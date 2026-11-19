@@ -2866,7 +2866,7 @@
 	"systemLogs.raw.endOlderWindow": "이 시간 범위의 이전 쪽에는 더 이상 일치하는 항목이 없습니다.",
 	"systemLogs.raw.capReached": "표시 한도 도달: 항목 {count}개. 더 먼 항목을 보려면 필터를 좁히세요.",
 	"systemLogs.raw.emptyTitle": "일치하는 항목 없음",
-	"systemLogs.raw.emptyHint": "소스를 줄이거나, 수준을 넓히거나, 기간을 늘리거나, 검색어를 짧게 해 보세요. 검색은 정확한 텍스트와 일치합니다.",
+	"systemLogs.raw.emptyHint": "소스를 줄이거나, 수준을 넓히거나, 기간을 늘리거나, 검색어를 짧게 해 보세요. 검색은 입력한 텍스트가 메시지 어디에 있든 찾아내며, 대소문자를 구분하지 않습니다.",
 	"systemLogs.raw.resetFilters": "전체 보기",
 	"systemLogs.raw.copy": "복사",
 	"systemLogs.raw.copied": "복사됨",

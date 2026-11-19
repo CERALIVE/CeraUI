@@ -2914,7 +2914,7 @@
 	"systemLogs.raw.endOlderWindow": "No hay más entradas que coincidan del lado más antiguo de este intervalo de tiempo.",
 	"systemLogs.raw.capReached": "Se alcanzó el límite de visualización: {count} entradas. Acota los filtros para llegar a entradas más alejadas.",
 	"systemLogs.raw.emptyTitle": "Ninguna entrada coincide",
-	"systemLogs.raw.emptyHint": "Prueba con menos fuentes, un nivel más amplio, un período más largo o un texto de búsqueda más corto. La búsqueda solo encuentra el texto exacto.",
+	"systemLogs.raw.emptyHint": "Prueba con menos fuentes, un nivel más amplio, un período más largo o un texto de búsqueda más corto. La búsqueda encuentra lo que escribas en cualquier parte del mensaje y no distingue mayúsculas de minúsculas.",
 	"systemLogs.raw.resetFilters": "Mostrar todo",
 	"systemLogs.raw.copy": "Copiar",
 	"systemLogs.raw.copied": "Copiado",

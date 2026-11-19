@@ -2914,7 +2914,7 @@
 	"systemLogs.raw.endOlderWindow": "Não há mais entradas correspondentes no lado mais antigo deste intervalo de tempo.",
 	"systemLogs.raw.capReached": "Limite de exibição atingido: {count} entradas. Refine os filtros para chegar a entradas mais distantes.",
 	"systemLogs.raw.emptyTitle": "Nenhuma entrada corresponde",
-	"systemLogs.raw.emptyHint": "Tente menos fontes, um nível mais amplo, um período mais longo ou um texto de pesquisa mais curto. A pesquisa busca o texto exato.",
+	"systemLogs.raw.emptyHint": "Tente menos fontes, um nível mais amplo, um período mais longo ou um texto de pesquisa mais curto. A pesquisa encontra o texto digitado em qualquer parte da mensagem, sem diferenciar maiúsculas de minúsculas.",
 	"systemLogs.raw.resetFilters": "Mostrar tudo",
 	"systemLogs.raw.copy": "Copiar",
 	"systemLogs.raw.copied": "Copiado",

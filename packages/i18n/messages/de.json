@@ -2911,7 +2911,7 @@
 	"systemLogs.raw.endOlderWindow": "Auf der älteren Seite dieses Zeitfensters gibt es keine weiteren passenden Einträge.",
 	"systemLogs.raw.capReached": "Anzeigegrenze erreicht: {count} Einträge. Grenze die Filter ein, um weiter entfernte Einträge zu erreichen.",
 	"systemLogs.raw.emptyTitle": "Keine passenden Einträge",
-	"systemLogs.raw.emptyHint": "Versuche weniger Quellen, eine breitere Stufe, einen längeren Zeitraum oder einen kürzeren Suchtext. Die Suche findet genau den eingegebenen Text.",
+	"systemLogs.raw.emptyHint": "Versuche weniger Quellen, eine breitere Stufe, einen längeren Zeitraum oder einen kürzeren Suchtext. Die Suche findet den eingegebenen Text an jeder Stelle einer Meldung. Groß- und Kleinschreibung spielt keine Rolle.",
 	"systemLogs.raw.resetFilters": "Alles anzeigen",
 	"systemLogs.raw.copy": "Kopieren",
 	"systemLogs.raw.copied": "Kopiert",

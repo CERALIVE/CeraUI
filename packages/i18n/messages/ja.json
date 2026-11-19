@@ -2866,7 +2866,7 @@
 	"systemLogs.raw.endOlderWindow": "この時間範囲の古い方に、これ以上一致するエントリーはありません。",
 	"systemLogs.raw.capReached": "表示の上限に達しました: {count} 件。離れたエントリーを表示するには、フィルターを絞り込んでください。",
 	"systemLogs.raw.emptyTitle": "一致するエントリーはありません",
-	"systemLogs.raw.emptyHint": "ソースを減らす、レベルを広げる、期間を長くする、検索文字を短くするのいずれかを試してください。検索は文字列の完全一致です。",
+	"systemLogs.raw.emptyHint": "ソースを減らす、レベルを広げる、期間を長くする、検索文字を短くするのいずれかを試してください。入力した文字列を含むエントリーを探します。大文字と小文字は区別しません。",
 	"systemLogs.raw.resetFilters": "すべて表示",
 	"systemLogs.raw.copy": "コピー",
 	"systemLogs.raw.copied": "コピーしました",

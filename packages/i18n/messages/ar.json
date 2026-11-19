@@ -2923,7 +2923,7 @@
 	"systemLogs.raw.endOlderWindow": "لا توجد إدخالات أخرى مطابقة في الجانب الأقدم من هذه الفترة الزمنية.",
 	"systemLogs.raw.capReached": "تم بلوغ حد العرض: {count} إدخال. ضيّق عوامل التصفية للوصول إلى إدخالات أبعد.",
 	"systemLogs.raw.emptyTitle": "لا توجد إدخالات مطابقة",
-	"systemLogs.raw.emptyHint": "جرّب مصادر أقل، أو مستوى أوسع، أو فترة أطول، أو نص بحث أقصر. يطابق البحث النص بالضبط.",
+	"systemLogs.raw.emptyHint": "جرّب مصادر أقل، أو مستوى أوسع، أو فترة أطول، أو نص بحث أقصر. يجد البحث النص الذي تكتبه في أي موضع من الرسالة، ولا يميّز بين الأحرف الكبيرة والصغيرة.",
 	"systemLogs.raw.resetFilters": "عرض الكل",
 	"systemLogs.raw.copy": "نسخ",
 	"systemLogs.raw.copied": "تم النسخ",

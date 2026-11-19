@@ -2866,7 +2866,7 @@
 	"systemLogs.raw.endOlderWindow": "此时间范围的较早一侧没有更多匹配的条目。",
 	"systemLogs.raw.capReached": "已达到显示上限：{count} 条。请缩小筛选范围以查看更远的条目。",
 	"systemLogs.raw.emptyTitle": "没有匹配的条目",
-	"systemLogs.raw.emptyHint": "请尝试减少来源、放宽级别、延长时间范围或缩短搜索文字。搜索按原文精确匹配。",
+	"systemLogs.raw.emptyHint": "请尝试减少来源、放宽级别、延长时间范围或缩短搜索文字。搜索会查找包含所输入文字的条目，不区分大小写。",
 	"systemLogs.raw.resetFilters": "显示全部",
 	"systemLogs.raw.copy": "复制",
 	"systemLogs.raw.copied": "已复制",

@@ -2911,7 +2911,7 @@
 	"systemLogs.raw.endOlderWindow": "No additional entries match on the older side of this time window.",
 	"systemLogs.raw.capReached": "Display limit reached: {count} entries. Narrow the filters to reach entries further away.",
 	"systemLogs.raw.emptyTitle": "No entries match",
-	"systemLogs.raw.emptyHint": "Try fewer sources, a wider level, a longer time range or shorter search text. Search matches exact text.",
+	"systemLogs.raw.emptyHint": "Try fewer sources, a wider level, a longer time range or shorter search text. Search finds the typed text anywhere in a message; case doesn't matter.",
 	"systemLogs.raw.resetFilters": "Show everything",
 	"systemLogs.raw.copy": "Copy",
 	"systemLogs.raw.copied": "Copied",

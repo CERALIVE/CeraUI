@@ -2914,7 +2914,7 @@
 	"systemLogs.raw.endOlderWindow": "Aucune autre entrée ne correspond du côté le plus ancien de cette plage horaire.",
 	"systemLogs.raw.capReached": "Limite d'affichage atteinte : {count} entrées. Affinez les filtres pour atteindre des entrées plus éloignées.",
 	"systemLogs.raw.emptyTitle": "Aucune entrée ne correspond",
-	"systemLogs.raw.emptyHint": "Essayez moins de sources, un niveau plus large, une période plus longue ou un texte de recherche plus court. La recherche porte sur le texte exact.",
+	"systemLogs.raw.emptyHint": "Essayez moins de sources, un niveau plus large, une période plus longue ou un texte de recherche plus court. La recherche trouve le texte saisi n'importe où dans le message, sans distinguer majuscules et minuscules.",
 	"systemLogs.raw.resetFilters": "Tout afficher",
 	"systemLogs.raw.copy": "Copier",
 	"systemLogs.raw.copied": "Copié",

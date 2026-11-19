@@ -382,7 +382,7 @@ Rules for this copy:
 | `systemLogs.raw.endOlderWindow` | No additional entries match on the older side of this time window. | Visible end marker at the older edge of an approximate window |
 | `systemLogs.raw.capReached` | Display limit reached: {count} entries. Narrow the filters to reach entries further away. | Row cap |
 | `systemLogs.raw.emptyTitle` | No entries match | Empty state |
-| `systemLogs.raw.emptyHint` | Try fewer sources, a wider level, a longer time range or shorter search text. Search matches exact text. | Empty state |
+| `systemLogs.raw.emptyHint` | Try fewer sources, a wider level, a longer time range or shorter search text. Search finds the typed text anywhere in a message; case doesn't matter. | Empty state |
 | `systemLogs.raw.resetFilters` | Show everything | Empty state action (back to defaults) |
 | `systemLogs.raw.copy` | Copy | Expanded row |
 | `systemLogs.raw.copied` | Copied | Expanded row, after copy |
