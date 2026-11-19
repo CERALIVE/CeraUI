@@ -6,6 +6,23 @@ import type { AppWebSocket, RPCContext } from "./types.ts";
 const closedSockets = new WeakSet<AppWebSocket>();
 const sessions = new WeakMap<AppWebSocket, AbortController>();
 const inactiveSession = AbortSignal.abort();
+const clients = new Set<AppWebSocket>();
+
+export function addClient(ws: AppWebSocket): void {
+	clients.add(ws);
+}
+
+export function removeClient(ws: AppWebSocket): void {
+	clients.delete(ws);
+}
+
+export function getClients(): Set<AppWebSocket> {
+	return clients;
+}
+
+export function getAuthenticatedClients(): AppWebSocket[] {
+	return Array.from(clients).filter((ws) => ws.data.isAuthenticated);
+}
 
 export function socketSessionSignal(ws: AppWebSocket): AbortSignal {
 	if (!ws.data.isAuthenticated || closedSockets.has(ws)) return inactiveSession;
