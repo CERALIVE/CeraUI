@@ -474,6 +474,68 @@ describe("SharingFlow: support bundle", () => {
 		expect(download).toHaveBeenCalledExactlyOnceWith(BUNDLE_TICKET.url);
 	});
 
+	it("marks a preview the device refused to prepare, and only that one, as a refusal Export can replace", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const { flow, previewBundle } = setup();
+		previewBundle
+			.mockRejectedValueOnce(failedPreview())
+			.mockRejectedValueOnce(busyPreview())
+			.mockRejectedValueOnce(new Error("Request timeout: logs.previewBundle"))
+			.mockResolvedValueOnce(manifest(2));
+
+		await flow.openBundle();
+		expect(flow.bundleProblem).toBe("failed");
+		expect(flow.bundleRefused).toBe(true);
+
+		await flow.retryPreview();
+		expect(flow.bundleProblem).toBe("busy");
+		expect(flow.bundleRefused).toBe(false);
+
+		await flow.retryPreview();
+		expect(flow.bundleProblem).toBe("failed");
+		expect(flow.bundleRefused).toBe(false);
+
+		await flow.retryPreview();
+		expect(flow.manifest).toStrictEqual(manifest(2));
+		expect(flow.bundleRefused).toBe(false);
+	});
+
+	it("marks a creation the device refused as READ_FAILED as a refusal Export can replace, not a call that failed here", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const { flow, previewBundle, createBundle } = setup();
+		previewBundle.mockResolvedValue(manifest(3));
+		createBundle
+			.mockResolvedValueOnce({ ok: false, error: "READ_FAILED" })
+			.mockResolvedValueOnce({ ok: false, error: "BUSY" })
+			.mockRejectedValueOnce(new Error("Request timeout"));
+		await flow.openBundle();
+
+		await flow.downloadBundle();
+		expect(flow.bundleProblem).toBe("failed");
+		expect(flow.bundleRefused).toBe(true);
+
+		await flow.downloadBundle();
+		expect(flow.bundleRefused).toBe(false);
+
+		await flow.downloadBundle();
+		expect(flow.bundleProblem).toBe("failed");
+		expect(flow.bundleRefused).toBe(false);
+	});
+
+	it("leaves a refused bundle for the Export confirmation", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const { flow, previewBundle } = setup();
+		previewBundle.mockRejectedValueOnce(failedPreview());
+		await flow.openBundle();
+
+		flow.exportInstead();
+
+		expect(flow.bundleStep).toBe("closed");
+		expect(flow.bundleProblem).toBeNull();
+		expect(flow.bundleRefused).toBe(false);
+		expect(flow.exportStep).toBe("confirm");
+	});
+
 	it.each([
 		["no reply", null],
 		["a ticket without its url", { ok: true }],

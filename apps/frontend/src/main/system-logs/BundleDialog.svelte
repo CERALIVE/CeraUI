@@ -5,8 +5,10 @@
   free of personal data. The downloaded file carries no such warning of its own,
   so this is where it is said, before Download bundle can be pressed. A refused
   preview (including the device's fail-closed identifier collision, which reads
-  as READ_FAILED) offers Retry; Cancel, Escape and the close button discard a
-  request still in flight.
+  as READ_FAILED) offers Retry; under the band, a bundle the device refused to
+  prepare also points to Export this view, which does not go through that
+  collision. Cancel, Escape and the close button discard a request still in
+  flight.
 -->
 <script lang="ts">
 import { getLocale, m } from '@ceraui/i18n/svelte';
@@ -21,6 +23,7 @@ import type { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';
 import KeepWords from './KeepWords.svelte';
 
 let { sharing }: { sharing: SharingFlow } = $props();
+const uid = $props.id();
 
 type SectionId = LogBundleManifest['sections'][number]['id'];
 
@@ -123,6 +126,21 @@ const status = $derived(
 						<p class="text-sm"><KeepWords text={CREATE_PROBLEM[sharing.bundleProblem]()} /></p>
 					{/if}
 				</div>
+			</div>
+		{/if}
+
+		{#if sharing.bundleRefused}
+			<div class="flex flex-wrap items-center gap-3" data-testid="sharing-bundle-use-export">
+				<p class="min-w-0 grow basis-40 text-sm" id="{uid}-use-export"><KeepWords text={m['systemLogs.sharing.bundleUseExport']()} /></p>
+				<Button
+					aria-describedby="{uid}-use-export"
+					class="ms-auto h-auto max-w-full py-1 whitespace-normal"
+					onclick={() => sharing.exportInstead()}
+					size="sm"
+					variant="outline"
+				>
+					{m['systemLogs.sharing.export']()}
+				</Button>
 			</div>
 		{/if}
 

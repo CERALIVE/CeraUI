@@ -3020,6 +3020,7 @@
 	"systemLogs.sharing.bundleSensitive": "डिवाइस को ज्ञात सीक्रेट और सामान्य पहचानकर्ता हटा दिए जाते हैं, फिर भी फ़ाइल में व्यक्तिगत डेटा हो सकता है। साझा करने से पहले इसकी समीक्षा करें।",
 	"systemLogs.sharing.bundleDownload": "बंडल डाउनलोड करें",
 	"systemLogs.sharing.bundleFailed": "सपोर्ट बंडल तैयार नहीं हो सका।",
+	"systemLogs.sharing.bundleUseExport": "इसके बजाय यह दृश्य एक्सपोर्ट करें।",
 	"systemLogs.sharing.busy": "एक और एक्सपोर्ट चल रहा है। उसके पूरा होने पर फिर प्रयास करें।",
 	"systemLogs.sharing.failed": "फ़ाइल नहीं बनाई जा सकी।",
 	"systemLogs.sharing.browserSaves": "फ़ाइलें उस ब्राउज़र द्वारा सहेजी जाती हैं जिसका आप उपयोग कर रहे हैं।",

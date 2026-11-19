@@ -624,6 +624,64 @@ describe("SharingSection: support bundle", () => {
 		},
 	);
 
+	it("points a refused preview to Export this view under its band, and opens the export from there", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		previewBundle.mockRejectedValueOnce(
+			new RpcError({ message: "READ_FAILED", code: "INTERNAL_ERROR" }),
+		);
+		await open("bundle");
+		const body = await dialog(sharing.bundle);
+
+		const band = await within(body).findByTestId("sharing-bundle-problem");
+		const instead = within(body).getByTestId("sharing-bundle-use-export");
+		expect(band.nextElementSibling).toBe(instead);
+		expect(instead.querySelector("p")?.textContent?.trim()).toBe(
+			en.systemLogs.sharing.bundleUseExport,
+		);
+		const action = within(instead).getByRole("button", {
+			name: sharing.export,
+		});
+		expect(tokens(action)).toEqual(expect.arrayContaining(["border-border"]));
+		expect(
+			document.getElementById(action.getAttribute("aria-describedby") ?? ""),
+		).toBe(instead.querySelector("p"));
+
+		await fireEvent.click(action);
+
+		const exportBody = await dialog(sharing.export);
+		expect(within(exportBody).getByText(sharing.exportHint)).toBeTruthy();
+		await waitForElementToBeRemoved(body);
+		expect(flow.bundleStep).toBe("closed");
+		expect(createExport).not.toHaveBeenCalled();
+	});
+
+	it("points a creation refused as READ_FAILED to Export this view, keeping its band free of buttons", async () => {
+		previewBundle.mockResolvedValue(bundleManifest(3));
+		createBundle.mockResolvedValue({ ok: false, error: "READ_FAILED" });
+		await open("bundle");
+		const body = await dialog(sharing.bundle);
+		await within(body).findByRole("table");
+
+		await fireEvent.click(button(body, sharing.bundleDownload));
+
+		const band = await within(body).findByTestId("sharing-bundle-problem");
+		expect(within(band).queryByRole("button")).toBeNull();
+		expect(band.nextElementSibling).toBe(
+			within(body).getByTestId("sharing-bundle-use-export"),
+		);
+	});
+
+	it("offers no Export alternative when the bundle is only busy", async () => {
+		previewBundle.mockRejectedValueOnce(
+			new RpcError({ message: "BUSY", code: "INTERNAL_ERROR" }),
+		);
+		await open("bundle");
+		const body = await dialog(sharing.bundle);
+
+		await within(body).findByTestId("sharing-bundle-problem");
+		expect(within(body).queryByTestId("sharing-bundle-use-export")).toBeNull();
+	});
+
 	it("states a preview missing its versions and boots as a failed preview with Retry, and Download stays unavailable", async () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
 		previewBundle

@@ -3032,6 +3032,7 @@
 	"systemLogs.sharing.bundleSensitive": "تُزال الأسرار التي يعرفها الجهاز والمعرّفات الشائعة، لكن قد يظل الملف يحتوي على بيانات شخصية. راجعه قبل مشاركته.",
 	"systemLogs.sharing.bundleDownload": "تنزيل الحزمة",
 	"systemLogs.sharing.bundleFailed": "تعذّر تجهيز حزمة الدعم.",
+	"systemLogs.sharing.bundleUseExport": "استخدم «تصدير هذا العرض» بدلًا من ذلك.",
 	"systemLogs.sharing.busy": "هناك تصدير آخر قيد التنفيذ. أعد المحاولة عند انتهائه.",
 	"systemLogs.sharing.failed": "تعذّر إنشاء الملف.",
 	"systemLogs.sharing.browserSaves": "يحفظ المتصفح الذي تستخدمه الملفات.",

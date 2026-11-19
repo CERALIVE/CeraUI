@@ -3020,6 +3020,7 @@
 	"systemLogs.sharing.bundleSensitive": "Dem Gerät bekannte Geheimnisse und gängige Kennungen werden entfernt, die Datei kann aber trotzdem personenbezogene Daten enthalten. Prüfe sie, bevor du sie teilst.",
 	"systemLogs.sharing.bundleDownload": "Paket herunterladen",
 	"systemLogs.sharing.bundleFailed": "Das Support-Paket konnte nicht vorbereitet werden.",
+	"systemLogs.sharing.bundleUseExport": "Nutze stattdessen „Diese Ansicht exportieren“.",
 	"systemLogs.sharing.busy": "Ein anderer Export läuft gerade. Versuche es erneut, wenn er fertig ist.",
 	"systemLogs.sharing.failed": "Die Datei konnte nicht erstellt werden.",
 	"systemLogs.sharing.browserSaves": "Dateien werden vom Browser gespeichert, den du gerade verwendest.",

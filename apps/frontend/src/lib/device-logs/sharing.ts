@@ -69,6 +69,14 @@ export function refusal(error: LogErrorCode): SharingProblem {
 	return error === "BUSY" ? "busy" : "failed";
 }
 
+/**
+ * The device refused to prepare the bundle: its sanitized READ_FAILED, which
+ * includes the fail-closed collision of a held secret with a structured value.
+ */
+export function preparationRefused(error: unknown): boolean {
+	return error instanceof RpcError && error.message === "READ_FAILED";
+}
+
 /** A preview rejects with its sanitized code as the message (apps/backend/docs/agents/device-log-bundle.md). */
 export function previewProblem(error: unknown): SharingProblem {
 	return error instanceof RpcError && error.message === "BUSY"

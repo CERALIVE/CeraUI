@@ -7,7 +7,8 @@
  * A reply that does not match its wire schema, a ticket path the device did not
  * mint for that flow, a manifest naming a section twice, a refused call and a
  * download the browser refuses all read as failed, with the step kept for
- * another try.
+ * another try. A bundle the device refuses to prepare (READ_FAILED, which
+ * includes its secret collision) also offers Export this view instead.
  * Cancel, a deleted history and `dispose()` advance the run a request was sent
  * under, so its late reply is discarded and can never start a download. A ticket the device minted for a discarded reply expires
  * there within 60 s. No timer is kept here.
@@ -24,6 +25,7 @@ import {
 	bundleManifestReply,
 	type ExportSpan,
 	exportInput,
+	preparationRefused,
 	previewProblem,
 	RAW_OPENING_QUERY,
 	refusal,
@@ -43,6 +45,9 @@ export interface SharingDeps {
 export type ExportStep = "closed" | "confirm" | "creating";
 export type BundleStep = "closed" | "previewing" | "preview" | "creating";
 
+// A call that threw or answered off its schema: a failure, but no device refusal.
+const UNANSWERED: LogExportOutput = { ok: false, error: "READ_FAILED" };
+
 async function ticket(
 	call: () => Promise<LogExportOutput>,
 	kind: "export" | "bundle",
@@ -51,7 +56,7 @@ async function ticket(
 		return ticketReply(await call(), kind);
 	} catch (error) {
 		console.error("System Logs sharing failed:", error);
-		return { ok: false, error: "READ_FAILED" };
+		return UNANSWERED;
 	}
 }
 
@@ -74,6 +79,8 @@ export class SharingFlow {
 	exportProblem = $state<SharingProblem | null>(null);
 	bundleStep = $state<BundleStep>("closed");
 	bundleProblem = $state<SharingProblem | null>(null);
+	/** The bundle problem is the device refusing to prepare it, which Export this view avoids. */
+	bundleRefused = $state(false);
 	manifest = $state.raw<LogBundleManifest | null>(null);
 
 	readonly #deps: SharingDeps;
@@ -152,6 +159,7 @@ export class SharingFlow {
 		const run = this.#bundleRun;
 		this.bundleStep = "creating";
 		this.bundleProblem = null;
+		this.bundleRefused = false;
 		const reply = await ticket(() => this.#deps.logs.createBundle(), "bundle");
 		if (run !== this.#bundleRun) return;
 		if (reply.ok && started(this.#deps.download, reply.url)) {
@@ -159,6 +167,8 @@ export class SharingFlow {
 			return;
 		}
 		this.bundleProblem = reply.ok ? "failed" : refusal(reply.error);
+		this.bundleRefused =
+			reply !== UNANSWERED && !reply.ok && reply.error === "READ_FAILED";
 		this.bundleStep = "preview";
 	}
 
@@ -167,6 +177,13 @@ export class SharingFlow {
 		this.bundleStep = "closed";
 		this.manifest = null;
 		this.bundleProblem = null;
+		this.bundleRefused = false;
+	}
+
+	/** Leaves a bundle the device refused for the Export this view confirmation. */
+	exportInstead(): void {
+		this.closeBundle();
+		this.openExport();
 	}
 
 	dispose(): void {
@@ -185,18 +202,22 @@ export class SharingFlow {
 		this.bundleStep = "previewing";
 		this.manifest = null;
 		this.bundleProblem = null;
+		this.bundleRefused = false;
 		let manifest: LogBundleManifest | null = null;
 		let problem: SharingProblem | null = null;
+		let refused = false;
 		try {
 			manifest = bundleManifestReply(await this.#deps.logs.previewBundle());
 		} catch (error) {
 			problem = previewProblem(error);
+			refused = preparationRefused(error);
 			if (problem === "failed")
 				console.error("System Logs sharing failed:", error);
 		}
 		if (run !== this.#bundleRun) return;
 		this.manifest = manifest;
 		this.bundleProblem = problem;
+		this.bundleRefused = refused;
 		this.bundleStep = "preview";
 	}
 

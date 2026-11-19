@@ -3023,6 +3023,7 @@
 	"systemLogs.sharing.bundleSensitive": "Les secrets connus de l'appareil et les identifiants courants sont supprimés, mais le fichier peut encore contenir des données personnelles. Vérifiez-le avant de le partager.",
 	"systemLogs.sharing.bundleDownload": "Télécharger le paquet",
 	"systemLogs.sharing.bundleFailed": "Impossible de préparer le paquet d'assistance.",
+	"systemLogs.sharing.bundleUseExport": "Utilisez plutôt Exporter cette vue.",
 	"systemLogs.sharing.busy": "Un autre export est en cours. Réessayez quand il sera terminé.",
 	"systemLogs.sharing.failed": "Impossible de créer le fichier.",
 	"systemLogs.sharing.browserSaves": "Les fichiers sont enregistrés par le navigateur que vous utilisez.",

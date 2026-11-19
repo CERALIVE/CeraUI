@@ -2975,6 +2975,7 @@
 	"systemLogs.sharing.bundleSensitive": "设备已知的密钥信息和常见标识符会被移除，但文件仍可能包含个人数据。分享前请先检查。",
 	"systemLogs.sharing.bundleDownload": "下载支持包",
 	"systemLogs.sharing.bundleFailed": "无法准备支持包。",
+	"systemLogs.sharing.bundleUseExport": "请改用“导出此视图”。",
 	"systemLogs.sharing.busy": "另一个导出正在进行。请在其完成后重试。",
 	"systemLogs.sharing.failed": "无法创建文件。",
 	"systemLogs.sharing.browserSaves": "文件由你正在使用的浏览器保存。",

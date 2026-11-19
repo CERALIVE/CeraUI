@@ -3020,6 +3020,7 @@
 	"systemLogs.sharing.bundleSensitive": "Secrets known to the device and common identifiers are removed, but the file may still contain personal data. Review it before sharing.",
 	"systemLogs.sharing.bundleDownload": "Download bundle",
 	"systemLogs.sharing.bundleFailed": "Couldn't prepare the support bundle.",
+	"systemLogs.sharing.bundleUseExport": "Use Export this view instead.",
 	"systemLogs.sharing.busy": "Another export is running. Try again when it finishes.",
 	"systemLogs.sharing.failed": "Couldn't create the file.",
 	"systemLogs.sharing.browserSaves": "Files are saved by the browser you are using.",
