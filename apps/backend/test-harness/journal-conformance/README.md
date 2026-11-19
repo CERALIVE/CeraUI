@@ -110,10 +110,13 @@ Storage reports journalctl usage separately from recursive journal-directory
 bytes, including the image-owned predecessor directory. Recent source volume
 is a sample of up to 4096 records (`src/modules/device-logs/storage.ts:55-59`).
 
-Older-file cleanup rotates and vacuums using rounded uptime plus sixty seconds,
-then reports journal boot counts before and after. Files may contain more than
-one boot. Clear refuses during a busy update phase, persists a new history epoch
-and closes admission in one synchronous step. Follow, export and query
+Older-file cleanup reads `journalctl --header` and vacuums with rounded uptime
+plus sixty seconds, widened when necessary to retain archives ending in the
+current boot. It never rotates the active file. The native probe checks that
+older-file cleanup preserves current-boot records in a cross-boot active file.
+Older cleanup reports journal boot counts before and after. Both actions refuse
+during a busy update phase, persist a new history epoch
+and close admission in one synchronous step. Follow, export and query
 cancellations start together and join for at most 15 seconds. A rejected or
 timed-out drain returns `READ_FAILED`, reopens admission and deletes nothing.
 After another update-phase check, clear rotates and vacuums, removes only the six

@@ -191,7 +191,7 @@ test.each(["size", "age", "unknown"] as const)(
 		});
 	},
 );
-test("delete older files rotates then uses rounded uptime plus safety minute", async () => {
+test("delete older files reads headers then uses rounded uptime plus safety minute", async () => {
 	const r = await service();
 	f.read.mockResolvedValue("1234.5 0");
 	f.run.mockImplementation(async (_cmd, args) => {
@@ -205,7 +205,7 @@ test("delete older files rotates then uses rounded uptime plus safety minute", a
 	expect(reply).toMatchObject({ ok: true, bootsBefore: 1, bootsAfter: 1 });
 	expect(f.run.mock.calls.map((c) => c[1])).toEqual([
 		["--list-boots", "-o", "json"],
-		["--rotate"],
+		["--header"],
 		["--vacuum-time=1295s"],
 		["--list-boots", "-o", "json"],
 		["--disk-usage"],
@@ -614,7 +614,7 @@ test("zero uptime vacuums with the safety minute and the fixed read and command 
 	expect(f.read.mock.calls).toEqual([["/proc/uptime", "utf8"]]);
 	expect(f.run.mock.calls.map((c) => c.slice(0, 2))).toEqual([
 		["journalctl", ["--list-boots", "-o", "json"]],
-		["journalctl", ["--rotate"]],
+		["journalctl", ["--header"]],
 		["journalctl", ["--vacuum-time=60s"]],
 		["journalctl", ["--list-boots", "-o", "json"]],
 		["journalctl", ["--disk-usage"]],
@@ -661,7 +661,7 @@ test.each(["", "-1 0", "1.2.3 0", "Infinity 0", "9007199254740991 0", "1e9 0"])(
 		});
 		expect(f.run.mock.calls.map((c) => c[1])).toEqual([
 			["--list-boots", "-o", "json"],
-			["--rotate"],
+			["--header"],
 		]);
 	},
 );

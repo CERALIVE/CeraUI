@@ -139,6 +139,8 @@ async function confirmAction(trigger: string, confirm: string): Promise<void> {
 	await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
 }
 
+const confirmOlder = () => confirmAction(copy.deleteOlder, copy.deleteOlder);
+
 describe("StorageSection: survivor regressions", () => {
 	it.each([
 		[copy.keepForLabel, copy.keepForDevice],
@@ -847,7 +849,7 @@ describe("StorageSection: cleanup", () => {
 		mount();
 
 		expect(screen.getByText(copy.deleteOlderHint)).toBeTruthy();
-		await fireEvent.click(screen.getByTestId("storage-delete-older"));
+		await confirmOlder();
 
 		const status = screen.getByTestId("storage-cleanup-status");
 		await waitFor(() =>
@@ -878,6 +880,10 @@ describe("StorageSection: cleanup", () => {
 			"storage-delete-legacy",
 		) as HTMLButtonElement;
 		await fireEvent.click(older);
+		const dialog = await screen.findByRole("alertdialog");
+		await fireEvent.click(
+			within(dialog).getByRole("button", { name: copy.deleteOlder }),
+		);
 		expect(older.disabled).toBe(true);
 		expect(older.getAttribute("aria-busy")).toBe("true");
 		expect(legacy.disabled).toBe(true);
@@ -907,7 +913,7 @@ describe("StorageSection: cleanup", () => {
 			});
 		mount();
 
-		await fireEvent.click(screen.getByTestId("storage-delete-older"));
+		await confirmOlder();
 		const band = await screen.findByTestId("storage-cleanup-failed");
 		expect(band.getAttribute("role")).toBe("alert");
 		expect(within(band).getByText(copy.actionFailed)).toBeTruthy();
@@ -918,6 +924,12 @@ describe("StorageSection: cleanup", () => {
 		await fireEvent.click(
 			within(band).getByTestId("storage-cleanup-failed-retry"),
 		);
+		await fireEvent.click(
+			within(await screen.findByRole("alertdialog")).getByRole("button", {
+				name: copy.deleteOlder,
+			}),
+		);
+		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
 		await waitFor(() =>
 			expect(rpc.logs.deleteOlderFiles).toHaveBeenCalledTimes(2),
 		);
@@ -925,6 +937,12 @@ describe("StorageSection: cleanup", () => {
 		expect(historyChanged).not.toHaveBeenCalled();
 
 		await fireEvent.click(screen.getByTestId("storage-cleanup-failed-retry"));
+		await fireEvent.click(
+			within(await screen.findByRole("alertdialog")).getByRole("button", {
+				name: copy.deleteOlder,
+			}),
+		);
+		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
 		await waitFor(() =>
 			expect(screen.queryByTestId("storage-cleanup-failed")).toBeNull(),
 		);
@@ -1138,7 +1156,7 @@ describe("StorageSection: cleanup", () => {
 		rpc.logs.clearAll.mockReturnValue(new Promise(() => {}));
 		mount();
 
-		await fireEvent.click(screen.getByTestId("storage-delete-older"));
+		await confirmOlder();
 		const status = screen.getByTestId("storage-cleanup-status");
 		await waitFor(() => expect(status.textContent?.trim()).not.toBe(""));
 
@@ -1659,7 +1677,7 @@ describe("StorageSection: anatomy", () => {
 		});
 		mount();
 
-		await fireEvent.click(screen.getByTestId("storage-delete-older"));
+		await confirmOlder();
 		const band = await screen.findByTestId("storage-cleanup-failed");
 		expect(tokens(band)).toEqual([
 			"border-status-warning/30",
@@ -2041,7 +2059,7 @@ describe("StorageSection: successful replies that leave out what they promise", 
 		[
 			"Delete older log files",
 			() => rpc.logs.deleteOlderFiles,
-			() => fireEvent.click(screen.getByTestId("storage-delete-older")),
+			confirmOlder,
 			{ bootsBefore: 17, bootsAfter: 4 },
 		],
 		[
@@ -2100,7 +2118,7 @@ describe("StorageSection: successful replies that leave out what they promise", 
 			});
 			mount();
 
-			await fireEvent.click(screen.getByTestId("storage-delete-older"));
+			await confirmOlder();
 
 			await expectRecovery("storage-cleanup-failed");
 			expect(

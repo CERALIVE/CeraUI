@@ -2988,6 +2988,7 @@
 	"systemLogs.storage.maintenanceFailed": "सहेजने के बाद की सफ़ाई पूरी नहीं हुई। सीमाएँ सहेजी गई हैं।",
 	"systemLogs.storage.deleteOlder": "पुरानी लॉग फ़ाइलें हटाएँ",
 	"systemLogs.storage.deleteOlderHint": "वे लॉग फ़ाइलें हटाता है जिन्हें डिवाइस पहले ही बंद कर चुका है। कुछ पिछले बूट बचे रह सकते हैं।",
+	"systemLogs.storage.deleteOlderBody": "इससे वे पुरानी लॉग फ़ाइलें हमेशा के लिए हट जाएँगी जिन्हें डिवाइस पहले ही बंद कर चुका है। इस बूट के लॉग सुरक्षित रहेंगे। पिछले बूट के कुछ लॉग बचे रह सकते हैं।",
 	"systemLogs.storage.deleteOlderResult": "सहेजे गए बूट: पहले {before}, अब {after}।",
 	"systemLogs.storage.deleteLegacy": "बची हुई डीबग फ़ाइलें हटाएँ ({size})",
 	"systemLogs.storage.clearAll": "सभी लॉग साफ़ करें",

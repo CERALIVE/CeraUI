@@ -784,7 +784,14 @@ describe("SystemLogsView: Storage region", () => {
 
 		await fireEvent.click(tab(en.systemLogs.tabs.storage));
 		expect(usage()).toBe(used("48\u00a0MB"));
-		await fireEvent.click(screen.getByTestId("storage-delete-older"));
+		const older = screen.getByTestId("storage-delete-older");
+		older.focus();
+		await fireEvent.click(older);
+		const confirmation = within(
+			await screen.findByRole("alertdialog"),
+		).getByRole("button", { name: en.systemLogs.storage.deleteOlder });
+		await fireEvent.click(confirmation);
+		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
 		await waitFor(() => expect(usage()).toBe(used("12\u00a0MB")));
 
 		await fireEvent.click(tab(en.systemLogs.tabs.events));

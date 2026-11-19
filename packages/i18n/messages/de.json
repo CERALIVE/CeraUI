@@ -2988,6 +2988,7 @@
 	"systemLogs.storage.maintenanceFailed": "Die Bereinigung nach dem Speichern wurde nicht abgeschlossen. Die Grenzen sind gespeichert.",
 	"systemLogs.storage.deleteOlder": "Ältere Protokolldateien löschen",
 	"systemLogs.storage.deleteOlderHint": "Entfernt Protokolldateien, die das Gerät bereits geschlossen hat. Einige frühere Systemstarts können erhalten bleiben.",
+	"systemLogs.storage.deleteOlderBody": "Ältere Protokolldateien, die das Gerät bereits geschlossen hat, werden dauerhaft gelöscht. Die Protokolle des aktuellen Systemstarts bleiben erhalten. Einige Protokolle früherer Systemstarts können erhalten bleiben.",
 	"systemLogs.storage.deleteOlderResult": "Gespeicherte Systemstarts: vorher {before}, jetzt {after}.",
 	"systemLogs.storage.deleteLegacy": "Übrige Debug-Dateien löschen ({size})",
 	"systemLogs.storage.clearAll": "Alle Protokolle löschen",

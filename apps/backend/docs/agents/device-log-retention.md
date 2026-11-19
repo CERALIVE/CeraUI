@@ -6,12 +6,12 @@ export and sharing owners with controlled journal transports and real temporary
 settings and legacy files. These tests do not establish physical board vacuum
 qualification or complete device-log UI integration.
 
-All retention mutations share the existing exclusive queue. Only `clearAll`
-closes the history admission gate. Daily maintenance, settings changes,
-`deleteOlderFiles` and `deleteLegacyDebug` serialize with clear without taking
-that gate.
+All retention mutations share the existing exclusive queue. `clearAll` and
+`deleteOlderFiles` also share the history fence and the update reservation.
+Daily maintenance, settings changes and `deleteLegacyDebug` serialize without
+taking the history fence.
 
-## Clear ordering
+## Destructive operation ordering
 
 The transaction first refuses a busy software-update phase. Inside the exclusive
 queue, `beginHistoryClear` synchronously persists one `historyEpoch` increment
@@ -58,6 +58,17 @@ attribute settlement to this client. The barrier proves quiescence, not that
 Clear succeeded. A failed barrier is retried with bounded commands and
 backoff, and a rejected exit observation keeps both fences closed because a
 still-live client could submit after the barrier. Fences are process-local.
+
+## Deleting older files
+
+Older cleanup does not rotate the active journal. It reads fixed
+`journalctl --header` output before vacuuming. On v257 the Boot ID with the
+`TAIL_ENTRY_BOOT_ID` flag describes the last entry. An archive ending in this
+boot is protected by moving the uptime-based cutoff back to at least the
+earliest such file head. The cutoff also accounts for older filesystem times
+that systemd can use when aging the file. Unknown archive header evidence
+refuses cleanup. A shared file can keep logs from earlier boots. The result
+counts boots with retained journal entries before and after the vacuum.
 
 ## Admission and terminal ownership
 

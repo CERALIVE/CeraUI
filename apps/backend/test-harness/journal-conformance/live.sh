@@ -53,6 +53,29 @@ if [[ "${1:-suite}" == verify-shutdown ]]; then
 	exit 0
 fi
 
+machine="$(tr -d '\n' </etc/machine-id)"
+boot="$(tr -d '-' </proc/sys/kernel/random/boot_id)"
+active="/var/log/journal/$machine/system.journal"
+for i in 1 2 3; do systemd-cat -t older-cleanup echo "current-boot cleanup record $i"; done
+sync_journal
+age="$(($(date +%s) - $(cut -d. -f1 /proc/uptime) - 60))"
+equal 'active journal starts with a boot older than the uptime window' \
+	"$("${J[@]}" --file="$active" --until="@$age" \
+		_BOOT_ID=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa | jq -rs 'map(.MESSAGE) | join(" ")')" \
+	'cleanup previous boot seed'
+equal 'current boot records are in the same active journal' \
+	"$("${J[@]}" --file="$active" "_BOOT_ID=$boot" SYSLOG_IDENTIFIER=older-cleanup | jq -s length)" 3
+# Compare the entire pre-cleanup boot, excluding any background writes after it.
+cleanup_cutoff="$(date +%s.%6N)"
+current_cleanup_count() {
+	"${J[@]}" "--until=@$cleanup_cutoff" "_BOOT_ID=$boot" | jq -s length
+}
+cleanup_count="$(current_cleanup_count)"
+/state/retention-probe
+equal 'older-file cleanup preserves the current boot record count' "$(current_cleanup_count)" "$cleanup_count"
+equal 'older-file cleanup preserves the three fixture records' \
+	"$("${J[@]}" "_BOOT_ID=$boot" SYSLOG_IDENTIFIER=older-cleanup | jq -s length)" 3
+
 systemd-run --quiet --wait --unit=pfx sh -c 'printf "<3>err line\n<4>warn line\n<7>debug line\nplain line\n<3>a\nb\n"'
 sync_journal
 equal 'stdout priority prefixes and per-line reset' \

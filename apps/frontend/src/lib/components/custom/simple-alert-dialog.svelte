@@ -36,6 +36,7 @@ interface Props extends AlertDialogDefault.RootProps {
 	 */
 	onconfirm?: () => unknown | Promise<unknown>;
 	contentProps?: WithoutChild<AlertDialogDefault.ContentProps>;
+	triggerProps?: WithoutChild<AlertDialogDefault.TriggerProps>;
 	/** Confirm action button style; use `"destructive"` for reboot, power off, etc. */
 	confirmVariant?: Extract<ButtonVariant, 'default' | 'destructive'>;
 }
@@ -57,6 +58,7 @@ let {
 	buttonText,
 	buttonAriaLabel,
 	contentProps,
+	triggerProps,
 	title,
 	disabledConfirmButton = false,
 	dialogTitle,
@@ -162,7 +164,7 @@ const confirmButtonClasses = $derived(
 </script>
 
 <AlertDialog.Root {...restProps} bind:open>
-	<AlertDialog.Trigger class={triggerClasses} aria-label={buttonAriaLabel} {title}>
+	<AlertDialog.Trigger {...triggerProps} class={triggerClasses} aria-label={buttonAriaLabel} {title}>
 		<span class="relative z-10 flex items-center gap-2">
 			{#if icon && iconPosition === 'left'}
 				{@render icon()}

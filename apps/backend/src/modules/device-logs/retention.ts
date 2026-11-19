@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { clearInterval, setInterval } from "node:timers";
 import type {
 	LogDeleteOlderFilesOutput,
@@ -21,6 +20,7 @@ import { readJournalCeiling } from "./ceiling.ts";
 import { clearNativeJournal } from "./clear-journal.ts";
 import { abortLogExports } from "./export.ts";
 import { stopAllFollows } from "./follow.ts";
+import { vacuumOlderJournal } from "./older-journal.ts";
 import { abortLogQueries } from "./query-admission.ts";
 import { deleteLegacyDebugFiles } from "./retention-files.ts";
 import {
@@ -140,33 +140,17 @@ export function setRetention(next: LogRetention): Promise<LogStorageOutput> {
 	}, busy);
 }
 export function deleteOlderFiles(): Promise<LogDeleteOlderFilesOutput> {
-	return exclusive<LogDeleteOlderFilesOutput, typeof busy>(async () => {
-		try {
-			if (shouldUseMocks())
-				return {
-					ok: true,
-					storage: await getStorage(),
-					bootsBefore: 1,
-					bootsAfter: 1,
-				};
-			const bootsBefore = (await listBoots()).filter(
-				(boot) => boot.logsAvailable,
-			).length;
-			await run("journalctl", ["--rotate"]);
-			const text = await readFile("/proc/uptime", "utf8");
-			const uptime = Number(/^\d+(?:\.\d+)?(?=\s)/.exec(text)?.[0]);
-			const seconds = Math.ceil(uptime) + 60;
-			if (!Number.isSafeInteger(seconds) || seconds < 60)
-				return { ok: false, error: "READ_FAILED" };
-			await run("journalctl", [`--vacuum-time=${seconds}s`]);
-			const bootsAfter = (await listBoots()).filter(
-				(boot) => boot.logsAvailable,
-			).length;
-			return { ok: true, storage: await getStorage(), bootsBefore, bootsAfter };
-		} catch {
-			return { ok: false, error: "READ_FAILED" };
-		}
-	}, busy);
+	return withDestructiveRetention(async (retainUntil) => {
+		const mock = shouldUseMocks();
+		const bootsBefore = mock ? 1 : await countStoredBoots();
+		if (!mock) await vacuumOlderJournal(retainUntil);
+		const bootsAfter = mock ? 1 : await countStoredBoots();
+		return { ok: true, storage: await getStorage(), bootsBefore, bootsAfter };
+	});
+}
+
+async function countStoredBoots(): Promise<number> {
+	return (await listBoots()).filter((boot) => boot.logsAvailable).length;
 }
 export function deleteLegacyDebug(): Promise<LogStorageOutput> {
 	return exclusive<LogStorageOutput, typeof busy>(async () => {
@@ -179,66 +163,78 @@ export function deleteLegacyDebug(): Promise<LogStorageOutput> {
 	}, busy);
 }
 export function clearAll(): Promise<LogStorageOutput> {
-	return exclusive<LogStorageOutput, typeof busy>(async () => {
-		let reopen: (() => void) | undefined;
-		let release: (() => void) | undefined;
-		let settlement: Promise<unknown> | undefined;
-		try {
-			if (
-				isUpdating() ||
-				updatePhaseBusyReasons(getOrchestratorState().phase).length > 0
-			)
-				return { ok: false, error: "UPDATE_IN_PROGRESS" };
-			reopen = beginHistoryClear();
-			const stopping = [
-				stopAllFollows("cleared"),
-				abortLogExports(),
-				abortLogQueries(),
-			];
-			const deadline = Promise.withResolvers<null>();
-			const timer = setTimeout(() => deadline.resolve(null), 15_000);
-			let drained: PromiseSettledResult<void>[] | null;
+	return withDestructiveRetention(async (retainUntil) => {
+		const mock = shouldUseMocks();
+		if (!mock) await clearNativeJournal(retainUntil);
+		await deleteLegacyDebugFiles();
+		// Mock Clear empties the captured ring before writing its first new marker.
+		if (mock) clearRecentLogLines();
+		logger.info("device logs cleared", { module: "device-logs" });
+		updateLogState({ lastClearedAt: Date.now() });
+		return { ok: true, storage: await getStorage() };
+	});
+}
+
+function updateBusy(): boolean {
+	return (
+		isUpdating() ||
+		updatePhaseBusyReasons(getOrchestratorState().phase).length > 0
+	);
+}
+
+type DestructiveReply = { readonly ok: true };
+function withDestructiveRetention<R extends DestructiveReply>(
+	operation: (retainUntil: (pending: Promise<unknown>) => void) => Promise<R>,
+): Promise<R | Extract<LogStorageOutput, { ok: false }>> {
+	return exclusive<R | Extract<LogStorageOutput, { ok: false }>, typeof busy>(
+		async () => {
+			let reopen: (() => void) | undefined;
+			let release: (() => void) | undefined;
+			let settlement: Promise<unknown> | undefined;
 			try {
-				drained = await Promise.race([
-					Promise.allSettled(stopping),
-					deadline.promise,
-				]);
-			} finally {
-				clearTimeout(timer);
-			}
-			if (
-				drained === null ||
-				drained.some((result) => result.status === "rejected")
-			)
-				return { ok: false, error: "READ_FAILED" };
-			const mock = shouldUseMocks();
-			const deletion = reserveUpdateEvidenceDeletion(
-				isUpdating() ||
-					updatePhaseBusyReasons(getOrchestratorState().phase).length > 0,
-			);
-			if (!deletion.allowed) return { ok: false, error: "UPDATE_IN_PROGRESS" };
-			release = deletion.reservation.releaseAfterCompletion;
-			if (!mock)
-				await clearNativeJournal((pending) => {
+				if (updateBusy()) return { ok: false, error: "UPDATE_IN_PROGRESS" };
+				reopen = beginHistoryClear();
+				const stopping = [
+					stopAllFollows("cleared"),
+					abortLogExports(),
+					abortLogQueries(),
+				];
+				const deadline = Promise.withResolvers<null>();
+				const timer = setTimeout(() => deadline.resolve(null), 15_000);
+				let drained: PromiseSettledResult<void>[] | null;
+				try {
+					drained = await Promise.race([
+						Promise.allSettled(stopping),
+						deadline.promise,
+					]);
+				} finally {
+					clearTimeout(timer);
+				}
+				if (
+					drained === null ||
+					drained.some((result) => result.status === "rejected")
+				)
+					return { ok: false, error: "READ_FAILED" };
+				const deletion = reserveUpdateEvidenceDeletion(updateBusy());
+				if (!deletion.allowed)
+					return { ok: false, error: "UPDATE_IN_PROGRESS" };
+				release = deletion.reservation.releaseAfterCompletion;
+				return await operation((pending) => {
 					settlement = pending;
 				});
-			await deleteLegacyDebugFiles();
-			// Mock Clear empties the captured ring before writing its first new marker.
-			if (mock) clearRecentLogLines();
-			logger.info("device logs cleared", { module: "device-logs" });
-			updateLogState({ lastClearedAt: Date.now() });
-			return { ok: true, storage: await getStorage() };
-		} catch {
-			return { ok: false, error: "READ_FAILED" };
-		} finally {
-			const finish = () => {
-				release?.();
-				reopen?.();
-			};
-			if (settlement) {
-				deferHistoryClear();
-				void settlement.then(finish, () => undefined);
-			} else finish();
-		}
-	}, busy);
+			} catch {
+				return { ok: false, error: "READ_FAILED" };
+			} finally {
+				const finish = () => {
+					release?.();
+					reopen?.();
+				};
+				if (settlement) {
+					deferHistoryClear();
+					void settlement.then(finish, () => undefined);
+				} else finish();
+			}
+		},
+		busy,
+	);
 }

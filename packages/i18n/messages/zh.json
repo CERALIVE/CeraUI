@@ -2943,6 +2943,7 @@
 	"systemLogs.storage.maintenanceFailed": "保存后的清理未完成。限制已保存。",
 	"systemLogs.storage.deleteOlder": "删除较早的日志文件",
 	"systemLogs.storage.deleteOlderHint": "删除设备已关闭的日志文件。部分更早的启动可能仍会保留。",
+	"systemLogs.storage.deleteOlderBody": "此操作会永久删除设备已关闭的旧日志文件。本次启动的日志将保留，之前启动时的部分日志也可能保留。",
 	"systemLogs.storage.deleteOlderResult": "已保存的启动：之前 {before}，现在 {after}。",
 	"systemLogs.storage.deleteLegacy": "删除残留的调试文件（{size}）",
 	"systemLogs.storage.clearAll": "清除所有日志",

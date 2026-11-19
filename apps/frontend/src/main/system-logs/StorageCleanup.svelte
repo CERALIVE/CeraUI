@@ -1,8 +1,8 @@
 <!--
   StorageCleanup.svelte: the cleanup actions, destructive ones last. Deleting
   older files reports which boots remain instead of promising they are gone.
-  Clear all logs and Clear event history each ask first, opening on Cancel; a
-  refusal or failure is an inline band whose Retry asks again. A success that removed stored history
+  Older log cleanup, Clear all logs and Clear event history ask first, opening on Cancel.
+  A refusal or failure is an inline band whose Retry asks again. A success that removed stored history
   tells the other System Logs regions through the history bus.
 -->
 <script lang="ts">
@@ -69,6 +69,7 @@ function openOnCancel(id: string) {
 let running = $state<Action>();
 let boots = $state<{ before: number; after: number }>();
 let failure = $state<{ action: Action; reason: ActionFailure }>();
+let confirmDeleteOlder = $state(false);
 let confirmClearAll = $state(false);
 let confirmClearEvents = $state(false);
 
@@ -113,7 +114,7 @@ const clearEvents = () =>
 	});
 
 const RETRY: Record<Action, () => unknown> = {
-	deleteOlder,
+	deleteOlder: () => (confirmDeleteOlder = true),
 	deleteLegacy,
 	clearAll: () => (confirmClearAll = true),
 	clearEvents: () => (confirmClearEvents = true),
@@ -122,17 +123,26 @@ const RETRY: Record<Action, () => unknown> = {
 
 <div class="flex flex-col gap-4 border-t pt-5" data-testid="storage-cleanup">
 	<div class="flex flex-col items-start gap-1.5">
-		<Button
-			aria-busy={running === 'deleteOlder'}
-			class={WRAP}
-			data-testid="storage-delete-older"
-			disabled={running !== undefined}
-			onclick={deleteOlder}
-			size="sm"
-			variant="outline"
+		<SimpleAlertDialog
+			class="{CONFIRM_WIDTH} {CONFIRM_BUTTONS} {LINE_BREAKS}"
+			bind:open={confirmDeleteOlder}
+			buttonClasses={TRIGGER}
+			buttonText={m['systemLogs.storage.deleteOlder']()}
+			confirmButtonText={m['systemLogs.storage.deleteOlder']()}
+			confirmVariant="destructive"
+			contentProps={openOnCancel(`${uid}-delete-older`)}
+			disabledConfirmButton={running !== undefined}
+			extraButtonClasses="min-h-(--touch-target-min)"
+			triggerProps={{ 'aria-busy': running === 'deleteOlder', 'data-testid': 'storage-delete-older', disabled: running !== undefined }}
+			onconfirm={deleteOlder}
 		>
-			{m['systemLogs.storage.deleteOlder']()}
-		</Button>
+			{#snippet dialogTitle()}
+				{m['systemLogs.storage.deleteOlder']()}
+			{/snippet}
+			{#snippet description()}
+				{m['systemLogs.storage.deleteOlderBody']()}
+			{/snippet}
+		</SimpleAlertDialog>
 		<p class="text-muted-foreground text-xs">{m['systemLogs.storage.deleteOlderHint']()}</p>
 	</div>
 	{#if storage.legacyDebugBytes > 0}

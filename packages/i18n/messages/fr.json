@@ -2991,6 +2991,7 @@
 	"systemLogs.storage.maintenanceFailed": "Le nettoyage après l'enregistrement ne s'est pas terminé. Les limites sont enregistrées.",
 	"systemLogs.storage.deleteOlder": "Supprimer les anciens fichiers journaux",
 	"systemLogs.storage.deleteOlderHint": "Supprime les fichiers journaux que l'appareil a déjà fermés. Certains démarrages antérieurs peuvent rester.",
+	"systemLogs.storage.deleteOlderBody": "Cette action supprime définitivement les anciens fichiers journaux déjà fermés par l’appareil. Les journaux du démarrage actuel sont conservés. Certains journaux des démarrages précédents peuvent subsister.",
 	"systemLogs.storage.deleteOlderResult": "Démarrages enregistrés : {before} avant, {after} maintenant.",
 	"systemLogs.storage.deleteLegacy": "Supprimer les fichiers de débogage restants ({size})",
 	"systemLogs.storage.clearAll": "Effacer tous les journaux",

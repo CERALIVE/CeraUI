@@ -21,7 +21,7 @@ const actions = {
 };
 for (const mock of [false, true]) {
 	for (const [name, mutate] of Object.entries(actions)) {
-		test(`${name} before and after ${mock ? "mock" : "native"} clear serializes without owning its gate`, async () => {
+		test(`${name} before and after ${mock ? "mock" : "native"} clear serializes with the required history gate`, async () => {
 			h = historyFixture(mock);
 			settings.saveLogSettings({
 				maxAgeDays: 7,
@@ -66,14 +66,19 @@ for (const mock of [false, true]) {
 				}),
 			);
 			try {
-				// A clear queued behind another mutation has not bumped or closed the door.
-				const ticket = await bounded(createExport({}, { filter: {} }));
-				if (!ticket.ok) throw new Error(ticket.error);
-				const old = await handleLogExportRequest(
-					new Request(`http://device${ticket.url}`),
-				);
-				expect(await bounded(old.text())).toContain("before-clear");
-				expect(settings.getLogState().historyEpoch).toBe(0);
+				if (name === "older") {
+					expect(settings.historyClearing()).toBeInstanceOf(Promise);
+					expect(settings.getLogState().historyEpoch).toBe(1);
+				} else {
+					// A clear queued behind a non-destructive mutation leaves the door open.
+					const ticket = await bounded(createExport({}, { filter: {} }));
+					if (!ticket.ok) throw new Error(ticket.error);
+					const old = await handleLogExportRequest(
+						new Request(`http://device${ticket.url}`),
+					);
+					expect(await bounded(old.text())).toContain("before-clear");
+					expect(settings.getLogState().historyEpoch).toBe(0);
+				}
 				expect(trace).toEqual([]);
 				beforeReadout.release();
 				await bounded(clearReadout.entered);
@@ -91,7 +96,9 @@ for (const mock of [false, true]) {
 				await bounded(Promise.all([clearing, after]));
 				expect(trace).toEqual(["before", "clear", "after"]);
 				expect((await bounded(incoming)).ok).toBe(true);
-				expect(settings.getLogState().historyEpoch).toBe(1);
+				expect(settings.getLogState().historyEpoch).toBe(
+					name === "older" ? 3 : 1,
+				);
 			} finally {
 				beforeReadout.release();
 				clearReadout.release();

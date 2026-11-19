@@ -2988,6 +2988,7 @@
 	"systemLogs.storage.maintenanceFailed": "The cleanup after saving didn't finish. The limits are saved.",
 	"systemLogs.storage.deleteOlder": "Delete older log files",
 	"systemLogs.storage.deleteOlderHint": "Removes log files the device has already closed. Some earlier boots may remain.",
+	"systemLogs.storage.deleteOlderBody": "This permanently deletes older log files that the device has already closed. Logs from this boot are kept. Some logs from earlier boots may remain.",
 	"systemLogs.storage.deleteOlderResult": "Boots stored: {before} before, {after} now.",
 	"systemLogs.storage.deleteLegacy": "Delete leftover debug files ({size})",
 	"systemLogs.storage.clearAll": "Clear all logs",

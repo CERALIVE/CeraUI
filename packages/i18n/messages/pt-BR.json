@@ -2991,6 +2991,7 @@
 	"systemLogs.storage.maintenanceFailed": "A limpeza após salvar não terminou. Os limites estão salvos.",
 	"systemLogs.storage.deleteOlder": "Excluir arquivos de log antigos",
 	"systemLogs.storage.deleteOlderHint": "Remove os arquivos de log que o dispositivo já fechou. Algumas inicializações anteriores podem permanecer.",
+	"systemLogs.storage.deleteOlderBody": "Esta ação exclui permanentemente os arquivos de log antigos que o dispositivo já fechou. Os logs da inicialização atual são mantidos. Alguns logs de inicializações anteriores podem permanecer.",
 	"systemLogs.storage.deleteOlderResult": "Inicializações armazenadas: {before} antes, {after} agora.",
 	"systemLogs.storage.deleteLegacy": "Excluir arquivos de depuração restantes ({size})",
 	"systemLogs.storage.clearAll": "Apagar todos os logs",

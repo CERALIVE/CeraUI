@@ -334,6 +334,22 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			"Socket-owned abort; bounded batches; TERM/KILL and reap before replacement",
 	},
 	{
+		id: "deviceLogs.journalHeader",
+		file: "modules/device-logs/older-journal.ts",
+		symbol: "vacuumOlderJournal",
+		command: "[journalctl, --header]",
+		class: "bounded-probe",
+		status: "enforced",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		mechanism: "Fixed argv through the bounded run() collector",
+	},
+	{
 		id: "deviceLogs.journalScan",
 		file: "modules/device-logs/reader.ts",
 		symbol: "scanJournal",

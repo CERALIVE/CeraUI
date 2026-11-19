@@ -26,6 +26,19 @@ afterEach(() => {
 	vi.resetAllMocks();
 });
 
+it("asks before deleting older logs and leaves them alone on Cancel", async () => {
+	render(StorageCleanup, {
+		props: { storage: logStorage(), onrefresh: async () => {} },
+	});
+	await fireEvent.click(screen.getByRole("button", { name: copy.deleteOlder }));
+	expect(rpc.logs.deleteOlderFiles).not.toHaveBeenCalled();
+	const dialog = await screen.findByRole("alertdialog");
+	const cancel = within(dialog).getByRole("button", { name: en.dialog.cancel });
+	await waitFor(() => expect(document.activeElement).toBe(cancel));
+	await fireEvent.click(cancel);
+	expect(rpc.logs.deleteOlderFiles).not.toHaveBeenCalled();
+});
+
 it.each([
 	[copy.clearAll, copy.clearAllConfirm, rpc.logs.clearAll],
 	[copy.clearEvents, copy.clearEventsConfirm, rpc.events.clear],
@@ -39,10 +52,25 @@ it.each([
 		});
 		const older = screen.getByTestId<HTMLButtonElement>("storage-delete-older");
 		await fireEvent.click(older);
-		await fireEvent.click(screen.getByRole("button", { name: label }));
-		const dialog = await screen.findByRole("alertdialog");
+		const deletingDialog = await screen.findByRole("alertdialog");
+		await fireEvent.click(
+			within(deletingDialog).getByRole("button", { name: copy.deleteOlder }),
+		);
+		await fireEvent.click(
+			screen.getByRole("button", { name: label, hidden: true }),
+		);
+		const dialog = screen
+			.getAllByRole("alertdialog", { hidden: true })
+			.find((candidate) =>
+				within(candidate).queryByRole("button", {
+					name: confirmLabel,
+					hidden: true,
+				}),
+			);
+		if (!dialog) throw new Error("missing Clear dialog");
 		const confirm = within(dialog).getByRole<HTMLButtonElement>("button", {
 			name: confirmLabel,
+			hidden: true,
 		});
 
 		await fireEvent.click(confirm);

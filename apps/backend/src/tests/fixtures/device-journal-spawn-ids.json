@@ -6,6 +6,7 @@
 	"boot.systemdReady",
 	"connectivity.deviceBoundProbe",
 	"deviceLogs.journalFollow",
+	"deviceLogs.journalHeader",
 	"deviceLogs.journalScan",
 	"exec.execFileP",
 	"ingest.srtLiveTransmit",

@@ -57,6 +57,7 @@ export function retentionFixture() {
 	const run = spyOn(runner, "run").mockImplementation(async (cmd, args) => {
 		if (cmd !== "journalctl") throw new Error("unexpected command");
 		if (args.includes("--disk-usage")) return "take up 32M";
+		if (args.includes("--list-boots")) return "[]";
 		return "";
 	});
 	const detail = spyOn(logging, "setJournalDetail");
