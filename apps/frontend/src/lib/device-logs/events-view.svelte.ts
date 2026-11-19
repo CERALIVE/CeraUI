@@ -41,6 +41,8 @@ export interface EventFilter {
 type End = "first" | "older";
 
 const PAGE = 100;
+// Three pages bound the number of mounted, nonvirtualized rows.
+export const EVENT_ROW_CAP = 300;
 const PROBLEMS = new Set(["error", "warning"]);
 
 function listInput(
@@ -75,7 +77,7 @@ function merge(
 		ids.add(event.id);
 		merged.push(event);
 	}
-	return merged.sort((a, b) => b.seq - a.seq);
+	return merged.sort((a, b) => b.seq - a.seq).slice(0, EVENT_ROW_CAP);
 }
 
 export class EventsView {
@@ -101,6 +103,7 @@ export class EventsView {
 	readonly #deps: EventsViewDeps;
 	#generation = 0;
 	#head = 0;
+	#retainedFrom = 0;
 	#held: DeviceEvent[] = [];
 	#disposed = false;
 	#rawRequest: object | undefined;
@@ -119,7 +122,11 @@ export class EventsView {
 	}
 
 	loadOlder(): Promise<void> {
-		if (this.loading !== null || this.nextBeforeSeq === null)
+		if (
+			this.loading !== null ||
+			this.nextBeforeSeq === null ||
+			this.events.length === EVENT_ROW_CAP
+		)
 			return Promise.resolve();
 		return this.#read("older");
 	}
@@ -229,7 +236,13 @@ export class EventsView {
 			if (generation !== this.#generation) return;
 			this.failed = null;
 			this.#head = Math.max(this.#head, page.headSeq);
-			this.events = merge(end === "first" ? [] : this.events, page.events);
+			this.#retainedFrom = page.retainedFromSeq;
+			this.events = merge(
+				end === "first"
+					? []
+					: this.events.filter((event) => event.seq >= this.#retainedFrom),
+				page.events,
+			);
 			this.nextBeforeSeq = page.nextBeforeSeq;
 			newer = this.#held.splice(0).filter((event) => event.seq > page.headSeq);
 		} catch (error) {
@@ -261,7 +274,8 @@ export class EventsView {
 				return;
 			}
 			this.#head = Math.max(this.#head, event.seq);
-			if (admits(this.filter, event)) admitted.push(event);
+			if (event.seq >= this.#retainedFrom && admits(this.filter, event))
+				admitted.push(event);
 		}
 		this.events = merge(this.events, admitted);
 	}

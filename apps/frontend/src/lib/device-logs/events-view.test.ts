@@ -37,6 +37,16 @@ const ids = (view: EventsView) => view.events.map((item) => item.seq);
 const e = (seq: number, extra: Partial<DeviceEvent> = {}) =>
 	event(seq, "internet_lost", {}, extra);
 
+it("keeps only the newest 300 rows as live events pass the display cap", async () => {
+	const { view, list, push } = setup();
+	list.mockResolvedValueOnce(eventPage([e(1)]));
+	await view.reload();
+
+	for (let seq = 2; seq <= 304; seq++) push(e(seq));
+
+	expect(ids(view)).toEqual(Array.from({ length: 300 }, (_, i) => 304 - i));
+});
+
 describe("EventsView: the first page", () => {
 	it("reads the newest page with only a limit when nothing is filtered", async () => {
 		const { view, list } = setup();

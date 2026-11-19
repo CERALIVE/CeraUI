@@ -13,7 +13,7 @@
 -->
 <script lang="ts">
 import { getLocale, m } from '@ceraui/i18n/svelte';
-import { EVENT_FAMILIES } from '@ceraui/rpc/schemas';
+import { type DeviceEvent, EVENT_FAMILIES } from '@ceraui/rpc/schemas';
 import { ListFilter, RefreshCw, TriangleAlert, WifiOff } from '@lucide/svelte';
 import { onDestroy, untrack } from 'svelte';
 import { MediaQuery } from 'svelte/reactivity';
@@ -24,7 +24,7 @@ import { Toggle } from '$lib/components/ui/toggle';
 import { BootList } from '$lib/device-logs/boot-list.svelte';
 import { bootRows, formatBootTime } from '$lib/device-logs/boot-rows';
 import { bootSelection } from '$lib/device-logs/boot-selection.svelte';
-import { type AroundPage, EventsView } from '$lib/device-logs/events-view.svelte';
+import { type AroundPage, EVENT_ROW_CAP, EventsView } from '$lib/device-logs/events-view.svelte';
 import { onHistoryChanged } from '$lib/device-logs/history-bus';
 import { modemNames, timelineGroups } from '$lib/device-logs/timeline-groups';
 import { rpc } from '$lib/rpc/client';
@@ -52,6 +52,7 @@ const inline = new MediaQuery(INLINE_FILTERS_QUERY);
 let filtersOpen = $state(false);
 let scroller = $state<HTMLDivElement>();
 let stopId = $state<string>();
+let focusedRow = $state.raw<DeviceEvent>();
 
 const view = new EventsView(
 	{
@@ -78,7 +79,13 @@ $effect(() => {
 	untrack(() => view.connectionChanged(state));
 });
 
-const groups = $derived(timelineGroups(view.events));
+// Keep the exact keyed row and its active control until focus leaves it.
+const visibleEvents = $derived(
+	focusedRow && !view.events.some((event) => event.id === focusedRow?.id)
+		? [...view.events.slice(0, EVENT_ROW_CAP - 1), focusedRow].sort((a, b) => b.seq - a.seq)
+		: view.events,
+);
+const groups = $derived(timelineGroups(visibleEvents));
 const names = $derived(modemNames(view.events));
 const bootInfo = $derived(new Map(bootRows(boots.boots ?? []).map((row) => [row.boot.bootId, row])));
 const rowIds = $derived(
@@ -216,7 +223,12 @@ function showAll(): void {
 	{#if view.failed === 'first'}
 		{@render failure(() => void view.reload())}
 	{/if}
-	<div bind:this={scroller} class="min-h-0 flex-1 scroll-pt-16 overflow-y-auto overscroll-contain" data-testid="events-scroller">
+	<div bind:this={scroller} class="min-h-0 flex-1 scroll-pt-16 overflow-y-auto overscroll-contain" data-testid="events-scroller"
+		onfocusout={(event) => {
+			const row = event.target instanceof Element && event.target.closest('[data-testid="event-row"]');
+			if (row && !(event.relatedTarget instanceof Node && row.contains(event.relatedTarget))) focusedRow = undefined;
+		}}
+	>
 		<!-- A re-read for a skipped seq keeps its rows until the page arrives, with no loading rows above them. -->
 		{#if view.loading === 'first' && view.events.length === 0}
 			<div aria-busy="true" data-testid="events-loading" role="status">
@@ -286,7 +298,7 @@ function showAll(): void {
 							<EventRow
 								event={item.event}
 								{names}
-								onfocusin={() => (stopId = item.event.id)}
+								onfocusin={() => { stopId = item.event.id; focusedRow = item.event; }}
 								onkeydown={(keyEvent) => navigate(keyEvent, item.event.id)}
 								onviewraw={() => void view.viewRaw(item.event, onviewraw)}
 								rawLink={view.rawLink?.id === item.event.id ? view.rawLink.state : null}
@@ -303,7 +315,7 @@ function showAll(): void {
 		{/if}
 		{#if view.failed === 'older'}
 			{@render failure(() => void view.loadOlder(), true)}
-		{:else if view.nextBeforeSeq !== null}
+		{:else if view.nextBeforeSeq !== null && view.events.length < EVENT_ROW_CAP}
 			<div class="flex justify-center px-4 py-3">
 				<!-- aria-disabled, not disabled, while its page loads: the pressed button keeps keyboard focus. -->
 				<Button
@@ -321,7 +333,9 @@ function showAll(): void {
 				class="text-muted-foreground before:bg-border after:bg-border flex items-center gap-3 px-4 py-3 text-xs before:h-px before:flex-1 after:h-px after:flex-1"
 				data-testid="events-end"
 			>
-				{m['systemLogs.events.noOlder']()}
+				{view.events.length === EVENT_ROW_CAP
+					? m['systemLogs.raw.capReached']({ count: EVENT_ROW_CAP })
+					: m['systemLogs.events.noOlder']()}
 			</p>
 		{/if}
 	</div>

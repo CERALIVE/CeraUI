@@ -17,6 +17,12 @@ global event cache or replay queue. A later listener receives only later frames;
 it obtains retained history through `events.list`. `resetState()` also detaches
 the listener at logout.
 
+The open view displays at most 300 rows, newest first. Each list reply's
+`retainedFromSeq` expires older rows already shown. Push frames carry events
+only, so between list replies the view uses the last known retained boundary
+and the display cap. An evicted row with keyboard focus stays mounted in place
+of one row until focus leaves it.
+
 `lib/rpc/subscriptions-event-feed.test.ts` drives the real subscription handler.
 Its producer compatibility case runs the real backend emitter under Bun, feeds
 it a hyphenated kernel boot ID through `currentBootId`, and checks that every

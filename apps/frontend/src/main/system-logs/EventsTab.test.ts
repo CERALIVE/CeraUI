@@ -143,6 +143,31 @@ function row(code: string): HTMLElement {
 	return node;
 }
 
+it("keeps focus on an expired row until the operator leaves it", async () => {
+	await shown([stopped(9), stopped(8), stopped(7)], { nextBeforeSeq: 7 });
+	list.mockResolvedValueOnce(
+		eventPage([], { headSeq: 12, retainedFromSeq: 9 }),
+	);
+	const [newest, expired, focused] = rows();
+	const action =
+		focused && within(focused).getByRole("button", { name: ev.viewRaw });
+	const nextAction =
+		newest && within(newest).getByRole("button", { name: ev.viewRaw });
+	action?.focus();
+	expect(document.activeElement).toBe(action);
+
+	await fireEvent.click(screen.getByRole("button", { name: ev.loadOlder }));
+
+	expect(rows()).toEqual([newest, focused]);
+	expect(expired?.isConnected).toBe(false);
+	expect(document.activeElement).toBe(action);
+
+	nextAction?.focus();
+	await tick();
+	expect(rows()).toEqual([newest]);
+	expect(document.activeElement).toBe(nextAction);
+});
+
 describe("EventsTab: rows", () => {
 	it("reads the newest events with only a limit and renders a stopped stream as its title and detail", async () => {
 		await shown([stopped(2)]);
