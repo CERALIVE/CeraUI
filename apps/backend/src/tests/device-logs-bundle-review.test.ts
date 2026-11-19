@@ -93,6 +93,167 @@ test.each(["preview", "create"] as const)(
 	},
 );
 
+const numericBootId = "abeefc820722459888558b432da848fa";
+
+test("a known boot ID with a long digit run survives preview and download", async () => {
+	const cursor = `s=abcd;i=1;b=${numericBootId};m=10;t=20;x=abcd`;
+	const versions = { ...source.exportedBy, bootId: numericBootId };
+	source = {
+		...source,
+		exportedBy: versions,
+		boots: [{ bootId: numericBootId, versions }],
+		journalBoots: [numericBootId],
+		bootRecords: [{ bootId: numericBootId, startedAt: 1, versions }],
+		events: [
+			deviceEventSchema.parse({
+				id: "event",
+				seq: 1,
+				bootId: numericBootId,
+				at: 1,
+				code: "device_started",
+				family: "system",
+				severity: "info",
+				params: {},
+			}),
+		],
+	};
+	fixture.scan.mockImplementation(
+		journal([
+			record(1, {
+				_BOOT_ID: numericBootId,
+				__CURSOR: cursor,
+				MESSAGE: `modem identifier 490154203237518, boot text ${numericBootId}`,
+			}),
+		]),
+	);
+	const manifest = await previewBundle();
+	expect(manifest.exportedBy.bootId).toBe(numericBootId);
+	expect(manifest.boots).toEqual([{ bootId: numericBootId, versions }]);
+	const ticket = await createBundle({});
+	if (!ticket.ok) throw new Error(ticket.error);
+	const response = await handleLogBundleRequest(
+		new Request(`http://device${ticket.url}`),
+	);
+	expect(response.status).toBe(200);
+	const text = await new Response(
+		response.body?.pipeThrough(new DecompressionStream("gzip")),
+	).text();
+	expect(text).toContain(`"cursor":"${cursor}"`);
+	expect(text).toContain(`"boot":{"bootId":"${numericBootId}"`);
+	expect(text).toContain(
+		`"event":{"id":"event","seq":1,"bootId":"${numericBootId}"`,
+	);
+	expect(text).toContain("modem identifier [ID]");
+	expect(text).toContain("boot text abeefc[ID]b432da848fa");
+	expect(text).not.toContain("490154203237518");
+	expect(text.trimEnd().split("\n").at(-1)).toBe(
+		'{"section":"end","complete":true}',
+	);
+});
+
+test.each([
+	[
+		"an unknown boot shaped value",
+		{ exported: { bootId, ceraui: numericBootId }, secrets: [] },
+	],
+	[
+		"a held secret inside a known boot ID",
+		{
+			exported: { bootId: numericBootId, ceraui: "ui" },
+			secrets: [{ kind: "key", value: "820722459888558" }],
+		},
+	],
+] as const)(
+	"refuses %s in structured values",
+	async (_scenario, { exported, secrets }) => {
+		source = {
+			...source,
+			exportedBy: { ...source.exportedBy, ...exported },
+			journalBoots: [exported.bootId],
+			secrets,
+		};
+		await expect(previewBundle()).rejects.toThrow("READ_FAILED");
+		expect(await createBundle({})).toEqual({ ok: false, error: "READ_FAILED" });
+	},
+);
+
+const retainedBootId = "abeefc490154203237518b432da848fa";
+
+const collisions: ReadonlyArray<
+	readonly [
+		string,
+		{
+			readonly version?: string;
+			readonly serial?: string;
+			readonly cursor?: string;
+			readonly scanBootId?: string;
+		},
+	]
+> = [
+	["version text", { version: `build/${retainedBootId}` }],
+	["an event parameter", { serial: `modem/${retainedBootId}` }],
+	["a nonboot cursor component", { cursor: `s=${retainedBootId};b=${bootId}` }],
+	["a different boot in the cursor", { cursor: `b=${retainedBootId}` }],
+	[
+		"an IMEI next to the boot component",
+		{
+			cursor: `b=${numericBootId};i=490154203237518`,
+			scanBootId: numericBootId,
+		},
+	],
+	[
+		"an IMEI appended to the boot component",
+		{ cursor: `b=${numericBootId}/490154203237518`, scanBootId: numericBootId },
+	],
+];
+
+test.each(collisions)(
+	"refuses a numeric identifier in %s",
+	async (_name, row) => {
+		source = {
+			...source,
+			bootRecords: [{ bootId: retainedBootId, startedAt: 1, versions: null }],
+		};
+		if (row.version)
+			source = {
+				...source,
+				exportedBy: { ...source.exportedBy, ceraui: row.version },
+			};
+		if (row.serial)
+			source = {
+				...source,
+				events: [
+					deviceEventSchema.parse({
+						id: "event",
+						seq: 1,
+						bootId,
+						at: 1,
+						code: "future_event",
+						family: "network",
+						severity: "info",
+						params: { serial: row.serial },
+					}),
+				],
+			};
+		if (row.cursor) {
+			const scanBootId = row.scanBootId ?? bootId;
+			source = {
+				...source,
+				exportedBy: { ...source.exportedBy, bootId: scanBootId },
+				boots: [{ bootId: scanBootId, versions: null }],
+				journalBoots: [scanBootId],
+			};
+			fixture.scan.mockImplementation(
+				journal([record(1, { _BOOT_ID: scanBootId, __CURSOR: row.cursor })]),
+			);
+		}
+		await expect(previewBundle()).rejects.toMatchObject({
+			code: "READ_FAILED",
+		});
+		expect(await createBundle({})).toEqual({ ok: false, error: "READ_FAILED" });
+	},
+);
+
 test("clear remains pending until its aborted native scan has joined", async () => {
 	const entered = Promise.withResolvers<void>();
 	const aborted = Promise.withResolvers<void>();

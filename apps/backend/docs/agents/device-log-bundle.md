@@ -63,12 +63,16 @@ replacement; adjacent ranges remain separate.
 The collision policy is **fail closed**. A known secret colliding with a boot
 ID, cursor, timestamp, unit, version, event ID, settings value or other structured
 field refuses the entire operation with `READ_FAILED`. Pattern masking that
-would alter structured text is also refused. Journal messages are the free-text
-exception and are redacted. A final serialized-record check prevents JSON
+would alter structured text is also refused. Only designated boot ID fields
+can suppress a numeric match, and only when the entire field equals its
+authoritative boot ID. A journal cursor receives the same exception only
+for its single `b=` component when that component and the entry's boot ID
+both equal the scanned boot. Version text, event parameters, other cursor
+components and journal messages keep all pattern checks. Known secrets
+still match inside every boot ID. A final check of each serialized record prevents JSON
 framing or replacement markers from reintroducing a known secret. The manifest
-is checked independently, including on deadline paths. No loose identifier
-schema or identifier exemption exists, and no exception or abort reason is
-copied into output or logs.
+is checked independently, including on deadline paths. No exception or abort
+reason is copied into output or logs.
 Object keys are structured text too: a retained event parameter name containing
 a supported sensitive pattern refuses the operation instead of being renamed.
 The final manifest check also covers section counts after processing; a count

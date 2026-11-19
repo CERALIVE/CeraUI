@@ -22,7 +22,10 @@ function isLocalIPv4(a: number, b: number): boolean {
 
 interface Redactor {
 	structured(value: string | number | boolean | null): void;
-	text(value: string): { readonly text: string; readonly redactions: number };
+	text(
+		value: string,
+		bootSpan?: readonly [start: number, end: number],
+	): { readonly text: string; readonly redactions: number };
 }
 
 export function buildRedactor(
@@ -74,7 +77,7 @@ export function buildRedactor(
 			exact.lastIndex = 0;
 			if (exact.test(String(value))) throw new BundleReadError();
 		},
-		text(value: string) {
+		text(value: string, bootSpan) {
 			const spans: Array<{
 				start: number;
 				end: number;
@@ -139,10 +142,12 @@ export function buildRedactor(
 					address?: (typeof addresses)[number],
 				) => string,
 				addressContext = false,
+				ignore?: typeof bootSpan,
 			) => {
 				let addressIndex = 0;
 				for (const match of value.matchAll(pattern)) {
 					const end = match.index + match[0].length;
+					if (ignore && ignore[0] <= match.index && end <= ignore[1]) continue;
 					let containing: (typeof addresses)[number] | undefined;
 					if (addressContext) {
 						let address = addresses[addressIndex];
@@ -161,8 +166,8 @@ export function buildRedactor(
 						});
 				}
 			};
-			mask(/(?<!\d)89\d{17,18}(?!\d)/g, () => "[ICCID]");
-			mask(/(?<!\d)\d{15}(?!\d)/g, () => "[ID]");
+			mask(/(?<!\d)89\d{17,18}(?!\d)/g, () => "[ICCID]", false, bootSpan);
+			mask(/(?<!\d)\d{15}(?!\d)/g, () => "[ID]", false, bootSpan);
 			mask(
 				/\b[0-9a-f]{2}([:-])[0-9a-f]{2}\1[0-9a-f]{2}\1[0-9a-f]{2}\1[0-9a-f]{2}\1[0-9a-f]{2}\b/gi,
 				(match, address) => {

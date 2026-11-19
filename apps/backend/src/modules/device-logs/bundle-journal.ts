@@ -23,7 +23,11 @@ type BootWindow = {
 export async function collectBundleJournal(
 	[current, previous]: readonly string[],
 	window: BootWindow & { readonly epoch: number; readonly deadline: number },
-	append: (entry: LogEntry, isCurrent: boolean) => Promise<AppendCut | null>,
+	append: (
+		entry: LogEntry,
+		isCurrent: boolean,
+		boot: string,
+	) => Promise<AppendCut | null>,
 ): Promise<{ readonly bootsCovered: number; readonly incomplete: Cut | null }> {
 	const owners = { current: {}, previous: {} };
 	const queryFor = (boot: string) =>
@@ -73,7 +77,7 @@ export async function collectBundleJournal(
 			if (!page.ok) return page.error;
 			try {
 				for (const entry of page.entries) {
-					const cut = phase.stopped() ?? (await append(entry, isCurrent));
+					const cut = phase.stopped() ?? (await append(entry, isCurrent, boot));
 					if (cut) return cut;
 					if (!covered) {
 						covered = true;

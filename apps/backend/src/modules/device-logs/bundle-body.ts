@@ -1,5 +1,6 @@
 import {
 	type LogBundleManifest,
+	type LogEntry,
 	logBundleManifestSchema,
 } from "@ceraui/rpc/schemas";
 import { collectBundleData } from "./bundle-data.ts";
@@ -12,6 +13,20 @@ const MAX_COMPRESSED = 8 * 1024 * 1024;
 const TAIL_RESERVE = 512;
 export const BUNDLE_TIME_MS = 60_000;
 type Section = LogBundleManifest["sections"][number]["id"];
+
+function bootSpan(
+	value: unknown,
+	expected: string | undefined,
+	inCursor: boolean,
+): readonly [number, number] | undefined {
+	if (!expected || !/^[0-9a-f]{32}$/.test(expected)) return;
+	if (!inCursor) return value === expected ? [0, expected.length] : undefined;
+	if (typeof value !== "string") return;
+	const [boot, duplicate] = value.matchAll(/(?:^|;)b=([^;]*)/g);
+	if (!boot || duplicate || boot[1] !== expected) return;
+	const end = boot.index + boot[0].length;
+	return [end - expected.length, end];
+}
 
 export async function buildBundle(
 	{
@@ -31,6 +46,26 @@ export async function buildBundle(
 }> {
 	const snapshot = await collectBundleData();
 	const redactor = buildRedactor(snapshot.secrets);
+	// Register the objects that own boot identity fields, never arbitrary values.
+	const bootFields = new WeakMap<object, string>();
+	const current = snapshot.journalBoots[0];
+	if (current) bootFields.set(snapshot.exportedBy, current);
+	for (const boot of snapshot.boots) {
+		if (!snapshot.journalBoots.includes(boot.bootId)) continue;
+		bootFields.set(boot, boot.bootId);
+		if (boot.versions) bootFields.set(boot.versions, boot.bootId);
+	}
+	for (const boot of snapshot.bootRecords) {
+		bootFields.set(boot, boot.bootId);
+		if (boot.versions) bootFields.set(boot.versions, boot.bootId);
+	}
+	const knownBoots = new Set([
+		...snapshot.journalBoots,
+		...snapshot.bootRecords.map((boot) => boot.bootId),
+	]);
+	for (const event of snapshot.events) {
+		if (knownBoots.has(event.bootId)) bootFields.set(event, event.bootId);
+	}
 	redactor.structured(createdAt);
 	const filename = `ceralive-support-${snapshot.exportedBy.bootId.slice(0, 8)}-${new Date(
 		createdAt,
@@ -69,15 +104,15 @@ export async function buildBundle(
 		plain: MAX_PLAIN - TAIL_RESERVE,
 		compressed: MAX_COMPRESSED - TAIL_RESERVE,
 	};
-	async function append(
-		section: Section | "end",
-		payload: Record<string, unknown>,
-		budget: typeof totalBudget | null = totalBudget,
-	) {
+	function inspect(root: unknown, entry?: LogEntry) {
 		let redactions = 0;
-		function visit(value: unknown, message = false): unknown {
+		function visit(
+			value: unknown,
+			message = false,
+			span?: ReturnType<typeof bootSpan>,
+		): unknown {
 			if (typeof value === "string") {
-				const masked = redactor.text(value);
+				const masked = redactor.text(value, span);
 				if (!message && masked.redactions !== 0) throw new BundleReadError();
 				redactions += masked.redactions;
 				return masked.text;
@@ -96,14 +131,32 @@ export async function buildBundle(
 			return Object.fromEntries(
 				Object.entries(value).map(([key, inner]) => {
 					if (redactor.text(key).redactions !== 0) throw new BundleReadError();
+					const cursor = value === entry && key === "cursor";
+					const span =
+						key === "bootId" || cursor
+							? bootSpan(inner, bootFields.get(value), cursor)
+							: undefined;
 					return [
 						key,
-						visit(inner, section === "journal" && key === "message"),
+						visit(inner, value === entry && key === "message", span),
 					];
 				}),
 			);
 		}
-		const text = `${JSON.stringify(visit({ section, ...payload }))}\n`;
+		const text = JSON.stringify(visit(root));
+		return { text, redactions };
+	}
+	async function append(
+		section: Section | "end",
+		payload: Record<string, unknown>,
+		budget: typeof totalBudget | null = totalBudget,
+		entry?: LogEntry,
+	) {
+		const record = { section, ...payload };
+		const boot = bootFields.get(payload);
+		if (boot) bootFields.set(record, boot);
+		const inspected = inspect(record, entry);
+		const text = `${inspected.text}\n`;
 		redactor.structured(text);
 		const bytes = new TextEncoder().encode(text);
 		if (budget && plainBytes + bytes.byteLength > budget.plain)
@@ -124,7 +177,7 @@ export async function buildBundle(
 			const counter = manifest.sections.find((entry) => entry.id === section);
 			if (counter) {
 				counter.entries++;
-				counter.redactions += redactions;
+				counter.redactions += inspected.redactions;
 			}
 		}
 		return null;
@@ -137,8 +190,7 @@ export async function buildBundle(
 		...snapshot.bootRecords.map((boot) => ["events", { boot }] as const),
 	];
 	// The preview returns these structured fields even when the journal is cut.
-	if (redactor.text(JSON.stringify(manifest)).redactions !== 0)
-		throw new BundleReadError();
+	redactor.structured(inspect(manifest).text);
 	let incomplete: string | null = null;
 	for (const [section, payload] of prelude) {
 		incomplete = stopped() ?? (await append(section, payload));
@@ -154,8 +206,15 @@ export async function buildBundle(
 		const coverage = await collectBundleJournal(
 			snapshot.journalBoots,
 			{ epoch, signal, stopped, deadline: createdAt + BUNDLE_TIME_MS },
-			(entry, isCurrent) =>
-				append("journal", { entry }, isCurrent ? totalBudget : previousBudget),
+			(entry, isCurrent, boot) => {
+				if (entry.bootId === boot) bootFields.set(entry, boot);
+				return append(
+					"journal",
+					{ entry },
+					isCurrent ? totalBudget : previousBudget,
+					entry,
+				);
+			},
 		);
 		incomplete = coverage.incomplete;
 		journal.bootsCovered = coverage.bootsCovered;
