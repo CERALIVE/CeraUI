@@ -86,7 +86,7 @@ describe('closed log schema vocabularies', () => {
 		['query', logs.logQueryPageSchema.shape.ok, true],
 		['follow', logs.logFollowStartOutputSchema.options[0].shape.ok, true],
 		['storage', logs.logStorageOutputSchema.options[0].shape.ok, true],
-		['delete', logs.logDeleteOlderFilesOutputSchema.options[0].shape.ok, true],
+		['delete', logs.logClearAllOutputSchema.options[0].shape.ok, true],
 		['export', logs.logExportOutputSchema.options[0].shape.ok, true],
 		['around', logs.logAroundOutputSchema.options[0].shape.ok, true],
 	] as const;

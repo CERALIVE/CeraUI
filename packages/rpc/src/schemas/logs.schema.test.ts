@@ -23,7 +23,7 @@ import {
 	logBootInfoSchema,
 	logBootSchema,
 	logBundleManifestSchema,
-	logDeleteOlderFilesOutputSchema,
+	logClearAllOutputSchema,
 	logEntrySchema,
 	logErrorSchema,
 	logExportInputSchema,
@@ -316,7 +316,7 @@ describe('complete legal wire states and required fields', () => {
 		},
 		{
 			name: 'delete reply',
-			schema: logDeleteOlderFilesOutputSchema,
+			schema: logClearAllOutputSchema,
 			value: { ok: true, storage: fullStorage, bootsBefore: 2, bootsAfter: 1 },
 		},
 		{
@@ -453,7 +453,7 @@ describe('complete legal wire states and required fields', () => {
 		logQueryOutputSchema,
 		logFollowStartOutputSchema,
 		logStorageOutputSchema,
-		logDeleteOlderFilesOutputSchema,
+		logClearAllOutputSchema,
 		logExportOutputSchema,
 		logAroundOutputSchema,
 	])('preserves every classified failure branch', (schema) => {
@@ -681,7 +681,7 @@ describe('closed raw log object and value boundaries', () => {
 		{ name: 'boot information', schema: logBootInfoSchema, value: boot },
 		{ name: 'storage', schema: logStorageSchema, value: storageWithCeiling },
 		{ name: 'storage reply', schema: logStorageOutputSchema, value: storageReply },
-		{ name: 'delete reply', schema: logDeleteOlderFilesOutputSchema, value: deleteReply },
+		{ name: 'delete reply', schema: logClearAllOutputSchema, value: deleteReply },
 		{ name: 'export reply', schema: logExportOutputSchema, value: exportReply },
 		{ name: 'around input', schema: logAroundInputSchema, value: { bootId, at: 0 } },
 		{ name: 'around reply', schema: logAroundOutputSchema, value: around },
@@ -744,7 +744,7 @@ describe('closed raw log object and value boundaries', () => {
 		{ name: 'query', schema: logQueryOutputSchema, value: page },
 		{ name: 'follow start', schema: logFollowStartOutputSchema, value: followStart },
 		{ name: 'storage', schema: logStorageOutputSchema, value: storageReply },
-		{ name: 'delete', schema: logDeleteOlderFilesOutputSchema, value: deleteReply },
+		{ name: 'delete', schema: logClearAllOutputSchema, value: deleteReply },
 		{ name: 'export', schema: logExportOutputSchema, value: exportReply },
 		{ name: 'around', schema: logAroundOutputSchema, value: around },
 	])('$name rejects an unknown success discriminant', ({ schema, value }) => {
@@ -1048,7 +1048,7 @@ describe('boot versions, storage and sharing', () => {
 		});
 		expect(logStorageOutputSchema.parse({ ok: true, storage })).toEqual({ ok: true, storage });
 		expect(
-			logDeleteOlderFilesOutputSchema.parse({
+			logClearAllOutputSchema.parse({
 				ok: true,
 				storage,
 				bootsBefore: 3,
@@ -1071,7 +1071,7 @@ describe('boot versions, storage and sharing', () => {
 		});
 	});
 
-	test('the public barrels expose the closed log vocabulary and all thirteen procedures', () => {
+	test('the public barrels expose the closed log vocabulary and all twelve procedures', () => {
 		expect(LOG_SOURCES).toEqual([
 			'app',
 			'engine',
@@ -1102,7 +1102,6 @@ describe('boot versions, storage and sharing', () => {
 			'createBundle',
 			'createExport',
 			'deleteLegacyDebug',
-			'deleteOlderFiles',
 			'followStart',
 			'followStop',
 			'getStorage',

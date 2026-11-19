@@ -133,14 +133,12 @@ type Outputs = {
 	logRetentionSchema: Retention;
 	logStorageSchema: Storage;
 	logStorageOutputSchema: { ok: true; storage: Storage } | Failure;
-	logDeleteOlderFilesOutputSchema:
+	logClearAllOutputSchema:
 		| {
 				ok: true;
 				storage: Storage;
 				bootsBefore: number;
 				bootsAfter: number;
-				unverifiedArchivesKept?: true | undefined;
-				legacyArchivesKept?: true | undefined;
 		  }
 		| Failure;
 	logExportInputSchema: TimeRange & { filter: Filter; boot: Boot };
@@ -260,8 +258,8 @@ export type LogStorageAlias = Assert<Equal<logs.LogStorage, Storage>>;
 export type LogStorageOutputAlias = Assert<
 	Equal<logs.LogStorageOutput, Outputs['logStorageOutputSchema']>
 >;
-export type LogDeleteOlderFilesOutputAlias = Assert<
-	Equal<logs.LogDeleteOlderFilesOutput, Outputs['logDeleteOlderFilesOutputSchema']>
+export type LogClearAllOutputAlias = Assert<
+	Equal<logs.LogClearAllOutput, Outputs['logClearAllOutputSchema']>
 >;
 export type LogExportInputAlias = Assert<
 	Equal<Flat<logs.LogExportInput>, Flat<Inputs['logExportInputSchema']>>
@@ -354,9 +352,8 @@ type ProcedureShapes = {
 	followStop: [NoInput, 'logFollowStopOutputSchema'];
 	getStorage: [NoInput, 'logStorageSchema'];
 	setRetention: ['logRetentionSchema', 'logStorageOutputSchema'];
-	deleteOlderFiles: [NoInput, 'logDeleteOlderFilesOutputSchema'];
 	deleteLegacyDebug: [NoInput, 'logStorageOutputSchema'];
-	clearAll: [NoInput, 'logDeleteOlderFilesOutputSchema'];
+	clearAll: [NoInput, 'logClearAllOutputSchema'];
 	createExport: ['logExportInputSchema', 'logExportOutputSchema'];
 	previewBundle: [NoInput, 'logBundleManifestSchema'];
 	createBundle: [NoInput, 'logExportOutputSchema'];

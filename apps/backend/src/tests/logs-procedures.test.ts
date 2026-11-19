@@ -61,11 +61,6 @@ const guestCalls = [
 			call(appRouter.logs.setRetention, retention, { context }),
 	},
 	{
-		name: "deleteOlderFiles",
-		invoke: (context: RPCContext) =>
-			call(appRouter.logs.deleteOlderFiles, undefined, { context }),
-	},
-	{
 		name: "deleteLegacyDebug",
 		invoke: (context: RPCContext) =>
 			call(appRouter.logs.deleteLegacyDebug, undefined, { context }),
@@ -244,11 +239,6 @@ test("storage retention cleanup and export delegates work without systemd", asyn
 				context: sockets.context,
 			}),
 		).toMatchObject({ ok: true, storage: { retention } });
-		expect(
-			await call(appRouter.logs.deleteOlderFiles, undefined, {
-				context: sockets.context,
-			}),
-		).toMatchObject({ ok: true, bootsBefore: 1, bootsAfter: 1 });
 		expect(
 			await call(appRouter.logs.deleteLegacyDebug, undefined, {
 				context: sockets.context,

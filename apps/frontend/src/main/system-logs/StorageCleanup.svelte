@@ -6,7 +6,7 @@
 <script lang="ts">
 import { formatBytes } from '@ceraui/i18n/formatters';
 import { getLocale } from '@ceraui/i18n/svelte';
-import type { LogDeleteOlderFilesOutput, LogStorage } from '@ceraui/rpc/schemas';
+import type { LogClearAllOutput, LogStorage } from '@ceraui/rpc/schemas';
 
 import SimpleAlertDialog from '$lib/components/custom/simple-alert-dialog.svelte';
 import { Button, buttonVariants } from '$lib/components/ui/button';
@@ -65,7 +65,7 @@ function openOnCancel(id: string) {
 }
 
 let running = $state<Action>();
-let cleanup = $state<OkReply<LogDeleteOlderFilesOutput>>();
+let cleanup = $state<OkReply<LogClearAllOutput>>();
 let failure = $state<{ action: Action; reason: ActionFailure }>();
 let confirmClearAll = $state(false);
 let confirmClearEvents = $state(false);

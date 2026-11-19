@@ -191,23 +191,6 @@ test.each(["size", "age", "unknown"] as const)(
 		});
 	},
 );
-test("delete older reports stored boots without vacuuming an empty archive snapshot", async () => {
-	const r = await service();
-	f.run.mockImplementation(async (_cmd, args) => {
-		if (args.includes("--list-boots"))
-			return JSON.stringify([
-				{ boot_id: record(1).bootId, index: 0, first_entry: 0, last_entry: 0 },
-			]);
-		return "take up 1M";
-	});
-	const reply = await r.deleteOlderFiles();
-	expect(reply).toMatchObject({ ok: true, bootsBefore: 1, bootsAfter: 1 });
-	expect(f.run.mock.calls.map((c) => c[1])).toEqual([
-		["--list-boots", "-o", "json"],
-		["--list-boots", "-o", "json"],
-		["--disk-usage"],
-	]);
-});
 test("clear joins readers, preserves events and records the new epoch", async () => {
 	const r = await service();
 	writeFileSync(join(f.dir, "debug.log"), "old");
@@ -299,11 +282,6 @@ test("mock operations use only ring data and clear before emitting to a throwing
 		expect((await r.setRetention({ ...defaults, maxAgeDays: 7 })).ok).toBe(
 			true,
 		);
-		expect(await r.deleteOlderFiles()).toMatchObject({
-			ok: true,
-			bootsBefore: 1,
-			bootsAfter: 1,
-		});
 		expect((await r.clearAll()).ok).toBe(true);
 		expect(JSON.parse(logging.getRecentLogLines()[0] ?? "{}").msg).toBe(
 			"device logs cleared",
@@ -614,25 +592,6 @@ test("mock ceiling enforces the scenario's age and size ceiling independently", 
 	});
 });
 
-test("empty journal cleanup still reports both boot counts without probing uptime", async () => {
-	const r = await service();
-	f.run.mockImplementation(async (cmd, args) => {
-		expect(cmd).toBe("journalctl");
-		return args.includes("--list-boots") ? "[]" : "take up 0B";
-	});
-	expect(await r.deleteOlderFiles()).toMatchObject({
-		ok: true,
-		bootsBefore: 0,
-		bootsAfter: 0,
-	});
-	expect(f.read).not.toHaveBeenCalled();
-	expect(f.run.mock.calls.map((c) => c.slice(0, 2))).toEqual([
-		["journalctl", ["--list-boots", "-o", "json"]],
-		["journalctl", ["--list-boots", "-o", "json"]],
-		["journalctl", ["--disk-usage"]],
-	]);
-});
-
 test.each(["save", "state", "detail"] as const)(
 	"setting I/O failure (%s) refuses and releases mutex",
 	async (kind) => {
@@ -658,51 +617,6 @@ test.each(["save", "state", "detail"] as const)(
 		} finally {
 			fail.mockRestore();
 		}
-	},
-);
-
-test.each(["", "-1", "1.2.3", "Infinity", "9007199254740991", "1e9"])(
-	"older-file cleanup refuses malformed boot inventories %j",
-	async (inventory) => {
-		const r = await service();
-		f.run.mockResolvedValue(inventory);
-		expect(await r.deleteOlderFiles()).toEqual({
-			ok: false,
-			error: "READ_FAILED",
-		});
-		expect(f.run.mock.calls.map((c) => c[1])).toEqual([
-			["--list-boots", "-o", "json"],
-		]);
-	},
-);
-
-test.each(["before inventory", "scope", "snapshot", "after inventory"])(
-	"older-file cleanup refuses failed journal operation at %s",
-	async (stage) => {
-		const r = await service();
-		if (stage === "scope")
-			f.archiveScope.mockImplementationOnce(() => {
-				throw new Error("machine ID read failure");
-			});
-		if (stage === "snapshot")
-			f.archiveScope.mockReturnValueOnce({
-				...f.archiveScope(),
-				directories: ["/dev/null"],
-			});
-		let call = 0;
-		f.run.mockImplementation(async (_cmd, args) => {
-			const index = call++;
-			if (
-				(stage === "before inventory" && index === 0) ||
-				(stage === "after inventory" && index === 1)
-			)
-				throw new Error("journal failure");
-			return args.includes("--list-boots") ? "[]" : "take up 0B";
-		});
-		expect(await r.deleteOlderFiles()).toEqual({
-			ok: false,
-			error: "READ_FAILED",
-		});
 	},
 );
 

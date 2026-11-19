@@ -135,15 +135,6 @@ const cases = [
 		invalid: () => spyOn(retention, "setRetention").mockResolvedValue(invalid),
 	},
 	{
-		name: "deleteOlderFiles",
-		spy: () => spyOn(retention, "deleteOlderFiles"),
-		invoke: (context: RPCContext) =>
-			call(appRouter.logs.deleteOlderFiles, undefined, { context }),
-		args: () => [],
-		invalid: () =>
-			spyOn(retention, "deleteOlderFiles").mockResolvedValue(invalid),
-	},
-	{
 		name: "deleteLegacyDebug",
 		spy: () => spyOn(retention, "deleteLegacyDebug"),
 		invoke: (context: RPCContext) =>

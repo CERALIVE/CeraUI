@@ -202,18 +202,16 @@ export const logStorageOutputSchema = z.discriminatedUnion('ok', [
 	logErrorSchema,
 ]);
 export type LogStorageOutput = z.infer<typeof logStorageOutputSchema>;
-export const logDeleteOlderFilesOutputSchema = z.discriminatedUnion('ok', [
+export const logClearAllOutputSchema = z.discriminatedUnion('ok', [
 	z.strictObject({
 		ok: z.literal(true),
 		storage: logStorageSchema,
 		bootsBefore: countSchema,
 		bootsAfter: countSchema,
-		unverifiedArchivesKept: z.literal(true).optional(),
-		legacyArchivesKept: z.literal(true).optional(),
 	}),
 	logErrorSchema,
 ]);
-export type LogDeleteOlderFilesOutput = z.infer<typeof logDeleteOlderFilesOutputSchema>;
+export type LogClearAllOutput = z.infer<typeof logClearAllOutputSchema>;
 
 export const logExportInputSchema = z
 	.strictObject({

@@ -44,7 +44,7 @@ import type {
 	LogAroundOutput,
 	LogBootInfo,
 	LogBundleManifest,
-	LogDeleteOlderFilesOutput,
+	LogClearAllOutput,
 	LogExportInput,
 	LogExportOutput,
 	LogFollowStartInput,
@@ -972,7 +972,7 @@ export interface TypedRPC {
 		getStorage: () => Promise<LogStorage>;
 		setRetention: (input: LogRetention) => Promise<LogStorageOutput>;
 		deleteLegacyDebug: () => Promise<LogStorageOutput>;
-		clearAll: () => Promise<LogDeleteOlderFilesOutput>;
+		clearAll: () => Promise<LogClearAllOutput>;
 		createExport: (input: LogExportInput) => Promise<LogExportOutput>;
 		previewBundle: () => Promise<LogBundleManifest>;
 		createBundle: () => Promise<LogExportOutput>;

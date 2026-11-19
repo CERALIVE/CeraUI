@@ -1,6 +1,6 @@
 import { clearInterval, setInterval } from "node:timers";
 import type {
-	LogDeleteOlderFilesOutput,
+	LogClearAllOutput,
 	LogRetention,
 	LogStorageOutput,
 } from "@ceraui/rpc/schemas";
@@ -20,7 +20,6 @@ import { readJournalCeiling } from "./ceiling.ts";
 import { clearNativeJournal } from "./clear-journal.ts";
 import { abortLogExports } from "./export.ts";
 import { stopAllFollows } from "./follow.ts";
-import { deleteOlderJournal } from "./older-journal.ts";
 import { abortLogQueries } from "./query-admission.ts";
 import { deleteLegacyDebugFiles } from "./retention-files.ts";
 import {
@@ -139,28 +138,6 @@ export function setRetention(next: LogRetention): Promise<LogStorageOutput> {
 		}
 	}, busy);
 }
-export function deleteOlderFiles(): Promise<LogDeleteOlderFilesOutput> {
-	return withDestructiveRetention(false, async () => {
-		const mock = shouldUseMocks();
-		const before = mock
-			? []
-			: (await listBoots()).filter((boot) => boot.logsAvailable);
-		const warnings = mock
-			? {}
-			: (await deleteOlderJournal(before.find((boot) => boot.current)?.firstTs))
-					.warnings;
-		const bootsBefore = mock ? 1 : before.length;
-		const bootsAfter = mock ? 1 : await countStoredBoots();
-		return {
-			ok: true,
-			storage: await getStorage(),
-			bootsBefore,
-			bootsAfter,
-			...warnings,
-		};
-	});
-}
-
 async function countStoredBoots(): Promise<number> {
 	return (await listBoots()).filter((boot) => boot.logsAvailable).length;
 }
@@ -174,21 +151,6 @@ export function deleteLegacyDebug(): Promise<LogStorageOutput> {
 		}
 	}, busy);
 }
-export function clearAll(): Promise<LogDeleteOlderFilesOutput> {
-	return withDestructiveRetention(true, async (retainUntil) => {
-		const mock = shouldUseMocks();
-		const bootsBefore = await countStoredBoots();
-		if (!mock) await clearNativeJournal(retainUntil);
-		await deleteLegacyDebugFiles();
-		// Mock Clear empties the captured ring before writing its first new marker.
-		if (mock) clearRecentLogLines();
-		logger.info("device logs cleared", { module: "device-logs" });
-		updateLogState({ lastClearedAt: Date.now() });
-		const bootsAfter = await countStoredBoots();
-		return { ok: true, storage: await getStorage(), bootsBefore, bootsAfter };
-	});
-}
-
 function updateBusy(): boolean {
 	return (
 		isUpdating() ||
@@ -196,60 +158,63 @@ function updateBusy(): boolean {
 	);
 }
 
-type DestructiveReply = { readonly ok: true };
-function withDestructiveRetention<R extends DestructiveReply>(
-	stopFollows: boolean,
-	operation: (retainUntil: (pending: Promise<unknown>) => void) => Promise<R>,
-): Promise<R | Extract<LogStorageOutput, { ok: false }>> {
-	return exclusive<R | Extract<LogStorageOutput, { ok: false }>, typeof busy>(
-		async () => {
-			let reopen: (() => void) | undefined;
-			let release: (() => void) | undefined;
-			let settlement: Promise<unknown> | undefined;
+export function clearAll(): Promise<LogClearAllOutput> {
+	return exclusive<LogClearAllOutput, typeof busy>(async () => {
+		let reopen: (() => void) | undefined;
+		let release: (() => void) | undefined;
+		let settlement: Promise<unknown> | undefined;
+		try {
+			if (updateBusy()) return { ok: false, error: "UPDATE_IN_PROGRESS" };
+			reopen = beginHistoryClear();
+			const stopping = [
+				stopAllFollows("cleared"),
+				abortLogExports(),
+				abortLogQueries(),
+			];
+			const deadline = Promise.withResolvers<null>();
+			const timer = setTimeout(() => deadline.resolve(null), 15_000);
+			let drained: PromiseSettledResult<void>[] | null;
 			try {
-				if (updateBusy()) return { ok: false, error: "UPDATE_IN_PROGRESS" };
-				reopen = beginHistoryClear();
-				const stopping = [
-					...(stopFollows ? [stopAllFollows("cleared")] : []),
-					abortLogExports(),
-					abortLogQueries(),
-				];
-				const deadline = Promise.withResolvers<null>();
-				const timer = setTimeout(() => deadline.resolve(null), 15_000);
-				let drained: PromiseSettledResult<void>[] | null;
-				try {
-					drained = await Promise.race([
-						Promise.allSettled(stopping),
-						deadline.promise,
-					]);
-				} finally {
-					clearTimeout(timer);
-				}
-				if (
-					drained === null ||
-					drained.some((result) => result.status === "rejected")
-				)
-					return { ok: false, error: "READ_FAILED" };
-				const deletion = reserveUpdateEvidenceDeletion(updateBusy());
-				if (!deletion.allowed)
-					return { ok: false, error: "UPDATE_IN_PROGRESS" };
-				release = deletion.reservation.releaseAfterCompletion;
-				return await operation((pending) => {
+				drained = await Promise.race([
+					Promise.allSettled(stopping),
+					deadline.promise,
+				]);
+			} finally {
+				clearTimeout(timer);
+			}
+			if (
+				drained === null ||
+				drained.some((result) => result.status === "rejected")
+			)
+				return { ok: false, error: "READ_FAILED" };
+			const deletion = reserveUpdateEvidenceDeletion(updateBusy());
+			if (!deletion.allowed) return { ok: false, error: "UPDATE_IN_PROGRESS" };
+			release = deletion.reservation.releaseAfterCompletion;
+			const mock = shouldUseMocks();
+			const bootsBefore = await countStoredBoots();
+			if (!mock) {
+				await clearNativeJournal((pending) => {
 					settlement = pending;
 				});
-			} catch {
-				return { ok: false, error: "READ_FAILED" };
-			} finally {
-				const finish = () => {
-					release?.();
-					reopen?.();
-				};
-				if (settlement) {
-					deferHistoryClear();
-					void settlement.then(finish, () => undefined);
-				} else finish();
 			}
-		},
-		busy,
-	);
+			await deleteLegacyDebugFiles();
+			// Mock Clear empties the captured ring before writing its first new marker.
+			if (mock) clearRecentLogLines();
+			logger.info("device logs cleared", { module: "device-logs" });
+			updateLogState({ lastClearedAt: Date.now() });
+			const bootsAfter = await countStoredBoots();
+			return { ok: true, storage: await getStorage(), bootsBefore, bootsAfter };
+		} catch {
+			return { ok: false, error: "READ_FAILED" };
+		} finally {
+			const finish = () => {
+				release?.();
+				reopen?.();
+			};
+			if (settlement) {
+				deferHistoryClear();
+				void settlement.then(finish, () => undefined);
+			} else finish();
+		}
+	}, busy);
 }

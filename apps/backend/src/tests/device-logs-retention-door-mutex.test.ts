@@ -16,7 +16,6 @@ const actions = {
 	daily: () => retention.maintain(),
 	settings: () =>
 		retention.setRetention({ maxAgeDays: 7, maxSizeMb: 64, detail: "info" }),
-	older: () => retention.deleteOlderFiles(),
 	legacy: () => retention.deleteLegacyDebug(),
 };
 for (const mock of [false, true]) {
@@ -66,19 +65,14 @@ for (const mock of [false, true]) {
 				}),
 			);
 			try {
-				if (name === "older") {
-					expect(settings.historyClearing()).toBeInstanceOf(Promise);
-					expect(settings.getLogState().historyEpoch).toBe(1);
-				} else {
-					// A clear queued behind a non-destructive mutation leaves the door open.
-					const ticket = await bounded(createExport({}, { filter: {} }));
-					if (!ticket.ok) throw new Error(ticket.error);
-					const old = await handleLogExportRequest(
-						new Request(`http://device${ticket.url}`),
-					);
-					expect(await bounded(old.text())).toContain("before-clear");
-					expect(settings.getLogState().historyEpoch).toBe(0);
-				}
+				// A clear queued behind a non-destructive mutation leaves the door open.
+				const ticket = await bounded(createExport({}, { filter: {} }));
+				if (!ticket.ok) throw new Error(ticket.error);
+				const old = await handleLogExportRequest(
+					new Request(`http://device${ticket.url}`),
+				);
+				expect(await bounded(old.text())).toContain("before-clear");
+				expect(settings.getLogState().historyEpoch).toBe(0);
 				expect(trace).toEqual([]);
 				beforeReadout.release();
 				await bounded(clearReadout.entered);
@@ -96,9 +90,7 @@ for (const mock of [false, true]) {
 				await bounded(Promise.all([clearing, after]));
 				expect(trace).toEqual(["before", "clear", "after"]);
 				expect((await bounded(incoming)).ok).toBe(true);
-				expect(settings.getLogState().historyEpoch).toBe(
-					name === "older" ? 3 : 1,
-				);
+				expect(settings.getLogState().historyEpoch).toBe(1);
 			} finally {
 				beforeReadout.release();
 				clearReadout.release();

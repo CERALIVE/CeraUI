@@ -3,11 +3,11 @@
  * rejected call is a value the Storage region renders, never a throw.
  */
 import {
-	type LogDeleteOlderFilesOutput,
+	type LogClearAllOutput,
 	type LogErrorCode,
 	type LogStorage,
 	type LogStorageOutput,
-	logDeleteOlderFilesOutputSchema,
+	logClearAllOutputSchema,
 	logStorageOutputSchema,
 	successResponseSchema,
 } from "@ceraui/rpc/schemas";
@@ -45,8 +45,8 @@ export function storageReply(reply: unknown): LogStorageOutput {
 }
 
 /** Clearing logs also returns the boot counts before and after. */
-export function clearAllReply(reply: unknown): LogDeleteOlderFilesOutput {
-	return parseReply(logDeleteOlderFilesOutputSchema, reply);
+export function clearAllReply(reply: unknown): LogClearAllOutput {
+	return parseReply(logClearAllOutputSchema, reply);
 }
 
 /** Clear event history answers { success }: read like the others, then mapped onto an action reply. */

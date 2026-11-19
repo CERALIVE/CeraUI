@@ -9,46 +9,11 @@ import * as runner from "../../helpers/run.ts";
 import * as mocks from "../../mocks/mock-service.ts";
 import * as boot from "../../modules/device-logs/boot-id.ts";
 import * as follow from "../../modules/device-logs/follow.ts";
-import * as archives from "../../modules/device-logs/journal-archive-snapshot.ts";
 import * as queries from "../../modules/device-logs/query-admission.ts";
 import * as reader from "../../modules/device-logs/reader.ts";
 import * as settings from "../../modules/device-logs/settings.ts";
 import * as runtime from "../../modules/system/update-orchestrator/runtime.ts";
 import { record } from "./device-query.ts";
-
-export const priorBoot = "e".repeat(32);
-const firstTs = 1_800_000_000_000;
-const machine = "b".repeat(32);
-export const archive = (seq: string) =>
-	`system@${"a".repeat(32)}-${seq.padStart(16, "0")}-0000000000000001.journal`;
-
-export function header(
-	path: string,
-	tailBoot: string,
-	flags = " TAIL_ENTRY_BOOT_ID",
-) {
-	return [
-		`File path: ${path}`,
-		`Machine ID: ${machine}`,
-		`Boot ID: ${tailBoot}`,
-		"State: ARCHIVED",
-		`Compatible flags:${flags}`,
-		`Tail realtime timestamp: Tue 2023-11-14 22:13:20 UTC (${((firstTs - 1_000) * 1000).toString(16)})`,
-		"Entry objects: 1",
-		"",
-	].join("\n");
-}
-
-export function bootList(...boots: string[]) {
-	return JSON.stringify(
-		boots.map((boot_id, i) => ({
-			boot_id,
-			index: i + 1 - boots.length,
-			first_entry: (firstTs - 1000) * 1000 + i,
-			last_entry: (firstTs - 1000) * 1000 + i,
-		})),
-	);
-}
 
 export function retentionFixture() {
 	const spawn = spyOn(Bun, "spawn").mockImplementation(() => {
@@ -63,10 +28,6 @@ export function retentionFixture() {
 	const identity = spyOn(boot, "currentBootId").mockReturnValue(
 		record(1).bootId,
 	);
-	const archiveScope = spyOn(archives, "journalArchiveScope").mockReturnValue({
-		machine,
-		directories: [dir],
-	});
 	const phase = spyOn(runtime, "getOrchestratorState").mockReturnValue({
 		...runtime.getOrchestratorState(),
 		phase: "idle",
@@ -108,7 +69,6 @@ export function retentionFixture() {
 		stop,
 		abort,
 		scan,
-		archiveScope,
 		run,
 		detail,
 		schedule,
@@ -121,7 +81,6 @@ export function retentionFixture() {
 				spawn,
 				mock,
 				identity,
-				archiveScope,
 				phase,
 				stop,
 				abort,

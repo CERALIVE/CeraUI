@@ -3,7 +3,7 @@ import {
 	logAroundOutputSchema,
 	logBootInfoSchema,
 	logBundleManifestSchema,
-	logDeleteOlderFilesOutputSchema,
+	logClearAllOutputSchema,
 	logExportInputSchema,
 	logExportOutputSchema,
 	logFollowStartInputSchema,
@@ -29,7 +29,6 @@ import { BundleReadError } from "../../modules/device-logs/redaction.ts";
 import {
 	clearAll,
 	deleteLegacyDebug,
-	deleteOlderFiles,
 	getStorage,
 	setRetention,
 } from "../../modules/device-logs/retention.ts";
@@ -76,16 +75,12 @@ export const setLogRetentionProcedure = authedProcedure
 	.output(logStorageOutputSchema)
 	.handler(({ input }) => setRetention(input));
 
-export const deleteOlderLogFilesProcedure = authedProcedure
-	.output(logDeleteOlderFilesOutputSchema)
-	.handler(() => deleteOlderFiles());
-
 export const deleteLegacyDebugProcedure = authedProcedure
 	.output(logStorageOutputSchema)
 	.handler(() => deleteLegacyDebug());
 
 export const clearAllLogsProcedure = authedProcedure
-	.output(logDeleteOlderFilesOutputSchema)
+	.output(logClearAllOutputSchema)
 	.handler(() => clearAll());
 
 export const createLogExportProcedure = authedProcedure

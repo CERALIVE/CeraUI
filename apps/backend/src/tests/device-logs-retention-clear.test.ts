@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import {
 	type LogFollowMessage,
-	logDeleteOlderFilesOutputSchema,
+	logClearAllOutputSchema,
 	logFollowMessageSchema,
 	logStorageOutputSchema,
 } from "@ceraui/rpc/schemas";
@@ -25,7 +25,6 @@ import * as reader from "../modules/device-logs/reader.ts";
 import {
 	clearAll,
 	deleteLegacyDebug,
-	deleteOlderFiles,
 	maintain,
 	setRetention,
 } from "../modules/device-logs/retention.ts";
@@ -402,11 +401,6 @@ for (const { name, invoke, schema } of [
 		schema: logStorageOutputSchema,
 	},
 	{
-		name: "deleteOlderFiles",
-		invoke: deleteOlderFiles,
-		schema: logDeleteOlderFilesOutputSchema,
-	},
-	{
 		name: "deleteLegacyDebug",
 		invoke: deleteLegacyDebug,
 		schema: logStorageOutputSchema,
@@ -414,7 +408,7 @@ for (const { name, invoke, schema } of [
 	{
 		name: "clearAll",
 		invoke: clearAll,
-		schema: logDeleteOlderFilesOutputSchema,
+		schema: logClearAllOutputSchema,
 	},
 ]) {
 	test(`the successful ${name} reply carries resolved wire storage`, async () => {
@@ -423,37 +417,6 @@ for (const { name, invoke, schema } of [
 		expect(schema.safeParse(result).success).toBe(true);
 	});
 }
-
-test("native older-file cleanup returns resolved wire storage", async () => {
-	f.mock.mockReturnValue(false);
-	const current = (await list())[0];
-	if (!current) throw new Error("missing current boot");
-	list.mockResolvedValue([
-		current,
-		{
-			...current,
-			bootId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-			index: -1,
-			current: false,
-			logsAvailable: false,
-		},
-	]);
-	const limit = spyOn(ceiling, "readJournalCeiling").mockReturnValue({
-		maxSizeMb: 256,
-		maxAgeDays: 30,
-	});
-	const directory = spyOn(files, "journalDirectoryBytes").mockResolvedValue(0);
-	try {
-		const result = await deleteOlderFiles();
-		expect(result).toMatchObject({ ok: true, bootsBefore: 1, bootsAfter: 1 });
-		expect(logDeleteOlderFilesOutputSchema.safeParse(result).success).toBe(
-			true,
-		);
-	} finally {
-		limit.mockRestore();
-		directory.mockRestore();
-	}
-});
 
 test("inactive maintenance resolves to its public void result", async () => {
 	expect(await maintain()).toBeUndefined();

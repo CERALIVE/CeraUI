@@ -38,7 +38,6 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 bun build --compile "$here/reader-probe.ts" --outfile "$state/reader-probe"
-bun build --compile "$here/retention-probe.ts" --outfile "$state/retention-probe"
 bun build --compile "$here/around-probe.ts" --outfile "$state/around-probe"
 docker run --pull=never --rm -i --name "$fixture" \
 	-v "$here:/conformance:ro" \
@@ -63,12 +62,6 @@ docker run --pull=never -d --name "$name" --privileged --cgroupns=host \
 			printf "[Journal]\nReadKMsg=no\n" >/etc/systemd/journald.conf.d/container.conf
 			printf "[Unit]\nAfter=systemd-journald.service dbus.service\n[Service]\nType=oneshot\nExecStart=/bin/sh -c \"echo ready > /state/ready\"\n" >/etc/systemd/system/conformance-ready.service
 			ln -s ../conformance-ready.service /etc/systemd/system/multi-user.target.wants/conformance-ready.service
-			machine=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-			mkdir -p "/var/log/journal/$machine"
-			uptime="$(cut -d. -f1 /proc/uptime)"
-			old="$((($(date +%s) - uptime - 180) * 1000000))"
-			printf "__REALTIME_TIMESTAMP=%s\n__MONOTONIC_TIMESTAMP=1000000\n_BOOT_ID=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n_MACHINE_ID=%s\nMESSAGE=cleanup previous boot seed\n\n" "$old" "$machine" |
-				/usr/lib/systemd/systemd-journal-remote -o "/var/log/journal/$machine/system.journal" -
 		fi
 		mount --bind /state/boot-id /proc/sys/kernel/random/boot_id
 		exec /lib/systemd/systemd

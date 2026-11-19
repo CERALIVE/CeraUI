@@ -1,6 +1,0 @@
-{
-	"header": ["journalctl", "--file=<pinned>", "--no-pager", "--header"],
-	"boots": ["journalctl", "--file=<pinned>", "--no-pager", "--list-boots", "-o", "json"],
-	"bootIndex": ["journalctl", "--file=<pinned>", "--no-pager", "--field=_BOOT_ID"],
-	"verify": ["journalctl", "--file=<pinned>", "--no-pager", "--verify", "--quiet"]
-}
