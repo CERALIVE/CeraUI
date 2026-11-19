@@ -30,7 +30,11 @@ import {
 	JournalReadError,
 	scanJournal,
 } from "./reader.ts";
-import { getLogState, historyClearing } from "./settings.ts";
+import {
+	getLogState,
+	historyClearAwaitingSettlement,
+	historyClearing,
+} from "./settings.ts";
 import { JournalSignalError } from "./termination.ts";
 
 interface FollowOptions extends Pick<WatcherOptions, "spawn"> {
@@ -82,6 +86,7 @@ export async function startFollow(
 		for (;;) {
 			if (sessionSignal?.aborted || epoch !== getLogState().historyEpoch)
 				return { ok: false, error: "READ_FAILED" };
+			if (historyClearAwaitingSettlement()) return { ok: false, error: "BUSY" };
 			const gate = historyClearing();
 			const wait = gate ?? (running.has(conn) ? stopFollow(conn) : undefined);
 			if (!wait) break;

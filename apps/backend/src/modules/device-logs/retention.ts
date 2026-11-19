@@ -10,7 +10,7 @@ import {
 	logger,
 	setJournalDetail,
 } from "../../helpers/logger.ts";
-import { type RunOpts, run } from "../../helpers/run.ts";
+import { run } from "../../helpers/run.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { updatePhaseBusyReasons } from "../system/disruptive-action-gate.ts";
 import { reserveUpdateEvidenceDeletion } from "../system/disruptive-action-reservation.ts";
@@ -18,13 +18,16 @@ import { isUpdating } from "../system/software-updates.ts";
 import { getOrchestratorState } from "../system/update-orchestrator/runtime.ts";
 import { listBoots } from "./boots.ts";
 import { readJournalCeiling } from "./ceiling.ts";
+import { clearNativeJournal } from "./clear-journal.ts";
 import { abortLogExports } from "./export.ts";
 import { stopAllFollows } from "./follow.ts";
 import { abortLogQueries } from "./query-admission.ts";
 import { deleteLegacyDebugFiles } from "./retention-files.ts";
 import {
 	beginHistoryClear,
+	deferHistoryClear,
 	getLogSettings,
+	historyClearAwaitingSettlement,
 	saveLogSettings,
 	updateLogState,
 } from "./settings.ts";
@@ -35,8 +38,15 @@ export { getStorage } from "./storage.ts";
 
 let tail: Promise<unknown> = Promise.resolve();
 let daily: ReturnType<typeof setInterval> | undefined;
-function exclusive<T>(operation: () => Promise<T>): Promise<T> {
-	const result = tail.then(operation);
+const busy = { ok: false, error: "BUSY" } as const;
+function exclusive<T, R>(
+	operation: () => Promise<T>,
+	refused: R,
+): Promise<T | R> {
+	if (historyClearAwaitingSettlement()) return Promise.resolve(refused);
+	const result = tail.then<T | R>(() =>
+		historyClearAwaitingSettlement() ? refused : operation(),
+	);
 	tail = result.catch(() => undefined);
 	return result;
 }
@@ -102,14 +112,14 @@ async function maintenance(): Promise<void> {
 	});
 }
 export function maintain(): Promise<void> {
-	return exclusive(maintenance);
+	return exclusive(maintenance, undefined);
 }
 export async function initLogRetention(): Promise<void> {
 	schedule();
 	await maintain();
 }
 export function setRetention(next: LogRetention): Promise<LogStorageOutput> {
-	return exclusive(async () => {
+	return exclusive<LogStorageOutput, typeof busy>(async () => {
 		const limit = ceiling();
 		const { maxAgeDays, maxSizeMb } = next;
 		if (
@@ -127,10 +137,10 @@ export function setRetention(next: LogRetention): Promise<LogStorageOutput> {
 		} catch {
 			return { ok: false, error: "READ_FAILED" };
 		}
-	});
+	}, busy);
 }
 export function deleteOlderFiles(): Promise<LogDeleteOlderFilesOutput> {
-	return exclusive(async () => {
+	return exclusive<LogDeleteOlderFilesOutput, typeof busy>(async () => {
 		try {
 			if (shouldUseMocks())
 				return {
@@ -156,21 +166,23 @@ export function deleteOlderFiles(): Promise<LogDeleteOlderFilesOutput> {
 		} catch {
 			return { ok: false, error: "READ_FAILED" };
 		}
-	});
+	}, busy);
 }
 export function deleteLegacyDebug(): Promise<LogStorageOutput> {
-	return exclusive(async () => {
+	return exclusive<LogStorageOutput, typeof busy>(async () => {
 		try {
 			await deleteLegacyDebugFiles();
 			return { ok: true, storage: await getStorage() };
 		} catch {
 			return { ok: false, error: "READ_FAILED" };
 		}
-	});
+	}, busy);
 }
 export function clearAll(): Promise<LogStorageOutput> {
-	return exclusive(async () => {
+	return exclusive<LogStorageOutput, typeof busy>(async () => {
 		let reopen: (() => void) | undefined;
+		let release: (() => void) | undefined;
+		let settlement: Promise<unknown> | undefined;
 		try {
 			if (
 				isUpdating() ||
@@ -205,34 +217,28 @@ export function clearAll(): Promise<LogStorageOutput> {
 					updatePhaseBusyReasons(getOrchestratorState().phase).length > 0,
 			);
 			if (!deletion.allowed) return { ok: false, error: "UPDATE_IN_PROGRESS" };
-			let childExit: Promise<number> | undefined;
-			const command: RunOpts = {
-				onChildExit(exited) {
-					childExit = exited;
-				},
-			};
-			try {
-				if (!mock) {
-					await run("journalctl", ["--rotate"], command);
-					await run("journalctl", ["--vacuum-time=1s"], command);
-				}
-				await deleteLegacyDebugFiles();
-				// Mock Clear empties the captured ring before writing its first new marker.
-				if (mock) clearRecentLogLines();
-			} finally {
-				const release = deletion.reservation.releaseAfterCompletion;
-				// The RPC may finish before a timed-out child has left the journal.
-				// The collector diagnoses a rejected observation. It is not exit proof.
-				if (childExit) void childExit.then(release, () => undefined);
-				else release();
-			}
+			release = deletion.reservation.releaseAfterCompletion;
+			if (!mock)
+				await clearNativeJournal((pending) => {
+					settlement = pending;
+				});
+			await deleteLegacyDebugFiles();
+			// Mock Clear empties the captured ring before writing its first new marker.
+			if (mock) clearRecentLogLines();
 			logger.info("device logs cleared", { module: "device-logs" });
 			updateLogState({ lastClearedAt: Date.now() });
 			return { ok: true, storage: await getStorage() };
 		} catch {
 			return { ok: false, error: "READ_FAILED" };
 		} finally {
-			reopen?.();
+			const finish = () => {
+				release?.();
+				reopen?.();
+			};
+			if (settlement) {
+				deferHistoryClear();
+				void settlement.then(finish, () => undefined);
+			} else finish();
 		}
-	});
+	}, busy);
 }

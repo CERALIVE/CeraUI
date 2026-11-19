@@ -35,14 +35,36 @@ Native clear rotates, vacuums and removes legacy debug files. Mock clear removes
 legacy files before wiping the ring and immediately recording the clear marker,
 so logging during unlink cannot precede the marker in the emptied ring. The
 gate stays closed through the marker, `lastClearedAt` persistence and final
-storage readout, and reopens in `finally` on success or failure. Later I/O
-failures cannot undo deletion that already happened.
+storage readout. A failure before a child is submitted releases immediately.
+After submission, an RPC error can precede settlement. Both fences stay held
+until the vacuum child exits or the daemon-side Rotate settles. A timed-out
+Rotate client is never signaled by this deadline. Retention mutations return
+`BUSY` while settlement is pending, and the daily tick defers to the next run.
+
+On systemd v257 a zero `journalctl --rotate` exit acknowledges the synchronous
+daemon operation, including its internal vacuum. On abnormal client exit,
+Clear waits for a successful `journalctl --sync` **issued after reaping the
+Rotate client**. In v257 `vl_method_synchronize` replies from a defer at
+`SD_EVENT_PRIORITY_NORMAL+15`; the Unix listener, connection I/O, and
+Varlink parsing and dispatch all run at `SD_EVENT_PRIORITY_NORMAL`. By the
+time the defer runs, the old connection's queued request has either run
+synchronously to completion or been discarded. The dead client cannot
+submit again. The next daemon instance also cannot inherit an accepted
+Rotate connection. See upstream `journald-server.c` (`server_open_varlink`,
+`vl_method_rotate`, `vl_method_synchronize`), `sd-varlink.c`
+(`sd_varlink_process`, `sd_varlink_attach_event`), and `sd-event.c`
+(`sd_event_prepare`). A `rotated` timestamp is shared with SIGUSR2 and cannot
+attribute settlement to this client. The barrier proves quiescence, not that
+Clear succeeded. A failed barrier is retried with bounded commands and
+backoff, and a rejected exit observation keeps both fences closed because a
+still-live client could submit after the barrier. Fences are process-local.
 
 ## Admission and terminal ownership
 
 Validated queries, around requests, follows, filtered exports and support
 bundles arriving during clear wait for its gate, then use normal admission and
-capacity checks. The gate check stays inside each replacement/wait loop, with
+capacity checks. When an RPC fails with settlement still pending, waiters and
+new calls receive `BUSY` or the existing sharing refusal. The gate check stays inside each replacement/wait loop, with
 no yield between an open gate and ownership registration. Bundle preview,
 creation and download deadlines include time spent at the gate.
 

@@ -1,4 +1,8 @@
-import { getLogState, historyClearing } from "./settings.ts";
+import {
+	getLogState,
+	historyClearAwaitingSettlement,
+	historyClearing,
+} from "./settings.ts";
 
 /** Run the reservation in the same turn as the final signal and epoch check. */
 export async function withHistoryAdmission<T>(
@@ -7,7 +11,12 @@ export async function withHistoryAdmission<T>(
 ): Promise<T | undefined> {
 	const epoch = getLogState().historyEpoch;
 	for (;;) {
-		if (signal?.aborted || epoch !== getLogState().historyEpoch) return;
+		if (
+			signal?.aborted ||
+			epoch !== getLogState().historyEpoch ||
+			historyClearAwaitingSettlement()
+		)
+			return;
 		const gate = historyClearing();
 		if (!gate) return admit(epoch);
 		if (!signal) {

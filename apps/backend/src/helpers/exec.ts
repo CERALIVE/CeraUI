@@ -10,7 +10,10 @@ import { logger } from "./logger.ts";
 import { DEFAULT_SPAWN_TIMEOUT_MS } from "./spawn-policy.ts";
 
 export type ExecResult = { stdout: string; stderr: string };
-export type ChildExitObserver = Pick<BoundedSpawnOptions, "onChildExit">;
+export type ChildExitObserver = Pick<
+	BoundedSpawnOptions,
+	"onChildExit" | "preserveChild"
+>;
 
 // util.promisify(exec) replacement: runs cmd through Bun's shell (string parsed
 // as written) and REJECTS on non-zero exit (Bun.$ throws ShellError).
@@ -58,6 +61,7 @@ export const execFileP = async (
 			timeoutMs: timeout,
 			maxBuffer,
 			...(opts?.onChildExit ? { onChildExit: opts.onChildExit } : {}),
+			...(opts?.preserveChild ? { preserveChild: true } : {}),
 			...(signal ? { signal } : {}),
 		});
 		({ stdout, stderr, exitCode } = await result);

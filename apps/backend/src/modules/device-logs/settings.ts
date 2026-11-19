@@ -36,21 +36,39 @@ let settings = defaultSettings;
 let state = defaultState;
 let settingsLoaded = false;
 let stateLoaded = false;
-let historyClear: ReturnType<typeof Promise.withResolvers<void>> | null = null;
+let historyClear: {
+	readonly ready: ReturnType<typeof Promise.withResolvers<void>>;
+	awaitingSettlement: boolean;
+} | null = null;
 
 export function historyClearing(): Promise<void> | null {
-	return historyClear?.promise ?? null;
+	return historyClear?.ready.promise ?? null;
+}
+
+export function historyClearAwaitingSettlement(): boolean {
+	return historyClear?.awaitingSettlement === true;
+}
+
+/** Wake admission waiters so they can return a retryable refusal. */
+export function deferHistoryClear(): void {
+	if (historyClear) {
+		historyClear.awaitingSettlement = true;
+		historyClear.ready.resolve();
+	}
 }
 
 /** Called only by retention's exclusive clear transaction. */
 export function beginHistoryClear(): () => void {
 	updateLogState({ historyEpoch: getLogState().historyEpoch + 1 });
-	const pending = Promise.withResolvers<void>();
+	const pending = {
+		ready: Promise.withResolvers<void>(),
+		awaitingSettlement: false,
+	};
 	historyClear = pending;
 	return () => {
 		if (historyClear !== pending) return;
 		historyClear = null;
-		pending.resolve();
+		pending.ready.resolve();
 	};
 }
 

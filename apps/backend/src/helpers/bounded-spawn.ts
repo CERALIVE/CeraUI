@@ -38,6 +38,8 @@ export interface BoundedSpawnOptions {
 	readonly onSpawn?: (child: Subprocess<"ignore", "pipe", "pipe">) => void;
 	/** Observes real child exit even when setup or bounded collection fails. */
 	readonly onChildExit?: (exited: Promise<number>) => void;
+	/** The caller owns settlement of a daemon request separately from this result. */
+	readonly preserveChild?: true;
 	readonly scheduleTimeout?: (callback: () => void, delayMs: number) => Timer;
 	readonly cancelTimeout?: (timer: Timer) => void;
 }
@@ -71,6 +73,7 @@ export async function collectBoundedChild(
 	const acc = { stdout: "", stderr: "" };
 	const readers: PipeReader[] = [];
 	let collecting = true;
+	let discarding = false;
 	const overflow = Promise.withResolvers<Error>();
 	const drain = async (reader: PipeReader, key: "stdout" | "stderr") => {
 		const decoder = new TextDecoder();
@@ -79,13 +82,16 @@ export async function collectBoundedChild(
 			const chunk = await reader.read();
 			if (!collecting) break;
 			if (chunk.done) {
-				acc[key] += decoder.decode();
+				if (!discarding) acc[key] += decoder.decode();
 				break;
 			}
+			if (discarding) continue;
 			bytes += chunk.value.byteLength;
 			if (opts.maxBuffer !== undefined && bytes > opts.maxBuffer) {
 				overflow.resolve(new Error(`${key} maxBuffer length exceeded`));
-				break;
+				if (!opts.preserveChild) break;
+				discarding = true;
+				continue;
 			}
 			acc[key] += decoder.decode(chunk.value, { stream: true });
 		}
@@ -117,6 +123,13 @@ export async function collectBoundedChild(
 				throw error;
 		}
 	};
+	const closeReaders = () => {
+		collecting = false;
+		for (const reader of readers) {
+			void reader.cancel().catch(() => undefined);
+			reader.releaseLock();
+		}
+	};
 	try {
 		let drained: Promise<unknown>;
 		try {
@@ -135,8 +148,10 @@ export async function collectBoundedChild(
 			]);
 		} catch (error) {
 			terminationIssued = true;
-			signal("SIGKILL");
-			await bounded(exited, BOUNDED_SPAWN_REAP_MS);
+			if (!opts.preserveChild) {
+				signal("SIGKILL");
+				await bounded(exited, BOUNDED_SPAWN_REAP_MS);
+			}
 			throw error;
 		}
 		const outcome = await Promise.race([
@@ -153,7 +168,7 @@ export async function collectBoundedChild(
 			overflow.promise.then((error) => ({ kind: "overflow", error }) as const),
 		]);
 		if (outcome.kind === "observation_failed") {
-			signal("SIGKILL");
+			if (!opts.preserveChild) signal("SIGKILL");
 			throw outcome.error;
 		}
 		const successfulBeforeTermination = child.exitCode === 0;
@@ -162,11 +177,13 @@ export async function collectBoundedChild(
 			(outcome.kind === "deadline" && !successfulBeforeTermination)
 		) {
 			terminationIssued = true;
-			signal("SIGTERM");
-			await bounded(exited, BOUNDED_SPAWN_TERM_GRACE_MS);
-			signal("SIGKILL");
-			await bounded(exited, BOUNDED_SPAWN_REAP_MS);
-			await bounded(drained, BOUNDED_SPAWN_DRAIN_MS);
+			if (!opts.preserveChild) {
+				signal("SIGTERM");
+				await bounded(exited, BOUNDED_SPAWN_TERM_GRACE_MS);
+				signal("SIGKILL");
+				await bounded(exited, BOUNDED_SPAWN_REAP_MS);
+				await bounded(drained, BOUNDED_SPAWN_DRAIN_MS);
+			}
 			if (outcome.kind === "overflow") throw outcome.error;
 			throw outcome.reason === "abort"
 				? new SpawnAbortError(command, acc.stdout, acc.stderr)
@@ -180,12 +197,11 @@ export async function collectBoundedChild(
 			stderr: acc.stderr,
 		};
 	} finally {
-		collecting = false;
 		if (timer !== undefined) cancel(timer);
 		opts.signal?.removeEventListener("abort", onAbort);
-		for (const reader of readers) {
-			void reader.cancel().catch(() => undefined);
-			reader.releaseLock();
-		}
+		if (opts.preserveChild) {
+			discarding = true;
+			void exited.then(closeReaders);
+		} else closeReaders();
 	}
 }

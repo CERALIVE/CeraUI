@@ -56,7 +56,7 @@ export type RunOpts = {
 	/** Max bytes captured from stdout/stderr before the child is killed. */
 	maxBuffer?: number;
 	/**
-	 * Wall-clock budget in ms before the child is killed and the call rejects
+	 * Wall-clock budget in ms before the call rejects
 	 * with {@link RunTimeoutError}. Defaults to {@link DEFAULT_TIMEOUT_MS} (30 s).
 	 * Every side-effect child process MUST carry a bounded timeout (Standard S1).
 	 */
@@ -71,7 +71,8 @@ export type RunOpts = {
 
 /**
  * Rejection raised when a command exceeds its {@link RunOpts.timeout} budget.
- * The child is killed; whatever stdout/stderr was captured before the kill is
+ * The child is killed unless its caller owns daemon settlement separately.
+ * Whatever stdout/stderr was captured before the deadline is
  * preserved on the error so callers can surface a partial diagnostic.
  */
 export class RunTimeoutError extends Error {
