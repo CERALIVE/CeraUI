@@ -3002,7 +3002,7 @@
 	"systemLogs.storage.clearEventsTitle": "Ereignisverlauf löschen?",
 	"systemLogs.storage.clearEventsBody": "Dadurch werden alle gespeicherten Ereignisse entfernt. Die Rohprotokolle bleiben erhalten. Das lässt sich nicht rückgängig machen.",
 	"systemLogs.storage.clearEventsConfirm": "Ereignisverlauf löschen",
-	"systemLogs.storage.updateInProgress": "Gerade läuft ein Update. Deshalb kannst du weder einzelne Protokolldateien löschen noch alle Protokolle leeren. Versuche es nach dem Update erneut.",
+	"systemLogs.storage.updateInProgress": "Gerade läuft ein Update. Deshalb kannst du die Protokolle jetzt nicht löschen. Versuche es nach dem Update erneut.",
 	"systemLogs.storage.loadFailed": "Der Protokollspeicher konnte nicht gelesen werden.",
 	"systemLogs.storage.actionFailed": "Diese Aktion konnte nicht abgeschlossen werden.",
 	"systemLogs.sharing.heading": "Downloads",

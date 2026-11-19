@@ -3005,7 +3005,7 @@
 	"systemLogs.storage.clearEventsTitle": "¿Borrar el historial de eventos?",
 	"systemLogs.storage.clearEventsBody": "Esto elimina todos los eventos guardados. Los logs se conservan. No se puede deshacer.",
 	"systemLogs.storage.clearEventsConfirm": "Borrar historial de eventos",
-	"systemLogs.storage.updateInProgress": "Hay una actualización en curso, así que por ahora no puedes eliminar archivos de log ni borrar todos los logs. Vuelve a intentarlo cuando termine.",
+	"systemLogs.storage.updateInProgress": "Hay una actualización en curso, así que por ahora no puedes borrar los logs. Vuelve a intentarlo cuando termine.",
 	"systemLogs.storage.loadFailed": "No se pudo leer el almacenamiento de registros.",
 	"systemLogs.storage.actionFailed": "No se pudo completar esta acción.",
 	"systemLogs.sharing.heading": "Descargas",

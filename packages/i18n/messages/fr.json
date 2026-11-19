@@ -3005,7 +3005,7 @@
 	"systemLogs.storage.clearEventsTitle": "Effacer l'historique des événements ?",
 	"systemLogs.storage.clearEventsBody": "Cette action supprime tous les événements enregistrés. Les journaux bruts sont conservés. Cette action est irréversible.",
 	"systemLogs.storage.clearEventsConfirm": "Effacer l'historique des événements",
-	"systemLogs.storage.updateInProgress": "Une mise à jour est en cours. Vous ne pouvez ni supprimer des fichiers journaux ni effacer tous les journaux pour le moment. Réessayez une fois la mise à jour terminée.",
+	"systemLogs.storage.updateInProgress": "Une mise à jour est en cours. Vous ne pouvez pas effacer les journaux pour le moment. Réessayez une fois la mise à jour terminée.",
 	"systemLogs.storage.loadFailed": "Impossible de lire le stockage des journaux.",
 	"systemLogs.storage.actionFailed": "Impossible de terminer cette action.",
 	"systemLogs.sharing.heading": "Téléchargements",

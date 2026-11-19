@@ -494,7 +494,7 @@ Rules for this copy:
 | `systemLogs.storage.clearEventsTitle` | Clear event history? | Confirmation title |
 | `systemLogs.storage.clearEventsBody` | This removes every stored event. Raw logs are kept. This can't be undone. | Confirmation body |
 | `systemLogs.storage.clearEventsConfirm` | Clear event history | Confirmation button (destructive) |
-| `systemLogs.storage.updateInProgress` | An update is in progress, so logs can't be cleared now. Try again after the update finishes. | UPDATE_IN_PROGRESS |
+| `systemLogs.storage.updateInProgress` | An update is in progress, so the logs can't be cleared now. Try again after the update finishes. | UPDATE_IN_PROGRESS |
 | `systemLogs.storage.loadFailed` | Couldn't read log storage. | Recovery band |
 | `systemLogs.storage.actionFailed` | Couldn't complete this action. | Recovery band after a failed action |
 

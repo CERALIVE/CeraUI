@@ -3014,7 +3014,7 @@
 	"systemLogs.storage.clearEventsTitle": "هل تريد مسح سجل الأحداث؟",
 	"systemLogs.storage.clearEventsBody": "يزيل هذا كل الأحداث المحفوظة. يُحتفظ بالسجلات الخام. لا يمكن التراجع عن ذلك.",
 	"systemLogs.storage.clearEventsConfirm": "مسح سجل الأحداث",
-	"systemLogs.storage.updateInProgress": "هناك تحديث قيد التنفيذ، لذا لا يمكن حذف ملفات السجل أو مسح السجلات الآن. أعد المحاولة بعد انتهاء التحديث.",
+	"systemLogs.storage.updateInProgress": "هناك تحديث قيد التنفيذ، لذا لا يمكن مسح السجلات الآن. أعد المحاولة بعد انتهاء التحديث.",
 	"systemLogs.storage.loadFailed": "تعذّرت قراءة تخزين السجلات.",
 	"systemLogs.storage.actionFailed": "تعذّر إكمال هذا الإجراء.",
 	"systemLogs.sharing.heading": "التنزيلات",

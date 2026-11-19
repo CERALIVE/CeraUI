@@ -3002,7 +3002,7 @@
 	"systemLogs.storage.clearEventsTitle": "इवेंट इतिहास साफ़ करें?",
 	"systemLogs.storage.clearEventsBody": "इससे सभी सहेजे गए इवेंट हट जाते हैं। रॉ लॉग बने रहते हैं। इसे पूर्ववत नहीं किया जा सकता।",
 	"systemLogs.storage.clearEventsConfirm": "इवेंट इतिहास साफ़ करें",
-	"systemLogs.storage.updateInProgress": "एक अपडेट चल रहा है। अभी न तो लॉग फ़ाइलें हटाई जा सकती हैं, न ही सभी लॉग साफ़ किए जा सकते हैं। अपडेट पूरा होने के बाद फिर कोशिश करें।",
+	"systemLogs.storage.updateInProgress": "एक अपडेट चल रहा है। अभी लॉग साफ़ नहीं किए जा सकते। अपडेट पूरा होने के बाद फिर कोशिश करें।",
 	"systemLogs.storage.loadFailed": "लॉग स्टोरेज नहीं पढ़ा जा सका।",
 	"systemLogs.storage.actionFailed": "यह कार्रवाई पूरी नहीं हो सकी।",
 	"systemLogs.sharing.heading": "डाउनलोड",

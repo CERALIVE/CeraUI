@@ -2957,7 +2957,7 @@
 	"systemLogs.storage.clearEventsTitle": "이벤트 기록을 지울까요?",
 	"systemLogs.storage.clearEventsBody": "저장된 모든 이벤트를 삭제합니다. 원본 로그는 유지됩니다. 되돌릴 수 없습니다.",
 	"systemLogs.storage.clearEventsConfirm": "이벤트 기록 지우기",
-	"systemLogs.storage.updateInProgress": "업데이트가 진행 중이라 지금은 로그 파일을 삭제하거나 모든 로그를 지울 수 없습니다. 업데이트가 끝난 뒤 다시 시도하세요.",
+	"systemLogs.storage.updateInProgress": "업데이트가 진행 중이라 지금은 로그를 지울 수 없습니다. 업데이트가 끝난 뒤 다시 시도하세요.",
 	"systemLogs.storage.loadFailed": "로그 저장 공간을 읽을 수 없습니다.",
 	"systemLogs.storage.actionFailed": "이 작업을 완료할 수 없습니다.",
 	"systemLogs.sharing.heading": "다운로드",

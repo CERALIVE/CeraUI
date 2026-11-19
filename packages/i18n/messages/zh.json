@@ -2957,7 +2957,7 @@
 	"systemLogs.storage.clearEventsTitle": "要清除事件历史吗？",
 	"systemLogs.storage.clearEventsBody": "这会删除所有已保存的事件。原始日志会保留。此操作无法撤销。",
 	"systemLogs.storage.clearEventsConfirm": "清除事件历史",
-	"systemLogs.storage.updateInProgress": "系统正在更新，暂时无法删除日志文件或清除所有日志。请在更新完成后重试。",
+	"systemLogs.storage.updateInProgress": "系统正在更新，暂时无法清除日志。请在更新完成后重试。",
 	"systemLogs.storage.loadFailed": "无法读取日志存储信息。",
 	"systemLogs.storage.actionFailed": "无法完成此操作。",
 	"systemLogs.sharing.heading": "下载",

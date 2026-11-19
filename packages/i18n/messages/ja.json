@@ -2957,7 +2957,7 @@
 	"systemLogs.storage.clearEventsTitle": "イベント履歴を消去しますか？",
 	"systemLogs.storage.clearEventsBody": "保存済みのイベントをすべて削除します。生ログは残ります。元に戻せません。",
 	"systemLogs.storage.clearEventsConfirm": "イベント履歴を消去",
-	"systemLogs.storage.updateInProgress": "アップデート中は、ログファイルの削除やログの一括消去はできません。アップデートが完了してから、もう一度お試しください。",
+	"systemLogs.storage.updateInProgress": "アップデート中は、ログを消去できません。アップデートが完了してから、もう一度お試しください。",
 	"systemLogs.storage.loadFailed": "ログのストレージ情報を読み込めませんでした。",
 	"systemLogs.storage.actionFailed": "この操作を完了できませんでした。",
 	"systemLogs.sharing.heading": "ダウンロード",

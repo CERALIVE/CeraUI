@@ -3005,7 +3005,7 @@
 	"systemLogs.storage.clearEventsTitle": "Apagar histórico de eventos?",
 	"systemLogs.storage.clearEventsBody": "Isso remove todos os eventos armazenados. Os logs brutos são mantidos. Não é possível desfazer.",
 	"systemLogs.storage.clearEventsConfirm": "Apagar histórico de eventos",
-	"systemLogs.storage.updateInProgress": "Há uma atualização em andamento. Por enquanto, não é possível excluir arquivos de log nem limpar todos os logs. Tente novamente quando a atualização terminar.",
+	"systemLogs.storage.updateInProgress": "Há uma atualização em andamento. Por enquanto, não é possível apagar os logs. Tente novamente quando a atualização terminar.",
 	"systemLogs.storage.loadFailed": "Não foi possível ler o armazenamento de logs.",
 	"systemLogs.storage.actionFailed": "Não foi possível concluir esta ação.",
 	"systemLogs.sharing.heading": "Downloads",
