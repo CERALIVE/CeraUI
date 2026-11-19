@@ -20,8 +20,19 @@ function isLocalIPv4(a: number, b: number): boolean {
 	);
 }
 
+/** Held values shorter than this are not matched: too many false hits. */
+export const MIN_REDACTED_LENGTH = 4;
+
 interface Redactor {
+	/**
+	 * Kinds (sorted, unique) of held values that are NOT matched because they
+	 * are shorter than {@link MIN_REDACTED_LENGTH}. Callers must not treat
+	 * output as redacted while this is non-empty.
+	 */
+	readonly unredacted: readonly string[];
 	structured(value: string | number | boolean | null): void;
+	/** Held secrets only, without the identifier and address patterns. */
+	known(value: string): { readonly text: string; readonly redactions: number };
 	text(
 		value: string,
 		bootSpan?: readonly [start: number, end: number],
@@ -32,10 +43,14 @@ export function buildRedactor(
 	secrets: readonly { readonly kind: string; readonly value: string }[],
 ): Redactor {
 	const literals = new Map<string, string>();
+	const unredacted = new Set<string>();
 	let secretBytes = 0;
 	for (const { kind, value } of secrets) {
 		if (!/^[a-z][a-z0-9_]{0,31}$/.test(kind)) throw new BundleReadError();
-		if (value.length < 4) continue;
+		if (value.length < MIN_REDACTED_LENGTH) {
+			if (value.length > 0) unredacted.add(kind);
+			continue;
+		}
 		secretBytes += Buffer.byteLength(value);
 		if (secretBytes > 64 * 1024) throw new BundleReadError();
 		const bytes = Buffer.from(value);
@@ -72,10 +87,20 @@ export function buildRedactor(
 		? new RegExp(alternatives.join("|"), "g")
 		: null;
 	return {
+		unredacted: [...unredacted].sort(),
 		structured(value: string | number | boolean | null) {
 			if (exact === null || value === null) return;
 			exact.lastIndex = 0;
 			if (exact.test(String(value))) throw new BundleReadError();
+		},
+		known(value: string) {
+			if (exact === null) return { text: value, redactions: 0 };
+			let redactions = 0;
+			const text = value.replace(exact, (match) => {
+				redactions++;
+				return literals.get(percentCase(match)) ?? "[REDACTED]";
+			});
+			return { text, redactions };
 		},
 		text(value: string, bootSpan) {
 			const spans: Array<{

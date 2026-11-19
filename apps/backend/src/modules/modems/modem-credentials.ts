@@ -86,7 +86,8 @@ import path from "node:path";
 
 import { z } from "zod";
 
-import { loadCacheFile } from "../../helpers/config-loader.ts";
+import { loadCacheFileWithStatus } from "../../helpers/config-loader.ts";
+import { setCredentialStoreState } from "../../helpers/credential-store-state.ts";
 import { logger } from "../../helpers/logger.ts";
 import type { PhysicalDeviceRecord } from "./physical-identity.ts";
 
@@ -267,8 +268,13 @@ export async function initModemCredentials(
 	storePath: string = modemCredentialsPath(),
 ): Promise<void> {
 	filePath = storePath;
-	const data = await loadCacheFile(storePath, fileSchema, {});
+	const { data, failed } = await loadCacheFileWithStatus(
+		storePath,
+		fileSchema,
+		{},
+	);
 	entries = { ...(data.devices ?? {}) };
+	setCredentialStoreState("modem", failed ? "failed" : "ready");
 	initialized = true;
 	const count = Object.keys(entries).length;
 	if (count > 0) {
@@ -411,4 +417,6 @@ export function resetModemCredentialsForTest(): void {
 	entries = {};
 	filePath = undefined;
 	initialized = false;
+	// A test process models a booted backend (see test-preload.ts).
+	setCredentialStoreState("modem", "ready");
 }

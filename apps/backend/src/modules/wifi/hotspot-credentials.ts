@@ -39,9 +39,10 @@
 import { z } from "zod";
 
 import {
-	loadCacheFile,
+	loadCacheFileWithStatus,
 	writeFileAtomicSync,
 } from "../../helpers/config-loader.ts";
+import { setCredentialStoreState } from "../../helpers/credential-store-state.ts";
 import { logger } from "../../helpers/logger.ts";
 import type { NmProfileInstance } from "../network/network-manager-profile-instance.ts";
 import { isWifiChannelName, type WifiChannel } from "./wifi-channels.ts";
@@ -198,13 +199,19 @@ export async function initHotspotCredentials(
 	path: string = HOTSPOT_CREDENTIALS_FILE,
 ): Promise<void> {
 	filePath = path;
-	const data = await loadCacheFile(path, fileSchema, {});
-	entries = Object.fromEntries(
-		Object.entries(data.adapters ?? {}).map(([key, entry]) => [
-			key,
-			migrateEntry(entry),
-		]),
-	);
+	const { data, failed } = await loadCacheFileWithStatus(path, fileSchema, {});
+	try {
+		entries = Object.fromEntries(
+			Object.entries(data.adapters ?? {}).map(([key, entry]) => [
+				key,
+				migrateEntry(entry),
+			]),
+		);
+	} catch (err) {
+		setCredentialStoreState("hotspot", "failed");
+		throw err;
+	}
+	setCredentialStoreState("hotspot", failed ? "failed" : "ready");
 	initialized = true;
 	const count = Object.keys(entries).length;
 	if (count > 0) {
@@ -401,4 +408,6 @@ export function resetHotspotCredentialsForTest(): void {
 	entries = {};
 	filePath = HOTSPOT_CREDENTIALS_FILE;
 	initialized = false;
+	// A test process models a booted backend (see test-preload.ts).
+	setCredentialStoreState("hotspot", "ready");
 }

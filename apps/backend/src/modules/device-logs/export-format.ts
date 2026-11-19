@@ -18,16 +18,22 @@ export function exportHeader(
 	boots: readonly LogBootInfo[],
 	query: ParsedQuery,
 	at: number,
+	/**
+	 * Applied to the variable values only (versions, boot ids, filter text),
+	 * before JSON quoting, so the fixed labels and warning can never be altered.
+	 */
+	redact: (text: string) => string = (text) => text,
 ): string {
 	const versionLines = (context: VersionContext) =>
 		Object.entries(context).map(
-			([key, value]) => `${key}: ${JSON.stringify(value)}`,
+			([key, value]) =>
+				`${key}: ${JSON.stringify(typeof value === "string" ? redact(value) : value)}`,
 		);
 	const lines = [
 		"exported-by",
 		...versionLines(current),
 		...boots.flatMap((boot) => [
-			`boot ${boot.bootId}`,
+			`boot ${redact(boot.bootId)}`,
 			...(boot.versions
 				? versionLines(boot.versions)
 				: ["versions: not recorded"]),
@@ -35,7 +41,7 @@ export function exportHeader(
 		`filter: ${JSON.stringify({
 			sources: [...new Set(query.sources)].sort(),
 			levels: [...new Set(query.levels)].sort(),
-			text: query.text,
+			text: query.text === undefined ? undefined : redact(query.text),
 			since: query.since,
 			until: query.until,
 		})}`,
