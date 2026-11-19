@@ -971,9 +971,8 @@ export interface TypedRPC {
 		followStop: () => Promise<LogFollowStopOutput>;
 		getStorage: () => Promise<LogStorage>;
 		setRetention: (input: LogRetention) => Promise<LogStorageOutput>;
-		deleteOlderFiles: () => Promise<LogDeleteOlderFilesOutput>;
 		deleteLegacyDebug: () => Promise<LogStorageOutput>;
-		clearAll: () => Promise<LogStorageOutput>;
+		clearAll: () => Promise<LogDeleteOlderFilesOutput>;
 		createExport: (input: LogExportInput) => Promise<LogExportOutput>;
 		previewBundle: () => Promise<LogBundleManifest>;
 		createBundle: () => Promise<LogExportOutput>;

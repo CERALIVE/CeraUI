@@ -6,7 +6,7 @@ import {
 } from "../../main/system-logs/__fixtures__/log-storage";
 import {
 	type ActionReply,
-	deleteOlderReply,
+	clearAllReply,
 	fromSuccess,
 	saveNote,
 	settleAction,
@@ -27,7 +27,7 @@ describe("settleAction", () => {
 			bootsAfter: 1,
 		};
 		expect(
-			await settleAction(() => Promise.resolve(reply), deleteOlderReply),
+			await settleAction(() => Promise.resolve(reply), clearAllReply),
 		).toEqual(reply);
 	});
 
@@ -180,7 +180,7 @@ const REPLIES: readonly [
 ][] = [
 	["logs.getStorage", parseStorage, storage, within("")],
 	[
-		"logs.setRetention, deleteLegacyDebug and clearAll",
+		"logs.setRetention and deleteLegacyDebug",
 		storageReply,
 		{ ok: true, storage },
 		[
@@ -190,8 +190,8 @@ const REPLIES: readonly [
 		],
 	],
 	[
-		"logs.deleteOlderFiles",
-		deleteOlderReply,
+		"logs.clearAll",
+		clearAllReply,
 		{ ok: true, storage, bootsBefore: 17, bootsAfter: 4 },
 		[
 			["ok", false, "true"],
@@ -266,7 +266,7 @@ describe("successful replies: every required member, absent, null or of the wron
 	it("still reads a reply that carries fields a newer device adds", () => {
 		const reply = { ok: true, storage, bootsBefore: 17, bootsAfter: 4 };
 		expect(
-			deleteOlderReply({
+			clearAllReply({
 				...reply,
 				addedLater: 1,
 				storage: { ...storage, alsoAddedLater: 2 },

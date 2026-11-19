@@ -57,10 +57,7 @@ void (initial.around !== undefined || initial.boot === null
 const stopBoot = bootSelection.onChoose((bootId) =>
 	void view.chooseBoot(bootId, bootSelection.boot?.current ? bootSelection.boot.bootId : undefined),
 );
-const stopHistory = onHistoryChanged((change) => {
-	if (change === 'older' && view.filter.time === 'current' && view.anchor === null && view.follow !== 'idle' && view.follow !== 'stopped') return;
-	void resetRawView(view);
-});
+const stopHistory = onHistoryChanged(() => void resetRawView(view));
 onDestroy(() => {
 	bootSelection.rawScope = null;
 	stopBoot();

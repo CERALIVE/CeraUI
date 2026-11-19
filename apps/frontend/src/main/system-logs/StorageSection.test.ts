@@ -23,7 +23,6 @@ const rpc = vi.hoisted(() => ({
 	logs: {
 		getStorage: vi.fn(),
 		setRetention: vi.fn(),
-		deleteOlderFiles: vi.fn(),
 		deleteLegacyDebug: vi.fn(),
 		clearAll: vi.fn(),
 	},
@@ -138,8 +137,6 @@ async function confirmAction(trigger: string, confirm: string): Promise<void> {
 	await fireEvent.click(within(dialog).getByRole("button", { name: confirm }));
 	await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
 }
-
-const confirmOlder = () => confirmAction(copy.deleteOlder, copy.deleteOlder);
 
 describe("StorageSection: survivor regressions", () => {
 	it.each([
@@ -836,117 +833,29 @@ describe("StorageSection: cleanup", () => {
 		expect(historyChanged).not.toHaveBeenCalled();
 	});
 
-	it("deletes older log files, states which boots remain and refreshes the history once", async () => {
-		rpc.logs.deleteOlderFiles.mockResolvedValue({
-			ok: true,
-			storage: logStorage({
-				journalBytes: 12 * MIB,
-				journalDirBytes: 12 * MIB,
-			}),
-			bootsBefore: 4,
-			bootsAfter: 2,
-		});
-		mount();
-
-		expect(screen.getByText(copy.deleteOlderHint)).toBeTruthy();
-		await confirmOlder();
-
-		const status = screen.getByTestId("storage-cleanup-status");
-		await waitFor(() =>
-			expect(status.textContent?.trim()).toBe(
-				fill(copy.deleteOlderResult, { before: 4, after: 2 }),
-			),
-		);
-		expect(status.getAttribute("role")).toBe("status");
-		expect(historyChanged).toHaveBeenCalledTimes(1);
-		expect(screen.getByTestId("storage-usage-text").textContent?.trim()).toBe(
-			fill(copy.used, { used: "12\u00a0MB", limit: "256\u00a0MB" }),
-		);
-	});
-
-	it("disables the plain cleanup actions while one runs", async () => {
-		let settle: (value: unknown) => void = () => {};
-		rpc.logs.deleteOlderFiles.mockReturnValue(
-			new Promise((resolve) => {
-				settle = resolve;
-			}),
-		);
+	it("disables leftover debug cleanup while Clear all runs", async () => {
+		const clearing = Promise.withResolvers<unknown>();
+		rpc.logs.clearAll.mockReturnValue(clearing.promise);
 		mount(logStorage({ legacyDebugBytes: MIB }));
 
-		const older = screen.getByTestId(
-			"storage-delete-older",
-		) as HTMLButtonElement;
-		const legacy = screen.getByTestId(
-			"storage-delete-legacy",
-		) as HTMLButtonElement;
-		await fireEvent.click(older);
+		await fireEvent.click(screen.getByRole("button", { name: copy.clearAll }));
 		const dialog = await screen.findByRole("alertdialog");
 		await fireEvent.click(
-			within(dialog).getByRole("button", { name: copy.deleteOlder }),
+			within(dialog).getByRole("button", { name: copy.clearAllConfirm }),
 		);
-		expect(older.disabled).toBe(true);
-		expect(older.getAttribute("aria-busy")).toBe("true");
+		const legacy = screen.getByTestId<HTMLButtonElement>(
+			"storage-delete-legacy",
+		);
 		expect(legacy.disabled).toBe(true);
 		expect(legacy.getAttribute("aria-busy")).toBe("false");
 
-		settle({
+		clearing.resolve({
 			ok: true,
 			storage: logStorage({ legacyDebugBytes: MIB }),
 			bootsBefore: 1,
 			bootsAfter: 1,
 		});
-		await waitFor(() => expect(older.disabled).toBe(false));
-		expect(legacy.disabled).toBe(false);
-		expect(older.getAttribute("aria-busy")).toBe("false");
-	});
-
-	it("reports a failed delete with a retry and leaves the history alone", async () => {
-		vi.spyOn(console, "error").mockImplementation(() => {});
-		rpc.logs.deleteOlderFiles
-			.mockResolvedValueOnce({ ok: false, error: "READ_FAILED" })
-			.mockRejectedValueOnce(new Error("socket closed"))
-			.mockResolvedValueOnce({
-				ok: true,
-				storage: logStorage(),
-				bootsBefore: 3,
-				bootsAfter: 3,
-			});
-		mount();
-
-		await confirmOlder();
-		const band = await screen.findByTestId("storage-cleanup-failed");
-		expect(band.getAttribute("role")).toBe("alert");
-		expect(within(band).getByText(copy.actionFailed)).toBeTruthy();
-		expect(
-			screen.getByTestId("storage-cleanup-status").textContent?.trim(),
-		).toBe("");
-
-		await fireEvent.click(
-			within(band).getByTestId("storage-cleanup-failed-retry"),
-		);
-		await fireEvent.click(
-			within(await screen.findByRole("alertdialog")).getByRole("button", {
-				name: copy.deleteOlder,
-			}),
-		);
-		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
-		await waitFor(() =>
-			expect(rpc.logs.deleteOlderFiles).toHaveBeenCalledTimes(2),
-		);
-		expect(await screen.findByTestId("storage-cleanup-failed")).toBeTruthy();
-		expect(historyChanged).not.toHaveBeenCalled();
-
-		await fireEvent.click(screen.getByTestId("storage-cleanup-failed-retry"));
-		await fireEvent.click(
-			within(await screen.findByRole("alertdialog")).getByRole("button", {
-				name: copy.deleteOlder,
-			}),
-		);
-		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
-		await waitFor(() =>
-			expect(screen.queryByTestId("storage-cleanup-failed")).toBeNull(),
-		);
-		expect(historyChanged).toHaveBeenCalledTimes(1);
+		await waitFor(() => expect(legacy.disabled).toBe(false));
 	});
 
 	it("asks before clearing all logs, in words that promise nothing more than it does", async () => {
@@ -1149,23 +1058,25 @@ describe("StorageSection: cleanup", () => {
 
 	it("clears an earlier outcome when the next action starts", async () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
-		rpc.logs.deleteOlderFiles.mockResolvedValueOnce({
+		rpc.logs.clearAll.mockResolvedValueOnce({
 			ok: true,
 			storage: logStorage(),
 			bootsBefore: 2,
 			bootsAfter: 1,
 		});
-		rpc.logs.clearAll.mockReturnValue(new Promise(() => {}));
+		rpc.events.clear.mockReturnValueOnce(new Promise(() => {}));
 		mount();
 
-		await confirmOlder();
+		await confirmAction(copy.clearAll, copy.clearAllConfirm);
 		const status = screen.getByTestId("storage-cleanup-status");
 		await waitFor(() => expect(status.textContent?.trim()).not.toBe(""));
 
-		await fireEvent.click(screen.getByRole("button", { name: copy.clearAll }));
+		await fireEvent.click(
+			screen.getByRole("button", { name: copy.clearEvents }),
+		);
 		const dialog = await screen.findByRole("alertdialog");
 		await fireEvent.click(
-			within(dialog).getByRole("button", { name: copy.clearAllConfirm }),
+			within(dialog).getByRole("button", { name: copy.clearEventsConfirm }),
 		);
 		await waitFor(() => expect(status.textContent?.trim()).toBe(""));
 	});
@@ -1606,27 +1517,13 @@ describe("StorageSection: anatomy", () => {
 			"border-t",
 			"pt-5",
 		]);
-		const older = screen.getByTestId("storage-delete-older");
-		expect(older.textContent?.trim()).toBe(copy.deleteOlder);
-		expect(tokens(older.parentElement)).toEqual([
-			"flex",
-			"flex-col",
-			"items-start",
-			"gap-1.5",
-		]);
-		expect(tokens(older.nextElementSibling)).toEqual([
-			"text-muted-foreground",
-			"text-xs",
-		]);
 		const legacy = screen.getByTestId("storage-delete-legacy");
 		expect(tokens(legacy)).toContain("self-start");
-		for (const action of [older, legacy]) {
-			expect(tokens(action)).toEqual(
-				expect.arrayContaining(["border-border", SMALL, ...WRAPS]),
-			);
-			expect(tokens(action)).not.toContain("whitespace-nowrap");
-			expect(action.getAttribute("aria-busy")).toBe("false");
-		}
+		expect(tokens(legacy)).toEqual(
+			expect.arrayContaining(["border-border", SMALL, ...WRAPS]),
+		);
+		expect(tokens(legacy)).not.toContain("whitespace-nowrap");
+		expect(legacy.getAttribute("aria-busy")).toBe("false");
 		const triggers = [
 			screen.getByRole("button", { name: copy.clearAll }),
 			screen.getByRole("button", { name: copy.clearEvents }),
@@ -1673,13 +1570,13 @@ describe("StorageSection: anatomy", () => {
 	});
 
 	it("draws every failure as the amber band with a small outline Retry", async () => {
-		rpc.logs.deleteOlderFiles.mockResolvedValue({
+		rpc.logs.clearAll.mockResolvedValue({
 			ok: false,
 			error: "READ_FAILED",
 		});
 		mount();
 
-		await confirmOlder();
+		await confirmAction(copy.clearAll, copy.clearAllConfirm);
 		const band = await screen.findByTestId("storage-cleanup-failed");
 		expect(tokens(band)).toEqual([
 			"border-status-warning/30",
@@ -2059,12 +1956,6 @@ describe("StorageSection: successful replies that leave out what they promise", 
 
 	const cleanupActions = [
 		[
-			"Delete older log files",
-			() => rpc.logs.deleteOlderFiles,
-			confirmOlder,
-			{ bootsBefore: 17, bootsAfter: 4 },
-		],
-		[
 			"Delete leftover debug files",
 			() => rpc.logs.deleteLegacyDebug,
 			() => fireEvent.click(screen.getByTestId("storage-delete-legacy")),
@@ -2110,17 +2001,17 @@ describe("StorageSection: successful replies that leave out what they promise", 
 			{ bootsBefore: "17", bootsAfter: 4 },
 		],
 	])(
-		"Delete older log files: a success that %s offers Retry and claims no boot counts",
+		"Clear all logs: a success that %s offers Retry and claims no boot counts",
 		async (_shape, boots) => {
 			vi.spyOn(console, "error").mockImplementation(() => {});
-			rpc.logs.deleteOlderFiles.mockResolvedValue({
+			rpc.logs.clearAll.mockResolvedValue({
 				ok: true,
 				storage: logStorage(),
 				...boots,
 			});
 			mount();
 
-			await confirmOlder();
+			await confirmAction(copy.clearAll, copy.clearAllConfirm);
 
 			await expectRecovery("storage-cleanup-failed");
 			expect(
@@ -2251,7 +2142,6 @@ describe("StorageSection: Chinese wraps only between words", () => {
 
 		expect(text).toContain("日志\u200b占用");
 		expect(text).toContain("占用\u200b更多\u200b空间");
-		expect(text).toContain("删除\u200b设备");
 		expect(text).toContain("最适合排查问题");
 		cleanup();
 

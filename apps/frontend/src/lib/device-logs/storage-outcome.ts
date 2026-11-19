@@ -44,8 +44,8 @@ export function storageReply(reply: unknown): LogStorageOutput {
 	return parseReply(logStorageOutputSchema, reply);
 }
 
-/** Deleting older files and clearing logs also return the boot counts before and after. */
-export function deleteOlderReply(reply: unknown): LogDeleteOlderFilesOutput {
+/** Clearing logs also returns the boot counts before and after. */
+export function clearAllReply(reply: unknown): LogDeleteOlderFilesOutput {
 	return parseReply(logDeleteOlderFilesOutputSchema, reply);
 }
 

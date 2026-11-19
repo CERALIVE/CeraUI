@@ -1,7 +1,5 @@
 <!--
-  StorageCleanup.svelte: the cleanup actions, destructive ones last. Deleting
-  older files reports which boots remain instead of promising they are gone.
-  Older log cleanup, Clear all logs and Clear event history ask first, opening on Cancel.
+  Clear all logs and Clear event history ask first, opening on Cancel.
   A refusal or failure is an inline band whose Retry asks again. A success that removed stored history
   tells the other System Logs regions through the history bus.
 -->
@@ -17,7 +15,7 @@ import { m } from '$lib/device-logs/storage-messages';
 import {
 	type ActionFailure,
 	type ActionReply,
-	deleteOlderReply,
+	clearAllReply,
 	fromSuccess,
 	type OkReply,
 	settleAction,
@@ -36,7 +34,7 @@ interface Props {
 
 let { storage = $bindable(), onrefresh }: Props = $props();
 
-type Action = 'deleteOlder' | 'deleteLegacy' | 'clearAll' | 'clearEvents';
+type Action = 'deleteLegacy' | 'clearAll' | 'clearEvents';
 
 // Long localized labels wrap inside the column; the shared Button base never wraps.
 const WRAP = 'h-auto max-w-full whitespace-normal py-1 text-start';
@@ -69,7 +67,6 @@ function openOnCancel(id: string) {
 let running = $state<Action>();
 let cleanup = $state<OkReply<LogDeleteOlderFilesOutput>>();
 let failure = $state<{ action: Action; reason: ActionFailure }>();
-let confirmDeleteOlder = $state(false);
 let confirmClearAll = $state(false);
 let confirmClearEvents = $state(false);
 
@@ -92,18 +89,12 @@ async function run<R extends ActionReply>(
 	}
 }
 
-const deleteOlder = () =>
-	run('deleteOlder', () => rpc.logs.deleteOlderFiles(), deleteOlderReply, (reply) => {
-		storage = reply.storage;
-		cleanup = reply;
-		notifyHistoryChanged('older');
-	});
 const deleteLegacy = () =>
 	run('deleteLegacy', () => rpc.logs.deleteLegacyDebug(), storageReply, (reply) => {
 		storage = reply.storage;
 	});
 const clearAll = () =>
-	run('clearAll', () => rpc.logs.clearAll(), deleteOlderReply, (reply) => {
+	run('clearAll', () => rpc.logs.clearAll(), clearAllReply, (reply) => {
 		storage = reply.storage;
 		cleanup = reply;
 		notifyHistoryChanged();
@@ -115,7 +106,6 @@ const clearEvents = () =>
 	});
 
 const RETRY: Record<Action, () => unknown> = {
-	deleteOlder: () => (confirmDeleteOlder = true),
 	deleteLegacy,
 	clearAll: () => (confirmClearAll = true),
 	clearEvents: () => (confirmClearEvents = true),
@@ -123,29 +113,6 @@ const RETRY: Record<Action, () => unknown> = {
 </script>
 
 <div class="flex flex-col gap-4 border-t pt-5" data-testid="storage-cleanup">
-	<div class="flex flex-col items-start gap-1.5">
-		<SimpleAlertDialog
-			class="{CONFIRM_WIDTH} {CONFIRM_BUTTONS} {LINE_BREAKS}"
-			bind:open={confirmDeleteOlder}
-			buttonClasses={TRIGGER}
-			buttonText={m['systemLogs.storage.deleteOlder']()}
-			confirmButtonText={m['systemLogs.storage.deleteOlder']()}
-			confirmVariant="destructive"
-			contentProps={openOnCancel(`${uid}-delete-older`)}
-			disabledConfirmButton={running !== undefined}
-			extraButtonClasses="min-h-(--touch-target-min)"
-			triggerProps={{ 'aria-busy': running === 'deleteOlder', 'data-testid': 'storage-delete-older', disabled: running !== undefined }}
-			onconfirm={deleteOlder}
-		>
-			{#snippet dialogTitle()}
-				{m['systemLogs.storage.deleteOlderTitle']()}
-			{/snippet}
-			{#snippet description()}
-				{m['systemLogs.storage.deleteOlderBody']()}
-			{/snippet}
-		</SimpleAlertDialog>
-		<p class="text-muted-foreground text-xs">{m['systemLogs.storage.deleteOlderHint']()}</p>
-	</div>
 	{#if storage.legacyDebugBytes > 0}
 		<Button
 			aria-busy={running === 'deleteLegacy'}
@@ -201,13 +168,7 @@ const RETRY: Record<Action, () => unknown> = {
 	</div>
 	<div class="text-sm" data-testid="storage-cleanup-status" role="status">
 		{#if cleanup}
-			<p>{m['systemLogs.storage.deleteOlderResult']({ before: cleanup.bootsBefore, after: cleanup.bootsAfter })}</p>
-			{#if cleanup.unverifiedArchivesKept}
-				<p>{m['systemLogs.storage.unverifiedArchivesKept']()}</p>
-			{/if}
-			{#if cleanup.legacyArchivesKept}
-				<p>{m['systemLogs.storage.legacyArchivesKept']()}</p>
-			{/if}
+			<p>{m['systemLogs.storage.clearAllResult']({ before: cleanup.bootsBefore, after: cleanup.bootsAfter })}</p>
 		{/if}
 	</div>
 	{#if failure}

@@ -26,7 +26,7 @@ const rpc = vi.hoisted(
 		({}) as {
 			logs?: {
 				getStorage: () => Promise<unknown>;
-				deleteOlderFiles?: () => Promise<unknown>;
+				clearAll?: () => Promise<unknown>;
 				query: () => Promise<unknown>;
 			};
 		},
@@ -768,7 +768,7 @@ describe("SystemLogsView: Storage region", () => {
 	it("shows the latest storage reply when the Storage tab opens again", async () => {
 		viewport(false);
 		getStorage.mockResolvedValue(logStorage());
-		const deleteOlderFiles = vi.fn().mockResolvedValue({
+		const clearAll = vi.fn().mockResolvedValue({
 			ok: true,
 			storage: logStorage({ journalBytes: 12 * MIB }),
 			bootsBefore: 2,
@@ -776,7 +776,7 @@ describe("SystemLogsView: Storage region", () => {
 		});
 		rpc.logs = {
 			getStorage,
-			deleteOlderFiles,
+			clearAll,
 			query: vi.fn().mockResolvedValue({ ok: false, error: "READ_FAILED" }),
 		};
 		render(SystemLogsView);
@@ -784,12 +784,14 @@ describe("SystemLogsView: Storage region", () => {
 
 		await fireEvent.click(tab(en.systemLogs.tabs.storage));
 		expect(usage()).toBe(used("48\u00a0MB"));
-		const older = screen.getByTestId("storage-delete-older");
-		older.focus();
-		await fireEvent.click(older);
+		const clear = screen.getByRole("button", {
+			name: en.systemLogs.storage.clearAll,
+		});
+		clear.focus();
+		await fireEvent.click(clear);
 		const confirmation = within(
 			await screen.findByRole("alertdialog"),
-		).getByRole("button", { name: en.systemLogs.storage.deleteOlder });
+		).getByRole("button", { name: en.systemLogs.storage.clearAllConfirm });
 		await fireEvent.click(confirmation);
 		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
 		await waitFor(() => expect(usage()).toBe(used("12\u00a0MB")));
