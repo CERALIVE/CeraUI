@@ -8,6 +8,7 @@ import {
 import { locateAround, queryLogs } from "../modules/device-logs/query.ts";
 import {
 	bootId,
+	eventMessage,
 	queryFixture,
 	record,
 	socket,
@@ -107,11 +108,11 @@ test("service option and match combinations replay against the systemd fixture",
 	fixture.scan.mockImplementation(async (input) => {
 		input.onRecord(
 			record(3, {
-				MESSAGE: "event-id",
+				MESSAGE: eventMessage,
 				__REALTIME_TIMESTAMP: "1700000002000000",
 			}),
 		);
-		return { status: "stopped", exitCode: 143, skippedRecords: 0 };
+		return { status: "eof", exitCode: 0, skippedRecords: 0 };
 	});
 	await locateAround(socket(), {
 		bootId,
@@ -121,10 +122,10 @@ test("service option and match combinations replay against the systemd fixture",
 	const hint = fixture.scan.mock.calls[0]?.[0];
 	if (!hint) throw new Error("around did not seek");
 	rows.push({
-		name: "event seek hint",
+		name: "event seek without realtime bounds",
 		options: hint.options,
 		matches: hint.matches,
-		ids: "m1 m4 m6",
+		ids: "m6 m4 m1",
 	});
 	for (const at of [
 		0,
@@ -147,19 +148,11 @@ test("service option and match combinations replay against the systemd fixture",
 		await locateAround(socket(), { bootId, at, eventId: "event-id" });
 		const seek = fixture.scan.mock.calls[0]?.[0];
 		if (!seek) throw new Error("around did not seek");
-		if (
-			rows.some(
-				(row) =>
-					JSON.stringify([row.options, row.matches]) ===
-					JSON.stringify([seek.options, seek.matches]),
-			)
-		)
-			continue;
 		rows.push({
 			name: `event seek at ${at}`,
 			options: seek.options,
 			matches: seek.matches,
-			ids: "",
+			ids: "m6 m4 m1",
 		});
 	}
 	const text = `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`;

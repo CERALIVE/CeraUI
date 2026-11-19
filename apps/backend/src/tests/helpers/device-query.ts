@@ -13,6 +13,13 @@ import { bootId, journalObject } from "./device-journal-record.ts";
 
 export { bootId };
 export const socket = () => ({ send: (_message: string) => undefined });
+export const eventMessage = JSON.stringify({
+	ts: "2026-01-01T00:00:00Z",
+	level: "info",
+	msg: "event",
+	module: "events",
+	meta: { event_id: "event-id" },
+});
 export function record(
 	n: number,
 	fields: Record<string, unknown> = {},

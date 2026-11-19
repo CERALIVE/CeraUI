@@ -35,11 +35,17 @@ preserves the incoming token or returns null on the first page. Query options
 contain only the direction and an optional inclusive cursor, never native time
 bounds or line limits.
 
-Event location uses one app-source scan with native +/-5 second seek hints and
-literal event-ID text. The lower hint is clamped to Unix time zero because
-systemd 257 rejects negative `@` timestamps. Timestamp membership also applies to that seek so the mock
-ring has the same bounded search. Its first matching entry becomes the exact
-anchor, excluded from both surrounding 50-entry pages. When absent, two independent
+Event location uses one bounded reverse app-source scan in journal cursor order.
+The parser recognizes the event producer's `module: "events"`, `msg: "event"`
+and string `meta.event_id` before formatting the display message. The scan
+requires an exact case-sensitive ID and inclusive five-second membership on
+each side, without native realtime pruning when the clock steps. The first
+matching entry becomes the exact anchor, excluded from both surrounding
+50-entry pages. The seek and enclosing pages retain their first decisive
+result and let the bounded reader settle without requesting an early stop, so
+a short native scan may finish before its stdout is processed. A budget cut
+without an anchor returns `READ_FAILED`. At EOF
+without a match, two independent
 pages scan the boot in opposite directions with membership windows
 `max(0, at - 60000) <= ts <= at` and `at < ts <= at + 60000`. At timestamp zero,
 the older query omits its redundant lower bound so its wire range stays valid.
@@ -49,7 +55,7 @@ Derived upper bounds saturate at the wire timestamp maximum (`Number.MAX_SAFE_IN
 When the inclusive newer lower bound reaches that maximum, its redundant upper
 bound is omitted to keep the query valid. At the maximum itself the strict newer
 window is empty: its page is terminal with no continuation. Admission is unchanged,
-including timestamps zero and the maximum; native seek lower bounds stay nonnegative.
+including timestamps zero and the maximum.
 
 `boot-list.ts` parses native boot-list JSON and assembles journal rows with
 stored boot versions. Journal timestamps are microseconds converted to whole

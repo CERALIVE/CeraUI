@@ -3,6 +3,7 @@ import { logAroundOutputSchema } from "@ceraui/rpc/schemas";
 import { locateAround, queryLogs } from "../modules/device-logs/query.ts";
 import {
 	bootId,
+	eventMessage,
 	journal,
 	queryFixture,
 	record,
@@ -16,13 +17,12 @@ beforeEach(() => {
 afterEach(() => fixture.restore());
 test("an event anchor is excluded from two resumable surrounding pages", async () => {
 	const rows = Array.from({ length: 120 }, (_, n) =>
-		record(n, { MESSAGE: n === 60 ? "event-id" : `row ${n}` }),
+		record(n, { MESSAGE: n === 60 ? eventMessage : `row ${n}` }),
 	);
 	fixture.scan.mockImplementationOnce(async (input) => {
-		expect(input.options).toEqual(["--since=@0", "--until=@6"]);
+		expect(input.options).toEqual(["-r"]);
 		expect(input.matches).toContain("_SYSTEMD_UNIT=ceralive.service");
-		for (const row of rows) if (input.onRecord(row) === "stop") break;
-		return { status: "stopped", exitCode: 143, skippedRecords: 0 };
+		return journal(rows)(input);
 	});
 	fixture.scan.mockImplementation(journal(rows));
 	const conn = socket();
@@ -35,6 +35,7 @@ test("an event anchor is excluded from two resumable surrounding pages", async (
 	if (!result.ok) throw new Error(result.error);
 	expect(result.approximate).toBe(false);
 	expect(result.anchor?.cursor).toBe("s=60");
+	expect(result.anchor).not.toHaveProperty("eventId");
 	expect(result.older.entries.map((r) => r.ts)).toEqual(
 		Array.from({ length: 50 }, (_, i) => 59 - i),
 	);
@@ -91,6 +92,25 @@ test("unknown boots fail before seeking an event", async () => {
 	);
 	expect(fixture.scan).not.toHaveBeenCalled();
 });
+test("a budget cut before a match cannot prove the event is absent", async () => {
+	fixture.scan.mockImplementationOnce(journal([record(1)], 0));
+	fixture.scan.mockImplementation(journal([record(1)]));
+	expect(
+		await locateAround(socket(), { bootId, at: 1, eventId: "event-id" }),
+	).toEqual({ ok: false, error: "READ_FAILED" });
+});
+test("an exact anchor survives budget exhaustion after its record is read", async () => {
+	const rows = [record(1), record(2, { MESSAGE: eventMessage })];
+	fixture.scan.mockImplementationOnce(journal(rows, 1));
+	fixture.scan.mockImplementation(journal(rows));
+	expect(
+		await locateAround(socket(), { bootId, at: 2, eventId: "event-id" }),
+	).toMatchObject({
+		ok: true,
+		approximate: false,
+		anchor: { cursor: "s=2" },
+	});
+});
 test("stored-only boots cannot anchor a raw event location", async () => {
 	const rows = await fixture.list();
 	fixture.list.mockResolvedValue(
@@ -116,7 +136,7 @@ test("exact surrounding pages retain adjacent records outside approximate clock 
 	fixture.scan.mockImplementation(
 		journal([
 			record(1, { __REALTIME_TIMESTAMP: "0" }),
-			record(2, { __REALTIME_TIMESTAMP: "100000000", MESSAGE: "event-id" }),
+			record(2, { __REALTIME_TIMESTAMP: "100000000", MESSAGE: eventMessage }),
 			record(3, { __REALTIME_TIMESTAMP: "200000000" }),
 		]),
 	);

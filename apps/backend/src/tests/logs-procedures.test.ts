@@ -132,7 +132,17 @@ test.each(guestCalls)(
 );
 
 test("query and around read the mock ring with defaults and extreme timestamps", async () => {
-	await seed();
+	await new Promise<void>((resolve) =>
+		logging.logger.write(
+			{
+				level: "error",
+				message: "event",
+				module: "events",
+				event_id: "rpc-marker",
+			},
+			() => resolve(),
+		),
+	);
 	const run = spyOn(runner, "run");
 	const spawn = spyOn(Bun, "spawn");
 	try {
@@ -149,7 +159,7 @@ test("query and around read the mock ring with defaults and extreme timestamps",
 		});
 		if (!result.ok) throw new Error(result.error);
 		expect(result.entries.map((entry) => entry.message)).toEqual([
-			"[test] rpc-marker",
+			'[events] event {"event_id":"rpc-marker"}',
 		]);
 		const entry = result.entries[0];
 		if (!entry) throw new Error("missing marker");

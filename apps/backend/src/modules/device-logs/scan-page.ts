@@ -21,6 +21,7 @@ export async function scanPage(
 		readonly bootId: string | null;
 		readonly epoch: number;
 		readonly signal: AbortSignal;
+		readonly settleNaturally?: boolean;
 	},
 ): Promise<LogQueryOutput> {
 	const binding = bindQuery(query, scope.bootId, scope.epoch);
@@ -72,6 +73,8 @@ export async function scanPage(
 		matches,
 		signal: scope.signal,
 		onRecord(record) {
+			if (window.invalid || window.lookahead || reachedGapEnd)
+				return "continue";
 			if (gap?.start && record.cursor === start && start !== gap.through)
 				return "continue";
 			if (gap?.start && start === gap.through) {
@@ -80,7 +83,8 @@ export async function scanPage(
 			}
 			window = advancePage(window, record, query);
 			reachedGapEnd = !window.lookahead && record.cursor === gap?.through;
-			return window.invalid || window.lookahead || reachedGapEnd
+			return !scope.settleNaturally &&
+				(window.invalid || window.lookahead || reachedGapEnd)
 				? "stop"
 				: "continue";
 		},

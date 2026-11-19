@@ -40,7 +40,7 @@ Events: [device-events.md](device-events.md).
 | Follow | `journalctl -f -o json --all --output-fields=<...> [--cursor=<c>] --lines=all -- <matches>` | `follow.ts:161-164,248-258` |
 | Follow position probe | options `-r`, or `--cursor=<afterCursor>` | `follow-position.ts:11` |
 | Paging | options `-r` for `direction: "older"`; `--cursor=<decoded cursor>` when continuing | `scan-page.ts:28-29` |
-| Around event-id seek | options `--since=@<floor(max(0, at-5000)/1000)>`, `--until=@<ceil(min(MAX_SAFE_INTEGER, at+5000)/1000)>`; matches compiled for source `app` and the event's boot; the scan stops at the first record that passes the residual test with `text: eventId` (a substring match) | `around.ts:16,23-43` |
+| Around event-id seek | option `-r`; matches compiled for source `app` and the event's boot; the scan retains the first exact parsed producer ID within the five-second realtime window | `around.ts` |
 | Storage oldest entry / recent sample | options none / `-r` | `storage.ts:33,57` |
 | Shutdown window | options `-r` (tail) or none (head) | `shutdown-window.ts:14` |
 | Boot list | `journalctl --list-boots -o json` | `boots.ts:41` |
@@ -134,7 +134,7 @@ example origins:
 | `src/tests/spawn-policy.test.ts:106-128` | the `deviceLogs.journalScan` site |
 | `src/tests/device-logs-follow-policy.test.ts:5-7` | the `deviceLogs.journalFollow` site |
 | `src/tests/device-logs-filter.test.ts:235-248` | compiler matches equal `test-harness/journal-conformance/golden-argv.txt` (15 rows) |
-| `src/tests/device-logs-query-golden.test.ts:76-104,116-171` | paging (`:76-104`) and around-seek (`:116-164`) argv, compared at `:171`, equal `query/golden-argv.txt` (20 rows: 9 paging, 11 around seek) |
+| `src/tests/device-logs-query-golden.test.ts` | Paging and around-seek argv equal `query/golden-argv.txt`. Timestamp edge cases all require the same reverse seek without realtime switches. |
 | `test-harness/journal-conformance/query/replay.sh:12-23` | replays each `query/golden-argv.txt` row against a fixture journal and checks the returned ids |
 | `src/tests/device-logs-suppression-conformance.test.ts:81-98` | a captured systemd 257 suppression record parses with its `MESSAGE_ID` and message, maps to marker `suppressed`, and classifies a boot ending on it as `unknown` (`too_few_entries`) |
 | `test-harness/journal-conformance/live.sh:136-166` | journald burst 2000 per 30 s: a 6000-line flood stores 6000 entries and no `Suppressed` notice is written |

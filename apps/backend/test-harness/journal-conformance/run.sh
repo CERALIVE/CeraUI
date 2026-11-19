@@ -39,6 +39,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 bun build --compile "$here/reader-probe.ts" --outfile "$state/reader-probe"
 bun build --compile "$here/retention-probe.ts" --outfile "$state/retention-probe"
+bun build --compile "$here/around-probe.ts" --outfile "$state/around-probe"
 docker run --pull=never --rm -i --name "$fixture" \
 	-v "$here:/conformance:ro" \
 	-v "$state/reader-probe:/reader-probe:ro" \

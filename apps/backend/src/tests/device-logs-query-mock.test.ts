@@ -5,6 +5,7 @@ import * as mocks from "../mocks/mock-service.ts";
 import { currentBootId } from "../modules/device-logs/boot-id.ts";
 import { listBoots } from "../modules/device-logs/boots.ts";
 import { locateAround, queryLogs } from "../modules/device-logs/query.ts";
+import { emitEvent, resetEventEmitterForTest } from "../modules/events/emit.ts";
 import * as store from "../modules/events/store.ts";
 import { socket } from "./helpers/device-query.ts";
 
@@ -51,7 +52,12 @@ test("mock queries, event location and boot discovery share the ring without any
 	const at = Date.now();
 	await new Promise<void>((resolve) =>
 		logging.logger.write(
-			{ level: "info", message: "event-id", module: "fixture" },
+			{
+				level: "info",
+				message: "event",
+				module: "events",
+				event_id: "event-id",
+			},
 			() => resolve(),
 		),
 	);
@@ -66,7 +72,7 @@ test("mock queries, event location and boot discovery share the ring without any
 		});
 		if (!result.ok) throw new Error(result.error);
 		expect(result.entries.map((r) => r.message)).toEqual([
-			"[fixture] event-id",
+			'[events] event {"event_id":"event-id"}',
 		]);
 		const boots = await listBoots();
 		expect(boots).toHaveLength(1);
@@ -84,7 +90,7 @@ test("mock queries, event location and boot discovery share the ring without any
 		expect(around).toMatchObject({
 			ok: true,
 			approximate: false,
-			anchor: { message: "[fixture] event-id" },
+			anchor: { message: '[events] event {"event_id":"event-id"}' },
 		});
 		expect(command).not.toHaveBeenCalled();
 		expect(spawn).not.toHaveBeenCalled();
@@ -93,3 +99,53 @@ test("mock queries, event location and boot discovery share the ring without any
 		spawn.mockRestore();
 	}
 });
+
+test.each([false, true])(
+	"mock event location ignores ID collisions when the producer record exists=%j",
+	async (present) => {
+		spyOn(mocks, "shouldUseMocks").mockReturnValue(true);
+		spyOn(store, "readBoots").mockReturnValue([]);
+		logging.clearRecentLogLines();
+		const bootId = currentBootId();
+		if (!bootId) throw new Error("missing current boot");
+		const id = `${bootId.slice(0, 8)}-1`;
+		const at = Date.now();
+		if (present) {
+			const written = Promise.withResolvers<void>();
+			resetEventEmitterForTest({
+				bootId: () => bootId,
+				tailSeq: () => 0,
+				appendEvent: () => undefined,
+				log(level, message, meta) {
+					logging.logger.write({ level, message, ...meta }, (error) => {
+						if (error) written.reject(error);
+						else written.resolve();
+					});
+				},
+			});
+			try {
+				emitEvent("service_stopping", { signal: "SIGTERM" });
+				await written.promise;
+			} finally {
+				resetEventEmitterForTest();
+			}
+		}
+		logging.logger.info(`free-text mention of ${id}`);
+		logging.logger.info("event", { module: "events", event_id: `${id}0` });
+		if (id !== id.toUpperCase())
+			logging.logger.info("event", {
+				module: "events",
+				event_id: id.toUpperCase(),
+			});
+		logging.logger.info("event", { module: "fixture", event_id: id });
+		logging.logger.info("event warning", { module: "events", event_id: id });
+		const located = await locateAround(socket(), { bootId, at, eventId: id });
+		if (!located.ok) throw new Error(located.error);
+		expect(located.approximate).toBe(!present);
+		expect(located.anchor?.message ?? null).toEqual(
+			present
+				? `[events] event {"event_id":"${id}","code":"service_stopping","params":{"signal":"SIGTERM"}}`
+				: null,
+		);
+	},
+);

@@ -7,6 +7,7 @@ import {
 import { locateAround } from "../modules/device-logs/query.ts";
 import {
 	bootId,
+	eventMessage,
 	journal,
 	queryFixture,
 	record,
@@ -106,13 +107,7 @@ test.each(extremes)(
 		);
 		expect(result).toMatchObject({ ok: true, anchor: null, approximate: true });
 		const first = fixture.scan.mock.calls[0]?.[0];
-		const center = BigInt(at);
-		const since = center > 5000n ? center - 5000n : 0n;
-		const until = center + 5000n > BigInt(max) ? BigInt(max) : center + 5000n;
-		expect(first?.options).toEqual([
-			`--since=@${since / 1000n}`,
-			`--until=@${(until + 999n) / 1000n}`,
-		]);
+		expect(first?.options).toEqual(["-r"]);
 	},
 );
 
@@ -121,7 +116,7 @@ test.each([max - 1, max])(
 	async (at) => {
 		const rows = [
 			{ ...record(1), ts: 0 },
-			{ ...record(2), ts: at, message: "event-id" },
+			{ ...record(2, { MESSAGE: eventMessage }), ts: at },
 			{ ...record(3), ts: 1 },
 		];
 		fixture.scan.mockImplementation(journal(rows));

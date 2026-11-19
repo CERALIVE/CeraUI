@@ -6,9 +6,11 @@ export type RawJournalRecord = LogEntry & {
 	readonly messageId: string | null;
 	readonly unitField: string | null;
 	readonly pid: number | null;
+	readonly eventId?: string;
 };
 
 const objectSchema = z.record(z.string(), z.unknown());
+const eventMetaSchema = z.object({ event_id: z.string().min(1) });
 const MESSAGE_BYTES = 16 * 1024;
 const LEGACY_LEVELS: Readonly<Record<string, LogLevel>> = {
 	error: "error",
@@ -70,6 +72,7 @@ export function parseRecord(input: unknown): RawJournalRecord | null {
 	let truncated = message === undefined;
 	let text = message ?? "";
 	let processSource: "srtla_send" | undefined;
+	let eventId: string | undefined;
 	if (text.startsWith('{"ts":')) {
 		try {
 			const structured = objectSchema.safeParse(JSON.parse(text));
@@ -77,6 +80,10 @@ export function parseRecord(input: unknown): RawJournalRecord | null {
 				const data = structured.data;
 				if (data.processSource === "srtla_send")
 					processSource = data.processSource;
+				if (data.module === "events" && data.msg === "event") {
+					const meta = eventMetaSchema.safeParse(data.meta);
+					if (meta.success) eventId = meta.data.event_id;
+				}
 				text = `${typeof data.module === "string" && data.module ? `[${data.module}] ` : ""}${data.msg}${
 					data.meta !== null && typeof data.meta === "object"
 						? ` ${JSON.stringify(data.meta)}`
@@ -123,6 +130,7 @@ export function parseRecord(input: unknown): RawJournalRecord | null {
 		messageId,
 		unitField: stringField(obj.UNIT),
 		pid: Number.isSafeInteger(pid) && pid > 0 ? pid : null,
+		...(eventId === undefined ? {} : { eventId }),
 	};
 }
 
@@ -131,6 +139,7 @@ export function toLogEntry(record: RawJournalRecord): LogEntry {
 		messageId: _messageId,
 		unitField: _unitField,
 		pid: _pid,
+		eventId: _eventId,
 		...entry
 	} = record;
 	return entry;

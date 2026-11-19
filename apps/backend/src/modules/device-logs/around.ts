@@ -1,7 +1,6 @@
 import {
 	type LogAroundInput,
 	type LogAroundOutput,
-	type LogQueryInput,
 	logQueryInputSchema,
 } from "@ceraui/rpc/schemas";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
@@ -10,7 +9,6 @@ import { compileFilter } from "./filter.ts";
 import { scanMockJournal } from "./mock-journal.ts";
 import { type RawJournalRecord, toLogEntry } from "./parse.ts";
 import { scanJournal } from "./reader.ts";
-import { matchesResidual } from "./residual.ts";
 import { scanPage } from "./scan-page.ts";
 
 const MAX_TIMESTAMP = Number.MAX_SAFE_INTEGER;
@@ -21,26 +19,32 @@ export async function locatePagesAround(
 ): Promise<LogAroundOutput> {
 	const found: { record: RawJournalRecord | null } = { record: null };
 	if (input.eventId !== undefined) {
-		const filter = {
-			sources: ["app"],
-			text: input.eventId,
-			since: Math.max(0, input.at - 5000),
-			until: Math.min(MAX_TIMESTAMP, input.at + 5000),
-		} satisfies LogQueryInput;
+		const since = Math.max(0, input.at - 5000);
+		const until = Math.min(MAX_TIMESTAMP, input.at + 5000);
 		const scan = shouldUseMocks() ? scanMockJournal : scanJournal;
-		await scan({
-			options: [
-				`--since=@${Math.floor(Math.max(0, input.at - 5000) / 1000)}`,
-				`--until=@${Math.ceil(filter.until / 1000)}`,
-			],
-			matches: compileFilter(filter, { bootId: input.bootId }).matches,
+		const result = await scan({
+			// Realtime can move backward within the journal's traversal order.
+			options: ["-r"],
+			matches: compileFilter({ sources: ["app"] }, { bootId: input.bootId })
+				.matches,
 			signal: scope.signal,
 			onRecord(record) {
-				if (!matchesResidual(record, filter)) return "continue";
+				if (
+					found.record !== null ||
+					record.source !== "app" ||
+					record.eventId !== input.eventId ||
+					record.ts < since ||
+					record.ts > until
+				)
+					return "continue";
 				found.record = record;
-				return "stop";
+				// A short native scan can exit before a requested stop is observed.
+				// Keep the first match and let the bounded reader settle normally.
+				return "continue";
 			},
 		});
+		if (result.status !== "eof" && found.record === null)
+			return { ok: false, error: "READ_FAILED" };
 	}
 	const anchor = found.record;
 	const olderQuery = logQueryInputSchema.parse({
@@ -68,7 +72,12 @@ export async function locatePagesAround(
 						: {}),
 				}),
 	});
-	const pageScope = { ...scope, bootId: input.bootId };
+	const pageScope = {
+		...scope,
+		bootId: input.bootId,
+		// An already-exited child cannot establish that we owned its stop.
+		settleNaturally: true,
+	};
 	// Internal anchor tokens use exactly the same binding as ordinary continuation.
 	const fromAnchor = (query: typeof olderQuery) =>
 		anchor

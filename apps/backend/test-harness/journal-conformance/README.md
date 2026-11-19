@@ -93,7 +93,7 @@ Run `cd apps/backend && bun test ./src/tests/device-logs-filter.test.ts`.
 `golden-argv.txt` is JSONL with `name`, `filter`, `bootId` and `matches` per row.
 Tests compare it without writing; regenerate explicitly with `UPDATE_GOLDEN=1`
 on the same test command. `query/golden-argv.txt` holds the paging and
-around-seek option cases (`src/tests/device-logs-query-golden.test.ts:76-171`);
+around-seek option cases (`src/tests/device-logs-query-golden.test.ts`);
 `query/replay.sh` replays each row against a fixture journal.
 
 ## Retention and cleanup [EXISTS]

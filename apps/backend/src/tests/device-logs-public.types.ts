@@ -33,6 +33,7 @@ type ExpectedRaw = LogEntry & {
 	readonly messageId: string | null;
 	readonly unitField: string | null;
 	readonly pid: number | null;
+	readonly eventId?: string;
 };
 interface ExpectedChild {
 	readonly stdout: ReadableStream<Uint8Array>;
@@ -109,6 +110,7 @@ export type DeviceJournalPublicContracts = [
 			[
 				code: "JOURNAL_UNAVAILABLE" | "RECORD_TOO_LARGE" | "READ_FAILED",
 				stderr?: string | undefined,
+				options?: ErrorOptions | undefined,
 			]
 		>
 	>,

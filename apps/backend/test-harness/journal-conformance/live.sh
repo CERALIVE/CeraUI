@@ -76,6 +76,21 @@ equal 'older-file cleanup preserves the current boot record count' "$(current_cl
 equal 'older-file cleanup preserves the three fixture records' \
 	"$("${J[@]}" "_BOOT_ID=$boot" SYSLOG_IDENTIFIER=older-cleanup | jq -s length)" 3
 
+# The standalone probe imports the same required setup as the backend.
+printf '{"hw":"n100","apt_update_enabled":false}\n' >/state/setup.json
+systemd-run --wait --collect --unit=ceralive --working-directory=/state \
+	/state/around-probe emit "$boot" || {
+	"${J[@]}" "_BOOT_ID=$boot" _SYSTEMD_UNIT=ceralive.service >&2
+	fail 'event producer unit failed'
+}
+sync_journal
+event_row="$("${J[@]}" "_BOOT_ID=$boot" _SYSTEMD_UNIT=ceralive.service |
+	jq -ser --arg id "${boot:0:8}-1" \
+	'map(select(.MESSAGE | contains("\"event_id\":\"" + $id + "\""))) | if length == 1 then .[0] else error("expected one producer record") end')"
+(cd /state && ./around-probe lookup "$boot" \
+	"$(jq -r '.__REALTIME_TIMESTAMP | tonumber / 1000 | floor' <<<"$event_row")" \
+	"$(jq -r '.__CURSOR' <<<"$event_row")")
+
 systemd-run --quiet --wait --unit=pfx sh -c 'printf "<3>err line\n<4>warn line\n<7>debug line\nplain line\n<3>a\nb\n"'
 sync_journal
 equal 'stdout priority prefixes and per-line reset' \
