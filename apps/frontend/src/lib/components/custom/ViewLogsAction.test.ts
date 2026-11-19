@@ -92,6 +92,34 @@ describe("ViewLogsAction", () => {
 		});
 	});
 
+	it("asks for the timeline event a message without a time emitted", async () => {
+		render(ViewLogsAction, {
+			messageKey: "settings.updates.failedReasonGeneric",
+			moment: { event: { family: "update", code: "update_failed" } },
+		});
+
+		await fireEvent.click(screen.getByTestId("view-logs-action"));
+
+		expect(requestDialog).toHaveBeenCalledExactlyOnceWith("logs", {
+			tab: "raw",
+			event: { family: "update", code: "update_failed" },
+		});
+	});
+
+	it("opens the newest entries, not the click, for a message whose moment is unknown", async () => {
+		render(ViewLogsAction, {
+			messageKey: "settings.updates.refusal.generic",
+			moment: "unknown",
+		});
+
+		await fireEvent.click(screen.getByTestId("view-logs-action"));
+
+		expect(requestDialog).toHaveBeenCalledExactlyOnceWith("logs", {
+			tab: "raw",
+			momentUnknown: true,
+		});
+	});
+
 	it("tells the placing surface once the logs were requested", async () => {
 		const onViewLogs = vi.fn(() => {
 			expect(requestDialog).toHaveBeenCalledTimes(1);

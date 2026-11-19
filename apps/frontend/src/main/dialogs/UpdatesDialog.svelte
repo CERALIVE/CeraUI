@@ -106,7 +106,12 @@ const activityEta = $derived(activityPhase ? etaMinutes(orchestrator?.progress?.
 					     so the title never says the server rejected it. -->
 					<p class="text-sm font-medium">{m['settings.updates.credentials.unusableTitle']()}</p>
 					<p class="text-muted-foreground text-sm">{m['settings.updates.credentials.rejectedBody']()}</p>
-					<ViewLogsAction class="mt-2" messageKey="settings.updates.credentials.rejectedBody" />
+					<!-- A details read carries no time; the credentials notice emitted this event. -->
+					<ViewLogsAction
+						class="mt-2"
+						messageKey="settings.updates.credentials.rejectedBody"
+						moment={{ event: { family: 'update', code: 'update_credentials_expired' } }}
+					/>
 				</div>
 			</div>
 		{/if}

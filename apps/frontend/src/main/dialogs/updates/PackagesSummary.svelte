@@ -16,6 +16,7 @@ import type { UpdateCheckClockSummary, UpdatePreflightReason, UpdateState, Updat
 import { AlertTriangle, CheckCircle2 } from '@lucide/svelte';
 
 import ViewLogsAction from '$lib/components/custom/ViewLogsAction.svelte';
+import type { LogMoment } from '$lib/device-logs/view-logs';
 import { createDeadlineClock } from '$lib/updates/deadline-clock.svelte';
 import { checkedAtOf, isWithheld } from '$lib/updates/legacy-packages';
 import { actionablePackageOrigins } from '$lib/updates/update-dialog-view';
@@ -114,6 +115,12 @@ const FAILED_REASON_COPY: Record<string, () => string> = {
 	captive_portal: () => m["settings.updates.checkFailed.captive_portal"](),
 };
 
+// These outcomes are persisted without a time and usually read long after they
+// happened, so the click is never their moment. A failure emitted update_failed
+// (update-orchestrator/runtime.ts); a preflight refusal and a cleanup warning
+// emit no event.
+const FAILED_MOMENT: LogMoment = { event: { family: 'update', code: 'update_failed' } };
+
 const failureMessage = $derived(
 	failed === undefined ? undefined : (FAILED_REASON_COPY[failed.reason]?.() ?? m["settings.updates.failedReasonGeneric"]()),
 );
@@ -153,6 +160,7 @@ const checkFailureMessage = $derived.by(() => {
 				<ViewLogsAction
 					class="mt-2"
 					messageKey={`settings.updates.update_preflight_failed.${preflightFailed.preflight_reason}`}
+					moment="unknown"
 				/>
 			</div>
 		</div>
@@ -167,6 +175,7 @@ const checkFailureMessage = $derived.by(() => {
 				<ViewLogsAction
 					class="mt-2"
 					messageKey={FAILED_REASON_COPY[failed.reason] ? undefined : 'settings.updates.failedReasonGeneric'}
+					moment={FAILED_MOMENT}
 				/>
 			</div>
 		</div>
@@ -180,7 +189,7 @@ const checkFailureMessage = $derived.by(() => {
 					<p class="text-muted-foreground mt-2 text-sm break-words" data-testid="update-cleanup-warning" role="status">
 						{m["settings.updates.cleanup_warning.post_clean_failed"]()}
 					</p>
-					<ViewLogsAction class="mt-2" messageKey={`settings.updates.cleanup_warning.${cleanupWarning}`} />
+					<ViewLogsAction class="mt-2" messageKey={`settings.updates.cleanup_warning.${cleanupWarning}`} moment="unknown" />
 				{/if}
 			</div>
 		</div>

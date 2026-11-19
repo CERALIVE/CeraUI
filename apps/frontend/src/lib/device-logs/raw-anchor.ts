@@ -41,11 +41,11 @@ export interface RawAnchor {
 	readonly eventId?: string;
 }
 
-/** The timeline event a message emitted: its family, code and `params.id`. */
+/** The timeline event a message emitted: its family, code and `params.id`; with no id, the newest event with that code. */
 export interface EventMatch {
 	readonly family: EventFamily;
 	readonly code: string;
-	readonly id: string;
+	readonly id?: string;
 }
 
 export interface RawMoment {
@@ -103,7 +103,9 @@ async function newestEvent(
 		);
 		if (signal.aborted) return undefined;
 		const found = page.events.find(
-			(event) => event.code === match.code && event.params.id === match.id,
+			(event) =>
+				event.code === match.code &&
+				(match.id === undefined || event.params.id === match.id),
 		);
 		if (found !== undefined) return found;
 		beforeSeq = page.nextBeforeSeq;

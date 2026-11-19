@@ -4,10 +4,19 @@
  * device can say "Not started"; a reply that never arrived says the outcome is
  * not confirmed, and carries no spinner that could run forever.
  */
-import { cleanup, render, screen, within } from "@testing-library/svelte";
-import { afterEach, describe, expect, it } from "vitest";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	within,
+} from "@testing-library/svelte";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { en } from "../../../tests/helpers/catalog";
+
+const requestDialog = vi.hoisted(() => vi.fn());
+vi.mock("$lib/stores/dialog-request.svelte", () => ({ requestDialog }));
 
 import ActionOutcomeBand from "./ActionOutcomeBand.svelte";
 
@@ -15,6 +24,7 @@ const updates = en.settings.updates;
 
 afterEach(() => {
 	cleanup();
+	requestDialog.mockReset();
 });
 
 describe("ActionOutcomeBand", () => {
@@ -58,6 +68,20 @@ describe("ActionOutcomeBand", () => {
 		expect(band.textContent).toContain(updates.refusal.generic);
 		const action = within(band).getByTestId("view-logs-action");
 		expect(action.className).toContain("mt-2");
+	});
+
+	it("opens the newest entries, saying the time is unknown, from an unexplained refusal", async () => {
+		render(ActionOutcomeBand, {
+			refusal: { action: "install", reason: "dpkg lock held" },
+			unconfirmed: undefined,
+		});
+
+		await fireEvent.click(screen.getByTestId("view-logs-action"));
+
+		expect(requestDialog).toHaveBeenCalledExactlyOnceWith("logs", {
+			tab: "raw",
+			momentUnknown: true,
+		});
 	});
 
 	it("renders nothing when there is no outcome to report", () => {

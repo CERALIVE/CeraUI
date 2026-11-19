@@ -118,8 +118,15 @@ density. It is not a redesign.
   (an update notice named `update:<kind>:<id>` emits `update_<kind>` with that
   id), else around its arrival when it arrived live, else at the newest
   entries with no anchor (`lib/device-logs/view-logs.ts`,
-  `lib/device-logs/raw-anchor.ts`). When neither the event nor the message's
-  own time is known, one muted line above the list says so
+  `lib/device-logs/raw-anchor.ts`). The Updates dialog shows persisted states
+  that carry no time, so its View logs actions pass a `moment` instead of the
+  click: an unexplained package failure opens the newest `update_failed` entry,
+  a kernel rollback the newest `update_kernel_rolled_back` and the credentials
+  band the newest `update_credentials_expired` (an event match without an id
+  takes the newest event with that code); a preflight refusal, a cleanup
+  warning, a kernel failure and an action refusal emit no event, so they open
+  the newest entries with `momentUnknown`. When neither the event nor the
+  message's own time is known, one muted line above the list says so
   (`systemLogs.anchor.unknown`, `main/system-logs/RawLogsTab.svelte`). The low-disk banner keeps
   `settings.deviceStats.lowDiskAction` and opens Storage.
 - **Primitives.** `AppDialog`, `Button`, `Tabs`, `Select` (single and multiple),

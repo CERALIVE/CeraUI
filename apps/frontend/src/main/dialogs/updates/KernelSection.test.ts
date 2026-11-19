@@ -4,14 +4,26 @@ import type {
 	UpdateOrchestratorPhase,
 	UpdateOrchestratorWireState,
 } from "@ceraui/rpc/schemas";
-import { cleanup, render, screen, within } from "@testing-library/svelte";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	within,
+} from "@testing-library/svelte";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { en } from "../../../tests/helpers/catalog";
 
+const requestDialog = vi.hoisted(() => vi.fn());
+vi.mock("$lib/stores/dialog-request.svelte", () => ({ requestDialog }));
+
 import KernelSection from "./KernelSection.svelte";
 
-afterEach(cleanup);
+afterEach(() => {
+	cleanup();
+	requestDialog.mockReset();
+});
 
 const kernel: NonNullable<UpdateDetails["kernel"]> = {
 	booted: {
@@ -71,6 +83,28 @@ it("offers View logs beside a kernel failure the device did not explain", () => 
 		within(status).getByTestId("update-kernel-reason").textContent,
 	).toContain(en.settings.updates.kernel.reason.generic);
 	expect(within(status).getByTestId("view-logs-action")).toBeTruthy();
+});
+
+it("asks for the newest kernel rollback event beside an unexplained rollback", async () => {
+	show(undefined, { ...kernel, state: "rolled_back", reason: null });
+
+	await fireEvent.click(screen.getByTestId("view-logs-action"));
+
+	expect(requestDialog).toHaveBeenCalledExactlyOnceWith("logs", {
+		tab: "raw",
+		event: { family: "update", code: "update_kernel_rolled_back" },
+	});
+});
+
+it("opens the newest entries, saying the time is unknown, beside a kernel failure with no event", async () => {
+	show(undefined, { ...kernel, state: "failed", reason: null });
+
+	await fireEvent.click(screen.getByTestId("view-logs-action"));
+
+	expect(requestDialog).toHaveBeenCalledExactlyOnceWith("logs", {
+		tab: "raw",
+		momentUnknown: true,
+	});
 });
 
 it("offers no View logs beside a kernel failure with a named reason", () => {

@@ -41,6 +41,19 @@ export function viewNoticeLogs(notice: NoticeMoment): void {
 	});
 }
 
+/** The moment of a message that carries no time: the timeline event it emitted, or none known. */
+export type LogMoment = { readonly event: EventMatch } | "unknown";
+
+/** Open System Logs on Raw logs at a message's event entry, or at the newest entries saying its time is not known. */
+export function viewMomentLogs(moment: LogMoment): void {
+	requestDialog(
+		"logs",
+		moment === "unknown"
+			? { tab: "raw", momentUnknown: true }
+			: { tab: "raw", event: moment.event },
+	);
+}
+
 /** Toast options carrying View logs when `key` names a log-pointing message; `at` defaults to when the toast is raised. */
 export function viewLogsToast(
 	key: string | undefined,

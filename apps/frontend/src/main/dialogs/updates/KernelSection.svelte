@@ -7,6 +7,7 @@ import { RefreshCw } from '@lucide/svelte';
 import ViewLogsAction from '$lib/components/custom/ViewLogsAction.svelte';
 import { Button } from '$lib/components/ui/button';
 import { Progress } from '$lib/components/ui/progress';
+import type { LogMoment } from '$lib/device-logs/view-logs';
 import { kernelInstallable, kernelReasonKey, kernelUpdatePhase } from '$lib/updates/kernel-update-view';
 import { etaMinutes, isUpdateBusy, phaseLabelKey, progressPercent } from '$lib/updates/update-view';
 
@@ -37,6 +38,10 @@ const reason = $derived(wire && wire.phase === phase
 	? wire.failure_reason ?? (recordPhase === phase ? kernel?.reason : null)
 	: kernel?.reason);
 const showReason = $derived(reason != null || phase === 'kernel-rolled-back' || phase === 'kernel-failed');
+// The kernel record carries no time; only a rollback emits a timeline event.
+const reasonMoment = $derived<LogMoment>(
+	phase === 'kernel-rolled-back' ? { event: { family: 'update', code: 'update_kernel_rolled_back' } } : 'unknown',
+);
 </script>
 
 <section
@@ -63,7 +68,7 @@ const showReason = $derived(reason != null || phase === 'kernel-rolled-back' || 
 				<p class="text-muted-foreground" data-testid="update-kernel-reason">
 					{resolveMessageKey(kernelReasonKey(reason))}
 				</p>
-				<ViewLogsAction messageKey={kernelReasonKey(reason)} />
+				<ViewLogsAction messageKey={kernelReasonKey(reason)} moment={reasonMoment} />
 			{/if}
 			{#if percent !== undefined}
 				<div class="space-y-2">

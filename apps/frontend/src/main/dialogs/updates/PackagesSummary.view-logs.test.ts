@@ -1,11 +1,23 @@
 // @vitest-environment jsdom
 import type { UpdateState } from "@ceraui/rpc/schemas";
-import { cleanup, render, screen, within } from "@testing-library/svelte";
-import { afterEach, describe, expect, it } from "vitest";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	within,
+} from "@testing-library/svelte";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const requestDialog = vi.hoisted(() => vi.fn());
+vi.mock("$lib/stores/dialog-request.svelte", () => ({ requestDialog }));
 
 import PackagesSummary from "./PackagesSummary.svelte";
 
-afterEach(cleanup);
+afterEach(() => {
+	cleanup();
+	requestDialog.mockReset();
+});
 
 function show(updateState: UpdateState): void {
 	render(PackagesSummary, { updateState });
@@ -56,5 +68,54 @@ describe("PackagesSummary: View logs beside a log-pointing outcome", () => {
 		show({ kind: "success" } as UpdateState);
 
 		expect(action("update-succeeded")).toBeNull();
+	});
+});
+
+// These outcomes are persisted states without a time, usually read long after
+// the device reported them, so the click is never their moment.
+describe("PackagesSummary: View logs opens the outcome's moment, not the click", () => {
+	async function viewLogs(inside: string): Promise<void> {
+		const button = action(inside);
+		if (!button) throw new Error(`no View logs under ${inside}`);
+		await fireEvent.click(button);
+	}
+
+	it("asks for the newest update failure event under an unexplained failure", async () => {
+		show({ kind: "failed", reason: "dpkg was interrupted" } as UpdateState);
+
+		await viewLogs("update-failed");
+
+		expect(requestDialog).toHaveBeenCalledExactlyOnceWith("logs", {
+			tab: "raw",
+			event: { family: "update", code: "update_failed" },
+		});
+	});
+
+	it("opens the newest entries, saying the time is unknown, under a preflight refusal", async () => {
+		show({
+			kind: "update_preflight_failed",
+			preflight_reason: "insufficient_space",
+		});
+
+		await viewLogs("update-preflight-failed");
+
+		expect(requestDialog).toHaveBeenCalledExactlyOnceWith("logs", {
+			tab: "raw",
+			momentUnknown: true,
+		});
+	});
+
+	it("opens the newest entries, saying the time is unknown, under a cleanup warning", async () => {
+		show({
+			kind: "success",
+			cleanup_warning: "post_clean_failed",
+		} as UpdateState);
+
+		await viewLogs("update-succeeded");
+
+		expect(requestDialog).toHaveBeenCalledExactlyOnceWith("logs", {
+			tab: "raw",
+			momentUnknown: true,
+		});
 	});
 });

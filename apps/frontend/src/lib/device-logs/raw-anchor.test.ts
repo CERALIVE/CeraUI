@@ -144,6 +144,34 @@ describe("locateMoment", () => {
 		expect(deps.logs.boots).not.toHaveBeenCalled();
 	});
 
+	it.each([
+		["update_failed", { stage: "commit", reason: "dpkg was interrupted" }],
+		["update_kernel_rolled_back", { id: "txn-8", version: "7.2.0" }],
+	])(
+		"opens the exact entry of the newest %s event when the message names no id",
+		async (code, params) => {
+			const matching = (seq: number): DeviceEvent => ({
+				...updateEvent(seq, code, ""),
+				params,
+			});
+			const deps = sources(
+				eventPage([
+					updateEvent(9, "update_refused", "txn-1"),
+					matching(8),
+					matching(4),
+				]),
+			);
+
+			await locateMoment(deps, { event: { family: "update", code } });
+
+			expect(deps.logs.around).toHaveBeenCalledExactlyOnceWith({
+				bootId: EARLIER,
+				at: AT - 8000,
+				eventId: "event-8",
+			});
+		},
+	);
+
 	it("reads older pages until it reaches the event", async () => {
 		const deps = sources(
 			eventPage([updateEvent(12, "update_installed", "txn-1")], 11),
