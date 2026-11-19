@@ -76,8 +76,8 @@ density. It is not a redesign.
   name from `dialogs.close`, 44 px hit area through `data-touch-target="hit-area"`).
   The aside is an additive optional `AppDialog` header snippet rendered after
   the title element, outside it, so the dialog's accessible name stays exactly
-  "System Logs". No description line: `settings.index.logsDesc` stays the
-  Settings entry's description, unchanged.
+  "System Logs". No description line: the description belongs to the Settings
+  entry (`settings.index.logsViewerDesc`).
 - **Stream-state pill.** Reads the HUD state (`getHudState()`,
   `main/system-logs/StreamStatePill.svelte:22-23`): Live reuses the HUD live indicator styling (other lime uses:
   critique SL-13), Idle and Offline are
@@ -1106,9 +1106,13 @@ technology speech. Browser coverage is in the related specs above.
   times between adjacent records of one boot. It never guesses from forward
   jumps, which a quiet period can also produce. A backend flag for systemd's
   own "time changed" record would be stronger and needs a wire change first.
-- **Settings entry description.** `settings.index.logsDesc` ("Download device
-  and system logs for diagnostics") under-describes the new view. Changing it
-  changes an existing message, so it stays as it is until the owner decides.
+- **Settings entry description (decided).** The owner approved a new key: the
+  Settings row reads `settings.index.logsViewerDesc` ("See what happened, follow
+  logs live and share them") (`main/SettingsView.svelte:176`). The old
+  `settings.index.logsDesc` ("Download device and system logs for diagnostics")
+  keeps its value in every catalog because the frozen pre-migration oracle
+  (`packages/i18n/tests/fixtures/*.rendered.json`) still renders it; no screen
+  shows it.
 - **Registry-owned variants.** `stream_reconfigured` and `update_failed` pick
   their detail variant from the recorded `outcome` and `stage` values;
   `engine_lost` and `modem_connected` pick it from a boolean (`streaming`:

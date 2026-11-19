@@ -2199,6 +2199,7 @@
 	"settings.index.groups.system": "系统",
 	"settings.index.logs": "系统日志",
 	"settings.index.logsDesc": "下载设备和系统日志以进行诊断",
+	"settings.index.logsViewerDesc": "查看发生了什么，实时跟踪日志并分享",
 	"settings.index.modemCapabilities": "蜂窝功能",
 	"settings.index.modemCapabilitiesDesc": "开启锁频段、定位等高级调制解调器控制",
 	"settings.index.pairing": "设备配对",

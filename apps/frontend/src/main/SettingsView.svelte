@@ -173,7 +173,7 @@ const groups = $derived<Group[]>([
 		label: m["settings.index.groups.developer"](),
 		entries: [
 			{ key: 'ssh', title: m["settings.index.ssh"](), desc: m["settings.index.sshDesc"](), icon: SquareTerminal },
-			{ key: 'logs', title: m["settings.index.logs"](), desc: m["settings.index.logsDesc"](), icon: ScrollText },
+			{ key: 'logs', title: m["settings.index.logs"](), desc: m["settings.index.logsViewerDesc"](), icon: ScrollText },
 		],
 	},
 	{

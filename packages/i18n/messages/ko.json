@@ -2199,6 +2199,7 @@
 	"settings.index.groups.system": "시스템",
 	"settings.index.logs": "시스템 로그",
 	"settings.index.logsDesc": "진단을 위해 기기 및 시스템 로그를 다운로드합니다",
+	"settings.index.logsViewerDesc": "무슨 일이 있었는지 확인하고 로그를 실시간으로 따라가며 공유합니다",
 	"settings.index.modemCapabilities": "셀룰러 기능",
 	"settings.index.modemCapabilitiesDesc": "밴드 잠금, 위치 등 고급 모뎀 제어를 켭니다",
 	"settings.index.pairing": "기기 페어링",

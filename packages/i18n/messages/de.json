@@ -2244,6 +2244,7 @@
 	"settings.index.groups.system": "System",
 	"settings.index.logs": "Systemprotokolle",
 	"settings.index.logsDesc": "Geräte- und Systemprotokolle für Diagnosen herunterladen",
+	"settings.index.logsViewerDesc": "Nachsehen, was passiert ist, Protokolle live mitverfolgen und teilen",
 	"settings.index.modemCapabilities": "Mobilfunk-Funktionen",
 	"settings.index.modemCapabilitiesDesc": "Erweiterte Modem-Steuerungen wie Bandsperre und Standort aktivieren",
 	"settings.index.pairing": "Geräte-Kopplung",

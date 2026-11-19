@@ -2247,6 +2247,7 @@
 	"settings.index.groups.system": "Système",
 	"settings.index.logs": "Journaux système",
 	"settings.index.logsDesc": "Télécharger les journaux de l'appareil et du système pour le diagnostic",
+	"settings.index.logsViewerDesc": "Voir ce qui s'est passé, suivre les journaux en direct et les partager",
 	"settings.index.modemCapabilities": "Fonctions cellulaires",
 	"settings.index.modemCapabilitiesDesc": "Activez les commandes avancées du modem, comme le verrouillage de bandes et la localisation",
 	"settings.index.pairing": "Appairage de l'appareil",

@@ -2199,6 +2199,7 @@
 	"settings.index.groups.system": "システム",
 	"settings.index.logs": "システムログ",
 	"settings.index.logsDesc": "診断用にデバイスとシステムのログをダウンロードします",
+	"settings.index.logsViewerDesc": "何が起きたかを確認し、ログをリアルタイムで追跡して共有できます",
 	"settings.index.modemCapabilities": "セルラー機能",
 	"settings.index.modemCapabilitiesDesc": "バンドロックや位置情報など、モデムの詳細な操作を有効にします",
 	"settings.index.pairing": "デバイスのペアリング",

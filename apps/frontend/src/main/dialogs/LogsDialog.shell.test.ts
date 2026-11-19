@@ -68,6 +68,7 @@ describe("LogsDialog: the System Logs shell", () => {
 		const title = screen.getByRole("heading", { name: en.settings.index.logs });
 		expect(title.querySelector("svg")).toBeNull();
 		expect(screen.queryByText(en.settings.index.logsDesc)).toBeNull();
+		expect(screen.queryByText(en.settings.index.logsViewerDesc)).toBeNull();
 		expect(document.querySelector("[data-app-dialog-footer]")).toBeNull();
 	});
 

@@ -2244,6 +2244,7 @@
 	"settings.index.groups.system": "सिस्टम",
 	"settings.index.logs": "सिस्टम लॉग",
 	"settings.index.logsDesc": "निदान के लिए डिवाइस और सिस्टम लॉग डाउनलोड करें",
+	"settings.index.logsViewerDesc": "देखें कि क्या हुआ, लॉग लाइव फ़ॉलो करें और उन्हें साझा करें",
 	"settings.index.modemCapabilities": "सेल्युलर सुविधाएँ",
 	"settings.index.modemCapabilitiesDesc": "बैंड लॉकिंग और लोकेशन जैसे उन्नत मॉडेम नियंत्रण चालू करें",
 	"settings.index.pairing": "डिवाइस पेयरिंग",

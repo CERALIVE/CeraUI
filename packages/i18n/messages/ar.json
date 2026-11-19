@@ -2256,6 +2256,7 @@
 	"settings.index.groups.system": "النظام",
 	"settings.index.logs": "سجلات النظام",
 	"settings.index.logsDesc": "تنزيل سجلات الجهاز والنظام للتشخيص",
+	"settings.index.logsViewerDesc": "معرفة ما حدث ومتابعة السجلات مباشرةً ومشاركتها",
 	"settings.index.modemCapabilities": "ميزات الشبكة الخلوية",
 	"settings.index.modemCapabilitiesDesc": "فعّل عناصر التحكم المتقدمة بالمودم مثل قفل النطاقات والموقع",
 	"settings.index.pairing": "إقران الجهاز",

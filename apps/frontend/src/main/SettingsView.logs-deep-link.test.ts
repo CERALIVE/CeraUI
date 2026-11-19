@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { m } from "@ceraui/i18n/svelte";
-import { fireEvent, render, screen } from "@testing-library/svelte";
+import { fireEvent, render, screen, within } from "@testing-library/svelte";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { destroyAsyncOperations } from "$lib/rpc/async-operation.svelte";
@@ -84,6 +84,22 @@ async function probe(): Promise<{ open: string; context: unknown }> {
 		context: JSON.parse(node.dataset.context ?? "null"),
 	};
 }
+
+describe("SettingsView: System Logs entry", () => {
+	it("describes the System Logs view rather than the old log downloads", () => {
+		render(SettingsView);
+
+		const entry = screen.getByRole("button", {
+			name: new RegExp(m["settings.index.logs"]()),
+		});
+		expect(
+			within(entry).getByText(m["settings.index.logsViewerDesc"]()),
+		).toBeTruthy();
+		expect(
+			within(entry).queryByText(m["settings.index.logsDesc"]()),
+		).toBeNull();
+	});
+});
 
 describe("SettingsView: System Logs deep links", () => {
 	it("opens the Logs dialog with the requested context and consumes the request", async () => {

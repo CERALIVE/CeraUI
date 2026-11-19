@@ -2247,6 +2247,7 @@
 	"settings.index.groups.system": "Sistema",
 	"settings.index.logs": "Logs do sistema",
 	"settings.index.logsDesc": "Baixe logs do dispositivo e do sistema para diagnóstico",
+	"settings.index.logsViewerDesc": "Veja o que aconteceu, acompanhe os logs ao vivo e compartilhe-os",
 	"settings.index.modemCapabilities": "Recursos de celular",
 	"settings.index.modemCapabilitiesDesc": "Ative controles avançados do modem, como bloqueio de bandas e localização",
 	"settings.index.pairing": "Emparelhamento do dispositivo",

@@ -2244,6 +2244,7 @@
 	"settings.index.groups.system": "System",
 	"settings.index.logs": "System Logs",
 	"settings.index.logsDesc": "Download device and system logs for diagnostics",
+	"settings.index.logsViewerDesc": "See what happened, follow logs live and share them",
 	"settings.index.modemCapabilities": "Cellular Features",
 	"settings.index.modemCapabilitiesDesc": "Turn on advanced modem controls like band locking and location",
 	"settings.index.pairing": "Device Pairing",
