@@ -12,7 +12,15 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/svelte";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeAll,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vitest";
 
 import { fourBoots } from "$lib/device-logs/__fixtures__/boots";
 import {
@@ -54,6 +62,12 @@ vi.mock("$lib/rpc/subscriptions.svelte", async () => ({
 
 const WIDE = "(min-width: 1024px)";
 let media: MediaQueryControl | undefined;
+
+// Keep the first Vite transforms outside the DOM query budget.
+beforeAll(async () => {
+	await import("./EventsTab.svelte");
+	await import("./RawLogsTab.svelte");
+});
 
 beforeEach(() => {
 	media = installMediaQueries((query) => query === WIDE);

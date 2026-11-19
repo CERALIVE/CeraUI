@@ -8,7 +8,15 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/svelte";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeAll,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vitest";
 
 import { en } from "../../tests/helpers/catalog";
 import {
@@ -46,6 +54,11 @@ vi.mock("$lib/helpers/SystemHelper", () => ({
 
 let media: MediaQueryControl | undefined;
 
+// Keep the first Vite transform outside the DOM query budget.
+beforeAll(async () => {
+	await import("./RawLogsTab.svelte");
+});
+
 beforeEach(() => {
 	media = installMediaQueries((query) => query === "(min-width: 1024px)");
 	logs.getStorage.mockResolvedValue({});
@@ -75,7 +88,20 @@ afterEach(() => {
 const tab = (name: string) => screen.getByRole("tab", { name });
 
 describe("SystemLogsView: Raw logs panel", () => {
-	it("mounts the raw viewer only inside the selected Raw logs panel", async () => {
+	it("mounts the raw viewer only inside the selected Raw logs panel", async ({
+		onTestFinished,
+	}) => {
+		const rawChunk = Promise.withResolvers<void>();
+		vi.doMock(import("./RawLogsTab.svelte"), async (importOriginal) => {
+			await rawChunk.promise;
+			return importOriginal();
+		});
+		onTestFinished(async () => {
+			rawChunk.resolve();
+			await vi.dynamicImportSettled();
+			vi.doUnmock("./RawLogsTab.svelte");
+		});
+
 		render(SystemLogsView);
 		await screen.findByRole("tablist");
 		expect(screen.queryByTestId("raw-logs")).toBeNull();
@@ -83,11 +109,15 @@ describe("SystemLogsView: Raw logs panel", () => {
 
 		await fireEvent.click(tab(en.systemLogs.tabs.raw));
 		const panel = screen.getByTestId("system-logs-panel-raw");
-		expect(await within(panel).findByTestId("raw-logs")).toBeTruthy();
+		const raw = within(panel);
+		expect((await raw.findByRole("status")).ariaBusy).toBe("true");
+		const viewer = raw.findByTestId("raw-logs", undefined, { timeout: 5_000 });
+		rawChunk.resolve();
+		expect(await viewer).toBeTruthy();
 		expect(screen.getAllByTestId("raw-logs")).toHaveLength(1);
-		expect(
-			screen.getByTestId("system-logs-panel-events").childElementCount,
-		).toBe(0);
+		const events = screen.getByTestId("system-logs-panel-events");
+		expect(within(events).queryByTestId("raw-logs")).toBeNull();
+		expect(events.childElementCount).toBe(0);
 		await waitFor(() => expect(logs.query).toHaveBeenCalledTimes(1));
 	});
 
