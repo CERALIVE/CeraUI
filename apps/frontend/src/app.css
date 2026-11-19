@@ -327,6 +327,12 @@
 		-webkit-tap-highlight-color: rgba(128, 138, 150, 0.35);
 	}
 
+	/* A fullscreen dialog is fixed to the viewport, which excludes the reserved
+	   gutter; while one is open the page cannot scroll, so the gutter goes. */
+	html:has([data-app-dialog-fullscreen]) {
+		scrollbar-gutter: auto;
+	}
+
 	body {
 		@apply bg-background text-foreground;
 		font-synthesis-weight: none;
@@ -850,10 +856,32 @@ html[data-theme='eink'] *::after {
 	background-color: transparent;
 }
 
+/* A pressed toggle inverts the neutral pair: its label stays at WCAG AA on the
+   fill and the fill stands apart from the surface in every palette, with no
+   lime outside the live pill. */
 [data-slot='toggle'][data-state='on'],
 [data-slot='toggle'][aria-pressed='true'] {
-	background-color: color-mix(in oklab, var(--primary) 20%, var(--switch-off));
-	color: var(--foreground);
+	background-color: var(--foreground);
+	color: var(--background);
+}
+
+/* ── Destructive button label ──
+   The CLI-managed destructive recipe sets its label in --destructive over a
+   tint of the same red: 3.1:1 on the dark card. Mixing the label toward
+   --foreground holds WCAG AA 4.5:1 on the recipe's resting, focus and hover
+   tints in every palette, and the red tint and hue still mark the action as
+   destructive. Disabled drops the 50% fade, which would fail AA, and reads
+   quieter through a fainter tint and a less contrasted label. Keyed on the
+   recipe's own tint class, so the ui/ primitives stay untouched; unlayered so
+   it beats their utilities. destructive-button-contrast.test.ts measures it. */
+:is([data-slot='button'], [data-slot='alert-dialog-action'])[class~='bg-destructive/10'] {
+	color: color-mix(in oklab, var(--destructive) 60%, var(--foreground));
+}
+
+:is([data-slot='button'], [data-slot='alert-dialog-action'])[class~='bg-destructive/10']:disabled {
+	opacity: 1;
+	background-color: color-mix(in oklab, var(--destructive) 4%, var(--card));
+	color: color-mix(in oklab, var(--destructive) 75%, var(--foreground));
 }
 
 /* ── Pointer-cursor affordance for interactive controls ──

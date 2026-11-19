@@ -18,6 +18,7 @@
 import { logger } from "../../helpers/logger.ts";
 import { run } from "../../helpers/run.ts";
 import { getms } from "../../helpers/time.ts";
+import { emitEvent } from "../events/emit.ts";
 import { isRealDevice } from "../system/device-detection.ts";
 import {
 	notificationBroadcast,
@@ -57,6 +58,13 @@ export {
 export const UPDATE_GW_INT = 2000;
 
 export const NO_INTERNET_NOTIFICATION = "no_internet";
+
+let internetReachable = true;
+function recordInternetConnectivity(reachable: boolean): void {
+	if (reachable === internetReachable) return;
+	internetReachable = reachable;
+	emitEvent(reachable ? "internet_restored" : "internet_lost", {});
+}
 
 let updateGwInFlight: Promise<boolean> | undefined;
 let updateGwLastRun = 0;
@@ -135,6 +143,7 @@ export async function updateGw(
 		if (!fromCache) deps.validateDns();
 
 		logger.info("Internet reachable via the default route");
+		recordInternetConnectivity(true);
 		notificationRemove(NO_INTERNET_NOTIFICATION);
 	}
 
@@ -146,7 +155,10 @@ export async function updateGw(
 	const defaultIf = await deps.defaultInterface(4);
 	const recovery = await recoverNaturalGateway(deps, candidates);
 	if (recovery !== undefined) {
-		if (recovery) notificationRemove(NO_INTERNET_NOTIFICATION);
+		if (recovery) {
+			recordInternetConnectivity(true);
+			notificationRemove(NO_INTERNET_NOTIFICATION);
+		}
 		return recovery;
 	}
 	// Keep the current default ahead of equal-ranked peers to avoid route churn.
@@ -166,6 +178,7 @@ export async function updateGw(
 			`Default route is on ${claim.ifname} (${claim.reason}) — not a connectivity verdict; re-electing from ${candidates.length} eligible interface(s)`,
 		);
 	} else if (!defaultReachable) {
+		recordInternetConnectivity(false);
 		notificationBroadcast(
 			NO_INTERNET_NOTIFICATION,
 			"warning",
@@ -197,6 +210,7 @@ export async function updateGw(
 
 	if (goodIf) {
 		// Connectivity and route application are distinct claims; retract only the former.
+		recordInternetConnectivity(true);
 		notificationRemove(NO_INTERNET_NOTIFICATION);
 		if (
 			election.results.find(({ candidate }) => candidate.name === goodIf)

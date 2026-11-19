@@ -32,6 +32,7 @@
  */
 
 import { isDevelopment } from "../../mocks/mock-config.ts";
+import { emitDeviceEvent } from "../events/device-emit.ts";
 
 /** Device-tree path Rockchip boards expose their model string on. */
 const DEVICE_TREE_MODEL = "/proc/device-tree/model";
@@ -280,6 +281,7 @@ export async function warnOnHardwareIdentityDrift(
 	const configured = deps.configuredHw();
 	if (detected === configured) return { checked: true, drift: false };
 
+	emitDeviceEvent("hardware_identity_drift", { detected, configured });
 	deps.warn(
 		`hardware identity drift: setup.json hw="${configured}" but the device-tree ` +
 			`identifies this board as "${detected}". setup.json.hw is a static, ` +

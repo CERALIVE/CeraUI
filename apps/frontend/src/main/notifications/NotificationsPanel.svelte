@@ -18,14 +18,17 @@ import Bell from '@lucide/svelte/icons/bell';
 import Inbox from '@lucide/svelte/icons/inbox';
 import XIcon from '@lucide/svelte/icons/x';
 
+import ViewLogsAction from '$lib/components/custom/ViewLogsAction.svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import { Badge } from '$lib/components/ui/badge';
 import { Button } from '$lib/components/ui/button';
+import { notificationLogKey } from '$lib/device-logs/log-pointer-keys';
 import { requestDialog } from '$lib/stores/dialog-request.svelte';
 import { getDisplayProfile, prefersEinkTheme } from '$lib/stores/display-profile.svelte';
 import { getPersistent } from '$lib/stores/notifications.svelte';
 import { cn } from '$lib/utils';
 
+import KeepWords from '../system-logs/KeepWords.svelte';
 import {
 	dismissPersistentNotification,
 	NOTIFICATION_ICONS,
@@ -97,12 +100,12 @@ const TONES: Record<NotificationType, string> = {
 				>
 					<Icon class={cn('mt-0.5 size-4 shrink-0', TONES[item.type])} aria-hidden="true" />
 					<div class="min-w-0 flex-1">
-						<p class="text-foreground text-sm leading-relaxed break-words">
-							{persistentNotificationText(item)}
+						<p class="text-foreground text-sm leading-relaxed break-words text-pretty [word-break:auto-phrase] [&:lang(ko)]:break-keep [&:lang(zh)]:break-keep [&:lang(zh)]:text-balance">
+							<KeepWords text={persistentNotificationText(item)} />
 						</p>
 						{#if item.action?.kind === 'navigate'}
 							<Button
-								class="mt-2 h-7 px-2 text-xs"
+								class="mt-2 me-2 h-7 px-2 text-xs"
 								size="sm"
 								variant="outline"
 								data-testid="notification-action"
@@ -115,6 +118,12 @@ const TONES: Record<NotificationType, string> = {
 								{lookupLabel(item.action.labelKey)}
 							</Button>
 						{/if}
+						<ViewLogsAction
+							class="mt-2 h-7 px-2 text-xs"
+							messageKey={notificationLogKey(item)}
+							notice={item}
+							onViewLogs={() => (open = false)}
+						/>
 					</div>
 					{#if item.isDismissable}
 						<Button

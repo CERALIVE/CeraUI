@@ -1,0 +1,13 @@
+{
+	"N_DROPPED": "5997",
+	"MESSAGE_ID": "a596d6fe7bfa4994828e72309e95d61e",
+	"_PID": "488",
+	"MESSAGE": "Suppressed 5997 messages from rate-limited-flood.service",
+	"_TRANSPORT": "driver",
+	"SYSLOG_IDENTIFIER": "systemd-journald",
+	"__CURSOR": "s=3745ff2e16214b618c8bae2d4c7fe3b7;i=1f75;b=11111111111111111111111111111111;m=13b762b46;t=6605065447193;x=6be4847256bf2025",
+	"_BOOT_ID": "11111111111111111111111111111111",
+	"__REALTIME_TIMESTAMP": "1794748272898451",
+	"PRIORITY": "6",
+	"_SYSTEMD_UNIT": "systemd-journald.service"
+}

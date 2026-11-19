@@ -5,6 +5,7 @@ import { hudStructure } from './helpers/aria.js';
 import { runAxe, type AxeViolationSummary } from './helpers/axe.js';
 import { type Destination, navigateTo } from './helpers/index.js';
 import { expect, test } from './fixtures/index.js';
+import { SYSTEM_LOGS_DIALOG, SystemLogsPage } from './pages/system-logs.js';
 
 /**
  * axe-core a11y CI gate (Task 7).
@@ -117,6 +118,24 @@ test.describe('a11y', () => {
 		await expect(main).toBeVisible();
 		await expect(main).toBeFocused();
 	});
+
+	// System Logs has no a11y-baseline.json entry: each view is analysed alone and held to zero.
+	for (const view of ['events', 'raw', 'storage'] as const) {
+		test(`System Logs ${view}: no critical or serious violations in either theme @a11y`, async ({ page }, testInfo) => {
+			test.skip(testInfo.project.name !== 'desktop', 'a11y gate runs once, on desktop');
+
+			const found: Record<string, AxeViolationSummary[]> = {};
+			for (const scheme of ['dark', 'light'] as const) {
+				const logs = new SystemLogsPage(page);
+				// Below 1024 px Storage is its own tab; wider it is the side column beside Events and Raw logs.
+				const size = view === 'storage' ? { width: 768, height: 1024 } : { width: 1280, height: 800 };
+				await logs.open({ locale: 'en', size, touch: false, scheme });
+				await logs.show(view);
+				found[scheme] = await runAxe(page, { include: [SYSTEM_LOGS_DIALOG] });
+			}
+			expect(found).toEqual({ dark: [], light: [] });
+		});
+	}
 
 	test('HUD telemetry exposes labelled badges + polite live regions @a11y', async ({
 		authedPage: page,

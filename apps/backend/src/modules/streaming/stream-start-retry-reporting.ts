@@ -4,6 +4,7 @@ import type {
 } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
+import { emitEvent } from "../events/emit.ts";
 import { isUpdating } from "../system/software-updates.ts";
 import {
 	notificationBroadcast,
@@ -163,6 +164,18 @@ function notificationParams(
 
 export function reportStartRetry(diagnostic: StartRetryDiagnostic): void {
 	logger.warn("stream start retry scheduled", diagnostic);
+	if (diagnostic.retry.state === "scheduled") {
+		try {
+			emitEvent("stream_start_retrying", {
+				class: diagnostic.class,
+				phase: diagnostic.phase,
+				attempt: diagnostic.retry.attempt,
+				maxAttempts: diagnostic.retry.maxAttempts,
+			});
+		} catch {
+			// Event history must not alter stream control.
+		}
+	}
 	if (diagnostic.retry.state !== "scheduled" || diagnostic.retry.suppressed)
 		return;
 	if (!isRetryableStartClass(diagnostic.class)) {
@@ -187,6 +200,19 @@ export function reportStartTerminalFailure(
 	diagnostic: StartRetryDiagnostic,
 ): void {
 	logger.error("stream start failed", diagnostic);
+	try {
+		emitEvent("stream_start_failed", {
+			class: diagnostic.class,
+			phase: diagnostic.phase,
+			attempt: diagnostic.retry.attempt,
+			maxAttempts: diagnostic.retry.maxAttempts,
+			...(diagnostic.captureCause === undefined
+				? {}
+				: { captureCause: diagnostic.captureCause }),
+		});
+	} catch {
+		// Event history must not alter stream control.
+	}
 	notificationRemove("stream_start_retry");
 	// Deliberately NOT persistent: a capture failure already has its own standing
 	// mechanism (`hdmi_error`, raised and retracted by the signal watcher), and a

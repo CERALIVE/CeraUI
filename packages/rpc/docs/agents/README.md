@@ -8,7 +8,9 @@ Read the contract for the subsystem you touch before making changes. Every origi
 | OVERVIEW | [overview-2.md](overview-2.md) | OVERVIEW |
 | STRUCTURE | [structure.md](structure.md) | STRUCTURE |
 | WHERE TO LOOK | [where-to-look.md](where-to-look.md) | `contracts/{domain}.contract.ts`, `contracts/index.ts`, `schemas/{domain}.schema.ts`, `schemas/network.schema.ts`, `schemas/modems.schema.ts`, `schemas/status.schema.ts`, `schemas/capability-modules.schema.ts`, `capabilities/capability-matrix.ts` |
-| IMPORT PATHS | [import-paths.md](import-paths.md) | `dist/session-switch.js`, `docs/ENCODER-LOAD.md` |
+| IMPORT PATHS | [import-paths.md](import-paths.md) | `dist/session-switch.js`, `docs/ENCODER-LOAD.md`, `@ceraui/rpc/events` |
+| Device logs wire contract [EXISTS] | [device-logs-wire.md](device-logs-wire.md) | `schemas/logs.schema.ts`, `contracts/logs.contract.ts` |
+| Device events wire contract [EXISTS] | [device-events-wire.md](device-events-wire.md) | `schemas/events-wire.schema.ts`, `schemas/events.schema.ts`, `contracts/events.contract.ts` |
 | UPLINK STEERING WIRE STATE IS SHARED [EXISTS] | [uplink-steering-wire-state-is-shared.md](uplink-steering-wire-state-is-shared.md) | `schemas/network.schema.ts`, `apps/` |
 | AN UPLINK ROW CARRIES A NAME, NOT A SECOND IDENTITY [EXISTS] | [an-uplink-row-carries-a-name-not-a-second-identity.md](an-uplink-row-carries-a-name-not-a-second-identity.md) | `apps/backend/AGENTS.md` |
 | DEVICE-TOKEN CLAIM CONTRACT (canonical, single source) | [device-token-claim-contract-canonical-single-source.md](device-token-claim-contract-canonical-single-source.md) | `src/schemas/pairing.schema.ts`, `apps/backend/src/modules/pairing/device-token.ts`, `ceralive-platform/apps/api/lib/claim.ts` |

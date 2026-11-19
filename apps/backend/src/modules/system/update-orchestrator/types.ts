@@ -140,6 +140,7 @@ export type OrchestratorEvent =
 			readonly type: "DOWNLOAD_FAILED";
 			readonly now: number;
 			readonly reason: string;
+			readonly failureId?: string;
 	  }
 	// Records a stop request, not cancellation (root AGENTS.md D8 Known gaps (b), (g)).
 	| { readonly type: "DOWNLOAD_ABORTED_FOR_STREAM"; readonly now: number }
@@ -159,6 +160,7 @@ export type OrchestratorEvent =
 			readonly type: "COMMIT_FAILED";
 			readonly now: number;
 			readonly reason: string;
+			readonly failureId?: string;
 	  }
 	// Uncertainty is not evidence of a bad candidate to quarantine. Only positive
 	// consistency recovery or the local receipt flow may settle a missing unit.

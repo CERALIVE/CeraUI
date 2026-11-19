@@ -14,6 +14,9 @@
 import { getLocale, m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { UpdateCheckClockSummary, UpdatePreflightReason, UpdateState, UpdateTransportSummary } from '@ceraui/rpc/schemas';
 import { AlertTriangle, CheckCircle2 } from '@lucide/svelte';
+
+import ViewLogsAction from '$lib/components/custom/ViewLogsAction.svelte';
+import type { LogMoment } from '$lib/device-logs/view-logs';
 import { createDeadlineClock } from '$lib/updates/deadline-clock.svelte';
 import { checkedAtOf, isWithheld } from '$lib/updates/legacy-packages';
 import { actionablePackageOrigins } from '$lib/updates/update-dialog-view';
@@ -112,6 +115,11 @@ const FAILED_REASON_COPY: Record<string, () => string> = {
 	captive_portal: () => m["settings.updates.checkFailed.captive_portal"](),
 };
 
+const failureId = $derived(failed?.failure_id);
+const failureMoment = $derived<LogMoment>(failureId === undefined
+	? 'unknown'
+	: { event: { family: 'update', code: 'update_failed', id: failureId } });
+
 const failureMessage = $derived(
 	failed === undefined ? undefined : (FAILED_REASON_COPY[failed.reason]?.() ?? m["settings.updates.failedReasonGeneric"]()),
 );
@@ -148,6 +156,11 @@ const checkFailureMessage = $derived.by(() => {
 				<p class="text-muted-foreground mt-1 text-sm break-words" data-testid="update-preflight-reason">
 					{preflightMessage}
 				</p>
+				<ViewLogsAction
+					class="mt-2"
+					messageKey={`settings.updates.update_preflight_failed.${preflightFailed.preflight_reason}`}
+					moment="unknown"
+				/>
 			</div>
 		</div>
 	{:else if failed}
@@ -158,6 +171,11 @@ const checkFailureMessage = $derived.by(() => {
 				<p class="text-muted-foreground mt-1 text-sm break-words" data-testid="update-failed-reason">
 					{failureMessage}
 				</p>
+				<ViewLogsAction
+					class="mt-2"
+					messageKey={FAILED_REASON_COPY[failed.reason] ? undefined : 'settings.updates.failedReasonGeneric'}
+					moment={failureMoment}
+				/>
 			</div>
 		</div>
 	{:else if succeeded}
@@ -170,6 +188,7 @@ const checkFailureMessage = $derived.by(() => {
 					<p class="text-muted-foreground mt-2 text-sm break-words" data-testid="update-cleanup-warning" role="status">
 						{m["settings.updates.cleanup_warning.post_clean_failed"]()}
 					</p>
+					<ViewLogsAction class="mt-2" messageKey={`settings.updates.cleanup_warning.${cleanupWarning}`} moment="unknown" />
 				{/if}
 			</div>
 		</div>

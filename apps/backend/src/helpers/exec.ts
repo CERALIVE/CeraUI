@@ -1,6 +1,7 @@
 import fs from "node:fs";
 
 import {
+	type BoundedSpawnOptions,
 	collectBoundedChild,
 	SpawnAbortError,
 	SpawnTimeoutError,
@@ -9,6 +10,10 @@ import { logger } from "./logger.ts";
 import { DEFAULT_SPAWN_TIMEOUT_MS } from "./spawn-policy.ts";
 
 export type ExecResult = { stdout: string; stderr: string };
+export type ChildExitObserver = Pick<
+	BoundedSpawnOptions,
+	"onChildExit" | "preserveChild"
+>;
 
 // util.promisify(exec) replacement: runs cmd through Bun's shell (string parsed
 // as written) and REJECTS on non-zero exit (Bun.$ throws ShellError).
@@ -24,7 +29,11 @@ export const execP = async (cmd: string): Promise<ExecResult> => {
 export const execFileP = async (
 	file: string,
 	args: readonly string[] = [],
-	opts?: { maxBuffer?: number; timeout?: number; signal?: AbortSignal },
+	opts?: {
+		maxBuffer?: number;
+		timeout?: number;
+		signal?: AbortSignal;
+	} & ChildExitObserver,
 ): Promise<ExecResult> => {
 	const maxBuffer = opts?.maxBuffer ?? 1024 * 1024;
 	const timeout = opts?.timeout ?? DEFAULT_SPAWN_TIMEOUT_MS;
@@ -48,11 +57,14 @@ export const execFileP = async (
 	let stderr: string;
 	let exitCode: number;
 	try {
-		({ stdout, stderr, exitCode } = await collectBoundedChild(proc, command, {
+		const result = collectBoundedChild(proc, command, {
 			timeoutMs: timeout,
 			maxBuffer,
+			...(opts?.onChildExit ? { onChildExit: opts.onChildExit } : {}),
+			...(opts?.preserveChild ? { preserveChild: true } : {}),
 			...(signal ? { signal } : {}),
-		}));
+		});
+		({ stdout, stderr, exitCode } = await result);
 	} catch (error) {
 		if (error instanceof SpawnTimeoutError) {
 			Object.assign(error, {

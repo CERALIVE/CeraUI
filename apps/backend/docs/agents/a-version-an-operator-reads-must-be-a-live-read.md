@@ -107,3 +107,39 @@ gated `dpkg` reader, and the dev-checkout regression lock) +
 `bun run test:release-package-contracts`: the version source is EXECUTED against
 `package.json`, and both stamping lines are pinned).
 
+## Boot version context [EXISTS]
+
+`modules/system/version-context.ts` collects the existing revision snapshot,
+validated booted OS stamp (falling back to the trimmed legacy image file), one
+RAUC status document for `booted` and `compatible`, and the device-tree model.
+Optional failed reads remain null. The engine's unreachable sentinel maps to
+null. Mock mode uses the existing device-stats slot fixture and leaves optional
+facts absent from the scenario null, without reading host hardware.
+
+All new log consumers obtain journal-form boot IDs through
+`modules/device-logs/boot-id.ts`: remove hyphens, lowercase, then require 32 hex
+characters. The streaming marker's existing kernel-form reader is unchanged.
+Missing boot identity fails collection rather than inventing a valid ID; the
+non-critical boot guard reports that failure while startup continues.
+
+`main.ts` starts the boot-record guard without awaiting it. Inside the guard,
+revision initialization finishes before `logBootRecord()` emits exactly one
+`logger.info("device started", { module: "boot", versions })`. The sender field
+is `senderVersion`, because `sender` is reserved for redacted SMS content.
+The published `VersionContext` schema and the existing revisions wire shape are
+unchanged. Coverage: `tests/version-context.test.ts`.
+
+Each collection refreshes the mutable engine and sender through the revisions
+owner before reading its record. CeraUI, kernel and Bun remain facts about this
+running process. `refreshSenderRevision()` uses the bounded asynchronous command
+runner; unreadable or empty sender output becomes the existing unknown sentinel.
+Mock collection skips both live probes. A boot record collects once and emits
+one line; later exporters and bundles collect again to observe upgrades.
+
+Boot identity, collection, logger and source-boundary coverage live in
+`tests/version-context-boot.test.ts`, `tests/version-context.test.ts` and
+`tests/version-context-sources.test.ts`. Source tests retain the real validated
+OS reader and revisions owner and drive RAUC and sender executables through the
+actual command runner; only their filesystem/executable locations are redirected
+to private test fixtures.
+

@@ -11,6 +11,7 @@ import {
 	relayStatusToGateway,
 } from "../modules/remote-control/status-relay.ts";
 import type { MessageSocket } from "../modules/ui/message-socket.ts";
+import { createContext } from "./context.ts";
 import { broadcast, buildMessage } from "./events.ts";
 import type { AppWebSocket } from "./types.ts";
 
@@ -105,7 +106,7 @@ export function isAuthedSocket(conn: WebSocket | AppWebSocket): boolean {
 export function addAuthedSocket(conn: WebSocket | AppWebSocket): void {
 	const ws = conn as AppWebSocket;
 	if (ws.data) {
-		ws.data.isAuthenticated = true;
+		createContext(ws).authenticate();
 	}
 }
 
@@ -116,7 +117,7 @@ export function addAuthedSocket(conn: WebSocket | AppWebSocket): void {
 export function deleteAuthedSocket(conn: WebSocket | AppWebSocket): void {
 	const ws = conn as AppWebSocket;
 	if (ws.data) {
-		ws.data.isAuthenticated = false;
+		createContext(ws).deauthenticate();
 	}
 }
 

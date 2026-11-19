@@ -69,6 +69,16 @@ toasts. Literal device messages without a key stay literal; an unknown key
 falls back to the stored `text`. Transient toasts keep their push-time text,
 and the dismiss control reuses `notifications.panel.dismiss`.
 
+The device marks the authenticated snapshot of standing notices with
+`replay: true`. The browser reads this mark rather than guessing from the
+first frame after connect. A notice first seen in a replay is not marked as
+live (`arrivedLive`). If the same name, revision and backend `publisher`
+return, the store keeps the first arrival and its live flag, so the bands
+keep their order. A backend restart changes `publisher`, even when it reuses
+a revision number. View logs uses the arrival time only for a live arrival
+([system-logs-view.md](system-logs-view.md), Deep links). Coverage:
+`src/tests/view-logs-notice-moment.test.ts`.
+
 `src/tests/notification-locale.test.ts` covers both persistent surfaces,
 parameter translation, stable entries and rows across a locale switch, and
 literal device messages.

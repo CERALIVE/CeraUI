@@ -1,12 +1,11 @@
+// allow: SIZE_OK: Single process-wide transport/ring owner; splitting it is outside this change.
 import { Writable } from "node:stream";
 import winston from "winston";
 
 import { isDevelopment } from "../mocks/mock-config.ts";
 
-const isDev = process.env.NODE_ENV === "development";
-
 /**
- * Bounded on-disk log retention.
+ * Bounded on-disk log retention for non-production runs.
  *
  * Rotation caps total disk use so an SBC's eMMC/SD never fills from logs:
  *   LOG_MAX_SIZE_BYTES per file × LOG_MAX_FILES = LOG_MAX_TOTAL_BYTES ceiling.
@@ -442,8 +441,8 @@ export function formatConsoleEntry(
 /**
  * Fixed production log schema. One shape for the file transport AND the prod
  * console so journal/log shippers parse a single record format:
- *   { ts, level, msg, module?, meta? }
- * `ts` is ISO-8601 UTC; `module` is lifted out of the metadata when present;
+ *   { ts, level, msg, module?, processSource?, meta? }
+ * `ts` is ISO-8601 UTC; `module` and the owned process role are top-level;
  * every remaining non-reserved field is folded under `meta`.
  */
 export interface ProdLogRecord {
@@ -451,6 +450,7 @@ export interface ProdLogRecord {
 	level: string;
 	msg: string;
 	module?: string;
+	processSource?: "srtla_send";
 	meta?: Record<string, unknown>;
 }
 
@@ -462,13 +462,13 @@ export interface StructuredLogInfo {
 	[key: string]: unknown;
 }
 
-// `module` joins the console reserved set: it is promoted to a top-level schema
-// field, so it must not also appear inside `meta`.
+// Promoted fields must not also appear inside `meta`.
 const STRUCTURED_RESERVED_KEYS = new Set([
 	"level",
 	"message",
 	"timestamp",
 	"module",
+	"processSource",
 ]);
 
 // winston's timestamp() default is already ISO-8601, but a caller-supplied
@@ -505,6 +505,8 @@ export function formatProdEntry(info: StructuredLogInfo): string {
 	if (info.module !== undefined && info.module !== null) {
 		record.module = String(info.module);
 	}
+	if (info.processSource === "srtla_send")
+		record.processSource = info.processSource;
 
 	const meta: Record<string, unknown> = {};
 	for (const key of Object.keys(info)) {
@@ -522,7 +524,8 @@ export function formatProdEntry(info: StructuredLogInfo): string {
 /**
  * Per-transport level with a single optional override. When `LOG_LEVEL` is set
  * (non-empty) it wins for EVERY transport; otherwise each transport keeps its
- * default (dev console `info`, prod console `warn`, file `debug`).
+ * default (dev console `info`, production console `debug`, other console
+ * `warn`, non-production file `debug`).
  */
 export function resolveLogLevel(defaultLevel: string): string {
 	const override = process.env.LOG_LEVEL;
@@ -546,14 +549,54 @@ export function resolveLogLevel(defaultLevel: string): string {
 export const LOG_RING_CAPACITY = 1000;
 
 const logRing: string[] = [];
+let logRingOffset = 0;
+const logListeners = new Set<(line: string, seq: number) => void>();
+let logListenerFailureReported = false;
+let logListenerDispatchDepth = 0;
+const LOG_MESSAGE = Symbol.for("message");
+const REENTRANT_LOG = Symbol("listener-reentrant");
+
+function reportLogListenerFailure(): void {
+	if (logListenerFailureReported) return;
+	logListenerFailureReported = true;
+	try {
+		console.error("Log ring subscriber failed; logging continues");
+	} catch {
+		// Diagnostic output is best effort and must never re-enter the logger.
+	}
+}
 
 const logRingStream = new Writable({
-	write(chunk: Buffer | string, _encoding, callback) {
-		const line = chunk.toString("utf8").replace(/\n+$/, "");
+	objectMode: true,
+	write(
+		info: StructuredLogInfo & {
+			[LOG_MESSAGE]: string;
+			[REENTRANT_LOG]?: boolean;
+		},
+		_encoding,
+		callback,
+	) {
+		const line = info[LOG_MESSAGE];
 		if (line.length > 0) {
+			const seq = logRingOffset + logRing.length;
 			logRing.push(line);
 			if (logRing.length > LOG_RING_CAPACITY) {
 				logRing.shift();
+				logRingOffset++;
+			}
+			if (info[REENTRANT_LOG]) {
+				callback();
+				return;
+			}
+			for (const listener of [...logListeners]) {
+				logListenerDispatchDepth++;
+				try {
+					Promise.resolve(listener(line, seq)).catch(reportLogListenerFailure);
+				} catch {
+					reportLogListenerFailure();
+				} finally {
+					logListenerDispatchDepth--;
+				}
 			}
 		}
 		callback();
@@ -565,15 +608,38 @@ export function getRecentLogLines(): string[] {
 	return [...logRing];
 }
 
-/** Drop every captured line — used by tests for a deterministic baseline. */
+/** Lines evicted or cleared; offset + ring index is a stable sequence. */
+export function getLogRingOffset(): number {
+	return logRingOffset;
+}
+
+/** Subscribe to redacted ring records; the returned function unsubscribes. */
+export function onLogLine(
+	listener: (line: string, seq: number) => void,
+): () => void {
+	logListeners.add(listener);
+	return () => {
+		logListeners.delete(listener);
+	};
+}
+
+/** Empty the mock device log ring on Clear while keeping sequence offsets monotonic. */
 export function clearRecentLogLines(): void {
+	logRingOffset += logRing.length;
 	logRing.length = 0;
 }
 
-export const logger = winston.createLogger({
-	format: structuredBase,
-	defaultMeta: {},
-	transports: [
+const JOURNAL_PRIORITIES: Readonly<Record<string, number>> = {
+	error: 3,
+	warn: 4,
+	info: 6,
+};
+
+export function buildLoggerTransports(env: {
+	NODE_ENV?: string;
+}): winston.transport[] {
+	const production = env.NODE_ENV === "production";
+	const transports: winston.transport[] = [
 		new winston.transports.Stream({
 			stream: logRingStream,
 			level: resolveLogLevel("debug"),
@@ -586,7 +652,9 @@ export const logger = winston.createLogger({
 			),
 		}),
 		new winston.transports.Console({
-			level: resolveLogLevel(isDev ? "info" : "warn"),
+			level: resolveLogLevel(
+				production ? "debug" : env.NODE_ENV === "development" ? "info" : "warn",
+			),
 			format: winston.format.combine(
 				structuredBase,
 				winston.format.printf((info) =>
@@ -595,10 +663,13 @@ export const logger = winston.createLogger({
 								info as ConsoleLogInfo,
 								shouldColorizeConsole(),
 							)
-						: formatProdEntry(info as StructuredLogInfo),
+						: `<${JOURNAL_PRIORITIES[info.level] ?? 7}>${formatProdEntry(info as StructuredLogInfo)}`,
 				),
 			),
 		}),
+	];
+	if (production) return transports;
+	transports.push(
 		new winston.transports.File({
 			filename: LOG_FILENAME,
 			level: resolveLogLevel("debug"),
@@ -612,5 +683,35 @@ export const logger = winston.createLogger({
 				),
 			),
 		}),
-	],
+	);
+	return transports;
+}
+
+export const logger = winston.createLogger({
+	format: structuredBase,
+	defaultMeta: {},
+	transports: buildLoggerTransports(process.env),
 });
+
+const writeLogRecord = logger.write;
+logger.write = function (
+	this: winston.Logger,
+	chunk: object,
+	encoding?: BufferEncoding | ((error?: Error | null) => void),
+	callback?: (error?: Error | null) => void,
+): boolean {
+	// Tag synchronous callback logs before Winston queues them; keep ring/console output without redispatch.
+	const entry =
+		logListenerDispatchDepth > 0 ? { ...chunk, [REENTRANT_LOG]: true } : chunk;
+	return Reflect.apply(writeLogRecord, this, [entry, encoding, callback]);
+};
+
+/** Persisted detail affects the device console only; LOG_LEVEL still wins. */
+export function setJournalDetail(detail: "debug" | "info"): void {
+	if (process.env.NODE_ENV !== "production") return;
+	for (const transport of logger.transports) {
+		if (transport instanceof winston.transports.Console) {
+			transport.level = resolveLogLevel(detail);
+		}
+	}
+}

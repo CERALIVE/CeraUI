@@ -15,7 +15,7 @@
  * settings too, not only the details.
  */
 import type { UpdateDetails } from "@ceraui/rpc/schemas";
-import { render } from "@testing-library/svelte";
+import { fireEvent, render } from "@testing-library/svelte";
 import { flushSync } from "svelte";
 import {
 	afterEach,
@@ -32,6 +32,10 @@ import {
 	noteLinkState,
 	noteSessionRestored,
 } from "../../lib/rpc/session-epoch.svelte";
+import {
+	clearRequestedDialog,
+	getRequestedDialogContext,
+} from "../../lib/stores/dialog-request.svelte";
 import {
 	orchestratorAt,
 	reactiveOrchestrator,
@@ -65,6 +69,10 @@ vi.mock("$lib/rpc/subscriptions.svelte", async () => {
 
 vi.mock("svelte-sonner", () => ({
 	toast: { error: vi.fn(), success: vi.fn() },
+}));
+
+vi.mock("$lib/stores/navigation-lazy", () => ({
+	navigateToDestination: () => undefined,
 }));
 
 beforeAll(() => {
@@ -237,6 +245,47 @@ describe("sweep: a certificate verdict is not a server rejection", () => {
 			"The device's update certificate could not be used",
 		);
 		expect(band?.textContent).not.toContain("server rejected");
+		// Its body sends the operator to System Logs, so the action sits under it.
+		expect(
+			band?.querySelector('[data-testid="view-logs-action"]')?.className,
+		).toContain("mt-2");
+	});
+
+	it("opens the newest entries for an unusable credential without a correlated expiry event", async () => {
+		clearRequestedDialog();
+		await openDialog({
+			...nothingFound(1_000),
+			credentials: { state: "valid", expiresAt: 999_999_999 },
+			transport: {
+				profile: "apt",
+				checkedAt: 1_000,
+				status: "none",
+				selected: null,
+				findings: [
+					{
+						ifname: "eth0",
+						family: 4,
+						kind: "ethernet",
+						healthy: false,
+						captive: false,
+						metered: false,
+						states: ["credentials-invalid"],
+					},
+				],
+			},
+		});
+		const action = document.querySelector<HTMLElement>(
+			'[data-testid="update-credentials-rejected"] [data-testid="view-logs-action"]',
+		);
+		if (!action) throw new Error("the credentials band offers no View logs");
+
+		await fireEvent.click(action);
+
+		expect(getRequestedDialogContext()).toEqual({
+			tab: "raw",
+			momentUnknown: true,
+		});
+		clearRequestedDialog();
 	});
 });
 

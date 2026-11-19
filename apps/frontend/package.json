@@ -39,6 +39,8 @@
 		"@fontsource-variable/plus-jakarta-sans": "^5.3.0",
 		"@fontsource-variable/space-grotesk": "^5.3.0",
 		"@internationalized/date": "^3.12.4",
+		"@tanstack/svelte-virtual": "^3.13.52",
+		"@tanstack/virtual-core": "^3.19.11",
 		"@zip.js/zip.js": "^2.24.0",
 		"bits-ui": "^2.20.6",
 		"clsx": "^2.1.1",

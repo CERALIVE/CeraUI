@@ -4,7 +4,7 @@ import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import { persistPlugin } from "svelte-persistent-runes/plugins";
-import { defineConfig, loadEnv, type ProxyOptions } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 import { BUILD_BRAND } from "./brand.config.ts";
@@ -23,11 +23,8 @@ import {
 } from "./vite.sourcemaps.ts";
 import { VARIANTS_ALIAS } from "./vite.variants.ts";
 import {
-	applyPreviewWebSocketRoute,
-	DEVICE_WS_PROXY_CONTEXT,
+	buildDeviceProxy,
 	previewUpgradeGuard,
-	rejectWebSocketUpgrade,
-	resolvePreviewWebSocketRoute,
 } from "./vite-preview-routing.ts";
 
 export {
@@ -49,81 +46,9 @@ const SPA_MAP_DIR = path.resolve(
 	SPA_SOURCEMAP_OUT_DIR,
 );
 
-// DEV-SYNC power-user mode (Task 14): env-gated proxy to a remote-device backend.
-// Exact WS paths prevent the CI worker cookie from becoming a root proxy.
-// Inert unless VITE_DEVICE_HOST is set: default `bun run dev` is unchanged.
-function buildDeviceProxy(
-	env: Record<string, string>,
-	allowWorkerRouting: boolean,
-): Record<string, ProxyOptions> | undefined {
-	const deviceHost = env.VITE_DEVICE_HOST;
-	if (!deviceHost) {
-		return undefined;
-	}
-
-	const deviceProtocol = (env.VITE_DEVICE_PROTOCOL || "ws").toLowerCase();
-	const isSecure = deviceProtocol === "wss" || deviceProtocol === "https";
-	const devicePort = env.VITE_DEVICE_PORT || (isSecure ? "443" : "80");
-	const wsTarget = `${isSecure ? "wss" : "ws"}://${deviceHost}:${devicePort}`;
-
-	return {
-		[DEVICE_WS_PROXY_CONTEXT]: {
-			target: wsTarget,
-			ws: true,
-			changeOrigin: true,
-			secure: false,
-			rewriteWsOrigin: true,
-			configure(proxy) {
-				const forwardWebSocket = proxy.ws.bind(proxy);
-				const routeWebSocket: typeof proxy.ws = (...args) => {
-					const [req, socket, head, optionsOrCallback, callback] = args;
-					const options =
-						typeof optionsOrCallback === "function"
-							? undefined
-							: optionsOrCallback;
-					const onError =
-						typeof optionsOrCallback === "function"
-							? optionsOrCallback
-							: callback;
-					const route = resolvePreviewWebSocketRoute(
-						wsTarget,
-						{ url: req.url, headers: req.headers },
-						allowWorkerRouting,
-					);
-					if (route === null) {
-						rejectWebSocketUpgrade(socket);
-						return;
-					}
-					applyPreviewWebSocketRoute(req, route);
-					if (onError) {
-						forwardWebSocket(
-							req,
-							socket,
-							head,
-							{ ...options, target: route.target },
-							onError,
-						);
-					} else {
-						forwardWebSocket(req, socket, head, {
-							...options,
-							target: route.target,
-						});
-					}
-				};
-				Object.defineProperty(proxy, "ws", { value: routeWebSocket });
-			},
-			bypass(req: { url?: string; headers: Record<string, unknown> }) {
-				const upgrade = String(req.headers.upgrade ?? "").toLowerCase();
-				// WS upgrade → device; everything else served locally by Vite.
-				return upgrade === "websocket" ? undefined : req.url;
-			},
-		},
-	};
-}
-
 function buildDeviceServer(env: Record<string, string>) {
 	const proxy = buildDeviceProxy(env, false);
-	if (!proxy) return {};
+	if (!env.VITE_DEVICE_HOST) return { proxy };
 	return {
 		host: "0.0.0.0",
 		hmr: {
@@ -137,8 +62,10 @@ function buildDeviceServer(env: Record<string, string>) {
 }
 
 function buildDevicePreview(env: Record<string, string>) {
-	const proxy = buildDeviceProxy(env, process.env.CI === "true");
-	return proxy ? { host: "0.0.0.0", proxy } : {};
+	return {
+		...(env.VITE_DEVICE_HOST ? { host: "0.0.0.0" } : {}),
+		proxy: buildDeviceProxy(env, process.env.CI === "true"),
+	};
 }
 
 // https://vitejs.dev/config/
@@ -215,8 +142,21 @@ export default defineConfig(({ mode }) => {
 							return i18nChunk;
 						}
 
+						if (id.endsWith("/packages/rpc/src/schemas/logs.schema.ts")) {
+							return "device-log-contract";
+						}
+
 						// Vendor chunks for external dependencies
 						if (id.includes("node_modules")) {
+							// Only the lazy Raw logs list uses the virtualizer; matching "svelte" below would put it on the initial route.
+							if (
+								/\/node_modules\/@tanstack\/(?:svelte-virtual|virtual-core)\//.test(
+									id,
+								)
+							) {
+								return "raw-logs-virtualizer";
+							}
+
 							// Core Svelte framework (largest)
 							if (
 								id.includes("svelte") ||
@@ -298,8 +238,7 @@ export default defineConfig(({ mode }) => {
 		// Enhanced development server configuration
 		server: {
 			port: 6173,
-			// host / hmr / proxy injected ONLY when VITE_DEVICE_HOST is set; empty
-			// otherwise, so the default dev server is byte-for-byte unchanged.
+			// An explicit device enables the WebSocket proxy and remote HMR setup.
 			...deviceServer,
 			// Configure source map ignore list for better debugging
 			sourcemapIgnoreList(sourcePath) {

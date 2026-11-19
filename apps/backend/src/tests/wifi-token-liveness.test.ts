@@ -14,6 +14,7 @@ import {
 	handleTerminationSignal,
 	resetShutdownForTest,
 } from "../helpers/shutdown.ts";
+import { resetEventEmitterForTest } from "../modules/events/emit.ts";
 import * as nm from "../modules/network/network-manager.ts";
 import {
 	getControlChannel,
@@ -175,6 +176,10 @@ function stallReads() {
 beforeEach(async () => {
 	jest.useFakeTimers();
 	jest.setSystemTime(0);
+	// This suite counts Wi-Fi timers; event coalescing owns a separate scheduler.
+	resetEventEmitterForTest({
+		schedule: () => ({ unref: () => {}, cancel: () => {} }),
+	});
 	inheritedRegistry = isolateWifiRegistry();
 	wifiRadioObservation.stop();
 	await wifiRadioObservation.settled;
@@ -230,6 +235,7 @@ afterEach(async () => {
 	resetWifiCapabilitiesForTest();
 	onWifiChange(() => undefined);
 	setWifiState({});
+	resetEventEmitterForTest();
 	mock.restore();
 	restoreWifiRegistry(inheritedRegistry);
 	setControlChannel(inheritedChannel);

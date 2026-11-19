@@ -27,7 +27,10 @@
  *   - a single onNetifChange callback registry
  *   - a pure reconcileNetif(next, prev) diff function
  */
+import type { UplinkKind } from "@ceraui/rpc/events";
+import { emitEvent } from "../../events/emit.ts";
 import type { NetifState, StateDiff } from "../state-types.ts";
+import { resolveUplinkIdentity } from "../uplink-identity.ts";
 
 /** One diffed entry: the interface name plus its (next) data. */
 export type NetifDiffEntry = {
@@ -36,6 +39,7 @@ export type NetifDiffEntry = {
 };
 
 let netifState: NetifState = {};
+let netifKinds = new Map<string, UplinkKind>();
 
 let onChangeCb: ((diff: StateDiff<NetifDiffEntry>) => void) | undefined;
 
@@ -51,9 +55,34 @@ export function getNetifState(): NetifState {
  */
 export function setNetifState(newState: NetifState): void {
 	const prev = netifState;
+	const previousKinds = netifKinds;
+	const nextKinds = new Map<string, UplinkKind>(
+		Object.keys(newState).map((iface) => [
+			iface,
+			resolveUplinkIdentity(iface).kind,
+		]),
+	);
 	netifState = newState;
+	netifKinds = nextKinds;
 
 	const diff = reconcileNetif(newState, prev);
+	for (const { name: iface } of diff.added) {
+		const kind = nextKinds.get(iface);
+		if (kind === undefined) continue;
+		emitEvent("interface_added", {
+			iface,
+			kind,
+		});
+	}
+	for (const { name: iface } of diff.removed) {
+		// A descriptor can disappear before the netif removal is published.
+		const kind = previousKinds.get(iface);
+		if (kind === undefined) continue;
+		emitEvent("interface_removed", {
+			iface,
+			kind,
+		});
+	}
 	if (
 		diff.added.length > 0 ||
 		diff.removed.length > 0 ||

@@ -33,6 +33,7 @@ bunx biome check packages/rpc
 | STRUCTURE | [Contract 3](docs/agents/structure.md) |
 | WHERE TO LOOK | [Contract 4](docs/agents/where-to-look.md) |
 | IMPORT PATHS | [Contract 5](docs/agents/import-paths.md) |
+| Device logs and events wire, `@ceraui/rpc/events` | [Logs](docs/agents/device-logs-wire.md); [Events](docs/agents/device-events-wire.md) |
 | UPLINK STEERING WIRE STATE IS SHARED | [Contract 6](docs/agents/uplink-steering-wire-state-is-shared.md) |
 | AN UPLINK ROW CARRIES A NAME, NOT A SECOND IDENTITY | [Contract 7](docs/agents/an-uplink-row-carries-a-name-not-a-second-identity.md) |
 | DEVICE-TOKEN CLAIM CONTRACT (canonical, single source) | [Contract 8](docs/agents/device-token-claim-contract-canonical-single-source.md) |

@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
+import { VIEW_LOGS_TOAST_CLASS } from "../lib/device-logs/view-logs";
 import { ConnectionResetError } from "../lib/rpc/client";
 import { runStartWatchdog } from "../lib/rpc/streaming-start-watchdog";
 
@@ -28,6 +28,9 @@ const toastError = vi.hoisted(() => vi.fn());
 const startStreaming = vi.hoisted(() => vi.fn());
 
 vi.mock("svelte-sonner", () => ({ toast: { error: toastError } }));
+vi.mock("$lib/stores/navigation-lazy", () => ({
+	navigateToDestination: vi.fn(),
+}));
 
 vi.mock("$lib/helpers/SystemHelper", () => ({
 	startStreaming,
@@ -98,9 +101,21 @@ vi.mock("$main/dialogs/EncoderDialog.svelte", async () => ({
 	default: (await import("./fixtures/Noop.svelte")).default,
 }));
 
+import {
+	clearRequestedDialog,
+	getRequestedDialog,
+	getRequestedDialogContext,
+} from "$lib/stores/dialog-request.svelte";
+
 import LiveView from "../main/LiveView.svelte";
 
 const startFailed = en.live.startFailed as Readonly<Record<string, string>>;
+
+// A suffix that sends the operator to System Logs brings the action with it.
+const VIEW_LOGS = {
+	action: { label: en.notifications.viewLogs, onClick: expect.any(Function) },
+	class: VIEW_LOGS_TOAST_CLASS,
+};
 
 afterEach(() => {
 	cleanup();
@@ -111,6 +126,7 @@ afterEach(() => {
 	state.failure = undefined;
 	toastError.mockReset();
 	startStreaming.mockReset();
+	clearRequestedDialog();
 });
 
 describe("LiveView start-failure output", () => {
@@ -154,6 +170,7 @@ describe("LiveView start-failure output", () => {
 		await tick();
 
 		expect(toastError).toHaveBeenCalledWith(startFailed[reason]);
+		expect(toastError.mock.calls[0]).toHaveLength(1);
 		expect(startFailed[reason]).not.toBe(startFailed.generic);
 	});
 
@@ -183,7 +200,29 @@ describe("LiveView typed start-failure rendering (Todo 29)", () => {
 
 		expect(toastError).toHaveBeenCalledWith(
 			`${startFailure.class.engine_unavailable} ${startFailure.retriedThenFailed}`,
+			VIEW_LOGS,
 		);
+	});
+
+	it("opens System Logs on Raw logs at the moment the failure was shown", async () => {
+		state.failure = {
+			class: "engine_unavailable",
+			phase: "connect",
+			retriable: true,
+			attemptId: "att_logs",
+		};
+		const before = Date.now();
+
+		render(LiveView);
+		await tick();
+		const after = Date.now();
+		toastError.mock.calls[0]?.[1]?.action.onClick();
+
+		expect(getRequestedDialog()).toBe("logs");
+		const context = getRequestedDialogContext();
+		expect(context?.tab).toBe("raw");
+		expect(context?.at).toBeGreaterThanOrEqual(before);
+		expect(context?.at).toBeLessThanOrEqual(after);
 	});
 
 	it("renders the class message + not-retriable suffix for a deterministic class", async () => {
@@ -199,6 +238,7 @@ describe("LiveView typed start-failure rendering (Todo 29)", () => {
 
 		expect(toastError).toHaveBeenCalledWith(
 			`${startFailure.class.start_invalid} ${startFailure.notRetriable}`,
+			VIEW_LOGS,
 		);
 	});
 
@@ -217,6 +257,7 @@ describe("LiveView typed start-failure rendering (Todo 29)", () => {
 		expect(toastError).toHaveBeenCalledTimes(1);
 		expect(toastError).toHaveBeenCalledWith(
 			`${startFailure.class.engine_internal} ${startFailure.notRetriable}`,
+			VIEW_LOGS,
 		);
 	});
 
@@ -246,7 +287,7 @@ describe("LiveView typed start-failure rendering (Todo 29)", () => {
 			const suffix = retriable
 				? startFailure.retriedThenFailed
 				: startFailure.notRetriable;
-			expect(toastError).toHaveBeenCalledWith(`${reason} ${suffix}`);
+			expect(toastError).toHaveBeenCalledWith(`${reason} ${suffix}`, VIEW_LOGS);
 			expect(reason).not.toBe(startFailed.generic);
 		},
 	);
@@ -265,8 +306,10 @@ describe("LiveView typed start-failure rendering (Todo 29)", () => {
 		await tick();
 
 		expect(toastError).toHaveBeenCalledTimes(1);
+		// "Start again once it finishes" points nowhere near the logs: no action.
 		expect(toastError).toHaveBeenCalledWith(
 			`${startFailure.class.update_in_progress} ${startFailure.waitForUpdate}`,
+			undefined,
 		);
 		const shown = String(toastError.mock.calls[0]?.[0] ?? "");
 		expect(shown).not.toContain(startFailure.notRetriable);
@@ -299,6 +342,7 @@ describe("LiveView typed start-failure rendering (Todo 29)", () => {
 
 		expect(toastError).toHaveBeenCalledWith(
 			`${startFailure.class.start_invalid} ${startFailure.notRetriable}`,
+			VIEW_LOGS,
 		);
 		const shown = String(toastError.mock.calls[0]?.[0] ?? "");
 		expect(shown).not.toContain("invalid params");

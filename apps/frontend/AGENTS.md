@@ -37,6 +37,7 @@ bun run test:federation-abi
 | Preamble / ROLE | [Contract 1](docs/agents/overview.md); [Contract 2](docs/agents/role.md) |
 | STRUCTURE / CRITICAL: initSubscriptions() must be called at startup | [Contract 3](docs/agents/structure.md); [Contract 4](docs/agents/critical-initsubscriptions-must-be-called-at-startup.md) |
 | NETWORK VIEW STRUCTURE / RPC PATTERN | [Contract 5](docs/agents/network-view-structure.md); [Contract 6](docs/agents/rpc-pattern.md) |
+| System Logs view and event feed | [View](docs/agents/system-logs-view.md); [Feed](docs/agents/event-timeline-feed.md) |
 | Hotspot draft lifetime, consent and echoed settlement | [Binding contract](../../docs/HOTSPOT-DRAFT-BINDING.md) |
 | COMMANDS / FEDERATION LIB BUILD (Task 39) | [Contract 7](docs/agents/commands.md); [Contract 8](docs/agents/federation-lib-build-task-39.md) |
 | FEDERATION SIGNING (Task 40) / FEDERATION PUBLISH (Task 41) | [Contract 9](docs/agents/federation-signing-task-40.md); [Contract 10](docs/agents/federation-publish-task-41.md) |

@@ -1,4 +1,6 @@
+import type { EventCode } from "@ceraui/rpc/events";
 import { logger } from "../../../helpers/logger.ts";
+import { emitEvent } from "../../events/emit.ts";
 import {
 	type NotificationOptions,
 	notificationExists,
@@ -159,11 +161,59 @@ const notices = {
 	},
 } as const;
 
+const eventCodes = {
+	"packages-recovered": "update_packages_recovered",
+	"slot-sync-recovered": "update_slot_sync_recovered",
+	"updates-available": "update_updates_available",
+	installed: "update_installed",
+	refused: "update_refused",
+	"download-paused": "update_download_paused",
+	"os-staged": "update_os_staged",
+	"os-activation-requested": "update_os_activation_requested",
+	"os-activated": "update_os_activated",
+	"os-rollback": "update_os_rollback",
+	"slots-current": "update_slots_current",
+	"restart-recommended": "update_restart_recommended",
+	"cellular-approval": "update_cellular_approval",
+	"credentials-expiring": "update_credentials_expiring",
+	"credentials-expired": "update_credentials_expired",
+	"transport-unhealthy": "update_transport_unhealthy",
+	"kernel-staged": "update_kernel_staged",
+	"kernel-succeeded": "update_kernel_succeeded",
+	"kernel-rolled-back": "update_kernel_rolled_back",
+	"os-stage-retry": "update_os_stage_retry",
+	"os-stage-operator": "update_os_stage_operator",
+	"os-stage-unresolved": "update_os_stage_unresolved",
+} as const satisfies Record<UpdateNotice["kind"], EventCode>;
+
 /** Stable identity = event kind + exact transaction/version/unit; a retry is silent. */
 export function notifyUpdate(
 	event: UpdateNotice,
 	options: Pick<NotificationOptions, "beforeDismiss" | "onDismiss"> = {},
 ): boolean {
+	// History is independent of whether the operator has seen or dismissed the notice.
+	try {
+		switch (event.kind) {
+			case "installed":
+				emitEvent(eventCodes[event.kind], {
+					id: event.id,
+					packages: [...event.packages],
+				});
+				break;
+			case "transport-unhealthy":
+				emitEvent(eventCodes[event.kind], {
+					id: event.id,
+					reasons: [...event.reasons],
+				});
+				break;
+			default: {
+				const { kind, ...params } = event;
+				emitEvent(eventCodes[kind], params);
+			}
+		}
+	} catch {
+		// Event history must not interrupt notification publication.
+	}
 	const name = `update:${event.kind}:${event.id}`;
 	if (notificationExists(name)) return false;
 	const notice = notices[event.kind];

@@ -1,23 +1,44 @@
 import type { NotificationActionTarget } from "@ceraui/rpc/schemas";
 
-// A single-slot request bus so an allowlisted notification action can deep-link
-// into a config dialog. The producer (a notification tap) calls requestDialog();
-// the owning view (SettingsView for `updates-dialog`) consumes it via an effect
-// and clears it. Held on globalThis for the same dev dual-URL reason as the
-// notification store — the toast host and SettingsView must share ONE slot.
+import type { EventMatch } from "$lib/device-logs/raw-anchor";
+import type { ShellTab } from "$lib/device-logs/shell-layout";
+
+// A single-slot request bus so an allowlisted notification action, or a "View
+// logs" action, can deep-link into a Settings dialog. The producer calls
+// requestDialog(); SettingsView consumes it via an effect and clears it. `logs`
+// is a frontend-only target: it never travels on the notification wire. Held on
+// globalThis for the same dev dual-URL reason as the notification store. The
+// toast host and SettingsView must share ONE slot.
+export type DialogTarget = NotificationActionTarget | "logs";
+
+/** Where System Logs opens: a tab, and the boot, moment or event its raw entries surround. */
+export interface LogsDialogContext {
+	tab?: ShellTab;
+	bootId?: string;
+	at?: number;
+	event?: EventMatch;
+	/** The message's moment is not known, so Raw logs say why they show the newest entries. */
+	momentUnknown?: true;
+}
+
+interface DialogRequest {
+	target: DialogTarget;
+	context?: LogsDialogContext;
+}
+
 interface DialogRequestStore {
-	get requested(): NotificationActionTarget | undefined;
-	set(target: NotificationActionTarget | undefined): void;
+	get requested(): DialogRequest | undefined;
+	set(request: DialogRequest | undefined): void;
 }
 
 function createStore(): DialogRequestStore {
-	let requested = $state<NotificationActionTarget | undefined>(undefined);
+	let requested = $state<DialogRequest | undefined>(undefined);
 	return {
 		get requested() {
 			return requested;
 		},
-		set(target) {
-			requested = target;
+		set(request) {
+			requested = request;
 		},
 	};
 }
@@ -34,17 +55,23 @@ const singleton: DialogRequestStore = ((): DialogRequestStore => {
 	return existing;
 })();
 
-export function requestDialog(target: NotificationActionTarget): void {
-	singleton.set(target);
-	if (target === "updates-dialog") {
-		void import("$lib/stores/navigation-lazy").then(
-			({ navigateToDestination }) => navigateToDestination("settings"),
-		);
-	}
+// Every target is a Settings dialog, so every request switches there.
+export function requestDialog(
+	target: DialogTarget,
+	context?: LogsDialogContext,
+): void {
+	singleton.set({ target, context });
+	void import("$lib/stores/navigation-lazy").then(({ navigateToDestination }) =>
+		navigateToDestination("settings"),
+	);
 }
 
-export function getRequestedDialog(): NotificationActionTarget | undefined {
-	return singleton.requested;
+export function getRequestedDialog(): DialogTarget | undefined {
+	return singleton.requested?.target;
+}
+
+export function getRequestedDialogContext(): LogsDialogContext | undefined {
+	return singleton.requested?.context;
 }
 
 export function clearRequestedDialog(): void {

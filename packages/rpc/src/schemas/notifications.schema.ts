@@ -40,6 +40,8 @@ export const notificationSchema = z.object({
 	// fenced against a newer `show` (see notificationRemoveSchema). Absent on
 	// transient (non-persistent) notifications, which are never removed by id.
 	revision: z.number().optional(),
+	// The backend process that assigned the revision. A restart can reuse the number.
+	publisher: z.string().min(1).optional(),
 	// Optional, versioned, allowlisted deep-link affordance (additive — legacy
 	// producers omit it and keep working unchanged).
 	action: notificationActionSchema.optional(),
@@ -58,6 +60,8 @@ export type NotificationRemove = z.infer<typeof notificationRemoveSchema>;
 // Notifications message schema. Both arrays are optional: a `show` frame carries
 // no `remove`, and a `remove`-only frame carries no `show`.
 export const notificationsMessageSchema = z.object({
+	// Set by the producer for snapshots, independent of when the socket opened.
+	replay: z.boolean().optional(),
 	show: z.array(notificationSchema).optional(),
 	remove: z.array(notificationRemoveSchema).optional(),
 });

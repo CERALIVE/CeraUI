@@ -58,6 +58,7 @@
 // `boot-guard.ts`) so the loop is unit-testable without real timers or a socket.
 
 import { logger as defaultLogger } from "../../helpers/logger.ts";
+import { emitEvent } from "../events/emit.ts";
 import { getHardwareKind } from "../system/hardware-kind.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import {
@@ -65,7 +66,10 @@ import {
 	getLastCapabilities,
 } from "./capabilities.ts";
 import { runInflightConfigChangeReconciliation } from "./config-change-reconcile-wiring.ts";
-import { reportEngineState } from "./lifecycle-indicators.ts";
+import {
+	reportEngineRecovery,
+	reportEngineState,
+} from "./lifecycle-indicators.ts";
 import { getPipelinesMessage, initPipelines } from "./pipelines.ts";
 import {
 	type EngineDeviceCacheDeps,
@@ -94,6 +98,8 @@ export interface EngineReconnectLogger {
 
 /** Injected collaborators; defaults wire the real capability/broadcast path. */
 export interface EngineReconnectDeps {
+	onUnavailable?: () => void;
+	onRecovered?: (streaming: boolean) => void;
 	/**
 	 * Re-attempt the engine connection and refresh the capability contract. MUST
 	 * NOT throw (the capability ladder never does) — the loop treats a resolve as
@@ -116,7 +122,7 @@ export interface EngineReconnectDeps {
 	 * indicator. Gated on `isStreaming` inside the reporter: only a mid-stream
 	 * unreachable→reachable transition toasts.
 	 */
-	reportEngineState: (reachable: boolean) => void;
+	reportEngineState: (reachable: boolean, streaming: boolean) => void;
 	logger: EngineReconnectLogger;
 	random: () => number;
 	setTimer: (fn: () => void, ms: number) => TimerHandle;
@@ -185,11 +191,23 @@ function defaultDeps(
 ): EngineReconnectDeps {
 	const capsOverride = fetchers.capabilities ?? {};
 	return {
+		onUnavailable: () => {
+			if (!getIsStreaming()) {
+				try {
+					emitEvent("engine_lost", { streaming: false });
+				} catch {
+					// Event history must not alter stream control.
+				}
+			}
+		},
+		onRecovered: (streaming) => {
+			if (!streaming) reportEngineRecovery(streaming);
+		},
 		refreshCapabilities: () => initPipelines(capsOverride),
 		isEngineReachable: () => getLastCapabilities()?.engineUnavailable === false,
 		broadcastEngineState: buildDefaultBroadcastEngineState(fetchers.sources),
-		reportEngineState: (reachable) =>
-			reportEngineState({ isStreaming: getIsStreaming(), reachable }),
+		reportEngineState: (reachable, streaming) =>
+			reportEngineState({ isStreaming: streaming, reachable }),
 		logger: defaultLogger,
 		random: Math.random,
 		setTimer: (fn, ms) => setTimeout(fn, ms),
@@ -257,14 +275,20 @@ async function runAttempt(broadcastOnHeal: boolean): Promise<boolean> {
 		);
 	}
 	if (!state) return false;
-	deps.reportEngineState(deps.isEngineReachable());
-	if (!deps.isEngineReachable()) return false;
-	if (!broadcastOnHeal) return true;
+	const reachable = deps.isEngineReachable();
+	const streaming = getIsStreaming();
+	if (!reachable || !broadcastOnHeal) {
+		deps.reportEngineState(reachable, streaming);
+		return reachable;
+	}
 	try {
 		await deps.broadcastEngineState();
 		deps.logger.info(
 			"engine reconnect: engine reachable again; re-broadcast capabilities/pipelines/sources to clients",
 		);
+		// Reconciliation may adopt or retire a stream; both observers own this snapshot.
+		deps.reportEngineState(reachable, streaming);
+		deps.onRecovered?.(streaming);
 		return true;
 	} catch (err) {
 		deps.logger.warn(
@@ -365,6 +389,7 @@ export async function initEngineConnection(
 	deps.logger.warn(
 		"engine reconnect: engine unreachable at boot; scheduling background reconnect",
 	);
+	deps.onUnavailable?.();
 	scheduleRecheck();
 }
 

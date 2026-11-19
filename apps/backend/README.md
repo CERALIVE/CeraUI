@@ -20,6 +20,17 @@ Previously received copies are NOT erased. Pairing-secret registration through
 [remote control contract](docs/agents/remote-control-plane.md) for the exact
 boundary and the still-unwired v2 broadcast relay.
 
+### Device log retention [PARTIAL]
+
+The retention service serializes cleanup and closes query, follow and export
+admission during clear. It persists the epoch before cancellation, joins all
+drains for at most 15 seconds and holds admission through the final storage
+readout. A rejected or timed-out drain returns `READ_FAILED` without deletion.
+See the [retention contract](docs/agents/device-log-retention.md) for waiting
+admission, update refusal, full-disk behavior, excluded metadata readers and the
+known reader and follow-stream limitations. Controlled transport tests do not
+claim physical board qualification.
+
 ### Modem-control compatibility
 
 The backend pins `@ceralive/modem-control` at `1.3.0` EXACTLY. The SMS port, the

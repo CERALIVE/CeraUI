@@ -10,8 +10,9 @@
  * production-readiness floor, not a tunable.
  */
 
-/** Free-space floor for the low-disk warning: 512 MiB, in bytes. */
-export const LOW_DISK_THRESHOLD_BYTES = 512 * 1024 * 1024;
+import { LOW_DISK_THRESHOLD_BYTES } from "@ceraui/rpc/schemas";
+
+export { LOW_DISK_THRESHOLD_BYTES } from "@ceraui/rpc/schemas";
 
 /** The subset of the device-stats `disk` signal this derivation reads. */
 export interface DiskUsageLike {

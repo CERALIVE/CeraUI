@@ -1,0 +1,143 @@
+import { expect, test } from "bun:test";
+import type { LogSource } from "@ceraui/rpc/schemas";
+import { parseRecord } from "../modules/device-logs/parse.ts";
+import { matchesResidual } from "../modules/device-logs/residual.ts";
+import { record } from "./helpers/device-query.ts";
+
+test.each([
+	[
+		"ceralive.service",
+		"srtla_send: link ready",
+		"srtla_send",
+		"bonding",
+		false,
+		true,
+	],
+	["ceralive.service", "srtla_send: quoted", undefined, "app", true, false],
+	[
+		"ceralive.service",
+		"app mentions srtla_send: link ready",
+		undefined,
+		"app",
+		true,
+		false,
+	],
+	[
+		"srtla.service",
+		"receiver accepted a connection",
+		undefined,
+		"bonding",
+		false,
+		true,
+	],
+	[
+		"NetworkManager.service",
+		"srtla_send: quoted",
+		"srtla_send",
+		"network",
+		false,
+		false,
+	],
+] as const)(
+	"%s message %s with producer %s is attributed to %s",
+	(unit, msg, producer, source, inApp, inBonding) => {
+		const entry = parseRecord({
+			__CURSOR: "fixture=1",
+			__REALTIME_TIMESTAMP: "1000",
+			_BOOT_ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			_SYSTEMD_UNIT: unit,
+			MESSAGE: JSON.stringify({
+				ts: "2026-01-01",
+				msg,
+				module: "fixture",
+				processSource: producer,
+			}),
+		});
+		if (!entry) throw new Error("invalid journal fixture");
+		const included = (sources: LogSource[]) =>
+			matchesResidual(entry, { sources });
+		expect([
+			entry.source,
+			included(["app"]),
+			included(["bonding", "bonding"]),
+		]).toEqual([source, inApp, inBonding]);
+		expect(included(["app", "bonding"])).toBe(inApp || inBonding);
+		expect(included([])).toBe(true);
+	},
+);
+
+test("an omitted source selection keeps an unrelated suppression notice", () => {
+	expect(
+		matchesResidual(
+			{ ...record(1), marker: "suppressed", message: "unknown unit dropped" },
+			{},
+		),
+	).toBe(true);
+});
+test("a suppression notice naming any selected source survives the source union", () => {
+	for (const message of [
+		"ceralive.service dropped",
+		"NetworkManager.service dropped",
+	]) {
+		expect(
+			matchesResidual(
+				{ ...record(1), marker: "suppressed", message },
+				{ sources: ["app", "network", "kernel"] },
+			),
+		).toBe(true);
+	}
+});
+
+test.each([
+	[{ ts: 10 }, { since: 10, until: 10 }, true],
+	[{ ts: 9 }, { since: 10 }, false],
+	[{ ts: 11 }, { until: 10 }, false],
+	[{ ts: 10 }, {}, true],
+	[{ message: "USB.[*] FOUND" }, { text: "usb.[*]" }, true],
+	[{ message: "USBx" }, { text: "usb." }, false],
+	[{ message: "", marker: null }, {}, true],
+	[
+		{ message: "ceralive.service dropped", marker: "suppressed" },
+		{ sources: ["app"] },
+		true,
+	],
+	[
+		{ message: "NetworkManager.service dropped", marker: "suppressed" },
+		{ sources: ["app"] },
+		false,
+	],
+	[{ message: "unknown dropped", marker: "suppressed" }, {}, true],
+	[
+		{ message: "NetworkManager.service dropped", marker: "suppressed" },
+		{ sources: ["network"] },
+		true,
+	],
+	[
+		{ message: "unknown dropped", marker: "suppressed" },
+		{ sources: ["kernel"] },
+		false,
+	],
+] as const)(
+	"residual membership %j against %j is %j",
+	(patch, filter, expected) => {
+		expect(
+			matchesResidual(
+				{ ...record(1), ...patch },
+				{ ...filter, sources: "sources" in filter ? [...filter.sources] : [] },
+			),
+		).toBe(expected);
+	},
+);
+
+test("shared-unit suppression is relevant to the sender even without a producer tag", () => {
+	expect(
+		matchesResidual(
+			{
+				...record(1),
+				marker: "suppressed",
+				message: "ceralive.service dropped",
+			},
+			{ sources: ["bonding"] },
+		),
+	).toBe(true);
+});

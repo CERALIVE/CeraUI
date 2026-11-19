@@ -1,5 +1,6 @@
 import type { CaptureStatus } from "@ceralive/cerastream";
 import type { StreamSource } from "@ceraui/rpc/schemas";
+import { emitEvent } from "../events/emit.ts";
 import {
 	notificationBroadcast,
 	notificationRemove,
@@ -12,6 +13,7 @@ export interface CaptureResilienceDeps {
 	readonly sources: () => readonly StreamSource[];
 	readonly notify: typeof notificationBroadcast;
 	readonly removeNotification: (name: string) => void;
+	readonly emitEvent?: typeof emitEvent;
 	readonly now: () => number;
 	readonly setTimer: (
 		callback: () => void,
@@ -20,11 +22,12 @@ export interface CaptureResilienceDeps {
 	readonly clearTimer: (timer: ReturnType<typeof setTimeout> | number) => void;
 }
 
-function defaultDeps(): CaptureResilienceDeps {
+function defaultDeps(): Required<CaptureResilienceDeps> {
 	return {
 		sources: () => getSourcesMessage().sources,
 		notify: notificationBroadcast,
 		removeNotification: notificationRemove,
+		emitEvent,
 		now: Date.now,
 		setTimer: (callback, delayMs) => {
 			const timer = setTimeout(callback, delayMs);
@@ -35,8 +38,9 @@ function defaultDeps(): CaptureResilienceDeps {
 	};
 }
 
-let deps: CaptureResilienceDeps = defaultDeps();
+let deps = defaultDeps();
 const standing = new Set<string>();
+const lostInputs = new Map<string, string>();
 let standbySince: number | undefined;
 let standbyTimer: ReturnType<typeof setTimeout> | number | undefined;
 
@@ -49,7 +53,7 @@ function raise(
 	name: string,
 	message: string,
 	key: string,
-	params?: Record<string, unknown>,
+	params?: { name: string; activeCamera: string },
 ): void {
 	if (standing.has(name)) return;
 	standing.add(name);
@@ -64,6 +68,7 @@ function clearStandbyTimer(): void {
 function retractAll(): void {
 	clearStandbyTimer();
 	standbySince = undefined;
+	lostInputs.clear();
 	for (const name of [...standing]) retract(name);
 }
 
@@ -71,7 +76,7 @@ export function setCaptureResilienceDepsForTest(
 	next: CaptureResilienceDeps | null,
 ): void {
 	retractAll();
-	deps = next ?? defaultDeps();
+	deps = { ...defaultDeps(), ...next };
 }
 
 function nameFor(
@@ -119,6 +124,14 @@ export function noteCaptureStatus(
 	const activeId = capture.active_source?.input_id ?? capture.live_inputs[0];
 	const activeCamera =
 		activeId === undefined ? undefined : nameFor(activeId, sources);
+	for (const [id, name] of lostInputs) {
+		if (!capture.live_inputs.includes(id)) continue;
+		lostInputs.delete(id);
+		deps.emitEvent("capture_input_returned", {
+			name,
+			activeCamera: id === activeId,
+		});
+	}
 	const lost = new Set<string>();
 	if (capture.state !== "standby" && activeCamera !== undefined) {
 		for (const degraded of capture.degraded_inputs) {
@@ -132,6 +145,10 @@ export function noteCaptureStatus(
 				"notifications.captureInputLost",
 				{ name, activeCamera },
 			);
+			if (!lostInputs.has(degraded.input_id)) {
+				lostInputs.set(degraded.input_id, name);
+				deps.emitEvent("capture_input_lost", { name, activeCamera: false });
+			}
 		}
 	}
 	for (const id of [...standing]) {
@@ -146,9 +163,16 @@ export function noteCaptureStatus(
 		);
 		if (standbySince === undefined) {
 			standbySince = capture.standby_since_ms ?? deps.now();
+			deps.emitEvent("capture_standby_entered", {
+				durationSec: Math.max(0, (deps.now() - standbySince) / 1000),
+			});
 			longStandby();
 		}
 	} else {
+		if (standbySince !== undefined)
+			deps.emitEvent("capture_standby_exited", {
+				durationSec: Math.max(0, (deps.now() - standbySince) / 1000),
+			});
 		clearStandbyTimer();
 		standbySince = undefined;
 		retract("capture-standby");

@@ -5,6 +5,9 @@ Read the contract for the subsystem you touch before making changes. Every origi
 | Original heading | Contract | Governed paths / scope |
 |---|---|---|
 | Preamble | [overview.md](overview.md) | `../../AGENTS.md` |
+| System Logs view: planning-time design intent and code map | [system-logs-view.md](system-logs-view.md) | `main/dialogs/LogsDialog.svelte`, `main/system-logs/`, `lib/device-logs/` |
+| System Logs critique (todo 36 findings and their owners) | [system-logs-critique.md](system-logs-critique.md) | `main/system-logs/`, `lib/device-logs/` |
+| Device event timeline feed [EXISTS] | [event-timeline-feed.md](event-timeline-feed.md) | `lib/rpc/client.ts`, `lib/rpc/subscriptions.svelte.ts`, `lib/rpc/subscriptions-event-feed.test.ts` |
 | ROLE | [role.md](role.md) | ROLE |
 | STRUCTURE | [structure.md](structure.md) | STRUCTURE |
 | CRITICAL: initSubscriptions() must be called at startup | [critical-initsubscriptions-must-be-called-at-startup.md](critical-initsubscriptions-must-be-called-at-startup.md) | `lib/rpc/subscriptions.svelte.ts` |
@@ -42,3 +45,4 @@ Read the contract for the subsystem you touch before making changes. Every origi
 | AN UPDATE ACTION'S OUTCOME IS DECIDED BY EVIDENCE, NOT BY THE REPLY ALONE [EXISTS] | [an-update-action-outcome-is-decided-by-evidence.md](an-update-action-outcome-is-decided-by-evidence.md) | `lib/updates/update-action-{failure,outcome,settlement}.ts`, `lib/updates/update-actions.svelte.ts`, `lib/updates/update-surface.svelte.ts`, `lib/updates/update-settings-owner.svelte.ts`, `lib/updates/os-offer-witness.ts`, `lib/updates/update-device-follow.svelte.ts`, `lib/rpc/session-epoch.svelte.ts`, `main/dialogs/updates/{ActionOutcomeList,PackagesSection,SettingsSaveBand}.svelte`, `lib/components/updating-overlay.svelte`, `main/settings/AddonsSection.svelte`, `lib/updates/update-{action,surface,settings}.interleavings.test.ts`, `lib/updates/os-offer-witness.test.ts` |
 | …AND THE ROW IS KEYED ON ITS ROSTER ID [EXISTS] | [an-unchanged-tick-must-be-a-no-op.md](an-unchanged-tick-must-be-a-no-op.md) | …AND THE ROW IS KEYED ON ITS ROSTER ID [EXISTS] |
 | HARD RULES (full section; update evidence, Start/Stop settlement, SSH and disruptive refusals) | [update-and-stream-evidence-hard-rules.md](update-and-stream-evidence-hard-rules.md) | `LiveView.real-socket-stop.test.ts`, `notifications.disruptiveActionRefused`, `../../docs/START-LIFECYCLE.md` |
+| SYSTEM LOGS CRITIQUE: findings, grades and dispositions [EXISTS] | [system-logs-critique.md](system-logs-critique.md) | `main/system-logs/`, `lib/device-logs/` |

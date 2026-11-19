@@ -53,7 +53,8 @@ permanently rather than "not yet".
    reuses freed indices).
 3. **The record parser does not use `mmcliParseSep`.** That parser logs the
    offending LINE VERBATIM whenever a line does not split cleanly, so any drift
-   in how mmcli frames a message body would print the body into `debug.log`.
+   in how mmcli frames a message body would print the body into the journal
+   (`journalctl -u ceralive`).
    `parseSmsRecord` has its own splitter, and its `ParseError.raw` carries the
    KEY NAMES it found and nothing else. The LIST parse does reuse
    `mmcliParseSep`; that output is only D-Bus paths. It DOES share

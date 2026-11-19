@@ -309,6 +309,9 @@ test("succeeded and rolled-back outcomes acknowledge without deleting producer e
 		expect(f.state().phase).toBe("idle");
 		expect(f.acks()).toBe(1);
 		expect(f.lane.busy()).toBe(false);
+		expect((await f.lane.summary()).rollbackAttemptId).toBe(
+			outcome === "rolled_back" ? kernelState.attempt : undefined,
+		);
 	}
 });
 test("seven-day escalation is submitted once and only while idle", async () => {

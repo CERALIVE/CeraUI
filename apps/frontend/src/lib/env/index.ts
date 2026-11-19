@@ -156,6 +156,27 @@ export function getRpcSocketUrl(): string {
 }
 
 /**
+ * Pure: `path` on the backend's HTTP origin, from the RPC socket origin
+ * (`ws:` -> `http:`, `wss:` -> `https:`). Exported for unit testing.
+ */
+export function resolveBackendHttpUrl(
+	socketOrigin: string,
+	path: string,
+): string {
+	return socketOrigin
+		? `${socketOrigin.replace(/^ws/, "http")}${path}`
+		: NON_BROWSER_SOCKET_URL;
+}
+
+/**
+ * An HTTP URL for a route the backend serves beside the RPC socket (the ticketed
+ * log downloads), on the same origin `getRpcSocketUrl` dials.
+ */
+export function getBackendHttpUrl(path: string): string {
+	return resolveBackendHttpUrl(getSocketUrl(), path);
+}
+
+/**
  * The preview WebSocket URL. Single-origin (Task 20): the browser dials the
  * CeraUI backend at `PREVIEW_WS_PATH`, NOT the cerastream engine's loopback port
  * — the backend proxies frames from the engine. The dial reuses `getSocketUrl()`

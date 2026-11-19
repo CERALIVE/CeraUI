@@ -17,6 +17,10 @@
 		"./schemas": {
 			"types": "./src/schemas/index.ts",
 			"import": "./src/schemas/index.ts"
+		},
+		"./events": {
+			"types": "./src/schemas/events.schema.ts",
+			"import": "./src/schemas/events.schema.ts"
 		}
 	},
 	"scripts": {

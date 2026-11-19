@@ -33,6 +33,7 @@ import {
 	getActive,
 	push,
 	pushNotification,
+	replayNotification,
 	resolveNotificationText,
 	toActiveNotification,
 } from "./notifications.svelte";
@@ -240,6 +241,49 @@ describe("pushNotification", () => {
 		);
 		expect(input.size).toBe(0);
 		expect(output.size).toBe(1);
+	});
+});
+
+// ============================================
+// A notice the device sends again keeps its first arrival
+// ============================================
+
+describe("a notice the device sends again", () => {
+	const standing = (revision: number) =>
+		makeNotification({ is_persistent: true, duration: 0, revision });
+
+	it("keeps the first arrival when the same revision comes back in a connection's replay", () => {
+		let active: Map<string, ActiveNotification> = new Map();
+		active = pushNotification(active, standing(4), translations, T0);
+		active = replayNotification(active, standing(4), translations, T0 + 90_000);
+
+		const entry = active.get("jetson-undervoltage");
+		expect(entry?.receivedAt).toBe(T0);
+		expect(entry?.arrivedLive).toBe(true);
+	});
+
+	it("takes the new arrival for a new revision of the same notice", () => {
+		let active: Map<string, ActiveNotification> = new Map();
+		active = pushNotification(active, standing(4), translations, T0);
+		active = pushNotification(active, standing(5), translations, T0 + 1);
+
+		expect(active.get("jetson-undervoltage")?.receivedAt).toBe(T0 + 1);
+	});
+
+	it("marks a notice first seen in a replay as not arriving live, and keeps that mark on the next replay", () => {
+		let active: Map<string, ActiveNotification> = new Map();
+		active = replayNotification(active, standing(4), translations, T0);
+		active = replayNotification(active, standing(4), translations, T0 + 5);
+
+		const entry = active.get("jetson-undervoltage");
+		expect(entry?.receivedAt).toBe(T0);
+		expect(entry?.arrivedLive).toBe(false);
+	});
+
+	it("counts a notice pushed as it happens as arriving live", () => {
+		const active = pushNotification(new Map(), standing(1), translations, T0);
+
+		expect(active.get("jetson-undervoltage")?.arrivedLive).toBe(true);
 	});
 });
 

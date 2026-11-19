@@ -15,6 +15,7 @@ import { describe, expect, it } from "vitest";
 import {
 	NON_BROWSER_SOCKET_URL,
 	RPC_WS_PATH,
+	resolveBackendHttpUrl,
 	resolveRuntimePortOverride,
 	resolveSocketUrl,
 	type SocketLocation,
@@ -150,6 +151,32 @@ describe("resolveSocketUrl — non-browser / SSR guard", () => {
 				endpointOverride: undefined,
 				portOverride: undefined,
 			}),
+		).toBe(NON_BROWSER_SOCKET_URL);
+	});
+});
+
+describe("resolveBackendHttpUrl: HTTP routes beside the RPC socket", () => {
+	it("maps a ws:// origin to http:// and appends the path", () => {
+		expect(
+			resolveBackendHttpUrl(
+				"ws://ceralive.local",
+				"/api/logs/export?ticket=ab",
+			),
+		).toBe("http://ceralive.local/api/logs/export?ticket=ab");
+	});
+
+	it("maps a wss:// origin to https:// and keeps a non-default port", () => {
+		expect(
+			resolveBackendHttpUrl(
+				"wss://192.168.1.10:8443",
+				"/api/logs/bundle?ticket=cd",
+			),
+		).toBe("https://192.168.1.10:8443/api/logs/bundle?ticket=cd");
+	});
+
+	it("has no URL outside a browser", () => {
+		expect(
+			resolveBackendHttpUrl(NON_BROWSER_SOCKET_URL, "/api/logs/export"),
 		).toBe(NON_BROWSER_SOCKET_URL);
 	});
 });

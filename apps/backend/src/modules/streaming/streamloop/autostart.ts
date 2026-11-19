@@ -24,6 +24,7 @@ import fs from "node:fs";
 import { logger } from "../../../helpers/logger.ts";
 import { AUTOSTART_RETRY_DELAY } from "../../../helpers/timing-constants.ts";
 import { getConfig, saveConfig } from "../../config.ts";
+import { emitEvent } from "../../events/emit.ts";
 import { isUpdating } from "../../system/software-updates.ts";
 import { notificationBroadcast } from "../../ui/notifications.ts";
 import { broadcastMsg } from "../../ui/websocket-server.ts";
@@ -86,6 +87,13 @@ export async function autoStartStream(linkAttempt = 1): Promise<void> {
 			maxAttempts: AUTOSTART_MAX_LINK_ATTEMPTS,
 			retryState: "exhausted",
 		});
+		try {
+			emitEvent("stream_autostart_failed", {
+				reason: "network_links_unavailable",
+			});
+		} catch {
+			// Event history must not alter stream control.
+		}
 		notificationBroadcast(
 			"stream_autostart_failed",
 			"error",
@@ -117,6 +125,11 @@ export async function autoStartStream(linkAttempt = 1): Promise<void> {
 		c = await validateConfig(config);
 	} catch (err) {
 		logger.error("autostart failed", { err });
+		try {
+			emitEvent("stream_autostart_failed", { reason: "start_invalid" });
+		} catch {
+			// Event history must not alter stream control.
+		}
 		notificationBroadcast(
 			"stream_autostart_failed",
 			"error",

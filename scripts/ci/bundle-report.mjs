@@ -25,6 +25,19 @@ import { assertFederationAssetSet, discoverFederationAssets } from '../federatio
 const KIB = 1024;
 
 const SPA_BASELINE = {
+	// ACCEPTED, TRACKED REGRESSION: System Logs, measured 2026-11-18.
+	// Main f6c9a2fb: 1,130,265/1,329,981 B total/precache; 0e347d01:
+	// 1,253,631/1,453,432 B (+123,366/+123,451 B), over the old ceilings by
+	// 1,534/1,624 B. The new systemLogs and timeline catalog chunks (ten
+	// locales) carry 62,914 B, the lazy view chunks 41,161 B, the lazy list
+	// virtualizer 9,535 B, the log schema 4,971 B, vendor-core 1,726 B and CSS
+	// 1,393 B. Both aggregate checks count the lazy chunks in this build, and
+	// the production sourcemaps show no source module in more than one emitted
+	// chunk. The build embeds the short commit ID and a UTC build timestamp, so
+	// repeat gzip measurements can differ. Rebaseline to the measured footprint
+	// under TD-spa-i18n-catalog-size (still open), retaining
+	// 1,235,713/1,435,424 B below. Both 16 KiB headrooms, ratios,
+	// route/chunk/federation and Workbox limits stay fixed.
 	// ACCEPTED, TRACKED REGRESSION — kernel update UI, measured 2026-10-28.
 	// Main 64c69d97: 1,229,723/1,429,441 B total/precache; c000188d:
 	// 1,235,713/1,435,424 B (+5,990/+5,983 B). Nineteen operator keys x
@@ -81,10 +94,10 @@ const SPA_BASELINE = {
 	// single-chunk ceilings are NOT widened. Both aggregates now carry a SECOND,
 	// absolute ceiling so a re-derivation cannot hand back a fresh 12% to spend
 	// silently — precache gained one here for the reason totalGzip already had.
-	totalGzip: 1_235_713,
+	totalGzip: 1_253_631,
 	initialRouteGzip: 497_196,
 	largestChunkGzip: 461_577,
-	precacheGzip: 1_435_424,
+	precacheGzip: 1_453_432,
 };
 
 // The aggregate's binding constraint. A ratio applied to a freshly re-derived
@@ -120,6 +133,11 @@ const SPA_DISPLACED_BASELINES = {
 		{
 			bytes: 1_213_588,
 			label: 'pre-kernel-update-ui',
+			debt: 'TD-spa-i18n-catalog-size',
+		},
+		{
+			bytes: 1_235_713,
+			label: 'pre-system-logs',
 			debt: 'TD-spa-i18n-catalog-size',
 		},
 	],
@@ -158,6 +176,11 @@ const SPA_DISPLACED_BASELINES = {
 		{
 			bytes: 1_413_236,
 			label: 'pre-kernel-update-ui',
+			debt: 'TD-spa-i18n-catalog-size',
+		},
+		{
+			bytes: 1_435_424,
+			label: 'pre-system-logs',
 			debt: 'TD-spa-i18n-catalog-size',
 		},
 	],

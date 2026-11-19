@@ -45,6 +45,7 @@ const GATED_JOBS = [
 	'merge-fe-reports',
 	'guardrails',
 	'test-be',
+	'journal-conformance',
 	'setup-e2e',
 	'test-e2e',
 	'merge-e2e-reports',

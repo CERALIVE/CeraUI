@@ -279,7 +279,7 @@ export async function initModemCredentials(
 /**
  * The stored login for a device, INCLUDING the password.
  *
- * THIS IS THE ONE FUNCTION THAT RETURNS THE SECRET. It exists for the
+ * This returns the secret for the
  * device-facing verify path — the code that actually presents the credential to
  * the dongle's admin API — and its result must never be threaded into an RPC
  * procedure's output, a broadcast payload, or a log record. Every operator-
@@ -302,6 +302,16 @@ export function readModemCredential(
 			? { lastOutcome: entry.lastOutcome }
 			: {}),
 	};
+}
+
+/** Private bundle redaction input, including logins for disconnected devices. */
+export function getStoredModemCredentials(): ReadonlyArray<
+	Pick<ModemCredential, "username" | "password">
+> {
+	return Object.values(entries).map(({ username, password }) => ({
+		username,
+		password,
+	}));
 }
 
 /**

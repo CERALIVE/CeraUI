@@ -62,9 +62,10 @@ const gsmResetCallbacks = new Set<GsmConnectionsResetCallback>();
 function statusSignature(modem: Modem): string {
 	const status = modem.status;
 	if (!status) {
-		return "";
+		return JSON.stringify({ sim_presence: modem.sim_presence });
 	}
 	return JSON.stringify({
+		sim_presence: modem.sim_presence,
 		connection: status.connection,
 		signal: status.signal,
 		roaming: status.roaming,
