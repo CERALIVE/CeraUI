@@ -2983,7 +2983,7 @@
 	"systemLogs.storage.detailFull": "Detalle completo",
 	"systemLogs.storage.detailFullHint": "Conserva las entradas de depuración. Usa más espacio y es lo mejor para solucionar problemas.",
 	"systemLogs.storage.detailReduced": "Reducido",
-	"systemLogs.storage.detailReducedHint": "Conserva el nivel Información y los superiores, así el historial dura más. Las entradas de depuración no se guardan.",
+	"systemLogs.storage.detailReducedHint": "Conserva el nivel Información y los superiores de la app de CeraLive, incluido el emisor de bonding. Sus entradas de depuración no se guardan, así que el historial dura más.",
 	"systemLogs.storage.save": "Guardar límites",
 	"systemLogs.storage.saved": "Límites guardados.",
 	"systemLogs.storage.targetNotMet": "Todavía no se cumple el nuevo límite. El dispositivo elimina más a medida que rota los archivos de registro.",

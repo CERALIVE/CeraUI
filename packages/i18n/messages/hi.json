@@ -2980,7 +2980,7 @@
 	"systemLogs.storage.detailFull": "पूरा विवरण",
 	"systemLogs.storage.detailFullHint": "डीबग एंट्री रखता है। ज़्यादा जगह लेता है और समस्या सुलझाने के लिए सबसे अच्छा है।",
 	"systemLogs.storage.detailReduced": "कम",
-	"systemLogs.storage.detailReducedHint": "जानकारी और उससे ऊपर के स्तर रखता है, इसलिए इतिहास ज़्यादा समय तक चलता है। डीबग एंट्री सहेजी नहीं जातीं।",
+	"systemLogs.storage.detailReducedHint": "CeraLive ऐप के लिए, जिसमें बॉन्डिंग सेंडर भी शामिल है, जानकारी और उससे ऊपर के स्तर रखता है। ऐप की डीबग एंट्री सहेजी नहीं जातीं, इसलिए इतिहास ज़्यादा समय तक चलता है।",
 	"systemLogs.storage.save": "सीमाएँ सहेजें",
 	"systemLogs.storage.saved": "सीमाएँ सहेजी गईं।",
 	"systemLogs.storage.targetNotMet": "नई सीमा अभी पूरी नहीं हुई। डिवाइस लॉग फ़ाइलें रोटेट करते समय और हटाता है।",

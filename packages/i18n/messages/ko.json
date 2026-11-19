@@ -2935,7 +2935,7 @@
 	"systemLogs.storage.detailFull": "전체 세부 정보",
 	"systemLogs.storage.detailFullHint": "디버그 항목을 보관합니다. 공간을 더 쓰며 문제 해결에 가장 적합합니다.",
 	"systemLogs.storage.detailReduced": "축소",
-	"systemLogs.storage.detailReducedHint": "정보 수준 이상을 보관하므로 기록이 더 오래 유지됩니다. 디버그 항목은 저장되지 않습니다.",
+	"systemLogs.storage.detailReducedHint": "본딩 송신기를 포함한 CeraLive 앱의 정보 수준 이상을 보관합니다. 앱의 디버그 항목은 저장되지 않으므로 기록이 더 오래 유지됩니다.",
 	"systemLogs.storage.save": "한도 저장",
 	"systemLogs.storage.saved": "한도를 저장했습니다.",
 	"systemLogs.storage.targetNotMet": "새 한도에 아직 도달하지 않았습니다. 기기는 로그 파일을 교체하면서 더 삭제합니다.",

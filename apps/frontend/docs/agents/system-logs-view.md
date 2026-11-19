@@ -456,7 +456,7 @@ Rules for this copy:
 | `systemLogs.storage.detailFull` | Full detail | Detail debug (default) |
 | `systemLogs.storage.detailFullHint` | Keeps debug entries. Uses more space and is best for troubleshooting. | Consequence line |
 | `systemLogs.storage.detailReduced` | Reduced | Detail info |
-| `systemLogs.storage.detailReducedHint` | Keeps info and above, so history lasts longer. Debug entries are not stored. | Consequence line |
+| `systemLogs.storage.detailReducedHint` | Keeps info and above for the CeraLive app, including the bonding sender. Its debug entries are not stored, so history lasts longer. | Consequence line |
 | `systemLogs.storage.save` | Save limits | Explicit save |
 | `systemLogs.storage.saved` | Limits saved. | After save |
 | `systemLogs.storage.targetNotMet` | The new limit is not met yet. The device removes more as it rotates log files. | targetMet: false |

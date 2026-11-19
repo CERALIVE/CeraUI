@@ -2983,7 +2983,7 @@
 	"systemLogs.storage.detailFull": "Détail complet",
 	"systemLogs.storage.detailFullHint": "Conserve les entrées de débogage. Utilise plus d'espace et convient le mieux au dépannage.",
 	"systemLogs.storage.detailReduced": "Réduit",
-	"systemLogs.storage.detailReducedHint": "Conserve le niveau Information et les niveaux supérieurs, l'historique dure donc plus longtemps. Les entrées de débogage ne sont pas enregistrées.",
+	"systemLogs.storage.detailReducedHint": "Conserve le niveau Information et les niveaux supérieurs pour l'application CeraLive, y compris l'émetteur d'agrégation. Ses entrées de débogage ne sont pas enregistrées, l'historique dure donc plus longtemps.",
 	"systemLogs.storage.save": "Enregistrer les limites",
 	"systemLogs.storage.saved": "Limites enregistrées.",
 	"systemLogs.storage.targetNotMet": "La nouvelle limite n'est pas encore atteinte. L'appareil en supprime davantage au fil de la rotation des fichiers journaux.",

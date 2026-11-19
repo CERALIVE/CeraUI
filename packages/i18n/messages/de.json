@@ -2980,7 +2980,7 @@
 	"systemLogs.storage.detailFull": "Volle Details",
 	"systemLogs.storage.detailFullHint": "Behält Debug-Einträge. Belegt mehr Speicher und eignet sich am besten zur Fehlersuche.",
 	"systemLogs.storage.detailReduced": "Reduziert",
-	"systemLogs.storage.detailReducedHint": "Behält Info und höher, damit der Verlauf länger reicht. Debug-Einträge werden nicht gespeichert.",
+	"systemLogs.storage.detailReducedHint": "Behält für die CeraLive-App, einschließlich des Bonding-Senders, die Stufe Info und höher. Debug-Einträge der App werden nicht gespeichert, damit der Verlauf länger reicht.",
 	"systemLogs.storage.save": "Grenzen speichern",
 	"systemLogs.storage.saved": "Grenzen gespeichert.",
 	"systemLogs.storage.targetNotMet": "Die neue Grenze ist noch nicht erreicht. Das Gerät entfernt mehr, während es Protokolldateien rotiert.",

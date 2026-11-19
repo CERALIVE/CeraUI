@@ -2992,7 +2992,7 @@
 	"systemLogs.storage.detailFull": "تفاصيل كاملة",
 	"systemLogs.storage.detailFullHint": "يحتفظ بإدخالات التصحيح. يستخدم مساحة أكبر وهو الأفضل لاستكشاف الأخطاء.",
 	"systemLogs.storage.detailReduced": "مُقلَّص",
-	"systemLogs.storage.detailReducedHint": "يحتفظ بمستوى المعلومات وما فوقه، فيدوم السجل مدة أطول. لا تُحفظ إدخالات التصحيح.",
+	"systemLogs.storage.detailReducedHint": "يحتفظ بمستوى المعلومات وما فوقه لتطبيق CeraLive، بما في ذلك مُرسل الربط. لا تُحفظ إدخالات التصحيح الخاصة بالتطبيق، فيدوم السجل مدة أطول.",
 	"systemLogs.storage.save": "حفظ الحدود",
 	"systemLogs.storage.saved": "حُفظت الحدود.",
 	"systemLogs.storage.targetNotMet": "لم يتحقق الحد الجديد بعد. يزيل الجهاز المزيد أثناء تدوير ملفات السجل.",

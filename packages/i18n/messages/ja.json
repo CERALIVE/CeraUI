@@ -2935,7 +2935,7 @@
 	"systemLogs.storage.detailFull": "すべての詳細",
 	"systemLogs.storage.detailFullHint": "デバッグエントリーを保存します。容量を多く使い、トラブルシューティングに最適です。",
 	"systemLogs.storage.detailReduced": "簡略",
-	"systemLogs.storage.detailReducedHint": "情報レベル以上を保存するため、履歴を長く残せます。デバッグエントリーは保存されません。",
+	"systemLogs.storage.detailReducedHint": "CeraLive アプリ（ボンディング送信を含む）の情報レベル以上を保存します。アプリのデバッグエントリーは保存されないため、履歴を長く残せます。",
 	"systemLogs.storage.save": "上限を保存",
 	"systemLogs.storage.saved": "上限を保存しました。",
 	"systemLogs.storage.targetNotMet": "新しい上限にはまだ達していません。デバイスはログファイルのローテーションに合わせてさらに削除します。",
