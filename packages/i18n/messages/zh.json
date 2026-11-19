@@ -2975,6 +2975,7 @@
 	"systemLogs.sharing.bundleRedactions": "已移除的值",
 	"systemLogs.sharing.bundleRunning": "当前运行",
 	"systemLogs.sharing.bundleBoots": "包含的启动：{count}",
+	"systemLogs.sharing.bundleJournalIncomplete": "由于达到大小或时间上限，或发生读取错误，原始日志收集提前结束。支持包可能未包含所有条目。",
 	"systemLogs.sharing.bundleSensitive": "设备已知的密钥信息和常见标识符会被移除，但文件仍可能包含个人数据。分享前请先检查。",
 	"systemLogs.sharing.bundleDownload": "下载支持包",
 	"systemLogs.sharing.bundleFailed": "无法准备支持包。",

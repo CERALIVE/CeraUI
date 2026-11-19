@@ -2975,6 +2975,7 @@
 	"systemLogs.sharing.bundleRedactions": "제거된 값",
 	"systemLogs.sharing.bundleRunning": "현재 실행 중",
 	"systemLogs.sharing.bundleBoots": "포함된 부팅: {count}",
+	"systemLogs.sharing.bundleJournalIncomplete": "크기 또는 시간 제한이나 읽기 오류로 인해 원본 로그 수집이 중단되었습니다. 번들에 모든 항목이 들어 있지 않을 수 있습니다.",
 	"systemLogs.sharing.bundleSensitive": "기기가 아는 비밀 값과 일반적인 식별자는 제거되지만, 파일에 개인 데이터가 남아 있을 수 있습니다. 공유하기 전에 확인하세요.",
 	"systemLogs.sharing.bundleDownload": "번들 다운로드",
 	"systemLogs.sharing.bundleFailed": "지원 번들을 준비할 수 없습니다.",

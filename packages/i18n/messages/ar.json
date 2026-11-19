@@ -3032,6 +3032,7 @@
 	"systemLogs.sharing.bundleRedactions": "القيم المُزالة",
 	"systemLogs.sharing.bundleRunning": "قيد التشغيل الآن",
 	"systemLogs.sharing.bundleBoots": "مرات الإقلاع المشمولة: {count}",
+	"systemLogs.sharing.bundleJournalIncomplete": "قد لا تتضمن الحزمة كل الإدخالات لأن جمع السجلات الخام توقف مبكرًا بسبب حد الحجم أو الوقت أو خطأ في القراءة.",
 	"systemLogs.sharing.bundleSensitive": "تُزال الأسرار التي يعرفها الجهاز والمعرّفات الشائعة، لكن قد يظل الملف يحتوي على بيانات شخصية. راجعه قبل مشاركته.",
 	"systemLogs.sharing.bundleDownload": "تنزيل الحزمة",
 	"systemLogs.sharing.bundleFailed": "تعذّر تجهيز حزمة الدعم.",

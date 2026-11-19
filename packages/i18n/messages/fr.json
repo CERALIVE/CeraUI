@@ -3023,6 +3023,7 @@
 	"systemLogs.sharing.bundleRedactions": "Valeurs supprimées",
 	"systemLogs.sharing.bundleRunning": "En cours d'exécution",
 	"systemLogs.sharing.bundleBoots": "Démarrages couverts : {count}",
+	"systemLogs.sharing.bundleJournalIncomplete": "La collecte des journaux bruts a été interrompue par une limite de taille ou de temps, ou par une erreur de lecture. Le paquet peut donc ne pas contenir toutes les entrées.",
 	"systemLogs.sharing.bundleSensitive": "Les secrets connus de l'appareil et les identifiants courants sont supprimés, mais le fichier peut encore contenir des données personnelles. Vérifiez-le avant de le partager.",
 	"systemLogs.sharing.bundleDownload": "Télécharger le paquet",
 	"systemLogs.sharing.bundleFailed": "Impossible de préparer le paquet d'assistance.",

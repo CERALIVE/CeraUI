@@ -2975,6 +2975,7 @@
 	"systemLogs.sharing.bundleRedactions": "除去した値",
 	"systemLogs.sharing.bundleRunning": "現在実行中",
 	"systemLogs.sharing.bundleBoots": "含まれる起動: {count}",
+	"systemLogs.sharing.bundleJournalIncomplete": "サイズや時間の上限、または読み取りエラーにより、生ログの収集が途中で終了しました。バンドルにすべてのエントリーが含まれていない可能性があります。",
 	"systemLogs.sharing.bundleSensitive": "デバイスが把握しているシークレットと一般的な識別子は除去されますが、個人データが残る場合があります。共有する前に内容を確認してください。",
 	"systemLogs.sharing.bundleDownload": "バンドルをダウンロード",
 	"systemLogs.sharing.bundleFailed": "サポートバンドルを準備できませんでした。",

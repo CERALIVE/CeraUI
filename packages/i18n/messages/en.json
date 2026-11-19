@@ -3020,6 +3020,7 @@
 	"systemLogs.sharing.bundleRedactions": "Removed values",
 	"systemLogs.sharing.bundleRunning": "Running now",
 	"systemLogs.sharing.bundleBoots": "Boots covered: {count}",
+	"systemLogs.sharing.bundleJournalIncomplete": "Raw logs were cut short by a size or time limit or by a read error, so the bundle may not hold every entry.",
 	"systemLogs.sharing.bundleSensitive": "Secrets known to the device and common identifiers are removed, but the file may still contain personal data. Review it before sharing.",
 	"systemLogs.sharing.bundleDownload": "Download bundle",
 	"systemLogs.sharing.bundleFailed": "Couldn't prepare the support bundle.",

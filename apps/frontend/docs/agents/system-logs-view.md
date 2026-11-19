@@ -499,6 +499,7 @@ Rules for this copy:
 | `systemLogs.sharing.bundleRedactions` | Removed values | Manifest table header |
 | `systemLogs.sharing.bundleRunning` | Running now | Version block heading (exportedBy) |
 | `systemLogs.sharing.bundleBoots` | Boots covered: {count} | Manifest summary |
+| `systemLogs.sharing.bundleJournalIncomplete` | Raw logs were cut short by a size or time limit or by a read error, so the bundle may not hold every entry. | Manifest note when journal collection was incomplete |
 | `systemLogs.sharing.bundleSensitive` | Secrets known to the device and common identifiers are removed, but the file may still contain personal data. Review it before sharing. | Shown before Download is enabled |
 | `systemLogs.sharing.bundleDownload` | Download bundle | Bundle dialog primary |
 | `systemLogs.sharing.bundleFailed` | Couldn't prepare the support bundle. | Recovery band |

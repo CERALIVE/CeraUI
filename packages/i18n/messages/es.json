@@ -3023,6 +3023,7 @@
 	"systemLogs.sharing.bundleRedactions": "Valores eliminados",
 	"systemLogs.sharing.bundleRunning": "En ejecución ahora",
 	"systemLogs.sharing.bundleBoots": "Arranques incluidos: {count}",
+	"systemLogs.sharing.bundleJournalIncomplete": "Es posible que no encuentres todas las entradas en el paquete. La recopilación de logs se interrumpió por un límite de tamaño o de tiempo, o por un error de lectura.",
 	"systemLogs.sharing.bundleSensitive": "Se eliminan los secretos que conoce el dispositivo y los identificadores comunes, pero el archivo todavía puede contener datos personales. Revísalo antes de compartirlo.",
 	"systemLogs.sharing.bundleDownload": "Descargar paquete",
 	"systemLogs.sharing.bundleFailed": "No se pudo preparar el paquete de soporte.",

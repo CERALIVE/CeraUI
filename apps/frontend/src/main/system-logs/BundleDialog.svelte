@@ -56,6 +56,7 @@ const CREATE_PROBLEM = {
 };
 
 const locale = $derived(getLocale());
+const journal = $derived(sharing.manifest?.sections.find((section) => section.id === 'journal'));
 const count = (value: number) => value.toLocaleString(locale);
 const status = $derived(
 	sharing.bundleStep === 'previewing'
@@ -165,9 +166,12 @@ const status = $derived(
 			</table>
 			<p class="text-muted-foreground text-xs" data-testid="sharing-bundle-boots">
 				{m['systemLogs.sharing.bundleBoots']({
-					count: count(sharing.manifest.sections.find((section) => section.id === 'journal')?.bootsCovered ?? 0),
+					count: count(journal?.bootsCovered ?? 0),
 				})}
 			</p>
+			{#if journal?.complete === false}
+				<p class="text-muted-foreground text-sm"><KeepWords text={m['systemLogs.sharing.bundleJournalIncomplete']()} /></p>
+			{/if}
 
 			{@render runningNow(sharing.manifest.exportedBy)}
 		{/if}

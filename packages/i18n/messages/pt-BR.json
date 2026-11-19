@@ -3023,6 +3023,7 @@
 	"systemLogs.sharing.bundleRedactions": "Valores removidos",
 	"systemLogs.sharing.bundleRunning": "Em execução agora",
 	"systemLogs.sharing.bundleBoots": "Inicializações incluídas: {count}",
+	"systemLogs.sharing.bundleJournalIncomplete": "A coleta de logs brutos foi interrompida por um limite de tamanho ou de tempo, ou por um erro de leitura. O pacote pode não incluir todas as entradas.",
 	"systemLogs.sharing.bundleSensitive": "Os segredos conhecidos pelo dispositivo e os identificadores comuns são removidos, mas o arquivo ainda pode conter dados pessoais. Revise-o antes de compartilhar.",
 	"systemLogs.sharing.bundleDownload": "Baixar pacote",
 	"systemLogs.sharing.bundleFailed": "Não foi possível preparar o pacote de suporte.",

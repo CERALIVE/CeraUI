@@ -3020,6 +3020,7 @@
 	"systemLogs.sharing.bundleRedactions": "हटाए गए मान",
 	"systemLogs.sharing.bundleRunning": "अभी चल रहा है",
 	"systemLogs.sharing.bundleBoots": "शामिल बूट: {count}",
+	"systemLogs.sharing.bundleJournalIncomplete": "आकार या समय की सीमा या पढ़ने में हुई गड़बड़ी के कारण रॉ लॉग इकट्ठा करना बीच में रुक गया। हो सकता है कि बंडल में सभी एंट्री न हों।",
 	"systemLogs.sharing.bundleSensitive": "डिवाइस को ज्ञात सीक्रेट और सामान्य पहचानकर्ता हटा दिए जाते हैं, फिर भी फ़ाइल में व्यक्तिगत डेटा हो सकता है। साझा करने से पहले इसकी समीक्षा करें।",
 	"systemLogs.sharing.bundleDownload": "बंडल डाउनलोड करें",
 	"systemLogs.sharing.bundleFailed": "सपोर्ट बंडल तैयार नहीं हो सका।",

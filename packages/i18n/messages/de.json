@@ -3020,6 +3020,7 @@
 	"systemLogs.sharing.bundleRedactions": "Entfernte Werte",
 	"systemLogs.sharing.bundleRunning": "Läuft gerade",
 	"systemLogs.sharing.bundleBoots": "Enthaltene Systemstarts: {count}",
+	"systemLogs.sharing.bundleJournalIncomplete": "Die Erfassung der Rohprotokolle wurde wegen eines Größenlimits, eines Zeitlimits oder eines Lesefehlers vorzeitig beendet. Das Paket enthält daher möglicherweise nicht alle Einträge.",
 	"systemLogs.sharing.bundleSensitive": "Dem Gerät bekannte Geheimnisse und gängige Kennungen werden entfernt, die Datei kann aber trotzdem personenbezogene Daten enthalten. Prüfe sie, bevor du sie teilst.",
 	"systemLogs.sharing.bundleDownload": "Paket herunterladen",
 	"systemLogs.sharing.bundleFailed": "Das Support-Paket konnte nicht vorbereitet werden.",
