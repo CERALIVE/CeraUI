@@ -4,7 +4,6 @@
  */
 
 import fs from "node:fs";
-import path from "node:path";
 import { PREVIEW_TOKEN_PARAM, PREVIEW_WS_PATH } from "@ceraui/rpc/schemas";
 import type { Server } from "bun";
 
@@ -22,78 +21,15 @@ import {
 } from "../modules/ui/kiosk-token.ts";
 import { initPreviewSocketData } from "../modules/ui/preview-proxy.ts";
 import { createServerWebSocketHandler, initSocketData } from "./adapter.ts";
-import { permitsE2eWorkerUpgrade } from "./e2e-worker-admission.ts";
+import { permitsE2eWorkerProxyRequest } from "./e2e-worker-admission.ts";
 import { issueKioskSessionToken } from "./procedures/auth.procedure.ts";
+import { serveStatic } from "./static-spa.ts";
 import type { ServerSocketData } from "./types.ts";
 
 const isDevelopment =
 	process.env.NODE_ENV === "development" && !fs.existsSync("public");
 const RPC_WS_PATH = "/ws";
 const e2eWorkerProxySecret = process.env.E2E_WORKER_PROXY_SECRET;
-
-// MIME type mapping
-const mimeTypes: Record<string, string> = {
-	".html": "text/html",
-	".js": "application/javascript",
-	".css": "text/css",
-	".json": "application/json",
-	".png": "image/png",
-	".jpg": "image/jpeg",
-	".jpeg": "image/jpeg",
-	".gif": "image/gif",
-	".svg": "image/svg+xml",
-	".ico": "image/x-icon",
-	".woff": "font/woff",
-	".woff2": "font/woff2",
-	".ttf": "font/ttf",
-	".webmanifest": "application/manifest+json",
-};
-
-/**
- * Get MIME type from file extension
- */
-function getMimeType(filePath: string): string {
-	const ext = path.extname(filePath).toLowerCase();
-	return mimeTypes[ext] || "application/octet-stream";
-}
-
-/**
- * Serve static files from public directory
- */
-async function serveStatic(pathname: string): Promise<Response | null> {
-	// Normalize path and prevent directory traversal
-	const safePath = path.normalize(pathname).replace(/^(\.\.(\/|\\|$))+/, "");
-	let filePath = path.join("public", safePath);
-
-	// Default to index.html for root or non-file paths
-	if (safePath === "/" || safePath === "") {
-		filePath = path.join("public", "index.html");
-	}
-
-	try {
-		const file = Bun.file(filePath);
-		const exists = await file.exists();
-
-		if (!exists) {
-			// Try with index.html for SPA routing
-			const indexPath = path.join("public", "index.html");
-			const indexFile = Bun.file(indexPath);
-			if (await indexFile.exists()) {
-				return new Response(indexFile, {
-					headers: { "Content-Type": "text/html" },
-				});
-			}
-			return null;
-		}
-
-		return new Response(file, {
-			headers: { "Content-Type": getMimeType(filePath) },
-		});
-	} catch (error) {
-		logger.error(`Static file error: ${error}`);
-		return null;
-	}
-}
 
 /**
  * Proxy request to frontend dev server
@@ -131,11 +67,16 @@ async function handleRequest(
 ): Promise<Response> {
 	const url = new URL(req.url);
 
-	if (url.pathname === "/api/logs/export") {
-		return handleLogExportRequest(req);
-	}
-	if (url.pathname === "/api/logs/bundle") {
-		return handleLogBundleRequest(req);
+	if (
+		url.pathname === "/api/logs/export" ||
+		url.pathname === "/api/logs/bundle"
+	) {
+		if (!permitsE2eWorkerProxyRequest(req, e2eWorkerProxySecret)) {
+			return new Response("Worker proxy admission required", { status: 403 });
+		}
+		return url.pathname === "/api/logs/export"
+			? handleLogExportRequest(req)
+			: handleLogBundleRequest(req);
 	}
 
 	// Single-use loopback kiosk-token exchange (DC-3): swap the tmpfs token for a
@@ -238,7 +179,7 @@ function startServer(): void {
 					if (pathname !== RPC_WS_PATH && pathname !== PREVIEW_WS_PATH) {
 						return new Response("WebSocket path not found", { status: 404 });
 					}
-					if (!permitsE2eWorkerUpgrade(req, e2eWorkerProxySecret)) {
+					if (!permitsE2eWorkerProxyRequest(req, e2eWorkerProxySecret)) {
 						return new Response("Worker proxy admission required", {
 							status: 403,
 						});

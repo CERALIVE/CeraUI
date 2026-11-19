@@ -1,12 +1,12 @@
 import type { Duplex } from "node:stream";
-import type { Plugin } from "vite";
+import type { Plugin, ProxyOptions } from "vite";
 
 export const DEVICE_WS_PROXY_CONTEXT = "^/(?:ws|preview)(?:\\?[^#]*)?$";
+const DEVICE_LOG_PROXY_CONTEXT = "^/api/logs/(?:export|bundle)(?:\\?[^#]*)?$";
 export const E2E_BACKEND_PORT_COOKIE = "ceraui_e2e_backend_port";
 export const E2E_WORKER_SECRET_HEADER = "x-ceraui-worker-secret";
 
 const E2E_WORKER_ROUTE = /^(31\d{2})\.([0-9a-f]{64})$/;
-const ACCEPTED_WS_PATHS = new Set(["/ws", "/preview"]);
 const RAW_WS_REQUEST_TARGET = /^\/(?:ws|preview)(?:\?[^#]*)?$/;
 const STEERING_QUERY_KEYS = new Set([
 	E2E_BACKEND_PORT_COOKIE,
@@ -122,8 +122,7 @@ function parseRoutingCookie(cookieHeader: string | undefined): {
 export function isAcceptedPreviewWebSocketPath(
 	rawUrl: string | undefined,
 ): boolean {
-	const url = parseRequestUrl(rawUrl);
-	return url !== null && ACCEPTED_WS_PATHS.has(url.pathname);
+	return parseRequestUrl(rawUrl) !== null;
 }
 
 export function resolvePreviewWebSocketRoute(
@@ -132,13 +131,16 @@ export function resolvePreviewWebSocketRoute(
 	allowWorkerRouting: boolean,
 ): PreviewWebSocketRoute | null {
 	const url = parseRequestUrl(request.url);
-	if (
-		url === null ||
-		!ACCEPTED_WS_PATHS.has(url.pathname)
-	) {
-		return null;
-	}
+	if (url === null) return null;
 	if (!allowWorkerRouting) return { target: defaultTarget };
+	return resolveWorkerRoute("ws", request, url);
+}
+
+function resolveWorkerRoute(
+	protocol: "ws" | "http",
+	request: PreviewWebSocketRequest,
+	url: URL,
+): PreviewWebSocketRoute | null {
 	if (hasSteeringAttempt(url, request.headers)) return null;
 
 	const route = parseRoutingCookie(
@@ -148,12 +150,91 @@ export function resolvePreviewWebSocketRoute(
 	);
 	if (route === null) return null;
 	return {
-		target: `ws://127.0.0.1:${route.port}`,
+		target: `${protocol}://127.0.0.1:${route.port}`,
 		workerPort: route.port,
 		workerSecret: route.secret,
 		...(route.forwardedCookie === undefined
 			? {}
 			: { forwardedCookie: route.forwardedCookie }),
+	};
+}
+
+export function buildDeviceProxy(
+	env: Record<string, string>,
+	allowWorkerRouting: boolean,
+): Record<string, ProxyOptions> {
+	const deviceHost = env.VITE_DEVICE_HOST;
+	const protocol = (env.VITE_DEVICE_PROTOCOL || "ws").toLowerCase();
+	const secure = deviceHost !== undefined && (protocol === "wss" || protocol === "https");
+	const port = deviceHost ? (env.VITE_DEVICE_PORT || (secure ? "443" : "80")) : "3002";
+	const authority = `${deviceHost || "127.0.0.1"}:${port}`;
+	const httpTarget = `${secure ? "https" : "http"}://${authority}`;
+	const wsTarget = `${secure ? "wss" : "ws"}://${authority}`;
+
+	return {
+		[DEVICE_LOG_PROXY_CONTEXT]: {
+			target: httpTarget,
+			changeOrigin: true,
+			secure: false,
+			configure(proxy) {
+				if (!allowWorkerRouting) return;
+				const forwardHttp = proxy.web.bind(proxy);
+				const routeHttp: typeof proxy.web = (...args) => {
+					const [req, res, optionsOrCallback, callback] = args;
+					const options = typeof optionsOrCallback === "function" ? {} : optionsOrCallback;
+					const onError = typeof optionsOrCallback === "function" ? optionsOrCallback : callback;
+					const request = { url: req.url, headers: req.headers };
+					const url = new URL(req.url ?? "", httpTarget);
+					const route = resolveWorkerRoute("http", request, url);
+					if (route === null) {
+						res.writeHead(403).end();
+						return;
+					}
+					applyPreviewWebSocketRoute(request, route);
+					const routedOptions = { ...options, target: route.target };
+					if (onError) forwardHttp(req, res, routedOptions, onError);
+					else forwardHttp(req, res, routedOptions);
+				};
+				Object.defineProperty(proxy, "web", { value: routeHttp });
+			},
+		},
+		...(deviceHost
+			? {
+					[DEVICE_WS_PROXY_CONTEXT]: {
+						target: wsTarget,
+						ws: true,
+						changeOrigin: true,
+						secure: false,
+						rewriteWsOrigin: true,
+						configure(proxy) {
+							const forwardWebSocket = proxy.ws.bind(proxy);
+							const routeWebSocket: typeof proxy.ws = (...args) => {
+								const [req, socket, head, optionsOrCallback, callback] = args;
+								const route = resolvePreviewWebSocketRoute(
+									wsTarget,
+									{ url: req.url, headers: req.headers },
+									allowWorkerRouting,
+								);
+								if (route === null) {
+									rejectWebSocketUpgrade(socket);
+									return;
+								}
+								applyPreviewWebSocketRoute(req, route);
+								const options = typeof optionsOrCallback === "object" ? optionsOrCallback : undefined;
+								const onError = typeof optionsOrCallback === "function" ? optionsOrCallback : callback;
+								const routedOptions = { ...options, target: route.target };
+								if (onError) forwardWebSocket(req, socket, head, routedOptions, onError);
+								else forwardWebSocket(req, socket, head, routedOptions);
+							};
+							Object.defineProperty(proxy, "ws", { value: routeWebSocket });
+						},
+						bypass(req) {
+							const upgrade = String(req.headers.upgrade ?? "").toLowerCase();
+							return upgrade === "websocket" ? undefined : req.url;
+						},
+					},
+				}
+			: {}),
 	};
 }
 
