@@ -78,6 +78,15 @@ boot. The timestamp is an additional requirement and never proves membership
 by itself. A separate outcome reports legacy files that could not be checked.
 The result counts retained journal boots before and after cleanup.
 
+Immediately before unlink, the snapshot owner checks device, inode, link
+count, size and change timestamps, then syncs the containing directory.
+Files rotated or flushed after inventory are outside the snapshot. Journald
+does not publish a different file under the same closed archive name during
+normal operation. Linux pathname unlink has no atomic inode precondition.
+An independent privileged writer that replaces the exact name between the
+final check and unlink is outside the application fences. Independent daemon
+retention can still remove files on its own.
+
 ## Admission and terminal ownership
 
 Validated queries, around requests, follows, filtered exports and support
