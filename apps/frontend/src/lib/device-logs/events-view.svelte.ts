@@ -107,12 +107,11 @@ export class EventsView {
 	/** The first page again, from the newest event, dropping every row shown. */
 	reload(): Promise<void> {
 		this.rowReset = { keepShownFocus: false };
-		this.#rawRequest = undefined;
-		this.rawLink = null;
+		this.#clearRawLink();
 		this.events = [];
 		this.nextBeforeSeq = null;
 		this.browsingHistory = false;
-		return this.#reread(false);
+		return this.#read("first");
 	}
 
 	loadOlder(): Promise<void> {
@@ -207,14 +206,13 @@ export class EventsView {
 		void this.reload();
 	}
 
-	/** The first page again; the rows shown stay until it replaces them. */
-	#reread(keepShownFocus: boolean): Promise<void> {
-		this.#generation += 1;
-		return this.#read("first", keepShownFocus);
+	#clearRawLink(): void {
+		this.#rawRequest = undefined;
+		this.rawLink = null;
 	}
 
 	async #read(end: End, keepShownFocus = false): Promise<void> {
-		const generation = this.#generation;
+		const generation = end === "first" ? ++this.#generation : this.#generation;
 		const beforeSeq = end === "older" ? this.nextBeforeSeq : null;
 		const startingRows = this.events;
 		this.loading = end;
@@ -251,9 +249,17 @@ export class EventsView {
 			}
 			this.failed = end;
 		}
-		if (keepShownFocus) this.rowReset = { keepShownFocus };
 		this.loading = null;
 		this.#receive(newer);
+		if (keepShownFocus) {
+			const link = this.rawLink;
+			if (
+				link?.state === "pending" &&
+				!this.events.some(({ id }) => id === link.id)
+			)
+				this.#clearRawLink();
+			this.rowReset = { keepShownFocus };
+		}
 	}
 
 	// A push while the first page is being read waits for that page: the device
@@ -268,7 +274,7 @@ export class EventsView {
 		const admitted: DeviceEvent[] = [];
 		for (const event of batch) {
 			if (event.seq > this.#head + 1) {
-				void this.#reread(true);
+				void this.#read("first", true);
 				return;
 			}
 			this.#head = Math.max(this.#head, event.seq);

@@ -95,7 +95,7 @@ async function openHistory(
 
 function renderedTimes(): (string | null | undefined)[] {
 	return screen
-		.getAllByTestId("event-row")
+		.queryAllByTestId("event-row")
 		.map((row) => row.querySelector("time")?.getAttribute("datetime"));
 }
 
@@ -249,18 +249,34 @@ it("does not open raw logs from a request started before history was cleared", a
 	expect(onViewRaw).not.toHaveBeenCalled();
 });
 
-it("returns focus to the folded filter if a gap refresh replaces the focused event", async () => {
-	await openHistory(1, false);
-	screen.getByRole("button", { name: copy.viewRaw }).focus();
-	list.mockResolvedValueOnce(eventPage([stopped(3)]));
+it.each([
+	{ outcome: "replaces the row", rows: [stopped(3)], survives: false },
+	{ outcome: "fails", rows: null, survives: false },
+	{ outcome: "keeps the row", rows: [stopped(3), stopped(1)], survives: true },
+])(
+	"settles focus and the pending raw action when a gap refresh $outcome",
+	async ({ rows, survives }) => {
+		await openHistory(1, false);
+		const raw = screen.getByRole("button", { name: copy.viewRaw });
+		const reply = Promise.withResolvers<LogAroundOutput>();
+		around.mockReturnValueOnce(reply.promise);
+		raw.focus();
+		await fireEvent.click(raw);
 
-	feed.listener?.([stopped(3)]);
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		if (rows) list.mockResolvedValueOnce(eventPage(rows));
+		else list.mockRejectedValueOnce(new Error("down"));
+		feed.listener?.([stopped(3)]);
 
-	await waitFor(() =>
-		expect(renderedTimes()).toContain(new Date(stopped(3).at).toISOString()),
-	);
-	expect(renderedTimes()).toHaveLength(1);
-	expect(document.activeElement).toBe(
-		screen.getByRole("button", { name: copy.filter }),
-	);
-});
+		const times = (rows ?? []).map(({ at }) => new Date(at).toISOString());
+		await waitFor(() => expect(renderedTimes()).toEqual(times));
+		expect(document.activeElement).toBe(
+			survives ? raw : screen.getByRole("button", { name: copy.filter }),
+		);
+
+		const page = aroundPage();
+		reply.resolve(page);
+		await tick();
+		expect(onViewRaw.mock.calls).toEqual(survives ? [[page]] : []);
+	},
+);

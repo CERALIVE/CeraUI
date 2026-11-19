@@ -839,6 +839,10 @@ Start from newest keeps its button focusable during the Events reload. If the
 button still owns focus when the reload finishes, focus moves to the first
 event action, Retry on failure, or the first visible filter when empty.
 
+After an Events gap refresh, a pending View raw logs reply can open Raw logs
+only if its event is still shown. A failed refresh retires the pending action
+and returns any focused row action to the filter bar.
+
 `RawView` exposes the tab's operator actions. `RawPaging` owns query
 generations, continuations and head replay. `RawFollowSession` owns the
 socket listener, subscription and resume checkpoint. `RawRowWindow` owns
