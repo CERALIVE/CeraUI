@@ -411,7 +411,11 @@ for (const { name, invoke, schema } of [
 		invoke: deleteLegacyDebug,
 		schema: logStorageOutputSchema,
 	},
-	{ name: "clearAll", invoke: clearAll, schema: logStorageOutputSchema },
+	{
+		name: "clearAll",
+		invoke: clearAll,
+		schema: logDeleteOlderFilesOutputSchema,
+	},
 ]) {
 	test(`the successful ${name} reply carries resolved wire storage`, async () => {
 		const result = await invoke();

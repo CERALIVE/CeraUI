@@ -251,6 +251,23 @@ equal 'predecessor file bytes survive vacuum unchanged' \
 	"$(sha256sum "/var/log/journal/$predecessor/"*)" "$predecessor_hashes"
 echo "PREDECESSOR journalctl=$usage_before du_before=$du_before du_after=$du_after"
 
+# Move only the vacuum client's clock back. The daemon and host keep real time.
+future_us="$(($(date +%s) * 1000000))"
+future_name="$(printf 'future@%032x-%016x-%016x.journal' 42 1 "$future_us")"
+printf '__REALTIME_TIMESTAMP=%s\n__MONOTONIC_TIMESTAMP=1000000\n_BOOT_ID=%s\n_MACHINE_ID=%s\nMESSAGE=future archive receipt\n\n' "$future_us" "$boot" "$machine" |
+	/usr/lib/systemd/systemd-journal-remote -o "/var/log/journal/$machine/$future_name" -
+equal 'future dated archive initially readable' \
+	"$("${J[@]}" --file="/var/log/journal/$machine/$future_name" | jq -rs 'map(.MESSAGE) | join(" ")')" \
+	'future archive receipt'
+journalctl --rotate
+faketime="$(find /usr/lib -name libfaketime.so.1 -print -quit)"
+[[ -n "$faketime" ]] || fail 'libfaketime not installed'
+LD_PRELOAD="$faketime" FAKETIME=-1d journalctl --vacuum-time=1s
+[[ -f "/var/log/journal/$machine/$future_name" ]] || fail 'time-only vacuum did not preserve the future dated fixture'
+LD_PRELOAD="$faketime" FAKETIME=-1d journalctl --vacuum-time=1s --vacuum-files=1
+[[ ! -e "/var/log/journal/$machine/$future_name" ]] || fail 'clear kept the future dated archive'
+echo 'PASS live: clear removes future dated archive'
+
 printf '22222222-2222-2222-2222-222222222222\n' >/state/boot-id
 systemctl restart systemd-journald
 emit boundary first-fake-boot

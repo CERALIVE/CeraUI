@@ -348,7 +348,7 @@ type ProcedureShapes = {
 	setRetention: ['logRetentionSchema', 'logStorageOutputSchema'];
 	deleteOlderFiles: [NoInput, 'logDeleteOlderFilesOutputSchema'];
 	deleteLegacyDebug: [NoInput, 'logStorageOutputSchema'];
-	clearAll: [NoInput, 'logStorageOutputSchema'];
+	clearAll: [NoInput, 'logDeleteOlderFilesOutputSchema'];
 	createExport: ['logExportInputSchema', 'logExportOutputSchema'];
 	previewBundle: [NoInput, 'logBundleManifestSchema'];
 	createBundle: [NoInput, 'logExportOutputSchema'];

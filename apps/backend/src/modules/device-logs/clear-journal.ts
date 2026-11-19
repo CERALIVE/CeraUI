@@ -6,7 +6,10 @@ export async function clearNativeJournal(
 	retainUntil: (settlement: Promise<unknown>) => void,
 ): Promise<void> {
 	await runJournalMutation(["--rotate"], retainUntil);
-	await runJournalMutation(["--vacuum-time=1s"], retainUntil);
+	await runJournalMutation(
+		["--vacuum-time=1s", "--vacuum-files=1"],
+		retainUntil,
+	);
 }
 
 export async function runJournalMutation(

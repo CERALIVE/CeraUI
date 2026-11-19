@@ -162,16 +162,18 @@ export function deleteLegacyDebug(): Promise<LogStorageOutput> {
 		}
 	}, busy);
 }
-export function clearAll(): Promise<LogStorageOutput> {
+export function clearAll(): Promise<LogDeleteOlderFilesOutput> {
 	return withDestructiveRetention(async (retainUntil) => {
 		const mock = shouldUseMocks();
+		const bootsBefore = await countStoredBoots();
 		if (!mock) await clearNativeJournal(retainUntil);
 		await deleteLegacyDebugFiles();
 		// Mock Clear empties the captured ring before writing its first new marker.
 		if (mock) clearRecentLogLines();
 		logger.info("device logs cleared", { module: "device-logs" });
 		updateLogState({ lastClearedAt: Date.now() });
-		return { ok: true, storage: await getStorage() };
+		const bootsAfter = await countStoredBoots();
+		return { ok: true, storage: await getStorage(), bootsBefore, bootsAfter };
 	});
 }
 

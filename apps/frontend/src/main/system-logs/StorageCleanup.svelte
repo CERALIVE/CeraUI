@@ -103,8 +103,9 @@ const deleteLegacy = () =>
 		storage = reply.storage;
 	});
 const clearAll = () =>
-	run('clearAll', () => rpc.logs.clearAll(), storageReply, (reply) => {
+	run('clearAll', () => rpc.logs.clearAll(), deleteOlderReply, (reply) => {
 		storage = reply.storage;
+		boots = { before: reply.bootsBefore, after: reply.bootsAfter };
 		notifyHistoryChanged();
 	});
 const clearEvents = () =>

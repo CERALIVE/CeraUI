@@ -31,7 +31,7 @@ export const logsContract = oc.router({
 	setRetention: oc.input(logRetentionSchema).output(logStorageOutputSchema),
 	deleteOlderFiles: oc.output(logDeleteOlderFilesOutputSchema),
 	deleteLegacyDebug: oc.output(logStorageOutputSchema),
-	clearAll: oc.output(logStorageOutputSchema),
+	clearAll: oc.output(logDeleteOlderFilesOutputSchema),
 	createExport: oc.input(logExportInputSchema).output(logExportOutputSchema),
 	previewBundle: oc.output(logBundleManifestSchema),
 	createBundle: oc.output(logExportOutputSchema),

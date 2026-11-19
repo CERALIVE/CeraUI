@@ -39,12 +39,12 @@ export async function settleAction<R extends ActionReply>(
 	}
 }
 
-/** Save limits, delete leftover debug files and clear all answer with the full storage reading. */
+/** Saving limits and deleting leftover debug files return the full storage reading. */
 export function storageReply(reply: unknown): LogStorageOutput {
 	return parseReply(logStorageOutputSchema, reply);
 }
 
-/** Delete older log files also answers with the boot counts before and after. */
+/** Deleting older files and clearing logs also return the boot counts before and after. */
 export function deleteOlderReply(reply: unknown): LogDeleteOlderFilesOutput {
 	return parseReply(logDeleteOlderFilesOutputSchema, reply);
 }

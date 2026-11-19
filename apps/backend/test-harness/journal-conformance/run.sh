@@ -55,7 +55,7 @@ docker run --pull=never -d --name "$name" --privileged --cgroupns=host \
 		export DEBIAN_FRONTEND=noninteractive
 		if [[ ! -x /usr/bin/jq ]]; then
 			apt-get update -qq
-			apt-get install -y -qq --no-install-recommends systemd systemd-sysv systemd-journal-remote dbus jq strace
+			apt-get install -y -qq --no-install-recommends systemd systemd-sysv systemd-journal-remote dbus jq strace libfaketime
 			printf "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n" >/etc/machine-id
 			mkdir -p /var/log/journal /etc/systemd/system/multi-user.target.wants
 			mkdir -p /etc/systemd/journald.conf.d

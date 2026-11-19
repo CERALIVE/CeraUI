@@ -85,7 +85,7 @@ export const deleteLegacyDebugProcedure = authedProcedure
 	.handler(() => deleteLegacyDebug());
 
 export const clearAllLogsProcedure = authedProcedure
-	.output(logStorageOutputSchema)
+	.output(logDeleteOlderFilesOutputSchema)
 	.handler(() => clearAll());
 
 export const createLogExportProcedure = authedProcedure

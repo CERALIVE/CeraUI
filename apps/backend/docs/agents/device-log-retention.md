@@ -31,7 +31,10 @@ action reservation in the same turn. An update that started during the drain ret
 already happened and remain in force. Update admission stays closed through
 rotation, vacuum and legacy file deletion, including when a command fails.
 
-Native clear rotates, vacuums and removes legacy debug files. Mock clear removes
+Native clear rotates, then vacuums with `--vacuum-time=1s --vacuum-files=1`
+in one call. The active journal counts toward the limit, so even future-dated
+archives are removed. Clear also removes legacy debug files and reports the
+stored boot counts before and after the operation. Mock clear removes
 legacy files before wiping the ring and immediately recording the clear marker,
 so logging during unlink cannot precede the marker in the emptied ring. The
 gate stays closed through the marker, `lastClearedAt` persistence and final

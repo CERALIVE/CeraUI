@@ -16,7 +16,7 @@ Shapes: `src/schemas/logs.schema.ts`. Procedures: `src/contracts/logs.contract.t
 | `setRetention` | `logRetentionSchema` | `logStorageOutputSchema` | `{ ok: false, error }` |
 | `deleteOlderFiles` | none | `logDeleteOlderFilesOutputSchema` | `{ ok: false, error }` |
 | `deleteLegacyDebug` | none | `logStorageOutputSchema` | `{ ok: false, error }` |
-| `clearAll` | none | `logStorageOutputSchema` | `{ ok: false, error }` |
+| `clearAll` | none | `logDeleteOlderFilesOutputSchema` (includes boot counts) | `{ ok: false, error }` |
 | `createExport` | `logExportInputSchema` | `logExportOutputSchema` | `{ ok: false, error }` |
 | `previewBundle` | none | `logBundleManifestSchema` | thrown oRPC error, code `READ_FAILED` or `BUSY` |
 | `createBundle` | none | `logExportOutputSchema` | `{ ok: false, error }` |

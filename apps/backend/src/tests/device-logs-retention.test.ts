@@ -214,15 +214,33 @@ test("delete older files reads headers then uses rounded uptime plus safety minu
 test("clear joins readers, preserves events and records the new epoch", async () => {
 	const r = await service();
 	writeFileSync(join(f.dir, "debug.log"), "old");
+	const older = "f".repeat(32);
+	const journalBoots = (bootIds: readonly string[]) =>
+		JSON.stringify(
+			bootIds.map((boot_id, index) => ({
+				boot_id,
+				index: -index,
+				first_entry: 0,
+				last_entry: 0,
+			})),
+		);
+	f.run
+		.mockResolvedValueOnce(journalBoots([record(1).bootId, older]))
+		.mockResolvedValueOnce("")
+		.mockResolvedValueOnce("")
+		.mockResolvedValueOnce(journalBoots([record(1).bootId]));
 	const before = getLogState().historyEpoch;
 	const reply = await r.clearAll();
 	expect(reply.ok).toBe(true);
+	expect(reply).toMatchObject({ bootsBefore: 2, bootsAfter: 1 });
 	expect(getLogState().historyEpoch).toBe(before + 1);
 	expect(f.stop).toHaveBeenCalledWith("cleared");
 	expect(f.abort).toHaveBeenCalledTimes(1);
 	expect(f.run.mock.calls.map((c) => c[1])).toEqual([
+		["--list-boots", "-o", "json"],
 		["--rotate"],
-		["--vacuum-time=1s"],
+		["--vacuum-time=1s", "--vacuum-files=1"],
+		["--list-boots", "-o", "json"],
 		["--disk-usage"],
 	]);
 	expect(existsSync(join(f.dir, "debug.log"))).toBe(false);
@@ -703,6 +721,8 @@ test.each([
 	async (kind) => {
 		const r = await service();
 		const files = await import("../modules/device-logs/retention-files.ts");
+		if (kind === "rotate" || kind === "vacuum")
+			f.run.mockResolvedValueOnce("[]");
 		const undo =
 			kind === "persist"
 				? spyOn(stateStore, "updateLogState").mockImplementationOnce(() => {

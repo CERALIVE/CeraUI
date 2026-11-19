@@ -102,7 +102,7 @@ test("a reaped follower with a frozen stream cancel hook releases its slot and a
 			h.f.run.mock.calls.slice(0, 2).map(([bin, args]) => [bin, args]),
 		).toEqual([
 			["journalctl", ["--rotate"]],
-			["journalctl", ["--vacuum-time=1s"]],
+			["journalctl", ["--vacuum-time=1s", "--vacuum-files=1"]],
 		]);
 		expect(getLogState().historyEpoch).toBe(1);
 		expect(getLogState().lastClearedAt).not.toBeNull();

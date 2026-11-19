@@ -47,7 +47,7 @@ Events: [device-events.md](device-events.md).
 | Disk usage | `journalctl --disk-usage` | `storage.ts:19` |
 | Retention maintenance | `--vacuum-time=<maxAgeDays>d` and/or `--vacuum-size=<maxSizeMb>M`, each when set | `retention.ts:74-84` |
 | Delete older files | `--header`, then `--vacuum-time=<seconds>s` with the current boot protected | `older-journal.ts` |
-| Clear all | `--rotate`, then `--vacuum-time=1s` | `clear-journal.ts` |
+| Clear all | `--rotate`, then `--vacuum-time=1s --vacuum-files=1` | `clear-journal.ts` |
 
 Matches: `_BOOT_ID=`, `PRIORITY=`, `_SYSTEMD_UNIT=`, `_TRANSPORT=kernel`,
 `MESSAGE_ID=a596d6fe7bfa4994828e72309e95d61e` (`filter.ts:21-39`).

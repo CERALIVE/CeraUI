@@ -39,6 +39,28 @@ it("asks before deleting older logs and leaves them alone on Cancel", async () =
 	expect(rpc.logs.deleteOlderFiles).not.toHaveBeenCalled();
 });
 
+it("reports the boot counts returned after clearing all logs", async () => {
+	rpc.logs.clearAll.mockResolvedValue({
+		ok: true,
+		storage: logStorage(),
+		bootsBefore: 3,
+		bootsAfter: 1,
+	});
+	render(StorageCleanup, {
+		props: { storage: logStorage(), onrefresh: async () => {} },
+	});
+	await fireEvent.click(screen.getByRole("button", { name: copy.clearAll }));
+	const dialog = await screen.findByRole("alertdialog");
+	await fireEvent.click(
+		within(dialog).getByRole("button", { name: copy.clearAllConfirm }),
+	);
+	await waitFor(() =>
+		expect(screen.getByRole("status").textContent?.trim()).toBe(
+			copy.deleteOlderResult.replace("{before}", "3").replace("{after}", "1"),
+		),
+	);
+});
+
 it.each([
 	[copy.clearAll, copy.clearAllConfirm, rpc.logs.clearAll],
 	[copy.clearEvents, copy.clearEventsConfirm, rpc.events.clear],

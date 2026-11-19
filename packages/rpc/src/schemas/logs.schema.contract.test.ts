@@ -116,7 +116,7 @@ describe('log procedure input and output bindings', () => {
 		['setRetention', logs.logRetentionSchema, logs.logStorageOutputSchema],
 		['deleteOlderFiles', undefined, logs.logDeleteOlderFilesOutputSchema],
 		['deleteLegacyDebug', undefined, logs.logStorageOutputSchema],
-		['clearAll', undefined, logs.logStorageOutputSchema],
+		['clearAll', undefined, logs.logDeleteOlderFilesOutputSchema],
 		['createExport', logs.logExportInputSchema, logs.logExportOutputSchema],
 		['previewBundle', undefined, logs.logBundleManifestSchema],
 		['createBundle', undefined, logs.logExportOutputSchema],

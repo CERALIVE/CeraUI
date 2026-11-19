@@ -1010,6 +1010,8 @@ describe("StorageSection: cleanup", () => {
 		const cleared = Date.UTC(2026, 10, 15, 12, 0);
 		rpc.logs.clearAll.mockResolvedValue({
 			ok: true,
+			bootsBefore: 3,
+			bootsAfter: 1,
 			storage: logStorage({
 				journalBytes: MIB,
 				journalDirBytes: MIB,
@@ -2072,7 +2074,7 @@ describe("StorageSection: successful replies that leave out what they promise", 
 			"Clear all logs",
 			() => rpc.logs.clearAll,
 			() => confirmAction(copy.clearAll, copy.clearAllConfirm),
-			{},
+			{ bootsBefore: 17, bootsAfter: 4 },
 		],
 	] as const;
 
