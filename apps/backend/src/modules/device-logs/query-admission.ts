@@ -4,6 +4,7 @@ import {
 	historyClearAwaitingSettlement,
 	historyClearing,
 } from "./settings.ts";
+import { waitForAdmission } from "./sharing-admission.ts";
 
 interface Slot {
 	readonly controller: AbortController;
@@ -14,23 +15,31 @@ const running = new Map<object, Slot>();
 export async function withQuerySlot<T>(
 	conn: object,
 	run: (signal: AbortSignal) => Promise<T>,
+	waitSignal?: AbortSignal,
 ): Promise<T | { readonly ok: false; readonly error: "BUSY" | "READ_FAILED" }> {
 	const epoch = getLogState().historyEpoch;
 	for (;;) {
 		const gate = historyClearing();
-		if (epoch !== getLogState().historyEpoch)
+		if (waitSignal?.aborted || epoch !== getLogState().historyEpoch)
 			throw new JournalReadError("READ_FAILED");
 		if (historyClearAwaitingSettlement()) return { ok: false, error: "BUSY" };
 		if (gate) {
-			await gate;
+			await waitForAdmission(gate, waitSignal);
 			continue;
 		}
 		const previous = running.get(conn);
-		if (!previous) break;
-		previous.controller.abort();
-		await previous.settled;
+		if (previous) {
+			previous.controller.abort();
+			await waitForAdmission(previous.settled, waitSignal);
+			continue;
+		}
+		if (running.size < 2) break;
+		if (!waitSignal) return { ok: false, error: "BUSY" };
+		await waitForAdmission(
+			Promise.race([...running.values()].map((slot) => slot.settled)),
+			waitSignal,
+		);
 	}
-	if (running.size >= 2) return { ok: false, error: "BUSY" };
 	const controller = new AbortController();
 	const settled = Promise.withResolvers<void>();
 	running.set(conn, { controller, settled: settled.promise });

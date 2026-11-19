@@ -63,12 +63,15 @@ export async function* exportChunks(
 		while (!incomplete) {
 			incomplete = stopped();
 			if (incomplete) break;
-			const result = await withQuerySlot(owner, (slotSignal) =>
-				scanPage(position, {
-					bootId,
-					epoch,
-					signal: AbortSignal.any([slotSignal, signal]),
-				}),
+			const result = await withQuerySlot(
+				owner,
+				(slotSignal) =>
+					scanPage(position, {
+						bootId,
+						epoch,
+						signal: AbortSignal.any([slotSignal, signal]),
+					}),
+				signal,
 			);
 			incomplete = stopped();
 			if (incomplete) break;

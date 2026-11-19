@@ -19,17 +19,22 @@ export async function withHistoryAdmission<T>(
 			return;
 		const gate = historyClearing();
 		if (!gate) return admit(epoch);
-		if (!signal) {
-			await gate;
-			continue;
-		}
-		const aborted = Promise.withResolvers<void>();
-		const onAbort = () => aborted.resolve();
-		signal.addEventListener("abort", onAbort, { once: true });
-		try {
-			await Promise.race([gate, aborted.promise]);
-		} finally {
-			signal.removeEventListener("abort", onAbort);
-		}
+		await waitForAdmission(gate, signal);
+	}
+}
+
+export async function waitForAdmission(
+	ready: Promise<void>,
+	signal?: AbortSignal,
+): Promise<void> {
+	if (!signal) return ready;
+	if (signal.aborted) return;
+	const aborted = Promise.withResolvers<void>();
+	const onAbort = () => aborted.resolve();
+	signal.addEventListener("abort", onAbort, { once: true });
+	try {
+		await Promise.race([ready, aborted.promise]);
+	} finally {
+		signal.removeEventListener("abort", onAbort);
 	}
 }

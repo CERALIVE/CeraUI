@@ -12,6 +12,7 @@ import {
 } from "../modules/device-logs/export.ts";
 import { toLogEntry } from "../modules/device-logs/parse.ts";
 import { queryLogs } from "../modules/device-logs/query.ts";
+import * as admission from "../modules/device-logs/query-admission.ts";
 import * as pages from "../modules/device-logs/scan-page.ts";
 import {
 	bootId,
@@ -19,6 +20,7 @@ import {
 	queryFixture,
 	record,
 } from "./helpers/device-query.ts";
+import { bounded, turn } from "./helpers/history-clear.ts";
 
 const context = {
 	bootId,
@@ -69,8 +71,8 @@ afterEach(async () => {
 	clock.mockRestore();
 	fixture.restore();
 });
-async function bundleLines() {
-	const result = await createBundle({});
+async function bundleLines(signal?: AbortSignal) {
+	const result = await createBundle({}, signal);
 	if (!result.ok) throw new Error(result.error);
 	const response = await handleLogBundleRequest(
 		new Request(`http://device${result.url}`),
@@ -129,7 +131,7 @@ test.each([
 	},
 );
 
-test("scan admission reports BUSY in the bundle without replacing either existing query", async () => {
+test("a bundle at its deadline leaves both occupied viewer slots intact", async () => {
 	const entered = Promise.withResolvers<void>();
 	const release = Promise.withResolvers<void>();
 	let started = 0;
@@ -141,18 +143,29 @@ test("scan admission reports BUSY in the bundle without replacing either existin
 	const first = queryLogs({}, { boot: bootId });
 	const second = queryLogs({}, { boot: bootId });
 	await entered.promise;
-	let checks = 0;
-	fixture.epoch.mockImplementation(() => {
-		if (++checks > 64) throw new Error("bundle did not stop after BUSY");
-		return { historyEpoch: 7, lastClearedAt: null, lastMaintenance: null };
-	});
+	const attempted = Promise.withResolvers<void>();
+	const controller = new AbortController();
+	const original = admission.withQuerySlot;
+	const slot = spyOn(admission, "withQuerySlot").mockImplementationOnce(
+		(...args) => {
+			const result = original(...args);
+			attempted.resolve();
+			return result;
+		},
+	);
 	try {
-		const lines = await bundleLines();
+		const pending = bundleLines(controller.signal);
+		await bounded(attempted.promise);
+		await turn();
+		controller.abort("time_limit");
+		const lines = await bounded(pending);
 		expect(lines.slice(-2)).toEqual([
-			{ section: "journal", incomplete: "BUSY" },
+			{ section: "journal", incomplete: "time_limit" },
 			{ section: "end", complete: false },
 		]);
+		expect(started).toBe(2);
 	} finally {
+		slot.mockRestore();
 		release.resolve();
 		expect((await first).ok).toBe(true);
 		expect((await second).ok).toBe(true);

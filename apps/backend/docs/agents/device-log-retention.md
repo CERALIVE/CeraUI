@@ -93,8 +93,10 @@ The follow publisher checks its own abort state and seals after its first
 terminal message, including queued catch-up continuations. Export finishing is
 idempotent across request abort, stream cancellation and clear. Sharing
 reservation remains synchronous. The export body checks whether it stopped
-before requesting another query slot; journal scans and follow-position probes
-never wait on this admission gate.
+before requesting another query slot. Export and bundle page requests can wait
+for a viewer slot to settle within their existing sharing deadline. Interactive
+queries return `BUSY` at capacity. Scans and follow-position probes do not acquire
+another slot from inside their existing owners.
 
 ## Known limitations
 

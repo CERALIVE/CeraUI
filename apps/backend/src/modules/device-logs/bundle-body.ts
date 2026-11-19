@@ -168,12 +168,15 @@ export async function buildBundle(
 			bootIncomplete = stopped();
 			if (bootIncomplete) break;
 			try {
-				const page = await withQuerySlot(owner, (slotSignal) =>
-					scanPage(position, {
-						bootId: boot,
-						epoch,
-						signal: AbortSignal.any([signal, slotSignal]),
-					}),
+				const page = await withQuerySlot(
+					owner,
+					(slotSignal) =>
+						scanPage(position, {
+							bootId: boot,
+							epoch,
+							signal: AbortSignal.any([signal, slotSignal]),
+						}),
+					signal,
 				);
 				bootIncomplete = stopped();
 				if (bootIncomplete) break;
