@@ -1,3 +1,5 @@
+import { isIPv6 } from "node:net";
+
 export class BundleReadError extends Error {
 	constructor(readonly code: "READ_FAILED" | "BUSY" = "READ_FAILED") {
 		super(code);
@@ -77,16 +79,47 @@ export function buildRedactor(
 						known: true,
 					});
 			}
+			const addresses: Array<{ readonly start: number; readonly end: number }> =
+				[];
+			for (const match of value.matchAll(
+				/(?<![\w.])(?<![\da-f:]:)[\da-f]{0,4}:[\da-f:.]+(?:%[\w.~-]+)?(?![\w:%]|\.[\w:.])/gi,
+			)) {
+				const address = match[0].replace(/\.+$/, "");
+				const host = address.split("%", 1)[0] ?? "";
+				if (!isIPv6(host)) continue;
+				const start = match.index;
+				const end = start + address.length;
+				addresses.push({ start, end });
+				if (/^[23][\da-f]{3}:/i.test(host)) {
+					const bracketed = value[start - 1] === "[" && value[end] === "]";
+					spans.push({
+						start: bracketed ? start - 1 : start,
+						end: bracketed ? end + 1 : end,
+						marker: "[IP]",
+						known: false,
+					});
+				}
+			}
 			const mask = (
 				pattern: RegExp,
 				replacement: (match: string) => string,
+				addressFragment = false,
 			) => {
+				let addressIndex = 0;
 				for (const match of value.matchAll(pattern)) {
+					const end = match.index + match[0].length;
+					if (addressFragment) {
+						let address = addresses[addressIndex];
+						while (address && address.end <= match.index)
+							address = addresses[++addressIndex];
+						if (address && address.start <= match.index && end <= address.end)
+							continue;
+					}
 					const next = replacement(match[0]);
 					if (next !== match[0])
 						spans.push({
 							start: match.index,
-							end: match.index + match[0].length,
+							end,
 							marker: next,
 							known: false,
 						});
@@ -100,25 +133,30 @@ export function buildRedactor(
 					const separator = match.charAt(2);
 					return `${match.slice(0, 8)}${separator}**${separator}**${separator}**`;
 				},
+				true,
 			);
-			mask(/(?<![\d.])\d{1,3}(?:\.\d{1,3}){3}(?![\d.])/g, (match) => {
-				const a = Number.parseInt(match, 10);
-				const b = Number.parseInt(match.slice(match.indexOf(".") + 1), 10);
-				if (
-					match
-						.split(".")
-						.map(Number)
-						.some((octet) => octet > 255) ||
-					a === 10 ||
-					a === 127 ||
-					(a === 172 && b >= 16 && b <= 31) ||
-					(a === 192 && b === 168) ||
-					(a === 169 && b === 254) ||
-					(a === 100 && b >= 64 && b <= 127)
-				)
-					return match;
-				return "[IP]";
-			});
+			mask(
+				/(?<![\d.])\d{1,3}(?:\.\d{1,3}){3}(?![\d.])/g,
+				(match) => {
+					const a = Number.parseInt(match, 10);
+					const b = Number.parseInt(match.slice(match.indexOf(".") + 1), 10);
+					if (
+						match
+							.split(".")
+							.map(Number)
+							.some((octet) => octet > 255) ||
+						a === 10 ||
+						a === 127 ||
+						(a === 172 && b >= 16 && b <= 31) ||
+						(a === 192 && b === 168) ||
+						(a === 169 && b === 254) ||
+						(a === 100 && b >= 64 && b <= 127)
+					)
+						return match;
+					return "[IP]";
+				},
+				true,
+			);
 			mask(
 				/(?<![\d.])[+-]?\d{1,3}\.\d{4,}\s*,\s*[+-]?\d{1,3}\.\d{4,}(?![\d.])/g,
 				(match) => {

@@ -36,11 +36,14 @@ It also recognizes their JSON-escaped, percent-encoded (either hex case),
 base64 and base64url representations. Short values are ignored. Every performed
 replacement is counted once. The pattern pass masks 15-digit identifiers,
 19/20-digit ICCIDs beginning with 89, MAC suffixes, IPv4 outside the specified
-private/loopback/link-local/CGNAT ranges, decimal coordinate pairs, and the
-logger's Bearer/PASETO/JWT shapes. The first three MAC octets and private IPv4
-remain useful diagnostics. This reduces sensitive data; arbitrary personal
-text and historical credentials no longer held by the backend are not guaranteed
-to be recognized.
+private/loopback/link-local/CGNAT ranges, global unicast IPv6 (`2000::/3`),
+decimal coordinate pairs, and the logger's Bearer/PASETO/JWT shapes. IPv6
+masking includes compressed and IPv4-embedded forms and zone identifiers.
+Bracketed endpoints keep their port, as in `[IP]:9000`. Link-local IPv6
+(`fe80::/10`), unique local IPv6 (`fc00::/7`), and `::1` remain visible.
+The first three MAC octets and private IPv4 remain useful diagnostics.
+Arbitrary personal text and historical credentials no longer held by the
+backend are not guaranteed to be recognized.
 Literal matching is case-sensitive and does not normalize Unicode; case-folded
 or differently normalized spellings are outside the exact-occurrence contract.
 
