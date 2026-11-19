@@ -77,6 +77,9 @@ export class EventsView {
 	failed = $state<End | null>(null);
 	nextBeforeSeq = $state<number | null>(null);
 	browsingHistory = $state(false);
+	rowReset = $state.raw<{ readonly keepShownFocus: boolean }>({
+		keepShownFocus: false,
+	});
 	stale = $state(false);
 	rawLink = $state.raw<{
 		readonly id: string;
@@ -103,10 +106,13 @@ export class EventsView {
 
 	/** The first page again, from the newest event, dropping every row shown. */
 	reload(): Promise<void> {
+		this.rowReset = { keepShownFocus: false };
+		this.#rawRequest = undefined;
+		this.rawLink = null;
 		this.events = [];
 		this.nextBeforeSeq = null;
 		this.browsingHistory = false;
-		return this.#reread();
+		return this.#reread(false);
 	}
 
 	loadOlder(): Promise<void> {
@@ -202,12 +208,12 @@ export class EventsView {
 	}
 
 	/** The first page again; the rows shown stay until it replaces them. */
-	#reread(): Promise<void> {
+	#reread(keepShownFocus: boolean): Promise<void> {
 		this.#generation += 1;
-		return this.#read("first");
+		return this.#read("first", keepShownFocus);
 	}
 
-	async #read(end: End): Promise<void> {
+	async #read(end: End, keepShownFocus = false): Promise<void> {
 		const generation = this.#generation;
 		const beforeSeq = end === "older" ? this.nextBeforeSeq : null;
 		const startingRows = this.events;
@@ -245,6 +251,7 @@ export class EventsView {
 			}
 			this.failed = end;
 		}
+		if (keepShownFocus) this.rowReset = { keepShownFocus };
 		this.loading = null;
 		this.#receive(newer);
 	}
@@ -261,7 +268,7 @@ export class EventsView {
 		const admitted: DeviceEvent[] = [];
 		for (const event of batch) {
 			if (event.seq > this.#head + 1) {
-				void this.#reread();
+				void this.#reread(true);
 				return;
 			}
 			this.#head = Math.max(this.#head, event.seq);

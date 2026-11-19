@@ -72,6 +72,16 @@ $effect(() => {
 	untrack(() => view.connectionChanged(state));
 });
 
+$effect.pre(() => {
+	const { keepShownFocus } = view.rowReset;
+	untrack(() => {
+		if (keepShownFocus && view.events.some((event) => event.id === focusedRow?.id)) return;
+		if (focusedRow && document.activeElement?.closest('[data-testid="event-row"]'))
+			scroller?.parentElement?.querySelector<HTMLButtonElement>('[data-testid="events-filters"] button')?.focus();
+		focusedRow = stopId = undefined;
+	});
+});
+
 // Keep the exact keyed row and its active control until focus leaves it.
 const visibleEvents = $derived(
 	focusedRow && !view.events.some((event) => event.id === focusedRow?.id)
@@ -118,10 +128,6 @@ $effect(() => {
 	});
 });
 
-function showAll(): void {
-	view.showAll();
-	bootSelection.choose(null);
-}
 </script>
 
 {#snippet skeletonRows(count: number)}
@@ -200,7 +206,7 @@ function showAll(): void {
 			<div class="flex flex-col items-center gap-2 px-6 py-10 text-center" data-testid="events-empty">
 				{#if view.filtered}
 					<p class="text-sm font-semibold">{m['systemLogs.events.emptyFiltered']()}</p>
-					<Button class="mt-2" onclick={showAll} size="sm" variant="outline">{m['systemLogs.events.showAll']()}</Button>
+					<Button class="mt-2" onclick={() => { view.showAll(); bootSelection.choose(null); }} size="sm" variant="outline">{m['systemLogs.events.showAll']()}</Button>
 				{:else}
 					<p class="text-sm font-semibold">{m['systemLogs.events.emptyTitle']()}</p>
 					<p class="text-muted-foreground max-w-prose text-sm">{m['systemLogs.events.emptyBody']()}</p>

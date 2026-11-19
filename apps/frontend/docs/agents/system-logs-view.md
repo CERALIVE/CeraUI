@@ -1002,7 +1002,7 @@ Related browser specs and their entry points:
 
 ### role="status" elements
 
-`main/system-logs/BootPicker.svelte:165`, `main/system-logs/BundleDialog.svelte:98`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:195`, `main/system-logs/ExportDialog.svelte:50`, `main/system-logs/RawLogList.svelte:241`, `main/system-logs/RawLogRow.svelte:136`, `main/system-logs/RawLogsPanel.svelte:97`, `main/system-logs/RawLogsTab.svelte:136`, `main/system-logs/StorageCleanup.svelte:191`, `main/system-logs/StorageLimits.svelte:173`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:220`.
+`main/system-logs/BootPicker.svelte:165`, `main/system-logs/BundleDialog.svelte:98`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:201`, `main/system-logs/ExportDialog.svelte:50`, `main/system-logs/RawLogList.svelte:241`, `main/system-logs/RawLogRow.svelte:136`, `main/system-logs/RawLogsPanel.svelte:97`, `main/system-logs/RawLogsTab.svelte:136`, `main/system-logs/StorageCleanup.svelte:191`, `main/system-logs/StorageLimits.svelte:173`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:220`.
 
 ### Limits and constants
 
@@ -1025,10 +1025,11 @@ Backend and wire limits: [device-logs.md](../../../backend/docs/agents/device-lo
 | Code | Source |
 |---| --- |
 | Events list key map (ArrowDown, ArrowUp, Home, End) | `main/system-logs/EventsTab.svelte:39-42` |
-| Events focus move to a row button | `main/system-logs/EventsTab.svelte:90` |
-| Events row keydown hook | `main/system-logs/EventsTab.svelte:228` |
-| Events scroller scroll padding | `main/system-logs/EventsTab.svelte:187` |
-| Events paging focus handoff | `main/system-logs/EventsTab.svelte:114` |
+| Events focus move to a row button | `main/system-logs/EventsTab.svelte:100` |
+| Events row keydown hook | `main/system-logs/EventsTab.svelte:234` |
+| Events scroller scroll padding | `main/system-logs/EventsTab.svelte:193` |
+| Events paging focus handoff | `main/system-logs/EventsTab.svelte:124` |
+| Events focus recovery on row reset | `main/system-logs/EventsTab.svelte:76` |
 | View raw logs pending (aria-disabled) | `main/system-logs/EventRow.svelte:90` |
 | Event row tab stop | `main/system-logs/EventRow.svelte:95` |
 | Raw list focus on a row | `main/system-logs/RawLogList.svelte:116` |

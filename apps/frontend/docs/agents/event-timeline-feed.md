@@ -26,8 +26,11 @@ recover those rows if they are still stored.
 
 Each list reply's `retainedFromSeq` expires older rows already shown. Push
 frames carry events only, so between list replies the view uses the last known
-retained boundary. An evicted row with keyboard focus stays mounted in place
-of one row until focus leaves it.
+retained boundary. A row evicted within the current window's generation
+stays mounted in place of one row until focus leaves it. An explicit reload
+clears the pin and retires any pending raw-log action. A gap refresh keeps
+focus only if the row is still present. If either reset removes a focused row,
+focus goes to the filter bar.
 
 `lib/rpc/subscriptions-event-feed.test.ts` drives the real subscription handler.
 Its producer compatibility case runs the real backend emitter under Bun, feeds

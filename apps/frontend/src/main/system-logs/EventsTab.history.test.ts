@@ -3,13 +3,26 @@ import type {
 	DeviceEvent,
 	EventListInput,
 	EventListOutput,
+	LogAroundInput,
+	LogAroundOutput,
 } from "@ceraui/rpc/schemas";
-import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/svelte";
 import { tick } from "svelte";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { fourBoots } from "$lib/device-logs/__fixtures__/boots";
-import { event, eventPage } from "$lib/device-logs/__fixtures__/events";
+import {
+	aroundPage,
+	event,
+	eventPage,
+} from "$lib/device-logs/__fixtures__/events";
+import { notifyHistoryChanged } from "$lib/device-logs/history-bus";
 
 import { en } from "../../tests/helpers/catalog";
 import { installMediaQueries } from "../../tests/helpers/media-query";
@@ -17,13 +30,17 @@ import EventsTab from "./EventsTab.svelte";
 
 type FeedListener = (events: DeviceEvent[]) => void;
 
-const { list, feed } = vi.hoisted(() => ({
+const { list, around, feed } = vi.hoisted(() => ({
 	list: vi.fn<(input: EventListInput) => Promise<EventListOutput>>(),
+	around: vi.fn<(input: LogAroundInput) => Promise<LogAroundOutput>>(),
 	feed: { listener: undefined as FeedListener | undefined },
 }));
 
 vi.mock("$lib/rpc/client", () => ({
-	rpc: { events: { list }, logs: { boots: async () => fourBoots() } },
+	rpc: {
+		events: { list },
+		logs: { around, boots: () => Promise.resolve(fourBoots()) },
+	},
 }));
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getConnectionState: () => "connected",
@@ -33,12 +50,15 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 }));
 
 const { events: copy, action, error } = en.systemLogs;
+const onViewRaw = vi.fn();
 let media: ReturnType<typeof installMediaQueries> | undefined;
 
 afterEach(() => {
 	cleanup();
 	media?.restore();
 	list.mockReset();
+	around.mockReset();
+	onViewRaw.mockClear();
 	vi.restoreAllMocks();
 });
 
@@ -46,7 +66,10 @@ function stopped(seq: number): DeviceEvent {
 	return event(seq, "stream_stopped", { cause: "operator", durationSec: 4 });
 }
 
-async function openHistory(count: number): Promise<DeviceEvent[]> {
+async function openHistory(
+	count: number,
+	inline = true,
+): Promise<DeviceEvent[]> {
 	const retained = Array.from({ length: count }, (_, index) =>
 		stopped(count - index),
 	);
@@ -64,8 +87,8 @@ async function openHistory(count: number): Promise<DeviceEvent[]> {
 			}),
 		);
 	});
-	media = installMediaQueries(() => true);
-	render(EventsTab, { onviewraw: vi.fn() });
+	media = installMediaQueries(() => inline);
+	render(EventsTab, { onviewraw: onViewRaw });
 	await screen.findAllByTestId("event-row");
 	return retained;
 }
@@ -141,5 +164,64 @@ it("retries an older page after pushes fill the display and revisits rows evicte
 	expect(screen.queryByRole("alert")).toBeNull();
 	expect(renderedTimes()).toEqual(
 		retained.slice(100, 400).map((record) => new Date(record.at).toISOString()),
+	);
+});
+
+it.each([
+	{ reset: "a filter change", empty: copy.emptyFiltered },
+	{ reset: "a history clear", empty: copy.emptyTitle },
+])(
+	"retires the focused raw action and restores a filter control after $reset",
+	async ({ reset, empty }) => {
+		await openHistory(1);
+		const raw = screen.getByRole("button", { name: copy.viewRaw });
+		raw.focus();
+		list.mockResolvedValueOnce(eventPage([]));
+		const filter = screen.getByRole("button", {
+			name: en.timeline.family.stream,
+		});
+
+		if (reset === "a filter change") {
+			await fireEvent.click(
+				screen.getByRole("button", { name: en.timeline.family.network }),
+			);
+		} else {
+			notifyHistoryChanged();
+		}
+
+		expect(await screen.findByText(empty)).toBeTruthy();
+		expect(screen.queryByRole("button", { name: copy.viewRaw })).toBeNull();
+		expect(document.activeElement).toBe(filter);
+	},
+);
+
+it("does not open raw logs from a request started before history was cleared", async () => {
+	await openHistory(1);
+	const reply = Promise.withResolvers<LogAroundOutput>();
+	around.mockReturnValueOnce(reply.promise);
+	await fireEvent.click(screen.getByRole("button", { name: copy.viewRaw }));
+	list.mockResolvedValueOnce(eventPage([]));
+
+	notifyHistoryChanged();
+	await screen.findByText(copy.emptyTitle);
+	reply.resolve(aroundPage());
+	await tick();
+
+	expect(onViewRaw).not.toHaveBeenCalled();
+});
+
+it("returns focus to the folded filter if a gap refresh replaces the focused event", async () => {
+	await openHistory(1, false);
+	screen.getByRole("button", { name: copy.viewRaw }).focus();
+	list.mockResolvedValueOnce(eventPage([stopped(3)]));
+
+	feed.listener?.([stopped(3)]);
+
+	await waitFor(() =>
+		expect(renderedTimes()).toContain(new Date(stopped(3).at).toISOString()),
+	);
+	expect(renderedTimes()).toHaveLength(1);
+	expect(document.activeElement).toBe(
+		screen.getByRole("button", { name: copy.filter }),
 	);
 });
