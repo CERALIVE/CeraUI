@@ -74,9 +74,8 @@ function schemeFor(...indexes: number[]): Scheme {
 
 const findings = (audits: readonly Audited[]) => audits.flatMap((audit) => audit.found.map((finding) => `${audit.state}: ${finding}`));
 
-test.beforeEach(({ browserName }, testInfo) => {
+test.beforeEach(({ browserName }) => {
 	test.skip(browserName !== 'chromium', 'painted-geometry probes are Chromium-specific');
-	test.skip(testInfo.project.name !== 'desktop', 'every case sets its own viewport; one project is enough');
 });
 
 for (const [sizeIndex, size] of SIZES.entries()) {

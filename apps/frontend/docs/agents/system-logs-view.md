@@ -784,8 +784,9 @@ widths are not measured in this lane.
   `html:has([data-app-dialog-fullscreen])`). Below 640 px each tab grows from
   its label's width (`SystemLogsView.svelte:171`, `max-sm:flex-auto`).
 - Measured (`tests/e2e/system-logs-responsive.spec.ts`): in Chromium against
-  the mock backend, the dialog width matched the viewport width in the 12 EN,
-  AR and DE cases at 375x812, 768x1024, 1280x800, and touch 1024x600. The audit
+  the mock backend, the desktop and mobile projects each run the 12 EN, AR and
+  DE cases at 375x812, 768x1024, 1280x800, and touch 1024x600. The dialog width
+  matched the viewport width in those cases. The audit
   checked horizontal overflow and the bounds of visible state, severity, and
   action elements in those cases and at 320x720 and 375x812 in all ten
   locales. At the tested widths of 375 px or above, the audited tab labels used
