@@ -1,5 +1,3 @@
-// The Events window is ordered by sequence. Reconnect and gap reads preserve
-// history only when their list still identifies the same ring.
 import type {
 	DeviceEvent,
 	EventFamily,
@@ -13,7 +11,13 @@ import type { ConnectionState } from "$lib/rpc/client";
 
 import { admits, type EventFilter, listInput } from "./events-filter";
 import { type AroundPage, EventsRawLink } from "./events-raw-link.svelte";
-import { EVENT_ROW_CAP, mergeEvents } from "./events-window";
+import {
+	EVENT_ROW_CAP,
+	mergeEvents,
+	readEventPage,
+	retainedEvents,
+	shouldReloadEvents,
+} from "./events-window";
 
 export type { AroundPage, RawLinkState } from "./events-raw-link.svelte";
 
@@ -156,22 +160,28 @@ export class EventsView {
 		const current = () =>
 			generation === this.#generation && held === this.#held;
 		const beforeSeq = end === "older" ? this.nextBeforeSeq : null;
-		const startingRows = this.events;
+		const window = {
+			rows: this.events,
+			head: this.#head,
+			epoch: this.#epoch,
+			current,
+		};
 		this.loading = end;
 		// An older page's failure stays while it is read again, so its Retry keeps focus.
 		if (end === "first" && mode !== "live-edge") this.failed = null;
 		let newer: DeviceEvent[] = [];
 		let settleRows = mode === "gap";
 		try {
-			const page = await this.#deps.list(listInput(this.filter, beforeSeq));
+			const input = listInput(this.filter, beforeSeq);
+			const page = await readEventPage(this.#deps.list, input, window);
 			if (!current()) return;
+			if (page === null) {
+				this.failed = "older";
+				return;
+			}
 			const seen = this.#head;
-			const sameEpoch = page.epoch !== undefined && page.epoch === this.#epoch;
 			this.#epoch = page.epoch;
-			// A lower edge already replaces the whole window without a second list.
-			const lowerEdge =
-				mode === "live-edge" && page.epoch === undefined && page.headSeq < seen;
-			if (!sameEpoch && !lowerEdge && (end === "older" || mode !== "replace")) {
+			if (shouldReloadEvents(page, window, mode === "replace" ? end : mode)) {
 				void this.reload();
 				return;
 			}
@@ -189,10 +199,7 @@ export class EventsView {
 					this.#raw.reset();
 					settleRows = true;
 				} else {
-					const kept = this.events.filter(
-						(event) =>
-							event.seq >= page.retainedFromSeq && event.seq <= page.headSeq,
-					);
+					const kept = retainedEvents(this.events, page);
 					// shortcut: counts at most one page of unseen events, so a gap or outage
 					// longer than PAGE undercounts; page toward the head if that becomes routine.
 					this.newWhileBrowsing += page.events.filter(
@@ -209,7 +216,7 @@ export class EventsView {
 				// window. Joining to the live window would leave a hole between them.
 				const liveEdgeMoved =
 					end === "older" && beforeSeq !== this.nextBeforeSeq;
-				const shown = liveEdgeMoved ? startingRows : this.events;
+				const shown = liveEdgeMoved ? window.rows : this.events;
 				const merged = mergeEvents(
 					end === "first"
 						? []
@@ -244,12 +251,7 @@ export class EventsView {
 		if (!current()) return;
 		this.#receive(newer);
 		if (settleRows) {
-			const link = this.rawLink;
-			if (
-				link?.state === "pending" &&
-				!this.events.some(({ id }) => id === link.id)
-			)
-				this.#raw.reset();
+			this.#raw.retirePendingOutside(this.events);
 			this.rowReset = { keepShownFocus: true };
 		}
 	}

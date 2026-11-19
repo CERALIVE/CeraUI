@@ -19,6 +19,12 @@ export class EventsRawLink {
 		this.link = null;
 	}
 
+	retirePendingOutside(rows: readonly DeviceEvent[]): void {
+		const link = this.link;
+		if (link?.state === "pending" && !rows.some(({ id }) => id === link.id))
+			this.reset();
+	}
+
 	async open(
 		event: DeviceEvent,
 		around: (input: LogAroundInput) => Promise<LogAroundOutput>,

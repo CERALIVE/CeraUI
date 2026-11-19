@@ -43,12 +43,19 @@ action is retired, and the new-event count restarts.
 
 An `events.list` reply names the ring's `epoch` when the store can keep one.
 Only a matching UUID proves that the previous window belongs to that ring.
-A changed or omitted epoch retires every old row and pending raw-log action,
-even if the new head reaches or passes the old one. The view drops the old
-window, moves focus from a row to the filter bar and reads the newest page
-again. A reload already replaces the window. An edge check with no epoch and
-a lower head can replace it directly from the page it already read. A late
-reply that settles nothing leaves the seen epoch alone.
+A changed UUID indicates a history clear. A reconnect or gap check without
+an epoch refreshes the newest page and retires every old row and pending
+raw-log action, even if the new head reaches or passes the old one. Focus
+left on a row moves to the filter bar. An edge check with no epoch and a
+lower head can replace the window directly from the page it already read.
+
+Load older with no epoch validates the paging boundary by rereading its
+last visible record in the same snapshot as the older rows. If that record
+still matches and the head has not gone backward, the view keeps its
+position and advances with the older page. A boundary that cannot be
+verified shows the paging Retry, keeping the rows and cursor. A lower head
+replaces the window with the newest page. A late reply that settles
+nothing leaves the seen epoch alone.
 
 A failed check keeps every row and adds the load-failure band, whose Retry
 checks again. The band is withdrawn while disconnected, because the next

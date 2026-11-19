@@ -16,7 +16,7 @@ const PROBLEMS = new Set(["error", "warning"]);
 export function listInput(
 	filter: EventFilter,
 	beforeSeq: number | null,
-): EventListInput {
+): EventListInput & { readonly limit: number } {
 	return {
 		limit: PAGE,
 		...(beforeSeq === null ? {} : { beforeSeq }),

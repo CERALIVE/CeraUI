@@ -892,11 +892,15 @@ A reconnect check with a matching epoch and nondecreasing head keeps rows in
 its retained range, along with their paging, pending action and focus. A
 dropped connection cannot settle a check or replay its held pushes. When the
 Retry of a failed check succeeds, focus left on it moves to the first visible
-filter. A changed or missing epoch cannot establish that a reused event ID
-still identifies the old row, so the view reads the newest page again and
-retires every old action. Focus left on a row moves to the filter bar. A
-missing epoch with a lower head can replace the window from the check's
-page directly and keep focus on a still-shown ID.
+filter. A changed epoch signals a history clear. A reconnect check without
+an epoch refreshes the newest page and retires old actions. Focus left on a
+row moves to the filter bar. A missing epoch with a lower head can replace
+the window from the check's page directly and keep focus on a still-shown ID.
+
+Load older without an epoch checks the last visible record at the paging
+boundary before joining an older page. A match preserves the paging position
+and advances the cursor. A lower head reloads from the newest page. An
+unverified boundary leaves the rows in place and offers the paging Retry.
 
 `EventsView` owns the Events window and its connection-bound feed queue.
 `EventsRawLink` owns pending requests to open Raw logs from a row.
@@ -1033,6 +1037,7 @@ button disappears, provided the operator has not moved focus.
 | `lib/device-logs/boot-list.test.ts` |
 | `lib/device-logs/boot-rows.test.ts` |
 | `lib/device-logs/boot-selection.test.ts` |
+| `lib/device-logs/events-view.epoch-paging.test.ts` |
 | `lib/device-logs/events-view.test.ts` |
 | `lib/device-logs/history-bus.test.ts` |
 | `lib/device-logs/param-parts.test.ts` |
