@@ -204,5 +204,6 @@ export const updateOrchestratorWireStateSchema = z.object({
 	progress: updateOrchestratorProgressSchema.nullable(),
 	failure_reason: z.string().nullable(),
 	cellular_override_id: z.string().nullable(),
+	rollbackAttemptId: z.uuid().optional(),
 });
 export type UpdateOrchestratorWireState = z.infer<typeof updateOrchestratorWireStateSchema>;

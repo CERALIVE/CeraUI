@@ -30,7 +30,8 @@ The first valid update emission in each boot lazily seeds its subject collection
 from `readEvents()`. Only records matching the current boot and a known registry
 code in the update family participate. The registry derives stored subjects from
 their params with the same code-specific function used for live emissions,
-including `update_failed`'s stage and reason. This suppresses already persisted
+including `update_failed`'s stage and attempt ID when supplied, otherwise its
+stage and reason. This suppresses already persisted
 subjects after a backend process restart in the same OS boot. Unknown future
 codes and non-update codes consume no update capacity. Seeding stops at 1024
 unique subjects and uses the existing store's eight 512 KiB file bounds.

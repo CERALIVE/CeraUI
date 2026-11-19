@@ -38,10 +38,13 @@ const reason = $derived(wire && wire.phase === phase
 	? wire.failure_reason ?? (recordPhase === phase ? kernel?.reason : null)
 	: kernel?.reason);
 const showReason = $derived(reason != null || phase === 'kernel-rolled-back' || phase === 'kernel-failed');
-// The kernel record carries no time; only a rollback emits a timeline event.
-const reasonMoment = $derived<LogMoment>(
-	phase === 'kernel-rolled-back' ? { event: { family: 'update', code: 'update_kernel_rolled_back' } } : 'unknown',
-);
+const reasonMoment = $derived.by((): LogMoment => {
+	const id = kernel?.rollbackAttemptId;
+	if (phase !== 'kernel-rolled-back' || recordPhase !== phase || id === undefined) return 'unknown';
+	// Live state can advance before the details reply catches up.
+	if (wire?.phase === phase && wire.rollbackAttemptId !== id) return 'unknown';
+	return { event: { family: 'update', code: 'update_kernel_rolled_back', id } };
+});
 </script>
 
 <section

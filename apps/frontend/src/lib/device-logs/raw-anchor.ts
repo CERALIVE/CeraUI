@@ -44,7 +44,7 @@ export interface RawAnchor {
 	readonly eventId?: string;
 }
 
-/** The timeline event a message emitted: its family, code and `params.id`; with no id, the newest event with that code. */
+/** The timeline event a message emitted. An unidentified outcome cannot select an exact event. */
 export interface EventMatch {
 	readonly family: EventFamily;
 	readonly code: string;
@@ -111,9 +111,7 @@ async function newestEvent(
 		if (signal.aborted) return undefined;
 		const page = eventListOutputSchema.parse(reply);
 		const found = page.events.find(
-			(event) =>
-				event.code === match.code &&
-				(match.id === undefined || event.params.id === match.id),
+			(event) => event.code === match.code && event.params.id === match.id,
 		);
 		if (found !== undefined) return found;
 		const next = page.nextBeforeSeq;
@@ -137,7 +135,8 @@ export async function locateMoment(
 	signal: AbortSignal = new AbortController().signal,
 ): Promise<LogAroundOutput | null> {
 	let event: DeviceEvent | undefined;
-	if (moment.event !== undefined) {
+	const match = moment.event;
+	if (match?.id) {
 		const deadline = new AbortController();
 		const timeout = Promise.withResolvers<undefined>();
 		const timer = setTimeout(() => {
@@ -152,7 +151,7 @@ export async function locateMoment(
 			event = await Promise.race([
 				newestEvent(
 					sources.events,
-					moment.event,
+					match,
 					AbortSignal.any([signal, deadline.signal]),
 				),
 				timeout.promise,

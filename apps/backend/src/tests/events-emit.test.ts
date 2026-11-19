@@ -102,6 +102,7 @@ function sample<C extends EventCode>(code: C): EventParams<C> {
 		true,
 		["x"],
 		BOOT,
+		"52fd5e45-627d-4a10-a263-9129880c4330",
 		"ethernet",
 		"probe_failed",
 		"operator",

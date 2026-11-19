@@ -120,10 +120,13 @@ density. It is not a redesign.
   entries with no anchor (`lib/device-logs/view-logs.ts`,
   `lib/device-logs/raw-anchor.ts`). The Updates dialog shows persisted states
   that carry no time, so its View logs actions pass a `moment` instead of the
-  click: an unexplained package failure opens the newest `update_failed` entry,
-  a kernel rollback the newest `update_kernel_rolled_back` and the credentials
-  band the newest `update_credentials_expired` (an event match without an id
-  takes the newest event with that code). The event lookup reads older pages
+  click. An unexplained package failure or kernel rollback opens its matching
+  event only when the event code and the producer's `params.id` both match the
+  outcome. A package-set signature is not an attempt ID. A live rollback must
+  agree with the retained record's attempt before using that record. An unusable
+  credential verdict does not identify a certificate expiry notice. Unidentified
+  outcomes open the newest entries with the unknown-moment note. The identified
+  event lookup reads older pages
   of 200 until the stored history ends, for at most `EVENT_LOOKUP_MS`; a page
   cursor that does not move back is a failed read, and the end of the history
   or the deadline falls back to the message's own time, else the newest

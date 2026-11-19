@@ -423,6 +423,9 @@ export function createKernelRuntime(port: KernelRuntimePort) {
 							state: record.state,
 							version: record.version,
 							reason: record.reason,
+							...(record.state === "rolled_back"
+								? { rollbackAttemptId: record.attempt }
+								: {}),
 						}
 					: {
 							state: attempt && reason !== null ? "failed" : null,

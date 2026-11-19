@@ -10,7 +10,9 @@ per-boot subject deduplication, validation, redaction and output failure contain
 The runtime's `dispatch` records `update_failed` only when the reducer accepts
 `DOWNLOAD_FAILED`, `COMMIT_FAILED`, `SYNC_FAILED` or `OS_STAGING_FAILED`.
 Their stages are `download`, `commit`, `sync` and `os-staging`, with the original
-reason. An accepted OS attempt settlement can retain its existing retry policy;
+reason. For a settled package failure with a UUID in the package state, the
+event also records that UUID as `params.id` so View logs can find that
+attempt. An accepted OS attempt settlement can retain its existing retry policy;
 recording the failed attempt does not make that policy terminal. Ignored events,
 ordinary progress and phase changes emit no failure. The legacy software-update
 notification raises do not produce these events.

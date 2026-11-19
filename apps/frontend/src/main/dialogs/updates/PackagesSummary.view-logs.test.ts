@@ -80,14 +80,37 @@ describe("PackagesSummary: View logs opens the outcome's moment, not the click",
 		await fireEvent.click(button);
 	}
 
-	it("asks for the newest update failure event under an unexplained failure", async () => {
-		show({ kind: "failed", reason: "dpkg was interrupted" } as UpdateState);
+	it("opens the newest entries when the package failure has only a package-set identity", async () => {
+		show({
+			kind: "failed",
+			reason: "dpkg was interrupted",
+			identity: { version: "packages-1", packages: ["ceralive"] },
+		});
 
 		await viewLogs("update-failed");
 
 		expect(requestDialog).toHaveBeenCalledExactlyOnceWith("logs", {
 			tab: "raw",
-			event: { family: "update", code: "update_failed" },
+			momentUnknown: true,
+		});
+	});
+
+	it("links an unexplained transaction failure by its event correlation id", async () => {
+		show({
+			kind: "failed",
+			reason: "dpkg was interrupted",
+			failure_id: "52fd5e45-627d-4a10-a263-9129880c4330",
+		});
+
+		await viewLogs("update-failed");
+
+		expect(requestDialog).toHaveBeenCalledExactlyOnceWith("logs", {
+			tab: "raw",
+			event: {
+				family: "update",
+				code: "update_failed",
+				id: "52fd5e45-627d-4a10-a263-9129880c4330",
+			},
 		});
 	});
 

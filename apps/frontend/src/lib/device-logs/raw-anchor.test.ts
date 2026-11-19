@@ -146,32 +146,90 @@ describe("locateMoment", () => {
 	});
 
 	it.each([
-		["update_failed", { stage: "commit", reason: "dpkg was interrupted" }],
-		["update_kernel_rolled_back", { id: "txn-8", version: "7.2.0" }],
-	])(
-		"opens the exact entry of the newest %s event when the message names no id",
-		async (code, params) => {
-			const matching = (seq: number): DeviceEvent => ({
-				...updateEvent(seq, code, ""),
-				params,
-			});
+		[14, "attempt-new"],
+		[10, "attempt-old"],
+	] as const)(
+		"opens rollback event %s for its own attempt",
+		async (seq, id) => {
+			const code = "update_kernel_rolled_back";
 			const deps = sources(
 				eventPage([
-					updateEvent(9, "update_refused", "txn-1"),
-					matching(8),
-					matching(4),
+					{
+						...updateEvent(14, code, "attempt-new"),
+						params: { id: "attempt-new", version: "7.2.0" },
+					},
+					{
+						...updateEvent(12, "update_kernel_succeeded", "attempt-old"),
+						params: { id: "attempt-old", version: "7.2.0" },
+					},
+					{
+						...updateEvent(10, code, "attempt-old"),
+						params: { id: "attempt-old", version: "7.2.0" },
+					},
 				]),
 			);
 
-			await locateMoment(deps, { event: { family: "update", code } });
+			await locateMoment(deps, { event: { family: "update", code, id } });
 
 			expect(deps.logs.around).toHaveBeenCalledExactlyOnceWith({
 				bootId: EARLIER,
-				at: AT - 8000,
-				eventId: "event-8",
+				at: AT - seq * 1000,
+				eventId: `event-${seq}`,
 			});
 		},
 	);
+
+	it.each([
+		["update_failed", { stage: "commit", reason: "dpkg was interrupted" }],
+		["update_kernel_rolled_back", { id: "txn-8", version: "7.2.0" }],
+		["update_credentials_expired", { id: "previous-credential:expired" }],
+	])(
+		"leaves the moment unknown when a %s outcome has no identifying id",
+		async (code, params) => {
+			const deps = sources(
+				eventPage([
+					updateEvent(9, "update_refused", "txn-1"),
+					{ ...updateEvent(8, code, ""), params },
+					{ ...updateEvent(4, code, ""), params },
+				]),
+			);
+
+			expect(
+				await locateMoment(deps, { event: { family: "update", code } }),
+			).toBeNull();
+			expect(deps.logs.around).not.toHaveBeenCalled();
+			expect(deps.events.list).not.toHaveBeenCalled();
+		},
+	);
+
+	it("uses the package attempt instead of newer sync or OS failures with the same code", async () => {
+		const code = "update_failed";
+		const id = "52fd5e45-627d-4a10-a263-9129880c4330";
+		const deps = sources(
+			eventPage([
+				{
+					...updateEvent(12, code, ""),
+					params: { stage: "sync", reason: "failed" },
+				},
+				{
+					...updateEvent(10, code, ""),
+					params: { stage: "os-staging", reason: "failed" },
+				},
+				{
+					...updateEvent(8, code, id),
+					params: { stage: "commit", reason: "failed", id },
+				},
+			]),
+		);
+
+		await locateMoment(deps, { event: { family: "update", code, id } });
+
+		expect(deps.logs.around).toHaveBeenCalledExactlyOnceWith({
+			bootId: EARLIER,
+			at: AT - 8000,
+			eventId: "event-8",
+		});
+	});
 
 	it("reads older pages until it reaches the event", async () => {
 		const deps = sources(

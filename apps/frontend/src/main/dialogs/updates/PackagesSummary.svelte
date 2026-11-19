@@ -115,11 +115,10 @@ const FAILED_REASON_COPY: Record<string, () => string> = {
 	captive_portal: () => m["settings.updates.checkFailed.captive_portal"](),
 };
 
-// These outcomes are persisted without a time and usually read long after they
-// happened, so the click is never their moment. A failure emitted update_failed
-// (update-orchestrator/runtime.ts); a preflight refusal and a cleanup warning
-// emit no event.
-const FAILED_MOMENT: LogMoment = { event: { family: 'update', code: 'update_failed' } };
+const failureId = $derived(failed?.failure_id);
+const failureMoment = $derived<LogMoment>(failureId === undefined
+	? 'unknown'
+	: { event: { family: 'update', code: 'update_failed', id: failureId } });
 
 const failureMessage = $derived(
 	failed === undefined ? undefined : (FAILED_REASON_COPY[failed.reason]?.() ?? m["settings.updates.failedReasonGeneric"]()),
@@ -175,7 +174,7 @@ const checkFailureMessage = $derived.by(() => {
 				<ViewLogsAction
 					class="mt-2"
 					messageKey={FAILED_REASON_COPY[failed.reason] ? undefined : 'settings.updates.failedReasonGeneric'}
-					moment={FAILED_MOMENT}
+					moment={failureMoment}
 				/>
 			</div>
 		</div>

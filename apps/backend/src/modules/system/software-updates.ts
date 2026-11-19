@@ -17,6 +17,7 @@
 */
 
 // allow: SIZE_OK — legacy update coordinator owns the shared discovery/install/recovery latches; new admission parsing stays in leaf modules.
+import { randomUUID } from "node:crypto";
 import {
 	type AptReachability as AptReachabilityWire,
 	aptReachabilitySchema,
@@ -1622,6 +1623,7 @@ export function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonit
 					? null
 					: {
 							reason: aptErr.trim() || `apt-get exited with code ${code}`,
+							failure_id: randomUUID(),
 							...((currentUpdateIdentity ?? availableIdentity)
 								? {
 										identity: (currentUpdateIdentity ??

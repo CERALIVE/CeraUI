@@ -251,10 +251,11 @@ describe("sweep: a certificate verdict is not a server rejection", () => {
 		).toContain("mt-2");
 	});
 
-	it("opens the newest expired-credentials event from the band, not the moment of the click", async () => {
+	it("opens the newest entries for an unusable credential without a correlated expiry event", async () => {
 		clearRequestedDialog();
 		await openDialog({
 			...nothingFound(1_000),
+			credentials: { state: "valid", expiresAt: 999_999_999 },
 			transport: {
 				profile: "apt",
 				checkedAt: 1_000,
@@ -282,7 +283,7 @@ describe("sweep: a certificate verdict is not a server rejection", () => {
 
 		expect(getRequestedDialogContext()).toEqual({
 			tab: "raw",
-			event: { family: "update", code: "update_credentials_expired" },
+			momentUnknown: true,
 		});
 		clearRequestedDialog();
 	});

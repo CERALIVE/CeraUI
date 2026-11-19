@@ -201,12 +201,14 @@ test("a dismissed refusal still reaches the emitter exactly once", () => {
 test.each(["downloading", "committing"] as const)(
 	"%s records the failure before its optional refusal notice",
 	async (phase) => {
+		const failureId = "52fd5e45-627d-4a10-a263-9129880c4330";
 		setOrchestratorRuntimeDepsForTest(
 			fakeDeps({
 				quarantine: testQuarantine(),
 				getPackageInstallWireState: () => ({
 					kind: "failed",
 					reason: "apt_failed",
+					failure_id: failureId,
 				}),
 			}),
 		);
@@ -219,6 +221,7 @@ test.each(["downloading", "committing"] as const)(
 			{
 				code: "update_failed",
 				params: {
+					id: failureId,
 					stage: phase === "downloading" ? "download" : "commit",
 					reason: "apt_failed",
 				},

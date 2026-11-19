@@ -212,9 +212,13 @@ export const EVENT_REGISTRY = {
 	update_os_stage_unresolved: update('os_stage_unresolved', updateVersion, 'error'),
 	update_failed: entry(
 		'update',
-		z.strictObject({ stage: z.enum(['download', 'commit', 'sync', 'os-staging']), reason: text }),
+		z.strictObject({
+			stage: z.enum(['download', 'commit', 'sync', 'os-staging']),
+			reason: text,
+			id: z.uuid().optional(),
+		}),
 		'error',
-		(params) => `update:failed:${params.stage}:${params.reason}`,
+		(params) => `update:failed:${params.stage}:${params.id ?? params.reason}`,
 	),
 	device_started: entry(
 		'device',

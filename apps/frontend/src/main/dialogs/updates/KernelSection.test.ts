@@ -39,6 +39,7 @@ const kernel: NonNullable<UpdateDetails["kernel"]> = {
 function show(
 	phase: UpdateOrchestratorPhase | undefined,
 	summary: UpdateDetails["kernel"],
+	rollbackAttemptId?: string,
 ) {
 	const wire: UpdateOrchestratorWireState | undefined =
 		phase === undefined
@@ -49,6 +50,7 @@ function show(
 					progress: { percent: 42, etaSeconds: 90 },
 					failure_reason: null,
 					cellular_override_id: null,
+					...(rollbackAttemptId === undefined ? {} : { rollbackAttemptId }),
 				};
 	return render(KernelSection, {
 		wire,
@@ -85,14 +87,48 @@ it("offers View logs beside a kernel failure the device did not explain", () => 
 	expect(within(status).getByTestId("view-logs-action")).toBeTruthy();
 });
 
-it("asks for the newest kernel rollback event beside an unexplained rollback", async () => {
+it("opens the newest entries when the rollback record has no attempt identity", async () => {
 	show(undefined, { ...kernel, state: "rolled_back", reason: null });
 
 	await fireEvent.click(screen.getByTestId("view-logs-action"));
 
 	expect(requestDialog).toHaveBeenCalledExactlyOnceWith("logs", {
 		tab: "raw",
-		event: { family: "update", code: "update_kernel_rolled_back" },
+		momentUnknown: true,
+	});
+});
+
+it("links a retained rollback to the attempt in the displayed record", async () => {
+	show(undefined, {
+		...kernel,
+		state: "rolled_back",
+		rollbackAttemptId: "attempt-old",
+	});
+
+	await fireEvent.click(screen.getByTestId("view-logs-action"));
+
+	expect(requestDialog).toHaveBeenCalledExactlyOnceWith("logs", {
+		tab: "raw",
+		event: {
+			family: "update",
+			code: "update_kernel_rolled_back",
+			id: "attempt-old",
+		},
+	});
+});
+
+it("does not link a live rollback to a different attempt from an older details reply", async () => {
+	show(
+		"kernel-rolled-back",
+		{ ...kernel, state: "rolled_back", rollbackAttemptId: "attempt-old" },
+		"attempt-new",
+	);
+
+	await fireEvent.click(screen.getByTestId("view-logs-action"));
+
+	expect(requestDialog).toHaveBeenCalledExactlyOnceWith("logs", {
+		tab: "raw",
+		momentUnknown: true,
 	});
 });
 
