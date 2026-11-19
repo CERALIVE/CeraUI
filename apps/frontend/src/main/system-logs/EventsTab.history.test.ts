@@ -92,7 +92,7 @@ async function openHistory(
 				retainedFromSeq: 1,
 				nextBeforeSeq:
 					matches.length > page.length ? (page.at(-1)?.seq ?? null) : null,
-				epoch,
+				...(epoch === undefined ? {} : { epoch }),
 			}),
 		);
 	});

@@ -41,15 +41,14 @@ Seq, and with it the event id, can then restart at 1, so the newest page
 replaces the window, its paging cursor and the seen head, any pending raw-log
 action is retired, and the new-event count restarts.
 
-Each `events.list` reply also names the ring's `epoch`, which a clear
-replaces. A reply whose epoch differs from the last one the view settled is a
-history clear even when its head reaches or passes the old one, and whichever
-read it answers: the view drops every row and pending raw-log action, moves
-focus from a row to the filter bar and reads the newest page again, as Clear
-history does. That page sets the seen head to the new ring's. A reply to a
-reload already replaces everything, so it is used as it is. A late reply that
-settles nothing leaves the seen epoch alone, and a reply without one, from a
-store that cannot keep it, keeps the last one seen.
+An `events.list` reply names the ring's `epoch` when the store can keep one.
+Only a matching UUID proves that the previous window belongs to that ring.
+A changed or omitted epoch retires every old row and pending raw-log action,
+even if the new head reaches or passes the old one. The view drops the old
+window, moves focus from a row to the filter bar and reads the newest page
+again. A reload already replaces the window. An edge check with no epoch and
+a lower head can replace it directly from the page it already read. A late
+reply that settles nothing leaves the seen epoch alone.
 
 A failed check keeps every row and adds the load-failure band, whose Retry
 checks again. The band is withdrawn while disconnected, because the next
@@ -60,8 +59,11 @@ newest page.
 Each list reply's `retainedFromSeq` expires older rows already shown. Push
 frames carry events only, so between list replies the view uses the last known
 retained boundary and epoch. A new process reaches the view only on a new
-connection, whose reconnect read holds the pushes until it settles. A row evicted within the current window's generation
-stays mounted in place of one row until focus leaves it. An explicit reload
+connection. A drop discards pushes held by that connection. A reconnect read
+and any replacement read it triggers can replay only pushes from their own
+connection that are newer than the replacement page's head. A row evicted
+within the current window's generation stays mounted in place of one row
+until focus leaves it. An explicit reload
 clears the pin and retires any pending raw-log action. When a gap refresh
 settles, it preserves row focus and pending raw-log actions only for rows
 still present. A failed gap refresh leaves no rows. If either reset removes

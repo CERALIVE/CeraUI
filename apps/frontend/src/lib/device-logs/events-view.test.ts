@@ -8,7 +8,13 @@ import type {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BOOT_IDS } from "./__fixtures__/boots";
-import { aroundPage, EVENT_AT, event, eventPage } from "./__fixtures__/events";
+import {
+	aroundPage,
+	EVENT_AT,
+	event,
+	eventPage,
+	EVENT_RING_EPOCH as KEPT_RING,
+} from "./__fixtures__/events";
 import { EventsView } from "./events-view.svelte";
 
 type Feed = (events: DeviceEvent[]) => void;
@@ -38,7 +44,7 @@ const e = (seq: number, extra: Partial<DeviceEvent> = {}) =>
 	event(seq, "internet_lost", {}, extra);
 
 // Rows 400 to 101 of 500 retained events, after paging past the 300-row window.
-async function browsing(bootId: string | null = null, epoch?: string) {
+async function browsing(bootId: string | null = null, epoch = KEPT_RING) {
 	const harness = setup(bootId);
 	const range = (high: number) =>
 		Array.from({ length: 100 }, (_, i) => e(high - i));
@@ -57,7 +63,6 @@ async function browsing(bootId: string | null = null, epoch?: string) {
 	return harness;
 }
 
-const KEPT_RING = "0f4c2a51-8d3e-4b7a-9c1f-2e6d8a4b5c7e";
 const NEW_RING = "6a1b9c3d-2e4f-4a5b-8c6d-7e8f9a0b1c2d";
 // A different event under a seq, and so an id, that a cleared ring used before.
 const refill = (seq: number) =>
@@ -808,34 +813,39 @@ describe("EventsView: connection", () => {
 	);
 
 	it.each([
-		{ reply: "the same ring epoch", epoch: KEPT_RING },
+		{ reply: "the same ring epoch by seq alone", epoch: KEPT_RING },
 		{ reply: "no ring epoch", epoch: undefined },
-	])(
-		"settles a reconnect check that names $reply by seq alone",
-		async ({ epoch }) => {
-			const { view, list, around } = await browsing(null, KEPT_RING);
-			const raw = Promise.withResolvers<LogAroundOutput>();
-			around.mockReturnValueOnce(raw.promise);
-			const open = vi.fn();
-			const opening = view.viewRaw(e(250), open);
-			list.mockResolvedValueOnce(
-				eventPage([e(501)], { headSeq: 501, retainedFromSeq: 201, epoch }),
-			);
+	])("settles a reconnect check that names $reply", async ({ epoch }) => {
+		const { view, list, around } = await browsing(null, KEPT_RING);
+		const raw = Promise.withResolvers<LogAroundOutput>();
+		around.mockReturnValueOnce(raw.promise);
+		const open = vi.fn();
+		const opening = view.viewRaw(e(250), open);
+		const page = eventPage([e(501)], {
+			headSeq: 501,
+			retainedFromSeq: 201,
+			epoch,
+		});
+		list.mockResolvedValue(page);
 
-			reconnect(view);
-			await vi.waitFor(() => expect(view.loading).toBeNull());
+		reconnect(view);
+		await vi.waitFor(() => expect(view.loading).toBeNull());
 
-			expect(list).toHaveBeenCalledTimes(5);
-			expect(ids(view)).toEqual(Array.from({ length: 200 }, (_, i) => 400 - i));
-			expect(view.browsingHistory).toBe(true);
-			expect(view.newWhileBrowsing).toBe(1);
-			expect(view.rawLink).toEqual({ id: e(250).id, state: "pending" });
-			const page = aroundPage();
-			raw.resolve(page);
-			await opening;
-			expect(open).toHaveBeenCalledExactlyOnceWith(page);
-		},
-	);
+		const proven = epoch !== undefined;
+		expect(list).toHaveBeenCalledTimes(proven ? 5 : 6);
+		expect(ids(view)).toEqual(
+			proven ? Array.from({ length: 200 }, (_, i) => 400 - i) : [501],
+		);
+		expect(view.browsingHistory).toBe(proven);
+		expect(view.newWhileBrowsing).toBe(proven ? 1 : 0);
+		expect(view.rawLink).toEqual(
+			proven ? { id: e(250).id, state: "pending" } : null,
+		);
+		const rawPage = aroundPage();
+		raw.resolve(rawPage);
+		await opening;
+		expect(open.mock.calls).toEqual(proven ? [[rawPage]] : []);
+	});
 
 	it("takes no ring epoch from a check that succeeds after the link drops again", async () => {
 		const { view, list } = await browsing(null, KEPT_RING);
@@ -858,6 +868,70 @@ describe("EventsView: connection", () => {
 		expect(view.events).toEqual([refill(651)]);
 		expect(view.browsingHistory).toBe(false);
 	});
+
+	it.each([500, 650])(
+		"refreshes a refilled window at head %i when the reconnect epoch is unavailable",
+		async (head) => {
+			const { view, list, around } = await browsing(null, KEPT_RING);
+			const raw = Promise.withResolvers<LogAroundOutput>();
+			around.mockReturnValueOnce(raw.promise);
+			const open = vi.fn();
+			const opening = view.viewRaw(e(250), open);
+			const newest = eventPage([refill(head), refill(head - 1)], {
+				retainedFromSeq: 1,
+				epoch: undefined,
+			});
+			list.mockResolvedValue(newest);
+
+			reconnect(view);
+			await vi.waitFor(() => expect(view.loading).toBeNull());
+			raw.resolve(aroundPage());
+			await opening;
+
+			expect(view.events).toEqual(newest.events);
+			expect(view.browsingHistory).toBe(false);
+			expect(view.rowReset).toEqual({ keepShownFocus: false });
+			expect(view.rawLink).toBeNull();
+			expect(open).not.toHaveBeenCalled();
+		},
+	);
+
+	it.each([false, true])(
+		"replays only the replacement connection's pushes (new push during the read: %s)",
+		async (duringRead) => {
+			const { view, list, push } = await browsing(null, KEPT_RING);
+			list.mockResolvedValueOnce(
+				eventPage([e(250), e(249)], { epoch: KEPT_RING }),
+			);
+			reconnect(view);
+			await vi.waitFor(() => expect(view.loading).toBeNull());
+
+			const oldCheck = Promise.withResolvers<EventListOutput>();
+			const replacement = Promise.withResolvers<EventListOutput>();
+			const newPage = eventPage([refill(250), refill(249)], {
+				epoch: NEW_RING,
+			});
+			list.mockReturnValueOnce(oldCheck.promise);
+			const checking = view.checkLiveEdge();
+			push(e(251));
+			list
+				.mockResolvedValueOnce(newPage)
+				.mockReturnValueOnce(replacement.promise);
+
+			reconnect(view);
+			await vi.waitFor(() => expect(view.browsingHistory).toBe(false));
+			if (duringRead) push(refill(251));
+			replacement.resolve(newPage);
+			oldCheck.resolve(eventPage([e(250)], { epoch: KEPT_RING }));
+			await checking;
+			await vi.waitFor(() => expect(view.loading).toBeNull());
+
+			expect(view.events).toEqual(
+				duringRead ? [refill(251), ...newPage.events] : newPage.events,
+			);
+			expect(view.stale).toBe(false);
+		},
+	);
 
 	it("reads the newest page again when an older page comes from a new ring epoch", async () => {
 		const { view, list } = await browsing(null, KEPT_RING);

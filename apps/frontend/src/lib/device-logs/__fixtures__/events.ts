@@ -13,6 +13,7 @@ import type {
 import { BOOT_IDS } from "./boots";
 
 export const EVENT_AT = Date.UTC(2026, 10, 16, 11, 0, 0);
+export const EVENT_RING_EPOCH = "0f4c2a51-8d3e-4b7a-9c1f-2e6d8a4b5c7e";
 
 export function event(
 	seq: number,
@@ -43,6 +44,7 @@ export function eventPage(
 		nextBeforeSeq: null,
 		headSeq: events[0]?.seq ?? 0,
 		retainedFromSeq: events.at(-1)?.seq ?? 0,
+		epoch: EVENT_RING_EPOCH,
 		...extra,
 	};
 }

@@ -1,23 +1,5 @@
-/**
- * The Events tab's state: the event history, newest first and always in `seq`
- * order (never by time), its filters and paging, and the events the device
- * pushes while the tab is open. A push that skips a `seq` re-reads the list
- * instead of guessing what was missed, keeping the rows shown until the first
- * page replaces them; a disconnect marks the list stale and
- * the reconnect re-reads it. While browsing older events, the reconnect instead
- * checks the live edge: the list stays stale until a check on the current
- * connection succeeds, and that check removes only rows the ring no longer
- * holds, keeping the window, its paging and every other row's action. A check
- * that proves the ring was cleared replaces the window with the newest page.
- * A reply naming a new ring epoch is a history clear: every row and action goes
- * and the newest page is read again. A drop retires the check in flight.
- * Pushes leave a browsed window in place and only count the new events Start
- * from newest will show; a skipped `seq` reads the live edge for that count.
- * Only the newest read may settle, and a push that arrives while the first page
- * is read joins that page unless the page already covers it. Disposing drops
- * every reply still in flight and stops listening once; disposing again does
- * nothing. Data loads only in these methods, never in an effect.
- */
+// The Events window is ordered by sequence. Reconnect and gap reads preserve
+// history only when their list still identifies the same ring.
 import type {
 	DeviceEvent,
 	EventFamily,
@@ -29,10 +11,11 @@ import type {
 
 import type { ConnectionState } from "$lib/rpc/client";
 
+import { admits, type EventFilter, listInput } from "./events-filter";
+import { type AroundPage, EventsRawLink } from "./events-raw-link.svelte";
 import { EVENT_ROW_CAP, mergeEvents } from "./events-window";
 
-export type AroundPage = Extract<LogAroundOutput, { ok: true }>;
-export type RawLinkState = "pending" | "removed" | "busy" | "failed";
+export type { AroundPage, RawLinkState } from "./events-raw-link.svelte";
 
 export interface EventsViewDeps {
 	readonly list: (input: EventListInput) => Promise<EventListOutput>;
@@ -42,37 +25,7 @@ export interface EventsViewDeps {
 	) => void;
 }
 
-export interface EventFilter {
-	readonly families: readonly EventFamily[];
-	readonly problemsOnly: boolean;
-	readonly bootId: string | null;
-}
-
 type End = "first" | "older";
-
-const PAGE = 100;
-const PROBLEMS = new Set(["error", "warning"]);
-
-function listInput(
-	filter: EventFilter,
-	beforeSeq: number | null,
-): EventListInput {
-	return {
-		limit: PAGE,
-		...(beforeSeq === null ? {} : { beforeSeq }),
-		...(filter.families.length === 0 ? {} : { families: [...filter.families] }),
-		...(filter.problemsOnly ? { problemsOnly: true } : {}),
-		...(filter.bootId === null ? {} : { bootId: filter.bootId }),
-	};
-}
-
-function admits(filter: EventFilter, event: DeviceEvent): boolean {
-	return (
-		(filter.families.length === 0 || filter.families.includes(event.family)) &&
-		(!filter.problemsOnly || PROBLEMS.has(event.severity)) &&
-		(filter.bootId === null || filter.bootId === event.bootId)
-	);
-}
 
 export class EventsView {
 	events = $state.raw<readonly DeviceEvent[]>([]);
@@ -91,25 +44,23 @@ export class EventsView {
 	stale = $state(false);
 	liveEdgeFailed = $state(false);
 	newWhileBrowsing = $state(0);
-	rawLink = $state.raw<{
-		readonly id: string;
-		readonly state: RawLinkState;
-	} | null>(null);
+	get rawLink() {
+		return this.#raw.link;
+	}
 	readonly filtered = $derived(
 		this.filter.families.length > 0 ||
 			this.filter.problemsOnly ||
 			this.filter.bootId !== null,
 	);
 	readonly #deps: EventsViewDeps;
+	readonly #raw = new EventsRawLink();
 	#generation = 0;
-	#connection = 0;
 	#head = 0;
 	#retainedFrom = 0;
 	#epoch: string | undefined;
 	#held: DeviceEvent[] = [];
-	#connected = false;
+	#connected: boolean | undefined;
 	#disposed = false;
-	#rawRequest: object | undefined;
 
 	constructor(deps: EventsViewDeps, bootId: string | null) {
 		this.#deps = deps;
@@ -124,7 +75,7 @@ export class EventsView {
 		this.liveEdgeFailed = false;
 		this.newWhileBrowsing = 0;
 		this.rowReset = { keepShownFocus: false };
-		this.#clearRawLink();
+		this.#raw.reset();
 		this.events = [];
 		this.nextBeforeSeq = null;
 		this.browsingHistory = false;
@@ -168,7 +119,7 @@ export class EventsView {
 	connectionChanged(state: ConnectionState): void {
 		this.#connected = state === "connected";
 		if (!this.#connected) {
-			this.#connection += 1;
+			this.#held = [];
 			this.stale = true;
 			this.liveEdgeFailed = false;
 		} else if (this.stale) {
@@ -178,51 +129,15 @@ export class EventsView {
 	}
 
 	/** Asks for the raw entries around `event`; only the newest request may open them. */
-	async viewRaw(
-		event: DeviceEvent,
-		open: (page: AroundPage) => void,
-	): Promise<void> {
-		// The pending action stays focusable (aria-disabled), so a repeat press lands here.
-		if (this.rawLink?.id === event.id && this.rawLink.state === "pending")
-			return;
-		const request = {};
-		this.#rawRequest = request;
-		this.rawLink = { id: event.id, state: "pending" };
-		let state: RawLinkState;
-		try {
-			const result = await this.#deps.around({
-				bootId: event.bootId,
-				at: event.at,
-				eventId: event.id,
-			});
-			if (request !== this.#rawRequest) return;
-			if (result.ok) {
-				this.rawLink = null;
-				open(result);
-				return;
-			}
-			state =
-				result.error === "BOOT_UNAVAILABLE"
-					? "removed"
-					: result.error === "BUSY"
-						? "busy"
-						: "failed";
-		} catch (error) {
-			if (request !== this.#rawRequest) return;
-			console.error(
-				"System Logs could not open the raw logs of an event:",
-				error,
-			);
-			state = "failed";
-		}
-		this.rawLink = { id: event.id, state };
+	viewRaw(event: DeviceEvent, open: (page: AroundPage) => void): Promise<void> {
+		return this.#raw.open(event, this.#deps.around, open);
 	}
 
 	dispose(): void {
 		if (this.#disposed) return;
 		this.#disposed = true;
 		this.#generation += 1;
-		this.#rawRequest = undefined;
+		this.#raw.reset();
 		this.#deps.setFeedListener(undefined);
 	}
 
@@ -231,21 +146,15 @@ export class EventsView {
 		void this.reload();
 	}
 
-	#clearRawLink(): void {
-		this.#rawRequest = undefined;
-		this.rawLink = null;
-	}
-
 	async #read(
 		end: End,
 		mode: "replace" | "gap" | "live-edge" = "replace",
 	): Promise<void> {
 		const generation = end === "first" ? ++this.#generation : this.#generation;
-		const connection = this.#connection;
-		// Only the newest read settles, and an edge check only on the connection it checked.
+		// The queue belongs to one connection. A superseded read cannot drain a new queue.
+		const held = this.#held;
 		const current = () =>
-			generation === this.#generation &&
-			(mode !== "live-edge" || connection === this.#connection);
+			generation === this.#generation && held === this.#held;
 		const beforeSeq = end === "older" ? this.nextBeforeSeq : null;
 		const startingRows = this.events;
 		this.loading = end;
@@ -257,16 +166,12 @@ export class EventsView {
 			const page = await this.#deps.list(listInput(this.filter, beforeSeq));
 			if (!current()) return;
 			const seen = this.#head;
-			const epoch = this.#epoch;
-			// A reply without an epoch comes from a store that cannot keep one.
-			this.#epoch = page.epoch ?? epoch;
-			// A new epoch is a clear, after which seq and ids repeat, so nothing shown
-			// survives. A reload's own page already replaces every row and action.
-			if (
-				epoch !== undefined &&
-				this.#epoch !== epoch &&
-				(end === "older" || mode !== "replace")
-			) {
+			const sameEpoch = page.epoch !== undefined && page.epoch === this.#epoch;
+			this.#epoch = page.epoch;
+			// A lower edge already replaces the whole window without a second list.
+			const lowerEdge =
+				mode === "live-edge" && page.epoch === undefined && page.headSeq < seen;
+			if (!sameEpoch && !lowerEdge && (end === "older" || mode !== "replace")) {
 				void this.reload();
 				return;
 			}
@@ -281,7 +186,7 @@ export class EventsView {
 					this.events = page.events;
 					this.nextBeforeSeq = page.nextBeforeSeq;
 					this.newWhileBrowsing = 0;
-					this.#clearRawLink();
+					this.#raw.reset();
 					settleRows = true;
 				} else {
 					const kept = this.events.filter(
@@ -316,13 +221,13 @@ export class EventsView {
 				this.events = merged.slice(-EVENT_ROW_CAP);
 				this.nextBeforeSeq = page.nextBeforeSeq;
 			}
-			newer = this.#held.splice(0).filter((event) => event.seq > page.headSeq);
+			newer = held.splice(0).filter((event) => event.seq > page.headSeq);
 		} catch (error) {
 			if (!current()) return;
 			console.error("System Logs could not read the event history:", error);
 			if (mode === "live-edge") {
 				// Offline, the next reconnect checks again, so Retry waits for the link.
-				this.liveEdgeFailed = this.#connected;
+				this.liveEdgeFailed = this.#connected === true;
 			} else {
 				if (end === "first") {
 					this.events = [];
@@ -332,11 +237,11 @@ export class EventsView {
 			}
 		} finally {
 			if (generation === this.#generation) {
-				if (mode === "live-edge") this.#held.length = 0;
+				if (mode === "live-edge") held.length = 0;
 				this.loading = null;
 			}
 		}
-		if (generation !== this.#generation) return;
+		if (!current()) return;
 		this.#receive(newer);
 		if (settleRows) {
 			const link = this.rawLink;
@@ -344,7 +249,7 @@ export class EventsView {
 				link?.state === "pending" &&
 				!this.events.some(({ id }) => id === link.id)
 			)
-				this.#clearRawLink();
+				this.#raw.reset();
 			this.rowReset = { keepShownFocus: true };
 		}
 	}
@@ -353,6 +258,7 @@ export class EventsView {
 	// may have sent it after taking the page, so it joins unless its seq is at or
 	// below the page's headSeq, which the page already covers.
 	#receive(batch: readonly DeviceEvent[]): void {
+		if (this.#connected === false) return;
 		if (this.loading === "first") {
 			this.#held.push(...batch);
 			return;
