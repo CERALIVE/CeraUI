@@ -1,10 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-
 import { expect, test, type BackendRpc } from './fixtures/index.js';
 
-import { EVIDENCE_DIR, navigateTo, pressAndExpectRow } from './helpers/index.js';
+import { EVIDENCE_DIR, navigateTo } from './helpers/index.js';
 
 /**
  * Task 13 — observable logs end-to-end (S8).
@@ -87,14 +86,6 @@ test.beforeEach(async ({ page, browserName }, testInfo) => {
 	test.skip(testInfo.project.name !== 'desktop', 'desktop layout drives the settings list');
 	await page.addInitScript(installWsHarness, { token: TOKEN });
 	await page.goto('/');
-	// A mount slower than 5s leaves index.html's #js-failed watchdog over a working app (a separate product
-	// defect). Waiting for the mount and removing it isolates the download contract; it is not late-mount coverage.
-	await page.waitForFunction(
-		() => (window as { __ceraAppMounted?: boolean }).__ceraAppMounted === true,
-		undefined,
-		{ timeout: 60_000 },
-	);
-	await page.evaluate(() => document.getElementById('js-failed')?.remove());
 	await navigateTo(page, 'settings');
 });
 
@@ -150,28 +141,4 @@ test('LogsDialog downloads a real, observable backend journal', async ({ page, b
 		].join('\n'),
 		'utf8',
 	);
-});
-
-test('Events rows are one tab stop that the arrow keys, Home and End move between', async ({ page }) => {
-	await page.getByRole('button', { name: 'System Logs' }).first().click();
-	const dialog = page.getByRole('dialog', { name: 'System Logs' });
-	const rows = dialog.getByTestId('event-row');
-	await expect(rows.nth(2)).toBeVisible();
-
-	await rows.first().getByRole('button', { name: 'View raw logs' }).focus();
-	await pressAndExpectRow(page, 'ArrowDown');
-	await pressAndExpectRow(page, 'End');
-	await pressAndExpectRow(page, 'ArrowUp');
-	await pressAndExpectRow(page, 'Home');
-
-	// A row's stop is its first action; Tab reaches the row's other actions, then
-	// leaves the list without stopping on another row's actions.
-	const first = dialog.locator('[data-expected-row]');
-	const actions = await first.getByRole('button').count();
-	for (let step = 1; step < actions; step++) {
-		await page.keyboard.press('Tab');
-		await expect(first.locator(':focus')).toHaveCount(1);
-	}
-	await page.keyboard.press('Tab');
-	expect(await page.evaluate(() => Boolean(document.activeElement?.closest('[data-testid="event-row"]')))).toBe(false);
 });

@@ -1,6 +1,6 @@
 import en from '../../../../packages/i18n/messages/en.json' with { type: 'json' };
 import { expect, type Locator, type Page, test } from './fixtures/index.js';
-import { ensureAuthenticated } from './helpers/index.js';
+import { ensureAuthenticated, navigateTo, pressAndExpectRow } from './helpers/index.js';
 import { SYSTEM_LOGS_DIALOG } from './pages/system-logs.js';
 
 /**
@@ -119,4 +119,37 @@ test('System Logs works by keyboard alone and returns focus to its Settings entr
 	await page.keyboard.press('Escape');
 	await expect(dialog).toHaveCount(0);
 	await expect(entry).toBeFocused();
+});
+
+test('Events rows are one tab stop that the arrow keys, Home and End move between', { tag: '@desktop-only' }, async ({ page }) => {
+	await page.goto('/');
+	await page.waitForFunction(
+		() => '__ceraAppMounted' in window && window.__ceraAppMounted === true,
+		undefined,
+		{ timeout: 60_000 },
+	);
+	await expect(page.locator('#js-failed')).toBeHidden();
+	await ensureAuthenticated(page);
+	await navigateTo(page, 'settings');
+
+	await page.getByRole('button', { name: 'System Logs' }).first().click();
+	const dialog = page.getByRole('dialog', { name: 'System Logs' });
+	const rows = dialog.getByTestId('event-row');
+	await expect(rows.nth(2)).toBeVisible();
+
+	await rows.first().getByRole('button', { name: 'View raw logs' }).focus();
+	await pressAndExpectRow(page, 'ArrowDown');
+	await pressAndExpectRow(page, 'End');
+	await pressAndExpectRow(page, 'ArrowUp');
+	await pressAndExpectRow(page, 'Home');
+
+	// A row's stop is its first action. Tab visits its other actions, then leaves the list.
+	const first = dialog.locator('[data-expected-row]');
+	const actions = await first.getByRole('button').count();
+	for (let step = 1; step < actions; step++) {
+		await page.keyboard.press('Tab');
+		await expect(first.locator(':focus')).toHaveCount(1);
+	}
+	await page.keyboard.press('Tab');
+	expect(await page.evaluate(() => Boolean(document.activeElement?.closest('[data-testid="event-row"]')))).toBe(false);
 });
