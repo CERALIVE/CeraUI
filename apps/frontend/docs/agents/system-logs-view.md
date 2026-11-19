@@ -402,7 +402,8 @@ Rules for this copy:
 | `systemLogs.error.readFailed` | Couldn't read the logs. | JOURNAL_UNAVAILABLE, READ_FAILED, RECORD_TOO_LARGE |
 | `systemLogs.marker.suppressed` | The device dropped entries here because too many were written at once. | marker: 'suppressed' and gap suppressed |
 | `systemLogs.marker.dropped` | Entries skipped while following: {count} | dropped > 0 |
-| `systemLogs.marker.catchupExceeded` | Too many entries arrived at once, so some were skipped. | Gap catchup_exceeded |
+| `systemLogs.marker.catchupExceeded` | More entries were written while following was paused than could be caught up. They are still stored. | Gap catchup_exceeded |
+| `systemLogs.marker.showSkipped` | Show skipped entries | Recover the retained range from a catch-up separator |
 | `systemLogs.marker.cursorUnavailable` | Log cleanup removed the follow position, so some entries may be missing. | Gap cursor_unavailable |
 | `systemLogs.marker.clockChanged` | The device clock changed here. Times recorded before this point may be wrong. | Clock-not-synced marker |
 | `systemLogs.follow.start` | Follow | Follow button |
@@ -865,6 +866,11 @@ live-region announcements.
 After reconnect, a previously attached Raw follow checks the running boot
 before offering a usable Resume. A changed boot stops the follow with the
 restart notice and reloads This boot from its newest retained entry.
+
+The catch-up separator can recover one bounded newer page at a time, in its
+original position between the live and historical rows. The button retains
+focus while more pages remain. When recovery finishes, focus moves to a
+recovered entry if the operator is still on the disappearing button.
 
 ### Components
 

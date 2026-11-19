@@ -124,6 +124,7 @@ type Outputs = {
 		entries: Entry[];
 		checkpointCursor: string | null;
 		dropped: number;
+		gapFrom?: string | undefined;
 		gap?: 'catchup_exceeded' | 'cursor_unavailable' | 'suppressed' | undefined;
 		ended?: 'follower_exit' | 'boot_changed' | 'cleared' | undefined;
 	};

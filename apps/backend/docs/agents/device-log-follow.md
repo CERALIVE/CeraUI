@@ -45,7 +45,12 @@ examined cursor and the dropped count. A relevant kept suppression notice marks
 its batch `suppressed`. The systemd conformance flood has not reproduced a real
 suppression notice; notice handling is tested with synthetic records only.
 More than 2,000 records before the first flush discards that generation, joins its
-watcher, resolves a fresh head and emits `catchup_exceeded` before restarting.
+watcher, resolves a fresh head for the same journal match and emits
+`catchup_exceeded` before restarting. The old checkpoint becomes `gapFrom`,
+a newer-query continuation bound to the same filter, boot and history epoch.
+It pages after the old checkpoint through the restart head, inclusive, in
+journal order. A boot-start checkpoint begins at the retained start. A
+checkpoint excluded by the filter is verified in a boot-only scan.
 Unexpected completion or output failure emits `follower_exit` once without retry.
 
 Stop cancels the flush before aborting and joining. It returns the checkpoint of

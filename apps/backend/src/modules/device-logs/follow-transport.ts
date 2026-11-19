@@ -1,4 +1,8 @@
-import { LOG_FOLLOW_EVENT, type LogFollowMessage } from "@ceraui/rpc/schemas";
+import {
+	LOG_FOLLOW_EVENT,
+	LOG_FOLLOW_GAP_FROM,
+	type LogFollowMessage,
+} from "@ceraui/rpc/schemas";
 import type { ServerWebSocketSendStatus } from "bun";
 import { buildMsg, getSocketSenderId } from "../../rpc/compat.ts";
 import type { MessageSocket } from "../ui/message-socket.ts";
@@ -12,8 +16,20 @@ export function createFollowTransport(
 	conn: FollowSocket,
 	session: AbortSignal | undefined,
 ) {
-	const send = (message: LogFollowMessage) =>
-		conn.send(buildMsg(LOG_FOLLOW_EVENT, message, getSocketSenderId(conn)));
+	const send = ({ gapFrom, ...message }: LogFollowMessage) => {
+		const id = getSocketSenderId(conn);
+		// The old payload parser rejects unknown fields. A sibling envelope
+		// field keeps the original payload valid and shares its send outcome.
+		return conn.send(
+			gapFrom === undefined
+				? buildMsg(LOG_FOLLOW_EVENT, message, id)
+				: JSON.stringify({
+						[LOG_FOLLOW_EVENT]: message,
+						[LOG_FOLLOW_GAP_FROM]: gapFrom,
+						id: id ?? undefined,
+					}),
+		);
+	};
 	return {
 		send(message: LogFollowMessage, checkpointCursor: string | null) {
 			if (session?.aborted) return "failed";

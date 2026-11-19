@@ -4,6 +4,7 @@
  * Provides type-safe RPC calls to the backend via WebSocket.
  * Uses the AppContract from @ceraui/rpc for end-to-end type safety.
  */
+
 import type {
 	AddonDescriptor,
 	AddonState,
@@ -149,6 +150,7 @@ import type {
 	WifiOperationOutput,
 	WifiScanInput,
 } from "@ceraui/rpc/schemas";
+import { LOG_FOLLOW_EVENT, LOG_FOLLOW_GAP_FROM } from "@ceraui/rpc/schemas";
 
 import { getRpcSocketUrl } from "../env";
 import { nextBackoffDelay } from "./backoff";
@@ -451,9 +453,17 @@ class RPCClient {
 					? (parsed as { seq: number }).seq
 					: undefined;
 			for (const [type, value] of Object.entries(parsed)) {
-				if (type === "id" || type === "seq") continue;
+				if (type === "id" || type === "seq" || type === LOG_FOLLOW_GAP_FROM)
+					continue;
+				const payload =
+					type === LOG_FOLLOW_EVENT &&
+					typeof value === "object" &&
+					value !== null &&
+					Object.hasOwn(parsed, LOG_FOLLOW_GAP_FROM)
+						? { ...value, gapFrom: parsed[LOG_FOLLOW_GAP_FROM] }
+						: value;
 				for (const handler of this.messageHandlers) {
-					handler(type, value, seq);
+					handler(type, payload, seq);
 				}
 			}
 		} catch (error) {

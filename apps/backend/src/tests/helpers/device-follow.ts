@@ -1,5 +1,6 @@
 import { spyOn } from "bun:test";
 import {
+	LOG_FOLLOW_GAP_FROM,
 	type LogFollowMessage,
 	logFollowMessageSchema,
 } from "@ceraui/rpc/schemas";
@@ -130,7 +131,17 @@ export function followFixture() {
 		data: { senderId: "viewer" },
 		send(frame: string) {
 			const parsed = JSON.parse(frame);
-			messages.push(logFollowMessageSchema.parse(parsed["logs.follow"]));
+			const message = logFollowMessageSchema
+				.omit({ gapFrom: true })
+				.parse(parsed["logs.follow"]);
+			messages.push(
+				logFollowMessageSchema.parse({
+					...message,
+					...(Object.hasOwn(parsed, LOG_FOLLOW_GAP_FROM)
+						? { gapFrom: parsed[LOG_FOLLOW_GAP_FROM] }
+						: {}),
+				}),
+			);
 			sent.resolve();
 			return Buffer.byteLength(frame);
 		},

@@ -9,7 +9,7 @@
 <script lang="ts">
 import { getLocale, m } from '@ceraui/i18n/svelte';
 import { createVirtualizer } from '@tanstack/svelte-virtual';
-import { untrack } from 'svelte';
+import { tick, untrack } from 'svelte';
 import { SvelteSet } from 'svelte/reactivity';
 
 import { Button } from '$lib/components/ui/button';
@@ -140,6 +140,16 @@ function navigate(event: KeyboardEvent, currentKey: string): void {
 function showHeld(): void {
 	view.showHeld();
 	(scroller as HTMLDivElement).scrollTop = 0;
+}
+
+async function readGap(action: HTMLElement, gap: { key: string; continuation: string }): Promise<void> {
+	const focused = document.activeElement === action;
+	const next = await view.loadGap(gap.key, gap.continuation);
+	await tick();
+	if (!focused || action.isConnected || document.activeElement !== document.body) return;
+	if (typeof next === 'string') pendingFocus = next;
+	else if (next === null || view.rows.some((row) => row.key === gap.key && row.kind === 'marker' && row.gapError))
+		scroller?.focus();
 }
 </script>
 
@@ -273,6 +283,8 @@ function showHeld(): void {
 						formatTime={(ts) => timeFormat.format(ts)}
 						onKeydown={(event) => navigate(event, row.key)}
 						onToggle={() => toggle(row.key)}
+						readGap={(action, continuation) => readGap(action, { key: row.key, continuation })}
+						loadingGap={view.loadingGap === row.key}
 						{row}
 						stale={view.stale}
 					/>

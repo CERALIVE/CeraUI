@@ -30,9 +30,11 @@ interface Props {
 	onToggle: () => void;
 	/** The list moves focus between rows with the arrow keys. */
 	onKeydown: (event: KeyboardEvent) => void;
+	readGap?: (action: HTMLElement, continuation: string) => Promise<void>;
+	loadingGap?: boolean;
 }
 
-let { row, stale, anchored, expanded, focusable, formatTime, formatDate, onToggle, onKeydown }: Props = $props();
+let { row, stale, anchored, expanded, focusable, formatTime, formatDate, onToggle, onKeydown, readGap, loadingGap }: Props = $props();
 
 const uid = $props.id();
 
@@ -72,7 +74,30 @@ async function copy(text: string): Promise<void> {
 		>
 	</div>
 {:else if row.kind === 'marker'}
-	<div class={SEPARATOR} data-marker={row.marker} data-testid="raw-marker">{MARKER[row.marker](row.count)}</div>
+	<div data-marker={row.marker} data-testid="raw-marker" class={!row.gapFrom && !row.gapError ? SEPARATOR : undefined}>
+		{#if row.gapFrom || row.gapError}
+			<div class={SEPARATOR}>{MARKER[row.marker](row.count)}</div>
+		{:else}
+			{MARKER[row.marker](row.count)}
+		{/if}
+		{#if row.gapError}
+			<p class="text-muted-foreground px-4 text-center text-xs" role="alert">{row.gapError === 'CURSOR_UNAVAILABLE' || row.gapError === 'FILTER_CHANGED'
+				? m['systemLogs.error.expiredTitle']()
+				: row.gapError === 'BUSY' ? m['systemLogs.error.busy']() : m['systemLogs.error.readFailed']()}</p>
+		{/if}
+		{#if row.gapFrom && readGap}
+			{const continuation = $derived(row.gapFrom)}
+			<div class="flex justify-center px-4 pb-2">
+				<Button
+					aria-busy={loadingGap || undefined}
+					aria-disabled={loadingGap || undefined}
+					onclick={(event) => continuation === undefined ? undefined : readGap?.(event.currentTarget, continuation)}
+					size="sm"
+					variant="ghost"
+				>{row.gapError ? m['systemLogs.action.retry']() : m['systemLogs.marker.showSkipped']()}</Button>
+			</div>
+		{/if}
+	</div>
 {:else if row.entry.marker === 'suppressed'}
 	<div class={SEPARATOR} data-marker="suppressed" data-testid="raw-marker">{m['systemLogs.marker.suppressed']()}</div>
 {:else}

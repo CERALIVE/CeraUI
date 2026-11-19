@@ -4,7 +4,11 @@
  * its shown part never holds more than ROW_CAP entries: the rows nearest the
  * top are kept.
  */
-import type { LogEntry, LogFollowMessage } from "@ceraui/rpc/schemas";
+import type {
+	LogEntry,
+	LogErrorCode,
+	LogFollowMessage,
+} from "@ceraui/rpc/schemas";
 
 export const ROW_CAP = 2000;
 
@@ -17,6 +21,8 @@ export type RawRow =
 			readonly key: string;
 			readonly marker: MarkerKind;
 			readonly count: number;
+			readonly gapFrom?: string;
+			readonly gapError?: LogErrorCode;
 	  };
 
 export type DisplayRow =
@@ -103,7 +109,19 @@ export function followRows(
 			? [marker("dropped", `dropped-${serial}`, message.dropped)]
 			: []),
 		...entryRows([...message.entries].reverse()),
-		...(gap === undefined ? [] : [marker(gap, `gap-${serial}`, 0)]),
+		...(gap === undefined
+			? []
+			: [
+					{
+						kind: "marker" as const,
+						key: `gap-${serial}`,
+						marker: gap,
+						count: 0,
+						...(gap === "catchupExceeded" && message.gapFrom !== undefined
+							? { gapFrom: message.gapFrom }
+							: {}),
+					},
+				]),
 	];
 }
 

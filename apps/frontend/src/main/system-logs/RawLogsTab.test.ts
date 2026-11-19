@@ -1215,6 +1215,68 @@ describe("RawLogsTab: follow", () => {
 		expect(logs.followStart).toHaveBeenCalledTimes(1);
 	});
 
+	it("pages skipped rows in place and transfers focus when the gap is filled", async () => {
+		await mounted();
+		await startFollowing();
+		push({
+			gap: "catchup_exceeded",
+			checkpointCursor: "s=7",
+			...{ gapFrom: "next1" },
+		});
+		push({ entries: [entry("s=8")], checkpointCursor: "s=8" });
+		const action = await screen.findByRole("button", {
+			name: "Show skipped entries",
+		});
+		action.focus();
+		const reply = Promise.withResolvers<QueryPage>();
+		logs.query.mockReturnValueOnce(reply.promise);
+		await fireEvent.click(action);
+		expect(document.activeElement).toBe(action);
+		reply.resolve(
+			page(["s=4", "s=5"], {
+				hasMore: true,
+				continuation: "next2",
+				termination: "lookahead",
+			}),
+		);
+		await waitFor(() =>
+			expect(cursors()).toEqual(["s=8", "s=5", "s=4", "s=3", "s=2", "s=1"]),
+		);
+		expect(document.activeElement).toBe(action);
+		expect(logs.query).toHaveBeenLastCalledWith({
+			...DEFAULT_INPUT,
+			direction: "newer",
+			continuation: "next1",
+		});
+		logs.query.mockResolvedValueOnce(page(["s=6", "s=7"]));
+		await fireEvent.click(action);
+		await waitFor(() =>
+			expect(cursors()).toEqual([
+				"s=8",
+				"s=7",
+				"s=6",
+				"s=5",
+				"s=4",
+				"s=3",
+				"s=2",
+				"s=1",
+			]),
+		);
+		await waitFor(() =>
+			expect(
+				document.activeElement
+					?.closest("[data-cursor]")
+					?.getAttribute("data-cursor"),
+			).toBe("s=7"),
+		);
+		expect(screen.queryByTestId("raw-marker")).toBeNull();
+		expect(logs.query).toHaveBeenLastCalledWith({
+			...DEFAULT_INPUT,
+			direction: "newer",
+			continuation: "next2",
+		});
+	});
+
 	it("shows the out-of-date notice while the socket is down even without a follow", async () => {
 		await mounted();
 		setConnectionState("disconnected");

@@ -133,3 +133,19 @@ describe('log procedure input and output bindings', () => {
 		if (schema instanceof z.ZodArray) expect(schema.element).toBe(logs.logBootInfoSchema);
 	});
 });
+test('follow catch-up frames accept an optional query continuation and refuse raw cursors', () => {
+	const frame = {
+		subscriptionId: 'sub',
+		entries: [],
+		checkpointCursor: 's=8',
+		dropped: 0,
+		gap: 'catchup_exceeded' as const,
+	};
+	expect(logs.logFollowMessageSchema.parse(frame)).toEqual(frame);
+	const recoverable = { ...frame, gapFrom: 'encoded_position' };
+	expect(logs.logFollowMessageSchema.safeParse(recoverable)).toEqual({
+		success: true,
+		data: recoverable,
+	});
+	expect(logs.logFollowMessageSchema.safeParse({ ...frame, gapFrom: 's=1' }).success).toBe(false);
+});

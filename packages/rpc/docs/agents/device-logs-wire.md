@@ -40,11 +40,22 @@ Frame fields (`logs.schema.ts:150-157`): `subscriptionId`, `entries`,
 `cursor_unavailable`, `suppressed`), optional `ended` (`follower_exit`,
 `boot_changed`, `cleared`).
 
+On `catchup_exceeded`, the optional `gapFrom` field is a `logs.query` continuation
+for direction `newer` using the same filter and `boot: "current"`. It starts after
+the old checkpoint and ends at the restart checkpoint, including that record
+if it matches. On the socket the continuation travels as a sibling envelope
+field named `logs.follow.gapFrom`, alongside the unchanged `logs.follow`
+payload. Receivers that understand the sibling fold it into the parsed follow
+message. Older receivers ignore the sibling and still accept the original gap
+payload through their strict schema.
+
 A follow started on a verified empty boot returns a boot-start checkpoint in
 the existing `checkpointCursor` field. Clients echo it as `afterCursor` to
 replay from the beginning of retained history for that boot, even on another
 socket. The checkpoint carries the boot ID and history epoch. A stale boot-start
 checkpoint reports `cursor_unavailable` and attaches at the current head.
+An ordinary journal checkpoint from a different boot attaches at the retained
+start of the running boot.
 
 ## Shapes
 

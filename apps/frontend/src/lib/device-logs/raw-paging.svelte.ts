@@ -53,6 +53,7 @@ const MOMENT_EXPORT_HALF_MS = 5 * 60_000;
 /** Owns query generations, the fixed window's edges and head replay. */
 export class RawPaging {
 	loading = $state<"first" | RawEnd | null>(null);
+	loadingGap = $state<string | null>(null);
 	bottom = $state.raw<RawEdge | null>(null);
 	/** Only in anchor mode, where the list pages toward newer entries too. */
 	top = $state.raw<RawEdge | null>(null);
@@ -72,6 +73,7 @@ export class RawPaging {
 
 	invalidate(): void {
 		this.#generation += 1;
+		this.loadingGap = null;
 	}
 
 	/** Follow cannot run over an empty search with a position. Replay from the head next time. */
@@ -87,6 +89,7 @@ export class RawPaging {
 	async loadHead(refollow: boolean, fence?: FollowFence): Promise<void> {
 		const { rows, follow, feedback } = this.context;
 		const generation = ++this.#generation;
+		this.loadingGap = null;
 		const live = follow.detach();
 		const query = queryInput(this.context.filter(), this.deps.now());
 		this.deps.onQuery?.(query);
@@ -124,6 +127,7 @@ export class RawPaging {
 			// A budget page with no position repeats this end's first query.
 			(edge.continuation === null && edge.hasMore !== null) ||
 			this.loading !== null ||
+			this.loadingGap !== null ||
 			(end === "bottom" && rows.capped)
 		)
 			return;
@@ -162,6 +166,30 @@ export class RawPaging {
 			if (EXPIRED.has(result.error)) this[end] = { ...edge, lost: true };
 		}
 		if (head) await follow.afterHeadRead(live, false);
+	}
+
+	async loadGap(
+		key: string,
+		continuation: string,
+	): Promise<string | null | undefined> {
+		if (this.loading !== null || this.loadingGap !== null) return;
+		const generation = this.#generation;
+		this.loadingGap = key;
+		const query = queryInput(this.context.filter(), this.deps.now());
+		const page = await this.#query({
+			...query,
+			direction: "newer",
+			continuation,
+		});
+		if (generation !== this.#generation) return;
+		this.loadingGap = null;
+		if (
+			page.ok &&
+			page.continuation === continuation &&
+			page.entries.length === 0
+		)
+			return this.context.rows.fillGap(key, READ_FAILED);
+		return this.context.rows.fillGap(key, page);
 	}
 
 	openAnchor(around: AroundPage): void {

@@ -177,6 +177,17 @@ export class RawView {
 		return this.#pages.loadMore(end);
 	}
 
+	get loadingGap(): string | null {
+		return this.#pages.loadingGap;
+	}
+
+	loadGap(
+		key: string,
+		continuation: string,
+	): Promise<string | null | undefined> {
+		return this.#pages.loadGap(key, continuation);
+	}
+
 	retry(): Promise<void> {
 		const op = this.failure?.op;
 		if (op === "first") return this.reset();

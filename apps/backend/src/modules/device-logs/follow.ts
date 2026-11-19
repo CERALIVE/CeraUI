@@ -15,6 +15,7 @@ import {
 } from "../../helpers/spawn-policy.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { currentBootId } from "./boot-id.ts";
+import { bindQuery, encodePosition } from "./continuation.ts";
 import { compileFilter } from "./filter.ts";
 import { createFollowDelivery } from "./follow-delivery.ts";
 import { resolveFollowPosition } from "./follow-position.ts";
@@ -154,6 +155,7 @@ export async function startFollow(
 	running.set(conn, slot);
 	const position = (cursor?: string) =>
 		resolveFollowPosition(scan, { bootId, signal: controller.signal }, cursor);
+	const { matches } = compileFilter(filter, { bootId });
 	void (async () => {
 		try {
 			const after = filter.afterCursor;
@@ -213,13 +215,13 @@ export async function startFollow(
 					const handle = mock
 						? followMockJournal({
 								options: positionOptions,
-								matches: compileFilter(filter, { bootId }).matches,
+								matches,
 								signal: local.signal,
 								onRecord: delivery.onRecord,
 							})
 						: nativeFollow(
 								positionOptions,
-								compileFilter(filter, { bootId }).matches,
+								matches,
 								{ ...options, clock: time },
 								local,
 								delivery.onRecord,
@@ -250,13 +252,38 @@ export async function startFollow(
 					});
 					return;
 				}
-				cursor = await position();
+				const from = cursor ?? bootStart;
+				cursor = await resolveFollowPosition(scan, {
+					bootId,
+					signal: controller.signal,
+					matches,
+				});
+				const gapFrom =
+					cursor === null
+						? undefined
+						: encodePosition(
+								from,
+								bindQuery(
+									{
+										...filter,
+										boot: "current",
+										direction: "newer",
+										limit: 100,
+									},
+									bootId,
+									epoch,
+								),
+								{ through: cursor, start: true },
+							);
 				publish({
 					subscriptionId,
 					entries: [],
 					checkpointCursor: cursor ?? bootStart,
 					dropped: 0,
 					gap: "catchup_exceeded",
+					...(gapFrom !== undefined && gapFrom.length <= 2048
+						? { gapFrom }
+						: {}),
 				});
 			}
 		} catch (error) {

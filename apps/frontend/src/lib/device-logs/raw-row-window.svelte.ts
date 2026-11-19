@@ -1,6 +1,7 @@
-import type { LogFollowMessage } from "@ceraui/rpc/schemas";
+import type { LogFollowMessage, LogQueryOutput } from "@ceraui/rpc/schemas";
 import {
 	capRows,
+	entryRows,
 	followRows,
 	marker,
 	newestCursor,
@@ -40,6 +41,52 @@ export class RawRowWindow {
 		return this.#list.some((row) => row.key === cursor);
 	}
 
+	fillGap(key: string, result: LogQueryOutput): string | null | undefined {
+		const index = this.#list.findIndex((row) => row.key === key);
+		const gap = this.#list[index];
+		if (gap?.kind !== "marker") return;
+		const { gapFrom, gapError: _previousError, ...markerRow } = gap;
+		const incoming = result.ok
+			? newRows(this.#list, entryRows([...result.entries].reverse()))
+			: [];
+		const markerRows = !result.ok
+			? [
+					{
+						...markerRow,
+						...(result.error === "CURSOR_UNAVAILABLE" ||
+						result.error === "FILTER_CHANGED"
+							? {}
+							: { gapFrom }),
+						gapError: result.error,
+					},
+				]
+			: result.continuation === null
+				? []
+				: [{ ...markerRow, gapFrom: result.continuation }];
+		const next = [
+			...this.#list.slice(0, index),
+			...markerRows,
+			...incoming,
+			...this.#list.slice(index + 1),
+		];
+		this.#write(
+			next,
+			this.#shownFrom === key ? (next[index]?.key ?? null) : undefined,
+		);
+		if (this.has(key)) return;
+		return (
+			incoming.find(
+				(row) =>
+					row.kind === "entry" &&
+					row.entry.marker === null &&
+					this.has(row.key),
+			)?.key ??
+			this.rows.find((row) => row.kind === "entry" && row.entry.marker === null)
+				?.key ??
+			null
+		);
+	}
+
 	clear(): void {
 		this.#list = [];
 		this.#shownFrom = null;
@@ -63,6 +110,11 @@ export class RawRowWindow {
 	appendBatch(message: LogFollowMessage): number {
 		const added = newRows(this.#list, followRows(message, ++this.#serial));
 		this.place(added, "above");
+		if (
+			message.gapFrom !== undefined &&
+			this.held.every((row) => row.kind === "marker")
+		)
+			this.#shownFrom = null;
 		return added.filter((row) => row.kind === "entry").length;
 	}
 
@@ -89,9 +141,11 @@ export class RawRowWindow {
 	}
 
 	/** Rows above the first shown row wait while the operator reads away from the top. */
-	#write(next: RawRow[]): void {
-		const from =
-			this.#shownFrom ?? (this.#atTop ? null : (this.#list[0]?.key ?? null));
+	#write(
+		next: RawRow[],
+		from = this.#shownFrom ??
+			(this.#atTop ? null : (this.#list[0]?.key ?? null)),
+	): void {
 		const at = from === null ? 0 : this.#boundaryIn(next, from);
 		const held = capRows(next.slice(0, at), HELD_CAP);
 		// Cut skip counts join the overflow count. Gap notices stay at the boundary.

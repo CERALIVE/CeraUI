@@ -30,6 +30,7 @@ export const LOG_ERROR_CODES = [
 	'UPDATE_IN_PROGRESS',
 ] as const;
 export const LOG_FOLLOW_EVENT = 'logs.follow';
+export const LOG_FOLLOW_GAP_FROM = 'logs.follow.gapFrom';
 export const LOG_FOLLOW_BOOT_START_PREFIX = 'boot-start:';
 
 export function journalCursorBoot(cursor: string): string | undefined {
@@ -158,6 +159,7 @@ export const logFollowMessageSchema = z.strictObject({
 	checkpointCursor: z.string().nullable(),
 	dropped: countSchema,
 	gap: z.enum(['catchup_exceeded', 'cursor_unavailable', 'suppressed']).optional(),
+	gapFrom: continuationSchema.optional(),
 	ended: z.enum(['follower_exit', 'boot_changed', 'cleared']).optional(),
 });
 export type LogFollowMessage = z.infer<typeof logFollowMessageSchema>;
