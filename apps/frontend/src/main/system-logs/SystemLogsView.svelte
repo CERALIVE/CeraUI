@@ -1,5 +1,5 @@
 <!--
-  SystemLogsView.svelte — the System Logs work surface inside LogsDialog's
+  SystemLogsView.svelte: the System Logs work surface inside LogsDialog's
   fullscreen AppDialog. Shape: apps/frontend/docs/agents/system-logs-view.md.
 
   Tabs Events (default) and Raw logs; at >= 1024 px a 320 px side column holds

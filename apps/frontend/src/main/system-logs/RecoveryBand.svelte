@@ -1,5 +1,5 @@
 <!--
-  RecoveryBand.svelte — the System Logs failure band: names what went wrong and
+  RecoveryBand.svelte: the System Logs failure band: names what went wrong and
   offers Retry, in the app's amber recovery style. Announced once as an alert.
 -->
 <script lang="ts">

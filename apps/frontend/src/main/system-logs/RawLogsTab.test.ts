@@ -249,7 +249,7 @@ async function startFollowing() {
 	await screen.findByText(en.systemLogs.follow.following);
 }
 
-describe("RawLogsTab — first page", () => {
+describe("RawLogsTab: first page", () => {
 	it("asks for the default view and lists its entries", async () => {
 		await mounted();
 		expect(logs.query).toHaveBeenCalledExactlyOnceWith(DEFAULT_INPUT);
@@ -311,7 +311,7 @@ describe("RawLogsTab — first page", () => {
 	});
 });
 
-describe("RawLogsTab — filters", () => {
+describe("RawLogsTab: filters", () => {
 	it.each([
 		{ label: en.systemLogs.raw.levelErrors, levels: ["error"] },
 		{ label: en.systemLogs.raw.levelWarnings, levels: ["error", "warning"] },
@@ -622,7 +622,7 @@ describe("RawLogsTab — filters", () => {
 	});
 });
 
-describe("RawLogsTab — paging", () => {
+describe("RawLogsTab: paging", () => {
 	it("passes the previous continuation on Load more", async () => {
 		await mounted(page(["s=3", "s=2"], { hasMore: true, continuation: "c1" }));
 		logs.query.mockResolvedValueOnce(page(["s=1"]));
@@ -882,7 +882,7 @@ describe("RawLogsTab — paging", () => {
 	});
 });
 
-describe("RawLogsTab — follow", () => {
+describe("RawLogsTab: follow", () => {
 	it("is an outline button named Follow next to nothing while idle", async () => {
 		await mounted();
 		const button = screen.getByTestId("raw-follow-button");
@@ -1188,7 +1188,7 @@ describe("RawLogsTab — follow", () => {
 	});
 });
 
-describe("RawLogsTab — history and rows", () => {
+describe("RawLogsTab: history and rows", () => {
 	it("starts over when stored history changes", async () => {
 		await mounted(page(["s=2"], { hasMore: true, continuation: "c1" }));
 		logs.query.mockResolvedValueOnce(page(["n=1"]));
@@ -1436,7 +1436,7 @@ describe("RawLogsTab — history and rows", () => {
 	});
 });
 
-describe("RawLogsTab — anatomy", () => {
+describe("RawLogsTab: anatomy", () => {
 	it("lays out the filter bar: Level, Search, Filters and Follow, then Source, Time and Order", async () => {
 		await mounted();
 		const bar = screen.getByTestId("raw-filters");
@@ -1845,7 +1845,7 @@ function around(patch: Partial<AroundPage> = {}): AroundPage {
 	};
 }
 
-describe("RawLogsTab — anchor mode", () => {
+describe("RawLogsTab: anchor mode", () => {
 	it("brings an exact anchor into view once the list is laid out", async () => {
 		// At mount the list may not be laid out yet; the browser reports its size later.
 		const laidOutHeight = Object.getOwnPropertyDescriptor(

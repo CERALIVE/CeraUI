@@ -79,7 +79,7 @@ afterEach(() => {
 	media = undefined;
 });
 
-describe("LogsDialog — opened with a deep-link context", () => {
+describe("LogsDialog: opened with a deep-link context", () => {
 	it.each(["events", "storage"] as const)(
 		"leaves a %s context on that view without reading raw logs",
 		async (tab) => {

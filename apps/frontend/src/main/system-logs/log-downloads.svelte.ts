@@ -9,7 +9,7 @@ export type LogKind = "device" | "system";
  */
 export class LogDownloads {
 	// In-flight + failure are surfaced INLINE (progress spinner on the row, calm
-	// amber retry band below) rather than via a bare toast — a transient toast is
+	// amber retry band below) rather than via a bare toast. A transient toast is
 	// easy to miss and offers no recovery. The download is a single awaited request
 	// with no backend progress events, so "progress" is the in-flight indicator.
 	downloading = $state<LogKind | null>(null);

@@ -1,5 +1,5 @@
 <!--
-  RawLogRow.svelte — one row of the Raw logs list. An entry is a button that
+  RawLogRow.svelte: one row of the Raw logs list. An entry is a button that
   expands to the full message, the full unit and Copy; raw text stays dir="ltr"
   inside RTL chrome and wraps instead of scrolling. Gaps, journald's own
   suppression notice, day changes, a clock that moved back and the selected

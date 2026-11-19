@@ -44,9 +44,9 @@
   open            (bindable) — controls visibility.
   title           string     — required, drives the accessible name.
   description?    string     — supporting line under the title.
-  headerAside?    Snippet    — content beside the title, outside it, so the
+  headerAside?    Snippet   : content beside the title, outside it, so the
                                accessible name stays the title (additive).
-  fullscreen?     boolean    — full-viewport work surface (additive; off by default).
+  fullscreen?     boolean   : full-viewport work surface (additive; off by default).
   icon?           Component  — optional Lucide icon shown beside the title.
   destructive?    boolean    — style the default primary action as destructive.
   children        Snippet    — the dialog body (scrollable region).

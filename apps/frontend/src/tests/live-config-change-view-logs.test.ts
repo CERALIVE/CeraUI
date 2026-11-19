@@ -117,7 +117,7 @@ async function saveWith(
 	await expect.poll(() => setConfig.mock.calls.length).toBe(1);
 }
 
-describe("LiveView — encoder apply outcome toasts", () => {
+describe("LiveView: encoder apply outcome toasts", () => {
 	it("offers View logs when a failed rollback's reason is unnamed", async () => {
 		await saveWith({
 			result: "rollback_failed",

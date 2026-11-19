@@ -1,5 +1,5 @@
 <!--
-  StreamStatePill.svelte — the stream state in the System Logs header: Live, Idle
+  StreamStatePill.svelte: the stream state in the System Logs header: Live, Idle
   or Offline, read from the same HUD state as the top bar and styled like its
   lead badge. Live is the only lime in the view, because it is the live signal.
   The live and idle tokens are not registered Tailwind colours (`bg-status-live`

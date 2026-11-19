@@ -50,7 +50,7 @@ const mount = () =>
 const button = (kind: "device" | "system") =>
 	screen.getByTestId(`log-download-${kind}`) as HTMLButtonElement;
 
-describe("LegacyLogDownloads — the two shipped rows", () => {
+describe("LegacyLogDownloads: the two shipped rows", () => {
 	it.each([
 		["device", en.advanced.ceraliveLog, en.advanced.ceraliveLogTooltip],
 		["system", en.advanced.systemLog, en.advanced.systemLogTooltip],
@@ -88,7 +88,7 @@ function tokens(element: Element | null | undefined): string[] {
 	return (element?.getAttribute("class") ?? "").split(/\s+/).filter(Boolean);
 }
 
-describe("LegacyLogDownloads — the shipped anatomy", () => {
+describe("LegacyLogDownloads: the shipped anatomy", () => {
 	it("keeps each row's tile, wrapping text and small outline Download button", async () => {
 		const pending = deferred();
 		getDeviceLog.mockReturnValue(pending.promise);
@@ -214,7 +214,7 @@ describe("LegacyLogDownloads — the shipped anatomy", () => {
 	});
 });
 
-describe("LegacyLogDownloads — one download at a time", () => {
+describe("LegacyLogDownloads: one download at a time", () => {
 	it.each([
 		["device", "system", getDeviceLog, getSystemLog],
 		["system", "device", getSystemLog, getDeviceLog],
@@ -246,7 +246,7 @@ describe("LegacyLogDownloads — one download at a time", () => {
 	);
 });
 
-describe("LegacyLogDownloads — inline recovery", () => {
+describe("LegacyLogDownloads: inline recovery", () => {
 	it.each([
 		["device", getDeviceLog, getSystemLog],
 		["system", getSystemLog, getDeviceLog],

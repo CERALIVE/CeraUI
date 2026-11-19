@@ -1,5 +1,5 @@
 <!--
-  ParamText.svelte — a translated sentence with its one data param in a <bdi>,
+  ParamText.svelte: a translated sentence with its one data param in a <bdi>,
   so a version, slot or time keeps its own direction inside right-to-left text.
 -->
 <script lang="ts">

@@ -1,5 +1,5 @@
 <!--
-  EventRow.svelte — one Events row: the severity glyph (shape, tone and name;
+  EventRow.svelte: one Events row: the severity glyph (shape, tone and name;
   an unknown code shows its family icon), the title, the absolute and relative
   time, one detail sentence with its data params in <bdi>, how many similar
   events were folded in, a quiet View raw logs action and what that action

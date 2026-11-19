@@ -81,7 +81,7 @@ function tab(name: string): HTMLElement {
 	return screen.getByRole("tab", { name });
 }
 
-describe("SystemLogsView — Events panel", () => {
+describe("SystemLogsView: Events panel", () => {
 	it("opens on the Events tab showing the device's event history", async () => {
 		render(SystemLogsView);
 

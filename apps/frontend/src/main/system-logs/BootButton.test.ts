@@ -84,7 +84,7 @@ async function settled(): Promise<void> {
 	await tick();
 }
 
-describe("BootButton — when it appears", () => {
+describe("BootButton: when it appears", () => {
 	it("appears once the view's copy loaded and the device answered the boot list", async () => {
 		render(BootButton);
 
@@ -146,7 +146,7 @@ describe("BootButton — when it appears", () => {
 	});
 });
 
-describe("BootButton — label", () => {
+describe("BootButton: label", () => {
 	it("is named Choose a boot, followed by the boot it shows", async () => {
 		render(BootButton);
 		const node = await button();
@@ -271,7 +271,7 @@ describe("BootButton — label", () => {
 	});
 });
 
-describe("BootButton — the boot sheet", () => {
+describe("BootButton: the boot sheet", () => {
 	it("opens a sheet titled Boots that lists the boots, with no footer", async () => {
 		render(BootButton);
 		const node = await button();

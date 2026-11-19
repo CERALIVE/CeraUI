@@ -1,5 +1,5 @@
 <!--
-  BootPicker.svelte — the boot list of System Logs: All boots, then every boot
+  BootPicker.svelte: the boot list of System Logs: All boots, then every boot
   the device reports, in its order (newest first), each with its start time, how
   it ended (the device's own mark), its system image and slot, "Changed" when
   those differ from the boot before it, and "Logs removed" when its raw logs are

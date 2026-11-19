@@ -1,5 +1,5 @@
 <!--
-  IdleCockpitEncoderStub.svelte — stand-in for IdleCockpit that only offers the
+  IdleCockpitEncoderStub.svelte: stand-in for IdleCockpit that only offers the
   encoder row's edit, so a test can open LiveView's EncoderDialog.
 -->
 <script lang="ts">

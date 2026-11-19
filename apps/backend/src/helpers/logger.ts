@@ -1,4 +1,4 @@
-// allow: SIZE_OK — Single process-wide transport/ring owner; splitting it is outside this change.
+// allow: SIZE_OK: Single process-wide transport/ring owner; splitting it is outside this change.
 import { Writable } from "node:stream";
 import winston from "winston";
 

@@ -1,6 +1,6 @@
 # frontend
 
-Svelte 5 PWA for CeraUI — the on-device control plane for CeraLive streaming hardware. Control uses WebSocket RPC (`@ceraui/rpc`); browser-owned log downloads use ticketed HTTP. No direct hardware access.
+Svelte 5 PWA for CeraUI, the on-device control plane for CeraLive streaming hardware. Control uses WebSocket RPC (`@ceraui/rpc`); browser-owned log downloads use ticketed HTTP. No direct hardware access.
 
 **Status**: [EXISTS] — active development, part of the `ceralive-workspace` Bun monorepo.
 

@@ -1,5 +1,5 @@
 <!--
-  LegacyLogDownloads.svelte — the two shipped log downloads, moved from LogsDialog
+  LegacyLogDownloads.svelte: the two shipped log downloads, moved from LogsDialog
   into the System Logs Downloads region. Their state is a LogDownloads owned by
   SystemLogsView, so it outlives this component; long titles and descriptions
   wrap (Japanese at phrases, Korean at spaces, Chinese between words), and a
@@ -68,7 +68,7 @@ const logs = $derived([
 	{/each}
 
 	{#if downloads.failed}
-		<!-- Calm amber recovery band — the failed download stays actionable. -->
+		<!-- Calm amber recovery band: the failed download stays actionable. -->
 		<div
 			class="border-status-warning/30 bg-status-warning/10 flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center"
 			data-testid="log-download-error"

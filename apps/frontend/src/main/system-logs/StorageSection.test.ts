@@ -139,7 +139,7 @@ async function confirmAction(trigger: string, confirm: string): Promise<void> {
 	await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
 }
 
-describe("StorageSection — survivor regressions", () => {
+describe("StorageSection: survivor regressions", () => {
 	it.each([
 		[copy.keepForLabel, copy.keepForDevice],
 		[copy.maxSizeLabel, copy.maxSizeDevice],
@@ -198,7 +198,7 @@ describe("StorageSection — survivor regressions", () => {
 	});
 });
 
-describe("StorageSection — usage readout", () => {
+describe("StorageSection: usage readout", () => {
 	it("states the space logs use against the device's limit", () => {
 		mount();
 
@@ -385,7 +385,7 @@ describe("StorageSection — usage readout", () => {
 	});
 });
 
-describe("StorageSection — limits", () => {
+describe("StorageSection: limits", () => {
 	it("disables both limits with a stated reason when the device limit is unknown, keeping Detail editable", async () => {
 		rpc.logs.setRetention.mockResolvedValue({
 			ok: true,
@@ -779,7 +779,7 @@ describe("StorageSection — limits", () => {
 	});
 });
 
-describe("StorageSection — cleanup", () => {
+describe("StorageSection: cleanup", () => {
 	it("renders nothing for leftover debug files when there are none", () => {
 		mount(logStorage({ legacyDebugBytes: 0 }));
 
@@ -1151,7 +1151,7 @@ describe("StorageSection — cleanup", () => {
 	});
 });
 
-describe("StorageSection — reading storage again", () => {
+describe("StorageSection: reading storage again", () => {
 	it("offers a retry when storage cannot be read after the event history was cleared", async () => {
 		const error = vi.spyOn(console, "error").mockImplementation(() => {});
 		rpc.events.clear.mockResolvedValue({ success: true });
@@ -1187,7 +1187,7 @@ describe("StorageSection — reading storage again", () => {
 	});
 });
 
-describe("StorageSection — formatting follows the device language", () => {
+describe("StorageSection: formatting follows the device language", () => {
 	it("formats sizes, counts, days and dates for the chosen locale", () => {
 		setLocale("de");
 		const oldest = Date.UTC(2026, 10, 1, 8, 30);
@@ -1252,7 +1252,7 @@ describe("StorageSection — formatting follows the device language", () => {
 	});
 });
 
-describe("StorageSection — extremes", () => {
+describe("StorageSection: extremes", () => {
 	it("treats a timestamp no date can show as not reported", () => {
 		const beyondDates = 8_640_000_000_000_001;
 		mount(
@@ -1294,7 +1294,7 @@ describe("StorageSection — extremes", () => {
 	});
 });
 
-describe("StorageSection — anatomy", () => {
+describe("StorageSection: anatomy", () => {
 	it.each([
 		[copy.clearAll, copy.clearAllTitle],
 		[copy.clearEvents, copy.clearEventsTitle],
@@ -1706,7 +1706,7 @@ describe("StorageSection — anatomy", () => {
 	});
 });
 
-describe("StorageSection — owns its initial storage read", () => {
+describe("StorageSection: owns its initial storage read", () => {
 	it("loads a reply when the placeholder mounts it without initial data", async () => {
 		let resolveRead: (value: LogStorage) => void = () => {};
 		rpc.logs.getStorage.mockReturnValue(
@@ -1799,7 +1799,7 @@ function deferredRead() {
 	return { promise, answer, fail };
 }
 
-describe("StorageSection — overlapping reads", () => {
+describe("StorageSection: overlapping reads", () => {
 	it("keeps Retry disabled while its read is running, so a second click starts no second read", async () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
 		rpc.events.clear.mockResolvedValue({ success: true });
@@ -1986,7 +1986,7 @@ describe("StorageSection — overlapping reads", () => {
 	});
 });
 
-describe("StorageSection — malformed replies", () => {
+describe("StorageSection: malformed replies", () => {
 	it("offers a retry and keeps the readout when a cleanup reply carries malformed storage", async () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
 		rpc.logs.clearAll.mockResolvedValue({
@@ -2009,7 +2009,7 @@ describe("StorageSection — malformed replies", () => {
 	});
 });
 
-describe("StorageSection — successful replies that leave out what they promise", () => {
+describe("StorageSection: successful replies that leave out what they promise", () => {
 	const reading = () =>
 		screen.getByTestId("storage-usage-text").textContent?.trim();
 	const before = fill(copy.used, { used: "48\u00a0MB", limit: "256\u00a0MB" });
@@ -2161,7 +2161,7 @@ describe("StorageSection — successful replies that leave out what they promise
 	});
 });
 
-describe("StorageSection — a newer reply retires a failed read", () => {
+describe("StorageSection: a newer reply retires a failed read", () => {
 	const used = () =>
 		screen.getByTestId("storage-usage-text").textContent?.trim();
 	const six = fill(copy.used, { used: "6\u00a0MB", limit: "256\u00a0MB" });
@@ -2223,7 +2223,7 @@ describe("StorageSection — a newer reply retires a failed read", () => {
 	});
 });
 
-describe("StorageSection — Chinese wraps only between words", () => {
+describe("StorageSection: Chinese wraps only between words", () => {
 	it("marks the word gaps in every part of Storage, and only in Chinese", () => {
 		setLocale("zh");
 		mount(logStorage({ legacyDebugBytes: 5 * MIB }));

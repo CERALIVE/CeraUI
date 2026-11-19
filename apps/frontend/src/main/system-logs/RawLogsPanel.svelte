@@ -1,5 +1,5 @@
 <!--
-  RawLogsPanel.svelte — the Raw logs tab panel. The tab (its virtual list and
+  RawLogsPanel.svelte: the Raw logs tab panel. The tab (its virtual list and
   live follow) is its own chunk, loaded through the house lazy registry when the
   panel first mounts, so opening System Logs on Events never fetches it. A slow
   chunk shows loading rows; a failed one states it with Retry. A message's

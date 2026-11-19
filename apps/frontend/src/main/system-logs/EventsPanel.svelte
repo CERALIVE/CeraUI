@@ -1,5 +1,5 @@
 <!--
-  EventsPanel.svelte — the Events tab panel. The tab (the event registry and its
+  EventsPanel.svelte: the Events tab panel. The tab (the event registry and its
   ten-locale copy) is its own chunk, loaded through the house lazy registry when
   the panel first mounts. A slow chunk shows loading rows; a failed one states
   it with Retry.

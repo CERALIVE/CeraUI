@@ -47,7 +47,7 @@ function classes(element: Element): string[] {
 	return (element.getAttribute("class") ?? "").split(/\s+/).filter(Boolean);
 }
 
-describe("AppDialog — default surface (fullscreen omitted)", () => {
+describe("AppDialog: default surface (fullscreen omitted)", () => {
 	it("keeps the centered dialog with its height cap and padded scrolling body on desktop", () => {
 		viewport(true);
 		render(AppDialog, {
@@ -132,7 +132,7 @@ describe("AppDialog — default surface (fullscreen omitted)", () => {
 	});
 });
 
-describe("AppDialog — fullscreen", () => {
+describe("AppDialog: fullscreen", () => {
 	it.each([true, false])(
 		"uses the centered dialog pinned to every edge at desktop=%s",
 		(desktop) => {
@@ -251,7 +251,7 @@ describe("AppDialog — fullscreen", () => {
 	});
 });
 
-describe("AppDialog — header aside", () => {
+describe("AppDialog: header aside", () => {
 	it.each([true, false])(
 		"renders the aside beside the title, outside it, so the name stays the title (fullscreen=%s)",
 		(fullscreen) => {

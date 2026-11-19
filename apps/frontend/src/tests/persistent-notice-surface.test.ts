@@ -206,7 +206,7 @@ describe("LayoutToastHost — the toast layer is transient only", () => {
 	});
 });
 
-describe("LayoutToastHost — View logs on a log-pointing toast", () => {
+describe("LayoutToastHost: View logs on a log-pointing toast", () => {
 	it("adds View logs to a transient toast that points to System Logs, at its arrival", () => {
 		pushAt(4242, {
 			name: "start",
@@ -368,7 +368,7 @@ describe.each([
 		navigate: "notification-action",
 	},
 ])(
-	"$surface — View logs beside a log-pointing notice",
+	"$surface: View logs beside a log-pointing notice",
 	({ component, row, navigate }) => {
 		async function mount(): Promise<HTMLElement> {
 			const view = render(component);
@@ -419,7 +419,7 @@ describe.each([
 	},
 );
 
-describe("NotificationsPanel — View logs leaves the archive", () => {
+describe("NotificationsPanel: View logs leaves the archive", () => {
 	it("closes the panel so System Logs is not opened behind it", async () => {
 		push(notification({ key: START_FAILED }));
 		const view = render(NotificationsPanel);

@@ -95,7 +95,7 @@ async function openBundle(): Promise<HTMLElement> {
 	return screen.findByRole("dialog", { name: sharing.bundle });
 }
 
-describe("SystemLogsView — Sharing in the Downloads region", () => {
+describe("SystemLogsView: Sharing in the Downloads region", () => {
 	it("adds the Sharing group after the shipped rows once the viewer is ready", async () => {
 		viewport(true);
 		const probe = Promise.withResolvers<unknown>();
@@ -147,7 +147,7 @@ describe("SystemLogsView — Sharing in the Downloads region", () => {
 	});
 });
 
-describe("SystemLogsView — Sharing downloads", () => {
+describe("SystemLogsView: Sharing downloads", () => {
 	it("hands an export ticket to the browser on the backend origin", async () => {
 		viewport(true);
 		logs.createExport.mockResolvedValue(EXPORT_TICKET);
@@ -169,7 +169,7 @@ describe("SystemLogsView — Sharing downloads", () => {
 	});
 });
 
-describe("SystemLogsView — Sharing state belongs to the open view", () => {
+describe("SystemLogsView: Sharing state belongs to the open view", () => {
 	it("keeps a bundle preview in flight when Downloads moves across the 1024 px breakpoint", async () => {
 		viewport(true);
 		const preview = Promise.withResolvers<LogBundleManifest>();

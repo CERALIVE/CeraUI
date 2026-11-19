@@ -18,7 +18,7 @@ afterEach(() => {
 
 const NOTE: string = zh.systemLogs.sharing.bundleSensitive;
 
-describe("KeepWords — fixed copy that may wrap", () => {
+describe("KeepWords: fixed copy that may wrap", () => {
 	it("marks the gaps between Chinese words and keeps the copy exactly", async () => {
 		setLocale("zh");
 		await tick();

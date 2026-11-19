@@ -1,5 +1,5 @@
 <!--
-  StorageLimits.svelte — how long and how much the device keeps, and at what
+  StorageLimits.svelte: how long and how much the device keeps, and at what
   detail. Choices are staged and only Save applies them, because a tighter
   limit deletes stored logs. Every offered limit stays inside the device's own
   ceiling; when the device does not report it, both limits stay visible but

@@ -54,7 +54,7 @@ async function until(reached: () => boolean): Promise<void> {
 	throw new Error("the flow did not settle");
 }
 
-describe("SharingFlow — Export this view", () => {
+describe("SharingFlow: Export this view", () => {
 	it("starts closed on the Raw logs tab's opening view", () => {
 		const { flow } = setup();
 		expect(flow.exportStep).toBe("closed");
@@ -317,7 +317,7 @@ describe("SharingFlow — Export this view", () => {
 	});
 });
 
-describe("SharingFlow — support bundle", () => {
+describe("SharingFlow: support bundle", () => {
 	it("starts closed with no manifest", () => {
 		const { flow } = setup();
 		expect(flow.bundleStep).toBe("closed");
@@ -655,7 +655,7 @@ describe("SharingFlow — support bundle", () => {
 	});
 });
 
-describe("SharingFlow — deleted history", () => {
+describe("SharingFlow: deleted history", () => {
 	it("reads the preview again so a stale manifest is never offered", async () => {
 		const { flow, previewBundle } = setup();
 		previewBundle.mockResolvedValueOnce(manifest(500));
@@ -747,7 +747,7 @@ describe("SharingFlow — deleted history", () => {
 	});
 });
 
-describe("SharingFlow — dispose", () => {
+describe("SharingFlow: dispose", () => {
 	it("closes both flows, ignores late replies and stops listening for history", async () => {
 		const { flow, createExport, previewBundle, download } = setup();
 		const ticket = Promise.withResolvers<LogExportOutput>();

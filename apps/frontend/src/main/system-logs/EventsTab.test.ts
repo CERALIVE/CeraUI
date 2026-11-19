@@ -143,7 +143,7 @@ function row(code: string): HTMLElement {
 	return node;
 }
 
-describe("EventsTab — rows", () => {
+describe("EventsTab: rows", () => {
 	it("reads the newest events with only a limit and renders a stopped stream as its title and detail", async () => {
 		await shown([stopped(2)]);
 
@@ -369,7 +369,7 @@ describe("EventsTab — rows", () => {
 	});
 });
 
-describe("EventsTab — boot separators", () => {
+describe("EventsTab: boot separators", () => {
 	const minute = 60_000;
 
 	it("heads each boot's rows with its start, system image, slot, shutdown mark and Changed tag", async () => {
@@ -474,7 +474,7 @@ describe("EventsTab — boot separators", () => {
 	});
 });
 
-describe("EventsTab — pushed events", () => {
+describe("EventsTab: pushed events", () => {
 	it("prepends a pushed event and never shows one twice", async () => {
 		await shown([stopped(1)]);
 
@@ -527,7 +527,7 @@ describe("EventsTab — pushed events", () => {
 	});
 });
 
-describe("EventsTab — filters", () => {
+describe("EventsTab: filters", () => {
 	it("offers one chip per family and Problems only, inline on a roomy screen", async () => {
 		await shown([stopped(1)]);
 
@@ -637,7 +637,7 @@ describe("EventsTab — filters", () => {
 	});
 });
 
-describe("EventsTab — View raw logs", () => {
+describe("EventsTab: View raw logs", () => {
 	it("asks for the raw entries around the event and hands them to the shell", async () => {
 		const target = stopped(3, { at: EVENT_AT + 5 });
 		const { onviewraw } = await shown([target]);
@@ -735,7 +735,7 @@ describe("EventsTab — View raw logs", () => {
 	});
 });
 
-describe("EventsTab — states", () => {
+describe("EventsTab: states", () => {
 	it("shows skeleton rows and a hidden status while the first page loads", () => {
 		list.mockReturnValue(new Promise(() => {}));
 		render(EventsTab, { props: { onviewraw: vi.fn() } });
@@ -983,7 +983,7 @@ describe("EventsTab — states", () => {
 	});
 });
 
-describe("EventsTab — boot heading versions", () => {
+describe("EventsTab: boot heading versions", () => {
 	async function heading(
 		osImage: string | null,
 		slot: string | null,
@@ -1025,7 +1025,7 @@ describe("EventsTab — boot heading versions", () => {
 	});
 });
 
-describe("EventsTab — right-to-left", () => {
+describe("EventsTab: right-to-left", () => {
 	it("keeps the raw diagnostics left to right inside Arabic chrome", async () => {
 		setLocale("ar");
 		await shown([
@@ -1039,7 +1039,7 @@ describe("EventsTab — right-to-left", () => {
 	});
 });
 
-describe("EventsTab — layout", () => {
+describe("EventsTab: layout", () => {
 	it("lays a row out as a glyph column and a content column with one wrapping action line", async () => {
 		await shown([
 			stopped(2, { suppressed: 2 }),

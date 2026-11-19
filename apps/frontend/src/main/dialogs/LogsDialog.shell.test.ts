@@ -30,7 +30,7 @@ afterEach(() => {
 	cleanup();
 });
 
-describe("LogsDialog — the System Logs shell", () => {
+describe("LogsDialog: the System Logs shell", () => {
 	it("stays closed until it is opened", () => {
 		render(LogsDialog);
 

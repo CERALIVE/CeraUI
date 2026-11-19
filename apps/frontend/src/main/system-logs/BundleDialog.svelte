@@ -1,5 +1,5 @@
 <!--
-  BundleDialog.svelte — the support bundle's preview. It opens on the device's
+  BundleDialog.svelte: the support bundle's preview. It opens on the device's
   manifest: each section with its entries and removed values, the boots covered
   and the versions running now, and the statement that the file is reduced, not
   free of personal data. The downloaded file carries no such warning of its own,

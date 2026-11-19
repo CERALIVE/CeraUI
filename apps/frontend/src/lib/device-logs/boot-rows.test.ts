@@ -20,7 +20,7 @@ function pair(
 	]);
 }
 
-describe("bootRows — versions", () => {
+describe("bootRows: versions", () => {
 	it("reads the system image and slot from the boot's version record", () => {
 		const [row] = pair(["2026.11.3", "b"], ["2026.11.2", "a"]);
 		expect(row?.osImage).toBe("2026.11.3");
@@ -39,7 +39,7 @@ describe("bootRows — versions", () => {
 	});
 });
 
-describe("bootRows — changed", () => {
+describe("bootRows: changed", () => {
 	it.each([
 		["the system image differs", ["2026.11.3", "a"], ["2026.11.2", "a"], true],
 		["the slot differs", ["2026.11.3", "b"], ["2026.11.3", "a"], true],
@@ -116,7 +116,7 @@ describe("formatBootTime", () => {
 	});
 });
 
-describe("formatBootTime — the day period stays on its time's line", () => {
+describe("formatBootTime: the day period stays on its time's line", () => {
 	const LOCALES = [
 		"en",
 		"ar",

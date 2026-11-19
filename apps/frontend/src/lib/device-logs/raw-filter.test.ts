@@ -20,7 +20,7 @@ function filter(patch: Partial<RawFilter> = {}): RawFilter {
 	return { ...DEFAULT_RAW_FILTER, ...patch };
 }
 
-describe("raw-filter — defaults and level sets", () => {
+describe("raw-filter: defaults and level sets", () => {
 	it("starts on This boot, Info, newest first, all sources and no text", () => {
 		expect(DEFAULT_RAW_FILTER).toEqual({
 			sources: [],
@@ -42,7 +42,7 @@ describe("raw-filter — defaults and level sets", () => {
 	});
 });
 
-describe("raw-filter — queryInput", () => {
+describe("raw-filter: queryInput", () => {
 	it("builds the first-page input of the default view", () => {
 		expect(queryInput(DEFAULT_RAW_FILTER, NOW)).toStrictEqual({
 			sources: [],
@@ -108,7 +108,7 @@ describe("raw-filter — queryInput", () => {
 	});
 });
 
-describe("raw-filter — follow", () => {
+describe("raw-filter: follow", () => {
 	it("is available only on This boot, newest first, outside anchor mode", () => {
 		expect(followBlock(DEFAULT_RAW_FILTER, false)).toBeNull();
 		expect(followBlock(DEFAULT_RAW_FILTER, true)).toBe("anchor");
@@ -142,7 +142,7 @@ describe("raw-filter — follow", () => {
 	});
 });
 
-describe("raw-filter — folded filter count", () => {
+describe("raw-filter: folded filter count", () => {
 	it("counts Source, Time and Order when they differ from the defaults", () => {
 		expect(foldedFilterCount(DEFAULT_RAW_FILTER, false)).toBe(0);
 		expect(foldedFilterCount(filter({ sources: ["engine"] }), false)).toBe(1);
@@ -190,7 +190,7 @@ describe("raw-filter: what the controls show for an anchor window", () => {
 	});
 });
 
-describe("raw-filter — searchText", () => {
+describe("raw-filter: searchText", () => {
 	it("keeps ordinary text exactly, spaces included", () => {
 		expect(searchText(" srt link ")).toBe(" srt link ");
 	});

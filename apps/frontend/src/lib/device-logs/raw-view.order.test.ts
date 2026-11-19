@@ -1229,7 +1229,7 @@ const witness = (scenario: Scenario) => async () => {
 	expect(await replay(scenario)).toEqual([]);
 };
 
-describe("RawView — event orders against a device that replies like the backend", () => {
+describe("RawView: event orders against a device that replies like the backend", () => {
 	it(
 		"witness R1: Keep searching after a zero-record budget page reaches the end",
 		witness({ setup: "budget0-follow", cut: "end", events: [] }),

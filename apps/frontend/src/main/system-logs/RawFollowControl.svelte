@@ -1,5 +1,5 @@
 <!--
-  RawFollowControl.svelte — Follow, Pause and Resume for the Raw logs tab, with
+  RawFollowControl.svelte: Follow, Pause and Resume for the Raw logs tab, with
   the follow state beside them. Follow is an outline button: a filled lime one
   would read as going live. Unavailable, it stays visible and disabled next to
   its reason (DESIGN.md CT-2). Following is the info tone with a motion-safe

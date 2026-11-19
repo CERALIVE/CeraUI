@@ -158,7 +158,7 @@ async function following(cursors: readonly string[] = ["s=3", "s=2"]) {
 	return h;
 }
 
-describe("RawView — first page", () => {
+describe("RawView: first page", () => {
 	it("asks for the default view and shows its rows", async () => {
 		const h = harness();
 		h.query.mockResolvedValueOnce(
@@ -356,7 +356,7 @@ describe("RawView — first page", () => {
 	});
 });
 
-describe("RawView — search", () => {
+describe("RawView: search", () => {
 	it("applies typed text after 300 ms of quiet, once", async () => {
 		vi.useFakeTimers();
 		const h = await loaded([]);
@@ -430,7 +430,7 @@ describe("RawView — search", () => {
 	});
 });
 
-describe("RawView — paging", () => {
+describe("RawView: paging", () => {
 	it("passes the previous continuation on Load more and appends", async () => {
 		const h = await loaded(["s=4", "s=3"], {
 			hasMore: true,
@@ -922,7 +922,7 @@ describe("RawView — paging", () => {
 	});
 });
 
-describe("RawView — reset", () => {
+describe("RawView: reset", () => {
 	it("empties the rows and asks for the first page with no continuation", async () => {
 		const h = await loaded(["s=2"], { hasMore: true, continuation: "c1" });
 		h.query.mockResolvedValueOnce(page(["s=3"]));
@@ -971,7 +971,7 @@ function around(patch: Partial<AroundPage> = {}): AroundPage {
 	};
 }
 
-describe("RawView — anchor mode", () => {
+describe("RawView: anchor mode", () => {
 	it("shows newer entries above the anchor and older below, newest first", () => {
 		const h = harness();
 		h.view.start(around());
@@ -1129,7 +1129,7 @@ describe("RawView — anchor mode", () => {
 	});
 });
 
-describe("RawView — follow availability", () => {
+describe("RawView: follow availability", () => {
 	it("is blocked by Oldest first, a time window or a chosen boot", async () => {
 		const h = await loaded([]);
 		h.query.mockResolvedValue(page([]));
@@ -1142,7 +1142,7 @@ describe("RawView — follow availability", () => {
 	});
 });
 
-describe("RawView — follow", () => {
+describe("RawView: follow", () => {
 	it("starts after the newest row and listens for batches", async () => {
 		const h = await loaded(["s=3", "s=2"]);
 		const reply = deferred<LogFollowStartOutput>();
@@ -1852,7 +1852,7 @@ describe("RawView — follow", () => {
 	});
 });
 
-describe("RawView — held entries", () => {
+describe("RawView: held entries", () => {
 	it("keeps separate gap rows across repeated held-buffer overflows", async () => {
 		const h = await following();
 		for (const cycle of [0, 1]) {
@@ -1985,7 +1985,7 @@ describe("RawView — held entries", () => {
 	});
 });
 
-describe("RawView — connection", () => {
+describe("RawView: connection", () => {
 	it("switches a live follow to Disconnected and resumes only when asked", async () => {
 		const h = await following();
 		expect(h.view.stale).toBe(false);
@@ -2087,7 +2087,7 @@ describe("RawView — connection", () => {
 	});
 });
 
-describe("RawView — announcements", () => {
+describe("RawView: announcements", () => {
 	it("summarises new entries at most every 5 seconds", async () => {
 		const h = await following([]);
 		h.push({ entries: [entry("a")], checkpointCursor: "a" });
@@ -2110,7 +2110,7 @@ describe("RawView — announcements", () => {
 	});
 });
 
-describe("RawView — dispose", () => {
+describe("RawView: dispose", () => {
 	it("stops a live follow and clears the listener", async () => {
 		const h = await following();
 		h.followStop.mockResolvedValueOnce({

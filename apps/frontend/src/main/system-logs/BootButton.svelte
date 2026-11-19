@@ -1,5 +1,5 @@
 <!--
-  BootButton.svelte — below 1024 px the boot picker sits behind this header
+  BootButton.svelte: below 1024 px the boot picker sits behind this header
   button, which shows the chosen boot and opens the picker in a nested sheet;
   choosing a boot or Escape closes it. It appears once this view's copy loaded
   and the device answered the boot list, so an older backend shows no button.

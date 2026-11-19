@@ -96,7 +96,7 @@ const dialog = (title: string) => screen.findByRole("dialog", { name: title });
 const button = (scope: HTMLElement, name: string) =>
 	within(scope).getByRole("button", { name }) as HTMLButtonElement;
 
-describe("SharingSection — the second Downloads group", () => {
+describe("SharingSection: the second Downloads group", () => {
 	it("lists Export this view then Support bundle after a neutral rule, with the browser line under them", () => {
 		const group = screen.getByTestId("sharing-group");
 		expect(tokens(group)).toEqual([
@@ -248,7 +248,7 @@ describe("SharingSection — the second Downloads group", () => {
 	});
 });
 
-describe("SharingSection — Export this view", () => {
+describe("SharingSection: Export this view", () => {
 	it("states what the file holds and that it may be sensitive before anything downloads", async () => {
 		await open("export");
 
@@ -408,7 +408,7 @@ describe("SharingSection — Export this view", () => {
 	});
 });
 
-describe("SharingSection — support bundle", () => {
+describe("SharingSection: support bundle", () => {
 	it("prepares the preview with the review statement already shown and Download unavailable", async () => {
 		previewBundle.mockReturnValue(new Promise<never>(() => {}));
 		await open("bundle");
@@ -700,7 +700,7 @@ describe("SharingSection — support bundle", () => {
 	});
 });
 
-describe("SharingSection — dialog anatomy", () => {
+describe("SharingSection: dialog anatomy", () => {
 	it("draws the export confirmation as a hint, a calm sensitive-data note and a status line", async () => {
 		await open("export");
 		const body = await dialog(sharing.export);

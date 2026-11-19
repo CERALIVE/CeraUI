@@ -1,5 +1,5 @@
 <!--
-  EventsTab.svelte — the Events panel of System Logs: what happened, newest
+  EventsTab.svelte: the Events panel of System Logs: what happened, newest
   first, under one sticky heading per boot carrying its start, system image,
   slot and how it ended. Family chips and Problems only filter it, folded behind
   Filter on a narrow or short screen; the boot comes from the boot picker. Each

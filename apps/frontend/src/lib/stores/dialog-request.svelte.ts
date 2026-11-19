@@ -6,7 +6,7 @@ import type { ShellTab } from "$lib/device-logs/shell-layout";
 // logs" action, can deep-link into a Settings dialog. The producer calls
 // requestDialog(); SettingsView consumes it via an effect and clears it. `logs`
 // is a frontend-only target: it never travels on the notification wire. Held on
-// globalThis for the same dev dual-URL reason as the notification store — the
+// globalThis for the same dev dual-URL reason as the notification store. The
 // toast host and SettingsView must share ONE slot.
 export type DialogTarget = NotificationActionTarget | "logs";
 

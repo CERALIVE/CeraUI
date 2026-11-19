@@ -25,7 +25,7 @@ afterEach(() => {
 // What the device receives: JSON drops absent optional fields.
 const onWire = (value: unknown): unknown => JSON.parse(JSON.stringify(value));
 
-describe("exportInput — the Raw logs query as an export", () => {
+describe("exportInput: the Raw logs query as an export", () => {
 	it("keeps the filter, the boot and the time range, and drops paging", () => {
 		expect(
 			onWire(
@@ -61,7 +61,7 @@ describe("exportInput — the Raw logs query as an export", () => {
 	});
 });
 
-describe("refusal — a ticket reply's error code", () => {
+describe("refusal: a ticket reply's error code", () => {
 	it("reads BUSY as another export running", () => {
 		expect(refusal("BUSY")).toBe("busy");
 	});
@@ -74,7 +74,7 @@ describe("refusal — a ticket reply's error code", () => {
 	);
 });
 
-describe("previewProblem — a rejected bundle preview", () => {
+describe("previewProblem: a rejected bundle preview", () => {
 	it("reads the device's sanitized BUSY as another export running", () => {
 		expect(
 			previewProblem(new RpcError({ message: "BUSY", code: "INTERNAL_ERROR" })),
@@ -94,7 +94,7 @@ describe("previewProblem — a rejected bundle preview", () => {
 	});
 });
 
-describe("startBackendDownload — the browser saves the file", () => {
+describe("startBackendDownload: the browser saves the file", () => {
 	it("clicks an attached anchor on the backend origin, then removes it", () => {
 		const clicked: Array<{
 			href: string;
@@ -161,7 +161,7 @@ function splitsInside(text: string, chunks: string[], word: string): boolean {
 	return boundaries(chunks).some((b) => b > start && b < start + word.length);
 }
 
-describe("chineseWordChunks — where fixed Chinese copy may wrap", () => {
+describe("chineseWordChunks: where fixed Chinese copy may wrap", () => {
 	it.each(["en", "ja", "ko", "de", "ar"])("returns %s copy whole", (locale) => {
 		expect(chineseWordChunks(NOTE, locale)).toEqual([NOTE]);
 	});
@@ -261,10 +261,12 @@ describe("chineseWordChunks — where fixed Chinese copy may wrap", () => {
 	it("never starts a chunk with a run of punctuation such as a doubled dash", () => {
 		const segment = segmenterGiving([
 			{ segment: "数据", isWordLike: true },
-			{ segment: "——", isWordLike: false },
+			{ segment: "\u2014\u2014", isWordLike: false },
 			{ segment: "分享", isWordLike: true },
 		]);
-		expect(chineseWordChunks("数据——分享", "zh")).toEqual(["数据——分享"]);
+		expect(chineseWordChunks("数据\u2014\u2014分享", "zh")).toEqual([
+			"数据\u2014\u2014分享",
+		]);
 		expect(segment).toHaveBeenCalledOnce();
 	});
 
@@ -280,7 +282,7 @@ describe("chineseWordChunks — where fixed Chinese copy may wrap", () => {
 
 const TOKEN = "0123456789abcdef".repeat(4);
 
-describe("ticketReply — only the path the device minted for this flow", () => {
+describe("ticketReply: only the path the device minted for this flow", () => {
 	it.each(["export", "bundle"] as const)(
 		"accepts the backend's own %s ticket",
 		(kind) => {
@@ -355,7 +357,7 @@ describe("ticketReply — only the path the device minted for this flow", () => 
 	});
 });
 
-describe("bundleManifestReply — a preview that can be shown as it is", () => {
+describe("bundleManifestReply: a preview that can be shown as it is", () => {
 	it("accepts a manifest naming each section once", () => {
 		expect(bundleManifestReply(bundleManifest(7))).toStrictEqual(
 			bundleManifest(7),

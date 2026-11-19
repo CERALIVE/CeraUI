@@ -1,5 +1,5 @@
 <!--
-  StorageCleanup.svelte — the cleanup actions, destructive ones last. Deleting
+  StorageCleanup.svelte: the cleanup actions, destructive ones last. Deleting
   older files reports which boots remain instead of promising they are gone.
   Clear all logs and Clear event history each ask first, opening on Cancel; a
   refusal or failure is an inline band whose Retry asks again. A success that removed stored history

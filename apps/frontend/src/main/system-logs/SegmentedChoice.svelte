@@ -1,5 +1,5 @@
 <!--
-  SegmentedChoice.svelte — a single-choice group drawn as equal segments (Raw
+  SegmentedChoice.svelte: a single-choice group drawn as equal segments (Raw
   logs Level and Order); no segment is narrower than its longest word, so a long
   translation widens its own segment instead of running under the next, and under
   touch none is narrower than the 44 px target. One tab stop on the checked segment; arrow keys move

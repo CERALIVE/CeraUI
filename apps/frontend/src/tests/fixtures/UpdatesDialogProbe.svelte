@@ -1,5 +1,5 @@
 <!--
-  UpdatesDialogProbe.svelte — stand-in for the lazily loaded UpdatesDialog in the
+  UpdatesDialogProbe.svelte: stand-in for the lazily loaded UpdatesDialog in the
   SettingsView deep-link tests. Prints whether SettingsView opened it.
 -->
 <script lang="ts">

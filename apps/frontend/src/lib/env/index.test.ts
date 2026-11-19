@@ -155,7 +155,7 @@ describe("resolveSocketUrl — non-browser / SSR guard", () => {
 	});
 });
 
-describe("resolveBackendHttpUrl — HTTP routes beside the RPC socket", () => {
+describe("resolveBackendHttpUrl: HTTP routes beside the RPC socket", () => {
 	it("maps a ws:// origin to http:// and appends the path", () => {
 		expect(
 			resolveBackendHttpUrl(

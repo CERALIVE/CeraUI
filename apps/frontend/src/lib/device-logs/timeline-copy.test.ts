@@ -50,7 +50,7 @@ function copyOf(code: string, values: DeviceEvent["params"] = {}) {
 	return eventCopy(event(1, code, values), NAMES);
 }
 
-describe("eventCopy — a detail sentence for every code", () => {
+describe("eventCopy: a detail sentence for every code", () => {
 	it.each<[string, DeviceEvent["params"], string | null]>([
 		["stream_started", {}, null],
 		[
@@ -518,7 +518,7 @@ describe("eventCopy — a detail sentence for every code", () => {
 	});
 });
 
-describe("eventCopy — data params render on their own", () => {
+describe("eventCopy: data params render on their own", () => {
 	it("splits a sentence into text and its data params, in reading order", () => {
 		const copy = copyOf("stream_start_retrying", {
 			class: "start_timeout",
@@ -572,7 +572,7 @@ describe("eventCopy — data params render on their own", () => {
 	});
 });
 
-describe("eventCopy — unknown and invalid records", () => {
+describe("eventCopy: unknown and invalid records", () => {
 	it("gives a code from a newer version the honest generic title, its family icon and the code only in diagnostics", () => {
 		const copy = eventCopy(
 			event(
@@ -630,7 +630,7 @@ describe("eventCopy — unknown and invalid records", () => {
 	});
 });
 
-describe("eventCopy — severity glyphs", () => {
+describe("eventCopy: severity glyphs", () => {
 	it.each([
 		["error", CircleAlert, "text-status-error"],
 		["warning", TriangleAlert, "text-status-warning"],
@@ -649,7 +649,7 @@ describe("eventCopy — severity glyphs", () => {
 	);
 });
 
-describe("eventCopy — diagnostics hold the raw tokens the sentence does not show", () => {
+describe("eventCopy: diagnostics hold the raw tokens the sentence does not show", () => {
 	it.each<[string, DeviceEvent["params"], [string, string][]]>([
 		[
 			"stream_started",

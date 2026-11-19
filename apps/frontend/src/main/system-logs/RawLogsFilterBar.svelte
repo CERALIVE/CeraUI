@@ -1,5 +1,5 @@
 <!--
-  RawLogsFilterBar.svelte — the Raw logs filter bar, fixed above the list. Level,
+  RawLogsFilterBar.svelte: the Raw logs filter bar, fixed above the list. Level,
   Search and Follow stay visible; Source, Time and Order sit in a second row
   when the panel is at least 720 px wide and the viewport is taller than 600 px,
   and fold behind a Filters button otherwise (the 1024x600 kiosk, phones). The

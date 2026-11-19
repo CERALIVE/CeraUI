@@ -43,7 +43,7 @@ afterEach(() => {
 	bootSelection.reset();
 });
 
-describe("SystemLogsView — Boots region", () => {
+describe("SystemLogsView: Boots region", () => {
 	it("lists the boots under the Boots heading of the side column at 1024 px and wider", async () => {
 		media = installMediaQueries((query) => query === WIDE);
 		render(SystemLogsView);

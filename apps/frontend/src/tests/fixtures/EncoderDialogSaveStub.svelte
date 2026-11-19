@@ -1,5 +1,5 @@
 <!--
-  EncoderDialogSaveStub.svelte — stand-in for EncoderDialog whose Save hands
+  EncoderDialogSaveStub.svelte: stand-in for EncoderDialog whose Save hands
   LiveView one bitrate change, so its save handler and toasts run for real.
 -->
 <script lang="ts">

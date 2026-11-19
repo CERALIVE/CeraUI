@@ -46,7 +46,7 @@ const keys = (rows: readonly { key: string }[]) => rows.map((row) => row.key);
 const kinds = (rows: readonly { kind: string }[]) =>
 	rows.map((row) => row.kind);
 
-describe("raw-rows — entryRows and newestCursor", () => {
+describe("raw-rows: entryRows and newestCursor", () => {
 	it("keys each entry by its cursor", () => {
 		const rows = entryRows([entry("s=1"), entry("s=2")]);
 		expect(rows).toEqual([
@@ -68,7 +68,7 @@ describe("raw-rows — entryRows and newestCursor", () => {
 	});
 });
 
-describe("raw-rows — newRows", () => {
+describe("raw-rows: newRows", () => {
 	it("drops entries whose cursor is already shown and keeps markers", () => {
 		const shown = entryRows([entry("s=1"), entry("s=2")]);
 		const marker: RawRow = {
@@ -91,7 +91,7 @@ describe("raw-rows — newRows", () => {
 	});
 });
 
-describe("raw-rows — placeRows", () => {
+describe("raw-rows: placeRows", () => {
 	const rows = (...cursors: string[]) =>
 		entryRows(cursors.map((cursor) => entry(cursor)));
 	const gap: RawRow = {
@@ -140,7 +140,7 @@ describe("raw-rows — placeRows", () => {
 	});
 });
 
-describe("raw-rows — capRows", () => {
+describe("raw-rows: capRows", () => {
 	it("keeps everything at or under the cap", () => {
 		const rows = entryRows([entry("s=1"), entry("s=2")]);
 		expect(capRows(rows, 2)).toEqual({ rows, removed: 0 });
@@ -186,7 +186,7 @@ describe("raw-rows — capRows", () => {
 	});
 });
 
-describe("raw-rows — followRows", () => {
+describe("raw-rows: followRows", () => {
 	it("shows a batch newest first", () => {
 		const rows = followRows(
 			message({ entries: [entry("s=1"), entry("s=2"), entry("s=3")] }),
@@ -240,7 +240,7 @@ describe("raw-rows — followRows", () => {
 	});
 });
 
-describe("raw-rows — displayRows", () => {
+describe("raw-rows: displayRows", () => {
 	const day = (ts: number) => String(Math.floor(ts / 100));
 
 	it("opens the list with a date row and keeps the rows in order", () => {

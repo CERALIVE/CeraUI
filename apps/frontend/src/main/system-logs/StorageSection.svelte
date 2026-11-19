@@ -1,5 +1,5 @@
 <!--
-  StorageSection.svelte — the Storage region of System Logs: what logs use, the
+  StorageSection.svelte: the Storage region of System Logs: what logs use, the
   retention limits and the cleanup actions, over the logs storage RPCs. It owns
   its reads so the shell only needs to fill its Storage placeholder.
 -->

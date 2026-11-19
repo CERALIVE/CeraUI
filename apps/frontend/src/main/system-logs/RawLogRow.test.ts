@@ -65,7 +65,7 @@ function has(element: Element | null | undefined, ...tokens: string[]): void {
 	for (const token of tokens) expect(classes, token).toContain(token);
 }
 
-describe("RawLogRow — entry anatomy", () => {
+describe("RawLogRow: entry anatomy", () => {
 	it("shows the level glyph by name, the time, the unit and the message", () => {
 		show({ kind: "entry", key: "s=1", entry: entry({ level: "error" }) });
 		const row = screen.getByTestId("raw-row");
@@ -201,7 +201,7 @@ describe("RawLogRow — entry anatomy", () => {
 	});
 });
 
-describe("RawLogRow — expanded", () => {
+describe("RawLogRow: expanded", () => {
 	it.each([
 		["debug", false],
 		["error", true],
@@ -284,7 +284,7 @@ describe("RawLogRow — expanded", () => {
 	});
 });
 
-describe("RawLogRow — anatomy", () => {
+describe("RawLogRow: anatomy", () => {
 	it("lays out a collapsed entry as one button row", () => {
 		show({ kind: "entry", key: "s=1", entry: entry() }, { anchored: true });
 		const row = screen.getByTestId("raw-row");
@@ -346,7 +346,7 @@ describe("RawLogRow — anatomy", () => {
 	});
 });
 
-describe("RawLogRow — separator rows", () => {
+describe("RawLogRow: separator rows", () => {
 	it("shows journald's suppression notice as a gap, never as a line", () => {
 		show({
 			kind: "entry",

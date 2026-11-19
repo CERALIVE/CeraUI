@@ -77,7 +77,7 @@ function quietErrors() {
 	return vi.spyOn(console, "error").mockImplementation(() => {});
 }
 
-describe("BootPicker — shutdown marks", () => {
+describe("BootPicker: shutdown marks", () => {
 	it("renders four distinct marks with distinct accessible names for current, clean, unclean and unknown", async () => {
 		render(BootPicker);
 		await list();
@@ -159,7 +159,7 @@ describe("BootPicker — shutdown marks", () => {
 	});
 });
 
-describe("BootPicker — rows", () => {
+describe("BootPicker: rows", () => {
 	it("lists every boot in the device's order after All boots", async () => {
 		render(BootPicker);
 		const listbox = await list();
@@ -375,7 +375,7 @@ describe("BootPicker — rows", () => {
 	});
 });
 
-describe("BootPicker — choosing", () => {
+describe("BootPicker: choosing", () => {
 	it("notifies both tab stores with the chosen boot id", async () => {
 		const { events, raw } = tabStores();
 		render(BootPicker);
@@ -470,7 +470,7 @@ describe("BootPicker — choosing", () => {
 	});
 });
 
-describe("BootPicker — keyboard", () => {
+describe("BootPicker: keyboard", () => {
 	it("falls back to All boots as the tab stop when the chosen boot is no longer listed", async () => {
 		bootSelection.choose(boot("9".repeat(32), "clean"));
 		render(BootPicker);
@@ -573,7 +573,7 @@ describe("BootPicker — keyboard", () => {
 	});
 });
 
-describe("BootPicker — anatomy", () => {
+describe("BootPicker: anatomy", () => {
 	const OPTION = [
 		"flex",
 		"min-h-(--touch-target-min)",
@@ -852,7 +852,7 @@ describe("BootPicker — anatomy", () => {
 	});
 });
 
-describe("BootPicker — reading the list", () => {
+describe("BootPicker: reading the list", () => {
 	it("reads the boots once on mount", async () => {
 		render(BootPicker);
 		await list();

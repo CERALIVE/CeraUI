@@ -1,5 +1,5 @@
 <!--
-  LogsDialogProbe.svelte — stand-in for the lazily loaded LogsDialog in the
+  LogsDialogProbe.svelte: stand-in for the lazily loaded LogsDialog in the
   SettingsView deep-link tests. Prints the props SettingsView hands it.
 -->
 <script lang="ts">

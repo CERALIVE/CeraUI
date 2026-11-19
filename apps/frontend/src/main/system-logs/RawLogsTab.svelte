@@ -1,5 +1,5 @@
 <!--
-  RawLogsTab.svelte — the Raw logs panel of System Logs: a fixed filter bar,
+  RawLogsTab.svelte: the Raw logs panel of System Logs: a fixed filter bar,
   state notices, and the list that owns the scroll. Each mount builds its own
   view and runs a fresh first query (or opens on a `logs.around` result), and
   unmounting stops any follow, so a hidden tab never reads logs. One polite

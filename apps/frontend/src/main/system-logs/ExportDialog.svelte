@@ -1,5 +1,5 @@
 <!--
-  ExportDialog.svelte — the confirmation in front of "Export this view": what the
+  ExportDialog.svelte: the confirmation in front of "Export this view": what the
   file holds and that it may contain sensitive data, before anything downloads.
   Download export asks the device for a ticket; Cancel, Escape and the close
   button discard a request still in flight.

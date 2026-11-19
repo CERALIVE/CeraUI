@@ -1,5 +1,5 @@
 <!--
-  LowDiskBannerStub.svelte — stand-in for LowDiskBanner that always shows its
+  LowDiskBannerStub.svelte: stand-in for LowDiskBanner that always shows its
   action, so SettingsView's onViewLogs wiring is clickable without disk stats.
 -->
 <script lang="ts">

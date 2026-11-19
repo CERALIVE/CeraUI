@@ -1,5 +1,5 @@
 <!--
-  ShutdownMark.svelte — how a boot ended, exactly as the device classified it:
+  ShutdownMark.svelte: how a boot ended, exactly as the device classified it:
   glyph (shape and colour) plus its text label, never colour alone. Unknown has
   its own glyph, tone and data-state and is never drawn or named as clean
   (DESIGN.md CT-3). Shared by the boot picker and the Events boot separators.

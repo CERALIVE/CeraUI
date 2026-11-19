@@ -37,7 +37,7 @@ const ids = (view: EventsView) => view.events.map((item) => item.seq);
 const e = (seq: number, extra: Partial<DeviceEvent> = {}) =>
 	event(seq, "internet_lost", {}, extra);
 
-describe("EventsView — the first page", () => {
+describe("EventsView: the first page", () => {
 	it("reads the newest page with only a limit when nothing is filtered", async () => {
 		const { view, list } = setup();
 		list.mockResolvedValue(eventPage([e(3), e(2), e(1)]));
@@ -154,7 +154,7 @@ describe("EventsView — the first page", () => {
 	});
 });
 
-describe("EventsView — filters", () => {
+describe("EventsView: filters", () => {
 	it("sends one family per selected chip and drops a chip when it is selected again", async () => {
 		const { view, list } = setup();
 		list.mockResolvedValue(eventPage([]));
@@ -248,7 +248,7 @@ describe("EventsView — filters", () => {
 	});
 });
 
-describe("EventsView — Load older", () => {
+describe("EventsView: Load older", () => {
 	it("pages with beforeSeq and the same filter, appending without repeats", async () => {
 		const { view, list } = setup();
 		list.mockResolvedValueOnce(
@@ -354,7 +354,7 @@ describe("EventsView — Load older", () => {
 	});
 });
 
-describe("EventsView — pushed events", () => {
+describe("EventsView: pushed events", () => {
 	async function ready(
 		events: DeviceEvent[],
 		extra: Partial<EventListOutput> = {},
@@ -539,7 +539,7 @@ describe("EventsView — pushed events", () => {
 	});
 });
 
-describe("EventsView — connection", () => {
+describe("EventsView: connection", () => {
 	it("marks the list stale while disconnected and reads it again on reconnect", async () => {
 		const { view, list } = setup();
 		list.mockResolvedValue(eventPage([e(1)]));
@@ -564,7 +564,7 @@ describe("EventsView — connection", () => {
 	});
 });
 
-describe("EventsView — View raw logs", () => {
+describe("EventsView: View raw logs", () => {
 	it("asks for the raw entries around the event and opens them", async () => {
 		const { view, around } = setup();
 		const page = aroundPage(true);
@@ -663,7 +663,7 @@ describe("EventsView — View raw logs", () => {
 	});
 });
 
-describe("EventsView — lifetime", () => {
+describe("EventsView: lifetime", () => {
 	it("listens for pushed events from construction until it is disposed", () => {
 		const { view, setFeedListener } = setup();
 		expect(setFeedListener).toHaveBeenCalledOnce();

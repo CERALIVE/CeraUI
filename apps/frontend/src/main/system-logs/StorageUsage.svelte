@@ -1,5 +1,5 @@
 <!--
-  StorageUsage.svelte — what stored logs use: the journal against its limit,
+  StorageUsage.svelte: what stored logs use: the journal against its limit,
   journal data journalctl does not count, the oldest entry, the event history,
   and recent volume by source labelled as the sample it is. An unknown value
   says so and is never drawn as zero. Bars are neutral and decorative; the text

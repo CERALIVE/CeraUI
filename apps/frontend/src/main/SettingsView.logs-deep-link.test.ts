@@ -85,7 +85,7 @@ async function probe(): Promise<{ open: string; context: unknown }> {
 	};
 }
 
-describe("SettingsView — System Logs deep links", () => {
+describe("SettingsView: System Logs deep links", () => {
 	it("opens the Logs dialog with the requested context and consumes the request", async () => {
 		render(SettingsView);
 		requestDialog("logs", { tab: "raw", at: 1_700_000_000_000 });

@@ -74,7 +74,7 @@ afterEach(() => {
 
 const tab = (name: string) => screen.getByRole("tab", { name });
 
-describe("SystemLogsView — Raw logs panel", () => {
+describe("SystemLogsView: Raw logs panel", () => {
 	it("mounts the raw viewer only inside the selected Raw logs panel", async () => {
 		render(SystemLogsView);
 		await screen.findByRole("tablist");

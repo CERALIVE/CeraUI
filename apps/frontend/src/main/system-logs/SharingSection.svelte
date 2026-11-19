@@ -1,5 +1,5 @@
 <!--
-  SharingSection.svelte — the second group of the System Logs Downloads region,
+  SharingSection.svelte: the second group of the System Logs Downloads region,
   after a neutral rule: Export this view and Support bundle, in the shipped rows'
   anatomy, with the line saying the browser saves the files. Each row opens a
   nested dialog that states what the file holds and that it may contain

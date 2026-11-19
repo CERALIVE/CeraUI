@@ -15,7 +15,7 @@ function action(inside: string): HTMLElement | null {
 	return within(screen.getByTestId(inside)).queryByTestId("view-logs-action");
 }
 
-describe("PackagesSummary — View logs beside a log-pointing outcome", () => {
+describe("PackagesSummary: View logs beside a log-pointing outcome", () => {
 	it("offers it under a preflight refusal that points to the logs", () => {
 		show({
 			kind: "update_preflight_failed",

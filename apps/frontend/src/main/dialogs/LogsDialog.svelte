@@ -1,5 +1,5 @@
 <!--
-  LogsDialog.svelte — System Logs, a full-viewport view opened from Settings.
+  LogsDialog.svelte: System Logs, a full-viewport view opened from Settings.
 
   A thin AppDialog shell in the DeviceHealthDialog pattern: the header carries
   the stream-state pill at its inline end, and SystemLogsView owns the body. The

@@ -26,7 +26,7 @@ afterEach(() => {
 	toast.error.mockReset();
 });
 
-describe("announceLegacyInstallOutcome — View logs on a failure", () => {
+describe("announceLegacyInstallOutcome: View logs on a failure", () => {
 	it("offers View logs when the device sent no reason", () => {
 		announceLegacyInstallOutcome(finished("  "));
 

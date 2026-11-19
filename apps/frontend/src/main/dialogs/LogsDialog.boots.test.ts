@@ -92,7 +92,7 @@ function withoutClean(): LogBootInfo[] {
 	return fourBoots().filter((boot) => boot.bootId !== BOOT_IDS.clean);
 }
 
-describe("LogsDialog — the boot picker in the header", () => {
+describe("LogsDialog: the boot picker in the header", () => {
 	it("shows the boot button in the header below 1024 px, outside the title", async () => {
 		viewport(false);
 		render(LogsDialogHarness);
@@ -165,7 +165,7 @@ describe("LogsDialog — the boot picker in the header", () => {
 	});
 });
 
-describe("LogsDialog — the chosen boot lives as long as the open view", () => {
+describe("LogsDialog: the chosen boot lives as long as the open view", () => {
 	it("drops the chosen boot when the parent closes the view, telling no store", async () => {
 		viewport(false);
 		const view = render(LogsDialog, { props: { open: true } });

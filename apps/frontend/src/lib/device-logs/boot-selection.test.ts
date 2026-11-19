@@ -112,7 +112,7 @@ describe("bootSelection", () => {
 	});
 });
 
-describe("bootSelection.recheck — after stored history is deleted", () => {
+describe("bootSelection.recheck: after stored history is deleted", () => {
 	const current = boot(BOOT_IDS.current, "current");
 
 	it("goes back to All boots, telling the stores, when the device no longer lists the chosen boot", async () => {

@@ -1,5 +1,5 @@
 <!--
-  ViewLogsAction.svelte — "View logs" beside a message that sends the operator
+  ViewLogsAction.svelte: "View logs" beside a message that sends the operator
   to System Logs. Renders only for a key in LOG_POINTER_KEYS and opens the view
   on Raw logs around `at` (the message's time when known, else the click).
 -->

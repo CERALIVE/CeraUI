@@ -1,5 +1,5 @@
 <!--
-  RawLogList.svelte — the Raw logs list, the tab's one scroll owner. A virtual
+  RawLogList.svelte: the Raw logs list, the tab's one scroll owner. A virtual
   list (@tanstack/svelte-virtual) of measured rows, so wrapped and expanded rows
   keep their height; it is a plain list, never a live region. The list is one
   tab stop: arrow keys, Home and End move between entries. Follow entries that

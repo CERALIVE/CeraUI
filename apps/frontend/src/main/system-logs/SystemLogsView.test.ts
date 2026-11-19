@@ -98,7 +98,7 @@ function region(testId: string): HTMLElement {
 	return screen.getByTestId(testId);
 }
 
-describe("SystemLogsView — Downloads never wait", () => {
+describe("SystemLogsView: Downloads never wait", () => {
 	it.each([true, false])(
 		"shows both download rows and a loading status while the check is pending (wide=%s)",
 		(wide) => {
@@ -130,7 +130,7 @@ describe("SystemLogsView — Downloads never wait", () => {
 	});
 });
 
-describe("SystemLogsView — wide layout (>= 1024 px)", () => {
+describe("SystemLogsView: wide layout (>= 1024 px)", () => {
 	beforeEach(() => {
 		viewport(true);
 		getStorage.mockResolvedValue(logStorage());
@@ -247,7 +247,7 @@ describe("SystemLogsView — wide layout (>= 1024 px)", () => {
 	});
 });
 
-describe("SystemLogsView — narrow layout (< 1024 px)", () => {
+describe("SystemLogsView: narrow layout (< 1024 px)", () => {
 	beforeEach(() => {
 		viewport(false);
 		getStorage.mockResolvedValue(logStorage());
@@ -321,7 +321,7 @@ describe("SystemLogsView — narrow layout (< 1024 px)", () => {
 	});
 });
 
-describe("SystemLogsView — device version without the log viewer", () => {
+describe("SystemLogsView: device version without the log viewer", () => {
 	it.each([true, false])(
 		"replaces the tabs with one calm notice and keeps Downloads (wide=%s)",
 		async (wide) => {
@@ -364,7 +364,7 @@ describe("SystemLogsView — device version without the log viewer", () => {
 	});
 });
 
-describe("SystemLogsView — check failures", () => {
+describe("SystemLogsView: check failures", () => {
 	it.each([true, false])(
 		"shows a recovery band, keeps Downloads, and retries (wide=%s)",
 		async (wide) => {
@@ -432,7 +432,7 @@ function tokens(element: Element | null | undefined): string[] {
 	return (element?.getAttribute("class") ?? "").split(/\s+/).filter(Boolean);
 }
 
-describe("SystemLogsView — anatomy", () => {
+describe("SystemLogsView: anatomy", () => {
 	it("gives each tab panel and the side column their own scroll, and pads each region", async () => {
 		viewport(true);
 		getStorage.mockResolvedValue(logStorage());
@@ -590,7 +590,7 @@ describe("SystemLogsView — anatomy", () => {
 	});
 });
 
-describe("SystemLogsView — initial focus", () => {
+describe("SystemLogsView: initial focus", () => {
 	it.each([true, false])(
 		"moves focus to the selected tab when the tabs appear, so arrow keys work at once (wide=%s)",
 		async (wide) => {
@@ -648,7 +648,7 @@ describe("SystemLogsView — initial focus", () => {
 	});
 });
 
-describe("SystemLogsView — Downloads keep their state across the check", () => {
+describe("SystemLogsView: Downloads keep their state across the check", () => {
 	it("keeps a failed download's retry band when the check settles", async () => {
 		viewport(false);
 		let fail: (error: unknown) => void = () => {};
@@ -745,7 +745,7 @@ describe("SystemLogsView — Downloads keep their state across the check", () =>
 	});
 });
 
-describe("SystemLogsView — Storage region", () => {
+describe("SystemLogsView: Storage region", () => {
 	const usage = () =>
 		screen.getByTestId("storage-usage-text").textContent?.trim();
 	const used = (size: string) =>
