@@ -12,6 +12,15 @@ Missing current boot identity refuses the start.
 A start without a position resolves the current boot's newest cursor. A resume
 validates its cursor against the boot alone, independently of source and severity.
 An unavailable resume emits `cursor_unavailable`, then resolves a fresh head.
+An empty start returns an opaque boot-start checkpoint. A mock checkpoint
+contains the process's ring identity and the first expected sequence and is verified against the oldest
+retained sequence before replay. A wrapped ring or an old checkpoint without
+sequence evidence reports `cursor_unavailable` and reads from the retained
+start. Native journal cursors and boot IDs alone cannot prove that records
+before the first retained cursor were not vacuumed. Native boot-start resume
+therefore reports possible truncation and reads from the retained start.
+Both cases use the same existing catch-up bounds. A stale boot or epoch
+reports `cursor_unavailable` and starts at the current boot's fresh head.
 Only a proven empty boot permits a cursorless start; an exhausted probe is a failure.
 EOF with skipped unreadable records cannot prove an empty boot in a head probe.
 The watcher uses an inclusive cursor and `--lines=all`, never `-n 0`.
@@ -48,8 +57,8 @@ The publisher advances only on Bun-accepted frames, including frames queued
 under Bun's connection backpressure limit. A dropped frame stops delivery and
 attempts one terminal `follower_exit` notice at the previous checkpoint, or
 `cleared` when retrying a clear notice. If the notice also drops, the socket
-disconnects so Resume uses the client's last received checkpoint. On the same
-session, a cursorless Resume after a drop replays from the proven empty boot.
+disconnects so Resume uses the client's last received checkpoint, including a
+boot-start checkpoint when the first entry has not been acknowledged.
 
 The spawn registry grows from 75 to 76 entries with `deviceLogs.journalFollow`.
 Tests live in `src/tests/device-logs-follow*.test.ts`; fake schedulers and children

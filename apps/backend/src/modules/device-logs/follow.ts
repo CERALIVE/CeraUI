@@ -22,7 +22,11 @@ import {
 	createFollowTransport,
 	type FollowSocket,
 } from "./follow-transport.ts";
-import { followMockJournal, scanMockJournal } from "./mock-journal.ts";
+import {
+	followMockJournal,
+	mockJournalRetentionBoundary,
+	scanMockJournal,
+} from "./mock-journal.ts";
 import type { RawJournalRecord } from "./parse.ts";
 import {
 	JOURNAL_OUTPUT_FIELDS,
@@ -98,7 +102,7 @@ export async function startFollow(
 	if (running.size >= 4) return { ok: false, error: "BUSY" };
 	const bootId = currentBootId();
 	if (bootId === undefined) return { ok: false, error: "BOOT_UNAVAILABLE" };
-	const bootStart = `${LOG_FOLLOW_BOOT_START_PREFIX}${bootId}:${epoch}`;
+	const bootIdentity = `${LOG_FOLLOW_BOOT_START_PREFIX}${bootId}:${epoch}`;
 	const mock = shouldUseMocks();
 	const scan = mock ? scanMockJournal : scanJournal;
 	const time = options.clock ?? clock;
@@ -152,10 +156,16 @@ export async function startFollow(
 	void (async () => {
 		try {
 			const after = filter.afterCursor;
-			let cursor = after?.startsWith(LOG_FOLLOW_BOOT_START_PREFIX)
-				? null
-				: await position(after);
-			if (after !== undefined && after !== bootStart && cursor !== after) {
+			const boundary = mock ? mockJournalRetentionBoundary() : undefined;
+			const bootStart =
+				boundary === undefined ? bootIdentity : `${bootIdentity}:${boundary}`;
+			const bootResume =
+				after === bootIdentity ||
+				after?.startsWith(`${bootIdentity}:`) === true;
+			const bootToken = after?.startsWith(LOG_FOLLOW_BOOT_START_PREFIX);
+			let cursor = bootToken ? null : await position(after);
+			const retained = mock && after === bootStart;
+			if (after !== undefined && (bootResume ? !retained : cursor !== after)) {
 				publish({
 					subscriptionId,
 					entries: [],
@@ -163,7 +173,7 @@ export async function startFollow(
 					dropped: 0,
 					gap: "cursor_unavailable",
 				});
-				cursor = await position();
+				if (!bootResume) cursor = await position();
 			}
 			slot.checkpoint = cursor ?? bootStart;
 			for (;;) {

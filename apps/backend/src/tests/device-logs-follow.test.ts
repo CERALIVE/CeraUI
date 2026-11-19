@@ -143,6 +143,59 @@ test("an empty boot starts at its beginning and delivers its first record", asyn
 	]);
 });
 
+test("native boot start with unprovable retention reports a gap and reads retained history once", async () => {
+	f.scan.mockResolvedValueOnce({
+		status: "eof",
+		exitCode: 0,
+		skippedRecords: 0,
+	});
+	const { checkpointCursor } = await start();
+	if (checkpointCursor === null) throw new Error("missing boot checkpoint");
+	await stopFollow(f.conn);
+	await start({ afterCursor: checkpointCursor });
+	await child().emit([record(3), record(4)]);
+	f.time.advance(250);
+	child().finish();
+	await stopFollow(f.conn);
+	expect(
+		f.messages.map(({ gap, entries }) => [
+			gap,
+			entries.map(({ cursor }) => cursor),
+		]),
+	).toEqual([
+		["cursor_unavailable", []],
+		[undefined, ["s=3", "s=4"]],
+	]);
+	expect(f.children).toHaveLength(2);
+	expect(f.argv[1]?.filter((arg) => arg.startsWith("--cursor"))).toEqual([]);
+});
+
+test.each(["boot", "epoch"] as const)(
+	"stale boot-start %s falls back to the current head",
+	async (part) => {
+		f.scan.mockResolvedValueOnce({
+			status: "eof",
+			exitCode: 0,
+			skippedRecords: 0,
+		});
+		const { checkpointCursor } = await start();
+		if (checkpointCursor === null) throw new Error("missing boot checkpoint");
+		await stopFollow(f.conn);
+		const stale =
+			part === "boot"
+				? checkpointCursor.replace(record(1).bootId, "b".repeat(32))
+				: checkpointCursor.replace(
+						/:\d+$/,
+						`:${getLogState().historyEpoch + 1}`,
+					);
+		expect((await start({ afterCursor: stale })).checkpointCursor).toBe("s=1");
+		expect(f.messages.map((message) => message.gap)).toEqual([
+			"cursor_unavailable",
+		]);
+		expect(f.argv[1]).toContain("--cursor=s=1");
+	},
+);
+
 test("more than 2000 catchup records announce a gap and restart at fresh head", async () => {
 	await start();
 	f.rows.push(record(3000));

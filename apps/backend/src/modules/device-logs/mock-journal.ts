@@ -14,6 +14,7 @@ import {
 } from "./reader.ts";
 
 const loggerRecord = z.object({ ts: z.string(), level: z.string() });
+const ringIncarnation = crypto.randomUUID();
 const PRIORITIES: Readonly<Record<string, string>> = {
 	error: "3",
 	warn: "4",
@@ -121,6 +122,10 @@ export function scanMockJournal(input: Omit<ScanJournalOptions, "spawn">) {
 export interface MockFollowHandle {
 	readonly exited: Promise<number>;
 	abort(): void;
+}
+
+export function mockJournalRetentionBoundary(): string {
+	return `${ringIncarnation}:${getLogRingOffset()}`;
 }
 export function followMockJournal(
 	input: Pick<

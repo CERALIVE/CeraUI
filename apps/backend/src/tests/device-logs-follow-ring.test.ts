@@ -227,3 +227,43 @@ test("Resume on a new socket replays an empty boot after both sends drop", async
 		messages.flatMap((m) => m.entries.map((entry) => entry.message)),
 	).toEqual(backlog.map((message) => `[follow-fixture] ${message}`));
 });
+
+test("Resume reports a lost boot prefix even when retained matches fit one batch", async () => {
+	const time = manualClock();
+	const initial = await startFollow({ send: () => 0 }, { levels: ["error"] });
+	if (!initial.ok || initial.checkpointCursor === null)
+		throw new Error("missing empty boot checkpoint");
+	await stopAllFollows("cleared");
+	await emit("evicted matching record", "error");
+	for (let i = 0; i < logging.LOG_RING_CAPACITY; i++) await emit(`filler ${i}`);
+	await emit("retained matching record", "error");
+	const messages: ReturnType<typeof logFollowMessageSchema.parse>[] = [];
+	const socket = {
+		send: (frame: string) =>
+			messages.push(
+				logFollowMessageSchema.parse(JSON.parse(frame)["logs.follow"]),
+			),
+	};
+	expect(
+		(
+			await startFollow(
+				socket,
+				{
+					levels: ["error"],
+					afterCursor: initial.checkpointCursor,
+				},
+				{ clock: time.clock },
+			)
+		).ok,
+	).toBe(true);
+	time.advance(250);
+	expect(
+		messages.map(({ gap, entries }) => [
+			gap,
+			entries.map((entry) => entry.message),
+		]),
+	).toEqual([
+		["cursor_unavailable", []],
+		[undefined, ["[follow-fixture] retained matching record"]],
+	]);
+});
