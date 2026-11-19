@@ -25,7 +25,7 @@ export async function logsSockets() {
 			message: () => undefined,
 		},
 	});
-	async function connect(authed = true): Promise<AppWebSocket> {
+	async function connectPeer(authed = true) {
 		const opened = Promise.withResolvers<AppWebSocket>();
 		waiting.push(opened.resolve);
 		const peer = new WebSocket(
@@ -33,7 +33,10 @@ export async function logsSockets() {
 		);
 		peer.addEventListener("error", opened.reject, { once: true });
 		peers.push(peer);
-		return opened.promise;
+		return { ws: await opened.promise, peer };
+	}
+	async function connect(authed = true): Promise<AppWebSocket> {
+		return (await connectPeer(authed)).ws;
 	}
 	const ws = await connect();
 	const guest = await connect(false);
@@ -42,6 +45,7 @@ export async function logsSockets() {
 		context: createContext(ws),
 		guestContext: createContext(guest),
 		connect,
+		connectPeer,
 		close() {
 			for (const peer of peers) peer.close();
 			server.stop(true);

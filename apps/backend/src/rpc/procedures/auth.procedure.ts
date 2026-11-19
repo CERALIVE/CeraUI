@@ -17,10 +17,10 @@ import type { AuthTokens } from "../../helpers/config-schemas.ts";
 import { randomBase64 } from "../../helpers/crypto.ts";
 import { logger } from "../../helpers/logger.ts";
 import { isDevelopment } from "../../mocks/mock-config.ts";
-import { createContext, getAuthenticatedClients } from "../context.ts";
+import { closeSocketSession, getAuthenticatedClients } from "../context.ts";
 import { getPasswordHash, setPasswordHash } from "../state/password.ts";
 import { PersistentTokenStore } from "../state/persistent-token-store.ts";
-import type { RPCContext } from "../types.ts";
+import type { AppWebSocket, RPCContext } from "../types.ts";
 
 const AUTH_TOKENS_FILE = "auth_tokens.json";
 const BCRYPT_ROUNDS = 10;
@@ -136,9 +136,14 @@ function knownToken(token: string): boolean {
 	);
 }
 
-function invalidateToken(token: string): number {
+function closeRevokedPeer(ws: AppWebSocket): void {
+	closeSocketSession(ws);
+	ws.close(1008, "Session revoked");
+}
+
+function invalidateToken(token: string, caller: AppWebSocket): number {
 	for (const ws of getAuthenticatedClients())
-		if (ws.data.authToken === token) createContext(ws).deauthenticate();
+		if (ws !== caller && ws.data.authToken === token) closeRevokedPeer(ws);
 	let revoked = 0;
 	if (tempTokens[token]) {
 		delete tempTokens[token];
@@ -148,9 +153,9 @@ function invalidateToken(token: string): number {
 	return revoked;
 }
 
-function invalidateAllTokens(): number {
+function invalidateAllTokens(caller: AppWebSocket): number {
 	for (const ws of getAuthenticatedClients())
-		if (ws.data.authToken !== undefined) createContext(ws).deauthenticate();
+		if (ws !== caller && ws.data.authToken !== undefined) closeRevokedPeer(ws);
 	let revoked = 0;
 	for (const token of Object.keys(tempTokens)) {
 		delete tempTokens[token];
@@ -255,7 +260,8 @@ export const setPasswordProcedure = baseProcedure
 			// otherwise changing the password after losing a device leaves that
 			// device signed in. The calling socket is re-authenticated on a fresh
 			// token so the operator who just changed it is not thrown out.
-			const revoked = invalidateAllTokens();
+			context.deauthenticate();
+			const revoked = invalidateAllTokens(context.ws);
 			const replacement = genAuthToken(false);
 			context.authenticate(replacement);
 			logger.info(
@@ -277,7 +283,7 @@ export const logoutProcedure = baseProcedure
 		const token = context.ws.data.authToken;
 		context.deauthenticate();
 		if (token) {
-			invalidateToken(token);
+			invalidateToken(token, context.ws);
 		}
 		logger.info("Auth: logout successful");
 		return { success: true };
@@ -297,7 +303,7 @@ export const revokeTokenProcedure = baseProcedure
 
 		if (input.scope === "all") {
 			context.deauthenticate();
-			const revoked = invalidateAllTokens();
+			const revoked = invalidateAllTokens(context.ws);
 			logger.info(`Auth: revoked all ${revoked} credential(s)`);
 			return { success: true, revoked };
 		}
@@ -312,7 +318,7 @@ export const revokeTokenProcedure = baseProcedure
 		if (target === context.ws.data.authToken) {
 			context.deauthenticate();
 		}
-		const revoked = invalidateToken(target);
+		const revoked = invalidateToken(target, context.ws);
 		logger.info(`Auth: revoked ${revoked} credential record(s)`);
 		return { success: true, revoked };
 	});

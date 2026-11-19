@@ -6,6 +6,7 @@ import { createContext } from "../rpc/context.ts";
 import * as events from "../rpc/events.ts";
 import { appRouter } from "../rpc/router.ts";
 import { followFixture, record } from "./helpers/device-follow.ts";
+import { bounded } from "./helpers/history-clear.ts";
 import { logsSockets } from "./helpers/logs-rpc.ts";
 
 let f: ReturnType<typeof followFixture>;
@@ -157,25 +158,36 @@ test("logout retires a follow and blocks records while its child is reaping", as
 });
 
 test("revoking a credential retires a follow on another socket using it", async () => {
-	const peer = await sockets.connect();
+	const { ws: peer, peer: client } = await sockets.connectPeer();
 	const peerContext = createContext(peer);
 	const credential = crypto.randomUUID();
 	peerContext.authenticate(credential);
 	events.addClient(peer);
+	const closed = Promise.withResolvers<CloseEvent>();
+	const received: unknown[] = [];
+	client.addEventListener("close", closed.resolve, { once: true });
+	client.addEventListener("message", (event) => received.push(event.data));
 	try {
 		expect(
 			await call(appRouter.logs.followStart, {}, { context: peerContext }),
 		).toMatchObject({ ok: true });
 		const child = f.children[0];
 		if (!child) throw new Error("missing watcher");
-		await call(
-			appRouter.auth.revokeToken,
-			{ scope: "token", token: credential },
-			{ context: sockets.context },
-		);
+		await child.emit([record(2)]);
+		expect(
+			await call(
+				appRouter.auth.revokeToken,
+				{ scope: "token", token: credential },
+				{ context: sockets.context },
+			),
+		).toMatchObject({ success: true });
 		expect(peerContext.isAuthenticated()).toBe(false);
 		expect(child.signals).toEqual(["SIGTERM"]);
 		expect(sockets.context.isAuthenticated()).toBe(true);
+		f.time.advance(250);
+		expect((await bounded(closed.promise)).code).toBe(1008);
+		expect(received).toEqual([]);
+		expect(sockets.ws.readyState).toBe(WebSocket.OPEN);
 	} finally {
 		events.removeClient(peer);
 	}
