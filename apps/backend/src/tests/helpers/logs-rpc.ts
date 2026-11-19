@@ -38,10 +38,11 @@ export async function logsSockets() {
 	async function connect(authed = true): Promise<AppWebSocket> {
 		return (await connectPeer(authed)).ws;
 	}
-	const ws = await connect();
+	const { ws, peer: client } = await connectPeer();
 	const guest = await connect(false);
 	return {
 		ws,
+		client,
 		context: createContext(ws),
 		guestContext: createContext(guest),
 		connect,

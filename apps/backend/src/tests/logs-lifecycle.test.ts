@@ -5,6 +5,7 @@ import { createWebSocketHandler } from "../rpc/adapter.ts";
 import { createContext } from "../rpc/context.ts";
 import * as events from "../rpc/events.ts";
 import { appRouter } from "../rpc/router.ts";
+import { authTokenDirectory } from "./helpers/auth-token-directory.ts";
 import { followFixture, record } from "./helpers/device-follow.ts";
 import { bounded } from "./helpers/history-clear.ts";
 import { logsSockets } from "./helpers/logs-rpc.ts";
@@ -158,6 +159,7 @@ test("logout retires a follow and blocks records while its child is reaping", as
 });
 
 test("revoking a credential retires a follow on another socket using it", async () => {
+	using _tokens = authTokenDirectory();
 	const { ws: peer, peer: client } = await sockets.connectPeer();
 	const peerContext = createContext(peer);
 	const credential = crypto.randomUUID();
