@@ -78,13 +78,17 @@ async function run<R extends ActionReply>(
 	read: (reply: unknown) => R,
 	done: (reply: OkReply<R>) => unknown,
 ): Promise<void> {
+	if (running !== undefined) return;
 	running = action;
 	boots = undefined;
 	failure = undefined;
-	const reply = await settleAction(call, read);
-	running = undefined;
-	if (typeof reply === 'string') failure = { action, reason: reply };
-	else await done(reply);
+	try {
+		const reply = await settleAction(call, read);
+		if (typeof reply === 'string') failure = { action, reason: reply };
+		else await done(reply);
+	} finally {
+		running = undefined;
+	}
 }
 
 const deleteOlder = () =>
@@ -153,6 +157,7 @@ const RETRY: Record<Action, () => unknown> = {
 			confirmButtonText={m['systemLogs.storage.clearAllConfirm']()}
 			confirmVariant="destructive"
 			contentProps={openOnCancel(`${uid}-clear-all`)}
+			disabledConfirmButton={running !== undefined}
 			extraButtonClasses="min-h-(--touch-target-min)"
 			onconfirm={clearAll}
 		>
@@ -171,6 +176,7 @@ const RETRY: Record<Action, () => unknown> = {
 			confirmButtonText={m['systemLogs.storage.clearEventsConfirm']()}
 			confirmVariant="destructive"
 			contentProps={openOnCancel(`${uid}-clear-events`)}
+			disabledConfirmButton={running !== undefined}
 			extraButtonClasses="min-h-(--touch-target-min)"
 			onconfirm={clearEvents}
 		>
