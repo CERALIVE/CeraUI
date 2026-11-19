@@ -44,6 +44,7 @@ const ENDED = {
 
 const view = new RawView({
 	logs: rpc.logs,
+	readCurrentBoot: async () => (await rpc.logs.boots()).find((boot) => boot.current)?.bootId,
 	setFollowListener: setLogFollowListener,
 	now: () => Date.now(),
 	onQuery: (query, span) => onquery?.(query, span),

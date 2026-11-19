@@ -862,6 +862,10 @@ socket listener, subscription and resume checkpoint. `RawRowWindow` owns
 the held boundary and caps, and `RawFeedback` owns recovery state and
 live-region announcements.
 
+After reconnect, a previously attached Raw follow checks the running boot
+before offering a usable Resume. A changed boot stops the follow with the
+restart notice and reloads This boot from its newest retained entry.
+
 ### Components
 
 | Source | Props |

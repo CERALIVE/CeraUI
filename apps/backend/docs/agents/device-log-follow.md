@@ -12,6 +12,10 @@ Missing current boot identity refuses the start.
 A start without a position resolves the current boot's newest cursor. A resume
 validates its cursor against the boot alone, independently of source and severity.
 An unavailable resume emits `cursor_unavailable`, then resolves a fresh head.
+An ordinary journal cursor that identifies a previous boot starts from the
+first retained record of the running boot. A same-boot boot-start checkpoint
+still reports `cursor_unavailable` if retained history cannot be proven
+complete, then reads from the retained start.
 An empty start returns an opaque boot-start checkpoint. A mock checkpoint
 contains the process's ring identity and the first expected sequence and is verified against the oldest
 retained sequence before replay. A wrapped ring or an old checkpoint without

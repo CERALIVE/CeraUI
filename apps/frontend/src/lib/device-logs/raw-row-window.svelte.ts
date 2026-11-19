@@ -32,6 +32,10 @@ export class RawRowWindow {
 		return newestCursor(this.#list);
 	}
 
+	get newestBoot(): string | undefined {
+		return this.#list.find((row) => row.kind === "entry")?.entry.bootId;
+	}
+
 	has(cursor: string): boolean {
 		return this.#list.some((row) => row.key === cursor);
 	}

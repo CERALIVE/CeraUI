@@ -1,5 +1,6 @@
 // allow: SIZE_OK - Socket lifetime state machine; the clear fence shares slot ownership.
 import {
+	journalCursorBoot,
 	LOG_FOLLOW_BOOT_START_PREFIX,
 	type LogFollowMessage,
 	type LogFollowStartInput,
@@ -163,9 +164,16 @@ export async function startFollow(
 				after === bootIdentity ||
 				after?.startsWith(`${bootIdentity}:`) === true;
 			const bootToken = after?.startsWith(LOG_FOLLOW_BOOT_START_PREFIX);
-			let cursor = bootToken ? null : await position(after);
+			const priorBoot =
+				after === undefined ? undefined : journalCursorBoot(after);
+			const bootChanged = priorBoot !== undefined && priorBoot !== bootId;
+			let cursor = bootToken || bootChanged ? null : await position(after);
 			const retained = mock && after === bootStart;
-			if (after !== undefined && (bootResume ? !retained : cursor !== after)) {
+			if (
+				!bootChanged &&
+				after !== undefined &&
+				(bootResume ? !retained : cursor !== after)
+			) {
 				publish({
 					subscriptionId,
 					entries: [],

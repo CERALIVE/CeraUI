@@ -32,6 +32,10 @@ export const LOG_ERROR_CODES = [
 export const LOG_FOLLOW_EVENT = 'logs.follow';
 export const LOG_FOLLOW_BOOT_START_PREFIX = 'boot-start:';
 
+export function journalCursorBoot(cursor: string): string | undefined {
+	return /(?:^|;)b=([0-9a-f]{32})(?:;|$)/.exec(cursor)?.[1];
+}
+
 export const logSourceSchema = z.enum(LOG_SOURCES);
 export type LogSource = z.infer<typeof logSourceSchema>;
 export const logLevelSchema = z.enum(LOG_LEVELS);

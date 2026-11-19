@@ -5,6 +5,7 @@ import type { ExportSpan } from "./sharing";
 
 export interface RawViewDeps {
 	readonly logs: Pick<TypedRPC["logs"], "query" | "followStart" | "followStop">;
+	readCurrentBoot?(): Promise<string | undefined>;
 	/** Publishes the fixed query before a read, including reads that fail. */
 	onQuery?(query: LogQueryInput, span?: ExportSpan): void;
 	setFollowListener(

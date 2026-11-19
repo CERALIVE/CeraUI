@@ -1,4 +1,5 @@
 import {
+	journalCursorBoot,
 	LOG_FOLLOW_BOOT_START_PREFIX,
 	type LogFollowMessage,
 	type LogFollowStopOutput,
@@ -51,7 +52,10 @@ export class RawFollowSession {
 	#checkpoint: string | null = null;
 
 	constructor(
-		private readonly deps: Pick<RawViewDeps, "logs" | "setFollowListener">,
+		private readonly deps: Pick<
+			RawViewDeps,
+			"logs" | "readCurrentBoot" | "setFollowListener"
+		>,
 		private readonly context: FollowContext,
 	) {}
 
@@ -93,15 +97,43 @@ export class RawFollowSession {
 		const connected = state === "connected";
 		if (connected === this.connected) return;
 		this.connected = connected;
-		if (connected || this.state === "idle" || this.state === "stopped") return;
+		if (this.state === "idle" || this.state === "stopped") return;
+		if (connected) {
+			void this.#checkBoot();
+			return;
+		}
 		this.#forget();
 		if (this.state === "paused") return;
 		this.state = "disconnected";
 		this.context.feedback.announce("disconnected");
 	}
 
+	async #checkBoot(): Promise<void> {
+		const { readCurrentBoot } = this.deps;
+		if (readCurrentBoot === undefined) return;
+		const checkpoint = this.#checkpoint;
+		const boot =
+			(checkpoint?.startsWith(LOG_FOLLOW_BOOT_START_PREFIX)
+				? checkpoint.split(":")[1]
+				: checkpoint === null
+					? undefined
+					: journalCursorBoot(checkpoint)) ?? this.context.rows.newestBoot;
+		if (boot === undefined) return;
+		const token = ++this.#token;
+		this.busy = true;
+		const current = await settleRawRpc(
+			readCurrentBoot,
+			undefined,
+			"System Logs current boot read failed:",
+		);
+		if (token !== this.#token || this.context.isDisposed()) return;
+		this.busy = false;
+		if (current !== undefined && current !== boot) this.#end("boot_changed");
+	}
+
 	resetForFilter(): boolean {
 		const live = this.detach();
+		if (!live) this.#forget();
 		this.state = "idle";
 		this.ended = null;
 		this.#checkpoint = null;
@@ -218,7 +250,7 @@ export class RawFollowSession {
 		this.state = "stopped";
 		this.ended = reason;
 		this.context.feedback.announce("stopped");
-		if (reason !== "cleared") return;
+		if (reason !== "cleared" && reason !== "boot_changed") return;
 		this.#checkpoint = null;
 		void this.context.readHead();
 	}

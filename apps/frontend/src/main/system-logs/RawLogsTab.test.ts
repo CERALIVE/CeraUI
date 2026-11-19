@@ -40,6 +40,7 @@ import RawLogsFilterBar from "./RawLogsFilterBar.svelte";
 import RawLogsTab from "./RawLogsTab.svelte";
 
 const logs = vi.hoisted(() => ({
+	boots: vi.fn(),
 	query: vi.fn(),
 	followStart: vi.fn(),
 	followStop: vi.fn(),
@@ -178,6 +179,8 @@ afterAll(() => {
 
 beforeEach(() => {
 	scrollerHeight = 4000;
+	logs.boots.mockReset();
+	logs.boots.mockResolvedValue([]);
 	logs.query.mockReset();
 	logs.followStart.mockReset();
 	logs.followStop.mockReset();
@@ -1174,6 +1177,42 @@ describe("RawLogsTab: follow", () => {
 				.getAllByTestId("raw-row")
 				.every((row) => row.dataset.stale === "false"),
 		).toBe(true);
+	});
+
+	it("stops follow and reloads This boot after a device restart", async () => {
+		const running = fourBoots().find(({ current }) => current);
+		if (!running) throw new Error("missing running boot fixture");
+		const oldCursor = `s=3;b=${BOOT};m=123`;
+		const newCursor = `s=2;b=${running.bootId};m=124`;
+		await mounted(page([oldCursor]));
+		logs.followStart.mockResolvedValueOnce({
+			ok: true,
+			subscriptionId: "sub-1",
+			checkpointCursor: oldCursor,
+		});
+		await fireEvent.click(screen.getByTestId("raw-follow-button"));
+		await screen.findByText(en.systemLogs.follow.following);
+		setConnectionState("disconnected");
+		await screen.findByTestId("raw-disconnected");
+
+		logs.boots.mockResolvedValueOnce([running]);
+		logs.query.mockResolvedValueOnce(
+			page([], {
+				bootId: running.bootId,
+				entries: [entry(newCursor, { bootId: running.bootId })],
+			}),
+		);
+		setConnectionState("connected");
+
+		expect(
+			(await screen.findByTestId("raw-follow-ended")).textContent?.trim(),
+		).toBe(en.systemLogs.follow.endedBoot);
+		expect(screen.getByTestId("raw-follow-state").dataset.state).toBe(
+			"stopped",
+		);
+		await waitFor(() => expect(cursors()).toEqual([newCursor]));
+		expect(logs.query).toHaveBeenLastCalledWith(DEFAULT_INPUT);
+		expect(logs.followStart).toHaveBeenCalledTimes(1);
 	});
 
 	it("shows the out-of-date notice while the socket is down even without a follow", async () => {
