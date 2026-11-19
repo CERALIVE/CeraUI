@@ -49,16 +49,27 @@ const view = new RawView({
 	now: () => Date.now(),
 	onQuery: (query, span) => onquery?.(query, span),
 });
-const initial = untrack(() => ({ around, bootId: bootSelection.bootId }));
-void (initial.around !== undefined || initial.bootId === null
+const initial = untrack(() => ({ around, boot: bootSelection.boot }));
+void (initial.around !== undefined || initial.boot === null
 	? view.start(initial.around)
-	: view.chooseBoot(initial.bootId));
-const stopBoot = bootSelection.onChoose((bootId) => void view.chooseBoot(bootId));
+	: view.chooseBoot(initial.boot.bootId, initial.boot.current ? initial.boot.bootId : undefined));
+const stopBoot = bootSelection.onChoose((bootId) =>
+	void view.chooseBoot(bootId, bootSelection.boot?.current ? bootSelection.boot.bootId : undefined),
+);
 const stopHistory = onHistoryChanged(() => void resetRawView(view));
 onDestroy(() => {
+	bootSelection.rawScope = null;
 	stopBoot();
 	stopHistory();
 	view.dispose();
+});
+
+$effect(() => {
+	const anchorBoot = view.anchor === null ? undefined : view.bottom?.query.boot;
+	bootSelection.rawScope = {
+		time: view.filter.time,
+		bootId: anchorBoot === undefined || anchorBoot === 'all' || anchorBoot === 'current' ? view.filter.bootId : anchorBoot,
+	};
 });
 
 $effect(() => {

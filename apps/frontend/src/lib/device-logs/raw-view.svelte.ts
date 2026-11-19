@@ -130,7 +130,8 @@ export class RawView {
 	}
 
 	/** A boot from the boot picker; `null` is "All boots". */
-	chooseBoot(bootId: string | null): Promise<void> {
+	chooseBoot(bootId: string | null, currentBootId?: string): Promise<void> {
+		if (bootId === currentBootId) return this.showCurrentBoot();
 		return this.#apply(bootId === null ? { bootId, time: "all" } : { bootId });
 	}
 

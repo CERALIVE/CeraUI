@@ -7,11 +7,13 @@
  * view, and while open it rechecks the choice after stored history is deleted.
  */
 import type { LogBootInfo } from "@ceraui/rpc/schemas";
+import type { RawFilter } from "./raw-filter";
 
 type BootListener = (bootId: string | null) => void;
 
 class BootSelection {
 	#boot = $state.raw<LogBootInfo | null>(null);
+	rawScope = $state.raw<Pick<RawFilter, "time" | "bootId"> | null>(null);
 	readonly #listeners = new Set<BootListener>();
 
 	get boot(): LogBootInfo | null {
@@ -22,10 +24,19 @@ class BootSelection {
 		return this.#boot?.bootId ?? null;
 	}
 
-	/** Choosing the boot already chosen is a no-op, so no tab re-reads for nothing. */
+	isSelected(boot: LogBootInfo | null): boolean {
+		const scope = this.rawScope;
+		if (scope === null) return (boot?.bootId ?? null) === this.bootId;
+		if (scope.bootId !== null) return boot?.bootId === scope.bootId;
+		return boot === null
+			? scope.time === "all"
+			: scope.time === "current" && boot.current;
+	}
+
+	/** Reusing the same boot is a no-op only when Raw already shows its scope. */
 	choose(boot: LogBootInfo | null): void {
 		const bootId = boot?.bootId ?? null;
-		if (bootId === this.bootId) return;
+		if (bootId === this.bootId && this.isSelected(boot)) return;
 		this.#boot = boot;
 		for (const listener of this.#listeners) {
 			try {
@@ -46,6 +57,7 @@ class BootSelection {
 	/** Back to All boots without telling anyone: the view closed. */
 	reset(): void {
 		this.#boot = null;
+		this.rawScope = null;
 	}
 
 	/**

@@ -40,9 +40,10 @@ onDestroy(onHistoryChanged(() => void list.load()));
 
 let listbox = $state<HTMLElement>();
 const rows = $derived(list.boots === null ? null : bootRows(list.boots));
-const selectedId = $derived(bootSelection.bootId);
+const allSelected = $derived(bootSelection.isSelected(null));
+const selectedId = $derived(rows?.find((row) => bootSelection.isSelected(row.boot))?.boot.bootId ?? null);
 // The single tab stop: the chosen boot, or All boots when that boot is not listed.
-const stopId = $derived(rows?.some((row) => row.boot.bootId === selectedId) ? selectedId : null);
+const stopId = $derived(selectedId);
 
 function choose(boot: LogBootInfo | null): void {
 	bootSelection.choose(boot);
@@ -95,7 +96,7 @@ function keydown(event: KeyboardEvent, target: number | undefined, boot: LogBoot
 		<span hidden id="{uid}-changed">{m['systemLogs.boots.changedDescription']()}</span>
 		<div aria-label={m['systemLogs.boots.heading']()} bind:this={listbox} class="flex flex-col gap-2" role="listbox">
 			<div
-				aria-selected={selectedId === null}
+				aria-selected={allSelected}
 				class={OPTION}
 				data-testid="boot-option-all"
 				onclick={() => choose(null)}
@@ -104,7 +105,7 @@ function keydown(event: KeyboardEvent, target: number | undefined, boot: LogBoot
 				tabindex={stopId === null ? 0 : -1}
 			>
 				<span class="text-sm font-medium">{m['systemLogs.boots.all']()}</span>
-				{@render check(selectedId === null)}
+				{@render check(allSelected)}
 			</div>
 			{#each rows as row, index (row.boot.bootId)}
 				<div

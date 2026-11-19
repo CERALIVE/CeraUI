@@ -36,6 +36,7 @@ import { notifyHistoryChanged } from "$lib/device-logs/history-bus";
 import { RawView } from "$lib/device-logs/raw-view.svelte";
 
 import { en } from "../../tests/helpers/catalog";
+import BootPicker from "./BootPicker.svelte";
 import RawLogsFilterBar from "./RawLogsFilterBar.svelte";
 import RawLogsTab from "./RawLogsTab.svelte";
 
@@ -241,6 +242,37 @@ async function mounted(
 	await waitFor(() => expect(screen.queryByTestId("raw-loading")).toBeNull());
 	return view;
 }
+
+it("selects Running now for This boot and lets All boots change the Raw scope", async () => {
+	const running = fourBoots().find(({ current }) => current);
+	if (!running) throw new Error("missing running boot");
+	logs.boots.mockResolvedValue([running]);
+	logs.query.mockResolvedValue(page(["s=1"]));
+	render(RawLogsTab);
+	render(BootPicker);
+
+	const current = await screen.findByRole("option", { name: /Running now/ });
+	const all = screen.getByRole("option", { name: en.systemLogs.boots.all });
+	expect(current.getAttribute("aria-selected")).toBe("true");
+	expect(all.getAttribute("aria-selected")).toBe("false");
+	await fireEvent.click(all);
+	await waitFor(() =>
+		expect(logs.query).toHaveBeenLastCalledWith({
+			...DEFAULT_INPUT,
+			boot: "all",
+		}),
+	);
+	expect(all.getAttribute("aria-selected")).toBe("true");
+
+	await fireEvent.click(current);
+	await waitFor(() =>
+		expect(logs.query).toHaveBeenLastCalledWith(DEFAULT_INPUT),
+	);
+	expect(current.getAttribute("aria-selected")).toBe("true");
+	expect(screen.getByTestId("raw-follow-button").hasAttribute("disabled")).toBe(
+		false,
+	);
+});
 
 async function startFollowing() {
 	logs.followStart.mockResolvedValueOnce({

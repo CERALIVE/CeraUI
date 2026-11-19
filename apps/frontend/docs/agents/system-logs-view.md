@@ -866,6 +866,10 @@ live-region announcements.
 After reconnect, a previously attached Raw follow checks the running boot
 before offering a usable Resume. A changed boot stops the follow with the
 restart notice and reloads This boot from its newest retained entry.
+While Raw is open, the boot picker checks Running now for This boot and
+checks All boots only for All stored. Choosing Running now keeps Follow
+available under the normal filters. Choosing All boots can change the Raw
+scope even if the shared boot selection already had no explicit boot.
 
 The catch-up separator can recover one bounded newer page at a time, in its
 original position between the live and historical rows. The button retains
@@ -891,7 +895,7 @@ recovered entry if the operator is still on the disappearing button.
 | `main/system-logs/ParamText.svelte:8` | props |
 | `main/system-logs/RawFollowControl.svelte:17` | props |
 | `main/system-logs/RawLogList.svelte:22` | props |
-| `main/system-logs/RawLogRow.svelte:35` | props |
+| `main/system-logs/RawLogRow.svelte:37` | props |
 | `main/system-logs/RawLogsFilterBar.svelte:23` | props |
 | `main/system-logs/RawLogsPanel.svelte:23` | props |
 | `main/system-logs/RawLogsTab.svelte:27` | props |
@@ -1048,7 +1052,7 @@ Related browser specs and their entry points:
 | SEARCH_MAX_BYTES | 256 | `lib/device-logs/raw-filter.ts:58` |
 | ROW_CAP | 2000 | `lib/device-logs/raw-rows.ts:9` |
 | SEARCH_DEBOUNCE_MS | 300 | `lib/device-logs/raw-view.svelte.ts:22` |
-| HELD_CAP | 500 | `lib/device-logs/raw-row-window.svelte.ts:13` |
+| HELD_CAP | 500 | `lib/device-logs/raw-row-window.svelte.ts:14` |
 | NEW_ENTRIES_EVERY_MS | 5000 | `lib/device-logs/raw-feedback.svelte.ts:23` |
 | MOMENT_EXPORT_HALF_MS | 300000 | `lib/device-logs/raw-paging.svelte.ts:51` |
 
@@ -1068,9 +1072,10 @@ Backend and wire limits: [device-logs.md](../../../backend/docs/agents/device-lo
 | Start from newest focus handoff | `main/system-logs/EventsTab.svelte:109` |
 | View raw logs pending (aria-disabled) | `main/system-logs/EventRow.svelte:90` |
 | Event row tab stop | `main/system-logs/EventRow.svelte:95` |
-| Raw list focus on a row | `main/system-logs/RawLogList.svelte:116` |
-| Raw paging focus handoff | `main/system-logs/RawLogList.svelte:109` |
-| Boot picker option focus | `main/system-logs/BootPicker.svelte:58` |
+| Raw list focus on a row | `main/system-logs/RawLogList.svelte:115` |
+| Raw paging focus handoff | `main/system-logs/RawLogList.svelte:105` |
+| Raw gap recovery focus | `main/system-logs/RawLogList.svelte:145` |
+| Boot picker option focus | `main/system-logs/BootPicker.svelte:54` |
 | Segmented choice focus | `main/system-logs/SegmentedChoice.svelte:50` |
 | Selected tab focus | `main/system-logs/SystemLogsView.svelte:135` |
 | Storage heading focus | `main/system-logs/SystemLogsView.svelte:144` |
