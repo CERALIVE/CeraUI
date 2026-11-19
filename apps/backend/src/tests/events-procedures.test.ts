@@ -27,6 +27,8 @@ import type { AppWebSocket, SocketData } from "../rpc/types.ts";
 
 const BOOT = "66d8d1808694489b8c3a3fb4795cab24";
 const OTHER_BOOT = "123456788694489b8c3a3fb4795cab24";
+const UUID =
+	/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const originalDir = process.env.CERALIVE_EVENTS_DIR;
 let dir: string;
 let server: ReturnType<typeof Bun.serve<SocketData>>;
@@ -124,18 +126,21 @@ test("paging walks five retained events as two, two, one without repeats", async
 			nextBeforeSeq: 14,
 			headSeq: 15,
 			retainedFromSeq: 11,
+			epoch: expect.any(String),
 		},
 		{
 			events: expect.any(Array),
 			nextBeforeSeq: 12,
 			headSeq: 15,
 			retainedFromSeq: 11,
+			epoch: expect.any(String),
 		},
 		{
 			events: expect.any(Array),
 			nextBeforeSeq: null,
 			headSeq: 15,
 			retainedFromSeq: 11,
+			epoch: expect.any(String),
 		},
 	]);
 	expect(
@@ -201,12 +206,34 @@ test("clearing events keeps boot records and reports an empty timeline", async (
 		nextBeforeSeq: null,
 		headSeq: 0,
 		retainedFromSeq: 0,
+		epoch: expect.any(String),
 	});
 	expect(
 		await call(appRouter.events.boots, undefined, {
 			context: createContext(authed),
 		}),
 	).toEqual([boot]);
+});
+
+test("pages share one ring epoch, and a clear and restart that reuse seq 1 name a new one", async () => {
+	seed();
+	const first = await list({ limit: 2 });
+	const second = await list({ limit: 2, beforeSeq: first.nextBeforeSeq ?? 0 });
+	expect(first.epoch).toMatch(UUID);
+	expect(second.epoch).toBe(first.epoch);
+	expect(
+		await call(appRouter.events.clear, undefined, {
+			context: createContext(authed),
+		}),
+	).toEqual({ success: true });
+	resetEventEmitterForTest({ bootId: () => BOOT, log: () => {} });
+	emitEvent("engine_lost", { streaming: true });
+
+	const refilled = await list({});
+	expect(refilled.events.map((event) => event.seq)).toEqual([1]);
+	expect(refilled.epoch).toMatch(UUID);
+	expect(refilled.epoch).not.toBe(first.epoch);
+	expect((await list({})).epoch).toBe(refilled.epoch);
 });
 
 test("timeline reads and clear reject unauthenticated callers without erasing records", async () => {

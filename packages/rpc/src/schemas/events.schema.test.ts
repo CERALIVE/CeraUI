@@ -437,4 +437,12 @@ describe('event wire compatibility and RPC boundary', () => {
 		expect(Object.keys(appContract.events).sort()).toEqual(['boots', 'clear', 'list']);
 		expect(appContract.events).toEqual(eventsContract);
 	});
+
+	test('a list output may name its ring epoch as a UUID or leave it out', () => {
+		const named = { ...list, epoch: '0f4c2a51-8d3e-4b7a-9c1f-2e6d8a4b5c7e' };
+		expect(eventListOutputSchema.parse(named)).toEqual(named);
+		expect(eventListOutputSchema.parse(list)).toEqual(list);
+		for (const epoch of [1, null, '', 'ring-1'])
+			expect(eventListOutputSchema.safeParse({ ...list, epoch }).success).toBe(false);
+	});
 });

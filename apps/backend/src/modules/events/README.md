@@ -2,9 +2,16 @@
 
 `store.ts` owns two independent JSONL rings on the data partition. Events retain
 eight files of at most 512 KiB each; boot records retain two files of at most
-128 KiB each. `clearEvents` attempts every event generation and returns false
-if any removal fails. `eventsBytes` counts event generations only. Boot
-versions remain available after event cleanup.
+128 KiB each. `clearEvents` removes the ring epoch, then attempts every event
+generation, and returns false if any removal fails. `eventsBytes` counts event
+generation files only. Boot versions remain available after event cleanup.
+
+`epoch.ts` exports `eventsEpoch`, which names the event ring with a UUID kept
+in `events.epoch` (the file name `store.ts` exports for its clear), written
+with mode 0600 and `fdatasync` when it is missing or fails the wire schema. A
+clear removes it first, so a clear cut short never keeps the old name for a
+changed ring, and the next read names a new one. It returns undefined when the
+file cannot be read or written, never a new value per read.
 
 The directory resolves from `CERALIVE_EVENTS_DIR`, then
 `CERALIVE_DATA_DIR/ceralive/events`, then the shared development detector's

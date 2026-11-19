@@ -8,10 +8,10 @@ source; the linked contracts hold the detail.
 | Piece | Source | Contract |
 |---|---|---|
 | Registry: per code a family, params schema, severity and subject | `packages/rpc/src/schemas/events.schema.ts:107`, export `./events` in `packages/rpc/package.json:21` | [Events wire contract](../../../../packages/rpc/docs/agents/device-events-wire.md) |
-| Wire record, list input and output, `EVENT_PUSH`, `LOW_DISK_THRESHOLD_BYTES` | `packages/rpc/src/schemas/events-wire.schema.ts:8-77`, re-exported by `packages/rpc/src/schemas/index.ts:15` | same |
+| Wire record, list input and output, `EVENT_PUSH`, `LOW_DISK_THRESHOLD_BYTES` | `packages/rpc/src/schemas/events-wire.schema.ts:8-83`, re-exported by `packages/rpc/src/schemas/index.ts:15` | same |
 | Emitter | `src/modules/events/emit.ts` | [event-emitter.md](event-emitter.md) |
-| Store: event and boot JSONL rings | `src/modules/events/store.ts` | [store README](../../src/modules/events/README.md) |
-| `events.list`, `events.boots`, `events.clear` | `src/rpc/procedures/events.procedure.ts:18,42,46` | [event-timeline-rpc.md](event-timeline-rpc.md) |
+| Store: event and boot JSONL rings, and the event ring's epoch | `src/modules/events/store.ts`, `src/modules/events/epoch.ts` | [store README](../../src/modules/events/README.md) |
+| `events.list`, `events.boots`, `events.clear` | `src/rpc/procedures/events.procedure.ts:19,45,49` | [event-timeline-rpc.md](event-timeline-rpc.md) |
 | Producers | per family | [stream](stream-lifecycle-events.md), [network](network-events.md), [cellular](cellular-events.md), [update](update-events.md), [device](event-emitter.md#device-lifecycle-producers-exists), [capture](capture-events.md) |
 
 Raw journal reads: [device-logs.md](device-logs.md).
@@ -62,11 +62,12 @@ subprocess or threshold for an event. Named exception: `disk_low` and
 
 | Fact | Source |
 |---|---|
-| Events: at most 8 files of at most 512 KiB each; boots: at most 2 files of at most 128 KiB each; the active file rotates when an append would exceed its limit | `store.ts:17-28,111-120` |
-| Directory: `CERALIVE_EVENTS_DIR`, else `CERALIVE_DATA_DIR/ceralive/events`, else a dev temp dir, else `/data/ceralive/events` | `store.ts:51-62` |
-| `mkdir` mode 0700; active file `fchmod` 0600 on append | `store.ts:99,124` |
-| Readers skip oversized files, the unterminated last line, unparsable lines and records failing the `v: 1` schema | `store.ts:147-148,162-176` |
-| `events.clear` calls `clearEvents`, which deletes the `events` generations and not the `boots` files | `events.procedure.ts:49`; `store.ts:200-207` |
+| Events: at most 8 files of at most 512 KiB each; boots: at most 2 files of at most 128 KiB each; the active file rotates when an append would exceed its limit | `store.ts:17-28,123-132` |
+| Directory: `CERALIVE_EVENTS_DIR`, else `CERALIVE_DATA_DIR/ceralive/events`, else a dev temp dir, else `/data/ceralive/events` | `store.ts:54-65` |
+| `mkdir` mode 0700; active file `fchmod` 0600 on append | `store.ts:102,136` |
+| Readers skip oversized files, the unterminated last line, unparsable lines and records failing the `v: 1` schema | `store.ts:159-160,173-189` |
+| Ring epoch: a UUID in `events.epoch`, mode 0600, kept across reads, rotation and restarts; a missing or damaged file gets a new one on the next `events.list`, and one that cannot be read or written is omitted from the reply | `epoch.ts:12-41`; `events.procedure.ts:34,41` |
+| `events.clear` calls `clearEvents`, which deletes the ring epoch first, then the `events` generations, and not the `boots` files | `events.procedure.ts:51`; `store.ts:212-234` |
 
 ## Sync
 
@@ -75,10 +76,11 @@ subprocess or threshold for an event. Named exception: `disk_low` and
 | `shutdown_requested`, `service_stopping` | on each published record | `emit.ts:116-117,125` |
 | `device_started`, severity `error` or `warning` | at most once per second | `emit.ts:118-125` |
 | Others | no | `emit.ts:123-127` |
-| Boot records | yes | `store.ts:140-145` |
+| Boot records | yes | `store.ts:156` |
+| Ring epoch | yes | `epoch.ts:35` |
 
-The store calls `fdatasyncSync` when `sync` is set (`store.ts:126`); failures
-are caught and logged as one warning (`store.ts:73-83`).
+The store calls `fdatasyncSync` when `sync` is set (`store.ts:138`); failures
+are caught and logged as one warning (`store.ts:76-86`).
 
 ## Adding an event
 

@@ -1,6 +1,7 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import { eventsEpoch } from "../modules/events/epoch.ts";
 import {
 	appendBoot,
 	appendEvent,
@@ -198,6 +199,56 @@ test("clear removes only eight event generations and preserves both boot generat
 	expect(tailSeq(deps)).toBe(0);
 	clearEvents(deps);
 	expect(deps.warnings).toEqual([]);
+});
+
+const UUID =
+	/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+test("the ring epoch lives on disk until a clear or a damaged file replaces it", () => {
+	using deps = fixture();
+	const file = path.join(deps.baseDir, "events.epoch");
+	expect(eventsEpoch(deps)).toMatch(UUID);
+	expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+	const stored = "0f4c2a51-8d3e-4b7a-9c1f-2e6d8a4b5c7e";
+	fs.writeFileSync(file, stored);
+	appendEvent(event(1), { ...deps, sync: false });
+	expect(eventsEpoch(deps)).toBe(stored);
+
+	expect(clearEvents(deps)).toBe(true);
+	const cleared = eventsEpoch(deps);
+	expect(cleared).toMatch(UUID);
+	expect(cleared).not.toBe(stored);
+	fs.writeFileSync(file, stored.slice(0, 12));
+	const repaired = eventsEpoch(deps);
+	expect(repaired).toMatch(UUID);
+	expect(repaired).not.toBe(cleared);
+	expect(eventsEpoch(deps)).toBe(repaired);
+	expect(deps.warnings).toEqual([]);
+});
+
+test("a failed clear still replaces the ring epoch, and an unwritable store names none", () => {
+	using deps = fixture();
+	const before = eventsEpoch(deps);
+	const retained = path.join(deps.baseDir, "events.1.jsonl");
+	fs.writeFileSync(retained, line(event(1)));
+	const remove = fs.rmSync;
+	const unlink = spyOn(fs, "rmSync").mockImplementation((target, options) => {
+		if (target === retained) throw new Error("injected unlink failure");
+		remove(target, options);
+	});
+	try {
+		expect(clearEvents(deps)).toBe(false);
+	} finally {
+		unlink.mockRestore();
+	}
+	expect(readEvents(deps)).toEqual([event(1)]);
+	expect(eventsEpoch(deps)).not.toBe(before);
+
+	const blocked = path.join(deps.baseDir, "blocked");
+	fs.writeFileSync(blocked, "");
+	const warned = deps.warnings.length;
+	expect(eventsEpoch({ ...deps, baseDir: blocked })).toBeUndefined();
+	expect(deps.warnings).toHaveLength(warned + 1);
 });
 
 test("tailSeq takes the maximum across disk generations and rereads stale state", () => {

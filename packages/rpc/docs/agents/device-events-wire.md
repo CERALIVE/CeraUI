@@ -15,7 +15,7 @@ frontend code imports `@ceraui/rpc/schemas`, not `@ceraui/rpc/events`
 
 Procedures `events.list`, `events.boots`, `events.clear`:
 `src/contracts/events.contract.ts:9-13`. Push: `EVENT_PUSH = 'event'` with
-`{ append: DeviceEvent[] }` (`events-wire.schema.ts:17,74-76`).
+`{ append: DeviceEvent[] }` (`events-wire.schema.ts:17,80-82`).
 
 ## Wire record
 
@@ -28,7 +28,7 @@ Procedures `events.list`, `events.boots`, `events.clear`:
 
 A record with a param value outside those types fails the schema. The store
 reader skips records that fail its `v: 1` schema
-(`apps/backend/src/modules/events/store.ts:147-148,174`). The Events tab
+(`apps/backend/src/modules/events/store.ts:159-160,185`). The Events tab
 renders an unknown code with `timeline.unknown.title`
 (`apps/frontend/src/lib/device-logs/timeline-copy.ts:139-140`).
 
@@ -48,9 +48,18 @@ renders an unknown code with `timeline.unknown.title`
 
 `beforeSeq?`, `limit` 1 to 200 default 100, `bootId?`, `families?`,
 `problemsOnly?`; output `events`, `nextBeforeSeq`, `headSeq`,
-`retainedFromSeq` (`events-wire.schema.ts:48-62`).
+`retainedFromSeq`, `epoch?` (`events-wire.schema.ts:48-68`).
+
+`epoch` is `eventRingEpochSchema`, a UUID naming the retained ring
+(`events-wire.schema.ts:57-59`). It is replaced by a clear, after which `seq`
+and event ids can start again at 1. It is optional: the backend omits it when
+the store cannot keep one, and a reader then compares `seq` alone. The output
+is still a strict object, so a reader built before the field rejects a reply
+that carries it. The field and its readers were added before the event wire
+reached any release tag.
 
 ## Tests
 
 `src/schemas/events.schema.test.ts` (registry params, text ceilings, enums,
-severities, subjects, unknown family and severity fallbacks).
+severities, subjects, unknown family and severity fallbacks, the optional list
+`epoch`).

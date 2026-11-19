@@ -5,6 +5,7 @@ import {
 	successResponseSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
+import { eventsEpoch } from "../../modules/events/epoch.ts";
 import {
 	clearEvents,
 	readBoots,
@@ -30,12 +31,14 @@ export const listEventsProcedure = authedProcedure
 					event.severity === "warning"),
 		);
 		const events = matches.slice(0, input.limit);
+		const epoch = eventsEpoch();
 		return {
 			events,
 			nextBeforeSeq:
 				matches.length > events.length ? (events.at(-1)?.seq ?? null) : null,
 			headSeq: retained[0]?.seq ?? 0,
 			retainedFromSeq: retained.at(-1)?.seq ?? 0,
+			...(epoch === undefined ? {} : { epoch }),
 		};
 	});
 

@@ -54,11 +54,17 @@ export const eventListInputSchema = z.strictObject({
 });
 export type EventListInput = z.input<typeof eventListInputSchema>;
 
+// The event ring's identity: kept while its records are, replaced by a clear,
+// after which seq and event ids can start again from 1.
+export const eventRingEpochSchema = z.uuid();
+
 export const eventListOutputSchema = z.strictObject({
 	events: z.array(deviceEventSchema),
 	nextBeforeSeq: z.number().int().nullable(),
 	headSeq: z.number().int(),
 	retainedFromSeq: z.number().int(),
+	// Absent when the store cannot keep one; readers then compare seq alone.
+	epoch: eventRingEpochSchema.optional(),
 });
 export type EventListOutput = z.infer<typeof eventListOutputSchema>;
 

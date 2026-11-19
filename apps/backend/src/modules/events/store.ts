@@ -27,6 +27,8 @@ const BOOTS = {
 	schema: eventBootRecordSchema,
 } as const;
 type Ring = typeof EVENTS | typeof BOOTS;
+// The ring identity file, owned by epoch.ts and removed first by a clear.
+export const EPOCH_FILE = "events.epoch";
 
 export interface EventStoreDeps {
 	readonly baseDir?: string;
@@ -71,7 +73,7 @@ function filePath(base: string, ring: Ring, generation: number): string {
 	);
 }
 
-function contain<T>(deps: EventStoreDeps, fallback: T, run: () => T): T {
+export function contain<T>(deps: EventStoreDeps, fallback: T, run: () => T): T {
 	try {
 		return run();
 	} catch (error) {
@@ -212,9 +214,16 @@ export function clearEvents(deps: EventStoreDeps = {}): boolean {
 		const io = deps.fs ?? fs;
 		const base = deps.baseDir ?? resolveEventsDir();
 		let failure: { readonly error: unknown } | undefined;
-		for (let gen = 0; gen < EVENTS.files; gen += 1) {
+		const files = [
+			// The identity goes first, so a clear cut short never keeps it for a changed ring.
+			path.join(base, EPOCH_FILE),
+			...Array.from({ length: EVENTS.files }, (_, gen) =>
+				filePath(base, EVENTS, gen),
+			),
+		];
+		for (const file of files) {
 			try {
-				io.rmSync(filePath(base, EVENTS, gen), { force: true });
+				io.rmSync(file, { force: true });
 			} catch (error) {
 				failure ??= { error };
 			}
