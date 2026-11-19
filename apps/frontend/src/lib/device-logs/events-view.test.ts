@@ -38,7 +38,7 @@ const e = (seq: number, extra: Partial<DeviceEvent> = {}) =>
 	event(seq, "internet_lost", {}, extra);
 
 // Rows 400 to 101 of 500 retained events, after paging past the 300-row window.
-async function browsing(bootId: string | null = null) {
+async function browsing(bootId: string | null = null, epoch?: string) {
 	const harness = setup(bootId);
 	const range = (high: number) =>
 		Array.from({ length: 100 }, (_, i) => e(high - i));
@@ -48,6 +48,7 @@ async function browsing(bootId: string | null = null) {
 				headSeq: 500,
 				nextBeforeSeq: high - 99,
 				retainedFromSeq: 1,
+				epoch,
 			}),
 		);
 	await harness.view.reload();
@@ -55,6 +56,12 @@ async function browsing(bootId: string | null = null) {
 	expect(harness.view.browsingHistory).toBe(true);
 	return harness;
 }
+
+const KEPT_RING = "0f4c2a51-8d3e-4b7a-9c1f-2e6d8a4b5c7e";
+const NEW_RING = "6a1b9c3d-2e4f-4a5b-8c6d-7e8f9a0b1c2d";
+// A different event under a seq, and so an id, that a cleared ring used before.
+const refill = (seq: number) =>
+	e(seq, { code: "internet_restored", at: EVENT_AT + 1_000_000 + seq });
 
 function reconnect(view: EventsView): void {
 	view.connectionChanged("disconnected");
@@ -728,6 +735,175 @@ describe("EventsView: connection", () => {
 			expect(list).toHaveBeenCalledTimes(5);
 		},
 	);
+
+	it("replaces a window whose reconnect check finds a lower head that still overlaps it, and retires its pending action", async () => {
+		const { view, list, around } = await browsing();
+		const raw = Promise.withResolvers<LogAroundOutput>();
+		around.mockReturnValueOnce(raw.promise);
+		const open = vi.fn();
+		const opening = view.viewRaw(e(200), open);
+		// A clear and a restart refilled the ring to 210, reusing seq 200 and its id.
+		const page = eventPage(
+			Array.from({ length: 100 }, (_, i) => refill(210 - i)),
+			{ headSeq: 210, retainedFromSeq: 1, nextBeforeSeq: 111 },
+		);
+		expect(page.events).toContainEqual(
+			expect.objectContaining({ id: e(200).id }),
+		);
+		list.mockResolvedValueOnce(page);
+
+		reconnect(view);
+		await vi.waitFor(() => expect(view.loading).toBeNull());
+
+		expect(view.events).toEqual(page.events);
+		expect(view.nextBeforeSeq).toBe(111);
+		expect(view.newWhileBrowsing).toBe(0);
+		expect(view.stale).toBe(false);
+		expect(view.rawLink).toBeNull();
+		raw.resolve(aroundPage());
+		await opening;
+		expect(open).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		{ form: "below the old head", head: 210 },
+		{ form: "at the old head", head: 500 },
+		{ form: "past the old head", head: 650 },
+	])(
+		"treats a reconnect check naming a new ring epoch, refilled $form, as a history clear",
+		async ({ head }) => {
+			const { view, list, around, push } = await browsing(null, KEPT_RING);
+			const raw = Promise.withResolvers<LogAroundOutput>();
+			around.mockReturnValueOnce(raw.promise);
+			const open = vi.fn();
+			const opening = view.viewRaw(e(200), open);
+			const ring = { headSeq: head, retainedFromSeq: 1, epoch: NEW_RING };
+			const newest = eventPage(
+				Array.from({ length: 100 }, (_, i) => refill(head - i)),
+				{ ...ring, nextBeforeSeq: head - 99 },
+			);
+			list.mockResolvedValueOnce(eventPage([refill(head)], ring));
+			list.mockResolvedValueOnce(newest);
+
+			reconnect(view);
+			await vi.waitFor(() => expect(view.loading).toBeNull());
+
+			expect(list).toHaveBeenCalledTimes(6);
+			expect(list).toHaveBeenLastCalledWith({ limit: 100 });
+			expect(view.events).toEqual(newest.events);
+			expect(view.browsingHistory).toBe(false);
+			expect(view.nextBeforeSeq).toBe(head - 99);
+			expect(view.newWhileBrowsing).toBe(0);
+			expect(view.stale).toBe(false);
+			expect(view.rowReset).toEqual({ keepShownFocus: false });
+			expect(view.rawLink).toBeNull();
+			raw.resolve(aroundPage());
+			await opening;
+			expect(open).not.toHaveBeenCalled();
+
+			push(refill(head + 1));
+			expect(view.events[0]).toEqual(refill(head + 1));
+			expect(list).toHaveBeenCalledTimes(6);
+		},
+	);
+
+	it.each([
+		{ reply: "the same ring epoch", epoch: KEPT_RING },
+		{ reply: "no ring epoch", epoch: undefined },
+	])(
+		"settles a reconnect check that names $reply by seq alone",
+		async ({ epoch }) => {
+			const { view, list, around } = await browsing(null, KEPT_RING);
+			const raw = Promise.withResolvers<LogAroundOutput>();
+			around.mockReturnValueOnce(raw.promise);
+			const open = vi.fn();
+			const opening = view.viewRaw(e(250), open);
+			list.mockResolvedValueOnce(
+				eventPage([e(501)], { headSeq: 501, retainedFromSeq: 201, epoch }),
+			);
+
+			reconnect(view);
+			await vi.waitFor(() => expect(view.loading).toBeNull());
+
+			expect(list).toHaveBeenCalledTimes(5);
+			expect(ids(view)).toEqual(Array.from({ length: 200 }, (_, i) => 400 - i));
+			expect(view.browsingHistory).toBe(true);
+			expect(view.newWhileBrowsing).toBe(1);
+			expect(view.rawLink).toEqual({ id: e(250).id, state: "pending" });
+			const page = aroundPage();
+			raw.resolve(page);
+			await opening;
+			expect(open).toHaveBeenCalledExactlyOnceWith(page);
+		},
+	);
+
+	it("takes no ring epoch from a check that succeeds after the link drops again", async () => {
+		const { view, list } = await browsing(null, KEPT_RING);
+		const shown = view.events;
+		const ring = { retainedFromSeq: 1, epoch: NEW_RING };
+		const late = Promise.withResolvers<EventListOutput>();
+		list.mockReturnValueOnce(late.promise);
+		reconnect(view);
+		view.connectionChanged("disconnected");
+		late.resolve(eventPage([refill(650)], ring));
+		await vi.waitFor(() => expect(view.loading).toBeNull());
+		expect(view.events).toBe(shown);
+
+		list.mockResolvedValueOnce(eventPage([refill(651)], ring));
+		list.mockResolvedValueOnce(eventPage([refill(651)], ring));
+		view.connectionChanged("connected");
+		await vi.waitFor(() => expect(view.loading).toBeNull());
+
+		expect(list).toHaveBeenCalledTimes(7);
+		expect(view.events).toEqual([refill(651)]);
+		expect(view.browsingHistory).toBe(false);
+	});
+
+	it("reads the newest page again when an older page comes from a new ring epoch", async () => {
+		const { view, list } = await browsing(null, KEPT_RING);
+		const ring = { headSeq: 520, retainedFromSeq: 501, epoch: NEW_RING };
+		const newest = eventPage(
+			Array.from({ length: 20 }, (_, i) => refill(520 - i)),
+			ring,
+		);
+		list.mockResolvedValueOnce(eventPage([], ring));
+		list.mockResolvedValueOnce(newest);
+
+		await view.loadOlder();
+		await vi.waitFor(() => expect(view.loading).toBeNull());
+
+		expect(list).toHaveBeenCalledTimes(6);
+		expect(list).toHaveBeenLastCalledWith({ limit: 100 });
+		expect(view.events).toEqual(newest.events);
+		expect(view.browsingHistory).toBe(false);
+		expect(view.nextBeforeSeq).toBeNull();
+	});
+
+	it("follows a new ring epoch's head after a reconnect reload, so a skipped seq still reads the gap", async () => {
+		const { view, list, push } = setup();
+		list.mockResolvedValueOnce(
+			eventPage([e(300), e(299)], { retainedFromSeq: 1, epoch: KEPT_RING }),
+		);
+		await view.reload();
+		list.mockResolvedValueOnce(
+			eventPage([refill(2), refill(1)], { epoch: NEW_RING }),
+		);
+
+		reconnect(view);
+		await vi.waitFor(() => expect(view.loading).toBeNull());
+		expect(view.events).toEqual([refill(2), refill(1)]);
+		expect(list).toHaveBeenCalledTimes(2);
+
+		list.mockResolvedValueOnce(
+			eventPage([refill(4), refill(3), refill(2), refill(1)], {
+				epoch: NEW_RING,
+			}),
+		);
+		push(refill(4));
+		await vi.waitFor(() => expect(view.loading).toBeNull());
+		expect(list).toHaveBeenCalledTimes(3);
+		expect(ids(view)).toEqual([4, 3, 2, 1]);
+	});
 
 	it("keeps the window and its pending action when a filtered check is empty but the ring still holds the rows", async () => {
 		const { view, list, around } = await browsing(BOOT_IDS.current);

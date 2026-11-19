@@ -35,12 +35,22 @@ check removes only displayed rows outside the ring the reply describes, below
 its `retainedFromSeq` or above its `headSeq`, and settles them as a gap
 refresh does (next paragraph). An empty filtered reply keeps every row those
 bounds still cover. Seq only grows while the ring is kept, so a reply whose
-`headSeq` is below one already seen, with no displayed row left, proves the
-ring was cleared; an empty ring reports zero for both bounds. Seq can then
-restart at 1, so the newest page replaces the window, its paging cursor and
-the seen head, and the new-event count restarts. A clear and restart that
-refill seq up to a displayed row keep that row until Start from newest;
-proving that case needs a ring identity on `events.list`.
+`headSeq` is below one already seen proves the ring was cleared, even when its
+range still covers displayed rows; an empty ring reports zero for both bounds.
+Seq, and with it the event id, can then restart at 1, so the newest page
+replaces the window, its paging cursor and the seen head, any pending raw-log
+action is retired, and the new-event count restarts.
+
+Each `events.list` reply also names the ring's `epoch`, which a clear
+replaces. A reply whose epoch differs from the last one the view settled is a
+history clear even when its head reaches or passes the old one, and whichever
+read it answers: the view drops every row and pending raw-log action, moves
+focus from a row to the filter bar and reads the newest page again, as Clear
+history does. That page sets the seen head to the new ring's. A reply to a
+reload already replaces everything, so it is used as it is. A late reply that
+settles nothing leaves the seen epoch alone, and a reply without one, from a
+store that cannot keep it, keeps the last one seen.
+
 A failed check keeps every row and adds the load-failure band, whose Retry
 checks again. The band is withdrawn while disconnected, because the next
 reconnect checks by itself, and Start from newest or any other reload also
@@ -49,7 +59,8 @@ newest page.
 
 Each list reply's `retainedFromSeq` expires older rows already shown. Push
 frames carry events only, so between list replies the view uses the last known
-retained boundary. A row evicted within the current window's generation
+retained boundary and epoch. A new process reaches the view only on a new
+connection, whose reconnect read holds the pushes until it settles. A row evicted within the current window's generation
 stays mounted in place of one row until focus leaves it. An explicit reload
 clears the pin and retires any pending raw-log action. When a gap refresh
 settles, it preserves row focus and pending raw-log actions only for rows

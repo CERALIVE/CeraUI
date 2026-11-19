@@ -9,13 +9,14 @@
  * connection succeeds, and that check removes only rows the ring no longer
  * holds, keeping the window, its paging and every other row's action. A check
  * that proves the ring was cleared replaces the window with the newest page.
- * A drop retires the check in flight. Pushes leave a browsed window in
- * place and only count the new events Start from newest will show; a skipped
- * `seq` reads the live edge for that count. Only the newest read may settle,
- * and a push that arrives while the first page is read joins that page unless
- * the page already covers it. Disposing drops every reply still in flight and stops listening
- * once; disposing again does nothing. Data loads only in these methods, never in
- * an effect.
+ * A reply naming a new ring epoch is a history clear: every row and action goes
+ * and the newest page is read again. A drop retires the check in flight.
+ * Pushes leave a browsed window in place and only count the new events Start
+ * from newest will show; a skipped `seq` reads the live edge for that count.
+ * Only the newest read may settle, and a push that arrives while the first page
+ * is read joins that page unless the page already covers it. Disposing drops
+ * every reply still in flight and stops listening once; disposing again does
+ * nothing. Data loads only in these methods, never in an effect.
  */
 import type {
 	DeviceEvent,
@@ -104,6 +105,7 @@ export class EventsView {
 	#connection = 0;
 	#head = 0;
 	#retainedFrom = 0;
+	#epoch: string | undefined;
 	#held: DeviceEvent[] = [];
 	#connected = false;
 	#disposed = false;
@@ -255,24 +257,37 @@ export class EventsView {
 			const page = await this.#deps.list(listInput(this.filter, beforeSeq));
 			if (!current()) return;
 			const seen = this.#head;
-			this.#head = Math.max(this.#head, page.headSeq);
+			const epoch = this.#epoch;
+			// A reply without an epoch comes from a store that cannot keep one.
+			this.#epoch = page.epoch ?? epoch;
+			// A new epoch is a clear, after which seq and ids repeat, so nothing shown
+			// survives. A reload's own page already replaces every row and action.
+			if (
+				epoch !== undefined &&
+				this.#epoch !== epoch &&
+				(end === "older" || mode !== "replace")
+			) {
+				void this.reload();
+				return;
+			}
+			// A first page reports the head at its read; pushes since then are held.
+			this.#head =
+				end === "first" ? page.headSeq : Math.max(seen, page.headSeq);
 			this.#retainedFrom = page.retainedFromSeq;
 			if (mode === "live-edge") {
-				const kept = this.events.filter(
-					(event) =>
-						event.seq >= page.retainedFromSeq && event.seq <= page.headSeq,
-				);
-				// Seq only grows while the ring is kept, so a lower head with no shown row
-				// left proves a clear, after which seq can restart at 1.
-				// shortcut: a clear and restart that refill seq up to a shown row keep that
-				// row; give events.list a ring identity if that must be proven too.
-				if (kept.length === 0 && page.headSeq < seen) {
-					this.#head = page.headSeq;
+				// Seq only grows while the ring is kept, so a lower head proves a clear,
+				// after which seq, and so a shown row's id, can repeat.
+				if (page.headSeq < seen) {
 					this.events = page.events;
 					this.nextBeforeSeq = page.nextBeforeSeq;
 					this.newWhileBrowsing = 0;
+					this.#clearRawLink();
 					settleRows = true;
 				} else {
+					const kept = this.events.filter(
+						(event) =>
+							event.seq >= page.retainedFromSeq && event.seq <= page.headSeq,
+					);
 					// shortcut: counts at most one page of unseen events, so a gap or outage
 					// longer than PAGE undercounts; page toward the head if that becomes routine.
 					this.newWhileBrowsing += page.events.filter(

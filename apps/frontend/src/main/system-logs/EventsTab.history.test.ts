@@ -76,6 +76,7 @@ function stopped(seq: number): DeviceEvent {
 async function openHistory(
 	count: number,
 	inline = true,
+	epoch?: string,
 ): Promise<DeviceEvent[]> {
 	const retained = Array.from({ length: count }, (_, index) =>
 		stopped(count - index),
@@ -91,6 +92,7 @@ async function openHistory(
 				retainedFromSeq: 1,
 				nextBeforeSeq:
 					matches.length > page.length ? (page.at(-1)?.seq ?? null) : null,
+				epoch,
 			}),
 		);
 	});
@@ -291,8 +293,8 @@ it.each([
 	},
 );
 
-async function browseToOldest(): Promise<DeviceEvent[]> {
-	const retained = await openHistory(401, false);
+async function browseToOldest(epoch?: string): Promise<DeviceEvent[]> {
+	const retained = await openHistory(401, false, epoch);
 	for (const _page of [1, 2, 3]) await loadOlder();
 	await screen.findByRole("button", { name: error.startFromNewest });
 	return retained;
@@ -358,6 +360,53 @@ it("shows the empty list, retires a pending raw action and hands focus to the fi
 	expect(await screen.findByText(copy.emptyTitle)).toBeTruthy();
 	expect(renderedTimes()).toEqual([]);
 	expect(screen.queryByRole("button", { name: copy.loadOlder })).toBeNull();
+	expect(document.activeElement).toBe(
+		screen.getByRole("button", { name: copy.filter }),
+	);
+	reply.resolve(aroundPage());
+	await tick();
+	expect(onViewRaw).not.toHaveBeenCalled();
+});
+
+it("shows the refilled ring, retires a pending raw action and hands focus to the filter bar when a reconnect names a new ring epoch", async () => {
+	await browseToOldest("0f4c2a51-8d3e-4b7a-9c1f-2e6d8a4b5c7e");
+	const raw = screen.getAllByRole("button", { name: copy.viewRaw }).at(-1);
+	const reply = Promise.withResolvers<LogAroundOutput>();
+	around.mockReturnValueOnce(reply.promise);
+	raw?.focus();
+	if (raw) await fireEvent.click(raw);
+	// A clear and a restart refilled the ring past its old head, reusing every shown seq and id.
+	const refilled = Array.from({ length: 450 }, (_, index) =>
+		event(
+			450 - index,
+			"engine_lost",
+			{ streaming: true },
+			{
+				at: Date.UTC(2026, 10, 17) + (450 - index) * 1000,
+			},
+		),
+	);
+	list.mockImplementation(({ limit }) =>
+		Promise.resolve(
+			eventPage(refilled.slice(0, limit), {
+				headSeq: 450,
+				retainedFromSeq: 1,
+				nextBeforeSeq: 351,
+				epoch: "6a1b9c3d-2e4f-4a5b-8c6d-7e8f9a0b1c2d",
+			}),
+		),
+	);
+
+	setConnectionState("disconnected");
+	await screen.findByTestId("events-disconnected");
+	setConnectionState("connected");
+
+	await waitFor(() =>
+		expect(renderedTimes()).toEqual(times(refilled.slice(0, 100))),
+	);
+	expect(
+		screen.queryByRole("button", { name: error.startFromNewest }),
+	).toBeNull();
 	expect(document.activeElement).toBe(
 		screen.getByRole("button", { name: copy.filter }),
 	);
