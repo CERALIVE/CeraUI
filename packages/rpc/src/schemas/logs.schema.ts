@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { bootIdSchema, countSchema, timestampSchema } from './logs-fields';
 
 export * from './logs-boot.schema';
+export * from './logs-cursor';
 
 export const LOG_SOURCES = [
 	'app',
@@ -31,16 +32,6 @@ export const LOG_ERROR_CODES = [
 ] as const;
 export const LOG_FOLLOW_EVENT = 'logs.follow';
 export const LOG_FOLLOW_GAP_FROM = 'logs.follow.gapFrom';
-export const LOG_FOLLOW_BOOT_START_PREFIX = 'boot-start:';
-
-export function followCheckpointBoot(cursor: string | null): string | undefined {
-	if (cursor === null) return undefined;
-	if (cursor.startsWith(LOG_FOLLOW_BOOT_START_PREFIX))
-		return /^([0-9a-f]{32}):[0-9]+(?::[0-9a-f-]+:[0-9]+)?$/.exec(
-			cursor.slice(LOG_FOLLOW_BOOT_START_PREFIX.length),
-		)?.[1];
-	return /(?:^|;)b=([0-9a-f]{32})(?:;|$)/.exec(cursor)?.[1];
-}
 
 export const logSourceSchema = z.enum(LOG_SOURCES);
 export type LogSource = z.infer<typeof logSourceSchema>;

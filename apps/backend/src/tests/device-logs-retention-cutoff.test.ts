@@ -45,34 +45,47 @@ test.each([
 		kept: false,
 	},
 	{
+		name: "a synthetic follow checkpoint is not archive evidence",
+		file: archive("3"),
+		entryBoot: priorBoot,
+		cursor: `boot-start:${priorBoot}:0`,
+		kept: true,
+	},
+	{
 		name: "a clock step makes a current boot archive appear older",
 		file: archive("2"),
 		entryBoot: bootId,
 		kept: true,
 	},
-])("scopes older deletion when $name", async ({ file, entryBoot, kept }) => {
-	fixture = retentionFixture();
-	const path = join(fixture.dir, file);
-	writeFileSync(path, "journal");
-	fixture.run.mockImplementation(async (_command, args) => {
-		const pinned = args[0]?.slice("--file=".length) ?? "";
-		if (args.includes("--header")) return header(pinned, entryBoot);
-		if (args.includes("--output-fields=_BOOT_ID"))
-			return JSON.stringify({
-				_BOOT_ID: entryBoot,
-				__CURSOR: `b=${entryBoot};s=1`,
-			});
-		if (args.includes("--disk-usage")) return "take up 1M";
-		return "[]";
-	});
-	expect(await deleteOlderFiles()).toMatchObject({ ok: true });
-	expect(existsSync(path)).toBe(kept);
-	expect(
-		fixture.run.mock.calls
-			.flatMap(([, args]) => args)
-			.filter((arg) => arg.startsWith("--vacuum")),
-	).toEqual([]);
-});
+])(
+	"scopes older deletion when $name",
+	async ({ file, entryBoot, cursor, kept }) => {
+		fixture = retentionFixture();
+		const path = join(fixture.dir, file);
+		writeFileSync(path, "journal");
+		fixture.run.mockImplementation(async (_command, args) => {
+			const pinned = args[0]?.slice("--file=".length) ?? "";
+			if (args.includes("--header")) return header(pinned, entryBoot);
+			if (args.includes("--output-fields=_BOOT_ID"))
+				return JSON.stringify({
+					_BOOT_ID: entryBoot,
+					__CURSOR: cursor ?? `b=${entryBoot};s=1`,
+				});
+			if (args.includes("--disk-usage")) return "take up 1M";
+			return "[]";
+		});
+		expect(await deleteOlderFiles()).toMatchObject({
+			ok: true,
+			...(cursor ? { unverifiedArchivesKept: true } : {}),
+		});
+		expect(existsSync(path)).toBe(kept);
+		expect(
+			fixture.run.mock.calls
+				.flatMap(([, args]) => args)
+				.filter((arg) => arg.startsWith("--vacuum")),
+		).toEqual([]);
+	},
+);
 
 test.each(["legacy update flag", "busy orchestrator phase"])(
 	"older-file cleanup preserves update evidence under the %s",
