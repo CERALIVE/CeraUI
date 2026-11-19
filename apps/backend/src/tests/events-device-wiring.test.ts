@@ -2,7 +2,7 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { emitDeviceEvent } from "../modules/events/device-emit.ts";
@@ -39,7 +39,7 @@ function declaration(path: string, name: string): string {
 }
 
 test("boot observes ready modem discovery once while the guarded version record is pending", async () => {
-	const cwd = await mkdtemp(join(tmpdir(), "ceraui-event-boot-"));
+	const cwd = await mkdtemp(resolve(tmpdir(), "ceraui_event_boot_"));
 	try {
 		// Mock boot checks that the sender is readable but never runs it.
 		const senderPath = join(cwd, "srtla_send");

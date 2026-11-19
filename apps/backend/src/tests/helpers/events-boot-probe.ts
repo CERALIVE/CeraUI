@@ -1,5 +1,6 @@
 import { spyOn } from "bun:test";
 import { deepStrictEqual, strictEqual } from "node:assert/strict";
+import fs from "node:fs";
 import { setImmediate } from "node:timers/promises";
 import * as processCleanup from "../../helpers/killall.ts";
 import * as preview from "../../mocks/providers/preview.ts";
@@ -10,6 +11,7 @@ import * as emitter from "../../modules/events/emit.ts";
 import * as modemLoop from "../../modules/modems/modem-update-loop.ts";
 import * as modemIdentity from "../../modules/modems/modem-wire-producer.ts";
 import { setModemsState } from "../../modules/modems/state/modems-state-cache.ts";
+import * as streamloop from "../../modules/streaming/streamloop.ts";
 import { getBootReadiness } from "../../modules/system/readiness.ts";
 import * as revisions from "../../modules/system/revisions.ts";
 import * as updates from "../../modules/system/update-bootstrap.ts";
@@ -17,11 +19,23 @@ import * as versionContext from "../../modules/system/version-context.ts";
 import * as server from "../../rpc/server.ts";
 
 // The entrypoint runs in its own mock-mode process. Keep sockets, host process
-// cleanup and installed updater ownership out of this wiring test.
+// cleanup, autostart and installed updater ownership out of this wiring test.
 spyOn(server, "initServer").mockReturnValue(undefined);
 spyOn(preview, "startMockPreviewServer").mockReturnValue(null);
 spyOn(processCleanup, "default").mockResolvedValue(undefined);
 spyOn(updates, "runUpdateBootstrap").mockResolvedValue(undefined);
+spyOn(streamloop, "checkAutoStartStream").mockResolvedValue(undefined);
+
+// Detect an attempted host marker write without letting it reach the filesystem.
+const writeFileSync = fs.writeFileSync;
+let markerWriteAttempts = 0;
+spyOn(fs, "writeFileSync").mockImplementation((path, ...args) => {
+	if (path === streamloop.AUTOSTART_CHECK_FILE) {
+		markerWriteAttempts++;
+		return;
+	}
+	writeFileSync(path, ...args);
+});
 
 const revisionRead = Promise.withResolvers<void>();
 const logWrite = Promise.withResolvers<void>();
@@ -104,4 +118,5 @@ strictEqual(
 	getBootReadiness().degradedSubsystems.includes("boot-record"),
 	true,
 );
+strictEqual(markerWriteAttempts, 0, "boot attempted to write the host marker");
 process.exit(0);
