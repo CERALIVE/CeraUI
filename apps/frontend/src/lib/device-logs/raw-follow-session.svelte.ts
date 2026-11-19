@@ -30,6 +30,7 @@ interface FollowContext {
 	readonly feedback: RawFeedback;
 	filter(): RawFilter;
 	canFollow(): boolean;
+	showsCurrentBoot(): boolean;
 	isDisposed(): boolean;
 	preparePagingForFollow(): void;
 	readHead(fence?: FollowFence): Promise<void>;
@@ -97,11 +98,11 @@ export class RawFollowSession {
 		const connected = state === "connected";
 		if (connected === this.connected) return;
 		this.connected = connected;
-		if (this.state === "idle" || this.state === "stopped") return;
 		if (connected) {
 			void this.#checkBoot();
 			return;
 		}
+		if (this.state === "idle" || this.state === "stopped") return;
 		this.#forget();
 		if (this.state === "paused") return;
 		this.state = "disconnected";
@@ -123,7 +124,13 @@ export class RawFollowSession {
 		);
 		if (token !== this.#token || this.context.isDisposed()) return;
 		this.busy = false;
-		if (current !== undefined && current !== boot) this.#end("boot_changed");
+		if (
+			this.connected &&
+			this.context.showsCurrentBoot() &&
+			current !== undefined &&
+			current !== boot
+		)
+			this.#end("boot_changed");
 	}
 
 	resetForFilter(): boolean {

@@ -882,9 +882,10 @@ socket listener, subscription and resume checkpoint. `RawRowWindow` owns
 the held boundary and caps, and `RawFeedback` owns recovery state and
 live-region announcements.
 
-After reconnect, a previously attached Raw follow checks the running boot
-before offering a usable Resume. A changed boot stops the follow with the
-restart notice and reloads This boot from its newest retained entry.
+After reconnect, Raw checks the running boot in every follow state when it
+knows the displayed boot or the follow checkpoint's boot. For This boot, a
+changed boot shows Stopped with the restart notice and reloads the newest
+retained entries without starting Follow. Historical scopes stay in place.
 If the boot check cannot answer, a Follow reply with a checkpoint from a
 different boot takes the same stop and reload path before applying any batch.
 While Raw is open, the boot picker checks Running now for This boot and

@@ -1296,6 +1296,41 @@ describe("RawLogsTab: follow", () => {
 		expect(logs.followStart).toHaveBeenCalledTimes(2);
 	});
 
+	it.each(["idle", "stopped"] as const)(
+		"refreshes This boot on reconnect from %s without starting follow",
+		async (state) => {
+			const running = fourBoots().find(({ current }) => current);
+			if (!running) throw new Error("missing running boot fixture");
+			await mounted(page(["old-boot-row"]));
+			const starts = state === "stopped" ? 1 : 0;
+			if (state === "stopped") {
+				await startFollowing();
+				push({ ended: "follower_exit" });
+				await screen.findByTestId("raw-follow-ended");
+			}
+			setConnectionState("disconnected");
+			await screen.findByTestId("raw-disconnected");
+			logs.boots.mockResolvedValueOnce([running]);
+			logs.query.mockResolvedValueOnce(
+				page([], {
+					bootId: running.bootId,
+					entries: [entry("running-boot-row", { bootId: running.bootId })],
+				}),
+			);
+			setConnectionState("connected");
+
+			await waitFor(() => expect(cursors()).toEqual(["running-boot-row"]));
+			expect(screen.getByTestId("raw-follow-ended").textContent).toBe(
+				en.systemLogs.follow.endedBoot,
+			);
+			expect(screen.getByTestId("raw-follow-state").dataset.state).toBe(
+				"stopped",
+			);
+			expect(logs.query).toHaveBeenLastCalledWith(DEFAULT_INPUT);
+			expect(logs.followStart).toHaveBeenCalledTimes(starts);
+		},
+	);
+
 	it("pages skipped rows in place and transfers focus when the gap is filled", async () => {
 		await mounted();
 		await startFollowing();

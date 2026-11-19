@@ -46,6 +46,10 @@ export class RawView {
 			feedback: this.#feedback,
 			filter: () => this.filter,
 			canFollow: () => this.followBlocked === null,
+			showsCurrentBoot: () =>
+				this.anchor === null &&
+				this.filter.time === "current" &&
+				this.filter.bootId === null,
 			isDisposed: () => this.#disposed,
 			preparePagingForFollow: () => this.#pages.prepareForFollow(),
 			readHead: (fence) => this.#pages.loadHead(false, fence),
