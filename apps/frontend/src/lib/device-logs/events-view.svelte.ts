@@ -21,6 +21,8 @@ import type {
 
 import type { ConnectionState } from "$lib/rpc/client";
 
+import { EVENT_ROW_CAP, mergeEvents } from "./events-window";
+
 export type AroundPage = Extract<LogAroundOutput, { ok: true }>;
 export type RawLinkState = "pending" | "removed" | "busy" | "failed";
 
@@ -41,8 +43,6 @@ export interface EventFilter {
 type End = "first" | "older";
 
 const PAGE = 100;
-// Three pages bound the number of mounted, nonvirtualized rows.
-export const EVENT_ROW_CAP = 300;
 const PROBLEMS = new Set(["error", "warning"]);
 
 function listInput(
@@ -66,20 +66,6 @@ function admits(filter: EventFilter, event: DeviceEvent): boolean {
 	);
 }
 
-function merge(
-	shown: readonly DeviceEvent[],
-	more: readonly DeviceEvent[],
-): DeviceEvent[] {
-	const ids = new Set(shown.map((event) => event.id));
-	const merged = [...shown];
-	for (const event of more) {
-		if (ids.has(event.id)) continue;
-		ids.add(event.id);
-		merged.push(event);
-	}
-	return merged.sort((a, b) => b.seq - a.seq).slice(0, EVENT_ROW_CAP);
-}
-
 export class EventsView {
 	events = $state.raw<readonly DeviceEvent[]>([]);
 	filter = $state.raw<EventFilter>({
@@ -90,6 +76,7 @@ export class EventsView {
 	loading = $state<End | null>(null);
 	failed = $state<End | null>(null);
 	nextBeforeSeq = $state<number | null>(null);
+	browsingHistory = $state(false);
 	stale = $state(false);
 	rawLink = $state.raw<{
 		readonly id: string;
@@ -118,15 +105,12 @@ export class EventsView {
 	reload(): Promise<void> {
 		this.events = [];
 		this.nextBeforeSeq = null;
+		this.browsingHistory = false;
 		return this.#reread();
 	}
 
 	loadOlder(): Promise<void> {
-		if (
-			this.loading !== null ||
-			this.nextBeforeSeq === null ||
-			this.events.length === EVENT_ROW_CAP
-		)
+		if (this.loading !== null || this.nextBeforeSeq === null)
 			return Promise.resolve();
 		return this.#read("older");
 	}
@@ -225,24 +209,31 @@ export class EventsView {
 
 	async #read(end: End): Promise<void> {
 		const generation = this.#generation;
+		const beforeSeq = end === "older" ? this.nextBeforeSeq : null;
+		const startingRows = this.events;
 		this.loading = end;
 		// An older page's failure stays while it is read again, so its Retry keeps focus.
 		if (end === "first") this.failed = null;
 		let newer: DeviceEvent[] = [];
 		try {
-			const page = await this.#deps.list(
-				listInput(this.filter, end === "older" ? this.nextBeforeSeq : null),
-			);
+			const page = await this.#deps.list(listInput(this.filter, beforeSeq));
 			if (generation !== this.#generation) return;
 			this.failed = null;
 			this.#head = Math.max(this.#head, page.headSeq);
 			this.#retainedFrom = page.retainedFromSeq;
-			this.events = merge(
+			// If pushes passed the request's edge, join the reply to its original
+			// window. Joining to the live window would leave a hole between them.
+			const liveEdgeMoved = end === "older" && beforeSeq !== this.nextBeforeSeq;
+			const shown = liveEdgeMoved ? startingRows : this.events;
+			const merged = mergeEvents(
 				end === "first"
 					? []
-					: this.events.filter((event) => event.seq >= this.#retainedFrom),
+					: shown.filter((event) => event.seq >= this.#retainedFrom),
 				page.events,
 			);
+			if (liveEdgeMoved || merged.length > EVENT_ROW_CAP)
+				this.browsingHistory = true;
+			this.events = merged.slice(-EVENT_ROW_CAP);
 			this.nextBeforeSeq = page.nextBeforeSeq;
 			newer = this.#held.splice(0).filter((event) => event.seq > page.headSeq);
 		} catch (error) {
@@ -266,7 +257,7 @@ export class EventsView {
 			this.#held.push(...batch);
 			return;
 		}
-		if (this.failed === "first") return;
+		if (this.failed === "first" || this.browsingHistory) return;
 		const admitted: DeviceEvent[] = [];
 		for (const event of batch) {
 			if (event.seq > this.#head + 1) {
@@ -277,6 +268,11 @@ export class EventsView {
 			if (event.seq >= this.#retainedFrom && admits(this.filter, event))
 				admitted.push(event);
 		}
-		this.events = merge(this.events, admitted);
+		if (admitted.length === 0) return;
+		const merged = mergeEvents(this.events, admitted);
+		this.events = merged.slice(0, EVENT_ROW_CAP);
+		// The live edge can evict rows the last server cursor has already passed.
+		if (merged.length > EVENT_ROW_CAP)
+			this.nextBeforeSeq = this.events.at(-1)?.seq ?? null;
 	}
 }

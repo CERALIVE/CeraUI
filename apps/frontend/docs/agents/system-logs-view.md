@@ -146,6 +146,7 @@ in section 4.
 | Keep searching | Raw logs | `hasMore: null`: a Keep searching button and a line saying only part of the stored logs was checked; never an end marker (the normal state for a time-bounded view once its entries are shown) | no |
 | End of results | Raw logs, Events | Raw logs shows an end marker at an exhausted, available edge after the first load when rows are present. The display-limit notice takes precedence at the bottom. Approximate-window markers name the time window. Events shows an end row when events are present and no older page or paging error remains. | no |
 | Row cap reached | Raw logs | `ROW_CAP` is 2000 journal entries, excluding marker rows. Only entries beyond the cap are dropped and stop older paging | no |
+| Browsing older history | Events | Load older rolls the 300-event window toward older results while the server has more. Live pushes leave that window in place. Start from newest returns to the live edge | no |
 | Follow unavailable | Raw logs | Follow present, disabled, with an adjacent reason element (`data-testid` ending `-reason`) when the time is not This boot, the order is not Newest first, or the tab is in anchor mode (DESIGN.md CT-2). Follow displays while connected and is aria-disabled while its request is busy | no |
 | Following | Raw logs | Follow becomes Pause; a state label "Following" in `--status-info` with a `motion-safe` pulse dot; static dot plus label under reduced motion or e-ink | polite |
 | New entries held | Raw logs | While scrolled away from the top, incoming entries wait (cap 500) behind a "New entries: {count}" button at the top of the list; selecting it merges them and scrolls to the top | polite, throttled |
@@ -383,7 +384,7 @@ Rules for this copy:
 | `systemLogs.anchor.moment` | Selected moment: {time} | Separator row at the moment of an approximate window |
 | `systemLogs.error.expiredTitle` | This position is no longer stored | CURSOR_UNAVAILABLE, FILTER_CHANGED |
 | `systemLogs.error.expiredBody` | Log cleanup or a filter change removed the place this list was reading from. | Same |
-| `systemLogs.error.startFromNewest` | Start from newest | Same, action |
+| `systemLogs.error.startFromNewest` | Start from newest | Expired Raw position or return to the live edge of Events |
 | `systemLogs.error.bootRemoved` | Logs for this boot were removed. | BOOT_UNAVAILABLE |
 | `systemLogs.error.showCurrentBoot` | Show this boot | Same, action |
 | `systemLogs.error.busy` | Another view is reading logs. Try again in a moment. | BUSY |
@@ -848,8 +849,10 @@ live-region announcements.
 | `main/system-logs/BootPicker.svelte:30` | props |
 | `main/system-logs/BundleDialog.svelte:23` | props |
 | `main/system-logs/EventRow.svelte:38` | props |
+| `main/system-logs/EventsBootHeading.svelte:11` | props |
+| `main/system-logs/EventsFilters.svelte:11` | props |
 | `main/system-logs/EventsPanel.svelte:16` | props |
-| `main/system-logs/EventsTab.svelte:37` | props |
+| `main/system-logs/EventsTab.svelte:36` | props |
 | `main/system-logs/ExportDialog.svelte:16` | props |
 | `main/system-logs/KeepWords.svelte:14` | props |
 | `main/system-logs/LegacyLogDownloads.svelte:21` | props |
@@ -881,6 +884,7 @@ live-region announcements.
 | `lib/device-logs/boot-selection.svelte.ts` |
 | `lib/device-logs/cjk-words.ts` |
 | `lib/device-logs/events-view.svelte.ts` |
+| `lib/device-logs/events-window.ts` |
 | `lib/device-logs/history-bus.ts` |
 | `lib/device-logs/log-pointer-keys.ts` |
 | `lib/device-logs/param-parts.ts` |
@@ -915,6 +919,7 @@ live-region announcements.
 | `main/system-logs/BootButton.test.ts` |
 | `main/system-logs/BootPicker.test.ts` |
 | `main/system-logs/EventsPanel.test.ts` |
+| `main/system-logs/EventsTab.history.test.ts` |
 | `main/system-logs/EventsTab.test.ts` |
 | `main/system-logs/KeepWords.test.ts` |
 | `main/system-logs/LegacyLogDownloads.test.ts` |
@@ -997,13 +1002,14 @@ Related browser specs and their entry points:
 
 ### role="status" elements
 
-`main/system-logs/BootPicker.svelte:165`, `main/system-logs/BundleDialog.svelte:98`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:234`, `main/system-logs/ExportDialog.svelte:50`, `main/system-logs/RawLogList.svelte:241`, `main/system-logs/RawLogRow.svelte:136`, `main/system-logs/RawLogsPanel.svelte:97`, `main/system-logs/RawLogsTab.svelte:136`, `main/system-logs/StorageCleanup.svelte:191`, `main/system-logs/StorageLimits.svelte:173`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:220`.
+`main/system-logs/BootPicker.svelte:165`, `main/system-logs/BundleDialog.svelte:98`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:195`, `main/system-logs/ExportDialog.svelte:50`, `main/system-logs/RawLogList.svelte:241`, `main/system-logs/RawLogRow.svelte:136`, `main/system-logs/RawLogsPanel.svelte:97`, `main/system-logs/RawLogsTab.svelte:136`, `main/system-logs/StorageCleanup.svelte:191`, `main/system-logs/StorageLimits.svelte:173`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:220`.
 
 ### Limits and constants
 
 | Name | Value | Source |
 |---| --- |---|
-| PAGE | 100 | `lib/device-logs/events-view.svelte.ts:43` |
+| PAGE | 100 | `lib/device-logs/events-view.svelte.ts:45` |
+| EVENT_ROW_CAP | 300 | `lib/device-logs/events-window.ts:4` |
 | PAGE_LIMIT | 100 | `lib/device-logs/raw-filter.ts:57` |
 | SEARCH_MAX_BYTES | 256 | `lib/device-logs/raw-filter.ts:58` |
 | ROW_CAP | 2000 | `lib/device-logs/raw-rows.ts:9` |
@@ -1018,11 +1024,11 @@ Backend and wire limits: [device-logs.md](../../../backend/docs/agents/device-lo
 
 | Code | Source |
 |---| --- |
-| Events list key map (ArrowDown, ArrowUp, Home, End) | `main/system-logs/EventsTab.svelte:44-47` |
-| Events focus move to a row button | `main/system-logs/EventsTab.svelte:96` |
-| Events row keydown hook | `main/system-logs/EventsTab.svelte:302` |
-| Events scroller scroll padding | `main/system-logs/EventsTab.svelte:226` |
-| Events paging focus handoff | `main/system-logs/EventsTab.svelte:121` |
+| Events list key map (ArrowDown, ArrowUp, Home, End) | `main/system-logs/EventsTab.svelte:39-42` |
+| Events focus move to a row button | `main/system-logs/EventsTab.svelte:90` |
+| Events row keydown hook | `main/system-logs/EventsTab.svelte:228` |
+| Events scroller scroll padding | `main/system-logs/EventsTab.svelte:187` |
+| Events paging focus handoff | `main/system-logs/EventsTab.svelte:114` |
 | View raw logs pending (aria-disabled) | `main/system-logs/EventRow.svelte:90` |
 | Event row tab stop | `main/system-logs/EventRow.svelte:95` |
 | Raw list focus on a row | `main/system-logs/RawLogList.svelte:116` |

@@ -17,10 +17,16 @@ global event cache or replay queue. A later listener receives only later frames;
 it obtains retained history through `events.list`. `resetState()` also detaches
 the listener at logout.
 
-The open view displays at most 300 rows, newest first. Each list reply's
-`retainedFromSeq` expires older rows already shown. Push frames carry events
-only, so between list replies the view uses the last known retained boundary
-and the display cap. An evicted row with keyboard focus stays mounted in place
+The open view displays at most 300 rows, newest first. Loading older events
+past that limit drops the newest edge and continues with the server cursor.
+Live pushes leave that history window in place. Start from newest reads the
+latest page again. At the live edge, pushes keep the newest 300 rows and move
+the older-query boundary when they evict rows, so Load older or Retry can
+recover those rows if they are still stored.
+
+Each list reply's `retainedFromSeq` expires older rows already shown. Push
+frames carry events only, so between list replies the view uses the last known
+retained boundary. An evicted row with keyboard focus stays mounted in place
 of one row until focus leaves it.
 
 `lib/rpc/subscriptions-event-feed.test.ts` drives the real subscription handler.

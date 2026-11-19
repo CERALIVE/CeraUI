@@ -12,34 +12,29 @@
   sentence ending is stranded; long recorded values still wrap inside their row.
 -->
 <script lang="ts">
-import { getLocale, m } from '@ceraui/i18n/svelte';
-import { type DeviceEvent, EVENT_FAMILIES } from '@ceraui/rpc/schemas';
-import { ListFilter, RefreshCw, TriangleAlert, WifiOff } from '@lucide/svelte';
+import { m } from '@ceraui/i18n/svelte';
+import type { DeviceEvent } from '@ceraui/rpc/schemas';
+import { RefreshCw, TriangleAlert, WifiOff } from '@lucide/svelte';
 import { onDestroy, untrack } from 'svelte';
-import { MediaQuery } from 'svelte/reactivity';
 
 import { Button } from '$lib/components/ui/button';
 import { Skeleton } from '$lib/components/ui/skeleton';
-import { Toggle } from '$lib/components/ui/toggle';
 import { BootList } from '$lib/device-logs/boot-list.svelte';
-import { bootRows, formatBootTime } from '$lib/device-logs/boot-rows';
+import { bootRows } from '$lib/device-logs/boot-rows';
 import { bootSelection } from '$lib/device-logs/boot-selection.svelte';
-import { type AroundPage, EVENT_ROW_CAP, EventsView } from '$lib/device-logs/events-view.svelte';
+import { type AroundPage, EventsView } from '$lib/device-logs/events-view.svelte';
+import { EVENT_ROW_CAP } from '$lib/device-logs/events-window';
 import { onHistoryChanged } from '$lib/device-logs/history-bus';
 import { modemNames, timelineGroups } from '$lib/device-logs/timeline-groups';
 import { rpc } from '$lib/rpc/client';
 import { getConnectionState, setEventFeedListener } from '$lib/rpc/subscriptions.svelte';
 
 import EventRow from './EventRow.svelte';
-import ParamText from './ParamText.svelte';
-import ShutdownMark from './ShutdownMark.svelte';
+import EventsBootHeading from './EventsBootHeading.svelte';
+import EventsFilters from './EventsFilters.svelte';
 
 let { onviewraw }: { onviewraw: (around: AroundPage) => void } = $props();
 
-// Chips sit inline only with room both ways; a 1024x600 kiosk folds them too.
-const INLINE_FILTERS_QUERY = '(min-width: 768px) and (min-height: 601px)';
-const TAG = 'bg-secondary text-secondary-foreground rounded-sm px-1.5 py-0.5 font-medium';
-const CHIP = 'min-h-(--touch-target-min)';
 const NAVIGATION: Record<string, (index: number, last: number) => number> = {
 	ArrowDown: (index) => index + 1,
 	ArrowUp: (index) => index - 1,
@@ -48,8 +43,6 @@ const NAVIGATION: Record<string, (index: number, last: number) => number> = {
 };
 
 const uid = $props.id();
-const inline = new MediaQuery(INLINE_FILTERS_QUERY);
-let filtersOpen = $state(false);
 let scroller = $state<HTMLDivElement>();
 let stopId = $state<string>();
 let focusedRow = $state.raw<DeviceEvent>();
@@ -82,7 +75,7 @@ $effect(() => {
 // Keep the exact keyed row and its active control until focus leaves it.
 const visibleEvents = $derived(
 	focusedRow && !view.events.some((event) => event.id === focusedRow?.id)
-		? [...view.events.slice(0, EVENT_ROW_CAP - 1), focusedRow].sort((a, b) => b.seq - a.seq)
+		? [...(view.browsingHistory ? view.events.slice(1 - EVENT_ROW_CAP) : view.events.slice(0, EVENT_ROW_CAP - 1)), focusedRow].sort((a, b) => b.seq - a.seq)
 		: view.events,
 );
 const groups = $derived(timelineGroups(visibleEvents));
@@ -120,6 +113,7 @@ $effect(() => {
 	untrack(() => {
 		const next = scroller?.querySelector<HTMLElement>('[data-paging]');
 		if (next) next.focus();
+		else if (view.browsingHistory) focusEvent(rowIds.length - 1);
 		else if (tabStop !== undefined) focusEvent(rowIds.indexOf(tabStop));
 	});
 });
@@ -140,31 +134,6 @@ function showAll(): void {
 			</div>
 		</div>
 	{/each}
-{/snippet}
-
-{#snippet filters()}
-	<fieldset aria-label={m['systemLogs.events.families']()} class="flex flex-wrap items-center gap-2">
-		{#each EVENT_FAMILIES as family (family)}
-			<Toggle
-				class={CHIP}
-				onPressedChange={() => view.toggleFamily(family)}
-				pressed={view.filter.families.includes(family)}
-				size="sm"
-				variant="outline"
-			>
-				{m[`timeline.family.${family}`]()}
-			</Toggle>
-		{/each}
-	</fieldset>
-	<Toggle
-		class={CHIP}
-		onPressedChange={(pressed) => view.setProblemsOnly(pressed)}
-		pressed={view.filter.problemsOnly}
-		size="sm"
-		variant="outline"
-	>
-		{m['systemLogs.events.problemsOnly']()}
-	</Toggle>
 {/snippet}
 
 {#snippet failure(retry: () => void, paging = false)}
@@ -192,28 +161,7 @@ function showAll(): void {
 <div
 	class="flex h-full min-h-0 flex-col [&:lang(ja)]:[word-break:auto-phrase] [&:lang(ko)]:break-keep [&:lang(zh)]:text-balance"
 >
-	<div class="flex flex-col gap-3 border-b px-4 py-3" data-testid="events-filters">
-		{#if inline.current}
-			<div class="flex flex-wrap items-center gap-x-4 gap-y-2">{@render filters()}</div>
-		{:else}
-			<Button
-				aria-controls="{uid}-filters"
-				aria-expanded={filtersOpen}
-				class="data-active:bg-muted gap-1.5 self-start"
-				data-active={view.filtered || undefined}
-				data-testid="events-filter-toggle"
-				onclick={() => (filtersOpen = !filtersOpen)}
-				size="sm"
-				variant="outline"
-			>
-				<ListFilter class="size-4" />
-				{m['systemLogs.events.filter']()}
-			</Button>
-			<div class="flex flex-wrap items-center gap-x-4 gap-y-2" hidden={!filtersOpen} id="{uid}-filters">
-				{@render filters()}
-			</div>
-		{/if}
-	</div>
+	<EventsFilters {view} />
 	{#if view.stale}
 		<div class="text-muted-foreground flex items-start gap-2 border-b px-4 py-2 text-sm" data-testid="events-disconnected">
 			<WifiOff class="mt-0.5 size-4 shrink-0" />
@@ -222,6 +170,19 @@ function showAll(): void {
 	{/if}
 	{#if view.failed === 'first'}
 		{@render failure(() => void view.reload())}
+	{/if}
+	{#if view.browsingHistory}
+		<div class="flex justify-center border-b px-4 py-2">
+			<Button
+				onclick={async (event) => {
+					const focused = document.activeElement === event.currentTarget;
+					await view.reload();
+					if (focused && document.activeElement === document.body) focusEvent(0);
+				}}
+				size="sm"
+				variant="outline">{m['systemLogs.error.startFromNewest']()}</Button
+			>
+		</div>
 	{/if}
 	<div bind:this={scroller} class="min-h-0 flex-1 scroll-pt-16 overflow-y-auto overscroll-contain" data-testid="events-scroller"
 		onfocusout={(event) => {
@@ -249,42 +210,7 @@ function showAll(): void {
 		{#each groups as group (group.key)}
 			{const info = $derived(bootInfo.get(group.bootId))}
 			<section aria-labelledby="{uid}-{group.key}" data-boot-id={group.bootId} data-testid="events-boot">
-				<h3
-					class="bg-muted sticky top-0 z-10 flex flex-wrap items-center gap-x-3 gap-y-1 border-y px-4 py-2 text-xs"
-					id="{uid}-{group.key}"
-				>
-					{#if info !== undefined}
-						<time class="text-sm font-medium tabular-nums" datetime={new Date(info.boot.firstTs).toISOString()}
-							><ParamText
-								format={(time) => m['systemLogs.boots.started']({ time })}
-								value={formatBootTime(info.boot.firstTs, getLocale())}
-							/></time
-						>
-						<span class="text-muted-foreground flex flex-wrap gap-x-2">
-							{#if info.osImage === null && info.slot === null}
-								<span>{m['systemLogs.boots.versionsUnknown']()}</span>
-							{:else}
-								{#if info.osImage !== null}
-									<span><ParamText format={(version) => m['systemLogs.boots.systemImage']({ version })} value={info.osImage} /></span>
-								{/if}
-								{#if info.slot !== null}
-									<span><ParamText format={(slot) => m['systemLogs.boots.slot']({ slot })} value={info.slot} /></span>
-								{/if}
-							{/if}
-						</span>
-						<ShutdownMark shutdown={info.boot.shutdown} />
-						{#if info.changed}
-							<span class={TAG}>{m['systemLogs.boots.changed']()}</span>
-						{/if}
-					{:else if boots.failed}
-						<span class="text-sm font-medium">{m['systemLogs.boots.loadFailed']()}</span>
-					{:else if boots.boots === null}
-						<span class="sr-only">{m['common.loading']()}</span>
-						<Skeleton class="h-4 w-48" />
-					{:else}
-						<span class="text-sm font-medium">{m['systemLogs.boots.versionsUnknown']()}</span>
-					{/if}
-				</h3>
+				<EventsBootHeading id="{uid}-{group.key}" {info} {boots} />
 				<ul class="divide-y">
 					{#each group.items as item (item.key)}
 						{#if item.kind === 'clock'}
@@ -315,7 +241,7 @@ function showAll(): void {
 		{/if}
 		{#if view.failed === 'older'}
 			{@render failure(() => void view.loadOlder(), true)}
-		{:else if view.nextBeforeSeq !== null && view.events.length < EVENT_ROW_CAP}
+		{:else if view.nextBeforeSeq !== null}
 			<div class="flex justify-center px-4 py-3">
 				<!-- aria-disabled, not disabled, while its page loads: the pressed button keeps keyboard focus. -->
 				<Button
@@ -333,9 +259,7 @@ function showAll(): void {
 				class="text-muted-foreground before:bg-border after:bg-border flex items-center gap-3 px-4 py-3 text-xs before:h-px before:flex-1 after:h-px after:flex-1"
 				data-testid="events-end"
 			>
-				{view.events.length === EVENT_ROW_CAP
-					? m['systemLogs.raw.capReached']({ count: EVENT_ROW_CAP })
-					: m['systemLogs.events.noOlder']()}
+				{m['systemLogs.events.noOlder']()}
 			</p>
 		{/if}
 	</div>
