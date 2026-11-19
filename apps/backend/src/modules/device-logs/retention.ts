@@ -140,7 +140,7 @@ export function setRetention(next: LogRetention): Promise<LogStorageOutput> {
 	}, busy);
 }
 export function deleteOlderFiles(): Promise<LogDeleteOlderFilesOutput> {
-	return withDestructiveRetention(async () => {
+	return withDestructiveRetention(false, async () => {
 		const mock = shouldUseMocks();
 		const bootsBefore = mock ? 1 : await countStoredBoots();
 		const warnings = mock ? {} : await deleteOlderJournal();
@@ -169,7 +169,7 @@ export function deleteLegacyDebug(): Promise<LogStorageOutput> {
 	}, busy);
 }
 export function clearAll(): Promise<LogDeleteOlderFilesOutput> {
-	return withDestructiveRetention(async (retainUntil) => {
+	return withDestructiveRetention(true, async (retainUntil) => {
 		const mock = shouldUseMocks();
 		const bootsBefore = await countStoredBoots();
 		if (!mock) await clearNativeJournal(retainUntil);
@@ -192,6 +192,7 @@ function updateBusy(): boolean {
 
 type DestructiveReply = { readonly ok: true };
 function withDestructiveRetention<R extends DestructiveReply>(
+	stopFollows: boolean,
 	operation: (retainUntil: (pending: Promise<unknown>) => void) => Promise<R>,
 ): Promise<R | Extract<LogStorageOutput, { ok: false }>> {
 	return exclusive<R | Extract<LogStorageOutput, { ok: false }>, typeof busy>(
@@ -203,7 +204,7 @@ function withDestructiveRetention<R extends DestructiveReply>(
 				if (updateBusy()) return { ok: false, error: "UPDATE_IN_PROGRESS" };
 				reopen = beginHistoryClear();
 				const stopping = [
-					stopAllFollows("cleared"),
+					...(stopFollows ? [stopAllFollows("cleared")] : []),
 					abortLogExports(),
 					abortLogQueries(),
 				];

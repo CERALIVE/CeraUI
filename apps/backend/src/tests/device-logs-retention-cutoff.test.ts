@@ -146,3 +146,11 @@ test("does not unlink a replacement under the same archived name after proof", a
 	expect(existsSync(path)).toBe(true);
 	expect(existsSync(displaced)).toBe(true);
 });
+
+test("keeps existing follows attached while older cleanup drains queries", async () => {
+	fixture = retentionFixture();
+	fixture.mock.mockReturnValue(true);
+	expect(await deleteOlderFiles()).toMatchObject({ ok: true });
+	expect(fixture.stop).not.toHaveBeenCalled();
+	expect(fixture.abort).toHaveBeenCalledTimes(1);
+});

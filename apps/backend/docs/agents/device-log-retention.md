@@ -19,7 +19,8 @@ and then closes the settings-owned promise gate. If that write throws, clear
 returns `READ_FAILED`, leaves the gate open and aborts no work. Clearing logs on
 a full filesystem therefore requires enough space to persist that epoch first.
 
-The follow, export and query owners start cancellation together. Clear joins
+Clear cancels follow, export and query owners together. Older cleanup cancels
+queries and downloads but leaves registered current-boot follows running. Both join
 all their results, including rejected results, for at most 15 seconds. A
 rejection or timeout returns `READ_FAILED`, reopens admission, deletes nothing
 and never rolls the epoch back. Timeout does not repair an owner that still
@@ -86,7 +87,8 @@ creation and download deadlines include time spent at the gate.
 Calls capture the epoch at entry. An older call still pending after a bump uses
 the existing cancellation outcome instead of waiting on a gate whose drain may
 need that call: queries and around return `READ_FAILED`; pending follow starts
-return `READ_FAILED`; registered follows end once with `cleared`; old export
+return `READ_FAILED`; registered follows end once with `cleared` only for
+Clear all; old export
 tickets are refused and running streams finish incomplete. Calls admitted
 between successive clears belong to the clear that subsequently stops them.
 

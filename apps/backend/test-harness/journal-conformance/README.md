@@ -119,8 +119,8 @@ clock movement at vacuum launch, and foreign machine and namespace directories.
 It also checks retained unknown headers.
 Both cleanup actions report journal boot counts before and after. Both refuse
 during a busy update phase, persist a new history epoch
-and close admission in one synchronous step. Follow, export and query
-cancellations start together and join for at most 15 seconds. A rejected or
+and close admission in one synchronous step. Both cancel exports and queries,
+and only Clear also cancels active follows. They join for at most 15 seconds. A rejected or
 timed-out drain returns `READ_FAILED`, reopens admission and deletes nothing.
 After another update-phase check, clear rotates and vacuums, with a file limit
 that removes even future-dated archives. The native case moves only the

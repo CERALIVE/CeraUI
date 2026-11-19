@@ -96,7 +96,7 @@ const deleteOlder = () =>
 	run('deleteOlder', () => rpc.logs.deleteOlderFiles(), deleteOlderReply, (reply) => {
 		storage = reply.storage;
 		cleanup = reply;
-		notifyHistoryChanged();
+		notifyHistoryChanged('older');
 	});
 const deleteLegacy = () =>
 	run('deleteLegacy', () => rpc.logs.deleteLegacyDebug(), storageReply, (reply) => {
@@ -138,7 +138,7 @@ const RETRY: Record<Action, () => unknown> = {
 			onconfirm={deleteOlder}
 		>
 			{#snippet dialogTitle()}
-				{m['systemLogs.storage.deleteOlder']()}
+				{m['systemLogs.storage.deleteOlderTitle']()}
 			{/snippet}
 			{#snippet description()}
 				{m['systemLogs.storage.deleteOlderBody']()}

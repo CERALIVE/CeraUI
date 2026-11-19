@@ -271,7 +271,7 @@ export async function startFollow(
 										limit: 100,
 									},
 									bootId,
-									epoch,
+									getLogState().historyEpoch,
 								),
 								{ through: cursor, start: true },
 							);

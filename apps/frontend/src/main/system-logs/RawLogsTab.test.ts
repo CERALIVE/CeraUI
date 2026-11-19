@@ -1330,6 +1330,19 @@ describe("RawLogsTab: history and rows", () => {
 		expect(logs.query).toHaveBeenLastCalledWith(DEFAULT_INPUT);
 	});
 
+	it("keeps showing current boot batches on the same follow after older cleanup", async () => {
+		await mounted();
+		await startFollowing();
+		notifyHistoryChanged("older");
+		await tick();
+		push({ entries: [entry("s=4")], checkpointCursor: "s=4" });
+		await waitFor(() =>
+			expect(cursors()).toEqual(["s=4", "s=3", "s=2", "s=1"]),
+		);
+		expect(logs.followStop).not.toHaveBeenCalled();
+		expect(logs.followStart).toHaveBeenCalledTimes(1);
+	});
+
 	it("stops listening for history changes on unmount", async () => {
 		const view = await mounted();
 		view.unmount();
