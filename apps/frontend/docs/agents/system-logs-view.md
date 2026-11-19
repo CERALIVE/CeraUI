@@ -486,6 +486,7 @@ Rules for this copy:
 | `systemLogs.storage.deleteOlder` | Delete older log files | Action |
 | `systemLogs.storage.deleteOlderHint` | Removes log files the device has already closed. Some earlier boots may remain. | Action description |
 | `systemLogs.storage.deleteOlderTitle` | Delete older log files? | Confirmation title |
+| `systemLogs.storage.deleteOlderBody` | This permanently deletes older log files that the device has already closed. Logs from this boot are kept. Some logs from earlier boots may remain. Downloads that are running are cancelled. | Confirmation body |
 | `systemLogs.storage.unverifiedArchivesKept` | Some log files were kept because the device couldn't verify that they contain only logs from earlier boots. | Outcome when archive evidence is incomplete |
 | `systemLogs.storage.legacyArchivesKept` | A log file from an older system version can't be checked. It was kept. | Outcome when legacy archive evidence is incomplete |
 | `systemLogs.storage.deleteOlderResult` | Boots stored: {before} before, {after} now. | Result of deleteOlderFiles |
