@@ -20,7 +20,7 @@ import { readJournalCeiling } from "./ceiling.ts";
 import { clearNativeJournal } from "./clear-journal.ts";
 import { abortLogExports } from "./export.ts";
 import { stopAllFollows } from "./follow.ts";
-import { vacuumOlderJournal } from "./older-journal.ts";
+import { deleteOlderJournal } from "./older-journal.ts";
 import { abortLogQueries } from "./query-admission.ts";
 import { deleteLegacyDebugFiles } from "./retention-files.ts";
 import {
@@ -140,12 +140,18 @@ export function setRetention(next: LogRetention): Promise<LogStorageOutput> {
 	}, busy);
 }
 export function deleteOlderFiles(): Promise<LogDeleteOlderFilesOutput> {
-	return withDestructiveRetention(async (retainUntil) => {
+	return withDestructiveRetention(async () => {
 		const mock = shouldUseMocks();
 		const bootsBefore = mock ? 1 : await countStoredBoots();
-		if (!mock) await vacuumOlderJournal(retainUntil);
+		const warnings = mock ? {} : await deleteOlderJournal();
 		const bootsAfter = mock ? 1 : await countStoredBoots();
-		return { ok: true, storage: await getStorage(), bootsBefore, bootsAfter };
+		return {
+			ok: true,
+			storage: await getStorage(),
+			bootsBefore,
+			bootsAfter,
+			...warnings,
+		};
 	});
 }
 

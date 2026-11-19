@@ -2993,6 +2993,7 @@
 	"systemLogs.storage.deleteOlder": "Excluir arquivos de log antigos",
 	"systemLogs.storage.deleteOlderHint": "Remove os arquivos de log que o dispositivo já fechou. Algumas inicializações anteriores podem permanecer.",
 	"systemLogs.storage.deleteOlderBody": "Esta ação exclui permanentemente os arquivos de log antigos que o dispositivo já fechou. Os logs da inicialização atual são mantidos. Alguns logs de inicializações anteriores podem permanecer.",
+	"systemLogs.storage.unverifiedArchivesKept": "Alguns arquivos de log foram mantidos porque o dispositivo não conseguiu verificar se continham apenas logs de inicializações anteriores.",
 	"systemLogs.storage.deleteOlderResult": "Inicializações armazenadas: {before} antes, {after} agora.",
 	"systemLogs.storage.deleteLegacy": "Excluir arquivos de depuração restantes ({size})",
 	"systemLogs.storage.clearAll": "Apagar todos os logs",

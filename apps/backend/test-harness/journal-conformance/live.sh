@@ -76,6 +76,8 @@ equal 'older-file cleanup preserves the current boot record count' "$(current_cl
 equal 'older-file cleanup preserves the three fixture records' \
 	"$("${J[@]}" "_BOOT_ID=$boot" SYSLOG_IDENTIFIER=older-cleanup | jq -s length)" 3
 
+bash /conformance/older-archives.sh "$machine" "$boot"
+
 # The standalone probe imports the same required setup as the backend.
 printf '{"hw":"n100","apt_update_enabled":false}\n' >/state/setup.json
 systemd-run --wait --collect --unit=ceralive --working-directory=/state \

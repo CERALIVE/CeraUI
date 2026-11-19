@@ -21,6 +21,10 @@ Shapes: `src/schemas/logs.schema.ts`. Procedures: `src/contracts/logs.contract.t
 | `previewBundle` | none | `logBundleManifestSchema` | thrown oRPC error, code `READ_FAILED` or `BUSY` |
 | `createBundle` | none | `logExportOutputSchema` | `{ ok: false, error }` |
 
+Delete older may return `unverifiedArchivesKept: true` alongside the refreshed counts and storage.
+These warnings identify archives kept because their contents could not be
+checked safely. Clear does not return these warnings.
+
 Sources: `src/contracts/logs.contract.ts:25-37`;
 `apps/backend/src/rpc/procedures/logs.procedure.ts:41-106` (`previewBundle`
 at `:90-101`); `apps/backend/src/modules/device-logs/follow.ts:52`;

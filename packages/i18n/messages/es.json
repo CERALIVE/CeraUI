@@ -2993,6 +2993,7 @@
 	"systemLogs.storage.deleteOlder": "Eliminar archivos de registro antiguos",
 	"systemLogs.storage.deleteOlderHint": "Elimina los archivos de registro que el dispositivo ya cerró. Algunos arranques anteriores pueden permanecer.",
 	"systemLogs.storage.deleteOlderBody": "Si confirmas, se eliminarán de forma permanente los archivos de registro antiguos que el dispositivo ya cerró. Se conservan los registros de este arranque. Es posible que queden algunos registros de arranques anteriores.",
+	"systemLogs.storage.unverifiedArchivesKept": "Se conservaron algunos archivos de log porque el dispositivo no pudo comprobar que solo contuvieran logs de arranques anteriores.",
 	"systemLogs.storage.deleteOlderResult": "Arranques guardados: {before} antes, {after} ahora.",
 	"systemLogs.storage.deleteLegacy": "Eliminar restos de depuración ({size})",
 	"systemLogs.storage.clearAll": "Borrar todos los registros",

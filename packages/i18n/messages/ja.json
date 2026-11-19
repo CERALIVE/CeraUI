@@ -2945,6 +2945,7 @@
 	"systemLogs.storage.deleteOlder": "古いログファイルを削除",
 	"systemLogs.storage.deleteOlderHint": "デバイスがすでに閉じたログファイルを削除します。以前の起動の一部は残る場合があります。",
 	"systemLogs.storage.deleteOlderBody": "デバイスがすでに閉じた古いログファイルを完全に削除します。今回の起動のログは保持されます。過去の起動のログが一部残る場合があります。",
+	"systemLogs.storage.unverifiedArchivesKept": "過去の起動のログだけが含まれていると確認できなかったため、一部のログファイルを残しました。",
 	"systemLogs.storage.deleteOlderResult": "保存済みの起動: 以前 {before}、現在 {after}。",
 	"systemLogs.storage.deleteLegacy": "残っているデバッグファイルを削除 ({size})",
 	"systemLogs.storage.clearAll": "すべてのログを消去",

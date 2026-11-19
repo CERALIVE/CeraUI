@@ -9,6 +9,7 @@ import * as runner from "../../helpers/run.ts";
 import * as mocks from "../../mocks/mock-service.ts";
 import * as boot from "../../modules/device-logs/boot-id.ts";
 import * as follow from "../../modules/device-logs/follow.ts";
+import * as archives from "../../modules/device-logs/journal-archive-snapshot.ts";
 import * as queries from "../../modules/device-logs/query-admission.ts";
 import * as reader from "../../modules/device-logs/reader.ts";
 import * as settings from "../../modules/device-logs/settings.ts";
@@ -28,6 +29,10 @@ export function retentionFixture() {
 	const identity = spyOn(boot, "currentBootId").mockReturnValue(
 		record(1).bootId,
 	);
+	const archiveScope = spyOn(archives, "journalArchiveScope").mockReturnValue({
+		machine: "b".repeat(32),
+		directories: [dir],
+	});
 	const phase = spyOn(runtime, "getOrchestratorState").mockReturnValue({
 		...runtime.getOrchestratorState(),
 		phase: "idle",
@@ -69,6 +74,7 @@ export function retentionFixture() {
 		stop,
 		abort,
 		scan,
+		archiveScope,
 		run,
 		detail,
 		schedule,
@@ -81,6 +87,7 @@ export function retentionFixture() {
 				spawn,
 				mock,
 				identity,
+				archiveScope,
 				phase,
 				stop,
 				abort,

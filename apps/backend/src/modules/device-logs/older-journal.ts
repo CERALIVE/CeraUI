@@ -1,55 +1,125 @@
-import { readFile, stat } from "node:fs/promises";
+import { journalCursorBoot } from "@ceraui/rpc/schemas";
+import { z } from "zod";
 import { run } from "../../helpers/run.ts";
-import { currentBootId, normalizeBootId } from "./boot-id.ts";
-import { runJournalMutation } from "./clear-journal.ts";
+import { currentBootId } from "./boot-id.ts";
+import {
+	journalArchiveScope,
+	withJournalArchiveSnapshot,
+} from "./journal-archive-snapshot.ts";
 import { JournalReadError } from "./reader.ts";
 
-export async function vacuumOlderJournal(
-	retainUntil: (settlement: Promise<unknown>) => void,
-): Promise<void> {
+const id = z.string().regex(/^[0-9a-f]{32}$/);
+const headerSchema = z.object({
+	path: z.string(),
+	machine: id,
+	state: z.literal("ARCHIVED"),
+	flags: z
+		.string()
+		.regex(/^(?: (?:SEALED|SEALED_CONTINUOUS|TAIL_ENTRY_BOOT_ID))*$/),
+	boot: id,
+	count: z
+		.string()
+		.regex(/^[1-9]\d*$/)
+		.transform(Number)
+		.pipe(z.number().int().safe()),
+});
+const entry = z.object({ _BOOT_ID: id, __CURSOR: z.string() });
+
+export function parseArchiveHeader(output: string) {
+	const field = (key: string) => {
+		const lines = output
+			.split("\n")
+			.filter((line) => line.startsWith(`${key}:`));
+		const [line] = lines;
+		return lines.length === 1 ? line?.slice(key.length + 1) : undefined;
+	};
+	const parsed = headerSchema.safeParse({
+		path: field("File path")?.trim(),
+		machine: field("Machine ID")?.trim(),
+		state: field("State")?.trim(),
+		flags: field("Compatible flags"),
+		boot: field("Boot ID")?.trim(),
+		count: field("Entry objects")?.trim(),
+	});
+	return parsed.success ? parsed.data : null;
+}
+
+type ArchiveDecision = "delete" | "keep" | "unverified";
+type BootEvidence = {
+	readonly boot: string;
+	readonly machine: string;
+};
+
+async function inspectArchive(
+	path: string,
+	evidence: BootEvidence,
+	signal: AbortSignal,
+): Promise<ArchiveDecision> {
+	const read = (options: string[]) =>
+		run("journalctl", [`--file=${path}`, "--no-pager", ...options], { signal });
+	try {
+		const header = parseArchiveHeader(await read(["--header"]));
+		if (header?.path !== path || header.machine !== evidence.machine)
+			return "unverified";
+		if (!header.flags.split(" ").includes("TAIL_ENTRY_BOOT_ID"))
+			return "unverified";
+		if (header.boot === evidence.boot) return "keep";
+
+		const output = await read([
+			"-o",
+			"json",
+			"--all",
+			"--lines=all",
+			"--output-fields=_BOOT_ID",
+		]);
+		const lines = output.trim().split("\n");
+		if (lines.length !== header.count) return "unverified";
+		const previous = header.boot;
+		for (const line of lines) {
+			const parsed = entry.safeParse(JSON.parse(line));
+			if (
+				!parsed.success ||
+				journalCursorBoot(parsed.data.__CURSOR) !== parsed.data._BOOT_ID
+			)
+				return "unverified";
+			const boot = parsed.data._BOOT_ID;
+			if (boot === evidence.boot || boot !== previous) return "keep";
+		}
+		return "delete";
+	} catch (error) {
+		if (error instanceof Error) return "unverified";
+		throw error;
+	}
+}
+
+export async function deleteOlderJournal() {
 	const boot = currentBootId();
 	if (boot === undefined) throw new JournalReadError("READ_FAILED");
-	const headers = await run("journalctl", ["--header"]);
-	const text = await readFile("/proc/uptime", "utf8");
-	const uptime = Number(/^\d+(?:\.\d+)?(?=\s)/.exec(text)?.[0]);
-	const fallback = Math.ceil(uptime) + 60;
-	if (!Number.isSafeInteger(fallback) || fallback < 60)
-		throw new JournalReadError("READ_FAILED");
-
-	let earliest = Infinity;
-	for (const header of headers.split(/(?=^File path: )/m)) {
-		const path = /^File path: (.+)$/m.exec(header)?.[1];
-		// Vacuum considers archived names, including uncleanly closed journals.
-		if (!path || !/[^/]*(?:@[^/]*\.journal|\.journal~)$/.test(path)) continue;
-		if (/^Entry objects: 0$/m.test(header)) continue;
-		const id = /^Boot ID: ([0-9a-f]{32})$/im.exec(header)?.[1];
-		if (
-			id === undefined ||
-			!/^Compatible flags:.*\bTAIL_ENTRY_BOOT_ID\b/m.test(header)
-		)
-			throw new JournalReadError("READ_FAILED");
-		if (normalizeBootId(id) !== boot) continue;
-		const raw = /^Head realtime timestamp: .+ \(([0-9a-f]+)\)$/im.exec(
-			header,
-		)?.[1];
-		const head = raw === undefined ? NaN : Number.parseInt(raw, 16);
-		if (!Number.isSafeInteger(head) || head <= 0)
-			throw new JournalReadError("READ_FAILED");
-		// systemd can lower the filename timestamp to the file's metadata
-		// timestamps. Creation time can predate the head after a clock step.
-		const info = await stat(path);
-		earliest = Math.min(
-			earliest,
-			head,
-			...[info.birthtimeMs, info.ctimeMs, info.atimeMs, info.mtimeMs]
-				.filter((ms) => ms > 0)
-				.map((ms) => Math.floor(ms * 1000)),
-		);
-	}
-	// Round away from the first protected file and allow for spawning journalctl.
-	const seconds = Math.max(
-		fallback,
-		Math.ceil((Date.now() * 1000 - earliest) / 1_000_000) + 1,
-	);
-	await runJournalMutation([`--vacuum-time=${seconds}s`], retainUntil);
+	const { machine, directories } = journalArchiveScope();
+	const signal = AbortSignal.timeout(30_000);
+	let unverifiedArchivesKept = false;
+	await withJournalArchiveSnapshot(directories, async (archive) => {
+		const result = archive.unclean
+			? "unverified"
+			: await inspectArchive(archive.path, { boot, machine }, signal);
+		switch (result) {
+			case "keep":
+				break;
+			case "delete":
+				archive.remove();
+				break;
+			case "unverified":
+				unverifiedArchivesKept = true;
+				break;
+			default: {
+				const unreachable: never = result;
+				throw new JournalReadError(unreachable);
+			}
+		}
+	});
+	return {
+		...(unverifiedArchivesKept
+			? { unverifiedArchivesKept: true as const }
+			: {}),
+	};
 }

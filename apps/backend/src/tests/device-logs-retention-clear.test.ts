@@ -426,7 +426,6 @@ for (const { name, invoke, schema } of [
 
 test("native older-file cleanup returns resolved wire storage", async () => {
 	f.mock.mockReturnValue(false);
-	f.read.mockResolvedValue("0 0");
 	const current = (await list())[0];
 	if (!current) throw new Error("missing current boot");
 	list.mockResolvedValue([

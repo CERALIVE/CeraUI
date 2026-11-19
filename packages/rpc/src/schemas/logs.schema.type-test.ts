@@ -134,7 +134,13 @@ type Outputs = {
 	logStorageSchema: Storage;
 	logStorageOutputSchema: { ok: true; storage: Storage } | Failure;
 	logDeleteOlderFilesOutputSchema:
-		| { ok: true; storage: Storage; bootsBefore: number; bootsAfter: number }
+		| {
+				ok: true;
+				storage: Storage;
+				bootsBefore: number;
+				bootsAfter: number;
+				unverifiedArchivesKept?: true | undefined;
+		  }
 		| Failure;
 	logExportInputSchema: TimeRange & { filter: Filter; boot: Boot };
 	logExportOutputSchema: { ok: true; url: string; expiresAt: number } | Failure;

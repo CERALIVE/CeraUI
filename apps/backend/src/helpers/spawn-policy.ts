@@ -336,8 +336,9 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 	{
 		id: "deviceLogs.journalHeader",
 		file: "modules/device-logs/older-journal.ts",
-		symbol: "vacuumOlderJournal",
-		command: "[journalctl, --header]",
+		symbol: "inspectArchive",
+		command:
+			"[journalctl, --file=<pinned descriptor>, --no-pager, --header or fixed boot fields]",
 		class: "bounded-probe",
 		status: "enforced",
 		contract: {
@@ -347,7 +348,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			shutdownAbort: false,
 			lifetimeTimeoutExempt: false,
 		},
-		mechanism: "Fixed argv through the bounded run() collector",
+		mechanism: "Read-only archive evidence through the bounded run() collector",
 	},
 	{
 		id: "deviceLogs.journalScan",

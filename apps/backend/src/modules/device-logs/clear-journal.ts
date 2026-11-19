@@ -12,7 +12,7 @@ export async function clearNativeJournal(
 	);
 }
 
-export async function runJournalMutation(
+async function runJournalMutation(
 	args: readonly string[],
 	retainUntil: (settlement: Promise<unknown>) => void,
 ): Promise<void> {

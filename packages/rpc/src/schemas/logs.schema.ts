@@ -212,6 +212,7 @@ export const logDeleteOlderFilesOutputSchema = z.discriminatedUnion('ok', [
 		storage: logStorageSchema,
 		bootsBefore: countSchema,
 		bootsAfter: countSchema,
+		unverifiedArchivesKept: z.literal(true).optional(),
 	}),
 	logErrorSchema,
 ]);

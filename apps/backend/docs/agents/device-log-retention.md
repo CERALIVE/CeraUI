@@ -64,14 +64,15 @@ still-live client could submit after the barrier. Fences are process-local.
 
 ## Deleting older files
 
-Older cleanup does not rotate the active journal. It reads fixed
-`journalctl --header` output before vacuuming. On v257 the Boot ID with the
-`TAIL_ENTRY_BOOT_ID` flag describes the last entry. An archive ending in this
-boot is protected by moving the uptime-based cutoff back to at least the
-earliest such file head. The cutoff also accounts for older filesystem times
-that systemd can use when aging the file. Unknown archive header evidence
-refuses cleanup. A shared file can keep logs from earlier boots. The result
-counts boots with retained journal entries before and after the vacuum.
+Older cleanup snapshots named archives in the local machine's default
+namespace under `/run/log/journal` and `/var/log/journal`. It neither rotates
+nor invokes vacuum. Directory descriptors anchor the paths. For each candidate,
+`journalctl --file` reads the pinned inode. The file must have a recognized
+archived header in the local machine scope, and a complete record stream must
+agree on a single different boot. The header's tail boot ID alone cannot rule
+out a mixed file. Unclean archives, unreadable evidence and scans over the
+time or output limits are kept.
+The result counts retained journal boots before and after cleanup.
 
 ## Admission and terminal ownership
 

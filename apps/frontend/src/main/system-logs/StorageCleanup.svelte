@@ -8,7 +8,7 @@
 <script lang="ts">
 import { formatBytes } from '@ceraui/i18n/formatters';
 import { getLocale } from '@ceraui/i18n/svelte';
-import type { LogStorage } from '@ceraui/rpc/schemas';
+import type { LogDeleteOlderFilesOutput, LogStorage } from '@ceraui/rpc/schemas';
 
 import SimpleAlertDialog from '$lib/components/custom/simple-alert-dialog.svelte';
 import { Button, buttonVariants } from '$lib/components/ui/button';
@@ -67,7 +67,7 @@ function openOnCancel(id: string) {
 }
 
 let running = $state<Action>();
-let boots = $state<{ before: number; after: number }>();
+let cleanup = $state<OkReply<LogDeleteOlderFilesOutput>>();
 let failure = $state<{ action: Action; reason: ActionFailure }>();
 let confirmDeleteOlder = $state(false);
 let confirmClearAll = $state(false);
@@ -81,7 +81,7 @@ async function run<R extends ActionReply>(
 ): Promise<void> {
 	if (running !== undefined) return;
 	running = action;
-	boots = undefined;
+	cleanup = undefined;
 	failure = undefined;
 	try {
 		const reply = await settleAction(call, read);
@@ -95,7 +95,7 @@ async function run<R extends ActionReply>(
 const deleteOlder = () =>
 	run('deleteOlder', () => rpc.logs.deleteOlderFiles(), deleteOlderReply, (reply) => {
 		storage = reply.storage;
-		boots = { before: reply.bootsBefore, after: reply.bootsAfter };
+		cleanup = reply;
 		notifyHistoryChanged();
 	});
 const deleteLegacy = () =>
@@ -105,7 +105,7 @@ const deleteLegacy = () =>
 const clearAll = () =>
 	run('clearAll', () => rpc.logs.clearAll(), deleteOlderReply, (reply) => {
 		storage = reply.storage;
-		boots = { before: reply.bootsBefore, after: reply.bootsAfter };
+		cleanup = reply;
 		notifyHistoryChanged();
 	});
 const clearEvents = () =>
@@ -199,11 +199,14 @@ const RETRY: Record<Action, () => unknown> = {
 			{/snippet}
 		</SimpleAlertDialog>
 	</div>
-	<p class="text-sm" data-testid="storage-cleanup-status" role="status">
-		{#if boots}
-			{m['systemLogs.storage.deleteOlderResult']({ before: boots.before, after: boots.after })}
+	<div class="text-sm" data-testid="storage-cleanup-status" role="status">
+		{#if cleanup}
+			<p>{m['systemLogs.storage.deleteOlderResult']({ before: cleanup.bootsBefore, after: cleanup.bootsAfter })}</p>
+			{#if cleanup.unverifiedArchivesKept}
+				<p>{m['systemLogs.storage.unverifiedArchivesKept']()}</p>
+			{/if}
 		{/if}
-	</p>
+	</div>
 	{#if failure}
 		<RecoveryBand
 			message={failure.reason === 'refused'

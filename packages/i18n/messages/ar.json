@@ -3002,6 +3002,7 @@
 	"systemLogs.storage.deleteOlder": "حذف ملفات السجل الأقدم",
 	"systemLogs.storage.deleteOlderHint": "يزيل ملفات السجل التي أغلقها الجهاز بالفعل. قد تبقى بعض مرات الإقلاع السابقة.",
 	"systemLogs.storage.deleteOlderBody": "يؤدي هذا الإجراء إلى حذف ملفات السجل القديمة التي أغلقها الجهاز نهائيًا. يُحتفظ بسجلات الإقلاع الحالي، وقد تبقى بعض سجلات مرات الإقلاع السابقة.",
+	"systemLogs.storage.unverifiedArchivesKept": "احتُفظ ببعض ملفات السجل لأن الجهاز لم يتمكن من التحقق من أنها لا تحتوي إلا على سجلات مرات الإقلاع السابقة.",
 	"systemLogs.storage.deleteOlderResult": "مرات الإقلاع المحفوظة: {before} قبل، {after} الآن.",
 	"systemLogs.storage.deleteLegacy": "حذف ملفات التصحيح المتبقية ({size})",
 	"systemLogs.storage.clearAll": "مسح كل السجلات",

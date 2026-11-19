@@ -99,7 +99,7 @@ around-seek option cases (`src/tests/device-logs-query-golden.test.ts`);
 ## Retention and cleanup [EXISTS]
 
 `src/modules/device-logs/retention.ts` owns retention changes and serializes
-maintenance, older-file vacuum, legacy-file removal and clear. Settings and
+maintenance, older-file cleanup, legacy-file removal and clear. Settings and
 maintenance receipts use the existing atomic settings store. With an unknown
 image ceiling, `setRetention` refuses any non-null limit; a save with both limits
 `null` (for example a Detail-only change) is accepted (`src/modules/device-logs/retention.ts:109-126`).
@@ -111,10 +111,12 @@ Storage reports journalctl usage separately from recursive journal-directory
 bytes, including the image-owned predecessor directory. Recent source volume
 is a sample of up to 4096 records (`src/modules/device-logs/storage.ts:55-59`).
 
-Older-file cleanup reads `journalctl --header` and vacuums with rounded uptime
-plus sixty seconds, widened when necessary to retain archives ending in the
-current boot. It never rotates the active file. The native probe checks that
-older-file cleanup preserves current-boot records in a cross-boot active file.
+Older-file cleanup checks each archive in a directory-scoped snapshot and
+removes only files proven to contain records from a single earlier boot.
+The native probe covers cross-boot active and mixed archived files, a rotation
+during inspection, backward archive naming, older creation-time metadata,
+clock movement at vacuum launch, and foreign machine and namespace directories.
+It also checks retained unknown headers.
 Both cleanup actions report journal boot counts before and after. Both refuse
 during a busy update phase, persist a new history epoch
 and close admission in one synchronous step. Follow, export and query

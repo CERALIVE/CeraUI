@@ -464,6 +464,7 @@ Rules for this copy:
 | `systemLogs.storage.maintenanceFailed` | The cleanup after saving didn't finish. The limits are saved. | lastMaintenance.ok: false |
 | `systemLogs.storage.deleteOlder` | Delete older log files | Action |
 | `systemLogs.storage.deleteOlderHint` | Removes log files the device has already closed. Some earlier boots may remain. | Action description |
+| `systemLogs.storage.unverifiedArchivesKept` | Some log files were kept because the device couldn't verify that they contain only logs from earlier boots. | Outcome when archive evidence is incomplete |
 | `systemLogs.storage.deleteOlderResult` | Boots stored: {before} before, {after} now. | Result of deleteOlderFiles |
 | `systemLogs.storage.deleteLegacy` | Delete leftover debug files ({size}) | Rendered only when legacyDebugBytes > 0 |
 | `systemLogs.storage.clearAll` | Clear all logs | Destructive trigger |
