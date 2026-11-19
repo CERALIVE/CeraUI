@@ -67,8 +67,9 @@ Values from a request:
 
 Retention ceiling: `setRetention` returns `INVALID_RETENTION` for a value above
 the ceiling or any limit when the ceiling is unreadable (`retention.ts:113-120`).
-Settings loaded from disk are parsed with `logRetentionSchema` and no ceiling
-check (`settings.ts:79-85`).
+The RPC parses `logRetentionSchema` once before the service checks the
+deployment ceiling and persists the typed settings. Settings loaded from disk
+are parsed separately without a ceiling check.
 Maintenance runs when a ceiling is readable and a limit is set
 (`retention.ts:46-52,72`) and does not compare values with the ceiling
 (`retention.ts:71-101`).

@@ -9,6 +9,7 @@ import {
 	saveLogSettings,
 	setLogSettingsDirForTest,
 } from "../modules/device-logs/settings.ts";
+import { expectInvalidRetention } from "./helpers/retention-rpc.ts";
 
 const defaults = {
 	maxAgeDays: null,
@@ -75,14 +76,14 @@ afterEach(() => {
 });
 
 test.each(invalidSettings)(
-	"$name settings input rejects without changing bytes or cache",
-	({ value }) => {
+	"$name RPC settings input rejects without changing bytes or cache",
+	async ({ value }) => {
 		saveLogSettings(saved);
 		const path = join(dir, "log-settings.json");
 		const before = readFileSync(path);
 		const write = spyOn(configLoader, "writeFileAtomicSync");
 		try {
-			expect(() => saveLogSettings(value)).toThrow();
+			await expectInvalidRetention(value);
 			expect(write).not.toHaveBeenCalled();
 			expect(readFileSync(path)).toEqual(before);
 			expect(getLogSettings()).toEqual(saved);
@@ -208,7 +209,6 @@ test("cold invalid settings getters cache one warned fallback", () => {
 		warn.mockRestore();
 	}
 });
-
 test("a saved settings value remains cached if disk bytes later corrupt", () => {
 	saveLogSettings(saved);
 	writeFileSync(join(dir, "log-settings.json"), '{"detail":');
@@ -220,7 +220,6 @@ test("a saved settings value remains cached if disk bytes later corrupt", () => 
 		warn.mockRestore();
 	}
 });
-
 test("high-bit bytes are malformed UTF-8 settings, not ASCII JSON", () => {
 	const path = join(dir, "log-settings.json");
 	const bytes = Buffer.from(
@@ -235,31 +234,4 @@ test("high-bit bytes are malformed UTF-8 settings, not ASCII JSON", () => {
 	} finally {
 		warn.mockRestore();
 	}
-});
-
-test("cold settings and state getters read the process working directory", async () => {
-	const state = {
-		historyEpoch: 3,
-		lastClearedAt: 5,
-		lastMaintenance: { at: 6, ok: true, targetMet: false },
-	};
-	writeFileSync(join(dir, "log-settings.json"), JSON.stringify(saved));
-	writeFileSync(join(dir, "log-state.json"), JSON.stringify(state));
-	const moduleUrl = import.meta.resolve("../modules/device-logs/settings.ts");
-	const script = `import { getLogSettings, getLogState } from ${JSON.stringify(moduleUrl)};\nconsole.log(JSON.stringify({ settings: getLogSettings(), state: getLogState() }));`;
-	const child = Bun.spawn([process.execPath, "--eval", script], {
-		cwd: dir,
-		env: process.env,
-		stdin: "ignore",
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-	const [output, errors, exitCode] = await Promise.all([
-		new Response(child.stdout).text(),
-		new Response(child.stderr).text(),
-		child.exited,
-	]);
-
-	expect(exitCode, await errors).toBe(0);
-	expect(JSON.parse(await output)).toEqual({ settings: saved, state });
 });

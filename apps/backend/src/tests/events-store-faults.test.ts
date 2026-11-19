@@ -103,7 +103,7 @@ test.each([false, true])(
 test.each([
 	"mkdirSync",
 	"statSync",
-	"readFileSync",
+	"readSync",
 	"chmodSync",
 	"openSync",
 	"fchmodSync",
@@ -122,8 +122,13 @@ test.each([
 		);
 		const failure = new Error(`injected ${operation}`);
 		let closed = 0;
+		let appended = false;
 		const injected = {
 			...fs,
+			appendFileSync: (...args: Parameters<typeof fs.appendFileSync>) => {
+				fs.appendFileSync(...args);
+				appended = true;
+			},
 			closeSync: (fd: number) => {
 				fs.closeSync(fd);
 				closed++;
@@ -132,6 +137,7 @@ test.each([
 				if (operation === "closeSync") {
 					const [fd] = args;
 					if (typeof fd === "number") fs.closeSync(fd);
+					if (!appended) return;
 				}
 				throw failure;
 			},
@@ -140,8 +146,9 @@ test.each([
 			appendEvent(event(), { ...deps, fs: injected, sync: true }),
 		).not.toThrow();
 		expect(deps.warnings).toHaveLength(1);
+		if (operation === "readSync") expect(closed).toBe(1);
 		if (["fchmodSync", "appendFileSync", "fdatasyncSync"].includes(operation))
-			expect(closed).toBe(1);
+			expect(closed).toBe(2);
 	},
 );
 

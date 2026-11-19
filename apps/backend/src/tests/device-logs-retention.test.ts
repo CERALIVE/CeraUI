@@ -106,32 +106,6 @@ test("tightened retention records observed success without rotating", async () =
 	await r.setRetention(defaults);
 	expect(timerHasRef()).toBe(false);
 });
-test.each([
-	{ maxAgeDays: 31, maxSizeMb: null, detail: "debug" },
-	{ maxAgeDays: 0, maxSizeMb: null, detail: "debug" },
-	{ maxAgeDays: -1, maxSizeMb: null, detail: "debug" },
-	{ maxAgeDays: 1.1, maxSizeMb: null, detail: "debug" },
-	{ maxAgeDays: Number.MAX_SAFE_INTEGER, maxSizeMb: null, detail: "debug" },
-	{ maxAgeDays: null, maxSizeMb: 257, detail: "debug" },
-	{ maxAgeDays: null, maxSizeMb: 15, detail: "debug" },
-	{ maxAgeDays: null, maxSizeMb: Number.MAX_VALUE, detail: "debug" },
-	{ maxAgeDays: null, maxSizeMb: 16.1, detail: "debug" },
-	{},
-	null,
-	"",
-	{ ...defaults, detail: "bad" },
-])(
-	"refuses invalid admission without saving or spawning: %j",
-	async (value) => {
-		const r = await service();
-		expect(await r.setRetention(value)).toEqual({
-			ok: false,
-			error: "INVALID_RETENTION",
-		});
-		expect(getLogSettings()).toEqual(defaults);
-		expect(f.run.mock.calls).toEqual([]);
-	},
-);
 test("unknown ceiling allows detail only and leaves maintenance inert", async () => {
 	const r = await service();
 	ceiling?.mockReturnValue(null);

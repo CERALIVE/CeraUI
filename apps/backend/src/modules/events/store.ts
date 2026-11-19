@@ -36,6 +36,7 @@ export interface EventStoreDeps {
 		| "existsSync"
 		| "statSync"
 		| "readFileSync"
+		| "readSync"
 		| "chmodSync"
 		| "rmSync"
 		| "renameSync"
@@ -104,9 +105,18 @@ function append(
 			if (size > ring.bytes) {
 				throw new RangeError("existing event store file exceeds limit");
 			}
-			const text = io.readFileSync(file, "utf8");
 			// Separate a torn append from the next record after a process restart.
-			if (size > 0 && !text.endsWith("\n")) prefix = "\n";
+			if (size > 0) {
+				const tail = new Uint8Array(1);
+				const fd = io.openSync(file, "r");
+				try {
+					if (io.readSync(fd, tail, { length: 1, position: size - 1 }) !== 1)
+						throw new RangeError("event store tail could not be read");
+					if (tail[0] !== 10) prefix = "\n";
+				} finally {
+					io.closeSync(fd);
+				}
+			}
 			io.chmodSync(file, 0o600);
 			if (size + Buffer.byteLength(prefix + line) > ring.bytes) {
 				io.rmSync(filePath(base, ring, ring.files - 1), { force: true });

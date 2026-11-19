@@ -36,6 +36,34 @@ afterEach(() => {
 });
 
 describe("device log settings persistence", () => {
+	test("cold settings and state getters read the process working directory", async () => {
+		const saved = { maxAgeDays: 7, maxSizeMb: 32, detail: "info" } as const;
+		const state = {
+			historyEpoch: 3,
+			lastClearedAt: 5,
+			lastMaintenance: { at: 6, ok: true, targetMet: false },
+		};
+		writeFileSync(join(dir, "log-settings.json"), JSON.stringify(saved));
+		writeFileSync(join(dir, "log-state.json"), JSON.stringify(state));
+		const moduleUrl = import.meta.resolve("../modules/device-logs/settings.ts");
+		const script = `import { getLogSettings, getLogState } from ${JSON.stringify(moduleUrl)};\nconsole.log(JSON.stringify({ settings: getLogSettings(), state: getLogState() }));`;
+		const child = Bun.spawn([process.execPath, "--eval", script], {
+			cwd: dir,
+			env: process.env,
+			stdin: "ignore",
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		const [output, errors, exitCode] = await Promise.all([
+			new Response(child.stdout).text(),
+			new Response(child.stderr).text(),
+			child.exited,
+		]);
+
+		expect(exitCode, await errors).toBe(0);
+		expect(JSON.parse(await output)).toEqual({ settings: saved, state });
+	});
+
 	test("uses defaults without creating either file when absent", () => {
 		const setDetail = spyOn(logging, "setJournalDetail");
 		const warn = spyOn(logger, "warn").mockImplementation(() => logger);
@@ -153,12 +181,15 @@ describe("device log settings persistence", () => {
 		{ maxAgeDays: null, maxSizeMb: null, detail: "trace" },
 		{ maxAgeDays: 1.5, maxSizeMb: null, detail: "debug" },
 		{ maxAgeDays: null, maxSizeMb: null, detail: "debug", extra: true },
-	])("rejects invalid settings input without writing: %j", (value) => {
+	])("rejects invalid persisted settings without writing: %j", (value) => {
+		const file = join(dir, "log-settings.json");
+		const raw = JSON.stringify(value);
+		writeFileSync(file, raw);
 		const write = spyOn(configLoader, "writeFileAtomicSync");
 		try {
-			expect(() => saveLogSettings(value)).toThrow();
-			expect(write).not.toHaveBeenCalled();
 			expect(getLogSettings()).toEqual(defaults);
+			expect(write).not.toHaveBeenCalled();
+			expect(readFileSync(file, "utf8")).toBe(raw);
 		} finally {
 			write.mockRestore();
 		}

@@ -104,10 +104,9 @@ export function getLogSettings(): LogRetention {
 	return { ...settings };
 }
 
-export function saveLogSettings(next: unknown): LogRetention {
-	const parsed = logRetentionSchema.parse(next);
-	writeFileAtomicSync(filePath(settingsFile), JSON.stringify(parsed));
-	settings = parsed;
+export function saveLogSettings(next: LogRetention): LogRetention {
+	writeFileAtomicSync(filePath(settingsFile), JSON.stringify(next));
+	settings = { ...next };
 	settingsLoaded = true;
 	return { ...settings };
 }

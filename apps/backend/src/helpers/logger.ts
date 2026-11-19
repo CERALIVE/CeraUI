@@ -620,7 +620,7 @@ export function onLogLine(
 	};
 }
 
-/** Drop every captured line — used by tests for a deterministic baseline. */
+/** Empty the mock device log ring on Clear while keeping sequence offsets monotonic. */
 export function clearRecentLogLines(): void {
 	logRingOffset += logRing.length;
 	logRing.length = 0;

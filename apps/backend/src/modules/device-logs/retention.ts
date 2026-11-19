@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { clearInterval, setInterval } from "node:timers";
-import {
-	type LogDeleteOlderFilesOutput,
-	type LogStorageOutput,
-	logRetentionSchema,
+import type {
+	LogDeleteOlderFilesOutput,
+	LogRetention,
+	LogStorageOutput,
 } from "@ceraui/rpc/schemas";
 import {
 	clearRecentLogLines,
@@ -108,12 +108,10 @@ export async function initLogRetention(): Promise<void> {
 	schedule();
 	await maintain();
 }
-export function setRetention(next: unknown): Promise<LogStorageOutput> {
+export function setRetention(next: LogRetention): Promise<LogStorageOutput> {
 	return exclusive(async () => {
-		const parsed = logRetentionSchema.safeParse(next);
-		if (!parsed.success) return { ok: false, error: "INVALID_RETENTION" };
 		const limit = ceiling();
-		const { maxAgeDays, maxSizeMb } = parsed.data;
+		const { maxAgeDays, maxSizeMb } = next;
 		if (
 			(maxAgeDays !== null &&
 				(limit === null || maxAgeDays > limit.maxAgeDays)) ||
@@ -121,9 +119,9 @@ export function setRetention(next: unknown): Promise<LogStorageOutput> {
 		)
 			return { ok: false, error: "INVALID_RETENTION" };
 		try {
-			saveLogSettings(parsed.data);
+			saveLogSettings(next);
 			schedule();
-			setJournalDetail(parsed.data.detail);
+			setJournalDetail(next.detail);
 			await maintenance();
 			return { ok: true, storage: await getStorage() };
 		} catch {
@@ -213,6 +211,7 @@ export function clearAll(): Promise<LogStorageOutput> {
 					await run("journalctl", ["--vacuum-time=1s"]);
 				}
 				await deleteLegacyDebugFiles();
+				// Mock Clear empties the captured ring before writing its first new marker.
 				if (mock) clearRecentLogLines();
 			} finally {
 				deletion.reservation.releaseAfterCompletion();

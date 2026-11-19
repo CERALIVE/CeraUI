@@ -18,7 +18,8 @@ the append; boot appends always sync. Generation moves use atomic rename.
 Unlike a configuration snapshot, JSONL is append-only: there is no temporary
 replacement of the whole active file. A crash can tear the last line. Readers
 ignore unterminated, malformed, invalid and unknown-version records, and the
-next append separates a torn tail from its new record. The ring is intended for
+next append inspects only the final byte and separates a torn tail from its
+new record. The ring is intended for
 the single backend writer; rotation is not a multi-process transaction.
 
 All operations read disk rather than retaining an authoritative memory cache.
