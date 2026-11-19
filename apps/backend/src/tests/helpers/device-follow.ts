@@ -132,6 +132,7 @@ export function followFixture() {
 			const parsed = JSON.parse(frame);
 			messages.push(logFollowMessageSchema.parse(parsed["logs.follow"]));
 			sent.resolve();
+			return Buffer.byteLength(frame);
 		},
 	};
 	return {

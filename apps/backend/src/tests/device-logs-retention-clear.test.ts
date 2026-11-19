@@ -329,6 +329,7 @@ test("clear joins a real native follower before starting journal cleanup", async
 			messages.push(
 				logFollowMessageSchema.parse(JSON.parse(frame)["logs.follow"]),
 			);
+			return Buffer.byteLength(frame);
 		},
 	};
 	try {
@@ -370,6 +371,7 @@ test.each([false, true])(
 					logFollowMessageSchema.parse(JSON.parse(frame)["logs.follow"]),
 				);
 				if (throwing) throw new Error("subscriber failed");
+				return Buffer.byteLength(frame);
 			},
 		};
 		expect((await startFollow(conn, {}, { clock: time.clock })).ok).toBe(true);

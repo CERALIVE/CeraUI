@@ -1,6 +1,5 @@
 // allow: SIZE_OK - Socket lifetime state machine; the clear fence shares slot ownership.
 import {
-	LOG_FOLLOW_EVENT,
 	type LogFollowMessage,
 	type LogFollowStartInput,
 	type LogFollowStartOutput,
@@ -12,13 +11,15 @@ import {
 	type WatcherOptions,
 } from "../../helpers/spawn-policy.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
-import { buildMsg, getSocketSenderId } from "../../rpc/compat.ts";
-import type { MessageSocket } from "../ui/message-socket.ts";
 import { currentBootId } from "./boot-id.ts";
 import { compileFilter } from "./filter.ts";
 import { createFollowDelivery } from "./follow-delivery.ts";
 import { resolveFollowPosition } from "./follow-position.ts";
 import { joinFollowProcess } from "./follow-stream.ts";
+import {
+	createFollowTransport,
+	type FollowSocket,
+} from "./follow-transport.ts";
 import { followMockJournal, scanMockJournal } from "./mock-journal.ts";
 import type { RawJournalRecord } from "./parse.ts";
 import {
@@ -40,14 +41,23 @@ interface FollowSlot {
 	readonly sendEnd: (reason: "cleared") => void;
 	checkpoint: string | null;
 }
-const running = new Map<MessageSocket, FollowSlot>();
+const running = new Map<FollowSocket, FollowSlot>();
+// A null checkpoint from a proven empty boot has no wire cursor to echo on Resume.
+const emptyBootRecovery = new WeakMap<
+	FollowSocket,
+	{
+		readonly epoch: number;
+		readonly bootId: string;
+		readonly sessionSignal: AbortSignal | undefined;
+	}
+>();
 const clock: Pick<JournalClock, "setTimeout" | "clearTimeout"> = {
 	setTimeout: (callback, delay) => Number(setTimeout(callback, delay)),
 	clearTimeout: (timer) => clearTimeout(timer),
 };
 
 export async function stopFollow(
-	conn: MessageSocket,
+	conn: FollowSocket,
 ): Promise<LogFollowStopOutput> {
 	const slot = running.get(conn);
 	if (!slot) return { success: false, checkpointCursor: null };
@@ -64,7 +74,7 @@ export async function stopAllFollows(reason: "cleared"): Promise<void> {
 }
 
 export async function startFollow(
-	conn: MessageSocket,
+	conn: FollowSocket,
 	input: LogFollowStartInput,
 	options: FollowOptions = {},
 ): Promise<LogFollowStartOutput> {
@@ -89,10 +99,18 @@ export async function startFollow(
 	if (running.size >= 4) return { ok: false, error: "BUSY" };
 	const bootId = currentBootId();
 	if (bootId === undefined) return { ok: false, error: "BOOT_UNAVAILABLE" };
+	const recovery = emptyBootRecovery.get(conn);
+	const resumeEmptyBoot =
+		filter.afterCursor === undefined &&
+		recovery?.epoch === epoch &&
+		recovery.bootId === bootId &&
+		recovery.sessionSignal === sessionSignal;
+	emptyBootRecovery.delete(conn);
 	const mock = shouldUseMocks();
 	const scan = mock ? scanMockJournal : scanJournal;
 	const time = options.clock ?? clock;
 	const controller = new AbortController();
+	const transport = createFollowTransport(conn, sessionSignal);
 	const settled = Promise.withResolvers<void>();
 	const ready = Promise.withResolvers<LogFollowStartOutput>();
 	const subscriptionId = crypto.randomUUID();
@@ -112,13 +130,20 @@ export async function startFollow(
 		)
 			return;
 		if (message.ended !== undefined) ended = true;
-		try {
-			conn.send(buildMsg(LOG_FOLLOW_EVENT, message, getSocketSenderId(conn)));
+		const status = transport.send(message, slot.checkpoint);
+		if (status === "accepted") {
 			slot.checkpoint = message.checkpointCursor;
-		} catch {
-			// A failed transport has no recipient; retire it without advancing the checkpoint.
-			controller.abort();
+			return;
 		}
+		if (
+			status === "dropped" &&
+			started &&
+			slot.checkpoint === null &&
+			message.ended !== "cleared"
+		)
+			emptyBootRecovery.set(conn, { epoch, bootId, sessionSignal });
+		ended = true;
+		retireSession();
 	};
 	const slot: FollowSlot = {
 		controller,
@@ -140,7 +165,7 @@ export async function startFollow(
 		resolveFollowPosition(scan, { bootId, signal: controller.signal }, cursor);
 	void (async () => {
 		try {
-			let cursor = await position(filter.afterCursor);
+			let cursor = resumeEmptyBoot ? null : await position(filter.afterCursor);
 			if (filter.afterCursor !== undefined && cursor !== filter.afterCursor) {
 				publish({
 					subscriptionId,

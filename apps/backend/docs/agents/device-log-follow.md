@@ -44,6 +44,13 @@ decodes chunked UTF-8, drains stderr without retaining it, and owns TERM, 100 ms
 KILL escalation and reaping. Parsing and wire projection use the landed parser.
 Mocks use the landed logger-ring scan/follow APIs without spawning.
 
+The publisher advances only on Bun-accepted frames, including frames queued
+under Bun's connection backpressure limit. A dropped frame stops delivery and
+attempts one terminal `follower_exit` notice at the previous checkpoint, or
+`cleared` when retrying a clear notice. If the notice also drops, the socket
+disconnects so Resume uses the client's last received checkpoint. On the same
+session, a cursorless Resume after a drop replays from the proven empty boot.
+
 The spawn registry grows from 75 to 76 entries with `deviceLogs.journalFollow`.
 Tests live in `src/tests/device-logs-follow*.test.ts`; fake schedulers and children
 cover batching and lifecycle, while the real mock ring covers filtered resume and

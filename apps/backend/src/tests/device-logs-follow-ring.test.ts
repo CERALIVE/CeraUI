@@ -99,3 +99,87 @@ test("real ring pending at pause is replayed exactly once after resume", async (
 		"[follow-fixture] pending",
 	]);
 });
+
+test("a dropped middle frame ends follow at the accepted cursor and Resume replays it", async () => {
+	const time = manualClock();
+	const messages: ReturnType<typeof logFollowMessageSchema.parse>[] = [];
+	const conn = {
+		send(frame: string) {
+			const message = logFollowMessageSchema.parse(
+				JSON.parse(frame)["logs.follow"],
+			);
+			if (
+				message.entries[0]?.message === "[follow-fixture] missing" &&
+				messages.length === 1
+			)
+				return 0;
+			messages.push(message);
+			return messages.length === 1 ? -1 : Buffer.byteLength(frame);
+		},
+	};
+	await emit("head");
+	expect((await startFollow(conn, {}, { clock: time.clock })).ok).toBe(true);
+	await emit("accepted");
+	time.advance(250);
+	const accepted = `mock=${logging.getLogRingOffset() + 1}`;
+	await emit("missing");
+	time.advance(250);
+	await emit("later");
+	time.advance(250);
+	expect(
+		messages.map(({ checkpointCursor, ended }) => ({
+			checkpointCursor,
+			ended,
+		})),
+	).toEqual([
+		{ checkpointCursor: accepted, ended: undefined },
+		{ checkpointCursor: accepted, ended: "follower_exit" },
+	]);
+	const afterCursor = messages[1]?.checkpointCursor;
+	if (!afterCursor) throw new Error("missing recovery checkpoint");
+	expect(
+		(await startFollow(conn, { afterCursor }, { clock: time.clock })).ok,
+	).toBe(true);
+	time.advance(250);
+	expect(messages.map((m) => m.entries.map((entry) => entry.message))).toEqual([
+		["[follow-fixture] accepted"],
+		[],
+		["[follow-fixture] missing", "[follow-fixture] later"],
+	]);
+});
+
+test("Resume replays the first dropped frame after a cursorless start", async () => {
+	const time = manualClock();
+	const messages: ReturnType<typeof logFollowMessageSchema.parse>[] = [];
+	let drop = true;
+	const conn = {
+		send(frame: string) {
+			const message = logFollowMessageSchema.parse(
+				JSON.parse(frame)["logs.follow"],
+			);
+			if (drop && message.entries.length > 0) {
+				drop = false;
+				return 0;
+			}
+			messages.push(message);
+			return Buffer.byteLength(frame);
+		},
+	};
+	expect(await startFollow(conn, {}, { clock: time.clock })).toMatchObject({
+		ok: true,
+		checkpointCursor: null,
+	});
+	await emit("first");
+	time.advance(250);
+	expect(messages).toMatchObject([
+		{ ended: "follower_exit", checkpointCursor: null },
+	]);
+	expect(await startFollow(conn, {}, { clock: time.clock })).toMatchObject({
+		ok: true,
+		checkpointCursor: null,
+	});
+	time.advance(250);
+	expect(
+		messages.flatMap((m) => m.entries.map((entry) => entry.message)),
+	).toEqual(["[follow-fixture] first"]);
+});

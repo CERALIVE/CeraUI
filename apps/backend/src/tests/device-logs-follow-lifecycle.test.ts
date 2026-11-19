@@ -45,13 +45,21 @@ test.each([0, 1, 143])(
 test("a fifth socket is busy and replacing a socket reaps its child first", async () => {
 	for (let n = 0; n < 4; n++) {
 		expect(
-			(await startFollow(n === 0 ? f.conn : { send() {} }, {}, f.options)).ok,
+			(
+				await startFollow(
+					n === 0 ? f.conn : { send: Buffer.byteLength },
+					{},
+					f.options,
+				)
+			).ok,
 		).toBe(true);
 	}
-	expect(await startFollow({ send() {} }, {}, f.options)).toEqual({
-		ok: false,
-		error: "BUSY",
-	});
+	expect(await startFollow({ send: Buffer.byteLength }, {}, f.options)).toEqual(
+		{
+			ok: false,
+			error: "BUSY",
+		},
+	);
 	await start();
 	expect(f.children[0]?.signals).toEqual(["SIGTERM"]);
 	expect(f.children.length).toBe(5);

@@ -124,6 +124,7 @@ export function historyInputs(mock: boolean) {
 			messages.push(
 				logFollowMessageSchema.parse(JSON.parse(frame)["logs.follow"]),
 			);
+			return Buffer.byteLength(frame);
 		},
 	});
 	const start = async (conn = socket()) => {
