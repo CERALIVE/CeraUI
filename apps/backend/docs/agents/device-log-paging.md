@@ -35,17 +35,18 @@ preserves the incoming token or returns null on the first page. Query options
 contain only the direction and an optional inclusive cursor, never native time
 bounds or line limits.
 
-Event location uses one bounded reverse app-source scan in journal cursor order.
+Event location first seeks forward with rounded native realtime bounds around
+the requested time, scoped to the selected boot and app unit. If the seek
+misses or spends its budget, a bounded reverse scan without native time
+pruning can recover records hidden by a clock step.
 The parser recognizes the event producer's `module: "events"`, `msg: "event"`
 and string `meta.event_id` before formatting the display message. The scan
 requires an exact case-sensitive ID and inclusive five-second membership on
-each side, without native realtime pruning when the clock steps. The first
+each side on both passes, independently of the native seek. The first
 matching entry becomes the exact anchor, excluded from both surrounding
-50-entry pages. The seek and enclosing pages retain their first decisive
-result and let the bounded reader settle without requesting an early stop, so
-a short native scan may finish before its stdout is processed. A budget cut
-without an anchor returns `READ_FAILED`. At EOF
-without a match, two independent
+50-entry pages. The seek stops at a verified record and the surrounding scans
+stop at lookahead or an expired cursor. The reader still joins the child.
+When neither bounded seek verifies the event, two independent
 pages scan the boot in opposite directions with membership windows
 `max(0, at - 60000) <= ts <= at` and `at < ts <= at + 60000`. At timestamp zero,
 the older query omits its redundant lower bound so its wire range stays valid.

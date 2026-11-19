@@ -41,6 +41,7 @@ export interface ScanJournalOptions {
 	readonly options: string[];
 	readonly matches: string[];
 	readonly signal?: AbortSignal;
+	readonly acceptConcurrentCleanExit?: true;
 	readonly limits?: Partial<Record<keyof typeof JOURNAL_LIMITS, number>>;
 	readonly onRecord: (record: RawJournalRecord) => "continue" | "stop";
 	readonly spawn?: (argv: string[]) => JournalChild;
@@ -228,9 +229,17 @@ export async function scanJournal(
 			retirement.disarm();
 		}
 	}
-	const termination = classifyTermination(exitCode, child.signalCode, {
+	const signalCode = child.signalCode;
+	const signals = retirement.signals;
+	const cleanConcurrentExit =
+		input.acceptConcurrentCleanExit === true &&
+		exitCode === 0 &&
+		signalCode === null;
+	const termination = classifyTermination(exitCode, signalCode, {
 		status,
-		...retirement.signals,
+		...signals,
+		// Physical EOF still requires both pipes; a concurrent exit owns no signal.
+		diedBeforeOurSignal: signals.diedBeforeOurSignal && !cleanConcurrentExit,
 	});
 	if (retirement.failure || termination === "READ_FAILED")
 		throw new JournalReadError(

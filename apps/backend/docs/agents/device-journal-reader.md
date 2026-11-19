@@ -53,7 +53,8 @@ ID remain unproven. No notice text is inferred or manufactured here.
 `mockJournal = { scan, follow }`. Callers choose it through `shouldUseMocks()`.
 Scans accept the reader's options excluding `spawn`, share its bounds and
 results, and use the real redacted logger ring without spawning. Positions
-support forward/reverse traversal and inclusive/exclusive mock cursors.
+support forward/reverse traversal, inclusive/exclusive mock cursors, and the
+forward time hint used for exact event seeks.
 Compiled field groups apply before delivery; residuals remain with callers.
 The cursor is `mock=<seq>` using the logger's monotonic eviction/clear offset.
 Boot identity comes only from `currentBootId()`.
@@ -134,16 +135,17 @@ Only zero normal exit establishes physical EOF; cancellation never does.
 
 ### Observable death before a reader signal
 
-The classifier also receives `diedBeforeOurSignal`. When true, every cell in
-the termination table is `READ_FAILED`, including a normal zero exit whose death
-was already visible before the reader's first signal attempt. It is not evidence
-of a cancellation caused by the reader. An exit already learned before retirement
-does not cause a signal attempt and retains the no-signals table behavior.
+The classifier also receives `diedBeforeOurSignal`. Normally, when true, every
+cell in the termination table is `READ_FAILED`. Around history scans can accept
+a reaped normal zero exit observed during retirement because a verified record
+or a bounded partial result needs no cancellation proof. A decisive callback
+stop or a budget cut still cannot certify EOF. No signal exit is reader-owned
+if death preceded the first signal.
 
 | Observation before signaling | `diedBeforeOurSignal` | Signals claimed | Normal 0 | Normal nonzero, including 137/143 | TERM death | KILL death | Other signal |
 |---|---|---|---|---|---|---|---|
-| Already dead before first TERM | true | none | F | F | F | F | F |
-| ESRCH on first TERM | true | none | F | F | F | F | F |
+| Already dead before first TERM | true | none | F unless around scan | F | F | F | F |
+| ESRCH on first TERM | true | none | F unless around scan | F | F | F | F |
 | Alive/unknown before first TERM | false | only successfully attempted signals | prior table | F | prior table | prior table | F |
 | Already dead before escalation after valid TERM | false | TERM only | prior table | F | S/B | F | F |
 | Alive/unknown before escalation after valid TERM | false | TERM and successful KILL attempt | prior table | F | S/B | S/B | F |

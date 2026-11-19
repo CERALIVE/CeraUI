@@ -22,29 +22,33 @@ export async function locatePagesAround(
 		const since = Math.max(0, input.at - 5000);
 		const until = Math.min(MAX_TIMESTAMP, input.at + 5000);
 		const scan = shouldUseMocks() ? scanMockJournal : scanJournal;
-		const result = await scan({
-			// Realtime can move backward within the journal's traversal order.
-			options: ["-r"],
-			matches: compileFilter({ sources: ["app"] }, { bootId: input.bootId })
-				.matches,
-			signal: scope.signal,
-			onRecord(record) {
-				if (
-					found.record !== null ||
-					record.source !== "app" ||
-					record.eventId !== input.eventId ||
-					record.ts < since ||
-					record.ts > until
-				)
-					return "continue";
-				found.record = record;
-				// A short native scan can exit before a requested stop is observed.
-				// Keep the first match and let the bounded reader settle normally.
-				return "continue";
-			},
-		});
-		if (result.status !== "eof" && found.record === null)
-			return { ok: false, error: "READ_FAILED" };
+		const scanForEvent = (options: string[]) =>
+			scan({
+				options,
+				matches: compileFilter({ sources: ["app"] }, { bootId: input.bootId })
+					.matches,
+				signal: scope.signal,
+				acceptConcurrentCleanExit: true,
+				onRecord(record) {
+					if (
+						record.source !== "app" ||
+						record.eventId !== input.eventId ||
+						record.ts < since ||
+						record.ts > until
+					)
+						return "continue";
+					found.record = record;
+					return "stop";
+				},
+			});
+		// Round outwards for native microseconds; exact membership uses floored milliseconds.
+		await scanForEvent([
+			`--since=@${Math.floor(since / 1000)}`,
+			`--until=@${Math.floor(until / 1000) + 1}`,
+		]);
+		// Native time pruning can hide entries after a clock step.
+		if (found.record === null && !scope.signal.aborted)
+			await scanForEvent(["-r"]);
 	}
 	const anchor = found.record;
 	const olderQuery = logQueryInputSchema.parse({
@@ -75,8 +79,7 @@ export async function locatePagesAround(
 	const pageScope = {
 		...scope,
 		bootId: input.bootId,
-		// An already-exited child cannot establish that we owned its stop.
-		settleNaturally: true,
+		acceptConcurrentCleanExit: true as const,
 	};
 	// Internal anchor tokens use exactly the same binding as ordinary continuation.
 	const fromAnchor = (query: typeof olderQuery) =>

@@ -66,7 +66,22 @@ function snapshot(options: string[], bootId: string | undefined): MockFields[] {
 		(option) =>
 			option.startsWith("--cursor=") || option.startsWith("--after-cursor="),
 	);
-	if (!position) return records;
+	if (!position) {
+		const since = options.find((option) => option.startsWith("--since=@"));
+		const until = options.find((option) => option.startsWith("--until=@"));
+		if (since === undefined || until === undefined) return records;
+		const lower = Number(since.slice("--since=@".length)) * 1_000_000;
+		const upper = Number(until.slice("--until=@".length)) * 1_000_000;
+		const start = records.findIndex(
+			(record) => Number(record.__REALTIME_TIMESTAMP) >= lower,
+		);
+		if (start === -1) return [];
+		const end = records.findIndex(
+			(record, index) =>
+				index >= start && Number(record.__REALTIME_TIMESTAMP) > upper,
+		);
+		return records.slice(start, end === -1 ? undefined : end);
+	}
 	const cursor = position.slice(position.indexOf("=") + 1);
 	const index = records.findIndex((record) => record.__CURSOR === cursor);
 	return index < 0

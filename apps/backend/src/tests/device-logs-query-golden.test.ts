@@ -122,10 +122,10 @@ test("service option and match combinations replay against the systemd fixture",
 	const hint = fixture.scan.mock.calls[0]?.[0];
 	if (!hint) throw new Error("around did not seek");
 	rows.push({
-		name: "event seek without realtime bounds",
+		name: "event seek with realtime hint",
 		options: hint.options,
 		matches: hint.matches,
-		ids: "m6 m4 m1",
+		ids: "m1 m4 m6",
 	});
 	for (const at of [
 		0,
@@ -152,9 +152,18 @@ test("service option and match combinations replay against the systemd fixture",
 			name: `event seek at ${at}`,
 			options: seek.options,
 			matches: seek.matches,
-			ids: "m6 m4 m1",
+			ids: "",
 		});
 	}
+	const fallback = fixture.scan.mock.calls[1]?.[0];
+	if (!fallback)
+		throw new Error("around did not retry without the realtime hint");
+	rows.push({
+		name: "event seek fallback without realtime bounds",
+		options: fallback.options,
+		matches: fallback.matches,
+		ids: "m6 m4 m1",
+	});
 	const text = `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`;
 	const path = new URL(
 		"../../test-harness/journal-conformance/query/golden-argv.txt",

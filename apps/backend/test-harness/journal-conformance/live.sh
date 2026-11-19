@@ -89,9 +89,16 @@ sync_journal
 event_row="$("${J[@]}" "_BOOT_ID=$boot" _SYSTEMD_UNIT=ceralive.service |
 	jq -ser --arg id "${boot:0:8}-1" \
 	'map(select(.MESSAGE | contains("\"event_id\":\"" + $id + "\""))) | if length == 1 then .[0] else error("expected one producer record") end')"
-(cd /state && ./around-probe lookup "$boot" \
-	"$(jq -r '.__REALTIME_TIMESTAMP | tonumber / 1000 | floor' <<<"$event_row")" \
-	"$(jq -r '.__CURSOR' <<<"$event_row")")
+event_at="$(jq -r '.__REALTIME_TIMESTAMP | tonumber / 1000 | floor' <<<"$event_row")"
+event_cursor="$(jq -r '.__CURSOR' <<<"$event_row")"
+(cd /state && ./around-probe lookup "$boot" "$event_at" "$event_cursor")
+systemd-run --quiet --wait --collect --unit=ceralive --property=LogRateLimitIntervalSec=0 \
+	sh -c 'i=0; while [ "$i" -lt 10000 ]; do printf "<7>anchor depth %s\n" "$i"; i=$((i+1)); done'
+sync_journal
+equal 'ten thousand newer CeraLive app lines stored' \
+	"$("${J[@]}" -r -n 10000 "_BOOT_ID=$boot" _SYSTEMD_UNIT=ceralive.service |
+		jq -rs 'map(select(.MESSAGE | startswith("anchor depth "))) | length')" 10000
+(cd /state && ./around-probe lookup-deep "$boot" "$event_at" "$event_cursor")
 
 systemd-run --quiet --wait --unit=pfx sh -c 'printf "<3>err line\n<4>warn line\n<7>debug line\nplain line\n<3>a\nb\n"'
 sync_journal

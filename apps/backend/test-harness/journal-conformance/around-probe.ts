@@ -29,7 +29,7 @@ if (action === "emit") {
 		}),
 	);
 	console.log(`free-text mention of ${eventId}`);
-} else if (action === "lookup" && rawAt !== undefined && cursor) {
+} else if ((action === "lookup" || action === "lookup-deep") && rawAt !== undefined && cursor) {
 	const located = await locatePagesAround(
 		{ bootId, at: Number(rawAt), eventId },
 		{ epoch: 0, signal: new AbortController().signal },
@@ -37,13 +37,17 @@ if (action === "emit") {
 	if (!located.ok) throw new Error(located.error);
 	equal(located.approximate, false);
 	equal(located.anchor?.cursor, cursor);
+	const app = located.newer.entries.filter(({ source }) => source === "app");
 	deepStrictEqual(
-		located.newer.entries
-			.filter(({ source }) => source === "app")
-			.map(({ message }) => message),
+		(action === "lookup-deep" ? app.slice(0, 2) : app).map(({ message }) => message),
 		[`[events] event {"event_id":"${eventId}0"}`, `free-text mention of ${eventId}`],
 	);
-	console.log("PASS live: exact event producer anchor survives suffix and free-text collisions");
+	if (action === "lookup-deep") {
+		equal(located.newer.termination, "lookahead");
+		console.log("PASS live: deep event producer anchor survives ten thousand newer app records");
+	} else {
+		console.log("PASS live: exact event producer anchor survives suffix and free-text collisions");
+	}
 } else {
 	throw new TypeError("expected emit or lookup with the fixture anchor");
 }

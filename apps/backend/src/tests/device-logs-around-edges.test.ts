@@ -15,12 +15,15 @@ beforeEach(() => {
 });
 afterEach(() => fixture.restore());
 test.each([1, 1000, 4999, 5001, 5999, 6001])(
-	"seek at %i ms traverses without native realtime bounds",
+	"seek at %i ms rounds native bounds outward",
 	async (at) => {
 		fixture.scan.mockImplementationOnce(async (input) => {
-			expect(input.options).toEqual(["-r"]);
+			expect(input.options).toEqual([
+				`--since=@${Math.floor(Math.max(0, at - 5000) / 1000)}`,
+				`--until=@${Math.floor((at + 5000) / 1000) + 1}`,
+			]);
 			expect(input.onRecord(record(at, { MESSAGE: eventMessage }))).toBe(
-				"continue",
+				"stop",
 			);
 			return { status: "eof", exitCode: 0, skippedRecords: 0 };
 		});
@@ -81,8 +84,14 @@ test.each([
 		expect(result.anchor?.ts ?? null).toBe(approximate ? null : ts);
 	},
 );
-test("the first in-range exact match wins in reverse cursor order across a clock step", async () => {
+test("a clock step can hide an in-range match from native bounds but not the reverse fallback", async () => {
+	fixture.scan.mockImplementationOnce(async () => ({
+		status: "eof",
+		exitCode: 0,
+		skippedRecords: 0,
+	}));
 	fixture.scan.mockImplementationOnce(async (input) => {
+		expect(input.options).toEqual(["-r"]);
 		return journal([
 			record(1, { MESSAGE: eventMessage }),
 			record(2, { MESSAGE: eventMessage }),

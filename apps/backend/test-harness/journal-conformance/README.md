@@ -15,6 +15,8 @@ messages, including an app message that starts with `srtla_send: ` and separate
 sender Error and Debug filters. `live.sh` asserts daemon behavior:
 priorities, backlog and follow, excluded anchors, restart, suppression, rotation,
 vacuum, predecessor accounting, boot boundaries and clean versus killed boots.
+The live event probe verifies the exact producer cursor and neighboring
+collision controls both before and after ten thousand newer app entries.
 It refuses to run outside the explicitly marked disposable container.
 
 Only the live container is privileged. Packages install into its writable layer;

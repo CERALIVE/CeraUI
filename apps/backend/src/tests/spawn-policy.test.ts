@@ -108,7 +108,7 @@ describe("spawn-policy registry consistency", () => {
 			file: "modules/device-logs/reader.ts",
 			symbol: "scanJournal",
 			command:
-				"[journalctl, -o, json, --all, fixed fields, internal options, --, compiled matches]",
+				"[journalctl, -o, json, --all, fixed fields, internal options (including event seek time bounds), --, compiled matches]",
 			class: "bounded-command",
 			status: "enforced",
 			contract: {

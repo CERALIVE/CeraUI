@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { logAroundOutputSchema } from "@ceraui/rpc/schemas";
 import { locateAround, queryLogs } from "../modules/device-logs/query.ts";
+import { scanJournal } from "../modules/device-logs/reader.ts";
+import { fakeJournal, journalLine } from "./helpers/device-journal.ts";
 import {
 	bootId,
 	eventMessage,
@@ -10,6 +12,7 @@ import {
 	socket,
 } from "./helpers/device-query.ts";
 
+const realScan = scanJournal;
 let fixture: ReturnType<typeof queryFixture>;
 beforeEach(() => {
 	fixture = queryFixture();
@@ -20,7 +23,7 @@ test("an event anchor is excluded from two resumable surrounding pages", async (
 		record(n, { MESSAGE: n === 60 ? eventMessage : `row ${n}` }),
 	);
 	fixture.scan.mockImplementationOnce(async (input) => {
-		expect(input.options).toEqual(["-r"]);
+		expect(input.options).toEqual(["--since=@0", "--until=@6"]);
 		expect(input.matches).toContain("_SYSTEMD_UNIT=ceralive.service");
 		return journal(rows)(input);
 	});
@@ -92,12 +95,88 @@ test("unknown boots fail before seeking an event", async () => {
 	);
 	expect(fixture.scan).not.toHaveBeenCalled();
 });
-test("a budget cut before a match cannot prove the event is absent", async () => {
-	fixture.scan.mockImplementationOnce(journal([record(1)], 0));
-	fixture.scan.mockImplementation(journal([record(1)]));
+test("budget exhaustion on both seeks returns approximate neighboring entries", async () => {
+	const rows = [record(1), record(2), record(3)];
+	fixture.scan.mockImplementationOnce(journal(rows, 0));
+	fixture.scan.mockImplementationOnce(journal(rows, 0));
+	fixture.scan.mockImplementation(journal(rows));
 	expect(
-		await locateAround(socket(), { bootId, at: 1, eventId: "event-id" }),
-	).toEqual({ ok: false, error: "READ_FAILED" });
+		await locateAround(socket(), { bootId, at: 2, eventId: "event-id" }),
+	).toMatchObject({
+		ok: true,
+		anchor: null,
+		approximate: true,
+		older: { entries: [{ cursor: "s=2" }, { cursor: "s=1" }] },
+		newer: { entries: [{ cursor: "s=3" }] },
+	});
+});
+
+test("a timestamp seek finds an exact event behind ten thousand newer app records", async () => {
+	const appLine = (n: number, message: string) =>
+		journalLine({
+			__CURSOR: `s=${n}`,
+			__REALTIME_TIMESTAMP: String(n * 1_000_000),
+			_SYSTEMD_UNIT: "ceralive.service",
+			MESSAGE: message,
+		});
+	const head = Array.from({ length: 10_000 }, (_, i) =>
+		appLine(i + 120, "app debug"),
+	);
+	const anchor = appLine(100, eventMessage);
+	fixture.scan.mockImplementationOnce((input) => {
+		const child = fakeJournal(
+			input.options.includes("--until=@106")
+				? [anchor]
+				: [...head.reverse(), anchor],
+			{ held: true },
+		);
+		child.endOutput();
+		return realScan({ ...input, spawn: () => child.child });
+	});
+	fixture.scan.mockImplementation(
+		journal([
+			record(99, { __REALTIME_TIMESTAMP: "99000000" }),
+			record(100, { __REALTIME_TIMESTAMP: "100000000", MESSAGE: eventMessage }),
+			record(101, { __REALTIME_TIMESTAMP: "101000000" }),
+		]),
+	);
+
+	expect(
+		await locateAround(socket(), { bootId, at: 100_000, eventId: "event-id" }),
+	).toMatchObject({
+		ok: true,
+		approximate: false,
+		anchor: { cursor: "s=100", ts: 100_000 },
+		older: { entries: [{ cursor: "s=99" }] },
+		newer: { entries: [{ cursor: "s=101" }] },
+	});
+});
+
+test("a completed surrounding page survives unreadable records after lookahead", async () => {
+	const anchor = record(100, { MESSAGE: eventMessage });
+	fixture.scan.mockImplementationOnce(journal([anchor]));
+	const lines = Array.from({ length: 52 }, (_, i) =>
+		journalLine({
+			__CURSOR: `s=${100 - i}`,
+			_SYSTEMD_UNIT: "ceralive.service",
+		}),
+	);
+	const child = fakeJournal([...lines, "{unreadable}\n"]);
+	fixture.scan.mockImplementationOnce((input) =>
+		realScan({ ...input, spawn: () => child.child }),
+	);
+	fixture.scan.mockImplementation(journal([anchor]));
+
+	const result = await locateAround(socket(), {
+		bootId,
+		at: 100,
+		eventId: "event-id",
+	});
+	if (!result.ok) throw new Error(result.error);
+	expect(result.older.termination).toBe("lookahead");
+	expect(result.older.entries.map((entry) => entry.cursor)).toEqual(
+		Array.from({ length: 50 }, (_, i) => `s=${99 - i}`),
+	);
 });
 test("an exact anchor survives budget exhaustion after its record is read", async () => {
 	const rows = [record(1), record(2, { MESSAGE: eventMessage })];

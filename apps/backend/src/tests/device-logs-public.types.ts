@@ -66,6 +66,7 @@ interface ExpectedOptions {
 	readonly options: string[];
 	readonly matches: string[];
 	readonly signal?: AbortSignal;
+	readonly acceptConcurrentCleanExit?: true;
 	readonly limits?: Partial<Record<keyof ExpectedLimits, number>>;
 	readonly onRecord: (record: ExpectedRaw) => "continue" | "stop";
 	readonly spawn?: (argv: string[]) => ExpectedChild;

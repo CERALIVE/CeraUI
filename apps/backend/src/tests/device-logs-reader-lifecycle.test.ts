@@ -165,6 +165,24 @@ test("a nonzero exit predating a requested stop cannot masquerade as success", a
 	).rejects.toMatchObject({ code: "READ_FAILED" });
 });
 
+test("an around scan can accept a reaped clean exit without claiming a signal or EOF", async () => {
+	const fake = fakeJournal([journalLine()], { held: true });
+	const result = await scanJournal({
+		...scanInput,
+		acceptConcurrentCleanExit: true,
+		spawn: () => ({
+			...fake.child,
+			get exitCode() {
+				fake.finish();
+				return 0;
+			},
+		}),
+		onRecord: () => "stop",
+	});
+	expect(result).toEqual({ status: "stopped", exitCode: 0, skippedRecords: 0 });
+	expect(fake.signals).toEqual([]);
+});
+
 test("successful EOF clears timers and removes abort ownership", async () => {
 	const time = manualClock();
 	const controller = new AbortController();

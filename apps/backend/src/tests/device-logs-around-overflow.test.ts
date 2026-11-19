@@ -107,7 +107,13 @@ test.each(extremes)(
 		);
 		expect(result).toMatchObject({ ok: true, anchor: null, approximate: true });
 		const first = fixture.scan.mock.calls[0]?.[0];
-		expect(first?.options).toEqual(["-r"]);
+		const center = BigInt(at);
+		const since = center < 5000n ? 0n : center - 5000n;
+		const until = center + 5000n < BigInt(max) ? center + 5000n : BigInt(max);
+		expect(first?.options).toEqual([
+			`--since=@${since / 1000n}`,
+			`--until=@${until / 1000n + 1n}`,
+		]);
 	},
 );
 

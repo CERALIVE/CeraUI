@@ -21,7 +21,7 @@ export async function scanPage(
 		readonly bootId: string | null;
 		readonly epoch: number;
 		readonly signal: AbortSignal;
-		readonly settleNaturally?: boolean;
+		readonly acceptConcurrentCleanExit?: true;
 	},
 ): Promise<LogQueryOutput> {
 	const binding = bindQuery(query, scope.bootId, scope.epoch);
@@ -72,6 +72,9 @@ export async function scanPage(
 		options,
 		matches,
 		signal: scope.signal,
+		...(scope.acceptConcurrentCleanExit === true && {
+			acceptConcurrentCleanExit: true,
+		}),
 		onRecord(record) {
 			if (window.invalid || window.lookahead || reachedGapEnd)
 				return "continue";
@@ -83,8 +86,7 @@ export async function scanPage(
 			}
 			window = advancePage(window, record, query);
 			reachedGapEnd = !window.lookahead && record.cursor === gap?.through;
-			return !scope.settleNaturally &&
-				(window.invalid || window.lookahead || reachedGapEnd)
+			return window.invalid || window.lookahead || reachedGapEnd
 				? "stop"
 				: "continue";
 		},

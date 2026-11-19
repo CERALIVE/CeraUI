@@ -40,7 +40,7 @@ Events: [device-events.md](device-events.md).
 | Follow | `journalctl -f -o json --all --output-fields=<...> [--cursor=<c>] --lines=all -- <matches>` | `follow.ts:161-164,248-258` |
 | Follow position probe | options `-r`, or `--cursor=<afterCursor>` | `follow-position.ts:11` |
 | Paging | options `-r` for `direction: "older"`; `--cursor=<decoded cursor>` when continuing | `scan-page.ts:28-29` |
-| Around event-id seek | option `-r`; matches compiled for source `app` and the event's boot; the scan retains the first exact parsed producer ID within the five-second realtime window | `around.ts` |
+| Around event-id seek | `--since=@<seconds>` and `--until=@<seconds>`, then `-r` without time bounds if needed. Both scans match the `app` scope and event boot and require the exact parsed producer ID within five seconds | `around.ts` |
 | Storage oldest entry / recent sample | options none / `-r` | `storage.ts:33,57` |
 | Shutdown window | options `-r` (tail) or none (head) | `shutdown-window.ts:14` |
 | Boot list | `journalctl --list-boots -o json` | `boots.ts:41` |
