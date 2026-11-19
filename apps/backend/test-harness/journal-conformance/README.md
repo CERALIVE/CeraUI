@@ -18,6 +18,9 @@ vacuum, predecessor accounting, boot boundaries and clean versus killed boots.
 The live event probe verifies the exact producer cursor and neighboring
 collision controls both before and after ten thousand newer app entries.
 It refuses to run outside the explicitly marked disposable container.
+The fixture also runs the around reader against a journal with a missing
+event ID and five thousand out-of-window records on each side. It checks
+the retained neighbors, exact millisecond membership, and budget cutoffs.
 
 Only the live container is privileged. Packages install into its writable layer;
 no temporary image is built, and no image is removed. A unique named volume

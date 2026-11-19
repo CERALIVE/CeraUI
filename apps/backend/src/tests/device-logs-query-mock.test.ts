@@ -149,3 +149,49 @@ test.each([false, true])(
 		);
 	},
 );
+
+test("mock approximate pages preserve clock-step order and exact time membership", async () => {
+	spyOn(mocks, "shouldUseMocks").mockReturnValue(true);
+	spyOn(store, "readBoots").mockReturnValue([]);
+	const bootId = currentBootId();
+	if (!bootId) throw new Error("missing current boot");
+	const at = 1_700_000_000_500;
+	const rows = [
+		[-40, "older before step"],
+		[-61_000, "clock steps back"],
+		[0, "at the requested time"],
+		[1, "newer before step"],
+		[61_000, "clock steps forward"],
+		[100, "newer after step"],
+	] as const;
+	const ring = spyOn(logging, "getRecentLogLines").mockReturnValue(
+		rows.map(([offset, msg]) =>
+			JSON.stringify({
+				ts: new Date(at + offset).toISOString(),
+				level: "info",
+				msg,
+			}),
+		),
+	);
+	try {
+		const result = await locateAround(socket(), {
+			bootId,
+			at,
+			eventId: "absent",
+		});
+		if (!result.ok) throw new Error(result.error);
+		expect(result).toMatchObject({ approximate: true, anchor: null });
+		expect(result.older.entries.map((row) => row.message)).toEqual([
+			"at the requested time",
+			"older before step",
+		]);
+		expect(result.newer.entries.map((row) => row.message)).toEqual([
+			"newer before step",
+			"newer after step",
+		]);
+		expect(result.older.termination).toBe("end");
+		expect(result.newer.termination).toBe("end");
+	} finally {
+		ring.mockRestore();
+	}
+});

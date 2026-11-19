@@ -42,6 +42,7 @@ bun build --compile "$here/around-probe.ts" --outfile "$state/around-probe"
 docker run --pull=never --rm -i --name "$fixture" \
 	-v "$here:/conformance:ro" \
 	-v "$state/reader-probe:/reader-probe:ro" \
+	-v "$state/around-probe:/around-probe:ro" \
 	-e CONFORMANCE_SELFTEST="${CONFORMANCE_SELFTEST:-0}" debian:trixie bash -s <"$here/fixture.sh"
 docker volume create "$volume"
 created_volume=1

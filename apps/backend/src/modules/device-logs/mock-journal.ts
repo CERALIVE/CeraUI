@@ -61,7 +61,8 @@ function snapshot(options: string[], bootId: string | undefined): MockFields[] {
 	const records = getRecentLogLines().map((line, index) =>
 		fields(line, offset + index, bootId),
 	);
-	if (options.includes("-r")) records.reverse();
+	const reverse = options.includes("-r");
+	if (reverse) records.reverse();
 	const position = options.find(
 		(option) =>
 			option.startsWith("--cursor=") || option.startsWith("--after-cursor="),
@@ -72,13 +73,18 @@ function snapshot(options: string[], bootId: string | undefined): MockFields[] {
 		if (since === undefined || until === undefined) return records;
 		const lower = Number(since.slice("--since=@".length)) * 1_000_000;
 		const upper = Number(until.slice("--until=@".length)) * 1_000_000;
-		const start = records.findIndex(
-			(record) => Number(record.__REALTIME_TIMESTAMP) >= lower,
+		const start = records.findIndex((record) =>
+			reverse
+				? Number(record.__REALTIME_TIMESTAMP) <= upper
+				: Number(record.__REALTIME_TIMESTAMP) >= lower,
 		);
 		if (start === -1) return [];
 		const end = records.findIndex(
 			(record, index) =>
-				index >= start && Number(record.__REALTIME_TIMESTAMP) > upper,
+				index >= start &&
+				(reverse
+					? Number(record.__REALTIME_TIMESTAMP) < lower
+					: Number(record.__REALTIME_TIMESTAMP) > upper),
 		);
 		return records.slice(start, end === -1 ? undefined : end);
 	}

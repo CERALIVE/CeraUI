@@ -117,4 +117,20 @@ source /conformance/query/replay.sh
 	gen 1700000007000000 8000000 ceralive.service stdout 7 '{"ts":"2026-01-01","level":"debug","msg":"srtla_send: 2026-11-19T10:00:00.000000Z TRACE retry failed","processSource":"srtla_send"}'
 } | /usr/lib/systemd/systemd-journal-remote -o /fx/reader.journal -
 /reader-probe /fx/reader.journal
+{
+	for ((i = 1; i <= 5000; i++)); do
+		gen 1699999939000000 "$i" ceralive.service stdout 6 'distant older'
+	done
+	gen 1700000000499321 5001 ceralive.service stdout 6 'just older'
+	gen 1700000000500321 5002 ceralive.service stdout 6 'at the requested time'
+	gen 1700000000501321 5003 ceralive.service stdout 6 'just newer'
+	for ((i = 5004; i <= 10003; i++)); do
+		gen 1700000062000000 "$i" ceralive.service stdout 6 'distant newer'
+	done
+} | /usr/lib/systemd/systemd-journal-remote -o /fx/around.journal -
+mkdir /fx/bin
+printf '#!/bin/sh\nexec /usr/bin/journalctl --file=/fx/around.journal "$@"\n' >/fx/bin/journalctl
+chmod +x /fx/bin/journalctl
+printf '{"hw":"n100","apt_update_enabled":false}\n' >/fx/setup.json
+(cd /fx && PATH="/fx/bin:$PATH" /around-probe lookup-approximate aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 1700000000500)
 echo 'FIXTURE OK systemd 257'

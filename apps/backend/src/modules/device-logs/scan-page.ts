@@ -15,6 +15,14 @@ import { scanMockJournal } from "./mock-journal.ts";
 import { advancePage, type PageWindow } from "./page-window.ts";
 import { JournalReadError, scanJournal } from "./reader.ts";
 
+/** Round outwards for native microseconds; membership uses floored milliseconds. */
+export function realtimeSeekOptions(since: number, until: number): string[] {
+	return [
+		`--since=@${Math.floor(since / 1000)}`,
+		`--until=@${Math.floor(until / 1000) + 1}`,
+	];
+}
+
 export async function scanPage(
 	query: ParsedQuery,
 	scope: {
@@ -23,6 +31,7 @@ export async function scanPage(
 		readonly signal: AbortSignal;
 		readonly acceptConcurrentCleanExit?: true;
 	},
+	realtimeHint?: readonly [since: number, until: number],
 ): Promise<LogQueryOutput> {
 	const binding = bindQuery(query, scope.bootId, scope.epoch);
 	const position =
@@ -60,6 +69,8 @@ export async function scanPage(
 		return { ok: false, error: "CURSOR_UNAVAILABLE" };
 	const options = query.direction === "older" ? ["-r"] : [];
 	if (start !== null && !bootStart) options.push(`--cursor=${start}`);
+	else if (realtimeHint !== undefined)
+		options.push(...realtimeSeekOptions(...realtimeHint));
 	let reachedGapEnd = false;
 	let window: PageWindow = {
 		entries: [],

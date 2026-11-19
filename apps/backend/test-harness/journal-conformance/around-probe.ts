@@ -48,6 +48,26 @@ if (action === "emit") {
 	} else {
 		console.log("PASS live: exact event producer anchor survives suffix and free-text collisions");
 	}
+} else if (action === "lookup-approximate" && rawAt !== undefined) {
+	const located = await locatePagesAround(
+		{ bootId, at: Number(rawAt), eventId },
+		{ epoch: 0, signal: new AbortController().signal },
+	);
+	if (!located.ok) throw new Error(located.error);
+	equal(located.approximate, true);
+	equal(located.anchor, null);
+	deepStrictEqual(located.older.entries.map(({ message }) => message), [
+		"at the requested time",
+		"just older",
+	]);
+	deepStrictEqual(located.newer.entries.map(({ message }) => message), [
+		"just newer",
+	]);
+	for (const page of [located.older, located.newer]) {
+		equal(page.termination, "budget");
+		equal(page.hasMore, null);
+	}
+	console.log("PASS fixture: approximate window survives five thousand out-of-window rows on each side");
 } else {
 	throw new TypeError("expected emit or lookup with the fixture anchor");
 }

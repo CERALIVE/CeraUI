@@ -46,11 +46,15 @@ each side on both passes, independently of the native seek. The first
 matching entry becomes the exact anchor, excluded from both surrounding
 50-entry pages. The seek stops at a verified record and the surrounding scans
 stop at lookahead or an expired cursor. The reader still joins the child.
-When neither bounded seek verifies the event, two independent
-pages scan the boot in opposite directions with membership windows
-`max(0, at - 60000) <= ts <= at` and `at < ts <= at + 60000`. At timestamp zero,
-the older query omits its redundant lower bound so its wire range stays valid.
-Both replies carry the exact query objects for continuing each page.
+Without an exact anchor, each approximate page starts with rounded realtime
+hints and applies its exact membership window: `max(0, at - 60000) <= ts <= at`
+for older and `at < ts <= at + 60000` for newer. A hinted scan that does not
+reach lookahead retries in the same direction without time pruning to account
+for clock steps. If that retry exhausts its budget, the page reports `budget`
+with unknown `hasMore`. If the hinted scan located rows, the page keeps them
+and continues from the last returned cursor. At timestamp zero, the older query
+omits its redundant lower bound so its wire range stays valid. Both replies
+carry the exact queries for continuing without hints.
 
 Derived upper bounds saturate at the wire timestamp maximum (`Number.MAX_SAFE_INTEGER`).
 When the inclusive newer lower bound reaches that maximum, its redundant upper
