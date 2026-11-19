@@ -434,6 +434,18 @@ jobs:
       - name: Prepare Debian trixie image
         run: docker pull debian:trixie
 
+      - name: Cache Bun install
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-store-${{ hashFiles('CeraUI/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-store-
+
+      - name: Install dependencies
+        working-directory: CeraUI
+        run: bun install --frozen-lockfile
+
       - name: Journal conformance
         working-directory: CeraUI
         run: bun run test:journal-conformance

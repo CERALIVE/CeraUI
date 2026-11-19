@@ -31,29 +31,25 @@ describe("bounded journal stream", () => {
 		expect(fake.signals).toEqual([]);
 	});
 
-	test("static argv requests unabridged fields and consumes compiled matches", async () => {
+	test("journal scan places options before the compiled match boundary", async () => {
 		const fake = fakeJournal([journalLine()]);
+		const options = ["-r", "--cursor=s=1"];
+		const matches = ["_BOOT_ID=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "PRIORITY=3"];
 		let argv: string[] = [];
 		await scanJournal({
 			...scanInput,
-			options: ["-r", "--cursor=s=1"],
-			matches: ["_BOOT_ID=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "PRIORITY=3"],
+			options,
+			matches,
 			spawn(args) {
 				argv = args;
 				return fake.child;
 			},
 		});
-		expect(argv).toEqual([
-			"journalctl",
-			"-o",
-			"json",
-			"--all",
-			"--output-fields=MESSAGE,PRIORITY,_SYSTEMD_UNIT,SYSLOG_IDENTIFIER,_BOOT_ID,_TRANSPORT,MESSAGE_ID,UNIT,_PID",
-			"-r",
-			"--cursor=s=1",
+		const boundary = argv.indexOf("--");
+		expect(argv.slice(boundary - options.length)).toEqual([
+			...options,
 			"--",
-			"_BOOT_ID=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			"PRIORITY=3",
+			...matches,
 		]);
 	});
 

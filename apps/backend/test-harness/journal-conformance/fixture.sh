@@ -101,4 +101,14 @@ check 'clock since forward includes out of range record' 'm3 m4 m5 m6 m7' --sinc
 check 'clock since reverse hides in range records' 'm7 m6' -r --since=@1700000002
 check 'clock until forward cuts by position' 'm1 m2 m3 m4 m5' --until=@1700000003
 source /conformance/query/replay.sh
+# Read a native journal through the delivered reader. The unused field would
+# exceed the reader's test budget if journalctl received no field projection.
+{
+	printf '__REALTIME_TIMESTAMP=1700000000000000\n__MONOTONIC_TIMESTAMP=1000000\n_BOOT_ID=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n_MACHINE_ID=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n'
+	printf '_SYSTEMD_UNIT=ceralive.service\n_TRANSPORT=stdout\nPRIORITY=3\nMESSAGE_ID=a596d6fe7bfa4994828e72309e95d61e\nUNIT=ceralive.service\n_PID=123\n'
+	printf 'MESSAGE=%s\nIGNORED=%09000d\n\n' "${big:0:5000}" 0
+	gen 1700000001000000 2000000 '' kernel 3 'kernel fixture' | head -n -1
+	printf 'SYSLOG_IDENTIFIER=kernel-fixture\n\n'
+} | /usr/lib/systemd/systemd-journal-remote -o /fx/reader.journal -
+/reader-probe /fx/reader.journal
 echo 'FIXTURE OK systemd 257'

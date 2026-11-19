@@ -1,14 +1,16 @@
 # Journal conformance [EXISTS]
 
-Run `bun run test:journal-conformance` from the repository root with Docker and
-an existing `debian:trixie` image. The runner refuses to pull an image.
-CI provisions that image explicitly before invoking the same command.
+Run `bun run test:journal-conformance` from the repository root after
+`bun install --frozen-lockfile`, with Docker and an existing `debian:trixie`
+image. The runner refuses to pull an image. CI provides both prerequisites.
 `CONFORMANCE_SELFTEST=1 bun run test:journal-conformance` deliberately reverses
 the first paging expectation and must fail.
 
 `fixture.sh` imports seven records into a real journal and asserts systemd 257
 paging, filtering, cursor, JSON and clock-step behavior. A second seven-record
-fixture tests a backwards wall-clock step. `live.sh` asserts daemon behavior:
+fixture tests a backwards wall-clock step. A compiled `reader-probe.ts` runs
+the CeraUI scanner against a native fixture to check parsed fields, unabridged
+messages and exclusion of unused fields. `live.sh` asserts daemon behavior:
 priorities, backlog and follow, excluded anchors, restart, suppression, rotation,
 vacuum, predecessor accounting, boot boundaries and clean versus killed boots.
 It refuses to run outside the explicitly marked disposable container.

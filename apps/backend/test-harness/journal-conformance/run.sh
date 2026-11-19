@@ -37,8 +37,10 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+bun build --compile "$here/reader-probe.ts" --outfile "$state/reader-probe"
 docker run --pull=never --rm -i --name "$fixture" \
 	-v "$here:/conformance:ro" \
+	-v "$state/reader-probe:/reader-probe:ro" \
 	-e CONFORMANCE_SELFTEST="${CONFORMANCE_SELFTEST:-0}" debian:trixie bash -s <"$here/fixture.sh"
 docker volume create "$volume"
 created_volume=1
