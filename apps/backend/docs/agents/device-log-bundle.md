@@ -38,7 +38,10 @@ replacement is counted once. The pattern pass masks 15-digit identifiers,
 19/20-digit ICCIDs beginning with 89, MAC suffixes, IPv4 outside the specified
 private/loopback/link-local/CGNAT ranges, global unicast IPv6 (`2000::/3`),
 decimal coordinate pairs, and the logger's Bearer/PASETO/JWT shapes. IPv6
-masking includes compressed and IPv4-embedded forms and zone identifiers.
+masking includes compressed forms and zone identifiers. IPv4-mapped and
+`64:ff9b::/96` addresses follow the embedded IPv4 policy in dotted and
+hexadecimal forms. Other nonlocal IPv6 literals still get dotted IPv4
+masking when no whole-address mask applies.
 Bracketed endpoints keep their port, as in `[IP]:9000`. Link-local IPv6
 (`fe80::/10`), unique local IPv6 (`fc00::/7`), and `::1` remain visible.
 The first three MAC octets and private IPv4 remain useful diagnostics.

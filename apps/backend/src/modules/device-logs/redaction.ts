@@ -9,6 +9,17 @@ export class BundleReadError extends Error {
 const percentCase = (value: string) =>
 	value.replace(/%[0-9a-f]{2}/gi, (part) => part.toLowerCase());
 
+function isLocalIPv4(a: number, b: number): boolean {
+	return (
+		a === 10 ||
+		a === 127 ||
+		(a === 172 && b >= 16 && b <= 31) ||
+		(a === 192 && b === 168) ||
+		(a === 169 && b === 254) ||
+		(a === 100 && b >= 64 && b <= 127)
+	);
+}
+
 interface Redactor {
 	structured(value: string | number | boolean | null): void;
 	text(value: string): { readonly text: string; readonly redactions: number };
@@ -79,8 +90,12 @@ export function buildRedactor(
 						known: true,
 					});
 			}
-			const addresses: Array<{ readonly start: number; readonly end: number }> =
-				[];
+			const addresses: Array<{
+				readonly start: number;
+				readonly end: number;
+				readonly masked: boolean;
+				readonly local: boolean;
+			}> = [];
 			for (const match of value.matchAll(
 				/(?<![\w.])(?<![\da-f:]:)[\da-f]{0,4}:[\da-f:.]+(?:%[\w.~-]+)?(?![\w:%]|\.[\w:.])/gi,
 			)) {
@@ -89,8 +104,25 @@ export function buildRedactor(
 				if (!isIPv6(host)) continue;
 				const start = match.index;
 				const end = start + address.length;
-				addresses.push({ start, end });
-				if (/^[23][\da-f]{3}:/i.test(host)) {
+				let masked = /^[23][\da-f]{3}:/i.test(host);
+				if (!masked && /(?:ffff|ff9b):/i.test(host)) {
+					const canonical = new URL(`http://[${host}]`).hostname;
+					const mapped = /^\[::ffff:([\da-f]+):[\da-f]+\]$/.exec(canonical);
+					const translated = /^\[64:ff9b::(?:([\da-f]+):)?[\da-f]*\]$/.exec(
+						canonical,
+					);
+					if (mapped || translated) {
+						// A single translated hextet is the low 16 bits.
+						const high = Number.parseInt(
+							mapped?.[1] ?? translated?.[1] ?? "0",
+							16,
+						);
+						masked = !isLocalIPv4(high >>> 8, high & 255);
+					}
+				}
+				const local = /^(?:f[cd][\da-f]{2}|fe[89ab][\da-f]):/i.test(host);
+				addresses.push({ start, end, masked, local });
+				if (masked) {
 					const bracketed = value[start - 1] === "[" && value[end] === "]";
 					spans.push({
 						start: bracketed ? start - 1 : start,
@@ -102,20 +134,24 @@ export function buildRedactor(
 			}
 			const mask = (
 				pattern: RegExp,
-				replacement: (match: string) => string,
-				addressFragment = false,
+				replacement: (
+					match: string,
+					address?: (typeof addresses)[number],
+				) => string,
+				addressContext = false,
 			) => {
 				let addressIndex = 0;
 				for (const match of value.matchAll(pattern)) {
 					const end = match.index + match[0].length;
-					if (addressFragment) {
+					let containing: (typeof addresses)[number] | undefined;
+					if (addressContext) {
 						let address = addresses[addressIndex];
 						while (address && address.end <= match.index)
 							address = addresses[++addressIndex];
 						if (address && address.start <= match.index && end <= address.end)
-							continue;
+							containing = address;
 					}
-					const next = replacement(match[0]);
+					const next = replacement(match[0], containing);
 					if (next !== match[0])
 						spans.push({
 							start: match.index,
@@ -129,7 +165,8 @@ export function buildRedactor(
 			mask(/(?<!\d)\d{15}(?!\d)/g, () => "[ID]");
 			mask(
 				/\b[0-9a-f]{2}([:-])[0-9a-f]{2}\1[0-9a-f]{2}\1[0-9a-f]{2}\1[0-9a-f]{2}\1[0-9a-f]{2}\b/gi,
-				(match) => {
+				(match, address) => {
+					if (address) return match;
 					const separator = match.charAt(2);
 					return `${match.slice(0, 8)}${separator}**${separator}**${separator}**`;
 				},
@@ -137,7 +174,8 @@ export function buildRedactor(
 			);
 			mask(
 				/(?<![\d.])\d{1,3}(?:\.\d{1,3}){3}(?![\d.])/g,
-				(match) => {
+				(match, address) => {
+					if (address?.masked || address?.local) return match;
 					const a = Number.parseInt(match, 10);
 					const b = Number.parseInt(match.slice(match.indexOf(".") + 1), 10);
 					if (
@@ -145,12 +183,7 @@ export function buildRedactor(
 							.split(".")
 							.map(Number)
 							.some((octet) => octet > 255) ||
-						a === 10 ||
-						a === 127 ||
-						(a === 172 && b >= 16 && b <= 31) ||
-						(a === 192 && b === 168) ||
-						(a === 169 && b === 254) ||
-						(a === 100 && b >= 64 && b <= 127)
+						isLocalIPv4(a, b)
 					)
 						return match;
 					return "[IP]";

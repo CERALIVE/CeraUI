@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeEach, expect, spyOn, test } from "bun:test";
-import { logBundleManifestSchema } from "@ceraui/rpc/schemas";
+import { logBundleManifestSchema, logEntrySchema } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 import * as logging from "../helpers/logger.ts";
 import * as bundle from "../modules/device-logs/bundle.ts";
@@ -160,6 +160,71 @@ test("authenticated preview and creation drive a real single-use gzip HTTP downl
 	expect(status.status).toBe(200);
 	expect(await status.json()).toEqual({ is_streaming: false });
 });
+test("gzip downloads mask public IPv4 embeddings and retain local diagnostics", async () => {
+	const addresses = [
+		"::ffff:8.8.8.8",
+		"[64:ff9b::1.1.1.1]:9000",
+		"0:0:0:0:0:FFFF:0808:0808",
+		"0064:ff9b:0:0:0:0:0101:0101",
+		"4000::8.8.4.4",
+	];
+	const local = [
+		"::ffff:10.0.0.1",
+		"::ffff:172.31.0.1",
+		"64:ff9b::192.168.0.1",
+		"64:ff9b::127.0.0.1",
+		"64:ff9b::169.254.0.1",
+		"::ffff:6440:1",
+		"fd00::8.8.8.8",
+		"fe80::1%eth0",
+		"2026-11-19T08:12:34.567Z",
+	].join(" ");
+	const cursor = `s=abcd;i=1;b=${bootId};m=1500;t=abcd;x=4321`;
+	fixture.scan.mockImplementation(
+		journal([
+			record(1, {
+				__CURSOR: cursor,
+				MESSAGE: [...addresses, local, "aa:bb:cc:dd:ee:ff"].join(" "),
+			}),
+		]),
+	);
+	const preview = await call(appRouter.logs.previewBundle, undefined, {
+		context: sockets.context,
+	});
+	const created = await call(appRouter.logs.createBundle, undefined, {
+		context: sockets.context,
+	});
+	if (!created.ok) throw new Error(created.error);
+	initServer();
+	const server = getServer();
+	if (!server) throw new Error("missing server");
+	const response = await fetch(new URL(created.url, server.url));
+	expect(response.status).toBe(200);
+	if (!response.body) throw new Error("missing HTTP body");
+	const text = await new Response(
+		response.body.pipeThrough(new DecompressionStream("gzip")),
+	).text();
+	const entries = text
+		.trimEnd()
+		.split("\n")
+		.map((row): { section: string; entry?: unknown } => JSON.parse(row))
+		.filter((row) => row.section === "journal")
+		.map((row) => logEntrySchema.parse(row.entry));
+	expect(entries.map(({ cursor, message }) => ({ cursor, message }))).toEqual([
+		{
+			cursor,
+			message: `[IP] [IP]:9000 [IP] [IP] 4000::[IP] ${local} aa:bb:cc:**:**:**`,
+		},
+	]);
+	expect(preview.sections.find(({ id }) => id === "journal")).toEqual({
+		id: "journal",
+		entries: 1,
+		redactions: 6,
+		bootsCovered: 1,
+		complete: true,
+	});
+});
+
 test("a frozen-schema collision gives only READ_FAILED over RPC and no download bytes", async () => {
 	const original = await collect();
 	collect.mockResolvedValue({
