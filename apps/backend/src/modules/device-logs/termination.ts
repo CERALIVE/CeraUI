@@ -75,7 +75,7 @@ export class JournalSignalError extends Error {
 	}
 }
 
-function trackOwnership(child: Child) {
+export function trackOwnership(child: Child) {
 	const processAtSpawn =
 		process.platform === "linux" && child.pid !== undefined
 			? readProcessStat(child.pid)
@@ -87,7 +87,7 @@ function trackOwnership(child: Child) {
 		get diedBeforeOurSignal() {
 			return diedBeforeOurSignal;
 		},
-		send(signal: StopSignal): boolean | JournalSignalError {
+		send(signal: StopSignal): boolean {
 			const stat =
 				process.platform === "linux" && child.pid !== undefined
 					? readProcessStat(child.pid)
@@ -119,7 +119,7 @@ function trackOwnership(child: Child) {
 					if (!sent) diedBeforeOurSignal = true;
 					return false;
 				}
-				return new JournalSignalError(signal, error);
+				throw error;
 			}
 		},
 	};
@@ -135,20 +135,25 @@ export function journalRetirement(
 	let failure: JournalSignalError | undefined;
 	let grace: number | undefined;
 	let retiring = false;
+	function sendDuringRetirement(signal: StopSignal): boolean | undefined {
+		try {
+			return owner.send(signal);
+		} catch (error) {
+			failure ??= new JournalSignalError(signal, error);
+			return undefined;
+		}
+	}
 	return {
 		stop() {
 			if (retiring) return;
 			retiring = true;
-			const term = owner.send("SIGTERM");
+			const term = sendDuringRetirement("SIGTERM");
 			termSent = term === true;
 			if (term === false) return;
-			if (term instanceof JournalSignalError) failure = term;
 			if (child.exitCode != null || child.signalCode != null) return;
 			grace = clock.setTimeout(() => {
 				grace = undefined;
-				const kill = owner.send("SIGKILL");
-				killSent = kill === true;
-				if (kill instanceof JournalSignalError) failure ??= kill;
+				killSent = sendDuringRetirement("SIGKILL") === true;
 			}, BOUNDED_SPAWN_TERM_GRACE_MS);
 		},
 		disarm() {
