@@ -113,7 +113,7 @@ density. It is not a redesign.
   key `notifications.viewLogs` in the boot-time `notifications` namespace (not in
   this inventory) and opens this view on Raw logs at the message's moment: a
   toast at its arrival, and a refusal band at the moment the device answered.
-  The device replays its standing notices to every connection it opens, so a
+  The device explicitly marks its post-authentication snapshot as a replay, so a
   standing notice opens at the exact entry of the timeline event it emitted
   (an update notice named `update:<kind>:<id>` emits `update_<kind>` with that
   id), else around its arrival when it arrived live, else at the newest

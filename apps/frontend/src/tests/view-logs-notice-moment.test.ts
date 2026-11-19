@@ -131,7 +131,7 @@ function at(ms: number, step: () => void): void {
 
 function connectAndReplay(standing: Notification[]): void {
 	handlers.connection?.("connected");
-	handlers.message?.("notification", { show: standing });
+	handlers.message?.("notification", { replay: true, show: standing });
 }
 
 async function viewLogs(): Promise<unknown> {
@@ -272,4 +272,55 @@ describe("View logs on a standing notice opens its own moment", () => {
 
 		expect(await viewLogs()).toEqual({ tab: "raw", at: LIVE_AT });
 	});
+
+	it("keeps a public push live before login and marks the later snapshot as replay", async () => {
+		const live = { ...RECOVERY_FAILED, publisher: "process-a" };
+		handlers.connection?.("connected");
+		at(LIVE_AT, () => handlers.message?.("notification", { show: [live] }));
+
+		expect(await viewLogs()).toEqual({ tab: "raw", at: LIVE_AT });
+
+		at(LIVE_AT + 90_000, () =>
+			handlers.message?.("notification", {
+				replay: true,
+				show: [{ ...live, revision: 3 }],
+			}),
+		);
+		expect(await viewLogs()).toEqual({ tab: "raw", momentUnknown: true });
+	});
+
+	it("marks the login snapshot on the same socket after a state reset as replay", async () => {
+		connectAndReplay([]);
+		resetState();
+		at(LIVE_AT, () =>
+			handlers.message?.("notification", {
+				replay: true,
+				show: [{ ...RECOVERY_FAILED, publisher: "process-a" }],
+			}),
+		);
+
+		expect(await viewLogs()).toEqual({ tab: "raw", momentUnknown: true });
+	});
+
+	it.each(["process-a", "process-b"])(
+		"scopes an equal revision in a replay from %s to its publisher",
+		async (publisher) => {
+			connectAndReplay([]);
+			at(LIVE_AT, () =>
+				handlers.message?.("notification", {
+					show: [{ ...RECOVERY_FAILED, publisher: "process-a" }],
+				}),
+			);
+			handlers.connection?.("disconnected");
+			at(LIVE_AT + 90_000, () =>
+				connectAndReplay([{ ...RECOVERY_FAILED, publisher }]),
+			);
+
+			expect(await viewLogs()).toEqual(
+				publisher === "process-a"
+					? { tab: "raw", at: LIVE_AT }
+					: { tab: "raw", momentUnknown: true },
+			);
+		},
+	);
 });

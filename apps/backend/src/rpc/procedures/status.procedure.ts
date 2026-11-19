@@ -188,5 +188,5 @@ export function buildInitialStatus() {
  * unnoticed until a board proof used a genuinely one-shot one.
  */
 export function buildInitialNotifications() {
-	return getPersistentNotifications(true);
+	return { ...getPersistentNotifications(true), replay: true as const };
 }

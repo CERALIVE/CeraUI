@@ -16,12 +16,14 @@
  * returned the clamp notification.
  */
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { notificationsMessageSchema } from "@ceraui/rpc/schemas";
 
 import {
 	notificationBroadcast,
 	notificationRemove,
 } from "../modules/ui/notifications.ts";
+import * as websocket from "../modules/ui/websocket-server.ts";
 import { buildInitialNotifications } from "../rpc/procedures/status.procedure.ts";
 
 const NAME = "test-persistent-boot-notification";
@@ -72,5 +74,74 @@ describe("initial-state push replays persistent notifications", () => {
 		expect(buildInitialNotifications().show.some((e) => e.name === NAME)).toBe(
 			false,
 		);
+	});
+});
+
+// A client cannot tell a replayed standing notice from one raised just now, so
+// the producer says which frame is the replay and which process numbered it.
+describe("the replay and its publisher are on the wire", () => {
+	afterEach(() => {
+		notificationRemove(NAME);
+	});
+
+	test("the initial push is marked as the replay of standing notices", () => {
+		notificationBroadcast(NAME, "warning", "x", 0, true, true, true);
+
+		expect(buildInitialNotifications().replay).toBe(true);
+	});
+
+	test("a live broadcast is unmarked and names the publisher the replay names", () => {
+		const broadcast = spyOn(websocket, "broadcastMsg");
+		try {
+			notificationBroadcast(NAME, "warning", "x", 0, true, true, true);
+
+			expect(broadcast).toHaveBeenCalledTimes(1);
+			const [type, payload] = broadcast.mock.calls[0] ?? [];
+			expect(type).toBe("notification");
+			const live = notificationsMessageSchema.parse(payload);
+			expect(live.replay).toBeUndefined();
+			const publisher = live.show?.[0]?.publisher;
+			expect(publisher).toBeString();
+			expect(publisher).not.toBe("");
+			expect(
+				buildInitialNotifications().show.find((entry) => entry.name === NAME)
+					?.publisher,
+			).toBe(publisher);
+		} finally {
+			broadcast.mockRestore();
+		}
+	});
+
+	test("two backend processes number the same notice alike but name different publishers", async () => {
+		const module = new URL("../modules/ui/notifications.ts", import.meta.url)
+			.pathname;
+		const probe = [
+			`import { getPersistentNotifications, notificationBroadcast } from ${JSON.stringify(module)};`,
+			`notificationBroadcast("probe", "warning", "x", 0, true, true, true);`,
+			`const [entry] = getPersistentNotifications(true).show;`,
+			`console.log(JSON.stringify({ revision: entry.revision, publisher: entry.publisher }));`,
+		].join("\n");
+		const run = async (): Promise<{ revision: number; publisher: string }> => {
+			const child = Bun.spawn([process.execPath, "-e", probe], {
+				stdout: "pipe",
+				stderr: "ignore",
+				timeout: 3000,
+			});
+			const [out, code] = await Promise.all([
+				new Response(child.stdout).text(),
+				child.exited,
+			]);
+			expect(code).toBe(0);
+			// Startup may log before the probe prints its value.
+			const line = out.trimEnd().split("\n").at(-1) ?? "";
+			return JSON.parse(line);
+		};
+
+		const first = await run();
+		const second = await run();
+
+		expect(second.revision).toBe(first.revision);
+		expect(first.publisher).toBeString();
+		expect(second.publisher).not.toBe(first.publisher);
 	});
 });

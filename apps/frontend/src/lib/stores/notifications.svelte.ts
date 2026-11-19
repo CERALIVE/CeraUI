@@ -51,7 +51,7 @@ import {
 
 /** A render-ready notification: text already resolved, duration in ms. */
 export interface ActiveNotification
-	extends Pick<Notification, "key" | "params" | "revision"> {
+	extends Pick<Notification, "key" | "params" | "publisher" | "revision"> {
 	/** Stable dedup key (== {@link Notification.name}). */
 	name: string;
 	/** Toast severity. */
@@ -203,6 +203,9 @@ export function toActiveNotification(
 		...(notification.revision !== undefined
 			? { revision: notification.revision }
 			: {}),
+		...(notification.publisher !== undefined
+			? { publisher: notification.publisher }
+			: {}),
 		isDismissable: notification.is_dismissable,
 		isPersistent: notification.is_persistent,
 		durationMs: notification.duration * 1000,
@@ -214,8 +217,7 @@ export function toActiveNotification(
 	};
 }
 
-// The device sends a standing notice again, at the same revision, to every
-// connection it opens; that is not a new arrival.
+// A replay of a revision from the same process is not a new arrival.
 function fold(
 	active: ReadonlyMap<string, ActiveNotification>,
 	entry: ActiveNotification,
@@ -226,7 +228,8 @@ function fold(
 		entry.name,
 		prior !== undefined &&
 			entry.revision !== undefined &&
-			prior.revision === entry.revision
+			prior.revision === entry.revision &&
+			prior.publisher === entry.publisher
 			? {
 					...entry,
 					receivedAt: prior.receivedAt,

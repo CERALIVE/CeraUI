@@ -109,6 +109,37 @@ describe('notification schema carries the OPTIONAL action descriptor', () => {
 	});
 });
 
+describe('replay mark and publisher identity (additive)', () => {
+	const standing = {
+		name: 'update:refused:txn-1',
+		type: 'warning' as const,
+		msg: 'Update refused',
+		is_dismissable: true,
+		is_persistent: true,
+		duration: 0,
+		revision: 4,
+	};
+
+	test('a snapshot frame keeps its replay mark and each entry the publisher of its revision', () => {
+		const parsed = notificationsMessageSchema.parse({
+			replay: true,
+			show: [{ ...standing, publisher: 'process-a' }],
+		});
+		expect(parsed.replay).toBe(true);
+		expect(parsed.show?.[0]?.publisher).toBe('process-a');
+	});
+
+	test('a frame from an older producer, without either, still parses', () => {
+		const parsed = notificationsMessageSchema.parse({ show: [standing] });
+		expect(parsed.replay).toBeUndefined();
+		expect(parsed.show?.[0]?.publisher).toBeUndefined();
+	});
+
+	test('rejects a publisher that is not a string', () => {
+		expect(notificationSchema.safeParse({ ...standing, publisher: 7 }).success).toBe(false);
+	});
+});
+
 describe('typed remove message { id, revision }', () => {
 	test('accepts a well-formed { id, revision } entry', () => {
 		const parsed = notificationRemoveSchema.parse({ id: 'update', revision: 7 });
