@@ -46,7 +46,7 @@ Events: [device-events.md](device-events.md).
 | Boot list | `journalctl --list-boots -o json` | `boots.ts:41` |
 | Disk usage | `journalctl --disk-usage` | `storage.ts:19` |
 | Retention maintenance | `--vacuum-time=<maxAgeDays>d` and/or `--vacuum-size=<maxSizeMb>M`, each when set | `retention.ts:74-84` |
-| Delete older files | Read `--header` and boot fields from pinned snapshot archives, then unlink proven prior-boot files | `older-journal.ts`, `journal-archive-snapshot.ts` |
+| Delete older files | Read `--header` and `--list-boots -o json` from pinned snapshot archives, cross-check `--field=_BOOT_ID`, and verify the archive before unlink | `older-journal.ts`, `journal-archive-snapshot.ts` |
 | Clear all | `--rotate`, then `--vacuum-time=1s --vacuum-files=1` | `clear-journal.ts` |
 
 Matches: `_BOOT_ID=`, `PRIORITY=`, `_SYSTEMD_UNIT=`, `_TRANSPORT=kernel`,

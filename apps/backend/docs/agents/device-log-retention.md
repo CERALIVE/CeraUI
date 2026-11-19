@@ -68,15 +68,29 @@ still-live client could submit after the barrier. Fences are process-local.
 Older cleanup snapshots named archives in the local machine's default
 namespace under `/run/log/journal` and `/var/log/journal`. It neither rotates
 nor invokes vacuum. Directory descriptors anchor the paths. For each candidate,
-`journalctl --file` reads the pinned inode. The file must have a recognized
-archived header in the local machine scope, and a complete record stream must
-agree on a single different boot. The header's tail boot ID alone cannot rule
-out a mixed file. Unclean archives, unreadable evidence and scans over the
-time or output limits are kept. Legacy headers without `TAIL_ENTRY_BOOT_ID`
-also need a tail realtime earlier than the first retained entry of the current
-boot. The timestamp is an additional requirement and never proves membership
-by itself. A separate outcome reports legacy files that could not be checked.
-The result counts retained journal boots before and after cleanup.
+`journalctl --file` reads the pinned inode. A recognized header must match the
+local machine. Ordinary archives must be marked `ARCHIVED`. A `.journal~`
+name identifies a file journald closed by renaming, even if its header still
+says `ONLINE`.
+
+Cleanup checks archives sequentially. The header, JSON `--list-boots`, and
+any subsequent checks share a fresh 10-second budget for that archive. Each
+command caps each output stream at 64 KiB. A file can be deleted if the
+nonempty boot list contains only earlier boots, the `_BOOT_ID` field index
+agrees and `journalctl --verify` finds no structural damage. The index
+cross-check protects interleaved boots that `--list-boots` can skip when it
+seeks over a boot's range. The header's tail boot ID alone cannot rule out a
+mixed file. The commands return metadata and verification status without
+buffering an entry per record.
+
+Unreadable or corrupt files, including unusable `.journal~` files, stay and
+trigger the existing `unverifiedArchivesKept` warning. The exact count is
+internal to the archive operation and its conformance receipt.
+Legacy headers without `TAIL_ENTRY_BOOT_ID` also need a tail realtime earlier
+than the first retained entry of the current boot. The timestamp never proves
+membership by itself. The separate legacy warning identifies files kept for
+lack of that additional evidence. The result also counts retained journal
+boots before and after cleanup.
 
 Immediately before unlink, the snapshot owner checks device, inode, link
 count, size and change timestamps, then syncs the containing directory.

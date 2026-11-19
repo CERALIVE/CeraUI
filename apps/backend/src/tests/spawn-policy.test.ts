@@ -29,10 +29,10 @@ const alive = (proc: ManagedProcess): boolean =>
 	proc.exitCode === null && proc.signalCode === null;
 
 describe("spawn-policy registry consistency", () => {
-	it("classifies all 77 production spawn sites with unique ids", () => {
-		expect(SPAWN_POLICY).toHaveLength(77);
+	it("classifies all 79 production spawn sites with unique ids", () => {
+		expect(SPAWN_POLICY).toHaveLength(79);
 		const ids = new Set(SPAWN_POLICY.map((s) => s.id));
-		expect(ids.size).toBe(77);
+		expect(ids.size).toBe(79);
 		expect([...ids].sort()).toEqual(expectedIds);
 		expect(getSpawnSite("updateRecovery.probe")).toMatchObject({
 			file: "modules/system/update-orchestrator/recovery-probes.ts",

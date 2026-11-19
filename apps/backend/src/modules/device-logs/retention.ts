@@ -147,7 +147,8 @@ export function deleteOlderFiles(): Promise<LogDeleteOlderFilesOutput> {
 			: (await listBoots()).filter((boot) => boot.logsAvailable);
 		const warnings = mock
 			? {}
-			: await deleteOlderJournal(before.find((boot) => boot.current)?.firstTs);
+			: (await deleteOlderJournal(before.find((boot) => boot.current)?.firstTs))
+					.warnings;
 		const bootsBefore = mock ? 1 : before.length;
 		const bootsAfter = mock ? 1 : await countStoredBoots();
 		return {

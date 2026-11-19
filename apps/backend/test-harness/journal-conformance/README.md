@@ -114,11 +114,15 @@ bytes, including the image-owned predecessor directory. Recent source volume
 is a sample of up to 4096 records (`src/modules/device-logs/storage.ts:55-59`).
 
 Older-file cleanup checks each archive in a directory-scoped snapshot and
-removes only files proven to contain records from a single earlier boot.
+removes only files proven to contain records from earlier boots.
 The native probe covers cross-boot active and mixed archived files, a rotation
 during inspection, backward archive naming, older creation-time metadata,
 clock movement at vacuum launch, and foreign machine and namespace directories.
-It also checks retained unknown headers and both legacy archive outcomes.
+It also checks retained unknown headers, both legacy archive outcomes, a
+32 MiB archive with 60,000 entries, multiple old boots in one file, an
+interleaved current boot, and readable and unreadable `.journal~` files.
+`retention/golden-argv.json` records the fixed archive commands. The retention
+unit tests match them after substituting the pinned descriptor.
 Both cleanup actions report journal boot counts before and after. Both refuse
 during a busy update phase, persist a new history epoch
 and close admission in one synchronous step. Both cancel exports and queries,

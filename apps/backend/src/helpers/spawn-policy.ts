@@ -337,8 +337,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		id: "deviceLogs.journalHeader",
 		file: "modules/device-logs/older-journal.ts",
 		symbol: "inspectArchive",
-		command:
-			"[journalctl, --file=<pinned descriptor>, --no-pager, --header or fixed boot fields]",
+		command: "[journalctl, --file=<pinned descriptor>, --no-pager, --header]",
 		class: "bounded-probe",
 		status: "enforced",
 		contract: {
@@ -349,6 +348,40 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			lifetimeTimeoutExempt: false,
 		},
 		mechanism: "Read-only archive evidence through the bounded run() collector",
+	},
+	{
+		id: "deviceLogs.journalArchiveBoots",
+		file: "modules/device-logs/older-journal.ts",
+		symbol: "inspectArchive",
+		command:
+			"[journalctl, --file=<pinned descriptor>, --no-pager, --list-boots, -o, json] or [..., --field=_BOOT_ID]",
+		class: "bounded-probe",
+		status: "enforced",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		mechanism: "Bounded per-archive boot inventory and index cross-check",
+	},
+	{
+		id: "deviceLogs.journalArchiveVerify",
+		file: "modules/device-logs/older-journal.ts",
+		symbol: "inspectArchive",
+		command:
+			"[journalctl, --file=<pinned descriptor>, --no-pager, --verify, --quiet]",
+		class: "bounded-probe",
+		status: "enforced",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		mechanism: "Structural verification within the same per-archive deadline",
 	},
 	{
 		id: "deviceLogs.journalScan",

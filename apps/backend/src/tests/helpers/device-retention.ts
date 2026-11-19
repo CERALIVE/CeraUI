@@ -16,6 +16,40 @@ import * as settings from "../../modules/device-logs/settings.ts";
 import * as runtime from "../../modules/system/update-orchestrator/runtime.ts";
 import { record } from "./device-query.ts";
 
+export const priorBoot = "e".repeat(32);
+const firstTs = 1_800_000_000_000;
+const machine = "b".repeat(32);
+export const archive = (seq: string) =>
+	`system@${"a".repeat(32)}-${seq.padStart(16, "0")}-0000000000000001.journal`;
+
+export function header(
+	path: string,
+	tailBoot: string,
+	flags = " TAIL_ENTRY_BOOT_ID",
+) {
+	return [
+		`File path: ${path}`,
+		`Machine ID: ${machine}`,
+		`Boot ID: ${tailBoot}`,
+		"State: ARCHIVED",
+		`Compatible flags:${flags}`,
+		`Tail realtime timestamp: Tue 2023-11-14 22:13:20 UTC (${((firstTs - 1_000) * 1000).toString(16)})`,
+		"Entry objects: 1",
+		"",
+	].join("\n");
+}
+
+export function bootList(...boots: string[]) {
+	return JSON.stringify(
+		boots.map((boot_id, i) => ({
+			boot_id,
+			index: i + 1 - boots.length,
+			first_entry: (firstTs - 1000) * 1000 + i,
+			last_entry: (firstTs - 1000) * 1000 + i,
+		})),
+	);
+}
+
 export function retentionFixture() {
 	const spawn = spyOn(Bun, "spawn").mockImplementation(() => {
 		throw new Error("unexpected native process");
@@ -30,7 +64,7 @@ export function retentionFixture() {
 		record(1).bootId,
 	);
 	const archiveScope = spyOn(archives, "journalArchiveScope").mockReturnValue({
-		machine: "b".repeat(32),
+		machine,
 		directories: [dir],
 	});
 	const phase = spyOn(runtime, "getOrchestratorState").mockReturnValue({

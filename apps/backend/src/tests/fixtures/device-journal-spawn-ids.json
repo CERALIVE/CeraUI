@@ -5,6 +5,8 @@
 	"backend.singleton",
 	"boot.systemdReady",
 	"connectivity.deviceBoundProbe",
+	"deviceLogs.journalArchiveBoots",
+	"deviceLogs.journalArchiveVerify",
 	"deviceLogs.journalFollow",
 	"deviceLogs.journalHeader",
 	"deviceLogs.journalScan",

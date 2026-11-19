@@ -1,30 +1,18 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { existsSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import archiveArgv from "../../test-harness/journal-conformance/retention/golden-argv.json";
 import { parseArchiveHeader } from "../modules/device-logs/older-journal.ts";
 import { deleteOlderFiles } from "../modules/device-logs/retention.ts";
 import * as updates from "../modules/system/software-updates.ts";
 import { bootId } from "./helpers/device-query.ts";
-import { retentionFixture } from "./helpers/device-retention.ts";
-
-const priorBoot = "e".repeat(32);
-const firstTs = 1_800_000_000_000;
-const machine = "b".repeat(32);
-const archive = (seq: string) =>
-	`system@${"a".repeat(32)}-${seq.padStart(16, "0")}-0000000000000001.journal`;
-
-function header(path: string, tailBoot: string, flags = " TAIL_ENTRY_BOOT_ID") {
-	return [
-		`File path: ${path}`,
-		`Machine ID: ${machine}`,
-		`Boot ID: ${tailBoot}`,
-		"State: ARCHIVED",
-		`Compatible flags:${flags}`,
-		`Tail realtime timestamp: Tue 2023-11-14 22:13:20 UTC (${((firstTs - 1_000) * 1000).toString(16)})`,
-		"Entry objects: 1",
-		"",
-	].join("\n");
-}
+import {
+	archive,
+	bootList,
+	header,
+	priorBoot,
+	retentionFixture,
+} from "./helpers/device-retention.ts";
 
 let fixture: ReturnType<typeof retentionFixture>;
 afterEach(async () => {
@@ -48,7 +36,7 @@ test.each([
 		name: "a synthetic follow checkpoint is not archive evidence",
 		file: archive("3"),
 		entryBoot: priorBoot,
-		cursor: `boot-start:${priorBoot}:0`,
+		invalidBootId: `boot-start:${priorBoot}:0`,
 		kept: true,
 	},
 	{
@@ -59,24 +47,23 @@ test.each([
 	},
 ])(
 	"scopes older deletion when $name",
-	async ({ file, entryBoot, cursor, kept }) => {
+	async ({ file, entryBoot, invalidBootId, kept }) => {
 		fixture = retentionFixture();
 		const path = join(fixture.dir, file);
 		writeFileSync(path, "journal");
 		fixture.run.mockImplementation(async (_command, args) => {
 			const pinned = args[0]?.slice("--file=".length) ?? "";
 			if (args.includes("--header")) return header(pinned, entryBoot);
-			if (args.includes("--output-fields=_BOOT_ID"))
-				return JSON.stringify({
-					_BOOT_ID: entryBoot,
-					__CURSOR: cursor ?? `b=${entryBoot};s=1`,
-				});
+			if (args.includes("--field=_BOOT_ID")) return `${entryBoot}\n`;
+			if (args.includes("--verify")) return "";
+			if (args.includes("--list-boots") && args[0]?.startsWith("--file="))
+				return bootList(invalidBootId ?? entryBoot);
 			if (args.includes("--disk-usage")) return "take up 1M";
 			return "[]";
 		});
 		expect(await deleteOlderFiles()).toMatchObject({
 			ok: true,
-			...(cursor ? { unverifiedArchivesKept: true } : {}),
+			...(invalidBootId ? { unverifiedArchivesKept: true } : {}),
 		});
 		expect(existsSync(path)).toBe(kept);
 		expect(
@@ -145,19 +132,33 @@ test("does not unlink a replacement under the same archived name after proof", a
 	fixture.run.mockImplementation(async (_cmd, args) => {
 		const pinned = args[0]?.slice("--file=".length) ?? "";
 		if (args.includes("--header")) return header(pinned, priorBoot);
-		if (args.includes("--output-fields=_BOOT_ID")) {
+		if (args.includes("--verify")) {
 			renameSync(path, displaced);
 			writeFileSync(path, "replacement");
-			return JSON.stringify({
-				_BOOT_ID: priorBoot,
-				__CURSOR: `b=${priorBoot};s=1`,
-			});
+			return "";
 		}
+		if (args.includes("--field=_BOOT_ID")) return `${priorBoot}\n`;
+		if (args.includes("--list-boots") && args[0]?.startsWith("--file="))
+			return bootList(priorBoot);
 		return args.includes("--list-boots") ? "[]" : "take up 1M";
 	});
 	expect(await deleteOlderFiles()).toMatchObject({ ok: true });
 	expect(existsSync(path)).toBe(true);
 	expect(existsSync(displaced)).toBe(true);
+	expect(
+		fixture.run.mock.calls
+			.filter(([, args]) => args[0]?.startsWith("--file="))
+			.map(([command, [, ...options]]) => [
+				command,
+				"--file=<pinned>",
+				...options,
+			]),
+	).toEqual([
+		archiveArgv.header,
+		archiveArgv.boots,
+		archiveArgv.bootIndex,
+		archiveArgv.verify,
+	]);
 });
 
 test("keeps existing follows attached while older cleanup drains queries", async () => {
