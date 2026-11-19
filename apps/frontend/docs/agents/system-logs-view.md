@@ -890,7 +890,7 @@ recovered entry if the operator is still on the disappearing button.
 | `main/system-logs/EventsLoadFailure.svelte:11` | props |
 | `main/system-logs/EventsPanel.svelte:16` | props |
 | `main/system-logs/EventsTab.svelte:37` | props |
-| `main/system-logs/ExportDialog.svelte:16` | props |
+| `main/system-logs/ExportDialog.svelte:17` | props |
 | `main/system-logs/KeepWords.svelte:14` | props |
 | `main/system-logs/LegacyLogDownloads.svelte:21` | props |
 | `main/system-logs/ParamText.svelte:8` | props |
@@ -955,6 +955,7 @@ recovered entry if the operator is still on the disappearing button.
 |---|
 | `main/system-logs/BootButton.test.ts` |
 | `main/system-logs/BootPicker.test.ts` |
+| `main/system-logs/BundleDialog.coverage.test.ts` |
 | `main/system-logs/EventsPanel.test.ts` |
 | `main/system-logs/EventsTab.history.test.ts` |
 | `main/system-logs/EventsTab.test.ts` |
@@ -1037,11 +1038,11 @@ Related browser specs and their entry points:
 
 ### RecoveryBand call sites
 
-`main/system-logs/StorageCleanup.svelte:197`, `main/system-logs/StorageLimits.svelte:183`, `main/system-logs/StorageSection.svelte:61`.
+`main/system-logs/StorageCleanup.svelte:208`, `main/system-logs/StorageLimits.svelte:183`, `main/system-logs/StorageSection.svelte:61`.
 
 ### role="status" elements
 
-`main/system-logs/BootPicker.svelte:165`, `main/system-logs/BundleDialog.svelte:101`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:201`, `main/system-logs/ExportDialog.svelte:51`, `main/system-logs/RawLogList.svelte:241`, `main/system-logs/RawLogRow.svelte:136`, `main/system-logs/RawLogsPanel.svelte:98`, `main/system-logs/RawLogsTab.svelte:137`, `main/system-logs/StorageCleanup.svelte:191`, `main/system-logs/StorageLimits.svelte:173`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:222`.
+`main/system-logs/BootPicker.svelte:166`, `main/system-logs/BundleDialog.svelte:102`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:198`, `main/system-logs/ExportDialog.svelte:51`, `main/system-logs/RawLogList.svelte:251`, `main/system-logs/RawLogRow.svelte:161`, `main/system-logs/RawLogsPanel.svelte:98`, `main/system-logs/RawLogsTab.svelte:149`, `main/system-logs/StorageCleanup.svelte:202`, `main/system-logs/StorageLimits.svelte:173`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:222`.
 
 ### Limits and constants
 
@@ -1051,7 +1052,7 @@ Related browser specs and their entry points:
 | EVENT_ROW_CAP | 300 | `lib/device-logs/events-window.ts:4` |
 | PAGE_LIMIT | 100 | `lib/device-logs/raw-filter.ts:57` |
 | SEARCH_MAX_BYTES | 256 | `lib/device-logs/raw-filter.ts:58` |
-| ROW_CAP | 2000 | `lib/device-logs/raw-rows.ts:9` |
+| ROW_CAP | 2000 | `lib/device-logs/raw-rows.ts:13` |
 | SEARCH_DEBOUNCE_MS | 300 | `lib/device-logs/raw-view.svelte.ts:22` |
 | HELD_CAP | 500 | `lib/device-logs/raw-row-window.svelte.ts:14` |
 | NEW_ENTRIES_EVERY_MS | 5000 | `lib/device-logs/raw-feedback.svelte.ts:23` |
@@ -1091,10 +1092,10 @@ Backend and wire limits: [device-logs.md](../../../backend/docs/agents/device-lo
 | SL-7 | `apps/frontend/docs/agents/system-logs-critique.md:67` |
 | SL-11 | `apps/frontend/docs/agents/system-logs-critique.md:71` |
 | SL-13 | `apps/frontend/docs/agents/system-logs-critique.md:73` |
-| DF-27 | `docs/DESIGN-FOLLOWUPS.md:493` |
-| DF-30 | `docs/DESIGN-FOLLOWUPS.md:548` |
-| DF-34 | `docs/DESIGN-FOLLOWUPS.md:596` |
-| DF-39 | `docs/DESIGN-FOLLOWUPS.md:689` |
+| DF-27 | `docs/DESIGN-FOLLOWUPS.md:495` |
+| DF-30 | `docs/DESIGN-FOLLOWUPS.md:550` |
+| DF-34 | `docs/DESIGN-FOLLOWUPS.md:598` |
+| DF-39 | `docs/DESIGN-FOLLOWUPS.md:691` |
 
 ### Not measured
 
