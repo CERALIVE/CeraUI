@@ -21,9 +21,11 @@
 // state — every other module reaches it through the exported helpers so the
 // mutable list never leaks across module boundaries.
 
+import { basename } from "node:path";
 import { logger } from "../../../helpers/logger.ts";
 import { periodicCheckForSoftwareUpdates } from "../../system/software-updates.ts";
 import {
+	SENDER_LOG_PREFIX,
 	SHUTDOWN_SIGKILL_TIMEOUT_MS,
 	SHUTDOWN_SIGTERM_GRACE_MS,
 } from "../constants.ts";
@@ -76,11 +78,33 @@ export function spawnStreamingLoop(
 		// preserving the per-chunk pattern matching the errCallback relies on.
 		(async () => {
 			const decoder = new TextDecoder();
+			const sender = basename(command) === "srtla_send";
+			const lineDecoder = new TextDecoder();
+			let tail = "";
+			const logSenderLine = (line: string) => {
+				const message = line.trimEnd();
+				if (message.length === 0) return;
+				const level = /\bwarn(?:ing)?\b/i.test(message)
+					? "warn"
+					: /\b(?:error|fatal|failed|cannot|could not|unable)\b/i.test(message)
+						? "error"
+						: "info";
+				logger[level](`${SENDER_LOG_PREFIX}${message}`);
+			};
 			for await (const chunk of proc.stderr) {
 				const dataStr = decoder.decode(chunk);
-				logger.debug(`${streamingProcess.spawnfile} stderr: ${dataStr}`);
+				if (sender) {
+					const lines = (
+						tail + lineDecoder.decode(chunk, { stream: true })
+					).split("\n");
+					tail = lines.pop() ?? "";
+					for (const line of lines) logSenderLine(line);
+				} else {
+					logger.debug(`${streamingProcess.spawnfile} stderr: ${dataStr}`);
+				}
 				errCallback(dataStr);
 			}
+			if (sender) logSenderLine(tail + lineDecoder.decode());
 		})().catch((err) => {
 			// stderr is torn down when the process is killed; that surfaces here
 			// as a benign cancellation, not a subprocess error to report.

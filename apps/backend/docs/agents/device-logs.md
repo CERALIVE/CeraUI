@@ -53,6 +53,15 @@ Matches: `_BOOT_ID=`, `PRIORITY=`, `_SYSTEMD_UNIT=`, `_TRANSPORT=kernel`,
 `MESSAGE_ID=a596d6fe7bfa4994828e72309e95d61e` (`filter.ts:21-39`).
 Level to priority: error 0-3, warning 4, info 5-6, debug 7 (`filter.ts:9-14`).
 
+| Source | Journal candidates | Recent volume attribution |
+|---|---|---|
+| CeraLive app | `ceralive.service` | App records without the sender prefix |
+| Bonding sender | `ceralive.service`, `srtla-send.service`, `srtla.service` | `srtla_send: ` messages from `ceralive.service`, plus entries from the two standalone receiver units when present |
+
+The shared unit is matched once when both sources are selected. Source
+membership uses the message prefix before display formatting. A suppression
+notice naming `ceralive.service` can affect both sources.
+
 Values from a request:
 
 | Value | Check | Source |
@@ -136,10 +145,10 @@ example origins:
 
 ## Child-process stderr
 
-`src/modules/streaming/streamloop/process-runner.ts:73,81` logs captured
-stderr at debug when the caller passes an error callback. Debug lines carry
-priority 7 (`src/helpers/logger.ts:663`); a Level filter without `debug` excludes
-`PRIORITY=7` (`filter.ts:9-14,22-27`). In production `setJournalDetail`
+`src/modules/streaming/streamloop/process-runner.ts` logs each nonempty sender
+stderr line with the `srtla_send: ` prefix. Warn or warning wins, failure
+keywords map to error, and the remaining lines are info. Notifications still
+receive the original stderr chunks. In production `setJournalDetail`
 sets the console level (`src/helpers/logger.ts:707-714`); it is called from
 `initLogSettings` (`settings.ts:96`, run at `src/main.ts:446`) and from
 `setRetention` (`retention.ts:124`).

@@ -1,7 +1,10 @@
 import { LOG_SOURCES, type LogSource } from "@ceraui/rpc/schemas";
+import { SENDER_LOG_PREFIX } from "../streaming/constants.ts";
+
+const APP_UNIT = "ceralive.service";
 
 export const SOURCE_UNITS: Readonly<Record<LogSource, readonly string[]>> = {
-	app: ["ceralive.service"],
+	app: [APP_UNIT],
 	engine: ["cerastream.service"],
 	bonding: ["srtla-send.service", "srtla.service"],
 	network: [
@@ -60,7 +63,15 @@ export const SOURCE_UNITS: Readonly<Record<LogSource, readonly string[]>> = {
 	kernel: [],
 };
 
-export function sourceOfUnit(unit: string): LogSource | null {
+// Candidate units can overlap even though each entry has only one source.
+export const JOURNAL_SOURCE_UNITS = {
+	...SOURCE_UNITS,
+	bonding: [APP_UNIT, ...SOURCE_UNITS.bonding],
+} satisfies Readonly<Record<LogSource, readonly string[]>>;
+
+export function sourceOfUnit(unit: string, message = ""): LogSource | null {
+	if (unit === APP_UNIT && message.startsWith(SENDER_LOG_PREFIX))
+		return "bonding";
 	return (
 		LOG_SOURCES.find((source) => SOURCE_UNITS[source].includes(unit)) ?? null
 	);

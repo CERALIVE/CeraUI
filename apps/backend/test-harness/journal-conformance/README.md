@@ -10,7 +10,8 @@ the first paging expectation and must fail.
 paging, filtering, cursor, JSON and clock-step behavior. A second seven-record
 fixture tests a backwards wall-clock step. A compiled `reader-probe.ts` runs
 the CeraUI scanner against a native fixture to check parsed fields, unabridged
-messages and exclusion of unused fields. `live.sh` asserts daemon behavior:
+messages, exclusion of unused fields and separation of app, sender and receiver
+messages. `live.sh` asserts daemon behavior:
 priorities, backlog and follow, excluded anchors, restart, suppression, rotation,
 vacuum, predecessor accounting, boot boundaries and clean versus killed boots.
 It refuses to run outside the explicitly marked disposable container.

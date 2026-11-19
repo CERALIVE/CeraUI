@@ -109,6 +109,9 @@ source /conformance/query/replay.sh
 	printf 'MESSAGE=%s\nIGNORED=%09000d\n\n' "${big:0:5000}" 0
 	gen 1700000001000000 2000000 '' kernel 3 'kernel fixture' | head -n -1
 	printf 'SYSLOG_IDENTIFIER=kernel-fixture\n\n'
+	gen 1700000002000000 3000000 ceralive.service stdout 6 '{"ts":"2026-01-01","level":"info","msg":"srtla_send: link ready"}'
+	gen 1700000003000000 4000000 ceralive.service stdout 6 '{"ts":"2026-01-01","level":"info","msg":"app startup"}'
+	gen 1700000004000000 5000000 srtla.service stdout 6 'receiver ready'
 } | /usr/lib/systemd/systemd-journal-remote -o /fx/reader.journal -
 /reader-probe /fx/reader.journal
 echo 'FIXTURE OK systemd 257'

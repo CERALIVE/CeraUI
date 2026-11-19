@@ -1,4 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { onLogLine } from "../../helpers/logger.ts";
 
 // Edge-case hardening for the stream subprocess supervisor
 // (streamloop/process-runner.ts). This is the layer that owns every live
@@ -46,6 +50,47 @@ function spawnAndCapture(
 }
 
 describe("process-runner: stderr is drained into the error callback", () => {
+	test("stores sender lines at their own severity while delivering unchanged stderr", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "sender-stderr-"));
+		const command = join(dir, "srtla_send");
+		const lines = [
+			["Info: waiting for peers", "info"],
+			["WARN: retrying", "warn"],
+			["Warning: slow peer", "warn"],
+			["Error opening socket", "error"],
+			["Fatal startup", "error"],
+			["Failed to establish any initial connections", "error"],
+			["Cannot bind", "error"],
+			["Could not read addresses", "error"],
+			["Unable to connect", "error"],
+		] as const;
+		const stderr = lines.map(([line]) => line).join("\n");
+		const seen: unknown[] = [];
+		const unsubscribe = onLogLine((line) => {
+			const entry = JSON.parse(line);
+			if (typeof entry.msg === "string" && entry.msg.startsWith("srtla_send: "))
+				seen.push([entry.msg, entry.level]);
+		});
+		try {
+			writeFileSync(command, "#!/bin/sh\nprintf '%s' \"$1\" >&2\n", {
+				mode: 0o700,
+			});
+			const received: string[] = [];
+			const sender = spawnStreamingLoop(command, [stderr], (chunk) => {
+				received.push(chunk);
+			});
+			expect(await sender.proc.exited).toBe(0);
+			await waitUntil(() => seen.length >= lines.length, 750);
+			expect(received.join("")).toBe(stderr);
+			expect(seen).toEqual(
+				lines.map(([line, level]) => [`srtla_send: ${line}`, level]),
+			);
+		} finally {
+			unsubscribe();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
 	test("each stderr chunk reaches the per-process error callback in order", async () => {
 		const received: string[] = [];
 		// Emit a known srtla-style error line on stderr, then exit cleanly.

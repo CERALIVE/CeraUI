@@ -13,6 +13,28 @@ afterEach(() => {
 	spyOn(store, "readBoots").mockRestore();
 	logging.clearRecentLogLines();
 });
+
+test.each([
+	["app", [["app", "startup complete"]]],
+	["bonding", [["bonding", "srtla_send: link ready"]]],
+] as const)(
+	"mock query for %s separates sender and app journal entries",
+	async (source, expected) => {
+		spyOn(mocks, "shouldUseMocks").mockReturnValue(true);
+		logging.clearRecentLogLines();
+		logging.logger.info("startup complete");
+		logging.logger.info("srtla_send: link ready");
+		const result = await queryLogs(socket(), {
+			sources: [source],
+			levels: ["info"],
+		});
+		if (!result.ok) throw new Error(result.error);
+		expect(
+			result.entries.map(({ source, message }) => [source, message]),
+		).toEqual(expected.map((row) => [...row]));
+	},
+);
+
 test("mock queries, event location and boot discovery share the ring without any process", async () => {
 	spyOn(mocks, "shouldUseMocks").mockReturnValue(true);
 	spyOn(store, "readBoots").mockReturnValue([]);

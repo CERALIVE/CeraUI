@@ -1,6 +1,8 @@
 import { deepStrictEqual } from "node:assert/strict";
+import { compileFilter } from "../../src/modules/device-logs/filter.ts";
 import type { RawJournalRecord } from "../../src/modules/device-logs/parse.ts";
 import { scanJournal } from "../../src/modules/device-logs/reader.ts";
+import { matchesResidual } from "../../src/modules/device-logs/residual.ts";
 
 const file = process.argv[2];
 if (file === undefined) throw new TypeError("expected the fixture journal path");
@@ -46,3 +48,23 @@ deepStrictEqual(records, [
 	},
 ]);
 console.log("PASS fixture: CeraUI reader preserves projected fields and a long message");
+
+for (const [source, expected] of [
+	["bonding", ["srtla_send: link ready", "receiver ready"]],
+	["app", ["app startup"]],
+] as const) {
+	const filter = { sources: [source], levels: ["info"] as const };
+	const selected = { ...filter, levels: [...filter.levels] };
+	const messages: string[] = [];
+	const scan = await scanJournal({
+		options: [`--file=${file}`, "--since=@1700000002"],
+		matches: compileFilter(selected, { bootId }).matches,
+		onRecord(record) {
+			if (matchesResidual(record, selected)) messages.push(record.message);
+			return "continue";
+		},
+	});
+	deepStrictEqual(scan, { status: "eof", skippedRecords: 0, exitCode: 0 });
+	deepStrictEqual(messages, expected);
+}
+console.log("PASS fixture: source filters separate app, sender and receiver records");

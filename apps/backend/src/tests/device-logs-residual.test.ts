@@ -1,6 +1,42 @@
 import { expect, test } from "bun:test";
+import type { LogSource } from "@ceraui/rpc/schemas";
+import { parseRecord } from "../modules/device-logs/parse.ts";
 import { matchesResidual } from "../modules/device-logs/residual.ts";
 import { record } from "./helpers/device-query.ts";
+
+test.each([
+	["ceralive.service", "srtla_send: link ready", "bonding", false, true],
+	[
+		"ceralive.service",
+		"app mentions srtla_send: link ready",
+		"app",
+		true,
+		false,
+	],
+	["srtla.service", "receiver accepted a connection", "bonding", false, true],
+	["NetworkManager.service", "srtla_send: quoted", "network", false, false],
+] as const)(
+	"%s message %s is attributed to %s and filtered accordingly",
+	(unit, msg, source, inApp, inBonding) => {
+		const entry = parseRecord({
+			__CURSOR: "fixture=1",
+			__REALTIME_TIMESTAMP: "1000",
+			_BOOT_ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			_SYSTEMD_UNIT: unit,
+			MESSAGE: JSON.stringify({ ts: "2026-01-01", msg, module: "fixture" }),
+		});
+		if (!entry) throw new Error("invalid journal fixture");
+		const included = (sources: LogSource[]) =>
+			matchesResidual(entry, { sources });
+		expect([
+			entry.source,
+			included(["app"]),
+			included(["bonding", "bonding"]),
+		]).toEqual([source, inApp, inBonding]);
+		expect(included(["app", "bonding"])).toBe(inApp || inBonding);
+		expect(included([])).toBe(true);
+	},
+);
 
 test("an omitted source selection keeps an unrelated suppression notice", () => {
 	expect(

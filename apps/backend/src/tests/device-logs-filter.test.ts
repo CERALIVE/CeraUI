@@ -108,7 +108,15 @@ describe("journal field group algebra", () => {
 									levelPriorities[level].map((n) => `PRIORITY=${n}`),
 								);
 					const common = [...boot, ...priorities];
-					const selectedUnits = sources.flatMap((source) => units[source]);
+					const selectedUnits = [
+						...new Set(
+							sources.flatMap((source) =>
+								source === "bonding"
+									? ["ceralive.service", ...units.bonding]
+									: units[source],
+							),
+						),
+					];
 					const groups: string[][] = [];
 					if (sourceMask === 0) groups.push(common);
 					if (selectedUnits.length)

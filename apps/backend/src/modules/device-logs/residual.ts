@@ -1,5 +1,5 @@
 import type { LogFilter, LogQueryInput } from "@ceraui/rpc/schemas";
-import { SOURCE_UNITS } from "./catalog.ts";
+import { JOURNAL_SOURCE_UNITS } from "./catalog.ts";
 import type { RawJournalRecord } from "./parse.ts";
 
 /** Shared by paging and follow; journal traversal order is independent of time. */
@@ -15,11 +15,11 @@ export function matchesResidual(
 	)
 		return false;
 	const sources = filter.sources ?? [];
-	return (
-		record.marker !== "suppressed" ||
-		sources.length === 0 ||
-		sources.some((source) =>
-			SOURCE_UNITS[source].some((unit) => record.message.includes(unit)),
-		)
+	if (sources.length === 0) return true;
+	// A shared ceralive.service match is only a candidate for either source.
+	if (record.marker !== "suppressed")
+		return record.source !== null && sources.includes(record.source);
+	return sources.some((source) =>
+		JOURNAL_SOURCE_UNITS[source].some((unit) => record.message.includes(unit)),
 	);
 }

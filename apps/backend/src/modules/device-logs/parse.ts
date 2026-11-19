@@ -69,11 +69,13 @@ export function parseRecord(input: unknown): RawJournalRecord | null {
 	}
 	let truncated = message === undefined;
 	let text = message ?? "";
+	let sourceMessage = text;
 	if (text.startsWith('{"ts":')) {
 		try {
 			const structured = objectSchema.safeParse(JSON.parse(text));
 			if (structured.success && typeof structured.data.msg === "string") {
 				const data = structured.data;
+				sourceMessage = structured.data.msg;
 				text = `${typeof data.module === "string" && data.module ? `[${data.module}] ` : ""}${data.msg}${
 					data.meta !== null && typeof data.meta === "object"
 						? ` ${JSON.stringify(data.meta)}`
@@ -109,7 +111,7 @@ export function parseRecord(input: unknown): RawJournalRecord | null {
 		source:
 			obj._TRANSPORT === "kernel"
 				? "kernel"
-				: sourceOfUnit(systemUnit ?? identifier ?? ""),
+				: sourceOfUnit(systemUnit ?? identifier ?? "", sourceMessage),
 		message: text,
 		truncated,
 		marker:

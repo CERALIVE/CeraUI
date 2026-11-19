@@ -4,7 +4,7 @@ import {
 	type LogFilter,
 	type LogLevel,
 } from "@ceraui/rpc/schemas";
-import { SOURCE_UNITS } from "./catalog.ts";
+import { JOURNAL_SOURCE_UNITS } from "./catalog.ts";
 
 const PRIORITIES: Readonly<Record<LogLevel, readonly number[]>> = {
 	error: [0, 1, 2, 3],
@@ -26,9 +26,13 @@ export function compileFilter(
 				PRIORITIES[level].map((priority) => `PRIORITY=${priority}`),
 			);
 	const common = [...boot, ...priorities];
-	const units = LOG_SOURCES.filter((source) =>
-		sources.includes(source),
-	).flatMap((source) => SOURCE_UNITS[source]);
+	const units = [
+		...new Set(
+			LOG_SOURCES.filter((source) => sources.includes(source)).flatMap(
+				(source) => JOURNAL_SOURCE_UNITS[source],
+			),
+		),
+	];
 	const groups: string[][] = [];
 	if (sources.length === 0) groups.push(common);
 	if (units.length > 0)
