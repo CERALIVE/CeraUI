@@ -8,17 +8,61 @@
     (at your option) any later version.
 */
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, jest, spyOn, test } from "bun:test";
 
 import {
 	concurrentApIfname,
 	ensureConcurrentApInterface,
+	isSupportedWifiIfname,
 	releaseConcurrentApInterface,
 	resetConcurrentInterfaceDepsForTest,
 	setConcurrentInterfaceDepsForTest,
+	wifiInterfaceReaders,
 } from "../modules/wifi/wifi-concurrent-interface.ts";
 
-afterEach(resetConcurrentInterfaceDepsForTest);
+afterEach(() => {
+	resetConcurrentInterfaceDepsForTest();
+	jest.restoreAllMocks();
+});
+
+describe("supported Wi-Fi interfaces", () => {
+	test.each(["wireless", "phy80211"])(
+		"accepts a non-wl radio with %s",
+		(marker) => {
+			spyOn(wifiInterfaceReaders, "pathExists").mockImplementation(
+				(path) => path === `/sys/class/net/ath0/${marker}`,
+			);
+			expect(isSupportedWifiIfname("ath0")).toBe(true);
+		},
+	);
+
+	test("rejects an interface without wireless markers", () => {
+		spyOn(wifiInterfaceReaders, "pathExists").mockReturnValue(false);
+		expect(isSupportedWifiIfname("eth0")).toBe(false);
+	});
+
+	test.each(["clap-wlan0", "clap-ath0"])(
+		"excludes %s even with wireless markers",
+		(ifname) => {
+			const reader = spyOn(wifiInterfaceReaders, "pathExists").mockReturnValue(
+				true,
+			);
+			expect(isSupportedWifiIfname(ifname)).toBe(false);
+			expect(reader).not.toHaveBeenCalled();
+		},
+	);
+
+	test.each(["wlan0", "wlp1s0", "wlx020000000001", "wlwg0"])(
+		"keeps %s as a name candidate",
+		(ifname) => {
+			const reader = spyOn(wifiInterfaceReaders, "pathExists").mockReturnValue(
+				false,
+			);
+			expect(isSupportedWifiIfname(ifname)).toBe(true);
+			expect(reader).not.toHaveBeenCalled();
+		},
+	);
+});
 
 describe("concurrent AP virtual interface", () => {
 	test("uses a deterministic Linux-safe interface name", () => {

@@ -27,7 +27,10 @@ import {
 	resetWifiCapabilitiesForTest,
 	setWifiCapabilityDepsForTest,
 } from "../modules/wifi/wifi-capabilities.ts";
-import { concurrentApIfname } from "../modules/wifi/wifi-concurrent-interface.ts";
+import {
+	concurrentApIfname,
+	wifiInterfaceReaders,
+} from "../modules/wifi/wifi-concurrent-interface.ts";
 import {
 	addWifiInterface,
 	clearWifiInterfacesForTest,
@@ -65,6 +68,7 @@ const snapshot = [
 let coordinator: UplinkSteeringCoordinator | undefined;
 
 beforeEach(async () => {
+	spyOn(wifiInterfaceReaders, "pathExists").mockReturnValue(false);
 	jest.useFakeTimers();
 	jest.setSystemTime(0);
 	wifiRadioObservation.stop();
@@ -398,7 +402,7 @@ test.each(["", "unknown"])(
 	},
 );
 
-test("discovery ignores an NM Wi-Fi device outside supported radio and clap names", async () => {
+test("discovery ignores an NM Wi-Fi device without a supported name or kernel evidence", async () => {
 	processIfconfigOutput(
 		`${snapshot}\n\nath0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>\n        ether 02:00:00:00:00:02`,
 	);
@@ -410,6 +414,34 @@ test("discovery ignores an NM Wi-Fi device outside supported radio and clap name
 	expect(
 		Object.values(getWifiInterfacesByMacAddress()).map((entry) => entry.ifname),
 	).toEqual(["wlan0"]);
+	expect(wifiZonesReady()).toBe(true);
+});
+
+test("discovery accepts a kernel-reported radio outside wl names", async () => {
+	spyOn(nm, "nmDeviceProp").mockResolvedValue([
+		"Test",
+		"Radio",
+		"no",
+		"no",
+		"yes",
+	]);
+	spyOn(wifiInterfaceReaders, "pathExists").mockImplementation(
+		(path) => path === "/sys/class/net/ath0/phy80211",
+	);
+	setPermanentMacReaderForTest(async (ifname) =>
+		ifname === "ath0" ? "02:00:00:00:00:02" : mac,
+	);
+	processIfconfigOutput(
+		`${snapshot}\n\nath0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>\n        ether 02:00:00:00:00:02`,
+	);
+	spyOn(nm, "nmDevices").mockResolvedValue([
+		`wlan0:wifi:connected:${ap}`,
+		"ath0:wifi:disconnected:",
+	]);
+	await wifiUpdateDevices();
+	expect(
+		Object.values(getWifiInterfacesByMacAddress()).map((entry) => entry.ifname),
+	).toEqual(["wlan0", "ath0"]);
 	expect(wifiZonesReady()).toBe(true);
 });
 
