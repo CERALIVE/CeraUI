@@ -92,24 +92,25 @@ Maintenance runs when a ceiling is readable and a limit is set
 | Stdout bytes per scan | 8 MiB, counted per chunk read; the chunk that exceeds it is not parsed and the scan ends with `budget` | `reader.ts:9,160-163`; `bounds.ts:26-29` |
 | One record | 1 MiB, else `RECORD_TOO_LARGE` | `reader.ts:10,126,168,178` |
 | Stderr kept | 64 KiB | `reader.ts:11` |
-| Page size | 1 to 200, default 100 | `logs.schema.ts:94` |
-| Search text | 1 to 256 UTF-8 bytes, no NUL | `logs.schema.ts:73-80` |
+| Page size | 1 to 200, default 100 | `logs.schema.ts:105` |
+| Search text | 1 to 256 UTF-8 bytes, no NUL | `logs.schema.ts:84-91` |
 | Queries | a new query on a socket aborts its previous one; `BUSY` at 2 running | `query-admission.ts:25,28` |
-| Follows | a new start on a socket stops its previous one; `BUSY` at 4 running | `follow.ts:80-83` |
+| Follows | a new start on a socket stops its previous one or returns `BUSY` at 4 running | `follow.ts:91-104` |
 | Follow batch | flush delay 0 at 200 entries or 64 KiB, else 250 ms; an entry past 200 entries or 256 KiB is counted in `dropped` | `follow-batch.ts:23,34` |
-| Follow catch-up | more than 2000 records examined before the first flush restarts the follower with `gap: "catchup_exceeded"` | `follow-delivery.ts:47-50`; `follow.ts:206-213` |
-
-Follow reads from the running boot's retained start when either checkpoint
-format identifies a previous boot. This path does not signal log cleanup.
-Same-boot checkpoints still require the existing epoch and retention evidence.
+| Follow catch-up | more than 2000 records examined before the first flush restarts the follower with `gap: "catchup_exceeded"` | `follow-delivery.ts:47-50`, `follow.ts:255-287` |
 | Export | 64 MiB, 120 s; ticket 60 s, deleted on use | `export-body.ts:10-11`; `export.ts:65,90` |
 | Bundle | 32 MiB plain, 8 MiB compressed; 60 s to prepare, 60 s to download | `bundle-body.ts:12-13`; `bundle.ts:53,70,128` |
 | Sharing slot | one lease at a time | `sharing.ts:4-15` |
 | Clear all and sharing | releases unused export and bundle tickets and aborts running downloads | `retention.ts:180`; `export.ts:174-180`; `bundle.ts:196-201` |
 
+Follow reads from the running boot's retained start when either checkpoint
+format identifies a previous boot. This path does not signal log cleanup.
+Same-boot checkpoints still require the existing epoch and retention evidence
+(`follow.ts:159-187`).
+
 ## Error codes
 
-`LOG_ERROR_CODES` (`packages/rpc/src/schemas/logs.schema.ts:18-28`), with
+`LOG_ERROR_CODES` (`packages/rpc/src/schemas/logs.schema.ts:21-31`), with
 example origins:
 
 | Code | Returned at |

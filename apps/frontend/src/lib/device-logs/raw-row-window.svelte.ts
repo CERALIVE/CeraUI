@@ -66,7 +66,7 @@ export class RawRowWindow {
 				]
 			: result.continuation === null
 				? []
-				: [{ ...markerRow, gapFrom: result.continuation }];
+				: [{ ...markerRow, gapFrom: result.continuation, gapPaged: true }];
 		const boundary = this.#boundary;
 		const held = this.#list
 			.slice(0, boundary)

@@ -34,7 +34,7 @@ density. It is not a redesign.
 - **Signature move.** The boot separator. In Events each boot group has a sticky
   heading with its start time and the system image, slot and end mark that are
   recorded (`main/system-logs/EventsTab.svelte:213-241`); Raw logs separates rows
-  by date and clock rows instead (`lib/device-logs/raw-rows.ts:120-147`). A boot loop reads as a run of short segments
+   by date and clock rows instead (`lib/device-logs/raw-rows.ts:140-168`). A boot loop reads as a run of short segments
   with unclean marks, which is what the operator must see first.
 - **Left out on purpose.** Stat tiles or counts above the lists, charts of error
   rates, a description line under the title, text search on Events (it has
@@ -174,9 +174,9 @@ in section 4.
 | Follow unavailable | Raw logs | Follow present, disabled, with an adjacent reason element (`data-testid` ending `-reason`) when the time is not This boot, the order is not Newest first, or the tab is in anchor mode (DESIGN.md CT-2). Follow displays while connected and is aria-disabled while its request is busy | no |
 | Following | Raw logs | Follow becomes Pause; a state label "Following" in `--status-info` with a `motion-safe` pulse dot; static dot plus label under reduced motion or e-ink | polite |
 | New entries held | Raw logs | While scrolled away from the top, incoming entries wait (cap 500) behind a "New entries: {count}" button at the top of the list; selecting it merges them and scrolls to the top | polite, throttled |
-| Paused | Raw logs | Label "Paused", Resume action; checkpoint and resume code: `lib/device-logs/raw-follow-session.svelte.ts:62-88`; backend catch-up limit: [device-logs.md](../../../backend/docs/agents/device-logs.md) | polite |
+| Paused | Raw logs | Label "Paused", Resume action. Checkpoint and resume code: `lib/device-logs/raw-follow-session.svelte.ts:68-94`. Backend catch-up limit: [device-logs.md](../../../backend/docs/agents/device-logs.md) | polite |
 | Gap marker | Raw logs | A full-width separator row (neutral 1 px rules either side of centered text) stating what was skipped and why: catch-up exceeded, position removed by cleanup, or entries dropped by the device | polite |
-| Dropped marker | Raw logs | `dropped > 0` in a follow batch: one separator row "Entries skipped while following: {count}". journald's suppressed-messages record (`marker: 'suppressed'`) is a separate marker row (`lib/device-logs/raw-rows.ts:90-105`, `main/system-logs/RawLogRow.svelte:59-68`) | polite (as a gap) |
+| Dropped marker | Raw logs | `dropped > 0` in a follow batch: one separator row "Entries skipped while following: {count}". journald's suppressed-messages record (`marker: 'suppressed'`) is a separate marker row (`lib/device-logs/raw-rows.ts:103-127`, `main/system-logs/RawLogRow.svelte:103-104`) | polite (as a gap) |
 | Follower stopped | Raw logs | Label "Stopped" with its reason (reader ended, device restarted, logs cleared) and a Follow action; `ended: 'cleared'` also resets the list | polite |
 | Disconnected | Raw logs, Events, header pill | The socket dropped: follow state "Disconnected", a notice that entries may be out of date, rows dimmed to `text-muted-foreground`, the pill shows Offline, no pulse anywhere; stale, never fresh-looking. Raw logs shows Disconnected only when a follow was active, and on reconnect offers Resume (`lib/device-logs/raw-follow-session.svelte.ts:91-100`, `main/system-logs/RawFollowControl.svelte:28-56`); Events reloads its first page on reconnect (`events-view.svelte.ts:150-156`) | polite |
 | Anchor | Raw logs | Opened from an event or a "View logs" action: the matching row has a tonal highlight (`bg-status-info/10`, no outline or stripe); an exact match receives focus and an approximate one leaves focus on the selected tab (`main/system-logs/SystemLogsView.svelte:134-138`, `main/system-logs/RawLogList.svelte:79-89`); "approximate" is stated when no exact entry matched; a Back to latest entries action leaves anchor mode | no |
@@ -417,8 +417,10 @@ Rules for this copy:
 | `systemLogs.error.readFailed` | Couldn't read the logs. | JOURNAL_UNAVAILABLE, READ_FAILED, RECORD_TOO_LARGE |
 | `systemLogs.marker.suppressed` | The device dropped entries here because too many were written at once. | marker: 'suppressed' and gap suppressed |
 | `systemLogs.marker.dropped` | Entries skipped while following: {count} | dropped > 0 |
-| `systemLogs.marker.catchupExceeded` | More entries were written while following was paused than could be caught up. They are still stored. | Gap catchup_exceeded |
+| `systemLogs.marker.catchupExceeded` | More entries were written than could be caught up when following resumed. They are still stored. | Gap catchup_exceeded |
 | `systemLogs.marker.showSkipped` | Show skipped entries | Recover the retained range from a catch-up separator |
+| `systemLogs.marker.showMoreSkipped` | Show more skipped entries | Read the next page in the same range |
+| `systemLogs.marker.recoveryLimit` | Some skipped ranges can't be opened here because the list reached its recovery limit. Use the filters to find those entries. | Gap position limit |
 | `systemLogs.marker.cursorUnavailable` | Log cleanup removed the follow position, so some entries may be missing. | Gap cursor_unavailable |
 | `systemLogs.marker.clockChanged` | The device clock changed here. Times recorded before this point may be wrong. | Clock-not-synced marker |
 | `systemLogs.follow.start` | Follow | Follow button |
@@ -1081,7 +1083,8 @@ Related browser specs and their entry points:
 | SEARCH_MAX_BYTES | 256 | `lib/device-logs/raw-filter.ts:58` |
 | ROW_CAP | 2000 | `lib/device-logs/raw-rows.ts:13` |
 | SEARCH_DEBOUNCE_MS | 300 | `lib/device-logs/raw-view.svelte.ts:22` |
-| HELD_CAP | 500 | `lib/device-logs/raw-row-window.svelte.ts:14` |
+| HELD_CAP | 500 | `lib/device-logs/raw-row-window.svelte.ts:15` |
+| GAP_CAP | 32 | `lib/device-logs/raw-row-window.svelte.ts:16` |
 | NEW_ENTRIES_EVERY_MS | 5000 | `lib/device-logs/raw-feedback.svelte.ts:23` |
 | MOMENT_EXPORT_HALF_MS | 300000 | `lib/device-logs/raw-paging.svelte.ts:51` |
 | EVENT_LOOKUP_MS | 10000 | `lib/device-logs/raw-anchor.ts:30` |
@@ -1136,7 +1139,7 @@ technology speech. Browser coverage is in the related specs above.
   did not fix are in [system-logs-critique.md](system-logs-critique.md).
 - **Polish (todo 38).** Four DF-31 items stay as they are:
   - Two time formats. Raw rows use a fixed two-digit hour (`RawLogList.svelte:47`)
-    in a mono tabular column (`RawLogRow.svelte:102`), so times line up down the
+    in a mono tabular column (`RawLogRow.svelte:129`), so times line up down the
     list. Events shows a relative time next to a localized clock for events dated
     today, or a localized date and time for older events (`timeline-copy.ts:168-174`).
   - The Storage heading under the Storage tab on phones. It names the Storage
@@ -1175,9 +1178,9 @@ technology speech. Browser coverage is in the related specs above.
     entry cap. When the held cap (`HELD_CAP`) cuts held rows, each cut entry
     and the count of each cut dropped marker are added to one held overflow
     count, and the other cut markers stay at the boundary
-    (`lib/device-logs/raw-row-window.svelte.ts:92-103`). Show held rows adds that
+    (`lib/device-logs/raw-row-window.svelte.ts:174-201`). Show held rows adds that
     count back as one dropped marker
-    (`lib/device-logs/raw-row-window.svelte.ts:69-86`, tested in
+    (`lib/device-logs/raw-row-window.svelte.ts:155-171`, tested in
     `lib/device-logs/raw-view.order.test.ts:1365`).
   - Every other page extends its own edge with entries not listed yet; a
     Follow batch goes on top.

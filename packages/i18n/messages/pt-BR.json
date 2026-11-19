@@ -2938,6 +2938,7 @@
 	"systemLogs.marker.dropped": "Entradas ignoradas durante o acompanhamento: {count}",
 	"systemLogs.marker.catchupExceeded": "Foram registradas mais entradas do que foi possível exibir ao retomar o acompanhamento. Elas continuam armazenadas.",
 	"systemLogs.marker.showSkipped": "Mostrar entradas puladas",
+	"systemLogs.marker.showMoreSkipped": "Mostrar mais entradas puladas",
 	"systemLogs.marker.recoveryLimit": "A lista atingiu o limite de recuperação. Use os filtros para encontrar as entradas que não podem ser abertas aqui.",
 	"systemLogs.marker.cursorUnavailable": "Uma limpeza de logs removeu a posição de acompanhamento, então algumas entradas podem estar faltando.",
 	"systemLogs.marker.clockChanged": "O relógio do dispositivo mudou aqui. Os horários registrados antes deste ponto podem estar errados.",

@@ -23,6 +23,7 @@ export type RawRow =
 			readonly count: number;
 			readonly gapFrom?: string;
 			readonly gapError?: LogErrorCode;
+			readonly gapPaged?: boolean;
 	  };
 
 export type DisplayRow =

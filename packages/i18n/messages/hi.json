@@ -2935,6 +2935,7 @@
 	"systemLogs.marker.dropped": "फ़ॉलो करते समय छोड़ी गई एंट्री: {count}",
 	"systemLogs.marker.catchupExceeded": "इतनी नई एंट्री दर्ज हुईं कि फ़ॉलो फिर से शुरू होने पर सभी नहीं दिखाई जा सकीं। वे अब भी सेव हैं।",
 	"systemLogs.marker.showSkipped": "छूटी हुई एंट्री दिखाएँ",
+	"systemLogs.marker.showMoreSkipped": "और छूटी हुई एंट्री दिखाएँ",
 	"systemLogs.marker.recoveryLimit": "सूची में छूटी हुई एंट्री वापस दिखाने की सीमा पूरी हो गई है। बाकी एंट्री ढूँढने के लिए फ़िल्टर का इस्तेमाल करें।",
 	"systemLogs.marker.cursorUnavailable": "लॉग की सफ़ाई ने फ़ॉलो की स्थिति हटा दी, इसलिए कुछ एंट्री गायब हो सकती हैं।",
 	"systemLogs.marker.clockChanged": "यहाँ डिवाइस की घड़ी बदली। इस बिंदु से पहले दर्ज समय गलत हो सकते हैं।",

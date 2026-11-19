@@ -94,7 +94,9 @@ async function copy(text: string): Promise<void> {
 					onclick={(event) => continuation === undefined ? undefined : readGap?.(event.currentTarget, continuation)}
 					size="sm"
 					variant="ghost"
-				>{row.gapError ? m['systemLogs.action.retry']() : m['systemLogs.marker.showSkipped']()}</Button>
+				>{row.gapError ? m['systemLogs.action.retry']() : row.gapPaged
+					? m['systemLogs.marker.showMoreSkipped']()
+					: m['systemLogs.marker.showSkipped']()}</Button>
 			</div>
 		{/if}
 	</div>

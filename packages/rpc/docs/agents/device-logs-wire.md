@@ -31,16 +31,16 @@ Sources: `src/contracts/logs.contract.ts:25-37`;
 at `:90-101`); `apps/backend/src/modules/device-logs/follow.ts:52`;
 `apps/backend/src/modules/device-logs/bundle.ts:85-90`;
 `apps/backend/src/modules/device-logs/redaction.ts:1-5`. `{ ok: false, error }` uses `logErrorSchema` with the nine
-`LOG_ERROR_CODES` (`logs.schema.ts:18-40`). The 13 handlers are built on
+`LOG_ERROR_CODES` (`logs.schema.ts:21-31`). The 13 handlers are built on
 `authedProcedure`, whose middleware throws oRPC `UNAUTHORIZED`
 (`apps/backend/src/rpc/procedures/logs.procedure.ts:39-106`;
 `apps/backend/src/rpc/middleware/auth.middleware.ts:19-25`).
 
 ## Follow push
 
-`LOG_FOLLOW_EVENT = 'logs.follow'` (`logs.schema.ts:29`), sent on the socket
+`LOG_FOLLOW_EVENT = 'logs.follow'` (`logs.schema.ts:32`), sent on the socket
 that started the follow (`apps/backend/src/modules/device-logs/follow.ts:102`).
-Frame fields (`logs.schema.ts:150-157`): `subscriptionId`, `entries`,
+Frame fields (`logs.schema.ts:161-169`): `subscriptionId`, `entries`,
 `checkpointCursor`, `dropped`, optional `gap` (`catchup_exceeded`,
 `cursor_unavailable`, `suppressed`), optional `ended` (`follower_exit`,
 `boot_changed`, `cleared`).
@@ -68,20 +68,20 @@ boundary reports the gap and reads from the retained start.
 
 | Shape | Rule | Source |
 |---|---|---|
-| Filter `sources` | default `[]` | `logs.schema.ts:68` |
-| Filter `levels` | at least 1, default all four | `logs.schema.ts:69-72` |
-| Filter `text` | 1 to 256 UTF-8 bytes, no NUL | `logs.schema.ts:73-80` |
-| Time range | `until > since` when both are set | `logs.schema.ts:57-64` |
-| `boot` | `current`, `all` or 32 lowercase hex | `logs.schema.ts:42,84` |
-| `continuation` | `[A-Za-z0-9_-]`, at most 2048 | `logs.schema.ts:45-48` |
-| `limit` | 1 to 200, default 100 | `logs.schema.ts:94` |
-| Input objects | `z.strictObject` | `logs.schema.ts:66,89,131` |
-| Page `hasMore` | `boolean` or `null`; `null` with `termination: "budget"` | `logs.schema.ts:118-119`; `apps/backend/src/modules/device-logs/scan-page.ts:53-66` |
-| Version context | `bootId` (32 lowercase hex) and `ceraui` (string) required; `osImage`, `slot`, `board`, `boardModel`, `engine`, `senderVersion`, `kernel`, `bun` nullable strings | `logs.schema.ts:160-172` |
-| Boot `versions` | version context or `null` | `logs.schema.ts:183` |
+| Filter `sources` | default `[]` | `logs.schema.ts:79` |
+| Filter `levels` | at least 1, default all four | `logs.schema.ts:80-83` |
+| Filter `text` | 1 to 256 UTF-8 bytes, no NUL | `logs.schema.ts:84-91` |
+| Time range | `until > since` when both are set | `logs.schema.ts:64-75` |
+| `boot` | `current`, `all` or 32 lowercase hex | `logs-fields.ts:3`, `logs.schema.ts:95` |
+| `continuation` | `[A-Za-z0-9_-]`, at most 2048 | `logs.schema.ts:56-59` |
+| `limit` | 1 to 200, default 100 | `logs.schema.ts:105` |
+| Input objects | `z.strictObject` | `logs.schema.ts:77,100,142` |
+| Page `hasMore` | `boolean` or `null` with `termination: "budget"` | `logs.schema.ts:129-130`, `apps/backend/src/modules/device-logs/scan-page.ts:53-66` |
+| Version context | `bootId` (32 lowercase hex) and `ceraui` (string) required. `osImage`, `slot`, `board`, `boardModel`, `engine`, `senderVersion`, `kernel`, `bun` nullable strings | `logs-boot.schema.ts:4-16` |
+| Boot `versions` | version context or `null` | `logs-boot.schema.ts:27` |
 | `ceraui` fallback | `unknown revision` | `apps/backend/src/modules/system/version-context.ts:66` |
-| Storage `ceiling` | object or `null` | `logs.schema.ts:197-202` |
-| Retention | `maxAgeDays` at least 1 or `null`; `maxSizeMb` at least 16 or `null`; `detail` `debug` or `info` | `logs.schema.ts:187-191` |
+| Storage `ceiling` | object or `null` | `logs.schema.ts:182-187` |
+| Retention | `maxAgeDays` at least 1 or `null`, `maxSizeMb` at least 16 or `null`, `detail` `debug` or `info` | `logs.schema.ts:172-176` |
 | Retention upper bound | checked against the ceiling in `setRetention` | `apps/backend/src/modules/device-logs/retention.ts:113-120` |
 | Bundle manifest | sections `versions`, `events`, `journal`, `settings` with `entries` and `redactions`; journal also has `bootsCovered` and `complete`; `exportedBy`; `boots` with versions | `logBundleManifestSchema` |
 

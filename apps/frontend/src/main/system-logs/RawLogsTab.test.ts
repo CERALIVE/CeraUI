@@ -1358,6 +1358,9 @@ describe("RawLogsTab: follow", () => {
 		await waitFor(() =>
 			expect(cursors()).toEqual(["s=8", "s=5", "s=4", "s=3", "s=2", "s=1"]),
 		);
+		expect(
+			screen.getByRole("button", { name: "Show more skipped entries" }),
+		).toBe(action);
 		expect(document.activeElement).toBe(action);
 		expect(logs.query).toHaveBeenLastCalledWith({
 			...DEFAULT_INPUT,
