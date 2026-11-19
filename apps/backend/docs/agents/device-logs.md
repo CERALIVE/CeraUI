@@ -10,7 +10,7 @@ source; the linked contracts hold the detail.
 | The service unit runs `/usr/local/bin/ceralive` with `SyslogIdentifier=ceralive`; read it with `journalctl -u ceralive` | `deployment/ceralive.service:12,15` |
 | With `NODE_ENV=production` the logger has a Stream transport (in-memory ring) and a Console transport, and returns before adding the File transport (`debug.log`) | `src/helpers/logger.ts:640,651,668,670` |
 | Console lines carry a journal priority: error 3, warn 4, info 6, any other level 7 | `src/helpers/logger.ts:629-633,663` |
-| `logs.deleteLegacyDebug` and `logs.clearAll` delete `debug.log` and `debug1.log` to `debug5.log` from the working directory; in production code `deleteLegacyDebugFiles` is called only from those two (unit tests also call it) | `src/modules/device-logs/retention-files.ts:4-11,48-61`; `retention.ts:164,206`; `src/tests/device-logs-retention-files.test.ts:45` |
+| `logs.deleteLegacyDebug` and `logs.clearAll` delete `debug.log` and `debug1.log` to `debug5.log` from the working directory; in production code `deleteLegacyDebugFiles` is called only from those two (unit tests also call it) | `src/modules/device-logs/retention-files.ts:4-11,48-61`; `retention.ts`; `src/tests/device-logs-retention-files.test.ts:45` |
 
 ## Module map
 
@@ -46,7 +46,6 @@ Events: [device-events.md](device-events.md).
 | Boot list | `journalctl --list-boots -o json` | `boots.ts:41` |
 | Disk usage | `journalctl --disk-usage` | `storage.ts:19` |
 | Retention maintenance | `--vacuum-time=<maxAgeDays>d` and/or `--vacuum-size=<maxSizeMb>M`, each when set | `retention.ts:74-84` |
-| Delete older files | Read `--header` and `--list-boots -o json` from pinned snapshot archives, cross-check `--field=_BOOT_ID`, and verify the archive before unlink | `older-journal.ts`, `journal-archive-snapshot.ts` |
 | Clear all | `--rotate`, then `--vacuum-time=1s --vacuum-files=1` | `clear-journal.ts` |
 
 Matches: `_BOOT_ID=`, `PRIORITY=`, `_SYSTEMD_UNIT=`, `_TRANSPORT=kernel`,
@@ -101,7 +100,7 @@ Maintenance runs when a ceiling is readable and a limit is set
 | Export | 64 MiB, 120 s; ticket 60 s, deleted on use | `export-body.ts:10-11`; `export.ts:65,90` |
 | Bundle | 32 MiB plain, 8 MiB compressed; 60 s to prepare, 60 s to download | `bundle-body.ts:12-13`; `bundle.ts:53,70,128` |
 | Sharing slot | one lease at a time | `sharing.ts:4-15` |
-| Clear all and sharing | releases unused export and bundle tickets and aborts running downloads | `retention.ts:180`; `export.ts:174-180`; `bundle.ts:196-201` |
+| Clear all and sharing | releases unused export and bundle tickets and aborts running downloads | `retention.ts`; `export.ts:174-180`; `bundle.ts:196-201` |
 
 Follow reads from the running boot's retained start when either checkpoint
 format identifies a previous boot. This path does not signal log cleanup.

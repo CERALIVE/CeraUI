@@ -554,9 +554,9 @@ The full table, evidence and the fixed findings are in
 - **Owner:** device-log-system todo 38 (keyboard audit).
 - **Exit condition:** opening either clear confirmation focuses Cancel.
 - **Todo 38: closed.** Both clear confirmations open with focus on Cancel:
-  `apps/frontend/src/main/system-logs/StorageCleanup.svelte:55` (`openOnCancel`) hands an
-  `onOpenAutoFocus` to the shared dialog through its existing `contentProps` (`:155`,
-  `:173`), so `simple-alert-dialog.svelte` is unchanged. Proved by `StorageSection.test.ts`
+  `apps/frontend/src/main/system-logs/StorageCleanup.svelte:53` (`openOnCancel`) hands an
+  `onOpenAutoFocus` to the shared dialog through its existing `contentProps` (`:137`,
+  `:156`), so `simple-alert-dialog.svelte` is unchanged. Proved by `StorageSection.test.ts`
   ("opens Clear all logs with focus on Cancel") and `apps/frontend/tests/e2e/system-logs-keyboard.spec.ts`.
 
 ### DF-31: System Logs polish residuals (SL-12, P3)

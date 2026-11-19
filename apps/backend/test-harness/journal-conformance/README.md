@@ -101,7 +101,7 @@ around-seek option cases (`src/tests/device-logs-query-golden.test.ts`);
 ## Retention and cleanup [EXISTS]
 
 `src/modules/device-logs/retention.ts` owns retention changes and serializes
-maintenance, older-file cleanup, legacy-file removal and clear. Settings and
+maintenance, legacy-file removal and clear. Settings and
 maintenance receipts use the existing atomic settings store. With an unknown
 image ceiling, `setRetention` refuses any non-null limit; a save with both limits
 `null` (for example a Detail-only change) is accepted (`src/modules/device-logs/retention.ts:109-126`).
@@ -113,20 +113,10 @@ Storage reports journalctl usage separately from recursive journal-directory
 bytes, including the image-owned predecessor directory. Recent source volume
 is a sample of up to 4096 records (`src/modules/device-logs/storage.ts:55-59`).
 
-Older-file cleanup checks each archive in a directory-scoped snapshot and
-removes only files proven to contain records from earlier boots.
-The native probe covers cross-boot active and mixed archived files, a rotation
-during inspection, backward archive naming, older creation-time metadata,
-clock movement at vacuum launch, and foreign machine and namespace directories.
-It also checks retained unknown headers, both legacy archive outcomes, a
-32 MiB archive with 60,000 entries, multiple old boots in one file, an
-interleaved current boot, and readable and unreadable `.journal~` files.
-`retention/golden-argv.json` records the fixed archive commands. The retention
-unit tests match them after substituting the pinned descriptor.
-Both cleanup actions report journal boot counts before and after. Both refuse
-during a busy update phase, persist a new history epoch
-and close admission in one synchronous step. Both cancel exports and queries,
-and only Clear also cancels active follows. They join for at most 15 seconds. A rejected or
+Clear reports journal boot counts before and after. It refuses during a busy
+update phase, then persists a new history epoch and closes admission in one
+synchronous step. It cancels follows, exports and queries and joins them for
+at most 15 seconds. A rejected or
 timed-out drain returns `READ_FAILED`, reopens admission and deletes nothing.
 After another update-phase check, clear rotates and vacuums, with a file limit
 that removes even future-dated archives. The native case moves only the
@@ -135,7 +125,7 @@ legacy debug files, and records its completion time. Admission stays closed
 through final storage readout; new requests wait and old pending requests use
 their existing cancellation outcome. Export queries share scan admission;
 their captured history epoch expires after clear. Clear does not delete the
-event store or the predecessor directory (`src/modules/device-logs/retention.ts:171-217`). Export cancellation invalidates unused tickets and
+event store or the predecessor directory (`src/modules/device-logs/retention.ts`). Export cancellation invalidates unused tickets and
 releases a paused download's sharing lease without requiring another client read.
 Mock operations use the logger ring without native
 journal commands or image/journal-directory reads; legacy unlink precedes the

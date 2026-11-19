@@ -6,12 +6,12 @@ export and sharing owners with controlled journal transports and real temporary
 settings and legacy files. These tests do not establish physical board vacuum
 qualification or complete device-log UI integration.
 
-All retention mutations share the existing exclusive queue. `clearAll` and
-`deleteOlderFiles` also share the history fence and the update reservation.
+All retention mutations share the existing exclusive queue. `clearAll` takes
+the history fence and the update reservation.
 Daily maintenance, settings changes and `deleteLegacyDebug` serialize without
 taking the history fence.
 
-## Destructive operation ordering
+## Clear all ordering
 
 The transaction first refuses a busy software-update phase. Inside the exclusive
 queue, `beginHistoryClear` synchronously persists one `historyEpoch` increment
@@ -19,9 +19,8 @@ and then closes the settings-owned promise gate. If that write throws, clear
 returns `READ_FAILED`, leaves the gate open and aborts no work. Clearing logs on
 a full filesystem therefore requires enough space to persist that epoch first.
 
-Clear cancels follow, export and query owners together. Older cleanup cancels
-queries and downloads but leaves registered current-boot follows running. Both join
-all their results, including rejected results, for at most 15 seconds. A
+Clear cancels follow, export and query owners together and joins all their
+results, including rejected results, for at most 15 seconds. A
 rejection or timeout returns `READ_FAILED`, reopens admission, deletes nothing
 and never rolls the epoch back. Timeout does not repair an owner that still
 cannot settle or release its existing capacity.
@@ -63,44 +62,6 @@ Clear succeeded. A failed barrier is retried with bounded commands and
 backoff, and a rejected exit observation keeps both fences closed because a
 still-live client could submit after the barrier. Fences are process-local.
 
-## Deleting older files
-
-Older cleanup snapshots named archives in the local machine's default
-namespace under `/run/log/journal` and `/var/log/journal`. It neither rotates
-nor invokes vacuum. Directory descriptors anchor the paths. For each candidate,
-`journalctl --file` reads the pinned inode. A recognized header must match the
-local machine. Ordinary archives must be marked `ARCHIVED`. A `.journal~`
-name identifies a file journald closed by renaming, even if its header still
-says `ONLINE`.
-
-Cleanup checks archives sequentially. The header, JSON `--list-boots`, and
-any subsequent checks share a fresh 10-second budget for that archive. Each
-command caps each output stream at 64 KiB. A file can be deleted if the
-nonempty boot list contains only earlier boots, the `_BOOT_ID` field index
-agrees and `journalctl --verify` finds no structural damage. The index
-cross-check protects interleaved boots that `--list-boots` can skip when it
-seeks over a boot's range. The header's tail boot ID alone cannot rule out a
-mixed file. The commands return metadata and verification status without
-buffering an entry per record.
-
-Unreadable or corrupt files, including unusable `.journal~` files, stay and
-trigger the existing `unverifiedArchivesKept` warning. The exact count is
-internal to the archive operation and its conformance receipt.
-Legacy headers without `TAIL_ENTRY_BOOT_ID` also need a tail realtime earlier
-than the first retained entry of the current boot. The timestamp never proves
-membership by itself. The separate legacy warning identifies files kept for
-lack of that additional evidence. The result also counts retained journal
-boots before and after cleanup.
-
-Immediately before unlink, the snapshot owner checks device, inode, link
-count, size and change timestamps, then syncs the containing directory.
-Files rotated or flushed after inventory are outside the snapshot. Journald
-does not publish a different file under the same closed archive name during
-normal operation. Linux pathname unlink has no atomic inode precondition.
-An independent privileged writer that replaces the exact name between the
-final check and unlink is outside the application fences. Independent daemon
-retention can still remove files on its own.
-
 ## Admission and terminal ownership
 
 Validated queries, around requests, follows, filtered exports and support
@@ -113,9 +74,7 @@ creation and download deadlines include time spent at the gate.
 Calls capture the epoch at entry. An older call still pending after a bump uses
 the existing cancellation outcome instead of waiting on a gate whose drain may
 need that call: queries and around return `READ_FAILED`; pending follow starts
-return `READ_FAILED`; registered follows end once with `cleared` only for
-Clear all; old export
-tickets are refused and running streams finish incomplete. Calls admitted
+return `READ_FAILED`; registered follows end once with `cleared`; old export tickets are refused and running streams finish incomplete. Calls admitted
 between successive clears belong to the clear that subsequently stops them.
 
 The follow publisher checks its own abort state and seals after its first

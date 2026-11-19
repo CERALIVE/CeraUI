@@ -1,6 +1,6 @@
 # Device logs wire contract [EXISTS]
 
-Shapes: `src/schemas/logs.schema.ts`. Procedures: `src/contracts/logs.contract.ts:24-38`
+Shapes: `src/schemas/logs.schema.ts`. Procedures: `src/contracts/logs.contract.ts`
 (`appContract.logs`). Backend: [device-logs.md](../../../../apps/backend/docs/agents/device-logs.md).
 
 ## Procedures
@@ -14,26 +14,19 @@ Shapes: `src/schemas/logs.schema.ts`. Procedures: `src/contracts/logs.contract.t
 | `followStop` | none | `logFollowStopOutputSchema` | `success: false` when no follow |
 | `getStorage` | none | `logStorageSchema` | thrown |
 | `setRetention` | `logRetentionSchema` | `logStorageOutputSchema` | `{ ok: false, error }` |
-| `deleteOlderFiles` | none | `logDeleteOlderFilesOutputSchema` | `{ ok: false, error }` |
 | `deleteLegacyDebug` | none | `logStorageOutputSchema` | `{ ok: false, error }` |
-| `clearAll` | none | `logDeleteOlderFilesOutputSchema` (includes boot counts) | `{ ok: false, error }` |
+| `clearAll` | none | `logClearAllOutputSchema` (includes boot counts) | `{ ok: false, error }` |
 | `createExport` | `logExportInputSchema` | `logExportOutputSchema` | `{ ok: false, error }` |
 | `previewBundle` | none | `logBundleManifestSchema` | thrown oRPC error, code `READ_FAILED` or `BUSY` |
 | `createBundle` | none | `logExportOutputSchema` | `{ ok: false, error }` |
 
-Delete older may return `unverifiedArchivesKept: true` or
-`legacyArchivesKept: true` alongside the refreshed counts and storage.
-These warnings identify archives kept because their contents could not be
-checked safely. Clear does not return these warnings.
-
-Sources: `src/contracts/logs.contract.ts:25-37`;
-`apps/backend/src/rpc/procedures/logs.procedure.ts:41-106` (`previewBundle`
-at `:90-101`); `apps/backend/src/modules/device-logs/follow.ts:52`;
+Sources: `src/contracts/logs.contract.ts`;
+`apps/backend/src/rpc/procedures/logs.procedure.ts`; `apps/backend/src/modules/device-logs/follow.ts:52`;
 `apps/backend/src/modules/device-logs/bundle.ts:85-90`;
 `apps/backend/src/modules/device-logs/redaction.ts:1-5`. `{ ok: false, error }` uses `logErrorSchema` with the nine
-`LOG_ERROR_CODES` (`logs.schema.ts:21-31`). The 13 handlers are built on
+`LOG_ERROR_CODES` (`logs.schema.ts:21-31`). The 12 handlers are built on
 `authedProcedure`, whose middleware throws oRPC `UNAUTHORIZED`
-(`apps/backend/src/rpc/procedures/logs.procedure.ts:39-106`;
+(`apps/backend/src/rpc/procedures/logs.procedure.ts`;
 `apps/backend/src/rpc/middleware/auth.middleware.ts:19-25`).
 
 ## Follow push

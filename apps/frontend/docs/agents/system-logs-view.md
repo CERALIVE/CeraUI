@@ -45,8 +45,8 @@ density. It is not a redesign.
   destination or a hash route; Events is the default tab; Detail Full keeps
   debug entries and Detail Reduced sets the production journal console level to
   info, unless `LOG_LEVEL` overrides it (`apps/backend/src/helpers/logger.ts:706-714`); retention can only tighten the device's
-  own limit; "Delete older log files" reports which boots remain instead of
-  promising they are gone; the two legacy downloads keep their actions and their
+  own limit; Clear all reports stored boot counts before and after; the two
+  legacy downloads keep their actions and their
   rendering changed (critique SL-2);
   temperature events are out of scope.
 - **Assumptions (not confirmed by the owner).** Below 1024 px the boot picker
@@ -483,13 +483,7 @@ Rules for this copy:
 | `systemLogs.storage.saved` | Limits saved. | After save |
 | `systemLogs.storage.targetNotMet` | The new limit is not met yet. The device removes more as it rotates log files. | targetMet: false |
 | `systemLogs.storage.maintenanceFailed` | The cleanup after saving didn't finish. The limits are saved. | lastMaintenance.ok: false |
-| `systemLogs.storage.deleteOlder` | Delete older log files | Action |
-| `systemLogs.storage.deleteOlderHint` | Removes log files the device has already closed. Some earlier boots may remain. | Action description |
-| `systemLogs.storage.deleteOlderTitle` | Delete older log files? | Confirmation title |
-| `systemLogs.storage.deleteOlderBody` | This permanently deletes older log files that the device has already closed. Logs from this boot are kept. Some logs from earlier boots may remain. Downloads that are running are cancelled. | Confirmation body |
-| `systemLogs.storage.unverifiedArchivesKept` | Some log files were kept because the device couldn't verify that they contain only logs from earlier boots. | Outcome when archive evidence is incomplete |
-| `systemLogs.storage.legacyArchivesKept` | A log file from an older system version can't be checked. It was kept. | Outcome when legacy archive evidence is incomplete |
-| `systemLogs.storage.deleteOlderResult` | Boots stored: {before} before, {after} now. | Result of deleteOlderFiles |
+| `systemLogs.storage.clearAllResult` | Boots stored: {before} before, {after} now. | Result of Clear all |
 | `systemLogs.storage.deleteLegacy` | Delete leftover debug files ({size}) | Rendered only when legacyDebugBytes > 0 |
 | `systemLogs.storage.clearAll` | Clear all logs | Destructive trigger |
 | `systemLogs.storage.clearAllTitle` | Clear all logs? | Confirmation title |
@@ -944,7 +938,7 @@ button disappears, provided the operator has not moved focus.
 | `main/system-logs/SegmentedChoice.svelte:27` | props |
 | `main/system-logs/SharingSection.svelte:21` | props |
 | `main/system-logs/ShutdownMark.svelte:21` | props |
-| `main/system-logs/StorageCleanup.svelte:37` | props |
+| `main/system-logs/StorageCleanup.svelte:35` | props |
 | `main/system-logs/StorageLimits.svelte:34` | props |
 | `main/system-logs/StorageSection.svelte:20` | props |
 | `main/system-logs/StorageUsage.svelte:17` | props |
@@ -1079,11 +1073,11 @@ Related browser specs and their entry points:
 
 ### RecoveryBand call sites
 
-`main/system-logs/StorageCleanup.svelte:214`, `main/system-logs/StorageLimits.svelte:183`, `main/system-logs/StorageSection.svelte:61`.
+`main/system-logs/StorageCleanup.svelte:175`, `main/system-logs/StorageLimits.svelte:183`, `main/system-logs/StorageSection.svelte:61`.
 
 ### role="status" elements
 
-`main/system-logs/BootPicker.svelte:166`, `main/system-logs/BundleDialog.svelte:102`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:211`, `main/system-logs/ExportDialog.svelte:51`, `main/system-logs/RawLogList.svelte:251`, `main/system-logs/RawLogRow.svelte:163`, `main/system-logs/RawLogsPanel.svelte:101`, `main/system-logs/RawLogsTab.svelte:161`, `main/system-logs/StorageCleanup.svelte:202`, `main/system-logs/StorageLimits.svelte:173`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:224`.
+`main/system-logs/BootPicker.svelte:166`, `main/system-logs/BundleDialog.svelte:102`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:211`, `main/system-logs/ExportDialog.svelte:51`, `main/system-logs/RawLogList.svelte:251`, `main/system-logs/RawLogRow.svelte:163`, `main/system-logs/RawLogsPanel.svelte:101`, `main/system-logs/RawLogsTab.svelte:158`, `main/system-logs/StorageCleanup.svelte:169`, `main/system-logs/StorageLimits.svelte:173`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:224`.
 
 ### Limits and constants
 
@@ -1125,7 +1119,7 @@ Backend and wire limits: [device-logs.md](../../../backend/docs/agents/device-lo
 | Segmented choice focus | `main/system-logs/SegmentedChoice.svelte:50` |
 | Selected tab focus | `main/system-logs/SystemLogsView.svelte:137` |
 | Storage heading focus | `main/system-logs/SystemLogsView.svelte:146` |
-| Cancel focus for clear confirmations | `main/system-logs/StorageCleanup.svelte:64` |
+| Cancel focus for clear confirmations | `main/system-logs/StorageCleanup.svelte:53` |
 | RecoveryBand Retry button | `main/system-logs/RecoveryBand.svelte:35` |
 
 ### Recorded follow-ups
