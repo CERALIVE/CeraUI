@@ -221,6 +221,15 @@ export default defineConfig(({ mode }) => {
 
 						// Vendor chunks for external dependencies
 						if (id.includes("node_modules")) {
+							// Only the lazy Raw logs list uses the virtualizer; matching "svelte" below would put it on the initial route.
+							if (
+								/\/node_modules\/@tanstack\/(?:svelte-virtual|virtual-core)\//.test(
+									id,
+								)
+							) {
+								return "raw-logs-virtualizer";
+							}
+
 							// Core Svelte framework (largest)
 							if (
 								id.includes("svelte") ||
