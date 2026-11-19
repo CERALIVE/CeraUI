@@ -46,6 +46,7 @@ export interface EventStoreDeps {
 		| "fchmodSync"
 		| "appendFileSync"
 		| "fdatasyncSync"
+		| "fsyncSync"
 		| "closeSync"
 	>;
 	readonly warn?: (message: string) => void;
@@ -213,17 +214,25 @@ export function clearEvents(deps: EventStoreDeps = {}): boolean {
 	return contain(deps, false, () => {
 		const io = deps.fs ?? fs;
 		const base = deps.baseDir ?? resolveEventsDir();
+		let directory: number;
+		try {
+			directory = io.openSync(base, fs.constants.O_DIRECTORY);
+		} catch (error) {
+			if (error instanceof Error && "code" in error && error.code === "ENOENT")
+				return true;
+			throw error;
+		}
+		try {
+			io.rmSync(path.join(base, EPOCH_FILE), { force: true });
+			// Persist the unlink before deleting any generation under the old identity.
+			io.fsyncSync(directory);
+		} finally {
+			io.closeSync(directory);
+		}
 		let failure: { readonly error: unknown } | undefined;
-		const files = [
-			// The identity goes first, so a clear cut short never keeps it for a changed ring.
-			path.join(base, EPOCH_FILE),
-			...Array.from({ length: EVENTS.files }, (_, gen) =>
-				filePath(base, EVENTS, gen),
-			),
-		];
-		for (const file of files) {
+		for (let gen = 0; gen < EVENTS.files; gen += 1) {
 			try {
-				io.rmSync(file, { force: true });
+				io.rmSync(filePath(base, EVENTS, gen), { force: true });
 			} catch (error) {
 				failure ??= { error };
 			}

@@ -15,19 +15,21 @@ filters and pagination, and are zero when the ring is empty.
 `epoch` names the retained ring: a UUID that `eventsEpoch`
 (`src/modules/events/epoch.ts`) keeps in `events.epoch` beside the JSONL
 generations. It is the same on every page and
-across rotation and restarts. `clear` removes it before the generations, so the
-next read names a new ring. That matters because the emitter takes `seq` from
-the store tail when it starts, so after a clear and a restart `seq`, and with it
-the event id, starts again at 1 and can repeat a number a client still shows.
+across rotation and restarts. `clear` unlinks it and syncs the directory before
+touching any generation, so the next read names a new ring. The emitter takes
+`seq` from the store tail when it starts. After a clear and a restart `seq`
+and the event ID start again at 1 and can repeat a number a client still shows.
 The field is optional on the wire and omitted when the store cannot read or
 write the file, rather than inventing a new identity on each read. The push frame
 is unchanged: a new process reaches a client only on a new connection, and the
 client reads the list on every reconnect.
 
 `boots` reads the separate boot ring, including stored version contexts.
-`clear` attempts every event generation and leaves boot records intact. It
-returns `success: false` if any removal fails, even when other generations
-were removed. All three procedures use the existing authentication middleware.
+`clear` returns `success: false` without removing any event generations if
+epoch invalidation fails. After invalidation, it attempts every event
+generation and returns `success: false` if any could not be removed. Boot
+records stay intact. All three procedures use the existing authentication
+middleware.
 
 After the local control server binds, `src/main.ts` registers the emitter sink
 with `broadcastMsgLocal(EVENT_PUSH, { append: [event] }, 0, undefined, true)`.

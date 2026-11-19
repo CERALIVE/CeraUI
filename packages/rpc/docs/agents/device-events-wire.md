@@ -28,7 +28,7 @@ Procedures `events.list`, `events.boots`, `events.clear`:
 
 A record with a param value outside those types fails the schema. The store
 reader skips records that fail its `v: 1` schema
-(`apps/backend/src/modules/events/store.ts:159-160,185`). The Events tab
+(`apps/backend/src/modules/events/store.ts:160-161,186`). The Events tab
 renders an unknown code with `timeline.unknown.title`
 (`apps/frontend/src/lib/device-logs/timeline-copy.ts:139-140`).
 
@@ -53,7 +53,8 @@ renders an unknown code with `timeline.unknown.title`
 `epoch` is `eventRingEpochSchema`, a UUID naming the retained ring
 (`events-wire.schema.ts:57-59`). It is replaced by a clear, after which `seq`
 and event ids can start again at 1. It is optional: the backend omits it when
-the store cannot keep one, and a reader then compares `seq` alone. The output
+the store cannot keep one. An omitted epoch cannot establish that the
+client's existing window still belongs to that ring. The output
 is still a strict object, so a reader built before the field rejects a reply
 that carries it. The field and its readers were added before the event wire
 reached any release tag.

@@ -2,9 +2,12 @@
 
 `store.ts` owns two independent JSONL rings on the data partition. Events retain
 eight files of at most 512 KiB each; boot records retain two files of at most
-128 KiB each. `clearEvents` removes the ring epoch, then attempts every event
-generation, and returns false if any removal fails. `eventsBytes` counts event
-generation files only. Boot versions remain available after event cleanup.
+128 KiB each. `clearEvents` unlinks the ring epoch and syncs its directory
+before removing any event generation. If either step fails, it returns false
+and leaves every generation in place. Once the epoch is invalidated, it
+attempts every event generation and reports any removal failure. `eventsBytes`
+counts event generation files only. Boot versions remain available after event
+cleanup.
 
 `epoch.ts` exports `eventsEpoch`, which names the event ring with a UUID kept
 in `events.epoch` (the file name `store.ts` exports for its clear), written

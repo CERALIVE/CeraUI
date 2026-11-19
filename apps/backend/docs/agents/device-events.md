@@ -62,12 +62,12 @@ subprocess or threshold for an event. Named exception: `disk_low` and
 
 | Fact | Source |
 |---|---|
-| Events: at most 8 files of at most 512 KiB each; boots: at most 2 files of at most 128 KiB each; the active file rotates when an append would exceed its limit | `store.ts:17-28,123-132` |
-| Directory: `CERALIVE_EVENTS_DIR`, else `CERALIVE_DATA_DIR/ceralive/events`, else a dev temp dir, else `/data/ceralive/events` | `store.ts:54-65` |
-| `mkdir` mode 0700; active file `fchmod` 0600 on append | `store.ts:102,136` |
-| Readers skip oversized files, the unterminated last line, unparsable lines and records failing the `v: 1` schema | `store.ts:159-160,173-189` |
+| Events retain at most 8 files of at most 512 KiB each. Boots retain at most 2 files of at most 128 KiB each. The active file rotates when an append would exceed its limit. | `store.ts:17-28,124-133` |
+| Directory: `CERALIVE_EVENTS_DIR`, else `CERALIVE_DATA_DIR/ceralive/events`, else a dev temp dir, else `/data/ceralive/events` | `store.ts:55-66` |
+| `mkdir` mode 0700, active file `fchmod` 0600 on append | `store.ts:103,137` |
+| Readers skip oversized files, the unterminated last line, unparsable lines and records failing the `v: 1` schema | `store.ts:160-161,174-190` |
 | Ring epoch: a UUID in `events.epoch`, mode 0600, kept across reads, rotation and restarts; a missing or damaged file gets a new one on the next `events.list`, and one that cannot be read or written is omitted from the reply | `epoch.ts:12-41`; `events.procedure.ts:34,41` |
-| `events.clear` calls `clearEvents`, which deletes the ring epoch first, then the `events` generations, and not the `boots` files | `events.procedure.ts:51`; `store.ts:212-234` |
+| `events.clear` leaves every generation intact if unlinking `events.epoch` or syncing the directory fails. Once the epoch is invalidated, it attempts every event generation and preserves the boot files. | `events.procedure.ts:51`, `store.ts:213-243` |
 
 ## Sync
 
@@ -76,11 +76,11 @@ subprocess or threshold for an event. Named exception: `disk_low` and
 | `shutdown_requested`, `service_stopping` | on each published record | `emit.ts:116-117,125` |
 | `device_started`, severity `error` or `warning` | at most once per second | `emit.ts:118-125` |
 | Others | no | `emit.ts:123-127` |
-| Boot records | yes | `store.ts:156` |
+| Boot records | yes | `store.ts:157` |
 | Ring epoch | yes | `epoch.ts:35` |
 
-The store calls `fdatasyncSync` when `sync` is set (`store.ts:138`); failures
-are caught and logged as one warning (`store.ts:76-86`).
+The store calls `fdatasyncSync` when `sync` is set (`store.ts:139`). It
+catches failures and logs one warning (`store.ts:77-87`).
 
 ## Adding an event
 
