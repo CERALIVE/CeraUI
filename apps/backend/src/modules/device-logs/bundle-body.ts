@@ -1,12 +1,10 @@
 import {
 	type LogBundleManifest,
 	logBundleManifestSchema,
-	logQueryInputSchema,
 } from "@ceraui/rpc/schemas";
 import { collectBundleData } from "./bundle-data.ts";
-import { withQuerySlot } from "./query-admission.ts";
+import { collectBundleJournal } from "./bundle-journal.ts";
 import { BundleReadError, buildRedactor } from "./redaction.ts";
-import { scanPage } from "./scan-page.ts";
 import { getLogState } from "./settings.ts";
 
 const MAX_PLAIN = 32 * 1024 * 1024;
@@ -146,58 +144,21 @@ export async function buildBundle(
 		incomplete = stopped() ?? (await append(section, payload));
 		if (incomplete) break;
 	}
-	const owner = {};
 	const previousBudget = {
 		plain: plainBytes + Math.floor((totalBudget.plain - plainBytes) / 2),
 		compressed:
 			compressedBytes +
 			Math.floor((totalBudget.compressed - compressedBytes) / 2),
 	};
-	for (const boot of incomplete ? [] : [...snapshot.journalBoots].reverse()) {
-		const budget =
-			boot === snapshot.exportedBy.bootId ? totalBudget : previousBudget;
-		const startingEntries = journal.entries;
-		let bootIncomplete: string | null = null;
-		const query = logQueryInputSchema.parse({
-			boot,
-			direction: "older",
-			limit: 200,
-		});
-		let position = query;
-		while (!bootIncomplete) {
-			bootIncomplete = stopped();
-			if (bootIncomplete) break;
-			try {
-				const page = await withQuerySlot(
-					owner,
-					(slotSignal) =>
-						scanPage(position, {
-							bootId: boot,
-							epoch,
-							signal: AbortSignal.any([signal, slotSignal]),
-						}),
-					signal,
-				);
-				bootIncomplete = stopped();
-				if (bootIncomplete) break;
-				if (!page.ok) {
-					bootIncomplete = page.error;
-					break;
-				}
-				for (const entry of page.entries) {
-					bootIncomplete =
-						stopped() ?? (await append("journal", { entry }, budget));
-					if (bootIncomplete) break;
-				}
-				if (page.hasMore === false) break;
-				position = { ...query, continuation: page.continuation ?? undefined };
-			} catch (error) {
-				if (error instanceof BundleReadError) throw error;
-				bootIncomplete = stopped() ?? "READ_FAILED";
-			}
-		}
-		if (journal.entries > startingEntries) journal.bootsCovered++;
-		incomplete ??= bootIncomplete;
+	if (incomplete === null) {
+		const coverage = await collectBundleJournal(
+			snapshot.journalBoots,
+			{ epoch, signal, stopped, deadline: createdAt + BUNDLE_TIME_MS },
+			(entry, isCurrent) =>
+				append("journal", { entry }, isCurrent ? totalBudget : previousBudget),
+		);
+		incomplete = coverage.incomplete;
+		journal.bootsCovered = coverage.bootsCovered;
 	}
 	incomplete ??= stopped();
 	if (incomplete) await append("journal", { incomplete }, null);

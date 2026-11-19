@@ -74,15 +74,17 @@ a supported sensitive pattern refuses the operation instead of being renamed.
 The final manifest check also covers section counts after processing; a count
 whose serialized digits equal a held secret refuses preview and creation.
 
-`bundle-body.ts` reads one page at a time using `scanPage` and `withQuerySlot`,
+`bundle-journal.ts` reads one page at a time using `scanPage` and `withQuerySlot`,
 all sources/levels, older direction and limit 200, independently of the caller's
-socket. It reads the newest entries of the previous available boot first,
-using at most half of each byte budget remaining after the prelude, then gives
-the current boot the rest. A cut of the previous boot does not prevent reading
-the current one. The preview's journal section reports `bootsCovered` based on
+socket. It reads one running-boot page first, then gives the previous available
+boot at most half the remaining time, including query slot admission. It writes
+previous-boot entries first, using at most half of each byte budget remaining
+after the prelude, then writes the buffered running-boot page and continues that
+boot with the remaining time and bytes. The preview's journal section reports `bootsCovered` based on
 admitted entries and `complete` based on whether collection finished without a
 cut or read failure. The separate `boots` list still reports version context.
-Budget pages continue until real EOF, failure or a cap. Sections are
+Budget pages continue when the cursor advances. A missing or unchanged budget
+cursor ends that boot with `READ_FAILED` and marks the journal incomplete. Sections are
 versions, settings, events and journal, followed by an end record. A journal
 failure or cut adds an incomplete journal record and `complete:false`. Caps are
 32 MiB of NDJSON, 8 MiB of gzip and sixty seconds, including reserved termination

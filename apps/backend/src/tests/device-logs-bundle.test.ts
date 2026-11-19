@@ -969,6 +969,7 @@ test("uncompressed output is bounded at 32 MiB and compressed output at 8 MiB", 
 				})),
 				true,
 			),
+			continuation: String(n),
 		}));
 		try {
 			const response = await download();
