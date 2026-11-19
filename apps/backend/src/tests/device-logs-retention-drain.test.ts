@@ -1,5 +1,5 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { LogFollowMessage, LogStorageOutput } from "@ceraui/rpc/schemas";
 import { getRecentLogLines } from "../helpers/logger.ts";
@@ -74,7 +74,7 @@ test("a real nonsettling query owner fails clear at 15 seconds without deletion 
 	}
 });
 
-test("a frozen follow stream-cancel hook causes a bounded failed clear and leaves evidence intact", async () => {
+test("a reaped follower with a frozen stream cancel hook releases its slot and allows clear", async () => {
 	h = historyFixture(false);
 	const hook = Promise.withResolvers<void>();
 	const process = historyJournal({
@@ -92,40 +92,35 @@ test("a frozen follow stream-cancel hook causes a bounded failed clear and leave
 			)
 		).ok,
 	).toBe(true);
-	writeFileSync(join(h.f.dir, "debug.log"), "keep native evidence");
-	const clock = drainClock();
+	const evidence = join(h.f.dir, "debug.log");
+	writeFileSync(evidence, "native evidence");
 	const clearing = h.own(clearAll());
 	try {
 		await bounded(process.cancelled);
-		clock.capture();
-		clock.advance(15_000);
-		expect(await bounded(clearing)).toEqual({
-			ok: false,
-			error: "READ_FAILED",
-		});
-		expect(h.f.run.mock.calls).toEqual([]);
+		expect((await bounded(clearing)).ok).toBe(true);
+		expect(h.f.run.mock.calls.slice(0, 2)).toEqual([
+			["journalctl", ["--rotate"]],
+			["journalctl", ["--vacuum-time=1s"]],
+		]);
 		expect(getLogState().historyEpoch).toBe(1);
-		expect(getLogState().lastClearedAt).toBeNull();
-		expect(readFileSync(join(h.f.dir, "debug.log"), "utf8")).toBe(
-			"keep native evidence",
-		);
-		expect((await bounded(createExport({}, { filter: {} }))).ok).toBe(true);
-		expect((await h.start()).result.ok).toBe(true);
+		expect(getLogState().lastClearedAt).not.toBeNull();
+		expect(existsSync(evidence)).toBe(false);
 		expect(process.alive).toBe(false);
 		expect(process.cancelCount).toBe(1);
-		const again = h.own(clearAll());
-		await turn();
-		clock.capture();
-		clock.advance(15_000);
-		expect(await bounded(again)).toEqual({ ok: false, error: "READ_FAILED" });
-		expect(messages.map((message) => message.ended)).toEqual(["cleared"]);
+		expect(process.proc.stdout.locked).toBe(false);
+		expect(process.proc.stderr.locked).toBe(false);
+		expect((await h.start(conn)).result.ok).toBe(true);
+		expect((await bounded(clearAll())).ok).toBe(true);
+		expect(messages.map((message) => message.ended)).toEqual([
+			"cleared",
+			"cleared",
+		]);
 		expect(getLogState().historyEpoch).toBe(2);
 		expect((await createExport({}, { filter: {} })).ok).toBe(true);
 	} finally {
 		hook.resolve();
 		process.finish();
 		await bounded(clearing);
-		clock.dispose();
 	}
 });
 

@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { BOUNDED_SPAWN_TERM_GRACE_MS } from "../../helpers/bounded-spawn.ts";
+import type { JournalClock } from "./reader.ts";
 
 type ScanStatus = "eof" | "stopped" | "budget";
 
@@ -61,7 +63,19 @@ interface Child {
 	kill(signal: "SIGTERM" | "SIGKILL"): void;
 }
 
-export function trackOwnership(child: Child) {
+type StopSignal = "SIGTERM" | "SIGKILL";
+
+export class JournalSignalError extends Error {
+	constructor(
+		public readonly signal: StopSignal,
+		cause: unknown,
+	) {
+		super("Journal process signal failed", { cause });
+		this.name = "JournalSignalError";
+	}
+}
+
+function trackOwnership(child: Child) {
 	const processAtSpawn =
 		process.platform === "linux" && child.pid !== undefined
 			? readProcessStat(child.pid)
@@ -73,7 +87,7 @@ export function trackOwnership(child: Child) {
 		get diedBeforeOurSignal() {
 			return diedBeforeOurSignal;
 		},
-		send(signal: "SIGTERM" | "SIGKILL"): boolean {
+		send(signal: StopSignal): boolean | JournalSignalError {
 			const stat =
 				process.platform === "linux" && child.pid !== undefined
 					? readProcessStat(child.pid)
@@ -105,8 +119,51 @@ export function trackOwnership(child: Child) {
 					if (!sent) diedBeforeOurSignal = true;
 					return false;
 				}
-				throw error;
+				return new JournalSignalError(signal, error);
 			}
+		},
+	};
+}
+
+export function journalRetirement(
+	child: Child,
+	clock: Pick<JournalClock, "setTimeout" | "clearTimeout">,
+) {
+	const owner = trackOwnership(child);
+	let termSent = false;
+	let killSent = false;
+	let failure: JournalSignalError | undefined;
+	let grace: number | undefined;
+	let retiring = false;
+	return {
+		stop() {
+			if (retiring) return;
+			retiring = true;
+			const term = owner.send("SIGTERM");
+			termSent = term === true;
+			if (term === false) return;
+			if (term instanceof JournalSignalError) failure = term;
+			if (child.exitCode != null || child.signalCode != null) return;
+			grace = clock.setTimeout(() => {
+				grace = undefined;
+				const kill = owner.send("SIGKILL");
+				killSent = kill === true;
+				if (kill instanceof JournalSignalError) failure ??= kill;
+			}, BOUNDED_SPAWN_TERM_GRACE_MS);
+		},
+		disarm() {
+			if (grace !== undefined) clock.clearTimeout(grace);
+			grace = undefined;
+		},
+		get failure() {
+			return failure;
+		},
+		get signals() {
+			return {
+				termSent,
+				killSent,
+				diedBeforeOurSignal: owner.diedBeforeOurSignal,
+			};
 		},
 	};
 }

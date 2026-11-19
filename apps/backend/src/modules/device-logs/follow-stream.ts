@@ -8,16 +8,21 @@ import {
 	type JournalClock,
 	JournalReadError,
 } from "./reader.ts";
+import { journalRetirement } from "./termination.ts";
 
 /** Long-lived output has a per-record bound, never a growing stdout/stderr buffer. */
 export async function readFollowOutput(
 	proc: ManagedProcess,
 	onRecord: (record: RawJournalRecord) => "continue" | "stop",
+	signal?: AbortSignal,
 ): Promise<void> {
 	if (!proc.stdout || !proc.stderr) throw new JournalReadError("READ_FAILED");
 	const stdout = proc.stdout.getReader();
 	const stderr = proc.stderr.getReader();
 	let pending = new Uint8Array(0);
+	const stopped = Promise.withResolvers<void>();
+	const stop = () => stopped.resolve();
+	signal?.addEventListener("abort", stop, { once: true });
 	const decode = new TextDecoder("utf-8", { fatal: true });
 	const line = (bytes: Uint8Array) => {
 		let value: unknown;
@@ -32,10 +37,12 @@ export async function readFollowOutput(
 		return record === null || onRecord(record) !== "stop";
 	};
 	try {
-		await Promise.all([
+		signal?.throwIfAborted();
+		const output = Promise.all([
 			(async () => {
 				for (;;) {
 					const chunk = await stdout.read();
+					if (signal?.aborted) return;
 					if (chunk.done) {
 						if (pending.byteLength) line(pending);
 						return;
@@ -70,8 +77,10 @@ export async function readFollowOutput(
 				}
 			})(),
 		]);
+		await Promise.race([output, stopped.promise]);
 	} finally {
-		await Promise.allSettled([stdout.cancel(), stderr.cancel()]);
+		signal?.removeEventListener("abort", stop);
+		void Promise.allSettled([stdout.cancel(), stderr.cancel()]);
 		stdout.releaseLock();
 		stderr.releaseLock();
 	}
@@ -86,32 +95,31 @@ export async function joinFollowProcess(
 		readonly onRecord: (record: RawJournalRecord) => "continue" | "stop";
 	},
 ): Promise<void> {
-	let grace: number | undefined;
-	let retiring = false;
+	const retirement = journalRetirement(handle.proc, options.clock);
+	const pipes = new AbortController();
 	const retire = () => {
-		if (retiring) return;
-		retiring = true;
-		handle.abort();
-		if (handle.proc.exitCode === null && handle.proc.signalCode === null)
-			grace = options.clock.setTimeout(() => {
-				if (handle.proc.exitCode === null && handle.proc.signalCode === null)
-					handle.proc.kill("SIGKILL");
-			}, 100);
+		retirement.stop();
+		pipes.abort();
 	};
+	const output = readFollowOutput(handle.proc, options.onRecord, pipes.signal);
+	let drain: number | undefined;
+	const exited = handle.proc.exited.then(() => {
+		if (!pipes.signal.aborted)
+			drain = options.clock.setTimeout(() => pipes.abort(), 100);
+	});
 	options.signal.addEventListener("abort", retire);
 	if (options.signal.aborted) retire();
 	try {
-		await Promise.all([
-			readFollowOutput(handle.proc, options.onRecord),
-			handle.proc.exited,
-		]);
+		await Promise.all([output, exited]);
 	} finally {
 		retire();
 		try {
-			await handle.proc.exited;
+			await exited;
 		} finally {
 			options.signal.removeEventListener("abort", retire);
-			if (grace !== undefined) options.clock.clearTimeout(grace);
+			retirement.disarm();
+			if (drain !== undefined) options.clock.clearTimeout(drain);
 		}
 	}
+	if (retirement.failure) throw retirement.failure;
 }

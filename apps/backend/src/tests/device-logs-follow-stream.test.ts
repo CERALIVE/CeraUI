@@ -124,7 +124,7 @@ test("draining stderr allows a backpressured child to finish stdout", async () =
 	expect(seen).toEqual(["after-stderr"]);
 });
 
-test("pipe cancellation completes before locks are released and output returns", async () => {
+test("pipe cancellation starts and releases locks without waiting for its hook", async () => {
 	const cancelling = Promise.withResolvers<void>();
 	const released = Promise.withResolvers<void>();
 	const proc = {
@@ -140,12 +140,14 @@ test("pipe cancellation completes before locks are released and output returns",
 		}),
 	};
 	const task = readFollowOutput(proc, () => "stop");
-	await cancelling.promise;
-	expect(proc.stdout.locked).toBe(true);
-	released.resolve();
-	await task;
-	expect(proc.stdout.locked).toBe(false);
-	expect(proc.stderr?.locked).toBe(false);
+	try {
+		await cancelling.promise;
+		await task;
+		expect(proc.stdout.locked).toBe(false);
+		expect(proc.stderr?.locked).toBe(false);
+	} finally {
+		released.resolve();
+	}
 });
 
 test("an unexpected decoder failure retains its identity", async () => {

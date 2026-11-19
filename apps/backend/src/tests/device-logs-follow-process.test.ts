@@ -1,7 +1,10 @@
 import { expect, spyOn, test } from "bun:test";
 import type { ManagedProcess } from "../helpers/spawn-policy.ts";
 import { joinFollowProcess } from "../modules/device-logs/follow-stream.ts";
+import { JournalSignalError } from "../modules/device-logs/termination.ts";
 import { manualClock } from "./helpers/device-journal.ts";
+import { turn } from "./helpers/history-clear.ts";
+import { historyJournal } from "./helpers/history-journal.ts";
 
 function heldProcess(ignoreTerm = false) {
 	const exit = Promise.withResolvers<number>();
@@ -185,3 +188,57 @@ test("an output error and concurrent stop share one retirement and wait for reap
 	expect(handle.signals).toEqual(["SIGTERM", "SIGKILL"]);
 	expect(time.timers.size).toBe(0);
 });
+
+test.each(["SIGTERM", "SIGKILL"] as const)(
+	"follower releases both pipes and waits for reaping when %s throws",
+	async (fault) => {
+		const time = manualClock();
+		const controller = new AbortController();
+		const child = historyJournal();
+		const signals: string[] = [];
+		child.proc.kill = (signal) => {
+			signals.push(String(signal));
+			if (signal === fault) throw new Error("signal refused");
+		};
+		const task = joinFollowProcess(
+			{
+				proc: child.proc,
+				abort() {
+					child.proc.kill("SIGTERM");
+				},
+			},
+			{
+				clock: time.clock,
+				signal: controller.signal,
+				onRecord: () => "continue",
+			},
+		);
+		let settled = false;
+		const outcome = task.then(
+			() => {
+				settled = true;
+			},
+			(error: unknown) => {
+				settled = true;
+				return error;
+			},
+		);
+		try {
+			controller.abort();
+			expect(() => time.advance(100)).not.toThrow();
+			await turn();
+			expect(signals).toEqual(["SIGTERM", "SIGKILL"]);
+			expect(child.proc.stdout.locked).toBe(false);
+			expect(child.proc.stderr.locked).toBe(false);
+			expect(settled).toBe(false);
+			child.finish();
+			const error = await outcome;
+			expect(error).toBeInstanceOf(JournalSignalError);
+			expect(error).toMatchObject({ signal: fault });
+			expect(time.timers.size).toBe(0);
+		} finally {
+			child.finish();
+			await outcome;
+		}
+	},
+);

@@ -1,7 +1,6 @@
-import { BOUNDED_SPAWN_TERM_GRACE_MS } from "../../helpers/bounded-spawn.ts";
 import { scanBudget } from "./bounds.ts";
 import { parseRecord, type RawJournalRecord } from "./parse.ts";
-import { classifyTermination, trackOwnership } from "./termination.ts";
+import { classifyTermination, journalRetirement } from "./termination.ts";
 
 export const JOURNAL_LIMITS = {
 	deadlineMs: 2000,
@@ -17,8 +16,9 @@ export class JournalReadError extends Error {
 	constructor(
 		public readonly code: ReadCode,
 		public stderr = "",
+		options?: ErrorOptions,
 	) {
-		super(code);
+		super(code, options);
 		this.name = "JournalReadError";
 	}
 }
@@ -95,7 +95,7 @@ export async function scanJournal(
 	}
 	const stdout = child.stdout.getReader();
 	const stderr = child.stderr.getReader();
-	const owner = trackOwnership(child);
+	const retirement = journalRetirement(child, time);
 	let exitCode: number | null = null;
 	const exited = child.exited.then((code): number => {
 		exitCode = code;
@@ -202,9 +202,6 @@ export async function scanJournal(
 		}
 	};
 	const output = Promise.all([readStdout(), readStderr(), exited]);
-	let grace: number | undefined;
-	let termSent = false;
-	let killSent = false;
 	let status: JournalScanResult["status"] | undefined;
 	try {
 		status = await Promise.race([
@@ -219,33 +216,27 @@ export async function scanJournal(
 		time.clearTimeout(deadline);
 		input.signal?.removeEventListener("abort", onAbort);
 		collecting = false;
-		if (exitCode === null) {
-			termSent = owner.send("SIGTERM");
-			if (termSent)
-				grace = time.setTimeout(() => {
-					killSent = owner.send("SIGKILL");
-				}, BOUNDED_SPAWN_TERM_GRACE_MS);
-		}
+		if (exitCode === null) retirement.stop();
 		try {
-			await exited;
-		} finally {
-			if (grace !== undefined) time.clearTimeout(grace);
+			// Let pipe continuations already queued by termination observe collecting=false.
+			await Promise.resolve();
 			void Promise.allSettled([stdout.cancel(), stderr.cancel()]);
-			await Promise.allSettled([output]);
 			stdout.releaseLock();
 			stderr.releaseLock();
+			await exited;
+		} finally {
+			retirement.disarm();
 		}
 	}
 	const termination = classifyTermination(exitCode, child.signalCode, {
 		status,
-		termSent,
-		killSent,
-		diedBeforeOurSignal: owner.diedBeforeOurSignal,
+		...retirement.signals,
 	});
-	if (termination === "READ_FAILED")
+	if (retirement.failure || termination === "READ_FAILED")
 		throw new JournalReadError(
 			"READ_FAILED",
 			new TextDecoder().decode(captured),
+			{ cause: retirement.failure },
 		);
 	return { status: termination, exitCode, skippedRecords };
 }

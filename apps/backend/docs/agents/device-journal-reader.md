@@ -18,7 +18,10 @@ Only `eof` proves a successful physical end of the scope, including both pipe
 drains and a zero child exit. `stopped` is callback or signal cancellation;
 `budget` proves no end. The paging owner decides look-ahead and `hasMore`.
 Termination sends TERM, escalates to KILL after 100 ms and joins the child's
-exit. A zero exit induced by cancellation does not become EOF. Unexpected
+exit. A signal failure is retained as a typed cause of `READ_FAILED` when
+there is no earlier read failure. The reader cancels the pipes and releases
+their locks without joining stream cancel hooks. A zero exit induced by
+cancellation does not become EOF. Unexpected
 nonzero exits fail with `READ_FAILED`. Exit classification happens after reaping:
 cancellation accepts zero or a signal exit matching TERM/KILL actually sent by
 this reader. An external KILL remains a failure when the reader sent only TERM,

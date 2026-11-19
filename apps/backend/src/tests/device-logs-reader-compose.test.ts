@@ -195,7 +195,10 @@ test("stderr arriving after retirement starts cannot replace the captured diagno
 });
 
 test("the default clock enforces elapsed time and retires every allocated timer", async () => {
-	const fake = fakeJournal([journalLine().repeat(2)], { held: true });
+	const fake = fakeJournal([journalLine().repeat(2)], {
+		held: true,
+		ignoreTerm: true,
+	});
 	let now = 10_000;
 	let seen = 0;
 	const active = new Set<number>();
@@ -228,7 +231,17 @@ test("the default clock enforces elapsed time and retires every allocated timer"
 	try {
 		const result = await scanJournal({
 			...scanInput,
-			spawn: () => fake.child,
+			spawn: () => ({
+				...fake.child,
+				get signalCode() {
+					return fake.child.signalCode;
+				},
+				kill(signal) {
+					fake.child.kill(signal);
+					if (signal === "SIGTERM")
+						queueMicrotask(() => fake.finish(143, signal));
+				},
+			}),
 			onRecord() {
 				now = 13_000;
 				return ++seen === 2 ? "stop" : "continue";

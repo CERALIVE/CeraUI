@@ -63,12 +63,8 @@ never wait on this admission gate.
 - `getStorage`, `listBoots`, classified-boot and shutdown-window metadata readers
   remain outside admission and cancellation. They may observe intermediate or
   mixed metadata across clear.
-- In the landed reader, a `kill()` exception before termination skips the later
-  reaping block. The query can settle with a live child and a locked stdout
-  reader. Clear relies on that owner's settlement and cannot detect this leak.
-- In the landed follow-stream owner, a stream cancellation hook that never
-  settles prevents its join from completing. Clear returns `READ_FAILED` at
-  15 seconds and preserves logs; the old follow still needs its owner to settle.
-
-The reader and follow-stream defects require changes in their owning units;
-retention does not replace those owners or report an unjoined drain as success.
+- A child whose exit has not been confirmed still occupies its query or follow
+  slot, even after a failed TERM or KILL attempt. Clear returns `READ_FAILED`
+  at its drain deadline and preserves logs in that case. Both owners release
+  their pipe readers without waiting on stream cancel hooks, so a stalled hook
+  on a reaped child cannot block clear.

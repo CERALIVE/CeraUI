@@ -1,6 +1,9 @@
 import { expect, spyOn, test } from "bun:test";
 import * as fs from "node:fs";
-import { scanJournal } from "../modules/device-logs/reader.ts";
+import {
+	JournalReadError,
+	scanJournal,
+} from "../modules/device-logs/reader.ts";
 import {
 	fakeJournal,
 	journalLine,
@@ -266,7 +269,17 @@ test.each(["EIO", { toString: () => "ESRCH" }])(
 			}),
 			onRecord: () => "stop",
 		}).catch((error: unknown) => error);
-		expect(result).toBe(failure);
+		expect(result).toBeInstanceOf(JournalReadError);
+		expect(result).toMatchObject({
+			code: "READ_FAILED",
+			cause: { signal: "SIGTERM" },
+		});
+		if (
+			!(result instanceof JournalReadError) ||
+			!(result.cause instanceof Error)
+		)
+			throw new Error("missing signal failure");
+		expect(result.cause.cause).toBe(failure);
 	},
 );
 

@@ -6,7 +6,6 @@ import { createContext } from "../rpc/context.ts";
 import * as events from "../rpc/events.ts";
 import { appRouter } from "../rpc/router.ts";
 import { followFixture, record } from "./helpers/device-follow.ts";
-import { turn } from "./helpers/history-clear.ts";
 import { logsSockets } from "./helpers/logs-rpc.ts";
 
 let f: ReturnType<typeof followFixture>;
@@ -143,9 +142,10 @@ test("logout retires a follow and blocks records while its child is reaping", as
 	const kill = spyOn(child.proc, "kill").mockImplementation(() => undefined);
 	const send = spyOn(sockets.ws, "send");
 	try {
+		await child.emit([record(2)]);
+		expect(f.time.timers.size).toBe(1);
 		await call(appRouter.auth.logout, undefined, { context: sockets.context });
-		const consumed = child.emit([record(2)]);
-		await Promise.race([consumed, turn()]);
+		await expect(child.emit([record(3)])).rejects.toBeInstanceOf(TypeError);
 		f.time.advance(250);
 		expect(send.mock.calls).toEqual([]);
 		expect(kill.mock.calls).toEqual([["SIGTERM"], ["SIGKILL"]]);

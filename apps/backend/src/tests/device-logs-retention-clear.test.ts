@@ -173,7 +173,7 @@ test("clear joins an export suspended in header collection before discarding the
 });
 
 test.each([false, true])(
-	"clear joins a real export scan with a throwing cancel hook=%s",
+	"clear joins a real export scan with a throwing TERM signal=%s",
 	async (throwing) => {
 		const body = await pausedExport();
 		const held = fakeJournal([], { held: true });
@@ -187,33 +187,19 @@ test.each([false, true])(
 			entered.resolve();
 			return nativeScan({ ...input, spawn: () => held.child });
 		});
-		const pending = body.read().then(
-			(chunk) => ({ ok: true, chunk }) as const,
-			(error: unknown) => ({ ok: false, error }) as const,
-		);
+		const pending = body.read();
 		try {
 			await bounded(entered.promise);
 			expect((await bounded(clearAll())).ok).toBe(true);
 			expect((await createExport({}, { filter: {} })).ok).toBe(true);
 			expect(held.signals).toEqual(["SIGTERM"]);
-			const result = await bounded(pending);
-			if (throwing) {
-				expect(result.ok).toBe(false);
-				if (result.ok) throw new Error("cancel hook did not fail");
-				expect(result.error).toBeInstanceOf(Error);
-				if (result.error instanceof Error)
-					expect(result.error.message).toBe("cancel consumer failed");
-			} else {
-				expect(result.ok).toBe(true);
-				if (!result.ok) throw result.error;
-				expect(new TextDecoder().decode(result.chunk.value)).toBe(
-					"# incomplete: cleared\n",
-				);
-				expect(await bounded(body.read())).toEqual({
-					done: true,
-					value: undefined,
-				});
-			}
+			expect(new TextDecoder().decode((await bounded(pending)).value)).toBe(
+				"# incomplete: cleared\n",
+			);
+			expect(await bounded(body.read())).toEqual({
+				done: true,
+				value: undefined,
+			});
 		} finally {
 			held.finish();
 		}
