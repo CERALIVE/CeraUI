@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { logFollowStartOutputSchema } from "@ceraui/rpc/schemas";
+import { logger } from "../helpers/logger.ts";
 import * as policy from "../helpers/spawn-policy.ts";
 import {
 	startFollow,
@@ -76,6 +77,45 @@ test("clear announces termination and leaves no follow or timer", async () => {
 		checkpointCursor: null,
 	});
 });
+
+test.each(["Stop", "Clear"] as const)(
+	"%s reports a TERM failure once after reap and settles successfully",
+	async (action) => {
+		await start();
+		const follower = child();
+		const kill = spyOn(follower.proc, "kill").mockImplementation(() => {
+			throw new Error("private subprocess detail");
+		});
+		const warn = spyOn(logger, "warn");
+		const stopping =
+			action === "Stop" ? stopFollow(f.conn) : stopAllFollows("cleared");
+		try {
+			expect(warn.mock.calls).toEqual([]);
+			follower.finish();
+			expect(await stopping).toEqual(
+				action === "Stop"
+					? { success: true, checkpointCursor: "s=1" }
+					: undefined,
+			);
+			expect<readonly unknown[]>(warn.mock.calls).toEqual([
+				[
+					"Journal follower signal failed after reap",
+					{ module: "device-logs", signal: "SIGTERM" },
+				],
+			]);
+			expect(f.time.timers.size).toBe(0);
+			expect(await stopFollow(f.conn)).toEqual({
+				success: false,
+				checkpointCursor: null,
+			});
+		} finally {
+			follower.finish();
+			await stopping;
+			warn.mockRestore();
+			kill.mockRestore();
+		}
+	},
+);
 
 test("a stopped follower never flushes its queued entry on unexpected pipe completion", async () => {
 	await start();

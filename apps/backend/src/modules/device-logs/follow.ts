@@ -6,6 +6,7 @@ import {
 	type LogFollowStopOutput,
 	logFollowStartInputSchema,
 } from "@ceraui/rpc/schemas";
+import { logger } from "../../helpers/logger.ts";
 import {
 	spawnWatcher,
 	type WatcherOptions,
@@ -29,6 +30,7 @@ import {
 	scanJournal,
 } from "./reader.ts";
 import { getLogState, historyClearing } from "./settings.ts";
+import { JournalSignalError } from "./termination.ts";
 
 interface FollowOptions extends Pick<WatcherOptions, "spawn"> {
 	readonly clock?: Pick<JournalClock, "setTimeout" | "clearTimeout">;
@@ -253,6 +255,11 @@ export async function startFollow(
 				});
 			}
 		} catch (error) {
+			if (error instanceof JournalSignalError)
+				logger.warn("Journal follower signal failed after reap", {
+					module: "device-logs",
+					signal: error.signal,
+				});
 			if (!started)
 				ready.resolve({
 					ok: false,
