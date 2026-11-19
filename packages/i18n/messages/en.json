@@ -3003,6 +3003,7 @@
 	"systemLogs.sharing.heading": "Downloads",
 	"systemLogs.sharing.export": "Export this view",
 	"systemLogs.sharing.exportHint": "Saves the entries that match the Raw logs filters as a text file.",
+	"systemLogs.sharing.exportHintMoment": "Saves the entries that match the Raw logs filters from the 10 minutes around the selected moment as a text file.",
 	"systemLogs.sharing.exportSensitive": "This file may contain sensitive data such as network names and addresses. Review it before sharing.",
 	"systemLogs.sharing.exportDownload": "Download export",
 	"systemLogs.sharing.bundle": "Support bundle",

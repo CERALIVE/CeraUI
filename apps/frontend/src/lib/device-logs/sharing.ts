@@ -21,6 +21,9 @@ export { chineseWordChunks } from "./cjk-words";
 
 export type SharingProblem = "busy" | "failed";
 
+/** What "Export this view" saves: the Raw logs filters, or the ten minutes around an exact anchor. */
+export type ExportSpan = "filters" | "moment";
+
 /** The Raw logs tab's opening view: this boot, errors through info, every source. */
 export const RAW_OPENING_QUERY: LogQueryInput = {
 	sources: [],

@@ -1,6 +1,7 @@
 <!--
   ExportDialog.svelte: the confirmation in front of "Export this view": what the
-  file holds and that it may contain sensitive data, before anything downloads.
+  file holds (the Raw logs filters, or the ten minutes around an exact anchor)
+  and that it may contain sensitive data, before anything downloads.
   Download export asks the device for a ticket; Cancel, Escape and the close
   button discard a request still in flight.
 -->
@@ -32,7 +33,7 @@ const PROBLEM = {
 	title={m['systemLogs.sharing.export']()}
 >
 	<div class="flex flex-col gap-4 [word-break:auto-phrase] [&:lang(ko)]:break-keep [&:lang(zh)]:break-keep wrap-break-word text-pretty [&:lang(zh)]:text-balance">
-		<p class="text-sm"><KeepWords text={m['systemLogs.sharing.exportHint']()} /></p>
+		<p class="text-sm"><KeepWords text={sharing.viewSpan === 'moment' ? m['systemLogs.sharing.exportHintMoment']() : m['systemLogs.sharing.exportHint']()} /></p>
 		<div class="flex items-start gap-3 rounded-lg border p-3">
 			<ShieldAlert aria-hidden="true" class="text-muted-foreground mt-0.5 size-4 shrink-0" />
 			<p class="text-sm" data-testid="sharing-export-sensitive"><KeepWords text={m['systemLogs.sharing.exportSensitive']()} /></p>

@@ -3006,6 +3006,7 @@
 	"systemLogs.sharing.heading": "Descargas",
 	"systemLogs.sharing.export": "Exportar esta vista",
 	"systemLogs.sharing.exportHint": "Guarda como archivo de texto las entradas que coinciden con los filtros de Registros sin procesar.",
+	"systemLogs.sharing.exportHintMoment": "Guarda como archivo de texto las entradas que coinciden con los filtros de Registros sin procesar en los 10 minutos alrededor del momento seleccionado.",
 	"systemLogs.sharing.exportSensitive": "Este archivo puede contener datos sensibles, como nombres de red y direcciones. Revísalo antes de compartirlo.",
 	"systemLogs.sharing.exportDownload": "Descargar exportación",
 	"systemLogs.sharing.bundle": "Paquete de soporte",

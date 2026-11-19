@@ -47,6 +47,9 @@ const EXPIRED: ReadonlySet<LogErrorCode> = new Set([
 	"FILTER_CHANGED",
 ]);
 
+/** Each side of an exact anchor's entry that "Export this view" saves. */
+const MOMENT_EXPORT_HALF_MS = 5 * 60_000;
+
 /** Owns query generations, the fixed window's edges and head replay. */
 export class RawPaging {
 	loading = $state<"first" | RawEnd | null>(null);
@@ -162,11 +165,22 @@ export class RawPaging {
 	}
 
 	openAnchor(around: AroundPage): void {
-		// The two paging edges together cover this one filter and time window.
-		this.deps.onQuery?.({
-			...around.olderQuery,
-			until: around.newerQuery.until,
-		});
+		// An approximate window's two edges cover its own bounded time window; an
+		// exact anchor pages its whole boot, so its export keeps to its moment.
+		if (around.anchor === null)
+			this.deps.onQuery?.({
+				...around.olderQuery,
+				until: around.newerQuery.until,
+			});
+		else
+			this.deps.onQuery?.(
+				{
+					...around.olderQuery,
+					since: Math.max(0, around.anchor.ts - MOMENT_EXPORT_HALF_MS),
+					until: around.anchor.ts + MOMENT_EXPORT_HALF_MS,
+				},
+				"moment",
+			);
 		this.anchor = {
 			cursor: around.anchor?.cursor ?? null,
 			approximate: around.approximate,

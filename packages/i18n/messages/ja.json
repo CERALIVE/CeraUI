@@ -2958,6 +2958,7 @@
 	"systemLogs.sharing.heading": "ダウンロード",
 	"systemLogs.sharing.export": "この表示をエクスポート",
 	"systemLogs.sharing.exportHint": "生ログのフィルターに一致するエントリーをテキストファイルとして保存します。",
+	"systemLogs.sharing.exportHintMoment": "選択した時刻の前後5分間で、生ログのフィルターに一致するエントリーをテキストファイルとして保存します。",
 	"systemLogs.sharing.exportSensitive": "このファイルにはネットワーク名やアドレスなどの機密データが含まれる場合があります。共有する前に内容を確認してください。",
 	"systemLogs.sharing.exportDownload": "エクスポートをダウンロード",
 	"systemLogs.sharing.bundle": "サポートバンドル",

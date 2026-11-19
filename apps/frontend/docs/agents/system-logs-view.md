@@ -100,7 +100,11 @@ density. It is not a redesign.
   `advanced.systemLogTooltip`, `advanced.download`, `advanced.downloading`,
   `advanced.downloadFailed`, `advanced.retryDownload`). Second group, after a
   neutral rule, same row anatomy: Export this view, Support bundle; one line
-  under it says files are saved by the browser. The Downloads region renders
+  under it says files are saved by the browser. Export this view saves the
+  Raw tab's filters and time window; an exact anchor pages its whole boot, so
+  there it saves the 10 minutes around the anchored entry with the window's
+  levels, and the confirmation says so (`lib/device-logs/raw-paging.svelte.ts`).
+  The Downloads region renders
   immediately; the Sharing group renders only once the viewer check is ready (`main/system-logs/SystemLogsView.svelte:172-174`).
 - **Older backend.** If the log procedures are missing, the tabs and the Storage
   region are replaced by one calm notice ("not available on this device
@@ -479,6 +483,7 @@ Rules for this copy:
 | `systemLogs.sharing.heading` | Downloads | Region heading |
 | `systemLogs.sharing.export` | Export this view | Row title and button |
 | `systemLogs.sharing.exportHint` | Saves the entries that match the Raw logs filters as a text file. | Row description |
+| `systemLogs.sharing.exportHintMoment` | Saves the entries that match the Raw logs filters from the 10 minutes around the selected moment as a text file. | Export confirmation while an exact anchor is open |
 | `systemLogs.sharing.exportSensitive` | This file may contain sensitive data such as network names and addresses. Review it before sharing. | Shown before the export download starts |
 | `systemLogs.sharing.exportDownload` | Download export | Confirmation button |
 | `systemLogs.sharing.bundle` | Support bundle | Row title and nested dialog title |
@@ -877,7 +882,7 @@ live-region announcements.
 | `main/system-logs/RawLogRow.svelte:35` | props |
 | `main/system-logs/RawLogsFilterBar.svelte:23` | props |
 | `main/system-logs/RawLogsPanel.svelte:23` | props |
-| `main/system-logs/RawLogsTab.svelte:26` | props |
+| `main/system-logs/RawLogsTab.svelte:27` | props |
 | `main/system-logs/RecoveryBand.svelte:19` | props |
 | `main/system-logs/SegmentedChoice.svelte:27` | props |
 | `main/system-logs/SharingSection.svelte:21` | props |
@@ -1019,7 +1024,7 @@ Related browser specs and their entry points:
 
 ### role="status" elements
 
-`main/system-logs/BootPicker.svelte:165`, `main/system-logs/BundleDialog.svelte:98`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:201`, `main/system-logs/ExportDialog.svelte:50`, `main/system-logs/RawLogList.svelte:241`, `main/system-logs/RawLogRow.svelte:136`, `main/system-logs/RawLogsPanel.svelte:98`, `main/system-logs/RawLogsTab.svelte:136`, `main/system-logs/StorageCleanup.svelte:191`, `main/system-logs/StorageLimits.svelte:173`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:222`.
+`main/system-logs/BootPicker.svelte:165`, `main/system-logs/BundleDialog.svelte:98`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:201`, `main/system-logs/ExportDialog.svelte:51`, `main/system-logs/RawLogList.svelte:241`, `main/system-logs/RawLogRow.svelte:136`, `main/system-logs/RawLogsPanel.svelte:98`, `main/system-logs/RawLogsTab.svelte:137`, `main/system-logs/StorageCleanup.svelte:191`, `main/system-logs/StorageLimits.svelte:173`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:222`.
 
 ### Limits and constants
 
@@ -1033,6 +1038,7 @@ Related browser specs and their entry points:
 | SEARCH_DEBOUNCE_MS | 300 | `lib/device-logs/raw-view.svelte.ts:22` |
 | HELD_CAP | 500 | `lib/device-logs/raw-row-window.svelte.ts:13` |
 | NEW_ENTRIES_EVERY_MS | 5000 | `lib/device-logs/raw-feedback.svelte.ts:23` |
+| MOMENT_EXPORT_HALF_MS | 300000 | `lib/device-logs/raw-paging.svelte.ts:51` |
 
 Backend and wire limits: [device-logs.md](../../../backend/docs/agents/device-logs.md),
 [device-events.md](../../../backend/docs/agents/device-events.md).

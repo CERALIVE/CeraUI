@@ -88,6 +88,26 @@ const around = logAroundOutputSchema.parse({
 		until: AT + 60_000,
 	},
 });
+const ENTRY_AT = AT - 2_000;
+const exactAround = logAroundOutputSchema.parse({
+	ok: true,
+	approximate: false,
+	anchor: {
+		cursor: "s=anchor",
+		ts: ENTRY_AT,
+		bootId: BOOT,
+		level: "error",
+		source: "app",
+		unit: "ceraui.service",
+		message: "update refused",
+		truncated: false,
+		marker: null,
+	},
+	older: PAGE,
+	newer: PAGE,
+	olderQuery: { boot: BOOT, direction: "older", limit: 50 },
+	newerQuery: { boot: BOOT, direction: "newer", limit: 50 },
+});
 let media: MediaQueryControl;
 
 // RawLogsPanel loads the Raw tab as a lazy chunk; loading it here keeps its first,
@@ -162,6 +182,55 @@ describe("System Logs deep-link integration", () => {
 			since: AT - 60_000,
 			until: AT + 60_000,
 		});
+	});
+
+	it("exports the ten minutes around an exact anchor with its levels, not its whole boot, and says so", async () => {
+		logs.around.mockResolvedValue(exactAround);
+		render(SystemLogsView, { props: { context: { tab: "raw", at: AT } } });
+		await screen.findByTestId("raw-anchor");
+
+		await fireEvent.click(await screen.findByTestId("sharing-open-export"));
+		const body = await screen.findByRole("dialog", {
+			name: en.systemLogs.sharing.export,
+		});
+		await fireEvent.click(
+			within(body).getByRole("button", {
+				name: en.systemLogs.sharing.exportDownload,
+			}),
+		);
+		await waitFor(() => expect(logs.createExport).toHaveBeenCalledTimes(1));
+
+		expect(logs.createExport.mock.calls[0]?.[0]).toEqual({
+			filter: {
+				sources: [],
+				levels: ["error", "warning", "info", "debug"],
+				text: undefined,
+			},
+			boot: BOOT,
+			since: ENTRY_AT - 300_000,
+			until: ENTRY_AT + 300_000,
+		});
+		expect(
+			within(body).getByText(en.systemLogs.sharing.exportHintMoment),
+		).toBeTruthy();
+		expect(
+			within(body).queryByText(en.systemLogs.sharing.exportHint),
+		).toBeNull();
+	});
+
+	it("describes the Raw logs filters again once the view leaves the anchor", async () => {
+		logs.around.mockResolvedValue(exactAround);
+		render(SystemLogsView, { props: { context: { tab: "raw", at: AT } } });
+		await fireEvent.click(await screen.findByTestId("raw-anchor-leave"));
+		await waitFor(() => expect(logs.query).toHaveBeenCalledTimes(1));
+
+		await fireEvent.click(await screen.findByTestId("sharing-open-export"));
+		const body = await screen.findByRole("dialog", {
+			name: en.systemLogs.sharing.export,
+		});
+		expect(
+			within(body).getByText(en.systemLogs.sharing.exportHint),
+		).toBeTruthy();
 	});
 
 	it("exports changed levels and search rather than the opening query after the Raw tab unmounts", async () => {

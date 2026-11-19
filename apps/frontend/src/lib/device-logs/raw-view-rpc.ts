@@ -1,10 +1,12 @@
 import type { LogFollowMessage, LogQueryInput } from "@ceraui/rpc/schemas";
 import type { TypedRPC } from "$lib/rpc/client";
 
+import type { ExportSpan } from "./sharing";
+
 export interface RawViewDeps {
 	readonly logs: Pick<TypedRPC["logs"], "query" | "followStart" | "followStop">;
 	/** Publishes the fixed query before a read, including reads that fail. */
-	onQuery?(query: LogQueryInput): void;
+	onQuery?(query: LogQueryInput, span?: ExportSpan): void;
 	setFollowListener(
 		listener: ((message: LogFollowMessage) => void) | undefined,
 	): void;

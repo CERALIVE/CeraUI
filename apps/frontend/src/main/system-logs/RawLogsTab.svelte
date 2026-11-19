@@ -16,6 +16,7 @@ import { Button } from '$lib/components/ui/button';
 import { bootSelection } from '$lib/device-logs/boot-selection.svelte';
 import { onHistoryChanged } from '$lib/device-logs/history-bus';
 import { type AroundPage, type RawAnnouncement, RawView, resetRawView } from '$lib/device-logs/raw-view.svelte';
+import type { ExportSpan } from '$lib/device-logs/sharing';
 import { rpc } from '$lib/rpc/client';
 import { getConnectionState, setLogFollowListener } from '$lib/rpc/subscriptions.svelte';
 
@@ -23,7 +24,7 @@ import KeepWords from './KeepWords.svelte';
 import RawLogList from './RawLogList.svelte';
 import RawLogsFilterBar from './RawLogsFilterBar.svelte';
 
-let { around, onquery }: { around?: AroundPage; onquery?: (query: LogQueryInput) => void } = $props();
+let { around, onquery }: { around?: AroundPage; onquery?: (query: LogQueryInput, span?: ExportSpan) => void } = $props();
 
 const ANNOUNCE: Record<RawAnnouncement['kind'], (count: number) => string> = {
 	following: () => m['systemLogs.announce.following'](),
@@ -45,7 +46,7 @@ const view = new RawView({
 	logs: rpc.logs,
 	setFollowListener: setLogFollowListener,
 	now: () => Date.now(),
-	onQuery: (query) => onquery?.(query),
+	onQuery: (query, span) => onquery?.(query, span),
 });
 const initial = untrack(() => ({ around, bootId: bootSelection.bootId }));
 void (initial.around !== undefined || initial.bootId === null

@@ -22,6 +22,7 @@ import type {
 import { onHistoryChanged } from "./history-bus";
 import {
 	bundleManifestReply,
+	type ExportSpan,
 	exportInput,
 	previewProblem,
 	RAW_OPENING_QUERY,
@@ -67,6 +68,8 @@ function started(download: (path: string) => void, url: string): boolean {
 export class SharingFlow {
 	/** The Raw logs tab's current query: what "Export this view" saves. */
 	view = $state.raw<LogQueryInput>(RAW_OPENING_QUERY);
+	/** Whether {@link view} is the filters or the ten minutes around an exact anchor. */
+	viewSpan = $state<ExportSpan>("filters");
 	exportStep = $state<ExportStep>("closed");
 	exportProblem = $state<SharingProblem | null>(null);
 	bundleStep = $state<BundleStep>("closed");
@@ -86,12 +89,17 @@ export class SharingFlow {
 	}
 
 	/** One mounted Raw panel publishes; its snapshot survives a switch to Storage. */
-	bindView(): { publish(query: LogQueryInput): void; dispose(): void } {
+	bindView(): {
+		publish(query: LogQueryInput, span?: ExportSpan): void;
+		dispose(): void;
+	} {
 		const owner = {};
 		if (!this.#disposed) this.#viewOwner = owner;
 		return {
-			publish: (query) => {
-				if (this.#viewOwner === owner) this.view = query;
+			publish: (query, span = "filters") => {
+				if (this.#viewOwner !== owner) return;
+				this.view = query;
+				this.viewSpan = span;
 			},
 			dispose: () => {
 				if (this.#viewOwner === owner) this.#viewOwner = undefined;
@@ -166,6 +174,7 @@ export class SharingFlow {
 		this.#disposed = true;
 		this.#viewOwner = undefined;
 		this.view = RAW_OPENING_QUERY;
+		this.viewSpan = "filters";
 		this.#stopHistory();
 		this.closeExport();
 		this.closeBundle();
