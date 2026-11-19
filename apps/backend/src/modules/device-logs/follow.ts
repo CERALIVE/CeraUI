@@ -1,5 +1,6 @@
 // allow: SIZE_OK - Socket lifetime state machine; the clear fence shares slot ownership.
 import {
+	LOG_FOLLOW_BOOT_START_PREFIX,
 	type LogFollowMessage,
 	type LogFollowStartInput,
 	type LogFollowStartOutput,
@@ -44,15 +45,6 @@ interface FollowSlot {
 	checkpoint: string | null;
 }
 const running = new Map<FollowSocket, FollowSlot>();
-// A null checkpoint from a proven empty boot has no wire cursor to echo on Resume.
-const emptyBootRecovery = new WeakMap<
-	FollowSocket,
-	{
-		readonly epoch: number;
-		readonly bootId: string;
-		readonly sessionSignal: AbortSignal | undefined;
-	}
->();
 const clock: Pick<JournalClock, "setTimeout" | "clearTimeout"> = {
 	setTimeout: (callback, delay) => Number(setTimeout(callback, delay)),
 	clearTimeout: (timer) => clearTimeout(timer),
@@ -101,13 +93,7 @@ export async function startFollow(
 	if (running.size >= 4) return { ok: false, error: "BUSY" };
 	const bootId = currentBootId();
 	if (bootId === undefined) return { ok: false, error: "BOOT_UNAVAILABLE" };
-	const recovery = emptyBootRecovery.get(conn);
-	const resumeEmptyBoot =
-		filter.afterCursor === undefined &&
-		recovery?.epoch === epoch &&
-		recovery.bootId === bootId &&
-		recovery.sessionSignal === sessionSignal;
-	emptyBootRecovery.delete(conn);
+	const bootStart = `${LOG_FOLLOW_BOOT_START_PREFIX}${bootId}:${epoch}`;
 	const mock = shouldUseMocks();
 	const scan = mock ? scanMockJournal : scanJournal;
 	const time = options.clock ?? clock;
@@ -137,13 +123,6 @@ export async function startFollow(
 			slot.checkpoint = message.checkpointCursor;
 			return;
 		}
-		if (
-			status === "dropped" &&
-			started &&
-			slot.checkpoint === null &&
-			message.ended !== "cleared"
-		)
-			emptyBootRecovery.set(conn, { epoch, bootId, sessionSignal });
 		ended = true;
 		retireSession();
 	};
@@ -167,8 +146,11 @@ export async function startFollow(
 		resolveFollowPosition(scan, { bootId, signal: controller.signal }, cursor);
 	void (async () => {
 		try {
-			let cursor = resumeEmptyBoot ? null : await position(filter.afterCursor);
-			if (filter.afterCursor !== undefined && cursor !== filter.afterCursor) {
+			const after = filter.afterCursor;
+			let cursor = after?.startsWith(LOG_FOLLOW_BOOT_START_PREFIX)
+				? null
+				: await position(after);
+			if (after !== undefined && after !== bootStart && cursor !== after) {
 				publish({
 					subscriptionId,
 					entries: [],
@@ -178,14 +160,14 @@ export async function startFollow(
 				});
 				cursor = await position();
 			}
-			slot.checkpoint = cursor;
+			slot.checkpoint = cursor ?? bootStart;
 			for (;;) {
 				controller.signal.throwIfAborted();
 				const local = new AbortController();
 				const abort = () => local.abort();
 				controller.signal.addEventListener("abort", abort);
 				const delivery = createFollowDelivery({
-					cursor,
+					cursor: cursor ?? bootStart,
 					filter,
 					clock: time,
 					signal: local.signal,
@@ -224,7 +206,7 @@ export async function startFollow(
 						ready.resolve({
 							ok: true,
 							subscriptionId,
-							checkpointCursor: cursor,
+							checkpointCursor: slot.checkpoint,
 						});
 					}
 					await handle.exited;
@@ -249,7 +231,7 @@ export async function startFollow(
 				publish({
 					subscriptionId,
 					entries: [],
-					checkpointCursor: cursor,
+					checkpointCursor: cursor ?? bootStart,
 					dropped: 0,
 					gap: "catchup_exceeded",
 				});

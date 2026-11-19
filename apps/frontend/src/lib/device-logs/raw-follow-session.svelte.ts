@@ -1,6 +1,7 @@
-import type {
-	LogFollowMessage,
-	LogFollowStopOutput,
+import {
+	LOG_FOLLOW_BOOT_START_PREFIX,
+	type LogFollowMessage,
+	type LogFollowStopOutput,
 } from "@ceraui/rpc/schemas";
 import type { RawFeedback } from "./raw-feedback.svelte";
 import { followInput, type RawFilter } from "./raw-filter";
@@ -178,8 +179,12 @@ export class RawFollowSession {
 			return;
 		}
 		// The device may have written entries since the last read. Re-read before
-		// attaching beyond the learned head. A null head means this boot is empty.
-		if (position === null && reply.checkpointCursor !== null)
+		// attaching beyond the learned head, unless the watch starts at boot start.
+		if (
+			position === null &&
+			reply.checkpointCursor !== null &&
+			!reply.checkpointCursor.startsWith(LOG_FOLLOW_BOOT_START_PREFIX)
+		)
 			return this.context.readHead({ head: reply.checkpointCursor, announce });
 		this.#subscription = reply.subscriptionId;
 		this.#checkpoint = reply.checkpointCursor ?? this.#checkpoint;

@@ -6,6 +6,7 @@ import {
 	stopFollow,
 } from "../modules/device-logs/follow.ts";
 import { JOURNAL_OUTPUT_FIELDS } from "../modules/device-logs/reader.ts";
+import { getLogState } from "../modules/device-logs/settings.ts";
 import { followFixture, record } from "./helpers/device-follow.ts";
 
 let f: ReturnType<typeof followFixture>;
@@ -129,9 +130,11 @@ test("an excluded but existing checkpoint does not discard the first matching en
 	]);
 });
 
-test("an empty boot starts without a cursor and delivers its first record", async () => {
+test("an empty boot starts at its beginning and delivers its first record", async () => {
 	f.scan.mockResolvedValue({ status: "eof", exitCode: 0, skippedRecords: 0 });
-	expect((await start()).checkpointCursor).toBeNull();
+	expect((await start()).checkpointCursor).toBe(
+		`boot-start:${record(1).bootId}:${getLogState().historyEpoch}`,
+	);
 	expect(f.argv[0]?.filter((arg) => arg.startsWith("--cursor"))).toEqual([]);
 	await child().emit([record(1)]);
 	f.time.advance(250);

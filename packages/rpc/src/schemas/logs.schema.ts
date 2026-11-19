@@ -27,6 +27,7 @@ export const LOG_ERROR_CODES = [
 	'UPDATE_IN_PROGRESS',
 ] as const;
 export const LOG_FOLLOW_EVENT = 'logs.follow';
+export const LOG_FOLLOW_BOOT_START_PREFIX = 'boot-start:';
 
 export const logSourceSchema = z.enum(LOG_SOURCES);
 export type LogSource = z.infer<typeof logSourceSchema>;

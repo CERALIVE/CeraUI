@@ -148,7 +148,7 @@ test("a dropped middle frame ends follow at the accepted cursor and Resume repla
 	]);
 });
 
-test("Resume replays the first dropped frame after a cursorless start", async () => {
+test("Resume replays the first dropped frame after an empty boot start", async () => {
 	const time = manualClock();
 	const messages: ReturnType<typeof logFollowMessageSchema.parse>[] = [];
 	let drop = true;
@@ -165,21 +165,65 @@ test("Resume replays the first dropped frame after a cursorless start", async ()
 			return Buffer.byteLength(frame);
 		},
 	};
-	expect(await startFollow(conn, {}, { clock: time.clock })).toMatchObject({
-		ok: true,
-		checkpointCursor: null,
-	});
+	const started = await startFollow(conn, {}, { clock: time.clock });
+	if (!started.ok) throw new Error(started.error);
+	const afterCursor = started.checkpointCursor;
+	if (afterCursor === null) throw new Error("missing boot-start checkpoint");
 	await emit("first");
 	time.advance(250);
 	expect(messages).toMatchObject([
-		{ ended: "follower_exit", checkpointCursor: null },
+		{ ended: "follower_exit", checkpointCursor: afterCursor },
 	]);
-	expect(await startFollow(conn, {}, { clock: time.clock })).toMatchObject({
+	expect(
+		await startFollow(conn, { afterCursor }, { clock: time.clock }),
+	).toMatchObject({
 		ok: true,
-		checkpointCursor: null,
+		checkpointCursor: afterCursor,
 	});
 	time.advance(250);
 	expect(
 		messages.flatMap((m) => m.entries.map((entry) => entry.message)),
 	).toEqual(["[follow-fixture] first"]);
+});
+
+test("Resume on a new socket replays an empty boot after both sends drop", async () => {
+	const time = manualClock();
+	const messages: ReturnType<typeof logFollowMessageSchema.parse>[] = [];
+	const old = { send: () => 0, terminate: () => undefined };
+	const sent = spyOn(old, "send");
+	const closed = spyOn(old, "terminate");
+	const started = await startFollow(old, {}, { clock: time.clock });
+	if (!started.ok) throw new Error(started.error);
+	await emit("first missed entry");
+	time.advance(250);
+	expect(sent).toHaveBeenCalledTimes(2);
+	expect(closed).toHaveBeenCalledTimes(1);
+	await stopFollow(old);
+
+	const backlog = [
+		"first missed entry",
+		...Array.from({ length: 130 }, (_, i) => `while disconnected ${i}`),
+	];
+	for (const message of backlog.slice(1)) await emit(message);
+	const fresh = {
+		send(frame: string) {
+			messages.push(
+				logFollowMessageSchema.parse(JSON.parse(frame)["logs.follow"]),
+			);
+			return Buffer.byteLength(frame);
+		},
+	};
+	expect(
+		(
+			await startFollow(
+				fresh,
+				{ afterCursor: started.checkpointCursor ?? undefined },
+				{ clock: time.clock },
+			)
+		).ok,
+	).toBe(true);
+	time.advance(250);
+	expect(
+		messages.flatMap((m) => m.entries.map((entry) => entry.message)),
+	).toEqual(backlog.map((message) => `[follow-fixture] ${message}`));
 });

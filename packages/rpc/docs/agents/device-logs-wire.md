@@ -40,6 +40,12 @@ Frame fields (`logs.schema.ts:150-157`): `subscriptionId`, `entries`,
 `cursor_unavailable`, `suppressed`), optional `ended` (`follower_exit`,
 `boot_changed`, `cleared`).
 
+A follow started on a verified empty boot returns a boot-start checkpoint in
+the existing `checkpointCursor` field. Clients echo it as `afterCursor` to
+replay from the beginning of retained history for that boot, even on another
+socket. The checkpoint carries the boot ID and history epoch. A stale boot-start
+checkpoint reports `cursor_unavailable` and attaches at the current head.
+
 ## Shapes
 
 | Shape | Rule | Source |
