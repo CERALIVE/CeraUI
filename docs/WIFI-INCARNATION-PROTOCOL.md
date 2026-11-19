@@ -11,8 +11,9 @@ retains the legacy shape.
 
 Guarded requests now require the expected token at RPC admission and again
 at their transaction lock entry. Config and mode requests also supply the captured
-metadata for the asynchronous frames below. Composite physical identity,
-in-operation lifetime fencing and hardware qualification remain separate work.
+metadata for the asynchronous frames below. Start also retains the proof it
+obtained at transaction entry. Composite physical identity and hardware
+qualification remain separate work.
 
 ## Backend limited mode [EXISTS; host and mock-browser proof only]
 
@@ -124,6 +125,24 @@ transient reason; a replaced registry row remains a changed-radio refusal.
 Admission does not launch discovery or manufacture a token for the caller.
 The same missing/stale/limited policy applies to mock requests.
 
+### Start lifetime checks [EXISTS; host proof]
+
+Start retains the original row, registry key, token, permanent MAC and
+network-device/phy lifetime. After taking the adapter lock it checks that
+lifetime before cleanup, recording intent, target allocation and the
+already-active shortcut. It rechecks at profile pin, inactive creation, Up
+and autoconnect dispatch, then before remembering credentials and registering
+confirmation. Existing profile and hybrid target ownership checks still apply.
+Missing or changed proof during Start yields the existing `radio-changed`
+refusal without `current-unobserved`, so it cannot trigger an automatic replay.
+
+Confirmation checks the captured entry after reading the actual AP target
+lifetime. A positively identified active instance on a changed radio may be
+stopped by its captured profile UUID under the same adapter lock. It publishes
+`radio-changed`, including `deactivation-failed` as the reason if Down fails.
+Without exact activation evidence, ordinary bounded confirmation still
+applies. Start rollback restores only its own cache entry.
+
 The frontend keeps a `current-unobserved` request pending for the next Wi-Fi
 status frame containing that row, for at most three seconds. It sends the same
 call once with that frame's token. A frame without a token, or the absence of a
@@ -157,8 +176,8 @@ Cancelled Configure owners also reject their later RPC result and feedback
 through their own admission controller. This uses local state only; the wire
 and the one-terminal-per-valid-dispatch contract remain unchanged.
 
-Stop and station behavior and remote projection are unchanged. This contract
-makes no physical-radio or in-operation fencing qualification claim.
+Stop and station remain independent of the Start binding. This contract makes
+no physical-radio qualification claim.
 
 The `wifi-limited` mock scenario supplies an unidentified `wlan0` with an
 already active hotspot for the same admission policy and safe Stop/station

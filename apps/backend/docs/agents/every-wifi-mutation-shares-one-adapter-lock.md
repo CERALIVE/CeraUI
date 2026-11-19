@@ -121,6 +121,13 @@ Registration after NM acceptance adds proof observation without reacquiring
 ownership. An older observer cannot retire a newer unregistered transition;
 an unsuperseded observer still retires its own abandoned target.
 
+Start keeps the adapter lifetime proof separately from the one-shot request
+record. Before acting on a confirmed lifetime mismatch, the observer takes
+the original owner's adapter lock and verifies that the same pending entry
+still owns the exact profile and active instance. Down targets its captured
+UUID. A delayed observer cannot stop a successor activation. Failed Start
+rollback merges only its own projection against the current cache.
+
 The adapter-mode wrapper places a bounded terminal watchdog around that promise.
 If the delegated publisher is lost entirely, the mode operation settles once as
 typed `not-confirmed`; a late publisher is fenced and cannot emit a second mode

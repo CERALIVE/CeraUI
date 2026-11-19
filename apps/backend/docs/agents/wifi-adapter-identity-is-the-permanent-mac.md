@@ -163,6 +163,11 @@ owner keys and `wifi_modes`.
 Hybrid profiles explicitly remain autoconnect off. Direct Starts retain their
 mode intent even when no safe autoconnect path exists; B2 restores that intent.
 
+Start retains the verified row and lifetime obtained at lock entry. The
+physical recheck before each activation effect is independent of saved-profile
+and UUID ownership. The adapter lock orders CeraUI writers but does not prevent
+the kernel from reprobeing or renaming the radio during a NetworkManager call.
+
 Before discovery publishes rows, it examines
 every persisted current and historical owned AP UUID under Start's canonical
 adapter lock, including the profile read, policy check and write. A busy lock

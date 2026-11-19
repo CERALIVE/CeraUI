@@ -34,6 +34,11 @@ import {
 	getWifiState,
 	setWifiState,
 } from "./state/wifi-state.ts";
+import {
+	wifiAdapterLockKey,
+	withWifiAdapterLock,
+} from "./wifi-adapter-lock.ts";
+import { getWifiInterfaceByMacAddress } from "./wifi-connections.ts";
 import type {
 	HotspotActivationDeps,
 	HotspotActivationInstance,
@@ -41,7 +46,14 @@ import type {
 	WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
+import {
+	bindingForRow,
+	matchesWifiOperationRadio,
+	sampleWifiOperationRadio,
+	type WifiOperationBinding,
+} from "./wifi-operation-binding.ts";
 import { sameRadioLifetime, wifiRadioIdentity } from "./wifi-radio-identity.ts";
+import type { RadioSample } from "./wifi-radio-read-budget.ts";
 import { transitionVirtualBinding } from "./wifi-virtual-binding.ts";
 
 // Bounded confirmation poll: a production backstop for the NM monitor event.
@@ -81,7 +93,7 @@ type PendingHotspot = {
 	readonly matches: () => boolean;
 	readonly probe: () => Promise<boolean>;
 	readonly confirm: () => void;
-	readonly giveUp: () => void;
+	readonly giveUp: (changed?: { readonly stopped: boolean }) => void;
 };
 
 const pendingHotspots = new Map<string, PendingHotspot>();
@@ -132,14 +144,18 @@ export function recordPendingHotspotModify(
 	}
 }
 
-function settleCaptured(pending: PendingHotspot, confirmed: boolean): void {
+function settleCaptured(
+	pending: PendingHotspot,
+	confirmed: boolean,
+	changed?: { readonly stopped: boolean },
+): void {
 	if (!current(pending)) return;
 	const exact = !confirmed || pending.matches();
 	pending.controller.abort();
 	pendingHotspots.delete(pending.ifname);
 	pendingByRow.delete(pending.row);
 	if (confirmed && exact) pending.confirm();
-	else pending.giveUp();
+	else pending.giveUp(changed);
 }
 
 /** Trusted settlement/cancellation of the current pending operation. */
@@ -191,7 +207,11 @@ export async function handleWifiMonitorEvent(
 }
 
 export function registerPendingConfirmation(
-	target: HotspotConfirmationTarget & { readonly macAddress: string },
+	target: HotspotConfirmationTarget & {
+		readonly macAddress: string;
+		readonly binding?: WifiOperationBinding | undefined;
+		readonly targetRadio?: RadioSample | undefined;
+	},
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotActivationDeps,
 ): void {
@@ -204,6 +224,8 @@ export function registerPendingConfirmation(
 	const virtual = target.ifname !== ifname;
 	const lifetime = wifiRadioIdentity.state.rows.get(ifname)?.lifetime;
 	const apLifetime = wifiRadioIdentity.state.rows.get(target.ifname)?.lifetime;
+	const binding =
+		target.binding ?? bindingForRow(target.macAddress, wifiInterface);
 	const ownsCache = (): boolean =>
 		wifiInterface.hotspot === hotspot && hotspot.conn === target.uuid;
 	const matches = (): boolean =>
@@ -235,12 +257,16 @@ export function registerPendingConfirmation(
 		syncWifiStateCache(target.macAddress, wifiInterface);
 		deps.publishOutcome?.("start", device, { success: true });
 	};
-	const giveUp = (): void => {
-		if (wifiInterface.hotspot === hotspot) {
+	const giveUp: PendingHotspot["giveUp"] = (changed) => {
+		if (
+			wifiInterface.hotspot === hotspot &&
+			(!binding || getWifiInterfaceByMacAddress(binding.key) === wifiInterface)
+		) {
 			delete hotspot.transition;
 			if (ownsCache()) {
 				const binding = wifiInterface.concurrentHotspot;
 				if (
+					(!changed || changed.stopped) &&
 					virtual &&
 					binding?.ifname === target.ifname &&
 					(binding.activeConn === null || binding.activeConn === target.uuid)
@@ -253,12 +279,33 @@ export function registerPendingConfirmation(
 		}
 		deps.publishOutcome?.("start", device, {
 			success: false,
-			error: "not-confirmed",
+			error: changed ? "radio-changed" : "not-confirmed",
+			...(changed && !changed.stopped ? { reason: "deactivation-failed" } : {}),
 		});
+	};
+	const exactActivation = async (activation: HotspotActivationInstance) => {
+		if (
+			!activation.activePath ||
+			!sameNmProfileActivation(
+				activation.profile,
+				await deps.readProfileInstance?.(target.uuid),
+			)
+		)
+			return false;
+		const state = await nmDeviceProp(
+			target.ifname,
+			"GENERAL.STATE,GENERAL.CON-UUID,GENERAL.CON-PATH",
+		);
+		return (
+			Number.parseInt(state?.[0] ?? "", 10) === 100 &&
+			state?.[1] === target.uuid &&
+			state?.[2] === activation.activePath
+		);
 	};
 	let flight: Promise<boolean> | undefined;
 	const probe = (): Promise<boolean> => {
-		if (!current(pending) || !matches()) return Promise.resolve(false);
+		if (!current(pending) || !(binding ? ownsCache() : matches()))
+			return Promise.resolve(false);
 		flight ??= Promise.resolve()
 			.then(async () => {
 				if (
@@ -271,7 +318,8 @@ export function registerPendingConfirmation(
 					))
 				)
 					return false;
-				if (!current(pending) || !matches()) return false;
+				if (!current(pending) || !(binding ? ownsCache() : matches()))
+					return false;
 				const rows = await nmDevices("device,type,state,con-uuid");
 				const up =
 					rows?.some((raw) => {
@@ -283,25 +331,53 @@ export function registerPendingConfirmation(
 							uuid === target.uuid
 						);
 					}) ?? false;
-				if (!up || !current(pending) || !matches()) return false;
+				if (!up || !current(pending) || !(binding ? ownsCache() : matches()))
+					return false;
 				const activation = pending.activation;
-				if (!activation?.profile && !activation?.activePath) return true;
-				const state = await nmDeviceProp(
-					target.ifname,
-					"GENERAL.STATE,GENERAL.CON-UUID,GENERAL.CON-PATH",
+				const exact = activation?.profile || activation?.activePath;
+				if (exact && !(await exactActivation(activation))) return false;
+				if (!binding || !current(pending)) return current(pending) && matches();
+				const radio = await sampleWifiOperationRadio(target.ifname);
+				const parent = virtual
+					? await sampleWifiOperationRadio(binding.ifname)
+					: radio;
+				if (
+					!current(pending) ||
+					!ownsCache() ||
+					pending.activation !== activation
+				)
+					return false;
+				const targetLifetime = target.targetRadio?.lifetime ?? apLifetime;
+				if (!parent || (targetLifetime && !radio)) return false;
+				const sameTarget =
+					!virtual ||
+					(!targetLifetime && !exact) ||
+					sameRadioLifetime(targetLifetime, radio?.lifetime);
+				if (sameTarget && matchesWifiOperationRadio(binding, parent)) {
+					settleCaptured(pending, true);
+					return true;
+				}
+				if (!exact || !activation) return false;
+				const lock = await withWifiAdapterLock(
+					wifiAdapterLockKey(owner),
+					async () => {
+						if (
+							!current(pending) ||
+							!ownsCache() ||
+							pending.activation !== activation ||
+							!(await exactActivation(activation)) ||
+							!current(pending) ||
+							!ownsCache() ||
+							pending.activation !== activation
+						)
+							return false;
+						const stopped = await deps.nmDisconnect(target.uuid);
+						settleCaptured(pending, false, { stopped });
+						return true;
+					},
 				);
-				return (
-					Boolean(activation.activePath) &&
-					Number.parseInt(state?.[0] ?? "", 10) === 100 &&
-					state?.[1] === target.uuid &&
-					state?.[2] === activation.activePath &&
-					sameNmProfileActivation(
-						activation.profile,
-						await deps.readProfileInstance?.(target.uuid),
-					)
-				);
+				return lock.success && lock.result;
 			})
-			.then((up) => up && current(pending) && matches())
 			.finally(() => {
 				flight = undefined;
 			});

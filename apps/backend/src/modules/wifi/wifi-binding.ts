@@ -4,6 +4,7 @@ import {
 	type BaseWifiInterface,
 	getMacAddressForWifiInterface,
 } from "./wifi-interfaces.ts";
+import type { WifiOperationBinding } from "./wifi-operation-binding.ts";
 import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 import {
 	radioIdentityReaders,
@@ -92,7 +93,7 @@ export function registerWifiRequestLockEntry(
  */
 export function admitWifiRequest<T>(
 	row: BaseWifiInterface,
-	transaction: () => Promise<T>,
+	transaction: (binding?: WifiOperationBinding) => Promise<T>,
 	refused: (refusal: WifiBindingRefusal) => T,
 ): Promise<T> {
 	const request = requests.getStore();
@@ -104,7 +105,7 @@ export function admitWifiRequest<T>(
 		if (!binding.success) return refused(binding);
 		if (binding.row !== row)
 			return refused({ success: false, error: "radio-changed" });
-		return transaction();
+		return transaction(binding.operation);
 	});
 }
 
@@ -122,6 +123,7 @@ export async function resolveWifiBinding(
 			readonly success: true;
 			readonly row: BaseWifiInterface;
 			readonly macAddress: string;
+			readonly operation?: WifiOperationBinding;
 	  }
 > {
 	const interfaces = getWifiInterfacesByMacAddress();
@@ -203,7 +205,19 @@ export async function resolveWifiBinding(
 				(!fresh.macReadFailed && fresh.permanentMac !== current.permanentMac)
 			)
 				return changed;
-			return { success: true, row, macAddress: mac } as const;
+			return {
+				success: true,
+				row,
+				macAddress: mac,
+				operation: {
+					row,
+					key: mac,
+					ifname: current.ifname,
+					token: currentToken,
+					mac: current.permanentMac,
+					lifetime: fresh.lifetime,
+				},
+			} as const;
 		};
 		return await Promise.race([sample(), expired.promise]);
 	} finally {
