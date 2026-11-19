@@ -6,14 +6,27 @@ import {
 	handleLogBundleRequest,
 } from "../modules/device-logs/bundle.ts";
 import * as data from "../modules/device-logs/bundle-data.ts";
+import { queryLogs } from "../modules/device-logs/query.ts";
+import {
+	abortLogQueries,
+	withQuerySlot,
+} from "../modules/device-logs/query-admission.ts";
+import { scanJournal } from "../modules/device-logs/reader.ts";
 import * as pages from "../modules/device-logs/scan-page.ts";
+import {
+	fakeJournal,
+	journalLine,
+	manualClock,
+} from "./helpers/device-journal.ts";
 import {
 	bootId,
 	journal,
 	queryFixture,
 	record,
 } from "./helpers/device-query.ts";
+import { bounded, latch } from "./helpers/history-clear.ts";
 
+const realScan = scanJournal;
 let fixture: ReturnType<typeof queryFixture>;
 let collect: ReturnType<typeof spyOn<typeof data, "collectBundleData">>;
 let queries: ReturnType<typeof spyOn<typeof pages, "scanPage">>;
@@ -55,6 +68,22 @@ afterEach(async () => {
 	fixture.restore();
 });
 
+async function downloadBundleLines() {
+	const created = await createBundle({});
+	if (!created.ok) throw new Error(created.error);
+	const response = await handleLogBundleRequest(
+		new Request(`http://device${created.url}`),
+	);
+	if (!response.body) throw new Error("missing bundle body");
+	const text = await new Response(
+		response.body.pipeThrough(new DecompressionStream("gzip")),
+	).text();
+	return text
+		.trimEnd()
+		.split("\n")
+		.map((line): Record<string, unknown> => JSON.parse(line));
+}
+
 test.each([
 	{ count: 199, sizes: [199], limits: [200] },
 	{ count: 200, sizes: [200], limits: [200] },
@@ -71,19 +100,7 @@ test.each([
 			if (++calls > 3) throw new Error("bundle page did not advance");
 			return scan(input);
 		});
-		const created = await createBundle({});
-		if (!created.ok) throw new Error(created.error);
-		const response = await handleLogBundleRequest(
-			new Request(`http://device${created.url}`),
-		);
-		if (!response.body) throw new Error("missing bundle body");
-		const text = await new Response(
-			response.body.pipeThrough(new DecompressionStream("gzip")),
-		).text();
-		const lines = text
-			.trimEnd()
-			.split("\n")
-			.map((line): Record<string, unknown> => JSON.parse(line));
+		const lines = await downloadBundleLines();
 		expect(
 			lines
 				.filter((line) => line.section === "journal")
@@ -105,3 +122,80 @@ test.each([
 		expect(actualSizes).toEqual(sizes);
 	},
 );
+
+test("the download covers the running boot while previous boot reap is held past the deadline", async () => {
+	const previous = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+	const startedAt = 1_700_000_000_000;
+	const clock = spyOn(Date, "now").mockReturnValue(startedAt);
+	const snapshot = await collect();
+	collect.mockImplementation(async () => {
+		clock.mockReturnValue(startedAt + 59_600);
+		return { ...snapshot, journalBoots: [bootId, previous] };
+	});
+	const current = journal([record(100), record(101), record(102)], 2);
+	const child = fakeJournal(
+		[
+			journalLine({
+				_BOOT_ID: previous,
+				_SYSTEMD_UNIT: "ceralive.service",
+			}),
+		],
+		{ held: true, ignoreTerm: true },
+	);
+	const terminated = Promise.withResolvers<void>();
+	fixture.scan.mockImplementation((input) => {
+		if (!input.matches.includes(`_BOOT_ID=${previous}`)) return current(input);
+		return realScan({
+			...input,
+			clock: manualClock().clock,
+			spawn: () => ({
+				...child.child,
+				get signalCode() {
+					return child.child.signalCode;
+				},
+				kill(signal) {
+					child.child.kill(signal);
+					if (signal === "SIGTERM") terminated.resolve();
+				},
+			}),
+		});
+	});
+	const pending = downloadBundleLines();
+	const spare = latch();
+	try {
+		await bounded(terminated.promise);
+		const lines = await bounded(pending);
+		expect(
+			lines
+				.filter((line) => line.section === "journal" && "entry" in line)
+				.map((line) => logEntrySchema.parse(line.entry).cursor),
+		).toEqual(["s=102", "s=101", "s=100"]);
+		expect(lines.slice(-2)).toEqual([
+			{ section: "journal", incomplete: "time_limit" },
+			{ section: "end", complete: false },
+		]);
+
+		clock.mockReturnValue(startedAt + 60_001);
+		const occupied = withQuerySlot({}, spare.hold);
+		try {
+			await bounded(spare.entered);
+			expect(await queryLogs({}, { boot: "all" })).toEqual({
+				ok: false,
+				error: "BUSY",
+			});
+			child.finish(143, "SIGTERM");
+			expect(
+				await bounded(
+					withQuerySlot({}, async () => "admitted", AbortSignal.timeout(1000)),
+				),
+			).toBe("admitted");
+		} finally {
+			spare.release();
+			await occupied;
+		}
+	} finally {
+		child.finish(143, "SIGTERM");
+		clock.mockRestore();
+		await Promise.allSettled([pending, abortLogQueries()]);
+	}
+});

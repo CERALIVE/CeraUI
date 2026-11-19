@@ -17,6 +17,7 @@ type Cut =
 type BootWindow = {
 	readonly signal: AbortSignal;
 	readonly stopped: () => TimeLimit | null;
+	readonly readDeadline?: Promise<TimeLimit>;
 };
 
 export async function collectBundleJournal(
@@ -24,13 +25,13 @@ export async function collectBundleJournal(
 	window: BootWindow & { readonly epoch: number; readonly deadline: number },
 	append: (entry: LogEntry, isCurrent: boolean) => Promise<AppendCut | null>,
 ): Promise<{ readonly bootsCovered: number; readonly incomplete: Cut | null }> {
-	const owner = {};
+	const owners = { current: {}, previous: {} };
 	const queryFor = (boot: string) =>
 		logQueryInputSchema.parse({ boot, direction: "older", limit: 200 });
 	async function read(position: ParsedQuery, boot: string, phase: BootWindow) {
 		try {
 			return await withQuerySlot(
-				owner,
+				boot === current ? owners.current : owners.previous,
 				(slotSignal) =>
 					scanPage(position, {
 						bootId: boot,
@@ -54,13 +55,21 @@ export async function collectBundleJournal(
 		const isCurrent = boot === current;
 		let covered = false;
 		let position = queryFor(boot);
-		let page = firstPage;
+		let page: LogQueryOutput | TimeLimit | undefined = firstPage;
 		for (;;) {
 			const beforeRead = phase.stopped();
 			if (beforeRead) return beforeRead;
-			page ??= await read(position, boot, phase);
+			if (page === undefined) {
+				const pending = read(position, boot, phase);
+				// Race only the read. The slot still owns reap, and a late page
+				// cannot append records or change coverage.
+				page = phase.readDeadline
+					? await Promise.race([pending, phase.readDeadline])
+					: await pending;
+			}
 			const afterRead = phase.stopped();
 			if (afterRead) return afterRead;
+			if (page === "time_limit") return page;
 			if (!page.ok) return page.error;
 			try {
 				for (const entry of page.entries) {
@@ -101,10 +110,15 @@ export async function collectBundleJournal(
 		const previousTime = Math.floor(remaining / 2);
 		const previousDeadline = now + previousTime;
 		const timeout = new AbortController();
+		const cutoff = Promise.withResolvers<TimeLimit>();
+		const signal = AbortSignal.any([window.signal, timeout.signal]);
+		const onAbort = () => cutoff.resolve("time_limit");
+		signal.addEventListener("abort", onAbort, { once: true });
 		const timer = setTimeout(() => timeout.abort(), previousTime);
 		try {
 			incomplete = await walk(previous, {
-				signal: AbortSignal.any([window.signal, timeout.signal]),
+				signal,
+				readDeadline: cutoff.promise,
 				stopped: () =>
 					window.stopped() ??
 					(timeout.signal.aborted || Date.now() >= previousDeadline
@@ -113,6 +127,7 @@ export async function collectBundleJournal(
 			});
 		} finally {
 			clearTimeout(timer);
+			signal.removeEventListener("abort", onAbort);
 		}
 	}
 	const currentCut = await walk(current, window, head);

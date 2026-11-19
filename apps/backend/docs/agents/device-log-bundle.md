@@ -77,10 +77,13 @@ whose serialized digits equal a held secret refuses preview and creation.
 `bundle-journal.ts` reads one page at a time using `scanPage` and `withQuerySlot`,
 all sources/levels, older direction and limit 200, independently of the caller's
 socket. It reads one running-boot page first, then gives the previous available
-boot at most half the remaining time, including query slot admission. It writes
+boot at most half the remaining time, including query slot admission. At the
+handoff it stops waiting for any pending previous-boot read. The reader retains
+its query slot until the child is reaped and cannot write a late page. It writes
 previous-boot entries first, using at most half of each byte budget remaining
 after the prelude, then writes the buffered running-boot page and continues that
-boot with the remaining time and bytes. The preview's journal section reports `bootsCovered` based on
+boot with a separate query owner and the remaining time and bytes. The preview's
+journal section reports `bootsCovered` based on
 admitted entries and `complete` based on whether collection finished without a
 cut or read failure. The separate `boots` list still reports version context.
 Budget pages continue when the cursor advances. A missing or unchanged budget
