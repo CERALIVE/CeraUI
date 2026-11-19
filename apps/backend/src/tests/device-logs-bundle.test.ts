@@ -162,7 +162,13 @@ test("preview and download use the same redacted pipeline, stored boot versions 
 			{ id: "versions", entries: 3, redactions: 0 },
 			{ id: "settings", entries: 1, redactions: 0 },
 			{ id: "events", entries: 2, redactions: 0 },
-			{ id: "journal", entries: 1, redactions: 6 },
+			{
+				id: "journal",
+				entries: 1,
+				redactions: 6,
+				bootsCovered: 1,
+				complete: true,
+			},
 		]);
 		expect(manifest.exportedBy.osImage).toBe("current-os");
 		expect(manifest.boots.map((boot) => boot.versions?.osImage)).toEqual([

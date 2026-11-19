@@ -353,6 +353,14 @@ describe('complete legal wire states and required fields', () => {
 			wrap: (value) => ({ ...bundle, sections: [value] }),
 		},
 		{
+			name: 'bundle journal section',
+			schema: logBundleManifestSchema,
+			value: { id: 'journal', entries: 1, redactions: 0, bootsCovered: 1, complete: false },
+			path: ['sections', 0],
+			booleans: ['complete'],
+			wrap: (value) => ({ ...bundle, sections: [value] }),
+		},
+		{
 			name: 'bundle boot',
 			schema: logBundleManifestSchema,
 			value: { bootId, versions: fullVersions },
@@ -505,10 +513,13 @@ describe('complete legal wire states and required fields', () => {
 	test.each(['versions', 'events', 'journal', 'settings'])(
 		'accepts bundle section enum member %s',
 		(id) => {
-			expect(
-				logBundleManifestSchema.parse({ ...bundle, sections: [{ id, entries: 0, redactions: 0 }] })
-					.sections,
-			).toEqual([{ id, entries: 0, redactions: 0 }]);
+			const section =
+				id === 'journal'
+					? { id, entries: 0, redactions: 0, bootsCovered: 0, complete: true }
+					: { id, entries: 0, redactions: 0 };
+			expect(logBundleManifestSchema.parse({ ...bundle, sections: [section] }).sections).toEqual([
+				section,
+			]);
 		},
 	);
 	test('rejects a trailing non-journal character in an event id at the eventId path', () => {
@@ -653,7 +664,7 @@ describe('closed raw log object and value boundaries', () => {
 		newerQuery: { direction: 'newer' },
 	};
 	const bundle = {
-		sections: [{ id: 'journal', entries: 0, redactions: 0 }],
+		sections: [{ id: 'journal', entries: 0, redactions: 0, bootsCovered: 0, complete: true }],
 		exportedBy: versions,
 		boots: [{ bootId, versions: null }],
 	} satisfies LogBundleManifest;
@@ -714,7 +725,7 @@ describe('closed raw log object and value boundaries', () => {
 			value: bundle,
 			invalid: {
 				...bundle,
-				sections: [{ id: 'journal', entries: 0, redactions: 0, unexpected: true }],
+				sections: [{ ...bundle.sections[0], unexpected: true }],
 			},
 		},
 		{
@@ -998,7 +1009,7 @@ describe('boot versions, storage and sharing', () => {
 		} satisfies LogBootInfo;
 		expect(logBootInfoSchema.parse(boot)).toEqual(boot);
 		const manifest = {
-			sections: [{ id: 'journal', entries: 0, redactions: 2 }],
+			sections: [{ id: 'journal', entries: 0, redactions: 2, bootsCovered: 0, complete: false }],
 			exportedBy: versions,
 			boots: [{ bootId, versions: null }],
 		} satisfies LogBundleManifest;

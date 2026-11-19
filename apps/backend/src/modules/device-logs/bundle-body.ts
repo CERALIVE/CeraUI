@@ -41,15 +41,21 @@ export async function buildBundle(
 		.replace(/[-:]/g, "")
 		.replace(/\.\d{3}Z$/, "Z")}.ndjson.gz`;
 	redactor.structured(filename);
-	const manifest = logBundleManifestSchema.parse({
-		sections: ["versions", "settings", "events", "journal"].map((id) => ({
-			id,
-			entries: 0,
-			redactions: 0,
-		})),
+	const counts = { entries: 0, redactions: 0 };
+	const journal: Extract<
+		LogBundleManifest["sections"][number],
+		{ id: "journal" }
+	> = { id: "journal", ...counts, bootsCovered: 0, complete: false };
+	const manifest: LogBundleManifest = {
+		sections: [
+			{ id: "versions", ...counts },
+			{ id: "settings", ...counts },
+			{ id: "events", ...counts },
+			journal,
+		],
 		exportedBy: snapshot.exportedBy,
-		boots: snapshot.boots,
-	});
+		boots: [...snapshot.boots],
+	};
 	const chunks: Uint8Array[] = [];
 	let plainBytes = 0;
 	let compressedBytes = 0;
@@ -61,10 +67,14 @@ export async function buildBundle(
 			? "time_limit"
 			: null;
 	};
+	const totalBudget = {
+		plain: MAX_PLAIN - TAIL_RESERVE,
+		compressed: MAX_COMPRESSED - TAIL_RESERVE,
+	};
 	async function append(
 		section: Section | "end",
 		payload: Record<string, unknown>,
-		terminal = false,
+		budget: typeof totalBudget | null = totalBudget,
 	) {
 		let redactions = 0;
 		function visit(value: unknown, message = false): unknown {
@@ -98,7 +108,7 @@ export async function buildBundle(
 		const text = `${JSON.stringify(visit({ section, ...payload }))}\n`;
 		redactor.structured(text);
 		const bytes = new TextEncoder().encode(text);
-		if (!terminal && plainBytes + bytes.byteLength > MAX_PLAIN - TAIL_RESERVE)
+		if (budget && plainBytes + bytes.byteLength > budget.plain)
 			return "size_limit";
 		// Complete gzip members let admission measure exact compressed bytes before
 		// accepting each record; no raw body or device scratch file is retained.
@@ -107,15 +117,12 @@ export async function buildBundle(
 				new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip")),
 			).arrayBuffer(),
 		);
-		if (
-			!terminal &&
-			compressedBytes + zipped.byteLength > MAX_COMPRESSED - TAIL_RESERVE
-		)
+		if (budget && compressedBytes + zipped.byteLength > budget.compressed)
 			return "compressed_size_limit";
 		plainBytes += bytes.byteLength;
 		compressedBytes += zipped.byteLength;
 		if (keep) chunks.push(zipped);
-		if (!terminal) {
+		if (budget) {
 			const counter = manifest.sections.find((entry) => entry.id === section);
 			if (counter) {
 				counter.entries++;
@@ -140,17 +147,26 @@ export async function buildBundle(
 		if (incomplete) break;
 	}
 	const owner = {};
-	for (const boot of snapshot.journalBoots) {
-		if (incomplete) break;
+	const previousBudget = {
+		plain: plainBytes + Math.floor((totalBudget.plain - plainBytes) / 2),
+		compressed:
+			compressedBytes +
+			Math.floor((totalBudget.compressed - compressedBytes) / 2),
+	};
+	for (const boot of incomplete ? [] : [...snapshot.journalBoots].reverse()) {
+		const budget =
+			boot === snapshot.exportedBy.bootId ? totalBudget : previousBudget;
+		const startingEntries = journal.entries;
+		let bootIncomplete: string | null = null;
 		const query = logQueryInputSchema.parse({
 			boot,
 			direction: "older",
 			limit: 200,
 		});
 		let position = query;
-		while (!incomplete) {
-			incomplete = stopped();
-			if (incomplete) break;
+		while (!bootIncomplete) {
+			bootIncomplete = stopped();
+			if (bootIncomplete) break;
 			try {
 				const page = await withQuerySlot(owner, (slotSignal) =>
 					scanPage(position, {
@@ -159,34 +175,39 @@ export async function buildBundle(
 						signal: AbortSignal.any([signal, slotSignal]),
 					}),
 				);
-				incomplete = stopped();
-				if (incomplete) break;
+				bootIncomplete = stopped();
+				if (bootIncomplete) break;
 				if (!page.ok) {
-					incomplete = page.error;
+					bootIncomplete = page.error;
 					break;
 				}
 				for (const entry of page.entries) {
-					incomplete = stopped() ?? (await append("journal", { entry }));
-					if (incomplete) break;
+					bootIncomplete =
+						stopped() ?? (await append("journal", { entry }, budget));
+					if (bootIncomplete) break;
 				}
 				if (page.hasMore === false) break;
 				position = { ...query, continuation: page.continuation ?? undefined };
 			} catch (error) {
 				if (error instanceof BundleReadError) throw error;
-				incomplete = stopped() ?? "READ_FAILED";
+				bootIncomplete = stopped() ?? "READ_FAILED";
 			}
 		}
+		if (journal.entries > startingEntries) journal.bootsCovered++;
+		incomplete ??= bootIncomplete;
 	}
 	incomplete ??= stopped();
-	if (incomplete) await append("journal", { incomplete }, true);
-	await append("end", { complete: incomplete === null }, true);
+	if (incomplete) await append("journal", { incomplete }, null);
+	await append("end", { complete: incomplete === null }, null);
 	const late = stopped();
 	if (incomplete === null && late !== null) {
 		incomplete = late;
 		chunks.pop();
-		await append("journal", { incomplete }, true);
-		await append("end", { complete: false }, true);
+		await append("journal", { incomplete }, null);
+		await append("end", { complete: false }, null);
 	}
-	redactor.structured(JSON.stringify(manifest));
-	return { manifest, chunks, filename };
+	journal.complete = incomplete === null;
+	const output = logBundleManifestSchema.parse(manifest);
+	redactor.structured(JSON.stringify(output));
+	return { manifest: output, chunks, filename };
 }

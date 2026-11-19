@@ -25,7 +25,13 @@ export function bundleManifest(journalEntries: number): LogBundleManifest {
 			{ id: "versions", entries: 2, redactions: 0 },
 			{ id: "settings", entries: 6, redactions: 1 },
 			{ id: "events", entries: 14, redactions: 0 },
-			{ id: "journal", entries: journalEntries, redactions: 9 },
+			{
+				id: "journal",
+				entries: journalEntries,
+				redactions: 9,
+				bootsCovered: 2,
+				complete: true,
+			},
 		],
 		exportedBy: RUNNING,
 		boots: [

@@ -430,6 +430,23 @@ describe("SharingSection: support bundle", () => {
 		expect(previewBundle).toHaveBeenCalledTimes(1);
 	});
 
+	it("counts journal boots separately from boots with version metadata", async () => {
+		const manifest = bundleManifest(10);
+		previewBundle.mockResolvedValue({
+			...manifest,
+			sections: manifest.sections.map((section) =>
+				section.id === "journal" ? { ...section, bootsCovered: 1 } : section,
+			),
+		});
+		await open("bundle");
+		const body = await dialog(sharing.bundle);
+		expect(
+			(
+				await within(body).findByTestId("sharing-bundle-boots")
+			).textContent?.trim(),
+		).toBe(sharing.bundleBoots.replace("{count}", "1"));
+	});
+
 	it("lists every section with its entries and removed values, the boots and the running versions before Download is enabled", async () => {
 		previewBundle.mockResolvedValue(bundleManifest(1234));
 		await open("bundle");

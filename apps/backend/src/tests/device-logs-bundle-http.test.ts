@@ -130,6 +130,8 @@ test("authenticated preview and creation drive a real single-use gzip HTTP downl
 		id: "journal",
 		entries: 1,
 		redactions: 1,
+		bootsCovered: 1,
+		complete: true,
 	});
 	const created = await call(appRouter.logs.createBundle, undefined, {
 		context: sockets.context,

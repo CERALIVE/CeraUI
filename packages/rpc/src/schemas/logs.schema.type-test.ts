@@ -150,11 +150,16 @@ type Outputs = {
 		  }
 		| Failure;
 	logBundleManifestSchema: {
-		sections: {
-			id: 'versions' | 'events' | 'journal' | 'settings';
-			entries: number;
-			redactions: number;
-		}[];
+		sections: (
+			| { id: 'versions' | 'events' | 'settings'; entries: number; redactions: number }
+			| {
+					id: 'journal';
+					entries: number;
+					redactions: number;
+					bootsCovered: number;
+					complete: boolean;
+			  }
+		)[];
 		exportedBy: Versions;
 		boots: { bootId: string; versions: Versions | null }[];
 	};

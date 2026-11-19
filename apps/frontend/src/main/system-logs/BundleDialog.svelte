@@ -146,7 +146,9 @@ const status = $derived(
 				</tbody>
 			</table>
 			<p class="text-muted-foreground text-xs" data-testid="sharing-bundle-boots">
-				{m['systemLogs.sharing.bundleBoots']({ count: count(sharing.manifest.boots.length) })}
+				{m['systemLogs.sharing.bundleBoots']({
+					count: count(sharing.manifest.sections.find((section) => section.id === 'journal')?.bootsCovered ?? 0),
+				})}
 			</p>
 
 			{@render runningNow(sharing.manifest.exportedBy)}

@@ -3,6 +3,9 @@
  * the backend; these declarations remain safe to import in the browser.
  */
 import { z } from 'zod';
+import { bootIdSchema, countSchema, timestampSchema } from './logs-fields';
+
+export * from './logs-boot.schema';
 
 export const LOG_SOURCES = [
 	'app',
@@ -40,9 +43,6 @@ export const logErrorSchema = z.strictObject({
 	error: logErrorCodeSchema,
 });
 
-const bootIdSchema = z.string().regex(/^[0-9a-f]{32}$/);
-const timestampSchema = z.number().int().nonnegative();
-const countSchema = z.number().int().nonnegative();
 const continuationSchema = z
 	.string()
 	.max(2048)
@@ -158,33 +158,6 @@ export const logFollowMessageSchema = z.strictObject({
 });
 export type LogFollowMessage = z.infer<typeof logFollowMessageSchema>;
 
-export const versionContextSchema = z.strictObject({
-	bootId: bootIdSchema,
-	osImage: z.string().nullable(),
-	slot: z.string().nullable(),
-	board: z.string().nullable(),
-	boardModel: z.string().nullable(),
-	ceraui: z.string(),
-	engine: z.string().nullable(),
-	// The logger reserves "sender" for sensitive SMS data.
-	senderVersion: z.string().nullable(),
-	kernel: z.string().nullable(),
-	bun: z.string().nullable(),
-});
-export type VersionContext = z.infer<typeof versionContextSchema>;
-export const logBootInfoSchema = z.strictObject({
-	bootId: bootIdSchema,
-	index: z.number().int(),
-	firstTs: timestampSchema,
-	lastTs: timestampSchema,
-	current: z.boolean(),
-	shutdown: z.enum(['clean', 'unclean', 'unknown', 'current']),
-	evidence: z.array(z.string()),
-	logsAvailable: z.boolean(),
-	versions: versionContextSchema.nullable(),
-});
-export type LogBootInfo = z.infer<typeof logBootInfoSchema>;
-
 export const logRetentionSchema = z.strictObject({
 	maxAgeDays: z.number().int().min(1).nullable(),
 	maxSizeMb: z.number().int().min(16).nullable(),
@@ -279,21 +252,3 @@ export const logAroundOutputSchema = z.discriminatedUnion('ok', [
 	logErrorSchema,
 ]);
 export type LogAroundOutput = z.infer<typeof logAroundOutputSchema>;
-
-export const logBundleManifestSchema = z.strictObject({
-	sections: z.array(
-		z.strictObject({
-			id: z.enum(['versions', 'events', 'journal', 'settings']),
-			entries: countSchema,
-			redactions: countSchema,
-		}),
-	),
-	exportedBy: versionContextSchema,
-	boots: z.array(
-		z.strictObject({
-			bootId: bootIdSchema,
-			versions: versionContextSchema.nullable(),
-		}),
-	),
-});
-export type LogBundleManifest = z.infer<typeof logBundleManifestSchema>;

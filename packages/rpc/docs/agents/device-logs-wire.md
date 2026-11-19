@@ -65,7 +65,7 @@ checkpoint reports `cursor_unavailable` and attaches at the current head.
 | Storage `ceiling` | object or `null` | `logs.schema.ts:197-202` |
 | Retention | `maxAgeDays` at least 1 or `null`; `maxSizeMb` at least 16 or `null`; `detail` `debug` or `info` | `logs.schema.ts:187-191` |
 | Retention upper bound | checked against the ceiling in `setRetention` | `apps/backend/src/modules/device-logs/retention.ts:113-120` |
-| Bundle manifest | sections `versions`, `events`, `journal`, `settings` with `entries` and `redactions`; `exportedBy`; `boots` with versions | `logs.schema.ts:282-297` |
+| Bundle manifest | sections `versions`, `events`, `journal`, `settings` with `entries` and `redactions`; journal also has `bootsCovered` and `complete`; `exportedBy`; `boots` with versions | `logBundleManifestSchema` |
 
 `system.getLog` and `system.getSyslog` are unchanged
 (`src/contracts/system.contract.ts`).

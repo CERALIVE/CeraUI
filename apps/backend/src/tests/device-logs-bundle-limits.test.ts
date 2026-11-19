@@ -5,6 +5,7 @@ import {
 	createBundle,
 	handleLogBundleRequest,
 } from "../modules/device-logs/bundle.ts";
+import { buildBundle } from "../modules/device-logs/bundle-body.ts";
 import * as data from "../modules/device-logs/bundle-data.ts";
 import { toLogEntry } from "../modules/device-logs/parse.ts";
 import * as pages from "../modules/device-logs/scan-page.ts";
@@ -78,6 +79,77 @@ async function bytes() {
 		).arrayBuffer(),
 	);
 }
+
+test("the previous boot gets its newest tail first without using the current boot's share", async () => {
+	const previous = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+	const older = { ...base, bootId: previous, message: "x".repeat(16_384) };
+	const latest = { ...older, message: "latest previous boot entry" };
+	const current = { ...base, message: "current boot entry" };
+	const olderVersion = { bootId: previous, versions: null };
+	collect.mockResolvedValue({
+		...snapshot,
+		boots: [...snapshot.boots, olderVersion],
+		journalBoots: [bootId, previous],
+	});
+	const headerBytes = Buffer.byteLength(
+		[...prelude, { section: "versions", ...olderVersion }].map(line).join(""),
+	);
+	const admitted = Math.floor(
+		(Math.floor((32 * 1024 * 1024 - 512 - headerBytes) / 2) -
+			Buffer.byteLength(entryLine(latest))) /
+			Buffer.byteLength(entryLine(older)),
+	);
+	const history = [
+		latest,
+		...Array.from({ length: admitted + 1 }, () => older),
+	];
+	const scan = spyOn(pages, "scanPage").mockImplementation(async (query) => {
+		const from = Number(query.continuation ?? "0");
+		const oldBoot = query.boot === previous;
+		const entries = oldBoot ? history.slice(from, from + 200) : [current];
+		const hasMore = oldBoot && from + entries.length < history.length;
+		return {
+			ok: true,
+			entries,
+			hasMore,
+			continuation: hasMore ? String(from + entries.length) : null,
+			termination: hasMore ? "lookahead" : "end",
+			bootId: oldBoot ? previous : bootId,
+			historyEpoch: 7,
+		};
+	});
+	try {
+		const { manifest, chunks } = await buildBundle(
+			{
+				createdAt: Date.now(),
+				epoch: 7,
+				signal: new AbortController().signal,
+			},
+			true,
+		);
+		const text = await new Response(
+			new Blob(chunks.map((chunk) => new Uint8Array(chunk)))
+				.stream()
+				.pipeThrough(new DecompressionStream("gzip")),
+		).text();
+		expect(text.indexOf(entryLine(latest))).toBe(headerBytes);
+		expect(text).toEndWith(
+			entryLine(current) +
+				line({ section: "journal", incomplete: "size_limit" }) +
+				line({ section: "end", complete: false }),
+		);
+		expect(manifest.sections.find(({ id }) => id === "journal")).toEqual({
+			id: "journal",
+			entries: admitted + 2,
+			redactions: 0,
+			bootsCovered: 2,
+			complete: false,
+		});
+	} finally {
+		scan.mockRestore();
+	}
+}, 30_000);
+
 function feed(rows: readonly LogEntry[]) {
 	let position = 0;
 	return spyOn(pages, "scanPage").mockImplementation(

@@ -70,7 +70,13 @@ whose serialized digits equal a held secret refuses preview and creation.
 
 `bundle-body.ts` reads one page at a time using `scanPage` and `withQuerySlot`,
 all sources/levels, older direction and limit 200, independently of the caller's
-socket. Budget pages continue until real EOF, failure or a cap. Sections are
+socket. It reads the newest entries of the previous available boot first,
+using at most half of each byte budget remaining after the prelude, then gives
+the current boot the rest. A cut of the previous boot does not prevent reading
+the current one. The preview's journal section reports `bootsCovered` based on
+admitted entries and `complete` based on whether collection finished without a
+cut or read failure. The separate `boots` list still reports version context.
+Budget pages continue until real EOF, failure or a cap. Sections are
 versions, settings, events and journal, followed by an end record. A journal
 failure or cut adds an incomplete journal record and `complete:false`. Caps are
 32 MiB of NDJSON, 8 MiB of gzip and sixty seconds, including reserved termination
