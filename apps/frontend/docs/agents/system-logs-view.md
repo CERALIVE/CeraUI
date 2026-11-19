@@ -169,7 +169,7 @@ in section 4.
 | Expired position | Raw logs | `CURSOR_UNAVAILABLE` or `FILTER_CHANGED`: "This position is no longer stored" with Start from newest; rows already shown stay, paging toward the lost side is disabled | alert |
 | Keep searching | Raw logs | `hasMore: null`: a Keep searching button and a line saying only part of the stored logs was checked; never an end marker (the normal state for a time-bounded view once its entries are shown) | no |
 | End of results | Raw logs, Events | Raw logs shows an end marker at an exhausted, available edge after the first load when rows are present. The display-limit notice takes precedence at the bottom. Approximate-window markers name the time window. Events shows an end row when events are present and no older page or paging error remains. | no |
-| Row cap reached | Raw logs | `ROW_CAP` is 2000 journal entries, excluding marker rows. Only entries beyond the cap are dropped and stop older paging | no |
+| Row cap reached | Raw logs | `ROW_CAP` is 2000 journal entries, excluding marker rows. Older paging stops at the cap. Skipped-entry recovery can still page by moving the display window | no |
 | Browsing older history | Events | Load older rolls the 300-event window toward older results while the server has more. Live pushes leave that window in place. Start from newest returns to the live edge | no |
 | Follow unavailable | Raw logs | Follow present, disabled, with an adjacent reason element (`data-testid` ending `-reason`) when the time is not This boot, the order is not Newest first, or the tab is in anchor mode (DESIGN.md CT-2). Follow displays while connected and is aria-disabled while its request is busy | no |
 | Following | Raw logs | Follow becomes Pause; a state label "Following" in `--status-info` with a `motion-safe` pulse dot; static dot plus label under reduced motion or e-ink | polite |
@@ -891,9 +891,14 @@ available under the normal filters. Choosing All boots can change the Raw
 scope even if the shared boot selection already had no explicit boot.
 
 The catch-up separator can recover one bounded newer page at a time, in its
-original position between the live and historical rows. The button retains
-focus while more pages remain. When recovery finishes, focus moves to a
-recovered entry if the operator is still on the disappearing button.
+original position between the live and historical rows. Entry eviction keeps
+existing unresolved gap positions. If a page would overflow the display, the
+window first makes room at the newer edge, then caps any excess at the older
+edge. The cursor advances only with the page in the display. Up to 32 gaps can
+keep positions at once. An inline notice tells the operator to use filters
+for additional ranges. Focus stays with the action while more pages remain
+and moves to a recovered entry, an adjacent entry or the list when the
+button disappears, provided the operator has not moved focus.
 
 ### Components
 
@@ -1004,6 +1009,7 @@ recovered entry if the operator is still on the disappearing button.
 | `lib/device-logs/raw-anchor.test.ts` |
 | `lib/device-logs/raw-filter.test.ts` |
 | `lib/device-logs/raw-follow-session.test.ts` |
+| `lib/device-logs/raw-gap-window.test.ts` |
 | `lib/device-logs/raw-rows.test.ts` |
 | `lib/device-logs/raw-view.order.test.ts` |
 | `lib/device-logs/raw-view.test.ts` |

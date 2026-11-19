@@ -2890,6 +2890,7 @@
 	"systemLogs.marker.dropped": "跟踪时跳过的条目：{count}",
 	"systemLogs.marker.catchupExceeded": "暂停跟踪期间写入的条目太多，恢复时未能全部加载。这些条目仍保存在设备上。",
 	"systemLogs.marker.showSkipped": "显示跳过的条目",
+	"systemLogs.marker.recoveryLimit": "列表已达到恢复上限。请使用筛选条件查找无法在此打开的条目。",
 	"systemLogs.marker.cursorUnavailable": "日志清理删除了跟踪位置，因此可能缺少部分条目。",
 	"systemLogs.marker.clockChanged": "设备时钟在此处发生了变化。此前记录的时间可能不准确。",
 	"systemLogs.follow.start": "跟踪",

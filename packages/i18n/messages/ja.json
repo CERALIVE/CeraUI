@@ -2890,6 +2890,7 @@
 	"systemLogs.marker.dropped": "追跡中にスキップしたエントリー: {count}",
 	"systemLogs.marker.catchupExceeded": "フォローの一時停止中に多数のエントリーが記録されたため、再開時にすべてを表示できませんでした。エントリーは保存されています。",
 	"systemLogs.marker.showSkipped": "スキップしたエントリーを表示",
+	"systemLogs.marker.recoveryLimit": "一覧で再読み込みできる上限に達しました。ここで開けないエントリーはフィルターで探してください。",
 	"systemLogs.marker.cursorUnavailable": "ログの整理により追跡位置が削除されたため、一部のエントリーが欠けている可能性があります。",
 	"systemLogs.marker.clockChanged": "ここでデバイスの時計が変わりました。これより前に記録された時刻は正しくない可能性があります。",
 	"systemLogs.follow.start": "追跡",

@@ -2935,6 +2935,7 @@
 	"systemLogs.marker.dropped": "Beim Mitverfolgen übersprungene Einträge: {count}",
 	"systemLogs.marker.catchupExceeded": "Während der Pause wurden mehr Einträge geschrieben, als beim Fortsetzen nachgeladen werden konnten. Sie sind weiterhin gespeichert.",
 	"systemLogs.marker.showSkipped": "Übersprungene Einträge anzeigen",
+	"systemLogs.marker.recoveryLimit": "Die Liste hat ihr Limit für das Nachladen erreicht. Nutze die Filter, um die Einträge zu finden, die sich hier nicht öffnen lassen.",
 	"systemLogs.marker.cursorUnavailable": "Eine Protokollbereinigung hat die Mitverfolgungsposition entfernt, daher fehlen möglicherweise Einträge.",
 	"systemLogs.marker.clockChanged": "Hier hat sich die Geräteuhr geändert. Zeiten vor dieser Stelle können falsch sein.",
 	"systemLogs.follow.start": "Mitverfolgen",

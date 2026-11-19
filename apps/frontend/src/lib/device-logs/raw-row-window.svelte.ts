@@ -9,9 +9,11 @@ import {
 	type Placement,
 	placeRows,
 	type RawRow,
+	ROW_CAP,
 } from "./raw-rows";
 
 const HELD_CAP = 500;
+const GAP_CAP = 32;
 
 /** One journal-ordered list with a boundary between held and shown rows. */
 export class RawRowWindow {
@@ -25,6 +27,7 @@ export class RawRowWindow {
 	rows = $derived(this.#list.slice(this.#boundary));
 	held = $derived(this.#list.slice(0, this.#boundary));
 	capped = $state(false);
+	gapLimitReached = $state(false);
 	#atTop = true;
 	#heldDropped = 0;
 	#serial = 0;
@@ -47,8 +50,9 @@ export class RawRowWindow {
 		if (gap?.kind !== "marker") return;
 		const { gapFrom, gapError: _previousError, ...markerRow } = gap;
 		const incoming = result.ok
-			? newRows(this.#list, entryRows([...result.entries].reverse()))
+			? newRows([], entryRows([...result.entries].reverse()))
 			: [];
+		const recovered = new Set(incoming.map((row) => row.key));
 		const markerRows = !result.ok
 			? [
 					{
@@ -63,33 +67,51 @@ export class RawRowWindow {
 			: result.continuation === null
 				? []
 				: [{ ...markerRow, gapFrom: result.continuation }];
-		const next = [
-			...this.#list.slice(0, index),
-			...markerRows,
-			...incoming,
-			...this.#list.slice(index + 1),
-		];
-		this.#write(
-			next,
-			this.#shownFrom === key ? (next[index]?.key ?? null) : undefined,
+		const boundary = this.#boundary;
+		const held = this.#list
+			.slice(0, boundary)
+			.filter((row) => !recovered.has(row.key));
+		const before = this.#list
+			.slice(boundary, index)
+			.filter((row) => !recovered.has(row.key));
+		const after = this.#list
+			.slice(index + 1)
+			.filter((row) => !recovered.has(row.key));
+		// Keep the entire requested page by taking space from the newest edge.
+		let room = Math.max(
+			0,
+			ROW_CAP -
+				incoming.length -
+				after.filter((row) => row.kind === "entry").length,
 		);
-		if (this.has(key)) return;
+		const nearer = before.findLastIndex(
+			(row) => row.kind === "entry" && --room < 0,
+		);
+		const above =
+			nearer === -1
+				? before
+				: before.filter((row, at) => at > nearer || hasGapPosition(row));
+		if (nearer !== -1) {
+			this.capped = true;
+			this.#atTop = false;
+		}
+		const next = [...held, ...above, ...markerRows, ...incoming, ...after];
+		this.#write(next, held.length);
+		if (markerRows.some(hasGapPosition)) return key;
 		return (
-			incoming.find(
+			[...incoming, ...after, ...above.reverse()].find(
 				(row) =>
 					row.kind === "entry" &&
 					row.entry.marker === null &&
 					this.has(row.key),
-			)?.key ??
-			this.rows.find((row) => row.kind === "entry" && row.entry.marker === null)
-				?.key ??
-			null
+			)?.key ?? null
 		);
 	}
 
 	clear(): void {
 		this.#list = [];
 		this.#shownFrom = null;
+		this.gapLimitReached = false;
 		this.reopen();
 	}
 
@@ -109,9 +131,17 @@ export class RawRowWindow {
 
 	appendBatch(message: LogFollowMessage): number {
 		const added = newRows(this.#list, followRows(message, ++this.#serial));
-		this.place(added, "above");
+		const atGapLimit =
+			message.gapFrom !== undefined &&
+			this.#list.filter(hasGapPosition).length === GAP_CAP;
+		if (atGapLimit) this.gapLimitReached = true;
+		this.place(
+			atGapLimit ? added.filter((row) => !hasGapPosition(row)) : added,
+			"above",
+		);
 		if (
 			message.gapFrom !== undefined &&
+			!atGapLimit &&
 			this.held.every((row) => row.kind === "marker")
 		)
 			this.#shownFrom = null;
@@ -141,12 +171,7 @@ export class RawRowWindow {
 	}
 
 	/** Rows above the first shown row wait while the operator reads away from the top. */
-	#write(
-		next: RawRow[],
-		from = this.#shownFrom ??
-			(this.#atTop ? null : (this.#list[0]?.key ?? null)),
-	): void {
-		const at = from === null ? 0 : this.#boundaryIn(next, from);
+	#write(next: RawRow[], at = this.#boundaryIn(next)): void {
 		const held = capRows(next.slice(0, at), HELD_CAP);
 		// Cut skip counts join the overflow count. Gap notices stay at the boundary.
 		const cut = next.slice(held.rows.length, at);
@@ -159,9 +184,12 @@ export class RawRowWindow {
 				(row.kind === "entry" ? 1 : row.marker === "dropped" ? row.count : 0),
 			0,
 		);
-		const shown = capRows(next.slice(at));
+		const display = next.slice(at);
+		const shown = capRows(display);
 		if (shown.removed > 0) this.capped = true;
-		this.#list = [...held.rows, ...notices, ...shown.rows];
+		// Entry eviction must never consume the only continuation for a gap.
+		const skippedGaps = display.slice(shown.rows.length).filter(hasGapPosition);
+		this.#list = [...held.rows, ...notices, ...shown.rows, ...skippedGaps];
 		this.#shownFrom =
 			held.rows.length + notices.length === 0
 				? null
@@ -169,7 +197,10 @@ export class RawRowWindow {
 	}
 
 	/** Where the first shown row sits in `next`, or the next shown row it kept. */
-	#boundaryIn(next: readonly RawRow[], from: string): number {
+	#boundaryIn(next: readonly RawRow[]): number {
+		const from =
+			this.#shownFrom ?? (this.#atTop ? null : (this.#list[0]?.key ?? null));
+		if (from === null) return 0;
 		const keys = next.map((row) => row.key);
 		const shown = this.#list.slice(
 			this.#list.findIndex((row) => row.key === from),
@@ -180,4 +211,8 @@ export class RawRowWindow {
 		}
 		return 0;
 	}
+}
+
+function hasGapPosition(row: RawRow): boolean {
+	return row.kind === "marker" && row.gapFrom !== undefined;
 }

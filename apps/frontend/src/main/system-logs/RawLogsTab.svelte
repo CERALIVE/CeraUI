@@ -154,6 +154,9 @@ const band = $derived.by(() => {
 			</Button>
 		</div>
 	{/if}
+	{#if view.gapLimitReached}
+		<p class="text-muted-foreground border-b px-4 py-2 text-xs">{m['systemLogs.marker.recoveryLimit']()}</p>
+	{/if}
 	<RawLogList {view} />
 	<div aria-live="polite" class="sr-only" data-testid="raw-status" role="status">
 		{#key view.announcement?.serial}{view.announcement === null

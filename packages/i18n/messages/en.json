@@ -2935,6 +2935,7 @@
 	"systemLogs.marker.dropped": "Entries skipped while following: {count}",
 	"systemLogs.marker.catchupExceeded": "More entries were written while following was paused than could be caught up. They are still stored.",
 	"systemLogs.marker.showSkipped": "Show skipped entries",
+	"systemLogs.marker.recoveryLimit": "Some skipped ranges can't be opened here because the list reached its recovery limit. Use the filters to find those entries.",
 	"systemLogs.marker.cursorUnavailable": "Log cleanup removed the follow position, so some entries may be missing.",
 	"systemLogs.marker.clockChanged": "The device clock changed here. Times recorded before this point may be wrong.",
 	"systemLogs.follow.start": "Follow",

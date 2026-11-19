@@ -70,6 +70,10 @@ export class RawView {
 		return this.#rows.capped;
 	}
 
+	get gapLimitReached() {
+		return this.#rows.gapLimitReached;
+	}
+
 	get loading() {
 		return this.#pages.loading;
 	}

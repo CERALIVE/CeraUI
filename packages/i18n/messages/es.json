@@ -2938,6 +2938,7 @@
 	"systemLogs.marker.dropped": "Entradas omitidas durante el seguimiento: {count}",
 	"systemLogs.marker.catchupExceeded": "Mientras el seguimiento estuvo en pausa, se escribieron más registros de los que se pudieron recuperar al reanudarlo. Siguen guardados.",
 	"systemLogs.marker.showSkipped": "Mostrar registros omitidos",
+	"systemLogs.marker.recoveryLimit": "Algunos tramos omitidos no se pueden abrir aquí porque la lista llegó a su límite de recuperación. Usa los filtros para encontrar esas entradas.",
 	"systemLogs.marker.cursorUnavailable": "La limpieza de registros eliminó la posición de seguimiento, así que pueden faltar algunas entradas.",
 	"systemLogs.marker.clockChanged": "El reloj del dispositivo cambió aquí. Las horas registradas antes de este punto pueden ser incorrectas.",
 	"systemLogs.follow.start": "Seguir",
