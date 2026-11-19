@@ -41,7 +41,13 @@ function declaration(path: string, name: string): string {
 test("boot observes ready modem discovery once while the guarded version record is pending", async () => {
 	const cwd = await mkdtemp(join(tmpdir(), "ceraui-event-boot-"));
 	try {
-		await Bun.write(join(cwd, "setup.json"), '{"hw":"n100"}');
+		// Mock boot checks that the sender is readable but never runs it.
+		const senderPath = join(cwd, "srtla_send");
+		await Bun.write(senderPath, "");
+		await Bun.write(
+			join(cwd, "setup.json"),
+			JSON.stringify({ hw: "n100", srtla_path: senderPath }),
+		);
 		const boot = Bun.spawn(
 			[
 				process.execPath,
@@ -61,17 +67,21 @@ test("boot observes ready modem discovery once while the guarded version record 
 					NOTIFY_SOCKET: "",
 				},
 				stdin: "ignore",
-				stdout: "ignore",
+				stdout: "pipe",
 				stderr: "pipe",
 				timeout: 8_000,
 				killSignal: "SIGKILL",
 			},
 		);
-		const [exitCode, stderr] = await Promise.all([
+		const [exitCode, stdout, stderr] = await Promise.all([
 			boot.exited,
+			new Response(boot.stdout).text(),
 			new Response(boot.stderr).text(),
 		]);
-		expect(exitCode, stderr || "mock boot did not finish").toBe(0);
+		const diagnostic = [boot.signalCode, stderr, stdout]
+			.filter(Boolean)
+			.join("\n");
+		expect(exitCode, diagnostic || "mock boot did not finish").toBe(0);
 	} finally {
 		await rm(cwd, { recursive: true, force: true });
 	}
