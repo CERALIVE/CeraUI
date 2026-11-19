@@ -2871,6 +2871,7 @@
 	"systemLogs.events.problemsOnly": "केवल समस्याएँ",
 	"systemLogs.events.loadOlder": "पुराने इवेंट लोड करें",
 	"systemLogs.events.noOlder": "कोई पुराना इवेंट सहेजा नहीं गया है।",
+	"systemLogs.events.startFromNewestCount": "नवीनतम से शुरू करें (नए इवेंट: {count})",
 	"systemLogs.events.viewRaw": "रॉ लॉग देखें",
 	"systemLogs.events.folded": "मिलते-जुलते इवेंट जोड़े गए: {count}",
 	"systemLogs.events.emptyTitle": "अभी तक कोई इवेंट दर्ज नहीं हुआ",

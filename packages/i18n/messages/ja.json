@@ -2826,6 +2826,7 @@
 	"systemLogs.events.problemsOnly": "問題のみ",
 	"systemLogs.events.loadOlder": "以前のイベントを読み込む",
 	"systemLogs.events.noOlder": "これより前のイベントは保存されていません。",
+	"systemLogs.events.startFromNewestCount": "最新から始める（新着: {count}）",
 	"systemLogs.events.viewRaw": "生ログを表示",
 	"systemLogs.events.folded": "まとめた類似イベント: {count}",
 	"systemLogs.events.emptyTitle": "まだイベントは記録されていません",

@@ -7,7 +7,9 @@
  * the reconnect re-reads it. While browsing older events, the reconnect instead
  * checks the live edge: the list stays stale until a check succeeds, and that
  * check removes only rows below the new retention floor, keeping the window,
- * its paging and every other row's action. Only the newest read may settle,
+ * its paging and every other row's action. Pushes leave a browsed window in
+ * place and only count the new events Start from newest will show; a skipped
+ * `seq` reads the live edge for that count. Only the newest read may settle,
  * and a push that arrives while the first page is read joins that page unless
  * the page already covers it. Disposing drops every reply still in flight and stops listening
  * once; disposing again does nothing. Data loads only in these methods, never in
@@ -85,6 +87,7 @@ export class EventsView {
 	});
 	stale = $state(false);
 	liveEdgeFailed = $state(false);
+	newWhileBrowsing = $state(0);
 	rawLink = $state.raw<{
 		readonly id: string;
 		readonly state: RawLinkState;
@@ -114,6 +117,7 @@ export class EventsView {
 		// Every row shown is dropped, so once connected nothing stale remains.
 		if (this.#connected) this.stale = false;
 		this.liveEdgeFailed = false;
+		this.newWhileBrowsing = 0;
 		this.rowReset = { keepShownFocus: false };
 		this.#clearRawLink();
 		this.events = [];
@@ -241,9 +245,15 @@ export class EventsView {
 		try {
 			const page = await this.#deps.list(listInput(this.filter, beforeSeq));
 			if (generation !== this.#generation) return;
+			const seen = this.#head;
 			this.#head = Math.max(this.#head, page.headSeq);
 			this.#retainedFrom = page.retainedFromSeq;
 			if (mode === "live-edge") {
+				// shortcut: counts at most one page of unseen events, so a gap or outage
+				// longer than PAGE undercounts; page toward the head if that becomes routine.
+				this.newWhileBrowsing += page.events.filter(
+					(event) => event.seq > seen,
+				).length;
 				const kept = this.events.filter(
 					(event) => event.seq >= this.#retainedFrom,
 				);
@@ -310,16 +320,26 @@ export class EventsView {
 			this.#held.push(...batch);
 			return;
 		}
-		if (this.failed === "first" || this.browsingHistory) return;
+		if (this.failed === "first") return;
 		const admitted: DeviceEvent[] = [];
+		let fresh = 0;
 		for (const event of batch) {
 			if (event.seq > this.#head + 1) {
-				void this.#read("first", "gap");
+				// While browsing, only the count needs what was missed, not the rows.
+				if (this.browsingHistory) this.newWhileBrowsing += fresh;
+				void this.#read("first", this.browsingHistory ? "live-edge" : "gap");
 				return;
 			}
-			this.#head = Math.max(this.#head, event.seq);
-			if (event.seq >= this.#retainedFrom && admits(this.filter, event))
+			if (event.seq >= this.#retainedFrom && admits(this.filter, event)) {
 				admitted.push(event);
+				if (event.seq > this.#head) fresh += 1;
+			}
+			this.#head = Math.max(this.#head, event.seq);
+		}
+		// A browsed window stays in place; Start from newest names what arrived.
+		if (this.browsingHistory) {
+			this.newWhileBrowsing += fresh;
+			return;
 		}
 		if (admitted.length === 0) return;
 		const merged = mergeEvents(this.events, admitted);

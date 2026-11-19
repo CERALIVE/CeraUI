@@ -2826,6 +2826,7 @@
 	"systemLogs.events.problemsOnly": "仅显示问题",
 	"systemLogs.events.loadOlder": "加载更早的事件",
 	"systemLogs.events.noOlder": "没有保存更早的事件。",
+	"systemLogs.events.startFromNewestCount": "从最新开始（新增：{count}）",
 	"systemLogs.events.viewRaw": "查看原始日志",
 	"systemLogs.events.folded": "已合并的相似事件：{count}",
 	"systemLogs.events.emptyTitle": "尚未记录任何事件",

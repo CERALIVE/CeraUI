@@ -2826,6 +2826,7 @@
 	"systemLogs.events.problemsOnly": "문제만",
 	"systemLogs.events.loadOlder": "이전 이벤트 불러오기",
 	"systemLogs.events.noOlder": "저장된 이전 이벤트가 없습니다.",
+	"systemLogs.events.startFromNewestCount": "최신부터 시작 (새 이벤트: {count})",
 	"systemLogs.events.viewRaw": "원본 로그 보기",
 	"systemLogs.events.folded": "합쳐진 비슷한 이벤트: {count}",
 	"systemLogs.events.emptyTitle": "아직 기록된 이벤트가 없습니다",

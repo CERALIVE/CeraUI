@@ -100,6 +100,9 @@ async function openHistory(
 	return retained;
 }
 
+const newCount = (count: number) =>
+	copy.startFromNewestCount.replace("{count}", String(count));
+
 function renderedTimes(): (string | null | undefined)[] {
 	return screen
 		.queryAllByTestId("event-row")
@@ -143,7 +146,7 @@ it("reaches the oldest of 401 matching events with a bounded window and stable p
 	expect(renderedTimes()[0]).toBe(new Date(stopped(300).at).toISOString());
 
 	await fireEvent.click(
-		screen.getByRole("button", { name: error.startFromNewest }),
+		await screen.findByRole("button", { name: newCount(2) }),
 	);
 	expect(renderedTimes()[0]).toBe(new Date(newer.at).toISOString());
 });
@@ -338,6 +341,37 @@ it.each([
 		expect(onViewRaw.mock.calls).toEqual(survives ? [[page]] : []);
 	},
 );
+
+it("names the new events on Start from newest while browsing, in place, until it returns to newest", async () => {
+	const retained = await browseToOldest();
+	const newest = screen.getByRole("button", { name: error.startFromNewest });
+	// The counted label is long in some locales, so it wraps inside a 320 px bar.
+	expect([...newest.classList]).toEqual(
+		expect.arrayContaining([
+			"h-auto",
+			"max-w-full",
+			"whitespace-normal",
+			"text-balance",
+		]),
+	);
+	const pushed = [stopped(403), stopped(402)];
+	retained.unshift(...pushed);
+
+	feed.listener?.([stopped(402)]);
+	expect(await screen.findByRole("button", { name: newCount(1) })).toBe(newest);
+	feed.listener?.([stopped(403)]);
+	expect(await screen.findByRole("button", { name: newCount(2) })).toBe(newest);
+	expect(renderedTimes()).toEqual(times(retained.slice(102, 402)));
+
+	await fireEvent.click(newest);
+
+	await waitFor(() =>
+		expect(renderedTimes().slice(0, 2)).toEqual(times(pushed)),
+	);
+	expect(
+		screen.queryByRole("button", { name: error.startFromNewest }),
+	).toBeNull();
+});
 
 it("keeps the disconnected notice and a Retry until a reconnect check succeeds, then hands focus to the filter bar", async () => {
 	const retained = await browseToOldest();

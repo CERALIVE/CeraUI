@@ -19,8 +19,11 @@ the listener at logout.
 
 The open view displays at most 300 rows, newest first. Loading older events
 past that limit drops the newest edge and continues with the server cursor.
-Live pushes leave that history window in place. Start from newest reads the
-latest page again. At the live edge, pushes keep the newest 300 rows and move
+Live pushes leave that history window in place. The view counts each new
+event the filter admits, once, and Start from newest names that count. A
+skipped `seq` or a reconnect reads the live edge again for the events it
+missed; that read counts at most one page. Start from newest reads the
+latest page again and clears the count. At the live edge, pushes keep the newest 300 rows and move
 the older-query boundary when they evict rows, so Load older or Retry can
 recover those rows if they are still stored.
 

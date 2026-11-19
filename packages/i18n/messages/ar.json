@@ -2883,6 +2883,7 @@
 	"systemLogs.events.problemsOnly": "المشكلات فقط",
 	"systemLogs.events.loadOlder": "تحميل أحداث أقدم",
 	"systemLogs.events.noOlder": "لا توجد أحداث أقدم محفوظة.",
+	"systemLogs.events.startFromNewestCount": "البدء من الأحدث (أحداث جديدة: {count})",
 	"systemLogs.events.viewRaw": "عرض السجلات الخام",
 	"systemLogs.events.folded": "أحداث مشابهة مدمجة: {count}",
 	"systemLogs.events.emptyTitle": "لم تُسجَّل أي أحداث بعد",

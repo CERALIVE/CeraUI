@@ -2874,6 +2874,7 @@
 	"systemLogs.events.problemsOnly": "Solo problemas",
 	"systemLogs.events.loadOlder": "Cargar eventos anteriores",
 	"systemLogs.events.noOlder": "No hay eventos anteriores guardados.",
+	"systemLogs.events.startFromNewestCount": "Empezar desde lo más reciente (nuevos: {count})",
 	"systemLogs.events.viewRaw": "Ver logs",
 	"systemLogs.events.folded": "Eventos similares agrupados: {count}",
 	"systemLogs.events.emptyTitle": "Todavía no hay eventos registrados",

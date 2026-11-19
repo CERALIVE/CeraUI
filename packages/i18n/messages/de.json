@@ -2871,6 +2871,7 @@
 	"systemLogs.events.problemsOnly": "Nur Probleme",
 	"systemLogs.events.loadOlder": "Ältere Ereignisse laden",
 	"systemLogs.events.noOlder": "Es sind keine älteren Ereignisse gespeichert.",
+	"systemLogs.events.startFromNewestCount": "Bei den neuesten beginnen (neu: {count})",
 	"systemLogs.events.viewRaw": "Rohprotokolle anzeigen",
 	"systemLogs.events.folded": "Zusammengefasste ähnliche Ereignisse: {count}",
 	"systemLogs.events.emptyTitle": "Noch keine Ereignisse aufgezeichnet",

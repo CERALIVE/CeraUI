@@ -170,7 +170,7 @@ in section 4.
 | Keep searching | Raw logs | `hasMore: null`: a Keep searching button and a line saying only part of the stored logs was checked; never an end marker (the normal state for a time-bounded view once its entries are shown) | no |
 | End of results | Raw logs, Events | Raw logs shows an end marker at an exhausted, available edge after the first load when rows are present. The display-limit notice takes precedence at the bottom. Approximate-window markers name the time window. Events shows an end row when events are present and no older page or paging error remains. | no |
 | Row cap reached | Raw logs | `ROW_CAP` is 2000 journal entries, excluding marker rows. Older paging stops at the cap. Skipped-entry recovery can still page by moving the display window | no |
-| Browsing older history | Events | Load older rolls the 300-event window toward older results while the server has more. Live pushes leave that window in place. Start from newest returns to the live edge | no |
+| Browsing older history | Events | Load older rolls the 300-event window toward older results while the server has more. Live pushes leave that window in place and are counted: once any arrive, the button reads "Start from newest (new: {count})" and wraps inside its bar on a narrow screen. Start from newest returns to the live edge | no |
 | Follow unavailable | Raw logs | Follow present, disabled, with an adjacent reason element (`data-testid` ending `-reason`) when the time is not This boot, the order is not Newest first, or the tab is in anchor mode (DESIGN.md CT-2). Follow displays while connected and is aria-disabled while its request is busy | no |
 | Following | Raw logs | Follow becomes Pause; a state label "Following" in `--status-info` with a `motion-safe` pulse dot; static dot plus label under reduced motion or e-ink | polite |
 | New entries held | Raw logs | While scrolled away from the top, incoming entries wait (cap 500) behind a "New entries: {count}" button at the top of the list; selecting it merges them and scrolls to the top | polite, throttled |
@@ -178,7 +178,7 @@ in section 4.
 | Gap marker | Raw logs | A full-width separator row (neutral 1 px rules either side of centered text) stating what was skipped and why: catch-up exceeded, position removed by cleanup, or entries dropped by the device | polite |
 | Dropped marker | Raw logs | `dropped > 0` in a follow batch: one separator row "Entries skipped while following: {count}". journald's suppressed-messages record (`marker: 'suppressed'`) is a separate marker row (`lib/device-logs/raw-rows.ts:103-127`, `main/system-logs/RawLogRow.svelte:103-104`) | polite (as a gap) |
 | Follower stopped | Raw logs | Label "Stopped" with its reason (reader ended, device restarted, logs cleared) and a Follow action; `ended: 'cleared'` also resets the list | polite |
-| Disconnected | Raw logs, Events, header pill | The socket dropped: follow state "Disconnected", a notice that entries may be out of date, rows dimmed to `text-muted-foreground`, the pill shows Offline, no pulse anywhere; stale, never fresh-looking. Raw logs shows Disconnected only when a follow was active, and on reconnect offers Resume (`lib/device-logs/raw-follow-session.svelte.ts:91-100`, `main/system-logs/RawFollowControl.svelte:28-56`); Events reloads its first page on reconnect at the live edge. While browsing older events, reconnect checks the live edge instead: the notice stays until a check succeeds, a failed check adds the load-failure band with Retry, and a successful check removes only rows below the new retention floor (`lib/device-logs/events-view.svelte.ts:154-168`) | polite |
+| Disconnected | Raw logs, Events, header pill | The socket dropped: follow state "Disconnected", a notice that entries may be out of date, rows dimmed to `text-muted-foreground`, the pill shows Offline, no pulse anywhere; stale, never fresh-looking. Raw logs shows Disconnected only when a follow was active, and on reconnect offers Resume (`lib/device-logs/raw-follow-session.svelte.ts:91-100`, `main/system-logs/RawFollowControl.svelte:28-56`); Events reloads its first page on reconnect at the live edge. While browsing older events, reconnect checks the live edge instead: the notice stays until a check succeeds, a failed check adds the load-failure band with Retry, and a successful check removes only rows below the new retention floor (`lib/device-logs/events-view.svelte.ts:158-172`) | polite |
 | Anchor | Raw logs | Opened from an event or a "View logs" action: the matching row has a tonal highlight (`bg-status-info/10`, no outline or stripe); an exact match receives focus and an approximate one leaves focus on the selected tab (`main/system-logs/SystemLogsView.svelte:134-138`, `main/system-logs/RawLogList.svelte:79-89`); "approximate" is stated when no exact entry matched; a Back to latest entries action leaves anchor mode | no |
 | Moment unknown | Raw logs | A "View logs" action whose message has no known moment (a notice first seen in a replay with no timeline event, or an event no longer stored) opens the newest entries with one muted line above the list saying the time is not known; choosing another tab drops it (`main/system-logs/RawLogsPanel.svelte`, `main/system-logs/RawLogsTab.svelte`) | no |
 | Unknown event code | Events | A record from a newer version: the family icon, the title "Event recorded by a newer version", one honest detail sentence, View raw logs, and the raw code only inside a collapsed Diagnostics disclosure (`data-testid` containing `diagnostic`, DESIGN.md OL-3..OL-5). A known code with invalid params shows its title with no detail | no |
@@ -350,6 +350,7 @@ Rules for this copy:
 | `systemLogs.events.problemsOnly` | Problems only | Toggle |
 | `systemLogs.events.loadOlder` | Load older events | Paging button |
 | `systemLogs.events.noOlder` | No older events are stored. | End row |
+| `systemLogs.events.startFromNewestCount` | Start from newest (new: {count}) | Return to the live edge of Events after new events arrived while browsing older ones |
 | `systemLogs.events.viewRaw` | View raw logs | Row action |
 | `systemLogs.events.folded` | Similar events folded in: {count} | Row line 3 when suppressed is set |
 | `systemLogs.events.emptyTitle` | No events recorded yet | Empty state |
@@ -1082,7 +1083,7 @@ Related browser specs and their entry points:
 
 | Name | Value | Source |
 |---| --- |---|
-| PAGE | 100 | `lib/device-logs/events-view.svelte.ts:48` |
+| PAGE | 100 | `lib/device-logs/events-view.svelte.ts:50` |
 | EVENT_ROW_CAP | 300 | `lib/device-logs/events-window.ts:4` |
 | PAGE_LIMIT | 100 | `lib/device-logs/raw-filter.ts:57` |
 | SEARCH_MAX_BYTES | 256 | `lib/device-logs/raw-filter.ts:58` |
@@ -1103,8 +1104,8 @@ Backend and wire limits: [device-logs.md](../../../backend/docs/agents/device-lo
 |---| --- |
 | Events list key map (ArrowDown, ArrowUp, Home, End) | `main/system-logs/EventsTab.svelte:40-43` |
 | Events row action lookup | `main/system-logs/EventsTab.svelte:105` |
-| Events row keydown hook | `main/system-logs/EventsTab.svelte:241` |
-| Events scroller scroll padding | `main/system-logs/EventsTab.svelte:200` |
+| Events row keydown hook | `main/system-logs/EventsTab.svelte:244` |
+| Events scroller scroll padding | `main/system-logs/EventsTab.svelte:203` |
 | Events paging focus handoff | `main/system-logs/EventsTab.svelte:152` |
 | Events focus recovery on row reset | `main/system-logs/EventsTab.svelte:78` |
 | Start from newest focus handoff | `main/system-logs/EventsTab.svelte:109` |

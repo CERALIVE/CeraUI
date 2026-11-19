@@ -769,6 +769,51 @@ describe("EventsView: connection", () => {
 	);
 });
 
+describe("EventsView: new events while browsing", () => {
+	it("counts each new event the filter admits without moving the window, and starts again from newest", async () => {
+		const { view, list, push } = await browsing(BOOT_IDS.current);
+		const shown = view.events;
+		expect(view.newWhileBrowsing).toBe(0);
+
+		push(e(501), e(501));
+		push(e(502, { bootId: BOOT_IDS.clean }), e(503));
+		push(e(503));
+
+		expect(view.newWhileBrowsing).toBe(2);
+		expect(view.events).toBe(shown);
+		expect(list).toHaveBeenCalledTimes(4);
+
+		list.mockResolvedValueOnce(eventPage([e(503), e(501)]));
+		await view.reload();
+		expect(view.newWhileBrowsing).toBe(0);
+		expect(ids(view)).toEqual([503, 501]);
+	});
+
+	it("reads the live edge to count what a skipped seq or a reconnect left out", async () => {
+		const { view, list, push } = await browsing();
+		const shown = view.events;
+		list.mockResolvedValueOnce(
+			eventPage([e(503), e(502), e(501), e(500)], { retainedFromSeq: 1 }),
+		);
+
+		push(e(501), e(503));
+		await vi.waitFor(() => expect(view.loading).toBeNull());
+		expect(list).toHaveBeenLastCalledWith({ limit: 100 });
+		expect(view.newWhileBrowsing).toBe(3);
+
+		const reply = Promise.withResolvers<EventListOutput>();
+		list.mockReturnValueOnce(reply.promise);
+		reconnect(view);
+		push(e(505), e(506));
+		reply.resolve(eventPage([e(505), e(504), e(503)], { retainedFromSeq: 1 }));
+		await vi.waitFor(() => expect(view.loading).toBeNull());
+
+		expect(view.newWhileBrowsing).toBe(6);
+		expect(view.events).toBe(shown);
+		expect(view.browsingHistory).toBe(true);
+	});
+});
+
 describe("EventsView: View raw logs", () => {
 	it("asks for the raw entries around the event and opens them", async () => {
 		const { view, around } = setup();

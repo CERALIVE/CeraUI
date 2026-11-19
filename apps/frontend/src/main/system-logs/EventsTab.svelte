@@ -190,10 +190,13 @@ $effect(() => {
 			<Button
 				aria-busy={returningToNewest || undefined}
 				aria-disabled={returningToNewest || undefined}
-				class="aria-disabled:pointer-events-none aria-disabled:opacity-50"
+				class="h-auto min-h-7 max-w-full py-1 text-center text-balance whitespace-normal aria-disabled:pointer-events-none aria-disabled:opacity-50"
 				onclick={returnToNewest}
 				size="sm"
-				variant="outline">{m['systemLogs.error.startFromNewest']()}</Button
+				variant="outline"
+				>{view.newWhileBrowsing > 0
+					? m['systemLogs.events.startFromNewestCount']({ count: view.newWhileBrowsing })
+					: m['systemLogs.error.startFromNewest']()}</Button
 			>
 		</div>
 	{/if}
