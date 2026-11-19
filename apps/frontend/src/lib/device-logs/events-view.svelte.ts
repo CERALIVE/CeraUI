@@ -4,9 +4,12 @@
  * pushes while the tab is open. A push that skips a `seq` re-reads the list
  * instead of guessing what was missed, keeping the rows shown until the first
  * page replaces them; a disconnect marks the list stale and
- * the reconnect re-reads it. Only the newest read may settle, and a push that
- * arrives while the first page is read joins that page unless the page already
- * covers it. Disposing drops every reply still in flight and stops listening
+ * the reconnect re-reads it. While browsing older events, the reconnect instead
+ * checks the live edge: the list stays stale until a check succeeds, and that
+ * check removes only rows below the new retention floor, keeping the window,
+ * its paging and every other row's action. Only the newest read may settle,
+ * and a push that arrives while the first page is read joins that page unless
+ * the page already covers it. Disposing drops every reply still in flight and stops listening
  * once; disposing again does nothing. Data loads only in these methods, never in
  * an effect.
  */
@@ -81,6 +84,7 @@ export class EventsView {
 		keepShownFocus: false,
 	});
 	stale = $state(false);
+	liveEdgeFailed = $state(false);
 	rawLink = $state.raw<{
 		readonly id: string;
 		readonly state: RawLinkState;
@@ -95,6 +99,7 @@ export class EventsView {
 	#head = 0;
 	#retainedFrom = 0;
 	#held: DeviceEvent[] = [];
+	#connected = false;
 	#disposed = false;
 	#rawRequest: object | undefined;
 
@@ -106,6 +111,9 @@ export class EventsView {
 
 	/** The first page again, from the newest event, dropping every row shown. */
 	reload(): Promise<void> {
+		// Every row shown is dropped, so once connected nothing stale remains.
+		if (this.#connected) this.stale = false;
+		this.liveEdgeFailed = false;
 		this.rowReset = { keepShownFocus: false };
 		this.#clearRawLink();
 		this.events = [];
@@ -143,12 +151,18 @@ export class EventsView {
 		this.#setFilter({ families: [], problemsOnly: false, bootId: null });
 	}
 
+	/** Reads the newest page again for its retention floor, keeping the browsed window. */
+	checkLiveEdge(): Promise<void> {
+		return this.#read("first", "live-edge");
+	}
+
 	connectionChanged(state: ConnectionState): void {
-		if (state !== "connected") {
+		this.#connected = state === "connected";
+		if (!this.#connected) {
 			this.stale = true;
+			this.liveEdgeFailed = false;
 		} else if (this.stale) {
-			this.stale = false;
-			if (this.browsingHistory) void this.#read("first", "live-edge");
+			if (this.browsingHistory) void this.checkLiveEdge();
 			else void this.reload();
 		}
 	}
@@ -223,37 +237,52 @@ export class EventsView {
 		// An older page's failure stays while it is read again, so its Retry keeps focus.
 		if (end === "first" && mode !== "live-edge") this.failed = null;
 		let newer: DeviceEvent[] = [];
+		let settleRows = mode === "gap";
 		try {
 			const page = await this.#deps.list(listInput(this.filter, beforeSeq));
 			if (generation !== this.#generation) return;
 			this.#head = Math.max(this.#head, page.headSeq);
 			this.#retainedFrom = page.retainedFromSeq;
-			if (mode === "live-edge") return;
-			this.failed = null;
-			// If pushes passed the request's edge, join the reply to its original
-			// window. Joining to the live window would leave a hole between them.
-			const liveEdgeMoved = end === "older" && beforeSeq !== this.nextBeforeSeq;
-			const shown = liveEdgeMoved ? startingRows : this.events;
-			const merged = mergeEvents(
-				end === "first"
-					? []
-					: shown.filter((event) => event.seq >= this.#retainedFrom),
-				page.events,
-			);
-			if (liveEdgeMoved || merged.length > EVENT_ROW_CAP)
-				this.browsingHistory = true;
-			this.events = merged.slice(-EVENT_ROW_CAP);
-			this.nextBeforeSeq = page.nextBeforeSeq;
+			if (mode === "live-edge") {
+				const kept = this.events.filter(
+					(event) => event.seq >= this.#retainedFrom,
+				);
+				settleRows = kept.length < this.events.length;
+				if (settleRows) this.events = kept;
+				this.stale = false;
+				this.liveEdgeFailed = false;
+			} else {
+				this.failed = null;
+				// If pushes passed the request's edge, join the reply to its original
+				// window. Joining to the live window would leave a hole between them.
+				const liveEdgeMoved =
+					end === "older" && beforeSeq !== this.nextBeforeSeq;
+				const shown = liveEdgeMoved ? startingRows : this.events;
+				const merged = mergeEvents(
+					end === "first"
+						? []
+						: shown.filter((event) => event.seq >= this.#retainedFrom),
+					page.events,
+				);
+				if (liveEdgeMoved || merged.length > EVENT_ROW_CAP)
+					this.browsingHistory = true;
+				this.events = merged.slice(-EVENT_ROW_CAP);
+				this.nextBeforeSeq = page.nextBeforeSeq;
+			}
 			newer = this.#held.splice(0).filter((event) => event.seq > page.headSeq);
 		} catch (error) {
 			if (generation !== this.#generation) return;
 			console.error("System Logs could not read the event history:", error);
-			if (mode === "live-edge") return;
-			if (end === "first") {
-				this.events = [];
-				this.nextBeforeSeq = null;
+			if (mode === "live-edge") {
+				// Offline, the next reconnect checks again, so Retry waits for the link.
+				this.liveEdgeFailed = this.#connected;
+			} else {
+				if (end === "first") {
+					this.events = [];
+					this.nextBeforeSeq = null;
+				}
+				this.failed = end;
 			}
-			this.failed = end;
 		} finally {
 			if (generation === this.#generation) {
 				if (mode === "live-edge") this.#held.length = 0;
@@ -262,7 +291,7 @@ export class EventsView {
 		}
 		if (generation !== this.#generation) return;
 		this.#receive(newer);
-		if (mode === "gap") {
+		if (settleRows) {
 			const link = this.rawLink;
 			if (
 				link?.state === "pending" &&

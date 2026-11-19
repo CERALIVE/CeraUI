@@ -178,7 +178,7 @@ in section 4.
 | Gap marker | Raw logs | A full-width separator row (neutral 1 px rules either side of centered text) stating what was skipped and why: catch-up exceeded, position removed by cleanup, or entries dropped by the device | polite |
 | Dropped marker | Raw logs | `dropped > 0` in a follow batch: one separator row "Entries skipped while following: {count}". journald's suppressed-messages record (`marker: 'suppressed'`) is a separate marker row (`lib/device-logs/raw-rows.ts:103-127`, `main/system-logs/RawLogRow.svelte:103-104`) | polite (as a gap) |
 | Follower stopped | Raw logs | Label "Stopped" with its reason (reader ended, device restarted, logs cleared) and a Follow action; `ended: 'cleared'` also resets the list | polite |
-| Disconnected | Raw logs, Events, header pill | The socket dropped: follow state "Disconnected", a notice that entries may be out of date, rows dimmed to `text-muted-foreground`, the pill shows Offline, no pulse anywhere; stale, never fresh-looking. Raw logs shows Disconnected only when a follow was active, and on reconnect offers Resume (`lib/device-logs/raw-follow-session.svelte.ts:91-100`, `main/system-logs/RawFollowControl.svelte:28-56`); Events reloads its first page on reconnect (`events-view.svelte.ts:150-156`) | polite |
+| Disconnected | Raw logs, Events, header pill | The socket dropped: follow state "Disconnected", a notice that entries may be out of date, rows dimmed to `text-muted-foreground`, the pill shows Offline, no pulse anywhere; stale, never fresh-looking. Raw logs shows Disconnected only when a follow was active, and on reconnect offers Resume (`lib/device-logs/raw-follow-session.svelte.ts:91-100`, `main/system-logs/RawFollowControl.svelte:28-56`); Events reloads its first page on reconnect at the live edge. While browsing older events, reconnect checks the live edge instead: the notice stays until a check succeeds, a failed check adds the load-failure band with Retry, and a successful check removes only rows below the new retention floor (`lib/device-logs/events-view.svelte.ts:154-168`) | polite |
 | Anchor | Raw logs | Opened from an event or a "View logs" action: the matching row has a tonal highlight (`bg-status-info/10`, no outline or stripe); an exact match receives focus and an approximate one leaves focus on the selected tab (`main/system-logs/SystemLogsView.svelte:134-138`, `main/system-logs/RawLogList.svelte:79-89`); "approximate" is stated when no exact entry matched; a Back to latest entries action leaves anchor mode | no |
 | Moment unknown | Raw logs | A "View logs" action whose message has no known moment (a notice first seen in a replay with no timeline event, or an event no longer stored) opens the newest entries with one muted line above the list saying the time is not known; choosing another tab drops it (`main/system-logs/RawLogsPanel.svelte`, `main/system-logs/RawLogsTab.svelte`) | no |
 | Unknown event code | Events | A record from a newer version: the family icon, the title "Event recorded by a newer version", one honest detail sentence, View raw logs, and the raw code only inside a collapsed Diagnostics disclosure (`data-testid` containing `diagnostic`, DESIGN.md OL-3..OL-5). A known code with invalid params shows its title with no detail | no |
@@ -878,6 +878,11 @@ After an Events gap refresh, a pending View raw logs reply can open Raw logs
 only if its event is still shown. A failed refresh retires the pending action
 and returns any focused row action to the filter bar.
 
+A reconnect check while browsing older events settles removed rows the same
+way, but only when the reply's retention floor removes some. An unchanged
+window keeps its rows, paging, pending action and focus. When the Retry of a
+failed check succeeds, focus left on it moves to the first visible filter.
+
 `RawView` exposes the tab's operator actions. `RawPaging` owns query
 generations, continuations and head replay. `RawFollowSession` owns the
 socket listener, subscription and resume checkpoint. `RawRowWindow` owns
@@ -1077,7 +1082,7 @@ Related browser specs and their entry points:
 
 | Name | Value | Source |
 |---| --- |---|
-| PAGE | 100 | `lib/device-logs/events-view.svelte.ts:45` |
+| PAGE | 100 | `lib/device-logs/events-view.svelte.ts:48` |
 | EVENT_ROW_CAP | 300 | `lib/device-logs/events-window.ts:4` |
 | PAGE_LIMIT | 100 | `lib/device-logs/raw-filter.ts:57` |
 | SEARCH_MAX_BYTES | 256 | `lib/device-logs/raw-filter.ts:58` |
@@ -1098,11 +1103,12 @@ Backend and wire limits: [device-logs.md](../../../backend/docs/agents/device-lo
 |---| --- |
 | Events list key map (ArrowDown, ArrowUp, Home, End) | `main/system-logs/EventsTab.svelte:40-43` |
 | Events row action lookup | `main/system-logs/EventsTab.svelte:105` |
-| Events row keydown hook | `main/system-logs/EventsTab.svelte:231` |
-| Events scroller scroll padding | `main/system-logs/EventsTab.svelte:190` |
-| Events paging focus handoff | `main/system-logs/EventsTab.svelte:144` |
+| Events row keydown hook | `main/system-logs/EventsTab.svelte:241` |
+| Events scroller scroll padding | `main/system-logs/EventsTab.svelte:200` |
+| Events paging focus handoff | `main/system-logs/EventsTab.svelte:152` |
 | Events focus recovery on row reset | `main/system-logs/EventsTab.svelte:78` |
 | Start from newest focus handoff | `main/system-logs/EventsTab.svelte:109` |
+| Events reconnect check Retry focus handoff | `main/system-logs/EventsTab.svelte:124` |
 | View raw logs pending (aria-disabled) | `main/system-logs/EventRow.svelte:90` |
 | Event row tab stop | `main/system-logs/EventRow.svelte:95` |
 | Raw list focus on a row | `main/system-logs/RawLogList.svelte:115` |

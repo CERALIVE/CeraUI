@@ -37,6 +37,30 @@ const ids = (view: EventsView) => view.events.map((item) => item.seq);
 const e = (seq: number, extra: Partial<DeviceEvent> = {}) =>
 	event(seq, "internet_lost", {}, extra);
 
+// Rows 400 to 101 of 500 retained events, after paging past the 300-row window.
+async function browsing(bootId: string | null = null) {
+	const harness = setup(bootId);
+	const range = (high: number) =>
+		Array.from({ length: 100 }, (_, i) => e(high - i));
+	for (const high of [500, 400, 300, 200])
+		harness.list.mockResolvedValueOnce(
+			eventPage(range(high), {
+				headSeq: 500,
+				nextBeforeSeq: high - 99,
+				retainedFromSeq: 1,
+			}),
+		);
+	await harness.view.reload();
+	for (const _page of [1, 2, 3]) await harness.view.loadOlder();
+	expect(harness.view.browsingHistory).toBe(true);
+	return harness;
+}
+
+function reconnect(view: EventsView): void {
+	view.connectionChanged("disconnected");
+	view.connectionChanged("connected");
+}
+
 it("keeps only the newest 300 rows as live events pass the display cap", async () => {
 	const { view, list, push } = setup();
 	list.mockResolvedValueOnce(eventPage([e(1)]));
@@ -571,7 +595,13 @@ describe("EventsView: connection", () => {
 
 		view.connectionChanged("connected");
 		expect(ids(view)).toEqual(expected);
-		reply.resolve(eventPage([e(501)], { headSeq: 501, nextBeforeSeq: 501 }));
+		reply.resolve(
+			eventPage([e(501)], {
+				headSeq: 501,
+				nextBeforeSeq: 501,
+				retainedFromSeq: 1,
+			}),
+		);
 		await vi.waitFor(() => expect(view.loading).toBeNull());
 		expect(ids(view)).toEqual(expected);
 		expect(view.browsingHistory).toBe(true);
@@ -601,6 +631,142 @@ describe("EventsView: connection", () => {
 		expect(view.stale).toBe(false);
 		expect(list).not.toHaveBeenCalled();
 	});
+
+	it("keeps the list stale through a reconnect check that leaves the window, its paging and a pending action alone", async () => {
+		const { view, list, around } = await browsing();
+		const shown = view.events;
+		const reset = view.rowReset;
+		around.mockReturnValueOnce(new Promise(() => {}));
+		void view.viewRaw(e(150), vi.fn());
+		const reply = Promise.withResolvers<EventListOutput>();
+		list.mockReturnValueOnce(reply.promise);
+
+		reconnect(view);
+		expect(view.stale).toBe(true);
+		reply.resolve(eventPage([e(501)], { headSeq: 501, retainedFromSeq: 101 }));
+		await vi.waitFor(() => expect(view.loading).toBeNull());
+
+		expect(view.stale).toBe(false);
+		expect(view.liveEdgeFailed).toBe(false);
+		expect(view.events).toBe(shown);
+		expect(view.nextBeforeSeq).toBe(101);
+		expect(view.rawLink).toEqual({ id: e(150).id, state: "pending" });
+		expect(view.rowReset).toBe(reset);
+	});
+
+	it.each([
+		{ pending: 150, expires: true },
+		{ pending: 250, expires: false },
+	])(
+		"expires only rows below a newer retained floor on reconnect (pending action on $pending)",
+		async ({ pending, expires }) => {
+			const { view, list, around } = await browsing();
+			const raw = Promise.withResolvers<LogAroundOutput>();
+			around.mockReturnValueOnce(raw.promise);
+			const open = vi.fn();
+			const opening = view.viewRaw(e(pending), open);
+			list.mockResolvedValueOnce(
+				eventPage([e(501)], { headSeq: 501, retainedFromSeq: 201 }),
+			);
+
+			reconnect(view);
+			await vi.waitFor(() => expect(view.loading).toBeNull());
+
+			expect(ids(view)).toEqual(Array.from({ length: 200 }, (_, i) => 400 - i));
+			expect(view.browsingHistory).toBe(true);
+			expect(view.nextBeforeSeq).toBe(101);
+			expect(view.stale).toBe(false);
+			expect(view.rowReset).toEqual({ keepShownFocus: true });
+			expect(view.rawLink).toEqual(
+				expires ? null : { id: e(pending).id, state: "pending" },
+			);
+			const page = aroundPage();
+			raw.resolve(page);
+			await opening;
+			expect(open.mock.calls).toEqual(expires ? [] : [[page]]);
+		},
+	);
+
+	it("keeps the list stale and offers a retry until a reconnect check succeeds", async () => {
+		const { view, list } = await browsing();
+		const errors = quietErrors();
+		const shown = view.events;
+		const failure = new Error("Request timeout: events.list");
+		list.mockRejectedValueOnce(failure);
+
+		reconnect(view);
+		await vi.waitFor(() => expect(view.loading).toBeNull());
+		expect(view.stale).toBe(true);
+		expect(view.liveEdgeFailed).toBe(true);
+		expect(view.events).toBe(shown);
+		expect(view.nextBeforeSeq).toBe(101);
+		expect(view.failed).toBeNull();
+		expect(errors).toHaveBeenCalledExactlyOnceWith(
+			expect.stringMatching(/\S/),
+			failure,
+		);
+
+		const retry = Promise.withResolvers<EventListOutput>();
+		list.mockReturnValueOnce(retry.promise);
+		const checking = view.checkLiveEdge();
+		expect(view.loading).toBe("first");
+		expect(view.stale).toBe(true);
+		expect(view.liveEdgeFailed).toBe(true);
+		retry.resolve(eventPage([e(501)], { headSeq: 501, retainedFromSeq: 1 }));
+		await checking;
+
+		expect(view.stale).toBe(false);
+		expect(view.liveEdgeFailed).toBe(false);
+		expect(view.events).toBe(shown);
+		expect(list).toHaveBeenLastCalledWith({ limit: 100 });
+	});
+
+	it("offers no retry while disconnected, even for a check that fails after the link drops again", async () => {
+		const { view, list } = await browsing();
+		quietErrors();
+		list.mockRejectedValueOnce(new Error("down"));
+		reconnect(view);
+		await vi.waitFor(() => expect(view.liveEdgeFailed).toBe(true));
+
+		view.connectionChanged("disconnected");
+		expect(view.liveEdgeFailed).toBe(false);
+		expect(view.stale).toBe(true);
+
+		const late = Promise.withResolvers<EventListOutput>();
+		list.mockReturnValueOnce(late.promise);
+		view.connectionChanged("connected");
+		view.connectionChanged("disconnected");
+		late.reject(new Error("down"));
+		await vi.waitFor(() => expect(view.loading).toBeNull());
+		expect(view.liveEdgeFailed).toBe(false);
+		expect(view.stale).toBe(true);
+	});
+
+	it.each([
+		{ check: "pending", stale: false },
+		{ check: "failed", stale: false },
+		{ check: "still disconnected", stale: true },
+	])(
+		"Start from newest settles the stale state when the reconnect check is $check",
+		async ({ check, stale }) => {
+			const { view, list } = await browsing();
+			quietErrors();
+			if (check === "pending") list.mockReturnValueOnce(new Promise(() => {}));
+			if (check === "failed") list.mockRejectedValueOnce(new Error("down"));
+			view.connectionChanged("disconnected");
+			if (check !== "still disconnected") view.connectionChanged("connected");
+			if (check === "failed")
+				await vi.waitFor(() => expect(view.liveEdgeFailed).toBe(true));
+			list.mockResolvedValueOnce(eventPage([e(501)]));
+
+			await view.reload();
+
+			expect(ids(view)).toEqual([501]);
+			expect(view.browsingHistory).toBe(false);
+			expect(view.liveEdgeFailed).toBe(false);
+			expect(view.stale).toBe(stale);
+		},
+	);
 });
 
 describe("EventsView: View raw logs", () => {

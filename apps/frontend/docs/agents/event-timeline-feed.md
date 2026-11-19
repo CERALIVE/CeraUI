@@ -24,9 +24,15 @@ latest page again. At the live edge, pushes keep the newest 300 rows and move
 the older-query boundary when they evict rows, so Load older or Retry can
 recover those rows if they are still stored.
 
-Reconnect while browsing older events refreshes only the live-edge metadata.
-It leaves the displayed rows, paging cursor and focus in place even if that
-refresh fails. At the live edge, reconnect loads the newest page.
+Reconnect while browsing older events checks the live edge without moving the
+window, its paging cursor or scroll. The list stays stale until a check
+succeeds. A successful check removes only displayed rows below the reply's
+`retainedFromSeq` and settles them as a gap refresh does (next paragraph).
+A failed check keeps every row and adds the load-failure band, whose Retry
+checks again. The band is withdrawn while disconnected, because the next
+reconnect checks by itself, and Start from newest or any other reload also
+ends the stale state once connected. At the live edge, reconnect loads the
+newest page.
 
 Each list reply's `retainedFromSeq` expires older rows already shown. Push
 frames carry events only, so between list replies the view uses the last known

@@ -120,6 +120,14 @@ async function returnToNewest(event: MouseEvent): Promise<void> {
 	returningToNewest = false;
 }
 
+// A successful check removes its Retry; focus left on it moves to the filter bar.
+async function checkLiveEdge(): Promise<void> {
+	const retry = document.activeElement;
+	await view.checkLiveEdge();
+	await tick();
+	if (retry !== null && !retry.isConnected && document.activeElement === document.body) firstFilter()?.focus();
+}
+
 // The stop follows focus (focusin on the row), so a row whose action cannot take focus keeps none.
 function navigate(event: KeyboardEvent, id: string): void {
 	const move = NAVIGATION[event.key];
@@ -174,6 +182,8 @@ $effect(() => {
 	{/if}
 	{#if view.failed === 'first'}
 		<EventsLoadFailure retry={() => void view.reload()} />
+	{:else if view.liveEdgeFailed}
+		<EventsLoadFailure busy={view.loading === 'first'} retry={() => void checkLiveEdge()} />
 	{/if}
 	{#if view.browsingHistory || returningToNewest}
 		<div class="flex justify-center border-b px-4 py-2">

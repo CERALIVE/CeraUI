@@ -16,6 +16,10 @@ import {
 import { tick } from "svelte";
 import { afterEach, expect, it, vi } from "vitest";
 
+import {
+	resetConnectionState,
+	setConnectionState,
+} from "$lib/components/custom/__fixtures__/connection-state.svelte";
 import { fourBoots } from "$lib/device-logs/__fixtures__/boots";
 import {
 	aroundPage,
@@ -42,8 +46,10 @@ vi.mock("$lib/rpc/client", () => ({
 		logs: { around, boots: () => Promise.resolve(fourBoots()) },
 	},
 }));
-vi.mock("$lib/rpc/subscriptions.svelte", () => ({
-	getConnectionState: () => "connected",
+vi.mock("$lib/rpc/subscriptions.svelte", async () => ({
+	...(await import(
+		"$lib/components/custom/__fixtures__/connection-state.svelte"
+	)),
 	setEventFeedListener: (listener: FeedListener | undefined) => {
 		feed.listener = listener;
 	},
@@ -55,6 +61,7 @@ let media: ReturnType<typeof installMediaQueries> | undefined;
 
 afterEach(() => {
 	cleanup();
+	resetConnectionState();
 	media?.restore();
 	list.mockReset();
 	around.mockReset();
@@ -280,3 +287,83 @@ it.each([
 		expect(onViewRaw.mock.calls).toEqual(survives ? [[page]] : []);
 	},
 );
+
+async function browseToOldest(): Promise<DeviceEvent[]> {
+	const retained = await openHistory(401, false);
+	for (const _page of [1, 2, 3]) await loadOlder();
+	await screen.findByRole("button", { name: error.startFromNewest });
+	return retained;
+}
+
+const times = (records: readonly DeviceEvent[]) =>
+	records.map(({ at }) => new Date(at).toISOString());
+
+it.each([
+	{ outcome: "an unchanged window", floor: 1, survives: true },
+	{ outcome: "a newer retained floor", floor: 101, survives: false },
+])(
+	"settles rows, focus and a pending raw action when a reconnect reports $outcome",
+	async ({ floor, survives }) => {
+		const retained = await browseToOldest();
+		const raw = screen.getAllByRole("button", { name: copy.viewRaw }).at(-1);
+		const reply = Promise.withResolvers<LogAroundOutput>();
+		around.mockReturnValueOnce(reply.promise);
+		raw?.focus();
+		if (raw) await fireEvent.click(raw);
+		list.mockResolvedValueOnce(
+			eventPage(retained.slice(0, 100), {
+				headSeq: 401,
+				retainedFromSeq: floor,
+				nextBeforeSeq: 302,
+			}),
+		);
+
+		setConnectionState("disconnected");
+		await screen.findByTestId("events-disconnected");
+		setConnectionState("connected");
+
+		await waitFor(() =>
+			expect(screen.queryByTestId("events-disconnected")).toBeNull(),
+		);
+		expect(renderedTimes()).toEqual(
+			times(retained.slice(100, survives ? 400 : 301)),
+		);
+		expect(document.activeElement).toBe(
+			survives ? raw : screen.getByRole("button", { name: copy.filter }),
+		);
+		expect(screen.getByRole("button", { name: copy.loadOlder })).toBeTruthy();
+		const page = aroundPage();
+		reply.resolve(page);
+		await tick();
+		expect(onViewRaw.mock.calls).toEqual(survives ? [[page]] : []);
+	},
+);
+
+it("keeps the disconnected notice and a Retry until a reconnect check succeeds, then hands focus to the filter bar", async () => {
+	const retained = await browseToOldest();
+	const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+	setConnectionState("disconnected");
+	await screen.findByTestId("events-disconnected");
+	list.mockRejectedValueOnce(new Error("down"));
+
+	setConnectionState("connected");
+
+	const band = await screen.findByRole("alert");
+	expect(band.textContent).toContain(copy.loadFailed);
+	expect(screen.getByTestId("events-disconnected")).toBeTruthy();
+	expect(renderedTimes()).toEqual(times(retained.slice(100, 400)));
+	expect(errors).toHaveBeenCalledOnce();
+
+	const retry = screen.getByRole("button", { name: action.retry });
+	retry.focus();
+	await fireEvent.click(retry);
+
+	await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+	expect(screen.queryByTestId("events-disconnected")).toBeNull();
+	expect(renderedTimes()).toEqual(times(retained.slice(100, 400)));
+	await waitFor(() =>
+		expect(document.activeElement).toBe(
+			screen.getByRole("button", { name: copy.filter }),
+		),
+	);
+});
