@@ -553,3 +553,23 @@ test("deferred hybrid rollback leaves a successor activation of its profile up",
 		await f.restore();
 	}
 });
+
+test("a first hybrid Start whose leg is replaced while NetworkManager loads its keyfile dispatches no Up", async () => {
+	const f = await hybrid();
+	try {
+		f.faults.afterSecretWrite = async () => f.replaceLeg();
+		const result = await f.start();
+		const uuid = f.created();
+		// Residual limit: the load itself already ran; the next effect's proof refuses.
+		expect(loads(f.commands)).toHaveLength(1);
+		expect(
+			f.commands.some((args) => args[2] === "conn" && args[3] === "up"),
+		).toBeFalse();
+		expect(uuid).toBeDefined();
+		expect(f.profiles.has(uuid ?? "")).toBeFalse();
+		expect(f.active()).toBeUndefined();
+		expect(result).toMatchObject({ success: false, error: "radio-changed" });
+	} finally {
+		await f.restore();
+	}
+});

@@ -131,20 +131,24 @@ an unsuperseded observer still retires its own abandoned target.
 Start keeps the adapter lifetime proof separately from the one-shot request
 record. Before acting on a confirmed lifetime mismatch, the observer takes
 the original owner's adapter lock and verifies that the same pending entry
-still owns the exact profile and active instance. Down targets its captured
-UUID. A delayed observer cannot stop a successor activation. Failed Start
+still owns the exact profile and active instance. Down names its captured
+active path (`nmcli connection down apath`), so a delayed observer cannot stop
+a successor activation of the same profile. Failed Start
 rollback merges only its own projection against the current cache.
 
-Bound credential writes check the radio and then the unchanged profile
-resource at keyfile publication, after temporary file preparation. A
-saved-profile Start that loses proof after Up checks its exact profile and
-active path before requesting Down. The same owner lock covers this cleanup.
-Hybrid Start's later effects prove the parent and then the original AP leg
-(`admitTarget`), including the nested credential permit, and hybrid
-Configure's staged permit rechecks its captured leg identity. Rollback waits
-for that Down before releasing the original allocator receipt, so an idle leg
-regains its prior autoconnect. A reused name alone does not authorize a
-release. A Start attempt UUID only correlates terminal output and grants
+Bound credential writes recheck the unchanged profile resource and then the
+radio after temporary file preparation. Publication keeps the old keyfile
+aside with a hard link, verifies it and the proof again, and renames it back
+instead of loading on any change. A saved-profile Start that loses proof after
+Up checks its exact profile and active path before requesting Down for that
+active path. The same owner lock covers this cleanup. Hybrid Start and
+Configure bind the original AP leg into the operation guard
+(`wifiOperationGuard().bindLeg`), so every later `check` and `permit` proves
+the parent and then that leg. Every hand-back after a rollback goes through
+`releaseHybridLeg` with the allocator receipt, so an idle leg regains its
+prior autoconnect and a successor's selection is untouched. A reused name
+alone does not authorize a release. The protocol contract lists the named
+residual windows. A Start attempt UUID only correlates terminal output and grants
 no authority to mutate or release a radio. It is a recorded deviation from
 plan todo 24; see the [protocol contract](../../../../docs/WIFI-INCARNATION-PROTOCOL.md).
 

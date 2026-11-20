@@ -136,9 +136,11 @@ Missing or changed proof during Start yields the existing `radio-changed`
 refusal without `current-unobserved`, so it cannot trigger an automatic replay.
 
 Confirmation checks the captured entry after reading the actual AP target
-lifetime. A positively identified active instance on a changed radio may be
-stopped by its captured profile UUID under the same adapter lock. It publishes
-`radio-changed`, including `deactivation-failed` as the reason if Down fails.
+lifetime. It samples the parent radio first and then the AP leg. A positively
+identified active instance on a changed radio may be stopped under the same
+adapter lock. Down names its captured D-Bus active path, so a later activation
+of the same profile stays up. It publishes `radio-changed`, including
+`deactivation-failed` as the reason if Down fails.
 Without exact activation evidence, ordinary bounded confirmation still
 applies. Start rollback restores only its own cache entry.
 
@@ -151,27 +153,41 @@ operation refuses without effects. If a write may already have changed the
 profile, Configure reports `activating` and suppresses further writes and Up.
 The limited-radio regulatory Stop retains its UUID-based authority.
 
-The credential writer requests the saved operation's proof after
-serialization and staging. It then re-reads the profile and requires the same
-NetworkManager resource immediately before publishing the keyfile. A profile
-replaced while that proof is evaluated keeps its own bytes, and nothing is
-loaded. For first-profile Start, the proof is also checked between inactive
-creation and the credential write.
+The credential writer stages the keyfile, re-reads the profile and requires
+the same NetworkManager resource, and only then requests the operation's
+proof. Publication is two back-to-back synchronous calls: a hard link keeps
+the current keyfile aside, and a rename puts the staged file in its place. The
+writer then checks that the kept file is the original device, inode and bytes,
+and requests the proof again before `nmcli connection load`. If the keyfile
+was replaced or the proof was lost, the kept file is renamed back, so the newer
+or original bytes stay and nothing is loaded (`publish-target-replaced`,
+`publish-proof-changed`). For first-profile Start, the proof is also checked
+between inactive creation and the credential write.
 
 After NetworkManager acknowledges Up, a replacement can still cause refusal.
 While holding the adapter lock, Start compares the captured profile file
-and active D-Bus path before requesting Down for the saved profile. An
-unverified or failed Down is reported as `radio-changed` with reason
-`deactivation-failed`. A hybrid Start retains its original AP leg lifetime
-and can release only the allocator receipt it acquired. Every later pin,
-credential write, Up and post-Up commit checks the parent radio first and
-then that leg, so a same-phy leg replaced during the parent sample is
-refused. Hybrid Configure applies its captured leg identity at the staged
-keyfile publication too. A stale Start waits for its exact-instance Down to
-settle before it rolls back state or releases the leg, so a release that
-finds the leg idle restores its prior autoconnect. If Down fails, the leg is
-still active. The release then leaves its policy alone and the selection keeps
-the recorded prior value for a later release.
+and active D-Bus path, then requests Down for that active path
+(`nmcli connection down apath <path>`), never for the profile UUID. A later
+activation of the same profile therefore stays up. An unverified or failed
+Down is reported as `radio-changed` with reason `deactivation-failed`.
+
+A hybrid Start binds its original AP leg lifetime into the operation guard
+right after allocation (`bindLeg`). Every later `check` and `permit` then
+samples the parent radio and then that leg, so a same-phy leg replaced during
+the parent sample is refused. That covers the saved pin, credential repair,
+the nested credential permit, Up, post-Up commits and both keyfile writer
+permits. Hybrid Configure binds its captured leg identity the same way, so its
+staged keyfile, restart Up and credential commit are covered too.
+
+A Start can release only the allocator receipt it acquired. Every hand-back
+after a rollback goes through `releaseHybridLeg`: Start's own rollback,
+deferred confirmation after its Down, and a retried created-profile cleanup
+after its Down. With the receipt, the release restores a borrowed leg's
+autoconnect only while the selection is still this Start's and the leg is
+idle, so a successor's selection is left alone. A stale Start waits for its
+exact-instance Down to settle before it rolls back state or releases the leg.
+If Down fails, the leg is still active. The release then leaves its policy
+alone and the selection keeps the recorded prior value for a later release.
 
 The Start request and terminal frame accept an optional `attempt` UUID.
 The backend echoes the captured UUID even when the NetworkManager monitor
@@ -192,6 +208,40 @@ Closing the dialog, changing device or link, and settling or timing out the
 pending operation retire its receipt. Stop and station do not use the UUID.
 A failed Start reply keeps the correlated refusal its frame delivered first,
 even if the row token rotated before the reply.
+
+### Residual limits [EXISTS; host proof]
+
+These windows come from NetworkManager and filesystem non-atomicity. Each is
+as small as the interfaces allow and fails safe.
+
+- **Keyfile link to rename.** Node offers no atomic exchange, so another
+  writer that renames the same keyfile between the hard link and the rename
+  is overwritten. No event-loop turn separates the two calls. A replacement
+  before the link is detected by the kept file's identity and restored
+  (`wifi-credential-publish-replacement.test.ts`).
+- **Final proof to load.** A radio or leg replaced after the last permit, while
+  `nmcli connection load` runs, lets NetworkManager read the credential into
+  the profile, which stays bound to the original radio. The next effect's
+  proof refuses, so no Up, autoconnect or commit follows, a first-profile
+  Start deletes its new profile, and the operator sees `radio-changed`
+  (`wifi-credential-publish-radio.test.ts`,
+  `wifi-hybrid-leg-boundaries.test.ts`).
+- **Restored keyfile metadata.** Renaming the kept file back restores its
+  inode and bytes, but the link changed its ctime. Later passive identity
+  checks treat that profile as replaced and refuse instead of adopting it. If
+  the rename back fails, the kept file stays beside the profile and its path
+  is logged as an error.
+- **Down without a reported path.** The hybrid channel refusal and
+  created-profile cleanup fall back to the profile UUID only when
+  NetworkManager reported no active path for this Up. Stopping a
+  wrong-channel AP outranks the successor risk, and a created profile is
+  deleted right after its Down. Saved-profile rollback and deferred
+  confirmation require the captured path and report `deactivation-failed`
+  without it.
+- **Failed Down.** If an exact Down fails, or names an activation that already
+  ended, the AP or its successor stays up. The borrowed leg keeps its
+  suppressed autoconnect until a later release, and the operator sees the
+  unknown-mode notice.
 
 ### Recorded deviation: the Start `attempt` correlation id
 
