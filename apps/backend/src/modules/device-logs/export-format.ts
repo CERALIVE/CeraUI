@@ -13,38 +13,60 @@ export function exportFilename(bootId: string | null, at: number): string {
 	return `ceralive-logs-${bootId?.slice(0, 8) ?? "all"}-${stamp}.txt`;
 }
 
+export type KnownMatch = (text: string) => {
+	readonly text: string;
+	readonly redactions: number;
+};
+
+/** Stands in for a whole header value whose serialized form held a credential. */
+const REDACTED_HEADER_VALUE = JSON.stringify("[REDACTED]");
+
 export function exportHeader(
 	current: VersionContext,
 	boots: readonly LogBootInfo[],
 	query: ParsedQuery,
 	at: number,
 	/**
-	 * Applied to the variable values only (versions, boot ids, filter text),
-	 * before JSON quoting, so the fixed labels and warning can never be altered.
+	 * Applied to the variable values only (versions, boot ids, filter values),
+	 * never to the fixed labels, the warning or the JSON syntax around a value.
 	 */
-	redact: (text: string) => string = (text) => text,
+	known: KnownMatch = (text) => ({ text, redactions: 0 }),
 ): string {
+	// Replace held values in a string, then check the serialized value again:
+	// JSON escaping can turn other text into a held value (a line break becomes
+	// a backslash and "n"). A value that still matches is replaced as a whole.
+	const value = (raw: string | number | null): string => {
+		const serialized = JSON.stringify(
+			typeof raw === "string" ? known(raw).text : raw,
+		);
+		const content =
+			typeof raw === "string" ? serialized.slice(1, -1) : serialized;
+		return known(content).redactions === 0 ? serialized : REDACTED_HEADER_VALUE;
+	};
 	const versionLines = (context: VersionContext) =>
-		Object.entries(context).map(
-			([key, value]) =>
-				`${key}: ${JSON.stringify(typeof value === "string" ? redact(value) : value)}`,
+		Object.entries(context).map(([key, raw]) => `${key}: ${value(raw)}`);
+	const filter = Object.entries({
+		sources: [...new Set(query.sources)].sort(),
+		levels: [...new Set(query.levels)].sort(),
+		text: query.text,
+		since: query.since,
+		until: query.until,
+	})
+		.filter(([, raw]) => raw !== undefined)
+		.map(
+			([key, raw]) =>
+				`${JSON.stringify(key)}:${Array.isArray(raw) ? `[${raw.map(value).join(",")}]` : value(raw as string | number)}`,
 		);
 	const lines = [
 		"exported-by",
 		...versionLines(current),
 		...boots.flatMap((boot) => [
-			`boot ${redact(boot.bootId)}`,
+			`boot ${known(boot.bootId).text}`,
 			...(boot.versions
 				? versionLines(boot.versions)
 				: ["versions: not recorded"]),
 		]),
-		`filter: ${JSON.stringify({
-			sources: [...new Set(query.sources)].sort(),
-			levels: [...new Set(query.levels)].sort(),
-			text: query.text === undefined ? undefined : redact(query.text),
-			since: query.since,
-			until: query.until,
-		})}`,
+		`filter: {${filter.join(",")}}`,
 		`createdAt: ${new Date(at).toISOString()}`,
 		"newest first",
 		"may contain sensitive data: review before sharing",

@@ -3,7 +3,7 @@ import { collectVersionContext } from "../system/version-context.ts";
 import { listBoots } from "./boots.ts";
 import { collectHeldSecrets } from "./bundle-data.ts";
 import type { ParsedQuery } from "./continuation.ts";
-import { exportEntry, exportHeader } from "./export-format.ts";
+import { exportEntry, exportHeader, type KnownMatch } from "./export-format.ts";
 import { withQuerySlot } from "./query-admission.ts";
 import { JournalReadError } from "./reader.ts";
 import { buildRedactor } from "./redaction.ts";
@@ -49,7 +49,7 @@ export async function* exportChunks(
 	// done for every held credential, nothing but the footer is sent. The limits
 	// (a snapshot, after journal normalization, fixed footer and filename text)
 	// are in docs/agents/device-log-export.md.
-	let redact = (text: string) => text;
+	let known: KnownMatch = (text) => ({ text, redactions: 0 });
 	const stores = credentialStoresState();
 	if (stores === "pending") {
 		incomplete ??= "CREDENTIALS_LOADING";
@@ -62,12 +62,13 @@ export async function* exportChunks(
 				// Too short to match safely: refuse rather than send them.
 				incomplete ??= `CREDENTIAL_TOO_SHORT (${redactor.unredacted.join(", ")})`;
 			} else {
-				redact = (text) => redactor.known(text).text;
+				known = redactor.known;
 			}
 		} catch {
 			incomplete ??= "READ_FAILED";
 		}
 	}
+	const redact = (text: string) => known(text).text;
 	try {
 		if (!incomplete) {
 			const boots = await listBoots();
@@ -82,7 +83,7 @@ export async function* exportChunks(
 			incomplete ??= stopped();
 			if (!incomplete) {
 				const header = encode(
-					exportHeader(current, covered, query, createdAt, redact),
+					exportHeader(current, covered, query, createdAt, known),
 				);
 				if (header) yield header;
 				else incomplete = "size_limit";
