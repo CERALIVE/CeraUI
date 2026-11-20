@@ -5,6 +5,10 @@
 Hotspot Start reserves a fresh UUID before each send and matches the delayed
 `wifi.hotspot.start` refusal by UUID, device and link epoch. Only the initiating
 dialog can apply it. A frame can precede the accepted reply or follow it.
+A failed reply keeps the correlated refusal its frame delivered first, even
+after a row-token rotation. The UUID is random correlation data, never a radio
+token, and is a recorded deviation from plan todo 24 described in the
+[protocol contract](../../../../docs/WIFI-INCARNATION-PROTOCOL.md).
 Authoritative Wi-Fi status still confirms Start and Stop, including on older
 backends that omit the echo. See the [binding contract](../../../../docs/HOTSPOT-DRAFT-BINDING.md).
 

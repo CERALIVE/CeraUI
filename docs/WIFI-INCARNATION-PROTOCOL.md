@@ -151,17 +151,27 @@ operation refuses without effects. If a write may already have changed the
 profile, Configure reports `activating` and suppresses further writes and Up.
 The limited-radio regulatory Stop retains its UUID-based authority.
 
-The credential writer requests the saved operation's proof again after
-serialization and staging, immediately before publishing the keyfile. For
-first-profile Start, it checks again between inactive creation and the
-credential write.
+The credential writer requests the saved operation's proof after
+serialization and staging. It then re-reads the profile and requires the same
+NetworkManager resource immediately before publishing the keyfile. A profile
+replaced while that proof is evaluated keeps its own bytes, and nothing is
+loaded. For first-profile Start, the proof is also checked between inactive
+creation and the credential write.
 
 After NetworkManager acknowledges Up, a replacement can still cause refusal.
 While holding the adapter lock, Start compares the captured profile file
 and active D-Bus path before requesting Down for the saved profile. An
 unverified or failed Down is reported as `radio-changed` with reason
 `deactivation-failed`. A hybrid Start retains its original AP leg lifetime
-and can release only the allocator receipt it acquired.
+and can release only the allocator receipt it acquired. Every later pin,
+credential write, Up and post-Up commit checks the parent radio first and
+then that leg, so a same-phy leg replaced during the parent sample is
+refused. Hybrid Configure applies its captured leg identity at the staged
+keyfile publication too. A stale Start waits for its exact-instance Down to
+settle before it rolls back state or releases the leg, so a release that
+finds the leg idle restores its prior autoconnect. If Down fails, the leg is
+still active. The release then leaves its policy alone and the selection keeps
+the recorded prior value for a later release.
 
 The Start request and terminal frame accept an optional `attempt` UUID.
 The backend echoes the captured UUID even when the NetworkManager monitor
@@ -180,6 +190,37 @@ frames. Older senders omit the UUID and receive the previous frame shape.
 Uncorrelated Start frames cannot resolve another client's pending operation.
 Closing the dialog, changing device or link, and settling or timing out the
 pending operation retire its receipt. Stop and station do not use the UUID.
+A failed Start reply keeps the correlated refusal its frame delivered first,
+even if the row token rotated before the reply.
+
+### Recorded deviation: the Start `attempt` correlation id
+
+Plan todo 24 (`ceraui-hotspot-radio-enforcement.md:437`) says the Start
+outcome frame keeps its current shape and carries no token. B8 deliberately
+deviates by adding the optional `attempt` field. On November 20, 2026, the
+owner delegated the decision ("whatever makes the most sense, safest, best
+user experience") and root approved keeping the field. Without it, the
+initiating dialog could only time out after a deferred refusal instead of
+showing the keyed refusal notice.
+
+The deviation is bounded:
+
+- `attempt` is a random UUID generated for each send. It is never a radio,
+  incarnation or credential token and grants no admission, mutation or
+  release authority. The incarnation alone admits the request.
+- Only the Start request accepts it. Stop, station and the other procedures
+  do not.
+- The backend echoes it only on that Start's terminal frame and only when the
+  request carried one. Without it, the frame bytes match the previous shape.
+  `apps/backend/src/tests/wifi-start-attempt-wire.test.ts` pins both cases for
+  an accepted Start and a refusal.
+- Entry refusals published by the admission middleware do not carry it. Their
+  RPC reply is the requester's result.
+
+Compatibility: an older backend strips the unknown request field, and the new
+dialog confirms from status as before. An older client omits the field and
+receives the previous bytes. A frame without a matching UUID, device and link
+epoch cannot settle a dialog's operation.
 
 Mode to hotspot or hybrid checks before recording intent, then passes the
 captured row and lifetime through Down and Start. A replacement after a

@@ -35,9 +35,10 @@ Each Start send has its own optional UUID. The subscription routes its delayed
 terminal to the initiating dialog only when the UUID, device and link match.
 The receipt is reserved before sending, so it can catch a refusal before the
 acknowledgement as well as afterward. A replacement during the accepted Start
-can show the changed-radio notice after the row token rotates. A failed or
-unverified Down shows the existing unknown-mode notice without reopening the
-credential gate. Success still requires authoritative status. A backend that
+can show the changed-radio notice after the row token rotates. A failed reply
+whose correlated refusal arrived first is applied the same way, so a rotation
+before that reply cannot hide the notice. A failed or unverified Down shows
+the existing unknown-mode notice without reopening the credential gate. Success still requires authoritative status. A backend that
 does not echo UUIDs continues to confirm from status.
 
 ## Admission and transient observation recovery
