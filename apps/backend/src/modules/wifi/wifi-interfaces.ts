@@ -94,6 +94,7 @@ import {
 	type WifiHotspot,
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
+import { wifiAdapterKeyPort } from "./wifi-permanent-mac.ts";
 import {
 	type RadioIdentity,
 	recordWifiRadioShadowFailure,
@@ -242,6 +243,13 @@ let discoveryController = new AbortController();
 let wifiDeviceRefreshCompleted = false;
 const classifiedWifiIfnames = new Map<string, number>();
 const nonWifiIfnames = new Map<string, number>();
+
+// The destination is addressable before discovery has finished both AP legs.
+const pendingPortHandoffs = new WeakSet<WifiInterface>();
+
+export function isWifiStopTargetPending(row: WifiInterface): boolean {
+	return pendingPortHandoffs.has(row);
+}
 
 /** Only a completed device refresh can classify the current netif snapshot. */
 export function wifiZonesReady(): boolean {
@@ -1037,6 +1045,13 @@ async function discoverWifiDevices() {
 
 						const updatedInterface = getWifiInterfaceByMacAddress(macAddress);
 						if (updatedInterface) {
+							if (
+								previous &&
+								previous[0] !== macAddress &&
+								(wifiAdapterKeyPort(previous[0]) ||
+									wifiAdapterKeyPort(macAddress))
+							)
+								pendingPortHandoffs.add(updatedInterface);
 							presentKeys.add(macAddress);
 							invalidateWifiRadioRow(updatedInterface, observation);
 							wifiIdToMacAddress[updatedInterface.id] = macAddress;
@@ -1121,6 +1136,7 @@ async function discoverWifiDevices() {
 			ifname: string;
 			activeConn: ConnectionUUID | null;
 		}> = [];
+		let unresolvedVirtual = false;
 		for (const [ifname, activeConn] of concurrentDevices) {
 			if (contradictoryVirtual(wifiInterface, identities, ifname)) continue;
 			if (activeConn !== null) {
@@ -1130,7 +1146,9 @@ async function discoverWifiDevices() {
 					!knownProfiles.has(activeConn)
 				)
 					continue;
-				if ((await resolveConnectionMode(activeConn)) !== "ap") continue;
+				const mode = await resolveConnectionMode(activeConn);
+				if (mode === "unknown") unresolvedVirtual = true;
+				if (mode !== "ap") continue;
 			} else if (
 				ifname !== expected &&
 				ifname !== wifiInterface.concurrentHotspot?.ifname
@@ -1140,6 +1158,11 @@ async function discoverWifiDevices() {
 		}
 		if (signal.aborted) return;
 		if (getWifiInterfaceByMacAddress(registryKey) !== wifiInterface) continue;
+		const stopTargetKnown =
+			(wifiInterface.activeConn === null ||
+				wifiInterface.activeMode === "ap" ||
+				wifiInterface.activeMode === "infrastructure") &&
+			!unresolvedVirtual;
 		const active = candidates.filter(
 			(candidate) => candidate.activeConn !== null,
 		);
@@ -1156,6 +1179,8 @@ async function discoverWifiDevices() {
 						) ?? candidates.find((candidate) => candidate.ifname === expected))
 					: undefined);
 		if (!chosen) {
+			if (stopTargetKnown && active.length === 0)
+				pendingPortHandoffs.delete(wifiInterface);
 			if (transitionVirtualBinding(wifiInterface, { kind: "discard" })) {
 				statusChange = true;
 			}
@@ -1169,7 +1194,7 @@ async function discoverWifiDevices() {
 			ifname: virtualIfname,
 			activeConn,
 		});
-		if (activeConn && canHotspot(wifiInterface)) {
+		if (activeConn) {
 			await handleHotspotConn(
 				wifiInterface.degradedReason === "permanent-mac-unresolved"
 					? registryKey
@@ -1178,6 +1203,9 @@ async function discoverWifiDevices() {
 				{ active: true },
 			);
 			if (signal.aborted) return;
+		}
+		if (stopTargetKnown) pendingPortHandoffs.delete(wifiInterface);
+		if (activeConn) {
 			await reconcileHybridStationChannel(registryKey, wifiInterface);
 			if (signal.aborted) return;
 		}
