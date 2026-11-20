@@ -774,7 +774,8 @@ async function reconfigureHotspotLocked(
 				const alreadyDispatched = dispatched;
 				dispatched = true;
 				return deps.nmConnSetFields(uuid, fields, async () => {
-					if ((await operation.permit()) && owned()) return true;
+					if ((await operation.permit()) && (await targetCurrent()) && owned())
+						return true;
 					dispatched = alreadyDispatched;
 					return false;
 				});
