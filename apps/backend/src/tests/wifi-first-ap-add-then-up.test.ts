@@ -145,7 +145,7 @@ for (const failure of [
 			expect(
 				f.commands.filter((a) => a[1] === "down" || a[1] === "del"),
 			).toEqual([
-				["conn", "down", uuid],
+				["conn", "down", "apath", f.nm.activePath()],
 				["conn", "del", uuid],
 			]);
 			expect([...f.profiles]).toEqual([OTHER_UUID]);

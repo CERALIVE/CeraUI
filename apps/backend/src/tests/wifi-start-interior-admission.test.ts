@@ -144,7 +144,9 @@ test.each(["stopped", "failed", "new-active-path", "new-profile"] as const)(
 				...(scenario === "stopped" ? {} : { reason: "deactivation-failed" }),
 			});
 			expect(down.mock.calls).toEqual(
-				scenario === "failed" || scenario === "stopped" ? [[upUuid]] : [],
+				scenario === "failed" || scenario === "stopped"
+					? [[upUuid, activePath]]
+					: [],
 			);
 		} finally {
 			await fixture.restore();
@@ -347,7 +349,7 @@ test.each([true, false])(
 			await Promise.race([reading.promise, confirmation]);
 			release.resolve();
 			await confirmation;
-			expect(down.mock.calls).toEqual([["test-ap"]]);
+			expect(down.mock.calls).toEqual([["test-ap", activePath]]);
 			expect(publish.mock.calls).toEqual([
 				[
 					"start",

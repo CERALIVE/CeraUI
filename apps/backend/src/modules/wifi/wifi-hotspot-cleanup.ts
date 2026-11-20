@@ -29,6 +29,7 @@ type CreatedHotspotCleanup = {
 	readonly iface: WifiInterfaceWithHotspot;
 	readonly hotspot: WifiHotspot;
 	readonly activationAttempted: boolean;
+	readonly activePath?: string | undefined;
 	readonly instance: NmProfileInstance | null | undefined;
 	readonly allocation?: { ifname: string; created: boolean };
 };
@@ -119,7 +120,11 @@ async function cleanupCreatedProfile(
 	const deactivated =
 		!target.activationAttempted ||
 		(progress.deactivated && (await inactive()) === true) ||
-		(await act({ uuid, kind: "down", run: () => deps.nmDisconnect(uuid) })) ||
+		(await act({
+			uuid,
+			kind: "down",
+			run: () => deps.nmDisconnect(uuid, target.activePath),
+		})) ||
 		(await inactive()) === true;
 	progress.deactivated = deactivated;
 	const deleted = prior

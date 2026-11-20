@@ -17,6 +17,7 @@ import {
 	handleWifiMonitorEvent,
 	settlePending,
 } from "../modules/wifi/wifi-hotspot-monitor.ts";
+import { HOTSPOT_UP_TO } from "../modules/wifi/wifi-hotspot-types.ts";
 import {
 	resetConcurrentInterfaceDepsForTest,
 	selectedTargets,
@@ -494,6 +495,61 @@ test("a retried hybrid cleanup restores the borrowed leg's autoconnect after its
 		expect(leg.autoconnect()).toBe("yes");
 	} finally {
 		resetConcurrentInterfaceDepsForTest();
+		await f.restore();
+	}
+});
+
+test("a saved hybrid Start rollback leaves a successor activation of its profile up", async () => {
+	const f = await hybrid();
+	try {
+		const uuid = await f.afterSavedStart();
+		const connect = f.deps.nmConnect;
+		f.deps.nmConnect = async (...args) => {
+			const up = await connect(...args);
+			f.misreadNextLegSample();
+			return up;
+		};
+		const down = f.deps.nmDisconnect;
+		f.deps.nmDisconnect = async (...args) => {
+			// The original activation ends and the same profile is activated again before Down.
+			await connect(uuid, HOTSPOT_UP_TO);
+			return down(...args);
+		};
+		const result = await f.start();
+		expect(f.active()).toBe(uuid);
+		expect(result).toEqual({
+			success: false,
+			error: "radio-changed",
+			reason: "deactivation-failed",
+		});
+	} finally {
+		await f.restore();
+	}
+});
+
+test("deferred hybrid rollback leaves a successor activation of its profile up", async () => {
+	const f = await hybrid();
+	try {
+		expect((await f.start()).success).toBeTrue();
+		const uuid = f.created();
+		const connect = f.deps.nmConnect;
+		const down = f.deps.nmDisconnect;
+		f.deps.nmDisconnect = async (...args) => {
+			if (uuid) await connect(uuid, HOTSPOT_UP_TO);
+			return down(...args);
+		};
+		const beginning = f.frames.length;
+		f.misreadNextLegSample();
+		await handleWifiMonitorEvent({
+			type: "device-state",
+			device: LEG,
+			state: "connected",
+		});
+		expect(f.active()).toBe(uuid);
+		expect(startFrames(f.frames.slice(beginning))).toEqual([
+			{ device: 0, error: "radio-changed", reason: "deactivation-failed" },
+		]);
+	} finally {
 		await f.restore();
 	}
 });

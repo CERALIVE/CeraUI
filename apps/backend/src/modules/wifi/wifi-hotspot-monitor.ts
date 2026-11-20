@@ -389,7 +389,10 @@ export function registerPendingConfirmation(
 							pending.activation !== activation
 						)
 							return false;
-						const stopped = await deps.nmDisconnect(target.uuid);
+						const stopped = await deps.nmDisconnect(
+							target.uuid,
+							activation.activePath,
+						);
 						settleCaptured(pending, false, { stopped });
 						if (stopped && target.allocation)
 							await releaseHybridLeg(target.allocation, deps, {

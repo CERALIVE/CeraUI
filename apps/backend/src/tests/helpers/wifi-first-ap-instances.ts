@@ -38,6 +38,7 @@ export function firstApInstances(
 	return {
 		add,
 		activate,
+		activePath: () => activePath,
 		files,
 		sync: () => {
 			for (const [uuid, fields] of settings) {

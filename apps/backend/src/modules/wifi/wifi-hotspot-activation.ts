@@ -995,7 +995,8 @@ export async function startHotspotLocked(
 					uuid,
 					kind: "down",
 					run: async () =>
-						owned(uuid, identity.profileMac) && deps.nmDisconnect(uuid),
+						owned(uuid, identity.profileMac) &&
+						deps.nmDisconnect(uuid, activePath),
 				});
 			return false;
 		};
@@ -1040,7 +1041,7 @@ export async function startHotspotLocked(
 						},
 						deps,
 					)) ||
-						!(await deps.nmDisconnect(existingUuid)))
+						!(await deps.nmDisconnect(existingUuid, activePath)))
 				)
 					result.reason = "deactivation-failed";
 				return result;
@@ -1203,6 +1204,7 @@ export async function startHotspotLocked(
 					iface: wifiInterface,
 					hotspot,
 					activationAttempted,
+					activePath,
 					instance: profileInstance,
 					...(concurrentInterface ? { allocation: concurrentInterface } : {}),
 				},

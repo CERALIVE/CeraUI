@@ -319,7 +319,11 @@ export async function nmConnect(
 	return false;
 }
 
-export async function nmDisconnect(uuid: ConnectionUUID) {
+const ACTIVE_PATH_RE =
+	/^\/org\/freedesktop\/NetworkManager\/ActiveConnection\/\d+$/;
+
+/** With an active path, Down names that one activation, never a later one of the same profile. */
+export async function nmDisconnect(uuid: ConnectionUUID, activePath?: string) {
 	try {
 		// In mock mode, simulate successful disconnection
 		if (shouldMockWifi()) {
@@ -327,7 +331,11 @@ export async function nmDisconnect(uuid: ConnectionUUID) {
 			return true;
 		}
 
-		const stdout = await run("nmcli", ["conn", "down", argMatch(ID_RE, uuid)]);
+		const selector =
+			activePath === undefined
+				? [argMatch(ID_RE, uuid)]
+				: ["apath", argMatch(ACTIVE_PATH_RE, activePath)];
+		const stdout = await run("nmcli", ["conn", "down", ...selector]);
 		return parseNmConnDeactivated(stdout);
 	} catch (err) {
 		logger.error(`nmDisconnect err: ${describeCliError(err)}`);
