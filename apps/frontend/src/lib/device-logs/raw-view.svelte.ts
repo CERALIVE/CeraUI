@@ -51,6 +51,7 @@ export class RawView {
 				this.filter.time === "current" &&
 				this.filter.bootId === null,
 			isDisposed: () => this.#disposed,
+			discardHeadRead: () => this.#pages.discardHeadRead(),
 			preparePagingForFollow: () => this.#pages.prepareForFollow(),
 			readHead: (fence) => this.#pages.loadHead(false, fence),
 		});

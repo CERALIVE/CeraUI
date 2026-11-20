@@ -591,9 +591,10 @@ The full table, evidence and the fixed findings are in
 ### DF-33: Two live Raw views at once (SL-14, P3)
 
 - **Where:** `lib/device-logs/raw-follow-session.svelte.ts` socket follow ownership.
-- **What:** the later Follow would win. No surface mounts two Raw views today.
-- **Owner:** whoever adds a second Raw view surface.
-- **Exit condition:** follow ownership is per view before a second Raw view ships.
+- **Resolved:** each Raw view owns its Follow. A later start tells the displaced
+  view to release its listener and enter Stopped. Stopping the new owner does not
+  resume the first, and an explicit takeback cannot be overwritten by a stale head
+  read. The backend still has one follow per socket. No surface mounts two Raw views today.
 
 ### DF-34: A sequence-gap reload drops Events keyboard focus (SL-16, P2)
 

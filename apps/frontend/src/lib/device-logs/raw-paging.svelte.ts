@@ -73,11 +73,22 @@ export class RawPaging {
 
 	invalidate(): void {
 		this.#generation += 1;
+		this.loading = null;
 		this.loadingGap = null;
+	}
+
+	/** A superseded head read must not replace the live window or its checkpoint. */
+	discardHeadRead(): void {
+		if (
+			this.loading === "first" ||
+			(this.loading === "bottom" && this.#openChain)
+		)
+			this.invalidate();
 	}
 
 	/** Follow cannot run over an empty search with a position. Replay from the head next time. */
 	prepareForFollow(): void {
+		this.discardHeadRead();
 		if (
 			this.#openChain &&
 			this.bottom !== null &&

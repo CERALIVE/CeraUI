@@ -284,6 +284,75 @@ async function startFollowing() {
 	await screen.findByText(en.systemLogs.follow.following);
 }
 
+it("keeps live rows when a mounted Raw tab takes Follow back before its old filter reply", async () => {
+	logs.query.mockResolvedValue(page(["initial"]));
+	const first = within(render(RawLogsTab).container);
+	const second = within(render(RawLogsTab).container);
+	await first.findByText("message initial");
+	await second.findByText("message initial");
+	const firstButton = first.getByTestId("raw-follow-button");
+	const secondButton = second.getByTestId("raw-follow-button");
+	const checkpointCursor = `boot-start:${BOOT}:0`;
+	logs.followStart
+		.mockResolvedValueOnce({
+			ok: true,
+			subscriptionId: "sub-1",
+			checkpointCursor,
+		})
+		.mockResolvedValueOnce({
+			ok: true,
+			subscriptionId: "sub-2",
+			checkpointCursor,
+		})
+		.mockResolvedValueOnce({
+			ok: true,
+			subscriptionId: "sub-3",
+			checkpointCursor,
+		});
+	await fireEvent.click(firstButton);
+	await first.findByText(en.systemLogs.follow.following);
+
+	const reply = Promise.withResolvers<QueryPage>();
+	logs.query.mockReturnValueOnce(reply.promise);
+	await fireEvent.click(
+		first.getByRole("radio", { name: en.systemLogs.raw.levelEverything }),
+	);
+	expect(firstButton.getAttribute("aria-disabled")).toBe("true");
+	await fireEvent.click(secondButton);
+	await first.findByText(en.systemLogs.follow.stopped);
+	await second.findByText(en.systemLogs.follow.following);
+	const status = first.getByTestId("raw-status");
+	expect(status.getAttribute("role")).toBe("status");
+	expect(status.getAttribute("aria-live")).toBe("polite");
+	expect(status.textContent).toBe(en.systemLogs.announce.stopped);
+	expect(firstButton.hasAttribute("aria-disabled")).toBe(false);
+
+	await fireEvent.click(firstButton);
+	await first.findByText(en.systemLogs.follow.following);
+	await second.findByText(en.systemLogs.follow.stopped);
+	push({
+		subscriptionId: "sub-3",
+		entries: [entry("fresh-after-retake")],
+		checkpointCursor: "fresh-after-retake",
+	});
+	await first.findByText("message fresh-after-retake");
+	expect(second.queryByText("message fresh-after-retake")).toBeNull();
+
+	reply.resolve(page(["old-filter-snapshot"]));
+	// Cross the RPC promise and Svelte's render work before checking the visible rows.
+	await reply.promise;
+	await tick();
+	await tick();
+
+	expect(first.getByTestId("raw-follow-state").textContent?.trim()).toBe(
+		en.systemLogs.follow.following,
+	);
+	expect(
+		first.queryAllByTestId("raw-row").map((row) => row.dataset.cursor),
+	).toEqual(["fresh-after-retake"]);
+	expect(first.queryByTestId("raw-loading")).toBeNull();
+});
+
 describe("RawLogsTab: first page", () => {
 	it("asks for the default view and lists its entries", async () => {
 		await mounted();

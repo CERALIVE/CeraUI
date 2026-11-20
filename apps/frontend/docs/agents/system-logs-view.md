@@ -1234,18 +1234,24 @@ technology speech. Browser coverage is in the related specs above.
     page's newest entry or that head. A null head means the boot has no record
     yet, and that first follow stays: it reads the boot from its start. A
     failed read leaves no position, so the next Follow learns the head again.
-    Follow and Pause are disabled while a head read runs.
+    Follow and Pause are disabled while a head read runs. A takeover cancels
+    the displaced view's pending head read and makes Follow available again.
   - Accepted limits: a dropped marker marks the run of the batch it came with,
     not the exact gap, because the wire carries only a count; after a replay
     whose page is shorter than the listed run, older rows leave the view until
     the next Load more.
-- **One Follow owner (decided).** A socket has one follow (a new start stops
-  the socket's older one) and the app has one follow listener. Only the view
-  that made the latest start stops the device follow or clears the listener;
+- **One Follow owner [EXISTS].** The backend keeps one follow per socket: a new
+  start stops the socket's older one. The app has one follow listener. If a
+  second Raw view starts Follow, it notifies the displaced view through a
+  callback. The displaced view releases its listener before the new one attaches
+  and enters the existing Stopped state and announcement without sending a device
+  Stop. Pausing or stopping the new owner does not resume the first. A displaced
+  view can explicitly take Follow back. Takeover and reattachment invalidate
+  pending head reads through the paging generation, so a stale reply cannot
+  replace live rows or move the checkpoint. Positioned history pages are not
+  head replacements.
   `dispose` runs once, and a disposed view never starts Follow again. A stale
-  view's dispose, Pause or late start reply therefore leaves a newer view's
-  Follow running. Messages that arrive before the start reply wait for its
-  subscription ID. The start announcement precedes replay, so a queued end
-  leaves Stopped as the live-region announcement. The app mounts one Raw logs
-  view at a time. If two were mounted, the later start would win and the earlier
-  view would not be told.
+  view's dispose, Pause or late start reply leaves the newer owner's Follow
+  running. Messages that arrive before the start reply wait for its subscription
+  ID. The start announcement precedes replay, so a queued end leaves Stopped as
+  the live-region announcement. The app still mounts one Raw logs view at a time.
