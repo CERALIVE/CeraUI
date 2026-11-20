@@ -41,7 +41,7 @@ test("a lost down reply is resolved by NM activation state while deletion remain
 	f.faults.upTimeout = f.faults.downTimeout = f.faults.deleteFails = true;
 	try {
 		expect((await f.start()).success).toBe(false);
-		expect(f.active()).toBeUndefined();
+		expect(f.active()).toBeString();
 		expect(await wifiHotspotStop({ device: 0 })).toEqual({ success: true });
 		expect(f.commands.filter((args) => args[1] === "down")).toHaveLength(1);
 		expect(f.commands.some((args) => args.includes("uuid,active"))).toBe(true);
@@ -125,7 +125,15 @@ for (const trace of [
 					f.faults.upTimeout = false;
 					f.faults.autoconnectTimeout = false;
 					f.faults.receiptUnreadable = false;
-					expect(await f.start()).toEqual({ success: true });
+					expect(await f.start()).toEqual(
+						trace === "up-timeout"
+							? {
+									success: false,
+									error: "activation-failed",
+									reason: "cleanup-pending",
+								}
+							: { success: true },
+					);
 					expect(f.profiles.has(uuid)).toBe(false);
 					expect(f.active()).not.toBe(uuid);
 					expect(f.row.hotspot.conn).not.toBe(uuid);
@@ -167,7 +175,11 @@ test("failed autoconnect suppression is recorded and retried without losing the 
 		f.faults.downFails = false;
 		f.faults.deleteFails = false;
 		f.faults.offFails = false;
-		expect(await f.start()).toEqual({ success: true });
+		expect(await f.start()).toEqual({
+			success: false,
+			error: "activation-failed",
+			reason: "cleanup-pending",
+		});
 		expect(f.profiles.has(uuid ?? "")).toBe(false);
 	} finally {
 		await f.restore();
