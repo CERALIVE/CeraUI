@@ -111,8 +111,8 @@ export const formatPercent =
 	};
 
 /**
- * Relative time from `date` to now using `Intl.RelativeTimeFormat`. Falls back
- * to `"just now"` for the most recent few seconds.
+ * Relative time from `date` to now using `Intl.RelativeTimeFormat`. Uses the
+ * locale's word for now within the recency window.
  * @example formatRelativeTime('en')(new Date(Date.now() - 120_000)) // "2 minutes ago"
  */
 export const formatRelativeTime =
@@ -120,10 +120,11 @@ export const formatRelativeTime =
 	(date: Date): string => {
 		const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
 		if (!Number.isFinite(seconds)) return "—";
-		if (Math.abs(seconds) < 10) return "just now";
 
 		const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
 		const abs = Math.abs(seconds);
+		if (abs < 10) return rtf.format(0, "second");
+
 		const sign = seconds < 0 ? 1 : -1; // future → positive, past → negative
 
 		if (abs < 60) return rtf.format(sign * abs, "second");
