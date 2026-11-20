@@ -128,8 +128,8 @@ test("retained cleanup shares Stop's owner lock and five-minute discovery retry 
 		expect(retries).toBe(scheduled);
 		f.faults.downFails = f.faults.deleteFails = false;
 		expect(await reconcileWifiAdapterPolicies(observation)).toBe(false);
-		expect(f.active()).toBeUndefined();
-		expect(f.profiles.has(uuid)).toBe(false);
+		expect(f.active()).toBe(uuid);
+		expect(f.profiles.has(uuid)).toBe(true);
 		expect(f.commands.filter((args) => args[1] === "add")).toHaveLength(1);
 	} finally {
 		cancelWifiAdapterReconciliation();

@@ -134,11 +134,16 @@ for (const trace of [
 								}
 							: { success: true },
 					);
-					expect(f.profiles.has(uuid)).toBe(false);
-					expect(f.active()).not.toBe(uuid);
-					expect(f.row.hotspot.conn).not.toBe(uuid);
+					expect(f.profiles.has(uuid)).toBe(trace === "up-timeout");
+					if (trace === "up-timeout") {
+						expect(f.active()).toBe(uuid);
+						expect(f.row.hotspot.conn).toBe(uuid);
+					} else {
+						expect(f.active()).not.toBe(uuid);
+						expect(f.row.hotspot.conn).not.toBe(uuid);
+					}
 					expect(f.commands.filter((args) => args[1] === "add")).toHaveLength(
-						2,
+						trace === "up-timeout" ? 1 : 2,
 					);
 					expect(f.profiles.has(OTHER_UUID)).toBe(true);
 					expect(
@@ -180,7 +185,7 @@ test("failed autoconnect suppression is recorded and retried without losing the 
 			error: "activation-failed",
 			reason: "cleanup-pending",
 		});
-		expect(f.profiles.has(uuid ?? "")).toBe(false);
+		expect(f.profiles.has(uuid ?? "")).toBe(true);
 	} finally {
 		await f.restore();
 	}
@@ -218,6 +223,7 @@ test("a failed fresh add cannot restore an already deleted active UUID from cach
 		f.faults.downFails = false;
 		f.faults.deleteFails = false;
 		f.faults.receiptUnreadable = true;
+		f.observe(undefined, "ap");
 		expect((await f.start()).success).toBe(false);
 		expect(f.profiles.has(uuid)).toBe(false);
 		expect(getWifiState()[MAC]?.conn).not.toBe(uuid);

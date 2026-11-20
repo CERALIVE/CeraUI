@@ -103,6 +103,7 @@ test("an owned modify keeps retained cleanup on the existing canonical receipt",
 				})
 			).success,
 		).toBe(true);
+		f.observe(undefined, "ap");
 		await withWifiAdapterLock(wifiAdapterLockKey(MAC), () =>
 			reconcileWifiAdapterTeardownLocked(MAC),
 		);
@@ -142,7 +143,12 @@ for (const window of [
 				return result;
 			};
 		} else if (window === "retained-down" || window === "retained-delete") {
-			f.faults.upTimeout = f.faults.downFails = f.faults.deleteFails = true;
+			f.faults.downFails = f.faults.deleteFails = true;
+			const up = f.deps.nmConnect;
+			f.deps.nmConnect = async (...args) => {
+				await up(...args);
+				return false;
+			};
 		} else {
 			f.faults.upTimeout =
 				f.faults.offFails =
@@ -159,8 +165,8 @@ for (const window of [
 				resetBootReadiness();
 				f.faults.deleteFails = false;
 				const down = f.deps.nmDisconnect;
-				f.deps.nmDisconnect = async (target) => {
-					const result = await down(target);
+				f.deps.nmDisconnect = async (target, path) => {
+					const result = await down(target, path);
 					restore(target);
 					return result;
 				};
