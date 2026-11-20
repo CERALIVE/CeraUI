@@ -584,6 +584,23 @@ describe("StorageSection: limits", () => {
 		).toBeTruthy();
 	});
 
+	it("says once, under the Detail options, how skipped bonding sender lines are reported", () => {
+		mount();
+
+		const detail = screen.getByRole("group", { name: copy.detailLabel });
+		const notes = within(detail).getAllByText(copy.detailSenderNote);
+		expect(notes).toHaveLength(1);
+		const note = notes[0] as HTMLElement;
+		expect(note.className.split(/\s+/)).toEqual(
+			expect.arrayContaining(["text-muted-foreground", "text-xs"]),
+		);
+		const lastOption = within(detail).getAllByRole("radio").at(-1);
+		expect(
+			(lastOption?.compareDocumentPosition(note) ?? 0) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+	});
+
 	it("applies nothing until Save, then saves exactly the chosen limits", async () => {
 		const saved = logStorage({
 			retention: { maxAgeDays: 7, maxSizeMb: 64, detail: "debug" },

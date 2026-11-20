@@ -134,7 +134,9 @@ density. It is not a redesign.
   warning, a kernel failure and an action refusal emit no event, so they open
   the newest entries with `momentUnknown`. When neither the event nor the
   message's own time is known, one muted line above the list says so
-  (`systemLogs.anchor.unknown`, `main/system-logs/RawLogsTab.svelte`). The low-disk banner keeps
+  (`systemLogs.anchor.unknown`, `main/system-logs/RawLogsTab.svelte`) until
+  Follow starts or the filter first leaves the default; restoring the default
+  filter does not bring it back for that opening. The low-disk banner keeps
   `settings.deviceStats.lowDiskAction` and opens Storage.
 - **Primitives.** `AppDialog`, `Button`, `Tabs`, `Select` (single and multiple),
   `Input`, `Toggle` (single-choice groups), `Skeleton`,
@@ -181,9 +183,10 @@ in section 4.
 | Gap marker | Raw logs | A full-width separator row (neutral 1 px rules either side of centered text) stating what was skipped and why: catch-up exceeded, position removed by cleanup, or entries dropped by the device | polite |
 | Dropped marker | Raw logs | `dropped > 0` in a follow batch: one separator row "Entries skipped while following: {count}". journald's suppressed-messages record (`marker: 'suppressed'`) is a separate marker row (`lib/device-logs/raw-rows.ts:103-127`, `main/system-logs/RawLogRow.svelte:103-104`) | polite (as a gap) |
 | Follower stopped | Raw logs | Label "Stopped" with its reason (reader ended, device restarted, logs cleared) and a Follow action; `ended: 'cleared'` also resets the list | polite |
+| Restarted while not following | Raw logs | An idle, paused or stopped view of This boot that learns of a new boot stays idle, with no state label, a Follow action and the muted line "The device restarted. This boot's entries are shown." above the reloaded newest entries; a view that was following, or lost its socket while following, shows Follower stopped instead | polite |
 | Disconnected | Raw logs, Events, header pill | The socket dropped. Follow shows "Disconnected", a notice says entries may be out of date, rows use `text-muted-foreground`, and the pill shows Offline without a pulse. Raw logs shows Disconnected only when a follow was active and offers Resume after reconnect (`lib/device-logs/raw-follow-session.svelte.ts:108-112`, `main/system-logs/RawFollowControl.svelte:28-56`). Events reloads at the live edge. While browsing, a reconnect checks the live edge. Failure shows Retry. Another drop retires the check and its held pushes. A matching epoch with a nondecreasing head keeps rows in the retained range. A changed or missing epoch refreshes the window and retires pending row actions (`lib/device-logs/events-view.svelte.ts:119-129,149-210`) | polite |
 | Anchor | Raw logs | Opened from an event or a "View logs" action: the matching row has a tonal highlight (`bg-status-info/10`, no outline or stripe); an exact match receives focus and an approximate one leaves focus on the selected tab (`main/system-logs/SystemLogsView.svelte:134-138`, `main/system-logs/RawLogList.svelte:79-89`); "approximate" is stated when no exact entry matched; a Back to latest entries action leaves anchor mode | no |
-| Moment unknown | Raw logs | A "View logs" action whose message has no known moment (a notice first seen in a replay with no timeline event, or an event no longer stored) opens the newest entries with one muted line above the list saying the time is not known; choosing another tab drops it (`main/system-logs/RawLogsPanel.svelte`, `main/system-logs/RawLogsTab.svelte`) | no |
+| Moment unknown | Raw logs | A "View logs" action whose message has no known moment (a notice first seen in a replay with no timeline event, or an event no longer stored) opens the newest entries with one muted line above the list saying the time is not known; Follow, the first filter change or choosing another tab drops it for that opening (`main/system-logs/RawLogsPanel.svelte`, `main/system-logs/RawLogsTab.svelte`) | no |
 | Unknown event code | Events | A record from a newer version: the family icon, the title "Event recorded by a newer version", one honest detail sentence, View raw logs, and the raw code only inside a collapsed Diagnostics disclosure (`data-testid` containing `diagnostic`, DESIGN.md OL-3..OL-5). A known code with invalid params shows its title with no detail | no |
 | Logs removed for a boot | Boots, Events, Raw logs | Boot rows keep the boot with a "Logs removed" label (never hidden); View raw logs on such a boot shows "Raw logs for this boot were removed"; a Raw query with `BOOT_UNAVAILABLE` shows "Logs for this boot were removed" with Show this boot | alert (Raw only) |
 | Clock-not-synced marker | Raw logs, Events | Where two adjacent records of the same boot (journal order for raw, `seq` order for events) run backwards in time, a separator row says the device clock changed there and earlier times may be wrong. Times are never corrected or re-sorted | no |
@@ -437,7 +440,8 @@ Rules for this copy:
 | `systemLogs.follow.disconnected` | Disconnected | State label |
 | `systemLogs.follow.disconnectedBody` | The connection to the device was lost. The entries shown may be out of date. | Disconnected notice |
 | `systemLogs.follow.endedReader` | Following stopped because the log reader ended. | ended: 'follower_exit' |
-| `systemLogs.follow.endedBoot` | Following stopped because the device restarted. | ended: 'boot_changed' |
+| `systemLogs.follow.endedBoot` | Following stopped because the device restarted. | ended: 'boot_changed' while following or disconnected from a follow |
+| `systemLogs.follow.bootChangedIdle` | The device restarted. This boot's entries are shown. | ended: 'boot_changed' in an idle, paused or stopped view; also its live-region announcement |
 | `systemLogs.follow.endedCleared` | Following stopped because the logs were cleared. | ended: 'cleared' |
 | `systemLogs.follow.unavailable` | Follow works with This boot and Newest first. | Disabled reason |
 | `systemLogs.follow.unavailableAnchor` | Go back to the latest entries to follow. | Disabled reason in anchor mode |
@@ -477,9 +481,10 @@ Rules for this copy:
 | `systemLogs.storage.limitsUnknown` | This device did not report its log limit, so limits can't be changed here. | Reason element when ceiling is null |
 | `systemLogs.storage.detailLabel` | Detail | Detail control label |
 | `systemLogs.storage.detailFull` | Full detail | Detail debug (default) |
-| `systemLogs.storage.detailFullHint` | Allows debug entries. Uses more space and is best for troubleshooting. When bonding sender output spikes, the device rate-limits it and reports how many lines it dropped. | Consequence line |
+| `systemLogs.storage.detailFullHint` | Stores debug entries too. Uses more space and is best for troubleshooting. | Consequence line |
 | `systemLogs.storage.detailReduced` | Reduced | Detail info |
-| `systemLogs.storage.detailReducedHint` | Allows info and above for the CeraLive app, including the bonding sender. Its debug entries are not stored, so history lasts longer. When bonding sender output spikes, the device rate-limits it and reports how many lines it dropped. | Consequence line |
+| `systemLogs.storage.detailReducedHint` | Stores info and above for the CeraLive app, including the bonding sender, so history lasts longer. | Consequence line |
+| `systemLogs.storage.detailSenderNote` | If the bonding sender writes too much at once, some of its lines are skipped and a warning under Bonding sender says how many. | One muted line under the Detail options |
 | `systemLogs.storage.save` | Save limits | Explicit save |
 | `systemLogs.storage.saved` | Limits saved. | After save |
 | `systemLogs.storage.targetNotMet` | The new limit is not met yet. The device removes more as it rotates log files. | targetMet: false |
@@ -915,8 +920,10 @@ live-region announcements.
 
 After reconnect, Raw checks the running boot in every follow state when it
 knows the displayed boot or the follow checkpoint's boot. For This boot, a
-changed boot shows Stopped with the restart notice and reloads the newest
-retained entries without starting Follow. Historical scopes stay in place.
+changed boot reloads the newest retained entries without starting Follow. A
+view that was following, or lost its socket while following, shows Stopped
+with the restart notice; an idle, paused or stopped view stays idle and says
+only that the device restarted. Historical scopes stay in place.
 If the boot check cannot answer, a Follow reply with a checkpoint from a
 different boot takes the same stop and reload path before applying any batch.
 While Raw is open, the boot picker checks Running now for This boot and

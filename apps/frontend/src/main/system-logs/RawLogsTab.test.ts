@@ -1158,6 +1158,31 @@ describe("RawLogsTab: follow", () => {
 		);
 	});
 
+	it("reports cleared logs rather than a restart when Clear lands during Pause", async () => {
+		await mounted();
+		await startFollowing();
+		const stop =
+			Promise.withResolvers<Awaited<ReturnType<typeof logs.followStop>>>();
+		logs.followStop.mockReturnValueOnce(stop.promise);
+		await fireEvent.click(screen.getByTestId("raw-follow-button"));
+		await screen.findByText(en.systemLogs.follow.paused);
+
+		logs.query.mockResolvedValueOnce(page(["fresh"]));
+		push({ ended: "cleared" });
+		stop.resolve({ success: true, checkpointCursor: null });
+
+		await waitFor(() => expect(cursors()).toEqual(["fresh"]));
+		expect(screen.getByTestId("raw-follow-ended").textContent?.trim()).toBe(
+			en.systemLogs.follow.endedCleared,
+		);
+		expect(screen.getByTestId("raw-follow-state").dataset.state).toBe(
+			"stopped",
+		);
+		expect(screen.getByTestId("raw-status").textContent).toBe(
+			en.systemLogs.announce.stopped,
+		);
+	});
+
 	it("states a restarted device as the reason", async () => {
 		await mounted();
 		await startFollowing();
@@ -1353,17 +1378,22 @@ describe("RawLogsTab: follow", () => {
 		expect(logs.followStart).toHaveBeenCalledTimes(2);
 	});
 
-	it.each(["idle", "stopped"] as const)(
+	it.each(["idle", "stopped", "paused"] as const)(
 		"refreshes This boot on reconnect from %s without starting follow",
 		async (state) => {
 			const running = fourBoots().find(({ current }) => current);
 			if (!running) throw new Error("missing running boot fixture");
 			await mounted(page(["old-boot-row"]));
-			const starts = state === "stopped" ? 1 : 0;
+			const starts = state === "idle" ? 0 : 1;
 			if (state === "stopped") {
 				await startFollowing();
 				push({ ended: "follower_exit" });
 				await screen.findByTestId("raw-follow-ended");
+			}
+			if (state === "paused") {
+				await startFollowing();
+				await fireEvent.click(screen.getByTestId("raw-follow-button"));
+				await screen.findByText(en.systemLogs.follow.paused);
 			}
 			setConnectionState("disconnected");
 			await screen.findByTestId("raw-disconnected");
@@ -1377,11 +1407,16 @@ describe("RawLogsTab: follow", () => {
 			setConnectionState("connected");
 
 			await waitFor(() => expect(cursors()).toEqual(["running-boot-row"]));
+			// Nothing was following, so nothing stopped: the view stays idle and says what happened.
 			expect(screen.getByTestId("raw-follow-ended").textContent).toBe(
-				en.systemLogs.follow.endedBoot,
+				en.systemLogs.follow.bootChangedIdle,
 			);
-			expect(screen.getByTestId("raw-follow-state").dataset.state).toBe(
-				"stopped",
+			expect(screen.queryByTestId("raw-follow-state")).toBeNull();
+			expect(screen.getByTestId("raw-follow-button").textContent?.trim()).toBe(
+				en.systemLogs.follow.start,
+			);
+			expect(screen.getByTestId("raw-status").textContent).toBe(
+				en.systemLogs.follow.bootChangedIdle,
 			);
 			expect(logs.query).toHaveBeenLastCalledWith(DEFAULT_INPUT);
 			expect(logs.followStart).toHaveBeenCalledTimes(starts);
@@ -1462,6 +1497,54 @@ describe("RawLogsTab: follow", () => {
 		await waitFor(() =>
 			expect(screen.queryByTestId("raw-disconnected")).toBeNull(),
 		);
+	});
+});
+
+describe("RawLogsTab: unknown moment", () => {
+	async function opened() {
+		logs.query.mockResolvedValueOnce(page(["s=3", "s=2", "s=1"]));
+		render(RawLogsTab, { momentUnknown: true });
+		await waitFor(() => expect(screen.queryByTestId("raw-loading")).toBeNull());
+		expect(screen.getByTestId("raw-moment-unknown").textContent?.trim()).toBe(
+			en.systemLogs.anchor.unknown,
+		);
+	}
+
+	it("dismisses the line once Follow starts, for the rest of the opening", async () => {
+		await opened();
+		await startFollowing();
+		expect(screen.queryByTestId("raw-moment-unknown")).toBeNull();
+		await fireEvent.click(screen.getByTestId("raw-follow-button"));
+		await screen.findByText(en.systemLogs.follow.paused);
+		expect(screen.queryByTestId("raw-moment-unknown")).toBeNull();
+	});
+
+	it("dismisses the line at the first filter change and keeps it gone on the default filter", async () => {
+		await opened();
+		const group = screen.getByRole("radiogroup", {
+			name: en.systemLogs.raw.levelLabel,
+		});
+		logs.query.mockResolvedValueOnce(page(["e=1"]));
+		await fireEvent.click(
+			within(group).getByRole("radio", { name: en.systemLogs.raw.levelErrors }),
+		);
+		await waitFor(() => expect(cursors()).toEqual(["e=1"]));
+		expect(screen.queryByTestId("raw-moment-unknown")).toBeNull();
+		logs.query.mockResolvedValueOnce(page(["s=3"]));
+		await fireEvent.click(
+			within(group).getByRole("radio", { name: en.systemLogs.raw.levelInfo }),
+		);
+		await waitFor(() => expect(cursors()).toEqual(["s=3"]));
+		expect(logs.query).toHaveBeenLastCalledWith(DEFAULT_INPUT);
+		expect(screen.queryByTestId("raw-moment-unknown")).toBeNull();
+	});
+
+	it("keeps the line when opening on the running boot, which is the default filter", async () => {
+		const running = fourBoots().find(({ current }) => current);
+		if (!running) throw new Error("missing running boot fixture");
+		bootSelection.choose(running);
+		await opened();
+		expect(logs.query).toHaveBeenCalledExactlyOnceWith(DEFAULT_INPUT);
 	});
 });
 
@@ -2291,6 +2374,36 @@ describe("RawLogsTab: anchor mode", () => {
 		expect(screen.getByTestId("raw-end-bottom").textContent?.trim()).toBe(
 			en.systemLogs.raw.end,
 		);
+	});
+
+	it("offers Keep searching at both ends of an approximate window that could not prove them", async () => {
+		// logs.around answers hasMore: null when its scan ran out of budget before proving an end.
+		const unproven = (cursor: string, continuation: string) =>
+			page([cursor], { hasMore: null, termination: "budget", continuation });
+		await mounted(
+			page([]),
+			around({
+				anchor: null,
+				approximate: true,
+				older: unproven("s=4", "older-c"),
+				newer: unproven("s=6", "newer-c"),
+			}),
+		);
+		const noWindowEnd = () => {
+			expect(screen.queryByTestId("raw-end-top")).toBeNull();
+			expect(screen.queryByTestId("raw-end-bottom")).toBeNull();
+			expect(screen.queryByText(en.systemLogs.raw.endNewerWindow)).toBeNull();
+			expect(screen.queryByText(en.systemLogs.raw.endOlderWindow)).toBeNull();
+		};
+		expect(screen.getByTestId("raw-keep-searching-top")).toBeTruthy();
+		expect(screen.getByTestId("raw-keep-searching-bottom")).toBeTruthy();
+		noWindowEnd();
+
+		logs.query.mockResolvedValueOnce(unproven("s=3", "older-c2"));
+		await fireEvent.click(screen.getByTestId("raw-keep-searching-bottom"));
+		await waitFor(() => expect(cursors()).toEqual(["s=6", "s=4", "s=3"]));
+		expect(screen.getByTestId("raw-keep-searching-bottom")).toBeTruthy();
+		noWindowEnd();
 	});
 
 	it("lets the approximate note take its own line beside a long action, and wrap Chinese only between words", async () => {

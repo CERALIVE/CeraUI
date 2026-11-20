@@ -64,6 +64,11 @@ export class RawFollowSession {
 		return this.state === "following" || this.state === "starting";
 	}
 
+	/** The operator asked to follow and nothing has stopped it: a dropped socket keeps the intent. */
+	get #followIntent(): boolean {
+		return this.#live || this.state === "disconnected";
+	}
+
 	/** Follow or Resume from the last resumable position, else the newest row. */
 	async start(): Promise<void> {
 		if (
@@ -259,10 +264,12 @@ export class RawFollowSession {
 	};
 
 	#end(reason: NonNullable<LogFollowMessage["ended"]>): void {
+		// A terminal push can still arrive while Pause is waiting for its stop reply.
+		const idleRestart = reason === "boot_changed" && !this.#followIntent;
 		this.#forget();
-		this.state = "stopped";
+		this.state = idleRestart ? "idle" : "stopped";
 		this.ended = reason;
-		this.context.feedback.announce("stopped");
+		this.context.feedback.announce(idleRestart ? "restarted" : "stopped");
 		if (reason !== "cleared" && reason !== "boot_changed") return;
 		this.#checkpoint = null;
 		void this.context.readHead();

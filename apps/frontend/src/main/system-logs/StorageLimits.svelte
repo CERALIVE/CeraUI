@@ -176,6 +176,8 @@ async function save(): Promise<void> {
 						</span>
 					</label>
 				{/each}
+				<!-- Both levels store the bonding sender, so its skipped-lines warning gets one note, not a line per option. -->
+				<p class="text-muted-foreground text-xs" data-testid="storage-detail-sender-note">{m['systemLogs.storage.detailSenderNote']()}</p>
 			</div>
 		</fieldset>
 
