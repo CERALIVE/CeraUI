@@ -95,6 +95,12 @@ Rules:
   and signal are always visible; hardware tags may collapse behind a disclosure.
 - **IH-4** — staleness beats freshness theatre: a stale reading renders as stale
   (dimmed/marked), never as a fresh-looking number (`.impeccable.md` Principle 4).
+- **IH-5** — Fill with lime (the primary color) only the single primary action of a
+  surface; other actions on that surface use outline or ghost. This holds on every
+  surface, not only modem rows; a destructive confirmation keeps its `destructive`
+  button. In System Logs, Storage Save and Download support bundle are filled and
+  every other action is outline or ghost; Follow stays outline, because a filled
+  lime button reads as going live (DF-32).
 
 ---
 

@@ -98,6 +98,32 @@ function region(testId: string): HTMLElement {
 	return screen.getByTestId(testId);
 }
 
+/** The Downloads region's headings and actions in DOM order, each action with its button variant. */
+function downloadsOrder(downloads: HTMLElement): string[] {
+	return [
+		...downloads.querySelectorAll<HTMLElement>(
+			'h3, h4, [data-testid^="sharing-open-"], [data-testid^="log-download-"]',
+		),
+	].map((node) =>
+		node.dataset.testid
+			? `${node.dataset.testid} ${node.dataset.variant}`
+			: `${node.tagName} ${node.textContent?.trim()}`,
+	);
+}
+
+const FILES_ORDER = [
+	`H4 ${en.systemLogs.sharing.filesHeading}`,
+	"log-download-device outline",
+	"log-download-system outline",
+];
+// Lime fills only the bundle, the region's primary action (DESIGN.md IH-5).
+const READY_ORDER = [
+	`H3 ${en.systemLogs.sharing.heading}`,
+	"sharing-open-bundle default",
+	"sharing-open-export outline",
+	...FILES_ORDER,
+];
+
 describe("SystemLogsView: Downloads never wait", () => {
 	it.each([true, false])(
 		"shows both download rows and a loading status while the check is pending (wide=%s)",
@@ -211,12 +237,23 @@ describe("SystemLogsView: wide layout (>= 1024 px)", () => {
 			en.systemLogs.boots.heading,
 			en.systemLogs.storage.heading,
 			en.systemLogs.sharing.heading,
+			en.systemLogs.sharing.filesHeading,
 		]);
 		expect(within(side).getByTestId("system-logs-boots")).toBeTruthy();
 		expect(within(side).getByTestId("system-logs-storage")).toBeTruthy();
 		const downloads = within(side).getByTestId("system-logs-downloads");
 		expect(within(downloads).getByTestId("log-row-device")).toBeTruthy();
 		expect(within(downloads).getByTestId("log-row-system")).toBeTruthy();
+	});
+
+	it("leads Downloads with the support bundle, then Export this view, then the full log files", async () => {
+		render(SystemLogsView);
+		await screen.findByRole("tablist");
+
+		const downloads = within(region("system-logs-side")).getByTestId(
+			"system-logs-downloads",
+		);
+		expect(downloadsOrder(downloads)).toEqual(READY_ORDER);
 	});
 
 	it("switches the panel when Raw logs is selected", async () => {
@@ -299,6 +336,26 @@ describe("SystemLogsView: narrow layout (< 1024 px)", () => {
 		expect(screen.queryByTestId("system-logs-boots")).toBeNull();
 	});
 
+	it("opens the Storage tab with Downloads above usage, limits and cleanup, the support bundle first", async () => {
+		render(SystemLogsView);
+		await screen.findByRole("tablist");
+		await fireEvent.click(tab(en.systemLogs.tabs.storage));
+
+		const panel = region("system-logs-panel-storage");
+		const downloads = within(panel).getByTestId("system-logs-downloads");
+		expect(downloadsOrder(downloads)).toEqual(READY_ORDER);
+		expect(downloads.nextElementSibling).toBe(
+			within(panel).getByTestId("system-logs-storage"),
+		);
+		const bundle = within(panel).getByTestId("sharing-row-bundle");
+		for (const part of ["storage-usage", "storage-limits", "storage-cleanup"]) {
+			expect(
+				bundle.compareDocumentPosition(await within(panel).findByTestId(part)) &
+					Node.DOCUMENT_POSITION_FOLLOWING,
+			).toBeTruthy();
+		}
+	});
+
 	it("falls back to Events when Storage moves into the side column, and returns to it", async () => {
 		render(SystemLogsView);
 		await screen.findByRole("tablist");
@@ -351,6 +408,10 @@ describe("SystemLogsView: device version without the log viewer", () => {
 				within(downloads).getByText(en.systemLogs.sharing.heading),
 			).toBeTruthy();
 			expect(within(downloads).getByTestId("log-row-device")).toBeTruthy();
+			expect(downloadsOrder(downloads)).toEqual([
+				`H3 ${en.systemLogs.sharing.heading}`,
+				...FILES_ORDER,
+			]);
 		},
 	);
 
@@ -471,7 +532,11 @@ describe("SystemLogsView: anatomy", () => {
 			const section = region(id);
 			expect(section.tagName).toBe("SECTION");
 			expect(tokens(section)).toEqual(["flex", "flex-col", "gap-3", "p-4"]);
-			const heading = within(section).getByRole("heading");
+			// Downloads adds the Full log files sub-heading under its own.
+			expect(within(section).getAllByRole("heading")).toHaveLength(
+				id === "system-logs-downloads" ? 2 : 1,
+			);
+			const heading = within(section).getByRole("heading", { level: 3 });
 			expect(heading.tagName).toBe("H3");
 			expect(tokens(heading)).toEqual([
 				"text-sm",

@@ -96,34 +96,42 @@ const dialog = (title: string) => screen.findByRole("dialog", { name: title });
 const button = (scope: HTMLElement, name: string) =>
 	within(scope).getByRole("button", { name }) as HTMLButtonElement;
 
-describe("SharingSection: the second Downloads group", () => {
-	it("lists Export this view then Support bundle after a neutral rule, with the browser line under them", () => {
+describe("SharingSection: the first Downloads group", () => {
+	it("lists Support bundle then Export this view, with the browser line under them", () => {
 		const group = screen.getByTestId("sharing-group");
-		expect(tokens(group)).toEqual([
-			"flex",
-			"flex-col",
-			"gap-3",
-			"border-t",
-			"pt-3",
-			...CJK_WRAP,
-		]);
+		expect(tokens(group)).toEqual(["flex", "flex-col", "gap-3", ...CJK_WRAP]);
 		expect(
 			within(group)
 				.getAllByTestId(/^sharing-row-/)
 				.map((row) => row.dataset.testid),
-		).toEqual(["sharing-row-export", "sharing-row-bundle"]);
+		).toEqual(["sharing-row-bundle", "sharing-row-export"]);
 		const note = within(group).getByText(sharing.browserSaves);
 		expect(tokens(note)).toEqual(["text-muted-foreground", "text-xs"]);
 		expect(group.lastElementChild).toBe(note);
 		expect(within(group).queryAllByRole("heading")).toHaveLength(0);
 	});
 
+	// Lime fills only the region's primary action, the bundle (DESIGN.md IH-5).
 	it.each([
-		["export", sharing.export, sharing.exportHint, "lucide-file-output"],
-		["bundle", sharing.bundle, sharing.bundleHint, "lucide-life-buoy"],
+		[
+			"bundle",
+			sharing.bundle,
+			sharing.bundleHint,
+			"lucide-life-buoy",
+			"default",
+			"bg-primary",
+		],
+		[
+			"export",
+			sharing.export,
+			sharing.exportHint,
+			"lucide-file-output",
+			"outline",
+			"border-border",
+		],
 	] as const)(
 		"draws the %s row in the shipped rows' anatomy",
-		(id, title, hint, glyph) => {
+		(id, title, hint, glyph, variant, fill) => {
 			const row = screen.getByTestId(`sharing-row-${id}`);
 			expect(tokens(row)).toEqual([
 				"flex",
@@ -162,6 +170,7 @@ describe("SharingSection: the second Downloads group", () => {
 			const action = screen.getByTestId(`sharing-open-${id}`);
 			expect(action.textContent?.trim()).toBe(title);
 			expect(action.dataset.slot).toBe("button");
+			expect(action.dataset.variant).toBe(variant);
 			// A long label (de, hi at 320 px) wraps inside the button instead of overflowing the row.
 			expect(tokens(action)).toEqual(
 				expect.arrayContaining([
@@ -170,7 +179,7 @@ describe("SharingSection: the second Downloads group", () => {
 					"max-w-full",
 					"py-1",
 					"whitespace-normal",
-					"border-border",
+					fill,
 					"text-[0.8rem]",
 				]),
 			);

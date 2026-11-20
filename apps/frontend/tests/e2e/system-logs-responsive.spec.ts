@@ -371,6 +371,30 @@ for (const scheme of ['dark', 'light'] as const) {
 		}
 		expect(findings(audits)).toEqual([]);
 	});
+
+	// DF-32: one backdrop for nested dialogs, never a lighter wash over the dark view.
+	test(`${scheme}: a Clear confirmation dims the view with the view's own backdrop`, async ({ page }) => {
+		const logs = new SystemLogsPage(page);
+		await logs.open({ locale: 'en', size: { width: 1280, height: 800 }, touch: false, scheme });
+		await logs.show('storage');
+		const backdrops = (slot: string) =>
+			page.locator(`[data-slot="${slot}"]`).evaluateAll((nodes) =>
+				nodes.map((node) => {
+					const style = getComputedStyle(node);
+					return { background: style.backgroundColor, filter: style.backdropFilter };
+				}),
+			);
+		const view = await backdrops('dialog-overlay');
+		expect(view).toHaveLength(1);
+
+		await page.getByRole('button', { name: en['systemLogs.storage.clearAll'], exact: true }).click();
+		await expect(page.getByRole('alertdialog')).toBeVisible();
+		await logs.settle();
+
+		expect(await backdrops('alert-dialog-overlay')).toEqual(view);
+		await page.keyboard.press('Escape');
+		await expect(page.getByRole('alertdialog')).toHaveCount(0);
+	});
 }
 
 for (const locale of ALL_LOCALES) {

@@ -3,13 +3,13 @@
   fullscreen AppDialog. Shape: apps/frontend/docs/agents/system-logs-view.md.
 
   Tabs Events (default) and Raw logs; at >= 1024 px a 320 px side column holds
-  Boots, Storage and Downloads, below it Storage is a third tab. The tabs and the
-  Boots and Storage regions wait for this view's lazy copy and one logs probe;
-  Downloads (the two shipped downloads) renders at once and never waits. An older
-  backend gets one calm notice instead of the tabs, with Downloads below it and
-  no side column; any other failure a recovery band with Retry. Once the tabs
-  are ready Downloads adds Sharing (export this view, support bundle), whose
-  flows live here and are disposed with the view. A panel's
+  Boots, Storage and Downloads, below it Storage is a third tab led by Downloads.
+  The tabs and the Boots and Storage regions wait for this view's lazy copy and
+  one logs probe; Downloads (the two shipped downloads) renders at once and never
+  waits. An older backend gets one calm notice instead of the tabs, with
+  Downloads below it and no side column; any other failure a recovery band with
+  Retry. Once the tabs are ready Downloads leads with Sharing (support bundle,
+  export this view), whose flows live here and are disposed with the view. A panel's
   content mounts only while its tab is active, so a hidden tab never reads logs.
   Each panel owns its scroll. The downloads' state lives here, so a failed
   download keeps its retry band wherever the Downloads region remounts. When the
@@ -170,10 +170,15 @@ $effect(() => {
 		{#if hasCopy}
 			<h3 class="text-sm font-semibold" id="{uid}-downloads">{m['systemLogs.sharing.heading']()}</h3>
 		{/if}
-		<LegacyLogDownloads downloads={legacyDownloads} />
 		{#if status === 'ready'}
 			<SharingSection {sharing} />
 		{/if}
+		<div class="flex flex-col gap-3 {status === 'ready' ? 'border-t pt-3' : ''}" data-testid="downloads-files">
+			{#if hasCopy}
+				<h4 class="text-muted-foreground text-xs font-medium">{m['systemLogs.sharing.filesHeading']()}</h4>
+			{/if}
+			<LegacyLogDownloads downloads={legacyDownloads} />
+		</div>
 	</section>
 {/snippet}
 
@@ -208,8 +213,8 @@ $effect(() => {
 						{/if}
 						{#if tab === 'storage' && current === 'storage'}
 							<div class="divide-y">
-								{@render storageRegion()}
 								{@render downloadsRegion()}
+								{@render storageRegion()}
 							</div>
 						{/if}
 						{#if tab === 'raw' && current === 'raw'}

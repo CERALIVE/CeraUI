@@ -30,7 +30,10 @@ density. It is not a redesign.
   most prominent control of the tab, deliberately an `outline` button: a filled
   lime button reads as going live. Storage: Save limits (`default` variant, the
   same Save vocabulary as every `AppDialog` footer), disabled until a limit or Detail changes (`main/system-logs/StorageLimits.svelte:162-183`). Destructive actions are `outline` triggers; only their confirmation
-  button uses the `destructive` variant.
+  button uses the `destructive` variant. Downloads: Download support bundle, the
+  region's one `default` (filled lime) button; Export this view and the two full
+  log files are `outline`. Lime fills only the single primary action of a surface
+  (DESIGN.md IH-5).
 - **Signature move.** The boot separator. In Events each boot group has a sticky
   heading with its start time and the system image, slot and end mark that are
   recorded (`main/system-logs/EventsTab.svelte:213-241`); Raw logs separates rows
@@ -89,23 +92,30 @@ density. It is not a redesign.
   regions in this order with a heading each: Boots (the boot picker), Storage,
   Downloads. Regions are separated by whitespace and a neutral 1 px rule, not
   boxed.
-- **Below 1024 px.** The Storage tab holds the Storage and Downloads regions;
-  the boot picker is the header button showing the selected boot, opening a
+- **Below 1024 px.** The Storage tab holds the Downloads region first, then
+  Storage (usage, limits and cleanup), so the support bundle is the first thing
+  on it (`main/system-logs/SystemLogsView.svelte:214-218`); the boot picker is the header button showing the selected boot, opening a
   nested `AppDialog` (sheet on phones) listing boots; choosing one closes it.
-- **Downloads region.** First group: the two legacy rows (wrapping changed, critique SL-2; icon
-  tile, title, description, outline Download button, inline amber retry band;
-  testids `log-row-device`, `log-row-system`, `log-download-device`,
+- **Downloads region.** The same order at every width (DF-23). First group, the
+  Sharing group: Support bundle with the filled `default` button, then Export
+  this view with an `outline` one, in the shipped rows' anatomy; one line under
+  them says files are saved by the browser (`main/system-logs/SharingSection.svelte`).
+  Export this view saves the Raw tab's filters and time window; an exact anchor
+  pages its whole boot, so there it saves the 10 minutes around the anchored
+  entry with the window's levels, and the confirmation says so
+  (`lib/device-logs/raw-paging.svelte.ts`). Second group, after a neutral rule,
+  under the "Full log files" heading (`systemLogs.sharing.filesHeading`, an `h4`):
+  the two legacy rows (wrapping changed, critique SL-2; icon tile, title,
+  description, outline Download button, inline amber retry band; testids
+  `log-row-device`, `log-row-system`, `log-download-device`,
   `log-download-system`, `log-download-error`, `log-download-retry`; copy
   `advanced.ceraliveLog`, `advanced.ceraliveLogTooltip`, `advanced.systemLog`,
   `advanced.systemLogTooltip`, `advanced.download`, `advanced.downloading`,
-  `advanced.downloadFailed`, `advanced.retryDownload`). Second group, after a
-  neutral rule, same row anatomy: Export this view, Support bundle; one line
-  under it says files are saved by the browser. Export this view saves the
-  Raw tab's filters and time window; an exact anchor pages its whole boot, so
-  there it saves the 10 minutes around the anchored entry with the window's
-  levels, and the confirmation says so (`lib/device-logs/raw-paging.svelte.ts`).
-  The Downloads region renders
-  immediately; the Sharing group renders only once the viewer check is ready (`main/system-logs/SystemLogsView.svelte:174-176`).
+  `advanced.downloadFailed`, `advanced.retryDownload`). Each download action
+  carries its button variant in `data-variant`. The Downloads region renders
+  immediately with the legacy rows; the Sharing group renders only once the
+  viewer check is ready (`main/system-logs/SystemLogsView.svelte:173-175`), and
+  the headings and the rule only once this view's copy has loaded (`:170-181`).
 - **Older backend.** If the log procedures are missing, the tabs and the Storage
   region are replaced by one calm notice ("not available on this device
   version"); Downloads still renders.
@@ -789,8 +799,10 @@ everywhere in the app.
   measured the status-pill text tones below 4.5:1 for error (both themes) and
   neutral (dark).
 - The lime `--status-live` token is not used for any severity, state, marker,
-  bar or selection in this view. The header pill's Live state uses it; Save and
-  Download bundle use the default primary button (critique SL-13).
+  bar or selection in this view. The header pill's Live state uses it. Storage
+  Save, the Support bundle action and each download confirmation's primary button
+  use the default primary button, each the single primary action of its surface
+  (DESIGN.md IH-5, critique SL-13).
 - Following uses `--status-info`; Paused, Stopped and Disconnected are neutral
   (`--status-neutral` glyph, foreground text).
 - Shutdown marks: current `CircleDot` in `--status-info`, clean `Check` in
@@ -825,7 +837,7 @@ widths are not measured in this lane.
 - Design rule: the view spans the whole viewport; while it is open the page
   drops its stable scrollbar gutter (`app.css`,
   `html:has([data-app-dialog-fullscreen])`). Below 640 px each tab grows from
-  its label's width (`SystemLogsView.svelte:195`, `max-sm:flex-auto`).
+  its label's width (`SystemLogsView.svelte:200`, `max-sm:flex-auto`).
 - Measured (`tests/e2e/system-logs-responsive.spec.ts`): in Chromium against
   the mock backend, the desktop and mobile projects each run the 12 EN, AR and
   DE cases at 375x812, 768x1024, 1280x800, and touch 1024x600. The dialog width
@@ -840,7 +852,8 @@ widths are not measured in this lane.
   audited text using computed colors. It does not model CSS opacity. The narrow
   matrix and open select portals use the compositor alone. It also checks both Clear
   confirmations at rest, on hover and on keyboard focus, in dark and light at
-  1440x900. The Raw search placeholder is measured against its field in all
+  1440x900, and that a Clear confirmation's computed backdrop (background and
+  backdrop filter) equals the view's own in dark and light at 1280x800 (DF-32). The Raw search placeholder is measured against its field in all
   ten locales at 320x720, 390x844, 1440x900 and touch 1024x600. In Arabic at
   390x844, in dark and light, every Storage size and size-limit option is
   checked to paint its value before its unit.
@@ -924,6 +937,8 @@ socket listener, subscription and resume checkpoint. `RawRowWindow` owns
 the held boundary and caps, and `RawFeedback` owns recovery state and
 live-region announcements.
 
+After a clock step an approximate window may not prove its ends; the screen then offers Keep searching instead of an end message.
+
 After reconnect, Raw checks the running boot in every follow state when it
 knows the displayed boot or the follow checkpoint's boot. For This boot, a
 changed boot reloads the newest retained entries without starting Follow. A
@@ -962,7 +977,7 @@ button disappears, provided the operator has not moved focus.
 | `main/system-logs/EventsTab.svelte:37` | props |
 | `main/system-logs/ExportDialog.svelte:17` | props |
 | `main/system-logs/KeepWords.svelte:14` | props |
-| `main/system-logs/LegacyLogDownloads.svelte:21` | props |
+| `main/system-logs/LegacyLogDownloads.svelte:22` | props |
 | `main/system-logs/ParamText.svelte:8` | props |
 | `main/system-logs/RawFollowControl.svelte:17` | props |
 | `main/system-logs/RawLogList.svelte:22` | props |
@@ -972,7 +987,7 @@ button disappears, provided the operator has not moved focus.
 | `main/system-logs/RawLogsTab.svelte:28` | props |
 | `main/system-logs/RecoveryBand.svelte:19` | props |
 | `main/system-logs/SegmentedChoice.svelte:27` | props |
-| `main/system-logs/SharingSection.svelte:21` | props |
+| `main/system-logs/SharingSection.svelte:22` | props |
 | `main/system-logs/ShutdownMark.svelte:21` | props |
 | `main/system-logs/StorageCleanup.svelte:36` | props |
 | `main/system-logs/StorageLimits.svelte:36` | props |
@@ -1116,7 +1131,7 @@ Related browser specs and their entry points:
 
 ### role="status" elements
 
-`main/system-logs/BootPicker.svelte:166`, `main/system-logs/BundleDialog.svelte:102`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:211`, `main/system-logs/ExportDialog.svelte:51`, `main/system-logs/RawLogList.svelte:251`, `main/system-logs/RawLogRow.svelte:163`, `main/system-logs/RawLogsPanel.svelte:101`, `main/system-logs/RawLogsTab.svelte:158`, `main/system-logs/StorageCleanup.svelte:173`, `main/system-logs/StorageLimits.svelte:186`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:224`.
+`main/system-logs/BootPicker.svelte:166`, `main/system-logs/BundleDialog.svelte:102`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:211`, `main/system-logs/ExportDialog.svelte:51`, `main/system-logs/RawLogList.svelte:251`, `main/system-logs/RawLogRow.svelte:163`, `main/system-logs/RawLogsPanel.svelte:101`, `main/system-logs/RawLogsTab.svelte:158`, `main/system-logs/StorageCleanup.svelte:173`, `main/system-logs/StorageLimits.svelte:186`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:229`.
 
 ### Limits and constants
 

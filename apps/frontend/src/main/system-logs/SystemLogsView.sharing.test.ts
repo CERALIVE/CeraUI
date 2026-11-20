@@ -96,7 +96,7 @@ async function openBundle(): Promise<HTMLElement> {
 }
 
 describe("SystemLogsView: Sharing in the Downloads region", () => {
-	it("adds the Sharing group after the shipped rows once the viewer is ready", async () => {
+	it("leads the Downloads region with the Sharing group once the viewer is ready", async () => {
 		viewport(true);
 		const probe = Promise.withResolvers<unknown>();
 		logs.getStorage.mockReturnValue(probe.promise);
@@ -112,7 +112,7 @@ describe("SystemLogsView: Sharing in the Downloads region", () => {
 		).getByTestId("system-logs-downloads");
 		expect(downloads.contains(group)).toBe(true);
 		expect(
-			screen.getByTestId("log-row-system").compareDocumentPosition(group) &
+			group.compareDocumentPosition(screen.getByTestId("log-row-device")) &
 				Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy();
 	});
