@@ -502,7 +502,14 @@ export type WifiDisconnectInput = z.infer<typeof wifiDisconnectInputSchema>;
 export const wifiNewInputSchema = z.object({
 	device: z.string(),
 	ssid: z.string().min(1, 'SSID cannot be empty'),
-	password: z.string().min(WIFI_PASSWORD_MIN, 'Password must be at least 8 characters'),
+	// Empty means an open network: the Wi-Fi dialog joins open rows with
+	// `password: ''`, and the join then passes no password to NetworkManager.
+	password: z
+		.string()
+		.refine(
+			(password) => password === '' || password.length >= WIFI_PASSWORD_MIN,
+			'Password must be at least 8 characters',
+		),
 	security: wifiSecuritySchema.optional(),
 });
 export type WifiNewInput = z.infer<typeof wifiNewInputSchema>;
