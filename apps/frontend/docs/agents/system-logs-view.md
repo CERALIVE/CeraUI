@@ -892,7 +892,9 @@ A reconnect check with a matching epoch and nondecreasing head keeps rows in
 its retained range, along with their paging, pending action and focus. A
 dropped connection cannot settle a check or replay its held pushes. When the
 Retry of a failed check succeeds, focus left on it moves to the first visible
-filter. A changed epoch signals a history clear. A reconnect check without
+filter. A changed UUID makes the frontend reload the history and can result
+from either a history clear or an epoch repair; retained events may be unchanged.
+A reconnect check without
 an epoch refreshes the newest page and retires old actions. Focus left on a
 row moves to the filter bar. A missing epoch with a lower head can replace
 the window from the check's page directly and keep focus on a still-shown ID.

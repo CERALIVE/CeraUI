@@ -1,7 +1,10 @@
 import { expect, spyOn, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { eventsEpoch } from "../modules/events/epoch.ts";
+import {
+	eventsEpoch,
+	resetEventsEpochForTest,
+} from "../modules/events/epoch.ts";
 import {
 	appendBoot,
 	appendEvent,
@@ -211,6 +214,7 @@ test("the ring epoch lives on disk until a clear or a damaged file replaces it",
 	expect(fs.statSync(file).mode & 0o777).toBe(0o600);
 	const stored = "0f4c2a51-8d3e-4b7a-9c1f-2e6d8a4b5c7e";
 	fs.writeFileSync(file, stored);
+	resetEventsEpochForTest();
 	appendEvent(event(1), { ...deps, sync: false });
 	expect(eventsEpoch(deps)).toBe(stored);
 
@@ -218,12 +222,14 @@ test("the ring epoch lives on disk until a clear or a damaged file replaces it",
 	const cleared = eventsEpoch(deps);
 	expect(cleared).toMatch(UUID);
 	expect(cleared).not.toBe(stored);
+	expect(deps.warnings).toEqual([]);
 	fs.writeFileSync(file, stored.slice(0, 12));
+	resetEventsEpochForTest();
 	const repaired = eventsEpoch(deps);
 	expect(repaired).toMatch(UUID);
 	expect(repaired).not.toBe(cleared);
 	expect(eventsEpoch(deps)).toBe(repaired);
-	expect(deps.warnings).toEqual([]);
+	expect(deps.warnings).toHaveLength(1);
 });
 
 test("a failed clear still replaces the ring epoch, and an unwritable store names none", () => {

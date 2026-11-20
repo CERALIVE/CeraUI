@@ -43,8 +43,9 @@ action is retired, and the new-event count restarts.
 
 An `events.list` reply names the ring's `epoch` when the store can keep one.
 Only a matching UUID proves that the previous window belongs to that ring.
-A changed UUID indicates a history clear. A reconnect or gap check without
-an epoch refreshes the newest page and retires every old row and pending
+A changed UUID makes the frontend reload the history and can result from either
+a history clear or an epoch repair; retained events may be unchanged. A
+reconnect or gap check without an epoch refreshes the newest page and retires every old row and pending
 raw-log action, even if the new head reaches or passes the old one. Focus
 left on a row moves to the filter bar. An edge check with no epoch and a
 lower head can replace the window directly from the page it already read.
