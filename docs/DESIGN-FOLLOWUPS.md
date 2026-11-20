@@ -451,6 +451,11 @@ The full table, evidence and the fixed findings are in
   iteration; the shape approved in todo 6 stays until then.
 - **Exit condition:** a decided placement and weight for the bundle, built and captured at
   375, 1024x600 and 1280 px.
+- **Resolved:** Support bundle leads Downloads at every width with the filled primary
+  button. Export this view comes second in outline, then the two outline downloads under
+  Full log files. Below 1024 px the Storage tab opens with Downloads above usage, limits
+  and cleanup. Captured at 375x812, 1024x600 touch and 1280x800 in both themes, in English
+  and Spanish.
 
 ### DF-25: Destructive confirmation text is under 4.5:1 (SL-5, P2)
 
@@ -464,6 +469,10 @@ The full table, evidence and the fixed findings are in
   `text-destructive` on its 10 % (light) or 20 % (dark) wash (`lib/components/ui/button/button.svelte`,
   variant `destructive`), used by every destructive confirmation in CeraUI, so raising it is the
   token decision DF-2 owns, taken once for the app rather than per surface.
+- **Resolved:** the shared destructive confirmation label meets 4.5:1 in dark and light.
+  The shared button keeps its dedicated label ink; the broader red-text rule does not
+  replace it. The System Logs confirmations are checked at rest, on hover and with
+  keyboard focus.
 
 ### DF-26: Spanish System Logs chrome wraps at 320 and 375 px (SL-6, P2)
 
@@ -517,6 +526,9 @@ The full table, evidence and the fixed findings are in
 - **What:** after the browser refuses a download, Retry reads Busy until the ticket expires.
 - **Owner:** the CeraUI device-logs backend owner; listed in the CeraUI PR follow-ups.
 - **Exit condition:** a retry after a refused download starts a new download.
+- **Resolved:** retry from the same authenticated connection replaces its unused export
+  or bundle ticket and starts a new download. The old ticket is refused. Another
+  connection cannot replace it, and an active transfer remains protected.
 
 ### DF-29: An approximate jump has no moment marker (SL-9, P2)
 
@@ -587,6 +599,10 @@ The full table, evidence and the fixed findings are in
   Save and Download are filled lime while Follow avoids lime.
 - **Owner:** the CeraUI design-system owner.
 - **Exit condition:** one backdrop for nested dialogs and one written rule for lime.
+- **Resolved:** `SimpleAlertDialog` uses the shared overlay rather than drawing its own
+  lighter backdrop. The responsive System Logs spec checks the computed backdrop in
+  both themes. [IH-5](../DESIGN.md) reserves the filled lime button for a surface's single
+  primary action: Storage Save and Support bundle are filled; Follow stays outline.
 
 ### DF-33: Two live Raw views at once (SL-14, P3)
 
@@ -633,6 +649,9 @@ The full table, evidence and the fixed findings are in
   list, such as Sources (`apps/frontend/src/main/system-logs/RawLogsFilterBar.svelte:143`),
   renders outside that subtree and keeps this page palette until this item's exit condition
   holds.
+- **Resolved:** the page scrollbar uses the graphite background token for its track and
+  the muted-foreground token for its thumb in both themes. System Logs inherits this
+  palette rather than setting a second scrollbar color.
 
 ### DF-36: Toasts are set in a system font stack, not the app typeface (todo 37)
 
@@ -644,6 +663,8 @@ The full table, evidence and the fixed findings are in
   toast in the app, so todo 37 left it to this owner.
 - **Owner:** the CeraUI design-system owner (shared `Toaster`).
 - **Exit condition:** every toast's text computes to the app's font family.
+- **Resolved:** the shared Sonner toaster inherits the app's font family. The shell
+  browser test checks the computed toast font in both themes.
 
 ### DF-37: The shared relative-time formatter says "just now" in English in every locale (todo 37)
 
@@ -662,6 +683,10 @@ The full table, evidence and the fixed findings are in
 - **Owner:** the CeraUI design-system and i18n owner (`packages/i18n`).
 - **Exit condition:** `formatRelativeTime` returns the locale's word for now in its recency
   window, its tests say so, and the override in `eventTime` is removed.
+- **Resolved:** the shared formatter uses the locale's Intl word for now inside its
+  existing recency window. The HUD and modem observations inherit the fix; Events keeps
+  the same display without its local override. Tests cover all ten locales at three
+  seconds and preserve the numeric cutoff at ten seconds.
 
 ### DF-38: The low-disk View logs action leaves keyboard focus off Storage on the mobile project (todo 37)
 
