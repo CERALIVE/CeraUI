@@ -46,6 +46,8 @@ test("a pending discovery priority write excludes activation until normalization
 		return true;
 	});
 	const deps: HotspotActivationDeps = {
+		readProfileInstance: async () => undefined,
+		releaseConcurrentInterface: async () => true,
 		nmConnSetFields: async () => true,
 		nmApConnAdd: async () => undefined,
 		nmConnDelete: async () => true,
@@ -80,7 +82,7 @@ test("a pending discovery priority write excludes activation until normalization
 	} finally {
 		release.resolve();
 		await discovery;
-		settlePending("wlan0", false);
+		await settlePending("wlan0", false);
 		await f.restore();
 	}
 });

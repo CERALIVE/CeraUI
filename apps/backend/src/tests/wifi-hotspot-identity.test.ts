@@ -118,6 +118,8 @@ function makeRecorder(over: Partial<HotspotActivationDeps> = {}): Recorder {
 
 	let generated = 0;
 	const deps: HotspotActivationDeps = {
+		readProfileInstance: async () => undefined,
+		releaseConcurrentInterface: async () => true,
 		nmConnect: async (uuid) => {
 			activated.push(uuid);
 			return true;

@@ -1,5 +1,4 @@
 import { logger } from "../../helpers/logger.ts";
-import { nmDisconnectActivation } from "../network/network-manager.ts";
 import type { NmProfileInstance } from "../network/network-manager-profile-instance.ts";
 import { getWifiState } from "./state/wifi-state.ts";
 import {
@@ -7,7 +6,11 @@ import {
 	type WifiPendingTeardownResult,
 } from "./wifi-adapter-reconcile-retry.ts";
 import { getWifiInterfaceByMacAddress } from "./wifi-connections.ts";
-import { readHotspotProfileActivity } from "./wifi-hotspot-activity.ts";
+import {
+	type NmActivationReceipt,
+	nmDisconnectActivation,
+	readHotspotProfileActivity,
+} from "./wifi-hotspot-activity.ts";
 import { recordHotspotProfileDeletion } from "./wifi-hotspot-discovery-fence.ts";
 import { syncWifiStateCache } from "./wifi-hotspot-monitor.ts";
 import { retireHotspotProfileAuthority } from "./wifi-hotspot-profile-observation.ts";
@@ -33,14 +36,13 @@ type CreatedHotspotCleanup = {
 	readonly iface: WifiInterfaceWithHotspot;
 	readonly hotspot: WifiHotspot;
 	readonly activationAttempted: boolean;
-	readonly activePath?: string | undefined;
+	readonly activation: NmActivationReceipt | undefined;
 	readonly instance: NmProfileInstance | null | undefined;
 	readonly allocation?: HybridLegAllocation;
 };
 
 type CleanupProgress = {
 	instance: NmProfileInstance | null | undefined;
-	deactivated: boolean;
 	prior?: { cleanupConfirmed: boolean };
 };
 
@@ -50,11 +52,8 @@ export async function cleanupCreatedHotspotProfile(
 	deps: HotspotActivationDeps,
 	prior?: { cleanupConfirmed: boolean; autoconnectDisabled: boolean },
 ): Promise<boolean> {
-	// A caller without profile readback cannot own a durable cleanup obligation.
-	if (!deps.readProfileInstance) return true;
 	const progress: CleanupProgress = {
 		instance: target.instance,
-		deactivated: !target.activationAttempted,
 		...(prior ? { prior } : {}),
 	};
 	const result = await cleanupCreatedProfile(owner, target, deps, progress);
@@ -119,16 +118,14 @@ async function cleanupCreatedProfile(
 	};
 	const deactivated =
 		!target.activationAttempted ||
-		(progress.deactivated && (await activity()) === "inactive") ||
-		(target.activePath !== undefined &&
-			(await act({
+		(!replaced && (await activity()) === "inactive") ||
+		(target.activation !== undefined &&
+			((await act({
 				uuid,
 				kind: "down",
-				run: () =>
-					nmDisconnectActivation(deps.nmDisconnect, uuid, target.activePath),
-			}))) ||
-		(!replaced && (await activity()) === "inactive");
-	progress.deactivated = deactivated;
+				run: () => nmDisconnectActivation(uuid, target.activation, deps),
+			})) ||
+				(!replaced && (await activity()) === "inactive")));
 	const deleted = prior
 		? prior.cleanupConfirmed
 		: deactivated &&
@@ -223,7 +220,7 @@ async function cleanupCreatedProfile(
 	if (target.allocation?.created) {
 		if (deps.rollbackConcurrentInterface)
 			await deps.rollbackConcurrentInterface(target.allocation);
-		else await deps.releaseConcurrentInterface?.(target.allocation.ifname);
+		else await deps.releaseConcurrentInterface(target.allocation.ifname);
 	}
 	return { complete: true, stopped: true };
 }

@@ -5,10 +5,8 @@ import * as restore from "../../../src/modules/wifi/wifi-adapter-mode-restore.ts
 import * as devices from "../../../src/modules/wifi/wifi-device-list.ts";
 import * as activation from "../../../src/modules/wifi/wifi-hotspot-activation.ts";
 import * as stop from "../../../src/modules/wifi/wifi-hotspot-config.ts";
-import {
-	MAC,
-	PROFILE,
-} from "../../../src/tests/helpers/wifi-autoconnect-fixture.ts";
+import { getWifiIdToMacAddress } from "../../../src/modules/wifi/wifi-interfaces.ts";
+import { MAC, PROFILE } from "../../../src/tests/helpers/wifi-autoconnect-fixture.ts";
 import { hotspotLossFixture } from "../../../src/tests/helpers/wifi-hotspot-loss-fixture.ts";
 import * as radio from "./first-ap-radio.ts";
 import { nativeRecoveryCase } from "./first-ap-recovery.ts";
@@ -31,10 +29,7 @@ test("native qualification drives observed loss, public Stop and actual owner re
 	const original = runSpy.getMockImplementation();
 	if (!original) throw new Error("Missing fixture NM boundary");
 	runSpy.mockImplementation(async (binary, args, options) => {
-		if (
-			binary === "nmcli" &&
-			args.slice(0, 2).join(" ") === "connection down"
-		) {
+		if (binary === "nmcli" && args.slice(0, 2).join(" ") === "connection down") {
 			f.lose();
 			return "Connection successfully deactivated";
 		}
@@ -49,21 +44,28 @@ test("native qualification drives observed loss, public Stop and actual owner re
 		}
 		return ["Policy", "Radio", "yes", "no", "yes"];
 	});
-	spyOn(activation, "wifiHotspotStart").mockImplementation(async () =>
-		f.start(),
-	);
-	spyOn(stop, "wifiHotspotStop").mockImplementation(async (request) =>
-		stopBackend(request, {
-			...stop.defaultHotspotStopDeps,
-			nmDisconnect: async () => {
-				f.lose();
-				return true;
-			},
-			rescan: async () => undefined,
-			broadcastState: () => undefined,
-			setDupIpSuppression: () => undefined,
-		}),
-	);
+	spyOn(activation, "wifiHotspotStart").mockImplementation(async () => f.start());
+	spyOn(stop, "wifiHotspotStop").mockImplementation(async (request) => {
+		const current = f.row();
+		const ids = getWifiIdToMacAddress();
+		const previous = ids[current.id];
+		ids[current.id] = MAC;
+		try {
+			return await stopBackend(request, {
+				...stop.defaultHotspotStopDeps,
+				nmDisconnect: async () => {
+					f.lose();
+					return true;
+				},
+				rescan: async () => undefined,
+				broadcastState: () => undefined,
+				setDupIpSuppression: () => undefined,
+			});
+		} finally {
+			if (previous === undefined) delete ids[current.id];
+			else ids[current.id] = previous;
+		}
+	});
 	const phases: string[] = [];
 	let failedStartAt = -1;
 	await nativeRecoveryCase(

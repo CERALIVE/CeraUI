@@ -81,7 +81,7 @@ test("a deferred replacement refusal echoes the Start UUID after its accepted re
 			success: Boolean(
 				await (operation.kind === "modify"
 					? operation.run(operation.fields)
-					: operation.run()),
+					: operation.run(instance)),
 			),
 			instance,
 		}),
@@ -141,7 +141,7 @@ test("a deferred replacement refusal echoes the Start UUID after its accepted re
 			},
 		]);
 	} finally {
-		settlePending(f.row.ifname, false);
+		await settlePending(f.row.ifname, false);
 		await f.restore();
 	}
 });

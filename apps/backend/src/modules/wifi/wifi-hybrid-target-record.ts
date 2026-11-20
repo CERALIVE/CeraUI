@@ -174,6 +174,15 @@ export async function currentTarget(
 	record: TargetRecord,
 	observe?: (identity: HybridLegIdentity) => void,
 ): Promise<boolean> {
+	return (await observeTarget(ifname, record, observe)) === "current";
+}
+
+/** A failed probe is not proof of loss; only definite replacement or kernel absence retires a claim. */
+export async function observeTarget(
+	ifname: string,
+	record: TargetRecord,
+	observe?: (identity: HybridLegIdentity) => void,
+): Promise<"current" | "retired" | "unseen" | "unknown"> {
 	const boot = await bootIdReader();
 	const parent = await sampleRadio(
 		record.parentIfname,
@@ -183,15 +192,24 @@ export async function currentTarget(
 	const target = await sampleRadio(ifname, radioIdentityReaders, undefined);
 	const identity = wifiRadioIdentity.state.rows.get(record.parentIfname);
 	if (
+		(boot?.trim() && boot.trim() !== record.boot) ||
+		(identity && identity.incarnation !== record.parentIncarnation) ||
+		(parent && !sameLifetime(parent.lifetime, record.parent)) ||
+		(target && !sameLifetime(target.lifetime, record.target))
+	) {
+		observe?.(hybridLegIdentity(target && ifname, target?.lifetime, undefined));
+		return "retired";
+	}
+	if (
 		boot?.trim() !== record.boot ||
 		identity?.incarnation !== record.parentIncarnation ||
 		(!parent?.macReadFailed &&
 			parent?.permanentMac !== identity?.permanentMac) ||
-		!sameLifetime(parent?.lifetime, record.parent) ||
-		!sameLifetime(target?.lifetime, record.target)
+		!parent ||
+		!target
 	) {
 		observe?.(hybridLegIdentity(target && ifname, target?.lifetime, undefined));
-		return false;
+		return target ? "unknown" : "unseen";
 	}
 	const info = await interfaceRunner("iw", [
 		"dev",
@@ -200,8 +218,13 @@ export async function currentTarget(
 	]).catch(() => "");
 	const wireless = interfaceIdentity(info);
 	observe?.(hybridIwLegIdentity(info, target?.lifetime));
-	return (
-		wireless?.ifindex === record.wireless.ifindex &&
+	if (
+		wireless &&
+		(wireless.ifindex !== record.wireless.ifindex ||
+			wireless.wdev !== record.wireless.wdev)
+	)
+		return "retired";
+	return wireless?.ifindex === record.wireless.ifindex &&
 		Number(wireless.ifindex) === record.target.ifindex &&
 		Number(/^\s*wiphy\s+(\d+)\s*$/m.exec(info)?.[1]) === record.target.wiphy &&
 		/^\s*Interface\s+(\S+)\s*$/m.exec(info)?.[1] === ifname &&
@@ -209,7 +232,8 @@ export async function currentTarget(
 		wireless.wdev === record.wireless.wdev &&
 		wifiRadioIdentity.state.rows.get(record.parentIfname)?.incarnation ===
 			record.parentIncarnation
-	);
+		? "current"
+		: "unknown";
 }
 
 /** Observation fences reactivation, but never grants creation or deletion authority. */

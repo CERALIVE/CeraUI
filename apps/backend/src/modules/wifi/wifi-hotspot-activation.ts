@@ -28,7 +28,6 @@ import {
 	nmConnSetFields,
 	nmDeviceProp,
 	nmDisconnect,
-	nmDisconnectActivation,
 } from "../network/network-manager.ts";
 import {
 	type NmProfileInstance,
@@ -79,6 +78,10 @@ import {
 	selectConcurrentApInterface,
 } from "./wifi-concurrent-interface.ts";
 import { getWifiInterfaceByMacAddress } from "./wifi-connections.ts";
+import {
+	type NmActivationReceipt,
+	nmDisconnectActivation,
+} from "./wifi-hotspot-activity.ts";
 import { cleanupCreatedHotspotProfile } from "./wifi-hotspot-cleanup.ts";
 import {
 	canAdoptHotspotProfile,
@@ -652,7 +655,7 @@ export async function startHotspotLocked(
 		if (!stopped.success) return;
 		if (wifiInterface.concurrentHotspot === virtual)
 			transitionVirtualBinding(wifiInterface, { kind: "retire" });
-		await deps.releaseConcurrentInterface?.(virtual.ifname);
+		await deps.releaseConcurrentInterface(virtual.ifname);
 		deps.broadcastState();
 		syncWifiStateCache(macAddress, wifiInterface);
 	};
@@ -794,8 +797,16 @@ export async function startHotspotLocked(
 		return result.success;
 	};
 	let activePath: string | undefined;
-	const activated = (path: string) => {
-		activePath = path;
+	let activeReceipt: NmActivationReceipt | undefined;
+	const connect = (
+		uuid: string,
+		before: NmProfileInstance | null | undefined,
+	) => {
+		const runId = before?.runId;
+		return deps.nmConnect(uuid, HOTSPOT_UP_TO, (path) => {
+			activePath = path;
+			if (runId) activeReceipt = { path, runId };
+		});
 	};
 	let activationAttempted = false;
 	let failedAdd: NmApConnAddError | undefined;
@@ -1002,7 +1013,7 @@ export async function startHotspotLocked(
 					kind: "down",
 					run: async () =>
 						owned(uuid, identity.profileMac) &&
-						nmDisconnectActivation(deps.nmDisconnect, uuid, activePath),
+						nmDisconnectActivation(uuid, activeReceipt, deps),
 				}));
 			return false;
 		};
@@ -1019,7 +1030,7 @@ export async function startHotspotLocked(
 			await deps.wifiUpdateSavedConns();
 			if (binding && !(await operation.permit())) return rollback();
 			if (!owned(conn, identity.profileMac)) return rollback();
-			profileInstance = await deps.readProfileInstance?.(conn);
+			profileInstance = await deps.readProfileInstance(conn);
 			const rebound = await writeProfile({
 				uuid: existingUuid,
 				kind: "modify",
@@ -1044,14 +1055,11 @@ export async function startHotspotLocked(
 						{
 							profile: profileInstance,
 							activePath,
+							activeRunId: activeReceipt?.runId,
 						},
 						deps,
 					)) ||
-						!(await nmDisconnectActivation(
-							deps.nmDisconnect,
-							existingUuid,
-							activePath,
-						)))
+						!(await nmDisconnectActivation(existingUuid, activeReceipt, deps)))
 				)
 					result.reason = "deactivation-failed";
 				return result;
@@ -1059,10 +1067,10 @@ export async function startHotspotLocked(
 			const up = await writeProfile({
 				uuid: existingUuid,
 				kind: "up",
-				run: async () => {
+				run: async (before) => {
 					if (!(await ready())) return false;
 					if (binding && !(await operation.permit())) return false;
-					return deps.nmConnect(existingUuid, HOTSPOT_UP_TO, activated);
+					return connect(existingUuid, before);
 				},
 			});
 			if (binding && (up || activePath) && !(await operation.permit()))
@@ -1146,11 +1154,11 @@ export async function startHotspotLocked(
 				!(await writeProfile({
 					uuid,
 					kind: "up",
-					run: async () => {
+					run: async (before) => {
 						if (!(await ready())) return false;
 						if (binding && !(await operation.permit())) return false;
 						activationAttempted = true;
-						return deps.nmConnect(uuid, HOTSPOT_UP_TO, activated);
+						return connect(uuid, before);
 					},
 				}))
 			)
@@ -1194,7 +1202,11 @@ export async function startHotspotLocked(
 				uuid: conn,
 				ifname: activationIfname,
 				credentialOwner: owner,
-				activation: { profile: profileInstance, activePath },
+				activation: {
+					profile: profileInstance,
+					activePath,
+					activeRunId: activeReceipt?.runId,
+				},
 				binding,
 				radioProof: operation.observe,
 				...(concurrentInterface ? { allocation: concurrentInterface } : {}),
@@ -1214,7 +1226,7 @@ export async function startHotspotLocked(
 					iface: wifiInterface,
 					hotspot,
 					activationAttempted,
-					activePath,
+					activation: activeReceipt,
 					instance: profileInstance,
 					...(concurrentInterface ? { allocation: concurrentInterface } : {}),
 				},

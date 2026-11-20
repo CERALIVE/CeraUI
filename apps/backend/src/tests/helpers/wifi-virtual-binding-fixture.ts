@@ -160,7 +160,7 @@ export async function virtualBindingFixture() {
 			modified.add(uuid);
 			return true;
 		},
-		releaseConcurrentInterface: async () => undefined,
+		releaseConcurrentInterface: async () => true,
 		broadcastState: () => undefined,
 		setDupIpSuppression: () => undefined,
 		rescan: async () => undefined,

@@ -101,7 +101,7 @@ test.each(["hotspot", "hybrid"] as const)(
 		const stopping = wifiHotspotStop({ device: 0 }, s.stop);
 		await gate.entered;
 		s.row.hotspot.conn = "replacement-hint";
-		settlePending("wlan0", false);
+		await settlePending("wlan0", false);
 		gate.release();
 		const result = await stopping;
 		expect({ result, downs: s.downs, state: s.model.phase }).toEqual({
@@ -117,7 +117,7 @@ test.each(["unreadable", "malformed"] as const)(
 	async (query) => {
 		const s = await setup("hotspot");
 		await wifiHotspotStart({ device: 0 }, s.start);
-		settlePending("wlan0", false);
+		await settlePending("wlan0", false);
 		s.model.query = query;
 		s.model.reply = "refuse";
 		expect(await wifiHotspotStop({ device: 0 }, s.stop)).toEqual({

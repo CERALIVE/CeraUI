@@ -16,7 +16,7 @@ test.each(["hotspot", "hybrid"] as const)(
 		f.confirmsActivation = false;
 		await f.startRestore(mode);
 		for (let attempt = 0; attempt < 2; attempt++) {
-			settlePending(f.row().ifname, false);
+			await settlePending(f.row().ifname, false);
 			f.list(["wlan0:wifi:disconnected:"]);
 			await f.advance();
 		}
@@ -25,7 +25,7 @@ test.each(["hotspot", "hybrid"] as const)(
 		f.persistMode(MAC, "station");
 		await notifyWifiAdapterModeEdge();
 		expect(getBootReadiness().degradedSubsystems).toEqual(["unrelated"]);
-		settlePending(f.row().ifname, false);
+		await settlePending(f.row().ifname, false);
 		expect(getBootReadiness().degradedSubsystems).toEqual(["unrelated"]);
 		await f.advance(300_000);
 		expect(f.attempts).toHaveLength(3);

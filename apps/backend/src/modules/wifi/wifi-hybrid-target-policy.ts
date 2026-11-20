@@ -28,10 +28,14 @@ import {
 import type { HybridLegAllocation } from "./wifi-hybrid-leg-release.ts";
 import {
 	currentTarget,
+	observeTarget,
 	selectedTargets,
 	targetRecords,
 } from "./wifi-hybrid-target-record.ts";
-import { wifiRadioIdentity } from "./wifi-radio-identity.ts";
+import {
+	radioIdentityReaders,
+	wifiRadioIdentity,
+} from "./wifi-radio-identity.ts";
 
 export async function connectionsPermitAdoption(
 	parentIfname: string,
@@ -85,10 +89,6 @@ export async function releaseCreatedHybridTarget(target: {
 		selectedTargets.delete(target.ifname);
 }
 
-export function releaseConcurrentApInterface(
-	ifname: string,
-	target?: HybridLegAllocation,
-): Promise<boolean> | Promise<void>;
 export async function releaseConcurrentApInterface(
 	ifname: string,
 	target?: HybridLegAllocation,
@@ -99,8 +99,18 @@ export async function releaseConcurrentApInterface(
 	if (target && targetRecords.get(target) !== record) return true;
 	const ownsSelection = () => selectedTargets.get(ifname) === stored;
 	try {
-		if (!(await currentTarget(ifname, record)) || !(await idleTarget(ifname)))
-			return false;
+		const observed = await observeTarget(ifname, record);
+		const interfaces =
+			observed === "unseen"
+				? await radioIdentityReaders.listInterfaces()
+				: undefined;
+		if (!ownsSelection()) return true;
+		if (observed === "retired" || interfaces?.includes(ifname) === false) {
+			const { record: _record, ...witness } = stored;
+			selectedTargets.set(ifname, witness);
+			return true;
+		}
+		if (observed !== "current" || !(await idleTarget(ifname))) return false;
 		const current = (await nmDeviceProp(ifname, "GENERAL.AUTOCONNECT"))?.[0];
 		if (!ownsSelection()) return true;
 		const { priorAutoconnect: _prior, ...released } = record;

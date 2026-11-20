@@ -288,7 +288,7 @@ beforeEach(async () => {
 		},
 	);
 	spyOn(defaultHotspotDeps, "releaseConcurrentInterface").mockImplementation(
-		async () => {},
+		async () => true,
 	);
 	mockHotspotConfirmationPoll();
 	spyOn(defaultHotspotStopDeps, "nmConnSetFields").mockImplementation(
@@ -304,7 +304,7 @@ beforeEach(async () => {
 	spyOn(
 		defaultHotspotStopDeps,
 		"releaseConcurrentInterface",
-	).mockImplementation(async () => {});
+	).mockImplementation(async () => true);
 	spyOn(defaultHotspotStopDeps, "broadcastState").mockImplementation(() => {});
 	spyOn(defaultHotspotStopDeps, "setDupIpSuppression").mockImplementation(
 		() => {},

@@ -194,6 +194,7 @@ export type HotspotConfirmationTarget = {
 export type HotspotActivationInstance = {
 	readonly profile: NmProfileInstance | null | undefined;
 	readonly activePath: string | undefined;
+	readonly activeRunId: string | undefined;
 };
 
 /**
@@ -210,7 +211,7 @@ export type HotspotActivationDeps = {
 	) => { staApCombo: { supported: boolean } } | undefined;
 	nmConnect: (...args: Parameters<typeof nmConnect>) => Promise<unknown>;
 	/** Production reads NM instance evidence; injected NM implementations supply their own. */
-	readProfileInstance?: typeof readNmProfileInstance;
+	readProfileInstance: typeof readNmProfileInstance;
 	nmConnSetFields: (
 		uuid: string,
 		fields: Record<string, string>,
@@ -243,10 +244,10 @@ export type HotspotActivationDeps = {
 	readHybridChannel?: typeof readHybridStationChannel;
 	validateConcurrentInterface?: typeof revalidateConcurrentApInterface;
 	confirmHybridActivation?: typeof confirmHybridActivation;
-	releaseConcurrentInterface?: (
+	releaseConcurrentInterface: (
 		ifname: string,
 		target?: HybridLegAllocation,
-	) => Promise<boolean> | Promise<void>;
+	) => Promise<boolean>;
 	rollbackConcurrentInterface?: (target: HybridLegAllocation) => Promise<void>;
 	/**
 	 * Does the operator want this adapter's AP to run ALONGSIDE its station leg?

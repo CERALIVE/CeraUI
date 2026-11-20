@@ -187,6 +187,7 @@ beforeEach(async () => {
 		pruneHotspotConns: async () => {},
 		releaseConcurrentInterface: async () => {
 			effects.push("release");
+			return true;
 		},
 		ensureConcurrentInterface: async () => {
 			effects.push("virtual");
@@ -202,6 +203,7 @@ beforeEach(async () => {
 		},
 		releaseConcurrentInterface: async () => {
 			effects.push("release");
+			return true;
 		},
 		broadcastState: () => {},
 		setDupIpSuppression: () => {},

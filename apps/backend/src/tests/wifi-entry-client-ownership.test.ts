@@ -206,7 +206,7 @@ test("finding 14: streaming during hybrid AP teardown publishes the accepted tra
 		return true;
 	});
 	spyOn(defaultHotspotStopDeps, "releaseConcurrentInterface").mockResolvedValue(
-		undefined,
+		true,
 	);
 	try {
 		expect(await request("hotspot", state.context, state.before)).toEqual({

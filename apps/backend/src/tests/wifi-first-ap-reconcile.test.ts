@@ -64,7 +64,7 @@ for (const remaining of ["none", "delete", "down"] as const) {
 					...defaultHotspotStopDeps,
 					broadcastState: () => undefined,
 					setDupIpSuppression: () => undefined,
-					releaseConcurrentInterface: async () => undefined,
+					releaseConcurrentInterface: async () => true,
 					rescan: async () => undefined,
 				},
 			);

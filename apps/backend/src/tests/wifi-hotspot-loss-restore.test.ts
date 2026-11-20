@@ -64,7 +64,7 @@ test("explicit Stop followed by loss keeps station intent and never restores", a
 				nmDisconnect: async () => true,
 				broadcastState: () => undefined,
 				setDupIpSuppression: () => undefined,
-				releaseConcurrentInterface: async () => undefined,
+				releaseConcurrentInterface: async () => true,
 				rescan: async () => undefined,
 				publishOutcome: () => undefined,
 			},
@@ -111,7 +111,7 @@ test("accepted recovery without NM confirmation also exhausts three attempts", a
 	lose();
 	await notifyWifiAdapterModeEdge();
 	for (let attempt = 0; attempt < 3; attempt++) {
-		settlePending(row().ifname, false);
+		await settlePending(row().ifname, false);
 		f.list(["wlan0:wifi:disconnected:"]);
 		await advance();
 	}

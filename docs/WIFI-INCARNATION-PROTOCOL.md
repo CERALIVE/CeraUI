@@ -237,8 +237,11 @@ report uncertain outcomes rather than claiming an atomic transaction.
   is detected on readback and is not reported as our commit
   (`wifi-credential-publish-radio.test.ts`). Restored files retain their
   bytes and inode, not their original ctime.
-- **Activation rollback and profile deletion.** Rollback never substitutes a
-  UUID for a missing Up path. If activity is unknown or the profile still has
+- **Activation rollback and profile deletion.** Rollback binds the Up path
+  to its original NetworkManager bus and daemon identity. Every exact Down
+  rechecks that identity before dispatch. A missing path, a different run,
+  or unreadable identity never authorizes a Down by path or UUID. Cleanup
+  checks fresh activity instead. If activity is unknown or the profile still has
   an active connection, retain it and issue the existing unknown-mode
   notice (`cleanup-pending` or `deactivation-failed`). First-profile deletion
   also checks inactivity immediately before dispatch; a successful exact
@@ -250,15 +253,17 @@ report uncertain outcomes rather than claiming an atomic transaction.
   unacknowledged Down, without repeating the command.
   NetworkManager does not offer a delete-if-inactive transaction: an
   independent activation after the final inventory answer can still race
-  Delete. Likewise an NM daemon replacement can reset active-path numbering;
-  the profile proof checks the daemon before dispatch, not inside `nmcli`.
+  Delete. NetworkManager can also restart between the final run check and
+  `nmcli` dispatch; `nmcli` itself cannot bind its request to a daemon run.
+  The renumbering tests cover restarts before the check, not inside that gap.
 - **Deferred borrowed-leg release.** Expiry and failed exact Down both try
   release using Start's allocator receipt under the owner lock. Only the
   still-owned idle leg can regain its previous autoconnect. Busy or
-  unreadable state retains a release obligation in bounded reconciliation
-  and produces the unknown-mode notice. A successor selection is never
-  adopted for the release. Tests cover idle expiry, release after busy
-  expiry, and a committed Down whose reply was lost.
+  unreadable state retains a release obligation with a bounded automatic
+  retry schedule and produces the unknown-mode notice. Confirmed removal or
+  replacement retires the old claim without restoring policy on a successor.
+  Tests cover idle expiry, release after busy expiry, a committed Down whose
+  reply was lost, and a replaced leg.
 
 ### Recorded deviation: the Start `attempt` correlation id
 

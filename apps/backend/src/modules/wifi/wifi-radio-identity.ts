@@ -1,4 +1,4 @@
-import { realpath } from "node:fs/promises";
+import { readdir, realpath } from "node:fs/promises";
 import type { MacAddress } from "../network/network-manager.ts";
 import type {
 	BaseWifiInterface,
@@ -43,7 +43,10 @@ export function getWifiRadioShadowFailures(): number {
 }
 
 // The bracketed lifetime sample owns adapter identity.
-export const radioIdentityReaders: RadioIdentityReaders = {
+export const radioIdentityReaders: RadioIdentityReaders & {
+	readonly listInterfaces: () => Promise<string[] | undefined>;
+} = {
+	listInterfaces: () => readdir("/sys/class/net").catch(() => undefined),
 	readDevicePath: async (ifname) => {
 		const { nmDeviceProp } = await import("../network/network-manager.ts");
 		return (await nmDeviceProp(ifname, "GENERAL.PATH"))?.[0];

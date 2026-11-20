@@ -22,7 +22,6 @@ import {
 	nmcliParseSep,
 	nmDeviceProp,
 	nmDevices,
-	nmDisconnectActivation,
 } from "../network/network-manager.ts";
 import {
 	type NmProfileInstance,
@@ -42,6 +41,7 @@ import {
 } from "./wifi-adapter-lock.ts";
 import { registerWifiAdapterLegRelease } from "./wifi-adapter-reconcile-retry.ts";
 import { getWifiInterfaceByMacAddress } from "./wifi-connections.ts";
+import { nmDisconnectActivation } from "./wifi-hotspot-activity.ts";
 import type {
 	HotspotActivationDeps,
 	HotspotActivationInstance,
@@ -147,6 +147,7 @@ export function recordPendingHotspotModify(
 		pending.activation = {
 			profile: after,
 			activePath: pending.activation?.activePath,
+			activeRunId: pending.activation?.activeRunId,
 		};
 	}
 }
@@ -159,9 +160,11 @@ export async function matchesHotspotActivation(
 ): Promise<boolean> {
 	if (
 		!activation.activePath ||
+		!activation.activeRunId ||
+		activation.activeRunId !== activation.profile?.runId ||
 		!sameNmProfileActivation(
 			activation.profile,
-			await deps.readProfileInstance?.(uuid),
+			await deps.readProfileInstance(uuid),
 		)
 	)
 		return false;
@@ -193,16 +196,17 @@ function settleCaptured(
 
 /** Trusted settlement/cancellation of the current pending operation. */
 export function settlePending(ifname: string, confirmed: true): void;
-export function settlePending(
-	ifname: string,
-	confirmed: false,
-): void | Promise<void>;
+export function settlePending(ifname: string, confirmed: false): Promise<void>;
 export function settlePending(
 	ifname: string,
 	confirmed: boolean,
 ): void | Promise<void> {
 	const pending = pendingHotspots.get(ifname);
-	if (pending) return settleCaptured(pending, confirmed, undefined, true);
+	if (!confirmed)
+		return Promise.resolve(
+			pending && settleCaptured(pending, false, undefined, true),
+		);
+	if (pending) void settleCaptured(pending, true, undefined, true);
 }
 
 /** Supersede older observers before another transaction owns the transition. */
@@ -417,9 +421,11 @@ export function registerPendingConfirmation(
 						)
 							return false;
 						const stopped = await nmDisconnectActivation(
-							deps.nmDisconnect,
 							target.uuid,
-							activation.activePath,
+							activation.activePath && activation.activeRunId
+								? { path: activation.activePath, runId: activation.activeRunId }
+								: undefined,
+							deps,
 						);
 						await settleCaptured(pending, false, { stopped });
 						return true;

@@ -54,8 +54,7 @@ export async function teardownHotspotLocked(
 	const wasConcurrent = concurrent !== undefined;
 	const activeConn = wifiInterface.activeConn;
 	const activeMode = wifiInterface.activeMode;
-	const pending = settlePending(wifiInterface.ifname, false);
-	if (pending) await pending;
+	await settlePending(wifiInterface.ifname, false);
 
 	beginHotspotTransition(wifiInterface, "deactivating");
 	deps.broadcastState();

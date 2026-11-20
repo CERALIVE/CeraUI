@@ -106,7 +106,7 @@ test.each(["stopped", "failed", "new-active-path", "new-profile"] as const)(
 				success: Boolean(
 					await (operation.kind === "modify"
 						? operation.run(operation.fields)
-						: operation.run()),
+						: operation.run(instance)),
 				),
 				instance,
 			}),
@@ -184,7 +184,7 @@ async function refusesHybridLegReplacement(
 	const release = spyOn(
 		defaultHotspotDeps,
 		"releaseConcurrentInterface",
-	).mockResolvedValue();
+	).mockResolvedValue(true);
 	let legIndex =
 		legAtAllocation === "present"
 			? "21"
@@ -324,7 +324,11 @@ test.each([true, false])(
 				macAddress: key,
 				uuid: "test-ap",
 				ifname: "wlan0",
-				activation: { profile: instance, activePath },
+				activation: {
+					profile: instance,
+					activePath,
+					activeRunId: instance.runId,
+				},
 				binding: bindingForRow(key, fixture.row),
 			},
 			fixture.row,
@@ -364,7 +368,7 @@ test.each([true, false])(
 			expect(fixture.row.hotspot.transition).toBeUndefined();
 		} finally {
 			release.resolve();
-			settlePending("wlan0", false);
+			await settlePending("wlan0", false);
 			await fixture.restore();
 		}
 	},

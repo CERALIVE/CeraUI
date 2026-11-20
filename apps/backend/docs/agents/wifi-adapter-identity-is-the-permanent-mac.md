@@ -472,6 +472,9 @@ A complete inventory that confirms the profile is absent clears the cached
 UUID and retires the durable creation record, even when no activation path
 was captured. Retain the record while the owned profile is still active and
 cleanup remains pending; restart recovery can still need that evidence.
+The Up path is scoped to the original NetworkManager bus and daemon run.
+The rollback Down seam rechecks that run before dispatch; a mismatch only
+allows recovery from fresh inventory, never reuse of an old activation path.
 
 Monitor events trigger confirmation rather than proving it. The pending
 activation captures its UUID, hotspot object, activation interface, profile

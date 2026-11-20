@@ -250,11 +250,9 @@ test("a saved hybrid Start restores its borrowed leg's autoconnect after its sta
 		});
 		f.deps.ensureConcurrentInterface = async () => target;
 		const releaseLeg = f.deps.releaseConcurrentInterface;
-		let release: Promise<void> | undefined;
-		f.deps.releaseConcurrentInterface = (...args) => {
-			release = releaseLeg?.(...args);
-			return release ?? Promise.resolve();
-		};
+		let release: Promise<boolean> | undefined;
+		f.deps.releaseConcurrentInterface = (...args) =>
+			(release = releaseLeg(...args));
 		const down = f.deps.nmDisconnect;
 		// NetworkManager completes this Down after any release already checking the leg.
 		f.deps.nmDisconnect = async (id) => {
@@ -653,3 +651,49 @@ test("a saved hybrid channel refusal without an Up path does not Down the succes
 		await f.restore();
 	}
 });
+
+test.each(["removed", "replaced"] as const)(
+	"deferred hybrid failure retires a %s leg claim without restoring policy onto a successor",
+	async (loss) => {
+		const f = await hybrid();
+		try {
+			const leg = await borrowLeg(f);
+			const terminal = Promise.withResolvers<unknown>();
+			const releasePoll = Promise.withResolvers<void>();
+			f.deps.pollHotspotActive = async () => false;
+			f.deps.publishOutcome = (_kind, _device, outcome) =>
+				terminal.resolve(outcome);
+			const retry = retries.retryWithBackoff;
+			spyOn(retries, "retryWithBackoff").mockImplementation(
+				async (action, options) => {
+					if (!options?.signal) return retry(action, options);
+					await releasePoll.promise;
+					return action();
+				},
+			);
+			expect(await f.start()).toEqual({ success: true });
+			f.observe(undefined, "ap");
+			if (loss === "removed") {
+				spyOn(radioIdentityReaders, "listInterfaces").mockResolvedValue([
+					"wlan0",
+				]);
+				f.loseNextLegSample();
+			} else f.replaceLeg();
+			releasePoll.resolve();
+
+			expect(await terminal.promise).toEqual({
+				success: false,
+				error: "not-confirmed",
+			});
+			expect(
+				selectedTargets.get(LEG)?.record?.priorAutoconnect,
+			).toBeUndefined();
+			expect(f.row.concurrentHotspot?.activeConn ?? null).toBeNull();
+			expect(leg.writes).toEqual([]);
+		} finally {
+			cancelWifiAdapterReconciliation();
+			resetConcurrentInterfaceDepsForTest();
+			await f.restore();
+		}
+	},
+);
