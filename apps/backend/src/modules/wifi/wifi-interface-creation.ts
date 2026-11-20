@@ -1,4 +1,7 @@
+import { existsSync } from "node:fs";
 import { endianness } from "node:os";
+
+import { ID_RE } from "../../helpers/run.ts";
 
 export type CreatedInterface = {
 	readonly ifindex: string;
@@ -80,9 +83,19 @@ export function createdInterfaceReceipt(
 		: undefined;
 }
 
-/** Wi-Fi name candidates; NM determines radio type, and clap AP legs are separate. */
+export const wifiInterfaceReaders = { pathExists: existsSync };
+
+/**
+ * Wi-Fi candidates by name or by the kernel's own cfg80211 link; NM still
+ * determines the radio type, and clap AP legs are separate.
+ */
 export function isSupportedWifiIfname(ifname: string): boolean {
-	return ifname.startsWith("wl");
+	if (isConcurrentApIfname(ifname)) return false;
+	if (ifname.startsWith("wl")) return true;
+	return (
+		ID_RE.test(ifname) &&
+		wifiInterfaceReaders.pathExists(`/sys/class/net/${ifname}/phy80211`)
+	);
 }
 
 export function concurrentApIfname(parentIfname: string): string {

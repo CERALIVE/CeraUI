@@ -33,6 +33,7 @@ import { wifiHotspotPrepare } from "../modules/wifi/wifi-hotspot-activation.ts";
 import * as hotspotConfig from "../modules/wifi/wifi-hotspot-config.ts";
 import { wifiHotspotStop } from "../modules/wifi/wifi-hotspot-config.ts";
 import { canHotspot } from "../modules/wifi/wifi-hotspot-types.ts";
+import { wifiInterfaceReaders } from "../modules/wifi/wifi-interface-creation.ts";
 import {
 	resetWifiConnectionModeCache,
 	resetWifiInterfaceDiscoveryForTest,
@@ -315,6 +316,22 @@ test("(3) two non-clap interfaces on one phy remain separate limited rows", asyn
 	expect(
 		Object.values(observed.wifi).map((row) => row.degraded_reason),
 	).toEqual(["permanent-mac-unresolved", "permanent-mac-unresolved"]);
+});
+
+test("(3b) a non-wl netdev on that phy counts only with the kernel's cfg80211 link", async () => {
+	const topology = [radio, { ...radio, ifname: "ap0", ifindex: 4 }];
+	const marker = spyOn(wifiInterfaceReaders, "pathExists").mockReturnValue(
+		false,
+	);
+	const unmarked = await discover(topology);
+	expect(unmarked.keys).toEqual([MAC]);
+	marker.mockImplementation((path) => path === "/sys/class/net/ap0/phy80211");
+	const marked = await discover(topology);
+	expect([...marked.keys].sort()).toEqual(["limited:3:0", "limited:4:0"]);
+	expect(Object.values(marked.wifi).map((row) => row.degraded_reason)).toEqual([
+		"permanent-mac-unresolved",
+		"permanent-mac-unresolved",
+	]);
 });
 
 test("capacity-deferred discovery recovers its published key and wire incarnation", async () => {
