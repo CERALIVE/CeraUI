@@ -614,11 +614,24 @@ class RPCClient {
  *
  * `logs.previewBundle` and `logs.createBundle` run the support-bundle pipeline
  * up to its 60s device deadline before they reply.
+ *
+ * Storage and cleanup add 15s to the device bound and round up to 5s.
+ * A regular command allows 30.25s including retirement; Rotate allows 30s.
+ * Each journal scan, filesystem readout or legacy deletion allows 3.1s.
+ * getStorage: disk usage + 4 readouts = 42.65s.
+ * setRetention: 10s admission + 3 commands + 5 readouts = 116.25s.
+ * deleteLegacyDebug: 10s admission + deletion + getStorage = 55.75s.
+ * clearAll: 10s admission + 15s drain + 4 commands + Rotate + deletion
+ *           + 4 readouts = 191.5s. Late settlement is not on the reply path.
  */
 const PROCEDURE_TIMEOUT_MS: Readonly<Record<string, number>> = {
 	"streaming.start": 75_000,
 	"logs.previewBundle": 75_000,
 	"logs.createBundle": 75_000,
+	"logs.getStorage": 60_000,
+	"logs.setRetention": 135_000,
+	"logs.deleteLegacyDebug": 75_000,
+	"logs.clearAll": 210_000,
 };
 
 function createRPCProxy<T extends object>(

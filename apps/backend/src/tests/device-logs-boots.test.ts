@@ -33,7 +33,7 @@ test("boot rows merge stored versions without replacing journal bounds or invent
 	);
 	const result = await listBoots();
 	expect(command.mock.calls).toEqual([
-		["journalctl", ["--list-boots", "-o", "json"]],
+		["journalctl", ["--list-boots", "-o", "json"], { timeout: 30_000 }],
 	]);
 	expect(result).toEqual([
 		{

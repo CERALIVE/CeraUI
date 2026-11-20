@@ -9,7 +9,9 @@ qualification or complete device-log UI integration.
 All retention mutations share the existing exclusive queue. `clearAll` takes
 the history fence and the update reservation.
 Daily maintenance, settings changes and `deleteLegacyDebug` serialize without
-taking the history fence.
+taking the history fence. Each queued operation has 10 seconds to start. An
+expired request leaves the queue immediately, returns `BUSY` (the daily tick
+defers) and never runs later.
 
 ## Clear all ordering
 
@@ -38,11 +40,18 @@ stored boot counts before and after the operation. Mock clear removes
 legacy files before wiping the ring and immediately recording the clear marker,
 so logging during unlink cannot precede the marker in the emptied ring. The
 gate stays closed through the marker, `lastClearedAt` persistence and final
-storage readout. A failure before a child is submitted releases immediately.
-After submission, an RPC error can precede settlement. Both fences stay held
-until the vacuum child exits or the daemon-side Rotate settles. A timed-out
-Rotate client is never signaled by this deadline. Retention mutations return
-`BUSY` while settlement is pending, and the daily tick defers to the next run.
+storage readout. A failure with nothing left to settle releases the fences
+immediately. If an RPC error precedes settlement, the history-clear gate and
+update-evidence reservation both stay held until the vacuum child exits or the
+daemon-side Rotate settles, and until any timed-out legacy unlink settles. The
+unlink holds both fences even in mock mode, which submits no journal child.
+A deletion that misses its 3.1-second deadline reports `READ_FAILED` without
+recording success and holds the mutation queue until settlement in either
+cleanup procedure. While Clear's fences await settlement, new retention
+mutations return `BUSY` immediately. Behind a standalone unlink, they can
+still queue under the 10-second admission deadline. A refused daily tick
+defers to the next run. A timed-out Rotate client is never signaled by its
+deadline.
 
 On systemd v257 a zero `journalctl --rotate` exit acknowledges the synchronous
 daemon operation, including its internal vacuum. On abnormal client exit,
@@ -88,9 +97,16 @@ another slot from inside their existing owners.
 
 ## Known limitations
 
-- `getStorage`, `listBoots`, classified-boot and shutdown-window metadata readers
-  remain outside admission and cancellation. They may observe intermediate or
-  mixed metadata across clear.
+- Storage readout scans reserve a single independent child slot before spawning
+  and retain it until the reader reaps the child. Busy scans and scans still
+  awaiting exit after 3.1 seconds report unavailable readings. The journal
+  directory walk and legacy stat pass have separate 3.1-second reply deadlines;
+  a timed-out size is `null`, not zero. Storage readouts and boot metadata
+  remain outside the clear drain and can observe intermediate or mixed metadata.
+- The synchronous reply-path calls cannot be bounded by an async deadline:
+  `eventsBytes`, `readJournalCeiling`, `saveLogSettings` and `updateLogState`
+  (including the epoch write), plus local state, settings and boot metadata
+  reads. These remain outside the cleanup reply-time guarantee.
 - A child whose exit has not been confirmed still occupies its query or follow
   slot, even after a failed TERM or KILL attempt. Clear returns `READ_FAILED`
   at its drain deadline and preserves logs in that case. Both owners release

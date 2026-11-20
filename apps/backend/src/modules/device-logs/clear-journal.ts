@@ -20,6 +20,7 @@ async function runJournalMutation(
 	let settlement: Promise<unknown> | undefined;
 	try {
 		await run("journalctl", [...args], {
+			timeout: 30_000,
 			...(rotates ? { preserveChild: true } : {}),
 			onChildExit(exited) {
 				settlement = rotates ? exited.then(acknowledgeRotation) : exited;

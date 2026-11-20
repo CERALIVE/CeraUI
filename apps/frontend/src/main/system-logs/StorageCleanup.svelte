@@ -114,7 +114,7 @@ const RETRY: Record<Action, () => unknown> = {
 </script>
 
 <div class="flex flex-col gap-4 border-t pt-5" data-testid="storage-cleanup">
-	{#if storage.legacyDebugBytes > 0}
+	{#if storage.legacyDebugBytes === null || storage.legacyDebugBytes > 0}
 		<Button
 			aria-busy={running === 'deleteLegacy'}
 			class="self-start {WRAP}"
@@ -124,10 +124,14 @@ const RETRY: Record<Action, () => unknown> = {
 			size="sm"
 			variant="outline"
 		>
-			<ParamText
-				format={(size) => m['systemLogs.storage.deleteLegacy']({ size })}
-				value={keepWhole(formatBytes(locale)(storage.legacyDebugBytes))}
-			/>
+			{#if storage.legacyDebugBytes === null}
+				{m['systemLogs.storage.deleteLegacyUnknown']()}
+			{:else}
+				<ParamText
+					format={(size) => m['systemLogs.storage.deleteLegacy']({ size })}
+					value={keepWhole(formatBytes(locale)(storage.legacyDebugBytes))}
+				/>
+			{/if}
 		</Button>
 	{/if}
 	<div class="flex flex-wrap gap-2">

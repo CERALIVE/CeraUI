@@ -38,7 +38,11 @@ export async function listBoots(): Promise<LogBootInfo[]> {
 	}
 	let value: unknown;
 	try {
-		value = JSON.parse(await run("journalctl", ["--list-boots", "-o", "json"]));
+		value = JSON.parse(
+			await run("journalctl", ["--list-boots", "-o", "json"], {
+				timeout: 30_000,
+			}),
+		);
 	} catch (error) {
 		if (error instanceof Error && "code" in error && error.code === "ENOENT")
 			throw new JournalReadError("JOURNAL_UNAVAILABLE");

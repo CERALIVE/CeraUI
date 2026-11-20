@@ -821,6 +821,38 @@ describe("StorageSection: limits", () => {
 });
 
 describe("StorageSection: cleanup", () => {
+	it("offers cleanup with a sizeless label when leftover file size is not reported", async () => {
+		rpc.logs.deleteLegacyDebug.mockResolvedValue({
+			ok: true,
+			storage: logStorage({ legacyDebugBytes: 0 }),
+		});
+		mount(logStorage({ legacyDebugBytes: null }));
+
+		const action = screen.getByRole("button", {
+			name: copy.deleteLegacyUnknown,
+		});
+		await fireEvent.click(action);
+
+		expect(rpc.logs.deleteLegacyDebug).toHaveBeenCalledTimes(1);
+		await waitFor(() =>
+			expect(screen.queryByTestId("storage-delete-legacy")).toBeNull(),
+		);
+	});
+
+	it("shows a typed Clear all failure without a success line or history broadcast", async () => {
+		rpc.logs.clearAll.mockResolvedValue({ ok: false, error: "READ_FAILED" });
+		mount();
+
+		await confirmAction(copy.clearAll, copy.clearAllConfirm);
+
+		const band = await screen.findByTestId("storage-cleanup-failed");
+		expect(within(band).getByText(copy.actionFailed)).toBeTruthy();
+		expect(
+			screen.getByTestId("storage-cleanup-status").textContent?.trim(),
+		).toBe("");
+		expect(historyChanged).not.toHaveBeenCalled();
+	});
+
 	it("renders nothing for leftover debug files when there are none", () => {
 		mount(logStorage({ legacyDebugBytes: 0 }));
 

@@ -142,7 +142,7 @@ type Member = readonly [path: string, nullable: boolean, wrongType: unknown];
 const STORAGE_MEMBERS: readonly Member[] = [
 	["journalBytes", true, "48"],
 	["journalDirBytes", true, "48"],
-	["legacyDebugBytes", false, "5"],
+	["legacyDebugBytes", true, "5"],
 	["ceiling", true, "256"],
 	["ceiling.maxSizeMb", false, "256"],
 	["ceiling.maxAgeDays", false, "30"],
