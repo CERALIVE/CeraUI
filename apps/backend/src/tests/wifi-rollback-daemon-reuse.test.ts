@@ -1,4 +1,5 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
+import * as nm from "../modules/network/network-manager.ts";
 import {
 	wifiAdapterLockKey,
 	withWifiAdapterLock,
@@ -72,6 +73,43 @@ test("a hybrid channel refusal after NM restarts does not down an unrelated acti
 		await f.restore();
 	}
 });
+
+test.each(["active", "unknown"] as const)(
+	"retained cleanup preserves both profiles after a daemon restart when old profile activity is %s",
+	async (activity) => {
+		const f = await firstAp("autoconnect");
+		const restart = renumberingDaemon(f);
+		try {
+			f.faults.downFails = true;
+			expect(await f.start()).toMatchObject({ reason: "cleanup-pending" });
+			const uuid = f.created();
+			if (!uuid) throw new Error("Missing created profile");
+			restart();
+			f.faults.downFails = false;
+
+			const inventory = nm.nmConnsGet;
+			spyOn(nm, "nmConnsGet").mockImplementation(async (fields) => {
+				const rows = await inventory(fields);
+				return fields === "uuid,active"
+					? activity === "unknown"
+						? undefined
+						: rows?.map((line) =>
+								line.startsWith(`${uuid}:`) ? `${uuid}:yes` : line,
+							)
+					: rows;
+			});
+			await withWifiAdapterLock(wifiAdapterLockKey(MAC), () =>
+				reconcileWifiAdapterTeardownLocked(MAC),
+			);
+
+			expect(f.active()).toBe(OTHER_UUID);
+			expect(f.profiles.has(uuid)).toBeTrue();
+		} finally {
+			cancelWifiAdapterReconciliation();
+			await f.restore();
+		}
+	},
+);
 
 test("retained cleanup retries autoconnect suppression even while a pathless activation stays active", async () => {
 	const f = await firstAp();
