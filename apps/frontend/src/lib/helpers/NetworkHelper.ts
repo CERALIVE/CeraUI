@@ -42,10 +42,17 @@ export const networkRenameWithError = (name: string, error?: string) => {
 	return name;
 };
 
+// Predictable names built from the MAC address (wlx…, enx…, wwx…): their
+// trailing digits are part of the MAC, not an interface index, so two such
+// adapters are told apart by the MAC's last four hex digits instead.
+const MAC_NAMED = /^(?:wl|en|ww)x[0-9a-f]{12}$/;
+
 export const networkRename = (name: string) => {
 	let numberSuffix = "";
-	const number = name.match(/\d+$/g)?.[0];
-	if (number) {
+	const number = MAC_NAMED.test(name) ? undefined : name.match(/\d+$/g)?.[0];
+	if (MAC_NAMED.test(name)) {
+		numberSuffix = ` (${name.slice(-4)})`;
+	} else if (number) {
 		numberSuffix = ` ${Number.parseInt(number, 10) + 1}`;
 		name = name.slice(0, -number.length).trim();
 	}
