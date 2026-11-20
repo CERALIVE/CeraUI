@@ -97,9 +97,14 @@ export function matchesWifiOperationRadio(
 	);
 }
 
-/** A refusal is sticky: later reads may not rebind a transaction or allow a retry. */
+/**
+ * A refusal is sticky: later reads may not rebind a transaction or allow a retry.
+ * Every effect of a bound operation goes through `check`/`permit`. Once a hybrid
+ * AP leg is bound, the same proof also covers that leg.
+ */
 export function wifiOperationGuard(binding: WifiOperationBinding | undefined) {
 	let changed = false;
+	let legCurrent: (() => Promise<boolean>) | undefined;
 	const current = () => {
 		changed ||= binding !== undefined && !ownsWifiOperation(binding);
 		return !changed;
@@ -110,6 +115,8 @@ export function wifiOperationGuard(binding: WifiOperationBinding | undefined) {
 			binding,
 			await sampleWifiOperationRadio(binding.ifname),
 		);
+		// The leg is read after the parent, so a leg replaced during the parent sample is seen.
+		if (!changed && legCurrent) changed ||= !(await legCurrent());
 		return !changed;
 	};
 	return {
@@ -123,5 +130,20 @@ export function wifiOperationGuard(binding: WifiOperationBinding | undefined) {
 		},
 		check,
 		permit: async () => (await check()) && current(),
+		bindLeg: (proof: () => Promise<boolean>) => {
+			legCurrent = proof;
+		},
 	};
+}
+
+/** The leg proof for a hybrid Start: the AP leg keeps the lifetime sampled at allocation. */
+export function wifiLegLifetimeProof(
+	ifname: string,
+	lifetime: RadioLifetime,
+): () => Promise<boolean> {
+	return async () =>
+		sameRadioLifetime(
+			lifetime,
+			(await sampleWifiOperationRadio(ifname))?.lifetime,
+		);
 }

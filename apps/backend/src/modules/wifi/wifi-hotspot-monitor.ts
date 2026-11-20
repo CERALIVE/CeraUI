@@ -45,6 +45,10 @@ import type {
 	HotspotConfirmationTarget,
 	WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
+import {
+	type HybridLegAllocation,
+	releaseHybridLeg,
+} from "./wifi-hybrid-leg-release.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
 import {
 	matchesWifiOperationRadio,
@@ -235,6 +239,7 @@ export function registerPendingConfirmation(
 		readonly macAddress: string;
 		readonly binding?: WifiOperationBinding | undefined;
 		readonly targetRadio?: RadioSample | undefined;
+		readonly allocation?: HybridLegAllocation;
 	},
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotActivationDeps,
@@ -344,11 +349,12 @@ export function registerPendingConfirmation(
 				if (exact && !(await exactActivation(activation))) return false;
 				if (!binding || !current(pending)) return current(pending) && matches();
 				const targetLifetime = target.targetRadio?.lifetime ?? apLifetime;
+				// The leg is read after the parent, so a leg replaced during the parent sample is seen.
+				const parent = await sampleWifiOperationRadio(binding.ifname);
 				const radio =
 					virtual && targetLifetime
 						? await sampleWifiOperationRadio(target.ifname)
 						: undefined;
-				const parent = await sampleWifiOperationRadio(binding.ifname);
 				if (
 					!current(pending) ||
 					!ownsCache() ||
@@ -385,6 +391,11 @@ export function registerPendingConfirmation(
 							return false;
 						const stopped = await deps.nmDisconnect(target.uuid);
 						settleCaptured(pending, false, { stopped });
+						if (stopped && target.allocation)
+							await releaseHybridLeg(target.allocation, deps, {
+								receipt: true,
+								deleteCreated: false,
+							});
 						return true;
 					},
 				);

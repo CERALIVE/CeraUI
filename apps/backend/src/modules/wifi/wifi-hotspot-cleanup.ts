@@ -20,6 +20,7 @@ import {
 	type WifiHotspot,
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
+import { releaseHybridLeg } from "./wifi-hybrid-leg-release.ts";
 import { transitionVirtualBinding } from "./wifi-virtual-binding.ts";
 
 type CreatedHotspotCleanup = {
@@ -51,9 +52,21 @@ export async function cleanupCreatedHotspotProfile(
 	};
 	const result = await cleanupCreatedProfile(owner, target, deps, progress);
 	if (!result.complete)
-		registerWifiAdapterTeardownLocked(owner, () =>
-			cleanupCreatedProfile(owner, target, deps, progress),
-		);
+		registerWifiAdapterTeardownLocked(owner, async () => {
+			const retried = await cleanupCreatedProfile(
+				owner,
+				target,
+				deps,
+				progress,
+			);
+			// Start released the leg while this AP was still up; only a later Down lets it restore.
+			if (retried.complete && retried.stopped && target.allocation)
+				await releaseHybridLeg(target.allocation, deps, {
+					receipt: true,
+					deleteCreated: false,
+				});
+			return retried;
+		});
 	return result.complete;
 }
 

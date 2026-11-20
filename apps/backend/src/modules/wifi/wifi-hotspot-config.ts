@@ -703,6 +703,8 @@ async function reconfigureHotspotLocked(
 	if (binding && (!(await admitted()) || !operation.current()))
 		return wifiOperationChanged;
 	if (!targetMatches) return "saving";
+	if (virtual && deps.readHybridTargetIdentity)
+		operation.bindLeg(targetCurrent);
 	const retireTransition = () => {
 		if (
 			wifiInterface.hotspot === hotspot &&
@@ -774,8 +776,7 @@ async function reconfigureHotspotLocked(
 				const alreadyDispatched = dispatched;
 				dispatched = true;
 				return deps.nmConnSetFields(uuid, fields, async () => {
-					if ((await operation.permit()) && (await targetCurrent()) && owned())
-						return true;
+					if ((await operation.permit()) && owned()) return true;
 					dispatched = alreadyDispatched;
 					return false;
 				});

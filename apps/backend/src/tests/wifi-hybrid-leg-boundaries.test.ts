@@ -2,12 +2,21 @@ import { expect, spyOn, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import * as nm from "../modules/network/network-manager.ts";
 import * as secrets from "../modules/network/network-manager-secret.ts";
+import {
+	wifiAdapterLockKey,
+	withWifiAdapterLock,
+} from "../modules/wifi/wifi-adapter-lock.ts";
+import { resolveWifiAdapterOwner } from "../modules/wifi/wifi-adapter-owner.ts";
+import { reconcileWifiAdapterTeardownLocked } from "../modules/wifi/wifi-adapter-reconcile-retry.ts";
 import { setConcurrentInterfaceDepsForTest } from "../modules/wifi/wifi-concurrent-interface-io.ts";
 import {
 	defaultHotspotConfigDeps,
 	reconfigureHotspotForRegdomain,
 } from "../modules/wifi/wifi-hotspot-config.ts";
-import { settlePending } from "../modules/wifi/wifi-hotspot-monitor.ts";
+import {
+	handleWifiMonitorEvent,
+	settlePending,
+} from "../modules/wifi/wifi-hotspot-monitor.ts";
 import {
 	resetConcurrentInterfaceDepsForTest,
 	selectedTargets,
@@ -29,6 +38,7 @@ async function hybrid() {
 	const f = await firstAp(undefined, true);
 	let legIndex = "21";
 	let legUnreadable = false;
+	let legMisreads = 0;
 	let onParentRead: (() => void) | undefined;
 	spyOn(radioIdentityReaders, "readText").mockImplementation(async (path) => {
 		if (path === "/sys/class/net/wlan0/ifindex") {
@@ -38,6 +48,10 @@ async function hybrid() {
 			return "10";
 		}
 		if (path.endsWith("/ifindex")) {
+			if (legMisreads > 0) {
+				legMisreads--;
+				return "22";
+			}
 			if (!legUnreadable) return legIndex;
 			legUnreadable = false;
 			return undefined;
@@ -67,6 +81,10 @@ async function hybrid() {
 		},
 		loseNextLegSample: () => {
 			legUnreadable = true;
+		},
+		// One whole sample (both ifindex reads) reports a different leg, then the original returns.
+		misreadNextLegSample: () => {
+			legMisreads = 2;
 		},
 		afterSavedStart: async () => {
 			const first = await f.start();
@@ -248,6 +266,232 @@ test("a saved hybrid Start restores its borrowed leg's autoconnect after its sta
 		expect(f.active()).toBeUndefined();
 		expect(autoconnect).toBe("yes");
 		expect(result).toEqual({ success: false, error: "radio-changed" });
+	} finally {
+		resetConcurrentInterfaceDepsForTest();
+		await f.restore();
+	}
+});
+
+type HybridFixture = Awaited<ReturnType<typeof hybrid>>;
+
+const configDeps = (f: HybridFixture) => ({
+	...defaultHotspotConfigDeps,
+	...qualifiedHybridEvidence,
+	readHybridTargetIdentity: async () => f.leg(),
+	getCapabilities: () => undefined,
+	broadcastState: f.deps.broadcastState,
+	wifiUpdateSavedConns: f.deps.wifiUpdateSavedConns,
+});
+
+const startFrames = (frames: readonly string[]) =>
+	frames.flatMap((raw) => {
+		const start = JSON.parse(raw).wifi?.hotspot?.start;
+		return start ? [start] : [];
+	});
+
+/** The next Start borrows the leg with its device autoconnect suppressed from `yes`. */
+async function borrowLeg(f: HybridFixture) {
+	const parent = wifiRadioIdentity.state.rows.get("wlan0")?.incarnation;
+	if (!parent) throw new Error("Missing parent incarnation");
+	const target = { ifname: LEG, created: false };
+	const record = {
+		boot: "boot-test",
+		parent: { ifindex: 10, wiphy: 1, phyPath },
+		target: { ifindex: 21, wiphy: 1, phyPath },
+		wireless: { ifindex: "21", wdev: "0x15" },
+		parentIfname: "wlan0",
+		parentIncarnation: parent,
+		priorAutoconnect: "yes",
+	};
+	targetRecords.set(target, record);
+	selectedTargets.set(LEG, { boot: "boot-test", first: record.target, record });
+	let autoconnect = "no";
+	const writes: string[] = [];
+	setConcurrentInterfaceDepsForTest(
+		async (command, args) => {
+			if (command === "iw")
+				return `Interface ${LEG}\n\tifindex 21\n\twdev 0x15\n\twiphy 1\n\ttype managed\n`;
+			if (args.slice(0, 4).join(" ") === `device set ${LEG} autoconnect`) {
+				autoconnect = args[4] ?? autoconnect;
+				writes.push(autoconnect);
+				return "";
+			}
+			throw new Error("Unexpected interface command");
+		},
+		null,
+		async () => "boot-test\n",
+	);
+	spyOn(nm, "nmDeviceProp").mockImplementation(async (ifname, fields) => {
+		if (ifname !== LEG) return deviceProp(ifname, fields);
+		if (fields === "GENERAL.AUTOCONNECT") return [autoconnect];
+		if (fields === "GENERAL.STATE,GENERAL.NM-MANAGED,GENERAL.CON-UUID")
+			return f.active()
+				? ["100 (connected)", "yes", f.active() ?? ""]
+				: ["30 (disconnected)", "yes", ""];
+		return deviceProp(ifname, fields);
+	});
+	f.deps.ensureConcurrentInterface = async () => target;
+	return {
+		autoconnect: () => autoconnect,
+		writes,
+		succeed: () =>
+			selectedTargets.set(LEG, {
+				boot: "boot-test",
+				first: record.target,
+				record: { ...record, priorAutoconnect: "no" },
+			}),
+	};
+}
+
+test("a saved hybrid Start does not repair credentials after its leg changes during staging", async () => {
+	const f = await hybrid();
+	try {
+		await f.afterSavedStart();
+		delete f.row.hotspot.password;
+		// The remembered password differs from the profile, so the repair is a real write.
+		f.deps.credentials = {
+			...f.deps.credentials,
+			get: () => ({ ssid: "First AP", password: "remembered-test-password" }),
+		};
+		const beginning = f.commands.length;
+		f.replaceLegAfterStagedSecret();
+		const result = await f.start();
+		expect(loads(f.commands.slice(beginning))).toEqual([]);
+		expect(result).toEqual({ success: false, error: "radio-changed" });
+	} finally {
+		await f.restore();
+	}
+});
+
+test("deferred hybrid confirmation refuses when the leg changes during the parent sample", async () => {
+	const f = await hybrid();
+	try {
+		expect((await f.start()).success).toBeTrue();
+		const beginning = f.frames.length;
+		f.replaceLegDuringNextParentRead();
+		await handleWifiMonitorEvent({
+			type: "device-state",
+			device: LEG,
+			state: "connected",
+		});
+		expect(startFrames(f.frames.slice(beginning))).toEqual([
+			{ device: 0, error: "radio-changed" },
+		]);
+		expect(f.active()).toBeUndefined();
+	} finally {
+		await f.restore();
+	}
+});
+
+test("hybrid Configure dispatches no restart Up after its leg changes during the parent sample", async () => {
+	const f = await hybrid();
+	try {
+		const uuid = await f.afterSavedStart();
+		f.row.concurrentHotspot = { ifname: LEG, activeConn: uuid };
+		const beginning = f.commands.length;
+		let channelReads = 0;
+		const result = await reconfigureHotspotForRegdomain(MAC, f.row, "auto", {
+			...configDeps(f),
+			readHybridChannel: async (ifname) => {
+				channelReads += 1;
+				if (channelReads > 1) f.replaceLegDuringNextParentRead();
+				return qualifiedHybridEvidence.readHybridChannel(ifname);
+			},
+		});
+		expect(
+			f.commands
+				.slice(beginning)
+				.filter((args) => args[2] === "conn" && args[3] === "up"),
+		).toEqual([]);
+		expect(result).toBeFalse();
+	} finally {
+		await f.restore();
+	}
+});
+
+test("hybrid Configure does not commit credentials after its leg changes during the saved-profile refresh", async () => {
+	const f = await hybrid();
+	try {
+		const uuid = await f.afterSavedStart();
+		f.row.concurrentHotspot = { ifname: LEG, activeConn: uuid };
+		const remembered: unknown[] = [];
+		const result = await reconfigureHotspotForRegdomain(MAC, f.row, "auto", {
+			...configDeps(f),
+			rememberCredentials: (...args) => {
+				remembered.push(args);
+			},
+			wifiUpdateSavedConns: async () => {
+				await f.deps.wifiUpdateSavedConns();
+				f.replaceLeg();
+			},
+		});
+		expect(remembered).toEqual([]);
+		expect(result).toBeFalse();
+	} finally {
+		await f.restore();
+	}
+});
+
+test.each(["original", "successor"] as const)(
+	"deferred hybrid rollback after its Down leaves the leg's autoconnect to the %s selection",
+	async (selection) => {
+		const f = await hybrid();
+		try {
+			const leg = await borrowLeg(f);
+			expect((await f.start()).success).toBeTrue();
+			if (selection === "successor") {
+				const down = f.deps.nmDisconnect;
+				f.deps.nmDisconnect = async (id) => {
+					leg.succeed();
+					return down(id);
+				};
+			}
+			const beginning = f.frames.length;
+			f.misreadNextLegSample();
+			await handleWifiMonitorEvent({
+				type: "device-state",
+				device: LEG,
+				state: "connected",
+			});
+			expect(startFrames(f.frames.slice(beginning))).toEqual([
+				{ device: 0, error: "radio-changed" },
+			]);
+			expect(f.active()).toBeUndefined();
+			expect(leg.writes).toEqual(selection === "original" ? ["yes"] : []);
+		} finally {
+			resetConcurrentInterfaceDepsForTest();
+			await f.restore();
+		}
+	},
+);
+
+test("a retried hybrid cleanup restores the borrowed leg's autoconnect after its Down", async () => {
+	const f = await hybrid();
+	try {
+		const leg = await borrowLeg(f);
+		const connect = f.deps.nmConnect;
+		f.deps.nmConnect = async (...args) => {
+			const up = await connect(...args);
+			f.misreadNextLegSample();
+			f.faults.downFails = true;
+			f.faults.deleteFails = true;
+			return up;
+		};
+		expect(await f.start()).toMatchObject({
+			success: false,
+			error: "radio-changed",
+			reason: "cleanup-pending",
+		});
+		expect(leg.autoconnect()).toBe("no");
+		f.faults.downFails = false;
+		f.faults.deleteFails = false;
+		const owner = resolveWifiAdapterOwner(MAC, f.row);
+		const retry = await withWifiAdapterLock(wifiAdapterLockKey(owner), () =>
+			reconcileWifiAdapterTeardownLocked(owner),
+		);
+		expect(retry).toMatchObject({ success: true, result: { complete: true } });
+		expect(f.active()).toBeUndefined();
+		expect(leg.autoconnect()).toBe("yes");
 	} finally {
 		resetConcurrentInterfaceDepsForTest();
 		await f.restore();
