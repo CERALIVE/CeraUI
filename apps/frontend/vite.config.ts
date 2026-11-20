@@ -23,6 +23,7 @@ import {
 } from "./vite.sourcemaps.ts";
 import { VARIANTS_ALIAS } from "./vite.variants.ts";
 import {
+	buildDevicePreview,
 	buildDeviceProxy,
 	previewUpgradeGuard,
 } from "./vite-preview-routing.ts";
@@ -61,20 +62,16 @@ function buildDeviceServer(env: Record<string, string>) {
 	};
 }
 
-function buildDevicePreview(env: Record<string, string>) {
-	return {
-		...(env.VITE_DEVICE_HOST ? { host: "0.0.0.0" } : {}),
-		proxy: buildDeviceProxy(env, process.env.CI === "true"),
-	};
-}
-
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
 	// Power-user device-proxy env (VITE_DEVICE_*). Read from the frontend app
 	// dir to match .env.local.example; also picks up shell-exported VITE_* vars.
 	const deviceEnv = loadEnv(mode, __dirname, "VITE_");
 	const deviceServer = buildDeviceServer(deviceEnv);
-	const devicePreview = buildDevicePreview(deviceEnv);
+	const devicePreview = buildDevicePreview(
+		deviceEnv,
+		process.env.CI === "true",
+	);
 
 	return {
 		// Load .env from monorepo root for unified configuration
