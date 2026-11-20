@@ -239,6 +239,17 @@ casing-only re-freeze of notifications.ceraliveUpdateAvailable landed as a
 separately reviewed commit inside that effort's single CeraUI PR; regeneration
 stayed forbidden.
 
+### Spanish terms
+
+`es.json` is neutral Latin American Spanish (es-419) and addresses the operator as tú, never usted or vosotros. Use these terms in every Spanish message:
+
+| English | Spanish | Notes |
+|---|---|---|
+| boot (noun) | arranque | «Este arranque», «Arranques», «Ranura de arranque». Restart actions still use reiniciar/reinicio. |
+| logs | logs | «Logs del sistema» wording inside messages. The Settings label `settings.index.logs` stays «Registros del sistema», and text quoting «Configuración → Registros del sistema» keeps that label. «registro» is only for network registration. |
+| bonding | bonding | «Emisor de bonding». Bonded links are «enlaces combinados»; «en agregación» describes a link in the bond. |
+| streaming engine | motor de streaming | The same term in Live, notification and System Logs messages. |
+
 ---
 
 ## Tests

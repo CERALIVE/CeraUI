@@ -35,7 +35,7 @@
 	"advanced.lanPassword": "Contraseña de la interfaz web LAN",
 	"advanced.lanPasswordTooltip": "Establece una contraseña para proteger el acceso a la interfaz web de CeraUI.",
 	"advanced.logManagement": "Gestión de logs",
-	"advanced.logManagementDescription": "Descargar logs del sistema para solución de problemas y depuración",
+	"advanced.logManagementDescription": "Descarga logs del sistema para solucionar problemas y depurar.",
 	"advanced.minLength": "Longitud mínima: 8 caracteres",
 	"advanced.newPassword": "Nueva Contraseña",
 	"advanced.passwordCopied": "Contraseña copiada",
