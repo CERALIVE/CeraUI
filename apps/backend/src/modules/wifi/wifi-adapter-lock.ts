@@ -41,9 +41,9 @@
   the ifname there would leave the parent's station mutations completely
   unguarded.
 
-  It is deliberately the BARE normalized MAC and carries no prefix: it shares the
-  process-wide `withDeviceLock` registry, and prefixing would silently stop
-  matching a key an existing caller (or test) already holds.
+  The sole radio keeps the bare normalized MAC. Proven twins use MAC@port.
+  Limited rows can retain an observed profile owner for a safe Stop.
+  These keys share the process-wide `withDeviceLock` registry without a prefix.
 */
 
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -76,13 +76,8 @@ export function ownsWifiAdapterLock(key: WifiAdapterLockKey): boolean {
 }
 
 /**
- * Derive the canonical lock key for an adapter from its permanent hardware
- * address — the registry key produced by {@link resolveWifiPermanentMac}.
- *
- * A well-formed address normalizes to the canonical lowercase colon form; a
- * caller holding something else keeps its own string (lowercased) rather than
- * silently resolving to `undefined`, because refusing to produce a key would
- * turn a serialized mutation into an unguarded one.
+ * Resolve the registry key to its lock owner, including limited Stop aliases.
+ * Port suffixes keep their case.
  */
 export function wifiAdapterLockKey(macAddress: MacAddress): WifiAdapterLockKey {
 	return resolveWifiAdapterOwner(
@@ -162,14 +157,21 @@ export function withWifiAdapterPolicyLocks<T>(
 	targets: ReadonlySet<WifiInterface>,
 	fn: () => Promise<T>,
 ): Promise<DeviceLockResult<T>> {
-	const aliases = [
-		...new Set(
-			Object.entries(getWifiInterfacesByMacAddress())
-				.filter(([, row]) => targets.has(row))
-				.map(([key]) => wifiAdapterLockKey(key))
-				.filter((key) => key !== heldKey),
-		),
-	].sort();
+	const aliases = Object.entries(getWifiInterfacesByMacAddress())
+		.filter(([, row]) => targets.has(row))
+		.map(([key]) => wifiAdapterLockKey(key))
+		.filter((key) => key !== heldKey);
+	return withWifiAdapterLocks(aliases, fn);
+}
+
+/** Take the entire set before a discovery transfer can change either row. */
+export function withWifiAdapterLocks<T>(
+	keys: Iterable<WifiAdapterLockKey>,
+	fn: () => Promise<T>,
+): Promise<DeviceLockResult<T>> {
+	const aliases = [...new Set(keys)]
+		.filter((key) => !ownsWifiAdapterLock(key))
+		.sort();
 	const acquire = async (index: number): Promise<DeviceLockResult<T>> => {
 		const key = aliases[index];
 		if (key === undefined) return { success: true, result: await fn() };

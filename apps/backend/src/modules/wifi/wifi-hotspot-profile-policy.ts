@@ -50,6 +50,19 @@ export async function applyHotspotProfilePolicy(
 	const mac = normalizeMacAddress(owner.split("@")[0]);
 	const intent = getPersistedWifiAdapterMode(owner);
 	const station = observation.station || intent === "station";
+	const healthyTwins =
+		mac !== undefined &&
+		owner === mac &&
+		new Set(
+			[...observation.identities.values()]
+				.filter(
+					(row) =>
+						row.classification === "verified" &&
+						row.permanentMac === mac &&
+						!row.ifname.startsWith("clap-"),
+				)
+				.map((row) => row.lifetime?.phyPath),
+		).size > 1;
 	for (const uuid of uuids) {
 		const profile = await observeHotspotProfile(uuid);
 		switch (profile.kind) {
@@ -60,11 +73,25 @@ export async function applyHotspotProfilePolicy(
 			case "unreadable":
 				return { success: true, result: `could not read ${uuid}` };
 			case "replaced":
+				if (healthyTwins)
+					return {
+						success: true,
+						result: `could not verify autoconnect for ${uuid}`,
+					};
 				continue;
 			case "read":
 				break;
 		}
 		if (profile.mode !== "ap") continue;
+		if (
+			healthyTwins &&
+			profile.autoconnect !== "yes" &&
+			profile.autoconnect !== "no"
+		)
+			return {
+				success: true,
+				result: `could not verify autoconnect for ${uuid}`,
+			};
 		const owners = getHotspotCredentialOwners(uuid);
 		if (!owners.includes(owner)) continue;
 		const resolved = owners.length === 1;
@@ -190,8 +217,16 @@ export async function applyHotspotProfilePolicy(
 						fields: { "connection.autoconnect": "no" },
 						run: (fields) => write(uuid, fields),
 					});
-					if (disabled === undefined) return undefined;
+					if (disabled === undefined && !healthyTwins) return undefined;
 					if (!disabled) return `could not disable ${uuid}`;
+					if (healthyTwins) {
+						const observed = await observeHotspotProfile(uuid);
+						if (
+							observed.kind !== "absent" &&
+							(observed.kind !== "read" || observed.autoconnect !== "no")
+						)
+							return `could not verify autoconnect is disabled for ${uuid}`;
+					}
 				}
 				if (failedFirstStart) clearHotspotProfileCreation(owner, uuid);
 				return undefined;
