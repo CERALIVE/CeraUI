@@ -91,8 +91,14 @@ terminal message, including queued catch-up continuations. Export finishing is
 idempotent across request abort, stream cancellation and clear. Sharing
 reservation remains synchronous. The export body checks whether it stopped
 before requesting another query slot. Export and bundle page requests can wait
-for a viewer slot to settle within their existing sharing deadline. Interactive
-queries return `BUSY` at capacity. Scans and follow-position probes do not acquire
+for a viewer slot to settle within their existing sharing deadline.
+Raw queries and Around wait up to 3.1 seconds for a free journal slot, including
+time at the ordinary Clear gate. Viewers get priority over download pages, but
+after two viewer grants with downloads queued, the next eligible download goes
+first. On expiry, Raw and Around return `BUSY` only if another viewer holds a
+slot; if only download readers hold slots, they return `READ_FAILED`. Closing
+the socket or a Clear that advances the history epoch also ends the wait with
+`READ_FAILED`. Scans and follow-position probes do not acquire
 another slot from inside their existing owners.
 
 ## Known limitations
