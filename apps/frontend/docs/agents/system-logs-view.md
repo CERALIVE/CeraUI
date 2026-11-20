@@ -175,7 +175,7 @@ in section 4.
 | Keep searching | Raw logs | `hasMore: null`: a Keep searching button and a line saying only part of the stored logs was checked; never an end marker (the normal state for a time-bounded view once its entries are shown) | no |
 | End of results | Raw logs, Events | Raw logs shows an end marker at an exhausted, available edge after the first load when rows are present. The display-limit notice takes precedence at the bottom. Approximate-window markers name the time window. Events shows an end row when events are present and no older page or paging error remains. | no |
 | Row cap reached | Raw logs | `ROW_CAP` is 2000 journal entries, excluding marker rows. Older paging stops at the cap. Skipped-entry recovery can still page by moving the display window | no |
-| Browsing older history | Events | Load older rolls the 300-event window toward older results while the server has more. Live pushes leave that window in place and are counted: once any arrive, the button reads "Start from newest (new: {count})" and wraps inside its bar on a narrow screen. Start from newest returns to the live edge | no |
+| Browsing older history | Events | Load older rolls the 300-event window toward older results while the server has more. Live pushes leave that window in place and are counted. The button reads "Start from newest: {count} new" for an exact positive count, "Start from newest: {count}+ new" for a positive lower bound, or "Start from newest: count unknown" when the tally is incomplete and no new events could be counted. Only an exact zero keeps the plain label. The button wraps inside its bar on a narrow screen. Start from newest returns to the live edge | no |
 | Follow unavailable | Raw logs | Follow present, disabled, with an adjacent reason element (`data-testid` ending `-reason`) when the time is not This boot, the order is not Newest first, or the tab is in anchor mode (DESIGN.md CT-2). Follow displays while connected and is aria-disabled while its request is busy | no |
 | Following | Raw logs | Follow becomes Pause; a state label "Following" in `--status-info` with a `motion-safe` pulse dot; static dot plus label under reduced motion or e-ink | polite |
 | New entries held | Raw logs | While scrolled away from the top, incoming entries wait (cap 500) behind a "New entries: {count}" button at the top of the list; selecting it merges them and scrolls to the top | polite, throttled |
@@ -356,7 +356,9 @@ Rules for this copy:
 | `systemLogs.events.problemsOnly` | Problems only | Toggle |
 | `systemLogs.events.loadOlder` | Load older events | Paging button |
 | `systemLogs.events.noOlder` | No older events are stored. | End row |
-| `systemLogs.events.startFromNewestCount` | Start from newest (new: {count}) | Return to the live edge of Events after new events arrived while browsing older ones |
+| `systemLogs.events.startFromNewestCount` | Start from newest: {count} new | Return to the live edge of Events with an exact positive count |
+| `systemLogs.events.startFromNewestAtLeast` | Start from newest: {count}+ new | Return to the live edge of Events with a positive lower bound |
+| `systemLogs.events.startFromNewestUnknown` | Start from newest: count unknown | Return to the live edge of Events when the tally is incomplete and no new events could be counted |
 | `systemLogs.events.viewRaw` | View raw logs | Row action |
 | `systemLogs.events.folded` | Similar events folded in: {count} | Row line 3 when suppressed is set |
 | `systemLogs.events.emptyTitle` | No events recorded yet | Empty state |
@@ -897,12 +899,16 @@ A reconnect check with a matching epoch and nondecreasing head keeps rows in
 its retained range, along with their paging, pending action and focus. A
 dropped connection cannot settle a check or replay its held pushes. When the
 Retry of a failed check succeeds, focus left on it moves to the first visible
-filter. A changed UUID makes the frontend reload the history and can result
-from either a history clear or an epoch repair; retained events may be unchanged.
-A reconnect check without
-an epoch refreshes the newest page and retires old actions. Focus left on a
-row moves to the filter bar. A missing epoch with a lower head can replace
-the window from the check's page directly and keep focus on a still-shown ID.
+filter. A changed epoch, a lower head or a reused sequence number with a
+different record changes the row keys. A history clear or an epoch repair can
+change the epoch, even if the retained events are unchanged. When a history
+replacement removes the focused row,
+focus moves to the list's row stop (the first row action), or to the first
+visible filter if no row remains. A same-history refill keeps row keys and
+focus on a still-shown row, including after a temporary epoch omission or
+when equivalent `params` fields change order. A reconnect check without an
+epoch can refresh the newest page and retire old actions. If its head is
+lower, it can replace the window from the check's page directly.
 
 Load older without an epoch checks the last visible record at the paging
 boundary before joining an older page. A match preserves the paging position

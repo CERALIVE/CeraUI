@@ -20,10 +20,16 @@ the listener at logout.
 The open view displays at most 300 rows, newest first. Loading older events
 past that limit drops the newest edge and continues with the server cursor.
 Live pushes leave that history window in place. The view counts each new
-event the filter admits, once, and Start from newest names that count. A
-skipped `seq` or a reconnect reads the live edge again for the events it
-missed; that read counts at most one page. Start from newest reads the
-latest page again and clears the count. At the live edge, pushes keep the newest 300 rows and move
+event the filter admits, once. A skipped `seq` or a reconnect reads the live
+edge again for the events it missed; a full page, a continuation cursor or
+`retainedFromSeq` above the last seen sequence plus one makes the tally
+incomplete, even if the read adds no matches. Start from newest shows
+`startFromNewestAtLeast` for a positive lower bound or `startFromNewestCount`
+for a positive exact count. A zero tally with incomplete coverage, including
+an empty filtered page after unseen events were evicted, shows
+`startFromNewestUnknown`; only an exact zero keeps the plain label. Start
+from newest reads the latest page again and clears the count. At the live
+edge, pushes keep the newest 300 rows and move
 the older-query boundary when they evict rows, so Load older or Retry can
 recover those rows if they are still stored.
 
@@ -43,12 +49,15 @@ action is retired, and the new-event count restarts.
 
 An `events.list` reply names the ring's `epoch` when the store can keep one.
 Only a matching UUID proves that the previous window belongs to that ring.
-A changed UUID makes the frontend reload the history and can result from either
-a history clear or an epoch repair; retained events may be unchanged. A
-reconnect or gap check without an epoch refreshes the newest page and retires every old row and pending
-raw-log action, even if the new head reaches or passes the old one. Focus
-left on a row moves to the filter bar. An edge check with no epoch and a
-lower head can replace the window directly from the page it already read.
+A changed UUID, a lower head or a reused `seq` with a different record
+changes the history's identity and its row keys. The UUID can change after
+a history clear or an epoch repair, even if the retained events are unchanged.
+A reconnect or gap check
+without an epoch can refresh the newest page and retire pending raw-log
+actions without changing the row keys: a same-history refill keeps focus on
+a still-shown row, including when the same epoch returns after an omission
+or the record's `params` fields are reordered. An edge check with no epoch
+and a lower head can replace the window directly from the page it already read.
 
 Load older with no epoch validates the paging boundary by rereading its
 last visible record in the same snapshot as the older rows. If that record
@@ -74,8 +83,10 @@ within the current window's generation stays mounted in place of one row
 until focus leaves it. An explicit reload
 clears the pin and retires any pending raw-log action. When a gap refresh
 settles, it preserves row focus and pending raw-log actions only for rows
-still present. A failed gap refresh leaves no rows. If either reset removes
-a focused row, focus goes to the filter bar.
+still present in the same history. A failed gap refresh leaves no rows. If a
+reset removes the focused row and focus has not moved elsewhere, focus goes
+to the list's row stop (the first row action), or to the first visible filter
+when no row remains.
 
 `lib/rpc/subscriptions-event-feed.test.ts` drives the real subscription handler.
 Its producer compatibility case runs the real backend emitter under Bun, feeds

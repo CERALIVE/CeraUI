@@ -14,6 +14,7 @@ const queries = new WeakMap<Page, LogQueryInput[]>();
 const newestEvent = new WeakMap<Page, { event: Record<string, unknown>; headSeq: number }>();
 const pushToPage = new WeakMap<Page, (message: string) => void>();
 const listReplies = new WeakMap<Page, PromiseWithResolvers<void>>();
+const replaceHistory = new WeakSet<Page>();
 const heldAround = new WeakMap<Page, { release: PromiseWithResolvers<void>; sent: number }>();
 
 /**
@@ -65,6 +66,12 @@ test.beforeEach(async ({ page, pageRpc }) => {
 				const newest = listIds.has(frame.id) ? frame.result?.events?.[0] : undefined;
 				if (newest) newestEvent.set(page, { event: newest, headSeq: frame.result.headSeq });
 				if (listIds.has(frame.id)) listReplies.get(page)?.resolve();
+				if (newest && replaceHistory.has(page)) {
+					delete frame.result.epoch;
+					// Reuse the seq and ID but change the second record under focus.
+					frame.result.events[1].at += 1000;
+					message = JSON.stringify(frame);
+				}
 			}
 			const held = heldAround.get(page);
 			if (held && typeof message === 'string' && aroundIds.has(JSON.parse(message).id)) {
@@ -316,4 +323,28 @@ test('a sequence-gap reload that keeps the focused event keeps keyboard focus on
 	await pressAndExpectRow(page, 'ArrowUp');
 	await pressAndExpectRow(page, 'ArrowDown');
 	await expect(held).toBeFocused();
+});
+
+test('a history replace with reused IDs moves focus to the list', async ({ page }) => {
+	await navigateTo(page, 'settings');
+	await page.getByRole('button', { name: 'System Logs' }).first().click();
+	const rows = page.getByRole('dialog', { name: 'System Logs' }).getByTestId('event-row');
+	await expect(rows.nth(2)).toBeVisible();
+	const row = rows.nth(1);
+	const recordedAt = await row.locator('time').getAttribute('datetime');
+	await row.evaluate((element) => element.setAttribute('data-held-row', ''));
+	await row.getByRole('button', { name: 'View raw logs' }).focus();
+
+	const newest = newestEvent.get(page);
+	if (!newest) throw new Error('The Events list reply was not observed');
+	replaceHistory.add(page);
+	pushToPage.get(page)?.(JSON.stringify({
+		event: { append: [{ ...newest.event, id: 'history-replace-witness', seq: newest.headSeq + 2 }] },
+	}));
+
+	await expect(row.locator('time')).not.toHaveAttribute('datetime', recordedAt ?? '');
+	const first = rows.first().getByRole('button', { name: 'View raw logs' });
+	await expect(first).toBeFocused();
+	await expect(first).toHaveAttribute('tabindex', '0');
+	await expect(page.locator('[data-held-row]')).toHaveCount(0);
 });
