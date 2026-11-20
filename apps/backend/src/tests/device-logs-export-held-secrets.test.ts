@@ -323,22 +323,30 @@ test("a backend that has just started refuses exports until both stores have loa
 		const { initHotspotCredentials } = await import(${module("modules/wifi/hotspot-credentials.ts")});
 		const { initModemCredentials } = await import(${module("modules/modems/modem-credentials.ts")});
 		const query = { sources: [], levels: ["info"], boot: "current", direction: "older", limit: 200 };
-		const footer = async () => {
-			let text = "";
+		// A refusal is a single chunk. Stop after the first one, so a header
+		// fails the comparison at once and the host's journal is never read.
+		const firstChunk = async () => {
 			for await (const chunk of exportChunks(query, null, getLogState().historyEpoch, new AbortController().signal, Date.now()))
-				text += new TextDecoder().decode(chunk);
-			return text;
+				return new TextDecoder().decode(chunk);
 		};
+		const sample = async () => [credentialStoresState(), await firstChunk()];
 		const init = {
 			hotspot: () => initHotspotCredentials(process.argv[1] + "/hotspot.json"),
 			modem: () => initModemCredentials(process.argv[1] + "/modems.json"),
 		};
 		const [first, second] = process.argv[2].split(",");
-		const steps = [credentialStoresState(), await footer()];
-		await init[first]();
-		steps.push(credentialStoresState(), await footer());
-		await init[second]();
-		steps.push(credentialStoresState());
+		const steps = [await sample()];
+		// Each store while its file is being read, then once it has been. Once
+		// both have loaded only the state is sampled: an export would read the
+		// host's journal.
+		let loading = init[first]();
+		steps.push(await sample());
+		await loading;
+		steps.push(await sample());
+		loading = init[second]();
+		steps.push(await sample());
+		await loading;
+		steps.push([credentialStoresState()]);
 		console.log(JSON.stringify(steps));
 	`;
 	// The child reads the packaged setup.json from its working directory.
@@ -355,22 +363,24 @@ test("a backend that has just started refuses exports until both stores have loa
 		expect(result.code).toBe(0);
 		return JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "null");
 	};
+	const loading = ["pending", "# incomplete: CREDENTIALS_LOADING\n"];
+	const failed = ["failed", "# incomplete: READ_FAILED\n"];
 	// No store files: both load as empty, but only once both have loaded.
 	for (const order of ["hotspot,modem", "modem,hotspot"])
 		expect(await run(order)).toEqual([
-			"pending",
-			"# incomplete: CREDENTIALS_LOADING\n",
-			"pending",
-			"# incomplete: CREDENTIALS_LOADING\n",
-			"ready",
+			loading,
+			loading,
+			loading,
+			loading,
+			["ready"],
 		]);
 	// A hotspot store that cannot be read fails at once, the modem store pending.
 	fs.mkdirSync(path.join(storeDir, "hotspot.json"));
 	expect(await run("hotspot,modem")).toEqual([
-		"pending",
-		"# incomplete: CREDENTIALS_LOADING\n",
-		"failed",
-		"# incomplete: READ_FAILED\n",
-		"failed",
+		loading,
+		loading,
+		failed,
+		failed,
+		["failed"],
 	]);
-});
+}, 30_000);
