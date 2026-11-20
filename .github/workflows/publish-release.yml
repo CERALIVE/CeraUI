@@ -19,6 +19,10 @@ on:
         description: "Override auto-detected version (optional, e.g., 2026.1.0)"
         required: false
         type: string
+      approved_sha:
+        description: "Full commit SHA approved for this release (optional)"
+        required: false
+        type: string
 
 env:
   NODE_VERSION: "26"
@@ -50,6 +54,16 @@ jobs:
             echo "::error::releases must be dispatched from ${DEFAULT_REF}, not ${DISPATCH_REF}"
             exit 1
           }
+
+      - name: Verify approved commit
+        env:
+          APPROVED_SHA: ${{ inputs.approved_sha }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          if [[ -n "$APPROVED_SHA" && "$GITHUB_SHA" != "$APPROVED_SHA" ]]; then
+            printf '::error::release commit %s is not the approved %s\n' "$GITHUB_SHA" "$APPROVED_SHA"
+            exit 1
+          fi
 
       - name: Checkout CeraUI
         uses: actions/checkout@v7

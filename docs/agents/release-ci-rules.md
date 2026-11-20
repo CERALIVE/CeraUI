@@ -2,6 +2,8 @@
 
 ## Release & CI rules
 
+Pass the full owner-approved commit SHA as `approved_sha` when dispatching Publish Release; a mismatch stops the release before checkout, and leaving it empty preserves the existing behavior.
+
 The `journal-conformance` Build Check job runs the real systemd 257 container
 suite for the existing `changes.outputs.code` gate, including backend changes.
 It inherits read-only contents permission and workflow cancellation, pins Bun
