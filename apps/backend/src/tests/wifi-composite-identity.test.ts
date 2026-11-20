@@ -115,6 +115,80 @@ test("R2 cold twins publish two stable verified rows with independent locks", as
 	expect(wifiAdapterLockKeyForDeviceId(b.id)).toBe(second);
 });
 
+test("Save refuses a port-only move after admission without changing NetworkManager", async () => {
+	addTwin();
+	await f.discover();
+	const [key, row] = rowFor("wlan0");
+	expect(key).toBe(primary);
+	const radio = f.witnesses.get(row.ifname);
+	if (!radio) throw new Error("Missing twin witness");
+	const saved = {
+		conn: "twin-save-profile",
+		ssid: "Twin AP",
+		password: "saved-twin-password",
+	};
+	rememberHotspotCredentials(key, saved);
+	f.profiles.set(saved.conn, {
+		"802-11-wireless.mode": "ap",
+		"802-11-wireless.mac-address": MAC,
+		"match.path": PORT,
+		"802-11-wireless.ssid": saved.ssid,
+		"802-11-wireless-security.psk": saved.password,
+	});
+	Object.assign(row.hotspot, {
+		conn: saved.conn,
+		name: saved.ssid,
+		password: saved.password,
+	});
+	const serialize = spyOn(runner, "runWithStdin");
+	const offline = serialize.getMockImplementation();
+	if (!offline) throw new Error("Missing offline serializer fixture");
+	const entered = Promise.withResolvers<void>();
+	const release = Promise.withResolvers<void>();
+	serialize.mockImplementationOnce(async (...args) => {
+		entered.resolve();
+		await release.promise;
+		return offline(...args);
+	});
+	const write = spyOn(f.deps, "nmConnSetFields");
+	const up = spyOn(f.deps, "nmConnect");
+	const down = spyOn(f.deps, "nmDisconnect");
+	const run = spyOn(runner, "run");
+	const before = f.effects.length;
+	const result = prepareHotspotForInterface(
+		key,
+		row,
+		{ name: "Renamed AP", password: "different-twin-password" },
+		f.deps,
+	);
+	try {
+		await Promise.race([
+			entered.promise,
+			result.then(() => {
+				throw new Error("Save ended before reaching the offline read");
+			}),
+		]);
+		// Only the fresh port read changes; discovery has not republished the row.
+		f.witnesses.set(row.ifname, { ...radio, path: "usb-Port3:1.0" });
+	} finally {
+		release.resolve();
+		await result;
+	}
+	await expect(result).resolves.toEqual({
+		success: false,
+		error: "radio-changed",
+	});
+	expect(write.mock.calls).toEqual([]);
+	expect(up.mock.calls).toEqual([]);
+	expect(down.mock.calls).toEqual([]);
+	expect(
+		run.mock.calls.filter(
+			([binary, args]) => binary === "nmcli" && args?.includes("load"),
+		),
+	).toEqual([]);
+	expect(f.effects.slice(before)).toEqual([]);
+});
+
 test("R3 an unseeded twin prepares new credentials without adopting the plain profile", async () => {
 	addTwin();
 	await f.discover();
