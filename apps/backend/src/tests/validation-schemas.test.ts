@@ -181,6 +181,29 @@ describe("wifiNewInputSchema", () => {
 		).toBe(false);
 	});
 
+	// Hotel and venue networks are mostly open; the dialog joins them with an
+	// empty password.
+	it("accepts an open network with an empty password", () => {
+		expect(
+			wifiNewInputSchema.safeParse({
+				device: "0",
+				ssid: "Hotel Guest",
+				password: "",
+				security: "",
+			}).success,
+		).toBe(true);
+	});
+
+	it("still rejects a one-character password", () => {
+		const result = wifiNewInputSchema.safeParse({
+			device: "0",
+			ssid: "MyNetwork",
+			password: "x",
+		});
+		expect(result.success).toBe(false);
+		expect(result.error?.issues[0]?.path).toEqual(["password"]);
+	});
+
 	it("accepts a valid WPA connection", () => {
 		expect(
 			wifiNewInputSchema.safeParse({

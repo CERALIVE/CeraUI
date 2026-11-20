@@ -215,6 +215,19 @@ describe("wifi mock-seam — connectNewAuthFails", () => {
 	});
 });
 
+describe("wifi mock-seam — open networks", () => {
+	it("joins an open network the dialog sends with an empty password", async () => {
+		resetMockWifiFaults();
+		const result = await call(
+			wifiConnectNewProcedure,
+			{ device: "0", ssid: "Hotel Guest", password: "", security: "" },
+			{ context: makeContext() },
+		);
+		expect(result).toEqual({ success: true });
+		expect(activeNetwork()).toBe("Hotel Guest");
+	});
+});
+
 describe("wifi mock-seam — suppressConfirm", () => {
 	it("accepts a connect but never marks the target active (drives timed_out)", async () => {
 		setMockWifiFaults({ suppressConfirm: true });
