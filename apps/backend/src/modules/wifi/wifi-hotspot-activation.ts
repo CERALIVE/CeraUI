@@ -118,6 +118,7 @@ import {
 	logHybridChannelRefusal,
 	logHybridTargetRefusal,
 } from "./wifi-hybrid-target-diagnostics.ts";
+import { targetRecords } from "./wifi-hybrid-target-record.ts";
 import {
 	getMacAddressForWifiInterface,
 	wifiUpdateDevices,
@@ -799,8 +800,10 @@ export async function startHotspotLocked(
 	let targetRadio: RadioSample | undefined;
 	try {
 		if (binding && concurrentInterface) {
+			const allocated = targetRecords.get(concurrentInterface)?.target;
 			targetRadio = await sampleWifiOperationRadio(concurrentInterface.ifname);
 			if (
+				(allocated && !sameRadioLifetime(allocated, targetRadio?.lifetime)) ||
 				(targetRadio &&
 					targetRadio.lifetime.phyPath !== binding.lifetime.phyPath) ||
 				!(await operation.permit())

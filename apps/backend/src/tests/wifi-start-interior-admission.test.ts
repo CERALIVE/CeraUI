@@ -16,6 +16,7 @@ import {
 	syncWifiStateCache,
 } from "../modules/wifi/wifi-hotspot-monitor.ts";
 import * as profileOperations from "../modules/wifi/wifi-hotspot-profile-operation.ts";
+import { targetRecords } from "../modules/wifi/wifi-hybrid-target-record.ts";
 import { bindingForRow } from "../modules/wifi/wifi-operation-binding.ts";
 import { radioIdentityReaders } from "../modules/wifi/wifi-radio-identity.ts";
 import { request } from "./helpers/wifi-entry-fixture.ts";
@@ -151,7 +152,10 @@ test.each(["stopped", "failed", "new-active-path", "new-profile"] as const)(
 	},
 );
 
-test("hybrid Start refuses a replacement AP leg on the same phy", async () => {
+const legStates = ["present", "already-replaced", "unreadable"] as const;
+async function refusesHybridLegReplacement(
+	legAtAllocation: (typeof legStates)[number],
+) {
 	const fixture = await startFixture();
 	mockQualifiedHybridActivation();
 	delete fixture.row.activeMode;
@@ -162,6 +166,16 @@ test("hybrid Start refuses a replacement AP leg on the same phy", async () => {
 	const previousModes = getConfig().wifi_modes;
 	getConfig().wifi_modes = { "dc:a6:32:aa:bb:c0": "hybrid" };
 	const target = { ifname: "clap-wlan0", created: false };
+	const phyPath = "/sys/devices/equivalence/phy1";
+	if (!fixture.before) throw new Error("Missing fixture parent incarnation");
+	targetRecords.set(target, {
+		boot: "test",
+		parent: { ifindex: 10, wiphy: 1, phyPath },
+		target: { ifindex: 21, wiphy: 1, phyPath },
+		wireless: { ifindex: "21", wdev: "0x15" },
+		parentIfname: fixture.row.ifname,
+		parentIncarnation: fixture.before,
+	});
 	spyOn(defaultHotspotDeps, "ensureConcurrentInterface").mockResolvedValue(
 		target,
 	);
@@ -169,16 +183,19 @@ test("hybrid Start refuses a replacement AP leg on the same phy", async () => {
 		defaultHotspotDeps,
 		"releaseConcurrentInterface",
 	).mockResolvedValue();
-	let legIndex = "21";
+	let legIndex =
+		legAtAllocation === "present"
+			? "21"
+			: legAtAllocation === "already-replaced"
+				? "22"
+				: undefined;
 	spyOn(radioIdentityReaders, "readText").mockImplementation(async (path) => {
 		if (path.endsWith("/ifindex"))
 			return path.includes(target.ifname) ? legIndex : "10";
 		if (path.endsWith("/index")) return "1";
 		return "dc:a6:32:aa:bb:c0";
 	});
-	spyOn(radioIdentityReaders, "realpath").mockResolvedValue(
-		"/sys/devices/equivalence/phy1",
-	);
+	spyOn(radioIdentityReaders, "realpath").mockResolvedValue(phyPath);
 	const capability: NonNullable<
 		ReturnType<typeof capabilities.getWifiCapabilitiesForInterface>
 	> = {
@@ -195,10 +212,12 @@ test("hybrid Start refuses a replacement AP leg on the same phy", async () => {
 		capability,
 	);
 	spyOn(defaultHotspotDeps, "readCapabilities").mockReturnValue(capability);
-	spyOn(defaultHotspotDeps, "nmConnSetFields").mockImplementation(async () => {
-		legIndex = "22";
-		return true;
-	});
+	const pin = spyOn(defaultHotspotDeps, "nmConnSetFields").mockImplementation(
+		async () => {
+			legIndex = "22";
+			return true;
+		},
+	);
 	try {
 		expect(await request("start", fixture.context, fixture.before)).toEqual({
 			success: false,
@@ -206,13 +225,18 @@ test("hybrid Start refuses a replacement AP leg on the same phy", async () => {
 		});
 		expect(fixture.up).not.toHaveBeenCalled();
 		expect<unknown>(release.mock.calls).toEqual([[target.ifname, target]]);
+		expect(pin).toHaveBeenCalledTimes(legAtAllocation === "present" ? 1 : 0);
 	} finally {
 		if (previousModes === undefined) delete getConfig().wifi_modes;
 		else getConfig().wifi_modes = previousModes;
 		restoreIntent.mockRestore();
 		await fixture.restore();
 	}
-});
+}
+test.each(legStates)(
+	"hybrid Start refuses a replacement AP leg on the same phy (%s)",
+	refusesHybridLegReplacement,
+);
 
 test("Start refuses before pinning if the radio changes during saved-profile refresh", async () => {
 	const fixture = await startFixture();
