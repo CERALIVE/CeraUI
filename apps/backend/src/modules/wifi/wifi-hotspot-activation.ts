@@ -601,7 +601,8 @@ export async function startHotspotForInterface(
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotActivationDeps = defaultHotspotDeps,
 ): Promise<HotspotStartResult> {
-	const lock = await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
+	const target = { registryKey: macAddress, modeTarget: wifiInterface };
+	const lock = await withWifiAdapterLock(target, () =>
 		admitWifiRequest(
 			wifiInterface,
 			async (binding): Promise<HotspotStartResult> => {

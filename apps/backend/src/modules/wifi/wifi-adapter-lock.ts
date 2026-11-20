@@ -47,6 +47,7 @@
 */
 
 import { AsyncLocalStorage } from "node:async_hooks";
+import { logger } from "../../helpers/logger.ts";
 import type { MacAddress } from "../network/network-manager.ts";
 import {
 	type DeviceLockResult,
@@ -56,8 +57,13 @@ import {
 	resolveWifiAdapterOwner,
 	retainWifiAdapterOwners,
 } from "./wifi-adapter-owner.ts";
+import { withoutWifiRequestBinding } from "./wifi-binding.ts";
 import { getWifiInterfacesByMacAddress } from "./wifi-connections.ts";
-import type { WifiInterface } from "./wifi-interfaces.ts";
+import {
+	isWifiModeTargetPending,
+	type WifiInterface,
+	wifiUpdateDevices,
+} from "./wifi-interfaces.ts";
 
 /** Opaque-by-convention lock key. Never build one by hand. */
 export type WifiAdapterLockKey = string;
@@ -129,9 +135,29 @@ export function wifiAdapterLockKeyForConnectionUuid(
  * adds behaviour.
  */
 export function withWifiAdapterLock<T>(
-	key: WifiAdapterLockKey,
+	target:
+		| WifiAdapterLockKey
+		| { registryKey: MacAddress; modeTarget: WifiInterface },
 	fn: () => Promise<T>,
 ): Promise<DeviceLockResult<T>> {
+	if (
+		typeof target !== "string" &&
+		isWifiModeTargetPending(target.modeTarget)
+	) {
+		// One fresh pass (or a coalesced trailing pass) per busy mode request.
+		void withoutWifiRequestBinding(wifiUpdateDevices).catch(
+			(error: unknown) => {
+				logger.warn(
+					`Wi-Fi handoff refresh failed: ${error instanceof Error ? error.message : String(error)}`,
+				);
+			},
+		);
+		return Promise.resolve({ success: false, error: "DEVICE_BUSY" });
+	}
+	const key =
+		typeof target === "string"
+			? target
+			: wifiAdapterLockKey(target.registryKey);
 	return withDeviceLock(key, async () => {
 		const owner: WifiLockOwner = {
 			key,

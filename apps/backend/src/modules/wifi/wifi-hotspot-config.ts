@@ -148,7 +148,7 @@ async function resolveAndStop(
 	if (!canHotspot(wifiInterface))
 		return { success: false, error: "unsupported" };
 	const lock = await withWifiAdapterLock(
-		wifiAdapterLockKey(macAddress),
+		{ registryKey: macAddress, modeTarget: wifiInterface },
 		async (): Promise<HotspotStopResult> => {
 			const owner = resolveWifiAdapterOwner(macAddress, wifiInterface);
 			const intentKey = wifiAdapterKeyMac(owner) ? owner : undefined;
@@ -206,8 +206,9 @@ export async function stopHotspotForInterface(
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotStopDeps = defaultHotspotStopDeps,
 ): Promise<HotspotStopResult> {
-	const lock = await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
-		stopHotspotForInterfaceLocked(macAddress, wifiInterface, deps),
+	const lock = await withWifiAdapterLock(
+		{ registryKey: macAddress, modeTarget: wifiInterface },
+		() => stopHotspotForInterfaceLocked(macAddress, wifiInterface, deps),
 	);
 	if (!lock.success) return { success: false, error: "DEVICE_BUSY" };
 	return lock.result;

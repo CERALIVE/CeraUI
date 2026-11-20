@@ -247,7 +247,7 @@ const nonWifiIfnames = new Map<string, number>();
 // The destination is addressable before discovery has finished both AP legs.
 const pendingPortHandoffs = new WeakSet<WifiInterface>();
 
-export function isWifiStopTargetPending(row: WifiInterface): boolean {
+export function isWifiModeTargetPending(row: WifiInterface): boolean {
 	return pendingPortHandoffs.has(row);
 }
 
@@ -1205,7 +1205,7 @@ async function discoverWifiDevices() {
 			if (signal.aborted) return;
 		}
 		if (stopTargetKnown) pendingPortHandoffs.delete(wifiInterface);
-		if (activeConn) {
+		if (activeConn && !isWifiModeTargetPending(wifiInterface)) {
 			await reconcileHybridStationChannel(registryKey, wifiInterface);
 			if (signal.aborted) return;
 		}

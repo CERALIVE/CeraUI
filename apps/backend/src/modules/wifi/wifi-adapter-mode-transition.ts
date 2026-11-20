@@ -39,10 +39,7 @@ import type {
 
 import { logger } from "../../helpers/logger.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
-import {
-	wifiAdapterLockKey,
-	withWifiAdapterLock,
-} from "./wifi-adapter-lock.ts";
+import { withWifiAdapterLock } from "./wifi-adapter-lock.ts";
 import {
 	isWifiAdapterModeAvailable,
 	observedWifiAdapterMode,
@@ -335,17 +332,19 @@ export async function setWifiAdapterMode(
 			if (!succeeded) undo();
 		}
 	};
-	const lock = await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
-		target === "station"
-			? transition()
-			: admitWifiRequest(wifiInterface, transition, (refusal) =>
-					refuse(
-						wifiInterface.id,
-						refusal.error,
-						publishRefusal,
-						refusal.reason,
+	const lock = await withWifiAdapterLock(
+		{ registryKey: macAddress, modeTarget: wifiInterface },
+		() =>
+			target === "station"
+				? transition()
+				: admitWifiRequest(wifiInterface, transition, (refusal) =>
+						refuse(
+							wifiInterface.id,
+							refusal.error,
+							publishRefusal,
+							refusal.reason,
+						),
 					),
-				),
 	);
 	return lock.success
 		? lock.result

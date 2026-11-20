@@ -28,9 +28,11 @@ because a twin arrives. Address-only owned profiles disarm before the new
 verified rows publish. Discovery withholds those rows when it cannot verify
 the legacy profile's autoconnect state. A port swap holds both row locks in
 stable order until it refreshes the new active connection identities.
-When a twin arrives or leaves, Stop on the transferred row returns
-`DEVICE_BUSY` until discovery knows which connection is active, including any
-hybrid AP leg. Retry Stop after discovery refreshes the row.
+When a twin arrives or leaves, discovery can expose the destination row before
+it knows the active connection. Stop, Start and mode changes (including choosing
+Station) return `DEVICE_BUSY` without saving a mode until discovery resolves the
+active connection, including any hybrid AP leg. Each such refusal requests a
+fresh discovery pass. Retry after the row refreshes.
 
 ### Hotspot profile writes [EXISTS; native requalification pending]
 

@@ -52,7 +52,6 @@ import {
 	isHotspotActive,
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
-import { isWifiStopTargetPending } from "./wifi-interfaces.ts";
 import {
 	wifiOperationChanged,
 	type wifiOperationGuard,
@@ -135,10 +134,6 @@ export async function reconcileWifiAdapterStopLocked(
 	if (operation && (!(await operation.check()) || !operation.current()))
 		return wifiOperationChanged;
 	const owner = resolveWifiAdapterOwner(registryKey, row);
-	if (isWifiStopTargetPending(row)) {
-		retryWifiAdapterReconcile(owner, undefined, "discovery");
-		return { success: false, error: "DEVICE_BUSY" };
-	}
 	const cleanup = await reconcileWifiAdapterTeardownLocked(owner);
 	const active =
 		row.concurrentHotspot?.activeConn ??
@@ -372,7 +367,11 @@ export async function reconcileWifiAdapterModeLocked(
 		publish(row.id, result);
 		return result;
 	}
-	const current = observedWifiAdapterMode(row);
+	// A returning sole row can see the live virtual leg without adopting its
+	// port-owned profile. Station still owes that AP a Down.
+	const current = row.concurrentHotspot?.activeConn
+		? "hybrid"
+		: observedWifiAdapterMode(row);
 	if (current === target) {
 		publish(row.id, { success: true, mode: target });
 		return { success: true, applied: target };
