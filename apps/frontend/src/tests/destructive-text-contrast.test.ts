@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
@@ -28,7 +28,14 @@ import {
  */
 
 const SURFACES = ["--background", "--card", "--popover"] as const;
-const NAMES = [...SURFACES, "--foreground", "--destructive", "--status-error"];
+const NAMES = [
+	...SURFACES,
+	"--foreground",
+	"--destructive",
+	"--status-error",
+	"--status-warning",
+	"--destructive-foreground",
+];
 const PALETTES = [
 	["light", "", tokenMap(balancedBlock(tokensCss, ".light {"), NAMES)],
 	[
@@ -51,6 +58,49 @@ const RED_STATUS = {
 	selector: ".text-status-error",
 	utility: "var(--status-error)",
 };
+// Red only while hovered: the Wi-Fi list's Forget icon (WifiNetworkList.svelte).
+const RED_TEXT_HOVER = {
+	selector: ".hover\\:text-destructive:hover",
+	utility: "var(--destructive)",
+};
+// A faded line on the solid red fill: pwa-status.svelte's bars (opacity-80).
+const FADED_ON_RED_FILL =
+	".bg-destructive.text-destructive-foreground .opacity-80";
+// A sonner error toast's icon (LayoutToastHost.svelte), on the toast's own red tint.
+const ERROR_TOAST = "[data-sonner-toast][data-type='error']";
+const ERROR_TOAST_ICON = {
+	selector: `${ERROR_TOAST} [data-icon]`,
+	utility: "",
+};
+// Red status inside the inverted tooltip (bg-foreground): the HUD health legend.
+const RED_STATUS_ON_TOOLTIP = {
+	selector: "[data-slot='tooltip-content'] .text-status-error",
+	utility: "",
+};
+// ui/dropdown-menu (CLI-managed): a destructive item's label and icon, which its
+// recipe sets through variant forms of `text-destructive`.
+const DESTRUCTIVE_MENU_ITEM = {
+	selector:
+		":is([data-slot='dropdown-menu-item'][data-variant='destructive'], [data-slot='dropdown-menu-item'][data-variant='destructive'] > svg)",
+	utility: "var(--destructive)",
+};
+// Tailwind compiles a variant form of a red ink to the raw token, out of reach of
+// the class-keyed rules, so each one names the app.css rule that sets its ink.
+const VARIANT_RED_INKS: Record<string, string> = {
+	"hover:text-destructive": RED_TEXT_HOVER.selector,
+	"data-[variant=destructive]:text-destructive": DESTRUCTIVE_MENU_ITEM.selector,
+	"data-[variant=destructive]:focus:text-destructive":
+		DESTRUCTIVE_MENU_ITEM.selector,
+	"data-[variant=destructive]:*:[svg]:text-destructive":
+		DESTRUCTIVE_MENU_ITEM.selector,
+};
+
+const SOURCE_ROOT = fileURLToPath(new URL("..", import.meta.url));
+
+/** A source file's class names, split on whitespace and quotes. */
+function classTokens(path: string): string[] {
+	return readFileSync(`${SOURCE_ROOT}${path}`, "utf8").split(/[\s"'`]+/);
+}
 
 function recipe(path: string, variant: string): string[] {
 	const source = readFileSync(
@@ -67,6 +117,49 @@ const destructiveBadge = recipe(
 	"destructive",
 );
 const errorBadge = recipe("../lib/components/custom/Badge.svelte", "error");
+const destructiveMenuItem = classTokens(
+	"lib/components/ui/dropdown-menu/dropdown-menu-item.svelte",
+);
+// A Button rendered as a primitive's child snippet (`<Button {...props} variant="destructive">`)
+// takes the primitive's data-slot from those props, over its own: under ui/dialog's Close
+// (IdentityPreview.svelte's "Restart now") it is no longer "button".
+const [, dialogCloseSlot] =
+	readFileSync(
+		`${SOURCE_ROOT}lib/components/ui/dialog/dialog-close.svelte`,
+		"utf8",
+	).match(/data-slot="([^"]+)"/) ?? [];
+const [, buttonBase = ""] =
+	readFileSync(
+		`${SOURCE_ROOT}lib/components/ui/button/button.svelte`,
+		"utf8",
+	).match(/base:\s*"([^"]+)"/) ?? [];
+const buttonClasses = (variant: string) =>
+	[
+		buttonBase,
+		...recipe("../lib/components/ui/button/button.svelte", variant),
+	].join(" ");
+
+/**
+ * Whether an element with these attributes matches `selector`, in the forms the
+ * destructive button rule is written in: an optional `:is(...)` list, then
+ * `[name='value']` and `[name~='value']` parts.
+ */
+function matchesAttributes(
+	selector: string,
+	attributes: Record<string, string>,
+): boolean {
+	const part = (text: string) => {
+		const match = text.match(/^\[([\w-]+)(~?)='([^']*)'\]$/);
+		if (match === null) throw new Error(`unsupported selector part ${text}`);
+		const [, name = "", list, value = ""] = match;
+		const have = attributes[name] ?? "";
+		return list ? have.split(/\s+/).includes(value) : have === value;
+	};
+	const [is, alternatives = ""] = selector.match(/^:is\(([^)]*)\)/) ?? [];
+	if (is !== undefined && !alternatives.split(/,\s*/).some(part)) return false;
+	const rest = selector.slice(is?.length ?? 0);
+	return (rest.match(/\[[^\]]+\]/g) ?? []).every(part);
+}
 
 function tintAlpha(classes: readonly string[], prefix: string): number {
 	const percent = classes
@@ -183,6 +276,169 @@ describe("red text and red badge colours", () => {
 				);
 			}
 			expect(belowAA(ratios)).toEqual({});
+		},
+	);
+
+	it.each(PALETTES)(
+		"keeps %s red text at 4.5:1 on the amber warning tint it sits on",
+		(_, __, tokens) => {
+			// HotspotActivationConfirm.svelte: name, password, load and save errors
+			// inside its bg-status-warning/10 panel, in a popover, card or dialog.
+			const text = resolveColor(ink(RED_TEXT), tokens);
+			const amber = resolveColor("var(--status-warning)", tokens);
+			const ratios: Record<string, number> = {};
+			for (const surface of SURFACES) {
+				const base = resolveColor(`var(${surface})`, tokens);
+				ratios[`amber on ${surface}`] = contrastRatio(
+					text,
+					paintOver(amber, 0.1, base),
+				);
+			}
+			expect(belowAA(ratios)).toEqual({});
+		},
+	);
+
+	it.each(PALETTES)(
+		"keeps %s red status text at 4.5:1 on the error badge over the amber warning tint",
+		(_, __, tokens) => {
+			// SharingSection.svelte: a down uplink's error Badge inside the section's
+			// bg-status-warning/10 headline surface, in a card or on the page.
+			const text = resolveColor(ink(RED_STATUS), tokens);
+			const amber = resolveColor("var(--status-warning)", tokens);
+			const red = resolveColor("var(--status-error)", tokens);
+			const alpha = tintAlpha(errorBadge, "bg-status-error/");
+			const ratios: Record<string, number> = {};
+			for (const surface of SURFACES) {
+				const base = resolveColor(`var(${surface})`, tokens);
+				ratios[`badge on amber on ${surface}`] = contrastRatio(
+					text,
+					paintOver(red, alpha, paintOver(amber, 0.1, base)),
+				);
+			}
+			expect(belowAA(ratios)).toEqual({});
+		},
+	);
+
+	it.each(PALETTES)(
+		"keeps %s faded text on the solid destructive fill at 4.5:1",
+		(_, __, tokens) => {
+			const opacity = appCss.includes(`${FADED_ON_RED_FILL} {`)
+				? Number(
+						declValue(ruleBody(appCss, `${FADED_ON_RED_FILL} {`), "opacity"),
+					)
+				: 0.8;
+			const fill = resolveColor("var(--destructive)", tokens);
+			const text = paintOver(
+				resolveColor("var(--destructive-foreground)", tokens),
+				opacity,
+				fill,
+			);
+			expect(belowAA({ "faded line": contrastRatio(text, fill) })).toEqual({});
+		},
+	);
+
+	it.each(PALETTES)(
+		"keeps %s red status text at 4.5:1 inside the inverted tooltip",
+		(_, __, tokens) => {
+			// HudBar.svelte: the health legend's Dead glyph, on the tooltip's
+			// --foreground fill; without a rule of its own it takes the page ink.
+			const rule = ink(RED_STATUS_ON_TOOLTIP) || ink(RED_STATUS);
+			const ratio = contrastRatio(
+				resolveColor(rule, tokens),
+				resolveColor("var(--foreground)", tokens),
+			);
+			expect(belowAA({ "tooltip --foreground": ratio })).toEqual({});
+		},
+	);
+
+	it.each(PALETTES)(
+		"keeps %s error toast icon in the red status ink, at 4.5:1 on the toast's red tint",
+		(_, __, tokens) => {
+			// The toast rules carry !important to beat sonner's own styles.
+			const plain = (value: string) => value.replace(/\s*!important$/, "");
+			const icon = plain(ink(ERROR_TOAST_ICON));
+			const tint = plain(
+				declValue(ruleBody(appCss, `${ERROR_TOAST} {`), "background"),
+			);
+			const ratio = contrastRatio(
+				resolveColor(icon, tokens),
+				resolveColor(tint, tokens),
+			);
+			expect(belowAA({ "error toast tint": ratio })).toEqual({});
+			expect(icon).toBe(ink(RED_STATUS));
+		},
+	);
+
+	it.each(PALETTES)(
+		"keeps %s hover-only red text in the red text ink, at 4.5:1 on every surface",
+		(_, __, tokens) => {
+			const text = resolveColor(ink(RED_TEXT_HOVER), tokens);
+			const ratios: Record<string, number> = {};
+			for (const surface of SURFACES) {
+				ratios[surface] = contrastRatio(
+					text,
+					resolveColor(`var(${surface})`, tokens),
+				);
+			}
+			expect(belowAA(ratios)).toEqual({});
+			expect(ink(RED_TEXT_HOVER)).toBe(ink(RED_TEXT));
+		},
+	);
+
+	it("gives a destructive Button its label rule when a primitive re-slots it", () => {
+		const selector = appCss
+			.split("\n")
+			.find((line) => line.endsWith("[class~='bg-destructive/10'] {"))
+			?.slice(0, -2);
+		expect(selector).toBeDefined();
+		expect(dialogCloseSlot).toBeDefined();
+		expect(dialogCloseSlot).not.toBe("button");
+		const destructive = buttonClasses("destructive");
+		const rule = (slot: string, classes = destructive) =>
+			matchesAttributes(selector ?? "", { class: classes, "data-slot": slot });
+		expect(rule("button")).toBe(true);
+		expect(rule(dialogCloseSlot ?? "")).toBe(true);
+		expect(rule(dialogCloseSlot ?? "", buttonClasses("outline"))).toBe(false);
+		expect(appCss).toContain(`${selector}:disabled {`);
+	});
+
+	it("names an app.css rule for every variant form of a red ink in the app", () => {
+		const found = new Set<string>();
+		for (const path of readdirSync(SOURCE_ROOT, {
+			recursive: true,
+			encoding: "utf8",
+		})) {
+			if (
+				!/\.(svelte|ts)$/.test(path) ||
+				/\.test\.ts$|(^|\/)tests\//.test(path)
+			)
+				continue;
+			for (const token of classTokens(path))
+				if (/.:text-(destructive|status-error)$/.test(token)) found.add(token);
+		}
+		expect([...found].sort()).toEqual(Object.keys(VARIANT_RED_INKS).sort());
+		for (const selector of new Set(Object.values(VARIANT_RED_INKS)))
+			expect(appCss).toContain(`${selector} {`);
+	});
+
+	it.each(PALETTES)(
+		"keeps %s destructive menu item in the red text ink, at 4.5:1 on the popover and on its focus tint",
+		(_, variant, tokens) => {
+			// The focus wash is also the hover one: bits-ui focuses the item under the pointer.
+			const alpha = tintAlpha(
+				destructiveMenuItem,
+				`${variant}data-[variant=destructive]:focus:bg-destructive/`,
+			);
+			const text = resolveColor(ink(DESTRUCTIVE_MENU_ITEM), tokens);
+			const popover = resolveColor("var(--popover)", tokens);
+			const red = resolveColor("var(--destructive)", tokens);
+			expect(
+				belowAA({
+					popover: contrastRatio(text, popover),
+					"focus tint": contrastRatio(text, paintOver(red, alpha, popover)),
+				}),
+			).toEqual({});
+			expect(ink(DESTRUCTIVE_MENU_ITEM)).toBe(ink(RED_TEXT));
 		},
 	);
 

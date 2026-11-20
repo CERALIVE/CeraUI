@@ -8,8 +8,9 @@ import { ensureAuthenticated, navigateTo } from './helpers/index.js';
  * Red text reads at WCAG AA 4.5:1 against the surface it is actually painted
  * on, in both themes: the Audio dialog's no-audio-support band (a red heading
  * and line over a light red wash on the dialog), a failed add-on's badge and
- * error line (red status text on its own red tint over the card), and the Lost
- * badge of an unplugged capture source, whose row is disabled and dimmed. The
+ * error line (red status text on its own red tint over the card), the Lost
+ * badge of an unplugged capture source, whose row is disabled and dimmed, and
+ * the development Dev Tools Error toast button while hovered. The
  * ratio is read from the pixels Chromium paints, so every ancestor's tint,
  * opacity and blend counts.
  */
@@ -287,4 +288,27 @@ for (const scheme of ['dark', 'light'] as const) {
 			}),
 		).toEqual({});
 	});
+
+	test(
+		`the Dev Tools Error toast button's label reads at AA while hovered in ${scheme}`,
+		{ tag: '@dev-only' },
+		async ({ page }) => {
+			await useScheme(page, scheme);
+			await page.goto('/');
+			await ensureAuthenticated(page);
+			await expectScheme(page, scheme);
+			const tab = page.locator('#nav-tab-devtools:visible, #mobile-nav-tab-devtools:visible').first();
+			await tab.click();
+			await expect(tab).toHaveAttribute('aria-current', 'page');
+
+			const button = page.getByTestId('toast-type-error');
+			// Centred first, so the measurement's own scroll leaves the pointer on it.
+			await button.evaluate((node) => node.scrollIntoView({ block: 'center' }));
+			await button.hover();
+			await button.evaluate((node) => Promise.all(node.getAnimations({ subtree: true }).map((a) => a.finished)));
+			await expect.poll(() => button.evaluate((node) => node.matches(':hover'))).toBe(true);
+
+			expect(belowAA({ hovered: await paintedContrast(button.getByText('Error', { exact: true })) })).toEqual({});
+		},
+	);
 }

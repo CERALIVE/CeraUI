@@ -31,6 +31,7 @@ import { evidencePath, navigateTo } from "./helpers";
  */
 
 const RECONNECTING_BANNER = '[data-disconnect-banner="reconnecting"]';
+const FAILED_BANNER = '[data-disconnect-banner="failed"]';
 const ANY_BANNER = "[data-disconnect-banner]";
 const OFFLINE_PAGE = '[data-testid="offline-page"]';
 
@@ -187,6 +188,39 @@ function offlinePageDelay(page: Page): Promise<number | null> {
 	return page.evaluate(() => (window as any).__cera.offlinePageDelayMs());
 }
 
+/**
+ * The fixed not-connected bar, the failed banner and the sticky header as the
+ * page paints them now: how far the bar and the header reach into the banner,
+ * and whether Retry and the header's home control each own the point at their
+ * own centre (elementFromPoint, no modal is open).
+ */
+function topBandGeometry(page: Page) {
+	return page.evaluate(() => {
+		const bar = document.querySelector('[data-testid="offline-bar"]');
+		const banner = document.querySelector('[data-disconnect-banner="failed"]');
+		const retry = banner?.querySelector("button");
+		const header = document.querySelector("header");
+		const home = header?.querySelector("button");
+		if (!bar || !banner || !retry || !header || !home) return null;
+		const b = banner.getBoundingClientRect();
+		const reach = (el: Element) => {
+			const a = el.getBoundingClientRect();
+			return Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+		};
+		const ownsCentre = (el: Element) => {
+			const r = el.getBoundingClientRect();
+			return el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+		};
+		return {
+			scrollY: window.scrollY,
+			barOverBanner: reach(bar),
+			headerOverBanner: reach(header),
+			retryTopmost: ownsCentre(retry),
+			headerHomeTopmost: ownsCentre(home),
+		};
+	});
+}
+
 test.describe(
 	"reconnect banner grace period — a short drop stays silent",
 	{ tag: "@functional" },
@@ -306,6 +340,57 @@ test.describe(
 			await expect(page.locator("#password")).toHaveCount(0);
 			record("reconnected → banner CLEARED, still authenticated ✓");
 		});
+
+		for (const scheme of ["dark", "light"] as const) {
+			test(`neither the not-connected bar nor the sticky header covers the failed banner or its Retry (${scheme})`, async ({
+				page,
+			}) => {
+				// Five reconnects have to fail before the banner turns to `failed`.
+				test.setTimeout(150_000);
+				record(`── failed connection, ${scheme}: offline bar, banner and header together ──`);
+
+				await page.emulateMedia({ colorScheme: scheme });
+				await page.evaluate((mode) => localStorage.setItem("mode-watcher-mode", mode), scheme);
+				await page.reload();
+				await (scheme === "dark"
+					? expect(page.locator("html")).toHaveClass(/\bdark\b/)
+					: expect(page.locator("html")).not.toHaveClass(/\bdark\b/));
+				await navigateTo(page, "live");
+				await page.evaluate(() => {
+					// biome-ignore lint/suspicious/noExplicitAny: browser harness glue.
+					const c = (window as any).__cera;
+					c.block = true;
+					c.markDrop();
+				});
+				await expect(page.locator(FAILED_BANNER)).toBeVisible({ timeout: 120_000 });
+				await expect(page.getByTestId("offline-bar")).toBeVisible();
+				record("socket held down until the banner failed; the not-connected bar is up");
+
+				for (const viewport of [
+					{ width: 1280, height: 800 },
+					{ width: 390, height: 844 },
+					{ width: 375, height: 812 },
+				]) {
+					await page.setViewportSize(viewport);
+					for (const scrollY of [0, 300]) {
+						await page.evaluate((y) => window.scrollTo(0, y), scrollY);
+						// The bar and the top bands publish their heights after layout: poll the settled paint.
+						await expect
+							.poll(() => topBandGeometry(page))
+							.toEqual({
+								scrollY,
+								barOverBanner: 0,
+								headerOverBanner: 0,
+								retryTopmost: true,
+								headerHomeTopmost: true,
+							});
+						record(
+							`${scheme} ${viewport.width}x${viewport.height} scrolled ${scrollY}: bar and header clear of the banner; Retry and the header's home control each topmost ✓`,
+						);
+					}
+				}
+			});
+		}
 
 		test("the full-page takeover waits out the same grace the banner does", async ({
 			page,

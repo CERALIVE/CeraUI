@@ -6,6 +6,7 @@ import { OfflinePage, PWAStatus } from '$lib/components/custom/pwa';
 import { Button } from '$lib/components/ui/button';
 import * as Tooltip from '$lib/components/ui/tooltip';
 import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
+import { publishHeight } from '$lib/layout';
 import { rpc } from '$lib/rpc';
 import { getUpdating } from '$lib/rpc/subscriptions.svelte';
 import {
@@ -50,6 +51,12 @@ const connectionSurfaces = $derived(
 // (App's boot-shell gate, DisconnectedBanner's precedence input) reading a raw
 // flag the browser `offline` event could flip instantly.
 const showOfflinePage = $derived(getShouldShowOfflinePage());
+
+// The update and connection banners stick as ONE stack below the offline bar,
+// and its published height is where the header sticks, so neither the header
+// nor the bar can paint over a banner or its Retry once the page scrolls.
+let topBands: HTMLDivElement | undefined = $state();
+$effect(() => (topBands ? publishHeight(topBands, '--top-bands-height') : undefined));
 
 // The overlay is DERIVED from the store, never mirrored into local state by an
 // `$effect`. A mirror is a second copy of the same fact that only converges
@@ -235,9 +242,11 @@ $effect(() => {
 		{#if updatingStatus}
 			<UpdatingOverlay details={updatingStatus}></UpdatingOverlay>
 		{/if}
-		<UpdateBanner />
+		<div bind:this={topBands} class="bg-background sticky top-(--offline-bar-height) z-40" data-testid="top-bands">
+			<UpdateBanner />
+			<DisconnectedBanner />
+		</div>
 		<UpdateOrchestratorBadge />
-		<DisconnectedBanner />
 		<Main></Main>
 	{:else if connectionSurfaces.showAuthTimeout}
 		<!-- Auth check stalled (offline device / dropped socket): a calm retry

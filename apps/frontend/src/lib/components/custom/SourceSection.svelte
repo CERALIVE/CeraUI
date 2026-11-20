@@ -854,7 +854,9 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 											{/if}
 										</span>
 									</span>
-									<span class="flex shrink-0 items-center gap-1.5">
+									<!-- Capped at the tile and wrapping: kind, Lost and Selected together are
+									     wider than a two-column tile at 1280 px. -->
+									<span class="flex max-w-full shrink-0 flex-wrap items-center gap-1.5">
 										{#if source.origin === 'capture'}
 											<span
 												class="{captureBadgeClass(source)} rounded px-1.5 py-0.5 text-xs font-medium group-disabled/row:opacity-60"
