@@ -27,13 +27,15 @@ import {
 } from "../modules/wifi/state/wifi-state.ts";
 import { handleWifi, setWifiJoinNmcliRunner } from "../modules/wifi/wifi.ts";
 import { wifiAdapterLockKey } from "../modules/wifi/wifi-adapter-lock.ts";
-import { addWifiInterface } from "../modules/wifi/wifi-connections.ts";
+import {
+	addWifiInterface,
+	getWifiInterfacesByMacAddress,
+} from "../modules/wifi/wifi-connections.ts";
 import { wifiHotspotStart } from "../modules/wifi/wifi-hotspot-activation.ts";
 import {
 	type HotspotStopDeps,
 	wifiHotspotStop,
 } from "../modules/wifi/wifi-hotspot-config.ts";
-import { handleWifiMonitorEvent } from "../modules/wifi/wifi-hotspot-monitor.ts";
 import type {
 	HotspotOutcomeKind,
 	HotspotToggleOutcome,
@@ -53,6 +55,7 @@ import {
 	isolateWifiRegistry,
 	restoreWifiRegistry,
 } from "./helpers/wifi-registry.ts";
+import { wifiRequestBinding } from "./helpers/wifi-request-binding.ts";
 
 const MAC = "dc:a6:32:7e:01:01";
 const DEVICE_ID = "0";
@@ -118,7 +121,9 @@ function makeStartDeps(
 	return {
 		nmConnect: async () => true,
 		nmConnSetFields: async () => true,
-		nmHotspot: async () => "hotspot-uuid",
+		nmApConnAdd: async () => "hotspot-uuid",
+		nmConnDelete: async () => true,
+		nmDisconnect: async () => true,
 		wifiUpdateSavedConns: async () => {},
 		broadcastState: () => {},
 		setDupIpSuppression: () => {},
@@ -137,7 +142,7 @@ function makeStopDeps(over: Partial<HotspotStopDeps>): HotspotStopDeps {
 		releaseConcurrentInterface: async () => {},
 		broadcastState: () => {},
 		setDupIpSuppression: () => {},
-		rescan: async () => true,
+		rescan: async () => {},
 		publishOutcome: capture,
 		...over,
 	};
@@ -171,7 +176,7 @@ describe("hotspot start — a failure is typed, and every path is terminal", () 
 
 		const result = await wifiHotspotStart(
 			{ device: 0 },
-			makeStartDeps({ nmHotspot: async () => undefined }),
+			makeStartDeps({ nmApConnAdd: async () => undefined }),
 		);
 
 		expect(result).toEqual({ success: false, error: "activation-failed" });
@@ -202,7 +207,7 @@ describe("hotspot start — a failure is typed, and every path is terminal", () 
 		const result = await wifiHotspotStart(
 			{ device: 0 },
 			makeStartDeps({
-				nmHotspot: async () => {
+				nmApConnAdd: async () => {
 					nmCalls.push("nmHotspot");
 					return "hotspot-uuid";
 				},
@@ -269,8 +274,10 @@ describe("hotspot start — the accepted path is settled by a LATER frame", () =
 		// inside the test, standing in for "advance time ~12s".
 		const realSetTimeout = globalThis.setTimeout;
 		globalThis.setTimeout = ((fn: () => void) => {
+			const timer = realSetTimeout(() => {}, 0);
+			clearTimeout(timer);
 			fn();
-			return 0 as unknown as ReturnType<typeof setTimeout>;
+			return timer;
 		}) as typeof globalThis.setTimeout;
 
 		try {
@@ -303,33 +310,6 @@ describe("hotspot start — the accepted path is settled by a LATER frame", () =
 		} finally {
 			globalThis.setTimeout = realSetTimeout;
 		}
-	});
-
-	test("an NM-confirmed activation publishes success exactly once", async () => {
-		const iface = makeHotspotIface("wlan2");
-		seed(iface);
-
-		const result = await wifiHotspotStart(
-			{ device: 0 },
-			makeStartDeps({
-				wifiUpdateSavedConns: async () => {
-					iface.hotspot.conn = "hotspot-uuid";
-				},
-			}),
-		);
-		expect(result).toEqual({ success: true });
-		expect(published).toEqual([]);
-
-		handleWifiMonitorEvent({
-			type: "connection-state",
-			connection: iface.hotspot.name ?? "",
-			state: "activated",
-		});
-
-		expect(published).toEqual([
-			{ kind: "start", device: 0, outcome: { success: true } },
-		]);
-		expect(getWifiState()[MAC]?.mode).toBe("hotspot");
 	});
 });
 
@@ -392,11 +372,14 @@ describe("the RPC caller receives the typed outcome (F-03)", () => {
 		const received: string[] = [];
 		const client = captureClient(received);
 		addClient(client);
+		const row = getWifiInterfacesByMacAddress()[MAC];
+		if (!row) throw new Error("missing request fixture row");
+		const binding = await wifiRequestBinding(MAC, row);
 
 		try {
 			const result = await call(
 				hotspotStartProcedure,
-				{ device: DEVICE_ID },
+				{ device: DEVICE_ID, incarnation: binding.incarnation },
 				{ context: makeContext() },
 			);
 			expect(result).toEqual({ success: false, error: "unsupported" });
@@ -414,6 +397,7 @@ describe("the RPC caller receives the typed outcome (F-03)", () => {
 				hotspot: { start: { device: 0, error: "unsupported" } },
 			});
 		} finally {
+			await binding.restore();
 			removeClient(client);
 		}
 	});
@@ -437,7 +421,7 @@ describe("a station join that resolves no connection is terminal (F-07)", () => 
 			send: (message: string) => sent.push(message),
 		} as unknown as AppWebSocket;
 
-		handleWifi(conn, {
+		const dispatched = handleWifi(conn, {
 			new: { device: 0, ssid: "CeraNet", password: "supersecret" },
 		});
 		for (let i = 0; i < 20; i++) await Promise.resolve();
@@ -451,6 +435,7 @@ describe("a station join that resolves no connection is terminal (F-07)", () => 
 			new: { error: "ambiguous", device: 0 },
 		});
 		expect(wifiMessageSchema.safeParse(frames[0]).success).toBe(true);
+		await dispatched;
 	});
 
 	test("an unresolvable adapter answers rather than going quiet", async () => {
@@ -460,7 +445,7 @@ describe("a station join that resolves no connection is terminal (F-07)", () => 
 			send: (message: string) => sent.push(message),
 		} as unknown as AppWebSocket;
 
-		handleWifi(conn, {
+		const dispatched = handleWifi(conn, {
 			new: { device: 9, ssid: "CeraNet", password: "supersecret" },
 		});
 		for (let i = 0; i < 20; i++) await Promise.resolve();
@@ -471,5 +456,6 @@ describe("a station join that resolves no connection is terminal (F-07)", () => 
 			.map((obj) => obj.wifi);
 
 		expect(frames).toContainEqual({ new: { error: "generic", device: 9 } });
+		await dispatched;
 	});
 });

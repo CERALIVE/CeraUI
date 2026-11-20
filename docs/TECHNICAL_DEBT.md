@@ -86,6 +86,18 @@ register is "empty" precisely when there are none.
 
 ## Open Debt
 
+```debt
+id: TD-rtl8852be-hybrid-kernel-7-4
+title: RTL8852BE built into the Rock 5B+ does not offer hybrid on the current rtw89 path
+track: 1
+status: open
+exit_criteria: capability:rtl8852be-nm-hybrid
+owner: andrescera
+registered_at: 2026-11-15
+resolved_at: null
+unblock: Track the image upgrade at https://github.com/CERALIVE/image-building-pipeline/issues/274; ship a device kernel >= 7.4 containing upstream rtw89 change 4aae1be9483dee7877244f1f1a8cc1b469669e49 allowing two stations during SCC, then qualify the RTL8852BE NetworkManager hybrid lifecycle before enabling that card's product qualification check. Do not backport the change.
+```
+
 ### Released brand artwork precache footprint (2026-10-20)
 
 The lock-verified `v2026.10.0` artwork deliberately replaces five precached

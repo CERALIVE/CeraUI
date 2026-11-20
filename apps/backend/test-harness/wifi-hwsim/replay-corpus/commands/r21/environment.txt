@@ -1,0 +1,1 @@
+NODE_ENV=production MOCK_MODE=false LC_ALL=C PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin

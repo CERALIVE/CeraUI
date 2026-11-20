@@ -1,3 +1,4 @@
+// allow: SIZE_OK - the versioned ownership store keeps migration, collision checks and atomic credential/creation updates together.
 /*
     CeraUI - web UI for the CeraLive project
     Copyright (C) 2024-2025 CeraLive project
@@ -42,6 +43,7 @@ import {
 	writeFileAtomicSync,
 } from "../../helpers/config-loader.ts";
 import { logger } from "../../helpers/logger.ts";
+import type { NmProfileInstance } from "../network/network-manager-profile-instance.ts";
 import { isWifiChannelName, type WifiChannel } from "./wifi-channels.ts";
 import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 
@@ -93,6 +95,22 @@ const entrySchema = z.object({
 	conn: z.string().min(1).optional(),
 	channel: z.string().min(1).optional(),
 	previousConns: z.array(z.string().min(1)).optional(),
+	pendingCreation: z.string().min(1).optional(),
+	pendingCreationInstance: z
+		.object({
+			path: z.string().min(1),
+			fingerprint: z.string().min(1),
+			runId: z.string().min(1).optional(),
+			file: z
+				.object({
+					filename: z.string().min(1),
+					device: z.string().min(1),
+					inode: z.string().min(1),
+					ctime: z.string().min(1),
+				})
+				.optional(),
+		})
+		.optional(),
 	updatedAt: z.number().optional(),
 });
 
@@ -209,6 +227,29 @@ export function getAllHotspotCredentials(): HotspotCredentials[] {
 	return Object.values(entries).map(toCredentials);
 }
 
+/** All persisted keys, or the keys that positively own a current/retired UUID. */
+export function getHotspotCredentialOwners(uuid?: string): string[] {
+	return Object.entries(entries)
+		.filter(
+			([, entry]) =>
+				uuid === undefined ||
+				entry.conn === uuid ||
+				entry.pendingCreation === uuid ||
+				entry.previousConns?.includes(uuid),
+		)
+		.map(([key]) => key);
+}
+
+/** A successful NM inventory proved this retired UUID no longer exists. */
+export function pruneAbsentHotspotHistory(owner: string, uuid: string): void {
+	const entry = entries[keyFor(owner) ?? ""];
+	if (!entry?.previousConns?.includes(uuid)) return;
+	entry.previousConns = entry.previousConns.filter(
+		(previous) => previous !== uuid,
+	);
+	persist();
+}
+
 /** Absent adapters and retired UUIDs retain their ownership evidence. */
 export function canUseHotspotConnection(
 	macAddress: string,
@@ -219,7 +260,9 @@ export function canUseHotspotConnection(
 	return !Object.entries(entries).some(
 		([owner, entry]) =>
 			keyFor(owner) !== key &&
-			(entry.conn === uuid || entry.previousConns?.includes(uuid)),
+			(entry.conn === uuid ||
+				entry.pendingCreation === uuid ||
+				entry.previousConns?.includes(uuid)),
 	);
 }
 
@@ -253,6 +296,12 @@ export function rememberHotspotCredentials(
 			? { channel: credentials.channel }
 			: {}),
 		previousConns: nextHistory(previous, credentials.conn),
+		...(previous?.pendingCreation
+			? { pendingCreation: previous.pendingCreation }
+			: {}),
+		...(previous?.pendingCreationInstance
+			? { pendingCreationInstance: previous.pendingCreationInstance }
+			: {}),
 		updatedAt: Date.now(),
 	};
 
@@ -270,15 +319,81 @@ export function rememberHotspotCredentials(
 	persist();
 }
 
+/** Stage before add, then bind the returned settings instance; never ordinary adoption. */
+export function recordHotspotProfileCreation(
+	owner: string,
+	uuid: string,
+	instance?: NmProfileInstance,
+): boolean {
+	const key = keyFor(owner);
+	const entry = key && entries[key];
+	if (
+		!key ||
+		!entry ||
+		!canUseHotspotConnection(owner, uuid) ||
+		(entry.pendingCreation && entry.pendingCreation !== uuid)
+	)
+		return false;
+	const next = {
+		...entries,
+		[key]: {
+			...entry,
+			pendingCreation: uuid,
+			...(instance ? { pendingCreationInstance: instance } : {}),
+		},
+	};
+	try {
+		if (initialized)
+			writeFileAtomicSync(
+				filePath,
+				JSON.stringify({ version: STORE_VERSION, adapters: next }),
+			);
+	} catch (error: unknown) {
+		logger.warn("Could not persist first-hotspot creation evidence", {
+			error: error instanceof Error ? error.name : "unknown",
+		});
+		return false;
+	}
+	entries = next;
+	return true;
+}
+
+export function getPendingHotspotCreation(owner: string): string | undefined {
+	return entries[keyFor(owner) ?? ""]?.pendingCreation;
+}
+
+export function getPendingHotspotCreationInstance(
+	owner: string,
+): NmProfileInstance | undefined {
+	return entries[keyFor(owner) ?? ""]?.pendingCreationInstance;
+}
+
+/** Retire only the completed generated UUID, preserving any newer obligation. */
+export function clearHotspotProfileCreation(owner: string, uuid: string): void {
+	const entry = entries[keyFor(owner) ?? ""];
+	if (entry?.pendingCreation !== uuid) return;
+	delete entry.pendingCreation;
+	delete entry.pendingCreationInstance;
+	persist();
+}
+
 /** Injectable view of the store used by the hotspot activation flow. */
 export type HotspotCredentialsStore = {
 	get(macAddress: string): HotspotCredentials | undefined;
 	remember(macAddress: string, credentials: HotspotCredentials): void;
+	recordCreation?(
+		owner: string,
+		uuid: string,
+		instance?: NmProfileInstance,
+	): boolean;
+	clearCreation?(owner: string, uuid: string): void;
 };
 
 export const hotspotCredentialsStore: HotspotCredentialsStore = {
 	get: getHotspotCredentials,
 	remember: rememberHotspotCredentials,
+	recordCreation: recordHotspotProfileCreation,
+	clearCreation: clearHotspotProfileCreation,
 };
 
 /** Test seam: drop all in-memory state and disarm persistence. */

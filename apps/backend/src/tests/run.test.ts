@@ -29,6 +29,25 @@ afterEach(() => {
 	mock.restore();
 });
 
+it("selects a machine receipt on stderr without changing stdout by default", async () => {
+	const child = [
+		"-e",
+		'process.stdout.write("normal"); process.stderr.write("receipt");',
+	];
+	ALLOWED.add(process.execPath);
+	try {
+		expect(await run(process.execPath, child)).toBe("normal");
+		expect(await run(process.execPath, child, { output: "stderr" })).toBe(
+			"receipt",
+		);
+		expect(
+			await runWithStdin(process.execPath, child, "", { output: "stderr" }),
+		).toBe("receipt");
+	} finally {
+		ALLOWED.delete(process.execPath);
+	}
+});
+
 describe("run() — allowlist enforcement", () => {
 	it("resolves for an allowlisted binary (nmcli -v) without touching a shell", async () => {
 		const spy = spyOn(execMod, "execFileP").mockResolvedValue({

@@ -1,0 +1,89 @@
+R19_KEYFILE_CAPTURE_BEGIN timestamp=2026-11-17T19:14:40.234056+00:00 before_delete=false
+R19_MASKED_KEYFILE_BEGIN uuid=23fdf18c-3f07-406f-a417-3b889770fb43 file="/etc/NetworkManager/system-connections/CeraTest.nmconnection" bytes=290 sha256=50bd1a6f7a88c93c115bb5109d3fb02359b8d53d02937ef8bbd7223e25164687 dev=65025 inode=134988 size=290 mtime_ns=1794942875332070858 ctime_ns=1794942875332070858
+[connection]
+id=CeraTest
+uuid=23fdf18c-3f07-406f-a417-3b889770fb43
+type=wifi
+interface-name=wlan1
+
+[wifi]
+mode=infrastructure
+ssid=CeraTest
+
+[wifi-security]
+key-mgmt=wpa-psk
+psk=<redacted>
+
+[ipv4]
+address1=192.0.2.2/24
+method=manual
+
+[ipv6]
+addr-gen-mode=default
+method=disabled
+
+[proxy]
+R19_MASKED_KEYFILE_END uuid=23fdf18c-3f07-406f-a417-3b889770fb43
+R19_MASKED_KEYFILE_BEGIN uuid=67c2e052-a256-3fbb-a642-7dc3714e4973 file="/run/NetworkManager/system-connections/Wired connection 1.nmconnection" bytes=270 sha256=85be60b347e61d32d14beeecd92552483173ef8e788f74950d05cbbc82beb8ea dev=25 inode=1951 size=270 mtime_ns=1794942869319949701 ctime_ns=1794942869319949701
+[connection]
+id=Wired connection 1
+uuid=67c2e052-a256-3fbb-a642-7dc3714e4973
+type=ethernet
+autoconnect-priority=-999
+interface-name=ens3
+timestamp=1794942869
+
+[ethernet]
+
+[ipv4]
+method=auto
+
+[ipv6]
+addr-gen-mode=default
+method=auto
+
+[proxy]
+
+[.nmmeta]
+nm-generated=true
+R19_MASKED_KEYFILE_END uuid=67c2e052-a256-3fbb-a642-7dc3714e4973
+R19_MASKED_KEYFILE_BEGIN uuid=04a8d233-c57c-4703-aef0-0b95b3ad1c20 file="/run/NetworkManager/system-connections/lo.nmconnection" bytes=314 sha256=6f04fe8d0e4e49eda7f2e56907e1a6b78674d0640d720922fa8bf13e446a6bcc dev=25 inode=1949 size=314 mtime_ns=1794942869319949701 ctime_ns=1794942869319949701
+[connection]
+id=lo
+uuid=04a8d233-c57c-4703-aef0-0b95b3ad1c20
+type=loopback
+autoconnect=false
+interface-name=lo
+timestamp=1794942869
+
+[loopback]
+
+[ipv4]
+address1=127.0.0.1/8
+method=manual
+
+[ipv6]
+addr-gen-mode=default
+address1=::1/128
+method=manual
+
+[proxy]
+
+[.nmmeta]
+nm-generated=true
+volatile=true
+external=true
+R19_MASKED_KEYFILE_END uuid=04a8d233-c57c-4703-aef0-0b95b3ad1c20
+R19_KEYFILE_CAPTURE_COMPLETE profiles=3 before_delete=false
+R19_NM_DEVICE_STATE_BEGIN
+ens3:ethernet:connected:Wired connection 1
+wlan1:wifi:connected:CeraTest
+lo:loopback:connected (externally):lo
+wlan2:wifi:disconnected:
+wlan3:wifi:disconnected:
+p2p-dev-wlan1:wifi-p2p:disconnected:
+p2p-dev-wlan2:wifi-p2p:disconnected:
+p2p-dev-wlan3:wifi-p2p:disconnected:
+hwsim0:unknown:unmanaged:
+wlan0:wifi:unmanaged:
+R19_NM_DEVICE_STATE_END exit=0

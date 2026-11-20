@@ -53,11 +53,14 @@ const UNAVAILABLE_REASON_KEY: Record<WifiAdapterModeUnavailableReason, string> =
 	};
 
 const ERROR_KEY: Record<string, string> = {
+	"radio-unverified": "hotspotConfirm.radioUnverified",
 	DEVICE_BUSY: "network.wifiMode.error.deviceBusy",
 	"no-device": "network.wifiMode.error.noDevice",
 	unsupported: "network.wifiMode.error.unsupported",
 	"capability-unproven": "network.wifiMode.error.capabilityUnproven",
 	"activation-failed": "network.wifiMode.error.activationFailed",
+	"hybrid-channel-not-permitted":
+		"network.wifiMode.error.hybridChannelNotPermitted",
 	"not-confirmed": "network.wifiMode.error.notConfirmed",
 	"deactivation-failed": "network.wifiMode.error.deactivationFailed",
 };

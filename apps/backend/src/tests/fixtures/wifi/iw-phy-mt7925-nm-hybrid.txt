@@ -1,0 +1,15 @@
+Wiphy phy0
+	wiphy index: 0
+	Supported interface modes:
+		 * managed
+		 * AP
+		 * P2P-client
+		 * P2P-device
+	Band 1:
+		Frequencies:
+			* 2412.0 MHz [1] (20.0 dBm)
+			* 2437.0 MHz [6] (20.0 dBm)
+			* 2462.0 MHz [11] (20.0 dBm)
+	valid interface combinations:
+		 * #{ managed, P2P-client } <= 2, #{ AP } <= 1, #{ P2P-device } <= 1,
+		   total <= 3, #channels <= 1

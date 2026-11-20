@@ -561,6 +561,11 @@ function defaultClassify(r: unknown): OsCommandVerdict {
  *    anti-double-dispatch guard, and the reason a re-entrant call dropped by the
  *    modem global lock never leaves a stuck spinner.
  *  - `opts.rpc` MUST be a raw `rpc.*` method call; `osCommand` only awaits it.
+ *    A request that rebinds and resends passes the resend's key to `handoff`
+ *    first, so the pending attempt and its settlement follow that key. When this
+ *    call no longer owns its attempt, or a different key already holds a pending
+ *    operation, `handoff` changes nothing and returns false, and the caller must
+ *    not resend.
  *  - On a non-ok verdict it transitions `key → failed` and toasts the busy/fail
  *    message thunk (falling back to `wifiSelector.os.operationFailed`). This is
  *    the SINGLE failure-feedback path for the surface. `silent` suppresses that
@@ -574,14 +579,16 @@ function defaultClassify(r: unknown): OsCommandVerdict {
  *    or staying pending; the caller still owns its inline refusal feedback.
  *  - RPC settlement only changes the attempt this call began. A replacement
  *    keeps its state, while this call still delivers its feedback and result.
- *  - `onResult` runs with the raw result on any resolve (ok or not).
+ *  - A terminal attempt at handoff keeps its existing outcome and feedback;
+ *    the abandoned retry does not deliver its earlier refusal again.
+ *  - Otherwise `onResult` runs with the raw result on any resolve (ok or not).
  *  - A thrown `rpc` transitions `key → failed` and toasts, returning `undefined`.
  */
 export async function osCommand<T>(opts: {
 	key: string;
 	target?: unknown;
 	pendingTtlMs?: number;
-	rpc: () => Promise<T>;
+	rpc: (handoff: (key: string) => boolean) => Promise<T>;
 	classify?: (r: T) => OsCommandVerdict;
 	confirmOnResolve?: boolean;
 	silent?: boolean;
@@ -595,22 +602,35 @@ export async function osCommand<T>(opts: {
 	if (isOperationPending(opts.key)) return undefined;
 
 	const owner = store();
-	const ownsAttempt = owner.begin(
-		opts.key,
-		opts.target,
-		undefined,
-		opts.pendingTtlMs,
-	);
+	let key = opts.key;
+	let ownsAttempt = owner.begin(key, opts.target, undefined, opts.pendingTtlMs);
+	let settledBeforeHandoff = false;
 	// Broadcasts can replace this key while the RPC is in flight, even with the
 	// same target. Only settle our attempt; feedback still belongs to this call.
 	const canSettle = () => singleton === owner && ownsAttempt();
+	const handoff = (next: string): boolean => {
+		// Only an attempt this call still owns may be resent, even under its own key.
+		if (!canSettle()) return false;
+		if (!owner.isPending(key)) {
+			settledBeforeHandoff = true;
+			return false;
+		}
+		if (next === key) return true;
+		// A pending destination belongs to another operation; never take it over.
+		if (owner.isPending(next)) return false;
+		owner.clear(key);
+		key = next;
+		ownsAttempt = owner.begin(key, opts.target, undefined, opts.pendingTtlMs);
+		return true;
+	};
 	try {
-		const r = await opts.rpc();
+		const r = await opts.rpc(handoff);
+		if (settledBeforeHandoff) return undefined;
 		if (opts.isCurrent && !opts.isCurrent()) return undefined;
 		const v = opts.classify?.(r) ?? defaultClassify(r);
 		if (!v.ok) {
 			if (canSettle())
-				owner.fail(opts.key, v.reason ?? (v.busy ? "device_busy" : "failed"));
+				owner.fail(key, v.reason ?? (v.busy ? "device_busy" : "failed"));
 			if (!opts.silent) {
 				toast.error(
 					(v.busy ? opts.busyMessage : opts.failMessage)?.(r) ??
@@ -618,9 +638,9 @@ export async function osCommand<T>(opts: {
 				);
 			}
 		} else if (v.clear) {
-			if (canSettle()) owner.clear(opts.key);
+			if (canSettle()) owner.clear(key);
 		} else if (opts.confirmOnResolve) {
-			if (canSettle()) owner.confirm(opts.key);
+			if (canSettle()) owner.confirm(key);
 		}
 		// else: stay pending; the per-surface $effect confirms on the authoritative
 		// broadcast, or the TTL valve flips it to timed_out.
@@ -630,7 +650,7 @@ export async function osCommand<T>(opts: {
 		if (opts.isCurrent && !opts.isCurrent()) return undefined;
 		if (canSettle())
 			owner.fail(
-				opts.key,
+				key,
 				e instanceof ConnectionResetError
 					? "connection_reset"
 					: e instanceof Error

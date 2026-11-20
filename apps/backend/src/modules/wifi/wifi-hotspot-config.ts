@@ -33,10 +33,17 @@ import {
 } from "./wifi-adapter-lock.ts";
 import {
 	recordWifiAdapterModeIntent,
-	resolveWifiAdapterModeIntentKey,
 	type WifiAdapterModeRecorder,
 	wifiAdapterModeRecorder,
 } from "./wifi-adapter-mode.ts";
+import { publishAdapterModeOutcome } from "./wifi-adapter-mode-outcome.ts";
+import { resolveWifiAdapterOwner } from "./wifi-adapter-owner.ts";
+import { reconcileWifiAdapterStopLocked } from "./wifi-adapter-reconciler.ts";
+import {
+	admitWifiRequest,
+	registerWifiRequestLockEntry,
+	type WifiBindingRefusal,
+} from "./wifi-binding.ts";
 import { getWifiCapabilitiesForInterface } from "./wifi-capabilities.ts";
 import {
 	type DerivedApChannel,
@@ -46,7 +53,11 @@ import {
 	type WifiChannel,
 } from "./wifi-channels.ts";
 import {
-	concurrentApIfname,
+	confirmHybridActivation,
+	HYBRID_CHANNEL_REFUSAL,
+	isQualifiedNmManagedHybrid,
+	readHybridStationChannel,
+	readHybridTargetIdentity,
 	releaseConcurrentApInterface,
 } from "./wifi-concurrent-interface.ts";
 import {
@@ -55,11 +66,15 @@ import {
 } from "./wifi-connections.ts";
 import { captureWifiFrameIncarnation } from "./wifi-frame-binding.ts";
 import { hotspotOwnershipGuard } from "./wifi-hotspot-discovery.ts";
-import { settlePending, syncWifiStateCache } from "./wifi-hotspot-monitor.ts";
+import {
+	beginHotspotTransition,
+	syncWifiStateCache,
+} from "./wifi-hotspot-monitor.ts";
 import {
 	type HotspotOutcomePublisher,
 	publishHotspotOutcome,
 } from "./wifi-hotspot-outcome.ts";
+import { runHotspotProfileOperation } from "./wifi-hotspot-profile-operation.ts";
 import {
 	DEFAULT_HOTSPOT_SECURITY,
 	type HotspotSecurityId,
@@ -70,11 +85,14 @@ import {
 import {
 	canHotspot,
 	HOTSPOT_UP_TO,
+	isConcurrentHotspot,
 	isHotspotActive,
 	type WifiHotspotMessage,
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
 import { getMacAddressForWifiInterface } from "./wifi-interfaces.ts";
+import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
+import { transitionVirtualBinding } from "./wifi-virtual-binding.ts";
 
 // ─── hotspot config validation constants ──────────────────────────────────────
 
@@ -122,24 +140,21 @@ async function resolveAndStop(
 		return { success: false, error: "unsupported" };
 	const lock = await withWifiAdapterLock(
 		wifiAdapterLockKey(macAddress),
-		async () => {
+		async (): Promise<HotspotStopResult> => {
+			const owner = resolveWifiAdapterOwner(macAddress, wifiInterface);
+			const intentKey = normalizeMacAddress(owner.split("@")[0])
+				? owner
+				: undefined;
 			const undo = deps.recordIntent
-				? recordWifiAdapterModeIntent(
-						resolveWifiAdapterModeIntentKey(macAddress),
-						"station",
-						deps.recordIntent,
-					)
+				? recordWifiAdapterModeIntent(intentKey, "station", deps.recordIntent)
 				: undefined;
 			let succeeded = false;
 			try {
-				const result =
-					!isHotspotActive(wifiInterface) || !wifiInterface.hotspot.conn
-						? ({ success: true } as const)
-						: await stopHotspotForInterfaceLocked(
-								macAddress,
-								wifiInterface,
-								deps,
-							);
+				const result = await stopHotspotForInterfaceLocked(
+					macAddress,
+					wifiInterface,
+					deps,
+				);
 				succeeded = result.success;
 				return result;
 			} finally {
@@ -163,7 +178,11 @@ export type HotspotStopDeps = {
 };
 
 export const defaultHotspotStopDeps: HotspotStopDeps = {
-	recordIntent: wifiAdapterModeRecorder,
+	recordIntent: {
+		read: (key) => wifiAdapterModeRecorder.read(key),
+		persist: (key, mode) => wifiAdapterModeRecorder.persist(key, mode),
+		restore: (key, previous) => wifiAdapterModeRecorder.restore(key, previous),
+	},
 	nmConnSetFields,
 	nmDisconnect,
 	releaseConcurrentInterface: releaseConcurrentApInterface,
@@ -191,69 +210,63 @@ export async function stopHotspotForInterfaceLocked(
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotStopDeps,
 ): Promise<HotspotStopResult> {
-	settlePending(wifiInterface.ifname, false);
-	return stopHotspotLocked(macAddress, wifiInterface, deps);
+	return reconcileWifiAdapterStopLocked(macAddress, wifiInterface, deps);
 }
 
-async function stopHotspotLocked(
+/** A roam may withdraw SCC legality; only the observed AP UUID is stopped. */
+export async function reconcileHybridStationChannel(
 	macAddress: string,
-	wifiInterface: WifiInterfaceWithHotspot,
-	deps: HotspotStopDeps,
-): Promise<HotspotStopResult> {
-	const conn = wifiInterface.hotspot.conn;
-	if (!conn) return { success: true };
-
-	// Read BEFORE the teardown clears it: the dup-IP suppression release below has
-	// to pair with whichever interface took it on the way in, and a capable radio
-	// hosting an EXCLUSIVE hotspot has no virtual netdev at all.
-	const concurrent = wifiInterface.concurrentHotspot;
-	const virtualIfname =
-		concurrent?.ifname ?? concurrentApIfname(wifiInterface.ifname);
-	const wasConcurrent = concurrent !== undefined;
-	const activeConn = wifiInterface.activeConn;
-	const activeMode = wifiInterface.activeMode;
-
-	wifiInterface.hotspot.transition = "deactivating";
-	deps.broadcastState();
-	syncWifiStateCache(macAddress, wifiInterface);
-
-	await deps.nmConnSetFields(conn, { "connection.autoconnect": "no" });
-
-	const disconnected = await deps.nmDisconnect(conn);
-	if (disconnected) {
-		const sameObservation =
-			wifiInterface.activeConn === activeConn &&
-			wifiInterface.activeMode === activeMode;
-		if (activeConn === conn && sameObservation) {
-			delete wifiInterface.activeConn;
-			delete wifiInterface.activeMode;
-		}
-		if (wifiInterface.conn === conn && sameObservation) {
-			wifiInterface.conn = null;
-			wifiInterface.available.clear();
-		}
-		const current = wifiInterface.concurrentHotspot;
-		if (
-			current?.ifname === virtualIfname &&
-			(current.activeConn === conn || current.activeConn === null)
-		) {
-			delete wifiInterface.concurrentHotspot;
-			await deps.releaseConcurrentInterface(virtualIfname);
-		}
-	}
-
-	delete wifiInterface.hotspot.transition;
-	if (!wasConcurrent) {
-		deps.setDupIpSuppression(wifiInterface.ifname, false);
-	}
-	deps.broadcastState();
-	syncWifiStateCache(macAddress, wifiInterface);
-	void deps.rescan();
-	// The transition is cleared either way, so the state broadcast above looks
-	// identical for both outcomes — only this return distinguishes them.
-	return disconnected
-		? { success: true }
-		: { success: false, error: "deactivation-failed" };
+	row: WifiInterfaceWithHotspot,
+): Promise<void> {
+	const uuid = row.concurrentHotspot?.activeConn;
+	if (
+		!uuid ||
+		uuid !== row.hotspot.conn ||
+		row.hotspot.transition ||
+		!normalizeMacAddress(macAddress.split("@")[0]) ||
+		row.degradedReason === "permanent-mac-unresolved" ||
+		!isQualifiedNmManagedHybrid(row.ifname)
+	)
+		return;
+	await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
+		admitWifiRequest(
+			row,
+			async () => {
+				const target = row.concurrentHotspot;
+				if (
+					target?.activeConn !== uuid ||
+					row.hotspot.conn !== uuid ||
+					row.hotspot.transition
+				)
+					return;
+				const channel = await readHybridStationChannel(row.ifname);
+				if (
+					channel &&
+					(await confirmHybridActivation(
+						row.ifname,
+						target.ifname,
+						uuid,
+						channel,
+					))
+				)
+					return;
+				if (row.concurrentHotspot !== target || row.hotspot.conn !== uuid)
+					return;
+				const stopped = await stopHotspotForInterfaceLocked(
+					macAddress,
+					row,
+					defaultHotspotStopDeps,
+				);
+				if (!stopped.success) return;
+				publishAdapterModeOutcome(row.id, {
+					success: false,
+					error: "activation-failed",
+					reason: HYBRID_CHANNEL_REFUSAL,
+				});
+			},
+			() => undefined,
+		),
+	);
 }
 
 // ─── config ──────────────────────────────────────────────────────────────────
@@ -282,6 +295,10 @@ export type HotspotConfigDeps = {
 	) => void;
 	/** The adapter's own capability read — the sole evidence for a WPA3 offer. */
 	getCapabilities: (ifname: string) => WifiAdapterCapabilities | undefined;
+	readHybridChannel?: typeof readHybridStationChannel;
+	confirmHybridActivation?: typeof confirmHybridActivation;
+	nmDisconnect?: typeof nmDisconnect;
+	readHybridTargetIdentity?: typeof readHybridTargetIdentity;
 };
 
 export const defaultHotspotConfigDeps: HotspotConfigDeps = {
@@ -291,6 +308,10 @@ export const defaultHotspotConfigDeps: HotspotConfigDeps = {
 	broadcastState: broadcastWifiState,
 	rememberCredentials: rememberHotspotCredentials,
 	getCapabilities: getWifiCapabilitiesForInterface,
+	readHybridChannel: readHybridStationChannel,
+	confirmHybridActivation,
+	nmDisconnect,
+	readHybridTargetIdentity,
 };
 
 function offeredSecurityFor(
@@ -309,10 +330,16 @@ function nmConnSetHotspotFields(
 	derived: readonly DerivedApChannel[],
 	offeredSecurity: readonly HotspotSecurityId[],
 	deps: HotspotConfigDeps,
+	hybridFields?: Record<string, string>,
 ) {
 	// An underived channel has no band/number mapping BY CONSTRUCTION, so an
 	// illegal channel can never reach nmcli even if validation were bypassed.
-	const nmSettings = nmSettingsForChannel(channel, derived);
+	const nmSettings = hybridFields
+		? {
+				nmBand: hybridFields["802-11-wireless.band"] ?? "",
+				nmChannel: hybridFields["802-11-wireless.channel"] ?? "",
+			}
+		: nmSettingsForChannel(channel, derived);
 	if (!nmSettings) return;
 	// Same rule for security: an unoffered mode resolves to no field set at all.
 	const securityFields = nmSettingsForSecurity(security, offeredSecurity);
@@ -326,7 +353,12 @@ function nmConnSetHotspotFields(
 		...securityFields,
 	};
 
-	return deps.nmConnSetFields(uuid, settingsToChange);
+	return runHotspotProfileOperation({
+		uuid,
+		kind: "modify",
+		fields: settingsToChange,
+		run: (fields) => deps.nmConnSetFields(uuid, fields),
+	}).then((result) => result.success);
 }
 
 function isHotspotConfigComplete(
@@ -355,13 +387,18 @@ export async function wifiHotspotConfig(
 	  said. `unavailable` is one token for all four because they are one operator
 	  fact: this adapter is not currently a reconfigurable hotspot.
 	*/
-	const refuse = () => {
+	const refuse = (error = "unavailable", reason?: string) => {
 		conn.send(
 			buildMsg(
 				"wifi",
 				{
 					hotspot: {
-						config: { device: msg.device, error: "unavailable", ...binding },
+						config: {
+							device: msg.device,
+							error,
+							...(reason === undefined ? {} : { reason }),
+							...binding,
+						},
 					},
 				},
 				senderId,
@@ -375,6 +412,11 @@ export async function wifiHotspotConfig(
 
 	const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
 	if (!wifiInterface) return refuse();
+	if (
+		!normalizeMacAddress(macAddress) ||
+		wifiInterface.degradedReason === "permanent-mac-unresolved"
+	)
+		return refuse("radio-unverified");
 	if (!canHotspot(wifiInterface)) return refuse();
 	// Make sure the interface is already in hotspot mode
 	if (!isHotspotActive(wifiInterface)) return refuse();
@@ -420,12 +462,15 @@ export async function wifiHotspotConfig(
 		return;
 	}
 
-	// The offered set is DERIVED from the live regulatory domain, so this rejects
-	// a channel that is merely well-formed as well as one that is illegal here.
+	// Hybrid may retain an unchanged hotspot-only preference; fresh SCC proof owns its effective channel.
 	if (
 		msg.channel === undefined ||
 		typeof msg.channel !== "string" ||
-		!isChannelOffered(msg.channel, wifiInterface.hotspot.availableChannels)
+		(!isChannelOffered(msg.channel, wifiInterface.hotspot.availableChannels) &&
+			!(
+				isConcurrentHotspot(wifiInterface) &&
+				msg.channel === wifiInterface.hotspot.channel
+			))
 	) {
 		conn.send(
 			buildMsg(
@@ -472,17 +517,26 @@ export async function wifiHotspotConfig(
 
 	// Serialize the reconfigure against every other mutation on this ADAPTER —
 	// the RPC layer's `runGuarded` acquires the identical key.
-	const lock = await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
-		reconfigureHotspotLocked(
-			macAddress,
+	const entered = registerWifiRequestLockEntry(wifiInterface);
+	const pending = withWifiAdapterLock(wifiAdapterLockKey(macAddress), () => {
+		const result = admitWifiRequest(
 			wifiInterface,
-			name,
-			password,
-			channel,
-			security,
-			deps,
-		),
-	);
+			() =>
+				reconfigureHotspotLocked(
+					macAddress,
+					wifiInterface,
+					name,
+					password,
+					channel,
+					security,
+					deps,
+				),
+			(refusal): ReconfigureResult => refusal,
+		);
+		entered?.();
+		return result;
+	});
+	const lock = await (entered ? pending.finally(entered) : pending);
 
 	if (!lock.success) {
 		conn.send(
@@ -500,6 +554,7 @@ export async function wifiHotspotConfig(
 	}
 
 	const result = lock.result;
+	if (typeof result === "object") return refuse(result.error, result.reason);
 	if (result === "saving" || result === "activating") {
 		conn.send(
 			buildMsg(
@@ -545,21 +600,35 @@ export async function reconfigureHotspotForRegdomain(
 	const security = wifiInterface.hotspot.security ?? DEFAULT_HOTSPOT_SECURITY;
 
 	const lock = await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
-		reconfigureHotspotLocked(
-			macAddress,
+		admitWifiRequest(
 			wifiInterface,
-			name,
-			password,
-			channel,
-			security,
-			deps,
+			() =>
+				reconfigureHotspotLocked(
+					macAddress,
+					wifiInterface,
+					name,
+					password,
+					channel,
+					security,
+					deps,
+				),
+			(refusal): ReconfigureResult => refusal,
 		),
 	);
 
 	return lock.success && lock.result === "ok";
 }
 
-type ReconfigureResult = "ok" | "saving" | "activating";
+type ReconfigureResult =
+	| "ok"
+	| "saving"
+	| "activating"
+	| WifiBindingRefusal
+	| {
+			readonly success: false;
+			readonly error: "activation-failed";
+			readonly reason?: typeof HYBRID_CHANNEL_REFUSAL;
+	  };
 
 async function reconfigureHotspotLocked(
 	macAddress: string,
@@ -578,6 +647,72 @@ async function reconfigureHotspotLocked(
 	if (!owned()) {
 		return "saving";
 	}
+	const virtual = wifiInterface.concurrentHotspot;
+	if (
+		virtual &&
+		deps.readHybridChannel &&
+		!isQualifiedNmManagedHybrid(wifiInterface.ifname)
+	)
+		return { success: false, error: "activation-failed" };
+	const hybridChannel =
+		virtual && deps.readHybridChannel
+			? await deps.readHybridChannel(wifiInterface.ifname)
+			: undefined;
+	const targetIdentity =
+		virtual && deps.readHybridTargetIdentity
+			? await deps.readHybridTargetIdentity(
+					wifiInterface.ifname,
+					virtual.ifname,
+				)
+			: undefined;
+	const targetCurrent = async () =>
+		!virtual ||
+		!deps.readHybridTargetIdentity ||
+		(targetIdentity !== undefined &&
+			(await deps.readHybridTargetIdentity(
+				wifiInterface.ifname,
+				virtual.ifname,
+			)) === targetIdentity);
+	if (!(await targetCurrent())) return "saving";
+	const channelRefusal = async () => {
+		const uuid = wifiInterface.hotspot.conn;
+		const stopped =
+			owned() && uuid
+				? await runHotspotProfileOperation({
+						uuid,
+						kind: "down",
+						run: async () => {
+							if (
+								!owned() ||
+								wifiInterface.hotspot.conn !== uuid ||
+								!(await targetCurrent())
+							)
+								return false;
+							return deps.nmDisconnect?.(uuid);
+						},
+					})
+				: undefined;
+		if (stopped?.success) {
+			if (wifiInterface.concurrentHotspot === virtual)
+				transitionVirtualBinding(wifiInterface, { kind: "retire" });
+			if (virtual) await releaseConcurrentApInterface(virtual.ifname);
+		}
+		delete wifiInterface.hotspot.transition;
+		deps.broadcastState();
+		syncWifiStateCache(macAddress, wifiInterface);
+		return {
+			success: false,
+			error: "activation-failed",
+			reason: HYBRID_CHANNEL_REFUSAL,
+		} as const;
+	};
+	if (virtual && deps.readHybridChannel && !hybridChannel)
+		return channelRefusal();
+	const channelCurrent = async () =>
+		!hybridChannel ||
+		!deps.readHybridChannel ||
+		(await deps.readHybridChannel(wifiInterface.ifname))?.identity ===
+			hybridChannel.identity;
 	const derived = wifiInterface.hotspot.derivedChannels ?? [];
 	const offeredSecurity = offeredSecurityFor(wifiInterface, deps);
 	// The mode already in force is always restorable, even on an adapter whose
@@ -601,6 +736,7 @@ async function reconfigureHotspotLocked(
 			derived,
 			offeredSecurity,
 			deps,
+			hybridChannel?.sameChannelOnly ? hybridChannel.fields : undefined,
 		))
 	) {
 		return "saving";
@@ -610,14 +746,50 @@ async function reconfigureHotspotLocked(
 		return "saving";
 	}
 	// Restart the connection with the updated config
-	wifiInterface.hotspot.transition = "activating";
+	beginHotspotTransition(wifiInterface, "activating");
 	deps.broadcastState();
 
 	if (isHotspotConfigComplete(wifiInterface)) {
-		const restarted = await deps.nmConnect(
-			wifiInterface.hotspot.conn,
-			HOTSPOT_UP_TO,
-		);
+		const restartUuid = wifiInterface.hotspot.conn;
+		const readiness: { failure: "channel" | "target" | undefined } = {
+			failure: undefined,
+		};
+		const connectCurrentTarget = async () => {
+			if (!(await channelCurrent())) {
+				readiness.failure = "channel";
+				return false;
+			}
+			if (!(await targetCurrent())) {
+				readiness.failure = "target";
+				return false;
+			}
+			return deps.nmConnect(restartUuid, HOTSPOT_UP_TO);
+		};
+		const restarted = (
+			await runHotspotProfileOperation({
+				uuid: restartUuid,
+				kind: "up",
+				run: connectCurrentTarget,
+			})
+		).success;
+		if (readiness.failure === "channel") return channelRefusal();
+		if (readiness.failure === "target") {
+			delete wifiInterface.hotspot.transition;
+			return "saving";
+		}
+		if (
+			restarted &&
+			virtual &&
+			hybridChannel &&
+			deps.confirmHybridActivation &&
+			!(await deps.confirmHybridActivation(
+				wifiInterface.ifname,
+				virtual.ifname,
+				wifiInterface.hotspot.conn,
+				hybridChannel,
+			))
+		)
+			return channelRefusal();
 		if (!owned()) {
 			delete wifiInterface.hotspot.transition;
 			return "saving";
@@ -633,13 +805,23 @@ async function reconfigureHotspotLocked(
 				derived,
 				restorableSecurity,
 				deps,
+				hybridChannel?.sameChannelOnly ? hybridChannel.fields : undefined,
 			);
 			if (!owned()) {
 				delete wifiInterface.hotspot.transition;
 				return "saving";
 			}
 
-			await deps.nmConnect(wifiInterface.hotspot.conn, HOTSPOT_UP_TO);
+			await runHotspotProfileOperation({
+				uuid: restartUuid,
+				kind: "up",
+				run: connectCurrentTarget,
+			});
+			if (readiness.failure === "channel") return channelRefusal();
+			if (readiness.failure === "target") {
+				delete wifiInterface.hotspot.transition;
+				return "saving";
+			}
 			if (!owned()) {
 				delete wifiInterface.hotspot.transition;
 				return "saving";

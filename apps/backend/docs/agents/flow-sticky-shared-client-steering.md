@@ -42,6 +42,17 @@ The fixed 10000-bucket verdict map uses largest-remainder apportionment. Reorder
 add/remove, and reweight never change a surviving mark, so established flows keep
 their original route while only new flows see the new weights.
 
+Wi-Fi marks use the coherently sampled permanent address bound to the current
+registry object, independently of its verified/limited classification key.
+An unrelated unreadable witness therefore cannot turn a surviving station's
+mark into a `limited:*` or `degraded:*` mark. A registered Wi-Fi radio without
+current coherent physical evidence holds the plan pending, including after
+an apply, preserving committed routes and flows until evidence returns.
+An actual replacement with a newly proven address still retires the old
+support. Missing/unregistered Wi-Fi and non-Wi-Fi coverage/deadline handling
+retain their existing behavior. The production-graph cases live in
+`wifi-steering-readiness.test.ts`.
+
 **Startup readiness preserves recovered sharing.** The first OS netif snapshot
 must exist before planning, including when it is empty. A snapshot with no
 `wl*` interface needs no Wi-Fi discovery; otherwise a completed Wi-Fi device

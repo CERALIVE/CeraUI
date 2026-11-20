@@ -1,0 +1,74 @@
+RADIO=/sys/class/net/wlan0 MAC=02:00:00:00:00:00
+RADIO=/sys/class/net/wlan1 MAC=02:00:00:00:01:00
+RADIO=/sys/class/net/wlan2 MAC=02:00:00:00:02:00
+RADIO=/sys/class/net/wlan3 MAC=02:00:00:00:03:00
+phy#3
+	Interface wlan3
+		ifindex 6
+		wdev 0x300000001
+		addr 1a:c8:76:8e:a1:b2
+		type managed
+		txpower 20.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
+phy#2
+	Interface wlan2
+		ifindex 5
+		wdev 0x200000001
+		addr d6:b2:79:80:cc:da
+		type managed
+		txpower 20.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
+phy#1
+	Unnamed/non-netdev interface
+		wdev 0x100000003
+		addr 02:00:00:00:01:00
+		type P2P-device
+		txpower 20.00 dBm
+	Interface wlan1
+		ifindex 4
+		wdev 0x100000001
+		addr 02:00:00:00:01:00
+		type managed
+		channel 6 (2437 MHz), width: 20 MHz (no HT), center1: 2437 MHz
+		txpower 20.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
+phy#0
+	Interface wlan0
+		ifindex 3
+		wdev 0x1
+		addr 02:00:00:00:00:00
+		ssid CeraTest
+		type AP
+		channel 6 (2437 MHz), width: 20 MHz (no HT), center1: 2437 MHz
+		txpower 20.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	10	0	0	0	0	721		10
+0: phy0: Wireless LAN
+	Soft blocked: no
+	Hard blocked: no
+1: phy1: Wireless LAN
+	Soft blocked: no
+	Hard blocked: no
+2: phy2: Wireless LAN
+	Soft blocked: no
+	Hard blocked: no
+3: phy3: Wireless LAN
+	Soft blocked: no
+	Hard blocked: no
+ens3:ethernet:connected
+wlan1:wifi:connected
+lo:loopback:connected (externally)
+wlan2:wifi:disconnected
+wlan3:wifi:disconnected
+p2p-dev-wlan1:wifi-p2p:disconnected
+p2p-dev-wlan2:wifi-p2p:disconnected
+p2p-dev-wlan3:wifi-p2p:disconnected
+hwsim0:unknown:unmanaged
+wlan0:wifi:unmanaged

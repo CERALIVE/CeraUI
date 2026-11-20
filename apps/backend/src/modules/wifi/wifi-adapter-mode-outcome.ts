@@ -32,33 +32,58 @@
 import type {
 	WifiAdapterMode,
 	WifiAdapterModeError,
+	WifiAdapterModeResult,
 } from "@ceraui/rpc/schemas";
 
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import { withoutWifiRequestBinding } from "./wifi-binding.ts";
 import { getWifiFrameIncarnation } from "./wifi-frame-incarnation.ts";
 
 export type AdapterModeOutcome =
 	| { pending: true; mode: WifiAdapterMode }
 	| { success: true; mode: WifiAdapterMode }
-	| { success: false; error: WifiAdapterModeError };
+	| { success: false; error: WifiAdapterModeError; reason?: string };
 
 export type AdapterModeOutcomePublisher = (
 	device: number | string,
 	outcome: AdapterModeOutcome,
+	reply?: AdapterModeRefusalPublisher,
 ) => void;
+
+export type AdapterModeRefusalPublisher = (
+	device: number | string,
+	outcome: Extract<AdapterModeOutcome, { success: false }>,
+) => void;
+
+export function buildAdapterModeOutcome(
+	device: number | string,
+	outcome: AdapterModeOutcome,
+): WifiAdapterModeResult {
+	return {
+		...("pending" in outcome
+			? { device, mode: outcome.mode, pending: true as const }
+			: outcome.success
+				? { device, mode: outcome.mode, success: true }
+				: {
+						device,
+						error: outcome.error,
+						...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
+					}),
+		...getWifiFrameIncarnation(),
+	};
+}
 
 export const publishAdapterModeOutcome: AdapterModeOutcomePublisher = (
 	device,
 	outcome,
-) => {
-	broadcastMsg("wifi", {
-		adapter_mode: {
-			...("pending" in outcome
-				? { device, mode: outcome.mode, pending: true }
-				: outcome.success
-					? { device, mode: outcome.mode, success: true }
-					: { device, error: outcome.error }),
-			...getWifiFrameIncarnation(),
-		},
+	reply,
+) =>
+	withoutWifiRequestBinding(() => {
+		if (reply && "success" in outcome && !outcome.success) {
+			reply(device, outcome);
+			return;
+		}
+		broadcastMsg("wifi", {
+			adapter_mode: buildAdapterModeOutcome(device, outcome),
+		});
 	});
-};

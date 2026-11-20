@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { resolveModemPhysicalIdentity } from "../modules/modems/physical-identity-source.ts";
 import {
+	isBondCandidate,
 	NETIF_ERR_DUPIPV4,
 	NETIF_ERR_HOTSPOT,
 	NETIF_ERR_SHAREDLAN,
@@ -25,6 +26,7 @@ import {
 	readDesiredSteeringState,
 	type SteeringStateBuilderDeps,
 } from "../modules/network/uplink-steering/state-builder.ts";
+import { isConcurrentApIfname } from "../modules/wifi/wifi-concurrent-interface.ts";
 import {
 	constructedTwinDeps,
 	constructedTwins,
@@ -103,6 +105,27 @@ function harness(
 }
 
 describe("readDesiredSteeringState", () => {
+	test.each(["clap-wlan0", "clap-a1b2c3d4"])(
+		"retained virtual name %s is a client zone and never an uplink",
+		async (name) => {
+			const state = await readReadySteeringState(
+				harness({
+					interfaces: () => ({
+						[name]: netif("10.42.0.1", "255.255.255.0", NETIF_ERR_HOTSPOT),
+						wlan0: netif("192.168.2.8"),
+					}),
+					isClientZone: isConcurrentApIfname,
+					isBondCandidate,
+					health: () => [health(name, "up", 100), health("wlan0", "up", 100)],
+				}),
+			);
+			expect(state.clientZones).toEqual([
+				{ ifname: name, ipv4Cidr: "10.42.0.0/24" },
+			]);
+			expect(state.uplinks.map((uplink) => uplink.ifname)).toEqual(["wlan0"]);
+		},
+	);
+
 	test.each(["netif", "zones"] as const)(
 		"keeps the first plan pending before %s readiness, even with no client zones",
 		async (missing) => {
@@ -383,7 +406,8 @@ describe("known-down uplink rejoin", () => {
 
 	test("keeps a returned-address uplink out on passive evidence before and after dwell", async () => {
 		const { engine, h, interfaces, observe } = fixture();
-		interfaces.wlan0 = { ...netif("192.168.2.8"), ip: undefined };
+		interfaces.wlan0 = netif("192.168.2.8");
+		delete interfaces.wlan0.ip;
 		observe("definitive_loss", lostAt);
 		interfaces.wlan0 = netif("192.168.2.8");
 

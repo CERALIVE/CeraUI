@@ -7,7 +7,6 @@ import {
 import {
 	getPersistedWifiAdapterModes,
 	isWifiAdapterModeAvailable,
-	observedWifiAdapterMode,
 	resolveWifiAdapterModeIntentKey,
 	wifiAdapterModeCapability,
 	wifiAdapterModeOptions,
@@ -20,107 +19,146 @@ import {
 	type AdapterModeTransitionDeps,
 	defaultAdapterModeDeps,
 } from "./wifi-adapter-mode-transition.ts";
-import { getWifiCapabilityEvidenceRevision } from "./wifi-capabilities.ts";
+import { resolveWifiAdapterOwner } from "./wifi-adapter-owner.ts";
+import {
+	reconcileWifiAdapterRestoreLocked,
+	retryWifiAdapterReconcile,
+	type WifiRestoreCycle,
+} from "./wifi-adapter-reconciler.ts";
+import { admitWifiRequest, withoutWifiRequestBinding } from "./wifi-binding.ts";
+import {
+	getWifiCapabilitiesForInterface,
+	getWifiCapabilityEvidenceRevision,
+} from "./wifi-capabilities.ts";
+import { HYBRID_CHANNEL_REFUSAL } from "./wifi-concurrent-interface.ts";
 import { canHotspot } from "./wifi-hotspot-types.ts";
-import type { WifiInterface } from "./wifi-interfaces.ts";
-
-type RestoreEdge = {
-	readonly row: WifiInterface;
-	readonly desired: string;
-	readonly signature: string;
-	readonly completed: boolean;
-};
-
-type RestoreCycle = {
-	readonly edges: Map<string, RestoreEdge>;
-	readonly stopped: () => boolean;
-};
+import { restoreLimitedHotspot } from "./wifi-limited-hotspot-restore.ts";
+import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 
 type Preferences = typeof getPersistedWifiAdapterModes;
 
-/** Apply current intent only. Enumerating keys never grants authority to write it. */
+/** All entrypoints submit apply-only work to the same logical owner. */
 async function applyWifiAdapterModes(
 	deps: AdapterModeTransitionDeps,
 	readPreferences: Preferences,
-	cycle?: RestoreCycle,
+	cycle?: WifiRestoreCycle,
 ): Promise<void> {
 	try {
-		for (const macAddress of Object.keys(readPreferences())) {
-			try {
-				await withWifiAdapterLock(wifiAdapterLockKey(macAddress), async () => {
-					if (cycle?.stopped()) return;
-					const key = resolveWifiAdapterModeIntentKey(macAddress);
-					const desired = readPreferences()[key];
-					const row = deps.resolveInterfaces()[macAddress];
-					if (
-						!row ||
-						desired === undefined ||
-						desired === "station" ||
-						!canHotspot(row)
-					)
+		let limitedVisited = false;
+		for (const [registryKey, row] of Object.entries(deps.resolveInterfaces())) {
+			if (!canHotspot(row)) continue;
+			const verified = normalizeMacAddress(registryKey) !== undefined;
+			const preferences = readPreferences();
+			if (
+				!verified &&
+				(limitedVisited ||
+					!Object.values(preferences).some((mode) => mode !== "station"))
+			)
+				continue;
+			const observedOwner = resolveWifiAdapterOwner(registryKey, row);
+			const key = verified
+				? observedOwner
+				: resolveWifiAdapterModeIntentKey(
+						"limited",
+						preferences,
+						Object.values(deps.resolveInterfaces()).filter(canHotspot).length,
+					);
+			const owner = key ?? observedOwner;
+			const lock = await withWifiAdapterLock(
+				wifiAdapterLockKey(owner),
+				async () => {
+					if (cycle?.stopped() || deps.resolveInterfaces()[registryKey] !== row)
 						return;
-					const previous = cycle?.edges.get(key);
-					if (
-						previous?.row === row &&
-						previous.desired === desired &&
-						previous.completed
-					)
-						return;
-					// An observed AP or our own pending activation is never a restore target.
-					if (
-						observedWifiAdapterMode(row) !== "station" ||
-						row.hotspot.transition
-					)
-						return;
+					const desired =
+						key === undefined ? undefined : readPreferences()[key];
+					if (!verified) limitedVisited = true;
+					const readCapabilities =
+						deps.readCapabilities ?? getWifiCapabilitiesForInterface;
+					const rawCapability = readCapabilities(row.ifname);
 					const capability = wifiAdapterModeCapability(
 						row,
-						deps.readCapabilities,
+						() => rawCapability,
 					);
-					const streaming = getIsStreaming();
 					const signature = JSON.stringify([
+						key,
 						desired,
 						row.ifname,
 						row.conn,
 						capability.staApComboSupported,
 						getWifiCapabilityEvidenceRevision(row.ifname),
-						streaming,
+						getIsStreaming(),
+						...(!verified ? Object.keys(deps.resolveInterfaces()) : []),
 					]);
-					if (previous?.row === row && previous.signature === signature) return;
-					cycle?.edges.set(key, { row, desired, signature, completed: false });
-					if (
-						!isWifiAdapterModeAvailable(
-							desired,
-							wifiAdapterModeOptions(capability),
-						)
-					) {
-						logger.warn(
-							`wifi mode restore: activation-failed on ${row.ifname}; leaving ${desired} pending`,
-						);
-						return;
-					}
-					if (desired === "hotspot" && row.conn && streaming) {
-						logger.warn(
-							`wifi mode restore: streaming keeps the station link on ${row.ifname}; leaving hotspot pending`,
-						);
-						return;
-					}
-					const result = await deps.startHotspot(
-						row.id,
-						deps.publishHotspotOutcome,
-					);
-					if (result.success) {
-						cycle?.edges.set(key, { row, desired, signature, completed: true });
-					} else {
-						logger.warn(
-							`wifi mode restore: ${result.error} on ${row.ifname}; leaving ${desired} pending`,
-						);
-					}
-				});
-			} catch (error: unknown) {
-				logger.error(
-					`wifi mode restore failed for ${macAddress}: ${error instanceof Error ? error.message : String(error)}`,
-				);
-			}
+					await reconcileWifiAdapterRestoreLocked(owner, {
+						row,
+						desired,
+						signature,
+						...(cycle ? { cycle } : {}),
+						isCurrent: () =>
+							deps.resolveInterfaces()[registryKey] === row &&
+							(key === undefined ? undefined : readPreferences()[key]) ===
+								desired,
+						activate: (settle, attempt) =>
+							admitWifiRequest(
+								row,
+								async () => {
+									if (!verified)
+										return restoreLimitedHotspot(
+											row,
+											deps,
+											readPreferences,
+											cycle?.stopped,
+											attempt,
+										);
+									if (desired === undefined || desired === "station")
+										return undefined;
+									if (
+										!isWifiAdapterModeAvailable(
+											desired,
+											wifiAdapterModeOptions(capability),
+										)
+									) {
+										if (
+											desired === "hybrid" &&
+											rawCapability?.staApCombo.supported === true &&
+											capability.staApComboSupported !== true
+										) {
+											const refusal = {
+												success: false,
+												error: "activation-failed",
+												reason: HYBRID_CHANNEL_REFUSAL,
+											} as const;
+											deps.publishHotspotOutcome("start", row.id, refusal);
+											settle(false);
+											return refusal;
+										}
+										logger.warn(
+											`wifi mode restore: activation-failed on ${row.ifname}; leaving ${desired} pending`,
+										);
+										return undefined;
+									}
+									if (desired === "hotspot" && row.conn && getIsStreaming()) {
+										logger.warn(
+											`wifi mode restore: streaming keeps the station link on ${row.ifname}; leaving hotspot pending`,
+										);
+										return undefined;
+									}
+									return deps.startHotspot(
+										row.id,
+										(...args) => {
+											deps.publishHotspotOutcome(...args);
+											if (args[2].success || args[2].error !== "DEVICE_BUSY")
+												settle(args[2].success);
+										},
+										attempt,
+									);
+								},
+								(refusal) => refusal,
+							),
+					});
+				},
+			);
+			if (!lock.success) retryWifiAdapterReconcile(owner, undefined, "restore");
 		}
 	} catch (error: unknown) {
 		logger.error(
@@ -137,7 +175,7 @@ export function reconcileWifiAdapterModes(
 	return applyWifiAdapterModes(deps, readPreferences);
 }
 
-/** No polling or timers: discovery, capability and streaming edges re-arm pending intent. */
+/** All failed attempts reuse the bounded discovery timer. */
 export function startWifiAdapterModeRestore(
 	deps: AdapterModeTransitionDeps = defaultAdapterModeDeps,
 	source: WifiAdapterModeRestoreSource = wifiAdapterModeRestoreSource,
@@ -145,7 +183,7 @@ export function startWifiAdapterModeRestore(
 	let stopped = false;
 	let queued = false;
 	let flight: Promise<void> | undefined;
-	const cycle: RestoreCycle = { edges: new Map(), stopped: () => stopped };
+	const cycle: WifiRestoreCycle = { edges: new Map(), stopped: () => stopped };
 	const request = (): Promise<void> => {
 		if (stopped || !source.hasDiscovery()) return Promise.resolve();
 		queued = true;
@@ -165,7 +203,10 @@ export function startWifiAdapterModeRestore(
 		});
 		return flight;
 	};
-	const unsubscribe = source.subscribe(request);
+	// An edge may be published from inside a request; restore is never its work.
+	const unsubscribe = source.subscribe(() =>
+		withoutWifiRequestBinding(request),
+	);
 	void request();
 	return () => {
 		stopped = true;

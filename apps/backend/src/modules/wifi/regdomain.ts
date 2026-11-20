@@ -526,7 +526,8 @@ export async function disarmRegdomainRestore(): Promise<boolean> {
 
 export type RegdomainRunner = (bin: string, args: string[]) => Promise<string>;
 
-const defaultRegdomainRunner: RegdomainRunner = (bin, args) => run(bin, args);
+const defaultRegdomainRunner: RegdomainRunner = (bin, args) =>
+	run(bin, args, args[0] === "--debug" ? { output: "stderr" } : undefined);
 
 let runner: RegdomainRunner = defaultRegdomainRunner;
 let derivedChannels: DerivedApChannel[] = [];

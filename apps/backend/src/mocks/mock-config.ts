@@ -16,6 +16,7 @@ import type {
 export type { MockModemConfig, MockWifiNetwork, MockWifiRadio };
 
 export type MockScenario =
+	| "wifi-limited"
 	| "single-modem"
 	| "multi-modem-wifi"
 	| "streaming-active"
@@ -80,6 +81,7 @@ export interface ScenarioBluetooth {
 }
 
 export interface ScenarioConfig {
+	limitedWifi?: boolean;
 	modems: number;
 	wifi: boolean;
 	streaming: boolean;
@@ -89,6 +91,13 @@ export interface ScenarioConfig {
 }
 
 export const scenarios: Record<MockScenario, ScenarioConfig> = {
+	"wifi-limited": {
+		modems: 0,
+		wifi: true,
+		streaming: false,
+		limitedWifi: true,
+		description: "Unidentified WiFi radio with an already active hotspot",
+	},
 	"single-modem": {
 		modems: 1,
 		wifi: false,

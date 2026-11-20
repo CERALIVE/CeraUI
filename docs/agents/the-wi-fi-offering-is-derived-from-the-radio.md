@@ -7,8 +7,10 @@ editor preserve edits on same-device/token status patches, including renames.
 Rebinding reloads the form and withdraws consent; session, link and attempt
 fences reject obsolete continuations. Save and mode outcomes use the dispatched
 token echoed by the producer. Tokenless rows remain visible with Stop available,
-but guarded actions require identification. Backend enforcement and limited or
-port-scoped identity states remain later work. See
+but guarded actions require identification. The backend now enforces the
+expected token at request and request-bound transaction-lock entry and retains
+safe Stop, station and internal actions. Request admission is separate from
+frame correlation metadata. Port-scoped identity remains separate work. See
 [the binding contract](../HOTSPOT-DRAFT-BINDING.md).
 
 **Security offerings are partial, nonempty maps [EXISTS].** A radio without
@@ -68,6 +70,13 @@ reddens six tests.
 shape we knew how to read is gone. The second is a statement about the *read*, not
 about the hardware. Self-managed wiphys get a shorter TTL (60 s vs 5 min) because their
 domain moves with no operator action.
+
+Well-formed bands outside the represented 2.4/5/6 GHz schema are omitted rather
+than invalidating neighbouring radios. Their frequencies may omit channel
+suffixes, as S1G does in iw 6.9. Malformed frequency blocks and supported-band
+rows without channel numbers still fail. Grouped interface limits use the same
+slot accounting as concurrency discovery: managed and AP need two slots, even
+inside a shared group, and each alternative retains its own total/channel bounds.
 
 **Three degraded states, and collapsing any pair is the bug.** A radio that does not
 carry a band renders **zero** nodes. A radio that carries it under a non-permitting,

@@ -1,7 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { wifiMessageSchema } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
-import { initMockService } from "../mocks/mock-service.ts";
+import { getMockState, initMockService } from "../mocks/mock-service.ts";
 import { getMockWifiIncarnation } from "../mocks/providers/wifi-incarnation.ts";
 import {
 	type AdapterModeTransitionDeps,
@@ -145,18 +145,17 @@ test("real mode RPC echoes the validated expected token only on asynchronous fra
 			{ context: fixture.context },
 		);
 		await fixture.rotate();
-		if (!complete) throw new Error("missing terminal callback");
-		complete("start", 0, { success: true });
+		expect(complete).toBeUndefined();
+		expect(defaultAdapterModeDeps.startHotspot).not.toHaveBeenCalled();
 		frameTranscript("rpc-mode:real", fixture, result);
 		expect(result).toEqual({
-			success: true,
-			accepted: true,
-			applied: "hotspot",
+			success: false,
+			error: "radio-changed",
 		});
 		const modes = fixture.frames
 			.map((raw) => wifiMessageSchema.parse(JSON.parse(raw).wifi).adapter_mode)
 			.filter((mode) => mode !== undefined);
-		expect(modes).toHaveLength(2);
+		expect(modes).toHaveLength(1);
 		for (const mode of modes) expect(mode.incarnation).toBe("request-A");
 	} finally {
 		await fixture.restore();
@@ -169,14 +168,17 @@ for (const expected of [undefined, "request-A"]) {
 			const fixture = await wifiFrameFixture(false);
 			fixture.mocked(true);
 			initMockService("multi-modem-wifi");
-			const captured = expected ?? getMockWifiIncarnation("wlan0");
+			const requested =
+				mode === "hybrid" ? getMockWifiIncarnation("wlan0") : expected;
+			const captured = requested ?? getMockWifiIncarnation("wlan0");
+			const before = structuredClone(getMockState());
 			try {
 				const result = await call(
 					setWifiAdapterModeProcedure,
 					{
 						device: "0",
 						mode,
-						...(expected === undefined ? {} : { incarnation: expected }),
+						...(requested === undefined ? {} : { incarnation: requested }),
 					},
 					{ context: fixture.context },
 				);
@@ -187,16 +189,25 @@ for (const expected of [undefined, "request-A"]) {
 				);
 				const outcome =
 					mode === "hotspot"
-						? { device: "0", mode, success: true }
+						? {
+								device: "0",
+								error:
+									expected === undefined ? "binding-required" : "radio-changed",
+							}
 						: { device: "0", error: "capability-unproven" };
 				expect(legacy).toEqual([
 					JSON.stringify({ wifi: { adapter_mode: outcome } }),
 				]);
 				expect(result).toEqual(
 					mode === "hotspot"
-						? { success: true, applied: mode }
+						? {
+								success: false,
+								error:
+									expected === undefined ? "binding-required" : "radio-changed",
+							}
 						: { success: false, error: "capability-unproven" },
 				);
+				expect(getMockState()).toEqual(before);
 				const frame = wifiMessageSchema.parse(
 					JSON.parse(fixture.frames[0] ?? "{}").wifi,
 				);

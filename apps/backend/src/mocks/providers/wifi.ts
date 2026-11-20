@@ -70,6 +70,10 @@ export function getMockHotspotConfig(device: string): MockHotspotConfig {
 	return mockHotspotConfigs[device] ?? mockHotspotConfigs.wlan0;
 }
 
+export function isMockWifiLimited(device: string | undefined): boolean {
+	return getScenarioConfig().limitedWifi === true && device === "wlan0";
+}
+
 export function setMockHotspotConfig(
 	device: string,
 	update: { name?: string; password?: string; channel?: string },
@@ -184,6 +188,9 @@ export function handleNmcliCommand(args: string[]): string | null {
 	// scenario, else it falls through to a real `nmcli` and registration fails.
 	// getMockConnections already filters wifi entries on config.wifi internally.
 	if (argsStr.includes("connection") && argsStr.includes("show")) {
+		const at = args.indexOf("connection");
+		if (args.includes("multiline") && args[at + 2])
+			return getMockConnectionFields(args);
 		return getMockConnections(args);
 	}
 
@@ -246,6 +253,12 @@ function getMockConnections(args: string[]): string {
 				switch (f.trim()) {
 					case "uuid":
 						return conn.uuid;
+					case "active":
+						return getMockState().wifiModes[conn.device] !== "hotspot" &&
+							getMockState().wifiConnections.get(conn.device)?.activeNetwork ===
+								conn.name
+							? "yes"
+							: "no";
 					case "type":
 						return conn.type;
 					case "name":
@@ -266,6 +279,10 @@ function getMockConnections(args: string[]): string {
 				switch (f.trim()) {
 					case "uuid":
 						return hotspot.uuid;
+					case "active":
+						return getMockState().wifiModes[device] === "hotspot"
+							? "yes"
+							: "no";
 					case "type":
 						return "802-11-wireless";
 					case "name":
@@ -337,9 +354,17 @@ function getMockWifiList(): string {
  * Generate mock connection field values
  */
 function getMockConnectionFields(args: string[]): string {
-	const getValuesIndex = args.indexOf("--get-values");
+	const getValuesIndex = args.indexOf(
+		args.includes("multiline") ? "--fields" : "--get-values",
+	);
 	const fields = getValuesIndex !== -1 ? args[getValuesIndex + 1] : "";
 	const fieldList = fields?.split(",") ?? [];
+	const render = (values: string[]) =>
+		args.includes("multiline")
+			? fieldList
+					.map((field, index) => `${field}:${values[index] ?? ""}`)
+					.join("\n")
+			: values.join("\n");
 
 	// Find the UUID (last argument usually)
 	const uuid = args[args.length - 1];
@@ -377,15 +402,15 @@ function getMockConnectionFields(args: string[]): string {
 		const radio = mockWifiRadios.find((r) => r.device === hotspotDevice);
 		const mode =
 			wifiModes[hotspotDevice] === "hotspot" ? "ap" : "infrastructure";
-		return fieldList
-			.map((f) =>
+		return render(
+			fieldList.map((f) =>
 				getFieldValue(f, {
 					mode,
 					ssid: hotspot.name,
 					macAddress: radio?.macAddress ?? "dc:a6:32:12:34:57",
 				}),
-			)
-			.join("\n");
+			),
+		);
 	}
 
 	// Check saved connections
@@ -393,28 +418,28 @@ function getMockConnectionFields(args: string[]): string {
 	if (savedConn) {
 		const mode =
 			wifiModes[savedConn.device] === "hotspot" ? "ap" : "infrastructure";
-		return fieldList
-			.map((f) =>
+		return render(
+			fieldList.map((f) =>
 				getFieldValue(f, {
 					mode,
 					ssid: savedConn.name,
 					macAddress: savedConn.macAddress,
 				}),
-			)
-			.join("\n");
+			),
+		);
 	}
 
 	// For any other connection (like modem connections or dynamically created ones)
 	// Return values that won't cause errors but indicate it's not a wifi connection
-	return fieldList
-		.map((f) =>
+	return render(
+		fieldList.map((f) =>
 			getFieldValue(f, {
 				mode: "infrastructure",
 				ssid: `mock-${uuid?.slice(0, 8) || "unknown"}`,
 				macAddress: "00:00:00:00:00:00",
 			}),
-		)
-		.join("\n");
+		),
+	);
 }
 
 /**

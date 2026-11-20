@@ -55,6 +55,7 @@ import {
 	uplinkFlowsResetEventSchema,
 } from "@ceraui/rpc/schemas";
 import { downloadLog } from "$lib/helpers/SystemHelper";
+import { wifiFailureReason } from "$lib/helpers/wifi-mode-outcome";
 import { isSameWireValue, preserveWireIdentity } from "$lib/rpc/value-identity";
 import { authStatusStore } from "$lib/stores/auth-status.svelte";
 import { ingestBuffering } from "$lib/stores/buffering.svelte";
@@ -90,6 +91,7 @@ import {
 	confirmOperation,
 	destroyAsyncOperations,
 	failOperation,
+	getOperationPhase,
 	getOperationTarget,
 	isOperationPending,
 	reconcileOperationsOnReconnect,
@@ -122,6 +124,7 @@ import {
 	refreshWifiAdapterModes,
 	resetWifiAdapterModes,
 } from "./wifi-adapter-modes.svelte";
+import { noteWifiConfig, noteWifiStatus } from "./wifi-status-receipt";
 
 export { mergeModemList };
 
@@ -621,6 +624,7 @@ function handleMessage(
 			}
 			if (statusData.wifi !== undefined) {
 				wifiState = preserveWireIdentity(wifiState, statusData.wifi);
+				noteWifiStatus(statusData.wifi);
 			}
 			if (statusData.modems !== undefined) {
 				modemsState = mergeModemList(modemsState, statusData.modems);
@@ -875,25 +879,40 @@ function handleMessage(
 			// Deferred hotspot reconfigure result. `hotspotConfigure` only acks the
 			// dispatch; the real outcome arrives here and resolves the separate
 			// `hotspot-config:${device}` key the HotspotDialog save op stays pending on.
-			if (
-				wifiData.hotspot?.config?.device !== undefined &&
-				wifiData.hotspot.config.incarnation ===
-					wifiState?.[String(wifiData.hotspot.config.device)]?.incarnation
-			) {
-				const key = wifiHotspotConfigOpKey(
-					String(wifiData.hotspot.config.device),
-					wifiData.hotspot.config.incarnation,
-				);
-				if (wifiData.hotspot.config.success) {
-					confirmOperation(key);
-				} else {
-					failOperation(key, wifiData.hotspot.config.error ?? "failed");
+			if (wifiData.hotspot?.config?.device !== undefined) {
+				const config = wifiData.hotspot.config;
+				const ownsDispatch = noteWifiConfig(config);
+				// Entry-only missing tokens settle by RPC; transient refusals stay
+				// pending while the same owner performs its one bounded retry.
+				if (
+					ownsDispatch &&
+					config.incarnation ===
+						wifiState?.[String(config.device)]?.incarnation &&
+					config.error !== "binding-required" &&
+					!(
+						config.error === "radio-changed" &&
+						config.reason === "current-unobserved"
+					)
+				) {
+					const key = wifiHotspotConfigOpKey(
+						String(config.device),
+						config.incarnation,
+					);
+					if (config.success) {
+						confirmOperation(key);
+					} else {
+						failOperation(key, wifiFailureReason(config) ?? "failed");
+					}
 				}
 			}
 			// `begin` on the pending frame is deliberate: it re-arms the TTL and
 			// makes a transition dispatched from ANOTHER client visible here too.
 			if (
 				wifiData.adapter_mode?.device !== undefined &&
+				// Legacy call-only binding replies are not broadcast terminals.
+				(seq !== undefined ||
+					(wifiData.adapter_mode.error !== "binding-required" &&
+						wifiData.adapter_mode.error !== "radio-changed")) &&
 				wifiData.adapter_mode.incarnation ===
 					wifiState?.[String(wifiData.adapter_mode.device)]?.incarnation
 			) {
@@ -904,8 +923,15 @@ function handleMessage(
 				if (wifiData.adapter_mode.pending === true) {
 					beginOperation(key, wifiData.adapter_mode.mode);
 				} else if (wifiData.adapter_mode.error !== undefined) {
-					failOperation(key, wifiData.adapter_mode.error);
+					// A reconnect can clear the latch before its terminal arrives.
+					if (getOperationPhase(key) === "idle") beginOperation(key);
+					failOperation(
+						key,
+						wifiFailureReason(wifiData.adapter_mode) ?? "failed",
+					);
 				} else if (wifiData.adapter_mode.success === true) {
+					if (getOperationPhase(key) === "idle")
+						beginOperation(key, wifiData.adapter_mode.mode);
 					confirmOperation(key);
 					void refreshWifiAdapterModes();
 				}

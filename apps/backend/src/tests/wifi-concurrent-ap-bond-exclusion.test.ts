@@ -86,6 +86,23 @@ beforeEach(() => {
 });
 
 describe("a concurrent AP holding 10.42.0.1 never enters the bond", () => {
+	test.each(["clap-wlan0", "clap-a1b2c3d4"])(
+		"retained virtual name %s never gains bond eligibility",
+		(name) => {
+			processIfconfigOutput(
+				ifconfig(
+					ifconfigStanza("wlan0", "192.168.1.50", "aa:bb:cc:dd:ee:02"),
+					ifconfigStanza(name, AP_ADDRESS, "aa:bb:cc:dd:ee:03"),
+				),
+			);
+			const entry = getNetworkInterfaces()[name];
+			if (!entry) throw new Error("Missing fixture netdev");
+			expect(entry.error & NETIF_ERR_HOTSPOT).toBe(NETIF_ERR_HOTSPOT);
+			expect(isBondCandidate(name, entry)).toBe(false);
+			expect(genSrtlaIpList()).toEqual(["192.168.1.50"]);
+		},
+	);
+
 	test("`genSrtlaIpList` emits no 10.42.0.x while the AP is up", () => {
 		processIfconfigOutput(hybridTopology());
 
