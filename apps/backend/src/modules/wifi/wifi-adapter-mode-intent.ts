@@ -1,8 +1,14 @@
 import type { WifiAdapterMode } from "@ceraui/rpc/schemas";
 import { logger } from "../../helpers/logger.ts";
 import { getConfig, saveConfig } from "../config.ts";
-import { isHotspotPortCredentialCopy } from "./hotspot-credentials.ts";
-import { wifiAdapterKeyMac } from "./wifi-permanent-mac.ts";
+import {
+	getHotspotCredentialOwners,
+	isHotspotPortCredentialCopy,
+} from "./hotspot-credentials.ts";
+import {
+	normalizeMacAddress,
+	wifiAdapterKeyMac,
+} from "./wifi-permanent-mac.ts";
 
 // ─── persistence (permanent-MAC keyed) ───────────────────────────────────────
 
@@ -35,12 +41,12 @@ export function getPersistedWifiAdapterModes(): Readonly<
 export function persistWifiAdapterMode(
 	macAddress: string,
 	mode: WifiAdapterMode,
-	alias?: string,
+	aliases: readonly string[] = [],
 ): void {
 	saveWifiAdapterModes({
 		...(getConfig().wifi_modes ?? {}),
 		[macAddress]: mode,
-		...(alias ? { [alias]: mode } : {}),
+		...Object.fromEntries(aliases.map((alias) => [alias, mode])),
 	});
 }
 
@@ -53,7 +59,7 @@ export function seedWifiPortMode(
 	const mode = getPersistedWifiAdapterMode(owner);
 	if (mode === undefined || getPersistedWifiAdapterMode(alias) === mode) return;
 	try {
-		persistWifiAdapterMode(owner, mode, alias);
+		persistWifiAdapterMode(owner, mode, [alias]);
 	} catch (error: unknown) {
 		logger.warn("Could not persist the hotspot port intent", {
 			error: error instanceof Error ? error.name : "unknown",
@@ -84,7 +90,7 @@ function saveWifiAdapterModes(next: Record<string, WifiAdapterMode>): void {
 export function restoreWifiAdapterMode(
 	macAddress: string,
 	previous: WifiAdapterMode | undefined,
-	alias?: { readonly key: string; readonly mode: WifiAdapterMode | undefined },
+	aliases: readonly ModeSnapshot[] = [],
 ): void {
 	const config = getConfig();
 	const next = { ...(config.wifi_modes ?? {}) };
@@ -93,7 +99,7 @@ export function restoreWifiAdapterMode(
 	} else {
 		next[macAddress] = previous;
 	}
-	if (alias) {
+	for (const alias of aliases) {
 		if (alias.mode === undefined) delete next[alias.key];
 		else next[alias.key] = alias.mode;
 	}
@@ -131,6 +137,11 @@ export const wifiAdapterModeRecorder: WifiAdapterModeRecorder = {
 	restore: restoreWifiAdapterMode,
 };
 
+type ModeSnapshot = {
+	readonly key: string;
+	readonly mode: WifiAdapterMode | undefined;
+};
+
 /** Undo only our own write; another authority may have superseded this intent. */
 export function recordWifiAdapterModeIntent(
 	key: string | undefined,
@@ -140,17 +151,32 @@ export function recordWifiAdapterModeIntent(
 ): () => void {
 	if (key === undefined) return () => undefined;
 	const previous = recorder.read(key);
-	const alias =
-		portAlias && portAlias !== key && isHotspotPortCredentialCopy(portAlias)
-			? { key: portAlias, mode: recorder.read(portAlias) }
-			: undefined;
-	if (alias) recorder.persist(key, target, alias.key);
-	else recorder.persist(key, target);
+	const plain = normalizeMacAddress(key);
+	const candidates =
+		target === "station" && plain
+			? getHotspotCredentialOwners().filter((alias) =>
+					alias.startsWith(`${plain}@`),
+				)
+			: portAlias && portAlias !== key
+				? [portAlias]
+				: [];
+	const aliases = candidates.filter(isHotspotPortCredentialCopy);
+	const snapshots: ModeSnapshot[] = aliases.map((alias) => ({
+		key: alias,
+		mode: recorder.read(alias),
+	}));
+	recorder.persist(key, target, aliases);
 	return () => {
-		const undoAlias = alias && recorder.read(alias.key) === target;
+		const undoAliases = snapshots.filter(
+			(alias) =>
+				recorder.read(alias.key) === target &&
+				isHotspotPortCredentialCopy(alias.key),
+		);
 		if (recorder.read(key) === target) {
-			if (undoAlias) recorder.restore(key, previous, alias);
-			else recorder.restore(key, previous);
-		} else if (undoAlias) recorder.restore(alias.key, alias.mode);
+			recorder.restore(key, previous, undoAliases);
+		} else {
+			const [first, ...rest] = undoAliases;
+			if (first) recorder.restore(first.key, first.mode, rest);
+		}
 	};
 }

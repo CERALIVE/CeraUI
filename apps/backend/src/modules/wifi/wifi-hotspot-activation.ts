@@ -248,8 +248,7 @@ function rememberIdentity(
 		...(conn !== undefined ? { conn } : {}),
 		...(channel !== undefined ? { channel } : {}),
 	};
-	if (portAlias) deps.credentials.remember(macAddress, credentials, portAlias);
-	else deps.credentials.remember(macAddress, credentials);
+	deps.credentials.remember(macAddress, credentials, portAlias);
 }
 
 /*

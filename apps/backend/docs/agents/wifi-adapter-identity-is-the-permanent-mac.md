@@ -16,8 +16,10 @@ and channel. The plain record keeps its UUID and ownership history. A twin
 uses its own port record and profile. An unseeded port needs first-time setup
 even when there is a plain-MAC profile. A returning sole adapter uses the
 plain-MAC credentials, mode intent and lock even when its port is known. Stop
-persists the plain station intent. Independent port profiles, credentials and
-mode intent stay saved until distinct twins are proven again.
+or choosing Station records station intent for the plain MAC and all its
+credential-only port copies, even when the current port cannot be read.
+No credentials or profiles are deleted. Independent port profiles,
+credentials and mode intent stay saved until distinct twins are proven again.
 No discovery transition removes a profile or stops an AP by itself merely
 because a twin arrives. Address-only owned profiles disarm before the new
 verified rows publish. Discovery withholds those rows when it cannot verify

@@ -119,6 +119,7 @@ const fileSchema = z.object({
 	adapters: z.record(z.string(), entrySchema).optional(),
 });
 
+/** Port copies have no update timestamp or UUID evidence; empty released history is allowed. */
 type StoredEntry = z.infer<typeof entrySchema>;
 
 let filePath = HOTSPOT_CREDENTIALS_FILE;

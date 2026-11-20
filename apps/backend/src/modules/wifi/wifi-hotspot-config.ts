@@ -153,12 +153,7 @@ async function resolveAndStop(
 			const owner = resolveWifiAdapterOwner(macAddress, wifiInterface);
 			const intentKey = wifiAdapterKeyMac(owner) ? owner : undefined;
 			const undo = deps.recordIntent
-				? recordWifiAdapterModeIntent(
-						intentKey,
-						"station",
-						deps.recordIntent,
-						soleWifiPortAlias(bindingForRow(macAddress, wifiInterface)),
-					)
+				? recordWifiAdapterModeIntent(intentKey, "station", deps.recordIntent)
 				: undefined;
 			let succeeded = false;
 			try {
@@ -947,8 +942,7 @@ async function reconfigureHotspotLocked(
 				: {}),
 		};
 		const alias = soleWifiPortAlias(binding);
-		if (alias) deps.rememberCredentials(owner, credentials, alias);
-		else deps.rememberCredentials(owner, credentials);
+		deps.rememberCredentials(owner, credentials, alias);
 		seedWifiPortMode(owner, alias);
 	}
 	if (!binding) await deps.wifiUpdateSavedConns();
