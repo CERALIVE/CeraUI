@@ -1,9 +1,18 @@
-import { getHotspotCredentialOwners } from "./hotspot-credentials.ts";
+import {
+	getHotspotCredentialOwners,
+	getHotspotCredentials,
+	getPendingHotspotCreation,
+} from "./hotspot-credentials.ts";
 import { resolveWifiAdapterModeIntentKey } from "./wifi-adapter-mode-intent.ts";
 import { getWifiInterfacesByMacAddress } from "./wifi-connections.ts";
 import { canHotspot } from "./wifi-hotspot-types.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
-import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
+import {
+	normalizeMacAddress,
+	normalizeWifiAdapterKey,
+	wifiAdapterKeyPort,
+} from "./wifi-permanent-mac.ts";
+import { wifiRadioIdentity } from "./wifi-radio-identity.ts";
 
 const rowOwners = new WeakMap<WifiInterface, { owner: string; uuid: string }>();
 const pendingOwners = new WeakMap<WifiInterface, string>();
@@ -59,7 +68,25 @@ export function resolveWifiAdapterOwner(
 ): string {
 	const pending = row && pendingOwners.get(row);
 	if (pending) return pending;
+	if (wifiAdapterKeyPort(registryKey))
+		return normalizeWifiAdapterKey(registryKey);
 	if (row) {
+		const identity = wifiRadioIdentity.state.rows.get(row.ifname);
+		if (
+			identity?.row === row &&
+			identity.key === registryKey &&
+			identity.classification === "verified" &&
+			identity.devicePath
+		) {
+			const portOwner = `${registryKey}@${identity.devicePath}`;
+			const saved = getHotspotCredentials(portOwner);
+			if (
+				saved?.conn ||
+				saved?.previousConns?.length ||
+				getPendingHotspotCreation(portOwner)
+			)
+				return portOwner;
+		}
 		const activeUuid =
 			row.activeMode === "ap"
 				? row.activeConn
@@ -111,7 +138,7 @@ export function resolveWifiAdapterOwner(
 			if (intent) return intent;
 		}
 	}
-	return normalizeMacAddress(registryKey) ?? registryKey.trim().toLowerCase();
+	return normalizeWifiAdapterKey(registryKey);
 }
 
 /** Intent changes cannot move an admitted operation into another lock domain. */

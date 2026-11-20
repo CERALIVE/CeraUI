@@ -19,7 +19,7 @@ import {
 	wifiOperationChanged,
 	type wifiOperationGuard,
 } from "./wifi-operation-binding.ts";
-import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
+import { wifiAdapterKeyMac } from "./wifi-permanent-mac.ts";
 import { transitionVirtualBinding } from "./wifi-virtual-binding.ts";
 
 export async function teardownHotspotLocked(
@@ -112,7 +112,7 @@ export async function teardownHotspotLocked(
 			(current.activeConn === conn || current.activeConn === null)
 		) {
 			transitionVirtualBinding(wifiInterface, { kind: "retire" });
-			if (normalizeMacAddress(macAddress))
+			if (wifiAdapterKeyMac(macAddress))
 				await deps.releaseConcurrentInterface(virtualIfname);
 		}
 	}

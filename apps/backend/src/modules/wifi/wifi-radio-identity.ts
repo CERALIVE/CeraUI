@@ -147,6 +147,7 @@ export class WifiRadioIdentityProducer {
 		const samples = new Map<string, RadioSample | undefined>();
 		const seen = new Set<string>();
 		const macPaths = new Map<MacAddress, Set<string>>();
+		const pathByPhy = new Map<string, string>();
 		const interfacesByPhy = new Map<string, number>();
 		const devicePaths = new Map<string, Set<string>>();
 		// Finish classification before publishing any healthy identity edge.
@@ -167,6 +168,7 @@ export class WifiRadioIdentityProducer {
 				if (!ifname.startsWith("clap-")) {
 					interfacesByPhy.set(path, (interfacesByPhy.get(path) ?? 0) + 1);
 					if (sample.devicePath) {
+						pathByPhy.set(path, sample.devicePath);
 						const phys =
 							devicePaths.get(sample.devicePath) ?? new Set<string>();
 						phys.add(path);
@@ -187,6 +189,24 @@ export class WifiRadioIdentityProducer {
 			if (!seen.has(pair)) cache.delete(pair);
 		}
 
+		const compositeMacs = new Set<MacAddress>();
+		for (const [mac, phys] of macPaths) {
+			if (
+				phys.size > 1 &&
+				[...phys].every((phy) => {
+					const port = pathByPhy.get(phy);
+					return (
+						interfacesByPhy.get(phy) === 1 &&
+						port !== undefined &&
+						devicePaths.get(port)?.size === 1
+					);
+				})
+			)
+				compositeMacs.add(mac);
+		}
+		const uncertain = [...samples.values()].some(
+			(other) => other === undefined,
+		);
 		const rows = new Map<string, RadioIdentity>();
 		for (const device of devices) {
 			const row =
@@ -196,10 +216,15 @@ export class WifiRadioIdentityProducer {
 					: undefined);
 			const sample = samples.get(device.ifname);
 			const mac = sample?.permanentMac;
+			const twins = mac !== undefined && (macPaths.get(mac)?.size ?? 0) > 1;
+			const compositePort =
+				mac && sample && compositeMacs.has(mac)
+					? pathByPhy.get(sample.lifetime.phyPath)
+					: undefined;
 			const shared =
 				// A still-listed uncertain witness cannot establish MAC uniqueness.
-				[...samples.values()].some((other) => other === undefined) ||
-				(mac !== undefined && (macPaths.get(mac)?.size ?? 0) > 1) ||
+				uncertain ||
+				(twins && !compositePort) ||
 				(sample !== undefined &&
 					(interfacesByPhy.get(sample.lifetime.phyPath) ?? 0) > 1);
 			const classification = !sample
@@ -219,7 +244,9 @@ export class WifiRadioIdentityProducer {
 			);
 			let key =
 				classification === "verified" && mac
-					? mac
+					? compositePort
+						? `${mac}@${compositePort}`
+						: mac
 					: classification === "limited" && sample
 						? `limited:${sample.lifetime.ifindex}:${sample.lifetime.wiphy}`
 						: `degraded:${device.ifname}`;
@@ -238,6 +265,12 @@ export class WifiRadioIdentityProducer {
 						previous.ifname !== device.ifname)) &&
 				previous.classification === classification &&
 				previous.permanentMac === mac &&
+				(classification !== "verified" ||
+					previous.devicePath ===
+						(sample?.devicePath &&
+						devicePaths.get(sample.devicePath)?.size === 1
+							? sample.devicePath
+							: undefined)) &&
 				previous.degradedReason === degradedReason;
 			rows.set(device.ifname, {
 				ifname: device.ifname,

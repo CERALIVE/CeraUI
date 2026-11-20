@@ -59,7 +59,11 @@ import {
 
 export { retryWifiAdapterReconcile } from "./wifi-adapter-reconcile-retry.ts";
 
-import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
+import {
+	normalizeMacAddress,
+	wifiAdapterKeyMac,
+	wifiAdapterKeyPort,
+} from "./wifi-permanent-mac.ts";
 import { sameRadioLifetime, wifiRadioIdentity } from "./wifi-radio-identity.ts";
 
 const MAX_RESTORE_ATTEMPTS = 3;
@@ -131,12 +135,18 @@ export async function reconcileWifiAdapterStopLocked(
 		return wifiOperationChanged;
 	const owner = resolveWifiAdapterOwner(registryKey, row);
 	const cleanup = await reconcileWifiAdapterTeardownLocked(owner);
-	const conn = row.hotspot.conn;
+	const conn =
+		(wifiAdapterKeyPort(registryKey)
+			? (row.concurrentHotspot?.activeConn ??
+				(row.activeMode === "ap" ? row.activeConn : undefined))
+			: undefined) ?? row.hotspot.conn;
 	if (
-		normalizeMacAddress(registryKey) &&
+		wifiAdapterKeyMac(registryKey) &&
 		row.degradedReason !== "permanent-mac-unresolved" &&
 		(isHotspotActive(row) || row.hotspot.transition === "activating") &&
 		conn &&
+		(!wifiAdapterKeyPort(registryKey) ||
+			getHotspotCredentialOwners(conn).includes(owner)) &&
 		!(
 			await runHotspotProfileOperation({
 				uuid: conn,

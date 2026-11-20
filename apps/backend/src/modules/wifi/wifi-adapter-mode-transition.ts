@@ -63,6 +63,7 @@ import { reconcileWifiAdapterModeLocked } from "./wifi-adapter-reconciler.ts";
 
 export { defaultAdapterModeDeps } from "./wifi-adapter-mode-deps.ts";
 
+import type { WifiAdapterModeRecorder } from "./wifi-adapter-mode-intent.ts";
 import { resolveWifiAdapterOwner } from "./wifi-adapter-owner.ts";
 import { admitWifiRequest, withoutWifiRequestBinding } from "./wifi-binding.ts";
 import { getWifiCapabilitiesForInterface } from "./wifi-capabilities.ts";
@@ -72,7 +73,6 @@ import {
 } from "./wifi-concurrent-interface.ts";
 import { captureWifiFrameIncarnation } from "./wifi-frame-binding.ts";
 import { withWifiFrameIncarnation } from "./wifi-frame-incarnation.ts";
-
 import type { HotspotStopResult } from "./wifi-hotspot-config.ts";
 import type { HotspotOutcomePublisher } from "./wifi-hotspot-outcome.ts";
 import type { HotspotStartResult } from "./wifi-hotspot-types.ts";
@@ -82,11 +82,12 @@ import type { WifiInterface } from "./wifi-interfaces.ts";
 import { takeWifiModeRequestRefusal } from "./wifi-mode-request.ts";
 import {
 	bindingForRow,
+	soleWifiPortAlias,
 	type WifiOperationBinding,
 	wifiOperationChanged,
 	wifiOperationGuard,
 } from "./wifi-operation-binding.ts";
-import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
+import { wifiAdapterKeyMac } from "./wifi-permanent-mac.ts";
 
 export {
 	reconcileWifiAdapterModes,
@@ -113,11 +114,8 @@ export interface AdapterModeTransitionDeps {
 	) => Promise<HotspotStopResult>;
 	readonly publishOutcome: AdapterModeOutcomePublisher;
 	readonly publishHotspotOutcome: HotspotOutcomePublisher;
-	readonly persistMode: (macAddress: string, mode: WifiAdapterMode) => void;
-	readonly restoreMode: (
-		macAddress: string,
-		previous: WifiAdapterMode | undefined,
-	) => void;
+	readonly persistMode: WifiAdapterModeRecorder["persist"];
+	readonly restoreMode: WifiAdapterModeRecorder["restore"];
 	readonly readPersistedMode: (
 		macAddress: string,
 	) => WifiAdapterMode | undefined;
@@ -223,7 +221,7 @@ export async function setWifiAdapterMode(
 	): Promise<SetWifiAdapterModeOutput> => {
 		const id = wifiInterface.id;
 		const owner = resolveWifiAdapterOwner(macAddress, wifiInterface);
-		const intentKey = normalizeMacAddress(owner.split("@")[0])
+		const intentKey = wifiAdapterKeyMac(owner)
 			? owner
 			: resolveWifiAdapterModeIntentKey(
 					macAddress,
@@ -232,7 +230,7 @@ export async function setWifiAdapterMode(
 				);
 		if (
 			target !== "station" &&
-			(!normalizeMacAddress(macAddress) ||
+			(!wifiAdapterKeyMac(macAddress) ||
 				wifiInterface.degradedReason === "permanent-mac-unresolved")
 		)
 			return refuse(id, "radio-unverified", publishRefusal);
@@ -291,11 +289,16 @@ export async function setWifiAdapterMode(
 		const operation = wifiOperationGuard(binding);
 		if (binding && (!(await operation.check()) || !operation.current()))
 			return refuse(id, "radio-changed", publishRefusal);
-		const undo = recordWifiAdapterModeIntent(intentKey, target, {
-			read: deps.readPersistedMode,
-			persist: deps.persistMode,
-			restore: deps.restoreMode,
-		});
+		const undo = recordWifiAdapterModeIntent(
+			intentKey,
+			target,
+			{
+				read: deps.readPersistedMode,
+				persist: deps.persistMode,
+				restore: deps.restoreMode,
+			},
+			soleWifiPortAlias(binding ?? bindingForRow(macAddress, wifiInterface)),
+		);
 		let succeeded = false;
 		try {
 			const result = await reconcileWifiAdapterModeLocked(owner, {

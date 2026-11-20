@@ -36,6 +36,7 @@ import {
 	type WifiAdapterModeRecorder,
 	wifiAdapterModeRecorder,
 } from "./wifi-adapter-mode.ts";
+import { seedWifiPortMode } from "./wifi-adapter-mode-intent.ts";
 import { publishAdapterModeOutcome } from "./wifi-adapter-mode-outcome.ts";
 import { resolveWifiAdapterOwner } from "./wifi-adapter-owner.ts";
 import { reconcileWifiAdapterStopLocked } from "./wifi-adapter-reconciler.ts";
@@ -93,11 +94,12 @@ import {
 import { getMacAddressForWifiInterface } from "./wifi-interfaces.ts";
 import {
 	bindingForRow,
+	soleWifiPortAlias,
 	type WifiOperationBinding,
 	wifiOperationChanged,
 	wifiOperationGuard,
 } from "./wifi-operation-binding.ts";
-import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
+import { wifiAdapterKeyMac } from "./wifi-permanent-mac.ts";
 import { transitionVirtualBinding } from "./wifi-virtual-binding.ts";
 
 // ─── hotspot config validation constants ──────────────────────────────────────
@@ -149,11 +151,14 @@ async function resolveAndStop(
 		wifiAdapterLockKey(macAddress),
 		async (): Promise<HotspotStopResult> => {
 			const owner = resolveWifiAdapterOwner(macAddress, wifiInterface);
-			const intentKey = normalizeMacAddress(owner.split("@")[0])
-				? owner
-				: undefined;
+			const intentKey = wifiAdapterKeyMac(owner) ? owner : undefined;
 			const undo = deps.recordIntent
-				? recordWifiAdapterModeIntent(intentKey, "station", deps.recordIntent)
+				? recordWifiAdapterModeIntent(
+						intentKey,
+						"station",
+						deps.recordIntent,
+						soleWifiPortAlias(bindingForRow(macAddress, wifiInterface)),
+					)
 				: undefined;
 			let succeeded = false;
 			try {
@@ -187,8 +192,10 @@ export type HotspotStopDeps = {
 export const defaultHotspotStopDeps: HotspotStopDeps = {
 	recordIntent: {
 		read: (key) => wifiAdapterModeRecorder.read(key),
-		persist: (key, mode) => wifiAdapterModeRecorder.persist(key, mode),
-		restore: (key, previous) => wifiAdapterModeRecorder.restore(key, previous),
+		persist: (key, mode, alias) =>
+			wifiAdapterModeRecorder.persist(key, mode, alias),
+		restore: (key, previous, alias) =>
+			wifiAdapterModeRecorder.restore(key, previous, alias),
 	},
 	nmConnSetFields,
 	nmDisconnect,
@@ -236,7 +243,7 @@ export async function reconcileHybridStationChannel(
 		!uuid ||
 		uuid !== row.hotspot.conn ||
 		row.hotspot.transition ||
-		!normalizeMacAddress(macAddress.split("@")[0]) ||
+		!wifiAdapterKeyMac(macAddress) ||
 		row.degradedReason === "permanent-mac-unresolved" ||
 		!isQualifiedNmManagedHybrid(row.ifname)
 	)
@@ -306,6 +313,7 @@ export type HotspotConfigDeps = {
 			channel: WifiChannel;
 			conn?: string;
 		},
+		portAlias?: string,
 	) => void;
 	/** The adapter's own capability read — the sole evidence for a WPA3 offer. */
 	getCapabilities: (ifname: string) => WifiAdapterCapabilities | undefined;
@@ -427,7 +435,7 @@ export async function wifiHotspotConfig(
 	const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
 	if (!wifiInterface) return refuse();
 	if (
-		!normalizeMacAddress(macAddress) ||
+		!wifiAdapterKeyMac(macAddress) ||
 		wifiInterface.degradedReason === "permanent-mac-unresolved"
 	)
 		return refuse("radio-unverified");
@@ -664,11 +672,8 @@ async function reconfigureHotspotLocked(
 		dispatched ? ("activating" as const) : wifiOperationChanged;
 	const hotspot = wifiInterface.hotspot;
 	const selected = hotspot.conn;
-	const ownsProfile = hotspotOwnershipGuard(
-		macAddress,
-		wifiInterface,
-		selected,
-	);
+	const owner = resolveWifiAdapterOwner(macAddress, wifiInterface);
+	const ownsProfile = hotspotOwnershipGuard(owner, wifiInterface, selected);
 	const owned = () => ownsProfile() && (!binding || hotspot.conn === selected);
 	if (!owned()) {
 		return "saving";
@@ -933,14 +938,18 @@ async function reconfigureHotspotLocked(
 	// The operator's chosen credentials are now the adapter's durable identity —
 	// a later recreate must restore these, not the originally generated pair.
 	if (isWifiChannelName(channel)) {
-		deps.rememberCredentials(macAddress, {
+		const credentials = {
 			ssid: name,
 			password,
 			channel,
 			...(wifiInterface.hotspot.conn !== undefined
 				? { conn: wifiInterface.hotspot.conn }
 				: {}),
-		});
+		};
+		const alias = soleWifiPortAlias(binding);
+		if (alias) deps.rememberCredentials(owner, credentials, alias);
+		else deps.rememberCredentials(owner, credentials);
+		seedWifiPortMode(owner, alias);
 	}
 	if (!binding) await deps.wifiUpdateSavedConns();
 	if (!owned()) return "saving";

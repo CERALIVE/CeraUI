@@ -39,7 +39,10 @@ import {
 	readVerifiedNmWifiSecret,
 } from "../network/network-manager-secret.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
-import { hotspotCredentialsStore } from "./hotspot-credentials.ts";
+import {
+	hotspotCredentialsStore,
+	isHotspotPortCredentialCopy,
+} from "./hotspot-credentials.ts";
 import { getWifiState, setWifiState } from "./state/wifi-state.ts";
 import { broadcastWifiState, wifiUpdateSavedConns } from "./wifi.ts";
 import {
@@ -53,6 +56,7 @@ import {
 	wifiAdapterModeCapability,
 	wifiAdapterModeRecorder,
 } from "./wifi-adapter-mode.ts";
+import { seedWifiPortMode } from "./wifi-adapter-mode-intent.ts";
 import { resolveWifiAdapterOwner } from "./wifi-adapter-owner.ts";
 import {
 	clearWifiAdapterReconcile,
@@ -132,6 +136,7 @@ import {
 import {
 	bindingForRow,
 	sampleWifiOperationRadio,
+	soleWifiPortAlias,
 	type WifiOperationBinding,
 	wifiLegLifetimeProof,
 	wifiOperationChanged,
@@ -231,17 +236,20 @@ function rememberIdentity(
 	deps: HotspotActivationDeps,
 	conn?: string,
 	profileMac?: string,
+	portAlias?: string,
 ): void {
 	if (!hotspotOwnershipGuard(macAddress, wifiInterface)(conn, profileMac))
 		return;
 	const { name, password, channel } = wifiInterface.hotspot;
 	if (!name || !password) return;
-	deps.credentials.remember(macAddress, {
+	const credentials = {
 		ssid: name,
 		password,
 		...(conn !== undefined ? { conn } : {}),
 		...(channel !== undefined ? { channel } : {}),
-	});
+	};
+	if (portAlias) deps.credentials.remember(macAddress, credentials, portAlias);
+	else deps.credentials.remember(macAddress, credentials);
 }
 
 /*
@@ -254,12 +262,12 @@ function rememberIdentity(
 */
 async function resolveHotspotIdentity(
 	macAddress: string,
+	physicalMac: string,
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotActivationDeps,
 	operation?: ReturnType<typeof wifiOperationGuard>,
+	portAlias?: string,
 ): Promise<HotspotIdentity | undefined> {
-	const physicalMac = normalizeMacAddress(macAddress.split("@")[0]);
-	if (!physicalMac) return undefined;
 	const stored = deps.credentials.get(macAddress);
 	const hotspot = wifiInterface.hotspot;
 	let profileMac = getHotspotProfilePin(hotspot, hotspot.conn);
@@ -339,6 +347,7 @@ async function resolveHotspotIdentity(
 		deps,
 		hotspot.conn ?? stored?.conn,
 		profileMac,
+		portAlias,
 	);
 	return {
 		...(hotspot.conn !== undefined ? { conn: hotspot.conn } : {}),
@@ -415,19 +424,24 @@ async function prepareHotspotLocked(
 	deps: HotspotActivationDeps,
 	binding = bindingForRow(macAddress, wifiInterface),
 ): Promise<HotspotPrepareResult> {
+	const physicalMac = binding?.mac ?? normalizeMacAddress(macAddress);
 	if (
-		!normalizeMacAddress(macAddress) ||
+		!physicalMac ||
 		wifiInterface.degradedReason === "permanent-mac-unresolved"
 	)
 		return { success: false, error: "radio-unverified" };
 	const owner = resolveWifiAdapterOwner(macAddress, wifiInterface);
+	const portAlias = soleWifiPortAlias(binding);
+	const hasPortCopy = isHotspotPortCredentialCopy(owner);
 	const owned = hotspotOwnershipGuard(owner, wifiInterface);
 	const operation = wifiOperationGuard(binding);
 	const identity = await resolveHotspotIdentity(
 		owner,
+		physicalMac,
 		wifiInterface,
 		deps,
 		binding ? operation : undefined,
+		portAlias,
 	);
 	if (
 		operation.changed ||
@@ -440,7 +454,7 @@ async function prepareHotspotLocked(
 	// No profile, and the store has never recorded one: this adapter has never
 	// hosted an AP, so the shown pair is a suggestion rather than a saved setup.
 	const firstTime =
-		!identity.conn && !deps.credentials.get(owner)?.conn
+		!hasPortCopy && !identity.conn && !deps.credentials.get(owner)?.conn
 			? ({ firstTime: true } as const)
 			: {};
 	const chosen =
@@ -452,6 +466,20 @@ async function prepareHotspotLocked(
 		isHotspotActive(wifiInterface) ||
 		(chosen.name === identity.name && chosen.password === identity.password)
 	) {
+		if (
+			chosen &&
+			chosen.name === identity.name &&
+			chosen.password === identity.password
+		)
+			rememberIdentity(
+				owner,
+				wifiInterface,
+				deps,
+				identity.conn,
+				identity.profileMac,
+				portAlias,
+			);
+		seedWifiPortMode(owner, portAlias);
 		return {
 			success: true,
 			name: identity.name,
@@ -503,7 +531,9 @@ async function prepareHotspotLocked(
 		deps,
 		identity.conn,
 		identity.profileMac,
+		portAlias,
 	);
+	seedWifiPortMode(owner, portAlias);
 	return { success: true, ...chosen, ...firstTime };
 }
 
@@ -589,6 +619,9 @@ export async function startHotspotForInterface(
 									resolveWifiAdapterOwner(macAddress, wifiInterface),
 									target,
 									deps.recordIntent,
+									soleWifiPortAlias(
+										binding ?? bindingForRow(macAddress, wifiInterface),
+									),
 								);
 							}
 						},
@@ -631,12 +664,14 @@ export async function startHotspotLocked(
 			error: "activation-failed",
 			reason: "cleanup-pending",
 		};
+	const physicalMac = binding?.mac ?? normalizeMacAddress(macAddress);
 	if (
-		!normalizeMacAddress(macAddress) ||
+		!physicalMac ||
 		wifiInterface.degradedReason === "permanent-mac-unresolved"
 	)
 		return { success: false, error: "radio-unverified" };
 	const ifname = wifiInterface.ifname;
+	const portAlias = soleWifiPortAlias(binding);
 	const owned = hotspotOwnershipGuard(owner, wifiInterface);
 	if (!owned()) {
 		return { success: false, error: "activation-failed" };
@@ -873,9 +908,9 @@ export async function startHotspotLocked(
 					...hybridChannel?.fields,
 				}
 			: hotspotBindingFields(
-					macAddress,
+					physicalMac,
 					wifiInterface.hotspot.security,
-					hotspotDevicePath(macAddress, ifname),
+					binding?.devicePath ?? hotspotDevicePath(physicalMac, ifname),
 				);
 		if (concurrentInterface) {
 			wifiInterface.supportsApStaConcurrency = true;
@@ -939,9 +974,11 @@ export async function startHotspotLocked(
 		// broadcasts exactly the credentials they acknowledged.
 		const identity = await resolveHotspotIdentity(
 			owner,
+			physicalMac,
 			wifiInterface,
 			deps,
 			binding ? operation : undefined,
+			portAlias,
 		);
 		if (!identity || !owned(identity.conn, identity.profileMac))
 			return rollback();
@@ -1094,7 +1131,14 @@ export async function startHotspotLocked(
 			});
 			if (binding && !(await operation.permit())) return await changedAfterUp();
 			if (!owned(conn, identity.profileMac)) return rollback();
-			rememberIdentity(owner, wifiInterface, deps, conn, identity.profileMac);
+			rememberIdentity(
+				owner,
+				wifiInterface,
+				deps,
+				conn,
+				identity.profileMac,
+				portAlias,
+			);
 			rememberHotspotProfilePin(
 				wifiInterface.hotspot,
 				conn,
@@ -1186,7 +1230,7 @@ export async function startHotspotLocked(
 			if (!owned(uuid)) return rollback();
 			conn = uuid;
 			wifiInterface.hotspot.conn ??= uuid;
-			rememberIdentity(owner, wifiInterface, deps, uuid);
+			rememberIdentity(owner, wifiInterface, deps, uuid, undefined, portAlias);
 			rememberHotspotProfilePin(
 				wifiInterface.hotspot,
 				uuid,
@@ -1194,6 +1238,7 @@ export async function startHotspotLocked(
 			);
 		}
 
+		seedWifiPortMode(owner, portAlias);
 		// NM activation issued successfully. The mode flip waits for confirmation —
 		// it does NOT block this call (so the UI shows `activating` meanwhile).
 		registerPendingConfirmation(

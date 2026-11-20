@@ -3,9 +3,23 @@
 ## WIFI ADAPTER IDENTITY IS THE PERMANENT MAC [EXISTS]
 
 Every adapter-keyed Wi-Fi structure uses the coherent lifetime sample from
-`WifiRadioIdentityProducer`. A verified adapter keeps its normalized permanent
-hardware address as the registry, numeric-id-map and credential-store key;
-NetworkManager profiles are pinned to that permanent address.
+`WifiRadioIdentityProducer`. A sole verified radio normally keeps its permanent
+MAC as its key. Same-address radios each use `MAC@port` only when every member
+has its own phy and a unique literal NetworkManager `GENERAL.PATH`. If any
+member lacks that proof, the group stays limited. A port change invalidates
+outstanding hotspot operations. NM hardware pins use the sampled MAC, and
+exclusive profiles also carry `match.path`.
+
+The version 2 credential store still reads released plain-MAC and version 1
+records. A sole radio can seed its observed port with just the name, password
+and channel. The plain record keeps its UUID and ownership history. A twin
+uses its own port record and profile. An unseeded port needs first-time setup
+even when there is a plain-MAC profile. If a former twin returns alone to
+the same proven port and that port owns a profile, it keeps the port's
+credentials and owner, while the plain record remains available for rollback.
+No discovery transition removes a profile or stops an AP by itself merely
+because a twin arrives. Address-only owned profiles disarm before the new
+verified rows publish.
 
 ### Hotspot profile writes [EXISTS; native requalification pending]
 

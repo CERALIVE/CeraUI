@@ -63,6 +63,25 @@ export function normalizeMacAddress(
 	return mac;
 }
 
+/** Registry/store keys may carry a literal, case-sensitive port after the MAC. */
+export function wifiAdapterKeyMac(key: string): MacAddress | undefined {
+	return normalizeMacAddress(key.split("@", 1)[0]);
+}
+
+export function normalizeWifiAdapterKey(key: string): string {
+	const separator = key.indexOf("@");
+	const mac = wifiAdapterKeyMac(key);
+	if (!mac) return key.trim().toLowerCase();
+	return separator < 0 ? mac : mac + key.slice(separator);
+}
+
+export function wifiAdapterKeyPort(key: string): string | undefined {
+	const separator = key.indexOf("@");
+	return separator < 0 || !wifiAdapterKeyMac(key)
+		? undefined
+		: key.slice(separator + 1);
+}
+
 /** sysfs node exposing the radio's `wiphy->perm_addr`. */
 export function permanentMacSysfsPath(ifname: string): string {
 	return `/sys/class/net/${ifname}/phy80211/macaddress`;

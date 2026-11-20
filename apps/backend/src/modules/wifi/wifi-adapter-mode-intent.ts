@@ -1,6 +1,8 @@
 import type { WifiAdapterMode } from "@ceraui/rpc/schemas";
+import { logger } from "../../helpers/logger.ts";
 import { getConfig, saveConfig } from "../config.ts";
-import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
+import { isHotspotPortCredentialCopy } from "./hotspot-credentials.ts";
+import { wifiAdapterKeyMac } from "./wifi-permanent-mac.ts";
 
 // ─── persistence (permanent-MAC keyed) ───────────────────────────────────────
 
@@ -33,11 +35,30 @@ export function getPersistedWifiAdapterModes(): Readonly<
 export function persistWifiAdapterMode(
 	macAddress: string,
 	mode: WifiAdapterMode,
+	alias?: string,
 ): void {
 	saveWifiAdapterModes({
 		...(getConfig().wifi_modes ?? {}),
 		[macAddress]: mode,
+		...(alias ? { [alias]: mode } : {}),
 	});
+}
+
+/** A newly seeded port inherits the existing intent without moving the plain record. */
+export function seedWifiPortMode(
+	owner: string,
+	alias: string | undefined,
+): void {
+	if (!alias || alias === owner || !isHotspotPortCredentialCopy(alias)) return;
+	const mode = getPersistedWifiAdapterMode(owner);
+	if (mode === undefined || getPersistedWifiAdapterMode(alias) === mode) return;
+	try {
+		persistWifiAdapterMode(owner, mode, alias);
+	} catch (error: unknown) {
+		logger.warn("Could not persist the hotspot port intent", {
+			error: error instanceof Error ? error.name : "unknown",
+		});
+	}
 }
 
 /** A failed atomic write must never publish an unpersisted intent to readers. */
@@ -63,6 +84,7 @@ function saveWifiAdapterModes(next: Record<string, WifiAdapterMode>): void {
 export function restoreWifiAdapterMode(
 	macAddress: string,
 	previous: WifiAdapterMode | undefined,
+	alias?: { readonly key: string; readonly mode: WifiAdapterMode | undefined },
 ): void {
 	const config = getConfig();
 	const next = { ...(config.wifi_modes ?? {}) };
@@ -70,6 +92,10 @@ export function restoreWifiAdapterMode(
 		delete next[macAddress];
 	} else {
 		next[macAddress] = previous;
+	}
+	if (alias) {
+		if (alias.mode === undefined) delete next[alias.key];
+		else next[alias.key] = alias.mode;
 	}
 	saveWifiAdapterModes(next);
 }
@@ -80,7 +106,7 @@ export function resolveWifiAdapterModeIntentKey(
 	preferences = getPersistedWifiAdapterModes(),
 	hotspotAdapterCount = 0,
 ): string | undefined {
-	if (normalizeMacAddress(macAddress)) return macAddress;
+	if (wifiAdapterKeyMac(macAddress)) return macAddress;
 	if (hotspotAdapterCount !== 1) return undefined;
 	const keys = Object.keys(preferences).filter(
 		(key) => preferences[key] !== "station",
@@ -110,11 +136,24 @@ export function recordWifiAdapterModeIntent(
 	key: string | undefined,
 	target: WifiAdapterMode,
 	recorder: WifiAdapterModeRecorder,
+	portAlias?: string,
 ): () => void {
 	if (key === undefined) return () => undefined;
 	const previous = recorder.read(key);
-	recorder.persist(key, target);
+	const alias =
+		portAlias &&
+		portAlias !== key &&
+		(isHotspotPortCredentialCopy(portAlias) ||
+			getPersistedWifiAdapterMode(portAlias) !== undefined)
+			? { key: portAlias, mode: recorder.read(portAlias) }
+			: undefined;
+	if (alias) recorder.persist(key, target, alias.key);
+	else recorder.persist(key, target);
 	return () => {
-		if (recorder.read(key) === target) recorder.restore(key, previous);
+		const undoAlias = alias && recorder.read(alias.key) === target;
+		if (recorder.read(key) === target) {
+			if (undoAlias) recorder.restore(key, previous, alias);
+			else recorder.restore(key, previous);
+		} else if (undoAlias) recorder.restore(alias.key, alias.mode);
 	};
 }

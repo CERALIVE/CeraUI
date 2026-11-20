@@ -1,4 +1,7 @@
-import { getHotspotCredentialOwners } from "./hotspot-credentials.ts";
+import {
+	getHotspotCredentialOwners,
+	isHotspotPortCredentialCopy,
+} from "./hotspot-credentials.ts";
 import {
 	getPersistedWifiAdapterMode,
 	getPersistedWifiAdapterModes,
@@ -24,7 +27,11 @@ export function uniqueHotspotAddress(
 			macAddress,
 			...getHotspotCredentialOwners(),
 			...Object.keys(getPersistedWifiAdapterModes()),
-		].filter((key) => normalizeMacAddress(key.split("@")[0]) === macAddress),
+		].filter(
+			(key) =>
+				normalizeMacAddress(key.split("@")[0]) === macAddress &&
+				!isHotspotPortCredentialCopy(key),
+		),
 	);
 	return phys.size === 1 && keys.size === 1;
 }

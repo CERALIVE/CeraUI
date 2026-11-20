@@ -12,8 +12,12 @@ retains the legacy shape.
 Guarded requests now require the expected token at RPC admission and again
 at their transaction lock entry. Config and mode requests also supply the captured
 metadata for the asynchronous frames below. Start also retains the proof it
-obtained at transaction entry. Composite physical identity and hardware
-qualification remain separate work.
+obtained at transaction entry. Same-address radios with independently verified
+ports keep separate rows and admission tokens. An unsafe or missing port leaves
+the whole address group limited. Port-qualified requests recheck the captured
+literal path alongside the existing lifetime witness. The wire shape and
+localized refusal keys are unchanged. Physical same-address qualification is
+still pending.
 
 ## Backend limited mode [EXISTS; host and mock-browser proof only]
 

@@ -84,6 +84,7 @@ import {
 	hotspotClientsForMessage,
 	recordHotspotClientsBroadcast,
 } from "./wifi-hotspot-clients.ts";
+import { bindingForRow } from "./wifi-operation-binding.ts";
 import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 
 export { currentHotspotApIfnames } from "./wifi-hotspot-clients.ts";
@@ -928,9 +929,13 @@ async function runWifiNew(
 		return;
 	}
 
+	const currentRow = getWifiInterfaceByMacAddress(macAddress);
+	const hardwareMac =
+		(currentRow && bindingForRow(macAddress, currentRow)?.mac) ??
+		normalizeMacAddress(macAddress);
 	if (
-		normalizeMacAddress(macAddress) &&
-		!(await nmConnSetWifiMacAddress(outcome.uuid, macAddress))
+		hardwareMac &&
+		!(await nmConnSetWifiMacAddress(outcome.uuid, hardwareMac))
 	) {
 		logger.warn(
 			"Failed to set the MAC address for the newly created connection",

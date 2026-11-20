@@ -96,6 +96,7 @@ import {
 import {
 	type RadioIdentity,
 	recordWifiRadioShadowFailure,
+	sameRadioLifetime,
 	wifiRadioIdentity,
 } from "./wifi-radio-identity.ts";
 import { wifiRadioObservation } from "./wifi-radio-observation.ts";
@@ -488,8 +489,17 @@ async function reconcileSampledWifiRegistry(): Promise<boolean> {
 		observation !== wifiRadioIdentity.publishedObservation
 	)
 		return false;
+	const registry = getWifiInterfacesByMacAddress();
+	for (const [key, row] of Object.entries(registry)) {
+		const next = wifiRadioIdentity.state.rows.get(row.ifname);
+		if (next && next.row === row && next.key !== key && registry[next.key]) {
+			// The next full discovery can resolve both sides of a port swap.
+			scheduleWifiUpdate(0);
+			return false;
+		}
+	}
 	let statusChange = false;
-	for (const [key, row] of Object.entries(getWifiInterfacesByMacAddress())) {
+	for (const [key, row] of Object.entries(registry)) {
 		const identity = wifiRadioIdentity.state.rows.get(row.ifname);
 		if (identity?.row !== row) continue;
 		const checked = await withWifiAdapterLock(
@@ -507,6 +517,23 @@ async function reconcileSampledWifiRegistry(): Promise<boolean> {
 					if (transitionVirtualBinding(row, { kind: "retire" }))
 						statusChange = true;
 				if (key !== identity.key) {
+					const activeAp =
+						isApMode(row) || Boolean(row.concurrentHotspot?.activeConn);
+					if (
+						(key.includes("@") || identity.key.includes("@")) &&
+						!activeAp &&
+						canHotspot(row)
+					) {
+						const {
+							conn: _conn,
+							name: _name,
+							password: _password,
+							channel: _channel,
+							security: _security,
+							...idle
+						} = row.hotspot;
+						row.hotspot = idle;
+					}
 					removeWifiInterface(key, "transfer");
 					addWifiInterface(identity.key, row);
 					wifiIdToMacAddress[row.id] = identity.key;
@@ -894,10 +921,18 @@ async function discoverWifiDevices() {
 					for (const [key, candidate] of Object.entries(
 						getWifiInterfacesByMacAddress(),
 					)) {
+						const before = previousIdentities.get(ifname);
+						const samePortRadio =
+							identity &&
+							before &&
+							sameRadioLifetime(before.lifetime, identity.lifetime) &&
+							(before.key.includes("@") || identity.key.includes("@")) &&
+							![...identities.values()].some((current) => current.key === key);
 						if (
 							key !== macAddress &&
 							candidate?.ifname === ifname &&
-							candidate.degradedReason !== undefined
+							(candidate.degradedReason !== undefined || samePortRadio) &&
+							!getWifiInterfaceByMacAddress(macAddress)
 						) {
 							recoveredId = candidate.id;
 							removeWifiInterface(key);
