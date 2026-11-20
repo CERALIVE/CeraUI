@@ -29,6 +29,7 @@ import {
 import {
 	resetConnectionState,
 	setConnectionState,
+	setSocketAuthenticated,
 } from "$lib/components/custom/__fixtures__/connection-state.svelte";
 import { fourBoots } from "$lib/device-logs/__fixtures__/boots";
 import { bootSelection } from "$lib/device-logs/boot-selection.svelte";
@@ -1385,7 +1386,13 @@ describe("RawLogsTab: follow", () => {
 				entries: [entry(newCursor, { bootId: running.bootId })],
 			}),
 		);
+		const bootReads = logs.boots.mock.calls.length;
+		setSocketAuthenticated(false);
 		setConnectionState("connected");
+		await tick();
+		expect(logs.boots).toHaveBeenCalledTimes(bootReads);
+		expect(screen.getByTestId("raw-disconnected")).toBeTruthy();
+		setSocketAuthenticated(true);
 
 		expect(
 			(await screen.findByTestId("raw-follow-ended")).textContent?.trim(),

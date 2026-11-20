@@ -8,6 +8,7 @@ import * as Tooltip from '$lib/components/ui/tooltip';
 import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
 import { publishHeight } from '$lib/layout';
 import { rpc } from '$lib/rpc';
+import { getSessionReady } from '$lib/rpc/session-epoch.svelte';
 import { getUpdating } from '$lib/rpc/subscriptions.svelte';
 import {
 	authenticateWithToken,
@@ -15,11 +16,9 @@ import {
 	revokePersistentToken,
 } from '$lib/stores/auth-status.svelte';
 import {
-	clearSessionExpired,
 	deriveConnectionSurfaceUx,
 	getDisconnectedSince,
 	getGraceNow,
-	markAuthenticated,
 } from '$lib/stores/connection-ux.svelte';
 import { getShouldShowOfflinePage } from '$lib/stores/offline-state.svelte';
 import { legacyInstall } from '$lib/updates/legacy-install';
@@ -104,11 +103,9 @@ function runAuthCheck() {
 			switch (attempt.kind) {
 				case 'ok':
 					isCheckingAuthStatus = false;
-					markAuthenticated();
-					clearSessionExpired();
 					return;
 				case 'rejected':
-					localStorage.removeItem('auth');
+					if (localStorage.getItem('auth') === auth) localStorage.removeItem('auth');
 					isCheckingAuthStatus = false;
 					authStatusStore.set(false);
 					return;
@@ -177,9 +174,9 @@ $effect(() => {
 const authStatus = $derived(authStatusStore.value);
 
 $effect(() => {
-	if (!authStatus) return;
+	if (!authStatus || !getSessionReady()) return;
 	const sendHeartbeat = () => {
-		if (document.visibilityState === 'visible' && document.hasFocus()) {
+		if (getSessionReady() && document.visibilityState === 'visible' && document.hasFocus()) {
 			void rpc.ui.heartbeat().catch(() => undefined);
 		}
 	};

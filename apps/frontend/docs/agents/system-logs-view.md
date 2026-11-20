@@ -939,6 +939,10 @@ live-region announcements.
 
 After a clock step an approximate window may not prove its ends; the screen then offers Keep searching instead of an end message.
 
+Raw boot detection and Events history recovery wait for the replacement
+socket to finish signing in. Both views keep their disconnected state between
+socket open and authentication; they do not retry a rejected protected read.
+
 After reconnect, Raw checks the running boot in every follow state when it
 knows the displayed boot or the follow checkpoint's boot. For This boot, a
 changed boot reloads the newest retained entries without starting Follow. A

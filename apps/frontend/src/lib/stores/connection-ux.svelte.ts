@@ -37,7 +37,10 @@
 // allow: SIZE_OK — one connection UX state machine; pure transitions and their sole reactive owner stay co-located.
 import type { ConnectionState } from "$lib/rpc/client";
 import { rpcClient } from "$lib/rpc/client";
-import { clearAuthInteraction } from "./auth-status.svelte";
+import { authStatusStore, setSessionExpired } from "./auth-status.svelte";
+
+export { getSessionExpired } from "./auth-status.svelte";
+
 import { createStalenessClock } from "./hud/staleness";
 
 // ============================================
@@ -369,22 +372,6 @@ export function shouldExpireSession(
 }
 
 // ============================================
-// Auth latch (plain — reactivity not required)
-// ============================================
-
-let authenticatedOnce = false;
-
-/** Record that the operator has successfully authenticated at least once. */
-export function markAuthenticated(): void {
-	authenticatedOnce = true;
-}
-
-/** Whether the operator has ever authenticated this page-load. */
-export function wasAuthenticated(): boolean {
-	return authenticatedOnce;
-}
-
-// ============================================
 // Reactive store (runes — lazily created)
 // ============================================
 
@@ -392,22 +379,18 @@ interface ConnectionUxStore {
 	getReconnectAttempts(): number;
 	getHasConnected(): boolean;
 	getIsRebooting(): boolean;
-	getSessionExpired(): boolean;
 	getDisconnectedSince(): number | null;
 	getConnectionLossCause(): ConnectionLossCause;
 	getGraceNow(): number;
 	isGraceClockRunning(): boolean;
 	markRebooting(): void;
 	clearRebooting(): void;
-	markSessionExpired(): void;
-	clearSessionExpired(): void;
 	retryConnection(): void;
 	destroy(): void;
 }
 
 function createConnectionUxStore(): ConnectionUxStore {
 	let reconnect = $state<ReconnectState>(initialReconnectState());
-	let sessionExpired = $state(false);
 	let graceNow = $state(Date.now());
 	let browserOfflineSince = $state<number | null>(
 		typeof navigator !== "undefined" && navigator.onLine === false
@@ -467,7 +450,6 @@ function createConnectionUxStore(): ConnectionUxStore {
 		getReconnectAttempts: () => reconnect.attempts,
 		getHasConnected: () => reconnect.hasConnected,
 		getIsRebooting: () => reconnect.rebooting,
-		getSessionExpired: () => sessionExpired,
 		getDisconnectedSince: disconnectedSince,
 		getConnectionLossCause: () =>
 			deriveConnectionLossCause(browserOfflineSince),
@@ -478,12 +460,6 @@ function createConnectionUxStore(): ConnectionUxStore {
 		},
 		clearRebooting: () => {
 			reconnect = { ...reconnect, rebooting: false };
-		},
-		markSessionExpired: () => {
-			sessionExpired = true;
-		},
-		clearSessionExpired: () => {
-			sessionExpired = false;
 		},
 		retryConnection: () => {
 			// Reset our local budget and ask the transport to reconnect now.
@@ -535,11 +511,6 @@ export function getIsRebooting(): boolean {
 	return store().getIsRebooting();
 }
 
-/** Whether the session expired mid-session and re-authentication is required. */
-export function getSessionExpired(): boolean {
-	return store().getSessionExpired();
-}
-
 /** When the current disconnect started, or `null` while connected. */
 export function getDisconnectedSince(): number | null {
 	return store().getDisconnectedSince();
@@ -576,15 +547,10 @@ export function clearRebooting(): void {
 	store().clearRebooting();
 }
 
-/** Flag that the auth token expired mid-session. */
+/** Return to sign-in with the session-expired notice. */
 export function markSessionExpired(): void {
-	clearAuthInteraction();
-	store().markSessionExpired();
-}
-
-/** Clear the session-expired flag (call on a fresh successful login). */
-export function clearSessionExpired(): void {
-	store().clearSessionExpired();
+	setSessionExpired(true);
+	authStatusStore.set(false);
 }
 
 /** Manually trigger a reconnect after the retry budget was exhausted. */
@@ -596,5 +562,5 @@ export function retryConnection(): void {
 export function destroyConnectionUxStore(): void {
 	singleton?.destroy();
 	singleton = null;
-	authenticatedOnce = false;
+	setSessionExpired(false);
 }

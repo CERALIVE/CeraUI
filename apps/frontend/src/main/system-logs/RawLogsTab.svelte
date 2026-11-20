@@ -21,7 +21,7 @@ import { isDefaultFilter } from '$lib/device-logs/raw-filter';
 import { type AroundPage, type RawAnnouncement, RawView, resetRawView } from '$lib/device-logs/raw-view.svelte';
 import type { ExportSpan } from '$lib/device-logs/sharing';
 import { rpc } from '$lib/rpc/client';
-import { getConnectionState, setLogFollowListener } from '$lib/rpc/subscriptions.svelte';
+import { getSessionReady, setLogFollowListener } from '$lib/rpc/subscriptions.svelte';
 
 import KeepWords from './KeepWords.svelte';
 import RawLogList from './RawLogList.svelte';
@@ -77,8 +77,8 @@ $effect(() => {
 });
 
 $effect(() => {
-	const state = getConnectionState();
-	untrack(() => view.connectionChanged(state));
+	const ready = getSessionReady();
+	untrack(() => view.connectionChanged(ready ? 'connected' : 'disconnected'));
 });
 
 // The unknown moment speaks for the opening view only; restoring the default filter does not bring it back.

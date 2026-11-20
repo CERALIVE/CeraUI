@@ -27,7 +27,7 @@ import { EVENT_ROW_CAP } from '$lib/device-logs/events-window';
 import { onHistoryChanged } from '$lib/device-logs/history-bus';
 import { modemNames, timelineGroups } from '$lib/device-logs/timeline-groups';
 import { rpc } from '$lib/rpc/client';
-import { getConnectionState, setEventFeedListener } from '$lib/rpc/subscriptions.svelte';
+import { getSessionReady, setEventFeedListener } from '$lib/rpc/subscriptions.svelte';
 
 import EventRow from './EventRow.svelte';
 import EventsBootHeading from './EventsBootHeading.svelte';
@@ -72,8 +72,8 @@ onDestroy(bootSelection.onChoose((bootId) => view.setBoot(bootId)));
 onDestroy(() => view.dispose());
 
 $effect(() => {
-	const state = getConnectionState();
-	untrack(() => view.connectionChanged(state));
+	const ready = getSessionReady();
+	untrack(() => view.connectionChanged(ready ? 'connected' : 'disconnected'));
 });
 
 $effect.pre(() => {

@@ -50,7 +50,20 @@ automatic commit path ships with it.
 
 ### Connection-ready gate
 
-`BootShell.svelte` holds the app in a loading state until the first full snapshot arrives from the backend. The gate flips once `subscriptions.svelte.ts` processes the post-login initial-state push. No destination view renders before this flip — prevents flash-of-stale-data on startup.
+`BootShell.svelte` waits for the first socket open or inbound frame. That
+one-time transport signal is not permission to send protected RPCs.
+
+`getSessionReady()` instead names admission on the current link. A successful
+form or saved-token login admits that link; a drop invalidates it immediately.
+An established shell attempts its remembered token once on each replacement
+link. Missing or refused credentials return the tab to sign-in; an unreachable
+attempt on the current link also returns to sign-in but keeps the saved token.
+A refusal only removes the token actually attempted, not a replacement written
+by another tab. Late login and hydrate replies cannot affect another link.
+Raw, Events and the foreground UI heartbeat use session readiness. Updates'
+`getRestoredSessions()` signal still moves only after both safety pulls settle.
+The first-run password prompt ends on confirmed setup or socket replacement.
+Only a fresh `set_password: true` from the replacement can request setup again.
 
 ### Infinite-retry with jitter backoff
 

@@ -11,7 +11,7 @@ import { Checkbox } from '$lib/components/ui/checkbox';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import { deviceName, siteName } from '$lib/config';
-import { getNotifications, getStatus } from '$lib/rpc/subscriptions.svelte';
+import { clearPasswordSetup, getNotifications, getStatus } from '$lib/rpc/subscriptions.svelte';
 import {
 	authenticate,
 	clearAuthInteraction,
@@ -183,6 +183,7 @@ async function login() {
 			clearFields();
 			if (!created) return;
 			setPassword = false;
+			clearPasswordSetup();
 		}
 		const result = await authenticate(submitted.password, persistent, submitted.controller.signal);
 		if (attempt !== submitted || submitted.controller.signal.aborted) return;
