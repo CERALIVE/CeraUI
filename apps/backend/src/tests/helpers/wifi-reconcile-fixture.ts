@@ -17,7 +17,7 @@ export const policyStop = (disconnect: () => Promise<boolean>) =>
 			nmDisconnect: disconnect,
 			broadcastState: () => undefined,
 			setDupIpSuppression: () => undefined,
-			releaseConcurrentInterface: async () => undefined,
+			releaseConcurrentInterface: async () => true,
 			rescan: async () => undefined,
 			publishOutcome: () => undefined,
 		},

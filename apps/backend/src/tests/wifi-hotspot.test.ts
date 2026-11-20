@@ -122,6 +122,7 @@ describe("wifiHotspotStart — AP+STA concurrent mode", () => {
 			nmDisconnect: async () => true,
 			releaseConcurrentInterface: async (ifname) => {
 				released.push(ifname);
+				return true;
 			},
 			broadcastState: () => {},
 			setDupIpSuppression: () => {

@@ -142,6 +142,9 @@ function ownByA(history: boolean): void {
 
 function activationDeps(): HotspotActivationDeps {
 	return {
+		readProfileInstance: async (uuid) =>
+			profiles.has(uuid) ? undefined : null,
+		releaseConcurrentInterface: async () => true,
 		credentials: hotspotCredentialsStore,
 		findHotspotConn: discovery.findHotspotConnForAdapter,
 		nmConnSetFields: async (uuid, fields) => {

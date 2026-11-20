@@ -15,7 +15,7 @@ test.each(["hotspot", "hybrid"] as const)(
 		f.confirmsActivation = false;
 		await f.startRestore(mode);
 		for (let attempt = 0; attempt < 3; attempt++) {
-			settlePending(f.row().ifname, false);
+			await settlePending(f.row().ifname, false);
 			f.list(["wlan0:wifi:disconnected:"]);
 			await f.advance();
 		}

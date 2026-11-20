@@ -120,7 +120,7 @@ test("r8 an old poll cannot retire a replacement Start before confirmation regis
 		oldPoll.resolve(false);
 		replacementNm.resolve(true);
 		replacementPoll.resolve(false);
-		settlePending("wlan0", false);
+		await settlePending("wlan0", false);
 		if (replacement) await replacement;
 		await flush();
 	}

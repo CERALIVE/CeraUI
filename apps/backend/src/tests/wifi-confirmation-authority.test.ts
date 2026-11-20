@@ -53,7 +53,7 @@ test.each(["hotspot", "hybrid"] as const)(
 			expect(observedWifiAdapterMode(f.row())).toBe(mode);
 		} finally {
 			hint.resolve(false);
-			settlePending("wlan0", false);
+			await settlePending("wlan0", false);
 			await flush();
 		}
 	},
@@ -112,7 +112,7 @@ test.each(["hotspot", "hybrid"] as const)(
 		try {
 			await f.startRestore(mode);
 			await oldEntered.promise;
-			settlePending("wlan0", false);
+			await settlePending("wlan0", false);
 			const profile = f.profiles.get(PROFILE);
 			if (!profile) throw new Error("Missing first profile");
 			f.profiles.set("replacement-ap", { ...profile });
@@ -146,7 +146,7 @@ test.each(["hotspot", "hybrid"] as const)(
 		} finally {
 			oldPoll.resolve(false);
 			newPoll.resolve(false);
-			settlePending("wlan0", false);
+			await settlePending("wlan0", false);
 			await flush();
 		}
 	},
@@ -177,7 +177,7 @@ test.each(["hotspot", "hybrid"] as const)(
 			expect(observedWifiAdapterMode(f.row())).toBe("station");
 		} finally {
 			proof.resolve(false);
-			settlePending("wlan0", false);
+			await settlePending("wlan0", false);
 			await flush();
 		}
 	},

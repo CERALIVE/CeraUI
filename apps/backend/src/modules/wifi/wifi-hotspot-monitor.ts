@@ -34,13 +34,29 @@ import {
 	getWifiState,
 	setWifiState,
 } from "./state/wifi-state.ts";
+import {
+	ownsWifiAdapterLock,
+	wifiAdapterLockKey,
+	withWifiAdapterLock,
+} from "./wifi-adapter-lock.ts";
+import { registerWifiAdapterLegRelease } from "./wifi-adapter-reconcile-retry.ts";
+import { getWifiInterfaceByMacAddress } from "./wifi-connections.ts";
+import { nmDisconnectActivation } from "./wifi-hotspot-activity.ts";
 import type {
 	HotspotActivationDeps,
 	HotspotActivationInstance,
 	HotspotConfirmationTarget,
 	WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
+import {
+	type HybridLegAllocation,
+	releaseHybridLeg,
+} from "./wifi-hybrid-leg-release.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
+import {
+	type WifiOperationBinding,
+	wifiOperationGuard,
+} from "./wifi-operation-binding.ts";
 import { sameRadioLifetime, wifiRadioIdentity } from "./wifi-radio-identity.ts";
 import { transitionVirtualBinding } from "./wifi-virtual-binding.ts";
 
@@ -81,7 +97,10 @@ type PendingHotspot = {
 	readonly matches: () => boolean;
 	readonly probe: () => Promise<boolean>;
 	readonly confirm: () => void;
-	readonly giveUp: () => void;
+	readonly giveUp: (
+		changed?: { readonly stopped: boolean },
+		cancelled?: boolean,
+	) => void | Promise<void>;
 };
 
 const pendingHotspots = new Map<string, PendingHotspot>();
@@ -128,24 +147,66 @@ export function recordPendingHotspotModify(
 		pending.activation = {
 			profile: after,
 			activePath: pending.activation?.activePath,
+			activeRunId: pending.activation?.activeRunId,
 		};
 	}
 }
 
-function settleCaptured(pending: PendingHotspot, confirmed: boolean): void {
+export async function matchesHotspotActivation(
+	uuid: string,
+	ifname: string,
+	activation: HotspotActivationInstance,
+	deps: Pick<HotspotActivationDeps, "readProfileInstance">,
+): Promise<boolean> {
+	if (
+		!activation.activePath ||
+		!activation.activeRunId ||
+		activation.activeRunId !== activation.profile?.runId ||
+		!sameNmProfileActivation(
+			activation.profile,
+			await deps.readProfileInstance(uuid),
+		)
+	)
+		return false;
+	const state = await nmDeviceProp(
+		ifname,
+		"GENERAL.STATE,GENERAL.CON-UUID,GENERAL.CON-PATH",
+	);
+	return (
+		Number.parseInt(state?.[0] ?? "", 10) === 100 &&
+		state?.[1] === uuid &&
+		state?.[2] === activation.activePath
+	);
+}
+
+function settleCaptured(
+	pending: PendingHotspot,
+	confirmed: boolean,
+	changed?: { readonly stopped: boolean },
+	cancelled?: boolean,
+): void | Promise<void> {
 	if (!current(pending)) return;
 	const exact = !confirmed || pending.matches();
 	pending.controller.abort();
 	pendingHotspots.delete(pending.ifname);
 	pendingByRow.delete(pending.row);
 	if (confirmed && exact) pending.confirm();
-	else pending.giveUp();
+	else return pending.giveUp(changed, cancelled);
 }
 
 /** Trusted settlement/cancellation of the current pending operation. */
-export function settlePending(ifname: string, confirmed: boolean): void {
+export function settlePending(ifname: string, confirmed: true): void;
+export function settlePending(ifname: string, confirmed: false): Promise<void>;
+export function settlePending(
+	ifname: string,
+	confirmed: boolean,
+): void | Promise<void> {
 	const pending = pendingHotspots.get(ifname);
-	if (pending) settleCaptured(pending, confirmed);
+	if (!confirmed)
+		return Promise.resolve(
+			pending && settleCaptured(pending, false, undefined, true),
+		);
+	if (pending) void settleCaptured(pending, true, undefined, true);
 }
 
 /** Supersede older observers before another transaction owns the transition. */
@@ -181,7 +242,7 @@ export async function handleWifiMonitorEvent(
 				event.device === pending.apIfname);
 		if (!relevant || !current(pending)) continue;
 		try {
-			if (await pending.probe()) settleCaptured(pending, true);
+			if (await pending.probe()) await settleCaptured(pending, true);
 		} catch (error: unknown) {
 			logger.warn("Wi-Fi AP confirmation observation failed", {
 				error: error instanceof Error ? error.name : "unknown",
@@ -191,7 +252,12 @@ export async function handleWifiMonitorEvent(
 }
 
 export function registerPendingConfirmation(
-	target: HotspotConfirmationTarget & { readonly macAddress: string },
+	target: HotspotConfirmationTarget & {
+		readonly macAddress: string;
+		readonly binding?: WifiOperationBinding | undefined;
+		readonly radioProof?: ReturnType<typeof wifiOperationGuard>["observe"];
+		readonly allocation?: HybridLegAllocation;
+	},
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotActivationDeps,
 ): void {
@@ -204,6 +270,8 @@ export function registerPendingConfirmation(
 	const virtual = target.ifname !== ifname;
 	const lifetime = wifiRadioIdentity.state.rows.get(ifname)?.lifetime;
 	const apLifetime = wifiRadioIdentity.state.rows.get(target.ifname)?.lifetime;
+	const binding = target.binding;
+	const radioProof = target.radioProof ?? wifiOperationGuard(binding).observe;
 	const ownsCache = (): boolean =>
 		wifiInterface.hotspot === hotspot && hotspot.conn === target.uuid;
 	const matches = (): boolean =>
@@ -235,12 +303,20 @@ export function registerPendingConfirmation(
 		syncWifiStateCache(target.macAddress, wifiInterface);
 		deps.publishOutcome?.("start", device, { success: true });
 	};
-	const giveUp = (): void => {
-		if (wifiInterface.hotspot === hotspot) {
+	const reportFailure = (
+		changed: { readonly stopped: boolean } | undefined,
+		releasePending = false,
+	) => {
+		if (
+			wifiInterface.hotspot === hotspot &&
+			(!binding || getWifiInterfaceByMacAddress(binding.key) === wifiInterface)
+		) {
 			delete hotspot.transition;
 			if (ownsCache()) {
 				const binding = wifiInterface.concurrentHotspot;
 				if (
+					!releasePending &&
+					(!changed || changed.stopped) &&
 					virtual &&
 					binding?.ifname === target.ifname &&
 					(binding.activeConn === null || binding.activeConn === target.uuid)
@@ -253,12 +329,41 @@ export function registerPendingConfirmation(
 		}
 		deps.publishOutcome?.("start", device, {
 			success: false,
-			error: "not-confirmed",
+			error: changed ? "radio-changed" : "not-confirmed",
+			...(releasePending || (changed && !changed.stopped)
+				? { reason: "deactivation-failed" }
+				: {}),
 		});
 	};
+	const giveUp: PendingHotspot["giveUp"] = (changed, cancelled) => {
+		const allocation = target.allocation;
+		if (!allocation) return reportFailure(changed);
+		const key = wifiAdapterLockKey(owner);
+		const release = () =>
+			releaseHybridLeg(allocation, deps, {
+				receipt: true,
+				deleteCreated: false,
+			});
+		const reconcile = async () => {
+			const released = await release();
+			if (!released) registerWifiAdapterLegRelease(owner, release);
+			return released;
+		};
+		if (ownsWifiAdapterLock(key))
+			return reconcile().then((released) => reportFailure(changed, !released));
+		// Explicit cancellation does not start a new locked operation.
+		if (cancelled) return reportFailure(changed);
+		return withWifiAdapterLock(key, reconcile).then((lock) => {
+			if (!lock.success) registerWifiAdapterLegRelease(owner, release);
+			reportFailure(changed, !lock.success || !lock.result);
+		});
+	};
+	const exactActivation = (activation: HotspotActivationInstance) =>
+		matchesHotspotActivation(target.uuid, target.ifname, activation, deps);
 	let flight: Promise<boolean> | undefined;
 	const probe = (): Promise<boolean> => {
-		if (!current(pending) || !matches()) return Promise.resolve(false);
+		if (!current(pending) || !(binding ? ownsCache() : matches()))
+			return Promise.resolve(false);
 		flight ??= Promise.resolve()
 			.then(async () => {
 				if (
@@ -271,7 +376,8 @@ export function registerPendingConfirmation(
 					))
 				)
 					return false;
-				if (!current(pending) || !matches()) return false;
+				if (!current(pending) || !(binding ? ownsCache() : matches()))
+					return false;
 				const rows = await nmDevices("device,type,state,con-uuid");
 				const up =
 					rows?.some((raw) => {
@@ -283,25 +389,50 @@ export function registerPendingConfirmation(
 							uuid === target.uuid
 						);
 					}) ?? false;
-				if (!up || !current(pending) || !matches()) return false;
+				if (!up || !current(pending) || !(binding ? ownsCache() : matches()))
+					return false;
 				const activation = pending.activation;
-				if (!activation?.profile && !activation?.activePath) return true;
-				const state = await nmDeviceProp(
-					target.ifname,
-					"GENERAL.STATE,GENERAL.CON-UUID,GENERAL.CON-PATH",
+				const exact = activation?.profile || activation?.activePath;
+				if (exact && !(await exactActivation(activation))) return false;
+				if (!binding || !current(pending)) return current(pending) && matches();
+				const proof = await radioProof();
+				if (
+					!current(pending) ||
+					!ownsCache() ||
+					pending.activation !== activation
+				)
+					return false;
+				if (proof === "match") {
+					await settleCaptured(pending, true);
+					return true;
+				}
+				if (proof !== "replaced" || !exact || !activation) return false;
+				const lock = await withWifiAdapterLock(
+					wifiAdapterLockKey(owner),
+					async () => {
+						if (
+							!current(pending) ||
+							!ownsCache() ||
+							pending.activation !== activation ||
+							!(await exactActivation(activation)) ||
+							!current(pending) ||
+							!ownsCache() ||
+							pending.activation !== activation
+						)
+							return false;
+						const stopped = await nmDisconnectActivation(
+							target.uuid,
+							activation.activePath && activation.activeRunId
+								? { path: activation.activePath, runId: activation.activeRunId }
+								: undefined,
+							deps,
+						);
+						await settleCaptured(pending, false, { stopped });
+						return true;
+					},
 				);
-				return (
-					Boolean(activation.activePath) &&
-					Number.parseInt(state?.[0] ?? "", 10) === 100 &&
-					state?.[1] === target.uuid &&
-					state?.[2] === activation.activePath &&
-					sameNmProfileActivation(
-						activation.profile,
-						await deps.readProfileInstance?.(target.uuid),
-					)
-				);
+				return lock.success && lock.result;
 			})
-			.then((up) => up && current(pending) && matches())
 			.finally(() => {
 				flight = undefined;
 			});
@@ -327,7 +458,7 @@ export function registerPendingConfirmation(
 			async () => {
 				if (!current(pending)) return true;
 				if (await probe()) {
-					settleCaptured(pending, true);
+					await settleCaptured(pending, true);
 					return true;
 				}
 				throw new Error("hotspot not yet confirmed");

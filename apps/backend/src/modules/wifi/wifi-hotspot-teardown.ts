@@ -1,9 +1,6 @@
-import {
-	type ConnectionUUID,
-	nmConnsGet,
-	nmcliParseSep,
-} from "../network/network-manager.ts";
+import type { ConnectionUUID } from "../network/network-manager.ts";
 import { concurrentApIfname } from "./wifi-concurrent-interface.ts";
+import { readHotspotProfileActivity } from "./wifi-hotspot-activity.ts";
 import type {
 	HotspotStopDeps,
 	HotspotStopResult,
@@ -18,6 +15,10 @@ import {
 	isHotspotActive,
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
+import {
+	wifiOperationChanged,
+	type wifiOperationGuard,
+} from "./wifi-operation-binding.ts";
 import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 import { transitionVirtualBinding } from "./wifi-virtual-binding.ts";
 
@@ -26,27 +27,24 @@ export async function teardownHotspotLocked(
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotStopDeps,
 	conn: ConnectionUUID | undefined,
+	options: {
+		readonly operation: ReturnType<typeof wifiOperationGuard> | undefined;
+		readonly pendingCleanup: boolean;
+	},
 ): Promise<HotspotStopResult> {
+	const { operation, pendingCleanup } = options;
 	if (!conn) return { success: true };
 	if (
 		!isHotspotActive(wifiInterface) &&
 		wifiInterface.hotspot.transition !== "activating"
 	) {
-		const connections = await nmConnsGet("uuid,active");
-		if (
-			connections?.every((raw) => {
-				if (!raw) return true;
-				const [uuid, active] = nmcliParseSep(raw);
-				return (
-					Boolean(uuid) &&
-					(active === "yes" || active === "no") &&
-					(uuid !== conn || active === "no")
-				);
-			})
-		)
+		const activity = await readHotspotProfileActivity(conn);
+		if (activity === "inactive" || activity === "absent")
 			return { success: true };
 	}
 
+	if (operation && (!(await operation.check()) || !operation.current()))
+		return wifiOperationChanged;
 	// Read BEFORE the teardown clears it: the dup-IP suppression release below has
 	// to pair with whichever interface took it on the way in, and a capable radio
 	// hosting an EXCLUSIVE hotspot has no virtual netdev at all.
@@ -56,20 +54,41 @@ export async function teardownHotspotLocked(
 	const wasConcurrent = concurrent !== undefined;
 	const activeConn = wifiInterface.activeConn;
 	const activeMode = wifiInterface.activeMode;
-	settlePending(wifiInterface.ifname, false);
+	await settlePending(wifiInterface.ifname, false);
 
 	beginHotspotTransition(wifiInterface, "deactivating");
 	deps.broadcastState();
 	syncWifiStateCache(macAddress, wifiInterface);
 
-	const disconnected = (
+	let dispatched = false;
+	let disconnected = (
 		await runHotspotProfileOperation({
 			uuid: conn,
 			kind: "down",
 			selected: true,
-			run: () => deps.nmDisconnect(conn),
+			run: async () => {
+				if (operation && (!(await operation.check()) || !operation.current()))
+					return false;
+				dispatched = true;
+				return deps.nmDisconnect(conn);
+			},
 		})
 	).success;
+	if (!dispatched && operation?.changed) {
+		delete wifiInterface.hotspot.transition;
+		return wifiOperationChanged;
+	}
+	if (dispatched && pendingCleanup && !disconnected) {
+		const activity = await readHotspotProfileActivity(conn);
+		disconnected = activity === "inactive" || activity === "absent";
+	}
+	const result: HotspotStopResult = disconnected
+		? { success: true }
+		: { success: false, error: "deactivation-failed" };
+	if (operation && (!(await operation.check()) || !operation.current())) {
+		delete wifiInterface.hotspot.transition;
+		return result;
+	}
 	if (disconnected) {
 		const sameObservation =
 			wifiInterface.activeConn === activeConn &&
@@ -107,7 +126,5 @@ export async function teardownHotspotLocked(
 	void deps.rescan();
 	// The transition is cleared either way, so the state broadcast above looks
 	// identical for both outcomes — only this return distinguishes them.
-	return disconnected
-		? { success: true }
-		: { success: false, error: "deactivation-failed" };
+	return result;
 }

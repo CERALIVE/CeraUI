@@ -43,7 +43,9 @@ for (const proven of [false, true]) {
 					return outcome === "ok";
 				},
 			);
-			spyOn(defaultHotspotConfigDeps, "nmConnect").mockResolvedValue(true);
+			const up = spyOn(defaultHotspotConfigDeps, "nmConnect").mockResolvedValue(
+				true,
+			);
 			spyOn(
 				defaultHotspotConfigDeps,
 				"wifiUpdateSavedConns",
@@ -66,15 +68,18 @@ for (const proven of [false, true]) {
 					undefined,
 				);
 				const expected =
-					outcome === "ok"
-						? { device: 0, success: true }
-						: {
-								device: 0,
-								error: outcome === "throw" ? "unavailable" : "saving",
-							};
+					proven && outcome !== "throw"
+						? { device: 0, error: "activating" }
+						: outcome === "ok"
+							? { device: 0, success: true }
+							: {
+									device: 0,
+									error: outcome === "throw" ? "unavailable" : "saving",
+								};
 				expect(legacy).toEqual([
 					JSON.stringify({ wifi: { hotspot: { config: expected } } }),
 				]);
+				if (proven && outcome !== "throw") expect(up).not.toHaveBeenCalled();
 				expect(replacement).toEqual(expect.any(String));
 				expect(replacement).not.toBe(fixture.before);
 				const frame = wifiMessageSchema.parse(

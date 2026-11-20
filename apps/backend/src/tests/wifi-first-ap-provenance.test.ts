@@ -20,13 +20,12 @@ import { replayFirstApState as replay } from "./helpers/wifi-first-ap-instances.
 
 for (const completion of ["confirmation", "cleanup"] as const) {
 	test(`creation UUID is durable before add and retired after ${completion}`, async () => {
-		const f = await firstAp();
+		const f = await firstAp(completion === "cleanup" ? "up" : undefined);
 		const dir = await mkdtemp(join(tmpdir(), "first-ap-write-"));
 		const path = join(dir, "hotspot_credentials.json");
 		await initHotspotCredentials(path);
 		rememberHotspotCredentials(MAC, { ssid: "First AP", password: f.secret });
 		f.deps.credentials = hotspotCredentialsStore;
-		f.faults.upTimeout = completion === "cleanup";
 		let observed = false;
 		f.faults.beforeAdd = async () => {
 			const saved: {

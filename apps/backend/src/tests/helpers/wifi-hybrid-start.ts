@@ -202,7 +202,7 @@ export async function hybridFixture(first = false, recordDiscovery = true) {
 			return observe();
 		},
 		restore: async () => {
-			settlePending("wlan0", false);
+			await settlePending("wlan0", false);
 			resetConcurrentInterfaceDepsForTest();
 			resetApStaCapabilityStateForTest();
 			stopWifiUpdateLoopForTest();

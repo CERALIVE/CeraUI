@@ -25,12 +25,17 @@ import {
 	idleTarget,
 	setConcurrentAutoconnect,
 } from "./wifi-concurrent-interface-io.ts";
+import type { HybridLegAllocation } from "./wifi-hybrid-leg-release.ts";
 import {
 	currentTarget,
+	observeBorrowedLeg,
 	selectedTargets,
 	targetRecords,
 } from "./wifi-hybrid-target-record.ts";
-import { wifiRadioIdentity } from "./wifi-radio-identity.ts";
+import {
+	radioIdentityReaders,
+	wifiRadioIdentity,
+} from "./wifi-radio-identity.ts";
 
 export async function connectionsPermitAdoption(
 	parentIfname: string,
@@ -86,30 +91,51 @@ export async function releaseCreatedHybridTarget(target: {
 
 export async function releaseConcurrentApInterface(
 	ifname: string,
-): Promise<void> {
+	target?: HybridLegAllocation,
+): Promise<boolean> {
 	const stored = selectedTargets.get(ifname);
 	const record = stored?.record;
-	if (!stored || !record || record.priorAutoconnect === undefined) return;
+	if (!stored || !record || record.priorAutoconnect === undefined) return true;
+	if (target && targetRecords.get(target) !== record) return true;
+	const ownsSelection = () => selectedTargets.get(ifname) === stored;
 	try {
-		if (!(await currentTarget(ifname, record)) || !(await idleTarget(ifname)))
-			return;
+		const observed = await observeBorrowedLeg(ifname, record);
+		const interfaces =
+			observed === "unseen"
+				? await radioIdentityReaders.listInterfaces()
+				: undefined;
+		if (!ownsSelection()) return true;
+		if (observed === "retired" || interfaces?.includes(ifname) === false) {
+			const { record: _record, ...witness } = stored;
+			selectedTargets.set(ifname, witness);
+			return true;
+		}
+		if (observed !== "current" || !(await idleTarget(ifname))) return false;
 		const current = (await nmDeviceProp(ifname, "GENERAL.AUTOCONNECT"))?.[0];
+		if (!ownsSelection()) return true;
 		const { priorAutoconnect: _prior, ...released } = record;
 		if (current !== "no") {
 			// A readable value other than ours is an external change: retire the claim, never overwrite it.
 			// shortcut: an external A->B->A autoconnect cycle between our reads is unobservable (nmcli monitor reports only device/connection state); retire on property events if a device-property feed is ever consumed.
 			if (current !== undefined)
 				selectedTargets.set(ifname, { ...stored, record: released });
-			return;
+			return current !== undefined;
 		}
 		if (
-			!(await setConcurrentAutoconnect(ifname, record.priorAutoconnect, () =>
-				currentTarget(ifname, record),
+			!(await setConcurrentAutoconnect(
+				ifname,
+				record.priorAutoconnect,
+				async () =>
+					ownsSelection() &&
+					(await observeBorrowedLeg(ifname, record)) === "current" &&
+					ownsSelection(),
 			))
 		)
-			return;
-		selectedTargets.set(ifname, { ...stored, record: released });
+			return false;
+		if (ownsSelection())
+			selectedTargets.set(ifname, { ...stored, record: released });
+		return true;
 	} catch {
-		return;
+		return false;
 	}
 }

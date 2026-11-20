@@ -1,7 +1,8 @@
-import { open, rename, rm } from "node:fs/promises";
+import { open } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { logger } from "../../helpers/logger.ts";
 import { run, runWithStdin } from "../../helpers/run.ts";
+import { stageKeyfilePublication } from "./network-manager-keyfile-publication.ts";
 import type { NmProfileReadTrace } from "./network-manager-profile-diagnostics.ts";
 import { readNmProfileFileSecret } from "./network-manager-profile-file.ts";
 import {
@@ -89,6 +90,7 @@ export async function readVerifiedNmWifiSecret(
 export async function writeNmWifiSecret(
 	uuid: string,
 	fields: Readonly<Record<string, string>>,
+	permit?: () => Promise<boolean>,
 ): Promise<boolean> {
 	const reject = (
 		reason:
@@ -97,6 +99,8 @@ export async function writeNmWifiSecret(
 			| "pre-file-unreadable"
 			| "serialization-failed"
 			| "pre-write-resource-changed"
+			| "publish-target-replaced"
+			| "publish-proof-changed"
 			| "file-publish-failed"
 			| "load-failed"
 			| "post-read-fields-unreadable"
@@ -123,6 +127,8 @@ export async function writeNmWifiSecret(
 	const filename = before.file.filename;
 	const held = await openNmProfileFile(before.file);
 	if (!held) return reject("pre-file-unreadable");
+	const original = held.bytes;
+	const expected = before.file;
 	let output: string;
 	try {
 		output = await serializeNmProfileModify(held.bytes.toString(), fields);
@@ -132,24 +138,32 @@ export async function writeNmWifiSecret(
 	} finally {
 		await held.handle.close();
 	}
-	if (!sameNmProfileResource(before, await readNmProfileInstance(uuid)))
-		return reject("pre-write-resource-changed");
 	const temporary = join(
 		dirname(filename),
 		`.${basename(filename)}.${crypto.randomUUID()}.tmp`,
 	);
+	const submitted = Buffer.from(output);
+	const publication = stageKeyfilePublication(expected, original, temporary);
 	let stage: "file-publish-failed" | "load-failed" | "post-read-failed" =
 		"file-publish-failed";
 	try {
 		const file = await open(temporary, "wx", 0o600);
 		try {
-			await file.writeFile(output);
+			await file.writeFile(submitted);
 			await file.sync();
 		} finally {
 			await file.close();
 		}
-		await rename(temporary, filename);
+		if (!sameNmProfileResource(before, await readNmProfileInstance(uuid)))
+			return reject("pre-write-resource-changed");
+		if (permit && !(await permit())) return false;
+		if (!publication.publish(submitted))
+			return reject("publish-target-replaced");
+		if (permit && !(await permit())) return reject("publish-proof-changed");
+		if (!publication.ownsLive(submitted))
+			return reject("publish-target-replaced");
 		stage = "load-failed";
+		publication.beginLoad();
 		await run("nmcli", ["connection", "load", filename]);
 		stage = "post-read-failed";
 		const trace: NmProfileReadTrace = {};
@@ -174,11 +188,14 @@ export async function writeNmWifiSecret(
 		if (!after.file) return reject("post-file-unreadable");
 		if (after.runId !== before.runId) return reject("post-run-changed");
 		if (after.path !== before.path) return reject("post-path-changed");
+		if (!publication.ownsLive(submitted))
+			return reject("publish-target-replaced");
+		publication.commit();
 		return true;
 	} catch (error: unknown) {
 		if (!(error instanceof Error)) throw error;
 		return reject(stage);
 	} finally {
-		await rm(temporary, { force: true });
+		await publication.finish(submitted);
 	}
 }

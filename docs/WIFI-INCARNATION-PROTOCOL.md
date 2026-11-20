@@ -11,8 +11,9 @@ retains the legacy shape.
 
 Guarded requests now require the expected token at RPC admission and again
 at their transaction lock entry. Config and mode requests also supply the captured
-metadata for the asynchronous frames below. Composite physical identity,
-in-operation lifetime fencing and hardware qualification remain separate work.
+metadata for the asynchronous frames below. Start also retains the proof it
+obtained at transaction entry. Composite physical identity and hardware
+qualification remain separate work.
 
 ## Backend limited mode [EXISTS; host and mock-browser proof only]
 
@@ -59,9 +60,8 @@ All guarded Wi-Fi router procedures use one admission middleware. It establishes
 the request binding exactly once, including an explicitly missing client token.
 Transaction checks consume that context; its absence means no incoming guarded
 request is being admitted. Internal callers do not acquire a token requirement.
-A mode change to hotspot or hybrid is checked at the transition's lock entry,
-and the start it runs trusts that admission, so a change during the AP teardown
-never refuses after effects; in-operation fencing is separate work. The request
+A mode change to hotspot or hybrid is checked at the transition's lock entry.
+Its delegates use the proof captured by that transaction. The request
 admission is one-shot: the transaction lock-entry check consumes it whether it
 admits or refuses. It applies only to the recorded device; another adapter's
 internal transaction does not inherit it. Middleware retires the record in
@@ -124,6 +124,188 @@ transient reason; a replaced registry row remains a changed-radio refusal.
 Admission does not launch discovery or manufacture a token for the caller.
 The same missing/stale/limited policy applies to mock requests.
 
+### Start lifetime checks [EXISTS; host proof]
+
+Start retains the original row, registry key, token, permanent MAC and
+network-device/phy lifetime. After taking the adapter lock it checks that
+lifetime before cleanup, recording intent, target allocation and the
+already-active shortcut. It rechecks at profile pin, inactive creation, Up
+and autoconnect dispatch, then before remembering credentials and registering
+confirmation. Existing profile and hybrid target ownership checks still apply.
+Missing or changed proof during Start yields the existing `radio-changed`
+refusal without `current-unobserved`, so it cannot trigger an automatic replay.
+
+Confirmation checks the captured entry after reading the actual AP target
+lifetime. It samples the parent radio first and then the AP leg. A positively
+identified active instance on a changed radio may be stopped under the same
+adapter lock. Down names its captured D-Bus active path, so a later activation
+of the same profile stays up. It publishes `radio-changed`, including
+`deactivation-failed` as the reason if Down fails.
+Without exact activation evidence, ordinary bounded confirmation still
+applies. Start rollback restores only its own cache entry.
+
+Prepare rechecks after resolving credentials and inside the shared repair or
+Save callback. It checks again before returning credentials or committing the
+Save. Active Configure and regulatory restart use the same writer. It checks
+the selected radio and profile before the forward write, reactivation, any
+rollback, and the credential commit. If proof is lost before dispatch, the
+operation refuses without effects. If a write may already have changed the
+profile, Configure reports `activating` and suppresses further writes and Up.
+The limited-radio regulatory Stop retains its UUID-based authority.
+
+The credential writer stages the keyfile, re-reads the profile and requires
+the same NetworkManager resource, and only then requests the operation's
+proof. Publication is two back-to-back synchronous calls: a hard link keeps
+the current keyfile aside, and a rename puts the staged file in its place. The
+writer then checks that the kept file is the original device, inode and bytes,
+and requests the proof again before `nmcli connection load`. If the keyfile
+was replaced or the proof was lost, the kept file is renamed back, so the newer
+or original bytes stay and nothing is loaded (`publish-target-replaced`,
+`publish-proof-changed`). For first-profile Start, the proof is also checked
+between inactive creation and the credential write.
+
+After NetworkManager acknowledges Up, a replacement can still cause refusal.
+While holding the adapter lock, Start compares the captured profile file
+and active D-Bus path, then requests Down for that active path
+(`nmcli connection down apath <path>`), never for the profile UUID. A later
+activation of the same profile therefore stays up. An unverified or failed
+Down is reported as `radio-changed` with reason `deactivation-failed`.
+
+A hybrid Start binds its original AP leg lifetime into the operation guard
+right after allocation (`bindLeg`). Every later `check` and `permit` then
+samples the parent radio and then that leg, so a same-phy leg replaced during
+the parent sample is refused. That covers the saved pin, credential repair,
+the nested credential permit, Up, post-Up commits and both keyfile writer
+permits. Hybrid Configure binds its captured leg identity the same way, so its
+staged keyfile, restart Up and credential commit are covered too.
+
+A Start can release only the allocator receipt it acquired. Every hand-back
+after a rollback goes through `releaseHybridLeg`: Start's own rollback,
+deferred confirmation after its Down, and a retried created-profile cleanup
+after its Down. With the receipt, the release restores a borrowed leg's
+autoconnect only while the selection is still this Start's and the leg is
+idle, so a successor's selection is left alone. A stale Start waits for its
+exact-instance Down to settle before it rolls back state or releases the leg.
+If Down fails, the leg is still active. The release then leaves its policy
+alone and the selection keeps the recorded prior value for a later release.
+
+The Start request and terminal frame accept an optional `attempt` UUID.
+The backend echoes the captured UUID even when the NetworkManager monitor
+publishes after the reply. The incarnation still controls admission.
+The dialog reserves a fresh UUID for each dispatch, including the one allowed
+retry. An accepted Start can consume a refusal for its UUID, device and
+socket epoch even if the same dialog already displays the replacement radio.
+A refusal may arrive before or after the dispatch acknowledgement. The dialog
+shows the existing changed-radio notice when cleanup succeeded and the
+existing unknown-mode notice when Down could not be verified. The latter
+does not reopen the credential gate automatically.
+
+The status snapshot still confirms Start and Stop. Older backends can ignore
+the request field and continue sending their existing status and terminal
+frames. Older senders omit the UUID and receive the previous frame shape.
+Uncorrelated Start frames cannot resolve another client's pending operation.
+Closing the dialog, changing device or link, and settling or timing out the
+pending operation retire its receipt. Stop and station do not use the UUID.
+A failed Start reply keeps the correlated refusal its frame delivered first,
+even if the row token rotated before the reply.
+
+### Residual limits [EXISTS; host proof]
+
+The adapter lock orders CeraUI operations, not independent NetworkManager or
+filesystem writers. The following checks reduce the remaining windows and
+report uncertain outcomes rather than claiming an atomic transaction.
+
+- **Keyfile publication and restoration.** Park the live file, verify the
+  parked identity and bytes, and publish by linking into a vacant pathname.
+  The live path can briefly be absent, but an independent writer that takes
+  it first is not overwritten. Verify the live staged inode and bytes again
+  after the final radio permit and after load readback. Before load, a
+  refusal or inspection error restores the parked file only if the pathname
+  is vacant or still holds the staged file. Recheck the moved file before
+  restoration; if a successor won the race, relink it instead of the backup.
+  Preserve and log recovery files when an external writer wins the relink
+  or ownership cannot be established. The tests replace the live keyfile
+  during both permit outcomes and throw during the post-publication permit
+  (`wifi-credential-publish-radio.test.ts`).
+- **Final proof to load.** A radio or leg replaced after the last permit, while
+  `nmcli connection load` runs, lets NetworkManager read the credential into
+  the profile, which stays bound to the original radio. The next effect's
+  proof refuses, so no Up, autoconnect or commit follows, a first-profile
+  Start deletes its new profile, and the operator sees `radio-changed`
+  (`wifi-hybrid-leg-boundaries.test.ts`). An independent keyfile change
+  inside load cannot undo that dispatched load; even a same-byte successor
+  is detected on readback and is not reported as our commit
+  (`wifi-credential-publish-radio.test.ts`). Restored files retain their
+  bytes and inode, not their original ctime.
+- **Activation rollback and profile deletion.** Rollback binds the Up path
+  to its original NetworkManager bus and daemon identity. Every exact Down
+  rechecks that identity before dispatch. A missing path, a different run,
+  or unreadable identity never authorizes a Down by path or UUID. Cleanup
+  checks fresh activity instead. If activity is unknown or the profile still has
+  an active connection, retain it and issue the existing unknown-mode
+  notice (`cleanup-pending` or `deactivation-failed`). First-profile deletion
+  also checks inactivity immediately before dispatch; a successful exact
+  Down alone is not sufficient. The host tests start a same-profile
+  successor both before and after Down and observe that it survives.
+  A complete inventory that shows the profile gone retires its cached
+  references and creation record without issuing Down or Delete. Explicit
+  Stop of a pending first profile may also confirm inactivity after an
+  unacknowledged Down, without repeating the command.
+  NetworkManager does not offer a delete-if-inactive transaction: an
+  independent activation after the final inventory answer can still race
+  Delete. NetworkManager can also restart between the final run check and
+  `nmcli` dispatch; `nmcli` itself cannot bind its request to a daemon run.
+  The renumbering tests cover restarts before the check, not inside that gap.
+- **Deferred borrowed-leg release.** Expiry and failed exact Down both try
+  release using Start's allocator receipt under the owner lock. Only the
+  still-owned idle leg can regain its previous autoconnect. Busy or
+  unreadable state retains a release obligation with a bounded automatic
+  retry schedule and produces the unknown-mode notice. Confirmed removal or
+  replacement retires the old claim without restoring policy on a successor.
+  A parent-only incarnation change does not retire the claim: the same
+  managed leg can still recover its saved autoconnect policy once idle.
+  Tests cover idle expiry, release after busy expiry, a committed Down whose
+  reply was lost, a replaced leg, and a parent reset with the same leg.
+- **Explicit Stop during hybrid Start confirmation.** Stop settles the
+  pending Start before issuing Down. If the leg is still busy, the Start
+  terminal can report `deactivation-failed` and readiness stays degraded
+  until reconciliation completes the release, even if Stop succeeds.
+
+### Recorded deviation: the Start `attempt` correlation id
+
+Plan todo 24 (`ceraui-hotspot-radio-enforcement.md:437`) says the Start
+outcome frame keeps its current shape and carries no token. B8 deliberately
+deviates by adding the optional `attempt` field. On November 20, 2026, the
+owner delegated the decision ("whatever makes the most sense, safest, best
+user experience") and root approved keeping the field. Without it, the
+initiating dialog could only time out after a deferred refusal instead of
+showing the keyed refusal notice.
+
+The deviation is bounded:
+
+- `attempt` is a random UUID generated for each send. It is never a radio,
+  incarnation or credential token and grants no admission, mutation or
+  release authority. The incarnation alone admits the request.
+- Only the Start request accepts it. Stop, station and the other procedures
+  do not.
+- The backend echoes it only on that Start's terminal frame and only when the
+  request carried one. Without it, the frame bytes match the previous shape.
+  `apps/backend/src/tests/wifi-start-attempt-wire.test.ts` pins both cases for
+  an accepted Start and a refusal.
+- Entry refusals published by the admission middleware do not carry it. Their
+  RPC reply is the requester's result.
+
+Compatibility: an older backend strips the unknown request field, and the new
+dialog confirms from status as before. An older client omits the field and
+receives the previous bytes. A frame without a matching UUID, device and link
+epoch cannot settle a dialog's operation.
+
+Mode to hotspot or hybrid checks before recording intent, then passes the
+captured row and lifetime through Down and Start. A replacement after a
+confirmed Down blocks Start and settles the original mode operation with
+`radio-changed`. A failed Down remains `deactivation-failed`. A refusal can
+restore only the intent written by that operation under the held owner lock.
+
 The frontend keeps a `current-unobserved` request pending for the next Wi-Fi
 status frame containing that row, for at most three seconds. It sends the same
 call once with that frame's token. A frame without a token, or the absence of a
@@ -157,8 +339,8 @@ Cancelled Configure owners also reject their later RPC result and feedback
 through their own admission controller. This uses local state only; the wire
 and the one-terminal-per-valid-dispatch contract remain unchanged.
 
-Stop and station behavior and remote projection are unchanged. This contract
-makes no physical-radio or in-operation fencing qualification claim.
+Stop and station remain independent of the Start binding. This contract makes
+no physical-radio qualification claim.
 
 The `wifi-limited` mock scenario supplies an unidentified `wlan0` with an
 already active hotspot for the same admission policy and safe Stop/station
@@ -198,10 +380,11 @@ credentials and mode unchanged.
 
 RPC replies and config/mode/toggle terminal frames accept an optional `reason`
 alongside the typed refusal. RPC error envelopes gain no field. Replies identify
-their dispatch through the request/response pair. The current UI confirms
-start/stop from authoritative status rather than ingesting those terminal
-frames. Internal boot reconciliation uses the shared mode producer; regulatory
-reconfiguration has no additional keyed hotspot settlement frame.
+their dispatch through the request/response pair. Start also correlates
+deferred refusals as described above. Internal boot reconciliation uses the
+shared mode producer. Regulatory reconfiguration has no additional keyed
+hotspot settlement frame and skips the restart if its original radio has no
+verified lifetime.
 
 The existing transport envelope distinguishes mode publications. Broadcasts
 carry `seq`; private mode refusals do not. The RPC client consumes an

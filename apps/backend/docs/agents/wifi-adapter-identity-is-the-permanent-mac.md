@@ -163,6 +163,11 @@ owner keys and `wifi_modes`.
 Hybrid profiles explicitly remain autoconnect off. Direct Starts retain their
 mode intent even when no safe autoconnect path exists; B2 restores that intent.
 
+Start retains the verified row and lifetime obtained at lock entry. The
+physical recheck before each activation effect is independent of saved-profile
+and UUID ownership. The adapter lock orders CeraUI writers but does not prevent
+the kernel from reprobeing or renaming the radio during a NetworkManager call.
+
 Before discovery publishes rows, it examines
 every persisted current and historical owned AP UUID under Start's canonical
 adapter lock, including the profile read, policy check and write. A busy lock
@@ -458,10 +463,18 @@ remain intact. A failed fresh
 add cannot restore the deleted UUID from an older cache snapshot.
 
 Retained cleanup remembers checked autoconnect suppression and disconnection.
-A retry reads NM's UUID/active inventory, keeps confirmed stopped state for an
-inactive profile, and retries deletion without a redundant down. A refused down
-is accepted as stopped only after that inventory proves the UUID inactive;
-unreadable or active evidence retains failure and the bounded recovery path.
+A retry never substitutes UUID Down for a missing active path. It may proceed
+without another Down if NM's UUID/active inventory proves the profile inactive.
+The same inactivity proof is required immediately before deletion, because
+Delete also disconnects active users of the profile. Active or unreadable
+evidence leaves the profile and the bounded recovery path in place.
+A complete inventory that confirms the profile is absent clears the cached
+UUID and retires the durable creation record, even when no activation path
+was captured. Retain the record while the owned profile is still active and
+cleanup remains pending; restart recovery can still need that evidence.
+The Up path is scoped to the original NetworkManager bus and daemon run.
+The rollback Down seam rechecks that run before dispatch; a mismatch only
+allows recovery from fresh inventory, never reuse of an old activation path.
 
 Monitor events trigger confirmation rather than proving it. The pending
 activation captures its UUID, hotspot object, activation interface, profile
@@ -776,8 +789,10 @@ cannot leave an unpersisted hotspot choice eligible for later restore.
 Explicit mode changes hold one adapter lock across persistence, intermediate
 teardown and activation. Internal delegates do not reacquire that lock and omit
 the recorder by destructuring, so a hybrid/hotspot switch's intermediate Stop
-cannot replace its target with station. Regulatory reconfigure and its rollback
-use their existing direct activation path and never record a new mode choice.
+cannot replace its target with station. Regulatory reconfigure requires a
+verified binding for the original registry row before entering the writer.
+It and its rollback use that binding through the existing direct activation
+path and never record a new mode choice.
 After confirmed teardown, Stop retires matching parent aliases independently of
 virtual cleanup. It examines the current concurrent observation even when none
 existed at entry, matching the captured virtual name or the parent's canonical

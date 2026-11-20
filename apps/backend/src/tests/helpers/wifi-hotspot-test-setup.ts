@@ -59,6 +59,8 @@ export function makeDeps(
 ): HotspotActivationDeps {
 	return {
 		nmConnect: async () => true,
+		readProfileInstance: async () => undefined,
+		releaseConcurrentInterface: async () => true,
 		nmConnSetFields: async () => true,
 		nmApConnAdd: async () => "hotspot-uuid",
 		nmConnDelete: async () => true,

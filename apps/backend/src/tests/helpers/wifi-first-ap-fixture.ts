@@ -138,6 +138,14 @@ export async function firstAp(
 		}
 		if (args[0] === "conn" && args[1] === "down") {
 			if (faults.downFails) throw new Error("NM deactivation unavailable");
+			if (args[2] === "apath") {
+				if (!active || instances.activePath() !== args[3])
+					throw new Error("Connection is not active");
+				active = undefined;
+				if (faults.downTimeout)
+					throw new Error("NM down committed then timed out");
+				return { stdout: "Connection successfully deactivated", stderr: "" };
+			}
 			if (active !== args[2]) throw new Error("Connection is not active");
 			if (active === args[2]) active = undefined;
 			if (faults.downTimeout)

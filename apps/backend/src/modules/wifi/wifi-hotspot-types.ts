@@ -47,6 +47,7 @@ import {
 	type HotspotSecurityId,
 	hotspotSecurityFields,
 } from "./wifi-hotspot-security.ts";
+import type { HybridLegAllocation } from "./wifi-hybrid-leg-release.ts";
 import type { HybridTargetRefusal } from "./wifi-hybrid-target-diagnostics.ts";
 import type { BaseWifiInterface, WifiInterface } from "./wifi-interfaces.ts";
 import type { VirtualHotspotBinding } from "./wifi-virtual-binding.ts";
@@ -193,6 +194,7 @@ export type HotspotConfirmationTarget = {
 export type HotspotActivationInstance = {
 	readonly profile: NmProfileInstance | null | undefined;
 	readonly activePath: string | undefined;
+	readonly activeRunId: string | undefined;
 };
 
 /**
@@ -209,10 +211,11 @@ export type HotspotActivationDeps = {
 	) => { staApCombo: { supported: boolean } } | undefined;
 	nmConnect: (...args: Parameters<typeof nmConnect>) => Promise<unknown>;
 	/** Production reads NM instance evidence; injected NM implementations supply their own. */
-	readProfileInstance?: typeof readNmProfileInstance;
+	readProfileInstance: typeof readNmProfileInstance;
 	nmConnSetFields: (
 		uuid: string,
 		fields: Record<string, string>,
+		permit?: () => Promise<boolean>,
 	) => Promise<unknown>;
 	nmApConnAdd: typeof nmApConnAdd;
 	nmConnDelete: typeof nmConnDelete;
@@ -237,19 +240,15 @@ export type HotspotActivationDeps = {
 		ifname: string,
 		admitted?: () => boolean,
 		onRefusal?: (refusal: HybridTargetRefusal) => void,
-	) => Promise<
-		| { ifname: string; created: boolean }
-		| typeof HYBRID_CHANNEL_REFUSAL
-		| undefined
-	>;
+	) => Promise<HybridLegAllocation | typeof HYBRID_CHANNEL_REFUSAL | undefined>;
 	readHybridChannel?: typeof readHybridStationChannel;
 	validateConcurrentInterface?: typeof revalidateConcurrentApInterface;
 	confirmHybridActivation?: typeof confirmHybridActivation;
-	releaseConcurrentInterface?: (ifname: string) => Promise<void>;
-	rollbackConcurrentInterface?: (target: {
-		ifname: string;
-		created: boolean;
-	}) => Promise<void>;
+	releaseConcurrentInterface: (
+		ifname: string,
+		target?: HybridLegAllocation,
+	) => Promise<boolean>;
+	rollbackConcurrentInterface?: (target: HybridLegAllocation) => Promise<void>;
 	/**
 	 * Does the operator want this adapter's AP to run ALONGSIDE its station leg?
 	 *

@@ -222,6 +222,7 @@ export async function nmConnGetFields<Tupel extends Readonly<Array<string>>>(
 export async function nmConnSetFields(
 	uuid: ConnectionUUID,
 	fields: Record<string, string>,
+	permit?: () => Promise<boolean>,
 ) {
 	try {
 		// In mock mode, simulate successful modification
@@ -231,7 +232,7 @@ export async function nmConnSetFields(
 		}
 
 		if (fields["802-11-wireless-security.psk"] !== undefined)
-			return await writeNmWifiSecret(argMatch(ID_RE, uuid), fields);
+			return await writeNmWifiSecret(argMatch(ID_RE, uuid), fields, permit);
 		const args = ["con", "modify", argMatch(ID_RE, uuid)];
 		for (const field in fields) {
 			const value = fields[field];
@@ -240,6 +241,7 @@ export async function nmConnSetFields(
 			args.push(field);
 			args.push(value);
 		}
+		if (permit && !(await permit())) return false;
 		const stdout = await run("nmcli", args);
 		return stdout === "";
 	} catch {
@@ -317,7 +319,11 @@ export async function nmConnect(
 	return false;
 }
 
-export async function nmDisconnect(uuid: ConnectionUUID) {
+const ACTIVE_PATH_RE =
+	/^\/org\/freedesktop\/NetworkManager\/ActiveConnection\/\d+$/;
+
+/** Callers using an active path must prove the current daemon owns that receipt. */
+export async function nmDisconnect(uuid: ConnectionUUID, activePath?: string) {
 	try {
 		// In mock mode, simulate successful disconnection
 		if (shouldMockWifi()) {
@@ -325,7 +331,11 @@ export async function nmDisconnect(uuid: ConnectionUUID) {
 			return true;
 		}
 
-		const stdout = await run("nmcli", ["conn", "down", argMatch(ID_RE, uuid)]);
+		const selector =
+			activePath === undefined
+				? [argMatch(ID_RE, uuid)]
+				: ["apath", argMatch(ACTIVE_PATH_RE, activePath)];
+		const stdout = await run("nmcli", ["conn", "down", ...selector]);
 		return parseNmConnDeactivated(stdout);
 	} catch (err) {
 		logger.error(`nmDisconnect err: ${describeCliError(err)}`);
@@ -516,6 +526,7 @@ export async function nmApConnAdd(
 	identity: { readonly name: string; readonly password: string },
 	bindingFields: Readonly<Record<string, string>>,
 	recordCreation?: (uuid: string, instance?: NmProfileInstance) => boolean,
+	permit?: () => Promise<boolean>,
 ): Promise<string | undefined> {
 	// Retain our UUID before dispatch; a mismatched receipt never grants cleanup
 	// authority over the UUID printed by NetworkManager.
@@ -569,13 +580,14 @@ export async function nmApConnAdd(
 		if (recordCreation && !recordCreation(uuid)) return undefined;
 		if (shouldMockWifi()) return uuid;
 		argMatch(ID_RE, device);
-		dispatched = true;
 		let stdout: string | undefined;
 		const added = await runHotspotProfileOperation(
 			{
 				uuid,
 				kind: "add",
 				run: async () => {
+					if (permit && !(await permit())) return false;
+					dispatched = true;
 					stdout = await run("nmcli", [
 						"connection",
 						"add",
@@ -585,13 +597,14 @@ export async function nmApConnAdd(
 					]);
 					instance = await readNmProfileInstance(uuid, initial);
 					if (!instance?.file) return false;
+					if (permit && !(await permit())) return false;
 					secretWrite = null;
 					secretWrite = await runHotspotProfileOperation(
 						{
 							uuid,
 							kind: "modify",
 							fields: { "802-11-wireless-security.psk": identity.password },
-							run: (delta) => nmConnSetFields(uuid, delta),
+							run: (delta) => nmConnSetFields(uuid, delta, permit),
 						},
 						{ instance, readProfileInstance: readNmProfileInstance },
 					);

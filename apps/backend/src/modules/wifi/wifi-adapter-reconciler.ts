@@ -52,6 +52,10 @@ import {
 	isHotspotActive,
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
+import {
+	wifiOperationChanged,
+	type wifiOperationGuard,
+} from "./wifi-operation-binding.ts";
 
 export { retryWifiAdapterReconcile } from "./wifi-adapter-reconcile-retry.ts";
 
@@ -121,7 +125,10 @@ export async function reconcileWifiAdapterStopLocked(
 	registryKey: string,
 	row: WifiInterfaceWithHotspot,
 	deps: HotspotStopDeps,
+	operation?: ReturnType<typeof wifiOperationGuard>,
 ): Promise<HotspotStopResult> {
+	if (operation && (!(await operation.check()) || !operation.current()))
+		return wifiOperationChanged;
 	const owner = resolveWifiAdapterOwner(registryKey, row);
 	const cleanup = await reconcileWifiAdapterTeardownLocked(owner);
 	const conn = row.hotspot.conn;
@@ -136,25 +143,44 @@ export async function reconcileWifiAdapterStopLocked(
 				kind: "modify",
 				selected: true,
 				fields: { "connection.autoconnect": "no" },
-				run: (fields) => deps.nmConnSetFields(conn, fields),
+				run: async (fields) =>
+					(!operation || ((await operation.check()) && operation.current())) &&
+					deps.nmConnSetFields(conn, fields),
 			})
-		).success
+		).success &&
+		!operation?.changed
 	)
 		retryWifiAdapterReconcile(owner, `could not disable ${conn}`);
-	const result = await teardownHotspotLocked(registryKey, row, deps, conn);
+	if (operation?.changed) return wifiOperationChanged;
+	const result = await teardownHotspotLocked(registryKey, row, deps, conn, {
+		operation,
+		pendingCleanup: !cleanup.stopped,
+	});
+	if (operation && (!(await operation.check()) || !operation.current()))
+		return result;
+	// Explicit Stop can select the current AP even when rollback lacked authority to Down it.
+	const reconciled =
+		result.success && !cleanup.stopped
+			? await reconcileWifiAdapterTeardownLocked(owner)
+			: cleanup;
 	await reconcileWifiAdapterLocked(
 		owner,
 		{
 			identities: wifiRadioIdentity.state.rows,
 			active: new Map(),
 			station: true,
-			write: deps.nmConnSetFields,
+			write: operation
+				? async (uuid, fields) =>
+						(await operation.check()) &&
+						operation.current() &&
+						deps.nmConnSetFields(uuid, fields)
+				: deps.nmConnSetFields,
 		},
-		cleanup,
+		reconciled,
 	);
-	if (result.success && cleanup.stopped)
+	if (result.success && reconciled.stopped)
 		clearWifiAdapterReconcile(owner, "restore");
-	return cleanup.stopped
+	return reconciled.stopped
 		? result
 		: { success: false, error: "deactivation-failed" };
 }

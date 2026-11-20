@@ -155,7 +155,7 @@ export function stopActivityFixture(): (
 			recordIntent: wifiAdapterModeRecorder,
 			nmConnSetFields: (uuid, fields) => nm.nmConnSetFields(uuid, fields),
 			nmDisconnect: (uuid) => nm.nmDisconnect(uuid),
-			releaseConcurrentInterface: async () => undefined,
+			releaseConcurrentInterface: async () => true,
 			broadcastState: () => undefined,
 			setDupIpSuppression: () => undefined,
 			rescan: async () => undefined,

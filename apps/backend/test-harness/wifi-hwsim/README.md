@@ -275,12 +275,34 @@ loads a host module and remains outside shared CI.
 
 ### Later gates
 
-`replacement.ts` and `hybrid-target.ts` do not exist yet and must
-be committed before their reviewed gate head is qualified. Duplicate-address
+Run `replacement.ts` on four radios to check that Start refuses after the
+physical names are swapped during saved-profile refresh before Up. Duplicate-address
 testing needs a working distinct-address creation control first. Require state
 100 **and the intended active profile/SSID** for association; the integration
 script's `connected` substring alone accepts `disconnected`. Establish positive
 controls before treating application refusal as a passing negative control.
+
+### #603 secret boundary
+
+Run the following from the committed CeraUI checkout, with `TMPDIR` set to
+a disk-backed directory outside Git work trees and `/tmp`.
+
+```bash
+bash apps/backend/test-harness/wifi-hwsim/vm/run-vm.sh \
+  --radios 4 --repo "$PWD" --ref HEAD -- \
+  bun apps/backend/test-harness/wifi-hwsim/checks/secret-boundary.ts
+```
+
+`B8-603` receipts distinguish stored, agent-owned, not-saved and missing PSKs.
+The check records flags, persistent presence, verified equality, and activation
+outcomes across separate `nmcli` processes. It repeats the legacy nonsecret
+rewrite before running the candidate's saved-profile Start and active Save.
+If a fixture cannot Start without a usable secret, the check first records
+that refusal and then installs a stored control secret for Save and rollback.
+A forced forward activation failure tests rollback on the original UUID.
+Only generated fixture secrets are used, and the receipts omit their values.
+A pass ends with `B8-603 complete`. It cannot identify the flags on the
+removed incident profile.
 
 ### First AP add-then-up gate
 

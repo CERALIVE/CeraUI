@@ -1,5 +1,6 @@
 import type {
 	HotspotConfigOutput,
+	HotspotToggleOutput,
 	WifiInterface,
 	WifiMessage,
 	WifiStatus,
@@ -18,6 +19,63 @@ type WifiConfigDispatch = {
 	receive: ((config?: WifiConfigReceipt) => void) | undefined;
 };
 const configDispatches = new Set<WifiConfigDispatch>();
+
+type WifiStartReceipt = NonNullable<
+	NonNullable<WifiMessage["hotspot"]>["start"]
+>;
+type WifiStartOutcome = HotspotToggleOutput & { readonly correlated?: true };
+const startReceivers = new Map<string, (frame: WifiStartReceipt) => void>();
+
+export function noteWifiStart(frame: WifiStartReceipt): void {
+	if (frame.attempt) startReceivers.get(frame.attempt)?.(frame);
+}
+
+export async function withWifiStartReceipt(
+	device: string,
+	invoke: (attempt: string) => Promise<HotspotToggleOutput>,
+	signal: AbortSignal,
+): Promise<WifiStartOutcome> {
+	// getRandomValues also works on a plain-HTTP device LAN.
+	const bytes = crypto.getRandomValues(new Uint8Array(16));
+	bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
+	bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
+	const hex = Array.from(bytes, (byte) =>
+		byte.toString(16).padStart(2, "0"),
+	).join("");
+	const attempt = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+	const link = getLinkEpoch();
+	const { promise, resolve } = Promise.withResolvers<
+		WifiStartReceipt | undefined
+	>();
+	let terminal: WifiStartReceipt | undefined;
+	const abort = () => {
+		startReceivers.delete(attempt);
+		resolve(undefined);
+	};
+	startReceivers.set(attempt, (frame) => {
+		if (String(frame.device) !== device || getLinkEpoch() !== link) return;
+		if (terminal || (frame.success !== true && !frame.error)) return;
+		terminal = frame;
+		resolve(frame);
+	});
+	signal.addEventListener("abort", abort, { once: true });
+	try {
+		if (signal.aborted) return { success: false, error: "binding-required" };
+		const ack = await invoke(attempt);
+		const frame = ack.success && ack.accepted ? await promise : terminal;
+		return frame?.error && !signal.aborted
+			? {
+					success: false,
+					error: frame.error,
+					reason: frame.reason,
+					correlated: true,
+				}
+			: ack;
+	} finally {
+		startReceivers.delete(attempt);
+		signal.removeEventListener("abort", abort);
+	}
+}
 
 export function noteWifiStatus(status: WifiStatus): void {
 	for (const receive of [...waiters]) receive(status);

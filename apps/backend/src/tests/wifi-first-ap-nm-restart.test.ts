@@ -84,7 +84,7 @@ test("pending cleanup Stop disconnects our AP after an in-process NM restart", a
 		expect(await wifiHotspotStop({ device: 0 })).toEqual({ success: true });
 		expect(f.active()).toBeUndefined();
 		expect(f.profiles.has(uuid)).toBe(false);
-		expect(f.commands.filter((args) => args[1] === "down")).toHaveLength(2);
+		expect(f.commands.filter((args) => args[1] === "down")).toHaveLength(1);
 	} finally {
 		cancelWifiAdapterReconciliation();
 		config.getConfig().wifi_modes = modes;

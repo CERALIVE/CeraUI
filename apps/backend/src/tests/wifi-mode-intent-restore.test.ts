@@ -288,7 +288,7 @@ beforeEach(async () => {
 		},
 	);
 	spyOn(defaultHotspotDeps, "releaseConcurrentInterface").mockImplementation(
-		async () => {},
+		async () => true,
 	);
 	mockHotspotConfirmationPoll();
 	spyOn(defaultHotspotStopDeps, "nmConnSetFields").mockImplementation(
@@ -304,7 +304,7 @@ beforeEach(async () => {
 	spyOn(
 		defaultHotspotStopDeps,
 		"releaseConcurrentInterface",
-	).mockImplementation(async () => {});
+	).mockImplementation(async () => true);
 	spyOn(defaultHotspotStopDeps, "broadcastState").mockImplementation(() => {});
 	spyOn(defaultHotspotStopDeps, "setDupIpSuppression").mockImplementation(
 		() => {},
@@ -716,6 +716,7 @@ for (const succeeds of [true, false]) {
 	test(`regulatory ${succeeds ? "reconfigure" : "rollback"} preserves the real mode store`, async () => {
 		observed("hotspot");
 		persistWifiAdapterMode(MAC, "hotspot");
+		const binding = await wifiRequestBinding(MAC, row);
 		let forward = true;
 		const result = await reconfigureHotspotForRegdomain(MAC, row, "auto", {
 			...defaultHotspotConfigDeps,
@@ -731,7 +732,7 @@ for (const succeeds of [true, false]) {
 			broadcastState: () => {},
 			rememberCredentials: () => {},
 			getCapabilities: () => undefined,
-		});
+		}).finally(binding.restore);
 		expect(result).toBe(succeeds);
 		expect(await diskModes()).toEqual({ [MAC]: "hotspot" });
 	});

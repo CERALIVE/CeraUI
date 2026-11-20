@@ -80,6 +80,8 @@ export function autoconnectFixture() {
 	let row: WifiInterfaceWithHotspot;
 
 	const deps: HotspotActivationDeps = {
+		readProfileInstance: async () => undefined,
+		releaseConcurrentInterface: async () => true,
 		recordIntent: wifiAdapterModeRecorder,
 		nmConnSetFields: (uuid, fields) => nm.nmConnSetFields(uuid, fields),
 		nmConnect: async (uuid) => {
@@ -215,7 +217,7 @@ export function autoconnectFixture() {
 	});
 
 	afterEach(async () => {
-		settlePending("wlan0", false);
+		await settlePending("wlan0", false);
 		wifiRadioObservation.stop();
 		await wifiRadioObservation.settled;
 		resetWifiInterfaceDiscoveryForTest();

@@ -255,17 +255,40 @@ test("an admitted mode transition does not re-admit its start after the AP teard
 		return true;
 	});
 	try {
-		expect(await request("hybrid", state.context, state.before)).toEqual({
-			success: true,
-			accepted: true,
-			applied: "hybrid",
+		let intent: ReturnType<typeof defaultAdapterModeDeps.readPersistedMode> =
+			"hotspot";
+		spyOn(defaultAdapterModeDeps, "readPersistedMode").mockImplementation(
+			() => intent,
+		);
+		spyOn(defaultAdapterModeDeps, "persistMode").mockImplementation(
+			(_, mode) => {
+				intent = mode;
+			},
+		);
+		const restore = spyOn(
+			defaultAdapterModeDeps,
+			"restoreMode",
+		).mockImplementation((_, previous) => {
+			intent = previous;
 		});
-		expect(state.effects).toContain("ap-teardown");
-		expect(state.effects).not.toContain("mode-restore");
+		const start = spyOn(defaultAdapterModeDeps, "startHotspot");
+		const up = spyOn(defaultHotspotDeps, "nmConnect");
+		expect(await request("hybrid", state.context, state.before)).toEqual({
+			success: false,
+			error: "radio-changed",
+		});
+		expect(state.effects.filter((effect) => effect === "ap-teardown")).toEqual([
+			"ap-teardown",
+		]);
+		expect(start).not.toHaveBeenCalled();
+		expect(up).not.toHaveBeenCalled();
+		expect(restore.mock.calls).toEqual([["dc:a6:32:aa:bb:c0", "hotspot"]]);
 		const modes = state.frames
 			.map((raw) => JSON.parse(raw).wifi?.adapter_mode)
 			.filter(Boolean);
-		expect(modes.at(-1)).toMatchObject({ success: true, mode: "hybrid" });
+		expect(modes.filter((mode) => !mode.pending)).toEqual([
+			{ device: 0, error: "radio-changed", incarnation: state.before },
+		]);
 	} finally {
 		await state.restore();
 	}
@@ -330,6 +353,7 @@ for (const kind of guarded) {
 		);
 		try {
 			await request(kind, state.context, state.before);
+			if (kind === "configure") await state.configReceived;
 			const results = await Promise.all(seen);
 			expect(fired.size).toBeGreaterThan(0);
 			expect(results.filter((result) => result.endsWith(":admitted"))).toEqual(

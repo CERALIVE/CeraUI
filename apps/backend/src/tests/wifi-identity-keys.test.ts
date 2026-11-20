@@ -246,6 +246,7 @@ function stopFixture(uuid: string) {
 		},
 		releaseConcurrentInterface: async (ifname) => {
 			state.deleted.add(ifname);
+			return true;
 		},
 		broadcastState: () => undefined,
 		setDupIpSuppression: () => undefined,
@@ -411,6 +412,7 @@ test("failed proof replacement still observes a live AP without fresh concurrenc
 				},
 				releaseConcurrentInterface: async () => {
 					effects.push("iw-del");
+					return true;
 				},
 				broadcastState: () => undefined,
 				setDupIpSuppression: () => undefined,

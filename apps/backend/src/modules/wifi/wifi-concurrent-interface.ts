@@ -22,6 +22,7 @@ export {
 	readHybridStationChannel,
 	revalidateHybridStationChannel,
 } from "./wifi-hybrid-channel.ts";
+export { readHybridTargetIdentity } from "./wifi-hybrid-target-identity.ts";
 export {
 	releaseConcurrentApInterface,
 	releaseCreatedHybridTarget,
@@ -29,7 +30,6 @@ export {
 } from "./wifi-hybrid-target-policy.ts";
 export {
 	observeConcurrentInterfacesAtFirstDiscovery,
-	readHybridTargetIdentity,
 	resetConcurrentInterfaceDepsForTest,
 } from "./wifi-hybrid-target-record.ts";
 export { selectConcurrentApInterface } from "./wifi-hybrid-target-selector.ts";

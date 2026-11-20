@@ -23,6 +23,7 @@ import {
 import { publishHotspotOutcome } from "./wifi-hotspot-outcome.ts";
 import { canHotspot, type HotspotStartResult } from "./wifi-hotspot-types.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
+import { bindingForRow, wifiOperationGuard } from "./wifi-operation-binding.ts";
 
 /**
  * Was the adapter busy at this instant? Acquires and releases immediately, so it
@@ -40,8 +41,10 @@ export const defaultAdapterModeDeps: AdapterModeTransitionDeps = {
 	readHybridChannel: readHybridStationChannel,
 	resolveInterfaces: getWifiInterfacesByMacAddress,
 	isAdapterBusy: probeAdapterBusy,
-	startHotspot: async (device, publish, restoreAttempt) => {
-		const found = findAdapterByDevice(device, getWifiInterfacesByMacAddress());
+	startHotspot: async (device, publish, restoreAttempt, binding) => {
+		const found = binding
+			? { macAddress: binding.key, wifiInterface: binding.row }
+			: findAdapterByDevice(device, getWifiInterfacesByMacAddress());
 		const { recordIntent: _recorder, ...deps } = defaultHotspotDeps;
 		const result: HotspotStartResult = !found
 			? { success: false, error: "no-device" }
@@ -53,13 +56,17 @@ export const defaultAdapterModeDeps: AdapterModeTransitionDeps = {
 						{ ...deps, publishOutcome: publish },
 						undefined,
 						restoreAttempt,
+						binding ?? bindingForRow(found.macAddress, found.wifiInterface),
 					);
 		if (!result.success) publish("start", device, result);
 		return result;
 	},
-	stopHotspot: async (device, publish) => {
-		const found = findAdapterByDevice(device, getWifiInterfacesByMacAddress());
+	stopHotspot: async (device, publish, binding) => {
+		const found = binding
+			? { macAddress: binding.key, wifiInterface: binding.row }
+			: findAdapterByDevice(device, getWifiInterfacesByMacAddress());
 		const { recordIntent: _recorder, ...deps } = defaultHotspotStopDeps;
+		const operation = binding ? wifiOperationGuard(binding) : undefined;
 		const result: HotspotStopResult = !found
 			? { success: false, error: "no-device" }
 			: !canHotspot(found.wifiInterface)
@@ -68,6 +75,7 @@ export const defaultAdapterModeDeps: AdapterModeTransitionDeps = {
 						found.macAddress,
 						found.wifiInterface,
 						{ ...deps, publishOutcome: publish },
+						operation,
 					);
 		publish("stop", device, result);
 		return result;

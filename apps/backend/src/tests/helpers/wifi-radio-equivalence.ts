@@ -253,6 +253,8 @@ export async function radioEquivalenceTranscript(
 
 	let confirmedUuid: string | undefined;
 	const deps: HotspotActivationDeps = {
+		readProfileInstance: async () => undefined,
+		releaseConcurrentInterface: async () => true,
 		recordIntent: wifiAdapterModeRecorder,
 		pollHotspotActive: async (_iface, uuid) => confirmedUuid === uuid,
 		credentials: {

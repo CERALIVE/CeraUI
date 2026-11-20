@@ -40,7 +40,7 @@ export type HotspotProfileOperation = ProfileOperationTarget &
 		  }
 		| {
 				readonly kind: "add" | "up" | "down" | "delete";
-				readonly run: () => Promise<unknown>;
+				readonly run: (before?: NmProfileInstance | null) => Promise<unknown>;
 		  }
 	);
 
@@ -68,8 +68,8 @@ export async function runHotspotProfileOperation(
 	const fields = Object.freeze(
 		kind === "modify" ? { ...operation.fields } : {},
 	);
-	const dispatch = () =>
-		operation.kind === "modify" ? operation.run(fields) : operation.run();
+	const dispatch = (before?: NmProfileInstance | null) =>
+		operation.kind === "modify" ? operation.run(fields) : operation.run(before);
 	const owners = getHotspotCredentialOwners(uuid);
 	const bound = owners.flatMap((owner) => {
 		const instance = getPendingHotspotCreationInstance(owner);
@@ -137,7 +137,7 @@ export async function runHotspotProfileOperation(
 	) {
 		if (!before?.file)
 			return {
-				success: Boolean(await dispatch()),
+				success: Boolean(await dispatch(before)),
 				checked: true,
 				instance: undefined,
 			};
@@ -200,7 +200,7 @@ export async function runHotspotProfileOperation(
 		let checked = false;
 		let instance: NmProfileInstance | null | undefined;
 		try {
-			acknowledged = Boolean(await dispatch());
+			acknowledged = Boolean(await dispatch(before));
 		} finally {
 			const after = await observe();
 			exit = `after-${kind}`;

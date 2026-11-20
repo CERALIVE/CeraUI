@@ -203,6 +203,127 @@ afterEach(() => {
 });
 
 describe("hotspot draft ownership through the real dialog", () => {
+	it("shows the unknown mode for its own failed Start reply after the radio rotates", async () => {
+		const reply = deferred<Awaited<ReturnType<typeof rpc.wifi.hotspotStart>>>();
+		start.mockReturnValueOnce(reply.promise);
+		const view = render(HotspotDialog, {
+			open: true,
+			deviceId: "0",
+			iface: row(),
+		});
+		await gate();
+		await fireEvent.click(screen.getByTestId("hotspot-confirm-ack"));
+		await fireEvent.click(screen.getByTestId("hotspot-confirm-activate"));
+		await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+		const attempt = start.mock.calls[0]?.[0].attempt;
+		await view.rerender({ open: true, deviceId: "0", iface: row("radio-B") });
+		const reason = "deactivation-failed";
+		wire.message("wifi", {
+			hotspot: {
+				start: { device: 0, attempt, error: "radio-changed", reason },
+			},
+		});
+		reply.resolve({ success: false, error: "radio-changed", reason });
+		await waitFor(() =>
+			expect(screen.getByTestId("hotspot-start-refused").textContent).toContain(
+				"mode is unknown",
+			),
+		);
+		expect(screen.queryByTestId("hotspot-activation-confirm")).toBeNull();
+	});
+
+	it.each(["before", "after"] as const)(
+		"shows its own deferred Start refusal %s the acknowledgement and ignores foreign frames",
+		async (timing) => {
+			const ack = deferred<{ success: true; accepted: true }>();
+			start.mockReturnValueOnce(ack.promise);
+			const view = render(HotspotDialog, {
+				open: true,
+				deviceId: "0",
+				iface: row(),
+			});
+			await gate();
+			await fireEvent.click(screen.getByTestId("hotspot-confirm-ack"));
+			await fireEvent.click(screen.getByTestId("hotspot-confirm-activate"));
+			await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+			const attempt = start.mock.calls[0]?.[0].attempt;
+			expect(attempt).toMatch(
+				/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/,
+			);
+			const refusal = (device: number, attempt?: string) =>
+				wire.message("wifi", {
+					hotspot: { start: { device, attempt, error: "radio-changed" } },
+				});
+			refusal(0, crypto.randomUUID());
+			refusal(1, attempt);
+			refusal(0);
+			await tick();
+			expect(screen.queryByTestId("hotspot-start-refused")).toBeNull();
+
+			await view.rerender({ open: true, deviceId: "0", iface: row("radio-B") });
+			if (timing === "after") {
+				ack.resolve({ success: true, accepted: true });
+				await tick();
+			}
+			refusal(0, attempt);
+			if (timing === "before") ack.resolve({ success: true, accepted: true });
+			await waitFor(() =>
+				expect(screen.getByTestId("hotspot-start-refused").textContent).toMatch(
+					/adapter changed.*wasn't turned on/,
+				),
+			);
+			expect(start).toHaveBeenCalledTimes(1);
+		},
+	);
+
+	it("an older backend can confirm an accepted Start by status alone", async () => {
+		start.mockResolvedValueOnce({ success: true, accepted: true });
+		const view = render(HotspotDialog, {
+			open: true,
+			deviceId: "0",
+			iface: row(),
+		});
+		await gate();
+		await fireEvent.click(screen.getByTestId("hotspot-confirm-ack"));
+		await fireEvent.click(screen.getByTestId("hotspot-confirm-activate"));
+		await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+		await view.rerender({
+			open: true,
+			deviceId: "0",
+			iface: row("radio-A", true),
+		});
+		await waitFor(() =>
+			expect(getOperationPhase(wifiHotspotOpKey("0", "radio-A"))).toBe(
+				"confirmed",
+			),
+		);
+	});
+
+	it("does not claim the hotspot is off when cleanup of its accepted Start failed", async () => {
+		start.mockResolvedValueOnce({ success: true, accepted: true });
+		render(HotspotDialog, { open: true, deviceId: "0", iface: row() });
+		await gate();
+		await fireEvent.click(screen.getByTestId("hotspot-confirm-ack"));
+		await fireEvent.click(screen.getByTestId("hotspot-confirm-activate"));
+		await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+		wire.message("wifi", {
+			hotspot: {
+				start: {
+					device: 0,
+					attempt: start.mock.calls[0]?.[0].attempt,
+					error: "radio-changed",
+					reason: "deactivation-failed",
+				},
+			},
+		});
+		await waitFor(() =>
+			expect(screen.getByTestId("hotspot-start-refused").textContent).toContain(
+				"mode is unknown",
+			),
+		);
+		expect(screen.queryByTestId("hotspot-activation-confirm")).toBeNull();
+	});
+
 	it("a current-unobserved refusal recovers without closing the gate when the next status frame arrives", async () => {
 		prepare.mockResolvedValueOnce(unobserved);
 		const view = render(HotspotDialog, {
@@ -300,6 +421,9 @@ describe("hotspot draft ownership through the real dialog", () => {
 			expect(start).toHaveBeenLastCalledWith({
 				device: "0",
 				incarnation: token,
+				attempt: expect.stringMatching(
+					/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/,
+				),
 			});
 		});
 	}
@@ -474,6 +598,9 @@ describe("hotspot draft ownership through the real dialog", () => {
 				expect(start).toHaveBeenCalledWith({
 					device: "0",
 					incarnation: "radio-A",
+					attempt: expect.stringMatching(
+						/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/,
+					),
 				}),
 			);
 			expect(prepare).toHaveBeenLastCalledWith({

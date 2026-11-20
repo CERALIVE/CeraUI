@@ -61,7 +61,7 @@ async function setup(mode: "hotspot" | "hybrid", acceptsDown = true) {
 			if (acceptsDown) state = "down";
 			return acceptsDown;
 		},
-		releaseConcurrentInterface: async () => undefined,
+		releaseConcurrentInterface: async () => true,
 		broadcastState: () => undefined,
 		setDupIpSuppression: () => undefined,
 		rescan: async () => undefined,
@@ -179,7 +179,7 @@ test.each(["create", "up"] as const)(
 		} finally {
 			release.resolve();
 			await starting;
-			settlePending("wlan0", false);
+			await settlePending("wlan0", false);
 		}
 	},
 );

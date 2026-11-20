@@ -15,6 +15,7 @@ type OwnerRecovery = {
 	deadline: number;
 	pending: Set<string>;
 	teardown?: () => Promise<WifiPendingTeardownResult>;
+	legRelease?: () => Promise<boolean>;
 };
 
 const owners = new Map<string, OwnerRecovery>();
@@ -37,11 +38,33 @@ export function registerWifiAdapterTeardownLocked(
 	retryWifiAdapterReconcile(owner, "first-start cleanup pending", "cleanup");
 }
 
+export function registerWifiAdapterLegRelease(
+	owner: string,
+	release: () => Promise<boolean>,
+): void {
+	recoveryFor(owner).legRelease = release;
+	retryWifiAdapterReconcile(
+		owner,
+		"borrowed AP leg not released",
+		"leg-release",
+	);
+}
+
 /** Start, Stop and discovery consume the same input under that same lock. */
 export async function reconcileWifiAdapterTeardownLocked(
 	owner: string,
 ): Promise<WifiPendingTeardownResult> {
 	const state = owners.get(owner);
+	const release = state?.legRelease;
+	if (release && state) {
+		const released = await release();
+		if (state.legRelease === release) {
+			if (released) {
+				delete state.legRelease;
+				clearWifiAdapterReconcile(owner, "leg-release");
+			} else retryWifiAdapterReconcile(owner, undefined, "leg-release");
+		}
+	}
 	if (!state?.teardown) return { complete: true, stopped: true };
 	const result = await state.teardown();
 	if (result.complete) {

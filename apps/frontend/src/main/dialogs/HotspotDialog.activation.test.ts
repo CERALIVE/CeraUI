@@ -169,7 +169,13 @@ describe("HotspotDialog — no hotspot starts unseen (#413)", () => {
 
 		await fireEvent.click(q("hotspot-confirm-activate") as HTMLElement);
 		await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
-		expect(start).toHaveBeenCalledWith({ device: "0", incarnation: "radio-A" });
+		expect(start).toHaveBeenCalledWith({
+			device: "0",
+			incarnation: "radio-A",
+			attempt: expect.stringMatching(
+				/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/,
+			),
+		});
 		expect(prepare).toHaveBeenCalledTimes(1);
 		expect(q("hotspot-activation-confirm")).toBeNull();
 	});
