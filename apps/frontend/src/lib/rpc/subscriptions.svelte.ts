@@ -124,7 +124,11 @@ import {
 	refreshWifiAdapterModes,
 	resetWifiAdapterModes,
 } from "./wifi-adapter-modes.svelte";
-import { noteWifiConfig, noteWifiStatus } from "./wifi-status-receipt";
+import {
+	noteWifiConfig,
+	noteWifiStart,
+	noteWifiStatus,
+} from "./wifi-status-receipt";
 
 export { mergeModemList };
 
@@ -876,6 +880,7 @@ function handleMessage(
 					failOperation(key, wifiData.new.error);
 				}
 			}
+			if (wifiData.hotspot?.start) noteWifiStart(wifiData.hotspot.start);
 			// Deferred hotspot reconfigure result. `hotspotConfigure` only acks the
 			// dispatch; the real outcome arrives here and resolves the separate
 			// `hotspot-config:${device}` key the HotspotDialog save op stays pending on.

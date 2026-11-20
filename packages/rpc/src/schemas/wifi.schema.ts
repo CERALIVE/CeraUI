@@ -535,6 +535,7 @@ const hotspotStartAttemptSchema = z.string().uuid();
 export const hotspotStartInputSchema = hotspotToggleInputSchema.extend({
 	attempt: hotspotStartAttemptSchema.optional(),
 });
+export type HotspotStartInput = z.infer<typeof hotspotStartInputSchema>;
 
 /*
   Why a hotspot start/stop did not complete. Every member names a DIFFERENT

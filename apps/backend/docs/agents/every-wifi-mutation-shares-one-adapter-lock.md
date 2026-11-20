@@ -91,6 +91,13 @@ unexpected throw from the `.catch` arms in `handleWifi`. `wifiHotspotStart`
 deliberately does NOT publish on success — that would resolve the operator's op
 before NetworkManager has answered.
 
+Start retains the optional UUID from its dispatch and echoes it on the
+terminal frame, including deferred monitor settlement. No UUID is added for
+older callers or to Stop. When Start detects a replacement after a saved
+profile's Up, it compares the captured profile and active path before Down
+under the owner lock. A failed or unverified cleanup reports `radio-changed`
+with `deactivation-failed` so the dialog cannot claim the AP is off.
+
 Once Start has returned acceptance and released its lock, Stop treats
 activating as a teardown target even before observed AP success. It retires
 confirmation before downing the selected UUID and waits for the down result.

@@ -2,6 +2,12 @@
 
 ## RPC PATTERN
 
+Hotspot Start reserves a fresh UUID before each send and matches the delayed
+`wifi.hotspot.start` refusal by UUID, device and link epoch. Only the initiating
+dialog can apply it. A frame can precede the accepted reply or follow it.
+Authoritative Wi-Fi status still confirms Start and Stop, including on older
+backends that omit the echo. See the [binding contract](../../../../docs/HOTSPOT-DRAFT-BINDING.md).
+
 Update actions retain the RPC envelope's optional `retryable` and distinct
 `UPDATE_ORCHESTRATOR_INITIALIZING` code before `osCommand` consumes a rejection.
 The existing Updates refusal band resolves that code to translated initialising/

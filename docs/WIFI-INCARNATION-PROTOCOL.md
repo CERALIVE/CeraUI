@@ -164,10 +164,22 @@ unverified or failed Down is reported as `radio-changed` with reason
 and can release only the allocator receipt it acquired.
 
 The Start request and terminal frame accept an optional `attempt` UUID.
-The backend retains this value for the lifetime of the operation and echoes
-it on its terminal Start frame. It provides correlation only. The
-incarnation field still controls admission. Older senders omit `attempt`
-and receive the existing frame shape. Stop and station do not use it.
+The backend echoes the captured UUID even when the NetworkManager monitor
+publishes after the reply. The incarnation still controls admission.
+The dialog reserves a fresh UUID for each dispatch, including the one allowed
+retry. An accepted Start can consume a refusal for its UUID, device and
+socket epoch even if the same dialog already displays the replacement radio.
+A refusal may arrive before or after the dispatch acknowledgement. The dialog
+shows the existing changed-radio notice when cleanup succeeded and the
+existing unknown-mode notice when Down could not be verified. The latter
+does not reopen the credential gate automatically.
+
+The status snapshot still confirms Start and Stop. Older backends can ignore
+the request field and continue sending their existing status and terminal
+frames. Older senders omit the UUID and receive the previous frame shape.
+Uncorrelated Start frames cannot resolve another client's pending operation.
+Closing the dialog, changing device or link, and settling or timing out the
+pending operation retire its receipt. Stop and station do not use the UUID.
 
 Mode to hotspot or hybrid checks before recording intent, then passes the
 captured row and lifetime through Down and Start. A replacement after a
@@ -249,10 +261,11 @@ credentials and mode unchanged.
 
 RPC replies and config/mode/toggle terminal frames accept an optional `reason`
 alongside the typed refusal. RPC error envelopes gain no field. Replies identify
-their dispatch through the request/response pair. The current UI confirms
-start/stop from authoritative status rather than ingesting those terminal
-frames. Internal boot reconciliation uses the shared mode producer; regulatory
-reconfiguration has no additional keyed hotspot settlement frame.
+their dispatch through the request/response pair. Start also correlates
+deferred refusals as described above. Internal boot reconciliation uses the
+shared mode producer. Regulatory reconfiguration has no additional keyed
+hotspot settlement frame and skips the restart if its original radio has no
+verified lifetime.
 
 The existing transport envelope distinguishes mode publications. Broadcasts
 carry `seq`; private mode refusals do not. The RPC client consumes an

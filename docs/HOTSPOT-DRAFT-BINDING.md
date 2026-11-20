@@ -31,6 +31,15 @@ the gate with fresh consent; a retired owner's response cannot reopen it.
 Configure distinguishes refusal from an interrupted restart and does not claim
 the hotspot is running after interruption.
 
+Each Start send has its own optional UUID. The subscription routes its delayed
+terminal to the initiating dialog only when the UUID, device and link match.
+The receipt is reserved before sending, so it can catch a refusal before the
+acknowledgement as well as afterward. A replacement during the accepted Start
+can show the changed-radio notice after the row token rotates. A failed or
+unverified Down shows the existing unknown-mode notice without reopening the
+credential gate. Success still requires authoritative status. A backend that
+does not echo UUIDs continues to confirm from status.
+
 ## Admission and transient observation recovery
 
 | Operation | Required binding |
@@ -46,8 +55,9 @@ for a running observation for up to two seconds and then returns
 
 One shared RPC middleware creates the request-admission context. Frame metadata
 uses a separate context and never supplies request authority. Direct internal
-calls, including boot restore and regulatory reconfigure, retain their base
-behavior without request context; no client token is synthesized for them.
+calls, including boot restore and regulatory reconfigure, have no request
+context and do not synthesize a client token. A regulatory restart requires
+an original verified radio binding.
 That context is one-shot: the transaction lock-entry check consumes it on admit
 and refuse alike, and middleware retires it in `finally` even when no consumer
 runs. It belongs only to its recorded adapter. Mock effects consume it
@@ -114,7 +124,7 @@ Broadcast terminals settle every observer regardless of reason, including busy
 outcomes and a reconnecting requester whose idle latch must be recreated. There
 is no foreign-DEVICE_BUSY filter. Configure keeps its separate asynchronous
 terminal contract. The [protocol contract](WIFI-INCARNATION-PROTOCOL.md) records
-the routing and attempt rules; no new wire field is introduced.
+the routing and attempt rules.
 
 Future remote callers must use this same admission and recovery contract.
 There is no remote hotspot route today; the token remains local and the remote
@@ -123,10 +133,9 @@ status projection is unchanged. The full backend table and D13 rule are in
 
 ## Compatibility and remaining rollout
 
-This fixes the frontend draft/acknowledgement overwrite and adds backend entry
-admission. Limited mode retains its existing degraded reason. In-operation
-lifetime fencing and composite/port-scoped identity remain separate changes;
-this entry check adds no such state field.
+Limited mode retains its existing degraded reason. Backend entry admission
+and in-operation checks use the radio lifetime. Composite and port-scoped
+identity remain separate changes.
 Old backends keep read-only hotspot display, Copy, Stop and station switching;
 the new frontend withholds guarded actions until a token is available.
 This is an intentional compatibility limit, not full action parity.
@@ -153,6 +162,9 @@ or connection changes, CeraLive reloads the details and asks you to confirm
 again. If identification is pending, wait for the details; update the device
 software if it remains unidentified. You can still read and copy an active
 hotspot's details and turn it off.
+If the adapter changes after you select Enable Hotspot, the dialog can report
+that the hotspot did not start. If it cannot confirm that the hotspot stopped,
+check the adapter's current status before trying again.
 
 es-419 (native review pending): Cuando abras la configuración del punto de
 acceso, guarda el nombre de la red y la contraseña que aparecen antes de
@@ -162,6 +174,9 @@ pide que confirmes otra vez. Si la identificación está pendiente, espera a
 que aparezcan los datos; actualiza el software del equipo si sigue sin
 identificarse. Puedes leer y copiar los datos de un punto de acceso activo
 y apagarlo de todos modos.
+Si el adaptador cambia después de seleccionar Activar punto de acceso, el
+cuadro puede indicar que el punto de acceso no se activó. Si no puede confirmar
+que se apagó, revisa el estado actual del adaptador antes de volver a intentarlo.
 
 ## Tests and authorized existing-assertion updates
 

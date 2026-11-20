@@ -66,7 +66,7 @@ import { rpc } from '$lib/rpc/client';
 import { hotspotIsActive, hotspotToggleConfirmed } from '$lib/rpc/os-toggle-predicates';
 import { getLinkEpoch } from '$lib/rpc/session-epoch.svelte';
 import { getWifiAdapterModeEntry } from '$lib/rpc/wifi-adapter-modes.svelte';
-import { withWifiConfigReceipt } from '$lib/rpc/wifi-status-receipt';
+import { withWifiConfigReceipt, withWifiStartReceipt } from '$lib/rpc/wifi-status-receipt';
 import { cn } from '$lib/utils';
 import HotspotActivationConfirm from '$main/network/HotspotActivationConfirm.svelte';
 import WifiModeBadge from '$main/network/WifiModeBadge.svelte';
@@ -105,11 +105,12 @@ const radioReason = $derived(iface?.degraded_reason);
 let ownerSession = $state(0);
 let formBinding = $state.raw<WifiRadioBinding | undefined>(undefined);
 let radioNotice = $state(false);
-let startRefused = $state(false);
+let startRefused = $state<'radio-changed' | 'deactivation-failed'>();
 let bindingUnsupported = $state(false);
 let admission: AbortController | undefined;
 let admissionOwner: WifiRadioBinding | undefined;
 let configAdmissionKey = $state<string>();
+let startAdmission = $state.raw<{ readonly key: string; readonly controller: AbortController }>();
 
 function capture(): WifiRadioBinding {
 	return { device: deviceId, incarnation: radioToken, link: getLinkEpoch(), session: ownerSession };
@@ -168,6 +169,11 @@ $effect(() => {
 	if (phase === 'idle' || phase === 'timed_out') admission?.abort();
 });
 
+$effect(() => {
+	if (!startAdmission) return;
+	if (getOperationPhase(startAdmission.key) !== 'pending') startAdmission.controller.abort();
+});
+
 // Local intent for the pending start/stop: the confirm $effect flips the op to
 // `confirmed` the moment the authoritative snapshot reports the target mode.
 let toggleTarget = $state<'hotspot' | 'station' | null>(null);
@@ -205,7 +211,10 @@ $effect.pre(() => {
 	radioReason;
 	untrack(() => {
 		if (!opened || (admissionOwner &&
-			(admissionOwner.device !== next.device || admissionOwner.link !== next.link))) admission?.abort();
+			(admissionOwner.device !== next.device || admissionOwner.link !== next.link))) {
+			admission?.abort();
+			startRefused = undefined;
+		}
 		const changed = formBinding !== undefined && (
 			formBinding.device !== next.device || formBinding.incarnation !== next.incarnation ||
 			formBinding.link !== next.link
@@ -379,7 +388,7 @@ async function handleToggle() {
 	} else {
 		bindingUnsupported = false;
 		ownerSession += 1;
-		startRefused = false;
+		startRefused = undefined;
 		confirmingStart = true;
 	}
 }
@@ -389,6 +398,8 @@ async function startConfirmed(incarnation: string) {
 	if (incarnation !== original.incarnation || radioReason) return;
 	let binding = original;
 	const controller = beginAdmission(original);
+	let deferred = false;
+	const ownsStart = () => admission === controller && !controller.signal.aborted && ownsAdmission(original);
 	confirmingStart = false;
 	toggleTarget = 'hotspot';
 	await osCommand({
@@ -396,30 +407,38 @@ async function startConfirmed(incarnation: string) {
 		target: 'hotspot',
 		classify: classifyWifiMutation,
 		rpc: async (handoff) => {
+			startAdmission = { key: toggleKey, controller };
 			const result = await withWifiEntryRetry(original,
-				(token) => rpc.wifi.hotspotStart({ device: original.device, incarnation: token }),
+				(token) => withWifiStartReceipt(original.device,
+					(attempt) => rpc.wifi.hotspotStart({ device: original.device, incarnation: token, attempt }),
+					controller.signal,
+				),
 				{
 					signal: controller.signal,
-					current: () => ownsAdmission(original),
+					current: ownsStart,
 					rebind: (token) => {
 						binding = { ...capture(), incarnation: token };
-						return handoff(wifiHotspotOpKey(original.device, token));
+						const key = wifiHotspotOpKey(original.device, token);
+						if (!handoff(key)) return false;
+						startAdmission = { key, controller };
+						return true;
 					},
 				},
 			);
+			deferred = result?.deferred === true;
 			if (!result && !controller.signal.aborted && ownsAdmission(original)) {
 				bindingUnsupported = true;
 				ownerSession += 1;
 				confirmingStart = true;
 			}
-			return result ?? { success: false, error: 'binding-required' };
+			return result ?? { success: false, error: 'binding-required', reason: undefined };
 		},
-		isCurrent: () => current(binding),
+		isCurrent: () => ownsStart() && (deferred || current(binding)),
 		onResult: (result) => {
-			if (wifiRadioChanged(result) && current(binding) && !confirmingStart) {
+			if (wifiRadioChanged(result) && !confirmingStart) {
 				ownerSession += 1;
-				startRefused = true;
-				confirmingStart = true;
+				startRefused = result.reason === 'deactivation-failed' ? 'deactivation-failed' : 'radio-changed';
+				confirmingStart = startRefused === 'radio-changed' && !isActive;
 			}
 		},
 		failMessage: (result) => wifiFailureReason(result ?? {}) === 'hybrid-channel-not-permitted'
@@ -428,6 +447,7 @@ async function startConfirmed(incarnation: string) {
 			? m['hotspotConfirm.radioUnverified']() : m["network.os.operationFailed"](),
 		busyMessage: () => m["network.os.deviceBusy"](),
 	});
+	if (startAdmission?.controller === controller) startAdmission = undefined;
 }
 
 // Confirm a pending start/stop as soon as the authoritative `wifi` snapshot
@@ -493,7 +513,11 @@ async function copyPassword() {
 			</p>
 		{/if}
 		{#if startRefused}
-			<p class="text-muted-foreground text-xs" role="status">{m['hotspotConfirm.radioChangedNotStarted']()}</p>
+			<p class="text-muted-foreground text-xs" role="status" data-testid="hotspot-start-refused">
+				{startRefused === 'deactivation-failed'
+					? m['network.wifiMode.error.notConfirmed']()
+					: m['hotspotConfirm.radioChangedNotStarted']()}
+			</p>
 		{/if}
 		<!-- Status row -->
 		<div
