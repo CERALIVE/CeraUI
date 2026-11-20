@@ -110,10 +110,13 @@ Preview performs identical compression/admission and discards each member.
 
 Sharing admission is device-wide with the existing export service. Preparation
 and active downloads hold the lease; a pending 32-byte random hex ticket
-expires sixty seconds after preparation. Only GET consumes it. Missing, unknown,
-reused or expired tickets return an empty 403; other methods return 405 without
-consuming it. The response uses attachment/no-store/application-gzip headers and
-no Content-Length. Request abort and cancellation release download ownership;
+expires sixty seconds after preparation. A new bundle or export request from
+the same authenticated WebSocket replaces its unused ticket; other connections
+remain Busy until expiry. Preview does not replace tickets. Only GET redeems a
+ticket. Missing, unknown, reused, expired or replaced tickets return an empty
+403; other methods return 405 without consuming it. The response uses
+attachment/no-store/application-gzip headers and no Content-Length. Request
+abort and cancellation release download ownership;
 throwing consumers cannot leak errors or retain a lease. The existing
 `abortLogExports()` clear hook also joins bundle preparation/downloads and
 invalidates tickets. Preview, creation and GET redemption share the filtered

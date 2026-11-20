@@ -24,15 +24,15 @@ type PreviewResult =
 	| { readonly ok: true; readonly manifest: LogBundleManifest }
 	| PreparationFailure;
 async function prepare(
-	keep: true,
+	conn: object,
 	signal?: AbortSignal,
 ): Promise<LogExportOutput>;
 async function prepare(
-	keep: false,
+	conn: null,
 	signal?: AbortSignal,
 ): Promise<PreviewResult>;
 async function prepare(
-	keep: boolean,
+	conn: object | null,
 	signal?: AbortSignal,
 ): Promise<LogExportOutput | PreviewResult> {
 	const now = Date.now();
@@ -47,7 +47,7 @@ async function prepare(
 	try {
 		return (
 			(await withHistoryAdmission(combined, (epoch) =>
-				collectAndIssue(keep, { signal: combined, now, epoch }, controller),
+				collectAndIssue(conn, { signal: combined, now, epoch }, controller),
 			)) ?? { ok: false, error: "READ_FAILED" }
 		);
 	} catch {
@@ -59,30 +59,25 @@ async function prepare(
 }
 
 async function collectAndIssue(
-	keep: boolean,
+	conn: object | null,
 	{ signal, now, epoch }: BundleWindow,
 	controller: AbortController,
 ): Promise<LogExportOutput | PreviewResult> {
-	const admittedAt = Date.now();
-	for (const [key, ticket] of tickets) {
-		if (ticket.expiresAt <= admittedAt) {
-			tickets.delete(key);
-			ticket.lease.release();
-		}
-	}
-	const lease = reserveLogSharing(admittedAt);
+	const lease = reserveLogSharing(conn);
 	if (!lease) return { ok: false, error: "BUSY" } as const;
-	lease.start();
 	const done = Promise.withResolvers<void>();
 	active.set(controller, done.promise);
 	try {
-		const body = await buildBundle({ signal, createdAt: now, epoch }, keep);
+		const body = await buildBundle(
+			{ signal, createdAt: now, epoch },
+			conn !== null,
+		);
 		if (
 			(signal.aborted && signal.reason !== "time_limit") ||
 			getLogState().historyEpoch !== epoch
 		)
 			throw new BundleReadError();
-		if (!keep) {
+		if (conn === null) {
 			lease.release();
 			return { ok: true, manifest: body.manifest };
 		}
@@ -90,8 +85,8 @@ async function collectAndIssue(
 			crypto.getRandomValues(new Uint8Array(32)),
 		).toString("hex");
 		const expiresAt = Date.now() + 60_000;
-		lease.start(expiresAt);
 		tickets.set(key, { body, lease, expiresAt, epoch });
+		lease.issue(expiresAt, () => tickets.delete(key));
 		return { ok: true, url: `/api/logs/bundle?ticket=${key}`, expiresAt };
 	} catch {
 		lease.release();
@@ -111,16 +106,16 @@ type BundleWindow = {
 export async function previewBundle(
 	signal?: AbortSignal,
 ): Promise<LogBundleManifest> {
-	const result = await prepare(false, signal);
+	const result = await prepare(null, signal);
 	if (!result.ok) throw new BundleReadError(result.error);
 	return result.manifest;
 }
 
 export async function createBundle(
-	_conn: object,
+	conn: object,
 	signal?: AbortSignal,
 ): Promise<LogExportOutput> {
-	return prepare(true, signal);
+	return prepare(conn, signal);
 }
 
 export async function handleLogBundleRequest(
@@ -176,7 +171,7 @@ function streamTicket(
 		readonly timeout: ReturnType<typeof setTimeout>;
 	},
 ): Response {
-	ticket.lease.start();
+	ticket.lease.stream();
 	const done = Promise.withResolvers<void>();
 	active.set(controller, done.promise);
 	let sink: ReadableStreamDefaultController<Uint8Array>;
