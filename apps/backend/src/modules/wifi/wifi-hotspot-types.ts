@@ -213,6 +213,7 @@ export type HotspotActivationDeps = {
 	nmConnSetFields: (
 		uuid: string,
 		fields: Record<string, string>,
+		permit?: () => Promise<boolean>,
 	) => Promise<unknown>;
 	nmApConnAdd: typeof nmApConnAdd;
 	nmConnDelete: typeof nmConnDelete;
@@ -245,7 +246,10 @@ export type HotspotActivationDeps = {
 	readHybridChannel?: typeof readHybridStationChannel;
 	validateConcurrentInterface?: typeof revalidateConcurrentApInterface;
 	confirmHybridActivation?: typeof confirmHybridActivation;
-	releaseConcurrentInterface?: (ifname: string) => Promise<void>;
+	releaseConcurrentInterface?: (
+		ifname: string,
+		target?: object,
+	) => Promise<void>;
 	rollbackConcurrentInterface?: (target: {
 		ifname: string;
 		created: boolean;

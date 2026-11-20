@@ -88,6 +88,7 @@ import {
 } from "./wifi-hotspot-discovery.ts";
 import {
 	beginHotspotTransition,
+	matchesHotspotActivation,
 	registerPendingConfirmation,
 	syncWifiStateCache,
 } from "./wifi-hotspot-monitor.ts";
@@ -129,6 +130,7 @@ import {
 	wifiOperationGuard,
 } from "./wifi-operation-binding.ts";
 import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
+import { sameRadioLifetime } from "./wifi-radio-identity.ts";
 import type { RadioSample } from "./wifi-radio-read-budget.ts";
 import { transitionVirtualBinding } from "./wifi-virtual-binding.ts";
 
@@ -313,7 +315,7 @@ async function resolveHotspotIdentity(
 			},
 			run: async (fields) =>
 				(!operation || ((await operation.check()) && operation.current())) &&
-				deps.nmConnSetFields(credentialUuid, fields),
+				deps.nmConnSetFields(credentialUuid, fields, operation?.permit),
 		});
 		if (!written.success) return undefined;
 		if (operation && (!(await operation.check()) || !operation.current()))
@@ -468,7 +470,11 @@ async function prepareHotspotLocked(
 				run: async (fields) =>
 					(!binding || ((await operation.check()) && operation.current())) &&
 					owned(credentialUuid, identity.profileMac) &&
-					deps.nmConnSetFields(credentialUuid, fields),
+					deps.nmConnSetFields(
+						credentialUuid,
+						fields,
+						binding ? operation.permit : undefined,
+					),
 			})
 		).success
 	) {
@@ -496,9 +502,24 @@ async function prepareHotspotLocked(
 // ─── start (atomic, NM-confirmed, with rollback) ─────────────────────────────
 
 export async function wifiHotspotStart(
-	msg: NonNullable<WifiHotspotMessage["hotspot"]["start"]>,
+	msg: NonNullable<WifiHotspotMessage["hotspot"]["start"]> & {
+		attempt?: string | undefined;
+	},
 	deps: HotspotActivationDeps = defaultHotspotDeps,
 ): Promise<HotspotStartResult> {
+	const { attempt } = msg;
+	const { publishOutcome } = deps;
+	if (attempt && publishOutcome)
+		deps = {
+			...deps,
+			publishOutcome: (kind, device, outcome) =>
+				publishOutcome(
+					kind,
+					device,
+					outcome,
+					kind === "start" ? attempt : undefined,
+				),
+		};
 	const result = await resolveAndStart(msg, deps);
 	/*
 	  A refusal ends here, so it is published here. A SUCCESS is deliberately not:
@@ -775,7 +796,17 @@ export async function startHotspotLocked(
 	let cleanupConfirmed = true;
 	let refusal: HotspotStartResult | undefined;
 	let rollbackState: (() => HotspotStartResult) | undefined;
+	let targetRadio: RadioSample | undefined;
 	try {
+		if (binding && concurrentInterface) {
+			targetRadio = await sampleWifiOperationRadio(concurrentInterface.ifname);
+			if (
+				(targetRadio &&
+					targetRadio.lifetime.phyPath !== binding.lifetime.phyPath) ||
+				!(await operation.permit())
+			)
+				return wifiOperationChanged;
+		}
 		if (binding && (!(await operation.check()) || !operation.current()))
 			return wifiOperationChanged;
 		const stillOwned = owned();
@@ -827,6 +858,7 @@ export async function startHotspotLocked(
 				ifname: concurrentInterface.ifname,
 			});
 		}
+		const virtualClaim = wifiInterface.concurrentHotspot;
 
 		// Snapshot prior state for rollback. getWifiState() returns the live cache
 		// reference; syncing below swaps in a NEW object, so this stays the old one.
@@ -855,7 +887,8 @@ export async function startHotspotLocked(
 				else delete next[macAddress];
 				setWifiState(next);
 			}
-			transitionVirtualBinding(wifiInterface, { kind: "retire" });
+			if (wifiInterface.concurrentHotspot === virtualClaim)
+				transitionVirtualBinding(wifiInterface, { kind: "retire" });
 			deps.broadcastState();
 			return {
 				success: false,
@@ -903,13 +936,23 @@ export async function startHotspotLocked(
 				"802-11-wireless.channel": exclusiveChannel.nmChannel,
 			});
 		// The leg's identity and bindings are rechecked immediately before each profile write.
+		const sameLeg = async () => {
+			if (!binding || !targetRadio) return true;
+			const fresh = await sampleWifiOperationRadio(activationIfname);
+			return (
+				sameRadioLifetime(targetRadio.lifetime, fresh?.lifetime) ||
+				operation.refuse()
+			);
+		};
 		const leg = async (): Promise<boolean> => {
+			if (binding && !(await sameLeg())) return false;
 			if (
 				!concurrentInterface ||
 				!deps.validateConcurrentInterface ||
 				(await deps.validateConcurrentInterface(concurrentInterface))
 			)
 				return true;
+			if (binding && targetRadio) operation.refuse();
 			channelRefused = true;
 			return false;
 		};
@@ -927,17 +970,8 @@ export async function startHotspotLocked(
 			return leg();
 		};
 		const admitted = () => operation.check();
-		let targetRadio: RadioSample | undefined;
 		const admitTarget = async () => {
-			if (concurrentInterface && binding) {
-				targetRadio = await sampleWifiOperationRadio(activationIfname);
-				if (
-					targetRadio &&
-					targetRadio.lifetime.phyPath !== binding.lifetime.phyPath
-				)
-					return false;
-			}
-			return admitted();
+			return (await admitted()) && (await sameLeg()) && operation.current();
 		};
 		const confirmed = async (uuid: string): Promise<boolean> => {
 			if (
@@ -955,6 +989,7 @@ export async function startHotspotLocked(
 				)
 			)
 				return true;
+			if (binding && !(await admitTarget())) return false;
 			channelRefused = true;
 			if (owned(uuid, identity.profileMac))
 				await writeProfile({
@@ -995,23 +1030,39 @@ export async function startHotspotLocked(
 			if (binding && (!(await admitted()) || !operation.current()))
 				return rollback();
 			prune(conn);
-			if (
-				!(await writeProfile({
-					uuid: existingUuid,
-					kind: "up",
-					run: async () => {
-						if (!(await ready())) return false;
-						if (binding && (!(await admitTarget()) || !operation.current()))
-							return false;
-						return deps.nmConnect(existingUuid, HOTSPOT_UP_TO, activated);
-					},
-				}))
-			) {
-				return rollback();
-			}
-			if (!(await confirmed(conn))) return rollback();
-			if (binding && (!(await admitted()) || !operation.current()))
-				return rollback();
+			const changedAfterUp = async () => {
+				const result = rollback();
+				if (
+					!result.success &&
+					(!(await matchesHotspotActivation(
+						existingUuid,
+						activationIfname,
+						{
+							profile: profileInstance,
+							activePath,
+						},
+						deps,
+					)) ||
+						!(await deps.nmDisconnect(existingUuid)))
+				)
+					result.reason = "deactivation-failed";
+				return result;
+			};
+			const up = await writeProfile({
+				uuid: existingUuid,
+				kind: "up",
+				run: async () => {
+					if (!(await ready())) return false;
+					if (binding && (!(await admitTarget()) || !operation.current()))
+						return false;
+					return deps.nmConnect(existingUuid, HOTSPOT_UP_TO, activated);
+				},
+			});
+			if (binding && (up || activePath) && !(await admitTarget()))
+				return changedAfterUp();
+			if (!up) return rollback();
+			if (!(await confirmed(conn)))
+				return operation.changed ? changedAfterUp() : rollback();
 			if (!owned(conn, identity.profileMac)) return rollback();
 			await reconcileWifiAdapterProfileLocked(owner, {
 				uuid: conn,
@@ -1026,8 +1077,7 @@ export async function startHotspotLocked(
 							deps.nmConnSetFields(id, delta),
 					}),
 			});
-			if (binding && (!(await admitted()) || !operation.current()))
-				return rollback();
+			if (binding && !(await admitTarget())) return changedAfterUp();
 			if (!owned(conn, identity.profileMac)) return rollback();
 			rememberIdentity(owner, wifiInterface, deps, conn, identity.profileMac);
 			rememberHotspotProfilePin(
@@ -1062,6 +1112,7 @@ export async function startHotspotLocked(
 						);
 						return creationRecorded;
 					},
+					binding ? operation.permit : undefined,
 				);
 			} catch (error) {
 				if (!(error instanceof NmApConnAddError)) throw error;
@@ -1180,7 +1231,12 @@ export async function startHotspotLocked(
 			}
 		}
 		if (!acceptedAllocation && concurrentInterface) {
-			await deps.releaseConcurrentInterface?.(concurrentInterface.ifname);
+			if (binding)
+				await deps.releaseConcurrentInterface?.(
+					concurrentInterface.ifname,
+					concurrentInterface,
+				);
+			else await deps.releaseConcurrentInterface?.(concurrentInterface.ifname);
 			if (
 				!createdUuid &&
 				concurrentInterface.created &&

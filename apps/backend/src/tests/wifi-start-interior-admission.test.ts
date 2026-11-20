@@ -1,10 +1,12 @@
 import { expect, spyOn, test } from "bun:test";
+import { getConfig } from "../modules/config.ts";
 import * as nm from "../modules/network/network-manager.ts";
 import {
 	getWifiState,
 	setWifiState,
 } from "../modules/wifi/state/wifi-state.ts";
 import { observedWifiAdapterMode } from "../modules/wifi/wifi-adapter-mode.ts";
+import * as capabilities from "../modules/wifi/wifi-capabilities.ts";
 import { addWifiInterface } from "../modules/wifi/wifi-connections.ts";
 import { defaultHotspotDeps } from "../modules/wifi/wifi-hotspot-activation.ts";
 import {
@@ -13,10 +15,12 @@ import {
 	settlePending,
 	syncWifiStateCache,
 } from "../modules/wifi/wifi-hotspot-monitor.ts";
+import * as profileOperations from "../modules/wifi/wifi-hotspot-profile-operation.ts";
 import { bindingForRow } from "../modules/wifi/wifi-operation-binding.ts";
 import { radioIdentityReaders } from "../modules/wifi/wifi-radio-identity.ts";
 import { request } from "./helpers/wifi-entry-fixture.ts";
 import { wifiFrameFixture } from "./helpers/wifi-frame-fixture.ts";
+import { mockQualifiedHybridActivation } from "./helpers/wifi-hotspot-test-setup.ts";
 
 const secondMac = "dc:a6:32:aa:bb:c1";
 
@@ -82,6 +86,133 @@ test.each(["ifindex", "macaddress"] as const)(
 		}
 	},
 );
+
+test.each(["stopped", "failed", "new-active-path", "new-profile"] as const)(
+	"existing Start reconciles a change during successful Up: %s",
+	async (scenario) => {
+		const fixture = await startFixture();
+		const instance = {
+			path: "/org/freedesktop/NetworkManager/Settings/1",
+			fingerprint: "test-ap",
+			runId: "test",
+			file: { filename: "test", device: "1", inode: "2", ctime: "3" },
+		};
+		const activePath = "/org/freedesktop/NetworkManager/ActiveConnection/6";
+		let upUuid: string | undefined;
+		spyOn(profileOperations, "runHotspotProfileOperation").mockImplementation(
+			async (operation) => ({
+				checked: true,
+				success: Boolean(
+					await (operation.kind === "modify"
+						? operation.run(operation.fields)
+						: operation.run()),
+				),
+				instance,
+			}),
+		);
+		spyOn(defaultHotspotDeps, "readProfileInstance").mockImplementation(
+			async () =>
+				upUuid && scenario === "new-profile"
+					? { ...instance, path: `${instance.path}0` }
+					: instance,
+		);
+		spyOn(nm, "nmDeviceProp").mockImplementation(async () => [
+			"100",
+			upUuid ?? "",
+			scenario === "new-active-path" ? `${activePath}0` : activePath,
+		]);
+		spyOn(defaultHotspotDeps, "nmConnSetFields").mockResolvedValue(true);
+		spyOn(defaultHotspotDeps, "nmConnect").mockImplementation(
+			async (uuid, _, activated) => {
+				upUuid = uuid;
+				activated?.(activePath);
+				await fixture.rotate();
+				return true;
+			},
+		);
+		const down = spyOn(defaultHotspotDeps, "nmDisconnect").mockResolvedValue(
+			scenario === "stopped",
+		);
+		try {
+			const result = await request("start", fixture.context, fixture.before);
+			expect(upUuid).toBeDefined();
+			if (!upUuid) throw new Error("Expected Up for the saved fixture profile");
+			expect(result).toEqual({
+				success: false,
+				error: "radio-changed",
+				...(scenario === "stopped" ? {} : { reason: "deactivation-failed" }),
+			});
+			expect(down.mock.calls).toEqual(
+				scenario === "failed" || scenario === "stopped" ? [[upUuid]] : [],
+			);
+		} finally {
+			await fixture.restore();
+		}
+	},
+);
+
+test("hybrid Start refuses a replacement AP leg on the same phy", async () => {
+	const fixture = await startFixture();
+	mockQualifiedHybridActivation();
+	delete fixture.row.activeMode;
+	fixture.row.supportsApStaConcurrency = true;
+	const intent = defaultHotspotDeps.recordIntent;
+	if (!intent) throw new Error("Missing fixture intent recorder");
+	const restoreIntent = spyOn(intent, "restore").mockImplementation(() => {});
+	const previousModes = getConfig().wifi_modes;
+	getConfig().wifi_modes = { "dc:a6:32:aa:bb:c0": "hybrid" };
+	const target = { ifname: "clap-wlan0", created: false };
+	spyOn(defaultHotspotDeps, "ensureConcurrentInterface").mockResolvedValue(
+		target,
+	);
+	const release = spyOn(
+		defaultHotspotDeps,
+		"releaseConcurrentInterface",
+	).mockResolvedValue();
+	let legIndex = "21";
+	spyOn(radioIdentityReaders, "readText").mockImplementation(async (path) => {
+		if (path.endsWith("/ifindex"))
+			return path.includes(target.ifname) ? legIndex : "10";
+		if (path.endsWith("/index")) return "1";
+		return "dc:a6:32:aa:bb:c0";
+	});
+	spyOn(radioIdentityReaders, "realpath").mockResolvedValue(
+		"/sys/devices/equivalence/phy1",
+	);
+	const capability: NonNullable<
+		ReturnType<typeof capabilities.getWifiCapabilitiesForInterface>
+	> = {
+		phy: "phy1",
+		generation: "wifi6",
+		bands: ["2.4", "5"],
+		maxWidthMhz: { "2.4": 40, "5": 80 },
+		apModes: ["2.4", "5"],
+		staApCombo: { supported: true, sameChannelOnly: true },
+		wpa3Sae: "unknown",
+		regulatory: { country: "ES", is6GhzLegal: false, self_managed: false },
+	};
+	spyOn(capabilities, "getWifiCapabilitiesForInterface").mockReturnValue(
+		capability,
+	);
+	spyOn(defaultHotspotDeps, "readCapabilities").mockReturnValue(capability);
+	spyOn(defaultHotspotDeps, "nmConnSetFields").mockImplementation(async () => {
+		legIndex = "22";
+		return true;
+	});
+	try {
+		expect(await request("start", fixture.context, fixture.before)).toEqual({
+			success: false,
+			error: "radio-changed",
+		});
+		expect(fixture.up).not.toHaveBeenCalled();
+		expect<unknown>(release.mock.calls).toEqual([[target.ifname, target]]);
+	} finally {
+		if (previousModes === undefined) delete getConfig().wifi_modes;
+		else getConfig().wifi_modes = previousModes;
+		restoreIntent.mockRestore();
+		await fixture.restore();
+	}
+});
 
 test("Start refuses before pinning if the radio changes during saved-profile refresh", async () => {
 	const fixture = await startFixture();

@@ -143,6 +143,31 @@ export function recordPendingHotspotModify(
 	}
 }
 
+export async function matchesHotspotActivation(
+	uuid: string,
+	ifname: string,
+	activation: HotspotActivationInstance,
+	deps: Pick<HotspotActivationDeps, "readProfileInstance">,
+): Promise<boolean> {
+	if (
+		!activation.activePath ||
+		!sameNmProfileActivation(
+			activation.profile,
+			await deps.readProfileInstance?.(uuid),
+		)
+	)
+		return false;
+	const state = await nmDeviceProp(
+		ifname,
+		"GENERAL.STATE,GENERAL.CON-UUID,GENERAL.CON-PATH",
+	);
+	return (
+		Number.parseInt(state?.[0] ?? "", 10) === 100 &&
+		state?.[1] === uuid &&
+		state?.[2] === activation.activePath
+	);
+}
+
 function settleCaptured(
 	pending: PendingHotspot,
 	confirmed: boolean,
@@ -281,25 +306,8 @@ export function registerPendingConfirmation(
 			...(changed && !changed.stopped ? { reason: "deactivation-failed" } : {}),
 		});
 	};
-	const exactActivation = async (activation: HotspotActivationInstance) => {
-		if (
-			!activation.activePath ||
-			!sameNmProfileActivation(
-				activation.profile,
-				await deps.readProfileInstance?.(target.uuid),
-			)
-		)
-			return false;
-		const state = await nmDeviceProp(
-			target.ifname,
-			"GENERAL.STATE,GENERAL.CON-UUID,GENERAL.CON-PATH",
-		);
-		return (
-			Number.parseInt(state?.[0] ?? "", 10) === 100 &&
-			state?.[1] === target.uuid &&
-			state?.[2] === activation.activePath
-		);
-	};
+	const exactActivation = (activation: HotspotActivationInstance) =>
+		matchesHotspotActivation(target.uuid, target.ifname, activation, deps);
 	let flight: Promise<boolean> | undefined;
 	const probe = (): Promise<boolean> => {
 		if (!current(pending) || !(binding ? ownsCache() : matches()))

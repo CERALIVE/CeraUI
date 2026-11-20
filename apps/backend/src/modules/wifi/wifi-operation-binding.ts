@@ -104,18 +104,24 @@ export function wifiOperationGuard(binding: WifiOperationBinding | undefined) {
 		changed ||= binding !== undefined && !ownsWifiOperation(binding);
 		return !changed;
 	};
+	const check = async () => {
+		if (!binding || !current()) return !changed;
+		changed ||= !matchesWifiOperationRadio(
+			binding,
+			await sampleWifiOperationRadio(binding.ifname),
+		);
+		return !changed;
+	};
 	return {
 		current,
+		refuse: () => {
+			changed = true;
+			return false;
+		},
 		get changed() {
 			return changed;
 		},
-		async check() {
-			if (!binding || !current()) return !changed;
-			changed ||= !matchesWifiOperationRadio(
-				binding,
-				await sampleWifiOperationRadio(binding.ifname),
-			);
-			return !changed;
-		},
+		check,
+		permit: async () => (await check()) && current(),
 	};
 }

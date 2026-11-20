@@ -128,6 +128,14 @@ still owns the exact profile and active instance. Down targets its captured
 UUID. A delayed observer cannot stop a successor activation. Failed Start
 rollback merges only its own projection against the current cache.
 
+Bound credential writes check the radio at keyfile publication after
+temporary file preparation. A saved-profile Start that loses proof after
+Up checks its exact profile and active path before requesting Down. The
+same owner lock covers this cleanup. For hybrid Start, rollback releases
+the original allocator receipt. A reused name alone does not authorize a
+release. A Start attempt UUID only correlates terminal output and grants
+no authority to mutate or release a radio.
+
 The adapter-mode wrapper places a bounded terminal watchdog around that promise.
 If the delegated publisher is lost entirely, the mode operation settles once as
 typed `not-confirmed`; a late publisher is fenced and cannot emit a second mode

@@ -48,21 +48,28 @@ export type HotspotOutcomePublisher = (
 	kind: HotspotOutcomeKind,
 	device: number | string,
 	outcome: HotspotToggleOutcome,
+	attempt?: string,
 ) => void;
 
 export const publishHotspotOutcome: HotspotOutcomePublisher = (
 	kind,
 	device,
 	outcome,
+	attempt,
 ) =>
 	withoutWifiRequestBinding(() => {
 		broadcastMsg("wifi", {
 			hotspot: {
 				[kind]: outcome.success
-					? { device, success: true }
+					? {
+							device,
+							success: true,
+							...(kind === "start" && attempt ? { attempt } : {}),
+						}
 					: {
 							device,
 							error: outcome.error,
+							...(kind === "start" && attempt ? { attempt } : {}),
 							...(outcome.reason === undefined
 								? {}
 								: { reason: outcome.reason }),

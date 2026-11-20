@@ -531,6 +531,10 @@ export const hotspotToggleInputSchema = z.object({
 	incarnation: wifiIncarnationSchema.optional(),
 });
 export type HotspotToggleInput = z.infer<typeof hotspotToggleInputSchema>;
+const hotspotStartAttemptSchema = z.string().uuid();
+export const hotspotStartInputSchema = hotspotToggleInputSchema.extend({
+	attempt: hotspotStartAttemptSchema.optional(),
+});
 
 /*
   Why a hotspot start/stop did not complete. Every member names a DIFFERENT
@@ -650,6 +654,9 @@ export const hotspotToggleResultSchema = z.object({
 	reason: z.string().optional(),
 });
 export type HotspotToggleResult = z.infer<typeof hotspotToggleResultSchema>;
+const hotspotStartResultSchema = hotspotToggleResultSchema.extend({
+	attempt: hotspotStartAttemptSchema.optional(),
+});
 
 // WiFi message schema (response from WiFi operations)
 export const wifiMessageSchema = z.object({
@@ -668,7 +675,7 @@ export const wifiMessageSchema = z.object({
 	adapter_mode: wifiAdapterModeResultSchema.optional(),
 	hotspot: z
 		.object({
-			start: hotspotToggleResultSchema.optional(),
+			start: hotspotStartResultSchema.optional(),
 			stop: hotspotToggleResultSchema.optional(),
 			config: z
 				.object({

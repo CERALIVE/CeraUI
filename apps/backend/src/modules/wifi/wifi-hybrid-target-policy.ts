@@ -86,14 +86,18 @@ export async function releaseCreatedHybridTarget(target: {
 
 export async function releaseConcurrentApInterface(
 	ifname: string,
+	target?: object,
 ): Promise<void> {
 	const stored = selectedTargets.get(ifname);
 	const record = stored?.record;
 	if (!stored || !record || record.priorAutoconnect === undefined) return;
+	if (target && targetRecords.get(target) !== record) return;
+	const ownsSelection = () => selectedTargets.get(ifname) === stored;
 	try {
 		if (!(await currentTarget(ifname, record)) || !(await idleTarget(ifname)))
 			return;
 		const current = (await nmDeviceProp(ifname, "GENERAL.AUTOCONNECT"))?.[0];
+		if (!ownsSelection()) return;
 		const { priorAutoconnect: _prior, ...released } = record;
 		if (current !== "no") {
 			// A readable value other than ours is an external change: retire the claim, never overwrite it.
@@ -103,12 +107,18 @@ export async function releaseConcurrentApInterface(
 			return;
 		}
 		if (
-			!(await setConcurrentAutoconnect(ifname, record.priorAutoconnect, () =>
-				currentTarget(ifname, record),
+			!(await setConcurrentAutoconnect(
+				ifname,
+				record.priorAutoconnect,
+				async () =>
+					ownsSelection() &&
+					(await currentTarget(ifname, record)) &&
+					ownsSelection(),
 			))
 		)
 			return;
-		selectedTargets.set(ifname, { ...stored, record: released });
+		if (ownsSelection())
+			selectedTargets.set(ifname, { ...stored, record: released });
 	} catch {
 		return;
 	}

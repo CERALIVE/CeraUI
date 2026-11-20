@@ -293,6 +293,7 @@ export type HotspotConfigDeps = {
 	nmConnSetFields: (
 		uuid: string,
 		fields: Record<string, string>,
+		permit?: () => Promise<boolean>,
 	) => Promise<unknown>;
 	nmConnect: (uuid: string, timeout?: number) => Promise<unknown>;
 	wifiUpdateSavedConns: () => Promise<void>;
@@ -770,8 +771,13 @@ async function reconfigureHotspotLocked(
 					!owned()
 				)
 					return false;
+				const alreadyDispatched = dispatched;
 				dispatched = true;
-				return deps.nmConnSetFields(uuid, fields);
+				return deps.nmConnSetFields(uuid, fields, async () => {
+					if ((await operation.permit()) && owned()) return true;
+					dispatched = alreadyDispatched;
+					return false;
+				});
 			}
 		: deps.nmConnSetFields;
 	const previous = {

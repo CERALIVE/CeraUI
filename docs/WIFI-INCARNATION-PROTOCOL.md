@@ -151,6 +151,24 @@ operation refuses without effects. If a write may already have changed the
 profile, Configure reports `activating` and suppresses further writes and Up.
 The limited-radio regulatory Stop retains its UUID-based authority.
 
+The credential writer requests the saved operation's proof again after
+serialization and staging, immediately before publishing the keyfile. For
+first-profile Start, it checks again between inactive creation and the
+credential write.
+
+After NetworkManager acknowledges Up, a replacement can still cause refusal.
+While holding the adapter lock, Start compares the captured profile file
+and active D-Bus path before requesting Down for the saved profile. An
+unverified or failed Down is reported as `radio-changed` with reason
+`deactivation-failed`. A hybrid Start retains its original AP leg lifetime
+and can release only the allocator receipt it acquired.
+
+The Start request and terminal frame accept an optional `attempt` UUID.
+The backend retains this value for the lifetime of the operation and echoes
+it on its terminal Start frame. It provides correlation only. The
+incarnation field still controls admission. Older senders omit `attempt`
+and receive the existing frame shape. Stop and station do not use it.
+
 Mode to hotspot or hybrid checks before recording intent, then passes the
 captured row and lifetime through Down and Start. A replacement after a
 confirmed Down blocks Start and settles the original mode operation with

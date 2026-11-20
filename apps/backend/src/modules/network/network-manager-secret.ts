@@ -89,6 +89,7 @@ export async function readVerifiedNmWifiSecret(
 export async function writeNmWifiSecret(
 	uuid: string,
 	fields: Readonly<Record<string, string>>,
+	permit?: () => Promise<boolean>,
 ): Promise<boolean> {
 	const reject = (
 		reason:
@@ -132,8 +133,6 @@ export async function writeNmWifiSecret(
 	} finally {
 		await held.handle.close();
 	}
-	if (!sameNmProfileResource(before, await readNmProfileInstance(uuid)))
-		return reject("pre-write-resource-changed");
 	const temporary = join(
 		dirname(filename),
 		`.${basename(filename)}.${crypto.randomUUID()}.tmp`,
@@ -148,6 +147,9 @@ export async function writeNmWifiSecret(
 		} finally {
 			await file.close();
 		}
+		if (!sameNmProfileResource(before, await readNmProfileInstance(uuid)))
+			return reject("pre-write-resource-changed");
+		if (permit && !(await permit())) return false;
 		await rename(temporary, filename);
 		stage = "load-failed";
 		await run("nmcli", ["connection", "load", filename]);

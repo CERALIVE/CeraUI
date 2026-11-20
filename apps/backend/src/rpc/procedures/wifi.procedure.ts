@@ -50,6 +50,7 @@ import {
 	hotspotConfigOutputSchema,
 	hotspotPrepareInputSchema,
 	hotspotPrepareOutputSchema,
+	hotspotStartInputSchema,
 	hotspotToggleInputSchema,
 	hotspotToggleOutputSchema,
 	type SetWifiAdapterModeOutput,
@@ -352,7 +353,7 @@ export const wifiScanProcedure = authedProcedure
  * Start hotspot procedure
  */
 export const hotspotStartProcedure = authedProcedure
-	.input(hotspotToggleInputSchema)
+	.input(hotspotStartInputSchema)
 	.output(hotspotToggleOutputSchema)
 	.use(wifiRequestAdmission("start"))
 	.handler(async ({ input }): Promise<HotspotToggleOutput> => {
@@ -364,10 +365,18 @@ export const hotspotStartProcedure = authedProcedure
 					setMockWifiConnection(device, { activeNetwork: undefined });
 				}
 			}
-			publishHotspotOutcome("start", Number(input.device), { success: true });
+			publishHotspotOutcome(
+				"start",
+				Number(input.device),
+				{ success: true },
+				input.attempt,
+			);
 			return { success: true, accepted: true };
 		}
-		const result = await wifiHotspotStart({ device: Number(input.device) });
+		const result = await wifiHotspotStart({
+			device: Number(input.device),
+			attempt: input.attempt,
+		});
 		if (!result.success) return result;
 		return { success: true, accepted: true };
 	});
