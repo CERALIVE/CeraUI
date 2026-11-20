@@ -147,9 +147,9 @@ export async function writeNmWifiSecret(
 		} finally {
 			await file.close();
 		}
+		if (permit && !(await permit())) return false;
 		if (!sameNmProfileResource(before, await readNmProfileInstance(uuid)))
 			return reject("pre-write-resource-changed");
-		if (permit && !(await permit())) return false;
 		await rename(temporary, filename);
 		stage = "load-failed";
 		await run("nmcli", ["connection", "load", filename]);
