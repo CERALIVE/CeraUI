@@ -297,7 +297,9 @@ for (const scheme of ['dark', 'light'] as const) {
 			await page.goto('/');
 			await ensureAuthenticated(page);
 			await expectScheme(page, scheme);
-			const tab = page.locator('#nav-tab-devtools:visible, #mobile-nav-tab-devtools:visible').first();
+			const tab = page
+				.getByRole('navigation', { name: 'Main navigation' })
+				.getByRole('button', { name: 'Dev Tools', exact: true });
 			await tab.click();
 			await expect(tab).toHaveAttribute('aria-current', 'page');
 
