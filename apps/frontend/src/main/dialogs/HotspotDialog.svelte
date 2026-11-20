@@ -398,7 +398,7 @@ async function startConfirmed(incarnation: string) {
 	if (incarnation !== original.incarnation || radioReason) return;
 	let binding = original;
 	const controller = beginAdmission(original);
-	let deferred = false;
+	let correlated = false;
 	const ownsStart = () => admission === controller && !controller.signal.aborted && ownsAdmission(original);
 	confirmingStart = false;
 	toggleTarget = 'hotspot';
@@ -425,7 +425,7 @@ async function startConfirmed(incarnation: string) {
 					},
 				},
 			);
-			deferred = result?.deferred === true;
+			correlated = result?.correlated === true;
 			if (!result && !controller.signal.aborted && ownsAdmission(original)) {
 				bindingUnsupported = true;
 				ownerSession += 1;
@@ -433,7 +433,7 @@ async function startConfirmed(incarnation: string) {
 			}
 			return result ?? { success: false, error: 'binding-required', reason: undefined };
 		},
-		isCurrent: () => ownsStart() && (deferred || current(binding)),
+		isCurrent: () => ownsStart() && (correlated || current(binding)),
 		onResult: (result) => {
 			if (wifiRadioChanged(result) && !confirmingStart) {
 				ownerSession += 1;

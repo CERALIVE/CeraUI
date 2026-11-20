@@ -23,7 +23,7 @@ const configDispatches = new Set<WifiConfigDispatch>();
 type WifiStartReceipt = NonNullable<
 	NonNullable<WifiMessage["hotspot"]>["start"]
 >;
-type WifiStartOutcome = HotspotToggleOutput & { readonly deferred?: true };
+type WifiStartOutcome = HotspotToggleOutput & { readonly correlated?: true };
 const startReceivers = new Map<string, (frame: WifiStartReceipt) => void>();
 
 export function noteWifiStart(frame: WifiStartReceipt): void {
@@ -47,27 +47,28 @@ export async function withWifiStartReceipt(
 	const { promise, resolve } = Promise.withResolvers<
 		WifiStartReceipt | undefined
 	>();
+	let terminal: WifiStartReceipt | undefined;
 	const abort = () => {
 		startReceivers.delete(attempt);
 		resolve(undefined);
 	};
 	startReceivers.set(attempt, (frame) => {
 		if (String(frame.device) !== device || getLinkEpoch() !== link) return;
-		if (frame.success !== true && !frame.error) return;
+		if (terminal || (frame.success !== true && !frame.error)) return;
+		terminal = frame;
 		resolve(frame);
 	});
 	signal.addEventListener("abort", abort, { once: true });
 	try {
 		if (signal.aborted) return { success: false, error: "binding-required" };
 		const ack = await invoke(attempt);
-		if (!ack.success || !ack.accepted) return ack;
-		const frame = await promise;
+		const frame = ack.success && ack.accepted ? await promise : terminal;
 		return frame?.error && !signal.aborted
 			? {
 					success: false,
 					error: frame.error,
 					reason: frame.reason,
-					deferred: true,
+					correlated: true,
 				}
 			: ack;
 	} finally {
