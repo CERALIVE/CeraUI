@@ -91,8 +91,12 @@ milliseconds; stored-only rows project their start timestamp into the wire range
 `logsAvailable: false`. Rows are newest journal index first, followed by
 stored-only boots with older indices. Shutdown is `unknown` until the
 classifier is integrated; the current boot is `current`. `boots.ts` performs the
-native list command. Under mocks it assembles one current journal boot from the
-ring, together with stored-only boot history, without spawning.
+native list command. Under mocks it assembles one current journal boot
+together with stored-only boot history, without spawning. The current mock
+boot's `firstTs` is captured the first time that boot ID is listed in the
+backend process and stays fixed even if the log ring is pruned or cleared.
+Its `lastTs` still comes from the last retained entry, or is zero for an empty
+ring.
 Stored-only indices saturate at `Number.MIN_SAFE_INTEGER`; stored start times
 are floored and saturated to the nonnegative safe-integer wire timestamp range.
 
