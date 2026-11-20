@@ -781,8 +781,10 @@ cannot leave an unpersisted hotspot choice eligible for later restore.
 Explicit mode changes hold one adapter lock across persistence, intermediate
 teardown and activation. Internal delegates do not reacquire that lock and omit
 the recorder by destructuring, so a hybrid/hotspot switch's intermediate Stop
-cannot replace its target with station. Regulatory reconfigure and its rollback
-use their existing direct activation path and never record a new mode choice.
+cannot replace its target with station. Regulatory reconfigure requires a
+verified binding for the original registry row before entering the writer.
+It and its rollback use that binding through the existing direct activation
+path and never record a new mode choice.
 After confirmed teardown, Stop retires matching parent aliases independently of
 virtual cleanup. It examines the current concurrent observation even when none
 existed at entry, matching the captured virtual name or the parent's canonical

@@ -7,6 +7,7 @@ import {
 	reconfigureHotspotForRegdomain,
 } from "../modules/wifi/wifi-hotspot-config.ts";
 import { radioIdentityReaders } from "../modules/wifi/wifi-radio-identity.ts";
+import { invalidateWifiRadioRow } from "../modules/wifi/wifi-radio-publication.ts";
 import { fixture, request } from "./helpers/wifi-entry-fixture.ts";
 import { mockQualifiedHybridActivation } from "./helpers/wifi-hotspot-test-setup.ts";
 import { qualifiedHybridEvidence } from "./helpers/wifi-hybrid-qualification.ts";
@@ -69,6 +70,25 @@ test("regulatory reconfigure does not reactivate or commit credentials after the
 		expect(up).not.toHaveBeenCalled();
 		expect(write).toHaveBeenCalledTimes(1);
 		expect(state.effects).not.toContain("store-write");
+	} finally {
+		await state.restore();
+	}
+});
+
+test("regulatory restart does not write or reactivate an AP without its original radio proof", async () => {
+	const state = await fixture();
+	const up = spyOn(defaultHotspotConfigDeps, "nmConnect");
+	try {
+		invalidateWifiRadioRow(state.row, undefined);
+		expect(
+			await reconfigureHotspotForRegdomain(
+				"dc:a6:32:aa:bb:c0",
+				state.row,
+				"auto",
+			),
+		).toBe(false);
+		expect(state.effects).toEqual([]);
+		expect(up).not.toHaveBeenCalled();
 	} finally {
 		await state.restore();
 	}

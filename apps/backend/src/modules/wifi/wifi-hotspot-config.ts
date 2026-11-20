@@ -609,7 +609,7 @@ export async function reconfigureHotspotForRegdomain(
 	binding = bindingForRow(macAddress, wifiInterface),
 ): Promise<boolean> {
 	const { name, password } = wifiInterface.hotspot;
-	if (!name || !password) return false;
+	if (!binding || !name || !password) return false;
 
 	// A domain change moves the CHANNEL and nothing else, so the security mode
 	// is carried through unexamined rather than re-derived.
