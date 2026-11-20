@@ -5,6 +5,7 @@ import { getConfig } from "../../../src/modules/config.ts";
 import {
 	nmApConnAdd,
 	nmConnDelete,
+	nmDeviceProp,
 	nmDisconnect,
 } from "../../../src/modules/network/network-manager.ts";
 import {
@@ -18,7 +19,10 @@ import {
 } from "../../../src/modules/wifi/wifi-hotspot-activation.ts";
 import { hotspotBindingFields } from "../../../src/modules/wifi/wifi-hotspot-types.ts";
 import { terminateWifiDiscovery } from "../../../src/modules/wifi/wifi-interfaces.ts";
-import { wifiRadioIdentity } from "../../../src/modules/wifi/wifi-radio-identity.ts";
+import {
+	radioIdentityReaders,
+	wifiRadioIdentity,
+} from "../../../src/modules/wifi/wifi-radio-identity.ts";
 import { projectWifiRadioIncarnation } from "../../../src/modules/wifi/wifi-radio-publication.ts";
 import { observeSavedProfileRadio, seedObservedRadioRow } from "./first-ap-radio.ts";
 
@@ -67,6 +71,45 @@ async function main() {
 		await wifiRadioIdentity.discover([{ ifname: a, row }]);
 		const token = projectWifiRadioIncarnation(row, wifiRadioIdentity.state.rows.get(a));
 		assert(token, "Fixture radio has no current incarnation");
+		const originalRead = radioIdentityReaders.readText;
+		let startedUp = false;
+		let stoppedUp = false;
+		try {
+			const changedAfterUp = await withWifiRequestBinding(
+				{ device: String(row.id), expected: token, kind: "config" },
+				() =>
+					wifiHotspotStart(
+						{ device: row.id },
+						{
+							...defaultHotspotDeps,
+							nmConnect: async (...args) => {
+								const up = await defaultHotspotDeps.nmConnect(...args);
+								assert(up, "Native post-Up fixture did not activate");
+								startedUp = true;
+								// Keep NM's real active instance observable while changing the
+								// kernel lifetime witness seen by the pending operation.
+								const changed: typeof originalRead = async (path) =>
+									path === `/sys/class/net/${a}/ifindex` ? "1000000" : originalRead(path);
+								Object.defineProperty(radioIdentityReaders, "readText", { value: changed });
+								return up;
+							},
+							nmDisconnect: async (id) => {
+								assert.equal(id, uuid);
+								stoppedUp = await defaultHotspotDeps.nmDisconnect(id);
+								return stoppedUp;
+							},
+						},
+					),
+			);
+			assert.deepEqual(changedAfterUp, { success: false, error: "radio-changed" });
+			assert(startedUp && stoppedUp, "Start did not reconcile its native activation");
+			assert.notEqual((await nmDeviceProp(a, "GENERAL.CON-UUID"))?.[0], uuid);
+			process.stdout.write(
+				"B8 replacement: native Up reconciled with exact Down after lifetime change\n",
+			);
+		} finally {
+			Object.defineProperty(radioIdentityReaders, "readText", { value: originalRead });
+		}
 		let swapped = false;
 		let upCalls = 0;
 		const result = await withWifiRequestBinding(
