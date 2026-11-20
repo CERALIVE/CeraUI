@@ -34,8 +34,11 @@ The export replaces the credentials the backend holds, using the bundle's
 known-secret matcher (`redaction.ts`) on `collectHeldSecrets()` (`bundle-data.ts`).
 It runs on each entry's unit and message before continuation lines are indented,
 then on each formatted entry and gap record. In the header it runs on the values
-only (versions, boot ids, the filter text) before they are quoted, so the fixed
-labels and the sensitive data warning are never altered. The bundle's identifier
+only (versions, boot ids, the filter values), so the fixed labels, the sensitive
+data warning and the JSON syntax are never altered. Each value is matched before
+it is serialized and again after: when JSON escaping turns it into a held value
+(a line break becomes a backslash and `n`), the whole value is written as
+`"[REDACTED]"`. The bundle's identifier
 and address masking stays bundle-only. When redaction cannot cover every held
 credential, the export sends only a footer:
 
