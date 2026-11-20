@@ -114,9 +114,9 @@ export function resolveWifiAdapterModeIntentKey(
 	const addresses = new Set(keys.map((key) => key.split("@")[0]));
 	if (addresses.size !== 1) return undefined;
 	const address = keys[0]?.split("@")[0];
-	if (address && preferences[address] !== undefined)
-		return preferences[address] === "station" ? undefined : address;
-	return keys.length === 1 ? keys[0] : undefined;
+	return address && preferences[address] && preferences[address] !== "station"
+		? address
+		: undefined;
 }
 
 export interface WifiAdapterModeRecorder {
@@ -141,10 +141,7 @@ export function recordWifiAdapterModeIntent(
 	if (key === undefined) return () => undefined;
 	const previous = recorder.read(key);
 	const alias =
-		portAlias &&
-		portAlias !== key &&
-		(isHotspotPortCredentialCopy(portAlias) ||
-			getPersistedWifiAdapterMode(portAlias) !== undefined)
+		portAlias && portAlias !== key && isHotspotPortCredentialCopy(portAlias)
 			? { key: portAlias, mode: recorder.read(portAlias) }
 			: undefined;
 	if (alias) recorder.persist(key, target, alias.key);

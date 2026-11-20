@@ -217,7 +217,7 @@ test("released package reads and writes the candidate store across twin arrival"
 	}
 });
 
-test("a returning sole port uses its owned credentials and leaves the legacy record intact", async () => {
+test("a returning sole adapter uses legacy credentials and preserves the port profile", async () => {
 	rememberHotspotCredentials(primary, {
 		ssid: "Port-owned AP",
 		password: "saved-port-password",
@@ -226,11 +226,11 @@ test("a returning sole port uses its owned credentials and leaves the legacy rec
 	const row = f.row();
 	row.hotspot = { availableChannels: ["auto"], warnings: {} };
 	await f.sample();
-	expect(wifiAdapterLockKeyForDeviceId(row.id)).toBe(primary);
+	expect(wifiAdapterLockKeyForDeviceId(row.id)).toBe(MAC);
 	expect(await prepareHotspotForInterface(MAC, row, {}, f.deps)).toEqual({
 		success: true,
-		name: "Port-owned AP",
-		password: "saved-port-password",
+		name: "Policy AP",
+		password: "fixture-password",
 	});
 	expect(getHotspotCredentials(MAC)?.conn).toBe(PROFILE);
 	expect(getHotspotCredentialOwners("port-profile")).toEqual([primary]);

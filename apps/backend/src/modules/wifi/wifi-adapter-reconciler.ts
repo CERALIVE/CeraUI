@@ -135,18 +135,24 @@ export async function reconcileWifiAdapterStopLocked(
 		return wifiOperationChanged;
 	const owner = resolveWifiAdapterOwner(registryKey, row);
 	const cleanup = await reconcileWifiAdapterTeardownLocked(owner);
+	const active =
+		row.concurrentHotspot?.activeConn ??
+		(row.activeMode === "ap" ? row.activeConn : undefined);
+	const returningPortAp =
+		normalizeMacAddress(registryKey) &&
+		active &&
+		getHotspotCredentialOwners(active).some((key) => wifiAdapterKeyPort(key));
 	const conn =
-		(wifiAdapterKeyPort(registryKey)
-			? (row.concurrentHotspot?.activeConn ??
-				(row.activeMode === "ap" ? row.activeConn : undefined))
-			: undefined) ?? row.hotspot.conn;
+		(wifiAdapterKeyPort(registryKey) || returningPortAp ? active : undefined) ??
+		row.hotspot.conn;
+	const owners = conn ? getHotspotCredentialOwners(conn) : [];
 	if (
 		wifiAdapterKeyMac(registryKey) &&
 		row.degradedReason !== "permanent-mac-unresolved" &&
 		(isHotspotActive(row) || row.hotspot.transition === "activating") &&
 		conn &&
-		(!wifiAdapterKeyPort(registryKey) ||
-			getHotspotCredentialOwners(conn).includes(owner)) &&
+		(owners.includes(owner) ||
+			(!wifiAdapterKeyPort(registryKey) && owners.length === 0)) &&
 		!(
 			await runHotspotProfileOperation({
 				uuid: conn,

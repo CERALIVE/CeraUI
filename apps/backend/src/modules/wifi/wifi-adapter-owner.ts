@@ -1,18 +1,12 @@
-import {
-	getHotspotCredentialOwners,
-	getHotspotCredentials,
-	getPendingHotspotCreation,
-} from "./hotspot-credentials.ts";
+import { getHotspotCredentialOwners } from "./hotspot-credentials.ts";
 import { resolveWifiAdapterModeIntentKey } from "./wifi-adapter-mode-intent.ts";
 import { getWifiInterfacesByMacAddress } from "./wifi-connections.ts";
 import { canHotspot } from "./wifi-hotspot-types.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
 import {
-	normalizeMacAddress,
 	normalizeWifiAdapterKey,
-	wifiAdapterKeyPort,
+	wifiAdapterKeyMac,
 } from "./wifi-permanent-mac.ts";
-import { wifiRadioIdentity } from "./wifi-radio-identity.ts";
 
 const rowOwners = new WeakMap<WifiInterface, { owner: string; uuid: string }>();
 const pendingOwners = new WeakMap<WifiInterface, string>();
@@ -68,25 +62,9 @@ export function resolveWifiAdapterOwner(
 ): string {
 	const pending = row && pendingOwners.get(row);
 	if (pending) return pending;
-	if (wifiAdapterKeyPort(registryKey))
+	if (wifiAdapterKeyMac(registryKey))
 		return normalizeWifiAdapterKey(registryKey);
 	if (row) {
-		const identity = wifiRadioIdentity.state.rows.get(row.ifname);
-		if (
-			identity?.row === row &&
-			identity.key === registryKey &&
-			identity.classification === "verified" &&
-			identity.devicePath
-		) {
-			const portOwner = `${registryKey}@${identity.devicePath}`;
-			const saved = getHotspotCredentials(portOwner);
-			if (
-				saved?.conn ||
-				saved?.previousConns?.length ||
-				getPendingHotspotCreation(portOwner)
-			)
-				return portOwner;
-		}
 		const activeUuid =
 			row.activeMode === "ap"
 				? row.activeConn
@@ -115,20 +93,12 @@ export function resolveWifiAdapterOwner(
 				}
 			}
 		}
-		if (
-			owner &&
-			(!normalizeMacAddress(registryKey) ||
-				normalizeMacAddress(owner.split("@")[0]) === registryKey)
-		) {
+		if (owner) {
 			if (ownedUuid) rowOwners.set(row, { owner, uuid: ownedUuid });
 			return owner;
 		}
 		// D12 is the sole-radio exception; observed UUID ownership takes precedence.
-		if (
-			owners.length === 0 &&
-			!normalizeMacAddress(registryKey) &&
-			!rejected?.size
-		) {
+		if (owners.length === 0 && !rejected?.size) {
 			const intent = resolveWifiAdapterModeIntentKey(
 				registryKey,
 				undefined,

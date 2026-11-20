@@ -910,7 +910,7 @@ export async function startHotspotLocked(
 			: hotspotBindingFields(
 					physicalMac,
 					wifiInterface.hotspot.security,
-					binding?.devicePath ?? hotspotDevicePath(physicalMac, ifname),
+					binding ? binding.devicePath : hotspotDevicePath(physicalMac, ifname),
 				);
 		if (concurrentInterface) {
 			wifiInterface.supportsApStaConcurrency = true;

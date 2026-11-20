@@ -190,6 +190,7 @@ export async function resolveWifiBinding(
 			);
 			if (controller.signal.aborted) return unobserved;
 			const current = wifiRadioIdentity.state.rows.get(row.ifname);
+			const port = wifiAdapterKeyPort(mac);
 			if (getWifiInterfacesByMacAddress()[mac] !== row) return changed;
 			const currentToken = projectWifiRadioIncarnation(row, current);
 			if (currentToken === undefined) return unobserved;
@@ -203,7 +204,8 @@ export async function resolveWifiBinding(
 				fresh.lifetime.ifindex !== current.lifetime.ifindex ||
 				fresh.lifetime.wiphy !== current.lifetime.wiphy ||
 				fresh.lifetime.phyPath !== current.lifetime.phyPath ||
-				(wifiAdapterKeyPort(mac) && fresh.devicePath !== current.devicePath) ||
+				(port !== undefined &&
+					(fresh.devicePath !== port || current.devicePath !== port)) ||
 				(!fresh.macReadFailed && fresh.permanentMac !== current.permanentMac)
 			)
 				return changed;

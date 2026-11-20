@@ -127,7 +127,9 @@ export function wifiOperationGuard(binding: WifiOperationBinding | undefined) {
 			(!parent.macReadFailed && parent.permanentMac !== binding.mac)
 		)
 			return "replaced";
-		return (!port || parent.devicePath === port) && ownsWifiOperation(binding)
+		return (port === undefined ||
+			(parent.devicePath === port && binding.devicePath === port)) &&
+			ownsWifiOperation(binding)
 			? "match"
 			: "unavailable";
 	};

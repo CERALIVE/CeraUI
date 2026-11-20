@@ -14,12 +14,15 @@ The version 2 credential store still reads released plain-MAC and version 1
 records. A sole radio can seed its observed port with just the name, password
 and channel. The plain record keeps its UUID and ownership history. A twin
 uses its own port record and profile. An unseeded port needs first-time setup
-even when there is a plain-MAC profile. If a former twin returns alone to
-the same proven port and that port owns a profile, it keeps the port's
-credentials and owner, while the plain record remains available for rollback.
+even when there is a plain-MAC profile. A returning sole adapter uses the
+plain-MAC credentials, mode intent and lock even when its port is known. Stop
+persists the plain station intent. Independent port profiles, credentials and
+mode intent stay saved until distinct twins are proven again.
 No discovery transition removes a profile or stops an AP by itself merely
 because a twin arrives. Address-only owned profiles disarm before the new
-verified rows publish.
+verified rows publish. Discovery withholds those rows when it cannot verify
+the legacy profile's autoconnect state. A port swap holds both row locks in
+stable order until it refreshes the new active connection identities.
 
 ### Hotspot profile writes [EXISTS; native requalification pending]
 
