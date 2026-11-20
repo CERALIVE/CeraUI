@@ -623,6 +623,13 @@ taskset -c 0-3 bash apps/backend/test-harness/wifi-hwsim/guest-versions.selftest
 
 ## Recorded guest replay
 
+The disposable VM check `checks/duplicate-address.ts` first proves an actual
+distinct-address AP activation, then asks the guest kernel to create a second
+wiphy with the same permanent address. It verifies the kernel witnesses,
+NetworkManager paths and two independent AP profiles when the guest reports
+distinct safe paths. A refused kernel setup, unusable ports or failed activation
+leaves same-address support qualified only by host tests.
+
 `replay-corpus/README.md` lists the real R19/R20/R21 captures, consumer coverage
 and explicit missing samples. The replay suite drives shared native decoders,
 the frozen literal matchers and actual bootstrap/version scripts. It never

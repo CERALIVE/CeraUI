@@ -45,7 +45,7 @@ import {
 	stopHotspotForInterface,
 } from "./wifi-hotspot-config.ts";
 import { canHotspot, isApMode } from "./wifi-hotspot-types.ts";
-import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
+import { wifiAdapterKeyMac } from "./wifi-permanent-mac.ts";
 
 /**
  * Re-derive every AP-capable adapter's offered channels, then restart the
@@ -74,7 +74,7 @@ export async function reconcileHotspotChannels(): Promise<void> {
 		);
 		if (action.kind === "none") continue;
 		if (
-			!normalizeMacAddress(macAddress) ||
+			!wifiAdapterKeyMac(macAddress) ||
 			wifiInterface.degradedReason === "permanent-mac-unresolved"
 		) {
 			logger.warn(

@@ -10,22 +10,35 @@ import {
 	defaultAdapterModeDeps,
 	reconcileWifiAdapterModes,
 } from "../modules/wifi/wifi-adapter-mode-transition.ts";
-import { handleWifiMonitorEvent } from "../modules/wifi/wifi-connections.ts";
+import {
+	getWifiInterfacesByMacAddress,
+	handleWifiMonitorEvent,
+} from "../modules/wifi/wifi-connections.ts";
 import { defaultHotspotDeps } from "../modules/wifi/wifi-hotspot-activation.ts";
+import { canHotspot } from "../modules/wifi/wifi-hotspot-types.ts";
 import {
 	autoconnectFixture,
 	MAC,
+	PORT,
 	PROFILE,
 } from "./helpers/wifi-autoconnect-fixture.ts";
 import { mockQualifiedHybridActivation } from "./helpers/wifi-hotspot-test-setup.ts";
 
-const f = autoconnectFixture();
+const owner = `${MAC}@${PORT}`;
+const other = "wlan1:wifi:disconnected:";
+const f = {
+	...autoconnectFixture(),
+	row() {
+		const row = getWifiInterfacesByMacAddress()[owner];
+		if (!row || !canHotspot(row)) throw new Error("Missing verified twin");
+		return row;
+	},
+};
 
 test.each(["hotspot", "hybrid"] as const)(
 	"r5 default executor restores composite %s intent with physical NM pins",
 	async (mode) => {
 		if (mode === "hybrid") mockQualifiedHybridActivation();
-		const owner = `${MAC}@phy0`;
 		const confirmed = Promise.withResolvers<void>();
 		spyOn(defaultAdapterModeDeps, "publishHotspotOutcome").mockImplementation(
 			(kind, _device, outcome) => {
@@ -41,12 +54,22 @@ test.each(["hotspot", "hybrid"] as const)(
 			password: "fixture-password",
 			conn: PROFILE,
 		});
+		const profile = f.profiles.get(PROFILE);
+		if (!profile) throw new Error("Missing fixture profile");
+		profile["match.path"] = PORT;
+		f.witnesses.set("wlan1", {
+			ifindex: 5,
+			phy: "/sys/devices/policy/phy1",
+			mac: MAC,
+			path: "usb-Composite:2.0",
+		});
+		f.list(["wlan0:wifi:disconnected:", other]);
+		await f.discover();
 		f.persistMode(owner, mode);
 		f.row().conn = PROFILE;
 		f.row().activeConn = PROFILE;
 		f.row().activeMode = "ap";
 		f.row().supportsApStaConcurrency = true;
-		await f.sample();
 		spyOn(defaultHotspotDeps, "readCapabilities").mockReturnValue({
 			staApCombo: { supported: true },
 		});
@@ -62,8 +85,9 @@ test.each(["hotspot", "hybrid"] as const)(
 						? [
 								"wlan0:wifi:connected:station-link",
 								`clap-wlan0:wifi:connected:${uuid}`,
+								other,
 							]
-						: [`wlan0:wifi:connected:${uuid}`],
+						: [`wlan0:wifi:connected:${uuid}`, other],
 				);
 				return true;
 			},

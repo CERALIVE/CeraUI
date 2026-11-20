@@ -3,9 +3,36 @@
 ## WIFI ADAPTER IDENTITY IS THE PERMANENT MAC [EXISTS]
 
 Every adapter-keyed Wi-Fi structure uses the coherent lifetime sample from
-`WifiRadioIdentityProducer`. A verified adapter keeps its normalized permanent
-hardware address as the registry, numeric-id-map and credential-store key;
-NetworkManager profiles are pinned to that permanent address.
+`WifiRadioIdentityProducer`. A sole verified radio normally keeps its permanent
+MAC as its key. Same-address radios each use `MAC@port` only when every member
+has its own phy and a unique literal NetworkManager `GENERAL.PATH`. If any
+member lacks that proof, the group stays limited. A port change invalidates
+outstanding hotspot operations. NM hardware pins use the sampled MAC, and
+exclusive profiles also carry `match.path`.
+
+The version 2 credential store still reads released plain-MAC and version 1
+records. A sole radio can seed its observed port with just the name, password
+and channel. The plain record keeps its UUID and ownership history. A twin
+uses its own port record and profile. An unseeded port needs first-time setup
+even when there is a plain-MAC profile. A returning sole adapter uses the
+plain-MAC credentials, mode intent and lock even when its port is known. Stop
+or choosing Station records station intent for the plain MAC and all its
+credential-only port copies, even when the current port cannot be read.
+No credentials or profiles are deleted. Independent port profiles,
+credentials and mode intent stay saved until distinct twins are proven again.
+If you stop an independently configured port AP while its adapter is alone,
+that AP comes back when the twin returns with proven ports and the saved port
+mode still calls for an AP.
+No discovery transition removes a profile or stops an AP by itself merely
+because a twin arrives. Address-only owned profiles disarm before the new
+verified rows publish. Discovery withholds those rows when it cannot verify
+the legacy profile's autoconnect state. A port swap holds both row locks in
+stable order until it refreshes the new active connection identities.
+When a twin arrives or leaves, discovery can expose the destination row before
+it knows the active connection. Stop, Start and mode changes (including choosing
+Station) return `DEVICE_BUSY` without saving a mode until discovery resolves the
+active connection, including any hybrid AP leg. Each such refusal requests a
+fresh discovery pass. Retry after the row refreshes.
 
 ### Hotspot profile writes [EXISTS; native requalification pending]
 

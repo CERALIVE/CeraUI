@@ -45,7 +45,7 @@ import {
 import { logger } from "../../helpers/logger.ts";
 import type { NmProfileInstance } from "../network/network-manager-profile-instance.ts";
 import { isWifiChannelName, type WifiChannel } from "./wifi-channels.ts";
-import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
+import { normalizeWifiAdapterKey } from "./wifi-permanent-mac.ts";
 
 /** Default on-disk location, relative to the backend's working directory. */
 export const HOTSPOT_CREDENTIALS_FILE = "hotspot_credentials.json";
@@ -119,6 +119,7 @@ const fileSchema = z.object({
 	adapters: z.record(z.string(), entrySchema).optional(),
 });
 
+/** Port copies have no update timestamp or UUID evidence; empty released history is allowed. */
 type StoredEntry = z.infer<typeof entrySchema>;
 
 let filePath = HOTSPOT_CREDENTIALS_FILE;
@@ -131,7 +132,7 @@ let entries: Record<string, StoredEntry> = {};
 let initialized = false;
 
 function keyFor(macAddress: string): string | undefined {
-	return normalizeMacAddress(macAddress) ?? macAddress.trim().toLowerCase();
+	return normalizeWifiAdapterKey(macAddress);
 }
 
 function toCredentials(entry: StoredEntry): HotspotCredentials {
@@ -146,9 +147,11 @@ function toCredentials(entry: StoredEntry): HotspotCredentials {
 	};
 }
 
-/** Bring a stored entry up to the current shape. A v1 entry gains an empty history. */
+/** Bound recorded history without adding ownership fields to credential copies. */
 function migrateEntry(entry: StoredEntry): StoredEntry {
-	return { ...entry, previousConns: boundHistory(entry.previousConns ?? []) };
+	return entry.previousConns === undefined
+		? entry
+		: { ...entry, previousConns: boundHistory(entry.previousConns) };
 }
 
 /** Newest-last, de-duplicated, capped at {@link PREVIOUS_CONNS_LIMIT}. */
@@ -240,6 +243,20 @@ export function getHotspotCredentialOwners(uuid?: string): string[] {
 		.map(([key]) => key);
 }
 
+/** A prepared copy does not grant ownership of a NetworkManager profile. */
+export function isHotspotPortCredentialCopy(key: string): boolean {
+	const entry = entries[normalizeWifiAdapterKey(key)];
+	return (
+		key.includes("@") &&
+		entry !== undefined &&
+		entry.updatedAt === undefined &&
+		!entry.conn &&
+		!entry.pendingCreation &&
+		!entry.pendingCreationInstance &&
+		!entry.previousConns?.length
+	);
+}
+
 /** A successful NM inventory proved this retired UUID no longer exists. */
 export function pruneAbsentHotspotHistory(owner: string, uuid: string): void {
 	const entry = entries[keyFor(owner) ?? ""];
@@ -275,6 +292,7 @@ export function canUseHotspotConnection(
 export function rememberHotspotCredentials(
 	macAddress: string,
 	credentials: HotspotCredentials,
+	portAlias?: string,
 ): void {
 	const key = keyFor(macAddress);
 	if (!key || !credentials.ssid || !credentials.password) return;
@@ -305,18 +323,31 @@ export function rememberHotspotCredentials(
 		updatedAt: Date.now(),
 	};
 
-	if (
+	const same =
 		previous &&
 		previous.ssid === next.ssid &&
 		previous.password === next.password &&
 		previous.conn === next.conn &&
-		previous.channel === next.channel
-	) {
-		return;
+		previous.channel === next.channel;
+	let mirrored = false;
+	if (portAlias?.startsWith(`${key}@`) && !key.includes("@")) {
+		const alias = entries[portAlias];
+		if (
+			(!alias || isHotspotPortCredentialCopy(portAlias)) &&
+			(alias?.ssid !== next.ssid ||
+				alias.password !== next.password ||
+				alias.channel !== next.channel)
+		) {
+			entries[portAlias] = {
+				ssid: next.ssid,
+				password: next.password,
+				...(next.channel !== undefined ? { channel: next.channel } : {}),
+			};
+			mirrored = true;
+		}
 	}
-
-	entries[key] = next;
-	persist();
+	if (!same) entries[key] = next;
+	if (!same || mirrored) persist();
 }
 
 /** Stage before add, then bind the returned settings instance; never ordinary adoption. */
@@ -380,7 +411,7 @@ export function clearHotspotProfileCreation(owner: string, uuid: string): void {
 /** Injectable view of the store used by the hotspot activation flow. */
 export type HotspotCredentialsStore = {
 	get(macAddress: string): HotspotCredentials | undefined;
-	remember(macAddress: string, credentials: HotspotCredentials): void;
+	remember: typeof rememberHotspotCredentials;
 	recordCreation?(
 		owner: string,
 		uuid: string,

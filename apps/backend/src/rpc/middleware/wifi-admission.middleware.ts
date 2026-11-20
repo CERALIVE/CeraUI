@@ -10,9 +10,10 @@ import {
 	resolveMockWifiDevice,
 } from "../../mocks/providers/wifi-incarnation.ts";
 import {
-	wifiAdapterLockKeyForDeviceId,
+	wifiAdapterLockKey,
 	withWifiAdapterLock,
 } from "../../modules/wifi/wifi-adapter-lock.ts";
+import { findAdapterByDevice } from "../../modules/wifi/wifi-adapter-mode-deps.ts";
 import { buildAdapterModeOutcome } from "../../modules/wifi/wifi-adapter-mode-outcome.ts";
 import {
 	resolveMockWifiBinding,
@@ -20,6 +21,7 @@ import {
 	type WifiBindingRefusal,
 	withWifiRequestBinding,
 } from "../../modules/wifi/wifi-binding.ts";
+import { getWifiInterfacesByMacAddress } from "../../modules/wifi/wifi-connections.ts";
 import { captureWifiFrameIncarnation } from "../../modules/wifi/wifi-frame-binding.ts";
 import {
 	getWifiFrameIncarnation,
@@ -34,11 +36,19 @@ type Input = HotspotToggleInput &
 async function probe(
 	input: Input,
 	kind: "config" | "mode",
+	action: Action,
 ): Promise<WifiBindingRefusal | undefined> {
-	const key = wifiAdapterLockKeyForDeviceId(input.device);
-	if (!key) return { success: false, error: "no-device" };
-	const lock = await withWifiAdapterLock(key, () =>
-		resolveWifiBinding(input.device, input.incarnation, kind),
+	const bind = () => resolveWifiBinding(input.device, input.incarnation, kind);
+	const found = findAdapterByDevice(
+		input.device,
+		getWifiInterfacesByMacAddress(),
+	);
+	if (!found) return { success: false, error: "no-device" };
+	const lock = await withWifiAdapterLock(
+		action === "start" || action === "mode"
+			? { registryKey: found.macAddress, modeTarget: found.wifiInterface }
+			: wifiAdapterLockKey(found.macAddress),
+		bind,
 	);
 	if (!lock.success) return { success: false, error: lock.error };
 	return lock.result.success ? undefined : lock.result;
@@ -65,7 +75,7 @@ export const wifiRequestAdmissionMiddleware = os
 							? getMockWifiFaults().deviceBusy
 								? ({ success: false, error: "DEVICE_BUSY" } as const)
 								: resolveMockWifiBinding(input.device, input.incarnation)
-							: await probe(input, kind);
+							: await probe(input, kind, action);
 						if (!refusal) {
 							// Mock effects follow this synchronous check without a lock.
 							if (mocked) admission.consumed = true;

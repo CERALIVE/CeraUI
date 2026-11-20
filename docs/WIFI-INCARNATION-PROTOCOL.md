@@ -12,8 +12,17 @@ retains the legacy shape.
 Guarded requests now require the expected token at RPC admission and again
 at their transaction lock entry. Config and mode requests also supply the captured
 metadata for the asynchronous frames below. Start also retains the proof it
-obtained at transaction entry. Composite physical identity and hardware
-qualification remain separate work.
+obtained at transaction entry. Same-address radios with independently verified
+ports keep separate rows and admission tokens. An unsafe or missing port leaves
+the whole address group limited. Port-qualified requests recheck the captured
+literal path alongside the existing lifetime witness. The wire shape and
+localized refusal keys are unchanged. Physical same-address qualification is
+still pending.
+
+A sole adapter uses the plain MAC record, including when returning from a
+verified pair. Discovery preserves independent port state for the next proven
+pair. A destination row cannot accept a concurrent Stop while its active UUID
+is changing during a port swap.
 
 ## Backend limited mode [EXISTS; host and mock-browser proof only]
 
@@ -33,7 +42,7 @@ stops it with a warning instead, leaving persisted mode intent unchanged.
 
 Boot alone may restore an existing owned profile under D12: one hotspot-capable
 adapter, one logical non-station intent (MAC and MAC@port count as one), the
-plain record's profile or the sole composite record's profile, a currently
+plain record's profile, a currently
 permitted stored channel or `auto`, and no disruptive streaming transition.
 Hybrid requires proven concurrency and the existing fixed interface binding.
 No credential, autoconnect or mode-intent write is allowed.

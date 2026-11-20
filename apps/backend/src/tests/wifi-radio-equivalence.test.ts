@@ -88,6 +88,51 @@ for (const fixture of radioEquivalenceCases) {
 		const { broadcasts, ...transcript } =
 			await radioEquivalenceTranscript(fixture);
 		expect(transcript.unexpected).toEqual([]);
+		if (fixture.name === "duplicate MAC") {
+			const [frame] = transcript.frames;
+			const keys = [
+				"58:02:05:e1:79:1c@platform-equivalence-phy0",
+				"58:02:05:e1:79:1c@platform-equivalence-phy1",
+			];
+			expect(transcript.frames).toHaveLength(1);
+			expect(frame?.discovered.keys).toEqual(keys);
+			expect(frame?.discovered.ids).toEqual({ 0: keys[0], 1: keys[1] });
+			expect(
+				frame?.activations.map(({ device, prepare, start }) => ({
+					device,
+					prepare: prepare.success,
+					start,
+				})),
+			).toEqual([
+				{ device: 0, prepare: true, start: { success: true } },
+				{ device: 1, prepare: true, start: { success: true } },
+			]);
+			expect(
+				transcript.calls.filter(([effect]) => effect === "nmConnect"),
+			).toEqual([
+				["nmConnect", "fixture-uuid-wlan0"],
+				["nmConnect", "fixture-uuid-wlan1"],
+			]);
+			expect(
+				broadcasts
+					.filter(({ phase }) => phase === "discovery:pending")
+					.map(({ payload }) => {
+						if (
+							typeof payload !== "object" ||
+							!payload ||
+							!("wifi" in payload) ||
+							typeof payload.wifi !== "object" ||
+							!payload.wifi
+						)
+							throw new Error("Missing twin broadcast");
+						return Object.keys(payload.wifi);
+					}),
+			).toEqual([
+				["0", "1"],
+				["0", "1"],
+			]);
+			return;
+		}
 		for (const [index, frame] of transcript.frames.entries()) {
 			for (const activation of frame.activations) {
 				const admitted = fixture.limitedFrames?.includes(index)

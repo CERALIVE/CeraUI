@@ -65,7 +65,12 @@ import {
 	type WifiHotspot,
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
-import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
+import {
+	normalizeMacAddress,
+	wifiAdapterKeyMac,
+	wifiAdapterKeyPort,
+} from "./wifi-permanent-mac.ts";
+import { wifiRadioIdentity } from "./wifi-radio-identity.ts";
 
 const hotspotProfilePins = new WeakMap<
 	WifiHotspot,
@@ -267,7 +272,8 @@ async function observeHotspotConn(
 ): Promise<void> {
 	if (
 		macAddress_ !== undefined &&
-		(!normalizeMacAddress(macAddress_) ||
+		((getWifiInterfaceByMacAddress(macAddress_) !== undefined &&
+			!wifiAdapterKeyMac(macAddress_)) ||
 			getWifiInterfaceByMacAddress(macAddress_)?.degradedReason ===
 				"permanent-mac-unresolved")
 	) {
@@ -397,6 +403,14 @@ async function observeHotspotConn(
 		macAddress,
 		getWifiInterfaceByMacAddress(macAddress),
 	);
+	const port = wifiAdapterKeyPort(macAddress);
+	if (
+		port &&
+		(getHotspotCredentialOwners(uuid)[0] !== owner ||
+			!(await profileMatchesPort(uuid, port)))
+	)
+		return clearRejectedHotspotConn(macAddress, uuid);
+	if (wasHotspotConnDeletedSince(uuid, epoch)) return;
 	if (!canAdoptHotspotProfile(owner, uuid, fields?.[12] ?? "")) {
 		return clearRejectedHotspotConn(macAddress, uuid);
 	}
@@ -492,18 +506,22 @@ async function observeHotspotConn(
 			macAddress,
 			wifiInterface.hotspot.conn ?? uuid,
 		);
-	if (!concurrentProfile && profileMac.toLowerCase() !== macAddress) {
+	const physicalMac =
+		wifiRadioIdentity.state.rows.get(wifiInterface.ifname)?.permanentMac ??
+		normalizeMacAddress(macAddress);
+	if (!physicalMac) return;
+	if (!concurrentProfile && profileMac.toLowerCase() !== physicalMac) {
 		const repaired = await runHotspotProfileOperation({
 			uuid,
 			kind: "modify",
 			fields: {
 				"connection.interface-name": "",
-				"802-11-wireless.mac-address": macAddress,
+				"802-11-wireless.mac-address": physicalMac,
 			},
 			run: (fields) => nmConnSetFields(uuid, fields),
 		});
 		if (!repaired.checked || (!pinned && !repaired.success)) return;
-		if (repaired.success) profileMac = macAddress;
+		if (repaired.success) profileMac = physicalMac;
 	}
 	if (wasHotspotConnDeletedSince(uuid, epoch) || !ownsProfile(uuid, profileMac))
 		return clearRejectedHotspotConn(
@@ -651,7 +669,7 @@ async function findMacAddressForConnection(uuid: string, profileMac: string) {
 		if (
 			!wifiInterface ||
 			!canHotspot(wifiInterface) ||
-			!normalizeMacAddress(macAddress.split("@")[0]) ||
+			!wifiAdapterKeyMac(macAddress) ||
 			wifiInterface.degradedReason === "permanent-mac-unresolved" ||
 			(wifiInterface.hotspot.conn !== uuid &&
 				wifiInterface.ifname !== connIfName &&
@@ -755,6 +773,7 @@ export async function findHotspotConnForAdapter(
 	deps: HotspotProfileDeps = defaultHotspotProfileDeps,
 ): Promise<ExistingHotspotConn | undefined> {
 	const physicalMac = normalizeMacAddress(macAddress.split("@")[0]);
+	const port = wifiAdapterKeyPort(macAddress);
 	using read = trackHotspotProfileRead();
 	const epoch = read.epoch;
 	if (stored?.conn) {
@@ -762,11 +781,13 @@ export async function findHotspotConnForAdapter(
 		if (
 			profile &&
 			!wasHotspotConnDeletedSince(profile.uuid, epoch) &&
-			canAdoptHotspotProfile(macAddress, profile.uuid, profile.macAddress)
+			canAdoptHotspotProfile(macAddress, profile.uuid, profile.macAddress) &&
+			(!port || (await profileMatchesPort(profile.uuid, port)))
 		) {
 			return profile;
 		}
 	}
+	if (port) return undefined;
 
 	const rows = await listWirelessConns("uuid,type", deps);
 	if (!rows) return undefined;
@@ -788,6 +809,23 @@ export async function findHotspotConnForAdapter(
 		canAdoptHotspotProfile(macAddress, ssidMatch.uuid, ssidMatch.macAddress)
 		? ssidMatch
 		: undefined;
+}
+
+async function profileMatchesPort(
+	uuid: string,
+	port: string,
+): Promise<boolean> {
+	const fields = await nmConnGetFields(uuid, [
+		"match.path",
+		"connection.interface-name",
+	] as const);
+	if (fields?.[0] === port) return true;
+	const ifname = fields?.[1];
+	return Boolean(
+		ifname &&
+			isConcurrentApIfname(ifname) &&
+			wifiRadioIdentity.state.rows.get(ifname.slice(5))?.devicePath === port,
+	);
 }
 
 /**

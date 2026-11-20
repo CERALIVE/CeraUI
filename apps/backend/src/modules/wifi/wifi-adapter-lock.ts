@@ -41,12 +41,13 @@
   the ifname there would leave the parent's station mutations completely
   unguarded.
 
-  It is deliberately the BARE normalized MAC and carries no prefix: it shares the
-  process-wide `withDeviceLock` registry, and prefixing would silently stop
-  matching a key an existing caller (or test) already holds.
+  The sole radio keeps the bare normalized MAC. Proven twins use MAC@port.
+  Limited rows can retain an observed profile owner for a safe Stop.
+  These keys share the process-wide `withDeviceLock` registry without a prefix.
 */
 
 import { AsyncLocalStorage } from "node:async_hooks";
+import { logger } from "../../helpers/logger.ts";
 import type { MacAddress } from "../network/network-manager.ts";
 import {
 	type DeviceLockResult,
@@ -56,8 +57,13 @@ import {
 	resolveWifiAdapterOwner,
 	retainWifiAdapterOwners,
 } from "./wifi-adapter-owner.ts";
+import { withoutWifiRequestBinding } from "./wifi-binding.ts";
 import { getWifiInterfacesByMacAddress } from "./wifi-connections.ts";
-import type { WifiInterface } from "./wifi-interfaces.ts";
+import {
+	isWifiModeTargetPending,
+	type WifiInterface,
+	wifiUpdateDevices,
+} from "./wifi-interfaces.ts";
 
 /** Opaque-by-convention lock key. Never build one by hand. */
 export type WifiAdapterLockKey = string;
@@ -76,13 +82,8 @@ export function ownsWifiAdapterLock(key: WifiAdapterLockKey): boolean {
 }
 
 /**
- * Derive the canonical lock key for an adapter from its permanent hardware
- * address — the registry key produced by {@link resolveWifiPermanentMac}.
- *
- * A well-formed address normalizes to the canonical lowercase colon form; a
- * caller holding something else keeps its own string (lowercased) rather than
- * silently resolving to `undefined`, because refusing to produce a key would
- * turn a serialized mutation into an unguarded one.
+ * Resolve the registry key to its lock owner, including limited Stop aliases.
+ * Port suffixes keep their case.
  */
 export function wifiAdapterLockKey(macAddress: MacAddress): WifiAdapterLockKey {
 	return resolveWifiAdapterOwner(
@@ -134,9 +135,29 @@ export function wifiAdapterLockKeyForConnectionUuid(
  * adds behaviour.
  */
 export function withWifiAdapterLock<T>(
-	key: WifiAdapterLockKey,
+	target:
+		| WifiAdapterLockKey
+		| { registryKey: MacAddress; modeTarget: WifiInterface },
 	fn: () => Promise<T>,
 ): Promise<DeviceLockResult<T>> {
+	if (
+		typeof target !== "string" &&
+		isWifiModeTargetPending(target.modeTarget)
+	) {
+		// One fresh pass (or a coalesced trailing pass) per busy mode request.
+		void withoutWifiRequestBinding(wifiUpdateDevices).catch(
+			(error: unknown) => {
+				logger.warn(
+					`Wi-Fi handoff refresh failed: ${error instanceof Error ? error.message : String(error)}`,
+				);
+			},
+		);
+		return Promise.resolve({ success: false, error: "DEVICE_BUSY" });
+	}
+	const key =
+		typeof target === "string"
+			? target
+			: wifiAdapterLockKey(target.registryKey);
 	return withDeviceLock(key, async () => {
 		const owner: WifiLockOwner = {
 			key,
@@ -162,14 +183,21 @@ export function withWifiAdapterPolicyLocks<T>(
 	targets: ReadonlySet<WifiInterface>,
 	fn: () => Promise<T>,
 ): Promise<DeviceLockResult<T>> {
-	const aliases = [
-		...new Set(
-			Object.entries(getWifiInterfacesByMacAddress())
-				.filter(([, row]) => targets.has(row))
-				.map(([key]) => wifiAdapterLockKey(key))
-				.filter((key) => key !== heldKey),
-		),
-	].sort();
+	const aliases = Object.entries(getWifiInterfacesByMacAddress())
+		.filter(([, row]) => targets.has(row))
+		.map(([key]) => wifiAdapterLockKey(key))
+		.filter((key) => key !== heldKey);
+	return withWifiAdapterLocks(aliases, fn);
+}
+
+/** Take the entire set before a discovery transfer can change either row. */
+export function withWifiAdapterLocks<T>(
+	keys: Iterable<WifiAdapterLockKey>,
+	fn: () => Promise<T>,
+): Promise<DeviceLockResult<T>> {
+	const aliases = [...new Set(keys)]
+		.filter((key) => !ownsWifiAdapterLock(key))
+		.sort();
 	const acquire = async (index: number): Promise<DeviceLockResult<T>> => {
 		const key = aliases[index];
 		if (key === undefined) return { success: true, result: await fn() };
