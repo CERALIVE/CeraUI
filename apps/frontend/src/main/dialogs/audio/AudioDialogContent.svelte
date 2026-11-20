@@ -81,7 +81,7 @@ const backendDisabledReason = $derived(
 {:else if gateState === 'no-audio-support'}
 	<div class="border-destructive/20 bg-destructive/5 rounded-lg border px-4 py-3">
 		<h4 class="text-destructive text-sm font-medium">{m["settings.noAudioSettingSupport"]()}</h4>
-		<p class="text-destructive/80 mt-1 text-xs">{m["settings.selectedPipelineNoAudio"]()}</p>
+		<p class="text-destructive mt-1 text-xs">{m["settings.selectedPipelineNoAudio"]()}</p>
 	</div>
 {:else}
 	<div class="space-y-5">

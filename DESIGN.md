@@ -454,7 +454,8 @@ state; the `success`/`warning`/`error`/`neutral` pill tint and a Lucide shield
 glyph (check, alert, x, question) in that tone only reinforce it, and "unknown"
 is neutral, never an alarm. The badge word itself uses `text-foreground`: the
 shared status-pill text tones measured below WCAG AA 4.5:1 for `error` (light
-and dark) and `neutral` (dark), and axe fails them on this surface; the glyph
+and dark, until `app.css` mixed that tone toward the foreground) and `neutral`
+(dark), and axe fails them on this surface; the glyph
 needs only the 3:1 non-text ratio. Other Badge call sites are unchanged. The
 remaining-days phrase is the only foreground text in the detail line. The row
 is a labelled `role="group"`, wraps instead of overflowing in every locale,

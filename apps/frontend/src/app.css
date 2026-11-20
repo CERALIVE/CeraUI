@@ -355,12 +355,9 @@
 		@apply bg-muted-foreground/30 rounded-sm;
 	}
 
+	/* Thumb and track come from the graphite tokens, so they follow every palette. */
 	html {
-		scrollbar-color: hsl(215 10% 46% / 0.3) hsl(210 20% 98%);
-	}
-
-	html.dark {
-		scrollbar-color: hsl(215 10% 55% / 0.3) hsl(222 30% 6%);
+		scrollbar-color: color-mix(in oklch, var(--muted-foreground) 45%, transparent) var(--background);
 	}
 
 	.hide-scrollbar::-webkit-scrollbar {
@@ -723,6 +720,12 @@ html[data-theme='eink'] *::after {
 	pointer-events: none;
 }
 
+/* sonner sets its own system font stack on `[data-sonner-toaster]` (0,1,0);
+   `:root` lifts this rule above it so every toast is set in the app typeface. */
+:root [data-sonner-toaster] {
+	font-family: inherit;
+}
+
 [data-sonner-toast] {
 	pointer-events: auto;
 	border-radius: 0.625rem !important;
@@ -882,6 +885,30 @@ html[data-theme='eink'] *::after {
 	opacity: 1;
 	background-color: color-mix(in oklab, var(--destructive) 4%, var(--card));
 	color: color-mix(in oklab, var(--destructive) 75%, var(--foreground));
+}
+
+/* ── Red text and red status text ──
+   `text-destructive` in --destructive measured 3.6:1 on the dark card and 3.2:1
+   as the shadcn destructive badge's label on its dark red tint;
+   `text-status-error` measured 4.1:1 as the status Badge's error tone on its 10%
+   tint and 3.9:1 as the Add-ons Failed badge on its 12% tint (light). Mixing
+   each ink toward --foreground holds WCAG AA 4.5:1 on the background, card and
+   popover and on the red tints it sits on, in every palette, keeping the most
+   red that clears them all. Red text is bound by an unplugged source's Lost
+   badge (dark), its 15% tint over the selected row's dimmed selection tint; red
+   status text by the connection banner's Retry on hover, a 10% tint over the
+   banner's own 10% tint. Keyed on the ink class, so no tint or pairing
+   bypasses it; an opacity modifier (`text-destructive/80`) would, so red text
+   carries none. Fills, tokens and the ui/ primitives stay as shipped; the
+   destructive button keeps its own label above, which outranks this rule.
+   Unlayered so these beat the utilities.
+   destructive-text-contrast.test.ts and red-text-contrast.spec.ts measure them. */
+.text-destructive {
+	color: color-mix(in oklab, var(--destructive) 76%, var(--foreground));
+}
+
+.text-status-error {
+	color: color-mix(in oklab, var(--status-error) 86%, var(--foreground));
 }
 
 /* ── Pointer-cursor affordance for interactive controls ──
