@@ -67,6 +67,9 @@ Limits:
 - **Fixed text.** Footers and the attachment filename are not passed through the
   matcher. They carry only status codes, credential kinds, counts and the
   validated boot id and time.
+- **Header boundaries.** Each header value is matched on its own. A held value
+  that only matches together with the closing quote or the syntax after a header
+  value (a comma, brace or line break) is not replaced.
 
 The support bundle uses the same held list and matcher but none of the store
 states or the short-value refusal; it is unchanged here.
