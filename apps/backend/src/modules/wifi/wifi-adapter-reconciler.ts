@@ -152,13 +152,10 @@ export async function reconcileWifiAdapterStopLocked(
 	)
 		retryWifiAdapterReconcile(owner, `could not disable ${conn}`);
 	if (operation?.changed) return wifiOperationChanged;
-	const result = await teardownHotspotLocked(
-		registryKey,
-		row,
-		deps,
-		conn,
+	const result = await teardownHotspotLocked(registryKey, row, deps, conn, {
 		operation,
-	);
+		pendingCleanup: !cleanup.stopped,
+	});
 	if (operation && (!(await operation.check()) || !operation.current()))
 		return result;
 	// Explicit Stop can select the current AP even when rollback lacked authority to Down it.

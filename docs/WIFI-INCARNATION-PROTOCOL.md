@@ -244,6 +244,10 @@ report uncertain outcomes rather than claiming an atomic transaction.
   also checks inactivity immediately before dispatch; a successful exact
   Down alone is not sufficient. The host tests start a same-profile
   successor both before and after Down and observe that it survives.
+  A complete inventory that shows the profile gone retires its cached
+  references and creation record without issuing Down or Delete. Explicit
+  Stop of a pending first profile may also confirm inactivity after an
+  unacknowledged Down, without repeating the command.
   NetworkManager does not offer a delete-if-inactive transaction: an
   independent activation after the final inventory answer can still race
   Delete. Likewise an NM daemon replacement can reset active-path numbering;

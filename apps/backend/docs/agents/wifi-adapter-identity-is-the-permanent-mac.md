@@ -468,6 +468,10 @@ without another Down if NM's UUID/active inventory proves the profile inactive.
 The same inactivity proof is required immediately before deletion, because
 Delete also disconnects active users of the profile. Active or unreadable
 evidence leaves the profile and the bounded recovery path in place.
+A complete inventory that confirms the profile is absent clears the cached
+UUID and retires the durable creation record, even when no activation path
+was captured. Retain the record while the owned profile is still active and
+cleanup remains pending; restart recovery can still need that evidence.
 
 Monitor events trigger confirmation rather than proving it. The pending
 activation captures its UUID, hotspot object, activation interface, profile

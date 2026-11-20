@@ -1,9 +1,6 @@
-import {
-	type ConnectionUUID,
-	nmConnsGet,
-	nmcliParseSep,
-} from "../network/network-manager.ts";
+import type { ConnectionUUID } from "../network/network-manager.ts";
 import { concurrentApIfname } from "./wifi-concurrent-interface.ts";
+import { readHotspotProfileActivity } from "./wifi-hotspot-activity.ts";
 import type {
 	HotspotStopDeps,
 	HotspotStopResult,
@@ -30,25 +27,19 @@ export async function teardownHotspotLocked(
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotStopDeps,
 	conn: ConnectionUUID | undefined,
-	operation?: ReturnType<typeof wifiOperationGuard>,
+	options: {
+		readonly operation: ReturnType<typeof wifiOperationGuard> | undefined;
+		readonly pendingCleanup: boolean;
+	},
 ): Promise<HotspotStopResult> {
+	const { operation, pendingCleanup } = options;
 	if (!conn) return { success: true };
 	if (
 		!isHotspotActive(wifiInterface) &&
 		wifiInterface.hotspot.transition !== "activating"
 	) {
-		const connections = await nmConnsGet("uuid,active");
-		if (
-			connections?.every((raw) => {
-				if (!raw) return true;
-				const [uuid, active] = nmcliParseSep(raw);
-				return (
-					Boolean(uuid) &&
-					(active === "yes" || active === "no") &&
-					(uuid !== conn || active === "no")
-				);
-			})
-		)
+		const activity = await readHotspotProfileActivity(conn);
+		if (activity === "inactive" || activity === "absent")
 			return { success: true };
 	}
 
@@ -71,7 +62,7 @@ export async function teardownHotspotLocked(
 	syncWifiStateCache(macAddress, wifiInterface);
 
 	let dispatched = false;
-	const disconnected = (
+	let disconnected = (
 		await runHotspotProfileOperation({
 			uuid: conn,
 			kind: "down",
@@ -87,6 +78,10 @@ export async function teardownHotspotLocked(
 	if (!dispatched && operation?.changed) {
 		delete wifiInterface.hotspot.transition;
 		return wifiOperationChanged;
+	}
+	if (dispatched && pendingCleanup && !disconnected) {
+		const activity = await readHotspotProfileActivity(conn);
+		disconnected = activity === "inactive" || activity === "absent";
 	}
 	const result: HotspotStopResult = disconnected
 		? { success: true }

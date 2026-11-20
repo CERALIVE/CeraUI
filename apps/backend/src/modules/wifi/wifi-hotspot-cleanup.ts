@@ -1,9 +1,5 @@
 import { logger } from "../../helpers/logger.ts";
-import {
-	nmConnsGet,
-	nmcliParseSep,
-	nmDisconnectActivation,
-} from "../network/network-manager.ts";
+import { nmDisconnectActivation } from "../network/network-manager.ts";
 import type { NmProfileInstance } from "../network/network-manager-profile-instance.ts";
 import { getWifiState } from "./state/wifi-state.ts";
 import {
@@ -11,6 +7,7 @@ import {
 	type WifiPendingTeardownResult,
 } from "./wifi-adapter-reconcile-retry.ts";
 import { getWifiInterfaceByMacAddress } from "./wifi-connections.ts";
+import { readHotspotProfileActivity } from "./wifi-hotspot-activity.ts";
 import { recordHotspotProfileDeletion } from "./wifi-hotspot-discovery-fence.ts";
 import { syncWifiStateCache } from "./wifi-hotspot-monitor.ts";
 import { retireHotspotProfileAuthority } from "./wifi-hotspot-profile-observation.ts";
@@ -53,6 +50,8 @@ export async function cleanupCreatedHotspotProfile(
 	deps: HotspotActivationDeps,
 	prior?: { cleanupConfirmed: boolean; autoconnectDisabled: boolean },
 ): Promise<boolean> {
+	// A caller without profile readback cannot own a durable cleanup obligation.
+	if (!deps.readProfileInstance) return true;
 	const progress: CleanupProgress = {
 		instance: target.instance,
 		deactivated: !target.activationAttempted,
@@ -98,8 +97,8 @@ async function cleanupCreatedProfile(
 			owner,
 		});
 		progress.instance = result.instance;
-		gone = result.instance === null;
-		replaced = !result.checked || gone;
+		gone ||= result.instance === null;
+		replaced ||= !result.checked || gone;
 		return result.success;
 	};
 	const autoconnectDisabled =
@@ -110,23 +109,17 @@ async function cleanupCreatedProfile(
 			fields: { "connection.autoconnect": "no" },
 			run: (fields) => deps.nmConnSetFields(uuid, fields),
 		}));
-	const inactive = async (): Promise<boolean | undefined> => {
-		const list = await nmConnsGet("uuid,active");
-		if (!list) return undefined;
-		const rows = list.filter(Boolean).map(nmcliParseSep);
-		if (
-			rows.some(
-				([id, active, extra]) =>
-					!id || extra !== undefined || (active !== "yes" && active !== "no"),
-			)
-		)
-			return undefined;
-		const matching = rows.filter(([id]) => id === uuid);
-		return matching.length === 1 ? matching[0]?.[1] === "no" : undefined;
+	const activity = async () => {
+		const observed = await readHotspotProfileActivity(uuid);
+		if (observed === "absent") {
+			replaced = true;
+			gone = true;
+		}
+		return observed;
 	};
 	const deactivated =
 		!target.activationAttempted ||
-		(progress.deactivated && (await inactive()) === true) ||
+		(progress.deactivated && (await activity()) === "inactive") ||
 		(target.activePath !== undefined &&
 			(await act({
 				uuid,
@@ -134,7 +127,7 @@ async function cleanupCreatedProfile(
 				run: () =>
 					nmDisconnectActivation(deps.nmDisconnect, uuid, target.activePath),
 			}))) ||
-		(await inactive()) === true;
+		(!replaced && (await activity()) === "inactive");
 	progress.deactivated = deactivated;
 	const deleted = prior
 		? prior.cleanupConfirmed
@@ -143,7 +136,8 @@ async function cleanupCreatedProfile(
 				uuid,
 				kind: "delete",
 				// Delete itself tears down any users of the profile, including a successor.
-				run: async () => (await inactive()) === true && deps.nmConnDelete(uuid),
+				run: async () =>
+					(await activity()) === "inactive" && deps.nmConnDelete(uuid),
 			}));
 	if ((deactivated || deleted) && iface.hotspot === hotspot) {
 		if (iface.conn === uuid) iface.conn = null;
@@ -181,6 +175,11 @@ async function cleanupCreatedProfile(
 			if (row.concurrentHotspot?.activeConn === uuid)
 				transitionVirtualBinding(row, { kind: "clear" });
 			syncWifiStateCache(macAddress, row);
+		}
+		if (gone && row === iface && iface.hotspot === hotspot) {
+			delete hotspot.transition;
+			if (!target.allocation) deps.setDupIpSuppression(iface.ifname, false);
+			deps.broadcastState();
 		}
 		return { complete: true, stopped: true };
 	}

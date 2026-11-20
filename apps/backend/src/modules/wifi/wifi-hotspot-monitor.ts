@@ -97,9 +97,10 @@ type PendingHotspot = {
 	readonly matches: () => boolean;
 	readonly probe: () => Promise<boolean>;
 	readonly confirm: () => void;
-	readonly giveUp: (changed?: {
-		readonly stopped: boolean;
-	}) => void | Promise<void>;
+	readonly giveUp: (
+		changed?: { readonly stopped: boolean },
+		cancelled?: boolean,
+	) => void | Promise<void>;
 };
 
 const pendingHotspots = new Map<string, PendingHotspot>();
@@ -179,6 +180,7 @@ function settleCaptured(
 	pending: PendingHotspot,
 	confirmed: boolean,
 	changed?: { readonly stopped: boolean },
+	cancelled?: boolean,
 ): void | Promise<void> {
 	if (!current(pending)) return;
 	const exact = !confirmed || pending.matches();
@@ -186,7 +188,7 @@ function settleCaptured(
 	pendingHotspots.delete(pending.ifname);
 	pendingByRow.delete(pending.row);
 	if (confirmed && exact) pending.confirm();
-	else return pending.giveUp(changed);
+	else return pending.giveUp(changed, cancelled);
 }
 
 /** Trusted settlement/cancellation of the current pending operation. */
@@ -200,7 +202,7 @@ export function settlePending(
 	confirmed: boolean,
 ): void | Promise<void> {
 	const pending = pendingHotspots.get(ifname);
-	if (pending) return settleCaptured(pending, confirmed);
+	if (pending) return settleCaptured(pending, confirmed, undefined, true);
 }
 
 /** Supersede older observers before another transaction owns the transition. */
@@ -329,7 +331,7 @@ export function registerPendingConfirmation(
 				: {}),
 		});
 	};
-	const giveUp: PendingHotspot["giveUp"] = (changed) => {
+	const giveUp: PendingHotspot["giveUp"] = (changed, cancelled) => {
 		const allocation = target.allocation;
 		if (!allocation) return reportFailure(changed);
 		const key = wifiAdapterLockKey(owner);
@@ -345,6 +347,8 @@ export function registerPendingConfirmation(
 		};
 		if (ownsWifiAdapterLock(key))
 			return reconcile().then((released) => reportFailure(changed, !released));
+		// Explicit cancellation does not start a new locked operation.
+		if (cancelled) return reportFailure(changed);
 		return withWifiAdapterLock(key, reconcile).then((lock) => {
 			if (!lock.success) registerWifiAdapterLegRelease(owner, release);
 			reportFailure(changed, !lock.success || !lock.result);
