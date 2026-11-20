@@ -117,7 +117,10 @@ export function wifiOperationGuard(binding: WifiOperationBinding | undefined) {
 	const observe = async () => {
 		if (!binding) return "match";
 		const port = wifiAdapterKeyPort(binding.key);
-		const parent = await sampleWifiOperationRadio(binding.ifname, Boolean(port));
+		const parent = await sampleWifiOperationRadio(
+			binding.ifname,
+			Boolean(port),
+		);
 		if (!parent) return "unavailable";
 		const leg = legCurrent ? await legCurrent() : true;
 		if (leg === undefined) return "unavailable";

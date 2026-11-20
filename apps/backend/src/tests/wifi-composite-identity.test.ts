@@ -1,4 +1,5 @@
-import { expect, test } from "bun:test";
+import { beforeEach, expect, spyOn, test } from "bun:test";
+import * as runner from "../helpers/run.ts";
 import { getConfig, getConfigFilePath } from "../modules/config.ts";
 import {
 	getHotspotCredentialOwners,
@@ -19,8 +20,36 @@ import {
 	PORT,
 	PROFILE,
 } from "./helpers/wifi-autoconnect-fixture.ts";
+import * as profileInstances from "./helpers/wifi-first-ap-instances.ts";
 
 const f = autoconnectFixture();
+beforeEach(() => {
+	const instances = profileInstances.firstApInstances;
+	const runSpy = spyOn(runner, "run");
+	const run = runSpy.getMockImplementation();
+	if (!run) throw new Error("Missing fake NetworkManager runner");
+	let loading: string | undefined;
+	runSpy.mockImplementation(async (...args) => {
+		const [binary, argv] = args;
+		if (binary !== "nmcli" || argv?.[0] !== "connection" || argv[1] !== "load")
+			return run(...args);
+		loading = argv[2];
+		try {
+			return await run(...args);
+		} finally {
+			loading = undefined;
+		}
+	});
+	spyOn(profileInstances, "firstApInstances").mockImplementation((...args) => {
+		const model = instances(...args);
+		const write = model.files.write;
+		model.files.write = (uuid) => {
+			// NM load reads the published file; it doesn't replace its inode.
+			if (!loading || model.files.filename(uuid) !== loading) write(uuid);
+		};
+		return model;
+	});
+});
 const SECOND_PORT = "usb-Port2:1.0";
 const primary = `${MAC}@${PORT}`;
 const second = `${MAC}@${SECOND_PORT}`;
