@@ -104,19 +104,28 @@ export function matchesWifiOperationRadio(
  */
 export function wifiOperationGuard(binding: WifiOperationBinding | undefined) {
 	let changed = false;
-	let legCurrent: (() => Promise<boolean>) | undefined;
+	let legCurrent: (() => Promise<boolean | undefined>) | undefined;
 	const current = () => {
 		changed ||= binding !== undefined && !ownsWifiOperation(binding);
 		return !changed;
 	};
+	// Unavailable proof denies effects but is not evidence authorizing rollback Down.
+	const observe = async () => {
+		if (!binding) return "match";
+		const parent = await sampleWifiOperationRadio(binding.ifname);
+		if (!parent) return "unavailable";
+		const leg = legCurrent ? await legCurrent() : true;
+		if (leg === undefined) return "unavailable";
+		if (
+			!leg ||
+			!sameRadioLifetime(binding.lifetime, parent.lifetime) ||
+			(!parent.macReadFailed && parent.permanentMac !== binding.mac)
+		)
+			return "replaced";
+		return ownsWifiOperation(binding) ? "match" : "unavailable";
+	};
 	const check = async () => {
-		if (!binding || !current()) return !changed;
-		changed ||= !matchesWifiOperationRadio(
-			binding,
-			await sampleWifiOperationRadio(binding.ifname),
-		);
-		// The leg is read after the parent, so a leg replaced during the parent sample is seen.
-		if (!changed && legCurrent) changed ||= !(await legCurrent());
+		if (binding && current()) changed ||= (await observe()) !== "match";
 		return !changed;
 	};
 	return {
@@ -129,8 +138,9 @@ export function wifiOperationGuard(binding: WifiOperationBinding | undefined) {
 			return changed;
 		},
 		check,
+		observe,
 		permit: async () => (await check()) && current(),
-		bindLeg: (proof: () => Promise<boolean>) => {
+		bindLeg: (proof: () => Promise<boolean | undefined>) => {
 			legCurrent = proof;
 		},
 	};
@@ -140,10 +150,9 @@ export function wifiOperationGuard(binding: WifiOperationBinding | undefined) {
 export function wifiLegLifetimeProof(
 	ifname: string,
 	lifetime: RadioLifetime,
-): () => Promise<boolean> {
-	return async () =>
-		sameRadioLifetime(
-			lifetime,
-			(await sampleWifiOperationRadio(ifname))?.lifetime,
-		);
+): () => Promise<boolean | undefined> {
+	return async () => {
+		const sample = await sampleWifiOperationRadio(ifname);
+		return sample && sameRadioLifetime(lifetime, sample.lifetime);
+	};
 }

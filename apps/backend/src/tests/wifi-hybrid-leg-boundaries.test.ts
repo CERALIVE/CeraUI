@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import { readFile } from "node:fs/promises";
+import * as retries from "../helpers/retry.ts";
 import * as nm from "../modules/network/network-manager.ts";
 import * as secrets from "../modules/network/network-manager-secret.ts";
 import {
@@ -7,7 +8,10 @@ import {
 	withWifiAdapterLock,
 } from "../modules/wifi/wifi-adapter-lock.ts";
 import { resolveWifiAdapterOwner } from "../modules/wifi/wifi-adapter-owner.ts";
-import { reconcileWifiAdapterTeardownLocked } from "../modules/wifi/wifi-adapter-reconcile-retry.ts";
+import {
+	cancelWifiAdapterReconciliation,
+	reconcileWifiAdapterTeardownLocked,
+} from "../modules/wifi/wifi-adapter-reconcile-retry.ts";
 import { setConcurrentInterfaceDepsForTest } from "../modules/wifi/wifi-concurrent-interface-io.ts";
 import {
 	defaultHotspotConfigDeps,
@@ -569,6 +573,82 @@ test("a first hybrid Start whose leg is replaced while NetworkManager loads its 
 		expect(f.profiles.has(uuid ?? "")).toBeFalse();
 		expect(f.active()).toBeUndefined();
 		expect(result).toMatchObject({ success: false, error: "radio-changed" });
+	} finally {
+		await f.restore();
+	}
+});
+
+test.each(["idle", "busy", "down-reply-lost"] as const)(
+	"a deferred hybrid refusal restores its borrowed leg when it becomes idle (%s)",
+	async (schedule) => {
+		const f = await hybrid();
+		try {
+			const leg = await borrowLeg(f);
+			const terminal = Promise.withResolvers<unknown>();
+			f.deps.publishOutcome = (_kind, _device, outcome) =>
+				terminal.resolve(outcome);
+			const expiry = Promise.withResolvers<void>();
+			const retry = retries.retryWithBackoff;
+			spyOn(retries, "retryWithBackoff").mockImplementation(
+				async (action, options) => {
+					if (options?.baseDelayMs !== 500) return retry(action, options);
+					await expiry.promise;
+					return action();
+				},
+			);
+			if (schedule !== "down-reply-lost")
+				f.deps.pollHotspotActive = async () => false;
+			expect(await f.start()).toEqual({ success: true });
+			if (schedule === "down-reply-lost") {
+				f.faults.downTimeout = true;
+				f.misreadNextLegSample();
+				await handleWifiMonitorEvent({
+					type: "device-state",
+					device: LEG,
+					state: "connected",
+				});
+				expiry.resolve();
+			} else {
+				if (schedule === "idle") f.observe(undefined, "ap");
+				expiry.resolve();
+			}
+			expect(await terminal.promise).toMatchObject({
+				success: false,
+				error:
+					schedule === "down-reply-lost" ? "radio-changed" : "not-confirmed",
+			});
+			if (schedule === "busy") {
+				expect(leg.autoconnect()).toBe("no");
+				f.observe(undefined, "ap");
+				const owner = resolveWifiAdapterOwner(MAC, f.row);
+				await withWifiAdapterLock(wifiAdapterLockKey(owner), () =>
+					reconcileWifiAdapterTeardownLocked(owner),
+				);
+			}
+			expect(leg.autoconnect()).toBe("yes");
+		} finally {
+			cancelWifiAdapterReconciliation();
+			resetConcurrentInterfaceDepsForTest();
+			await f.restore();
+		}
+	},
+);
+
+test("a saved hybrid channel refusal without an Up path does not Down the successor by UUID", async () => {
+	const f = await hybrid();
+	try {
+		const uuid = await f.afterSavedStart();
+		const connect = f.deps.nmConnect;
+		f.deps.nmConnect = (id, timeout) => connect(id, timeout);
+		f.deps.confirmHybridActivation = async () => {
+			await connect(uuid, HOTSPOT_UP_TO);
+			return false;
+		};
+		expect(await f.start()).toMatchObject({
+			success: false,
+			reason: "deactivation-failed",
+		});
+		expect(f.active()).toBe(uuid);
 	} finally {
 		await f.restore();
 	}

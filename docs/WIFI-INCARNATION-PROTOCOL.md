@@ -211,37 +211,50 @@ even if the row token rotated before the reply.
 
 ### Residual limits [EXISTS; host proof]
 
-These windows come from NetworkManager and filesystem non-atomicity. Each is
-as small as the interfaces allow and fails safe.
+The adapter lock orders CeraUI operations, not independent NetworkManager or
+filesystem writers. The following checks reduce the remaining windows and
+report uncertain outcomes rather than claiming an atomic transaction.
 
-- **Keyfile link to rename.** Node offers no atomic exchange, so another
-  writer that renames the same keyfile between the hard link and the rename
-  is overwritten. No event-loop turn separates the two calls. A replacement
-  before the link is detected by the kept file's identity and restored
-  (`wifi-credential-publish-replacement.test.ts`).
+- **Keyfile publication and restoration.** Park the live file, verify the
+  parked identity and bytes, and publish by linking into a vacant pathname.
+  The live path can briefly be absent, but an independent writer that takes
+  it first is not overwritten. Verify the live staged inode and bytes again
+  after the final radio permit and after load readback. Before load, a
+  refusal or inspection error restores the parked file only if the pathname
+  is vacant or still holds the staged file. Recheck the moved file before
+  restoration; if a successor won the race, relink it instead of the backup.
+  Preserve and log recovery files when an external writer wins the relink
+  or ownership cannot be established. The tests replace the live keyfile
+  during both permit outcomes and throw during the post-publication permit
+  (`wifi-credential-publish-radio.test.ts`).
 - **Final proof to load.** A radio or leg replaced after the last permit, while
   `nmcli connection load` runs, lets NetworkManager read the credential into
   the profile, which stays bound to the original radio. The next effect's
   proof refuses, so no Up, autoconnect or commit follows, a first-profile
   Start deletes its new profile, and the operator sees `radio-changed`
-  (`wifi-credential-publish-radio.test.ts`,
-  `wifi-hybrid-leg-boundaries.test.ts`).
-- **Restored keyfile metadata.** Renaming the kept file back restores its
-  inode and bytes, but the link changed its ctime. Later passive identity
-  checks treat that profile as replaced and refuse instead of adopting it. If
-  the rename back fails, the kept file stays beside the profile and its path
-  is logged as an error.
-- **Down without a reported path.** The hybrid channel refusal and
-  created-profile cleanup fall back to the profile UUID only when
-  NetworkManager reported no active path for this Up. Stopping a
-  wrong-channel AP outranks the successor risk, and a created profile is
-  deleted right after its Down. Saved-profile rollback and deferred
-  confirmation require the captured path and report `deactivation-failed`
-  without it.
-- **Failed Down.** If an exact Down fails, or names an activation that already
-  ended, the AP or its successor stays up. The borrowed leg keeps its
-  suppressed autoconnect until a later release, and the operator sees the
-  unknown-mode notice.
+  (`wifi-hybrid-leg-boundaries.test.ts`). An independent keyfile change
+  inside load cannot undo that dispatched load; even a same-byte successor
+  is detected on readback and is not reported as our commit
+  (`wifi-credential-publish-radio.test.ts`). Restored files retain their
+  bytes and inode, not their original ctime.
+- **Activation rollback and profile deletion.** Rollback never substitutes a
+  UUID for a missing Up path. If activity is unknown or the profile still has
+  an active connection, retain it and issue the existing unknown-mode
+  notice (`cleanup-pending` or `deactivation-failed`). First-profile deletion
+  also checks inactivity immediately before dispatch; a successful exact
+  Down alone is not sufficient. The host tests start a same-profile
+  successor both before and after Down and observe that it survives.
+  NetworkManager does not offer a delete-if-inactive transaction: an
+  independent activation after the final inventory answer can still race
+  Delete. Likewise an NM daemon replacement can reset active-path numbering;
+  the profile proof checks the daemon before dispatch, not inside `nmcli`.
+- **Deferred borrowed-leg release.** Expiry and failed exact Down both try
+  release using Start's allocator receipt under the owner lock. Only the
+  still-owned idle leg can regain its previous autoconnect. Busy or
+  unreadable state retains a release obligation in bounded reconciliation
+  and produces the unknown-mode notice. A successor selection is never
+  adopted for the release. Tests cover idle expiry, release after busy
+  expiry, and a committed Down whose reply was lost.
 
 ### Recorded deviation: the Start `attempt` correlation id
 

@@ -161,6 +161,11 @@ export async function reconcileWifiAdapterStopLocked(
 	);
 	if (operation && (!(await operation.check()) || !operation.current()))
 		return result;
+	// Explicit Stop can select the current AP even when rollback lacked authority to Down it.
+	const reconciled =
+		result.success && !cleanup.stopped
+			? await reconcileWifiAdapterTeardownLocked(owner)
+			: cleanup;
 	await reconcileWifiAdapterLocked(
 		owner,
 		{
@@ -174,11 +179,11 @@ export async function reconcileWifiAdapterStopLocked(
 						deps.nmConnSetFields(uuid, fields)
 				: deps.nmConnSetFields,
 		},
-		cleanup,
+		reconciled,
 	);
-	if (result.success && cleanup.stopped)
+	if (result.success && reconciled.stopped)
 		clearWifiAdapterReconcile(owner, "restore");
-	return cleanup.stopped
+	return reconciled.stopped
 		? result
 		: { success: false, error: "deactivation-failed" };
 }

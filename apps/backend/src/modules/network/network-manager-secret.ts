@@ -1,8 +1,8 @@
-import { linkSync, renameSync } from "node:fs";
-import { open, readFile, rm, stat } from "node:fs/promises";
+import { open } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { logger } from "../../helpers/logger.ts";
 import { run, runWithStdin } from "../../helpers/run.ts";
+import { stageKeyfilePublication } from "./network-manager-keyfile-publication.ts";
 import type { NmProfileReadTrace } from "./network-manager-profile-diagnostics.ts";
 import { readNmProfileFileSecret } from "./network-manager-profile-file.ts";
 import {
@@ -138,28 +138,18 @@ export async function writeNmWifiSecret(
 	} finally {
 		await held.handle.close();
 	}
-	const sibling = () =>
-		join(
-			dirname(filename),
-			`.${basename(filename)}.${crypto.randomUUID()}.tmp`,
-		);
-	const temporary = sibling();
-	const displaced = sibling();
-	let preserveDisplaced = false;
-	const restore = (
-		reason: "publish-target-replaced" | "publish-proof-changed",
-	): false => {
-		preserveDisplaced = true;
-		renameSync(displaced, filename);
-		preserveDisplaced = false;
-		return reject(reason);
-	};
+	const temporary = join(
+		dirname(filename),
+		`.${basename(filename)}.${crypto.randomUUID()}.tmp`,
+	);
+	const submitted = Buffer.from(output);
+	const publication = stageKeyfilePublication(expected, original, temporary);
 	let stage: "file-publish-failed" | "load-failed" | "post-read-failed" =
 		"file-publish-failed";
 	try {
 		const file = await open(temporary, "wx", 0o600);
 		try {
-			await file.writeFile(output);
+			await file.writeFile(submitted);
 			await file.sync();
 		} finally {
 			await file.close();
@@ -167,19 +157,13 @@ export async function writeNmWifiSecret(
 		if (!sameNmProfileResource(before, await readNmProfileInstance(uuid)))
 			return reject("pre-write-resource-changed");
 		if (permit && !(await permit())) return false;
-		// Synchronous back-to-back calls keep the displaced file without an event-loop turn before publication.
-		linkSync(filename, displaced);
-		renameSync(temporary, filename);
-		const kept = await stat(displaced, { bigint: true });
-		if (
-			String(kept.dev) !== expected.device ||
-			String(kept.ino) !== expected.inode ||
-			!(await readFile(displaced)).equals(original)
-		)
-			return restore("publish-target-replaced");
-		// NetworkManager has not loaded the file yet, so restoring it undoes publication.
-		if (permit && !(await permit())) return restore("publish-proof-changed");
+		if (!publication.publish(submitted))
+			return reject("publish-target-replaced");
+		if (permit && !(await permit())) return reject("publish-proof-changed");
+		if (!publication.ownsLive(submitted))
+			return reject("publish-target-replaced");
 		stage = "load-failed";
+		publication.beginLoad();
 		await run("nmcli", ["connection", "load", filename]);
 		stage = "post-read-failed";
 		const trace: NmProfileReadTrace = {};
@@ -204,16 +188,14 @@ export async function writeNmWifiSecret(
 		if (!after.file) return reject("post-file-unreadable");
 		if (after.runId !== before.runId) return reject("post-run-changed");
 		if (after.path !== before.path) return reject("post-path-changed");
+		if (!publication.ownsLive(submitted))
+			return reject("publish-target-replaced");
+		publication.commit();
 		return true;
 	} catch (error: unknown) {
 		if (!(error instanceof Error)) throw error;
 		return reject(stage);
 	} finally {
-		await rm(temporary, { force: true });
-		if (preserveDisplaced)
-			logger.error("NM profile rollback kept the original keyfile aside", {
-				preserved: displaced,
-			});
-		else await rm(displaced, { force: true });
+		await publication.finish(submitted);
 	}
 }

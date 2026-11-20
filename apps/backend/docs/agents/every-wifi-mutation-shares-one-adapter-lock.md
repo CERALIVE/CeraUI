@@ -136,19 +136,20 @@ active path (`nmcli connection down apath`), so a delayed observer cannot stop
 a successor activation of the same profile. Failed Start
 rollback merges only its own projection against the current cache.
 
-Bound credential writes recheck the unchanged profile resource and then the
-radio after temporary file preparation. Publication keeps the old keyfile
-aside with a hard link, verifies it and the proof again, and renames it back
-instead of loading on any change. A saved-profile Start that loses proof after
-Up checks its exact profile and active path before requesting Down for that
-active path. The same owner lock covers this cleanup. Hybrid Start and
-Configure bind the original AP leg into the operation guard
-(`wifiOperationGuard().bindLeg`), so every later `check` and `permit` proves
-the parent and then that leg. Every hand-back after a rollback goes through
-`releaseHybridLeg` with the allocator receipt, so an idle leg regains its
-prior autoconnect and a successor's selection is untouched. A reused name
-alone does not authorize a release. The protocol contract lists the named
-residual windows. A Start attempt UUID only correlates terminal output and grants
+Bound credential publication parks the old keyfile and publishes with a
+no-replace link. It rechecks the staged inode and submitted bytes after the
+final radio permit and after load readback. Before load, a refusal restores
+only into a vacant pathname; on conflict the backup is retained and logged.
+Start rollback never sends UUID Down without a captured activation path.
+Deleting a first profile also requires fresh evidence of inactivity, even
+after acknowledged Down. Hybrid Start, its confirmation observer and
+Configure use the original AP leg in `wifiOperationGuard`, not a newer
+roster entry. Deferred failure calls `releaseHybridLeg` under the owner
+lock with the allocator receipt, even when Down was not acknowledged.
+Busy or unreadable legs retain a bounded reconciliation obligation. An idle,
+still-owned leg regains its prior autoconnect; a successor's selection is
+untouched. The protocol contract lists the residual windows. A Start
+attempt UUID only correlates terminal output and grants
 no authority to mutate or release a radio. It is a recorded deviation from
 plan todo 24; see the [protocol contract](../../../../docs/WIFI-INCARNATION-PROTOCOL.md).
 

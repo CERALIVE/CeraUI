@@ -18,14 +18,15 @@ export async function releaseHybridLeg(
 		"releaseConcurrentInterface" | "rollbackConcurrentInterface"
 	>,
 	options: { readonly receipt: boolean; readonly deleteCreated: boolean },
-): Promise<void> {
-	if (options.receipt)
-		await deps.releaseConcurrentInterface?.(allocation.ifname, allocation);
-	else await deps.releaseConcurrentInterface?.(allocation.ifname);
+): Promise<boolean> {
+	const released = options.receipt
+		? await deps.releaseConcurrentInterface?.(allocation.ifname, allocation)
+		: await deps.releaseConcurrentInterface?.(allocation.ifname);
 	if (
 		options.deleteCreated &&
 		allocation.created &&
 		deps.rollbackConcurrentInterface
 	)
 		await deps.rollbackConcurrentInterface(allocation);
+	return released !== false;
 }

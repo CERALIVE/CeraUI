@@ -1,5 +1,9 @@
 import { logger } from "../../helpers/logger.ts";
-import { nmConnsGet, nmcliParseSep } from "../network/network-manager.ts";
+import {
+	nmConnsGet,
+	nmcliParseSep,
+	nmDisconnectActivation,
+} from "../network/network-manager.ts";
 import type { NmProfileInstance } from "../network/network-manager-profile-instance.ts";
 import { getWifiState } from "./state/wifi-state.ts";
 import {
@@ -20,7 +24,10 @@ import {
 	type WifiHotspot,
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
-import { releaseHybridLeg } from "./wifi-hybrid-leg-release.ts";
+import {
+	type HybridLegAllocation,
+	releaseHybridLeg,
+} from "./wifi-hybrid-leg-release.ts";
 import { transitionVirtualBinding } from "./wifi-virtual-binding.ts";
 
 type CreatedHotspotCleanup = {
@@ -31,7 +38,7 @@ type CreatedHotspotCleanup = {
 	readonly activationAttempted: boolean;
 	readonly activePath?: string | undefined;
 	readonly instance: NmProfileInstance | null | undefined;
-	readonly allocation?: { ifname: string; created: boolean };
+	readonly allocation?: HybridLegAllocation;
 };
 
 type CleanupProgress = {
@@ -120,16 +127,24 @@ async function cleanupCreatedProfile(
 	const deactivated =
 		!target.activationAttempted ||
 		(progress.deactivated && (await inactive()) === true) ||
-		(await act({
-			uuid,
-			kind: "down",
-			run: () => deps.nmDisconnect(uuid, target.activePath),
-		})) ||
+		(target.activePath !== undefined &&
+			(await act({
+				uuid,
+				kind: "down",
+				run: () =>
+					nmDisconnectActivation(deps.nmDisconnect, uuid, target.activePath),
+			}))) ||
 		(await inactive()) === true;
 	progress.deactivated = deactivated;
 	const deleted = prior
 		? prior.cleanupConfirmed
-		: await act({ uuid, kind: "delete", run: () => deps.nmConnDelete(uuid) });
+		: deactivated &&
+			(await act({
+				uuid,
+				kind: "delete",
+				// Delete itself tears down any users of the profile, including a successor.
+				run: async () => (await inactive()) === true && deps.nmConnDelete(uuid),
+			}));
 	if ((deactivated || deleted) && iface.hotspot === hotspot) {
 		if (iface.conn === uuid) iface.conn = null;
 		if (iface.activeConn === uuid) {

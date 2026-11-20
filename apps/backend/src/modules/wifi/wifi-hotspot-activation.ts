@@ -28,6 +28,7 @@ import {
 	nmConnSetFields,
 	nmDeviceProp,
 	nmDisconnect,
+	nmDisconnectActivation,
 } from "../network/network-manager.ts";
 import {
 	type NmProfileInstance,
@@ -57,6 +58,7 @@ import { resolveWifiAdapterOwner } from "./wifi-adapter-owner.ts";
 import {
 	clearWifiAdapterReconcile,
 	reconcileWifiAdapterTeardownLocked,
+	registerWifiAdapterLegRelease,
 } from "./wifi-adapter-reconcile-retry.ts";
 import { reconcileWifiAdapterProfileLocked } from "./wifi-adapter-reconciler.ts";
 import {
@@ -773,6 +775,7 @@ export async function startHotspotLocked(
 	const concurrentInterface =
 		allocation === HYBRID_CHANNEL_REFUSAL ? undefined : allocation;
 	let channelRefused = false;
+	let channelDownFailed = false;
 	let acceptedAllocation = false;
 	const hotspot = wifiInterface.hotspot;
 	let createdUuid: string | undefined;
@@ -912,9 +915,11 @@ export async function startHotspotLocked(
 			refusal = {
 				success: false,
 				error: operation.changed ? "radio-changed" : "activation-failed",
-				...(!operation.changed && channelRefused
-					? { reason: HYBRID_CHANNEL_REFUSAL }
-					: {}),
+				...(channelDownFailed
+					? { reason: "deactivation-failed" as const }
+					: !operation.changed && channelRefused
+						? { reason: HYBRID_CHANNEL_REFUSAL }
+						: {}),
 			};
 			return refusal;
 		};
@@ -990,14 +995,15 @@ export async function startHotspotLocked(
 				return true;
 			if (binding && !(await operation.permit())) return false;
 			channelRefused = true;
-			if (owned(uuid, identity.profileMac))
-				await writeProfile({
+			channelDownFailed =
+				!owned(uuid, identity.profileMac) ||
+				!(await writeProfile({
 					uuid,
 					kind: "down",
 					run: async () =>
 						owned(uuid, identity.profileMac) &&
-						deps.nmDisconnect(uuid, activePath),
-				});
+						nmDisconnectActivation(deps.nmDisconnect, uuid, activePath),
+				}));
 			return false;
 		};
 
@@ -1041,7 +1047,11 @@ export async function startHotspotLocked(
 						},
 						deps,
 					)) ||
-						!(await deps.nmDisconnect(existingUuid, activePath)))
+						!(await nmDisconnectActivation(
+							deps.nmDisconnect,
+							existingUuid,
+							activePath,
+						)))
 				)
 					result.reason = "deactivation-failed";
 				return result;
@@ -1186,7 +1196,7 @@ export async function startHotspotLocked(
 				credentialOwner: owner,
 				activation: { profile: profileInstance, activePath },
 				binding,
-				targetRadio,
+				radioProof: operation.observe,
 				...(concurrentInterface ? { allocation: concurrentInterface } : {}),
 			},
 			wifiInterface,
@@ -1224,10 +1234,14 @@ export async function startHotspotLocked(
 				});
 			}
 		}
-		if (!acceptedAllocation && concurrentInterface)
-			await releaseHybridLeg(concurrentInterface, deps, {
-				receipt: Boolean(binding),
-				deleteCreated: !createdUuid,
-			});
+		if (!acceptedAllocation && concurrentInterface) {
+			const release = () =>
+				releaseHybridLeg(concurrentInterface, deps, {
+					receipt: Boolean(binding),
+					deleteCreated: !createdUuid,
+				});
+			if (!(await release()) && binding && !concurrentInterface.created)
+				registerWifiAdapterLegRelease(owner, release);
+		}
 	}
 }

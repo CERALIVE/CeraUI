@@ -463,10 +463,11 @@ remain intact. A failed fresh
 add cannot restore the deleted UUID from an older cache snapshot.
 
 Retained cleanup remembers checked autoconnect suppression and disconnection.
-A retry reads NM's UUID/active inventory, keeps confirmed stopped state for an
-inactive profile, and retries deletion without a redundant down. A refused down
-is accepted as stopped only after that inventory proves the UUID inactive;
-unreadable or active evidence retains failure and the bounded recovery path.
+A retry never substitutes UUID Down for a missing active path. It may proceed
+without another Down if NM's UUID/active inventory proves the profile inactive.
+The same inactivity proof is required immediately before deletion, because
+Delete also disconnects active users of the profile. Active or unreadable
+evidence leaves the profile and the bounded recovery path in place.
 
 Monitor events trigger confirmation rather than proving it. The pending
 activation captures its UUID, hotspot object, activation interface, profile

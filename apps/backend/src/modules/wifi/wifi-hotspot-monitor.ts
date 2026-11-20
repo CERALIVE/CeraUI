@@ -22,6 +22,7 @@ import {
 	nmcliParseSep,
 	nmDeviceProp,
 	nmDevices,
+	nmDisconnectActivation,
 } from "../network/network-manager.ts";
 import {
 	type NmProfileInstance,
@@ -35,9 +36,11 @@ import {
 	setWifiState,
 } from "./state/wifi-state.ts";
 import {
+	ownsWifiAdapterLock,
 	wifiAdapterLockKey,
 	withWifiAdapterLock,
 } from "./wifi-adapter-lock.ts";
+import { registerWifiAdapterLegRelease } from "./wifi-adapter-reconcile-retry.ts";
 import { getWifiInterfaceByMacAddress } from "./wifi-connections.ts";
 import type {
 	HotspotActivationDeps,
@@ -51,12 +54,10 @@ import {
 } from "./wifi-hybrid-leg-release.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
 import {
-	matchesWifiOperationRadio,
-	sampleWifiOperationRadio,
 	type WifiOperationBinding,
+	wifiOperationGuard,
 } from "./wifi-operation-binding.ts";
 import { sameRadioLifetime, wifiRadioIdentity } from "./wifi-radio-identity.ts";
-import type { RadioSample } from "./wifi-radio-read-budget.ts";
 import { transitionVirtualBinding } from "./wifi-virtual-binding.ts";
 
 // Bounded confirmation poll: a production backstop for the NM monitor event.
@@ -96,7 +97,9 @@ type PendingHotspot = {
 	readonly matches: () => boolean;
 	readonly probe: () => Promise<boolean>;
 	readonly confirm: () => void;
-	readonly giveUp: (changed?: { readonly stopped: boolean }) => void;
+	readonly giveUp: (changed?: {
+		readonly stopped: boolean;
+	}) => void | Promise<void>;
 };
 
 const pendingHotspots = new Map<string, PendingHotspot>();
@@ -176,20 +179,28 @@ function settleCaptured(
 	pending: PendingHotspot,
 	confirmed: boolean,
 	changed?: { readonly stopped: boolean },
-): void {
+): void | Promise<void> {
 	if (!current(pending)) return;
 	const exact = !confirmed || pending.matches();
 	pending.controller.abort();
 	pendingHotspots.delete(pending.ifname);
 	pendingByRow.delete(pending.row);
 	if (confirmed && exact) pending.confirm();
-	else pending.giveUp(changed);
+	else return pending.giveUp(changed);
 }
 
 /** Trusted settlement/cancellation of the current pending operation. */
-export function settlePending(ifname: string, confirmed: boolean): void {
+export function settlePending(ifname: string, confirmed: true): void;
+export function settlePending(
+	ifname: string,
+	confirmed: false,
+): void | Promise<void>;
+export function settlePending(
+	ifname: string,
+	confirmed: boolean,
+): void | Promise<void> {
 	const pending = pendingHotspots.get(ifname);
-	if (pending) settleCaptured(pending, confirmed);
+	if (pending) return settleCaptured(pending, confirmed);
 }
 
 /** Supersede older observers before another transaction owns the transition. */
@@ -225,7 +236,7 @@ export async function handleWifiMonitorEvent(
 				event.device === pending.apIfname);
 		if (!relevant || !current(pending)) continue;
 		try {
-			if (await pending.probe()) settleCaptured(pending, true);
+			if (await pending.probe()) await settleCaptured(pending, true);
 		} catch (error: unknown) {
 			logger.warn("Wi-Fi AP confirmation observation failed", {
 				error: error instanceof Error ? error.name : "unknown",
@@ -238,7 +249,7 @@ export function registerPendingConfirmation(
 	target: HotspotConfirmationTarget & {
 		readonly macAddress: string;
 		readonly binding?: WifiOperationBinding | undefined;
-		readonly targetRadio?: RadioSample | undefined;
+		readonly radioProof?: ReturnType<typeof wifiOperationGuard>["observe"];
 		readonly allocation?: HybridLegAllocation;
 	},
 	wifiInterface: WifiInterfaceWithHotspot,
@@ -254,6 +265,7 @@ export function registerPendingConfirmation(
 	const lifetime = wifiRadioIdentity.state.rows.get(ifname)?.lifetime;
 	const apLifetime = wifiRadioIdentity.state.rows.get(target.ifname)?.lifetime;
 	const binding = target.binding;
+	const radioProof = target.radioProof ?? wifiOperationGuard(binding).observe;
 	const ownsCache = (): boolean =>
 		wifiInterface.hotspot === hotspot && hotspot.conn === target.uuid;
 	const matches = (): boolean =>
@@ -285,7 +297,10 @@ export function registerPendingConfirmation(
 		syncWifiStateCache(target.macAddress, wifiInterface);
 		deps.publishOutcome?.("start", device, { success: true });
 	};
-	const giveUp: PendingHotspot["giveUp"] = (changed) => {
+	const reportFailure = (
+		changed: { readonly stopped: boolean } | undefined,
+		releasePending = false,
+	) => {
 		if (
 			wifiInterface.hotspot === hotspot &&
 			(!binding || getWifiInterfaceByMacAddress(binding.key) === wifiInterface)
@@ -294,6 +309,7 @@ export function registerPendingConfirmation(
 			if (ownsCache()) {
 				const binding = wifiInterface.concurrentHotspot;
 				if (
+					!releasePending &&
 					(!changed || changed.stopped) &&
 					virtual &&
 					binding?.ifname === target.ifname &&
@@ -308,7 +324,30 @@ export function registerPendingConfirmation(
 		deps.publishOutcome?.("start", device, {
 			success: false,
 			error: changed ? "radio-changed" : "not-confirmed",
-			...(changed && !changed.stopped ? { reason: "deactivation-failed" } : {}),
+			...(releasePending || (changed && !changed.stopped)
+				? { reason: "deactivation-failed" }
+				: {}),
+		});
+	};
+	const giveUp: PendingHotspot["giveUp"] = (changed) => {
+		const allocation = target.allocation;
+		if (!allocation) return reportFailure(changed);
+		const key = wifiAdapterLockKey(owner);
+		const release = () =>
+			releaseHybridLeg(allocation, deps, {
+				receipt: true,
+				deleteCreated: false,
+			});
+		const reconcile = async () => {
+			const released = await release();
+			if (!released) registerWifiAdapterLegRelease(owner, release);
+			return released;
+		};
+		if (ownsWifiAdapterLock(key))
+			return reconcile().then((released) => reportFailure(changed, !released));
+		return withWifiAdapterLock(key, reconcile).then((lock) => {
+			if (!lock.success) registerWifiAdapterLegRelease(owner, release);
+			reportFailure(changed, !lock.success || !lock.result);
 		});
 	};
 	const exactActivation = (activation: HotspotActivationInstance) =>
@@ -348,34 +387,18 @@ export function registerPendingConfirmation(
 				const exact = activation?.profile || activation?.activePath;
 				if (exact && !(await exactActivation(activation))) return false;
 				if (!binding || !current(pending)) return current(pending) && matches();
-				const targetLifetime = target.targetRadio?.lifetime ?? apLifetime;
-				// The leg is read after the parent, so a leg replaced during the parent sample is seen.
-				const parent = await sampleWifiOperationRadio(binding.ifname);
-				const radio =
-					virtual && targetLifetime
-						? await sampleWifiOperationRadio(target.ifname)
-						: undefined;
+				const proof = await radioProof();
 				if (
 					!current(pending) ||
 					!ownsCache() ||
 					pending.activation !== activation
 				)
 					return false;
-				if (!parent || (virtual && targetLifetime && !radio)) return false;
-				const sameTarget =
-					!virtual ||
-					!targetLifetime ||
-					sameRadioLifetime(targetLifetime, radio?.lifetime);
-				if (sameTarget && matchesWifiOperationRadio(binding, parent)) {
-					settleCaptured(pending, true);
+				if (proof === "match") {
+					await settleCaptured(pending, true);
 					return true;
 				}
-				// The absence of a witness is not evidence that the activated leg changed.
-				const physicalChange =
-					!sameTarget ||
-					!sameRadioLifetime(binding.lifetime, parent.lifetime) ||
-					(!parent.macReadFailed && parent.permanentMac !== binding.mac);
-				if (!physicalChange || !exact || !activation) return false;
+				if (proof !== "replaced" || !exact || !activation) return false;
 				const lock = await withWifiAdapterLock(
 					wifiAdapterLockKey(owner),
 					async () => {
@@ -389,16 +412,12 @@ export function registerPendingConfirmation(
 							pending.activation !== activation
 						)
 							return false;
-						const stopped = await deps.nmDisconnect(
+						const stopped = await nmDisconnectActivation(
+							deps.nmDisconnect,
 							target.uuid,
 							activation.activePath,
 						);
-						settleCaptured(pending, false, { stopped });
-						if (stopped && target.allocation)
-							await releaseHybridLeg(target.allocation, deps, {
-								receipt: true,
-								deleteCreated: false,
-							});
+						await settleCaptured(pending, false, { stopped });
 						return true;
 					},
 				);
@@ -429,7 +448,7 @@ export function registerPendingConfirmation(
 			async () => {
 				if (!current(pending)) return true;
 				if (await probe()) {
-					settleCaptured(pending, true);
+					await settleCaptured(pending, true);
 					return true;
 				}
 				throw new Error("hotspot not yet confirmed");

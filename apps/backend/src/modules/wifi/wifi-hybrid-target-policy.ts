@@ -25,6 +25,7 @@ import {
 	idleTarget,
 	setConcurrentAutoconnect,
 } from "./wifi-concurrent-interface-io.ts";
+import type { HybridLegAllocation } from "./wifi-hybrid-leg-release.ts";
 import {
 	currentTarget,
 	selectedTargets,
@@ -84,27 +85,31 @@ export async function releaseCreatedHybridTarget(target: {
 		selectedTargets.delete(target.ifname);
 }
 
+export function releaseConcurrentApInterface(
+	ifname: string,
+	target?: HybridLegAllocation,
+): Promise<boolean> | Promise<void>;
 export async function releaseConcurrentApInterface(
 	ifname: string,
-	target?: object,
-): Promise<void> {
+	target?: HybridLegAllocation,
+): Promise<boolean> {
 	const stored = selectedTargets.get(ifname);
 	const record = stored?.record;
-	if (!stored || !record || record.priorAutoconnect === undefined) return;
-	if (target && targetRecords.get(target) !== record) return;
+	if (!stored || !record || record.priorAutoconnect === undefined) return true;
+	if (target && targetRecords.get(target) !== record) return true;
 	const ownsSelection = () => selectedTargets.get(ifname) === stored;
 	try {
 		if (!(await currentTarget(ifname, record)) || !(await idleTarget(ifname)))
-			return;
+			return false;
 		const current = (await nmDeviceProp(ifname, "GENERAL.AUTOCONNECT"))?.[0];
-		if (!ownsSelection()) return;
+		if (!ownsSelection()) return true;
 		const { priorAutoconnect: _prior, ...released } = record;
 		if (current !== "no") {
 			// A readable value other than ours is an external change: retire the claim, never overwrite it.
 			// shortcut: an external A->B->A autoconnect cycle between our reads is unobservable (nmcli monitor reports only device/connection state); retire on property events if a device-property feed is ever consumed.
 			if (current !== undefined)
 				selectedTargets.set(ifname, { ...stored, record: released });
-			return;
+			return current !== undefined;
 		}
 		if (
 			!(await setConcurrentAutoconnect(
@@ -116,10 +121,11 @@ export async function releaseConcurrentApInterface(
 					ownsSelection(),
 			))
 		)
-			return;
+			return false;
 		if (ownsSelection())
 			selectedTargets.set(ifname, { ...stored, record: released });
+		return true;
 	} catch {
-		return;
+		return false;
 	}
 }

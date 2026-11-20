@@ -1,11 +1,12 @@
 import { expect, spyOn, test } from "bun:test";
-import { readFile } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import * as profiles from "../modules/network/network-manager-profile-instance.ts";
 import * as secrets from "../modules/network/network-manager-secret.ts";
 import { firstAp } from "./helpers/wifi-first-ap-fixture.ts";
 
 const readProfile = profiles.readNmProfileInstance;
 const serialize = secrets.serializeNmProfileModify;
+const { readFile } = fs;
 const loads = (commands: readonly string[][]) =>
 	commands.filter(
 		([object, action]) => object === "connection" && action === "load",
@@ -69,6 +70,74 @@ test("a radio replaced after the last pre-publication check rolls the keyfile ba
 		);
 		expect(await readFile(filename)).toEqual(before);
 		expect(loads(f.commands.slice(first))).toEqual([]);
+		expect(result).toBeFalse();
+	} finally {
+		await f.restore();
+	}
+});
+
+test.each([true, false])(
+	"a keyfile superseded during the final radio permit stays live with permit=%s",
+	async (allowed) => {
+		const { f, uuid, filename, first } = await savedHotspot();
+		try {
+			let permits = 0;
+			let successor: Buffer | undefined;
+			const result = await secrets.writeNmWifiSecret(
+				uuid,
+				{ "802-11-wireless-security.psk": "requested-test-password" },
+				async () => {
+					if (++permits === 1) return true;
+					f.replace(uuid);
+					successor = await readFile(filename);
+					return allowed;
+				},
+			);
+			if (!successor) throw new Error("No successor installed");
+			expect((await readFile(filename)).equals(successor)).toBeTrue();
+			expect(loads(f.commands.slice(first))).toEqual([]);
+			expect(result).toBeFalse();
+		} finally {
+			await f.restore();
+		}
+	},
+);
+
+test("an error during post-publication inspection restores the original instead of leaving staged bytes live", async () => {
+	const { f, uuid, filename, before, first } = await savedHotspot();
+	try {
+		let permits = 0;
+		const result = await secrets.writeNmWifiSecret(
+			uuid,
+			{ "802-11-wireless-security.psk": "requested-test-password" },
+			async () => {
+				if (++permits === 1) return true;
+				throw new Error("Radio inspection failed");
+			},
+		);
+		expect(await readFile(filename)).toEqual(before);
+		expect(loads(f.commands.slice(first))).toEqual([]);
+		expect(result).toBeFalse();
+	} finally {
+		await f.restore();
+	}
+});
+
+test("a same-byte successor installed during load is not reported as our committed keyfile", async () => {
+	const { f, uuid, filename, first } = await savedHotspot();
+	try {
+		let installed = false;
+		f.faults.afterSecretWrite = async () => {
+			const successor = `${filename}.successor`;
+			await fs.copyFile(filename, successor);
+			await fs.rename(successor, filename);
+			installed = true;
+		};
+		const result = await secrets.writeNmWifiSecret(uuid, {
+			"802-11-wireless-security.psk": "requested-test-password",
+		});
+		expect(installed).toBeTrue();
+		expect(loads(f.commands.slice(first))).toHaveLength(1);
 		expect(result).toBeFalse();
 	} finally {
 		await f.restore();

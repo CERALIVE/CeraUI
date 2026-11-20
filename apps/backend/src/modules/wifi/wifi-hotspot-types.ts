@@ -47,6 +47,7 @@ import {
 	type HotspotSecurityId,
 	hotspotSecurityFields,
 } from "./wifi-hotspot-security.ts";
+import type { HybridLegAllocation } from "./wifi-hybrid-leg-release.ts";
 import type { HybridTargetRefusal } from "./wifi-hybrid-target-diagnostics.ts";
 import type { BaseWifiInterface, WifiInterface } from "./wifi-interfaces.ts";
 import type { VirtualHotspotBinding } from "./wifi-virtual-binding.ts";
@@ -238,22 +239,15 @@ export type HotspotActivationDeps = {
 		ifname: string,
 		admitted?: () => boolean,
 		onRefusal?: (refusal: HybridTargetRefusal) => void,
-	) => Promise<
-		| { ifname: string; created: boolean }
-		| typeof HYBRID_CHANNEL_REFUSAL
-		| undefined
-	>;
+	) => Promise<HybridLegAllocation | typeof HYBRID_CHANNEL_REFUSAL | undefined>;
 	readHybridChannel?: typeof readHybridStationChannel;
 	validateConcurrentInterface?: typeof revalidateConcurrentApInterface;
 	confirmHybridActivation?: typeof confirmHybridActivation;
 	releaseConcurrentInterface?: (
 		ifname: string,
-		target?: object,
-	) => Promise<void>;
-	rollbackConcurrentInterface?: (target: {
-		ifname: string;
-		created: boolean;
-	}) => Promise<void>;
+		target?: HybridLegAllocation,
+	) => Promise<boolean> | Promise<void>;
+	rollbackConcurrentInterface?: (target: HybridLegAllocation) => Promise<void>;
 	/**
 	 * Does the operator want this adapter's AP to run ALONGSIDE its station leg?
 	 *

@@ -322,6 +322,16 @@ export async function nmConnect(
 const ACTIVE_PATH_RE =
 	/^\/org\/freedesktop\/NetworkManager\/ActiveConnection\/\d+$/;
 
+export async function nmDisconnectActivation(
+	disconnect: typeof nmDisconnect,
+	uuid: ConnectionUUID,
+	path: string | undefined,
+): Promise<boolean> {
+	return (
+		path !== undefined && ACTIVE_PATH_RE.test(path) && disconnect(uuid, path)
+	);
+}
+
 /** With an active path, Down names that one activation, never a later one of the same profile. */
 export async function nmDisconnect(uuid: ConnectionUUID, activePath?: string) {
 	try {
