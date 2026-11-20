@@ -11,9 +11,11 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { WifiAdapterMode } from "@ceraui/rpc/schemas";
+import { run } from "../helpers/run.ts";
 import * as config from "../modules/config.ts";
 import * as nm from "../modules/network/network-manager.ts";
 import * as streaming from "../modules/streaming/streaming.ts";
+import { runIw } from "../modules/wifi/regdomain.ts";
 import {
 	onWifiChange,
 	setWifiState,
@@ -34,6 +36,7 @@ import {
 } from "../modules/wifi/wifi-adapter-mode-transition.ts";
 import * as legacy from "../modules/wifi/wifi-ap-sta-capability.ts";
 import * as caps from "../modules/wifi/wifi-capabilities.ts";
+import * as concurrent from "../modules/wifi/wifi-concurrent-interface.ts";
 import * as connections from "../modules/wifi/wifi-connections.ts";
 import * as devices from "../modules/wifi/wifi-device-list.ts";
 import {
@@ -50,8 +53,9 @@ import type {
 	WifiInterfaceWithHotspot,
 } from "../modules/wifi/wifi-hotspot-types.ts";
 import * as interfaces from "../modules/wifi/wifi-interfaces.ts";
-import * as permanent from "../modules/wifi/wifi-permanent-mac.ts";
 import { wifiRadioObservation } from "../modules/wifi/wifi-radio-observation.ts";
+import { mockHotspotConfirmationPoll } from "./helpers/wifi-hotspot-test-setup.ts";
+import { fakeShadowSysfs } from "./helpers/wifi-radio-equivalence-shadow.ts";
 import {
 	isolateWifiRegistry,
 	restoreWifiRegistry,
@@ -69,6 +73,7 @@ let scratch: string;
 let effects: string[];
 let cancel: (() => void) | undefined;
 let unsubscribe: (() => void) | undefined;
+let restoreShadow: () => Promise<void>;
 
 const flush = async () => {
 	for (let i = 0; i < 1000; i++) await Promise.resolve();
@@ -81,7 +86,7 @@ async function prove(
 	const fixture = (name: string) =>
 		readFile(join(import.meta.dir, "fixtures/wifi", name), "utf8");
 	const [phy, reg, dev] = await Promise.all([
-		fixture("iw-phy-rock5bplus-rtl8852be.txt"),
+		fixture("iw-phy-mt7925-nm-hybrid.txt"),
 		fixture("iw-reg-get-rock5bplus.txt"),
 		fixture("iw-dev-rock5bplus.txt"),
 	]);
@@ -95,8 +100,8 @@ async function prove(
 							phyName === "phy0" ? "wiphy index: 0" : "wiphy index: 1",
 						)
 						.replace(
-							"total <= 2, #channels <= 1",
-							`total <= ${supported ? 2 : 1}, #channels <= 1`,
+							"total <= 3, #channels <= 1",
+							`total <= ${supported ? 3 : 1}, #channels <= 1`,
 						)
 				: args[0] === "reg"
 					? reg
@@ -111,6 +116,30 @@ async function prove(
 
 beforeEach(async () => {
 	jest.useFakeTimers();
+	// Only the first-discovery wdev witness read is faked; other platform reads are unchanged.
+	concurrent.setConcurrentInterfaceDepsForTest(async (command, args) => {
+		if (command === "iw" && args[1]?.startsWith("clap-") && args[2] === "info")
+			throw new Error("No platform wdev in this suite");
+		return command === "iw" ? runIw(args) : run(command, args);
+	}, null);
+	restoreShadow = await fakeShadowSysfs(() => [
+		{
+			ifname: "wlan0",
+			operational: MAC,
+			permanent: MAC,
+			ifindex: 3,
+			phy: 0,
+			state: "connected",
+		},
+		{
+			ifname: "clap-wlan0",
+			operational: MAC,
+			permanent: MAC,
+			ifindex: 4,
+			phy: 0,
+			state: "disconnected",
+		},
+	]);
 	inherited = isolateWifiRegistry();
 	originalPath = config.getConfigFilePath();
 	originalModes = config.getConfig().wifi_modes;
@@ -163,8 +192,8 @@ beforeEach(async () => {
 			effects.push("virtual");
 			return { ifname: "clap-wlan0", created: true };
 		},
-		pollHotspotActive: async () => true,
 	} satisfies Partial<HotspotActivationDeps>);
+	mockHotspotConfirmationPoll();
 	Object.assign(defaultHotspotStopDeps, {
 		nmConnSetFields: async () => true,
 		nmDisconnect: async () => {
@@ -181,12 +210,14 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+	concurrent.setConcurrentInterfaceDepsForTest(null, null);
 	cancel?.();
 	cancel = undefined;
 	unsubscribe?.();
 	unsubscribe = undefined;
-	settlePending("wlan0", false);
+	await settlePending("wlan0", false);
 	wifiRadioObservation.stop();
+	await restoreShadow();
 	connections.wifiCancelScanRefresh();
 	interfaces.stopWifiUpdateLoopForTest();
 	caps.resetWifiCapabilitiesForTest();
@@ -253,10 +284,10 @@ test("an unknown exclusive fallback remains unrecorded after a duplicate Start",
 	row.supportsApStaConcurrency = await legacy.supportsApStaConcurrency("wlan0");
 	expect(await wifiHotspotStart({ device: 0 })).toEqual({ success: true });
 	settlePending("wlan0", true);
-	expect(getPersistedWifiAdapterModes()).toEqual({});
+	expect(getPersistedWifiAdapterModes()).toEqual({ [MAC]: "hotspot" });
 	effects = [];
 	expect(await wifiHotspotStart({ device: 0 })).toEqual({ success: true });
-	expect(getPersistedWifiAdapterModes()).toEqual({});
+	expect(getPersistedWifiAdapterModes()).toEqual({ [MAC]: "hotspot" });
 	expect(effects).toEqual([]);
 	expect(observedWifiAdapterMode(row)).toBe("hotspot");
 });
@@ -285,17 +316,15 @@ test("real discovery replacing an active marker with idle during teardown still 
 	spyOn(nm, "nmConnGetFields").mockResolvedValue(["infrastructure"]);
 	spyOn(devices, "wifiDeviceListGetMacAddress").mockReturnValue(MAC);
 	spyOn(devices, "wifiDeviceListGetInetAddress").mockReturnValue("192.0.2.2");
-	spyOn(permanent, "resolveWifiPermanentMac").mockResolvedValue(MAC);
 	spyOn(connections, "wifiUpdateScanResult").mockResolvedValue(true);
 	spyOn(connections, "wifiScheduleScanRefresh").mockImplementation(() => {});
-	spyOn(wifiRadioObservation, "enqueue").mockImplementation(() => {});
 	spyOn(defaultHotspotStopDeps, "nmDisconnect").mockImplementation(async () => {
 		effects.push("down");
 		await interfaces.wifiUpdateDevices();
 		return true;
 	});
 	const result = await setWifiAdapterMode(0, "hotspot");
-	settlePending("wlan0", true);
+	await settlePending("wlan0", true);
 	expect(result).toEqual({ success: true, accepted: true, applied: "hotspot" });
 	expect(effects).not.toContain("virtual");
 	expect(observedWifiAdapterMode(row)).toBe("hotspot");
@@ -338,7 +367,7 @@ for (const observed of ["station", "hotspot", "hybrid"] as const) {
 				config.saveConfig();
 				const before = await Bun.file(config.getConfigFilePath()).text();
 				const result = await wifiHotspotStart({ device: 0 });
-				settlePending("wlan0", true);
+				await settlePending("wlan0", true);
 				const mustRefuse =
 					previous === "hybrid" && supported !== true && observed !== "hybrid";
 				const target: WifiAdapterMode =
@@ -347,11 +376,7 @@ for (const observed of ["station", "hotspot", "hybrid"] as const) {
 						: supported === true && previous !== "hotspot"
 							? "hybrid"
 							: "hotspot";
-				const expected = mustRefuse
-					? previous
-					: target === "hybrid" || supported === false || previous === "hotspot"
-						? target
-						: previous;
+				const expected = mustRefuse ? previous : target;
 				expect(getPersistedWifiAdapterMode(MAC)).toBe(expected);
 				if (mustRefuse) {
 					expect(result).toEqual({
@@ -388,10 +413,8 @@ for (const parent of ["disconnected", "new-station"] as const) {
 		spyOn(nm, "nmConnGetFields").mockResolvedValue(["infrastructure"]);
 		spyOn(devices, "wifiDeviceListGetMacAddress").mockReturnValue(MAC);
 		spyOn(devices, "wifiDeviceListGetInetAddress").mockReturnValue("192.0.2.2");
-		spyOn(permanent, "resolveWifiPermanentMac").mockResolvedValue(MAC);
 		spyOn(connections, "wifiUpdateScanResult").mockResolvedValue(true);
 		spyOn(connections, "wifiScheduleScanRefresh").mockImplementation(() => {});
-		spyOn(wifiRadioObservation, "enqueue").mockImplementation(() => {});
 		spyOn(defaultHotspotStopDeps, "nmDisconnect").mockImplementation(
 			async () => {
 				effects.push("down");
@@ -412,7 +435,7 @@ for (const parent of ["disconnected", "new-station"] as const) {
 			accepted: true,
 			applied: "hotspot",
 		});
-		settlePending("wlan0", true);
+		await settlePending("wlan0", true);
 		expect(observedWifiAdapterMode(row)).toBe("hotspot");
 		expect(effects).not.toContain("virtual");
 	});
@@ -480,7 +503,7 @@ for (const accepted of [false, true]) {
 		finish.resolve(accepted);
 		await discovery;
 		await flush();
-		settlePending("wlan0", true);
+		await settlePending("wlan0", true);
 		expect(attempts).toBe(accepted ? 1 : 2);
 		expect(observedWifiAdapterMode(row)).toBe("hybrid");
 		expect(getPersistedWifiAdapterModes()).toEqual({ [MAC]: "hybrid" });
@@ -504,7 +527,7 @@ test("identical successful capability publications never re-arm a refused activa
 	}
 	expect(attempts).toBe(1);
 	expect(observedWifiAdapterMode(row)).toBe("station");
-	expect(jest.getTimerCount()).toBe(0);
+	expect(jest.getTimerCount()).toBe(1);
 });
 
 test("a coalesced binding change re-arms pending intent even when support stays true", async () => {
@@ -527,7 +550,7 @@ test("a coalesced binding change re-arms pending intent even when support stays 
 	finish.resolve(false);
 	await discovery;
 	await flush();
-	settlePending("wlan0", true);
+	await settlePending("wlan0", true);
 	expect(attempts).toBe(2);
 	expect(observedWifiAdapterMode(row)).toBe("hybrid");
 });

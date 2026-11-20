@@ -34,9 +34,20 @@ All fields inside a block core are explicit, and no field defaults onto a
 legacy payload. Consumers replace snapshots, not merge owners by ordinal.
 See [`docs/ENCODER-LOAD.md`](../../../../docs/ENCODER-LOAD.md).
 
+### Event registry entry point [EXISTS]
+
+`@ceraui/rpc/events` resolves to `src/schemas/events.schema.ts`
+(`package.json:21`) and exports `EVENT_REGISTRY`. `src/schemas/index.ts`
+re-exports `src/schemas/events-wire.schema.ts` (line 15), not
+`src/schemas/events.schema.ts`.
+Rule: boot-time frontend code imports `@ceraui/rpc/schemas`, not
+`@ceraui/rpc/events`. No bundle measurement backs this section. See
+[device-events-wire.md](device-events-wire.md).
+
 ```typescript
 import { appContract, type AppContract } from '@ceraui/rpc';           // root router
 import { streamingContract } from '@ceraui/rpc/contracts';             // granular
 import { loginInputSchema } from '@ceraui/rpc/schemas';                // validation
+import { EVENT_REGISTRY } from '@ceraui/rpc/events';                  // event registry; not for boot-time code
 ```
 

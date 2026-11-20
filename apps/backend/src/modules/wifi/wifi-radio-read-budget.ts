@@ -60,6 +60,7 @@ export type RadioSample = {
 	readonly lifetime: RadioLifetime;
 	readonly permanentMac: MacAddress | undefined;
 	readonly macReadFailed: boolean;
+	readonly devicePath: string | undefined;
 };
 
 function index(raw: string | undefined, minimum: number): number | undefined {
@@ -88,6 +89,11 @@ export async function sampleRadio(
 	const rawMac = await readText(`${d1}/macaddress`);
 	if (signal?.aborted) return undefined;
 	const permanentMac = normalizeMacAddress(rawMac);
+	const readDevicePath = readers.readDevicePath;
+	const rawPath = readDevicePath
+		? await readWifiRadio(() => readDevicePath(ifname), signal)
+		: undefined;
+	const devicePath = literalWifiDevicePath(rawPath);
 	const i2 = index(await readText(`${net}/ifindex`), 1);
 	if (signal?.aborted) return undefined;
 	const d2 = await readPath(`${net}/phy80211`);
@@ -98,5 +104,12 @@ export async function sampleRadio(
 		lifetime: { ifindex: i1, wiphy, phyPath: d1 },
 		permanentMac,
 		macReadFailed: rawMac === undefined,
+		devicePath,
 	};
+}
+
+export function literalWifiDevicePath(
+	rawPath: string | undefined,
+): string | undefined {
+	return rawPath && !/[*?[!|&`\s]|\p{Cc}/u.test(rawPath) ? rawPath : undefined;
 }

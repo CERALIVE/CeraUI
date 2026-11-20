@@ -1,4 +1,5 @@
 import { logger } from "../../../helpers/logger.ts";
+import { emitEvent } from "../../events/emit.ts";
 import { buildLinkTelemetry } from "../../streaming/link-telemetry.ts";
 import { getIsStreaming } from "../../streaming/streaming.ts";
 import { broadcastMsg } from "../../ui/websocket-server.ts";
@@ -22,6 +23,7 @@ import {
 	UPLINK_HEALTH_CONFIG,
 	type UplinkHealthOutcome,
 	type UplinkHealthRecord,
+	type UplinkHealthState,
 	type UplinkObservation,
 } from "./model.ts";
 import { getUplinkHealthEngine, notifyUplinkHealthChange } from "./state.ts";
@@ -90,6 +92,7 @@ export class UplinkHealthRuntime {
 	readonly #engine = getUplinkHealthEngine();
 	readonly #deps: UplinkHealthRuntimeDeps;
 	#lastJson = "";
+	#publishedStates = new Map<string, UplinkHealthState>();
 	#round = 0;
 	#completedRound = 0;
 	#generation = 0;
@@ -298,6 +301,20 @@ export class UplinkHealthRuntime {
 		const json = JSON.stringify(records);
 		if (json === this.#lastJson) return;
 		this.#lastJson = json;
+		for (const record of records) {
+			const previous = this.#publishedStates.get(record.iface);
+			if (previous === undefined || previous === record.state) continue;
+			const code = {
+				up: "link_up",
+				degraded: "link_degraded",
+				down: "link_down",
+			} as const;
+			const { iface, kind, displayName, reason } = record;
+			emitEvent(code[record.state], { iface, kind, displayName, reason });
+		}
+		this.#publishedStates = new Map(
+			records.map(({ iface, state }) => [iface, state]),
+		);
 		notifyUplinkHealthChange(records);
 		this.#deps.publish(records);
 	}

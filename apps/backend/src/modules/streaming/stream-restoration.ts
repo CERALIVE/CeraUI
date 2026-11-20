@@ -47,6 +47,7 @@ import type { LifecycleState } from "@ceraui/rpc/schemas";
 
 import { logger as defaultLogger } from "../../helpers/logger.ts";
 import { getConfig } from "../config.ts";
+import { emitEvent } from "../events/emit.ts";
 import {
 	notificationBroadcast,
 	notificationRemove,
@@ -279,6 +280,11 @@ async function defaultLaunch(
 
 function defaultPublish(outcome: RestorationRunOutcome): void {
 	if (outcome.result === "recovered") {
+		try {
+			emitEvent("stream_restored", {});
+		} catch {
+			// Event history must not alter stream control.
+		}
 		notificationRemove("stream_recovery_failed");
 		notificationBroadcast(
 			"stream_recovered",
@@ -294,6 +300,11 @@ function defaultPublish(outcome: RestorationRunOutcome): void {
 		return;
 	}
 	if (outcome.result !== "failed") return;
+	try {
+		emitEvent("stream_restore_failed", { reason: outcome.reason });
+	} catch {
+		// Event history must not alter stream control.
+	}
 	notificationBroadcast(
 		"stream_recovery_failed",
 		"error",

@@ -1,15 +1,3 @@
-<style>
-/* Custom animations for this component */
-@keyframes shimmer {
-	0% {
-		background-position: -200% 0;
-	}
-	100% {
-		background-position: 200% 0;
-	}
-}
-</style>
-
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
 import type { StatusMessage } from '@ceraui/rpc/schemas';
@@ -106,15 +94,6 @@ onMount(() => {
 			data-vaul-no-drag
 			disableDrag={true}
 		>
-			<!-- Background wash. Static: a takeover an operator cannot dismiss is the
-			     wrong surface to animate for decoration. -->
-			<div class="pointer-events-none absolute inset-0 overflow-hidden">
-				<div class="bg-primary/5 absolute -top-1/2 -left-1/2 h-96 w-96 rounded-full blur-3xl"></div>
-				<div
-					class="bg-secondary/5 absolute -right-1/2 -bottom-1/2 h-96 w-96 rounded-full blur-3xl"
-				></div>
-			</div>
-
 			<!-- Main Content Container -->
 			<div class="relative flex h-full w-full flex-col items-center justify-center p-4 sm:p-8">
 				<!-- Header Section with Enhanced Typography -->

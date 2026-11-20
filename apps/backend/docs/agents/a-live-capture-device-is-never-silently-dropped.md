@@ -70,8 +70,9 @@ Board-confirmed on a Rock 5B+ running current CeraUI against `ceralive-device
 (`controlC0`, `pcmC0D0c`, `timer`) and NO `cardN` directory at all, so a
 connected, capture-ready RØDE HDMI-to-USB-C —
 `0 [usbaudio]: USB-Audio - RØDE HDMI to USB-C`, `00-00: USB Audio : capture 1` —
-was absent from the picker entirely. `debug.log` recorded the whole story in one
-line: `audio devices: {"No audio":…,"Pipeline default":…}`.
+was absent from the picker entirely. The device diagnostic is the journal
+(`journalctl -u ceralive`). The historical capture recorded the whole story in
+one line: `audio devices: {"No audio":…,"Pipeline default":…}`.
 
 Diagnostic note worth keeping: the ENGINE's audio enumeration was correct
 throughout (the fixed board's `audio_sources` carries `transport: "usb"` and

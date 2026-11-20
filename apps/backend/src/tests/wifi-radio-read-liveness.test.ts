@@ -24,6 +24,7 @@ import {
 } from "../modules/wifi/wifi-capabilities.ts";
 import {
 	addWifiInterface,
+	getWifiInterfacesByMacAddress,
 	wifiCancelScanRefresh,
 } from "../modules/wifi/wifi-connections.ts";
 import * as devices from "../modules/wifi/wifi-device-list.ts";
@@ -32,16 +33,17 @@ import {
 	resetWifiInterfaceDiscoveryForTest,
 	wifiUpdateDevices,
 } from "../modules/wifi/wifi-interfaces.ts";
-import {
-	resetWifiPermanentMacCache,
-	setPermanentMacReaderForTest,
-} from "../modules/wifi/wifi-permanent-mac.ts";
+import { setPermanentMacReaderForTest } from "../modules/wifi/wifi-permanent-mac.ts";
 import {
 	radioIdentityReaders,
 	WifiRadioIdentityProducer,
 	wifiRadioIdentity,
 } from "../modules/wifi/wifi-radio-identity.ts";
-import { wifiRadioObservation } from "../modules/wifi/wifi-radio-observation.ts";
+import {
+	RADIO_SHADOW_TIMEOUT_MS,
+	wifiRadioObservation,
+} from "../modules/wifi/wifi-radio-observation.ts";
+import * as compat from "../rpc/compat.ts";
 import {
 	isolateWifiRegistry,
 	restoreWifiRegistry,
@@ -102,10 +104,12 @@ beforeEach(async () => {
 	spyOn(radioIdentityReaders, "realpath").mockResolvedValue(
 		"/sys/devices/radio/phy0",
 	);
+	spyOn(radioIdentityReaders, "readDevicePath").mockResolvedValue(
+		"platform-test-wlan0",
+	);
 	spyOn(nm, "nmDevices").mockResolvedValue(undefined);
 	spyOn(devices, "wifiDeviceListGetMacAddress").mockReturnValue(mac);
 	setPermanentMacReaderForTest(async () => mac);
-	resetWifiPermanentMacCache();
 	resetWifiInterfaceDiscoveryForTest();
 	wifiCancelScanRefresh();
 	onWifiChange(() => undefined);
@@ -131,7 +135,6 @@ afterEach(async () => {
 	wifiCancelScanRefresh();
 	resetWifiCapabilitiesForTest();
 	setPermanentMacReaderForTest(null);
-	resetWifiPermanentMacCache();
 	onWifiChange(() => undefined);
 	setWifiState({});
 	restoreWifiRegistry(registry);
@@ -309,3 +312,72 @@ for (const signal of ["SIGTERM", "SIGINT"] as const) {
 		});
 	}
 }
+
+test("(5) a held sample settles discovery at its own deadline and recovers on the L0 retry", async () => {
+	spyOn(nm, "nmDevices").mockResolvedValue(["wlan0:wifi:disconnected:"]);
+	spyOn(nm, "nmDeviceProp").mockResolvedValue([
+		"Test",
+		"Radio",
+		"no",
+		"no",
+		"yes",
+	]);
+	spyOn(nm, "nmConnsGet").mockResolvedValue([""]);
+	spyOn(nm, "nmScanResults").mockResolvedValue([""]);
+	await wifiUpdateDevices();
+	const entered = Promise.withResolvers<void>();
+	const held = Promise.withResolvers<string | undefined>();
+	releases.push(() => held.resolve(undefined));
+	spyOn(radioIdentityReaders, "readText").mockImplementationOnce(() => {
+		entered.resolve();
+		return held.promise;
+	});
+	let settled = false;
+	const discovery = wifiUpdateDevices().then((value) => {
+		settled = true;
+		return value;
+	});
+	work.push(discovery);
+	await entered.promise;
+	await advance(RADIO_SHADOW_TIMEOUT_MS - 1);
+	expect(settled).toBe(false);
+	await advance(1);
+	await discovery;
+	expect(Object.keys(getWifiInterfacesByMacAddress())).toEqual([
+		"degraded:wlan0",
+	]);
+	expect(wifiBuildMsg()[1]?.degraded_reason).toBe("permanent-mac-unresolved");
+	expect(wifiBuildMsg()[1]).not.toHaveProperty("incarnation");
+	held.resolve(undefined);
+	await advance(250);
+	await wifiRadioObservation.settled;
+	expect(Object.keys(getWifiInterfacesByMacAddress())).toEqual([mac]);
+	expect(wifiBuildMsg()[1]?.incarnation).toBe(
+		wifiRadioIdentity.state.rows.get("wlan0")?.incarnation,
+	);
+	expect(wifiBuildMsg()[1]?.incarnation).toEqual(expect.any(String));
+	expect(wifiBuildMsg()[1]).not.toHaveProperty("degraded_reason");
+});
+
+test("(6) a changed witness on the same key delivers the new token locally", async () => {
+	spyOn(nm, "nmDevices").mockResolvedValue(["wlan0:wifi:disconnected:"]);
+	let ifindex = "3";
+	spyOn(radioIdentityReaders, "readText").mockImplementation(async (path) =>
+		path.endsWith("/ifindex") ? ifindex : text(path),
+	);
+	seed();
+	await wifiUpdateDevices();
+	const before = wifiBuildMsg()[0]?.incarnation;
+	const delivered: unknown[] = [];
+	const local = compat.broadcastMsgLocal;
+	spyOn(compat, "broadcastMsgLocal").mockImplementation((...args) => {
+		if (args[0] === "status") delivered.push(structuredClone(args[1]));
+		return local(...args);
+	});
+	ifindex = "8";
+	await wifiUpdateDevices();
+	const after = wifiBuildMsg();
+	expect(after[0]?.incarnation).not.toBe(before);
+	expect(after[0]?.incarnation).toEqual(expect.any(String));
+	expect(delivered).toEqual([{ wifi: after }]);
+});

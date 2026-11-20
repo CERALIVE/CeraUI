@@ -120,6 +120,9 @@ beforeEach(async () => {
 	commands.length = 0;
 	spyOn(radioIdentityReaders, "readText").mockResolvedValue(undefined);
 	spyOn(radioIdentityReaders, "realpath").mockResolvedValue(undefined);
+	spyOn(radioIdentityReaders, "readDevicePath").mockResolvedValue(
+		"platform-test-wlan0",
+	);
 	wifiRadioObservation.stop();
 	await wifiRadioObservation.settled;
 	await wifiRadioIdentity.discover([]);
@@ -185,26 +188,42 @@ test.each(["hang", "slow", "throw"] as const)(
 			},
 		);
 		const failures = getWifiRadioShadowFailures();
-		const receipt = legacyReceipt();
+		let completed = false;
+		const receipt = legacyReceipt().then((value) => {
+			completed = true;
+			return value;
+		});
 		const first = await Promise.race([
 			receipt.then(() => "legacy"),
 			entered.promise.then(() => "shadow"),
 		]);
-		expect(first).toBe("legacy");
-		const actual = await receipt;
-		expect(actual).toEqual(expected);
-		expect(read).toHaveBeenCalledTimes(0);
-		jest.advanceTimersByTime(0);
-		await entered.promise;
+		expect(first).toBe("shadow");
+		expect(completed).toBe(false);
+		expect(getWifiInterfacesByMacAddress()).toEqual({});
 		if (mode === "slow") {
 			jest.advanceTimersByTime(RADIO_SHADOW_TIMEOUT_MS / 2);
 			gate.resolve("3");
-			await wifiRadioObservation.settled;
-		} else if (mode === "throw") {
-			await wifiRadioObservation.settled;
-		} else {
+		} else if (mode === "hang") {
 			jest.advanceTimersByTime(RADIO_SHADOW_TIMEOUT_MS);
 		}
+		const actual = await receipt;
+		expect(actual).toEqual(
+			mode === "slow"
+				? expected
+				: {
+						...expected,
+						logs: [
+							{
+								level: "warn",
+								args: [
+									`Wi-Fi identity sample lost (${mode === "hang" ? "timed out" : "rejected"}) for wlan0; retry 1/3`,
+								],
+							},
+							...expected.logs,
+						],
+					},
+		);
+		await wifiRadioObservation.settled;
 		expect(broadcasts).toEqual(expected.broadcasts);
 		if (mode === "slow") {
 			expect(logs).toEqual(expected.logs);
@@ -221,7 +240,14 @@ test.each(["hang", "slow", "throw"] as const)(
 			mode === "slow" ? 0 : 1,
 		);
 		if (mode === "hang") {
+			const secondEntered = Promise.withResolvers<void>();
+			read.mockImplementation(async () => {
+				secondEntered.resolve();
+				return gate.promise;
+			});
 			const another = startLegacy();
+			await secondEntered.promise;
+			jest.advanceTimersByTime(RADIO_SHADOW_TIMEOUT_MS);
 			expect(await another).toBe(true);
 			jest.advanceTimersByTime(0);
 			// Includes the fresh read a later discovery makes after a timed-out sample.
@@ -376,6 +402,8 @@ test("shadow rejection releases its queued batch without propagating", async () 
 });
 
 test("the production confirmation poll waits for its queued fresh read", async () => {
+	spyOn(nm, "nmDeviceProp").mockResolvedValue(["100", "ap"]);
+	spyOn(nm, "nmConnGetFields").mockResolvedValue(["ap"]);
 	const gate = Promise.withResolvers<string[]>();
 	releases.push(() => gate.resolve([]));
 	let reads = 0;

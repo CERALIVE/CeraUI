@@ -78,11 +78,13 @@ import {
 	hotspotStartProcedure,
 	hotspotStopProcedure,
 } from "../rpc/procedures/wifi.procedure.ts";
+import { mockHotspotConfirmationPoll } from "./helpers/wifi-hotspot-test-setup.ts";
 import { wifiProtocolContext } from "./helpers/wifi-protocol-context.ts";
 import {
 	isolateWifiRegistry,
 	restoreWifiRegistry,
 } from "./helpers/wifi-registry.ts";
+import { wifiRequestBinding } from "./helpers/wifi-request-binding.ts";
 
 const MAC = "dc:a6:32:01:02:03";
 const IFNAME = "wlan-intent";
@@ -193,7 +195,7 @@ async function publishRealCapabilities(): Promise<void> {
 	const fixture = (name: string) =>
 		readFile(join(import.meta.dir, "fixtures", "wifi", name), "utf8");
 	const [phy, reg, dev] = await Promise.all([
-		fixture("iw-phy-rock5bplus-rtl8852be.txt"),
+		fixture("iw-phy-mt7925-nm-hybrid.txt"),
 		fixture("iw-reg-get-rock5bplus.txt"),
 		fixture("iw-dev-rock5bplus.txt"),
 	]);
@@ -270,7 +272,7 @@ beforeEach(async () => {
 		effect("activate");
 		return acceptsActivation;
 	});
-	spyOn(defaultHotspotDeps, "nmHotspot").mockImplementation(async () => {
+	spyOn(defaultHotspotDeps, "nmApConnAdd").mockImplementation(async () => {
 		effect("create");
 		return PROFILE;
 	});
@@ -288,9 +290,7 @@ beforeEach(async () => {
 	spyOn(defaultHotspotDeps, "releaseConcurrentInterface").mockImplementation(
 		async () => {},
 	);
-	spyOn(defaultHotspotDeps, "pollHotspotActive").mockImplementation(
-		async () => true,
-	);
+	mockHotspotConfirmationPoll();
 	spyOn(defaultHotspotStopDeps, "nmConnSetFields").mockImplementation(
 		async () => {
 			effect("stop-fields");
@@ -319,7 +319,7 @@ afterEach(async () => {
 	wifiRadioObservation.stop();
 	resetWifiCapabilitiesForTest();
 	resetApStaCapabilityStateForTest();
-	settlePending(IFNAME, false);
+	await settlePending(IFNAME, false);
 	jest.clearAllTimers();
 	jest.useRealTimers();
 	mock.restore();
@@ -336,23 +336,28 @@ for (const capability of [false, true] as const) {
 	test(`(1) confirmed direct ${capability ? "hybrid" : "exclusive"} start records its actual mode before effects`, async () => {
 		seed(radio(capability));
 		const mode = capability ? "hybrid" : "hotspot";
-		const result = await call(
-			hotspotStartProcedure,
-			{ device: "0" },
-			{ context: wifiProtocolContext() },
-		);
-		settlePending(IFNAME, true);
-		expect(result).toEqual({ success: true, accepted: true });
-		expect(observedWifiAdapterMode(row)).toBe(mode);
-		expect(await diskModes()).toEqual({ [MAC]: mode });
-		expect(modesAtEffect.every((value) => value === mode)).toBe(true);
-		expect(transcript).toContain("activate");
+		const binding = await wifiRequestBinding(MAC, row);
+		try {
+			const result = await call(
+				hotspotStartProcedure,
+				{ device: "0", incarnation: binding.incarnation },
+				{ context: wifiProtocolContext() },
+			);
+			await settlePending(IFNAME, true);
+			expect(result).toEqual({ success: true, accepted: true });
+			expect(observedWifiAdapterMode(row)).toBe(mode);
+			expect(await diskModes()).toEqual({ [MAC]: mode });
+			expect(modesAtEffect.every((value) => value === mode)).toBe(true);
+			expect(transcript).toContain("activate");
+		} finally {
+			await binding.restore();
+		}
 	});
 }
 
 test("(1) stop remembers station under the same key as direct start, before teardown", async () => {
 	await wifiHotspotStart({ device: 0 });
-	settlePending(IFNAME, true);
+	await settlePending(IFNAME, true);
 	modesAtEffect = [];
 	const result = await call(
 		hotspotStopProcedure,
@@ -390,7 +395,7 @@ test("(2) an adapter appearing fifteen seconds after boot is restored on its dis
 	await advance(15);
 	seed();
 	await source.publish();
-	settlePending(IFNAME, true);
+	await settlePending(IFNAME, true);
 	expect(observedWifiAdapterMode(row)).toBe("hotspot");
 	expect(await diskModes()).toEqual({ [MAC]: "hotspot" });
 	expect(transcript).toContain("activate");
@@ -405,7 +410,7 @@ test("(3) boot does not act before discovery has published", async () => {
 	expect(transcript).toEqual([]);
 	expect(observedWifiAdapterMode(row)).toBe("station");
 	await source.publish();
-	settlePending(IFNAME, true);
+	await settlePending(IFNAME, true);
 	expect(observedWifiAdapterMode(row)).toBe("hotspot");
 });
 
@@ -430,7 +435,7 @@ test("(4) streaming restore stays pending with an empty NM transcript, logs once
 	);
 	streamingOn = false;
 	await source.publish(false);
-	settlePending(IFNAME, true);
+	await settlePending(IFNAME, true);
 	expect(observedWifiAdapterMode(row)).toBe("hotspot");
 	expect(jest.getTimerCount()).toBe(0);
 });
@@ -457,7 +462,7 @@ for (const from of ["hybrid", "hotspot"] as const) {
 		observed(from);
 		persistWifiAdapterMode(MAC, from);
 		const result = await transition.setWifiAdapterMode(0, target, modeDeps());
-		settlePending(IFNAME, true);
+		await settlePending(IFNAME, true);
 		expect(result.success).toBe(true);
 		expect(await diskModes()).toEqual({ [MAC]: target });
 		expect(observedWifiAdapterMode(row)).toBe(target);
@@ -502,7 +507,7 @@ for (const path of ["direct-hybrid", "stop", "station", "hybrid"] as const) {
 				: path === "stop"
 					? await wifiHotspotStop({ device: 0 })
 					: await transition.setWifiAdapterMode(0, path, modeDeps());
-		settlePending(IFNAME, true);
+		await settlePending(IFNAME, true);
 		expect(result.success).toBe(true);
 		expect(row.conn).toBe("station-link");
 		expect(getPersistedWifiAdapterMode(MAC)).toBe(
@@ -543,7 +548,7 @@ for (const previous of [undefined, "station"] as const) {
 	test(`(8) ${previous ?? "absent"} intent on a proven non-hybrid radio still allows exclusive start`, async () => {
 		if (previous !== undefined) persistWifiAdapterMode(MAC, previous);
 		expect(await wifiHotspotStart({ device: 0 })).toEqual({ success: true });
-		settlePending(IFNAME, true);
+		await settlePending(IFNAME, true);
 		expect(observedWifiAdapterMode(row)).toBe("hotspot");
 		expect(await diskModes()).toEqual({ [MAC]: "hotspot" });
 	});
@@ -552,19 +557,19 @@ for (const previous of [undefined, "station"] as const) {
 test("unknown capability and absent intent allow exclusive start without pinning future boots to hotspot", async () => {
 	seed(radio(undefined));
 	expect(await wifiHotspotStart({ device: 0 })).toEqual({ success: true });
-	settlePending(IFNAME, true);
+	await settlePending(IFNAME, true);
 	expect(observedWifiAdapterMode(row)).toBe("hotspot");
-	expect(getPersistedWifiAdapterModes()).toEqual({});
-	expect(await Bun.file(getConfigFilePath()).exists()).toBe(false);
+	expect(getPersistedWifiAdapterModes()).toEqual({ [MAC]: "hotspot" });
+	expect(await Bun.file(getConfigFilePath()).exists()).toBe(true);
 });
 
 test("unknown capability preserves a station choice instead of pinning exclusive mode", async () => {
 	seed(radio(undefined));
 	persistWifiAdapterMode(MAC, "station");
 	expect(await wifiHotspotStart({ device: 0 })).toEqual({ success: true });
-	settlePending(IFNAME, true);
+	await settlePending(IFNAME, true);
 	expect(observedWifiAdapterMode(row)).toBe("hotspot");
-	expect(await diskModes()).toEqual({ [MAC]: "station" });
+	expect(await diskModes()).toEqual({ [MAC]: "hotspot" });
 });
 
 test("capability arrival retries pending hybrid once and a duplicate edge does not start twice", async () => {
@@ -576,7 +581,7 @@ test("capability arrival retries pending hybrid once and a duplicate edge does n
 	expect(row.supportsApStaConcurrency).toBe(false);
 	transcript = [];
 	await publishRealCapabilities();
-	settlePending(IFNAME, true);
+	await settlePending(IFNAME, true);
 	const completed = [...transcript];
 	await notifyWifiAdapterModeEdge();
 	expect(observedWifiAdapterMode(row)).toBe("hybrid");
@@ -608,9 +613,7 @@ for (const mode of ["station", "hotspot", "hybrid"] as const) {
 				? await wifiHotspotStop({ device: 0 })
 				: await wifiHotspotStart({ device: 0 });
 		expect(result).toEqual({ success: true });
-		expect(await diskModes()).toEqual(
-			mode === "hotspot" ? {} : { [MAC]: mode },
-		);
+		expect(await diskModes()).toEqual({ [MAC]: mode });
 		expect(transcript).toEqual([]);
 	});
 }
@@ -646,7 +649,7 @@ test("not-confirmed retains the accepted target", async () => {
 		() => new Promise<boolean>(() => {}),
 	);
 	expect(await wifiHotspotStart({ device: 0 })).toEqual({ success: true });
-	settlePending(IFNAME, false);
+	await settlePending(IFNAME, false);
 	expect(observedWifiAdapterMode(row)).toBe("station");
 	expect(await diskModes()).toEqual({ [MAC]: "hotspot" });
 });
@@ -777,7 +780,7 @@ test("real discovery, capability publication and streaming clearance drive the b
 	streaming.updateStatus(false);
 	await applied.promise;
 	for (let turn = 0; turn < 30; turn++) await Promise.resolve();
-	settlePending(IFNAME, true);
+	await settlePending(IFNAME, true);
 	expect(observedWifiAdapterMode(row)).toBe("hotspot");
 	expect(await diskModes()).toEqual({ [MAC]: "hotspot" });
 });
@@ -789,10 +792,12 @@ test("legacy Start and Stop dispatch remember their choices through the unchange
 		started.resolve();
 		return true;
 	});
-	handleWifi(wifiProtocolContext().ws, { hotspot: { start: { device: 0 } } });
+	const dispatchedStart = handleWifi(wifiProtocolContext().ws, {
+		hotspot: { start: { device: 0 } },
+	});
 	await started.promise;
 	for (let turn = 0; turn < 30; turn++) await Promise.resolve();
-	settlePending(IFNAME, true);
+	await settlePending(IFNAME, true);
 	expect(await diskModes()).toEqual({ [MAC]: "hotspot" });
 	const stopped = Promise.withResolvers<void>();
 	spyOn(defaultHotspotStopDeps, "nmDisconnect").mockImplementation(async () => {
@@ -800,11 +805,14 @@ test("legacy Start and Stop dispatch remember their choices through the unchange
 		stopped.resolve();
 		return true;
 	});
-	handleWifi(wifiProtocolContext().ws, { hotspot: { stop: { device: 0 } } });
+	const dispatchedStop = handleWifi(wifiProtocolContext().ws, {
+		hotspot: { stop: { device: 0 } },
+	});
 	await stopped.promise;
 	for (let turn = 0; turn < 30; turn++) await Promise.resolve();
 	expect(await diskModes()).toEqual({ [MAC]: "station" });
 	expect(observedWifiAdapterMode(row)).toBe("station");
+	await Promise.all([dispatchedStart, dispatchedStop]);
 });
 
 test("the event leaf imports without preload or application files and cannot retain a process", async () => {
@@ -874,7 +882,7 @@ test("F1 a failed Start write cannot become an AP through later restore", async 
 	await expect(wifiHotspotStart({ device: 0 })).rejects.toThrow();
 	setConfigFilePath(durablePath);
 	await transition.reconcileWifiAdapterModes(modeDeps());
-	settlePending(IFNAME, true);
+	await settlePending(IFNAME, true);
 	expect(transcript).toEqual([]);
 	expect(observedWifiAdapterMode(row)).toBe("station");
 	expect(getPersistedWifiAdapterModes()).toEqual(await diskModes());
@@ -915,7 +923,7 @@ test("F2 direct Start uses fresh parser/cache proof after the initial probe fail
 	await publishRealCapabilities();
 	expect(row.supportsApStaConcurrency).toBe(false);
 	expect(await wifiHotspotStart({ device: 0 })).toEqual({ success: true });
-	settlePending(IFNAME, true);
+	await settlePending(IFNAME, true);
 	expect(observedWifiAdapterMode(row)).toBe("hybrid");
 	expect(row.conn).toBe("station-link");
 	expect(transcript).toContain("virtual");
@@ -943,10 +951,10 @@ test("F3 the actual failed probe permits exclusive Start without recording hotsp
 	expect(row.supportsApStaConcurrency).toBe(false);
 	expect(getWifiCapabilitiesForInterface(IFNAME)).toBeUndefined();
 	expect(await wifiHotspotStart({ device: 0 })).toEqual({ success: true });
-	settlePending(IFNAME, true);
+	await settlePending(IFNAME, true);
 	expect(observedWifiAdapterMode(row)).toBe("hotspot");
-	expect(getPersistedWifiAdapterModes()).toEqual({});
-	expect(await Bun.file(getConfigFilePath()).exists()).toBe(false);
+	expect(getPersistedWifiAdapterModes()).toEqual({ [MAC]: "hotspot" });
+	expect(await Bun.file(getConfigFilePath()).exists()).toBe(true);
 });
 
 for (const newer of ["station", "hotspot", "mode-only"] as const) {

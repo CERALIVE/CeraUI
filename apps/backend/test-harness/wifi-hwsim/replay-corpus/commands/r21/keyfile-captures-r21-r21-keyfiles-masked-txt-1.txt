@@ -1,0 +1,17 @@
+[connection]
+id=CeraPreflight-5b76f470-b9e5-415b-b169-22bef0d09f16\n
+uuid=5b76f470-b9e5-415b-b169-22bef0d09f16
+type=dummy
+autoconnect=false
+interface-name=cera-preflight
+
+[dummy]
+
+[ipv4]
+method=disabled
+
+[ipv6]
+addr-gen-mode=default
+method=disabled
+
+[proxy]

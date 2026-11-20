@@ -316,6 +316,42 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			"argv-only spawnWithTimeout; RAUC install stays inside the UID pin through confirmed completion",
 	})),
 	{
+		id: "deviceLogs.journalFollow",
+		file: "modules/device-logs/follow.ts",
+		symbol: "nativeFollow",
+		command:
+			"[journalctl, -f, -o, json, --all, fixed fields, position, --, compiled matches]",
+		class: "watcher",
+		status: "enforced",
+		contract: {
+			timed: false,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: true,
+			lifetimeTimeoutExempt: true,
+		},
+		mechanism:
+			"Socket-owned abort; bounded batches; TERM/KILL and reap before replacement",
+	},
+	{
+		id: "deviceLogs.journalScan",
+		file: "modules/device-logs/reader.ts",
+		symbol: "scanJournal",
+		command:
+			"[journalctl, -o, json, --all, fixed fields, internal options (including event seek time bounds), --, compiled matches]",
+		class: "bounded-command",
+		status: "enforced",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		mechanism:
+			"Incremental byte/record/deadline bounds; abort and stop retire TERM/KILL then reap",
+	},
+	{
 		id: "osStage.orphanLock",
 		file: "modules/system/update-orchestrator/os-stage-orphan-lock.ts",
 		symbol: "acquireOsOrphanLock",
@@ -558,7 +594,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		id: "streamloop.srtlaSend",
 		file: "modules/streaming/streamloop/process-runner.ts",
 		symbol: "spawnStreamingLoop",
-		command: "[command, ...args] (e.g. srtla_send)",
+		command: "[command, ...args] (owned srtla_send launch pipes both outputs)",
 		class: "supervised-worker",
 		contract: {
 			timed: false,

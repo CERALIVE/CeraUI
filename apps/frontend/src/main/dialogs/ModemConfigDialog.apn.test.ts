@@ -19,9 +19,27 @@
  */
 
 import type { Modem } from "@ceraui/rpc/schemas";
-import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/svelte";
+import {
+	beforeAll,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	onTestFinished,
+	vi,
+} from "vitest";
 
+import {
+	clearRequestedDialog,
+	getRequestedDialogContext,
+} from "$lib/stores/dialog-request.svelte";
 import { resetModemsFeed } from "../../tests/helpers/modem-feed.svelte";
 import ModemConfigDialog from "./ModemConfigDialog.svelte";
 
@@ -43,6 +61,10 @@ vi.mock("$lib/rpc/subscriptions.svelte", async () => {
 
 vi.mock("svelte-sonner", () => ({
 	toast: { error: vi.fn(), success: vi.fn() },
+}));
+
+vi.mock("$lib/stores/navigation-lazy", () => ({
+	navigateToDestination: () => undefined,
 }));
 
 type WireModemConfig = NonNullable<Modem["config"]>;
@@ -163,6 +185,27 @@ describe("a refused save is REPORTED, never reported as saved", () => {
 		expect(band.getAttribute("role")).toBe("alert");
 		// The dialog is still on the settings that did not land.
 		expect(autoApnSwitch()).toBeTruthy();
+	});
+
+	it("opens View logs at the moment the refusal arrived, not at the click", async () => {
+		const refusedAt = 1_800_000_000_000;
+		vi.useFakeTimers({ now: refusedAt, toFake: ["Date"] });
+		onTestFinished(() => {
+			vi.useRealTimers();
+			clearRequestedDialog();
+		});
+		configure.mockResolvedValue({ success: false, error: "write_failed" });
+		mount(modemWithConfig({}));
+
+		await saveChangedApn("ceralive.test.apn");
+		const band = await screen.findByTestId("modem-save-refused");
+		vi.setSystemTime(refusedAt + 45_000);
+		await fireEvent.click(within(band).getByTestId("view-logs-action"));
+
+		expect(getRequestedDialogContext()).toEqual({
+			tab: "raw",
+			at: refusedAt,
+		});
 	});
 
 	it("never renders the raw reason token", async () => {

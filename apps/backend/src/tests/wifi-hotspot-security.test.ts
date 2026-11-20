@@ -370,6 +370,8 @@ describe("nmcli field set", () => {
 		expect(hotspotBindingFields(MAC)).toEqual({
 			"connection.interface-name": "",
 			"802-11-wireless.mac-address": MAC,
+			"match.path": "",
+			"connection.autoconnect": "no",
 			"802-11-wireless-security.key-mgmt": "wpa-psk",
 			"802-11-wireless-security.pmf": "disable",
 		});

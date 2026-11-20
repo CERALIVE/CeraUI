@@ -24,6 +24,8 @@ export const SRTLA_LISTEN_PORT = parseInt(
 	10,
 );
 
+export const SENDER_LOG_PREFIX = "srtla_send: ";
+
 /** Timeout (ms) before SIGKILL is sent to processes that ignore SIGTERM. */
 export const SHUTDOWN_SIGKILL_TIMEOUT_MS = 10_000;
 

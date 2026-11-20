@@ -178,7 +178,11 @@ describe("compositionWrites", () => {
 			"composition_geometry_unsupported",
 			"composition_rect_invalid",
 		]) {
-			const copy = compositionRefusal({ success: false, error, applied: {} });
+			const copy = compositionRefusal({
+				success: false,
+				error,
+				applied: {},
+			})?.message;
 			expect(copy).toBeTruthy();
 			expect(copy).not.toContain(error);
 		}

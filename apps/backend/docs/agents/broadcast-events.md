@@ -155,6 +155,27 @@ backend records fed by a Winston `Stream` transport after `redact()` — so the
 whole getLog → `log` push → download path is exercisable end-to-end without
 hardware (`tests/observable-logs.test.ts`, e2e `logs-dialog.spec.ts`).
 
+With `NODE_ENV=production`, the logger writes debug and above to the console
+for the journal (`journalctl -u ceralive`), with `<3>` for errors, `<4>` for
+warnings, `<6>` for info and `<7>` for other levels before the JSON record.
+It creates no file transport on devices. Non-production keeps the bounded
+`debug.log` file and its existing console levels and pretty/JSON selection.
+`setJournalDetail('info' | 'debug')` changes only the production console level;
+`LOG_LEVEL` overrides both the startup default and later detail changes.
+Redaction and RPC trace gating are unchanged.
+
+The ring remains unprefixed JSON. `getLogRingOffset()` counts evicted and
+cleared records, so offset plus array index is a stable sequence.
+`onLogLine(listener)` receives each redacted line and its sequence, returning
+an unsubscribe function. Each line uses a snapshot of its listeners: removal
+during a callback affects later lines, and a newly added listener starts with
+the next line. A throwing or asynchronously rejecting callback cannot interrupt
+the ring or its peers. Failures attempt one static `console.error` diagnostic
+per process, outside the logger; an unavailable diagnostic sink is contained.
+Synchronous callback logs reach the ring and console but skip listeners; later async logs dispatch normally.
+Coverage: `tests/logger-journal.test.ts`, `tests/logger-transports.test.ts`
+and `tests/logger-listeners.test.ts`.
+
 `notifications.getPersistent` returns the live persistent set via
 `getPersistentNotifications(true)` (not an empty stub). The frontend
 NotificationsPanel reads the live `notification` push cache; this RPC is the

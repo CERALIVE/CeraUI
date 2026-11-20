@@ -1,0 +1,47 @@
+phy#3
+	Interface wlan3
+		ifindex 6
+		wdev 0x300000001
+		addr 7a:eb:a9:df:44:03
+		type managed
+		txpower 20.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
+phy#2
+	Interface wlan2
+		ifindex 5
+		wdev 0x200000001
+		addr ca:d5:e5:0b:64:66
+		type managed
+		txpower 20.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
+phy#1
+	Interface wlan1
+		ifindex 4
+		wdev 0x100000001
+		addr 9a:c1:73:ec:3e:65
+		type managed
+		txpower 20.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
+phy#0
+	Unnamed/non-netdev interface
+		wdev 0x2
+		addr 02:00:00:00:00:00
+		type P2P-device
+		txpower 20.00 dBm
+	Interface wlan0
+		ifindex 3
+		wdev 0x1
+		addr 02:00:00:00:00:00
+		ssid CeraTest
+		type AP
+		channel 6 (2437 MHz), width: 20 MHz (no HT), center1: 2437 MHz
+		txpower 20.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0

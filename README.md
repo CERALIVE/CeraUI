@@ -19,6 +19,30 @@ credentials and operator selection are normalized before NetworkManager writes.
 disabled by the device capability gate. See the
 [modem save contract](apps/backend/docs/agents/a-modem-save-spends-a-reconnect-only-when-it-must.md#applied-configuration-receipts-exists).
 
+**Journal reader primitives [EXISTS].** The backend has bounded journal scans,
+record parsing and logger-ring mock scan/follow adapters. These are internal
+building blocks for the planned viewer. See the
+[reader contract](apps/backend/docs/agents/device-journal-reader.md).
+
+**Support bundle backend [EXISTS].** Authenticated local clients can preview a
+manifest and download a bounded, redacted support bundle. Privacy validation
+finishes before a download ticket is issued; a secret colliding with structured
+metadata refuses the operation. This reduces sensitive data without guaranteeing
+an anonymous file. See the
+[bundle contract](apps/backend/docs/agents/device-log-bundle.md).
+
+**Boot version context [EXISTS].** After revisions initialize, the backend records
+one structured `device started` line with the running versions, journal boot ID,
+OS image, active slot and board. Optional unreadable sources remain null; RAUC
+does not block startup. See the
+[version contract](apps/backend/docs/agents/a-version-an-operator-reads-must-be-a-live-read.md#boot-version-context-exists).
+
+**Journal conformance [EXISTS].** `bun run test:journal-conformance` checks
+real systemd 257 journal behavior in disposable Debian trixie containers.
+Docker and a local `debian:trixie` image are required. The Build Check workflow
+runs the suite on code changes and includes its result in the required summary.
+See the [harness contract](apps/backend/test-harness/journal-conformance/README.md).
+
 **Streaming settings RPC [EXISTS].** Settings clients can save the producer's
 balancer selection or clear a saved codec with `video_codec: null` for the next
 start. Saved keys, defaults and passthrough choices remain unchanged. See the
@@ -496,6 +520,15 @@ See the [SSH persistence contract](apps/backend/docs/agents/dev-mock-seams.md#ss
   or UUID hint. Current and historical owners remain protected while absent;
   evidence-based orphan migration and unresolved-radio prepare/start remain.
   See the [ownership contract](apps/backend/docs/agents/wifi-adapter-identity-is-the-permanent-mac.md#hotspot-profile-ownership-exists-host-tested-only).
+- **Hotspot reconciliation [EXISTS; host-tested only]**: one logical-owner lock
+  serializes policy, Stop, mode changes, identity transfer and bounded boot
+  restoration. An observed lost hotspot is restored up to three times while
+  its saved intent remains on; Stop keeps it off. Confirmed-absent history is
+  pruned; failed reads retry without granting AP teardown authority. Retained
+  first-start cleanup also runs through that owner lock; Stop consumes it before
+  reporting, and persisted creation instances recover safely after a service restart.
+  See the
+  [lifecycle contract](docs/AP-STA-CONCURRENT-MODE.md#logical-owner-reconciliation-exists-host-tested-only).
 - **Device Health telemetry**: memory, per-cluster CPU frequency, DDR bus load,
   GPU load, and (on the vendor kernel) per-core decoder load, alongside the
   existing SoC temperature and load-average traces. Every signal is omitted
@@ -615,7 +648,7 @@ inline). See `.env.example` for the full layout.
 | `VITE_SOCKET_ENDPOINT` | dev only | `.env.development` | `ws://<page hostname>` | WebSocket endpoint (scheme + host, no port) |
 | `VITE_SOCKET_PORT` | dev only | `.env.development` | `3002` | Backend dev WebSocket port |
 | `MOCK_SCENARIO` | dev only | `.env.development` | `multi-modem-wifi` | Hardware mock scenario |
-| `LOG_LEVEL` | dev + prod | shell / systemd env | _(per-transport default)_ | Override Winston log level for all transports. Dev console default: `info`; prod console: `warn`; file: `debug`. Set to `debug` to enable per-RPC call trace lines. |
+| `LOG_LEVEL` | dev + prod | shell / systemd env | _(per-transport default)_ | Override Winston log level for all transports. Dev console default: `info`; prod console: `debug`; file: `debug`. Set to `debug` to enable per-RPC call trace lines. |
 
 ## Build & Deploy
 

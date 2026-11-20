@@ -10,9 +10,77 @@ import golden from "./fixtures/wifi/radio-equivalence-main.json";
 import { legacyOverlapTranscript } from "./helpers/wifi-legacy-overlap.ts";
 import { radioEquivalenceTranscript } from "./helpers/wifi-radio-equivalence.ts";
 
-const transcripts: Readonly<Record<string, unknown>> = golden.transcripts;
+const bindingFields = {
+	"connection.interface-name": "",
+	"802-11-wireless.mac-address": "58:02:05:e1:79:1c",
+	"match.path": "platform-equivalence-phy0",
+	"connection.autoconnect": "no",
+	"802-11-wireless-security.key-mgmt": "wpa-psk",
+	"802-11-wireless-security.pmf": "disable",
+};
+// Keep the recorded baseline immutable; apply the approved bindings and refresh.
+const verifiedTranscript = {
+	...golden.transcripts["verified fresh"],
+	calls: golden.transcripts["verified fresh"].calls.map((call, index) =>
+		index === 9 ? [call[0], call[1], bindingFields] : call,
+	),
+};
+const transcripts: Readonly<
+	Record<string, { readonly calls: readonly (readonly unknown[])[] }>
+> = {
+	...golden.transcripts,
+	"verified fresh": verifiedTranscript,
+	rename: {
+		...golden.transcripts.rename,
+		calls: golden.transcripts.rename.calls.flatMap((call, index) => {
+			if (index === 20)
+				return [["wifiUpdateSavedConns"], [call[0], call[1], bindingFields]];
+			return [index === 9 ? [call[0], call[1], bindingFields] : call];
+		}),
+	},
+	replug: {
+		...golden.transcripts.replug,
+		calls: golden.transcripts.replug.calls.map((call, index) =>
+			index === 9
+				? [call[0], call[1], bindingFields]
+				: index === 26
+					? [
+							call[0],
+							call[1],
+							{ ...bindingFields, "match.path": "platform-equivalence-phy2" },
+						]
+					: call,
+		),
+	},
+};
 const broadcastTranscripts: Readonly<Record<string, unknown>> =
 	golden.broadcasts;
+
+/** B7 changes only first-profile creation; retain the recorded main oracle. */
+function firstApTranscript<
+	T extends { readonly calls: readonly (readonly unknown[])[] },
+>(transcript: T | undefined) {
+	if (!transcript) throw new Error("Missing recorded main transcript");
+	return {
+		...transcript,
+		calls: transcript.calls.flatMap((call, index, calls) => {
+			if (call[0] === "nmHotspot") {
+				const binding = calls[index + 1];
+				if (binding?.[0] !== "nmConnSetFields")
+					throw new Error("Missing recorded first-profile binding");
+				return [
+					[
+						"nmApConnAdd",
+						call[1],
+						{ name: call[2], password: call[3] },
+						binding[2],
+					],
+				];
+			}
+			return calls[index - 1]?.[0] === "nmHotspot" ? [] : [[...call]];
+		}),
+	};
+}
 
 // R-A: shadow identity must preserve main's public discovery and activation bytes.
 for (const fixture of radioEquivalenceCases) {
@@ -20,14 +88,92 @@ for (const fixture of radioEquivalenceCases) {
 		const { broadcasts, ...transcript } =
 			await radioEquivalenceTranscript(fixture);
 		expect(transcript.unexpected).toEqual([]);
-		for (const frame of transcript.frames) {
+		for (const [index, frame] of transcript.frames.entries()) {
 			for (const activation of frame.activations) {
-				expect(activation.prepare.success).toBe(fixture.admitted);
-				expect(activation.start.success).toBe(fixture.admitted);
+				const admitted = fixture.limitedFrames?.includes(index)
+					? false
+					: fixture.admitted;
+				expect(activation.prepare.success).toBe(admitted);
+				expect(activation.start.success).toBe(admitted);
 			}
 		}
+		if (fixture.limitedFrames) {
+			const verified = verifiedTranscript;
+			const expectedCalls: unknown[][] =
+				fixture.frames.length > 1 ? [...verified.calls] : [];
+			const expectedBroadcasts: typeof broadcasts =
+				fixture.frames.length > 1
+					? [...golden.broadcasts["verified fresh"]]
+					: [];
+			expect(transcript.frames).toHaveLength(fixture.frames.length);
+			for (const [index, frame] of transcript.frames.entries()) {
+				if (!fixture.limitedFrames.includes(index)) {
+					expect(JSON.stringify(frame)).toBe(
+						JSON.stringify(verified.frames[0]),
+					);
+					continue;
+				}
+				const radios = fixture.frames[index];
+				if (!radios) throw new Error("Missing limited input frame");
+				const adapters = radios.map((radio, offset) => ({
+					id: index === 0 ? offset : 1,
+					key: `limited:${radio.ifindex}:${radio.phy}`,
+					wifi: {
+						ifname: radio.ifname,
+						conn: "",
+						hw: "Fixture Radio",
+						saved: {},
+						degraded_reason: "permanent-mac-unresolved",
+						available: [],
+						supports_hotspot: true,
+						mode: "station",
+					},
+				}));
+				const wifi = Object.fromEntries(
+					adapters.map((adapter) => [adapter.id, adapter.wifi]),
+				);
+				const snapshot = {
+					wifi,
+					keys: adapters.map((adapter) => adapter.key),
+					ids: Object.fromEntries(
+						adapters.map((adapter) => [adapter.id, adapter.key]),
+					),
+				};
+				const refusal = { success: false, error: "radio-unverified" } as const;
+				expect(frame.discovered).toEqual(snapshot);
+				expect(frame.activations).toEqual(
+					adapters.map(({ id }) => ({
+						device: id,
+						prepare: refusal,
+						start: refusal,
+						prepared: snapshot,
+						starting: snapshot,
+						confirmed: snapshot,
+					})),
+				);
+				for (const { id } of adapters)
+					expectedCalls.push(["publishOutcome", "start", id, refusal]);
+				const broadcast = {
+					phase: "discovery:pending",
+					at: index,
+					payload: { wifi },
+				};
+				expectedBroadcasts.push(broadcast, broadcast);
+			}
+			expect(transcript.calls).toEqual(
+				firstApTranscript({ calls: expectedCalls }).calls,
+			);
+			expect(broadcasts).toEqual(expectedBroadcasts);
+			return;
+		}
 		const bytes = JSON.stringify(transcript);
-		expect(bytes).toBe(JSON.stringify(transcripts[fixture.name]));
+		if (fixture.name === "rename")
+			expect(JSON.stringify(transcript.frames)).toBe(
+				JSON.stringify(golden.transcripts.rename.frames),
+			);
+		expect(bytes).toBe(
+			JSON.stringify(firstApTranscript(transcripts[fixture.name])),
+		);
 		expect(JSON.stringify(broadcasts)).toBe(
 			JSON.stringify(broadcastTranscripts[fixture.name]),
 		);
@@ -42,7 +188,7 @@ test("the parity oracle rejects an extra real Wi-Fi broadcast", async () => {
 		true,
 	);
 	expect(JSON.stringify(transcript)).toBe(
-		JSON.stringify(transcripts[fixture.name]),
+		JSON.stringify(firstApTranscript(transcripts[fixture.name])),
 	);
 	expect(JSON.stringify(broadcasts)).not.toBe(
 		JSON.stringify(broadcastTranscripts[fixture.name]),
@@ -80,9 +226,9 @@ test.each(["id", "registry-key", "id-map"] as const)(
 			},
 		);
 		try {
-			await expect(radioEquivalenceTranscript(fixture)).rejects.toThrow(
-				"Detached shadow changed legacy state",
-			);
+			await expect(
+				radioEquivalenceTranscript({ ...fixture, resample: true }),
+			).rejects.toThrow("Detached shadow changed legacy state");
 			expect(writes).toBe(1);
 		} finally {
 			mutation.mockRestore();

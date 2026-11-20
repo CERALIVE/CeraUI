@@ -18,22 +18,32 @@ export const radioEquivalenceCases: readonly EquivalenceFixture[] = [
 		name: "sysfs fail ifname cache hit",
 		frames: [
 			[radio],
-			[{ ...radio, permanent: undefined, operational: "02:00:00:00:00:02" }],
+			[
+				{
+					...radio,
+					permanent: undefined,
+					operational: "02:00:00:00:00:02",
+					ifindex: 20,
+				},
+			],
 		],
 		admitted: true,
+		limitedFrames: [1],
 	},
 	{
 		name: "operational-MAC cache hit",
 		frames: [
 			[radio],
-			[{ ...radio, ifname: "wlp-cache", permanent: undefined }],
+			[{ ...radio, ifname: "wlp-cache", permanent: undefined, ifindex: 20 }],
 		],
 		admitted: true,
+		limitedFrames: [1],
 	},
 	{
 		name: "no-cache/unverified",
 		frames: [[{ ...radio, permanent: undefined }]],
 		admitted: true,
+		limitedFrames: [0],
 	},
 	{
 		name: "duplicate MAC",
@@ -50,6 +60,7 @@ export const radioEquivalenceCases: readonly EquivalenceFixture[] = [
 			],
 		],
 		admitted: true,
+		limitedFrames: [0],
 	},
 	{
 		name: "rename",

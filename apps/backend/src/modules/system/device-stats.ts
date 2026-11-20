@@ -72,6 +72,7 @@ import {
 	shouldMockDeviceStats,
 } from "../../mocks/providers/device-stats.ts";
 import { DEVICE_STATS_EVENT } from "../../rpc/events.ts";
+import { createDiskEventObserver } from "../events/device-disk.ts";
 import { DEVICE_STATS_COLLECTOR_TIMEOUT_MS } from "../streaming/constants.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import { type CpuFreqStats, collectCpuFreq } from "./collectors/cpufreq.ts";
@@ -654,6 +655,7 @@ export function resolveDeviceStatsDeps(): DeviceStatsDeps {
  * then a fixed interval. Coalescing (5s window) lives in rpc/coalesce.ts.
  */
 export function initDeviceStats(): void {
+	const observeDisk = createDiskEventObserver();
 	const tick = async () => {
 		try {
 			const payload = await collectDeviceStats(
@@ -661,6 +663,7 @@ export function initDeviceStats(): void {
 				deviceStatsState,
 			);
 			recordDeviceStatsSnapshot(payload);
+			observeDisk(payload.disk);
 			broadcastMsg(DEVICE_STATS_EVENT, payload, getms() - ACTIVE_TO);
 		} catch (err) {
 			logger.error(`device-stats tick failed: ${err}`);

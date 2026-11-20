@@ -98,6 +98,34 @@ describe("config-change operator copy", () => {
 		expect(report.message).toContain("Check the system logs.");
 	});
 
+	it("names the reason sentence's key, so a sentence that points to the logs can offer them", () => {
+		const keyOf = (result: "reverted" | "rollback_failed", reason?: string) =>
+			configChangeReport({ result, attemptId: "a1", reason }, LL).reasonKey;
+
+		expect(keyOf("rollback_failed", "alsa: hw:CARD=x is busy")).toBe(
+			"live.encoder.applyPhase.reasonUnknown",
+		);
+		expect(keyOf("reverted")).toBe("live.encoder.applyPhase.reasonUnknown");
+		expect(keyOf("reverted", "change_rejected")).toBe(
+			"live.encoder.applyPhase.reasonRejected",
+		);
+		expect(keyOf("rollback_failed", "teardown_timeout")).toBe(
+			"live.encoder.applyPhase.reasonTeardownTimeout",
+		);
+		expect(keyOf("rollback_failed", "change_deadline_exceeded")).toBe(
+			"live.encoder.applyPhase.reasonDeadlineExceeded",
+		);
+		expect(keyOf("reverted", "engine_connection_lost")).toBe(
+			"live.encoder.applyPhase.reasonEngineLost",
+		);
+		expect(
+			configChangeReport({ result: "applied", attemptId: "a1" }, LL).reasonKey,
+		).toBeUndefined();
+		expect(
+			configChangeReport({ result: "busy" }, LL).reasonKey,
+		).toBeUndefined();
+	});
+
 	it("treats busy/rejected as a plain failed save — nothing about the stream changed", () => {
 		expect(configChangeReport({ result: "busy" }, LL)).toEqual({
 			level: "error",

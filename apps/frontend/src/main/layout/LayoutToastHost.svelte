@@ -4,6 +4,9 @@ import { MediaQuery } from 'svelte/reactivity';
 import { toast } from 'svelte-sonner';
 
 import { Toaster } from '$lib/components/ui/sonner';
+import { notificationLogKey } from '$lib/device-logs/log-pointer-keys';
+import { viewLogsToast } from '$lib/device-logs/view-logs';
+import { viewLogsMessage, viewLogsSecondary } from '$lib/device-logs/view-logs-secondary';
 import {
 	startStreaming as startStreamingFn,
 	stopStreaming as stopStreamingFn,
@@ -55,7 +58,7 @@ $effect(() => {
 		renderedAt.set(notification.name, notification.receivedAt);
 
 		const action = notification.action;
-		toast[notification.type](notification.text, {
+		toast[notification.type](viewLogsMessage(notification), {
 			id: notification.name,
 			duration: notification.durationMs,
 			dismissable: notification.isDismissable,
@@ -63,6 +66,7 @@ $effect(() => {
 			onAutoClose: () => dismiss(notification.name),
 			...(action?.kind === 'navigate'
 				? {
+						...viewLogsSecondary(notification, () => toast.dismiss(notification.name)),
 						action: {
 							label: resolveActionLabel(action.labelKey),
 							onClick: () => {
@@ -71,7 +75,7 @@ $effect(() => {
 							},
 						},
 					}
-				: {}),
+				: viewLogsToast(notificationLogKey(notification), notification.receivedAt)),
 		});
 	}
 

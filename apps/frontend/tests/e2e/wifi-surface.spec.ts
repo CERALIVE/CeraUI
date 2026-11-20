@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { wifiAdapterModeStatusSchema } from "@ceraui/rpc/schemas";
+import { type WifiStatus, wifiAdapterModeStatusSchema } from "@ceraui/rpc/schemas";
 
 import { expect, type Page, test } from "./fixtures/index.js";
 
@@ -230,7 +230,8 @@ test("direct hotspot start remembers the desired mode in the selector", { tag: "
 	page,
 	backendRpc,
 }) => {
-	expect(await backendRpc.call(["wifi", "hotspotStart"], { device: DEVICE_ID })).toEqual({
+	const { incarnation } = (await backendRpc.call<WifiStatus>(["wifi", "getStatus"]))[DEVICE_ID] ?? {};
+	expect(await backendRpc.call(["wifi", "hotspotStart"], { device: DEVICE_ID, incarnation })).toEqual({
 		success: true,
 		accepted: true,
 	});

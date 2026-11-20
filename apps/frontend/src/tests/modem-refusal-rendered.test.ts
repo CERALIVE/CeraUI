@@ -284,11 +284,27 @@ describe("each refusal class renders its own sentence, through its own RPC", () 
 });
 
 describe("the classes really are distinct ON SCREEN", () => {
-	it("eighteen classes render eighteen different sentences", async () => {
+	it("eighteen classes render eighteen different sentences", () => {
 		const rendered = new Set(
 			ALL_CASES.map((entry) => expectedSentence(entry.token)),
 		);
 		expect(rendered.size).toBe(ALL_CASES.length);
+	});
+});
+
+describe("View logs beside a config refusal that points to the logs", () => {
+	it("sits in the band of a write the device could not make", async () => {
+		await renderConfigRefusal("write_failed");
+
+		const band = screen.getByTestId("modem-save-refused");
+		const action = band.querySelector('[data-testid="view-logs-action"]');
+		expect(action?.className).toContain("mt-2");
+	});
+
+	it("is absent from a refusal that names its own fix", async () => {
+		await renderConfigRefusal("invalid_config");
+
+		expect(screen.queryByTestId("view-logs-action")).toBeNull();
 	});
 });
 

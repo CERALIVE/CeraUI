@@ -38,6 +38,7 @@ import {
 import {
 	getMockHotspotClients,
 	getMockHotspotConfig,
+	isMockWifiLimited,
 } from "../../mocks/providers/wifi.ts";
 import { getMockWifiIncarnation } from "../../mocks/providers/wifi-incarnation.ts";
 import {
@@ -83,9 +84,11 @@ import {
 	hotspotClientsForMessage,
 	recordHotspotClientsBroadcast,
 } from "./wifi-hotspot-clients.ts";
+import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 
 export { currentHotspotApIfnames } from "./wifi-hotspot-clients.ts";
 
+import { isQualifiedNmManagedHybrid } from "./wifi-concurrent-interface.ts";
 import { captureWifiFrameIncarnation } from "./wifi-frame-binding.ts";
 import { wifiHotspotConfig, wifiHotspotStop } from "./wifi-hotspot-config.ts";
 import { handleHotspotConn } from "./wifi-hotspot-discovery.ts";
@@ -241,6 +244,9 @@ export function wifiBuildMsg() {
 				ifs[index] = {
 					ifname: radio.ifname,
 					incarnation: getMockWifiIncarnation(radio.device),
+					...(isMockWifiLimited(radio.device)
+						? { degraded_reason: "permanent-mac-unresolved" as const }
+						: {}),
 					conn: hotspot.uuid,
 					hw: radio.macAddress,
 					saved: {},
@@ -286,6 +292,9 @@ export function wifiBuildMsg() {
 			const entry: WifiInterfaceResponseMessage = {
 				ifname: radio.ifname,
 				incarnation: getMockWifiIncarnation(radio.device),
+				...(isMockWifiLimited(radio.device)
+					? { degraded_reason: "permanent-mac-unresolved" as const }
+					: {}),
 				conn: activeSsid ? mockWifiUuidForSsid(activeSsid) : "",
 				hw: radio.macAddress,
 				saved,
@@ -326,7 +335,10 @@ export function wifiBuildMsg() {
 		if (wifiInterface.degradedReason !== undefined) {
 			entry.degraded_reason = wifiInterface.degradedReason;
 		}
-		if (wifiInterface.supportsApStaConcurrency === true) {
+		if (
+			wifiInterface.supportsApStaConcurrency === true &&
+			isQualifiedNmManagedHybrid(wifiInterface.ifname)
+		) {
 			entry.supports_ap_sta_concurrency = true;
 		}
 		ifs[id] = entry;
@@ -546,7 +558,7 @@ export async function wifiUpdateSavedConns(
 
 			const macAddress = macTmp.toLowerCase();
 			if (mode === "ap") {
-				void handleHotspotConn(macAddress, uuid);
+				await handleHotspotConn(macAddress, uuid);
 			} else if (mode === "infrastructure") {
 				registerSavedWifiConnection(savedInterfaces, macAddress, ssid, uuid);
 			}
@@ -916,7 +928,10 @@ async function runWifiNew(
 		return;
 	}
 
-	if (!(await nmConnSetWifiMacAddress(outcome.uuid, macAddress))) {
+	if (
+		normalizeMacAddress(macAddress) &&
+		!(await nmConnSetWifiMacAddress(outcome.uuid, macAddress))
+	) {
 		logger.warn(
 			"Failed to set the MAC address for the newly created connection",
 		);
@@ -944,7 +959,11 @@ async function wifiConnect(conn: MessageSocket, uuid: ConnectionUUID) {
 // is the oRPC wifi procedure, whose `context.ws` is a Bun ServerWebSocket, and
 // declaring the unrelated `ws` type here is what forced every call site to
 // launder it through `as unknown as WebSocket`.
-export function handleWifi(conn: MessageSocket, msg: WifiMessage["wifi"]) {
+export function handleWifi(
+	conn: MessageSocket,
+	msg: WifiMessage["wifi"],
+): Promise<void> | undefined {
+	let configuration: Promise<void> | undefined;
 	for (const type in msg) {
 		switch (type) {
 			case "connect":
@@ -989,11 +1008,12 @@ export function handleWifi(conn: MessageSocket, msg: WifiMessage["wifi"]) {
 					type,
 				);
 				/*
-				  These are dispatched, not awaited — but they are NOT bare
-				  fire-and-forget: each transaction publishes a terminal `wifi` frame
+				  Each transaction publishes a terminal `wifi` frame
 				  on every outcome it can reach, and the `catch` arms cover the one
 				  outcome it cannot (an unexpected throw), so no path on this branch
-				  can leave an operator's keyed op to expire on its TTL.
+				  can leave an operator's keyed op to expire on its TTL. Configuration
+				  also returns its completion so RPC cannot acknowledge it before
+				  the transaction has entered and finished its adapter lock.
 				*/
 				if ("start" in hotspotMessage && hotspotMessage.start) {
 					const { device } = hotspotMessage.start;
@@ -1016,23 +1036,26 @@ export function handleWifi(conn: MessageSocket, msg: WifiMessage["wifi"]) {
 				} else if ("config" in hotspotMessage && hotspotMessage.config) {
 					const { device } = hotspotMessage.config;
 					const binding = captureWifiFrameIncarnation(device, "config");
-					void wifiHotspotConfig(conn, hotspotMessage.config).catch((err) => {
-						logger.error(`hotspot configure threw: ${errorText(err)}`);
-						conn.send(
-							buildMsg(
-								"wifi",
-								{
-									hotspot: {
-										config: { device, error: "unavailable", ...binding },
+					configuration = wifiHotspotConfig(conn, hotspotMessage.config).catch(
+						(err) => {
+							logger.error(`hotspot configure threw: ${errorText(err)}`);
+							conn.send(
+								buildMsg(
+									"wifi",
+									{
+										hotspot: {
+											config: { device, error: "unavailable", ...binding },
+										},
 									},
-								},
-								getSocketSenderId(conn),
-							),
-						);
-					});
+									getSocketSenderId(conn),
+								),
+							);
+						},
+					);
 				}
 				break;
 			}
 		}
 	}
+	return configuration;
 }

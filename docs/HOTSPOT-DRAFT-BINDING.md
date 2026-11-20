@@ -19,23 +19,114 @@ remain readable and copyable, and Stop remains available.
 The live editor uses `wifiHotspotConfigOpKey(device, incarnation)` for dispatch,
 pending display and settlement. The shared mode and hotspot keys also include
 the token. Config/mode frames use the producer's dispatched token, never the
-latest token substituted onto an old outcome. Mismatched frames are ignored.
+latest token substituted onto an old outcome. Old config frames still drain
+local receipt ownership; mismatched frames cannot settle the displayed operation.
 Tokenless frames retain the legacy key for tokenless rows. The operation
 helper checks each owner's captured lifetime before applying a delayed RPC
 result, toast or callback; callers outside this flow retain their prior behavior.
 
-The frontend handles a future `radio-changed` or `binding-required` refusal
-without requiring either during this rollout. A current start refusal reopens
+The backend enforces `radio-changed` and `binding-required` at request and
+request-bound transaction-lock entry. A current start refusal reopens
 the gate with fresh consent; a retired owner's response cannot reopen it.
 Configure distinguishes refusal from an interrupted restart and does not claim
 the hotspot is running after interruption.
 
+## Admission and transient observation recovery
+
+| Operation | Required binding |
+| --- | --- |
+| Prepare load/save, Start, Configure, mode to hotspot/hybrid | The current row token; missing is `binding-required`, stale is `radio-changed` |
+| A guarded operation on a limited row | `radio-unverified`, with no radio or credential effect |
+| Stop and mode to station | Neither a missing nor a stale token refuses the action |
+
+The backend samples fresh physical identity under the adapter lock rather
+than trusting the last broadcast. If no current token is projectable, it waits
+for a running observation for up to two seconds and then returns
+`radio-changed`, `reason: "current-unobserved"`, without effects.
+
+One shared RPC middleware creates the request-admission context. Frame metadata
+uses a separate context and never supplies request authority. Direct internal
+calls, including boot restore and regulatory reconfigure, retain their base
+behavior without request context; no client token is synthesized for them.
+That context is one-shot: the transaction lock-entry check consumes it on admit
+and refuse alike, and middleware retires it in `finally` even when no consumer
+runs. It belongs only to its recorded adapter. Mock effects consume it
+synchronously. Configure retains it until its dispatched lock attempt enters
+or exits, while keeping the writer asynchronous. The transaction, the caller's
+later publications and everything they schedule run without it, and restore
+edges are delivered without it.
+
+That transient refusal does not close the Prepare gate or fail a pending
+config/mode operation. The frontend waits at most three seconds for the next
+status frame for the row and retries the same call once with that frame's
+token. A token-less frame selects `hotspotConfirm.bindingUnsupported` and
+sends no request; a missing frame expires to that same state. A second refusal
+uses the existing reloaded-details handling. Closing the owner or changing
+device/link retires the waiting request. There is no automatic retry loop.
+Before resending, the retry moves its pending operation to the new token's key,
+so the echoed terminal frame, pending protection and a deferred failure follow
+the resent request. If another operation already holds the retry's key, either
+the new token's key or its own key taken over by another client's transition,
+the retry is not sent and the first refusal takes the existing changed-radio
+handling. A rejected Prepare resend fails against the binding it was
+accepted under.
+
+Configure keeps this same recovery owner alive after the RPC dispatch
+acknowledgement until its captured config terminal arrives. A deferred
+`radio-changed/current-unobserved` receipt starts the existing future-status
+wait at receipt time, before an acknowledgement continuation can miss that
+status; it consumes the same single retry. A plain deferred `radio-changed`
+uses the same draft reload callback. Other writer terminals keep their existing
+subscription settlement, and a deferred `radio-unverified` has localized inline
+feedback. Closing the owner, a link reset or the existing operation timeout
+retires the config receipt; there is no additional timeout or retry loop.
+
+Each Configure call reserves its own terminal position before invoking RPC,
+even when another Save uses the same device and radio token. The receipt helper
+owns both the RPC and the captured terminal. `NotSentError` and a Configure
+RPC error release the reservation completely: the former proves no send, and
+the latter precedes writer admission on this procedure's fixed-ack path.
+A normal entry refusal also releases it; its frame precedes its RPC reply.
+An uncertain timeout or reset cannot prove no dispatch and keeps possible debt.
+Retiring an owner releases its callback but retains any possible terminal debt.
+Its delayed terminal is consumed without settling, reloading or recovering a
+replacement Save. A new socket epoch discards old-socket reservations. The
+valid Configure path owes one captured terminal per dispatch; no new wire
+identifier is introduced. Configure's result, toast and reload also require
+the same still-current admission controller, so an old acknowledgement cannot
+revive a cancelled Save. Every delivered captured terminal drains its local
+reservation before filtering by the displayed token. Repeated token rotations
+therefore retain no records for terminals already delivered.
+
+A terminal outcome received before handoff prevents a resend, including one
+under the same token; the existing confirmed or failed state remains visible.
+The abandoned retry does not replace that feedback with its earlier refusal.
+Attempt ownership belongs to one begin identity. A pending mode echo replaces
+that identity even when its key and target match, so a losing RPC cannot settle
+the winner displayed on its requesting client. The local-marker machinery is
+removed. All mode refusals before pending, including station contention and
+the transaction's own preflight checks, are private to their requester.
+
+Broadcast mode terminals carry the existing `seq` envelope. Private mode-error
+frames have no sequence and are consumed by the RPC client without entering
+subscription settlement; their correlated RPC result owns the local outcome.
+Broadcast terminals settle every observer regardless of reason, including busy
+outcomes and a reconnecting requester whose idle latch must be recreated. There
+is no foreign-DEVICE_BUSY filter. Configure keeps its separate asynchronous
+terminal contract. The [protocol contract](WIFI-INCARNATION-PROTOCOL.md) records
+the routing and attempt rules; no new wire field is introduced.
+
+Future remote callers must use this same admission and recovery contract.
+There is no remote hotspot route today; the token remains local and the remote
+status projection is unchanged. The full backend table and D13 rule are in
+[the protocol contract](WIFI-INCARNATION-PROTOCOL.md).
+
 ## Compatibility and remaining rollout
 
-This fixes the frontend draft/acknowledgement overwrite. P/P2 accept and echo
-tokens but do not enforce them at backend effect boundaries. That backend race,
-limited-mode behavior, `identity_limited`, composite/port-scope markers and
-their conditional copy ship in B. C adds none of those states or fields.
+This fixes the frontend draft/acknowledgement overwrite and adds backend entry
+admission. Limited mode retains its existing degraded reason. In-operation
+lifetime fencing and composite/port-scoped identity remain separate changes;
+this entry check adds no such state field.
 Old backends keep read-only hotspot display, Copy, Stop and station switching;
 the new frontend withholds guarded actions until a token is available.
 This is an intentional compatibility limit, not full action parity.

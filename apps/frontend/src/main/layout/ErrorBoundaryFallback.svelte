@@ -11,9 +11,10 @@ import { Button } from '$lib/components/ui/button';
 let { reset }: { error: unknown; reset: () => void } = $props();
 </script>
 
-<div class="flex min-h-screen items-center justify-center p-6" role="alert">
+<main class="flex min-h-screen items-center justify-center p-6">
 	<div
 		class="border-border bg-card w-full max-w-md rounded-xl border p-8 text-center shadow-sm"
+		role="alert"
 	>
 		<div
 			class="bg-status-error/10 text-status-error mx-auto mb-5 flex size-12 items-center justify-center rounded-full"
@@ -30,4 +31,4 @@ let { reset }: { error: unknown; reset: () => void } = $props();
 			{m["errorBoundary.retry"]()}
 		</Button>
 	</div>
-</div>
+</main>

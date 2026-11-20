@@ -1064,10 +1064,140 @@
 		"locales": ["de", "fr", "pt-BR"],
 		"reason": "\"Codec\" is the French word; fr general.audioCodec reads \"Codec audio\". de live.education.field.codec.title reads \"Video-Codec\" and general.audioCodec \"Audio-Codec\"; pt-BR general.audioCodec reads \"Codec de Áudio\", keeping the term untranslated."
 	},
+	"systemLogs.boots.slot": {
+		"value": "Slot {slot}",
+		"locales": ["de", "pt-BR"],
+		"reason": "Same A/B system slot term as settings.updates.slots.slot; de notifications.updateSlotsCurrent reads \"Beide System-Slots sind aktuell.\" and pt-BR notifications.updateSlotsCurrent reads \"Os dois slots do sistema estão atualizados.\", keeping the term untranslated."
+	},
+	"systemLogs.level.debug": {
+		"value": "Debug",
+		"locales": ["de"],
+		"reason": "Journal priority name; de advanced.logManagementDescription reads \"System-Logs für Fehlerbehebung und Debugging herunterladen\", keeping the term untranslated."
+	},
+	"systemLogs.level.error": {
+		"value": "Error",
+		"locales": ["es"],
+		"reason": "Error is the Spanish word; es advanced.copyFailed reads \"Error al copiar\" and devtools.networkError reads \"Error de Red\"."
+	},
+	"systemLogs.level.info": {
+		"value": "Info",
+		"locales": ["de"],
+		"reason": "Journal priority name; Info is standard German (Duden), as in de devtools.info \"Info\"."
+	},
+	"systemLogs.raw.levelInfo": {
+		"value": "Info",
+		"locales": ["de"],
+		"reason": "Journal priority name; Info is standard German (Duden), as in de devtools.info \"Info\"."
+	},
+	"systemLogs.raw.sourceLabel": {
+		"value": "Sources",
+		"locales": ["fr"],
+		"reason": "\"Sources\" is the French plural; fr live.summary.switchUnknown reads \"Ce moteur ne communique pas les sources accessibles en direct.\"."
+	},
+	"systemLogs.severity.error": {
+		"value": "Error",
+		"locales": ["es"],
+		"reason": "Error is the Spanish word; es advanced.copyFailed reads \"Error al copiar\" and devtools.networkError reads \"Error de Red\"."
+	},
+	"systemLogs.severity.info": {
+		"value": "Information",
+		"locales": ["de", "fr"],
+		"reason": "Information is the German noun, as in de advanced.versionInformation \"Versionsinformationen\"; \"Information\" is the French word, as in fr devtools.info."
+	},
+	"systemLogs.sharing.bundleSectionVersions": {
+		"value": "Versions",
+		"locales": ["fr"],
+		"reason": "\"Versions\" is the French plural; fr settings.index.versions reads \"Versions de l'appareil\"."
+	},
+	"systemLogs.sharing.heading": {
+		"value": "Downloads",
+		"locales": ["de", "pt-BR"],
+		"reason": "Download is the loanword both catalogs use for a transfer; de notifications.updateCellularApproval reads \"Dieser Download benötigt eine Freigabe für Mobilfunkdaten ({size}).\" and pt-BR reads \"Este download exige autorização para usar dados móveis ({size}).\"."
+	},
+	"systemLogs.source.kernel": {
+		"value": "Kernel",
+		"locales": ["de", "es", "pt-BR"],
+		"reason": "Linux kernel, as in settings.updates.kernel.title; es network.unclaimedAdapters.titleOne reads \"Adaptador detectado: sin controlador en este kernel\", de reads \"kein Treiber in diesem Kernel\"; pt-BR settings.updates.phase.kernelStaged reads \"Kernel pronto\", keeping the term untranslated."
+	},
+	"systemLogs.source.updates": {
+		"value": "Updates",
+		"locales": ["de"],
+		"reason": "de general.checkForUpdates reads \"Nach Updates suchen\" and settings.index.updates \"Software-Updates\"; Update is the German loanword (Duden) used across the de catalog."
+	},
+	"systemLogs.storage.volumeSource": {
+		"value": "Source",
+		"locales": ["fr"],
+		"reason": "\"Source\" is the French word; fr live.cannotStartNoPipeline reads \"Sélectionnez une source vidéo avant de démarrer la diffusion\"."
+	},
+	"systemLogs.versions.ceraui": {
+		"value": "CeraUI",
+		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
+		"reason": "CeraUI product name labelling the control software version row."
+	},
+	"systemLogs.versions.kernel": {
+		"value": "Kernel",
+		"locales": ["de", "es", "pt-BR"],
+		"reason": "Linux kernel, as in settings.updates.kernel.title; es network.unclaimedAdapters.titleOne reads \"Adaptador detectado: sin controlador en este kernel\", de reads \"kein Treiber in diesem Kernel\"; pt-BR settings.updates.phase.kernelStaged reads \"Kernel pronto\", keeping the term untranslated."
+	},
+	"systemLogs.versions.slot": {
+		"value": "Slot",
+		"locales": ["de", "pt-BR"],
+		"reason": "Same A/B system slot term as settings.updates.slots.slot; de notifications.updateSlotsCurrent reads \"Beide System-Slots sind aktuell.\" and pt-BR notifications.updateSlotsCurrent reads \"Os dois slots do sistema estão atualizados.\", keeping the term untranslated."
+	},
 	"theme.system": {
 		"value": "System",
 		"locales": ["de"],
 		"reason": "de notifications.updateSlotsCurrent reads \"Beide System-Slots sind aktuell.\" and advanced.downloadSystemLog \"System-Logdatei herunterladen\"."
+	},
+	"timeline.family.stream": {
+		"value": "Stream",
+		"locales": ["de"],
+		"reason": "de live.startStream reads \"Stream starten\" and live.stopStream \"Stream stoppen\"; Stream is the German loanword (Duden) used across the de catalog."
+	},
+	"timeline.family.update": {
+		"value": "Updates",
+		"locales": ["de"],
+		"reason": "de general.checkForUpdates reads \"Nach Updates suchen\" and settings.index.updates \"Software-Updates\"; Update is the German loanword (Duden) used across the de catalog."
+	},
+	"timeline.interface_added.detail": {
+		"value": "Interface: {iface}",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR network.sections.networkInterfaces reads \"Interfaces de Rede\"; \"Interface\" is the Portuguese word."
+	},
+	"timeline.interface_removed.detail": {
+		"value": "Interface: {iface}",
+		"locales": ["pt-BR"],
+		"reason": "pt-BR network.sections.networkInterfaces reads \"Interfaces de Rede\"; \"Interface\" is the Portuguese word."
+	},
+	"timeline.modem_added.detail": {
+		"value": "Modem: {name}",
+		"locales": ["de", "pt-BR"],
+		"reason": "de network.modem.bands.reason.unknown_modem reads \"Kein Modem hat für dieses Gerät geantwortet.\" and pt-BR reads \"Nenhum modem respondeu por este dispositivo.\"; \"Modem\" is the German and Portuguese word."
+	},
+	"timeline.modem_connected.detail.notRoaming": {
+		"value": "Modem: {name}",
+		"locales": ["de", "pt-BR"],
+		"reason": "de network.modem.bands.reason.unknown_modem reads \"Kein Modem hat für dieses Gerät geantwortet.\" and pt-BR reads \"Nenhum modem respondeu por este dispositivo.\"; \"Modem\" is the German and Portuguese word."
+	},
+	"timeline.modem_disconnected.detail": {
+		"value": "Modem: {name}",
+		"locales": ["de", "pt-BR"],
+		"reason": "de network.modem.bands.reason.unknown_modem reads \"Kein Modem hat für dieses Gerät geantwortet.\" and pt-BR reads \"Nenhum modem respondeu por este dispositivo.\"; \"Modem\" is the German and Portuguese word."
+	},
+	"timeline.modem_removed.detail": {
+		"value": "Modem: {name}",
+		"locales": ["de", "pt-BR"],
+		"reason": "de network.modem.bands.reason.unknown_modem reads \"Kein Modem hat für dieses Gerät geantwortet.\" and pt-BR reads \"Nenhum modem respondeu por este dispositivo.\"; \"Modem\" is the German and Portuguese word."
+	},
+	"timeline.sim_inserted.detail": {
+		"value": "Modem: {name}",
+		"locales": ["de", "pt-BR"],
+		"reason": "de network.modem.bands.reason.unknown_modem reads \"Kein Modem hat für dieses Gerät geantwortet.\" and pt-BR reads \"Nenhum modem respondeu por este dispositivo.\"; \"Modem\" is the German and Portuguese word."
+	},
+	"timeline.sim_removed.detail": {
+		"value": "Modem: {name}",
+		"locales": ["de", "pt-BR"],
+		"reason": "de network.modem.bands.reason.unknown_modem reads \"Kein Modem hat für dieses Gerät geantwortet.\" and pt-BR reads \"Nenhum modem respondeu por este dispositivo.\"; \"Modem\" is the German and Portuguese word."
 	},
 	"units.kbps": {
 		"value": "kbps",

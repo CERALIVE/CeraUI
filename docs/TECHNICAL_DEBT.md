@@ -86,6 +86,18 @@ register is "empty" precisely when there are none.
 
 ## Open Debt
 
+```debt
+id: TD-rtl8852be-hybrid-kernel-7-4
+title: RTL8852BE built into the Rock 5B+ does not offer hybrid on the current rtw89 path
+track: 1
+status: open
+exit_criteria: capability:rtl8852be-nm-hybrid
+owner: andrescera
+registered_at: 2026-11-15
+resolved_at: null
+unblock: Track the image upgrade at https://github.com/CERALIVE/image-building-pipeline/issues/274; ship a device kernel >= 7.4 containing upstream rtw89 change 4aae1be9483dee7877244f1f1a8cc1b469669e49 allowing two stations during SCC, then qualify the RTL8852BE NetworkManager hybrid lifecycle before enabling that card's product qualification check. Do not backport the change.
+```
+
 ### Released brand artwork precache footprint (2026-10-20)
 
 The lock-verified `v2026.10.0` artwork deliberately replaces five precached
@@ -214,6 +226,36 @@ This is the same root cause as `TD-federation-i18n-catalog-size` on a different 
 the SPA splits the catalog into lazy namespace chunks where the federation bundle cannot,
 so the SPA pays the ten-locale tax per namespace rather than all at once. It is recorded
 separately because the remedies and the exit measurements differ.
+
+**2026-11-18: System Logs crosses both aggregate ceilings (accepted
+footprint, debt still open).** With Bun 1.4.4 and the same build/report
+commands, main `f6c9a2fb` measures **1,130,265 B total SPA gzip /
+1,329,981 B precache**, 105,448 B / 105,443 B under the kernel-step
+baselines. The System Logs tree at `0e347d01` measures **1,253,631 B /
+1,453,432 B**, adding **123,366 B / 123,451 B** and exceeding those
+ceilings by **1,534 B / 1,624 B**. The two new namespace catalog chunks,
+`systemLogs` and `timeline`, carry 62,914 B of ten-locale copy; the lazy
+view chunks (Logs dialog, Raw logs, Events and their shared parts)
+41,161 B; the lazy `raw-logs-virtualizer` chunk 9,535 B; the log wire
+schema 4,971 B; `vendor-core` 1,726 B; CSS 1,393 B; smaller split chunks
+1,666 B.
+
+Both aggregate checks count the lazy chunks in this build, and the
+production sourcemaps show no source module in more than one emitted
+chunk. Moving the list virtualizer into its own lazy chunk took 9,429 B
+off the initial route and added about 120 B to each aggregate. The build
+embeds the short commit ID and a UTC build timestamp, so repeat gzip
+measurements can differ. Dropping copy, languages or log features is not
+a fix.
+
+Under the accepted-footprint mechanism in `scripts/ci/bundle-report.mjs:16-18`,
+both baselines move to these measured totals: **1,235,713 -> 1,253,631 B**
+and **1,435,424 -> 1,453,432 B**. Both displaced baselines remain visible
+in every report. The **16 KiB absolute headroom** and ratios are
+unchanged, giving **1,270,015 B / 1,469,816 B** ceilings. Initial-route,
+single-chunk and federation ceilings, Workbox patterns and its 2 MiB
+per-file limit are untouched. This entry remains open; no catalog
+reduction is claimed.
 
 **2026-10-28 — the kernel update UI crosses both aggregate ceilings
 (accepted footprint, debt still open).** With Bun 1.4.3 and the same build/report

@@ -115,7 +115,7 @@ async function commit(): Promise<void> {
 	refusal = undefined;
 	try {
 		const result = await sendCompositionWrite({ composition_rect: placed }, getIsStreaming);
-		if (result !== undefined) refusal = compositionRefusal(result);
+		if (result !== undefined) refusal = compositionRefusal(result)?.message;
 	} catch {
 		refusal = m['notifications.saveFailed']();
 	}

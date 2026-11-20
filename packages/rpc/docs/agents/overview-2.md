@@ -38,3 +38,8 @@ origin-vetted APT discovery; legacy frames omit both and parse unchanged.
 shared `successResponseSchema`; it carries no timestamp or new producer-owned
 wire shape. The backend stamps receive time, not a client-supplied clock.
 
+Device logs wire contract [EXISTS]: `schemas/logs.schema.ts` and the thirteen
+`appContract.logs` procedures in `contracts/logs.contract.ts`; the backend
+handlers are registered. Shape rules: [device-logs-wire.md](device-logs-wire.md).
+Device events wire contract [EXISTS]: [device-events-wire.md](device-events-wire.md).
+

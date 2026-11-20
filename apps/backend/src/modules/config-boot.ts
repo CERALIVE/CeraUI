@@ -29,6 +29,7 @@ import {
 	RuntimeConfigAuthorityError,
 } from "../helpers/runtime-config-authority.ts";
 import { getConfigFilePath, loadConfig } from "./config.ts";
+import { emitDeviceEvent } from "./events/device-emit.ts";
 import { STORED_STATE_LIMITS } from "./system/update-orchestrator/stored-state-file.ts";
 import {
 	decodeAuthorityUtf8,
@@ -70,6 +71,7 @@ function sleepFor(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 function announceDamagedReset(copy: string): void {
+	emitDeviceEvent("config_reset_damaged", {});
 	const name = basename(copy);
 	logger.error("config: damaged config.json archived; first-run settings", {
 		copy,

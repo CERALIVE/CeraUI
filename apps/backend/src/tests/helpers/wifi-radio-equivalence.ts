@@ -1,62 +1,14 @@
-import { jest, spyOn } from "bun:test";
-import { deepStrictEqual } from "node:assert/strict";
-import { logger } from "../../helpers/logger.ts";
-import * as runner from "../../helpers/run.ts";
-import * as mocks from "../../mocks/mock-service.ts";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { HotspotCredentials } from "../../modules/wifi/hotspot-credentials.ts";
+import type { wifiBuildMsg } from "../../modules/wifi/wifi.ts";
 import {
-	onWifiChange,
-	setWifiState,
-} from "../../modules/wifi/state/wifi-state.ts";
-import * as wifi from "../../modules/wifi/wifi.ts";
-import {
-	currentHotspotApIfnames,
-	wifiBuildMsg,
-} from "../../modules/wifi/wifi.ts";
-import { setApStaCapabilityRunnerForTest } from "../../modules/wifi/wifi-ap-sta-capability.ts";
-import {
-	refreshWifiCapabilities,
-	resetWifiCapabilitiesForTest,
-	setWifiCapabilityDepsForTest,
-} from "../../modules/wifi/wifi-capabilities.ts";
-import {
-	clearWifiInterfacesForTest,
-	getWifiInterfacesByMacAddress,
-	resetWifiScanStampsForTest,
-	wifiCancelScanRefresh,
-	wifiStateInit,
-} from "../../modules/wifi/wifi-connections.ts";
-import {
-	wifiDeviceListAdd,
-	wifiDeviceListEndUpdate,
-	wifiDeviceListStartUpdate,
-} from "../../modules/wifi/wifi-device-list.ts";
-import {
-	wifiHotspotPrepare,
-	wifiHotspotStart,
-} from "../../modules/wifi/wifi-hotspot-activation.ts";
-import {
-	refreshHotspotClients,
-	resetHotspotClientsForTest,
-	setHotspotClientsDepsForTest,
-} from "../../modules/wifi/wifi-hotspot-clients.ts";
-import { handleWifiMonitorEvent } from "../../modules/wifi/wifi-hotspot-monitor.ts";
-import type { HotspotActivationDeps } from "../../modules/wifi/wifi-hotspot-types.ts";
-import {
-	getWifiIdToMacAddress,
-	resetWifiConnectionModeCache,
-	resetWifiInterfaceDiscoveryForTest,
-	stopWifiUpdateLoopForTest,
-	wifiUpdateDevices,
-} from "../../modules/wifi/wifi-interfaces.ts";
-import {
-	resetWifiPermanentMacCache,
-	setPermanentMacReaderForTest,
-} from "../../modules/wifi/wifi-permanent-mac.ts";
-import { wifiRadioIdentity } from "../../modules/wifi/wifi-radio-identity.ts";
-import { projectWifiRadioIncarnation } from "../../modules/wifi/wifi-radio-publication.ts";
-import * as compat from "../../rpc/compat.ts";
-import { getClients } from "../../rpc/events.ts";
+	canHotspot,
+	type HotspotActivationDeps,
+} from "../../modules/wifi/wifi-hotspot-types.ts";
+import type { wifiUpdateDevices } from "../../modules/wifi/wifi-interfaces.ts";
+import { createEquivalenceNm } from "./wifi-radio-equivalence-nm.ts";
 
 export type RadioFixture = {
 	readonly ifname: string;
@@ -72,6 +24,11 @@ export type EquivalenceFixture = {
 	readonly name: string;
 	readonly frames: readonly (readonly RadioFixture[])[];
 	readonly admitted: boolean;
+	readonly limitedFrames?: readonly number[];
+	readonly resample?: true;
+	readonly duringDiscovery?: (
+		discovery: ReturnType<typeof wifiUpdateDevices>,
+	) => Promise<void>;
 	readonly publication?: () => Promise<void>;
 };
 
@@ -94,6 +51,73 @@ export async function radioEquivalenceTranscript(
 	duplicateBroadcast = false,
 	observe?: (rows: ReturnType<typeof wifiBuildMsg>) => void,
 ) {
+	const { jest, spyOn } = await import("bun:test");
+	const deepStrictEqual: typeof import("node:assert/strict").deepStrictEqual = (
+		await import("node:assert/strict")
+	).deepStrictEqual;
+	const { logger } = await import("../../helpers/logger.ts");
+	const runner = await import("../../helpers/run.ts");
+	const mocks = await import("../../mocks/mock-service.ts");
+	const { getConfig, getConfigFilePath, setConfigFilePath } = await import(
+		"../../modules/config.ts"
+	);
+	const { wifiAdapterModeRecorder } = await import(
+		"../../modules/wifi/wifi-adapter-mode.ts"
+	);
+	const { onWifiChange, setWifiState } = await import(
+		"../../modules/wifi/state/wifi-state.ts"
+	);
+	const wifi = await import("../../modules/wifi/wifi.ts");
+	const { currentHotspotApIfnames, wifiBuildMsg } = wifi;
+	const { setApStaCapabilityRunnerForTest } = await import(
+		"../../modules/wifi/wifi-ap-sta-capability.ts"
+	);
+	const {
+		refreshWifiCapabilities,
+		resetWifiCapabilitiesForTest,
+		setWifiCapabilityDepsForTest,
+	} = await import("../../modules/wifi/wifi-capabilities.ts");
+	const {
+		clearWifiInterfacesForTest,
+		getWifiInterfacesByMacAddress,
+		resetWifiScanStampsForTest,
+		wifiCancelScanRefresh,
+		wifiStateInit,
+	} = await import("../../modules/wifi/wifi-connections.ts");
+	const {
+		wifiDeviceListAdd,
+		wifiDeviceListEndUpdate,
+		wifiDeviceListStartUpdate,
+	} = await import("../../modules/wifi/wifi-device-list.ts");
+	const { wifiHotspotPrepare, wifiHotspotStart } = await import(
+		"../../modules/wifi/wifi-hotspot-activation.ts"
+	);
+	const {
+		refreshHotspotClients,
+		resetHotspotClientsForTest,
+		setHotspotClientsDepsForTest,
+	} = await import("../../modules/wifi/wifi-hotspot-clients.ts");
+	const { handleWifiMonitorEvent } = await import(
+		"../../modules/wifi/wifi-hotspot-monitor.ts"
+	);
+	const {
+		getWifiIdToMacAddress,
+		resetWifiConnectionModeCache,
+		resetWifiInterfaceDiscoveryForTest,
+		stopWifiUpdateLoopForTest,
+		wifiUpdateDevices,
+	} = await import("../../modules/wifi/wifi-interfaces.ts");
+	const { setPermanentMacReaderForTest } = await import(
+		"../../modules/wifi/wifi-permanent-mac.ts"
+	);
+	const { wifiRadioIdentity } = await import(
+		"../../modules/wifi/wifi-radio-identity.ts"
+	);
+	const { projectWifiRadioIncarnation } = await import(
+		"../../modules/wifi/wifi-radio-publication.ts"
+	);
+	const compat = await import("../../rpc/compat.ts");
+	const { getClients } = await import("../../rpc/events.ts");
 	jest.useFakeTimers();
 	jest.setSystemTime(0);
 	let phase = "setup";
@@ -110,7 +134,18 @@ export async function radioEquivalenceTranscript(
 	}> = [];
 	const publicationLogs = new Set<(typeof logs)[number]>();
 	const store = new Map<string, HotspotCredentials>();
+	const nm = createEquivalenceNm(() => radios, unexpected);
 	const restorers: Array<() => void | Promise<void>> = [];
+	const previousConfigPath = getConfigFilePath();
+	const previousModes = getConfig().wifi_modes;
+	const modeScratch = await mkdtemp(join(tmpdir(), "wifi-parity-modes-"));
+	setConfigFilePath(join(modeScratch, "config.json"));
+	getConfig().wifi_modes = {};
+	restorers.push(async () => {
+		getConfig().wifi_modes = previousModes;
+		setConfigFilePath(previousConfigPath);
+		await rm(modeScratch, { recursive: true, force: true });
+	});
 	for (const level of ["error", "warn", "info", "debug"] as const) {
 		const log = spyOn(logger, level).mockImplementation(
 			(...args: unknown[]) => {
@@ -171,29 +206,7 @@ export async function radioEquivalenceTranscript(
 		});
 		restorers.push(() => doubled.mockRestore());
 	}
-	const command = spyOn(runner, "run").mockImplementation(async (bin, args) => {
-		if (bin === "nmcli") {
-			if (
-				args.join(" ") ===
-				"--terse --fields device,type,state,con-uuid device status"
-			)
-				return radios.map((r) => `${r.ifname}:wifi:${r.state}:`).join("\n");
-			if (
-				args.includes(
-					"GENERAL.VENDOR,GENERAL.PRODUCT,WIFI-PROPERTIES.AP,WIFI-PROPERTIES.5GHZ,WIFI-PROPERTIES.2GHZ",
-				)
-			)
-				return "Fixture\nRadio\nyes\nno\nyes";
-			if (args.join(" ") === "--terse --fields uuid,type connection show")
-				return "";
-			if (
-				args.includes("IN-USE,BSSID,SSID,MODE,CHAN,RATE,SIGNAL,BARS,SECURITY")
-			)
-				return "";
-		}
-		unexpected.push(`${bin} ${args.join(" ")}`);
-		throw new Error(`Unexpected equivalence command: ${bin} ${args.join(" ")}`);
-	});
+	const command = spyOn(runner, "run").mockImplementation(nm.run);
 	const mockMode = spyOn(mocks, "shouldUseMocks").mockReturnValue(false);
 	restorers.push(
 		() => command.mockRestore(),
@@ -202,7 +215,6 @@ export async function radioEquivalenceTranscript(
 	clearWifiInterfacesForTest();
 	resetWifiInterfaceDiscoveryForTest();
 	resetWifiConnectionModeCache();
-	resetWifiPermanentMacCache();
 	resetWifiScanStampsForTest();
 	resetWifiCapabilitiesForTest();
 	resetHotspotClientsForTest();
@@ -239,7 +251,10 @@ export async function radioEquivalenceTranscript(
 		restorers.push(await fakeShadowSysfs(() => radios));
 	}
 
+	let confirmedUuid: string | undefined;
 	const deps: HotspotActivationDeps = {
+		recordIntent: wifiAdapterModeRecorder,
+		pollHotspotActive: async (_iface, uuid) => confirmedUuid === uuid,
 		credentials: {
 			get: (mac) => {
 				calls.push(["credentials.get", mac]);
@@ -260,10 +275,12 @@ export async function radioEquivalenceTranscript(
 			calls.push(["findHotspotConn", mac, stored]);
 			return undefined;
 		},
-		nmHotspot: async (ifname, ssid, password) => {
-			calls.push(["nmHotspot", ifname, ssid, password]);
+		nmApConnAdd: async (ifname, identity, bindingFields) => {
+			calls.push(["nmApConnAdd", ifname, identity, bindingFields]);
 			return `fixture-uuid-${ifname}`;
 		},
+		nmConnDelete: async () => true,
+		nmDisconnect: async () => true,
 		nmConnSetFields: async (uuid, fields) => {
 			calls.push(["nmConnSetFields", uuid, fields]);
 			return true;
@@ -307,13 +324,16 @@ export async function radioEquivalenceTranscript(
 		for (const frame of fixture.frames) {
 			phase = "discovery:pending";
 			radios = frame;
+			nm.reset();
 			wifiDeviceListStartUpdate();
 			for (const radio of radios) {
 				if (radio.operational)
 					wifiDeviceListAdd(radio.ifname, radio.operational);
 			}
 			wifiDeviceListEndUpdate();
-			await wifiUpdateDevices();
+			const discovery = wifiUpdateDevices();
+			if (fixture.duringDiscovery) await fixture.duringDiscovery(discovery);
+			await discovery;
 			phase = "discovery:published";
 			await refreshWifiCapabilities(radios.map((r) => r.ifname));
 			wifiCancelScanRefresh();
@@ -326,11 +346,15 @@ export async function radioEquivalenceTranscript(
 				phase = "prepare:published";
 				const prepared = snapshot();
 				phase = "start:pending";
+				confirmedUuid = undefined;
 				const start = await wifiHotspotStart({ device: iface.id }, deps);
 				phase = "start:published";
 				const starting = snapshot();
 				phase = "confirmation:pending";
-				handleWifiMonitorEvent({
+				if (canHotspot(iface) && iface.hotspot.conn)
+					nm.activate(iface.ifname, iface.hotspot.conn);
+				confirmedUuid = "hotspot" in iface ? iface.hotspot.conn : undefined;
+				await handleWifiMonitorEvent({
 					type: "device-state",
 					device: iface.ifname,
 					state: "connected",
@@ -360,6 +384,21 @@ export async function radioEquivalenceTranscript(
 				]),
 			);
 			const beforeLocal = localBroadcasts.length;
+			if (fixture.resample) {
+				const { wifiRadioObservation } = await import(
+					"../../modules/wifi/wifi-radio-observation.ts"
+				);
+				wifiRadioObservation.enqueue(
+					Object.values(getWifiInterfacesByMacAddress()).map((row) => ({
+						ifname: row.ifname,
+						row,
+						...(row.degradedReason
+							? { degradedReason: row.degradedReason }
+							: {}),
+					})),
+					wifiRadioIdentity.publishedObservation,
+				);
+			}
 			// Both main and A receive the same one-millisecond inter-frame gap.
 			jest.advanceTimersByTime(1);
 			const observationModule = new URL(
@@ -413,7 +452,7 @@ export async function radioEquivalenceTranscript(
 		wifiCancelScanRefresh();
 		stopWifiUpdateLoopForTest();
 		for (const iface of Object.values(getWifiInterfacesByMacAddress())) {
-			handleWifiMonitorEvent({
+			await handleWifiMonitorEvent({
 				type: "device-state",
 				device: iface.ifname,
 				state: "connected",
@@ -422,7 +461,6 @@ export async function radioEquivalenceTranscript(
 		clearWifiInterfacesForTest();
 		resetWifiInterfaceDiscoveryForTest();
 		resetWifiConnectionModeCache();
-		resetWifiPermanentMacCache();
 		resetWifiScanStampsForTest();
 		setPermanentMacReaderForTest(null);
 		setApStaCapabilityRunnerForTest(null);

@@ -137,23 +137,31 @@ for (const mocked of [false, true]) {
 					},
 					{ context: fixture.context },
 				);
-				await entered.promise;
-				await fixture.rotate();
-				if (mocked) rebindMockWifi("wlan0");
-				release.resolve();
+				if (!mocked) {
+					await entered.promise;
+					await fixture.rotate();
+					release.resolve();
+				}
 				const result = await pending;
+				if (mocked) {
+					await fixture.rotate();
+					rebindMockWifi("wlan0");
+				}
 				await fixture.configReceived;
 				const legacy = frameTranscript(
 					`rpc-config:${mocked}:${expected}`,
 					fixture,
 					result,
 				);
-				expect(result).toEqual({ success: true });
+				const error =
+					expected === undefined ? "binding-required" : "radio-changed";
+				expect(result).toEqual({ success: false, error });
 				expect(legacy).toEqual([
 					JSON.stringify({
-						wifi: { hotspot: { config: { device: 0, error: "saving" } } },
+						wifi: { hotspot: { config: { device: 0, error } } },
 					}),
 				]);
+				expect(fixture.effects).toEqual([]);
 				const frame = wifiMessageSchema.parse(
 					JSON.parse(fixture.frames[0] ?? "{}").wifi,
 				);

@@ -19,6 +19,7 @@ import {
 	getCaptureProgress,
 	getIsCapturing,
 	getScreenshotImages,
+	mobileCaptureRoot,
 	REQUIRED_CAPTURE_DESTINATIONS,
 	type ScreenshotImage,
 	setCaptureProgress,
@@ -105,8 +106,8 @@ async function enableMobileView(): Promise<void> {
 	});
 
 	if (iframe.contentDocument) {
-		const mainElement = document.querySelector('main');
-		if (mainElement) {
+		const shell = mobileCaptureRoot(document);
+		if (shell) {
 			const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
 				.map((el) => el.outerHTML)
 				.join('\n');
@@ -116,7 +117,7 @@ async function enableMobileView(): Promise<void> {
 			iframe.srcdoc = `<!DOCTYPE html>
         <html class="${htmlClasses}" style="width: 430px; height: 932px;">
           <head><meta charset="utf-8"><meta name="viewport" content="width=430, height=932">${styles}</head>
-          <body class="${bodyClasses}" style="width: 430px; min-height: 932px; margin: 0;">${mainElement.outerHTML}</body>
+          <body class="${bodyClasses}" style="width: 430px; min-height: 932px; margin: 0;">${shell.outerHTML}</body>
         </html>`;
 
 			// Wait for iframe content to load and render

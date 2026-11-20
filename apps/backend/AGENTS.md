@@ -3,9 +3,8 @@
 Parent: [workspace rules](https://github.com/CERALIVE/ceralive/blob/master/AGENTS.md); [CeraUI rules](../../AGENTS.md).
 
 ## ROLE
-Bun/TypeScript device HTTP + WebSocket control plane. Serves the frontend,
-exposes oRPC, and drives cerastream and the SRTLA sender through their bindings.
-The engine owns capture identity; the backend preserves and projects it.
+Bun/TypeScript device control plane: HTTP, WebSocket, oRPC and engine/sender bindings.
+Capture identity is engine-owned and preserved on the wire.
 
 ## STRUCTURE
 - `src/` — entrypoint, domain modules, RPC, helpers, mocks and tests.
@@ -13,20 +12,23 @@ The engine owns capture identity; the backend preserves and projects it.
 - `docs/` — preserved backend subsystem contracts.
 
 ## COMMANDS
-From the checkout root: `bun run --filter backend check`, `bun run lint`,
+Root: `bun run --filter backend check`, `bun run lint`,
 `bun run --filter backend test`, `bun run build:backend`.
 Full PR gate: `bun run test`, `bun run test:e2e`, `bun run check:tech-debt`,
-`bun run build` (see parent rules and CI; reader sweep precedes the gate).
+`bun run build` (parent rules/CI; reader sweep first).
 
 ## WHERE TO LOOK
 | Code path or task | Contract |
 |---|---|
-| Before changes, read the owning subsystem contract | [All backend contracts](docs/agents/README.md) |
+| Before changes, read the owning contract | [Index](docs/agents/README.md) |
+| Versions | [Contract](docs/agents/a-version-an-operator-reads-must-be-a-live-read.md) |
+| Device events | [Contract](docs/agents/device-events.md) |
+| Device logs | [Contract](docs/agents/device-logs.md) |
 | Projection, modem roster and first-sight USB bond admission | [an-isolated-dongle-is-surfaced-without-entering-the-bond.md](docs/agents/an-isolated-dongle-is-surfaced-without-entering-the-bond.md) |
 | Cellular composition and wire projection | [the-cellular-subsystem-one-composition-root-one-wire.md](docs/agents/the-cellular-subsystem-one-composition-root-one-wire.md) |
 | Modem presence and exact-identity admission | [a-device-is-announced-before-any-modem-service-can-descri.md](docs/agents/a-device-is-announced-before-any-modem-service-can-descri.md) |
 | Modem mutation leases, journal and rollback | [the-modem-mutation-safety-contract.md](docs/agents/the-modem-mutation-safety-contract.md) |
-| Modem configuration normalization and applied receipts | [a-modem-save-spends-a-reconnect-only-when-it-must.md](docs/agents/a-modem-save-spends-a-reconnect-only-when-it-must.md) |
+| Modem configuration normalization and applied receipts | [Contract](docs/agents/a-modem-save-spends-a-reconnect-only-when-it-must.md) |
 | Modem feature gates | [the-capability-feature-gate-framework.md](docs/agents/the-capability-feature-gate-framework.md) |
 | Shared-client flow-sticky steering | [flow-sticky-shared-client-steering.md](docs/agents/flow-sticky-shared-client-steering.md) |
 | Streaming-first shaping and read-only NAT diagnostics | [streaming-first-uplink-shaping.md](docs/agents/streaming-first-uplink-shaping.md) |
@@ -35,23 +37,23 @@ Full PR gate: `bun run test`, `bun run test:e2e`, `bun run check:tech-debt`,
 | Update orchestrator, D8, OS staging and slot mirroring | [the-update-orchestrator-and-d8-admission.md](docs/agents/the-update-orchestrator-and-d8-admission.md) |
 | Streaming RPC, lifecycle, audio inputs | [streaming-rpc-procedures.md](docs/agents/streaming-rpc-procedures.md) |
 | Apply-now candidates, negotiated capture clears and applied-only persistence | [Staged persistence](docs/agents/apply-now-config-change-transaction-staged-persistence.md) |
-| Device-scoped saved capture modes and automatic defaults | [Per-device modes](docs/agents/one-row-per-physical-camera-per-device-mode-selection.md) |
-| Live capture and audio visibility | [a-live-capture-device-is-never-silently-dropped.md](docs/agents/a-live-capture-device-is-never-silently-dropped.md) |
-| Audio identity and naming | [audio-device-naming.md](docs/agents/audio-device-naming.md) |
-| Audio backend override | [the-audio-backend-is-an-override-and-absent-is-not-a-defa.md](docs/agents/the-audio-backend-is-an-override-and-absent-is-not-a-defa.md) |
+| Saved capture modes and automatic defaults | [Per-device modes](docs/agents/one-row-per-physical-camera-per-device-mode-selection.md) |
+| Live capture and audio visibility | [Contract](docs/agents/a-live-capture-device-is-never-silently-dropped.md) |
+| Audio identity and naming | [Contract](docs/agents/audio-device-naming.md) |
+| Audio backend override | [Contract](docs/agents/the-audio-backend-is-an-override-and-absent-is-not-a-defa.md) |
 | Preview origin and auth | [preview-websocket-proxy-single-origin-task-20.md](docs/agents/preview-websocket-proxy-single-origin-task-20.md) |
 | Engine IPC ownership | [streaming-engine-seam.md](docs/agents/streaming-engine-seam.md) |
 | Hotplug and cleanup | [sigusr2-udev-hotplug-hook.md](docs/agents/sigusr2-udev-hotplug-hook.md) |
 | Wi-Fi mutation locking | [every-wifi-mutation-shares-one-adapter-lock.md](docs/agents/every-wifi-mutation-shares-one-adapter-lock.md) |
-| Wi-Fi identity, profile ownership, lifetime tokens and captured config/mode frame correlation | [wifi-adapter-identity-is-the-permanent-mac.md](docs/agents/wifi-adapter-identity-is-the-permanent-mac.md); [additive protocol](../../docs/WIFI-INCARNATION-PROTOCOL.md) |
+| Wi-Fi identity, logical-owner reconciliation, bounded restore, lifetime tokens and captured frame correlation | [wifi-adapter-identity-is-the-permanent-mac.md](docs/agents/wifi-adapter-identity-is-the-permanent-mac.md); [additive protocol](../../docs/WIFI-INCARNATION-PROTOCOL.md) |
 | Notifications and scoped retraction | [a-persistent-notification-must-be-retractable.md](docs/agents/a-persistent-notification-must-be-retractable.md) |
 | Test fixtures and forbidden patterns | [anti-patterns.md](docs/agents/anti-patterns.md) |
 | Start failures and operator diagnostics | [start-failure-diagnostics.md](docs/agents/start-failure-diagnostics.md) |
 | Update, recovery, D8 stream-admission, disruptive-action, OS-stage and add-on helper hard rules | [update-orchestrator-hard-rules.md](docs/agents/update-orchestrator-hard-rules.md) |
 
 ## HARD RULES
-- The update-orchestrator, recovery, D8 stream-admission, disruptive-action, OS-stage, journal and add-on helper hard rules are binding and live verbatim in [update-orchestrator-hard-rules.md](docs/agents/update-orchestrator-hard-rules.md); read it before touching those paths.
-- The projection is what reaches the wire; preserve producer identity and schema. Its lifecycle seeding and runtime-evidence rule is binding and lives verbatim in [lifecycle-projection-hard-rules.md](docs/agents/lifecycle-projection-hard-rules.md).
+- Update, recovery, D8, disruptive-action, OS-stage, journal and add-on helper rules are binding: read [the contract](docs/agents/update-orchestrator-hard-rules.md) before touching those paths.
+- Wire projection preserves producer identity and schema. Follow the binding [lifecycle seeding and runtime-evidence rules](docs/agents/lifecycle-projection-hard-rules.md).
 - Streaming-first uplink shaping caps only shared clients; local stream egress stays uncapped. Foreign roots fail closed.
 - The two NAT layers are watched, never arbitrated: diagnostics are read-only, tri-state, and never gate streaming or mutate either layer.
 - Modem roster: exact triplets; RNDIS e0/01/03 admits; e0/01/01, e0/01/04 veto; ID_MM_DEVICE_IGNORE=1 excludes; weak retires, strong stays undriveable.

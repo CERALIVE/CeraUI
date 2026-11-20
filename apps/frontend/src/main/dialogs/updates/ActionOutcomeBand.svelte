@@ -13,6 +13,8 @@
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import { AlertTriangle, CircleHelp } from '@lucide/svelte';
 
+import ViewLogsAction from '$lib/components/custom/ViewLogsAction.svelte';
+
 import type { UncertainCause } from '$lib/updates/update-action-failure';
 import type { ActionRefusal, UpdateActionKind } from '$lib/updates/update-surface.svelte';
 import { actionRefusalKey } from '$lib/updates/update-view';
@@ -45,6 +47,8 @@ let { refusal, unconfirmed, cause = 'lost', label }: Props = $props();
 			{@render actionLabel()}
 			<p class="text-sm font-medium">{m['settings.updates.refusal.title']()}</p>
 			<p class="text-muted-foreground text-sm">{resolveMessageKey(actionRefusalKey(refusal.reason))}</p>
+			<!-- The refusal carries no time and emits no event of its own. -->
+			<ViewLogsAction class="mt-2" messageKey={actionRefusalKey(refusal.reason)} moment="unknown" />
 		</div>
 	</div>
 {:else if unconfirmed}

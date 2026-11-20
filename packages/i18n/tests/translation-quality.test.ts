@@ -92,6 +92,11 @@ const NEW_KEYS = [
 	{ path: "live.networkIngest.includesAudio", todo: 12 },
 	{ path: "live.source.audioEmbedded", todo: 13 },
 	{ path: "live.comingSoon.embeddedAudio", todo: 13 },
+	{ path: "systemLogs.tabs.raw", todo: 29 },
+	{ path: "systemLogs.follow.start", todo: 29 },
+	{ path: "systemLogs.storage.clearAll", todo: 29 },
+	{ path: "timeline.stream_started.title", todo: 29 },
+	{ path: "timeline.link_down.title", todo: 29 },
 ] as const;
 
 // Locales the spec explicitly requires a REAL (≠ en) value from — a coincidental

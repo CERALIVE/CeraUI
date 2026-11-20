@@ -38,7 +38,7 @@
  */
 
 import { SpawnAbortError, SpawnTimeoutError } from "./bounded-spawn.ts";
-import { execFileP } from "./exec.ts";
+import { type ChildExitObserver, execFileP } from "./exec.ts";
 import { logger } from "./logger.ts";
 
 /** Default stdout/stderr ceiling for buffered (execFile) commands: 10 MiB. */
@@ -53,10 +53,12 @@ export const DEFAULT_MAX_BUFFER = 10 * 1024 * 1024;
 export const DEFAULT_TIMEOUT_MS = 30_000;
 
 export type RunOpts = {
+	/** Select stderr for commands whose machine receipt is on that channel. */
+	output?: "stdout" | "stderr";
 	/** Max bytes captured from stdout/stderr before the child is killed. */
 	maxBuffer?: number;
 	/**
-	 * Wall-clock budget in ms before the child is killed and the call rejects
+	 * Wall-clock budget in ms before the call rejects
 	 * with {@link RunTimeoutError}. Defaults to {@link DEFAULT_TIMEOUT_MS} (30 s).
 	 * Every side-effect child process MUST carry a bounded timeout (Standard S1).
 	 */
@@ -67,11 +69,12 @@ export type RunOpts = {
 	 * the child is ever spawned.
 	 */
 	signal?: AbortSignal;
-};
+} & ChildExitObserver;
 
 /**
  * Rejection raised when a command exceeds its {@link RunOpts.timeout} budget.
- * The child is killed; whatever stdout/stderr was captured before the kill is
+ * The child is killed unless its caller owns daemon settlement separately.
+ * Whatever stdout/stderr was captured before the deadline is
  * preserved on the error so callers can surface a partial diagnostic.
  */
 export class RunTimeoutError extends Error {
@@ -110,6 +113,8 @@ export const ALLOWED: Set<string> = new Set<string>([
 	"nmcli",
 	"mmcli",
 	"systemctl",
+	// Fixed read-only system-bus identity calls for NM resource receipts.
+	"busctl",
 	"/usr/bin/systemd-notify",
 	"journalctl",
 	"ip",
@@ -233,6 +238,7 @@ async function spawnCollect(
 	}
 
 	const child = Bun.spawn(argv, {
+		env: process.env,
 		stdin: input === undefined ? "ignore" : "pipe",
 		stdout: "pipe",
 		stderr: "pipe",
@@ -320,7 +326,7 @@ async function spawnCollect(
 }
 
 /**
- * Run an allowlisted binary argv-only (NO shell) and resolve with its stdout.
+ * Run an allowlisted binary argv-only (NO shell), selecting stdout by default.
  *
  * @throws if `bin` is not in {@link ALLOWED}.
  * @throws {@link RunTimeoutError} if the command exceeds its timeout budget.
@@ -344,12 +350,12 @@ export async function run(
 	}
 
 	try {
-		const { stdout } = await execFileP(bin, [...args], {
+		const { stdout, stderr } = await execFileP(bin, [...args], {
+			...opts,
 			maxBuffer: opts?.maxBuffer ?? DEFAULT_MAX_BUFFER,
 			timeout: opts?.timeout ?? DEFAULT_TIMEOUT_MS,
-			...(opts?.signal ? { signal: opts.signal } : {}),
 		});
-		return stdout;
+		return opts?.output === "stderr" ? stderr : stdout;
 	} catch (err) {
 		if (err instanceof SpawnTimeoutError) {
 			throw err instanceof SpawnAbortError
@@ -364,8 +370,9 @@ export async function run(
  * Run an allowlisted binary argv-only and feed `input` to its stdin.
  *
  * The secret `input` is written to the child's stdin and is NEVER placed on
- * argv (so it cannot leak via the process table / `ps`). Resolves with stdout
- * when the child exits 0; rejects with stderr (or the spawn error) otherwise.
+ * argv (so it cannot leak via the process table / `ps`). On exit 0, resolves
+ * with stdout by default or stderr when `output: "stderr"` is requested.
+ * On failure, rejects with stderr or the spawn error.
  *
  * @throws if `bin` is not in {@link ALLOWED}.
  * @throws {@link RunTimeoutError} / {@link RunAbortError} on timeout / abort.
@@ -395,7 +402,7 @@ export async function runWithStdin(
 	);
 
 	if (code === 0) {
-		return stdout;
+		return opts?.output === "stderr" ? stderr : stdout;
 	}
 	throw new Error(
 		`${bin} exited with code ${code}${stderr ? `: ${stderr.trim()}` : ""}`,

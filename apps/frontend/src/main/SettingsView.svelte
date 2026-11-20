@@ -40,7 +40,12 @@ import { AppDialog, LazyDialog, lazyDialog } from '$lib/components/dialogs';
 import { osCommand } from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc/client';
 import { getConfig, getKiosk } from '$lib/rpc/subscriptions.svelte';
-import { clearRequestedDialog, getRequestedDialog } from '$lib/stores/dialog-request.svelte';
+import {
+	clearRequestedDialog,
+	getRequestedDialog,
+	getRequestedDialogContext,
+	type LogsDialogContext,
+} from '$lib/stores/dialog-request.svelte';
 import { cn } from '$lib/utils';
 
 import DeviceStatsSection from './settings/DeviceStatsSection.svelte';
@@ -168,7 +173,7 @@ const groups = $derived<Group[]>([
 		label: m["settings.index.groups.developer"](),
 		entries: [
 			{ key: 'ssh', title: m["settings.index.ssh"](), desc: m["settings.index.sshDesc"](), icon: SquareTerminal },
-			{ key: 'logs', title: m["settings.index.logs"](), desc: m["settings.index.logsDesc"](), icon: ScrollText },
+			{ key: 'logs', title: m["settings.index.logs"](), desc: m["settings.index.logsViewerDesc"](), icon: ScrollText },
 		],
 	},
 	{
@@ -211,6 +216,7 @@ let cloudOpen = $state(false);
 let networkIngestOpen = $state(false);
 let sshOpen = $state(false);
 let logsOpen = $state(false);
+let logsContext = $state<LogsDialogContext>();
 let updatesOpen = $state(false);
 let powerOpen = $state(false);
 let versionsOpen = $state(false);
@@ -239,7 +245,7 @@ function openEntry(entry: Entry) {
 			sshOpen = true;
 			return;
 		case 'logs':
-			logsOpen = true;
+			openLogs();
 			return;
 		case 'updates':
 			updatesOpen = true;
@@ -273,13 +279,20 @@ function openEntry(entry: Entry) {
 
 const ActiveIcon = $derived(active?.icon);
 
-// A notification tap (Todo 24) requests the Updates dialog via the dialog-request
-// bus, which has already switched the destination to Settings; open it here.
+// The context says where System Logs opens; the Settings entry opens it plain.
+function openLogs(context?: LogsDialogContext): void {
+	logsContext = context;
+	logsOpen = true;
+}
+
+// A notification tap (Todo 24) or a "View logs" action requests a dialog via the
+// dialog-request bus, which has already switched the destination to Settings;
+// open it here.
 $effect(() => {
-	if (getRequestedDialog() === 'updates-dialog') {
-		updatesOpen = true;
-		clearRequestedDialog();
-	}
+	const target = getRequestedDialog();
+	if (target === 'updates-dialog') updatesOpen = true;
+	if (target === 'logs') openLogs(getRequestedDialogContext());
+	clearRequestedDialog();
 });
 </script>
 
@@ -297,7 +310,7 @@ $effect(() => {
 			<DeviceStatsSection />
 
 			<!-- Production-readiness signal: low free space on /data points to Logs. -->
-			<LowDiskBanner onViewLogs={() => (logsOpen = true)} />
+			<LowDiskBanner onViewLogs={() => openLogs({ tab: 'storage' })} />
 
 			<!-- Mobile-only: desktop hosts language + theme in the header toolbar instead. -->
 			{#if !isDesktop.current}
@@ -433,7 +446,7 @@ $effect(() => {
 <LazyDialog dialog={CloudRemoteDialog} bind:open={cloudOpen} />
 <LazyDialog dialog={NetworkIngestDialog} bind:open={networkIngestOpen} />
 <LazyDialog dialog={SshDialog} bind:open={sshOpen} />
-<LazyDialog dialog={LogsDialog} bind:open={logsOpen} />
+<LazyDialog context={logsContext} dialog={LogsDialog} bind:open={logsOpen} />
 <LazyDialog dialog={UpdatesDialog} bind:open={updatesOpen} />
 <LazyDialog dialog={PowerDialog} bind:open={powerOpen} />
 <LazyDialog dialog={VersionsDialog} bind:open={versionsOpen} />

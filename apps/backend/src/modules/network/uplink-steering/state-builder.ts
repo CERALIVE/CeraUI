@@ -4,8 +4,9 @@ import {
 	isConcurrentApIfname,
 	isSupportedWifiIfname,
 } from "../../wifi/wifi-concurrent-interface.ts";
-import { getWifiInterfacesByMacAddress } from "../../wifi/wifi-connections.ts";
+import { getWifiInterfaceByIfname } from "../../wifi/wifi-connections.ts";
 import { wifiZonesReady } from "../../wifi/wifi-interfaces.ts";
+import { wifiRadioIdentity } from "../../wifi/wifi-radio-identity.ts";
 import { isSharedLanPort } from "../ethernet-role.ts";
 import {
 	getNetworkInterfaces,
@@ -46,7 +47,8 @@ export interface SteeringStateBuilderDeps {
 	readonly identityDeadlineExpired: (ifname: string) => boolean;
 	readonly interfaces: () => NetworkSnapshot;
 	readonly health: () => readonly UplinkHealthRecord[];
-	readonly wifiIdentity: (ifname: string) => string | undefined;
+	/** A registered radio without coherent physical proof returns null. */
+	readonly wifiIdentity: (ifname: string) => string | null | undefined;
 	readonly physicalIdentity: (ifname: string) => string;
 	readonly markForIdentity: (identity: string) => number;
 	readonly isBondCandidate: (
@@ -107,12 +109,9 @@ export async function readDesiredSteeringState(
 	if (zones.length === 0) return { clientZones: [], uplinks: [], routes: [] };
 	assertClientZonesDisjoint(zones);
 	const health = new Map(deps.health().map((record) => [record.iface, record]));
-	const { candidates: collected, identityPending } = collectUplinkCandidates(
-		interfaces,
-		zones,
-		health,
-		deps,
-	);
+	const collection = collectUplinkCandidates(interfaces, zones, health, deps);
+	if ("pending" in collection) return collection;
+	const { candidates: collected, identityPending } = collection;
 	if (!context.hasAppliedState && identityPending)
 		return { pending: true, netifReady: true, reason: "identity" };
 	assertNoOverlap(zones, collected);
@@ -183,7 +182,9 @@ function collectUplinkCandidates(
 	zones: readonly ClientZone[],
 	health: ReadonlyMap<string, UplinkHealthRecord>,
 	deps: SteeringStateBuilderDeps,
-): { candidates: UplinkCandidate[]; identityPending: boolean } {
+):
+	| { candidates: UplinkCandidate[]; identityPending: boolean }
+	| PendingSteeringState {
 	let identityPending = false;
 	const zoneIfaces = new Set(zones.map((zone) => zone.ifname));
 	const sourceAddressCounts = new Map<string, number>();
@@ -202,6 +203,8 @@ function collectUplinkCandidates(
 		const record = health.get(ifname);
 		if (record?.state === "down") continue;
 		const wifiId = deps.wifiIdentity(ifname);
+		if (wifiId === null)
+			return { pending: true, netifReady: true, reason: "identity" };
 		if (isSupportedWifiIfname(ifname) && wifiId === undefined) continue;
 		if (
 			wifiId === undefined &&
@@ -310,11 +313,13 @@ function assertDistinctMarks(candidates: readonly UplinkCandidate[]): void {
 	}
 }
 
-function wifiIdentity(ifname: string): string | undefined {
-	for (const [mac, entry] of Object.entries(getWifiInterfacesByMacAddress())) {
-		if (entry?.ifname === ifname) return `wifi-mac:${mac.toLowerCase()}`;
-	}
-	return undefined;
+function wifiIdentity(ifname: string): string | null | undefined {
+	const entry = getWifiInterfaceByIfname(ifname);
+	if (!entry) return undefined;
+	const identity = wifiRadioIdentity.state.rows.get(ifname);
+	return identity?.row === entry && identity.lifetime && identity.permanentMac
+		? `wifi-mac:${identity.permanentMac}`
+		: null;
 }
 
 function isSupportedUplink(ifname: string): boolean {

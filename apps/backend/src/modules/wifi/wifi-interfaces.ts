@@ -39,21 +39,36 @@ import {
 	parseFail,
 	parseOk,
 } from "../system/cli-parse.ts";
+import { getHotspotCredentials } from "./hotspot-credentials.ts";
 import { getDerivedApChannels, refreshHotspotChannels } from "./regdomain.ts";
 import {
 	broadcastWifiState,
 	type WifiNetwork,
 	wifiUpdateSavedConns,
 } from "./wifi.ts";
-import { notifyWifiAdapterModeDiscovery } from "./wifi-adapter-mode-events.ts";
+import {
+	wifiAdapterLockKey,
+	withWifiAdapterLock,
+} from "./wifi-adapter-lock.ts";
+import {
+	notifyWifiAdapterModeDiscovery,
+	observeWifiHotspotLoss,
+} from "./wifi-adapter-mode-events.ts";
+import {
+	cancelWifiAdapterReconciliation,
+	clearWifiAdapterReconcile,
+} from "./wifi-adapter-reconcile-retry.ts";
+import { retryWifiAdapterReconcile } from "./wifi-adapter-reconciler.ts";
 import { supportsApStaConcurrency } from "./wifi-ap-sta-capability.ts";
+import { quiesceHotspotAutoconnect } from "./wifi-autoconnect-policy.ts";
 import { refreshWifiCapabilities } from "./wifi-capabilities.ts";
 import type { AutoWifiChannel } from "./wifi-channels.ts";
 import {
 	concurrentApIfname,
-	ensureConcurrentApInterface,
 	isConcurrentApIfname,
+	isQualifiedNmManagedHybrid,
 	isSupportedWifiIfname,
+	observeConcurrentInterfacesAtFirstDiscovery,
 } from "./wifi-concurrent-interface.ts";
 import {
 	addWifiInterface,
@@ -69,24 +84,30 @@ import {
 	wifiDeviceListGetInetAddress,
 	wifiDeviceListGetMacAddress,
 } from "./wifi-device-list.ts";
+import { reconcileHybridStationChannel } from "./wifi-hotspot-config.ts";
 import { handleHotspotConn } from "./wifi-hotspot-discovery.ts";
 import {
 	canHotspot,
 	isApMode,
+	isConcurrentHotspot,
 	type WifiHotspot,
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
 import {
-	getWifiPermanentMacCached,
-	resolveWifiPermanentMac,
-	retainWifiPermanentMacs,
-} from "./wifi-permanent-mac.ts";
-import {
+	type RadioIdentity,
 	recordWifiRadioShadowFailure,
 	wifiRadioIdentity,
 } from "./wifi-radio-identity.ts";
 import { wifiRadioObservation } from "./wifi-radio-observation.ts";
-import { invalidateWifiRadioRow } from "./wifi-radio-publication.ts";
+import {
+	invalidateWifiRadioRow,
+	notifyWifiRadioPublication,
+	projectWifiRadioIncarnation,
+} from "./wifi-radio-publication.ts";
+import {
+	transitionVirtualBinding,
+	type VirtualHotspotBinding,
+} from "./wifi-virtual-binding.ts";
 
 export type SSID = string;
 export type WifiInterfaceId = number;
@@ -135,10 +156,7 @@ export type BaseWifiInterface = {
 	savedAll: Record<SSID, ConnectionUUID[]>;
 	removed?: true;
 	supportsApStaConcurrency?: boolean;
-	concurrentHotspot?: {
-		ifname: string;
-		activeConn: ConnectionUUID | null;
-	};
+	concurrentHotspot?: VirtualHotspotBinding;
 	degradedReason?: WifiAdapterDegradedReason;
 };
 
@@ -217,6 +235,7 @@ export function getMacAddressForWifiInterface(id: WifiInterfaceId) {
 let unavailableDeviceRetryExpiry = 0;
 let wifiIfId = 0;
 const wifiUpdateTimers = new Set<ReturnType<typeof setTimeout>>();
+let wifiDiscoveryRetryTimer: ReturnType<typeof setTimeout> | undefined;
 let discoveryController = new AbortController();
 let wifiDeviceRefreshCompleted = false;
 const classifiedWifiIfnames = new Map<string, number>();
@@ -251,19 +270,46 @@ export function wifiZonesReady(): boolean {
 	});
 }
 
-export function scheduleWifiUpdate(delayMs: number): void {
+export function scheduleWifiUpdate(
+	delayMs: number,
+): ReturnType<typeof setTimeout> | undefined {
 	if (discoveryController.signal.aborted) return;
 	const timer = setTimeout(() => {
 		wifiUpdateTimers.delete(timer);
+		if (wifiDiscoveryRetryTimer === timer) wifiDiscoveryRetryTimer = undefined;
 		void wifiUpdateDevices();
 	}, delayMs).unref();
 	wifiUpdateTimers.add(timer);
+	return timer;
+}
+
+export function scheduleWifiDiscoveryRetry(): void {
+	if (unavailableDeviceRetryExpiry === 0)
+		unavailableDeviceRetryExpiry = getms() + 5 * 60 * 1_000;
+	if (getms() < unavailableDeviceRetryExpiry && wifiUpdateTimers.size === 0)
+		wifiDiscoveryRetryTimer = scheduleWifiUpdate(3_000);
+}
+
+export function clearWifiDiscoveryRetry(): void {
+	if (
+		Object.values(getWifiInterfacesByMacAddress()).some(
+			(row) => row.degradedReason === "unavailable",
+		)
+	)
+		return;
+	if (wifiDiscoveryRetryTimer !== undefined) {
+		clearTimeout(wifiDiscoveryRetryTimer);
+		wifiUpdateTimers.delete(wifiDiscoveryRetryTimer);
+		wifiDiscoveryRetryTimer = undefined;
+	}
 }
 
 function cancelWifiUpdateTimers(): void {
 	for (const timer of wifiUpdateTimers) clearTimeout(timer);
 	wifiUpdateTimers.clear();
+	wifiDiscoveryRetryTimer = undefined;
 	unavailableDeviceRetryExpiry = 0;
+	cancelWifiAdapterReconciliation();
 }
 
 export function stopWifiUpdateLoopForTest(): void {
@@ -284,17 +330,27 @@ export function resetWifiInterfaceDiscoveryForTest(): void {
 export function recordDegradedWifiInterface(
 	ifname: string,
 	reason: WifiAdapterDegradedReason,
+	registryKey?: string,
 ): WifiInterface {
-	const existing = Object.values(getWifiInterfacesByMacAddress()).find(
-		(wifiInterface) => wifiInterface?.ifname === ifname,
-	);
-	if (existing) {
+	const entries = Object.entries(getWifiInterfacesByMacAddress());
+	const previous =
+		(registryKey === undefined
+			? undefined
+			: entries.find(([key]) => key === registryKey)) ??
+		entries.find(([, wifiInterface]) => wifiInterface?.ifname === ifname);
+	const existing = previous?.[1];
+	if (
+		existing &&
+		(registryKey === undefined || registryKey === previous?.[0])
+	) {
 		delete existing.removed;
+		existing.ifname = ifname;
 		existing.degradedReason = reason;
 		return existing;
 	}
+	if (previous) removeWifiInterface(previous[0]);
 	const degraded: WifiInterface = {
-		id: wifiIfId++,
+		id: existing?.id ?? wifiIfId++,
 		ifname,
 		conn: null,
 		hw: ifname,
@@ -303,7 +359,7 @@ export function recordDegradedWifiInterface(
 		savedAll: {},
 		degradedReason: reason,
 	};
-	addWifiInterface(`degraded:${ifname}`, degraded);
+	addWifiInterface(registryKey ?? `degraded:${ifname}`, degraded);
 	return degraded;
 }
 
@@ -335,43 +391,148 @@ async function resolveConnectionMode(
 	return mode;
 }
 
+function hotspotObservation(row: WifiInterface): string | undefined {
+	return canHotspot(row)
+		? JSON.stringify([
+				row.hotspot.conn,
+				row.hotspot.name,
+				row.hotspot.password,
+				row.hotspot.channel,
+				row.hotspot.security,
+			])
+		: undefined;
+}
+
+function contradictoryVirtual(
+	row: WifiInterface,
+	identities: ReadonlyMap<string, RadioIdentity>,
+	ifname = row.concurrentHotspot?.ifname ?? concurrentApIfname(row.ifname),
+): boolean {
+	const parent = identities.get(row.ifname)?.lifetime;
+	const virtual = identities.get(ifname)?.lifetime;
+	return (
+		parent !== undefined &&
+		virtual !== undefined &&
+		(parent.phyPath !== virtual.phyPath || parent.wiphy !== virtual.wiphy)
+	);
+}
+
+function observeActiveConnection(
+	row: WifiInterface,
+	activeConn: ConnectionUUID | null,
+	mode: WifiActiveMode,
+): boolean {
+	const previousConn = row.activeConn ?? null;
+	const previousMode = row.activeMode;
+	const retired = transitionVirtualBinding(row, {
+		kind: "parent",
+		connection: activeConn,
+		mode,
+	});
+	row.activeConn = activeConn;
+	if (activeConn === null) delete row.activeMode;
+	else row.activeMode = mode;
+	return (
+		retired || previousConn !== activeConn || previousMode !== row.activeMode
+	);
+}
+
 async function syncActiveConnection(
 	wifiInterface: WifiInterface,
 	macAddress: MacAddress,
 	activeConn: ConnectionUUID | null,
 ): Promise<boolean> {
-	const previousConn = wifiInterface.activeConn ?? null;
-	const previousMode = wifiInterface.activeMode;
-
-	if (activeConn === null) {
-		wifiInterface.activeConn = null;
-		delete wifiInterface.activeMode;
-		return previousConn !== null || previousMode !== undefined;
-	}
-
-	const mode = await resolveConnectionMode(activeConn);
+	const detailsBefore = hotspotObservation(wifiInterface);
+	const mode =
+		activeConn === null ? "unknown" : await resolveConnectionMode(activeConn);
 	if (discoveryController.signal.aborted) return false;
-	wifiInterface.activeConn = activeConn;
-	wifiInterface.activeMode = mode;
-
-	// NM is the authority on AP mode, so adopt the AP profile as this radio's
-	// hotspot connection here rather than waiting on the saved-connection sweep
-	// (which only runs when a NEW adapter appears).
+	const changed = observeActiveConnection(wifiInterface, activeConn, mode);
 	if (
+		activeConn !== null &&
 		mode === "ap" &&
 		canHotspot(wifiInterface) &&
-		wifiInterface.hotspot.conn !== activeConn
+		(wifiInterface.hotspot.conn !== activeConn ||
+			wifiInterface.degradedReason === "permanent-mac-unresolved")
 	) {
 		await handleHotspotConn(macAddress, activeConn, { active: true });
 	}
-
-	return previousConn !== activeConn || previousMode !== mode;
+	return changed || detailsBefore !== hotspotObservation(wifiInterface);
 }
 
 let activeDiscovery: Promise<boolean | undefined> | undefined;
 let queuedDiscovery:
 	| ReturnType<typeof Promise.withResolvers<boolean | undefined>>
 	| undefined;
+
+async function reconcileSampledWifiRegistry(): Promise<boolean> {
+	const observation = wifiRadioIdentity.publishedObservation;
+	const activeConnections = new Map<string, string | null>();
+	for (const row of Object.values(getWifiInterfacesByMacAddress())) {
+		activeConnections.set(row.ifname, row.activeConn ?? row.conn);
+		if (row.concurrentHotspot)
+			activeConnections.set(
+				row.concurrentHotspot.ifname,
+				row.concurrentHotspot.activeConn,
+			);
+	}
+	if (
+		!(await quiesceHotspotAutoconnect(
+			wifiRadioIdentity.state.rows,
+			activeConnections,
+		))
+	) {
+		return false;
+	}
+	if (
+		discoveryController.signal.aborted ||
+		observation !== wifiRadioIdentity.publishedObservation
+	)
+		return false;
+	let statusChange = false;
+	for (const [key, row] of Object.entries(getWifiInterfacesByMacAddress())) {
+		const identity = wifiRadioIdentity.state.rows.get(row.ifname);
+		if (identity?.row !== row) continue;
+		const checked = await withWifiAdapterLock(
+			wifiAdapterLockKey(key),
+			async () => {
+				const active = activeConnections.get(row.ifname) ?? null;
+				if ((row.activeConn ?? row.conn) !== active) {
+					if (active === null) row.conn = null;
+					if (await syncActiveConnection(row, key, active)) statusChange = true;
+				}
+				if (
+					row.concurrentHotspot?.activeConn &&
+					activeConnections.get(row.concurrentHotspot.ifname) === null
+				)
+					if (transitionVirtualBinding(row, { kind: "retire" }))
+						statusChange = true;
+				if (key !== identity.key) {
+					removeWifiInterface(key, "transfer");
+					addWifiInterface(identity.key, row);
+					wifiIdToMacAddress[row.id] = identity.key;
+				}
+				if (identity.degradedReason === undefined) delete row.degradedReason;
+				else row.degradedReason = identity.degradedReason;
+			},
+		);
+		if (!checked.success) {
+			retryWifiAdapterReconcile(
+				wifiAdapterLockKey(key),
+				undefined,
+				"discovery",
+			);
+			return false;
+		}
+	}
+	if (statusChange) broadcastWifiState();
+	for (const key of Object.keys(getWifiInterfacesByMacAddress()))
+		clearWifiAdapterReconcile(wifiAdapterLockKey(key), "discovery");
+	queueMicrotask(() => {
+		if (!discoveryController.signal.aborted)
+			void notifyWifiAdapterModeDiscovery();
+	});
+	return true;
+}
 
 export function terminateWifiDiscovery(): void {
 	discoveryController.abort();
@@ -408,6 +569,29 @@ async function discoverWifiDevices() {
 	nonWifiIfnames.clear();
 	let classificationComplete = true;
 	const signal = discoveryController.signal;
+	const previousIdentities = wifiRadioIdentity.state.rows;
+	const activeBefore = Object.values(getWifiInterfacesByMacAddress()).filter(
+		(row) => isApMode(row) || isConcurrentHotspot(row),
+	);
+	const activityBefore = new Map(
+		Object.values(getWifiInterfacesByMacAddress()).map((row) => [
+			row,
+			{
+				conn: row.conn,
+				activeConn: row.activeConn,
+				activeMode: row.activeMode,
+			},
+		]),
+	);
+	const wireBefore = new Map(
+		Object.values(getWifiInterfacesByMacAddress()).map((row) => [
+			row,
+			projectWifiRadioIncarnation(
+				row,
+				wifiRadioIdentity.state.rows.get(row.ifname),
+			),
+		]),
+	);
 	let observation: number | undefined;
 	try {
 		wifiRadioObservation.stop();
@@ -429,7 +613,17 @@ async function discoverWifiDevices() {
 		scheduleWifiUpdate(0);
 		return;
 	}
-	if (!networkDevices) {
+	const complete = networkDevices?.every((raw) => {
+		if (!raw.trim()) return true;
+		const fields = nmcliParseSep(raw);
+		return (
+			fields.length === 4 &&
+			fields[0] !== "" &&
+			fields[1] !== "" &&
+			fields[2] !== ""
+		);
+	});
+	if (!networkDevices || !complete) {
 		if (observation !== undefined) {
 			try {
 				wifiRadioObservation.enqueue(
@@ -441,6 +635,7 @@ async function discoverWifiDevices() {
 							: {}),
 					})),
 					observation,
+					reconcileSampledWifiRegistry,
 				);
 			} catch {
 				recordWifiRadioShadowFailure();
@@ -452,20 +647,142 @@ async function discoverWifiDevices() {
 	// sorts the results alphabetically by interface name
 	networkDevices.sort();
 
-	// mark all WiFi adapters as removed
-	for (const wifiInterface of Object.values(getWifiInterfacesByMacAddress())) {
-		invalidateWifiRadioRow(wifiInterface, observation);
-		wifiInterface.removed = true;
+	if (observation !== undefined) {
+		try {
+			const sampled = await wifiRadioObservation.sample(
+				networkDevices.flatMap((raw) => {
+					const [ifname, type, state] = nmcliParseSep(raw);
+					if (
+						!ifname ||
+						type !== "wifi" ||
+						(!isSupportedWifiIfname(ifname) && !isConcurrentApIfname(ifname))
+					)
+						return [];
+					const degradedReason: WifiAdapterDegradedReason | undefined =
+						state === "unavailable"
+							? "unavailable"
+							: !wifiDeviceListGetMacAddress(ifname)
+								? "operational-mac-missing"
+								: undefined;
+					return [{ ifname, ...(degradedReason ? { degradedReason } : {}) }];
+				}),
+				observation,
+				reconcileSampledWifiRegistry,
+			);
+			if (!sampled) return;
+		} catch {
+			recordWifiRadioShadowFailure();
+		}
+	}
+	if (signal.aborted) return;
+	const identities =
+		wifiRadioIdentity.publishedObservation === observation
+			? wifiRadioIdentity.state.rows
+			: new Map<string, RadioIdentity>();
+	await observeConcurrentInterfacesAtFirstDiscovery(
+		networkDevices
+			.filter((raw) => raw.trim())
+			.map((raw) => nmcliParseSep(raw)[0] ?? ""),
+		identities,
+	);
+	if (signal.aborted) return;
+	const listed = new Map(
+		networkDevices
+			.filter((raw) => raw.trim())
+			.map((raw) => {
+				const [ifname, , , uuid] = nmcliParseSep(raw);
+				return [ifname, uuid || null];
+			}),
+	);
+	const replaced = (ifname: string): boolean => {
+		const before = previousIdentities.get(ifname)?.lifetime;
+		const after = identities.get(ifname)?.lifetime;
+		return (
+			before !== undefined &&
+			after !== undefined &&
+			(before.ifindex !== after.ifindex ||
+				before.wiphy !== after.wiphy ||
+				before.phyPath !== after.phyPath)
+		);
+	};
+	const observeBusyAdapter = async (
+		key: string,
+		row: WifiInterface,
+	): Promise<void> => {
+		const before = activityBefore.get(row);
+		const active = listed.get(row.ifname) ?? null;
+		if (
+			!before ||
+			key !== identities.get(row.ifname)?.key ||
+			replaced(row.ifname) ||
+			active === before.activeConn
+		)
+			return;
+		const mode =
+			active === null ? "unknown" : await resolveConnectionMode(active);
+		if (
+			signal.aborted ||
+			observation !== wifiRadioIdentity.publishedObservation ||
+			getWifiInterfacesByMacAddress()[key] !== row ||
+			row.conn !== before.conn ||
+			row.activeConn !== before.activeConn ||
+			row.activeMode !== before.activeMode ||
+			(active !== null && mode === "unknown")
+		)
+			return;
+		// Observations remain current during an operation; policy and identity transfer wait.
+		row.conn =
+			active !== null && wifiDeviceListGetInetAddress(row.ifname)
+				? active
+				: null;
+		observeActiveConnection(row, active, mode);
+	};
+	let operationPending = false;
+	for (const [key, row] of Object.entries(getWifiInterfacesByMacAddress())) {
+		const probe = await withWifiAdapterLock(
+			wifiAdapterLockKey(key),
+			async () => true,
+		);
+		if (probe.success) continue;
+		await observeBusyAdapter(key, row);
+		retryWifiAdapterReconcile(wifiAdapterLockKey(key), undefined, "discovery");
+		operationPending = true;
+	}
+	if (operationPending) return;
+	if (!(await quiesceHotspotAutoconnect(identities, listed))) {
+		return;
+	}
+	if (signal.aborted) return;
+	// Evaluate absence against the complete roster, before adopting any parent AP.
+	for (const row of Object.values(getWifiInterfacesByMacAddress())) {
+		const binding = row.concurrentHotspot;
+		if (
+			binding &&
+			(!listed.has(row.ifname) ||
+				!listed.has(binding.ifname) ||
+				contradictoryVirtual(row, identities) ||
+				replaced(row.ifname) ||
+				replaced(binding.ifname))
+		) {
+			if (
+				transitionVirtualBinding(row, {
+					kind: "discard",
+					parentConn: listed.get(row.ifname) ?? null,
+				})
+			)
+				statusChange = true;
+		}
 	}
 
 	// Rebuild the id to mac address map
 	wifiIdToMacAddress = {};
 	const seenIfnames: string[] = [];
+	const presentKeys = new Set<string>();
 	const concurrentDevices = new Map<string, ConnectionUUID | null>();
 
 	for (const networkDevice of networkDevices) {
 		try {
-			const [ifname, type, state, connUuid] = nmcliParseSep(networkDevice) as [
+			const [ifname, type, state] = nmcliParseSep(networkDevice) as [
 				string,
 				string,
 				string,
@@ -484,174 +801,223 @@ async function discoverWifiDevices() {
 				continue;
 			}
 			if (isConcurrentApIfname(ifname)) {
-				concurrentDevices.set(ifname, connUuid !== "" ? connUuid : null);
+				const active = listed.get(ifname);
+				concurrentDevices.set(
+					ifname,
+					state.startsWith("connected") && active && active !== "--"
+						? active
+						: null,
+				);
 				continue;
 			}
 			if (!isSupportedWifiIfname(ifname)) continue;
-			if (state === "unavailable") {
-				classificationComplete = false;
-				unavailableDevices = true;
-				seenIfnames.push(ifname);
-				const existed = Object.values(getWifiInterfacesByMacAddress()).some(
-					(wifiInterface) => wifiInterface?.ifname === ifname,
-				);
-				invalidateWifiRadioRow(
-					recordDegradedWifiInterface(ifname, "unavailable"),
-					observation,
-				);
-				if (existed) statusChange = true;
-				else newDevices = true;
-				continue;
-			}
+			const previous = Object.entries(getWifiInterfacesByMacAddress()).find(
+				([, row]) => row.ifname === ifname,
+			);
+			const owner =
+				previous?.[0] ?? identities.get(ifname)?.key ?? `degraded:${ifname}`;
+			const checked = await withWifiAdapterLock(
+				wifiAdapterLockKey(owner),
+				async () => {
+					if (state === "unavailable") {
+						classificationComplete = false;
+						unavailableDevices = true;
+						seenIfnames.push(ifname);
+						const existed = Object.values(getWifiInterfacesByMacAddress()).some(
+							(wifiInterface) => wifiInterface?.ifname === ifname,
+						);
+						const row = recordDegradedWifiInterface(
+							ifname,
+							"unavailable",
+							identities.get(ifname)?.key ?? `degraded:${ifname}`,
+						);
+						presentKeys.add(
+							identities.get(ifname)?.key ?? `degraded:${ifname}`,
+						);
+						transitionVirtualBinding(row, {
+							kind: "parent",
+							connection: null,
+							mode: "unknown",
+						});
+						row.conn = null;
+						row.activeConn = null;
+						delete row.activeMode;
+						invalidateWifiRadioRow(row, observation);
+						if (observation !== undefined)
+							wifiRadioIdentity.associateRows([row], observation);
+						if (existed) statusChange = true;
+						else newDevices = true;
+						return;
+					}
 
-			const activeConn: ConnectionUUID | null =
-				connUuid !== "" ? connUuid : null;
-			const conn =
-				activeConn !== null && wifiDeviceListGetInetAddress(ifname)
-					? activeConn
-					: null;
-			const currentMac = wifiDeviceListGetMacAddress(ifname);
-			if (!currentMac) {
-				classificationComplete = false;
-				seenIfnames.push(ifname);
-				const existed = Object.values(getWifiInterfacesByMacAddress()).some(
-					(wifiInterface) => wifiInterface?.ifname === ifname,
-				);
-				invalidateWifiRadioRow(
-					recordDegradedWifiInterface(ifname, "operational-mac-missing"),
-					observation,
-				);
-				if (existed) statusChange = true;
-				else newDevices = true;
-				continue;
-			}
+					const activeConn = listed.get(ifname) ?? null;
+					const conn =
+						activeConn !== null && wifiDeviceListGetInetAddress(ifname)
+							? activeConn
+							: null;
+					const currentMac = wifiDeviceListGetMacAddress(ifname);
+					if (!currentMac) {
+						classificationComplete = false;
+						seenIfnames.push(ifname);
+						const existed = Object.values(getWifiInterfacesByMacAddress()).some(
+							(wifiInterface) => wifiInterface?.ifname === ifname,
+						);
+						const row = recordDegradedWifiInterface(
+							ifname,
+							"operational-mac-missing",
+							identities.get(ifname)?.key ?? `degraded:${ifname}`,
+						);
+						presentKeys.add(
+							identities.get(ifname)?.key ?? `degraded:${ifname}`,
+						);
+						transitionVirtualBinding(row, {
+							kind: "parent",
+							connection: null,
+							mode: "unknown",
+						});
+						row.conn = null;
+						row.activeConn = null;
+						delete row.activeMode;
+						invalidateWifiRadioRow(row, observation);
+						if (observation !== undefined)
+							wifiRadioIdentity.associateRows([row], observation);
+						if (existed) statusChange = true;
+						else newDevices = true;
+						return;
+					}
 
-			/*
-			  Adapters are keyed by their PERMANENT hardware address, never the
-			  operational one the ifconfig poll reports: NetworkManager randomizes
-			  that while scanning, and a re-keyed registry silently discards the
-			  adapter's adopted hotspot profile, saved-connection map and id.
-			*/
-			seenIfnames.push(ifname);
-			const macAddress = await resolveWifiPermanentMac(ifname, currentMac);
-			if (signal.aborted) return;
-			const permanentMacResolved =
-				getWifiPermanentMacCached(ifname) !== undefined;
-			let recoveredId: WifiInterfaceId | undefined;
-			for (const [key, candidate] of Object.entries(
-				getWifiInterfacesByMacAddress(),
-			)) {
-				if (
-					key !== macAddress &&
-					candidate?.ifname === ifname &&
-					candidate.degradedReason !== undefined
-				) {
-					recoveredId = candidate.id;
-					removeWifiInterface(key);
-					break;
-				}
-			}
-
-			const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
-
-			if (wifiInterface) {
-				invalidateWifiRadioRow(wifiInterface, observation);
-				// the interface is still available
-				delete wifiInterface.removed;
-				if (permanentMacResolved) delete wifiInterface.degradedReason;
-				else wifiInterface.degradedReason = "permanent-mac-unresolved";
-
-				if (ifname !== wifiInterface.ifname) {
-					wifiInterface.ifname = ifname;
-					statusChange = true;
-				}
-				if (conn !== wifiInterface.conn) {
-					wifiInterface.conn = conn;
-					statusChange = true;
-				}
-			} else {
-				const id = recoveredId ?? wifiIfId++;
-
-				const parsedProps = parseWifiDeviceProperties(
-					await nmDeviceProp(
-						ifname,
-						"GENERAL.VENDOR,GENERAL.PRODUCT,WIFI-PROPERTIES.AP,WIFI-PROPERTIES.5GHZ,WIFI-PROPERTIES.2GHZ",
-					),
-				);
-				if (signal.aborted) return;
-				if (!parsedProps.ok) {
-					classificationComplete = false;
-					logParseError(parsedProps);
-					continue;
-				}
-
-				const newInterface: WifiInterface = {
-					id,
-					ifname,
-					hw: parsedProps.value.hw,
-					conn,
-					available: new Map(),
-					saved: {},
-					savedAll: {},
-					...(!permanentMacResolved
-						? { degradedReason: "permanent-mac-unresolved" as const }
-						: {}),
-				};
-				invalidateWifiRadioRow(newInterface, observation);
-
-				if (parsedProps.value.supportsAp) {
-					newInterface.supportsApStaConcurrency =
-						await supportsApStaConcurrency(ifname);
-					if (signal.aborted) return;
-					if (newInterface.supportsApStaConcurrency) {
-						const concurrentInterface =
-							await ensureConcurrentApInterface(ifname);
-						if (signal.aborted) return;
-						if (concurrentInterface === undefined) {
-							newInterface.supportsApStaConcurrency = false;
+					seenIfnames.push(ifname);
+					const identity = identities.get(ifname);
+					const macAddress = identity?.key ?? `degraded:${ifname}`;
+					const permanentMacResolved = identity?.classification === "verified";
+					let recoveredId: WifiInterfaceId | undefined;
+					for (const [key, candidate] of Object.entries(
+						getWifiInterfacesByMacAddress(),
+					)) {
+						if (
+							key !== macAddress &&
+							candidate?.ifname === ifname &&
+							candidate.degradedReason !== undefined
+						) {
+							recoveredId = candidate.id;
+							removeWifiInterface(key);
+							break;
 						}
 					}
 
-					const bandCapability: AutoWifiChannel[] = ["auto"];
-					if (parsedProps.value.supports5Ghz) bandCapability.push("auto_50");
-					if (parsedProps.value.supports2Ghz) bandCapability.push("auto_24");
+					const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
 
-					const hotspot: WifiHotspot = {
-						warnings: {},
-						bandCapability,
-						availableChannels: [...bandCapability],
-					};
-					// Fold in the concrete channels the kernel currently permits, and
-					// retire any band its regulatory rules forbid initiating on.
-					refreshHotspotChannels(hotspot, getDerivedApChannels());
-					(newInterface as WifiInterfaceWithHotspot).hotspot = hotspot;
-				}
-				newDevices = true;
-				statusChange = true;
-				addWifiInterface(macAddress, newInterface);
-			}
+					if (wifiInterface) {
+						invalidateWifiRadioRow(wifiInterface, observation);
+						// the interface is still available
+						delete wifiInterface.removed;
+						if (permanentMacResolved) delete wifiInterface.degradedReason;
+						else wifiInterface.degradedReason = "permanent-mac-unresolved";
 
-			const updatedInterface = getWifiInterfaceByMacAddress(macAddress);
-			if (updatedInterface) {
-				invalidateWifiRadioRow(updatedInterface, observation);
-				wifiIdToMacAddress[updatedInterface.id] = macAddress;
-				if (
-					await syncActiveConnection(updatedInterface, macAddress, activeConn)
-				) {
-					statusChange = true;
-				}
-				const incarnation = getNetworkInterfaceIncarnation(ifname);
-				if (
-					incarnation !== undefined &&
-					topologyGeneration === getNetifTopologyGeneration()
-				)
-					classifiedWifiIfnames.set(ifname, incarnation);
-				if (
-					activeConn !== null &&
-					updatedInterface.activeMode !== "ap" &&
-					updatedInterface.activeMode !== "infrastructure"
-				)
-					classificationComplete = false;
+						if (ifname !== wifiInterface.ifname) {
+							wifiInterface.ifname = ifname;
+							statusChange = true;
+						}
+						if (conn !== wifiInterface.conn) {
+							wifiInterface.conn = conn;
+							statusChange = true;
+						}
+					} else {
+						const id = recoveredId ?? wifiIfId++;
+
+						const parsedProps = parseWifiDeviceProperties(
+							await nmDeviceProp(
+								ifname,
+								"GENERAL.VENDOR,GENERAL.PRODUCT,WIFI-PROPERTIES.AP,WIFI-PROPERTIES.5GHZ,WIFI-PROPERTIES.2GHZ",
+							),
+						);
+						if (signal.aborted) return;
+						if (!parsedProps.ok) {
+							classificationComplete = false;
+							logParseError(parsedProps);
+							return;
+						}
+
+						const newInterface: WifiInterface = {
+							id,
+							ifname,
+							hw: parsedProps.value.hw,
+							conn,
+							available: new Map(),
+							saved: {},
+							savedAll: {},
+							...(!permanentMacResolved
+								? { degradedReason: "permanent-mac-unresolved" as const }
+								: {}),
+						};
+						invalidateWifiRadioRow(newInterface, observation);
+
+						if (parsedProps.value.supportsAp) {
+							newInterface.supportsApStaConcurrency =
+								isQualifiedNmManagedHybrid(ifname) &&
+								(await supportsApStaConcurrency(ifname));
+							if (signal.aborted) return;
+
+							const bandCapability: AutoWifiChannel[] = ["auto"];
+							if (parsedProps.value.supports5Ghz)
+								bandCapability.push("auto_50");
+							if (parsedProps.value.supports2Ghz)
+								bandCapability.push("auto_24");
+
+							const hotspot: WifiHotspot = {
+								warnings: {},
+								bandCapability,
+								availableChannels: [...bandCapability],
+							};
+							// Fold in the concrete channels the kernel currently permits, and
+							// retire any band its regulatory rules forbid initiating on.
+							refreshHotspotChannels(hotspot, getDerivedApChannels());
+							(newInterface as WifiInterfaceWithHotspot).hotspot = hotspot;
+						}
+						newDevices = true;
+						statusChange = true;
+						addWifiInterface(macAddress, newInterface);
+					}
+
+					const updatedInterface = getWifiInterfaceByMacAddress(macAddress);
+					if (updatedInterface) {
+						presentKeys.add(macAddress);
+						invalidateWifiRadioRow(updatedInterface, observation);
+						wifiIdToMacAddress[updatedInterface.id] = macAddress;
+						if (observation !== undefined)
+							wifiRadioIdentity.associateRows([updatedInterface], observation);
+						if (
+							await syncActiveConnection(
+								updatedInterface,
+								macAddress,
+								activeConn,
+							)
+						) {
+							statusChange = true;
+						}
+						const incarnation = getNetworkInterfaceIncarnation(ifname);
+						if (
+							incarnation !== undefined &&
+							topologyGeneration === getNetifTopologyGeneration()
+						)
+							classifiedWifiIfnames.set(ifname, incarnation);
+						if (
+							activeConn !== null &&
+							updatedInterface.activeMode !== "ap" &&
+							updatedInterface.activeMode !== "infrastructure"
+						)
+							classificationComplete = false;
+					}
+				},
+			);
+			if (!checked.success) {
+				if (previous) await observeBusyAdapter(previous[0], previous[1]);
+				retryWifiAdapterReconcile(
+					wifiAdapterLockKey(owner),
+					undefined,
+					"discovery",
+				);
+				return;
 			}
 		} catch (err) {
 			classificationComplete = false;
@@ -664,33 +1030,90 @@ async function discoverWifiDevices() {
 		if (signal.aborted) return;
 	}
 
-	for (const wifiInterface of Object.values(getWifiInterfacesByMacAddress())) {
-		if (wifiInterface?.supportsApStaConcurrency !== true) continue;
-		const virtualIfname = concurrentApIfname(wifiInterface.ifname);
-		if (!concurrentDevices.has(virtualIfname)) {
-			if (wifiInterface.concurrentHotspot !== undefined) {
-				delete wifiInterface.concurrentHotspot;
+	for (const [registryKey, wifiInterface] of Object.entries(
+		getWifiInterfacesByMacAddress(),
+	)) {
+		const identity = identities.get(wifiInterface.ifname);
+		if (!canHotspot(wifiInterface) || identity?.key !== registryKey) continue;
+		const expected = concurrentApIfname(wifiInterface.ifname);
+		const stored =
+			identity.classification === "verified"
+				? getHotspotCredentials(registryKey)
+				: undefined;
+		const knownProfiles = new Set([
+			wifiInterface.hotspot.conn,
+			stored?.conn,
+			...(stored?.previousConns ?? []),
+		]);
+		const candidates: Array<{
+			ifname: string;
+			activeConn: ConnectionUUID | null;
+		}> = [];
+		for (const [ifname, activeConn] of concurrentDevices) {
+			if (contradictoryVirtual(wifiInterface, identities, ifname)) continue;
+			if (activeConn !== null) {
+				if (
+					ifname !== expected &&
+					ifname !== wifiInterface.concurrentHotspot?.ifname &&
+					!knownProfiles.has(activeConn)
+				)
+					continue;
+				if ((await resolveConnectionMode(activeConn)) !== "ap") continue;
+			} else if (
+				ifname !== expected &&
+				ifname !== wifiInterface.concurrentHotspot?.ifname
+			)
+				continue;
+			candidates.push({ ifname, activeConn });
+		}
+		if (signal.aborted) return;
+		if (getWifiInterfaceByMacAddress(registryKey) !== wifiInterface) continue;
+		const active = candidates.filter(
+			(candidate) => candidate.activeConn !== null,
+		);
+		const chosen =
+			active.find(
+				(candidate) => candidate.activeConn === wifiInterface.hotspot.conn,
+			) ??
+			(active.length === 1
+				? active[0]
+				: active.length === 0
+					? (candidates.find(
+							(candidate) =>
+								candidate.ifname === wifiInterface.concurrentHotspot?.ifname,
+						) ?? candidates.find((candidate) => candidate.ifname === expected))
+					: undefined);
+		if (!chosen) {
+			if (transitionVirtualBinding(wifiInterface, { kind: "discard" })) {
 				statusChange = true;
 			}
 			continue;
 		}
+		const { ifname: virtualIfname, activeConn } = chosen;
 
-		const activeConn = concurrentDevices.get(virtualIfname) ?? null;
+		const detailsBefore = hotspotObservation(wifiInterface);
+		const bindingChanged = transitionVirtualBinding(wifiInterface, {
+			kind: "set",
+			ifname: virtualIfname,
+			activeConn,
+		});
 		if (activeConn && canHotspot(wifiInterface)) {
-			await handleHotspotConn(undefined, activeConn, { active: true });
+			await handleHotspotConn(
+				wifiInterface.degradedReason === "permanent-mac-unresolved"
+					? registryKey
+					: undefined,
+				activeConn,
+				{ active: true },
+			);
+			if (signal.aborted) return;
+			await reconcileHybridStationChannel(registryKey, wifiInterface);
 			if (signal.aborted) return;
 		}
-		const previous = wifiInterface.concurrentHotspot;
-		wifiInterface.concurrentHotspot = { ifname: virtualIfname, activeConn };
-		if (
-			previous?.ifname !== virtualIfname ||
-			previous.activeConn !== activeConn
-		) {
+		if (bindingChanged || detailsBefore !== hotspotObservation(wifiInterface)) {
 			statusChange = true;
 		}
 	}
 
-	retainWifiPermanentMacs(seenIfnames);
 	// Fire-and-forget: the capability read is bounded and never throws, and the
 	// wire builder serves whatever the last successful read produced.
 	void refreshWifiCapabilities(seenIfnames);
@@ -699,7 +1122,7 @@ async function discoverWifiDevices() {
 	const wifiInterfacesByMacAddress = getWifiInterfacesByMacAddress();
 	for (const i in wifiInterfacesByMacAddress) {
 		const wifiInterface = wifiInterfacesByMacAddress[i];
-		if (wifiInterface?.removed) {
+		if (wifiInterface && (wifiInterface.removed || !presentKeys.has(i))) {
 			removeWifiInterface(i);
 			statusChange = true;
 		}
@@ -740,9 +1163,22 @@ async function discoverWifiDevices() {
 			triggerNetworkInterfacesChange();
 			// Remove hotspot IPs from the source IP address list for BCRPT
 		}
+	} else if (
+		Object.values(getWifiInterfacesByMacAddress()).some(
+			(row) =>
+				wireBefore.get(row) !==
+				projectWifiRadioIncarnation(
+					row,
+					wifiRadioIdentity.state.rows.get(row.ifname),
+				),
+		)
+	) {
+		notifyWifiRadioPublication();
 	}
 	if (signal.aborted) return;
-	logger.debug("Wifi interfaces", wifiInterfacesByMacAddress);
+	logger.debug("Wifi interfaces refreshed", {
+		count: Object.keys(wifiInterfacesByMacAddress).length,
+	});
 
 	/* If some wifi adapters were marked unavailable, recheck periodically
      This might happen when the system has just booted up and the adapter
@@ -750,13 +1186,12 @@ async function discoverWifiDevices() {
      Uses a timeout to avoid polling nmcli forever */
 	if (unavailableDevices) {
 		if (unavailableDeviceRetryExpiry === 0) {
-			unavailableDeviceRetryExpiry = getms() + 5 * 60 * 1_000; // 5 minute timeout
-			scheduleWifiUpdate(3_000);
+			scheduleWifiDiscoveryRetry();
 			logger.warn(
 				"One or more Wifi interfaces are unavailable. Will retry periodically for the next 5 minutes",
 			);
 		} else if (getms() < unavailableDeviceRetryExpiry) {
-			scheduleWifiUpdate(3_000);
+			scheduleWifiDiscoveryRetry();
 			logger.warn(
 				"One or more Wifi interfaces are still unavailable. Retrying in 3 seconds...",
 			);
@@ -765,38 +1200,11 @@ async function discoverWifiDevices() {
 		unavailableDeviceRetryExpiry = 0;
 	}
 
-	// A task starts sampling only after this legacy promise has been published.
-	if (observation !== undefined) {
-		try {
-			wifiRadioObservation.enqueue(
-				networkDevices.flatMap((raw) => {
-					const [ifname, type, state] = nmcliParseSep(raw);
-					if (!ifname || type !== "wifi" || isConcurrentApIfname(ifname)) {
-						return [];
-					}
-					const degradedReason: WifiAdapterDegradedReason | undefined =
-						state === "unavailable"
-							? "unavailable"
-							: !wifiDeviceListGetMacAddress(ifname)
-								? "operational-mac-missing"
-								: undefined;
-					const row = Object.values(getWifiInterfacesByMacAddress()).find(
-						(candidate) => candidate.ifname === ifname,
-					);
-					return [
-						{
-							ifname,
-							...(degradedReason ? { degradedReason } : {}),
-							...(row ? { row } : {}),
-						},
-					];
-				}),
-				observation,
-			);
-		} catch {
-			recordWifiRadioShadowFailure();
-		}
-	}
+	for (const key of Object.keys(getWifiInterfacesByMacAddress()))
+		clearWifiAdapterReconcile(wifiAdapterLockKey(key), "discovery");
+	for (const row of activeBefore)
+		if (!isApMode(row) && !isConcurrentHotspot(row))
+			observeWifiHotspotLoss(row);
 	queueMicrotask(() => {
 		void notifyWifiAdapterModeDiscovery();
 	});

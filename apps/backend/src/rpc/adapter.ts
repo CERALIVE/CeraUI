@@ -8,6 +8,7 @@ import type { ServerWebSocket, WebSocketHandler } from "bun";
 
 import { logger, logRedact } from "../helpers/logger.ts";
 import { isRuntimeConfigAvailable } from "../modules/config.ts";
+import { stopFollow } from "../modules/device-logs/follow.ts";
 import { SHARING_DIAG_EVENT } from "../modules/network/sharing-diag/status.ts";
 import {
 	getStreamHealth,
@@ -19,7 +20,11 @@ import {
 	createPreviewWebSocketHandler,
 	isPreviewSocket,
 } from "../modules/ui/preview-proxy.ts";
-import { createContext, initSocketData } from "./context.ts";
+import {
+	closeSocketSession,
+	createContext,
+	initSocketData,
+} from "./context.ts";
 import { extractValidationDetails } from "./error-enrichment.ts";
 import {
 	addClient,
@@ -281,9 +286,11 @@ export function createWebSocketHandler(): WebSocketHandler<SocketData> {
 			void handleORPCMessage(ws, message);
 		},
 
-		close(ws: AppWebSocket, code: number, reason: string) {
+		async close(ws: AppWebSocket, code: number, reason: string) {
+			closeSocketSession(ws);
 			logger.debug(`WebSocket client disconnected: ${code} ${reason}`);
 			removeClient(ws);
+			await stopFollow(ws);
 		},
 
 		drain(_ws: AppWebSocket) {

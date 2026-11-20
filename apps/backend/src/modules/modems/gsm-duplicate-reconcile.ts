@@ -61,7 +61,8 @@ export async function auditGsmProfiles(): Promise<Array<GsmProfileAudit>> {
 		const [uuid, type, state] = nmcliParseSep(row) as [string, string, string];
 		if (type !== "gsm" || !uuid) continue;
 
-		const fields = await nmConnGetFields(uuid, GSM_AUDIT_FIELDS);
+		// The inventory proved GSM: its GSM and connection settings are required.
+		const fields = await nmConnGetFields(uuid, GSM_AUDIT_FIELDS, "fixed");
 		if (fields === undefined) continue;
 
 		audits.push({

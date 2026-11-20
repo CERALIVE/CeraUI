@@ -25,6 +25,7 @@ import { OS_STAGE_CONFIRMABLE_UNSAFE_REASONS } from "@ceraui/rpc/schemas";
 import { awaitUpdatePhysicalReconciliation } from "../../../helpers/boot-guard.ts";
 import { logger } from "../../../helpers/logger.ts";
 import { shouldUseMocks } from "../../../mocks/mock-service.ts";
+import { emitEvent } from "../../events/emit.ts";
 import { currentLifecycleHolder } from "../../streaming/lifecycle-admission.ts";
 import { broadcastMsg } from "../../ui/websocket-server.ts";
 import { cleanAptCache } from "../apt-cache-clean.ts";
@@ -762,12 +763,15 @@ export function setOrchestratorStateForTest(next: OrchestratorState): void {
 }
 
 export function getOrchestratorWireState(): UpdateOrchestratorWireState {
+	const rollbackAttemptId =
+		state.phase === "kernel-rolled-back" ? state.kernelAttempt?.id : undefined;
 	return {
 		schema: 1,
 		phase: state.phase,
 		progress: state.progress,
 		failure_reason: state.failureReason,
 		cellular_override_id: state.cellularOverrideId,
+		...(rollbackAttemptId === undefined ? {} : { rollbackAttemptId }),
 	};
 }
 
@@ -821,6 +825,35 @@ function dispatch(event: OrchestratorEvent): OrchestratorState {
 	const next = reduceOrchestrator(state, event);
 	if (next !== state) {
 		adoptState(next);
+		try {
+			switch (event.type) {
+				case "DOWNLOAD_FAILED":
+					emitEvent("update_failed", {
+						stage: "download",
+						reason: event.reason,
+						...(event.failureId === undefined ? {} : { id: event.failureId }),
+					});
+					break;
+				case "COMMIT_FAILED":
+					emitEvent("update_failed", {
+						stage: "commit",
+						reason: event.reason,
+						...(event.failureId === undefined ? {} : { id: event.failureId }),
+					});
+					break;
+				case "SYNC_FAILED":
+					emitEvent("update_failed", { stage: "sync", reason: event.reason });
+					break;
+				case "OS_STAGING_FAILED":
+					emitEvent("update_failed", {
+						stage: "os-staging",
+						reason: event.reason,
+					});
+					break;
+			}
+		} catch {
+			// Event history must not interrupt transition persistence or publication.
+		}
 		deps.persist(state);
 		publishWireState();
 	}
@@ -1415,8 +1448,13 @@ async function pollPackageInstallProgress(): Promise<void> {
 		return;
 	}
 	if (wire.kind === "failed") {
+		const failure = {
+			now,
+			reason: wire.reason,
+			...(wire.failure_id === undefined ? {} : { failureId: wire.failure_id }),
+		};
 		if (state.phase === "downloading") {
-			dispatch({ type: "DOWNLOAD_FAILED", now, reason: wire.reason });
+			dispatch({ type: "DOWNLOAD_FAILED", ...failure });
 		} else {
 			const pending = await deps.quarantine.readPending();
 			await deps.quarantine.recordPackageFailure(
@@ -1427,7 +1465,7 @@ async function pollPackageInstallProgress(): Promise<void> {
 				wire.reason,
 			);
 			await deps.quarantine.clearPending();
-			dispatch({ type: "COMMIT_FAILED", now, reason: wire.reason });
+			dispatch({ type: "COMMIT_FAILED", ...failure });
 			notifyUpdate({
 				kind: "refused",
 				id: `commit:${state.enteredAt}`,

@@ -45,8 +45,9 @@ bound that elapses with no arrival yields NO reply — never the retained value.
 
 **Never log a value on this path.** `parseUssdNetworkRequest` deliberately does not
 route through `mmcliParseSep`, which logs an unsplittable line VERBATIM; every
-value here is subscriber content. Verified live: a `debug.log` covering a full
-four-turn dialogue contains 0 occurrences of the MSISDN or of any menu text.
+value here is subscriber content. The device diagnostic is the journal
+(`journalctl -u ceralive`). The historical live capture covering a full four-turn
+dialogue contained 0 occurrences of the MSISDN or of any menu text.
 
 Board-proven end to end through CeraUI's OWN authenticated RPC: `ussdInitiate`
 `*611#` → the root menu (carrying the SIM's number), `ussdRespond` `4` → the

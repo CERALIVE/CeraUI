@@ -52,7 +52,19 @@ export const DESTINATION_NAMESPACES: Readonly<
 	identity: [],
 };
 
-const DEFERRED = new Set<string>(Object.values(DESTINATION_NAMESPACES).flat());
+/**
+ * Keyed by dialog: namespaces only that lazily imported dialog reads. The dialog
+ * awaits them itself when it opens; they are neither boot nor destination copy.
+ */
+export const DIALOG_NAMESPACES: Readonly<Record<string, readonly Namespace[]>> =
+	{
+		systemLogs: ["systemLogs", "timeline"],
+	};
+
+const DEFERRED = new Set<string>([
+	...Object.values(DESTINATION_NAMESPACES).flat(),
+	...Object.values(DIALOG_NAMESPACES).flat(),
+]);
 
 /**
  * The shell set: every namespace that is NOT claimed by a single destination.
@@ -75,6 +87,11 @@ export function ensureBootNamespaces(): Promise<void> {
  */
 export function ensureDestinationNamespaces(key: string): Promise<void> {
 	return ensureNamespaces(DESTINATION_NAMESPACES[key] ?? []);
+}
+
+/** The dialog twin of {@link ensureDestinationNamespaces}: a lazy dialog awaits its own set. */
+export function ensureDialogNamespaces(key: string): Promise<void> {
+	return ensureNamespaces(DIALOG_NAMESPACES[key] ?? []);
 }
 
 /**
@@ -108,7 +125,10 @@ export function prefetchDeferredNamespaces(): void {
 /** Namespaces in neither set — always empty; the test gate asserts it. */
 export function orphanNamespaces(): Namespace[] {
 	const covered = new Set<string>(BOOT_NAMESPACES);
-	for (const list of Object.values(DESTINATION_NAMESPACES)) {
+	for (const list of [
+		...Object.values(DESTINATION_NAMESPACES),
+		...Object.values(DIALOG_NAMESPACES),
+	]) {
 		for (const ns of list) covered.add(ns);
 	}
 	return NAMESPACES.filter((ns) => !covered.has(ns));

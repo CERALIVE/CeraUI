@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { WifiStatus } from "@ceraui/rpc/schemas";
 
 import { type BackendRpc, expect, type Page, test } from "./fixtures/index.js";
 
@@ -244,15 +245,16 @@ async function pumpStatusTicks(page: Page, count: number): Promise<void> {
 
 /** Commit the mock AP state before injecting its confirming snapshot. */
 async function emitHotspotActive(page: Page, device: string, backendRpc: BackendRpc): Promise<void> {
+	const { incarnation } = (await backendRpc.call<WifiStatus>(["wifi", "getStatus"]))[device] ?? {};
 	const prepared = await backendRpc.call<{ success: boolean }>(
 		["wifi", "hotspotPrepare"],
-		{ device, name: FORM_NAME, password: FORM_PASS },
+		{ device, incarnation, name: FORM_NAME, password: FORM_PASS },
 	);
 	if (!prepared.success) throw new Error("mock hotspot preparation failed");
 	// Bypass the page's fake start so subsequent real status ticks keep the AP on.
 	const started = await backendRpc.call<{ success: boolean }>(
 		["wifi", "hotspotStart"],
-		{ device },
+		{ device, incarnation },
 	);
 	if (!started.success) throw new Error("mock hotspot start failed");
 	await page.evaluate((dev) => {

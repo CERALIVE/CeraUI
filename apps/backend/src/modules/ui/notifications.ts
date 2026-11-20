@@ -82,6 +82,8 @@ export type NotificationOptions = {
 
 const persistentNotifications = new Map<string, PersistentNotification>();
 
+// Revisions start over when the backend restarts; this namespaces them.
+const publisher: string = crypto.randomUUID();
 let revisionCounter = 0;
 function nextRevision(): number {
 	return ++revisionCounter;
@@ -100,7 +102,7 @@ export function buildNotificationMsg(
 		...(n.key !== undefined ? { key: n.key } : {}),
 		...(n.params !== undefined ? { params: n.params } : {}),
 		...(n.action !== undefined ? { action: n.action } : {}),
-		...(revision !== undefined ? { revision } : {}),
+		...(revision !== undefined ? { revision, publisher } : {}),
 		is_dismissable: n.isDismissable,
 		is_persistent: n.isPersistent,
 		duration,
@@ -296,5 +298,10 @@ export function notificationSendPersistent(
 	conn: MessageSocket,
 	isAuthed = false,
 ) {
-	conn.send(buildMsg("notification", getPersistentNotifications(isAuthed)));
+	conn.send(
+		buildMsg("notification", {
+			...getPersistentNotifications(isAuthed),
+			replay: true,
+		}),
+	);
 }

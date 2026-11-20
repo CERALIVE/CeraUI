@@ -142,6 +142,18 @@ export function reserveDisruptiveAction(
 	return acquireTicket(pending);
 }
 
+export function reserveUpdateEvidenceDeletion(
+	updateBusy: boolean,
+): DisruptiveReservationOutcome {
+	if (updateBusy || readDisruptiveUpdateBusy().length > 0)
+		return { allowed: false, reason: "update_in_progress" };
+	return reserveDisruptiveAction(
+		{ allowed: true },
+		"service",
+		Symbol("update-evidence-deletion"),
+	);
+}
+
 export function reservePowerAction(
 	decision: DisruptiveActionDecision,
 	action: PowerAction,

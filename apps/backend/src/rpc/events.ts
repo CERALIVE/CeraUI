@@ -10,7 +10,15 @@ import {
 	shouldCoalesce,
 	updateCoalesceState,
 } from "./coalesce.ts";
+import { getAuthenticatedClients, getClients } from "./context.ts";
 import type { AppWebSocket } from "./types.ts";
+
+export {
+	addClient,
+	getAuthenticatedClients,
+	getClients,
+	removeClient,
+} from "./context.ts";
 
 type EventHandler<T = unknown> = (data: T) => void;
 type UnsubscribeFn = () => void;
@@ -91,35 +99,7 @@ export const broadcastEmitter = new EventEmitter();
 /**
  * Connected WebSocket clients
  */
-const clients = new Set<AppWebSocket>();
-
-/**
- * Register a new client
- */
-export function addClient(ws: AppWebSocket): void {
-	clients.add(ws);
-}
-
-/**
- * Remove a client
- */
-export function removeClient(ws: AppWebSocket): void {
-	clients.delete(ws);
-}
-
-/**
- * Get all connected clients
- */
-export function getClients(): Set<AppWebSocket> {
-	return clients;
-}
-
-/**
- * Get authenticated clients
- */
-export function getAuthenticatedClients(): AppWebSocket[] {
-	return Array.from(clients).filter((ws) => ws.data.isAuthenticated);
-}
+const clients = getClients();
 
 /**
  * Dev-only: simulate a device reboot by dropping the authenticated sockets.

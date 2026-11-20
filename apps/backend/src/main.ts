@@ -15,6 +15,7 @@
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { EVENT_PUSH } from "@ceraui/rpc/schemas";
 import pkg from "../package.json" with { type: "json" };
 import {
 	backendSingletonApplies,
@@ -65,6 +66,11 @@ import {
 	bootRuntimeConfig,
 	stopRuntimeConfigRecovery,
 } from "./modules/config-boot.ts";
+import { initLogRetention } from "./modules/device-logs/retention.ts";
+import { initLogSettings } from "./modules/device-logs/settings.ts";
+import { initCellularEvents } from "./modules/events/cellular-events.ts";
+import { recordDeviceStart } from "./modules/events/device-start.ts";
+import { setEventSink } from "./modules/events/emit.ts";
 import { initIdentity } from "./modules/identity/index.ts";
 import { initRTMPIngestStats } from "./modules/ingest/rtmp.ts";
 import { initSRTIngest, stopSRTIngest } from "./modules/ingest/srt.ts";
@@ -177,6 +183,7 @@ import {
 	awaitUpdateStartupAdjudication,
 	startUpdateOrchestrator,
 } from "./modules/system/update-orchestrator/runtime.ts";
+import { logBootRecord } from "./modules/system/version-context.ts";
 import { initHotspotCredentials } from "./modules/wifi/hotspot-credentials.ts";
 import { applyPersistedCountry } from "./modules/wifi/regdomain.ts";
 import { startWifiAdapterModeRestore } from "./modules/wifi/wifi-adapter-mode-transition.ts";
@@ -184,6 +191,7 @@ import { wifiStateInit } from "./modules/wifi/wifi-connections.ts";
 import { handleWifiMonitorEvent as handleHotspotMonitorEvent } from "./modules/wifi/wifi-hotspot-monitor.ts";
 import { terminateWifiDiscovery } from "./modules/wifi/wifi-interfaces.ts";
 import { wifiRadioObservation } from "./modules/wifi/wifi-radio-observation.ts";
+import { broadcastMsgLocal } from "./rpc/compat.ts";
 import { onHeartbeatTick, startHeartbeat } from "./rpc/heartbeat.ts";
 import { getServer, initServer } from "./rpc/index.ts";
 import { stopLegacyTokenMigration } from "./rpc/procedures/auth.procedure.ts";
@@ -287,6 +295,9 @@ if (configAvailableAtBind) void initRemote();
 // must come up even when identity, the cloud channel, or the engine never do
 // (S6 — a top-level-await failure here previously bricked boot in the field).
 await runCritical("ws-control-server", initServer);
+setEventSink((event) =>
+	broadcastMsgLocal(EVENT_PUSH, { append: [event] }, 0, undefined, true),
+);
 const boundPort = Number(getServer()?.url.port) || null;
 logger.info(bootTimer.phase("🚀", "server"));
 
@@ -425,10 +436,16 @@ await guardNonCritical("mock-preview", () => {
 	startMockPreviewServer();
 });
 
-void initRevisions();
+void guardNonCritical("boot-record", async () => {
+	await initRevisions();
+	await logBootRecord();
+	await recordDeviceStart();
+});
 initHardwareMonitoring();
 initDeviceStats();
 initCpu();
+await guardNonCritical("log-settings", initLogSettings);
+await guardNonCritical("log-retention", initLogRetention);
 await guardNonCritical("encoder-load", initEncoderLoad);
 await guardNonCritical("fan", initFan);
 await guardNonCritical("rtmp-ingest", initRTMPIngestStats);
@@ -562,6 +579,7 @@ await guardNonCritical("cellular-shadow", startModemShadowIfEnabled);
 await guardNonCritical("udev-provisional", initUdevProvisionalMonitor);
 
 // Event-driven modems share the SAME monitor (one nmcli monitor for all)
+initCellularEvents();
 void initModemUpdateLoop({ monitor: networkMonitor });
 
 // Replay the durable modem-mutation journal and LOWER the admission barrier.

@@ -27,6 +27,7 @@ export interface AvailableUpdate {
 export interface UpdateFailure {
 	reason: string;
 	identity?: UpdateIdentity;
+	failure_id?: string;
 }
 
 // The raw backend signals the reducer folds into ONE state. `available === false`
@@ -93,15 +94,7 @@ export function deriveUpdateState(s: UpdateSnapshot): UpdateState {
 			preflight_reason: s.preflightFailure,
 		};
 	if (s.updating) return deriveInstallState(s.updating);
-	if (s.failure) {
-		return s.failure.identity
-			? {
-					kind: "failed",
-					reason: s.failure.reason,
-					identity: s.failure.identity,
-				}
-			: { kind: "failed", reason: s.failure.reason };
-	}
+	if (s.failure) return { kind: "failed", ...s.failure };
 	if (s.succeeded)
 		return {
 			kind: "success",

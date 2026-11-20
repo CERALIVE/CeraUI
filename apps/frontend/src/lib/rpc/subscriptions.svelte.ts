@@ -13,12 +13,14 @@ import type {
 	CaptureDevice,
 	ConfigMessage,
 	CpuInfo,
+	DeviceEvent,
 	DeviceStats,
 	DevicesMessage,
 	EncoderLoad,
 	FanReading,
 	KioskStatus,
 	LinkTelemetryMessage,
+	LogFollowMessage,
 	ModemList,
 	NetifEntry,
 	NetifMessage,
@@ -41,14 +43,19 @@ import type {
 import {
 	CONFIG_CHANGE_EVENT,
 	configChangeStateSchema,
+	deviceEventSchema,
+	EVENT_PUSH,
 	ethernetRoleMessageSchema,
 	hardwareTypeSchema,
+	LOG_FOLLOW_EVENT,
+	logFollowMessageSchema,
 	notificationsMessageSchema,
 	pipelineSchema,
 	setEthernetRoleInputSchema,
 	uplinkFlowsResetEventSchema,
 } from "@ceraui/rpc/schemas";
 import { downloadLog } from "$lib/helpers/SystemHelper";
+import { wifiFailureReason } from "$lib/helpers/wifi-mode-outcome";
 import { isSameWireValue, preserveWireIdentity } from "$lib/rpc/value-identity";
 import { authStatusStore } from "$lib/stores/auth-status.svelte";
 import { ingestBuffering } from "$lib/stores/buffering.svelte";
@@ -59,6 +66,7 @@ import {
 import {
 	dismiss as dismissNotification,
 	push as pushNotification,
+	pushReplayed as pushReplayedNotification,
 } from "$lib/stores/notifications.svelte";
 import {
 	resetPairingState,
@@ -83,6 +91,7 @@ import {
 	confirmOperation,
 	destroyAsyncOperations,
 	failOperation,
+	getOperationPhase,
 	getOperationTarget,
 	isOperationPending,
 	reconcileOperationsOnReconnect,
@@ -115,8 +124,25 @@ import {
 	refreshWifiAdapterModes,
 	resetWifiAdapterModes,
 } from "./wifi-adapter-modes.svelte";
+import { noteWifiConfig, noteWifiStatus } from "./wifi-status-receipt";
 
 export { mergeModemList };
+
+let eventFeedListener: ((events: DeviceEvent[]) => void) | undefined;
+
+export function setEventFeedListener(
+	listener: ((events: DeviceEvent[]) => void) | undefined,
+): void {
+	eventFeedListener = listener;
+}
+
+let logFollowListener: ((message: LogFollowMessage) => void) | undefined;
+
+export function setLogFollowListener(
+	listener: ((message: LogFollowMessage) => void) | undefined,
+): void {
+	logFollowListener = listener;
+}
 
 // ============================================
 // Svelte 5 Reactive State ($state)
@@ -511,6 +537,23 @@ function handleMessage(
 	if (!connectionReadyState) connectionReadyState = true;
 
 	switch (type) {
+		case EVENT_PUSH: {
+			if (
+				!eventFeedListener ||
+				!data ||
+				typeof data !== "object" ||
+				!("append" in data) ||
+				!Array.isArray(data.append)
+			)
+				break;
+			const events: DeviceEvent[] = [];
+			for (const record of data.append) {
+				const parsed = deviceEventSchema.safeParse(record);
+				if (parsed.success) events.push(parsed.data);
+			}
+			if (events.length) eventFeedListener(events);
+			break;
+		}
 		case "auth":
 			authState = data as typeof authState;
 			break;
@@ -581,6 +624,7 @@ function handleMessage(
 			}
 			if (statusData.wifi !== undefined) {
 				wifiState = preserveWireIdentity(wifiState, statusData.wifi);
+				noteWifiStatus(statusData.wifi);
 			}
 			if (statusData.modems !== undefined) {
 				modemsState = mergeModemList(modemsState, statusData.modems);
@@ -835,25 +879,40 @@ function handleMessage(
 			// Deferred hotspot reconfigure result. `hotspotConfigure` only acks the
 			// dispatch; the real outcome arrives here and resolves the separate
 			// `hotspot-config:${device}` key the HotspotDialog save op stays pending on.
-			if (
-				wifiData.hotspot?.config?.device !== undefined &&
-				wifiData.hotspot.config.incarnation ===
-					wifiState?.[String(wifiData.hotspot.config.device)]?.incarnation
-			) {
-				const key = wifiHotspotConfigOpKey(
-					String(wifiData.hotspot.config.device),
-					wifiData.hotspot.config.incarnation,
-				);
-				if (wifiData.hotspot.config.success) {
-					confirmOperation(key);
-				} else {
-					failOperation(key, wifiData.hotspot.config.error ?? "failed");
+			if (wifiData.hotspot?.config?.device !== undefined) {
+				const config = wifiData.hotspot.config;
+				const ownsDispatch = noteWifiConfig(config);
+				// Entry-only missing tokens settle by RPC; transient refusals stay
+				// pending while the same owner performs its one bounded retry.
+				if (
+					ownsDispatch &&
+					config.incarnation ===
+						wifiState?.[String(config.device)]?.incarnation &&
+					config.error !== "binding-required" &&
+					!(
+						config.error === "radio-changed" &&
+						config.reason === "current-unobserved"
+					)
+				) {
+					const key = wifiHotspotConfigOpKey(
+						String(config.device),
+						config.incarnation,
+					);
+					if (config.success) {
+						confirmOperation(key);
+					} else {
+						failOperation(key, wifiFailureReason(config) ?? "failed");
+					}
 				}
 			}
 			// `begin` on the pending frame is deliberate: it re-arms the TTL and
 			// makes a transition dispatched from ANOTHER client visible here too.
 			if (
 				wifiData.adapter_mode?.device !== undefined &&
+				// Legacy call-only binding replies are not broadcast terminals.
+				(seq !== undefined ||
+					(wifiData.adapter_mode.error !== "binding-required" &&
+						wifiData.adapter_mode.error !== "radio-changed")) &&
 				wifiData.adapter_mode.incarnation ===
 					wifiState?.[String(wifiData.adapter_mode.device)]?.incarnation
 			) {
@@ -864,8 +923,15 @@ function handleMessage(
 				if (wifiData.adapter_mode.pending === true) {
 					beginOperation(key, wifiData.adapter_mode.mode);
 				} else if (wifiData.adapter_mode.error !== undefined) {
-					failOperation(key, wifiData.adapter_mode.error);
+					// A reconnect can clear the latch before its terminal arrives.
+					if (getOperationPhase(key) === "idle") beginOperation(key);
+					failOperation(
+						key,
+						wifiFailureReason(wifiData.adapter_mode) ?? "failed",
+					);
 				} else if (wifiData.adapter_mode.success === true) {
+					if (getOperationPhase(key) === "idle")
+						beginOperation(key, wifiData.adapter_mode.mode);
 					confirmOperation(key);
 					void refreshWifiAdapterModes();
 				}
@@ -983,7 +1049,8 @@ function handleMessage(
 			const message = parsed.data;
 			notificationsState = message;
 			for (const notification of message.show ?? []) {
-				pushNotification(notification);
+				if (message.replay) pushReplayedNotification(notification);
+				else pushNotification(notification);
 			}
 			for (const entry of message.remove ?? []) {
 				dismissNotification(entry.id);
@@ -1043,6 +1110,18 @@ function handleMessage(
 				};
 			}
 			break;
+
+		case LOG_FOLLOW_EVENT: {
+			const parsed = logFollowMessageSchema.safeParse(data);
+			if (parsed.success) {
+				try {
+					logFollowListener?.(parsed.data);
+				} catch (error) {
+					console.error("Log follow listener failed:", error);
+				}
+			}
+			break;
+		}
 
 		case "log":
 			// Download log file
@@ -1238,6 +1317,8 @@ export function initSubscriptions(): void {
  * Reset all state (for testing or logout)
  */
 export function resetState(): void {
+	eventFeedListener = undefined;
+	logFollowListener = undefined;
 	authState = undefined;
 	configState = undefined;
 	statusState = undefined;

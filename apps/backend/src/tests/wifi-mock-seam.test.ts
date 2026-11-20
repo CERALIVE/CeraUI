@@ -25,7 +25,9 @@ import {
 	stopMockService,
 } from "../mocks/mock-service.ts";
 import {
+	getMockHotspotConfig,
 	getMockWifiFaults,
+	handleNmcliCommand,
 	resetMockWifiFaults,
 	setMockWifiFaults,
 } from "../mocks/providers/wifi.ts";
@@ -116,6 +118,26 @@ describe("wifi mock-seam — default (no faults)", () => {
 		expect(result).toEqual({ success: true });
 		expect(activeNetwork()).toBe(SAVED_SSID);
 	});
+});
+
+describe("r10 mock NM connection activity", () => {
+	for (const mode of ["station", "hotspot"] as const) {
+		it(`reports authoritative hotspot activity in ${mode} mode`, () => {
+			getMockState().wifiModes.wlan0 = mode;
+			const uuid = getMockHotspotConfig("wlan0").uuid;
+			const rows = handleNmcliCommand([
+				"--terse",
+				"--fields",
+				"uuid,active",
+				"connection",
+				"show",
+			])?.split("\n");
+			expect(rows).toContain(`${uuid}:${mode === "hotspot" ? "yes" : "no"}`);
+			expect(rows?.filter(Boolean).every((row) => /:(yes|no)$/.test(row))).toBe(
+				true,
+			);
+		});
+	}
 });
 
 describe("wifi mock-seam — deviceBusy", () => {

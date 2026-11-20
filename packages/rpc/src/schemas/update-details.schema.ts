@@ -134,6 +134,7 @@ export const updateDetailsSchema = z.object({
 			state: z.string().nullable(),
 			version: z.string().nullable(),
 			reason: z.string().nullable(),
+			rollbackAttemptId: z.uuid().optional(),
 		})
 		.optional(),
 });

@@ -35,6 +35,25 @@ import {
 	devRebindWifiProcedure,
 } from "./procedures/dev.procedure.ts";
 import {
+	clearEventsProcedure,
+	eventBootsProcedure,
+	listEventsProcedure,
+} from "./procedures/events.procedure.ts";
+import {
+	aroundLogsProcedure,
+	clearAllLogsProcedure,
+	createLogBundleProcedure,
+	createLogExportProcedure,
+	deleteLegacyDebugProcedure,
+	followStartProcedure,
+	followStopProcedure,
+	getLogStorageProcedure,
+	logBootsProcedure,
+	previewLogBundleProcedure,
+	queryLogsProcedure,
+	setLogRetentionProcedure,
+} from "./procedures/logs.procedure.ts";
+import {
 	acknowledgeMutationProcedure,
 	configureModemProcedure,
 	decommissionMutationProcedure,
@@ -167,6 +186,25 @@ const base = os.$context<RPCContext>();
 
 const stableRoutes = {
 	ui: base.router({ heartbeat: heartbeatProcedure }),
+	logs: base.router({
+		query: queryLogsProcedure,
+		around: aroundLogsProcedure,
+		boots: logBootsProcedure,
+		followStart: followStartProcedure,
+		followStop: followStopProcedure,
+		getStorage: getLogStorageProcedure,
+		setRetention: setLogRetentionProcedure,
+		deleteLegacyDebug: deleteLegacyDebugProcedure,
+		clearAll: clearAllLogsProcedure,
+		createExport: createLogExportProcedure,
+		previewBundle: previewLogBundleProcedure,
+		createBundle: createLogBundleProcedure,
+	}),
+	events: base.router({
+		list: listEventsProcedure,
+		boots: eventBootsProcedure,
+		clear: clearEventsProcedure,
+	}),
 	auth: base.router({
 		login: loginProcedure,
 		setPassword: setPasswordProcedure,

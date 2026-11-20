@@ -259,7 +259,7 @@ export async function startStream(
 	});
 	try {
 		const sender = startStreamDeps.spawnStreamingLoop(
-			srtlaSendExec,
+			{ command: srtlaSendExec, role: "srtla_send" },
 			[
 				...buildSrtlaSendArgs({
 					listenPort: SRTLA_LISTEN_PORT,

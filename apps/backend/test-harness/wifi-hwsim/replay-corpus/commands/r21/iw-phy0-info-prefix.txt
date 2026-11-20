@@ -1,0 +1,351 @@
+Wiphy phy0
+	wiphy index: 0
+	max # scan SSIDs: 4
+	max scan IEs length: 2109 bytes
+	max # sched scan SSIDs: 0
+	max # match sets: 0
+	Retry short limit: 7
+	Retry long limit: 4
+	Coverage class: 0 (up to 0m)
+	Device supports RSN-IBSS.
+	Device supports AP-side u-APSD.
+	Device supports T-DLS.
+	Supported Ciphers:
+		* WEP40 (00-0f-ac:1)
+		* WEP104 (00-0f-ac:5)
+		* TKIP (00-0f-ac:2)
+		* CCMP-128 (00-0f-ac:4)
+		* CCMP-256 (00-0f-ac:10)
+		* GCMP-128 (00-0f-ac:8)
+		* GCMP-256 (00-0f-ac:9)
+		* CMAC (00-0f-ac:6)
+		* CMAC-256 (00-0f-ac:13)
+		* GMAC-128 (00-0f-ac:11)
+		* GMAC-256 (00-0f-ac:12)
+	Available Antennas: TX 0 RX 0
+	Supported interface modes:
+		 * IBSS
+		 * managed
+		 * AP
+		 * AP/VLAN
+		 * monitor
+		 * mesh point
+		 * P2P-client
+		 * P2P-GO
+		 * P2P-device
+		 * outside context of a BSS
+	Band 1:
+		Capabilities: 0x107e
+			HT20/HT40
+			SM Power Save disabled
+			RX Greenfield
+			RX HT20 SGI
+			RX HT40 SGI
+			No RX STBC
+			Max AMSDU length: 3839 bytes
+			DSSS/CCK HT40
+		Maximum RX AMPDU length 65535 bytes (exponent: 0x003)
+		Minimum RX AMPDU time spacing: 8 usec (0x06)
+		HT TX/RX MCS rate indexes supported: 0-15
+		HE Iftypes: managed, P2P-client
+			HE MAC Capabilities (0x78011ac80040):
+				+HTC HE Supported
+				Trigger Frame MAC Padding Duration: 2
+				Multi-TID Aggregation Support: 7
+				BSR
+				MU Cascading
+				Ack-Enabled Aggregation
+				OM Control
+				Maximum A-MPDU Length Exponent: 3
+				A-MSDU in A-MPDU
+			HE PHY Capabilities: (0x02bfce0000000000000000):
+				HE40/2.4GHz
+				Punctured Preamble RX: 15
+				Device Class: 1
+				LDPC Coding in Payload
+				Midamble Rx Max NSTS: 1
+				NDP with 4x HE-LTF and 3.2us GI
+				STBC Tx <= 80MHz
+				STBC Rx <= 80MHz
+				Full Bandwidth UL MU-MIMO
+				Partial Bandwidth UL MU-MIMO
+			HE RX MCS and NSS set <= 80 MHz
+				1 streams: MCS 0-11
+				2 streams: MCS 0-11
+				3 streams: not supported
+				4 streams: not supported
+				5 streams: not supported
+				6 streams: not supported
+				7 streams: not supported
+				8 streams: not supported
+			HE TX MCS and NSS set <= 80 MHz
+				1 streams: MCS 0-11
+				2 streams: MCS 0-11
+				3 streams: not supported
+				4 streams: not supported
+				5 streams: not supported
+				6 streams: not supported
+				7 streams: not supported
+				8 streams: not supported
+		EHT Iftypes: managed, P2P-client
+			EHT MAC Capabilities (0x0700):
+				NSEP priority access Supported
+				EHT OM Control Supported
+				Triggered TXOP Sharing Supported
+			EHT PHY Capabilities: (0x7c0000feffff7f01):
+				242-tone RU in BW wider than 20MHz Supported
+				NDP With  EHT-LTF And 3.2 µs GI
+				Partial Bandwidth UL MU-MIMO
+				SU Beamformer
+				SU Beamformee
+				Ng = 16 SU Feedback
+				Ng = 16 MU Feedback
+				Codebook size (4, 2) SU Feedback
+				Codebook size (7, 5) MU Feedback
+				Triggered SU Beamforming Feedback
+				Triggered MU Beamforming Partial BW Feedback
+				Triggered CQI Feedback
+				Partial Bandwidth DL MU-MIMO
+				PSR-Based SR Support
+				Power Boost Factor Support
+				EHT MU PPDU With 4 EHT-LTF And 0.8 µs GI
+				Max Nc: 15
+				Non-Triggered CQI Feedback
+				Tx 1024-QAM And 4096-QAM < 242-tone RU
+				Rx 1024-QAM And 4096-QAM < 242-tone RU
+				PPE Thresholds Present
+				Common Nominal Packet Padding: 3
+				Maximum Number Of Supported EHT-LTFs: 31
+				Support of MCS 15: 15
+				Support For 20MHz Rx NDP With Wider Bandwidth
+			EHT MCS/NSS: (0x88888800000000000000000000):
+			EHT bw=20 MHz, max NSS for MCS 0-7: Rx=8, Tx=8
+			EHT bw=20 MHz, max NSS for MCS 8-9: Rx=8, Tx=8
+			EHT bw=20 MHz, max NSS for MCS 10-11: Rx=8, Tx=8
+			EHT bw=20 MHz, max NSS for MCS 12-13: Rx=0, Tx=0
+			EHT PPE Thresholds 
+		HE Iftypes: AP, P2P-GO
+			HE MAC Capabilities (0x78011ac80040):
+				+HTC HE Supported
+				Trigger Frame MAC Padding Duration: 2
+				Multi-TID Aggregation Support: 7
+				BSR
+				MU Cascading
+				Ack-Enabled Aggregation
+				OM Control
+				Maximum A-MPDU Length Exponent: 3
+				A-MSDU in A-MPDU
+			HE PHY Capabilities: (0x02bfce0000000000000000):
+				HE40/2.4GHz
+				Punctured Preamble RX: 15
+				Device Class: 1
+				LDPC Coding in Payload
+				Midamble Rx Max NSTS: 1
+				NDP with 4x HE-LTF and 3.2us GI
+				STBC Tx <= 80MHz
+				STBC Rx <= 80MHz
+				Full Bandwidth UL MU-MIMO
+				Partial Bandwidth UL MU-MIMO
+			HE RX MCS and NSS set <= 80 MHz
+				1 streams: MCS 0-11
+				2 streams: MCS 0-11
+				3 streams: not supported
+				4 streams: not supported
+				5 streams: not supported
+				6 streams: not supported
+				7 streams: not supported
+				8 streams: not supported
+			HE TX MCS and NSS set <= 80 MHz
+				1 streams: MCS 0-11
+				2 streams: MCS 0-11
+				3 streams: not supported
+				4 streams: not supported
+				5 streams: not supported
+				6 streams: not supported
+				7 streams: not supported
+				8 streams: not supported
+		EHT Iftypes: AP, P2P-GO
+			EHT MAC Capabilities (0x0700):
+				NSEP priority access Supported
+				EHT OM Control Supported
+				Triggered TXOP Sharing Supported
+			EHT PHY Capabilities: (0x7c0000feffff7f01):
+				242-tone RU in BW wider than 20MHz Supported
+				NDP With  EHT-LTF And 3.2 µs GI
+				Partial Bandwidth UL MU-MIMO
+				SU Beamformer
+				SU Beamformee
+				Ng = 16 SU Feedback
+				Ng = 16 MU Feedback
+				Codebook size (4, 2) SU Feedback
+				Codebook size (7, 5) MU Feedback
+				Triggered SU Beamforming Feedback
+				Triggered MU Beamforming Partial BW Feedback
+				Triggered CQI Feedback
+				Partial Bandwidth DL MU-MIMO
+				PSR-Based SR Support
+				Power Boost Factor Support
+				EHT MU PPDU With 4 EHT-LTF And 0.8 µs GI
+				Max Nc: 15
+				Non-Triggered CQI Feedback
+				Tx 1024-QAM And 4096-QAM < 242-tone RU
+				Rx 1024-QAM And 4096-QAM < 242-tone RU
+				PPE Thresholds Present
+				Common Nominal Packet Padding: 3
+				Maximum Number Of Supported EHT-LTFs: 31
+				Support of MCS 15: 15
+				Support For 20MHz Rx NDP With Wider Bandwidth
+			EHT MCS/NSS: (0x88888800000000000000000000):
+			EHT bw=20 MHz, max NSS for MCS 0-7: Rx=8, Tx=8
+			EHT bw=20 MHz, max NSS for MCS 8-9: Rx=8, Tx=8
+			EHT bw=20 MHz, max NSS for MCS 10-11: Rx=8, Tx=8
+			EHT bw=20 MHz, max NSS for MCS 12-13: Rx=0, Tx=0
+			EHT PPE Thresholds 
+		HE Iftypes: mesh point
+			HE MAC Capabilities (0x70011a800040):
+				+HTC HE Supported
+				Multi-TID Aggregation Support: 7
+				Ack-Enabled Aggregation
+				OM Control
+				Maximum A-MPDU Length Exponent: 3
+				A-MSDU in A-MPDU
+			HE PHY Capabilities: (0x02bf000000000000000000):
+				HE40/2.4GHz
+				Punctured Preamble RX: 15
+				Device Class: 1
+				LDPC Coding in Payload
+				Midamble Rx Max NSTS: 1
+			HE RX MCS and NSS set <= 80 MHz
+				1 streams: MCS 0-11
+				2 streams: MCS 0-11
+				3 streams: not supported
+				4 streams: not supported
+				5 streams: not supported
+				6 streams: not supported
+				7 streams: not supported
+				8 streams: not supported
+			HE TX MCS and NSS set <= 80 MHz
+				1 streams: MCS 0-11
+				2 streams: MCS 0-11
+				3 streams: not supported
+				4 streams: not supported
+				5 streams: not supported
+				6 streams: not supported
+				7 streams: not supported
+				8 streams: not supported
+		Bitrates (non-HT):
+			* 1.0 Mbps
+			* 2.0 Mbps (short preamble supported)
+			* 5.5 Mbps (short preamble supported)
+			* 11.0 Mbps (short preamble supported)
+			* 6.0 Mbps
+			* 9.0 Mbps
+			* 12.0 Mbps
+			* 18.0 Mbps
+			* 24.0 Mbps
+			* 36.0 Mbps
+			* 48.0 Mbps
+			* 54.0 Mbps
+		Frequencies:
+			* 2412.0 MHz [1] (20.0 dBm)
+			* 2417.0 MHz [2] (20.0 dBm)
+			* 2422.0 MHz [3] (20.0 dBm)
+			* 2427.0 MHz [4] (20.0 dBm)
+			* 2432.0 MHz [5] (20.0 dBm)
+			* 2437.0 MHz [6] (20.0 dBm)
+			* 2442.0 MHz [7] (20.0 dBm)
+			* 2447.0 MHz [8] (20.0 dBm)
+			* 2452.0 MHz [9] (20.0 dBm)
+			* 2457.0 MHz [10] (20.0 dBm)
+			* 2462.0 MHz [11] (20.0 dBm)
+			* 2467.0 MHz [12] (20.0 dBm) (no IR)
+			* 2472.0 MHz [13] (20.0 dBm) (no IR)
+			* 2484.0 MHz [14] (20.0 dBm) (no IR)
+	Band 2:
+		Capabilities: 0x107e
+			HT20/HT40
+			SM Power Save disabled
+			RX Greenfield
+			RX HT20 SGI
+			RX HT40 SGI
+			No RX STBC
+			Max AMSDU length: 3839 bytes
+			DSSS/CCK HT40
+		Maximum RX AMPDU length 65535 bytes (exponent: 0x003)
+		Minimum RX AMPDU time spacing: 8 usec (0x06)
+		HT TX/RX MCS rate indexes supported: 0-15
+		VHT Capabilities (0x038004fa):
+			Max MPDU length: 11454
+			Supported Channel Width: 160 MHz, 80+80 MHz
+			RX LDPC
+			short GI (80 MHz)
+			short GI (160/80+80 MHz)
+			TX STBC
+		VHT RX MCS set:
+			1 streams: MCS 0-9
+			2 streams: MCS 0-9
+			3 streams: MCS 0-9
+			4 streams: MCS 0-9
+			5 streams: MCS 0-9
+			6 streams: MCS 0-9
+			7 streams: MCS 0-9
+			8 streams: MCS 0-9
+		VHT RX highest supported: 0 Mbps
+		VHT TX MCS set:
+			1 streams: MCS 0-9
+			2 streams: MCS 0-9
+			3 streams: MCS 0-9
+			4 streams: MCS 0-9
+			5 streams: MCS 0-9
+			6 streams: MCS 0-9
+			7 streams: MCS 0-9
+			8 streams: MCS 0-9
+		VHT TX highest supported: 0 Mbps
+		VHT extended NSS: not supported
+		HE Iftypes: managed, P2P-client
+			HE MAC Capabilities (0x78011ac80040):
+				+HTC HE Supported
+				Trigger Frame MAC Padding Duration: 2
+				Multi-TID Aggregation Support: 7
+				BSR
+				MU Cascading
+				Ack-Enabled Aggregation
+				OM Control
+				Maximum A-MPDU Length Exponent: 3
+				A-MSDU in A-MPDU
+			HE PHY Capabilities: (0x1cbfce0000000000000000):
+				HE40/HE80/5GHz
+				HE160/5GHz
+				HE160/HE80+80/5GHz
+				Punctured Preamble RX: 15
+				Device Class: 1
+				LDPC Coding in Payload
+				Midamble Rx Max NSTS: 1
+				NDP with 4x HE-LTF and 3.2us GI
+				STBC Tx <= 80MHz
+				STBC Rx <= 80MHz
+				Full Bandwidth UL MU-MIMO
+				Partial Bandwidth UL MU-MIMO
+			HE RX MCS and NSS set <= 80 MHz
+				1 streams: MCS 0-11
+				2 streams: MCS 0-11
+				3 streams: not supported
+				4 streams: not supported
+				5 streams: not supported
+				6 streams: not supported
+				7 streams: not supported
+				8 streams: not supported
+			HE TX MCS and NSS set <= 80 MHz
+				1 streams: MCS 0-11
+				2 streams: MCS 0-11
+				3 streams: not supported
+				4 streams: not supported
+				5 streams: not supported
+				6 streams: not supported
+				7 streams: not supported
+				8 streams: not supported
+			HE RX MCS and NSS set 160 MHz
+				1 streams: MCS 0-11
+				2 streams: MCS 0-11
+				3 streams: not supported
+				4 streams: not suppor

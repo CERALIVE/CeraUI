@@ -184,9 +184,8 @@ test.describe('Task 13 — responsive multi-resolution hardening', () => {
 		const hud = await hudStructure(page);
 		await expect(hud).toBeInViewport();
 
-		// Main content region renders. MainView's content <main> is the inner one
-		// (the PullToRefresh wrapper also renders a <main>), so scope to the last.
-		const main = page.getByRole('main').last();
+		// Main content region renders.
+		const main = page.getByRole('main');
 		await expect(main).toBeVisible();
 
 		const overflow = await horizontalOverflowPx(page);

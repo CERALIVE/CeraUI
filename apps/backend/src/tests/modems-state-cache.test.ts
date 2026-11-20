@@ -88,6 +88,17 @@ describe("modems-state-cache", () => {
 		expect(diff.changed[0]?.data.status?.roaming).toBe(false);
 	});
 
+	test("SIM-only changes notify subscribers, including a modem without status", () => {
+		for (const withStatus of [true, false]) {
+			const previous = makeModem({}, { sim_presence: "present" });
+			if (!withStatus) delete previous.status;
+			const next = { ...previous, sim_presence: "absent" as const };
+			expect(
+				ids(reconcileModems({ 0: next }, { 0: previous }).changed),
+			).toEqual([0]);
+		}
+	});
+
 	test("modem added: new modem appears in next → added=[newId], callback fired", () => {
 		setModemsState({ 0: makeModem() });
 

@@ -7,11 +7,10 @@ import { setStreamLivenessSourceForTest } from "../../modules/system/stream-live
 // Suites modelling an initialised backend without loading that owner bind the
 // production boot classifier: idle only while the sentinel is physically absent.
 export function bindSessionOwnerForTest(): () => void {
-	bindStreamLiveness(() => initialOtaStreamLiveness());
-	return () => bindStreamLiveness(() => "unknown");
+	return bindStreamLiveness(initialOtaStreamLiveness);
 }
 
-/** Binds for the whole file and restores the unbound default afterwards. */
+/** Binds for the whole file and restores the previous owner afterwards. */
 export function useSessionOwnerForFile(): void {
 	let restore: (() => void) | undefined;
 	beforeAll(() => {

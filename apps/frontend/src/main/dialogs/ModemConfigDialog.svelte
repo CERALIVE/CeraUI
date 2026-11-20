@@ -152,6 +152,7 @@ import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import MutationOutcomeBand from '$lib/components/custom/MutationOutcomeBand.svelte';
 import NoSimBadge from '$lib/components/custom/NoSimBadge.svelte';
 import SimpleAlertDialog from '$lib/components/custom/simple-alert-dialog.svelte';
+import ViewLogsAction from '$lib/components/custom/ViewLogsAction.svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
@@ -477,6 +478,8 @@ const reconnectExpected = $derived(
 // save used to vanish before an operator could read it (the UpdatesDialog
 // precedent). Cleared on the next dispatch and on the open edge.
 let saveRefusal = $state<ModemConfigRefusal | undefined>(undefined);
+// When the refusal arrived, so View logs opens at it, not at the click.
+let saveRefusedAt = $state<number>();
 // Resolved through the SHARED refusal taxonomy rather than interpolated into
 // `saveRefused.<token>`: a seventeenth `modemConfigRefusalSchema` member used to
 // render its own dotted path at the operator, and now fails the build instead.
@@ -637,6 +640,7 @@ async function handleSave() {
 	if (result && result.success === false) {
 		saveExpected = undefined;
 		saveRefusal = result.error ?? 'write_failed';
+		saveRefusedAt = Date.now();
 		return;
 	}
 	// Release the echo baseline to the server-APPLIED (post-clamp) config, never
@@ -702,6 +706,8 @@ const stableKey = $derived(modem.stable_key ?? '');
 const usbSwitchTrackable = $derived(canTrackUsbModeSwitch(modem));
 
 let usbFlow = $state<UsbModeFlow | undefined>(undefined);
+// When the device answered the last switch, so View logs opens at that answer.
+let usbAnsweredAt = $state<number>();
 
 const activeUsbMode = $derived(
 	displayedUsbMode(getModems(), stableKey, usbFlow) ?? modem.usb_mode,
@@ -1017,15 +1023,19 @@ function bandLabel(band: string): string {
 	return bandOperatorLabel(band, resolveMessageKey);
 }
 
+const usbReasonKey = $derived(
+	usbFlow?.phase === 'refused' && usbFlow.reason
+		? `network.modem.usbMode.reason.${usbFlow.reason}`
+		: undefined,
+);
+
 const usbFailureText = $derived.by(() => {
 	const flow = usbFlow;
 	if (flow?.phase !== 'refused') return undefined;
 	const head = flow.refusal
 		? resolveMessageKey(`network.modem.usbMode.error.${flow.refusal}`)
 		: m["network.modem.usbMode.error.transition_failed"]();
-	const detail = flow.reason
-		? resolveMessageKey(`network.modem.usbMode.reason.${flow.reason}`)
-		: undefined;
+	const detail = usbReasonKey ? resolveMessageKey(usbReasonKey) : undefined;
 	return detail ? `${head} ${detail}` : head;
 });
 
@@ -1047,6 +1057,7 @@ async function handleUsbModeSwitch() {
 	} catch {
 		if (usbFlow) usbFlow = failUsbModeFlow(usbFlow);
 	}
+	usbAnsweredAt = Date.now();
 }
 
 // A refusal the device will repeat verbatim on every retry (`uncertified`,
@@ -1420,6 +1431,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 					>
 						{t(saveRefusalKey)}
 					</p>
+					<ViewLogsAction at={saveRefusedAt} class="mt-2" messageKey={saveRefusalKey} />
 				</div>
 			</div>
 		{/if}
@@ -2918,6 +2930,8 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 						{/if}
 					</div>
 				{/if}
+				<!-- Under whichever band above states the refused switch. -->
+				<ViewLogsAction at={usbAnsweredAt} messageKey={usbReasonKey} />
 		</CapabilitySection>
 
 		<ModemFccUnlockSection

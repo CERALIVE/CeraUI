@@ -107,6 +107,16 @@ async function readPreferences<T>(
 	return parsed.data;
 }
 
+/** Read the effective image channel without migrating or saving preferences. */
+export async function readUpdateChannel(): Promise<UpdateSettings["channel"]> {
+	await readPreferences(updateSettingsFilePath, updateSettingsSchema);
+	const image = await readPreferences(
+		imageChannelPath(updateSettingsFilePath),
+		imageChannelSchema,
+	);
+	return image?.channel ?? updateSettingsSchema.parse({}).channel;
+}
+
 export async function loadUpdateSettings(
 	filePath = updateSettingsFilePath,
 ): Promise<UpdateSettings> {

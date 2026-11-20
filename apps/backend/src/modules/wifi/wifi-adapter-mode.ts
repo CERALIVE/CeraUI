@@ -42,8 +42,21 @@ import type {
 	WifiAdapterModeUnavailableReason,
 } from "@ceraui/rpc/schemas";
 
-import { getConfig, saveConfig } from "../config.ts";
+import { getPersistedWifiAdapterMode } from "./wifi-adapter-mode-intent.ts";
+
+export {
+	getPersistedWifiAdapterMode,
+	getPersistedWifiAdapterModes,
+	persistWifiAdapterMode,
+	recordWifiAdapterModeIntent,
+	resolveWifiAdapterModeIntentKey,
+	restoreWifiAdapterMode,
+	type WifiAdapterModeRecorder,
+	wifiAdapterModeRecorder,
+} from "./wifi-adapter-mode-intent.ts";
+
 import { getWifiCapabilitiesForInterface } from "./wifi-capabilities.ts";
+import { isQualifiedNmManagedHybrid } from "./wifi-concurrent-interface.ts";
 import {
 	canHotspot,
 	isApMode,
@@ -131,10 +144,14 @@ export function wifiAdapterModeCapability(
 	) => { staApCombo: { supported: boolean } } | undefined = (ifname) =>
 		getWifiCapabilitiesForInterface(ifname),
 ): WifiAdapterModeCapability {
+	const supported = readCapabilities(wifiInterface.ifname)?.staApCombo
+		.supported;
 	return {
 		supportsHotspot: canHotspot(wifiInterface),
-		staApComboSupported: readCapabilities(wifiInterface.ifname)?.staApCombo
-			.supported,
+		staApComboSupported:
+			supported === true && !isQualifiedNmManagedHybrid(wifiInterface.ifname)
+				? undefined
+				: supported,
 	};
 }
 
@@ -143,106 +160,6 @@ export function isWifiAdapterModeAvailable(
 	options: readonly WifiAdapterModeOption[],
 ): boolean {
 	return options.some((option) => option.mode === mode && option.available);
-}
-
-// ─── persistence (permanent-MAC keyed) ───────────────────────────────────────
-
-/**
- * The operator's stated mode for this adapter, or `undefined` when they have
- * never chosen. Absence is deliberately NOT `station`: the boot reconciler acts
- * on a stated preference only, so an untouched device keeps its behaviour.
- */
-export function getPersistedWifiAdapterMode(
-	macAddress: string,
-): WifiAdapterMode | undefined {
-	return getConfig().wifi_modes?.[macAddress];
-}
-
-/** Every stated preference, keyed by permanent MAC. */
-export function getPersistedWifiAdapterModes(): Readonly<
-	Record<string, WifiAdapterMode>
-> {
-	return getConfig().wifi_modes ?? {};
-}
-
-/**
- * Record the operator's choice. Persisted BEFORE the radio is touched, on
- * `wifi-country.ts`'s terms: the persisted value is what the boot reconciler
- * re-applies, so a device that loses power mid-transition comes back trying for
- * the operator's mode rather than silently keeping the one it was leaving.
- */
-export function persistWifiAdapterMode(
-	macAddress: string,
-	mode: WifiAdapterMode,
-): void {
-	saveWifiAdapterModes({
-		...(getConfig().wifi_modes ?? {}),
-		[macAddress]: mode,
-	});
-}
-
-/** A failed atomic write must never publish an unpersisted intent to readers. */
-function saveWifiAdapterModes(next: Record<string, WifiAdapterMode>): void {
-	const config = getConfig();
-	const previous = config.wifi_modes;
-	config.wifi_modes = next;
-	try {
-		saveConfig();
-	} catch (error: unknown) {
-		config.wifi_modes = previous;
-		throw error;
-	}
-}
-
-/**
- * Restore a previous preference after a failed transition.
- *
- * `undefined` REMOVES the key rather than writing a value: an adapter that had
- * never been given a preference must not acquire one because a transition was
- * attempted and failed.
- */
-export function restoreWifiAdapterMode(
-	macAddress: string,
-	previous: WifiAdapterMode | undefined,
-): void {
-	const config = getConfig();
-	const next = { ...(config.wifi_modes ?? {}) };
-	if (previous === undefined) {
-		delete next[macAddress];
-	} else {
-		next[macAddress] = previous;
-	}
-	saveWifiAdapterModes(next);
-}
-
-/** One policy point for the logical intent identity, shared by Start, Stop and boot. */
-export function resolveWifiAdapterModeIntentKey(macAddress: string): string {
-	return macAddress;
-}
-
-export interface WifiAdapterModeRecorder {
-	readonly read: typeof getPersistedWifiAdapterMode;
-	readonly persist: typeof persistWifiAdapterMode;
-	readonly restore: typeof restoreWifiAdapterMode;
-}
-
-export const wifiAdapterModeRecorder: WifiAdapterModeRecorder = {
-	read: getPersistedWifiAdapterMode,
-	persist: persistWifiAdapterMode,
-	restore: restoreWifiAdapterMode,
-};
-
-/** Undo only our own write; another authority may have superseded this intent. */
-export function recordWifiAdapterModeIntent(
-	key: string,
-	target: WifiAdapterMode,
-	recorder: WifiAdapterModeRecorder,
-): () => void {
-	const previous = recorder.read(key);
-	recorder.persist(key, target);
-	return () => {
-		if (recorder.read(key) === target) recorder.restore(key, previous);
-	};
 }
 
 // ─── wire projection ─────────────────────────────────────────────────────────

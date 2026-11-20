@@ -8,7 +8,7 @@ import type {
 } from "@ceraui/rpc/schemas";
 import { mount, unmount } from "svelte";
 import { toast } from "svelte-sonner";
-import "../../app.css";
+import "./federation.css";
 import { buildEncoderSetConfig } from "$lib/streaming/encoderConfig";
 import { encoderSaveErrorMessage } from "$lib/streaming/encoderSaveError";
 import type { BalancerAlgorithm } from "$lib/streaming/outputFormat";

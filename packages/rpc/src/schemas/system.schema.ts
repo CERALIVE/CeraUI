@@ -268,6 +268,7 @@ export const updateStateSchema = z.discriminatedUnion('kind', [
 		kind: z.literal('failed'),
 		reason: z.string(),
 		identity: updateIdentitySchema.optional(),
+		failure_id: z.uuid().optional(),
 	}),
 ]);
 export type UpdateState = z.infer<typeof updateStateSchema>;

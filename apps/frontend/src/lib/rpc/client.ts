@@ -4,6 +4,7 @@
  * Provides type-safe RPC calls to the backend via WebSocket.
  * Uses the AppContract from @ceraui/rpc for end-to-end type safety.
  */
+
 import type {
 	AddonDescriptor,
 	AddonState,
@@ -22,13 +23,18 @@ import type {
 	ClaimCodeOutput,
 	CompletePairingInput,
 	CompletePairingOutput,
+	EventBootRecord,
+	EventListInput,
+	EventListOutput,
 	FccUnlockOptionsInput,
 	FccUnlockOptionsOutput,
 	GetEngineOutput,
 	HotspotConfigInput,
+	HotspotConfigOutput,
 	HotspotPrepareInput,
 	HotspotPrepareOutput,
 	HotspotToggleInput,
+	HotspotToggleOutput,
 	InstallUpdatesNowInput,
 	KioskConfigureInput,
 	KioskConfigureOutput,
@@ -36,9 +42,24 @@ import type {
 	KioskStatus,
 	KioskToggleOutput,
 	ListDevicesOutput,
+	LogAroundInput,
+	LogAroundOutput,
+	LogBootInfo,
+	LogBundleManifest,
+	LogClearAllOutput,
+	LogExportInput,
+	LogExportOutput,
+	LogFollowStartInput,
+	LogFollowStartOutput,
+	LogFollowStopOutput,
 	LoginInput,
 	LoginOutput,
 	LogoutOutput,
+	LogQueryInput,
+	LogQueryOutput,
+	LogRetention,
+	LogStorage,
+	LogStorageOutput,
 	ModemBandsInput,
 	ModemBandsOutput,
 	ModemCapabilitiesOutput,
@@ -131,6 +152,7 @@ import type {
 	WifiOperationOutput,
 	WifiScanInput,
 } from "@ceraui/rpc/schemas";
+import { LOG_FOLLOW_EVENT, LOG_FOLLOW_GAP_FROM } from "@ceraui/rpc/schemas";
 
 import { getRpcSocketUrl } from "../env";
 import { nextBackoffDelay } from "./backoff";
@@ -433,9 +455,31 @@ class RPCClient {
 					? (parsed as { seq: number }).seq
 					: undefined;
 			for (const [type, value] of Object.entries(parsed)) {
-				if (type === "id" || type === "seq") continue;
+				if (type === "id" || type === "seq" || type === LOG_FOLLOW_GAP_FROM)
+					continue;
+				// Private mode refusals are call replies; only sequenced terminals
+				// belong to the transaction shared by all subscribed clients.
+				if (
+					seq === undefined &&
+					type === "wifi" &&
+					typeof value === "object" &&
+					value !== null &&
+					"adapter_mode" in value &&
+					typeof value.adapter_mode === "object" &&
+					value.adapter_mode !== null &&
+					"error" in value.adapter_mode &&
+					typeof value.adapter_mode.error === "string"
+				)
+					continue;
+				const payload =
+					type === LOG_FOLLOW_EVENT &&
+					typeof value === "object" &&
+					value !== null &&
+					Object.hasOwn(parsed, LOG_FOLLOW_GAP_FROM)
+						? { ...value, gapFrom: parsed[LOG_FOLLOW_GAP_FROM] }
+						: value;
 				for (const handler of this.messageHandlers) {
-					handler(type, value, seq);
+					handler(type, payload, seq);
 				}
 			}
 		} catch (error) {
@@ -566,9 +610,14 @@ class RPCClient {
  * `failure` payload, so it is raised above the retry budget (and kept below the
  * 90s optimism start-watchdog, so the awaited reply stays the primary signal and
  * the watchdog is only the lost-signal backstop).
+ *
+ * `logs.previewBundle` and `logs.createBundle` run the support-bundle pipeline
+ * up to its 60s device deadline before they reply.
  */
 const PROCEDURE_TIMEOUT_MS: Readonly<Record<string, number>> = {
 	"streaming.start": 75_000,
+	"logs.previewBundle": 75_000,
+	"logs.createBundle": 75_000,
 };
 
 function createRPCProxy<T extends object>(
@@ -639,6 +688,11 @@ export type AddonOpResult =
  * Maps contract structure to callable async functions
  */
 export interface TypedRPC {
+	events: {
+		list: (input: EventListInput) => Promise<EventListOutput>;
+		boots: () => Promise<EventBootRecord[]>;
+		clear: () => Promise<SuccessResponse>;
+	};
 	auth: {
 		login: (input: LoginInput) => Promise<LoginOutput>;
 		setPassword: (input: SetPasswordInput) => Promise<SuccessResponse>;
@@ -819,12 +873,14 @@ export interface TypedRPC {
 		connectNew: (input: WifiNewInput) => Promise<WifiOperationOutput>;
 		forget: (input: WifiForgetInput) => Promise<SuccessResponse>;
 		scan: (input: WifiScanInput) => Promise<SuccessResponse>;
-		hotspotStart: (input: HotspotToggleInput) => Promise<SuccessResponse>;
+		hotspotStart: (input: HotspotToggleInput) => Promise<HotspotToggleOutput>;
 		hotspotStop: (input: HotspotToggleInput) => Promise<SuccessResponse>;
 		hotspotPrepare: (
 			input: HotspotPrepareInput,
 		) => Promise<HotspotPrepareOutput>;
-		hotspotConfigure: (input: HotspotConfigInput) => Promise<SuccessResponse>;
+		hotspotConfigure: (
+			input: HotspotConfigInput,
+		) => Promise<HotspotConfigOutput>;
 		setCountry: (input: SetWifiCountryInput) => Promise<SetWifiCountryOutput>;
 		getAdapterModes: () => Promise<WifiAdapterModeStatus>;
 		/**
@@ -924,6 +980,20 @@ export interface TypedRPC {
 	notifications: {
 		getPersistent: () => Promise<unknown>;
 		dismiss: (input: { name: string }) => Promise<SuccessResponse>;
+	};
+	logs: {
+		query: (input: LogQueryInput) => Promise<LogQueryOutput>;
+		around: (input: LogAroundInput) => Promise<LogAroundOutput>;
+		boots: () => Promise<LogBootInfo[]>;
+		followStart: (input: LogFollowStartInput) => Promise<LogFollowStartOutput>;
+		followStop: () => Promise<LogFollowStopOutput>;
+		getStorage: () => Promise<LogStorage>;
+		setRetention: (input: LogRetention) => Promise<LogStorageOutput>;
+		deleteLegacyDebug: () => Promise<LogStorageOutput>;
+		clearAll: () => Promise<LogClearAllOutput>;
+		createExport: (input: LogExportInput) => Promise<LogExportOutput>;
+		previewBundle: () => Promise<LogBundleManifest>;
+		createBundle: () => Promise<LogExportOutput>;
 	};
 	pairing: {
 		generateClaimCode: () => Promise<ClaimCodeOutput>;

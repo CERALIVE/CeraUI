@@ -6,7 +6,7 @@ const WORKER_PROXY_SECRET = /^[0-9a-f]{64}$/;
  * E2E worker backends accept browser traffic only through the CI preview proxy.
  * This is transport admission; RPC authentication remains independently required.
  */
-export function permitsE2eWorkerUpgrade(
+export function permitsE2eWorkerProxyRequest(
 	request: Request,
 	expectedSecret: string | undefined,
 ): boolean {

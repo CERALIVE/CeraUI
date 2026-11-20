@@ -94,6 +94,14 @@ Avoid committing `html` reporter config. It generates large artifacts and is not
 
 ## Source component prerequisites
 
+The WiFi loading case in `network-staleness.spec.ts` holds the dialog's opening
+`wifi.scan` request on its WebSocket route. The manual tap promotes that pending
+scan; release the real request only after observing both the spinner and disabled
+button. An unheld mock scan can finish between those assertions. Keep the final
+hidden-spinner and enabled-button assertions after release. The capture
+expectation names the awaited request and reports the last observed socket state;
+release the captured request in `finally`, including on assertion failure.
+
 `pull-to-refresh.component.spec.ts` mounts the real component on a private
 ephemeral component server. The main E2E application still runs from the
 production build through `vite preview`; its `dist/public` artifact does not
@@ -356,9 +364,10 @@ test('modem 0 is PIN-locked', async ({ page }) => {
 - **CI runs the production bundle.** Functional lanes serve the prebuilt frontend with `vite preview` on `:6173`. The lane seeds the reference backend's password and persistent token before server startup, so global setup does not need a missing-cookie proxy fallback. Before each test navigation, the fixture installs an HttpOnly SameSite=Strict cookie containing its 3100-3199 worker port plus a random per-worker proxy secret. Only a literal raw `/ws` or `/preview` request target, optionally followed by a query, reaches the preview proxy; dot-segment, encoded-path, authority-like, fragment, and child-path forms are destroyed before URL normalization. The proxy consumes and strips the routing value, then sends the secret in a proxy-only backend admission header. Missing, malformed, duplicate, encoded, or out-of-range routing values and explicit query/header steering fail closed. Worker backends require the exact header in E2E mode, so a browser cannot connect directly to another worker. The cookie is removed at fixture teardown. Do not switch CI to `vite dev`.
 - **Do not import `/src` at runtime.** Production preview does not serve source modules. Use `backendRpc` for an independent supported RPC call, or `pageRpc` when a dev-only broadcast must be delivered on the app's authenticated socket. Request `pageRpc` in a `beforeEach` that runs before `page.goto()` so its WebSocket route is installed before app boot.
 - **No production test backdoors.** Worker selection is fixture-owned, CI-preview-gated, and absent from the production application bundle. Do not add worker-routing logic, a global, or a test-only API to application source. Local Vite dev retains the existing `window.__ceraSocketPort` override and does not accept the routing cookie.
+- **Real System Logs downloads.** The built preview forwards exactly `/api/logs/export` and `/api/logs/bundle` to the backend that issued the ticket. In CI, both requests use the same admitted worker as the WebSocket, including the backend's proxy-secret check. The functional suite saves the files in Chromium and inspects the filtered text and gzip NDJSON.
 - **Self-test:** `backend-scenario-fixture.spec.ts` (the positive: a `modem-pin-locked` worker reports `sim_lock.required === 'sim-pin'` in the modems broadcast) plus `backend-scenario-default.spec.ts` (the negative: a default worker does not) prove the override actually changes backend state. The two live in separate files by necessity (one scenario per file, per the rule above); shared page-WS capture is in `helpers/modem-capture.ts`. Extend that pattern rather than re-deriving the WS capture.
 
-Valid scenarios are the `MockScenario` union in `apps/backend/src/mocks/mock-config.ts`: `multi-modem-wifi`, `single-modem`, `streaming-active`, `modem-pin-locked`, `bt-mic-paired`, `caps-full`, `engine-starting`, `engine-unavailable`.
+Valid scenarios are the `MockScenario` union in `apps/backend/src/mocks/mock-config.ts`: `multi-modem-wifi`, `single-modem`, `streaming-active`, `modem-pin-locked`, `bt-mic-paired`, `caps-full`, `engine-starting`, `engine-unavailable`, `wifi-limited`. The last seeds an unidentified radio with a live hotspot for `hotspot-limited-mode.spec.ts`.
 
 **A scenario only reaches the wire if the device consults its provider.** `bt-mic-paired` is the current counter-example and is worth knowing before you write a Bluetooth spec: the scenario boots, `apps/backend/src/mocks/providers/bluetooth.ts` seeds its roster, and nothing reads it — `modules/bluetooth/bluetooth-runtime.ts` builds the `bluetooth` broadcast straight from the real `BluetoothStack`, so a worker on that scenario still publishes the dev host's honest `{enabled:false}`. `bluetooth.spec.ts` therefore keeps the scenario AND injects the payload over the page socket (`helpers/bluetooth-wire.ts`), the same drop-and-inject shape `modem-ux.visual.spec.ts` uses for its roster. Delete the injection, not the scenario, once the device seam lands.
 
@@ -421,6 +430,77 @@ Do not modify `field-lock.spec.ts`. It is a deterministic integration proof and 
 - Refresh the baseline after an intentional change: `UPDATE_A11Y_BASELINE=1 bun run --filter frontend test:e2e -- a11y.spec.ts --project=desktop -g "axe gate"`. Capture mode rewrites the allowlist and `test-results/task-7-a11y-baseline.json` and never fails. A normal run writes `test-results/task-7-a11y-gate.json` and enforces.
 - All three tests are tagged `@a11y`; the dedicated CI step runs them and the broad Functional E2E step grep-inverts `@a11y` to avoid duplicate coverage against the same preview server.
 - To prove the gate works, seed a violation with a rule id NOT already baselined (e.g. an `<img>` without `alt` → `image-alt`). Seeding more `color-contrast` will be tolerated — it is the baselined rule.
+
+`live-design-a11y.spec.ts` measures keyboard stops against the fixed Live bar in
+idle and live layouts. Before each viewport's Tab traversal, it waits for the
+main landmark to be visible and carry `tabindex="-1"`, then gives focus five
+seconds and verifies that it actually reached the landmark. Only a focus
+timeout is caught and rethrown, with `main-focus-state` attached. First,
+one-second JavaScript, animation-frame and DOM probes run concurrently and record
+whether the page answers. The attachment includes the configuration,
+active element, target, ancestors, centre hit-test stack, viewport/scroll offsets,
+Live bar and offline/update/boot surfaces. Each DOM capture has its own
+one-second deadline; if the renderer cannot answer, the attachment retains the
+pre-focus state and marks the unavailable reads. The error names failed probes.
+The actual `[data-boot-shell]` overlay has a named `bootShell` record with its
+presence, state, computed display/position/z-index, bounds and centre-hit-stack
+membership, and is identified in both the surface and hit-test lists.
+This bounds and diagnoses recurrence of the unresolved hosted stall; it does
+not prove its cause.
+
+The same timeout path also records `outOfPage` evidence, with a shared 2.5-second
+collection deadline and at most 450 ms for best-effort debugger resume, disable
+and session detach. A fresh page CDP session requests a V8 pause and records only
+the reason and call-frame names, sanitized script URLs and source coordinates;
+it never records scope objects, locals or source. `pauseRequested` distinguishes
+a new pause request from observing an existing pause. A missing pause is explicitly
+timed out. Browser CDP process CPU times and Linux `/proc` thread states/ticks
+are sampled consecutively before either debugger command, without a sleep. The
+`cpuInterval` records the difference between the second and first process-reply
+timestamps, its calculation and ordering, and zero overlap with the collector's
+own pause. These are cumulative process observations, not an inferred stall cause.
+Each sample also retains its monotonic reply timestamp, and `processDeltas`
+derives CPU seconds for PIDs present in both samples. Zero measured deltas remain
+valid; unavailable sample pairs do not invent deltas.
+A short
+browser trace retains only the exact main-frame-to-renderer PID mapping; all
+renderer candidates remain visible if that mapping is unavailable. Missing CDP
+or `/proc` data stays unavailable. No command line, environment or trace payload
+is attached. URLs omit credentials, queries and fragments.
+
+`Page.captureScreenshot` is requested directly over CDP under its own bound
+before the collector enables/pauses the debugger,
+with a successful PNG attached as `main-focus-cdp-screenshot`; this is stall
+evidence, not a screenshot assertion or baseline. Captures above 256 KiB are
+omitted before decoding/attachment and recorded as `truncated`, with their
+original size, zero attached bytes and the ceiling. Successful capture and
+failed attachment are separate outcomes; attachment failure records its class
+and never reports successful delivery. Each attachment is also bounded, and
+failures always rethrow the original focus timeout.
+`cleanup` retains resume, disable and detach outcomes per session, including
+timeouts when the page cannot answer. This is an acknowledgement record, not a
+claim that a timed-out detach completed within its budget.
+`main-focus-a11y.spec.ts` retains the public CDP event/function breakpoints and
+modal-dialog stand-in. It also covers a collector-initiated pause in a yielding
+animation-frame callback, a rejected screenshot attachment and an oversized
+capture. Before the observer is disabled, every case proves that both collector
+sessions reject commands as closed and that JavaScript and the focus event
+progress. The modal case first releases its intentional dialog block, allowing
+an already-requested detach to finish; it does not use observer debugger teardown
+to establish this proof. `main-focus-cleanup-witness` records the independent
+closure/responsiveness proof and whether the modal was released first. These
+controls validate the diagnostic, not the hosted stall's cause.
+
+The stand-in/session setup is owned by `fixtures/focus-stall.ts`; delivered
+artifact and cleanup assertions remain in the spec. The CPU assertions in
+`helpers/focus-stall-cpu.ts` compare both delivered samples with independently
+cloned real browser replies, require positive intervals and nonzero real
+browser/renderer counters, recompute deltas, and observe that both replies
+precede every collector debugger request. Labels alone cannot satisfy them.
+`main-focus-cpu-witness` retains those independent replies and request times
+for review, separately from the collector's derived fields.
+A seventh control rejects the JSON attachment itself and requires the original
+focus error to report its delivery status and error class.
 
 ## navigateTo Helper
 

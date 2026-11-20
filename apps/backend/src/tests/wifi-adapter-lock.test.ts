@@ -89,7 +89,9 @@ function makeDeps(over: Partial<HotspotActivationDeps>): HotspotActivationDeps {
 	return {
 		nmConnect: async () => true,
 		nmConnSetFields: async () => true,
-		nmHotspot: async () => "hotspot-uuid",
+		nmApConnAdd: async () => "hotspot-uuid",
+		nmConnDelete: async () => true,
+		nmDisconnect: async () => true,
 		wifiUpdateSavedConns: async () => {},
 		broadcastState: () => {},
 		setDupIpSuppression: () => {},
@@ -176,7 +178,7 @@ describe("connectNew races a hotspot start on ONE adapter (F-01 + F-10)", () => 
 		const first = startHotspotForInterface(
 			MAC,
 			iface,
-			makeDeps({ nmHotspot: () => gate.promise }),
+			makeDeps({ nmApConnAdd: () => gate.promise }),
 		);
 
 		// The hotspot transaction now holds the adapter. A station join dispatched

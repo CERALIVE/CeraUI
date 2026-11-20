@@ -7,6 +7,7 @@ import {
 	spyOn,
 	test,
 } from "bun:test";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -60,11 +61,17 @@ import {
 	stopWifiUpdateLoopForTest,
 	wifiUpdateDevices,
 } from "../modules/wifi/wifi-interfaces.ts";
-import {
-	resetWifiPermanentMacCache,
-	setPermanentMacReaderForTest,
-} from "../modules/wifi/wifi-permanent-mac.ts";
 import { wifiRadioObservation } from "../modules/wifi/wifi-radio-observation.ts";
+import {
+	nmcliFieldNames,
+	nmcliFieldOutput,
+} from "./helpers/nmcli-field-output.ts";
+import { firstApInstances } from "./helpers/wifi-first-ap-instances.ts";
+import {
+	decodeProfile,
+	encodeProfile,
+} from "./helpers/wifi-first-ap-keyfile-codec.ts";
+import { fakeShadowSysfs } from "./helpers/wifi-radio-equivalence-shadow.ts";
 import {
 	isolateWifiRegistry,
 	restoreWifiRegistry,
@@ -85,9 +92,13 @@ let scratch: string | undefined;
 let afterWrite: (() => void) | undefined;
 let beforeWrite: ((args: readonly string[]) => Promise<void>) | undefined;
 let unreadableSettings = false;
+let restoreShadow: () => Promise<void>;
+let resources: ReturnType<typeof firstApInstances>;
+let settleDiscoveryRace: (() => Promise<void>) | undefined;
 
 function profile(mac = "", ifname = "wlan0"): Record<string, string> {
 	return {
+		"802-11-wireless-security.psk-flags": "0",
 		"connection.interface-name": ifname,
 		"connection.autoconnect": "yes",
 		"connection.autoconnect-priority": "0",
@@ -143,10 +154,12 @@ function activationDeps(): HotspotActivationDeps {
 			effects.push(["up", uuid]);
 			return true;
 		},
-		nmHotspot: async (_ifname, ssid, password) => {
+		nmApConnAdd: async (_ifname, { name: ssid, password }) => {
 			effects.push(["create", ssid, password]);
 			return "b-new-profile";
 		},
+		nmConnDelete: async () => true,
+		nmDisconnect: async () => true,
 		wifiUpdateSavedConns: async () => {},
 		broadcastState: () => {},
 		setDupIpSuppression: () => {},
@@ -154,12 +167,11 @@ function activationDeps(): HotspotActivationDeps {
 	};
 }
 
-beforeEach(() => {
+beforeEach(async () => {
 	inherited = isolateWifiRegistry();
 	resetHotspotCredentialsForTest();
 	resetWifiConnectionModeCache();
 	resetWifiInterfaceDiscoveryForTest();
-	resetWifiPermanentMacCache();
 	resetWifiCapabilitiesForTest();
 	onWifiChange(() => {});
 	setWifiState({});
@@ -170,13 +182,32 @@ beforeEach(() => {
 		"802-11-wireless.ssid": "Operator-AP",
 		"802-11-wireless-security.psk": "operator-secret",
 	});
+	resources = firstApInstances(new Set(profiles.keys()), profiles);
 	effects.length = 0;
 	unexpected.length = 0;
 	afterWrite = undefined;
 	beforeWrite = undefined;
 	unreadableSettings = false;
+	settleDiscoveryRace = undefined;
 	devices = "wlan0:wifi:disconnected:";
-	setPermanentMacReaderForTest(async () => B);
+	restoreShadow = await fakeShadowSysfs(() => [
+		{
+			ifname: "wlan0",
+			operational: B,
+			permanent: B,
+			ifindex: 3,
+			phy: 0,
+			state: "disconnected",
+		},
+		{
+			ifname: "clap-wlan0",
+			operational: B,
+			permanent: B,
+			ifindex: 4,
+			phy: 0,
+			state: "connected",
+		},
+	]);
 	setWifiCapabilityDepsForTest({
 		runIw: async () => "",
 		readPhyName: async () => undefined,
@@ -186,6 +217,8 @@ beforeEach(() => {
 	});
 	spyOn(mockWifi, "shouldMockWifi").mockReturnValue(false);
 	spyOn(runner, "run").mockImplementation(async (bin, args) => {
+		resources.sync();
+		if (bin === "busctl") return resources.busReply(args);
 		if (
 			bin === "iw" &&
 			(args.join(" ") === "dev wlan0 station dump" ||
@@ -193,20 +226,51 @@ beforeEach(() => {
 		)
 			return "";
 		if (bin === "nmcli") {
-			const fieldIndex = args.indexOf("--get-values");
-			if (fieldIndex !== -1) {
+			if (args[0] === "connection" && args[1] === "load") {
+				const loaded = decodeProfile(readFileSync(args[2] ?? "", "utf8"));
+				const uuid = loaded["connection.uuid"];
+				if (!uuid) throw new Error("Missing loaded ownership fixture UUID");
+				const current = profiles.get(uuid) ?? {};
+				const delta = Object.entries(loaded).filter(
+					([key, value]) =>
+						key !== "connection.uuid" &&
+						key !== "connection.type" &&
+						key !== "802-11-wireless-security.psk-flags" &&
+						current[key] !== value,
+				);
+				const effect = ["con", "modify", uuid, ...delta.flat()];
+				if (beforeWrite) await beforeWrite(effect);
+				effects.push(effect);
+				Object.assign(current, loaded);
+				resources.bumpVersion(uuid);
+				afterWrite?.();
+				return "";
+			}
+			if (args.includes("--fields")) {
+				const fields = args[args.indexOf("--fields") + 1];
+				if (fields === "uuid,dbus-path" || fields === "uuid,filename")
+					return [...profiles.keys()]
+						.map(
+							(uuid) =>
+								`${uuid}:${
+									fields === "uuid,filename"
+										? resources.files.filename(uuid)
+										: resources.paths().find(([id]) => id === uuid)?.[1]
+								}`,
+						)
+						.join("\n");
+			}
+			const fieldNames = nmcliFieldNames(args);
+			if (fieldNames.length > 0) {
 				const uuid = args.at(-1) ?? "";
 				const fields = profiles.get(uuid);
 				if (
 					unreadableSettings &&
-					args[fieldIndex + 1]?.includes("connection.autoconnect-priority")
+					fieldNames.includes("connection.autoconnect-priority")
 				) {
 					throw new Error("Fixture settings unavailable");
 				}
-				return (args[fieldIndex + 1] ?? "")
-					.split(",")
-					.map((field) => fields?.[field] ?? "")
-					.join("\n");
+				return nmcliFieldOutput(args, (field) => fields?.[field] ?? "");
 			}
 			if (args[0] === "con" && args[1] === "modify") {
 				if (beforeWrite) await beforeWrite(args);
@@ -239,23 +303,40 @@ beforeEach(() => {
 		unexpected.push(`${bin} ${args.join(" ")}`);
 		throw new Error(`Unexpected ownership command: ${bin} ${args.join(" ")}`);
 	});
+	spyOn(runner, "runWithStdin").mockImplementation(async (bin, args, input) => {
+		if (
+			bin !== "nmcli" ||
+			args.slice(0, 3).join(" ") !== "--offline connection modify"
+		)
+			throw new Error("Unexpected ownership offline operation");
+		const fields = decodeProfile(input);
+		for (let i = 3; i < args.length; i += 2) {
+			const key = args[i],
+				value = args[i + 1];
+			if (!key || value === undefined)
+				throw new Error("Invalid offline fields");
+			fields[key] = value;
+		}
+		return encodeProfile(fields);
+	});
 });
 
 afterEach(async () => {
+	await settleDiscoveryRace?.();
 	stopWifiUpdateLoopForTest();
 	wifiCancelScanRefresh();
 	wifiRadioObservation.stop();
-	settlePending("wlan0", true);
+	await restoreShadow();
+	await settlePending("wlan0", false);
 	restoreWifiRegistry(inherited);
 	resetHotspotCredentialsForTest();
 	resetWifiConnectionModeCache();
 	resetWifiInterfaceDiscoveryForTest();
-	resetWifiPermanentMacCache();
-	setPermanentMacReaderForTest(null);
 	resetWifiCapabilitiesForTest();
 	setWifiState({});
 	jest.useRealTimers();
 	mock.restore();
+	resources.files.close();
 	if (scratch) await rm(scratch, { recursive: true });
 	scratch = undefined;
 	expect(unexpected).toEqual([]);
@@ -534,7 +615,9 @@ for (const concurrent of [false, true]) {
 		expect(iface.hotspot.conn).toBeUndefined();
 		expect(iface.hotspot.password).toBeUndefined();
 		expect(getHotspotCredentials(B)).toBeUndefined();
-		expect(effects).toEqual([]);
+		expect(effects).toEqual([
+			["con", "modify", "a-profile", "connection.autoconnect", "no"],
+		]);
 	});
 }
 
@@ -652,6 +735,8 @@ test("the same owner's normalized UUID hint remains usable", async () => {
 test("pending prepare cannot repair a UUID claimed by competing discovery", async () => {
 	jest.useFakeTimers();
 	const iface = radio();
+	const candidateProfile = profile(B);
+	profiles.set(FOREIGN, candidateProfile);
 	addWifiInterface(A, {
 		...iface,
 		id: 1,
@@ -660,36 +745,39 @@ test("pending prepare cannot repair a UUID claimed by competing discovery", asyn
 	});
 	const lookupGate = Promise.withResolvers<void>();
 	const lookupEntered = Promise.withResolvers<void>();
-	const gates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
-	const entered = [
-		Promise.withResolvers<void>(),
-		Promise.withResolvers<void>(),
-	];
-	let priorityCalls = 0;
+	const priorityGate = Promise.withResolvers<void>();
+	const priorityEntered = Promise.withResolvers<void>();
 	beforeWrite = async (args) => {
 		if (args[3] !== "connection.autoconnect-priority") return;
-		const index = priorityCalls++;
-		entered[index]?.resolve();
-		await gates[index]?.promise;
+		priorityEntered.resolve();
+		await priorityGate.promise;
 	};
 	const deps = activationDeps();
 	deps.findHotspotConn = async (mac, stored) => {
+		const candidate = await discovery.findHotspotConnForAdapter(mac, stored);
 		lookupEntered.resolve();
 		await lookupGate.promise;
-		return discovery.findHotspotConnForAdapter(mac, stored);
+		return candidate;
 	};
 
 	const prepare = prepareHotspotForInterface(B, iface, {}, deps);
+	const pending: Promise<unknown>[] = [prepare];
+	settleDiscoveryRace = async () => {
+		lookupGate.resolve();
+		priorityGate.resolve();
+		await Promise.allSettled(pending);
+	};
 	await lookupEntered.promise;
+	candidateProfile["802-11-wireless.mac-address"] = "";
 	const claimA = discovery.handleHotspotConn(A, FOREIGN, { active: true });
-	await entered[0]?.promise;
+	pending.push(claimA);
+	await priorityEntered.promise;
+	priorityGate.resolve();
+	await claimA;
 	const claimB = discovery.handleHotspotConn(undefined, FOREIGN, {
 		active: true,
 	});
-	await entered[1]?.promise;
-	gates[0]?.resolve();
-	await claimA;
-	gates[1]?.resolve();
+	pending.push(claimB);
 	await claimB;
 	lookupGate.resolve();
 	const result = await prepare;
@@ -739,6 +827,7 @@ for (const complete of [false, true]) {
 test("pending prepare still adopts a legitimate single-adapter discovery", async () => {
 	jest.useFakeTimers();
 	const iface = radio();
+	profiles.set(FOREIGN, profile(B));
 	const lookupGate = Promise.withResolvers<void>();
 	const lookupEntered = Promise.withResolvers<void>();
 	const deps = activationDeps();
@@ -751,6 +840,8 @@ test("pending prepare still adopts a legitimate single-adapter discovery", async
 	await lookupEntered.promise;
 	await discovery.handleHotspotConn(undefined, FOREIGN, { active: true });
 	lookupGate.resolve();
+	await prepare;
+	await discovery.handleHotspotConn(undefined, FOREIGN, { active: true });
 
 	expect(await prepare).toEqual({
 		success: true,
@@ -764,7 +855,7 @@ test("pending prepare still adopts a legitimate single-adapter discovery", async
 });
 
 for (const unverified of [false, true]) {
-	test(`${unverified ? "unverified" : "verified"} single-adapter prepare and start keep the saved pair`, async () => {
+	test(`${unverified ? "unverified" : "verified"} single-adapter prepare and start preserve credential ownership`, async () => {
 		jest.useFakeTimers();
 		const iface = radio();
 		if (unverified) iface.degradedReason = "permanent-mac-unresolved";
@@ -775,20 +866,37 @@ for (const unverified of [false, true]) {
 		const prepared = await prepareHotspotForInterface(B, iface, {}, deps);
 		const started = await startHotspotForInterface(B, iface, deps);
 
-		expect(prepared).toEqual({
-			success: true,
-			name: OWN_PAIR.ssid,
-			password: OWN_PAIR.password,
-			firstTime: true,
-		});
-		expect(started).toEqual({ success: true });
-		expect(effects.filter((effect) => effect[0] === "create")).toEqual([
-			["create", OWN_PAIR.ssid, OWN_PAIR.password],
-		]);
+		expect(prepared).toEqual(
+			unverified
+				? {
+						success: false,
+						error: "radio-unverified",
+					}
+				: {
+						success: true,
+						name: OWN_PAIR.ssid,
+						password: OWN_PAIR.password,
+						firstTime: true,
+					},
+		);
+		expect(started).toEqual(
+			unverified
+				? { success: false, error: "radio-unverified" }
+				: { success: true },
+		);
+		expect(effects.filter((effect) => effect[0] === "create")).toEqual(
+			unverified ? [] : [["create", OWN_PAIR.ssid, OWN_PAIR.password]],
+		);
 		expect(getHotspotCredentials(B)).toMatchObject({
 			...OWN_PAIR,
-			conn: "b-new-profile",
+			...(unverified ? {} : { conn: "b-new-profile" }),
 		});
+		if (unverified) expect(effects).toEqual([]);
+		if (unverified)
+			expect(getHotspotCredentials(B)).toEqual({
+				...OWN_PAIR,
+				previousConns: [],
+			});
 	});
 }
 
@@ -929,7 +1037,7 @@ for (const stage of [
 				((stage === "binding" || stage === "new binding") &&
 					fields["802-11-wireless.mac-address"] !== undefined) ||
 				((stage === "autoconnect" || stage === "new autoconnect") &&
-					fields["connection.autoconnect"] === "yes")
+					fields["connection.autoconnect-priority"] === "999")
 			)
 				await pause();
 			return true;
@@ -939,9 +1047,9 @@ for (const stage of [
 			if (stage === "activation" || stage === "new activation") await pause();
 			return true;
 		};
-		deps.nmHotspot = async (_ifname, ssid, password) => {
+		deps.nmApConnAdd = async (_ifname, { name: ssid, password }) => {
 			effects.push(["create", ssid, password]);
-			if (stage === "creation") await pause();
+			if (stage === "creation" || stage === "new binding") await pause();
 			return "b-new-profile";
 		};
 		deps.wifiUpdateSavedConns = async () => {
@@ -984,6 +1092,11 @@ for (const stage of [
 			channel: "auto",
 		};
 		iface.activeConn = "b-profile";
+		profiles.set("b-profile", {
+			...profile(B),
+			"802-11-wireless.ssid": OWN_PAIR.ssid,
+			"802-11-wireless-security.psk": OWN_PAIR.password,
+		});
 		rememberHotspotCredentials(B, { ...OWN_PAIR, conn: "b-profile" });
 		const gate = Promise.withResolvers<void>();
 		const entered = Promise.withResolvers<void>();
@@ -996,6 +1109,12 @@ for (const stage of [
 		const deps: HotspotConfigDeps = {
 			nmConnSetFields: async (uuid, fields) => {
 				effects.push([uuid, JSON.stringify(fields)]);
+				Object.assign(profiles.get(uuid) ?? {}, fields);
+				if (fields["802-11-wireless-security.psk"] !== undefined)
+					Object.assign(profiles.get(uuid) ?? {}, {
+						"802-11-wireless-security.psk-flags": "0",
+					});
+				resources.sync();
 				writes++;
 				if (
 					(stage === "save" && writes === 1) ||
@@ -1096,12 +1215,21 @@ test("prepare save refuses a foreign current cache after the profile write settl
 		name: OWN_PAIR.ssid,
 		password: OWN_PAIR.password,
 	};
+	profiles.set("b-profile", {
+		...profile(B),
+		"802-11-wireless.ssid": OWN_PAIR.ssid,
+		"802-11-wireless-security.psk": OWN_PAIR.password,
+	});
 	rememberHotspotCredentials(B, { ...OWN_PAIR, conn: "b-profile" });
 	const gate = Promise.withResolvers<void>();
 	const entered = Promise.withResolvers<void>();
 	const deps = activationDeps();
 	deps.nmConnSetFields = async (uuid, fields) => {
 		effects.push([uuid, JSON.stringify(fields)]);
+		Object.assign(profiles.get(uuid) ?? {}, fields, {
+			"802-11-wireless-security.psk-flags": "0",
+		});
+		resources.sync();
 		entered.resolve();
 		await gate.promise;
 		return true;
@@ -1229,7 +1357,8 @@ for (const stage of ["binding", "activation", "autoconnect"] as const) {
 			if (
 				(stage === "binding" &&
 					fields["802-11-wireless.mac-address"] !== undefined) ||
-				(stage === "autoconnect" && fields["connection.autoconnect"] === "yes")
+				(stage === "autoconnect" &&
+					fields["connection.autoconnect-priority"] === "999")
 			) {
 				entered.resolve();
 				await gate.promise;

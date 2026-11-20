@@ -1,0 +1,139 @@
+import {
+	type LogEntry,
+	type LogQueryOutput,
+	logQueryInputSchema,
+} from "@ceraui/rpc/schemas";
+import type { ParsedQuery } from "./continuation.ts";
+import { withQuerySlot } from "./query-admission.ts";
+import { BundleReadError } from "./redaction.ts";
+import { scanPage } from "./scan-page.ts";
+
+type TimeLimit = "time_limit";
+type AppendCut = "size_limit" | "compressed_size_limit";
+type Cut =
+	| TimeLimit
+	| AppendCut
+	| Extract<LogQueryOutput, { ok: false }>["error"];
+type BootWindow = {
+	readonly signal: AbortSignal;
+	readonly stopped: () => TimeLimit | null;
+	readonly readDeadline?: Promise<TimeLimit>;
+};
+
+export async function collectBundleJournal(
+	[current, previous]: readonly string[],
+	window: BootWindow & { readonly epoch: number; readonly deadline: number },
+	append: (
+		entry: LogEntry,
+		isCurrent: boolean,
+		boot: string,
+	) => Promise<AppendCut | null>,
+): Promise<{ readonly bootsCovered: number; readonly incomplete: Cut | null }> {
+	const owners = { current: {}, previous: {} };
+	const queryFor = (boot: string) =>
+		logQueryInputSchema.parse({ boot, direction: "older", limit: 200 });
+	async function read(position: ParsedQuery, boot: string, phase: BootWindow) {
+		try {
+			return await withQuerySlot(
+				boot === current ? owners.current : owners.previous,
+				(slotSignal) =>
+					scanPage(position, {
+						bootId: boot,
+						epoch: window.epoch,
+						signal: AbortSignal.any([phase.signal, slotSignal]),
+					}),
+				phase.signal,
+			);
+		} catch (error) {
+			if (error instanceof BundleReadError) throw error;
+			return { ok: false, error: "READ_FAILED" } as const;
+		}
+	}
+
+	let bootsCovered = 0;
+	async function walk(
+		boot: string,
+		phase: BootWindow,
+		firstPage?: LogQueryOutput,
+	): Promise<Cut | null> {
+		const isCurrent = boot === current;
+		let covered = false;
+		let position = queryFor(boot);
+		let page: LogQueryOutput | TimeLimit | undefined = firstPage;
+		for (;;) {
+			const beforeRead = phase.stopped();
+			if (beforeRead) return beforeRead;
+			if (page === undefined) {
+				const pending = read(position, boot, phase);
+				// Race only the read. The slot still owns reap, and a late page
+				// cannot append records or change coverage.
+				page = phase.readDeadline
+					? await Promise.race([pending, phase.readDeadline])
+					: await pending;
+			}
+			const afterRead = phase.stopped();
+			if (afterRead) return afterRead;
+			if (page === "time_limit") return page;
+			if (!page.ok) return page.error;
+			try {
+				for (const entry of page.entries) {
+					const cut = phase.stopped() ?? (await append(entry, isCurrent, boot));
+					if (cut) return cut;
+					if (!covered) {
+						covered = true;
+						bootsCovered++;
+					}
+				}
+			} catch (error) {
+				if (error instanceof BundleReadError) throw error;
+				return phase.stopped() ?? "READ_FAILED";
+			}
+			if (page.hasMore === false) return null;
+			if (
+				page.continuation === null ||
+				(page.termination === "budget" &&
+					page.continuation === position.continuation)
+			)
+				return "READ_FAILED";
+			position = { ...position, continuation: page.continuation };
+			page = undefined;
+		}
+	}
+
+	let incomplete: Cut | null = window.stopped();
+	if (current === undefined || incomplete) return { bootsCovered, incomplete };
+	if (previous === undefined)
+		return { incomplete: await walk(current, window), bootsCovered };
+
+	// Read one running-boot page before sharing the remaining time. Write
+	// previous records first so their byte cap and output order are unchanged.
+	const head = await read(queryFor(current), current, window);
+	const now = Date.now();
+	const remaining = window.deadline - now;
+	if (remaining > 0 && !window.stopped()) {
+		const previousTime = Math.floor(remaining / 2);
+		const previousDeadline = now + previousTime;
+		const timeout = new AbortController();
+		const cutoff = Promise.withResolvers<TimeLimit>();
+		const signal = AbortSignal.any([window.signal, timeout.signal]);
+		const onAbort = () => cutoff.resolve("time_limit");
+		signal.addEventListener("abort", onAbort, { once: true });
+		const timer = setTimeout(() => timeout.abort(), previousTime);
+		try {
+			incomplete = await walk(previous, {
+				signal,
+				readDeadline: cutoff.promise,
+				stopped: () =>
+					window.stopped() ??
+					(timeout.signal.aborted || Date.now() >= previousDeadline
+						? "time_limit"
+						: null),
+			});
+		} finally {
+			clearTimeout(timer);
+			signal.removeEventListener("abort", onAbort);
+		}
+	}
+	const currentCut = await walk(current, window, head);
+	return { bootsCovered, incomplete: incomplete ?? currentCut };
+}

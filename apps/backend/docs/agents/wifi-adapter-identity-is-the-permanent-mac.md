@@ -2,44 +2,319 @@
 
 ## WIFI ADAPTER IDENTITY IS THE PERMANENT MAC [EXISTS]
 
-Every adapter-keyed WiFi structure — the `wifiInterfacesByMacAddress` registry,
-the `wifiState` cache, the numeric UI id map, the hotspot credential store, and
-the `802-11-wireless.mac-address` pinned into a NetworkManager profile — is keyed
-on the radio's **permanent hardware address**, resolved by
-`modules/wifi/wifi-permanent-mac.ts` (`resolveWifiPermanentMac`).
+Every adapter-keyed Wi-Fi structure uses the coherent lifetime sample from
+`WifiRadioIdentityProducer`. A verified adapter keeps its normalized permanent
+hardware address as the registry, numeric-id-map and credential-store key;
+NetworkManager profiles are pinned to that permanent address.
 
-**`ifconfig`/`GENERAL.HWADDR` report the OPERATIONAL address, and it moves.**
-NetworkManager randomizes a WiFi device's MAC while scanning
-(`wifi.scan-rand-mac-address`, on by default) and resets it when it activates a
-connection. Confirmed on a Rock 5B+, roughly every 7 minutes:
-`device (wlan0): set-hw-addr: set MAC address to 26:C3:93:B6:9C:A7 (scanning)`.
-Two things broke while the registry keyed on that value:
+### Hotspot profile writes [EXISTS; native requalification pending]
 
-- the registry re-keyed itself, so the adapter's adopted hotspot profile, saved
-  connection map and id were discarded and rebuilt empty; and
-- profiles were pinned to a randomized address. **NetworkManager matches
-  `802-11-wireless.mac-address` against the PERMANENT address**, so those
-  profiles could never activate again — the board's journal recorded
-  `audit: op="connection-activate" result="fail" reason="… device MAC address
-  does not match the profile"` on every hotspot start.
+The NetworkManager boundary keeps PSKs off child argv and environment. It
+normalizes secret-bearing keyfile data through the existing bounded stdin
+runner, writes a mode-0600 sibling, fsyncs and atomically publishes it before
+asking NM to load it. First add remains inactive and autoconnect-off; submitted
+SSID, security, credential and binding fields must match before the checked
+receipt can grant creation or cleanup authority. Start carries that receipt.
+An indistinguishable exact clone before add readback remains outside this
+settings-based guarantee.
 
-**Resolution ladder** (`resolveWifiPermanentMac(ifname, currentMac)`):
-`/sys/class/net/<ifname>/phy80211/macaddress` (the cfg80211 `wiphy->perm_addr`,
-verified byte-equal to NetworkManager's D-Bus `PermHwAddress` on the reference
-board) → the last permanent address read for that interface → the current
-address. The cached tier is load-bearing: a transient sysfs failure must not
-re-key the registry onto a scan-time address for one poll. `busctl` is
-deliberately NOT used — it is not in the `helpers/run.ts` ALLOWED set, and a
-single sysfs read needs no spawn at all. `setPermanentMacReaderForTest` is the
-test seam.
+Every owned keyfile modify declares its exact delta. The existing operation
+helper holds the verified old inode open, predicts the resulting bytes with
+NM's own offline serializer and skips no-ops. A success adopts only exact
+predicted bytes with an unchanged old inode's content. Only the canonical
+`[connection]` timestamp may differ, and only when its value matches the daemon
+timestamp read inside the coherent profile observation. Duplicate groups/keys,
+foreign settings and every other byte remain subject to exact equality.
+The resulting verified file becomes the new receipt. VersionId is diagnostic
+only: NM can activate outside the adapter lock and advance it independently.
+A failure with the original inode,
+metadata and bytes unchanged retains the prior receipt without rebinding it.
+All other outcomes preserve the profile, retire authority and degrade health.
+Ephemeral descriptors, bytes and read receipts add no persistent recovery store.
+Up, down and delete compare settings, file identity and bytes without adopting
+new file evidence.
 
-The cache also correlates the last permanent address through the operational MAC,
-so an ifname rename during a transient sysfs failure keeps the same physical
-identity. Discovery never drops an adapter merely because NetworkManager reports
-`unavailable`, the operational MAC has not landed, or the permanent address cannot
-yet be confirmed: the registry retains a row with a typed `degraded_reason`, keeps
-its numeric id while re-keying on recovery. A permanent-MAC-unresolved row still
-enters the id map and retains today's hotspot prepare/start behavior.
+File observation lives in `network-manager-profile-file.ts`; read-only byte
+classification lives in `wifi-hotspot-profile-readback.ts`. The existing
+operation helper remains the sole dispatch/retirement owner and uses the
+same credential record store.
+
+Mixed-setting readback is keyed by the explicit NM field name through
+`network-manager-output.ts`. An absent optional setting never shifts later
+values; a wholly empty or malformed reply grants no evidence. Multiline values
+remain literal, including colons, backslashes and whitespace. Single-setting,
+scalar and fixed-list reads preserve their existing argv. Non-owned client
+profiles share the protected secret writer and strict file proof without
+requiring AP-mode or adapter-owner evidence. Rejected writes emit a WARN with
+only the whitelisted rejecting-check code.
+
+Mixed-section device reads project indexed fields to their requested base
+field in producer order, joining multiple values with a newline. Named multiline
+mode retains the original indexed labels; missing fields still yield an empty
+scalar. Duplicate detection uses a canonical index without leading zeros, with
+the bare label equivalent to index 1. Logical duplicates reject the entire reply
+without merging their values or rewriting the retained named labels.
+
+Native positional `--get-values` device and profile reads consume exactly one
+final LF before splitting. A blank record remains an empty string, including
+at the end of a tuple. An entirely empty stdout retains the scalar result
+`[""]`. Spaces and carriage returns belong to the value. Explicit multiline
+device reads keep their labelled-line format.
+
+NM 1.42.4 and 1.52.1 both provide the offline stdin/keyfile serializer; native
+daemon/offline byte parity is a separate gate and mismatches fail closed.
+Byte-identical foreign writes after NM's rename and whole-file replacement
+before its rename remain the documented limits.
+
+#### Known limits
+
+**LOW-1: No-op prediction can miss live autoconnect drift.** If the keyfile
+still says `no`, a temporary live NM change sets `yes`, and the request returns
+to `no` (A -> B -> A), byte prediction sees no file delta. Dispatch is skipped
+and the ownership fingerprint excludes autoconnect, so success can leave the
+live value at `yes`. No-op behavior is unchanged by this round.
+
+**LOW-2: Option B proves resulting content, not who last wrote it.** A foreign
+byte-identical replacement after NM's write is adopted and may later receive
+our cleanup actions. NM can also overwrite an atomic foreign replacement
+before its rename. These are accepted attribution limits, not an authorship
+guarantee; VersionId remains diagnostic only.
+
+Every authority-retiring readback emits one WARN with the reason, changed
+setting names, missing-file-receipt category, numeric stat witnesses,
+path/run change flags and optional VersionId. Ephemeral observation metadata
+belongs to the existing receipt and never enters its persisted JSON. A loaded
+receipt without per-field history reports that comparison as unavailable.
+Warnings never include setting values, raw keyfiles, filenames, PSKs or argv.
+
+### Hotspot credential rediscovery [EXISTS; host-tested only]
+
+Empty or hidden NM secret readbacks cannot replace a known credential for
+the same UUID and binding. Discovery retains the existing stored credential;
+the limited active-profile view uses the same rule without admitting control.
+A first Start still protects its resolved chosen credential before the durable
+UUID hint is written, using the accepted UUID/binding evidence.
+Every available initial or changed secret must match a fresh coherent profile
+read and its persistent keyfile through NM's own serializer before publication
+or persistence. A stale display value is never credential authority.
+An owned write completed during verification wins over that older read.
+The guarded cache/store commit emits only presence flags and short digests.
+Credentials never carry into another UUID or a rejected binding.
+
+Prepare and Start verify a selected lookup credential through
+`readVerifiedNmWifiSecret` before it enters the cache or identity store.
+Lookup/display tuples are hints, including when no durable UUID hint exists.
+The shared verifier reads the guarded persistent keyfile and checks it through
+NM's serializer; a stale display password cannot become a chosen credential.
+Owned create, repair, Save and rollback writes remain checked before publication.
+
+The same guarded file-secret observation supplies the credential component of
+`readNmProfileInstance` and its submitted-field comparison. This reader does not
+request the nmcli PSK display field. Empty/hidden/plaintext visibility changes
+therefore cannot fail an add or change activation/cleanup authority. The
+persisted secret still must match exactly, and non-secret NM settings plus
+strict file/byte evidence remain mandatory. No credential store is added.
+
+### Hotspot autoconnect policy [EXISTS; host-tested only]
+
+`wifi-adapter-reconciler.ts` is the single policy/convergence authority.
+`wifi-adapter-owner.ts` resolves observed UUID ownership and the existing D12
+exception; `wifi-adapter-lock.ts` retains that exact owner for an admitted
+operation. Limited registry keys, composite owner keys, Stop, mode changes,
+discovery, boot restore and identity transfer share one lock domain. Health
+and retry accounting retain the complete logical owner, including `@`.
+
+Each owned UUID is observed as READ, UNREADABLE or confirmed ABSENT. Only a
+successful UUID inventory can establish absence after a failed detail read.
+Confirmed-absent historical UUIDs are pruned without deleting profiles or
+discarding current credentials. Unreadable UUIDs retain ownership and retry.
+Only positively read AP profiles with one current UUID claimant grant startup
+deactivation authority. Competing unresolved claimants preserve a live AP even
+when one claimant requests station; safe autoconnect disarming remains separate.
+Fresh connection observations remain available during an admitted operation;
+policy writes, registry transfer and publication wait. Stop preserves a newer
+station UUID observed while deactivation was pending.
+After an awaited profile read, policy retains the current aliases of its
+candidate and observed/cached target rows through binding and every NM action.
+The retained operation's old key therefore remains an admission barrier during
+a fresh owner binding. Busy aliases defer through the existing discovery retry
+without failure health; unrelated rows remain independent.
+Literal path and interface pins constrain candidate owners before a same-MAC
+match can qualify. Positive contradictions revoke remembered inactive bindings
+and prevent the same cached UUID from restoring them. Unreadable evidence retains
+valid serialization knowledge; incomplete evidence cannot revive a revoked
+binding. Fresh matching pins can restore it. An admitted operation retains its
+captured owner until lock release. Inactive path-pinned twins
+therefore retain their separate composite owner locks and station intent.
+Activation uses that logical owner for credentials and intent, while the
+registry key and physical permanent MAC continue to supply NM/cache bindings.
+
+The coherent sample also reads NetworkManager's unescaped `GENERAL.PATH`
+between its two ifindex reads. It preserves colons and case exactly. Empty
+paths, wildcard/operator syntax (`*?[!|&` and backticks), whitespace, control
+characters and paths shared by distinct phys cannot supply a `match.path` pin.
+Virtual `clap-*` interfaces do not count as additional physical radios.
+
+An exclusive Start writes the permanent MAC, the literal `match.path` and
+autoconnect off before activation, and refuses activation if that write fails.
+After a successful activation it arms autoconnect only with saved `hotspot` or
+`hybrid` intent, both pins and a unique address across present phys, credential
+owner keys and `wifi_modes`.
+Hybrid profiles explicitly remain autoconnect off. Direct Starts retain their
+mode intent even when no safe autoconnect path exists; B2 restores that intent.
+
+Before discovery publishes rows, it examines
+every persisted current and historical owned AP UUID under Start's canonical
+adapter lock, including the profile read, policy check and write. A busy lock
+withholds the discovery pass until a later refresh. Unsafe autonomous
+profiles first gain any missing durable `hotspot` or `hybrid` intent, then
+autoconnect is disabled. A failed intent write preserves the old autoconnect
+value and recovery path. The pass also handles a newly present or persisted
+same-address twin. It never modifies station profiles or writes profiles without
+persisted ownership. Deactivation follows saved station intent as described
+below. An unresolved present radio
+that could own an inactive, unpinned profile retains that recovery path, even
+when several radios are unreadable and D12 restore cannot select one. Positive
+same-address twins still quiesce. Every possible owner is evaluated independently:
+a verified row appearing first cannot bypass another unresolved possible owner.
+
+Saved `station` intent disables autoconnect on that owner's current and
+historical AP profiles, including safely pinned inactive profiles. Explicit
+station selection checks these writes before reporting success, even when the
+adapter is already in station mode; refusal restores the previous intent.
+Startup applies the same station rule before publication and deactivates an
+active owned AP, including one whose autoconnect is already off. The mutable
+connection observation is retired after confirmed deactivation, so discovery
+cannot republish the connection it just stopped. A failed profile read,
+autoconnect-off write or station-intent deactivation logs an error and records
+`wifi-hotspot-autoconnect:<owner>` in the existing boot-readiness degradation
+status. Discovery withholds virtual-interface creation and the complete row
+publication until a subsequent pass succeeds. A complete successful policy pass
+clears only that owner's entry; unrelated boot degradation is preserved.
+Policy failure and a busy adapter lock use the existing discovery timer: one
+pending retry every three seconds, bounded by the existing five-minute budget.
+A busy lock alone is not degradation.
+The write after activation is checked through the same failure path. Successful
+policy work cannot cancel pending identity transfer or another owner's retry;
+the shared timer is cancelled only when all pending owner work has converged.
+
+Direct Stop uses the same checked current/historical owner policy for verified
+and limited adapters. It always attempts the disconnect and reports
+`{ success: true }` with station intent when the AP is stopped, even if policy
+work failed. That failure remains degraded and is retried until the off-write
+lands or the bounded budget expires. A failed disconnect still reports
+`deactivation-failed` and restores the previous intent. This keeps a rejected
+Stop-time off-write from leaving an AP active after reboot: startup sees station
+intent, stops any active owned AP and retries the profile policy.
+
+Identity observation retries limited as well as unverified discovery witnesses
+at 250 ms, 1 s and 4 s, for at most three retries. Retry publication awaits the
+same checked quiesce pass before transferring registry keys or delivering a
+token, then notifies mode reconciliation. A failed pass withholds that
+publication and schedules the existing bounded discovery retry.
+
+Moving a known adapter to a new port preserves its credentials; its old path
+does not autoconnect there. Bound restore rewrites the port pin. Rolling back
+to an older backend retains that pin, so a moved USB adapter may require a
+fresh hotspot Start. Hybrid and pathless restore depend on CeraUI starting.
+These are host-tested policies, not physical NetworkManager qualification.
+
+### Concurrent target reuse [PARTIAL; host-tested, VM/W6 pending]
+
+`wifi-concurrent-interface.ts` retains the public import surface; the one
+NM-managed hybrid selector lives in `wifi-hybrid-target-selector.ts`.
+Driver combinations, grouped/total/P2P occupancy and exact-phy derived AP
+channels are necessary; the separate card qualification check is also required.
+Neither a board model nor a parser-positive unqualified card enables hybrid.
+Discovery only observes capability and existing AP UUID/phy associations.
+Saved hybrid restore or an admitted hybrid Start may adopt the existing eligible
+leg using the immutable first-discovery boot/ifindex witness. Its same-boot record
+must match on later reuse. An admitted Start or saved restore can create an absent
+leg after the same qualification, occupancy, parent and binding checks. A leg
+appearing after absence was admitted is foreign and cannot be borrowed. Missing
+identity or foreign evidence still refuses with O3. Exact nl80211 replies alone
+own creation cleanup; parent and exact-object continuity also fence the created
+leg's autoconnect write and later lifecycle checks. Deleting a rolled-back created
+leg retires the record bound to that object, so a later admitted attempt may
+create it again; a refused or failed delete keeps both.
+Adoption and name recognition never confer deletion authority.
+Selection binds the record to the object it admitted and rechecks identity and
+bindings under the lock around its device write; Start rechecks before each
+profile write. Autoconnect writes read the prior value, perform a final identity
+check after profile scans and immediately check identity after the write. A
+mismatch refuses and compensates only while the setting is still our value.
+NM can address device-set only by name, leaving a one-call replacement window;
+the pre-write value and compensating write cannot prove a replacement's own
+history or exclude another replacement. The exact-object deletion fence remains
+unchanged; see `docs/AP-STA-CONCURRENT-MODE.md` for the residual windows.
+Restoring our pre-write `yes` can overwrite a replacement's own deliberate
+`autoconnect no`. Every compensation attempt logs WARN with the interface name,
+our pre-write/written values and identity-loss reason; unavailable post-write
+reads or failed restores log ERROR without raw command errors or secrets.
+Compensation failure preserves the normal hybrid Start refusal for either leg
+kind and the existing best-effort release behavior.
+
+The selected leg's runtime device-autoconnect change records its prior value.
+Stop/rollback restore only that exact current object and retain its netdev.
+Retained created legs remain disarmed. The existing record store, runtime policy
+and station/regulatory checks have separate modules without a second reconciler.
+Legacy AP details and UUID Stop remain available independently of offering.
+Profile priority/binding normalization finishes under the shared adapter lock;
+background discovery defers while it is busy, while owned refresh runs inline.
+SCC comes from `#channels`; its effective channel comes from the live associated
+station and current regulatory derivation. Saved channel intent is preserved.
+An illegal or unqualified associated channel refuses AP up through the existing
+reason field, without changing the station or country. See
+`docs/AP-STA-CONCURRENT-MODE.md` for the lifecycle and remaining qualification.
+
+Configure RPC awaits the shared configuration transaction before returning its
+existing acknowledgement. The shared dispatcher returns that completion while
+retaining the terminal-frame error handler. Additional identity reads cannot
+make the acknowledgement race lock entry or leave the request's work detached.
+
+`ifconfig` and `GENERAL.HWADDR` report the operational address, which
+NetworkManager randomizes while scanning. They cannot supply identity, including
+through a remembered interface name or an operational-address alias. The
+standalone `resolveWifiPermanentMac` reads sysfs only and returns undefined
+when the permanent address is unreadable. Its old fallback tiers are removed.
+
+The producer brackets ifindex, resolved `phy80211` path, wiphy index and
+permanent address with a second ifindex/path read. Its cache uses the complete
+`(ifindex, wiphy, phyPath)` tuple, survives a same-lifetime read failure, and
+is pruned when a lifetime disappears or becomes incoherent. Zero or malformed
+addresses never use that read-failure cache. Phy zero is valid.
+
+Classification finishes before discovery publishes a row:
+
+- **Verified:** a readable or same-lifetime cached address is unique across
+  distinct phy paths, and the phy has one non-`clap` interface. Key: the MAC.
+- **Limited:** a coherent lifetime lacks an attributable address, shares its
+  address with another phy, or has multiple non-`clap` interfaces. Key:
+  `limited:<ifindex>:<wiphy>`.
+- **Unverified:** the lifetime bracket is incomplete or inconsistent. Key:
+  `degraded:<ifname>`.
+
+A `clap-*` interface is sampled as another witness of its phy, never counted
+as another physical radio, and never published as an adapter row. A ready
+limited/unverified row carries `degraded_reason: "permanent-mac-unresolved"`;
+there is no new status field. Unavailable and operational-address-missing rows
+retain their existing degraded reasons and not-ready key rule: only the same
+coherent predecessor witness can retain a verified key.
+
+Classification keys are not physical steering identities. Shared-client
+steering reads the coherent permanent address for the exact sampled registry
+object, so a limited classification cannot rotate an unchanged station's
+mark or retire its routes. A registered radio without that proof leaves
+steering pending, including after an apply; it never supplies a provisional
+key as a permanent MAC. This does not gate station operations or alter
+credential-store ownership.
+
+Discovery never adopts credentials, repins a profile, writes autoconnect or
+allocates a virtual interface for an unresolved key. Limited keys never enter
+the credential store. Non-MAC keys are rejected before hotspot credential
+resolution or profile adoption. Verified store keys and credential continuity
+are unchanged. Limited-mode requests and read-only live-profile handling follow
+the rules below.
 
 **A monitor event carries an ifname, never a MAC.** `getWifiInterfaceByIfname()`
 (`wifi-connections.ts`) is the bridge; do NOT route a device-state event through
@@ -86,18 +361,18 @@ fields. A successfully completed binding refreshes that evidence to its actual
 new pin; an in-flight binding retains the original selection evidence until
 its final ownership check.
 
-Ownership arbitration does not consume shadow identity, change registry keys,
-introduce limited mode, change NetworkManager targeting or change mode
-transitions. Unresolved radios retain prepare/start capability. A radio
-returning under a new name or after replug keeps its own credentials.
-Same-MAC physical distinction and activation fencing remain outside this
-ownership change; G1-G5 are unrun and unclaimed.
+Ownership arbitration remains independent of lifetime admission. Its existing
+UUID and pin checks apply to verified keys; unresolved keys cannot enter profile
+adoption or credential resolution. Returning verified adapters retain their own
+credentials. Composite same-MAC physical identity and activation fencing remain
+outside this classification change. This change claims host proof only.
 
 Coverage: `wifi-hotspot-ownership.test.ts` exercises O1-O9 through real
 discovery, saved-sweep, prepare/start and configure boundaries, all stored
 owners, after-await checks, orphan migration and unrelated-profile survival.
 `wifi-radio-equivalence.test.ts` retains the recorded main bytes for verified,
-rename, replug and unverified prepare/start fixtures. The orphan byte fixture
+rename and replug fixtures, and explicitly checks the isolated limited keys
+and mutation-free outcomes of the four unresolved fixture families. The orphan byte fixture
 also runs against unchanged main. The pruning regression loads a legacy
 collision from disk because new store writes can no longer create one; its
 existing assertions are unchanged.
@@ -108,183 +383,338 @@ pre-fix head. Single-adapter discovery and verified/unverified prepare/start
 controls retain the existing results. These tests prove dispatch and return
 behavior at the host boundary; they do not qualify physical NM scheduling.
 
-### Observational lifetime producer [EXISTS; host-tested only]
+### First hotspot profile [EXISTS; host-tested only]
 
-`modules/wifi/wifi-radio-identity.ts` computes separate, internal evidence.
-The live resolver above, all of its cache tiers, registry keys, numeric ids,
-degraded reasons, id-map membership and credential-store keys are unchanged.
-Action admission consumes neither the classification nor the token. The additive
-protocol projects the optional token in local `wifiBuildMsg` rows and captures it
-for asynchronous config/mode frame correlation. Optional request tokens supply
-only that echoed metadata. Hotspot prepare/start/stop, mode transitions, profile
-targeting and credential behavior remain unchanged.
+First Start uses `nmApConnAdd` to create a persistent AP profile with its bind
+and security fields and `autoconnect=no` in one command. The helper generates
+the UUID before dispatch and accepts only that UUID in the add receipt.
+Lock-entry admission precedes creation and activation; internal callers retain
+the existing ownership and limited-row rules. Ownership checks and NM refusal
+remain the checks between add and up. Fresh physical re-admission belongs to
+the later in-operation admission change.
 
-The injectable file reader brackets the permanent address and wiphy index with
-the netdev ifindex and resolved `phy80211` path. A reads only these sysfs files
-and symlinks; it starts no new external process. `GENERAL.PATH` acquisition and
-composite identity remain deferred to the later guarded backend rollout.
-Only a coherent positive ifindex and nonnegative wiphy index produce a witness;
-phy0 is valid. The shadow MAC cache uses the complete `(ifindex, wiphy)` pair,
-serves only same-pair read failures, and is pruned to coherent pairs in each run.
-It assumes one fixed network namespace, automatic index allocation and no
-privileged index reassignment or namespace moves.
+A dispatched add failure or receipt mismatch deletes only the generated UUID,
+including when NetworkManager created the profile before the runner rejected.
+Start retains that exact-UUID cleanup until the transaction accepts success.
+Ownership loss, saved-refresh or autoconnect failure, activation refusal and
+post-up exceptions attempt a checked autoconnect-off write, deactivate an
+attempted activation and delete the new profile. An unsuccessful teardown
+retains the exact UUID, matching cache/store adoption and allocation receipt
+as an input to the logical owner's reconciler. Start, Stop and discovery consume
+that obligation under the same owner lock. It reports `cleanup-pending` and logs the checked
+suppression/deactivation results instead of pretending the profile is gone.
+Failed cleanup uses the existing five-minute discovery retry budget. Stop attempts
+the retained UUID even when the row has not observed its activation; a successful
+disconnect reports stopped while unfinished deletion or policy remains degraded
+and retryable. An unsuccessful disconnect retains the existing failure result.
 
-All eligible radios are sampled before shadow rows are published. Unique MACs
-classify as verified. Shared MACs and coherent but unattributable samples
-classify as limited, and incomplete samples
-as unverified. Limited/unverified keys are isolated `degraded:<ifname>`
-placeholders. These classifications are evidence only; limited hotspot mode is
-not implemented here.
-An unavailable or operational-MAC-missing row retains a predecessor's shadow
-key only with the same coherent witness; a new lifetime gets a placeholder
-until NetworkManager is ready, even if its permanent address is readable.
+Before the atomic add, the generated UUID is written as `pendingCreation` in the
+existing credential ownership record. The store stays version 2; ordinary
+adoption preserves this private field but cannot create it. A failed record write
+refuses the add. Confirmed activation, completed cleanup or confirmed absence
+retires only the matching UUID. A profile rename preserves creation evidence;
+an observed replacement settings object retires the old resource's record.
+Before up, the record is durably bound to the exact NM settings path, NM run
+identity, resource fingerprint and keyfile filename/device/inode/ctime.
+Startup checks that instance at observation and again
+before down/off writes. Mismatch, including a same-path settings replacement,
+retires the record without touching the profile; unbound records grant no
+teardown authority. The fingerprint excludes the cosmetic profile name while
+including its literal path binding.
+The NM profile ID is again the cosmetic `Hotspot`, with no provenance authority.
+There is no separate durable store. Before legacy missing-intent backfill or
+restoration, startup requires positive owned-AP evidence and a unique UUID owner;
+without saved hotspot/hybrid intent it deactivates the observed AP and checks
+autoconnect-off. Failed reads or actions retain owner degradation and bounded
+retry. It never deletes by name. An unstamped legacy profile keeps B5's upgrade
+preservation rule; saved hotspot/hybrid intent keeps the chosen AP available.
 
-Observational incarnations rotate on a changed witness, classification or degraded
-edge. Same-object renames and repeated duplicate runs retain their incarnation.
-Discovery and monitor `unavailable` events project incarnation/degraded-reason
-changes into the observational snapshot. An event with no identity row returns
-before advancing the publication sequence, so a virtual or non-Wi-Fi device
-cannot cancel another radio's pending sample. Existing status builds carry
-the sampled token when one is available.
-Projection also requires the exact registry row, its current observation
-generation and a coherent lifetime. A private weak map invalidates evidence
-before discovery publishes or mutates a row. This covers a new row and a reused
-same-MAC row; an ifname alone never associates a token. Failed, timed-out,
-incoherent and superseded observations leave the field absent until a later
-current sample proves it. Monitor-only unavailable edges retain the original
-row association while rotating the token. The existing disconnect broadcast
-still precedes the monitor observation: a private publication fence omits the
-token in that synchronous window and releases it in `finally`, including when
-the identity update throws. The fence never restores over a newer discovery
-generation. Legacy data and discovery publication remain unchanged.
-Observation sequences fence publication: an older discovery cannot erase a
-later unavailable event or replace a newer completed observation. Canceled
-samples cannot commit their cache or snapshot.
+Cleanup authority captures the NM settings object path, its bus-scoped unique
+NM owner and a fingerprint of the profile's binding, credentials and AP settings.
+Paths are compared only within the same identified NM run. Passive observations
+and pre-action checks always require unchanged file identity. Across runs, matching
+settings and unchanged file identity rebind the existing creation record and cleanup progress to the new run
+before actions; the next same-run replacement still invalidates them. Every cleanup action
+re-reads that evidence. A changed or absent instance drops the obligation
+without suppressing, disconnecting or deleting a replacement with the same
+UUID. A changed or unreadable file drops authority with visible hotspot health
+degradation. Checked add readback establishes the initial receipt. A successful
+modify refreshes it only when same-run object continuity, the held old inode
+and NM's exact byte prediction agree. A failed or lost modify reply with unchanged
+resource, metadata and bytes retains the prior receipt without rebinding; every
+other failed outcome retires authority and leaves the profile untouched.
+Up/down/delete retain strict evidence checks; they never authorize a changed file.
+A restart between commit and readback
+cannot establish continuity and leaves the profile untouched. Dropping stale authority also
+invalidates its cached active aliases before Start can accept an already-active
+shortcut.
 
-`wifiUpdateDevices` allows one active discovery and one queued discovery.
-Callers arriving during the active run share the queued run, whose device
-listing starts after their calls. Each run retains its own result or original
-error object, and a rejection still starts the queued run. Confirmation polls
-use this same queue. The queue creates no timers and leaves the discovery body,
-classification, tokens and wire fields unchanged. Both the AP+STA probe and
-concurrent-interface default runners use `runIw` and its `/usr/sbin/iw`
-fallback while retaining their injected test runners.
+Confirmed removal (including an authoritative UUID list after a lost delete
+reply) clears matching provisional adoption and cached active aliases.
+Deletion epochs fence delayed discovery only while those continuations remain
+in flight; their scoped disposers retire the tombstones at settlement.
+Replaced hotspot objects, replacement store entries and unrelated profiles
+remain intact. A failed fresh
+add cannot restore the deleted UUID from an older cache snapshot.
 
-Discovery is a terminal shutdown owner alongside observation. The composition
-root injects both terminations into the shutdown helper, which imports no Wi-Fi
-modules. Termination settles queued and later callers with `undefined`, the
-existing no-update result, even while an active listing is still held. Active
-work checks the terminal fence after awaits. Pending scan refreshes, scan
-backoff waits and unavailable-device retries are cancelled; later scheduling
-cannot reopen them. Discovery and scan timers are unreferenced. The reusable
-cancel helpers do not clear the terminal state; only explicit test setup reopens
-it. `wifi-discovery-shutdown.test.ts` covers both signals, delayed cleanup,
-late saved/scan reads and cancellation of a pending scan retry.
+Retained cleanup remembers checked autoconnect suppression and disconnection.
+A retry reads NM's UUID/active inventory, keeps confirmed stopped state for an
+inactive profile, and retries deletion without a redundant down. A refused down
+is accepted as stopped only after that inventory proves the UUID inactive;
+unreadable or active evidence retains failure and the bounded recovery path.
 
-The discovery-owned abort signal also accompanies its saved-connection refresh.
-It cancels an already-waiting saved-list retry, prevents a failed held listing
-from arming another wait, and fences later profile reads, AP dispatch and saved
-map publication. Saved refreshes entered with an already-aborted signal perform
-no read. Independent saved-refresh callers that omit the signal retain their
-existing retry schedule and timer lifetime; the shared retry helper's
-unsignaled consumers are unchanged.
+Monitor events trigger confirmation rather than proving it. The pending
+activation captures its UUID, hotspot object, activation interface, profile
+instance and the active-connection path returned by NM's up receipt.
+Production confirmation waits for the shared discovery flight, brackets an
+AP-profile mode read with device-state/UUID/active-path reads, and compares the
+profile instance on both sides. After the final roster await it rechecks the
+captured settings instance and active path, while retaining the original queued
+discovery order. A replacement during that await cannot confirm. It accepts only state 100 on the captured
+activation and profile in AP mode. A station reconnect or same-name connection
+cannot publish hotspot success. The existing bounded timeout still applies.
 
-`wifi-radio-observation.ts` schedules sysfs sampling in a later task, after
-legacy publication and promise completion; legacy callers never await it.
-Only this detached work has one logical active flight and one replaceable latest
-queued batch. A 1000 ms budget aborts the sample and prevents further reads or
-publication from that generation. A held uncancellable physical read may settle
-later; a new logical sample does not wait for it while capacity is available.
-`wifi-radio-read-budget.ts` bounds all outstanding physical text/symlink reads
-to four across every producer, discovery and retry. An operation increments the
-counter when it starts and decrements it only on settlement; cancellation never
-pretends that the operation finished. At capacity the latest sample waits
-without a new reader call or sampling timeout. One string-only warning per
-saturation episode names the held count. Settlement resumes only a queued
-capacity-deferred sample; it does not revive an exhausted retry cycle, which
-requires another discovery. Capacity wait has no finite bound if reads stay held.
+Command failures and malformed receipts never log the passphrase. Regressions
+are split across `wifi-first-ap-add-then-up.test.ts`, `wifi-first-ap-cleanup.test.ts`,
+`wifi-first-ap-discovery.test.ts`, `wifi-first-ap-confirmation.test.ts` and
+`wifi-first-ap-instance.test.ts` and `wifi-first-ap-reconcile.test.ts`, with command and instance fixtures under
+`helpers/wifi-first-ap-*.ts`. Real NM qualification uses the local-only
+`test-harness/wifi-hwsim/checks/first-ap.ts` VM check and remains separate.
 
-Lost observations resample the
-current registry with a fresh generation and invalidate each row first, after
-250 ms, then 1 s, then 4 s, with at most three consecutive retries.
-An incomplete/inconsistent bracket still publishes uncertainty. A current
-sampled row with no declared degraded reason and no coherent projectable token
-is a loss with reason `incomplete`, so it retries instead of being stranded.
-A row declared degraded/limited by its own contract does not retry solely for
-absent proof. Coherent publication and new discovery reset the retry budget.
-Discovery cancels pending
-observation work before awaiting NetworkManager, and an absent device listing
-still queues the retained registry rows.
+### Sampled lifetime identity [EXISTS; host-tested only]
 
-Explicit `stop()` and `terminate()` cancel without a warning or retry.
-`stop()` remains reusable; `terminate()` permanently rejects enqueue, starts
-and retry work. Process SIGTERM/SIGINT injects `terminate()` through
-`BackendShutdownDeps` at the main composition root, including when an older
-discovery is still awaiting its listing. The shutdown helper has no Wi-Fi or
-application bootstrap import. Wi-Fi-owned test setup alone reopens the singleton.
-Every observation-owned start, deadline, retry and queued-continuation timer is
-unreferenced; explicit cancellation still clears timers, but they cannot retain
-an otherwise finished process.
+The sample is authoritative for registry keys. One active discovery and one
+queued discovery still bound legacy device listings; queued callers share a
+fresh run begun after their calls and retain that run's result or original
+error. Confirmation polls use the same queue. The initial identity sample is
+awaited inside that run, with the producer's 1000 ms deadline. A lost sample
+publishes an isolated uncertain row rather than an operational-address key.
 
-After a publication, a changed wire-projected token on any current row sends
-exactly one additional local Wi-Fi status frame through a callback installed
-beside `broadcastWifiState`. No projected token change means no frame.
-`broadcastMsgLocal` keeps this notification off the cloud relay; the remote
-projection, registry keys, token format, admission and wire fields are unchanged.
-The local callback never records global hotspot membership delivery. Only the
-normal global `broadcastWifiState` path acknowledges the roster, preserving
-one global/control-channel notification when a poll overlaps token publication.
+Guarded RPC requests require the expected token at request and transaction-lock
+entry; frame correlation remains separate from that authority. The sampled
+registry, numeric-id and credential-store key rules above remain authoritative.
 
-Both integration boundaries contain shadow exceptions. Read failures, timeouts
-and unexpected shadow exceptions increment `getWifiRadioShadowFailures()`.
-Each lost sample also emits one string-only `logger.warn`:
-`Wi-Fi identity sample lost (<reason>) for <ifnames>; retry <n>/3`
-for the three retries, and `; no retries left` for the final exhausted loss.
-An initial sample plus three retries that all time out therefore produces four
-warnings and no pending timer. No status object or credential enters these
-warnings.
+The four-operation physical read budget remains shared across producers. A
+cancelled or timed-out physical read holds its slot until it actually settles.
+At saturation no fifth read starts; sampling resumes when capacity returns.
+Discovery does not wait indefinitely for capacity. The latest deferred sample
+can recover the retained row without an unrelated network event.
+Its exact row bindings remain scoped to the observation generation while the
+sample is deferred. A same-lifetime rename through an unavailable observation
+retains the full sampled-key row, including its AP capabilities.
+A new unavailable observation retires the parent's active UUID, AP mode and
+connection fields while retaining its capabilities and cached hotspot settings.
+The missing-operational-address branch retires the same three fields. Device
+and matching connection-down events do likewise; virtual-leg events retire only
+that leg and preserve the parent station. An unrelated old connection event
+cannot clear a newer connection.
 
-Coverage: `wifi-token-liveness.test.ts`, `wifi-radio-identity.test.ts`,
-`wifi-discovery-single-flight.test.ts` and `wifi-radio-equivalence.test.ts`.
-`process-lifetime.test.ts` covers helper-only subprocess imports without the
-application preload or setup file, injected termination, and native timer
-reference state/natural exit with a never-settling reader.
-Fake-clock liveness tests reproduce the boot-time virtual-interface event,
-failed listing, recovery after timeout, retry exhaustion, local-only token
-arrival, per-row rotation, exception-safe publication fencing, credential-free
-warnings, rejection/supersession recovery and exhaustion, incomplete brackets,
-budget resets and already-fired retry cancellation. `wifi-radio-read-liveness`
-regressions cover the four-operation physical bound, late completion fences,
-settlement recovery and terminal pending-listing shutdown; the roster publication
-regression uses real authenticated local and injected control-channel delivery.
-After removing only the optional incarnation
-field from Wi-Fi rows, nine recorded main fixture families cover
-the resolver tiers, unavailable/missing-operational rows, duplicates, rename and
-replug, public prepare/start results, credentials and broadcast count/order.
-The overlapping-call fixture now records one initial read and one queued read,
-results `false,false,false`, one broadcast and the final unavailable row;
-the error fixture preserves the first run's error and shares the queued result.
-`wifi-discovery-bounded.test.ts` covers sequential registry equivalence,
-freshness, rejection recovery, the production confirmation poll and a burst of
-100 callers with no timer left pending. An extra real broadcast is a permanent
-negative control. Fault tests use fake clocks and capability/command readers to cover
-hanging, slow and rejected sampling plus both integration boundaries.
-The authorized A-only raw-byte assertion now compares all legacy bytes after
-removing only incarnation, with added wire-value rotation and ordinary-status
-stability assertions. The owner-authorized L0 changes keep strict legacy-log
-equality while separately requiring the exact lost-sample warning for hung
-and rejected readers. The hang case counts exactly two reads, including the
-fresh discovery after timeout, and still proves releasing the old read adds
-no third call. The slow case and all other assertions remain unchanged.
-Locator-only A tests were
-removed with the explicitly deferred feature. Owner hardware gates G1-G5 are
-unrun and are not claimed;
-host evidence does not qualify physical radios or NetworkManager activation.
+Retry and failed-listing recovery preserve the complete last physical witness
+roster, including unpublished `clap-*` interfaces. Current published rows are
+bound separately from that roster; registry membership never proves uniqueness.
+Any incomplete lifetime bracket in that still-listed roster withholds verified
+classification for the sample. A failed sysfs read cannot establish that a
+duplicate disappeared. Verification resumes after coherent sampling or a fresh
+successful listing that removes the missing witness. Same-phy Rock and the
+single-interface Orange topology retain their normal verified classification.
+
+A private weak association binds each sampled token to the exact registry
+object and observation generation before scan refresh or other discovery
+broadcasts can publish it. Witness, classification and degraded edges rotate
+incarnations; repeated evidence and true same-lifetime renames retain them.
+An incomplete or failed proof has no wire incarnation. A failed-proof
+replacement uses a fresh degraded object/id and removes the predecessor's
+registry entry; it never inherits the predecessor's token. Recovery gets a
+fresh token, while a successful same-lifetime recovery keeps its token.
+
+Monitor events still carry ifnames. A virtual/non-Wi-Fi unavailable event
+cannot cancel another radio's sample. A real unavailable event rotates only
+its current row. The synchronous disconnect broadcast withholds the token
+through a private publication fence, released in finally without overwriting
+a newer discovery generation. Captured request tokens supply echoed config/mode metadata; request and
+transaction-lock admission enforce the expected token separately.
+
+A timed-out, rejected, superseded or incomplete sample retains L0's bounded
+retry schedule: 250 ms, 1 s and 4 s, at most three retries. A retry samples the
+current registry with a fresh generation, applies recovered keys and degraded
+reasons, then projects its token. A failed NetworkManager listing also queues
+the retained rows. Successful publication or new discovery resets the retry
+budget. Explicit stop/termination cancels without a warning or retry.
+
+Each lost sample emits the exact string-only warning
+`Wi-Fi identity sample lost (<reason>) for <ifnames>; retry <n>/3`, or
+`; no retries left` on exhaustion. No status or credential enters that log.
+Read failures, timeouts and unexpected observation exceptions retain the
+internal `getWifiRadioShadowFailures()` counter. Capacity saturation logs
+one string-only held-count warning per episode.
+
+A changed token is delivered locally. When the normal discovery broadcast
+already carries it, no extra local frame is needed; otherwise one local
+Wi-Fi status frame carries the change. Retry publication does the same.
+No projected change means no frame. Local token delivery never acknowledges
+global hotspot-roster membership or changes the cloud projection.
+
+Observation stop is reusable; termination is permanent. The awaited sample
+propagates cancellation to discovery so a shutdown cannot continue into a
+fallback row, saved-profile refresh or scan scheduling. Discovery also owns
+its terminal abort signal, queued callers, scan refreshes, backoff waits and
+unavailable-device retries. The composition root injects observation and
+discovery termination into the graph-free shutdown helper. Observation,
+discovery and scan timers remain unreferenced and explicitly cancellable.
+
+Coverage includes `wifi-identity-keys.test.ts` (unsafe cache rejection,
+per-phy uniqueness, separate same-phy limited rows and every equivalence fixture),
+`wifi-radio-read-liveness.test.ts` (the exact sample deadline/retry,
+local token delivery and terminal cancellation),
+`wifi-incarnation-publication.test.ts` (all eight replacement/proof cases on
+all four status surfaces), the unchanged B1 bound and shutdown assertions,
+and L0 retry/physical-read/native process-lifetime tests.
+`wifi-radio-equivalence.test.ts` preserves the recorded verified bytes and
+checks the four authorized limited fixture deltas without regenerating the
+golden file. Its three observational mutation controls still reject the same
+id, registry-key and id-map writes.
+
+### Request admission [EXISTS; host-tested only]
+
+One shared RPC middleware binds guarded requests
+and their transaction-lock entry to a fresh physical sample. Internal callers
+without request context retain their base behavior. The request context is
+one-shot: the transaction lock-entry check consumes it on admit and refuse, and
+middleware retires it in `finally` on every exit. The record belongs only to
+its device, so another adapter's internal work never inherits the requirement.
+Configure retains the record until its dispatched lock attempt enters or exits,
+without awaiting the writer. Mock effects consume it synchronously; outcome
+publishers and restore edges run without it.
+Captured config/mode
+metadata has a separate context, remains fixed for the dispatch, and never
+grants admission by itself.
+
+RPC entry refusals keep their existing result and Start/Configure/mode frame,
+but send that frame only to the requesting socket. They never publish a
+terminal to another client's accepted transaction. Prepare remains RPC-only;
+transaction publishers and internal callers retain their existing broadcasts.
+Every mode refusal before pending follows that private route, including
+station's token-free busy path, transaction preflight/lock exits and mocks.
+A one-shot request publication scope supplies an optional reply callback through
+the existing publisher hook; internal two-argument calls are unchanged. The
+existing sequence envelope separates private replies from broadcast terminals,
+so the frontend no longer infers request ownership from matching targets or
+filters busy terminals from observers. The additive protocol contract records
+the exact routing and attempt rules.
 
 The [additive protocol contract](../../../../docs/WIFI-INCARNATION-PROTOCOL.md)
-defines token validation, mock rebind control, byte changes, RPC output parsing,
-remote stripping and the workspace package boundary. No frontend uses the token
-for behavior in this step.
+continues to define token shape, frame correlation, remote stripping and the
+shared package boundary. Token validation, bounded current-unobserved recovery
+and exact frontend attempt ownership follow that same contract. This host-tested mechanism does not qualify physical
+radios or NetworkManager activation.
+
+### Limited operation [EXISTS; host and mock-browser proof only]
+
+Prepare (both load and save), Start, Configure, and selection of hotspot or
+hybrid refuse with `radio-unverified` before credentials, NetworkManager or
+virtual-interface effects, including an already-active shortcut. Configure also
+sends its captured terminal `config: {error: "radio-unverified"}` frame.
+These checks live in the shared backend transactions, so direct and legacy
+callers receive the same refusal as RPC clients. Guarded RPC tokens are enforced separately; these transaction checks also
+protect direct and internal paths.
+
+Display, Copy, Stop and station operations remain available. Discovery reads
+the AP profile NetworkManager reports active on the exact device into memory
+only. Existing virtual APs remain observable when a fresh concurrency probe
+fails, unless coherent parent and virtual samples positively identify different
+phy paths or wiphy indices. Such a contradiction clears the virtual association.
+`transitionVirtualBinding` is the single writer of immutable virtual bindings.
+It privately owns the associated UUID and retired Stop authority for discovery,
+Start, confirmation, refresh, monitor-down, Stop, rollback and registry removal.
+Invalidation retires live authority while preserving a reusable inactive profile
+hint; a hint cannot block adoption of a freshly observed parent AP. Positively
+invalid physical associations discard their matching cached target. A legitimate
+exclusive parent target is preserved independently.
+A fresh complete parent listing naming that same known UUID preserves it even
+when the current profile or mode read fails.
+
+Complete-listing disappearance, rename, replug and cross-phy contradiction are
+evaluated against the whole roster before any parent AP adoption. A failed or
+malformed/partial listing cannot establish disappearance. Confirmation records
+its selected UUID through the same owner even before any discovery refresh.
+Registry-key transfer preserves the binding; actual row removal retires it.
+The 126-cell production-graph matrix in `wifi-virtual-binding.test.ts` covers
+discovery, Start-confirmation and refresh across all lifecycle events and
+present/absent/changed parent APs, preserving foreign profiles throughout.
+The observed exclusive or concurrent UUID remains stoppable even when
+its profile cannot be read; a changed UUID clears the previous profile details
+before reading the new profile. Same-UUID exclusive discovery retries the
+read-only details and preserves loaded credentials when a refresh fails.
+Both exclusive and concurrent detail changes use the normal Wi-Fi status
+broadcast, including recovered reads and changed credentials. Saved-profile
+refresh waits for AP adoption before its callers publish.
+A readable non-AP profile retires its provisional hotspot target.
+Discovery does not search for a replacement profile, adopt credentials, repair
+a pin or priority, or write an unresolved key into the credential store.
+Stop deactivates the observed UUID without virtual-interface deletion. When the
+logical intent owner can be resolved, it also checks that owner's current and
+historical AP autoconnect policy under the Stop contract above.
+New station joins do not pin a limited registry key as a MAC address.
+When a regulatory change requires restarting a limited AP, the backend stops
+it instead and logs a warning; that maintenance path leaves mode intent intact.
+
+The boot restore has one private exception (D12). Exactly one hotspot-capable
+adapter and one logical non-station intent must remain. Plain MAC and MAC@port
+keys for the same address count as one. All address groups with any non-station
+record are counted before precedence is applied; the plain record wins, or a
+single composite record when no plain record exists. Its owned AP profile must exist,
+and its stored channel must be `auto` or among the currently derived permitted
+channels for that adapter's bands. Streaming must permit the transition.
+Hybrid also requires proven concurrency and a profile already bound to the
+current fixed virtual-interface name; otherwise it stays pending rather than
+becoming exclusive.
+
+Only boot restore may activate that existing profile on a limited adapter.
+Cancellation and the current adapter roster, exact row, intent, streaming and
+channel eligibility are rechecked after awaited prerequisites, including hybrid
+interface allocation, before activation. The same admission predicate reaches
+the fixed-name allocator's internal awaits and precedes its mutations.
+An incompatible or invisible existing interface is refused without deletion.
+Creation records private kernel ifindex/wdev evidence from the add command's own
+nl80211 NEW_INTERFACE reply. `iw --debug` exposes that reply on stderr; its
+family, sequence, socket port, command, interface name and attribute lengths are
+checked before granting ownership. A subsequent mutable-name read never confers
+deletion authority. Missing or malformed receipts refuse ownership and report
+the failure without deleting an unproven object. A captured reply remains usable
+after a command timeout; failed later metadata reads cannot erase the obligation.
+Object-bound metadata also checks that the created object still has the target
+name before handoff.
+
+Cleanup addresses that exact wireless device, not its mutable name, and never deletes a
+reused or replacement interface. Cancellation retires activation authority while
+preserving cleanup authority. The allocation remains owned through activation;
+refusal, failure, exception and cancellation roll back the operation's own target.
+Discovery retains the handle until row insertion and releases it on pre-handoff
+abort or exception. A rejected activation await also runs the existing state
+rollback, clearing transition and concurrent state while preserving the original
+error, before releasing its exact created resource.
+It does not change credentials, credential-store contents, autoconnect or mode
+intent. Hybrid uses the existing fixed-interface allocator until the target
+allocator step lands. A successful restore logs exactly
+`hotspot restored on an adapter that could not be identified`; every refusal
+logs its failed condition once per unchanged restore edge.
+Accepted restoration is identified by the selected logical owner and mode;
+an unrelated station preference cannot dispatch that accepted activation again.
+Stop and station selection resolve the same logical persisted intent, so the
+stopped hotspot is not restored again. This recovery requires the same sole
+hotspot-capable adapter condition; with another such adapter present, a limited
+radio cannot clear that other adapter's persisted intent.
+
+Accepted limit: a replacement of that sole unidentifiable adapter cannot be
+distinguished from the original and receives the same boot restore. An
+exclusive profile independently auto-activated by NetworkManager remains
+observable and stoppable outside D12. Physical limited-radio restore is
+unqualified; both lab radios have verifiable identities.
+
+Coverage: `wifi-limited-mode.test.ts`, the active-profile discovery case in
+`wifi-identity-keys.test.ts`, the four explicit limited equivalence deltas and
+`hotspot-limited-mode.spec.ts`. The `wifi-limited` mock scenario retains live
+details and safe controls and refuses direct guarded RPC requests.
 
 ### Chosen mode and boot restore [EXISTS; host and mock-browser tested]
 
@@ -302,11 +732,10 @@ false or unknown concurrency refuses with `activation-failed`, without effects
 or a persistence write. An explicit hybrid mode switch retains its existing
 `capability-unproven` refusal. With absent or station intent, a proven non-hybrid
 radio still starts exclusively. If concurrency is unknown, the existing
-exclusive path remains available, but it does not create a durable hotspot
-choice from that uncertainty. An already-active Start applies the same recording
-proof: observed hybrid is recorded; observed exclusive mode is recorded only with
-proven absence of concurrency or an existing explicit hotspot choice. Retrying an
-unknown exclusive fallback never manufactures a persisted exclusive preference.
+exclusive path remains available. Every successful exclusive Start records
+`hotspot` for reboot, including unknown-capability and already-active Starts,
+so an AP without safe autoconnect has a restore intent. An observed hybrid
+Start records `hybrid`; refused Starts still restore their previous intent.
 Before any already-active exclusive shortcut can succeed or record, an explicit
 hybrid choice with absent or unknown concurrency is refused with
 `activation-failed`. An already-active hybrid topology keeps its shortcut.
@@ -318,8 +747,23 @@ concurrent-interface allocation remains the final admission check; successful
 allocation updates the row's concurrent path state before confirmation.
 
 Stop records station under the same key before teardown, including the
-already-stopped shortcut. A definite refusal or throw restores the previous
-value, deleting a previously absent key. Start has one undo at the lock exit,
+already-stopped shortcut. A disconnect refusal or throw restores the previous
+value, deleting a previously absent key. Policy failure after a successful Stop
+keeps station intent, reports stopped, and retries with recoverable degradation.
+An accepted Start that is still activating is not already stopped: Stop
+disarms its selected profile, retires pending confirmation, and awaits NM down
+before reporting success. A late connected event cannot confirm that retired
+Start. Create/up work still holding the adapter lock continues to refuse Stop
+with DEVICE_BUSY and leaves intent and NM state untouched.
+The selected UUID is captured before awaited disarm. An absent observer
+transition does not prove inactivity: before the inactive shortcut succeeds,
+NM's uuid,active inventory must prove that UUID inactive or absent. An NM
+active connection includes activation in progress and must take the normal down
+path. Unreadable or malformed inventory cannot authorize the shortcut; normal
+down must supply its receipt instead. This also covers immediate retry after
+failed down and committed-down/lost-reply recovery, without retained parallel
+teardown state.
+Start has one undo at the lock exit,
 including failure before an activation rollback exists; an accepted but
 `not-confirmed` activation keeps its target. Undo applies only while the stored
 value is still this operation's target, so an older failure cannot overwrite a
@@ -348,14 +792,55 @@ Hybrid Start, Stop, and station or hybrid selection remain available.
 
 Boot restore is apply-only. It waits for the first completed discovery
 publication, then follows discovery, capability-publication and streaming-clearance
-edges; it has no polling deadline or restore timer. Each attempt re-reads current
+edges. Failed activation reuses the bounded discovery timer, with at most three
+attempts for the current boot choice until observed AP success. Acceptance
+alone never completes restore: the actual confirmation outcome settles it,
+and failed confirmation retains bounded recovery. Exhaustion records
+`wifi-hotspot-restore:<logical-owner>`; successful restoration clears that entry.
+Station intent cancels the current cycle entry even while activation is pending.
+A late terminal requires that exact live attempt and unchanged registry/intent;
+it cannot recreate a cancelled entry or its degradation. Cycle-less apply calls
+retain their local settlement contract.
+
+Confirmation captures the selected UUID, actual AP interface, row and available
+physical lifetime. Device events concern that AP interface; a station event on a
+hybrid parent's interface supplies no AP evidence. Names and positive poll hints
+trigger observation but cannot settle activation alone. NM must report the
+captured AP interface connected on the captured UUID, and the pending record,
+selection and lifetime must still match after the read. A held old poll cannot
+settle its replacement or manufacture state using the row's newer UUID.
+The existing poll helper retains queued discovery; its status boolean is only a
+candidate for the pending monitor's mandatory AP-specific check.
+If discovery discards a vanished virtual target and its cached UUID, the exact
+current pending record still retires its own transition. Cache/binding cleanup
+keeps its separate UUID fence, so replacement state is preserved. The abandoned
+transition cannot block bounded recovery until the retry window expires:
+failed confirmation continues toward three attempts and owner degradation.
+Every new activating/deactivating transaction supersedes prior confirmation
+observers synchronously before it claims the transition flag. This ownership
+handoff occurs before awaited NM activation/deactivation, not at later confirmation registration.
+An old failed poll therefore cannot clear a replacement Start's flag while its
+NM request is pending. Start, reconfigure and Stop share the claim operation;
+Stop retains its existing terminal settlement before claiming deactivation.
+No new registry, timer or wire field is involved.
+
+Each attempt re-reads current
 intent and the registry under the adapter lock, never calls the persisting mode
 setter, and skips station intent, active or observed APs, and owned pending
 activations. Streaming leaves a disruptive restore pending with one warning.
 An unavailable hybrid capability leaves hybrid pending with `activation-failed`.
-The same unchanged edge does not repeat an attempt or warning; a late adapter,
-capability arrival or cleared stream re-arms pending work. Accepted activations
-are not dispatched twice for the same row and intent.
+An unchanged capability edge cannot dispatch an immediate duplicate; scheduled
+retries follow failed activation. A late adapter,
+capability arrival or cleared stream re-arms pending work. Pending accepted
+activations are not duplicated by unrelated edges; failed confirmation can retry.
+Observed AP loss or a positively changed physical lifetime re-arms recovery.
+Its budget is keyed by (ifindex, wiphy, phyPath), not the availability token.
+Unknown samples retain the prior physical witness; token churn alone cannot
+refill exhausted attempts or the recovery window. Accepted, unconfirmed starts
+consume the same three-attempt budget. Busy/pending work defers without charge,
+station intent cancels it, and observed success clears only owner restoration
+health. No name-based deletion or expanded D12 activation authority is added.
+
 Capability edges come only from successful cache publication or an invalidation
 that changes evidence. A failed read retaining the same expired cache emits no
 edge, so a pending restore cannot turn one discovery event into an endless probe
@@ -365,20 +850,21 @@ concurrency proof. Invalidation and recovery advance that evidence even when
 restore coalesces the events during a waiting activation. Pending-attempt dedup
 includes this revision, so true-to-unknown-to-true recovery is not lost after a
 definite activation refusal. Identical proof/binding publications leave it
-unchanged, and accepted activations remain suppressed. The producer retains only
+unchanged. Observed success completes restoration; acceptance remains pending.
+The producer retains only
 the latest mapped interface set or its invalidation; revision reads start no IO.
 
 The event source is a graph-free leaf, introduces no wire field, and has a
 cancellable subscription. Shutdown retires restore before terminating identity
 observation. It cannot start another adapter after cancellation.
-The later limited-radio D12 exception and composite identity keys remain outside
-this step; this restore applies only to the existing matching intent key.
+Verified restore uses its matching intent key. Limited restore uses the D12
+exception above; composite physical identity remains a later step.
 
 ### Inherited follow-ups outside B2 round 4 [PARTIAL]
 
 - Bound retries when the initial capability read fails with no retained cache.
 - Run one trailing capability computation for a newer interface set joining an
   older flight.
-- Bind confirmation to the chosen activation topology, covering discovery
-  repopulation while virtual-interface release is awaited.
+- Preserve virtual ownership if discovery repopulates while release is awaited
+  (the separate B7 teardown follow-up).
 

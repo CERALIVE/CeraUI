@@ -162,7 +162,8 @@ describe("logger anti-regression — no ANSI in the production path", () => {
 
 		const console = lines.find((l) => l.transport === "Console");
 		assert(console);
-		const parsed = JSON.parse(console.line) as {
+		expect(console.line.startsWith("<3>")).toBe(true);
+		const parsed = JSON.parse(console.line.slice(3)) as {
 			level: string;
 			msg: string;
 			module?: string;
@@ -264,7 +265,8 @@ describe("logger anti-regression — dev/prod format selection through the live 
 		assert(console);
 		expect(console.line).not.toContain(ANSI_ESCAPE);
 		// JSON form carries the ISO `ts`, not a bare HH:MM:SS clock token.
-		const parsed = JSON.parse(console.line) as { ts: string };
+		expect(console.line.startsWith("<3>")).toBe(true);
+		const parsed = JSON.parse(console.line.slice(3)) as { ts: string };
 		expect(Number.isNaN(new Date(parsed.ts).getTime())).toBe(false);
 	});
 });

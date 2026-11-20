@@ -15,6 +15,8 @@ import { setStreamReconciliationCompletedForTest } from "../modules/system/strea
 const runtimeRoot = mkdtempSync(join(tmpdir(), "ceraui-backend-test-"));
 const previousStreamingMarker = process.env.CERALIVE_STREAMING_MARKER;
 process.env.CERALIVE_STREAMING_MARKER = join(runtimeRoot, "streaming");
+const previousEventsDir = process.env.CERALIVE_EVENTS_DIR;
+process.env.CERALIVE_EVENTS_DIR = join(runtimeRoot, "events");
 
 const setup = await loadJsonConfigSync(
 	"setup.json",
@@ -46,5 +48,7 @@ afterAll(async () => {
 	if (previousStreamingMarker === undefined)
 		delete process.env.CERALIVE_STREAMING_MARKER;
 	else process.env.CERALIVE_STREAMING_MARKER = previousStreamingMarker;
+	if (previousEventsDir === undefined) delete process.env.CERALIVE_EVENTS_DIR;
+	else process.env.CERALIVE_EVENTS_DIR = previousEventsDir;
 	await rm(runtimeRoot, { recursive: true, force: true });
 });

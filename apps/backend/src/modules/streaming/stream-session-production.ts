@@ -1,4 +1,5 @@
 import { logger } from "../../helpers/logger.ts";
+import { emitEvent } from "../events/emit.ts";
 import { admitAndPrepareStreamStart } from "../system/update-orchestrator/runtime.ts";
 import { notificationBroadcast } from "../ui/notifications.ts";
 import { noteStreamStopped } from "./armed-stream-marker.ts";
@@ -20,6 +21,7 @@ import {
 import { awaitRecoveryBarrier, isRecoveryPending } from "./recovery-barrier.ts";
 import { newAttemptId } from "./start-failure-taxonomy.ts";
 import {
+	getStreamLifecycleState,
 	seedStreamLifecycleState,
 	updateStreamLifecycleState,
 } from "./stream-lifecycle-status.ts";
@@ -32,6 +34,16 @@ import {
 import { getIsStreaming, updateStatus } from "./streaming.ts";
 import { stopGeneration } from "./streamloop/session.ts";
 
+function recordEvent(publish: () => void): void {
+	try {
+		publish();
+	} catch {
+		// Event history must not alter stream control or later hooks.
+	}
+}
+
+let streamStartedAt: number | undefined;
+
 export const streamSessionProductionDeps: StreamSessionOrchestratorDeps = {
 	initialLiveness: initialOtaStreamLiveness,
 	createAttemptId: newAttemptId,
@@ -39,8 +51,25 @@ export const streamSessionProductionDeps: StreamSessionOrchestratorDeps = {
 	getStreamingStatus: getIsStreaming,
 	stopRuntime: stopGeneration,
 	queryRuntime: queryEngineRuntimeStreaming,
-	seedLifecycleState: seedStreamLifecycleState,
-	setLifecycleState: updateStreamLifecycleState,
+	seedLifecycleState: (state) => {
+		streamStartedAt = undefined;
+		seedStreamLifecycleState(state);
+	},
+	setLifecycleState: (state) => {
+		const previous = getStreamLifecycleState();
+		updateStreamLifecycleState(state);
+		if (previous === "starting" && state === "streaming") {
+			streamStartedAt = Date.now();
+			recordEvent(() => emitEvent("stream_started", {}));
+		}
+		if (previous !== "stop_failed" && state === "stop_failed")
+			recordEvent(() => emitEvent("stream_stop_failed", {}));
+		if (
+			previous === "reconfiguring" &&
+			(state === "streaming" || state === "idle" || state === "reconciling")
+		)
+			recordEvent(() => emitEvent("stream_reconfigured", { outcome: state }));
+	},
 	invariantViolation: (from, to) => {
 		logger.error("stream-session illegal lifecycle transition", { from, to });
 		notificationBroadcast(
@@ -84,5 +113,17 @@ export const streamSessionProductionDeps: StreamSessionOrchestratorDeps = {
 	admitUpdate: admitAndPrepareStreamStart,
 	markStreamingForOta: setOtaStreamingMarker,
 	unmarkStreamingForOta: clearOtaStreamingMarker,
-	onStreamStopped: noteStreamStopped,
+	onStreamStopped: (cause) => {
+		noteStreamStopped(cause);
+		recordEvent(() =>
+			emitEvent("stream_stopped", {
+				cause,
+				durationSec:
+					streamStartedAt === undefined
+						? 0
+						: Math.max(0, (Date.now() - streamStartedAt) / 1000),
+			}),
+		);
+		streamStartedAt = undefined;
+	},
 };

@@ -21,6 +21,7 @@ import { release } from "node:os";
 
 import { ENGINE_UNREACHABLE_REVISION } from "@ceraui/rpc/schemas";
 
+import { execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
 import { DEFAULT_SPAWN_TIMEOUT_MS } from "../../helpers/spawn-policy.ts";
 
@@ -88,24 +89,19 @@ export async function refreshEngineRevision(): Promise<string> {
 
 const UNKNOWN_REVISION = "unknown revision";
 
-function readRevision(cmd: string) {
+export async function refreshSenderRevision(): Promise<string> {
 	try {
-		const result = Bun.spawnSync(cmd.split(" "), {
-			stdout: "pipe",
-			timeout: DEFAULT_SPAWN_TIMEOUT_MS,
-		});
-		if (result.exitCode !== 0) {
-			return UNKNOWN_REVISION;
-		}
-		return result.stdout.toString().trim();
+		const result = await execFileP(srtlaSendExec, ["-v"]);
+		revisions.srtla = result.stdout.trim() || UNKNOWN_REVISION;
 	} catch (_err) {
-		return UNKNOWN_REVISION;
+		revisions.srtla = UNKNOWN_REVISION;
 	}
+	return revisions.srtla;
 }
 
 /**
- * Argv-only sibling of `readRevision` for probes whose answer may legitimately
- * be ABSENT. `readRevision` answers the literal `"unknown revision"`, which is a
+ * Argv-only sibling of `refreshSenderRevision` for probes that may legitimately
+ * be ABSENT. The sender reader answers the literal `"unknown revision"`, a
  * fine value to render in a version slot but useless to a resolution ladder —
  * the ladder has to tell "this rung had no answer" from "this rung answered".
  */
@@ -225,7 +221,7 @@ export async function initRevisions(
 ) {
 	revisions.ceralive = await resolveCeraUiRevision(revisionSources);
 
-	revisions.srtla = readRevision(`${srtlaSendExec} -v`);
+	await refreshSenderRevision();
 	revisions.bun = Bun.version;
 	revisions.kernel = release();
 	await refreshEngineRevision();

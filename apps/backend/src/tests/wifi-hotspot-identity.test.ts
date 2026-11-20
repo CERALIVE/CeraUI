@@ -22,7 +22,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import * as runner from "../helpers/run.ts";
-
+import * as nmSecrets from "../modules/network/network-manager-secret.ts";
 import {
 	getHotspotCredentials,
 	initHotspotCredentials,
@@ -49,16 +49,21 @@ import {
 	pruneDuplicateHotspotConns,
 	shouldAdoptHotspotConn,
 } from "../modules/wifi/wifi-hotspot-discovery.ts";
+import { settlePending } from "../modules/wifi/wifi-hotspot-monitor.ts";
 import type {
 	HotspotActivationDeps,
 	WifiInterfaceWithHotspot,
 } from "../modules/wifi/wifi-hotspot-types.ts";
 import {
 	normalizeMacAddress,
-	resetWifiPermanentMacCache,
 	resolveWifiPermanentMac,
 	setPermanentMacReaderForTest,
 } from "../modules/wifi/wifi-permanent-mac.ts";
+import { nmcliFieldOutput } from "./helpers/nmcli-field-output.ts";
+import {
+	MAC as FIRST_AP_MAC,
+	firstAp,
+} from "./helpers/wifi-first-ap-fixture.ts";
 
 /** The reference board's real permanent address (D-Bus `PermHwAddress`). */
 const PERM_MAC = "58:02:05:e1:79:1c";
@@ -72,13 +77,16 @@ const PASSWORD_PROOF_MACS = [
 	"58:02:05:ff:ee:dd",
 	"02:00:00:00:00:01",
 ] as const;
+const fixtureIfnames = new Set<string>();
 
 function makeHotspotIface(
 	over: { ifname?: string; hotspotConn?: string } = {},
 ): WifiInterfaceWithHotspot {
+	const ifname = over.ifname ?? "wlan0";
+	fixtureIfnames.add(ifname);
 	return {
 		id: 0,
-		ifname: over.ifname ?? "wlan0",
+		ifname,
 		conn: null,
 		hw: "Realtek RTL8852BE",
 		available: new Map(),
@@ -118,11 +126,13 @@ function makeRecorder(over: Partial<HotspotActivationDeps> = {}): Recorder {
 			setFields.push([uuid, fields]);
 			return true;
 		},
-		nmHotspot: async (_device, ssid, password) => {
+		nmApConnAdd: async (_device, { name: ssid, password }) => {
 			created.push({ ssid, password });
 			generated += 1;
 			return `generated-uuid-${generated}`;
 		},
+		nmConnDelete: async () => true,
+		nmDisconnect: async () => true,
 		wifiUpdateSavedConns: async () => {},
 		broadcastState: () => {},
 		setDupIpSuppression: () => {},
@@ -138,6 +148,16 @@ function makeRecorder(over: Partial<HotspotActivationDeps> = {}): Recorder {
 		},
 		...over,
 	};
+	const profilePasswords = new Map<string, string>();
+	const findProfile = deps.findHotspotConn;
+	deps.findHotspotConn = async (...args) => {
+		const profile = await findProfile(...args);
+		if (profile) profilePasswords.set(profile.uuid, profile.password);
+		return profile;
+	};
+	spyOn(nmSecrets, "readVerifiedNmWifiSecret").mockImplementation(
+		async (uuid) => profilePasswords.get(uuid),
+	);
 
 	return { deps, created, activated, setFields, pruned, store };
 }
@@ -146,12 +166,12 @@ beforeEach(() => {
 	setWifiState({});
 	onWifiChange(() => {});
 	resetHotspotCredentialsForTest();
-	resetWifiPermanentMacCache();
 });
 
-afterEach(() => {
+afterEach(async () => {
+	for (const ifname of fixtureIfnames) await settlePending(ifname, false);
+	fixtureIfnames.clear();
 	setPermanentMacReaderForTest(null);
-	resetWifiPermanentMacCache();
 	resetHotspotCredentialsForTest();
 });
 
@@ -173,27 +193,27 @@ describe("permanent MAC resolution", () => {
 		expect(duringScan).toBe(first);
 	});
 
-	test("a transient sysfs failure holds the last permanent address", async () => {
+	test("a failed sysfs read cannot reuse an ifname-only identity", async () => {
 		setPermanentMacReaderForTest(async () => PERM_MAC);
 		await resolveWifiPermanentMac("wlan0", PERM_MAC);
 
 		setPermanentMacReaderForTest(async () => undefined);
-		expect(await resolveWifiPermanentMac("wlan0", RANDOM_MAC)).toBe(PERM_MAC);
+		expect(await resolveWifiPermanentMac("wlan0", RANDOM_MAC)).toBeUndefined();
 	});
 
-	test("an ifname rename keeps the permanent identity when the new sysfs read fails", async () => {
+	test("a renamed interface cannot reuse an operational-address identity", async () => {
 		setPermanentMacReaderForTest(async (ifname) =>
 			ifname === "wlan0" ? PERM_MAC : undefined,
 		);
 		await resolveWifiPermanentMac("wlan0", RANDOM_MAC);
 
-		expect(await resolveWifiPermanentMac("wlp1s0", RANDOM_MAC)).toBe(PERM_MAC);
+		expect(await resolveWifiPermanentMac("wlp1s0", RANDOM_MAC)).toBeUndefined();
 	});
 
-	test("with no permanent address at all it degrades to the current one", async () => {
+	test("an unreadable permanent address cannot fall back to the operational address", async () => {
 		setPermanentMacReaderForTest(async () => undefined);
 
-		expect(await resolveWifiPermanentMac("wlan0", RANDOM_MAC)).toBe(RANDOM_MAC);
+		expect(await resolveWifiPermanentMac("wlan0", RANDOM_MAC)).toBeUndefined();
 	});
 
 	test("rejects malformed and all-zero addresses", () => {
@@ -858,6 +878,43 @@ describe("shouldAdoptHotspotConn", () => {
 });
 
 describe("pruneDuplicateHotspotConns", () => {
+	test("the real first-add label remains eligible for owned historical pruning", async () => {
+		const f = await firstAp();
+		try {
+			expect(await f.start()).toEqual({ success: true });
+			settlePending("wlan0", true);
+			const uuid = f.created();
+			const name = f.fields()["connection.id"];
+			if (!uuid || typeof name !== "string")
+				throw new Error("Missing first-add identity");
+			for (const conn of [uuid, "keep"])
+				rememberHotspotCredentials(FIRST_AP_MAC, {
+					ssid: "First AP",
+					password: f.secret,
+					conn,
+				});
+			f.row.hotspot.conn = "keep";
+			f.row.conn = f.row.activeConn = null;
+			f.observe(undefined, "ap");
+			const { deps, deleted } = makeProfileDeps([
+				{
+					uuid,
+					name,
+					mode: "ap",
+					ssid: "First AP",
+					psk: f.secret,
+					mac: FIRST_AP_MAC,
+				},
+			]);
+			expect(
+				await pruneDuplicateHotspotConns(FIRST_AP_MAC, "keep", deps),
+			).toEqual([uuid]);
+			expect(deleted).toEqual([uuid]);
+		} finally {
+			await f.restore();
+		}
+	});
+
 	afterEach(() => {
 		removeWifiInterface(PERM_MAC);
 		removeWifiInterface(SECOND_PERM_MAC);
@@ -1079,17 +1136,14 @@ describe("hotspot deletion reservation", () => {
 				const read = spyOn(runner, "run").mockImplementation(
 					async (bin, args) => {
 						expect(bin).toBe("nmcli");
-						expect(args[4]).toBe("--get-values");
+						expect(args[6]).toBe("--fields");
 						expect(args.at(-1)).toBe("reader");
 						await pauseRead();
-						return (args[5] ?? "")
-							.split(",")
-							.map((field) => {
-								if (!(field in fields))
-									throw new Error(`Unexpected field ${field}`);
-								return fields[field];
-							})
-							.join("\n");
+						return nmcliFieldOutput(args, (field) => {
+							if (!(field in fields))
+								throw new Error(`Unexpected field ${field}`);
+							return fields[field];
+						});
 					},
 				);
 				const reader =
@@ -1183,7 +1237,7 @@ describe("hotspot deletion reservation", () => {
 		const observed: boolean[] = [];
 		const read = spyOn(runner, "run").mockImplementation(async (bin, args) => {
 			expect(bin).toBe("nmcli");
-			expect(args[4]).toBe("--get-values");
+			expect(args[6]).toBe("--fields");
 			expect(args.at(-1)).toBe("superseded");
 			const p = profiles.find((entry) => entry.uuid === "superseded");
 			observed.push(p !== undefined);
@@ -1203,13 +1257,10 @@ describe("hotspot deletion reservation", () => {
 				"connection.interface-name": "",
 				"802-11-wireless.mac-address": p.mac,
 			};
-			const snapshot = (args[5] ?? "")
-				.split(",")
-				.map((field) => {
-					if (!(field in fields)) throw new Error(`Unexpected field ${field}`);
-					return fields[field];
-				})
-				.join("\n");
+			const snapshot = nmcliFieldOutput(args, (field) => {
+				if (!(field in fields)) throw new Error(`Unexpected field ${field}`);
+				return fields[field];
+			});
 			if (observed.length === 1) {
 				readEntered.resolve();
 				await releaseRead.promise;
@@ -1290,12 +1341,14 @@ describe("hotspot deletion reservation", () => {
 		const reads: string[] = [];
 		const read = spyOn(runner, "run").mockImplementation(async (bin, args) => {
 			expect(bin).toBe("nmcli");
-			expect(args.slice(0, 5)).toEqual([
+			expect(args.slice(0, 7)).toEqual([
+				"--mode",
+				"multiline",
 				"--terse",
 				"--escape",
 				"no",
 				"--show-secrets",
-				"--get-values",
+				"--fields",
 			]);
 			const uuid = args.at(-1) ?? "";
 			reads.push(uuid);
@@ -1316,13 +1369,10 @@ describe("hotspot deletion reservation", () => {
 				"connection.interface-name": "",
 				"802-11-wireless.mac-address": p.mac,
 			};
-			return (args[5] ?? "")
-				.split(",")
-				.map((field) => {
-					if (!(field in fields)) throw new Error(`Unexpected field ${field}`);
-					return fields[field];
-				})
-				.join("\n");
+			return nmcliFieldOutput(args, (field) => {
+				if (!(field in fields)) throw new Error(`Unexpected field ${field}`);
+				return fields[field];
+			});
 		});
 		const pruning = pruneDuplicateHotspotConns(PERM_MAC, "keep", deps);
 		await entered.promise;

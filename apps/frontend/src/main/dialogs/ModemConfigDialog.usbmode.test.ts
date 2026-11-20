@@ -25,8 +25,13 @@ import {
 	describe,
 	expect,
 	it,
+	onTestFinished,
 	vi,
 } from "vitest";
+import {
+	clearRequestedDialog,
+	getRequestedDialogContext,
+} from "$lib/stores/dialog-request.svelte";
 import { openModemAdvanced } from "../../tests/helpers/modem-advanced";
 import {
 	publishModems,
@@ -71,6 +76,10 @@ vi.mock("$lib/rpc/subscriptions.svelte", async () => {
 
 vi.mock("svelte-sonner", () => ({
 	toast: { error: vi.fn(), success: vi.fn() },
+}));
+
+vi.mock("$lib/stores/navigation-lazy", () => ({
+	navigateToDestination: () => undefined,
 }));
 
 const KEY = "platform-xhci-hcd.0-usb-1:2";
@@ -271,7 +280,7 @@ describe("ONLY the certified transitions are rendered", () => {
 });
 
 describe("an uncertifiable device gets NO control — never a disabled one", () => {
-	async function renderWithSuppression(suppressed: string) {
+	function renderWithSuppression(suppressed: string) {
 		usbModeOptions.mockResolvedValue({ certified: [], suppressed });
 		render(ModemConfigDialog, {
 			props: { open: true, modem: modem(), deviceId: "0" },
@@ -508,6 +517,87 @@ describe("the handler is REAL — and pessimistic", () => {
 		expect(
 			screen.getByTestId("modem-usb-mode-active").getAttribute("data-usb-mode"),
 		).toBe("qmi");
+	});
+
+	it("offers View logs when the switch failed part-way", async () => {
+		setUsbMode.mockResolvedValue({
+			success: false,
+			error: "transition_failed",
+			reason: "transaction_error",
+		});
+		publish({ "0": modem() });
+		render(ModemConfigDialog, {
+			props: { open: true, modem: modem(), deviceId: "0" },
+		});
+
+		await openConfirm();
+
+		const band = await screen.findByTestId("modem-usb-mode-error");
+		expect(band.textContent).toMatch(/part-way/i);
+		expect(await screen.findByTestId("view-logs-action")).toBeTruthy();
+	});
+
+	it("opens View logs at the moment the device answered the switch, not at the click", async () => {
+		const answeredAt = 1_800_000_000_000;
+		vi.useFakeTimers({ now: answeredAt, toFake: ["Date"] });
+		onTestFinished(() => {
+			vi.useRealTimers();
+			clearRequestedDialog();
+		});
+		setUsbMode.mockResolvedValue({
+			success: false,
+			error: "transition_failed",
+			reason: "transaction_error",
+		});
+		publish({ "0": modem() });
+		render(ModemConfigDialog, {
+			props: { open: true, modem: modem(), deviceId: "0" },
+		});
+
+		await openConfirm();
+		const action = await screen.findByTestId("view-logs-action");
+		vi.setSystemTime(answeredAt + 45_000);
+		await fireEvent.click(action);
+
+		expect(getRequestedDialogContext()).toEqual({
+			tab: "raw",
+			at: answeredAt,
+		});
+	});
+
+	it("a refusal that carries no reason renders no reason sentence and no View logs", async () => {
+		setUsbMode.mockResolvedValue({
+			success: false,
+			error: "transition_failed",
+		});
+		publish({ "0": modem() });
+		render(ModemConfigDialog, {
+			props: { open: true, modem: modem(), deviceId: "0" },
+		});
+
+		await openConfirm();
+
+		const band = await screen.findByTestId("modem-usb-mode-error");
+		expect(band.textContent).toMatch(/didn't complete/i);
+		expect(band.textContent).not.toContain("network.modem");
+		expect(screen.queryByTestId("view-logs-action")).toBeNull();
+	});
+
+	it("offers no View logs for a refusal whose reason names the cause", async () => {
+		setUsbMode.mockResolvedValue({
+			success: false,
+			error: "transition_failed",
+			reason: "postcondition_mismatch",
+		});
+		publish({ "0": modem() });
+		render(ModemConfigDialog, {
+			props: { open: true, modem: modem(), deviceId: "0" },
+		});
+
+		await openConfirm();
+
+		await screen.findByTestId("modem-usb-mode-error");
+		expect(screen.queryByTestId("view-logs-action")).toBeNull();
 	});
 
 	it("renders the uncertified refusal — what every real modem gets today", async () => {

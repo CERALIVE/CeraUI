@@ -1,0 +1,12 @@
+/repo mode=755 uid=0 gid=0
+TARGET FSTYPE OPTIONS
+/      ext4   rw,relatime,discard,errors=remount-ro
+/run mode=755 uid=0 gid=0
+TARGET FSTYPE OPTIONS
+/run   tmpfs  rw,nosuid,nodev,noexec,relatime,size=202096k,mode=755,inode64
+/usr/local/bin mode=755 uid=0 gid=0
+TARGET FSTYPE OPTIONS
+/      ext4   rw,relatime,discard,errors=remount-ro
+/etc/NetworkManager/system-connections mode=755 uid=0 gid=0
+TARGET FSTYPE OPTIONS
+/      ext4   rw,relatime,discard,errors=remount-ro
