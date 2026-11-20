@@ -8,6 +8,7 @@ import {
 import { startWifiAdapterModeRestore } from "../modules/wifi/wifi-adapter-mode-restore.ts";
 import { defaultAdapterModeDeps } from "../modules/wifi/wifi-adapter-mode-transition.ts";
 import * as concurrent from "../modules/wifi/wifi-concurrent-interface.ts";
+import * as creation from "../modules/wifi/wifi-concurrent-interface-creation.ts";
 import * as devices from "../modules/wifi/wifi-device-list.ts";
 import { startHotspotLocked } from "../modules/wifi/wifi-hotspot-activation.ts";
 import * as policy from "../modules/wifi/wifi-hybrid-target-policy.ts";
@@ -85,6 +86,31 @@ function overrideIw(
 		},
 		async () => visible,
 	);
+}
+
+function atCreatedRevalidation(): () => boolean {
+	const revalidate = creation.revalidateCreatedConcurrentApInterface;
+	const currentTarget = records.currentTarget;
+	let revalidating = false;
+	let permitChecked = false;
+	spyOn(records, "currentTarget").mockImplementation(async (...args) => {
+		const current = await currentTarget(...args);
+		if (revalidating) permitChecked = current;
+		return current;
+	});
+	spyOn(creation, "revalidateCreatedConcurrentApInterface").mockImplementation(
+		async (target, expected, observe) => {
+			if (!observe) return revalidate(target, expected, observe);
+			revalidating = true;
+			try {
+				return await revalidate(target, expected, observe);
+			} finally {
+				revalidating = false;
+				permitChecked = false;
+			}
+		},
+	);
+	return () => permitChecked;
 }
 
 const refusals: ReadonlyArray<
@@ -233,10 +259,9 @@ const refusals: ReadonlyArray<
 	[
 		"created-target-changed",
 		(f) => {
-			let createdReads = 0;
+			const finalRead = atCreatedRevalidation();
 			overrideIw(f, (args, text) =>
-				// The eighth successful by-name read is the final created revalidation.
-				args.join(" ") === "dev clap-wlan0 info" && ++createdReads === 8
+				args.join(" ") === "dev clap-wlan0 info" && finalRead()
 					? text.replace("type managed", "type AP")
 					: text,
 			);
@@ -499,11 +524,12 @@ test.each(["retained", "borrowed", "created"] as const)(
 			expect(
 				await concurrent.selectConcurrentApInterface("wlan0"),
 			).toBeDefined();
-		let createdReads = 0;
+		const finalRead =
+			origin === "created" ? atCreatedRevalidation() : undefined;
 		overrideIw(f, (args, text) => {
 			if (
 				args.join(" ") === "dev clap-wlan0 info" &&
-				(origin !== "created" || ++createdReads === 8)
+				(finalRead === undefined || finalRead())
 			)
 				return text.replace("wdev 0x7", "wdev 0x77");
 			return text;

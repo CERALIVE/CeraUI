@@ -370,8 +370,9 @@ export async function run(
  * Run an allowlisted binary argv-only and feed `input` to its stdin.
  *
  * The secret `input` is written to the child's stdin and is NEVER placed on
- * argv (so it cannot leak via the process table / `ps`). Resolves with stdout
- * when the child exits 0; rejects with stderr (or the spawn error) otherwise.
+ * argv (so it cannot leak via the process table / `ps`). On exit 0, resolves
+ * with stdout by default or stderr when `output: "stderr"` is requested.
+ * On failure, rejects with stderr or the spawn error.
  *
  * @throws if `bin` is not in {@link ALLOWED}.
  * @throws {@link RunTimeoutError} / {@link RunAbortError} on timeout / abort.

@@ -2,6 +2,10 @@ import { expect, spyOn, test } from "bun:test";
 import * as retries from "../helpers/retry.ts";
 import * as nm from "../modules/network/network-manager.ts";
 import { wifiUpdateSavedConns } from "../modules/wifi/wifi.ts";
+import {
+	wifiAdapterLockKey,
+	withWifiAdapterLock,
+} from "../modules/wifi/wifi-adapter-lock.ts";
 import { defaultHotspotDeps } from "../modules/wifi/wifi-hotspot-activation.ts";
 import { handleHotspotConn } from "../modules/wifi/wifi-hotspot-discovery.ts";
 import {
@@ -200,8 +204,7 @@ test("256 profile deletions leave no tombstones after their discovery reads reti
 	}
 });
 
-test("first-profile cleanup fences only the in-flight discovery continuation", async () => {
-	const f = await firstAp();
+function countDeletionTombstones(created: () => string | undefined) {
 	const writes = Map.prototype.set;
 	const tombstones = new Set<Map<unknown, unknown>>();
 	spyOn(Map.prototype, "set").mockImplementation(function <K, V>(
@@ -212,12 +215,38 @@ test("first-profile cleanup fences only the in-flight discovery continuation", a
 		if (
 			typeof key === "string" &&
 			typeof value === "number" &&
-			key === f.created()
+			key === created()
 		)
 			tombstones.add(this);
 		return writes.call(this, key, value);
 	});
-	const size = () => [...tombstones].reduce((sum, map) => sum + map.size, 0);
+	return () => [...tombstones].reduce((sum, map) => sum + map.size, 0);
+}
+
+test.each(Array.from({ length: 16 }, (_, i) => i + 1))(
+	"16 rejected first-profile Starts leave no tombstones or adapter lock (batch %i/16)",
+	async () => {
+		const f = await firstAp();
+		const size = countDeletionTombstones(f.created);
+		f.faults.receiptUnreadable = true;
+		try {
+			for (let attempt = 0; attempt < 16; attempt++) {
+				expect((await f.start()).success).toBe(false);
+				expect(f.row.hotspot.conn).toBeUndefined();
+				expect(
+					await withWifiAdapterLock(wifiAdapterLockKey(MAC), async () => true),
+				).toEqual({ success: true, result: true });
+				expect(size()).toBe(0);
+			}
+		} finally {
+			await f.restore();
+		}
+	},
+);
+
+test("first-profile cleanup fences only the in-flight discovery continuation", async () => {
+	const f = await firstAp();
+	const size = countDeletionTombstones(f.created);
 	const fields = nm.nmConnGetFields;
 	const paused = Promise.withResolvers<void>();
 	const release = Promise.withResolvers<void>();
