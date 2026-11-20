@@ -20,8 +20,10 @@ test('the real version checker accepts all seven captured GO-4 command replies',
 		{ kind: 'versions', replies },
 		`
 set -euo pipefail
-mount --bind "$1/nmcli" /usr/bin/nmcli
-bash "$2/guest-versions.sh"
+# The replay must work on runners without /usr/bin/nmcli installed.
+nmcli_fixture="$1/nmcli"
+function /usr/bin/nmcli() { "$nmcli_fixture" "$@"; }
+source "$2/guest-versions.sh"
 `,
 	);
 	expect(result.code).toBe(0);

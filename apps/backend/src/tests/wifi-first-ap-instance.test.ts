@@ -5,6 +5,11 @@ import { wifiUpdateSavedConns } from "../modules/wifi/wifi.ts";
 import { defaultHotspotDeps } from "../modules/wifi/wifi-hotspot-activation.ts";
 import { handleHotspotConn } from "../modules/wifi/wifi-hotspot-discovery.ts";
 import {
+	recordHotspotProfileDeletion,
+	trackHotspotProfileRead,
+	wasHotspotConnDeletedSince,
+} from "../modules/wifi/wifi-hotspot-discovery-fence.ts";
+import {
 	handleWifiMonitorEvent,
 	syncWifiStateCache,
 } from "../modules/wifi/wifi-hotspot-monitor.ts";
@@ -183,7 +188,19 @@ for (const replacement of [
 	});
 }
 
-test("deleted-profile tombstones live only until their discovery continuations finish", async () => {
+test("256 profile deletions leave no tombstones after their discovery reads retire", () => {
+	const uuids = Array.from({ length: 256 }, (_, index) => `deleted-${index}`);
+	for (const uuid of uuids) {
+		using read = trackHotspotProfileRead();
+		recordHotspotProfileDeletion(uuid);
+		expect(wasHotspotConnDeletedSince(uuid, read.epoch)).toBe(true);
+	}
+	for (const uuid of uuids) {
+		expect(wasHotspotConnDeletedSince(uuid, 0)).toBe(false);
+	}
+});
+
+test("first-profile cleanup fences only the in-flight discovery continuation", async () => {
 	const f = await firstAp();
 	const writes = Map.prototype.set;
 	const tombstones = new Set<Map<unknown, unknown>>();
@@ -207,9 +224,7 @@ test("deleted-profile tombstones live only until their discovery continuations f
 	let discovery: Promise<void> | undefined;
 	f.faults.receiptUnreadable = true;
 	try {
-		for (let i = 0; i < 256; i++) {
-			expect((await f.start()).success).toBe(false);
-		}
+		expect((await f.start()).success).toBe(false);
 		expect(size()).toBe(0);
 		f.faults.afterAdd = async () => {
 			const uuid = f.created();

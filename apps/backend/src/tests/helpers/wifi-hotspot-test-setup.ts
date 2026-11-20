@@ -10,6 +10,7 @@ export function mockHotspotConfirmationPoll(): void {
 	// These adapters do not model NM files; never probe the workstation's NM.
 	spyOn(defaultHotspotDeps, "readProfileInstance").mockResolvedValue(undefined);
 	spyOn(nm, "nmDevices").mockResolvedValue([]);
+	spyOn(nm, "nmConnsGet").mockResolvedValue([]);
 }
 
 /** The caller supplies the fake allocation; these inputs establish its admitted card/channel. */

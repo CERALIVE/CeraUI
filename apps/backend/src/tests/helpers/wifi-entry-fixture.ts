@@ -6,6 +6,7 @@ import type {
 	SetWifiAdapterModeOutput,
 } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
+import * as nm from "../../modules/network/network-manager.ts";
 import { wifiAdapterModeRecorder } from "../../modules/wifi/wifi-adapter-mode.ts";
 import { defaultAdapterModeDeps } from "../../modules/wifi/wifi-adapter-mode-transition.ts";
 import { defaultHotspotDeps } from "../../modules/wifi/wifi-hotspot-activation.ts";
@@ -35,6 +36,7 @@ type Guarded = (typeof guarded)[number];
 export async function fixture() {
 	const state = await wifiFrameFixture();
 	const effects: unknown[] = [];
+	spyOn(nm, "nmConnsGet").mockResolvedValue([]);
 	spyOn(defaultHotspotDeps.credentials, "get").mockImplementation(() => {
 		effects.push("store-read");
 		return undefined;
