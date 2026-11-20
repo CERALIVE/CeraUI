@@ -35,9 +35,12 @@ import {
 	type RadioIdentity,
 	type RadioLifetime,
 	radioIdentityReaders,
+	sameRadioLifetime as sameLifetime,
 	wifiRadioIdentity,
 } from "./wifi-radio-identity.ts";
 import { sampleRadio } from "./wifi-radio-read-budget.ts";
+
+export { sameRadioLifetime as sameLifetime } from "./wifi-radio-identity.ts";
 
 export type TargetRecord = {
 	readonly boot: string;
@@ -160,41 +163,36 @@ export async function observeConcurrentInterfacesAtFirstDiscovery(
 	}
 }
 
-export function sameLifetime(
-	a: RadioLifetime | undefined,
-	b: RadioLifetime,
-): boolean {
-	return (
-		a?.ifindex === b.ifindex && a.wiphy === b.wiphy && a.phyPath === b.phyPath
-	);
-}
-
 export async function currentTarget(
 	ifname: string,
 	record: TargetRecord,
 	observe?: (identity: HybridLegIdentity) => void,
 ): Promise<boolean> {
-	return (await observeTarget(ifname, record, observe)) === "current";
+	return (
+		(await observeTarget(ifname, record, "admission", observe)) === "current"
+	);
 }
 
-/** A failed probe is not proof of loss; only definite replacement or kernel absence retires a claim. */
-export async function observeTarget(
+export function observeBorrowedLeg(ifname: string, record: TargetRecord) {
+	// A new parent incarnation fences admission, not restoration to the same leg.
+	return observeTarget(ifname, record, "release");
+}
+
+async function observeTarget(
 	ifname: string,
 	record: TargetRecord,
+	scope: "admission" | "release",
 	observe?: (identity: HybridLegIdentity) => void,
 ): Promise<"current" | "retired" | "unseen" | "unknown"> {
 	const boot = await bootIdReader();
-	const parent = await sampleRadio(
-		record.parentIfname,
-		radioIdentityReaders,
-		undefined,
-	);
+	const parent =
+		scope === "admission"
+			? await sampleRadio(record.parentIfname, radioIdentityReaders, undefined)
+			: undefined;
 	const target = await sampleRadio(ifname, radioIdentityReaders, undefined);
 	const identity = wifiRadioIdentity.state.rows.get(record.parentIfname);
 	if (
 		(boot?.trim() && boot.trim() !== record.boot) ||
-		(identity && identity.incarnation !== record.parentIncarnation) ||
-		(parent && !sameLifetime(parent.lifetime, record.parent)) ||
 		(target && !sameLifetime(target.lifetime, record.target))
 	) {
 		observe?.(hybridLegIdentity(target && ifname, target?.lifetime, undefined));
@@ -202,11 +200,12 @@ export async function observeTarget(
 	}
 	if (
 		boot?.trim() !== record.boot ||
-		identity?.incarnation !== record.parentIncarnation ||
-		(!parent?.macReadFailed &&
-			parent?.permanentMac !== identity?.permanentMac) ||
-		!parent ||
-		!target
+		!target ||
+		(scope === "admission" &&
+			(identity?.incarnation !== record.parentIncarnation ||
+				!sameLifetime(parent?.lifetime, record.parent) ||
+				(!parent?.macReadFailed &&
+					parent?.permanentMac !== identity?.permanentMac)))
 	) {
 		observe?.(hybridLegIdentity(target && ifname, target?.lifetime, undefined));
 		return target ? "unknown" : "unseen";
@@ -230,55 +229,11 @@ export async function observeTarget(
 		/^\s*Interface\s+(\S+)\s*$/m.exec(info)?.[1] === ifname &&
 		/^\s*type\s+managed\s*$/m.test(info) &&
 		wireless.wdev === record.wireless.wdev &&
-		wifiRadioIdentity.state.rows.get(record.parentIfname)?.incarnation ===
-			record.parentIncarnation
+		(scope === "release" ||
+			wifiRadioIdentity.state.rows.get(record.parentIfname)?.incarnation ===
+				record.parentIncarnation)
 		? "current"
 		: "unknown";
-}
-
-/** Observation fences reactivation, but never grants creation or deletion authority. */
-export async function readHybridTargetIdentity(
-	parent: string,
-	target: string,
-): Promise<string | undefined> {
-	const parentSample = await sampleRadio(
-		parent,
-		radioIdentityReaders,
-		undefined,
-	);
-	const targetSample = await sampleRadio(
-		target,
-		radioIdentityReaders,
-		undefined,
-	);
-	const info = await interfaceRunner("iw", [
-		"dev",
-		argMatch(ID_RE, target),
-		"info",
-	]).catch(() => "");
-	const identity = interfaceIdentity(info);
-	const after = await sampleRadio(target, radioIdentityReaders, undefined);
-	const incarnation = wifiRadioIdentity.state.rows.get(parent)?.incarnation;
-	if (
-		!parentSample ||
-		!incarnation ||
-		!targetSample ||
-		!identity ||
-		!sameLifetime(after?.lifetime, targetSample.lifetime) ||
-		parentSample.lifetime.phyPath !== targetSample.lifetime.phyPath ||
-		parentSample.lifetime.wiphy !== targetSample.lifetime.wiphy ||
-		Number(identity.ifindex) !== targetSample.lifetime.ifindex ||
-		Number(/^\s*wiphy\s+(\d+)\s*$/m.exec(info)?.[1]) !==
-			targetSample.lifetime.wiphy ||
-		/^\s*Interface\s+(\S+)\s*$/m.exec(info)?.[1] !== target
-	)
-		return undefined;
-	return JSON.stringify([
-		incarnation,
-		parentSample.lifetime,
-		targetSample.lifetime,
-		identity.wdev,
-	]);
 }
 
 export function matchesConcurrentDiscoveryBoot(boot: string): boolean {

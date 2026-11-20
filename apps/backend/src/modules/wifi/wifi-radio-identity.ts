@@ -42,10 +42,12 @@ export function getWifiRadioShadowFailures(): number {
 	return shadowFailures;
 }
 
-// The bracketed lifetime sample owns adapter identity.
-export const radioIdentityReaders: RadioIdentityReaders & {
+type RadioRosterReaders = RadioIdentityReaders & {
 	readonly listInterfaces: () => Promise<string[] | undefined>;
-} = {
+};
+
+// The bracketed lifetime sample owns adapter identity.
+export const radioIdentityReaders: RadioRosterReaders = {
 	listInterfaces: () => readdir("/sys/class/net").catch(() => undefined),
 	readDevicePath: async (ifname) => {
 		const { nmDeviceProp } = await import("../network/network-manager.ts");

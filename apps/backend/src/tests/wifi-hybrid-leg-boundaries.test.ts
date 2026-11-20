@@ -294,6 +294,10 @@ const startFrames = (frames: readonly string[]) =>
 
 /** The next Start borrows the leg with its device autoconnect suppressed from `yes`. */
 async function borrowLeg(f: HybridFixture) {
+	spyOn(radioIdentityReaders, "listInterfaces").mockResolvedValue([
+		"wlan0",
+		LEG,
+	]);
 	const parent = wifiRadioIdentity.state.rows.get("wlan0")?.incarnation;
 	if (!parent) throw new Error("Missing parent incarnation");
 	const target = { ifname: LEG, created: false };
@@ -362,6 +366,48 @@ test("a saved hybrid Start does not repair credentials after its leg changes dur
 		expect(loads(f.commands.slice(beginning))).toEqual([]);
 		expect(result).toEqual({ success: false, error: "radio-changed" });
 	} finally {
+		await f.restore();
+	}
+});
+
+test("deferred release retains and restores a borrowed leg's policy across parent unavailability", async () => {
+	const f = await hybrid();
+	try {
+		const leg = await borrowLeg(f);
+		const terminal = Promise.withResolvers<unknown>();
+		const expire = Promise.withResolvers<void>();
+		f.deps.pollHotspotActive = async () => false;
+		f.deps.publishOutcome = (_kind, _device, outcome) =>
+			terminal.resolve(outcome);
+		const retry = retries.retryWithBackoff;
+		spyOn(retries, "retryWithBackoff").mockImplementation(
+			async (action, options) => {
+				if (options?.baseDelayMs !== 500) return retry(action, options);
+				await expire.promise;
+				return action();
+			},
+		);
+		expect(await f.start()).toEqual({ success: true });
+		const prior = wifiRadioIdentity.state.rows.get(f.row.ifname)?.incarnation;
+		wifiRadioIdentity.markUnavailable(f.row.ifname);
+		expect(
+			wifiRadioIdentity.state.rows.get(f.row.ifname)?.incarnation,
+		).not.toBe(prior);
+		expire.resolve();
+		await terminal.promise;
+
+		expect(selectedTargets.get(LEG)?.record?.priorAutoconnect).toBe("yes");
+		expect(leg.writes).toEqual([]);
+		f.observe(undefined, "ap");
+		const owner = resolveWifiAdapterOwner(MAC, f.row);
+		await withWifiAdapterLock(wifiAdapterLockKey(owner), () =>
+			reconcileWifiAdapterTeardownLocked(owner),
+		);
+		expect(leg.autoconnect()).toBe("yes");
+		expect(leg.writes).toEqual(["yes"]);
+	} finally {
+		cancelWifiAdapterReconciliation();
+		resetConcurrentInterfaceDepsForTest();
 		await f.restore();
 	}
 });

@@ -262,8 +262,14 @@ report uncertain outcomes rather than claiming an atomic transaction.
   unreadable state retains a release obligation with a bounded automatic
   retry schedule and produces the unknown-mode notice. Confirmed removal or
   replacement retires the old claim without restoring policy on a successor.
+  A parent-only incarnation change does not retire the claim: the same
+  managed leg can still recover its saved autoconnect policy once idle.
   Tests cover idle expiry, release after busy expiry, a committed Down whose
-  reply was lost, and a replaced leg.
+  reply was lost, a replaced leg, and a parent reset with the same leg.
+- **Explicit Stop during hybrid Start confirmation.** Stop settles the
+  pending Start before issuing Down. If the leg is still busy, the Start
+  terminal can report `deactivation-failed` and readiness stays degraded
+  until reconciliation completes the release, even if Stop succeeds.
 
 ### Recorded deviation: the Start `attempt` correlation id
 

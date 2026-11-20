@@ -28,7 +28,7 @@ import {
 import type { HybridLegAllocation } from "./wifi-hybrid-leg-release.ts";
 import {
 	currentTarget,
-	observeTarget,
+	observeBorrowedLeg,
 	selectedTargets,
 	targetRecords,
 } from "./wifi-hybrid-target-record.ts";
@@ -99,7 +99,7 @@ export async function releaseConcurrentApInterface(
 	if (target && targetRecords.get(target) !== record) return true;
 	const ownsSelection = () => selectedTargets.get(ifname) === stored;
 	try {
-		const observed = await observeTarget(ifname, record);
+		const observed = await observeBorrowedLeg(ifname, record);
 		const interfaces =
 			observed === "unseen"
 				? await radioIdentityReaders.listInterfaces()
@@ -127,7 +127,7 @@ export async function releaseConcurrentApInterface(
 				record.priorAutoconnect,
 				async () =>
 					ownsSelection() &&
-					(await currentTarget(ifname, record)) &&
+					(await observeBorrowedLeg(ifname, record)) === "current" &&
 					ownsSelection(),
 			))
 		)
