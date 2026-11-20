@@ -20,6 +20,9 @@ or choosing Station records station intent for the plain MAC and all its
 credential-only port copies, even when the current port cannot be read.
 No credentials or profiles are deleted. Independent port profiles,
 credentials and mode intent stay saved until distinct twins are proven again.
+If you stop an independently configured port AP while its adapter is alone,
+that AP comes back when the twin returns with proven ports and the saved port
+mode still calls for an AP.
 No discovery transition removes a profile or stops an AP by itself merely
 because a twin arrives. Address-only owned profiles disarm before the new
 verified rows publish. Discovery withholds those rows when it cannot verify

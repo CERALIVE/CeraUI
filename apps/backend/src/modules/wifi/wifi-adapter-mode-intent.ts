@@ -165,7 +165,9 @@ export function recordWifiAdapterModeIntent(
 		key: alias,
 		mode: recorder.read(alias),
 	}));
-	recorder.persist(key, target, aliases);
+	// Recorder adapters observe the two-argument call when there are no copies.
+	if (aliases.length) recorder.persist(key, target, aliases);
+	else recorder.persist(key, target);
 	return () => {
 		const undoAliases = snapshots.filter(
 			(alias) =>
@@ -173,10 +175,14 @@ export function recordWifiAdapterModeIntent(
 				isHotspotPortCredentialCopy(alias.key),
 		);
 		if (recorder.read(key) === target) {
-			recorder.restore(key, previous, undoAliases);
+			if (undoAliases.length) recorder.restore(key, previous, undoAliases);
+			else recorder.restore(key, previous);
 		} else {
 			const [first, ...rest] = undoAliases;
-			if (first) recorder.restore(first.key, first.mode, rest);
+			if (first) {
+				if (rest.length) recorder.restore(first.key, first.mode, rest);
+				else recorder.restore(first.key, first.mode);
+			}
 		}
 	};
 }
