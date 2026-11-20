@@ -160,8 +160,21 @@ test('a start failure offers View logs, which opens System Logs on Raw logs', as
 		'true',
 	);
 	await expect(logs.getByTestId('raw-anchor-approximate')).toBeVisible();
-	await expect(logs.getByTestId('raw-row').filter({ hasText: marker }).first()).toBeVisible();
 	await expect(logs.getByRole('tab', { name: 'Raw logs' })).toBeFocused();
+
+	// On mobile, the matching entry can be below the initially mounted virtual rows.
+	const matchingRow = logs.getByTestId('raw-row').filter({ hasText: marker }).first();
+	const scroller = logs.getByTestId('raw-scroller');
+	while ((await matchingRow.count()) === 0) {
+		const advanced = await scroller.evaluate(async (el) => {
+			const before = el.scrollTop;
+			el.scrollTop += el.clientHeight;
+			await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+			return el.scrollTop > before;
+		});
+		if (!advanced) break;
+	}
+	await expect(matchingRow).toBeVisible();
 });
 
 test('Export this view saves the Raw tab current levels and text after switching to Storage', async ({
