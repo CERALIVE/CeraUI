@@ -3018,6 +3018,7 @@
 	"systemLogs.sharing.heading": "Downloads",
 	"systemLogs.sharing.filesHeading": "Arquivos de log completos",
 	"systemLogs.sharing.export": "Exportar esta visualização",
+	"systemLogs.sharing.exportLogs": "Exportar logs",
 	"systemLogs.sharing.exportHint": "Salva como arquivo de texto as entradas que correspondem aos filtros de Logs brutos.",
 	"systemLogs.sharing.exportHintMoment": "Salva como arquivo de texto as entradas que correspondem aos filtros de Logs brutos nos 10 minutos em torno do momento selecionado.",
 	"systemLogs.sharing.exportSensitive": "Este arquivo pode conter dados sensíveis, como nomes de rede e endereços. Revise-o antes de compartilhar.",

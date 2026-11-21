@@ -147,6 +147,155 @@ describe("SystemLogsView: Sharing in the Downloads region", () => {
 	});
 });
 
+describe("SystemLogsView: the logs toolbar", () => {
+	it.each([true, false])(
+		"shares the tab strip's row, outside every panel, so it shows without scrolling (wide=%s)",
+		async (wide) => {
+			viewport(wide);
+			render(SystemLogsView);
+
+			const list = await screen.findByRole("tablist");
+			const toolbar = screen.getByTestId("sharing-toolbar");
+			expect(toolbar.parentElement).toBe(list.parentElement);
+			for (const panel of screen.getAllByRole("tabpanel", { hidden: true })) {
+				expect(panel.contains(toolbar)).toBe(false);
+			}
+		},
+	);
+
+	it("comes before the tabs in the DOM, so Tab goes from the tabs straight into the panel, and shows after them from 640 px", async () => {
+		viewport(true);
+		render(SystemLogsView);
+
+		const list = await screen.findByRole("tablist");
+		const toolbar = screen.getByTestId("sharing-toolbar");
+		expect(toolbar.nextElementSibling).toBe(list);
+		expect(toolbar.className.split(/\s+/)).toEqual(
+			expect.arrayContaining(["sm:order-last", "ms-auto", "max-sm:w-full"]),
+		);
+	});
+
+	it("opens the bundle preview from the Events tab on a narrow screen, where Downloads is not mounted", async () => {
+		viewport(false);
+		logs.previewBundle.mockResolvedValue(bundleManifest(3));
+		render(SystemLogsView);
+		await screen.findByRole("tablist");
+		expect(screen.queryByTestId("sharing-group")).toBeNull();
+
+		await fireEvent.click(screen.getByTestId("sharing-toolbar-bundle"));
+
+		const body = await screen.findByRole("dialog", { name: sharing.bundle });
+		expect(await within(body).findByRole("table")).toBeTruthy();
+		expect(logs.previewBundle).toHaveBeenCalledTimes(1);
+	});
+
+	it("hands an export ticket to the browser from the Events tab on a narrow screen", async () => {
+		viewport(false);
+		logs.createExport.mockResolvedValue(EXPORT_TICKET);
+		const clicked = Promise.withResolvers<string>();
+		anchorClicks.mockImplementation(function (this: HTMLAnchorElement) {
+			clicked.resolve(this.href);
+		});
+		render(SystemLogsView);
+		await screen.findByRole("tablist");
+
+		await fireEvent.click(screen.getByTestId("sharing-toolbar-export"));
+		const body = await screen.findByRole("dialog", { name: sharing.export });
+		await fireEvent.click(
+			within(body).getByRole("button", { name: sharing.exportDownload }),
+		);
+
+		expect(await signalled(clicked.promise, "the download")).toBe(
+			getBackendHttpUrl(EXPORT_TICKET.url),
+		);
+	});
+
+	// Lime fills one sharing action in the whole view (DESIGN.md IH-5).
+	it("fills only Export logs among the toolbar and Downloads sharing actions", async () => {
+		viewport(true);
+		render(SystemLogsView);
+		await screen.findByTestId("sharing-group");
+
+		const actions = [
+			...document.querySelectorAll<HTMLElement>(
+				'[data-testid^="sharing-toolbar-"], [data-testid^="sharing-open-"]',
+			),
+		];
+		expect(actions.map((action) => action.dataset.testid)).toEqual([
+			"sharing-toolbar-bundle",
+			"sharing-toolbar-export",
+			"sharing-open-bundle",
+			"sharing-open-export",
+		]);
+		expect(
+			actions
+				.filter((action) => action.dataset.variant === "default")
+				.map((action) => action.dataset.testid),
+		).toEqual(["sharing-toolbar-export"]);
+	});
+
+	it("leaves the toolbar out while the check is pending and on a device version without the log viewer", async () => {
+		viewport(true);
+		const probe = Promise.withResolvers<unknown>();
+		logs.getStorage.mockReturnValueOnce(probe.promise);
+		const pending = render(SystemLogsView);
+		expect(screen.getByTestId("system-logs-loading")).toBeTruthy();
+		expect(screen.queryByTestId("sharing-toolbar")).toBeNull();
+		pending.unmount();
+
+		logs.getStorage.mockRejectedValue(
+			new RpcError({
+				message: "Unknown procedure path: logs.getStorage",
+				code: "INTERNAL_ERROR",
+			}),
+		);
+		render(SystemLogsView);
+		await screen.findByTestId("system-logs-unavailable");
+		expect(screen.queryByTestId("sharing-toolbar")).toBeNull();
+	});
+});
+
+describe("SystemLogsView: Support bundle from the load failure", () => {
+	it.each([true, false])(
+		"offers Support bundle beside Try again when the view cannot load, and opens its preview (wide=%s)",
+		async (wide) => {
+			viewport(wide);
+			vi.spyOn(console, "error").mockImplementation(() => {});
+			logs.getStorage.mockRejectedValue(
+				new Error("Request timeout: logs.getStorage"),
+			);
+			logs.previewBundle.mockResolvedValue(bundleManifest(3));
+			render(SystemLogsView);
+
+			const band = await screen.findByTestId("system-logs-check-failed");
+			expect(screen.queryByTestId("sharing-toolbar")).toBeNull();
+			expect(
+				within(band)
+					.getAllByRole("button")
+					.map((action) => action.textContent?.trim()),
+			).toEqual([en.errorBoundary.retry, sharing.bundle]);
+			const bundle = within(band).getByTestId("system-logs-check-bundle");
+			expect(bundle.dataset.variant).toBe("outline");
+
+			await fireEvent.click(bundle);
+
+			const body = await screen.findByRole("dialog", { name: sharing.bundle });
+			expect(await within(body).findByRole("table")).toBeTruthy();
+		},
+	);
+
+	it("offers no Support bundle when the view's own copy could not load", async () => {
+		viewport(false);
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		ensureNamespaces.mockRejectedValueOnce(new Error("chunk fetch failed"));
+		render(SystemLogsView);
+
+		const band = await screen.findByTestId("system-logs-check-failed");
+		expect(within(band).queryByTestId("system-logs-check-bundle")).toBeNull();
+		expect(within(band).getAllByRole("button")).toHaveLength(1);
+	});
+});
+
 describe("SystemLogsView: Sharing downloads", () => {
 	it("hands an export ticket to the browser on the backend origin", async () => {
 		viewport(true);

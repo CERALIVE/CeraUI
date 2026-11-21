@@ -3015,6 +3015,7 @@
 	"systemLogs.sharing.heading": "Downloads",
 	"systemLogs.sharing.filesHeading": "Vollständige Protokolldateien",
 	"systemLogs.sharing.export": "Diese Ansicht exportieren",
+	"systemLogs.sharing.exportLogs": "Protokolle exportieren",
 	"systemLogs.sharing.exportHint": "Speichert die Einträge, die den Filtern der Rohprotokolle entsprechen, als Textdatei.",
 	"systemLogs.sharing.exportHintMoment": "Speichert die Einträge, die den Filtern der Rohprotokolle entsprechen, aus den 10 Minuten rund um den gewählten Zeitpunkt als Textdatei.",
 	"systemLogs.sharing.exportSensitive": "Diese Datei kann sensible Daten wie Netzwerknamen und Adressen enthalten. Prüfe sie, bevor du sie teilst.",

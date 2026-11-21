@@ -3018,6 +3018,7 @@
 	"systemLogs.sharing.heading": "Téléchargements",
 	"systemLogs.sharing.filesHeading": "Fichiers journaux complets",
 	"systemLogs.sharing.export": "Exporter cette vue",
+	"systemLogs.sharing.exportLogs": "Exporter les journaux",
 	"systemLogs.sharing.exportHint": "Enregistre dans un fichier texte les entrées qui correspondent aux filtres des journaux bruts.",
 	"systemLogs.sharing.exportHintMoment": "Enregistre dans un fichier texte les entrées qui correspondent aux filtres des journaux bruts, sur les 10 minutes autour du moment sélectionné.",
 	"systemLogs.sharing.exportSensitive": "Ce fichier peut contenir des données sensibles, comme des noms de réseau et des adresses. Vérifiez-le avant de le partager.",

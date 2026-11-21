@@ -98,9 +98,9 @@ Rules:
 - **IH-5** — Fill with lime (the primary color) only the single primary action of a
   surface; other actions on that surface use outline or ghost. This holds on every
   surface, not only modem rows; a destructive confirmation keeps its `destructive`
-  button. In System Logs, Storage Save and Download support bundle are filled and
-  every other action is outline or ghost; Follow stays outline, because a filled
-  lime button reads as going live (DF-32).
+  button. In System Logs, Storage Save and the logs toolbar's Export logs are
+  filled and every other action, Support bundle included, is outline or ghost;
+  Follow stays outline, because a filled lime button reads as going live (DF-32).
 
 ---
 

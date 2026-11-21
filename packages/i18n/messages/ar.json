@@ -3027,6 +3027,7 @@
 	"systemLogs.sharing.heading": "التنزيلات",
 	"systemLogs.sharing.filesHeading": "ملفات السجل الكاملة",
 	"systemLogs.sharing.export": "تصدير هذا العرض",
+	"systemLogs.sharing.exportLogs": "تصدير السجلات",
 	"systemLogs.sharing.exportHint": "يحفظ الإدخالات المطابقة لعوامل تصفية السجلات الخام في ملف نصي.",
 	"systemLogs.sharing.exportHintMoment": "يحفظ في ملف نصي الإدخالات المطابقة لعوامل تصفية السجلات الخام خلال الدقائق العشر المحيطة باللحظة المحددة.",
 	"systemLogs.sharing.exportSensitive": "قد يحتوي هذا الملف على بيانات حساسة مثل أسماء الشبكات والعناوين. راجعه قبل مشاركته.",

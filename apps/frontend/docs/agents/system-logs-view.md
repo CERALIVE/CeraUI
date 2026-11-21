@@ -30,10 +30,11 @@ density. It is not a redesign.
   most prominent control of the tab, deliberately an `outline` button: a filled
   lime button reads as going live. Storage: Save limits (`default` variant, the
   same Save vocabulary as every `AppDialog` footer), disabled until a limit or Detail changes (`main/system-logs/StorageLimits.svelte:162-183`). Destructive actions are `outline` triggers; only their confirmation
-  button uses the `destructive` variant. Downloads: Download support bundle, the
-  region's one `default` (filled lime) button; Export this view and the two full
-  log files are `outline`. Lime fills only the single primary action of a surface
-  (DESIGN.md IH-5).
+  button uses the `destructive` variant. Logs toolbar: Export logs, the view's
+  one `default` (filled lime) sharing action, after an `outline` Support bundle.
+  Downloads: every action is `outline` (Support bundle, Export this view and the
+  two full log files), because the toolbar holds the filled one. Lime fills only
+  the single primary action of a surface (DESIGN.md IH-5).
 - **Signature move.** The boot separator. In Events each boot group has a sticky
   heading with its start time and the system image, slot and end mark that are
   recorded (`main/system-logs/EventsTab.svelte:213-241`); Raw logs separates rows
@@ -88,18 +89,46 @@ density. It is not a redesign.
   Offline wins over Live, so a dropped connection never looks live.
 - **Tabs.** `F/lib/components/ui/tabs`: Events (default) | Raw logs, plus
   Storage below 1024 px. Each tab panel owns its scroll.
+- **Logs toolbar.** Once the tabs are ready, Support bundle (`outline`,
+  LifeBuoy) and Export logs (`default`, Download) share the tab strip's row,
+  at its inline end from 640 px, and on a row of their own above the tabs below
+  640 px, where the group is a `data-touch-region` so a phone gets 44 px
+  targets. Each button grows from its label's width. When both labels do not
+  fit one row (Japanese at 320 px, German at 375 px) the second button moves to
+  its own row, so no word breaks; a label longer than a whole row wraps inside
+  its button with words kept whole, as in the Downloads rows (Japanese at
+  phrases, Korean at spaces, Chinese at `KeepWords` gaps)
+  (`main/system-logs/SharingToolbar.svelte`, the tab strip in
+  `main/system-logs/SystemLogsView.svelte:204-222`). The toolbar comes before
+  the tab list in the DOM (`sm:order-last` shows it after the tabs from
+  640 px), so Tab still goes from the tabs straight into the panel's first
+  control and Shift+Tab from the tabs reaches Export logs. Both actions show without
+  scrolling on every tab at 375, 768, 1024x600 touch and 1280 px and in e-ink
+  (`tests/e2e/system-logs-toolbar.spec.ts`, dark theme; the light theme was
+  checked in screenshots only), after owner
+  feedback on v2026.11.3 that the downloads were almost hidden at the end of
+  the view. Each action opens the same confirmation as its Downloads row
+  through the view's `SharingFlow`. The two dialogs mount once in
+  `SystemLogsView`, so they also open from Events on a phone, where the
+  Downloads region is not mounted. The group's accessible name is the
+  Downloads heading (`systemLogs.sharing.heading`).
 - **Side column (>= 1024 px).** 320 px at the inline end, its own scroll, three
   regions in this order with a heading each: Boots (the boot picker), Storage,
   Downloads. Regions are separated by whitespace and a neutral 1 px rule, not
   boxed.
 - **Below 1024 px.** The Storage tab holds the Downloads region first, then
   Storage (usage, limits and cleanup), so the support bundle is the first thing
-  on it (`main/system-logs/SystemLogsView.svelte:214-218`); the boot picker is the header button showing the selected boot, opening a
+  on it (`main/system-logs/SystemLogsView.svelte:229-234`); the boot picker is the header button showing the selected boot, opening a
   nested `AppDialog` (sheet on phones) listing boots; choosing one closes it.
 - **Downloads region.** The same order at every width (DF-23). First group, the
-  Sharing group: Support bundle with the filled `default` button, then Export
-  this view with an `outline` one, in the shipped rows' anatomy; one line under
+  Sharing group: Support bundle, then Export this view, both `outline` (the logs
+  toolbar holds the filled action), in the shipped rows' anatomy; one line under
   them says files are saved by the browser (`main/system-logs/SharingSection.svelte`).
+  The support bundle dialog opens on the row's own plain line of what the
+  bundle holds and who it is for (`systemLogs.sharing.bundleHint`), directly
+  above the unchanged privacy note (`main/system-logs/BundleDialog.svelte`);
+  reusing the existing key keeps the explanation free in the SPA size budget,
+  where a new sentence costs about 1 KiB across ten locales.
   Export this view saves the Raw tab's filters and time window; an exact anchor
   pages its whole boot, so there it saves the 10 minutes around the anchored
   entry with the window's levels, and the confirmation says so
@@ -114,11 +143,16 @@ density. It is not a redesign.
   `advanced.downloadFailed`, `advanced.retryDownload`). Each download action
   carries its button variant in `data-variant`. The Downloads region renders
   immediately with the legacy rows; the Sharing group renders only once the
-  viewer check is ready (`main/system-logs/SystemLogsView.svelte:173-175`), and
-  the headings and the rule only once this view's copy has loaded (`:170-181`).
+  viewer check is ready (`main/system-logs/SystemLogsView.svelte:185-187`), and
+  the headings and the rule only once this view's copy has loaded (`:182-193`).
 - **Older backend.** If the log procedures are missing, the tabs and the Storage
   region are replaced by one calm notice ("not available on this device
   version"); Downloads still renders.
+- **Load failure.** Any other failed check shows the amber recovery band with
+  Try again and, once this view's copy has loaded, an `outline` Support bundle
+  that opens the same preview dialog (`copyLoaded` in
+  `main/system-logs/SystemLogsView.svelte`). A copy load that failed offers
+  Try again alone, because the dialog's copy is in this view's namespace.
 - **Deep links.** The "View logs" action next to log-pointing messages uses the
   key `notifications.viewLogs` in the boot-time `notifications` namespace (not in
   this inventory) and opens this view on Raw logs at the message's moment: a
@@ -174,13 +208,13 @@ in section 4.
 
 | State | Region | What renders | Announced (design intent, not measured) |
 |---|---|---|---|
-| Loading | Events, Raw logs, Boots, Storage, bundle preview | Skeleton placeholders (the bundle preview uses plain skeleton blocks and status text, `main/system-logs/BundleDialog.svelte:101-107`) | status role (section 7 map) |
+| Loading | Events, Raw logs, Boots, Storage, bundle preview | Skeleton placeholders (the bundle preview uses plain skeleton blocks and status text, `main/system-logs/BundleDialog.svelte:104-112`) | status role (section 7 map) |
 | Empty | Events | Title "No events recorded yet" plus a sentence naming what will appear (stream, links, modems, updates, restarts, capture) | no |
 | Empty | Raw logs | "No entries match" plus a hint that teaches the filter (fewer sources, wider level, longer time, shorter text) and a Show everything action resetting to defaults | no |
 | Empty (filtered) | Events | "No events match these filters" plus Show all events | no |
 | Error with recovery | regions using `RecoveryBand` (section 7 map) | Inline band in the existing amber recovery style (`border-status-warning/30 bg-status-warning/10`, `role="alert"`) naming the problem; which regions render `RecoveryBand` and its Retry: section 7 map | alert |
 | Busy | Raw logs, Sharing | "Another view is reading logs" (Raw, `BUSY`) or "Another export is running" (Sharing) | alert |
-| Bundle refused | Sharing | The device refused to prepare the bundle (`READ_FAILED`, which includes the fail-closed collision of a held secret with a structured value): the failure band, then under it "Use Export this view instead." and an Export this view button that opens the export confirmation (`main/system-logs/BundleDialog.svelte:132-145`, `lib/device-logs/sharing-flow.svelte.ts`) | alert (the band); the button is described by the line |
+| Bundle refused | Sharing | The device refused to prepare the bundle (`READ_FAILED`, which includes the fail-closed collision of a held secret with a structured value): the failure band, then under it "Use Export this view instead." and an Export this view button that opens the export confirmation (`main/system-logs/BundleDialog.svelte:135-148`, `lib/device-logs/sharing-flow.svelte.ts`) | alert (the band); the button is described by the line |
 | Expired position | Raw logs | `CURSOR_UNAVAILABLE` or `FILTER_CHANGED`: "This position is no longer stored" with Start from newest; rows already shown stay, paging toward the lost side is disabled | alert |
 | Keep searching | Raw logs | `hasMore: null`: a Keep searching button and a line saying only part of the stored logs was checked; never an end marker (the normal state for a time-bounded view once its entries are shown) | no |
 | End of results | Raw logs, Events | Raw logs shows an end marker at an exhausted, available edge after the first load when rows are present. The display-limit notice takes precedence at the bottom. Approximate-window markers name the time window. Events shows an end row when events are present and no older page or paging error remains. | no |
@@ -519,14 +553,15 @@ Rules for this copy:
 
 | Key | English | Used for |
 |---|---|---|
-| `systemLogs.sharing.heading` | Downloads | Region heading |
+| `systemLogs.sharing.heading` | Downloads | Region heading; the logs toolbar group's accessible name |
 | `systemLogs.sharing.export` | Export this view | Row title and button |
+| `systemLogs.sharing.exportLogs` | Export logs | Logs toolbar primary action |
 | `systemLogs.sharing.exportHint` | Saves the entries that match the Raw logs filters as a text file. | Row description |
 | `systemLogs.sharing.exportHintMoment` | Saves the entries that match the Raw logs filters from the 10 minutes around the selected moment as a text file. | Export confirmation while an exact anchor is open |
 | `systemLogs.sharing.exportSensitive` | This file may contain sensitive data such as network names and addresses. Review it before sharing. | Shown before the export download starts |
 | `systemLogs.sharing.exportDownload` | Download export | Confirmation button |
-| `systemLogs.sharing.bundle` | Support bundle | Row title and nested dialog title |
-| `systemLogs.sharing.bundleHint` | One file for a helper: versions, events, recent logs and settings, with known secrets removed. | Row description |
+| `systemLogs.sharing.bundle` | Support bundle | Row title, logs toolbar and load-failure action, nested dialog title |
+| `systemLogs.sharing.bundleHint` | One file for a helper: versions, events, recent logs and settings, with known secrets removed. | Row description; first line of the bundle dialog, above the privacy note |
 | `systemLogs.sharing.bundlePreparing` | Preparing the preview… | Bundle dialog loading status |
 | `systemLogs.sharing.bundleSectionVersions` | Versions | Manifest row |
 | `systemLogs.sharing.bundleSectionEvents` | Events | Manifest row |
@@ -800,7 +835,7 @@ everywhere in the app.
   neutral (dark).
 - The lime `--status-live` token is not used for any severity, state, marker,
   bar or selection in this view. The header pill's Live state uses it. Storage
-  Save, the Support bundle action and each download confirmation's primary button
+  Save, the logs toolbar's Export logs and each download confirmation's primary button
   use the default primary button, each the single primary action of its surface
   (DESIGN.md IH-5, critique SL-13).
 - Following uses `--status-info`; Paused, Stopped and Disconnected are neutral
@@ -825,10 +860,10 @@ widths are not measured in this lane.
 
 | Width | Header | Tabs and side column | Filter bars | Rows | Boot picker |
 |---|---|---|---|---|---|
-| 375 (phone) | Title and close on row 1; pill and boot button wrap to a second header line | Events, Raw logs, Storage tabs at full width; no side column | Raw: row 1 Level (full width, labels may wrap to two lines inside equal segments; a segment is never narrower than its longest word, so a long translation such as French "Avertissements" widens its own segment instead of running under the next; under touch every segment is at least 44 x 44 px, so short CJK labels do not shrink the target); row 2 Search (fills), Filters button, Follow. Source, Time and Order fold into the in-flow Filters panel. Events: Filter button unfolds family chips and Problems only | Events: time under the title. Raw: two-line rows | Header button, nested sheet |
-| 768 (tablet) | One row: title, pill, boot button, close | Three tabs; no side column | Raw: Level, Search, Follow on row 1; Source, Time, Order inline on row 2 (panel at least 720 px wide and viewport taller than 600 px); Events: chips and toggle inline, wrapping | One-line raw rows; event time at the inline end | Header button, nested centered dialog or sheet per `AppDialog` |
-| 1024x600 (kiosk, touch) | One row: title, pill, close (no boot button) | Events, Raw logs; 320 px side column with Boots, Storage, Downloads, scrolling on its own | Panel is about 704 px and the viewport is 600 px tall, so both tabs use the folded bars: Raw is one row (Level, Search, Filters, Follow); Events folds its chips behind Filter. Budget: header about 56 px, tabs 44, bar about 60, leaving about 440 px of list | One-line raw rows | First side-column region |
-| 1280 (desktop) | One row: title, pill, close | Events, Raw logs; side column | Raw: two rows, everything inline; Events: chips inline | Full density, one-line rows | First side-column region |
+| 375 (phone) | Title and close on row 1; pill and boot button wrap to a second header line | Logs toolbar on its own row above the tabs, 44 px targets; Events, Raw logs, Storage tabs at full width; no side column | Raw: row 1 Level (full width, labels may wrap to two lines inside equal segments; a segment is never narrower than its longest word, so a long translation such as French "Avertissements" widens its own segment instead of running under the next; under touch every segment is at least 44 x 44 px, so short CJK labels do not shrink the target); row 2 Search (fills), Filters button, Follow. Source, Time and Order fold into the in-flow Filters panel. Events: Filter button unfolds family chips and Problems only | Events: time under the title. Raw: two-line rows | Header button, nested sheet |
+| 768 (tablet) | One row: title, pill, boot button, close | Three tabs, logs toolbar at the inline end of their row; no side column | Raw: Level, Search, Follow on row 1; Source, Time, Order inline on row 2 (panel at least 720 px wide and viewport taller than 600 px); Events: chips and toggle inline, wrapping | One-line raw rows; event time at the inline end | Header button, nested centered dialog or sheet per `AppDialog` |
+| 1024x600 (kiosk, touch) | One row: title, pill, close (no boot button) | Events, Raw logs, logs toolbar at the inline end of their row; 320 px side column with Boots, Storage, Downloads, scrolling on its own | Panel is about 704 px and the viewport is 600 px tall, so both tabs use the folded bars: Raw is one row (Level, Search, Filters, Follow); Events folds its chips behind Filter. Budget: header about 56 px, tab row about 53 with the toolbar's 44 px buttons, bar about 60, leaving about 430 px of list | One-line raw rows | First side-column region |
+| 1280 (desktop) | One row: title, pill, close | Events, Raw logs, logs toolbar at the inline end of their row; side column | Raw: two rows, everything inline; Events: chips inline | Full density, one-line rows | First side-column region |
 
 - Every width: zero horizontal overflow in Events, Raw logs and Storage, in
   `en`, `ar` and `de` (DESIGN.md BP-1..BP-3, LO-5); state, severity and action
@@ -837,7 +872,7 @@ widths are not measured in this lane.
 - Design rule: the view spans the whole viewport; while it is open the page
   drops its stable scrollbar gutter (`app.css`,
   `html:has([data-app-dialog-fullscreen])`). Below 640 px each tab grows from
-  its label's width (`SystemLogsView.svelte:200`, `max-sm:flex-auto`).
+  its label's width (`SystemLogsView.svelte:215`, `max-sm:flex-auto`).
 - Measured (`tests/e2e/system-logs-responsive.spec.ts`): in Chromium against
   the mock backend, the desktop and mobile projects each run the 12 EN, AR and
   DE cases at 375x812, 768x1024, 1280x800, and touch 1024x600. The dialog width
@@ -972,7 +1007,7 @@ button disappears, provided the operator has not moved focus.
 |---| --- |
 | `main/system-logs/BootButton.svelte` | no props |
 | `main/system-logs/BootPicker.svelte:30` | props |
-| `main/system-logs/BundleDialog.svelte:25` | props |
+| `main/system-logs/BundleDialog.svelte:26` | props |
 | `main/system-logs/EventRow.svelte:38` | props |
 | `main/system-logs/EventsBootHeading.svelte:11` | props |
 | `main/system-logs/EventsFilters.svelte:11` | props |
@@ -991,14 +1026,15 @@ button disappears, provided the operator has not moved focus.
 | `main/system-logs/RawLogsTab.svelte:28` | props |
 | `main/system-logs/RecoveryBand.svelte:19` | props |
 | `main/system-logs/SegmentedChoice.svelte:27` | props |
-| `main/system-logs/SharingSection.svelte:22` | props |
+| `main/system-logs/SharingSection.svelte:20` | props |
+| `main/system-logs/SharingToolbar.svelte:23` | props |
 | `main/system-logs/ShutdownMark.svelte:21` | props |
 | `main/system-logs/StorageCleanup.svelte:36` | props |
 | `main/system-logs/StorageLimits.svelte:36` | props |
 | `main/system-logs/StorageSection.svelte:20` | props |
 | `main/system-logs/StorageUsage.svelte:19` | props |
 | `main/system-logs/StreamStatePill.svelte` | no props |
-| `main/system-logs/SystemLogsView.svelte:65` | props |
+| `main/system-logs/SystemLogsView.svelte:72` | props |
 
 ### Modules
 
@@ -1058,6 +1094,7 @@ button disappears, provided the operator has not moved focus.
 | `main/system-logs/RawLogsTab.test.ts` |
 | `main/system-logs/SegmentedChoice.test.ts` |
 | `main/system-logs/SharingSection.test.ts` |
+| `main/system-logs/SharingToolbar.test.ts` |
 | `main/system-logs/StorageCleanup.test.ts` |
 | `main/system-logs/StorageSection.test.ts` |
 | `main/system-logs/StreamStatePill.reactive.test.ts` |
@@ -1112,6 +1149,7 @@ Related browser specs and their entry points:
 | `apps/frontend/tests/e2e/pages/system-logs.ts` |
 | `apps/frontend/tests/e2e/system-logs-keyboard.spec.ts` |
 | `apps/frontend/tests/e2e/system-logs-responsive.spec.ts` |
+| `apps/frontend/tests/e2e/system-logs-toolbar.spec.ts` |
 | `apps/frontend/tests/e2e/system-logs.spec.ts` |
 | `apps/frontend/tests/e2e/view-logs-action.spec.ts` |
 | `apps/frontend/tests/e2e/visual/system-logs.visual.spec.ts` |
@@ -1125,6 +1163,7 @@ Related browser specs and their entry points:
 | `main/system-logs/__fixtures__/FakeRawLogsTab.svelte` |
 | `main/system-logs/__fixtures__/hud-feed.svelte.ts` |
 | `main/system-logs/__fixtures__/log-storage.ts` |
+| `main/system-logs/__fixtures__/SharingHarness.svelte` |
 | `lib/device-logs/__fixtures__/boots.ts` |
 | `lib/device-logs/__fixtures__/events.ts` |
 | `lib/device-logs/__fixtures__/sharing.ts` |
@@ -1135,7 +1174,7 @@ Related browser specs and their entry points:
 
 ### role="status" elements
 
-`main/system-logs/BootPicker.svelte:166`, `main/system-logs/BundleDialog.svelte:102`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:211`, `main/system-logs/ExportDialog.svelte:51`, `main/system-logs/RawLogList.svelte:251`, `main/system-logs/RawLogRow.svelte:163`, `main/system-logs/RawLogsPanel.svelte:101`, `main/system-logs/RawLogsTab.svelte:158`, `main/system-logs/StorageCleanup.svelte:173`, `main/system-logs/StorageLimits.svelte:186`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:229`.
+`main/system-logs/BootPicker.svelte:166`, `main/system-logs/BundleDialog.svelte:104`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:211`, `main/system-logs/ExportDialog.svelte:51`, `main/system-logs/RawLogList.svelte:251`, `main/system-logs/RawLogRow.svelte:163`, `main/system-logs/RawLogsPanel.svelte:101`, `main/system-logs/RawLogsTab.svelte:158`, `main/system-logs/StorageCleanup.svelte:173`, `main/system-logs/StorageLimits.svelte:186`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:244`.
 
 ### Limits and constants
 
@@ -1175,8 +1214,8 @@ Backend and wire limits: [device-logs.md](../../../backend/docs/agents/device-lo
 | Raw gap recovery focus | `main/system-logs/RawLogList.svelte:145` |
 | Boot picker option focus | `main/system-logs/BootPicker.svelte:54` |
 | Segmented choice focus | `main/system-logs/SegmentedChoice.svelte:50` |
-| Selected tab focus | `main/system-logs/SystemLogsView.svelte:137` |
-| Storage heading focus | `main/system-logs/SystemLogsView.svelte:146` |
+| Selected tab focus | `main/system-logs/SystemLogsView.svelte:149` |
+| Storage heading focus | `main/system-logs/SystemLogsView.svelte:158` |
 | Cancel focus for clear confirmations | `main/system-logs/StorageCleanup.svelte:54` |
 | RecoveryBand Retry button | `main/system-logs/RecoveryBand.svelte:35` |
 
@@ -1208,8 +1247,8 @@ technology speech. Browser coverage is in the related specs above.
     list. Events shows a relative time next to a localized clock for events dated
     today, or a localized date and time for older events (`timeline-copy.ts:153-159`).
   - The Storage heading under the Storage tab on phones. It names the Storage
-    region (`SystemLogsView.svelte:158`) and is where a Storage request puts focus
-    (`:146`).
+    region (`SystemLogsView.svelte:170`) and is where a Storage request puts focus
+    (`:158`).
   - The unit in an expanded raw row. The row's unit truncates (`RawLogRow.svelte:132`);
     the expanded detail shows it whole and wrapped (`:154`).
   - "Boot started" may wrap in the side column. Keep the full localized timestamp and

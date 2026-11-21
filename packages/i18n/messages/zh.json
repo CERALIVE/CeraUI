@@ -2970,6 +2970,7 @@
 	"systemLogs.sharing.heading": "下载",
 	"systemLogs.sharing.filesHeading": "完整日志文件",
 	"systemLogs.sharing.export": "导出此视图",
+	"systemLogs.sharing.exportLogs": "导出日志",
 	"systemLogs.sharing.exportHint": "将符合原始日志筛选条件的条目保存为文本文件。",
 	"systemLogs.sharing.exportHintMoment": "将所选时间前后各5分钟内符合原始日志筛选条件的条目保存为文本文件。",
 	"systemLogs.sharing.exportSensitive": "此文件可能包含网络名称和地址等敏感数据。分享前请先检查。",

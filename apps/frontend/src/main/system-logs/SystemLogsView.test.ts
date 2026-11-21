@@ -116,10 +116,10 @@ const FILES_ORDER = [
 	"log-download-device outline",
 	"log-download-system outline",
 ];
-// Lime fills only the bundle, the region's primary action (DESIGN.md IH-5).
+// Lime fills only the logs toolbar's Export logs, so every Downloads action is outline (DESIGN.md IH-5).
 const READY_ORDER = [
 	`H3 ${en.systemLogs.sharing.heading}`,
-	"sharing-open-bundle default",
+	"sharing-open-bundle outline",
 	"sharing-open-export outline",
 	...FILES_ORDER,
 ];

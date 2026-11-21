@@ -8,9 +8,13 @@
   one logs probe; Downloads (the two shipped downloads) renders at once and never
   waits. An older backend gets one calm notice instead of the tabs, with
   Downloads below it and no side column; any other failure a recovery band with
-  Retry. Once the tabs are ready Downloads leads with Sharing (support bundle,
-  export this view), whose flows live here and are disposed with the view. A panel's
-  content mounts only while its tab is active, so a hidden tab never reads logs.
+  Retry and, once this view's copy loaded, Support bundle. Once the tabs are
+  ready the logs toolbar (Support bundle, Export logs) shares the tab strip's
+  row, above the tabs below 640 px, and Downloads leads with Sharing (support
+  bundle, export this view). The flows and their two dialogs live here, so any
+  of those actions opens them whichever tab is showing, and they are disposed
+  with the view. A panel's content mounts only while its tab is active, so a
+  hidden tab never reads logs.
   Each panel owns its scroll. The downloads' state lives here, so a failed
   download keeps its retry band wherever the Downloads region remounts. When the
   tabs appear the selected tab takes focus, unless focus is already in the view.
@@ -18,7 +22,7 @@
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
 import type { LogStorage } from '@ceraui/rpc/schemas';
-import { Info, RefreshCw, TriangleAlert } from '@lucide/svelte';
+import { Info, LifeBuoy, RefreshCw, TriangleAlert } from '@lucide/svelte';
 import { onDestroy } from 'svelte';
 import { MediaQuery } from 'svelte/reactivity';
 
@@ -44,11 +48,14 @@ import { rpc } from '$lib/rpc/client';
 import type { LogsDialogContext } from '$lib/stores/dialog-request.svelte';
 
 import BootPicker from './BootPicker.svelte';
+import BundleDialog from './BundleDialog.svelte';
 import EventsPanel from './EventsPanel.svelte';
+import ExportDialog from './ExportDialog.svelte';
 import LegacyLogDownloads from './LegacyLogDownloads.svelte';
 import { LogDownloads } from './log-downloads.svelte';
 import RawLogsPanel from './RawLogsPanel.svelte';
 import SharingSection from './SharingSection.svelte';
+import SharingToolbar from './SharingToolbar.svelte';
 import StorageSection from './StorageSection.svelte';
 
 const TAB_LABELS: Record<ShellTab, () => string> = {
@@ -68,6 +75,8 @@ const wide = new MediaQuery(WIDE_DESKTOP_QUERY);
 const uid = $props.id();
 
 let status = $state<ShellStatus>('loading');
+// A failed check may still have loaded this view's copy, which the failure band's Support bundle needs.
+let copyLoaded = $state(false);
 let storage = $state.raw<LogStorage | null>();
 const legacyDownloads = new LogDownloads();
 // Each new deep link selects its tab again; the operator's own choice overrides it.
@@ -99,7 +108,10 @@ async function check(): Promise<void> {
 	const run = ++checkRun;
 	let reading: unknown;
 	const result = await checkLogViewer(
-		() => ensureDialogNamespaces('systemLogs'),
+		async () => {
+			await ensureDialogNamespaces('systemLogs');
+			copyLoaded = true;
+		},
 		async () => {
 			reading = await rpc.logs.getStorage();
 		},
@@ -186,8 +198,11 @@ $effect(() => {
 	<div class="flex min-h-0 min-w-0 flex-1 flex-col">
 		{#if status === 'ready'}
 			<Tabs.Root class="min-h-0 flex-1 gap-0" onValueChange={selectTab} value={current}>
-				<!-- Below 640 px each tab takes its label's width, so a long label (Spanish at 375 px) keeps to two lines. -->
-				<div class="border-b px-4">
+				<!-- Below 640 px each tab takes its label's width, so a long label (Spanish at 375 px) keeps to two lines,
+				     and the toolbar takes its own row above the tabs so their underline stays on the rule. The toolbar comes
+				     first in the DOM, so Tab still goes from the tabs straight into the panel; from 640 px it shows at the row's end. -->
+				<div class="flex flex-wrap items-end gap-x-3 border-b px-4" data-testid="system-logs-tabbar">
+					<SharingToolbar class="ms-auto self-center py-1 max-sm:w-full max-sm:pt-3 sm:order-last" {sharing} />
 					<Tabs.List
 						aria-label={m['systemLogs.tabs.label']()}
 						bind:ref={tabList}
@@ -252,16 +267,31 @@ $effect(() => {
 					<p class="text-sm font-semibold">{m['errorBoundary.title']()}</p>
 					<p class="text-sm">{m['errorBoundary.description']()}</p>
 				</div>
-				<Button
-					class="shrink-0 gap-1.5"
-					data-testid="system-logs-check-retry"
-					onclick={retry}
-					size="sm"
-					variant="outline"
-				>
-					<RefreshCw class="size-4" />
-					{m['errorBoundary.retry']()}
-				</Button>
+				<div class="flex shrink-0 flex-wrap gap-2">
+					<Button
+						class="shrink-0 gap-1.5"
+						data-testid="system-logs-check-retry"
+						onclick={retry}
+						size="sm"
+						variant="outline"
+					>
+						<RefreshCw class="size-4" />
+						{m['errorBoundary.retry']()}
+					</Button>
+					{#if copyLoaded}
+						<Button
+							class="shrink-0 gap-1.5"
+							data-testid="system-logs-check-bundle"
+							data-variant="outline"
+							onclick={() => void sharing.openBundle()}
+							size="sm"
+							variant="outline"
+						>
+							<LifeBuoy aria-hidden="true" class="size-4" />
+							{m['systemLogs.sharing.bundle']()}
+						</Button>
+					{/if}
+				</div>
 			</div>
 		{/if}
 
@@ -280,3 +310,6 @@ $effect(() => {
 		</div>
 	{/if}
 </div>
+
+<ExportDialog {sharing} />
+<BundleDialog {sharing} />

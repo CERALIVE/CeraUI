@@ -31,7 +31,7 @@ import { RpcError } from "$lib/rpc/rpc-error";
 
 import { de, en, zh } from "../../tests/helpers/catalog";
 
-import SharingSection from "./SharingSection.svelte";
+import SharingHarness from "./__fixtures__/SharingHarness.svelte";
 
 const createExport =
 	vi.fn<(input: LogExportInput) => Promise<LogExportOutput>>();
@@ -57,7 +57,7 @@ beforeEach(() => {
 		logs: { createExport, previewBundle, createBundle },
 		download: startBackendDownload,
 	});
-	render(SharingSection, { props: { sharing: flow } });
+	render(SharingHarness, { props: { sharing: flow } });
 });
 
 afterEach(() => {
@@ -111,15 +111,15 @@ describe("SharingSection: the first Downloads group", () => {
 		expect(within(group).queryAllByRole("heading")).toHaveLength(0);
 	});
 
-	// Lime fills only the region's primary action, the bundle (DESIGN.md IH-5).
+	// Lime fills only the logs toolbar's Export logs, so both rows are outline (DESIGN.md IH-5).
 	it.each([
 		[
 			"bundle",
 			sharing.bundle,
 			sharing.bundleHint,
 			"lucide-life-buoy",
-			"default",
-			"bg-primary",
+			"outline",
+			"border-border",
 		],
 		[
 			"export",
@@ -418,6 +418,22 @@ describe("SharingSection: Export this view", () => {
 });
 
 describe("SharingSection: support bundle", () => {
+	it("says in plain words what the bundle holds and who it is for, above the unchanged review statement", async () => {
+		previewBundle.mockReturnValue(new Promise<never>(() => {}));
+		await open("bundle");
+
+		const body = await dialog(sharing.bundle);
+		const about = within(body).getByTestId("sharing-bundle-about");
+		expect(about.textContent?.trim()).toBe(sharing.bundleHint);
+		expect(about.nextElementSibling).toBe(
+			within(body).getByTestId("sharing-bundle-sensitive").parentElement,
+		);
+		expect(
+			within(body).getByTestId("sharing-bundle-sensitive").textContent?.trim(),
+		).toBe(sharing.bundleSensitive);
+		expect(createBundle).not.toHaveBeenCalled();
+	});
+
 	it("prepares the preview with the review statement already shown and Download unavailable", async () => {
 		previewBundle.mockReturnValue(new Promise<never>(() => {}));
 		await open("bundle");
@@ -875,7 +891,9 @@ describe("SharingSection: dialog anatomy", () => {
 			"empty:hidden",
 		]);
 		const note = within(body).getByTestId("sharing-bundle-sensitive");
-		expect(status.parentElement?.firstElementChild).toBe(note.parentElement);
+		const about = within(body).getByTestId("sharing-bundle-about");
+		expect(status.parentElement?.firstElementChild).toBe(about);
+		expect(about.nextElementSibling).toBe(note.parentElement);
 		expect(note.parentElement?.nextElementSibling).toBe(status);
 		expect(tokens(status.parentElement)).toEqual([
 			"flex",
@@ -957,8 +975,12 @@ describe("SharingSection: dialog anatomy", () => {
 			"border",
 			"p-3",
 		]);
-		// First in the body, so a short screen shows it before Download is reached.
-		expect(box?.parentElement?.firstElementChild).toBe(box);
+		// Second in the body, right under the plain-language summary, so a short
+		// screen shows it before Download is reached.
+		const about = within(body).getByTestId("sharing-bundle-about");
+		expect(box?.parentElement?.firstElementChild).toBe(about);
+		expect(about.nextElementSibling).toBe(box);
+		expect(tokens(about)).toEqual(["text-sm"]);
 		const glyph = box?.querySelector("svg");
 		expect(glyph?.getAttribute("aria-hidden")).toBe("true");
 		expect(tokens(glyph)).toEqual(
