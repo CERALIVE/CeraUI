@@ -71,6 +71,12 @@
 			},
 			"plural": false
 		},
+		"live.ingest.linkCount": {
+			"params": {
+				"count": "<count>"
+			},
+			"plural": false
+		},
 		"live.ingest.linksReadyCount": {
 			"params": {
 				"count": "<count>"

@@ -499,6 +499,14 @@
 	"live.ingest.idleTitle": "No bonded links yet",
 	"live.ingest.link": "Link",
 	"live.ingest.links": "Links",
+	"live.ingest.linkCount": {
+		"0": "0 links",
+		"1": "1 link",
+		"2": "2 links",
+		"5": "5 links",
+		"11": "11 links",
+		"100": "100 links"
+	},
 	"live.ingest.linksReadyCount": {
 		"0": "0 links ready to bond",
 		"1": "1 link ready to bond",

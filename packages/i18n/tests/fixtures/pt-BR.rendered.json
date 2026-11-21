@@ -499,6 +499,14 @@
 	"live.ingest.idleTitle": "Ainda sem links agrupados",
 	"live.ingest.link": "Link",
 	"live.ingest.links": "Links",
+	"live.ingest.linkCount": {
+		"0": "0 link",
+		"1": "1 link",
+		"2": "2 links",
+		"5": "5 links",
+		"11": "11 links",
+		"100": "100 links"
+	},
 	"live.ingest.linksReadyCount": {
 		"0": "0 link pronto para agrupar",
 		"1": "1 link pronto para agrupar",

@@ -64,13 +64,15 @@ const { m } = (await import(join(GENERATED, "registry.js"))) as {
 /**
  * The keys that carry plural syntax: the three the todo-19 grammar inventory
  * found, plus `live.ingest.sampleCount` (added with its frozen-oracle entry so
- * the session summary stops reading "1 Samples").
+ * the session summary stops reading "1 Samples") and `live.ingest.linkCount`
+ * (the same for the live header's "1 Links").
  */
 const PLURAL_KEYS = [
 	"live.server.bondedAcross",
 	"live.setup.linksReady",
 	"live.ingest.linksReadyCount",
 	"live.ingest.sampleCount",
+	"live.ingest.linkCount",
 ] as const;
 
 function renderPlural(locale: LocaleCode, key: string, count: number): string {

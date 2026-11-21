@@ -562,6 +562,22 @@
 	"live.ingest.idleTitle": "अभी तक कोई बॉन्डेड लिंक नहीं",
 	"live.ingest.link": "लिंक",
 	"live.ingest.links": "लिंक",
+	"live.ingest.linkCount": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} लिंक",
+				"countPlural=other": "{count} लिंक",
+				"countPlural=*": "{count} लिंक"
+			}
+		}
+	],
 	"live.ingest.linksReadyCount": [
 		{
 			"declarations": [

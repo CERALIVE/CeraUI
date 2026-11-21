@@ -562,6 +562,7 @@
 	"live.ingest.idleTitle": "ボンディングされたリンクがまだありません",
 	"live.ingest.link": "リンク",
 	"live.ingest.links": "リンク",
+	"live.ingest.linkCount": "{count} 個のリンク",
 	"live.ingest.linksReadyCount": "{count} 個のリンクがボンディング可能",
 	"live.ingest.linksReadyHint": "配信中にボンディングのテレメトリが表示されます。",
 	"live.ingest.linksReadyTitle": "リンク準備完了",

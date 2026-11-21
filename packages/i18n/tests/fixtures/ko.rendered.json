@@ -499,6 +499,7 @@
 	"live.ingest.idleTitle": "아직 본딩된 링크가 없습니다",
 	"live.ingest.link": "링크",
 	"live.ingest.links": "링크",
+	"live.ingest.linkCount": "링크 <count>개",
 	"live.ingest.linksReadyCount": "본딩할 링크 <count>개 준비됨",
 	"live.ingest.linksReadyHint": "스트림이 시작되면 본딩 텔레메트리가 표시됩니다.",
 	"live.ingest.linksReadyTitle": "링크 준비됨",

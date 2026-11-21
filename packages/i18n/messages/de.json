@@ -562,6 +562,22 @@
 	"live.ingest.idleTitle": "Noch keine gebündelten Links",
 	"live.ingest.link": "Verbindung",
 	"live.ingest.links": "Verbindungen",
+	"live.ingest.linkCount": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} Verbindung",
+				"countPlural=other": "{count} Verbindungen",
+				"countPlural=*": "{count} Verbindungen"
+			}
+		}
+	],
 	"live.ingest.linksReadyCount": [
 		{
 			"declarations": [

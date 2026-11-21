@@ -250,9 +250,10 @@ function exportCsv(): void {
 			</span>
 		{:else if hasLinks}
 			<span
-				class="bg-secondary/60 text-muted-foreground ms-auto rounded-full px-2 py-0.5 font-mono text-xs tabular-nums"
+				class="bg-secondary/60 text-muted-foreground ms-auto rounded-full px-2 py-0.5 font-mono text-xs tabular-nums whitespace-nowrap"
+				data-testid="ingest-link-count"
 			>
-				{links.length}&nbsp;{m["live.ingest.links"]()}
+				{m["live.ingest.linkCount"]({ count: links.length })}
 			</span>
 		{/if}
 	</div>

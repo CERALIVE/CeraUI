@@ -499,6 +499,7 @@
 	"live.ingest.idleTitle": "尚无绑定链路",
 	"live.ingest.link": "链路",
 	"live.ingest.links": "链路",
+	"live.ingest.linkCount": "<count> 条链路",
 	"live.ingest.linksReadyCount": "<count> 条链路可用于绑定",
 	"live.ingest.linksReadyHint": "直播开始后将显示绑定遥测。",
 	"live.ingest.linksReadyTitle": "链路就绪",

@@ -562,6 +562,23 @@
 	"live.ingest.idleTitle": "Aún no hay enlaces agrupados",
 	"live.ingest.link": "Enlace",
 	"live.ingest.links": "Enlaces",
+	"live.ingest.linkCount": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} enlace",
+				"countPlural=many": "{count} enlaces",
+				"countPlural=other": "{count} enlaces",
+				"countPlural=*": "{count} enlaces"
+			}
+		}
+	],
 	"live.ingest.linksReadyCount": [
 		{
 			"declarations": [

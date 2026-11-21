@@ -585,6 +585,33 @@ describe("IngestStats — session summary + export (device-local)", () => {
 		vi.restoreAllMocks();
 	});
 
+	it("counts the live links in the header badge with a real plural", () => {
+		// The badge used to print the count beside a fixed "Links", so a stream
+		// on one link read "1 Links".
+		const badge = (container: HTMLElement) =>
+			panelOf(container)
+				.querySelector('[data-testid="ingest-link-count"]')
+				?.textContent?.replace(/\s+/g, " ")
+				.trim();
+
+		const one = render(IngestStats, {
+			props: {
+				telemetry: { links: [TWO_LINKS.links[0]] } as LinkTelemetryMessage,
+				isStreaming: true,
+				bitrateKbps: 4000,
+			},
+		});
+		flushSync();
+		expect(badge(one.container)).toBe("1 link");
+		one.unmount();
+
+		const two = render(IngestStats, {
+			props: { telemetry: TWO_LINKS, isStreaming: true, bitrateKbps: 4000 },
+		});
+		flushSync();
+		expect(badge(two.container)).toBe("2 links");
+	});
+
 	it("counts the samples in the summary badge with a real plural", () => {
 		// One frame while streaming, then stop: a one-sample session.
 		const { container, rerender } = render(IngestStats, {
