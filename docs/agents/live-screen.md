@@ -149,6 +149,33 @@ must contain the `source-audio` block with its ids unchanged.
   height (plus the mobile dock below desktop chrome), so a control reached with
   Tab or scrolled into view stops above the bar, never under it (WCAG 2.4.11).
 
+#### Start refusals end in an action
+
+A typed start refusal is a toast. Where the next step is decided, the toast's
+button is that step and View logs sits beside it
+(`startFailureNextStep`, `apps/frontend/src/lib/streaming/start-failure-copy.ts`):
+
+- `engine_internal`, `engine_unavailable`, `start_timeout`: Try again. It is
+  admitted only where the idle Live bar offers Start (`idleStartAdmitted` in
+  `LiveView.svelte`: no live or summary cockpit, no unresolved stream outcome,
+  no Start in flight). It then goes through the Live bar's own gate
+  (`idleStartGate`, the same readiness verdict with the implicit sole camera
+  folded in), decided at the tap from the same input object the bar renders
+  from (`idleGateInputs`), and does nothing when that refusal is no longer
+  current or the view is gone. A Try again on an engine refusal is remembered
+  against the attempt generation of the Start it dispatches, written only
+  after validation passed. When the typed refusal of that same generation
+  comes back within two minutes, the toast offers Restart box, which opens the
+  same reboot sheet as Settings, so the operator still confirms. A proven
+  non-dispatch, a Start from the Live bar, a newer attempt, a running stream
+  or the two minutes clear it.
+- `start_invalid`: Open stream setup (scrolls to the setup card and focuses
+  it).
+- `mutation_blocked`: Open Network, where the modem controls live.
+
+The other classes keep their copy and View logs. The copy for these classes no
+longer says "Open Settings → System Logs".
+
 #### Screen sizes
 
 - At 1024 px and wider the screen must have two columns: `program-desk`, then

@@ -28,13 +28,79 @@ export function startFailureRetryKey(
 		: "live.startFailure.notRetriable";
 }
 
-export function startFailureMessage(failure: StartFailureCopyInput): string {
+/**
+ * What the operator can do next, as one button on the toast. A refusal that
+ * used to end in "Open Settings → System Logs" now ends in an action:
+ *
+ * - the engine classes and a start timeout: Try again, and Restart box when
+ *   the same kind of failure comes back right after a retry;
+ * - `start_invalid`: Open stream setup;
+ * - `mutation_blocked`: Open Network, where the modem controls live.
+ *
+ * Every other class keeps its existing copy and View logs.
+ */
+export type StartFailureNextStep =
+	| "tryAgain"
+	| "restartBox"
+	| "openSetup"
+	| "openNetwork";
+
+const ENGINE_CLASSES: ReadonlySet<string> = new Set([
+	"engine_internal",
+	"engine_unavailable",
+	"start_timeout",
+]);
+
+/** Whether a failure belongs to the engine group that escalates to Restart box. */
+export function isEngineStartFailure(failure: StartFailureCopyInput): boolean {
+	return ENGINE_CLASSES.has(failure.class);
+}
+
+export function startFailureNextStep(
+	failure: StartFailureCopyInput,
+	repeated = false,
+): StartFailureNextStep | undefined {
+	if (ENGINE_CLASSES.has(failure.class))
+		return repeated ? "restartBox" : "tryAgain";
+	if (failure.class === "start_invalid") return "openSetup";
+	if (failure.class === "mutation_blocked") return "openNetwork";
+	return undefined;
+}
+
+const NEXT_STEP_SUFFIX: Partial<Record<StartFailureNextStep, MessageKey>> = {
+	tryAgain: "live.startFailure.next.tryAgain",
+	restartBox: "live.startFailure.next.restartBox",
+	openSetup: "live.startFailure.next.openSetup",
+};
+
+export const NEXT_STEP_ACTION: Record<StartFailureNextStep, MessageKey> = {
+	tryAgain: "live.startFailure.action.tryAgain",
+	restartBox: "live.startFailure.action.restartBox",
+	openSetup: "live.startFailure.action.openSetup",
+	openNetwork: "live.startFailure.action.openNetwork",
+};
+
+function classReason(failure: StartFailureCopyInput): string {
 	const key =
-		failure.captureCause !== undefined
-			? `live.startFailure.class.${failure.class}.${failure.captureCause}`
-			: `live.startFailure.class.${failure.class}`;
+		failure.class === "mutation_blocked"
+			? "live.startFailure.mutationBlockedNetwork"
+			: failure.captureCause !== undefined
+				? `live.startFailure.class.${failure.class}.${failure.captureCause}`
+				: `live.startFailure.class.${failure.class}`;
 	const cls = m[key];
-	const reason =
-		typeof cls === "function" ? cls() : m["live.startFailed.generic"]();
+	return typeof cls === "function" ? cls() : m["live.startFailed.generic"]();
+}
+
+export function startFailureMessage(
+	failure: StartFailureCopyInput,
+	repeated = false,
+): string {
+	const reason = classReason(failure);
+	const step = startFailureNextStep(failure, repeated);
+	if (step !== undefined) {
+		// The reason already names the fix for these two; the button carries it.
+		const suffix = NEXT_STEP_SUFFIX[step];
+		return suffix === undefined ? reason : `${reason} ${m[suffix]()}`;
+	}
 	return `${reason} ${m[startFailureRetryKey(failure)]()}`;
 }
