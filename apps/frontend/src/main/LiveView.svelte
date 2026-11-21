@@ -16,6 +16,7 @@ import { toast } from 'svelte-sonner';
 import { LazyDialog, LazyDialogFallback, lazyDialog } from '$lib/components/dialogs';
 import { platformCapsForHardware } from '$lib/components/streaming/ValidationAdapter';
 import { viewLogsToast } from '$lib/device-logs/view-logs';
+import { linkNamer } from '$lib/helpers/link-names';
 import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
 import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
 import { rpc } from '$lib/rpc';
@@ -1148,6 +1149,7 @@ const configRows = $derived<ConfigRow[]>([
 			}}
 			telemetry={linkTelemetry}
 			bitrateKbps={liveBitrate.primaryKbps ?? undefined}
+			linkName={linkNamer({ modems: getStatus()?.modems, wifi: getStatus()?.wifi })}
 			{audioSourceLost}
 			{videoSignalLost}
 			{isStreaming}

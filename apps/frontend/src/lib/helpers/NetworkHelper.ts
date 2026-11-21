@@ -15,6 +15,7 @@ import type {
 } from "@ceraui/rpc/schemas";
 import QRCode from "qrcode";
 
+import { interfaceLabel } from "$lib/helpers/link-names";
 import { formatGenerationRun } from "$lib/modem/operator-labels";
 import { rpc } from "$lib/rpc/client";
 import { getStatus } from "$lib/rpc/subscriptions.svelte";
@@ -47,33 +48,9 @@ export const networkRenameWithError = (name: string, error?: string) => {
 	return name;
 };
 
-// Predictable names built from the MAC address (wlx…, enx…, wwx…): their
-// trailing digits are part of the MAC, not an interface index, so two such
-// adapters are told apart by the MAC's last four hex digits instead.
-const MAC_NAMED = /^(?:wl|en|ww)x[0-9a-f]{12}$/;
-
-export const networkRename = (name: string) => {
-	let numberSuffix = "";
-	const number = MAC_NAMED.test(name) ? undefined : name.match(/\d+$/g)?.[0];
-	if (MAC_NAMED.test(name)) {
-		numberSuffix = ` (${name.slice(-4)})`;
-	} else if (number) {
-		numberSuffix = ` ${Number.parseInt(number, 10) + 1}`;
-		name = name.slice(0, -number.length).trim();
-	}
-
-	if (name.startsWith("wl")) {
-		name = m["networking.types.wifi"]();
-	} else if (name.startsWith("eth") || name.startsWith("en")) {
-		name = m["networking.types.ethernet"]();
-	} else if (name.startsWith("ww")) {
-		name = m["networking.types.modem"]();
-	} else if (name.startsWith("usb")) {
-		name = m["networking.types.usb"]();
-	}
-
-	return name + numberSuffix;
-};
+// The interface label lives with the link names (pure, no store imports), so
+// the HUD store can use it without loading the RPC client.
+export const networkRename = interfaceLabel;
 
 export const getModemNetworkName = (name: string) => {
 	const status = getStatus();

@@ -1239,8 +1239,8 @@ describe("S6 — wifi/ethernet null signal is valid, not an error", () => {
 			expect(link.signal).toBeNull();
 			expect(link.isConnected).toBe(false);
 			expect(link.connectionState).toBe("disconnected");
-			// Generic fallback label when no active SSID.
-			expect(link.label).toBe("Wi-Fi");
+			// Without an active network, the radio's own name (link-names.ts).
+			expect(link.label).toBe("Wi-Fi 1");
 		}
 	});
 

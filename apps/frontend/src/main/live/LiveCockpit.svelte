@@ -112,6 +112,8 @@ interface Props {
 	telemetry: LinkTelemetryMessage | null | undefined;
 	/** APPLIED bitrate in kbps — folded into the session peak/avg rollup. */
 	bitrateKbps?: number;
+	/** Names links for people (`$lib/helpers/link-names`); IngestStats shows it. */
+	linkName?: ((iface: string) => string) | undefined;
 	// ── Mid-stream lifecycle banners ───────────────────────────────────────────
 	// The selected audio device vanished mid-stream (LiveView derives it from the
 	// available audio sources vs config.asrc). Video-source-lost and all-links-down
@@ -169,6 +171,7 @@ const {
 	onSliderCommit,
 	telemetry,
 	bitrateKbps,
+	linkName = undefined,
 	audioSourceLost = false,
 	videoSignalLost = false,
 	isStreaming,
@@ -451,7 +454,7 @@ const BAND_ICON_CLASS = 'text-status-warning mt-0.5 size-4 shrink-0';
 			/>
 		{/if}
 
-		<IngestStats {telemetry} {isStreaming} {bitrateKbps} />
+		<IngestStats {telemetry} {isStreaming} {bitrateKbps} {linkName} />
 	</section>
 
 	<LiveBar>
