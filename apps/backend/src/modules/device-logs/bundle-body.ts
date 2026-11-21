@@ -13,6 +13,11 @@ const MAX_COMPRESSED = 8 * 1024 * 1024;
 const TAIL_RESERVE = 512;
 export const BUNDLE_TIME_MS = 60_000;
 type Section = LogBundleManifest["sections"][number]["id"];
+// sd_journal_get_cursor's exact output: SD_ID128 strings for s and b, PRIx64
+// (no leading zeros) for i, m, t and x. Each value is journald's own random file
+// ID, counter, timestamp or field-hash XOR, so a digit run in one is no identifier.
+const NATIVE_CURSOR =
+	/^s=[0-9a-f]{32};i=(?:0|[1-9a-f][0-9a-f]{0,15});b=([0-9a-f]{32});m=(?:0|[1-9a-f][0-9a-f]{0,15});t=(?:0|[1-9a-f][0-9a-f]{0,15});x=(?:0|[1-9a-f][0-9a-f]{0,15})$/;
 
 function bootSpan(
 	value: unknown,
@@ -22,6 +27,7 @@ function bootSpan(
 	if (!expected || !/^[0-9a-f]{32}$/.test(expected)) return;
 	if (!inCursor) return value === expected ? [0, expected.length] : undefined;
 	if (typeof value !== "string") return;
+	if (NATIVE_CURSOR.exec(value)?.[1] === expected) return [0, value.length];
 	const [boot, duplicate] = value.matchAll(/(?:^|;)b=([^;]*)/g);
 	if (!boot || duplicate || boot[1] !== expected) return;
 	const end = boot.index + boot[0].length;
@@ -65,6 +71,15 @@ export async function buildBundle(
 	]);
 	for (const event of snapshot.events) {
 		if (knownBoots.has(event.bootId)) bootFields.set(event, event.bootId);
+		// The two producers whose params name the boot before theirs.
+		const named =
+			event.code === "device_started"
+				? event.params.previousBootId
+				: event.code === "previous_boot_unclean"
+					? event.params.bootId
+					: undefined;
+		if (typeof named === "string" && knownBoots.has(named))
+			bootFields.set(event.params, named);
 	}
 	redactor.structured(createdAt);
 	const filename = `ceralive-support-${snapshot.exportedBy.bootId.slice(0, 8)}-${new Date(
@@ -93,9 +108,10 @@ export async function buildBundle(
 	let plainBytes = 0;
 	let compressedBytes = 0;
 	const stopped = () => {
-		if (getLogState().historyEpoch !== epoch) throw new BundleReadError();
+		if (getLogState().historyEpoch !== epoch)
+			throw new BundleReadError("abort");
 		if (signal.aborted && signal.reason !== "time_limit")
-			throw new BundleReadError();
+			throw new BundleReadError("abort");
 		return signal.aborted || Date.now() - createdAt >= BUNDLE_TIME_MS
 			? "time_limit"
 			: null;
@@ -112,8 +128,11 @@ export async function buildBundle(
 			span?: ReturnType<typeof bootSpan>,
 		): unknown {
 			if (typeof value === "string") {
+				// A held secret refuses first, so any remaining mask is a pattern.
+				if (!message) redactor.structured(value);
 				const masked = redactor.text(value, span);
-				if (!message && masked.redactions !== 0) throw new BundleReadError();
+				if (!message && masked.redactions !== 0)
+					throw new BundleReadError("pattern");
 				redactions += masked.redactions;
 				return masked.text;
 			}
@@ -130,10 +149,12 @@ export async function buildBundle(
 			if (typeof value !== "object") throw new BundleReadError();
 			return Object.fromEntries(
 				Object.entries(value).map(([key, inner]) => {
-					if (redactor.text(key).redactions !== 0) throw new BundleReadError();
+					redactor.structured(key);
+					if (redactor.text(key).redactions !== 0)
+						throw new BundleReadError("pattern");
 					const cursor = value === entry && key === "cursor";
 					const span =
-						key === "bootId" || cursor
+						key === "bootId" || key === "previousBootId" || cursor
 							? bootSpan(inner, bootFields.get(value), cursor)
 							: undefined;
 					return [

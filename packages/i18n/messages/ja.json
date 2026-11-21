@@ -2989,6 +2989,8 @@
 	"systemLogs.sharing.bundleSensitive": "デバイスが把握しているシークレットと一般的な識別子は除去されますが、個人データが残る場合があります。共有する前に内容を確認してください。",
 	"systemLogs.sharing.bundleDownload": "バンドルをダウンロード",
 	"systemLogs.sharing.bundleFailed": "サポートバンドルを準備できませんでした。",
+	"systemLogs.sharing.bundleFailedCollision": "保存されたパスワードまたはキーがデバイスの他の情報と一致しました。より長く固有の値に変更して、再試行してください。",
+	"systemLogs.sharing.bundleFailedJournal": "デバイスがログを読み取れませんでした。再試行するか、デバイスを再起動してください。",
 	"systemLogs.sharing.bundleUseExport": "代わりに「この表示をエクスポート」を使用してください。",
 	"systemLogs.sharing.busy": "別のエクスポートを実行中です。完了してから再試行してください。",
 	"systemLogs.sharing.failed": "ファイルを作成できませんでした。",

@@ -3034,6 +3034,8 @@
 	"systemLogs.sharing.bundleSensitive": "Secrets known to the device and common identifiers are removed, but the file may still contain personal data. Review it before sharing.",
 	"systemLogs.sharing.bundleDownload": "Download bundle",
 	"systemLogs.sharing.bundleFailed": "Couldn't prepare the support bundle.",
+	"systemLogs.sharing.bundleFailedCollision": "A saved password or key matches other device details. Change it to a longer, unique value and try again.",
+	"systemLogs.sharing.bundleFailedJournal": "The device couldn't read its logs. Try again or restart the device.",
 	"systemLogs.sharing.bundleUseExport": "Use Export this view instead.",
 	"systemLogs.sharing.busy": "Another export is running. Try again when it finishes.",
 	"systemLogs.sharing.failed": "Couldn't create the file.",

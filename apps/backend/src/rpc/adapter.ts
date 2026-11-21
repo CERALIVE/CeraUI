@@ -3,6 +3,7 @@
  * Handles WebSocket connections and routes messages to ORPC procedures
  */
 
+import { logBundleFailureReasonSchema } from "@ceraui/rpc/schemas";
 import { call, ORPCError } from "@orpc/server";
 import type { ServerWebSocket, WebSocketHandler } from "bun";
 
@@ -177,6 +178,11 @@ export async function handleORPCMessage(
 		const updateStartupPending =
 			error instanceof ORPCError &&
 			error.code === "UPDATE_ORCHESTRATOR_INITIALIZING";
+		// Additive: only a closed support-bundle stage crosses, never other data.
+		const stage =
+			error instanceof ORPCError
+				? logBundleFailureReasonSchema.safeParse(error.data?.stage).data
+				: undefined;
 		ws.send(
 			JSON.stringify({
 				id: message.id,
@@ -190,6 +196,7 @@ export async function handleORPCMessage(
 							: "INTERNAL_ERROR",
 					...(updateStartupPending ? { retryable: true } : {}),
 					...(fields.length > 0 ? { fields } : {}),
+					...(stage ? { stage } : {}),
 				},
 			}),
 		);
