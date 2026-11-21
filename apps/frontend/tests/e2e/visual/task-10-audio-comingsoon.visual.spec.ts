@@ -1,5 +1,6 @@
 import { expect, test } from "../fixtures/index.js";
 import {
+	endStream,
 	ensureAuthenticated,
 	evidencePath,
 	navigateTo,
@@ -54,10 +55,7 @@ test.describe("@visual Task 10 — gated live audio switch", () => {
 			await strip.screenshot({
 				path: evidencePath("task-10-audio-comingsoon.png"),
 			});
-			await page
-				.getByTestId("live-bar")
-				.getByRole("button", { name: "Stop stream" })
-				.click();
+			await endStream(page);
 		},
 	);
 });

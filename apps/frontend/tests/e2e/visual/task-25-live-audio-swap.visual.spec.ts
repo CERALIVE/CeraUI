@@ -1,5 +1,6 @@
 import { expect, test } from "../fixtures/index.js";
 import {
+	endStream,
 	ensureAuthenticated,
 	evidencePath,
 	navigateTo,
@@ -82,10 +83,7 @@ test.describe("@visual Task 25 — live audio switch enabled + deferred remain",
 			await card.screenshot({
 				path: evidencePath("task-25-live-audio-swap.png"),
 			});
-			await page
-				.getByTestId("live-bar")
-				.getByRole("button", { name: "Stop stream" })
-				.click();
+			await endStream(page);
 		},
 	);
 });

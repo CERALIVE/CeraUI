@@ -116,6 +116,14 @@ function stopButton(page: Page) {
 		.getByRole("button", { name: /stop stream/i });
 }
 
+/** Answer End stream: the Live bar's Stop asks before it sends the stop. */
+async function confirmEnd(page: Page): Promise<void> {
+	await page
+		.getByRole("alertdialog", { name: /end the stream/i })
+		.getByRole("button", { name: /end stream/i })
+		.click();
+}
+
 /** A window marker that would vanish on a full reload — proves in-app recovery. */
 async function markNoReload(page: Page): Promise<void> {
 	await page.evaluate(() => {
@@ -348,6 +356,7 @@ test.describe("Telemetry lifecycle (clears on stop)", () => {
 		// single authoritative false PUSH is LOST client-side (the field bug). A retry
 		// stop would generate no new change-broadcast either (no-rebroadcast trap).
 		await stopButton(page).click();
+		await confirmEnd(page);
 
 		// The watchdog's authoritative status PULL (real backend is_streaming:false,
 		// which the push-rewrite cannot touch) reconciles the store → summary → Idle,
@@ -378,6 +387,7 @@ test.describe("Telemetry lifecycle (clears on stop)", () => {
 		// keep reporting is_streaming:true (and keep the push rewritten to true too).
 		forcePullStreaming = true;
 		await stopButton(page).click();
+		await confirmEnd(page);
 
 		// The watchdog pulls (still streaming) → re-dispatches → pulls (still streaming)
 		// → exposes the truthful banner with Retry. The view stays TRUTHFULLY live

@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 
 import { type BackendRpc, expect, test } from "./fixtures/index.js";
 import { runAxe } from "./helpers/axe.js";
-import { ensureAuthenticated, navigateTo } from "./helpers/index.js";
+import { endStream, ensureAuthenticated, navigateTo } from "./helpers/index.js";
 
 /**
  * The Audio card's mixer, against the mock engine.
@@ -251,7 +251,7 @@ test.describe("audio mixer — caps-full", () => {
 
 		expect(await runAxe(page, { include: ['[data-testid="audio-card"]'] })).toEqual([]);
 
-		await page.getByTestId("live-bar").getByRole("button", { name: "Stop stream" }).click();
+		await endStream(page);
 		await expect(page.getByTestId("idle-cockpit").or(page.getByTestId("summary-done"))).toBeVisible({
 			timeout: 15_000,
 		});
@@ -354,7 +354,7 @@ test.describe("audio mixer — caps-full", () => {
 		});
 		await expect(card.getByTestId(`audio-strip-error-${THIRD}`)).toBeEmpty();
 
-		await page.getByTestId("live-bar").getByRole("button", { name: "Stop stream" }).click();
+		await endStream(page);
 		await expect(page.getByTestId("idle-cockpit").or(page.getByTestId("summary-done"))).toBeVisible({
 			timeout: 15_000,
 		});
@@ -386,7 +386,7 @@ test.describe("audio mixer — caps-full", () => {
 			applied: { id: THIRD, gain_db: -1 },
 		});
 		await expect(card.getByTestId(`audio-strip-error-${THIRD}`)).toBeEmpty();
-		await page.getByTestId("live-bar").getByRole("button", { name: "Stop stream" }).click();
+		await endStream(page);
 		await expect(page.getByTestId("idle-cockpit").or(page.getByTestId("summary-done"))).toBeVisible({
 			timeout: 15_000,
 		});
@@ -563,7 +563,7 @@ test.describe("audio mixer — caps-full", () => {
 				applied: { id, gain_db: level - 1 },
 			});
 		}
-		await page.getByTestId("live-bar").getByRole("button", { name: "Stop stream" }).click();
+		await endStream(page);
 		await expect(page.getByTestId("idle-cockpit").or(page.getByTestId("summary-done"))).toBeVisible({
 			timeout: 15_000,
 		});
