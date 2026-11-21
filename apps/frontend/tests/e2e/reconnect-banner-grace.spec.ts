@@ -5,6 +5,24 @@ import { expect, type Page, test } from "./fixtures/index.js";
 
 import { evidencePath, navigateTo } from "./helpers";
 
+declare global {
+	interface Window {
+		__ceraReconnectGrace: {
+			socket: WebSocket | null;
+			block: boolean;
+			droppedAt: number | null;
+			bannerFirstSeenAt: number | null;
+			offlineDroppedAt: number | null;
+			offlinePageFirstSeenAt: number | null;
+			markDrop(): void;
+			markOfflineDrop(): void;
+			bannerDelayMs(): number | null;
+			offlinePageDelayMs(): number | null;
+			isSocketOpen(): boolean;
+		};
+	}
+}
+
 /**
  * Reconnect-banner grace period, @functional.
  *
@@ -76,23 +94,20 @@ function record(line: string): void {
  * longer than the grace period without touching the transport's own backoff.
  */
 function installHarness(token: string): void {
-	// biome-ignore lint/suspicious/noExplicitAny: browser harness glue.
-	const w = window as any;
-	if (w.__cera) return;
-	const Real = w.WebSocket;
+	if (window.__ceraReconnectGrace) return;
+	const Real = window.WebSocket;
 
-	w.__cera = {
+	const harness: Window["__ceraReconnectGrace"] = {
 		socket: null,
 		block: false,
-		droppedAt: null as number | null,
-		bannerFirstSeenAt: null as number | null,
-		offlineDroppedAt: null as number | null,
-		offlinePageFirstSeenAt: null as number | null,
+		droppedAt: null,
+		bannerFirstSeenAt: null,
+		offlineDroppedAt: null,
+		offlinePageFirstSeenAt: null,
 		markDrop() {
-			w.__cera.droppedAt = performance.now();
-			w.__cera.bannerFirstSeenAt = null;
-			const s = w.__cera.socket;
-			if (s) s.close();
+			harness.droppedAt = performance.now();
+			harness.bannerFirstSeenAt = null;
+			harness.socket?.close();
 		},
 		/**
 		 * Stamp the instant BEFORE the browser is taken offline. Stamping early
@@ -100,40 +115,41 @@ function installHarness(token: string): void {
 		 * lower bound — so the safe direction is the one that cannot false-fail.
 		 */
 		markOfflineDrop() {
-			w.__cera.offlineDroppedAt = performance.now();
-			w.__cera.offlinePageFirstSeenAt = null;
+			harness.offlineDroppedAt = performance.now();
+			harness.offlinePageFirstSeenAt = null;
 		},
 		/** ms between the drop and the banner first appearing; null = never seen. */
 		bannerDelayMs(): number | null {
-			const { droppedAt, bannerFirstSeenAt } = w.__cera;
+			const { droppedAt, bannerFirstSeenAt } = harness;
 			if (droppedAt === null || bannerFirstSeenAt === null) return null;
 			return bannerFirstSeenAt - droppedAt;
 		},
 		/** ms between going offline and the full-page takeover; null = never seen. */
 		offlinePageDelayMs(): number | null {
-			const { offlineDroppedAt, offlinePageFirstSeenAt } = w.__cera;
+			const { offlineDroppedAt, offlinePageFirstSeenAt } = harness;
 			if (offlineDroppedAt === null || offlinePageFirstSeenAt === null) {
 				return null;
 			}
 			return offlinePageFirstSeenAt - offlineDroppedAt;
 		},
 		isSocketOpen(): boolean {
-			return w.__cera.socket?.readyState === 1;
+			return harness.socket?.readyState === WebSocket.OPEN;
 		},
 	};
+	window.__ceraReconnectGrace = harness;
 
 	const noteSurfaces = (): void => {
 		if (
-			w.__cera.bannerFirstSeenAt === null &&
+			harness.bannerFirstSeenAt === null &&
 			document.querySelector('[data-disconnect-banner="reconnecting"]')
 		) {
-			w.__cera.bannerFirstSeenAt = performance.now();
+			harness.bannerFirstSeenAt = performance.now();
 		}
 		if (
-			w.__cera.offlinePageFirstSeenAt === null &&
+			harness.offlinePageFirstSeenAt === null &&
 			document.querySelector('[data-testid="offline-page"]')
 		) {
-			w.__cera.offlinePageFirstSeenAt = performance.now();
+			harness.offlinePageFirstSeenAt = performance.now();
 		}
 	};
 	// Observe the Document node, not `documentElement` — an init script runs
@@ -145,30 +161,28 @@ function installHarness(token: string): void {
 	});
 
 	class HookedWS extends Real {
-		// biome-ignore lint/suspicious/noExplicitAny: native ctor signature.
-		constructor(url: string, protocols?: any) {
-			super(w.__cera.block ? String(url).replace(/:\d+/, ":1") : url, protocols);
-			w.__cera.socket = this;
-			this.__realSend = Real.prototype.send.bind(this);
+		constructor(url: string | URL, protocols?: string | string[]) {
+			super(harness.block ? String(url).replace(/:\d+/, ":1") : url, protocols);
+			harness.socket = this;
 		}
 
-		// biome-ignore lint/suspicious/noExplicitAny: WebSocket.send payload union.
-		send(data: any) {
+		override send(data: Parameters<WebSocket["send"]>[0]) {
+			if (typeof data !== "string") return super.send(data);
 			try {
 				const msg = JSON.parse(data);
 				const p = Array.isArray(msg.path) ? msg.path.join(".") : null;
 				if (p === "auth.login") {
 					msg.input = { token, persistent_token: true };
-					return this.__realSend(JSON.stringify(msg));
+					return super.send(JSON.stringify(msg));
 				}
 			} catch {
 				/* not an RPC frame (e.g. keepalive) */
 			}
-			return this.__realSend(data);
+			return super.send(data);
 		}
 	}
 
-	w.WebSocket = HookedWS;
+	window.WebSocket = HookedWS;
 	// Non-empty marker makes the app auto-login on load AND on every reconnect;
 	// the harness rewrites that login frame to the token.
 	try {
@@ -179,13 +193,11 @@ function installHarness(token: string): void {
 }
 
 function bannerDelay(page: Page): Promise<number | null> {
-	// biome-ignore lint/suspicious/noExplicitAny: browser harness glue.
-	return page.evaluate(() => (window as any).__cera.bannerDelayMs());
+	return page.evaluate(() => window.__ceraReconnectGrace.bannerDelayMs());
 }
 
 function offlinePageDelay(page: Page): Promise<number | null> {
-	// biome-ignore lint/suspicious/noExplicitAny: browser harness glue.
-	return page.evaluate(() => (window as any).__cera.offlinePageDelayMs());
+	return page.evaluate(() => window.__ceraReconnectGrace.offlinePageDelayMs());
 }
 
 /**
@@ -239,8 +251,7 @@ test.describe(
 			await page.goto("/");
 			await page
 				.waitForFunction(
-					// biome-ignore lint/suspicious/noExplicitAny: browser harness glue.
-					() => (window as any).__ceraAppMounted === true,
+					() => "__ceraAppMounted" in window && window.__ceraAppMounted === true,
 					undefined,
 					{ timeout: 60_000 },
 				)
@@ -275,13 +286,11 @@ test.describe(
 			await expect(page.locator(ANY_BANNER)).toHaveCount(0);
 			record("authed shell up, no disconnect banner");
 
-			// biome-ignore lint/suspicious/noExplicitAny: browser harness glue.
-			await page.evaluate(() => (window as any).__cera.markDrop());
+			await page.evaluate(() => window.__ceraReconnectGrace.markDrop());
 			record("socket dropped (heartbeat-style re-dial)");
 
 			await expect
-				// biome-ignore lint/suspicious/noExplicitAny: browser harness glue.
-				.poll(() => page.evaluate(() => (window as any).__cera.isSocketOpen()), {
+				.poll(() => page.evaluate(() => window.__ceraReconnectGrace.isSocketOpen()), {
 					timeout: 30_000,
 				})
 				.toBe(true);
@@ -314,8 +323,7 @@ test.describe(
 			await expect(page.locator(ANY_BANNER)).toHaveCount(0);
 
 			await page.evaluate(() => {
-				// biome-ignore lint/suspicious/noExplicitAny: browser harness glue.
-				const c = (window as any).__cera;
+				const c = window.__ceraReconnectGrace;
 				c.block = true;
 				c.markDrop();
 			});
@@ -332,8 +340,9 @@ test.describe(
 			);
 			record("banner withheld for the full grace period ✓");
 
-			// biome-ignore lint/suspicious/noExplicitAny: browser harness glue.
-			await page.evaluate(() => ((window as any).__cera.block = false));
+			await page.evaluate(() => {
+				window.__ceraReconnectGrace.block = false;
+			});
 			await expect(page.locator(ANY_BANNER)).toHaveCount(0, {
 				timeout: 60_000,
 			});
@@ -357,8 +366,7 @@ test.describe(
 					: expect(page.locator("html")).not.toHaveClass(/\bdark\b/));
 				await navigateTo(page, "live");
 				await page.evaluate(() => {
-					// biome-ignore lint/suspicious/noExplicitAny: browser harness glue.
-					const c = (window as any).__cera;
+					const c = window.__ceraReconnectGrace;
 					c.block = true;
 					c.markDrop();
 				});
@@ -406,8 +414,7 @@ test.describe(
 			// `offline` event could trigger with zero debounce. `setOffline` drives
 			// that real edge (navigator.onLine flips and the event fires), not a
 			// synthetic dispatch.
-			// biome-ignore lint/suspicious/noExplicitAny: browser harness glue.
-			await page.evaluate(() => (window as any).__cera.markOfflineDrop());
+			await page.evaluate(() => window.__ceraReconnectGrace.markOfflineDrop());
 			await page.context().setOffline(true);
 			record("browser taken offline");
 
