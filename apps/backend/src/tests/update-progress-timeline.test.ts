@@ -149,6 +149,7 @@ test.each([
 			spyOn(transaction, "runDetachedAptAll").mockImplementation(
 				(args, verdict, handlers) => realRun(args, verdict, handlers, depsA),
 			);
+			seen.accepted = structuredClone(h.frames.at(-1)?.updating);
 			void run().catch(restarted.reject);
 			await restarted.promise;
 
@@ -174,6 +175,11 @@ test.each([
 					},
 					() => {
 						see("caught up");
+						files.status +=
+							"pmstatus:man-db:55.0000:Processing triggers for man-db\n";
+					},
+					() => {
+						see("estimate dips");
 						files.status += pm("80.0000");
 					},
 					() => {
@@ -195,6 +201,7 @@ test.each([
 			expect(await completion).toBe(exitCode);
 			await h.settled();
 			see("outcome");
+			seen["outcome state"] = h.frames.at(-1)?.update_state?.kind;
 
 			// The process after the outcome finds no unit.
 			updates.resetSoftwareUpdateState();
@@ -210,6 +217,7 @@ test.each([
 
 			const outcome = seen.outcome as UpdateProgress;
 			expect(seen).toEqual({
+				accepted: { total: 0, downloading: 0, unpacking: 0, setting_up: 0 },
 				"pinned download in flight": downloading,
 				"unit cache hit": downloading,
 				"dpkg in the original process": installingAt(40),
@@ -217,8 +225,10 @@ test.each([
 				"attached, first read failed": installingAt(40),
 				"a new tab is still told nothing": true,
 				"caught up": installingAt(60),
+				"estimate dips": installingAt(60),
 				"later progress": installingAt(80),
 				outcome,
+				"outcome state": terminal,
 				"re-authenticated after the outcome": outcome,
 				"no unit": null,
 			});
@@ -235,3 +245,33 @@ test.each([
 		});
 	},
 );
+
+test("a pinned prefetch keeps the download phase when the unit starts", async () => {
+	await withDeviceType("real", async () => {
+		const { h, run } = await install([sample("eth0", "ethernet", 6)]);
+		await using _h = h;
+		const files: Files = { stdout: "", stderr: "", status: "" };
+		let state: "absent" | "running" | "finished" = "absent";
+		let firstDrain: unknown;
+		const deps = unitDeps(files, {
+			state: () => state,
+			exitCode: 0,
+			onStart: () => {
+				state = "running";
+				files.stdout = "Reading package lists...\n";
+			},
+			steps: [
+				() => {
+					firstDrain = structuredClone(h.frames.at(-1)?.updating);
+					state = "finished";
+				},
+			],
+		});
+		spyOn(transaction, "runDetachedAptAll").mockImplementation(
+			(args, verdict, handlers) => realRun(args, verdict, handlers, deps),
+		);
+		await run();
+		await h.settled();
+		expect(firstDrain).toEqual(downloading);
+	});
+});
