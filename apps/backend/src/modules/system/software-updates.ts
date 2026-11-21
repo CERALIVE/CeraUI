@@ -1651,6 +1651,8 @@ export function createSoftwareUpdateProcessMonitor(
 		const cleaned = await cleanAptCache(defaultAptSpaceDeps.run);
 		lastCleanupWarning =
 			code === 0 && !cleaned ? "post_clean_failed" : undefined;
+		// The outcome is known: initial pushes may report it again.
+		settleSoftwareUpdateRecovery();
 
 		if (softUpdateStatus) {
 			const failure =

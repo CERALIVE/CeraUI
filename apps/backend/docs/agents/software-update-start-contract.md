@@ -45,7 +45,11 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   and status in that order, and the final drain reads each file until a read
   returns nothing, so output larger than one bounded read is replayed whole.
   Recovery announces a reattached unit from its first drain, never with an
-  empty frame. The detached result alone settles the outcome.
+  empty frame; until recovery settles (`beginSoftwareUpdateRecovery` before
+  the WS server binds), initial pushes omit `updating` rather than send
+  `null`. The in-process pinned prefetch is announced as Downloading, and the
+  shown percentage is the highest APT reported in the current phase. The
+  detached result alone settles the outcome.
 - **Reattachment identity is a safety boundary.** Adoption requires the
   exact unit id and transient fragment path, transient-service description/type,
   exact non-duplicated `[Service]` stdout/stderr append destinations, no pre/post
@@ -60,5 +64,5 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
 
 Coverage: `tests/software-updates-start-refusal.test.ts`,
 `tests/software-updates-apt.test.ts`, `tests/package-progress-output.test.ts`,
-`tests/software-update-status-channel.test.ts`.
+`tests/software-update-status-channel.test.ts`, `tests/update-progress-timeline.test.ts`.
 

@@ -72,8 +72,7 @@ export const statusMessageSchema = z.object({
 	audio_mix_active: z.boolean().optional(),
 	stream_lifecycle: lifecycleStateSchema.optional(),
 	available_updates: availableUpdatesFieldSchema,
-	// Omitted while the backend has not yet read a recovered update unit.
-	updating: updatingStatusSchema.optional(),
+	updating: updatingStatusSchema,
 	update_state: updateStateSchema.optional(),
 	// Additive (Todo 36): the packages+OS+slot-sync orchestrator's own phase,
 	// a SEPARATE state machine from the legacy `update_state` above (which

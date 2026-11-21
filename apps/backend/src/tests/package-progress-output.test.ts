@@ -416,6 +416,25 @@ describe("a reconnecting tab during recovery", () => {
 		expect(h.frames.at(-1)?.updating).toEqual(preparing);
 	});
 
+	test("is told the outcome when the reattached unit settles before any read", async () => {
+		await using h = await updateHarness();
+		beginSoftwareUpdateRecovery();
+		await recoverSoftwareUpdateIfRunning({
+			recover: async (handlers) => {
+				handlers.onAttached?.();
+				return {
+					completion: Promise.reject(new Error("output unreadable")),
+					wasAlreadyFinished: true,
+				};
+			},
+			scheduleRetry: () => {},
+			resumePeriodicChecks: () => {},
+		});
+		await h.settled();
+		expect(buildInitialStatus().status.update_state?.kind).toBe("failed");
+		expect(buildInitialStatus().status).toHaveProperty("updating", null);
+	});
+
 	test("hears an explicit null once recovery finds no unit", async () => {
 		await using h = await updateHarness();
 		beginSoftwareUpdateRecovery();
