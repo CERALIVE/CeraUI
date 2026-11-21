@@ -9,6 +9,9 @@
  * them (label + disabled flag, in DOM order), never a value computed from the
  * predicate under test.
  */
+import { fireEvent } from "@testing-library/svelte";
+import { tick } from "svelte";
+
 import { streamLifecycleFixture } from "./reactive-stream-lifecycle.svelte";
 
 const CAPTURE = {
@@ -111,6 +114,22 @@ export function button(
 	);
 	if (!found) throw new Error(`no "${label}" button on screen`);
 	return found;
+}
+
+/**
+ * Press Stop the way an operator ends a stream. The Live bar's Stop asks "End
+ * the stream?" first, so when that question opens this answers End stream; a
+ * Stop that acts on one tap (the unconfirmed band) needs no answer.
+ */
+export async function endStream(container: HTMLElement): Promise<void> {
+	await fireEvent.click(button(container, "Stop Stream"));
+	await tick();
+	const end = [
+		...document.body.querySelectorAll<HTMLButtonElement>(
+			'[role="alertdialog"] button',
+		),
+	].find((b) => b.textContent?.trim() === "End stream");
+	if (end) await fireEvent.click(end);
 }
 
 export function band(container: HTMLElement): HTMLElement | null {
