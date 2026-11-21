@@ -1,5 +1,8 @@
 import { expect, test } from 'bun:test';
-import { file, spawnSync, YAML } from 'bun';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { file, spawnSync, write, YAML } from 'bun';
 
 const workflow = YAML.parse(
 	await file(new URL('../../.github/workflows/publish-release.yml', import.meta.url)).text(),
@@ -82,5 +85,64 @@ test.each([
 		expect(result.stdout.toString().trimEnd()).toBe(
 			`::error::release commit ${eventSha} is not the approved ${approvedSha}`,
 		);
+	}
+});
+
+const debJob = workflow.jobs['build-debian-package'];
+const floorStep = debJob.steps.find((step) => step.name === 'Verify Debian package systemd floor');
+
+test('both Debian release builds must verify the package before upload', () => {
+	const build = debJob.steps.findIndex(
+		(step) => step.run === './scripts/build/build-debian-package.sh',
+	);
+	const verify = debJob.steps.indexOf(floorStep);
+	const upload = debJob.steps.findIndex((step) =>
+		step.uses?.startsWith('actions/upload-artifact@'),
+	);
+	expect(build).toBeGreaterThanOrEqual(0);
+	expect(verify).toBeGreaterThan(build);
+	expect(upload).toBeGreaterThan(verify);
+	expect(debJob.strategy.matrix.architecture).toEqual(['arm64', 'amd64']);
+	expect(floorStep['working-directory']).toBe(debJob.steps[build]['working-directory']);
+	expect(floorStep.if).toBeUndefined();
+	expect(floorStep['continue-on-error']).toBeUndefined();
+	expect(debJob['continue-on-error']).toBeUndefined();
+	expect(workflow.jobs['create-release'].needs).toContain('build-debian-package');
+	expect(workflow.jobs['dispatch-apt-reindex'].needs).toContain('create-release');
+});
+
+test.each([
+	['the required floor', 'udev, systemd (>= 257), gpgv', 0],
+	['an unversioned dependency', 'systemd, udev', 1],
+	['a lower floor', 'systemd (>= 256), udev', 1],
+	['an optional alternative', 'systemd (>= 257) | sysvinit-core, udev', 1],
+	['no package', null, 1],
+])('the pre-upload guard handles %s', async (_label, depends, status) => {
+	expect(floorStep).toBeDefined();
+	const work = mkdtempSync(join(tmpdir(), 'release-deb-floor-'));
+	try {
+		mkdirSync(join(work, 'dist/debian'), { recursive: true });
+		if (depends !== null) {
+			const controlDir = join(work, 'fixture/DEBIAN');
+			mkdirSync(controlDir, { recursive: true });
+			chmodSync(controlDir, 0o755);
+			await write(
+				join(controlDir, 'control'),
+				`Package: ceralive-device\nVersion: 0.0.0\nArchitecture: all\nMaintainer: Contract <contract@ceralive.tv>\nDescription: Release contract fixture\nDepends: ${depends}\n`,
+			);
+			const build = spawnSync(
+				['dpkg-deb', '--build', 'fixture', 'dist/debian/ceralive-device.deb'],
+				{ cwd: work },
+			);
+			expect(build.exitCode, build.stderr.toString()).toBe(0);
+		}
+
+		const verify = spawnSync(['bash', '-e', '-c', floorStep.run], { cwd: work });
+		expect(verify.exitCode, verify.stderr.toString()).toBe(status);
+		if (depends !== null && status !== 0) {
+			expect(verify.stdout.toString()).toContain('must depend on systemd (>= 257)');
+		}
+	} finally {
+		rmSync(work, { recursive: true, force: true });
 	}
 });

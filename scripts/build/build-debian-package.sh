@@ -396,7 +396,7 @@ fpm -s dir -t deb \
     --url "$URL" \
     --license "GPL-3.0" \
     --category "net" \
-    --depends "systemd" \
+    --depends "systemd (>= 257)" \
     --depends "udev" \
     --depends "adduser" \
     --depends "sudo" \
@@ -447,7 +447,7 @@ cat > "dist/debian/package-info-${ARCHITECTURE}.json" << EOF
     "bundleSplitting": true
   },
   "dependencies": [
-    "systemd",
+    "systemd (>= 257)",
     "udev",
     "adduser",
     "sudo",
@@ -491,6 +491,9 @@ cat > "dist/debian/INSTALL-${ARCHITECTURE}.md" << EOF
 - APT-compatible versioning with timestamps
 
 ## Installation
+
+This package requires systemd 257 or newer. Devices with an older systemd stay
+on their currently installed version of CeraLive.
 
 ### 1. Install the package
 \`\`\`bash

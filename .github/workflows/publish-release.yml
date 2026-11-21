@@ -425,6 +425,25 @@ jobs:
           BUILD_VERSION: ${{ needs.calculate-version.outputs.version }}
           BUILD_ARCH: ${{ matrix.architecture }}
 
+      - name: Verify Debian package systemd floor
+        working-directory: CeraUI
+        shell: bash
+        run: |
+          shopt -s nullglob
+          packages=(dist/debian/*.deb)
+          if (( ${#packages[@]} != 1 )); then
+            echo "::error::Expected exactly one Debian package in dist/debian"
+            exit 1
+          fi
+
+          deb="${packages[0]}"
+          depends="$(dpkg-deb --field "$deb" Depends)"
+          printf '%s Depends: %s\n' "$deb" "$depends"
+          if ! grep -Eq '(^|,)[[:space:]]*systemd \(>= 257\)[[:space:]]*(,|$)' <<< "$depends"; then
+            echo "::error::$deb must depend on systemd (>= 257)"
+            exit 1
+          fi
+
       - name: Upload Debian package (${{ matrix.architecture }})
         uses: actions/upload-artifact@v7
         with:
