@@ -47,6 +47,43 @@ afterEach(() => {
 });
 
 describe("updating-overlay package acquisition", () => {
+	it("shows configuring activity without a number when dpkg's plan cannot be verified", async () => {
+		render(UpdatingOverlay, {
+			props: { details: progress({ total: 0, setting_up: 1 }) },
+		});
+		const bar = await screen.findByRole("progressbar");
+		expect(screen.getByTestId("update-phase").textContent).toContain(
+			"Installing",
+		);
+		expect(bar.getAttribute("aria-valuenow")).toBeNull();
+		expect(screen.queryByText(/^\d+ of \d+ steps$|^\d+%$/)).toBeNull();
+	});
+
+	it("keeps the last verified four steps until the device reports failure", async () => {
+		const details = progress({
+			total: 2,
+			downloading: 2,
+			unpacking: 2,
+			setting_up: 1,
+		});
+		const view = render(UpdatingOverlay, { props: { details } });
+		const bar = await screen.findByRole("progressbar");
+		expect(screen.getByText("4 of 6 steps")).toBeDefined();
+		expect(bar.getAttribute("aria-valuenow")).toBe("4");
+		expect(bar.getAttribute("aria-valuetext")).toBe("66%");
+		expect(screen.queryByText("5 of 6 steps")).toBeNull();
+		await view.rerender({
+			details: {
+				...details,
+				result: "dpkg: error processing package package-a",
+			},
+		});
+		expect(screen.getByTestId("update-failed")).toBeDefined();
+		expect(screen.queryByText("83%")).toBeNull();
+		expect(screen.queryByText("100%")).toBeNull();
+		expect(toastSuccess).not.toHaveBeenCalled();
+	});
+
 	it("counts completed steps in both the text and bar as two packages advance", async () => {
 		const view = render(UpdatingOverlay, {
 			props: { details: progress({ total: 2, downloading: 2 }) },

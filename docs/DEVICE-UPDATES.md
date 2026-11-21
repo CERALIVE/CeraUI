@@ -7,8 +7,8 @@ percentage while APT prepares or downloads packages. The detached service
 continues to append to durable logs. The UI cannot infer download bytes from
 `Get:N`, which identifies the start of a fetch; output can also arrive in bursts.
 When unpacking starts and APT has reported a package count, the overlay shows
-completed steps. The overlay text and both progress bars use the same step
-fraction and round the percentage down. A dpkg unpack or setup line marks the
+completed steps. The overlay text, both progress bars, and the orchestrator
+package percentage use the same fraction and round down. A dpkg unpack or setup line marks the
 start of that step; the next step's start credits the previous one. Phase
 labels describe current activity, not separate package totals. The last step
 is credited only after the detached update succeeds; a failure or interruption
@@ -16,10 +16,17 @@ does not report completion.
 
 For pinned updates, a broader download plan cannot set the install total.
 Progress counts distinct packages in APT's install plan, including dependencies
-APT adds, and ignores setup for packages outside that plan. This also applies
-when the log is replayed from disk.
-When the install count is unknown, static stripes show activity without a
-percentage, including in reduced-motion and e-ink modes.
+APT adds. A bare package name matches only its native `:arch` spelling, using
+the cached result of `dpkg --print-architecture`; foreign architectures remain
+distinct. If the install total cannot be verified, unpack/setup records still
+show the active phase, with static stripes instead of a number or percentage
+in all modes, including reduced motion and e-ink.
+
+After a recognized dpkg error, later package starts cannot increase the count.
+An error in stdout caps progress at the steps already credited before that
+line. Stdout and stderr are retained in separate files; when an error is on
+stderr, hold the last verified count, or show only the phase if replay has no
+trustworthy ordering. The unit's final result still determines the outcome.
 
 If the backend reconnects during an update and has not yet read the retained
 log, the overlay shows indeterminate activity until it gets usable counters.

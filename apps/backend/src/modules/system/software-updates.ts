@@ -60,6 +60,13 @@ import { cleanAptCache } from "./apt-cache-clean.ts";
 /* Software updates */
 import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
 import {
+	deriveAptProgress,
+	hasDpkgFailure,
+	hasPartialDpkgFailure,
+	readNativeAptArchitecture,
+	type SoftUpdateStatus,
+} from "./apt-progress.ts";
+import {
 	type AptReachability,
 	defaultAptReachabilityDeps,
 	deriveVerdict,
@@ -142,6 +149,8 @@ import {
 	updateDismissalKey,
 } from "./update-state.ts";
 
+export { deriveAptProgress, type SoftUpdateStatus } from "./apt-progress.ts";
+
 let availableUpdates:
 	| {
 			package_count: number;
@@ -149,13 +158,6 @@ let availableUpdates:
 	  }
 	| null
 	| false = aptUpdatesEnabled() ? null : false;
-export type SoftUpdateStatus = {
-	total: number;
-	downloading: number;
-	unpacking: number;
-	setting_up: number;
-	result?: string | 0;
-};
 let softUpdateStatus: SoftUpdateStatus | null = null;
 let aptGetUpdating = false;
 let aptDiscoveryRunning = false;
@@ -356,6 +358,7 @@ export function resetSoftwareUpdateState(): void {
 
 export type SoftwareUpdateRecoveryDeps = {
 	readonly recover: typeof recoverDetachedAptUpgrade;
+	readonly readNativeArchitecture?: typeof readNativeAptArchitecture;
 	readonly scheduleRetry: (retry: () => void) => void;
 	readonly resumePeriodicChecks: () => void;
 };
@@ -1525,110 +1528,18 @@ type SoftwareUpdateProcessMonitor = {
 	) => Promise<void>;
 };
 
-function aptInstallPlan(output: string): Set<string> | undefined {
-	const summary =
-		/^(?<upgrade>\d+) upgraded, (?<install>\d+) newly installed, (?:(?<reinstall>\d+) reinstalled, )?(?:(?<downgrade>\d+) downgraded, )?0 to remove(?: and \d+ not upgraded)?\.\r?\n/m.exec(
-			output,
-		);
-	if (!summary) return undefined;
-	const afterSummary = output.slice(summary.index + summary[0].length);
-	if (/^[1-9]\d* not fully installed or removed\.\r?$/m.test(afterSummary))
-		return undefined;
-
-	const plan = new Set<string>();
-	const beforeSummary = output.slice(0, summary.index);
-	const counts = new Map<string, number>([
-		["packages will be upgraded", Number(summary.groups?.upgrade)],
-		["NEW packages will be installed", Number(summary.groups?.install)],
-		["packages will be REINSTALLED", Number(summary.groups?.reinstall ?? 0)],
-		["packages will be DOWNGRADED", Number(summary.groups?.downgrade ?? 0)],
-	]);
-	for (const [, heading, block] of beforeSummary.matchAll(
-		/^The following ([^:\r\n]+):\r?\n((?:[ \t]+[^\r\n]+\r?\n)+)/gm,
-	)) {
-		// Informational headings (such as held-back packages) aren't work.
-		if (heading === undefined || !counts.has(heading)) continue;
-		const names = (block ?? "").trim().split(/\s+/);
-		if (names.length !== counts.get(heading)) return undefined;
-		counts.set(heading, 0);
-		for (const name of names) {
-			if (
-				!/^[a-z0-9][a-z0-9+.-]*(?::[a-z0-9-]+)?$/.test(name) ||
-				plan.has(name)
-			)
-				return undefined;
-			plan.add(name);
-		}
-	}
-	return plan.size > 0 && [...counts.values()].every((count) => count === 0)
-		? plan
-		: undefined;
-}
-
-export function deriveAptProgress(
-	current: SoftUpdateStatus,
-	output: string,
-	pinnedInstall?: readonly string[],
-): SoftUpdateStatus {
-	// The validated pinned unit runs two apt commands into one file. Only
-	// a complete download-only boundary can attribute a summary to install.
-	const boundary = pinnedInstall
-		? /^Download complete and in download only mode\r?\n/m.exec(output)
-		: null;
-	const installOutput = boundary
-		? output.slice(boundary.index + boundary[0].length)
-		: output;
-	const plan =
-		!pinnedInstall || boundary ? aptInstallPlan(installOutput) : undefined;
-	// Pins identify activity if the plan is unknown, but cannot supply its
-	// denominator: APT may add dependencies or leave a pin unchanged.
-	const packages = plan ?? new Set(pinnedInstall);
-	let highestGet = current.downloading;
-	for (const match of installOutput.matchAll(/Get:(\d+)/g)) {
-		highestGet = Math.max(highestGet, Number.parseInt(match[1] ?? "", 10));
-	}
-	const unpacked = new Set<string>();
-	const configured = new Set<string>();
-	let ambiguous = false;
-	for (const [, action, name] of installOutput.matchAll(
-		/^(Unpacking|Setting up) ([a-z0-9][a-z0-9+.-]*(?::[a-z0-9-]+)?)[ \t][^\r\n]*\r?\n/gm,
-	)) {
-		if (name === undefined) continue;
-		if (!packages.has(name)) {
-			const colon = name.indexOf(":");
-			// Never guess whether an omitted qualifier represents another
-			// identity. Two different explicit qualifiers are not ambiguous.
-			const alias =
-				colon >= 0
-					? packages.has(name.slice(0, colon))
-					: [...packages].some((candidate) => candidate.startsWith(`${name}:`));
-			ambiguous ||= alias || (plan !== undefined && action === "Unpacking");
-			continue;
-		}
-		if (action === "Unpacking") unpacked.add(name);
-		else if (unpacked.has(name)) configured.add(name);
-	}
-	const total =
-		ambiguous || (pinnedInstall && unpacked.size === 0) ? 0 : (plan?.size ?? 0);
-	return {
-		...current,
-		total,
-		downloading:
-			unpacked.size > 0 || configured.size > 0
-				? total
-				: Math.min(highestGet, total),
-		unpacking: unpacked.size,
-		setting_up: configured.size,
-	};
-}
-
 export function createSoftwareUpdateProcessMonitor(
 	prefetched = "",
+	readArchitecture = readNativeAptArchitecture,
 ): SoftwareUpdateProcessMonitor {
 	let rebootAfterUpgrade = false;
 	let pinnedInstall: readonly string[] | undefined;
 	let aptLog = prefetched;
 	let aptErr = "";
+	let stderrFailed = false;
+	let outputHeld = false;
+	let architecture: ReturnType<typeof readNativeAptArchitecture> | undefined;
+	let nativeArch: string | undefined;
 
 	const observeRebootPackages = () => {
 		if (rebootAfterUpgrade) return;
@@ -1642,15 +1553,15 @@ export function createSoftwareUpdateProcessMonitor(
 	};
 	if (prefetched) observeRebootPackages();
 
-	const handleStdoutChunk = (data: string) => {
-		aptLog += data;
-
+	const publishProgress = (hold: boolean) => {
 		if (!softUpdateStatus) return;
 		const previous = softUpdateStatus;
 		const next = deriveAptProgress(
 			previous,
 			aptLog.slice(prefetched.length),
 			pinnedInstall,
+			nativeArch,
+			hold || stderrFailed,
 		);
 		softUpdateStatus = next;
 		if (!pinnedInstall && next.total === 0 && aptLog.includes(" upgraded")) {
@@ -1675,9 +1586,25 @@ export function createSoftwareUpdateProcessMonitor(
 		onPinnedInstall: (packages) => {
 			pinnedInstall = packages;
 		},
-		onStdout: handleStdoutChunk,
+		onStdout: (data) => {
+			aptLog += data;
+			publishProgress(hasPartialDpkgFailure(aptErr));
+		},
 		onStderr: (data) => {
 			aptErr += data;
+			stderrFailed ||= hasDpkgFailure(aptErr);
+		},
+		onOutputBatch: async (stdout, stderr, stderrCaughtUp) => {
+			aptLog += stdout;
+			aptErr += stderr;
+			stderrFailed ||= stderr !== "" && hasDpkgFailure(aptErr);
+			const hold = !stderrCaughtUp || hasPartialDpkgFailure(aptErr);
+			if (stdout || stderr || hold !== outputHeld) {
+				architecture ??= readArchitecture();
+				nativeArch = await architecture;
+				publishProgress(hold);
+			}
+			outputHeld = hold;
 		},
 		onObserverError: (error, suppressedRetries = 0) => {
 			logger.warn(
@@ -2070,7 +1997,10 @@ async function recoverSoftwareUpdate(
 	lastInstallUnitVerdict = "not-probed";
 	if (!aptUpdatesEnabled() || shouldUseMocks() || isUpdating()) return false;
 
-	const monitor = createSoftwareUpdateProcessMonitor();
+	const monitor = createSoftwareUpdateProcessMonitor(
+		"",
+		deps.readNativeArchitecture,
+	);
 	const recovered = await deps.recover({
 		...monitor.handlers,
 		onAttached: () => {

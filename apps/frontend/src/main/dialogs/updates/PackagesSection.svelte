@@ -17,6 +17,7 @@
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
+import { packageProgressFraction } from '@ceraui/rpc/package-progress';
 import type { UpdateCheckClockSummary, UpdateTransportSummary } from '@ceraui/rpc/schemas';
 import { AlertTriangle, Download, RefreshCw } from '@lucide/svelte';
 import { untrack } from 'svelte';
@@ -29,7 +30,6 @@ import { rpc } from '$lib/rpc/client';
 import { NotSentError } from '$lib/rpc/rpc-error';
 import { getUpdateState } from '$lib/rpc/subscriptions.svelte';
 import { actionableCountOf, availableOf, checkedAtOf } from '$lib/updates/legacy-packages';
-import { packageProgressFraction } from '$lib/updates/package-progress';
 import type { UpdateSurface } from '$lib/updates/update-surface.svelte';
 
 import ActionOutcomeBand from './ActionOutcomeBand.svelte';

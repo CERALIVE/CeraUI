@@ -24,10 +24,16 @@ export { buildDetachedAptUpgradeCommand } from "./software-update-service.ts";
 const OUTPUT_POLL_INTERVAL_MS = 250;
 const FINAL_DRAIN_MAX_FAILURES = 20;
 const INSPECT_RETRY_MAX_MS = 30_000;
+const STDERR_READS_PER_POLL = 4;
 
 export type SoftwareUpdateOutputHandlers = {
 	readonly onStdout: (chunk: string) => void;
 	readonly onStderr: (chunk: string) => void;
+	readonly onOutputBatch?: (
+		stdout: string,
+		stderr: string,
+		stderrCaughtUp: boolean,
+	) => Promise<void>;
 	readonly onAttached?: () => void;
 	readonly onPinnedInstall?: (packages: readonly string[]) => void;
 	readonly onObserverError?: (
@@ -120,24 +126,32 @@ async function drainAvailableOutput(
 	readonly stderr: OutputCursor;
 	readonly complete: boolean;
 }> {
-	const [stdoutResult, stderrResult] = await Promise.allSettled([
-		drainOutputCursor(stdoutCursor, readOutput),
-		drainOutputCursor(stderrCursor, readOutput),
-	]);
-	if (stdoutResult.status === "rejected") {
-		reportObserverError(handlers, stdoutResult.reason);
+	let complete = true;
+	let stderrCaughtUp = false;
+	try {
+		stdoutCursor = await drainOutputCursor(stdoutCursor, readOutput);
+	} catch (error) {
+		reportObserverError(handlers, error);
+		complete = false;
 	}
-	if (stderrResult.status === "rejected") {
-		reportObserverError(handlers, stderrResult.reason);
+	try {
+		// Snapshot stdout before stderr so a later stdout step cannot earn
+		// credit before an error already written on stderr is inspected.
+		for (let i = 0; i < STDERR_READS_PER_POLL; i++) {
+			const next = await drainOutputCursor(stderrCursor, readOutput);
+			stderrCaughtUp = next.offset === stderrCursor.offset;
+			stderrCursor = next;
+			if (stderrCaughtUp || !handlers.onOutputBatch) break;
+		}
+	} catch (error) {
+		reportObserverError(handlers, error);
+		complete = false;
 	}
+	if (handlers.onOutputBatch) complete &&= stderrCaughtUp;
 	return {
-		stdout:
-			stdoutResult.status === "fulfilled" ? stdoutResult.value : stdoutCursor,
-		stderr:
-			stderrResult.status === "fulfilled" ? stderrResult.value : stderrCursor,
-		complete:
-			stdoutResult.status === "fulfilled" &&
-			stderrResult.status === "fulfilled",
+		stdout: stdoutCursor,
+		stderr: stderrCursor,
+		complete,
 	};
 }
 
@@ -167,9 +181,25 @@ async function observeDetachedAptUpgrade(
 	deps: DetachedAptUpgradeDeps,
 ): Promise<number> {
 	let state: DetachedAptServiceState = initialState;
+	let stdout = "";
+	let stderr = "";
+	const flush = async (complete: boolean) => {
+		await handlers.onOutputBatch?.(stdout, stderr, complete);
+		stdout = "";
+		stderr = "";
+	};
 	let [stdoutCursor, stderrCursor] = createOutputCursors(
 		deps.outputPaths,
-		handlers,
+		handlers.onOutputBatch
+			? {
+					onStdout: (chunk) => {
+						stdout += chunk;
+					},
+					onStderr: (chunk) => {
+						stderr += chunk;
+					},
+				}
+			: handlers,
 	);
 	let inspectRetryMs = 1_000;
 	let lastInspectReportAt = -Infinity;
@@ -184,6 +214,7 @@ async function observeDetachedAptUpgrade(
 		);
 		stdoutCursor = drained.stdout;
 		stderrCursor = drained.stderr;
+		await flush(drained.complete);
 		await deps.sleep(OUTPUT_POLL_INTERVAL_MS);
 		try {
 			state = await deps.inspect();
@@ -218,6 +249,7 @@ async function observeDetachedAptUpgrade(
 		);
 		stdoutCursor = drained.stdout;
 		stderrCursor = drained.stderr;
+		await flush(drained.complete);
 		finalDrainComplete = drained.complete;
 		if (!finalDrainComplete) {
 			finalDrainFailures++;
@@ -228,9 +260,10 @@ async function observeDetachedAptUpgrade(
 		}
 	}
 	const stdoutTail = stdoutCursor.decoder.decode();
-	if (stdoutTail.length > 0) handlers.onStdout(stdoutTail);
+	if (stdoutTail.length > 0) stdoutCursor.emit(stdoutTail);
 	const stderrTail = stderrCursor.decoder.decode();
-	if (stderrTail.length > 0) handlers.onStderr(stderrTail);
+	if (stderrTail.length > 0) stderrCursor.emit(stderrTail);
+	await flush(true);
 	try {
 		await deps.cleanup(state);
 	} catch (error) {

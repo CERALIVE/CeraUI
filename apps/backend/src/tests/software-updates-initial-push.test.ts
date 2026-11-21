@@ -356,9 +356,10 @@ describe.each(["live", "reattached", "finished replay"] as const)(
 						const unknownTotal = { ...update, unpacking: 1 };
 						const configured = { ...unknownTotal, setting_up: 1 };
 						expect(installFrames).toEqual([
-							...(mode === "finished replay"
-								? []
-								: [
+							// An initial replay already contains the unrelated
+							// setup line. With no denominator it proves phase only.
+							...(mode === "live"
+								? [
 										{
 											updating: unknownTotal,
 											update_state: {
@@ -366,14 +367,17 @@ describe.each(["live", "reattached", "finished replay"] as const)(
 												progress: unknownTotal,
 											},
 										},
-									]),
+									]
+								: []),
 							{
 								updating: configured,
 								update_state: { kind: "installing", progress: configured },
 							},
 						]);
 					}
-					expect(frames[0]).toEqual({
+					expect(
+						frames.find((frame) => Object.hasOwn(frame, "updating")),
+					).toEqual({
 						updating: update,
 						update_state: { kind: "downloading", progress: update },
 					});

@@ -33,7 +33,7 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   transaction's output to the backend process and produced `SIGPIPE` after the
   parent unit stopped. The transient service appends stdout/stderr under
   fixed `/run/ceralive/software-update.{stdout,stderr}` files; the backend polls
-  them and feeds the unchanged apt parsers and `SoftUpdateStatus` broadcasts.
+  them and feeds the apt progress parser and `SoftUpdateStatus` broadcasts.
   The root-owned directory is not peer-writable, file creation is exclusive and
   no-follow, and the files are mode 0600. Caller-selected paths are rejected.
   Progress is derived from the cumulative log, so tokens split across arbitrary
@@ -46,12 +46,14 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   after the download-only boundary. Cross-check upgraded, new, reinstalled
   and downgraded lists against their individual summary counts. Unsupported
   categories or ambiguous evidence leave the total unknown.
-  Each exact identity, including any APT architecture suffix, contributes
-  at most one unpack and one subsequent setup. Unrelated dpkg activity is
-  not counted.
-  Reattachment reads the explicit pins from the validated unit command.
-  Pins can identify activity while the total is unknown, but cannot prove the
-  total: APT can add dependencies or leave a requested package unchanged.
+  A bare name and its verified native `:arch` form share one identity;
+  foreign architectures remain distinct. One unpack and one subsequent
+  setup per planned identity can contribute to the numeric count. When the
+  denominator is unknown, dpkg activity establishes the phase only.
+  Reattachment identifies the pinned two-stage unit from validated argv;
+  that argv does not establish a count. Dpkg errors cap the count at the
+  observed prefix (same log) or the last independently verified frame
+  (split logs). The detached result continues to own terminal settlement.
 - **Reattachment identity is a safety boundary.** Adoption requires the
   exact unit id and transient fragment path, transient-service description/type,
   exact non-duplicated `[Service]` stdout/stderr append destinations, no pre/post

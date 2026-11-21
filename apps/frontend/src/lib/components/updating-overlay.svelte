@@ -1,5 +1,6 @@
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
+import { packageProgressFraction } from '@ceraui/rpc/package-progress';
 import type { StatusMessage } from '@ceraui/rpc/schemas';
 import { CheckCircle2, Cog, Download, Package, RotateCw, XCircle } from '@lucide/svelte';
 import { onMount } from 'svelte';
@@ -7,7 +8,6 @@ import { onMount } from 'svelte';
 import * as Drawer from '$lib/components/ui/drawer/index.js';
 import { Progress } from '$lib/components/ui/progress';
 import { announceLegacyInstallOutcome } from '$lib/updates/legacy-install-notice';
-import { packageProgressFraction } from '$lib/updates/package-progress';
 
 const { details }: { details: Exclude<StatusMessage['updating'], boolean | null> } = $props();
 

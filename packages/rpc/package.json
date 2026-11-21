@@ -21,6 +21,10 @@
 		"./events": {
 			"types": "./src/schemas/events.schema.ts",
 			"import": "./src/schemas/events.schema.ts"
+		},
+		"./package-progress": {
+			"types": "./src/package-progress.ts",
+			"import": "./src/package-progress.ts"
 		}
 	},
 	"scripts": {
