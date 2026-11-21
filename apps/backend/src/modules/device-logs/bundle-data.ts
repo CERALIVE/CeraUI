@@ -32,7 +32,12 @@ interface BundleData {
 	}>;
 }
 
-export async function collectBundleData(): Promise<BundleData> {
+/**
+ * Credentials the backend holds now, as redaction input only; never output.
+ * A snapshot: values changed afterwards, and earlier values no longer held,
+ * are not included.
+ */
+export function collectHeldSecrets(): Array<{ kind: string; value: string }> {
 	const config = getConfig();
 	const secrets: Array<{ kind: string; value: string }> = [];
 	const add = (kind: string, value: string | undefined) => {
@@ -60,6 +65,12 @@ export async function collectBundleData(): Promise<BundleData> {
 	}
 	for (const marker of getRouterCellularMarkers().values())
 		add("serial", marker.serial);
+	return secrets;
+}
+
+export async function collectBundleData(): Promise<BundleData> {
+	const config = getConfig();
+	const secrets = collectHeldSecrets();
 	const [exportedBy, available, updateChannel] = await Promise.all([
 		collectVersionContext(),
 		listBoots(),

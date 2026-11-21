@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import {
 	loadCacheFile,
+	loadCacheFileWithStatus,
 	loadJsonConfig,
 	loadJsonConfigSync,
 	saveJsonConfigAsync,
@@ -255,6 +256,47 @@ describe("loadCacheFile", () => {
 		const result = await loadCacheFile(testFilePath, testCacheSchema);
 
 		expect(result).toEqual({});
+	});
+});
+
+describe("loadCacheFileWithStatus", () => {
+	let tempDir: string;
+	let testFilePath: string;
+
+	beforeEach(() => {
+		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "cache-status-test-"));
+		testFilePath = path.join(tempDir, "test-cache.json");
+	});
+
+	afterEach(() => {
+		fs.rmSync(tempDir, { recursive: true, force: true });
+	});
+
+	it("reports a valid file as loaded", async () => {
+		fs.writeFileSync(testFilePath, JSON.stringify({ key1: "value1" }));
+		expect(
+			await loadCacheFileWithStatus(testFilePath, testCacheSchema),
+		).toEqual({ data: { key1: "value1" }, failed: false });
+	});
+
+	it("reports a missing file as an empty store, not a failure", async () => {
+		expect(
+			await loadCacheFileWithStatus(
+				path.join(tempDir, "nonexistent.json"),
+				testCacheSchema,
+			),
+		).toEqual({ data: {}, failed: false });
+	});
+
+	it("reports unparsable and invalid files as failed", async () => {
+		fs.writeFileSync(testFilePath, "{ invalid json }");
+		expect(
+			await loadCacheFileWithStatus(testFilePath, testCacheSchema),
+		).toEqual({ data: {}, failed: true });
+		fs.writeFileSync(testFilePath, JSON.stringify({ key1: 5 }));
+		expect(
+			await loadCacheFileWithStatus(testFilePath, testCacheSchema),
+		).toEqual({ data: {}, failed: true });
 	});
 });
 

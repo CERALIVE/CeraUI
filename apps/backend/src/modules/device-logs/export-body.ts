@@ -1,9 +1,12 @@
+import { credentialStoresState } from "../../helpers/credential-store-state.ts";
 import { collectVersionContext } from "../system/version-context.ts";
 import { listBoots } from "./boots.ts";
+import { collectHeldSecrets } from "./bundle-data.ts";
 import type { ParsedQuery } from "./continuation.ts";
-import { exportEntry, exportHeader } from "./export-format.ts";
+import { exportEntry, exportHeader, type KnownMatch } from "./export-format.ts";
 import { withQuerySlot } from "./query-admission.ts";
 import { JournalReadError } from "./reader.ts";
+import { buildRedactor } from "./redaction.ts";
 import { scanPage } from "./scan-page.ts";
 import { getLogState } from "./settings.ts";
 
@@ -41,6 +44,31 @@ export async function* exportChunks(
 		return chunk;
 	};
 	let incomplete: string | null = stopped();
+	// Replace the credentials the backend holds as the export starts, in each
+	// entry's unit and message and in the header's values. When that cannot be
+	// done for every held credential, nothing but the footer is sent. The limits
+	// (a snapshot, after journal normalization, fixed footer and filename text)
+	// are in docs/agents/device-log-export.md.
+	let known: KnownMatch = (text) => ({ text, redactions: 0 });
+	const stores = credentialStoresState();
+	if (stores === "pending") {
+		incomplete ??= "CREDENTIALS_LOADING";
+	} else if (stores === "failed") {
+		incomplete ??= "READ_FAILED";
+	} else {
+		try {
+			const redactor = buildRedactor(collectHeldSecrets());
+			if (redactor.unredacted.length > 0) {
+				// Too short to match safely: refuse rather than send them.
+				incomplete ??= `CREDENTIAL_TOO_SHORT (${redactor.unredacted.join(", ")})`;
+			} else {
+				known = redactor.known;
+			}
+		} catch {
+			incomplete ??= "READ_FAILED";
+		}
+	}
+	const redact = (text: string) => known(text).text;
 	try {
 		if (!incomplete) {
 			const boots = await listBoots();
@@ -54,7 +82,9 @@ export async function* exportChunks(
 			const current = await collectVersionContext();
 			incomplete ??= stopped();
 			if (!incomplete) {
-				const header = encode(exportHeader(current, covered, query, createdAt));
+				const header = encode(
+					exportHeader(current, covered, query, createdAt, known),
+				);
 				if (header) yield header;
 				else incomplete = "size_limit";
 			}
@@ -82,7 +112,15 @@ export async function* exportChunks(
 			for (const entry of result.entries) {
 				incomplete = stopped();
 				if (incomplete) break;
-				const chunk = encode(exportEntry(entry));
+				const chunk = encode(
+					redact(
+						exportEntry({
+							...entry,
+							unit: redact(entry.unit),
+							message: redact(entry.message),
+						}),
+					),
+				);
 				if (!chunk) {
 					incomplete = "size_limit";
 					break;
