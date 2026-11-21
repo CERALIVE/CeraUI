@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
-import { LOG_ERROR_CODES } from "@ceraui/rpc/schemas";
+import {
+	LOG_ERROR_CODES,
+	logBundleFailureReasonSchema,
+} from "@ceraui/rpc/schemas";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { getBackendHttpUrl } from "$lib/env";
@@ -10,6 +13,7 @@ import {
 	bundleManifestReply,
 	chineseWordChunks,
 	exportInput,
+	previewFailure,
 	previewProblem,
 	RAW_OPENING_QUERY,
 	refusal,
@@ -86,11 +90,50 @@ describe("previewProblem: a rejected bundle preview", () => {
 			"the sanitized READ_FAILED (a read error or an identifier collision)",
 			new RpcError({ message: "READ_FAILED", code: "INTERNAL_ERROR" }),
 		],
+		[
+			"a READ_FAILED naming its stage",
+			new RpcError({
+				message: "READ_FAILED:collision",
+				code: "INTERNAL_ERROR",
+			}),
+		],
 		["a reply that never arrived", new Error("Request timeout: logs.x")],
 		["a plain error that only says BUSY", new Error("BUSY")],
 		["a thrown non-error", "BUSY"],
 	])("reads %s as a failure", (_name, error) => {
 		expect(previewProblem(error)).toBe("failed");
+	});
+});
+
+describe("previewFailure: the stage of a preview the device refused", () => {
+	it.each(logBundleFailureReasonSchema.options.filter((r) => r !== "internal"))(
+		"reads READ_FAILED:%s as that stage",
+		(reason) => {
+			expect(
+				previewFailure(
+					new RpcError({
+						message: `READ_FAILED:${reason}`,
+						code: "INTERNAL_ERROR",
+					}),
+				),
+			).toBe(reason);
+		},
+	);
+
+	it("reads the bare READ_FAILED and an unknown stage as an unclassified refusal", () => {
+		for (const message of ["READ_FAILED", "READ_FAILED:future_stage"])
+			expect(
+				previewFailure(new RpcError({ message, code: "INTERNAL_ERROR" })),
+			).toBe("internal");
+	});
+
+	it.each([
+		["BUSY", new RpcError({ message: "BUSY", code: "INTERNAL_ERROR" })],
+		["a timeout", new Error("Request timeout: logs.previewBundle")],
+		["a local error with the same text", new Error("READ_FAILED:collision")],
+		["a thrown non-error", "READ_FAILED:collision"],
+	])("reads %s as no device refusal", (_name, error) => {
+		expect(previewFailure(error)).toBeNull();
 	});
 });
 

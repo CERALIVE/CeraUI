@@ -3,6 +3,7 @@
  * saves, how a refusal reads, and how a ticketed file reaches the browser.
  */
 import type {
+	LogBundleFailureReason,
 	LogBundleManifest,
 	LogErrorCode,
 	LogExportInput,
@@ -10,6 +11,7 @@ import type {
 	LogQueryInput,
 } from "@ceraui/rpc/schemas";
 import {
+	logBundleFailureReason,
 	logBundleManifestSchema,
 	logExportOutputSchema,
 } from "@ceraui/rpc/schemas";
@@ -70,12 +72,26 @@ export function refusal(error: LogErrorCode): SharingProblem {
 }
 
 /**
- * The device refused to prepare the bundle: its sanitized READ_FAILED, which
- * includes the fail-closed collision of a held secret with a structured value.
+ * The stage at which the device refused to prepare the bundle, from its
+ * sanitized READ_FAILED message (which includes the fail-closed collision of a
+ * held secret with a structured value), or null when the device did not refuse.
  */
-export function preparationRefused(error: unknown): boolean {
-	return error instanceof RpcError && error.message === "READ_FAILED";
+export function previewFailure(error: unknown): LogBundleFailureReason | null {
+	return error instanceof RpcError
+		? logBundleFailureReason(error.message)
+		: null;
 }
+
+/** Each stage's sentence; stages share one only where the remedy is the same. */
+export const BUNDLE_FAILURE_COPY_KEYS = {
+	collision: "systemLogs.sharing.bundleFailedCollision",
+	pattern: "systemLogs.sharing.bundleFailedPattern",
+	budget: "systemLogs.sharing.bundleFailedBudget",
+	journal_read: "systemLogs.sharing.bundleFailedJournal",
+	deadline: "systemLogs.sharing.bundleFailedInterrupted",
+	abort: "systemLogs.sharing.bundleFailedInterrupted",
+	internal: "systemLogs.sharing.bundleFailed",
+} as const satisfies Record<LogBundleFailureReason, string>;
 
 /** A preview rejects with its sanitized code as the message (apps/backend/docs/agents/device-log-bundle.md). */
 export function previewProblem(error: unknown): SharingProblem {

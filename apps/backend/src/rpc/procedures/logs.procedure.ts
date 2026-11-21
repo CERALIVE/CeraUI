@@ -2,6 +2,7 @@ import {
 	logAroundInputSchema,
 	logAroundOutputSchema,
 	logBootInfoSchema,
+	logBundleFailureMessage,
 	logBundleManifestSchema,
 	logClearAllOutputSchema,
 	logExportInputSchema,
@@ -113,9 +114,11 @@ export const previewLogBundleProcedure = authedProcedure
 		try {
 			return await previewBundle(signal);
 		} catch (error) {
-			const code =
-				error instanceof BundleReadError ? error.code : "READ_FAILED";
-			throw new ORPCError(code, { message: code });
+			const { code, reason } =
+				error instanceof BundleReadError ? error : new BundleReadError();
+			throw new ORPCError(code, {
+				message: reason === "busy" ? code : logBundleFailureMessage(reason),
+			});
 		}
 	});
 

@@ -6,14 +6,16 @@
 `logs.createBundle` procedures accept no input. Extra input is refused before
 collection. Preview returns the frozen `LogBundleManifest`; creation returns
 the existing ticket result or an existing error code. Preview failures use
-`READ_FAILED` or `BUSY` as sanitized RPC errors, without causes or input text.
+`READ_FAILED` or `BUSY` as sanitized RPC errors, without causes or input text;
+a classified `READ_FAILED` names its closed stage as `READ_FAILED:<stage>`
+(see Failure stages).
 The viewer and coordinated English/Spanish user documentation belong to later
 device-log-system todos; this backend does not upload a file.
 
 The existing legacy WebSocket adapter retains its `INTERNAL_ERROR` transport
-envelope for procedure errors, with the constant `READ_FAILED`/`BUSY` message.
-Direct oRPC errors retain the matching existing log error code. No transport
-error vocabulary or adapter behavior is changed.
+envelope for procedure errors, with the sanitized `READ_FAILED[:<stage>]`/`BUSY`
+message. Direct oRPC errors retain the matching existing log error code. No
+transport error vocabulary or adapter behavior is changed.
 
 Preview and creation execute the same bounded pipeline. `bundle-data.ts`
 collects current versions, the current and previous available journal boots'
@@ -65,14 +67,22 @@ ID, cursor, timestamp, unit, version, event ID, settings value or other structur
 field refuses the entire operation with `READ_FAILED`. Pattern masking that
 would alter structured text is also refused. Only designated boot ID fields
 can suppress a numeric match, and only when the entire field equals its
-authoritative boot ID. A journal cursor receives the same exception only
-for its single `b=` component when that component and the entry's boot ID
-both equal the scanned boot. Version text, event parameters, other cursor
-components and journal messages keep all pattern checks. Known secrets
-still match inside every boot ID. A final check of each serialized record prevents JSON
+authoritative boot ID. These are boot records, retained events whose boot is
+known, and the `bootId`/`previousBootId` parameters (from `previous_boot_unclean`
+and `device_started`) when they name a known boot. About one random boot ID in
+390 holds a 15-digit decimal run, so an unclean previous boot must not refuse
+every bundle. A journal cursor in sd_journal_get_cursor's exact format
+(`s=<32 hex>;i=;b=<32 hex>;m=;t=;x=`, every value lowercase hex) whose `b=` and
+entry boot ID equal the scanned boot is exempt from numeric masks as a whole:
+journald generates every component, and about one real `x=` hash in 1700 holds
+a 15-digit run (30 of 50,000 cursors on a systemd 262 host). Any other cursor
+receives the exception only for its single `b=` component when that component
+and the entry's boot ID both equal the scanned boot. Version text, other event
+parameters, non-native cursor components and journal messages keep all pattern
+checks. Known secrets still match inside every boot ID and every cursor. A final check of each serialized record prevents JSON
 framing or replacement markers from reintroducing a known secret. The manifest
 is checked independently, including on deadline paths. No exception or abort
-reason is copied into output or logs.
+reason is copied into output or logs; only the closed stage is (Failure stages).
 Object keys are structured text too: a retained event parameter name containing
 a supported sensitive pattern refuses the operation instead of being renamed.
 The final manifest check also covers section counts after processing; a count
@@ -135,10 +145,38 @@ A paused active download also has a sixty-second transport deadline. It fails
 the stream with a constant error and releases sharing without another client
 pull; a stalled client cannot reserve exports forever.
 
+## Failure stages
+
+Every refused preview or creation logs one warning, `Support bundle preparation
+refused` with `{ module: "device-logs", operation: "preview" | "create", stage }`,
+and nothing else. The preview error message carries the same stage
+(`logBundleFailureMessage()` in `@ceraui/rpc`); creation keeps `{ ok: false,
+error }`. The frontend reads the stage with `logBundleFailureReason()` and shows
+its own localized sentence.
+
+| Stage | Code | Raised where |
+|---|---|---|
+| `collision` | `READ_FAILED` | a held secret of 4+ units is in a structured value, object key, the timestamp, file name, serialized record or manifest (`redaction.ts` `structured()`) |
+| `pattern` | `READ_FAILED` | an identifier, address, location or token shape would alter a structured value or key (`bundle-body.ts` `inspect()`) |
+| `budget` | `READ_FAILED` | held secrets exceed the 64 KiB dictionary budget (`buildRedactor()`) |
+| `journal_read` | `READ_FAILED` | `journalctl --list-boots` failed during collection; journal page failures are cuts, not refusals |
+| `abort` | `READ_FAILED` | a clear, service stop or caller abort, or a history epoch change, interrupted preparation |
+| `deadline` | `READ_FAILED` | the sixty-second budget expired while admission waited for a clear |
+| `internal` | `READ_FAILED` (bare message) | anything else, including an unencodable held secret |
+| `busy` | `BUSY` | another export, bundle or unexpired ticket holds the sharing lease |
+
+The time limit, byte caps and journal page read failures never refuse; they end
+the journal with an incomplete record and `complete:false`. After one Retry on a
+device, `journalctl -u ceralive -g 'Support bundle preparation refused' -o
+json-pretty -n 5` names the stage; `stage:"collision"` points at a held
+credential that is also ordinary device text (for example a stream ID `live`, or
+a short numeric password inside a timestamp), which the operator fixes by
+changing that credential.
+
 Tests are `src/tests/device-logs-redaction.test.ts` and
 `src/tests/device-logs-bundle*.test.ts`, including real HTTP and RPC, adversarial
-collisions, throwing readers/consumers, cancellation, both byte caps and
-deadlines. Board latency, CPU load and physical streaming volume remain
+collisions, throwing readers/consumers, cancellation, both byte caps,
+deadlines and every failure stage (`device-logs-bundle-diagnostics.test.ts`). Board latency, CPU load and physical streaming volume remain
 unmeasured.
 
 The frozen NDJSON and manifest formats carry no review-before-sharing statement.

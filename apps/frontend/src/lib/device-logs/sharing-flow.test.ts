@@ -591,6 +591,47 @@ describe("SharingFlow: support bundle", () => {
 		expect(flow.bundleRefused).toBe(false);
 	});
 
+	it("keeps the device's sanitized stage of a refused preview until the next attempt or close", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const { flow, previewBundle } = setup();
+		previewBundle
+			.mockRejectedValueOnce(
+				new RpcError({
+					message: "READ_FAILED:collision",
+					code: "INTERNAL_ERROR",
+				}),
+			)
+			.mockRejectedValueOnce(busyPreview())
+			.mockRejectedValueOnce(failedPreview())
+			.mockResolvedValueOnce(manifest(2));
+
+		await flow.openBundle();
+		expect(flow.bundleProblem).toBe("failed");
+		expect(flow.bundleFailure).toBe("collision");
+		expect(flow.bundleRefused).toBe(true);
+
+		await flow.retryPreview();
+		expect(flow.bundleProblem).toBe("busy");
+		expect(flow.bundleFailure).toBeNull();
+
+		await flow.retryPreview();
+		expect(flow.bundleFailure).toBe("internal");
+		expect(flow.bundleRefused).toBe(true);
+
+		await flow.retryPreview();
+		expect(flow.manifest).toStrictEqual(manifest(2));
+		expect(flow.bundleFailure).toBeNull();
+
+		previewBundle.mockRejectedValueOnce(
+			new RpcError({ message: "READ_FAILED:pattern", code: "INTERNAL_ERROR" }),
+		);
+		flow.closeBundle();
+		await flow.openBundle();
+		expect(flow.bundleFailure).toBe("pattern");
+		flow.closeBundle();
+		expect(flow.bundleFailure).toBeNull();
+	});
+
 	it("marks a creation the device refused as READ_FAILED as a refusal Export can replace, not a call that failed here", async () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
 		const { flow, previewBundle, createBundle } = setup();

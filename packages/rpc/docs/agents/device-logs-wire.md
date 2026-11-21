@@ -17,17 +17,26 @@ Shapes: `src/schemas/logs.schema.ts`. Procedures: `src/contracts/logs.contract.t
 | `deleteLegacyDebug` | none | `logStorageOutputSchema` | `{ ok: false, error }` |
 | `clearAll` | none | `logClearAllOutputSchema` (includes boot counts) | `{ ok: false, error }` |
 | `createExport` | `logExportInputSchema` | `logExportOutputSchema` | `{ ok: false, error }` |
-| `previewBundle` | none | `logBundleManifestSchema` | thrown oRPC error, code `READ_FAILED` or `BUSY` |
+| `previewBundle` | none | `logBundleManifestSchema` | thrown oRPC error, code `READ_FAILED` or `BUSY`; a classified `READ_FAILED` message is `READ_FAILED:<stage>` |
 | `createBundle` | none | `logExportOutputSchema` | `{ ok: false, error }` |
 
 Sources: `src/contracts/logs.contract.ts`;
 `apps/backend/src/rpc/procedures/logs.procedure.ts`; `apps/backend/src/modules/device-logs/follow.ts:52`;
-`apps/backend/src/modules/device-logs/bundle.ts:85-90`;
-`apps/backend/src/modules/device-logs/redaction.ts:1-5`. `{ ok: false, error }` uses `logErrorSchema` with the nine
+`apps/backend/src/modules/device-logs/bundle.ts:100-105`;
+`apps/backend/src/modules/device-logs/redaction.ts:4-12`. `{ ok: false, error }` uses `logErrorSchema` with the nine
 `LOG_ERROR_CODES` (`logs.schema.ts:21-31`). The 12 handlers are built on
 `authedProcedure`, whose middleware throws oRPC `UNAUTHORIZED`
 (`apps/backend/src/rpc/procedures/logs.procedure.ts`;
 `apps/backend/src/rpc/middleware/auth.middleware.ts:19-25`).
+
+The preview stage is the closed `logBundleFailureReasonSchema` in
+`logs-boot.schema.ts`: `collision`, `pattern`, `budget`, `journal_read`,
+`deadline`, `abort` and `internal`. `logBundleFailureMessage()` keeps the bare
+`READ_FAILED` for `internal`, so an unclassified refusal reads as before, and
+`logBundleFailureReason()` reads any `READ_FAILED:<word>` from a newer device
+with an unknown stage as `internal`. The message never carries a cause, input
+text, secret or position. `createBundle` keeps `{ ok: false, error }` without a
+stage.
 
 ## Follow push
 

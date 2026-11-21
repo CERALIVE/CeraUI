@@ -55,3 +55,27 @@ export const logBundleManifestSchema = z.strictObject({
 	),
 });
 export type LogBundleManifest = z.infer<typeof logBundleManifestSchema>;
+
+/** Where a bundle preview stopped with READ_FAILED: a closed stage, never a cause or input. */
+export const logBundleFailureReasonSchema = z.enum([
+	'collision',
+	'pattern',
+	'budget',
+	'journal_read',
+	'deadline',
+	'abort',
+	'internal',
+]);
+export type LogBundleFailureReason = z.infer<typeof logBundleFailureReasonSchema>;
+
+/** The preview's sanitized message: bare READ_FAILED when the stage is unclassified. */
+export function logBundleFailureMessage(reason: LogBundleFailureReason): string {
+	return reason === 'internal' ? 'READ_FAILED' : `READ_FAILED:${reason}`;
+}
+
+/** The stage a preview message names, `internal` for an unknown one, null when it is no READ_FAILED. */
+export function logBundleFailureReason(message: string): LogBundleFailureReason | null {
+	const match = /^READ_FAILED(?::(\w+))?$/.exec(message);
+	if (!match) return null;
+	return logBundleFailureReasonSchema.safeParse(match[1]).data ?? 'internal';
+}

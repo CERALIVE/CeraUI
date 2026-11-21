@@ -45,6 +45,11 @@ describe('closed log schema vocabularies', () => {
 		['shutdown', logs.logBootInfoSchema.shape.shutdown, ['clean', 'unclean', 'unknown', 'current']],
 		['detail', logs.logRetentionSchema.shape.detail, ['debug', 'info']],
 		['section', logs.logBundleSectionIdSchema, ['versions', 'events', 'journal', 'settings']],
+		[
+			'bundle failure',
+			logs.logBundleFailureReasonSchema,
+			['collision', 'pattern', 'budget', 'journal_read', 'deadline', 'abort', 'internal'],
+		],
 	] as const;
 	for (const [name, schema, options] of vocabularies) {
 		test(`${name} has exactly the specified options`, () => {

@@ -5,19 +5,20 @@
   free of personal data. The downloaded file carries no such warning of its own,
   so this is where it is said, before Download bundle can be pressed. A refused
   preview (including the device's fail-closed identifier collision, which reads
-  as READ_FAILED) offers Retry; under the band, a bundle the device refused to
-  prepare also points to Export this view, which does not go through that
-  collision. Cancel, Escape and the close button discard a request still in
-  flight.
+  as READ_FAILED) offers Retry and names the device's sanitized stage in its own
+  sentence; under the band, a bundle the device refused to prepare also points
+  to Export this view, which does not go through that collision. Cancel, Escape
+  and the close button discard a request still in flight.
 -->
 <script lang="ts">
-import { getLocale, m } from '@ceraui/i18n/svelte';
+import { getLocale, m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { LogBundleManifest, VersionContext } from '@ceraui/rpc/schemas';
 import { RefreshCw, ShieldAlert, TriangleAlert } from '@lucide/svelte';
 
 import { AppDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
 import { Skeleton } from '$lib/components/ui/skeleton';
+import { BUNDLE_FAILURE_COPY_KEYS } from '$lib/device-logs/sharing';
 import type { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';
 
 import KeepWords from './KeepWords.svelte';
@@ -48,7 +49,7 @@ const VERSIONS: ReadonlyArray<[Exclude<keyof VersionContext, 'bootId'>, () => st
 
 const PREVIEW_PROBLEM = {
 	busy: () => m['systemLogs.sharing.busy'](),
-	failed: () => m['systemLogs.sharing.bundleFailed'](),
+	failed: () => resolveMessageKey(BUNDLE_FAILURE_COPY_KEYS[sharing.bundleFailure ?? 'internal']),
 };
 const CREATE_PROBLEM = {
 	busy: () => m['systemLogs.sharing.busy'](),

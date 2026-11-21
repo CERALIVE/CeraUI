@@ -633,6 +633,39 @@ describe("SharingSection: support bundle", () => {
 		},
 	);
 
+	it.each([
+		["collision", sharing.bundleFailedCollision],
+		["pattern", sharing.bundleFailedPattern],
+		["budget", sharing.bundleFailedBudget],
+		["journal_read", sharing.bundleFailedJournal],
+		["deadline", sharing.bundleFailedInterrupted],
+		["abort", sharing.bundleFailedInterrupted],
+	] as const)(
+		"states the device's %s stage in its own sentence, with Retry and Export this view",
+		async (stage, text) => {
+			vi.spyOn(console, "error").mockImplementation(() => {});
+			previewBundle.mockRejectedValueOnce(
+				new RpcError({
+					message: `READ_FAILED:${stage}`,
+					code: "INTERNAL_ERROR",
+				}),
+			);
+			await open("bundle");
+			const body = await dialog(sharing.bundle);
+
+			const band = await within(body).findByTestId("sharing-bundle-problem");
+			expect(band.querySelector("p")?.textContent?.trim()).toBe(text);
+			expect(text).not.toBe(sharing.bundleFailed);
+			expect(band.textContent).not.toContain(stage);
+			expect(
+				within(band).getByRole("button", { name: en.systemLogs.action.retry }),
+			).toBeTruthy();
+			expect(
+				within(body).getByTestId("sharing-bundle-use-export"),
+			).toBeTruthy();
+		},
+	);
+
 	it("points a refused preview to Export this view under its band, and opens the export from there", async () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
 		previewBundle.mockRejectedValueOnce(

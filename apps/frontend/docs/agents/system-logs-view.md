@@ -174,13 +174,13 @@ in section 4.
 
 | State | Region | What renders | Announced (design intent, not measured) |
 |---|---|---|---|
-| Loading | Events, Raw logs, Boots, Storage, bundle preview | Skeleton placeholders (the bundle preview uses plain skeleton blocks and status text, `main/system-logs/BundleDialog.svelte:101-107`) | status role (section 7 map) |
+| Loading | Events, Raw logs, Boots, Storage, bundle preview | Skeleton placeholders (the bundle preview uses plain skeleton blocks and status text, `main/system-logs/BundleDialog.svelte:102-108`) | status role (section 7 map) |
 | Empty | Events | Title "No events recorded yet" plus a sentence naming what will appear (stream, links, modems, updates, restarts, capture) | no |
 | Empty | Raw logs | "No entries match" plus a hint that teaches the filter (fewer sources, wider level, longer time, shorter text) and a Show everything action resetting to defaults | no |
 | Empty (filtered) | Events | "No events match these filters" plus Show all events | no |
 | Error with recovery | regions using `RecoveryBand` (section 7 map) | Inline band in the existing amber recovery style (`border-status-warning/30 bg-status-warning/10`, `role="alert"`) naming the problem; which regions render `RecoveryBand` and its Retry: section 7 map | alert |
 | Busy | Raw logs, Sharing | "Another view is reading logs" (Raw, `BUSY`) or "Another export is running" (Sharing) | alert |
-| Bundle refused | Sharing | The device refused to prepare the bundle (`READ_FAILED`, which includes the fail-closed collision of a held secret with a structured value): the failure band, then under it "Use Export this view instead." and an Export this view button that opens the export confirmation (`main/system-logs/BundleDialog.svelte:132-145`, `lib/device-logs/sharing-flow.svelte.ts`) | alert (the band); the button is described by the line |
+| Bundle refused | Sharing | The device refused to prepare the bundle (`READ_FAILED`, which includes the fail-closed collision of a held secret with a structured value): the failure band states the device's sanitized stage (`READ_FAILED:<stage>`, read by `previewFailure()` into `bundleFailure`) in its own sentence from `BUNDLE_FAILURE_COPY_KEYS` (`lib/device-logs/sharing.ts`; a bare or unknown stage keeps "Couldn't prepare the support bundle."), then under it "Use Export this view instead." and an Export this view button that opens the export confirmation (`main/system-logs/BundleDialog.svelte:133-146`, `lib/device-logs/sharing-flow.svelte.ts`) | alert (the band); the button is described by the line |
 | Expired position | Raw logs | `CURSOR_UNAVAILABLE` or `FILTER_CHANGED`: "This position is no longer stored" with Start from newest; rows already shown stay, paging toward the lost side is disabled | alert |
 | Keep searching | Raw logs | `hasMore: null`: a Keep searching button and a line saying only part of the stored logs was checked; never an end marker (the normal state for a time-bounded view once its entries are shown) | no |
 | End of results | Raw logs, Events | Raw logs shows an end marker at an exhausted, available edge after the first load when rows are present. The display-limit notice takes precedence at the bottom. Approximate-window markers name the time window. Events shows an end row when events are present and no older page or paging error remains. | no |
@@ -539,7 +539,12 @@ Rules for this copy:
 | `systemLogs.sharing.bundleJournalIncomplete` | Raw logs were cut short by a size or time limit or by a read error, so the bundle may not hold every entry. | Manifest note when journal collection was incomplete |
 | `systemLogs.sharing.bundleSensitive` | Secrets known to the device and common identifiers are removed, but the file may still contain personal data. Review it before sharing. | Shown before Download is enabled |
 | `systemLogs.sharing.bundleDownload` | Download bundle | Bundle dialog primary |
-| `systemLogs.sharing.bundleFailed` | Couldn't prepare the support bundle. | Recovery band |
+| `systemLogs.sharing.bundleFailed` | Couldn't prepare the support bundle. | Recovery band (bare `READ_FAILED`, `internal` or unknown stage, and an unanswered preview) |
+| `systemLogs.sharing.bundleFailedCollision` | A saved password or key matches part of a name, version or number the bundle must keep, so it was stopped to protect that secret. Change it to a longer, unique value and try again. | Recovery band, `collision` stage |
+| `systemLogs.sharing.bundleFailedPattern` | A name, version or other detail the bundle must keep looks like a phone ID, address or token, so it was stopped to keep that value private. | Recovery band, `pattern` stage |
+| `systemLogs.sharing.bundleFailedBudget` | The device holds too many saved passwords and keys to check them all. Remove the ones you no longer use and try again. | Recovery band, `budget` stage |
+| `systemLogs.sharing.bundleFailedJournal` | The device couldn't read its logs. Try again, and restart the device if this keeps happening. | Recovery band, `journal_read` stage |
+| `systemLogs.sharing.bundleFailedInterrupted` | Preparing the bundle was interrupted or took too long, for example because logs were cleared. Try again. | Recovery band, `abort` and `deadline` stages |
 | `systemLogs.sharing.bundleUseExport` | Use Export this view instead. | Under the band of a bundle the device refused to prepare |
 | `systemLogs.sharing.busy` | Another export is running. Try again when it finishes. | BUSY |
 | `systemLogs.sharing.failed` | Couldn't create the file. | Recovery band |
@@ -972,7 +977,7 @@ button disappears, provided the operator has not moved focus.
 |---| --- |
 | `main/system-logs/BootButton.svelte` | no props |
 | `main/system-logs/BootPicker.svelte:30` | props |
-| `main/system-logs/BundleDialog.svelte:25` | props |
+| `main/system-logs/BundleDialog.svelte:26` | props |
 | `main/system-logs/EventRow.svelte:38` | props |
 | `main/system-logs/EventsBootHeading.svelte:11` | props |
 | `main/system-logs/EventsFilters.svelte:11` | props |
@@ -1135,7 +1140,7 @@ Related browser specs and their entry points:
 
 ### role="status" elements
 
-`main/system-logs/BootPicker.svelte:166`, `main/system-logs/BundleDialog.svelte:102`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:211`, `main/system-logs/ExportDialog.svelte:51`, `main/system-logs/RawLogList.svelte:251`, `main/system-logs/RawLogRow.svelte:163`, `main/system-logs/RawLogsPanel.svelte:101`, `main/system-logs/RawLogsTab.svelte:158`, `main/system-logs/StorageCleanup.svelte:173`, `main/system-logs/StorageLimits.svelte:186`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:229`.
+`main/system-logs/BootPicker.svelte:166`, `main/system-logs/BundleDialog.svelte:103`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:211`, `main/system-logs/ExportDialog.svelte:51`, `main/system-logs/RawLogList.svelte:251`, `main/system-logs/RawLogRow.svelte:163`, `main/system-logs/RawLogsPanel.svelte:101`, `main/system-logs/RawLogsTab.svelte:158`, `main/system-logs/StorageCleanup.svelte:173`, `main/system-logs/StorageLimits.svelte:186`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:229`.
 
 ### Limits and constants
 

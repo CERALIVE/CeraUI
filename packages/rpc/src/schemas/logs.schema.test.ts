@@ -22,6 +22,9 @@ import {
 	logAroundOutputSchema,
 	logBootInfoSchema,
 	logBootSchema,
+	logBundleFailureMessage,
+	logBundleFailureReason,
+	logBundleFailureReasonSchema,
 	logBundleManifestSchema,
 	logClearAllOutputSchema,
 	logEntrySchema,
@@ -1020,6 +1023,20 @@ describe('boot versions, storage and sharing', () => {
 			boots: [{ bootId, versions: null }],
 		} satisfies LogBundleManifest;
 		expect(logBundleManifestSchema.parse(manifest)).toEqual(manifest);
+	});
+
+	test('a refused preview names its closed stage in the READ_FAILED message and nothing else', () => {
+		expect(logBundleFailureMessage('internal')).toBe('READ_FAILED');
+		expect(logBundleFailureMessage('collision')).toBe('READ_FAILED:collision');
+		expect(logBundleFailureMessage('journal_read')).toBe('READ_FAILED:journal_read');
+		for (const reason of logBundleFailureReasonSchema.options) {
+			expect(logBundleFailureReason(logBundleFailureMessage(reason))).toBe(reason);
+		}
+		// An unknown stage from a newer device is still that device's refusal.
+		expect(logBundleFailureReason('READ_FAILED:future_stage')).toBe('internal');
+		for (const message of ['BUSY', 'READ_FAILED:', 'READ_FAILED collision', 'boom', '']) {
+			expect(logBundleFailureReason(message)).toBeNull();
+		}
 	});
 
 	test('retention defaults to the image ceiling without hard-coded upper bounds', () => {
