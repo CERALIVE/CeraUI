@@ -22,6 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	resetConnectionState,
 	setConnectionState,
+	setSocketAuthenticated,
 } from "$lib/components/custom/__fixtures__/connection-state.svelte";
 import {
 	BOOT_IDS,
@@ -982,7 +983,12 @@ describe("EventsTab: states", () => {
 		).not.toContain("text-foreground");
 
 		list.mockResolvedValueOnce(eventPage([stopped(2)]));
+		setSocketAuthenticated(false);
 		setConnectionState("connected");
+		await tick();
+		expect(list).toHaveBeenCalledTimes(1);
+		expect(screen.getByTestId("events-disconnected")).toBe(notice);
+		setSocketAuthenticated(true);
 		await waitFor(() =>
 			expect(screen.queryByTestId("events-disconnected")).toBeNull(),
 		);

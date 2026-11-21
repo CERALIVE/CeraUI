@@ -92,7 +92,7 @@ type Retention = { maxAgeDays: number | null; maxSizeMb: number | null; detail: 
 type Storage = {
 	journalBytes: number | null;
 	journalDirBytes: number | null;
-	legacyDebugBytes: number;
+	legacyDebugBytes: number | null;
 	ceiling: { maxSizeMb: number; maxAgeDays: number } | null;
 	retention: Retention;
 	oldestEntryTs: number | null;

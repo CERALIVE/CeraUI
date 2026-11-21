@@ -27,7 +27,7 @@ import { EVENT_ROW_CAP } from '$lib/device-logs/events-window';
 import { onHistoryChanged } from '$lib/device-logs/history-bus';
 import { modemNames, timelineGroups } from '$lib/device-logs/timeline-groups';
 import { rpc } from '$lib/rpc/client';
-import { getConnectionState, setEventFeedListener } from '$lib/rpc/subscriptions.svelte';
+import { getSessionReady, setEventFeedListener } from '$lib/rpc/subscriptions.svelte';
 
 import EventRow from './EventRow.svelte';
 import EventsBootHeading from './EventsBootHeading.svelte';
@@ -48,6 +48,8 @@ let scroller = $state<HTMLDivElement>();
 let stopId = $state<string>();
 let focusedRow = $state.raw<DeviceEvent>();
 let returningToNewest = $state(false);
+let focusAfterReset = $state.raw<Element>();
+let previousHistoryRevision = 0;
 
 const view = new EventsView(
 	{
@@ -70,17 +72,29 @@ onDestroy(bootSelection.onChoose((bootId) => view.setBoot(bootId)));
 onDestroy(() => view.dispose());
 
 $effect(() => {
-	const state = getConnectionState();
-	untrack(() => view.connectionChanged(state));
+	const ready = getSessionReady();
+	untrack(() => view.connectionChanged(ready ? 'connected' : 'disconnected'));
 });
 
 $effect.pre(() => {
 	const { keepShownFocus } = view.rowReset;
 	untrack(() => {
-		if (keepShownFocus && view.events.some((event) => event.id === focusedRow?.id)) return;
-		if (focusedRow && document.activeElement?.closest('[data-testid="event-row"]'))
-			firstFilter()?.focus();
+		const sameHistory = previousHistoryRevision === view.historyRevision;
+		previousHistoryRevision = view.historyRevision;
+		if (sameHistory && keepShownFocus && view.events.some((event) => event.id === focusedRow?.id)) return;
+		const active = document.activeElement;
+		if (active && scroller?.contains(active)) focusAfterReset = active;
 		focusedRow = stopId = undefined;
+	});
+});
+
+$effect(() => {
+	const previous = focusAfterReset;
+	if (previous === undefined || view.loading !== null) return;
+	untrack(() => {
+		if (!previous.isConnected && document.activeElement === document.body)
+			(eventAction(0) ?? firstFilter())?.focus();
+		focusAfterReset = undefined;
 	});
 });
 
@@ -97,6 +111,15 @@ const rowIds = $derived(
 	groups.flatMap((group) => group.items.flatMap((item) => (item.kind === 'event' ? [item.event.id] : []))),
 );
 const tabStop = $derived(rowIds.find((id) => id === stopId) ?? rowIds[0]);
+const newestLabel = $derived(
+	view.newWhileBrowsing > 0
+		? view.newCountIncomplete
+			? m['systemLogs.events.startFromNewestAtLeast']({ count: view.newWhileBrowsing })
+			: m['systemLogs.events.startFromNewestCount']({ count: view.newWhileBrowsing })
+		: view.newCountIncomplete
+			? m['systemLogs.events.startFromNewestUnknown']()
+			: m['systemLogs.error.startFromNewest'](),
+);
 
 function firstFilter(): HTMLButtonElement | null | undefined {
 	return scroller?.parentElement?.querySelector<HTMLButtonElement>('[data-testid="events-filters"] button');
@@ -142,8 +165,10 @@ let pressed = $state.raw<object>();
 
 $effect.pre(() => {
 	if (view.loading !== null) return;
-	const paging = document.activeElement?.hasAttribute('data-paging');
-	untrack(() => (pressed = paging ? {} : undefined));
+	untrack(() => {
+		const paging = focusAfterReset === undefined && document.activeElement?.hasAttribute('data-paging');
+		pressed = paging ? {} : undefined;
+	});
 });
 
 $effect(() => {
@@ -194,9 +219,7 @@ $effect(() => {
 				onclick={returnToNewest}
 				size="sm"
 				variant="outline"
-				>{view.newWhileBrowsing > 0
-					? m['systemLogs.events.startFromNewestCount']({ count: view.newWhileBrowsing })
-					: m['systemLogs.error.startFromNewest']()}</Button
+				>{newestLabel}</Button
 			>
 		</div>
 	{/if}
@@ -228,7 +251,7 @@ $effect(() => {
 			<section aria-labelledby="{uid}-{group.key}" data-boot-id={group.bootId} data-testid="events-boot">
 				<EventsBootHeading id="{uid}-{group.key}" {info} {boots} />
 				<ul class="divide-y">
-					{#each group.items as item (item.key)}
+					{#each group.items as item (`${view.historyRevision}:${item.key}`)}
 						{#if item.kind === 'clock'}
 							<li
 								class="text-muted-foreground before:bg-border after:bg-border flex items-center gap-3 px-4 py-2 text-xs before:h-px before:flex-1 after:h-px after:flex-1"

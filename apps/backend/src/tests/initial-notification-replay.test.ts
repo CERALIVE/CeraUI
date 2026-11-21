@@ -17,7 +17,10 @@
  */
 
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { notificationsMessageSchema } from "@ceraui/rpc/schemas";
+import {
+	notificationSchema,
+	notificationsMessageSchema,
+} from "@ceraui/rpc/schemas";
 
 import {
 	notificationBroadcast,
@@ -113,35 +116,50 @@ describe("the replay and its publisher are on the wire", () => {
 	});
 
 	test("two backend processes number the same notice alike but name different publishers", async () => {
+		// Share one deadline across both children so a hang still yields exit diagnostics.
+		const deadline = AbortSignal.timeout(30_000);
 		const module = new URL("../modules/ui/notifications.ts", import.meta.url)
 			.pathname;
+		const prefix = "replay-result:";
+		const resultSchema = notificationSchema
+			.pick({ revision: true, publisher: true })
+			.required();
 		const probe = [
 			`import { getPersistentNotifications, notificationBroadcast } from ${JSON.stringify(module)};`,
 			`notificationBroadcast("probe", "warning", "x", 0, true, true, true);`,
 			`const [entry] = getPersistentNotifications(true).show;`,
-			`console.log(JSON.stringify({ revision: entry.revision, publisher: entry.publisher }));`,
+			`console.log(${JSON.stringify(prefix)} + JSON.stringify({ revision: entry.revision, publisher: entry.publisher }));`,
 		].join("\n");
-		const run = async (): Promise<{ revision: number; publisher: string }> => {
+		const run = async (label: string) => {
 			const child = Bun.spawn([process.execPath, "-e", probe], {
+				env: process.env,
 				stdout: "pipe",
-				stderr: "ignore",
-				timeout: 3000,
+				stderr: "pipe",
+				signal: deadline,
+				killSignal: "SIGKILL",
 			});
-			const [out, code] = await Promise.all([
+			const [out, stderr, code] = await Promise.all([
 				new Response(child.stdout).text(),
+				new Response(child.stderr).text(),
 				child.exited,
 			]);
-			expect(code).toBe(0);
-			// Startup may log before the probe prints its value.
-			const line = out.trimEnd().split("\n").at(-1) ?? "";
-			return JSON.parse(line);
+			const line = out.split("\n").find((line) => line.startsWith(prefix));
+			const details = `${label} replay child (exit ${code}, signal ${child.signalCode ?? "none"}, result ${line === undefined ? "missing" : "received"}); stderr: ${stderr.trim() || "(empty)"}`;
+			if (deadline.aborted)
+				throw new Error(`Replay deadline exceeded: ${details}`);
+			if (code !== 0 || line === undefined) throw new Error(details);
+			try {
+				return resultSchema.parse(JSON.parse(line.slice(prefix.length)));
+			} catch (cause) {
+				throw new Error(`Invalid replay result: ${details}`, { cause });
+			}
 		};
 
-		const first = await run();
-		const second = await run();
+		const first = await run("first");
+		const second = await run("second");
 
 		expect(second.revision).toBe(first.revision);
 		expect(first.publisher).toBeString();
 		expect(second.publisher).not.toBe(first.publisher);
-	});
+	}, 0);
 });

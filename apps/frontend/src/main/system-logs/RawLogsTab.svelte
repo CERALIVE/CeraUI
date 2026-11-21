@@ -3,7 +3,8 @@
   state notices, and the list that owns the scroll. Each mount builds its own
   view and runs a fresh first query (or opens on a `logs.around` result), and
   unmounting stops any follow, so a hidden tab never reads logs. A message whose
-  moment is not known opens on the newest entries with one line saying so. One polite
+  moment is not known opens on the newest entries with one line saying so, until
+  Follow starts or the filter first leaves the default. One polite
   status region, mounted before anything can follow, announces follow states;
   failures are inline alert bands with their recovery.
 -->
@@ -16,10 +17,11 @@ import { onDestroy, untrack } from 'svelte';
 import { Button } from '$lib/components/ui/button';
 import { bootSelection } from '$lib/device-logs/boot-selection.svelte';
 import { onHistoryChanged } from '$lib/device-logs/history-bus';
+import { isDefaultFilter } from '$lib/device-logs/raw-filter';
 import { type AroundPage, type RawAnnouncement, RawView, resetRawView } from '$lib/device-logs/raw-view.svelte';
 import type { ExportSpan } from '$lib/device-logs/sharing';
 import { rpc } from '$lib/rpc/client';
-import { getConnectionState, setLogFollowListener } from '$lib/rpc/subscriptions.svelte';
+import { getSessionReady, setLogFollowListener } from '$lib/rpc/subscriptions.svelte';
 
 import KeepWords from './KeepWords.svelte';
 import RawLogList from './RawLogList.svelte';
@@ -32,6 +34,7 @@ const ANNOUNCE: Record<RawAnnouncement['kind'], (count: number) => string> = {
 	resumed: () => m['systemLogs.announce.resumed'](),
 	paused: () => m['systemLogs.announce.paused'](),
 	stopped: () => m['systemLogs.announce.stopped'](),
+	restarted: () => m['systemLogs.follow.bootChangedIdle'](),
 	gap: () => m['systemLogs.announce.gap'](),
 	disconnected: () => m['systemLogs.announce.disconnected'](),
 	newEntries: (count) => m['systemLogs.announce.newEntries']({ count }),
@@ -74,8 +77,14 @@ $effect(() => {
 });
 
 $effect(() => {
-	const state = getConnectionState();
-	untrack(() => view.connectionChanged(state));
+	const ready = getSessionReady();
+	untrack(() => view.connectionChanged(ready ? 'connected' : 'disconnected'));
+});
+
+// The unknown moment speaks for the opening view only; restoring the default filter does not bring it back.
+let momentDismissed = $state(false);
+$effect(() => {
+	if (view.follow !== 'idle' || !isDefaultFilter(view.filter)) momentDismissed = true;
 });
 
 const band = $derived.by(() => {
@@ -111,10 +120,11 @@ const band = $derived.by(() => {
 			<p>{m['systemLogs.follow.disconnectedBody']()}</p>
 		</div>
 	{/if}
-	{#if view.follow === 'stopped' && view.ended !== null}
-		<p class="text-muted-foreground border-b px-4 py-2 text-xs" data-testid="raw-follow-ended">{ENDED[view.ended]()}</p>
+	{#if view.ended !== null && (view.follow === 'stopped' || view.follow === 'idle')}
+		<!-- An idle view only learns that the device restarted: nothing was following, so nothing stopped. -->
+		<p class="text-muted-foreground border-b px-4 py-2 text-xs" data-testid="raw-follow-ended">{view.follow === 'idle' ? m['systemLogs.follow.bootChangedIdle']() : ENDED[view.ended]()}</p>
 	{/if}
-	{#if momentUnknown}
+	{#if momentUnknown && !momentDismissed}
 		<p class="text-muted-foreground border-b px-4 py-2 text-xs [&:lang(zh)]:break-keep" data-testid="raw-moment-unknown">
 			<KeepWords text={m['systemLogs.anchor.unknown']()} />
 		</p>

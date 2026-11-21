@@ -1,4 +1,4 @@
-import { afterEach, expect, spyOn, test } from "bun:test";
+import { afterEach, expect, setSystemTime, spyOn, test } from "bun:test";
 import { logBootInfoSchema } from "@ceraui/rpc/schemas";
 import * as run from "../helpers/run.ts";
 import * as mocks from "../mocks/mock-service.ts";
@@ -9,6 +9,7 @@ import * as store from "../modules/events/store.ts";
 import { record } from "./helpers/device-query.ts";
 
 afterEach(() => {
+	setSystemTime();
 	spyOn(run, "run").mockRestore();
 	spyOn(mocks, "shouldUseMocks").mockRestore();
 	spyOn(store, "readBoots").mockRestore();
@@ -33,7 +34,7 @@ test("boot rows merge stored versions without replacing journal bounds or invent
 	);
 	const result = await listBoots();
 	expect(command.mock.calls).toEqual([
-		["journalctl", ["--list-boots", "-o", "json"]],
+		["journalctl", ["--list-boots", "-o", "json"], { timeout: 30_000 }],
 	]);
 	expect(result).toEqual([
 		{
@@ -102,15 +103,17 @@ test.each([
 	},
 );
 test.each([
-	[[], 0, 0],
-	[[3, 9], 3, 9],
-	[[0, 3], 0, 3],
-	[[1000, 2000], 1000, 2000],
+	["01".repeat(16), [], 0],
+	["02".repeat(16), [3, 9], 9],
+	["03".repeat(16), [0, 3], 3],
+	["04".repeat(16), [1000, 2000], 2000],
 ] as const)(
-	"mock boot bounds come from ring %j",
-	async (timestamps, first, last) => {
+	"mock boot %s starts at discovery and reads its last timestamp from %j",
+	async (bootId, timestamps, last) => {
+		const startedAt = 3000;
+		setSystemTime(new Date(startedAt));
 		spyOn(mocks, "shouldUseMocks").mockReturnValue(true);
-		spyOn(identity, "currentBootId").mockReturnValue(a);
+		spyOn(identity, "currentBootId").mockReturnValue(bootId);
 		spyOn(store, "readBoots").mockReturnValue([]);
 		spyOn(adapter, "scanMockJournal").mockImplementation(async (input) => {
 			expect(input.options).toEqual([]);
@@ -121,9 +124,9 @@ test.each([
 		});
 		expect(await listBoots()).toEqual([
 			{
-				bootId: a,
+				bootId,
 				index: 0,
-				firstTs: first,
+				firstTs: startedAt,
 				lastTs: last,
 				current: true,
 				logsAvailable: true,
@@ -154,9 +157,11 @@ test("missing mock identity and native command faults remain explicit failures",
 		expect(listBoots()).rejects.toMatchObject({ code });
 	}
 });
-test("the largest reader-admitted microsecond timestamp round-trips through mock boot bounds", async () => {
+test("the largest reader-admitted microsecond timestamp round-trips as the mock boot's last entry", async () => {
+	const startedAt = 3000;
+	setSystemTime(new Date(startedAt));
 	spyOn(mocks, "shouldUseMocks").mockReturnValue(true);
-	spyOn(identity, "currentBootId").mockReturnValue(a);
+	spyOn(identity, "currentBootId").mockReturnValue("05".repeat(16));
 	spyOn(store, "readBoots").mockReturnValue([]);
 	const largest = record(1, {
 		__REALTIME_TIMESTAMP: String(Number.MAX_SAFE_INTEGER),
@@ -167,7 +172,7 @@ test("the largest reader-admitted microsecond timestamp round-trips through mock
 	});
 	const result = await listBoots();
 	expect(result[0]).toMatchObject({
-		firstTs: Number(BigInt(Number.MAX_SAFE_INTEGER) / 1000n),
+		firstTs: startedAt,
 		lastTs: Number(BigInt(Number.MAX_SAFE_INTEGER) / 1000n),
 	});
 	expect(logBootInfoSchema.safeParse(result[0]).success).toBe(true);

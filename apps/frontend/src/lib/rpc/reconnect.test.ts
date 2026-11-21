@@ -15,6 +15,8 @@ function makeDeps(overrides: Partial<ReauthDeps> = {}): {
 } {
 	const dispatched: Array<[string, unknown]> = [];
 	const deps: ReauthDeps = {
+		isCurrent: () => true,
+		onAuthenticated: vi.fn(),
 		getStoredToken: vi.fn(() => "stored-secret"),
 		clearStoredToken: vi.fn(),
 		login: vi.fn(async () => ({ success: true })),
@@ -56,6 +58,7 @@ describe("reauthenticateAndHydrate", () => {
 		expect(deps.login).toHaveBeenCalledExactlyOnceWith("stored-secret");
 		expect(deps.getConfig).toHaveBeenCalledOnce();
 		expect(deps.getStatus).toHaveBeenCalledOnce();
+		expect(deps.onAuthenticated).toHaveBeenCalledOnce();
 		expect(deps.routeToLogin).not.toHaveBeenCalled();
 		expect(deps.clearStoredToken).not.toHaveBeenCalled();
 

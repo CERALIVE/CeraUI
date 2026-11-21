@@ -806,12 +806,15 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 							data-unbound={coarseUnbound.unbound ? 'true' : undefined}
 						>
 							<div class="flex items-center gap-2">
+								<!-- A disabled row dims its frame (60% of each colour's alpha) and every
+								     child but the Lost badge, never the whole button: opacity on an
+								     ancestor would paint the red Lost word below AA, and no ink wins it back. -->
 								<button
-									class="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-lg border px-3 py-3 text-left transition-colors {selected
+									class="group/row flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-lg border px-3 py-3 text-left transition-colors {selected
 										? coarseUnbound.unbound
-											? 'border-status-warning/60 bg-status-warning/10'
-											: 'border-primary bg-primary/10'
-										: 'border-border hover:bg-accent/50'} disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
+											? 'border-status-warning/60 bg-status-warning/10 disabled:border-status-warning/36 disabled:bg-status-warning/6'
+											: 'border-primary bg-primary/10 disabled:border-primary/60 disabled:bg-primary/6'
+										: 'border-border hover:bg-accent/50 disabled:border-border/60'} disabled:cursor-not-allowed disabled:hover:bg-transparent"
 									data-selected={selected}
 									data-testid={source.origin === 'network'
 										? `source-network-ingest-select-${source.requiresGateway}`
@@ -821,7 +824,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 									title={disabled ? rowReason(source) : undefined}
 									type="button"
 								>
-									<span class="flex min-w-0 items-center gap-2.5">
+									<span class="flex min-w-0 items-center gap-2.5 group-disabled/row:opacity-60">
 										<RowIcon
 											aria-hidden={true}
 											class="size-4 shrink-0 {selected
@@ -851,10 +854,12 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 											{/if}
 										</span>
 									</span>
-									<span class="flex shrink-0 items-center gap-1.5">
+									<!-- Capped at the tile and wrapping: kind, Lost and Selected together are
+									     wider than a two-column tile at 1280 px. -->
+									<span class="flex max-w-full shrink-0 flex-wrap items-center gap-1.5">
 										{#if source.origin === 'capture'}
 											<span
-												class="{captureBadgeClass(source)} rounded px-1.5 py-0.5 text-xs font-medium"
+												class="{captureBadgeClass(source)} rounded px-1.5 py-0.5 text-xs font-medium group-disabled/row:opacity-60"
 												data-source-kind={source.kind}
 												data-testid={`source-kind-${source.id}`}
 											>
@@ -875,7 +880,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 												     can never be read as the red "device is gone" badge —
 												     colour is reinforcement, never the sole signal. -->
 												<span
-													class="border-status-warning/60 bg-status-warning/10 text-status-warning inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium"
+													class="border-status-warning/60 bg-status-warning/10 text-status-warning inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium group-disabled/row:opacity-60"
 													data-testid={`source-degraded-${source.id}`}
 													title={source.degraded.reason ?? source.degraded.code}
 												>
@@ -887,7 +892,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 												     device is fine, the cable is idle. The row stays selectable —
 												     a signal can appear at any moment. -->
 												<span
-													class="border-status-warning/60 bg-status-warning/10 text-status-warning inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium"
+													class="border-status-warning/60 bg-status-warning/10 text-status-warning inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium group-disabled/row:opacity-60"
 													data-testid={`source-no-signal-${source.id}`}
 												>
 													<SignalZero aria-hidden={true} class="size-3" />
@@ -897,7 +902,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 										{/if}
 										{#if source.origin === 'coarse'}
 											<span
-												class="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+												class="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium group-disabled/row:opacity-60"
 												data-testid={`source-not-connected-${source.id}`}
 											>
 												<Unplug aria-hidden={true} class="size-3" />
@@ -906,7 +911,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 										{/if}
 										{#if source.origin === 'network' && source.supportsAudio}
 											<span
-												class="bg-primary/10 text-primary inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium"
+												class="bg-primary/10 text-primary inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium group-disabled/row:opacity-60"
 												data-testid={`source-network-audio-${source.requiresGateway}`}
 											>
 												<Volume2 aria-hidden={true} class="size-3" />
@@ -915,7 +920,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 										{/if}
 										{#if selected}
 											<span
-												class="inline-flex items-center gap-1 text-xs font-semibold {coarseUnbound.unbound
+												class="inline-flex items-center gap-1 text-xs font-semibold group-disabled/row:opacity-60 {coarseUnbound.unbound
 													? 'text-status-warning'
 													: 'text-primary'}"
 												data-testid={`source-selected-${source.id}`}

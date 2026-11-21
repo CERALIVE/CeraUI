@@ -32,13 +32,16 @@ interface FollowContext {
 	canFollow(): boolean;
 	showsCurrentBoot(): boolean;
 	isDisposed(): boolean;
+	discardHeadRead(): void;
 	preparePagingForFollow(): void;
 	readHead(fence?: FollowFence): Promise<void>;
 }
 
-// The socket has one follower and one listener slot. Only the latest owner
-// may stop the device or clear that slot. The token does not retain the view.
-let followOwner: object | undefined;
+// The app's socket has one follower and one listener slot. Keep only the
+// latest owner's token once it stops, for cleanup of a late disposed start.
+let followOwner:
+	| { readonly token: object; readonly displace?: () => void }
+	| undefined;
 
 /** Owns the lifetime and resume position of one view's subscription. */
 export class RawFollowSession {
@@ -48,9 +51,11 @@ export class RawFollowSession {
 	connected = $state(true);
 	#token = 0;
 	readonly #owner = {};
+	#listening = false;
 	#subscription: string | null = null;
 	#queued: LogFollowMessage[] | null = null;
 	#checkpoint: string | null = null;
+	#pendingIdleRestart = false;
 
 	constructor(
 		private readonly deps: Pick<
@@ -62,6 +67,11 @@ export class RawFollowSession {
 
 	get #live(): boolean {
 		return this.state === "following" || this.state === "starting";
+	}
+
+	/** The operator asked to follow and nothing has stopped it: a dropped socket keeps the intent. */
+	get #followIntent(): boolean {
+		return this.#live || this.state === "disconnected";
 	}
 
 	/** Follow or Resume from the last resumable position, else the newest row. */
@@ -139,21 +149,34 @@ export class RawFollowSession {
 		this.state = "idle";
 		this.ended = null;
 		this.#checkpoint = null;
+		this.#pendingIdleRestart = false;
 		return live;
 	}
 
 	/** Stops and forgets the device follow; true when it was running or starting. */
 	detach(): boolean {
 		const live = this.#live;
-		if (!live && this.#subscription === null) return false;
+		const disposed = this.context.isDisposed();
+		if (!live && this.#subscription === null) {
+			if (disposed) this.#forget();
+			return false;
+		}
 		if (this.#subscription !== null || this.state === "starting")
 			void this.#stop();
-		this.#forget();
+		this.#forget(live && !disposed);
 		return live;
 	}
 
 	setHeadPosition(cursor: string): void {
 		this.#checkpoint = cursor;
+	}
+
+	/** A boot ID proves a restart, but only an accepted head page proves the reload. */
+	headPlaced(): void {
+		if (!this.#pendingIdleRestart) return;
+		this.#pendingIdleRestart = false;
+		this.ended = "boot_changed";
+		this.context.feedback.announce("restarted");
 	}
 
 	/** Continue from the resume position, or the head learned while bootstrapping. */
@@ -162,11 +185,14 @@ export class RawFollowSession {
 		refollow: boolean,
 		fence?: FollowFence,
 	): Promise<void> {
+		if (this.#listening) return;
 		this.busy = false;
+		if (this.state === "stopped") return;
 		if (fence !== undefined) {
 			// A failed read proves nothing: the next Follow learns the head again.
 			if (this.context.feedback.failure?.op === "first") {
 				if (this.state === "starting") this.state = "idle";
+				this.#releaseOwnership();
 				return;
 			}
 			this.#checkpoint ??= fence.head;
@@ -175,22 +201,33 @@ export class RawFollowSession {
 			await this.#attach(
 				fence?.announce ?? (this.state === "starting" ? "following" : null),
 			);
-		else if (refollow) await this.start();
+		else if (refollow && followOwner?.token === this.#owner) await this.start();
+		else this.#releaseOwnership();
 	}
 
 	async #attach(announce: StartAnnouncement): Promise<void> {
 		if (this.context.isDisposed()) return;
 		this.context.preparePagingForFollow();
 		const token = ++this.#token;
-		followOwner = this.#owner;
 		this.state = "starting";
 		this.busy = true;
 		this.ended = null;
+		this.#pendingIdleRestart = false;
 		const { feedback, rows } = this.context;
 		if (feedback.failure?.op === "follow") feedback.failure = null;
 		this.#subscription = null;
 		this.#queued = [];
-		this.deps.setFollowListener(this.#receive);
+		const previousOwner = followOwner;
+		// Reserve the slot before calling out: another start can supersede this one.
+		followOwner = { token: this.#owner, displace: this.#displace };
+		if (previousOwner?.token !== this.#owner) previousOwner?.displace?.();
+		if (token !== this.#token) return;
+		const receive = (message: LogFollowMessage) => {
+			if (token === this.#token) this.#receive(message);
+		};
+		this.#listening = true;
+		this.deps.setFollowListener(receive);
+		if (token !== this.#token) return;
 		const position = this.#checkpoint ?? rows.newest;
 		const input = followInput(this.context.filter(), position);
 		const reply = await settleRawRpc(
@@ -235,10 +272,10 @@ export class RawFollowSession {
 		this.#checkpoint = reply.checkpointCursor ?? this.#checkpoint;
 		this.state = "following";
 		if (announce !== null) feedback.announce(announce);
-		for (const message of queued) this.#receive(message);
+		for (const message of queued) receive(message);
 	}
 
-	readonly #receive = (message: LogFollowMessage): void => {
+	#receive(message: LogFollowMessage): void {
 		// Clear logs ends every follow, even before the reply names this one.
 		if (message.ended === "cleared") {
 			this.#end("cleared");
@@ -256,29 +293,47 @@ export class RawFollowSession {
 			feedback.announce("gap");
 		else feedback.announceNew(added);
 		if (message.ended !== undefined) this.#end(message.ended);
+	}
+
+	readonly #displace = (): void => {
+		this.context.discardHeadRead();
+		this.state = "stopped";
+		this.context.feedback.announce("stopped");
+		this.#forget();
 	};
 
 	#end(reason: NonNullable<LogFollowMessage["ended"]>): void {
+		// A terminal push can still arrive while Pause is waiting for its stop reply.
+		const idleRestart = reason === "boot_changed" && !this.#followIntent;
 		this.#forget();
-		this.state = "stopped";
-		this.ended = reason;
-		this.context.feedback.announce("stopped");
+		this.state = idleRestart ? "idle" : "stopped";
+		this.#pendingIdleRestart = idleRestart;
+		this.ended = idleRestart ? null : reason;
+		if (!idleRestart) this.context.feedback.announce("stopped");
 		if (reason !== "cleared" && reason !== "boot_changed") return;
 		this.#checkpoint = null;
 		void this.context.readHead();
 	}
 
 	/** Detaches this view from the device follow; late replies become stale. */
-	#forget(): void {
+	#forget(keepOwnership = false): void {
 		this.#token += 1;
 		this.#subscription = null;
 		this.#queued = null;
 		this.busy = false;
-		if (followOwner === this.#owner) this.deps.setFollowListener(undefined);
+		if (!keepOwnership) this.#releaseOwnership();
+		if (!this.#listening) return;
+		this.#listening = false;
+		this.deps.setFollowListener(undefined);
+	}
+
+	#releaseOwnership(): void {
+		if (followOwner?.token === this.#owner)
+			followOwner = { token: this.#owner };
 	}
 
 	#stop(): Promise<LogFollowStopOutput | null> {
-		return followOwner === this.#owner
+		return followOwner?.token === this.#owner
 			? settleRawRpc(
 					() => this.deps.logs.followStop(),
 					null,

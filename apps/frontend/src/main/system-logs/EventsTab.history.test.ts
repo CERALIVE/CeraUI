@@ -23,6 +23,7 @@ import {
 import { fourBoots } from "$lib/device-logs/__fixtures__/boots";
 import {
 	aroundPage,
+	EVENT_RING_EPOCH,
 	event,
 	eventPage,
 } from "$lib/device-logs/__fixtures__/events";
@@ -104,6 +105,8 @@ async function openHistory(
 
 const newCount = (count: number) =>
 	copy.startFromNewestCount.replace("{count}", String(count));
+const lowerBound = (count: number) =>
+	copy.startFromNewestAtLeast.replace("{count}", String(count));
 
 function renderedTimes(): (string | null | undefined)[] {
 	return screen
@@ -148,7 +151,7 @@ it("reaches the oldest of 401 matching events with a bounded window and stable p
 	expect(renderedTimes()[0]).toBe(new Date(stopped(300).at).toISOString());
 
 	await fireEvent.click(
-		await screen.findByRole("button", { name: newCount(2) }),
+		await screen.findByRole("button", { name: lowerBound(2) }),
 	);
 	expect(renderedTimes()[0]).toBe(new Date(newer.at).toISOString());
 });
@@ -283,7 +286,11 @@ it.each([
 		const times = (rows ?? []).map(({ at }) => new Date(at).toISOString());
 		await waitFor(() => expect(renderedTimes()).toEqual(times));
 		expect(document.activeElement).toBe(
-			survives ? raw : screen.getByRole("button", { name: copy.filter }),
+			survives
+				? raw
+				: rows
+					? screen.getAllByRole("button", { name: copy.viewRaw })[0]
+					: screen.getByRole("button", { name: copy.filter }),
 		);
 
 		const page = aroundPage();
@@ -299,6 +306,184 @@ async function browseToOldest(epoch?: string): Promise<DeviceEvent[]> {
 	await screen.findByRole("button", { name: error.startFromNewest });
 	return retained;
 }
+
+it("keeps focus and the row node when the same epoch returns after an omitted epoch", async () => {
+	const retained = await openHistory(2, true, EVENT_RING_EPOCH);
+	const raw = screen.getAllByRole("button", { name: copy.viewRaw }).at(-1);
+	raw?.focus();
+
+	const withoutEpoch = [stopped(4), stopped(3), ...retained];
+	const omitted = eventPage(withoutEpoch, { epoch: undefined });
+	list.mockResolvedValueOnce(omitted).mockResolvedValueOnce(omitted);
+	feed.listener?.([stopped(4)]);
+	await waitFor(() => expect(renderedTimes()).toEqual(times(withoutEpoch)));
+	expect(document.activeElement).toBe(raw);
+
+	const withEpoch = [stopped(6), stopped(5), ...withoutEpoch];
+	const restored = eventPage(withEpoch);
+	list.mockResolvedValueOnce(restored).mockResolvedValueOnce(restored);
+	feed.listener?.([stopped(6)]);
+	await waitFor(() => expect(renderedTimes()).toEqual(times(withEpoch)));
+
+	expect(document.activeElement).toBe(raw);
+	expect(screen.getAllByRole("button", { name: copy.viewRaw }).at(-1)).toBe(
+		raw,
+	);
+	expect(raw?.getAttribute("tabindex")).toBe("0");
+});
+
+it("keeps focus and the row node when a gap refill reorders equivalent event params", async () => {
+	await openHistory(2, true, EVENT_RING_EPOCH);
+	const raw = screen.getAllByRole("button", { name: copy.viewRaw }).at(-1);
+	raw?.focus();
+	const reordered = event(1, "stream_stopped", {
+		durationSec: 4,
+		cause: "operator",
+	});
+	const refill = [stopped(4), stopped(3), stopped(2), reordered];
+	list.mockResolvedValueOnce(eventPage(refill));
+
+	feed.listener?.([stopped(4)]);
+	await waitFor(() => expect(renderedTimes()).toEqual(times(refill)));
+
+	expect(document.activeElement).toBe(raw);
+	expect(screen.getAllByRole("button", { name: copy.viewRaw }).at(-1)).toBe(
+		raw,
+	);
+	expect(raw?.getAttribute("tabindex")).toBe("0");
+});
+
+it("keeps the focused row mounted when a verified no-epoch older page extends the list", async () => {
+	await openHistory(101);
+	const row = screen.getAllByTestId("event-row")[1];
+	const raw = row?.querySelector("button");
+	raw?.focus();
+
+	await fireEvent.click(screen.getByRole("button", { name: copy.loadOlder }));
+
+	expect(screen.getAllByTestId("event-row")).toHaveLength(101);
+	expect(screen.getAllByTestId("event-row")[1]).toBe(row);
+	expect(document.activeElement).toBe(raw);
+	expect(raw?.getAttribute("tabindex")).toBe("0");
+});
+
+it("moves the row stop off a replaced record whose seq and ID were reused", async () => {
+	await browseToOldest();
+	const raw = screen.getAllByRole("button", { name: copy.viewRaw }).at(-1);
+	raw?.focus();
+	const replacement = [stopped(210), { ...stopped(2), at: stopped(2).at + 1 }];
+	list.mockResolvedValueOnce(
+		eventPage(replacement, {
+			epoch: undefined,
+			headSeq: 210,
+			retainedFromSeq: 1,
+		}),
+	);
+
+	setConnectionState("disconnected");
+	await screen.findByTestId("events-disconnected");
+	setConnectionState("connected");
+
+	await waitFor(() => expect(renderedTimes()).toEqual(times(replacement)));
+	expect(raw?.isConnected).toBe(false);
+	const first = screen.getAllByRole("button", { name: copy.viewRaw })[0];
+	expect(document.activeElement).toBe(first);
+	expect(first?.getAttribute("tabindex")).toBe("0");
+});
+
+it.each([
+	{
+		scenario: "a full page with more matches",
+		size: 100,
+		floor: 1,
+		cursor: 452,
+		head: 551,
+	},
+	{
+		scenario: "an exactly full page",
+		size: 100,
+		floor: 402,
+		cursor: null,
+		head: 501,
+	},
+	{
+		scenario: "a short filtered page after eviction",
+		size: 3,
+		floor: 420,
+		cursor: null,
+		head: 450,
+	},
+	{
+		scenario: "an empty filtered page after eviction",
+		size: 0,
+		floor: 420,
+		cursor: null,
+		head: 450,
+	},
+])(
+	"labels the new count truthfully for $scenario",
+	async ({ size, floor, cursor, head }) => {
+		await openHistory(401, true, EVENT_RING_EPOCH);
+		await fireEvent.click(
+			screen.getByRole("button", { name: en.timeline.family.stream }),
+		);
+		await waitFor(() => expect(renderedTimes()).toHaveLength(100));
+		for (const _page of [1, 2, 3]) await loadOlder();
+		const newest = screen.getByRole("button", { name: error.startFromNewest });
+		list.mockResolvedValueOnce(
+			eventPage(
+				Array.from({ length: size }, (_, index) => stopped(head - index)),
+				{
+					headSeq: head,
+					retainedFromSeq: floor,
+					nextBeforeSeq: cursor,
+				},
+			),
+		);
+
+		setConnectionState("disconnected");
+		await screen.findByTestId("events-disconnected");
+		setConnectionState("connected");
+
+		await waitFor(() =>
+			expect(screen.queryByTestId("events-disconnected")).toBeNull(),
+		);
+		const label = size === 0 ? copy.startFromNewestUnknown : lowerBound(size);
+		expect(newest.textContent?.trim()).toBe(label);
+
+		feed.listener?.([stopped(head + 1)]);
+		await tick();
+		expect(newest.textContent?.trim()).toBe(lowerBound(size + 1));
+	},
+);
+
+it("shows a lower bound after reconnect returns a full continued page with no additional matches", async () => {
+	const retained = await openHistory(401, true, EVENT_RING_EPOCH);
+	await fireEvent.click(
+		screen.getByRole("button", { name: en.timeline.family.stream }),
+	);
+	for (const _page of [1, 2, 3]) await loadOlder();
+	await screen.findByRole("button", { name: error.startFromNewest });
+	feed.listener?.([stopped(402)]);
+	const newest = await screen.findByRole("button", { name: newCount(1) });
+
+	list.mockResolvedValueOnce(
+		eventPage([stopped(402), ...retained.slice(0, 99)], {
+			headSeq: 403,
+			retainedFromSeq: 1,
+			nextBeforeSeq: 303,
+		}),
+	);
+	setConnectionState("disconnected");
+	await screen.findByTestId("events-disconnected");
+	setConnectionState("connected");
+	await waitFor(() =>
+		expect(screen.queryByTestId("events-disconnected")).toBeNull(),
+	);
+
+	expect(newest.textContent?.trim()).toBe(lowerBound(1));
+	expect(screen.getByRole("button", { name: lowerBound(1) })).toBe(newest);
+});
 
 const times = (records: readonly DeviceEvent[]) =>
 	records.map(({ at }) => new Date(at).toISOString());
@@ -334,7 +519,7 @@ it.each([
 			times(retained.slice(100, survives ? 400 : 301)),
 		);
 		expect(document.activeElement).toBe(
-			survives ? raw : screen.getByRole("button", { name: copy.filter }),
+			survives ? raw : screen.getAllByRole("button", { name: copy.viewRaw })[0],
 		);
 		expect(screen.getByRole("button", { name: copy.loadOlder })).toBeTruthy();
 		const page = aroundPage();
@@ -368,7 +553,7 @@ it("shows the empty list, retires a pending raw action and hands focus to the fi
 	expect(onViewRaw).not.toHaveBeenCalled();
 });
 
-it("shows the refilled ring, retires a pending raw action and hands focus to the filter bar when a reconnect names a new ring epoch", async () => {
+it("shows the refilled ring, retires a pending raw action and hands focus to the first row when a reconnect names a new ring epoch", async () => {
 	await browseToOldest("0f4c2a51-8d3e-4b7a-9c1f-2e6d8a4b5c7e");
 	const raw = screen.getAllByRole("button", { name: copy.viewRaw }).at(-1);
 	const reply = Promise.withResolvers<LogAroundOutput>();
@@ -408,7 +593,7 @@ it("shows the refilled ring, retires a pending raw action and hands focus to the
 		screen.queryByRole("button", { name: error.startFromNewest }),
 	).toBeNull();
 	expect(document.activeElement).toBe(
-		screen.getByRole("button", { name: copy.filter }),
+		screen.getAllByRole("button", { name: copy.viewRaw })[0],
 	);
 	reply.resolve(aroundPage());
 	await tick();

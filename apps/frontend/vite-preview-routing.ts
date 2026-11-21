@@ -238,6 +238,16 @@ export function buildDeviceProxy(
 	};
 }
 
+export function buildDevicePreview(
+	env: Record<string, string>,
+	allowWorkerRouting: boolean,
+): { host?: string; proxy: Record<string, ProxyOptions> } {
+	return {
+		...(env.VITE_DEVICE_HOST ? { host: "0.0.0.0" } : {}),
+		proxy: buildDeviceProxy(env, allowWorkerRouting),
+	};
+}
+
 export function rejectWebSocketUpgrade(
 	socket: Pick<Duplex, "destroy" | "on">,
 ): void {

@@ -42,7 +42,7 @@ const ux = $derived(
 	{#if ux.mode === 'rebooting'}
 		<div
 			aria-live="polite"
-			class="bg-status-info/10 border-status-info/30 text-foreground sticky top-0 z-40 flex items-center gap-2.5 border-b px-4 py-2.5 text-sm backdrop-blur-sm"
+			class="bg-status-info/10 border-status-info/30 text-foreground flex items-center gap-2.5 border-b px-4 py-2.5 text-sm backdrop-blur-sm"
 			data-disconnect-banner="rebooting"
 			role="status"
 		>
@@ -53,7 +53,7 @@ const ux = $derived(
 	{:else if ux.mode === 'failed'}
 		<div
 			aria-live="assertive"
-			class="bg-status-error/10 border-status-error/30 text-foreground sticky top-0 z-40 flex items-center gap-2.5 border-b px-4 py-2.5 text-sm backdrop-blur-sm"
+			class="bg-status-error/10 border-status-error/30 text-foreground flex items-center gap-2.5 border-b px-4 py-2.5 text-sm backdrop-blur-sm"
 			data-disconnect-banner="failed"
 			role="alert"
 		>
@@ -71,7 +71,7 @@ const ux = $derived(
 	{:else}
 		<div
 			aria-live="polite"
-			class="bg-status-warning/10 border-status-warning/30 text-foreground sticky top-0 z-40 flex items-center gap-2.5 border-b px-4 py-2.5 text-sm backdrop-blur-sm"
+			class="bg-status-warning/10 border-status-warning/30 text-foreground flex items-center gap-2.5 border-b px-4 py-2.5 text-sm backdrop-blur-sm"
 			data-disconnect-banner="reconnecting"
 			role="status"
 		>

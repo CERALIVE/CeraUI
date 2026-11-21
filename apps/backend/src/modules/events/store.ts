@@ -29,6 +29,11 @@ const BOOTS = {
 type Ring = typeof EVENTS | typeof BOOTS;
 // The ring identity file, owned by epoch.ts and removed first by a clear.
 export const EPOCH_FILE = "events.epoch";
+const clearGenerations = new Map<string, number>();
+
+export function eventsClearGeneration(base: string): number {
+	return clearGenerations.get(base) ?? 0;
+}
 
 export interface EventStoreDeps {
 	readonly baseDir?: string;
@@ -37,11 +42,14 @@ export interface EventStoreDeps {
 		| "mkdirSync"
 		| "existsSync"
 		| "statSync"
+		| "fstatSync"
+		| "readdirSync"
 		| "readFileSync"
 		| "readSync"
 		| "chmodSync"
 		| "rmSync"
 		| "renameSync"
+		| "linkSync"
 		| "openSync"
 		| "fchmodSync"
 		| "appendFileSync"
@@ -74,14 +82,17 @@ function filePath(base: string, ring: Ring, generation: number): string {
 	);
 }
 
+export function warnEventStore(deps: EventStoreDeps, message: string): void {
+	const warn = deps.warn ?? ((text: string) => logger.warn(text));
+	warn(`event store: ${message}`);
+}
+
 export function contain<T>(deps: EventStoreDeps, fallback: T, run: () => T): T {
 	try {
 		return run();
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
-		(deps.warn ?? ((text) => logger.warn(text)))(
-			`event store: operation failed: ${message}`,
-		);
+		warnEventStore(deps, `operation failed: ${message}`);
 		return fallback;
 	}
 }
@@ -213,7 +224,7 @@ export function tailSeq(deps: EventStoreDeps = {}): number {
 export function clearEvents(deps: EventStoreDeps = {}): boolean {
 	return contain(deps, false, () => {
 		const io = deps.fs ?? fs;
-		const base = deps.baseDir ?? resolveEventsDir();
+		const base = path.resolve(deps.baseDir ?? resolveEventsDir());
 		let directory: number;
 		try {
 			directory = io.openSync(base, fs.constants.O_DIRECTORY);
@@ -226,6 +237,7 @@ export function clearEvents(deps: EventStoreDeps = {}): boolean {
 			io.rmSync(path.join(base, EPOCH_FILE), { force: true });
 			// Persist the unlink before deleting any generation under the old identity.
 			io.fsyncSync(directory);
+			clearGenerations.set(base, eventsClearGeneration(base) + 1);
 		} finally {
 			io.closeSync(directory);
 		}

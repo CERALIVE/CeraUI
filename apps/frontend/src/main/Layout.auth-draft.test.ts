@@ -41,6 +41,7 @@ vi.mock("$lib/rpc", async () => ({
 	rpc: (await import("../lib/rpc/client")).rpc,
 }));
 vi.mock("$lib/rpc/subscriptions.svelte", async () => ({
+	clearPasswordSetup: vi.fn(),
 	getStatus: (await import("./__fixtures__/auth-feed.svelte")).getStatusFeed,
 	getNotifications: (await import("./__fixtures__/auth-feed.svelte"))
 		.getNotificationsFeed,

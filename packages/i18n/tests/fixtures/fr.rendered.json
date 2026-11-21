@@ -1155,7 +1155,7 @@
 	"settings.deviceHealth.traceLabel": "Enregistreur cinq minutes — <summary>",
 	"settings.deviceHealth.unavailable": "Indisponible",
 	"settings.deviceHealth.waiting": "En attente de la première mesure",
-	"settings.deviceStats.bootSlot": "Slot de démarrage",
+	"settings.deviceStats.bootSlot": "Emplacement de démarrage",
 	"settings.deviceStats.cpuFreq": "Fréquence CPU",
 	"settings.deviceStats.cpuFreqHint": "Fréquence actuelle face au plafond matériel, par politique cpufreq. Un nom de politique est un répertoire sysfs, pas un cluster de cœurs.",
 	"settings.deviceStats.cpuLoad": "Charge CPU",

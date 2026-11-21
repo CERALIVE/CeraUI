@@ -30,7 +30,10 @@ density. It is not a redesign.
   most prominent control of the tab, deliberately an `outline` button: a filled
   lime button reads as going live. Storage: Save limits (`default` variant, the
   same Save vocabulary as every `AppDialog` footer), disabled until a limit or Detail changes (`main/system-logs/StorageLimits.svelte:162-183`). Destructive actions are `outline` triggers; only their confirmation
-  button uses the `destructive` variant.
+  button uses the `destructive` variant. Downloads: Download support bundle, the
+  region's one `default` (filled lime) button; Export this view and the two full
+  log files are `outline`. Lime fills only the single primary action of a surface
+  (DESIGN.md IH-5).
 - **Signature move.** The boot separator. In Events each boot group has a sticky
   heading with its start time and the system image, slot and end mark that are
   recorded (`main/system-logs/EventsTab.svelte:213-241`); Raw logs separates rows
@@ -89,23 +92,30 @@ density. It is not a redesign.
   regions in this order with a heading each: Boots (the boot picker), Storage,
   Downloads. Regions are separated by whitespace and a neutral 1 px rule, not
   boxed.
-- **Below 1024 px.** The Storage tab holds the Storage and Downloads regions;
-  the boot picker is the header button showing the selected boot, opening a
+- **Below 1024 px.** The Storage tab holds the Downloads region first, then
+  Storage (usage, limits and cleanup), so the support bundle is the first thing
+  on it (`main/system-logs/SystemLogsView.svelte:214-218`); the boot picker is the header button showing the selected boot, opening a
   nested `AppDialog` (sheet on phones) listing boots; choosing one closes it.
-- **Downloads region.** First group: the two legacy rows (wrapping changed, critique SL-2; icon
-  tile, title, description, outline Download button, inline amber retry band;
-  testids `log-row-device`, `log-row-system`, `log-download-device`,
+- **Downloads region.** The same order at every width (DF-23). First group, the
+  Sharing group: Support bundle with the filled `default` button, then Export
+  this view with an `outline` one, in the shipped rows' anatomy; one line under
+  them says files are saved by the browser (`main/system-logs/SharingSection.svelte`).
+  Export this view saves the Raw tab's filters and time window; an exact anchor
+  pages its whole boot, so there it saves the 10 minutes around the anchored
+  entry with the window's levels, and the confirmation says so
+  (`lib/device-logs/raw-paging.svelte.ts`). Second group, after a neutral rule,
+  under the "Full log files" heading (`systemLogs.sharing.filesHeading`, an `h4`):
+  the two legacy rows (wrapping changed, critique SL-2; icon tile, title,
+  description, outline Download button, inline amber retry band; testids
+  `log-row-device`, `log-row-system`, `log-download-device`,
   `log-download-system`, `log-download-error`, `log-download-retry`; copy
   `advanced.ceraliveLog`, `advanced.ceraliveLogTooltip`, `advanced.systemLog`,
   `advanced.systemLogTooltip`, `advanced.download`, `advanced.downloading`,
-  `advanced.downloadFailed`, `advanced.retryDownload`). Second group, after a
-  neutral rule, same row anatomy: Export this view, Support bundle; one line
-  under it says files are saved by the browser. Export this view saves the
-  Raw tab's filters and time window; an exact anchor pages its whole boot, so
-  there it saves the 10 minutes around the anchored entry with the window's
-  levels, and the confirmation says so (`lib/device-logs/raw-paging.svelte.ts`).
-  The Downloads region renders
-  immediately; the Sharing group renders only once the viewer check is ready (`main/system-logs/SystemLogsView.svelte:174-176`).
+  `advanced.downloadFailed`, `advanced.retryDownload`). Each download action
+  carries its button variant in `data-variant`. The Downloads region renders
+  immediately with the legacy rows; the Sharing group renders only once the
+  viewer check is ready (`main/system-logs/SystemLogsView.svelte:173-175`), and
+  the headings and the rule only once this view's copy has loaded (`:170-181`).
 - **Older backend.** If the log procedures are missing, the tabs and the Storage
   region are replaced by one calm notice ("not available on this device
   version"); Downloads still renders.
@@ -134,7 +144,9 @@ density. It is not a redesign.
   warning, a kernel failure and an action refusal emit no event, so they open
   the newest entries with `momentUnknown`. When neither the event nor the
   message's own time is known, one muted line above the list says so
-  (`systemLogs.anchor.unknown`, `main/system-logs/RawLogsTab.svelte`). The low-disk banner keeps
+  (`systemLogs.anchor.unknown`, `main/system-logs/RawLogsTab.svelte`) until
+  Follow starts or the filter first leaves the default; restoring the default
+  filter does not bring it back for that opening. The low-disk banner keeps
   `settings.deviceStats.lowDiskAction` and opens Storage.
 - **Primitives.** `AppDialog`, `Button`, `Tabs`, `Select` (single and multiple),
   `Input`, `Toggle` (single-choice groups), `Skeleton`,
@@ -173,7 +185,7 @@ in section 4.
 | Keep searching | Raw logs | `hasMore: null`: a Keep searching button and a line saying only part of the stored logs was checked; never an end marker (the normal state for a time-bounded view once its entries are shown) | no |
 | End of results | Raw logs, Events | Raw logs shows an end marker at an exhausted, available edge after the first load when rows are present. The display-limit notice takes precedence at the bottom. Approximate-window markers name the time window. Events shows an end row when events are present and no older page or paging error remains. | no |
 | Row cap reached | Raw logs | `ROW_CAP` is 2000 journal entries, excluding marker rows. Older paging stops at the cap. Skipped-entry recovery can still page by moving the display window | no |
-| Browsing older history | Events | Load older rolls the 300-event window toward older results while the server has more. Live pushes leave that window in place and are counted: once any arrive, the button reads "Start from newest (new: {count})" and wraps inside its bar on a narrow screen. Start from newest returns to the live edge | no |
+| Browsing older history | Events | Load older rolls the 300-event window toward older results while the server has more. Live pushes leave that window in place and are counted. The button reads "Start from newest: {count} new" for an exact positive count, "Start from newest: {count}+ new" for a positive lower bound, or "Start from newest: count unknown" when the tally is incomplete and no new events could be counted. Only an exact zero keeps the plain label. The button wraps inside its bar on a narrow screen. Start from newest returns to the live edge | no |
 | Follow unavailable | Raw logs | Follow present, disabled, with an adjacent reason element (`data-testid` ending `-reason`) when the time is not This boot, the order is not Newest first, or the tab is in anchor mode (DESIGN.md CT-2). Follow displays while connected and is aria-disabled while its request is busy | no |
 | Following | Raw logs | Follow becomes Pause; a state label "Following" in `--status-info` with a `motion-safe` pulse dot; static dot plus label under reduced motion or e-ink | polite |
 | New entries held | Raw logs | While scrolled away from the top, incoming entries wait (cap 500) behind a "New entries: {count}" button at the top of the list; selecting it merges them and scrolls to the top | polite, throttled |
@@ -181,9 +193,10 @@ in section 4.
 | Gap marker | Raw logs | A full-width separator row (neutral 1 px rules either side of centered text) stating what was skipped and why: catch-up exceeded, position removed by cleanup, or entries dropped by the device | polite |
 | Dropped marker | Raw logs | `dropped > 0` in a follow batch: one separator row "Entries skipped while following: {count}". journald's suppressed-messages record (`marker: 'suppressed'`) is a separate marker row (`lib/device-logs/raw-rows.ts:103-127`, `main/system-logs/RawLogRow.svelte:103-104`) | polite (as a gap) |
 | Follower stopped | Raw logs | Label "Stopped" with its reason (reader ended, device restarted, logs cleared) and a Follow action; `ended: 'cleared'` also resets the list | polite |
+| Restarted while not following | Raw logs | An idle, paused or stopped view of This boot that learns of a new boot stays idle, with no state label and a Follow action. The muted line "The device restarted. This boot's entries are shown." appears and is announced only after the first read succeeds, including after Retry. A view that was following, or lost its socket while following, shows Follower stopped instead | polite |
 | Disconnected | Raw logs, Events, header pill | The socket dropped. Follow shows "Disconnected", a notice says entries may be out of date, rows use `text-muted-foreground`, and the pill shows Offline without a pulse. Raw logs shows Disconnected only when a follow was active and offers Resume after reconnect (`lib/device-logs/raw-follow-session.svelte.ts:108-112`, `main/system-logs/RawFollowControl.svelte:28-56`). Events reloads at the live edge. While browsing, a reconnect checks the live edge. Failure shows Retry. Another drop retires the check and its held pushes. A matching epoch with a nondecreasing head keeps rows in the retained range. A changed or missing epoch refreshes the window and retires pending row actions (`lib/device-logs/events-view.svelte.ts:119-129,149-210`) | polite |
 | Anchor | Raw logs | Opened from an event or a "View logs" action: the matching row has a tonal highlight (`bg-status-info/10`, no outline or stripe); an exact match receives focus and an approximate one leaves focus on the selected tab (`main/system-logs/SystemLogsView.svelte:134-138`, `main/system-logs/RawLogList.svelte:79-89`); "approximate" is stated when no exact entry matched; a Back to latest entries action leaves anchor mode | no |
-| Moment unknown | Raw logs | A "View logs" action whose message has no known moment (a notice first seen in a replay with no timeline event, or an event no longer stored) opens the newest entries with one muted line above the list saying the time is not known; choosing another tab drops it (`main/system-logs/RawLogsPanel.svelte`, `main/system-logs/RawLogsTab.svelte`) | no |
+| Moment unknown | Raw logs | A "View logs" action whose message has no known moment (a notice first seen in a replay with no timeline event, or an event no longer stored) opens the newest entries with one muted line above the list saying the time is not known; Follow, the first filter change or choosing another tab drops it for that opening (`main/system-logs/RawLogsPanel.svelte`, `main/system-logs/RawLogsTab.svelte`) | no |
 | Unknown event code | Events | A record from a newer version: the family icon, the title "Event recorded by a newer version", one honest detail sentence, View raw logs, and the raw code only inside a collapsed Diagnostics disclosure (`data-testid` containing `diagnostic`, DESIGN.md OL-3..OL-5). A known code with invalid params shows its title with no detail | no |
 | Logs removed for a boot | Boots, Events, Raw logs | Boot rows keep the boot with a "Logs removed" label (never hidden); View raw logs on such a boot shows "Raw logs for this boot were removed"; a Raw query with `BOOT_UNAVAILABLE` shows "Logs for this boot were removed" with Show this boot | alert (Raw only) |
 | Clock-not-synced marker | Raw logs, Events | Where two adjacent records of the same boot (journal order for raw, `seq` order for events) run backwards in time, a separator row says the device clock changed there and earlier times may be wrong. Times are never corrected or re-sorted | no |
@@ -353,7 +366,9 @@ Rules for this copy:
 | `systemLogs.events.problemsOnly` | Problems only | Toggle |
 | `systemLogs.events.loadOlder` | Load older events | Paging button |
 | `systemLogs.events.noOlder` | No older events are stored. | End row |
-| `systemLogs.events.startFromNewestCount` | Start from newest (new: {count}) | Return to the live edge of Events after new events arrived while browsing older ones |
+| `systemLogs.events.startFromNewestCount` | Start from newest: {count} new | Return to the live edge of Events with an exact positive count |
+| `systemLogs.events.startFromNewestAtLeast` | Start from newest: {count}+ new | Return to the live edge of Events with a positive lower bound |
+| `systemLogs.events.startFromNewestUnknown` | Start from newest: count unknown | Return to the live edge of Events when the tally is incomplete and no new events could be counted |
 | `systemLogs.events.viewRaw` | View raw logs | Row action |
 | `systemLogs.events.folded` | Similar events folded in: {count} | Row line 3 when suppressed is set |
 | `systemLogs.events.emptyTitle` | No events recorded yet | Empty state |
@@ -437,7 +452,8 @@ Rules for this copy:
 | `systemLogs.follow.disconnected` | Disconnected | State label |
 | `systemLogs.follow.disconnectedBody` | The connection to the device was lost. The entries shown may be out of date. | Disconnected notice |
 | `systemLogs.follow.endedReader` | Following stopped because the log reader ended. | ended: 'follower_exit' |
-| `systemLogs.follow.endedBoot` | Following stopped because the device restarted. | ended: 'boot_changed' |
+| `systemLogs.follow.endedBoot` | Following stopped because the device restarted. | ended: 'boot_changed' while following or disconnected from a follow |
+| `systemLogs.follow.bootChangedIdle` | The device restarted. This boot's entries are shown. | Successful new-boot head read in a view that had no active Follow intent; also its live-region announcement |
 | `systemLogs.follow.endedCleared` | Following stopped because the logs were cleared. | ended: 'cleared' |
 | `systemLogs.follow.unavailable` | Follow works with This boot and Newest first. | Disabled reason |
 | `systemLogs.follow.unavailableAnchor` | Go back to the latest entries to follow. | Disabled reason in anchor mode |
@@ -477,9 +493,10 @@ Rules for this copy:
 | `systemLogs.storage.limitsUnknown` | This device did not report its log limit, so limits can't be changed here. | Reason element when ceiling is null |
 | `systemLogs.storage.detailLabel` | Detail | Detail control label |
 | `systemLogs.storage.detailFull` | Full detail | Detail debug (default) |
-| `systemLogs.storage.detailFullHint` | Allows debug entries. Uses more space and is best for troubleshooting. When bonding sender output spikes, the device rate-limits it and reports how many lines it dropped. | Consequence line |
+| `systemLogs.storage.detailFullHint` | Stores debug entries too. Uses more space and is best for troubleshooting. | Consequence line |
 | `systemLogs.storage.detailReduced` | Reduced | Detail info |
-| `systemLogs.storage.detailReducedHint` | Allows info and above for the CeraLive app, including the bonding sender. Its debug entries are not stored, so history lasts longer. When bonding sender output spikes, the device rate-limits it and reports how many lines it dropped. | Consequence line |
+| `systemLogs.storage.detailReducedHint` | Stores info and above for the CeraLive app, including the bonding sender, so history lasts longer. | Consequence line |
+| `systemLogs.storage.detailSenderNote` | If the bonding sender writes too much at once, some of its lines are skipped and a warning under Bonding sender says how many. | One muted line under the Detail options |
 | `systemLogs.storage.save` | Save limits | Explicit save |
 | `systemLogs.storage.saved` | Limits saved. | After save |
 | `systemLogs.storage.targetNotMet` | The new limit is not met yet. The device removes more as it rotates log files. | targetMet: false |
@@ -782,8 +799,10 @@ everywhere in the app.
   measured the status-pill text tones below 4.5:1 for error (both themes) and
   neutral (dark).
 - The lime `--status-live` token is not used for any severity, state, marker,
-  bar or selection in this view. The header pill's Live state uses it; Save and
-  Download bundle use the default primary button (critique SL-13).
+  bar or selection in this view. The header pill's Live state uses it. Storage
+  Save, the Support bundle action and each download confirmation's primary button
+  use the default primary button, each the single primary action of its surface
+  (DESIGN.md IH-5, critique SL-13).
 - Following uses `--status-info`; Paused, Stopped and Disconnected are neutral
   (`--status-neutral` glyph, foreground text).
 - Shutdown marks: current `CircleDot` in `--status-info`, clean `Check` in
@@ -818,7 +837,7 @@ widths are not measured in this lane.
 - Design rule: the view spans the whole viewport; while it is open the page
   drops its stable scrollbar gutter (`app.css`,
   `html:has([data-app-dialog-fullscreen])`). Below 640 px each tab grows from
-  its label's width (`SystemLogsView.svelte:195`, `max-sm:flex-auto`).
+  its label's width (`SystemLogsView.svelte:200`, `max-sm:flex-auto`).
 - Measured (`tests/e2e/system-logs-responsive.spec.ts`): in Chromium against
   the mock backend, the desktop and mobile projects each run the 12 EN, AR and
   DE cases at 375x812, 768x1024, 1280x800, and touch 1024x600. The dialog width
@@ -833,7 +852,8 @@ widths are not measured in this lane.
   audited text using computed colors. It does not model CSS opacity. The narrow
   matrix and open select portals use the compositor alone. It also checks both Clear
   confirmations at rest, on hover and on keyboard focus, in dark and light at
-  1440x900. The Raw search placeholder is measured against its field in all
+  1440x900, and that a Clear confirmation's computed backdrop (background and
+  backdrop filter) equals the view's own in dark and light at 1280x800 (DF-32). The Raw search placeholder is measured against its field in all
   ten locales at 320x720, 390x844, 1440x900 and touch 1024x600. In Arabic at
   390x844, in dark and light, every Storage size and size-limit option is
   checked to paint its value before its unit.
@@ -892,10 +912,16 @@ A reconnect check with a matching epoch and nondecreasing head keeps rows in
 its retained range, along with their paging, pending action and focus. A
 dropped connection cannot settle a check or replay its held pushes. When the
 Retry of a failed check succeeds, focus left on it moves to the first visible
-filter. A changed epoch signals a history clear. A reconnect check without
-an epoch refreshes the newest page and retires old actions. Focus left on a
-row moves to the filter bar. A missing epoch with a lower head can replace
-the window from the check's page directly and keep focus on a still-shown ID.
+filter. A changed epoch, a lower head or a reused sequence number with a
+different record changes the row keys. A history clear or an epoch repair can
+change the epoch, even if the retained events are unchanged. When a history
+replacement removes the focused row,
+focus moves to the list's row stop (the first row action), or to the first
+visible filter if no row remains. A same-history refill keeps row keys and
+focus on a still-shown row, including after a temporary epoch omission or
+when equivalent `params` fields change order. A reconnect check without an
+epoch can refresh the newest page and retire old actions. If its head is
+lower, it can replace the window from the check's page directly.
 
 Load older without an epoch checks the last visible record at the paging
 boundary before joining an older page. A match preserves the paging position
@@ -911,10 +937,18 @@ socket listener, subscription and resume checkpoint. `RawRowWindow` owns
 the held boundary and caps, and `RawFeedback` owns recovery state and
 live-region announcements.
 
+After a clock step an approximate window may not prove its ends; the screen then offers Keep searching instead of an end message.
+
+Raw boot detection and Events history recovery wait for the replacement
+socket to finish signing in. Both views keep their disconnected state between
+socket open and authentication; they do not retry a rejected protected read.
+
 After reconnect, Raw checks the running boot in every follow state when it
 knows the displayed boot or the follow checkpoint's boot. For This boot, a
-changed boot shows Stopped with the restart notice and reloads the newest
-retained entries without starting Follow. Historical scopes stay in place.
+changed boot reloads the newest retained entries without starting Follow. A
+view that was following, or lost its socket while following, shows Stopped
+with the restart notice; an idle, paused or stopped view stays idle and says
+only that the device restarted. Historical scopes stay in place.
 If the boot check cannot answer, a Follow reply with a checkpoint from a
 different boot takes the same stop and reload path before applying any batch.
 While Raw is open, the boot picker checks Running now for This boot and
@@ -947,7 +981,7 @@ button disappears, provided the operator has not moved focus.
 | `main/system-logs/EventsTab.svelte:37` | props |
 | `main/system-logs/ExportDialog.svelte:17` | props |
 | `main/system-logs/KeepWords.svelte:14` | props |
-| `main/system-logs/LegacyLogDownloads.svelte:21` | props |
+| `main/system-logs/LegacyLogDownloads.svelte:22` | props |
 | `main/system-logs/ParamText.svelte:8` | props |
 | `main/system-logs/RawFollowControl.svelte:17` | props |
 | `main/system-logs/RawLogList.svelte:22` | props |
@@ -957,7 +991,7 @@ button disappears, provided the operator has not moved focus.
 | `main/system-logs/RawLogsTab.svelte:28` | props |
 | `main/system-logs/RecoveryBand.svelte:19` | props |
 | `main/system-logs/SegmentedChoice.svelte:27` | props |
-| `main/system-logs/SharingSection.svelte:21` | props |
+| `main/system-logs/SharingSection.svelte:22` | props |
 | `main/system-logs/ShutdownMark.svelte:21` | props |
 | `main/system-logs/StorageCleanup.svelte:36` | props |
 | `main/system-logs/StorageLimits.svelte:36` | props |
@@ -1101,7 +1135,7 @@ Related browser specs and their entry points:
 
 ### role="status" elements
 
-`main/system-logs/BootPicker.svelte:166`, `main/system-logs/BundleDialog.svelte:102`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:211`, `main/system-logs/ExportDialog.svelte:51`, `main/system-logs/RawLogList.svelte:251`, `main/system-logs/RawLogRow.svelte:163`, `main/system-logs/RawLogsPanel.svelte:101`, `main/system-logs/RawLogsTab.svelte:158`, `main/system-logs/StorageCleanup.svelte:173`, `main/system-logs/StorageLimits.svelte:186`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:224`.
+`main/system-logs/BootPicker.svelte:166`, `main/system-logs/BundleDialog.svelte:102`, `main/system-logs/EventsPanel.svelte:43`, `main/system-logs/EventsTab.svelte:211`, `main/system-logs/ExportDialog.svelte:51`, `main/system-logs/RawLogList.svelte:251`, `main/system-logs/RawLogRow.svelte:163`, `main/system-logs/RawLogsPanel.svelte:101`, `main/system-logs/RawLogsTab.svelte:158`, `main/system-logs/StorageCleanup.svelte:173`, `main/system-logs/StorageLimits.svelte:186`, `main/system-logs/StorageSection.svelte:68`, `main/system-logs/SystemLogsView.svelte:229`.
 
 ### Limits and constants
 
@@ -1225,18 +1259,24 @@ technology speech. Browser coverage is in the related specs above.
     page's newest entry or that head. A null head means the boot has no record
     yet, and that first follow stays: it reads the boot from its start. A
     failed read leaves no position, so the next Follow learns the head again.
-    Follow and Pause are disabled while a head read runs.
+    Follow and Pause are disabled while a head read runs. A takeover cancels
+    the displaced view's pending head read and makes Follow available again.
   - Accepted limits: a dropped marker marks the run of the batch it came with,
     not the exact gap, because the wire carries only a count; after a replay
     whose page is shorter than the listed run, older rows leave the view until
     the next Load more.
-- **One Follow owner (decided).** A socket has one follow (a new start stops
-  the socket's older one) and the app has one follow listener. Only the view
-  that made the latest start stops the device follow or clears the listener;
+- **One Follow owner [EXISTS].** The backend keeps one follow per socket: a new
+  start stops the socket's older one. The app has one follow listener. If a
+  second Raw view starts Follow, it notifies the displaced view through a
+  callback. The displaced view releases its listener before the new one attaches
+  and enters the existing Stopped state and announcement without sending a device
+  Stop. Pausing or stopping the new owner does not resume the first. A displaced
+  view can explicitly take Follow back. Takeover and reattachment invalidate
+  pending head reads through the paging generation, so a stale reply cannot
+  replace live rows or move the checkpoint. Positioned history pages are not
+  head replacements.
   `dispose` runs once, and a disposed view never starts Follow again. A stale
-  view's dispose, Pause or late start reply therefore leaves a newer view's
-  Follow running. Messages that arrive before the start reply wait for its
-  subscription ID. The start announcement precedes replay, so a queued end
-  leaves Stopped as the live-region announcement. The app mounts one Raw logs
-  view at a time. If two were mounted, the later start would win and the earlier
-  view would not be told.
+  view's dispose, Pause or late start reply leaves the newer owner's Follow
+  running. Messages that arrive before the start reply wait for its subscription
+  ID. The start announcement precedes replay, so a queued end leaves Stopped as
+  the live-region announcement. The app still mounts one Raw logs view at a time.

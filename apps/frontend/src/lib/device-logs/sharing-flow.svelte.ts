@@ -7,8 +7,10 @@
  * A reply that does not match its wire schema, a ticket path the device did not
  * mint for that flow, a manifest naming a section twice, a refused call and a
  * download the browser refuses all read as failed, with the step kept for
- * another try. A bundle the device refuses to prepare (READ_FAILED, which
- * includes its secret collision) also offers Export this view instead.
+ * another try. Pressing the dialog's download button again requests a fresh
+ * ticket; the same connection can replace an unused ticket, not a running
+ * download. A bundle the device refuses to prepare (READ_FAILED, including a
+ * secret collision) also offers Export this view instead.
  * Cancel, a deleted history and `dispose()` advance the run a request was sent
  * under, so its late reply is discarded and can never start a download. A ticket the device minted for a discarded reply expires
  * there within 60 s. No timer is kept here.

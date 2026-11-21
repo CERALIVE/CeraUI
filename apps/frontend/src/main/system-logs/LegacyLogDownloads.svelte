@@ -1,6 +1,7 @@
 <!--
   LegacyLogDownloads.svelte: the two shipped log downloads, moved from LogsDialog
-  into the System Logs Downloads region. Their state is a LogDownloads owned by
+  into the System Logs Downloads region, where they are the secondary Full log
+  files group with outline buttons. Their state is a LogDownloads owned by
   SystemLogsView, so it outlives this component; long titles and descriptions
   wrap (Japanese at phrases, Korean at spaces, Chinese between words), and a
   narrow row puts its button on a line of its own.
@@ -51,6 +52,7 @@ const logs = $derived([
 			<Button
 				class="ms-auto shrink-0 gap-1.5"
 				data-testid={`log-download-${log.id}`}
+				data-variant="outline"
 				disabled={downloads.downloading !== null}
 				onclick={() => downloads.download(log.id)}
 				size="sm"

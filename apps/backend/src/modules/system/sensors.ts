@@ -125,24 +125,46 @@ async function isServiceFailed(service: string) {
 	}
 }
 
-async function monitorBootconfig() {
-	if (!(await isServiceEnabled(bootconfigService))) {
-		notificationRemove("bootconfig");
+type BootconfigDeps = {
+	readonly bootconfigService: string;
+	readonly isServiceEnabled: typeof isServiceEnabled;
+	readonly isServiceFailed: typeof isServiceFailed;
+	readonly notificationExists: typeof notificationExists;
+	readonly notificationRemove: (name: string) => void;
+	readonly notificationBroadcast: typeof notificationBroadcast;
+	readonly setTimeout: (run: () => Promise<void>, delay: number) => void;
+	readonly emitDeviceEvent: typeof emitDeviceEvent;
+};
+
+const defaultBootconfigDeps: BootconfigDeps = {
+	bootconfigService,
+	isServiceEnabled,
+	isServiceFailed,
+	notificationExists,
+	notificationRemove,
+	notificationBroadcast,
+	setTimeout: (run, delay) => setTimeout(run, delay),
+	emitDeviceEvent,
+};
+
+export async function monitorBootconfig(deps = defaultBootconfigDeps) {
+	if (!(await deps.isServiceEnabled(deps.bootconfigService))) {
+		deps.notificationRemove("bootconfig");
 		return;
 	}
 
-	if (await isServiceFailed(bootconfigService)) {
-		emitDeviceEvent("bootloader_update_failed", {});
+	if (await deps.isServiceFailed(deps.bootconfigService)) {
+		deps.emitDeviceEvent("bootloader_update_failed", {});
 		const msg =
 			"Updating the bootloader failed. Please download the system log from the Advanced / developer menu";
-		notificationBroadcast("bootconfig", "error", msg, 0, true, false);
+		deps.notificationBroadcast("bootconfig", "error", msg, 0, true, false);
 		return;
 	}
 
-	if (!notificationExists("bootconfig")) {
+	if (!deps.notificationExists("bootconfig")) {
 		const msg =
 			"Don't reset or unplug the system. The bootloader is being updated in the background and doing so may brick your board...";
-		notificationBroadcast(
+		deps.notificationBroadcast(
 			"bootconfig",
 			"warning",
 			msg,
@@ -154,7 +176,7 @@ async function monitorBootconfig() {
 		);
 	}
 
-	setTimeout(monitorBootconfig, 2000);
+	deps.setTimeout(() => monitorBootconfig(deps), 2000);
 }
 
 export function startDmesgWatcher(

@@ -27,6 +27,20 @@ export function noteSessionRestored(): void {
  */
 let links = $state(0);
 let linkUp = false;
+let authenticatedLink = $state<number>();
+
+/** The current socket has been admitted, independently of post-login hydration. */
+export function getSessionReady(): boolean {
+	return authenticatedLink === links;
+}
+
+export function noteAuthenticatedLink(link: number): void {
+	authenticatedLink = link;
+}
+
+export function clearAuthenticatedLink(): void {
+	authenticatedLink = undefined;
+}
 
 export function getLinkEpoch(): number {
 	return links;

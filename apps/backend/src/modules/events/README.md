@@ -10,11 +10,20 @@ counts event generation files only. Boot versions remain available after event
 cleanup.
 
 `epoch.ts` exports `eventsEpoch`, which names the event ring with a UUID kept
-in `events.epoch` (the file name `store.ts` exports for its clear), written
-with mode 0600 and `fdatasync` when it is missing or fails the wire schema. A
-clear removes it first, so a clear cut short never keeps the old name for a
-changed ring, and the next read names a new one. It returns undefined when the
-file cannot be read or written, never a new value per read.
+in `events.epoch`. It opens the file without following links or blocking on
+a FIFO and reads at most 64 bytes from a regular file. A missing epoch is
+installed by linking a private, fsynced staging file into place; an invalid
+file is replaced atomically by rename and logged once. The directory is synced
+before the ID is cached. A directory at the epoch path is left untouched and
+logged once. Startup removes only staging files whose writer PID is gone.
+
+The deployed backend is the single, non-template `ceralive.service`. The
+package scripts restart or stop that unit; systemd stops the old backend before
+starting its replacement. Only `eventsEpoch` and `clearEvents` change the
+epoch path, and both are synchronous, so they cannot interleave and need no
+writer lock. The cached ID is keyed by the resolved store path and stays valid
+until a clear has durably removed it, even if later disk reads would fail.
+Without a valid cached or persisted ID, the epoch is omitted.
 
 The directory resolves from `CERALIVE_EVENTS_DIR`, then
 `CERALIVE_DATA_DIR/ceralive/events`, then the shared development detector's
@@ -32,7 +41,7 @@ next append inspects only the final byte and separates a torn tail from its
 new record. The ring is intended for
 the single backend writer; rotation is not a multi-process transaction.
 
-All operations read disk rather than retaining an authoritative memory cache.
+Ring record operations read disk rather than retaining a memory cache.
 Writers and readers use the shared wire schemas, with the boot schema's journal
 boot-ID constraint also applied to events. Invalid records are rejected before
 directory creation, rotation or writes. Rejection returns void and emits one

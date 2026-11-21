@@ -93,7 +93,7 @@ Maintenance runs when a ceiling is readable and a limit is set
 | Stderr kept | 64 KiB | `reader.ts:11` |
 | Page size | 1 to 200, default 100 | `logs.schema.ts:105` |
 | Search text | 1 to 256 UTF-8 bytes, no NUL | `logs.schema.ts:84-91` |
-| Queries | a new query on a socket aborts its previous one; `BUSY` at 2 running | `query-admission.ts:25,28` |
+| Queries | two slots device-wide, one per socket; Raw and Around wait up to 3.1 s for a slot | [Paging admission](device-log-paging.md) |
 | Follows | a new start on a socket stops its previous one or returns `BUSY` at 4 running | `follow.ts:91-104` |
 | Follow batch | flush delay 0 at 200 entries or 64 KiB, else 250 ms; an entry past 200 entries or 256 KiB is counted in `dropped` | `follow-batch.ts:23,34` |
 | Follow catch-up | more than 2000 records examined before the first flush restarts the follower with `gap: "catchup_exceeded"` | `follow-delivery.ts:47-50`, `follow.ts:255-287` |
@@ -118,7 +118,7 @@ example origins:
 | `BOOT_UNAVAILABLE` | `query.ts:39,64`; `follow.ts:85` |
 | `FILTER_CHANGED` | `continuation.ts:72` |
 | `JOURNAL_UNAVAILABLE` | `reader.ts:92` (spawn `ENOENT`); `boots.ts:44` |
-| `BUSY` | `query-admission.ts:28`; `follow.ts:83`; `export.ts:61`; `bundle.ts:45` |
+| `BUSY` | [Paging admission](device-log-paging.md); `follow.ts:83`; `export.ts:61`; `bundle.ts:45` |
 | `RECORD_TOO_LARGE` | `reader.ts:126,168,178` |
 | `READ_FAILED` | `reader.ts:93,134,153`; `retention.ts:128,150,157` |
 | `INVALID_RETENTION` | `retention.ts:112,120` |

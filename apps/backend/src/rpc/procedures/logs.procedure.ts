@@ -17,6 +17,7 @@ import {
 } from "@ceraui/rpc/schemas";
 import { ORPCError, os } from "@orpc/server";
 import { z } from "zod";
+import { BOUNDED_SPAWN_TERM_GRACE_MS } from "../../helpers/bounded-spawn.ts";
 import {
 	createBundle,
 	previewBundle,
@@ -25,6 +26,7 @@ import { listBoots } from "../../modules/device-logs/classified-boots.ts";
 import { createExport } from "../../modules/device-logs/export.ts";
 import { startFollow, stopFollow } from "../../modules/device-logs/follow.ts";
 import { locateAround, queryLogs } from "../../modules/device-logs/query.ts";
+import { JOURNAL_LIMITS } from "../../modules/device-logs/reader.ts";
 import { BundleReadError } from "../../modules/device-logs/redaction.ts";
 import {
 	clearAll,
@@ -34,19 +36,33 @@ import {
 } from "../../modules/device-logs/retention.ts";
 import { socketSessionSignal } from "../context.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
-import type { RPCContext } from "../types.ts";
+import type { AppWebSocket, RPCContext } from "../types.ts";
 
 const authedProcedure = os.$context<RPCContext>().use(authMiddleware);
+const SLOT_WAIT_MS =
+	JOURNAL_LIMITS.deadlineMs + BOUNDED_SPAWN_TERM_GRACE_MS + 1000;
+
+function slotAdmission(ws: AppWebSocket, signal?: AbortSignal) {
+	const session = socketSessionSignal(ws);
+	return {
+		interactive: signal ? AbortSignal.any([session, signal]) : session,
+		timeoutMs: SLOT_WAIT_MS,
+	};
+}
 
 export const queryLogsProcedure = authedProcedure
 	.input(logQueryInputSchema)
 	.output(logQueryOutputSchema)
-	.handler(({ context, input }) => queryLogs(context.ws, input));
+	.handler(({ context, input, signal }) =>
+		queryLogs(context.ws, input, slotAdmission(context.ws, signal)),
+	);
 
 export const aroundLogsProcedure = authedProcedure
 	.input(logAroundInputSchema)
 	.output(logAroundOutputSchema)
-	.handler(({ context, input }) => locateAround(context.ws, input));
+	.handler(({ context, input, signal }) =>
+		locateAround(context.ws, input, slotAdmission(context.ws, signal)),
+	);
 
 export const logBootsProcedure = authedProcedure
 	.output(z.array(logBootInfoSchema))

@@ -14,6 +14,15 @@
 import type { ConnectionState } from "$lib/rpc/client";
 
 let state = $state<ConnectionState>("connected");
+let authenticated = $state(true);
+
+export function getSessionReady(): boolean {
+	return getConnectionState() === "connected" && authenticated;
+}
+
+export function setSocketAuthenticated(accepted: boolean): void {
+	authenticated = accepted;
+}
 
 /** Mirrors the real `subscriptions.svelte` getter consumed by BondToggle. */
 export function getConnectionState(): ConnectionState {
@@ -28,4 +37,5 @@ export function setConnectionState(next: ConnectionState): void {
 /** Reset to the default connected baseline between tests. */
 export function resetConnectionState(): void {
 	state = "connected";
+	authenticated = true;
 }

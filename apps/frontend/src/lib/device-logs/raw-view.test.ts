@@ -2351,7 +2351,7 @@ describe("RawView: dispose", () => {
 		expect(keys(next)).toEqual(["s=3", "s=2", "s=1"]);
 	});
 
-	it("pauses without stopping the device when a newer view has taken Follow over", async () => {
+	it("stays stopped without stopping the device when a newer view has taken Follow over", async () => {
 		const old = await loaded(["s=1"]);
 		old.followStart.mockResolvedValueOnce({
 			ok: true,
@@ -2362,7 +2362,7 @@ describe("RawView: dispose", () => {
 		const next = await replacement(old);
 		await old.view.pauseFollow();
 		expect(old.followStop).not.toHaveBeenCalled();
-		expect(old.view.follow).toBe("paused");
+		expect(old.view.follow).toBe("stopped");
 		old.push({
 			subscriptionId: "sub-2",
 			entries: [entry("s=3")],

@@ -143,6 +143,8 @@ describe("LegacyLogDownloads: the shipped anatomy", () => {
 					"border-border",
 				]),
 			);
+			// Secondary files: never lime-filled (DESIGN.md IH-5).
+			expect(button(kind).dataset.variant).toBe("outline");
 		}
 		expect(tokens(button("system").querySelector("svg"))).toContain("size-4");
 

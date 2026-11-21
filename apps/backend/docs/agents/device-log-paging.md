@@ -1,15 +1,37 @@
 # Device log paging [EXISTS]
 
-`src/modules/device-logs/query.ts` exports `queryLogs(conn, input)`,
-`locateAround(conn, input)` and `abortLogQueries()`. The connection object owns
+`src/modules/device-logs/query.ts` exports `queryLogs(conn, input, admission?)`,
+`locateAround(conn, input, admission?)` and `abortLogQueries()`. The connection object owns
 one running operation. A replacement aborts and joins that operation before
 starting; at most two operations run device-wide. Each operation holds its slot
-through boot discovery and its sequential scans. Export callers can use a
-dedicated owner object to share the device limit independently of socket queries.
-Clear awaits `abortLogQueries()` to join all active operations.
+through boot discovery and its sequential scans. Filtered export and support
+bundle reads use separate owners and acquire a slot per page. Each class
+admits its oldest eligible request. A same-socket replacement keeps its place
+in the queue while its owner is running, but another owner can use a free
+slot without waiting for that replacement.
 
-The service consumes only the landed reader, parser, mock adapter, compiler,
-settings and event-store public APIs. No viewer or RPC wiring is added here.
+Viewers get priority, but after two viewer admissions while download pages
+are queued, the oldest eligible download gets the next free slot. A download
+admission resets that count. With both slots held by downloads, the first
+eligible viewer gets the first freed slot before another download page. As
+long as holders settle, history admission is open, and waiters stay live,
+neither class can starve. This is a bound on handoffs, not on elapsed time.
+A slot is not free until its read settles, including confirmation of child exit.
+
+Raw query and Around RPCs wait up to the journal scan deadline plus its
+termination grace and 1,000 ms (currently 3,100 ms). Expiring that wait returns
+`BUSY` if another viewer still holds a slot, and `READ_FAILED` otherwise,
+including when only download readers hold slots. Socket closure or request
+cancellation while waiting also returns `READ_FAILED`. The admission timer is
+cleared when the wait ends, before any granted read starts. Clear wakes queued
+operations, including replacements blocked on their own socket, so an older
+history epoch returns `READ_FAILED` without waiting for reap. Clear still joins
+all active operations through `abortLogQueries()`. The separate refusal while
+[Clear is awaiting settlement](device-log-retention.md#admission-and-terminal-ownership)
+remains `BUSY`.
+
+The service consumes the reader, parser, mock adapter, compiler, settings and
+event-store public APIs.
 `residual.ts` exports `matchesResidual` for paging and the subsequent follow
 service: literal case-insensitive displayed-message text, inclusive timestamp
 membership and source relevance of suppression notices. Out-of-range records
@@ -68,8 +90,12 @@ milliseconds; stored-only rows project their start timestamp into the wire range
 `logsAvailable: false`. Rows are newest journal index first, followed by
 stored-only boots with older indices. Shutdown is `unknown` until the
 classifier is integrated; the current boot is `current`. `boots.ts` performs the
-native list command. Under mocks it assembles one current journal boot from the
-ring, together with stored-only boot history, without spawning.
+native list command. Under mocks it assembles one current journal boot
+together with stored-only boot history, without spawning. The current mock
+boot's `firstTs` is captured the first time that boot ID is listed in the
+backend process and stays fixed even if the log ring is pruned or cleared.
+Its `lastTs` still comes from the last retained entry, or is zero for an empty
+ring.
 Stored-only indices saturate at `Number.MIN_SAFE_INTEGER`; stored start times
 are floored and saturated to the nonnegative safe-integer wire timestamp range.
 

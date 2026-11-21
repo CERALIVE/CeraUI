@@ -371,17 +371,43 @@ for (const scheme of ['dark', 'light'] as const) {
 		}
 		expect(findings(audits)).toEqual([]);
 	});
+
+	// DF-32: one backdrop for nested dialogs, never a lighter wash over the dark view.
+	test(`${scheme}: a Clear confirmation dims the view with the view's own backdrop`, async ({ page }) => {
+		const logs = new SystemLogsPage(page);
+		await logs.open({ locale: 'en', size: { width: 1280, height: 800 }, touch: false, scheme });
+		await logs.show('storage');
+		const backdrops = (slot: string) =>
+			page.locator(`[data-slot="${slot}"]`).evaluateAll((nodes) =>
+				nodes.map((node) => {
+					const style = getComputedStyle(node);
+					return { background: style.backgroundColor, filter: style.backdropFilter };
+				}),
+			);
+		const view = await backdrops('dialog-overlay');
+		expect(view).toHaveLength(1);
+
+		await page.getByRole('button', { name: en['systemLogs.storage.clearAll'], exact: true }).click();
+		await expect(page.getByRole('alertdialog')).toBeVisible();
+		await logs.settle();
+
+		expect(await backdrops('alert-dialog-overlay')).toEqual(view);
+		await page.keyboard.press('Escape');
+		await expect(page.getByRole('alertdialog')).toHaveCount(0);
+	});
 }
 
 for (const locale of ALL_LOCALES) {
-	test(`${locale}: the Raw search placeholder is painted whole and the field keeps its full name`, async ({ page }) => {
+	test(`${locale}: the Raw search placeholder is painted whole and the field keeps its full name`, async ({ page }, testInfo) => {
 		test.setTimeout(120_000);
 		const logs = new SystemLogsPage(page);
 		const measured: { size: string; name: string | null; placeholder: string; width: number; room: number }[] = [];
 		try {
 			for (const [size, touch] of [
 				[{ width: 320, height: 720 }, false],
+				[{ width: 375, height: 812 }, false],
 				[{ width: 390, height: 844 }, false],
+				[{ width: 1280, height: 800 }, false],
 				[{ width: 1440, height: 900 }, false],
 				// Touch layout persists across loads, so the touch kiosk comes last.
 				[{ width: 1024, height: 600 }, true],
@@ -407,54 +433,66 @@ for (const locale of ALL_LOCALES) {
 				measured.push({ size: `${size.width}x${size.height}`, ...fit });
 			}
 		} finally {
-			writeEvidence(`raw-search-placeholder-${locale}.json`, measured);
+			writeEvidence(`raw-search-placeholder-${locale}-${testInfo.project.name}.json`, measured);
 		}
 		expect(measured.filter((entry) => entry.width > entry.room + 0.5)).toEqual([]);
 		expect(new Set(measured.map((entry) => entry.name)).size).toBe(1);
 		// The wide layout has room for the full label, so it stays the placeholder there.
-		const wide = measured.find((entry) => entry.size === '1440x900');
-		expect(wide?.placeholder).toBe(wide?.name);
+		for (const viewport of ['1280x800', '1440x900']) {
+			const wide = measured.find((entry) => entry.size === viewport);
+			expect(wide?.placeholder, viewport).toBe(wide?.name);
+		}
 	});
 }
 
-for (const scheme of ['dark', 'light'] as const) {
-	test(`ar ${scheme}: every Storage size reads its value before its Latin unit`, async ({ page }) => {
-		test.setTimeout(120_000);
-		const logs = new SystemLogsPage(page);
-		await logs.open({ locale: 'ar', size: { width: 390, height: 844 }, touch: false, scheme });
-		await logs.show('storage');
-		const order = () =>
-			page.evaluate(() => {
-				const sizes: { text: string; valueFirst: boolean }[] = [];
-				const roots = document.querySelectorAll('[data-testid="system-logs-storage"], [data-slot="select-content"]');
-				for (const root of roots) {
-					const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-					for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
-						for (const match of (node.textContent ?? '').matchAll(/(\d[\d.,]*)\u00a0([KMGT]?B)(?![A-Za-z])/g)) {
-							const at = (start: number, end: number) => {
-								const range = document.createRange();
-								range.setStart(node, start);
-								range.setEnd(node, end);
-								return range.getBoundingClientRect();
-							};
-							const unitAt = match.index + match[0].length - (match[2]?.length ?? 0);
-							const value = at(match.index, match.index + (match[1]?.length ?? 0));
-							const unit = at(unitAt, unitAt + (match[2]?.length ?? 0));
-							sizes.push({ text: match[0], valueFirst: value.left < unit.left });
+for (const [size, touch] of [
+	[{ width: 375, height: 812 }, false],
+	[{ width: 390, height: 844 }, false],
+	[{ width: 1024, height: 600 }, true],
+	[{ width: 1280, height: 800 }, false],
+] as const) {
+	const viewport = `${size.width}x${size.height}`;
+	for (const scheme of ['dark', 'light'] as const) {
+		test(`ar at ${viewport}${touch ? ' touch' : ''} ${scheme}: every Storage size reads its value before its Latin unit`, async ({
+			page,
+		}, testInfo) => {
+			test.setTimeout(120_000);
+			const logs = new SystemLogsPage(page);
+			await logs.open({ locale: 'ar', size, touch, scheme });
+			await logs.show('storage');
+			const order = () =>
+				page.evaluate(() => {
+					const sizes: { text: string; valueFirst: boolean }[] = [];
+					const roots = document.querySelectorAll('[data-testid="system-logs-storage"], [data-slot="select-content"]');
+					for (const root of roots) {
+						const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+						for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+							for (const match of (node.textContent ?? '').matchAll(/(\d[\d.,]*)\u00a0([KMGT]?B)(?![A-Za-z])/g)) {
+								const at = (start: number, end: number) => {
+									const range = document.createRange();
+									range.setStart(node, start);
+									range.setEnd(node, end);
+									return range.getBoundingClientRect();
+								};
+								const unitAt = match.index + match[0].length - (match[2]?.length ?? 0);
+								const value = at(match.index, match.index + (match[1]?.length ?? 0));
+								const unit = at(unitAt, unitAt + (match[2]?.length ?? 0));
+								sizes.push({ text: match[0], valueFirst: value.left < unit.left });
+							}
 						}
 					}
-				}
-				return sizes;
-			});
-		const readouts = await order();
-		await page.getByTestId('storage-maxSizeMb-select').click();
-		await expect(page.locator('[data-slot="select-content"]').getByRole('option')).not.toHaveCount(0);
-		await logs.settle();
-		const menu = (await order()).slice(readouts.length);
-		writeEvidence(`ar-storage-sizes-${scheme}.json`, { readouts, menu });
-		// The usage sentence, the event history, the volume table, the size limit and its options.
-		expect(readouts.length).toBeGreaterThanOrEqual(4);
-		expect(menu.length).toBeGreaterThanOrEqual(2);
-		expect([...readouts, ...menu].filter((size) => !size.valueFirst)).toEqual([]);
-	});
+					return sizes;
+				});
+			const readouts = await order();
+			await page.getByTestId('storage-maxSizeMb-select').click();
+			await expect(page.locator('[data-slot="select-content"]').getByRole('option')).not.toHaveCount(0);
+			await logs.settle();
+			const menu = (await order()).slice(readouts.length);
+			writeEvidence(`ar-storage-sizes-${viewport}-${scheme}-${testInfo.project.name}.json`, { readouts, menu });
+			// The usage sentence, the event history, the volume table, the size limit and its options.
+			expect(readouts.length).toBeGreaterThanOrEqual(4);
+			expect(menu.length).toBeGreaterThanOrEqual(2);
+			expect([...readouts, ...menu].filter((size) => !size.valueFirst)).toEqual([]);
+		});
+	}
 }

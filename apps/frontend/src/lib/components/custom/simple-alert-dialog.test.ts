@@ -114,6 +114,17 @@ describe("SimpleAlertDialog — async confirm loading (Task 29)", () => {
 		expect(onconfirm).toHaveBeenCalledTimes(1);
 	});
 
+	// DF-32: a second, lighter wash over the shared overlay brightened the dark UI.
+	it("dims the page with one backdrop, the overlay every dialog shares", () => {
+		render(SimpleAlertDialog, {
+			props: { open: true, confirmButtonText: "Confirm" },
+		});
+
+		expect(
+			document.body.querySelectorAll('[data-slot="alert-dialog-overlay"]'),
+		).toHaveLength(1);
+	});
+
 	it("keeps the original immediate-close behaviour for a synchronous confirm", async () => {
 		const onconfirm = vi.fn(() => {
 			/* synchronous: returns undefined, not a promise */

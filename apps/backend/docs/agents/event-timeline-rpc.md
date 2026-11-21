@@ -19,8 +19,10 @@ across rotation and restarts. `clear` unlinks it and syncs the directory before
 touching any generation, so the next read names a new ring. The emitter takes
 `seq` from the store tail when it starts. After a clear and a restart `seq`
 and the event ID start again at 1 and can repeat a number a client still shows.
-The field is optional on the wire and omitted when the store cannot read or
-write the file, rather than inventing a new identity on each read. The push frame
+The field is optional on the wire and omitted when the store has no cached
+identity and cannot read or write one, rather than inventing a new identity on
+each read. The optional `epoch` field was accepted by the product owner on 2026-11-19.
+The push frame
 is unchanged: a new process reaches a client only on a new connection, and the
 client reads the list on every reconnect.
 

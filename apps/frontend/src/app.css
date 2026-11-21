@@ -233,6 +233,17 @@
 		   under the dock, and the bottom offset the toast stack is pushed above
 		   so a toast can never own the dock's hit-test point. */
 		--mobile-dock-height: 7rem;
+
+		/* Height of pwa-status's fixed not-connected / offline bar, which it
+		   publishes while the bar is on screen. The page starts below it and
+		   every band sticky at the top stops below it, so the bar never covers
+		   the connection banner, its Retry or the header. */
+		--offline-bar-height: 0px;
+
+		/* Height of Layout's sticky stack of top bands (update and connection
+		   banners), which it publishes while mounted. The header sticks below
+		   it, so a scrolled page never slides the header over a banner. */
+		--top-bands-height: 0px;
 	}
 
 	[data-layout-mode='touch'] {
@@ -335,6 +346,7 @@
 
 	body {
 		@apply bg-background text-foreground;
+		padding-top: var(--offline-bar-height);
 		font-synthesis-weight: none;
 		text-rendering: optimizeLegibility;
 		-webkit-font-smoothing: antialiased;
@@ -355,12 +367,9 @@
 		@apply bg-muted-foreground/30 rounded-sm;
 	}
 
+	/* Thumb and track come from the graphite tokens, so they follow every palette. */
 	html {
-		scrollbar-color: hsl(215 10% 46% / 0.3) hsl(210 20% 98%);
-	}
-
-	html.dark {
-		scrollbar-color: hsl(215 10% 55% / 0.3) hsl(222 30% 6%);
+		scrollbar-color: color-mix(in oklch, var(--muted-foreground) 45%, transparent) var(--background);
 	}
 
 	.hide-scrollbar::-webkit-scrollbar {
@@ -723,6 +732,12 @@ html[data-theme='eink'] *::after {
 	pointer-events: none;
 }
 
+/* sonner sets its own system font stack on `[data-sonner-toaster]` (0,1,0);
+   `:root` lifts this rule above it so every toast is set in the app typeface. */
+:root [data-sonner-toaster] {
+	font-family: inherit;
+}
+
 [data-sonner-toast] {
 	pointer-events: auto;
 	border-radius: 0.625rem !important;
@@ -784,8 +799,9 @@ html[data-theme='eink'] *::after {
 	border-color: color-mix(in oklab, var(--status-error) 45%, var(--border)) !important;
 }
 
+/* The raw token reads 4.2:1 on this tint; the icon takes the red status ink. */
 [data-sonner-toast][data-type='error'] [data-icon] {
-	color: var(--status-error) !important;
+	color: color-mix(in oklab, var(--status-error) 84%, var(--foreground)) !important;
 }
 
 /* info + default/loading — neutral graphite */
@@ -872,16 +888,76 @@ html[data-theme='eink'] *::after {
    tints in every palette, and the red tint and hue still mark the action as
    destructive. Disabled drops the 50% fade, which would fail AA, and reads
    quieter through a fainter tint and a less contrasted label. Keyed on the
-   recipe's own tint class, so the ui/ primitives stay untouched; unlayered so
-   it beats their utilities. destructive-button-contrast.test.ts measures it. */
-:is([data-slot='button'], [data-slot='alert-dialog-action'])[class~='bg-destructive/10'] {
+   recipe's classes, also on a Button a primitive's child snippet re-slots
+   (Dialog.Close); unlayered over ui/'s utilities. destructive-button-contrast.test.ts measures it. */
+:is([data-slot='button'], [data-slot='alert-dialog-action'], [class~='group/button'])[class~='bg-destructive/10'] {
 	color: color-mix(in oklab, var(--destructive) 60%, var(--foreground));
 }
 
-:is([data-slot='button'], [data-slot='alert-dialog-action'])[class~='bg-destructive/10']:disabled {
+:is([data-slot='button'], [data-slot='alert-dialog-action'], [class~='group/button'])[class~='bg-destructive/10']:disabled {
 	opacity: 1;
 	background-color: color-mix(in oklab, var(--destructive) 4%, var(--card));
 	color: color-mix(in oklab, var(--destructive) 75%, var(--foreground));
+}
+
+/* On the solid red fill an 80% fade reads 3.5:1 (the "• Trying again…" line
+   of pwa-status's not-connected and offline bars); it keeps full strength
+   there, and its smaller size still sets it apart. */
+.bg-destructive.text-destructive-foreground .opacity-80 {
+	opacity: 1;
+}
+
+/* ── Red text and red status text ──
+   `text-destructive` in --destructive measured 3.6:1 on the dark card and 3.2:1
+   as the shadcn destructive badge's label on its dark red tint;
+   `text-status-error` measured 4.1:1 as the status Badge's error tone on its 10%
+   tint and 3.9:1 as the Add-ons Failed badge on its 12% tint (light). Mixing
+   each ink toward --foreground holds WCAG AA 4.5:1 on the background, card and
+   popover and on the red and amber tints it sits on, in every palette, keeping
+   the most red that clears them all. Red text is bound by the hotspot
+   confirmation's errors (dark), on its 10% amber tint over the popover (4.41:1
+   at 76%, 4.55:1 at 74%); red status text by the Sharing section's error Badge
+   on its 10% amber surface (4.42:1 at 86%, 4.54:1 at 84%). Keyed on the ink class, so
+   no tint or pairing bypasses it; an opacity modifier (`text-destructive/80`)
+   would, so red text carries none. Fills, tokens and the ui/ primitives stay as
+   shipped; the destructive button keeps its own label above, which outranks
+   this rule.
+   Unlayered so these beat the utilities.
+   destructive-text-contrast.test.ts and red-text-contrast.spec.ts measure them. */
+.text-destructive {
+	color: color-mix(in oklab, var(--destructive) 74%, var(--foreground));
+}
+
+/* Red only while hovered (the Wi-Fi list's Forget icon) takes the same ink: the
+   raw token measured 3.3:1 on its dark hover. Same media query as Tailwind's
+   own `hover:` variant, so a tap on a touch screen still leaves no red. */
+@media (hover: hover) {
+	.hover\:text-destructive:hover {
+		color: color-mix(in oklab, var(--destructive) 74%, var(--foreground));
+	}
+}
+
+/* Tailwind compiles a variant form of the red ink (`focus:text-destructive`,
+   `data-[...]:text-destructive`) to the raw token, which the class-keyed rule
+   above cannot reach. The shadcn destructive dropdown item sets its label and
+   icon that way and measured 3.5:1 on the dark popover and 3.1:1 on its focus
+   tint; keyed on the primitive's own slot and variant, it takes the same ink.
+   destructive-text-contrast.test.ts fails on a variant form it does not name. */
+:is([data-slot='dropdown-menu-item'][data-variant='destructive'], [data-slot='dropdown-menu-item'][data-variant='destructive'] > svg) {
+	color: color-mix(in oklab, var(--destructive) 74%, var(--foreground));
+}
+
+.text-status-error {
+	color: color-mix(in oklab, var(--status-error) 84%, var(--foreground));
+}
+
+/* The tooltip is inverted (bg-foreground, text-background), so the page ink
+   reads 2.7:1 there (dark) and disappears in e-ink. Red status inside it mixes
+   toward the tooltip's own text colour instead, keeping the most red that
+   clears 4.5:1 on --foreground in every palette (e-ink binds). The HUD
+   health legend's Dead glyph is the one user. */
+[data-slot='tooltip-content'] .text-status-error {
+	color: color-mix(in oklab, var(--status-error) 44%, var(--background));
 }
 
 /* ── Pointer-cursor affordance for interactive controls ──

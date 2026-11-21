@@ -814,6 +814,12 @@ describe('closed raw log object and value boundaries', () => {
 		},
 	);
 
+	test('storage accepts null when the legacy debug file size is not reported', () => {
+		expect(
+			logStorageSchema.parse({ ...storage, legacyDebugBytes: null }).legacyDebugBytes,
+		).toBeNull();
+	});
+
 	test.each([
 		{ maxSizeMb: 0, maxAgeDays: 1 },
 		{ maxSizeMb: 1, maxAgeDays: 0 },
