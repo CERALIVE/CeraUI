@@ -3,6 +3,7 @@
  * saves, how a refusal reads, and how a ticketed file reaches the browser.
  */
 import type {
+	LogBundleFailureReason,
 	LogBundleManifest,
 	LogErrorCode,
 	LogExportInput,
@@ -70,12 +71,32 @@ export function refusal(error: LogErrorCode): SharingProblem {
 }
 
 /**
- * The device refused to prepare the bundle: its sanitized READ_FAILED, which
- * includes the fail-closed collision of a held secret with a structured value.
+ * The stage at which the device refused to prepare the bundle: its sanitized
+ * READ_FAILED (which includes the fail-closed collision of a held secret with a
+ * structured value) and the envelope's additive stage. An older device sends no
+ * stage, which reads as unclassified. Null when the device did not refuse.
  */
-export function preparationRefused(error: unknown): boolean {
-	return error instanceof RpcError && error.message === "READ_FAILED";
+export function previewFailure(error: unknown): LogBundleFailureReason | null {
+	if (!(error instanceof RpcError) || error.message !== "READ_FAILED")
+		return null;
+	return error.stage ?? "internal";
 }
+
+/**
+ * Each stage's sentence. Only collision (change that credential) and
+ * journal_read (restart the device) need a remedy the band's Retry and Export
+ * this view do not already offer; the 64 KiB secret budget is not reachable
+ * with real credentials. The SPA size budget leaves no room for the rest.
+ */
+export const BUNDLE_FAILURE_COPY_KEYS = {
+	collision: "systemLogs.sharing.bundleFailedCollision",
+	journal_read: "systemLogs.sharing.bundleFailedJournal",
+	pattern: "systemLogs.sharing.bundleFailed",
+	budget: "systemLogs.sharing.bundleFailed",
+	deadline: "systemLogs.sharing.bundleFailed",
+	abort: "systemLogs.sharing.bundleFailed",
+	internal: "systemLogs.sharing.bundleFailed",
+} as const satisfies Record<LogBundleFailureReason, string>;
 
 /** A preview rejects with its sanitized code as the message (apps/backend/docs/agents/device-log-bundle.md). */
 export function previewProblem(error: unknown): SharingProblem {
