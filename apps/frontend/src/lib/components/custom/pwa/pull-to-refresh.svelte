@@ -28,6 +28,12 @@ let currentY = 0;
 
 const handleTouchStart = (e: TouchEvent) => {
 	if (window.scrollY > 0) return; // Only allow at top of page
+	// Let marked regions own the entire gesture, even at their scroll boundaries.
+	if (e.composedPath().some(
+		(node) => node instanceof Element && node.hasAttribute('data-no-pull-to-refresh'),
+	)) {
+		return;
+	}
 
 	const clientY = e.touches[0]?.clientY;
 	if (clientY === undefined || !Number.isFinite(clientY)) return; // Prevent NaN coordinates
@@ -46,7 +52,7 @@ const handleTouchMove = (e: TouchEvent) => {
 	const rawPullDistance = currentY - startY;
 	pullDistance = Number.isFinite(rawPullDistance) ? Math.max(0, rawPullDistance) : 0;
 
-	canRefresh = pullDistance  > threshold;
+	canRefresh = pullDistance > threshold;
 
 	// Prevent default scrolling when pulling
 	if (pullDistance > 0) {
@@ -121,6 +127,11 @@ const handleTouchEnd = async () => {
 	}
 };
 
+const handleTouchCancel = () => {
+	canRefresh = false;
+	void handleTouchEnd();
+};
+
 onMount(() => {
 	// Only add touch listeners on mobile/tablet devices (including iPad) with NaN safety
 	const { maxTouchPoints } = navigator;
@@ -137,11 +148,13 @@ onMount(() => {
 		document.addEventListener('touchstart', handleTouchStart, { passive: true });
 		document.addEventListener('touchmove', handleTouchMove, { passive: false });
 		document.addEventListener('touchend', handleTouchEnd, { passive: true });
+		document.addEventListener('touchcancel', handleTouchCancel, { passive: true });
 
 		return () => {
 			document.removeEventListener('touchstart', handleTouchStart);
 			document.removeEventListener('touchmove', handleTouchMove);
 			document.removeEventListener('touchend', handleTouchEnd);
+			document.removeEventListener('touchcancel', handleTouchCancel);
 		};
 	}
 });

@@ -22,12 +22,19 @@ import { publishHeight } from '$lib/layout';
 interface Props {
 	/** The idle readiness line: a blocking reason, or the ready text. */
 	status?: string;
+	/** ID of the readiness text when it describes a fix button. */
+	statusId?: string;
 	/** Whether `status` is a blocking reason. */
 	blocked?: boolean;
+	/**
+	 * While blocked, one button per thing to fix, under the line. The host owns
+	 * the items and their actions; the bar only places them.
+	 */
+	checklist?: Snippet;
 	children: Snippet;
 }
 
-const { status, blocked = false, children }: Props = $props();
+const { status, statusId, blocked = false, checklist, children }: Props = $props();
 
 const HEIGHT_PROPERTY = '--live-bar-height';
 
@@ -49,15 +56,21 @@ $effect(() => (bar ? publishHeight(bar, HEIGHT_PROPERTY) : undefined));
 		class="mx-auto flex w-full max-w-3xl flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 lg:max-w-6xl"
 	>
 		{#if status !== undefined}
-			<!-- Two lines are always reserved, so a reason that wraps never moves the bar. -->
-			<p class="flex min-h-10 min-w-0 items-start gap-2 text-sm sm:flex-1" aria-live="polite">
-				<span
-					class="mt-1.5 size-2 shrink-0 rounded-full"
-					style="background: {blocked ? 'var(--destructive)' : 'var(--status-success)'};"
-					aria-hidden={true}
-				></span>
-				<span class="line-clamp-2 min-w-0">{status}</span>
-			</p>
+			<div class="flex min-w-0 flex-col gap-2 sm:flex-1">
+				<!-- Two lines are reserved, so a reason that wraps never moves the bar;
+				     on a short screen one line is enough. -->
+				<p class="flex min-h-10 min-w-0 items-start gap-2 text-sm [@media(max-height:640px)]:min-h-0" aria-live="polite">
+					<span
+						class="mt-1.5 size-2 shrink-0 rounded-full"
+						style="background: {blocked ? 'var(--destructive)' : 'var(--status-success)'};"
+						aria-hidden={true}
+					></span>
+					<span id={statusId} class="line-clamp-2 min-w-0">{status}</span>
+				</p>
+				{#if blocked && checklist}
+					{@render checklist()}
+				{/if}
+			</div>
 		{/if}
 		{@render children()}
 	</div>

@@ -781,6 +781,7 @@
 	"live.audioMixer.error.refused": "デバイスがこの変更を拒否したため、何も変わっていません。",
 	"live.telemetryCard.title": "テレメトリー",
 	"live.bar.ready": "配信を開始できます",
+	"live.bar.blockedSeveral": "配信を始める前にこちらを確認してください",
 	"live.source.activeConfigured": "設定済み",
 	"live.source.activeLive": "ライブ",
 	"live.source.audioAmbiguousBody": "このカメラは自身のオーディオデバイスを複数報告しています。どれを使うかは推測しません。下から正しいものを選んでください。",

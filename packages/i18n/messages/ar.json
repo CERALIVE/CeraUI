@@ -876,6 +876,7 @@
 	"live.audioMixer.error.refused": "رفض الجهاز هذا التغيير، ولم يتغير شيء.",
 	"live.telemetryCard.title": "القياس عن بُعد",
 	"live.bar.ready": "جاهز للبث المباشر",
+	"live.bar.blockedSeveral": "أصلح هذه الأمور قبل بدء البث",
 	"live.source.activeConfigured": "مُهيأ",
 	"live.source.activeLive": "مباشر",
 	"live.source.audioAmbiguousBody": "تُبلّغ هذه الكاميرا عن أكثر من جهاز صوت خاص بها، لذلك لن نخمّن أيها تريد. اختر الجهاز الصحيح أدناه.",
