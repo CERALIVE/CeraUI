@@ -30,6 +30,10 @@ import * as websocket from "../modules/ui/websocket-server.ts";
 import { buildInitialNotifications } from "../rpc/procedures/status.procedure.ts";
 
 const NAME = "test-persistent-boot-notification";
+// With the backend preload's global hooks, Bun 1.4.4 treats a per-test timeout
+// of 0 as its 5 s default and SIGTERMs live children, so the test timeout must
+// outlast this deadline for the deadline's diagnostics to win.
+const CHILD_DEADLINE_MS = 30_000;
 
 describe("initial-state push replays persistent notifications", () => {
 	afterEach(() => {
@@ -115,51 +119,55 @@ describe("the replay and its publisher are on the wire", () => {
 		}
 	});
 
-	test("two backend processes number the same notice alike but name different publishers", async () => {
-		// Share one deadline across both children so a hang still yields exit diagnostics.
-		const deadline = AbortSignal.timeout(30_000);
-		const module = new URL("../modules/ui/notifications.ts", import.meta.url)
-			.pathname;
-		const prefix = "replay-result:";
-		const resultSchema = notificationSchema
-			.pick({ revision: true, publisher: true })
-			.required();
-		const probe = [
-			`import { getPersistentNotifications, notificationBroadcast } from ${JSON.stringify(module)};`,
-			`notificationBroadcast("probe", "warning", "x", 0, true, true, true);`,
-			`const [entry] = getPersistentNotifications(true).show;`,
-			`console.log(${JSON.stringify(prefix)} + JSON.stringify({ revision: entry.revision, publisher: entry.publisher }));`,
-		].join("\n");
-		const run = async (label: string) => {
-			const child = Bun.spawn([process.execPath, "-e", probe], {
-				env: process.env,
-				stdout: "pipe",
-				stderr: "pipe",
-				signal: deadline,
-				killSignal: "SIGKILL",
-			});
-			const [out, stderr, code] = await Promise.all([
-				new Response(child.stdout).text(),
-				new Response(child.stderr).text(),
-				child.exited,
-			]);
-			const line = out.split("\n").find((line) => line.startsWith(prefix));
-			const details = `${label} replay child (exit ${code}, signal ${child.signalCode ?? "none"}, result ${line === undefined ? "missing" : "received"}); stderr: ${stderr.trim() || "(empty)"}`;
-			if (deadline.aborted)
-				throw new Error(`Replay deadline exceeded: ${details}`);
-			if (code !== 0 || line === undefined) throw new Error(details);
-			try {
-				return resultSchema.parse(JSON.parse(line.slice(prefix.length)));
-			} catch (cause) {
-				throw new Error(`Invalid replay result: ${details}`, { cause });
-			}
-		};
+	test(
+		"two backend processes number the same notice alike but name different publishers",
+		async () => {
+			// Share one deadline across both children so a hang still yields exit diagnostics.
+			const deadline = AbortSignal.timeout(CHILD_DEADLINE_MS);
+			const module = new URL("../modules/ui/notifications.ts", import.meta.url)
+				.pathname;
+			const prefix = "replay-result:";
+			const resultSchema = notificationSchema
+				.pick({ revision: true, publisher: true })
+				.required();
+			const probe = [
+				`import { getPersistentNotifications, notificationBroadcast } from ${JSON.stringify(module)};`,
+				`notificationBroadcast("probe", "warning", "x", 0, true, true, true);`,
+				`const [entry] = getPersistentNotifications(true).show;`,
+				`console.log(${JSON.stringify(prefix)} + JSON.stringify({ revision: entry.revision, publisher: entry.publisher }));`,
+			].join("\n");
+			const run = async (label: string) => {
+				const child = Bun.spawn([process.execPath, "-e", probe], {
+					env: process.env,
+					stdout: "pipe",
+					stderr: "pipe",
+					signal: deadline,
+					killSignal: "SIGKILL",
+				});
+				const [out, stderr, code] = await Promise.all([
+					new Response(child.stdout).text(),
+					new Response(child.stderr).text(),
+					child.exited,
+				]);
+				const line = out.split("\n").find((line) => line.startsWith(prefix));
+				const details = `${label} replay child (exit ${code}, signal ${child.signalCode ?? "none"}, result ${line === undefined ? "missing" : "received"}); stderr: ${stderr.trim() || "(empty)"}`;
+				if (deadline.aborted)
+					throw new Error(`Replay deadline exceeded: ${details}`);
+				if (code !== 0 || line === undefined) throw new Error(details);
+				try {
+					return resultSchema.parse(JSON.parse(line.slice(prefix.length)));
+				} catch (cause) {
+					throw new Error(`Invalid replay result: ${details}`, { cause });
+				}
+			};
 
-		const first = await run("first");
-		const second = await run("second");
+			const first = await run("first");
+			const second = await run("second");
 
-		expect(second.revision).toBe(first.revision);
-		expect(first.publisher).toBeString();
-		expect(second.publisher).not.toBe(first.publisher);
-	}, 0);
+			expect(second.revision).toBe(first.revision);
+			expect(first.publisher).toBeString();
+			expect(second.publisher).not.toBe(first.publisher);
+		},
+		CHILD_DEADLINE_MS + 10_000,
+	);
 });
