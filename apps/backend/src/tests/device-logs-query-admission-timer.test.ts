@@ -128,6 +128,35 @@ test("Raw removes its admission timer at grant, before the scan completes", asyn
 	expect(jest.getTimerCount()).toBe(0);
 });
 
+test("Raw uses a free slot while another socket's replacement waits for its holder", async () => {
+	const owner = {};
+	const reader = latch();
+	releases.push(reader.release);
+	const viewer = { interactive: new AbortController().signal };
+	void own(withQuerySlot(owner, reader.hold, viewer));
+	await reader.entered;
+
+	let replacementRan = false;
+	void own(
+		withQuerySlot(
+			owner,
+			async () => {
+				replacementRan = true;
+			},
+			viewer,
+		),
+	);
+	const raw = own(
+		call(queryLogsProcedure, { boot: bootId }, { context: sockets.context }),
+	);
+	const beforeDeadline = await Promise.race([raw, nextTurn()]);
+	jest.advanceTimersByTime(3100);
+
+	expect(await raw).toMatchObject({ ok: true, entries: [{ cursor: "s=1" }] });
+	expect(beforeDeadline).toBeDefined();
+	expect(replacementRan).toBe(false);
+});
+
 test("Raw expires at 3,100 ms without leaving an admission timer", async () => {
 	await fillSlots();
 	const raw = own(

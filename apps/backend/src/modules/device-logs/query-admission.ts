@@ -6,13 +6,12 @@ import {
 } from "./settings.ts";
 import { waitForAdmission } from "./sharing-admission.ts";
 
-// FIFO within each class, including replacements waiting for their own socket.
-// Only a class head with no running owner can enter. Owners never wait for
-// another slot, so a blocked head cannot create a circular wait. With continued
-// reaps and open history, neither eligible head can starve: viewers go first,
-// but after two viewer grants while downloads wait, the next eligible download
-// goes first. Each download grant resets the streak, so a full download-only
-// pool gives its first freed slot to a waiting viewer.
+// FIFO among eligible waiters in each class. A replacement keeps its place
+// while its owner is running but cannot block another owner from a free slot.
+// With continued reaps and open history, neither class can starve. Viewers go
+// first, but after two viewer grants while downloads wait, the next eligible
+// download goes first. Each download grant resets the streak, so a full
+// download-only pool gives its first freed slot to a waiting viewer.
 // At most two readers and one per owner; only settlement (including child reap)
 // releases a slot. Clear wakes queued requests without releasing any owner.
 
@@ -40,14 +39,16 @@ const viewers = new Set<Waiter>();
 const downloads = new Set<Waiter>();
 let viewerHandoffs = 0;
 
-function eligibleHead(queue: Set<Waiter>): Waiter | undefined {
-	const head = queue.values().next().value;
-	return head && !running.has(head.conn) ? head : undefined;
+function firstEligible(queue: Set<Waiter>): Waiter | undefined {
+	for (const waiter of queue) {
+		if (!running.has(waiter.conn)) return waiter;
+	}
+	return undefined;
 }
 
 function nextWaiter(): Waiter | undefined {
-	const viewer = eligibleHead(viewers);
-	const download = eligibleHead(downloads);
+	const viewer = firstEligible(viewers);
+	const download = firstEligible(downloads);
 	if (viewer && (!download || viewerHandoffs < MAX_VIEWER_HANDOFFS))
 		return viewer;
 	return download;

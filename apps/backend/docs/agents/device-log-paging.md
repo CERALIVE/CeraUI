@@ -5,11 +5,10 @@
 one running operation. A replacement aborts and joins that operation before
 starting; at most two operations run device-wide. Each operation holds its slot
 through boot discovery and its sequential scans. Filtered export and support
-bundle reads use separate owners and acquire a slot per page. Each class has a
-FIFO queue, including same-socket replacements. A class head cannot enter
-while its owner is running; later requests of that class cannot pass it. The
-other class can still use a free slot, and an active reader never asks for a
-second slot, so this cannot create a circular wait.
+bundle reads use separate owners and acquire a slot per page. Each class
+admits its oldest eligible request. A same-socket replacement keeps its place
+in the queue while its owner is running, but another owner can use a free
+slot without waiting for that replacement.
 
 Viewers get priority, but after two viewer admissions while download pages
 are queued, the oldest eligible download gets the next free slot. A download
