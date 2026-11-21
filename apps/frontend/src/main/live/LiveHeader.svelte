@@ -38,8 +38,11 @@ const { isStreaming, unconfirmed = false }: Props = $props();
 			{m["live.notStreaming"]()}
 		</span>
 	{/if}
-	<div>
-		<h1 class="text-2xl font-bold tracking-tight">{m["live.title"]()}</h1>
-		<p class="text-muted-foreground text-sm">{m["live.description"]()}</p>
+	<!-- On a phone the bottom nav already says Live and the subtitle carries no
+	     state, so below 640 px the header is the state chip alone; the title stays
+	     in the page for screen readers and the heading outline. -->
+	<div class="min-w-0">
+		<h1 class="text-2xl font-bold tracking-tight max-sm:sr-only">{m["live.title"]()}</h1>
+		<p class="text-muted-foreground text-sm max-sm:sr-only">{m["live.description"]()}</p>
 	</div>
 </header>

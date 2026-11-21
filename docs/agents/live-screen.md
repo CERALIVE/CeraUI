@@ -123,6 +123,23 @@ must contain the `source-audio` block with its ids unchanged.
 5. `live-bar`, with `BitrateAdjuster` and the Stop button, or the Done button
    in the post-stream summary window.
 
+**Proposal (phones, below 1024 px):** the stream comes first. `LiveGlance`
+(`data-live-glance`, hidden from 1024 px) opens the cards: the headline
+bitrate (its unit stacked, "Mb" over "s"), one verdict and one bar per link
+with its share of the bond. The verdict says only what the rows show: waiting
+(no rows), a link stopped reporting (a stale row, which is not proof the link
+failed), a link is idle (a fresh row with no share) or all links sending. Inside `telemetry-card`,
+`StreamTelemetryStrip` and `IngestStats` sit in `LiveDetails`
+(`data-live-details`), a disclosure that is closed by default on phones, keeps
+the streamer's choice in `localStorage` under `ceraui.live.detailsOpen`, is
+always open from 1024 px (the width-only breakpoint `LiveGlance` uses; its
+summary hidden) and is forced open, without a toggle, in the post-stream
+summary window. The header is the state chip alone below 640 px (title and
+subtitle stay for screen readers). It never unmounts its content, so the session
+rollup survives. In `live-bar` the bitrate control is a value button beside
+Stop below 640 px and opens `BitrateAdjuster` in a bottom sheet (closed again
+when the screen widens past 640 px); from 640 px it is inline as before. Desktop layout is unchanged.
+
 #### The Live bar
 
 - `live-bar` must stay fixed to the bottom of the viewport on every screen

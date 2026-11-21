@@ -53,11 +53,13 @@ import { deriveLiveSourceState } from '$lib/streaming/live-source-state';
 import type { ActiveSummary } from '$lib/streaming/sourceSummary';
 
 import AudioMixer from './AudioMixer.svelte';
-import BitrateAdjuster from './BitrateAdjuster.svelte';
 import CompositionCard from './CompositionCard.svelte';
 import LiveBar from './LiveBar.svelte';
+import LiveDetails from './LiveDetails.svelte';
+import LiveGlance from './LiveGlance.svelte';
 import LiveSourceSwitch from './LiveSourceSwitch.svelte';
 import LiveSummaryStrip from './LiveSummaryStrip.svelte';
+import PhoneBitrateControl from './PhoneBitrateControl.svelte';
 import ProgramDesk from './ProgramDesk.svelte';
 import StreamControlButton from './StreamControlButton.svelte';
 import StreamTelemetryStrip from './StreamTelemetryStrip.svelte';
@@ -370,6 +372,10 @@ const BAND_ICON_CLASS = 'text-status-warning mt-0.5 size-4 shrink-0';
 	{/if}
 
 	{#if !summaryMode}
+		<!-- Phones (below 1024 px) open on the stream itself: bitrate, one verdict,
+		     a bar per link. The engineering numbers stay in Details below. -->
+		<LiveGlance {bitrate} {bitrateMeasured} {telemetry} />
+
 		<!-- Mid-stream preview: the engine already publishes MSE during an active
 		     session (wave2 14e), so the desk's disclosure dials the same single-use-
 		     token proxy and stays off until its own toggle is pressed. -->
@@ -442,19 +448,23 @@ const BAND_ICON_CLASS = 'text-status-warning mt-0.5 size-4 shrink-0';
 		<h2 class="text-muted-foreground text-xs font-medium" id="live-telemetry-card-title">
 			{m["live.telemetryCard.title"]()}
 		</h2>
-		{#if !summaryMode}
-			<StreamTelemetryStrip
-				{bitrate}
-				{bitrateMeasured}
-				{bitrateTarget}
-				{bitrateLimit}
-				{tempSensor}
-				{uptimeSensor}
-				{encoderLoad}
-			/>
-		{/if}
+		<!-- Folded on phones, always open from 1024 px and in the summary window.
+		     IngestStats stays mounted while folded, so its session rollup survives. -->
+		<LiveDetails forceOpen={summaryMode}>
+			{#if !summaryMode}
+				<StreamTelemetryStrip
+					{bitrate}
+					{bitrateMeasured}
+					{bitrateTarget}
+					{bitrateLimit}
+					{tempSensor}
+					{uptimeSensor}
+					{encoderLoad}
+				/>
+			{/if}
 
-		<IngestStats {telemetry} {isStreaming} {bitrateKbps} {linkName} />
+			<IngestStats {telemetry} {isStreaming} {bitrateKbps} {linkName} />
+		</LiveDetails>
 	</section>
 
 	<LiveBar>
@@ -471,9 +481,10 @@ const BAND_ICON_CLASS = 'text-status-warning mt-0.5 size-4 shrink-0';
 				{m["live.ingest.done"]()}
 			</Button>
 		{:else}
-			<div class="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-				<!-- Bitrate hot-adjust — the only field changeable mid-stream (setBitrate). -->
-				<BitrateAdjuster
+			<div class="flex min-w-0 flex-1 flex-row items-stretch gap-3 sm:items-center sm:gap-4">
+				<!-- Bitrate hot-adjust — the only field changeable mid-stream (setBitrate).
+				     On a phone a value button beside Stop that opens it in a sheet. -->
+				<PhoneBitrateControl
 					{bitrateDraft}
 					{bitrateLabel}
 					{bitrateMax}
@@ -485,7 +496,7 @@ const BAND_ICON_CLASS = 'text-status-warning mt-0.5 size-4 shrink-0';
 					{sliderMin}
 					{step}
 				/>
-				<div class="shrink-0 sm:min-w-56">
+				<div class="min-w-0 flex-1 sm:flex-none sm:shrink-0 sm:min-w-56">
 					<StreamControlButton
 						canStart={false}
 						confirmStop
