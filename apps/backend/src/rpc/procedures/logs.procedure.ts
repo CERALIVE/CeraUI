@@ -113,9 +113,14 @@ export const previewLogBundleProcedure = authedProcedure
 		try {
 			return await previewBundle(signal);
 		} catch (error) {
-			const code =
-				error instanceof BundleReadError ? error.code : "READ_FAILED";
-			throw new ORPCError(code, { message: code });
+			const { code, reason } =
+				error instanceof BundleReadError ? error : new BundleReadError();
+			// Older clients match the message exactly; the stage rides beside it.
+			const data =
+				reason === "busy" || reason === "internal"
+					? undefined
+					: { stage: reason };
+			throw new ORPCError(code, { message: code, data });
 		}
 	});
 

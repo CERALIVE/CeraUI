@@ -3038,6 +3038,8 @@
 	"systemLogs.sharing.bundleSensitive": "Se eliminan los secretos que conoce el dispositivo y los identificadores comunes, pero el archivo todavía puede contener datos personales. Revísalo antes de compartirlo.",
 	"systemLogs.sharing.bundleDownload": "Descargar paquete",
 	"systemLogs.sharing.bundleFailed": "No se pudo preparar el paquete de soporte.",
+	"systemLogs.sharing.bundleFailedCollision": "Una contraseña o clave guardada coincide con otros datos del dispositivo. Cámbiala por un valor más largo y único, y vuelve a intentarlo.",
+	"systemLogs.sharing.bundleFailedJournal": "El dispositivo no pudo leer sus logs. Vuelve a intentarlo o reinicia el dispositivo.",
 	"systemLogs.sharing.bundleUseExport": "En su lugar, usa Exportar esta vista.",
 	"systemLogs.sharing.busy": "Hay otra exportación en curso. Vuelve a intentarlo cuando termine.",
 	"systemLogs.sharing.failed": "No se pudo crear el archivo.",

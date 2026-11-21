@@ -104,6 +104,24 @@ describe("describeRpcError", () => {
 	});
 });
 
+describe("RpcError", () => {
+	it("keeps the envelope's optional stage beside the unchanged message and code", () => {
+		const staged = new RpcError({
+			message: "READ_FAILED",
+			code: "INTERNAL_ERROR",
+			stage: "collision",
+		});
+		expect([staged.message, staged.code, staged.stage]).toEqual([
+			"READ_FAILED",
+			"INTERNAL_ERROR",
+			"collision",
+		]);
+		expect(
+			new RpcError({ message: "READ_FAILED", code: "INTERNAL_ERROR" }).stage,
+		).toBeUndefined();
+	});
+});
+
 describe("rpcErrorToNotification", () => {
 	it("bridges each code to a deduped error notification with its i18n key", () => {
 		const validation = rpcErrorToNotification(

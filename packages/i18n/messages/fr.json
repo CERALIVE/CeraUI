@@ -3038,6 +3038,8 @@
 	"systemLogs.sharing.bundleSensitive": "Les secrets connus de l'appareil et les identifiants courants sont supprimés, mais le fichier peut encore contenir des données personnelles. Vérifiez-le avant de le partager.",
 	"systemLogs.sharing.bundleDownload": "Télécharger le paquet",
 	"systemLogs.sharing.bundleFailed": "Impossible de préparer le paquet d'assistance.",
+	"systemLogs.sharing.bundleFailedCollision": "Un mot de passe ou une clé enregistrés correspondent à d'autres données de l'appareil. Choisissez une valeur plus longue et unique, puis réessayez.",
+	"systemLogs.sharing.bundleFailedJournal": "L'appareil n'a pas pu lire ses journaux. Réessayez ou redémarrez l'appareil.",
 	"systemLogs.sharing.bundleUseExport": "Utilisez plutôt « Exporter cette vue ».",
 	"systemLogs.sharing.busy": "Un autre export est en cours. Réessayez quand il sera terminé.",
 	"systemLogs.sharing.failed": "Impossible de créer le fichier.",

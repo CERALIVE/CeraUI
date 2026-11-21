@@ -2990,6 +2990,8 @@
 	"systemLogs.sharing.bundleSensitive": "기기가 아는 비밀 값과 일반적인 식별자는 제거되지만, 파일에 개인 데이터가 남아 있을 수 있습니다. 공유하기 전에 확인하세요.",
 	"systemLogs.sharing.bundleDownload": "번들 다운로드",
 	"systemLogs.sharing.bundleFailed": "지원 번들을 준비할 수 없습니다.",
+	"systemLogs.sharing.bundleFailedCollision": "저장된 비밀번호나 키가 기기의 다른 정보와 일치합니다. 더 길고 고유한 값으로 바꾼 뒤 다시 시도하세요.",
+	"systemLogs.sharing.bundleFailedJournal": "기기가 로그를 읽지 못했습니다. 다시 시도하거나 기기를 다시 시작하세요.",
 	"systemLogs.sharing.bundleUseExport": "대신 '이 보기 내보내기'를 사용하세요.",
 	"systemLogs.sharing.busy": "다른 내보내기가 진행 중입니다. 끝난 뒤 다시 시도하세요.",
 	"systemLogs.sharing.failed": "파일을 만들 수 없습니다.",

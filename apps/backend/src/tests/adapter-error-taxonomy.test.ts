@@ -20,7 +20,7 @@
  * the client via the error frame.
  */
 import { describe, expect, test } from "bun:test";
-import { os } from "@orpc/server";
+import { ORPCError, os } from "@orpc/server";
 import { z } from "zod";
 
 import { handleORPCMessage } from "../rpc/adapter.ts";
@@ -30,7 +30,7 @@ const KNOWN_SECRET = "v4.public.shouldNeverSurface";
 
 interface ErrorEnvelope {
 	id?: string;
-	error?: { message: string; code: string; fields?: string[] };
+	error?: { message: string; code: string; fields?: string[]; stage?: string };
 }
 
 /** Minimal Bun ServerWebSocket stand-in that records every frame sent. */
@@ -78,6 +78,14 @@ const testRouter = os.$context<RPCContext>().router({
 			.output(z.object({ ok: z.boolean() }))
 			.handler(() => {
 				throw new Error("engine exploded");
+			}),
+		throwStage: base
+			.input(z.object({ stage: z.string() }))
+			.handler(({ input }) => {
+				throw new ORPCError("READ_FAILED", {
+					message: "READ_FAILED",
+					data: { stage: input.stage },
+				});
 			}),
 	}),
 });
@@ -129,6 +137,29 @@ describe("rpc adapter error taxonomy", () => {
 		expect(envelope.error?.code).toBe("INTERNAL_ERROR");
 		expect(envelope.error?.fields).toBeUndefined();
 	});
+
+	test.each([
+		["collision", { stage: "collision" }],
+		["journal_read", { stage: "journal_read" }],
+		["internal", { stage: "internal" }],
+		[KNOWN_SECRET, {}],
+		["collision;rm", {}],
+	])(
+		"a refusal's data stage %s rides the envelope only as a closed bundle stage",
+		async (stage, extra) => {
+			const ws = fakeWs();
+			await handleORPCMessage(
+				ws,
+				{ id: "m5", path: ["probe", "throwStage"], input: { stage } },
+				testRouter,
+			);
+			// The message stays byte for byte what older clients match exactly.
+			expect(sentEnvelope(ws)).toEqual({
+				id: "m5",
+				error: { message: "READ_FAILED", code: "INTERNAL_ERROR", ...extra },
+			});
+		},
+	);
 
 	test("unknown procedure path → INTERNAL_ERROR, no field paths", async () => {
 		const ws = fakeWs();
