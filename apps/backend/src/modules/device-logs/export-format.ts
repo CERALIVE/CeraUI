@@ -19,6 +19,25 @@ export type KnownMatch = (text: string) => {
 	readonly redactions: number;
 };
 
+/**
+ * Names the kinds of held values too short to match. The line is generated
+ * text, so it is checked as written (with its "# " prefix): if it happens to
+ * match a held value, a line that names no kinds is used instead, and if that
+ * matches too, the line is left out.
+ */
+function shortValuesLines(
+	kinds: readonly string[],
+	known: KnownMatch,
+): string[] {
+	if (kinds.length === 0) return [];
+	const label = `not redacted, shorter than ${MIN_REDACTED_LENGTH} characters`;
+	const line = [
+		`${label}: ${kinds.join(", ")}`,
+		`${label}: some held values`,
+	].find((candidate) => known(`# ${candidate}`).redactions === 0);
+	return line === undefined ? [] : [line];
+}
+
 /** Stands in for a whole header value whose serialized form held a credential. */
 const REDACTED_HEADER_VALUE = JSON.stringify("[REDACTED]");
 
@@ -75,11 +94,7 @@ export function exportHeader(
 		`filter: {${filter.join(",")}}`,
 		`createdAt: ${new Date(at).toISOString()}`,
 		"newest first",
-		...(unredacted.length > 0
-			? [
-					`not redacted, shorter than ${MIN_REDACTED_LENGTH} characters: ${unredacted.join(", ")}`,
-				]
-			: []),
+		...shortValuesLines(unredacted, known),
 		"may contain sensitive data: review before sharing",
 	];
 	return `${lines.map((line) => `# ${line}`).join("\n")}\n`;

@@ -8,6 +8,7 @@ import {
 	type VersionContext,
 } from "@ceraui/rpc/schemas";
 import { setCredentialStoreState } from "../helpers/credential-store-state.ts";
+import * as config from "../modules/config.ts";
 import * as identity from "../modules/device-logs/boot-id.ts";
 import * as data from "../modules/device-logs/bundle-data.ts";
 import {
@@ -21,6 +22,8 @@ import {
 	initModemCredentials,
 	resetModemCredentialsForTest,
 } from "../modules/modems/modem-credentials.ts";
+import * as modemState from "../modules/modems/modems-state.ts";
+import * as relays from "../modules/remote/remote-relays.ts";
 import * as versions from "../modules/system/version-context.ts";
 import {
 	initHotspotCredentials,
@@ -34,6 +37,7 @@ import {
 } from "./helpers/device-query.ts";
 import { runTestCommand } from "./helpers/run-test-command.ts";
 
+const collectHeldSecrets = data.collectHeldSecrets;
 // Quote, backslash and spaces give distinct JSON and percent forms; its base64
 // holds "+", so base64url differs too.
 const secret = 'held "key"\\ ~?>> x';
@@ -297,12 +301,11 @@ test("a short stream ID does not stop the export, and the header names its kind 
 });
 
 test("the header lists every short identifier kind once, sorted, without values", async () => {
-	const values = ["e2e", "cam", "w3b", "q", "adm", "s9"];
+	const values = ["e2e", "cam", "w3b", "adm", "s9"];
 	held.mockReturnValue([
 		{ kind: "stream", value: "e2e" },
 		{ kind: "stream", value: "cam" },
 		{ kind: "apn_user", value: "w3b" },
-		{ kind: "apn_password", value: "q" },
 		{ kind: "router_user", value: "adm" },
 		{ kind: "serial", value: "s9" },
 		{ kind: "stream", value: "" },
@@ -313,7 +316,7 @@ test("the header lists every short identifier kind once, sorted, without values"
 		.split("\n")
 		.find((candidate) => candidate.startsWith("# not redacted"));
 	expect(`${line}\n`).toBe(
-		notRedactedLine("apn_password, apn_user, router_user, serial, stream"),
+		notRedactedLine("apn_user, router_user, serial, stream"),
 	);
 	for (const value of values) expect(line).not.toContain(value);
 	// The line sits in the header, before the warning and the entries.
@@ -326,9 +329,11 @@ test("the header lists every short identifier kind once, sorted, without values"
 test("a short password or key still stops the export, naming the blocking kinds only", async () => {
 	held.mockReturnValue([
 		{ kind: "stream", value: "e2e" },
+		{ kind: "apn_user", value: "w3b" },
 		{ kind: "apn_password", value: "x" },
 		{ kind: "router_password", value: "ab1" },
 		{ kind: "password", value: "pw" },
+		{ kind: "remote_key", value: "k1" },
 		{ kind: "key", value: "abcd" },
 	]);
 	fixture.scan.mockImplementation(
@@ -336,7 +341,7 @@ test("a short password or key still stops the export, naming the blocking kinds 
 	);
 	// Neither an entry nor the filter text is sent, only the footer.
 	expect(await download({ filter: { text: "ab1" } })).toBe(
-		"# incomplete: CREDENTIAL_TOO_SHORT (password, router_password)\n",
+		"# incomplete: CREDENTIAL_TOO_SHORT (apn_password, password, remote_key, router_password)\n",
 	);
 	// A kind not on the identifier list, including one added later, blocks.
 	held.mockReturnValue([
@@ -356,12 +361,118 @@ test("a short password or key still stops the export, naming the blocking kinds 
 
 test("only identifier-like kinds may be sent when short", () => {
 	expect([...data.SHORT_VALUE_EXPORT_KINDS].sort()).toEqual([
-		"apn_password",
 		"apn_user",
 		"router_user",
 		"serial",
 		"stream",
 	]);
+});
+
+test("generated kind lists that match a held value name no kinds", async () => {
+	held.mockReturnValue([
+		{ kind: "stream", value: "e2e" },
+		{ kind: "password", value: "stream" },
+	]);
+	fixture.scan.mockImplementation(journal([record(1, { MESSAGE: "entry" })]));
+	const text = await download();
+	expect(text).toContain(
+		"# not redacted, shorter than 4 characters: some held values\n",
+	);
+	expect(text.split("\n").filter((line) => line.includes("stream"))).toEqual(
+		[],
+	);
+	expect(text).toEndWith("# complete: 1 entries\n");
+	// Checked with the "# " prefix the line is written with.
+	held.mockReturnValue([
+		{ kind: "stream", value: "e2e" },
+		{ kind: "password", value: "# not redacted" },
+	]);
+	expect(await download()).not.toContain("# not redacted");
+	// When the kind-free line would match too, the line is left out.
+	for (const fallback of ["some held values", "held values"]) {
+		held.mockReturnValue([
+			{ kind: "stream", value: "e2e" },
+			{ kind: "password", value: "stream" },
+			{ kind: "key", value: fallback },
+		]);
+		const omitted = await download();
+		expect(omitted).not.toContain("not redacted");
+		expect(omitted).not.toContain(fallback);
+		expect(omitted).toEndWith("# complete: 1 entries\n");
+	}
+	for (const value of [
+		"CREDENTIAL_TOO_SHORT (router_password)",
+		"incomplete: CREDENTIAL_TOO_SHORT (",
+	]) {
+		held.mockReturnValue([
+			{ kind: "router_password", value: "ab1" },
+			{ kind: "key", value },
+		]);
+		expect(await download()).toBe("# incomplete: CREDENTIAL_TOO_SHORT\n");
+	}
+});
+
+test("the real collector files the relay override under relay and the stream ID under stream", async () => {
+	held.mockImplementation(collectHeldSecrets);
+	const getConfig = spyOn(config, "getConfig");
+	const getRelays = spyOn(relays, "getRelays");
+	const getModems = spyOn(modemState, "getModems");
+	try {
+		getModems.mockReturnValue({});
+		fixture.scan.mockImplementation(
+			journal([record(1, { MESSAGE: "stream e2e key k9" })]),
+		);
+		// A short stream ID set by hand goes out, named in the header.
+		getConfig.mockReturnValue({ srt_streamid: "e2e" });
+		getRelays.mockReturnValue(undefined);
+		const text = await download();
+		expect(text).toContain(notRedactedLine("stream"));
+		expect(text).toEndWith("# complete: 1 entries\n");
+		// A short relay stream key blocks, with or without the cached account
+		// it was copied from.
+		getConfig.mockReturnValue({
+			srt_streamid: "e2e",
+			relay_streamid_override: "k9",
+		});
+		expect(await download()).toBe(
+			"# incomplete: CREDENTIAL_TOO_SHORT (relay)\n",
+		);
+		getRelays.mockReturnValue({
+			bcrp_key: "bcrp-key",
+			servers: {},
+			accounts: { first: { name: "account", ingest_key: "k9" } },
+		});
+		expect(await download()).toBe(
+			"# incomplete: CREDENTIAL_TOO_SHORT (relay)\n",
+		);
+		// A short private APN password blocks; a short APN user name does not.
+		getConfig.mockReturnValue({});
+		getRelays.mockReturnValue(undefined);
+		getModems.mockReturnValue({
+			1: {
+				ifname: "wwan0",
+				name: "modem",
+				sim_network: "",
+				network_type: { supported: {}, active: null },
+				config: {
+					conn: "uuid",
+					autoconfig: false,
+					apn: "corp.example",
+					username: "u1",
+					password: "p1",
+					roaming: false,
+					network: "",
+				},
+			},
+		});
+		expect(await download()).toBe(
+			"# incomplete: CREDENTIAL_TOO_SHORT (apn_password)\n",
+		);
+	} finally {
+		getConfig.mockRestore();
+		getRelays.mockRestore();
+		getModems.mockRestore();
+	}
 });
 
 test("the header's fixed text is never altered by a held value that matches it", async () => {

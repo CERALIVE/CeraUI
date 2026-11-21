@@ -51,12 +51,13 @@ export async function* exportChunks(
 	// (a snapshot, after journal normalization, fixed footer and filename text)
 	// are in docs/agents/device-log-export.md.
 	//
-	// Values shorter than MIN_REDACTED_LENGTH are never replaced: matching one
-	// to three characters would rewrite ordinary words and numbers all over the
-	// log. A short value of a kind in SHORT_VALUE_EXPORT_KINDS (a stream ID, an
-	// APN login, a router user name, a serial) is sent as it appears in the
-	// journal, and the header names its kind, never the value. A short value of
-	// any other kind (passwords, keys, pairing and relay secrets) still stops
+	// The matcher skips non-empty values shorter than MIN_REDACTED_LENGTH
+	// (UTF-16 code units): matching one to three characters would rewrite
+	// ordinary words and numbers all over the log. A short value of a kind in
+	// SHORT_VALUE_EXPORT_KINDS (a manually set stream ID, an APN or router user
+	// name, a serial) can therefore appear in the file, after the usual
+	// formatting, and the header names its kind, never the value. A short value
+	// of any other kind (passwords, keys, pairing and relay secrets) still stops
 	// the export.
 	let known: KnownMatch = (text) => ({ text, redactions: 0 });
 	let unredacted: readonly string[] = [];
@@ -72,7 +73,14 @@ export async function* exportChunks(
 				(kind) => !SHORT_VALUE_EXPORT_KINDS.has(kind),
 			);
 			if (blocking.length > 0) {
-				incomplete ??= `CREDENTIAL_TOO_SHORT (${blocking.join(", ")})`;
+				// The kind list is generated text: if the footer as written would
+				// match a held value, name no kinds. The bare status is fixed
+				// protocol text and is not checked.
+				const named = `CREDENTIAL_TOO_SHORT (${blocking.join(", ")})`;
+				incomplete ??=
+					redactor.known(`# incomplete: ${named}\n`).redactions === 0
+						? named
+						: "CREDENTIAL_TOO_SHORT";
 			} else {
 				known = redactor.known;
 				unredacted = redactor.unredacted;

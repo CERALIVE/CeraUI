@@ -229,6 +229,14 @@ test("every held credential class including disconnected router logins is collec
 			"serial-private",
 		].sort(),
 	);
+	// The relay override holds an ingest key, so it is a relay secret.
+	const kind = (value: string) =>
+		result.secrets.find((secret) => secret.value === value)?.kind;
+	expect(kind("override-key")).toBe("relay");
+	expect(kind("stream-id")).toBe("stream");
+	expect(buildRedactor(result.secrets).known("key override-key").text).toBe(
+		"key [REDACTED:relay]",
+	);
 });
 
 test("missing data stays unknown and a missing current journal boot never borrows an old context", async () => {
