@@ -12,10 +12,12 @@ import {
 	runDetachedAptAll,
 } from "../modules/system/software-update-process.ts";
 import {
+	beginSoftwareUpdateRecovery,
 	createSoftwareUpdateProcessMonitor,
 	recoverSoftwareUpdateIfRunning,
 	startSoftwareUpdate,
 } from "../modules/system/software-updates.ts";
+import { buildInitialStatus } from "../rpc/procedures/status.procedure.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
 
@@ -360,4 +362,65 @@ test("every read split of the status file converges without a partial number", a
 		for (const frame of running) expect(allowed).toContainEqual(frame);
 		expect(running.at(-1)).toEqual(installingAt(40));
 	}
+});
+
+test("APT's percentage never moves backward within a phase", () => {
+	expect(deriveUpdateProgress("", dl("41.0000") + dl("30.0000"))).toEqual(
+		downloadingAt(41),
+	);
+	const status = `${dpkgStatus}${pm("cerastream", "35.0000", "Processing triggers")}`;
+	expect(deriveUpdateProgress("", status)).toEqual(installingAt(40));
+});
+
+test("a pinned prefetch keeps the download phase when the unit starts", async () => {
+	await using h = await updateHarness();
+	expect(startSoftwareUpdate()).toEqual({ started: true });
+	const monitor = createSoftwareUpdateProcessMonitor(fetchLog);
+	monitor.handlers.onDrained?.();
+	expect(h.frames.at(-1)?.updating).toEqual(downloadingAt());
+});
+
+describe("a reconnecting tab during recovery", () => {
+	const recover = (
+		attach: (handlers: Parameters<typeof recoverDetachedAptUpgrade>[0]) => void,
+		found: boolean,
+	) =>
+		recoverSoftwareUpdateIfRunning({
+			recover: async (handlers) => {
+				attach(handlers);
+				return found
+					? {
+							completion: new Promise<number>(() => {}),
+							wasAlreadyFinished: false,
+						}
+					: null;
+			},
+			scheduleRetry: () => {},
+			resumePeriodicChecks: () => {},
+		});
+
+	test("is not told nothing is updating before the unit's output was read", async () => {
+		await using h = await updateHarness();
+		beginSoftwareUpdateRecovery();
+		expect(buildInitialStatus().status).not.toHaveProperty("updating");
+		let drained: (() => void) | undefined;
+		await recover((handlers) => {
+			handlers.onAttached?.();
+			drained = handlers.onDrained;
+		}, true);
+		// Attached but unread: still no claim either way, and no empty frame.
+		expect(buildInitialStatus().status).not.toHaveProperty("updating");
+		expect(h.frames.some((frame) => frame.updating !== undefined)).toBe(false);
+		drained?.();
+		expect(buildInitialStatus().status.updating).toEqual(preparing);
+		expect(h.frames.at(-1)?.updating).toEqual(preparing);
+	});
+
+	test("hears an explicit null once recovery finds no unit", async () => {
+		await using h = await updateHarness();
+		beginSoftwareUpdateRecovery();
+		await recover(() => {}, false);
+		expect(h.frames.at(-1)?.updating).toBeNull();
+		expect(buildInitialStatus().status.updating).toBeNull();
+	});
 });

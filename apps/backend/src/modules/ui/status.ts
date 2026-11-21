@@ -66,8 +66,9 @@ import { getRevisions } from "../system/revisions.ts";
 import { getSensors } from "../system/sensors.ts";
 import {
 	getAvailableUpdates,
-	getSoftUpdateStatus,
+	type getSoftUpdateStatus,
 	getUpdateState,
+	initialSoftUpdateStatus,
 } from "../system/software-updates.ts";
 import { getCachedSshStatus, getSshStatus } from "../system/ssh.ts";
 import { getOrchestratorWireState } from "../system/update-orchestrator/runtime.ts";
@@ -117,7 +118,7 @@ export function sendStatus(conn: WebSocket) {
 			audio_mix_active: getAudioMixActive(),
 			stream_lifecycle: getStreamLifecycleState(),
 			available_updates: getAvailableUpdates(),
-			updating: getSoftUpdateStatus(),
+			...initialSoftUpdateStatus(),
 			update_state: getUpdateState(),
 			update_orchestrator: getOrchestratorWireState(),
 			ssh: getCachedSshStatus(),

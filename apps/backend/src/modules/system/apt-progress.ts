@@ -11,7 +11,7 @@ const PHASE_ORDER = { preparing: 0, downloading: 1, installing: 2 } as const;
 // The step fields are phase markers: update-state reads a nonzero
 // unpacking/setting_up as "installing", and total stays at 1 so an older
 // release's page cannot compute a full bar from them.
-const PHASE_MARKERS = {
+export const PHASE_MARKERS = {
 	preparing: { total: 0, downloading: 0, unpacking: 0, setting_up: 0 },
 	downloading: { total: 1, downloading: 1, unpacking: 0, setting_up: 0 },
 	installing: { total: 1, downloading: 0, unpacking: 0, setting_up: 1 },
@@ -51,8 +51,14 @@ export function deriveUpdateProgress(
 		if (failed || !record || value > 100) continue;
 		const phase = record[1] === "pmstatus" ? "installing" : "downloading";
 		if (PHASE_ORDER[phase] < PHASE_ORDER[reported]) continue;
+		// APT's estimate can dip (a new fetch item, trigger work); hold the
+		// phase's highest so the number never moves backward.
+		const shown = Math.min(99, Math.floor(value));
+		percent =
+			phase === reported && percent !== undefined
+				? Math.max(percent, shown)
+				: shown;
 		reported = phase;
-		percent = Math.min(99, Math.floor(value));
 	}
 	const fromTranscript = transcriptPhase(stdout);
 	const phase =

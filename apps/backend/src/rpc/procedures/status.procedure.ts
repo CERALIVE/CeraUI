@@ -51,8 +51,8 @@ import { getRevisions } from "../../modules/system/revisions.ts";
 import { getSensors } from "../../modules/system/sensors.ts";
 import {
 	getAvailableUpdates,
-	getSoftUpdateStatus,
 	getUpdateState,
+	initialSoftUpdateStatus,
 } from "../../modules/system/software-updates.ts";
 import { getCachedSshStatus, getSshStatus } from "../../modules/system/ssh.ts";
 import { getOrchestratorWireState } from "../../modules/system/update-orchestrator/runtime.ts";
@@ -86,7 +86,7 @@ export const getStatusProcedure = authedProcedure
 			audio_mix_active: getAudioMixActive(),
 			stream_lifecycle: getStreamLifecycleState(),
 			available_updates: getAvailableUpdates(),
-			updating: getSoftUpdateStatus(),
+			...initialSoftUpdateStatus(),
 			update_state: getUpdateState(),
 			update_orchestrator: getOrchestratorWireState(),
 			ssh: getCachedSshStatus(),
@@ -136,7 +136,7 @@ export function buildInitialStatus() {
 			audio_mix_active: getAudioMixActive(),
 			stream_lifecycle: getStreamLifecycleState(),
 			available_updates: getAvailableUpdates(),
-			updating: getSoftUpdateStatus(),
+			...initialSoftUpdateStatus(),
 			update_state: getUpdateState(),
 			update_orchestrator: getOrchestratorWireState(),
 			ssh: getCachedSshStatus(),

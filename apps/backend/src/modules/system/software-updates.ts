@@ -59,7 +59,11 @@ import {
 import { cleanAptCache } from "./apt-cache-clean.ts";
 /* Software updates */
 import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
-import { deriveUpdateProgress, type SoftUpdateStatus } from "./apt-progress.ts";
+import {
+	deriveUpdateProgress,
+	PHASE_MARKERS,
+	type SoftUpdateStatus,
+} from "./apt-progress.ts";
 import {
 	type AptReachability,
 	defaultAptReachabilityDeps,
@@ -153,6 +157,9 @@ let availableUpdates:
 	| null
 	| false = aptUpdatesEnabled() ? null : false;
 let softUpdateStatus: SoftUpdateStatus | null = null;
+// Between boot and recovery's first read of a detached unit, nobody knows
+// whether an update is running; the initial push then says nothing.
+let softUpdateRecoveryPending = false;
 let aptGetUpdating = false;
 let aptDiscoveryRunning = false;
 let aptGetUpdateFailures = 0;
@@ -312,6 +319,21 @@ export function getAvailableUpdates() {
 	return availableUpdates;
 }
 
+export function beginSoftwareUpdateRecovery(): void {
+	softUpdateRecoveryPending = true;
+}
+
+export function settleSoftwareUpdateRecovery(): void {
+	softUpdateRecoveryPending = false;
+}
+
+/** The `updating` field for an initial push; omitted while recovery is pending. */
+export function initialSoftUpdateStatus(): {
+	updating?: SoftUpdateStatus | null;
+} {
+	return softUpdateRecoveryPending ? {} : { updating: softUpdateStatus };
+}
+
 export function getSoftUpdateStatus() {
 	return softUpdateStatus;
 }
@@ -324,6 +346,7 @@ export function isUpdating() {
 // and the last terminal outcome so a suite that leaves an update mid-flight
 // cannot refuse the next test's start with `already_updating`.
 export function resetSoftwareUpdateState(): void {
+	softUpdateRecoveryPending = false;
 	if (delayedSoftwareUpdateStart) clearTimeout(delayedSoftwareUpdateStart);
 	if (softwareUpdateRecoveryRetryTimer) {
 		clearTimeout(softwareUpdateRecoveryRetryTimer);
@@ -1396,6 +1419,7 @@ const defaultSoftwareUpdateRunner: SoftwareUpdateRunner = (
 	// AGENTS.md.
 	if (!checkStarted) return refuseUpdateStart("check_unavailable");
 
+	settleSoftwareUpdateRecovery();
 	softUpdateStatus = { downloading: 0, unpacking: 0, setting_up: 0, total: 0 };
 	broadcastMsg("status", {
 		updating: softUpdateStatus,
@@ -1553,11 +1577,8 @@ export function createSoftwareUpdateProcessMonitor(
 	const publishProgress = () => {
 		if (!softUpdateStatus) return;
 		const previous = softUpdateStatus;
-		// The in-process prefetch is finished work, not this unit's progress.
-		const next = deriveUpdateProgress(
-			aptLog.slice(prefetched.length),
-			aptStatus,
-		);
+		// The in-process prefetch's Get: lines are this update's download.
+		const next = deriveUpdateProgress(aptLog, aptStatus);
 		softUpdateStatus = next;
 		observeRebootPackages();
 		if (
@@ -1570,6 +1591,7 @@ export function createSoftwareUpdateProcessMonitor(
 		)
 			return;
 		announced = true;
+		settleSoftwareUpdateRecovery();
 		try {
 			broadcastMsg("status", {
 				updating: next,
@@ -1912,6 +1934,14 @@ async function prepareSoftwareUpdate(
 	// Fetch under the pin so the unit's own download stage is a cache hit.
 	let prefetched = "";
 	if (capable && network.pinned) {
+		// The transfer runs before the unit's status channel exists: name it.
+		if (softUpdateStatus) {
+			softUpdateStatus = { ...PHASE_MARKERS.downloading };
+			broadcastMsg("status", {
+				updating: softUpdateStatus,
+				update_state: getUpdateState(),
+			});
+		}
 		const fetched = await network.transfer(
 			(attempt, signal) =>
 				runAptCommand(
@@ -1983,10 +2013,16 @@ export function getLastInstallUnitVerdict(): InstallUnitVerdict {
 async function recoverSoftwareUpdate(
 	deps: SoftwareUpdateRecoveryDeps = defaultSoftwareUpdateRecoveryDeps,
 ): Promise<boolean> {
-	if (pendingPackageSuccess.pending) return false;
+	if (pendingPackageSuccess.pending) {
+		settleSoftwareUpdateRecovery();
+		return false;
+	}
 	// Reset first: a throwing probe must not leave an older attempt's verdict.
 	lastInstallUnitVerdict = "not-probed";
-	if (!aptUpdatesEnabled() || shouldUseMocks() || isUpdating()) return false;
+	if (!aptUpdatesEnabled() || shouldUseMocks() || isUpdating()) {
+		settleSoftwareUpdateRecovery();
+		return false;
+	}
 
 	const monitor = createSoftwareUpdateProcessMonitor();
 	const recovered = await deps.recover({
@@ -2013,6 +2049,14 @@ async function recoverSoftwareUpdate(
 	// to check); a loaded unit is, and an unreadable probe throws instead.
 	if (!recovered) {
 		lastInstallUnitVerdict = "absent";
+		if (softUpdateRecoveryPending) {
+			settleSoftwareUpdateRecovery();
+			// A tab that kept its overlay across the restart learns it is over.
+			broadcastMsg("status", {
+				updating: null,
+				update_state: getUpdateState(),
+			});
+		}
 		return false;
 	}
 	lastInstallUnitVerdict = "attached";

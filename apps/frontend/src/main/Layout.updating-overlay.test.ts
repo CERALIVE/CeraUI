@@ -245,6 +245,18 @@ describe("Layout — the update overlay survives a backend restart", () => {
 		transport.connection?.("connected");
 		await vi.waitFor(() => expect(transport.hydrateCalls).toBeGreaterThan(0));
 
+		// The restarted backend has not read the unit yet, so its initial push
+		// omits `updating`; the overlay keeps APT's last number.
+		pushStatus({
+			is_streaming: false,
+			wifi: {},
+			modems: {},
+			update_state: { kind: "idle" },
+		});
+		flushSync();
+		expect(overlayTitle()).toBe(mounted);
+		expect(bar()?.getAttribute("aria-valuenow")).toBe("40");
+
 		// A frame before any APT status record is activity, never a number.
 		updating(silent);
 		expect(overlayTitle()).toBe(mounted);

@@ -35,6 +35,19 @@ phases only, from coarse transcript evidence: APT's `Get:` lines while
 fetching and dpkg's unpack/setup records once it runs. Its status file is
 never read, because it may hold an older run's records.
 
+APT's own estimate can dip within a phase (a fetch item added, trigger work
+found), so the number shown is the highest APT reported in the current phase,
+folded over the bytes; it never moves backward. On pinned images the download
+runs in-process before the unit (and its status channel) exists: the UI says
+**Downloading** from the moment that transfer starts, without a number, and
+the prefetch's `Get:` lines keep that phase when the unit begins.
+
+After a backend restart nobody knows, until recovery has read the detached
+unit, whether an update is running. Until then the initial status push omits
+`updating`, which the browser keeps as its last frame, instead of sending
+`null` or an empty frame; recovery then publishes the recovered state, or an
+explicit `null` when no unit exists.
+
 Live polling and reattachment derive progress from the same bytes: complete
 status lines only, so a record split across reads counts once it is whole.
 The observer reads stdout, stderr and then the status file, and the final

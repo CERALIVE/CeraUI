@@ -165,8 +165,10 @@ import {
 	stopDmesgWatchers,
 } from "./modules/system/sensors.ts";
 import {
+	beginSoftwareUpdateRecovery,
 	periodicCheckForSoftwareUpdates,
 	recoverSoftwareUpdateIfRunning,
+	settleSoftwareUpdateRecovery,
 } from "./modules/system/software-updates.ts";
 import {
 	ensureSshPasswordProvisioned,
@@ -294,6 +296,7 @@ if (configAvailableAtBind) void initRemote();
 // could fail OR hang. It is the operator's only lifeline to the device, so it
 // must come up even when identity, the cloud channel, or the engine never do
 // (S6 — a top-level-await failure here previously bricked boot in the field).
+beginSoftwareUpdateRecovery();
 await runCritical("ws-control-server", initServer);
 setEventSink((event) =>
 	broadcastMsgLocal(EVENT_PUSH, { append: [event] }, 0, undefined, true),
@@ -513,7 +516,10 @@ void guardNonCritical("update-bootstrap", () =>
 	runUpdateBootstrap({
 		start: async () => {
 			await guardNonCritical("update-orchestrator", startUpdateOrchestrator);
-			return awaitUpdateStartupAdjudication();
+			const admitted = await awaitUpdateStartupAdjudication();
+			// A refused bootstrap never recovers; stop withholding `updating`.
+			if (!admitted) settleSoftwareUpdateRecovery();
+			return admitted;
 		},
 		recover: async () => {
 			await guardNonCritical("software-update-recovery", async () => {
@@ -523,6 +529,9 @@ void guardNonCritical("update-bootstrap", () =>
 		periodic: () => {
 			periodicCheckForSoftwareUpdates();
 		},
+	}).catch((error: unknown) => {
+		settleSoftwareUpdateRecovery();
+		throw error;
 	}),
 );
 
