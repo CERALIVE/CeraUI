@@ -10,12 +10,14 @@ test("captured eligible twins render independently; backend refusal withdraws on
 	publish(TWIN_NETIF);
 	const cards = page.getByTestId("bonded-link-card");
 	await expect(cards).toHaveCount(2);
+	// Each twin is its own card under its own name: the two identical dongles
+	// read as SIM 1 and SIM 2 (their order in the modem list), not as one model name
+	// twice that needs an identity line to tell them apart.
+	const names: Record<string, string> = { enx0c5b8f279a64: "SIM 1", eth1: "SIM 2" };
 	for (const iface of Object.keys(TWIN_NETIF)) {
-		const card = cards.filter({ has: page.locator(`[data-testid="bonded-link-identity"]`, { hasText: iface }) });
+		const card = page.locator(`[data-testid="bonded-link-card"][data-link-id="${iface}"]`);
 		await expect(card).toHaveCount(1);
-		await expect(card).toHaveAttribute("data-link-id", iface);
-		await expect(card.getByTestId("bonded-link-identity")).toHaveText(iface);
-		await expect(card).toContainText("Huawei E3372");
+		await expect(card).toContainText(names[iface] ?? "missing name");
 	}
 	await expect(page.getByTestId("bonded-links-not-bonded")).toHaveCount(0);
 

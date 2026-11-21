@@ -30,6 +30,7 @@ import {
 	SPARK_W,
 } from '$lib/components/custom/ingest-link-view';
 import { Button } from '$lib/components/ui/button';
+import { createSessionLinkNames } from '$lib/helpers/session-link-names';
 import {
 	computeSessionRollup,
 	createSample,
@@ -51,6 +52,12 @@ interface Props {
 	 * restate the setting instead of reporting what the bond actually carried.
 	 */
 	bitrateKbps?: number | undefined;
+	/**
+	 * The link's name for people ("SIM 1 · Northwind", "Wi-Fi · HomeNetwork"),
+	 * from the shared helper in `$lib/helpers/link-names`. The interface id stays
+	 * as a small second label. Absent: the interface id alone, as before.
+	 */
+	linkName?: ((iface: string) => string) | undefined;
 	class?: string;
 }
 
@@ -58,8 +65,11 @@ const {
 	telemetry = undefined,
 	isStreaming = undefined,
 	bitrateKbps = undefined,
+	linkName = undefined,
 	class: className = undefined,
 }: Props = $props();
+
+const nameOf = (iface: string): string => linkName?.(iface) ?? iface;
 
 const links = $derived<LinkTelemetryEntry[]>(telemetry?.links ?? []);
 const hasLinks = $derived(links.length > 0);
@@ -81,7 +91,11 @@ const transferred = $derived(
 );
 
 // Shared 4-column track so header, rows, and totals stay aligned on any width.
-const COLS = 'grid grid-cols-[minmax(0,1.4fr)_1fr_1fr_1fr] gap-x-3';
+// The name takes the free width (it can be "SIM 2 · operator" or a network
+// name now); the three readings take what they need.
+// Fixed reading tracks, the same in the header, every row and the totals, so a
+// long value never shifts one row's columns away from the others.
+const COLS = 'grid grid-cols-[minmax(0,1fr)_4.5rem_3rem_3.5rem] gap-x-3';
 
 // Per-link RTT-trend derivation — constants, math, and the memoizing cache — lives
 // in `ingest-link-view.ts` (pure + unit-testable). RING_CAPACITY bounds the ring
@@ -136,6 +150,28 @@ const anyDegraded = $derived(linkViews.some((v) => v.degraded));
 let sessionSamples: SessionSample[] = [];
 let wasStreaming = false;
 let rollup = $state<SessionRollup | null>(null);
+// Every name a link carried during the session, in the order they were seen,
+// recorded with each sample. A SIM that registers on another operator mid-session
+// reads "SIM 1 · A → B" in the summary instead of the name at viewing time.
+// Plain data, like the samples: nothing renders from it until the session ends.
+let sessionNames = createSessionLinkNames();
+let summaryNames = $state<ReadonlyMap<string, readonly string[]>>(new Map());
+
+function recordNames(links: readonly LinkTelemetryEntry[] | undefined) {
+	for (const link of links ?? []) {
+		sessionNames.record(link.iface, nameOf(link.iface));
+	}
+}
+
+/** Whether a session row's link carried more than one name. */
+function renamedInSession(iface: string): boolean {
+	return (summaryNames.get(iface)?.length ?? 0) > 1;
+}
+
+/** A session row's name: every name it had, in order. */
+function sessionNameOf(iface: string): string {
+	return summaryNames.get(iface)?.join(' → ') ?? nameOf(iface);
+}
 
 $effect(() => {
 	const streaming = isStreaming === true;
@@ -146,13 +182,17 @@ $effect(() => {
 
 	if (streaming && !wasStreaming) {
 		sessionSamples = [];
+		sessionNames = createSessionLinkNames();
 		rollup = null;
 	}
 	if (streaming) {
 		sessionSamples.push(createSample(br, frameLinks, Date.now(), cumulativeBytes));
+		// The names are read, not tracked: a new status frame must not add a sample.
+		untrack(() => recordNames(frameLinks));
 	}
 	if (!streaming && wasStreaming) {
 		rollup = sessionSamples.length > 0 ? computeSessionRollup(sessionSamples) : null;
+		summaryNames = sessionNames.snapshot();
 		// Clear the live sparkline ring so the next session starts fresh without a
 		// remount; the folded rollup above is what the summary renders from now on.
 		history = {};
@@ -356,7 +396,7 @@ function exportCsv(): void {
 						'text-[10px] font-medium uppercase tracking-wide',
 					)}
 				>
-					<span class="w-24 shrink-0 ps-4">{m["live.ingest.link"]()}</span>
+					<span class="w-24 shrink-0 ps-4 sm:w-36">{m["live.ingest.link"]()}</span>
 					<span class="flex-1">{m["live.ingest.contribution"]()}</span>
 					<span class="w-12 text-end">{m["live.ingest.nak"]()}</span>
 					<span class="w-14 text-end">{m["live.ingest.rtt"]()}</span>
@@ -367,16 +407,29 @@ function exportCsv(): void {
 						<li
 							data-testid="ingest-contribution-row"
 							data-iface={link.iface}
-							class="flex items-center gap-3 border-b py-2 text-xs last:border-b-0"
+							data-renamed={renamedInSession(link.iface)}
+							class={cn(
+								'flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2 text-xs last:border-b-0',
+								!renamedInSession(link.iface) && 'sm:flex-nowrap',
+							)}
 						>
-							<div class="flex w-24 shrink-0 items-center gap-2">
+							<!-- Below 640 px the name has its own line, and so does a link that
+							     was renamed during the session at every width: every name it had
+							     stays readable, wrapping, never clipped in the narrow name column. -->
+							<div
+								class={cn(
+									'flex min-w-0 basis-full items-start gap-2',
+									!renamedInSession(link.iface) && 'sm:w-36 sm:shrink-0 sm:basis-auto',
+								)}
+								data-session-link-name-cell
+							>
 								<!-- Spectral per-link identity dot (--link-1..6 ramp). -->
 								<span
 									aria-hidden="true"
-									class="size-2 shrink-0 rounded-full"
+									class="mt-1 size-2 shrink-0 rounded-full"
 									style={`background-color: var(--link-${(i % 6) + 1})`}
 								></span>
-								<span class="truncate font-medium">{link.iface}</span>
+								<span class="min-w-0 font-medium break-words" data-session-link-name title={link.iface}>{sessionNameOf(link.iface)}</span>
 							</div>
 							<div
 								aria-hidden="true"
@@ -484,18 +537,23 @@ function exportCsv(): void {
 								class="size-2 shrink-0 rounded-full"
 								style={`background-color: var(--link-${(i % 6) + 1})`}
 							></span>
-							<span class="truncate font-medium">{link.iface}</span>
+							<span class="min-w-0">
+								<span class="line-clamp-2 block font-medium break-words" data-link-name>{nameOf(link.iface)}</span>
+								{#if nameOf(link.iface) !== link.iface}
+									<span class="text-muted-foreground block truncate font-mono text-[10px]">{link.iface}</span>
+								{/if}
+							</span>
 							{#if link.stale}
 								<Badge variant="stale" data-stale-interface={link.iface} />
 							{/if}
 						</div>
-						<span data-testid="ingest-rtt" class="text-foreground text-end font-mono tabular-nums">
+						<span data-testid="ingest-rtt" class="text-foreground truncate text-end font-mono tabular-nums">
 							{`${link.rtt_ms} ${m["units.ms"]()}`}
 						</span>
-						<span data-testid="ingest-nak" class="text-foreground text-end font-mono tabular-nums">
+						<span data-testid="ingest-nak" class="text-foreground truncate text-end font-mono tabular-nums">
 							{link.nak_count}
 						</span>
-						<span data-testid="ingest-weight" class="text-foreground text-end font-mono tabular-nums">
+						<span data-testid="ingest-weight" class="text-foreground truncate text-end font-mono tabular-nums">
 							{link.weight_percent}%
 						</span>
 					</div>
@@ -519,7 +577,7 @@ function exportCsv(): void {
 								view.degraded ? 'text-status-warning' : 'text-primary',
 							)}
 							role="img"
-							aria-label={m["live.ingest.trendLabel"]({ iface: link.iface })}
+							aria-label={m["live.ingest.trendLabel"]({ iface: nameOf(link.iface) })}
 						>
 							<!-- Baseline track so a short/empty trace still reads as calibrated. -->
 							<line
