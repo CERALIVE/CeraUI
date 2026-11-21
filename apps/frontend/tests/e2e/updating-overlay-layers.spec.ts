@@ -38,9 +38,17 @@ test("shows activity for a silent single-package download before counting instal
 
 	await sendProgress(1, 1, 1);
 	await expect(phase).toHaveText("Unpacking");
-	await expect(bar).toHaveAttribute("aria-valuenow", "2");
+	await expect(bar).toHaveAttribute("aria-valuenow", "1");
 	await expect(bar).toHaveAttribute("aria-valuemax", "3");
 	await expect(bar).toHaveCSS("background-image", "none");
+
+	await sendProgress(1, 1, 1, 1);
+	await expect(phase).toHaveText("Installing");
+	await expect(bar).toHaveAttribute("aria-valuenow", "2");
+	await expect(bar).toHaveAttribute("aria-valuetext", "66%");
+	await expect(overlay.getByText("2 of 3 steps")).toBeVisible();
+	await expect(overlay.getByText("1/1", { exact: true })).toHaveCount(0);
+	await expect(overlay.getByText("100%", { exact: true })).toHaveCount(0);
 });
 
 // The update takeover once carried a decorative wash: an overflow-hidden layer

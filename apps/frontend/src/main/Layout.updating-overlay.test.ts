@@ -194,15 +194,15 @@ describe("Layout — the update overlay is mounted globally, not per trigger", (
 	});
 
 	it("renders the real percentage and phase, not a bare 'Applying…'", async () => {
-		// 6 of 12 steps done → 50%, currently unpacking.
+		// The second unpack has started: 5 of 12 steps done → 41%.
 		updating({ total: 4, downloading: 4, unpacking: 2, setting_up: 0 });
 		render(Layout);
 
 		await waitFor(() => {
-			expect(document.body.textContent).toContain("50%");
+			expect(document.body.textContent).toContain("41%");
 		});
 		expect(document.body.textContent).toContain("Unpacking");
-		expect(document.body.textContent).toContain("2");
+		expect(document.body.textContent).toMatch(/5\s+of\s+12\s+steps/);
 	});
 
 	it("stays unmounted while no update is running", async () => {
@@ -234,7 +234,7 @@ describe("Layout — the update overlay survives a backend restart", () => {
 
 		// The old observer saw unpacking before the package's postinst restarted it.
 		updating({ total: 1, downloading: 1, unpacking: 1, setting_up: 0 });
-		expect(bar()?.getAttribute("aria-valuenow")).toBe("2");
+		expect(bar()?.getAttribute("aria-valuenow")).toBe("1");
 		transport.connection?.("disconnected");
 		flushSync();
 		expect(overlayTitle()).toBe(mounted);
@@ -319,6 +319,7 @@ describe("Layout — the update overlay survives a backend restart", () => {
 		expect(document.body.textContent).toContain("Updating Device Software");
 		// The progress moved, so the mount really is reading the post-reconnect
 		// frame rather than a frozen pre-drop snapshot.
-		expect(document.body.textContent).toContain("58%");
+		expect(document.body.textContent).toContain("50%");
+		expect(document.body.textContent).toMatch(/6\s+of\s+12\s+steps/);
 	});
 });

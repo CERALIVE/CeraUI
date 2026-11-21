@@ -39,7 +39,6 @@ const downloadFinished = $derived(
 	animationPhase === 'unpacking' || animationPhase === 'installing' || isSuccess,
 );
 const fraction = $derived(downloadFinished ? packageProgressFraction(details, isSuccess) : null);
-const showCounts = $derived(fraction !== null);
 
 // Terminal outcomes have ONE announcer, once per outcome. In the app Layout
 // never mounts this takeover for a terminal frame: it releases the takeover and
@@ -223,11 +222,6 @@ onMount(() => {
 						>
 							{m["updatingOverlay.downloading"]()}
 						</span>
-						{#if showCounts && details.downloading > 0}
-							<span class="text-muted-foreground text-[9px] sm:text-xs"
-								>{details.downloading}/{details.total}</span
-							>
-						{/if}
 					</div>
 
 					<!-- Arrow -->
@@ -255,11 +249,6 @@ onMount(() => {
 						>
 							{m["updatingOverlay.unpacking"]()}
 						</span>
-						{#if showCounts && details.unpacking > 0}
-							<span class="text-muted-foreground text-[9px] sm:text-xs"
-								>{details.unpacking}/{details.total}</span
-							>
-						{/if}
 					</div>
 
 					<!-- Arrow -->
@@ -287,11 +276,6 @@ onMount(() => {
 						>
 							{m["updatingOverlay.installing"]()}
 						</span>
-						{#if showCounts && details.setting_up > 0}
-							<span class="text-muted-foreground text-[9px] sm:text-xs"
-								>{details.setting_up}/{details.total}</span
-							>
-						{/if}
 					</div>
 				</div>
 			</div>

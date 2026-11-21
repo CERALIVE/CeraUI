@@ -47,7 +47,31 @@ afterEach(() => {
 });
 
 describe("updating-overlay package acquisition", () => {
-	it("does not show 100% for 200 of 201 steps or a full pending counter", async () => {
+	it("counts completed steps in both the text and bar as two packages advance", async () => {
+		const view = render(UpdatingOverlay, {
+			props: { details: progress({ total: 2, downloading: 2 }) },
+		});
+		const bar = await screen.findByRole("progressbar");
+
+		for (const [unpacking, setting_up, completed, percent] of [
+			[1, 0, 2, 33],
+			[2, 0, 3, 50],
+			[2, 1, 4, 66],
+			[2, 2, 5, 83],
+		]) {
+			await view.rerender({
+				details: progress({ total: 2, downloading: 2, unpacking, setting_up }),
+			});
+			expect(screen.getByText(`${completed} of 6 steps`)).toBeDefined();
+			expect(screen.getAllByText(`${percent}%`)).toHaveLength(2);
+			expect(bar.getAttribute("aria-valuenow")).toBe(String(completed));
+			expect(bar.getAttribute("aria-valuemax")).toBe("6");
+			expect(bar.getAttribute("aria-valuetext")).toBe(`${percent}%`);
+			expect(screen.queryByText(/^\d+\/\d+$/)).toBeNull();
+		}
+	});
+
+	it("rounds down near completion and reaches 100% only on success", async () => {
 		const details = progress({
 			total: 67,
 			downloading: 67,
@@ -58,10 +82,12 @@ describe("updating-overlay package acquisition", () => {
 		const bar = await screen.findByRole("progressbar");
 		expect(screen.queryByText("100%")).toBeNull();
 		expect(screen.getAllByText("99%")).toHaveLength(2);
-		expect(bar.getAttribute("aria-valuenow")).toBe("200");
+		expect(bar.getAttribute("aria-valuenow")).toBe("199");
 		expect(bar.getAttribute("aria-valuemax")).toBe("201");
 		await view.rerender({ details: { ...details, setting_up: 67 } });
 		expect(bar.getAttribute("aria-valuenow")).toBe("200");
+		expect(screen.getByText("200 of 201 steps")).toBeDefined();
+		expect(screen.getAllByText("99%")).toHaveLength(2);
 		await view.rerender({ details: { ...details, setting_up: 67, result: 0 } });
 		expect(bar.getAttribute("aria-valuenow")).toBe("201");
 		expect(screen.getAllByText("100%")).toHaveLength(2);
@@ -94,7 +120,7 @@ describe("updating-overlay package acquisition", () => {
 		await view.rerender({
 			details: progress({ downloading: 1, unpacking: 1 }),
 		});
-		expect(bar.getAttribute("aria-valuenow")).toBe("2");
+		expect(bar.getAttribute("aria-valuenow")).toBe("1");
 		expect(screen.getByTestId("update-phase").textContent).toContain(
 			"Unpacking",
 		);
@@ -109,6 +135,38 @@ describe("updating-overlay package acquisition", () => {
 });
 
 describe("updating-overlay terminal state", () => {
+	it.each([
+		["failed", "dpkg: post-installation script returned error exit status 1"],
+		["interrupted without stderr", ""],
+	])(
+		"does not show completion before or after an install is %s",
+		async (_, result) => {
+			// The final "Setting up" record precedes postinst, even if the unit
+			// exits unsuccessfully. A signaled unit can report an empty error string.
+			const details = progress({ downloading: 1, unpacking: 1, setting_up: 1 });
+			const view = render(UpdatingOverlay, { props: { details } });
+			const bar = await screen.findByRole("progressbar");
+
+			expect(screen.getByTestId("update-phase").textContent).toContain(
+				"Installing",
+			);
+			expect(screen.getByText("2 of 3 steps")).toBeDefined();
+			expect(bar.getAttribute("aria-valuenow")).toBe("2");
+			expect(bar.getAttribute("aria-valuetext")).toBe("66%");
+			expect(screen.queryByText("1/1")).toBeNull();
+			expect(screen.queryByText("100%")).toBeNull();
+			expect(toastSuccess).not.toHaveBeenCalled();
+
+			await view.rerender({ details: { ...details, result } });
+			expect(screen.getByTestId("update-failed")).toBeDefined();
+			expect(screen.queryByText("1/1")).toBeNull();
+			expect(screen.queryByText("100%")).toBeNull();
+			expect(screen.queryByText("3 of 3 steps")).toBeNull();
+			expect(bar.getAttribute("aria-valuenow")).toBeNull();
+			expect(toastSuccess).not.toHaveBeenCalled();
+		},
+	);
+
 	it("shows a FAILURE indicator + error toast (never success) when the result is an apt error string", async () => {
 		const reason = "E: Could not get lock /var/lib/dpkg/lock";
 		// vaul-svelte portals Drawer.Content to document.body, so query `document`.
