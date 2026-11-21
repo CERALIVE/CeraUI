@@ -188,12 +188,6 @@ starts and the total is known, the overlay and inline bar show counted steps.
 A zero-counter reattach frame returns the overlay to indeterminate activity,
 not a fake percentage or `0 of 1` steps.
 
-The notification feed keeps existing entries on an empty reconnect replay.
-An explicit `remove` entry retracts the corresponding update offer. A
-`removeSuperseded` entry only retracts an identified offer different from the
-identity still pending. The new backend's empty process-local map cannot
-establish that an earlier offer ceased to apply.
-
 ### A terminal install releases the takeover [EXISTS]
 
 The legacy `status.updating` push has ONE reading, `legacy-install.ts`:

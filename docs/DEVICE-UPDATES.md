@@ -1,6 +1,6 @@
 # Device updates: the update orchestrator [PARTIAL]
 
-## Package progress and availability notice
+## Package update progress
 
 On both legacy and capable images, Software Updates shows activity without a
 percentage while APT prepares or downloads packages. The detached service
@@ -9,20 +9,8 @@ continues to append to durable logs. The UI cannot infer download bytes from
 When unpacking starts and APT has reported a package count, the overlay shows
 install steps. Only the terminal APT result establishes success or failure.
 
-Only discovery after a successful APT refresh reconciles `ceralive_update`.
-An install exit code proves nothing about updates outside its transaction.
-The normal check after restart withdraws the notice if nothing remains or
-publishes the offer for the remaining packages. Capable
-discovery requires an actionable package from the exact CeraLive application
-roster and the verified CeraLive APT origin. A failed refresh can leave lists
-readable, but their contents cannot change the standing offer.
-
-If the remaining offer was durably dismissed, the check sends an
-identity-scoped withdrawal: a cached different offer can disappear, but a
-matching or unidentified offer is not treated as superseded. Authenticated
-replay carries explicit withdrawals for the lifetime of the backend process
-or until a new offer is published. An empty replay is not withdrawal. Reload
-starts with an empty notification store.
+If the backend reconnects during an update and has not yet read the retained
+log, the overlay shows indeterminate activity until it gets usable counters.
 
 ## Pending disruptive effects [PARTIAL — host proof, board drill owed]
 

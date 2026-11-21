@@ -40,9 +40,7 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   file reads are still counted exactly once. No wall-clock deadline is added: a
   valid package transaction may run for minutes.
   Each changed count publishes both `updating` and `update_state`; a `Get:N`
-  line shows a fetch started, not that it completed. Terminal success reports
-  only the transaction outcome. The usual package check after restart
-  reconciles the availability notice against the upgrades that remain.
+  line shows a fetch started, not that it completed.
 - **Reattachment identity is a safety boundary.** Adoption requires the
   exact unit id and transient fragment path, transient-service description/type,
   exact non-duplicated `[Service]` stdout/stderr append destinations, no pre/post

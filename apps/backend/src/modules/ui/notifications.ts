@@ -75,23 +75,12 @@ type PersistentNotification = Notification & {
 export type NotificationOptions = {
 	action?: NotificationAction;
 	dismissalKey?: string;
-	onSuppressedByDismissal?: () => void;
 	beforeDismiss?: () => void;
 	/** A producer's durable acknowledgement must succeed before removal. */
 	onDismiss?: () => void;
 };
 
 const persistentNotifications = new Map<string, PersistentNotification>();
-// Only producers opting into withdrawal replay occupy a slot here.
-const replayedWithdrawals = new Map<
-	string,
-	{
-		readonly id: string;
-		readonly revision: number;
-		readonly authedOnly: boolean;
-		readonly currentIdentity: string | undefined;
-	}
->();
 
 // Revisions start over when the backend restarts; this namespaces them.
 const publisher: string = crypto.randomUUID();
@@ -142,18 +131,13 @@ export function notificationSend(
 	// operator already dismissed stays suppressed across reloads and restarts.
 	const dismissalKey = opts?.dismissalKey;
 	if (isPersistent && dismissalKey) {
-		let dismissed: boolean;
 		try {
-			dismissed = isNotificationDismissed(dismissalKey);
+			if (isNotificationDismissed(dismissalKey)) return false;
 		} catch (error) {
 			logger.warn("Notification deferred: dismissal store unavailable", {
 				name,
 				error: error instanceof Error ? error.message : String(error),
 			});
-			return false;
-		}
-		if (dismissed) {
-			opts?.onSuppressedByDismissal?.();
 			return false;
 		}
 	}
@@ -176,7 +160,6 @@ export function notificationSend(
 	let doSend = true;
 	let revision: number | undefined;
 	if (isPersistent) {
-		replayedWithdrawals.delete(name);
 		let pn = persistentNotifications.get(name);
 		if (pn) {
 			// Rate limiting to once every second
@@ -255,29 +238,6 @@ export function notificationRemove(name: string) {
 	return msg;
 }
 
-/** Replay positive producer evidence, not absence from the process-local map. */
-export function withdrawPersistentNotification(
-	name: string,
-	currentIdentity?: string,
-): void {
-	const prior = replayedWithdrawals.get(name);
-	if (prior && prior.currentIdentity === currentIdentity) return;
-	const standing = persistentNotifications.get(name);
-	const authedOnly = standing?.authedOnly ?? true;
-	const entry = { id: name, revision: nextRevision() };
-	replayedWithdrawals.set(name, { ...entry, authedOnly, currentIdentity });
-	if (
-		currentIdentity === undefined ||
-		standing?.dismissalKey !== currentIdentity
-	)
-		persistentNotifications.delete(name);
-	const message =
-		currentIdentity === undefined
-			? { remove: [entry] }
-			: { removeSuperseded: [{ id: name, currentIdentity }] };
-	broadcastMsg("notification", message, 0, authedOnly);
-}
-
 // Persists the dismissal (survives reload + restart) only when the notification
 // carries a semantic dismissalKey; a keyless notification is merely removed.
 export function notificationDismiss(name: string) {
@@ -331,23 +291,7 @@ export function getPersistentNotifications(
 		}
 	}
 
-	const remove = [];
-	const removeSuperseded = [];
-	for (const {
-		id,
-		revision,
-		currentIdentity,
-		authedOnly,
-	} of replayedWithdrawals.values()) {
-		if (!isAuthed && authedOnly) continue;
-		if (currentIdentity === undefined) remove.push({ id, revision });
-		else removeSuperseded.push({ id, currentIdentity });
-	}
-	return {
-		show: notifications,
-		...(remove.length > 0 ? { remove } : {}),
-		...(removeSuperseded.length > 0 ? { removeSuperseded } : {}),
-	};
+	return { show: notifications };
 }
 
 export function notificationSendPersistent(

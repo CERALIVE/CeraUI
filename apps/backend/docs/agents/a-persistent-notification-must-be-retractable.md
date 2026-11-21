@@ -25,15 +25,6 @@ that contradicts the notification's own claim; every other outcome — an
 unreachable engine, a fallback v4l2 row, an idle engine — leaves the notification
 standing.
 
-Package availability uses `withdrawPersistentNotification` only after a
-conclusive package check. An empty result withdraws the offer by name. If the
-current offer was durably dismissed, a separate identity-scoped withdrawal
-retracts only a cached different offer. Both forms can be replayed even if no
-offer was raised in this process. Publishing a persistent notice clears the
-retained withdrawal for its name. An empty snapshot after restart does not
-authorize retraction. Regular removals and durable operator dismissals keep
-their existing meaning.
-
 **`hdmi_error` retracts on `signal: "present"` for an HDMI-RX capture device**
 (`modules/system/hdmi-signal-notification.ts`
 `clearHdmiSignalErrorOnRecovery`). That verdict is stamped at `fromEngineDevice`

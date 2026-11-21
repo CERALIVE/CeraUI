@@ -32,12 +32,7 @@ import {
 	getPersistent,
 } from "$lib/stores/notifications.svelte";
 
-function show(
-	name: string,
-	msg: string,
-	revision: number,
-	offerIdentity?: string,
-): void {
+function show(name: string, msg: string, revision: number): void {
 	handlers.message?.("notification", {
 		show: [
 			{
@@ -48,7 +43,6 @@ function show(
 				is_persistent: true,
 				duration: 0,
 				revision,
-				...(offerIdentity === undefined ? {} : { params: { offerIdentity } }),
 			},
 		],
 	});
@@ -99,67 +93,4 @@ describe("persistent notifications are retractable", () => {
 
 		expect(persistentNames()).toEqual(["no_internet"]);
 	});
-
-	it("keeps the offer on empty reconnect replay and retracts it only on explicit removal", () => {
-		show("ceralive_update", "A CeraLive update is available", 1);
-		show("no_internet", "No internet connection", 2);
-
-		handlers.message?.("notification", { replay: true, show: [] });
-		expect(persistentNames().sort()).toEqual([
-			"ceralive_update",
-			"no_internet",
-		]);
-
-		handlers.message?.("notification", {
-			replay: true,
-			show: [],
-			remove: [{ id: "ceralive_update", revision: 1 }],
-		});
-
-		expect(persistentNames()).toEqual(["no_internet"]);
-	});
-
-	it("keeps an update offer across a live push, and restores it on reload only when replayed", () => {
-		show("ceralive_update", "A CeraLive update is available", 1);
-		show("no_internet", "No internet connection", 2);
-		handlers.message?.("notification", { show: [] });
-		expect(persistentNames()).toContain("ceralive_update");
-
-		const offered = {
-			name: "ceralive_update",
-			type: "warning",
-			msg: "A CeraLive update is available",
-			is_dismissable: true,
-			is_persistent: true,
-			duration: 0,
-		};
-		handlers.message?.("notification", { replay: true, show: [offered] });
-		expect(persistentNames()).toContain("ceralive_update");
-
-		clearNotifications();
-		handlers.message?.("notification", { replay: true, show: [] });
-		expect(persistentNames()).toEqual([]);
-		handlers.message?.("notification", { replay: true, show: [offered] });
-		expect(persistentNames()).toEqual(["ceralive_update"]);
-	});
-
-	it.each([
-		["update:old", ["no_internet"]],
-		["update:remaining", ["ceralive_update", "no_internet"]],
-	] as const)(
-		"applies replayed supersession to offer %s only if it differs from the pending identity",
-		(cached, remaining) => {
-			show("ceralive_update", "Pending update", 1, cached);
-			show("no_internet", "No internet connection", 2);
-
-			handlers.message?.("notification", {
-				replay: true,
-				show: [],
-				removeSuperseded: [
-					{ id: "ceralive_update", currentIdentity: "update:remaining" },
-				],
-			});
-			expect(persistentNames().sort()).toEqual([...remaining]);
-		},
-	);
 });

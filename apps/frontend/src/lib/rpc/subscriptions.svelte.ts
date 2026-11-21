@@ -62,7 +62,6 @@ import { ingestBuffering } from "$lib/stores/buffering.svelte";
 import { markSessionExpired } from "$lib/stores/connection-ux.svelte";
 import {
 	dismiss as dismissNotification,
-	getActive as getActiveNotifications,
 	push as pushNotification,
 	pushReplayed as pushReplayedNotification,
 } from "$lib/stores/notifications.svelte";
@@ -1066,12 +1065,6 @@ function handleMessage(
 			}
 			for (const entry of message.remove ?? []) {
 				dismissNotification(entry.id);
-			}
-			for (const { id, currentIdentity } of message.removeSuperseded ?? []) {
-				const prior = getActiveNotifications().find(({ name }) => name === id);
-				const identity = prior?.params?.offerIdentity;
-				if (typeof identity === "string" && identity !== currentIdentity)
-					dismissNotification(id);
 			}
 			break;
 		}

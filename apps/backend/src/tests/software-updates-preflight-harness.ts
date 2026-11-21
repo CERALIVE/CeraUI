@@ -181,7 +181,7 @@ export async function updateHarness() {
 			"The following packages will be upgraded:\n  cerastream\n1 upgraded, 0 newly installed, 0 to remove.\nNeed to get 4 kB of archives.\n",
 		stderr: "",
 	});
-	await updates.runUpdateDiscoveryAndReport(true);
+	await updates.runUpdateDiscoveryAndReport();
 	discovery.mockRestore();
 	let callback:
 		| Parameters<Parameters<typeof updates.setSoftwareUpdateCheckRunner>[0]>[0]

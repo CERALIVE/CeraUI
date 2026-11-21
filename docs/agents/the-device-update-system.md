@@ -58,12 +58,10 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
   (`quarantine.json`), idle-only restart of stale services with a protected-unit
   list, and keyed update notifications. Contract:
   [`docs/UPDATE-RECOVERY.md`](../UPDATE-RECOVERY.md).
-- **[EXISTS] Package progress and offer withdrawal.** Preparation and fetches
+- **[EXISTS] Package progress.** Preparation and fetches
   show activity without a byte percentage. Unpacking and setup use counted
-  steps from the retained APT log. Only a conclusive check can retract the
-  update offer; reconnect requires an explicit removal, not
-  absence from a fresh backend's replay. See
-  [Package progress and availability notice](../DEVICE-UPDATES.md#package-progress-and-availability-notice).
+  steps from the retained APT log. See
+  [Package update progress](../DEVICE-UPDATES.md#package-update-progress).
 - **[EXISTS; host-tested] Download-hold notice.** Genuine D8 package/OS
   interruption captures an opaque attempt before awaits and publishes through a
   detached macrotask and separate strict ledger. Committed intents rehydrate and

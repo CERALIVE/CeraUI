@@ -1,5 +1,3 @@
-export const CERALIVE_APT_ORIGIN = "apt.ceralive.tv";
-
 function sourceOrigin(
 	source: string,
 	release: string,
@@ -10,7 +8,7 @@ function sourceOrigin(
 	const host = new URL(url).hostname;
 	if (host !== origin) return null;
 	if (
-		host === CERALIVE_APT_ORIGIN &&
+		host === "apt.ceralive.tv" &&
 		/(?:^|,)o=CeraLive(?:,|$)/.test(release) &&
 		/(?:^|,)l=CeraLive(?:,|$)/.test(release) &&
 		/(?:^|,)n=(?:stable|beta)(?:,|$)/.test(release)
