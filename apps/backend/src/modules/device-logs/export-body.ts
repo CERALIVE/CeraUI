@@ -1,7 +1,7 @@
 import { credentialStoresState } from "../../helpers/credential-store-state.ts";
 import { collectVersionContext } from "../system/version-context.ts";
 import { listBoots } from "./boots.ts";
-import { collectHeldSecrets } from "./bundle-data.ts";
+import { collectHeldSecrets, SHORT_VALUE_EXPORT_KINDS } from "./bundle-data.ts";
 import type { ParsedQuery } from "./continuation.ts";
 import { exportEntry, exportHeader, type KnownMatch } from "./export-format.ts";
 import { withQuerySlot } from "./query-admission.ts";
@@ -46,10 +46,20 @@ export async function* exportChunks(
 	let incomplete: string | null = stopped();
 	// Replace the credentials the backend holds as the export starts, in each
 	// entry's unit and message and in the header's values. When that cannot be
-	// done for every held credential, nothing but the footer is sent. The limits
+	// done for every held credential (apart from the short identifier values
+	// below), nothing but the footer is sent. The limits
 	// (a snapshot, after journal normalization, fixed footer and filename text)
 	// are in docs/agents/device-log-export.md.
+	//
+	// Values shorter than MIN_REDACTED_LENGTH are never replaced: matching one
+	// to three characters would rewrite ordinary words and numbers all over the
+	// log. A short value of a kind in SHORT_VALUE_EXPORT_KINDS (a stream ID, an
+	// APN login, a router user name, a serial) is sent as it appears in the
+	// journal, and the header names its kind, never the value. A short value of
+	// any other kind (passwords, keys, pairing and relay secrets) still stops
+	// the export.
 	let known: KnownMatch = (text) => ({ text, redactions: 0 });
+	let unredacted: readonly string[] = [];
 	const stores = credentialStoresState();
 	if (stores === "pending") {
 		incomplete ??= "CREDENTIALS_LOADING";
@@ -58,11 +68,14 @@ export async function* exportChunks(
 	} else {
 		try {
 			const redactor = buildRedactor(collectHeldSecrets());
-			if (redactor.unredacted.length > 0) {
-				// Too short to match safely: refuse rather than send them.
-				incomplete ??= `CREDENTIAL_TOO_SHORT (${redactor.unredacted.join(", ")})`;
+			const blocking = redactor.unredacted.filter(
+				(kind) => !SHORT_VALUE_EXPORT_KINDS.has(kind),
+			);
+			if (blocking.length > 0) {
+				incomplete ??= `CREDENTIAL_TOO_SHORT (${blocking.join(", ")})`;
 			} else {
 				known = redactor.known;
+				unredacted = redactor.unredacted;
 			}
 		} catch {
 			incomplete ??= "READ_FAILED";
@@ -83,7 +96,7 @@ export async function* exportChunks(
 			incomplete ??= stopped();
 			if (!incomplete) {
 				const header = encode(
-					exportHeader(current, covered, query, createdAt, known),
+					exportHeader(current, covered, query, createdAt, known, unredacted),
 				);
 				if (header) yield header;
 				else incomplete = "size_limit";

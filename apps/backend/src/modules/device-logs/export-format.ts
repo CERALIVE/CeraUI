@@ -4,6 +4,7 @@ import type {
 	VersionContext,
 } from "@ceraui/rpc/schemas";
 import type { ParsedQuery } from "./continuation.ts";
+import { MIN_REDACTED_LENGTH } from "./redaction.ts";
 
 export function exportFilename(bootId: string | null, at: number): string {
 	const stamp = new Date(at)
@@ -31,6 +32,11 @@ export function exportHeader(
 	 * never to the fixed labels, the warning or the JSON syntax around a value.
 	 */
 	known: KnownMatch = (text) => ({ text, redactions: 0 }),
+	/**
+	 * Kinds of held values too short to match, sent as they appear. Only the
+	 * kinds are written, never a value.
+	 */
+	unredacted: readonly string[] = [],
 ): string {
 	// Replace held values in a string, then check the serialized value again:
 	// JSON escaping can turn other text into a held value (a line break becomes
@@ -69,6 +75,11 @@ export function exportHeader(
 		`filter: {${filter.join(",")}}`,
 		`createdAt: ${new Date(at).toISOString()}`,
 		"newest first",
+		...(unredacted.length > 0
+			? [
+					`not redacted, shorter than ${MIN_REDACTED_LENGTH} characters: ${unredacted.join(", ")}`,
+				]
+			: []),
 		"may contain sensitive data: review before sharing",
 	];
 	return `${lines.map((line) => `# ${line}`).join("\n")}\n`;

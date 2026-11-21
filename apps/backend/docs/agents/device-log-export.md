@@ -43,16 +43,29 @@ it is serialized and again after: when JSON escaping turns it into a held value
 (a line break becomes a backslash and `n`), the whole value is written as
 `"[REDACTED]"`. The bundle's identifier
 and address masking stays bundle-only. When redaction cannot cover every held
-credential, the export sends only a footer:
+credential, apart from the short identifier values described below, the export
+sends only a footer:
 
 - `# incomplete: CREDENTIALS_LOADING` while the hotspot or modem credential store
   has not finished loading (`helpers/credential-store-state.ts`: `pending`).
 - `# incomplete: READ_FAILED` when one of those stores existed but could not be
   loaded (`failed`; it started empty and its values are unknown), when a
   credential cannot be read, or when the matcher refuses the held set.
-- `# incomplete: CREDENTIAL_TOO_SHORT (<kinds>)` when a held value is shorter than
-  four characters (`MIN_REDACTED_LENGTH`), which the matcher does not replace.
-  Only the kinds are named.
+- `# incomplete: CREDENTIAL_TOO_SHORT (<kinds>)` when a held value shorter than
+  four characters (`MIN_REDACTED_LENGTH`), which the matcher does not replace,
+  is a password, key, pairing or relay secret, hotspot password, router
+  password, or any kind not listed below. Only the kinds are named.
+
+Short values of the kinds in `SHORT_VALUE_EXPORT_KINDS` (`bundle-data.ts`):
+`stream`, `apn_user`, `apn_password`, `router_user` and `serial` do not stop the
+export. They identify a stream, a carrier APN or an account rather than grant
+access to the device, and short stream IDs and carrier APN logins are common. A
+value of one to three characters cannot be replaced without rewriting ordinary
+text, so it is sent exactly as the journal holds it, in entries and in header
+values. The header then carries
+`# not redacted, shorter than 4 characters: <kinds>` before the warning line,
+naming the kinds (sorted, once each) and never the values. Longer values of the
+same kinds, and every other held value, are still replaced.
 
 Limits:
 
@@ -72,7 +85,7 @@ Limits:
   value (a comma, brace or line break) is not replaced.
 
 The support bundle uses the same held list and matcher but none of the store
-states or the short-value refusal; it is unchanged here.
+states, the short-value refusal or the header line; it is unchanged here.
 
 The response has attachment, no-store and UTF-8 plain text headers, with no
 Content-Length. Backpressure retains one page; no export content is sent over
