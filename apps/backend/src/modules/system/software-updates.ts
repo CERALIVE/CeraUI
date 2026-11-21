@@ -1728,10 +1728,7 @@ export function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonit
 					if (rebootAfterUpgrade && !onCommitSucceeded) {
 						rebootAfterUpdate();
 					} else {
-						invariant(
-							false,
-							"software update complete; exiting to restart CeraUI",
-						);
+						invariant(false, UPDATE_RESTART_REASON);
 					}
 				});
 			}
@@ -2063,6 +2060,10 @@ async function recoverSoftwareUpdate(
 	}
 	return true;
 }
+
+/** The deliberate crash a finished update ends the process with, so systemd restarts CeraUI. */
+export const UPDATE_RESTART_REASON =
+	"software update complete; exiting to restart CeraUI";
 
 export function recoverSoftwareUpdateIfRunning(
 	deps: SoftwareUpdateRecoveryDeps = defaultSoftwareUpdateRecoveryDeps,

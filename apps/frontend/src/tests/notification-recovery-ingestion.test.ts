@@ -122,4 +122,37 @@ describe("persistent notifications are retractable", () => {
 
 		expect(persistentNames()).toEqual(["no_internet"]);
 	});
+
+	it("a scoped withdrawal drops only the copy of the release it names", () => {
+		const offer = (release?: string) =>
+			handlers.message?.("notification", {
+				show: [
+					{
+						name: "ceralive_update",
+						type: "warning",
+						msg: "A CeraLive update is available.",
+						is_dismissable: true,
+						is_persistent: true,
+						duration: 0,
+						revision: 1,
+						...(release !== undefined ? { release } : {}),
+					},
+				],
+			});
+		const withdraw = (release: string) =>
+			handlers.message?.("notification", {
+				withdraw: [{ id: "ceralive_update", release }],
+			});
+		// A copy from a producer that predates releases is never matched.
+		offer();
+		withdraw("update:cerastream=2");
+		expect(persistentNames()).toEqual(["ceralive_update"]);
+		// Nor is a copy of a different release.
+		offer("update:cerastream=3");
+		withdraw("update:cerastream=2");
+		expect(persistentNames()).toEqual(["ceralive_update"]);
+		// The named release is dropped.
+		withdraw("update:cerastream=3");
+		expect(persistentNames()).toEqual([]);
+	});
 });

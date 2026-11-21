@@ -98,6 +98,8 @@ export type NotificationOptions = {
 const persistentNotifications = new Map<string, PersistentNotification>();
 // Withdrawn names and their removal revisions, replayed until the name is shown again.
 const replayedRemovals = new Map<string, number>();
+// Releases an earlier process proved obsolete, replayed (scoped) until the name is shown again.
+const retractedReleases = new Map<string, readonly string[]>();
 
 // Revisions start over when the backend restarts; this namespaces them.
 const publisher: string = crypto.randomUUID();
@@ -120,6 +122,9 @@ export function buildNotificationMsg(
 		...(n.params !== undefined ? { params: n.params } : {}),
 		...(n.action !== undefined ? { action: n.action } : {}),
 		...(revision !== undefined ? { revision, publisher } : {}),
+		...(n.releaseScoped && n.dismissalKey !== undefined
+			? { release: n.dismissalKey }
+			: {}),
 		is_dismissable: n.isDismissable,
 		is_persistent: n.isPersistent,
 		duration,
@@ -179,6 +184,7 @@ export function notificationSend(
 	let revision: number | undefined;
 	if (isPersistent) {
 		replayedRemovals.delete(name);
+		retractedReleases.delete(name);
 		let pn = persistentNotifications.get(name);
 		if (pn) {
 			// Rate limiting to once every second
@@ -263,6 +269,10 @@ function removeNotification(name: string, replay: boolean) {
 	if (replay) {
 		replayedRemovals.set(name, revision);
 		broadcastMsg("notification", legacyRemoval([name]), 0, authedOnly);
+	} else {
+		// A plain removal ends any replay of the name.
+		replayedRemovals.delete(name);
+		retractedReleases.delete(name);
 	}
 	return msg;
 }
@@ -283,6 +293,23 @@ export function notificationRemove(name: string) {
  */
 export function notificationWithdraw(name: string) {
 	return removeNotification(name, true);
+}
+
+/**
+ * Retracts only copies of `name` that carry one of `releases`, for a verdict an
+ * earlier process computed: a copy any other producer showed is never touched.
+ * Current frontends apply it; older ones strip the unknown key.
+ */
+export function notificationRetract(
+	name: string,
+	releases: readonly string[],
+): void {
+	retractedReleases.set(name, releases);
+	broadcastMsg("notification", retractionFrame(name, releases), 0, true);
+}
+
+function retractionFrame(name: string, releases: readonly string[]) {
+	return { withdraw: releases.map((release) => ({ id: name, release })) };
 }
 
 // Persists the dismissal (survives reload + restart) only when the notification
@@ -381,12 +408,20 @@ export function getPersistentNotifications(
  * as separate typed and pre-#183 frames so neither frontend drops the other's.
  */
 export function replayedRemovalFrames(isAuthed = false) {
-	if (!isAuthed || replayedRemovals.size === 0) return [];
+	if (!isAuthed) return [];
+	const frames: object[] = [...retractedReleases].map(([name, releases]) =>
+		retractionFrame(name, releases),
+	);
+	if (replayedRemovals.size === 0) return frames;
 	const typed = [...replayedRemovals].map(([id, revision]) => ({
 		id,
 		revision,
 	}));
-	return [{ remove: typed }, legacyRemoval([...replayedRemovals.keys()])];
+	return [
+		...frames,
+		{ remove: typed },
+		legacyRemoval([...replayedRemovals.keys()]),
+	];
 }
 
 export function notificationSendPersistent(

@@ -16,6 +16,8 @@ import { z } from "zod";
 import {
 	type AptScript,
 	FRAMES_PREFIX,
+	RECOVERY_FAILED_MARKER,
+	RECOVERY_RESTART_MARKER,
 	RESTART_EXIT_CODE,
 } from "./helpers/ceralive-update-apt.ts";
 import type { SessionStep } from "./helpers/ceralive-update-session.ts";
@@ -43,12 +45,10 @@ afterEach(async () => {
 	await rm(root, { recursive: true, force: true });
 });
 
-type Step = Omit<SessionStep, "record" | "scratch" | "boot"> & {
-	readonly boot?: string;
-};
+type Step = Omit<SessionStep, "record" | "scratch">;
 
 async function session(step: Step = {}) {
-	const input: SessionStep = { boot: "boot-a", ...step, record, scratch: root };
+	const input: SessionStep = { ...step, record, scratch: root };
 	await using child = Bun.spawn(
 		[process.execPath, SESSION, JSON.stringify(input)],
 		{
@@ -80,6 +80,7 @@ async function session(step: Step = {}) {
 		throw new Error(`session exited ${exit}: ${stderr}`);
 	return {
 		exit,
+		stdout,
 		stderr,
 		frames: z
 			.array(z.unknown())
@@ -87,15 +88,30 @@ async function session(step: Step = {}) {
 	};
 }
 
-function currentTab(frames: readonly unknown[], start: string[] = []) {
-	const shown = new Set(start);
+// What a tab holds: each notice name and the release its copy offers (none for
+// copies from producers that predate release-scoped notices).
+type Tab = ReadonlyMap<string, string | undefined>;
+const copy = (release?: string): Tab => new Map([[NOTICE, release]]);
+const RELEASE_2 = "update:cerastream=2";
+const RELEASE_3 = "update:cerastream=3";
+
+// The current frontend: typed frames only; `withdraw` drops only the named release.
+function tabOf(frames: readonly unknown[], start: Tab = new Map()): Tab {
+	const held = new Map(start);
 	for (const frame of frames) {
 		const parsed = notificationsMessageSchema.safeParse(frame);
 		if (!parsed.success) continue;
-		for (const { name } of parsed.data.show ?? []) shown.add(name);
-		for (const { id } of parsed.data.remove ?? []) shown.delete(id);
+		for (const { name, release } of parsed.data.show ?? [])
+			held.set(name, release);
+		for (const { id } of parsed.data.remove ?? []) held.delete(id);
+		for (const { id, release } of parsed.data.withdraw ?? [])
+			if (held.has(id) && held.get(id) === release) held.delete(id);
 	}
-	return [...shown];
+	return held;
+}
+
+function currentTab(frames: readonly unknown[], start: Tab = new Map()) {
+	return [...tabOf(frames, start).keys()];
 }
 
 // The v2026.7.2 frontend: no validation, `remove` entries go straight to the store.
@@ -107,6 +123,37 @@ function legacyTab(frames: readonly unknown[], start: string[] = []) {
 		for (const entry of message.remove ?? []) shown.delete(entry);
 	}
 	return [...shown].map(String);
+}
+
+// Every copy a session's frames show, as [name, release].
+function shows(frames: readonly unknown[]) {
+	return frames.flatMap((frame) =>
+		(notificationsMessageSchema.safeParse(frame).data?.show ?? []).map(
+			({ name, release }) => [name, release],
+		),
+	);
+}
+
+// Every removal a session's frames carry, in each wire form.
+function removals(frames: readonly unknown[]) {
+	return frames.flatMap((frame) => {
+		const message = frame as {
+			remove?: unknown[];
+			withdraw?: { id: string; release: string }[];
+		};
+		return [
+			...(message.remove ?? []).map((entry) =>
+				typeof entry === "string"
+					? ["string", entry]
+					: ["typed", (entry as { id: string }).id],
+			),
+			...(message.withdraw ?? []).map(({ id, release }) => [
+				"withdraw",
+				id,
+				release,
+			]),
+		];
+	});
 }
 
 const pending = (version: string): AptScript => ({
@@ -122,54 +169,86 @@ test(
 	async () => {
 		// Given a tab of each frontend generation showing the offer before the install.
 		const before = await session({ check: pending("2") });
-		const open = currentTab(before.frames);
+		const open = tabOf(before.frames);
 		const legacy = legacyTab(before.frames);
-		expect(open).toEqual([NOTICE]);
+		expect([...open]).toEqual([[NOTICE, RELEASE_2]]);
 		expect(legacy).toEqual([NOTICE]);
 		// When the package script restarts the backend: it recovers the finished
-		// install and exits through the update's own restart, with no check run.
+		// install and exits through exactly the update's own restart, with no check run.
 		const packageRestart = await session({ recoverInstall: true });
 		expect(packageRestart.exit).toBe(RESTART_EXIT_CODE);
+		expect(packageRestart.stdout).toContain(RECOVERY_RESTART_MARKER);
+		expect(packageRestart.stderr).not.toContain(RECOVERY_FAILED_MARKER);
 		// An install result is not evidence: a tab reconnecting now keeps its copy.
+		expect(removals(packageRestart.frames)).toEqual([]);
 		expect(currentTab(packageRestart.frames, open)).toEqual([NOTICE]);
 		expect(legacyTab(packageRestart.frames, legacy)).toEqual([NOTICE]);
 		// When the completion restart's conclusive check finds nothing pending
 		// and that process exits before either tab reconnects.
 		await session({ check: NOTHING_PENDING });
-		// Then a later process whose own refresh fails still withdraws it on reconnect.
+		// Then a later process whose own refresh fails retracts exactly that release.
 		const reconnect = await session({ check: REFRESH_FAILS });
+		expect(removals(reconnect.frames)).toEqual([
+			["withdraw", NOTICE, RELEASE_2],
+		]);
 		expect(currentTab(reconnect.frames, open)).toEqual([]);
-		expect(legacyTab(reconnect.frames, legacy)).toEqual([]);
+		// A pre-#183 tab cannot tell releases apart, so it waits for current evidence.
+		expect(legacyTab(reconnect.frames, legacy)).toEqual([NOTICE]);
 		// And a freshly opened tab never shows it.
 		expect(currentTab(reconnect.frames)).toEqual([]);
-		// When a later process finds a newer release, a tab holding it is never told to drop it.
+		// When the next process's own check proves nothing pending, every tab drops it.
+		const proven = await session({ check: NOTHING_PENDING });
+		expect(currentTab(proven.frames, open)).toEqual([]);
+		expect(legacyTab(proven.frames, legacy)).toEqual([]);
+		// When a later process finds a newer release, it shows it and removes nothing.
 		const newer = await session({ check: pending("3") });
-		expect(currentTab(newer.frames, [NOTICE])).toEqual([NOTICE]);
-		expect(legacyTab(newer.frames, [NOTICE])).toEqual([NOTICE]);
-		// And a restart that runs no check keeps it for every reconnecting tab.
+		expect(shows(newer.frames)).toEqual([[NOTICE, RELEASE_3]]);
+		expect(removals(newer.frames)).toEqual([]);
+		// And a restart that runs no check shows nothing and leaves release 3 alone.
 		const idle = await session();
-		expect(currentTab(idle.frames, [NOTICE])).toEqual([NOTICE]);
+		expect(shows(idle.frames)).toEqual([]);
+		expect(removals(idle.frames)).toEqual([["withdraw", NOTICE, RELEASE_2]]);
+		expect(currentTab(idle.frames, copy(RELEASE_3))).toEqual([NOTICE]);
 		expect(legacyTab(idle.frames, [NOTICE])).toEqual([NOTICE]);
 	},
 	SEQUENCE_TIMEOUT_MS,
 );
 
 test(
-	"a same-boot downgrade and re-upgrade cannot replay an obsolete withdrawal",
+	"a recovery that fails is never taken for the update's restart",
 	async () => {
-		// Given this build recorded a withdrawal.
-		await session({ check: pending("2"), build: "build-a" });
-		await session({ check: NOTHING_PENDING, build: "build-a" });
-		// When an older backend, which never writes the record, shows a new offer in the
-		// same boot, and the re-upgraded build restarts before its first check.
-		const upgraded = await session({ build: "build-b" });
-		// Then tabs holding the older backend's offer keep it.
-		expect(currentTab(upgraded.frames, [NOTICE])).toEqual([NOTICE]);
-		expect(legacyTab(upgraded.frames, [NOTICE])).toEqual([NOTICE]);
-		// Control: the build that wrote the record still restores its own withdrawal.
-		const same = await session({ build: "build-a" });
-		expect(currentTab(same.frames, [NOTICE])).toEqual([]);
-		expect(legacyTab(same.frames, [NOTICE])).toEqual([]);
+		const failed = await session({ recoverInstall: true, recoverFails: true });
+		expect(failed.exit).not.toBe(RESTART_EXIT_CODE);
+		expect(failed.stdout).not.toContain(RECOVERY_RESTART_MARKER);
+		expect(failed.stderr).toContain(RECOVERY_FAILED_MARKER);
+	},
+	SEQUENCE_TIMEOUT_MS,
+);
+
+test(
+	"an older backend's offer survives the restored backend's replay of an earlier withdrawal",
+	async () => {
+		// Given offer 2 shown in two tabs, then proven obsolete and recorded.
+		const shown = await session({ check: pending("2") });
+		const offline = tabOf(shown.frames);
+		await session({ check: NOTHING_PENDING });
+		// When a rollback runs an older backend: it shows its offer the way main
+		// did and never touches the record.
+		const older = await session({ olderBackend: true });
+		const holding = tabOf(older.frames, tabOf(shown.frames));
+		const legacy = legacyTab(older.frames);
+		expect([...holding]).toEqual([[NOTICE, undefined]]);
+		// When the original backend is restored and replays before any check.
+		const restored = await session();
+		// Then only the exact withdrawn release is named, never the name alone.
+		expect(removals(restored.frames)).toEqual([
+			["withdraw", NOTICE, RELEASE_2],
+		]);
+		// So the older backend's offer survives in both frontend generations.
+		expect(currentTab(restored.frames, holding)).toEqual([NOTICE]);
+		expect(legacyTab(restored.frames, legacy)).toEqual([NOTICE]);
+		// While a tab that still holds the withdrawn release 2 drops it.
+		expect(currentTab(restored.frames, offline)).toEqual([]);
 	},
 	SEQUENCE_TIMEOUT_MS,
 );
@@ -178,20 +257,22 @@ test(
 	"a fresh backend that finds an already-dismissed successor withdraws the predecessor",
 	async () => {
 		const before = await session({ check: pending("2") });
-		const open = currentTab(before.frames);
+		const open = tabOf(before.frames);
 		// Given the operator dismissed release 3 elsewhere.
 		await writeFile(
 			dismissals,
 			JSON.stringify({
 				version: 1,
-				entries: [{ key: "update:cerastream=3", dismissedAt: 1 }],
+				entries: [{ key: RELEASE_3, dismissedAt: 1 }],
 			}),
 		);
 		// When a fresh process conclusively finds release 3.
 		const successor = await session({ check: pending("3") });
 		expect(currentTab(successor.frames, open)).toEqual([]);
-		// Then the withdrawal also survives into the next process.
-		expect(currentTab((await session()).frames, open)).toEqual([]);
+		// Then the withdrawal also survives into the next process, for either release.
+		const next = await session();
+		expect(currentTab(next.frames, open)).toEqual([]);
+		expect(currentTab(next.frames, copy(RELEASE_3))).toEqual([]);
 		// And a release that was never dismissed is offered again.
 		expect(currentTab((await session({ check: pending("4") })).frames)).toEqual(
 			[NOTICE],
@@ -204,10 +285,13 @@ test(
 	"a dismissal reaches other tabs after a restart and covers that release only",
 	async () => {
 		const dismissed = await session({ check: pending("2"), dismiss: true });
-		expect(currentTab(dismissed.frames, [NOTICE])).toEqual([]);
-		expect(currentTab((await session()).frames, [NOTICE])).toEqual([]);
+		expect(currentTab(dismissed.frames, copy(RELEASE_2))).toEqual([]);
+		expect(currentTab((await session()).frames, copy(RELEASE_2))).toEqual([]);
 		expect(
-			currentTab((await session({ check: pending("2") })).frames, [NOTICE]),
+			currentTab(
+				(await session({ check: pending("2") })).frames,
+				copy(RELEASE_2),
+			),
 		).toEqual([]);
 		expect(currentTab((await session({ check: pending("3") })).frames)).toEqual(
 			[NOTICE],
@@ -217,46 +301,96 @@ test(
 );
 
 test(
-	"a record from an earlier boot cannot withdraw anything after a reboot",
+	"a restored withdrawal retracts only the release it proved obsolete, however many restarts later",
 	async () => {
+		await session({ check: pending("2") });
 		await session({ check: NOTHING_PENDING });
-		expect(currentTab((await session()).frames, [NOTICE])).toEqual([]);
-		// When the device rebooted (an older CeraUI may have run meanwhile).
-		const rebooted = await session({ boot: "boot-b" });
-		// Then the old verdict says nothing about what a tab now shows.
-		expect(currentTab(rebooted.frames, [NOTICE])).toEqual([NOTICE]);
-		// Until this boot's own conclusive check proves it.
-		const proven = await session({ boot: "boot-b", check: NOTHING_PENDING });
-		expect(currentTab(proven.frames, [NOTICE])).toEqual([]);
+		for (let restart = 0; restart < 2; restart++) {
+			const replay = (await session()).frames;
+			expect(currentTab(replay, copy(RELEASE_2))).toEqual([]);
+			// A different release, or a copy from an older producer, is left alone.
+			expect(currentTab(replay, copy(RELEASE_3))).toEqual([NOTICE]);
+			expect(currentTab(replay, copy())).toEqual([NOTICE]);
+		}
+		// Until a process's own conclusive check proves nothing is pending at all.
+		const proven = await session({ check: NOTHING_PENDING });
+		expect(currentTab(proven.frames, copy())).toEqual([]);
+		expect(legacyTab(proven.frames, [NOTICE])).toEqual([]);
 	},
 	SEQUENCE_TIMEOUT_MS,
 );
 
 test(
-	"startup derives nothing from a missing, corrupt or wrong-kind record, or unreadable dismissals",
+	"startup derives nothing without a readable, current-schema record and acknowledgement store",
 	async () => {
-		expect(currentTab((await session()).frames, [NOTICE])).toEqual([NOTICE]);
-		await writeFile(record, "{");
-		expect(currentTab((await session()).frames, [NOTICE])).toEqual([NOTICE]);
-		await rm(record);
-		await mkdir(record);
-		expect(currentTab((await session()).frames, [NOTICE])).toEqual([NOTICE]);
-		await rm(record, { recursive: true });
-		// A forged multi-package key cannot be smuggled into one row's version.
+		// Given no record at all.
+		expect(currentTab((await session()).frames, copy(RELEASE_2))).toEqual([
+			NOTICE,
+		]);
+		// Given an acknowledgement for release 2, so an accepted record would act.
 		await writeFile(
-			record,
+			dismissals,
 			JSON.stringify({
 				version: 1,
-				boot: "boot-a",
-				offer: [{ name: "cerastream", version: "2,srtla=3" }],
+				entries: [
+					{ key: RELEASE_2, dismissedAt: 1 },
+					{ key: "update:cerastream=2,srtla=3", dismissedAt: 1 },
+				],
 			}),
 		);
-		expect(currentTab((await session()).frames, [NOTICE])).toEqual([NOTICE]);
+		const row = { name: "cerastream", version: "2" };
+		const refused: Record<string, string> = {
+			corrupt: "{",
+			prior: JSON.stringify({ version: 1, boot: "b", build: "x", offer: [] }),
+			future: JSON.stringify({ version: 3, offer: [row], withdrawn: [] }),
+			duplicate: `{"version":2,"offer":[],"withdrawn":[],"withdrawn":[[${JSON.stringify(row)}]]}`,
+			oversized: JSON.stringify({
+				version: 2,
+				offer: [row],
+				withdrawn: [],
+			}).padEnd(5000, " "),
+			// A forged multi-package key cannot be smuggled into one row's version.
+			forged: JSON.stringify({
+				version: 2,
+				offer: [{ name: "cerastream", version: "2,srtla=3" }],
+				withdrawn: [],
+			}),
+		};
+		for (const [kind, text] of Object.entries(refused)) {
+			await writeFile(record, text);
+			const tab =
+				kind === "forged"
+					? copy("update:cerastream=2,srtla=3")
+					: copy(RELEASE_2);
+			expect([kind, currentTab((await session()).frames, tab)]).toEqual([
+				kind,
+				[NOTICE],
+			]);
+		}
+		// Control: the same acknowledgement under a valid record does retract release 2.
+		await writeFile(
+			record,
+			JSON.stringify({ version: 2, offer: [row], withdrawn: [] }),
+		);
+		expect(currentTab((await session()).frames, copy(RELEASE_2))).toEqual([]);
 		await rm(record);
+		await rm(dismissals);
+		// Given a directory where the record should be.
+		await mkdir(record);
+		expect(currentTab((await session()).frames, copy(RELEASE_2))).toEqual([
+			NOTICE,
+		]);
+		await rm(record, { recursive: true });
 		// Given an offer whose dismissal state cannot be read.
-		await session({ check: pending("2") });
+		const shown = await session({ check: pending("2") });
+		const open = tabOf(shown.frames);
 		await mkdir(dismissals);
-		expect(currentTab((await session()).frames, [NOTICE])).toEqual([NOTICE]);
+		expect(currentTab((await session()).frames, open)).toEqual([NOTICE]);
+		// A proven absence needs no acknowledgement store, live and on later replay.
+		const absent = await session({ check: NOTHING_PENDING });
+		expect(currentTab(absent.frames, open)).toEqual([]);
+		expect(legacyTab(absent.frames, [NOTICE])).toEqual([]);
+		expect(currentTab((await session()).frames, open)).toEqual([]);
 	},
 	SEQUENCE_TIMEOUT_MS,
 );
@@ -269,13 +403,15 @@ test(
 		// When a newer offer is found but cannot be persisted.
 		const unwritten = await session({ check: pending("2"), failWrites: true });
 		// Then it is not shown, so no older verdict can later contradict a tab.
-		expect(currentTab(unwritten.frames)).toEqual([]);
+		expect(shows(unwritten.frames)).toEqual([]);
+		expect(removals(unwritten.frames)).toEqual([]);
 		// Given the offer is durable and shown.
 		const shown = await session({ check: pending("2") });
-		const open = currentTab(shown.frames);
-		expect(open).toEqual([NOTICE]);
+		const open = tabOf(shown.frames);
+		expect([...open]).toEqual([[NOTICE, RELEASE_2]]);
 		// When "nothing pending" cannot be persisted, the offer is not withdrawn.
 		const kept = await session({ check: NOTHING_PENDING, failWrites: true });
+		expect(removals(kept.frames)).toEqual([]);
 		expect(currentTab(kept.frames, open)).toEqual([NOTICE]);
 		// And the next process still trusts the durable offer, not the lost verdict.
 		expect(currentTab((await session()).frames, open)).toEqual([NOTICE]);

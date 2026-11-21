@@ -3,7 +3,9 @@
 // initializes the notice like main.ts, optionally runs the real package check
 // over scripted APT, dismisses what it shows, prints the frames an
 // authenticating tab receives, and may then recover a finished install, which
-// ends this process through the update's deliberate restart.
+// ends this process through the update's deliberate restart. With `olderBackend`
+// it is a backend from before this notice owner: it shows the notice the way
+// main did, never initializes or writes the offer record.
 import type { NotificationsMessage } from "@ceraui/rpc/schemas";
 import { defaultAptSpaceDeps } from "../../modules/system/apt-space-admission.ts";
 import { initCeraliveUpdateNotice } from "../../modules/system/ceralive-update-notice.ts";
@@ -14,21 +16,24 @@ import { setUpdateCapabilityPathForTest } from "../../modules/system/update-capa
 import { setUpdateSettingsFilePathForTest } from "../../modules/system/update-settings.ts";
 import {
 	getPersistentNotifications,
+	notificationBroadcast,
 	notificationDismiss,
 	replayedRemovalFrames,
 } from "../../modules/ui/notifications.ts";
 import {
 	type AptScript,
 	FRAMES_PREFIX,
+	RECOVERY_FAILED_MARKER,
+	RECOVERY_RESTART_MARKER,
 	RESTART_EXIT_CODE,
 	scriptedApt,
 } from "./ceralive-update-apt.ts";
 
 export type SessionStep = {
 	readonly record: string;
-	readonly boot: string;
-	readonly build?: string;
 	readonly scratch: string;
+	readonly olderBackend?: boolean;
+	readonly recoverFails?: boolean;
 	readonly check?: AptScript;
 	readonly dismiss?: boolean;
 	readonly failWrites?: boolean;
@@ -51,18 +56,26 @@ updates.setAptCommandRunnerForTest((argv) =>
 	scriptedApt(step.check ?? {})(argv),
 );
 
-initCeraliveUpdateNotice({
-	path: step.record,
-	boot: step.boot,
-	...(step.build === undefined ? {} : { build: step.build }),
-	...(step.failWrites
-		? {
-				write: () => {
-					throw new Error("state directory is read-only");
-				},
-			}
-		: {}),
-});
+if (step.olderBackend)
+	notificationBroadcast(
+		"ceralive_update",
+		"warning",
+		"A CeraLive update is available. Open Settings → Software Updates to install it.",
+		0,
+		true,
+		true,
+	);
+else
+	initCeraliveUpdateNotice({
+		path: step.record,
+		...(step.failWrites
+			? {
+					write: () => {
+						throw new Error("state directory is read-only");
+					},
+				}
+			: {}),
+	});
 if (step.check) await updates.runSoftwareUpdateCheck();
 if (step.dismiss) {
 	const seen = getPersistentNotifications(true).show.find(
@@ -81,17 +94,31 @@ const frames: unknown[] = [
 process.stdout.write(`${FRAMES_PREFIX}${JSON.stringify(frames)}\n`);
 
 if (step.recoverInstall) {
-	// Nothing else in this session throws once the frames are out, so this exit names the cause.
+	// Only the update's own success restart counts; any other error is a failed recovery.
 	for (const event of ["uncaughtException", "unhandledRejection"] as const)
-		process.on(event, () => process.exit(RESTART_EXIT_CODE));
+		process.on(event, (error) => {
+			if (
+				error instanceof Error &&
+				error.message === updates.UPDATE_RESTART_REASON
+			) {
+				process.stdout.write(`${RECOVERY_RESTART_MARKER}\n`);
+				process.exit(RESTART_EXIT_CODE);
+			}
+			process.stderr.write(`${RECOVERY_FAILED_MARKER} ${String(error)}\n`);
+			process.exit(1);
+		});
 	Object.assign(defaultAptSpaceDeps, {
 		run: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
 	});
 	await updates.recoverSoftwareUpdateIfRunning({
-		recover: async () => ({
-			completion: Promise.resolve(0),
-			wasAlreadyFinished: true,
-		}),
+		recover: step.recoverFails
+			? async () => {
+					throw new Error("detached update unit unreadable");
+				}
+			: async () => ({
+					completion: Promise.resolve(0),
+					wasAlreadyFinished: true,
+				}),
 		scheduleRetry: () => undefined,
 		resumePeriodicChecks: () => undefined,
 	});

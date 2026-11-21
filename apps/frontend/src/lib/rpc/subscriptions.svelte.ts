@@ -64,6 +64,7 @@ import {
 	dismiss as dismissNotification,
 	push as pushNotification,
 	pushReplayed as pushReplayedNotification,
+	retract as retractNotification,
 } from "$lib/stores/notifications.svelte";
 import {
 	resetPairingState,
@@ -1053,7 +1054,7 @@ function handleMessage(
 
 		// SINGULAR: the backend broadcasts `buildMsg("notification", …)`; the plural never hits the wire.
 		case "notification": {
-			// `show` adds/updates; typed `remove` drops by id. A malformed frame is
+			// `show` adds/updates; typed `remove` drops by id; `withdraw` drops only the named release. A malformed frame is
 			// skipped rather than cast blindly into the store.
 			const parsed = notificationsMessageSchema.safeParse(data);
 			if (!parsed.success) break;
@@ -1065,6 +1066,9 @@ function handleMessage(
 			}
 			for (const entry of message.remove ?? []) {
 				dismissNotification(entry.id);
+			}
+			for (const entry of message.withdraw ?? []) {
+				retractNotification(entry.id, entry.release);
 			}
 			break;
 		}

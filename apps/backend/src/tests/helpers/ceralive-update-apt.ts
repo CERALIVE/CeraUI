@@ -26,6 +26,10 @@ export type AptScript = {
 export const FRAMES_PREFIX = "auth-replay:";
 // Exit status of a session ended by the finished update's own restart (an uncaught throw).
 export const RESTART_EXIT_CODE = 75;
+// Printed only when the process ends through exactly that restart.
+export const RECOVERY_RESTART_MARKER = "recovery:restart";
+// Printed when recovery ends the process any other way.
+export const RECOVERY_FAILED_MARKER = "recovery:failed";
 
 export const CERALIVE_SOURCE =
 	"https://apt.ceralive.tv/dists/stable/binary-arm64 ./ Packages";
