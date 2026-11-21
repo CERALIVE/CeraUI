@@ -698,6 +698,15 @@
 	}
 }
 
+/* A full track of static stripes signals activity, not a measured fraction. */
+.package-update-progress[data-state='indeterminate'] {
+	background-image: repeating-linear-gradient(
+		135deg,
+		var(--primary) 0 0.2rem,
+		transparent 0.2rem 0.45rem
+	);
+}
+
 /* ── E-ink: kill all motion ──────────────────────
    E-paper repaints ghost; any animation or transition smears. Unlike
    `prefers-reduced-motion` (which uses a 0.01ms shrink so reduced-but-present

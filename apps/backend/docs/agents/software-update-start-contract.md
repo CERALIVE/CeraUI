@@ -41,6 +41,10 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   valid package transaction may run for minutes.
   Each changed count publishes both `updating` and `update_state`; a `Get:N`
   line shows a fetch started, not that it completed.
+  The pinned unit's download-only plan can be broader than its install.
+  Live observation and reattachment count only the install summary after
+  the download-only boundary. If either is absent, install activity has no
+  numeric total. Reattachment gets the mode from the validated unit identity.
 - **Reattachment identity is a safety boundary.** Adoption requires the
   exact unit id and transient fragment path, transient-service description/type,
   exact non-duplicated `[Service]` stdout/stderr append destinations, no pre/post

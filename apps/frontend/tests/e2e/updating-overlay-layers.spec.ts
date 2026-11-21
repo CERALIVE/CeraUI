@@ -7,10 +7,10 @@ test("shows activity for a silent single-package download before counting instal
 }) => {
 	await page.goto("/");
 	await ensureAuthenticated(page);
-	const sendProgress = (total: number, downloading: number, unpacking: number) =>
+	const sendProgress = (total: number, downloading: number, unpacking: number, setting_up = 0) =>
 		pageRpc.call(["dev", "emit"], {
 			type: "status",
-			payload: { updating: { total, downloading, unpacking, setting_up: 0 } },
+			payload: { updating: { total, downloading, unpacking, setting_up } },
 		});
 	const overlay = page.getByTestId("updating-overlay");
 	const phase = overlay.getByTestId("update-phase");
@@ -19,6 +19,17 @@ test("shows activity for a silent single-package download before counting instal
 	await sendProgress(0, 0, 0);
 	await expect(phase).toHaveText("Preparing or downloading packages");
 	await expect(bar).toHaveAttribute("data-state", "indeterminate");
+	await expect(bar).toHaveCSS("background-image", /repeating-linear-gradient/);
+
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	await page.locator("html").evaluate((root) => root.setAttribute("data-display", "eink"));
+	await sendProgress(0, 0, 1, 1);
+	await expect(phase).toHaveText("Installing");
+	await expect(bar).toHaveAttribute("data-state", "indeterminate");
+	await expect(bar).not.toHaveAttribute("aria-valuenow");
+	await expect(bar).toHaveCSS("background-image", /repeating-linear-gradient/);
+	await expect(bar).toHaveCSS("animation-name", "none");
+	await expect(overlay.getByText("1/0", { exact: true })).toHaveCount(0);
 
 	await sendProgress(1, 1, 0);
 	await expect(phase).toHaveText("Downloading");
@@ -29,6 +40,7 @@ test("shows activity for a silent single-package download before counting instal
 	await expect(phase).toHaveText("Unpacking");
 	await expect(bar).toHaveAttribute("aria-valuenow", "2");
 	await expect(bar).toHaveAttribute("aria-valuemax", "3");
+	await expect(bar).toHaveCSS("background-image", "none");
 });
 
 // The update takeover once carried a decorative wash: an overflow-hidden layer

@@ -68,6 +68,7 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 			kind: "finished",
 			exitCode: 0,
 			cleanup: "stop",
+			pinnedInstall: true,
 		});
 	});
 
@@ -79,7 +80,7 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 					"SubState=running",
 				),
 			),
-		).toEqual({ kind: "running" });
+		).toEqual({ kind: "running", pinnedInstall: true });
 	});
 
 	it.each(["--allow-unauthenticated", "-o", "-y", "+x", ".x", ":x", "~x"])(

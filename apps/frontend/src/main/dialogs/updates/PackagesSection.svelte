@@ -184,7 +184,7 @@ $effect(() => () => clearTimeout(checkTimeout));
 				{m["settings.dialogs.updating"]()}
 			</div>
 			<!-- APT does not report bytes transferred on this stream. -->
-			<Progress aria-label={m["updatingOverlay.progress"]()} value={progressValue ?? null} />
+			<Progress class="package-update-progress" aria-label={m["updatingOverlay.progress"]()} value={progressValue ?? null} />
 		</div>
 	{:else if starting}
 		<div class="flex items-center gap-2 text-sm font-medium" aria-live="polite">

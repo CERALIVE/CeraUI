@@ -1,13 +1,30 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { statusResponseSchema } from "@ceraui/rpc";
 
+import { buildAptAllInstallArgs } from "../modules/system/apt-all-packages.ts";
+import { softwareUpdateOutputPaths } from "../modules/system/software-update-output.ts";
 import {
+	recoverDetachedAptUpgrade,
+	runDetachedAptAll,
+} from "../modules/system/software-update-process.ts";
+import { expectedAptAllScript } from "../modules/system/software-update-service-contract.ts";
+import { parseDetachedAptServiceProbe } from "../modules/system/software-update-service-state.ts";
+import {
+	createSoftwareUpdateProcessMonitor,
 	recoverSoftwareUpdateIfRunning,
 	resetSoftwareUpdateState,
+	startSoftwareUpdate,
 } from "../modules/system/software-updates.ts";
 import { addClient, getClients, removeClient } from "../rpc/events.ts";
 import { buildInitialStatus } from "../rpc/procedures/status.procedure.ts";
 import type { AppWebSocket } from "../rpc/types.ts";
+import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
+import { updateHarness } from "./software-updates-preflight-harness.ts";
+
+useSessionOwnerForFile();
 
 const update = {
 	total: 0,
@@ -118,3 +135,130 @@ describe("software-update status reaches clients across recovery", () => {
 		]);
 	});
 });
+
+const pinnedArgs = buildAptAllInstallArgs(
+	[{ name: "cerastream", version: "2" }],
+	"any",
+);
+
+function inspectPinnedUpdate(finished: boolean) {
+	const stdout = [
+		"Id=ceralive-software-update.service",
+		"FragmentPath=/run/systemd/transient/ceralive-software-update.service",
+		"Description=CeraLive software update",
+		"LoadState=loaded",
+		`ActiveState=${finished ? "failed" : "active"}`,
+		`SubState=${finished ? "failed" : "running"}`,
+		"Transient=yes",
+		"Type=exec",
+		"RemainAfterExit=yes",
+		"User=",
+		"ExecStartPre=",
+		"ExecStartPost=",
+		"StandardOutput=append",
+		"StandardError=append",
+		`ExecMainCode=${finished ? 1 : 0}`,
+		`ExecMainStatus=${finished ? 100 : 0}`,
+		`ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -x /run/lock/ceralive-update.lock /bin/sh -ec ${expectedAptAllScript(pinnedArgs, [])} ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=42 ; code=exited ; status=100 }`,
+	].join("\n");
+	return parseDetachedAptServiceProbe({ stdout, stderr: "", exitCode: 0 }, [
+		"systemctl",
+		"show",
+	]);
+}
+
+describe.each(["live", "reattached"] as const)(
+	"pinned install progress (%s)",
+	(mode) => {
+		test.each([
+			["two download candidates, one installed", 2, true, true],
+			["one download candidate, one installed", 1, true, true],
+			["missing install summary", 2, true, false],
+			["missing phase boundary", 2, false, true],
+		] as const)(
+			"uses only a proven install denominator: %s",
+			async (_name, downloadCount, boundary, installSummary) => {
+				await using _h = await updateHarness();
+				const paths = softwareUpdateOutputPaths();
+				const received: unknown[] = [];
+				const client = socket(received);
+				addClient(client);
+				const dir = await mkdtemp(join(tmpdir(), "ceraui-pinned-progress-"));
+				const file = join(dir, "stdout");
+				const fetch = `${downloadCount} upgraded, 0 newly installed, 0 to remove.\nGet:1 https://example.invalid cerastream [48 MB]\n`;
+				const install = `${boundary ? "Download complete and in download only mode\n" : ""}Reading package lists...\n${installSummary ? "1 upgraded, 0 newly installed, 0 to remove.\n" : ""}Unpacking cerastream (2) over (1) ...\nSetting up cerastream (2) ...\n`;
+				let finished = mode === "reattached";
+				let started = finished;
+				const deps = {
+					outputPaths: paths,
+					inspect: async () =>
+						started
+							? inspectPinnedUpdate(finished)
+							: { kind: "absent" as const },
+					start: async () => {
+						started = true;
+					},
+					prepareOutput: async () => {},
+					readOutput: async (path: string, offset: number) => {
+						const bytes =
+							path === paths.stdout ? await readFile(file) : Buffer.alloc(0);
+						return { bytes: bytes.subarray(offset), nextOffset: bytes.length };
+					},
+					sleep: async () => {
+						if (finished) throw new Error("unexpected second poll");
+						await writeFile(file, fetch + install);
+						finished = true;
+					},
+					cleanup: async () => {},
+				};
+				try {
+					await writeFile(file, finished ? fetch + install : fetch);
+					if (mode === "live") {
+						expect(startSoftwareUpdate()).toEqual({ started: true });
+						expect(
+							await runDetachedAptAll(
+								pinnedArgs,
+								"any",
+								createSoftwareUpdateProcessMonitor().handlers,
+								deps,
+							),
+						).toBe(100);
+					} else {
+						expect(
+							await recoverSoftwareUpdateIfRunning({
+								recover: (handlers) =>
+									recoverDetachedAptUpgrade(handlers, deps),
+								scheduleRetry: () => {},
+								resumePeriodicChecks: () => {},
+							}),
+						).toBe(true);
+					}
+
+					const frames = received.flatMap((frame) => {
+						if (typeof frame !== "object" || !frame || !("status" in frame))
+							return [];
+						const parsed = statusResponseSchema.safeParse(frame.status);
+						return parsed.success ? [parsed.data] : [];
+					});
+					const installTotal = boundary && installSummary ? 1 : 0;
+					const progress = {
+						total: installTotal,
+						downloading: installTotal,
+						unpacking: 1,
+						setting_up: 1,
+					};
+					expect(frames).toContainEqual({
+						updating: progress,
+						update_state: { kind: "installing", progress },
+					});
+					for (const frame of frames)
+						if (frame.update_state?.kind === "downloading")
+							expect(frame.update_state.progress.total).toBe(0);
+				} finally {
+					removeClient(client);
+					await rm(dir, { recursive: true, force: true });
+				}
+			},
+		);
+	},
+);

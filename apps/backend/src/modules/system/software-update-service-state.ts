@@ -21,11 +21,12 @@ import {
 
 export type DetachedAptServiceState =
 	| { readonly kind: "absent" }
-	| { readonly kind: "running" }
+	| { readonly kind: "running"; readonly pinnedInstall?: true }
 	| {
 			readonly kind: "finished";
 			readonly exitCode: number;
 			readonly cleanup: "stop" | "reset-failed";
+			readonly pinnedInstall?: true;
 	  };
 
 export type FinishedDetachedAptServiceState = Extract<
@@ -122,6 +123,7 @@ export function parseDetachedAptServiceProbe(
 	if (state.kind === "absent") {
 		return state;
 	}
-	validateDetachedAptServiceIdentity(result.stdout);
-	return state;
+	return validateDetachedAptServiceIdentity(result.stdout) === "pinned"
+		? { ...state, pinnedInstall: true }
+		: state;
 }

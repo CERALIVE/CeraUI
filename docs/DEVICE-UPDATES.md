@@ -9,6 +9,11 @@ continues to append to durable logs. The UI cannot infer download bytes from
 When unpacking starts and APT has reported a package count, the overlay shows
 install steps. Only the terminal APT result establishes success or failure.
 
+For pinned updates, a broader download plan cannot set the install total.
+Progress uses the separate install summary, including when replayed from disk.
+When the install count is unknown, static stripes show activity without a
+percentage, including in reduced-motion and e-ink modes.
+
 If the backend reconnects during an update and has not yet read the retained
 log, the overlay shows indeterminate activity until it gets usable counters.
 

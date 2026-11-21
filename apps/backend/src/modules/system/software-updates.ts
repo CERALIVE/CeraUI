@@ -1528,47 +1528,89 @@ type SoftwareUpdateProcessMonitor = {
 export function deriveAptProgress(
 	current: SoftUpdateStatus,
 	output: string,
+	pinnedInstall = false,
 ): SoftUpdateStatus {
-	const parsedTotal = parseUpgradePackageCount(output);
-	const total = parsedTotal.ok ? parsedTotal.value : current.total;
+	// The validated pinned unit runs two apt commands into one file. Only
+	// a complete download-only boundary can attribute a summary to install.
+	const boundary = pinnedInstall
+		? /^Download complete and in download only mode\r?$/m.exec(output)
+		: null;
+	const installOutput = boundary
+		? output.slice(boundary.index + boundary[0].length)
+		: output;
+	const installSummary = pinnedInstall
+		? boundary &&
+			/^\d+ upgraded, \d+ newly installed,[^\r\n]*\r?\n/m.exec(
+				installOutput,
+			)?.[0]
+		: output;
+	const parsedTotal = parseUpgradePackageCount(installSummary || "");
+	const total = parsedTotal.ok
+		? parsedTotal.value
+		: pinnedInstall
+			? 0
+			: current.total;
 	let highestGet = current.downloading;
-	for (const match of output.matchAll(/Get:(\d+)/g)) {
+	for (const match of installOutput.matchAll(/Get:(\d+)/g)) {
 		highestGet = Math.max(highestGet, Number.parseInt(match[1] ?? "", 10));
 	}
-	const unpacking = Math.min(output.match(/Unpacking /g)?.length ?? 0, total);
-	const settingUp = Math.min(output.match(/Setting up /g)?.length ?? 0, total);
+	const limit = pinnedInstall && total === 0 ? Infinity : total;
+	const unpacking = Math.min(
+		installOutput.match(/Unpacking /g)?.length ?? 0,
+		limit,
+	);
+	const settingUp = Math.min(
+		installOutput.match(/Setting up /g)?.length ?? 0,
+		limit,
+	);
 	return {
 		...current,
 		total,
-		downloading: unpacking > 0 ? total : Math.min(highestGet, total),
+		downloading:
+			unpacking > 0 || (pinnedInstall && settingUp > 0)
+				? total
+				: Math.min(highestGet, total),
 		unpacking,
 		setting_up: settingUp,
 	};
 }
 
-export function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonitor {
+export function createSoftwareUpdateProcessMonitor(
+	prefetched = "",
+): SoftwareUpdateProcessMonitor {
 	let rebootAfterUpgrade = false;
-	let aptLog = "";
+	let pinnedInstall = false;
+	let aptLog = prefetched;
 	let aptErr = "";
+
+	const observeRebootPackages = () => {
+		if (rebootAfterUpgrade) return;
+		const count = parseUpgradePackageCount(aptLog);
+		if (!count.ok || count.value === 0) return;
+		const packageList = parseAptUpgradedPackages(aptLog);
+		rebootAfterUpgrade =
+			packageList.ok &&
+			packageList.value !== undefined &&
+			packageListIncludes(packageList.value, rebootPackageList);
+	};
+	if (prefetched) observeRebootPackages();
 
 	const handleStdoutChunk = (data: string) => {
 		aptLog += data;
 
 		if (!softUpdateStatus) return;
 		const previous = softUpdateStatus;
-		const next = deriveAptProgress(previous, aptLog);
+		const next = deriveAptProgress(
+			previous,
+			aptLog.slice(prefetched.length),
+			pinnedInstall,
+		);
 		softUpdateStatus = next;
-		if (next.total === 0 && aptLog.includes(" upgraded")) {
+		if (!pinnedInstall && next.total === 0 && aptLog.includes(" upgraded")) {
 			const count = parseUpgradePackageCount(aptLog);
 			if (!count.ok) logParseError(count);
 		}
-		if (!rebootAfterUpgrade && next.total > 0) {
-			const packageList = parseAptUpgradedPackages(aptLog);
-			rebootAfterUpgrade =
-				packageList.ok &&
-				packageList.value !== undefined &&
-				packageListIncludes(packageList.value, rebootPackageList);
-		}
+		observeRebootPackages();
 		if (
 			previous.total !== next.total ||
 			previous.downloading !== next.downloading ||
@@ -1583,6 +1625,9 @@ export function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonit
 	};
 
 	const handlers: SoftwareUpdateOutputHandlers = {
+		onPinnedInstall: () => {
+			pinnedInstall = true;
+		},
 		onStdout: handleStdoutChunk,
 		onStderr: (data) => {
 			aptErr += data;
@@ -1930,8 +1975,7 @@ async function prepareSoftwareUpdate(
 	}
 	pendingPackageSuccess.assertEffectsAllowed();
 	notePlannedShutdown("software_update");
-	const monitor = createSoftwareUpdateProcessMonitor();
-	if (prefetched) monitor.handlers.onStdout(prefetched);
+	const monitor = createSoftwareUpdateProcessMonitor(prefetched);
 	const finalFamily = installFamily(network.reachability.verdict);
 	const detachedArgs =
 		capable && network.pinned

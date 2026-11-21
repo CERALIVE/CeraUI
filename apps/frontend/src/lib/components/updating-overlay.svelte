@@ -201,7 +201,7 @@ onMount(() => {
 							class="bg-muted/30 border-border/50 h-2.5 overflow-hidden rounded-full border backdrop-blur-sm"
 						>
 							<Progress
-								class="h-full rounded-full"
+								class="package-update-progress h-full rounded-full"
 								max={Number.isFinite(total) ? total : 1}
 								value={showCounts ? progress : null}
 								aria-label={m["updatingOverlay.progress"]()}
@@ -279,7 +279,7 @@ onMount(() => {
 						>
 							{m["updatingOverlay.unpacking"]()}
 						</span>
-						{#if details?.unpacking > 0}
+						{#if showCounts && details.unpacking > 0}
 							<span class="text-muted-foreground text-[9px] sm:text-xs"
 								>{details.unpacking}/{details.total}</span
 							>
@@ -311,7 +311,7 @@ onMount(() => {
 						>
 							{m["updatingOverlay.installing"]()}
 						</span>
-						{#if details?.setting_up > 0}
+						{#if showCounts && details.setting_up > 0}
 							<span class="text-muted-foreground text-[9px] sm:text-xs"
 								>{details.setting_up}/{details.total}</span
 							>

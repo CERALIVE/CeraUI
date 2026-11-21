@@ -145,7 +145,9 @@ export function expectedAptAllScript(
 	return `/usr/bin/apt-get -d -y upgrade --with-new-pkgs${family.length ? ` ${family.join(" ")}` : ""} && /usr/bin/apt-get ${install.join(" ")}`;
 }
 
-export function validateDetachedAptServiceIdentity(output: string): void {
+export function validateDetachedAptServiceIdentity(
+	output: string,
+): "pinned" | "legacy" {
 	if (
 		output.split("\n").filter((line) => line.startsWith("ExecStart="))
 			.length !== 1
@@ -211,7 +213,7 @@ export function validateDetachedAptServiceIdentity(output: string): void {
 		if (canonical !== script) {
 			throw new DetachedAptServiceIdentityError("flock wrapper does not match");
 		}
-		return;
+		return "pinned";
 	}
 	if (
 		!execStart.startsWith("{ path=/usr/bin/apt-get ; ") ||
@@ -229,6 +231,7 @@ export function validateDetachedAptServiceIdentity(output: string): void {
 			"apt-get operation does not match",
 		);
 	}
+	return "legacy";
 }
 
 export function validateDetachedAptServiceFragment(fragment: string): void {
