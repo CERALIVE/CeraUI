@@ -4,7 +4,7 @@ import path from "node:path";
 import type { WebSocketRoute } from "@playwright/test";
 
 import { expect, test } from "./fixtures/index.js";
-import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers/index.js";
+import { ensureAuthenticated, evidencePath, navigateTo, openLiveDetails } from "./helpers/index.js";
 
 /**
  * Task 21 — bonded-ingest telemetry panel on the Live destination.
@@ -116,6 +116,7 @@ test.describe("Task 21 — ingest stats panel", () => {
 	}) => {
 		pushTelemetry(TWO_LINKS);
 
+		await openLiveDetails(page);
 		const panel = page.getByTestId("ingest-stats");
 		await expect(panel).toBeVisible({ timeout: 15_000 });
 
@@ -167,6 +168,7 @@ test.describe("Task 21 — ingest stats panel", () => {
 			{ ...(TWO_LINKS[1] as TelemetryEntry), stale: true },
 		]);
 
+		await openLiveDetails(page);
 		const panel = page.getByTestId("ingest-stats");
 		await expect(panel).toBeVisible({ timeout: 15_000 });
 

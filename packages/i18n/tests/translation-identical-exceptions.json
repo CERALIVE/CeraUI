@@ -254,6 +254,16 @@
 		"locales": ["de", "es", "pt-BR"],
 		"reason": "es devtools.newVersionDesc uses \"actualización de software\", retaining the engineering term in translated prose. de devtools.newVersionDesc reads \"Ein Software-Update ist zur Installation bereit.\"; pt-BR updatingOverlay.title reads \"Atualizando o Software do Dispositivo\", keeping the term untranslated."
 	},
+	"live.glance.details": {
+		"value": "Details",
+		"locales": ["de"],
+		"reason": "Details is the standard German word and the label the de catalog already uses for other disclosures (network.status.details)."
+	},
+	"live.glance.title": {
+		"value": "Stream",
+		"locales": ["de"],
+		"reason": "German uses the loanword Stream throughout the catalog (live.stopStream: \"Stream stoppen\"); a section heading for the running stream."
+	},
 	"live.goLive.gate.destination": {
 		"value": "Destination",
 		"locales": ["fr"],
