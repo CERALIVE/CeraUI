@@ -290,20 +290,6 @@ export function dismissNotification(
 	return next;
 }
 
-/**
- * Remove `name` only while the copy held offers exactly `release`: a scoped
- * retraction never touches a copy another producer showed. Returns a new map.
- */
-export function retractNotification(
-	active: ReadonlyMap<string, ActiveNotification>,
-	name: string,
-	release: string,
-): Map<string, ActiveNotification> {
-	return active.get(name)?.release === release
-		? dismissNotification(active, name)
-		: new Map(active);
-}
-
 // ============================================
 // Reactive store (runes — lazily created)
 // ============================================
@@ -312,7 +298,6 @@ interface NotificationStore {
 	push(notification: Notification): void;
 	replay(notification: Notification): void;
 	dismiss(name: string): void;
-	retract(name: string, release: string): void;
 	getActive(): ActiveNotification[];
 	getPersistent(): ActiveNotification[];
 	clear(): void;
@@ -351,9 +336,6 @@ function createNotificationStore(): NotificationStore {
 		},
 		dismiss: (name) => {
 			active = dismissNotification(active, name);
-		},
-		retract: (name, release) => {
-			active = retractNotification(active, name, release);
 		},
 		getActive: () => activeList,
 		getPersistent: () => persistentList,
@@ -410,11 +392,6 @@ export function pushReplayed(notification: Notification): void {
 /** Dismiss the active notification with the given `name`. */
 export function dismiss(name: string): void {
 	store().dismiss(name);
-}
-
-/** Retract `name` only if the copy shown offers exactly `release`. */
-export function retract(name: string, release: string): void {
-	store().retract(name, release);
 }
 
 /** The current ordered list of active notifications. */

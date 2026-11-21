@@ -62,9 +62,9 @@ import { ingestBuffering } from "$lib/stores/buffering.svelte";
 import { markSessionExpired } from "$lib/stores/connection-ux.svelte";
 import {
 	dismiss as dismissNotification,
+	getPersistent,
 	push as pushNotification,
 	pushReplayed as pushReplayedNotification,
-	retract as retractNotification,
 } from "$lib/stores/notifications.svelte";
 import {
 	resetPairingState,
@@ -1067,9 +1067,10 @@ function handleMessage(
 			for (const entry of message.remove ?? []) {
 				dismissNotification(entry.id);
 			}
-			for (const entry of message.withdraw ?? []) {
-				retractNotification(entry.id, entry.release);
-			}
+			// A scoped retraction never touches a copy of another release or producer.
+			for (const { id, release } of message.withdraw ?? [])
+				if (getPersistent().some((n) => n.name === id && n.release === release))
+					dismissNotification(id);
 			break;
 		}
 

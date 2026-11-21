@@ -88,7 +88,7 @@ re-raised anything yet. The tab open during an update still runs the previous
 bundle, which is why the withdrawal relies on long-shipped `remove` handling.
 A restarted backend retracts an earlier verdict only with a `withdraw` entry
 naming a `release`: the store drops the notice only while the copy it holds
-carries exactly that `release` (`retractNotification`), so a copy another backend
+carries exactly that `release` (the `withdraw` branch of the decoder), so a copy another backend
 showed since is never removed by an old verdict. Older bundles strip the key.
 Dismissal sends the shown `revision` and `publisher` with the name, so the device
 dismisses a release-scoped notice only for the release this tab showed. Coverage:
