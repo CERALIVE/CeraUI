@@ -856,6 +856,26 @@ describe("StorageSection: cleanup", () => {
 		);
 	});
 
+	it("switches to the sizeless cleanup label when deletion succeeds with an unknown size", async () => {
+		rpc.logs.deleteLegacyDebug.mockResolvedValue({
+			ok: true,
+			storage: logStorage({ legacyDebugBytes: null }),
+		});
+		mount(logStorage({ legacyDebugBytes: 2 * MIB }));
+
+		await fireEvent.click(
+			screen.getByRole("button", {
+				name: fill(copy.deleteLegacy, { size: "2\u00a0MB" }),
+			}),
+		);
+
+		const button = await screen.findByRole<HTMLButtonElement>("button", {
+			name: copy.deleteLegacyUnknown,
+		});
+		expect(button.disabled).toBe(false);
+		expect(screen.queryByTestId("storage-cleanup-failed")).toBeNull();
+	});
+
 	it("shows a typed Clear all failure without a success line or history broadcast", async () => {
 		rpc.logs.clearAll.mockResolvedValue({ ok: false, error: "READ_FAILED" });
 		mount();

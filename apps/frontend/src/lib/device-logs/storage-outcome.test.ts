@@ -263,6 +263,29 @@ describe("successful replies: every required member, absent, null or of the wron
 		},
 	);
 
+	const unknownSize = { ...storage, legacyDebugBytes: null };
+	it.each([
+		[
+			"logs.setRetention and deleteLegacyDebug",
+			storageReply,
+			{ ok: true, storage: unknownSize },
+		],
+		[
+			"logs.clearAll",
+			clearAllReply,
+			{ ok: true, storage: unknownSize, bootsBefore: 17, bootsAfter: 4 },
+		],
+	] as const)(
+		"settles %s with storage.legacyDebugBytes null without reporting an error",
+		async (_name, read, reply) => {
+			const report = vi.spyOn(console, "error").mockImplementation(() => {});
+			expect(
+				await settleAction<ActionReply>(() => Promise.resolve(reply), read),
+			).toEqual(reply);
+			expect(report).not.toHaveBeenCalled();
+		},
+	);
+
 	it("still reads a reply that carries fields a newer device adds", () => {
 		const reply = { ok: true, storage, bootsBefore: 17, bootsAfter: 4 };
 		expect(
