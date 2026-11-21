@@ -55,6 +55,7 @@ export class RawFollowSession {
 	#subscription: string | null = null;
 	#queued: LogFollowMessage[] | null = null;
 	#checkpoint: string | null = null;
+	#pendingIdleRestart = false;
 
 	constructor(
 		private readonly deps: Pick<
@@ -148,6 +149,7 @@ export class RawFollowSession {
 		this.state = "idle";
 		this.ended = null;
 		this.#checkpoint = null;
+		this.#pendingIdleRestart = false;
 		return live;
 	}
 
@@ -167,6 +169,14 @@ export class RawFollowSession {
 
 	setHeadPosition(cursor: string): void {
 		this.#checkpoint = cursor;
+	}
+
+	/** A boot ID proves a restart, but only an accepted head page proves the reload. */
+	headPlaced(): void {
+		if (!this.#pendingIdleRestart) return;
+		this.#pendingIdleRestart = false;
+		this.ended = "boot_changed";
+		this.context.feedback.announce("restarted");
 	}
 
 	/** Continue from the resume position, or the head learned while bootstrapping. */
@@ -202,6 +212,7 @@ export class RawFollowSession {
 		this.state = "starting";
 		this.busy = true;
 		this.ended = null;
+		this.#pendingIdleRestart = false;
 		const { feedback, rows } = this.context;
 		if (feedback.failure?.op === "follow") feedback.failure = null;
 		this.#subscription = null;
@@ -296,8 +307,9 @@ export class RawFollowSession {
 		const idleRestart = reason === "boot_changed" && !this.#followIntent;
 		this.#forget();
 		this.state = idleRestart ? "idle" : "stopped";
-		this.ended = reason;
-		this.context.feedback.announce(idleRestart ? "restarted" : "stopped");
+		this.#pendingIdleRestart = idleRestart;
+		this.ended = idleRestart ? null : reason;
+		if (!idleRestart) this.context.feedback.announce("stopped");
 		if (reason !== "cleared" && reason !== "boot_changed") return;
 		this.#checkpoint = null;
 		void this.context.readHead();

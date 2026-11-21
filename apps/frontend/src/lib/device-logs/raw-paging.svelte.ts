@@ -37,7 +37,7 @@ interface PagingContext {
 	readonly feedback: RawFeedback;
 	readonly follow: Pick<
 		RawFollowSession,
-		"detach" | "busy" | "afterHeadRead" | "setHeadPosition"
+		"detach" | "busy" | "headPlaced" | "afterHeadRead" | "setHeadPosition"
 	>;
 	filter(): RawFilter;
 }
@@ -121,8 +121,10 @@ export class RawPaging {
 		const result = await this.#query(query);
 		if (generation !== this.#generation) return;
 		this.loading = null;
-		if (result.ok) this.#place("bottom", edge, result);
-		else {
+		if (result.ok) {
+			this.#place("bottom", edge, result);
+			follow.headPlaced();
+		} else {
 			this.bottom = null;
 			feedback.failure = { code: result.error, op: "first" };
 		}

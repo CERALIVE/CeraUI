@@ -1499,6 +1499,69 @@ describe("RawLogsTab: follow", () => {
 		},
 	);
 
+	it("waits for the new boot's head before showing or announcing its entries", async () => {
+		const running = fourBoots().find(({ current }) => current);
+		if (!running) throw new Error("missing running boot fixture");
+		await mounted(page(["old-boot-row"]));
+		setConnectionState("disconnected");
+		await screen.findByTestId("raw-disconnected");
+		logs.boots.mockResolvedValueOnce([running]);
+		const head = Promise.withResolvers<QueryPage>();
+		logs.query.mockReturnValueOnce(head.promise);
+
+		setConnectionState("connected");
+
+		await waitFor(() => expect(logs.query).toHaveBeenCalledTimes(2));
+		expect(screen.queryByTestId("raw-follow-ended")).toBeNull();
+		expect(screen.getByTestId("raw-status").textContent).toBe("");
+		head.resolve(
+			page([], {
+				bootId: running.bootId,
+				entries: [entry("running-boot-row", { bootId: running.bootId })],
+			}),
+		);
+		await waitFor(() => expect(cursors()).toEqual(["running-boot-row"]));
+		expect(screen.getByTestId("raw-follow-ended").textContent).toBe(
+			en.systemLogs.follow.bootChangedIdle,
+		);
+		expect(screen.getByTestId("raw-status").textContent).toBe(
+			en.systemLogs.follow.bootChangedIdle,
+		);
+	});
+
+	it("withholds the idle restart notice after a failed head read until Retry succeeds", async () => {
+		const running = fourBoots().find(({ current }) => current);
+		if (!running) throw new Error("missing running boot fixture");
+		await mounted(page(["old-boot-row"]));
+		setConnectionState("disconnected");
+		await screen.findByTestId("raw-disconnected");
+		logs.boots.mockResolvedValueOnce([running]);
+		logs.query.mockResolvedValueOnce({ ok: false, error: "READ_FAILED" });
+
+		setConnectionState("connected");
+
+		expect((await screen.findByTestId("raw-failure")).dataset.code).toBe(
+			"READ_FAILED",
+		);
+		expect(screen.queryByTestId("raw-follow-ended")).toBeNull();
+		expect(screen.getByTestId("raw-status").textContent).toBe("");
+		logs.query.mockResolvedValueOnce(
+			page([], {
+				bootId: running.bootId,
+				entries: [entry("running-boot-row", { bootId: running.bootId })],
+			}),
+		);
+		await fireEvent.click(screen.getByTestId("raw-failure-action"));
+		await waitFor(() => expect(cursors()).toEqual(["running-boot-row"]));
+		expect(screen.queryByTestId("raw-failure")).toBeNull();
+		expect(screen.getByTestId("raw-follow-ended").textContent).toBe(
+			en.systemLogs.follow.bootChangedIdle,
+		);
+		expect(screen.getByTestId("raw-status").textContent).toBe(
+			en.systemLogs.follow.bootChangedIdle,
+		);
+	});
+
 	it("pages skipped rows in place and transfers focus when the gap is filled", async () => {
 		await mounted();
 		await startFollowing();
