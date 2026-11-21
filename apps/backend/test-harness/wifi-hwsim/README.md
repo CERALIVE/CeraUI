@@ -251,9 +251,9 @@ The simulator now uses Debian 13 trixie to match the device OS and its
 NetworkManager `1.52.x` series; its generic amd64 kernel remains different.
 Device qualification remains separate. hwsim does not model physical driver,
 firmware, RF, USB/PCI topology or physical interface limits, so a passing VM gate
-does not prove slot-limit behavior. Duplicate-address behavior is unqualified
-here: its later gate must record the actual Debian result with a working
-distinct-address control, rather than infer it from an upstream error string.
+does not prove slot-limit behavior. See [Equal permanent MAC and guest port
+identity](#equal-permanent-mac-and-guest-port-identity) for the current
+duplicate-address simulator procedure and its distinct-address control.
 
 The unchanged `integration-test.sh` accepts any state output containing
 `connected`, including `disconnected`. Its PASS marker alone is insufficient:
@@ -276,11 +276,8 @@ loads a host module and remains outside shared CI.
 ### Later gates
 
 Run `replacement.ts` on four radios to check that Start refuses after the
-physical names are swapped during saved-profile refresh before Up. Duplicate-address
-testing needs a working distinct-address creation control first. Require state
-100 **and the intended active profile/SSID** for association; the integration
-script's `connected` substring alone accepts `disconnected`. Establish positive
-controls before treating application refusal as a passing negative control.
+physical names are swapped during saved-profile refresh before Up. The
+duplicate-address gate has its own [current procedure](#equal-permanent-mac-and-guest-port-identity).
 
 ### Equal permanent MAC and guest port identity
 
