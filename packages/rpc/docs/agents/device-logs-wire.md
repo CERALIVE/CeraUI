@@ -17,7 +17,7 @@ Shapes: `src/schemas/logs.schema.ts`. Procedures: `src/contracts/logs.contract.t
 | `deleteLegacyDebug` | none | `logStorageOutputSchema` | `{ ok: false, error }` |
 | `clearAll` | none | `logClearAllOutputSchema` (includes boot counts) | `{ ok: false, error }` |
 | `createExport` | `logExportInputSchema` | `logExportOutputSchema` | `{ ok: false, error }` |
-| `previewBundle` | none | `logBundleManifestSchema` | thrown oRPC error, code `READ_FAILED` or `BUSY`; a classified `READ_FAILED` message is `READ_FAILED:<stage>` |
+| `previewBundle` | none | `logBundleManifestSchema` | thrown oRPC error, code and message `READ_FAILED` or `BUSY`; a classified `READ_FAILED` adds `data.stage` |
 | `createBundle` | none | `logExportOutputSchema` | `{ ok: false, error }` |
 
 Sources: `src/contracts/logs.contract.ts`;
@@ -31,10 +31,12 @@ Sources: `src/contracts/logs.contract.ts`;
 
 The preview stage is the closed `logBundleFailureReasonSchema` in
 `logs-boot.schema.ts`: `collision`, `pattern`, `budget`, `journal_read`,
-`deadline`, `abort` and `internal`. `logBundleFailureMessage()` keeps the bare
-`READ_FAILED` for `internal`, so an unclassified refusal reads as before, and
-`logBundleFailureReason()` reads any `READ_FAILED:<word>` from a newer device
-with an unknown stage as `internal`. The message never carries a cause, input
+`deadline`, `abort` and `internal`. It is additive: the message stays exactly
+`READ_FAILED` or `BUSY`, which older and federated frontends match, and the
+stage rides oRPC `data.stage` and the WS envelope's optional `stage` (the
+adapter forwards only a value this schema accepts). An unclassified refusal and
+BUSY carry no stage, so their envelopes are unchanged. A frontend reads a
+missing or unknown stage as `internal`. The stage never carries a cause, input
 text, secret or position. `createBundle` keeps `{ ok: false, error }` without a
 stage.
 

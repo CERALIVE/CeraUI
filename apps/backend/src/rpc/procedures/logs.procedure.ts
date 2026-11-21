@@ -2,7 +2,6 @@ import {
 	logAroundInputSchema,
 	logAroundOutputSchema,
 	logBootInfoSchema,
-	logBundleFailureMessage,
 	logBundleManifestSchema,
 	logClearAllOutputSchema,
 	logExportInputSchema,
@@ -116,9 +115,12 @@ export const previewLogBundleProcedure = authedProcedure
 		} catch (error) {
 			const { code, reason } =
 				error instanceof BundleReadError ? error : new BundleReadError();
-			throw new ORPCError(code, {
-				message: reason === "busy" ? code : logBundleFailureMessage(reason),
-			});
+			// Older clients match the message exactly; the stage rides beside it.
+			const data =
+				reason === "busy" || reason === "internal"
+					? undefined
+					: { stage: reason };
+			throw new ORPCError(code, { message: code, data });
 		}
 	});
 

@@ -597,8 +597,9 @@ describe("SharingFlow: support bundle", () => {
 		previewBundle
 			.mockRejectedValueOnce(
 				new RpcError({
-					message: "READ_FAILED:collision",
+					message: "READ_FAILED",
 					code: "INTERNAL_ERROR",
+					stage: "collision",
 				}),
 			)
 			.mockRejectedValueOnce(busyPreview())
@@ -623,11 +624,15 @@ describe("SharingFlow: support bundle", () => {
 		expect(flow.bundleFailure).toBeNull();
 
 		previewBundle.mockRejectedValueOnce(
-			new RpcError({ message: "READ_FAILED:pattern", code: "INTERNAL_ERROR" }),
+			new RpcError({
+				message: "READ_FAILED",
+				code: "INTERNAL_ERROR",
+				stage: "journal_read",
+			}),
 		);
 		flow.closeBundle();
 		await flow.openBundle();
-		expect(flow.bundleFailure).toBe("pattern");
+		expect(flow.bundleFailure).toBe("journal_read");
 		flow.closeBundle();
 		expect(flow.bundleFailure).toBeNull();
 	});

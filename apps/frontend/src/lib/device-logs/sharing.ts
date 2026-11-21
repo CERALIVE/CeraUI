@@ -11,7 +11,7 @@ import type {
 	LogQueryInput,
 } from "@ceraui/rpc/schemas";
 import {
-	logBundleFailureReason,
+	logBundleFailureReasonSchema,
 	logBundleManifestSchema,
 	logExportOutputSchema,
 } from "@ceraui/rpc/schemas";
@@ -72,24 +72,30 @@ export function refusal(error: LogErrorCode): SharingProblem {
 }
 
 /**
- * The stage at which the device refused to prepare the bundle, from its
- * sanitized READ_FAILED message (which includes the fail-closed collision of a
- * held secret with a structured value), or null when the device did not refuse.
+ * The stage at which the device refused to prepare the bundle: its sanitized
+ * READ_FAILED (which includes the fail-closed collision of a held secret with a
+ * structured value) and the envelope's additive stage. An older device sends no
+ * stage, which reads as unclassified. Null when the device did not refuse.
  */
 export function previewFailure(error: unknown): LogBundleFailureReason | null {
-	return error instanceof RpcError
-		? logBundleFailureReason(error.message)
-		: null;
+	if (!(error instanceof RpcError) || error.message !== "READ_FAILED")
+		return null;
+	return logBundleFailureReasonSchema.safeParse(error.stage).data ?? "internal";
 }
 
-/** Each stage's sentence; stages share one only where the remedy is the same. */
+/**
+ * Each stage's sentence. Only collision (change that credential) and
+ * journal_read (restart the device) need a remedy the band's Retry and Export
+ * this view do not already offer; the 64 KiB secret budget is not reachable
+ * with real credentials. The SPA size budget leaves no room for the rest.
+ */
 export const BUNDLE_FAILURE_COPY_KEYS = {
 	collision: "systemLogs.sharing.bundleFailedCollision",
-	pattern: "systemLogs.sharing.bundleFailedPattern",
-	budget: "systemLogs.sharing.bundleFailedBudget",
 	journal_read: "systemLogs.sharing.bundleFailedJournal",
-	deadline: "systemLogs.sharing.bundleFailedInterrupted",
-	abort: "systemLogs.sharing.bundleFailedInterrupted",
+	pattern: "systemLogs.sharing.bundleFailed",
+	budget: "systemLogs.sharing.bundleFailed",
+	deadline: "systemLogs.sharing.bundleFailed",
+	abort: "systemLogs.sharing.bundleFailed",
 	internal: "systemLogs.sharing.bundleFailed",
 } as const satisfies Record<LogBundleFailureReason, string>;
 

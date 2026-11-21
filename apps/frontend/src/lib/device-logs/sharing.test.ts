@@ -1,8 +1,5 @@
 // @vitest-environment jsdom
-import {
-	LOG_ERROR_CODES,
-	logBundleFailureReasonSchema,
-} from "@ceraui/rpc/schemas";
+import { LOG_ERROR_CODES } from "@ceraui/rpc/schemas";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { getBackendHttpUrl } from "$lib/env";
@@ -91,10 +88,11 @@ describe("previewProblem: a rejected bundle preview", () => {
 			new RpcError({ message: "READ_FAILED", code: "INTERNAL_ERROR" }),
 		],
 		[
-			"a READ_FAILED naming its stage",
+			"a READ_FAILED carrying its stage",
 			new RpcError({
-				message: "READ_FAILED:collision",
+				message: "READ_FAILED",
 				code: "INTERNAL_ERROR",
+				stage: "collision",
 			}),
 		],
 		["a reply that never arrived", new Error("Request timeout: logs.x")],
@@ -106,32 +104,23 @@ describe("previewProblem: a rejected bundle preview", () => {
 });
 
 describe("previewFailure: the stage of a preview the device refused", () => {
-	it.each(logBundleFailureReasonSchema.options.filter((r) => r !== "internal"))(
-		"reads READ_FAILED:%s as that stage",
-		(reason) => {
-			expect(
-				previewFailure(
-					new RpcError({
-						message: `READ_FAILED:${reason}`,
-						code: "INTERNAL_ERROR",
-					}),
-				),
-			).toBe(reason);
-		},
-	);
+	const refused = (stage?: string, message = "READ_FAILED") =>
+		new RpcError({ message, code: "INTERNAL_ERROR", stage });
 
-	it("reads the bare READ_FAILED and an unknown stage as an unclassified refusal", () => {
-		for (const message of ["READ_FAILED", "READ_FAILED:future_stage"])
-			expect(
-				previewFailure(new RpcError({ message, code: "INTERNAL_ERROR" })),
-			).toBe("internal");
+	it("reads the envelope's additive stage on the legacy READ_FAILED message", () => {
+		expect(previewFailure(refused("collision"))).toBe("collision");
+	});
+
+	it("reads a READ_FAILED from an older device, or with a stage it does not know, as unclassified", () => {
+		expect(previewFailure(refused())).toBe("internal");
+		expect(previewFailure(refused("future_stage"))).toBe("internal");
 	});
 
 	it.each([
-		["BUSY", new RpcError({ message: "BUSY", code: "INTERNAL_ERROR" })],
+		["BUSY, even with a stage", refused("collision", "BUSY")],
 		["a timeout", new Error("Request timeout: logs.previewBundle")],
-		["a local error with the same text", new Error("READ_FAILED:collision")],
-		["a thrown non-error", "READ_FAILED:collision"],
+		["a local error with the same text", new Error("READ_FAILED")],
+		["a thrown non-error", "READ_FAILED"],
 	])("reads %s as no device refusal", (_name, error) => {
 		expect(previewFailure(error)).toBeNull();
 	});

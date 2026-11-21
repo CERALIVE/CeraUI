@@ -13,9 +13,11 @@ const MAX_COMPRESSED = 8 * 1024 * 1024;
 const TAIL_RESERVE = 512;
 export const BUNDLE_TIME_MS = 60_000;
 type Section = LogBundleManifest["sections"][number]["id"];
-// sd_journal_get_cursor's exact format: journald's own hex counters, hashes and IDs.
+// sd_journal_get_cursor's exact output: SD_ID128 strings for s and b, PRIx64
+// (no leading zeros) for i, m, t and x. Each value is journald's own random file
+// ID, counter, timestamp or field-hash XOR, so a digit run in one is no identifier.
 const NATIVE_CURSOR =
-	/^s=[0-9a-f]{32};i=[0-9a-f]{1,16};b=([0-9a-f]{32});m=[0-9a-f]{1,16};t=[0-9a-f]{1,16};x=[0-9a-f]{1,16}$/;
+	/^s=[0-9a-f]{32};i=(?:0|[1-9a-f][0-9a-f]{0,15});b=([0-9a-f]{32});m=(?:0|[1-9a-f][0-9a-f]{0,15});t=(?:0|[1-9a-f][0-9a-f]{0,15});x=(?:0|[1-9a-f][0-9a-f]{0,15})$/;
 
 function bootSpan(
 	value: unknown,
@@ -25,7 +27,6 @@ function bootSpan(
 	if (!expected || !/^[0-9a-f]{32}$/.test(expected)) return;
 	if (!inCursor) return value === expected ? [0, expected.length] : undefined;
 	if (typeof value !== "string") return;
-	// Such a cursor carries no caller text, so a digit run in its hash is no identifier.
 	if (NATIVE_CURSOR.exec(value)?.[1] === expected) return [0, value.length];
 	const [boot, duplicate] = value.matchAll(/(?:^|;)b=([^;]*)/g);
 	if (!boot || duplicate || boot[1] !== expected) return;
@@ -70,8 +71,13 @@ export async function buildBundle(
 	]);
 	for (const event of snapshot.events) {
 		if (knownBoots.has(event.bootId)) bootFields.set(event, event.bootId);
-		// device_started and previous_boot_unclean name the boot before theirs.
-		const named = event.params.previousBootId ?? event.params.bootId;
+		// The two producers whose params name the boot before theirs.
+		const named =
+			event.code === "device_started"
+				? event.params.previousBootId
+				: event.code === "previous_boot_unclean"
+					? event.params.bootId
+					: undefined;
 		if (typeof named === "string" && knownBoots.has(named))
 			bootFields.set(event.params, named);
 	}

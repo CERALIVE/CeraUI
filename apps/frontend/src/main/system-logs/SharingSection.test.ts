@@ -635,27 +635,23 @@ describe("SharingSection: support bundle", () => {
 
 	it.each([
 		["collision", sharing.bundleFailedCollision],
-		["pattern", sharing.bundleFailedPattern],
-		["budget", sharing.bundleFailedBudget],
 		["journal_read", sharing.bundleFailedJournal],
-		["deadline", sharing.bundleFailedInterrupted],
-		["abort", sharing.bundleFailedInterrupted],
+		["pattern", sharing.bundleFailed],
+		["budget", sharing.bundleFailed],
+		["deadline", sharing.bundleFailed],
+		["abort", sharing.bundleFailed],
 	] as const)(
-		"states the device's %s stage in its own sentence, with Retry and Export this view",
+		"states the device's %s stage with its remedy's sentence, with Retry and Export this view",
 		async (stage, text) => {
 			vi.spyOn(console, "error").mockImplementation(() => {});
 			previewBundle.mockRejectedValueOnce(
-				new RpcError({
-					message: `READ_FAILED:${stage}`,
-					code: "INTERNAL_ERROR",
-				}),
+				new RpcError({ message: "READ_FAILED", code: "INTERNAL_ERROR", stage }),
 			);
 			await open("bundle");
 			const body = await dialog(sharing.bundle);
 
 			const band = await within(body).findByTestId("sharing-bundle-problem");
 			expect(band.querySelector("p")?.textContent?.trim()).toBe(text);
-			expect(text).not.toBe(sharing.bundleFailed);
 			expect(band.textContent).not.toContain(stage);
 			expect(
 				within(band).getByRole("button", { name: en.systemLogs.action.retry }),

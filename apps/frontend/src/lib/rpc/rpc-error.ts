@@ -24,6 +24,8 @@ export interface RpcErrorEnvelope {
 	code: string;
 	fields?: string[];
 	retryable?: boolean;
+	/** A refused support bundle's closed stage, beside the unchanged message. */
+	stage?: string;
 }
 
 /**
@@ -35,6 +37,7 @@ export class RpcError extends Error {
 	readonly code: string;
 	readonly fields: string[];
 	readonly retryable: boolean | undefined;
+	readonly stage: string | undefined;
 
 	constructor(envelope: RpcErrorEnvelope) {
 		super(envelope.message);
@@ -42,6 +45,7 @@ export class RpcError extends Error {
 		this.code = envelope.code;
 		this.fields = envelope.fields ?? [];
 		this.retryable = envelope.retryable;
+		this.stage = envelope.stage;
 	}
 }
 
