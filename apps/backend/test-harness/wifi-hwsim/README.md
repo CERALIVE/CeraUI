@@ -291,6 +291,10 @@ before CeraUI runs each port case. The same-path pair must refuse admission;
 the distinct-path pair must activate independent profiles. This is simulated
 port evidence, not physical-port qualification.
 
+Before booting the VM, validate both generated rules with
+`bash apps/backend/test-harness/wifi-hwsim/vm/duplicate-address-ports.sh --verify-rules`.
+This uses `udevadm verify` on temporary files without loading any host rules.
+
 ### #603 secret boundary
 
 Run the following from the committed CeraUI checkout, with `TMPDIR` set to
