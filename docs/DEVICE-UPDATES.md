@@ -1370,10 +1370,11 @@ candidate equal to the planned version; on legacy images through a simulation of
 the unchanged install argv). A failed or stale refresh, a failed discovery, one
 unverified candidate, a settled install and an empty restarted process change
 nothing. Its last verdict is written to `ceralive_update_offer.json` before any
-broadcast. A tab that missed the withdrawal during an update's restarts drops the
-notice at its next reconnect when it shows exactly the withdrawn release; a copy an
-older backend showed, and a v2026.6.x or 7.x tab, keep it until the running process's
-first conclusive check, which removes it in every frontend (also in the string form). A dismissal counts
+broadcast. The withdrawn state is replayed on every reconnect and repeated by every
+conclusive check, so a tab that missed it during an update's restarts, including a
+v2026.6.x or 7.x tab (string form), drops the notice at its next reconnect even if
+that backend's own refresh fails. After a rollback through an older backend, a current
+tab keeps that backend's offer; older tabs drop it until the next conclusive check. A dismissal counts
 only for the release the dismissing tab showed. Kernel, OS and `update:*` notices
 are never touched. Contract: [the retraction contract](../apps/backend/docs/agents/a-persistent-notification-must-be-retractable.md#the-ceralive-update-offer-is-withdrawn-only-by-a-conclusive-check-exists).
 Known gap: the orchestrator's package `updates-available` notice above has no

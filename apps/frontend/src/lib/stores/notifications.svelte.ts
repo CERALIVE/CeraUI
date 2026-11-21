@@ -53,7 +53,7 @@ import {
 export interface ActiveNotification
 	extends Pick<
 		Notification,
-		"key" | "params" | "publisher" | "revision" | "release"
+		"key" | "params" | "publisher" | "revision" | "issuance"
 	> {
 	/** Stable dedup key (== {@link Notification.name}). */
 	name: string;
@@ -209,8 +209,8 @@ export function toActiveNotification(
 		...(notification.publisher !== undefined
 			? { publisher: notification.publisher }
 			: {}),
-		...(notification.release !== undefined
-			? { release: notification.release }
+		...(notification.issuance !== undefined
+			? { issuance: notification.issuance }
 			: {}),
 		isDismissable: notification.is_dismissable,
 		isPersistent: notification.is_persistent,

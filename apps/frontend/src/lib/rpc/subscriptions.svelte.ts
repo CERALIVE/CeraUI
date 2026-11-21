@@ -1054,7 +1054,7 @@ function handleMessage(
 
 		// SINGULAR: the backend broadcasts `buildMsg("notification", …)`; the plural never hits the wire.
 		case "notification": {
-			// `show` adds/updates; typed `remove` drops by id; `withdraw` drops only the named release. A malformed frame is
+			// `show` adds/updates; typed `remove` drops by id, or only the issuances its scope names. A malformed frame is
 			// skipped rather than cast blindly into the store.
 			const parsed = notificationsMessageSchema.safeParse(data);
 			if (!parsed.success) break;
@@ -1064,13 +1064,17 @@ function handleMessage(
 				if (message.replay) pushReplayedNotification(notification);
 				else pushNotification(notification);
 			}
-			for (const entry of message.remove ?? []) {
-				dismissNotification(entry.id);
-			}
-			// A scoped retraction never touches a copy of another release or producer.
-			for (const { id, release } of message.withdraw ?? [])
-				if (getPersistent().some((n) => n.name === id && n.release === release))
+			for (const { id, issuance: scope } of message.remove ?? []) {
+				// A scoped removal retires only this lineage's issuances up to its generation.
+				const held =
+					scope && getPersistent().find((n) => n.name === id)?.issuance;
+				if (
+					!scope ||
+					(held?.lineage === scope.lineage &&
+						held.generation <= scope.generation)
+				)
 					dismissNotification(id);
+			}
 			break;
 		}
 

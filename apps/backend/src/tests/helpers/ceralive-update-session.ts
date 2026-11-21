@@ -12,6 +12,7 @@ import { initCeraliveUpdateNotice } from "../../modules/system/ceralive-update-n
 import * as updates from "../../modules/system/software-updates.ts";
 import { setStreamLivenessSourceForTest } from "../../modules/system/stream-liveness-source.ts";
 import { setStreamReconciliationCompletedForTest } from "../../modules/system/stream-reconciliation-latch.ts";
+import { setCeraliveSourcesFileForTest } from "../../modules/system/update-apt-channel.ts";
 import { setUpdateCapabilityPathForTest } from "../../modules/system/update-capabilities.ts";
 import { setUpdateSettingsFilePathForTest } from "../../modules/system/update-settings.ts";
 import {
@@ -33,6 +34,7 @@ export type SessionStep = {
 	readonly record: string;
 	readonly scratch: string;
 	readonly olderBackend?: boolean;
+	readonly capable?: boolean;
 	readonly recoverFails?: boolean;
 	readonly check?: AptScript;
 	readonly dismiss?: boolean;
@@ -43,8 +45,23 @@ export type SessionStep = {
 const step = JSON.parse(process.argv[2] ?? "") as SessionStep;
 setStreamReconciliationCompletedForTest(true);
 setStreamLivenessSourceForTest(() => "idle");
-setUpdateCapabilityPathForTest(`${step.scratch}/absent-capabilities.json`);
+// A capable image declares apt-all-packages; otherwise the legacy discovery runs.
+const capabilities = `${step.scratch}/capabilities.json`;
+if (step.capable)
+	await Bun.write(
+		capabilities,
+		JSON.stringify({
+			schema: 1,
+			features: ["apt-all-packages"],
+			apt_uid: 42042,
+			ota_uid: 42041,
+		}),
+	);
+setUpdateCapabilityPathForTest(
+	step.capable ? capabilities : `${step.scratch}/absent-capabilities.json`,
+);
 setUpdateSettingsFilePathForTest(`${step.scratch}/settings.json`);
+setCeraliveSourcesFileForTest(`${step.scratch}/sources`);
 updates.setAptReachabilityProbeForTest(async () => ({
 	ipv4: "ok",
 	ipv6: "ok",

@@ -123,8 +123,8 @@ describe("persistent notifications are retractable", () => {
 		expect(persistentNames()).toEqual(["no_internet"]);
 	});
 
-	it("a scoped withdrawal drops only the copy of the release it names", () => {
-		const offer = (release?: string) =>
+	it("a scoped removal retires only this lineage's issuances up to its generation", () => {
+		const offer = (issuance?: { lineage: string; generation: number }) =>
 			handlers.message?.("notification", {
 				show: [
 					{
@@ -135,24 +135,37 @@ describe("persistent notifications are retractable", () => {
 						is_persistent: true,
 						duration: 0,
 						revision: 1,
-						...(release !== undefined ? { release } : {}),
+						...(issuance !== undefined ? { issuance } : {}),
 					},
 				],
 			});
-		const withdraw = (release: string) =>
+		const removeScoped = (issuance: unknown) =>
 			handlers.message?.("notification", {
-				withdraw: [{ id: "ceralive_update", release }],
+				remove: [{ id: "ceralive_update", revision: 2, issuance }],
 			});
-		// A copy from a producer that predates releases is never matched.
+		const scope = { lineage: "lineage-a", generation: 5 };
+		// Kept: a copy with no issuance (another producer), another lineage, a newer issuance.
+		for (const held of [
+			undefined,
+			{ lineage: "lineage-b", generation: 1 },
+			{ lineage: "lineage-a", generation: 6 },
+		]) {
+			offer(held);
+			removeScoped(scope);
+			expect([held, persistentNames()]).toEqual([held, ["ceralive_update"]]);
+		}
+		// A malformed scope is a malformed frame: nothing is removed.
+		removeScoped({ lineage: "lineage-a", generation: "5" });
+		expect(persistentNames()).toEqual(["ceralive_update"]);
+		// Retired: the scoped issuance and an older one of the same lineage.
+		for (const generation of [5, 3]) {
+			offer({ lineage: "lineage-a", generation });
+			removeScoped(scope);
+			expect([generation, persistentNames()]).toEqual([generation, []]);
+		}
+		// An unscoped removal still removes by name, as every earlier frontend does.
 		offer();
-		withdraw("update:cerastream=2");
-		expect(persistentNames()).toEqual(["ceralive_update"]);
-		// Nor is a copy of a different release.
-		offer("update:cerastream=3");
-		withdraw("update:cerastream=2");
-		expect(persistentNames()).toEqual(["ceralive_update"]);
-		// The named release is dropped.
-		withdraw("update:cerastream=3");
+		remove("ceralive_update", 3);
 		expect(persistentNames()).toEqual([]);
 	});
 });

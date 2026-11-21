@@ -42,9 +42,8 @@ export const notificationSchema = z.object({
 	revision: z.number().optional(),
 	// The backend process that assigned the revision. A restart can reuse the number.
 	publisher: z.string().min(1).optional(),
-	// The exact content a release-scoped notice offers (its dismissal key). Only
-	// such a copy can be retracted by a `withdraw` entry naming the same release.
-	release: z.string().min(1).optional(),
+	// Which issuance of a release-scoped offer this copy is (see notificationIssuanceSchema).
+	issuance: z.lazy(() => notificationIssuanceSchema).optional(),
 	// Optional, versioned, allowlisted deep-link affordance (additive — legacy
 	// producers omit it and keep working unchanged).
 	action: notificationActionSchema.optional(),
@@ -57,6 +56,9 @@ export type Notification = z.infer<typeof notificationSchema>;
 export const notificationRemoveSchema = z.object({
 	id: z.string(),
 	revision: z.number(),
+	// When present, only copies of this lineage up to this generation are removed;
+	// frontends that predate it ignore it and remove by id.
+	issuance: z.lazy(() => notificationIssuanceSchema).optional(),
 });
 export type NotificationRemove = z.infer<typeof notificationRemoveSchema>;
 
@@ -70,13 +72,13 @@ export const notificationDismissInputSchema = z.object({
 });
 export type NotificationDismissInput = z.infer<typeof notificationDismissInputSchema>;
 
-// A scoped retraction: remove `id` only while the copy held carries exactly
-// `release`. Frontends that predate it strip the unknown key and change nothing.
-export const notificationWithdrawSchema = z.object({
-	id: z.string().min(1),
-	release: z.string().min(1),
+// One issuance of an offer: `lineage` names the device's offer history and
+// `generation` increases with every new issuance, so neither is ever reused.
+export const notificationIssuanceSchema = z.object({
+	lineage: z.string().min(1),
+	generation: z.number().int().min(0),
 });
-export type NotificationWithdraw = z.infer<typeof notificationWithdrawSchema>;
+export type NotificationIssuance = z.infer<typeof notificationIssuanceSchema>;
 
 // Notifications message schema. Both arrays are optional: a `show` frame carries
 // no `remove`, and a `remove`-only frame carries no `show`.
@@ -85,6 +87,5 @@ export const notificationsMessageSchema = z.object({
 	replay: z.boolean().optional(),
 	show: z.array(notificationSchema).optional(),
 	remove: z.array(notificationRemoveSchema).optional(),
-	withdraw: z.array(notificationWithdrawSchema).optional(),
 });
 export type NotificationsMessage = z.infer<typeof notificationsMessageSchema>;
