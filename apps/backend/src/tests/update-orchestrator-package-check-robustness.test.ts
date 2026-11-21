@@ -18,6 +18,7 @@ import { initialOrchestratorState } from "../modules/system/update-orchestrator/
 import { rankTransports } from "../modules/system/update-transport/core.ts";
 import {
 	getPersistentNotifications,
+	notificationBroadcast,
 	notificationRemove,
 } from "../modules/ui/notifications.ts";
 import { aptEntryHarness } from "./helpers/apt-transport-entry-harness.ts";
@@ -207,6 +208,40 @@ test("same-cycle stale-list availability cannot hide a failed refresh", async ()
 		kind: "check_failed",
 		reason: "captive_portal",
 	});
+});
+
+test("APT's exit-zero stale-index warning cannot authorize offer withdrawal", async () => {
+	await pinned([sample("eth0", "ethernet", 4)]);
+	notificationBroadcast(
+		"ceralive_update",
+		"warning",
+		"Pending update",
+		0,
+		true,
+	);
+	updates.setAptCommandRunnerForTest(async (argv) => ({
+		exitCode: 0,
+		stdout:
+			argv[1] === "update"
+				? "Reading package lists...\n"
+				: "0 upgraded, 0 newly installed, 0 to remove.\n",
+		stderr:
+			argv[1] === "update"
+				? "W: Some index files failed to download. They have been ignored, or old ones used instead.\n"
+				: "",
+	}));
+	try {
+		await defaultOrchestratorRuntimeDeps.runPackageCheck();
+		expect(
+			getPersistentNotifications(true).show.map(({ name }) => name),
+		).toContain("ceralive_update");
+		expect(updates.getUpdateState()).toMatchObject({
+			kind: "check_failed",
+			reason: "refresh_failed",
+		});
+	} finally {
+		notificationRemove("ceralive_update");
+	}
 });
 
 test("an unexpected refresh exception settles Check and leaves subsequent checks runnable", async () => {

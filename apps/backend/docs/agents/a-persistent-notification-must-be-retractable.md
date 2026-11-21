@@ -25,6 +25,14 @@ that contradicts the notification's own claim; every other outcome — an
 unreachable engine, a fallback v4l2 row, an idle engine — leaves the notification
 standing.
 
+Package availability uses `withdrawPersistentNotification` after a proven
+install or a conclusive package check. That producer's explicit removal is
+replayed by the authenticated notification snapshot, even if no offer was
+raised in this process. An actual persistent publish clears the retained
+removal for its own name. The removal is process-local; after a full restart
+an empty snapshot does not authorize the browser to clear an old offer.
+Regular removals and durable operator dismissals keep their existing meaning.
+
 **`hdmi_error` retracts on `signal: "present"` for an HDMI-RX capture device**
 (`modules/system/hdmi-signal-notification.ts`
 `clearHdmiSignalErrorOnRecovery`). That verdict is stamped at `fromEngineDevice`

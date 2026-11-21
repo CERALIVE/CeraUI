@@ -38,6 +38,12 @@ Install post-acceptance limits: D8 Known gaps (c). Check wire reference:
   save/restores `lastUpdateFailure`/`lastUpdateSucceeded` around dispatch, so a
   skipped check no longer wipes the failed-install state the operator was reading
   and then broadcasts nothing in its place.
+- Only a successful refresh followed by successfully parsed discovery can
+  reconcile the `ceralive_update` offer. Legacy manual and periodic checks may
+  still read stale lists after refresh failure, but cannot raise, replace, or
+  retract the offer from those lists. Capable offers require exact application
+  roster membership (including `srtla`), verified CeraLive candidate origin,
+  and actionability. Actionable Debian updates alone do not qualify.
 
 Coverage: `tests/software-updates-check-visibility.test.ts`,
 `tests/update-transport-captive-recovery.test.ts` + the frontend half in

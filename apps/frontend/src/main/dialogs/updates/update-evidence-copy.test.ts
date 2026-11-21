@@ -195,7 +195,7 @@ describe("F7: package progress with an unknown total", () => {
 			if (within(section).queryByRole("progressbar") === null)
 				throw new Error("no progress bar yet");
 		});
-		return within(section).getByRole("progressbar");
+		return within(section).getByRole("progressbar", { name: "Progress" });
 	}
 
 	it("is indeterminate, never a completed 100 %", async () => {

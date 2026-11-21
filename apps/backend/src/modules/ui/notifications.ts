@@ -81,6 +81,15 @@ export type NotificationOptions = {
 };
 
 const persistentNotifications = new Map<string, PersistentNotification>();
+// Only producers opting into withdrawal replay occupy a slot here.
+const replayedWithdrawals = new Map<
+	string,
+	{
+		readonly id: string;
+		readonly revision: number;
+		readonly authedOnly: boolean;
+	}
+>();
 
 // Revisions start over when the backend restarts; this namespaces them.
 const publisher: string = crypto.randomUUID();
@@ -160,6 +169,7 @@ export function notificationSend(
 	let doSend = true;
 	let revision: number | undefined;
 	if (isPersistent) {
+		replayedWithdrawals.delete(name);
 		let pn = persistentNotifications.get(name);
 		if (pn) {
 			// Rate limiting to once every second
@@ -238,6 +248,16 @@ export function notificationRemove(name: string) {
 	return msg;
 }
 
+/** Replay positive producer evidence, not absence from the process-local map. */
+export function withdrawPersistentNotification(name: string): void {
+	if (replayedWithdrawals.has(name)) return;
+	const authedOnly = persistentNotifications.get(name)?.authedOnly ?? true;
+	const entry = { id: name, revision: nextRevision() };
+	replayedWithdrawals.set(name, { ...entry, authedOnly });
+	persistentNotifications.delete(name);
+	broadcastMsg("notification", { remove: [entry] }, 0, authedOnly);
+}
+
 // Persists the dismissal (survives reload + restart) only when the notification
 // carries a semantic dismissalKey; a keyless notification is merely removed.
 export function notificationDismiss(name: string) {
@@ -291,7 +311,10 @@ export function getPersistentNotifications(
 		}
 	}
 
-	return { show: notifications };
+	const remove = Array.from(replayedWithdrawals.values())
+		.filter((entry) => isAuthed || !entry.authedOnly)
+		.map(({ id, revision }) => ({ id, revision }));
+	return { show: notifications, ...(remove.length > 0 ? { remove } : {}) };
 }
 
 export function notificationSendPersistent(

@@ -9,11 +9,18 @@ continues to append to durable logs. The UI cannot infer download bytes from
 When unpacking starts and APT has reported a package count, the overlay shows
 install steps. Only the terminal APT result establishes success or failure.
 
-A successful install or discovery with no applicable CeraLive package retracts
-the `ceralive_update` notice. An inconclusive check does not retract a last
-known offer. On reconnect, a complete authenticated replay without that offer
-also clears it from the open tab, without dismissing other notices or recording
-an operator dismissal. Reload starts with an empty notification store.
+A successful install, or a successful APT refresh and discovery with no
+applicable CeraLive package, explicitly retracts `ceralive_update`. Capable
+discovery requires an actionable package from the exact CeraLive application
+roster and the verified CeraLive APT origin. A failed refresh can leave lists
+readable, but their contents cannot change the standing offer.
+
+Authenticated replay carries the explicit removal while that backend process
+is alive, until an offer is published again. An empty replay from a newly
+started backend is unknown, not withdrawal; a later conclusive check can
+retract the offer even if the new backend never published it. Neither path
+dismisses other notices or records an operator dismissal. Reload starts with
+an empty notification store.
 
 ## Pending disruptive effects [PARTIAL — host proof, board drill owed]
 

@@ -22,6 +22,72 @@ import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 
 useSessionOwnerForFile();
 
+it("publishes a capable-image offer when the only actionable CeraLive candidate is srtla", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "apt-srtla-offer-"));
+	const capability = join(dir, "capabilities.json");
+	await writeFile(
+		capability,
+		JSON.stringify({
+			schema: 1,
+			features: ["apt-all-packages"],
+			apt_uid: 42042,
+			ota_uid: 42041,
+		}),
+	);
+	setUpdateCapabilityPathForTest(capability);
+	setCeraliveSourcesFileForTest(join(dir, "sources"));
+	setUpdateSettingsFilePathForTest(join(dir, "settings.json"));
+	resetSoftwareUpdateState();
+	setAptReachabilityProbeForTest(async () => ({
+		ipv4: "ok",
+		ipv6: "ok",
+		used: "any",
+		verdict: "any",
+		detail: [],
+	}));
+	const source = "https://apt.ceralive.tv stable/main arm64 Packages";
+	setAptCommandRunnerForTest(async (argv) => {
+		let stdout: string;
+		if (argv[1] === "-s")
+			stdout = "Inst srtla [1.0] (2.0 CeraLive:stable [arm64])\n";
+		else if (argv[1] === "showhold") stdout = "";
+		else if (argv[1] === "policy")
+			stdout = argv[2]
+				? `srtla:\n  Candidate: 2.0\n  Version table:\n     2.0 990\n        990 ${source}\n`
+				: `Package files:\n 990 ${source}\n     release o=CeraLive,n=stable,l=CeraLive\n     origin apt.ceralive.tv\nPinned packages:\n`;
+		else throw new Error(`unexpected APT command: ${JSON.stringify(argv)}`);
+		return { exitCode: 0, stdout, stderr: "" };
+	});
+	try {
+		expect(await runUpdateDiscoveryAndReport(true)).toBeNull();
+		expect(getUpdateState()).toMatchObject({
+			kind: "available",
+			actionable_count: 1,
+			packages: [
+				{
+					name: "srtla",
+					version: "2.0",
+					origin: "apt.ceralive.tv",
+					actionable: true,
+				},
+			],
+		});
+		expect(notificationExists("ceralive_update")).toMatchObject({
+			key: "notifications.ceraliveUpdateAvailable",
+			dismissalKey: expect.stringMatching(/^update:/),
+		});
+	} finally {
+		setAptCommandRunnerForTest(null);
+		setUpdateCapabilityPathForTest(null);
+		setCeraliveSourcesFileForTest(null);
+		setUpdateSettingsFilePathForTest(null);
+		resetAptReachabilityProbeForTest();
+		resetSoftwareUpdateState();
+		notificationRemove("ceralive_update");
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
 it("offers all three captured OPI security upgrades without retaining an obsolete CeraLive notice", async () => {
 	// Given
 	const dir = await mkdtemp(join(tmpdir(), "apt-opi-annotation-"));
@@ -90,7 +156,7 @@ it("offers all three captured OPI security upgrades without retaining an obsolet
 			true,
 		);
 		// When
-		await runUpdateDiscoveryAndReport();
+		expect(await runUpdateDiscoveryAndReport(true)).toBeNull();
 		// Then
 		expect(getUpdateState()).toMatchObject({
 			kind: "available",

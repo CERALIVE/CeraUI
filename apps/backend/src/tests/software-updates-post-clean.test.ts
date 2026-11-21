@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, jest, spyOn, test } from "bun:test";
 import * as spawnPolicy from "../helpers/spawn-policy.ts";
 import { cleanAptCache } from "../modules/system/apt-cache-clean.ts";
 import { defaultAptSpaceDeps } from "../modules/system/apt-space-admission.ts";
@@ -7,9 +7,11 @@ import { parseDetachedAptServiceState } from "../modules/system/software-update-
 import {
 	getUpdateState,
 	isUpdating,
+	periodicCheckForSoftwareUpdates,
 	recoverSoftwareUpdateIfRunning,
 	resetSoftwareUpdateState,
 	runUpdateDiscoveryAndReport,
+	type SoftwareUpdateError,
 	setSoftwareUpdateCheckRunner,
 	startSoftwareUpdate,
 	triggerManualUpdateCheck,
@@ -21,6 +23,7 @@ import {
 	notificationRemove,
 } from "../modules/ui/notifications.ts";
 import * as websocket from "../modules/ui/websocket-server.ts";
+import { buildInitialNotifications } from "../rpc/procedures/status.procedure.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
 
@@ -47,10 +50,13 @@ describe("update availability notification", () => {
 				getPersistentNotifications(true).show.map(({ name }) => name),
 			).not.toContain("ceralive_update");
 			expect(notificationExists("update-test-other")).toBeDefined();
+			const replay = buildInitialNotifications();
+			expect(replay).toMatchObject({
+				replay: true,
+				remove: [{ id: "ceralive_update", revision: expect.any(Number) }],
+			});
 			expect(broadcast.mock.calls.map(([, payload]) => payload)).toContainEqual(
-				{
-					remove: [{ id: "ceralive_update", revision: expect.any(Number) }],
-				},
+				{ remove: replay.remove },
 			);
 		} finally {
 			broadcast.mockRestore();
@@ -58,6 +64,54 @@ describe("update availability notification", () => {
 			notificationRemove("update-test-other");
 		}
 	});
+
+	test.each([
+		["manual", triggerManualUpdateCheck],
+		["periodic", periodicCheckForSoftwareUpdates],
+	] as const)(
+		"keeps a valid offer when a failed %s refresh is followed by a stale zero-upgrade list",
+		async (_name, trigger) => {
+			await using _h = await updateHarness();
+			const existing = notificationExists("ceralive_update");
+			expect(existing).toBeDefined();
+			const discovery = spyOn(
+				spawnPolicy,
+				"spawnWithTimeout",
+			).mockResolvedValue({
+				exitCode: 0,
+				stdout: "0 upgraded, 0 newly installed, 0 to remove.\n",
+				stderr: "",
+			});
+			let finishRefresh:
+				| ((result: SoftwareUpdateError, failures: number) => unknown)
+				| undefined;
+			setSoftwareUpdateCheckRunner((callback) => {
+				finishRefresh = callback;
+				return true;
+			});
+			const now = process.hrtime();
+			jest.useFakeTimers();
+			const clock = spyOn(process, "hrtime").mockReturnValue(now);
+			try {
+				trigger();
+				expect(finishRefresh).toBeDefined();
+				await finishRefresh?.(
+					new Error("apt-get update exited with code 100"),
+					1,
+				);
+
+				expect(notificationExists("ceralive_update")).toEqual(existing);
+				expect(buildInitialNotifications()).not.toHaveProperty("remove");
+				expect(discovery).toHaveBeenCalledTimes(1);
+			} finally {
+				jest.clearAllTimers();
+				clock.mockRestore();
+				jest.useRealTimers();
+				discovery.mockRestore();
+				notificationRemove("ceralive_update");
+			}
+		},
+	);
 
 	test.each([
 		["no upgrades", "0 upgraded, 0 newly installed, 0 to remove.\n"],
@@ -74,11 +128,31 @@ describe("update availability notification", () => {
 			stderr: "",
 		});
 		try {
-			await runUpdateDiscoveryAndReport();
+			expect(await runUpdateDiscoveryAndReport(true)).toBeNull();
 			expect(notificationExists("ceralive_update")).toBeUndefined();
 		} finally {
 			discovery.mockRestore();
 			notificationRemove("ceralive_update");
+		}
+	});
+
+	test("a conclusive no-offer check publishes replayable removal even without a local offer", async () => {
+		await using _h = await updateHarness();
+		notificationRemove("ceralive_update");
+		expect(buildInitialNotifications()).not.toHaveProperty("remove");
+		const discovery = spyOn(spawnPolicy, "spawnWithTimeout").mockResolvedValue({
+			exitCode: 0,
+			stdout: "0 upgraded, 0 newly installed, 0 to remove.\n",
+			stderr: "",
+		});
+		try {
+			expect(await runUpdateDiscoveryAndReport(true)).toBeNull();
+			expect(buildInitialNotifications()).toMatchObject({
+				replay: true,
+				remove: [{ id: "ceralive_update", revision: expect.any(Number) }],
+			});
+		} finally {
+			discovery.mockRestore();
 		}
 	});
 });

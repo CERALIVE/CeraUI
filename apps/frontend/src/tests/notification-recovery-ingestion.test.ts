@@ -94,11 +94,21 @@ describe("persistent notifications are retractable", () => {
 		expect(persistentNames()).toEqual(["no_internet"]);
 	});
 
-	it("withdraws a pre-restart update offer when the authenticated replay omits it", () => {
+	it("keeps the offer on empty reconnect replay and retracts it only on explicit removal", () => {
 		show("ceralive_update", "A CeraLive update is available", 1);
 		show("no_internet", "No internet connection", 2);
 
 		handlers.message?.("notification", { replay: true, show: [] });
+		expect(persistentNames().sort()).toEqual([
+			"ceralive_update",
+			"no_internet",
+		]);
+
+		handlers.message?.("notification", {
+			replay: true,
+			show: [],
+			remove: [{ id: "ceralive_update", revision: 1 }],
+		});
 
 		expect(persistentNames()).toEqual(["no_internet"]);
 	});
@@ -106,6 +116,7 @@ describe("persistent notifications are retractable", () => {
 	it("keeps an update offer across a live push, and restores it on reload only when replayed", () => {
 		show("ceralive_update", "A CeraLive update is available", 1);
 		show("no_internet", "No internet connection", 2);
+		handlers.message?.("notification", { show: [] });
 		expect(persistentNames()).toContain("ceralive_update");
 
 		const offered = {

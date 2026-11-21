@@ -42,6 +42,7 @@ import {
 	notificationBroadcast,
 	notificationExists,
 	notificationRemove,
+	withdrawPersistentNotification,
 } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import {
@@ -57,8 +58,9 @@ import {
 	logAptAllRefusal,
 	resetAptAllRefusalLogForTest,
 } from "./apt-all-refusal-log.ts";
-import { cleanAptCache } from "./apt-cache-clean.ts";
 /* Software updates */
+import { CERALIVE_APT_ORIGIN } from "./apt-all-source-policy.ts";
+import { cleanAptCache } from "./apt-cache-clean.ts";
 import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
 import {
 	type AptReachability,
@@ -498,13 +500,15 @@ export { ceralivePackageList } from "./package-layer.ts";
 const UPDATE_OFFER_NOTICE = "ceralive_update";
 
 function reconcileSoftwareUpdateOffer(identity: UpdateIdentity | null): void {
+	if (!identity) {
+		withdrawPersistentNotification(UPDATE_OFFER_NOTICE);
+		return;
+	}
 	const standing = notificationExists(UPDATE_OFFER_NOTICE);
-	const dismissalKey =
-		identity === null ? undefined : updateDismissalKey(identity);
+	const dismissalKey = updateDismissalKey(identity);
 	// Withdraw a replaced offer even if its successor was already dismissed.
-	if (standing && (!identity || standing.dismissalKey !== dismissalKey))
-		notificationRemove(UPDATE_OFFER_NOTICE);
-	if (dismissalKey === undefined) return;
+	if (standing && standing.dismissalKey !== dismissalKey)
+		withdrawPersistentNotification(UPDATE_OFFER_NOTICE);
 	notificationBroadcast(
 		UPDATE_OFFER_NOTICE,
 		"warning",
@@ -610,6 +614,7 @@ export function buildAptDiscoveryArgs(
 
 async function getCapableUpdateSize(
 	reachability: AptReachability,
+	refreshConfirmed: boolean,
 ): Promise<SoftwareUpdateError> {
 	aptAllMode = true;
 	pendingPackageSuccess.assertEffectsAllowed();
@@ -679,17 +684,22 @@ async function getCapableUpdateSize(
 				? deriveUpdateIdentity(packageNames, packageNames.length)
 				: null;
 		availableUpdates = { package_count: packageNames.length };
-		const offered = result.actionable.filter(
-			({ name }) => name.startsWith("ceralive-") || name === "cerastream",
-		);
-		reconcileSoftwareUpdateOffer(
-			offered.length > 0
-				? deriveUpdateIdentity(
-						offered.map(({ name, version }) => `${name}=${version}`),
-						offered.length,
-					)
-				: null,
-		);
+		if (refreshConfirmed) {
+			const offered = result.packages.filter(
+				({ name, origin, actionable }) =>
+					actionable &&
+					origin === CERALIVE_APT_ORIGIN &&
+					classifyPackageLayer(name) === "app",
+			);
+			reconcileSoftwareUpdateOffer(
+				offered.length > 0
+					? deriveUpdateIdentity(
+							offered.map(({ name, version }) => `${name}=${version}`),
+							offered.length,
+						)
+					: null,
+			);
+		}
 		broadcastMsg("status", {
 			available_updates: availableUpdates,
 			update_state: getUpdateState(),
@@ -868,14 +878,17 @@ export function reportUpdateCheckFailure(upgrade: {
 	return false;
 }
 
-async function getSoftwareUpdateSize(reachability: AptReachability) {
+async function getSoftwareUpdateSize(
+	reachability: AptReachability,
+	refreshConfirmed: boolean,
+) {
 	if (!aptUpdatesEnabled()) return null;
 	if (!isStreamConfirmedIdle() || isUpdating() || aptGetUpdating) return "busy";
 	const capabilities = await readPackageCapabilities();
 	if (capabilities === null) return "discovery_failed";
 	pendingPackageSuccess.assertEffectsAllowed();
 	if (capabilities.mode === "capable")
-		return getCapableUpdateSize(reachability);
+		return getCapableUpdateSize(reachability, refreshConfirmed);
 	aptAllMode = false;
 
 	const upgradeResult = await runAptCommand(
@@ -944,9 +957,10 @@ async function getSoftwareUpdateSize(reachability: AptReachability) {
 			? deriveUpdateIdentity(res.packages, res.upgradeCount, res.downloadSize)
 			: null;
 
-	reconcileSoftwareUpdateOffer(
-		actionableAppPackages.length > 0 ? availableIdentity : null,
-	);
+	if (refreshConfirmed)
+		reconcileSoftwareUpdateOffer(
+			actionableAppPackages.length > 0 ? availableIdentity : null,
+		);
 
 	availableUpdates = {
 		package_count: res.upgradeCount,
@@ -1088,13 +1102,17 @@ function checkForSoftwareUpdates(
 
 			aptGetUpdating = false;
 
-			// The operator-visible generic refresh verdict keys on the exit code because
-			// apt writes benign warnings to stderr. Only the two captive-portal signatures
-			// are specific enough for stderr to override that rule.
+			// APT can exit zero after reusing old indexes. Unlike benign warnings,
+			// its fetch-failure diagnostics cannot authorize offer reconciliation.
 			const errOrStderr = classifyAptUpdateResult(res.exitCode, stderr);
 			if (errOrStderr === "captive_portal") {
 				failCurrentCheck("captive_portal");
-			} else if (res.exitCode !== 0) {
+			} else if (
+				res.exitCode !== 0 ||
+				/^[WE]: (?:Failed to fetch |Some index files failed to download\b)/m.test(
+					stderr,
+				)
+			) {
 				failCurrentCheck("refresh_failed");
 			}
 
@@ -1163,6 +1181,7 @@ export function resetSoftwareUpdateCheckRunner(): void {
 // Benign refresh warnings must not suppress discovery's publication.
 type SoftwareUpdateSizeRunner = (
 	reachability: AptReachability,
+	refreshConfirmed: boolean,
 ) => Promise<SoftwareUpdateError>;
 
 let softwareUpdateSizeRunner: SoftwareUpdateSizeRunner = getSoftwareUpdateSize;
@@ -1182,23 +1201,24 @@ export function runSoftwareUpdateCheck(): Promise<SoftwareUpdateError> {
 	return new Promise((resolve, reject) => {
 		const started = softwareUpdateCheckRunner((refresh) => {
 			// Exit-zero warnings are benign; discovery must retain a real refresh failure.
-			const failure =
-				refresh === true && lastCheckFailure === null ? null : refresh;
-			if (failure !== null) {
-				resolve(failure);
+			if (!refreshSucceeded(refresh)) {
+				resolve(refresh);
 				return;
 			}
-			void runUpdateDiscoveryAndReport().then(
-				(discovery) => resolve(failure ?? discovery),
-				reject,
-			);
+			void runUpdateDiscoveryAndReport(true).then(resolve, reject);
 		});
 		if (!started) resolve("busy");
 	});
 }
 
+function refreshSucceeded(refresh: SoftwareUpdateError): boolean {
+	return refresh === null || (refresh === true && lastCheckFailure === null);
+}
+
 // Publish after discovery's early returns so an empty result is observable.
-export async function runUpdateDiscoveryAndReport(): Promise<SoftwareUpdateError> {
+export async function runUpdateDiscoveryAndReport(
+	refreshConfirmed = false,
+): Promise<SoftwareUpdateError> {
 	if (pendingPackageSuccess.pending) return "discovery_failed";
 	if (aptDiscoveryRunning) return "busy";
 	aptDiscoveryRunning = true;
@@ -1230,7 +1250,7 @@ export async function runUpdateDiscoveryAndReport(): Promise<SoftwareUpdateError
 				runLegacyPackageEffects(
 					() => {
 						lastAptReachability = aptReachabilityWire(attempt);
-						return softwareUpdateSizeRunner(attempt);
+						return softwareUpdateSizeRunner(attempt, refreshConfirmed);
 					},
 					() => "discovery_failed" as const,
 				),
@@ -1285,7 +1305,7 @@ export function periodicCheckForSoftwareUpdates() {
 	}
 
 	const started = softwareUpdateCheckRunner(async (err_, failures) => {
-		const discovery = await runUpdateDiscoveryAndReport();
+		const discovery = await runUpdateDiscoveryAndReport(refreshSucceeded(err_));
 		const err = err_ === null ? discovery : err_;
 		scheduleNextSoftwareUpdateCheck(computeNextCheckDelay(err, failures));
 	});
@@ -1339,8 +1359,8 @@ export function triggerManualUpdateCheck(): boolean {
 	lastPreflightFailure = null;
 	lastCleanupWarning = undefined;
 
-	const started = softwareUpdateCheckRunner(async () => {
-		await runUpdateDiscoveryAndReport();
+	const started = softwareUpdateCheckRunner(async (refresh) => {
+		await runUpdateDiscoveryAndReport(refreshSucceeded(refresh));
 	});
 	if (!started) {
 		lastUpdateFailure = priorFailure;
@@ -1772,7 +1792,7 @@ async function prepareSoftwareUpdate(
 	pendingPackageSuccess.assertEffectsAllowed();
 	if (capable) {
 		const discovery = await network.within(
-			(attempt) => getCapableUpdateSize(attempt),
+			(attempt) => getCapableUpdateSize(attempt, true),
 			(): SoftwareUpdateError => {
 				failCurrentCheck("discovery_failed");
 				return "discovery_failed";
