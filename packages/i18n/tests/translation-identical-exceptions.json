@@ -849,6 +849,16 @@
 		"locales": ["pt-BR"],
 		"reason": "pt-BR network.sections.networkInterfaces reads \"Interfaces de Rede\"; \"Interface\" is the Portuguese word."
 	},
+	"networking.linkName.sim": {
+		"value": "SIM {n}",
+		"locales": ["de", "es", "fr", "hi", "ja", "ko", "pt-BR"],
+		"reason": "SIM is the term these locales print on SIM cards and phone settings; the slot number is a placeholder."
+	},
+	"networking.linkName.simOperator": {
+		"value": "SIM {n} · {operator}",
+		"locales": ["de", "es", "fr", "hi", "ja", "ko", "pt-BR"],
+		"reason": "SIM plus two placeholders (slot number and the operator's own registered name); no prose to translate."
+	},
 	"networking.types.ethernet": {
 		"value": "Ethernet",
 		"locales": ["de", "es", "fr", "pt-BR"],
