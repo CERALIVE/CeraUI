@@ -23,9 +23,11 @@ show the active phase, with static stripes instead of a number or percentage
 in all modes, including reduced motion and e-ink.
 
 After a recognized dpkg error, later package starts cannot increase the count.
-An error in stdout caps progress at the steps already credited before that
-line. Stdout and stderr are retained in separate files; when an error is on
-stderr, hold the last verified count, or show only the phase if replay has no
+APT's PTY can put an error after package script output without a newline.
+An error in stdout caps progress at the steps credited before the marker,
+even if it appears mid-line or spans log reads. Stdout and stderr are retained
+in separate files; when an error is on stderr, hold the last verified count,
+or show only the phase if replay has no
 trustworthy ordering. The unit's final result still determines the outcome.
 
 If the backend reconnects during an update and has not yet read the retained

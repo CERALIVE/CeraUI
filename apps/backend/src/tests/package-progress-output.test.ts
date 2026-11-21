@@ -201,6 +201,62 @@ describe.each(["live", "replay"] as const)(
 			},
 		);
 
+		test.each([
+			["postinst output", failed],
+			[
+				"postinst output\r",
+				"dpkg: dependency problems prevent configuration of libmm-glib0:\r\n",
+			],
+			[
+				"postinst output\r",
+				"E: Sub-process /usr/bin/dpkg returned an error code (1)\r\n",
+			],
+		])(
+			"freezes when PTY output precedes the error without a newline: %s %s",
+			async (prefix, marker) => {
+				const partial = `${pair}${prefix}${marker.slice(0, 14)}`;
+				const error = `${pair}${prefix}${marker}`;
+				const { installing, seen } = await observe(mode, [
+					[pair],
+					[partial],
+					[error],
+					[`${error}${laterSetup}`],
+				]);
+				const fourSteps = {
+					total: 2,
+					downloading: 2,
+					unpacking: 2,
+					setting_up: 1,
+				};
+				expect(installing).toEqual([fourSteps]);
+				if (mode === "live")
+					expect(seen).toEqual([fourSteps, fourSteps, fourSteps]);
+			},
+		);
+
+		test("holds a count while a mid-line stderr marker is still partial", async () => {
+			const prefix = "postinst output\r";
+			const { installing, seen } = await observe(mode, [
+				[pair],
+				[`${pair}${laterSetup}`, prefix + failed.slice(0, 14)],
+				[`${pair}${laterSetup}`, prefix + failed],
+			]);
+			const fourSteps = {
+				total: 2,
+				downloading: 2,
+				unpacking: 2,
+				setting_up: 1,
+			};
+			if (mode === "live") {
+				expect(installing).toEqual([fourSteps]);
+				expect(seen).toEqual([fourSteps, fourSteps]);
+			} else {
+				expect(installing).toEqual([
+					{ total: 0, downloading: 0, unpacking: 1, setting_up: 1 },
+				]);
+			}
+		});
+
 		test("never credits the next package from the same read as a separate stderr failure", async () => {
 			const { installing, seen } = await observe(mode, [
 				[pair],

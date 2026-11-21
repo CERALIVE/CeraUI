@@ -127,17 +127,30 @@ describe("resume of a persisted download whose unit is gone (opi r5x X1 replay)"
 
 describe("resume of a persisted download with install-unit evidence keeps the existing paths", () => {
 	test("a reattached live unit stays downloading and the tick keeps polling its progress", async () => {
+		let wire: UpdateState = {
+			kind: "downloading",
+			progress: { total: 6, downloading: 3, unpacking: 0, setting_up: 0 },
+		};
 		const b = await boot(persistedDownloading, {
 			recoverSoftwareUpdateIfRunning: async () => true,
-			getPackageInstallWireState: () => ({
-				kind: "downloading",
-				progress: { total: 6, downloading: 3, unpacking: 0, setting_up: 0 },
-			}),
+			getPackageInstallWireState: () => wire,
 		});
 		expect(getOrchestratorState().phase).toBe("downloading");
 		await runOrchestratorTick();
 		expect(getOrchestratorState().phase).toBe("downloading");
-		expect(getOrchestratorState().progress?.percent).toBeGreaterThan(0);
+		expect(getOrchestratorState().progress).toBeNull();
+		expect(b.installs.count).toBe(0);
+
+		wire = {
+			kind: "installing",
+			progress: { total: 6, downloading: 6, unpacking: 1, setting_up: 0 },
+		};
+		await runOrchestratorTick();
+		expect(getOrchestratorState().phase).toBe("committing");
+		expect(getOrchestratorState().progress).toEqual({
+			percent: 33,
+			etaSeconds: 0,
+		});
 		expect(b.installs.count).toBe(0);
 	});
 

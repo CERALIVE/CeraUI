@@ -53,7 +53,8 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   Reattachment identifies the pinned two-stage unit from validated argv;
   that argv does not establish a count. Dpkg errors cap the count at the
   observed prefix (same log) or the last independently verified frame
-  (split logs). The detached result continues to own terminal settlement.
+  (split logs). A PTY diagnostic can follow a script fragment mid-line or
+  span log reads. The detached result continues to own terminal settlement.
 - **Reattachment identity is a safety boundary.** Adoption requires the
   exact unit id and transient fragment path, transient-service description/type,
   exact non-duplicated `[Service]` stdout/stderr append destinations, no pre/post

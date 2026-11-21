@@ -211,9 +211,23 @@ describe("trace 2 — an inconclusive probe defers adjudication to later ticks",
 		await runOrchestratorTick();
 		expect(probe.calls.count).toBe(2);
 		expect(getOrchestratorState().phase).toBe("downloading");
-		expect(getOrchestratorState().progress?.percent).toBeGreaterThan(0);
+		expect(getOrchestratorState().progress).toBeNull();
 		await runOrchestratorTick();
+		expect(getOrchestratorState().phase).toBe("downloading");
+		expect(getOrchestratorState().progress).toBeNull();
+		expect(probe.calls.count).toBe(2);
+		expect(b.installs.count).toBe(0);
+
+		wire = {
+			kind: "installing",
+			progress: { total: 6, downloading: 6, unpacking: 1, setting_up: 0 },
+		};
 		await runOrchestratorTick();
+		expect(getOrchestratorState().phase).toBe("committing");
+		expect(getOrchestratorState().progress).toEqual({
+			percent: 33,
+			etaSeconds: 0,
+		});
 		expect(probe.calls.count).toBe(2);
 		expect(b.installs.count).toBe(0);
 	});

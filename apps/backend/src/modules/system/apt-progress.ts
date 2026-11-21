@@ -39,13 +39,13 @@ const failurePrefixes = [
 ];
 
 function failureOffset(log: string): number {
-	let offset = 0;
-	for (const line of log.split("\n")) {
-		if (failurePrefixes.some((prefix) => line.startsWith(prefix)))
-			return offset;
-		offset += line.length + 1;
+	// APT's PTY can append a dpkg diagnostic to an unfinished postinst line.
+	let first = -1;
+	for (const marker of failurePrefixes) {
+		const offset = log.indexOf(marker);
+		if (offset >= 0 && (first < 0 || offset < first)) first = offset;
 	}
-	return -1;
+	return first;
 }
 
 export function hasDpkgFailure(log: string): boolean {
@@ -53,10 +53,12 @@ export function hasDpkgFailure(log: string): boolean {
 }
 
 export function hasPartialDpkgFailure(log: string): boolean {
-	const tail = log.slice(log.lastIndexOf("\n") + 1);
-	return (
-		tail !== "" && failurePrefixes.some((prefix) => prefix.startsWith(tail))
-	);
+	for (const marker of failurePrefixes) {
+		for (let length = 1; length < marker.length; length++) {
+			if (log.endsWith(marker.slice(0, length))) return true;
+		}
+	}
+	return false;
 }
 
 function aptInstallPlan(
