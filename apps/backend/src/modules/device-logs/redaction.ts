@@ -1,8 +1,13 @@
 import { isIPv6 } from "node:net";
+import type { LogBundleFailureReason } from "@ceraui/rpc/schemas";
 
 export class BundleReadError extends Error {
-	constructor(readonly code: "READ_FAILED" | "BUSY" = "READ_FAILED") {
+	readonly code: "READ_FAILED" | "BUSY";
+	/** The closed stage that refused; never a cause, an input or a secret's position. */
+	constructor(readonly reason: LogBundleFailureReason | "busy" = "internal") {
+		const code = reason === "busy" ? "BUSY" : "READ_FAILED";
 		super(code);
+		this.code = code;
 	}
 }
 
@@ -37,7 +42,7 @@ export function buildRedactor(
 		if (!/^[a-z][a-z0-9_]{0,31}$/.test(kind)) throw new BundleReadError();
 		if (value.length < 4) continue;
 		secretBytes += Buffer.byteLength(value);
-		if (secretBytes > 64 * 1024) throw new BundleReadError();
+		if (secretBytes > 64 * 1024) throw new BundleReadError("budget");
 		const bytes = Buffer.from(value);
 		let uri: string;
 		try {
@@ -75,7 +80,7 @@ export function buildRedactor(
 		structured(value: string | number | boolean | null) {
 			if (exact === null || value === null) return;
 			exact.lastIndex = 0;
-			if (exact.test(String(value))) throw new BundleReadError();
+			if (exact.test(String(value))) throw new BundleReadError("collision");
 		},
 		text(value: string, bootSpan) {
 			const spans: Array<{

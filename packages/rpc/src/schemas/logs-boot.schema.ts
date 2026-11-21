@@ -55,3 +55,19 @@ export const logBundleManifestSchema = z.strictObject({
 	),
 });
 export type LogBundleManifest = z.infer<typeof logBundleManifestSchema>;
+
+/**
+ * Where a bundle preview stopped with READ_FAILED: a closed stage, never a
+ * cause or input. It rides the error envelope's optional `stage` beside the
+ * unchanged `READ_FAILED` message that older clients match exactly.
+ */
+export const logBundleFailureReasonSchema = z.enum([
+	'collision',
+	'pattern',
+	'budget',
+	'journal_read',
+	'deadline',
+	'abort',
+	'internal',
+]);
+export type LogBundleFailureReason = z.infer<typeof logBundleFailureReasonSchema>;

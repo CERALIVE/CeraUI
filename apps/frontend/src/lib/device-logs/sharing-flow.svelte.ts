@@ -16,6 +16,7 @@
  * there within 60 s. No timer is kept here.
  */
 import type {
+	LogBundleFailureReason,
 	LogBundleManifest,
 	LogExportInput,
 	LogExportOutput,
@@ -27,7 +28,7 @@ import {
 	bundleManifestReply,
 	type ExportSpan,
 	exportInput,
-	preparationRefused,
+	previewFailure,
 	previewProblem,
 	RAW_OPENING_QUERY,
 	refusal,
@@ -83,6 +84,8 @@ export class SharingFlow {
 	bundleProblem = $state<SharingProblem | null>(null);
 	/** The bundle problem is the device refusing to prepare it, which Export this view avoids. */
 	bundleRefused = $state(false);
+	/** The device's sanitized stage of a refused preview, which picks its sentence. */
+	bundleFailure = $state<LogBundleFailureReason | null>(null);
 	manifest = $state.raw<LogBundleManifest | null>(null);
 
 	readonly #deps: SharingDeps;
@@ -180,6 +183,7 @@ export class SharingFlow {
 		this.manifest = null;
 		this.bundleProblem = null;
 		this.bundleRefused = false;
+		this.bundleFailure = null;
 	}
 
 	/** Leaves a bundle the device refused for the Export this view confirmation. */
@@ -205,21 +209,23 @@ export class SharingFlow {
 		this.manifest = null;
 		this.bundleProblem = null;
 		this.bundleRefused = false;
+		this.bundleFailure = null;
 		let manifest: LogBundleManifest | null = null;
 		let problem: SharingProblem | null = null;
-		let refused = false;
+		let failure: LogBundleFailureReason | null = null;
 		try {
 			manifest = bundleManifestReply(await this.#deps.logs.previewBundle());
 		} catch (error) {
 			problem = previewProblem(error);
-			refused = preparationRefused(error);
+			failure = previewFailure(error);
 			if (problem === "failed")
 				console.error("System Logs sharing failed:", error);
 		}
 		if (run !== this.#bundleRun) return;
 		this.manifest = manifest;
 		this.bundleProblem = problem;
-		this.bundleRefused = refused;
+		this.bundleRefused = failure !== null;
+		this.bundleFailure = failure;
 		this.bundleStep = "preview";
 	}
 

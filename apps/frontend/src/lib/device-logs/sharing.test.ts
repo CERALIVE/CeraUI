@@ -11,6 +11,7 @@ import {
 	bundleManifestReply,
 	chineseWordChunks,
 	exportInput,
+	previewFailure,
 	previewProblem,
 	RAW_OPENING_QUERY,
 	rawOpeningQuery,
@@ -105,11 +106,42 @@ describe("previewProblem: a rejected bundle preview", () => {
 			"the sanitized READ_FAILED (a read error or an identifier collision)",
 			new RpcError({ message: "READ_FAILED", code: "INTERNAL_ERROR" }),
 		],
+		[
+			"a READ_FAILED carrying its stage",
+			new RpcError({
+				message: "READ_FAILED",
+				code: "INTERNAL_ERROR",
+				stage: "collision",
+			}),
+		],
 		["a reply that never arrived", new Error("Request timeout: logs.x")],
 		["a plain error that only says BUSY", new Error("BUSY")],
 		["a thrown non-error", "BUSY"],
 	])("reads %s as a failure", (_name, error) => {
 		expect(previewProblem(error)).toBe("failed");
+	});
+});
+
+describe("previewFailure: the stage of a preview the device refused", () => {
+	const refused = (stage?: string, message = "READ_FAILED") =>
+		new RpcError({ message, code: "INTERNAL_ERROR", stage });
+
+	it("reads the envelope's additive stage on the legacy READ_FAILED message", () => {
+		expect(previewFailure(refused("collision"))).toBe("collision");
+	});
+
+	it("reads a READ_FAILED from an older device, or with a stage it does not know, as unclassified", () => {
+		expect(previewFailure(refused())).toBe("internal");
+		expect(previewFailure(refused("future_stage"))).toBe("internal");
+	});
+
+	it.each([
+		["BUSY, even with a stage", refused("collision", "BUSY")],
+		["a timeout", new Error("Request timeout: logs.previewBundle")],
+		["a local error with the same text", new Error("READ_FAILED")],
+		["a thrown non-error", "READ_FAILED"],
+	])("reads %s as no device refusal", (_name, error) => {
+		expect(previewFailure(error)).toBeNull();
 	});
 });
 

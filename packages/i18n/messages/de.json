@@ -3035,6 +3035,8 @@
 	"systemLogs.sharing.bundleSensitive": "Dem Gerät bekannte Geheimnisse und gängige Kennungen werden entfernt, die Datei kann aber trotzdem personenbezogene Daten enthalten. Prüfe sie, bevor du sie teilst.",
 	"systemLogs.sharing.bundleDownload": "Paket herunterladen",
 	"systemLogs.sharing.bundleFailed": "Das Support-Paket konnte nicht vorbereitet werden.",
+	"systemLogs.sharing.bundleFailedCollision": "Ein gespeichertes Passwort oder ein gespeicherter Schlüssel stimmt mit anderen Gerätedaten überein. Wähle einen längeren, eindeutigen Wert und versuche es erneut.",
+	"systemLogs.sharing.bundleFailedJournal": "Das Gerät konnte seine Protokolle nicht lesen. Versuche es erneut oder starte das Gerät neu.",
 	"systemLogs.sharing.bundleUseExport": "Nutze stattdessen „Diese Ansicht exportieren“.",
 	"systemLogs.sharing.busy": "Ein anderer Export läuft gerade. Versuche es erneut, wenn er fertig ist.",
 	"systemLogs.sharing.failed": "Die Datei konnte nicht erstellt werden.",
