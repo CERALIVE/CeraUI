@@ -52,20 +52,28 @@ sends only a footer:
   loaded (`failed`; it started empty and its values are unknown), when a
   credential cannot be read, or when the matcher refuses the held set.
 - `# incomplete: CREDENTIAL_TOO_SHORT (<kinds>)` when a held value shorter than
-  four characters (`MIN_REDACTED_LENGTH`), which the matcher does not replace,
-  is a password, key, pairing or relay secret, hotspot password, router
-  password, or any kind not listed below. Only the kinds are named.
+  four characters (`MIN_REDACTED_LENGTH`, counted in UTF-16 code units), which
+  the matcher skips, is a password, key, pairing or relay secret (including the
+  relay stream key in `relay_streamid_override`), hotspot, APN or router
+  password, or any kind not listed below. Only those kinds are named. If the
+  footer with its generated kind list would match a held value, it is just
+  `# incomplete: CREDENTIAL_TOO_SHORT`, which is fixed text.
 
 Short values of the kinds in `SHORT_VALUE_EXPORT_KINDS` (`bundle-data.ts`):
-`stream`, `apn_user`, `apn_password`, `router_user` and `serial` do not stop the
-export. They identify a stream, a carrier APN or an account rather than grant
-access to the device, and short stream IDs and carrier APN logins are common. A
-value of one to three characters cannot be replaced without rewriting ordinary
-text, so it is sent exactly as the journal holds it, in entries and in header
-values. The header then carries
+`stream` (a manually set `srt_streamid`), `apn_user`, `router_user` and `serial`
+do not stop the export. They name a stream, an account or a device rather than
+unlock one, and a hand-set stream ID is often a short label. The matcher skips
+non-empty values under four characters, so these values are not redacted
+anywhere: they can appear in entries and in header values such as the search
+text, after the usual formatting (continuation lines are indented, header
+values are JSON-escaped), unless a longer held value that covers them is
+replaced. The header then carries
 `# not redacted, shorter than 4 characters: <kinds>` before the warning line,
-naming the kinds (sorted, once each) and never the values. Longer values of the
-same kinds, and every other held value, are still replaced.
+naming the kinds (sorted, once each) and never the values. The line is checked
+as written: if it would match a held value it reads `...: some held values`
+instead, and if that would match too, the line is left out. Values of four
+characters or more are matched as before, with the limits below. Empty values
+are ignored.
 
 Limits:
 
@@ -77,15 +85,21 @@ Limits:
 - **Normalization.** Matching runs on what `parse.ts` returns, after it strips a
   unit's `.service` suffix and truncates messages at 16 KiB, so a value cut at
   those boundaries is not matched.
-- **Fixed text.** Footers and the attachment filename are not passed through the
-  matcher. They carry only status codes, credential kinds, counts and the
-  validated boot id and time.
+- **Fixed text.** Footers, the header's fixed labels and the attachment filename
+  are not passed through the matcher, apart from the generated kind lists
+  described above. They carry only status codes, credential kinds, counts and
+  the validated boot id and time, so a held value that happens to equal such
+  text can still appear there.
 - **Header boundaries.** Each header value is matched on its own. A held value
   that only matches together with the closing quote or the syntax after a header
   value (a comma, brace or line break) is not replaced.
 
 The support bundle uses the same held list and matcher but none of the store
-states, the short-value refusal or the header line; it is unchanged here.
+states, the short-value refusal or the header line. The held list now collects
+`relay_streamid_override` as `relay`, so the bundle marks it
+`[REDACTED:relay]` instead of `[REDACTED:stream]` (unless the same value is
+also held as the stream ID, which is listed first); otherwise the bundle is
+unchanged.
 
 The response has attachment, no-store and UTF-8 plain text headers, with no
 Content-Length. Backpressure retains one page; no export content is sent over
