@@ -67,9 +67,10 @@ This means a rebuild of the same tagged version still wins over an older build, 
 
 ## Upgrade Requirement
 
-`ceralive-device` requires systemd 257 or newer. Devices with older systemd
-stay on their current CeraLive version. The normal release build checks the
-`Depends` field of each built `.deb` before uploading it.
+`ceralive-device` requires systemd 257 or newer. Devices that cannot satisfy
+that dependency stay on their current CeraLive version. Both stable and beta
+release builds check the `Depends` fields of the arm64 and amd64 packages
+before any release artifact upload or publication.
 
 ## Build Metadata
 

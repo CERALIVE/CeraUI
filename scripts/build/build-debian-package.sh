@@ -492,8 +492,8 @@ cat > "dist/debian/INSTALL-${ARCHITECTURE}.md" << EOF
 
 ## Installation
 
-This package requires systemd 257 or newer. Devices with an older systemd stay
-on their currently installed version of CeraLive.
+This package requires systemd 257 or newer. Devices that cannot satisfy this
+dependency stay on their currently installed version of CeraLive.
 
 ### 1. Install the package
 \`\`\`bash
