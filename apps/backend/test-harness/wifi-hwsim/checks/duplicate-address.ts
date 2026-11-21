@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readdir, readFile, realpath } from "node:fs/promises";
+import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { run } from "../../../src/helpers/run.ts";
 import { onNetworkInterfacesChange } from "../../../src/modules/network/network-interfaces.ts";
 import {
@@ -105,11 +105,28 @@ list(replies(2))
 	);
 }
 
-async function connected(ifname: string, uuid: string, ssid: string) {
+type ExpectedAp = { ifname: string; uuid: string; ssid: string };
+
+async function connected({ ifname, uuid, ssid }: ExpectedAp) {
 	const proof = await nmDeviceProp(ifname, "GENERAL.STATE,GENERAL.CON-UUID");
-	assert.equal(Number.parseInt(proof?.[0] ?? "", 10), 100);
-	assert.equal(proof?.[1], uuid);
-	assert.deepEqual(await nmConnGetFields(uuid, ["802-11-wireless.ssid"] as const), [ssid]);
+	assert.equal(Number.parseInt(proof?.[0] ?? "", 10), 100, `${ifname} must be connected`);
+	assert.equal(proof?.[1], uuid, `${ifname} must own its expected active UUID`);
+	assert.deepEqual(
+		await nmConnGetFields(uuid, ["802-11-wireless.ssid", "802-11-wireless.mode"] as const),
+		[ssid, "ap"],
+		`${ifname} must use its expected SSID in AP mode`,
+	);
+}
+
+export function assertActiveApPair(active: string, pair: readonly [ExpectedAp, ExpectedAp]) {
+	const connections = new Set(active.split("\n"));
+	assert.notEqual(pair[0].uuid, pair[1].uuid, "The APs must use different profiles");
+	for (const { ifname, uuid } of pair) {
+		assert(
+			connections.has(`${uuid}:${ifname}`),
+			`${ifname} is missing its AP from the active NM snapshot`,
+		);
+	}
 }
 
 async function managed(ifname: string) {
@@ -140,7 +157,7 @@ async function assignGuestPorts(layout: "same" | "distinct", a: string, twin: st
 	await managed(twin);
 }
 
-async function discoverGuestRadios(a: string, twin: string, paths?: readonly [string, string]) {
+async function feedGuestDiscovery() {
 	// This standalone check has no backend interface monitor to supply the live snapshot.
 	const observations = await Promise.all(
 		(await radios()).map(async (ifname) => {
@@ -154,64 +171,79 @@ async function discoverGuestRadios(a: string, twin: string, paths?: readonly [st
 		wifiDeviceListAdd(ifname, mac.toLowerCase(), inet);
 	}
 	wifiDeviceListEndUpdate();
+}
 
-	const previous = wifiRadioIdentity.publishedObservation;
-	const published = Promise.withResolvers<void>();
-	let discoveryComplete = false;
-	const observe = () => {
-		const registry = getWifiInterfacesByMacAddress();
-		if (
-			discoveryComplete &&
-			wifiRadioIdentity.publishedObservation > previous &&
-			[a, twin].every((ifname, index) => {
-				const identity = wifiRadioIdentity.state.rows.get(ifname);
-				return (
-					identity?.row !== undefined &&
-					(paths === undefined ||
-						(identity.classification === "verified" &&
-							identity.degradedReason === undefined &&
-							identity.devicePath === paths[index])) &&
-					registry[identity.key] === identity.row &&
-					projectWifiRadioIncarnation(identity.row, identity) !== undefined
-				);
-			})
-		) {
-			published.resolve();
+export async function waitForSettledPublication(
+	refresh: () => Promise<unknown>,
+	subscribe: (listener: () => void) => () => void,
+	settled: () => Promise<void> | undefined,
+	ready: () => boolean,
+	timeoutDetails: () => string,
+) {
+	let changed = Promise.withResolvers<void>();
+	const unsubscribe = subscribe(() => changed.resolve());
+	const deadline = Promise.withResolvers<false>();
+	const timer = setTimeout(() => deadline.resolve(false), 20_000);
+	const withinDeadline = async (pending: Promise<unknown>) => {
+		if (!(await Promise.race([pending.then(() => true), deadline.promise]))) {
+			throw new Error(`Timed out waiting for published guest Wi-Fi rows: ${timeoutDetails()}`);
 		}
 	};
-	const unsubscribe = onNetworkInterfacesChange(observe);
-	const deadline = Promise.withResolvers<never>();
-	const timer = setTimeout(() => {
-		const details = [a, twin].map((ifname) => {
-			const identity = wifiRadioIdentity.state.rows.get(ifname);
-			return `${ifname}=${identity?.classification ?? "missing"} (row=${identity?.row?.id ?? "missing"}, path=${identity?.devicePath ?? "missing"}, token=${identity?.row && projectWifiRadioIncarnation(identity.row, identity) ? "ready" : "missing"})`;
-		});
-		deadline.reject(
-			new Error(`Timed out waiting for published guest Wi-Fi rows: ${details.join(", ")}`),
-		);
-	}, 20_000);
 	try {
-		await Promise.race([
-			Promise.all([
-				wifiUpdateDevices().then(async () => {
-					discoveryComplete = true;
-					observe();
-					await wifiRadioObservation.settled;
-					observe();
-				}),
-				published.promise,
-			]),
-			deadline.promise,
-		]);
+		await withinDeadline(refresh());
+		for (;;) {
+			const pending = settled();
+			if (pending) {
+				await withinDeadline(pending);
+				continue;
+			}
+			// Publication can fire before the sample settles; only the current state counts.
+			if (ready()) return;
+			await withinDeadline(changed.promise);
+			changed = Promise.withResolvers<void>();
+		}
 	} finally {
 		clearTimeout(timer);
 		unsubscribe();
 	}
 }
 
+type ExpectedRadio = { ifname: string; path?: string };
+
+async function discoverGuestRadios(expected: readonly [ExpectedRadio, ExpectedRadio]) {
+	await feedGuestDiscovery();
+	const previous = wifiRadioIdentity.publishedObservation;
+	await waitForSettledPublication(
+		wifiUpdateDevices,
+		onNetworkInterfacesChange,
+		() => wifiRadioObservation.settled,
+		() =>
+			wifiRadioIdentity.publishedObservation > previous &&
+			expected.every(({ ifname, path }) => {
+				const identity = wifiRadioIdentity.state.rows.get(ifname);
+				return (
+					identity?.row !== undefined &&
+					(path === undefined ||
+						(identity.classification === "verified" &&
+							identity.degradedReason === undefined &&
+							identity.devicePath === path)) &&
+					getWifiInterfacesByMacAddress()[identity.key] === identity.row &&
+					projectWifiRadioIncarnation(identity.row, identity) !== undefined
+				);
+			}),
+		() =>
+			expected
+				.map(({ ifname }) => {
+					const identity = wifiRadioIdentity.state.rows.get(ifname);
+					return `${ifname}=${identity?.classification ?? "missing"} (row=${identity?.row?.id ?? "missing"}, path=${identity?.devicePath ?? "missing"}, token=${identity?.row && projectWifiRadioIncarnation(identity.row, identity) ? "ready" : "missing"})`;
+				})
+				.join(", "),
+	);
+}
+
 async function checkSharedPortRefusal(a: string, twin: string) {
 	await assignGuestPorts("same", a, twin);
-	await discoverGuestRadios(a, twin);
+	await discoverGuestRadios([{ ifname: a }, { ifname: twin }]);
 	for (const ifname of [a, twin]) {
 		const identity = wifiRadioIdentity.state.rows.get(ifname);
 		assert(identity);
@@ -228,9 +260,95 @@ async function checkSharedPortRefusal(a: string, twin: string) {
 	console.log("B9 equal-address radios on the same port refused config admission");
 }
 
+async function requireNativeGuest() {
+	const message = "Use the disposable native hwsim VM started by vm/run-vm.sh";
+	assert.equal(process.env.HWSIM_REPO, "/repo", message);
+	assert.equal(process.getuid?.(), 0, message);
+	assert((await stat("/run/hwsim-client").catch(() => undefined))?.isFile(), message);
+	const vm = Bun.spawn(["systemd-detect-virt", "--vm", "--quiet"], {
+		stdin: "ignore",
+		stdout: "ignore",
+		stderr: "inherit",
+		timeout: 5_000,
+	});
+	assert.equal(await vm.exited, 0, message);
+}
+
+async function checkDistinctAddressControl(a: string, mac: string) {
+	await managed(a);
+	const control = { name: "Distinct address control", password: crypto.randomUUID() };
+	const uuid = await nmApConnAdd(a, control, hotspotBindingFields(mac));
+	assert(uuid);
+	try {
+		assert(await nmConnect(uuid, 20));
+		await connected({ ifname: a, uuid, ssid: control.name });
+		console.log("B9 distinct-address control connected to its intended AP profile");
+	} finally {
+		await nmDisconnect(uuid);
+		assert(await nmConnDelete(uuid));
+	}
+}
+
+async function checkDistinctPortActivation(a: string, twin: string, mac: string) {
+	await assignGuestPorts("distinct", a, twin);
+	const aPath = (await nmDeviceProp(a, "GENERAL.PATH"))?.[0];
+	const bPath = (await nmDeviceProp(twin, "GENERAL.PATH"))?.[0];
+	assert(aPath && bPath && aPath !== bPath, "Guest must report two distinct NM port paths");
+	const expected = [
+		{ ifname: a, path: aPath },
+		{ ifname: twin, path: bPath },
+	] as const;
+	const startAp = async ({ ifname, path }: (typeof expected)[number]): Promise<ExpectedAp> => {
+		// Start can schedule another discovery; the next request needs the current publication.
+		await discoverGuestRadios(expected);
+		const key = `${mac}@${path}`;
+		const row = getWifiInterfacesByMacAddress()[key];
+		assert(row, `No published port-qualified registry row for ${ifname} (${key})`);
+		assert.equal(row.ifname, ifname, `Registry key ${key} must resolve to its expected radio`);
+		const token = projectWifiRadioIncarnation(row, wifiRadioIdentity.state.rows.get(ifname));
+		assert(token, `No current incarnation for ${ifname} (${key}) before Prepare`);
+		const request = { device: String(row.id), expected: token, kind: "config" } as const;
+		const draft = await withWifiRequestBinding(request, () =>
+			wifiHotspotPrepare({ device: row.id }),
+		);
+		assert(draft.success && draft.firstTime);
+		await discoverGuestRadios(expected);
+		assert.equal(
+			projectWifiRadioIncarnation(row, wifiRadioIdentity.state.rows.get(ifname)),
+			token,
+			`Incarnation for ${ifname} (${key}) changed between Prepare and Start`,
+		);
+		assert(
+			(await withWifiRequestBinding(request, () => wifiHotspotStart({ device: row.id }))).success,
+		);
+		const started = getHotspotCredentials(key)?.conn;
+		assert(started);
+		const ap = { ifname, uuid: started, ssid: draft.name };
+		await connected(ap);
+		console.log(`B9 distinct-path AP active ifname=${ifname} key=${key} profile=${started}`);
+		return ap;
+	};
+	const pair = [await startAp(expected[0]), await startAp(expected[1])] as const;
+	for (const [index, { path }] of expected.entries()) {
+		assert.equal(getHotspotCredentials(`${mac}@${path}`)?.conn, pair[index]?.uuid);
+	}
+	await Promise.all(pair.map(connected));
+	const active = await run("nmcli", [
+		"--terse",
+		"--escape",
+		"no",
+		"--fields",
+		"UUID,DEVICE",
+		"connection",
+		"show",
+		"--active",
+	]);
+	assertActiveApPair(active, pair);
+	console.log(`B9 same-address APs concurrently active ${JSON.stringify(pair)}`);
+}
+
 async function main() {
-	assert.equal(process.env.HWSIM_REPO, "/repo", "Use the isolated native VM");
-	assert.equal(process.getuid?.(), 0);
+	await requireNativeGuest();
 	const initial = await radios();
 	assert.equal(initial.length, 4);
 	const a = initial[2];
@@ -238,18 +356,7 @@ async function main() {
 	assert(a && b);
 	const mac = await address(a);
 	assert.notEqual(await address(b), mac);
-	await managed(a);
-	const control = { name: "Distinct address control", password: crypto.randomUUID() };
-	const uuid = await nmApConnAdd(a, control, hotspotBindingFields(mac));
-	assert(uuid);
-	try {
-		assert(await nmConnect(uuid, 20));
-		await connected(a, uuid, control.name);
-		console.log("B9 distinct-address control connected to its intended AP profile");
-	} finally {
-		await nmDisconnect(uuid);
-		assert(await nmConnDelete(uuid));
-	}
+	await checkDistinctAddressControl(a, mac);
 
 	await addTwin(mac);
 	assert.equal(
@@ -267,61 +374,13 @@ async function main() {
 	assert.equal(await address(twin), mac, "Both wiphys must report the same permanent address");
 	await initHotspotCredentials();
 	await checkSharedPortRefusal(a, twin);
-	await assignGuestPorts("distinct", a, twin);
-	const aPath = (await nmDeviceProp(a, "GENERAL.PATH"))?.[0];
-	const bPath = (await nmDeviceProp(twin, "GENERAL.PATH"))?.[0];
-	assert(aPath && bPath && aPath !== bPath, "Guest must report two distinct NM port paths");
-	const paths = [aPath, bPath] as const;
-	await discoverGuestRadios(a, twin, paths);
-	const keys = [`${mac}@${aPath}`, `${mac}@${bPath}`];
-	const registry = getWifiInterfacesByMacAddress();
-	if (!aPath || !bPath || aPath === bPath || keys.some((key) => !registry[key])) {
-		const classes = [a, twin].map(
-			(ifname) => wifiRadioIdentity.state.rows.get(ifname)?.classification,
-		);
-		console.error("B9 guest refused distinct port identity for equal permanent addresses", {
-			aPath,
-			bPath,
-			classes,
-		});
-		assert.deepEqual(classes, ["limited", "limited"]);
-		throw new Error("Same-address simulated AP activation remains unqualified");
-	}
-	for (const key of keys) {
-		// Start can schedule another discovery; the next request needs the current publication.
-		await discoverGuestRadios(a, twin, paths);
-		const row = registry[key];
-		assert(row);
-		const token = projectWifiRadioIncarnation(row, wifiRadioIdentity.state.rows.get(row.ifname));
-		assert(token, `No current incarnation for ${row.ifname} (${key}) before Prepare`);
-		const request = { device: String(row.id), expected: token, kind: "config" } as const;
-		const draft = await withWifiRequestBinding(request, () =>
-			wifiHotspotPrepare({ device: row.id }),
-		);
-		assert(draft.success && draft.firstTime);
-		await discoverGuestRadios(a, twin, paths);
-		assert.equal(
-			projectWifiRadioIncarnation(row, wifiRadioIdentity.state.rows.get(row.ifname)),
-			token,
-			`Incarnation for ${row.ifname} (${key}) changed between Prepare and Start`,
-		);
-		assert(
-			(await withWifiRequestBinding(request, () => wifiHotspotStart({ device: row.id }))).success,
-		);
-		const started = getHotspotCredentials(key)?.conn;
-		assert(started);
-		await connected(row.ifname, started, draft.name);
-		console.log(`B9 distinct-path AP active ifname=${row.ifname} key=${key} profile=${started}`);
-	}
-	assert.notEqual(
-		getHotspotCredentials(keys[0] ?? "")?.conn,
-		getHotspotCredentials(keys[1] ?? "")?.conn,
-	);
-	console.log("B9 same-address radios connected to independent port-owned AP profiles");
+	await checkDistinctPortActivation(a, twin, mac);
 }
 
-try {
-	await main();
-} finally {
-	terminateWifiDiscovery();
+if (import.meta.main) {
+	try {
+		await main();
+	} finally {
+		terminateWifiDiscovery();
+	}
 }

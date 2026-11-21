@@ -282,20 +282,34 @@ testing needs a working distinct-address creation control first. Require state
 script's `connected` substring alone accepts `disconnected`. Establish positive
 controls before treating application refusal as a passing negative control.
 
-For the duplicate-address gate, run `checks/duplicate-address.ts` in the
-four-radio VM with `--repo "$PWD" --ref HEAD`. After the unchanged
-distinct-address activation control, the gate creates a second hwsim radio
-with the same permanent MAC. The guest-only port bootstrap assigns `ID_PATH`
-by hwsim parent, then verifies both udev and NetworkManager's `GENERAL.PATH`
-before CeraUI runs each port case. It also labels the two hwsim radios so
-normal discovery can enroll them and waits for both published radio rows.
-The same-path pair must refuse admission;
-the distinct-path pair must activate independent profiles. This is simulated
-port evidence, not physical-port qualification.
+### Equal permanent MAC and guest port identity
 
-Before booting the VM, validate both generated rules with
-`bash apps/backend/test-harness/wifi-hwsim/vm/duplicate-address-ports.sh --verify-rules`.
-This uses `udevadm verify` on temporary files without loading any host rules.
+Validate both rule layouts offline, then run the check from a committed CeraUI
+checkout with a disk-backed `TMPDIR` outside the worktree:
+
+```bash
+harness=apps/backend/test-harness/wifi-hwsim
+bash "$harness/vm/duplicate-address-ports.sh" --verify-rules
+bash "$harness/vm/run-vm.sh" --radios 4 --repo "$PWD" --ref HEAD -- \
+  bun "$harness/checks/duplicate-address.ts"
+```
+
+Offline verification uses `udevadm verify` without loading host rules. The
+check requires the native VM and its runner marker before touching NetworkManager.
+After the distinct-address AP control, it creates a second radio with the same
+permanent MAC. The guest assigns `ID_PATH` by hwsim parent and reads it back
+from udev and NetworkManager before each layout. Guest-only metadata lets
+CeraUI enroll both radios using normal discovery; the check waits for settled
+identity publication.
+
+The same-path layout must refuse both radios with exactly `radio-unverified`.
+With distinct paths, both APs must still be active after the second starts,
+each on its own device with the expected UUID, SSID and AP mode.
+
+Historically, unconfigured hwsim radios reported no NetworkManager port paths,
+so that setup exercised the fail-closed path only. The explicit paths now let
+the VM exercise both layouts. This is simulator evidence, not physical
+same-address hardware qualification.
 
 ### #603 secret boundary
 
@@ -637,13 +651,6 @@ taskset -c 0-3 bash apps/backend/test-harness/wifi-hwsim/guest-versions.selftest
 ```
 
 ## Recorded guest replay
-
-The disposable VM check `checks/duplicate-address.ts` first proves an actual
-distinct-address AP activation, then asks the guest kernel to create a second
-wiphy with the same permanent address. It verifies the kernel witnesses,
-NetworkManager paths and two independent AP profiles when the guest reports
-distinct safe paths. A refused kernel setup, unusable ports or failed activation
-leaves same-address support qualified only by host tests.
 
 `replay-corpus/README.md` lists the real R19/R20/R21 captures, consumer coverage
 and explicit missing samples. The replay suite drives shared native decoders,
