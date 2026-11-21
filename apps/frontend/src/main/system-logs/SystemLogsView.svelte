@@ -29,9 +29,10 @@ import { MediaQuery } from 'svelte/reactivity';
 import { Button } from '$lib/components/ui/button';
 import { Skeleton } from '$lib/components/ui/skeleton';
 import * as Tabs from '$lib/components/ui/tabs';
+import { bootSelection } from '$lib/device-logs/boot-selection.svelte';
 import type { RawMoment } from '$lib/device-logs/raw-anchor';
 import type { AroundPage } from '$lib/device-logs/raw-view.svelte';
-import { startBackendDownload } from '$lib/device-logs/sharing';
+import { rawOpeningQuery, startBackendDownload } from '$lib/device-logs/sharing';
 import { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';
 import {
 	activeTab,
@@ -93,10 +94,21 @@ let tabList = $state<HTMLElement | null>(null);
 let storageHeading = $state<HTMLHeadingElement>();
 let checkRun = 0;
 const sharing = new SharingFlow({ logs: rpc.logs, download: startBackendDownload });
+// Raw logs publishes its own view while open; otherwise Export saves what Raw would open on for the chosen boot.
+const stopBootScope = bootSelection.onChoose(() => {
+	if (current === 'raw') return;
+	sharing.view = rawOpeningQuery(bootSelection.boot);
+	sharing.viewSpan = 'filters';
+});
 onDestroy(() => {
 	checkRun++;
+	stopBootScope();
 	sharing.dispose();
 });
+// Where a sharing dialog returns focus when the control that opened it has left the page.
+let toolbarBundle = $state<HTMLElement | null>(null);
+let toolbarExport = $state<HTMLElement | null>(null);
+let failureBundle = $state<HTMLElement | null>(null);
 
 const tabs = $derived(shellTabs(wide.current));
 const current = $derived(activeTab(selected, tabs));
@@ -202,7 +214,12 @@ $effect(() => {
 				     and the toolbar takes its own row above the tabs so their underline stays on the rule. The toolbar comes
 				     first in the DOM, so Tab still goes from the tabs straight into the panel; from 640 px it shows at the row's end. -->
 				<div class="flex flex-wrap items-end gap-x-3 border-b px-4" data-testid="system-logs-tabbar">
-					<SharingToolbar class="ms-auto self-center py-1 max-sm:w-full max-sm:pt-3 sm:order-last" {sharing} />
+					<SharingToolbar
+						bind:bundleButton={toolbarBundle}
+						bind:exportButton={toolbarExport}
+						class="ms-auto self-center py-1 max-sm:w-full max-sm:pt-3 sm:order-last"
+						{sharing}
+					/>
 					<Tabs.List
 						aria-label={m['systemLogs.tabs.label']()}
 						bind:ref={tabList}
@@ -267,7 +284,8 @@ $effect(() => {
 					<p class="text-sm font-semibold">{m['errorBoundary.title']()}</p>
 					<p class="text-sm">{m['errorBoundary.description']()}</p>
 				</div>
-				<div class="flex shrink-0 flex-wrap gap-2">
+				<!-- A phone is thumbed, so below 640 px both recovery actions take 44 px (app.css). -->
+				<div class="flex shrink-0 flex-wrap gap-2" data-touch-region>
 					<Button
 						class="shrink-0 gap-1.5"
 						data-testid="system-logs-check-retry"
@@ -280,6 +298,7 @@ $effect(() => {
 					</Button>
 					{#if copyLoaded}
 						<Button
+							bind:ref={failureBundle}
 							class="shrink-0 gap-1.5"
 							data-testid="system-logs-check-bundle"
 							data-variant="outline"
@@ -311,5 +330,5 @@ $effect(() => {
 	{/if}
 </div>
 
-<ExportDialog {sharing} />
-<BundleDialog {sharing} />
+<ExportDialog returnFocus={() => toolbarExport} {sharing} />
+<BundleDialog returnFocus={() => toolbarBundle ?? failureBundle} {sharing} />

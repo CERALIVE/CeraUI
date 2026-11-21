@@ -14,7 +14,7 @@ import type { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';
 
 import KeepWords from './KeepWords.svelte';
 
-let { sharing }: { sharing: SharingFlow } = $props();
+let { sharing, returnFocus }: { sharing: SharingFlow; returnFocus?: () => HTMLElement | null } = $props();
 
 const PROBLEM = {
 	busy: () => m['systemLogs.sharing.busy'](),
@@ -30,6 +30,7 @@ const PROBLEM = {
 	onPrimary={() => void sharing.confirmExport()}
 	primaryLabel={m['systemLogs.sharing.exportDownload']()}
 	primaryLoading={sharing.exportStep === 'creating'}
+	{returnFocus}
 	title={m['systemLogs.sharing.export']()}
 >
 	<div class="flex flex-col gap-4 [word-break:auto-phrase] [&:lang(ko)]:break-keep [&:lang(zh)]:break-keep wrap-break-word text-pretty [&:lang(zh)]:text-balance">

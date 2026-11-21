@@ -3,6 +3,7 @@
  * saves, how a refusal reads, and how a ticketed file reaches the browser.
  */
 import type {
+	LogBootInfo,
 	LogBundleManifest,
 	LogErrorCode,
 	LogExportInput,
@@ -30,6 +31,13 @@ export const RAW_OPENING_QUERY: LogQueryInput = {
 	levels: ["error", "warning", "info"],
 	boot: "current",
 };
+
+/** What Raw logs opens on for the boot picker's choice: a previous boot, else this boot. */
+export function rawOpeningQuery(boot: LogBootInfo | null): LogQueryInput {
+	return boot === null || boot.current
+		? RAW_OPENING_QUERY
+		: { ...RAW_OPENING_QUERY, boot: boot.bootId };
+}
 
 export function exportInput(query: LogQueryInput): LogExportInput {
 	const { sources, levels, text, boot, since, until } = query;

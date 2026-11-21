@@ -20,7 +20,17 @@ import type { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';
 
 import KeepWords from './KeepWords.svelte';
 
-let { sharing, class: className }: { sharing: SharingFlow; class?: ClassValue } = $props();
+let {
+	sharing,
+	class: className,
+	bundleButton = $bindable(null),
+	exportButton = $bindable(null),
+}: {
+	sharing: SharingFlow;
+	class?: ClassValue;
+	bundleButton?: HTMLElement | null;
+	exportButton?: HTMLElement | null;
+} = $props();
 </script>
 
 <fieldset
@@ -33,6 +43,7 @@ let { sharing, class: className }: { sharing: SharingFlow; class?: ClassValue } 
 	data-touch-region
 >
 	<Button
+		bind:ref={bundleButton}
 		class="h-auto max-w-full gap-1.5 py-1.5 whitespace-normal max-sm:flex-auto"
 		data-testid="sharing-toolbar-bundle"
 		data-variant="outline"
@@ -43,6 +54,7 @@ let { sharing, class: className }: { sharing: SharingFlow; class?: ClassValue } 
 		<span><KeepWords text={m['systemLogs.sharing.bundle']()} /></span>
 	</Button>
 	<Button
+		bind:ref={exportButton}
 		class="h-auto max-w-full gap-1.5 py-1.5 whitespace-normal max-sm:flex-auto"
 		data-testid="sharing-toolbar-export"
 		data-variant="default"

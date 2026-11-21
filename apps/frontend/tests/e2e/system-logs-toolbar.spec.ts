@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 
 import { expect, test } from './fixtures/index.js';
+import { ensureAuthenticated, navigateTo } from './helpers/index.js';
 import { type SystemLogsTab, SystemLogsPage } from './pages/system-logs.js';
 
 /**
@@ -40,6 +41,65 @@ test.describe('System Logs toolbar', { tag: '@desktop-only' }, () => {
 			}
 		});
 	}
+
+	for (const action of [
+		{ row: 'sharing-open-export', toolbar: 'Export logs', dialog: 'Export this view' },
+		{ row: 'sharing-open-bundle', toolbar: 'Support bundle', dialog: 'Support bundle' },
+	] as const) {
+		test(`returns focus to the toolbar's ${action.toolbar} when a resize removed the Downloads row that opened ${action.dialog}`, async ({ page }) => {
+			const logs = new SystemLogsPage(page);
+			await logs.open({ locale: 'en', size: { width: 1280, height: 800 }, touch: false, scheme: 'dark' });
+			const row = page.getByTestId(action.row);
+			await row.focus();
+			await page.keyboard.press('Enter');
+			const dialog = page.getByRole('dialog', { name: action.dialog });
+			await expect(dialog).toBeVisible();
+
+			// Below 1024 px Downloads moves into the Storage tab, which is not the open one.
+			await page.setViewportSize({ width: 375, height: 812 });
+			await expect(row).toHaveCount(0);
+			await expect(dialog).toBeVisible();
+			await page.keyboard.press('Escape');
+			await expect(dialog).toHaveCount(0);
+
+			await expect(
+				page.getByRole('group', { name: 'Downloads' }).getByRole('button', { name: action.toolbar, exact: true }),
+			).toBeFocused();
+		});
+	}
+
+	test('a phone gets 44 px Try again and Support bundle when System Logs cannot load', async ({ page, pageRpc }) => {
+		await page.routeWebSocket(/\/ws(?:\?|$)/, (socket) => {
+			const server = socket.connectToServer();
+			pageRpc.bindConnectionLifecycle(socket, server);
+			socket.onMessage((message) => {
+				const frame = typeof message === 'string' ? JSON.parse(message) : undefined;
+				if (Array.isArray(frame?.path) && frame.path.join('.') === 'logs.getStorage') {
+					socket.send(JSON.stringify({ id: frame.id, error: { message: 'READ_FAILED', code: 'INTERNAL_ERROR' } }));
+					return;
+				}
+				server.send(message);
+			});
+			server.onMessage((message) => {
+				socket.send(message);
+				pageRpc.acceptServerMessage(message);
+			});
+		});
+		await page.setViewportSize({ width: 375, height: 812 });
+		await page.goto('/');
+		await ensureAuthenticated(page);
+		await navigateTo(page, 'settings');
+		await page.getByTestId('settings-entry-logs').click();
+
+		const band = page.getByTestId('system-logs-check-failed');
+		for (const name of ['Try again', 'Support bundle']) {
+			const action = band.getByRole('button', { name, exact: true });
+			await expect(action).toBeInViewport({ ratio: 1 });
+			expect((await action.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+		}
+		await band.getByRole('button', { name: 'Support bundle', exact: true }).click();
+		await expect(page.getByRole('dialog', { name: 'Support bundle' }).getByTestId('sharing-bundle-sensitive')).toBeVisible();
+	});
 
 	test('a phone opens the explained support bundle and exports from Events', async ({ page }, testInfo) => {
 		const logs = new SystemLogsPage(page);

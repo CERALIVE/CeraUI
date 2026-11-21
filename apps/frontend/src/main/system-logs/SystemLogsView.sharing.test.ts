@@ -9,16 +9,20 @@ import {
 	fireEvent,
 	render,
 	screen,
+	waitFor,
 	within,
 } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { BOOT_IDS, boot } from "$lib/device-logs/__fixtures__/boots";
 import {
 	bundleManifest,
 	EXPORT_TICKET,
 	signalled,
 } from "$lib/device-logs/__fixtures__/sharing";
+import { bootSelection } from "$lib/device-logs/boot-selection.svelte";
 import { notifyHistoryChanged } from "$lib/device-logs/history-bus";
+import { exportInput, RAW_OPENING_QUERY } from "$lib/device-logs/sharing";
 import { getBackendHttpUrl } from "$lib/env";
 import { RpcError } from "$lib/rpc/rpc-error";
 
@@ -77,6 +81,7 @@ beforeEach(() => {
 
 afterEach(() => {
 	cleanup();
+	bootSelection.reset();
 	media?.restore();
 	media = undefined;
 	vi.restoreAllMocks();
@@ -255,6 +260,90 @@ describe("SystemLogsView: the logs toolbar", () => {
 	});
 });
 
+describe("SystemLogsView: Export logs saves the boot the operator chose", () => {
+	async function exportFromToolbar(): Promise<void> {
+		await fireEvent.click(screen.getByTestId("sharing-toolbar-export"));
+		const body = await screen.findByRole("dialog", { name: sharing.export });
+		await fireEvent.click(
+			within(body).getByRole("button", { name: sharing.exportDownload }),
+		);
+		await within(body).findByTestId("sharing-export-problem");
+		await fireEvent.click(
+			within(body).getByRole("button", { name: en.dialogs.cancel }),
+		);
+	}
+
+	// Raw logs opens on the chosen boot, or on this boot when the running one (or none) is chosen.
+	it.each([true, false])(
+		"exports this boot by default, then a previous boot chosen on Events, without Raw logs ever opening (wide=%s)",
+		async (wide) => {
+			viewport(wide);
+			logs.createExport.mockResolvedValue({ ok: false, error: "BUSY" });
+			render(SystemLogsView);
+			await screen.findByRole("tablist");
+
+			await exportFromToolbar();
+			expect(logs.createExport).toHaveBeenLastCalledWith(
+				exportInput(RAW_OPENING_QUERY),
+			);
+
+			bootSelection.choose(boot(BOOT_IDS.clean, "clean"));
+			await exportFromToolbar();
+			expect(logs.createExport).toHaveBeenLastCalledWith(
+				exportInput({ ...RAW_OPENING_QUERY, boot: BOOT_IDS.clean }),
+			);
+
+			bootSelection.choose(boot(BOOT_IDS.current, "current"));
+			await exportFromToolbar();
+			expect(logs.createExport).toHaveBeenLastCalledWith(
+				exportInput(RAW_OPENING_QUERY),
+			);
+			expect(logs.createExport).toHaveBeenCalledTimes(3);
+		},
+	);
+});
+
+describe("SystemLogsView: a sharing dialog returns focus to a visible control", () => {
+	it("returns focus to the toolbar's Support bundle when the Downloads row that opened the dialog is gone", async () => {
+		viewport(true);
+		logs.previewBundle.mockReturnValue(new Promise<never>(() => {}));
+		render(SystemLogsView);
+		const opener = await screen.findByTestId("sharing-open-bundle");
+		opener.focus();
+		await fireEvent.click(opener);
+		await screen.findByRole("dialog", { name: sharing.bundle });
+
+		// Below 1024 px Downloads moves into the Storage tab, which is not the open one.
+		media?.set(() => false);
+		await waitFor(() => expect(opener.isConnected).toBe(false));
+		const body = await screen.findByRole("dialog", { name: sharing.bundle });
+		await fireEvent.click(
+			within(body).getByRole("button", { name: en.dialogs.cancel }),
+		);
+
+		await waitFor(() =>
+			expect(document.activeElement).toBe(
+				screen.getByTestId("sharing-toolbar-bundle"),
+			),
+		);
+	});
+
+	it("still returns focus to the control that opened the dialog while it is on the page", async () => {
+		viewport(true);
+		render(SystemLogsView);
+		await screen.findByTestId("sharing-group");
+		const opener = screen.getByTestId("sharing-open-export");
+		opener.focus();
+		await fireEvent.click(opener);
+		const body = await screen.findByRole("dialog", { name: sharing.export });
+		await fireEvent.click(
+			within(body).getByRole("button", { name: en.dialogs.cancel }),
+		);
+
+		await waitFor(() => expect(document.activeElement).toBe(opener));
+	});
+});
+
 describe("SystemLogsView: Support bundle from the load failure", () => {
 	it.each([true, false])(
 		"offers Support bundle beside Try again when the view cannot load, and opens its preview (wide=%s)",
@@ -276,6 +365,10 @@ describe("SystemLogsView: Support bundle from the load failure", () => {
 			).toEqual([en.errorBoundary.retry, sharing.bundle]);
 			const bundle = within(band).getByTestId("system-logs-check-bundle");
 			expect(bundle.dataset.variant).toBe("outline");
+			// A phone is thumbed, so below 640 px both recovery actions take 44 px (app.css).
+			expect(bundle.parentElement?.hasAttribute("data-touch-region")).toBe(
+				true,
+			);
 
 			await fireEvent.click(bundle);
 

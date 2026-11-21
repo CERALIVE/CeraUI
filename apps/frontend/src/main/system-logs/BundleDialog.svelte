@@ -23,7 +23,7 @@ import type { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';
 
 import KeepWords from './KeepWords.svelte';
 
-let { sharing }: { sharing: SharingFlow } = $props();
+let { sharing, returnFocus }: { sharing: SharingFlow; returnFocus?: () => HTMLElement | null } = $props();
 const uid = $props.id();
 
 type SectionId = LogBundleManifest['sections'][number]['id'];
@@ -93,6 +93,7 @@ const status = $derived(
 	primaryDisabled={sharing.manifest === null}
 	primaryLabel={m['systemLogs.sharing.bundleDownload']()}
 	primaryLoading={sharing.bundleStep === 'creating'}
+	{returnFocus}
 	title={m['systemLogs.sharing.bundle']()}
 >
 	<div class="flex flex-col gap-4 [word-break:auto-phrase] [&:lang(ko)]:break-keep [&:lang(zh)]:break-keep wrap-break-word text-pretty [&:lang(zh)]:text-balance">

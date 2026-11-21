@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { getBackendHttpUrl } from "$lib/env";
 import { RpcError } from "$lib/rpc/rpc-error";
 
+import { BOOT_IDS, boot } from "./__fixtures__/boots";
 import { bundleManifest } from "./__fixtures__/sharing";
 import {
 	bundleManifestReply,
@@ -12,6 +13,7 @@ import {
 	exportInput,
 	previewProblem,
 	RAW_OPENING_QUERY,
+	rawOpeningQuery,
 	refusal,
 	startBackendDownload,
 	ticketReply,
@@ -57,6 +59,23 @@ describe("exportInput: the Raw logs query as an export", () => {
 		expect(onWire(exportInput(RAW_OPENING_QUERY))).toStrictEqual({
 			filter: { sources: [], levels: ["error", "warning", "info"] },
 			boot: "current",
+		});
+	});
+});
+
+describe("rawOpeningQuery: what Raw logs opens on for the boot picker's choice", () => {
+	it("opens on this boot when no boot or the running boot is chosen", () => {
+		expect(rawOpeningQuery(null)).toEqual(RAW_OPENING_QUERY);
+		expect(rawOpeningQuery(boot(BOOT_IDS.current, "current"))).toEqual(
+			RAW_OPENING_QUERY,
+		);
+	});
+
+	it("opens on a previous boot with the opening filters", () => {
+		expect(rawOpeningQuery(boot(BOOT_IDS.unclean, "unclean"))).toEqual({
+			sources: [],
+			levels: ["error", "warning", "info"],
+			boot: BOOT_IDS.unclean,
 		});
 	});
 });
