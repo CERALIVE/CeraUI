@@ -84,6 +84,13 @@
 			],
 			"plural": true
 		},
+		"live.ingest.sampleCount": {
+			"countParams": [
+				"0",
+				"count"
+			],
+			"plural": true
+		},
 		"live.ingest.sessionEnded": {
 			"params": {
 				"duration": "<duration>"

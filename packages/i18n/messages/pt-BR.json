@@ -585,6 +585,23 @@
 	"live.ingest.peak": "Pico",
 	"live.ingest.rtt": "RTT",
 	"live.ingest.samples": "Amostras",
+	"live.ingest.sampleCount": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} amostra",
+				"countPlural=many": "{count} amostras",
+				"countPlural=other": "{count} amostras",
+				"countPlural=*": "{count} amostras"
+			}
+		}
+	],
 	"live.ingest.sessionEnded": "Sessão encerrada · {duration}",
 	"live.ingest.summary": "Resumo da sessão",
 	"live.ingest.title": "Estatísticas de ingestão",

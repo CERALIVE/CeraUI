@@ -584,6 +584,22 @@
 	"live.ingest.peak": "Spitze",
 	"live.ingest.rtt": "RTT",
 	"live.ingest.samples": "Messungen",
+	"live.ingest.sampleCount": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} Messung",
+				"countPlural=other": "{count} Messungen",
+				"countPlural=*": "{count} Messungen"
+			}
+		}
+	],
 	"live.ingest.sessionEnded": "Sitzung beendet · {duration}",
 	"live.ingest.summary": "Sitzungsübersicht",
 	"live.ingest.title": "Ingest-Statistiken",

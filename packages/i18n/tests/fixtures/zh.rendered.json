@@ -506,6 +506,7 @@
 	"live.ingest.peak": "峰值",
 	"live.ingest.rtt": "RTT",
 	"live.ingest.samples": "采样",
+	"live.ingest.sampleCount": "<count> 个采样",
 	"live.ingest.sessionEnded": "会话已结束 · <duration>",
 	"live.ingest.summary": "会话摘要",
 	"live.ingest.title": "采集统计",

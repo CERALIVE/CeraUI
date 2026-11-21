@@ -584,6 +584,22 @@
 	"live.ingest.peak": "Peak",
 	"live.ingest.rtt": "RTT",
 	"live.ingest.samples": "Samples",
+	"live.ingest.sampleCount": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} sample",
+				"countPlural=other": "{count} samples",
+				"countPlural=*": "{count} samples"
+			}
+		}
+	],
 	"live.ingest.sessionEnded": "Session ended · {duration}",
 	"live.ingest.summary": "Session Summary",
 	"live.ingest.title": "Ingest Stats",

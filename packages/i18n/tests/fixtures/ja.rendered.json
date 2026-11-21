@@ -506,6 +506,7 @@
 	"live.ingest.peak": "ピーク",
 	"live.ingest.rtt": "RTT",
 	"live.ingest.samples": "サンプル",
+	"live.ingest.sampleCount": "<count> 件のサンプル",
 	"live.ingest.sessionEnded": "セッション終了 · <duration>",
 	"live.ingest.summary": "セッションサマリー",
 	"live.ingest.title": "インジェスト統計",

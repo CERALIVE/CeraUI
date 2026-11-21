@@ -513,6 +513,14 @@
 	"live.ingest.peak": "Peak",
 	"live.ingest.rtt": "RTT",
 	"live.ingest.samples": "Samples",
+	"live.ingest.sampleCount": {
+		"0": "0 samples",
+		"1": "1 sample",
+		"2": "2 samples",
+		"5": "5 samples",
+		"11": "11 samples",
+		"100": "100 samples"
+	},
 	"live.ingest.sessionEnded": "Session ended · <duration>",
 	"live.ingest.summary": "Session Summary",
 	"live.ingest.title": "Ingest Stats",

@@ -569,6 +569,7 @@
 	"live.ingest.peak": "최고",
 	"live.ingest.rtt": "RTT",
 	"live.ingest.samples": "샘플",
+	"live.ingest.sampleCount": "샘플 {count}개",
 	"live.ingest.sessionEnded": "세션 종료 · {duration}",
 	"live.ingest.summary": "세션 요약",
 	"live.ingest.title": "인제스트 통계",

@@ -585,6 +585,23 @@
 	"live.ingest.peak": "Pic",
 	"live.ingest.rtt": "RTT",
 	"live.ingest.samples": "Échantillons",
+	"live.ingest.sampleCount": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} échantillon",
+				"countPlural=many": "{count} échantillons",
+				"countPlural=other": "{count} échantillons",
+				"countPlural=*": "{count} échantillons"
+			}
+		}
+	],
 	"live.ingest.sessionEnded": "Session terminée · {duration}",
 	"live.ingest.summary": "Résumé de session",
 	"live.ingest.title": "Statistiques d'ingestion",

@@ -588,6 +588,26 @@
 	"live.ingest.peak": "الذروة",
 	"live.ingest.rtt": "RTT",
 	"live.ingest.samples": "العينات",
+	"live.ingest.sampleCount": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=zero": "{count} عينة",
+				"countPlural=one": "{count} عينة",
+				"countPlural=two": "{count} عينتان",
+				"countPlural=few": "{count} عينات",
+				"countPlural=many": "{count} عينةً",
+				"countPlural=other": "{count} عينة",
+				"countPlural=*": "{count} عينة"
+			}
+		}
+	],
 	"live.ingest.sessionEnded": "انتهت الجلسة · {duration}",
 	"live.ingest.summary": "ملخص الجلسة",
 	"live.ingest.title": "إحصائيات الإدخال",

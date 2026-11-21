@@ -513,6 +513,14 @@
 	"live.ingest.peak": "शिखर",
 	"live.ingest.rtt": "RTT",
 	"live.ingest.samples": "नमूने",
+	"live.ingest.sampleCount": {
+		"0": "0 नमूना",
+		"1": "1 नमूना",
+		"2": "2 नमूने",
+		"5": "5 नमूने",
+		"11": "11 नमूने",
+		"100": "100 नमूने"
+	},
 	"live.ingest.sessionEnded": "सत्र समाप्त · <duration>",
 	"live.ingest.summary": "सत्र सारांश",
 	"live.ingest.title": "इन्जेस्ट आँकड़े",

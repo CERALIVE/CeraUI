@@ -513,6 +513,14 @@
 	"live.ingest.peak": "Spitze",
 	"live.ingest.rtt": "RTT",
 	"live.ingest.samples": "Messungen",
+	"live.ingest.sampleCount": {
+		"0": "0 Messungen",
+		"1": "1 Messung",
+		"2": "2 Messungen",
+		"5": "5 Messungen",
+		"11": "11 Messungen",
+		"100": "100 Messungen"
+	},
 	"live.ingest.sessionEnded": "Sitzung beendet · <duration>",
 	"live.ingest.summary": "Sitzungsübersicht",
 	"live.ingest.title": "Ingest-Statistiken",

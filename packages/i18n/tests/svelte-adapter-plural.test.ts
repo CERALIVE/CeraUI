@@ -61,11 +61,16 @@ const { m } = (await import(join(GENERATED, "registry.js"))) as {
 	>;
 };
 
-/** The three keys the todo-19 grammar inventory found carry plural syntax. */
+/**
+ * The keys that carry plural syntax: the three the todo-19 grammar inventory
+ * found, plus `live.ingest.sampleCount` (added with its frozen-oracle entry so
+ * the session summary stops reading "1 Samples").
+ */
 const PLURAL_KEYS = [
 	"live.server.bondedAcross",
 	"live.setup.linksReady",
 	"live.ingest.linksReadyCount",
+	"live.ingest.sampleCount",
 ] as const;
 
 function renderPlural(locale: LocaleCode, key: string, count: number): string {
@@ -209,7 +214,7 @@ describe("retired legacy grammar stays absent from every catalog", () => {
 		expect(hits).toEqual([]);
 	});
 
-	it("exactly three keys carry plural variants, in every locale that has any", () => {
+	it("exactly the listed keys carry plural variants, in every locale that has any", () => {
 		for (const locale of ALL_LOCALES) {
 			const keys = Object.entries(readCatalog(locale))
 				.filter(([, value]) => isComplex(value))

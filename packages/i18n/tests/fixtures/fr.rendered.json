@@ -513,6 +513,14 @@
 	"live.ingest.peak": "Pic",
 	"live.ingest.rtt": "RTT",
 	"live.ingest.samples": "Échantillons",
+	"live.ingest.sampleCount": {
+		"0": "0 échantillon",
+		"1": "1 échantillon",
+		"2": "2 échantillons",
+		"5": "5 échantillons",
+		"11": "11 échantillons",
+		"100": "100 échantillons"
+	},
 	"live.ingest.sessionEnded": "Session terminée · <duration>",
 	"live.ingest.summary": "Résumé de session",
 	"live.ingest.title": "Statistiques d'ingestion",

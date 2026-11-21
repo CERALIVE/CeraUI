@@ -513,6 +513,14 @@
 	"live.ingest.peak": "الذروة",
 	"live.ingest.rtt": "RTT",
 	"live.ingest.samples": "العينات",
+	"live.ingest.sampleCount": {
+		"0": "0 عينة",
+		"1": "1 عينة",
+		"2": "2 عينتان",
+		"5": "5 عينات",
+		"11": "11 عينةً",
+		"100": "100 عينة"
+	},
 	"live.ingest.sessionEnded": "انتهت الجلسة · <duration>",
 	"live.ingest.summary": "ملخص الجلسة",
 	"live.ingest.title": "إحصائيات الإدخال",

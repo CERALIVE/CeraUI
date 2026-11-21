@@ -513,6 +513,14 @@
 	"live.ingest.peak": "Pico",
 	"live.ingest.rtt": "RTT",
 	"live.ingest.samples": "Muestras",
+	"live.ingest.sampleCount": {
+		"0": "0 muestras",
+		"1": "1 muestra",
+		"2": "2 muestras",
+		"5": "5 muestras",
+		"11": "11 muestras",
+		"100": "100 muestras"
+	},
 	"live.ingest.sessionEnded": "Sesión finalizada · <duration>",
 	"live.ingest.summary": "Resumen de sesión",
 	"live.ingest.title": "Estadísticas de ingesta",

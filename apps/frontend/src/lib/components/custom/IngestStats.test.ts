@@ -585,6 +585,31 @@ describe("IngestStats — session summary + export (device-local)", () => {
 		vi.restoreAllMocks();
 	});
 
+	it("counts the samples in the summary badge with a real plural", () => {
+		// One frame while streaming, then stop: a one-sample session.
+		const { container, rerender } = render(IngestStats, {
+			props: { telemetry: bonded(false), isStreaming: true, bitrateKbps: 4000 },
+		});
+		flushSync();
+		rerender({
+			telemetry: { links: [] },
+			isStreaming: false,
+			bitrateKbps: 4000,
+		});
+		flushSync();
+		const one = panelOf(container)
+			.querySelector('[data-testid="ingest-sample-count"]')
+			?.textContent?.replace(/\s+/g, " ")
+			.trim();
+		expect(one).toBe("1 sample");
+
+		const many = runMockSession()
+			.querySelector('[data-testid="ingest-sample-count"]')
+			?.textContent?.replace(/\s+/g, " ")
+			.trim();
+		expect(many).toBe("2 samples");
+	});
+
 	it("renders the historical rollup with 4 tiles + per-link diagnostics after stop", () => {
 		const panel = runMockSession();
 

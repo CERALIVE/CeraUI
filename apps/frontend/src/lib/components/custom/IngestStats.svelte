@@ -243,9 +243,10 @@ function exportCsv(): void {
 		</h2>
 		{#if showSummary && rollup}
 			<span
-				class="bg-secondary/60 text-muted-foreground ms-auto rounded-full px-2 py-0.5 font-mono text-xs tabular-nums"
+				class="bg-secondary/60 text-muted-foreground ms-auto rounded-full px-2 py-0.5 font-mono text-xs tabular-nums whitespace-nowrap"
+				data-testid="ingest-sample-count"
 			>
-				{rollup.sampleCount}&nbsp;{m["live.ingest.samples"]()}
+				{m["live.ingest.sampleCount"]({ count: rollup.sampleCount })}
 			</span>
 		{:else if hasLinks}
 			<span
