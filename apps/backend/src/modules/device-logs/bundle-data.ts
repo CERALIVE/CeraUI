@@ -33,23 +33,23 @@ interface BundleData {
 }
 
 /**
- * Held kinds the log export still sends when a value is too short to match
- * (`MIN_REDACTED_LENGTH`). They identify a stream, a carrier APN or an account
- * rather than grant access: stream IDs are often a short label such as "cam",
- * and APN logins are published by the carrier and shared by its subscribers.
- * A short value of any other kind, including a kind added later, still stops
- * the export.
+ * Held kinds whose values the log export still sends when they are too short
+ * for the matcher (`MIN_REDACTED_LENGTH`). They name a stream, an APN account,
+ * a router account or a device rather than unlock something: a manually set
+ * SRT stream ID is often a short label such as "cam". A short value of any
+ * other kind, including the APN and router passwords, the relay stream key
+ * and any kind added later, still stops the export.
  */
 export const SHORT_VALUE_EXPORT_KINDS: ReadonlySet<string> = new Set([
 	"stream",
 	"apn_user",
-	"apn_password",
 	"router_user",
 	"serial",
 ]);
 
 /**
- * Credentials the backend holds now, as redaction input only; never output.
+ * Credentials the backend holds now, as redaction input only; the export and
+ * bundle never write these values themselves.
  * A snapshot: values changed afterwards, and earlier values no longer held,
  * are not included.
  */
@@ -63,7 +63,8 @@ export function collectHeldSecrets(): Array<{ kind: string; value: string }> {
 	add("ssh", config.ssh_pass);
 	add("remote_key", config.remote_key);
 	add("stream", config.srt_streamid);
-	add("stream", config.relay_streamid_override);
+	// The relay override carries the selected account's ingest key.
+	add("relay", config.relay_streamid_override);
 	add("pairing", config.pairing_secret);
 	const relays = getRelays();
 	add("relay", relays?.bcrp_key);
