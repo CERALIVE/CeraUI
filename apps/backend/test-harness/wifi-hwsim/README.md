@@ -282,6 +282,15 @@ testing needs a working distinct-address creation control first. Require state
 script's `connected` substring alone accepts `disconnected`. Establish positive
 controls before treating application refusal as a passing negative control.
 
+For the duplicate-address gate, run `checks/duplicate-address.ts` in the
+four-radio VM with `--repo "$PWD" --ref HEAD`. After the unchanged
+distinct-address activation control, the gate creates a second hwsim radio
+with the same permanent MAC. The guest-only port bootstrap assigns `ID_PATH`
+by hwsim parent, then verifies both udev and NetworkManager's `GENERAL.PATH`
+before CeraUI runs each port case. The same-path pair must refuse admission;
+the distinct-path pair must activate independent profiles. This is simulated
+port evidence, not physical-port qualification.
+
 ### #603 secret boundary
 
 Run the following from the committed CeraUI checkout, with `TMPDIR` set to

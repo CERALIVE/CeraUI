@@ -13,7 +13,10 @@ import {
 	getHotspotCredentials,
 	initHotspotCredentials,
 } from "../../../src/modules/wifi/hotspot-credentials.ts";
-import { withWifiRequestBinding } from "../../../src/modules/wifi/wifi-binding.ts";
+import {
+	resolveWifiBinding,
+	withWifiRequestBinding,
+} from "../../../src/modules/wifi/wifi-binding.ts";
 import { getWifiInterfacesByMacAddress } from "../../../src/modules/wifi/wifi-connections.ts";
 import {
 	wifiHotspotPrepare,
@@ -107,6 +110,44 @@ async function managed(ifname: string) {
 	await run("nmcli", ["device", "set", ifname, "autoconnect", "no"]);
 }
 
+async function assignGuestPorts(layout: "same" | "distinct", a: string, twin: string) {
+	const setup = Bun.spawn(
+		[
+			"timeout",
+			"-k",
+			"2",
+			"75",
+			"bash",
+			`${import.meta.dir}/../vm/duplicate-address-ports.sh`,
+			layout,
+			a,
+			twin,
+		],
+		{ stdin: "ignore", stdout: "inherit", stderr: "inherit" },
+	);
+	assert.equal(await setup.exited, 0, `Guest port preflight failed for ${layout} paths`);
+	await managed(a);
+	await managed(twin);
+}
+
+async function checkSharedPortRefusal(a: string, twin: string) {
+	await assignGuestPorts("same", a, twin);
+	await wifiUpdateDevices();
+	for (const ifname of [a, twin]) {
+		const identity = wifiRadioIdentity.state.rows.get(ifname);
+		assert(identity);
+		assert.equal(identity.classification, "limited");
+		const row = identity.row;
+		assert(row, `No published limited row for ${ifname}`);
+		const token = projectWifiRadioIncarnation(row, identity);
+		assert.deepEqual(await resolveWifiBinding(row.id, token, "config"), {
+			success: false,
+			error: "radio-unverified",
+		});
+	}
+	console.log("B9 equal-address radios on the same port refused config admission");
+}
+
 async function main() {
 	assert.equal(process.env.HWSIM_REPO, "/repo", "Use the isolated native VM");
 	assert.equal(process.getuid?.(), 0);
@@ -144,10 +185,11 @@ async function main() {
 	const twin = (await radios()).find((ifname) => !initial.includes(ifname));
 	assert(twin, "No additional hwsim netdev");
 	assert.equal(await address(twin), mac, "Both wiphys must report the same permanent address");
-	await managed(twin);
+	await initHotspotCredentials();
+	await checkSharedPortRefusal(a, twin);
+	await assignGuestPorts("distinct", a, twin);
 	const aPath = (await nmDeviceProp(a, "GENERAL.PATH"))?.[0];
 	const bPath = (await nmDeviceProp(twin, "GENERAL.PATH"))?.[0];
-	await initHotspotCredentials();
 	await wifiUpdateDevices();
 	const keys = [`${mac}@${aPath}`, `${mac}@${bPath}`];
 	const registry = getWifiInterfacesByMacAddress();
