@@ -5,8 +5,7 @@
   Install is destructive: it routes through a confirmation AppDialog before
   calling the surface's capability-selected package action. While an update runs, a progress indicator
   replaces the install action; the full-screen overlay (Layout, off
-  `status.updating`) shows activity during preparation and downloads and
-  step progress during installation.
+  `status.updating`) shows the phase and the percentage APT reports for it.
 
   Every conclusion is the device's (round-3 review C, C3-4): the start runs
   through the same action machine as the orchestrator controls (action
@@ -17,7 +16,6 @@
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
-import { packageProgressFraction } from '@ceraui/rpc/package-progress';
 import type { UpdateCheckClockSummary, UpdateTransportSummary } from '@ceraui/rpc/schemas';
 import { AlertTriangle, Download, RefreshCw } from '@lucide/svelte';
 import { untrack } from 'svelte';
@@ -51,8 +49,18 @@ const succeeded = $derived(updateState?.kind === 'success');
 const preflightFailed = $derived(updateState?.kind === 'update_preflight_failed');
 const lastCheckedAt = $derived(checkedAtOf(updateState));
 const inProgress = $derived(updateState?.kind === 'downloading' || updateState?.kind === 'installing');
-const progressFraction = $derived(
-	updateState?.kind === 'installing' ? packageProgressFraction(updateState.progress) : null
+// APT restarts its percentage for the install, so the phase names which one it is.
+const progressPercent = $derived(
+	updateState?.kind === 'downloading' || updateState?.kind === 'installing'
+		? updateState.progress.percent
+		: undefined
+);
+const phaseLabel = $derived(
+	updateState?.kind === 'installing'
+		? m['updatingOverlay.installing']()
+		: updateState?.kind === 'downloading' && updateState.progress.downloading > 0
+			? m['updatingOverlay.downloading']()
+			: m['updatingOverlay.preparingOrDownloading']()
 );
 
 let confirmOpen = $state(false);
@@ -181,13 +189,15 @@ $effect(() => () => clearTimeout(checkTimeout));
 				<RefreshCw class="text-primary size-4 motion-safe:animate-spin" />
 				{m["settings.dialogs.updating"]()}
 			</div>
-			<!-- APT does not report bytes transferred on this stream. -->
+			<p class="text-muted-foreground text-sm" data-testid="update-package-phase">
+				{phaseLabel}{progressPercent === undefined ? '' : ` · ${progressPercent}%`}
+			</p>
 			<Progress
 				class="package-update-progress"
 				aria-label={m["updatingOverlay.progress"]()}
-				aria-valuetext={progressFraction ? `${progressFraction.percent}%` : undefined}
-				max={progressFraction?.total ?? 100}
-				value={progressFraction?.completed ?? null}
+				aria-valuetext={progressPercent === undefined ? undefined : `${progressPercent}%`}
+				max={100}
+				value={progressPercent ?? null}
 			/>
 		</div>
 	{:else if starting}

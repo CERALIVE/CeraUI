@@ -2,38 +2,46 @@
 
 ## Package update progress
 
-On both legacy and capable images, Software Updates shows activity without a
-percentage while APT prepares or downloads packages. The detached service
-continues to append to durable logs. The UI cannot infer download bytes from
-`Get:N`, which identifies the start of a fetch; output can also arrive in bursts.
-When unpacking starts and APT has reported a package count, the overlay shows
-completed steps. The overlay text, both progress bars, and the orchestrator
-package percentage use the same fraction and round down. A dpkg unpack or setup line marks the
-start of that step; the next step's start credits the previous one. Phase
-labels describe current activity, not separate package totals. The last step
-is credited only after the detached update succeeds; a failure or interruption
-does not report completion.
+Progress comes from APT's own machine-readable channel, not from parsing
+apt/dpkg text. The detached unit opens
+`/run/ceralive/software-update.status` as descriptor 3 and runs every
+`apt-get` with `-o APT::Status-Fd=3`; the file is prepared like the stdout
+and stderr logs (root-owned, mode 0600, created exclusively). APT writes one
+complete line per record:
 
-For pinned updates, a broader download plan cannot set the install total.
-Progress counts distinct packages in APT's install plan, including dependencies
-APT adds. A bare package name matches only its native `:arch` spelling, using
-the cached result of `dpkg --print-architecture`; foreign architectures remain
-distinct. If the install total cannot be verified, unpack/setup records still
-show the active phase, with static stripes instead of a number or percentage
-in all modes, including reduced motion and e-ink.
+- `dlstatus:<item>:<percent>:<text>` while fetching: APT's own download
+  estimate.
+- `pmstatus:<package>:<percent>:<text>` from just before dpkg's first fork.
+  APT counts only dpkg state changes it verified for packages in its own plan
+  and keeps one step back from 100, so triggers and spindown never show 100%.
+- `pmerror:...` when a package fails.
 
-APT's PTY can put a package record or error after script output without
-a newline. The parser reads the accumulated log and can recognize records
-after these fragments, across log reads, and with CR or LF separators.
-Only a complete unpack/setup record for a planned identity can add a step.
-Recognizable quotes and contradictory records leave the count unknown.
-After a recognized dpkg error in stdout, later starts cannot advance the
-count. If separate stderr carries the error, hold the last verified count,
-or show only the phase if replay has no trustworthy ordering. The detached
-unit's final result still determines the outcome.
+The UI shows three phases: **Preparing or downloading packages** (no record
+yet), **Downloading** and **Installing**. A number appears only when APT
+reported one for the phase on screen; it is floored and capped at 99 while
+the unit runs, frozen at the first `pmerror`, and only a successful detached
+result shows 100%. A failure or interruption never shows completion. The
+percentage restarts when installing begins, so Settings names the phase next
+to the bar. There are no counted steps.
 
-If the backend reconnects during an update and has not yet read the retained
-log, the overlay shows indeterminate activity until it gets usable counters.
+Descriptor 3 rather than stderr: APT marks its status descriptor
+close-on-exec before forking dpkg, which on stderr would leave the image's
+`DPkg::Post-Invoke` hooks without stderr; stdout would interleave records
+with dpkg's PTY output.
+
+A unit started by a release without the channel (for example the very update
+that installs this version, adopted after the package restarts CeraUI) shows
+phases only, from coarse transcript evidence: APT's `Get:` lines while
+fetching and dpkg's unpack/setup records once it runs. Its status file is
+never read, because it may hold an older run's records.
+
+Live polling and reattachment derive progress from the same bytes: complete
+status lines only, so a record split across reads counts once it is whole.
+The observer reads stdout, stderr and then the status file, and the final
+drain reads every file to its end, so output larger than one 64 KiB read is
+replayed completely. A reattached unit is announced from its first drain, not
+with an empty frame, so the overlay does not drop back to "0 of 1 steps" or
+an empty bar while the log is re-read.
 
 ## Pending disruptive effects [PARTIAL — host proof, board drill owed]
 

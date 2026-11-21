@@ -82,6 +82,9 @@ export const updateProgressSchema = z.object({
 	unpacking: z.number(),
 	setting_up: z.number(),
 	total: z.number(),
+	// APT's own percentage (APT::Status-Fd) for the phase above. A running
+	// transaction never reports 100: only a successful `result` completes it.
+	percent: z.number().int().min(0).max(99).optional(),
 	// `0` marks completion; a string carries the apt failure message the update
 	// loop broadcasts before clearing state.
 	result: z.union([z.number(), z.string()]).optional(),

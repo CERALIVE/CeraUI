@@ -68,7 +68,6 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 			kind: "finished",
 			exitCode: 0,
 			cleanup: "stop",
-			pinnedInstall: ["ceralive-apt-credentials", "cerastream"],
 		});
 	});
 
@@ -80,10 +79,7 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 					"SubState=running",
 				),
 			),
-		).toEqual({
-			kind: "running",
-			pinnedInstall: ["ceralive-apt-credentials", "cerastream"],
-		});
+		).toEqual({ kind: "running" });
 	});
 
 	it.each(["--allow-unauthenticated", "-o", "-y", "+x", ".x", ":x", "~x"])(
@@ -141,11 +137,12 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 			{
 				stdout: "/run/ceralive/software-update.stdout",
 				stderr: "/run/ceralive/software-update.stderr",
+				status: "/run/ceralive/software-update.status",
 			},
 		);
 		const script = launcher.at(-1);
 		expect(script).toBeDefined();
-		expect(() =>
+		const rendered = () =>
 			probe(
 				flockUnit(
 					flockFinishedExecStart.replace(
@@ -153,8 +150,14 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 						`ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -x /run/lock/ceralive-update.lock /bin/sh -ec ${script} ; ignore_errors=`,
 					),
 				),
-			),
-		).not.toThrow();
+			);
+		expect(rendered).not.toThrow();
+		expect(rendered()).toEqual({
+			kind: "finished",
+			exitCode: 0,
+			cleanup: "stop",
+			aptStatus: true,
+		});
 	});
 
 	it.each([
@@ -215,6 +218,7 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 					{
 						stdout: "/run/ceralive/software-update.stdout",
 						stderr: "/run/ceralive/software-update.stderr",
+						status: "/run/ceralive/software-update.status",
 					},
 				),
 			).toThrow(InvalidDetachedAptUpgradeArgumentsError);
@@ -230,6 +234,7 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 				outputPaths: {
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
+					status: "/run/ceralive/software-update.status",
 				},
 				prepareOutput: async () => {},
 				start: async () => {},
@@ -283,6 +288,7 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 				outputPaths: {
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
+					status: "/run/ceralive/software-update.status",
 				},
 				prepareOutput: async () => {},
 				start: async () => {},

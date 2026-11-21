@@ -21,12 +21,13 @@ import {
 
 export type DetachedAptServiceState =
 	| { readonly kind: "absent" }
-	| { readonly kind: "running"; readonly pinnedInstall?: readonly string[] }
+	| { readonly kind: "running"; readonly aptStatus?: true }
 	| {
 			readonly kind: "finished";
 			readonly exitCode: number;
 			readonly cleanup: "stop" | "reset-failed";
-			readonly pinnedInstall?: readonly string[];
+			/** The unit writes APT status records; see software-update-service-contract.ts. */
+			readonly aptStatus?: true;
 	  };
 
 export type FinishedDetachedAptServiceState = Extract<
@@ -123,6 +124,7 @@ export function parseDetachedAptServiceProbe(
 	if (state.kind === "absent") {
 		return state;
 	}
-	const pinnedInstall = validateDetachedAptServiceIdentity(result.stdout);
-	return pinnedInstall === undefined ? state : { ...state, pinnedInstall };
+	return validateDetachedAptServiceIdentity(result.stdout)
+		? { ...state, aptStatus: true }
+		: state;
 }

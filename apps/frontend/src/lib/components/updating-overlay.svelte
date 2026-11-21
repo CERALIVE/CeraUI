@@ -1,8 +1,7 @@
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
-import { packageProgressFraction } from '@ceraui/rpc/package-progress';
 import type { StatusMessage } from '@ceraui/rpc/schemas';
-import { CheckCircle2, Cog, Download, Package, RotateCw, XCircle } from '@lucide/svelte';
+import { CheckCircle2, Cog, Download, RotateCw, XCircle } from '@lucide/svelte';
 import { onMount } from 'svelte';
 
 import * as Drawer from '$lib/components/ui/drawer/index.js';
@@ -29,16 +28,14 @@ const isSuccess = $derived(details?.result === 0);
 const animationPhase = $derived.by(() => {
 	if (isFailure) return 'failed';
 	if (isSuccess) return 'complete';
-	if (details.setting_up > 0) return 'installing';
-	if (details.unpacking > 0) return 'unpacking';
+	if (details.setting_up > 0 || details.unpacking > 0) return 'installing';
 	return details.downloading > 0 ? 'downloading' : 'preparing';
 });
 
-// APT's Get:N reports a fetch starting, not bytes or packages completed.
-const downloadFinished = $derived(
-	animationPhase === 'unpacking' || animationPhase === 'installing' || isSuccess,
-);
-const fraction = $derived(downloadFinished ? packageProgressFraction(details, isSuccess) : null);
+// The number is APT's own for the phase shown; only the device's success
+// result fills the bar, and a failure shows none.
+const percent = $derived(isSuccess ? 100 : isFailure ? undefined : details.percent);
+const installStarted = $derived(animationPhase === 'installing' || isSuccess);
 
 // Terminal outcomes have ONE announcer, once per outcome. In the app Layout
 // never mounts this takeover for a terminal frame: it releases the takeover and
@@ -93,11 +90,6 @@ onMount(() => {
 										? m["updatingOverlay.preparingOrDownloading"]()
 										: m["updatingOverlay.downloading"]()}</span
 								>
-							{:else if animationPhase === 'unpacking'}
-								<Package class="h-4 w-4 text-status-warning sm:h-5 sm:w-5" />
-								<span class="text-sm font-medium text-status-warning sm:text-base"
-									>{m["updatingOverlay.unpacking"]()}</span
-								>
 							{:else if animationPhase === 'installing'}
 								<Cog class="h-4 w-4 text-status-info sm:h-5 sm:w-5" />
 								<span class="text-sm font-medium text-status-info sm:text-base"
@@ -134,12 +126,12 @@ onMount(() => {
 							{/if}
 
 							<!-- Percentage Overlay -->
-							{#if fraction}
+							{#if percent !== undefined}
 								<div class="absolute inset-0 flex items-center justify-center">
 									<span
 										class="text-foreground bg-background/80 rounded-full px-3 py-1.5 text-xl font-bold sm:text-2xl"
 									>
-										{fraction.percent}%
+										{percent}%
 									</span>
 								</div>
 							{/if}
@@ -176,25 +168,12 @@ onMount(() => {
 						>
 							<Progress
 								class="package-update-progress h-full rounded-full"
-								max={fraction?.total ?? 1}
-								value={fraction?.completed ?? null}
-								aria-valuetext={fraction ? `${fraction.percent}%` : undefined}
+								max={100}
+								value={percent ?? null}
+								aria-valuetext={percent === undefined ? undefined : `${percent}%`}
 								aria-label={m["updatingOverlay.progress"]()}
 							/>
 						</div>
-
-						<!-- Progress Details -->
-						{#if fraction}
-							<div class="text-muted-foreground flex justify-between text-xs sm:text-sm">
-								<span
-									>{fraction.completed}
-									{m["updatingOverlay.of"]()}
-									{fraction.total}
-									{m["updatingOverlay.steps"]()}</span
-								>
-								<span>{fraction.percent}%</span>
-							</div>
-						{/if}
 					</div>
 				</div>
 
@@ -208,46 +187,19 @@ onMount(() => {
 					>
 						<div
 							class="flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all duration-300 sm:h-12 sm:w-12"
-							class:bg-primary={downloadFinished}
-							class:border-muted={!downloadFinished}
-							class:border-primary={downloadFinished}
-							class:text-muted-foreground={!downloadFinished}
-							class:text-primary-foreground={downloadFinished}
+							class:bg-primary={installStarted}
+							class:border-muted={!installStarted}
+							class:border-primary={installStarted}
+							class:text-muted-foreground={!installStarted}
+							class:text-primary-foreground={installStarted}
 						>
 							<Download class="h-3 w-3 sm:h-5 sm:w-5" />
 						</div>
 						<span
 							class="text-center text-[10px] font-medium sm:text-xs"
-							class:text-primary={downloadFinished}
+							class:text-primary={installStarted}
 						>
 							{m["updatingOverlay.downloading"]()}
-						</span>
-					</div>
-
-					<!-- Arrow -->
-					<div class="border-muted-foreground/30 w-3 border-t-2 border-dashed sm:w-6"></div>
-
-					<!-- Unpack Step -->
-					<div
-						class="flex flex-col items-center gap-1 transition-all duration-300 sm:gap-2"
-						class:opacity-100={details?.unpacking > 0 || animationPhase === 'unpacking'}
-						class:opacity-40={!(details?.unpacking > 0 || animationPhase === 'unpacking')}
-					>
-						<div
-							class="flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all duration-300 sm:h-12 sm:w-12"
-							class:bg-status-warning={details?.unpacking > 0}
-							class:border-status-warning={details?.unpacking > 0}
-							class:border-muted={!(details?.unpacking > 0)}
-							class:text-muted-foreground={!(details?.unpacking > 0)}
-							class:text-white={details?.unpacking > 0}
-						>
-							<Package class="h-3 w-3 sm:h-5 sm:w-5" />
-						</div>
-						<span
-							class="text-center text-[10px] font-medium sm:text-xs"
-							class:text-status-warning={details?.unpacking > 0}
-						>
-							{m["updatingOverlay.unpacking"]()}
 						</span>
 					</div>
 
@@ -257,22 +209,22 @@ onMount(() => {
 					<!-- Install Step -->
 					<div
 						class="flex flex-col items-center gap-1 transition-all duration-300 sm:gap-2"
-						class:opacity-100={details?.setting_up > 0 || animationPhase === 'installing'}
-						class:opacity-40={!(details?.setting_up > 0 || animationPhase === 'installing')}
+						class:opacity-100={installStarted}
+						class:opacity-40={!installStarted}
 					>
 						<div
 							class="flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all duration-300 sm:h-12 sm:w-12"
-							class:bg-status-info={details?.setting_up > 0}
-							class:border-status-info={details?.setting_up > 0}
-							class:border-muted={!(details?.setting_up > 0)}
-							class:text-muted-foreground={!(details?.setting_up > 0)}
-							class:text-white={details?.setting_up > 0}
+							class:bg-status-info={installStarted}
+							class:border-status-info={installStarted}
+							class:border-muted={!installStarted}
+							class:text-muted-foreground={!installStarted}
+							class:text-white={installStarted}
 						>
 							<Cog class="h-3 w-3 sm:h-5 sm:w-5" />
 						</div>
 						<span
 							class="text-center text-[10px] font-medium sm:text-xs"
-							class:text-status-info={details?.setting_up > 0}
+							class:text-status-info={installStarted}
 						>
 							{m["updatingOverlay.installing"]()}
 						</span>

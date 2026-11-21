@@ -16,7 +16,6 @@ import {
 	defaultDetachedAptServiceDeps,
 	type SoftwareUpdateOutputPaths,
 } from "./software-update-service.ts";
-import { aptPinnedPackageNames } from "./software-update-service-contract.ts";
 
 export type { SoftwareUpdateOutputPaths } from "./software-update-service.ts";
 export { buildDetachedAptUpgradeCommand } from "./software-update-service.ts";
@@ -24,18 +23,15 @@ export { buildDetachedAptUpgradeCommand } from "./software-update-service.ts";
 const OUTPUT_POLL_INTERVAL_MS = 250;
 const FINAL_DRAIN_MAX_FAILURES = 20;
 const INSPECT_RETRY_MAX_MS = 30_000;
-const STDERR_READS_PER_POLL = 4;
 
 export type SoftwareUpdateOutputHandlers = {
 	readonly onStdout: (chunk: string) => void;
 	readonly onStderr: (chunk: string) => void;
-	readonly onOutputBatch?: (
-		stdout: string,
-		stderr: string,
-		stderrCaughtUp: boolean,
-	) => Promise<void>;
+	/** APT::Status-Fd records; read only from a unit that writes them. */
+	readonly onStatus?: (chunk: string) => void;
+	/** Runs after every poll's reads and once after the final drain. */
+	readonly onDrained?: () => void;
 	readonly onAttached?: () => void;
-	readonly onPinnedInstall?: (packages: readonly string[]) => void;
 	readonly onObserverError?: (
 		error: unknown,
 		suppressedRetries?: number,
@@ -107,71 +103,65 @@ function reportObserverError(
 async function drainOutputCursor(
 	cursor: OutputCursor,
 	read: DetachedAptUpgradeDeps["readOutput"],
-): Promise<OutputCursor> {
+): Promise<{ readonly cursor: OutputCursor; readonly atEnd: boolean }> {
 	const next = await read(cursor.path, cursor.offset);
 	if (next.bytes.byteLength > 0) {
 		const text = cursor.decoder.decode(next.bytes, { stream: true });
 		if (text.length > 0) cursor.emit(text);
 	}
-	return { ...cursor, offset: next.nextOffset };
+	// One read is bounded; only an empty read proves the file was drained.
+	return {
+		cursor: { ...cursor, offset: next.nextOffset },
+		atEnd: next.bytes.byteLength === 0,
+	};
 }
 
 async function drainAvailableOutput(
-	stdoutCursor: OutputCursor,
-	stderrCursor: OutputCursor,
+	cursors: readonly OutputCursor[],
 	handlers: SoftwareUpdateOutputHandlers,
 	readOutput: DetachedAptUpgradeDeps["readOutput"],
 ): Promise<{
-	readonly stdout: OutputCursor;
-	readonly stderr: OutputCursor;
+	readonly cursors: readonly OutputCursor[];
 	readonly complete: boolean;
+	readonly atEnd: boolean;
 }> {
 	let complete = true;
-	let stderrCaughtUp = false;
-	try {
-		stdoutCursor = await drainOutputCursor(stdoutCursor, readOutput);
-	} catch (error) {
-		reportObserverError(handlers, error);
-		complete = false;
-	}
-	try {
-		// Snapshot stdout before stderr so a later stdout step cannot earn
-		// credit before an error already written on stderr is inspected.
-		for (let i = 0; i < STDERR_READS_PER_POLL; i++) {
-			const next = await drainOutputCursor(stderrCursor, readOutput);
-			stderrCaughtUp = next.offset === stderrCursor.offset;
-			stderrCursor = next;
-			if (stderrCaughtUp || !handlers.onOutputBatch) break;
+	let atEnd = true;
+	const drained: OutputCursor[] = [];
+	// In order: apt writes a status record before the dpkg output it announces,
+	// so the status file read last is never behind the transcript read first.
+	for (const cursor of cursors) {
+		try {
+			const next = await drainOutputCursor(cursor, readOutput);
+			atEnd &&= next.atEnd;
+			drained.push(next.cursor);
+		} catch (error) {
+			reportObserverError(handlers, error);
+			complete = false;
+			drained.push(cursor);
 		}
-	} catch (error) {
-		reportObserverError(handlers, error);
-		complete = false;
 	}
-	if (handlers.onOutputBatch) complete &&= stderrCaughtUp;
-	return {
-		stdout: stdoutCursor,
-		stderr: stderrCursor,
-		complete,
-	};
+	return { cursors: drained, complete, atEnd };
 }
 
 function createOutputCursors(
 	paths: SoftwareUpdateOutputPaths,
 	handlers: SoftwareUpdateOutputHandlers,
-): readonly [OutputCursor, OutputCursor] {
+	aptStatus: boolean,
+): readonly OutputCursor[] {
+	const cursor = (path: string, emit: (chunk: string) => void) => ({
+		path,
+		offset: 0,
+		decoder: new TextDecoder(),
+		emit,
+	});
 	return [
-		{
-			path: paths.stdout,
-			offset: 0,
-			decoder: new TextDecoder(),
-			emit: handlers.onStdout,
-		},
-		{
-			path: paths.stderr,
-			offset: 0,
-			decoder: new TextDecoder(),
-			emit: handlers.onStderr,
-		},
+		cursor(paths.stdout, handlers.onStdout),
+		cursor(paths.stderr, handlers.onStderr),
+		// A pre-channel unit never wrote this file; it may hold an older run's records.
+		...(aptStatus && handlers.onStatus
+			? [cursor(paths.status, handlers.onStatus)]
+			: []),
 	];
 }
 
@@ -181,40 +171,19 @@ async function observeDetachedAptUpgrade(
 	deps: DetachedAptUpgradeDeps,
 ): Promise<number> {
 	let state: DetachedAptServiceState = initialState;
-	let stdout = "";
-	let stderr = "";
-	const flush = async (complete: boolean) => {
-		await handlers.onOutputBatch?.(stdout, stderr, complete);
-		stdout = "";
-		stderr = "";
-	};
-	let [stdoutCursor, stderrCursor] = createOutputCursors(
+	let cursors = createOutputCursors(
 		deps.outputPaths,
-		handlers.onOutputBatch
-			? {
-					onStdout: (chunk) => {
-						stdout += chunk;
-					},
-					onStderr: (chunk) => {
-						stderr += chunk;
-					},
-				}
-			: handlers,
+		handlers,
+		initialState.aptStatus === true,
 	);
 	let inspectRetryMs = 1_000;
 	let lastInspectReportAt = -Infinity;
 	let suppressedInspectErrors = 0;
 
 	while (state.kind === "running") {
-		const drained = await drainAvailableOutput(
-			stdoutCursor,
-			stderrCursor,
-			handlers,
-			deps.readOutput,
-		);
-		stdoutCursor = drained.stdout;
-		stderrCursor = drained.stderr;
-		await flush(drained.complete);
+		cursors = (await drainAvailableOutput(cursors, handlers, deps.readOutput))
+			.cursors;
+		handlers.onDrained?.();
 		await deps.sleep(OUTPUT_POLL_INTERVAL_MS);
 		try {
 			state = await deps.inspect();
@@ -238,32 +207,27 @@ async function observeDetachedAptUpgrade(
 	}
 	if (state.kind !== "finished") throw new DetachedAptServiceVanishedError();
 
-	let finalDrainComplete = false;
 	let finalDrainFailures = 0;
-	while (!finalDrainComplete) {
+	for (;;) {
 		const drained = await drainAvailableOutput(
-			stdoutCursor,
-			stderrCursor,
+			cursors,
 			handlers,
 			deps.readOutput,
 		);
-		stdoutCursor = drained.stdout;
-		stderrCursor = drained.stderr;
-		await flush(drained.complete);
-		finalDrainComplete = drained.complete;
-		if (!finalDrainComplete) {
-			finalDrainFailures++;
-			if (finalDrainFailures >= FINAL_DRAIN_MAX_FAILURES) {
-				throw new DetachedAptOutputUnavailableError();
-			}
-			await deps.sleep(OUTPUT_POLL_INTERVAL_MS);
+		cursors = drained.cursors;
+		if (drained.complete && drained.atEnd) break;
+		if (drained.complete) continue;
+		finalDrainFailures++;
+		if (finalDrainFailures >= FINAL_DRAIN_MAX_FAILURES) {
+			throw new DetachedAptOutputUnavailableError();
 		}
+		await deps.sleep(OUTPUT_POLL_INTERVAL_MS);
 	}
-	const stdoutTail = stdoutCursor.decoder.decode();
-	if (stdoutTail.length > 0) stdoutCursor.emit(stdoutTail);
-	const stderrTail = stderrCursor.decoder.decode();
-	if (stderrTail.length > 0) stderrCursor.emit(stderrTail);
-	await flush(true);
+	for (const cursor of cursors) {
+		const tail = cursor.decoder.decode();
+		if (tail.length > 0) cursor.emit(tail);
+	}
+	handlers.onDrained?.();
 	try {
 		await deps.cleanup(state);
 	} catch (error) {
@@ -283,7 +247,11 @@ export async function runDetachedAptUpgrade(
 	}
 	await deps.prepareOutput();
 	await deps.start(buildDetachedAptUpgradeCommand(aptArgs, deps.outputPaths));
-	return observeDetachedAptUpgrade({ kind: "running" }, handlers, deps);
+	return observeDetachedAptUpgrade(
+		{ kind: "running", aptStatus: true },
+		handlers,
+		deps,
+	);
 }
 
 export async function runDetachedAptAll(
@@ -299,8 +267,11 @@ export async function runDetachedAptAll(
 	await deps.start(
 		buildDetachedAptAllCommand(installArgs, verdict, deps.outputPaths),
 	);
-	handlers.onPinnedInstall?.(aptPinnedPackageNames(installArgs));
-	return observeDetachedAptUpgrade({ kind: "running" }, handlers, deps);
+	return observeDetachedAptUpgrade(
+		{ kind: "running", aptStatus: true },
+		handlers,
+		deps,
+	);
 }
 
 export async function recoverDetachedAptUpgrade(
@@ -309,7 +280,6 @@ export async function recoverDetachedAptUpgrade(
 ): Promise<RecoveredDetachedAptUpgrade | null> {
 	const state = await deps.inspect();
 	if (state.kind === "absent") return null;
-	if (state.pinnedInstall) handlers.onPinnedInstall?.(state.pinnedInstall);
 	handlers.onAttached?.();
 	return {
 		completion: observeDetachedAptUpgrade(state, handlers, deps),

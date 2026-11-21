@@ -51,7 +51,6 @@
 	"softwareUpdates.cleanupTransient",
 	"softwareUpdates.discoverUpgrade",
 	"softwareUpdates.inspectTransient",
-	"softwareUpdates.nativeAptArchitecture",
 	"softwareUpdates.refreshPackageLists",
 	"softwareUpdates.startTransient",
 	"srtlaSend.capabilityProbe",

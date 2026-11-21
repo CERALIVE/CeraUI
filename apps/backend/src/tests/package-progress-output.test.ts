@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { packageProgressFraction } from "@ceraui/rpc/package-progress";
-import type { UpdateProgress } from "@ceraui/rpc/schemas";
+import type { StatusResponse, UpdateProgress } from "@ceraui/rpc";
 import { buildAptAllInstallArgs } from "../modules/system/apt-all-packages.ts";
-import { softwareUpdateOutputPaths } from "../modules/system/software-update-output.ts";
+import { deriveUpdateProgress } from "../modules/system/apt-progress.ts";
+import {
+	SOFTWARE_UPDATE_OUTPUT_READ_BYTES,
+	softwareUpdateOutputPaths,
+} from "../modules/system/software-update-output.ts";
 import {
 	type DetachedAptUpgradeDeps,
 	recoverDetachedAptUpgrade,
@@ -13,47 +16,142 @@ import {
 	recoverSoftwareUpdateIfRunning,
 	startSoftwareUpdate,
 } from "../modules/system/software-updates.ts";
-import { buildInitialStatus } from "../rpc/procedures/status.procedure.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
 
 useSessionOwnerForFile();
 
-const pin = { name: "libmm-glib0", version: "2" };
-const boundary = "Download complete and in download only mode\n";
-const plan =
-	`${boundary}The following packages will be upgraded:\n  libmm-glib0\n` +
-	"1 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n";
-const pair =
-	`${boundary}The following packages will be upgraded:\n  libmm-glib0 cera-widget\n` +
-	"2 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n" +
-	"Unpacking libmm-glib0 (2) over (1) ...\n" +
-	"Unpacking cera-widget (2) over (1) ...\n" +
-	"Setting up libmm-glib0 (2) ...\n";
-const laterSetup = "Setting up cera-widget (2) ...\n";
-const failed = "dpkg: error processing package libmm-glib0 (--configure):\n";
+// Byte-exact APT::Status-Fd records as APT 3.0 writes them, one line per write
+// (apt-pkg/acquire.cc pkgAcquireStatus::Pulse, apt-pkg/install-progress.cc).
+const dl = (percent: string) =>
+	`dlstatus:1:${percent}:Retrieving file 1 of 1\n`;
+const pm = (pkg: string, percent: string, action: string) =>
+	`pmstatus:${pkg}:${percent}:${action}\n`;
 
-type Checkpoint = readonly [stdout: string, stderr?: string];
-type Mode = "live" | "replay";
+const fetchStatus = dl("0.0000") + dl("41.2500");
+const dpkgStatus =
+	fetchStatus +
+	pm("dpkg-exec", "0.0000", "Running dpkg") +
+	pm("cerastream", "20.0000", "Preparing cerastream") +
+	pm("cerastream", "40.0000", "Unpacking cerastream");
+const pmerror =
+	"pmerror:cerastream:arm64:40.0000:installed cerastream package post-installation script subprocess returned error exit status 1\n";
+const fetchLog =
+	"Reading package lists...\nThe following packages will be upgraded:\n  cerastream\n" +
+	"1 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n" +
+	"Get:1 https://apt.invalid trixie/main arm64 cerastream arm64 2 [48 MB]\n";
+const dpkgLog =
+	`${fetchLog}(Reading database ... 1234 files and directories currently installed.)\n` +
+	"Preparing to unpack .../cerastream_2_arm64.deb ...\n" +
+	"Unpacking cerastream (2) over (1) ...\nSetting up cerastream (2) ...\n";
+
+const preparing = { total: 0, downloading: 0, unpacking: 0, setting_up: 0 };
+const downloadingAt = (percent?: number) => ({
+	total: 1,
+	downloading: 1,
+	unpacking: 0,
+	setting_up: 0,
+	...(percent === undefined ? {} : { percent }),
+});
+const installingAt = (percent?: number) => ({
+	total: 1,
+	downloading: 0,
+	unpacking: 0,
+	setting_up: 1,
+	...(percent === undefined ? {} : { percent }),
+});
+
+const completeLines = (text: string) =>
+	text.slice(0, text.lastIndexOf("\n") + 1);
+
+describe("deriveUpdateProgress()", () => {
+	test("reports APT's own percentage for the phase it is in", () => {
+		expect(deriveUpdateProgress("", "")).toEqual(preparing);
+		expect(deriveUpdateProgress(fetchLog, fetchStatus)).toEqual(
+			downloadingAt(41),
+		);
+		expect(deriveUpdateProgress(dpkgLog, dpkgStatus)).toEqual(installingAt(40));
+	});
+
+	test("a record earns nothing until its line is complete, at every byte split", () => {
+		const status = dpkgStatus + pm("cerastream", "80.0000", "Installed x");
+		for (let end = 0; end <= status.length; end++) {
+			const prefix = status.slice(0, end);
+			expect(deriveUpdateProgress("", prefix)).toEqual(
+				deriveUpdateProgress("", completeLines(prefix)),
+			);
+		}
+	});
+
+	test("never reports completion while the transaction is running", () => {
+		expect(deriveUpdateProgress("", dl("100.0000"))).toEqual(downloadingAt(99));
+		expect(
+			deriveUpdateProgress("", pm("cerastream", "99.9900", "Installed x")),
+		).toEqual(installingAt(99));
+	});
+
+	test("a package error freezes the percentage APT reported before it", () => {
+		const status =
+			dpkgStatus + pmerror + pm("libother", "60.0000", "Installed libother");
+		expect(deriveUpdateProgress(dpkgLog, status)).toEqual(installingAt(40));
+	});
+
+	test("a later download record cannot move an install back to downloading", () => {
+		expect(deriveUpdateProgress("", dpkgStatus + dl("12.0000"))).toEqual(
+			installingAt(40),
+		);
+	});
+
+	test("ignores lines that are not well-formed status records", () => {
+		const noise =
+			"pmstatus:cerastream:nan:Unpacking\npmstatus:cerastream:150.0000:x\n" +
+			"dlstatus:1:-1:x\nmedia-change:x\nstatus: cerastream: unpacked\n" +
+			"E: Sub-process /usr/bin/dpkg returned an error code (1)\n";
+		expect(deriveUpdateProgress("", fetchStatus + noise)).toEqual(
+			downloadingAt(41),
+		);
+	});
+
+	test("without a status channel the transcript gives a phase and never a number", () => {
+		expect(deriveUpdateProgress(fetchLog, "")).toEqual(downloadingAt());
+		expect(deriveUpdateProgress(dpkgLog, "")).toEqual(installingAt());
+		// A PTY can append a record to an unterminated script line.
+		expect(
+			deriveUpdateProgress(
+				`${fetchLog}postinst outputSetting up cerastream (2) ...\n`,
+				"",
+			),
+		).toEqual(installingAt());
+	});
+
+	test("a percentage from another phase is never shown", () => {
+		expect(deriveUpdateProgress(dpkgLog, fetchStatus)).toEqual(installingAt());
+	});
+});
+
+type Files = {
+	readonly stdout: string;
+	readonly stderr?: string;
+	readonly status?: string;
+};
+type Mode = "live" | "reattached" | "finished replay";
 
 async function observe(
 	mode: Mode,
-	checkpoints: readonly Checkpoint[],
-	architecture: string | null = "arm64",
+	checkpoints: readonly Files[],
+	aptStatus = true,
 ) {
 	await using h = await updateHarness();
-	let archReads = 0;
-	const readNativeArchitecture = () => {
-		archReads++;
-		return Promise.resolve(architecture ?? undefined);
-	};
 	const paths = softwareUpdateOutputPaths();
-	const points = mode === "replay" ? checkpoints.slice(-1) : checkpoints;
-	let started = mode === "replay";
+	const points =
+		mode === "finished replay" ? checkpoints.slice(-1) : checkpoints;
+	const reads = { stdout: 0, stderr: 0, status: 0 };
+	const end = { stdout: 0, stderr: 0, status: 0 };
+	let started = mode !== "live";
 	let cursor = 0;
-	let finished = mode === "replay";
+	let polls = 0;
+	let finished = points.length === 1;
 	let settled: Promise<number> | undefined;
-	const seen: (UpdateProgress | boolean | null | undefined)[] = [];
 	const deps: DetachedAptUpgradeDeps = {
 		outputPaths: paths,
 		inspect: async () =>
@@ -64,323 +162,202 @@ async function observe(
 							kind: "finished",
 							exitCode: 100,
 							cleanup: "reset-failed",
-							pinnedInstall: [pin.name],
+							...(aptStatus ? { aptStatus: true } : {}),
 						}
-					: { kind: "running" },
+					: { kind: "running", ...(aptStatus ? { aptStatus: true } : {}) },
 		start: async () => {
 			started = true;
 		},
 		prepareOutput: async () => {},
 		readOutput: async (path, offset) => {
-			const bytes = Buffer.from(
-				points[cursor]?.[path === paths.stdout ? 0 : 1] ?? "",
+			const file =
+				path === paths.stdout
+					? "stdout"
+					: path === paths.stderr
+						? "stderr"
+						: path === paths.status
+							? "status"
+							: undefined;
+			if (file === undefined) throw new Error(`unexpected read of ${path}`);
+			reads[file]++;
+			const bytes = Buffer.from(points[cursor]?.[file] ?? "");
+			// The production reader returns at most one bounded block per read.
+			const block = bytes.subarray(
+				offset,
+				offset + SOFTWARE_UPDATE_OUTPUT_READ_BYTES,
 			);
-			return { bytes: bytes.subarray(offset), nextOffset: bytes.length };
+			end[file] = Math.max(end[file], offset + block.byteLength);
+			return { bytes: block, nextOffset: offset + block.byteLength };
 		},
 		sleep: async () => {
-			seen.push(structuredClone(buildInitialStatus().status.updating));
-			cursor++;
+			polls++;
+			if (polls > 50) throw new Error("observer kept polling");
+			cursor = Math.min(cursor + 1, points.length - 1);
 			finished = cursor === points.length - 1;
-			if (cursor >= points.length) throw new Error("extra poll");
 		},
 		cleanup: async () => {},
 	};
 	if (mode === "live") {
 		expect(startSoftwareUpdate()).toEqual({ started: true });
-		const monitor = createSoftwareUpdateProcessMonitor(
-			"",
-			readNativeArchitecture,
-		);
+		const monitor = createSoftwareUpdateProcessMonitor();
 		await monitor.finish(
 			runDetachedAptAll(
-				buildAptAllInstallArgs([pin], "any"),
+				buildAptAllInstallArgs([{ name: "cerastream", version: "2" }], "any"),
 				"any",
 				monitor.handlers,
 				deps,
 			),
 		);
 	} else {
-		const recovery = {
-			recover: async (
-				handlers: Parameters<typeof recoverDetachedAptUpgrade>[0],
-			) => {
-				const recovered = await recoverDetachedAptUpgrade(handlers, deps);
-				settled = recovered?.completion;
-				return recovered;
-			},
-			readNativeArchitecture,
-			scheduleRetry: () => {},
-			resumePeriodicChecks: () => {},
-		};
-		expect(await recoverSoftwareUpdateIfRunning(recovery)).toBe(true);
+		expect(
+			await recoverSoftwareUpdateIfRunning({
+				recover: async (handlers) => {
+					const recovered = await recoverDetachedAptUpgrade(handlers, deps);
+					settled = recovered?.completion;
+					return recovered;
+				},
+				scheduleRetry: () => {},
+				resumePeriodicChecks: () => {},
+			}),
+		).toBe(true);
 		expect(await settled).toBe(100);
 	}
-	const installing = h.frames.flatMap((frame) =>
-		frame.update_state?.kind === "installing"
-			? [frame.update_state.progress]
-			: [],
-	);
-	expect(buildInitialStatus().status.update_state?.kind).toBe("failed");
-	expect(archReads).toBe(1);
-	return { installing, seen };
+	await h.settled();
+	const running: UpdateProgress[] = [];
+	const states: NonNullable<StatusResponse["update_state"]>[] = [];
+	for (const frame of h.frames) {
+		const updating = frame.updating;
+		if (
+			typeof updating === "object" &&
+			updating &&
+			updating.result === undefined
+		)
+			running.push(updating);
+		if (frame.update_state) states.push(frame.update_state);
+	}
+	const last = points.at(-1);
+	return { running, states, reads, end, last };
 }
 
-describe.each(["live", "replay"] as const)(
-	"package progress from %s output",
+describe.each(["live", "reattached", "finished replay"] as const)(
+	"APT status progress (%s)",
 	(mode) => {
-		test("matches a bare native plan to dpkg's qualified native records", async () => {
-			const unpack = `${plan}Unpacking libmm-glib0:arm64 (2) over (1) ...\n`;
-			const { installing } = await observe(mode, [
-				[unpack],
-				[`${unpack}Setting up libmm-glib0:arm64 (2) ...\n`],
+		test("publishes the same final frame for the same bytes", async () => {
+			const { running, states } = await observe(mode, [
+				{ stdout: fetchLog, status: fetchStatus },
+				{ stdout: dpkgLog, status: dpkgStatus },
 			]);
-			expect(installing.at(-1)).toEqual({
-				total: 1,
-				downloading: 1,
-				unpacking: 1,
-				setting_up: 1,
-			});
-		});
-
-		test("a foreign identity cannot consume a bare native plan slot", async () => {
-			const unpack = `${plan}Unpacking libmm-glib0:amd64 (2) over (1) ...\n`;
-			const { installing } = await observe(mode, [
-				[unpack],
-				[`${unpack}Setting up libmm-glib0:amd64 (2) ...\n`],
-			]);
-			expect(installing.at(-1)).toMatchObject({ total: 0, setting_up: 1 });
-			expect(installing.every((frame) => frame.total === 0)).toBe(true);
-		});
-
-		test("does not guess the native identity when the architecture probe is unavailable", async () => {
-			const unpack = `${plan}Unpacking libmm-glib0:arm64 (2) over (1) ...\n`;
-			const { installing } = await observe(
-				mode,
-				[[unpack], [`${unpack}Setting up libmm-glib0:arm64 (2) ...\n`]],
-				null,
-			);
-			expect(installing.at(-1)).toEqual({
-				total: 0,
-				downloading: 0,
-				unpacking: 1,
-				setting_up: 1,
-			});
-		});
-
-		test("configure-only output without a plan still reports installation activity", async () => {
-			const { installing } = await observe(mode, [
-				[boundary],
-				[`${boundary}Setting up configure-only (2) ...\n`],
-			]);
-			expect(installing.at(-1)).toEqual({
-				total: 0,
-				downloading: 0,
-				unpacking: 0,
-				setting_up: 1,
-			});
-		});
-
-		test("counts a genuine setup once after an unterminated postinst fragment", async () => {
-			const start = `${pair}postinst finished`;
-			const finished = start + laterSetup;
-			const { installing } = await observe(mode, [
-				[pair],
-				[`${start}Sett`],
-				[finished],
-				[`${finished}duplicate output${laterSetup}`],
-			]);
-			expect(installing.map((frame) => frame.setting_up)).toEqual(
-				mode === "live" ? [1, 2] : [2],
+			expect(running).toEqual(
+				mode === "live"
+					? [preparing, downloadingAt(41), installingAt(40)]
+					: mode === "reattached"
+						? [downloadingAt(41), installingAt(40)]
+						: [installingAt(40)],
 			);
 			expect(
-				installing.map((frame) => packageProgressFraction(frame)?.percent),
-			).toEqual(mode === "live" ? [66, 83] : [83]);
-			expect(installing.at(-1)).toEqual({
-				total: 2,
-				downloading: 2,
-				unpacking: 2,
-				setting_up: 2,
-			});
+				states.filter((state) => state.kind === "installing").at(-1),
+			).toEqual({ kind: "installing", progress: installingAt(40) });
+			expect(states.at(-1)?.kind).toBe("failed");
 		});
 
-		test("counts unpacking after an unterminated maintainer-script fragment", async () => {
-			const start = `${plan}preinst finishedUnpack`;
-			const unpacked = `${start}ing libmm-glib0 (2) over (1) ...\r`;
-			const { installing } = await observe(mode, [
-				[start],
-				[unpacked],
-				[`${unpacked}preparing filesSetting up libmm-glib0 (2) ...\r`],
+		test("a failed package never earns more progress or completion", async () => {
+			const { running, states } = await observe(mode, [
+				{ stdout: dpkgLog, status: dpkgStatus },
+				{
+					stdout: `${dpkgLog}dpkg: error processing package cerastream (--configure):\n`,
+					stderr: "E: Sub-process /usr/bin/dpkg returned an error code (1)\n",
+					status: `${dpkgStatus}${pmerror}${pm("libother", "60.0000", "Installed libother")}`,
+				},
 			]);
-			expect(installing.at(-1)).toEqual({
-				total: 1,
-				downloading: 1,
-				unpacking: 1,
-				setting_up: 1,
-			});
-			if (mode === "live")
-				expect(installing.map((frame) => frame.setting_up)).toEqual([0, 1]);
-		});
-
-		test("ignores a script's unplanned setup echo without losing real activity", async () => {
-			const unpacked = `${plan}Unpacking libmm-glib0 (2) over (1) ...\n`;
-			const echoed = `${unpacked}script echoes Setting up not-in-plan (2) ...\n`;
-			const { installing } = await observe(mode, [
-				[unpacked],
-				[echoed],
-				[`${echoed}postinst finishedSetting up libmm-glib0 (2) ...\n`],
-			]);
-			expect(installing.map((frame) => frame.setting_up)).toEqual(
-				mode === "live" ? [0, 1] : [1],
+			expect(running.at(-1)).toEqual(installingAt(40));
+			expect(running.every((frame) => (frame.percent ?? 0) <= 40)).toBe(true);
+			const failure = states.at(-1);
+			expect(failure?.kind).toBe("failed");
+			// Status records live in their own file, so the reason is apt's error text.
+			expect(failure?.kind === "failed" ? failure.reason : "").toBe(
+				"E: Sub-process /usr/bin/dpkg returned an error code (1)",
 			);
-			expect(installing.at(-1)?.total).toBe(1);
 		});
 
-		test("recovers a framed plan after a fragment, including a split summary", async () => {
-			const start =
-				"download outputDownload complete and in download only mode\r" +
-				"reading listsThe following packages will be upgraded:\r  libmm-glib0\r";
-			const { installing } = await observe(mode, [
-				[`${start}APT output1 upgra`],
-				[
-					`${start}APT output1 upgraded, 0 newly installed, 0 to remove.\r` +
-						"Preparing to unpack libmm-glib0.deb ...\rUnpacking libmm-glib0 (2) ...\r",
-				],
-			]);
-			expect(installing).toEqual([
-				{ total: 1, downloading: 1, unpacking: 1, setting_up: 0 },
-			]);
-		});
-
-		test("shows phase only for a visibly quoted planned setup", async () => {
-			const { installing } = await observe(mode, [
-				[pair],
-				[`${pair}script printed "${laterSetup.trimEnd()}"\n`],
-			]);
-			expect(installing.at(-1)).toEqual({
-				total: 0,
-				downloading: 0,
-				unpacking: 1,
-				setting_up: 1,
+		test("reads output larger than one bounded read to the end", async () => {
+			const filler = "  postinst: rebuilding caches\n".repeat(4_000);
+			const status =
+				dl("1.0000").repeat(3_000) +
+				pm("dpkg-exec", "0.0000", "Running dpkg") +
+				pm("cerastream", "40.0000", "Unpacking cerastream");
+			const stdout = `${dpkgLog}${filler}`;
+			expect(Buffer.byteLength(stdout)).toBeGreaterThan(
+				SOFTWARE_UPDATE_OUTPUT_READ_BYTES,
+			);
+			expect(Buffer.byteLength(status)).toBeGreaterThan(
+				SOFTWARE_UPDATE_OUTPUT_READ_BYTES,
+			);
+			const { running, end } = await observe(mode, [{ stdout, status }]);
+			expect(running.at(-1)).toEqual(installingAt(40));
+			expect(end).toEqual({
+				stdout: Buffer.byteLength(stdout),
+				stderr: 0,
+				status: Buffer.byteLength(status),
 			});
-		});
-
-		test("does not let a later boundary-like script echo supply a plan", async () => {
-			const unpack = "Unpacking libmm-glib0 (2) ...\n";
-			const { installing } = await observe(mode, [
-				[unpack],
-				[`${unpack}script printed ${plan}Setting up libmm-glib0 (2) ...\n`],
-			]);
-			expect(installing.at(-1)).toEqual({
-				total: 0,
-				downloading: 0,
-				unpacking: 1,
-				setting_up: 1,
-			});
-		});
-
-		test.each([
-			failed,
-			"dpkg: dependency problems prevent configuration of libmm-glib0:\n",
-			"E: Sub-process /usr/bin/dpkg returned an error code (1)\n",
-		])(
-			"holds at four completed steps when B starts after %s",
-			async (marker) => {
-				const { installing } = await observe(mode, [
-					[pair],
-					[`${pair}${marker.slice(0, 14)}`],
-					[`${pair}${marker}${laterSetup}`],
-				]);
-				expect(installing.at(-1)).toEqual({
-					total: 2,
-					downloading: 2,
-					unpacking: 2,
-					setting_up: 1,
-				});
-				expect(installing.some((frame) => frame.setting_up === 2)).toBe(false);
-			},
-		);
-
-		test.each([
-			["postinst output", failed],
-			[
-				"postinst output\r",
-				"dpkg: dependency problems prevent configuration of libmm-glib0:\r\n",
-			],
-			[
-				"postinst output\r",
-				"E: Sub-process /usr/bin/dpkg returned an error code (1)\r\n",
-			],
-		])(
-			"freezes when PTY output precedes the error without a newline: %s %s",
-			async (prefix, marker) => {
-				const partial = `${pair}${prefix}${marker.slice(0, 14)}`;
-				const error = `${pair}${prefix}${marker}`;
-				const { installing, seen } = await observe(mode, [
-					[pair],
-					[partial],
-					[error],
-					[`${error}${laterSetup}`],
-				]);
-				const fourSteps = {
-					total: 2,
-					downloading: 2,
-					unpacking: 2,
-					setting_up: 1,
-				};
-				expect(installing).toEqual([fourSteps]);
-				if (mode === "live")
-					expect(seen).toEqual([fourSteps, fourSteps, fourSteps]);
-			},
-		);
-
-		test("holds a count while a mid-line stderr marker is still partial", async () => {
-			const prefix = "postinst output\r";
-			const { installing, seen } = await observe(mode, [
-				[pair],
-				[`${pair}${laterSetup}`, prefix + failed.slice(0, 14)],
-				[`${pair}${laterSetup}`, prefix + failed],
-			]);
-			const fourSteps = {
-				total: 2,
-				downloading: 2,
-				unpacking: 2,
-				setting_up: 1,
-			};
-			if (mode === "live") {
-				expect(installing).toEqual([fourSteps]);
-				expect(seen).toEqual([fourSteps, fourSteps]);
-			} else {
-				expect(installing).toEqual([
-					{ total: 0, downloading: 0, unpacking: 1, setting_up: 1 },
-				]);
-			}
-		});
-
-		test("never credits the next package from the same read as a separate stderr failure", async () => {
-			const { installing, seen } = await observe(mode, [
-				[pair],
-				[`${pair}${laterSetup}`, failed.slice(0, 14)],
-				[`${pair}${laterSetup}`, failed],
-			]);
-			if (mode === "live") {
-				const fourSteps = {
-					total: 2,
-					downloading: 2,
-					unpacking: 2,
-					setting_up: 1,
-				};
-				expect(seen).toEqual([fourSteps, fourSteps]);
-				expect(installing.at(-1)).toEqual(fourSteps);
-			} else {
-				// Separate retained files have no shared ordering on a cold read.
-				expect(installing.at(-1)).toEqual({
-					total: 0,
-					downloading: 0,
-					unpacking: 1,
-					setting_up: 1,
-				});
-			}
-			expect(installing.some((frame) => frame.setting_up === 2)).toBe(false);
 		});
 	},
 );
+
+describe("reattachment", () => {
+	test("announces a recovered unit once, from what its files already prove", async () => {
+		const { running } = await observe("reattached", [
+			{ stdout: "", status: "" },
+			{ stdout: dpkgLog, status: dpkgStatus },
+		]);
+		expect(running).toEqual([preparing, installingAt(40)]);
+	});
+
+	test("a unit started before the status channel is never read for it and shows phases only", async () => {
+		const stale = pm("cerastream", "80.0000", "Installed cerastream");
+		const { running, reads } = await observe(
+			"reattached",
+			[
+				{ stdout: fetchLog, status: stale },
+				{ stdout: dpkgLog, status: stale },
+			],
+			false,
+		);
+		expect(reads.status).toBe(0);
+		expect(running).toEqual([downloadingAt(), installingAt()]);
+	});
+
+	test("finished replay of a pre-channel unit reads its whole transcript", async () => {
+		const stdout = `${fetchLog}${"Fetched 48 MB in 7s (6,857 kB/s)\n".repeat(3_000)}Unpacking cerastream (2) over (1) ...\n`;
+		expect(Buffer.byteLength(stdout)).toBeGreaterThan(
+			SOFTWARE_UPDATE_OUTPUT_READ_BYTES,
+		);
+		const { running, end } = await observe(
+			"finished replay",
+			[{ stdout }],
+			false,
+		);
+		expect(running).toEqual([installingAt()]);
+		expect(end.stdout).toBe(Buffer.byteLength(stdout));
+	});
+});
+
+test("every read split of the status file converges without a partial number", async () => {
+	const allowed = [
+		preparing,
+		downloadingAt(),
+		downloadingAt(0),
+		downloadingAt(41),
+		installingAt(0),
+		installingAt(20),
+		installingAt(40),
+	];
+	for (let split = 1; split < dpkgStatus.length; split += 7) {
+		const { running } = await observe("live", [
+			// apt writes each status record before the dpkg output it announces.
+			{ stdout: fetchLog, status: dpkgStatus.slice(0, split) },
+			{ stdout: dpkgLog, status: dpkgStatus },
+		]);
+		for (const frame of running) expect(allowed).toContainEqual(frame);
+		expect(running.at(-1)).toEqual(installingAt(40));
+	}
+});

@@ -13,11 +13,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 const RUN_DIR = "/run/ceralive";
-const MAX_READ_BYTES = 64 * 1024;
+export const SOFTWARE_UPDATE_OUTPUT_READ_BYTES = 64 * 1024;
 
 export type SoftwareUpdateOutputPaths = {
 	readonly stdout: string;
 	readonly stderr: string;
+	/** APT::Status-Fd records; only units that declare the channel write it. */
+	readonly status: string;
 };
 
 export type SoftwareUpdateOutputRead = {
@@ -39,6 +41,7 @@ export function softwareUpdateOutputPaths(): SoftwareUpdateOutputPaths {
 	return {
 		stdout: path.join(RUN_DIR, "software-update.stdout"),
 		stderr: path.join(RUN_DIR, "software-update.stderr"),
+		status: path.join(RUN_DIR, "software-update.status"),
 	};
 }
 
@@ -94,14 +97,12 @@ export async function prepareSoftwareUpdateOutput(
 	paths: SoftwareUpdateOutputPaths,
 	expectedUid = 0,
 ): Promise<void> {
-	const directories = new Set([
-		path.dirname(paths.stdout),
-		path.dirname(paths.stderr),
-	]);
+	const files = [paths.stdout, paths.stderr, paths.status];
+	const directories = new Set(files.map((file) => path.dirname(file)));
 	if (directories.size !== 1) {
 		throw new UnsafeSoftwareUpdateOutputPathError(
 			paths.stdout,
-			"stdout and stderr do not share a directory",
+			"output files do not share a directory",
 		);
 	}
 	const directory = directories.values().next().value;
@@ -112,8 +113,7 @@ export async function prepareSoftwareUpdateOutput(
 		);
 	}
 	await secureOutputDirectory(directory, expectedUid);
-	await createOutputFile(paths.stdout, expectedUid);
-	await createOutputFile(paths.stderr, expectedUid);
+	for (const file of files) await createOutputFile(file, expectedUid);
 }
 
 export async function readSoftwareUpdateOutput(
@@ -121,7 +121,11 @@ export async function readSoftwareUpdateOutput(
 	offset: number,
 ): Promise<SoftwareUpdateOutputRead> {
 	const paths = softwareUpdateOutputPaths();
-	if (filePath !== paths.stdout && filePath !== paths.stderr) {
+	if (
+		filePath !== paths.stdout &&
+		filePath !== paths.stderr &&
+		filePath !== paths.status
+	) {
 		throw new UnsafeSoftwareUpdateOutputPathError(
 			filePath,
 			"runtime paths are fixed",
@@ -148,7 +152,10 @@ export async function readSoftwareUpdateOutput(
 		if (stat.size === offset)
 			return { bytes: new Uint8Array(), nextOffset: offset };
 
-		const length = Math.min(stat.size - offset, MAX_READ_BYTES);
+		const length = Math.min(
+			stat.size - offset,
+			SOFTWARE_UPDATE_OUTPUT_READ_BYTES,
+		);
 		const buffer = Buffer.alloc(length);
 		const { bytesRead } = await handle.read(buffer, 0, length, offset);
 		return {

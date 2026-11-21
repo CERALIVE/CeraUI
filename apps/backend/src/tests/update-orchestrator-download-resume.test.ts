@@ -129,7 +129,13 @@ describe("resume of a persisted download with install-unit evidence keeps the ex
 	test("a reattached live unit stays downloading and the tick keeps polling its progress", async () => {
 		let wire: UpdateState = {
 			kind: "downloading",
-			progress: { total: 6, downloading: 3, unpacking: 0, setting_up: 0 },
+			progress: {
+				total: 1,
+				downloading: 1,
+				unpacking: 0,
+				setting_up: 0,
+				percent: 41,
+			},
 		};
 		const b = await boot(persistedDownloading, {
 			recoverSoftwareUpdateIfRunning: async () => true,
@@ -138,12 +144,21 @@ describe("resume of a persisted download with install-unit evidence keeps the ex
 		expect(getOrchestratorState().phase).toBe("downloading");
 		await runOrchestratorTick();
 		expect(getOrchestratorState().phase).toBe("downloading");
-		expect(getOrchestratorState().progress).toBeNull();
+		expect(getOrchestratorState().progress).toEqual({
+			percent: 41,
+			etaSeconds: 0,
+		});
 		expect(b.installs.count).toBe(0);
 
 		wire = {
 			kind: "installing",
-			progress: { total: 6, downloading: 6, unpacking: 1, setting_up: 0 },
+			progress: {
+				total: 1,
+				downloading: 0,
+				unpacking: 0,
+				setting_up: 1,
+				percent: 33,
+			},
 		};
 		await runOrchestratorTick();
 		expect(getOrchestratorState().phase).toBe("committing");

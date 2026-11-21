@@ -126,6 +126,7 @@ describe("apt-all-packages admission", () => {
 				buildDetachedAptAllCommand(install, "any", {
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
+					status: "/run/ceralive/software-update.status",
 				}),
 			).toThrow();
 		},
@@ -150,6 +151,7 @@ describe("apt-all-packages admission", () => {
 				buildDetachedAptAllCommand(install, "any", {
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
+					status: "/run/ceralive/software-update.status",
 				}).at(-1),
 			).toContain(`install ${name}=1`);
 		}
@@ -631,13 +633,19 @@ describe("apt-all-packages admission", () => {
 		const command = buildDetachedAptAllCommand(args, "any", {
 			stdout: "/run/ceralive/software-update.stdout",
 			stderr: "/run/ceralive/software-update.stderr",
+			status: "/run/ceralive/software-update.status",
 		});
 		expect(command.filter((token) => token === "systemd-run")).toHaveLength(1);
 		expect(command).toContain("/usr/bin/flock");
 		const script = command[command.length - 1] ?? "";
-		expect(script).toContain("/usr/bin/apt-get -d -y upgrade --with-new-pkgs");
+		expect(script).toStartWith(
+			"exec 3>>/run/ceralive/software-update.status && ",
+		);
 		expect(script).toContain(
-			"/usr/bin/apt-get -y --no-download --no-remove -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install cerastream=2026.9.7",
+			"/usr/bin/apt-get -o APT::Status-Fd=3 -d -y upgrade --with-new-pkgs",
+		);
+		expect(script).toContain(
+			"/usr/bin/apt-get -o APT::Status-Fd=3 -y --no-download --no-remove -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install cerastream=2026.9.7",
 		);
 		expect(script.indexOf("upgrade --with-new-pkgs")).toBeLessThan(
 			script.indexOf("install cerastream=2026.9.7"),
@@ -673,6 +681,7 @@ describe("apt-all-packages admission", () => {
 				outputPaths: {
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
+					status: "/run/ceralive/software-update.status",
 				},
 				prepareOutput: async () => {},
 				start: async () => {

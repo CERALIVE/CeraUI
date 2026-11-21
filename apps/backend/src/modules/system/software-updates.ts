@@ -59,13 +59,7 @@ import {
 import { cleanAptCache } from "./apt-cache-clean.ts";
 /* Software updates */
 import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
-import {
-	deriveAptProgress,
-	hasDpkgFailure,
-	hasPartialDpkgFailure,
-	readNativeAptArchitecture,
-	type SoftUpdateStatus,
-} from "./apt-progress.ts";
+import { deriveUpdateProgress, type SoftUpdateStatus } from "./apt-progress.ts";
 import {
 	type AptReachability,
 	defaultAptReachabilityDeps,
@@ -149,7 +143,7 @@ import {
 	updateDismissalKey,
 } from "./update-state.ts";
 
-export { deriveAptProgress, type SoftUpdateStatus } from "./apt-progress.ts";
+export type { SoftUpdateStatus } from "./apt-progress.ts";
 
 let availableUpdates:
 	| {
@@ -358,7 +352,6 @@ export function resetSoftwareUpdateState(): void {
 
 export type SoftwareUpdateRecoveryDeps = {
 	readonly recover: typeof recoverDetachedAptUpgrade;
-	readonly readNativeArchitecture?: typeof readNativeAptArchitecture;
 	readonly scheduleRetry: (retry: () => void) => void;
 	readonly resumePeriodicChecks: () => void;
 };
@@ -1422,7 +1415,6 @@ export function resetSoftwareUpdateRunner(): void {
 }
 
 const MOCK_UPDATE_STEP_DELAY_MS = 120;
-const MOCK_UPDATE_TOTAL = 4;
 
 let mockSoftwareUpdatePromise: Promise<void> | null = null;
 
@@ -1434,17 +1426,17 @@ async function simulateMockSoftwareUpdate(): Promise<void> {
 	softUpdateStatus = { total: 0, downloading: 0, unpacking: 0, setting_up: 0 };
 	broadcastMsg("status", { updating: softUpdateStatus });
 
-	const steps: Array<Partial<SoftUpdateStatus>> = [
-		{ total: MOCK_UPDATE_TOTAL },
-		{ downloading: MOCK_UPDATE_TOTAL },
-		{ unpacking: MOCK_UPDATE_TOTAL },
-		{ setting_up: MOCK_UPDATE_TOTAL },
+	const steps: SoftUpdateStatus[] = [
+		{ total: 1, downloading: 1, unpacking: 0, setting_up: 0, percent: 45 },
+		{ total: 1, downloading: 1, unpacking: 0, setting_up: 0, percent: 99 },
+		{ total: 1, downloading: 0, unpacking: 0, setting_up: 1, percent: 20 },
+		{ total: 1, downloading: 0, unpacking: 0, setting_up: 1, percent: 80 },
 	];
 
 	for (const step of steps) {
 		await Bun.sleep(MOCK_UPDATE_STEP_DELAY_MS);
 		if (!softUpdateStatus) return;
-		softUpdateStatus = { ...softUpdateStatus, ...step };
+		softUpdateStatus = step;
 		broadcastMsg("status", { updating: softUpdateStatus });
 	}
 
@@ -1530,21 +1522,26 @@ type SoftwareUpdateProcessMonitor = {
 
 export function createSoftwareUpdateProcessMonitor(
 	prefetched = "",
-	readArchitecture = readNativeAptArchitecture,
 ): SoftwareUpdateProcessMonitor {
 	let rebootAfterUpgrade = false;
-	let pinnedInstall: readonly string[] | undefined;
+	let summaryParseLogged = false;
 	let aptLog = prefetched;
 	let aptErr = "";
-	let stderrFailed = false;
-	let outputHeld = false;
-	let architecture: ReturnType<typeof readNativeAptArchitecture> | undefined;
-	let nativeArch: string | undefined;
+	let aptStatus = "";
+	// A reattached unit is announced by its first drain, never by an empty frame.
+	let announced = true;
 
 	const observeRebootPackages = () => {
 		if (rebootAfterUpgrade) return;
 		const count = parseUpgradePackageCount(aptLog);
-		if (!count.ok || count.value === 0) return;
+		if (!count.ok) {
+			if (!summaryParseLogged && aptLog.includes(" upgraded")) {
+				summaryParseLogged = true;
+				logParseError(count);
+			}
+			return;
+		}
+		if (count.value === 0) return;
 		const packageList = parseAptUpgradedPackages(aptLog);
 		rebootAfterUpgrade =
 			packageList.ok &&
@@ -1553,58 +1550,52 @@ export function createSoftwareUpdateProcessMonitor(
 	};
 	if (prefetched) observeRebootPackages();
 
-	const publishProgress = (hold: boolean) => {
+	const publishProgress = () => {
 		if (!softUpdateStatus) return;
 		const previous = softUpdateStatus;
-		const next = deriveAptProgress(
-			previous,
+		// The in-process prefetch is finished work, not this unit's progress.
+		const next = deriveUpdateProgress(
 			aptLog.slice(prefetched.length),
-			pinnedInstall,
-			nativeArch,
-			hold || stderrFailed,
+			aptStatus,
 		);
 		softUpdateStatus = next;
-		if (!pinnedInstall && next.total === 0 && aptLog.includes(" upgraded")) {
-			const count = parseUpgradePackageCount(aptLog);
-			if (!count.ok) logParseError(count);
-		}
 		observeRebootPackages();
 		if (
-			previous.total !== next.total ||
-			previous.downloading !== next.downloading ||
-			previous.unpacking !== next.unpacking ||
-			previous.setting_up !== next.setting_up
-		) {
+			announced &&
+			previous.total === next.total &&
+			previous.downloading === next.downloading &&
+			previous.unpacking === next.unpacking &&
+			previous.setting_up === next.setting_up &&
+			previous.percent === next.percent
+		)
+			return;
+		announced = true;
+		try {
 			broadcastMsg("status", {
 				updating: next,
 				update_state: getUpdateState(),
+			});
+		} catch (broadcastError) {
+			// The observer must keep draining; a lost frame is superseded by the next.
+			logger.warn("Software update progress: broadcast failed", {
+				error: broadcastError,
 			});
 		}
 	};
 
 	const handlers: SoftwareUpdateOutputHandlers = {
-		onPinnedInstall: (packages) => {
-			pinnedInstall = packages;
-		},
 		onStdout: (data) => {
 			aptLog += data;
-			publishProgress(hasPartialDpkgFailure(aptErr));
 		},
 		onStderr: (data) => {
 			aptErr += data;
-			stderrFailed ||= hasDpkgFailure(aptErr);
 		},
-		onOutputBatch: async (stdout, stderr, stderrCaughtUp) => {
-			aptLog += stdout;
-			aptErr += stderr;
-			stderrFailed ||= stderr !== "" && hasDpkgFailure(aptErr);
-			const hold = !stderrCaughtUp || hasPartialDpkgFailure(aptErr);
-			if (stdout || stderr || hold !== outputHeld) {
-				architecture ??= readArchitecture();
-				nativeArch = await architecture;
-				publishProgress(hold);
-			}
-			outputHeld = hold;
+		onStatus: (data) => {
+			aptStatus += data;
+		},
+		onDrained: publishProgress,
+		onAttached: () => {
+			announced = false;
 		},
 		onObserverError: (error, suppressedRetries = 0) => {
 			logger.warn(
@@ -1997,10 +1988,7 @@ async function recoverSoftwareUpdate(
 	lastInstallUnitVerdict = "not-probed";
 	if (!aptUpdatesEnabled() || shouldUseMocks() || isUpdating()) return false;
 
-	const monitor = createSoftwareUpdateProcessMonitor(
-		"",
-		deps.readNativeArchitecture,
-	);
+	const monitor = createSoftwareUpdateProcessMonitor();
 	const recovered = await deps.recover({
 		...monitor.handlers,
 		onAttached: () => {
@@ -2017,21 +2005,7 @@ async function recoverSoftwareUpdate(
 			logger.warn(
 				"Software update: reattached to the detached apt transaction",
 			);
-			try {
-				broadcastMsg("status", {
-					updating: softUpdateStatus,
-					update_state: getUpdateState(),
-				});
-			} catch (broadcastError) {
-				// The reattachment above already happened; a broadcast failure
-				// must never turn into a thrown, uncaught exception here — that
-				// would reject the whole recovery attempt and lose the very
-				// evidence (an already-finished unit's outcome) this path exists
-				// to observe.
-				logger.warn("Software update recovery: broadcast failed", {
-					error: broadcastError,
-				});
-			}
+			monitor.handlers.onAttached?.();
 		},
 	});
 	// `null` means `systemctl show` named the fixed unit and answered

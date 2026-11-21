@@ -123,9 +123,25 @@ export function isExpectedAptAllInstallArgv(argv: readonly string[]): boolean {
 	return true;
 }
 
+// Descriptor 3, never 2: apt marks its status descriptor close-on-exec before
+// forking dpkg, which would leave DPkg::Post-Invoke hooks without stderr.
+const APT_STATUS_OPTION = "-o APT::Status-Fd=3";
+
+function aptStatusRedirect(): string {
+	return `exec 3>>${softwareUpdateOutputPaths().status}`;
+}
+
+export function expectedAptUpgradeScript(aptArgs: readonly string[]): string {
+	if (!isExpectedAptUpgradeArgv(["/usr/bin/apt-get", ...aptArgs]))
+		throw new InvalidDetachedAptUpgradeArgumentsError();
+	return `${aptStatusRedirect()} && exec /usr/bin/apt-get ${APT_STATUS_OPTION} ${aptArgs.join(" ")}`;
+}
+
+/** `aptStatus: false` is the pre-channel script, kept only so it stays adoptable. */
 export function expectedAptAllScript(
 	install: readonly string[],
 	family: readonly string[],
+	aptStatus = true,
 ): string {
 	if (!isExpectedAptAllInstallArgv(["/usr/bin/apt-get", ...install]))
 		throw new InvalidDetachedAptUpgradeArgumentsError();
@@ -142,19 +158,35 @@ export function expectedAptAllScript(
 		throw new InvalidDetachedAptUpgradeArgumentsError();
 	if (family.length && !install.includes(family[1] ?? ""))
 		throw new InvalidDetachedAptUpgradeArgumentsError();
-	return `/usr/bin/apt-get -d -y upgrade --with-new-pkgs${family.length ? ` ${family.join(" ")}` : ""} && /usr/bin/apt-get ${install.join(" ")}`;
+	const apt = aptStatus
+		? `/usr/bin/apt-get ${APT_STATUS_OPTION}`
+		: "/usr/bin/apt-get";
+	const run = `${apt} -d -y upgrade --with-new-pkgs${family.length ? ` ${family.join(" ")}` : ""} && ${apt} ${install.join(" ")}`;
+	return aptStatus ? `${aptStatusRedirect()} && ${run}` : run;
 }
 
-// Read exact name=version operands from the already validated pinned argv.
-export function aptPinnedPackageNames(argv: readonly string[]): string[] {
-	return argv
-		.slice(argv.indexOf("install") + 1)
-		.map((token) => token.split("=", 1)[0] ?? "");
+const EXEC_START_TAIL =
+	/^ ; ignore_errors=no ; start_time=\[[^\]\n]+\] ; stop_time=\[[^\]\n]+\] ; pid=\d+ ; code=(?:\(null\)|exited|killed|dumped) ; status=\d+(?:\/[A-Za-z0-9_-]+)? }$/;
+
+function wrappedScript(execStart: string, argvPrefix: string): string | null {
+	const scriptEnd = execStart.indexOf(" ; ignore_errors=", argvPrefix.length);
+	return execStart.startsWith(argvPrefix) &&
+		scriptEnd >= 0 &&
+		EXEC_START_TAIL.test(execStart.slice(scriptEnd))
+		? execStart.slice(argvPrefix.length, scriptEnd)
+		: null;
 }
 
-export function validateDetachedAptServiceIdentity(
-	output: string,
-): readonly string[] | undefined {
+function canonicalScript(build: () => string): string | null {
+	try {
+		return build();
+	} catch {
+		return null; // a foreign command is not adoptable
+	}
+}
+
+/** Returns true when the unit writes APT status records to the status file. */
+export function validateDetachedAptServiceIdentity(output: string): boolean {
 	if (
 		output.split("\n").filter((line) => line.startsWith("ExecStart="))
 			.length !== 1
@@ -189,39 +221,50 @@ export function validateDetachedAptServiceIdentity(
 	}
 
 	const execStart = properties.get("ExecStart") ?? "";
-	const argvMarker = "argv[]=";
-	const argvStart = execStart.indexOf(argvMarker);
-	const argvEnd = execStart.indexOf(" ;", argvStart);
 	if (execStart.startsWith("{ path=/usr/bin/flock ; ")) {
-		const prefix = `{ path=/usr/bin/flock ; argv[]=/usr/bin/flock -x ${SOFTWARE_UPDATE_LOCK} /bin/sh -ec `;
-		const scriptEnd = execStart.indexOf(" ; ignore_errors=", prefix.length);
+		const script = wrappedScript(
+			execStart,
+			`{ path=/usr/bin/flock ; argv[]=/usr/bin/flock -x ${SOFTWARE_UPDATE_LOCK} /bin/sh -ec `,
+		);
+		const match =
+			/^(?<status>exec 3>>\S+ && )?\/usr\/bin\/apt-get(?: -o APT::Status-Fd=3)? -d -y upgrade --with-new-pkgs(?<family> -o Acquire::ForceIPv[46]=true)? && \/usr\/bin\/apt-get(?: -o APT::Status-Fd=3)? (?<install>.+)$/.exec(
+				script ?? "",
+			);
+		const aptStatus = match?.groups?.status !== undefined;
+		const family = match?.groups?.family?.trim().split(" ") ?? [];
+		const install = match?.groups?.install?.split(" ") ?? [];
 		if (
-			!execStart.startsWith(prefix) ||
-			scriptEnd < 0 ||
-			!/^ ; ignore_errors=no ; start_time=\[[^\]\n]+\] ; stop_time=\[[^\]\n]+\] ; pid=\d+ ; code=(?:\(null\)|exited|killed|dumped) ; status=\d+(?:\/[A-Za-z0-9_-]+)? }$/.test(
-				execStart.slice(scriptEnd),
-			)
+			script === null ||
+			canonicalScript(() =>
+				expectedAptAllScript(install, family, aptStatus),
+			) !== script
 		) {
 			throw new DetachedAptServiceIdentityError("flock wrapper does not match");
 		}
-		const script = execStart.slice(prefix.length, scriptEnd);
-		const match =
-			/^\/usr\/bin\/apt-get -d -y upgrade --with-new-pkgs(?<family> -o Acquire::ForceIPv[46]=true)? && \/usr\/bin\/apt-get (?<install>.+)$/.exec(
-				script,
-			);
-		const family = match?.groups?.family?.trim().split(" ") ?? [];
-		const install = match?.groups?.install?.split(" ") ?? [];
-		let canonical = "";
-		try {
-			canonical = expectedAptAllScript(install, family);
-		} catch {
-			/* a foreign command is not adoptable */
-		}
-		if (canonical !== script) {
-			throw new DetachedAptServiceIdentityError("flock wrapper does not match");
-		}
-		return aptPinnedPackageNames(install);
+		return aptStatus;
 	}
+	if (execStart.startsWith("{ path=/bin/sh ; ")) {
+		const script = wrappedScript(
+			execStart,
+			"{ path=/bin/sh ; argv[]=/bin/sh -ec ",
+		);
+		const args =
+			/^exec 3>>\S+ && exec \/usr\/bin\/apt-get -o APT::Status-Fd=3 (?<args>.+)$/
+				.exec(script ?? "")
+				?.groups?.args?.split(" ") ?? [];
+		if (
+			script === null ||
+			canonicalScript(() => expectedAptUpgradeScript(args)) !== script
+		) {
+			throw new DetachedAptServiceIdentityError(
+				"status wrapper does not match",
+			);
+		}
+		return true;
+	}
+	const argvMarker = "argv[]=";
+	const argvStart = execStart.indexOf(argvMarker);
+	const argvEnd = execStart.indexOf(" ;", argvStart);
 	if (
 		!execStart.startsWith("{ path=/usr/bin/apt-get ; ") ||
 		argvStart < 0 ||
@@ -238,7 +281,7 @@ export function validateDetachedAptServiceIdentity(
 			"apt-get operation does not match",
 		);
 	}
-	return undefined;
+	return false;
 }
 
 export function validateDetachedAptServiceFragment(fragment: string): void {

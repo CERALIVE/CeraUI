@@ -46,128 +46,65 @@ afterEach(() => {
 	document.body.innerHTML = "";
 });
 
-describe("updating-overlay package acquisition", () => {
-	it("shows configuring activity without a number when dpkg's plan cannot be verified", async () => {
-		render(UpdatingOverlay, {
-			props: { details: progress({ total: 0, setting_up: 1 }) },
-		});
-		const bar = await screen.findByRole("progressbar");
-		expect(screen.getByTestId("update-phase").textContent).toContain(
-			"Installing",
-		);
-		expect(bar.getAttribute("aria-valuenow")).toBeNull();
-		expect(screen.queryByText(/^\d+ of \d+ steps$|^\d+%$/)).toBeNull();
-	});
+const downloading = { total: 1, downloading: 1, unpacking: 0, setting_up: 0 };
+const installing = { total: 1, downloading: 0, unpacking: 0, setting_up: 1 };
 
-	it("keeps the last verified four steps until the device reports failure", async () => {
-		const details = progress({
-			total: 2,
-			downloading: 2,
-			unpacking: 2,
-			setting_up: 1,
-		});
-		const view = render(UpdatingOverlay, { props: { details } });
-		const bar = await screen.findByRole("progressbar");
-		expect(screen.getByText("4 of 6 steps")).toBeDefined();
-		expect(bar.getAttribute("aria-valuenow")).toBe("4");
-		expect(bar.getAttribute("aria-valuetext")).toBe("66%");
-		expect(screen.queryByText("5 of 6 steps")).toBeNull();
-		await view.rerender({
-			details: {
-				...details,
-				result: "dpkg: error processing package package-a",
-			},
-		});
-		expect(screen.getByTestId("update-failed")).toBeDefined();
-		expect(screen.queryByText("83%")).toBeNull();
-		expect(screen.queryByText("100%")).toBeNull();
-		expect(toastSuccess).not.toHaveBeenCalled();
-	});
-
-	it("counts completed steps in both the text and bar as two packages advance", async () => {
-		const view = render(UpdatingOverlay, {
-			props: { details: progress({ total: 2, downloading: 2 }) },
-		});
-		const bar = await screen.findByRole("progressbar");
-
-		for (const [unpacking, setting_up, completed, percent] of [
-			[1, 0, 2, 33],
-			[2, 0, 3, 50],
-			[2, 1, 4, 66],
-			[2, 2, 5, 83],
-		]) {
-			await view.rerender({
-				details: progress({ total: 2, downloading: 2, unpacking, setting_up }),
-			});
-			expect(screen.getByText(`${completed} of 6 steps`)).toBeDefined();
-			expect(screen.getAllByText(`${percent}%`)).toHaveLength(2);
-			expect(bar.getAttribute("aria-valuenow")).toBe(String(completed));
-			expect(bar.getAttribute("aria-valuemax")).toBe("6");
-			expect(bar.getAttribute("aria-valuetext")).toBe(`${percent}%`);
-			expect(screen.queryByText(/^\d+\/\d+$/)).toBeNull();
-		}
-	});
-
-	it("rounds down near completion and reaches 100% only on success", async () => {
-		const details = progress({
-			total: 67,
-			downloading: 67,
-			unpacking: 67,
-			setting_up: 66,
-		});
-		const view = render(UpdatingOverlay, { props: { details } });
-		const bar = await screen.findByRole("progressbar");
-		expect(screen.queryByText("100%")).toBeNull();
-		expect(screen.getAllByText("99%")).toHaveLength(2);
-		expect(bar.getAttribute("aria-valuenow")).toBe("199");
-		expect(bar.getAttribute("aria-valuemax")).toBe("201");
-		await view.rerender({ details: { ...details, setting_up: 67 } });
-		expect(bar.getAttribute("aria-valuenow")).toBe("200");
-		expect(screen.getByText("200 of 201 steps")).toBeDefined();
-		expect(screen.getAllByText("99%")).toHaveLength(2);
-		await view.rerender({ details: { ...details, setting_up: 67, result: 0 } });
-		expect(bar.getAttribute("aria-valuenow")).toBe("201");
-		expect(screen.getAllByText("100%")).toHaveLength(2);
-	});
-
-	it("shows activity without inventing steps while apt has emitted no counters", async () => {
+describe("updating-overlay package progress", () => {
+	it("shows activity without inventing a number before APT reports one", async () => {
 		render(UpdatingOverlay, { props: { details: progress({ total: 0 }) } });
 
-		const bar = await screen.findByRole("progressbar");
+		const bar = await screen.findByRole("progressbar", { name: "Progress" });
 		expect(bar.getAttribute("aria-valuenow")).toBeNull();
 		expect(screen.getByTestId("update-phase").textContent).toContain(
 			"Preparing or downloading packages",
 		);
-		expect(screen.queryByText(/0 of 1 steps|0%/)).toBeNull();
+		expect(screen.queryByText(/^\d+%$|of \d+ steps/)).toBeNull();
 	});
 
-	it("keeps a single-package fetch indeterminate until unpacking actually starts", async () => {
-		// Get:1 identifies a fetch that started, not bytes transferred.
+	it("shows APT's download percentage, then its install percentage", async () => {
 		const view = render(UpdatingOverlay, {
-			props: { details: progress({ downloading: 1 }) },
+			props: { details: progress(downloading) },
 		});
-
-		const bar = await screen.findByRole("progressbar");
-		expect(bar.getAttribute("aria-valuenow")).toBeNull();
+		const bar = await screen.findByRole("progressbar", { name: "Progress" });
 		expect(screen.getByTestId("update-phase").textContent).toContain(
 			"Downloading",
 		);
-		expect(screen.queryByText("1/1")).toBeNull();
+		expect(bar.getAttribute("aria-valuenow")).toBeNull();
 
-		await view.rerender({
-			details: progress({ downloading: 1, unpacking: 1 }),
-		});
-		expect(bar.getAttribute("aria-valuenow")).toBe("1");
-		expect(screen.getByTestId("update-phase").textContent).toContain(
-			"Unpacking",
-		);
+		for (const [details, phase, percent] of [
+			[progress({ ...downloading, percent: 41 }), "Downloading", 41],
+			[progress({ ...installing, percent: 0 }), "Installing", 0],
+			[progress({ ...installing, percent: 60 }), "Installing", 60],
+		] as const) {
+			await view.rerender({ details });
+			expect(screen.getByTestId("update-phase").textContent).toContain(phase);
+			expect(screen.getByText(`${percent}%`)).toBeDefined();
+			expect(bar.getAttribute("aria-valuenow")).toBe(String(percent));
+			expect(bar.getAttribute("aria-valuemax")).toBe("100");
+			expect(bar.getAttribute("aria-valuetext")).toBe(`${percent}%`);
+		}
+		expect(screen.queryByText(/of \d+ steps/)).toBeNull();
+	});
 
-		await view.rerender({
-			details: progress({ downloading: 1, unpacking: 1, setting_up: 1 }),
-		});
+	it("shows the install phase without a number when only the transcript proves it", async () => {
+		render(UpdatingOverlay, { props: { details: progress(installing) } });
+		const bar = await screen.findByRole("progressbar", { name: "Progress" });
 		expect(screen.getByTestId("update-phase").textContent).toContain(
 			"Installing",
 		);
+		expect(bar.getAttribute("aria-valuenow")).toBeNull();
+		expect(screen.queryByText(/^\d+%$/)).toBeNull();
+	});
+
+	it("reaches 100% only on the device's success result", async () => {
+		const details = progress({ ...installing, percent: 99 });
+		const view = render(UpdatingOverlay, { props: { details } });
+		const bar = await screen.findByRole("progressbar", { name: "Progress" });
+		expect(screen.getByText("99%")).toBeDefined();
+		expect(screen.queryByText("100%")).toBeNull();
+		await view.rerender({ details: { ...details, result: 0 } });
+		expect(bar.getAttribute("aria-valuenow")).toBe("100");
+		expect(screen.getByText("100%")).toBeDefined();
 	});
 });
 
@@ -178,27 +115,21 @@ describe("updating-overlay terminal state", () => {
 	])(
 		"does not show completion before or after an install is %s",
 		async (_, result) => {
-			// The final "Setting up" record precedes postinst, even if the unit
-			// exits unsuccessfully. A signaled unit can report an empty error string.
-			const details = progress({ downloading: 1, unpacking: 1, setting_up: 1 });
+			const details = progress({ ...installing, percent: 80 });
 			const view = render(UpdatingOverlay, { props: { details } });
-			const bar = await screen.findByRole("progressbar");
+			const bar = await screen.findByRole("progressbar", { name: "Progress" });
 
 			expect(screen.getByTestId("update-phase").textContent).toContain(
 				"Installing",
 			);
-			expect(screen.getByText("2 of 3 steps")).toBeDefined();
-			expect(bar.getAttribute("aria-valuenow")).toBe("2");
-			expect(bar.getAttribute("aria-valuetext")).toBe("66%");
-			expect(screen.queryByText("1/1")).toBeNull();
+			expect(bar.getAttribute("aria-valuetext")).toBe("80%");
 			expect(screen.queryByText("100%")).toBeNull();
 			expect(toastSuccess).not.toHaveBeenCalled();
 
 			await view.rerender({ details: { ...details, result } });
 			expect(screen.getByTestId("update-failed")).toBeDefined();
-			expect(screen.queryByText("1/1")).toBeNull();
+			expect(screen.queryByText("80%")).toBeNull();
 			expect(screen.queryByText("100%")).toBeNull();
-			expect(screen.queryByText("3 of 3 steps")).toBeNull();
 			expect(bar.getAttribute("aria-valuenow")).toBeNull();
 			expect(toastSuccess).not.toHaveBeenCalled();
 		},

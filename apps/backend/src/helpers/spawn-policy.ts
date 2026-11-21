@@ -711,23 +711,6 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			"spawnWithTimeout runs the read-only upgrade discovery argv-only with a bounded local probe window",
 	},
 	{
-		id: "softwareUpdates.nativeAptArchitecture",
-		file: "modules/system/apt-progress.ts",
-		symbol: "readNativeAptArchitecture",
-		command: "[/usr/bin/dpkg, --print-architecture]",
-		class: "bounded-probe",
-		contract: {
-			timed: true,
-			startupTimeout: false,
-			shutdownCleanup: false,
-			shutdownAbort: false,
-			lifetimeTimeoutExempt: false,
-		},
-		status: "enforced",
-		mechanism:
-			"Read-only with a one-second bound; a missing answer disables native identity aliasing for progress only",
-	},
-	{
 		id: "softwareUpdates.aptCacheClean",
 		file: "modules/system/apt-cache-clean.ts",
 		symbol: "cleanAptCache",

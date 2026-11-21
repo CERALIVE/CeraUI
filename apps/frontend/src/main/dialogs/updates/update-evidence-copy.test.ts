@@ -208,32 +208,42 @@ describe("F7: package progress with an unknown total", () => {
 		expect(bar.getAttribute("aria-valuenow")).toBeNull();
 	});
 
-	it("still reports a measured percentage when the total is known", async () => {
+	it("still reports a measured percentage when APT reports one", async () => {
 		const bar = await progressBar({
 			kind: "installing",
-			progress: { downloading: 2, unpacking: 1, setting_up: 0, total: 2 },
+			progress: {
+				downloading: 0,
+				unpacking: 0,
+				setting_up: 1,
+				total: 1,
+				percent: 50,
+			},
 		});
 
-		expect(bar.getAttribute("aria-valuenow")).toBe("2");
-		expect(bar.getAttribute("aria-valuemax")).toBe("6");
-		expect(bar.getAttribute("aria-valuetext")).toBe("33%");
+		expect(bar.getAttribute("aria-valuenow")).toBe("50");
+		expect(bar.getAttribute("aria-valuemax")).toBe("100");
+		expect(bar.getAttribute("aria-valuetext")).toBe("50%");
+		expect(screen.getByTestId("update-package-phase").textContent).toBe(
+			"Installing · 50%",
+		);
 	});
 
-	it.each([
-		[66, 199],
-		[67, 200],
-	])(
-		"keeps 67 packages below completion with %d setups started (%d steps done)",
-		async (setting_up, completed) => {
-			const bar = await progressBar({
-				kind: "installing",
-				progress: { downloading: 67, unpacking: 67, setting_up, total: 67 },
-			});
-			expect(bar.getAttribute("aria-valuenow")).toBe(String(completed));
-			expect(bar.getAttribute("aria-valuemax")).toBe("201");
-			expect(bar.getAttribute("aria-valuetext")).toBe("99%");
-		},
-	);
+	it("names the download so its own percentage is not read as install progress", async () => {
+		const bar = await progressBar({
+			kind: "downloading",
+			progress: {
+				downloading: 1,
+				unpacking: 0,
+				setting_up: 0,
+				total: 1,
+				percent: 99,
+			},
+		});
+		expect(bar.getAttribute("aria-valuetext")).toBe("99%");
+		expect(screen.getByTestId("update-package-phase").textContent).toBe(
+			"Downloading · 99%",
+		);
+	});
 
 	it("does not count the only package as downloaded just because fetching began", async () => {
 		const bar = await progressBar({

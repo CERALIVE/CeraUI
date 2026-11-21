@@ -153,6 +153,9 @@ function pushStatus(frame: Record<string, unknown>): void {
 	flushSync();
 }
 
+// The backend's install-phase markers; the number is APT's own percentage.
+const installing = { total: 1, downloading: 0, unpacking: 0, setting_up: 1 };
+
 function updating(frame: UpdatingFrame): void {
 	pushStatus({ updating: frame });
 }
@@ -194,15 +197,15 @@ describe("Layout — the update overlay is mounted globally, not per trigger", (
 	});
 
 	it("renders the real percentage and phase, not a bare 'Applying…'", async () => {
-		// The second unpack has started: 5 of 12 steps done → 41%.
-		updating({ total: 4, downloading: 4, unpacking: 2, setting_up: 0 });
+		// APT reports 50% of its install plan.
+		updating({ ...installing, percent: 50 });
 		render(Layout);
 
 		await waitFor(() => {
-			expect(document.body.textContent).toContain("41%");
+			expect(document.body.textContent).toContain("50%");
 		});
-		expect(document.body.textContent).toContain("Unpacking");
-		expect(document.body.textContent).toMatch(/5\s+of\s+12\s+steps/);
+		expect(document.body.textContent).toContain("Installing");
+		expect(document.body.textContent).not.toMatch(/\d+\s+of\s+\d+\s+steps/);
 	});
 
 	it("stays unmounted while no update is running", async () => {
@@ -232,28 +235,30 @@ describe("Layout — the update overlay survives a backend restart", () => {
 		expect(phase()?.textContent).toContain("Preparing or downloading packages");
 		expect(bar()?.getAttribute("data-state")).toBe("indeterminate");
 
-		// The old observer saw unpacking before the package's postinst restarted it.
-		updating({ total: 1, downloading: 1, unpacking: 1, setting_up: 0 });
-		expect(bar()?.getAttribute("aria-valuenow")).toBe("1");
+		// The old process published APT's install percentage before the
+		// package's postinst restarted it.
+		updating({ ...installing, percent: 40 });
+		expect(bar()?.getAttribute("aria-valuenow")).toBe("40");
 		transport.connection?.("disconnected");
 		flushSync();
 		expect(overlayTitle()).toBe(mounted);
 		transport.connection?.("connected");
 		await vi.waitFor(() => expect(transport.hydrateCalls).toBeGreaterThan(0));
 
-		// Reattach can publish before the reader has drained the durable log.
+		// A frame before any APT status record is activity, never a number.
 		updating(silent);
 		expect(overlayTitle()).toBe(mounted);
 		expect(phase()?.textContent).toContain("Preparing or downloading packages");
 		expect(bar()?.getAttribute("aria-valuenow")).toBeNull();
-		expect(document.body.textContent).not.toContain("0 of 1 steps");
+		expect(document.body.textContent).not.toMatch(/\d+\s+of\s+\d+\s+steps/);
 
-		updating({ total: 1, downloading: 1, unpacking: 1, setting_up: 1 });
+		// The new process replays the status file and publishes where APT is.
+		updating({ ...installing, percent: 60 });
 		expect(overlayTitle()).toBe(mounted);
 		expect(phase()?.textContent).toContain("Installing");
-		expect(bar()?.getAttribute("aria-valuenow")).toBe("2");
-		expect(bar()?.getAttribute("aria-valuemax")).toBe("3");
-		expect(bar()?.getAttribute("aria-valuetext")).toBe("66%");
+		expect(bar()?.getAttribute("aria-valuenow")).toBe("60");
+		expect(bar()?.getAttribute("aria-valuemax")).toBe("100");
+		expect(bar()?.getAttribute("aria-valuetext")).toBe("60%");
 	});
 
 	it("is on screen from the FIRST paint when Layout re-mounts onto an update already in flight", () => {
@@ -269,7 +274,7 @@ describe("Layout — the update overlay survives a backend restart", () => {
 	});
 
 	it("stays mounted across close → reconnect → initial push, with no flicker to the idle layout", async () => {
-		updating({ total: 4, downloading: 4, unpacking: 1, setting_up: 0 });
+		updating({ ...installing, percent: 30 });
 		render(Layout);
 
 		await waitFor(() => {
@@ -310,7 +315,7 @@ describe("Layout — the update overlay survives a backend restart", () => {
 			is_streaming: false,
 			wifi: {},
 			modems: {},
-			updating: { total: 4, downloading: 4, unpacking: 3, setting_up: 0 },
+			updating: { ...installing, percent: 58 },
 			update_state: { kind: "idle" },
 		});
 		await tick();
@@ -319,7 +324,6 @@ describe("Layout — the update overlay survives a backend restart", () => {
 		expect(document.body.textContent).toContain("Updating Device Software");
 		// The progress moved, so the mount really is reading the post-reconnect
 		// frame rather than a frozen pre-drop snapshot.
-		expect(document.body.textContent).toContain("50%");
-		expect(document.body.textContent).toMatch(/6\s+of\s+12\s+steps/);
+		expect(document.body.textContent).toContain("58%");
 	});
 });

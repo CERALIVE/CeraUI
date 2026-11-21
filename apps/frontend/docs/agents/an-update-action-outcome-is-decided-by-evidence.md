@@ -182,11 +182,11 @@ The withheld-packages band is headed **Not included in this update**. A row
 says "Ships with the next OS image" only for `layer: platform` (the wire
 schema's documented meaning of that layer) and "Held back by the system" only
 for `kept_back`; `actionable: false` alone adds nothing. The named package
-progress bar remains indeterminate during download or when the total is unknown
-(early oracle F7). `Get:N` is not a completed download. Once unpacking or setup
-starts and the total is known, the overlay and inline bar show counted steps.
-A zero-counter reattach frame returns the overlay to indeterminate activity,
-not a fake percentage or `0 of 1` steps.
+progress bar is indeterminate until the frame carries APT's own `percent`
+for the phase shown (early oracle F7); the phase markers alone never produce a
+number. Both the overlay and the inline bar show that percentage, never
+counted steps; the inline bar names the phase because APT restarts its
+percentage for the install. Only a terminal `result: 0` shows 100%.
 
 ### A terminal install releases the takeover [EXISTS]
 

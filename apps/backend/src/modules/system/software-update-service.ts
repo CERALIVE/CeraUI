@@ -22,6 +22,7 @@ import {
 	DetachedAptServiceCommandError,
 	DetachedAptServiceIdentityError,
 	expectedAptAllScript,
+	expectedAptUpgradeScript,
 	InvalidDetachedAptUpgradeArgumentsError,
 	isExpectedAptUpgradeArgv,
 	SOFTWARE_UPDATE_DESCRIPTION,
@@ -77,6 +78,22 @@ export type DetachedAptServiceDeps = {
 	readonly now?: () => number;
 };
 
+function assertTrustedOutputPaths(
+	outputPaths: SoftwareUpdateOutputPaths,
+): void {
+	const trusted = softwareUpdateOutputPaths();
+	if (
+		outputPaths.stdout !== trusted.stdout ||
+		outputPaths.stderr !== trusted.stderr ||
+		outputPaths.status !== trusted.status
+	) {
+		throw new UnsafeSoftwareUpdateOutputPathError(
+			outputPaths.stdout,
+			"runtime paths are fixed",
+		);
+	}
+}
+
 export function buildDetachedAptUpgradeCommand(
 	aptArgs: readonly string[],
 	outputPaths: SoftwareUpdateOutputPaths,
@@ -95,16 +112,7 @@ export function buildDetachedAptUpgradeCommand(
 	) {
 		throw new InvalidDetachedAptUpgradeArgumentsError();
 	}
-	const trustedPaths = softwareUpdateOutputPaths();
-	if (
-		outputPaths.stdout !== trustedPaths.stdout ||
-		outputPaths.stderr !== trustedPaths.stderr
-	) {
-		throw new UnsafeSoftwareUpdateOutputPathError(
-			outputPaths.stdout,
-			"runtime paths are fixed",
-		);
-	}
+	assertTrustedOutputPaths(outputPaths);
 	return [
 		"systemd-run",
 		`--unit=${SOFTWARE_UPDATE_UNIT}`,
@@ -116,8 +124,9 @@ export function buildDetachedAptUpgradeCommand(
 		`--property=StandardOutput=append:${outputPaths.stdout}`,
 		`--property=StandardError=append:${outputPaths.stderr}`,
 		"--",
-		"/usr/bin/apt-get",
-		...aptArgs,
+		"/bin/sh",
+		"-ec",
+		expectedAptUpgradeScript(aptArgs),
 	];
 }
 
@@ -131,15 +140,7 @@ export function buildDetachedAptAllCommand(
 			? []
 			: ["-o", `Acquire::ForceIPv${verdict === "force_ipv4" ? "4" : "6"}=true`];
 	const script = expectedAptAllScript(installArgs, family);
-	const trusted = softwareUpdateOutputPaths();
-	if (
-		outputPaths.stdout !== trusted.stdout ||
-		outputPaths.stderr !== trusted.stderr
-	)
-		throw new UnsafeSoftwareUpdateOutputPathError(
-			outputPaths.stdout,
-			"runtime paths are fixed",
-		);
+	assertTrustedOutputPaths(outputPaths);
 	return [
 		"systemd-run",
 		`--unit=${SOFTWARE_UPDATE_UNIT}`,

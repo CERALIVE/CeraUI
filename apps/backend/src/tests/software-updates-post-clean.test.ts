@@ -140,6 +140,7 @@ describe("best-effort post-clean", () => {
 					outputPaths: {
 						stdout: "/run/ceralive/software-update.stdout",
 						stderr: "/run/ceralive/software-update.stderr",
+						status: "/run/ceralive/software-update.status",
 					},
 					inspect: async () =>
 						parseDetachedAptServiceState(

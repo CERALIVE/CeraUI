@@ -32,39 +32,33 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
 - **Progress is durable, never pipe-owned.** `systemd-run --pipe` couples the
   transaction's output to the backend process and produced `SIGPIPE` after the
   parent unit stopped. The transient service appends stdout/stderr under
-  fixed `/run/ceralive/software-update.{stdout,stderr}` files; the backend polls
-  them and feeds the apt progress parser and `SoftUpdateStatus` broadcasts.
-  The root-owned directory is not peer-writable, file creation is exclusive and
-  no-follow, and the files are mode 0600. Caller-selected paths are rejected.
-  Progress is derived from the cumulative log, so tokens split across arbitrary
-  file reads occupy the same offsets on replay. A PTY can put a record after an
-  unterminated script fragment; record structure and plan membership, not a
-  line start, determine what can be counted. No wall-clock deadline is added.
-  Each changed count publishes both `updating` and `update_state`; a `Get:N`
-  line shows a fetch started, not that it completed.
-  The pinned unit's download-only plan can be broader than its install.
-  Live observation and reattachment use the upgraded/new package lists
-  after the download-only boundary. Cross-check upgraded, new, reinstalled
-  and downgraded lists against their individual summary counts. Unsupported
-  categories or ambiguous evidence leave the total unknown.
-  A bare name and its verified native `:arch` form share one identity;
-  foreign architectures remain distinct. One unpack and one subsequent
-  setup per planned identity can contribute to the numeric count. When the
-  denominator is unknown, dpkg activity establishes the phase only.
-  Reattachment identifies the pinned two-stage unit from validated argv;
-  that argv does not establish a count. Dpkg errors cap the count at the
-  observed prefix (same log) or the last independently verified frame
-  (split logs). The detached result continues to own terminal settlement.
+  fixed `/run/ceralive/software-update.{stdout,stderr}` files and its shell
+  opens `/run/ceralive/software-update.status` as descriptor 3 for
+  `apt-get -o APT::Status-Fd=3`. The root-owned directory is not
+  peer-writable, file creation is exclusive and no-follow, and the files are
+  mode 0600. Caller-selected paths are rejected.
+  Progress is a pure function of the bytes read (`apt-progress.ts`): APT's
+  complete `dlstatus`/`pmstatus` records give the phase and APT's own
+  percentage, capped at 99 and frozen at `pmerror`; stdout only ever adds
+  phase evidence. The legacy step fields are phase markers. Each changed frame
+  publishes both `updating` and `update_state`. Polls read stdout, stderr
+  and status in that order, and the final drain reads each file until a read
+  returns nothing, so output larger than one bounded read is replayed whole.
+  Recovery announces a reattached unit from its first drain, never with an
+  empty frame. The detached result alone settles the outcome.
 - **Reattachment identity is a safety boundary.** Adoption requires the
   exact unit id and transient fragment path, transient-service description/type,
   exact non-duplicated `[Service]` stdout/stderr append destinations, no pre/post
-  hooks, and the canonical
-  `/usr/bin/apt-get` upgrade argv. Do not loosen these checks to adopt a foreign
+  hooks, and one canonical command: the status-channel `/bin/sh -ec` wrapper
+  or pinned flock script, or the pre-channel `/usr/bin/apt-get` argv or flock
+  script a previous release started. Only units in the status-channel form
+  have their status file read. Do not loosen these checks to adopt a foreign
   same-named unit. Keep final output drain ahead of unit cleanup so recovery
   does not discard an unobserved outcome. Probe and drain contracts:
   `software-update-service-contract.ts`, `software-update-process.ts`,
   `tests/software-update-service-hooks.test.ts` and `docs/DEVICE-UPDATES.md`.
 
 Coverage: `tests/software-updates-start-refusal.test.ts`,
-`tests/software-updates-apt.test.ts`.
+`tests/software-updates-apt.test.ts`, `tests/package-progress-output.test.ts`,
+`tests/software-update-status-channel.test.ts`.
 
