@@ -10,7 +10,9 @@ When unpacking starts and APT has reported a package count, the overlay shows
 install steps. Only the terminal APT result establishes success or failure.
 
 For pinned updates, a broader download plan cannot set the install total.
-Progress uses the separate install summary, including when replayed from disk.
+Progress counts distinct packages in APT's install plan, including dependencies
+APT adds, and ignores setup for packages outside that plan. This also applies
+when the log is replayed from disk.
 When the install count is unknown, static stripes show activity without a
 percentage, including in reduced-motion and e-ink modes.
 

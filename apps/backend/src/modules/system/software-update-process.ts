@@ -16,6 +16,7 @@ import {
 	defaultDetachedAptServiceDeps,
 	type SoftwareUpdateOutputPaths,
 } from "./software-update-service.ts";
+import { aptPinnedPackageNames } from "./software-update-service-contract.ts";
 
 export type { SoftwareUpdateOutputPaths } from "./software-update-service.ts";
 export { buildDetachedAptUpgradeCommand } from "./software-update-service.ts";
@@ -28,7 +29,7 @@ export type SoftwareUpdateOutputHandlers = {
 	readonly onStdout: (chunk: string) => void;
 	readonly onStderr: (chunk: string) => void;
 	readonly onAttached?: () => void;
-	readonly onPinnedInstall?: () => void;
+	readonly onPinnedInstall?: (packages: readonly string[]) => void;
 	readonly onObserverError?: (
 		error: unknown,
 		suppressedRetries?: number,
@@ -265,7 +266,7 @@ export async function runDetachedAptAll(
 	await deps.start(
 		buildDetachedAptAllCommand(installArgs, verdict, deps.outputPaths),
 	);
-	handlers.onPinnedInstall?.();
+	handlers.onPinnedInstall?.(aptPinnedPackageNames(installArgs));
 	return observeDetachedAptUpgrade({ kind: "running" }, handlers, deps);
 }
 
@@ -275,7 +276,7 @@ export async function recoverDetachedAptUpgrade(
 ): Promise<RecoveredDetachedAptUpgrade | null> {
 	const state = await deps.inspect();
 	if (state.kind === "absent") return null;
-	if (state.pinnedInstall) handlers.onPinnedInstall?.();
+	if (state.pinnedInstall) handlers.onPinnedInstall?.(state.pinnedInstall);
 	handlers.onAttached?.();
 	return {
 		completion: observeDetachedAptUpgrade(state, handlers, deps),

@@ -42,9 +42,13 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   Each changed count publishes both `updating` and `update_state`; a `Get:N`
   line shows a fetch started, not that it completed.
   The pinned unit's download-only plan can be broader than its install.
-  Live observation and reattachment count only the install summary after
-  the download-only boundary. If either is absent, install activity has no
-  numeric total. Reattachment gets the mode from the validated unit identity.
+  Live observation and reattachment use the upgraded/new package lists
+  after the download-only boundary, cross-checked against the install summary.
+  Each planned name contributes at most one unpack and one setup, with
+  architecture suffixes ignored. Unrelated dpkg activity is not counted.
+  Reattachment reads the explicit pins from the validated unit command.
+  Pins can identify activity while the total is unknown, but cannot prove the
+  total: APT can add dependencies or leave a requested package unchanged.
 - **Reattachment identity is a safety boundary.** Adoption requires the
   exact unit id and transient fragment path, transient-service description/type,
   exact non-duplicated `[Service]` stdout/stderr append destinations, no pre/post

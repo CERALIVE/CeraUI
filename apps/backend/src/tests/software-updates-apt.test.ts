@@ -1096,10 +1096,10 @@ describe("deriveAptProgress() — arbitrary output chunk boundaries", () => {
 		};
 		let output = "";
 		for (const chunk of [
-			"2 upgraded, 0 newly installed, 0 to remove.\nGet:",
+			"The following packages will be upgraded:\n  package-a package-b\n2 upgraded, 0 newly installed, 0 to remove.\nGet:",
 			"1 package\nUnpack",
-			"ing package-a\nSet",
-			"ting up package-a\n",
+			"ing package-a (2) over (1) ...\nSet",
+			"ting up package-a (2) ...\n",
 		]) {
 			output += chunk;
 			status = deriveAptProgress(status, output);

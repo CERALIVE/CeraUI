@@ -1525,10 +1525,32 @@ type SoftwareUpdateProcessMonitor = {
 	) => Promise<void>;
 };
 
+function aptInstallPlan(output: string): Set<string> | undefined {
+	const summary = /^\d+ upgraded, \d+ newly installed,[^\r\n]*\r?\n/m.exec(
+		output,
+	);
+	if (!summary) return undefined;
+	const count = parseUpgradePackageCount(summary[0]);
+	if (!count.ok || count.value === 0) return undefined;
+
+	const plan = new Set<string>();
+	const beforeSummary = output.slice(0, summary.index);
+	for (const [, block] of beforeSummary.matchAll(
+		/^The following (?:packages will be upgraded|NEW packages will be installed):\r?\n((?:[ \t]+[^\r\n]+\r?\n)+)/gm,
+	)) {
+		for (const token of (block ?? "").trim().split(/\s+/)) {
+			const name = token.split(":", 1)[0] ?? "";
+			if (!APT_PACKAGE_NAME_RE.test(name)) return undefined;
+			plan.add(name);
+		}
+	}
+	return plan.size === count.value ? plan : undefined;
+}
+
 export function deriveAptProgress(
 	current: SoftUpdateStatus,
 	output: string,
-	pinnedInstall = false,
+	pinnedInstall?: readonly string[],
 ): SoftUpdateStatus {
 	// The validated pinned unit runs two apt commands into one file. Only
 	// a complete download-only boundary can attribute a summary to install.
@@ -1538,40 +1560,33 @@ export function deriveAptProgress(
 	const installOutput = boundary
 		? output.slice(boundary.index + boundary[0].length)
 		: output;
-	const installSummary = pinnedInstall
-		? boundary &&
-			/^\d+ upgraded, \d+ newly installed,[^\r\n]*\r?\n/m.exec(
-				installOutput,
-			)?.[0]
-		: output;
-	const parsedTotal = parseUpgradePackageCount(installSummary || "");
-	const total = parsedTotal.ok
-		? parsedTotal.value
-		: pinnedInstall
-			? 0
-			: current.total;
+	const plan =
+		!pinnedInstall || boundary ? aptInstallPlan(installOutput) : undefined;
+	const total = plan?.size ?? 0;
+	// Pins identify activity if the plan is unknown, but cannot supply its
+	// denominator: APT may add dependencies or leave a pin unchanged.
+	const packages = plan ?? new Set(pinnedInstall);
 	let highestGet = current.downloading;
 	for (const match of installOutput.matchAll(/Get:(\d+)/g)) {
 		highestGet = Math.max(highestGet, Number.parseInt(match[1] ?? "", 10));
 	}
-	const limit = pinnedInstall && total === 0 ? Infinity : total;
-	const unpacking = Math.min(
-		installOutput.match(/Unpacking /g)?.length ?? 0,
-		limit,
-	);
-	const settingUp = Math.min(
-		installOutput.match(/Setting up /g)?.length ?? 0,
-		limit,
-	);
+	const unpacked = new Set<string>();
+	const configured = new Set<string>();
+	for (const [, action, name] of installOutput.matchAll(
+		/^(Unpacking|Setting up) ([a-z0-9][a-z0-9+.-]*)(?::[a-z0-9-]+)?[ \t][^\r\n]*\r?\n/gm,
+	)) {
+		if (name === undefined || !packages.has(name)) continue;
+		(action === "Unpacking" ? unpacked : configured).add(name);
+	}
 	return {
 		...current,
 		total,
 		downloading:
-			unpacking > 0 || (pinnedInstall && settingUp > 0)
+			unpacked.size > 0 || configured.size > 0
 				? total
 				: Math.min(highestGet, total),
-		unpacking,
-		setting_up: settingUp,
+		unpacking: unpacked.size,
+		setting_up: configured.size,
 	};
 }
 
@@ -1579,7 +1594,7 @@ export function createSoftwareUpdateProcessMonitor(
 	prefetched = "",
 ): SoftwareUpdateProcessMonitor {
 	let rebootAfterUpgrade = false;
-	let pinnedInstall = false;
+	let pinnedInstall: readonly string[] | undefined;
 	let aptLog = prefetched;
 	let aptErr = "";
 
@@ -1625,8 +1640,8 @@ export function createSoftwareUpdateProcessMonitor(
 	};
 
 	const handlers: SoftwareUpdateOutputHandlers = {
-		onPinnedInstall: () => {
-			pinnedInstall = true;
+		onPinnedInstall: (packages) => {
+			pinnedInstall = packages;
 		},
 		onStdout: handleStdoutChunk,
 		onStderr: (data) => {

@@ -106,7 +106,7 @@ describe("software-update status reaches clients across recovery", () => {
 
 				// No parseable counters until apt releases the buffered transcript.
 				onStdout(
-					"1 upgraded, 0 newly installed, 0 to remove.\n" +
+					"The following packages will be upgraded:\n  cerastream\n1 upgraded, 0 newly installed, 0 to remove.\n" +
 						"Get:1 https://example.invalid cerastream [48 MB]\n" +
 						"Unpacking cerastream (2) over (1) ...\n",
 				);
@@ -171,13 +171,14 @@ describe.each(["live", "reattached"] as const)(
 	"pinned install progress (%s)",
 	(mode) => {
 		test.each([
-			["two download candidates, one installed", 2, true, true],
-			["one download candidate, one installed", 1, true, true],
-			["missing install summary", 2, true, false],
-			["missing phase boundary", 2, false, true],
+			["two download candidates, one installed", 2, true, true, false],
+			["one download candidate, one installed", 1, true, true, false],
+			["missing install summary", 2, true, false, false],
+			["missing phase boundary", 2, false, true, false],
+			["solver-added dependency", 2, true, true, true],
 		] as const)(
 			"uses only a proven install denominator: %s",
-			async (_name, downloadCount, boundary, installSummary) => {
+			async (_name, downloadCount, boundary, installSummary, dependency) => {
 				await using _h = await updateHarness();
 				const paths = softwareUpdateOutputPaths();
 				const received: unknown[] = [];
@@ -185,10 +186,32 @@ describe.each(["live", "reattached"] as const)(
 				addClient(client);
 				const dir = await mkdtemp(join(tmpdir(), "ceraui-pinned-progress-"));
 				const file = join(dir, "stdout");
-				const fetch = `${downloadCount} upgraded, 0 newly installed, 0 to remove.\nGet:1 https://example.invalid cerastream [48 MB]\n`;
-				const install = `${boundary ? "Download complete and in download only mode\n" : ""}Reading package lists...\n${installSummary ? "1 upgraded, 0 newly installed, 0 to remove.\n" : ""}Unpacking cerastream (2) over (1) ...\nSetting up cerastream (2) ...\n`;
-				let finished = mode === "reattached";
-				let started = finished;
+				const fetch = `The following packages will be upgraded:\n  cerastream${downloadCount === 2 ? " unrelated-upgrade" : ""}\n${downloadCount} upgraded, 0 newly installed, 0 to remove.\nGet:1 https://example.invalid cerastream [48 MB]\n`;
+				const partial = `${boundary ? "Download complete and in download only mode\n" : ""}Reading package lists...\nThe following packages will be upgraded:\n  cerastream\n${dependency ? "The following NEW packages will be installed:\n  libnew-dependency:arm64\n" : ""}${installSummary ? `1 upgraded, ${Number(dependency)} newly installed, 0 to remove.\n` : ""}${dependency ? "Unpacking libnew-dependency:arm64 (1) ...\nSetting up libnew-dependency:arm64 (1) ...\n" : ""}Unpacking cerastream:arm64 (2) over (1) ...\n`;
+				const unrelated = "Setting up pending-unrelated:arm64 (1) ...\n";
+				const setup =
+					"Setting up cerastream (2) ...\nSetting up cerastream:arm64 (2) ...\n";
+				// Reattach to a running unit after the unrelated setup has already
+				// reached disk. Both paths then watch cerastream's actual setup.
+				const checkpoints =
+					mode === "live"
+						? [
+								fetch,
+								fetch + partial,
+								fetch + partial + unrelated,
+								fetch + partial + unrelated + setup,
+							]
+						: [
+								fetch + partial + unrelated,
+								fetch + partial + unrelated + setup,
+							];
+				let checkpoint = 0;
+				let finished = false;
+				let started = mode === "reattached";
+				const installTotal =
+					boundary && installSummary ? (dependency ? 2 : 1) : 0;
+				const beforeWrites: unknown[] = [];
+				let replayCompletion: Promise<number> | undefined;
 				const deps = {
 					outputPaths: paths,
 					inspect: async () =>
@@ -206,13 +229,17 @@ describe.each(["live", "reattached"] as const)(
 					},
 					sleep: async () => {
 						if (finished) throw new Error("unexpected second poll");
-						await writeFile(file, fetch + install);
-						finished = true;
+						beforeWrites.push(buildInitialStatus().status.updating);
+						const next = checkpoints[++checkpoint];
+						if (next === undefined)
+							throw new Error("unexpected output checkpoint");
+						await writeFile(file, next);
+						finished = checkpoint === checkpoints.length - 1;
 					},
 					cleanup: async () => {},
 				};
 				try {
-					await writeFile(file, finished ? fetch + install : fetch);
+					await writeFile(file, checkpoints[0] ?? "");
 					if (mode === "live") {
 						expect(startSoftwareUpdate()).toEqual({ started: true });
 						expect(
@@ -226,12 +253,19 @@ describe.each(["live", "reattached"] as const)(
 					} else {
 						expect(
 							await recoverSoftwareUpdateIfRunning({
-								recover: (handlers) =>
-									recoverDetachedAptUpgrade(handlers, deps),
+								recover: async (handlers) => {
+									const recovered = await recoverDetachedAptUpgrade(
+										handlers,
+										deps,
+									);
+									replayCompletion = recovered?.completion;
+									return recovered;
+								},
 								scheduleRetry: () => {},
 								resumePeriodicChecks: () => {},
 							}),
 						).toBe(true);
+						expect(await replayCompletion).toBe(100);
 					}
 
 					const frames = received.flatMap((frame) => {
@@ -240,16 +274,48 @@ describe.each(["live", "reattached"] as const)(
 						const parsed = statusResponseSchema.safeParse(frame.status);
 						return parsed.success ? [parsed.data] : [];
 					});
-					const installTotal = boundary && installSummary ? 1 : 0;
 					const progress = {
 						total: installTotal,
 						downloading: installTotal,
-						unpacking: 1,
-						setting_up: 1,
+						unpacking: installTotal,
+						setting_up: installTotal,
 					};
-					expect(frames).toContainEqual({
-						updating: progress,
-						update_state: { kind: "installing", progress },
+					const firstProgress = {
+						...progress,
+						setting_up: Math.max(0, installTotal - 1),
+					};
+					const installFrames = frames.filter(
+						(frame) => frame.update_state?.kind === "installing",
+					);
+					if (installTotal > 0) {
+						expect(beforeWrites.at(-1)).toEqual(firstProgress);
+						expect(installFrames).toEqual([
+							{
+								updating: firstProgress,
+								update_state: { kind: "installing", progress: firstProgress },
+							},
+							{
+								updating: progress,
+								update_state: { kind: "installing", progress },
+							},
+						]);
+					} else {
+						const unknownTotal = { ...update, unpacking: 1 };
+						const configured = { ...unknownTotal, setting_up: 1 };
+						expect(installFrames).toEqual([
+							{
+								updating: unknownTotal,
+								update_state: { kind: "installing", progress: unknownTotal },
+							},
+							{
+								updating: configured,
+								update_state: { kind: "installing", progress: configured },
+							},
+						]);
+					}
+					expect(frames[0]).toEqual({
+						updating: update,
+						update_state: { kind: "downloading", progress: update },
 					});
 					for (const frame of frames)
 						if (frame.update_state?.kind === "downloading")

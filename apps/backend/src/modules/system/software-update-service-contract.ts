@@ -145,9 +145,16 @@ export function expectedAptAllScript(
 	return `/usr/bin/apt-get -d -y upgrade --with-new-pkgs${family.length ? ` ${family.join(" ")}` : ""} && /usr/bin/apt-get ${install.join(" ")}`;
 }
 
+// Read exact name=version operands from the already validated pinned argv.
+export function aptPinnedPackageNames(argv: readonly string[]): string[] {
+	return argv
+		.slice(argv.indexOf("install") + 1)
+		.map((token) => token.split("=", 1)[0] ?? "");
+}
+
 export function validateDetachedAptServiceIdentity(
 	output: string,
-): "pinned" | "legacy" {
+): readonly string[] | undefined {
 	if (
 		output.split("\n").filter((line) => line.startsWith("ExecStart="))
 			.length !== 1
@@ -213,7 +220,7 @@ export function validateDetachedAptServiceIdentity(
 		if (canonical !== script) {
 			throw new DetachedAptServiceIdentityError("flock wrapper does not match");
 		}
-		return "pinned";
+		return aptPinnedPackageNames(install);
 	}
 	if (
 		!execStart.startsWith("{ path=/usr/bin/apt-get ; ") ||
@@ -231,7 +238,7 @@ export function validateDetachedAptServiceIdentity(
 			"apt-get operation does not match",
 		);
 	}
-	return "legacy";
+	return undefined;
 }
 
 export function validateDetachedAptServiceFragment(fragment: string): void {
