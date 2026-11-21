@@ -84,6 +84,11 @@ descendant cases and receipt-set test with zero skips or failures. The checker
 unit tests run separately from backend discovery. Add future kernel files to both
 the manifest and `apps/backend/tsconfig.tests.json`.
 
+Publish Release keeps frontend unit tests first and enables unprivileged user
+namespaces before package and backend contracts. Its release/package gate mirrors
+the Build Check sender fixture and runs the opt-in netns cases separately,
+including rootful UID routing, so the bundled backend run's skips are covered.
+
 Four further Build Check facts, all landed 2026-08-14:
 
 - **The frontend Vitest lane runs on BUN; the Playwright lanes stay on Node 26**

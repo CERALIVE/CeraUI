@@ -73,6 +73,44 @@ test('release publishers and artifact uploads wait for successful commit approva
 	}
 });
 
+const releaseTestSteps = workflow.jobs['release-package-contracts'].steps;
+const backendUnitIndex = releaseTestSteps.findIndex((step) =>
+	step.run?.split('\n').includes('bun run --filter backend test'),
+);
+
+test('release enables unprivileged namespaces before package and backend contracts', () => {
+	const enable = releaseTestSteps.findIndex(
+		(step) => step.run === 'sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0',
+	);
+	const packages = releaseTestSteps.findIndex(
+		(step) => step.run === 'bun run test:release-package-contracts',
+	);
+	expect(enable).toBeGreaterThanOrEqual(0);
+	expect(packages).toBeGreaterThan(enable);
+	expect(backendUnitIndex).toBeGreaterThan(enable);
+	expect(releaseTestSteps[enable].if).toBeUndefined();
+	expect(releaseTestSteps[enable]['continue-on-error']).toBeUndefined();
+});
+
+const buildCheck = YAML.parse(
+	await file(new URL('../../.github/workflows/build-check.yml', import.meta.url)).text(),
+);
+
+test.each([
+	['Prepare pinned srtla-send runtime', 'before'],
+	['Export the live sender binary', 'before'],
+	['netns-semantics (isolated — statistical assertions need CPU headroom)', 'after'],
+	['update UID routing (rootful netns)', 'after'],
+])('release runs %s %s bundled backend tests, as in Build Check', (name, order) => {
+	const reference = buildCheck.jobs['test-be'].steps.find((step) => step.name === name);
+	const index = releaseTestSteps.findIndex((step) => step.name === name);
+	expect(reference).toBeDefined();
+	expect(index).toBeGreaterThanOrEqual(0);
+	expect(backendUnitIndex).toBeGreaterThanOrEqual(0);
+	expect(releaseTestSteps[index]).toEqual(reference);
+	expect(order === 'before' ? index < backendUnitIndex : index > backendUnitIndex).toBe(true);
+});
+
 const eventSha = 'a'.repeat(40);
 test.each([
 	['matching SHA', eventSha, 0],
