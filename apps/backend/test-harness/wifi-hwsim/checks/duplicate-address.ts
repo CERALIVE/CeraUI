@@ -34,6 +34,7 @@ import {
 	wifiUpdateDevices,
 } from "../../../src/modules/wifi/wifi-interfaces.ts";
 import { wifiRadioIdentity } from "../../../src/modules/wifi/wifi-radio-identity.ts";
+import { wifiRadioObservation } from "../../../src/modules/wifi/wifi-radio-observation.ts";
 import { projectWifiRadioIncarnation } from "../../../src/modules/wifi/wifi-radio-publication.ts";
 
 const address = async (ifname: string) =>
@@ -117,6 +118,9 @@ async function managed(ifname: string) {
 }
 
 async function assignGuestPorts(layout: "same" | "distinct", a: string, twin: string) {
+	// Retire the previous layout's scheduled samples before restarting NetworkManager.
+	wifiRadioObservation.stop();
+	await wifiRadioObservation.settled;
 	const setup = Bun.spawn(
 		[
 			"timeout",
@@ -136,7 +140,7 @@ async function assignGuestPorts(layout: "same" | "distinct", a: string, twin: st
 	await managed(twin);
 }
 
-async function discoverGuestRadios(a: string, twin: string) {
+async function discoverGuestRadios(a: string, twin: string, paths?: readonly [string, string]) {
 	// This standalone check has no backend interface monitor to supply the live snapshot.
 	const observations = await Promise.all(
 		(await radios()).map(async (ifname) => {
@@ -153,14 +157,20 @@ async function discoverGuestRadios(a: string, twin: string) {
 
 	const previous = wifiRadioIdentity.publishedObservation;
 	const published = Promise.withResolvers<void>();
+	let discoveryComplete = false;
 	const observe = () => {
 		const registry = getWifiInterfacesByMacAddress();
 		if (
+			discoveryComplete &&
 			wifiRadioIdentity.publishedObservation > previous &&
-			[a, twin].every((ifname) => {
+			[a, twin].every((ifname, index) => {
 				const identity = wifiRadioIdentity.state.rows.get(ifname);
 				return (
 					identity?.row !== undefined &&
+					(paths === undefined ||
+						(identity.classification === "verified" &&
+							identity.degradedReason === undefined &&
+							identity.devicePath === paths[index])) &&
 					registry[identity.key] === identity.row &&
 					projectWifiRadioIncarnation(identity.row, identity) !== undefined
 				);
@@ -174,7 +184,7 @@ async function discoverGuestRadios(a: string, twin: string) {
 	const timer = setTimeout(() => {
 		const details = [a, twin].map((ifname) => {
 			const identity = wifiRadioIdentity.state.rows.get(ifname);
-			return `${ifname}=${identity?.classification ?? "missing"} (row=${identity?.row?.id ?? "missing"})`;
+			return `${ifname}=${identity?.classification ?? "missing"} (row=${identity?.row?.id ?? "missing"}, path=${identity?.devicePath ?? "missing"}, token=${identity?.row && projectWifiRadioIncarnation(identity.row, identity) ? "ready" : "missing"})`;
 		});
 		deadline.reject(
 			new Error(`Timed out waiting for published guest Wi-Fi rows: ${details.join(", ")}`),
@@ -182,7 +192,15 @@ async function discoverGuestRadios(a: string, twin: string) {
 	}, 20_000);
 	try {
 		await Promise.race([
-			Promise.all([wifiUpdateDevices().then(observe), published.promise]),
+			Promise.all([
+				wifiUpdateDevices().then(async () => {
+					discoveryComplete = true;
+					observe();
+					await wifiRadioObservation.settled;
+					observe();
+				}),
+				published.promise,
+			]),
 			deadline.promise,
 		]);
 	} finally {
@@ -252,7 +270,9 @@ async function main() {
 	await assignGuestPorts("distinct", a, twin);
 	const aPath = (await nmDeviceProp(a, "GENERAL.PATH"))?.[0];
 	const bPath = (await nmDeviceProp(twin, "GENERAL.PATH"))?.[0];
-	await discoverGuestRadios(a, twin);
+	assert(aPath && bPath && aPath !== bPath, "Guest must report two distinct NM port paths");
+	const paths = [aPath, bPath] as const;
+	await discoverGuestRadios(a, twin, paths);
 	const keys = [`${mac}@${aPath}`, `${mac}@${bPath}`];
 	const registry = getWifiInterfacesByMacAddress();
 	if (!aPath || !bPath || aPath === bPath || keys.some((key) => !registry[key])) {
@@ -268,21 +288,30 @@ async function main() {
 		throw new Error("Same-address simulated AP activation remains unqualified");
 	}
 	for (const key of keys) {
+		// Start can schedule another discovery; the next request needs the current publication.
+		await discoverGuestRadios(a, twin, paths);
 		const row = registry[key];
 		assert(row);
 		const token = projectWifiRadioIncarnation(row, wifiRadioIdentity.state.rows.get(row.ifname));
-		assert(token);
+		assert(token, `No current incarnation for ${row.ifname} (${key}) before Prepare`);
 		const request = { device: String(row.id), expected: token, kind: "config" } as const;
 		const draft = await withWifiRequestBinding(request, () =>
 			wifiHotspotPrepare({ device: row.id }),
 		);
 		assert(draft.success && draft.firstTime);
+		await discoverGuestRadios(a, twin, paths);
+		assert.equal(
+			projectWifiRadioIncarnation(row, wifiRadioIdentity.state.rows.get(row.ifname)),
+			token,
+			`Incarnation for ${row.ifname} (${key}) changed between Prepare and Start`,
+		);
 		assert(
 			(await withWifiRequestBinding(request, () => wifiHotspotStart({ device: row.id }))).success,
 		);
 		const started = getHotspotCredentials(key)?.conn;
 		assert(started);
 		await connected(row.ifname, started, draft.name);
+		console.log(`B9 distinct-path AP active ifname=${row.ifname} key=${key} profile=${started}`);
 	}
 	assert.notEqual(
 		getHotspotCredentials(keys[0] ?? "")?.conn,

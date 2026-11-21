@@ -60,7 +60,11 @@ udevadm verify "$rules"
 udevadm control --reload-rules
 udevadm trigger --action=change --settle "/sys/class/net/$first" "/sys/class/net/$second"
 systemctl restart NetworkManager
-nm-online --wait-for-startup --timeout=25 --quiet
+if ! nm-online --wait-for-startup --timeout=25 --quiet ||
+	! systemctl is-active --quiet NetworkManager; then
+	echo "B9-PORT-BOOTSTRAP: NetworkManager did not finish startup for $layout layout" >&2
+	exit 1
+fi
 
 # These read-only probes must agree before CeraUI's discovery sees either radio.
 probe() {
