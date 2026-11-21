@@ -20,12 +20,14 @@ import {
 import {
 	type AptScript,
 	FRAMES_PREFIX,
+	RESTART_EXIT_CODE,
 	scriptedApt,
 } from "./ceralive-update-apt.ts";
 
 export type SessionStep = {
 	readonly record: string;
 	readonly boot: string;
+	readonly build?: string;
 	readonly scratch: string;
 	readonly check?: AptScript;
 	readonly dismiss?: boolean;
@@ -52,6 +54,7 @@ updates.setAptCommandRunnerForTest((argv) =>
 initCeraliveUpdateNotice({
 	path: step.record,
 	boot: step.boot,
+	...(step.build === undefined ? {} : { build: step.build }),
 	...(step.failWrites
 		? {
 				write: () => {
@@ -78,6 +81,9 @@ const frames: unknown[] = [
 process.stdout.write(`${FRAMES_PREFIX}${JSON.stringify(frames)}\n`);
 
 if (step.recoverInstall) {
+	// Nothing else in this session throws once the frames are out, so this exit names the cause.
+	for (const event of ["uncaughtException", "unhandledRejection"] as const)
+		process.on(event, () => process.exit(RESTART_EXIT_CODE));
 	Object.assign(defaultAptSpaceDeps, {
 		run: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
 	});

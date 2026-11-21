@@ -656,7 +656,9 @@ async function getCapableUpdateSize(
 			update_state: getUpdateState(),
 		});
 		if (refreshConclusive)
-			reconcileCeraliveUpdateNotice(firstPartyOffer(result.packages));
+			reconcileCeraliveUpdateNotice(
+				firstPartyOffer(result.packages, sourcePolicy.stdout),
+			);
 		return null;
 	} catch (error) {
 		if (!(error instanceof AptAllRefusalError)) throw error;

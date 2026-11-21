@@ -37,8 +37,8 @@ Install post-acceptance limits: D8 Known gaps (c). Check wire reference:
 - **Only a conclusive check changes the "CeraLive update is available" notice.**
   The refresh must exit 0 without `Err:`, failed-fetch, stale-index or `E:`
   diagnostics and must not be captive; legacy `dist-upgrade --assume-no` must exit
-  0, or 1 after its own `Abort.`, without `E:`; and every first-party candidate
-  must be verified. Every other cycle, a settled install and an empty restarted
+  0, or 1 after its own `Abort.`, without `E:`; CeraLive's verified source must
+  be in the refreshed inventory; and every first-party candidate must be verified. Every other cycle, a settled install and an empty restarted
   process leave it untouched. The advisory discovery itself and its parsers are
   unchanged. Rules, persistence and coverage:
   [the retraction contract](a-persistent-notification-must-be-retractable.md#the-ceralive-update-offer-is-withdrawn-only-by-a-conclusive-check-exists).

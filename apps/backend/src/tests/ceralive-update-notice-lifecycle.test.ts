@@ -60,6 +60,7 @@ import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import {
 	type AptPackage,
 	type AptScript,
+	DEBIAN_ONLY_INVENTORY,
 	scriptedApt,
 } from "./helpers/ceralive-update-apt.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
@@ -261,13 +262,51 @@ describe("legacy image", () => {
 		expect(currentTab(replayFrames())).toEqual([KERNEL, OS_OFFER].sort());
 	});
 
-	test("the typed removal alone does not reach a pre-#183 tab", async () => {
+	test("the typed removal withdraws a current tab but does not reach a pre-#183 tab", async () => {
 		await check({ upgradable: [cerastream("2")] });
 		await check({});
 		const typedOnly = liveFrames().filter(
 			(frame) => notificationsMessageSchema.safeParse(frame).success,
 		);
+		expect(currentTab(typedOnly, [NOTICE])).toEqual([]);
 		expect(legacyTab(typedOnly, [NOTICE])).toEqual([NOTICE]);
+	});
+
+	test("a refresh that never saw CeraLive's source keeps the offer", async () => {
+		await check({ upgradable: [cerastream("2")] });
+		// When CeraLive's source is disabled and only Debian answered the refresh.
+		await check({ inventory: DEBIAN_ONLY_INVENTORY });
+		expect(liveRemovals()).toEqual([]);
+		expect(notificationExists(NOTICE)?.dismissalKey).toBe(
+			"update:cerastream=2",
+		);
+		expect(currentTab(replayFrames(), [NOTICE])).toEqual([NOTICE]);
+	});
+
+	test("a dismissal that cannot be written is refused and cannot withdraw the offer later", async () => {
+		await check({ upgradable: [cerastream("2")] });
+		const seen = shown();
+		// When the dismissal store's directory is gone, so the write fails.
+		process.env.CERALIVE_DISMISSALS_FILE = join(
+			dir,
+			"missing",
+			"dismissals.json",
+		);
+		resetDismissalStoreForTests();
+		const sent: string[] = [];
+		await expect(
+			call(
+				dismissNotificationProcedure,
+				{ name: NOTICE, revision: seen?.revision, publisher: seen?.publisher },
+				{ context: context(sent) },
+			),
+		).rejects.toThrow();
+		// Then nothing is remembered and the next conclusive check keeps the offer for every tab.
+		expect(isNotificationDismissed("update:cerastream=2")).toBe(false);
+		expect(notificationExists(NOTICE)).toBeDefined();
+		await check({ upgradable: [cerastream("2")] });
+		expect(liveRemovals()).toEqual([]);
+		expect(currentTab(replayFrames(), [NOTICE])).toEqual([NOTICE]);
 	});
 
 	test("an independent update left after the install replaces the offer without a withdrawal", async () => {
@@ -437,6 +476,14 @@ describe("legacy image", () => {
 		expect(sent.map((frame) => JSON.parse(frame).notification)).toEqual([
 			{ show: [shown()] },
 		]);
+		// Checked independently of the producer: the resent copy is the newer release.
+		const resent = JSON.parse(sent[0] ?? "{}").notification.show[0];
+		expect(resent).toMatchObject({
+			name: NOTICE,
+			key: "notifications.ceraliveUpdateAvailable",
+			publisher: old?.publisher,
+		});
+		expect(resent.revision).toBeGreaterThan(old?.revision ?? Infinity);
 	});
 
 	test("a dismissal that cannot name the release it saw changes nothing", async () => {
@@ -504,6 +551,13 @@ describe("capable image", () => {
 		expect(getUpdateState()).toMatchObject({ actionable_count: 1 });
 		expect(liveRemovals()).toEqual([NOTICE]);
 		expect(currentTab(replayFrames(), [NOTICE])).toEqual([]);
+	});
+
+	test("a Debian-only refresh without CeraLive's source keeps the offer", async () => {
+		await check({ upgradable: [srtla("2.0")] });
+		await check({ upgradable: [curl], inventory: DEBIAN_ONLY_INVENTORY });
+		expect(liveRemovals()).toEqual([]);
+		expect(currentTab(replayFrames(), [NOTICE])).toEqual([NOTICE]);
 	});
 
 	test("a first-party candidate whose policy disagrees with the simulation leaves the offer untouched", async () => {

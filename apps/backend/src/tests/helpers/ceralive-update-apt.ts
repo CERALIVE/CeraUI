@@ -19,10 +19,13 @@ export type AptScript = {
 	readonly discovery?: Partial<SpawnWithTimeoutResult>;
 	readonly policyFails?: readonly string[];
 	readonly planOmits?: readonly string[];
+	readonly inventory?: string;
 };
 
 // Marks the line a restart-test session prints its authentication frames on.
 export const FRAMES_PREFIX = "auth-replay:";
+// Exit status of a session ended by the finished update's own restart (an uncaught throw).
+export const RESTART_EXIT_CODE = 75;
 
 export const CERALIVE_SOURCE =
 	"https://apt.ceralive.tv/dists/stable/binary-arm64 ./ Packages";
@@ -39,6 +42,8 @@ export const INVENTORY = `Package files:
      origin apt.ceralive.tv
 Pinned packages:
 `;
+// CeraLive's source disabled or absent: the refresh only ever saw Debian.
+export const DEBIAN_ONLY_INVENTORY = `${INVENTORY.split(` 500 ${CERALIVE_SOURCE}`)[0]}Pinned packages:\n`;
 const NOTHING =
 	"0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n";
 
@@ -104,7 +109,7 @@ export function scriptedApt(script: AptScript) {
 		}
 		if (bin === "/usr/bin/apt-mark") return ok("");
 		if (bin === "/usr/bin/apt-cache" && verb === "policy") {
-			if (name === undefined) return ok(INVENTORY);
+			if (name === undefined) return ok(script.inventory ?? INVENTORY);
 			if (script.policyFails?.includes(name))
 				return { exitCode: 100, stdout: "", stderr: `E: ${name}\n` };
 			const pkg = all.find((candidate) => candidate.name === name);

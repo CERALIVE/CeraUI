@@ -16,6 +16,7 @@ import { z } from "zod";
 import {
 	type AptScript,
 	FRAMES_PREFIX,
+	RESTART_EXIT_CODE,
 } from "./helpers/ceralive-update-apt.ts";
 import type { SessionStep } from "./helpers/ceralive-update-session.ts";
 
@@ -75,6 +76,8 @@ async function session(step: Step = {}) {
 		.find((entry) => entry.startsWith(FRAMES_PREFIX));
 	if (line === undefined)
 		throw new Error(`no frames (exit ${exit}): ${stderr}`);
+	if (!step.recoverInstall && exit !== 0)
+		throw new Error(`session exited ${exit}: ${stderr}`);
 	return {
 		exit,
 		stderr,
@@ -126,10 +129,7 @@ test(
 		// When the package script restarts the backend: it recovers the finished
 		// install and exits through the update's own restart, with no check run.
 		const packageRestart = await session({ recoverInstall: true });
-		expect(packageRestart.exit).not.toBe(0);
-		expect(packageRestart.stderr).toContain(
-			"software update complete; exiting to restart CeraUI",
-		);
+		expect(packageRestart.exit).toBe(RESTART_EXIT_CODE);
 		// An install result is not evidence: a tab reconnecting now keeps its copy.
 		expect(currentTab(packageRestart.frames, open)).toEqual([NOTICE]);
 		expect(legacyTab(packageRestart.frames, legacy)).toEqual([NOTICE]);
@@ -142,6 +142,34 @@ test(
 		expect(legacyTab(reconnect.frames, legacy)).toEqual([]);
 		// And a freshly opened tab never shows it.
 		expect(currentTab(reconnect.frames)).toEqual([]);
+		// When a later process finds a newer release, a tab holding it is never told to drop it.
+		const newer = await session({ check: pending("3") });
+		expect(currentTab(newer.frames, [NOTICE])).toEqual([NOTICE]);
+		expect(legacyTab(newer.frames, [NOTICE])).toEqual([NOTICE]);
+		// And a restart that runs no check keeps it for every reconnecting tab.
+		const idle = await session();
+		expect(currentTab(idle.frames, [NOTICE])).toEqual([NOTICE]);
+		expect(legacyTab(idle.frames, [NOTICE])).toEqual([NOTICE]);
+	},
+	SEQUENCE_TIMEOUT_MS,
+);
+
+test(
+	"a same-boot downgrade and re-upgrade cannot replay an obsolete withdrawal",
+	async () => {
+		// Given this build recorded a withdrawal.
+		await session({ check: pending("2"), build: "build-a" });
+		await session({ check: NOTHING_PENDING, build: "build-a" });
+		// When an older backend, which never writes the record, shows a new offer in the
+		// same boot, and the re-upgraded build restarts before its first check.
+		const upgraded = await session({ build: "build-b" });
+		// Then tabs holding the older backend's offer keep it.
+		expect(currentTab(upgraded.frames, [NOTICE])).toEqual([NOTICE]);
+		expect(legacyTab(upgraded.frames, [NOTICE])).toEqual([NOTICE]);
+		// Control: the build that wrote the record still restores its own withdrawal.
+		const same = await session({ build: "build-a" });
+		expect(currentTab(same.frames, [NOTICE])).toEqual([]);
+		expect(legacyTab(same.frames, [NOTICE])).toEqual([]);
 	},
 	SEQUENCE_TIMEOUT_MS,
 );

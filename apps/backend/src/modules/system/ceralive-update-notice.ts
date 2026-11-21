@@ -3,10 +3,12 @@
  *
  * Only a conclusive check may change it, and only after its verdict is
  * durable: every first-party candidate must be verified, and the verdict is
- * written (with this boot's id) before anything is broadcast. Contract:
+ * written (with this boot's and this backend build's identity) before anything
+ * is broadcast. An empty verdict also needs CeraLive's verified source in the
+ * refreshed inventory. Contract:
  * apps/backend/docs/agents/a-persistent-notification-must-be-retractable.md.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import type { UpdatePackage } from "@ceraui/rpc";
 import { z } from "zod";
 
@@ -24,6 +26,7 @@ import {
 	discoverAptAllPackages,
 	type PinnedAptPackage,
 } from "./apt-all-packages.ts";
+import { policySources } from "./apt-all-source-policy.ts";
 import {
 	APT_PACKAGE_NAME_RE,
 	compareAptPackageNames,
@@ -69,6 +72,7 @@ const recordSchema = z
 	.object({
 		version: z.literal(1),
 		boot: z.string().min(1),
+		build: z.string().min(1),
 		offer: offerSchema,
 	})
 	.strict();
@@ -76,12 +80,14 @@ const recordSchema = z
 type Store = {
 	readonly path: string;
 	readonly boot: string | undefined;
+	readonly build: string | undefined;
 	readonly write: (path: string, text: string) => void;
 };
 
 export type CeraliveUpdateNoticeOptions = {
 	readonly path?: string;
 	readonly boot?: string | undefined;
+	readonly build?: string | undefined;
 	readonly write?: (path: string, text: string) => void;
 };
 
@@ -92,7 +98,10 @@ let withdrawn = false;
 
 export function firstPartyOffer(
 	packages: readonly UpdatePackage[],
+	sourcePolicy: string,
 ): CeraliveOffer {
+	// Without CeraLive's verified source in the refresh, "nothing listed" proves nothing.
+	if (!firstPartySourceListed(sourcePolicy)) return "unknown";
 	const offer: PinnedAptPackage[] = [];
 	for (const { name, version, origin, actionable } of packages) {
 		if (classifyPackageLayer(name) !== "app") continue;
@@ -104,12 +113,21 @@ export function firstPartyOffer(
 	return offer;
 }
 
+function firstPartySourceListed(sourcePolicy: string): boolean {
+	return [...policySources(sourcePolicy).values()].includes(
+		FIRST_PARTY_APT_HOST,
+	);
+}
+
 /** Legacy: verify the exact install plan's first-party rows the way capable discovery does. */
 export async function legacyCeraliveOffer(
 	names: readonly string[],
 	plan: readonly string[],
 	run: AptRun,
 ): Promise<CeraliveOffer> {
+	const inventory = await run(["/usr/bin/apt-cache", "policy"]);
+	if (inventory.exitCode !== 0 || !firstPartySourceListed(inventory.stdout))
+		return "unknown";
 	if (names.length === 0) return [];
 	const simulation = await run([
 		"/usr/bin/apt-get",
@@ -118,8 +136,7 @@ export async function legacyCeraliveOffer(
 		"Debug::NoLocking=1",
 		...plan,
 	]);
-	const inventory = await run(["/usr/bin/apt-cache", "policy"]);
-	if (simulation.exitCode !== 0 || inventory.exitCode !== 0) return "unknown";
+	if (simulation.exitCode !== 0) return "unknown";
 	try {
 		const { packages } = await discoverAptAllPackages(
 			simulation.stdout,
@@ -132,7 +149,7 @@ export async function legacyCeraliveOffer(
 			},
 			inventory.stdout,
 		);
-		const offer = firstPartyOffer(packages);
+		const offer = firstPartyOffer(packages, inventory.stdout);
 		// The plan must take every first-party package discovery listed.
 		return offer !== "unknown" &&
 			names.every((name) => offer.some((row) => row.name === name))
@@ -200,13 +217,17 @@ function publish(offer: readonly PinnedAptPackage[]): void {
 	withdrawn = false;
 }
 
-function recordText(boot: string, offer: readonly PinnedAptPackage[]): string {
-	return JSON.stringify({ version: 1, boot, offer });
+function recordText(
+	boot: string,
+	build: string,
+	offer: readonly PinnedAptPackage[],
+): string {
+	return JSON.stringify({ version: 1, boot, build, offer });
 }
 
 function persist(offer: readonly PinnedAptPackage[]): boolean {
 	if (store === undefined) return true;
-	const text = recordText(store.boot ?? "", offer);
+	const text = recordText(store.boot ?? "", store.build ?? "", offer);
 	if (text === persisted) return true;
 	try {
 		store.write(store.path, text);
@@ -246,6 +267,23 @@ function readBootId(): string | undefined {
 	}
 }
 
+// A reinstall (upgrade or downgrade) replaces the running files, so their identity changes.
+function readBuildId(): string | undefined {
+	try {
+		return [...new Set([process.execPath, Bun.main])]
+			.map((file) => {
+				const stat = statSync(file);
+				return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}`;
+			})
+			.join("/");
+	} catch (error) {
+		logger.warn("CeraLive update notice: build identity unreadable", {
+			error: error instanceof Error ? error.message : String(error),
+		});
+		return undefined;
+	}
+}
+
 /** Applies a conclusive check's verdict; `unknown` leaves the notice as it is. */
 export function reconcileCeraliveUpdateNotice(verdict: CeraliveOffer): void {
 	if (verdict === "unknown") return;
@@ -265,13 +303,15 @@ export function initCeraliveUpdateNotice(
 	store = {
 		path: options.path ?? RECORD_FILE,
 		boot: "boot" in options ? options.boot : readBootId(),
+		build: "build" in options ? options.build : readBuildId(),
 		write: options.write ?? writeFileAtomicSync,
 	};
 	persisted = undefined;
 	withdrawn = false;
 	const record = readRecord(store.path);
 	if (record === undefined) return;
-	persisted = recordText(record.boot, record.offer);
-	if (record.boot !== store.boot) return;
+	persisted = recordText(record.boot, record.build, record.offer);
+	// Another build (an older backend shows offers without writing this record) breaks the chain.
+	if (record.boot !== store.boot || record.build !== store.build) return;
 	if (record.offer.length === 0 || dismissed(record.offer) === true) withdraw();
 }
