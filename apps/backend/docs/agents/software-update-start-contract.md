@@ -37,8 +37,9 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   The root-owned directory is not peer-writable, file creation is exclusive and
   no-follow, and the files are mode 0600. Caller-selected paths are rejected.
   Progress is derived from the cumulative log, so tokens split across arbitrary
-  file reads are still counted exactly once. No wall-clock deadline is added: a
-  valid package transaction may run for minutes.
+  file reads occupy the same offsets on replay. A PTY can put a record after an
+  unterminated script fragment; record structure and plan membership, not a
+  line start, determine what can be counted. No wall-clock deadline is added.
   Each changed count publishes both `updating` and `update_state`; a `Get:N`
   line shows a fetch started, not that it completed.
   The pinned unit's download-only plan can be broader than its install.
@@ -53,8 +54,7 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   Reattachment identifies the pinned two-stage unit from validated argv;
   that argv does not establish a count. Dpkg errors cap the count at the
   observed prefix (same log) or the last independently verified frame
-  (split logs). A PTY diagnostic can follow a script fragment mid-line or
-  span log reads. The detached result continues to own terminal settlement.
+  (split logs). The detached result continues to own terminal settlement.
 - **Reattachment identity is a safety boundary.** Adoption requires the
   exact unit id and transient fragment path, transient-service description/type,
   exact non-duplicated `[Service]` stdout/stderr append destinations, no pre/post

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { packageProgressFraction } from "@ceraui/rpc/package-progress";
 import type { UpdateProgress } from "@ceraui/rpc/schemas";
 import { buildAptAllInstallArgs } from "../modules/system/apt-all-packages.ts";
 import { softwareUpdateOutputPaths } from "../modules/system/software-update-output.ts";
@@ -175,6 +176,104 @@ describe.each(["live", "replay"] as const)(
 				total: 0,
 				downloading: 0,
 				unpacking: 0,
+				setting_up: 1,
+			});
+		});
+
+		test("counts a genuine setup once after an unterminated postinst fragment", async () => {
+			const start = `${pair}postinst finished`;
+			const finished = start + laterSetup;
+			const { installing } = await observe(mode, [
+				[pair],
+				[`${start}Sett`],
+				[finished],
+				[`${finished}duplicate output${laterSetup}`],
+			]);
+			expect(installing.map((frame) => frame.setting_up)).toEqual(
+				mode === "live" ? [1, 2] : [2],
+			);
+			expect(
+				installing.map((frame) => packageProgressFraction(frame)?.percent),
+			).toEqual(mode === "live" ? [66, 83] : [83]);
+			expect(installing.at(-1)).toEqual({
+				total: 2,
+				downloading: 2,
+				unpacking: 2,
+				setting_up: 2,
+			});
+		});
+
+		test("counts unpacking after an unterminated maintainer-script fragment", async () => {
+			const start = `${plan}preinst finishedUnpack`;
+			const unpacked = `${start}ing libmm-glib0 (2) over (1) ...\r`;
+			const { installing } = await observe(mode, [
+				[start],
+				[unpacked],
+				[`${unpacked}preparing filesSetting up libmm-glib0 (2) ...\r`],
+			]);
+			expect(installing.at(-1)).toEqual({
+				total: 1,
+				downloading: 1,
+				unpacking: 1,
+				setting_up: 1,
+			});
+			if (mode === "live")
+				expect(installing.map((frame) => frame.setting_up)).toEqual([0, 1]);
+		});
+
+		test("ignores a script's unplanned setup echo without losing real activity", async () => {
+			const unpacked = `${plan}Unpacking libmm-glib0 (2) over (1) ...\n`;
+			const echoed = `${unpacked}script echoes Setting up not-in-plan (2) ...\n`;
+			const { installing } = await observe(mode, [
+				[unpacked],
+				[echoed],
+				[`${echoed}postinst finishedSetting up libmm-glib0 (2) ...\n`],
+			]);
+			expect(installing.map((frame) => frame.setting_up)).toEqual(
+				mode === "live" ? [0, 1] : [1],
+			);
+			expect(installing.at(-1)?.total).toBe(1);
+		});
+
+		test("recovers a framed plan after a fragment, including a split summary", async () => {
+			const start =
+				"download outputDownload complete and in download only mode\r" +
+				"reading listsThe following packages will be upgraded:\r  libmm-glib0\r";
+			const { installing } = await observe(mode, [
+				[`${start}APT output1 upgra`],
+				[
+					`${start}APT output1 upgraded, 0 newly installed, 0 to remove.\r` +
+						"Preparing to unpack libmm-glib0.deb ...\rUnpacking libmm-glib0 (2) ...\r",
+				],
+			]);
+			expect(installing).toEqual([
+				{ total: 1, downloading: 1, unpacking: 1, setting_up: 0 },
+			]);
+		});
+
+		test("shows phase only for a visibly quoted planned setup", async () => {
+			const { installing } = await observe(mode, [
+				[pair],
+				[`${pair}script printed "${laterSetup.trimEnd()}"\n`],
+			]);
+			expect(installing.at(-1)).toEqual({
+				total: 0,
+				downloading: 0,
+				unpacking: 1,
+				setting_up: 1,
+			});
+		});
+
+		test("does not let a later boundary-like script echo supply a plan", async () => {
+			const unpack = "Unpacking libmm-glib0 (2) ...\n";
+			const { installing } = await observe(mode, [
+				[unpack],
+				[`${unpack}script printed ${plan}Setting up libmm-glib0 (2) ...\n`],
+			]);
+			expect(installing.at(-1)).toEqual({
+				total: 0,
+				downloading: 0,
+				unpacking: 1,
 				setting_up: 1,
 			});
 		});

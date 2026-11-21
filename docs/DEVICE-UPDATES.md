@@ -22,13 +22,15 @@ distinct. If the install total cannot be verified, unpack/setup records still
 show the active phase, with static stripes instead of a number or percentage
 in all modes, including reduced motion and e-ink.
 
-After a recognized dpkg error, later package starts cannot increase the count.
-APT's PTY can put an error after package script output without a newline.
-An error in stdout caps progress at the steps credited before the marker,
-even if it appears mid-line or spans log reads. Stdout and stderr are retained
-in separate files; when an error is on stderr, hold the last verified count,
-or show only the phase if replay has no
-trustworthy ordering. The unit's final result still determines the outcome.
+APT's PTY can put a package record or error after script output without
+a newline. The parser reads the accumulated log and can recognize records
+after these fragments, across log reads, and with CR or LF separators.
+Only a complete unpack/setup record for a planned identity can add a step.
+Recognizable quotes and contradictory records leave the count unknown.
+After a recognized dpkg error in stdout, later starts cannot advance the
+count. If separate stderr carries the error, hold the last verified count,
+or show only the phase if replay has no trustworthy ordering. The detached
+unit's final result still determines the outcome.
 
 If the backend reconnects during an update and has not yet read the retained
 log, the overlay shows indeterminate activity until it gets usable counters.

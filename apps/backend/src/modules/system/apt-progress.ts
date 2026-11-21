@@ -26,10 +26,16 @@ export function readNativeAptArchitecture(): Promise<string | undefined> {
 
 const packageIdentity = "[a-z0-9][a-z0-9+.-]*(?::[a-z0-9-]+)?";
 const packageIdentityPattern = new RegExp(`^${packageIdentity}$`);
+const version = "[0-9][a-zA-Z0-9.+:~\\-]*";
+// Only unpack/setup earn credit. Get/Fetched, Selecting, Preparing to unpack
+// and Processing triggers are not package-step completions.
 const dpkgActivityPattern = new RegExp(
-	`^(Unpacking|Setting up) (${packageIdentity})[ \\t][^\\r\\n]*\\r?\\n`,
-	"gm",
+	`(Unpacking|Setting up) (${packageIdentity}) \\(${version}\\)( over \\(${version}\\))? \\.\\.\\.(?=[\\r\\n'"\`])`,
+	"g",
 );
+const installPlanBoundary =
+	/Download complete and in download only mode[\r\n]+/g;
+const quote = /['"`]/;
 
 const failurePrefixes = [
 	"dpkg: error processing package",
@@ -65,13 +71,13 @@ function aptInstallPlan(
 	output: string,
 	canonical: (name: string) => string,
 ): Set<string> | undefined {
-	const summary =
-		/^(?<upgrade>\d+) upgraded, (?<install>\d+) newly installed, (?:(?<reinstall>\d+) reinstalled, )?(?:(?<downgrade>\d+) downgraded, )?0 to remove(?: and \d+ not upgraded)?\.\r?\n/m.exec(
-			output,
-		);
-	if (!summary) return undefined;
+	const summaries = output.matchAll(
+		/(?<upgrade>\d+) upgraded, (?<install>\d+) newly installed, (?:(?<reinstall>\d+) reinstalled, )?(?:(?<downgrade>\d+) downgraded, )?0 to remove(?: and \d+ not upgraded)?\.[\r\n]+/g,
+	);
+	const summary = summaries.next().value;
+	if (!summary || !summaries.next().done) return undefined;
 	const afterSummary = output.slice(summary.index + summary[0].length);
-	if (/^[1-9]\d* not fully installed or removed\.\r?$/m.test(afterSummary))
+	if (/[1-9]\d* not fully installed or removed\.[\r\n]/.test(afterSummary))
 		return undefined;
 
 	const plan = new Set<string>();
@@ -83,7 +89,9 @@ function aptInstallPlan(
 	]);
 	for (const [, heading, block] of output
 		.slice(0, summary.index)
-		.matchAll(/^The following ([^:\r\n]+):\r?\n((?:[ \t]+[^\r\n]+\r?\n)+)/gm)) {
+		.matchAll(
+			/The following ([^:\r\n]+):[\r\n]+((?:[ \t]+[^\r\n]+[\r\n]+)+)/g,
+		)) {
 		if (heading === undefined || !counts.has(heading)) continue;
 		const names = (block ?? "").trim().split(/\s+/);
 		if (names.length !== counts.get(heading)) return undefined;
@@ -113,32 +121,56 @@ export function deriveAptProgress(
 	// Only an observed download-only boundary can attribute a combined log's
 	// plan to the pinned install.
 	const boundary = pinnedInstall
-		? /^Download complete and in download only mode\r?\n/m.exec(output)
-		: null;
-	const install = boundary
-		? output.slice(boundary.index + boundary[0].length)
-		: output;
-	const stop = failureOffset(install);
+		? output.matchAll(installPlanBoundary).next().value
+		: undefined;
+	const firstActivity = output.matchAll(dpkgActivityPattern).next().value;
+	const firstFailure = failureOffset(output);
+	const installStart =
+		boundary &&
+		(!firstActivity || boundary.index < firstActivity.index) &&
+		(firstFailure < 0 || boundary.index < firstFailure)
+			? boundary.index + boundary[0].length
+			: 0;
+	const install = output.slice(installStart);
+	const stop = firstFailure < 0 ? -1 : firstFailure - installStart;
 	const prefix = stop < 0 ? install : install.slice(0, stop);
+	// A later script echo cannot supply a plan after dpkg activity has begun.
+	const firstInstallActivity = prefix
+		.matchAll(dpkgActivityPattern)
+		.next().value;
+	const beforeDpkg = prefix.slice(0, firstInstallActivity?.index);
 	const plan =
-		!pinnedInstall || boundary ? aptInstallPlan(prefix, canonical) : undefined;
+		!pinnedInstall || installStart > 0
+			? aptInstallPlan(beforeDpkg, canonical)
+			: undefined;
 	let highestGet = current.downloading;
-	for (const match of prefix.matchAll(/Get:(\d+)/g)) {
+	for (const match of beforeDpkg.matchAll(/Get:(\d+)(?=[ \t])/g)) {
 		highestGet = Math.max(highestGet, Number.parseInt(match[1] ?? "", 10));
 	}
 	const unpacked = new Set<string>();
 	const configured = new Set<string>();
-	let sawUnpack = false;
+	const observedUnpacks = new Set<string>();
 	let sawSetup = false;
 	let ambiguous = false;
 	for (const match of install.matchAll(dpkgActivityPattern)) {
-		const [, action, token] = match;
+		const [, action, token, previousVersion] = match;
 		if (token === undefined) continue;
 		const isUnpack = action === "Unpacking";
-		if (isUnpack) sawUnpack = true;
-		else sawSetup = true;
-		if (stderrFailed || (stop >= 0 && match.index >= stop) || !plan) continue;
+		if (!isUnpack && previousVersion) continue;
 		const name = canonical(token);
+		// A quoted record can be script output; it does not verify a step.
+		if (
+			quote.test(install[match.index - 1] ?? "") ||
+			quote.test(install[match.index + match[0].length] ?? "")
+		) {
+			ambiguous ||=
+				Boolean(plan?.has(name)) && (stop < 0 || match.index < stop);
+			continue;
+		}
+		if (isUnpack) observedUnpacks.add(name);
+		else if (!plan || plan.has(name) || observedUnpacks.has(name))
+			sawSetup = true;
+		if (stderrFailed || (stop >= 0 && match.index >= stop) || !plan) continue;
 		if (!plan.has(name)) {
 			const bare = name.split(":", 1)[0];
 			// An unplanned unpack invalidates the denominator. Without native
@@ -153,6 +185,9 @@ export function deriveAptProgress(
 			unpacked.add(name);
 		} else if (unpacked.has(name)) {
 			configured.add(name);
+		} else {
+			// A setup for a planned package with no matching unpack cannot establish a count.
+			ambiguous = true;
 		}
 	}
 	// Retained stderr has no shared offset with stdout. Only a previously
@@ -169,7 +204,7 @@ export function deriveAptProgress(
 		...current,
 		total,
 		downloading: unpacked.size > 0 ? total : Math.min(highestGet, total),
-		unpacking: total > 0 ? unpacked.size : Number(sawUnpack),
+		unpacking: total > 0 ? unpacked.size : Number(observedUnpacks.size > 0),
 		setting_up: total > 0 ? configured.size : Number(sawSetup),
 	};
 }
