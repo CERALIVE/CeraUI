@@ -215,11 +215,16 @@ assert_release_quality_gate "$release_workflow" 'build-ceraui-system'
 assert_release_quality_gate "$deb_workflow" 'build-deb'
 assert_recovery_gate_uses_resolved_commit
 
-primary_gated_builds="$(grep -Fc 'needs: [calculate-version, release-package-contracts]' "$release_workflow")"
-if [[ "$primary_gated_builds" -ne 3 ]]; then
-  printf 'all primary archive, Debian, and federation jobs must depend on the contract gate\n' >&2
-  exit 1
-fi
+for job in build-ceraui-system build-debian-package publish-federation; do
+  needs='    needs: [calculate-version, release-package-contracts'
+  if [[ "$job" != build-debian-package ]]; then
+    needs+=', build-debian-package'
+  fi
+  if ! extract_job_block "$release_workflow" "$job" | grep -Fx "${needs}]" >/dev/null; then
+    printf 'primary release job %s must depend on the contract gate\n' "$job" >&2
+    exit 1
+  fi
+done
 
 release_contract_job="$(grep -n '^  release-package-contracts:' "$release_workflow" | cut -d: -f1)"
 first_release_build="$(grep -n '^  build-ceraui-system:' "$release_workflow" | cut -d: -f1)"
@@ -247,7 +252,7 @@ grep -Fq 'needs: [calculate-version, build-ceraui-system, build-debian-package, 
 grep -Fq 'needs: [calculate-version, create-release]' "$release_workflow"
 grep -Fq 'event-type: apt-reindex' "$release_workflow"
 grep -Fq '"channel":"stable"' "$release_workflow"
-grep -Fq 'if: needs.calculate-version.outputs.is_beta !=' "$release_workflow"
+grep -Fq "if: success() && needs.calculate-version.outputs.is_beta != 'true'" "$release_workflow"
 grep -Fq 'test "$PACKAGE_VERSION" = "$RELEASE_VERSION"' "$release_workflow"
 grep -Fq 'workflow_dispatch:' "$deb_workflow"
 grep -Fq 'tag must equal v<version>' "$deb_workflow"

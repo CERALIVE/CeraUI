@@ -203,21 +203,6 @@ jobs:
           require_missing "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" "git tag"
           require_missing "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" "GitHub release"
 
-      - name: Version Summary
-        env:
-          VERSION: ${{ steps.calver.outputs.version }}
-          TAG: ${{ steps.calver.outputs.tag }}
-          IS_BETA: ${{ steps.calver.outputs.is_beta }}
-        run: |
-          TYPE_LABEL=$([[ "$IS_BETA" == "true" ]] && echo "🧪 Beta" || echo "✅ Stable")
-          {
-            echo "## 🏷️ Version Calculated"
-            echo ""
-            echo "**Version:** \`${VERSION}\`"
-            echo "**Tag:** \`${TAG}\`"
-            echo "**Type:** ${TYPE_LABEL}"
-          } >> "$GITHUB_STEP_SUMMARY"
-
   release-package-contracts:
     name: Release/package contracts
     runs-on: ubuntu-latest
@@ -233,9 +218,10 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
+          no-cache: true
 
-      - name: Cache Bun install
-        uses: actions/cache@v6
+      - name: Restore Bun install cache
+        uses: actions/cache/restore@v6
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-store-${{ hashFiles('CeraUI/bun.lock') }}
@@ -259,8 +245,8 @@ jobs:
         working-directory: CeraUI
         run: bun run --filter frontend test
 
-      - name: Cache Ruby gems (fpm)
-        uses: actions/cache@v6
+      - name: Restore Ruby gems cache (fpm)
+        uses: actions/cache/restore@v6
         with:
           path: /var/lib/gems
           key: ${{ runner.os }}-ruby-gems-fpm-v1
@@ -320,7 +306,8 @@ jobs:
   build-ceraui-system:
     name: Build CeraUI Full System
     runs-on: ubuntu-latest
-    needs: [calculate-version, release-package-contracts]
+    needs: [calculate-version, release-package-contracts, build-debian-package]
+    if: success()
     strategy:
       matrix:
         architecture: [arm64, amd64]
@@ -378,12 +365,9 @@ jobs:
           path: CeraUI/dist/compressed/*.tar.gz
 
   build-debian-package:
-    name: Build Debian Package
+    name: Build and Verify Debian Packages
     runs-on: ubuntu-latest
     needs: [calculate-version, release-package-contracts]
-    strategy:
-      matrix:
-        architecture: [arm64, amd64]
     steps:
       - name: Checkout CeraUI
         uses: actions/checkout@v7
@@ -399,14 +383,25 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
+          no-cache: true
 
-      - name: Cache Bun install
-        uses: actions/cache@v6
+      - name: Restore Bun install cache
+        id: bun-cache
+        uses: actions/cache/restore@v6
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-store-${{ hashFiles('CeraUI/bun.lock') }}
           restore-keys: |
             ${{ runner.os }}-bun-store-
+
+      - name: Restore Ruby gems cache (fpm)
+        id: fpm-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: /var/lib/gems
+          key: ${{ runner.os }}-ruby-gems-fpm-v1
+          restore-keys: |
+            ${{ runner.os }}-ruby-gems-fpm-
 
       - name: Install Ruby and FPM
         run: |
@@ -418,23 +413,76 @@ jobs:
         working-directory: CeraUI
         run: bun install --frozen-lockfile
 
-      - name: Build Debian package for ${{ matrix.architecture }}
+      # Keep both packages local until both pass; a matrix would upload one
+      # package while the other was still unverified.
+      - name: Build Debian packages
+        id: build-debs
         working-directory: CeraUI
-        run: ./scripts/build/build-debian-package.sh
+        shell: bash
+        run: |
+          for arch in arm64 amd64; do
+            BUILD_ARCH="$arch" ./scripts/build/build-debian-package.sh
+            stage="$RUNNER_TEMP/ceraui-debian/$arch"
+            mkdir -p "$stage"
+            cp dist/debian/*.deb "$stage/"
+          done
         env:
           BUILD_VERSION: ${{ needs.calculate-version.outputs.version }}
-          BUILD_ARCH: ${{ matrix.architecture }}
 
-      - name: Upload Debian package (${{ matrix.architecture }})
+      - name: Verify both Debian package systemd floors
+        id: verify-debs
+        working-directory: CeraUI
+        shell: bash
+        run: |
+          shopt -s nullglob
+          for arch in arm64 amd64; do
+            packages=("$RUNNER_TEMP/ceraui-debian/$arch/"*.deb)
+            if (( ${#packages[@]} != 1 )); then
+              echo "::error::Expected exactly one $arch Debian package"
+              exit 1
+            fi
+
+            deb="${packages[0]}"
+            if [[ "$(dpkg-deb --field "$deb" Architecture)" != "$arch" ]]; then
+              echo "::error::$deb must be a $arch package"
+              exit 1
+            fi
+            depends="$(dpkg-deb --field "$deb" Depends)"
+            depends="${depends//$'\n'/ }"
+            printf '%s Depends: %s\n' "$deb" "$depends"
+            if ! grep -Eq '(^|,)[[:space:]]*systemd \(>= 257\)[[:space:]]*(,|$)' <<< "$depends"; then
+              echo "::error::$deb must depend on systemd (>= 257)"
+              exit 1
+            fi
+          done
+
+      - name: Upload verified Debian packages
         uses: actions/upload-artifact@v7
+        if: success()
         with:
-          name: ceraui-debian-${{ matrix.architecture }}
-          path: CeraUI/dist/debian/*.deb
+          name: ceraui-debian
+          path: ${{ runner.temp }}/ceraui-debian/*/*.deb
+          if-no-files-found: error
+
+      - name: Save Bun install cache
+        if: success() && steps.bun-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ steps.bun-cache.outputs.cache-primary-key }}
+
+      - name: Save Ruby gems cache (fpm)
+        if: success() && steps.fpm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: /var/lib/gems
+          key: ${{ steps.fpm-cache.outputs.cache-primary-key }}
 
   publish-federation:
     name: Publish Federation Bundles to R2
     runs-on: ubuntu-latest
-    needs: [calculate-version, release-package-contracts]
+    needs: [calculate-version, release-package-contracts, build-debian-package]
+    if: success()
     permissions:
       contents: read
     steps:
@@ -552,6 +600,7 @@ jobs:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: [calculate-version, build-ceraui-system, build-debian-package, publish-federation]
+    if: success()
     permissions:
       contents: write
     steps:
@@ -738,7 +787,7 @@ jobs:
     name: Dispatch stable APT reindex
     runs-on: ubuntu-latest
     needs: [calculate-version, create-release]
-    if: needs.calculate-version.outputs.is_beta != 'true'
+    if: success() && needs.calculate-version.outputs.is_beta != 'true'
     steps:
       - name: Trigger centralized APT reindex
         uses: peter-evans/repository-dispatch@v4
