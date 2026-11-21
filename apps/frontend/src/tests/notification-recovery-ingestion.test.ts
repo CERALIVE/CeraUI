@@ -32,7 +32,12 @@ import {
 	getPersistent,
 } from "$lib/stores/notifications.svelte";
 
-function show(name: string, msg: string, revision: number): void {
+function show(
+	name: string,
+	msg: string,
+	revision: number,
+	offerIdentity?: string,
+): void {
 	handlers.message?.("notification", {
 		show: [
 			{
@@ -43,6 +48,7 @@ function show(name: string, msg: string, revision: number): void {
 				is_persistent: true,
 				duration: 0,
 				revision,
+				...(offerIdentity === undefined ? {} : { params: { offerIdentity } }),
 			},
 		],
 	});
@@ -136,4 +142,24 @@ describe("persistent notifications are retractable", () => {
 		handlers.message?.("notification", { replay: true, show: [offered] });
 		expect(persistentNames()).toEqual(["ceralive_update"]);
 	});
+
+	it.each([
+		["update:old", ["no_internet"]],
+		["update:remaining", ["ceralive_update", "no_internet"]],
+	] as const)(
+		"applies replayed supersession to offer %s only if it differs from the pending identity",
+		(cached, remaining) => {
+			show("ceralive_update", "Pending update", 1, cached);
+			show("no_internet", "No internet connection", 2);
+
+			handlers.message?.("notification", {
+				replay: true,
+				show: [],
+				removeSuperseded: [
+					{ id: "ceralive_update", currentIdentity: "update:remaining" },
+				],
+			});
+			expect(persistentNames().sort()).toEqual([...remaining]);
+		},
+	);
 });

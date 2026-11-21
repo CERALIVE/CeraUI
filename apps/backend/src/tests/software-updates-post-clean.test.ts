@@ -1,4 +1,7 @@
 import { describe, expect, jest, spyOn, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import * as spawnPolicy from "../helpers/spawn-policy.ts";
 import { cleanAptCache } from "../modules/system/apt-cache-clean.ts";
 import { defaultAptSpaceDeps } from "../modules/system/apt-space-admission.ts";
@@ -17,6 +20,14 @@ import {
 	triggerManualUpdateCheck,
 } from "../modules/system/software-updates.ts";
 import {
+	deriveUpdateIdentity,
+	updateDismissalKey,
+} from "../modules/system/update-state.ts";
+import {
+	recordNotificationDismissal,
+	resetDismissalStoreForTests,
+} from "../modules/ui/notification-dismissals.ts";
+import {
 	getPersistentNotifications,
 	notificationBroadcast,
 	notificationExists,
@@ -29,8 +40,15 @@ import { updateHarness } from "./software-updates-preflight-harness.ts";
 
 useSessionOwnerForFile();
 
+const NO_UPGRADES = "0 upgraded, 0 newly installed, 0 to remove.\n";
+const INDEPENDENT_UPGRADE =
+	"The following packages will be upgraded:\n  srtla\n1 upgraded, 0 newly installed, 0 to remove.\nNeed to get 4 kB of archives.\n";
+const remainingOffer = updateDismissalKey(
+	deriveUpdateIdentity(["srtla"], 1, "4 kB"),
+);
+
 describe("update availability notification", () => {
-	test("withdraws the installed offer from connected clients and reconnect replay", async () => {
+	test("withdraws the installed offer only after a conclusive post-install check", async () => {
 		await using h = await updateHarness();
 		const broadcast = spyOn(websocket, "broadcastMsg");
 		notificationBroadcast(
@@ -45,6 +63,19 @@ describe("update availability notification", () => {
 			h.completion = Promise.resolve(0);
 			startSoftwareUpdate();
 			await h.check();
+			expect(getUpdateState()).toEqual({ kind: "success" });
+			expect(notificationExists("ceralive_update")).toBeDefined();
+			expect(buildInitialNotifications()).not.toHaveProperty("remove");
+
+			using _discovery = spyOn(
+				spawnPolicy,
+				"spawnWithTimeout",
+			).mockResolvedValue({
+				exitCode: 0,
+				stdout: NO_UPGRADES,
+				stderr: "",
+			});
+			expect(await runUpdateDiscoveryAndReport(true)).toBeNull();
 
 			expect(
 				getPersistentNotifications(true).show.map(({ name }) => name),
@@ -62,6 +93,100 @@ describe("update availability notification", () => {
 			broadcast.mockRestore();
 			notificationRemove("ceralive_update");
 			notificationRemove("update-test-other");
+		}
+	});
+
+	test("successful legacy install leaves an independent new package offered after discovery", async () => {
+		await using h = await updateHarness();
+		using broadcast = spyOn(websocket, "broadcastMsg");
+		using _discovery = spyOn(spawnPolicy, "spawnWithTimeout").mockResolvedValue(
+			{
+				exitCode: 1,
+				stdout: INDEPENDENT_UPGRADE,
+				stderr: "",
+			},
+		);
+		try {
+			const installedOffer =
+				notificationExists("ceralive_update")?.dismissalKey;
+			expect(installedOffer).toBeDefined();
+			h.completion = Promise.resolve(0);
+			expect(startSoftwareUpdate()).toEqual({ started: true });
+			await h.check();
+
+			expect(h.launches).toEqual([
+				[
+					"-y",
+					"-o",
+					"Dpkg::Options::=--force-confdef",
+					"-o",
+					"Dpkg::Options::=--force-confold",
+					"install",
+					"cerastream",
+				],
+			]);
+			expect(notificationExists("ceralive_update")?.dismissalKey).toBe(
+				installedOffer,
+			);
+			expect(buildInitialNotifications()).not.toHaveProperty("remove");
+
+			expect(await runUpdateDiscoveryAndReport(true)).toBeNull();
+			expect(notificationExists("ceralive_update")?.dismissalKey).toBe(
+				remainingOffer,
+			);
+			expect(buildInitialNotifications().show).toContainEqual(
+				expect.objectContaining({
+					name: "ceralive_update",
+					params: { offerIdentity: remainingOffer },
+				}),
+			);
+			expect(
+				broadcast.mock.calls.filter(
+					([type, payload]) =>
+						type === "notification" &&
+						JSON.stringify(payload).includes('"id":"ceralive_update"'),
+				),
+			).toEqual([]);
+		} finally {
+			notificationRemove("ceralive_update");
+		}
+	});
+
+	test("replays supersession after a fresh check even when the new candidate is durably dismissed", async () => {
+		await using _h = await updateHarness();
+		using _discovery = spyOn(spawnPolicy, "spawnWithTimeout").mockResolvedValue(
+			{
+				exitCode: 1,
+				stdout: INDEPENDENT_UPGRADE,
+				stderr: "",
+			},
+		);
+		notificationRemove("ceralive_update");
+		expect(buildInitialNotifications().show).not.toContainEqual(
+			expect.objectContaining({ name: "ceralive_update" }),
+		);
+		const file = process.env.CERALIVE_DISMISSALS_FILE;
+		const dir = await mkdtemp(join(tmpdir(), "ceraui-offer-dismissal-"));
+		process.env.CERALIVE_DISMISSALS_FILE = join(dir, "dismissals.json");
+		resetDismissalStoreForTests();
+		try {
+			recordNotificationDismissal(remainingOffer);
+			resetDismissalStoreForTests();
+			expect(await runUpdateDiscoveryAndReport(true)).toBeNull();
+			expect(await runUpdateDiscoveryAndReport(true)).toBeNull();
+			expect(notificationExists("ceralive_update")).toBeUndefined();
+			expect(buildInitialNotifications()).toMatchObject({
+				replay: true,
+				removeSuperseded: [
+					{ id: "ceralive_update", currentIdentity: remainingOffer },
+				],
+			});
+			expect(buildInitialNotifications()).not.toHaveProperty("remove");
+		} finally {
+			if (file === undefined) delete process.env.CERALIVE_DISMISSALS_FILE;
+			else process.env.CERALIVE_DISMISSALS_FILE = file;
+			resetDismissalStoreForTests();
+			await rm(dir, { recursive: true });
 		}
 	});
 

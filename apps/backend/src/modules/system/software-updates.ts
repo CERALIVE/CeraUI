@@ -40,7 +40,6 @@ import { setup } from "../setup.ts";
 import { notePlannedShutdown } from "../streaming/armed-stream-marker.ts";
 import {
 	notificationBroadcast,
-	notificationExists,
 	notificationRemove,
 	withdrawPersistentNotification,
 } from "../ui/notifications.ts";
@@ -504,11 +503,7 @@ function reconcileSoftwareUpdateOffer(identity: UpdateIdentity | null): void {
 		withdrawPersistentNotification(UPDATE_OFFER_NOTICE);
 		return;
 	}
-	const standing = notificationExists(UPDATE_OFFER_NOTICE);
 	const dismissalKey = updateDismissalKey(identity);
-	// Withdraw a replaced offer even if its successor was already dismissed.
-	if (standing && standing.dismissalKey !== dismissalKey)
-		withdrawPersistentNotification(UPDATE_OFFER_NOTICE);
 	notificationBroadcast(
 		UPDATE_OFFER_NOTICE,
 		"warning",
@@ -518,7 +513,7 @@ function reconcileSoftwareUpdateOffer(identity: UpdateIdentity | null): void {
 		true,
 		true,
 		"notifications.ceraliveUpdateAvailable",
-		undefined,
+		{ offerIdentity: dismissalKey },
 		{
 			action: {
 				schema: 1,
@@ -527,6 +522,8 @@ function reconcileSoftwareUpdateOffer(identity: UpdateIdentity | null): void {
 				labelKey: "notifications.openUpdates",
 			},
 			dismissalKey,
+			onSuppressedByDismissal: () =>
+				withdrawPersistentNotification(UPDATE_OFFER_NOTICE, dismissalKey),
 		},
 	);
 }
@@ -1676,7 +1673,6 @@ export function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonit
 			const settledStatus = softUpdateStatus;
 			softUpdateStatus = null;
 			try {
-				if (code === 0) reconcileSoftwareUpdateOffer(null);
 				if (failure) {
 					notificationBroadcast(
 						"ceralive_update_failed",
@@ -1792,7 +1788,7 @@ async function prepareSoftwareUpdate(
 	pendingPackageSuccess.assertEffectsAllowed();
 	if (capable) {
 		const discovery = await network.within(
-			(attempt) => getCapableUpdateSize(attempt, true),
+			(attempt) => getCapableUpdateSize(attempt, false),
 			(): SoftwareUpdateError => {
 				failCurrentCheck("discovery_failed");
 				return "discovery_failed";

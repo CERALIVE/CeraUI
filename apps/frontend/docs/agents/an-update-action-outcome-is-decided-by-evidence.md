@@ -189,9 +189,10 @@ A zero-counter reattach frame returns the overlay to indeterminate activity,
 not a fake percentage or `0 of 1` steps.
 
 The notification feed keeps existing entries on an empty reconnect replay.
-Only an explicit `remove` entry retracts the corresponding update offer;
-the new backend's process-local map cannot establish that an earlier offer
-ceased to apply.
+An explicit `remove` entry retracts the corresponding update offer. A
+`removeSuperseded` entry only retracts an identified offer different from the
+identity still pending. The new backend's empty process-local map cannot
+establish that an earlier offer ceased to apply.
 
 ### A terminal install releases the takeover [EXISTS]
 

@@ -64,5 +64,15 @@ export const notificationsMessageSchema = z.object({
 	replay: z.boolean().optional(),
 	show: z.array(notificationSchema).optional(),
 	remove: z.array(notificationRemoveSchema).optional(),
+	// A conclusive producer verdict can retire older offers without erasing
+	// the offer for the identity that is still pending.
+	removeSuperseded: z
+		.array(
+			z.object({
+				id: z.string(),
+				currentIdentity: z.string().min(1),
+			}),
+		)
+		.optional(),
 });
 export type NotificationsMessage = z.infer<typeof notificationsMessageSchema>;
