@@ -1364,11 +1364,16 @@ This is host isolation evidence, not a shared-event-loop latency guarantee.
 `ceralive_update` ("A CeraLive update is available", `notifications.ceraliveUpdateAvailable`)
 is separate from `notifyUpdate()`. It names the exact first-party packages the
 Install control would take, on both legacy and capable images, keyed by their
-`name=version` pairs. Only a conclusive check raises, rekeys or withdraws it; a
-failed or stale refresh, contradictory candidate evidence, a settled install and
-an empty restarted process change nothing. Its last verdict survives restarts in
-`ceralive_update_offer.json`, so a tab that missed the withdrawal during an update's
-restarts drops the notice at its next reconnect. Kernel, OS and `update:*` notices
+`name=version` pairs. Only a conclusive check raises, rekeys or withdraws it, and
+only when every first-party candidate is verified (CeraLive origin, policy
+candidate equal to the planned version; on legacy images through a simulation of
+the unchanged install argv). A failed or stale refresh, a failed discovery, one
+unverified candidate, a settled install and an empty restarted process change
+nothing. Its last verdict is written to `ceralive_update_offer.json` with the boot
+id before any broadcast, so within one boot a tab that missed the withdrawal during
+an update's restarts drops the notice at its next reconnect, including a v2026.6.x
+or 7.x frontend (the removal is also sent in their string form). A dismissal counts
+only for the release the dismissing tab showed. Kernel, OS and `update:*` notices
 are never touched. Contract: [the retraction contract](../apps/backend/docs/agents/a-persistent-notification-must-be-retractable.md#the-ceralive-update-offer-is-withdrawn-only-by-a-conclusive-check-exists).
 Known gap: the orchestrator's package `updates-available` notice above has no
 retraction yet and can still outlive an installed update in an open tab.

@@ -2,33 +2,29 @@
 /*
  * The update that the "CeraLive update is available" notice offers restarts the
  * backend twice, and a tab can be offline for both. Each session below is a real
- * fresh backend process sharing only the files a device keeps, so nothing here
- * can pass by reusing one process's notification map.
+ * fresh backend process (helpers/ceralive-update-session.ts) sharing only the
+ * files a device keeps; the frames it prints are what an authenticating tab
+ * receives, applied here to a current tab, a pre-#183 tab and a fresh tab.
  */
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { join } from "node:path";
+import { notificationsMessageSchema } from "@ceraui/rpc/schemas";
 import { z } from "zod";
 
 import {
-	initCeraliveUpdateNotice,
-	reconcileCeraliveUpdateNotice,
-	resetCeraliveUpdateNoticeForTest,
-} from "../modules/system/ceralive-update-notice.ts";
-import { notificationRemove } from "../modules/ui/notifications.ts";
+	type AptScript,
+	FRAMES_PREFIX,
+} from "./helpers/ceralive-update-apt.ts";
+import type { SessionStep } from "./helpers/ceralive-update-session.ts";
 
 const NOTICE = "ceralive_update";
 const SESSION_TIMEOUT_MS = 45_000;
-const SEQUENCE_TIMEOUT_MS = 6 * SESSION_TIMEOUT_MS;
-const replaySchema = z.object({
-	show: z.array(z.string()),
-	remove: z.array(z.string()),
-});
-
-type Offer = readonly { readonly name: string; readonly version: string }[];
-type Step = { readonly reconcile?: Offer; readonly dismiss?: boolean };
+const SEQUENCE_TIMEOUT_MS = 8 * SESSION_TIMEOUT_MS;
+const SESSION = new URL("./helpers/ceralive-update-session.ts", import.meta.url)
+	.pathname;
+const SETUP = new URL("../../setup.json", import.meta.url).pathname;
 
 let root: string;
 let record: string;
@@ -38,65 +34,140 @@ beforeEach(async () => {
 	root = await mkdtemp(join(tmpdir(), "ceralive-update-restart-"));
 	record = join(root, "ceralive_update_offer.json");
 	dismissals = join(root, "dismissals.json");
+	await mkdir(join(root, "cwd"));
+	await copyFile(SETUP, join(root, "cwd", "setup.json"));
 });
 
 afterEach(async () => {
-	resetCeraliveUpdateNoticeForTest();
-	notificationRemove(NOTICE);
 	await rm(root, { recursive: true, force: true });
 });
 
+type Step = Omit<SessionStep, "record" | "scratch" | "boot"> & {
+	readonly boot?: string;
+};
+
 async function session(step: Step = {}) {
-	const base = new URL("../modules/", import.meta.url);
-	const source = `
-		import {initCeraliveUpdateNotice,reconcileCeraliveUpdateNotice} from ${JSON.stringify(new URL("system/ceralive-update-notice.ts", base).href)};
-		import {getPersistentNotifications,notificationDismiss} from ${JSON.stringify(new URL("ui/notifications.ts", base).href)};
-		const step = ${JSON.stringify(step)};
-		initCeraliveUpdateNotice(${JSON.stringify(record)});
-		if (step.reconcile) reconcileCeraliveUpdateNotice(step.reconcile);
-		if (step.dismiss) notificationDismiss(${JSON.stringify(NOTICE)});
-		const replay = getPersistentNotifications(true);
-		console.log(JSON.stringify({show:replay.show.map((n)=>n.name),remove:(replay.remove??[]).map((r)=>r.id)}));
-	`;
-	await using child = Bun.spawn([process.execPath, "-e", source], {
-		timeout: SESSION_TIMEOUT_MS,
-		killSignal: "SIGKILL",
-		stdout: "pipe",
-		stderr: "pipe",
-		env: { ...process.env, CERALIVE_DISMISSALS_FILE: dismissals },
-	});
+	const input: SessionStep = { boot: "boot-a", ...step, record, scratch: root };
+	await using child = Bun.spawn(
+		[process.execPath, SESSION, JSON.stringify(input)],
+		{
+			cwd: join(root, "cwd"),
+			timeout: SESSION_TIMEOUT_MS,
+			killSignal: "SIGKILL",
+			stdout: "pipe",
+			stderr: "pipe",
+			env: {
+				...process.env,
+				CERALIVE_DISMISSALS_FILE: dismissals,
+				CERALIVE_STREAMING_MARKER: join(root, "streaming"),
+				CERALIVE_EVENTS_DIR: join(root, "events"),
+				DOCKER_HOST: "unix:///nonexistent/docker.sock",
+			},
+		},
+	);
 	const [stdout, stderr, exit] = await Promise.all([
 		new Response(child.stdout).text(),
 		new Response(child.stderr).text(),
 		child.exited,
 	]);
-	expect({ exit, stderr: exit === 0 ? "" : stderr }).toEqual({
-		exit: 0,
-		stderr: "",
-	});
-	return replaySchema.parse(JSON.parse(stdout.trim().split("\n").at(-1) ?? ""));
+	const line = stdout
+		.split("\n")
+		.find((entry) => entry.startsWith(FRAMES_PREFIX));
+	if (line === undefined)
+		throw new Error(`no frames (exit ${exit}): ${stderr}`);
+	return {
+		exit,
+		stderr,
+		frames: z
+			.array(z.unknown())
+			.parse(JSON.parse(line.slice(FRAMES_PREFIX.length))),
+	};
 }
 
-const CURRENT = [{ name: "cerastream", version: "2026.11.3" }];
-const NEXT = [{ name: "cerastream", version: "2026.12.1" }];
-const SHOWN = { show: [NOTICE], remove: [] };
-const WITHDRAWN = { show: [], remove: [NOTICE] };
-const NOTHING = { show: [], remove: [] };
+function currentTab(frames: readonly unknown[], start: string[] = []) {
+	const shown = new Set(start);
+	for (const frame of frames) {
+		const parsed = notificationsMessageSchema.safeParse(frame);
+		if (!parsed.success) continue;
+		for (const { name } of parsed.data.show ?? []) shown.add(name);
+		for (const { id } of parsed.data.remove ?? []) shown.delete(id);
+	}
+	return [...shown];
+}
+
+// The v2026.7.2 frontend: no validation, `remove` entries go straight to the store.
+function legacyTab(frames: readonly unknown[], start: string[] = []) {
+	const shown = new Set<unknown>(start);
+	for (const frame of frames) {
+		const message = frame as { show?: { name: string }[]; remove?: unknown[] };
+		for (const { name } of message.show ?? []) shown.add(name);
+		for (const entry of message.remove ?? []) shown.delete(entry);
+	}
+	return [...shown].map(String);
+}
+
+const pending = (version: string): AptScript => ({
+	upgradable: [{ name: "cerastream", installed: "1", candidate: version }],
+});
+const NOTHING_PENDING: AptScript = {};
+const REFRESH_FAILS: AptScript = {
+	refresh: { exitCode: 100, stderr: "E: Could not get lock\n" },
+};
 
 test(
-	"the withdrawal after an update reaches a tab that missed every restart",
+	"install, package-script restart, completion restart and reconnect clear the offer in open and fresh tabs",
 	async () => {
-		// Given the offer a tab is showing.
-		expect(await session({ reconcile: CURRENT })).toEqual(SHOWN);
-		// When the package script restarts the backend before any check: no evidence changes.
-		expect(await session()).toEqual(NOTHING);
-		// When the completion restart's conclusive check finds nothing, and that process exits unseen.
-		expect(await session({ reconcile: [] })).toEqual(WITHDRAWN);
-		// Then a later process whose own check cannot complete still tells the tab.
-		expect(await session()).toEqual(WITHDRAWN);
-		// And the withdrawal never hides a newer release.
-		expect(await session({ reconcile: NEXT })).toEqual(SHOWN);
-		expect(await session()).toEqual(NOTHING);
+		// Given a tab of each frontend generation showing the offer before the install.
+		const before = await session({ check: pending("2") });
+		const open = currentTab(before.frames);
+		const legacy = legacyTab(before.frames);
+		expect(open).toEqual([NOTICE]);
+		expect(legacy).toEqual([NOTICE]);
+		// When the package script restarts the backend: it recovers the finished
+		// install and exits through the update's own restart, with no check run.
+		const packageRestart = await session({ recoverInstall: true });
+		expect(packageRestart.exit).not.toBe(0);
+		expect(packageRestart.stderr).toContain(
+			"software update complete; exiting to restart CeraUI",
+		);
+		// An install result is not evidence: a tab reconnecting now keeps its copy.
+		expect(currentTab(packageRestart.frames, open)).toEqual([NOTICE]);
+		expect(legacyTab(packageRestart.frames, legacy)).toEqual([NOTICE]);
+		// When the completion restart's conclusive check finds nothing pending
+		// and that process exits before either tab reconnects.
+		await session({ check: NOTHING_PENDING });
+		// Then a later process whose own refresh fails still withdraws it on reconnect.
+		const reconnect = await session({ check: REFRESH_FAILS });
+		expect(currentTab(reconnect.frames, open)).toEqual([]);
+		expect(legacyTab(reconnect.frames, legacy)).toEqual([]);
+		// And a freshly opened tab never shows it.
+		expect(currentTab(reconnect.frames)).toEqual([]);
+	},
+	SEQUENCE_TIMEOUT_MS,
+);
+
+test(
+	"a fresh backend that finds an already-dismissed successor withdraws the predecessor",
+	async () => {
+		const before = await session({ check: pending("2") });
+		const open = currentTab(before.frames);
+		// Given the operator dismissed release 3 elsewhere.
+		await writeFile(
+			dismissals,
+			JSON.stringify({
+				version: 1,
+				entries: [{ key: "update:cerastream=3", dismissedAt: 1 }],
+			}),
+		);
+		// When a fresh process conclusively finds release 3.
+		const successor = await session({ check: pending("3") });
+		expect(currentTab(successor.frames, open)).toEqual([]);
+		// Then the withdrawal also survives into the next process.
+		expect(currentTab((await session()).frames, open)).toEqual([]);
+		// And a release that was never dismissed is offered again.
+		expect(currentTab((await session({ check: pending("4") })).frames)).toEqual(
+			[NOTICE],
+		);
 	},
 	SEQUENCE_TIMEOUT_MS,
 );
@@ -104,49 +175,82 @@ test(
 test(
 	"a dismissal reaches other tabs after a restart and covers that release only",
 	async () => {
-		expect(await session({ reconcile: CURRENT, dismiss: true })).toEqual(
-			WITHDRAWN,
+		const dismissed = await session({ check: pending("2"), dismiss: true });
+		expect(currentTab(dismissed.frames, [NOTICE])).toEqual([]);
+		expect(currentTab((await session()).frames, [NOTICE])).toEqual([]);
+		expect(
+			currentTab((await session({ check: pending("2") })).frames, [NOTICE]),
+		).toEqual([]);
+		expect(currentTab((await session({ check: pending("3") })).frames)).toEqual(
+			[NOTICE],
 		);
-		expect(await session()).toEqual(WITHDRAWN);
-		expect(await session({ reconcile: CURRENT })).toEqual(WITHDRAWN);
-		expect(await session({ reconcile: NEXT })).toEqual(SHOWN);
 	},
 	SEQUENCE_TIMEOUT_MS,
 );
 
 test(
-	"startup derives nothing without a readable record and acknowledgement store",
+	"a record from an earlier boot cannot withdraw anything after a reboot",
 	async () => {
-		// Given no record at all.
-		expect(await session()).toEqual(NOTHING);
-		// Given a corrupt record.
+		await session({ check: NOTHING_PENDING });
+		expect(currentTab((await session()).frames, [NOTICE])).toEqual([]);
+		// When the device rebooted (an older CeraUI may have run meanwhile).
+		const rebooted = await session({ boot: "boot-b" });
+		// Then the old verdict says nothing about what a tab now shows.
+		expect(currentTab(rebooted.frames, [NOTICE])).toEqual([NOTICE]);
+		// Until this boot's own conclusive check proves it.
+		const proven = await session({ boot: "boot-b", check: NOTHING_PENDING });
+		expect(currentTab(proven.frames, [NOTICE])).toEqual([]);
+	},
+	SEQUENCE_TIMEOUT_MS,
+);
+
+test(
+	"startup derives nothing from a missing, corrupt or wrong-kind record, or unreadable dismissals",
+	async () => {
+		expect(currentTab((await session()).frames, [NOTICE])).toEqual([NOTICE]);
 		await writeFile(record, "{");
-		expect(await session()).toEqual(NOTHING);
+		expect(currentTab((await session()).frames, [NOTICE])).toEqual([NOTICE]);
+		await rm(record);
+		await mkdir(record);
+		expect(currentTab((await session()).frames, [NOTICE])).toEqual([NOTICE]);
+		await rm(record, { recursive: true });
+		// A forged multi-package key cannot be smuggled into one row's version.
+		await writeFile(
+			record,
+			JSON.stringify({
+				version: 1,
+				boot: "boot-a",
+				offer: [{ name: "cerastream", version: "2,srtla=3" }],
+			}),
+		);
+		expect(currentTab((await session()).frames, [NOTICE])).toEqual([NOTICE]);
+		await rm(record);
 		// Given an offer whose dismissal state cannot be read.
-		expect(await session({ reconcile: CURRENT })).toEqual(SHOWN);
+		await session({ check: pending("2") });
 		await mkdir(dismissals);
-		expect(await session()).toEqual(NOTHING);
-		// A proven absence needs no acknowledgement store.
-		expect(await session({ reconcile: [] })).toEqual(WITHDRAWN);
-		expect(await session()).toEqual(WITHDRAWN);
+		expect(currentTab((await session()).frames, [NOTICE])).toEqual([NOTICE]);
 	},
 	SEQUENCE_TIMEOUT_MS,
 );
 
 test(
-	"a record that cannot be rewritten for a newer offer is deleted, not left as a withdrawal",
+	"a verdict that cannot be written changes nothing, in either direction",
 	async () => {
-		// Given a persisted "nothing pending".
-		expect(await session({ reconcile: [] })).toEqual(WITHDRAWN);
-		initCeraliveUpdateNotice(record);
-		// When the write for a newer offer fails.
-		await mkdir(
-			join(dirname(record), `.${basename(record)}.${process.pid}.tmp`),
-		);
-		reconcileCeraliveUpdateNotice(CURRENT);
-		// Then no stale withdrawal can survive into the next process.
-		expect(existsSync(record)).toBe(false);
-		expect(await session()).toEqual(NOTHING);
+		// Given a durable "nothing pending" and no offer anywhere.
+		await session({ check: NOTHING_PENDING });
+		// When a newer offer is found but cannot be persisted.
+		const unwritten = await session({ check: pending("2"), failWrites: true });
+		// Then it is not shown, so no older verdict can later contradict a tab.
+		expect(currentTab(unwritten.frames)).toEqual([]);
+		// Given the offer is durable and shown.
+		const shown = await session({ check: pending("2") });
+		const open = currentTab(shown.frames);
+		expect(open).toEqual([NOTICE]);
+		// When "nothing pending" cannot be persisted, the offer is not withdrawn.
+		const kept = await session({ check: NOTHING_PENDING, failWrites: true });
+		expect(currentTab(kept.frames, open)).toEqual([NOTICE]);
+		// And the next process still trusts the durable offer, not the lost verdict.
+		expect(currentTab((await session()).frames, open)).toEqual([NOTICE]);
 	},
 	SEQUENCE_TIMEOUT_MS,
 );

@@ -103,6 +103,17 @@ describe("persistent notifications are retractable", () => {
 		]);
 	});
 
+	it("ignores the pre-#183 string removal that accompanies a typed one", () => {
+		show("ceralive_update", "A CeraLive update is available.", 7);
+
+		// The device sends this form for older open tabs; this frontend uses the typed frame.
+		handlers.message?.("notification", { remove: ["ceralive_update"] });
+		expect(persistentNames()).toEqual(["ceralive_update"]);
+
+		remove("ceralive_update", 8);
+		expect(persistentNames()).toEqual([]);
+	});
+
 	it("retracts only the named notification, leaving the rest of the panel intact", () => {
 		show("hdmi_error", "No HDMI signal detected", 1);
 		show("no_internet", "No internet connection", 2);

@@ -84,9 +84,8 @@ import {
 	normalizeAptCommandFailure,
 } from "./apt-transport-result.ts";
 import {
-	type CeraliveOffer,
-	capableCeraliveOffer,
-	legacyCandidate,
+	firstPartyOffer,
+	legacyCeraliveOffer,
 	reconcileCeraliveUpdateNotice,
 } from "./ceralive-update-notice.ts";
 import {
@@ -657,7 +656,7 @@ async function getCapableUpdateSize(
 			update_state: getUpdateState(),
 		});
 		if (refreshConclusive)
-			reconcileCeraliveUpdateNotice(capableCeraliveOffer(result.packages));
+			reconcileCeraliveUpdateNotice(firstPartyOffer(result.packages));
 		return null;
 	} catch (error) {
 		if (!(error instanceof AptAllRefusalError)) throw error;
@@ -832,21 +831,14 @@ export function reportUpdateCheckFailure(upgrade: {
 	return false;
 }
 
-async function legacyCeraliveOffer(
-	names: readonly string[],
-): Promise<CeraliveOffer> {
-	const offer: PinnedAptPackage[] = [];
-	for (const name of names) {
-		const policy = await runAptCommand(
-			["/usr/bin/apt-cache", "policy", name],
-			APT_DISCOVERY_TIMEOUT_MS,
-		);
-		const version =
-			policy.exitCode === 0 ? legacyCandidate(policy.stdout) : undefined;
-		if (version === undefined) return "unknown";
-		offer.push({ name, version });
-	}
-	return offer;
+// --assume-no answers its own prompt: exit 1 after "Abort." is the expected
+// refusal, any other non-zero exit or an error line is a failed discovery.
+function isCleanAssumeNoDiscovery(result: SpawnWithTimeoutResult): boolean {
+	return (
+		(result.exitCode === 0 ||
+			(result.exitCode === 1 && /^Abort\.$/m.test(result.stdout))) &&
+		!/^E:/m.test(result.stderr)
+	);
 }
 
 async function getSoftwareUpdateSize(
@@ -940,7 +932,16 @@ async function getSoftwareUpdateSize(
 	});
 	if (refreshConclusive)
 		reconcileCeraliveUpdateNotice(
-			await legacyCeraliveOffer(actionableAppPackages),
+			isCleanAssumeNoDiscovery(upgradeResult)
+				? await legacyCeraliveOffer(
+						actionableAppPackages,
+						buildAptUpgradeArgs(
+							actionableAppPackages,
+							reachability.verdict,
+						).filter((arg) => arg !== "-y"),
+						(argv) => runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
+					)
+				: "unknown",
 		);
 
 	return null;

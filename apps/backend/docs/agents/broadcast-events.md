@@ -177,9 +177,10 @@ Coverage: `tests/logger-journal.test.ts`, `tests/logger-transports.test.ts`
 and `tests/logger-listeners.test.ts`.
 
 `notifications.getPersistent` returns the live persistent set via
-`getPersistentNotifications(true)` (not an empty stub), plus a typed `remove`
-entry for each name withdrawn with `notificationWithdraw` (or dismissed with
-`replayRemoval`) and not shown again since; the authenticated replay carries the same. The frontend
+`getPersistentNotifications(true)` (not an empty stub). The post-auth replay
+frame has the same shape; after it, `replayedRemovalFrames(true)` adds one typed
+and one pre-#183 string-form `remove` frame for each name withdrawn with
+`notificationWithdraw` (or dismissed while `releaseScoped`) and not shown since. The frontend
 NotificationsPanel reads the live `notification` push cache; this RPC is the
 pull-equivalent (same data) for any consumer asking for the snapshot directly —
 keep it even though the panel does not call it.

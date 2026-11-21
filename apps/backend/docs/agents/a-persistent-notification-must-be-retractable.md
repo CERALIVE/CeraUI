@@ -217,34 +217,45 @@ no-signal raise's own standing-advisory non-overwrite is unchanged).
 paths and never withdrawn. The backend map is process-local, a replay only adds,
 and an open tab's store survives reconnects, so after an update the banner stayed
 on screen even with the candidate installed (Rock 5B+, 2026-11-21). Three review
-rounds of PR #664 rejected shortcuts that each hid a real offer; the rules below
-answer every one. Owner: `modules/system/ceralive-update-notice.ts`.
+rounds of PR #664 and one of #670 rejected shortcuts that each hid a real offer or
+lost a withdrawal; the rules below answer every one. Owner:
+`modules/system/ceralive-update-notice.ts`.
 
 | Rule | How it is met |
 |---|---|
-| Evidence | Only a conclusive check: `apt-get update` exit 0 with no `Err:`, failed-fetch, stale-index or `E:` diagnostics and not captive (`isConclusiveAptRefresh`), then a successful discovery. The flag travels with the check callback into `runUpdateDiscoveryAndReport`. Install results, install-time rediscovery and an empty restarted process are never evidence. |
-| Offer | Legacy: `actionableAppPackages` (exact roster, upgradable, not kept back), each with a read-only `apt-cache policy <name>`; a missing, invalid or installed-equal candidate makes the verdict `unknown`. Capable: roster rows that are actionable with origin `apt.ceralive.tv`; a roster row without that evidence and no verified row is `unknown`. No first-party row is a proven empty offer. Never name prefixes; kernel packages are not roster names. |
+| Refresh | Conclusive only when `apt-get update` exits 0 with no `Err:` line, no `E:`, failed-fetch or stale-index line and no captive signature (`isConclusiveAptRefresh`). The flag travels with the check callback into `runUpdateDiscoveryAndReport` on the manual, periodic and orchestrator entries. Install results, install-time rediscovery and an empty restarted process are never evidence. |
+| Discovery | Legacy `dist-upgrade --assume-no` must exit 0, or 1 after its own `Abort.`, with no `E:` line (`isCleanAssumeNoDiscovery`); otherwise the verdict is `unknown`. |
+| Every candidate verified | A verdict exists only when every exact-roster row is actionable with origin `apt.ceralive.tv` and a version (`firstPartyOffer`). Capable reads the existing discovery rows. Legacy simulates the unchanged install argv (`-s`, minus `-y`) and joins it with `apt-cache policy` through `discoverAptAllPackages`, so the policy candidate must equal the planned version and come from the CeraLive source, and the plan must still take every package dist-upgrade listed (`legacyCeraliveOffer`). One unverified row makes the whole verdict `unknown`; a dismissed subset is never "nothing left". No first-party row is a proven empty offer. Never name prefixes; kernel packages are not roster names. |
 | Identity | Dismissal key `update:<name=version,...>`, sorted with `compareAptPackageNames`. A same-size new release is a new key. |
 | Unknown | Changes nothing: no raise, no rekey, no withdrawal, no record write. |
-| Withdrawal | Empty offer, or an offer already dismissed (a dismissed successor must not keep its predecessor up). `notificationWithdraw` broadcasts the typed `remove` and keeps it in every authenticated replay until the name is shown again; a dismissal of this notice (`replayRemoval`) does the same, so a second tab that missed it learns too. |
-| Restart | The verdict is written atomically to `ceralive_update_offer.json` BEFORE any broadcast. `initCeraliveUpdateNotice()` (`main.ts`, before the first check) restores only withdrawals: an empty offer or a dismissed offer. An undismissed offer, a missing or invalid record and an unreadable dismissal store derive nothing. A failed write deletes the record so an older "none" cannot outlive a newer offer. |
-| Wire | No schema change: replay frames already allow `remove`, and the shipped frontend applies it from any frame. The tab open during an update runs the previous bundle, so this must not depend on new frontend code. |
+| Durable first | The verdict is written atomically to `ceralive_update_offer.json` as `{version:1, boot, offer}` before anything is broadcast, and only when it changed. If the write fails nothing changes on screen either, so the record is always the latest verdict any tab saw. |
+| Epoch | `boot` is the kernel boot id. Startup (`initCeraliveUpdateNotice()` in `main.ts`, before the first check) restores only a withdrawal (empty offer, or an offer the operator dismissed) from a record of the current boot. A record from an earlier boot (a reboot, or an older CeraUI that may have run meanwhile), a missing, oversized, non-regular, corrupt or non-canonical record, and unreadable dismissals derive nothing. The record is read through the bounded `readStoredStateFileSync`; rows must be canonical roster names with apt versions, so no row can forge another key. |
+| Withdrawal | Empty offer, or an offer already dismissed (a dismissed successor must not keep its predecessor up). `notificationWithdraw` broadcasts the typed `remove` and, as a separate frame, the pre-#183 string form, and keeps both in every authenticated replay until the name is shown again (`replayedRemovalFrames`, sent after the replay by `rpc/adapter.ts` and `notificationSendPersistent`). Current frontends reject the string frame; v2026.6.x/7.x frontends ignore the typed one. |
+| Dismissal | The notice is `releaseScoped`: `notifications.dismiss` carries the shown `revision` and `publisher`. Only a copy of the current release (same publisher, revision at or after the one that first carried the current key) is dismissed durably, and then its removal is replayed like a withdrawal. A stale copy changes nothing and gets the current release back; a client that cannot attest (an older frontend) changes nothing. Other notices keep name-only dismissal. |
+| Wire | Additive only: optional `revision`/`publisher` on the dismiss input (`notificationDismissInputSchema`) and separate removal frames after the unchanged replay frame. |
 
 Limits: a fresh tab after a restart sees an undismissed offer only after that
-process's first conclusive check (startup never republishes from the record). If
-both the write and the delete of the record fail, a stale "none" can hide the
-offer in reconnecting tabs until the next conclusive check republishes it; both
-failures are logged. A notice dismissed under the former names/count/size key is
-shown once more. The orchestrator's package `update:updates-available:*` notice
-has no retraction yet (separate follow-up).
+process's first conclusive check (startup never republishes from the record).
+While the state directory cannot be written, a new offer is not shown and a
+withdrawal is not made; both are logged and retried by the next conclusive
+check. After a reboot an open tab keeps a stale offer until that boot's first
+conclusive check. A notice dismissed under the former names/count/size key is
+shown once more, and a dismissal from an older frontend no longer sticks. The
+orchestrator's package `update:updates-available:*` notice has no retraction yet
+(separate follow-up).
 
-Coverage: `tests/ceralive-update-notice-lifecycle.test.ts` (real check entry over
-fake APT output on both images: version keys, withdrawal live and in replay with
-OS/kernel notices kept, an independent update left after install, stale and failed
-refreshes, legacy and capable candidate contradictions, kept-back packages, same-size
-release dismissal, missed dismissal, dismissed successor, install success is not
-evidence), `tests/ceralive-update-notice-restart.test.ts` (real fresh processes
-sharing only device files: the update's restart sequence, dismissal across restart,
-missing/corrupt record and unreadable dismissals, failed write) and the frontend half
-`apps/frontend/src/tests/notification-recovery-ingestion.test.ts` (a replay's
-`remove` drops the offer and keeps the OS notice).
+Coverage, as separate proofs: `tests/ceralive-update-notice-lifecycle.test.ts`
+(the real check entries over scripted APT on both images: version keys, live and
+replayed withdrawal for current and emulated v2026.7.2 tabs with OS/kernel notices
+kept, each inconclusive refresh indicator, failed discovery, legacy plan, origin,
+policy and omission contradictions, the mixed dismissed subset on capable, kept-back
+packages, attested, stale and unattested dismissals through the RPC procedure, the
+manual and periodic entries, install success is not evidence);
+`tests/ceralive-update-notice-restart.test.ts` (fresh `bun` processes sharing only
+device files, through the real check entry and the deliberate install restart:
+install, package-script restart, completion restart and reconnect for open and fresh
+tabs, a fresh process finding a dismissed successor, dismissal across restart, the
+boot epoch, missing/corrupt/forged records and unreadable dismissals, failed writes
+in both directions); and the frontend half
+(`apps/frontend/src/tests/notification-recovery-ingestion.test.ts`,
+`apps/frontend/src/main/notifications/notification-presentation.test.ts`).

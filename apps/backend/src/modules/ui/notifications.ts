@@ -61,7 +61,7 @@ type Notification = {
 	authedOnly: boolean;
 	action?: NotificationAction;
 	dismissalKey?: string;
-	replayRemoval?: boolean;
+	releaseScoped?: boolean;
 	beforeDismiss?: () => void;
 	onDismiss?: () => void;
 };
@@ -71,13 +71,25 @@ type PersistentNotification = Notification & {
 	last_sent: number;
 	updated: number;
 	revision: number;
+	// The revision that first carried the current dismissalKey.
+	releaseRevision: number;
+};
+
+/** What a client says it saw when it dismisses: the shown revision and its publisher. */
+export type NotificationSeen = {
+	readonly revision?: number | undefined;
+	readonly publisher?: string | undefined;
 };
 
 export type NotificationOptions = {
 	action?: NotificationAction;
 	dismissalKey?: string;
-	/** A dismissal is replayed to reconnecting clients, as {@link notificationWithdraw} is. */
-	replayRemoval?: boolean;
+	/**
+	 * The name carries one release at a time (its dismissalKey changes with it):
+	 * a durable dismissal must attest the current release, and a dismissal is
+	 * replayed like {@link notificationWithdraw}.
+	 */
+	releaseScoped?: boolean;
 	beforeDismiss?: () => void;
 	/** A producer's durable acknowledgement must succeed before removal. */
 	onDismiss?: () => void;
@@ -155,7 +167,7 @@ export function notificationSend(
 		...(params !== undefined ? { params } : {}),
 		...(opts?.action !== undefined ? { action: opts.action } : {}),
 		...(dismissalKey !== undefined ? { dismissalKey } : {}),
-		...(opts?.replayRemoval ? { replayRemoval: true } : {}),
+		...(opts?.releaseScoped ? { releaseScoped: true } : {}),
 		...(opts?.beforeDismiss ? { beforeDismiss: opts.beforeDismiss } : {}),
 		...(opts?.onDismiss ? { onDismiss: opts.onDismiss } : {}),
 		isDismissable,
@@ -173,19 +185,23 @@ export function notificationSend(
 			if (pn.last_sent && pn.last_sent + 1000 > getms()) {
 				doSend = false;
 			}
+			const releaseChanged = pn.dismissalKey !== dismissalKey;
 			Object.assign(pn, notification);
 			pn.updated = getms();
 			pn.revision = nextRevision();
+			if (releaseChanged) pn.releaseRevision = pn.revision;
 			if (doSend) {
 				pn.last_sent = getms();
 			}
 		} else {
+			const first = nextRevision();
 			pn = {
 				...notification,
 				isPersistent: true,
 				last_sent: 0,
 				updated: getms(),
-				revision: nextRevision(),
+				revision: first,
+				releaseRevision: first,
 			};
 			persistentNotifications.set(name, pn);
 		}
@@ -241,10 +257,20 @@ function removeNotification(name: string, replay: boolean) {
 	persistentNotifications.delete(name);
 
 	const revision = nextRevision();
-	if (replay) replayedRemovals.set(name, revision);
 	const msg = { remove: [{ id: name, revision }] };
-	broadcastMsg("notification", msg, 0, !n || n.authedOnly);
+	const authedOnly = !n || n.authedOnly;
+	broadcastMsg("notification", msg, 0, authedOnly);
+	if (replay) {
+		replayedRemovals.set(name, revision);
+		broadcastMsg("notification", legacyRemoval([name]), 0, authedOnly);
+	}
 	return msg;
+}
+
+// Frontends before #183 (July 2026) remove by bare name and ignore typed
+// entries; current frontends reject this frame and use the typed one.
+function legacyRemoval(names: readonly string[]) {
+	return { remove: [...names] };
 }
 
 export function notificationRemove(name: string) {
@@ -261,15 +287,50 @@ export function notificationWithdraw(name: string) {
 
 // Persists the dismissal (survives reload + restart) only when the notification
 // carries a semantic dismissalKey; a keyless notification is merely removed.
-export function notificationDismiss(name: string) {
+// A release-scoped notice is dismissed only by a client that saw its current
+// release; an attested older view gets the current release back instead, and
+// a client that cannot attest (an older frontend) changes nothing.
+export function notificationDismiss(
+	name: string,
+	seen: NotificationSeen = {},
+	requester?: MessageSocket,
+) {
 	const pn = persistentNotifications.get(name);
+	if (pn?.releaseScoped && !sawCurrentRelease(pn, seen)) {
+		if (requester && seen.revision !== undefined) resend(requester, pn);
+		return undefined;
+	}
 	pn?.onDismiss?.();
 	if (pn?.beforeDismiss) {
 		pn.beforeDismiss();
 	} else if (pn?.dismissalKey) {
 		recordNotificationDismissal(pn.dismissalKey);
 	}
-	return removeNotification(name, pn?.replayRemoval === true);
+	return removeNotification(name, pn?.releaseScoped === true);
+}
+
+function sawCurrentRelease(
+	pn: PersistentNotification,
+	seen: NotificationSeen,
+): boolean {
+	return (
+		seen.publisher === publisher &&
+		seen.revision !== undefined &&
+		seen.revision >= pn.releaseRevision &&
+		seen.revision <= pn.revision
+	);
+}
+
+function resend(conn: MessageSocket, pn: PersistentNotification): void {
+	const remaining = _notificationIsLive(pn);
+	if (remaining === false) return;
+	conn.send(
+		buildMsg(
+			"notification",
+			{ show: [buildNotificationMsg(pn, remaining, pn.revision)] },
+			getSocketSenderId(conn),
+		),
+	);
 }
 
 function _notificationIsLive(
@@ -312,10 +373,20 @@ export function getPersistentNotifications(
 		}
 	}
 
-	const remove = isAuthed
-		? [...replayedRemovals].map(([id, revision]) => ({ id, revision }))
-		: [];
-	return { show: notifications, ...(remove.length > 0 ? { remove } : {}) };
+	return { show: notifications };
+}
+
+/**
+ * The withdrawals a reconnecting client must still hear, sent after the replay
+ * as separate typed and pre-#183 frames so neither frontend drops the other's.
+ */
+export function replayedRemovalFrames(isAuthed = false) {
+	if (!isAuthed || replayedRemovals.size === 0) return [];
+	const typed = [...replayedRemovals].map(([id, revision]) => ({
+		id,
+		revision,
+	}));
+	return [{ remove: typed }, legacyRemoval([...replayedRemovals.keys()])];
 }
 
 export function notificationSendPersistent(
@@ -328,4 +399,6 @@ export function notificationSendPersistent(
 			replay: true,
 		}),
 	);
+	for (const frame of replayedRemovalFrames(isAuthed))
+		conn.send(buildMsg("notification", frame));
 }

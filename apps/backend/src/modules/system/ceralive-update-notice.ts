@@ -1,70 +1,147 @@
 /*
  * The "A CeraLive update is available" notice (`ceralive_update`).
  *
- * Only a conclusive check (a refresh that fetched every index, then a discovery
- * with coherent first-party evidence) may change it. Its last verdict is
- * persisted before anything is broadcast, so a withdrawal reaches a tab that
- * was offline across any number of backend restarts. Contract:
+ * Only a conclusive check may change it, and only after its verdict is
+ * durable: every first-party candidate must be verified, and the verdict is
+ * written (with this boot's id) before anything is broadcast. Contract:
  * apps/backend/docs/agents/a-persistent-notification-must-be-retractable.md.
  */
-import fs from "node:fs";
+import { readFileSync } from "node:fs";
 import type { UpdatePackage } from "@ceraui/rpc";
 import { z } from "zod";
 
 import { writeFileAtomicSync } from "../../helpers/config-loader.ts";
 import { logger } from "../../helpers/logger.ts";
+import type { SpawnWithTimeoutResult } from "../../helpers/spawn-policy.ts";
 import { isNotificationDismissed } from "../ui/notification-dismissals.ts";
 import {
 	notificationBroadcast,
 	notificationExists,
 	notificationWithdraw,
 } from "../ui/notifications.ts";
-import type { PinnedAptPackage } from "./apt-all-packages.ts";
-import { compareAptPackageNames } from "./apt-package-name.ts";
+import {
+	AptAllRefusalError,
+	discoverAptAllPackages,
+	type PinnedAptPackage,
+} from "./apt-all-packages.ts";
+import {
+	APT_PACKAGE_NAME_RE,
+	compareAptPackageNames,
+} from "./apt-package-name.ts";
 import { APT_SIMULATION_VERSION_RE } from "./apt-simulation-row.ts";
 import { FIRST_PARTY_APT_HOST } from "./apt-source-origins.ts";
 import { classifyPackageLayer } from "./package-layer.ts";
+import {
+	readStoredStateFileSync,
+	STORED_STATE_LIMITS,
+} from "./update-orchestrator/stored-state-file.ts";
 import { updateDismissalKey } from "./update-state.ts";
 
 const NOTICE = "ceralive_update";
 const RECORD_FILE = "ceralive_update_offer.json";
+const BOOT_ID_FILE = "/proc/sys/kernel/random/boot_id";
 
 /** The first-party packages Install would take; an empty list proves none remain. */
 export type CeraliveOffer = readonly PinnedAptPackage[] | "unknown";
 
-const recordSchema = z.object({
-	version: z.literal(1),
-	offer: z.array(z.object({ name: z.string(), version: z.string() })),
-});
+type AptRun = (argv: string[]) => Promise<SpawnWithTimeoutResult>;
+
+const offerSchema = z
+	.array(
+		z
+			.object({
+				name: z
+					.string()
+					.regex(APT_PACKAGE_NAME_RE)
+					.refine((name) => classifyPackageLayer(name) === "app"),
+				version: z.string().regex(APT_SIMULATION_VERSION_RE),
+			})
+			.strict(),
+	)
+	.refine((rows) =>
+		rows.every(
+			(row, i) =>
+				i === 0 ||
+				compareAptPackageNames(rows[i - 1]?.name ?? "", row.name) < 0,
+		),
+	);
+const recordSchema = z
+	.object({
+		version: z.literal(1),
+		boot: z.string().min(1),
+		offer: offerSchema,
+	})
+	.strict();
+
+type Store = {
+	readonly path: string;
+	readonly boot: string | undefined;
+	readonly write: (path: string, text: string) => void;
+};
+
+export type CeraliveUpdateNoticeOptions = {
+	readonly path?: string;
+	readonly boot?: string | undefined;
+	readonly write?: (path: string, text: string) => void;
+};
 
 // Inert until startup opts in, so a process that never initializes writes nothing.
-let recordPath: string | undefined;
+let store: Store | undefined;
+let persisted: string | undefined;
 let withdrawn = false;
 
-/** The candidate a legacy plan's package would install, or undefined if policy contradicts the plan. */
-export function legacyCandidate(policy: string): string | undefined {
-	const installed = /^\s*Installed:\s*(\S+)/m.exec(policy)?.[1];
-	const candidate = /^\s*Candidate:\s*(\S+)/m.exec(policy)?.[1];
-	return candidate !== undefined &&
-		candidate !== installed &&
-		APT_SIMULATION_VERSION_RE.test(candidate)
-		? candidate
-		: undefined;
-}
-
-export function capableCeraliveOffer(
+export function firstPartyOffer(
 	packages: readonly UpdatePackage[],
 ): CeraliveOffer {
-	const roster = packages.filter(
-		({ name }) => classifyPackageLayer(name) === "app",
-	);
-	const offer = roster.flatMap(({ name, version, origin, actionable }) =>
-		actionable && origin === FIRST_PARTY_APT_HOST && version !== undefined
-			? [{ name, version }]
-			: [],
-	);
-	// A roster row without verified CeraLive evidence is not proof that none remain.
-	return offer.length > 0 || roster.length === 0 ? offer : "unknown";
+	const offer: PinnedAptPackage[] = [];
+	for (const { name, version, origin, actionable } of packages) {
+		if (classifyPackageLayer(name) !== "app") continue;
+		// One unverified first-party candidate means the picture is incomplete.
+		if (!actionable || origin !== FIRST_PARTY_APT_HOST || version === undefined)
+			return "unknown";
+		offer.push({ name, version });
+	}
+	return offer;
+}
+
+/** Legacy: verify the exact install plan's first-party rows the way capable discovery does. */
+export async function legacyCeraliveOffer(
+	names: readonly string[],
+	plan: readonly string[],
+	run: AptRun,
+): Promise<CeraliveOffer> {
+	if (names.length === 0) return [];
+	const simulation = await run([
+		"/usr/bin/apt-get",
+		"-s",
+		"-o",
+		"Debug::NoLocking=1",
+		...plan,
+	]);
+	const inventory = await run(["/usr/bin/apt-cache", "policy"]);
+	if (simulation.exitCode !== 0 || inventory.exitCode !== 0) return "unknown";
+	try {
+		const { packages } = await discoverAptAllPackages(
+			simulation.stdout,
+			"",
+			async (name) => {
+				const policy = await run(["/usr/bin/apt-cache", "policy", name]);
+				if (policy.exitCode !== 0)
+					throw new AptAllRefusalError("discovery_failed", "package-policy");
+				return policy.stdout;
+			},
+			inventory.stdout,
+		);
+		const offer = firstPartyOffer(packages);
+		// The plan must take every first-party package discovery listed.
+		return offer !== "unknown" &&
+			names.every((name) => offer.some((row) => row.name === name))
+			? offer
+			: "unknown";
+	} catch (error) {
+		if (error instanceof AptAllRefusalError) return "unknown";
+		throw error;
+	}
 }
 
 function dismissalKey(offer: readonly PinnedAptPackage[]): string {
@@ -117,49 +194,52 @@ function publish(offer: readonly PinnedAptPackage[]): void {
 				labelKey: "notifications.openUpdates",
 			},
 			dismissalKey: dismissalKey(offer),
-			replayRemoval: true,
+			releaseScoped: true,
 		},
 	);
 	withdrawn = false;
 }
 
-function persist(offer: readonly PinnedAptPackage[]): void {
-	if (recordPath === undefined) return;
+function recordText(boot: string, offer: readonly PinnedAptPackage[]): string {
+	return JSON.stringify({ version: 1, boot, offer });
+}
+
+function persist(offer: readonly PinnedAptPackage[]): boolean {
+	if (store === undefined) return true;
+	const text = recordText(store.boot ?? "", offer);
+	if (text === persisted) return true;
 	try {
-		writeFileAtomicSync(recordPath, JSON.stringify({ version: 1, offer }));
+		store.write(store.path, text);
 	} catch (error) {
-		logger.warn("CeraLive update offer record not written", {
+		logger.warn("CeraLive update notice unchanged: verdict not persisted", {
 			error: error instanceof Error ? error.message : String(error),
 		});
-		// An older "none pending" left behind would withdraw this offer after a restart.
-		try {
-			fs.rmSync(recordPath, { force: true });
-		} catch (removeError) {
-			logger.error("Stale CeraLive update offer record not removed", {
-				error:
-					removeError instanceof Error
-						? removeError.message
-						: String(removeError),
-			});
-		}
+		return false;
+	}
+	persisted = text;
+	logger.info("CeraLive update notice verdict", {
+		offer: offer.length > 0 ? dismissalKey(offer) : "none",
+	});
+	return true;
+}
+
+function readRecord(path: string) {
+	try {
+		const text = readStoredStateFileSync(path, STORED_STATE_LIMITS.scalar);
+		return text === null ? undefined : recordSchema.parse(JSON.parse(text));
+	} catch (error) {
+		logger.warn("CeraLive update offer record ignored", {
+			error: error instanceof Error ? error.message : String(error),
+		});
+		return undefined;
 	}
 }
 
-function readRecord(path: string): PinnedAptPackage[] | undefined {
-	let text: string;
+function readBootId(): string | undefined {
 	try {
-		text = fs.readFileSync(path, "utf8");
+		return readFileSync(BOOT_ID_FILE, "utf8").trim() || undefined;
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== "ENOENT")
-			logger.warn("CeraLive update offer record unreadable", {
-				error: error instanceof Error ? error.message : String(error),
-			});
-		return undefined;
-	}
-	try {
-		return recordSchema.parse(JSON.parse(text)).offer;
-	} catch (error) {
-		logger.warn("CeraLive update offer record ignored: invalid", {
+		logger.warn("CeraLive update notice: boot id unreadable", {
 			error: error instanceof Error ? error.message : String(error),
 		});
 		return undefined;
@@ -172,20 +252,26 @@ export function reconcileCeraliveUpdateNotice(verdict: CeraliveOffer): void {
 	const offer = [...verdict].sort((a, b) =>
 		compareAptPackageNames(a.name, b.name),
 	);
-	persist(offer);
+	// A change that is not durable is not made, so no restart can act on an older verdict.
+	if (!persist(offer)) return;
 	if (offer.length === 0) withdraw();
 	else publish(offer);
 }
 
-/** Startup restores withdrawals only; an offer is shown again by a new check. */
-export function initCeraliveUpdateNotice(path = RECORD_FILE): void {
-	recordPath = path;
-	const offer = readRecord(path);
-	if (offer === undefined) return;
-	if (offer.length === 0 || dismissed(offer) === true) withdraw();
-}
-
-export function resetCeraliveUpdateNoticeForTest(): void {
-	recordPath = undefined;
+/** Startup restores only withdrawals proven by this boot's latest durable verdict. */
+export function initCeraliveUpdateNotice(
+	options: CeraliveUpdateNoticeOptions = {},
+): void {
+	store = {
+		path: options.path ?? RECORD_FILE,
+		boot: "boot" in options ? options.boot : readBootId(),
+		write: options.write ?? writeFileAtomicSync,
+	};
+	persisted = undefined;
 	withdrawn = false;
+	const record = readRecord(store.path);
+	if (record === undefined) return;
+	persisted = recordText(record.boot, record.offer);
+	if (record.boot !== store.boot) return;
+	if (record.offer.length === 0 || dismissed(record.offer) === true) withdraw();
 }
