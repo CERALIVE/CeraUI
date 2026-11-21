@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -11,6 +11,7 @@ import {
 	loadJsonConfigSync,
 	saveJsonConfigAsync,
 } from "../helpers/config-loader.ts";
+import { logger } from "../helpers/logger.ts";
 
 // Import the internal type guards and accessor for testing
 // These are not exported but we test them indirectly through the config-loader behavior
@@ -97,6 +98,71 @@ describe("loadJsonConfig", () => {
 		expect(result.loaded).toBe(false);
 		expect(result.data.count).toBe(10); // from defaults
 		expect(result.data.enabled).toBe(false); // from defaults
+	});
+
+	it("warns about a missing file by default", async () => {
+		const warn = spyOn(logger, "warn").mockImplementation(() => logger);
+		const info = spyOn(logger, "info").mockImplementation(() => logger);
+		try {
+			await loadJsonConfig(
+				path.join(tempDir, "nonexistent.json"),
+				testConfigSchema,
+				testDefaults,
+			);
+			expect(warn.mock.calls.map(([message]) => message)).toEqual([
+				`Config file not found: ${path.join(tempDir, "nonexistent.json")}, using defaults`,
+			]);
+			expect(info).not.toHaveBeenCalled();
+		} finally {
+			warn.mockRestore();
+			info.mockRestore();
+		}
+	});
+
+	it("logs an expected missing file at info", async () => {
+		const missing = path.join(tempDir, "cache.json");
+		const warn = spyOn(logger, "warn").mockImplementation(() => logger);
+		const info = spyOn(logger, "info").mockImplementation(() => logger);
+		try {
+			const result = await loadJsonConfig(
+				missing,
+				testConfigSchema,
+				testDefaults,
+				undefined,
+				{ missingFileLevel: "info" },
+			);
+			expect(result.loaded).toBe(false);
+			expect(result.data.count).toBe(10);
+			expect(info.mock.calls.map(([message]) => message)).toEqual([
+				`Config file not found: ${missing}, using defaults`,
+			]);
+			expect(warn).not.toHaveBeenCalled();
+		} finally {
+			warn.mockRestore();
+			info.mockRestore();
+		}
+	});
+
+	it("still warns about an unreadable expected file", async () => {
+		fs.writeFileSync(testFilePath, "{ invalid json }");
+		const warn = spyOn(logger, "warn").mockImplementation(() => logger);
+		try {
+			await loadJsonConfig(
+				testFilePath,
+				testConfigSchema,
+				testDefaults,
+				undefined,
+				{
+					missingFileLevel: "info",
+				},
+			);
+			expect(warn).toHaveBeenCalledTimes(1);
+			expect(String(warn.mock.calls[0]?.[0])).toStartWith(
+				`Invalid JSON in config file: ${testFilePath}`,
+			);
+		} finally {
+			warn.mockRestore();
+		}
 	});
 
 	it("should not throw and return defaults for a path in a missing directory", async () => {

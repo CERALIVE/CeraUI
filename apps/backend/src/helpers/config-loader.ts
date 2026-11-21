@@ -94,7 +94,8 @@ export type ConfigLoadResult<T> = {
  * Load and validate a JSON config file with Zod schema
  *
  * Behavior:
- * - If file doesn't exist: returns defaults, logs warning
+ * - If file doesn't exist: returns defaults, logs a warning (or info when
+ *   `options.missingFileLevel` says a missing file is expected, as for a cache)
  * - If JSON is invalid: returns defaults, logs warning
  * - If fields fail validation: strips invalid fields, applies defaults, logs warnings
  * - If fields are missing: applies defaults from schema, logs info
@@ -102,6 +103,7 @@ export type ConfigLoadResult<T> = {
  * @param filePath - Path to the JSON file
  * @param schema - Zod schema for validation
  * @param defaults - Default values to apply for missing fields
+ * @param options.missingFileLevel - Log level for a missing file (default warn)
  * @returns ConfigLoadResult with validated data and metadata
  */
 export async function loadJsonConfig<T extends z.ZodTypeAny>(
@@ -109,6 +111,7 @@ export async function loadJsonConfig<T extends z.ZodTypeAny>(
 	schema: T,
 	defaults: Partial<z.infer<T>> = {},
 	input?: { readonly parsed: unknown },
+	options: { readonly missingFileLevel?: "warn" | "info" } = {},
 ): Promise<ConfigLoadResult<z.infer<T>>> {
 	const result: ConfigLoadResult<z.infer<T>> = {
 		data: { ...defaults } as z.infer<T>,
@@ -130,7 +133,9 @@ export async function loadJsonConfig<T extends z.ZodTypeAny>(
 		result.loaded = true;
 	} catch (err) {
 		if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-			logger.warn(`Config file not found: ${filePath}, using defaults`);
+			if (options.missingFileLevel === "info")
+				logger.info(`Config file not found: ${filePath}, using defaults`);
+			else logger.warn(`Config file not found: ${filePath}, using defaults`);
 		} else if (err instanceof SyntaxError) {
 			logger.warn(
 				`Invalid JSON in config file: ${filePath}, using defaults: ${err.message}`,

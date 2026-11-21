@@ -92,11 +92,14 @@ export type ValidateRemoteRelaysMessage = {
 
 const RELAYS_CACHE_FILE = "relays_cache.json";
 
-// Load relays cache with Zod validation
+// Load relays cache with Zod validation. A missing cache is normal until the
+// first relay list arrives, so it is not a warning.
 const relaysCacheResult = await loadJsonConfig(
 	RELAYS_CACHE_FILE,
 	relaysCacheSchema,
 	RELAYS_CACHE_DEFAULTS,
+	undefined,
+	{ missingFileLevel: "info" },
 );
 let relaysCache: RelaysCache | undefined = relaysCacheResult.loaded
 	? relaysCacheResult.data
