@@ -47,6 +47,26 @@ afterEach(() => {
 });
 
 describe("updating-overlay package acquisition", () => {
+	it("does not show 100% for 200 of 201 steps or a full pending counter", async () => {
+		const details = progress({
+			total: 67,
+			downloading: 67,
+			unpacking: 67,
+			setting_up: 66,
+		});
+		const view = render(UpdatingOverlay, { props: { details } });
+		const bar = await screen.findByRole("progressbar");
+		expect(screen.queryByText("100%")).toBeNull();
+		expect(screen.getAllByText("99%")).toHaveLength(2);
+		expect(bar.getAttribute("aria-valuenow")).toBe("200");
+		expect(bar.getAttribute("aria-valuemax")).toBe("201");
+		await view.rerender({ details: { ...details, setting_up: 67 } });
+		expect(bar.getAttribute("aria-valuenow")).toBe("200");
+		await view.rerender({ details: { ...details, setting_up: 67, result: 0 } });
+		expect(bar.getAttribute("aria-valuenow")).toBe("201");
+		expect(screen.getAllByText("100%")).toHaveLength(2);
+	});
+
 	it("shows activity without inventing steps while apt has emitted no counters", async () => {
 		render(UpdatingOverlay, { props: { details: progress({ total: 0 }) } });
 

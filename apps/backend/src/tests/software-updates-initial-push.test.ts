@@ -167,18 +167,29 @@ function inspectPinnedUpdate(finished: boolean) {
 	]);
 }
 
-describe.each(["live", "reattached"] as const)(
+describe.each(["live", "reattached", "finished replay"] as const)(
 	"pinned install progress (%s)",
 	(mode) => {
 		test.each([
-			["two download candidates, one installed", 2, true, true, false],
-			["one download candidate, one installed", 1, true, true, false],
-			["missing install summary", 2, true, false, false],
-			["missing phase boundary", 2, false, true, false],
-			["solver-added dependency", 2, true, true, true],
+			["two download candidates, one installed", 2, true, true, ""],
+			["one download candidate, one installed", 1, true, true, ""],
+			["missing install summary", 2, true, false, ""],
+			["missing phase boundary", 2, false, true, ""],
+			["solver-added dependency", 2, true, true, "new"],
+			[
+				"different architecture cannot complete setup",
+				2,
+				true,
+				true,
+				"foreign",
+			],
+			["both architectures in the plan", 2, true, true, "multiarch"],
+			["upgrade and reinstall", 2, true, true, "reinstall"],
+			["reinstall count without a package list", 2, true, true, "unlisted"],
+			["one step short of 201", 2, true, true, "large"],
 		] as const)(
 			"uses only a proven install denominator: %s",
-			async (_name, downloadCount, boundary, installSummary, dependency) => {
+			async (_name, downloadCount, boundary, installSummary, variant) => {
 				await using _h = await updateHarness();
 				const paths = softwareUpdateOutputPaths();
 				const received: unknown[] = [];
@@ -187,29 +198,63 @@ describe.each(["live", "reattached"] as const)(
 				const dir = await mkdtemp(join(tmpdir(), "ceraui-pinned-progress-"));
 				const file = join(dir, "stdout");
 				const fetch = `The following packages will be upgraded:\n  cerastream${downloadCount === 2 ? " unrelated-upgrade" : ""}\n${downloadCount} upgraded, 0 newly installed, 0 to remove.\nGet:1 https://example.invalid cerastream [48 MB]\n`;
-				const partial = `${boundary ? "Download complete and in download only mode\n" : ""}Reading package lists...\nThe following packages will be upgraded:\n  cerastream\n${dependency ? "The following NEW packages will be installed:\n  libnew-dependency:arm64\n" : ""}${installSummary ? `1 upgraded, ${Number(dependency)} newly installed, 0 to remove.\n` : ""}${dependency ? "Unpacking libnew-dependency:arm64 (1) ...\nSetting up libnew-dependency:arm64 (1) ...\n" : ""}Unpacking cerastream:arm64 (2) over (1) ...\n`;
-				const unrelated = "Setting up pending-unrelated:arm64 (1) ...\n";
-				const setup =
-					"Setting up cerastream (2) ...\nSetting up cerastream:arm64 (2) ...\n";
+				const packageName =
+					variant === "foreign" || variant === "multiarch"
+						? "libfoo:amd64"
+						: "cerastream";
+				const upgrades =
+					variant === "multiarch"
+						? [packageName, "libfoo:arm64"]
+						: variant === "large"
+							? [
+									packageName,
+									...Array.from({ length: 66 }, (_, i) => `libextra${i}`),
+								]
+							: [packageName];
+				const added = variant === "new" ? "libnew-dependency:arm64" : undefined;
+				const reinstall = variant === "reinstall" ? "libreinstall" : undefined;
+				const knownPackages = [
+					...upgrades,
+					...(added ? [added] : []),
+					...(reinstall ? [reinstall] : []),
+				];
+				const partial = `${boundary ? "Download complete and in download only mode\n" : ""}Reading package lists...\nThe following packages will be upgraded:\n  ${upgrades.join(" ")}\n${added ? `The following NEW packages will be installed:\n  ${added}\n` : ""}${reinstall ? `The following packages will be REINSTALLED:\n  ${reinstall}\n` : ""}${installSummary ? `${upgrades.length} upgraded, ${Number(Boolean(added))} newly installed, ${reinstall || variant === "unlisted" ? "1 reinstalled, " : ""}0 to remove.\n` : ""}${knownPackages
+					.slice(1)
+					.map(
+						(name) => `Unpacking ${name} (1) ...\nSetting up ${name} (1) ...\n`,
+					)
+					.join("")}Unpacking ${packageName} (2) over (1) ...\n`;
+				const unrelated =
+					variant === "foreign"
+						? "Setting up libfoo:arm64 (1) ...\n"
+						: "Setting up pending-unrelated:arm64 (1) ...\n";
+				const setup = `Setting up ${packageName} (2) ...\nSetting up ${packageName} (2) ...\n`;
 				// Reattach to a running unit after the unrelated setup has already
 				// reached disk. Both paths then watch cerastream's actual setup.
+				const splitName =
+					partial.indexOf("\nUnpacking ") + "\nUnpacking ".length + 2;
 				const checkpoints =
 					mode === "live"
 						? [
 								fetch,
+								fetch + partial.slice(0, splitName),
 								fetch + partial,
 								fetch + partial + unrelated,
 								fetch + partial + unrelated + setup,
 							]
-						: [
-								fetch + partial + unrelated,
-								fetch + partial + unrelated + setup,
-							];
+						: mode === "reattached"
+							? [
+									fetch + partial + unrelated,
+									fetch + partial + unrelated + setup,
+								]
+							: [fetch + partial + unrelated + setup];
 				let checkpoint = 0;
-				let finished = false;
-				let started = mode === "reattached";
+				let finished = mode === "finished replay";
+				let started = mode !== "live";
 				const installTotal =
-					boundary && installSummary ? (dependency ? 2 : 1) : 0;
+					boundary && installSummary && variant !== "unlisted"
+						? knownPackages.length
+						: 0;
 				const beforeWrites: unknown[] = [];
 				let replayCompletion: Promise<number> | undefined;
 				const deps = {
@@ -288,12 +333,20 @@ describe.each(["live", "reattached"] as const)(
 						(frame) => frame.update_state?.kind === "installing",
 					);
 					if (installTotal > 0) {
-						expect(beforeWrites.at(-1)).toEqual(firstProgress);
+						if (mode !== "finished replay")
+							expect(beforeWrites.at(-1)).toEqual(firstProgress);
 						expect(installFrames).toEqual([
-							{
-								updating: firstProgress,
-								update_state: { kind: "installing", progress: firstProgress },
-							},
+							...(mode === "finished replay"
+								? []
+								: [
+										{
+											updating: firstProgress,
+											update_state: {
+												kind: "installing" as const,
+												progress: firstProgress,
+											},
+										},
+									]),
 							{
 								updating: progress,
 								update_state: { kind: "installing", progress },
@@ -303,10 +356,17 @@ describe.each(["live", "reattached"] as const)(
 						const unknownTotal = { ...update, unpacking: 1 };
 						const configured = { ...unknownTotal, setting_up: 1 };
 						expect(installFrames).toEqual([
-							{
-								updating: unknownTotal,
-								update_state: { kind: "installing", progress: unknownTotal },
-							},
+							...(mode === "finished replay"
+								? []
+								: [
+										{
+											updating: unknownTotal,
+											update_state: {
+												kind: "installing" as const,
+												progress: unknownTotal,
+											},
+										},
+									]),
 							{
 								updating: configured,
 								update_state: { kind: "installing", progress: configured },

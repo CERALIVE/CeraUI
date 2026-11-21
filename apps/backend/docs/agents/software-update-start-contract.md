@@ -43,9 +43,12 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   line shows a fetch started, not that it completed.
   The pinned unit's download-only plan can be broader than its install.
   Live observation and reattachment use the upgraded/new package lists
-  after the download-only boundary, cross-checked against the install summary.
-  Each planned name contributes at most one unpack and one setup, with
-  architecture suffixes ignored. Unrelated dpkg activity is not counted.
+  after the download-only boundary. Cross-check upgraded, new, reinstalled
+  and downgraded lists against their individual summary counts. Unsupported
+  categories or ambiguous evidence leave the total unknown.
+  Each exact identity, including any APT architecture suffix, contributes
+  at most one unpack and one subsequent setup. Unrelated dpkg activity is
+  not counted.
   Reattachment reads the explicit pins from the validated unit command.
   Pins can identify activity while the total is unknown, but cannot prove the
   total: APT can add dependencies or leave a requested package unchanged.

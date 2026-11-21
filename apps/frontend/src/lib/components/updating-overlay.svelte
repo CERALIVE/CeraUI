@@ -7,38 +7,12 @@ import { onMount } from 'svelte';
 import * as Drawer from '$lib/components/ui/drawer/index.js';
 import { Progress } from '$lib/components/ui/progress';
 import { announceLegacyInstallOutcome } from '$lib/updates/legacy-install-notice';
+import { packageProgressFraction } from '$lib/updates/package-progress';
 
 const { details }: { details: Exclude<StatusMessage['updating'], boolean | null> } = $props();
 
 // Enhanced state management
 let isVisible = $state(false);
-
-// Safe progress calculation with null checks and NaN prevention
-const progress: number = $derived.by(() => {
-	if (!details) return 0;
-	const downloading = Number(details.downloading) || 0;
-	const unpacking = Number(details.unpacking) || 0;
-	const setting_up = Number(details.setting_up) || 0;
-	const total = downloading + unpacking + setting_up;
-	return Number.isFinite(total) ? total : 0;
-});
-
-// Safe total calculation with minimum value and NaN prevention
-const total: number = $derived.by(() => {
-	if (!details?.total) return 1;
-	const calculatedTotal = 3 * (Number(details.total) || 0);
-	const safeTotal = Math.max(calculatedTotal, 1);
-	return Number.isFinite(safeTotal) ? safeTotal : 1;
-});
-
-// Progress percentage with enhanced NaN prevention
-const progressPercentage = $derived.by(() => {
-	if (!details || total <= 0 || !Number.isFinite(progress) || !Number.isFinite(total)) {
-		return 0;
-	}
-	const percentage = (progress / total) * 100;
-	return Number.isFinite(percentage) ? Math.min(percentage, 100) : 0;
-});
 
 // Truthful terminal-state detection. `details.result` is `0` (the device's
 // success result) or a STRING (the apt failure message the update loop
@@ -64,7 +38,8 @@ const animationPhase = $derived.by(() => {
 const downloadFinished = $derived(
 	animationPhase === 'unpacking' || animationPhase === 'installing' || isSuccess,
 );
-const showCounts = $derived(details.total > 0 && downloadFinished);
+const fraction = $derived(downloadFinished ? packageProgressFraction(details, isSuccess) : null);
+const showCounts = $derived(fraction !== null);
 
 // Terminal outcomes have ONE announcer, once per outcome. In the app Layout
 // never mounts this takeover for a terminal frame: it releases the takeover and
@@ -80,7 +55,7 @@ onMount(() => {
 </script>
 
 <!-- Enhanced Modern Glassmorphism Overlay -->
-{#if Number.isFinite(progress) && Number.isFinite(total) && Number.isFinite(progressPercentage)}
+{#if details}
 	<Drawer.Root closeOnEscape={false} closeOnOutsideClick={false} open={true}>
 		<Drawer.Content
 			class="from-background/95 via-background/90 to-background/95 h-full w-full border-0 bg-gradient-to-br backdrop-blur-xl"
@@ -160,12 +135,12 @@ onMount(() => {
 							{/if}
 
 							<!-- Percentage Overlay -->
-							{#if showCounts}
+							{#if fraction}
 								<div class="absolute inset-0 flex items-center justify-center">
 									<span
 										class="text-foreground bg-background/80 rounded-full px-3 py-1.5 text-xl font-bold sm:text-2xl"
 									>
-										{Number.isFinite(progressPercentage) ? progressPercentage.toFixed(0) : '0'}%
+										{fraction.percent}%
 									</span>
 								</div>
 							{/if}
@@ -202,22 +177,23 @@ onMount(() => {
 						>
 							<Progress
 								class="package-update-progress h-full rounded-full"
-								max={Number.isFinite(total) ? total : 1}
-								value={showCounts ? progress : null}
+								max={fraction?.total ?? 1}
+								value={fraction?.completed ?? null}
+								aria-valuetext={fraction ? `${fraction.percent}%` : undefined}
 								aria-label={m["updatingOverlay.progress"]()}
 							/>
 						</div>
 
 						<!-- Progress Details -->
-						{#if showCounts}
+						{#if fraction}
 							<div class="text-muted-foreground flex justify-between text-xs sm:text-sm">
 								<span
-									>{progress}
+									>{fraction.completed}
 									{m["updatingOverlay.of"]()}
-									{total}
+									{fraction.total}
 									{m["updatingOverlay.steps"]()}</span
 								>
-								<span>{progressPercentage.toFixed(1)}%</span>
+								<span>{fraction.percent}%</span>
 							</div>
 						{/if}
 					</div>
@@ -321,14 +297,4 @@ onMount(() => {
 			</div>
 		</Drawer.Content>
 	</Drawer.Root>
-{:else}
-	<!-- Fallback overlay without animations if values are invalid -->
-	<div class="bg-background/95 fixed inset-0 z-50 backdrop-blur-xl">
-		<div class="relative flex h-full w-full flex-col items-center justify-center p-4 sm:p-8">
-			<div class="text-center">
-				<RotateCw class="text-primary mx-auto mb-4 h-32 w-32 motion-safe:animate-spin" />
-				<div class="text-muted-foreground text-sm">Loading...</div>
-			</div>
-		</div>
-	</div>
 {/if}

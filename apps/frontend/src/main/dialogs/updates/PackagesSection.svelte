@@ -29,6 +29,7 @@ import { rpc } from '$lib/rpc/client';
 import { NotSentError } from '$lib/rpc/rpc-error';
 import { getUpdateState } from '$lib/rpc/subscriptions.svelte';
 import { actionableCountOf, availableOf, checkedAtOf } from '$lib/updates/legacy-packages';
+import { packageProgressFraction } from '$lib/updates/package-progress';
 import type { UpdateSurface } from '$lib/updates/update-surface.svelte';
 
 import ActionOutcomeBand from './ActionOutcomeBand.svelte';
@@ -50,12 +51,9 @@ const succeeded = $derived(updateState?.kind === 'success');
 const preflightFailed = $derived(updateState?.kind === 'update_preflight_failed');
 const lastCheckedAt = $derived(checkedAtOf(updateState));
 const inProgress = $derived(updateState?.kind === 'downloading' || updateState?.kind === 'installing');
-const progressValue = $derived.by(() => {
-	const p = updateState?.kind === 'installing' ? updateState.progress : undefined;
-	if (!p?.total || p.total <= 0) return undefined;
-	const done = (p.downloading ?? 0) + (p.unpacking ?? 0) + (p.setting_up ?? 0);
-	return Math.min(100, Math.max(0, Math.round((100 * done) / (3 * p.total))));
-});
+const progressFraction = $derived(
+	updateState?.kind === 'installing' ? packageProgressFraction(updateState.progress) : null
+);
 
 let confirmOpen = $state(false);
 
@@ -184,7 +182,13 @@ $effect(() => () => clearTimeout(checkTimeout));
 				{m["settings.dialogs.updating"]()}
 			</div>
 			<!-- APT does not report bytes transferred on this stream. -->
-			<Progress class="package-update-progress" aria-label={m["updatingOverlay.progress"]()} value={progressValue ?? null} />
+			<Progress
+				class="package-update-progress"
+				aria-label={m["updatingOverlay.progress"]()}
+				aria-valuetext={progressFraction ? `${progressFraction.percent}%` : undefined}
+				max={progressFraction?.total ?? 100}
+				value={progressFraction?.completed ?? null}
+			/>
 		</div>
 	{:else if starting}
 		<div class="flex items-center gap-2 text-sm font-medium" aria-live="polite">

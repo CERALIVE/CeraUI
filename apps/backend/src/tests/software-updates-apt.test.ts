@@ -1087,6 +1087,61 @@ StandardError=append:/run/ceralive/software-update.stderr
 });
 
 describe("deriveAptProgress() — arbitrary output chunk boundaries", () => {
+	const initial = { total: 0, downloading: 0, unpacking: 0, setting_up: 0 };
+	const transcript = [
+		"The following packages have been kept back:",
+		"  libkept",
+		"The following held packages will be changed:",
+		"  libapp",
+		"The following packages will be upgraded:",
+		"  libapp",
+		"1 upgraded, 0 newly installed, 0 to remove and 1 not upgraded.",
+		"Selecting previously unselected package libapp.",
+		"Preparing to unpack libapp.deb ...",
+		"Unpacking libapp (2) over (1) ...",
+		"Processing triggers for libkept (1) ...",
+		"dpkg: error processing package libapp (--configure): interrupted",
+		"",
+	].join("\n");
+
+	it("counts only the planned unpack before an interrupted configure", () => {
+		expect(deriveAptProgress(initial, transcript)).toEqual({
+			total: 1,
+			downloading: 1,
+			unpacking: 1,
+			setting_up: 0,
+		});
+	});
+
+	it.each([
+		[
+			"unsupported removal",
+			transcript
+				.replace(
+					"1 upgraded,",
+					"The following packages will be REMOVED:\n  libremove\n1 upgraded,",
+				)
+				.replace("0 to remove", "1 to remove"),
+		],
+		[
+			"a pre-existing partial install",
+			transcript.replace(
+				"Selecting previously",
+				"1 not fully installed or removed.\nSelecting previously",
+			),
+		],
+		[
+			"an ambiguous architecture",
+			transcript.replace("Unpacking libapp (", "Unpacking libapp:arm64 ("),
+		],
+		[
+			"an unpack missing from the plan",
+			transcript.replace("Unpacking libapp (", "Unpacking libother ("),
+		],
+	])("stays indeterminate for %s", (_name, output) => {
+		expect(deriveAptProgress(initial, output).total).toBe(0);
+	});
+
 	it("recognizes progress tokens split across several durable-file reads", () => {
 		let status = {
 			total: 0,

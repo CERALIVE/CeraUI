@@ -214,8 +214,23 @@ describe("F7: package progress with an unknown total", () => {
 			progress: { downloading: 2, unpacking: 1, setting_up: 0, total: 2 },
 		});
 
-		expect(bar.getAttribute("aria-valuenow")).toBe("50");
+		expect(bar.getAttribute("aria-valuenow")).toBe("3");
+		expect(bar.getAttribute("aria-valuemax")).toBe("6");
+		expect(bar.getAttribute("aria-valuetext")).toBe("50%");
 	});
+
+	it.each([66, 67])(
+		"keeps 67 packages below completion with %d setups while installing",
+		async (setting_up) => {
+			const bar = await progressBar({
+				kind: "installing",
+				progress: { downloading: 67, unpacking: 67, setting_up, total: 67 },
+			});
+			expect(bar.getAttribute("aria-valuenow")).toBe("200");
+			expect(bar.getAttribute("aria-valuemax")).toBe("201");
+			expect(bar.getAttribute("aria-valuetext")).toBe("99%");
+		},
+	);
 
 	it("does not count the only package as downloaded just because fetching began", async () => {
 		const bar = await progressBar({

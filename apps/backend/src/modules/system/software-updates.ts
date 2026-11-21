@@ -1526,25 +1526,43 @@ type SoftwareUpdateProcessMonitor = {
 };
 
 function aptInstallPlan(output: string): Set<string> | undefined {
-	const summary = /^\d+ upgraded, \d+ newly installed,[^\r\n]*\r?\n/m.exec(
-		output,
-	);
+	const summary =
+		/^(?<upgrade>\d+) upgraded, (?<install>\d+) newly installed, (?:(?<reinstall>\d+) reinstalled, )?(?:(?<downgrade>\d+) downgraded, )?0 to remove(?: and \d+ not upgraded)?\.\r?\n/m.exec(
+			output,
+		);
 	if (!summary) return undefined;
-	const count = parseUpgradePackageCount(summary[0]);
-	if (!count.ok || count.value === 0) return undefined;
+	const afterSummary = output.slice(summary.index + summary[0].length);
+	if (/^[1-9]\d* not fully installed or removed\.\r?$/m.test(afterSummary))
+		return undefined;
 
 	const plan = new Set<string>();
 	const beforeSummary = output.slice(0, summary.index);
-	for (const [, block] of beforeSummary.matchAll(
-		/^The following (?:packages will be upgraded|NEW packages will be installed):\r?\n((?:[ \t]+[^\r\n]+\r?\n)+)/gm,
+	const counts = new Map<string, number>([
+		["packages will be upgraded", Number(summary.groups?.upgrade)],
+		["NEW packages will be installed", Number(summary.groups?.install)],
+		["packages will be REINSTALLED", Number(summary.groups?.reinstall ?? 0)],
+		["packages will be DOWNGRADED", Number(summary.groups?.downgrade ?? 0)],
+	]);
+	for (const [, heading, block] of beforeSummary.matchAll(
+		/^The following ([^:\r\n]+):\r?\n((?:[ \t]+[^\r\n]+\r?\n)+)/gm,
 	)) {
-		for (const token of (block ?? "").trim().split(/\s+/)) {
-			const name = token.split(":", 1)[0] ?? "";
-			if (!APT_PACKAGE_NAME_RE.test(name)) return undefined;
+		// Informational headings (such as held-back packages) aren't work.
+		if (heading === undefined || !counts.has(heading)) continue;
+		const names = (block ?? "").trim().split(/\s+/);
+		if (names.length !== counts.get(heading)) return undefined;
+		counts.set(heading, 0);
+		for (const name of names) {
+			if (
+				!/^[a-z0-9][a-z0-9+.-]*(?::[a-z0-9-]+)?$/.test(name) ||
+				plan.has(name)
+			)
+				return undefined;
 			plan.add(name);
 		}
 	}
-	return plan.size === count.value ? plan : undefined;
+	return plan.size > 0 && [...counts.values()].every((count) => count === 0)
+		? plan
+		: undefined;
 }
 
 export function deriveAptProgress(
@@ -1555,14 +1573,13 @@ export function deriveAptProgress(
 	// The validated pinned unit runs two apt commands into one file. Only
 	// a complete download-only boundary can attribute a summary to install.
 	const boundary = pinnedInstall
-		? /^Download complete and in download only mode\r?$/m.exec(output)
+		? /^Download complete and in download only mode\r?\n/m.exec(output)
 		: null;
 	const installOutput = boundary
 		? output.slice(boundary.index + boundary[0].length)
 		: output;
 	const plan =
 		!pinnedInstall || boundary ? aptInstallPlan(installOutput) : undefined;
-	const total = plan?.size ?? 0;
 	// Pins identify activity if the plan is unknown, but cannot supply its
 	// denominator: APT may add dependencies or leave a pin unchanged.
 	const packages = plan ?? new Set(pinnedInstall);
@@ -1572,12 +1589,27 @@ export function deriveAptProgress(
 	}
 	const unpacked = new Set<string>();
 	const configured = new Set<string>();
+	let ambiguous = false;
 	for (const [, action, name] of installOutput.matchAll(
-		/^(Unpacking|Setting up) ([a-z0-9][a-z0-9+.-]*)(?::[a-z0-9-]+)?[ \t][^\r\n]*\r?\n/gm,
+		/^(Unpacking|Setting up) ([a-z0-9][a-z0-9+.-]*(?::[a-z0-9-]+)?)[ \t][^\r\n]*\r?\n/gm,
 	)) {
-		if (name === undefined || !packages.has(name)) continue;
-		(action === "Unpacking" ? unpacked : configured).add(name);
+		if (name === undefined) continue;
+		if (!packages.has(name)) {
+			const colon = name.indexOf(":");
+			// Never guess whether an omitted qualifier represents another
+			// identity. Two different explicit qualifiers are not ambiguous.
+			const alias =
+				colon >= 0
+					? packages.has(name.slice(0, colon))
+					: [...packages].some((candidate) => candidate.startsWith(`${name}:`));
+			ambiguous ||= alias || (plan !== undefined && action === "Unpacking");
+			continue;
+		}
+		if (action === "Unpacking") unpacked.add(name);
+		else if (unpacked.has(name)) configured.add(name);
 	}
+	const total =
+		ambiguous || (pinnedInstall && unpacked.size === 0) ? 0 : (plan?.size ?? 0);
 	return {
 		...current,
 		total,

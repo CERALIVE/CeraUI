@@ -251,7 +251,9 @@ describe("Layout — the update overlay survives a backend restart", () => {
 		updating({ total: 1, downloading: 1, unpacking: 1, setting_up: 1 });
 		expect(overlayTitle()).toBe(mounted);
 		expect(phase()?.textContent).toContain("Installing");
-		expect(bar()?.getAttribute("aria-valuenow")).toBe("3");
+		expect(bar()?.getAttribute("aria-valuenow")).toBe("2");
+		expect(bar()?.getAttribute("aria-valuemax")).toBe("3");
+		expect(bar()?.getAttribute("aria-valuetext")).toBe("66%");
 	});
 
 	it("is on screen from the FIRST paint when Layout re-mounts onto an update already in flight", () => {

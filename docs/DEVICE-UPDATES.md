@@ -7,7 +7,9 @@ percentage while APT prepares or downloads packages. The detached service
 continues to append to durable logs. The UI cannot infer download bytes from
 `Get:N`, which identifies the start of a fetch; output can also arrive in bursts.
 When unpacking starts and APT has reported a package count, the overlay shows
-install steps. Only the terminal APT result establishes success or failure.
+install steps. Both progress bars use the same step fraction and round the
+percentage down. They stop short of 100% while the detached update is running.
+Only the terminal APT result establishes success or failure.
 
 For pinned updates, a broader download plan cannot set the install total.
 Progress counts distinct packages in APT's install plan, including dependencies
