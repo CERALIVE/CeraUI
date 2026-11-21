@@ -21,6 +21,8 @@ interface Props {
 	onStep: (delta: number) => void;
 	onSliderChange: (value: number) => void;
 	onSliderCommit: (value: number) => void;
+	/** Show the "Adjust Bitrate" label; off in the phone sheet, whose title says it. */
+	showLabel?: boolean;
 }
 
 const {
@@ -34,6 +36,7 @@ const {
 	onStep,
 	onSliderChange,
 	onSliderCommit,
+	showLabel = true,
 }: Props = $props();
 </script>
 
@@ -44,7 +47,7 @@ const {
 
 <section aria-label={m["live.adjustBitrate"]()} class="min-w-0 flex-1 space-y-1.5">
 	<div class="flex items-center justify-between gap-4">
-		<p class="text-sm font-medium">{m["live.adjustBitrate"]()}</p>
+		<p class="text-sm font-medium" class:sr-only={!showLabel}>{m["live.adjustBitrate"]()}</p>
 		<p
 			class="font-mono text-base font-semibold tabular-nums"
 			style="color: var(--status-live);"
