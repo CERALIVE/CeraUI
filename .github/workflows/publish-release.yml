@@ -263,6 +263,10 @@ jobs:
           sudo apt-get install -y ruby-dev gcc g++
           sudo gem install --no-document fpm
 
+      # Both the package mount fixture and the backend kernel tests need real user namespaces.
+      - name: Enable unprivileged user namespaces (Ubuntu AppArmor restriction)
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - name: Run release/package contracts
         working-directory: CeraUI
         run: bun run test:release-package-contracts
@@ -289,19 +293,56 @@ jobs:
         working-directory: CeraUI
         run: bun run test:service-contract
 
-      # Per-workspace rather than the combined `bun run test`, and the FRONTEND
-      # suite deliberately lives in its own job below. These three run after a
-      # .deb build, a full lint/typecheck and a service contract on this runner;
-      # the frontend suite is the one that cannot absorb that (see that job).
-      # Per-workspace rather than the combined `bun run test`, because the
-      # frontend suite has already run above, on a fresh runner. Together these
-      # cover exactly what `bun run test` chained: rpc, i18n, frontend, backend.
+      # The live-producer contract skips unless this verified sender is exported.
+      - name: Prepare pinned srtla-send runtime
+        working-directory: CeraUI
+        run: |
+          set -euo pipefail
+          package_dir="dist/ci-packages"
+          package_path="$package_dir/srtla_4.2.0_amd64.deb"
+          runtime_root="dist/ci-runtime"
+          mkdir -p "$package_dir" "$runtime_root"
+
+          curl --fail --location --silent --show-error \
+            --output "$package_path" \
+            https://github.com/CERALIVE/srtla-send-rs/releases/download/v4.2.0/srtla_4.2.0_amd64.deb
+          printf '%s  %s\n' \
+            ec6ed389cf80c472dd1ebf3d8fd820c3bd1517517d54fbf24420322a7affd14f \
+            "$package_path" | sha256sum --check
+          test "$(dpkg-deb --field "$package_path" Package)" = srtla
+          test "$(dpkg-deb --field "$package_path" Version)" = 4.2.0
+          test "$(dpkg-deb --field "$package_path" Architecture)" = amd64
+          dpkg-deb --extract "$package_path" "$runtime_root"
+          test -f "$runtime_root/usr/bin/srtla_send"
+
+      - name: Export the live sender binary
+        working-directory: CeraUI
+        run: |
+          set -euo pipefail
+          runtime_bin="$GITHUB_WORKSPACE/CeraUI/dist/ci-runtime/usr/bin/srtla_send"
+          chmod +x "$runtime_bin"
+          test -x "$runtime_bin"
+          echo "SRTLA_SEND_BIN=$runtime_bin" >> "$GITHUB_ENV"
+
+      # The frontend suite already ran above on a fresh runner.
       - name: Run unit tests
         working-directory: CeraUI
         run: |
           bun run --filter @ceraui/rpc test
           bun run --filter @ceraui/i18n test
           bun run --filter backend test
+
+      # The bundled run skips these opt-in cases; the statistical tests need CPU headroom.
+      - name: netns-semantics (isolated — statistical assertions need CPU headroom)
+        working-directory: CeraUI
+        env:
+          CERALIVE_NETNS_ISOLATED: "1"
+        run: bun test apps/backend/src/tests/uplink-steering-netns.test.ts apps/backend/src/tests/uplink-shaper-netns.test.ts apps/backend/src/tests/update-transport-netns.test.ts
+
+      # The UID-routing fixture needs a nonzero UID in a private rootful network namespace.
+      - name: update UID routing (rootful netns)
+        working-directory: CeraUI
+        run: sudo -n unshare -n env CERALIVE_NETNS_ISOLATED=1 "$(command -v bun)" test apps/backend/src/tests/update-transport-pin-netns.test.ts
 
   build-ceraui-system:
     name: Build CeraUI Full System
