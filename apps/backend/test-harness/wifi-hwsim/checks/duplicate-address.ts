@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readdir, readFile, realpath } from "node:fs/promises";
 import { run } from "../../../src/helpers/run.ts";
+import { onNetworkInterfacesChange } from "../../../src/modules/network/network-interfaces.ts";
 import {
 	nmApConnAdd,
 	nmConnDelete,
@@ -135,7 +136,7 @@ async function assignGuestPorts(layout: "same" | "distinct", a: string, twin: st
 	await managed(twin);
 }
 
-async function discoverGuestRadios() {
+async function discoverGuestRadios(a: string, twin: string) {
 	// This standalone check has no backend interface monitor to supply the live snapshot.
 	const observations = await Promise.all(
 		(await radios()).map(async (ifname) => {
@@ -149,12 +150,50 @@ async function discoverGuestRadios() {
 		wifiDeviceListAdd(ifname, mac.toLowerCase(), inet);
 	}
 	wifiDeviceListEndUpdate();
-	await wifiUpdateDevices();
+
+	const previous = wifiRadioIdentity.publishedObservation;
+	const published = Promise.withResolvers<void>();
+	const observe = () => {
+		const registry = getWifiInterfacesByMacAddress();
+		if (
+			wifiRadioIdentity.publishedObservation > previous &&
+			[a, twin].every((ifname) => {
+				const identity = wifiRadioIdentity.state.rows.get(ifname);
+				return (
+					identity?.row !== undefined &&
+					registry[identity.key] === identity.row &&
+					projectWifiRadioIncarnation(identity.row, identity) !== undefined
+				);
+			})
+		) {
+			published.resolve();
+		}
+	};
+	const unsubscribe = onNetworkInterfacesChange(observe);
+	const deadline = Promise.withResolvers<never>();
+	const timer = setTimeout(() => {
+		const details = [a, twin].map((ifname) => {
+			const identity = wifiRadioIdentity.state.rows.get(ifname);
+			return `${ifname}=${identity?.classification ?? "missing"} (row=${identity?.row?.id ?? "missing"})`;
+		});
+		deadline.reject(
+			new Error(`Timed out waiting for published guest Wi-Fi rows: ${details.join(", ")}`),
+		);
+	}, 20_000);
+	try {
+		await Promise.race([
+			Promise.all([wifiUpdateDevices().then(observe), published.promise]),
+			deadline.promise,
+		]);
+	} finally {
+		clearTimeout(timer);
+		unsubscribe();
+	}
 }
 
 async function checkSharedPortRefusal(a: string, twin: string) {
 	await assignGuestPorts("same", a, twin);
-	await discoverGuestRadios();
+	await discoverGuestRadios(a, twin);
 	for (const ifname of [a, twin]) {
 		const identity = wifiRadioIdentity.state.rows.get(ifname);
 		assert(identity);
@@ -162,6 +201,7 @@ async function checkSharedPortRefusal(a: string, twin: string) {
 		const row = identity.row;
 		assert(row, `No published limited row for ${ifname}`);
 		const token = projectWifiRadioIncarnation(row, identity);
+		assert(token, `No published incarnation for ${ifname}`);
 		assert.deepEqual(await resolveWifiBinding(row.id, token, "config"), {
 			success: false,
 			error: "radio-unverified",
@@ -212,7 +252,7 @@ async function main() {
 	await assignGuestPorts("distinct", a, twin);
 	const aPath = (await nmDeviceProp(a, "GENERAL.PATH"))?.[0];
 	const bPath = (await nmDeviceProp(twin, "GENERAL.PATH"))?.[0];
-	await discoverGuestRadios();
+	await discoverGuestRadios(a, twin);
 	const keys = [`${mac}@${aPath}`, `${mac}@${bPath}`];
 	const registry = getWifiInterfacesByMacAddress();
 	if (!aPath || !bPath || aPath === bPath || keys.some((key) => !registry[key])) {

@@ -4,6 +4,8 @@ set -euo pipefail
 export LC_ALL=C
 
 first_path=platform-hwsim-port-0
+vendor=Linux
+product=mac80211_hwsim
 second_port() {
 	case "$1" in
 		same) printf '%s\n' "$first_path" ;;
@@ -13,8 +15,9 @@ second_port() {
 }
 
 render_rules() {
-	printf 'SUBSYSTEM=="net", SUBSYSTEMS=="mac80211_hwsim", KERNELS=="%s", ENV{ID_PATH}="%s"\n' \
-		"$1" "$first_path" "$2" "$3"
+	# Label the emulated hardware so normal discovery can enroll it without seeded rows.
+	printf 'SUBSYSTEM=="net", SUBSYSTEMS=="mac80211_hwsim", KERNELS=="%s", ENV{ID_PATH}="%s", ENV{ID_VENDOR_FROM_DATABASE}="%s", ENV{ID_MODEL_FROM_DATABASE}="%s"\n' \
+		"$1" "$first_path" "$vendor" "$product" "$2" "$3" "$vendor" "$product"
 }
 
 if [[ $# == 1 && $1 == --verify-rules ]]; then
@@ -61,12 +64,13 @@ nm-online --wait-for-startup --timeout=25 --quiet
 
 # These read-only probes must agree before CeraUI's discovery sees either radio.
 probe() {
-	local iface=$1 parent=$2 expected=$3 udev_path nm_path
+	local iface=$1 parent=$2 expected=$3 udev_path nm_path nm_labels
 	udev_path=$(udevadm info --query=property --property=ID_PATH --value "/sys/class/net/$iface")
 	nm_path=$(nmcli --escape no -g GENERAL.PATH device show "$iface")
-	printf 'B9-PORT-PROBE layout=%s ifname=%s parent=%s mac=%s udev=%q nm=%q expected=%s\n' \
-		"$layout" "$iface" "$parent" "$first_mac" "$udev_path" "$nm_path" "$expected"
-	[[ "$udev_path" == "$expected" && "$nm_path" == "$expected" ]]
+	nm_labels=$(nmcli --escape no -g GENERAL.VENDOR,GENERAL.PRODUCT device show "$iface")
+	printf 'B9-PORT-PROBE layout=%s ifname=%s parent=%s mac=%s udev=%q nm=%q expected=%s labels=%q\n' \
+		"$layout" "$iface" "$parent" "$first_mac" "$udev_path" "$nm_path" "$expected" "$nm_labels"
+	[[ "$udev_path" == "$expected" && "$nm_path" == "$expected" && "$nm_labels" == "$vendor"$'\n'"$product" ]]
 }
 rc=0
 probe "$first" "$first_parent" "$first_path" || rc=1

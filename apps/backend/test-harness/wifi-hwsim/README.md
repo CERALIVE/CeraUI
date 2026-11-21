@@ -287,7 +287,9 @@ four-radio VM with `--repo "$PWD" --ref HEAD`. After the unchanged
 distinct-address activation control, the gate creates a second hwsim radio
 with the same permanent MAC. The guest-only port bootstrap assigns `ID_PATH`
 by hwsim parent, then verifies both udev and NetworkManager's `GENERAL.PATH`
-before CeraUI runs each port case. The same-path pair must refuse admission;
+before CeraUI runs each port case. It also labels the two hwsim radios so
+normal discovery can enroll them and waits for both published radio rows.
+The same-path pair must refuse admission;
 the distinct-path pair must activate independent profiles. This is simulated
 port evidence, not physical-port qualification.
 
