@@ -19,6 +19,11 @@ import {
 } from "../../../src/modules/wifi/wifi-binding.ts";
 import { getWifiInterfacesByMacAddress } from "../../../src/modules/wifi/wifi-connections.ts";
 import {
+	wifiDeviceListAdd,
+	wifiDeviceListEndUpdate,
+	wifiDeviceListStartUpdate,
+} from "../../../src/modules/wifi/wifi-device-list.ts";
+import {
 	wifiHotspotPrepare,
 	wifiHotspotStart,
 } from "../../../src/modules/wifi/wifi-hotspot-activation.ts";
@@ -130,9 +135,26 @@ async function assignGuestPorts(layout: "same" | "distinct", a: string, twin: st
 	await managed(twin);
 }
 
+async function discoverGuestRadios() {
+	// This standalone check has no backend interface monitor to supply the live snapshot.
+	const observations = await Promise.all(
+		(await radios()).map(async (ifname) => {
+			const [mac, inet] = (await nmDeviceProp(ifname, "GENERAL.HWADDR,IP4.ADDRESS")) ?? [];
+			assert(mac, `Native operational address is unreadable for ${ifname}`);
+			return { ifname, mac, inet: inet?.split("/")[0] || null };
+		}),
+	);
+	wifiDeviceListStartUpdate();
+	for (const { ifname, mac, inet } of observations) {
+		wifiDeviceListAdd(ifname, mac.toLowerCase(), inet);
+	}
+	wifiDeviceListEndUpdate();
+	await wifiUpdateDevices();
+}
+
 async function checkSharedPortRefusal(a: string, twin: string) {
 	await assignGuestPorts("same", a, twin);
-	await wifiUpdateDevices();
+	await discoverGuestRadios();
 	for (const ifname of [a, twin]) {
 		const identity = wifiRadioIdentity.state.rows.get(ifname);
 		assert(identity);
@@ -190,7 +212,7 @@ async function main() {
 	await assignGuestPorts("distinct", a, twin);
 	const aPath = (await nmDeviceProp(a, "GENERAL.PATH"))?.[0];
 	const bPath = (await nmDeviceProp(twin, "GENERAL.PATH"))?.[0];
-	await wifiUpdateDevices();
+	await discoverGuestRadios();
 	const keys = [`${mac}@${aPath}`, `${mac}@${bPath}`];
 	const registry = getWifiInterfacesByMacAddress();
 	if (!aPath || !bPath || aPath === bPath || keys.some((key) => !registry[key])) {
