@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { deviceEventSchema } from "@ceraui/rpc/schemas";
+import * as logging from "../helpers/logger.ts";
 import {
 	createBundle,
 	handleLogBundleRequest,
@@ -24,11 +25,13 @@ const uncleanBoot = "ea318275064912837fa3c9d0b1e2f4ac";
 let fixture: ReturnType<typeof queryFixture>;
 let collect: ReturnType<typeof spyOn<typeof data, "collectBundleData">>;
 let clock: ReturnType<typeof spyOn<typeof Date, "now">>;
+let warn: ReturnType<typeof spyOn<typeof logging.logger, "warn">>;
 let source: Awaited<ReturnType<typeof data.collectBundleData>>;
 beforeEach(() => {
 	fixture = queryFixture();
 	fixture.scan.mockImplementation(journal([]));
 	clock = spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+	warn = spyOn(logging.logger, "warn").mockImplementation(() => logging.logger);
 	source = {
 		exportedBy: {
 			bootId,
@@ -63,9 +66,15 @@ beforeEach(() => {
 afterEach(async () => {
 	await abortLogExports();
 	collect.mockRestore();
+	warn.mockRestore();
 	clock.mockRestore();
 	fixture.restore();
 });
+
+const refusals = () =>
+	warn.mock.calls.filter(
+		(call) => (call as unknown[])[0] === "Support bundle preparation refused",
+	);
 
 async function download(): Promise<string> {
 	const ticket = await createBundle({});
@@ -124,6 +133,7 @@ test("a native journald cursor whose xor hash holds fifteen decimal digits survi
 	expect(text.trimEnd().split("\n").at(-1)).toBe(
 		'{"section":"end","complete":true}',
 	);
+	expect(refusals()).toEqual([]);
 });
 
 test("an identifier in the message of an entry with a native cursor is still masked", async () => {
@@ -207,6 +217,7 @@ test("an unclean previous boot whose ID holds fifteen decimal digits still previ
 	expect(text).toContain(
 		`"params":{"bootId":"${uncleanBoot}","evidence":["no_shutdown_markers"]}`,
 	);
+	expect(refusals()).toEqual([]);
 });
 
 test.each([

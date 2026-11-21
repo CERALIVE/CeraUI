@@ -12,7 +12,11 @@
  * text resolution stays at the toast host — this layer only chooses the i18n
  * key + params.
  */
-import type { Notification } from "@ceraui/rpc/schemas";
+import {
+	type LogBundleFailureReason,
+	logBundleFailureReasonSchema,
+	type Notification,
+} from "@ceraui/rpc/schemas";
 
 export const RPC_VALIDATION_ERROR_CODE = "VALIDATION_ERROR";
 export const RPC_INTERNAL_ERROR_CODE = "INTERNAL_ERROR";
@@ -25,7 +29,7 @@ export interface RpcErrorEnvelope {
 	fields?: string[];
 	retryable?: boolean;
 	/** A refused support bundle's closed stage, beside the unchanged message. */
-	stage?: string;
+	stage?: unknown;
 }
 
 /**
@@ -37,7 +41,8 @@ export class RpcError extends Error {
 	readonly code: string;
 	readonly fields: string[];
 	readonly retryable: boolean | undefined;
-	readonly stage: string | undefined;
+	/** Only a closed stage is kept; any other wire value is dropped, never logged. */
+	readonly stage: LogBundleFailureReason | undefined;
 
 	constructor(envelope: RpcErrorEnvelope) {
 		super(envelope.message);
@@ -45,7 +50,7 @@ export class RpcError extends Error {
 		this.code = envelope.code;
 		this.fields = envelope.fields ?? [];
 		this.retryable = envelope.retryable;
-		this.stage = envelope.stage;
+		this.stage = logBundleFailureReasonSchema.safeParse(envelope.stage).data;
 	}
 }
 

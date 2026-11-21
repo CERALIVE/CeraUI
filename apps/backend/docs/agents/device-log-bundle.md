@@ -163,7 +163,8 @@ Every refused preview or creation logs one warning, `Support bundle preparation
 refused` with `{ module: "device-logs", operation: "preview" | "create", stage }`,
 and nothing else. The preview error carries the same stage additively
 (`data.stage`, and the WS envelope's optional `stage`) beside the unchanged
-message; creation keeps `{ ok: false, error }`. The frontend reads the stage only
+message, except `busy` (BUSY is its own code) and `internal` (the envelope stays
+bare); creation keeps `{ ok: false, error }`. The frontend reads the stage only
 from a `READ_FAILED` envelope; an older device sends none, which reads as
 unclassified. `collision`
 and `journal_read` get their own localized sentence, and the other stages keep the
@@ -180,7 +181,8 @@ generic one, whose Retry and Export this view controls are already their remedy.
 | `internal` | `READ_FAILED` (bare message) | anything else, including an unencodable held secret |
 | `busy` | `BUSY` | another export, bundle or unexpired ticket holds the sharing lease |
 
-The time limit, byte caps and journal page read failures never refuse; they end
+Once admitted, the time limit, byte caps and journal page read failures never
+refuse (only the admission wait above can end in `deadline`); they end
 the journal with an incomplete record and `complete:false`. After one Retry on a
 device, `journalctl -u ceralive -g 'Support bundle preparation refused' -o
 json-pretty -n 5` names the stage; `stage:"collision"` points at a held

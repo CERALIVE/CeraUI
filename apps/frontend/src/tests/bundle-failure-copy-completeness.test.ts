@@ -45,7 +45,7 @@ describe("every refused-bundle stage renders its own translated sentence", () =>
 		}
 	});
 
-	it("the Spanish copy addresses the operator with tú, never usted or vosotros", () => {
+	it("the Spanish copy uses neither formal nor plural address (usted, vosotros)", () => {
 		for (const text of rendered("es"))
 			expect(text.toLowerCase()).not.toMatch(
 				/\busted(es)?\b|\bvosotros\b|\bvuestr/,

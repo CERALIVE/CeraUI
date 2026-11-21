@@ -11,7 +11,6 @@ import type {
 	LogQueryInput,
 } from "@ceraui/rpc/schemas";
 import {
-	logBundleFailureReasonSchema,
 	logBundleManifestSchema,
 	logExportOutputSchema,
 } from "@ceraui/rpc/schemas";
@@ -80,7 +79,7 @@ export function refusal(error: LogErrorCode): SharingProblem {
 export function previewFailure(error: unknown): LogBundleFailureReason | null {
 	if (!(error instanceof RpcError) || error.message !== "READ_FAILED")
 		return null;
-	return logBundleFailureReasonSchema.safeParse(error.stage).data ?? "internal";
+	return error.stage ?? "internal";
 }
 
 /**

@@ -5,8 +5,8 @@
   free of personal data. The downloaded file carries no such warning of its own,
   so this is where it is said, before Download bundle can be pressed. A refused
   preview (including the device's fail-closed identifier collision, which reads
-  as READ_FAILED) offers Retry and names the device's sanitized stage in its own
-  sentence; under the band, a bundle the device refused to prepare also points
+  as READ_FAILED) offers Retry; a collision or journal_read stage gets its own
+  sentence. Under the band, a bundle the device refused to prepare also points
   to Export this view, which does not go through that collision. Cancel, Escape
   and the close button discard a request still in flight.
 -->
