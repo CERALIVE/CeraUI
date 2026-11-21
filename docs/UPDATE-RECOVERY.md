@@ -136,8 +136,8 @@ access retries loading it. Startup guards recovered-update notice publication
 independently of rollback hydration, so failure in either cannot skip the other or
 fail startup. At the shared `notificationSend` boundary, a failed dismissal read
 warns and returns `false` before publication, without throwing into any producer.
-This includes runtime update transitions and `software-updates.ts`'s keyed
-`ceralive_update` broadcast. Keyless notices do not read the store. Unreadable
+This includes runtime update transitions and the keyed `ceralive_update` notice
+(`ceralive-update-notice.ts`), which then leaves its slot unchanged. Keyless notices do not read the store. Unreadable
 dismissals defer publication, never resurrect acknowledged rollbacks or hold an
 update phase open. Repair allows a later access/startup to load acknowledgements again;
 this does not add an automatic notice-retry timer.

@@ -79,6 +79,15 @@ a revision number. View logs uses the arrival time only for a live arrival
 ([system-logs-view.md](system-logs-view.md), Deep links). Coverage:
 `src/tests/view-logs-notice-moment.test.ts`.
 
+A replay is additive except for its typed `remove` entries: the device puts a
+withdrawal there that an offline tab must still hear (the "CeraLive update is
+available" notice after an update), and the browser drops exactly those names.
+Never treat a notice missing from a replay as withdrawn: a restarted backend
+has not re-raised anything yet. The tab open during an update still runs the
+previous bundle, which is why the withdrawal uses the long-shipped `remove`
+handling rather than new frontend logic. Coverage:
+`src/tests/notification-recovery-ingestion.test.ts`.
+
 `src/tests/notification-locale.test.ts` covers both persistent surfaces,
 parameter translation, stable entries and rows across a locale switch, and
 literal device messages.

@@ -149,6 +149,7 @@ import {
 	checkAutoStartStream,
 	srtlaSendExec,
 } from "./modules/streaming/streamloop.ts";
+import { initCeraliveUpdateNotice } from "./modules/system/ceralive-update-notice.ts";
 import { initCpu } from "./modules/system/cpu.ts";
 import {
 	detectHardwareKindFromDeviceTree,
@@ -496,6 +497,9 @@ await guardNonCritical("apt-channel-reconcile", async () => {
 	const mode = (await readUpdateCapabilities()).mode;
 	if (mode === "capable") await reconcileAptChannel(mode);
 });
+// Before the first check: a withdrawal persisted by an earlier process must
+// still reach a tab that missed it across the update's restarts.
+initCeraliveUpdateNotice();
 // Todo 36: the packages+OS+slot-sync orchestrator. Its own resume path (G17)
 // is the ONLY thing that reattaches to a persisted `committing` phase's
 // detached apt unit on this boot — running it BEFORE the general standalone

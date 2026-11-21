@@ -34,6 +34,12 @@ Install post-acceptance limits: D8 Known gaps (c). Check wire reference:
   offers retain the documented wire precedence above; the failure survives in
   the port result and `lastCheckFailure`. A stream/concurrent-refresh refusal still
   returns `busy` without clearing evidence.
+- **Only a conclusive check changes the "CeraLive update is available" notice.**
+  The refresh must exit 0 without `Err:`, failed-fetch, stale-index or `E:`
+  diagnostics and must not be captive; then discovery's first-party evidence must
+  be coherent. Every other cycle, a settled install and an empty restarted
+  process leave it untouched. Rules, persistence and coverage:
+  [the retraction contract](a-persistent-notification-must-be-retractable.md#the-ceralive-update-offer-is-withdrawn-only-by-a-conclusive-check-exists).
 - **A refused check restores what it did not replace.** `triggerManualUpdateCheck`
   save/restores `lastUpdateFailure`/`lastUpdateSucceeded` around dispatch, so a
   skipped check no longer wipes the failed-install state the operator was reading

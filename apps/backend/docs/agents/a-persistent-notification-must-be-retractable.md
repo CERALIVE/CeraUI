@@ -211,3 +211,40 @@ under the same guard — and the negative controls: a selected HDMI input with n
 cable still raises, the advisory still raises past the selection gate, and the
 no-signal raise's own standing-advisory non-overwrite is unchanged).
 
+## THE CERALIVE UPDATE OFFER IS WITHDRAWN ONLY BY A CONCLUSIVE CHECK [EXISTS]
+
+`ceralive_update` ("A CeraLive update is available") was raised by both discovery
+paths and never withdrawn. The backend map is process-local, a replay only adds,
+and an open tab's store survives reconnects, so after an update the banner stayed
+on screen even with the candidate installed (Rock 5B+, 2026-11-21). Three review
+rounds of PR #664 rejected shortcuts that each hid a real offer; the rules below
+answer every one. Owner: `modules/system/ceralive-update-notice.ts`.
+
+| Rule | How it is met |
+|---|---|
+| Evidence | Only a conclusive check: `apt-get update` exit 0 with no `Err:`, failed-fetch, stale-index or `E:` diagnostics and not captive (`isConclusiveAptRefresh`), then a successful discovery. The flag travels with the check callback into `runUpdateDiscoveryAndReport`. Install results, install-time rediscovery and an empty restarted process are never evidence. |
+| Offer | Legacy: `actionableAppPackages` (exact roster, upgradable, not kept back), each with a read-only `apt-cache policy <name>`; a missing, invalid or installed-equal candidate makes the verdict `unknown`. Capable: roster rows that are actionable with origin `apt.ceralive.tv`; a roster row without that evidence and no verified row is `unknown`. No first-party row is a proven empty offer. Never name prefixes; kernel packages are not roster names. |
+| Identity | Dismissal key `update:<name=version,...>`, sorted with `compareAptPackageNames`. A same-size new release is a new key. |
+| Unknown | Changes nothing: no raise, no rekey, no withdrawal, no record write. |
+| Withdrawal | Empty offer, or an offer already dismissed (a dismissed successor must not keep its predecessor up). `notificationWithdraw` broadcasts the typed `remove` and keeps it in every authenticated replay until the name is shown again; a dismissal of this notice (`replayRemoval`) does the same, so a second tab that missed it learns too. |
+| Restart | The verdict is written atomically to `ceralive_update_offer.json` BEFORE any broadcast. `initCeraliveUpdateNotice()` (`main.ts`, before the first check) restores only withdrawals: an empty offer or a dismissed offer. An undismissed offer, a missing or invalid record and an unreadable dismissal store derive nothing. A failed write deletes the record so an older "none" cannot outlive a newer offer. |
+| Wire | No schema change: replay frames already allow `remove`, and the shipped frontend applies it from any frame. The tab open during an update runs the previous bundle, so this must not depend on new frontend code. |
+
+Limits: a fresh tab after a restart sees an undismissed offer only after that
+process's first conclusive check (startup never republishes from the record). If
+both the write and the delete of the record fail, a stale "none" can hide the
+offer in reconnecting tabs until the next conclusive check republishes it; both
+failures are logged. A notice dismissed under the former names/count/size key is
+shown once more. The orchestrator's package `update:updates-available:*` notice
+has no retraction yet (separate follow-up).
+
+Coverage: `tests/ceralive-update-notice-lifecycle.test.ts` (real check entry over
+fake APT output on both images: version keys, withdrawal live and in replay with
+OS/kernel notices kept, an independent update left after install, stale and failed
+refreshes, legacy and capable candidate contradictions, kept-back packages, same-size
+release dismissal, missed dismissal, dismissed successor, install success is not
+evidence), `tests/ceralive-update-notice-restart.test.ts` (real fresh processes
+sharing only device files: the update's restart sequence, dismissal across restart,
+missing/corrupt record and unreadable dismissals, failed write) and the frontend half
+`apps/frontend/src/tests/notification-recovery-ingestion.test.ts` (a replay's
+`remove` drops the offer and keeps the OS notice).

@@ -85,6 +85,24 @@ describe("persistent notifications are retractable", () => {
 		expect(persistentNames()).not.toContain("cerastream");
 	});
 
+	it("a reconnect replay that carries a retained withdrawal drops a standing update offer from an open tab", () => {
+		// Given an open tab still showing the offer after the backend restarted.
+		show("ceralive_update", "A CeraLive update is available.", 7);
+		show("update:updates-available:os:2026.12.0", "Updates are available.", 8);
+
+		// When the new process replays its standing notices with the withdrawal it kept.
+		handlers.message?.("notification", {
+			replay: true,
+			show: [],
+			remove: [{ id: "ceralive_update", revision: 1 }],
+		});
+
+		// Then only the withdrawn offer leaves; the OS offer on the same surface stays.
+		expect(persistentNames()).toEqual([
+			"update:updates-available:os:2026.12.0",
+		]);
+	});
+
 	it("retracts only the named notification, leaving the rest of the panel intact", () => {
 		show("hdmi_error", "No HDMI signal detected", 1);
 		show("no_internet", "No internet connection", 2);

@@ -61,6 +61,7 @@ type Notification = {
 	authedOnly: boolean;
 	action?: NotificationAction;
 	dismissalKey?: string;
+	replayRemoval?: boolean;
 	beforeDismiss?: () => void;
 	onDismiss?: () => void;
 };
@@ -75,12 +76,16 @@ type PersistentNotification = Notification & {
 export type NotificationOptions = {
 	action?: NotificationAction;
 	dismissalKey?: string;
+	/** A dismissal is replayed to reconnecting clients, as {@link notificationWithdraw} is. */
+	replayRemoval?: boolean;
 	beforeDismiss?: () => void;
 	/** A producer's durable acknowledgement must succeed before removal. */
 	onDismiss?: () => void;
 };
 
 const persistentNotifications = new Map<string, PersistentNotification>();
+// Withdrawn names and their removal revisions, replayed until the name is shown again.
+const replayedRemovals = new Map<string, number>();
 
 // Revisions start over when the backend restarts; this namespaces them.
 const publisher: string = crypto.randomUUID();
@@ -150,6 +155,7 @@ export function notificationSend(
 		...(params !== undefined ? { params } : {}),
 		...(opts?.action !== undefined ? { action: opts.action } : {}),
 		...(dismissalKey !== undefined ? { dismissalKey } : {}),
+		...(opts?.replayRemoval ? { replayRemoval: true } : {}),
 		...(opts?.beforeDismiss ? { beforeDismiss: opts.beforeDismiss } : {}),
 		...(opts?.onDismiss ? { onDismiss: opts.onDismiss } : {}),
 		isDismissable,
@@ -160,6 +166,7 @@ export function notificationSend(
 	let doSend = true;
 	let revision: number | undefined;
 	if (isPersistent) {
+		replayedRemovals.delete(name);
 		let pn = persistentNotifications.get(name);
 		if (pn) {
 			// Rate limiting to once every second
@@ -229,13 +236,27 @@ export function notificationBroadcast(
 	);
 }
 
-export function notificationRemove(name: string) {
+function removeNotification(name: string, replay: boolean) {
 	const n = persistentNotifications.get(name);
 	persistentNotifications.delete(name);
 
-	const msg = { remove: [{ id: name, revision: nextRevision() }] };
+	const revision = nextRevision();
+	if (replay) replayedRemovals.set(name, revision);
+	const msg = { remove: [{ id: name, revision }] };
 	broadcastMsg("notification", msg, 0, !n || n.authedOnly);
 	return msg;
+}
+
+export function notificationRemove(name: string) {
+	return removeNotification(name, false);
+}
+
+/**
+ * Removes `name` and keeps the removal in every authenticated replay until the
+ * name is shown again, so a client that was offline still learns of it.
+ */
+export function notificationWithdraw(name: string) {
+	return removeNotification(name, true);
 }
 
 // Persists the dismissal (survives reload + restart) only when the notification
@@ -248,7 +269,7 @@ export function notificationDismiss(name: string) {
 	} else if (pn?.dismissalKey) {
 		recordNotificationDismissal(pn.dismissalKey);
 	}
-	return notificationRemove(name);
+	return removeNotification(name, pn?.replayRemoval === true);
 }
 
 function _notificationIsLive(
@@ -291,7 +312,10 @@ export function getPersistentNotifications(
 		}
 	}
 
-	return { show: notifications };
+	const remove = isAuthed
+		? [...replayedRemovals].map(([id, revision]) => ({ id, revision }))
+		: [];
+	return { show: notifications, ...(remove.length > 0 ? { remove } : {}) };
 }
 
 export function notificationSendPersistent(

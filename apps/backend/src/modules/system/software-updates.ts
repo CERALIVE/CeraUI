@@ -84,6 +84,12 @@ import {
 	normalizeAptCommandFailure,
 } from "./apt-transport-result.ts";
 import {
+	type CeraliveOffer,
+	capableCeraliveOffer,
+	legacyCandidate,
+	reconcileCeraliveUpdateNotice,
+} from "./ceralive-update-notice.ts";
+import {
 	logParseError,
 	type ParseResult,
 	parseFail,
@@ -139,7 +145,6 @@ import {
 	type UpdateFailure,
 	type UpdateIdentity,
 	type UpdateState,
-	updateDismissalKey,
 } from "./update-state.ts";
 
 let availableUpdates:
@@ -577,6 +582,7 @@ export function buildAptDiscoveryArgs(
 
 async function getCapableUpdateSize(
 	reachability: AptReachability,
+	refreshConclusive = false,
 ): Promise<SoftwareUpdateError> {
 	aptAllMode = true;
 	pendingPackageSuccess.assertEffectsAllowed();
@@ -646,24 +652,12 @@ async function getCapableUpdateSize(
 				? deriveUpdateIdentity(packageNames, packageNames.length)
 				: null;
 		availableUpdates = { package_count: packageNames.length };
-		if (
-			result.actionable.some(
-				({ name }) => name.startsWith("ceralive-") || name === "cerastream",
-			)
-		) {
-			notificationBroadcast(
-				"ceralive_update",
-				"warning",
-				"A CeraLive update is available. Open Settings → Software Updates to install it.",
-				0,
-				true,
-				true,
-			);
-		}
 		broadcastMsg("status", {
 			available_updates: availableUpdates,
 			update_state: getUpdateState(),
 		});
+		if (refreshConclusive)
+			reconcileCeraliveUpdateNotice(capableCeraliveOffer(result.packages));
 		return null;
 	} catch (error) {
 		if (!(error instanceof AptAllRefusalError)) throw error;
@@ -838,14 +832,34 @@ export function reportUpdateCheckFailure(upgrade: {
 	return false;
 }
 
-async function getSoftwareUpdateSize(reachability: AptReachability) {
+async function legacyCeraliveOffer(
+	names: readonly string[],
+): Promise<CeraliveOffer> {
+	const offer: PinnedAptPackage[] = [];
+	for (const name of names) {
+		const policy = await runAptCommand(
+			["/usr/bin/apt-cache", "policy", name],
+			APT_DISCOVERY_TIMEOUT_MS,
+		);
+		const version =
+			policy.exitCode === 0 ? legacyCandidate(policy.stdout) : undefined;
+		if (version === undefined) return "unknown";
+		offer.push({ name, version });
+	}
+	return offer;
+}
+
+async function getSoftwareUpdateSize(
+	reachability: AptReachability,
+	refreshConclusive = false,
+) {
 	if (!aptUpdatesEnabled()) return null;
 	if (!isStreamConfirmedIdle() || isUpdating() || aptGetUpdating) return "busy";
 	const capabilities = await readPackageCapabilities();
 	if (capabilities === null) return "discovery_failed";
 	pendingPackageSuccess.assertEffectsAllowed();
 	if (capabilities.mode === "capable")
-		return getCapableUpdateSize(reachability);
+		return getCapableUpdateSize(reachability, refreshConclusive);
 	aptAllMode = false;
 
 	const upgradeResult = await runAptCommand(
@@ -914,29 +928,6 @@ async function getSoftwareUpdateSize(reachability: AptReachability) {
 			? deriveUpdateIdentity(res.packages, res.upgradeCount, res.downloadSize)
 			: null;
 
-	if (res.ceralivePackages && availableIdentity) {
-		notificationBroadcast(
-			"ceralive_update",
-			"warning",
-			"A CeraLive update is available. Open Settings → Software Updates to install it.",
-			0,
-			true,
-			true,
-			true,
-			"notifications.ceraliveUpdateAvailable",
-			undefined,
-			{
-				action: {
-					schema: 1,
-					kind: "navigate",
-					target: "updates-dialog",
-					labelKey: "notifications.openUpdates",
-				},
-				dismissalKey: updateDismissalKey(availableIdentity),
-			},
-		);
-	}
-
 	availableUpdates = {
 		package_count: res.upgradeCount,
 		...(res.downloadSize !== undefined
@@ -947,6 +938,10 @@ async function getSoftwareUpdateSize(reachability: AptReachability) {
 		available_updates: availableUpdates,
 		update_state: getUpdateState(),
 	});
+	if (refreshConclusive)
+		reconcileCeraliveUpdateNotice(
+			await legacyCeraliveOffer(actionableAppPackages),
+		);
 
 	return null;
 }
@@ -1013,10 +1008,26 @@ export function classifyAptUpdateResult(
 	return null;
 }
 
+// apt-get update exits 0 when it keeps the old lists after a failed index fetch.
+function isConclusiveAptRefresh(result: SpawnWithTimeoutResult): boolean {
+	return (
+		result.exitCode === 0 &&
+		classifyAptUpdateResult(0, result.stderr) !== "captive_portal" &&
+		!/^Err:/m.test(result.stdout) &&
+		!/^(?:E:|W: (?:Failed to fetch|Some index files failed))/m.test(
+			result.stderr,
+		)
+	);
+}
+
 // Returns false when skipped (streaming/updating/apt busy) so the periodic
 // caller can still reschedule — a skipped check never runs its callback.
 function checkForSoftwareUpdates(
-	callback: (err: SoftwareUpdateError, aptGetUpdateFailures: number) => unknown,
+	callback: (
+		err: SoftwareUpdateError,
+		aptGetUpdateFailures: number,
+		refreshConclusive?: boolean,
+	) => unknown,
 ): boolean {
 	if (pendingPackageSuccess.pending) return false;
 	if (!aptUpdatesEnabled()) return false;
@@ -1099,7 +1110,12 @@ function checkForSoftwareUpdates(
 			if (stdout) logger.info(stdout);
 			if (stderr) logger.error(stderr);
 
-			if (callback) callback(errOrStderr, aptGetUpdateFailures);
+			if (callback)
+				callback(
+					errOrStderr,
+					aptGetUpdateFailures,
+					isConclusiveAptRefresh(res),
+				);
 		},
 		() => callback("discovery_failed", aptGetUpdateFailures),
 	)
@@ -1133,7 +1149,11 @@ export function computeNextCheckDelay(
 }
 
 type SoftwareUpdateCheckRunner = (
-	callback: (err: SoftwareUpdateError, failures: number) => unknown,
+	callback: (
+		err: SoftwareUpdateError,
+		failures: number,
+		refreshConclusive?: boolean,
+	) => unknown,
 ) => boolean;
 
 let softwareUpdateCheckRunner: SoftwareUpdateCheckRunner =
@@ -1152,6 +1172,7 @@ export function resetSoftwareUpdateCheckRunner(): void {
 // Benign refresh warnings must not suppress discovery's publication.
 type SoftwareUpdateSizeRunner = (
 	reachability: AptReachability,
+	refreshConclusive?: boolean,
 ) => Promise<SoftwareUpdateError>;
 
 let softwareUpdateSizeRunner: SoftwareUpdateSizeRunner = getSoftwareUpdateSize;
@@ -1169,7 +1190,7 @@ export function resetSoftwareUpdateSizeRunner(): void {
 // Orchestrator checks own a full cycle, not discovery against previously fetched lists.
 export function runSoftwareUpdateCheck(): Promise<SoftwareUpdateError> {
 	return new Promise((resolve, reject) => {
-		const started = softwareUpdateCheckRunner((refresh) => {
+		const started = softwareUpdateCheckRunner((refresh, _, conclusive) => {
 			// Exit-zero warnings are benign; discovery must retain a real refresh failure.
 			const failure =
 				refresh === true && lastCheckFailure === null ? null : refresh;
@@ -1177,7 +1198,7 @@ export function runSoftwareUpdateCheck(): Promise<SoftwareUpdateError> {
 				resolve(failure);
 				return;
 			}
-			void runUpdateDiscoveryAndReport().then(
+			void runUpdateDiscoveryAndReport(conclusive === true).then(
 				(discovery) => resolve(failure ?? discovery),
 				reject,
 			);
@@ -1187,7 +1208,10 @@ export function runSoftwareUpdateCheck(): Promise<SoftwareUpdateError> {
 }
 
 // Publish after discovery's early returns so an empty result is observable.
-export async function runUpdateDiscoveryAndReport(): Promise<SoftwareUpdateError> {
+// Only discovery after a conclusive refresh may change the CeraLive update notice.
+export async function runUpdateDiscoveryAndReport(
+	refreshConclusive = false,
+): Promise<SoftwareUpdateError> {
 	if (pendingPackageSuccess.pending) return "discovery_failed";
 	if (aptDiscoveryRunning) return "busy";
 	aptDiscoveryRunning = true;
@@ -1219,7 +1243,7 @@ export async function runUpdateDiscoveryAndReport(): Promise<SoftwareUpdateError
 				runLegacyPackageEffects(
 					() => {
 						lastAptReachability = aptReachabilityWire(attempt);
-						return softwareUpdateSizeRunner(attempt);
+						return softwareUpdateSizeRunner(attempt, refreshConclusive);
 					},
 					() => "discovery_failed" as const,
 				),
@@ -1273,11 +1297,13 @@ export function periodicCheckForSoftwareUpdates() {
 		return;
 	}
 
-	const started = softwareUpdateCheckRunner(async (err_, failures) => {
-		const discovery = await runUpdateDiscoveryAndReport();
-		const err = err_ === null ? discovery : err_;
-		scheduleNextSoftwareUpdateCheck(computeNextCheckDelay(err, failures));
-	});
+	const started = softwareUpdateCheckRunner(
+		async (err_, failures, conclusive) => {
+			const discovery = await runUpdateDiscoveryAndReport(conclusive === true);
+			const err = err_ === null ? discovery : err_;
+			scheduleNextSoftwareUpdateCheck(computeNextCheckDelay(err, failures));
+		},
+	);
 
 	// Skip path runs no callback; reschedule here so the loop survives a
 	// stream/update window instead of dying until the next backend restart.
@@ -1328,8 +1354,8 @@ export function triggerManualUpdateCheck(): boolean {
 	lastPreflightFailure = null;
 	lastCleanupWarning = undefined;
 
-	const started = softwareUpdateCheckRunner(async () => {
-		await runUpdateDiscoveryAndReport();
+	const started = softwareUpdateCheckRunner(async (_, __, conclusive) => {
+		await runUpdateDiscoveryAndReport(conclusive === true);
 	});
 	if (!started) {
 		lastUpdateFailure = priorFailure;
