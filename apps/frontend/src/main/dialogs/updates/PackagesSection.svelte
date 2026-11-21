@@ -5,7 +5,8 @@
   Install is destructive: it routes through a confirmation AppDialog before
   calling the surface's capability-selected package action. While an update runs, a progress indicator
   replaces the install action; the full-screen overlay (Layout, off
-  `status.updating`) carries the real percentage.
+  `status.updating`) shows activity during preparation and downloads and
+  step progress during installation.
 
   Every conclusion is the device's (round-3 review C, C3-4): the start runs
   through the same action machine as the orchestrator controls (action
@@ -50,7 +51,7 @@ const preflightFailed = $derived(updateState?.kind === 'update_preflight_failed'
 const lastCheckedAt = $derived(checkedAtOf(updateState));
 const inProgress = $derived(updateState?.kind === 'downloading' || updateState?.kind === 'installing');
 const progressValue = $derived.by(() => {
-	const p = updateState?.kind === 'downloading' || updateState?.kind === 'installing' ? updateState.progress : undefined;
+	const p = updateState?.kind === 'installing' ? updateState.progress : undefined;
 	if (!p?.total || p.total <= 0) return undefined;
 	const done = (p.downloading ?? 0) + (p.unpacking ?? 0) + (p.setting_up ?? 0);
 	return Math.min(100, Math.max(0, Math.round((100 * done) / (3 * p.total))));
@@ -182,7 +183,7 @@ $effect(() => () => clearTimeout(checkTimeout));
 				<RefreshCw class="text-primary size-4 motion-safe:animate-spin" />
 				{m["settings.dialogs.updating"]()}
 			</div>
-			<!-- An unknown total is indeterminate progress, never a finished bar. -->
+			<!-- APT does not report bytes transferred on this stream. -->
 			<Progress value={progressValue ?? null} />
 		</div>
 	{:else if starting}

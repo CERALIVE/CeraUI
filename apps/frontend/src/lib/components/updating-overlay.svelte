@@ -12,9 +12,6 @@ const { details }: { details: Exclude<StatusMessage['updating'], boolean | null>
 
 // Enhanced state management
 let isVisible = $state(false);
-let animationPhase = $state<'downloading' | 'unpacking' | 'installing' | 'complete' | 'failed'>(
-	'downloading',
-);
 
 // Safe progress calculation with null checks and NaN prevention
 const progress: number = $derived.by(() => {
@@ -55,22 +52,19 @@ const failureReason = $derived(
 const isFailure = $derived(failureReason !== undefined);
 const isSuccess = $derived(details?.result === 0);
 
-// Determine current animation phase
-$effect(() => {
-	if (!details) return;
-
-	if (isFailure) {
-		animationPhase = 'failed';
-	} else if (isSuccess) {
-		animationPhase = 'complete';
-	} else if (details.downloading && details.downloading > 0) {
-		animationPhase = 'downloading';
-	} else if (details.unpacking && details.unpacking > 0) {
-		animationPhase = 'unpacking';
-	} else if (details.setting_up && details.setting_up > 0) {
-		animationPhase = 'installing';
-	}
+const animationPhase = $derived.by(() => {
+	if (isFailure) return 'failed';
+	if (isSuccess) return 'complete';
+	if (details.setting_up > 0) return 'installing';
+	if (details.unpacking > 0) return 'unpacking';
+	return details.downloading > 0 ? 'downloading' : 'preparing';
 });
+
+// APT's Get:N reports a fetch starting, not bytes or packages completed.
+const downloadFinished = $derived(
+	animationPhase === 'unpacking' || animationPhase === 'installing' || isSuccess,
+);
+const showCounts = $derived(details.total > 0 && downloadFinished);
 
 // Terminal outcomes have ONE announcer, once per outcome. In the app Layout
 // never mounts this takeover for a terminal frame: it releases the takeover and
@@ -118,10 +112,12 @@ onMount(() => {
 						data-testid="update-phase"
 					>
 						<div class="flex items-center gap-1 sm:gap-2">
-							{#if animationPhase === 'downloading'}
+							{#if animationPhase === 'preparing' || animationPhase === 'downloading'}
 								<Download class="text-primary h-4 w-4 sm:h-5 sm:w-5" />
 								<span class="text-primary text-sm font-medium sm:text-base"
-									>{m["updatingOverlay.downloading"]()}</span
+									>{animationPhase === 'preparing'
+										? m["updatingOverlay.preparingOrDownloading"]()
+										: m["updatingOverlay.downloading"]()}</span
 								>
 							{:else if animationPhase === 'unpacking'}
 								<Package class="h-4 w-4 text-status-warning sm:h-5 sm:w-5" />
@@ -164,7 +160,7 @@ onMount(() => {
 							{/if}
 
 							<!-- Percentage Overlay -->
-							{#if animationPhase !== 'failed'}
+							{#if showCounts}
 								<div class="absolute inset-0 flex items-center justify-center">
 									<span
 										class="text-foreground bg-background/80 rounded-full px-3 py-1.5 text-xl font-bold sm:text-2xl"
@@ -207,20 +203,23 @@ onMount(() => {
 							<Progress
 								class="h-full rounded-full"
 								max={Number.isFinite(total) ? total : 1}
-								value={Number.isFinite(progress) ? progress : 0}
+								value={showCounts ? progress : null}
+								aria-label={m["updatingOverlay.progress"]()}
 							/>
 						</div>
 
 						<!-- Progress Details -->
-						<div class="text-muted-foreground flex justify-between text-xs sm:text-sm">
-							<span
-								>{Number.isFinite(progress) ? progress : 0}
-								{m["updatingOverlay.of"]()}
-								{Number.isFinite(total) ? total : 1}
-								{m["updatingOverlay.steps"]()}</span
-							>
-							<span>{Number.isFinite(progressPercentage) ? progressPercentage.toFixed(1) : '0.0'}%</span>
-						</div>
+						{#if showCounts}
+							<div class="text-muted-foreground flex justify-between text-xs sm:text-sm">
+								<span
+									>{progress}
+									{m["updatingOverlay.of"]()}
+									{total}
+									{m["updatingOverlay.steps"]()}</span
+								>
+								<span>{progressPercentage.toFixed(1)}%</span>
+							</div>
+						{/if}
 					</div>
 				</div>
 
@@ -229,26 +228,26 @@ onMount(() => {
 					<!-- Download Step -->
 					<div
 						class="flex flex-col items-center gap-1 transition-all duration-300 sm:gap-2"
-						class:opacity-100={details?.downloading > 0 || animationPhase === 'downloading'}
-						class:opacity-40={!(details?.downloading > 0 || animationPhase === 'downloading')}
+						class:opacity-100={!isFailure || details.downloading > 0}
+						class:opacity-40={isFailure && details.downloading <= 0}
 					>
 						<div
 							class="flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all duration-300 sm:h-12 sm:w-12"
-							class:bg-primary={details?.downloading > 0}
-							class:border-muted={!(details?.downloading > 0)}
-							class:border-primary={details?.downloading > 0}
-							class:text-muted-foreground={!(details?.downloading > 0)}
-							class:text-primary-foreground={details?.downloading > 0}
+							class:bg-primary={downloadFinished}
+							class:border-muted={!downloadFinished}
+							class:border-primary={downloadFinished}
+							class:text-muted-foreground={!downloadFinished}
+							class:text-primary-foreground={downloadFinished}
 						>
 							<Download class="h-3 w-3 sm:h-5 sm:w-5" />
 						</div>
 						<span
 							class="text-center text-[10px] font-medium sm:text-xs"
-							class:text-primary={details?.downloading > 0}
+							class:text-primary={downloadFinished}
 						>
 							{m["updatingOverlay.downloading"]()}
 						</span>
-						{#if details?.downloading > 0}
+						{#if showCounts && details.downloading > 0}
 							<span class="text-muted-foreground text-[9px] sm:text-xs"
 								>{details.downloading}/{details.total}</span
 							>

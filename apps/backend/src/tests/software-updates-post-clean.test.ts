@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import * as spawnPolicy from "../helpers/spawn-policy.ts";
 import { cleanAptCache } from "../modules/system/apt-cache-clean.ts";
 import { defaultAptSpaceDeps } from "../modules/system/apt-space-admission.ts";
 import { recoverDetachedAptUpgrade } from "../modules/system/software-update-process.ts";
@@ -8,14 +9,79 @@ import {
 	isUpdating,
 	recoverSoftwareUpdateIfRunning,
 	resetSoftwareUpdateState,
+	runUpdateDiscoveryAndReport,
 	setSoftwareUpdateCheckRunner,
 	startSoftwareUpdate,
 	triggerManualUpdateCheck,
 } from "../modules/system/software-updates.ts";
+import {
+	getPersistentNotifications,
+	notificationBroadcast,
+	notificationExists,
+	notificationRemove,
+} from "../modules/ui/notifications.ts";
+import * as websocket from "../modules/ui/websocket-server.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
 
 useSessionOwnerForFile();
+
+describe("update availability notification", () => {
+	test("withdraws the installed offer from connected clients and reconnect replay", async () => {
+		await using h = await updateHarness();
+		const broadcast = spyOn(websocket, "broadcastMsg");
+		notificationBroadcast(
+			"update-test-other",
+			"warning",
+			"Other notice",
+			0,
+			true,
+		);
+		try {
+			expect(notificationExists("ceralive_update")).toBeDefined();
+			h.completion = Promise.resolve(0);
+			startSoftwareUpdate();
+			await h.check();
+
+			expect(
+				getPersistentNotifications(true).show.map(({ name }) => name),
+			).not.toContain("ceralive_update");
+			expect(notificationExists("update-test-other")).toBeDefined();
+			expect(broadcast.mock.calls.map(([, payload]) => payload)).toContainEqual(
+				{
+					remove: [{ id: "ceralive_update", revision: expect.any(Number) }],
+				},
+			);
+		} finally {
+			broadcast.mockRestore();
+			notificationRemove("ceralive_update");
+			notificationRemove("update-test-other");
+		}
+	});
+
+	test.each([
+		["no upgrades", "0 upgraded, 0 newly installed, 0 to remove.\n"],
+		[
+			"only a platform upgrade",
+			"The following packages will be upgraded:\n  linux-image-edge-rockchip-rk3588\n1 upgraded, 0 newly installed, 0 to remove.\nNeed to get 4 kB of archives.\n",
+		],
+	])("withdraws the offer when discovery finds %s", async (_name, stdout) => {
+		await using _h = await updateHarness();
+		expect(notificationExists("ceralive_update")).toBeDefined();
+		const discovery = spyOn(spawnPolicy, "spawnWithTimeout").mockResolvedValue({
+			exitCode: 0,
+			stdout,
+			stderr: "",
+		});
+		try {
+			await runUpdateDiscoveryAndReport();
+			expect(notificationExists("ceralive_update")).toBeUndefined();
+		} finally {
+			discovery.mockRestore();
+			notificationRemove("ceralive_update");
+		}
+	});
+});
 
 describe("best-effort post-clean", () => {
 	test.each([false, true])(

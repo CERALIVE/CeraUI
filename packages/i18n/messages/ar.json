@@ -2488,6 +2488,7 @@
 	"units.ms": "ms",
 	"updatingOverlay.description": "ستتمكن من استخدامه بمجرد اكتمال عملية التحديث",
 	"updatingOverlay.downloading": "جاري التنزيل",
+	"updatingOverlay.preparingOrDownloading": "جارٍ تحضير الحزم أو تنزيلها",
 	"updatingOverlay.failedDescription": "تعذّر إكمال التحديث. لم يتم تغيير الجهاز.",
 	"updatingOverlay.failedMessage": "فشل التحديث",
 	"updatingOverlay.installing": "التثبيت",

@@ -40,6 +40,7 @@ import { setup } from "../setup.ts";
 import { notePlannedShutdown } from "../streaming/armed-stream-marker.ts";
 import {
 	notificationBroadcast,
+	notificationExists,
 	notificationRemove,
 } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
@@ -494,6 +495,38 @@ export function parseUpgradeDownloadSize(text: string): ParseResult<string> {
 
 export { ceralivePackageList } from "./package-layer.ts";
 
+const UPDATE_OFFER_NOTICE = "ceralive_update";
+
+function reconcileSoftwareUpdateOffer(identity: UpdateIdentity | null): void {
+	const standing = notificationExists(UPDATE_OFFER_NOTICE);
+	const dismissalKey =
+		identity === null ? undefined : updateDismissalKey(identity);
+	// Withdraw a replaced offer even if its successor was already dismissed.
+	if (standing && (!identity || standing.dismissalKey !== dismissalKey))
+		notificationRemove(UPDATE_OFFER_NOTICE);
+	if (dismissalKey === undefined) return;
+	notificationBroadcast(
+		UPDATE_OFFER_NOTICE,
+		"warning",
+		"A CeraLive update is available. Open Settings → Software Updates to install it.",
+		0,
+		true,
+		true,
+		true,
+		"notifications.ceraliveUpdateAvailable",
+		undefined,
+		{
+			action: {
+				schema: 1,
+				kind: "navigate",
+				target: "updates-dialog",
+				labelKey: "notifications.openUpdates",
+			},
+			dismissalKey,
+		},
+	);
+}
+
 // Reboot instead of just restarting CeraUI if we've updated packages matching this list
 const rebootPackageList = ["l4t", "ceralive-linux-", "ceralive-network-config"];
 
@@ -646,20 +679,17 @@ async function getCapableUpdateSize(
 				? deriveUpdateIdentity(packageNames, packageNames.length)
 				: null;
 		availableUpdates = { package_count: packageNames.length };
-		if (
-			result.actionable.some(
-				({ name }) => name.startsWith("ceralive-") || name === "cerastream",
-			)
-		) {
-			notificationBroadcast(
-				"ceralive_update",
-				"warning",
-				"A CeraLive update is available. Open Settings → Software Updates to install it.",
-				0,
-				true,
-				true,
-			);
-		}
+		const offered = result.actionable.filter(
+			({ name }) => name.startsWith("ceralive-") || name === "cerastream",
+		);
+		reconcileSoftwareUpdateOffer(
+			offered.length > 0
+				? deriveUpdateIdentity(
+						offered.map(({ name, version }) => `${name}=${version}`),
+						offered.length,
+					)
+				: null,
+		);
 		broadcastMsg("status", {
 			available_updates: availableUpdates,
 			update_state: getUpdateState(),
@@ -914,28 +944,9 @@ async function getSoftwareUpdateSize(reachability: AptReachability) {
 			? deriveUpdateIdentity(res.packages, res.upgradeCount, res.downloadSize)
 			: null;
 
-	if (res.ceralivePackages && availableIdentity) {
-		notificationBroadcast(
-			"ceralive_update",
-			"warning",
-			"A CeraLive update is available. Open Settings → Software Updates to install it.",
-			0,
-			true,
-			true,
-			true,
-			"notifications.ceraliveUpdateAvailable",
-			undefined,
-			{
-				action: {
-					schema: 1,
-					kind: "navigate",
-					target: "updates-dialog",
-					labelKey: "notifications.openUpdates",
-				},
-				dismissalKey: updateDismissalKey(availableIdentity),
-			},
-		);
-	}
+	reconcileSoftwareUpdateOffer(
+		actionableAppPackages.length > 0 ? availableIdentity : null,
+	);
 
 	availableUpdates = {
 		package_count: res.upgradeCount,
@@ -1575,7 +1586,10 @@ export function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonit
 			previous.unpacking !== next.unpacking ||
 			previous.setting_up !== next.setting_up
 		) {
-			broadcastMsg("status", { updating: softUpdateStatus });
+			broadcastMsg("status", {
+				updating: next,
+				update_state: getUpdateState(),
+			});
 		}
 	};
 
@@ -1642,6 +1656,7 @@ export function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonit
 			const settledStatus = softUpdateStatus;
 			softUpdateStatus = null;
 			try {
+				if (code === 0) reconcileSoftwareUpdateOffer(null);
 				if (failure) {
 					notificationBroadcast(
 						"ceralive_update_failed",

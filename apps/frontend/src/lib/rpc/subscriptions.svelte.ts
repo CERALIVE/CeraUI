@@ -1059,6 +1059,15 @@ function handleMessage(
 			if (!parsed.success) break;
 			const message = parsed.data;
 			notificationsState = message;
+			// A restart can drop the live remove frame. Only reconcile the
+			// update offer here; other notices keep their existing lifetime.
+			if (
+				message.replay &&
+				message.show &&
+				!message.show.some(({ name }) => name === "ceralive_update")
+			) {
+				dismissNotification("ceralive_update");
+			}
 			for (const notification of message.show ?? []) {
 				if (message.replay) pushReplayedNotification(notification);
 				else pushNotification(notification);

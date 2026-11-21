@@ -216,4 +216,13 @@ describe("F7: package progress with an unknown total", () => {
 
 		expect(bar.getAttribute("aria-valuenow")).toBe("50");
 	});
+
+	it("does not count the only package as downloaded just because fetching began", async () => {
+		const bar = await progressBar({
+			kind: "downloading",
+			progress: { downloading: 1, unpacking: 0, setting_up: 0, total: 1 },
+		});
+
+		expect(bar.getAttribute("aria-valuenow")).toBeNull();
+	});
 });

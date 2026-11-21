@@ -16,7 +16,7 @@
  * not regressed.
  */
 import type { UpdateProgress } from "@ceraui/rpc/schemas";
-import { render, waitFor } from "@testing-library/svelte";
+import { render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import UpdatingOverlay from "./updating-overlay.svelte";
@@ -44,6 +44,48 @@ beforeEach(() => {
 
 afterEach(() => {
 	document.body.innerHTML = "";
+});
+
+describe("updating-overlay package acquisition", () => {
+	it("shows activity without inventing steps while apt has emitted no counters", async () => {
+		render(UpdatingOverlay, { props: { details: progress({ total: 0 }) } });
+
+		const bar = await screen.findByRole("progressbar");
+		expect(bar.getAttribute("aria-valuenow")).toBeNull();
+		expect(screen.getByTestId("update-phase").textContent).toContain(
+			"Preparing or downloading packages",
+		);
+		expect(screen.queryByText(/0 of 1 steps|0%/)).toBeNull();
+	});
+
+	it("keeps a single-package fetch indeterminate until unpacking actually starts", async () => {
+		// Get:1 identifies a fetch that started, not bytes transferred.
+		const view = render(UpdatingOverlay, {
+			props: { details: progress({ downloading: 1 }) },
+		});
+
+		const bar = await screen.findByRole("progressbar");
+		expect(bar.getAttribute("aria-valuenow")).toBeNull();
+		expect(screen.getByTestId("update-phase").textContent).toContain(
+			"Downloading",
+		);
+		expect(screen.queryByText("1/1")).toBeNull();
+
+		await view.rerender({
+			details: progress({ downloading: 1, unpacking: 1 }),
+		});
+		expect(bar.getAttribute("aria-valuenow")).toBe("2");
+		expect(screen.getByTestId("update-phase").textContent).toContain(
+			"Unpacking",
+		);
+
+		await view.rerender({
+			details: progress({ downloading: 1, unpacking: 1, setting_up: 1 }),
+		});
+		expect(screen.getByTestId("update-phase").textContent).toContain(
+			"Installing",
+		);
+	});
 });
 
 describe("updating-overlay terminal state", () => {

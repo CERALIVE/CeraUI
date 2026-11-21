@@ -2476,6 +2476,7 @@
 	"units.ms": "ms",
 	"updatingOverlay.description": "You'll be able to use it once the update process is complete",
 	"updatingOverlay.downloading": "Downloading",
+	"updatingOverlay.preparingOrDownloading": "Preparing or downloading packages",
 	"updatingOverlay.failedDescription": "The update could not be completed. The device was not changed.",
 	"updatingOverlay.failedMessage": "Update Failed",
 	"updatingOverlay.installing": "Installing",

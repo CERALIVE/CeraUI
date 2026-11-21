@@ -1,6 +1,36 @@
 import { expect, test } from "./fixtures/index.js";
 import { ensureAuthenticated, setLocale } from "./helpers/index.js";
 
+test("shows activity for a silent single-package download before counting install steps", async ({
+	page,
+	pageRpc,
+}) => {
+	await page.goto("/");
+	await ensureAuthenticated(page);
+	const sendProgress = (total: number, downloading: number, unpacking: number) =>
+		pageRpc.call(["dev", "emit"], {
+			type: "status",
+			payload: { updating: { total, downloading, unpacking, setting_up: 0 } },
+		});
+	const overlay = page.getByTestId("updating-overlay");
+	const phase = overlay.getByTestId("update-phase");
+	const bar = overlay.getByRole("progressbar");
+
+	await sendProgress(0, 0, 0);
+	await expect(phase).toHaveText("Preparing or downloading packages");
+	await expect(bar).toHaveAttribute("data-state", "indeterminate");
+
+	await sendProgress(1, 1, 0);
+	await expect(phase).toHaveText("Downloading");
+	await expect(bar).toHaveAttribute("data-state", "indeterminate");
+	await expect(overlay.getByText("1/1", { exact: true })).toHaveCount(0);
+
+	await sendProgress(1, 1, 1);
+	await expect(phase).toHaveText("Unpacking");
+	await expect(bar).toHaveAttribute("aria-valuenow", "2");
+	await expect(bar).toHaveAttribute("aria-valuemax", "3");
+});
+
 // The update takeover once carried a decorative wash: an overflow-hidden layer
 // of blurred circles larger than the sheet, which a script could scroll. Neither
 // the sheet nor its direct children may scroll (nested content such as the

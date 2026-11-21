@@ -2479,6 +2479,7 @@
 	"units.ms": "ms",
 	"updatingOverlay.description": "Podrás utilizarlo una vez que se complete el proceso de actualización",
 	"updatingOverlay.downloading": "Descargando",
+	"updatingOverlay.preparingOrDownloading": "Preparando o descargando paquetes",
 	"updatingOverlay.failedDescription": "No se pudo completar la actualización. El dispositivo no se modificó.",
 	"updatingOverlay.failedMessage": "Error en la Actualización",
 	"updatingOverlay.installing": "Instalando",

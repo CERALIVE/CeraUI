@@ -2431,6 +2431,7 @@
 	"units.ms": "ms",
 	"updatingOverlay.description": "更新処理が完了すると使用できるようになります",
 	"updatingOverlay.downloading": "ダウンロード中",
+	"updatingOverlay.preparingOrDownloading": "パッケージを準備またはダウンロード中",
 	"updatingOverlay.failedDescription": "更新を完了できませんでした。デバイスは変更されていません。",
 	"updatingOverlay.failedMessage": "更新に失敗しました",
 	"updatingOverlay.installing": "インストール中",

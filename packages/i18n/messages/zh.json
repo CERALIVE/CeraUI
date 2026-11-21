@@ -2431,6 +2431,7 @@
 	"units.ms": "ms",
 	"updatingOverlay.description": "更新过程完成后，您将能够使用它",
 	"updatingOverlay.downloading": "正在下载",
+	"updatingOverlay.preparingOrDownloading": "正在准备或下载软件包",
 	"updatingOverlay.failedDescription": "无法完成更新。设备未被更改。",
 	"updatingOverlay.failedMessage": "更新失败",
 	"updatingOverlay.installing": "正在安装",

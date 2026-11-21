@@ -217,6 +217,43 @@ describe("Layout — the update overlay is mounted globally, not per trigger", (
 });
 
 describe("Layout — the update overlay survives a backend restart", () => {
+	it("shows honest activity before stdout and after reattach, then shows the replayed install phase", async () => {
+		const silent = { total: 0, downloading: 0, unpacking: 0, setting_up: 0 };
+		updating(silent);
+		render(Layout);
+		await waitFor(() => expect(overlayTitle()).toBeDefined());
+		const mounted = overlayTitle();
+		const phase = () => document.querySelector('[data-testid="update-phase"]');
+		const bar = () =>
+			document.querySelector(
+				'[data-testid="updating-overlay"] [role="progressbar"]',
+			);
+
+		expect(phase()?.textContent).toContain("Preparing or downloading packages");
+		expect(bar()?.getAttribute("data-state")).toBe("indeterminate");
+
+		// The old observer saw unpacking before the package's postinst restarted it.
+		updating({ total: 1, downloading: 1, unpacking: 1, setting_up: 0 });
+		expect(bar()?.getAttribute("aria-valuenow")).toBe("2");
+		transport.connection?.("disconnected");
+		flushSync();
+		expect(overlayTitle()).toBe(mounted);
+		transport.connection?.("connected");
+		await vi.waitFor(() => expect(transport.hydrateCalls).toBeGreaterThan(0));
+
+		// Reattach can publish before the reader has drained the durable log.
+		updating(silent);
+		expect(overlayTitle()).toBe(mounted);
+		expect(phase()?.textContent).toContain("Preparing or downloading packages");
+		expect(bar()?.getAttribute("aria-valuenow")).toBeNull();
+		expect(document.body.textContent).not.toContain("0 of 1 steps");
+
+		updating({ total: 1, downloading: 1, unpacking: 1, setting_up: 1 });
+		expect(overlayTitle()).toBe(mounted);
+		expect(phase()?.textContent).toContain("Installing");
+		expect(bar()?.getAttribute("aria-valuenow")).toBe("3");
+	});
+
 	it("is on screen from the FIRST paint when Layout re-mounts onto an update already in flight", () => {
 		updating({ total: 4, downloading: 4, unpacking: 1, setting_up: 0 });
 		render(Layout);

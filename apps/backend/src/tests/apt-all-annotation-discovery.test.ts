@@ -13,12 +13,16 @@ import {
 import { setCeraliveSourcesFileForTest } from "../modules/system/update-apt-channel.ts";
 import { setUpdateCapabilityPathForTest } from "../modules/system/update-capabilities.ts";
 import { setUpdateSettingsFilePathForTest } from "../modules/system/update-settings.ts";
-import { notificationRemove } from "../modules/ui/notifications.ts";
+import {
+	notificationBroadcast,
+	notificationExists,
+	notificationRemove,
+} from "../modules/ui/notifications.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 
 useSessionOwnerForFile();
 
-it("offers all three captured OPI security upgrades through real capable discovery", async () => {
+it("offers all three captured OPI security upgrades without retaining an obsolete CeraLive notice", async () => {
 	// Given
 	const dir = await mkdtemp(join(tmpdir(), "apt-opi-annotation-"));
 	const capability = join(dir, "capabilities.json");
@@ -78,6 +82,13 @@ it("offers all three captured OPI security upgrades through real capable discove
 		throw new Error(`unexpected APT command: ${JSON.stringify(argv)}`);
 	});
 	try {
+		notificationBroadcast(
+			"ceralive_update",
+			"warning",
+			"Previously available CeraLive update",
+			0,
+			true,
+		);
 		// When
 		await runUpdateDiscoveryAndReport();
 		// Then
@@ -106,6 +117,7 @@ it("offers all three captured OPI security upgrades through real capable discove
 			["/usr/bin/apt-cache", "policy", "libcurl4t64"],
 			["/usr/bin/apt-cache", "policy", "libcurl3t64-gnutls"],
 		]);
+		expect(notificationExists("ceralive_update")).toBeUndefined();
 	} finally {
 		setAptCommandRunnerForTest(null);
 		setUpdateCapabilityPathForTest(null);
@@ -113,6 +125,7 @@ it("offers all three captured OPI security upgrades through real capable discove
 		setUpdateSettingsFilePathForTest(null);
 		resetAptReachabilityProbeForTest();
 		resetSoftwareUpdateState();
+		notificationRemove("ceralive_update");
 		notificationRemove("ceralive_update_failed");
 		await rm(dir, { recursive: true, force: true });
 	}

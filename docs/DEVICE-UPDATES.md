@@ -1,5 +1,20 @@
 # Device updates: the update orchestrator [PARTIAL]
 
+## Package progress and availability notice
+
+On both legacy and capable images, Software Updates shows activity without a
+percentage while APT prepares or downloads packages. The detached service
+continues to append to durable logs. The UI cannot infer download bytes from
+`Get:N`, which identifies the start of a fetch; output can also arrive in bursts.
+When unpacking starts and APT has reported a package count, the overlay shows
+install steps. Only the terminal APT result establishes success or failure.
+
+A successful install or discovery with no applicable CeraLive package retracts
+the `ceralive_update` notice. An inconclusive check does not retract a last
+known offer. On reconnect, a complete authenticated replay without that offer
+also clears it from the open tab, without dismissing other notices or recording
+an operator dismissal. Reload starts with an empty notification store.
+
 ## Pending disruptive effects [PARTIAL — host proof, board drill owed]
 
 Accepted device power/reset and timed OS activation hold an in-process reservation
