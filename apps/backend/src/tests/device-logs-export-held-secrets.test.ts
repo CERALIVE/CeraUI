@@ -270,24 +270,98 @@ test("a credential store that has not finished loading stops the export", async 
 	expect(await download()).toEndWith("# complete: 1 entries\n");
 });
 
-test("a held credential too short to match stops the export, naming kinds only", async () => {
+const notRedactedLine = (kinds: string) =>
+	`# not redacted, shorter than 4 characters: ${kinds}\n`;
+
+test("a short stream ID does not stop the export, and the header names its kind only", async () => {
+	// The desktop E2E seed and many real boxes use a stream ID like "e2e".
 	held.mockReturnValue([
-		{ kind: "router_password", value: "ab1" },
-		{ kind: "apn_password", value: "x" },
+		{ kind: "stream", value: "e2e" },
 		{ kind: "key", value: "abcd" },
 	]);
 	fixture.scan.mockImplementation(
-		journal([record(1, { MESSAGE: "login ab1 then abcd" })]),
+		journal([record(1, { MESSAGE: "stream e2e login abcd" })]),
+	);
+	const text = await download({ filter: { text: "e2e" } });
+	expect(text).toContain(notRedactedLine("stream"));
+	// The short value is sent as logged; longer held values are still replaced.
+	expect(text).toContain("stream e2e login [REDACTED:key]");
+	expect(text).not.toContain("abcd");
+	expect(text).toContain('"text":"e2e"');
+	expect(text).toEndWith("# complete: 1 entries\n");
+	// Without a short value the header has no such line.
+	held.mockReturnValue([{ kind: "stream", value: "e2e login" }]);
+	const full = await download();
+	expect(full).not.toContain("not redacted");
+	expect(full).toContain("stream [REDACTED:stream] abcd");
+});
+
+test("the header lists every short identifier kind once, sorted, without values", async () => {
+	const values = ["e2e", "cam", "w3b", "q", "adm", "s9"];
+	held.mockReturnValue([
+		{ kind: "stream", value: "e2e" },
+		{ kind: "stream", value: "cam" },
+		{ kind: "apn_user", value: "w3b" },
+		{ kind: "apn_password", value: "q" },
+		{ kind: "router_user", value: "adm" },
+		{ kind: "serial", value: "s9" },
+		{ kind: "stream", value: "" },
+	]);
+	fixture.scan.mockImplementation(journal([record(1, { MESSAGE: "entry" })]));
+	const text = await download();
+	const line = text
+		.split("\n")
+		.find((candidate) => candidate.startsWith("# not redacted"));
+	expect(`${line}\n`).toBe(
+		notRedactedLine("apn_password, apn_user, router_user, serial, stream"),
+	);
+	for (const value of values) expect(line).not.toContain(value);
+	// The line sits in the header, before the warning and the entries.
+	expect(text.indexOf(line ?? "")).toBeLessThan(
+		text.indexOf("# may contain sensitive data"),
+	);
+	expect(text).toEndWith("# complete: 1 entries\n");
+});
+
+test("a short password or key still stops the export, naming the blocking kinds only", async () => {
+	held.mockReturnValue([
+		{ kind: "stream", value: "e2e" },
+		{ kind: "apn_password", value: "x" },
+		{ kind: "router_password", value: "ab1" },
+		{ kind: "password", value: "pw" },
+		{ kind: "key", value: "abcd" },
+	]);
+	fixture.scan.mockImplementation(
+		journal([record(1, { MESSAGE: "login ab1 pw e2e then abcd" })]),
 	);
 	// Neither an entry nor the filter text is sent, only the footer.
 	expect(await download({ filter: { text: "ab1" } })).toBe(
-		"# incomplete: CREDENTIAL_TOO_SHORT (apn_password, router_password)\n",
+		"# incomplete: CREDENTIAL_TOO_SHORT (password, router_password)\n",
+	);
+	// A kind not on the identifier list, including one added later, blocks.
+	held.mockReturnValue([
+		{ kind: "stream", value: "e2e" },
+		{ kind: "future_secret", value: "zz" },
+	]);
+	expect(await download()).toBe(
+		"# incomplete: CREDENTIAL_TOO_SHORT (future_secret)\n",
 	);
 	// Four characters is the shortest value the matcher replaces.
-	held.mockReturnValue([{ kind: "key", value: "abcd" }]);
+	held.mockReturnValue([{ kind: "password", value: "abcd" }]);
 	const text = await download();
-	expect(text).toContain("login ab1 then [REDACTED:key]");
+	expect(text).toContain("login ab1 pw e2e then [REDACTED:password]");
+	expect(text).not.toContain("not redacted");
 	expect(text).toEndWith("# complete: 1 entries\n");
+});
+
+test("only identifier-like kinds may be sent when short", () => {
+	expect([...data.SHORT_VALUE_EXPORT_KINDS].sort()).toEqual([
+		"apn_password",
+		"apn_user",
+		"router_user",
+		"serial",
+		"stream",
+	]);
 });
 
 test("the header's fixed text is never altered by a held value that matches it", async () => {
