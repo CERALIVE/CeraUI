@@ -36,6 +36,9 @@
  * Network the Connections group (`connections-card`), and Start sits in the
  * {@link LiveBar} fixed to the viewport bottom, beside the same disabled reason
  * the button carries as its title (or the ready text when nothing blocks).
+ * While blocked the bar also lists every blocked gate with a button to its
+ * existing setting ("Fix these before you go live"), and a tap on the blocked
+ * Start moves focus to that list instead of doing nothing.
  *
  * As with GoLiveCard, this component owns NO RPC and writes NO config — every
  * action is a callback prop, so the sole-camera "no premature setConfig" contract
@@ -50,7 +53,10 @@ import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
 import {
+	GATE_FIX_ORDER,
+	type GateFix,
 	type GateStatus,
+	type GoLiveGateKey,
 	READINESS_SOURCE_REASON,
 } from '$lib/streaming/go-live-readiness';
 import type { IdleStartGate } from '$lib/streaming/idle-start-gate';
@@ -108,6 +114,63 @@ const startDisabledReason = $derived(
 				)
 			: undefined,
 );
+
+// ── The Live bar's checklist while Start is blocked ───────────────────────────
+// Every blocked gate, in fix order, so a second blocker (no server under no
+// source) is visible at once instead of after the first is fixed. Each item
+// with a fix gets a button to the existing setting; the engine has none.
+interface Blocker {
+	key: GoLiveGateKey;
+	reasonKey: string;
+	fix: GateFix;
+}
+const blockers = $derived<Blocker[]>(
+	optimismState === 'starting'
+		? []
+		: GATE_FIX_ORDER.flatMap((key) => {
+				const gate = readiness.gates[key];
+				return gate.state === 'blocked'
+					? [{ key, reasonKey: gate.reasonKey ?? READINESS_SOURCE_REASON, fix: gate.fix ?? 'none' }]
+					: [];
+			}),
+);
+const fixable = $derived(blockers.filter((blocker) => blocker.fix !== 'none'));
+const singleBlockerReasonId = $props.id();
+// One blocker reads as its own reason; two or more as one line above the buttons.
+const barStatus = $derived(
+	blockers.length >= 2
+		? m["live.bar.blockedSeveral"]()
+		: (startDisabledReason ?? m["live.bar.ready"]()),
+);
+
+function fixLabel(fix: GateFix): string {
+	if (fix === 'openSource') return m["live.goLive.fix.openSource"]();
+	if (fix === 'openServer') return m["live.goLive.fix.openServer"]();
+	return m["live.goLive.fix.goNetwork"]();
+}
+
+function runFix(fix: GateFix) {
+	if (fix === 'openSource') onOpenSource();
+	else if (fix === 'openServer') serverRow?.onEdit();
+	else if (fix === 'goNetwork') onGoNetwork();
+}
+
+let checklistEl: HTMLElement | undefined = $state();
+let checklistAttention = $state(false);
+let attentionTimer: ReturnType<typeof setTimeout> | undefined;
+
+// A tap on the blocked Start points at the checklist: focus moves to the first
+// fix and the list is outlined for a moment. With nothing to tap (only the
+// engine blocks) Start is not given this handler, so it stays natively disabled
+// and the line above says why.
+function handleBlockedStart() {
+	checklistEl?.querySelector<HTMLButtonElement>('button')?.focus();
+	checklistAttention = true;
+	clearTimeout(attentionTimer);
+	attentionTimer = setTimeout(() => (checklistAttention = false), 1600);
+}
+
+$effect(() => () => clearTimeout(attentionTimer));
 
 function handleStartClick() {
 	// The config write happens at START time (never before): fold the implicit
@@ -426,14 +489,86 @@ const networkView = $derived<SetupRowView>({
 
 		<LiveBar
 			blocked={startDisabledReason !== undefined}
-			status={startDisabledReason ?? m["live.bar.ready"]()}
+			status={barStatus}
+			statusId={blockers.length === 1 && fixable.length === 1 ? singleBlockerReasonId : undefined}
 		>
+			{#snippet checklist()}
+				{#if blockers.length >= 2}
+					<!-- Every blocked gate in fix order, each with its reason as visible
+					     text (two causes can share one button label, such as a missing
+					     destination and a revoked slot) and a button where a fix exists.
+					     The engine has none: it reads as its reason alone. -->
+					<!-- At most a quarter of the viewport, scrolling inside past that, so Start
+					     stays in view. On a short screen (640 px of height or less: landscape,
+					     split view) the rows only tighten: every reason stays visible text,
+					     and a cut-off last row shows there is more to scroll. -->
+					<ul
+						bind:this={checklistEl}
+						class="-m-1 max-h-[25dvh] space-y-1.5 overflow-y-auto overscroll-contain rounded-lg p-1 transition-shadow motion-reduce:transition-none [@media(max-height:640px)]:space-y-1 {checklistAttention
+							? 'ring-destructive/60 ring-2'
+							: ''}"
+						data-blockers={blockers.length}
+						data-no-pull-to-refresh
+						aria-label={barStatus}
+					>
+						{#each blockers as blocker (blocker.key)}
+							<li class="flex items-center justify-between gap-3" data-blocker={blocker.key}>
+								<span
+									class="text-muted-foreground min-w-0 text-xs [@media(max-height:640px)]:leading-tight"
+									data-blocker-reason
+									id="live-blocker-reason-{blocker.key}"
+								>
+									{resolveReason(blocker.reasonKey)}
+								</span>
+								{#if blocker.fix !== 'none'}
+									<Button
+										aria-describedby="live-blocker-reason-{blocker.key}"
+										class="min-h-[44px] shrink-0 gap-1.5"
+										data-fix={blocker.fix}
+										onclick={() => runFix(blocker.fix)}
+										size="sm"
+										variant="outline"
+									>
+										{fixLabel(blocker.fix)}
+										<ChevronRight aria-hidden={true} class="h-4 w-4 rtl:-scale-x-100" />
+									</Button>
+								{/if}
+							</li>
+						{/each}
+					</ul>
+				{:else if fixable.length === 1}
+					<!-- One blocker: the line above is its reason; the button fixes it. -->
+					<div
+						bind:this={checklistEl}
+						class="-m-1 flex rounded-lg p-1 transition-shadow {checklistAttention
+							? 'ring-destructive/60 ring-2'
+							: ''}"
+						data-blockers={blockers.length}
+					>
+						{#each fixable as blocker (blocker.key)}
+							<Button
+								aria-describedby={singleBlockerReasonId}
+								class="min-h-[44px] gap-1.5"
+								data-blocker={blocker.key}
+								data-fix={blocker.fix}
+								onclick={() => runFix(blocker.fix)}
+								size="sm"
+								variant="outline"
+							>
+								{fixLabel(blocker.fix)}
+								<ChevronRight aria-hidden={true} class="h-4 w-4 rtl:-scale-x-100" />
+							</Button>
+						{/each}
+					</div>
+				{/if}
+			{/snippet}
 			<div class="shrink-0 sm:min-w-56">
 				<StreamControlButton
 					{canStart}
 					disabledReason={startDisabledReason}
 					{isStreaming}
 					{optimismState}
+					onBlockedStart={fixable.length > 0 ? handleBlockedStart : undefined}
 					onStart={handleStartClick}
 					{onStop}
 				/>

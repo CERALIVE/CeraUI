@@ -861,6 +861,7 @@
 	"live.audioMixer.error.refused": "L'appareil a refusé cette modification ; rien n'a changé.",
 	"live.telemetryCard.title": "Télémétrie",
 	"live.bar.ready": "Prêt à passer en direct",
+	"live.bar.blockedSeveral": "À régler avant de passer en direct",
 	"live.source.activeConfigured": "Configuré",
 	"live.source.activeLive": "En direct",
 	"live.source.audioAmbiguousBody": "Cette caméra signale plus d'un périphérique audio qui lui appartient : nous ne devinerons pas lequel vous voulez. Choisissez le bon ci-dessous.",

@@ -856,6 +856,7 @@
 	"live.audioMixer.error.refused": "Das Gerät hat diese Änderung abgelehnt, es wurde nichts geändert.",
 	"live.telemetryCard.title": "Telemetrie",
 	"live.bar.ready": "Bereit für den Live-Start",
+	"live.bar.blockedSeveral": "Vor dem Livegang noch erledigen",
 	"live.source.activeConfigured": "Konfiguriert",
 	"live.source.activeLive": "Live",
 	"live.source.audioAmbiguousBody": "Diese Kamera meldet mehr als ein eigenes Audiogerät, deshalb raten wir nicht, welches du möchtest. Wähle unten das richtige aus.",

@@ -189,8 +189,24 @@ rollup visible after Stop even if Details was never opened.
 
 - `live-bar` must stay fixed to the bottom of the viewport on every screen
   size, directly above the mobile dock when the dock is shown.
-- Idle, it must show the first blocking reason from `deriveGoLiveReadiness` as
-  visible text, or a ready state, and Start.
+- Idle, it shows readiness from `deriveGoLiveReadiness` beside Start.
+- While Start is blocked, the bar lists every blocked gate at once, in
+  `GATE_FIX_ORDER`. One blocker reads as its reason, with its fix button when
+  it has one. Two or more read "Fix these before you go live" (no count, so no
+  new plural message), then one row per gate: its reason as visible text and a
+  button to the existing setting where a fix exists (Choose source, Choose
+  destination, Set up network). The engine gate has no fix and shows its reason
+  alone. While a fix exists, a blocked Start stays dimmed and `aria-disabled`
+  and a tap moves focus to the first fix; it never starts. With no fix (only
+  the engine blocks) and while a start is in flight, Start is natively disabled.
+- The blocker list takes at most a quarter of the viewport height and scrolls
+  inside past that, so Start stays in view. At 640 px of viewport height or
+  less (landscape, split view) the rows stay rows with every reason as visible
+  text; they only tighten, and Start and the status line take less height. A
+  row cut off at the bottom of the list shows that more scrolls into view.
+  Touch drags that start inside the list scroll it without triggering page
+  pull-to-refresh. Each fix button is described by its reason
+  (`aria-describedby`), including when the status line carries the sole reason.
 - Live, it must show the bitrate control and Stop.
 - At every width (phone, kiosk and desktop), the Live bar's Stop opens
   "End the stream?" with Keep streaming (initial focus, the bottom button

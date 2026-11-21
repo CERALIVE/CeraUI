@@ -856,6 +856,7 @@
 	"live.audioMixer.error.refused": "डिवाइस ने यह बदलाव अस्वीकार कर दिया, इसलिए कुछ नहीं बदला।",
 	"live.telemetryCard.title": "टेलीमेट्री",
 	"live.bar.ready": "लाइव जाने के लिए तैयार",
+	"live.bar.blockedSeveral": "लाइव होने से पहले ये ठीक करें",
 	"live.source.activeConfigured": "कॉन्फ़िगर किया गया",
 	"live.source.activeLive": "लाइव",
 	"live.source.audioAmbiguousBody": "यह कैमरा अपने एक से अधिक ऑडियो डिवाइस बताता है, इसलिए हम अनुमान नहीं लगाएंगे कि आपको कौन सा चाहिए। नीचे सही डिवाइस चुनें।",

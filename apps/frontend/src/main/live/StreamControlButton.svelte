@@ -17,6 +17,12 @@ interface Props {
 	onStop: () => void;
 	/** Ask before the Live bar stops a confirmed stream, at every width. */
 	confirmStop?: boolean;
+	/**
+	 * A tap on Start while something blocks it. When set, a blocked Start is
+	 * not a dead button: it stays dimmed and `aria-disabled`, and a tap calls
+	 * this (the Live bar points at the things to fix) instead of doing nothing.
+	 * A start already in flight still disables the button outright.
+	 */
 }
 
 const {
@@ -27,6 +33,7 @@ const {
 	onStart,
 	onStop,
 	confirmStop = false,
+	onBlockedStart,
 }: Props = $props();
 
 let stopIntent = $state<number | null>(null);
@@ -71,6 +78,20 @@ function confirmEnd() {
 $effect(() => {
 	if (stopIntent !== null && !confirmOpen) stopIntent = null;
 });
+
+// Blocked but not busy, with somewhere to send the operator: keep the button
+// tappable and say it is not ready yet through aria-disabled.
+const leadsToFixes = $derived(!canStart && !isTransient && onBlockedStart !== undefined);
+
+function handleStartClick() {
+	if (leadsToFixes) {
+		onBlockedStart?.();
+		return;
+	}
+	// A blocked or busy Start never starts, even if a click reaches it.
+	if (!canStart || isTransient) return;
+	onStart();
+}
 </script>
 
 <!-- Streaming control — prominent, lime to start, neutral to stop -->
@@ -95,9 +116,10 @@ $effect(() => {
 	</Button>
 {:else}
 	<Button
-		class="bg-primary text-primary-foreground hover:bg-primary/90 group min-h-[44px] w-full gap-3 py-6 text-base font-semibold"
-		disabled={!canStart || isTransient}
-		onclick={onStart}
+		class="bg-primary text-primary-foreground hover:bg-primary/90 group min-h-[44px] w-full gap-3 py-6 text-base font-semibold aria-disabled:opacity-50 [@media(max-height:640px)]:py-3"
+		aria-disabled={leadsToFixes ? 'true' : undefined}
+		disabled={leadsToFixes ? false : !canStart || isTransient}
+		onclick={handleStartClick}
 		size="lg"
 		title={!canStart || isTransient ? disabledReason : undefined}
 		type="button"

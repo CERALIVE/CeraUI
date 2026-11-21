@@ -781,6 +781,7 @@
 	"live.audioMixer.error.refused": "기기가 이 변경을 거부해 아무것도 바뀌지 않았습니다.",
 	"live.telemetryCard.title": "텔레메트리",
 	"live.bar.ready": "라이브 시작 준비 완료",
+	"live.bar.blockedSeveral": "라이브 전에 다음을 해결하세요",
 	"live.source.activeConfigured": "구성됨",
 	"live.source.activeLive": "라이브",
 	"live.source.audioAmbiguousBody": "이 카메라가 자체 오디오 장치를 두 개 이상 보고했습니다. 어느 것을 원하는지 추측하지 않습니다. 아래에서 알맞은 장치를 선택하세요.",
