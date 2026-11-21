@@ -109,7 +109,7 @@ it.each(["\n", "\r\n"])(
 
 it("keeps simulation actions out of live download/unpack/configure progress", () => {
 	// Given/When
-	const actual = deriveUpdateProgress(simulation, "");
+	const actual = deriveUpdateProgress(simulation, undefined);
 	// Then
 	expect(actual).toEqual({
 		total: 0,

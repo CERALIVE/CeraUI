@@ -24,6 +24,7 @@ import {
 	type UpdatePackage,
 	type UpdatePreflightReason,
 } from "@ceraui/rpc";
+import { holdUpdateProgress } from "@ceraui/rpc/package-progress";
 import type { UpdateCapabilities } from "@ceraui/rpc/schemas";
 import { invariant } from "../../helpers/invariant.ts";
 import { logger } from "../../helpers/logger.ts";
@@ -126,6 +127,10 @@ import {
 	type CommitExitHook,
 	finishSoftwareUpdateRestart,
 } from "./software-update-restart.ts";
+import {
+	type DetachedAptServiceState,
+	defaultDetachedAptServiceDeps,
+} from "./software-update-service.ts";
 import { isStreamConfirmedIdle } from "./stream-liveness-source.ts";
 import { reconcileAptChannel } from "./update-apt-channel.ts";
 import {
@@ -323,15 +328,46 @@ export function beginSoftwareUpdateRecovery(): void {
 	softUpdateRecoveryPending = true;
 }
 
-export function settleSoftwareUpdateRecovery(): void {
+function settleSoftwareUpdateRecovery(): void {
 	softUpdateRecoveryPending = false;
 }
 
-/** The `updating` field for an initial push; omitted while recovery is pending. */
+/** Package progress for an initial push; omitted while recovery is pending. */
 export function initialSoftUpdateStatus(): {
 	updating?: SoftUpdateStatus | null;
+	update_state?: UpdateState;
 } {
-	return softUpdateRecoveryPending ? {} : { updating: softUpdateStatus };
+	return softUpdateRecoveryPending
+		? {}
+		: { updating: softUpdateStatus, update_state: getUpdateState() };
+}
+
+/** A refused bootstrap never recovers: stop withholding only on proof the unit is gone. */
+export async function settleSoftwareUpdateRecoveryIfAbsent(
+	inspect: () => Promise<DetachedAptServiceState> = defaultDetachedAptServiceDeps()
+		.inspect,
+): Promise<void> {
+	if (!softUpdateRecoveryPending) return;
+	let state: DetachedAptServiceState;
+	try {
+		state = await inspect();
+	} catch (error) {
+		logger.warn("Software update unit state unknown; progress stays withheld", {
+			error,
+		});
+		return;
+	}
+	if (state.kind !== "absent") return;
+	settleSoftwareUpdateRecovery();
+	try {
+		broadcastMsg("status", {
+			updating: softUpdateStatus,
+			update_state: getUpdateState(),
+		});
+	} catch (error) {
+		// Callers fire and forget; the next initial push carries the same state.
+		logger.warn("Software update recovery: broadcast failed", { error });
+	}
 }
 
 export function getSoftUpdateStatus() {
@@ -1552,8 +1588,10 @@ export function createSoftwareUpdateProcessMonitor(
 	let aptLog = prefetched;
 	let aptErr = "";
 	let aptStatus = "";
-	// A reattached unit is announced by its first drain, never by an empty frame.
+	// A reattached unit is announced by its first caught-up drain.
 	let announced = true;
+	// Live units write the status channel; a recovered one says whether it does.
+	let channel = true;
 
 	const observeRebootPackages = () => {
 		if (rebootAfterUpgrade) return;
@@ -1574,22 +1612,21 @@ export function createSoftwareUpdateProcessMonitor(
 	};
 	if (prefetched) observeRebootPackages();
 
-	const publishProgress = () => {
+	const publishProgress = (caughtUp = true) => {
 		if (!softUpdateStatus) return;
-		const previous = softUpdateStatus;
-		// The in-process prefetch's Get: lines are this update's download.
-		const next = deriveUpdateProgress(aptLog, aptStatus);
-		softUpdateStatus = next;
 		observeRebootPackages();
-		if (
-			announced &&
-			previous.total === next.total &&
-			previous.downloading === next.downloading &&
-			previous.unpacking === next.unpacking &&
-			previous.setting_up === next.setting_up &&
-			previous.percent === next.percent
-		)
-			return;
+		// A recovered unit is announced only once its files are read to the end.
+		if (!announced && !caughtUp) return;
+		const previous = softUpdateStatus;
+		const next = holdUpdateProgress(
+			previous,
+			deriveUpdateProgress(
+				aptLog.slice(prefetched.length),
+				channel ? aptStatus : undefined,
+			),
+		);
+		softUpdateStatus = next;
+		if (announced && next === previous) return;
 		announced = true;
 		settleSoftwareUpdateRecovery();
 		try {
@@ -1616,8 +1653,12 @@ export function createSoftwareUpdateProcessMonitor(
 			aptStatus += data;
 		},
 		onDrained: publishProgress,
-		onAttached: () => {
+		onStatusLost: () => {
+			channel = false;
+		},
+		onAttached: (aptStatus) => {
 			announced = false;
+			channel = aptStatus;
 		},
 		onObserverError: (error, suppressedRetries = 0) => {
 			logger.warn(
@@ -2029,7 +2070,7 @@ async function recoverSoftwareUpdate(
 	const monitor = createSoftwareUpdateProcessMonitor();
 	const recovered = await deps.recover({
 		...monitor.handlers,
-		onAttached: () => {
+		onAttached: (aptStatus) => {
 			softUpdateStatus = {
 				total: 0,
 				downloading: 0,
@@ -2043,7 +2084,7 @@ async function recoverSoftwareUpdate(
 			logger.warn(
 				"Software update: reattached to the detached apt transaction",
 			);
-			monitor.handlers.onAttached?.();
+			monitor.handlers.onAttached?.(aptStatus);
 		},
 	});
 	// `null` means `systemctl show` named the fixed unit and answered

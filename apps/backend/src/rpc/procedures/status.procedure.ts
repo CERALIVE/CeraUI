@@ -51,7 +51,6 @@ import { getRevisions } from "../../modules/system/revisions.ts";
 import { getSensors } from "../../modules/system/sensors.ts";
 import {
 	getAvailableUpdates,
-	getUpdateState,
 	initialSoftUpdateStatus,
 } from "../../modules/system/software-updates.ts";
 import { getCachedSshStatus, getSshStatus } from "../../modules/system/ssh.ts";
@@ -87,7 +86,6 @@ export const getStatusProcedure = authedProcedure
 			stream_lifecycle: getStreamLifecycleState(),
 			available_updates: getAvailableUpdates(),
 			...initialSoftUpdateStatus(),
-			update_state: getUpdateState(),
 			update_orchestrator: getOrchestratorWireState(),
 			ssh: getCachedSshStatus(),
 			wifi: wifiBuildMsg(),
@@ -137,7 +135,6 @@ export function buildInitialStatus() {
 			stream_lifecycle: getStreamLifecycleState(),
 			available_updates: getAvailableUpdates(),
 			...initialSoftUpdateStatus(),
-			update_state: getUpdateState(),
 			update_orchestrator: getOrchestratorWireState(),
 			ssh: getCachedSshStatus(),
 			wifi: wifiBuildMsg(),

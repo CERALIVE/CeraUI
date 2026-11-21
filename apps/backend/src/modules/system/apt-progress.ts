@@ -33,10 +33,13 @@ function transcriptPhase(stdout: string): Phase {
 	return /Get:\d+ /.test(stdout) ? "downloading" : "preparing";
 }
 
+/** `status` undefined: the unit has no readable status channel. */
 export function deriveUpdateProgress(
 	stdout: string,
-	status: string,
+	status: string | undefined,
 ): Omit<SoftUpdateStatus, "result"> {
+	if (status === undefined)
+		return { ...PHASE_MARKERS[transcriptPhase(stdout)] };
 	let reported: Phase = "preparing";
 	let percent: number | undefined;
 	let failed = false;
@@ -60,13 +63,8 @@ export function deriveUpdateProgress(
 				: shown;
 		reported = phase;
 	}
-	const fromTranscript = transcriptPhase(stdout);
-	const phase =
-		PHASE_ORDER[fromTranscript] > PHASE_ORDER[reported]
-			? fromTranscript
-			: reported;
 	return {
-		...PHASE_MARKERS[phase],
-		...(phase === reported && percent !== undefined ? { percent } : {}),
+		...PHASE_MARKERS[reported],
+		...(percent !== undefined ? { percent } : {}),
 	};
 }

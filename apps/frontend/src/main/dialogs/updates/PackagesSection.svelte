@@ -16,7 +16,8 @@
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
-import type { UpdateCheckClockSummary, UpdateTransportSummary } from '@ceraui/rpc/schemas';
+import { holdUpdateProgress } from '@ceraui/rpc/package-progress';
+import type { UpdateCheckClockSummary, UpdateProgress, UpdateTransportSummary } from '@ceraui/rpc/schemas';
 import { AlertTriangle, Download, RefreshCw } from '@lucide/svelte';
 import { untrack } from 'svelte';
 
@@ -48,17 +49,23 @@ const failed = $derived(updateState?.kind === 'failed');
 const succeeded = $derived(updateState?.kind === 'success');
 const preflightFailed = $derived(updateState?.kind === 'update_preflight_failed');
 const lastCheckedAt = $derived(checkedAtOf(updateState));
-const inProgress = $derived(updateState?.kind === 'downloading' || updateState?.kind === 'installing');
+// What this dialog last showed for the running install; a stale frame never moves it back.
+// `inProgress` reads it on every state, so the hold also ends with the run.
+let shownProgress: UpdateProgress | undefined;
+const progress = $derived.by(() => {
+	shownProgress =
+		updateState?.kind === 'downloading' || updateState?.kind === 'installing'
+			? holdUpdateProgress(shownProgress, updateState.progress)
+			: undefined;
+	return shownProgress;
+});
+const inProgress = $derived(progress !== undefined);
 // APT restarts its percentage for the install, so the phase names which one it is.
-const progressPercent = $derived(
-	updateState?.kind === 'downloading' || updateState?.kind === 'installing'
-		? updateState.progress.percent
-		: undefined
-);
+const progressPercent = $derived(progress?.percent);
 const phaseLabel = $derived(
-	updateState?.kind === 'installing'
+	progress && (progress.unpacking > 0 || progress.setting_up > 0)
 		? m['updatingOverlay.installing']()
-		: updateState?.kind === 'downloading' && updateState.progress.downloading > 0
+		: progress && progress.downloading > 0
 			? m['updatingOverlay.downloading']()
 			: m['updatingOverlay.preparingOrDownloading']()
 );

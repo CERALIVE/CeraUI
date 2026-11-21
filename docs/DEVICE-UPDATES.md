@@ -35,26 +35,38 @@ phases only, from coarse transcript evidence: APT's `Get:` lines while
 fetching and dpkg's unpack/setup records once it runs. Its status file is
 never read, because it may hold an older run's records.
 
+A unit with the channel takes its phase and number from the channel only.
 APT's own estimate can dip within a phase (a fetch item added, trigger work
-found), so the number shown is the highest APT reported in the current phase,
-folded over the bytes; it never moves backward. On pinned images the download
-runs in-process before the unit (and its status channel) exists: the UI says
-**Downloading** from the moment that transfer starts, without a number, and
-the prefetch's `Get:` lines keep that phase when the unit begins.
+found), so one rule (`holdUpdateProgress` in `@ceraui/rpc/package-progress`)
+decides what a running transaction shows, in the backend and in both browser
+views: the phase never moves back and, within a phase, the number never
+drops. Only an outcome, or the next run after it, shows what arrived. On
+pinned images the download runs in-process before the unit (and its status
+channel) exists: the UI says **Downloading** from the moment that transfer
+starts, without a number, and keeps it until APT reports the install.
 
 After a backend restart nobody knows, until recovery has read the detached
 unit, whether an update is running. Until then the initial status push omits
-`updating`, which the browser keeps as its last frame, instead of sending
-`null` or an empty frame; recovery then publishes the recovered state, or an
-explicit `null` when no unit exists.
+`updating` and `update_state`, which the browser keeps as its last frames,
+instead of sending `null`, an empty frame or idle package state; recovery
+then publishes the recovered state, or an explicit `null` when systemd shows
+the unit is gone. A bootstrap that refuses to run recovery stops withholding
+only once `systemctl show` reports the unit `not-found`; an unknown answer
+keeps the last frames.
 
 Live polling and reattachment derive progress from the same bytes: complete
 status lines only, so a record split across reads counts once it is whole.
-The observer reads stdout, stderr and then the status file, and the final
-drain reads every file to its end, so output larger than one 64 KiB read is
-replayed completely. A reattached unit is announced from its first drain, not
-with an empty frame, so the overlay does not drop back to "0 of 1 steps" or
-an empty bar while the log is re-read.
+Each poll reads stdout, stderr and then the status file, each to its end
+(bounded per poll), and the final drain does the same, so output larger than
+one 64 KiB read is replayed completely. A reattached unit is announced only
+once a poll has read every file to its end without an error, so the tab never
+sees an empty frame, "0 of 1 steps" or an older block of the log.
+
+The status file is display only. Its read errors never block a drain, change
+the outcome or keep the unit from being cleaned up; after 20 consecutive
+failures it is no longer read: the display keeps what it last showed and
+advances only on transcript phase evidence. The unit's exit status alone
+decides success or failure.
 
 ## Pending disruptive effects [PARTIAL — host proof, board drill owed]
 

@@ -67,7 +67,7 @@ import { getSensors } from "../system/sensors.ts";
 import {
 	getAvailableUpdates,
 	type getSoftUpdateStatus,
-	getUpdateState,
+	type getUpdateState,
 	initialSoftUpdateStatus,
 } from "../system/software-updates.ts";
 import { getCachedSshStatus, getSshStatus } from "../system/ssh.ts";
@@ -119,7 +119,6 @@ export function sendStatus(conn: WebSocket) {
 			stream_lifecycle: getStreamLifecycleState(),
 			available_updates: getAvailableUpdates(),
 			...initialSoftUpdateStatus(),
-			update_state: getUpdateState(),
 			update_orchestrator: getOrchestratorWireState(),
 			ssh: getCachedSshStatus(),
 			wifi: wifiBuildMsg(),

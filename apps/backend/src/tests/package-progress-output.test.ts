@@ -115,19 +115,21 @@ describe("deriveUpdateProgress()", () => {
 	});
 
 	test("without a status channel the transcript gives a phase and never a number", () => {
-		expect(deriveUpdateProgress(fetchLog, "")).toEqual(downloadingAt());
-		expect(deriveUpdateProgress(dpkgLog, "")).toEqual(installingAt());
+		expect(deriveUpdateProgress(fetchLog, undefined)).toEqual(downloadingAt());
+		expect(deriveUpdateProgress(dpkgLog, undefined)).toEqual(installingAt());
 		// A PTY can append a record to an unterminated script line.
 		expect(
 			deriveUpdateProgress(
 				`${fetchLog}postinst outputSetting up cerastream (2) ...\n`,
-				"",
+				undefined,
 			),
 		).toEqual(installingAt());
 	});
 
-	test("a percentage from another phase is never shown", () => {
-		expect(deriveUpdateProgress(dpkgLog, fetchStatus)).toEqual(installingAt());
+	test("a unit with the status channel takes its phase from the channel only", () => {
+		expect(deriveUpdateProgress(dpkgLog, fetchStatus)).toEqual(
+			downloadingAt(41),
+		);
 	});
 });
 
@@ -370,14 +372,6 @@ test("APT's percentage never moves backward within a phase", () => {
 	);
 	const status = `${dpkgStatus}${pm("cerastream", "35.0000", "Processing triggers")}`;
 	expect(deriveUpdateProgress("", status)).toEqual(installingAt(40));
-});
-
-test("a pinned prefetch keeps the download phase when the unit starts", async () => {
-	await using h = await updateHarness();
-	expect(startSoftwareUpdate()).toEqual({ started: true });
-	const monitor = createSoftwareUpdateProcessMonitor(fetchLog);
-	monitor.handlers.onDrained?.();
-	expect(h.frames.at(-1)?.updating).toEqual(downloadingAt());
 });
 
 describe("a reconnecting tab during recovery", () => {

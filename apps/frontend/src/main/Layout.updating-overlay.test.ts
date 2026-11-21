@@ -220,7 +220,7 @@ describe("Layout — the update overlay is mounted globally, not per trigger", (
 });
 
 describe("Layout — the update overlay survives a backend restart", () => {
-	it("shows honest activity before stdout and after reattach, then shows the replayed install phase", async () => {
+	it("shows honest activity before stdout, never rewinds across reattach, then shows the replayed install phase", async () => {
 		const silent = { total: 0, downloading: 0, unpacking: 0, setting_up: 0 };
 		updating(silent);
 		render(Layout);
@@ -257,11 +257,21 @@ describe("Layout — the update overlay survives a backend restart", () => {
 		expect(overlayTitle()).toBe(mounted);
 		expect(bar()?.getAttribute("aria-valuenow")).toBe("40");
 
-		// A frame before any APT status record is activity, never a number.
+		// A stale download frame or an empty one never rewinds this install.
+		updating({
+			total: 1,
+			downloading: 1,
+			unpacking: 0,
+			setting_up: 0,
+			percent: 96,
+		});
+		expect(overlayTitle()).toBe(mounted);
+		expect(phase()?.textContent).toContain("Installing");
+		expect(bar()?.getAttribute("aria-valuenow")).toBe("40");
 		updating(silent);
 		expect(overlayTitle()).toBe(mounted);
-		expect(phase()?.textContent).toContain("Preparing or downloading packages");
-		expect(bar()?.getAttribute("aria-valuenow")).toBeNull();
+		expect(phase()?.textContent).toContain("Installing");
+		expect(bar()?.getAttribute("aria-valuenow")).toBe("40");
 		expect(document.body.textContent).not.toMatch(/\d+\s+of\s+\d+\s+steps/);
 
 		// The new process replays the status file and publishes where APT is.
@@ -271,6 +281,18 @@ describe("Layout — the update overlay survives a backend restart", () => {
 		expect(bar()?.getAttribute("aria-valuenow")).toBe("60");
 		expect(bar()?.getAttribute("aria-valuemax")).toBe("100");
 		expect(bar()?.getAttribute("aria-valuetext")).toBe("60%");
+	});
+
+	it("starts the next install from its own phase, not the last one's", () => {
+		updating({ ...installing, percent: 70 });
+		render(Layout);
+		expect(overlayTitle()).toBeDefined();
+		updating({ ...installing, result: "E: dpkg returned an error code (1)" });
+		expect(overlayTitle()).toBeUndefined();
+
+		updating({ total: 0, downloading: 0, unpacking: 0, setting_up: 0 });
+		const phase = document.querySelector('[data-testid="update-phase"]');
+		expect(phase?.textContent).toContain("Preparing or downloading packages");
 	});
 
 	it("is on screen from the FIRST paint when Layout re-mounts onto an update already in flight", () => {

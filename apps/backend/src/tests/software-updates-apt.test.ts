@@ -683,8 +683,10 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 
 		expect(code).toBe(0);
 		expect(stdout.join("")).toBe("Unpacking package-a\n");
+		// Each poll reads to an empty read; the retained cursor never rewinds to 0.
 		expect(stdoutOffsets).toEqual([
 			0,
+			stdoutBytes.byteLength,
 			stdoutBytes.byteLength,
 			stdoutBytes.byteLength,
 		]);
@@ -1154,7 +1156,7 @@ describe("deriveUpdateProgress() — a transcript without the status channel", (
 			transcript.replace("Unpacking libapp (", "Unpacking libother ("),
 		],
 	])("shows the install phase and never a number for %s", (_name, output) => {
-		expect(deriveUpdateProgress(output, "")).toEqual(installing);
+		expect(deriveUpdateProgress(output, undefined)).toEqual(installing);
 	});
 
 	it("recognizes phase evidence split across several durable-file reads", () => {
@@ -1167,7 +1169,7 @@ describe("deriveUpdateProgress() — a transcript without the status channel", (
 			"ting up package-a (2) ...\n",
 		]) {
 			output += chunk;
-			phases.push(deriveUpdateProgress(output, ""));
+			phases.push(deriveUpdateProgress(output, undefined));
 		}
 
 		expect(phases).toEqual([

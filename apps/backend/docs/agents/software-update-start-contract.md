@@ -39,17 +39,24 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   mode 0600. Caller-selected paths are rejected.
   Progress is a pure function of the bytes read (`apt-progress.ts`): APT's
   complete `dlstatus`/`pmstatus` records give the phase and APT's own
-  percentage, capped at 99 and frozen at `pmerror`; stdout only ever adds
-  phase evidence. The legacy step fields are phase markers. Each changed frame
-  publishes both `updating` and `update_state`. Polls read stdout, stderr
-  and status in that order, and the final drain reads each file until a read
-  returns nothing, so output larger than one bounded read is replayed whole.
-  Recovery announces a reattached unit from its first drain, never with an
-  empty frame; until recovery settles (`beginSoftwareUpdateRecovery` before
-  the WS server binds), initial pushes omit `updating` rather than send
-  `null`. The in-process pinned prefetch is announced as Downloading, and the
-  shown percentage is the highest APT reported in the current phase. The
-  detached result alone settles the outcome.
+  percentage, capped at 99 and frozen at `pmerror`; a unit with the channel
+  takes its phase from it alone, and stdout gives phases only for a
+  pre-channel unit or a lost status file. The legacy step fields are phase
+  markers. Each changed frame publishes both `updating` and `update_state`.
+  Every poll and the final drain read stdout, stderr and status in that
+  order, each until a read returns nothing (bounded per poll), so output
+  larger than one bounded read is replayed whole. Recovery announces a
+  reattached unit only from a poll that read every file to its end without
+  an error; until recovery settles (`beginSoftwareUpdateRecovery` before the
+  WS server binds), initial pushes omit `updating` and `update_state` rather
+  than send `null` or idle state. A refused or failed bootstrap settles only
+  through `settleSoftwareUpdateRecoveryIfAbsent()`, on `LoadState=not-found`.
+  `holdUpdateProgress` (`@ceraui/rpc/package-progress`, shared with both
+  browser views) keeps a running transaction's phase and in-phase number
+  from moving back; the in-process pinned prefetch is announced as
+  Downloading. Status-file read errors never block a drain or cleanup and
+  never change the outcome; after 20 consecutive failures the file is
+  dropped (`onStatusLost`). The detached result alone settles the outcome.
 - **Reattachment identity is a safety boundary.** Adoption requires the
   exact unit id and transient fragment path, transient-service description/type,
   exact non-duplicated `[Service]` stdout/stderr append destinations, no pre/post
@@ -64,5 +71,6 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
 
 Coverage: `tests/software-updates-start-refusal.test.ts`,
 `tests/software-updates-apt.test.ts`, `tests/package-progress-output.test.ts`,
-`tests/software-update-status-channel.test.ts`, `tests/update-progress-timeline.test.ts`.
+`tests/software-update-status-channel.test.ts`, `tests/update-progress-timeline.test.ts`,
+`tests/update-recovery-ordering.test.ts`.
 

@@ -1,5 +1,7 @@
 <script lang="ts">
 import { directionFor, getLocale, m } from '@ceraui/i18n/svelte';
+import { holdUpdateProgress } from '@ceraui/rpc/package-progress';
+import type { UpdateProgress } from '@ceraui/rpc/schemas';
 import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
 
 import { OfflinePage, PWAStatus } from '$lib/components/custom/pwa';
@@ -65,9 +67,16 @@ $effect(() => (topBands ? publishHeight(topBands, '--top-bands-height') : undefi
 // `Layout.updating-overlay.test.ts`. Only a RUNNING install takes over: the
 // device's terminal object (success or failure) is the last `updating` frame the
 // store keeps, so mounting on it would leave a takeover nobody can dismiss.
+// What this tab last showed for the running install: a stale or empty frame
+// after a reconnect or a backend restart never moves it back.
+let shownInstall: UpdateProgress | undefined;
 const updatingStatus = $derived.by(() => {
 	const install = legacyInstall(getUpdating());
-	return install.kind === 'running' ? install.details : undefined;
+	shownInstall =
+		install.kind === 'running' && install.details
+			? holdUpdateProgress(shownInstall, install.details)
+			: undefined;
+	return shownInstall;
 });
 // This tree receives the terminal frame, so it owns the announcement, once per
 // outcome (`Layout.update-terminal.test.ts`). It reads the dedicated selector,
