@@ -128,6 +128,12 @@ must contain the `source-audio` block with its ids unchanged.
 - Idle, it must show the first blocking reason from `deriveGoLiveReadiness` as
   visible text, or a ready state, and Start.
 - Live, it must show the bitrate control and Stop.
+- Stop asks before it ends the stream: a tap opens "End the stream?" with
+  Keep streaming (initial focus, the bottom button on a phone) and End stream.
+  Only End stream sends the stop; Escape, Keep streaming and a tap on the
+  backdrop send nothing, and the question closes by itself when the session
+  ends some other way. The unconfirmed band's Stop stays one tap: there the
+  risk is a stream that will not stop, not one that stops by accident.
 - While it is mounted, the document's `scroll-padding-bottom` is the bar's
   height (plus the mobile dock below desktop chrome), so a control reached with
   Tab or scrolled into view stops above the bar, never under it (WCAG 2.4.11).

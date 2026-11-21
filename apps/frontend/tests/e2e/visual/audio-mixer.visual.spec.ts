@@ -3,7 +3,7 @@ import { isBackendSocket } from "../helpers/backend-socket.js";
 import type { Page } from '@playwright/test';
 
 import { expect, test } from '../fixtures/index.js';
-import { ensureAuthenticated, navigateTo } from '../helpers/index.js';
+import { endStream, ensureAuthenticated, navigateTo } from '../helpers/index.js';
 
 /**
  * audio-mixer.visual.spec.ts — @visual baselines for the Audio card's mixer.
@@ -109,6 +109,6 @@ test.describe('@visual audio mixer', () => {
 		// from its top so every run captures the same pixels.
 		await card.evaluate((element) => element.scrollIntoView({ block: 'start' }));
 		await expect(card).toHaveScreenshot('audio-mixer-live.png', { maxDiffPixels: 100 });
-		await page.getByTestId('live-bar').getByRole('button', { name: 'Stop stream' }).click();
+		await endStream(page);
 	});
 });

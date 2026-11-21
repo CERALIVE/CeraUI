@@ -485,6 +485,7 @@ const BAND_ICON_CLASS = 'text-status-warning mt-0.5 size-4 shrink-0';
 				<div class="shrink-0 sm:min-w-56">
 					<StreamControlButton
 						canStart={false}
+						confirmStop
 						{isStreaming}
 						{optimismState}
 						onStart={() => undefined}

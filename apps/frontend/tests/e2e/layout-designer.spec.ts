@@ -3,7 +3,7 @@ import type { Locator, Page } from "@playwright/test";
 import type { MockEngineState } from "./fixtures/backend.js";
 import { type BackendRpc, expect, test } from "./fixtures/index.js";
 import { runAxe } from "./helpers/axe.js";
-import { ensureAuthenticated, navigateTo } from "./helpers/index.js";
+import { endStream, ensureAuthenticated, navigateTo } from "./helpers/index.js";
 
 /**
  * The layout designer: the second picture input placed on the preview, against
@@ -358,7 +358,7 @@ test.describe("layout designer — caps-full", { tag: "@desktop-only" }, () => {
 		await expect.poll(async () => near((await savedComposition(backendRpc))?.rect, second as Rect)).toBe(true);
 		await expect.poll(async () => near(await shownRect(inset), second as Rect)).toBe(true);
 
-		await page.getByTestId("live-bar").getByRole("button", { name: "Stop stream" }).click();
+		await endStream(page);
 		await expect(page.getByTestId("idle-cockpit").or(page.getByTestId("summary-done"))).toBeVisible({
 			timeout: 15_000,
 		});
@@ -451,7 +451,7 @@ test.describe("layout designer — caps-full", { tag: "@desktop-only" }, () => {
 		await expect.poll(async () => near(await shownRect(live), running)).toBe(true);
 		expect((await workerBackend.mockEngine()).composition).toEqual(await savedComposition(backendRpc));
 
-		await page.getByTestId("live-bar").getByRole("button", { name: "Stop stream" }).click();
+		await endStream(page);
 		await expect(page.getByTestId("idle-cockpit").or(page.getByTestId("summary-done"))).toBeVisible({
 			timeout: 15_000,
 		});
@@ -479,7 +479,7 @@ test.describe("layout designer — caps-full", { tag: "@desktop-only" }, () => {
 		wire.holdServer();
 		await dragBy(page, live, live, -0.1, 0.1);
 		await dragBy(page, live, live, -0.1, 0.1);
-		await page.getByTestId("live-bar").getByRole("button", { name: "Stop stream" }).click();
+		await endStream(page);
 		await expect.poll(() => wire.calls("streaming.setConfig").length).toBe(before + 1);
 		wire.releaseServer();
 
@@ -524,7 +524,7 @@ test.describe("layout designer — caps-full", { tag: "@desktop-only" }, () => {
 		await expect
 			.poll(async () => near(await shownRect(shownAgain), after?.input.composition_rect as Rect))
 			.toBe(true);
-		await page.getByTestId("live-bar").getByRole("button", { name: "Stop stream" }).click();
+		await endStream(page);
 		await expect(page.getByTestId("idle-cockpit").or(page.getByTestId("summary-done"))).toBeVisible({
 			timeout: 15_000,
 		});
