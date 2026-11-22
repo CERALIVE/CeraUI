@@ -98,7 +98,7 @@ export const INVENTORY = `Package files:
      origin apt.ceralive.tv
 Pinned packages:
 `;
-const REFRESH = `Hit:1 https://deb.debian.org/debian-security trixie-security InRelease
+export const REFRESH = `Hit:1 https://deb.debian.org/debian-security trixie-security InRelease
 Hit:2 https://apt.ceralive.tv/dists/stable/binary-arm64 ./ InRelease
 Reading package lists...
 `;
@@ -106,8 +106,8 @@ Reading package lists...
 export const DEBIAN_ONLY_REFRESH = `${REFRESH.split("\n")[0]}\nReading package lists...\n`;
 // CeraLive's source disabled or absent: the inventory lists only Debian.
 export const DEBIAN_ONLY_INVENTORY = `${INVENTORY.split(` 500 ${CERALIVE_SOURCE}`)[0]}Pinned packages:\n`;
-const NOTHING =
-	"0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n";
+const nothing = (notUpgraded = 0) =>
+	`0 upgraded, 0 newly installed, 0 to remove and ${notUpgraded} not upgraded.\n`;
 // What apt-get prints before its plan when it is not quiet.
 const PREAMBLE =
 	"Reading package lists...\nBuilding dependency tree...\nReading state information...\n";
@@ -129,25 +129,37 @@ function policy(pkg: AptPackage): string {
 	return `${pkg.name}:\n  Installed: ${pkg.installed}\n  Candidate: ${pkg.candidate}\n  Version table:\n     ${pkg.candidate} ${pin}\n        ${pin} ${source}\n${local}`;
 }
 
-function counts(packages: readonly AptPackage[]): string {
+function counts(packages: readonly AptPackage[], notUpgraded = 0): string {
 	const upgraded = packages.filter(isInstalled).length;
-	return `${upgraded} upgraded, ${packages.length - upgraded} newly installed, 0 to remove and 0 not upgraded.\n`;
+	return `${upgraded} upgraded, ${packages.length - upgraded} newly installed, 0 to remove and ${notUpgraded} not upgraded.\n`;
 }
 
-// APT's order: the summary comes before the Inst rows it counts.
-function simulation(packages: readonly AptPackage[]): string {
+const KEPT_BACK = "The following packages have been kept back:";
+const keptBackList = (rows: readonly AptPackage[]) =>
+	rows.length === 0
+		? ""
+		: `${KEPT_BACK}\n  ${rows.map(({ name }) => name).join(" ")}\n`;
+
+// APT's order: the kept-back list and summary come before the Inst rows they count.
+function simulation(
+	packages: readonly AptPackage[],
+	keptBack: readonly AptPackage[] = [],
+): string {
 	const rows = packages.map(
 		(pkg) =>
 			`Inst ${pkg.name}${isInstalled(pkg) ? ` [${pkg.installed}]` : ""} (${pkg.planned ?? pkg.candidate} stable [${pkg.arch ?? "arm64"}])\n`,
 	);
-	return `${PREAMBLE}${counts(packages)}${rows.join("")}`;
+	return `${PREAMBLE}${keptBackList(keptBack)}${counts(packages, keptBack.length)}${rows.join("")}`;
 }
 
 // What --assume-no discovery prints before its lists and summary.
 const CALCULATING = `${PREAMBLE}Calculating upgrade...\n`;
 
-function upgradePlan(packages: readonly AptPackage[]): SpawnWithTimeoutResult {
-	if (packages.length === 0) return ok(`${CALCULATING}${NOTHING}`);
+function upgradePlan(
+	packages: readonly AptPackage[],
+	notUpgraded = 0,
+): SpawnWithTimeoutResult {
+	if (packages.length === 0) return ok(`${CALCULATING}${nothing(notUpgraded)}`);
 	const list = (heading: string, rows: readonly AptPackage[]) =>
 		rows.length === 0
 			? ""
@@ -157,7 +169,7 @@ function upgradePlan(packages: readonly AptPackage[]): SpawnWithTimeoutResult {
 		stdout: `${CALCULATING}${list(
 			"The following NEW packages will be installed:",
 			packages.filter((pkg) => !isInstalled(pkg)),
-		)}${list("The following packages will be upgraded:", packages.filter(isInstalled))}${counts(packages)}Need to get 4 kB of archives.\nDo you want to continue? [Y/n] N\nAbort.\n`,
+		)}${list("The following packages will be upgraded:", packages.filter(isInstalled))}${counts(packages, notUpgraded)}Need to get 4 kB of archives.\nDo you want to continue? [Y/n] N\nAbort.\n`,
 		stderr: "",
 	};
 }
@@ -229,19 +241,18 @@ function answer(script: AptScript) {
 		if (bin === "/usr/bin/apt-get" && verb === "update")
 			return { ...ok(REFRESH), ...script.refresh };
 		if (bin === "/usr/bin/apt-get" && verb === "dist-upgrade") {
-			const plan = upgradePlan(upgradable);
+			const plan = upgradePlan(upgradable, keptBack.length);
 			if (keptBack.length === 0) return { ...plan, ...script.discovery };
-			const held = keptBack.map((pkg) => pkg.name).join(" ");
 			return {
 				...plan,
-				stdout: `${CALCULATING}The following packages have been kept back:\n  ${held}\n${plan.stdout.slice(CALCULATING.length)}`,
+				stdout: `${CALCULATING}${keptBackList(keptBack)}${plan.stdout.slice(CALCULATING.length)}`,
 				...script.discovery,
 			};
 		}
 		if (bin === "/usr/bin/apt-get" && verb === "install")
 			return { ...upgradePlan(keptBack), ...script.fallback };
 		if (bin === "/usr/bin/apt-get" && verb === "-s")
-			return ok(simulation(upgradable));
+			return ok(simulation(upgradable, keptBack));
 		if (bin === "/usr/bin/apt-mark")
 			return ok((script.holds ?? []).map((name) => `${name}\n`).join(""));
 		// What #664's readback asks: `dpkg-query -W -f=<format> -- <names>`.

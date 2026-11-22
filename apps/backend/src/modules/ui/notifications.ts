@@ -180,11 +180,16 @@ export function notificationSend(
 	if (isPersistent) {
 		let pn = persistentNotifications.get(name);
 		if (pn) {
-			// Rate limiting to once every second
-			if (pn.last_sent && pn.last_sent + 1000 > getms()) {
+			const releaseChanged = pn.dismissalKey !== dismissalKey;
+			// Rate limiting to once every second. A release-scoped notice's new release is
+			// always sent: every connected tab must hold the copy the slot now names.
+			if (
+				pn.last_sent &&
+				pn.last_sent + 1000 > getms() &&
+				!(opts?.releaseScoped && releaseChanged)
+			) {
 				doSend = false;
 			}
-			const releaseChanged = pn.dismissalKey !== dismissalKey;
 			Object.assign(pn, notification);
 			pn.updated = getms();
 			pn.revision = nextRevision();

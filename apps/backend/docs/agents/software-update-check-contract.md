@@ -35,8 +35,9 @@ Install post-acceptance limits: D8 Known gaps (c). Check wire reference:
   the port result and `lastCheckFailure`. A stream/concurrent-refresh refusal still
   returns `busy` without clearing evidence.
 - **Only a conclusive check, or dpkg showing the offer installed, changes the "CeraLive update is available" notice.**
-  The refresh must exit 0 with a `Hit:`/`Get:` line for CeraLive's own host (and no
-  `Ign:` for it), without `Err:`, failed-fetch, stale-index or `E:` diagnostics,
+  The refresh must exit 0 having hit or fetched the `InRelease`/`Release` of every
+  CeraLive source the check's own inventory lists (same URI and suite, no `Ign:`),
+  without `Err:`, failed-fetch, stale-index or `E:` diagnostics,
   and must not be captive; legacy `dist-upgrade --assume-no` must exit
   0, or 1 after its own `Abort.`, without `E:`, must not be the kept-back fallback,
   and its upgrade and NEW lists must name exactly what its summary counts, each

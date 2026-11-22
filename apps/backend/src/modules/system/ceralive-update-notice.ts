@@ -1,17 +1,21 @@
 /*
  * The "A CeraLive update is available" notice (`ceralive_update`).
  *
- * Every shipped frontend removes it by name, whatever release a tab shows, so a
- * removal is sent only where this process knows it is right for every copy:
- * - live, after the update's own successful result, when dpkg shows every
- *   instance of the offer this process shows to every tab installed at or above
- *   its offered version (the readback `system.updateOutcome` uses);
- * - live and at login, after this process's own conclusive check found the
- *   complete first-party set: none pending (with dpkg showing any stored offer
- *   installed), or the user dismissed exactly that set.
- * A startup reads dpkg for a stored offer only to decide whether to re-announce
- * it. A restart or a login decides nothing by itself, and nothing unread,
- * partial or ambiguous withdraws. Only a check writes the record. Contract:
+ * The slot holds at most one offer: the exact package instances (name,
+ * architecture, version) this process's own conclusive check found pending.
+ * Nothing else ever writes it: not a startup, a login, a stored record or a
+ * recovered install. Every shipped frontend removes this notice by name,
+ * whatever release a tab shows, so a removal is sent only where this process
+ * knows every copy it reaches:
+ * - connected tabs, after the update's own successful result, when the slot
+ *   still holds the offer the update was taken against and dpkg shows it
+ *   installed at or above its offered version (the readback
+ *   `system.updateOutcome` uses);
+ * - every tab, live and at login, while this process's latest check found the
+ *   complete first-party set and it is none (dpkg showing any stored offer
+ *   installed) or exactly the set the user dismissed. Every check voids that
+ *   authority when it starts.
+ * Unknown always keeps the offer. Only a check writes the record. Contract:
  * apps/backend/docs/agents/a-persistent-notification-must-be-retractable.md.
  */
 import type { UpdatePackage } from "@ceraui/rpc";
@@ -60,8 +64,14 @@ export const ARCH_LIMIT = 16;
 /** One package instance Install takes: its name, the candidate's architecture and version. */
 export type OfferedPackage = Readonly<Required<Omit<UpdateTarget, "from">>>;
 
-/** The first-party packages Install would take; an empty list proves none remain. */
-export type CeraliveOffer = readonly OfferedPackage[] | "unknown";
+/**
+ * A conclusive check's first-party verdict: the instances Install would take (an
+ * empty list says none remain), and whether the check saw every first-party
+ * package it plans or keeps back, which alone makes it authority over every copy.
+ */
+export type CeraliveVerdict =
+	| { readonly offer: readonly OfferedPackage[]; readonly complete: boolean }
+	| "unknown";
 
 export type AptRun = (argv: string[]) => Promise<SpawnWithTimeoutResult>;
 
@@ -95,7 +105,7 @@ const offerSchema = z
 				compareAptPackageNames(rows[i - 1]?.name ?? "", row.name) < 0,
 		),
 	);
-// The one durable state: the current offer, or `null` for none.
+// The one durable state, written only by a check: the current offer, or `null` for none.
 const recordSchema = z
 	.object({ version: z.literal(8), offer: offerSchema.nullable() })
 	.strict();
@@ -119,24 +129,60 @@ export type CeraliveUpdateNoticeOptions = {
 let store: Store | undefined;
 let latest: OfferRecord | undefined;
 let persisted: string | undefined;
-// `latest` is this process's own conclusive check's complete verdict, not only a stored one.
-let checkedHere = false;
+// This process's latest check found the complete first-party set; cleared when any check starts.
+let authority = false;
+// Counts every write to the slot, so a read that outlived one cannot act on it.
+let slotGeneration = 0;
 
 // Named for a first-party package, of any architecture.
 const firstPartyName = (name: string) =>
 	classifyPackageLayer(name.split(":")[0] ?? "") === "app";
 
 /**
+ * The refresh hit or fetched the index of every CeraLive source the check's own
+ * inventory lists (the same URI and suite), and skipped none of them.
+ */
+function refreshedEveryCeraliveSource(
+	refresh: string,
+	sources: ReadonlyMap<string, string | null>,
+): boolean {
+	const ceralive = [...sources]
+		.filter(([, origin]) => origin === FIRST_PARTY_APT_HOST)
+		.map(([source]) => source.split(/\s+/));
+	return (
+		ceralive.length > 0 &&
+		ceralive.every(([uri = "", dist = ""]) => {
+			const suite = dist === "./" ? dist : (dist.split("/")[0] ?? "");
+			const lines = refresh
+				.split("\n")
+				.filter((line) => line.split(/\s+/)[1] === uri);
+			return (
+				lines.some((line) =>
+					new RegExp(
+						`^(?:Hit|Get):\\d+ \\S+ ${suite.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} (?:In)?Release(?: \\[.*\\])?$`,
+					).test(line),
+				) && !lines.some((line) => /^(?:Ign|Err):/.test(line))
+			);
+		})
+	);
+}
+
+/**
  * Capable: the check's verified first-party rows, each the exact instance its own
- * complete simulation plans; one unverified row means unknown.
+ * complete simulation plans; one unverified row means unknown. `keptBack` is the
+ * simulation's kept-back list when it names exactly what it counts, else null.
  */
 export function firstPartyOffer(
 	packages: readonly UpdatePackage[],
 	sourcePolicy: string,
 	simulation: string,
-): CeraliveOffer {
-	// Without CeraLive's source in the check, "nothing listed" proves nothing.
-	if (!firstPartySourceListed(sourcePolicy) || !completePlan(simulation))
+	refresh: string,
+	keptBack: readonly string[] | null,
+): CeraliveVerdict {
+	if (
+		!refreshedEveryCeraliveSource(refresh, policySources(sourcePolicy)) ||
+		!completePlan(simulation)
+	)
 		return "unknown";
 	const instances = admittedTargets(simulation);
 	if (instances === null) return "unknown";
@@ -156,13 +202,10 @@ export function firstPartyOffer(
 			return "unknown";
 		offer.push({ name, arch: instance.arch, version: instance.version });
 	}
-	return offer;
-}
-
-function firstPartySourceListed(sourcePolicy: string): boolean {
-	return [...policySources(sourcePolicy).values()].includes(
-		FIRST_PARTY_APT_HOST,
-	);
+	return {
+		offer,
+		complete: keptBack !== null && !keptBack.some(firstPartyName),
+	};
 }
 
 const PLAN_SUMMARY =
@@ -187,21 +230,31 @@ function completePlan(simulation: string): boolean {
 
 /**
  * Legacy: the check's actionable first-party names, each with its candidate from
- * CeraLive's own source and that candidate's architecture. With none actionable,
- * any first-party name the check still plans (a new install, another
- * architecture) means unknown, never none. Read-only `apt-cache`.
+ * CeraLive's own source and that candidate's architecture. `planned` is every
+ * name the upgrade and NEW lists carry, `keptBack` the kept-back list when it
+ * names exactly what the summary counts (else null). A first-party name either
+ * carries that is not offered (a new install, another architecture, a held
+ * package) leaves the verdict incomplete; with nothing offered, unknown.
+ * Read-only `apt-cache`.
  */
 export async function legacyCeraliveOffer(
 	names: readonly string[],
 	planned: readonly string[],
+	keptBack: readonly string[] | null,
+	refresh: string,
 	run: AptRun,
-): Promise<CeraliveOffer> {
-	if (names.length === 0 && planned.some(firstPartyName)) return "unknown";
+): Promise<CeraliveVerdict> {
+	const complete =
+		keptBack !== null &&
+		![...planned, ...keptBack].some(
+			(name) => firstPartyName(name) && !names.includes(name),
+		);
+	if (names.length === 0 && !complete) return "unknown";
 	const inventory = await run(["/usr/bin/apt-cache", "policy"]);
 	const sources = policySources(inventory.stdout);
 	if (
 		inventory.exitCode !== 0 ||
-		![...sources.values()].includes(FIRST_PARTY_APT_HOST)
+		!refreshedEveryCeraliveSource(refresh, sources)
 	)
 		return "unknown";
 	const offer: OfferedPackage[] = [];
@@ -228,7 +281,7 @@ export async function legacyCeraliveOffer(
 		if (arch === undefined) return "unknown";
 		offer.push({ name, arch, version: candidate });
 	}
-	return offer;
+	return { offer, complete };
 }
 
 // The architecture of the candidate's one package record; anything else is no answer.
@@ -255,9 +308,12 @@ function candidateArch(
 		: undefined;
 }
 
+// The offer's identity: every exact instance and its version.
 function dismissalKey(offer: readonly OfferedPackage[]): string {
 	return updateDismissalKey({
-		version: offer.map(({ name, version }) => `${name}=${version}`).join(","),
+		version: offer
+			.map(({ name, arch, version }) => `${name}:${arch}=${version}`)
+			.join(","),
 		packages: offer.map(({ name }) => name),
 	});
 }
@@ -273,15 +329,22 @@ function dismissed(offer: readonly OfferedPackage[]): boolean | undefined {
 	}
 }
 
+function withdraw(why: string): void {
+	slotGeneration++;
+	logger.info("CeraLive update notice withdrawn", { why });
+	notificationWithdraw(NOTICE);
+}
+
 function publish(offer: readonly OfferedPackage[]): void {
 	const acknowledged = dismissed(offer);
 	if (acknowledged === undefined) return;
-	// A dismissed successor must not keep its predecessor on screen, but only this
-	// process's own complete check knows no other release can be on screen.
+	// A dismissed successor must not keep its predecessor on screen, but only a
+	// complete check knows no other release can be on screen.
 	if (acknowledged) {
-		if (checkedHere) notificationWithdraw(NOTICE);
+		if (authority) withdraw("the complete set found is dismissed");
 		return;
 	}
+	slotGeneration++;
 	notificationBroadcast(
 		NOTICE,
 		"warning",
@@ -351,28 +414,36 @@ function readRecord(path: string) {
 	}
 }
 
+/** A check is starting: whatever the last one established is no longer current. */
+export function ceraliveCheckStarted(): void {
+	authority = false;
+}
+
 /**
  * Applies a conclusive check's own verdict (a check that is not conclusive
  * about CeraLive passes "unknown" and changes nothing). The verdict is
  * committed before it is broadcast.
  */
 export async function reconcileCeraliveUpdateNotice(
-	offer: CeraliveOffer,
+	verdict: CeraliveVerdict,
 ): Promise<void> {
-	if (offer === "unknown") {
+	if (
+		verdict === "unknown" ||
+		(verdict.offer.length === 0 && !verdict.complete)
+	) {
 		logger.warn("CeraLive update notice unchanged: check not conclusive");
 		return;
 	}
+	const { offer, complete } = verdict;
 	if (offer.length === 0) {
 		const standing = latest?.offer;
 		// "None pending" proves nothing about an offer dpkg does not show installed
 		// (held back, pinned away, withdrawn from the archive): it stays.
 		if (standing && !(await provenInstalled(standing))) return;
 		if (!persist(null)) return;
-		checkedHere = true;
-		logger.info("CeraLive update notice withdrawn: a conclusive check");
+		authority = true;
 		// Sent on every conclusive check, so a connected tab that missed one still hears it.
-		notificationWithdraw(NOTICE);
+		withdraw("a complete check found none pending");
 		return;
 	}
 	const sorted = [...offer].sort((a, b) =>
@@ -380,7 +451,7 @@ export async function reconcileCeraliveUpdateNotice(
 	);
 	// A change that is not durable is not made, so no restart can act on an older verdict.
 	if (!persist(sorted)) return;
-	checkedHere = true;
+	authority = complete;
 	publish(sorted);
 }
 
@@ -389,7 +460,7 @@ export function standingCeraliveOffer(): readonly OfferedPackage[] | null {
 	return latest?.offer ?? null;
 }
 
-// This process shows `offer`: every connected tab holds this copy, since it replaced theirs.
+// The slot holds `offer`: every connected tab was sent this copy (a new release is never rate-limited).
 function showing(offer: readonly OfferedPackage[]): boolean {
 	return notificationExists(NOTICE)?.dismissalKey === dismissalKey(offer);
 }
@@ -418,39 +489,41 @@ async function provenInstalled(
 }
 
 /**
- * The update's own successful result: when this process shows the offer it was
- * taken against and dpkg shows it installed, connected tabs drop it. A tab that
- * logs in later is not told (its copy may be another release's); the record
- * keeps the offer for the next conclusive check. Never throws.
+ * The update's own successful result: when the slot holds the offer it was taken
+ * against, nothing wrote the slot while dpkg was read, and dpkg shows the offer
+ * installed, connected tabs drop it. A tab that logs in later is not told (its
+ * copy may be another release's); the record keeps the offer for the next
+ * conclusive check. Never throws.
  */
 export async function withdrawCeraliveOfferIfInstalled(
 	offer: readonly OfferedPackage[] | null,
 ): Promise<void> {
 	if (offer === null || !showing(offer)) return;
-	if (!(await provenInstalled(offer)) || !showing(offer)) return;
-	logger.info(
-		"CeraLive update notice withdrawn: dpkg shows the install's offer",
-	);
-	notificationWithdraw(NOTICE);
+	const generation = slotGeneration;
+	if (
+		!(await provenInstalled(offer)) ||
+		generation !== slotGeneration ||
+		!showing(offer)
+	)
+		return;
+	withdraw("dpkg shows the install's offer");
 }
 
 // A tab that logs in may hold any release a predecessor showed. Only this
-// process's own complete check is authority over every copy: none pending, or
-// exactly the set the user dismissed.
+// process's latest, complete check is authority over every copy: none pending,
+// or exactly the set the user dismissed.
 function deliverable(): boolean {
-	if (!checkedHere || latest === undefined) return false;
+	if (!authority || latest === undefined) return false;
 	return latest.offer === null || dismissed(latest.offer) === true;
 }
 
 /**
- * Loads the last verdict. A stored offer dpkg shows installed is not
- * re-announced; any other is (a dismissed one is neither shown nor removed).
- * Nothing is removed and nothing written. Resolves once that read is done
- * (startup need not wait for it).
+ * Loads the last verdict, for a check to read back against dpkg. It announces,
+ * removes and runs nothing: only this process's own check writes the slot.
  */
-export async function initCeraliveUpdateNotice(
+export function initCeraliveUpdateNotice(
 	options: CeraliveUpdateNoticeOptions = {},
-): Promise<void> {
+): void {
 	store = {
 		path: options.path ?? RECORD_FILE,
 		write: options.write ?? writeFileAtomicSync,
@@ -459,14 +532,10 @@ export async function initCeraliveUpdateNotice(
 	};
 	latest = readRecord(store.path);
 	persisted = latest === undefined ? undefined : JSON.stringify(latest);
-	checkedHere = false;
+	authority = false;
 	setAuthenticatedReplay((send) => {
 		const sent = deliverable();
 		if (sent) for (const frame of removalFrames(NOTICE)) send(frame);
 		store?.observe(sent ? "sent" : "declined");
 	});
-	const offer = latest?.offer;
-	if (!offer || (await provenInstalled(offer))) return;
-	// Unless a check replaced it meanwhile.
-	if (latest?.offer === offer && !checkedHere) publish(offer);
 }

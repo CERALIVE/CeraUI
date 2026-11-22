@@ -509,7 +509,7 @@ async function installProof(capable = false) {
 
 for (const capable of [false, true])
 	test(
-		`an install's own restarts clear the offer in open tabs, live and after a missed process, and a fresh tab never shows it (${capable ? "capable" : "legacy"} image)`,
+		`an install's own restarts clear the offer in open tabs at the first conclusive check, live and after a missed process, and a fresh tab never shows it (${capable ? "capable" : "legacy"} image)`,
 		async () => {
 			// Given tabs of both decoders showing the offer before the install.
 			const before = await Backend.start({ apt: pending("1", "2"), capable });
@@ -524,7 +524,7 @@ for (const capable of [false, true])
 				["show"],
 			]);
 			// When the package script restarts the backend mid-transaction, the new process
-			// reads dpkg, which does not show the offer installed yet, and re-announces it.
+			// announces nothing: only its own conclusive check may write the slot.
 			await before.close();
 			const recovering = await Backend.start({
 				apt: configuring("2"),
@@ -533,20 +533,19 @@ for (const capable of [false, true])
 			await reconnect(recovering, connected);
 			expect(names(connected)).toEqual([[NOTICE], [NOTICE]]);
 			expect(removals(connected)).toEqual([0, 0]);
-			// And it recovers the finished install: dpkg shows cerastream 2 installed, so the
-			// tabs connected to it drop the offer before the update's own restart.
+			// And it recovers the finished install. It never showed the offer, so it cannot know
+			// which release a connected tab holds: those tabs keep their copy through its restart.
 			await recovering.setApt(settled("2"));
 			await recovering.recover();
 			await sync(connected);
-			expect(names(connected)).toEqual([[], []]);
-			expect(removals(connected)).toEqual([1, 1]);
+			expect(names(connected)).toEqual([[NOTICE], [NOTICE]]);
+			expect(removals(connected)).toEqual([0, 0]);
 			const restart = await recovering.ended();
 			expect(restart.exit).toBe(RESTART_EXIT_CODE);
 			expect(restart.stdout).toContain(RECOVERY_RESTART_MARKER);
 			expect(restart.stderr).not.toContain(RECOVERY_FAILED_MARKER);
 			for (const tab of connected) await tab.dropped();
-			// Then the update's own restart reads dpkg for the stored offer and does not re-announce
-			// it, but a tab that missed the proving process is not told at login (its copy may be
+			// Then the update's own restart announces nothing, tells no tab at login (a copy may be
 			// another release's), and a failing refresh changes nothing.
 			const completion = await Backend.start({
 				apt: failing(settled("2")),
@@ -556,10 +555,10 @@ for (const capable of [false, true])
 			expect(names(missing)).toEqual([[NOTICE], [NOTICE]]);
 			expect(removals(missing)).toEqual([0, 0]);
 			await reconnect(completion, connected);
-			expect(removals(connected)).toEqual([1, 1]);
+			expect(removals(connected)).toEqual([0, 0]);
 			await completion.check();
-			await sync(missing);
-			expect(removals(missing)).toEqual([0, 0]);
+			await sync([...missing, ...connected]);
+			expect(removals([...missing, ...connected])).toEqual([0, 0, 0, 0]);
 			// And a freshly opened tab is shown nothing.
 			const fresh = await tabs(completion);
 			expect(histories(fresh)).toEqual([[], []]);
@@ -567,9 +566,9 @@ for (const capable of [false, true])
 			// installed, every tab drops it: live, and at a later login.
 			await completion.setApt(settled("2"));
 			await completion.check();
-			await sync([...missing, ...fresh]);
-			expect(names(missing)).toEqual([[], []]);
-			expect(removals(missing)).toEqual([1, 1]);
+			await sync([...missing, ...connected, ...fresh]);
+			expect(names([...missing, ...connected])).toEqual([[], [], [], []]);
+			expect(removals([...missing, ...connected])).toEqual([1, 1, 1, 1]);
 			expect(removals(fresh)).toEqual([1, 1]);
 			expect(histories(await tabs(completion))).toEqual([
 				["remove"],
@@ -582,12 +581,16 @@ for (const capable of [false, true])
 			expect(names(missing)).toEqual([[NOTICE], [NOTICE]]);
 			expect(removals(missing)).toEqual([1, 1]);
 			await completion.close();
-			// And a restart that runs no check re-announces it and removes nothing.
+			// And a restart that runs no check announces nothing and removes nothing; its check shows it.
 			const idle = await Backend.start({ apt: pending("2", "3"), capable });
 			await reconnect(idle, missing);
 			expect(names(missing)).toEqual([[NOTICE], [NOTICE]]);
 			expect(removals(missing)).toEqual([1, 1]);
-			expect(histories(await tabs(idle))).toEqual([["show"], ["show"]]);
+			const later = await tabs(idle);
+			expect(histories(later)).toEqual([[], []]);
+			await idle.check();
+			await sync(later);
+			expect(histories(later)).toEqual([["show"], ["show"]]);
 		},
 		budget(5),
 	);
@@ -920,7 +923,7 @@ test(
 		expect(names(rolledBack)).toEqual([[NOTICE], [NOTICE]]);
 		expect(removals(rolledBack)).toEqual([0, 0]);
 		await restored.close();
-		// A stored offer: early tabs see nothing before hydration, then exactly its show.
+		// A stored offer: early tabs see nothing before or after hydration, then its check's show.
 		const offering = await Backend.start({ apt: pending("1", "2") });
 		await offering.check();
 		await offering.close();
@@ -931,6 +934,9 @@ test(
 		const waiting = await tabs(announcing);
 		expect(histories(waiting)).toEqual([[], []]);
 		await announcing.hydrate();
+		await sync(waiting);
+		expect(histories(waiting)).toEqual([[], []]);
+		await announcing.check();
 		await sync(waiting);
 		expect(histories(waiting)).toEqual([["show"], ["show"]]);
 	},
@@ -957,7 +963,7 @@ test(
 			dismissals,
 			JSON.stringify({
 				version: 1,
-				entries: [{ key: "update:cerastream=3", dismissedAt: 1 }],
+				entries: [{ key: "update:cerastream:arm64=3", dismissedAt: 1 }],
 			}),
 		);
 		// When a fresh process conclusively finds release 3, connected tabs drop the offer.
@@ -1080,7 +1086,7 @@ test(
 			dismissals,
 			JSON.stringify({
 				version: 1,
-				entries: [{ key: "update:cerastream=2,srtla=3", dismissedAt: 1 }],
+				entries: [{ key: "update:cerastream:arm64=2,srtla=3", dismissedAt: 1 }],
 			}),
 		);
 		const forged = [
@@ -1131,14 +1137,23 @@ test(
 			expect([kind, histories(await tabs(backend))]).toEqual([kind, [[], []]]);
 			await backend.close();
 		}
-		// Control: the valid record under the same evidence is re-announced, and removes nothing.
-		await writeFile(record, JSON.stringify(valid));
-		const control = await olderBackendTabs();
-		const backend = await Backend.start({ apt: pending("1", "2") });
-		await reconnect(backend, control);
-		expect(removals(control)).toEqual([0, 0]);
-		expect(histories(await tabs(backend))).toEqual([["show"], ["show"]]);
-		await backend.close();
+		// Control: the record is read. Under a check that finds nothing pending while dpkg shows
+		// cerastream 1, a refused record holds no offer, so "none" withdraws; the valid record's
+		// offer of 2 is not installed, so it stays.
+		for (const [kind, text, expected] of [
+			["corrupt", "{", [[], []]],
+			["valid", JSON.stringify(valid), [[NOTICE], [NOTICE]]],
+		] as const) {
+			await writeFile(record, text);
+			const control = await olderBackendTabs();
+			const backend = await Backend.start({ apt: settled("1") });
+			await reconnect(backend, control);
+			expect([kind, removals(control)]).toEqual([kind, [0, 0]]);
+			await backend.check();
+			await sync(control);
+			expect([kind, names(control)]).toEqual([kind, expected]);
+			await backend.close();
+		}
 		await rm(record);
 		await rm(dismissals);
 		// Given an offer whose dismissal state cannot be read.
@@ -1312,13 +1327,15 @@ test(
 		expect(removals(opened)).toEqual([0, 0]);
 		expect(names(opened)).toEqual([[NOTICE], [NOTICE]]);
 		await kept.close();
-		// When an install of the offer finishes in a process that cannot write, its own result
-		// step still withdraws it live: that evidence is dpkg's, read then, and nothing is written.
+		// When an install of the offer finishes in a process that cannot write: its own check found
+		// exactly the durable offer (nothing to write), so it shows it, and the install's own
+		// proof removes it live; nothing is written.
 		const installing = await Backend.start({
-			apt: configuring("3"),
+			apt: pending("2", "3"),
 			failWrites: true,
 		});
 		await reconnect(installing, opened);
+		await installing.check();
 		await installing.setApt(settled("3"));
 		await installing.recover();
 		await sync(opened);
@@ -1387,7 +1404,7 @@ for (const capable of [false, true]) {
 				dismissals,
 				JSON.stringify({
 					version: 1,
-					entries: [{ key: "update:cerastream=2", dismissedAt: 1 }],
+					entries: [{ key: "update:cerastream:arm64=2", dismissedAt: 1 }],
 				}),
 			);
 			// And an older backend shows release 3 in both decoders.
@@ -1409,14 +1426,15 @@ for (const capable of [false, true]) {
 	test(
 		`a tab that logs in after the update's own proof, even after a rollback, is not told by it (${image} image)`,
 		async () => {
-			const offering = await Backend.start({ apt: pending("1", "2"), capable });
-			await offering.check();
-			await offering.close();
+			// Given a process whose own check showed the offer to its tabs, which then finishes the install.
 			const recovering = await Backend.start({
-				apt: configuring("2"),
+				apt: pending("1", "2"),
 				capable,
 			});
 			const connected = await tabs(recovering);
+			await recovering.check();
+			await sync(connected);
+			expect(names(connected)).toEqual([[NOTICE], [NOTICE]]);
 			await recovering.setApt(settled("2"));
 			await recovering.recover();
 			await sync(connected);
@@ -1486,6 +1504,105 @@ for (const capable of [false, true]) {
 			expect(opened.map((tab) => tab.shown.has(NOTICE))).toEqual([
 				false,
 				false,
+			]);
+		},
+		budget(2),
+	);
+}
+
+for (const capable of [false, true]) {
+	const image = capable ? "capable" : "legacy";
+	const holdsNotice = (opened: readonly Tab[]) =>
+		opened.map((tab) => tab.shown.has(NOTICE));
+
+	test(
+		`a stored older offer never overwrites another backend's newer copy during recovery (${image} image)`,
+		async () => {
+			// Given release 2 recorded, then an older backend showing release 3 in both decoders.
+			const offering = await Backend.start({ apt: pending("1", "2"), capable });
+			await offering.check();
+			await offering.close();
+			const opened = await olderBackendTabs(pending("1", "3"));
+			// When the package script restarts this backend while cerastream 2 is configured.
+			const recovering = await Backend.start({
+				apt: configuring("2"),
+				capable,
+			});
+			await reconnect(recovering, opened);
+			expect(histories(opened)).toEqual([["show"], ["show"]]);
+			// And the install of 2 finishes while 3 is still pending.
+			await recovering.setApt(pending("2", "3"));
+			await recovering.recover();
+			await sync(opened);
+			// Then release 3's copy was neither replaced nor removed.
+			expect(histories(opened)).toEqual([["show"], ["show"]]);
+			expect((await recovering.ended()).exit).toBe(RESTART_EXIT_CODE);
+		},
+		budget(4),
+	);
+
+	test(
+		`a later check that is not conclusive voids the earlier "none" for tabs that reconnect (${image} image)`,
+		async () => {
+			const missing = await olderBackendTabs();
+			const backend = await Backend.start({ apt: settled("2"), capable });
+			await backend.check();
+			// When the next check's refresh fails, a tab that reconnects is not told the old "none".
+			await backend.setApt(failing(settled("2")));
+			await backend.check();
+			await reconnect(backend, missing);
+			expect(names(missing)).toEqual([[NOTICE], [NOTICE]]);
+			expect(removals(missing)).toEqual([0, 0]);
+			// Control: the next conclusive check tells them.
+			await backend.setApt(settled("2"));
+			await backend.check();
+			await sync(missing);
+			expect(names(missing)).toEqual([[], []]);
+		},
+		budget(3),
+	);
+
+	test(
+		`with no stored offer, a held CeraLive package beside an unrelated upgrade keeps another backend's banner (${image} image)`,
+		async () => {
+			const opened = await olderBackendTabs();
+			const backend = await Backend.start({
+				apt: {
+					keptBack: [cerastream("1", "2")],
+					holds: ["cerastream"],
+					upgradable: [curl],
+				},
+				capable,
+			});
+			await reconnect(backend, opened);
+			await backend.check();
+			await sync(opened);
+			expect(holdsNotice(opened)).toEqual([true, true]);
+			expect(removals(opened)).toEqual([0, 0]);
+			// Control: with cerastream 2 installed, the same process's next check clears it.
+			await backend.setApt({ ...settled("2"), upgradable: [curl] });
+			await backend.check();
+			await sync(opened);
+			expect(holdsNotice(opened)).toEqual([false, false]);
+		},
+		budget(3),
+	);
+
+	test(
+		`a new release found within a second still reaches every connected tab (${image} image)`,
+		async () => {
+			const backend = await Backend.start({ apt: pending("1", "2"), capable });
+			const opened = await tabs(backend);
+			await backend.check();
+			// The limiter holds the third update of a slot inside a second of the second.
+			for (const release of ["3", "4"]) {
+				await backend.setApt(pending("1", release));
+				await backend.check();
+			}
+			await sync(opened);
+			expect(histories(opened)).toEqual([
+				["show", "show", "show"],
+				["show", "show", "show"],
 			]);
 		},
 		budget(2),

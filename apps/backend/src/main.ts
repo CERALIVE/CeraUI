@@ -497,9 +497,9 @@ await guardNonCritical("apt-channel-reconcile", async () => {
 	const mode = (await readUpdateCapabilities()).mode;
 	if (mode === "capable") await reconcileAptChannel(mode);
 });
-// Loads the stored CeraLive offer before recovery takes an update against it, then
-// withdraws it if dpkg shows it installed, or re-announces it. Boot does not wait.
-void initCeraliveUpdateNotice();
+// Loads the stored CeraLive offer before recovery takes an update against it; only this
+// process's own conclusive check announces or withdraws the notice.
+initCeraliveUpdateNotice();
 // Todo 36: the packages+OS+slot-sync orchestrator. Its own resume path (G17)
 // is the ONLY thing that reattaches to a persisted `committing` phase's
 // detached apt unit on this boot — running it BEFORE the general standalone
