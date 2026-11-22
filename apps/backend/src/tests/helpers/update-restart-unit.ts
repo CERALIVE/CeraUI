@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { open, readFile, rm, writeFile } from "node:fs/promises";
+import { open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import {
 	prepareSoftwareUpdateOutput,
 	readSoftwareUpdateAttempt,
@@ -40,6 +40,13 @@ export function restartTestUnit(
 		readAttempt: () => readSoftwareUpdateAttempt(local, uid),
 		updateAttempt: (change) => updateSoftwareUpdateAttempt(local, change, uid),
 		prepareOutput: () => prepareSoftwareUpdateOutput(local, uid),
+		// The production fingerprint: which stdout file this is.
+		transcript: async () => {
+			const file = await stat(local.stdout, { bigint: true }).catch(
+				() => undefined,
+			);
+			return file && `${file.ino}:${file.size}:${file.mtimeNs}`;
+		},
 		start: async (command) => {
 			const argv = command
 				.slice(command.indexOf("--") + 1)

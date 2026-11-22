@@ -68,6 +68,7 @@ import {
 	setSoftwareUpdateSizeRunner,
 } from "../modules/system/software-updates.ts";
 import { deriveUpdateState } from "../modules/system/update-state.ts";
+import { memoryAttempt, TEST_INVOCATION } from "./helpers/memory-attempt.ts";
 
 const SOFTWARE_UPDATES_PATH = new URL(
 	"../modules/system/software-updates.ts",
@@ -496,8 +497,7 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			},
 			{
 				outputPaths: paths,
-				readAttempt: () => null,
-				updateAttempt: (change) => change(null),
+				...memoryAttempt(),
 				prepareOutput: async () => {
 					files.set(paths.stdout, new Uint8Array());
 					files.set(paths.stderr, new Uint8Array());
@@ -507,8 +507,13 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 					inspections++;
 					if (inspections === 1) return { kind: "absent" };
 					return finished
-						? { kind: "finished", exitCode: 0, cleanup: "stop" }
-						: { kind: "running" };
+						? {
+								kind: "finished",
+								exitCode: 0,
+								cleanup: "stop",
+								invocation: TEST_INVOCATION,
+							}
+						: { kind: "running", invocation: TEST_INVOCATION };
 				},
 				cleanup: async () => {
 					cleanupCalls++;
@@ -550,15 +555,14 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
 				},
-				readAttempt: () => null,
-				updateAttempt: (change) => change(null),
+				...memoryAttempt(),
 				prepareOutput: async () => {
 					prepared++;
 				},
 				start: async () => {
 					started++;
 				},
-				inspect: async () => ({ kind: "running" }),
+				inspect: async () => ({ kind: "running", invocation: TEST_INVOCATION }),
 				cleanup: async () => {},
 				readOutput: async (_file, offset) => ({
 					bytes: new Uint8Array(),
@@ -593,8 +597,7 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
 				},
-				readAttempt: () => null,
-				updateAttempt: (change) => change(null),
+				...memoryAttempt(),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
@@ -602,7 +605,12 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 					if (inspections === 1) return { kind: "absent" };
 					if (inspections === 2)
 						throw new Error("systemctl temporarily failed");
-					return { kind: "finished", exitCode: 0, cleanup: "stop" };
+					return {
+						kind: "finished",
+						exitCode: 0,
+						cleanup: "stop",
+						invocation: TEST_INVOCATION,
+					};
 				},
 				cleanup: async () => {},
 				readOutput: async (_file, offset) => {
@@ -642,15 +650,20 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			},
 			{
 				outputPaths: paths,
-				readAttempt: () => null,
-				updateAttempt: (change) => change(null),
+				...memoryAttempt(),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
 					inspections++;
 					if (inspections === 1) return { kind: "absent" };
-					if (inspections === 2) return { kind: "running" };
-					return { kind: "finished", exitCode: 0, cleanup: "stop" };
+					if (inspections === 2)
+						return { kind: "running", invocation: TEST_INVOCATION };
+					return {
+						kind: "finished",
+						exitCode: 0,
+						cleanup: "stop",
+						invocation: TEST_INVOCATION,
+					};
 				},
 				cleanup: async () => {},
 				readOutput: async (file, offset) => {
@@ -703,15 +716,19 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			},
 			{
 				outputPaths: paths,
-				readAttempt: () => null,
-				updateAttempt: (change) => change(null),
+				...memoryAttempt(),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
 					inspections++;
 					if (inspections === 1) return { kind: "absent" };
 					terminal = true;
-					return { kind: "finished", exitCode: 0, cleanup: "stop" };
+					return {
+						kind: "finished",
+						exitCode: 0,
+						cleanup: "stop",
+						invocation: TEST_INVOCATION,
+					};
 				},
 				cleanup: async () => {
 					cleanupCalls++;
@@ -753,15 +770,19 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			},
 			{
 				outputPaths: paths,
-				readAttempt: () => null,
-				updateAttempt: (change) => change(null),
+				...memoryAttempt(),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
 					inspections++;
 					if (inspections === 1) return { kind: "absent" };
 					terminal = true;
-					return { kind: "finished", exitCode: 0, cleanup: "stop" };
+					return {
+						kind: "finished",
+						exitCode: 0,
+						cleanup: "stop",
+						invocation: TEST_INVOCATION,
+					};
 				},
 				cleanup: async () => {
 					cleanupCalls++;
@@ -792,15 +813,19 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
 				},
-				readAttempt: () => null,
-				updateAttempt: (change) => change(null),
+				...memoryAttempt(),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
 					inspections++;
 					return inspections === 1
 						? { kind: "absent" }
-						: { kind: "finished", exitCode: 0, cleanup: "stop" };
+						: {
+								kind: "finished",
+								exitCode: 0,
+								cleanup: "stop",
+								invocation: TEST_INVOCATION,
+							};
 				},
 				cleanup: async () => {
 					throw new Error("systemctl stop failed");
@@ -846,8 +871,7 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			},
 			{
 				outputPaths: paths,
-				readAttempt: () => null,
-				updateAttempt: (change) => change(null),
+				...memoryAttempt(),
 				prepareOutput: async () => {
 					prepared++;
 				},
@@ -856,8 +880,13 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 				},
 				inspect: async () =>
 					finished
-						? { kind: "finished", exitCode: 0, cleanup: "stop" }
-						: { kind: "running" },
+						? {
+								kind: "finished",
+								exitCode: 0,
+								cleanup: "stop",
+								invocation: TEST_INVOCATION,
+							}
+						: { kind: "running", invocation: TEST_INVOCATION },
 				cleanup: async () => {
 					cleaned++;
 				},

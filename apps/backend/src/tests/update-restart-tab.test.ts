@@ -65,7 +65,7 @@ step() { read -r _ < "$SCRATCH/$1.fifo"; }
 # APT's transcript for a ten-package plan. Each moment is one printf, one
 # write, so the observer never reads half of it.
 echo "Reading package lists..."
-printf '%s\\n' "10 upgraded, 0 newly installed, 0 to remove and 0 not upgraded." "Get:"{1..2}" https://apt.invalid trixie/main arm64 p 2 [4 kB]"
+printf '%s\\n' "The following packages will be upgraded:" "  p1 p2 p3 p4 p5 p6 p7 p8 p9 p10" "10 upgraded, 0 newly installed, 0 to remove and 0 not upgraded." "Get:"{1..2}" https://apt.invalid trixie/main arm64 p 2 [4 kB]"
 step download-10
 printf '%s\\n' "Get:"{3..7}" https://apt.invalid trixie/main arm64 p 2 [4 kB]"
 step download-60
@@ -604,6 +604,59 @@ const outcomeOf = (seen: Seen) =>
 	seen.at === "push" || seen.at === "pull"
 		? (seen.status.update_state as Status | undefined)?.kind
 		: undefined;
+
+test("a recorded success is never told once another run has replaced the update's transcript", async () => {
+	await writeFile(join(scratch, "apt-get"), QUICK_APT);
+	const tab = new Tab();
+	// Update A succeeds and restarts CeraUI once.
+	const first = session("first");
+	const token = await signIn(tab, await first.listening());
+	first.send("recover");
+	await first.line("session:recovered");
+	await tab.until("no unit at boot", (s) => updatingOf(s) === null);
+	const exitedA = first.child.exited;
+	expect(await tab.call(["system", "startUpdate"])).toMatchObject({
+		success: true,
+	});
+	await tab.until("A's outcome", (s) => outcomeOf(s) === "success");
+	expect(await exitedA).toBe(RESTART_EXIT_CODE);
+
+	// The next lifetime tells A's recorded success again: the positive control.
+	const second = session("first");
+	await tab.connect(await second.listening());
+	expect(await tab.call(["auth", "login"], { token })).toEqual({
+		success: true,
+	});
+	second.send("recover");
+	await second.line("session:recovered");
+	await tab.until("A's receipt told again", (s) => outcomeOf(s) === "success");
+	second.child.kill("SIGKILL");
+	await second.child.exited;
+	await tab.until("the second backend died", (s) => s.at === "disconnected");
+
+	// Another run replaces the update's stdout file, as every launch does; an
+	// older release's run writes no attempt record at all.
+	await rm(join(scratch, "unit.stdout"));
+	await writeFile(join(scratch, "unit.stdout"), "Reading package lists...\n");
+	tab.moment("another run");
+
+	const third = session("first");
+	await tab.connect(await third.listening());
+	expect(await tab.call(["auth", "login"], { token })).toEqual({
+		success: true,
+	});
+	third.send("recover");
+	await third.line("session:recovered");
+	await tab.pull();
+	const seen = [...tab.seen];
+	tab.close();
+	const told = seen
+		.slice(seen.findIndex((s) => s.at === "moment" && s.name === "another run"))
+		.filter((s) => outcomeOf(s) !== undefined);
+	expect(told.length).toBeGreaterThan(0);
+	// A's success belongs to a transcript that is gone: never told again.
+	expect(told.map(outcomeOf)).toEqual(told.map(() => "available"));
+}, 120_000);
 
 // Each step between accepting an update and starting its unit, in order.
 const ADMISSION_STEPS = [

@@ -44,7 +44,7 @@ import { getIdleStatus } from "../idle-activity.ts";
 import {
 	aptUpdatesEnabled,
 	getLastInstallUnitVerdict,
-	getUpdateState,
+	getPlanUpdateState,
 	type InstallUnitVerdict,
 	recoverSoftwareUpdateIfRunning,
 	runSoftwareUpdateCheck,
@@ -432,7 +432,8 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	onlyMeteredCandidateExists: defaultOnlyMeteredCandidateExists,
 	runPackageCheck: runSoftwareUpdateCheck,
 	startPackageInstall: () => startSoftwareUpdate(notePackageCommitSucceeded),
-	getPackageInstallWireState: getUpdateState,
+	// Settles the plan only from an exit its own attempt claimed.
+	getPackageInstallWireState: getPlanUpdateState,
 	stopPackageInstallUnit: stopPackageInstallUnitForStream,
 	killAndRestartRaucForStream,
 	isCommitStageRunning: async () =>

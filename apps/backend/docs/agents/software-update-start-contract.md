@@ -42,9 +42,10 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   no-follow, and the files are mode 0600. Caller-selected paths are rejected.
   Progress is a pure function of the complete stdout lines read
   (`apt-progress.ts`), counting only whole lines in APT's and dpkg's own shape,
-  each archive and package step once: the plan's package count, `Get:`/`Fetched` while
-  fetching and dpkg's `Unpacking`/`Setting up` steps give the phase and a
-  number capped at 99; the step fields are phase markers. No wall-clock
+  each archive and package step once: the plan's package lists, `Get:` and
+  APT's exact `Fetched <size> in <time> (<rate>)` while fetching, and dpkg's
+  `Unpacking`/`Setting up` steps of planned packages give a number capped at
+  99 (any dpkg step gives the phase); the step fields are phase markers. No wall-clock
   deadline is added: a valid package transaction may run for minutes. Each
   changed frame publishes both `updating` and `update_state`. Every poll and
   the final drain read stdout then stderr, each until a read returns nothing
@@ -62,14 +63,20 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   (`@ceraui/rpc/package-progress`, shared with both browser views) keeps a
   running transaction's phase and in-phase number from moving back, and lets
   a same-phase frame without a number replace a held one; the browser shows a
-  number only while the device's own latest frame on this connection carries it. The
+  number only while the device's own latest frame on this connection carries it in the same phase. The
   in-process pinned prefetch is announced as Downloading. The detached
   result alone settles the outcome, including when stdout/stderr stay
   unreadable (`drained: false` after 20 failed final reads) or retirement
   fails; an observer that loses the unit reports no outcome (`updating:
   null`, no success or failure, no restart).
-  One attempt record (`software-update.attempt`) is all replay reads, and
-  every write is a synchronous compare-and-set (`updateSoftwareUpdateAttempt`)
+  One attempt record (`software-update.attempt`) is all replay reads, owned by
+  `software-update-attempt.ts`: an exit is used only through
+  `claimOutcome(attempt, { invocation })` (replay, the attempt's own success
+  effects, the orchestrator's `getPlanUpdateState` for `plan` attempts) and
+  `claimRetirement` (a launch or observer retiring a finished unit, only once
+  its transcript was read; `drained: false` keeps the unit, withholds the
+  restart and makes the next launch refuse). A second start while one waits
+  for discovery is refused. Every write is a synchronous compare-and-set (`updateSoftwareUpdateAttempt`)
   that writes nothing when the writer no longer owns the record, and an
   unreadable record refuses every write but a new admission's:
   `startSoftwareUpdate` writes `accepted` (new id) before publishing or
@@ -77,8 +84,9 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   and the observer adds the unit's `InvocationID` (the attempt's identity)
   and later its exit with `drained` and `transcript` (stdout inode:size:mtime),
   only into its own exit-less record (or none); a record of another attempt
-  makes the exit unknown. A unit no record names is adopted by the same
-  compare-and-set or watched for display only. Only a `launched` record's own fresh
+  makes the exit unknown. A unit no record names is adopted once (bound to its
+  invocation, as the plan's attempt) by the same compare-and-set or watched
+  for display only. Only a `launched` record's own fresh
   exit with an invocation is replayed, and only while stdout is still the file
   that exit was read from; an older exit is a `leftover` for
   retirement only. CeraUI restarts only after the exit is recorded; the unit

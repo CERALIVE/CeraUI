@@ -6,6 +6,7 @@ import {
 	startSoftwareUpdate,
 } from "../modules/system/software-updates.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
+import { recordedClaim } from "./helpers/memory-attempt.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
 
 useSessionOwnerForFile();
@@ -21,13 +22,13 @@ for (const permission of ["yes", "no", "unknown"] as const) {
 			if (permission !== "unknown")
 				permissionReply.resolve(permission === "yes");
 			startSoftwareUpdate();
-			const finished = createSoftwareUpdateProcessMonitor().finish(
-				Promise.resolve(0),
-				() => {
-					entered.resolve();
-					return permissionReply.promise;
-				},
-			);
+			const monitor = createSoftwareUpdateProcessMonitor();
+			// The claim the real observer hands over once the exit is recorded and read.
+			monitor.handlers.onOutcome?.(recordedClaim(0));
+			const finished = monitor.finish(Promise.resolve(0), () => {
+				entered.resolve();
+				return permissionReply.promise;
+			});
 			// When APT completes, then the actual wire success does not depend on restart permission.
 			await finished;
 			await entered.promise;

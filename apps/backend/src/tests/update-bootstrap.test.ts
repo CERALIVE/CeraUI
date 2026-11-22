@@ -14,6 +14,7 @@ import {
 	startUpdateOrchestrator,
 } from "../modules/system/update-orchestrator/runtime.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
+import { recordedClaim } from "./helpers/memory-attempt.ts";
 import { runtimeFixture } from "./helpers/os-unlaunched-runtime-fixture.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
 
@@ -32,11 +33,12 @@ test("held physical startup cannot let standalone recovery consume a finished co
 	let unitPresent = true;
 	const recover = () =>
 		recoverSoftwareUpdateIfRunning({
-			recover: async ({ onAttached }) => {
+			recover: async ({ onAttached, onOutcome }) => {
 				if (!unitPresent) return null;
 				events.push("consume-unit");
 				unitPresent = false;
 				onAttached?.(false);
+				onOutcome?.(recordedClaim(Promise.resolve(0)));
 				return { completion: Promise.resolve(0), wasAlreadyFinished: true };
 			},
 			scheduleRetry: () => {},

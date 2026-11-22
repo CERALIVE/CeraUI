@@ -26,7 +26,21 @@ export const PHASE_MARKERS = {
 const SUMMARY =
 	/^(\d+) upgraded, (\d+) newly installed, (?:(\d+) reinstalled, )?(?:(\d+) downgraded, )?\d+ to remove and \d+ not upgraded\.$/gm;
 const GET = /^Get:(\d+) \S+ .* \[[^\]]+\]$/gm;
-const FETCHED = /^Fetched \S+ \S+ in \S+/m;
+const FETCHED =
+	/^Fetched [0-9][0-9.,]* [kMGT]?B in [0-9][0-9a-z ]* \([0-9][0-9.,]* [kMGT]?B\/s\)$/m;
+// apt-get's own plan lists; only their packages' dpkg steps are counted.
+const PLAN_LIST =
+	/^The following (?:NEW )?packages will be (?:upgraded|installed|REINSTALLED|DOWNGRADED):\n((?: {2}.*\n)+)/gm;
+const PACKAGE = /^[a-z0-9][a-z0-9+.-]*$/;
+const nameOf = (qualified: string) => qualified.split(":")[0] ?? qualified;
+
+function plannedPackages(lines: string): ReadonlySet<string> {
+	const planned = new Set<string>();
+	for (const list of lines.matchAll(PLAN_LIST))
+		for (const name of (list[1] ?? "").split(/\s+/))
+			if (PACKAGE.test(nameOf(name))) planned.add(nameOf(name));
+	return planned;
+}
 const DPKG_STEP =
 	/^(Unpacking|Setting up) ([a-z0-9][a-z0-9+.:-]*) \([^()\s]+\)(?: over \([^()\s]+\))? \.\.\.$/gm;
 
@@ -40,10 +54,21 @@ export function deriveUpdateProgress(
 	stdout: string,
 ): Omit<SoftUpdateStatus, "result"> {
 	const lines = stdout.slice(0, stdout.lastIndexOf("\n") + 1);
-	const steps = distinct(lines, DPKG_STEP, (step) => `${step[1]} ${step[2]}`);
+	const planned = plannedPackages(lines);
+	// Any dpkg step shows the phase; only a planned package's step is counted.
+	const stepLines = Array.from(lines.matchAll(DPKG_STEP));
+	const steps = new Set(
+		stepLines
+			.filter((step) => planned.has(nameOf(step[2] ?? "")))
+			.map((step) => `${step[1]} ${nameOf(step[2] ?? "")}`),
+	).size;
 	const gets = distinct(lines, GET, (get) => get[1] ?? "");
 	const phase: Phase =
-		steps > 0 ? "installing" : gets > 0 ? "downloading" : "preparing";
+		stepLines.length > 0
+			? "installing"
+			: gets > 0
+				? "downloading"
+				: "preparing";
 	let packages = 0;
 	for (const plan of lines.matchAll(SUMMARY))
 		packages = plan

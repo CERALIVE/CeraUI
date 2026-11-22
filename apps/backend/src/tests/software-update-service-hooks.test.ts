@@ -6,6 +6,7 @@ import {
 	InvalidDetachedAptUpgradeArgumentsError,
 } from "../modules/system/software-update-service-contract.ts";
 import { parseDetachedAptServiceProbe } from "../modules/system/software-update-service-state.ts";
+import { memoryAttempt, withInvocation } from "./helpers/memory-attempt.ts";
 
 // From Rock 5B+ systemctl show after our detached apt-get completed. systemd
 // omits unset ExecStartPre/ExecStartPost even when --property names both.
@@ -232,15 +233,16 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
 				},
-				readAttempt: () => null,
-				updateAttempt: (change) => change(null),
+				...memoryAttempt(),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () =>
 					probe(
-						reads === 0
-							? finishedUnit.replace("SubState=exited", "SubState=running")
-							: finishedUnit,
+						withInvocation(
+							reads === 0
+								? finishedUnit.replace("SubState=exited", "SubState=running")
+								: finishedUnit,
+						),
 					),
 				cleanup: async () => {
 					cleaned++;
@@ -291,15 +293,14 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
 				},
-				readAttempt: () => null,
-				updateAttempt: (change) => change(null),
+				...memoryAttempt(),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
 					inspections++;
-					if (inspections === 1) return probe(running);
+					if (inspections === 1) return probe(withInvocation(running));
 					if (inspections <= 9) return probe(foreign);
-					return probe(flockUnit(flockFinishedExecStart));
+					return probe(withInvocation(flockUnit(flockFinishedExecStart)));
 				},
 				cleanup: async () => {
 					cleaned++;

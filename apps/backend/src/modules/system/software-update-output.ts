@@ -55,8 +55,14 @@ const attemptSchema = z
 		drained: z.boolean().optional(),
 		/** With the exit: the stdout file it was read from (inode:size:mtime). */
 		transcript: z.string().max(64).optional(),
+		/** Admitted for the orchestrator's plan, whose settlement claims it. */
+		plan: z.literal(true).optional(),
 		leftover: z
-			.object({ invocation: invocationSchema, exitCode: exitCodeSchema })
+			.object({
+				invocation: invocationSchema,
+				exitCode: exitCodeSchema,
+				drained: z.boolean().optional(),
+			})
 			.strict()
 			.optional(),
 	})

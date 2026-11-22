@@ -16,6 +16,7 @@ import {
 	triggerManualUpdateCheck,
 } from "../modules/system/software-updates.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
+import { memoryAttempt, recordedClaim } from "./helpers/memory-attempt.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
 
 useSessionOwnerForFile();
@@ -36,6 +37,7 @@ describe("best-effort post-clean", () => {
 					: { kind: "success" },
 			);
 			expect(h.cleanCount).toBe(2);
+			await h.restarted();
 			expect(h.restarts).toBe(1);
 		},
 	);
@@ -58,6 +60,7 @@ describe("best-effort post-clean", () => {
 			startSoftwareUpdate();
 			await h.check();
 			expect(getUpdateState().kind).toBe(kind);
+			if (exitCode === 0) await h.restarted();
 			expect(h.restarts).toBe(exitCode === 0 ? 1 : 0);
 		},
 	);
@@ -72,6 +75,7 @@ describe("best-effort post-clean", () => {
 		await h.check();
 
 		expect(getUpdateState()).toEqual({ kind: "success" });
+		await h.restarted();
 		expect(hookCalls).toBe(0);
 		expect(h.restarts).toBe(1);
 	});
@@ -129,8 +133,9 @@ describe("best-effort post-clean", () => {
 		h.cleanCount = 1;
 		h.postCleanFails = true;
 		await recoverSoftwareUpdateIfRunning({
-			recover: async ({ onAttached }) => {
+			recover: async ({ onAttached, onOutcome }) => {
 				onAttached?.(false);
+				onOutcome?.(recordedClaim(Promise.resolve(0)));
 				return { completion: Promise.resolve(0), wasAlreadyFinished: true };
 			},
 			scheduleRetry: () => {},
@@ -170,8 +175,7 @@ describe("best-effort post-clean", () => {
 						parseDetachedAptServiceState(
 							"LoadState=not-found\nActiveState=inactive\n",
 						),
-					readAttempt: () => null,
-					updateAttempt: (change) => change(null),
+					...memoryAttempt(),
 					prepareOutput: async () => {
 						throw new Error("must not prepare");
 					},

@@ -92,6 +92,7 @@ import {
 } from "../modules/system/update-orchestrator/runtime.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
 import * as compat from "../rpc/compat.ts";
+import { recordedClaim } from "./helpers/memory-attempt.ts";
 import { acquireTestOsStageControl } from "./helpers/os-stage-test-control.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
 
@@ -149,8 +150,9 @@ describe("boot double-recovery race — resume must not misread evidence a start
 				startupRetryClock: { wait: () => Promise.resolve() },
 				recoverSoftwareUpdateIfRunning: () =>
 					recoverSoftwareUpdateIfRunning({
-						recover: async ({ onAttached }) => {
+						recover: async ({ onAttached, onOutcome }) => {
 							onAttached?.();
+							onOutcome?.(recordedClaim(Promise.resolve(0)));
 							return {
 								completion: Promise.resolve(0),
 								wasAlreadyFinished: true,
@@ -181,8 +183,9 @@ describe("boot double-recovery race — resume must not misread evidence a start
 		// The boot-level standalone recovery call: finds the detached unit
 		// already finished with exit 0.
 		const bootRecovered = await recoverSoftwareUpdateIfRunning({
-			recover: async ({ onAttached }) => {
+			recover: async ({ onAttached, onOutcome }) => {
 				onAttached?.();
+				onOutcome?.(recordedClaim(Promise.resolve(0)));
 				return { completion: Promise.resolve(0), wasAlreadyFinished: true };
 			},
 			scheduleRetry: () => {},
@@ -213,8 +216,9 @@ describe("boot double-recovery race — resume must not misread evidence a start
 		await using h = await updateHarness();
 
 		const bootRecovered = await recoverSoftwareUpdateIfRunning({
-			recover: async ({ onAttached }) => {
+			recover: async ({ onAttached, onOutcome }) => {
 				onAttached?.();
+				onOutcome?.(recordedClaim(Promise.resolve(100)));
 				return { completion: Promise.resolve(100), wasAlreadyFinished: true };
 			},
 			scheduleRetry: () => {},
@@ -245,8 +249,9 @@ describe("boot double-recovery race — resume must not misread evidence a start
 		);
 		try {
 			const bootRecovered = await recoverSoftwareUpdateIfRunning({
-				recover: async ({ onAttached }) => {
+				recover: async ({ onAttached, onOutcome }) => {
 					onAttached?.();
+					onOutcome?.(recordedClaim(Promise.resolve(0)));
 					return { completion: Promise.resolve(0), wasAlreadyFinished: true };
 				},
 				scheduleRetry: () => {},

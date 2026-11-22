@@ -8,6 +8,7 @@ import {
 } from "../modules/system/update-orchestrator/persistence.ts";
 import { startUpdateOrchestrator } from "../modules/system/update-orchestrator/runtime.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
+import { recordedClaim } from "./helpers/memory-attempt.ts";
 import { runtimeFixture } from "./helpers/os-unlaunched-runtime-fixture.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
 
@@ -18,8 +19,9 @@ test("legacy scheduled discovery, Check, Install and recovery cannot erase pendi
 	await using h = await updateHarness();
 	const recover = () =>
 		updates.recoverSoftwareUpdateIfRunning({
-			recover: async ({ onAttached }) => {
+			recover: async ({ onAttached, onOutcome }) => {
 				onAttached?.(false);
+				onOutcome?.(recordedClaim(Promise.resolve(0)));
 				return { completion: Promise.resolve(0), wasAlreadyFinished: true };
 			},
 			scheduleRetry: () => {},

@@ -110,6 +110,10 @@ import {
 import { classifyPackageLayer } from "./package-layer.ts";
 import { markBootDegraded } from "./readiness.ts";
 import {
+	admitAttempt,
+	type ClaimedOutcome,
+} from "./software-update-attempt.ts";
+import {
 	pendingAwareAptSpaceDeps,
 	runLegacyPackageEffects,
 } from "./software-update-pending-effects.ts";
@@ -122,7 +126,6 @@ import {
 	runDetachedAptAll,
 	runDetachedAptUpgrade,
 	type SoftwareUpdateOutputHandlers,
-	softwareUpdateUptimeMs,
 } from "./software-update-process.ts";
 import {
 	isSoftwareUpdateRecoveryInconclusive,
@@ -338,27 +341,10 @@ function settleSoftwareUpdateRecovery(): void {
 	softUpdateRecoveryPending = false;
 }
 
-/** The new attempt's record; an older attempt's recorded exit stays only as a leftover. */
-function admitSoftwareUpdateAttempt(): boolean {
-	const deps = defaultDetachedAptServiceDeps();
+/** The new attempt's record; `plan`: the orchestrator's plan admits it and settles from it. */
+function admitSoftwareUpdateAttempt(plan: boolean): boolean {
 	try {
-		deps.updateAttempt(
-			(previous) => {
-				const leftover =
-					previous?.exitCode !== undefined && previous.invocation !== undefined
-						? { invocation: previous.invocation, exitCode: previous.exitCode }
-						: previous?.leftover;
-				return {
-					schema: 2,
-					attempt: randomUUID(),
-					phase: "accepted",
-					uptimeMs: softwareUpdateUptimeMs(deps),
-					...(leftover ? { leftover } : {}),
-				};
-				// A new attempt may replace a record nobody can read; no unit runs now.
-			},
-			{ replaceUnreadable: true },
-		);
+		admitAttempt(defaultDetachedAptServiceDeps(), { plan });
 		return true;
 	} catch (error) {
 		logger.warn("Software update refused: the attempt could not be recorded", {
@@ -368,8 +354,34 @@ function admitSoftwareUpdateAttempt(): boolean {
 	}
 }
 
-/** A unit's exit that an earlier lifetime observed and recorded. */
-function adoptRecordedOutcome(exitCode: number): void {
+// Where the current outcome came from: undefined when not a unit's exit (a
+// refusal or a preflight failure); otherwise the attempt's claim on that exit
+// for the orchestrator's plan (null until, or unless, the plan's own attempt
+// claimed it). Every admission clears it, so it never outlives its attempt.
+let exitOutcome: { claimed: ClaimedOutcome | null } | undefined;
+
+function claimedForPlan(claim: ClaimedOutcome | null): ClaimedOutcome | null {
+	return claim?.plan ? claim : null;
+}
+
+/**
+ * The orchestrator's view: an outcome that came from a unit's exit counts only
+ * once the plan's own attempt has claimed it; until then nothing is settled.
+ */
+export function getPlanUpdateState(): UpdateState {
+	const wire = getUpdateState();
+	if ((wire.kind !== "success" && wire.kind !== "failed") || !exitOutcome)
+		return wire;
+	const claimed = exitOutcome.claimed;
+	return claimed && (claimed.exitCode === 0) === (wire.kind === "success")
+		? wire
+		: { kind: "idle" };
+}
+
+/** A unit's exit that an earlier lifetime observed and recorded, claimed now. */
+function adoptRecordedOutcome(claim: ClaimedOutcome): void {
+	const exitCode = claim.exitCode;
+	exitOutcome = { claimed: claimedForPlan(claim) };
 	softUpdateStatus = null;
 	lastUpdateSucceeded = exitCode === 0;
 	lastUpdateFailure =
@@ -1550,12 +1562,18 @@ export function startSoftwareUpdate(
 		return refuseUpdateStart("check_unavailable");
 	}
 	if (recoveredOwnershipPending) return refuseUpdateStart("check_unavailable");
+	// A start already waiting for discovery admits its own attempt then.
+	if (delayedSoftwareUpdateStart) return refuseUpdateStart("already_updating");
 	// Before anything is published or started: a restart from here on finds
 	// this attempt's record, never an older attempt's exit.
-	if (!shouldUseMocks() && !admitSoftwareUpdateAttempt())
+	if (
+		!shouldUseMocks() &&
+		!admitSoftwareUpdateAttempt(onCommitSucceeded !== undefined)
+	)
 		return refuseUpdateStart("check_unavailable");
 
 	currentUpdateIdentity = availableIdentity;
+	exitOutcome = undefined;
 	lastUpdateFailure = null;
 	lastUpdateSucceeded = false;
 	lastPreflightFailure = null;
@@ -1633,8 +1651,8 @@ export function createSoftwareUpdateProcessMonitor(
 	let announced = true;
 	// Consecutive polls whose transcript could not be read.
 	let unreadablePolls = 0;
-	// Only a durably recorded exit may restart CeraUI; unrecorded, the unit is the evidence.
-	let outcomeRecorded = true;
+	// The attempt's own claim on its exit: the only authority for its success effects.
+	let claimOutcomeOf: () => Promise<ClaimedOutcome | null> = async () => null;
 	// A retirement that found another invocation holding the unit vetoes the restart.
 	let retirement: Promise<RetirementOutcome> = Promise.resolve("kept");
 
@@ -1697,14 +1715,22 @@ export function createSoftwareUpdateProcessMonitor(
 			aptErr += data;
 		},
 		onDrained: publishProgress,
-		onOutcomeRecorded: (recorded) => {
-			outcomeRecorded = recorded;
+		onOutcome: (claim) => {
+			claimOutcomeOf = claim;
 		},
 		onRetirement: (outcome) => {
 			retirement = outcome.catch((): RetirementOutcome => "kept");
 		},
 		onAttached: () => {
 			announced = false;
+		},
+		onAdopted: (attempt, plan) => {
+			logger.warn(
+				plan
+					? "Software update: a unit no attempt of this release named is adopted, and bound once to the saved plan"
+					: "Software update: a unit no attempt of this release named is adopted",
+				{ attempt },
+			);
 		},
 		onObserverError: (error, suppressedRetries = 0) => {
 			logger.warn(
@@ -1722,6 +1748,8 @@ export function createSoftwareUpdateProcessMonitor(
 		owned: boolean,
 	): Promise<number> => {
 		let code: number;
+		// A unit's exit, as opposed to a launch or observer error.
+		let fromExit = true;
 		try {
 			code = await completion;
 		} catch (err) {
@@ -1747,6 +1775,7 @@ export function createSoftwareUpdateProcessMonitor(
 				const message = err instanceof Error ? err.message : String(err);
 				aptErr += aptErr.length > 0 ? `\n${message}` : message;
 				code = 1;
+				fromExit = false;
 			}
 		}
 
@@ -1797,6 +1826,14 @@ export function createSoftwareUpdateProcessMonitor(
 			// unconditionally, before any broadcast/notification call below —
 			// a caller awaiting settle() must observe the real outcome even if
 			// a broadcast fails for some unrelated reason.
+			if (fromExit) {
+				// The plan settles from this exit only once its own attempt claims it.
+				const outcome: { claimed: ClaimedOutcome | null } = { claimed: null };
+				exitOutcome = outcome;
+				void claimOutcomeOf().then((claim) => {
+					outcome.claimed = claimedForPlan(claim);
+				});
+			}
 			lastUpdateSucceeded = code === 0;
 			if (code === 0 && owned && !ownership) pendingPackageSuccess.observe();
 			lastUpdateFailure = failure;
@@ -1867,7 +1904,6 @@ export function createSoftwareUpdateProcessMonitor(
 							lastCleanupWarning = "post_clean_failed";
 							broadcastUpdateState();
 						}
-						if (code === 0 && hook) pendingPackageSuccess.observe();
 					}
 				} catch (error) {
 					owned = false;
@@ -1896,14 +1932,23 @@ export function createSoftwareUpdateProcessMonitor(
 					);
 					return;
 				}
+				// Claimed now, after every await: still this attempt's recorded
+				// success, read to the end. Anything less keeps CeraUI running and
+				// the finished unit as the evidence.
+				const claim = await claimOutcomeOf();
+				if (!(claim?.exitCode === 0 && claim.drained)) {
+					markBootDegraded("software-update-unproven");
+					logger.error(
+						"Software update: restart withheld; this attempt's success is not recorded and read",
+					);
+					return;
+				}
+				// Only the plan's own attempt commits the plan.
+				const planHook = claim.plan ? hook : undefined;
+				if (ownership && planHook) pendingPackageSuccess.observe();
 				// Persist the observed commit success before deliberately exiting.
-				void finishSoftwareUpdateRestart(hook, () => {
-					if (!outcomeRecorded) {
-						markBootDegraded("software-update-retirement");
-						logger.error(
-							"Software update: restart withheld; the exit could not be recorded, so the finished unit stays as the evidence",
-						);
-					} else if (rebootAfterUpgrade && !hook) {
+				void finishSoftwareUpdateRestart(planHook, () => {
+					if (rebootAfterUpgrade && !planHook) {
 						rebootAfterUpdate();
 					} else {
 						invariant(
@@ -2248,7 +2293,7 @@ async function recoverSoftwareUpdate(
 		if (recovered.unit === "absent" && !softUpdateRecoveryPending) return false;
 		lastInstallUnitVerdict =
 			recovered.unit === "finished" ? "attached" : "absent";
-		adoptRecordedOutcome(recovered.recorded.exitCode);
+		adoptRecordedOutcome(recovered.recorded);
 		if (recovered.unit === "finished")
 			logger.warn(
 				"Software update: a finished unit whose exit is already recorded is not adopted again",

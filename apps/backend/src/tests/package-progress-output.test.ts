@@ -20,6 +20,7 @@ import {
 } from "../modules/system/software-updates.ts";
 import { buildInitialStatus } from "../rpc/procedures/status.procedure.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
+import { memoryAttempt, TEST_INVOCATION } from "./helpers/memory-attempt.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
 
 useSessionOwnerForFile();
@@ -76,15 +77,20 @@ describe("deriveUpdateProgress()", () => {
 	});
 
 	test("never reports completion while the transaction is running", () => {
-		// A dependency outside the plan adds steps; the number stops at 99.
+		// A dependency outside the plan is dpkg work but not the plan's: it
+		// shows the phase and is not counted, so it never pushes the number up.
 		const extra =
 			"Unpacking libextra (1) ...\nSetting up libextra (1) ...\nProcessing triggers for libc-bin (2.41) ...\n";
-		expect(deriveUpdateProgress(dpkgLog + extra)).toEqual(installingAt(99));
+		expect(deriveUpdateProgress(dpkgLog + extra)).toEqual(installingAt(50));
+		// The plan's last step started: one step back from 100, never 100.
+		const last = `${fetched}Unpacking cerastream (2) over (1) ...\nSetting up cerastream (2) ...\n`;
+		expect(deriveUpdateProgress(last).percent).toBeLessThan(100);
 	});
 
 	test("reinstalled and downgraded packages in the plan count too", () => {
 		// apt-get prints them between "newly installed" and "to remove".
 		const plan =
+			"The following packages will be upgraded:\n  a\nThe following packages will be REINSTALLED:\n  b\nThe following packages will be DOWNGRADED:\n  c\n" +
 			"1 upgraded, 0 newly installed, 1 reinstalled, 1 downgraded, 0 to remove and 0 not upgraded.\n";
 		const steps =
 			"Unpacking a (2) over (1) ...\nUnpacking b (1) over (1) ...\nUnpacking c (1) over (2) ...\nSetting up a (2) ...\n";
@@ -121,6 +127,28 @@ describe("deriveUpdateProgress()", () => {
 				`${fetched}postinst outputUnpacking cerastream (2) over (1) ...\n`,
 			),
 		).toEqual(downloadingAt(99));
+	});
+
+	test("only APT's own Fetched line ends the download", () => {
+		const plan =
+			"The following packages will be upgraded:\n  a b\n2 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n";
+		const get =
+			"Get:1 https://apt.invalid trixie/main arm64 a arm64 2 [4 kB]\n";
+		expect(
+			deriveUpdateProgress(
+				`${plan}${get}Fetched ready logs in process -- diagnostic\n`,
+			),
+		).toEqual(downloadingAt());
+		expect(
+			deriveUpdateProgress(`${plan}${get}Fetched 8 kB in 0s (40 kB/s)\n`),
+		).toEqual(downloadingAt(99));
+	});
+
+	test("only the plan's packages' dpkg steps are counted", () => {
+		// A whole dpkg-shaped line for a package outside the plan shows the phase only.
+		const outside =
+			"Unpacking libother (1) ...\nSetting up libother (1) ...\nUnpacking cerastream (2) over (1) ...\n";
+		expect(deriveUpdateProgress(fetched + outside)).toEqual(installingAt());
 	});
 
 	test("a repeated line counts once", () => {
@@ -163,13 +191,17 @@ async function observe(mode: Mode, checkpoints: readonly Files[]) {
 			!started
 				? { kind: "absent" }
 				: finished
-					? { kind: "finished", exitCode: 100, cleanup: "reset-failed" }
-					: { kind: "running" },
+					? {
+							kind: "finished",
+							exitCode: 100,
+							cleanup: "reset-failed",
+							invocation: TEST_INVOCATION,
+						}
+					: { kind: "running", invocation: TEST_INVOCATION },
 		start: async () => {
 			started = true;
 		},
-		readAttempt: () => null,
-		updateAttempt: (change) => change(null),
+		...memoryAttempt(),
 		prepareOutput: async () => {},
 		readOutput: async (path, offset) => {
 			const file =

@@ -9,6 +9,7 @@ import { buildInitialStatus } from "../rpc/procedures/status.procedure.ts";
 import { aptEntryHarness } from "./helpers/apt-transport-entry-harness.ts";
 import { sample } from "./helpers/apt-transport-fixture.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
+import { memoryAttempt, TEST_INVOCATION } from "./helpers/memory-attempt.ts";
 
 useSessionOwnerForFile();
 
@@ -27,7 +28,8 @@ const installingAt = (percent: number) => ({
 // A five-package plan: dpkg's ten steps (each package unpacked, then set
 // up) make the number APT's transcript proves: `dpkgAt(60)` is the
 // transcript once six steps are done and the seventh has started.
-const PLAN = "5 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n";
+const PLAN =
+	"The following packages will be upgraded:\n  cerastream libapp libb libc libd\n5 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n";
 const PACKAGES = ["cerastream", "libapp", "libb", "libc", "libd"];
 const STEPS = [
 	...PACKAGES.map((name) => `Unpacking ${name} (2) over (1) ...\n`),
@@ -55,18 +57,19 @@ function unitDeps(
 	let stdoutReads = 0;
 	return {
 		outputPaths: paths,
-		readAttempt: () => null,
-		updateAttempt: (change) => change(null),
+		...memoryAttempt(),
 		prepareOutput: async () => {},
 		start: async () => o.onStart?.(),
 		inspect: async () => {
 			const state = o.state();
 			if (state === "absent") return { kind: "absent" };
-			if (state === "running") return { kind: "running" };
+			if (state === "running")
+				return { kind: "running", invocation: TEST_INVOCATION };
 			return {
 				kind: "finished",
 				exitCode: o.exitCode,
 				cleanup: o.exitCode === 0 ? "stop" : "reset-failed",
+				invocation: TEST_INVOCATION,
 			};
 		},
 		cleanup: async () => {},

@@ -34,6 +34,9 @@ describe("createLiveProgress", () => {
 			setting_up: 0,
 		};
 		expect(live(at60, downloading, false)).toEqual(installing);
+		// The same number in another phase is not this number.
+		const downloading60 = { ...downloading, percent: 60 };
+		expect(live(at60, downloading60, false)).toEqual(installing);
 		// Once the device sends the number shown, it is live.
 		const again60 = { ...installing, percent: 60 };
 		expect(live(at60, again60, false)).toEqual(at60);

@@ -9,17 +9,28 @@ import type { UpdateProgress } from "@ceraui/rpc/schemas";
 /** Set by the layout: whether the connection to the device is down now. */
 export const CONNECTION_DROPPED = Symbol("update-connection-dropped");
 
+const phaseOf = (progress: UpdateProgress) =>
+	progress.setting_up > 0 || progress.unpacking > 0
+		? 2
+		: progress.downloading > 0
+			? 1
+			: 0;
+
 export function createLiveProgress() {
 	let beforeDrop: unknown;
 	return (
 		shown: UpdateProgress | undefined,
-		frame: { readonly percent?: number } | null | undefined,
+		frame: UpdateProgress | null | undefined,
 		dropped: boolean,
 	): UpdateProgress | undefined => {
 		if (dropped) beforeDrop = frame;
 		if (
 			shown?.percent === undefined ||
-			(!dropped && frame !== beforeDrop && frame?.percent === shown.percent)
+			(!dropped &&
+				frame !== beforeDrop &&
+				frame &&
+				phaseOf(frame) === phaseOf(shown) &&
+				frame.percent === shown.percent)
 		)
 			return shown;
 		const { percent: _held, ...phase } = shown;

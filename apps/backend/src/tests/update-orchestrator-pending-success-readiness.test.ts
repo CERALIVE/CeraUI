@@ -10,6 +10,7 @@ import {
 } from "../modules/system/update-orchestrator/runtime.ts";
 import { UpdateStartupReadiness } from "../modules/system/update-orchestrator/startup-readiness.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
+import { recordedClaim } from "./helpers/memory-attempt.ts";
 import { acquireTestOsStageControl } from "./helpers/os-stage-test-control.ts";
 import { runtimeFixture } from "./helpers/os-unlaunched-runtime-fixture.ts";
 import {
@@ -34,8 +35,9 @@ test("manual mutations stay initializing when a running recovery completes durin
 	const f = runtimeFixture({
 		recoverSoftwareUpdateIfRunning: () =>
 			updates.recoverSoftwareUpdateIfRunning({
-				recover: async ({ onAttached }) => {
+				recover: async ({ onAttached, onOutcome }) => {
 					onAttached?.(false);
+					onOutcome?.(recordedClaim(completion.promise));
 					return { completion: completion.promise, wasAlreadyFinished: false };
 				},
 				scheduleRetry: () => {},

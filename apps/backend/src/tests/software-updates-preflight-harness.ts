@@ -15,6 +15,7 @@ import * as transaction from "../modules/system/software-update-process.ts";
 import { setDetachedAptServiceDepsForTest } from "../modules/system/software-update-service.ts";
 import * as updates from "../modules/system/software-updates.ts";
 import * as compat from "../rpc/compat.ts";
+import { memoryAttempt, recordedClaim } from "./helpers/memory-attempt.ts";
 import { observeTestUpdateExit } from "./software-update-exit-harness.ts";
 import { armedMarkerFixture } from "./software-updates-marker-harness.ts";
 
@@ -37,8 +38,7 @@ export function useNoHostUpdateUnit(): void {
 			nextOffset: offset,
 		}),
 		sleep: async () => undefined,
-		readAttempt: () => null,
-		updateAttempt: (change) => change(null),
+		...memoryAttempt(),
 	});
 }
 
@@ -173,6 +173,15 @@ export async function updateHarness() {
 			h.markerAtLaunch =
 				readArmedStreamMarker()?.plannedShutdown?.reason === "software_update";
 			handlers.onStderr("original transaction failure");
+			// The claim the real observer hands over once the exit is recorded and read.
+			handlers.onOutcome?.(
+				recordedClaim(
+					h.completion.catch(
+						(error: { readonly transactionExitCode?: number }) =>
+							error.transactionExitCode ?? -1,
+					),
+				),
+			);
 			return h.completion;
 		},
 	);

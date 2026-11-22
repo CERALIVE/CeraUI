@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import type { UpdateProgress } from "@ceraui/rpc";
+import * as spawnPolicy from "../helpers/spawn-policy.ts";
 import { buildAptAllInstallArgs } from "../modules/system/apt-all-packages.ts";
 import * as readiness from "../modules/system/readiness.ts";
 import {
@@ -20,12 +21,15 @@ import {
 	beginSoftwareUpdateRecovery,
 	recoverSoftwareUpdateIfRunning,
 	resetSoftwareUpdateState,
+	runUpdateDiscoveryAndReport,
 	type SoftwareUpdateRecoveryDeps,
+	startSoftwareUpdate,
 } from "../modules/system/software-updates.ts";
 import {
 	reserveRecoveredUpdateExit,
 	resetRecoveredUpdateExitForTest,
 } from "../modules/system/update-orchestrator/recovery-exit-gate.ts";
+import { defaultOrchestratorRuntimeDeps } from "../modules/system/update-orchestrator/runtime.ts";
 import { buildInitialStatus } from "../rpc/procedures/status.procedure.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
@@ -48,7 +52,8 @@ type File = "stdout" | "stderr";
 // A five-package plan: dpkg's ten steps (each package unpacked, then set
 // up) make the number APT's transcript proves: `dpkgAt(60)` is the
 // transcript once six steps are done and the seventh has started.
-const PLAN = "5 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n";
+const PLAN =
+	"The following packages will be upgraded:\n  cerastream libapp libb libc libd\n5 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n";
 const PACKAGES = ["cerastream", "libapp", "libb", "libc", "libd"];
 const STEPS = [
 	...PACKAGES.map((name) => `Unpacking ${name} (2) over (1) ...\n`),
@@ -251,11 +256,6 @@ test("a first read error announces nothing until the unit's files are read", asy
 	expect(running(h.frames)).toEqual([installingAt(60)]);
 });
 
-const enoent = () =>
-	Object.assign(new Error("ENOENT: no such file or directory"), {
-		code: "ENOENT",
-	});
-
 const args = buildAptAllInstallArgs(
 	[{ name: "cerastream", version: "2" }],
 	"any",
@@ -269,7 +269,7 @@ test.each([
 	["stdout is unreadable", "stdout", eio, 137, false],
 	["stderr is unreadable", "stderr", eio, 100, false],
 ] as const)(
-	"when %s, exit %d stays the outcome and the next update starts",
+	"when %s, exit %d stays the outcome and the unit stays as the evidence",
 	async (_name, faulty, error, exitCode, readable) => {
 		const unit = fakeUnit({
 			files: { stdout: "done\n", stderr: "" },
@@ -284,13 +284,13 @@ test.each([
 		expect(unit.recorded()?.exitCode).toBe(exitCode);
 		// A unit whose transcript could not be read stays as recovery evidence.
 		expect(unit.retired).toEqual(readable ? [retirement] : []);
-		// Its exit is recorded, so the next launch may retire it and start.
-		expect(await runDetachedAptAll(args, "any", quiet, unit.deps)).toBe(
-			exitCode,
-		);
-		expect(unit.retired).toEqual(
-			readable ? [retirement, retirement] : [retirement],
-		);
+		expect(unit.recorded()?.drained).toBe(readable);
+		// The next launch never retires an unread outcome: it refuses instead.
+		await expect(
+			runDetachedAptAll(args, "any", quiet, unit.deps),
+		).rejects.toBeInstanceOf(DetachedAptServiceAlreadyExistsError);
+		expect(unit.retired).toEqual(readable ? [retirement] : []);
+		expect(unit.started).toHaveLength(1);
 	},
 );
 
@@ -962,4 +962,118 @@ test("a recorded exit is told while the transcript is the one it was recorded ag
 	await recoverSoftwareUpdateIfRunning(recoveryOf(unit));
 	expect(buildInitialStatus().status.update_state?.kind).toBe("success");
 	expect(h.restarts).toBe(0);
+});
+
+test("a replay is not told once a newer admission lands while it reads the transcript", async () => {
+	await using h = await updateHarness();
+	const unit = fakeUnit({
+		files: { stdout: "", stderr: "" },
+		exitCode: 0,
+		live: true,
+		recorded: { exitCode: 0, drained: true, transcript: "7:120:1000" },
+	});
+	// B is admitted between the replay's record read and its transcript read.
+	Object.assign(unit.deps, {
+		transcript: async () => {
+			unit.deps.updateAttempt(() => ({
+				schema: 2,
+				attempt: "22222222-2222-4222-8222-222222222222",
+				phase: "accepted",
+				uptimeMs: NOW,
+			}));
+			return "7:120:1000";
+		},
+	});
+	beginSoftwareUpdateRecovery();
+	expect(await recoverSoftwareUpdateIfRunning(recoveryOf(unit))).toBe(false);
+	expect(buildInitialStatus().status.update_state?.kind).not.toBe("success");
+	expect(h.frames.some((frame) => frame.update_state?.kind === "success")).toBe(
+		false,
+	);
+});
+
+test("an exit whose transcript could not be read never restarts CeraUI", async () => {
+	await using h = await updateHarness();
+	const unit = fakeUnit({
+		files: installing,
+		exitCode: 0,
+		finished: true,
+		failRead: (file) => (file === "stdout" ? new Error("EIO") : undefined),
+	});
+	const degraded = Promise.withResolvers<string>();
+	const mark = spyOn(readiness, "markBootDegraded").mockImplementation(
+		(subsystem) => degraded.resolve(subsystem),
+	);
+	try {
+		beginSoftwareUpdateRecovery();
+		expect(await recoverSoftwareUpdateIfRunning(recoveryOf(unit))).toBe(true);
+		// Whichever comes first: the old code restarted CeraUI instead.
+		expect(
+			await Promise.race([
+				degraded.promise,
+				h.restarted().then(() => "restarted"),
+			]),
+		).toBe("software-update-unproven");
+		expect(h.restarts).toBe(0);
+		expect(unit.recorded()?.drained).toBe(false);
+		expect(unit.retired).toEqual([]);
+	} finally {
+		mark.mockRestore();
+	}
+});
+
+test.each([
+	[undefined, "idle"],
+	[true, "success"],
+] as const)(
+	"the orchestrator settles its plan only from an exit its own attempt claimed (plan %s)",
+	async (plan, kind) => {
+		await using h = await updateHarness();
+		const unit = fakeUnit({
+			files: { stdout: "", stderr: "" },
+			exitCode: 0,
+			live: true,
+			recorded: { exitCode: 0, ...(plan ? { plan } : {}) },
+		});
+		beginSoftwareUpdateRecovery();
+		await recoverSoftwareUpdateIfRunning(recoveryOf(unit));
+		// The tab is told the device's outcome either way.
+		expect(buildInitialStatus().status.update_state?.kind).toBe("success");
+		expect(h.restarts).toBe(0);
+		// The plan settles only from its own attempt's claimed exit.
+		expect(
+			defaultOrchestratorRuntimeDeps.getPackageInstallWireState().kind,
+		).toBe(kind);
+	},
+);
+
+test("a second start while the first waits for discovery is refused", async () => {
+	await using _h = await updateHarness();
+	const discovery = Promise.withResolvers<{
+		exitCode: number;
+		stdout: string;
+		stderr: string;
+	}>();
+	const spawn = spyOn(spawnPolicy, "spawnWithTimeout").mockReturnValue(
+		discovery.promise as ReturnType<typeof spawnPolicy.spawnWithTimeout>,
+	);
+	const running = runUpdateDiscoveryAndReport();
+	try {
+		// The first start waits for discovery and admits its own attempt then.
+		expect(startSoftwareUpdate()).toEqual({ started: true });
+		// A second one would admit an attempt over the waiting one's record.
+		expect(startSoftwareUpdate()).toMatchObject({
+			started: false,
+			reason: "already_updating",
+		});
+	} finally {
+		discovery.resolve({
+			exitCode: 1,
+			stdout:
+				"The following packages will be upgraded:\n  cerastream\n1 upgraded, 0 newly installed, 0 to remove.\n",
+			stderr: "",
+		});
+		await running;
+		spawn.mockRestore();
+	}
 });

@@ -16,6 +16,7 @@ import {
 	startUpdateOrchestrator,
 } from "../modules/system/update-orchestrator/runtime.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
+import { recordedClaim } from "./helpers/memory-attempt.ts";
 import { runtimeFixture } from "./helpers/os-unlaunched-runtime-fixture.ts";
 import {
 	TestUpdateExit,
@@ -57,8 +58,9 @@ for (const first of ["package", "snapshot"] as const) {
 			},
 			recoverSoftwareUpdateIfRunning: () =>
 				updates.recoverSoftwareUpdateIfRunning({
-					recover: async ({ onAttached }) => {
+					recover: async ({ onAttached, onOutcome }) => {
 						onAttached?.(false);
+						onOutcome?.(recordedClaim(completion.promise));
 						return {
 							completion: completion.promise,
 							wasAlreadyFinished: first === "package",
