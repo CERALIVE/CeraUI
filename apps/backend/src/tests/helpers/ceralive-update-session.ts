@@ -1,0 +1,155 @@
+// One backend process for ceralive-update-notice-restart.test.ts, run as a
+// fresh `bun` child that shares only the device files with its siblings. It
+// serves the real WebSocket control server (password login, the post-auth
+// delivery, live broadcasts) on an ephemeral port, initializes the notice like
+// main.ts but only after binding (production order: `hydrate` runs it while
+// tabs may already be authenticated), and obeys stdin commands: `check` runs
+// the real package check over scripted APT, `apt <json>` replaces the device's
+// APT state, `recover` recovers a finished install through the real completion
+// path up to the update's deliberate restart, which it holds until `exit` (so a
+// test can sync its tabs first), `exit` ends it. The notice's dpkg readback reads
+// the same scripted device. With `olderBackend` it is started with
+// main-backend-preload.ts: main's backend from before this notice owner, whose
+// own check raises the notice the way main did, and which never initializes or
+// writes the offer record.
+import { defaultAptSpaceDeps } from "../../modules/system/apt-space-admission.ts";
+import * as updates from "../../modules/system/software-updates.ts";
+import { setStreamLivenessSourceForTest } from "../../modules/system/stream-liveness-source.ts";
+import { setStreamReconciliationCompletedForTest } from "../../modules/system/stream-reconciliation-latch.ts";
+import { setCeraliveSourcesFileForTest } from "../../modules/system/update-apt-channel.ts";
+import { setUpdateCapabilityPathForTest } from "../../modules/system/update-capabilities.ts";
+import { setUpdateSettingsFilePathForTest } from "../../modules/system/update-settings.ts";
+import { getServer, initServer } from "../../rpc/server.ts";
+import { setPasswordHash } from "../../rpc/state/password.ts";
+import {
+	APPLIED_MARKER,
+	type AptScript,
+	CHECKED_MARKER,
+	HYDRATED_MARKER,
+	READY_PREFIX,
+	RECOVERY_FAILED_MARKER,
+	RECOVERY_RESTART_MARKER,
+	RESTART_EXIT_CODE,
+	SESSION_PASSWORD,
+	scriptedApt,
+} from "./ceralive-update-apt.ts";
+
+export type SessionStep = {
+	readonly record: string;
+	readonly scratch: string;
+	// The device's APT answers for this process's whole life.
+	readonly apt?: AptScript;
+	readonly olderBackend?: boolean;
+	readonly capable?: boolean;
+	readonly failWrites?: boolean;
+	readonly recoverFails?: boolean;
+};
+
+const step = JSON.parse(process.argv[2] ?? "") as SessionStep;
+setStreamReconciliationCompletedForTest(true);
+setStreamLivenessSourceForTest(() => "idle");
+// A capable image declares apt-all-packages; otherwise the legacy discovery runs.
+const capabilities = `${step.scratch}/capabilities.json`;
+if (step.capable)
+	await Bun.write(
+		capabilities,
+		JSON.stringify({
+			schema: 1,
+			features: ["apt-all-packages"],
+			apt_uid: 42042,
+			ota_uid: 42041,
+		}),
+	);
+setUpdateCapabilityPathForTest(
+	step.capable ? capabilities : `${step.scratch}/absent-capabilities.json`,
+);
+setUpdateSettingsFilePathForTest(`${step.scratch}/settings.json`);
+setCeraliveSourcesFileForTest(`${step.scratch}/sources`);
+updates.setAptReachabilityProbeForTest(async () => ({
+	ipv4: "ok",
+	ipv6: "ok",
+	used: "any",
+	verdict: "any",
+	detail: [],
+}));
+let apt = scriptedApt(step.apt ?? {});
+updates.setAptCommandRunnerForTest((argv) => apt(argv));
+// Set once the finished install reached the update's own restart.
+let restarting = false;
+setPasswordHash(
+	await Bun.password.hash(SESSION_PASSWORD, { algorithm: "bcrypt", cost: 4 }),
+);
+
+initServer();
+process.stdout.write(`${READY_PREFIX}${getServer()?.port}\n`);
+
+for await (const command of console) {
+	if (command === "hydrate") {
+		// Main's backend has no such module (and its notifications lack what it imports).
+		if (!step.olderBackend)
+			(
+				await import("../../modules/system/ceralive-update-notice.ts")
+			).initCeraliveUpdateNotice({
+				path: step.record,
+				run: (argv) => apt(argv),
+				...(step.failWrites
+					? {
+							write: () => {
+								throw new Error("state directory is read-only");
+							},
+						}
+					: {}),
+			});
+		process.stdout.write(`${HYDRATED_MARKER}\n`);
+	} else if (command.startsWith("apt ")) {
+		apt = scriptedApt(JSON.parse(command.slice(4)));
+		process.stdout.write(`${APPLIED_MARKER}\n`);
+	} else if (command === "check") {
+		void updates.runSoftwareUpdateCheck().then(
+			() => process.stdout.write(`${CHECKED_MARKER}\n`),
+			(error) => process.stderr.write(`check failed ${String(error)}\n`),
+		);
+	} else if (command === "recover") {
+		// Only the update's own success restart counts; any other error is a failed recovery.
+		for (const event of ["uncaughtException", "unhandledRejection"] as const)
+			process.on(event, (error) => {
+				if (
+					error instanceof Error &&
+					error.message === updates.UPDATE_RESTART_REASON
+				) {
+					restarting = true;
+					process.stdout.write(`${RECOVERY_RESTART_MARKER}\n`);
+					return;
+				}
+				process.stderr.write(`${RECOVERY_FAILED_MARKER} ${String(error)}\n`);
+				process.exit(1);
+			});
+		Object.assign(defaultAptSpaceDeps, {
+			run: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+		});
+		// Beside the loop, so `exit` can end the held restart.
+		void updates
+			.recoverSoftwareUpdateIfRunning({
+				recover: step.recoverFails
+					? async () => {
+							throw new Error("detached update unit unreadable");
+						}
+					: async (handlers) => {
+							// As the real recovery does once it finds the unit.
+							handlers.onAttached?.();
+							return {
+								completion: Promise.resolve(0),
+								wasAlreadyFinished: true,
+							};
+						},
+				scheduleRetry: () => undefined,
+				resumePeriodicChecks: () => undefined,
+			})
+			.catch((error) => {
+				process.stderr.write(`${RECOVERY_FAILED_MARKER} ${String(error)}\n`);
+				process.exit(1);
+			});
+	} else if (command === "exit") {
+		process.exit(restarting ? RESTART_EXIT_CODE : 0);
+	}
+}

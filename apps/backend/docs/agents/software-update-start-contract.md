@@ -74,5 +74,8 @@ its version before was below it, and the fixed-name unit is neither running
 nor last finished non-zero; otherwise `unknown`. A finished non-zero exit of
 the fixed-name unit is attached as `exit`, a hint only: it may be another
 run's. It never starts, stops, retires or records
-anything; the unit's handling above is unchanged. See
+anything; the unit's handling above is unchanged. The "CeraLive update is
+available" notice reuses the same package read (`targetsAttained`, without the
+version-before and unit checks) for its own offer:
+[the retraction contract](a-persistent-notification-must-be-retractable.md#the-ceralive-update-offer-is-withdrawn-only-on-positive-evidence-exists). See
 [How an install ended, after CeraUI restarted](../../../../docs/DEVICE-UPDATES.md#how-an-install-ended-after-ceraui-restarted-exists-host-tested).

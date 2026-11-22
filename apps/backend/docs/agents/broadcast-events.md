@@ -186,7 +186,10 @@ Coverage: `tests/logger-journal.test.ts`, `tests/logger-transports.test.ts`
 and `tests/logger-listeners.test.ts`.
 
 `notifications.getPersistent` returns the live persistent set via
-`getPersistentNotifications(true)` (not an empty stub). The frontend
+`getPersistentNotifications(true)` (not an empty stub). The post-auth replay
+frame has the same shape and is the only notification frame a login gets: nothing
+adds a removal at login, and a login runs no command (the CeraLive update notice
+removes only live, from connected tabs). The frontend
 NotificationsPanel reads the live `notification` push cache; this RPC is the
 pull-equivalent (same data) for any consumer asking for the snapshot directly —
 keep it even though the panel does not call it.

@@ -5,7 +5,7 @@ export type AptOrigin = {
 	readonly probeUrl: string;
 };
 
-const FIRST_PARTY_APT_HOST = "apt.ceralive.tv";
+export const FIRST_PARTY_APT_HOST = "apt.ceralive.tv";
 
 export class AptSourceReadError extends Error {
 	override readonly name = "AptSourceReadError";
