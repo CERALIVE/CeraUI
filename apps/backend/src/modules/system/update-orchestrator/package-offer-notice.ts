@@ -70,10 +70,10 @@ function deliveryId(
 const noticeName = (id: string) => `update:updates-available:${id}`;
 type Discovery = NonNullable<Parameters<typeof runSoftwareUpdateCheck>[0]>;
 
-export function runScheduledPackageCheck(capture: Discovery) {
+export function runScheduledPackageCheck(capture?: Discovery) {
 	const audience = captureNotificationAudience();
 	return runSoftwareUpdateCheck(async (identity, evidence, run) => {
-		await capture(identity, evidence, run);
+		await capture?.(identity, evidence, run);
 		if (evidence?.offer.length === 0)
 			await withdrawInstalledPackageOffers(evidence, run, audience);
 	});
