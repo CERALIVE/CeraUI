@@ -32,20 +32,20 @@ import {
 	getPersistent,
 } from "$lib/stores/notifications.svelte";
 
+function notice(name: string, msg: string, revision: number) {
+	return {
+		name,
+		type: "error",
+		msg,
+		is_dismissable: true,
+		is_persistent: true,
+		duration: 0,
+		revision,
+	};
+}
+
 function show(name: string, msg: string, revision: number): void {
-	handlers.message?.("notification", {
-		show: [
-			{
-				name,
-				type: "error",
-				msg,
-				is_dismissable: true,
-				is_persistent: true,
-				duration: 0,
-				revision,
-			},
-		],
-	});
+	handlers.message?.("notification", { show: [notice(name, msg, revision)] });
 }
 
 function remove(name: string, revision: number): void {
@@ -101,6 +101,28 @@ describe("persistent notifications are retractable", () => {
 		expect(persistentNames()).toEqual([
 			"update:updates-available:os:2026.12.0",
 		]);
+	});
+
+	it("drops a standing update offer from the separate frames an authenticating tab receives", () => {
+		// Given an open tab still showing the offer after the backend restarted.
+		const os = notice(
+			"update:updates-available:os:2026.12.0",
+			"Updates are available.",
+			8,
+		);
+		show("ceralive_update", "A CeraLive update is available.", 7);
+		show(os.name, os.msg, os.revision);
+
+		// When it authenticates: the show replay, then the owner's typed and pre-#183 removals.
+		handlers.message?.("notification", { replay: true, show: [os] });
+		expect(persistentNames()).toContain("ceralive_update");
+		handlers.message?.("notification", {
+			remove: [{ id: "ceralive_update", revision: 1 }],
+		});
+		handlers.message?.("notification", { remove: ["ceralive_update"] });
+
+		// Then only the withdrawn offer leaves.
+		expect(persistentNames()).toEqual([os.name]);
 	});
 
 	it("ignores the pre-#183 string removal that accompanies a typed one", () => {

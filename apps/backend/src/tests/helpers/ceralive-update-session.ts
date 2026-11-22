@@ -2,8 +2,10 @@
 // fresh `bun` child that shares only the device files with its siblings. It
 // serves the real WebSocket control server (password login, the post-auth
 // replay, live broadcasts) on an ephemeral port, initializes the notice like
-// main.ts, and obeys stdin commands: `check` runs the real package check over
-// scripted APT, `recover` recovers a finished install (which ends the process
+// main.ts but only after binding (production order: `hydrate` runs it while
+// tabs may already be authenticated), and obeys stdin commands: `check` runs
+// the real package check over scripted APT, `apt <json>` replaces the device's
+// APT state, `recover` recovers a finished install (which ends the process
 // through the update's deliberate restart), `exit` ends it. With
 // `olderBackend` it is a backend from before this notice owner: it shows the
 // notice the way main did and never initializes or writes the offer record.
@@ -19,8 +21,10 @@ import { notificationBroadcast } from "../../modules/ui/notifications.ts";
 import { getServer, initServer } from "../../rpc/server.ts";
 import { setPasswordHash } from "../../rpc/state/password.ts";
 import {
+	APPLIED_MARKER,
 	type AptScript,
 	CHECKED_MARKER,
+	HYDRATED_MARKER,
 	READY_PREFIX,
 	RECOVERY_FAILED_MARKER,
 	RECOVERY_RESTART_MARKER,
@@ -67,7 +71,8 @@ updates.setAptReachabilityProbeForTest(async () => ({
 	verdict: "any",
 	detail: [],
 }));
-updates.setAptCommandRunnerForTest((argv) => scriptedApt(step.apt ?? {})(argv));
+let apt = scriptedApt(step.apt ?? {});
+updates.setAptCommandRunnerForTest((argv) => apt(argv));
 setPasswordHash(
 	await Bun.password.hash(SESSION_PASSWORD, { algorithm: "bcrypt", cost: 4 }),
 );
@@ -81,24 +86,29 @@ if (step.olderBackend)
 		true,
 		true,
 	);
-else
-	await initCeraliveUpdateNotice({
-		path: step.record,
-		inputs: updates.readCeraliveOfferInputs,
-		...(step.failWrites
-			? {
-					write: () => {
-						throw new Error("state directory is read-only");
-					},
-				}
-			: {}),
-	});
 
 initServer();
 process.stdout.write(`${READY_PREFIX}${getServer()?.port}\n`);
 
 for await (const command of console) {
-	if (command === "check") {
+	if (command === "hydrate") {
+		if (!step.olderBackend)
+			await initCeraliveUpdateNotice({
+				path: step.record,
+				snapshot: () => updates.readCeraliveOfferSnapshot(),
+				...(step.failWrites
+					? {
+							write: () => {
+								throw new Error("state directory is read-only");
+							},
+						}
+					: {}),
+			});
+		process.stdout.write(`${HYDRATED_MARKER}\n`);
+	} else if (command.startsWith("apt ")) {
+		apt = scriptedApt(JSON.parse(command.slice(4)));
+		process.stdout.write(`${APPLIED_MARKER}\n`);
+	} else if (command === "check") {
 		await updates.runSoftwareUpdateCheck();
 		process.stdout.write(`${CHECKED_MARKER}\n`);
 	} else if (command === "recover") {

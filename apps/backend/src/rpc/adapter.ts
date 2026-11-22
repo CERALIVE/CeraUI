@@ -17,7 +17,7 @@ import {
 } from "../modules/streaming/health.ts";
 import { CPU_EVENT } from "../modules/system/cpu.ts";
 import { getDeviceStatsSnapshot } from "../modules/system/device-stats-snapshot.ts";
-import { replayedRemovalFrames } from "../modules/ui/notifications.ts";
+import { replayToAuthenticated } from "../modules/ui/notifications.ts";
 import {
 	createPreviewWebSocketHandler,
 	isPreviewSocket,
@@ -249,8 +249,9 @@ function sendInitialStatusToClient(ws: AppWebSocket): void {
 	// re-raised by its own loop — and the boot-time encoder-mode clamp is exactly
 	// that. The legacy relay path has always replayed these.
 	sendToClient(ws, "notification", buildInitialNotifications());
-	for (const frame of replayedRemovalFrames(true))
-		sendToClient(ws, "notification", frame);
+	void replayToAuthenticated((frame) =>
+		sendToClient(ws, "notification", frame),
+	);
 }
 
 /**

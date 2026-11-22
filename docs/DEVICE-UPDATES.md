@@ -1372,7 +1372,8 @@ unverified candidate, a settled install and an empty restarted process change
 nothing. Its last verdict is written to `ceralive_update_offer.json` before any
 broadcast. A restarted backend replays a recorded withdrawal to every reconnecting
 tab, including a v2026.6.x or 7.x tab (string form), but only while the device's local
-APT evidence (installed and candidate versions, CeraLive sources) is unchanged; so a
+APT evidence (installed and candidate versions, holds, candidate pins and origins,
+dpkg state, CeraLive sources), re-read at each reconnect, is unchanged; so a
 tab that missed it during an update's restarts drops the notice even if that backend's
 own refresh fails, while after a rollback the offer an older backend showed stays. A dismissal counts
 only for the release the dismissing tab showed. Kernel, OS and `update:*` notices

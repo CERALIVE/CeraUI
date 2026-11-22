@@ -86,7 +86,8 @@ import {
 import {
 	firstPartyOffer,
 	legacyCeraliveOffer,
-	readOfferInputs,
+	type OfferSnapshot,
+	readOfferSnapshot,
 	reconcileCeraliveUpdateNotice,
 } from "./ceralive-update-notice.ts";
 import {
@@ -659,7 +660,7 @@ async function getCapableUpdateSize(
 		if (refreshConclusive)
 			reconcileCeraliveUpdateNotice(
 				firstPartyOffer(result.packages, sourcePolicy.stdout),
-				await readCeraliveOfferInputs(sourcePolicy.stdout),
+				await readCeraliveOfferSnapshot(sourcePolicy.stdout),
 			);
 		return null;
 	} catch (error) {
@@ -946,7 +947,7 @@ async function getSoftwareUpdateSize(
 						(argv) => runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
 					)
 				: "unknown",
-			await readCeraliveOfferInputs(),
+			await readCeraliveOfferSnapshot(),
 		);
 
 	return null;
@@ -2064,11 +2065,11 @@ async function recoverSoftwareUpdate(
 	return true;
 }
 
-/** The local APT evidence a CeraLive offer verdict is computed from (fingerprint). */
-export function readCeraliveOfferInputs(
+/** One read of the local APT evidence a CeraLive offer verdict depends on. */
+export function readCeraliveOfferSnapshot(
 	inventory?: string,
-): Promise<string | undefined> {
-	return readOfferInputs(
+): Promise<OfferSnapshot | undefined> {
+	return readOfferSnapshot(
 		(argv) => runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
 		inventory,
 	);

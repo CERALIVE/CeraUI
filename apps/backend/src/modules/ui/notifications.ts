@@ -87,7 +87,7 @@ export type NotificationOptions = {
 	/**
 	 * The name carries one release at a time (its dismissalKey changes with it):
 	 * a durable dismissal must attest the current release, and a dismissal is
-	 * replayed like {@link notificationWithdraw}.
+	 * broadcast like {@link notificationWithdraw}.
 	 */
 	releaseScoped?: boolean;
 	beforeDismiss?: () => void;
@@ -96,8 +96,10 @@ export type NotificationOptions = {
 };
 
 const persistentNotifications = new Map<string, PersistentNotification>();
-// Withdrawn names and their removal revisions, replayed until the name is shown again.
-const replayedRemovals = new Map<string, number>();
+// An owner's frames for each authenticating client, after the show replay.
+let authenticatedReplay:
+	| ((send: (frame: object) => void) => Promise<void>)
+	| undefined;
 
 // Revisions start over when the backend restarts; this namespaces them.
 const publisher: string = crypto.randomUUID();
@@ -178,7 +180,6 @@ export function notificationSend(
 	let doSend = true;
 	let revision: number | undefined;
 	if (isPersistent) {
-		replayedRemovals.delete(name);
 		let pn = persistentNotifications.get(name);
 		if (pn) {
 			// Rate limiting to once every second
@@ -252,7 +253,7 @@ export function notificationBroadcast(
 	);
 }
 
-function removeNotification(name: string, replay: boolean) {
+function removeNotification(name: string, legacy: boolean) {
 	const n = persistentNotifications.get(name);
 	persistentNotifications.delete(name);
 
@@ -260,13 +261,8 @@ function removeNotification(name: string, replay: boolean) {
 	const msg = { remove: [{ id: name, revision }] };
 	const authedOnly = !n || n.authedOnly;
 	broadcastMsg("notification", msg, 0, authedOnly);
-	if (replay) {
-		replayedRemovals.set(name, revision);
+	if (legacy)
 		broadcastMsg("notification", legacyRemoval([name]), 0, authedOnly);
-	} else {
-		// A plain removal ends any replay of the name.
-		replayedRemovals.delete(name);
-	}
 	return msg;
 }
 
@@ -281,8 +277,8 @@ export function notificationRemove(name: string) {
 }
 
 /**
- * Removes `name` and keeps the removal in every authenticated replay until the
- * name is shown again, so a client that was offline still learns of it.
+ * Removes `name` live, as a typed and a separate pre-#183 frame. A client that
+ * was offline learns of it only through its owner's authenticated replay.
  */
 export function notificationWithdraw(name: string) {
 	return removeNotification(name, true);
@@ -379,29 +375,40 @@ export function getPersistentNotifications(
 	return { show: notifications };
 }
 
-/**
- * The withdrawals a reconnecting client must still hear, sent after the replay
- * as separate typed and pre-#183 frames so neither frontend drops the other's.
- */
-export function replayedRemovalFrames(isAuthed = false) {
-	if (!isAuthed || replayedRemovals.size === 0) return [];
-	const typed = [...replayedRemovals].map(([id, revision]) => ({
-		id,
-		revision,
-	}));
-	return [{ remove: typed }, legacyRemoval([...replayedRemovals.keys()])];
+/** Typed and pre-#183 removal frames for `name`, for a sender addressing one client. */
+export function removalFrames(name: string): object[] {
+	return [
+		{ remove: [{ id: name, revision: nextRevision() }] },
+		legacyRemoval([name]),
+	];
+}
+
+/** Lets one owner add frames, decided when each client authenticates, after its show replay. */
+export function setAuthenticatedReplay(
+	replay: ((send: (frame: object) => void) => Promise<void>) | undefined,
+): void {
+	authenticatedReplay = replay;
+}
+
+export function replayToAuthenticated(
+	send: (frame: object) => void,
+): Promise<void> {
+	return authenticatedReplay?.(send) ?? Promise.resolve();
 }
 
 export function notificationSendPersistent(
 	conn: MessageSocket,
 	isAuthed = false,
-) {
+): Promise<void> {
 	conn.send(
 		buildMsg("notification", {
 			...getPersistentNotifications(isAuthed),
 			replay: true,
 		}),
 	);
-	for (const frame of replayedRemovalFrames(isAuthed))
-		conn.send(buildMsg("notification", frame));
+	return isAuthed
+		? replayToAuthenticated((frame) =>
+				conn.send(buildMsg("notification", frame)),
+			)
+		: Promise.resolve();
 }

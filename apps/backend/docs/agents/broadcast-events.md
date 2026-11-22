@@ -178,10 +178,11 @@ and `tests/logger-listeners.test.ts`.
 
 `notifications.getPersistent` returns the live persistent set via
 `getPersistentNotifications(true)` (not an empty stub). The post-auth replay
-frame has the same shape; after it, `replayedRemovalFrames(true)` adds one typed
-and one pre-#183 string-form `remove` frame for each
-name withdrawn with `notificationWithdraw` (or dismissed while `releaseScoped`) and not
-shown since. The frontend
+frame has the same shape; after it, the one owner registered with
+`setAuthenticatedReplay` may add frames decided when that client authenticates:
+the CeraLive update notice sends one typed and one pre-#183 string-form `remove`
+only while its recorded withdrawal still matches the device's evidence. No removal
+is retained between clients. The frontend
 NotificationsPanel reads the live `notification` push cache; this RPC is the
 pull-equivalent (same data) for any consumer asking for the snapshot directly —
 keep it even though the panel does not call it.

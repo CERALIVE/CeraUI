@@ -10,6 +10,8 @@ export type AptPackage = {
 	// The version the simulated plan takes, when it differs from the candidate.
 	readonly planned?: string;
 	readonly source?: "ceralive" | "debian";
+	// The candidate's priority in the policy version table.
+	readonly pin?: number;
 };
 
 export type AptScript = {
@@ -22,11 +24,17 @@ export type AptScript = {
 	readonly inventory?: string;
 	// Installed with nothing pending (candidate equals installed).
 	readonly installed?: readonly AptPackage[];
+	// Names `apt-mark showhold` lists (dpkg then shows them as "hold ok installed").
+	readonly holds?: readonly string[];
+	// The state the device moves to once the evidence snapshot starts being read.
+	readonly thenState?: AptScript;
 };
 
 // The restart-test backend child prints these on stdout.
 export const READY_PREFIX = "backend:ready:";
 export const CHECKED_MARKER = "backend:checked";
+export const HYDRATED_MARKER = "backend:hydrated";
+export const APPLIED_MARKER = "backend:apt-applied";
 export const SESSION_PASSWORD = "ceralive-session-password";
 // Exit status of a session ended by the finished update's own restart (an uncaught throw).
 export const RESTART_EXIT_CODE = 75;
@@ -61,7 +69,8 @@ function ok(stdout: string): SpawnWithTimeoutResult {
 
 function policy(pkg: AptPackage): string {
 	const source = pkg.source === "debian" ? DEBIAN_SOURCE : CERALIVE_SOURCE;
-	return `${pkg.name}:\n  Installed: ${pkg.installed}\n  Candidate: ${pkg.candidate}\n  Version table:\n     ${pkg.candidate} 990\n        990 ${source}\n *** ${pkg.installed} 100\n        100 /var/lib/dpkg/status\n`;
+	const pin = pkg.pin ?? 990;
+	return `${pkg.name}:\n  Installed: ${pkg.installed}\n  Candidate: ${pkg.candidate}\n  Version table:\n     ${pkg.candidate} ${pin}\n        ${pin} ${source}\n *** ${pkg.installed} 100\n        100 /var/lib/dpkg/status\n`;
 }
 
 function simulation(packages: readonly AptPackage[]): string {
@@ -82,7 +91,21 @@ function upgradePlan(packages: readonly AptPackage[]): SpawnWithTimeoutResult {
 	};
 }
 
-export function scriptedApt(script: AptScript) {
+export function scriptedApt(initial: AptScript) {
+	let script = initial;
+	return async (argv: readonly string[]): Promise<SpawnWithTimeoutResult> => {
+		if (
+			script.thenState &&
+			argv[0] === "/usr/bin/apt-cache" &&
+			argv[1] === "policy" &&
+			argv.length > 3
+		)
+			script = script.thenState;
+		return answer(script)(argv);
+	};
+}
+
+function answer(script: AptScript) {
 	const upgradable = script.upgradable ?? [];
 	const keptBack = script.keptBack ?? [];
 	const all = [...upgradable, ...keptBack];
@@ -116,7 +139,21 @@ export function scriptedApt(script: AptScript) {
 				),
 			);
 		}
-		if (bin === "/usr/bin/apt-mark") return ok("");
+		if (bin === "/usr/bin/apt-mark")
+			return ok((script.holds ?? []).map((name) => `${name}\n`).join(""));
+		if (bin === "/usr/bin/dpkg-query") {
+			const wanted = argv.slice(4);
+			const known = present.filter((pkg) => wanted.includes(pkg.name));
+			const rows = known.map(
+				(pkg) =>
+					`${pkg.name}\t${script.holds?.includes(pkg.name) ? "hold" : "install"} ok installed\t${pkg.installed}\n`,
+			);
+			return {
+				exitCode: known.length < wanted.length ? 1 : 0,
+				stdout: rows.join(""),
+				stderr: "",
+			};
+		}
 		if (bin === "/usr/bin/apt-cache" && verb === "policy") {
 			if (name === undefined) return ok(script.inventory ?? INVENTORY);
 			if (script.policyFails?.includes(name))

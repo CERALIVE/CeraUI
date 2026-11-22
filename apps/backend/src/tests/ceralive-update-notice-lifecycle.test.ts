@@ -22,9 +22,11 @@ import { notificationsMessageSchema } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 
 import { setup } from "../modules/setup.ts";
+import { initCeraliveUpdateNotice } from "../modules/system/ceralive-update-notice.ts";
 import {
 	getUpdateState,
 	periodicCheckForSoftwareUpdates,
+	readCeraliveOfferSnapshot,
 	resetAptReachabilityProbeForTest,
 	resetSoftwareUpdateCheckRunner,
 	resetSoftwareUpdateState,
@@ -51,7 +53,8 @@ import {
 	notificationExists,
 	notificationRemove,
 	notificationSendPersistent,
-	replayedRemovalFrames,
+	replayToAuthenticated,
+	setAuthenticatedReplay,
 } from "../modules/ui/notifications.ts";
 import * as websocket from "../modules/ui/websocket-server.ts";
 import { dismissNotificationProcedure } from "../rpc/procedures/notifications.procedure.ts";
@@ -110,10 +113,17 @@ async function useCapableImage(): Promise<void> {
 	setUpdateCapabilityPathForTest(capability);
 }
 
-function replayFrames(): unknown[] {
+// What an authenticating tab receives after the show replay (decided when it authenticates).
+async function replayedRemovals(): Promise<unknown[]> {
+	const frames: unknown[] = [];
+	await replayToAuthenticated((frame) => frames.push(frame));
+	return frames;
+}
+
+async function replayFrames(): Promise<unknown[]> {
 	return [
 		{ ...getPersistentNotifications(true), replay: true },
-		...replayedRemovalFrames(true),
+		...(await replayedRemovals()),
 	];
 }
 
@@ -214,11 +224,16 @@ beforeEach(async () => {
 		detail: [],
 	}));
 	setAptCommandRunnerForTest((argv) => scriptedApt(script)(argv));
+	await initCeraliveUpdateNotice({
+		path: join(dir, "offer.json"),
+		snapshot: () => readCeraliveOfferSnapshot(),
+	});
 	broadcast = spyOn(websocket, "broadcastMsg");
 });
 
 afterEach(async () => {
 	broadcast.mockRestore();
+	setAuthenticatedReplay(undefined);
 	clearPersistentNotices();
 	setAptCommandRunnerForTest(null);
 	resetSoftwareUpdateCheckRunner();
@@ -264,9 +279,13 @@ describe("legacy image", () => {
 		expect(currentTab(liveFrames(), open)).toEqual([KERNEL, OS_OFFER].sort());
 		expect(legacyTab(liveFrames(), open)).toEqual([KERNEL, OS_OFFER].sort());
 		// And a tab that reconnects later is told too; a fresh tab never sees it.
-		expect(currentTab(replayFrames(), open)).toEqual([KERNEL, OS_OFFER].sort());
-		expect(legacyTab(replayFrames(), open)).toEqual([KERNEL, OS_OFFER].sort());
-		expect(currentTab(replayFrames())).toEqual([KERNEL, OS_OFFER].sort());
+		expect(currentTab(await replayFrames(), open)).toEqual(
+			[KERNEL, OS_OFFER].sort(),
+		);
+		expect(legacyTab(await replayFrames(), open)).toEqual(
+			[KERNEL, OS_OFFER].sort(),
+		);
+		expect(currentTab(await replayFrames())).toEqual([KERNEL, OS_OFFER].sort());
 	});
 
 	test("the typed removal withdraws a current tab but does not reach a pre-#183 tab", async () => {
@@ -287,7 +306,7 @@ describe("legacy image", () => {
 		expect(notificationExists(NOTICE)?.dismissalKey).toBe(
 			"update:cerastream=2",
 		);
-		expect(currentTab(replayFrames(), [NOTICE])).toEqual([NOTICE]);
+		expect(currentTab(await replayFrames(), [NOTICE])).toEqual([NOTICE]);
 	});
 
 	test("a dismissal that cannot be written is refused and cannot withdraw the offer later", async () => {
@@ -313,7 +332,7 @@ describe("legacy image", () => {
 		expect(notificationExists(NOTICE)).toBeDefined();
 		await check({ upgradable: [cerastream("2")] });
 		expect(liveRemovals()).toEqual([]);
-		expect(currentTab(replayFrames(), [NOTICE])).toEqual([NOTICE]);
+		expect(currentTab(await replayFrames(), [NOTICE])).toEqual([NOTICE]);
 	});
 
 	test("an independent update left after the install replaces the offer without a withdrawal", async () => {
@@ -323,7 +342,7 @@ describe("legacy image", () => {
 		// Then the notice stays up for the remaining release.
 		expect(liveRemovals()).toEqual([]);
 		expect(notificationExists(NOTICE)?.dismissalKey).toBe("update:srtla=1.1");
-		expect(replayedRemovalFrames(true)).toEqual([]);
+		expect(await replayedRemovals()).toEqual([]);
 	});
 
 	test.each([
@@ -443,14 +462,14 @@ describe("legacy image", () => {
 		// When the same release is discovered again, it stays hidden and withdrawn for reconnecting tabs.
 		await check({ upgradable: [cerastream("2")] });
 		expect(notificationExists(NOTICE)).toBeUndefined();
-		expect(currentTab(replayFrames(), [NOTICE])).toEqual([]);
+		expect(currentTab(await replayFrames(), [NOTICE])).toEqual([]);
 		// When a new release of the same package with the same size appears.
 		await check({ upgradable: [cerastream("3")] });
 		// Then it is offered again.
 		expect(notificationExists(NOTICE)?.dismissalKey).toBe(
 			"update:cerastream=3",
 		);
-		expect(replayedRemovalFrames(true)).toEqual([]);
+		expect(await replayedRemovals()).toEqual([]);
 	});
 
 	test("a tab that missed a dismissal in another tab drops the notice on reconnect", async () => {
@@ -459,8 +478,8 @@ describe("legacy image", () => {
 		// When one tab dismisses the release it shows.
 		notificationDismiss(NOTICE, seen);
 		// Then the replay another tab of either generation receives carries the removal.
-		expect(currentTab(replayFrames(), [NOTICE])).toEqual([]);
-		expect(legacyTab(replayFrames(), [NOTICE])).toEqual([]);
+		expect(currentTab(await replayFrames(), [NOTICE])).toEqual([]);
+		expect(legacyTab(await replayFrames(), [NOTICE])).toEqual([]);
 	});
 
 	test("a dismissal from a tab still showing an older release changes nothing and shows it the current one", async () => {
@@ -519,7 +538,7 @@ describe("legacy image", () => {
 		// Then the older offer leaves every tab.
 		expect(liveRemovals()).toEqual([NOTICE]);
 		expect(notificationExists(NOTICE)).toBeUndefined();
-		expect(currentTab(replayFrames(), [NOTICE])).toEqual([]);
+		expect(currentTab(await replayFrames(), [NOTICE])).toEqual([]);
 	});
 
 	test("the legacy relay replay sends the show frame first, then both removal forms", async () => {
@@ -527,7 +546,7 @@ describe("legacy image", () => {
 		await check({ upgradable: [cerastream("2")] });
 		await check({});
 		const sent: string[] = [];
-		notificationSendPersistent(
+		await notificationSendPersistent(
 			{ send: (frame: string) => sent.push(frame) },
 			true,
 		);
@@ -557,14 +576,14 @@ describe("capable image", () => {
 		await check({ upgradable: [curl] });
 		expect(getUpdateState()).toMatchObject({ actionable_count: 1 });
 		expect(liveRemovals()).toEqual([NOTICE]);
-		expect(currentTab(replayFrames(), [NOTICE])).toEqual([]);
+		expect(currentTab(await replayFrames(), [NOTICE])).toEqual([]);
 	});
 
 	test("a Debian-only refresh without CeraLive's source keeps the offer", async () => {
 		await check({ upgradable: [srtla("2.0")] });
 		await check({ upgradable: [curl], inventory: DEBIAN_ONLY_INVENTORY });
 		expect(liveRemovals()).toEqual([]);
-		expect(currentTab(replayFrames(), [NOTICE])).toEqual([NOTICE]);
+		expect(currentTab(await replayFrames(), [NOTICE])).toEqual([NOTICE]);
 	});
 
 	test("a first-party candidate whose policy disagrees with the simulation leaves the offer untouched", async () => {
@@ -648,7 +667,7 @@ test("a successful install is not evidence that no offer remains", async () => {
 	await h.restarted();
 	// Then only the next conclusive check may withdraw the notice.
 	expect(getUpdateState()).toEqual({ kind: "success" });
-	expect(replayedRemovalFrames(true)).toEqual([]);
+	expect(await replayedRemovals()).toEqual([]);
 	expect(
 		getPersistentNotifications(true).show.map(({ name }) => name),
 	).toContain(NOTICE);
