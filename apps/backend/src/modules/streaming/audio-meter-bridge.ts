@@ -110,11 +110,10 @@ export interface AudioMeterBridgeDeps {
 	/** Whether that pick is a card CeraUI's own device scan currently lists. */
 	meterPreferencePresent: () => boolean;
 	/**
-	 * Whether the operator asked for NO audio at all — the one pick a `null`
-	 * preference cannot express, because `null` means "engine, choose for
-	 * yourself" and the engine has no "meter nothing" value.
+	 * Whether the selection is video-only: explicit "No audio" or idle Auto
+	 * with no capture audio. Neither may be shown as the engine's fallback card.
 	 */
-	meterSilenced: () => boolean;
+	meterSilenced: (programOwned?: boolean) => boolean;
 	/**
 	 * Whether a stream launch is currently acquiring the audio card. A launch
 	 * RELEASES the idle meter on purpose, so the level feed stopping is the
@@ -250,7 +249,8 @@ function defaultDeps(): AudioMeterBridgeDeps {
 		broadcast: (payload) => broadcastMsg("audio-level", payload),
 		meterPreference: () => resolveMeterPreference(getConfig().asrc),
 		meterPreferencePresent: () => isMeterPreferenceDevicePresent(),
-		meterSilenced: () => isMeterSilencedByPick(getConfig().asrc),
+		meterSilenced: (programOwned) =>
+			isMeterSilencedByPick(getConfig().asrc, programOwned),
 		launchInFlight: () => launchIsAcquiringAudio(getStreamLifecycleState()),
 		meterEmbedded: () => isMeterEmbeddedBySource(),
 		cardAliases: () => getAudioCardAliases(),
@@ -450,13 +450,10 @@ function projectLevel(
 	deps: AudioMeterBridgeDeps,
 ): AudioLevelMessage {
 	const message = toAudioLevelMessage(event);
-	if (getAudioMixActive() && message.source?.owner === "streaming")
-		return message;
-	// An explicit "No audio" pick outranks whatever the engine is metering,
-	// including the engine's own gap reason: the operator asked for silence, so
-	// that is the state — and the engine, told only `meter_device: null`, is
-	// auto-picking a real card whose real levels would otherwise render.
-	if (deps.meterSilenced()) {
+	const programOwned = message.source?.owner === "streaming";
+	if (getAudioMixActive() && programOwned) return message;
+	// A video-only selection outranks the engine's fallback card or gap reason.
+	if (deps.meterSilenced(programOwned)) {
 		clearForeignCardRun();
 		return { unavailable: true, reason: "mode_none" };
 	}
@@ -466,7 +463,7 @@ function projectLevel(
 	// than a second lifecycle guess: a `streaming` level for this source IS the
 	// muxed track (cerastream meters `MeterMode::ProgramAudio` off the program
 	// leg), and suppressing it would kill the one reading the operator wants.
-	if (deps.meterEmbedded() && message.source?.owner !== "streaming") {
+	if (deps.meterEmbedded() && !programOwned) {
 		clearForeignCardRun();
 		return { unavailable: true, reason: "embedded_audio" };
 	}
@@ -503,21 +500,6 @@ function handleEvent(event: EventParams): void {
 }
 
 /**
- * The selection every broadcast level is attributable to. Keyed on the PAIR,
- * because the two halves move independently: "Auto" and "No audio" both resolve
- * to a `null` preference yet mean opposite things, so the preference alone
- * cannot see that switch.
- */
-function meterSelectionKey(deps: AudioMeterBridgeDeps): string {
-	const pick = deps.meterSilenced()
-		? "silenced"
-		: deps.meterEmbedded()
-			? "embedded"
-			: "device";
-	return `${pick}:${deps.meterPreference() ?? "auto"}`;
-}
-
-/**
  * Retire the currently-rendered level the instant the operator's pick changes.
  *
  * Every gate below only ever acts on the NEXT level the engine sends, and the
@@ -528,26 +510,29 @@ function meterSelectionKey(deps: AudioMeterBridgeDeps): string {
  * as a transition instead of as live audio, and the very next real level
  * replaces it (this is a re-evaluation, never a pin).
  */
-function noteMeterSelection(deps: AudioMeterBridgeDeps): void {
-	if (!state || state.stopped) return;
-	const key = meterSelectionKey(deps);
+function noteMeterSelection(deps: AudioMeterBridgeDeps): string | null {
+	if (!state || state.stopped) return null;
+	const reason = deps.meterSilenced()
+		? "mode_none"
+		: deps.meterEmbedded()
+			? "embedded_audio"
+			: "handoff";
+	// A silenced selection already resolved to no card; don't resolve Auto again
+	// to form its key. Other null preferences can have a different meaning.
+	const preference = reason === "mode_none" ? null : deps.meterPreference();
+	const key = `${reason}:${preference ?? "auto"}`;
 	const previous = state.lastSelection;
 	state.lastSelection = key;
-	if (previous === undefined || previous === key) return;
+	if (previous === undefined || previous === key) return preference;
 	clearForeignCardRun();
 	try {
-		deps.broadcast(
-			deps.meterSilenced()
-				? { unavailable: true, reason: "mode_none" }
-				: deps.meterEmbedded()
-					? { unavailable: true, reason: "embedded_audio" }
-					: { unavailable: true, reason: "handoff" },
-		);
+		deps.broadcast({ unavailable: true, reason });
 	} catch (err) {
 		deps.logger.debug(
 			`audio-meter bridge: selection-change broadcast threw: ${errMessage(err)}`,
 		);
 	}
+	return preference;
 }
 
 /**
@@ -566,14 +551,13 @@ function noteMeterSelection(deps: AudioMeterBridgeDeps): void {
 async function pushPreference(client: CerastreamClient): Promise<void> {
 	if (!state || state.stopped) return;
 	const { deps } = state;
-	noteMeterSelection(deps);
+	const meter_device = noteMeterSelection(deps);
 	if (!supportsMeterDevicePreference(client.hello.schema_version)) {
 		deps.logger.debug(
 			`audio-meter bridge: engine schema ${client.hello.schema_version} predates audio.meter_device — leaving idle-meter selection to the engine`,
 		);
 		return;
 	}
-	const meter_device = deps.meterPreference();
 	try {
 		await sendMeterDevice(client, meter_device);
 		deps.logger.debug(
@@ -632,10 +616,9 @@ async function reassertPreference(cause: string): Promise<void> {
  * it whether or not the engine can be told about the change yet.
  */
 export function syncAudioMeterPreference(): void {
-	const client = state?.stopped === false ? state.client : undefined;
-	if (state && !state.stopped) noteMeterSelection(state.deps);
-	if (client === undefined) return;
-	void pushPreference(client);
+	if (!state || state.stopped) return;
+	if (state.client === undefined) noteMeterSelection(state.deps);
+	else void pushPreference(state.client);
 }
 
 /**
