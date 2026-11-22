@@ -139,6 +139,8 @@ import type {
 	SwitchInputOutput,
 	UpdateCapabilities,
 	UpdateDetails,
+	UpdateOutcome,
+	UpdateOutcomeInput,
 	UpdateSettings,
 	UsbModeOptionsInput,
 	UsbModeOptionsOutput,
@@ -953,6 +955,7 @@ export interface TypedRPC {
 		poweroff: () => Promise<SuccessResponse>;
 		reboot: () => Promise<SuccessResponse>;
 		startUpdate: () => Promise<SuccessResponse>;
+		updateOutcome: (input: UpdateOutcomeInput) => Promise<UpdateOutcome>;
 		checkForUpdates: () => Promise<SuccessResponse>;
 		sshStart: () => Promise<SuccessResponse>;
 		sshStop: () => Promise<SuccessResponse>;

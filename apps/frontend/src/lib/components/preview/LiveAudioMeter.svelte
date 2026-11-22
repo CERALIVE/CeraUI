@@ -204,7 +204,7 @@ const meteredDevice = $derived(
 	/>
 	{#if meteredDevice !== undefined}
 		<p
-			class="text-muted-foreground truncate pt-0.5 font-mono text-[11px] tracking-wide"
+			class="text-muted-foreground truncate pt-0.5 text-xs"
 			data-testid="live-audio-meter-device"
 		>
 			{meteredDevice}

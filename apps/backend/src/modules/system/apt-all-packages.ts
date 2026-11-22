@@ -1,4 +1,5 @@
 import type { UpdatePackage } from "@ceraui/rpc";
+import type { UpdateTarget } from "@ceraui/rpc/schemas";
 import {
 	type AptAllDiagnosticStep,
 	prepareAptDiagnostic,
@@ -230,6 +231,23 @@ export function buildAptAllInstallArgs(
 		"install",
 		...pairs.map(({ name, version }) => `${name}=${version}`),
 	];
+}
+
+/**
+ * What each pin of a checked pinned simulation installs: the exact instance
+ * (name as apt prints it, the candidate's own architecture) and the version
+ * installed before it. null when any row does not say its architecture.
+ */
+export function admittedTargets(text: string): UpdateTarget[] | null {
+	const targets: UpdateTarget[] = [];
+	for (const line of text.split("\n")) {
+		if (!line.startsWith("Inst ")) continue;
+		const row = parseAptSimulationRow(line);
+		if (row?.kind !== "Inst" || !row.version || !row.arch) return null;
+		const { name, version, arch, from } = row;
+		targets.push({ name, version, arch, ...(from ? { from } : {}) });
+	}
+	return targets.sort((a, b) => compareAptPackageNames(a.name, b.name));
 }
 
 export function assertPinnedInstallSimulation(

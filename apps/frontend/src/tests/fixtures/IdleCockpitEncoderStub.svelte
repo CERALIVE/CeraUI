@@ -3,7 +3,13 @@
   encoder row's edit, so a test can open LiveView's EncoderDialog.
 -->
 <script lang="ts">
-let { onOpenEncoder }: { onOpenEncoder?: () => void } = $props();
+import type { ConfigRow } from '$main/live/StreamSettingsCard.svelte';
+
+let { configRows = [] }: { configRows?: ConfigRow[] } = $props();
 </script>
 
-<button data-testid="open-encoder" onclick={() => onOpenEncoder?.()} type="button">Encoder</button>
+<button
+	data-testid="open-encoder"
+	onclick={() => configRows.find((row) => row.section === 'encoder')?.onEdit()}
+	type="button">Encoder</button
+>

@@ -18,8 +18,9 @@ import { ensureAuthenticated, navigateTo, setLocale, setTheme } from './helpers/
  *
  *  - nothing overflows sideways at 375x812, 768x1024, 1280x900 and 1024x600, idle
  *    and live, in English, Spanish and Arabic;
- *  - in touch layout every control of the Audio card, the layout controls and
- *    the Live bar answers to at least 44 px on its shorter side (DESIGN.md TT-1),
+ *  - in touch layout every control of the Audio card, the layout controls, the
+ *    Output card (the inline bitrate included) and the Live bar answers to at
+ *    least 44 px on its shorter side (DESIGN.md TT-1),
  *    at 375x812 and at the 1024x600 kiosk; switches and slider thumbs reach it
  *    through the token layer's `::after` hit area, never a grown box;
  *  - every slider has a name, every button has a name at phone width, and text
@@ -57,7 +58,7 @@ const KIOSK = VIEWPORTS[3];
 
 const TARGET_PX = 44;
 const PHONES = [PHONE, { width: 360, height: 640 }, { width: 320, height: 640 }];
-const TOUCH_REGIONS = ['audio-card', 'layout-controls', 'live-bar'] as const;
+const TOUCH_REGIONS = ['audio-card', 'layout-controls', 'live-bar', 'output-card'] as const;
 const CONTROLS =
 	'button, [role="slider"], [role="switch"], [role="radio"], [role="combobox"], input:not([type="hidden"]), select, a[href], summary';
 
@@ -111,6 +112,19 @@ async function goIdle(page: Page): Promise<void> {
 	await expect(page.getByTestId('live-cockpit').getByTestId('audio-mixer-next-start')).toHaveCount(0, {
 		timeout: 15_000,
 	});
+}
+
+/**
+ * Resize the page, then wait for its next rendering update. The app picks its desktop
+ * or phone chrome from a media query (svelte/reactivity `MediaQuery`), and the browser
+ * reports a media-query change only in that update, before it paints; layout read
+ * sooner still holds the previous size's chrome. A phone read straight after leaving
+ * 1280 px measured the desktop rail nav 188 to 260 px wider than the screen, a state no
+ * frame ever paints.
+ */
+async function resize(page: Page, viewport: { width: number; height: number }): Promise<void> {
+	await page.setViewportSize(viewport);
+	await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
 }
 
 async function overflowPx(page: Page): Promise<number> {
@@ -193,7 +207,7 @@ test.describe('@a11y Live screen design pass — caps-full', { tag: '@desktop-on
 			for (const state of ['idle', 'live'] as State[]) {
 				if (state === 'live') await goLive(page);
 				for (const viewport of VIEWPORTS) {
-					await page.setViewportSize(viewport);
+					await resize(page, viewport);
 					await expect(cockpit(page)).toBeVisible();
 					const px = await overflowPx(page);
 					if (px > 1) overflowing.push(`${locale} ${state} ${viewport.width}x${viewport.height}: ${px}px`);
@@ -204,7 +218,7 @@ test.describe('@a11y Live screen design pass — caps-full', { tag: '@desktop-on
 		expect(overflowing).toEqual([]);
 	});
 
-	test('touch layout gives every Audio, layout and Live bar control a 44 px hit area @a11y', async ({ page }) => {
+	test('touch layout gives every Audio, layout, Output and Live bar control a 44 px hit area @a11y', async ({ page }) => {
 		test.setTimeout(180_000);
 		const short: string[] = [];
 		const grown: string[] = [];
@@ -233,7 +247,7 @@ test.describe('@a11y Live screen design pass — caps-full', { tag: '@desktop-on
 	});
 
 	for (const theme of ['dark', 'light'] as const) {
-	test(`default layout gives every Audio, layout and Live bar control a 44 px target on a phone, ${theme} @a11y`, async ({ page }) => {
+	test(`default layout gives every Audio, layout, Output and Live bar control a 44 px target on a phone, ${theme} @a11y`, async ({ page }) => {
 		test.setTimeout(300_000);
 		const short: string[] = [];
 		const seen = new Set<string>();
@@ -246,7 +260,7 @@ test.describe('@a11y Live screen design pass — caps-full', { tag: '@desktop-on
 				for (const state of ['idle', 'live'] as State[]) {
 					if (state === 'live') await goLive(page);
 					for (const viewport of PHONES) {
-						await page.setViewportSize(viewport);
+						await resize(page, viewport);
 						for (const area of await regionTargets(page)) {
 							seen.add(area.region);
 							if (Math.min(area.hitWidth, area.hitHeight) < TARGET_PX - 0.5) {
@@ -277,7 +291,7 @@ test.describe('@a11y Live screen design pass — caps-full', { tag: '@desktop-on
 				if (state === 'live') await goLive(page);
 				const root = `[data-testid="${state}-cockpit"]`;
 				for (const viewport of [DESKTOP, PHONE]) {
-					await page.setViewportSize(viewport);
+					await resize(page, viewport);
 					await expect(page.locator(root)).toBeVisible();
 					// The encoder cell joins the live cockpit with the first load reading (a 2 s
 					// tick); scan only once it is there, so its text is always measured.
@@ -325,7 +339,7 @@ test.describe('@a11y Live screen design pass — caps-full', { tag: '@desktop-on
 		for (const state of ['idle', 'live'] as State[]) {
 			if (state === 'live') await goLive(page);
 			for (const viewport of [DESKTOP, KIOSK, PHONE]) {
-				await page.setViewportSize(viewport);
+				await resize(page, viewport);
 				await page.evaluate(() => window.scrollTo(0, 0));
 				for (const stop of await focusStopsUnderTheBar(page, `${state} ${viewport.width}x${viewport.height}`)) {
 					hidden.push(`${state} ${viewport.width}x${viewport.height} ${stop}`);
@@ -334,6 +348,83 @@ test.describe('@a11y Live screen design pass — caps-full', { tag: '@desktop-on
 			if (state === 'live') await goIdle(page);
 		}
 		expect(hidden).toEqual([]);
+	});
+
+	test("scrolled to its end, every idle region's last control sits whole above the Live bar, enabled and under the tap @a11y", async ({ page }) => {
+		test.setTimeout(240_000);
+		// Instant scrolling: the position a scroll settles on is the one measured.
+		await page.emulateMedia({ reducedMotion: 'reduce' });
+		// Every region of the idle cockpit, each checked on its own: the source options
+		// apart from the Audio box that follows them, and both disclosures.
+		const regions = [
+			{ name: 'Preview', selector: '[data-testid="preview-disclosure"]' },
+			{ name: 'Source options', selector: '[data-testid="source-list"] > ul' },
+			{ name: 'Audio', selector: '[data-testid="audio-card"]' },
+			{ name: 'Output', selector: '[data-testid="output-card"]' },
+			{ name: 'Connections', selector: '[data-testid="connections-card"]' },
+			{ name: 'Roadmap', selector: '[data-testid="live-roadmap"]' },
+		];
+		const unreachable: string[] = [];
+		for (const condition of [
+			{ name: '390x844', viewport: { width: 390, height: 844 }, touch: false },
+			{ name: '1024x600 touch', viewport: KIOSK, touch: true },
+			{ name: '1280x800', viewport: { width: 1280, height: 800 }, touch: false },
+		]) {
+			await page.setViewportSize(condition.viewport);
+			await openLive(page, { touch: condition.touch });
+			// The region that ends lowest is also checked with the page at its own end.
+			const lowest = await page.evaluate(
+				(selectors) => {
+					const bottoms = selectors.map(
+						(selector) => (document.querySelector(selector)?.getBoundingClientRect().bottom ?? Number.NEGATIVE_INFINITY) + window.scrollY,
+					);
+					return bottoms.indexOf(Math.max(...bottoms));
+				},
+				regions.map((region) => region.selector),
+			);
+			for (const [index, region] of regions.entries()) {
+				for (const scroll of index === lowest ? ['region', 'page'] : ['region']) {
+					const reach = await page.evaluate(
+						({ selector, scroll, controls }) => {
+							const root = document.querySelector(selector);
+							if (!root) return { name: '', problems: ['is not on the page'] };
+							// What is not rendered (display: none, visibility: hidden, the body of a closed
+							// disclosure) is not a control; the fixed Live bar is always on screen and
+							// belongs to no region.
+							const control = [...root.querySelectorAll<HTMLElement>(controls)]
+								.filter(
+									(element) =>
+										element.checkVisibility({ visibilityProperty: true }) &&
+										!element.closest('[data-testid="live-bar"]'),
+								)
+								.at(-1);
+							if (!control) return { name: '', problems: ['has no visible control'] };
+							const name = (control.getAttribute('aria-label') ?? control.textContent ?? '').trim();
+							if (scroll === 'region') root.scrollIntoView({ block: 'end', behavior: 'instant' });
+							else window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' });
+							const box = control.getBoundingClientRect();
+							const header = document.querySelector('header')?.getBoundingClientRect().bottom ?? 0;
+							const bar = document.querySelector('[data-testid="live-bar"]')?.getBoundingClientRect().top ?? innerHeight;
+							const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+							const problems: string[] = [];
+							if (name === '') problems.push('has no name');
+							if (control.matches(':disabled') || control.getAttribute('aria-disabled') === 'true') problems.push('is disabled');
+							if (box.top < header - 0.5) problems.push(`starts at ${Math.round(box.top)}, under the header ending at ${Math.round(header)}`);
+							if (box.bottom > bar + 0.5) problems.push(`ends at ${Math.round(box.bottom)}, under the bar at ${Math.round(bar)}`);
+							if (hit === null || (hit !== control && !control.contains(hit))) {
+								problems.push(`a tap at its centre lands on ${hit?.closest('[data-testid]')?.getAttribute('data-testid') ?? hit?.tagName ?? 'nothing'}`);
+							}
+							return { name: name.slice(0, 40), problems };
+						},
+						{ selector: region.selector, scroll, controls: CONTROLS },
+					);
+					for (const problem of reach.problems) {
+						unreachable.push(`${condition.name} ${region.name} "${reach.name}" (${scroll} end): ${problem}`);
+					}
+				}
+			}
+		}
+		expect(unreachable).toEqual([]);
 	});
 
 	test('sliders draw their track and fill, and run with the reading direction @a11y', async ({ page }) => {
