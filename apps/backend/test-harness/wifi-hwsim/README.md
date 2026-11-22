@@ -21,7 +21,7 @@ The first-AP shim installs an exclusive `/usr/local/bin/nmcli` link to its
 private executable in the exported repository and removes its owned link on
 close, uncaught process exit, SIGINT and SIGTERM. `/run` may remain `noexec`.
 That launcher directory is already
-on the guest's startup PATH. Bun 1.4.4's env-less product execution path retains
+on the guest's startup PATH. Bun 1.4.5's env-less product execution path retains
 the startup PATH, while the stdin runner receives the current environment;
 prepending a private directory after startup alone does not intercept both.
 An existing `/usr/local/bin/nmcli` is never overwritten.
@@ -98,7 +98,7 @@ shared-IPv4 hotspot profiles; the container uses `debian:trixie-slim`.
 It requires Linux with readable/writable `/dev/kvm`, QEMU (`qemu-system-x86_64`
 and `qemu-img`), xorriso, OpenSSH, curl, coreutils, find, flock, tar, Git and Python
 with `os.pidfd_open`/`signal.pidfd_send_signal` support (Linux, Python 3.9+).
-`--repo` additionally requires the workstation's Bun 1.4.4 binary.
+`--repo` additionally requires the workstation's Bun 1.4.5 binary.
 No host module, Docker or administrator password is needed. This remains
 local-only infrastructure, outside shared CI.
 
@@ -136,7 +136,7 @@ Flags:
 | Flag | Effect |
 |---|---|
 | `--radios N` | Create 2 to 100 radios, default 2. |
-| `--repo PATH` | Normalize PATH to its Git work-tree root, export one committed revision (default `HEAD`) to `/repo`, copy workstation Bun 1.4.4, and run `bun install --frozen-lockfile --linker=hoisted` in the guest. Hoisting makes workspace dependencies available to root-level gate imports. Commands start in `/repo`; `HWSIM_REPO=/repo` is available. Uncommitted files, workstation dependencies and submodules are excluded. |
+| `--repo PATH` | Normalize PATH to its Git work-tree root, export one committed revision (default `HEAD`) to `/repo`, copy workstation Bun 1.4.5, and run `bun install --frozen-lockfile --linker=hoisted` in the guest. Hoisting makes workspace dependencies available to root-level gate imports. Commands start in `/repo`; `HWSIM_REPO=/repo` is available. Uncommitted files, workstation dependencies and submodules are excluded. |
 | `--ref REV` | With `--repo`, select a commit from that repository's object store without checking it out or changing any worktree. The resolved commit supplies both checks and product code. |
 | `--no-install` | Skip the guest dependency install for self-contained repository commands. Without `--repo`, commands start in `/harness`. |
 | `--keep` | After a successful command, print the SSH command and hold the VM up for inspection until the runner is interrupted or one hour elapses. Keep the runner alive in its terminal; it still owns cleanup. |
@@ -641,7 +641,9 @@ Adding execute permission to the placeholder would not repair that inode error.
 `guest-versions.sh` prints every command's exit status and verdict. A valid
 hostapd version banner may accompany exit 1 on Debian 13's hostapd 2.10;
 that property applies only to this version probe. Other tool failures still
-fail the group, and the exact Bun/NM daemon pins remain 1.4.4/1.52.1.
+fail the group, and the live guest requires Bun 1.4.5 and NetworkManager 1.52.1.
+The R21 replay passes its exact historical Bun 1.4.4 pin to the same checker;
+live preflight does not pass an override.
 
 ```bash
 taskset -c 0-3 bash apps/backend/test-harness/wifi-hwsim/guest-versions.selftest.sh

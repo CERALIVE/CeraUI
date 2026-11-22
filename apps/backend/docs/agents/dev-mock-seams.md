@@ -9,7 +9,7 @@ are gated by `shouldUseMocks()` or `isDevelopment()` — never active in product
 
 The backend `test` script runs `bun test --parallel`, adopted after five full
 smoke runs and twenty consecutive clean acceptance runs on Bun 1.4.2. On the
-pinned Bun 1.4.4 it runs files across worker processes with per-file isolated globals; it does not
+pinned Bun 1.4.5 it runs files across worker processes with per-file isolated globals; it does not
 make tests within a file concurrent. Each file writing fixtures must own a
 `mkdtemp` root and redirect the existing path seam, never use a fixed shared
 path. `sim-autounlock.test.ts` uses `setConfigFilePath()` and absolute reads

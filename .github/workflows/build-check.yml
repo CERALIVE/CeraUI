@@ -121,7 +121,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
 
       - name: Cache Bun install
         uses: actions/cache@v6
@@ -169,7 +169,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
 
       - name: Cache Bun install
         uses: actions/cache@v6
@@ -210,7 +210,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
 
       - name: Cache Bun install
         uses: actions/cache@v6
@@ -275,7 +275,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
 
       - name: Cache Bun install
         uses: actions/cache@v6
@@ -429,7 +429,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
 
       - name: Prepare Debian trixie image
         run: docker pull debian:trixie
@@ -469,7 +469,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
 
       - name: Cache Bun install
         uses: actions/cache@v6
@@ -594,7 +594,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
 
       - name: Cache Bun install
         uses: actions/cache@v6
@@ -830,7 +830,7 @@ jobs:
       - name: Visual Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
 
       - name: Visual Bun cache
         uses: actions/cache@v6
@@ -860,7 +860,7 @@ jobs:
           node --version
           bun --version
           test "$(command -v bun)" = "$HOME/.bun/bin/bun"
-          test "$(bun --version)" = 1.4.4
+          test "$(bun --version)" = 1.4.5
           test "$(bun pm cache)" = "$HOME/.bun/install/cache"
           fc-list | sort | sha256sum
           ldd --version
@@ -897,7 +897,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
 
       - name: Cache Bun install
         uses: actions/cache@v6
@@ -1032,7 +1032,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
 
       - name: Cache Bun install
         uses: actions/cache@v6

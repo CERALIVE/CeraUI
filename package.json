@@ -57,7 +57,7 @@
 	"volta": {
 		"node": "26.0.0"
 	},
-	"packageManager": "bun@1.4.4",
+	"packageManager": "bun@1.4.5",
 	"workspaces": {
 		"packages": [
 			"apps/*",
