@@ -7,7 +7,6 @@ import {
 	prepareSoftwareUpdateOutput,
 	readSoftwareUpdateAttempt,
 	type SoftwareUpdateAttempt,
-	STATUS_RESERVED_BYTES,
 	softwareUpdateAttemptPath,
 	softwareUpdateOutputPaths,
 	UnsafeSoftwareUpdateOutputPathError,
@@ -37,7 +36,7 @@ const pinnedArgs = buildAptAllInstallArgs(
 const tail =
 	" ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=42 ; code=(null) ; status=0/0 }";
 const statusOpen =
-	"{ exec 3<>/run/ceralive/software-update.status; } 2>/dev/null || exec 3>/dev/null";
+	"exec 3> >(set +e; echo -1000 >/proc/self/oom_score_adj 2>/dev/null; cat >>/run/ceralive/software-update.status 2>/dev/null || exec cat >/dev/null; : >>/run/ceralive/software-update.status.done 2>/dev/null) || exec 3>/dev/null";
 // Round 4's form, never released: a pipe whose reader could stall or fail APT.
 const pipeDrain =
 	"exec 3> >(set +e; echo -1000 2>/dev/null >/proc/self/oom_score_adj; cat 2>/dev/null >>/run/ceralive/software-update.status; exec cat >/dev/null) || exec 3>/dev/null";
@@ -112,10 +111,7 @@ describe("the detached unit writes APT status records to a private third file", 
 			const stat = await lstat(local.status);
 			expect(stat.isFile()).toBe(true);
 			expect(stat.mode & 0o777).toBe(0o600);
-			// Reserved up front, so APT's writes never allocate.
-			expect(stat.size).toBe(STATUS_RESERVED_BYTES);
-			const bytes = await Bun.file(local.status).bytes();
-			expect(bytes.every((byte) => byte === 0)).toBe(true);
+			expect(stat.size).toBe(0);
 		} finally {
 			await rm(directory, { recursive: true, force: true });
 		}

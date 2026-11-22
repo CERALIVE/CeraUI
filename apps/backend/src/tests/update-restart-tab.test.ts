@@ -223,7 +223,8 @@ afterEach(async () => {
 			// The unit already exited with its session.
 		}
 	await rm(scratch, { recursive: true, force: true });
-});
+	// Kill and reap up to seven backend lifetimes; on a loaded runner that outlasts 5 s.
+}, 60_000);
 
 function session(role: "first" | "after-postinst" | "after-outcome" | "boot") {
 	const env: Record<string, string | undefined> = {
@@ -591,80 +592,77 @@ const outcomeOf = (seen: Seen) =>
 		? (seen.status.update_state as Status | undefined)?.kind
 		: undefined;
 
-test.each([
+// Each step between accepting an update and starting its unit, in order.
+const ADMISSION_STEPS = [
 	"reachability",
 	"apt-update",
 	"space",
 	"prepare-output",
 	"unit-start",
-])(
-	"a restart while a new update waits at %s never tells the tab the previous update's outcome",
-	async (step) => {
-		await writeFile(join(scratch, "apt-get"), QUICK_APT);
-		const tab = new Tab();
-		// Update A succeeds and restarts CeraUI once.
-		const first = session("first");
-		const token = await signIn(tab, await first.listening());
-		first.send("recover");
-		await first.line("session:recovered");
-		await tab.until("no unit at boot", (s) => updatingOf(s) === null);
-		const exitedA = first.child.exited;
-		expect(await tab.call(["system", "startUpdate"])).toMatchObject({
-			success: true,
-		});
-		await tab.until("A's outcome", (s) => outcomeOf(s) === "success");
-		expect(await exitedA).toBe(RESTART_EXIT_CODE);
+] as const;
 
-		// Update B is accepted; CeraUI dies while B waits at `step`.
-		const second = session("first");
-		await tab.connect(await second.listening());
-		expect(await tab.call(["auth", "login"], { token })).toEqual({
-			success: true,
-		});
-		second.send("recover");
-		await second.line("session:recovered");
-		await tab.until(
-			"A's outcome told again",
-			(s) => outcomeOf(s) === "success",
-		);
-		second.send(`park ${step}`);
-		await second.line(`session:parking ${step}`);
-		expect(await tab.call(["system", "startUpdate"])).toMatchObject({
-			success: true,
-		});
-		await second.line(`session:parked ${step}`);
-		second.child.kill("SIGKILL");
-		await second.child.exited;
-		await tab.until("B's backend died", (s) => s.at === "disconnected");
-		tab.moment("killed during B");
+test("a restart at any step before a new update's unit starts never tells the tab another update's outcome", async () => {
+	await writeFile(join(scratch, "apt-get"), QUICK_APT);
+	const tab = new Tab();
+	// Update A succeeds and restarts CeraUI once.
+	const first = session("first");
+	const token = await signIn(tab, await first.listening());
+	first.send("recover");
+	await first.line("session:recovered");
+	await tab.until("no unit at boot", (s) => updatingOf(s) === null);
+	const exitedA = first.child.exited;
+	expect(await tab.call(["system", "startUpdate"])).toMatchObject({
+		success: true,
+	});
+	await tab.until("A's outcome", (s) => outcomeOf(s) === "success");
+	expect(await exitedA).toBe(RESTART_EXIT_CODE);
 
-		// The next lifetime knows only the device's files.
-		const third = session("first");
-		await tab.connect(await third.listening());
-		expect(await tab.call(["auth", "login"], { token })).toEqual({
-			success: true,
-		});
-		third.send("recover");
-		await third.line("session:recovered");
-		await tab.pull();
-		const seen = [...tab.seen];
-		tab.close();
-		const told = seen
-			.slice(
-				seen.findIndex(
-					(s) => s.at === "moment" && s.name === "killed during B",
-				),
-			)
-			.filter((s) => outcomeOf(s) !== undefined);
+	// Each lifetime knows only the device's files: it is told what the last
+	// one left, then accepts a new update and is killed while it waits at the
+	// next step. One lifetime per step keeps the processes few.
+	const toldSince = (from: string) => {
+		const at = tab.seen.findIndex((s) => s.at === "moment" && s.name === from);
+		return tab.seen.slice(at).filter((s) => outcomeOf(s) !== undefined);
+	};
+	const expectTold = (from: string, kind: string) => {
+		const told = toldSince(from);
 		expect(told.length).toBeGreaterThan(0);
-		// Neither A's success nor any failure is ever B's; B simply never ran.
-		expect(told.map(outcomeOf)).toEqual(told.map(() => "available"));
+		expect(told.map(outcomeOf)).toEqual(told.map(() => kind));
 		expect(
 			told.some((s) => {
 				const u = updatingOf(s) as { result?: unknown } | null | undefined;
 				return typeof u === "object" && u !== null && "result" in u;
 			}),
 		).toBe(false);
-	},
-	120_000,
-);
+	};
+	let previous = "A's restart";
+	let kind = "success";
+	tab.moment(previous);
+	for (const step of [...ADMISSION_STEPS, undefined]) {
+		const lifetime = session("first");
+		await tab.connect(await lifetime.listening());
+		expect(await tab.call(["auth", "login"], { token })).toEqual({
+			success: true,
+		});
+		lifetime.send("recover");
+		await lifetime.line("session:recovered");
+		await tab.pull();
+		// A's own success is told once more; an update killed before its unit
+		// started is never given any outcome.
+		expectTold(previous, kind);
+		if (step === undefined) break;
+		lifetime.send(`park ${step}`);
+		await lifetime.line(`session:parking ${step}`);
+		expect(await tab.call(["system", "startUpdate"])).toMatchObject({
+			success: true,
+		});
+		await lifetime.line(`session:parked ${step}`);
+		lifetime.child.kill("SIGKILL");
+		await lifetime.child.exited;
+		await tab.until(`killed at ${step}`, (s) => s.at === "disconnected");
+		previous = `killed at ${step}`;
+		tab.moment(previous);
+		kind = "available";
+	}
+	tab.close();
+}, 240_000);

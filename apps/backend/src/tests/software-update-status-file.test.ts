@@ -1,19 +1,16 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import {
 	chmod,
+	mkdir,
 	mkdtemp,
 	readFile,
 	rm,
-	stat,
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildAptAllInstallArgs } from "../modules/system/apt-all-packages.ts";
-import {
-	prepareSoftwareUpdateOutput,
-	softwareUpdateOutputPaths,
-} from "../modules/system/software-update-output.ts";
+import { softwareUpdateOutputPaths } from "../modules/system/software-update-output.ts";
 import {
 	buildDetachedAptAllCommand,
 	buildDetachedAptUpgradeCommand,
@@ -27,11 +24,11 @@ const RECORDS = [
 
 // APT 3.0.3 ignores SIGPIPE (apt-private/private-main.cc InitSignals) and a
 // failed status write sets its pending error, which fails the install after
-// dpkg ran (apt-pkg/contrib/fileutl.cc FileFd::Write, private-install.cc). A
-// pipe on descriptor 3 could also block APT behind its reader.
+// dpkg ran (apt-pkg/contrib/fileutl.cc FileFd::Write, private-install.cc). So
+// APT writes into a pipe whose reader can never fail it.
 const FAKE_APT = `#!/bin/bash
 trap '' PIPE
-if [ -p /dev/fd/3 ]; then echo pipe >> "$WRITES"; exit 99; fi
+if [ ! -p /dev/fd/3 ]; then echo not-a-pipe >> "$WRITES"; exit 99; fi
 failed=0
 n=0
 for record in ${RECORDS.map((r) => `'${r}'`).join(" ")}; do
@@ -125,12 +122,32 @@ test.each(["pinned", "direct"] as const)(
 	},
 );
 
+test.each([
+	["pinned", "0"],
+	["pinned", "100"],
+	["direct", "0"],
+	["direct", "100"],
+] as const)(
+	"%s: a status sink that fails (a full /run) never changes APT's exit %s",
+	async (form, exit) => {
+		const result = await runUnit(form, "/dev/full", { FAKE_EXIT: exit });
+		expect(result.code).toBe(Number(exit));
+		expect(result.writes).toEqual(
+			Array(exit === "0" ? invocations[form] : 1).fill("0"),
+		);
+	},
+);
+
 test.each(["pinned", "direct"] as const)(
-	"%s: a status write that fails is APT's own write error, as on a full /run",
+	"%s: the reader marks the end only after a complete copy",
 	async (form) => {
-		const result = await runUnit(form, "/dev/full");
-		expect(result.code).toBe(100);
-		expect(result.writes).toEqual(["1"]);
+		const status = join(dir, "status");
+		expect((await runUnit(form, status)).code).toBe(0);
+		expect(await Bun.file(`${status}.done`).exists()).toBe(true);
+		const unwritable = join(dir, "occupied");
+		await mkdir(unwritable);
+		expect((await runUnit(form, unwritable)).code).toBe(0);
+		expect(await Bun.file(`${unwritable}.done`).exists()).toBe(false);
 	},
 );
 
@@ -170,36 +187,6 @@ test.each([
 		const runs = exit === "0" ? invocations[form] : 1;
 		expect(await readFile(status, "utf8")).toBe(
 			`${RECORDS.join("\n")}\n`.repeat(runs),
-		);
-	},
-);
-
-test.each(["pinned", "direct"] as const)(
-	"%s: APT's records are written inside the reserved status file, which never grows",
-	async (form) => {
-		const local = {
-			stdout: join(dir, "unit.stdout"),
-			stderr: join(dir, "unit.stderr"),
-			status: join(dir, "unit.status"),
-		};
-		const reserved = 64 * 1024;
-		expect(
-			await prepareSoftwareUpdateOutput(
-				local,
-				process.getuid?.() ?? 0,
-				reserved,
-			),
-		).toEqual({ status: true });
-		const before = await stat(local.status);
-		const result = await runUnit(form, local.status);
-		expect(result.code).toBe(0);
-		const after = await stat(local.status);
-		// No byte or block allocated after launch: a full /run cannot fail a write.
-		expect(after.size).toBe(reserved);
-		expect(after.blocks).toBe(before.blocks);
-		const text = await readFile(local.status, "utf8");
-		expect(text.slice(0, text.indexOf("\0"))).toBe(
-			`${RECORDS.join("\n")}\n`.repeat(invocations[form]),
 		);
 	},
 );

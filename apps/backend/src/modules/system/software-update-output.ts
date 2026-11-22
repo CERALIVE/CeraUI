@@ -29,14 +29,6 @@ import { logger } from "../../helpers/logger.ts";
 
 const RUN_DIR = "/run/ceralive";
 export const SOFTWARE_UPDATE_OUTPUT_READ_BYTES = 64 * 1024;
-/**
- * The status file is zero-filled to this size before launch, and the unit
- * opens it without truncating or appending: APT's records overwrite the
- * reservation, so they never allocate and a full /run cannot fail them. A
- * record is ~60 bytes; this holds hours of in-unit download records.
- */
-export const STATUS_RESERVED_BYTES = 4 * 1024 * 1024;
-const ZEROS = new Uint8Array(64 * 1024);
 
 export type SoftwareUpdateOutputPaths = {
 	readonly stdout: string;
@@ -61,11 +53,10 @@ const attemptSchema = z
 		uptimeMs: z.number().int().nonnegative(),
 		invocation: invocationSchema.optional(),
 		exitCode: exitCodeSchema.optional(),
+		/** With the exit: whether the unit's transcript was read to its end. */
+		drained: z.boolean().optional(),
 		leftover: z
-			.object({
-				invocation: invocationSchema.optional(),
-				exitCode: exitCodeSchema,
-			})
+			.object({ invocation: invocationSchema, exitCode: exitCodeSchema })
 			.strict()
 			.optional(),
 	})
@@ -128,7 +119,7 @@ function writeAll(fd: number, bytes: Uint8Array): void {
 function createOutputFile(
 	filePath: string,
 	expectedUid: number,
-	fill: { readonly text?: string; readonly zeros?: number } = {},
+	text?: string,
 ): void {
 	rmSync(filePath, { force: true });
 	const fd = openSync(
@@ -148,9 +139,7 @@ function createOutputFile(
 			);
 		}
 		fchmodSync(fd, 0o600);
-		if (fill.text !== undefined) writeAll(fd, Buffer.from(fill.text));
-		for (let left = fill.zeros ?? 0; left > 0; left -= ZEROS.byteLength)
-			writeAll(fd, ZEROS.subarray(0, Math.min(left, ZEROS.byteLength)));
+		if (text !== undefined) writeAll(fd, Buffer.from(text));
 	} finally {
 		closeSync(fd);
 	}
@@ -159,7 +148,6 @@ function createOutputFile(
 export async function prepareSoftwareUpdateOutput(
 	paths: SoftwareUpdateOutputPaths,
 	expectedUid = 0,
-	reservedBytes = STATUS_RESERVED_BYTES,
 ): Promise<{ readonly status: boolean }> {
 	const files = [paths.stdout, paths.stderr, paths.status];
 	const directories = new Set(files.map((file) => path.dirname(file)));
@@ -179,10 +167,10 @@ export async function prepareSoftwareUpdateOutput(
 	secureOutputDirectory(directory, expectedUid);
 	createOutputFile(paths.stdout, expectedUid);
 	createOutputFile(paths.stderr, expectedUid);
-	// Progress is display only: a status file that cannot be reserved (a /run
-	// already short of space) never blocks apt; the unit runs without it.
+	// Progress is display only: a status file that cannot be made never blocks apt.
 	try {
-		createOutputFile(paths.status, expectedUid, { zeros: reservedBytes });
+		rmSync(softwareUpdateStatusDonePath(paths), { force: true });
+		createOutputFile(paths.status, expectedUid);
 		return { status: true };
 	} catch (error) {
 		try {
@@ -198,6 +186,22 @@ export async function prepareSoftwareUpdateOutput(
 		);
 		return { status: false };
 	}
+}
+
+/** Made by the status reader once it copied everything APT wrote. */
+export function softwareUpdateStatusDonePath(
+	paths: SoftwareUpdateOutputPaths,
+): string {
+	return `${paths.status}.done`;
+}
+
+export async function readSoftwareUpdateStatusDone(
+	paths: SoftwareUpdateOutputPaths,
+): Promise<boolean> {
+	return fs
+		.lstat(softwareUpdateStatusDonePath(paths))
+		.then((stat) => stat.isFile())
+		.catch(() => false);
 }
 
 export function softwareUpdateAttemptPath(
@@ -216,7 +220,7 @@ export function writeSoftwareUpdateAttempt(
 	secureOutputDirectory(path.dirname(paths.stdout), expectedUid);
 	const target = softwareUpdateAttemptPath(paths);
 	const pending = `${target}.part`;
-	createOutputFile(pending, expectedUid, { text });
+	createOutputFile(pending, expectedUid, text);
 	renameSync(pending, target);
 }
 

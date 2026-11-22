@@ -63,10 +63,11 @@ export function deriveUpdateProgress(
 				: shown;
 		reported = phase;
 	}
-	// No complete record yet (an empty or partial channel): the transcript's
-	// phase, never a number.
-	if (percent === undefined && reported === "preparing")
-		return { ...PHASE_MARKERS[transcriptPhase(stdout)] };
+	// The transcript proves a later phase than any complete record (an empty,
+	// partial or stalled channel): that phase, never a stale number.
+	const proven = transcriptPhase(stdout);
+	if (PHASE_ORDER[proven] > PHASE_ORDER[reported])
+		return { ...PHASE_MARKERS[proven] };
 	return {
 		...PHASE_MARKERS[reported],
 		...(percent !== undefined ? { percent } : {}),

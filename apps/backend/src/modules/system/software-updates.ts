@@ -351,11 +351,8 @@ function admitSoftwareUpdateAttempt(): boolean {
 			);
 		}
 		const leftover =
-			previous?.exitCode !== undefined
-				? {
-						...(previous.invocation ? { invocation: previous.invocation } : {}),
-						exitCode: previous.exitCode,
-					}
+			previous?.exitCode !== undefined && previous.invocation !== undefined
+				? { invocation: previous.invocation, exitCode: previous.exitCode }
 				: previous?.leftover;
 		deps.writeAttempt({
 			schema: 2,
@@ -1616,7 +1613,14 @@ type SoftwareUpdateProcessMonitor = {
 
 export function createSoftwareUpdateProcessMonitor(
 	prefetched = "",
-	{ ownership }: { readonly ownership?: Promise<boolean> } = {},
+	{
+		ownership,
+		exitHook,
+	}: {
+		readonly ownership?: Promise<boolean>;
+		/** Read once ownership is granted: startup reserves the hook while adjudicating. */
+		readonly exitHook?: () => CommitExitHook | undefined;
+	} = {},
 ): SoftwareUpdateProcessMonitor {
 	let rebootAfterUpgrade = false;
 	let summaryParseLogged = false;
@@ -1819,19 +1823,20 @@ export function createSoftwareUpdateProcessMonitor(
 		void settled.then(async (code) => {
 			if (aptLog) logger.info(aptLog);
 			if (aptErr) logger.error(aptErr);
+			let hook = onCommitSucceeded;
 			if (ownership) {
 				// The outcome is told already; the unit's owner duties wait for startup.
 				let owned = false;
 				try {
 					owned = await ownership;
 					if (owned) {
+						hook = exitHook?.() ?? onCommitSucceeded;
 						const cleaned = await cleanAptCache(defaultAptSpaceDeps.run);
 						if (code === 0 && !cleaned) {
 							lastCleanupWarning = "post_clean_failed";
 							broadcastUpdateState();
 						}
-						if (code === 0 && onCommitSucceeded)
-							pendingPackageSuccess.observe();
+						if (code === 0 && hook) pendingPackageSuccess.observe();
 					}
 				} catch (error) {
 					owned = false;
@@ -1853,13 +1858,13 @@ export function createSoftwareUpdateProcessMonitor(
 			}
 			if (code === 0) {
 				// Persist the observed commit success before deliberately exiting.
-				void finishSoftwareUpdateRestart(onCommitSucceeded, () => {
+				void finishSoftwareUpdateRestart(hook, () => {
 					if (!outcomeRecorded) {
 						markBootDegraded("software-update-retirement");
 						logger.error(
 							"Software update: restart withheld; the exit could not be recorded, so the finished unit stays as the evidence",
 						);
-					} else if (rebootAfterUpgrade && !onCommitSucceeded) {
+					} else if (rebootAfterUpgrade && !hook) {
 						rebootAfterUpdate();
 					} else {
 						invariant(
@@ -2159,8 +2164,10 @@ async function recoverSoftwareUpdate(
 	// unit, cleaning the cache and restarting wait until it is true.
 	const monitor = createSoftwareUpdateProcessMonitor(
 		"",
-		ownership ? { ownership } : {},
+		ownership ? { ownership, exitHook: getRecoveredUpdateExitHook } : {},
 	);
+	// With ownership pending the hook is read at hand-over, never at attach.
+	const exitHook = ownership ? undefined : getRecoveredUpdateExitHook();
 	const recovered = await deps.recover(
 		{
 			...monitor.handlers,
@@ -2225,10 +2232,10 @@ async function recoverSoftwareUpdate(
 		// That window is exactly what let the update-orchestrator's own resume
 		// (resume.ts resumeCommitting()) observe neither a live nor a settled
 		// state and misclassify a successful recovery as unresolved.
-		await monitor.finish(recovered.completion, getRecoveredUpdateExitHook());
+		await monitor.finish(recovered.completion, exitHook);
 	} else {
 		// Still running: this can take minutes. Never block boot on it.
-		void monitor.finish(recovered.completion, getRecoveredUpdateExitHook());
+		void monitor.finish(recovered.completion, exitHook);
 	}
 	return true;
 }

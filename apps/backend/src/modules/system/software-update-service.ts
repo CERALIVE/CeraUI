@@ -14,6 +14,7 @@ import {
 	prepareSoftwareUpdateOutput,
 	readSoftwareUpdateAttempt,
 	readSoftwareUpdateOutput,
+	readSoftwareUpdateStatusDone,
 	type SoftwareUpdateAttempt,
 	type SoftwareUpdateOutputPaths,
 	type SoftwareUpdateOutputRead,
@@ -89,6 +90,8 @@ export type DetachedAptServiceDeps = {
 	readonly writeAttempt: (record: SoftwareUpdateAttempt) => void;
 	/** Milliseconds since boot; defaults to the host's uptime. */
 	readonly uptimeMs?: () => number;
+	/** The status reader copied everything APT wrote; absent: never waited for. */
+	readonly statusDone?: () => Promise<boolean>;
 };
 
 function assertTrustedOutputPaths(
@@ -245,5 +248,6 @@ export function defaultDetachedAptServiceDeps(): DetachedAptServiceDeps {
 		sleep: Bun.sleep,
 		readAttempt: () => readSoftwareUpdateAttempt(paths),
 		writeAttempt: (record) => writeSoftwareUpdateAttempt(paths, record),
+		statusDone: () => readSoftwareUpdateStatusDone(paths),
 	};
 }

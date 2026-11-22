@@ -134,10 +134,12 @@ describe("deriveUpdateProgress()", () => {
 		).toEqual(installingAt());
 	});
 
-	test("a unit with the status channel takes its phase from the channel only", () => {
-		expect(deriveUpdateProgress(dpkgLog, fetchStatus)).toEqual(
+	test("the status channel gives the number; a transcript proving a later phase overrides a stale record", () => {
+		expect(deriveUpdateProgress(fetchLog, fetchStatus)).toEqual(
 			downloadingAt(41),
 		);
+		// dpkg is unpacking while the last complete record is a download one.
+		expect(deriveUpdateProgress(dpkgLog, fetchStatus)).toEqual(installingAt());
 	});
 });
 

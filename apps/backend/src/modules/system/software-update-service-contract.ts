@@ -130,13 +130,16 @@ const APT_STATUS_OPTION = "-o APT::Status-Fd=3";
 /** The status forms need bash: its failed `exec` redirect returns, where sh exits. */
 export const STATUS_CHANNEL_SHELL = "/bin/bash";
 
-// APT writes its records into the status file itself, opened read-write
-// without truncating: they overwrite its zero-filled reservation, so a write
-// never allocates (a full /run cannot fail it), never blocks, and no reader
-// can die under it. One it cannot open gives APT /dev/null, so the install
-// still runs, without numbers.
+// APT writes its records into a pipe. Its reader appends them to the status
+// file and, on any write error (a full /run, a size limit), discards the rest,
+// so a status write never fails; it is exempt from the OOM killer, so only
+// stopping the unit, which ends APT too, ends it early. Once it has copied
+// everything it marks the end (`.done`), so the final read knows it is
+// complete; after an error it does not. A shell that cannot start it gives
+// APT /dev/null.
 function aptStatusRedirect(): string {
-	return `{ exec 3<>${softwareUpdateOutputPaths().status}; } 2>/dev/null || exec 3>/dev/null`;
+	const status = softwareUpdateOutputPaths().status;
+	return `exec 3> >(set +e; echo -1000 >/proc/self/oom_score_adj 2>/dev/null; cat >>${status} 2>/dev/null || exec cat >/dev/null; : >>${status}.done 2>/dev/null) || exec 3>/dev/null`;
 }
 
 export function expectedAptUpgradeScript(aptArgs: readonly string[]): string {

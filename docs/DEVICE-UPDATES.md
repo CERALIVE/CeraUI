@@ -29,21 +29,19 @@ close-on-exec before forking dpkg, which on stderr would leave the image's
 `DPkg::Post-Invoke` hooks without stderr; stdout would interleave records
 with dpkg's PTY output.
 
-The channel is best effort and cannot fail APT. Before launch the backend
-zero-fills the status file to a 4 MiB reservation; the unit opens it with
-`3<>` (read-write, no truncation, no append), so APT's records overwrite
-the reservation and a write never allocates: a full `/run` cannot fail it,
-and with no reader process nothing can stall or die under it. The reader
-stops at the first NUL. APT 3.0.3 does turn a failed status write into its
-pending error (`FileFd::Write`), and `private-install.cc` then fails the
-install after dpkg ran, which is why the write must not be able to fail. A
-status file that cannot be reserved (a `/run` already short of space)
-starts the released pre-channel command instead, so the unit's command
-always says whether it writes the channel; a file the shell cannot open
-gives APT `/dev/null`. A file removed mid-run is not an error (APT keeps its
-open descriptor). The remaining limit: APT writing past 4 MiB (a record is
-about 60 bytes, so tens of thousands of records; the pinned path fetches
-archives before the unit starts) would allocate again. The status forms
+The channel is best effort and cannot fail APT. APT writes its records into
+a pipe; a reader in the unit (exempt from the OOM killer) appends them to the
+status file and, on any write error (a full `/run`, a size limit, a file it
+cannot open), discards the rest. A status write therefore never fails and
+never waits on disk; only stopping the unit, which ends APT too, ends the
+reader early. APT 3.0.3 turns a failed status write into its pending error
+(`FileFd::Write`), and `private-install.cc` then fails the install after
+dpkg ran, which is why the write must not be able to fail. After a complete
+copy the reader creates `software-update.status.done`; the final read waits
+for it (bounded), and without it the channel is unknown and only transcript
+phases are shown. A status file the backend cannot make starts the released
+pre-channel command; a shell that cannot start the reader gives APT
+`/dev/null`. A file removed mid-run is not an error. The status forms
 run under `/bin/bash`, whose failed `exec` redirect returns where `sh`
 exits; the released pre-channel forms stay `/bin/sh` and remain adoptable.
 
@@ -104,13 +102,18 @@ anything or starts a check, so a restart at any step before the unit starts
 finds that attempt with no exit and tells nothing; an older attempt's
 recorded exit is kept only as a `leftover` a launch may use to retire that
 finished unit. When the record cannot be written the start is refused. The
-launch writes `launched` before the unit exists; the observer writes the
-unit's exit and systemd `InvocationID` under that attempt after its final
-read (five tries). A gone unit's exit is told only from a `launched` record
-with an exit, within 30 minutes of boot-relative uptime.
+launch writes `launched` before the unit exists and the observer adds
+systemd's `InvocationID` as soon as it sees the unit: that invocation is the
+attempt's identity, and a different invocation of the fixed unit is a
+replaced unit, never this attempt's. After its final read the observer writes
+the exit (and `drained`, whether the transcript was read) unless the record
+now holds a newer pending attempt (five tries). A gone unit's exit is told
+only from a `launched` record with an exit and an invocation, within 30
+minutes of boot-relative uptime.
 
 The unit is retired only once its exit is durably recorded and its
-transcript was read; otherwise it stays as the evidence, its exit is still
+transcript was read, and only while systemd still shows that same finished
+invocation; otherwise it stays as the evidence, its exit is still
 published, and the deliberate restart is withheld (boot marked degraded).
 A finished unit whose exit is recorded (same exit and invocation) is never
 adopted again: a later boot reports it and tries one retirement, so a unit
@@ -120,8 +123,10 @@ refuses otherwise.
 
 At boot a surviving unit is watched at once, independent of the slower
 startup checks: the tab sees its progress and outcome. Retiring it,
-cleaning the APT cache and restarting CeraUI wait until startup is admitted;
-a refused or failed startup leaves it watched only, and new starts are
+cleaning the APT cache and restarting CeraUI wait until startup is admitted,
+and the orchestrator's completion check is read only then (startup reserves
+it while adjudicating), so a restart runs it whenever one is reserved; a
+refused or failed startup leaves it watched only, and new starts are
 refused while that hand-over is pending.
 
 A tab can miss the single outcome push while it reconnects across the

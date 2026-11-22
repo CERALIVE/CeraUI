@@ -66,12 +66,16 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   One attempt record (`software-update.attempt`) is all replay reads:
   `startSoftwareUpdate` writes `accepted` (new id) before publishing or
   starting anything, the launch writes `launched` before the unit exists,
-  and the observer adds the exit and `InvocationID`. Only a `launched`
-  record's own fresh exit is replayed; an older exit is a `leftover` for
-  retirement only. The unit is retired, and CeraUI restarted, only after the
-  exit is recorded (and the transcript read); a recorded finished unit is
-  never adopted again. The status file is a zero-filled 4 MiB reservation
-  opened with `3<>`, so a status write never allocates and cannot fail APT.
+  and the observer adds the unit's `InvocationID` (the attempt's identity)
+  and later its exit with `drained`. Only a `launched` record's own fresh
+  exit with an invocation is replayed; an older exit is a `leftover` for
+  retirement only. CeraUI restarts only after the exit is recorded; the unit
+  is retired only when, besides, its transcript was read and systemd still
+  shows the same finished invocation. A recorded finished unit is never
+  adopted again. APT's status descriptor is a pipe whose OOM-exempt reader
+  appends to the status file and discards on any write error, so a status
+  write cannot fail APT; its `.done` mark makes the final read complete. The
+  completion hook of a unit watched at boot is read at hand-over.
 - **Reattachment identity is a safety boundary.** Adoption requires the
   exact unit id and transient fragment path, transient-service description/type,
   exact non-duplicated `[Service]` stdout/stderr append destinations, no pre/post

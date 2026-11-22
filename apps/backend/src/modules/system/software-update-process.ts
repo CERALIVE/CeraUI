@@ -105,6 +105,14 @@ export class DetachedAptServiceVanishedError extends Error {
 	}
 }
 
+/** systemd now shows another invocation of the fixed unit than the one observed. */
+export class DetachedAptServiceReplacedError extends Error {
+	constructor() {
+		super("the software-update unit is no longer the invocation observed");
+		this.name = "DetachedAptServiceReplacedError";
+	}
+}
+
 export class DetachedAptServiceAlreadyExistsError extends Error {
 	constructor() {
 		super("a detached apt transaction already exists");
@@ -147,21 +155,15 @@ async function drainOutputCursor(
 	read: DetachedAptUpgradeDeps["readOutput"],
 ): Promise<{ readonly cursor: OutputCursor; readonly atEnd: boolean }> {
 	const next = await read(cursor.path, cursor.offset);
-	let { bytes, nextOffset } = next;
-	// The status file is a zero-filled reservation: APT's records end at the first NUL.
-	const reserved = cursor.optional ? bytes.indexOf(0) : -1;
-	if (reserved >= 0) {
-		bytes = bytes.subarray(0, reserved);
-		nextOffset = cursor.offset + reserved;
-	}
+	const { bytes, nextOffset } = next;
 	if (bytes.byteLength > 0) {
 		const text = cursor.decoder.decode(bytes, { stream: true });
 		if (text.length > 0) cursor.emit(text);
 	}
-	// One read is bounded; only an empty read (or the reservation) proves the end.
+	// One read is bounded; only an empty read proves the file was drained.
 	return {
 		cursor: { ...cursor, offset: nextOffset },
-		atEnd: reserved >= 0 || bytes.byteLength === 0,
+		atEnd: bytes.byteLength === 0,
 	};
 }
 
@@ -252,7 +254,9 @@ function recordsExit(
 			? record
 			: undefined;
 	return (
-		exit?.exitCode === unit.exitCode && exit?.invocation === unit.invocation
+		exit?.invocation !== undefined &&
+		exit.invocation === unit.invocation &&
+		exit.exitCode === unit.exitCode
 	);
 }
 
@@ -272,6 +276,61 @@ async function retireDetachedAptUnit(
 			await deps.sleep(OUTPUT_POLL_INTERVAL_MS);
 		}
 	}
+}
+
+/**
+ * Retires `state` only while systemd still shows that same finished
+ * invocation; a replaced unit, or one that cannot be inspected, is left alone.
+ */
+async function retireSameUnit(
+	state: FinishedState,
+	handlers: SoftwareUpdateOutputHandlers,
+	deps: DetachedAptUpgradeDeps,
+	once = false,
+): Promise<void> {
+	let current: DetachedAptServiceState;
+	try {
+		current = await deps.inspect();
+	} catch (error) {
+		reportObserverError(handlers, error);
+		return;
+	}
+	if (current.kind !== "finished" || current.invocation !== state.invocation) {
+		reportObserverError(handlers, new DetachedAptServiceReplacedError());
+		return;
+	}
+	if (!once) return retireDetachedAptUnit(current, handlers, deps);
+	await deps
+		.cleanup(current)
+		.catch((error: unknown) => reportObserverError(handlers, error));
+}
+
+/** The first invocation seen is this attempt's, and is recorded; another one is a replaced unit. */
+function bindInvocation(
+	state: Exclude<DetachedAptServiceState, { readonly kind: "absent" }>,
+	bound: string | undefined,
+	attempt: string,
+	deps: DetachedAptUpgradeDeps,
+	handlers: SoftwareUpdateOutputHandlers,
+): string | undefined {
+	if (state.invocation === undefined) return bound;
+	if (bound !== undefined) {
+		if (state.invocation !== bound) throw new DetachedAptServiceReplacedError();
+		return bound;
+	}
+	const record = readAttempt(deps, handlers);
+	if (
+		record?.attempt === attempt &&
+		record.phase === "launched" &&
+		record.exitCode === undefined
+	) {
+		try {
+			deps.writeAttempt({ ...record, invocation: state.invocation });
+		} catch (error) {
+			reportObserverError(handlers, error);
+		}
+	}
+	return state.invocation;
 }
 
 export type ObserveOptions = {
@@ -311,6 +370,13 @@ async function observeDetachedAptUpgrade(
 	let inspectRetryMs = 1_000;
 	let lastInspectReportAt = -Infinity;
 	let suppressedInspectErrors = 0;
+	let invocation = bindInvocation(
+		initialState,
+		undefined,
+		attempt,
+		deps,
+		handlers,
+	);
 
 	while (state.kind === "running") {
 		const drained = await drainAvailableOutput(
@@ -340,9 +406,25 @@ async function observeDetachedAptUpgrade(
 		lastInspectReportAt = -Infinity;
 		suppressedInspectErrors = 0;
 		if (state.kind === "absent") throw new DetachedAptServiceVanishedError();
+		invocation = bindInvocation(state, invocation, attempt, deps, handlers);
 	}
 	if (state.kind !== "finished") throw new DetachedAptServiceVanishedError();
 	const finished = state;
+	bindInvocation(finished, invocation, attempt, deps, handlers);
+
+	// The status reader may still be copying APT's last records; it marks when
+	// it is done. Without that mark the channel is unknown, never complete.
+	if (deps.statusDone && cursors.some((cursor) => cursor.optional)) {
+		let done = false;
+		for (let tries = 0; tries < FINAL_DRAIN_MAX_FAILURES && !done; tries++) {
+			done = await deps.statusDone().catch(() => false);
+			if (!done) await deps.sleep(OUTPUT_POLL_INTERVAL_MS);
+		}
+		if (!done) {
+			cursors = cursors.filter((cursor) => !cursor.optional);
+			handlers.onStatusLost?.();
+		}
+	}
 
 	let finalDrainFailures = 0;
 	let caughtUp = false;
@@ -368,10 +450,16 @@ async function observeDetachedAptUpgrade(
 		if (tail.length > 0) cursor.emit(tail);
 	}
 	handlers.onDrained?.(caughtUp);
-	// APT has exited, so this read was complete. The exit is returned either
-	// way; only a durable record of it lets the unit go or CeraUI restart.
+	// The exit is returned either way; only a durable record of it lets the
+	// unit go or CeraUI restart. A pending newer attempt's record is never
+	// overwritten; a finished one is superseded by the unit systemd shows now.
+	const owner = readAttempt(deps, handlers);
+	const ours =
+		owner === null || owner.attempt === attempt || owner.exitCode !== undefined;
+	if (!ours)
+		reportObserverError(handlers, new DetachedAptServiceReplacedError());
 	let recorded = false;
-	for (let tries = 1; tries <= RECORD_ATTEMPTS && !recorded; tries++) {
+	for (let tries = 1; ours && tries <= RECORD_ATTEMPTS && !recorded; tries++) {
 		try {
 			deps.writeAttempt({
 				schema: 2,
@@ -380,6 +468,7 @@ async function observeDetachedAptUpgrade(
 				uptimeMs: softwareUpdateUptimeMs(deps),
 				...(finished.invocation ? { invocation: finished.invocation } : {}),
 				exitCode: finished.exitCode,
+				drained: transcriptRead,
 			});
 			recorded = true;
 		} catch (error) {
@@ -391,7 +480,7 @@ async function observeDetachedAptUpgrade(
 	// Unrecorded, or with an unread transcript, the unit stays as the evidence.
 	if (recorded && transcriptRead)
 		await whenOwned(options.retire, handlers, () =>
-			retireDetachedAptUnit(finished, handlers, deps),
+			retireSameUnit(finished, handlers, deps),
 		);
 	return finished.exitCode;
 }
@@ -480,7 +569,11 @@ export async function recoverDetachedAptUpgrade(
 	const state = await deps.inspect();
 	const record = readAttempt(deps, handlers);
 	if (state.kind === "absent") {
-		if (record?.phase !== "launched" || record.exitCode === undefined)
+		if (
+			record?.phase !== "launched" ||
+			record.exitCode === undefined ||
+			record.invocation === undefined
+		)
 			return null;
 		const age = softwareUpdateUptimeMs(deps) - record.uptimeMs;
 		return age >= 0 && age < RECORDED_OUTCOME_REPLAY_MS
@@ -490,11 +583,11 @@ export async function recoverDetachedAptUpgrade(
 	if (state.kind === "finished") {
 		const own = recordsExit(record, state);
 		if (own || recordsExit(record, state, true)) {
-			await whenOwned(options.retire, handlers, () =>
-				deps
-					.cleanup(state)
-					.catch((error: unknown) => reportObserverError(handlers, error)),
-			);
+			// A recorded exit whose transcript was not read keeps its unit as evidence.
+			if (!own || record?.drained === true)
+				await whenOwned(options.retire, handlers, () =>
+					retireSameUnit(state, handlers, deps, true),
+				);
 			// An older attempt's leftover tells the current attempt nothing.
 			return own
 				? { recorded: { exitCode: state.exitCode }, unit: "finished" }
@@ -502,10 +595,11 @@ export async function recoverDetachedAptUpgrade(
 		}
 	}
 	// This attempt's own launched unit keeps its id; any other gets a new one.
-	const attempt =
-		record?.phase === "launched" && record.exitCode === undefined
-			? record.attempt
-			: randomUUID();
+	const ours =
+		record?.phase === "launched" &&
+		record.exitCode === undefined &&
+		(record.invocation === undefined || record.invocation === state.invocation);
+	const attempt = ours && record ? record.attempt : randomUUID();
 	handlers.onAttached?.(state.aptStatus === true);
 	return {
 		completion: observeDetachedAptUpgrade(

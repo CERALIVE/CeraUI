@@ -20,6 +20,10 @@ import {
 	resetSoftwareUpdateState,
 	type SoftwareUpdateRecoveryDeps,
 } from "../modules/system/software-updates.ts";
+import {
+	reserveRecoveredUpdateExit,
+	resetRecoveredUpdateExitForTest,
+} from "../modules/system/update-orchestrator/recovery-exit-gate.ts";
 import { buildInitialStatus } from "../rpc/procedures/status.procedure.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
@@ -29,11 +33,14 @@ useSessionOwnerForFile();
 const paths = softwareUpdateOutputPaths();
 // Boot-relative clock the records carry.
 const NOW = 10 * 60 * 60_000;
+const INVOCATION = "0123456789abcdef0123456789abcdef";
 const attemptOf = (): SoftwareUpdateAttempt => ({
 	schema: 2,
 	attempt: "11111111-1111-4111-8111-111111111111",
 	phase: "launched",
 	uptimeMs: NOW,
+	invocation: INVOCATION,
+	drained: true,
 });
 type File = "stdout" | "stderr" | "status";
 const dl = (percent: string) =>
@@ -112,8 +119,9 @@ function fakeUnit(o: {
 							exitCode: o.exitCode,
 							cleanup: o.exitCode === 0 ? "stop" : "reset-failed",
 							aptStatus: true,
+							invocation: INVOCATION,
 						}
-					: { kind: "running", aptStatus: true },
+					: { kind: "running", aptStatus: true, invocation: INVOCATION },
 		cleanup: async (finished) => {
 			events.push("retire");
 			const error = o.failCleanup?.(++cleanupAttempts);
@@ -780,3 +788,110 @@ test.each([0, 100])(
 		expect(h.restarts).toBe(0);
 	},
 );
+
+const OTHER = "fedcba9876543210fedcba9876543210";
+
+test("a finished unit of another invocation than the recorded exit is observed, never taken as recorded", async () => {
+	await using h = await updateHarness();
+	const unit = fakeUnit({
+		files: installing,
+		exitCode: 0,
+		finished: true,
+		recorded: { exitCode: 0, invocation: OTHER },
+	});
+	const deps = recoveryOf(unit);
+	beginSoftwareUpdateRecovery();
+	expect(await recoverSoftwareUpdateIfRunning(deps)).toBe(true);
+	expect(deps.completion).toBeDefined();
+	expect(await deps.completion).toBe(0);
+	expect(unit.recorded()?.invocation).toBe(INVOCATION);
+	expect(unit.recorded()?.attempt).not.toBe(attemptOf().attempt);
+	await h.settled();
+});
+
+test("an exit is never written over a newer attempt's record", async () => {
+	const newer = {
+		schema: 2 as const,
+		attempt: "22222222-2222-4222-8222-222222222222",
+		phase: "accepted" as const,
+		uptimeMs: NOW,
+	};
+	const unit = fakeUnit({
+		files: { stdout: "done\n", stderr: "", status: "" },
+		exitCode: 0,
+		live: true,
+		steps: [() => unit.deps.writeAttempt(newer)],
+	});
+	expect(await runDetachedAptAll(args, "any", quiet, unit.deps)).toBe(0);
+	expect(unit.recorded()).toEqual(newer);
+	expect(unit.recordAttempts()).toBe(0);
+	// Not recorded, so not retired: the unit stays as the evidence.
+	expect(unit.retired).toEqual([]);
+});
+
+test("a retirement deferred until startup is admitted leaves a unit that was replaced meanwhile", async () => {
+	await using h = await updateHarness();
+	const unit = fakeUnit({ files: installing, exitCode: 0, finished: true });
+	const deps = recoveryOf(unit);
+	beginSoftwareUpdateRecovery();
+	const adjudication = Promise.withResolvers<boolean>();
+	expect(await recoverSoftwareUpdateIfRunning(deps, adjudication.promise)).toBe(
+		true,
+	);
+	expect(unit.recorded()?.exitCode).toBe(0);
+	// Another invocation of the fixed unit appears before startup hands it over.
+	const inspect = unit.deps.inspect;
+	Object.assign(unit.deps, {
+		inspect: async () => ({ ...(await inspect()), invocation: OTHER }),
+	});
+	adjudication.resolve(true);
+	await h.restarted();
+	expect(unit.retired).toEqual([]);
+});
+
+test("the completion hook startup reserves after the unit was attached is the one that guards the restart", async () => {
+	await using h = await updateHarness();
+	const unit = fakeUnit({ files: installing, exitCode: 0, finished: true });
+	const deps = recoveryOf(unit);
+	beginSoftwareUpdateRecovery();
+	const adjudication = Promise.withResolvers<boolean>();
+	try {
+		expect(
+			await recoverSoftwareUpdateIfRunning(deps, adjudication.promise),
+		).toBe(true);
+		let checked = 0;
+		reserveRecoveredUpdateExit(async () => {
+			checked++;
+			return true;
+		});
+		adjudication.resolve(true);
+		await h.restarted();
+		expect(checked).toBe(1);
+	} finally {
+		resetRecoveredUpdateExitForTest();
+	}
+});
+
+test("an exit recorded without its transcript keeps the unit on the next boot too", async () => {
+	await using h = await updateHarness();
+	const unit = fakeUnit({
+		files: installing,
+		exitCode: 0,
+		finished: true,
+		failRead: (file) => (file === "stdout" ? eio() : undefined),
+	});
+	beginSoftwareUpdateRecovery();
+	const first = recoveryOf(unit);
+	expect(await recoverSoftwareUpdateIfRunning(first)).toBe(true);
+	expect(unit.recorded()?.exitCode).toBe(0);
+	expect(unit.recorded()?.drained).toBe(false);
+	// The next lifetime finds that recorded exit: told, never adopted, not retired.
+	resetSoftwareUpdateState();
+	beginSoftwareUpdateRecovery();
+	const second = recoveryOf(unit);
+	expect(await recoverSoftwareUpdateIfRunning(second)).toBe(true);
+	expect(second.completion).toBeUndefined();
+	expect(unit.retired).toEqual([]);
+	expect(buildInitialStatus().status.update_state?.kind).toBe("success");
+	await h.settled();
+});

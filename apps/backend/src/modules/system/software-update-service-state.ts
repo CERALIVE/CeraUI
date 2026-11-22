@@ -21,7 +21,11 @@ import {
 
 export type DetachedAptServiceState =
 	| { readonly kind: "absent" }
-	| { readonly kind: "running"; readonly aptStatus?: true }
+	| {
+			readonly kind: "running";
+			readonly aptStatus?: true;
+			readonly invocation?: string;
+	  }
 	| {
 			readonly kind: "finished";
 			readonly exitCode: number;
@@ -87,7 +91,7 @@ export function parseDetachedAptServiceState(
 			subState !== "failed" ||
 			exit.mainStatus === 0
 		)
-			return { kind: "running" };
+			return { kind: "running", ...run };
 		return {
 			kind: "finished",
 			exitCode: processExitCode(exit.mainCode, exit.mainStatus),
@@ -97,7 +101,7 @@ export function parseDetachedAptServiceState(
 	}
 	if (subState === "exited") {
 		if (!exit || activeState !== "active" || exit.mainCode !== 1)
-			return { kind: "running" };
+			return { kind: "running", ...run };
 		return {
 			kind: "finished",
 			exitCode: exit.mainStatus,
@@ -111,7 +115,7 @@ export function parseDetachedAptServiceState(
 		activeState === "reloading" ||
 		activeState === "deactivating"
 	) {
-		return { kind: "running" };
+		return { kind: "running", ...run };
 	}
 	throw new DetachedAptServiceStateError(activeState, subState);
 }

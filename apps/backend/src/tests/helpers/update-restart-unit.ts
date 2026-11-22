@@ -3,6 +3,7 @@ import { open, readFile, rm, writeFile } from "node:fs/promises";
 import {
 	prepareSoftwareUpdateOutput,
 	readSoftwareUpdateAttempt,
+	readSoftwareUpdateStatusDone,
 	SOFTWARE_UPDATE_OUTPUT_READ_BYTES,
 	softwareUpdateOutputPaths,
 	writeSoftwareUpdateAttempt,
@@ -41,6 +42,7 @@ export function restartTestUnit(
 		outputPaths: fixed,
 		readAttempt: () => readSoftwareUpdateAttempt(local, uid),
 		writeAttempt: (record) => writeSoftwareUpdateAttempt(local, record, uid),
+		statusDone: () => readSoftwareUpdateStatusDone(local),
 		prepareOutput: () => prepareSoftwareUpdateOutput(local, uid),
 		start: async (command) => {
 			const argv = command
@@ -64,6 +66,12 @@ export function restartTestUnit(
 			await writeFile(`${unit}.pid`, String(child.pid));
 		},
 		inspect: async () => {
+			// systemd's InvocationID: one per started unit (a fixed one for a seeded unit).
+			const pid = await text(`${unit}.pid`);
+			const invocation = (pid ? Number(pid.trim()).toString(16) : "f").padStart(
+				32,
+				"0",
+			);
 			const exit = await text(`${unit}.exit`);
 			if (exit !== undefined) {
 				const exitCode = Number(exit.trim());
@@ -72,11 +80,12 @@ export function restartTestUnit(
 					exitCode,
 					cleanup: exitCode === 0 ? "stop" : "reset-failed",
 					aptStatus: true,
+					invocation,
 				};
 			}
-			return (await text(`${unit}.pid`)) === undefined
+			return pid === undefined
 				? { kind: "absent" }
-				: { kind: "running", aptStatus: true };
+				: { kind: "running", aptStatus: true, invocation };
 		},
 		cleanup: async () => {
 			if (o.failCleanup) throw new Error("systemctl stop failed");
