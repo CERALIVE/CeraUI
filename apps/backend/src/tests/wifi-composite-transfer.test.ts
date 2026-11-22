@@ -8,6 +8,7 @@ import {
 } from "../modules/wifi/wifi-hotspot-config.ts";
 import { canHotspot } from "../modules/wifi/wifi-hotspot-types.ts";
 import * as compat from "../rpc/compat.ts";
+import { ACTIVE_PATH, RUN_ID } from "./helpers/wifi-active-observation.ts";
 import {
 	autoconnectFixture,
 	MAC,
@@ -122,7 +123,7 @@ test("an ambiguous collision leaves an existing AP up until Stop targets only it
 	expect(row.activeConn).toBe(live);
 	expect(disconnect).not.toHaveBeenCalled();
 	expect(await wifiHotspotStop({ device: row.id })).toEqual({ success: true });
-	expect(disconnect.mock.calls).toEqual([[live]]);
+	expect(disconnect.mock.calls).toEqual([[live, ACTIVE_PATH, RUN_ID, "wlan0"]]);
 	expect(f.profiles.has(PROFILE)).toBe(true);
 	expect(f.profiles.has(live)).toBe(true);
 });

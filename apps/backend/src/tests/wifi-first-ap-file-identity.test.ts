@@ -114,9 +114,9 @@ for (const phase of ["retained", "up-to-cleanup"] as const) {
 			if (trace) cleanupActions.push("off");
 			return set(uuid, fields);
 		};
-		f.deps.nmDisconnect = async (uuid) => {
+		f.deps.nmDisconnect = async (...args) => {
 			if (trace) cleanupActions.push("down");
-			return down(uuid);
+			return down(...args);
 		};
 		f.deps.nmConnDelete = async (uuid) => {
 			if (trace) cleanupActions.push("delete");

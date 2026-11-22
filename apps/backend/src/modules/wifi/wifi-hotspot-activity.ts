@@ -1,20 +1,43 @@
-import { nmConnsGet, nmcliParseSep } from "../network/network-manager.ts";
-import type { HotspotActivationDeps } from "./wifi-hotspot-types.ts";
+import {
+	nmConnsGet,
+	nmcliParseSep,
+	nmDisconnect,
+	readNmDeviceActivation,
+} from "../network/network-manager.ts";
+import { nmRunId } from "../network/network-manager-profile-instance.ts";
 
 export type NmActivationReceipt = {
 	readonly path: string;
 	readonly runId: string;
+	readonly ifname: string;
 };
+
+/** Only the selected device can attest its activation; the inventory cannot. */
+export async function observeHotspotActivation(uuid: string, ifname: string) {
+	const runId = await nmRunId();
+	if (!runId) return undefined;
+	const active = await readNmDeviceActivation(ifname);
+	if (active?.uuid !== uuid || !active.path || (await nmRunId()) !== runId)
+		return undefined;
+	return { path: active.path, runId, ifname, connected: active.connected };
+}
 
 export async function nmDisconnectActivation(
 	uuid: string,
 	activation: NmActivationReceipt | undefined,
-	deps: Pick<HotspotActivationDeps, "readProfileInstance" | "nmDisconnect">,
+	deps: { readonly nmDisconnect: typeof nmDisconnect } = { nmDisconnect },
+	permit?: () => Promise<boolean>,
 ): Promise<boolean> {
 	if (!activation) return false;
-	const currentRunId = (await deps.readProfileInstance(uuid))?.runId;
+	if (permit && !(await permit())) return false;
+	const currentRunId = await nmRunId();
 	if (currentRunId === activation.runId)
-		return deps.nmDisconnect(uuid, activation.path);
+		return deps.nmDisconnect(
+			uuid,
+			activation.path,
+			activation.runId,
+			activation.ifname,
+		);
 	const activity = await readHotspotProfileActivity(uuid);
 	return activity === "inactive" || activity === "absent";
 }

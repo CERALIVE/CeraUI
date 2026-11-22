@@ -19,7 +19,7 @@
 /* NetworkManager / nmcli helpers */
 
 import { logger } from "../../helpers/logger.ts";
-import { argMatch, ID_RE, run } from "../../helpers/run.ts";
+import { argMatch, ID_RE, RunTimeoutError, run } from "../../helpers/run.ts";
 import {
 	handleNmcliCommand,
 	shouldMockWifi,
@@ -291,10 +291,14 @@ export async function nmConnDelete(uuid: ConnectionUUID) {
 	);
 }
 
+const NM_ACTIVATED_PATH_RE =
+	/D-Bus active path: (\/org\/freedesktop\/NetworkManager\/ActiveConnection\/\d+)\)/;
+
 export async function nmConnect(
 	uuid: ConnectionUUID,
 	timeout?: number,
 	onActivated?: (path: string) => void,
+	onTimeout?: () => void,
 ) {
 	try {
 		// In mock mode, simulate successful connection
@@ -308,12 +312,22 @@ export async function nmConnect(
 			"nmcli",
 			timeoutArgs.concat(["conn", "up", argMatch(ID_RE, uuid)]),
 		);
-		const path = stdout.match(
-			/D-Bus active path: (\/org\/freedesktop\/NetworkManager\/ActiveConnection\/\d+)/,
-		)?.[1];
+		const path = NM_ACTIVATED_PATH_RE.exec(stdout)?.[1];
 		if (path) onActivated?.(path);
 		return parseNmConnActivated(stdout);
 	} catch (err) {
+		// nmcli exit 3 and the process deadline do not cancel the daemon's Up.
+		if (
+			err instanceof RunTimeoutError ||
+			(err instanceof Error && "code" in err && err.code === 3)
+		) {
+			const path =
+				err instanceof RunTimeoutError
+					? NM_ACTIVATED_PATH_RE.exec(err.partialStdout)?.[1]
+					: undefined;
+			if (path) onActivated?.(path);
+			onTimeout?.();
+		}
 		logger.error(`nmConnect err: ${describeCliError(err)}`);
 	}
 	return false;
@@ -322,8 +336,27 @@ export async function nmConnect(
 const ACTIVE_PATH_RE =
 	/^\/org\/freedesktop\/NetworkManager\/ActiveConnection\/\d+$/;
 
+export async function readNmDeviceActivation(ifname: string) {
+	const fields = await nmDeviceProp(
+		ifname,
+		"GENERAL.STATE,GENERAL.CON-UUID,GENERAL.CON-PATH",
+	);
+	if (fields?.length !== 3) return undefined;
+	const [state, uuid, path] = fields;
+	return {
+		uuid,
+		path: path && ACTIVE_PATH_RE.test(path) ? path : undefined,
+		connected: Number.parseInt(state ?? "", 10) === 100,
+	};
+}
+
 /** Callers using an active path must prove the current daemon owns that receipt. */
-export async function nmDisconnect(uuid: ConnectionUUID, activePath?: string) {
+export async function nmDisconnect(
+	uuid: ConnectionUUID,
+	activePath?: string,
+	runId?: string,
+	ifname?: string,
+) {
 	try {
 		// In mock mode, simulate successful disconnection
 		if (shouldMockWifi()) {
@@ -331,11 +364,14 @@ export async function nmDisconnect(uuid: ConnectionUUID, activePath?: string) {
 			return true;
 		}
 
-		const selector =
-			activePath === undefined
-				? [argMatch(ID_RE, uuid)]
-				: ["apath", argMatch(ACTIVE_PATH_RE, activePath)];
-		const stdout = await run("nmcli", ["conn", "down", ...selector]);
+		if (activePath !== undefined) {
+			if (!runId || !ifname || !ACTIVE_PATH_RE.test(activePath)) return false;
+			const { deactivateNmActivation } = await import(
+				"./network-manager-activation.ts"
+			);
+			return await deactivateNmActivation(activePath, runId, uuid, ifname);
+		}
+		const stdout = await run("nmcli", ["conn", "down", argMatch(ID_RE, uuid)]);
 		return parseNmConnDeactivated(stdout);
 	} catch (err) {
 		logger.error(`nmDisconnect err: ${describeCliError(err)}`);

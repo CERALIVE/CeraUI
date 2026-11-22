@@ -39,7 +39,12 @@ import type {
 
 import { logger } from "../../helpers/logger.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
-import { withWifiAdapterLock } from "./wifi-adapter-lock.ts";
+import {
+	awaitWifiStopHandoff,
+	wifiAdapterLockKey,
+	withWifiAdapterLock,
+	withWifiAdapterLocks,
+} from "./wifi-adapter-lock.ts";
 import {
 	isWifiAdapterModeAvailable,
 	observedWifiAdapterMode,
@@ -56,11 +61,17 @@ import type {
 	AdapterModeOutcomePublisher,
 	AdapterModeRefusalPublisher,
 } from "./wifi-adapter-mode-outcome.ts";
-import { reconcileWifiAdapterModeLocked } from "./wifi-adapter-reconciler.ts";
+import {
+	reconcileWifiAdapterModeLocked,
+	wifiStopTarget,
+} from "./wifi-adapter-reconciler.ts";
 
 export { defaultAdapterModeDeps } from "./wifi-adapter-mode-deps.ts";
 
-import type { WifiAdapterModeRecorder } from "./wifi-adapter-mode-intent.ts";
+import {
+	tryRecordWifiStationIntent,
+	type WifiAdapterModeRecorder,
+} from "./wifi-adapter-mode-intent.ts";
 import { resolveWifiAdapterOwner } from "./wifi-adapter-owner.ts";
 import { admitWifiRequest, withoutWifiRequestBinding } from "./wifi-binding.ts";
 import { getWifiCapabilitiesForInterface } from "./wifi-capabilities.ts";
@@ -79,7 +90,7 @@ import type { WifiInterface } from "./wifi-interfaces.ts";
 import { takeWifiModeRequestRefusal } from "./wifi-mode-request.ts";
 import {
 	bindingForRow,
-	soleWifiPortAlias,
+	verifiedWifiPortKey,
 	type WifiOperationBinding,
 	wifiOperationChanged,
 	wifiOperationGuard,
@@ -208,16 +219,28 @@ export async function setWifiAdapterMode(
 	if (!found) return refuse(device, "no-device", publishRefusal);
 
 	const { macAddress, wifiInterface } = found;
+	if (
+		target === "station" &&
+		(!(await awaitWifiStopHandoff(wifiInterface)) ||
+			deps.resolveInterfaces()[macAddress] !== wifiInterface)
+	)
+		return refuse(wifiInterface.id, "DEVICE_BUSY", publishRefusal);
 	if (await deps.isAdapterBusy(macAddress)) {
 		return refuse(wifiInterface.id, "DEVICE_BUSY", publishRefusal);
 	}
+	const stationTarget =
+		target === "station" && canHotspot(wifiInterface)
+			? wifiStopTarget(macAddress, wifiInterface)
+			: undefined;
 	const transition = async (
 		binding = target === "station"
 			? undefined
 			: bindingForRow(macAddress, wifiInterface),
 	): Promise<SetWifiAdapterModeOutput> => {
 		const id = wifiInterface.id;
-		const owner = resolveWifiAdapterOwner(macAddress, wifiInterface);
+		const owner =
+			stationTarget?.owner ??
+			resolveWifiAdapterOwner(macAddress, wifiInterface);
 		const intentKey = wifiAdapterKeyMac(owner)
 			? owner
 			: resolveWifiAdapterModeIntentKey(
@@ -286,16 +309,28 @@ export async function setWifiAdapterMode(
 		const operation = wifiOperationGuard(binding);
 		if (binding && (!(await operation.check()) || !operation.current()))
 			return refuse(id, "radio-changed", publishRefusal);
-		const undo = recordWifiAdapterModeIntent(
-			intentKey,
-			target,
-			{
-				read: deps.readPersistedMode,
-				persist: deps.persistMode,
-				restore: deps.restoreMode,
-			},
-			soleWifiPortAlias(binding ?? bindingForRow(macAddress, wifiInterface)),
-		);
+		const recorder = {
+			read: deps.readPersistedMode,
+			persist: deps.persistMode,
+			restore: deps.restoreMode,
+		};
+		const undo =
+			target === "station"
+				? tryRecordWifiStationIntent(
+						intentKey,
+						recorder,
+						stationTarget
+							? stationTarget.port
+							: verifiedWifiPortKey(bindingForRow(macAddress, wifiInterface)),
+					)
+				: recordWifiAdapterModeIntent(
+						intentKey,
+						target,
+						recorder,
+						verifiedWifiPortKey(
+							binding ?? bindingForRow(macAddress, wifiInterface),
+						),
+					);
 		let succeeded = false;
 		try {
 			const result = await reconcileWifiAdapterModeLocked(owner, {
@@ -329,23 +364,32 @@ export async function setWifiAdapterMode(
 			succeeded = result.success;
 			return result;
 		} finally {
-			if (!succeeded) undo();
+			if (!succeeded) undo?.();
 		}
 	};
-	const lock = await withWifiAdapterLock(
-		{ registryKey: macAddress, modeTarget: wifiInterface },
-		() =>
-			target === "station"
-				? transition()
-				: admitWifiRequest(wifiInterface, transition, (refusal) =>
-						refuse(
-							wifiInterface.id,
-							refusal.error,
-							publishRefusal,
-							refusal.reason,
-						),
-					),
-	);
+	const lock = stationTarget
+		? await withWifiAdapterLocks(
+				[
+					wifiAdapterLockKey(macAddress),
+					stationTarget.owner,
+					...(stationTarget.port ? [stationTarget.port] : []),
+				],
+				() => transition(),
+			)
+		: await withWifiAdapterLock(
+				{ registryKey: macAddress, modeTarget: wifiInterface },
+				() =>
+					target === "station"
+						? transition()
+						: admitWifiRequest(wifiInterface, transition, (refusal) =>
+								refuse(
+									wifiInterface.id,
+									refusal.error,
+									publishRefusal,
+									refusal.reason,
+								),
+							),
+			);
 	return lock.success
 		? lock.result
 		: refuse(wifiInterface.id, lock.error, publishRefusal);

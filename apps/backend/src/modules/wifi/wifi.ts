@@ -50,7 +50,6 @@ import {
 	nmConnSetWifiMacAddress,
 	nmConnsGet,
 	nmcliParseSep,
-	nmDisconnect,
 	parseNmConnActivated,
 	parseNmConnAddUuid,
 } from "../network/network-manager.ts";
@@ -62,6 +61,10 @@ import {
 	buildMsg,
 	getSocketSenderId,
 } from "../ui/websocket-server.ts";
+import {
+	wifiAdapterLockKey,
+	withWifiAdapterLock,
+} from "./wifi-adapter-lock.ts";
 import {
 	getWifiCapabilitiesForInterface,
 	getWifiLinkTelemetryForInterface,
@@ -78,6 +81,10 @@ import {
 	wifiUpdateScanResult,
 } from "./wifi-connections.ts";
 import { wifiHotspotStart } from "./wifi-hotspot-activation.ts";
+import {
+	nmDisconnectActivation,
+	observeHotspotActivation,
+} from "./wifi-hotspot-activity.ts";
 import {
 	buildHotspotClients,
 	type HotspotClients,
@@ -606,13 +613,33 @@ function wifiSearchConnection(uuid: string) {
 	return connFound;
 }
 
-async function wifiDisconnect(uuid: ConnectionUUID) {
-	if (wifiSearchConnection(uuid) === undefined) return;
-
-	if (await nmDisconnect(uuid)) {
-		await wifiUpdateScanResult();
-		wifiScheduleScanRefresh();
-	}
+export async function wifiDisconnect(uuid: ConnectionUUID) {
+	const candidates = Object.entries(getWifiInterfacesByMacAddress()).filter(
+		([, row]) => row.conn === uuid && Object.values(row.saved).includes(uuid),
+	);
+	const selected = candidates.length === 1 ? candidates[0] : undefined;
+	if (!selected) return { success: false, error: "generic" } as const;
+	const [key, row] = selected;
+	const locked = await withWifiAdapterLock(
+		wifiAdapterLockKey(key),
+		async () => {
+			if (getWifiInterfaceByMacAddress(key) !== row || row.conn !== uuid)
+				return false;
+			const receipt = await observeHotspotActivation(uuid, row.ifname);
+			return nmDisconnectActivation(
+				uuid,
+				receipt,
+				undefined,
+				async () =>
+					getWifiInterfaceByMacAddress(key) === row && row.conn === uuid,
+			);
+		},
+	);
+	if (!locked.success) return { success: false, error: "DEVICE_BUSY" } as const;
+	if (!locked.result) return { success: false, error: "generic" } as const;
+	await wifiUpdateScanResult();
+	wifiScheduleScanRefresh();
+	return { success: true } as const;
 }
 
 /*

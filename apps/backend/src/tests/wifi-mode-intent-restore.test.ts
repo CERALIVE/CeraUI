@@ -78,6 +78,7 @@ import {
 	hotspotStartProcedure,
 	hotspotStopProcedure,
 } from "../rpc/procedures/wifi.procedure.ts";
+import { mockActiveObservation } from "./helpers/wifi-active-observation.ts";
 import { mockHotspotConfirmationPoll } from "./helpers/wifi-hotspot-test-setup.ts";
 import { wifiProtocolContext } from "./helpers/wifi-protocol-context.ts";
 import {
@@ -291,6 +292,16 @@ beforeEach(async () => {
 		async () => true,
 	);
 	mockHotspotConfirmationPoll();
+	mockActiveObservation((ifname) =>
+		ifname === IFNAME
+			? row.activeMode === "ap" ||
+				(row.conn === PROFILE && observedWifiAdapterMode(row) === "hotspot")
+				? (row.activeConn ?? row.conn ?? undefined)
+				: undefined
+			: row.concurrentHotspot?.ifname === ifname
+				? (row.concurrentHotspot.activeConn ?? undefined)
+				: undefined,
+	);
 	spyOn(defaultHotspotStopDeps, "nmConnSetFields").mockImplementation(
 		async () => {
 			effect("stop-fields");
@@ -717,6 +728,11 @@ for (const succeeds of [true, false]) {
 		observed("hotspot");
 		persistWifiAdapterMode(MAC, "hotspot");
 		const binding = await wifiRequestBinding(MAC, row);
+		spyOn(networkManager, "nmConnGetFields").mockResolvedValue([
+			MAC,
+			"platform-equivalence-phy1",
+			"",
+		]);
 		let forward = true;
 		const result = await reconfigureHotspotForRegdomain(MAC, row, "auto", {
 			...defaultHotspotConfigDeps,
@@ -865,8 +881,13 @@ for (const path of ["direct-start", "direct-stop", "mode"] as const) {
 					: path === "direct-stop"
 						? wifiHotspotStop({ device: 0 })
 						: transition.setWifiAdapterMode(0, "hotspot", modeDeps());
-			await expect(operation).rejects.toThrow();
-			expect(transcript).toEqual([]);
+			if (path === "direct-stop") {
+				expect(await operation).toEqual({ success: true });
+				expect(transcript).toEqual(["stop-fields", "disconnect"]);
+			} else {
+				await expect(operation).rejects.toThrow();
+				expect(transcript).toEqual([]);
+			}
 			expect(getPersistedWifiAdapterModes()).toEqual(before);
 			setConfigFilePath(durablePath);
 			expect(await diskModes()).toEqual(before);

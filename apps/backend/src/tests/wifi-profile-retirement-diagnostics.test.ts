@@ -210,7 +210,12 @@ for (const scenario of [
 									if (scenario === "quiet-up")
 										return f.deps.nmConnect(uuid, 30);
 									if (scenario === "quiet-down") {
-										const down = await f.deps.nmDisconnect(uuid);
+										const down = await f.deps.nmDisconnect(
+											uuid,
+											f.nm.activePath(),
+											expected.runId,
+											"wlan0",
+										);
 										f.nm.bumpVersion(uuid);
 										f.nm.bumpVersion(uuid);
 										return down;
@@ -222,7 +227,12 @@ for (const scenario of [
 										return deleted;
 									}
 									if (scenario === "after-down") {
-										const down = await f.deps.nmDisconnect(uuid);
+										const down = await f.deps.nmDisconnect(
+											uuid,
+											f.nm.activePath(),
+											expected.runId,
+											"wlan0",
+										);
 										f.replace(uuid, f.secret, false);
 										return down;
 									}

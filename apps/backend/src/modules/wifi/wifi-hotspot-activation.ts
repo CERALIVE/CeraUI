@@ -85,6 +85,7 @@ import { getWifiInterfaceByMacAddress } from "./wifi-connections.ts";
 import {
 	type NmActivationReceipt,
 	nmDisconnectActivation,
+	observeHotspotActivation,
 } from "./wifi-hotspot-activity.ts";
 import { cleanupCreatedHotspotProfile } from "./wifi-hotspot-cleanup.ts";
 import {
@@ -137,6 +138,7 @@ import {
 	bindingForRow,
 	sampleWifiOperationRadio,
 	soleWifiPortAlias,
+	verifiedWifiPortKey,
 	type WifiOperationBinding,
 	wifiLegLifetimeProof,
 	wifiOperationChanged,
@@ -151,8 +153,8 @@ import { transitionVirtualBinding } from "./wifi-virtual-binding.ts";
 export const defaultHotspotDeps: HotspotActivationDeps = {
 	recordIntent: {
 		read: (key) => wifiAdapterModeRecorder.read(key),
-		persist: (key, mode) => wifiAdapterModeRecorder.persist(key, mode),
-		restore: (key, previous) => wifiAdapterModeRecorder.restore(key, previous),
+		persist: (...args) => wifiAdapterModeRecorder.persist(...args),
+		restore: (...args) => wifiAdapterModeRecorder.restore(...args),
 	},
 	readCapabilities: getWifiCapabilitiesForInterface,
 	nmConnect,
@@ -619,7 +621,7 @@ export async function startHotspotForInterface(
 									resolveWifiAdapterOwner(macAddress, wifiInterface),
 									target,
 									deps.recordIntent,
-									soleWifiPortAlias(
+									verifiedWifiPortKey(
 										binding ?? bindingForRow(macAddress, wifiInterface),
 									),
 								);
@@ -676,23 +678,30 @@ export async function startHotspotLocked(
 	if (!owned()) {
 		return { success: false, error: "activation-failed" };
 	}
-	const stopRejectedHybrid = async (uuid: string): Promise<void> => {
+	const stopRejectedHybrid = async (uuid: string): Promise<boolean> => {
 		const virtual = wifiInterface.concurrentHotspot;
-		if (!virtual || !owned(uuid)) return;
+		if (!virtual || !owned(uuid)) return false;
 		const stopped = await runHotspotProfileOperation({
 			uuid,
 			kind: "down",
 			run: async () =>
-				(!binding || ((await operation.check()) && operation.current())) &&
-				owned(uuid) &&
-				deps.nmDisconnect(uuid),
+				nmDisconnectActivation(
+					uuid,
+					await observeHotspotActivation(uuid, virtual.ifname),
+					deps,
+					async () =>
+						(await operation.permit()) &&
+						owned(uuid) &&
+						wifiInterface.concurrentHotspot === virtual,
+				),
 		});
-		if (!stopped.success) return;
+		if (!stopped.success) return false;
 		if (wifiInterface.concurrentHotspot === virtual)
 			transitionVirtualBinding(wifiInterface, { kind: "retire" });
 		await deps.releaseConcurrentInterface(virtual.ifname);
 		deps.broadcastState();
 		syncWifiStateCache(macAddress, wifiInterface);
+		return true;
 	};
 	const rawCapability = deps.readCapabilities?.(ifname);
 	const concurrency = deps.readCapabilities
@@ -718,9 +727,11 @@ export async function startHotspotLocked(
 	if (!owned()) return { success: false, error: "activation-failed" };
 	if (useConcurrentAp && deps.readHybridChannel && !hybridChannel) {
 		const active = wifiInterface.concurrentHotspot?.activeConn;
-		if (active && active === wifiInterface.hotspot.conn && owned(active)) {
-			await stopRejectedHybrid(active);
-		}
+		const stopped =
+			!active ||
+			(active === wifiInterface.hotspot.conn &&
+				owned(active) &&
+				(await stopRejectedHybrid(active)));
 		if (operation.changed) return wifiOperationChanged;
 		logHybridChannelRefusal(
 			`wifi hotspot start: hybrid-channel-not-permitted on ${ifname}`,
@@ -732,7 +743,7 @@ export async function startHotspotLocked(
 		return {
 			success: false,
 			error: "activation-failed",
-			reason: HYBRID_CHANNEL_REFUSAL,
+			reason: stopped ? HYBRID_CHANNEL_REFUSAL : "deactivation-failed",
 		};
 	}
 	if (
@@ -770,12 +781,12 @@ export async function startHotspotLocked(
 				hybridChannel,
 			))
 		) {
-			await stopRejectedHybrid(wifiInterface.hotspot.conn);
+			const stopped = await stopRejectedHybrid(wifiInterface.hotspot.conn);
 			if (operation.changed) return wifiOperationChanged;
 			return {
 				success: false,
 				error: "activation-failed",
-				reason: HYBRID_CHANNEL_REFUSAL,
+				reason: stopped ? HYBRID_CHANNEL_REFUSAL : "deactivation-failed",
 			};
 		}
 		// Already up: nothing is dispatched, so no confirmation will ever settle
@@ -812,6 +823,7 @@ export async function startHotspotLocked(
 		: undefined;
 	const concurrentInterface =
 		allocation === HYBRID_CHANNEL_REFUSAL ? undefined : allocation;
+	const activationIfname = concurrentInterface?.ifname ?? ifname;
 	let channelRefused = false;
 	let channelDownFailed = false;
 	let acceptedAllocation = false;
@@ -840,7 +852,7 @@ export async function startHotspotLocked(
 		const runId = before?.runId;
 		return deps.nmConnect(uuid, HOTSPOT_UP_TO, (path) => {
 			activePath = path;
-			if (runId) activeReceipt = { path, runId };
+			if (runId) activeReceipt = { path, runId, ifname: activationIfname };
 		});
 	};
 	let activationAttempted = false;
@@ -894,7 +906,6 @@ export async function startHotspotLocked(
 					: {}),
 			};
 		}
-		const activationIfname = concurrentInterface?.ifname ?? ifname;
 		const bindingFields: Record<string, string> = concurrentInterface
 			? {
 					...concurrentHotspotBindingFields(ifname),
