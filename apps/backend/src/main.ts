@@ -166,9 +166,9 @@ import {
 } from "./modules/system/sensors.ts";
 import {
 	beginSoftwareUpdateRecovery,
+	observeSoftwareUpdateWithoutOwning,
 	periodicCheckForSoftwareUpdates,
 	recoverSoftwareUpdateIfRunning,
-	settleSoftwareUpdateRecoveryIfAbsent,
 } from "./modules/system/software-updates.ts";
 import {
 	ensureSshPasswordProvisioned,
@@ -517,8 +517,8 @@ void guardNonCritical("update-bootstrap", () =>
 		start: async () => {
 			await guardNonCritical("update-orchestrator", startUpdateOrchestrator);
 			const admitted = await awaitUpdateStartupAdjudication();
-			// A refused bootstrap never recovers; withhold until the unit is proven gone.
-			if (!admitted) void settleSoftwareUpdateRecoveryIfAbsent();
+			// A refused bootstrap never owns the unit; it still shows the tab its outcome.
+			if (!admitted) void observeSoftwareUpdateWithoutOwning();
 			return admitted;
 		},
 		recover: async () => {
@@ -530,7 +530,7 @@ void guardNonCritical("update-bootstrap", () =>
 			periodicCheckForSoftwareUpdates();
 		},
 	}).catch((error: unknown) => {
-		void settleSoftwareUpdateRecoveryIfAbsent();
+		void observeSoftwareUpdateWithoutOwning();
 		throw error;
 	}),
 );

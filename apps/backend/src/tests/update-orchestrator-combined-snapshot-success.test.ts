@@ -58,7 +58,7 @@ for (const first of ["package", "snapshot"] as const) {
 			recoverSoftwareUpdateIfRunning: () =>
 				updates.recoverSoftwareUpdateIfRunning({
 					recover: async ({ onAttached }) => {
-						onAttached?.();
+						onAttached?.(false);
 						return {
 							completion: completion.promise,
 							wasAlreadyFinished: first === "package",
@@ -79,8 +79,13 @@ for (const first of ["package", "snapshot"] as const) {
 		});
 		// The initial baseline must be durable before the production fault is armed.
 		fault = false;
+		// A reading from before the restart, so resume makes a durable change under the fault.
 		saveOrchestratorState(
-			{ ...initialOrchestratorState(0), phase: "committing" },
+			{
+				...initialOrchestratorState(0),
+				phase: "committing",
+				progress: { percent: 40, etaSeconds: 0 },
+			},
 			f.file,
 		);
 		fault = true;

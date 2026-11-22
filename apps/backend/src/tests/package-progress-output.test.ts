@@ -399,7 +399,7 @@ describe("a reconnecting tab during recovery", () => {
 		expect(buildInitialStatus().status).not.toHaveProperty("updating");
 		let drained: (() => void) | undefined;
 		await recover((handlers) => {
-			handlers.onAttached?.();
+			handlers.onAttached?.(false);
 			drained = handlers.onDrained;
 		}, true);
 		// Attached but unread: still no claim either way, and no empty frame.
@@ -415,7 +415,7 @@ describe("a reconnecting tab during recovery", () => {
 		beginSoftwareUpdateRecovery();
 		await recoverSoftwareUpdateIfRunning({
 			recover: async (handlers) => {
-				handlers.onAttached?.();
+				handlers.onAttached?.(false);
 				return {
 					completion: Promise.reject(new Error("output unreadable")),
 					wasAlreadyFinished: true,

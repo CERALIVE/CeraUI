@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { cleanAptCache } from "../modules/system/apt-cache-clean.ts";
 import { defaultAptSpaceDeps } from "../modules/system/apt-space-admission.ts";
-import { recoverDetachedAptUpgrade } from "../modules/system/software-update-process.ts";
+import {
+	DetachedAptServiceCleanupError,
+	recoverDetachedAptUpgrade,
+} from "../modules/system/software-update-process.ts";
 import { parseDetachedAptServiceState } from "../modules/system/software-update-service.ts";
 import {
 	getUpdateState,
@@ -34,6 +37,27 @@ describe("best-effort post-clean", () => {
 			);
 			expect(h.cleanCount).toBe(2);
 			expect(h.restarts).toBe(1);
+		},
+	);
+	test.each([
+		[0, "success"],
+		[100, "failed"],
+	] as const)(
+		"a unit whose retirement fails after exit %d keeps that outcome",
+		async (exitCode, kind) => {
+			await using h = await updateHarness();
+			const retirementFailed = Promise.reject(
+				new DetachedAptServiceCleanupError(
+					exitCode,
+					new Error("systemctl stop failed"),
+				),
+			);
+			retirementFailed.catch(() => {});
+			h.completion = retirementFailed;
+			startSoftwareUpdate();
+			await h.check();
+			expect(getUpdateState().kind).toBe(kind);
+			expect(h.restarts).toBe(exitCode === 0 ? 1 : 0);
 		},
 	);
 	test("legacy completion keeps its original exit without calling the orchestrator hook", async () => {
@@ -105,7 +129,7 @@ describe("best-effort post-clean", () => {
 		h.postCleanFails = true;
 		await recoverSoftwareUpdateIfRunning({
 			recover: async ({ onAttached }) => {
-				onAttached?.();
+				onAttached?.(false);
 				return { completion: Promise.resolve(0), wasAlreadyFinished: true };
 			},
 			scheduleRetry: () => {},

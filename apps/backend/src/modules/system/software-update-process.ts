@@ -22,6 +22,7 @@ export { buildDetachedAptUpgradeCommand } from "./software-update-service.ts";
 
 const OUTPUT_POLL_INTERVAL_MS = 250;
 const FINAL_DRAIN_MAX_FAILURES = 20;
+const RETIRE_ATTEMPTS = 5;
 // 16 MiB per file per poll; a backlog beyond that is caught up on later polls.
 const MAX_READS_PER_DRAIN = 256;
 const INSPECT_RETRY_MAX_MS = 30_000;
@@ -92,15 +93,6 @@ export class DetachedAptServiceCleanupError extends Error {
 	) {
 		super("apt transaction finished, but its transient service cleanup failed");
 		this.name = "DetachedAptServiceCleanupError";
-	}
-}
-
-export class DetachedAptOutputUnavailableError extends Error {
-	constructor() {
-		super(
-			"detached apt output remained unreadable after the transaction finished",
-		);
-		this.name = "DetachedAptOutputUnavailableError";
 	}
 }
 
@@ -197,10 +189,39 @@ function createOutputCursors(
 	];
 }
 
+type FinishedState = Extract<
+	DetachedAptServiceState,
+	{ readonly kind: "finished" }
+>;
+
+async function retireDetachedAptUnit(
+	state: FinishedState,
+	handlers: SoftwareUpdateOutputHandlers,
+	deps: DetachedAptUpgradeDeps,
+): Promise<void> {
+	for (let attempt = 1; ; attempt++) {
+		try {
+			await deps.cleanup(state);
+			return;
+		} catch (error) {
+			if (attempt === RETIRE_ATTEMPTS)
+				throw new DetachedAptServiceCleanupError(state.exitCode, error);
+			reportObserverError(handlers, error);
+			await deps.sleep(OUTPUT_POLL_INTERVAL_MS);
+		}
+	}
+}
+
+export type ObserveOptions = {
+	/** false: observe only; the unit stays for a later owner to retire. */
+	readonly retire?: boolean;
+};
+
 async function observeDetachedAptUpgrade(
 	initialState: Exclude<DetachedAptServiceState, { readonly kind: "absent" }>,
 	handlers: SoftwareUpdateOutputHandlers,
 	deps: DetachedAptUpgradeDeps,
+	options: ObserveOptions = {},
 ): Promise<number> {
 	let state: DetachedAptServiceState = initialState;
 	let cursors = createOutputCursors(
@@ -244,6 +265,7 @@ async function observeDetachedAptUpgrade(
 	if (state.kind !== "finished") throw new DetachedAptServiceVanishedError();
 
 	let finalDrainFailures = 0;
+	let caughtUp = false;
 	for (;;) {
 		const drained = await drainAvailableOutput(
 			cursors,
@@ -251,24 +273,48 @@ async function observeDetachedAptUpgrade(
 			deps.readOutput,
 		);
 		cursors = drained.cursors;
-		if (drained.caughtUp) break;
-		// Only stdout/stderr spend this budget; the status file drops itself.
-		if (drained.failed && ++finalDrainFailures >= FINAL_DRAIN_MAX_FAILURES) {
-			throw new DetachedAptOutputUnavailableError();
-		}
+		caughtUp = drained.caughtUp;
+		if (caughtUp) break;
+		// The exit status is the outcome; unreadable output only costs its transcript.
+		if (drained.failed && ++finalDrainFailures >= FINAL_DRAIN_MAX_FAILURES)
+			break;
 		await deps.sleep(OUTPUT_POLL_INTERVAL_MS);
 	}
 	for (const cursor of cursors) {
 		const tail = cursor.decoder.decode();
 		if (tail.length > 0) cursor.emit(tail);
 	}
-	handlers.onDrained?.(true);
-	try {
-		await deps.cleanup(state);
-	} catch (error) {
-		throw new DetachedAptServiceCleanupError(state.exitCode, error);
-	}
+	handlers.onDrained?.(caughtUp);
+	if (options.retire !== false)
+		await retireDetachedAptUnit(state, handlers, deps);
 	return state.exitCode;
+}
+
+async function launchDetachedAptUnit(
+	command: readonly string[],
+	handlers: SoftwareUpdateOutputHandlers,
+	deps: DetachedAptUpgradeDeps,
+): Promise<number> {
+	const existing = await deps.inspect();
+	if (existing.kind === "running")
+		throw new DetachedAptServiceAlreadyExistsError();
+	if (existing.kind === "finished") {
+		// Its outcome was observed when it finished; only its retirement failed.
+		await retireDetachedAptUnit(existing, handlers, deps).catch(() => {
+			throw new DetachedAptServiceAlreadyExistsError();
+		});
+		if ((await deps.inspect()).kind !== "absent")
+			throw new DetachedAptServiceAlreadyExistsError();
+	}
+	const prepared = await deps.prepareOutput();
+	await deps.start(command);
+	return observeDetachedAptUpgrade(
+		prepared?.status === false
+			? { kind: "running" }
+			: { kind: "running", aptStatus: true },
+		handlers,
+		deps,
+	);
 }
 
 export async function runDetachedAptUpgrade(
@@ -276,14 +322,8 @@ export async function runDetachedAptUpgrade(
 	handlers: SoftwareUpdateOutputHandlers,
 	deps: DetachedAptUpgradeDeps = defaultDetachedAptServiceDeps(),
 ): Promise<number> {
-	const existing = await deps.inspect();
-	if (existing.kind !== "absent") {
-		throw new DetachedAptServiceAlreadyExistsError();
-	}
-	await deps.prepareOutput();
-	await deps.start(buildDetachedAptUpgradeCommand(aptArgs, deps.outputPaths));
-	return observeDetachedAptUpgrade(
-		{ kind: "running", aptStatus: true },
+	return launchDetachedAptUnit(
+		buildDetachedAptUpgradeCommand(aptArgs, deps.outputPaths),
 		handlers,
 		deps,
 	);
@@ -295,15 +335,8 @@ export async function runDetachedAptAll(
 	handlers: SoftwareUpdateOutputHandlers,
 	deps: DetachedAptUpgradeDeps = defaultDetachedAptServiceDeps(),
 ): Promise<number> {
-	const existing = await deps.inspect();
-	if (existing.kind !== "absent")
-		throw new DetachedAptServiceAlreadyExistsError();
-	await deps.prepareOutput();
-	await deps.start(
+	return launchDetachedAptUnit(
 		buildDetachedAptAllCommand(installArgs, verdict, deps.outputPaths),
-	);
-	return observeDetachedAptUpgrade(
-		{ kind: "running", aptStatus: true },
 		handlers,
 		deps,
 	);
@@ -312,12 +345,13 @@ export async function runDetachedAptAll(
 export async function recoverDetachedAptUpgrade(
 	handlers: SoftwareUpdateOutputHandlers,
 	deps: DetachedAptUpgradeDeps = defaultDetachedAptServiceDeps(),
+	options: ObserveOptions = {},
 ): Promise<RecoveredDetachedAptUpgrade | null> {
 	const state = await deps.inspect();
 	if (state.kind === "absent") return null;
 	handlers.onAttached?.(state.aptStatus === true);
 	return {
-		completion: observeDetachedAptUpgrade(state, handlers, deps),
+		completion: observeDetachedAptUpgrade(state, handlers, deps, options),
 		wasAlreadyFinished: state.kind === "finished",
 	};
 }

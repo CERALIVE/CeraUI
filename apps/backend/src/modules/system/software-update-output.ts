@@ -11,6 +11,7 @@
 import { constants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { logger } from "../../helpers/logger.ts";
 
 const RUN_DIR = "/run/ceralive";
 export const SOFTWARE_UPDATE_OUTPUT_READ_BYTES = 64 * 1024;
@@ -96,7 +97,7 @@ async function createOutputFile(
 export async function prepareSoftwareUpdateOutput(
 	paths: SoftwareUpdateOutputPaths,
 	expectedUid = 0,
-): Promise<void> {
+): Promise<{ readonly status: boolean }> {
 	const files = [paths.stdout, paths.stderr, paths.status];
 	const directories = new Set(files.map((file) => path.dirname(file)));
 	if (directories.size !== 1) {
@@ -113,7 +114,21 @@ export async function prepareSoftwareUpdateOutput(
 		);
 	}
 	await secureOutputDirectory(directory, expectedUid);
-	for (const file of files) await createOutputFile(file, expectedUid);
+	await createOutputFile(paths.stdout, expectedUid);
+	await createOutputFile(paths.stderr, expectedUid);
+	// Progress is display only: a status file that cannot be made never blocks apt.
+	try {
+		await createOutputFile(paths.status, expectedUid);
+		return { status: true };
+	} catch (error) {
+		logger.warn(
+			"Software update status file unavailable; showing phases only",
+			{
+				error,
+			},
+		);
+		return { status: false };
+	}
 }
 
 export async function readSoftwareUpdateOutput(

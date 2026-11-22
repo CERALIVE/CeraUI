@@ -36,7 +36,7 @@ test("held physical startup cannot let standalone recovery consume a finished co
 				if (!unitPresent) return null;
 				events.push("consume-unit");
 				unitPresent = false;
-				onAttached?.();
+				onAttached?.(false);
 				return { completion: Promise.resolve(0), wasAlreadyFinished: true };
 			},
 			scheduleRetry: () => {},

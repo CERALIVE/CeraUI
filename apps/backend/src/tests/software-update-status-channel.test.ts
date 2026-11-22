@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { lstat, mkdtemp, rm } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { buildAptAllInstallArgs } from "../modules/system/apt-all-packages.ts";
@@ -30,14 +30,17 @@ const pinnedArgs = buildAptAllInstallArgs(
 );
 const tail =
 	" ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=42 ; code=(null) ; status=0/0 }";
-const legacyScript = `exec 3>>/run/ceralive/software-update.status && exec /usr/bin/apt-get -o APT::Status-Fd=3 ${legacyArgs.join(" ")}`;
-const pinnedScript = `exec 3>>/run/ceralive/software-update.status && /usr/bin/apt-get -o APT::Status-Fd=3 -d -y upgrade --with-new-pkgs && /usr/bin/apt-get -o APT::Status-Fd=3 ${pinnedArgs.join(" ")}`;
+const drain =
+	"exec 3> >(set +e; echo -1000 2>/dev/null >/proc/self/oom_score_adj; cat 2>/dev/null >>/run/ceralive/software-update.status; exec cat >/dev/null) || exec 3>/dev/null";
+const legacyScript = `${drain}; exec /usr/bin/apt-get -o APT::Status-Fd=3 ${legacyArgs.join(" ")}`;
+const pinnedScript = `${drain}; /usr/bin/apt-get -o APT::Status-Fd=3 -d -y upgrade --with-new-pkgs && /usr/bin/apt-get -o APT::Status-Fd=3 ${pinnedArgs.join(" ")}`;
+const unreleasedScript = `exec 3>>/run/ceralive/software-update.status && exec /usr/bin/apt-get -o APT::Status-Fd=3 ${legacyArgs.join(" ")}`;
 const preChannelPinned = `/usr/bin/apt-get -d -y upgrade --with-new-pkgs && /usr/bin/apt-get ${pinnedArgs.join(" ")}`;
 
-const shExec = (script: string) =>
-	`{ path=/bin/sh ; argv[]=/bin/sh -ec ${script}${tail}`;
-const flockExec = (script: string) =>
-	`{ path=/usr/bin/flock ; argv[]=/usr/bin/flock -x /run/lock/ceralive-update.lock /bin/sh -ec ${script}${tail}`;
+const shExec = (script: string, shell = "/bin/bash") =>
+	`{ path=${shell} ; argv[]=${shell} -ec ${script}${tail}`;
+const flockExec = (script: string, shell = "/bin/bash") =>
+	`{ path=/usr/bin/flock ; argv[]=/usr/bin/flock -x /run/lock/ceralive-update.lock ${shell} -ec ${script}${tail}`;
 const aptExec = `{ path=/usr/bin/apt-get ; argv[]=/usr/bin/apt-get ${legacyArgs.join(" ")} ; }`;
 
 function show(execStart: string, running = true): string {
@@ -75,7 +78,7 @@ describe("the detached unit writes APT status records to a private third file", 
 			"--property=StandardOutput=append:/run/ceralive/software-update.stdout",
 			"--property=StandardError=append:/run/ceralive/software-update.stderr",
 			"--",
-			"/bin/sh",
+			"/bin/bash",
 			"-ec",
 			legacyScript,
 		]);
@@ -107,6 +110,29 @@ describe("the detached unit writes APT status records to a private third file", 
 	});
 });
 
+test("a status file that cannot be prepared never blocks the launch", async () => {
+	const directory = await mkdtemp(path.join(tmpdir(), "ceraui-status-"));
+	const local = {
+		stdout: path.join(directory, "software-update.stdout"),
+		stderr: path.join(directory, "software-update.stderr"),
+		status: path.join(directory, "software-update.status"),
+	};
+	try {
+		await mkdir(local.status);
+		await writeFile(path.join(local.status, "occupant"), "");
+		expect(
+			await prepareSoftwareUpdateOutput(local, process.getuid?.() ?? 0),
+		).toEqual({ status: false });
+		for (const file of [local.stdout, local.stderr]) {
+			const stat = await lstat(file);
+			expect(stat.isFile()).toBe(true);
+			expect(stat.mode & 0o777).toBe(0o600);
+		}
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});
+
 describe("adoption identifies which units write the status channel", () => {
 	test.each([
 		["package-scoped unit", shExec(legacyScript), true],
@@ -114,7 +140,7 @@ describe("adoption identifies which units write the status channel", () => {
 		["package-scoped unit started before the channel", aptExec, false],
 		[
 			"pinned unit started before the channel",
-			flockExec(preChannelPinned),
+			flockExec(preChannelPinned, "/bin/sh"),
 			false,
 		],
 	])("%s", (_name, execStart, aptStatus) => {
@@ -143,14 +169,19 @@ describe("adoption identifies which units write the status channel", () => {
 		],
 		[
 			"a status option without the descriptor",
-			shExec(
-				legacyScript.replace(
-					"exec 3>>/run/ceralive/software-update.status && ",
-					"",
-				),
-			),
+			shExec(legacyScript.replace(`${drain}; `, "")),
 		],
-		["apt not exec'd", shExec(legacyScript.replace("&& exec /usr", "&& /usr"))],
+		["apt not exec'd", shExec(legacyScript.replace("; exec /usr", "; /usr"))],
+		[
+			"a drain that stops at its first failure",
+			shExec(legacyScript.replace("set +e; ", "")),
+		],
+		[
+			"the status file opened directly, never released",
+			shExec(unreleasedScript),
+		],
+		["a status form under /bin/sh", shExec(legacyScript, "/bin/sh")],
+		["a pinned status form under /bin/sh", flockExec(pinnedScript, "/bin/sh")],
 		[
 			"an extra command",
 			shExec(`${legacyScript} && /usr/bin/apt-get -y remove cerastream`),

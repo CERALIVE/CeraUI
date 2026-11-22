@@ -29,6 +29,7 @@ import {
 	SOFTWARE_UPDATE_FRAGMENT_PATH,
 	SOFTWARE_UPDATE_LOCK,
 	SOFTWARE_UPDATE_UNIT,
+	STATUS_CHANNEL_SHELL,
 	validateDetachedAptServiceFragment,
 } from "./software-update-service-contract.ts";
 import {
@@ -66,7 +67,10 @@ export {
 
 export type DetachedAptServiceDeps = {
 	readonly outputPaths: SoftwareUpdateOutputPaths;
-	readonly prepareOutput: () => Promise<void>;
+	/** `status: false`: the status file could not be made, so it is not read. */
+	readonly prepareOutput: () => Promise<
+		{ readonly status: boolean } | undefined
+	>;
 	readonly start: (command: readonly string[]) => Promise<void>;
 	readonly inspect: () => Promise<DetachedAptServiceState>;
 	readonly cleanup: (state: FinishedDetachedAptServiceState) => Promise<void>;
@@ -124,7 +128,7 @@ export function buildDetachedAptUpgradeCommand(
 		`--property=StandardOutput=append:${outputPaths.stdout}`,
 		`--property=StandardError=append:${outputPaths.stderr}`,
 		"--",
-		"/bin/sh",
+		STATUS_CHANNEL_SHELL,
 		"-ec",
 		expectedAptUpgradeScript(aptArgs),
 	];
@@ -155,7 +159,7 @@ export function buildDetachedAptAllCommand(
 		"/usr/bin/flock",
 		"-x",
 		SOFTWARE_UPDATE_LOCK,
-		"/bin/sh",
+		STATUS_CHANNEL_SHELL,
 		"-ec",
 		script,
 	];

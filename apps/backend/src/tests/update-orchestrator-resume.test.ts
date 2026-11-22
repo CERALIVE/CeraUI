@@ -89,8 +89,29 @@ describe('resume from "committing" — the safety-critical crash-resume path', (
 		progress: { percent: 50, etaSeconds: 10 },
 	};
 
-	test("unit still running (installing) -> stays committing, progress re-estimated from the SAME probe, no dpkg invoked", async () => {
+	test("unit still running (installing) -> stays committing, progress is APT's own number from the SAME probe, no dpkg invoked", async () => {
 		const { deps: d, calls } = deps({
+			recoverSoftwareUpdateIfRunning: async () => true,
+			getUpdateState: () =>
+				({
+					kind: "installing",
+					progress: {
+						downloading: 0,
+						unpacking: 0,
+						setting_up: 1,
+						total: 1,
+						percent: 33,
+					},
+				}) as UpdateState,
+		});
+		const resumed = await resumeOrchestratorState(persisted, d);
+		expect(resumed.phase).toBe("committing");
+		expect(resumed.progress).toEqual({ percent: 33, etaSeconds: 0 });
+		expect(calls.recover).toBe(1);
+	});
+
+	test("unit still running without an APT number -> progress is unknown, never estimated from counters", async () => {
+		const { deps: d } = deps({
 			recoverSoftwareUpdateIfRunning: async () => true,
 			getUpdateState: () =>
 				({
@@ -100,8 +121,7 @@ describe('resume from "committing" — the safety-critical crash-resume path', (
 		});
 		const resumed = await resumeOrchestratorState(persisted, d);
 		expect(resumed.phase).toBe("committing");
-		expect(resumed.progress).not.toBeNull();
-		expect(calls.recover).toBe(1);
+		expect(resumed.progress).toBeNull();
 	});
 
 	test("unit still running (downloading sub-phase of the combined unit) -> stays committing (trusts the persisted higher-level phase)", async () => {

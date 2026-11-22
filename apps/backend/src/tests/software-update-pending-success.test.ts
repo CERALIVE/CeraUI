@@ -19,7 +19,7 @@ test("legacy scheduled discovery, Check, Install and recovery cannot erase pendi
 	const recover = () =>
 		updates.recoverSoftwareUpdateIfRunning({
 			recover: async ({ onAttached }) => {
-				onAttached?.();
+				onAttached?.(false);
 				return { completion: Promise.resolve(0), wasAlreadyFinished: true };
 			},
 			scheduleRetry: () => {},

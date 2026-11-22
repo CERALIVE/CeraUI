@@ -638,9 +638,9 @@ describe("apt-all-packages admission", () => {
 		expect(command.filter((token) => token === "systemd-run")).toHaveLength(1);
 		expect(command).toContain("/usr/bin/flock");
 		const script = command[command.length - 1] ?? "";
-		expect(script).toStartWith(
-			"exec 3>>/run/ceralive/software-update.status && ",
-		);
+		const drain =
+			"exec 3> >(set +e; echo -1000 2>/dev/null >/proc/self/oom_score_adj; cat 2>/dev/null >>/run/ceralive/software-update.status; exec cat >/dev/null) || exec 3>/dev/null; ";
+		expect(script).toStartWith(drain);
 		expect(script).toContain(
 			"/usr/bin/apt-get -o APT::Status-Fd=3 -d -y upgrade --with-new-pkgs",
 		);
@@ -650,9 +650,9 @@ describe("apt-all-packages admission", () => {
 		expect(script.indexOf("upgrade --with-new-pkgs")).toBeLessThan(
 			script.indexOf("install cerastream=2026.9.7"),
 		);
-		expect(script).not.toContain("; /usr/bin/apt-get");
+		expect(script.slice(drain.length)).not.toContain("; /usr/bin/apt-get");
 		const state = (body: string) =>
-			`Id=ceralive-software-update.service\nFragmentPath=/run/systemd/transient/ceralive-software-update.service\nDescription=CeraLive software update\nTransient=yes\nType=exec\nRemainAfterExit=yes\nStandardOutput=append\nStandardError=append\nUser=\nExecStartPre=\nExecStartPost=\nExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -x /run/lock/ceralive-update.lock /bin/sh -ec ${body} ; ignore_errors=no ; start_time=[Mon 2026-09-28 18:05:58 UTC] ; stop_time=[n/a] ; pid=1088904 ; code=(null) ; status=0/0 }\n`;
+			`Id=ceralive-software-update.service\nFragmentPath=/run/systemd/transient/ceralive-software-update.service\nDescription=CeraLive software update\nTransient=yes\nType=exec\nRemainAfterExit=yes\nStandardOutput=append\nStandardError=append\nUser=\nExecStartPre=\nExecStartPost=\nExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -x /run/lock/ceralive-update.lock ${command.at(-3)} -ec ${body} ; ignore_errors=no ; start_time=[Mon 2026-09-28 18:05:58 UTC] ; stop_time=[n/a] ; pid=1088904 ; code=(null) ; status=0/0 }\n`;
 		expect(() =>
 			validateDetachedAptServiceIdentity(state(script)),
 		).not.toThrow();

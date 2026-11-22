@@ -67,7 +67,7 @@ for (const recovered of [false, true]) {
 				? () =>
 						updates.recoverSoftwareUpdateIfRunning({
 							recover: async ({ onAttached }) => {
-								onAttached?.();
+								onAttached?.(false);
 								return {
 									completion: completion.promise,
 									wasAlreadyFinished: false,

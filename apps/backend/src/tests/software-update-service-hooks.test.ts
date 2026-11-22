@@ -147,7 +147,7 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 				flockUnit(
 					flockFinishedExecStart.replace(
 						/^ExecStart=.*? \/bin\/sh -ec .*? ; ignore_errors=/,
-						`ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -x /run/lock/ceralive-update.lock /bin/sh -ec ${script} ; ignore_errors=`,
+						`ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -x /run/lock/ceralive-update.lock ${launcher.at(-3)} -ec ${script} ; ignore_errors=`,
 					),
 				),
 			);

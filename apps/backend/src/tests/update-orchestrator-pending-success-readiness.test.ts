@@ -35,7 +35,7 @@ test("manual mutations stay initializing when a running recovery completes durin
 		recoverSoftwareUpdateIfRunning: () =>
 			updates.recoverSoftwareUpdateIfRunning({
 				recover: async ({ onAttached }) => {
-					onAttached?.();
+					onAttached?.(false);
 					return { completion: completion.promise, wasAlreadyFinished: false };
 				},
 				scheduleRetry: () => {},

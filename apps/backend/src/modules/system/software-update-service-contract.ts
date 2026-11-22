@@ -127,14 +127,21 @@ export function isExpectedAptAllInstallArgv(argv: readonly string[]): boolean {
 // forking dpkg, which would leave DPkg::Post-Invoke hooks without stderr.
 const APT_STATUS_OPTION = "-o APT::Status-Fd=3";
 
+/** The status forms need bash for process substitution; pre-channel forms stay sh. */
+export const STATUS_CHANNEL_SHELL = "/bin/bash";
+
+// A failed status write fails APT's install (FileFd::Write sets its pending
+// error), so descriptor 3 is a pipe, never the file: its reader only stops at
+// EOF, appends best-effort, then discards. /dev/null if the pipe cannot exist.
 function aptStatusRedirect(): string {
-	return `exec 3>>${softwareUpdateOutputPaths().status}`;
+	const drain = `set +e; echo -1000 2>/dev/null >/proc/self/oom_score_adj; cat 2>/dev/null >>${softwareUpdateOutputPaths().status}; exec cat >/dev/null`;
+	return `exec 3> >(${drain}) || exec 3>/dev/null`;
 }
 
 export function expectedAptUpgradeScript(aptArgs: readonly string[]): string {
 	if (!isExpectedAptUpgradeArgv(["/usr/bin/apt-get", ...aptArgs]))
 		throw new InvalidDetachedAptUpgradeArgumentsError();
-	return `${aptStatusRedirect()} && exec /usr/bin/apt-get ${APT_STATUS_OPTION} ${aptArgs.join(" ")}`;
+	return `${aptStatusRedirect()}; exec /usr/bin/apt-get ${APT_STATUS_OPTION} ${aptArgs.join(" ")}`;
 }
 
 /** `aptStatus: false` is the pre-channel script, kept only so it stays adoptable. */
@@ -162,7 +169,7 @@ export function expectedAptAllScript(
 		? `/usr/bin/apt-get ${APT_STATUS_OPTION}`
 		: "/usr/bin/apt-get";
 	const run = `${apt} -d -y upgrade --with-new-pkgs${family.length ? ` ${family.join(" ")}` : ""} && ${apt} ${install.join(" ")}`;
-	return aptStatus ? `${aptStatusRedirect()} && ${run}` : run;
+	return aptStatus ? `${aptStatusRedirect()}; ${run}` : run;
 }
 
 const EXEC_START_TAIL =
@@ -180,8 +187,9 @@ function wrappedScript(execStart: string, argvPrefix: string): string | null {
 function canonicalScript(build: () => string): string | null {
 	try {
 		return build();
-	} catch {
-		return null; // a foreign command is not adoptable
+	} catch (error) {
+		if (error instanceof InvalidDetachedAptUpgradeArgumentsError) return null; // a foreign command is not adoptable
+		throw error;
 	}
 }
 
@@ -222,15 +230,20 @@ export function validateDetachedAptServiceIdentity(output: string): boolean {
 
 	const execStart = properties.get("ExecStart") ?? "";
 	if (execStart.startsWith("{ path=/usr/bin/flock ; ")) {
-		const script = wrappedScript(
+		const flock = `{ path=/usr/bin/flock ; argv[]=/usr/bin/flock -x ${SOFTWARE_UPDATE_LOCK} `;
+		const status = wrappedScript(
 			execStart,
-			`{ path=/usr/bin/flock ; argv[]=/usr/bin/flock -x ${SOFTWARE_UPDATE_LOCK} /bin/sh -ec `,
+			`${flock}${STATUS_CHANNEL_SHELL} -ec `,
 		);
+		const script = status ?? wrappedScript(execStart, `${flock}/bin/sh -ec `);
+		const aptStatus = status !== null;
+		const prefix = `${aptStatusRedirect()}; `;
 		const match =
-			/^(?<status>exec 3>>\S+ && )?\/usr\/bin\/apt-get(?: -o APT::Status-Fd=3)? -d -y upgrade --with-new-pkgs(?<family> -o Acquire::ForceIPv[46]=true)? && \/usr\/bin\/apt-get(?: -o APT::Status-Fd=3)? (?<install>.+)$/.exec(
-				script ?? "",
+			/^\/usr\/bin\/apt-get(?: -o APT::Status-Fd=3)? -d -y upgrade --with-new-pkgs(?<family> -o Acquire::ForceIPv[46]=true)? && \/usr\/bin\/apt-get(?: -o APT::Status-Fd=3)? (?<install>.+)$/.exec(
+				aptStatus && script?.startsWith(prefix)
+					? script.slice(prefix.length)
+					: (script ?? ""),
 			);
-		const aptStatus = match?.groups?.status !== undefined;
 		const family = match?.groups?.family?.trim().split(" ") ?? [];
 		const install = match?.groups?.install?.split(" ") ?? [];
 		if (
@@ -243,15 +256,15 @@ export function validateDetachedAptServiceIdentity(output: string): boolean {
 		}
 		return aptStatus;
 	}
-	if (execStart.startsWith("{ path=/bin/sh ; ")) {
+	if (execStart.startsWith(`{ path=${STATUS_CHANNEL_SHELL} ; `)) {
 		const script = wrappedScript(
 			execStart,
-			"{ path=/bin/sh ; argv[]=/bin/sh -ec ",
+			`{ path=${STATUS_CHANNEL_SHELL} ; argv[]=${STATUS_CHANNEL_SHELL} -ec `,
 		);
-		const args =
-			/^exec 3>>\S+ && exec \/usr\/bin\/apt-get -o APT::Status-Fd=3 (?<args>.+)$/
-				.exec(script ?? "")
-				?.groups?.args?.split(" ") ?? [];
+		const prefix = `${aptStatusRedirect()}; exec /usr/bin/apt-get ${APT_STATUS_OPTION} `;
+		const args = script?.startsWith(prefix)
+			? script.slice(prefix.length).split(" ")
+			: [];
 		if (
 			script === null ||
 			canonicalScript(() => expectedAptUpgradeScript(args)) !== script

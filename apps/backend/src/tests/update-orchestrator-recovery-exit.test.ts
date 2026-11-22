@@ -45,7 +45,7 @@ for (const phase of ["committing", "downloading"] as const) {
 						probes++;
 						if (consumed) return null;
 						consumed = true;
-						onAttached?.();
+						onAttached?.(false);
 						attached.resolve();
 						return {
 							completion: completion.promise,
@@ -119,7 +119,7 @@ test("recovered success keeps the backend alive when its authoritative tail cann
 		recoverSoftwareUpdateIfRunning: () =>
 			recoverSoftwareUpdateIfRunning({
 				recover: async ({ onAttached }) => {
-					onAttached?.();
+					onAttached?.(false);
 					return { completion: Promise.resolve(0), wasAlreadyFinished: true };
 				},
 				scheduleRetry: () => {},
