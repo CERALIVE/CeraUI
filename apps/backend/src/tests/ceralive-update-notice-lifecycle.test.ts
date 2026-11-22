@@ -2,9 +2,11 @@
  * The "A CeraLive update is available" notice (`ceralive_update`) used to be
  * raised by both discovery paths and never withdrawn: after a Rock was updated to
  * the candidate, an already-open tab kept the banner forever. These tests drive
- * the real check entry points (refresh + discovery) over scripted APT output and
- * pin when the notice may change: only a conclusive check with every first-party
- * candidate verified, keyed by the exact versions the Install control would take.
+ * the real check entry points (refresh + discovery) and the real install
+ * completion over scripted APT and dpkg output, and pin when the notice may
+ * change: a conclusive check with every first-party candidate verified (keyed by
+ * the exact versions the Install control would take), or a finished install that
+ * dpkg proves took the offer. Logins and restarts run no command at all.
  */
 import {
 	afterEach,
@@ -22,11 +24,13 @@ import { notificationsMessageSchema } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 
 import { setup } from "../modules/setup.ts";
-import { initCeraliveUpdateNotice } from "../modules/system/ceralive-update-notice.ts";
+import {
+	initCeraliveUpdateNotice,
+	withdrawCeraliveOfferIfInstalled,
+} from "../modules/system/ceralive-update-notice.ts";
 import {
 	getUpdateState,
 	periodicCheckForSoftwareUpdates,
-	readAdmittedCeraliveOfferEvidence,
 	resetAptReachabilityProbeForTest,
 	resetSoftwareUpdateCheckRunner,
 	resetSoftwareUpdateState,
@@ -67,7 +71,6 @@ import {
 	type AptScript,
 	DEBIAN_ONLY_INVENTORY,
 	type FailedRead,
-	REFRESH_WITHOUT_CERALIVE,
 	scriptedApt,
 } from "./helpers/ceralive-update-apt.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
@@ -105,8 +108,6 @@ const curl = {
 
 let dir: string;
 let script: AptScript;
-let runnerFor: AptScript | undefined;
-let runner = scriptedApt({});
 // Every APT argv the code under test ran in this case.
 let seen: string[][] = [];
 let broadcast: ReturnType<typeof spyOn<typeof websocket, "broadcastMsg">>;
@@ -238,20 +239,11 @@ beforeEach(async () => {
 		detail: [],
 	}));
 	seen = [];
-	// One scripted device per script, so a read sequence (inventoryLater) carries across commands.
 	setAptCommandRunnerForTest((argv) => {
 		seen.push([...argv]);
-		if (runnerFor !== script) {
-			runnerFor = script;
-			runner = scriptedApt(script);
-		}
-		return runner(argv);
+		return scriptedApt(script)(argv);
 	});
-	await initCeraliveUpdateNotice({
-		path: join(dir, "offer.json"),
-		evidence: () => readAdmittedCeraliveOfferEvidence(),
-		generation: () => "lifecycle",
-	});
+	initCeraliveUpdateNotice({ path: join(dir, "offer.json") });
 	broadcast = spyOn(websocket, "broadcastMsg");
 });
 
@@ -274,6 +266,24 @@ afterEach(async () => {
 	await rm(dir, { recursive: true, force: true });
 });
 
+// The device after the install of cerastream 2 (and of srtla 1.1, for two-package offers).
+const installedRelease: AptScript = {
+	installed: [cerastream("2", { installed: "2" })],
+};
+const bothPending: AptScript = {
+	upgradable: [cerastream("2"), srtla("1.1")],
+};
+const bothInstalled: AptScript = {
+	installed: [
+		cerastream("2", { installed: "2" }),
+		srtla("1.1", { installed: "1.1" }),
+	],
+};
+
+async function recorded(): Promise<unknown> {
+	return JSON.parse(await readFile(join(dir, "offer.json"), "utf8"));
+}
+
 describe("legacy image", () => {
 	test("a conclusive check keys the notice by the exact verified versions", async () => {
 		// When a fresh refresh and discovery find two first-party upgrades.
@@ -290,7 +300,7 @@ describe("legacy image", () => {
 		});
 	});
 
-	test("nothing pending after the update withdraws it in current and pre-#183 tabs, live and on reconnect", async () => {
+	test("nothing pending after the update withdraws it live in current and pre-#183 tabs; a later login is told only by an install's proof", async () => {
 		// Given the offer that was installed, plus OS and kernel notices on the same surface.
 		standing(OS_OFFER);
 		standing(KERNEL);
@@ -302,13 +312,10 @@ describe("legacy image", () => {
 		const open = [NOTICE, OS_OFFER, KERNEL];
 		expect(currentTab(liveFrames(), open)).toEqual([KERNEL, OS_OFFER].sort());
 		expect(legacyTab(liveFrames(), open)).toEqual([KERNEL, OS_OFFER].sort());
-		// And a tab that reconnects later is told too; a fresh tab never sees it.
-		expect(currentTab(await replayFrames(), open)).toEqual(
-			[KERNEL, OS_OFFER].sort(),
-		);
-		expect(legacyTab(await replayFrames(), open)).toEqual(
-			[KERNEL, OS_OFFER].sort(),
-		);
+		// And a tab that reconnects later is not told: a check's verdict is never delivered at login.
+		expect(await replayedRemovals()).toEqual([]);
+		expect(currentTab(await replayFrames(), open)).toEqual([...open].sort());
+		// And a fresh tab never sees it.
 		expect(currentTab(await replayFrames())).toEqual([KERNEL, OS_OFFER].sort());
 	});
 
@@ -436,20 +443,12 @@ describe("legacy image", () => {
 
 	test.each([
 		[
-			"a policy candidate that differs from the install plan",
-			{ upgradable: [cerastream("3", { planned: "2" })] },
-		],
-		[
 			"a candidate from another origin",
 			{ upgradable: [cerastream("2", { source: "debian" })] },
 		],
 		[
 			"a policy that cannot be read",
 			{ upgradable: [cerastream("2")], policyFails: ["cerastream"] },
-		],
-		[
-			"an install plan that no longer takes a listed package",
-			{ upgradable: [cerastream("2")], planOmits: ["cerastream"] },
 		],
 	] satisfies [string, AptScript][])(
 		"%s is not proof either way",
@@ -568,7 +567,8 @@ describe("legacy image", () => {
 	test("the legacy relay replay sends the show frame first, then both removal forms", async () => {
 		standing(OS_OFFER);
 		await check({ upgradable: [cerastream("2")] });
-		await check({});
+		// Given the installed offer proven by dpkg in this process.
+		await withdrawCeraliveOfferIfInstalled(scriptedApt(installedRelease));
 		const sent: string[] = [];
 		await notificationSendPersistent(
 			{ send: (frame: string) => sent.push(frame) },
@@ -600,7 +600,8 @@ describe("capable image", () => {
 		await check({ upgradable: [curl] });
 		expect(getUpdateState()).toMatchObject({ actionable_count: 1 });
 		expect(liveRemovals()).toEqual([NOTICE]);
-		expect(currentTab(await replayFrames(), [NOTICE])).toEqual([]);
+		// A later login is told only by an install's proof, not by this check.
+		expect(await replayedRemovals()).toEqual([]);
 	});
 
 	test("a Debian-only refresh without CeraLive's source keeps the offer", async () => {
@@ -678,183 +679,235 @@ describe("manual and periodic checks", () => {
 	);
 });
 
-test("a successful install is not evidence that no offer remains", async () => {
-	await check({ upgradable: [cerastream("2")] });
-	setAptCommandRunnerForTest(null);
-	// The harness observes the same broadcast seam; two wrappers would call each other.
-	broadcast.mockRestore();
-	// When the legacy transaction for the offer succeeds and the backend restarts itself.
-	await using h = await updateHarness();
-	h.completion = Promise.resolve(0);
-	startSoftwareUpdate();
-	await h.check();
-	await h.restarted();
-	// Then only the next conclusive check may withdraw the notice.
-	expect(getUpdateState()).toEqual({ kind: "success" });
-	expect(await replayedRemovals()).toEqual([]);
-	expect(
-		getPersistentNotifications(true).show.map(({ name }) => name),
-	).toContain(NOTICE);
-});
+describe("a finished install", () => {
+	// The device's dpkg answers the proof, recorded in `seen`.
+	function device(state: AptScript) {
+		return (argv: string[]) => {
+			seen.push([...argv]);
+			return scriptedApt(state)(argv);
+		};
+	}
 
-// A read that did not answer, on any evidence command, is never "nothing pending".
-const unanswered: readonly [AptRead, FailedRead][] = [
-	["dpkg-query", "launch"],
-	["dpkg-query", "timeout"],
-	["dpkg-query", "signal"],
-	["dpkg-query", "silent-exit-1"],
-	["dpkg-query", "truncated"],
-	["apt-mark", "launch"],
-	["apt-mark", "timeout"],
-	["roster-policy", "launch"],
-	["roster-policy", "timeout"],
-];
-const installedRelease: AptScript = {
-	installed: [cerastream("2", { installed: "2" })],
-};
-
-for (const capable of [false, true])
-	describe(`${capable ? "capable" : "legacy"} image: evidence that did not answer`, () => {
-		beforeEach(async () => {
-			if (capable) await useCapableImage();
+	test("withdraws the offer before the update's restart when dpkg shows it installed", async () => {
+		await check({ upgradable: [cerastream("2")] });
+		setAptCommandRunnerForTest(null);
+		// The harness observes the same broadcast seam; two wrappers would call each other.
+		broadcast.mockRestore();
+		// When the legacy transaction for the offer succeeds and the backend restarts itself.
+		await using h = await updateHarness();
+		seen = [];
+		setAptCommandRunnerForTest(device(installedRelease));
+		h.completion = Promise.resolve(0);
+		startSoftwareUpdate();
+		await h.check();
+		await h.restarted();
+		// Then by the restart the proof is durable and the notice is gone for live and later tabs.
+		expect(getUpdateState()).toEqual({ kind: "success" });
+		expect(await recorded()).toEqual({
+			version: 7,
+			offer: null,
+			installed: [{ name: "cerastream", version: "2" }],
 		});
+		expect(notificationExists(NOTICE)).toBeUndefined();
+		expect(currentTab(await replayFrames(), [NOTICE])).toEqual([]);
+		expect(legacyTab(await replayFrames(), [NOTICE])).toEqual([]);
+		// And only dpkg was asked: its status, then its own version comparison.
+		expect(seen).toEqual([
+			[
+				"/usr/bin/dpkg-query",
+				"-W",
+				"-f",
+				"$" + "{Package}\t$" + "{Status}\t$" + "{Version}\n",
+				"cerastream",
+			],
+			["/usr/bin/dpkg", "--compare-versions", "2", "ge", "2"],
+		]);
+	});
 
-		for (const [read, how] of unanswered)
-			test(`${read} ${how} keeps the offer and records nothing`, async () => {
-				// Given the offer shown and recorded.
-				await check({ upgradable: [cerastream("2")] });
-				expect(notificationExists(NOTICE)?.dismissalKey).toBe(
-					"update:cerastream=2",
-				);
-				const recorded = await readFile(join(dir, "offer.json"), "utf8");
-				// When it is installed and one command of the next conclusive check does not answer
-				// (capable discovery runs apt-mark itself, so there the whole check already refuses).
-				expect(
-					await check({ ...installedRelease, fail: { [read]: how } }),
-				).toBe(capable && read === "apt-mark" ? "discovery_failed" : null);
-				// Then nothing is removed, replayed or written.
-				expect(liveRemovals()).toEqual([]);
-				expect(notificationExists(NOTICE)?.dismissalKey).toBe(
-					"update:cerastream=2",
-				);
-				expect(await replayedRemovals()).toEqual([]);
-				expect(await readFile(join(dir, "offer.json"), "utf8")).toBe(recorded);
-			});
+	test("a successful install is not evidence when dpkg does not show the offer installed", async () => {
+		await check({ upgradable: [cerastream("2")] });
+		setAptCommandRunnerForTest(null);
+		broadcast.mockRestore();
+		// When the transaction succeeds but cerastream is still at 1.
+		await using h = await updateHarness();
+		setAptCommandRunnerForTest(
+			device({ installed: [cerastream("2", { installed: "1" })] }),
+		);
+		h.completion = Promise.resolve(0);
+		startSoftwareUpdate();
+		await h.check();
+		await h.restarted();
+		// Then the update still restarts, and only the next conclusive check may withdraw the notice.
+		expect(getUpdateState()).toEqual({ kind: "success" });
+		expect(await replayedRemovals()).toEqual([]);
+		expect(
+			getPersistentNotifications(true).show.map(({ name }) => name),
+		).toContain(NOTICE);
+	});
 
-		test("a package dpkg genuinely does not know is evidence: the proven none withdraws", async () => {
-			await check({ upgradable: [cerastream("2")] });
-			// When the same check answers completely (14 roster names absent, named on stderr).
-			await check(installedRelease);
-			expect(liveRemovals()).toEqual([NOTICE]);
-			expect(
-				JSON.parse(await readFile(join(dir, "offer.json"), "utf8")),
-			).toMatchObject({ version: 6, offer: null });
+	test("dpkg, not a string comparison, decides the installed version reaches the offer", async () => {
+		await check({
+			upgradable: [cerastream("2026.9.1", { installed: "2026.8.0" })],
 		});
-
-		test("a roster dependency the plan installs is part of the offer", async () => {
-			// When the plan upgrades cerastream and newly installs a roster package with it.
-			await check({ upgradable: [cerastream("2"), modemSupport("2026.1")] });
-			// Then both are the offer, keyed by their exact versions.
-			expect(notificationExists(NOTICE)?.dismissalKey).toBe(
-				"update:ceralive-modem-support=2026.1,cerastream=2",
-			);
-		});
-
-		test("a candidate the solver keeps back does not veto the valid upgrade beside it", async () => {
-			await check({ upgradable: [srtla("2.0")], keptBack: [cerastream("2")] });
-			expect(notificationExists(NOTICE)?.dismissalKey).toBe("update:srtla=2.0");
+		// When 2026.10.0 is installed: lower than 2026.9.1 as text, higher to dpkg.
+		await withdrawCeraliveOfferIfInstalled(
+			scriptedApt({
+				installed: [cerastream("2026.10.0", { installed: "2026.10.0" })],
+			}),
+		);
+		expect(liveRemovals()).toEqual([NOTICE]);
+		expect(await recorded()).toEqual({
+			version: 7,
+			offer: null,
+			installed: [{ name: "cerastream", version: "2026.9.1" }],
 		});
 	});
 
-// Round 9: a read is evidence only when every answer is complete and the check's refresh
-// touched CeraLive's index; an answer that is merely plausible is never "nothing pending".
-const incomplete: readonly [string, AptScript][] = [
-	[
-		"a refresh that never reached CeraLive's index",
-		{ refresh: { stdout: REFRESH_WITHOUT_CERALIVE } },
-	],
-	["a plan without its summary line", { fail: { simulation: "no-summary" } }],
-	["a plan cut to its first line", { fail: { simulation: "truncated" } }],
-	[
-		"an inventory without its Pinned packages terminator",
-		{ fail: { inventory: "no-summary" } },
-	],
-	[
-		"dpkg reporting config-files where APT reports it installed",
-		{ dpkgStatus: { cerastream: "deinstall ok config-files" } },
-	],
-	[
-		"dpkg holding a package apt-mark does not list",
-		{ dpkgStatus: { cerastream: "hold ok installed" } },
-	],
-];
+	const unproven: readonly [string, AptScript][] = [
+		[
+			"an offered package still below the offered version",
+			{
+				installed: [
+					cerastream("2", { installed: "1" }),
+					srtla("1.1", { installed: "1.1" }),
+				],
+			},
+		],
+		[
+			"an offered package below the offered version only in dpkg's order",
+			{
+				installed: [
+					cerastream("2", { installed: "2" }),
+					srtla("1.1", { installed: "1.1~rc1" }),
+				],
+			},
+		],
+		[
+			"an offered package dpkg does not know",
+			{ installed: [srtla("1.1", { installed: "1.1" })] },
+		],
+		[
+			"dpkg reporting config-files for an offered package",
+			{
+				...bothInstalled,
+				dpkgStatus: { cerastream: "deinstall ok config-files" },
+			},
+		],
+		[
+			"dpkg reporting an offered package half-configured",
+			{
+				...bothInstalled,
+				dpkgStatus: { cerastream: "install ok half-configured" },
+			},
+		],
+		...(
+			["launch", "timeout", "signal", "silent-exit-1", "truncated"] as const
+		).map((how): [string, AptScript] => [
+			`dpkg-query ${how}`,
+			{ ...bothInstalled, fail: { "dpkg-query": how } },
+		]),
+		...(["launch", "timeout", "signal", "silent-exit-1"] as const).map(
+			(how): [string, AptScript] => [
+				`dpkg --compare-versions ${how}`,
+				{ ...bothInstalled, fail: { "dpkg-compare": how } },
+			],
+		),
+	];
+
+	for (const [label, state] of unproven)
+		test(`${label} keeps the offer and records nothing`, async () => {
+			// Given a two-package offer shown and recorded.
+			await check(bothPending);
+			const before = await readFile(join(dir, "offer.json"), "utf8");
+			broadcast.mockClear();
+			// When the install finished and dpkg's answer does not prove it took the offer.
+			await withdrawCeraliveOfferIfInstalled(scriptedApt(state));
+			// Then nothing is removed, delivered or written.
+			expect(liveRemovals()).toEqual([]);
+			expect(notificationExists(NOTICE)?.dismissalKey).toBe(
+				"update:cerastream=2,srtla=1.1",
+			);
+			expect(await replayedRemovals()).toEqual([]);
+			expect(await readFile(join(dir, "offer.json"), "utf8")).toBe(before);
+		});
+
+	test("a check that records a newer offer while dpkg is read wins", async () => {
+		await check({ upgradable: [cerastream("2")] });
+		const reading = Promise.withResolvers<void>();
+		const held = Promise.withResolvers<void>();
+		// When the proof's dpkg read is held, and a check finds release 3 meanwhile.
+		const proving = withdrawCeraliveOfferIfInstalled(async (argv) => {
+			if (argv[0] === "/usr/bin/dpkg-query") {
+				reading.resolve();
+				await held.promise;
+			}
+			return scriptedApt(installedRelease)(argv);
+		});
+		await reading.promise;
+		await check({ upgradable: [cerastream("3", { installed: "2" })] });
+		held.resolve();
+		await proving;
+		// Then the newer offer stays shown and recorded.
+		expect(liveRemovals()).toEqual([]);
+		expect(notificationExists(NOTICE)?.dismissalKey).toBe(
+			"update:cerastream=3",
+		);
+		expect(await recorded()).toEqual({
+			version: 7,
+			offer: [{ name: "cerastream", version: "3" }],
+		});
+	});
+
+	test("an install with no recorded offer proves nothing and runs nothing", async () => {
+		seen = [];
+		await withdrawCeraliveOfferIfInstalled(device(installedRelease));
+		expect(seen).toEqual([]);
+		expect(await Bun.file(join(dir, "offer.json")).exists()).toBe(false);
+	});
+});
 
 for (const capable of [false, true])
-	describe(`${capable ? "capable" : "legacy"} image: evidence that is incomplete or not this refresh's`, () => {
+	describe(`${capable ? "capable" : "legacy"} image: logins and restarts`, () => {
 		beforeEach(async () => {
 			if (capable) await useCapableImage();
 		});
 
-		for (const [label, variation] of incomplete)
-			test(`${label} keeps the offer and records nothing`, async () => {
-				// Given the offer shown and recorded.
-				await check({ upgradable: [cerastream("2")] });
-				const recorded = await readFile(join(dir, "offer.json"), "utf8");
-				// When it is installed and the next check's evidence is incomplete in this one way.
-				await check({ ...installedRelease, ...variation });
-				// Then nothing is removed, replayed or written.
-				expect(liveRemovals()).toEqual([]);
-				expect(notificationExists(NOTICE)?.dismissalKey).toBe(
-					"update:cerastream=2",
-				);
-				expect(await replayedRemovals()).toEqual([]);
-				expect(await readFile(join(dir, "offer.json"), "utf8")).toBe(recorded);
-			});
-
-		test("a plan cut right after its summary hides no first-party row", async () => {
+		test("run no command, and an install's proof is delivered by the next process only", async () => {
 			await check({ upgradable: [cerastream("2")] });
-			const recorded = await readFile(join(dir, "offer.json"), "utf8");
-			// When the release is still pending but the plan's Inst rows are lost after its summary.
-			await check({
-				upgradable: [cerastream("2")],
-				fail: { simulation: "cut-after-summary" },
-			});
-			// Then the cut answer is not read as an empty plan.
-			expect(liveRemovals()).toEqual([]);
-			expect(notificationExists(NOTICE)?.dismissalKey).toBe(
-				"update:cerastream=2",
-			);
-			expect(await readFile(join(dir, "offer.json"), "utf8")).toBe(recorded);
-		});
-
-		test("a login and startup run APT only as simulations, never --assume-no", async () => {
-			// Given a recorded proof that nothing is pending.
-			await check(installedRelease);
+			await withdrawCeraliveOfferIfInstalled(scriptedApt(installedRelease));
 			seen = [];
-			// When a tab logs in and the process starts again.
+			// A login to the proving process is told.
 			expect(await replayedRemovals()).toHaveLength(2);
-			await initCeraliveUpdateNotice({
-				path: join(dir, "offer.json"),
-				evidence: () => readAdmittedCeraliveOfferEvidence(),
-				generation: () => "lifecycle",
-			});
-			// Then every apt-get it ran was a simulation.
-			const aptGet = seen.filter(([bin]) => bin === "/usr/bin/apt-get");
-			expect(aptGet.length).toBeGreaterThan(0);
-			expect(aptGet.filter((argv) => argv[1] !== "-s")).toEqual([]);
-			expect(aptGet.filter((argv) => argv.includes("--assume-no"))).toEqual([]);
-			if (!capable)
-				expect(aptGet[0]).toEqual([
-					"/usr/bin/apt-get",
-					"-s",
-					"-o",
-					"Debug::NoLocking=1",
-					"dist-upgrade",
-				]);
+			// The next process (the install's own restart) is told too, and takes the proof from the file.
+			initCeraliveUpdateNotice({ path: join(dir, "offer.json") });
+			expect(await replayedRemovals()).toHaveLength(2);
+			expect(await recorded()).toEqual({ version: 7, offer: null });
+			// A later restart has nothing to deliver.
+			initCeraliveUpdateNotice({ path: join(dir, "offer.json") });
+			expect(await replayedRemovals()).toEqual([]);
+			// And none of it ran any command.
+			expect(seen).toEqual([]);
 		});
 
-		test("a login the updater would refuse runs no APT command and removes nothing", async () => {
-			await check(installedRelease);
+		test("a proof the file cannot give up is delivered by no process that kept it there", async () => {
+			await check({ upgradable: [cerastream("2")] });
+			await withdrawCeraliveOfferIfInstalled(scriptedApt(installedRelease));
+			// When the next process cannot rewrite the record, it delivers nothing.
+			initCeraliveUpdateNotice({
+				path: join(dir, "offer.json"),
+				write: () => {
+					throw new Error("state directory is read-only");
+				},
+			});
+			expect(await replayedRemovals()).toEqual([]);
+			// Then the first process that can take it delivers it.
+			initCeraliveUpdateNotice({ path: join(dir, "offer.json") });
+			expect(await replayedRemovals()).toHaveLength(2);
+		});
+
+		test("a login during a live stream or with updates disabled runs nothing and is still told an install's proof", async () => {
+			await check({ upgradable: [cerastream("2")] });
+			await withdrawCeraliveOfferIfInstalled(scriptedApt(installedRelease));
 			for (const [label, refuse, restore] of [
 				[
 					"updates disabled",
@@ -875,36 +928,160 @@ for (const capable of [false, true])
 				seen = [];
 				const frames = await replayedRemovals();
 				restore();
-				expect([label, frames, seen]).toEqual([label, [], []]);
+				expect([label, frames.length, seen]).toEqual([label, 2, []]);
 			}
-			// Control: admitted again, the same login is told.
-			expect(await replayedRemovals()).toHaveLength(2);
 		});
 
-		test("no withdrawal is delivered before the update startup is settled", async () => {
-			await check(installedRelease);
-			const settled = Promise.withResolvers<void>();
-			const outcomes: string[] = [];
-			const starting = initCeraliveUpdateNotice({
-				path: join(dir, "offer.json"),
-				evidence: () => readAdmittedCeraliveOfferEvidence(),
-				generation: () => "lifecycle",
-				observe: (outcome) => outcomes.push(outcome),
-				settled: () => settled.promise,
-			});
-			seen = [];
-			// A login before adjudication reads nothing and is told nothing.
+		test("startup re-announces a stored offer, and a dismissed one only withdraws", async () => {
+			await check({ upgradable: [cerastream("2")] });
+			// When a fresh process loads the record (it starts with no notices).
+			clearPersistentNotices();
+			initCeraliveUpdateNotice({ path: join(dir, "offer.json") });
+			// Then the stored offer is shown again and nothing is removed.
+			expect(notificationExists(NOTICE)?.dismissalKey).toBe(
+				"update:cerastream=2",
+			);
 			expect(await replayedRemovals()).toEqual([]);
-			expect(seen).toEqual([]);
-			settled.resolve();
-			await starting;
-			// After it, startup and the next login are told.
+			// When that release was dismissed, a fresh process withdraws it instead.
+			recordNotificationDismissal("update:cerastream=2");
+			clearPersistentNotices();
+			broadcast.mockClear();
+			initCeraliveUpdateNotice({ path: join(dir, "offer.json") });
+			expect(notificationExists(NOTICE)).toBeUndefined();
+			expect(liveRemovals()).toEqual([NOTICE]);
 			expect(await replayedRemovals()).toHaveLength(2);
-			expect(outcomes).toEqual(["declined", "sent", "sent"]);
 		});
 	});
 
-describe("capable image: each read takes its own inventory", () => {
+// A command of the check itself that did not answer is never "nothing pending".
+const unanswered: readonly [AptRead, FailedRead, "both" | "capable"][] = [
+	["inventory", "launch", "both"],
+	["inventory", "timeout", "both"],
+	["inventory", "signal", "both"],
+	["inventory", "silent-exit-1", "both"],
+	["apt-mark", "launch", "capable"],
+	["apt-mark", "timeout", "capable"],
+];
+
+// An answer that is only partly there is never "nothing pending" either.
+const incomplete: readonly [
+	string,
+	AptScript,
+	"both" | "capable" | "legacy",
+][] = [
+	[
+		"a plan without its summary line",
+		{ fail: { simulation: "no-summary" } },
+		"capable",
+	],
+	[
+		"a plan cut to its first line",
+		{ fail: { simulation: "truncated" } },
+		"capable",
+	],
+	[
+		"a discovery without its summary line",
+		{ fail: { discovery: "no-summary" } },
+		"legacy",
+	],
+	[
+		"a discovery cut to its first line",
+		{ fail: { discovery: "truncated" } },
+		"legacy",
+	],
+	[
+		"an inventory cut before CeraLive's source",
+		{ fail: { inventory: "truncated" } },
+		"both",
+	],
+];
+
+for (const capable of [false, true])
+	describe(`${capable ? "capable" : "legacy"} image: a check whose own evidence is missing`, () => {
+		const image = capable ? "capable" : "legacy";
+		beforeEach(async () => {
+			if (capable) await useCapableImage();
+		});
+
+		for (const [read, how, on] of unanswered)
+			if (on === "both" || on === image)
+				test(`${read} ${how} keeps the offer and records nothing`, async () => {
+					// Given the offer shown and recorded.
+					await check({ upgradable: [cerastream("2")] });
+					const before = await readFile(join(dir, "offer.json"), "utf8");
+					// When it is installed and one command of the next conclusive check does not answer
+					// (capable discovery runs both itself, so there the whole check refuses).
+					expect(
+						await check({ ...installedRelease, fail: { [read]: how } }),
+					).toBe(capable ? "discovery_failed" : null);
+					// Then nothing is removed, delivered or written.
+					expect(liveRemovals()).toEqual([]);
+					expect(notificationExists(NOTICE)?.dismissalKey).toBe(
+						"update:cerastream=2",
+					);
+					expect(await replayedRemovals()).toEqual([]);
+					expect(await readFile(join(dir, "offer.json"), "utf8")).toBe(before);
+				});
+
+		for (const [label, variation, on] of incomplete)
+			if (on === "both" || on === image)
+				test(`${label} keeps the offer and records nothing`, async () => {
+					await check({ upgradable: [cerastream("2")] });
+					const before = await readFile(join(dir, "offer.json"), "utf8");
+					// When it is installed and the next check's evidence is incomplete in this one way.
+					await check({ ...installedRelease, ...variation });
+					expect(liveRemovals()).toEqual([]);
+					expect(notificationExists(NOTICE)?.dismissalKey).toBe(
+						"update:cerastream=2",
+					);
+					expect(await replayedRemovals()).toEqual([]);
+					expect(await readFile(join(dir, "offer.json"), "utf8")).toBe(before);
+				});
+
+		test("after the install, a conclusive check that finds nothing pending withdraws and records none", async () => {
+			await check({ upgradable: [cerastream("2")] });
+			await check(installedRelease);
+			expect(liveRemovals()).toEqual([NOTICE]);
+			expect(await recorded()).toEqual({ version: 7, offer: null });
+		});
+
+		test("a plan cut right after its summary hides no first-party row", async () => {
+			await check({ upgradable: [cerastream("2")] });
+			const before = await readFile(join(dir, "offer.json"), "utf8");
+			// When the release is still pending but the answer is lost after its summary.
+			await check({
+				upgradable: [cerastream("2")],
+				fail: capable
+					? { simulation: "cut-after-summary" }
+					: { discovery: "cut-after-summary" },
+			});
+			// Then the cut answer is not read as an empty plan.
+			expect(liveRemovals()).toEqual([]);
+			expect(notificationExists(NOTICE)?.dismissalKey).toBe(
+				"update:cerastream=2",
+			);
+			expect(await readFile(join(dir, "offer.json"), "utf8")).toBe(before);
+		});
+
+		test("a roster dependency the plan installs is part of the offer Install takes", async () => {
+			// When the plan upgrades cerastream and newly installs a roster package with it.
+			await check({ upgradable: [cerastream("2"), modemSupport("2026.1")] });
+			// Then the offer is what Install takes, keyed by exact versions: capable Install pins
+			// the whole plan, legacy Install names the upgrades and APT brings the dependency.
+			expect(notificationExists(NOTICE)?.dismissalKey).toBe(
+				capable
+					? "update:ceralive-modem-support=2026.1,cerastream=2"
+					: "update:cerastream=2",
+			);
+		});
+
+		test("a candidate the solver keeps back does not veto the valid upgrade beside it", async () => {
+			await check({ upgradable: [srtla("2.0")], keptBack: [cerastream("2")] });
+			expect(notificationExists(NOTICE)?.dismissalKey).toBe("update:srtla=2.0");
+		});
+	});
+
+describe("capable image: the check's own plan", () => {
 	beforeEach(useCapableImage);
 
 	test("a plan that only installs a roster dependency, cut after its summary, keeps the offer", async () => {
@@ -913,7 +1090,7 @@ describe("capable image: each read takes its own inventory", () => {
 		expect(notificationExists(NOTICE)?.dismissalKey).toBe(
 			"update:ceralive-modem-support=2026.1",
 		);
-		const recorded = await readFile(join(dir, "offer.json"), "utf8");
+		const before = await readFile(join(dir, "offer.json"), "utf8");
 		// When the next answer keeps "0 upgraded, 1 newly installed" but loses the Inst row.
 		await check({
 			upgradable: [modemSupport("2026.1")],
@@ -924,18 +1101,6 @@ describe("capable image: each read takes its own inventory", () => {
 		expect(notificationExists(NOTICE)?.dismissalKey).toBe(
 			"update:ceralive-modem-support=2026.1",
 		);
-		expect(await readFile(join(dir, "offer.json"), "utf8")).toBe(recorded);
-	});
-
-	test("an inventory that no longer lists CeraLive after the check's own keeps the offer", async () => {
-		await check({ upgradable: [cerastream("2")] });
-		const recorded = await readFile(join(dir, "offer.json"), "utf8");
-		// When the check's discovery saw CeraLive's source but the evidence read does not.
-		await check({ ...installedRelease, inventoryLater: DEBIAN_ONLY_INVENTORY });
-		expect(liveRemovals()).toEqual([]);
-		expect(notificationExists(NOTICE)?.dismissalKey).toBe(
-			"update:cerastream=2",
-		);
-		expect(await readFile(join(dir, "offer.json"), "utf8")).toBe(recorded);
+		expect(await readFile(join(dir, "offer.json"), "utf8")).toBe(before);
 	});
 });

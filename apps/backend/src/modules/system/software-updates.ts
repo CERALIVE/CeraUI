@@ -84,15 +84,11 @@ import {
 	normalizeAptCommandFailure,
 } from "./apt-transport-result.ts";
 import {
-	type AptRun,
-	type CeraliveOffer,
-	capableCeraliveOffer,
-	ceraliveIndexRefreshed,
-	collectOfferEvidence,
 	completePlan,
+	firstPartyOffer,
 	legacyCeraliveOffer,
-	type OfferEvidence,
 	reconcileCeraliveUpdateNotice,
+	withdrawCeraliveOfferIfInstalled,
 } from "./ceralive-update-notice.ts";
 import {
 	logParseError,
@@ -182,6 +178,8 @@ let softwareUpdateRecoveryRetryTimer: ReturnType<typeof setTimeout> | undefined;
 const SOFTWARE_UPDATE_RECOVERY_RETRY_MS = 3_000;
 const APT_REFRESH_TIMEOUT_MS = 5 * oneMinute;
 const APT_DISCOVERY_TIMEOUT_MS = 2 * oneMinute;
+// Bounds each dpkg read that proves a finished install, so the restart it precedes never hangs.
+const DPKG_PROOF_TIMEOUT_MS = 10_000;
 // A backstop only: apt's own per-connection timeouts end a stalled fetch first.
 const APT_DOWNLOAD_TIMEOUT_MS = 60 * oneMinute;
 
@@ -662,7 +660,11 @@ async function getCapableUpdateSize(
 			update_state: getUpdateState(),
 		});
 		if (refreshConclusive)
-			await reconcileCeraliveUpdateNotice(() => readCeraliveOfferEvidence());
+			reconcileCeraliveUpdateNotice(
+				completePlan(simulation.stdout)
+					? firstPartyOffer(result.packages, sourcePolicy.stdout)
+					: "unknown",
+			);
 		return null;
 	} catch (error) {
 		if (!(error instanceof AptAllRefusalError)) throw error;
@@ -936,9 +938,13 @@ async function getSoftwareUpdateSize(
 		available_updates: availableUpdates,
 		update_state: getUpdateState(),
 	});
-	// A check whose own discovery failed is not conclusive, whatever a later read says.
+	// A check whose own discovery failed is not conclusive.
 	if (refreshConclusive && isCleanAssumeNoDiscovery(upgradeResult))
-		await reconcileCeraliveUpdateNotice(() => readCeraliveOfferEvidence());
+		reconcileCeraliveUpdateNotice(
+			await legacyCeraliveOffer(actionableAppPackages, (argv) =>
+				runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
+			),
+		);
 
 	return null;
 }
@@ -1005,30 +1011,16 @@ export function classifyAptUpdateResult(
 	return null;
 }
 
-// apt-get update exits 0 when it keeps the old lists after a failed index fetch, and the
-// CeraLive notice may only act on a refresh that touched CeraLive's own index.
+// apt-get update exits 0 when it keeps the old lists after a failed index fetch;
+// such a refresh concludes nothing about the CeraLive notice.
 function isConclusiveAptRefresh(result: SpawnWithTimeoutResult): boolean {
 	return (
 		result.exitCode === 0 &&
-		ceraliveIndexRefreshed(result.stdout) &&
 		classifyAptUpdateResult(0, result.stderr) !== "captive_portal" &&
 		!/^Err:/m.test(result.stdout) &&
 		!/^(?:E:|W: (?:Failed to fetch|Some index files failed))/m.test(
 			result.stderr,
 		)
-	);
-}
-
-// The updater admits APT work only while it is enabled, idle, and no recovered
-// success, install, refresh or discovery is in flight.
-function aptWorkAdmitted(): boolean {
-	return (
-		!pendingPackageSuccess.pending &&
-		aptUpdatesEnabled() &&
-		isStreamConfirmedIdle() &&
-		!isUpdating() &&
-		!aptGetUpdating &&
-		!aptDiscoveryRunning
 	);
 }
 
@@ -1041,7 +1033,16 @@ function checkForSoftwareUpdates(
 		refreshConclusive?: boolean,
 	) => unknown,
 ): boolean {
-	if (!aptWorkAdmitted()) return false;
+	if (pendingPackageSuccess.pending) return false;
+	if (!aptUpdatesEnabled()) return false;
+	if (
+		!isStreamConfirmedIdle() ||
+		isUpdating() ||
+		aptGetUpdating ||
+		aptDiscoveryRunning
+	) {
+		return false;
+	}
 
 	lastCheckFailure = null;
 	lastAptReachability = undefined;
@@ -1724,7 +1725,11 @@ export function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonit
 			if (code === 0) {
 				// Persist the observed commit success before deliberately exiting;
 				// the observer has already drained output and cleaned up the unit.
-				void finishSoftwareUpdateRestart(onCommitSucceeded, () => {
+				void finishSoftwareUpdateRestart(onCommitSucceeded, async () => {
+					// The finished install is the CeraLive offer's positive evidence once dpkg confirms it.
+					await withdrawCeraliveOfferIfInstalled((argv) =>
+						runAptCommand(argv, DPKG_PROOF_TIMEOUT_MS),
+					);
 					if (rebootAfterUpgrade && !onCommitSucceeded) {
 						rebootAfterUpdate();
 					} else {
@@ -2059,54 +2064,6 @@ async function recoverSoftwareUpdate(
 		void monitor.finish(recovered.completion, getRecoveredUpdateExitHook());
 	}
 	return true;
-}
-
-// The legacy installer's decision, simulated only (no lock, prompt, hook or fetch):
-// the dist-upgrade plan's first-party upgrades, then the exact install argv
-// Install would run for them.
-async function legacyInstallerOffer(run: AptRun): Promise<CeraliveOffer> {
-	const discovery = await run([
-		"/usr/bin/apt-get",
-		"-s",
-		"-o",
-		"Debug::NoLocking=1",
-		"dist-upgrade",
-	]);
-	if (discovery.exitCode !== 0 || !completePlan(discovery.stdout))
-		return "unknown";
-	// An upgrade's Inst row carries the installed version; a new install's does not.
-	const names = discovery.stdout
-		.split("\n")
-		.flatMap((line) => /^Inst (\S+) \[/.exec(line)?.[1] ?? [])
-		.filter((name) => classifyPackageLayer(name) === "app")
-		.sort();
-	return legacyCeraliveOffer(
-		names,
-		buildAptUpgradeArgs(names, "any").filter((arg) => arg !== "-y"),
-		run,
-	);
-}
-
-/** One conclusive-or-nothing read of the evidence the CeraLive offer is decided from. */
-export function readCeraliveOfferEvidence(): Promise<
-	OfferEvidence | undefined
-> {
-	return collectOfferEvidence(
-		(argv) => runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
-		async (run) =>
-			(await readUpdateCapabilities()).mode === "capable"
-				? capableCeraliveOffer(run)
-				: legacyInstallerOffer(run),
-	);
-}
-
-/** The same read for a login or startup, only while the updater would admit APT work. */
-export function readAdmittedCeraliveOfferEvidence(): Promise<
-	OfferEvidence | undefined
-> {
-	return aptWorkAdmitted()
-		? readCeraliveOfferEvidence()
-		: Promise.resolve(undefined);
 }
 
 /** The deliberate crash a finished update ends the process with, so systemd restarts CeraUI. */

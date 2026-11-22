@@ -1364,23 +1364,20 @@ This is host isolation evidence, not a shared-event-loop latency guarantee.
 `ceralive_update` ("A CeraLive update is available", `notifications.ceraliveUpdateAvailable`)
 is separate from `notifyUpdate()`. It names the exact first-party packages the
 Install control would take, on both legacy and capable images, keyed by their
-`name=version` pairs. Only a conclusive check (a clean refresh that touched CeraLive's own index) raises,
-rekeys or withdraws it, and
-only when every first-party candidate is verified (CeraLive origin, policy
-candidate equal to the planned version; on legacy images through a simulation of
-the unchanged install argv). A failed or stale refresh, a failed discovery, one
-unverified candidate, a settled install and an empty restarted process change
-nothing. Its last verdict is written to `ceralive_update_offer.json` before any
-broadcast. A restarted backend replays a recorded withdrawal to every reconnecting
-tab, including a v2026.6.x or 7.x tab (string form), but only while the device's local
-APT evidence (the installer's simulated plan, new dependencies included, the roster's
-policy, holds, dpkg state, CeraLive sources), read afresh after that tab logs in, as
-simulations only, while the updater would admit APT work and with no APT file changing
-during the read, is unchanged; a command that failed, timed out or answered only in part keeps the notice; so a
-tab that missed it during an update's restarts drops the notice even if that backend's
-own refresh fails, while after a rollback the offer an older backend showed stays. A dismissal counts
+`name=version` pairs, and is withdrawn only on positive evidence: the updater's own
+successful install of that offer, proven by dpkg (`dpkg-query` status plus
+`dpkg --compare-versions ... ge ...` for every offered package) just before the
+update's restart, or a conclusive check (clean refresh and discovery, a complete
+plan, CeraLive's source listed) that finds nothing pending. A failed or stale
+refresh, a failed discovery, one unverified candidate, an install dpkg does not
+prove, a restart and a login change nothing. Its last verdict is written to
+`ceralive_update_offer.json` before any broadcast; a restarted backend re-announces a
+stored offer, and the install's own restart tells every tab that logs in to it,
+including a v2026.6.x or 7.x tab (string form), that the proven install removed it.
+A later restart delivers nothing, so after a rollback the offer an older backend
+showed stays. Logins and restarts run no APT or dpkg command. A dismissal counts
 only for the release the dismissing tab showed. Kernel, OS and `update:*` notices
-are never touched. Contract: [the retraction contract](../apps/backend/docs/agents/a-persistent-notification-must-be-retractable.md#the-ceralive-update-offer-is-withdrawn-only-by-a-conclusive-check-exists).
+are never touched. Contract: [the retraction contract](../apps/backend/docs/agents/a-persistent-notification-must-be-retractable.md#the-ceralive-update-offer-is-withdrawn-only-on-positive-evidence-exists).
 Known gap: the orchestrator's package `updates-available` notice above has no
 retraction yet and can still outlive an installed update in an open tab.
 

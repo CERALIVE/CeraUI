@@ -2,8 +2,9 @@ import { SpawnTimeoutError } from "../../helpers/bounded-spawn.ts";
 import type { SpawnWithTimeoutResult } from "../../helpers/spawn-policy.ts";
 
 // Scripted APT answers for the CeraLive update notice tests: one package set
-// drives legacy dist-upgrade, the install-plan and upgrade simulations, the
-// source inventory and per-package policy, as a real device would answer.
+// drives legacy dist-upgrade, the capable upgrade simulation, the source
+// inventory, per-package policy and dpkg's installed status, as a real device
+// would answer. Version comparison is the host's own dpkg.
 export type AptPackage = {
 	readonly name: string;
 	// "(none)" for a package that is not installed (a new install when planned).
@@ -22,7 +23,6 @@ export type AptScript = {
 	readonly keptBack?: readonly AptPackage[];
 	readonly discovery?: Partial<SpawnWithTimeoutResult>;
 	readonly policyFails?: readonly string[];
-	readonly planOmits?: readonly string[];
 	readonly inventory?: string;
 	// Installed with nothing pending (candidate equals installed).
 	readonly installed?: readonly AptPackage[];
@@ -30,14 +30,10 @@ export type AptScript = {
 	readonly holds?: readonly string[];
 	// Known to APT with a candidate, not installed and not planned.
 	readonly available?: readonly AptPackage[];
-	// What the source inventory answers after its first read.
-	readonly inventoryLater?: string;
 	// dpkg's status field for a package, instead of the one its state implies.
 	readonly dpkgStatus?: Readonly<Record<string, string>>;
 	// How one command fails instead of answering (see FailedRead).
 	readonly fail?: Partial<Record<AptRead, FailedRead>>;
-	// The state the device moves to once the roster policy is first read.
-	readonly thenState?: AptScript;
 };
 
 export type AptRead =
@@ -46,14 +42,14 @@ export type AptRead =
 	| "simulation"
 	| "inventory"
 	| "package-policy"
-	| "roster-policy"
 	| "apt-mark"
-	| "dpkg-query";
+	| "dpkg-query"
+	| "dpkg-compare";
 // How the command runner reports a child that never answered: a failed launch and a
 // timeout throw (runAptCommand turns both into exit 1 with a diagnostic), a signal
 // ends it with 128+n and partial output, a silent exit 1 says nothing at all. An
 // answer can also exit 0 incompletely: only its first line (truncated), without its
-// summary or terminator line (no-summary), or cut right after it (cut-after-summary).
+// summary line (no-summary), or cut right after it (cut-after-summary).
 export type FailedRead =
 	| "launch"
 	| "timeout"
@@ -68,16 +64,12 @@ export const READY_PREFIX = "backend:ready:";
 export const CHECKED_MARKER = "backend:checked";
 export const HYDRATED_MARKER = "backend:hydrated";
 export const APPLIED_MARKER = "backend:apt-applied";
-// One per replay (a login, or startup), printed after its frames: `<prefix>sent|declined`.
+// One per login, printed after its frames: `<prefix>sent|declined`.
 export const REPLAY_PREFIX = "backend:replay:";
-export const BLOCK_SET_MARKER = "backend:block-set";
-// The blocked command has started (its answer is fixed by the state at that moment).
-export const BLOCKED_MARKER = "backend:apt-blocked";
-export const RELEASED_MARKER = "backend:apt-released";
 export const SESSION_PASSWORD = "ceralive-session-password";
 // Exit status of a session ended by the finished update's own restart (an uncaught throw).
 export const RESTART_EXIT_CODE = 75;
-// Printed only when the process ends through exactly that restart.
+// Printed when the process reaches exactly that restart (held until `exit`).
 export const RECOVERY_RESTART_MARKER = "recovery:restart";
 // Printed when recovery ends the process any other way.
 export const RECOVERY_FAILED_MARKER = "recovery:failed";
@@ -97,18 +89,18 @@ export const INVENTORY = `Package files:
      origin apt.ceralive.tv
 Pinned packages:
 `;
-// CeraLive's source disabled or absent: the refresh only ever saw Debian.
-// A refresh that checked every index, CeraLive's included, and one that never reached CeraLive.
-const DEBIAN_REFRESH = `Hit:1 https://deb.debian.org/debian-security trixie-security InRelease\n`;
-const REFRESH = `${DEBIAN_REFRESH}Hit:2 https://apt.ceralive.tv/dists/stable/binary-arm64 ./ InRelease\nReading package lists...\n`;
-export const REFRESH_WITHOUT_CERALIVE = `${DEBIAN_REFRESH}Reading package lists...\n`;
+const REFRESH = `Hit:1 https://deb.debian.org/debian-security trixie-security InRelease
+Hit:2 https://apt.ceralive.tv/dists/stable/binary-arm64 ./ InRelease
+Reading package lists...
+`;
+// CeraLive's source disabled or absent: the inventory lists only Debian.
 export const DEBIAN_ONLY_INVENTORY = `${INVENTORY.split(` 500 ${CERALIVE_SOURCE}`)[0]}Pinned packages:\n`;
 const NOTHING =
 	"0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n";
 // What apt-get prints before its plan when it is not quiet.
 const PREAMBLE =
 	"Reading package lists...\nBuilding dependency tree...\nReading state information...\n";
-const SUMMARY = /^\d+ upgraded, |^Pinned packages:$/;
+const SUMMARY = /^\d+ upgraded, /;
 
 function ok(stdout: string): SpawnWithTimeoutResult {
 	return { exitCode: 0, stdout, stderr: "" };
@@ -140,15 +132,18 @@ function simulation(packages: readonly AptPackage[]): string {
 	return `${PREAMBLE}${counts(packages)}${rows.join("")}`;
 }
 
+// What --assume-no discovery prints before its lists and summary.
+const CALCULATING = `${PREAMBLE}Calculating upgrade...\n`;
+
 function upgradePlan(packages: readonly AptPackage[]): SpawnWithTimeoutResult {
-	if (packages.length === 0) return ok(NOTHING);
+	if (packages.length === 0) return ok(`${CALCULATING}${NOTHING}`);
 	const list = (heading: string, rows: readonly AptPackage[]) =>
 		rows.length === 0
 			? ""
 			: `${heading}\n  ${rows.map(({ name }) => name).join(" ")}\n`;
 	return {
 		exitCode: 1,
-		stdout: `${list(
+		stdout: `${CALCULATING}${list(
 			"The following NEW packages will be installed:",
 			packages.filter((pkg) => !isInstalled(pkg)),
 		)}${list("The following packages will be upgraded:", packages.filter(isInstalled))}${counts(packages)}Need to get 4 kB of archives.\nDo you want to continue? [Y/n] N\nAbort.\n`,
@@ -156,43 +151,22 @@ function upgradePlan(packages: readonly AptPackage[]): SpawnWithTimeoutResult {
 	};
 }
 
-export function scriptedApt(initial: AptScript, onChange?: () => void) {
-	let script = initial;
-	let inventories = 0;
+export function scriptedApt(script: AptScript) {
 	return async (argv: readonly string[]): Promise<SpawnWithTimeoutResult> => {
-		if (
-			script.thenState &&
-			argv[0] === "/usr/bin/apt-cache" &&
-			argv[1] === "policy" &&
-			argv.length > 3
-		) {
-			script = script.thenState;
-			onChange?.();
-		}
-		const read = readOf(argv);
-		const later =
-			read === "inventory" && inventories++ > 0
-				? script.inventoryLater
-				: undefined;
-		const current =
-			later === undefined ? script : { ...script, inventory: later };
-		const failure = script.fail?.[read];
+		const failure = script.fail?.[readOf(argv)];
 		return failure === undefined
-			? answer(current)(argv)
-			: failed(failure, argv, await answer(current)(argv));
+			? answer(script)(argv)
+			: failed(failure, argv, await answer(script)(argv));
 	};
 }
 
 function readOf(argv: readonly string[]): AptRead {
 	const [bin, verb] = argv;
 	if (bin === "/usr/bin/dpkg-query") return "dpkg-query";
+	if (bin === "/usr/bin/dpkg") return "dpkg-compare";
 	if (bin === "/usr/bin/apt-mark") return "apt-mark";
 	if (bin === "/usr/bin/apt-cache")
-		return argv.length === 2
-			? "inventory"
-			: argv.length === 3
-				? "package-policy"
-				: "roster-policy";
+		return argv.length === 2 ? "inventory" : "package-policy";
 	if (verb === "update") return "refresh";
 	return verb === "-s" ? "simulation" : "discovery";
 }
@@ -245,31 +219,14 @@ function answer(script: AptScript) {
 			const held = keptBack.map((pkg) => pkg.name).join(" ");
 			return {
 				...plan,
-				stdout: `The following packages have been kept back:\n  ${held}\n${plan.stdout}`,
+				stdout: `${CALCULATING}The following packages have been kept back:\n  ${held}\n${plan.stdout.slice(CALCULATING.length)}`,
 				...script.discovery,
 			};
 		}
 		if (bin === "/usr/bin/apt-get" && verb === "install")
 			return upgradePlan(keptBack);
-		if (bin === "/usr/bin/apt-get" && verb === "-s") {
-			const install = argv.indexOf("install");
-			// An explicit install also takes the new packages the plan depends on.
-			const requested =
-				install < 0
-					? upgradable
-					: all.filter(
-							(pkg) =>
-								argv.slice(install + 1).includes(pkg.name) || !isInstalled(pkg),
-						);
-			return ok(
-				simulation(
-					// planOmits: the explicit install plan, unlike the upgrade plan, leaves them out.
-					requested.filter(
-						(pkg) => install < 0 || !script.planOmits?.includes(pkg.name),
-					),
-				),
-			);
-		}
+		if (bin === "/usr/bin/apt-get" && verb === "-s")
+			return ok(simulation(upgradable));
 		if (bin === "/usr/bin/apt-mark")
 			return ok((script.holds ?? []).map((name) => `${name}\n`).join(""));
 		if (bin === "/usr/bin/dpkg-query") {
@@ -293,19 +250,14 @@ function answer(script: AptScript) {
 					.join(""),
 			};
 		}
+		if (bin === "/usr/bin/dpkg" && verb === "--compare-versions") {
+			const compared = Bun.spawnSync(["dpkg", ...argv.slice(1)]);
+			return { exitCode: compared.exitCode ?? 2, stdout: "", stderr: "" };
+		}
 		if (bin === "/usr/bin/apt-cache" && verb === "policy") {
 			if (name === undefined) return ok(script.inventory ?? INVENTORY);
 			if (script.policyFails?.includes(name))
 				return { exitCode: 100, stdout: "", stderr: `E: ${name}\n` };
-			// Several names: one block per known package, as APT prints them.
-			if (argv.length > 3)
-				return ok(
-					argv
-						.slice(2)
-						.flatMap((wanted) => present.filter((pkg) => pkg.name === wanted))
-						.map(policy)
-						.join(""),
-				);
 			const pkg = present.find((candidate) => candidate.name === name);
 			if (pkg) return ok(policy(pkg));
 		}

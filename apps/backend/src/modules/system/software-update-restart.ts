@@ -7,7 +7,7 @@ export type CommitExitHook = (() => void) | (() => Promise<boolean>);
 /** Settlement is separate: resume must read the outcome without waiting on itself. */
 export async function finishSoftwareUpdateRestart(
 	onCommitSucceeded: CommitExitHook | undefined,
-	exit: () => void,
+	exit: () => void | Promise<void>,
 ): Promise<void> {
 	try {
 		const permission =
@@ -31,5 +31,5 @@ export async function finishSoftwareUpdateRestart(
 		if (!(await pendingPackageSuccess.waitForDurability())) return;
 	}
 	// Intentionally outside the persistence catch: a deliberate exit cannot be swallowed.
-	exit();
+	await exit();
 }
