@@ -266,6 +266,8 @@ function session(role: "first" | "after-postinst" | "after-outcome" | "boot") {
 			heard.resolve();
 			heard = Promise.withResolvers<void>();
 		}
+		// Output ended: wake waiters only once the exit is known, or they would spin.
+		await child.exited;
 		heard.resolve();
 	})();
 	const printed = (match: (line: string) => boolean, what: string) =>
@@ -319,10 +321,8 @@ async function release(barrier: string) {
 
 // The first lifetime launches the update; the postinst ends it during dpkg;
 // the second recovers the same unit, which reaches Installing 80%.
-async function toInstalling80(tab: Tab) {
-	// The backend that starts the update.
-	const first = session("first");
-	await tab.connect(await first.listening());
+async function signIn(tab: Tab, port: number): Promise<string> {
+	await tab.connect(port);
 	expect(
 		await tab.call(["auth", "setPassword"], { password: "restart-test" }),
 	).toEqual({ success: true });
@@ -333,6 +333,13 @@ async function toInstalling80(tab: Tab) {
 	expect(login.success).toBe(true);
 	const token = login.auth_token ?? "";
 	expect(token).not.toBe("");
+	return token;
+}
+
+async function toInstalling80(tab: Tab) {
+	// The backend that starts the update.
+	const first = session("first");
+	const token = await signIn(tab, await first.listening());
 	await tab.pull();
 	tab.moment("signed in before the first recovery");
 	first.send("recover");
@@ -568,7 +575,96 @@ test("a successful unit that can never be retired restarts CeraUI once over five
 	expect(await readFile(join(scratch, "unit.exit"), "utf8")).toBe("0\n");
 	expect(
 		JSON.parse(
-			await readFile(join(scratch, "software-update.outcome"), "utf8"),
+			await readFile(join(scratch, "software-update.attempt"), "utf8"),
 		),
-	).toMatchObject({ schema: 1, exitCode: 0 });
+	).toMatchObject({ schema: 2, phase: "launched", exitCode: 0 });
 }, 120_000);
+
+// apt and dpkg for an update that finishes at once.
+const QUICK_APT = `#!/bin/bash
+echo "Setting up cerastream (2) ..."
+printf 'pmstatus:cerastream:90.0000:Setting up cerastream\\n' >&3 || exit 100
+exit 0
+`;
+const outcomeOf = (seen: Seen) =>
+	seen.at === "push" || seen.at === "pull"
+		? (seen.status.update_state as Status | undefined)?.kind
+		: undefined;
+
+test.each([
+	"reachability",
+	"apt-update",
+	"space",
+	"prepare-output",
+	"unit-start",
+])(
+	"a restart while a new update waits at %s never tells the tab the previous update's outcome",
+	async (step) => {
+		await writeFile(join(scratch, "apt-get"), QUICK_APT);
+		const tab = new Tab();
+		// Update A succeeds and restarts CeraUI once.
+		const first = session("first");
+		const token = await signIn(tab, await first.listening());
+		first.send("recover");
+		await first.line("session:recovered");
+		await tab.until("no unit at boot", (s) => updatingOf(s) === null);
+		const exitedA = first.child.exited;
+		expect(await tab.call(["system", "startUpdate"])).toMatchObject({
+			success: true,
+		});
+		await tab.until("A's outcome", (s) => outcomeOf(s) === "success");
+		expect(await exitedA).toBe(RESTART_EXIT_CODE);
+
+		// Update B is accepted; CeraUI dies while B waits at `step`.
+		const second = session("first");
+		await tab.connect(await second.listening());
+		expect(await tab.call(["auth", "login"], { token })).toEqual({
+			success: true,
+		});
+		second.send("recover");
+		await second.line("session:recovered");
+		await tab.until(
+			"A's outcome told again",
+			(s) => outcomeOf(s) === "success",
+		);
+		second.send(`park ${step}`);
+		await second.line(`session:parking ${step}`);
+		expect(await tab.call(["system", "startUpdate"])).toMatchObject({
+			success: true,
+		});
+		await second.line(`session:parked ${step}`);
+		second.child.kill("SIGKILL");
+		await second.child.exited;
+		await tab.until("B's backend died", (s) => s.at === "disconnected");
+		tab.moment("killed during B");
+
+		// The next lifetime knows only the device's files.
+		const third = session("first");
+		await tab.connect(await third.listening());
+		expect(await tab.call(["auth", "login"], { token })).toEqual({
+			success: true,
+		});
+		third.send("recover");
+		await third.line("session:recovered");
+		await tab.pull();
+		const seen = [...tab.seen];
+		tab.close();
+		const told = seen
+			.slice(
+				seen.findIndex(
+					(s) => s.at === "moment" && s.name === "killed during B",
+				),
+			)
+			.filter((s) => outcomeOf(s) !== undefined);
+		expect(told.length).toBeGreaterThan(0);
+		// Neither A's success nor any failure is ever B's; B simply never ran.
+		expect(told.map(outcomeOf)).toEqual(told.map(() => "available"));
+		expect(
+			told.some((s) => {
+				const u = updatingOf(s) as { result?: unknown } | null | undefined;
+				return typeof u === "object" && u !== null && "result" in u;
+			}),
+		).toBe(false);
+	},
+	120_000,
+);

@@ -26,6 +26,8 @@ export type DetachedAptServiceState =
 			readonly kind: "finished";
 			readonly exitCode: number;
 			readonly cleanup: "stop" | "reset-failed";
+			/** systemd's InvocationID: tells this run from another of the same unit. */
+			readonly invocation?: string;
 			/** The unit writes APT status records; see software-update-service-contract.ts. */
 			readonly aptStatus?: true;
 	  };
@@ -75,6 +77,8 @@ export function parseDetachedAptServiceState(
 	const activeState = properties.get("ActiveState") ?? "inactive";
 	const subState = properties.get("SubState") ?? "dead";
 	const exit = parseSystemdExitFields(properties);
+	const invocation = properties.get("InvocationID");
+	const run = invocation ? { invocation } : {};
 
 	if (activeState === "failed" || subState === "failed") {
 		if (
@@ -88,12 +92,18 @@ export function parseDetachedAptServiceState(
 			kind: "finished",
 			exitCode: processExitCode(exit.mainCode, exit.mainStatus),
 			cleanup: "reset-failed",
+			...run,
 		};
 	}
 	if (subState === "exited") {
 		if (!exit || activeState !== "active" || exit.mainCode !== 1)
 			return { kind: "running" };
-		return { kind: "finished", exitCode: exit.mainStatus, cleanup: "stop" };
+		return {
+			kind: "finished",
+			exitCode: exit.mainStatus,
+			cleanup: "stop",
+			...run,
+		};
 	}
 	if (
 		activeState === "active" ||

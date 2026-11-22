@@ -108,19 +108,18 @@ import {
 } from "./disruptive-action-reservation.ts";
 import { classifyPackageLayer } from "./package-layer.ts";
 import { markBootDegraded } from "./readiness.ts";
+import type { SoftwareUpdateAttempt } from "./software-update-output.ts";
 import {
 	pendingAwareAptSpaceDeps,
 	runLegacyPackageEffects,
 } from "./software-update-pending-effects.ts";
 import {
-	beginDetachedAptAttempt,
-	DetachedAptServiceAlreadyExistsError,
 	DetachedAptServiceCleanupError,
-	RECORDED_OUTCOME_REPLAY_MS,
 	recoverDetachedAptUpgrade,
 	runDetachedAptAll,
 	runDetachedAptUpgrade,
 	type SoftwareUpdateOutputHandlers,
+	softwareUpdateUptimeMs,
 } from "./software-update-process.ts";
 import {
 	isSoftwareUpdateRecoveryInconclusive,
@@ -131,10 +130,7 @@ import {
 	type CommitExitHook,
 	finishSoftwareUpdateRestart,
 } from "./software-update-restart.ts";
-import {
-	type DetachedAptServiceDeps,
-	defaultDetachedAptServiceDeps,
-} from "./software-update-service.ts";
+import { defaultDetachedAptServiceDeps } from "./software-update-service.ts";
 import { isStreamConfirmedIdle } from "./stream-liveness-source.ts";
 import { reconcileAptChannel } from "./update-apt-channel.ts";
 import {
@@ -328,6 +324,9 @@ export function getAvailableUpdates() {
 	return availableUpdates;
 }
 
+// A recovered unit's cleanup and restart are waiting for startup's verdict.
+let recoveredOwnershipPending = false;
+
 export function beginSoftwareUpdateRecovery(): void {
 	softUpdateRecoveryPending = true;
 }
@@ -336,24 +335,42 @@ function settleSoftwareUpdateRecovery(): void {
 	softUpdateRecoveryPending = false;
 }
 
-/**
- * While startup adjudication is pending, a unit that is already gone cannot be
- * observed: settle now from its recorded exit (or none), never hold the tab.
- */
-export async function settleSoftwareUpdateRecoveryIfUnitAbsent(
-	deps: Pick<
-		DetachedAptServiceDeps,
-		"inspect" | "readRecordedOutcome"
-	> = defaultDetachedAptServiceDeps(),
-): Promise<void> {
-	if (!softUpdateRecoveryPending) return;
-	if ((await deps.inspect()).kind !== "absent") return;
-	const recorded = await deps.readRecordedOutcome();
-	if (!softUpdateRecoveryPending) return;
-	if (recorded && Date.now() - recorded.at < RECORDED_OUTCOME_REPLAY_MS)
-		adoptRecordedOutcome(recorded.exitCode);
-	settleSoftwareUpdateRecovery();
-	broadcastMsg("status", { updating: null, update_state: getUpdateState() });
+/** The new attempt's record; an older attempt's recorded exit stays only as a leftover. */
+function admitSoftwareUpdateAttempt(): boolean {
+	const deps = defaultDetachedAptServiceDeps();
+	try {
+		let previous: SoftwareUpdateAttempt | null = null;
+		try {
+			previous = deps.readAttempt();
+		} catch (error) {
+			logger.warn(
+				"Software update: the previous attempt record is unreadable",
+				{
+					error,
+				},
+			);
+		}
+		const leftover =
+			previous?.exitCode !== undefined
+				? {
+						...(previous.invocation ? { invocation: previous.invocation } : {}),
+						exitCode: previous.exitCode,
+					}
+				: previous?.leftover;
+		deps.writeAttempt({
+			schema: 2,
+			attempt: randomUUID(),
+			phase: "accepted",
+			uptimeMs: softwareUpdateUptimeMs(deps),
+			...(leftover ? { leftover } : {}),
+		});
+		return true;
+	} catch (error) {
+		logger.warn("Software update refused: the attempt could not be recorded", {
+			error,
+		});
+		return false;
+	}
 }
 
 /** A unit's exit that an earlier lifetime observed and recorded. */
@@ -394,6 +411,7 @@ export function isUpdating() {
 // cannot refuse the next test's start with `already_updating`.
 export function resetSoftwareUpdateState(): void {
 	softUpdateRecoveryPending = false;
+	recoveredOwnershipPending = false;
 	if (delayedSoftwareUpdateStart) clearTimeout(delayedSoftwareUpdateStart);
 	if (softwareUpdateRecoveryRetryTimer) {
 		clearTimeout(softwareUpdateRecoveryRetryTimer);
@@ -1536,6 +1554,11 @@ export function startSoftwareUpdate(
 	if (isSoftwareUpdateRecoveryInconclusive()) {
 		return refuseUpdateStart("check_unavailable");
 	}
+	if (recoveredOwnershipPending) return refuseUpdateStart("check_unavailable");
+	// Before anything is published or started: a restart from here on finds
+	// this attempt's record, never an older attempt's exit.
+	if (!shouldUseMocks() && !admitSoftwareUpdateAttempt())
+		return refuseUpdateStart("check_unavailable");
 
 	currentUpdateIdentity = availableIdentity;
 	lastUpdateFailure = null;
@@ -1593,7 +1616,7 @@ type SoftwareUpdateProcessMonitor = {
 
 export function createSoftwareUpdateProcessMonitor(
 	prefetched = "",
-	{ observeOnly = false }: { readonly observeOnly?: boolean } = {},
+	{ ownership }: { readonly ownership?: Promise<boolean> } = {},
 ): SoftwareUpdateProcessMonitor {
 	let rebootAfterUpgrade = false;
 	let summaryParseLogged = false;
@@ -1604,7 +1627,8 @@ export function createSoftwareUpdateProcessMonitor(
 	let announced = true;
 	// Live units write the status channel; a recovered one says whether it does.
 	let channel = true;
-	let restartWithheld = false;
+	// Only a durably recorded exit may restart CeraUI; unrecorded, the unit is the evidence.
+	let outcomeRecorded = true;
 
 	const observeRebootPackages = () => {
 		if (rebootAfterUpgrade) return;
@@ -1669,6 +1693,9 @@ export function createSoftwareUpdateProcessMonitor(
 		onStatusLost: () => {
 			channel = false;
 		},
+		onOutcomeRecorded: (recorded) => {
+			outcomeRecorded = recorded;
+		},
 		onAttached: (aptStatus) => {
 			announced = false;
 			channel = aptStatus;
@@ -1693,10 +1720,8 @@ export function createSoftwareUpdateProcessMonitor(
 			code = await completion;
 		} catch (err) {
 			if (err instanceof DetachedAptServiceCleanupError) {
-				// The verified exit is the outcome; the next launch retires the unit.
+				// The verified, recorded exit is the outcome; the next launch retires the unit.
 				code = err.transactionExitCode;
-				// With no record, the next boot would adopt this unit again: no restart.
-				restartWithheld = !err.outcomeRecorded;
 				logger.error(
 					"Software update: the finished unit could not be retired",
 					{
@@ -1711,9 +1736,9 @@ export function createSoftwareUpdateProcessMonitor(
 		}
 
 		// Keep the in-flight latch until cleanup settles; its result cannot change code.
-		// A watcher that does not own the unit leaves the cache to its owner too.
+		// A recovered unit's cache waits until startup hands the unit over.
 		const cleaned =
-			observeOnly || (await cleanAptCache(defaultAptSpaceDeps.run));
+			ownership !== undefined || (await cleanAptCache(defaultAptSpaceDeps.run));
 		lastCleanupWarning =
 			code === 0 && !cleaned ? "post_clean_failed" : undefined;
 		// The outcome is known: initial pushes may report it again.
@@ -1738,7 +1763,7 @@ export function createSoftwareUpdateProcessMonitor(
 			// a caller awaiting settle() must observe the real outcome even if
 			// a broadcast fails for some unrelated reason.
 			lastUpdateSucceeded = code === 0;
-			if (code === 0 && owned) pendingPackageSuccess.observe();
+			if (code === 0 && owned && !ownership) pendingPackageSuccess.observe();
 			lastUpdateFailure = failure;
 			softUpdateStatus.result = code === 0 ? code : aptErr;
 			const settledStatus = softUpdateStatus;
@@ -1789,19 +1814,50 @@ export function createSoftwareUpdateProcessMonitor(
 		onCommitSucceeded?: CommitExitHook,
 	): Promise<void> => {
 		const settled = settle(completion, onCommitSucceeded !== undefined);
+		if (ownership) recoveredOwnershipPending = true;
 		// Keep the deliberate restart detached so a caller's catch cannot swallow it.
-		void settled.then((code) => {
+		void settled.then(async (code) => {
 			if (aptLog) logger.info(aptLog);
 			if (aptErr) logger.error(aptErr);
-
-			if (code === 0 && !observeOnly) {
-				// Persist the observed commit success before deliberately exiting;
-				// the observer has already drained output and cleaned up the unit.
+			if (ownership) {
+				// The outcome is told already; the unit's owner duties wait for startup.
+				let owned = false;
+				try {
+					owned = await ownership;
+					if (owned) {
+						const cleaned = await cleanAptCache(defaultAptSpaceDeps.run);
+						if (code === 0 && !cleaned) {
+							lastCleanupWarning = "post_clean_failed";
+							broadcastUpdateState();
+						}
+						if (code === 0 && onCommitSucceeded)
+							pendingPackageSuccess.observe();
+					}
+				} catch (error) {
+					owned = false;
+					logger.error(
+						"Software update: the recovered unit was not handed over",
+						{
+							error,
+						},
+					);
+				} finally {
+					recoveredOwnershipPending = false;
+				}
+				if (!owned) {
+					logger.warn(
+						"Software update: startup kept the recovered unit; it is watched only",
+					);
+					return;
+				}
+			}
+			if (code === 0) {
+				// Persist the observed commit success before deliberately exiting.
 				void finishSoftwareUpdateRestart(onCommitSucceeded, () => {
-					if (restartWithheld) {
+					if (!outcomeRecorded) {
 						markBootDegraded("software-update-retirement");
 						logger.error(
-							"Software update: restart withheld; the finished unit was neither retired nor recorded",
+							"Software update: restart withheld; the exit could not be recorded, so the finished unit stays as the evidence",
 						);
 					} else if (rebootAfterUpgrade && !onCommitSucceeded) {
 						rebootAfterUpdate();
@@ -1842,24 +1898,6 @@ async function prepareSoftwareUpdate(
 ): Promise<void> {
 	pendingPackageSuccess.assertEffectsAllowed();
 	if (!aptUpdatesEnabled() || !isStreamConfirmedIdle()) return;
-	// Before preflight: a restart from here on never replays an older exit.
-	try {
-		await beginDetachedAptAttempt();
-	} catch (error) {
-		logger.warn("Software update refused: an earlier update unit remains", {
-			error,
-		});
-		lastUpdateFailure = {
-			reason:
-				error instanceof DetachedAptServiceAlreadyExistsError
-					? "An earlier software update is still registered on the device."
-					: "The device could not record a new software update attempt.",
-		};
-		softUpdateStatus = null;
-		broadcastMsg("status", { updating: null, update_state: getUpdateState() });
-		return;
-	}
-
 	const capabilities = await readPackageCapabilities();
 	if (capabilities === null) {
 		refuseUnknownPackageInstall();
@@ -2101,7 +2139,7 @@ export function getLastInstallUnitVerdict(): InstallUnitVerdict {
 
 async function recoverSoftwareUpdate(
 	deps: SoftwareUpdateRecoveryDeps = defaultSoftwareUpdateRecoveryDeps,
-	observeOnly = false,
+	ownership?: Promise<boolean>,
 ): Promise<boolean> {
 	// One recovery per unit: a later caller gets the answer and changes nothing.
 	if (lastInstallUnitVerdict === "attached") return true;
@@ -2117,12 +2155,12 @@ async function recoverSoftwareUpdate(
 		return false;
 	}
 
-	// Without ownership the unit is only watched: the tab learns its real
-	// outcome, but nothing retires it, cleans the cache or restarts CeraUI.
-	const owner = !observeOnly;
-	const monitor = createSoftwareUpdateProcessMonitor("", {
-		observeOnly: !owner,
-	});
+	// Watched at once. With `ownership` (startup's verdict) given, retiring the
+	// unit, cleaning the cache and restarting wait until it is true.
+	const monitor = createSoftwareUpdateProcessMonitor(
+		"",
+		ownership ? { ownership } : {},
+	);
 	const recovered = await deps.recover(
 		{
 			...monitor.handlers,
@@ -2144,14 +2182,11 @@ async function recoverSoftwareUpdate(
 			},
 		},
 		undefined,
-		{ retire: owner },
+		{ retire: ownership ?? true },
 	);
-	// `null` means `systemctl show` named the fixed unit and answered
-	// `LoadState=not-found`. Absence is not identity-checked (there is nothing
-	// to check); a loaded unit is, and an unreadable probe throws instead.
+	// `null`: no unit, or one whose exit tells the current attempt nothing.
 	if (!recovered) {
-		// A watcher's probe is not the owner's verdict ("not-probed" stays).
-		if (owner) lastInstallUnitVerdict = "absent";
+		lastInstallUnitVerdict = "absent";
 		if (softUpdateRecoveryPending) {
 			settleSoftwareUpdateRecovery();
 			// A tab that kept its overlay across the restart learns it is over.
@@ -2165,27 +2200,20 @@ async function recoverSoftwareUpdate(
 	if ("recorded" in recovered) {
 		// Once per boot: a later recovery call finds the hold already settled.
 		if (recovered.unit === "absent" && !softUpdateRecoveryPending) return false;
-		if (owner)
-			lastInstallUnitVerdict =
-				recovered.unit === "finished" ? "attached" : "absent";
+		lastInstallUnitVerdict =
+			recovered.unit === "finished" ? "attached" : "absent";
 		adoptRecordedOutcome(recovered.recorded.exitCode);
-		if (recovered.unit === "finished") {
-			markBootDegraded("software-update-retirement");
-			logger.error(
-				"Software update: a finished unit could not be retired; its recorded outcome stands and it is not adopted again",
+		if (recovered.unit === "finished")
+			logger.warn(
+				"Software update: a finished unit whose exit is already recorded is not adopted again",
 			);
-		}
 		settleSoftwareUpdateRecovery();
 		// A tab that missed the result across the restarts learns it now.
 		broadcastMsg("status", {
 			updating: null,
 			update_state: getUpdateState(),
 		});
-		return owner && recovered.unit === "finished";
-	}
-	if (!owner) {
-		void monitor.finish(recovered.completion);
-		return false;
+		return recovered.unit === "finished";
 	}
 	lastInstallUnitVerdict = "attached";
 
@@ -2205,31 +2233,13 @@ async function recoverSoftwareUpdate(
 	return true;
 }
 
-/**
- * After a refused bootstrap: watch the unit to its real outcome without owning
- * it. Shares recovery's single entry, so it is a no-op once recovery ran.
- */
-export function observeSoftwareUpdateWithoutOwning(
-	deps: SoftwareUpdateRecoveryDeps = defaultSoftwareUpdateRecoveryDeps,
-): Promise<boolean> {
-	return recoverSoftwareUpdateWithCoordination({
-		attempt: () => recoverSoftwareUpdate(deps, true),
-		scheduleRetry: deps.scheduleRetry,
-		resumePeriodicChecks: () => undefined,
-		reportRetryError: (error) => {
-			logger.warn("Software update observation will retry", { error });
-		},
-	}).catch((error: unknown) => {
-		logger.warn("Software update observation will retry", { error });
-		return false;
-	});
-}
-
 export function recoverSoftwareUpdateIfRunning(
 	deps: SoftwareUpdateRecoveryDeps = defaultSoftwareUpdateRecoveryDeps,
+	/** Startup's verdict: until it is true the unit is only watched. */
+	ownership?: Promise<boolean>,
 ): Promise<boolean> {
 	return recoverSoftwareUpdateWithCoordination({
-		attempt: () => recoverSoftwareUpdate(deps),
+		attempt: () => recoverSoftwareUpdate(deps, ownership),
 		scheduleRetry: deps.scheduleRetry,
 		resumePeriodicChecks: deps.resumePeriodicChecks,
 		reportRetryError: (error) => {

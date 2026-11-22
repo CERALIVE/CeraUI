@@ -317,7 +317,7 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			expectedAptUpgradeScript(DETACHED_APT_ARGS),
 		]);
 		expect(command.at(-1)).toBe(
-			`{ exec 3>>/run/ceralive/software-update.status; } 2>/dev/null || exec 3>/dev/null; exec /usr/bin/apt-get -o APT::Status-Fd=3 ${DETACHED_APT_ARGS.join(" ")}`,
+			`{ exec 3<>/run/ceralive/software-update.status; } 2>/dev/null || exec 3>/dev/null; exec /usr/bin/apt-get -o APT::Status-Fd=3 ${DETACHED_APT_ARGS.join(" ")}`,
 		);
 		expect(command).not.toContain("--scope");
 		expect(command).not.toContain("--pipe");
@@ -511,9 +511,8 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			},
 			{
 				outputPaths: paths,
-				readRecordedOutcome: async () => null,
-				recordOutcome: async () => {},
-				beginAttempt: async () => {},
+				readAttempt: () => null,
+				writeAttempt: () => undefined,
 				prepareOutput: async () => {
 					files.set(paths.stdout, new Uint8Array());
 					files.set(paths.stderr, new Uint8Array());
@@ -567,9 +566,8 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 					stderr: "/run/ceralive/software-update.stderr",
 					status: "/run/ceralive/software-update.status",
 				},
-				readRecordedOutcome: async () => null,
-				recordOutcome: async () => {},
-				beginAttempt: async () => {},
+				readAttempt: () => null,
+				writeAttempt: () => undefined,
 				prepareOutput: async () => {
 					prepared++;
 				},
@@ -612,9 +610,8 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 					stderr: "/run/ceralive/software-update.stderr",
 					status: "/run/ceralive/software-update.status",
 				},
-				readRecordedOutcome: async () => null,
-				recordOutcome: async () => {},
-				beginAttempt: async () => {},
+				readAttempt: () => null,
+				writeAttempt: () => undefined,
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
@@ -663,9 +660,8 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			},
 			{
 				outputPaths: paths,
-				readRecordedOutcome: async () => null,
-				recordOutcome: async () => {},
-				beginAttempt: async () => {},
+				readAttempt: () => null,
+				writeAttempt: () => undefined,
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
@@ -726,9 +722,8 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			},
 			{
 				outputPaths: paths,
-				readRecordedOutcome: async () => null,
-				recordOutcome: async () => {},
-				beginAttempt: async () => {},
+				readAttempt: () => null,
+				writeAttempt: () => undefined,
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
@@ -757,7 +752,7 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 		expect(cleanupCalls).toBe(1);
 	});
 
-	it("bounds a permanently unreadable final drain, keeps the exit status and retires the unit", async () => {
+	it("bounds a permanently unreadable final drain without deleting recovery evidence", async () => {
 		const paths = {
 			stdout: "/run/ceralive/software-update.stdout",
 			stderr: "/run/ceralive/software-update.stderr",
@@ -778,9 +773,8 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			},
 			{
 				outputPaths: paths,
-				readRecordedOutcome: async () => null,
-				recordOutcome: async () => {},
-				beginAttempt: async () => {},
+				readAttempt: () => null,
+				writeAttempt: () => undefined,
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
@@ -802,10 +796,10 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			},
 		);
 
-		// The output files are never deleted here; only the finished unit is retired.
+		// The exit status is the outcome; the unit stays as the evidence.
 		await expect(completion).resolves.toBe(0);
 		expect(observerErrors).toBe(20);
-		expect(cleanupCalls).toBe(1);
+		expect(cleanupCalls).toBe(0);
 	});
 
 	it("reports cleanup failure separately from the retained transaction exit", async () => {
@@ -819,9 +813,8 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 					stderr: "/run/ceralive/software-update.stderr",
 					status: "/run/ceralive/software-update.status",
 				},
-				readRecordedOutcome: async () => null,
-				recordOutcome: async () => {},
-				beginAttempt: async () => {},
+				readAttempt: () => null,
+				writeAttempt: () => undefined,
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
@@ -875,9 +868,8 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			},
 			{
 				outputPaths: paths,
-				readRecordedOutcome: async () => null,
-				recordOutcome: async () => {},
-				beginAttempt: async () => {},
+				readAttempt: () => null,
+				writeAttempt: () => undefined,
 				prepareOutput: async () => {
 					prepared++;
 				},

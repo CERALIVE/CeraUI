@@ -46,9 +46,8 @@ function unitDeps(
 	let stdoutReads = 0;
 	return {
 		outputPaths: paths,
-		readRecordedOutcome: async () => null,
-		recordOutcome: async () => {},
-		beginAttempt: async () => {},
+		readAttempt: () => null,
+		writeAttempt: () => undefined,
 		prepareOutput: async () => {},
 		start: async () => o.onStart?.(),
 		inspect: async () => {

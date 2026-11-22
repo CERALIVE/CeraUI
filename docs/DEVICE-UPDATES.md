@@ -29,16 +29,21 @@ close-on-exec before forking dpkg, which on stderr would leave the image's
 `DPkg::Post-Invoke` hooks without stderr; stdout would interleave records
 with dpkg's PTY output.
 
-The channel is best effort. APT writes its records into the file itself,
-with no reader process: a regular file on `/run` never blocks APT, and
-nothing can stall or die under it. A file the shell cannot open gives APT
-`/dev/null`, so the install runs without numbers; a status file the
-backend could not prepare starts the released pre-channel command instead,
-so the unit's command always says whether it writes the channel. A file
-removed mid-run is not an error (APT keeps its open descriptor). APT 3.0.3
-does turn a failed status write into its pending error (`FileFd::Write`),
-and `private-install.cc` then fails the install after dpkg ran; on a
-regular tmpfs file that happens only when `/run` is full. The status forms
+The channel is best effort and cannot fail APT. Before launch the backend
+zero-fills the status file to a 4 MiB reservation; the unit opens it with
+`3<>` (read-write, no truncation, no append), so APT's records overwrite
+the reservation and a write never allocates: a full `/run` cannot fail it,
+and with no reader process nothing can stall or die under it. The reader
+stops at the first NUL. APT 3.0.3 does turn a failed status write into its
+pending error (`FileFd::Write`), and `private-install.cc` then fails the
+install after dpkg ran, which is why the write must not be able to fail. A
+status file that cannot be reserved (a `/run` already short of space)
+starts the released pre-channel command instead, so the unit's command
+always says whether it writes the channel; a file the shell cannot open
+gives APT `/dev/null`. A file removed mid-run is not an error (APT keeps its
+open descriptor). The remaining limit: APT writing past 4 MiB (a record is
+about 60 bytes, so tens of thousands of records; the pinned path fetches
+archives before the unit starts) would allocate again. The status forms
 run under `/bin/bash`, whose failed `exec` redirect returns where `sh`
 exits; the released pre-channel forms stay `/bin/sh` and remain adoptable.
 
@@ -91,26 +96,33 @@ also when stdout or stderr stay unreadable (the final drain gives up after 20
 failed reads) or when retiring the unit fails. The orchestrator's Settings
 activity line resumes with APT's own number or none.
 
-The observer records the exit status it saw (`/run/ceralive/software-update.outcome`:
-exit code and time, root-owned, mode 0600) after its final read and before
-retiring the unit; a failed write is retried five times and the exit is
-published either way. Every update attempt takes the record before its
-preflight (a fresh attempt id, no exit), so a restart during a new attempt's
-preflight or download never replays the previous attempt's success; when the
-record cannot be taken or removed, or any unit is still registered (a finished
-one is first retired only when its exit was recorded), the attempt is refused.
-Below 4 MiB free on `/run` the unit runs without a status channel (phases
-only), so a status write cannot meet a full `/run`; the remaining risk is a
-`/run` filled by something else during the install, the same risk the
-unit's stdout file already carries. While startup adjudication is pending, a
-unit that is already gone settles the tab at once from its recorded exit (or
-none). Retirement is retried five times. A finished unit whose exit is recorded is
-never adopted again: a later boot reports the recorded outcome, tries one
-retirement, marks boot degraded and never restarts CeraUI for it, so a unit
-whose `systemctl stop` keeps failing restarts CeraUI at most once. When
-neither the retirement nor the record succeeded, the deliberate restart is
-withheld instead. A launch retires a finished leftover only when its exit is
-recorded, and refuses otherwise.
+One durable attempt record, `/run/ceralive/software-update.attempt` (root,
+0600, written synchronously and renamed into place), is the only thing
+replay and adjudication read. `startSoftwareUpdate` writes a new attempt
+(`accepted`, a fresh id, no exit) after its refusals and before it publishes
+anything or starts a check, so a restart at any step before the unit starts
+finds that attempt with no exit and tells nothing; an older attempt's
+recorded exit is kept only as a `leftover` a launch may use to retire that
+finished unit. When the record cannot be written the start is refused. The
+launch writes `launched` before the unit exists; the observer writes the
+unit's exit and systemd `InvocationID` under that attempt after its final
+read (five tries). A gone unit's exit is told only from a `launched` record
+with an exit, within 30 minutes of boot-relative uptime.
+
+The unit is retired only once its exit is durably recorded and its
+transcript was read; otherwise it stays as the evidence, its exit is still
+published, and the deliberate restart is withheld (boot marked degraded).
+A finished unit whose exit is recorded (same exit and invocation) is never
+adopted again: a later boot reports it and tries one retirement, so a unit
+whose `systemctl stop` keeps failing restarts CeraUI at most once. A launch
+retires a finished leftover only when the record holds its exit, and
+refuses otherwise.
+
+At boot a surviving unit is watched at once, independent of the slower
+startup checks: the tab sees its progress and outcome. Retiring it,
+cleaning the APT cache and restarting CeraUI wait until startup is admitted;
+a refused or failed startup leaves it watched only, and new starts are
+refused while that hand-over is pending.
 
 A tab can miss the single outcome push while it reconnects across the
 completion restart. Once recovery finds the unit gone, the next backend

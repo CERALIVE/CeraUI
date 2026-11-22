@@ -1,12 +1,11 @@
 import { spawn } from "node:child_process";
 import { open, readFile, rm, writeFile } from "node:fs/promises";
 import {
-	beginSoftwareUpdateAttempt,
 	prepareSoftwareUpdateOutput,
-	readSoftwareUpdateOutcome,
+	readSoftwareUpdateAttempt,
 	SOFTWARE_UPDATE_OUTPUT_READ_BYTES,
 	softwareUpdateOutputPaths,
-	writeSoftwareUpdateOutcome,
+	writeSoftwareUpdateAttempt,
 } from "../../modules/system/software-update-output.ts";
 import type { DetachedAptServiceDeps } from "../../modules/system/software-update-service.ts";
 
@@ -40,9 +39,8 @@ export function restartTestUnit(
 	let stdoutReads = 0;
 	return {
 		outputPaths: fixed,
-		readRecordedOutcome: () => readSoftwareUpdateOutcome(local, uid),
-		recordOutcome: (outcome) => writeSoftwareUpdateOutcome(local, outcome, uid),
-		beginAttempt: (attempt) => beginSoftwareUpdateAttempt(local, attempt, uid),
+		readAttempt: () => readSoftwareUpdateAttempt(local, uid),
+		writeAttempt: (record) => writeSoftwareUpdateAttempt(local, record, uid),
 		prepareOutput: () => prepareSoftwareUpdateOutput(local, uid),
 		start: async (command) => {
 			const argv = command

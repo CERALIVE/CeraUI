@@ -18,10 +18,10 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type WebSocket from "ws";
-
 import { initMockService, shouldUseMocks } from "../mocks/mock-service.ts";
 import { getConfig } from "../modules/config.ts";
 import { setup } from "../modules/setup.ts";
+import { setDetachedAptServiceDepsForTest } from "../modules/system/software-update-service.ts";
 import {
 	getMockSoftwareUpdatePromise,
 	isUpdating,
@@ -39,6 +39,15 @@ import {
 import { addClient, removeClient } from "../rpc/events.ts";
 import type { AppWebSocket } from "../rpc/types.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
+import { useNoHostUpdateUnit } from "./software-updates-preflight-harness.ts";
+
+// Starts here admit an attempt: record it in a fake unit, never the host's /run.
+beforeEach(() => {
+	useNoHostUpdateUnit();
+});
+afterEach(() => {
+	setDetachedAptServiceDepsForTest(null);
+});
 
 useSessionOwnerForFile();
 

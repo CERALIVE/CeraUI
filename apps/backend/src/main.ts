@@ -166,10 +166,8 @@ import {
 } from "./modules/system/sensors.ts";
 import {
 	beginSoftwareUpdateRecovery,
-	observeSoftwareUpdateWithoutOwning,
 	periodicCheckForSoftwareUpdates,
 	recoverSoftwareUpdateIfRunning,
-	settleSoftwareUpdateRecoveryIfUnitAbsent,
 } from "./modules/system/software-updates.ts";
 import {
 	ensureSshPasswordProvisioned,
@@ -500,32 +498,24 @@ await guardNonCritical("apt-channel-reconcile", async () => {
 	const mode = (await readUpdateCapabilities()).mode;
 	if (mode === "capable") await reconcileAptChannel(mode);
 });
-// Todo 36: the packages+OS+slot-sync orchestrator. Its own resume path (G17)
-// is the ONLY thing that reattaches to a persisted `committing` phase's
-// detached apt unit on this boot — running it BEFORE the general standalone
-// recovery call below is what stops the two from racing over the SAME unit.
-// A recovered, already-finished unit's outcome is awaited (bounded: drain +
-// cleanup only, see software-updates.ts recoverSoftwareUpdate()) before
-// resume reads it. An explicit recovered-owner hook withholds deliberate exit
-// until startup adjudication and durable success under CONTROL, including a
-// unit still running at boot. Microtask ordering is not authority. The standalone call after it
-// is then a safe no-op whenever the orchestrator already handled the unit,
-// and remains the only recovery path for a detached transaction the
-// orchestrator itself never tracked (e.g. one started via
-// `system.startUpdate` directly).
+// Todo 36: the packages+OS+slot-sync orchestrator. A detached apt unit that
+// survived the restart is watched at once (observe), independent of the
+// slower startup checks, so the tab sees its progress and outcome. Recovery
+// has one entry: the orchestrator's resume (G17) and the standalone call after
+// adjudication join or reuse that observation. Only an admitted startup lets
+// the unit be retired, its cache cleaned or CeraUI restarted, and the
+// recovered-owner hook still withholds the deliberate exit until durable
+// success under CONTROL.
 void guardNonCritical("update-bootstrap", () =>
 	runUpdateBootstrap({
+		observe: (owned) => {
+			void guardNonCritical("software-update-observation", async () => {
+				await recoverSoftwareUpdateIfRunning(undefined, owned);
+			});
+		},
 		start: async () => {
 			await guardNonCritical("update-orchestrator", startUpdateOrchestrator);
-			// A gone unit needs no adjudication to tell the tab its outcome.
-			void guardNonCritical(
-				"software-update-absent-settle",
-				settleSoftwareUpdateRecoveryIfUnitAbsent,
-			);
-			const admitted = await awaitUpdateStartupAdjudication();
-			// A refused bootstrap never owns the unit; it still shows the tab its outcome.
-			if (!admitted) void observeSoftwareUpdateWithoutOwning();
-			return admitted;
+			return awaitUpdateStartupAdjudication();
 		},
 		recover: async () => {
 			await guardNonCritical("software-update-recovery", async () => {
@@ -535,9 +525,6 @@ void guardNonCritical("update-bootstrap", () =>
 		periodic: () => {
 			periodicCheckForSoftwareUpdates();
 		},
-	}).catch((error: unknown) => {
-		void observeSoftwareUpdateWithoutOwning();
-		throw error;
 	}),
 );
 

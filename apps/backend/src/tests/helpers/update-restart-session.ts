@@ -3,7 +3,8 @@
 // main.ts (initial pushes withhold package progress before the socket binds),
 // serves the real RPC WebSocket handler on a kernel-assigned loopback port,
 // and runs recovery when the test writes "recover" (twice, as the
-// orchestrator's resume and main's standalone call do).
+// orchestrator's resume and main's standalone call do). "park <step>" makes the
+// next update wait forever at that step, so the test can kill CeraUI there.
 import { writeFile } from "node:fs/promises";
 import { loadConfig } from "../../modules/config.ts";
 import { setup } from "../../modules/setup.ts";
@@ -40,6 +41,13 @@ for (const event of ["uncaughtException", "unhandledRejection"] as const)
 		process.exit(1);
 	});
 
+let parkAt: string | undefined;
+async function park(step: string): Promise<void> {
+	if (parkAt !== step) return;
+	process.stdout.write(`session:parked ${step}\n`);
+	await new Promise<never>(() => undefined);
+}
+
 await writeFile(`${scratch}/backend.pid`, String(process.pid));
 await loadConfig();
 setup.apt_update_enabled = true;
@@ -52,39 +60,51 @@ setSshStatusDepsForTest({
 	systemctlIsEnabled: async () => ({ stdout: "disabled\n", stderr: "" }),
 	readShadow: () => "",
 });
-updates.setAptReachabilityProbeForTest(async () => ({
-	ipv4: "ok",
-	ipv6: "ok",
-	used: "any",
-	verdict: "any",
-	detail: [],
-}));
-updates.setAptCommandRunnerForTest(scriptedApt);
+updates.setAptReachabilityProbeForTest(async () => {
+	await park("reachability");
+	return { ipv4: "ok", ipv6: "ok", used: "any", verdict: "any", detail: [] };
+});
+updates.setAptCommandRunnerForTest(async (argv) => {
+	if (argv[1] === "update") await park("apt-update");
+	return scriptedApt(argv);
+});
 Object.assign(defaultAptSpaceDeps, {
-	run: async (argv: readonly string[]) => ({
-		exitCode: 0,
-		stdout:
-			argv[0] === "/usr/bin/apt-config"
-				? "ARCHIVES='/cache/archives/';"
-				: argv.includes("clean")
-					? ""
-					: SPACE_TRANSCRIPT,
-		stderr: "",
-	}),
+	run: async (argv: readonly string[]) => {
+		if (!argv.includes("clean")) await park("space");
+		return {
+			exitCode: 0,
+			stdout:
+				argv[0] === "/usr/bin/apt-config"
+					? "ARCHIVES='/cache/archives/';"
+					: argv.includes("clean")
+						? ""
+						: SPACE_TRANSCRIPT,
+			stderr: "",
+		};
+	},
 	stat: async () => ({ dev: 1n }),
 	statfs: async () => ({ bavail: 268441456n, bsize: 1n }),
 });
-setDetachedAptServiceDepsForTest(
-	restartTestUnit(
-		scratch,
-		role === "after-postinst"
-			? {
-					failFirstStdoutRead: true,
-					holdSecondStdoutRead: `${scratch}/second-read.fifo`,
-				}
-			: { failCleanup: role === "boot" },
-	),
+const unit = restartTestUnit(
+	scratch,
+	role === "after-postinst"
+		? {
+				failFirstStdoutRead: true,
+				holdSecondStdoutRead: `${scratch}/second-read.fifo`,
+			}
+		: { failCleanup: role === "boot" },
 );
+setDetachedAptServiceDepsForTest({
+	...unit,
+	prepareOutput: async () => {
+		await park("prepare-output");
+		return unit.prepareOutput();
+	},
+	start: async (command) => {
+		await park("unit-start");
+		return unit.start(command);
+	},
+});
 
 updates.beginSoftwareUpdateRecovery();
 if (role === "first") await updates.runUpdateDiscoveryAndReport();
@@ -105,6 +125,11 @@ for await (const line of console) {
 		// A restart already decided would have ended the process first.
 		await new Promise((resolve) => setImmediate(resolve));
 		process.exit(0);
+	}
+	if (line.startsWith("park ")) {
+		parkAt = line.slice("park ".length).trim();
+		process.stdout.write(`session:parking ${parkAt}\n`);
+		continue;
 	}
 	if (line.trim() !== "recover") continue;
 	await updates.recoverSoftwareUpdateIfRunning();

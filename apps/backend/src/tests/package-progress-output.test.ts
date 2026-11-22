@@ -67,6 +67,14 @@ const completeLines = (text: string) =>
 	text.slice(0, text.lastIndexOf("\n") + 1);
 
 describe("deriveUpdateProgress()", () => {
+	test("a declared channel with no complete record yet shows the transcript's phase, without a number", () => {
+		expect(deriveUpdateProgress(dpkgLog, "")).toEqual(installingAt());
+		expect(deriveUpdateProgress(fetchLog, "")).toEqual(downloadingAt());
+		expect(deriveUpdateProgress(dpkgLog, "pmstatus:cerastream:4")).toEqual(
+			installingAt(),
+		);
+	});
+
 	test("reports APT's own percentage for the phase it is in", () => {
 		expect(deriveUpdateProgress("", "")).toEqual(preparing);
 		expect(deriveUpdateProgress(fetchLog, fetchStatus)).toEqual(
@@ -172,9 +180,8 @@ async function observe(
 		start: async () => {
 			started = true;
 		},
-		readRecordedOutcome: async () => null,
-		recordOutcome: async () => {},
-		beginAttempt: async () => {},
+		readAttempt: () => null,
+		writeAttempt: () => undefined,
 		prepareOutput: async () => {},
 		readOutput: async (path, offset) => {
 			const file =

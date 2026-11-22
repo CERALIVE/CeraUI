@@ -150,3 +150,59 @@ test("periodic checks wait for standalone recovery completion", async () => {
 	await completion;
 	expect(periodic).toBe(true);
 });
+
+test.each([true, false])(
+	"the bootstrap watches a surviving unit before startup adjudication; ownership follows its verdict (%p)",
+	async (admitted) => {
+		const order: string[] = [];
+		const verdict = Promise.withResolvers<boolean>();
+		let ownership: Promise<boolean> | undefined;
+		const run = runUpdateBootstrap({
+			observe: (owned) => {
+				order.push("observe");
+				ownership = owned;
+			},
+			start: async () => {
+				order.push("start");
+				return verdict.promise;
+			},
+			recover: async () => {
+				order.push("recover");
+			},
+			periodic: () => {
+				order.push("periodic");
+			},
+		});
+		expect(order).toEqual(["observe", "start"]);
+		let owned: boolean | undefined;
+		void ownership?.then((value) => {
+			owned = value;
+		});
+		await Promise.resolve();
+		expect(owned).toBeUndefined();
+		verdict.resolve(admitted);
+		await run;
+		expect(await ownership).toBe(admitted);
+		expect(order).toEqual(
+			admitted
+				? ["observe", "start", "recover", "periodic"]
+				: ["observe", "start"],
+		);
+	},
+);
+
+test("a bootstrap whose startup throws never hands the watched unit over", async () => {
+	let ownership: Promise<boolean> | undefined;
+	const run = runUpdateBootstrap({
+		observe: (owned) => {
+			ownership = owned;
+		},
+		start: async () => {
+			throw new Error("startup failed");
+		},
+		recover: async () => {},
+		periodic: () => {},
+	});
+	await expect(run).rejects.toThrow("startup failed");
+	expect(await ownership).toBe(false);
+});

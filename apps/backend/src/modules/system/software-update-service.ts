@@ -11,16 +11,15 @@
 import { spawnWithTimeout } from "../../helpers/spawn-policy.ts";
 import { classifyPackageLayer } from "./package-layer.ts";
 import {
-	beginSoftwareUpdateAttempt,
 	prepareSoftwareUpdateOutput,
-	type RecordedSoftwareUpdateOutcome,
-	readSoftwareUpdateOutcome,
+	readSoftwareUpdateAttempt,
 	readSoftwareUpdateOutput,
+	type SoftwareUpdateAttempt,
 	type SoftwareUpdateOutputPaths,
 	type SoftwareUpdateOutputRead,
 	softwareUpdateOutputPaths,
 	UnsafeSoftwareUpdateOutputPathError,
-	writeSoftwareUpdateOutcome,
+	writeSoftwareUpdateAttempt,
 } from "./software-update-output.ts";
 import {
 	DetachedAptServiceCommandError,
@@ -85,12 +84,11 @@ export type DetachedAptServiceDeps = {
 	readonly sleep: (milliseconds: number) => Promise<void>;
 	readonly now?: () => number;
 	/** The exit an observer recorded for the current unit; null until one did. */
-	readonly readRecordedOutcome: () => Promise<RecordedSoftwareUpdateOutcome | null>;
-	readonly recordOutcome: (
-		outcome: RecordedSoftwareUpdateOutcome,
-	) => Promise<void>;
-	/** Make `attempt` the record's owner; an older attempt's exit is dropped. */
-	readonly beginAttempt: (attempt: string) => Promise<void>;
+	/** The current attempt's durable record; synchronous so admission precedes any publication. */
+	readonly readAttempt: () => SoftwareUpdateAttempt | null;
+	readonly writeAttempt: (record: SoftwareUpdateAttempt) => void;
+	/** Milliseconds since boot; defaults to the host's uptime. */
+	readonly uptimeMs?: () => number;
 };
 
 function assertTrustedOutputPaths(
@@ -198,7 +196,7 @@ async function inspectService(): Promise<DetachedAptServiceState> {
 		"systemctl",
 		"show",
 		SOFTWARE_UPDATE_UNIT,
-		"--property=Id,FragmentPath,Description,LoadState,ActiveState,SubState,Transient,Type,RemainAfterExit,User,ExecMainCode,ExecMainStatus,ExecStart,ExecStartPre,ExecStartPost,StandardOutput,StandardError",
+		"--property=Id,InvocationID,FragmentPath,Description,LoadState,ActiveState,SubState,Transient,Type,RemainAfterExit,User,ExecMainCode,ExecMainStatus,ExecStart,ExecStartPre,ExecStartPost,StandardOutput,StandardError",
 		"--no-pager",
 	];
 	const result = await spawnWithTimeout(command, {
@@ -245,8 +243,7 @@ export function defaultDetachedAptServiceDeps(): DetachedAptServiceDeps {
 		},
 		readOutput: readSoftwareUpdateOutput,
 		sleep: Bun.sleep,
-		readRecordedOutcome: () => readSoftwareUpdateOutcome(paths),
-		recordOutcome: (outcome) => writeSoftwareUpdateOutcome(paths, outcome),
-		beginAttempt: (attempt) => beginSoftwareUpdateAttempt(paths, attempt),
+		readAttempt: () => readSoftwareUpdateAttempt(paths),
+		writeAttempt: (record) => writeSoftwareUpdateAttempt(paths, record),
 	};
 }

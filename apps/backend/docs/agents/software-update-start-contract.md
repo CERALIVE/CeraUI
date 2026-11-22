@@ -52,9 +52,10 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   an error; until recovery settles (`beginSoftwareUpdateRecovery` before the
   WS server binds), initial pushes omit `updating` and `update_state` rather
   than send `null` or idle state. An attached recovery answers later callers
-  without changing state; a refused or failed bootstrap runs
-  `observeSoftwareUpdateWithoutOwning()`, which shows the unit's real outcome
-  but never retires it or restarts CeraUI.
+  without changing state. The bootstrap's `observe` starts recovery at boot
+  with startup's verdict as `ownership`: the unit's progress and outcome are
+  shown at once; retirement, cache cleanup and the restart wait for an
+  admitted startup, and a refused or failed one leaves the unit watched only.
   `holdUpdateProgress` (`@ceraui/rpc/package-progress`, shared with both
   browser views) keeps a running transaction's phase and in-phase number
   from moving back; the in-process pinned prefetch is announced as
@@ -62,16 +63,15 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   never change the outcome; after 20 consecutive failures the file is
   dropped (`onStatusLost`). The detached result alone settles the outcome,
   including when stdout/stderr stay unreadable or retirement fails.
-  The observer records the exit (`software-update.outcome`) before retiring
-  the unit; a recorded finished unit is never adopted again (no second
-  restart), an absent unit's fresh record is replayed once per boot, and a
-  restart is withheld when neither retirement nor the record succeeded.
-  Retirement and the record write are retried; a launch retires only a
-  recorded leftover. Each attempt takes the record (new attempt id, no exit)
-  before preflight, so an older exit is never replayed for it; an attempt
-  that cannot take the record, or finds a registered unit, is refused. Below
-  4 MiB free on `/run` there is no status channel. A pending boot whose unit
-  is absent settles from the record without waiting for adjudication.
+  One attempt record (`software-update.attempt`) is all replay reads:
+  `startSoftwareUpdate` writes `accepted` (new id) before publishing or
+  starting anything, the launch writes `launched` before the unit exists,
+  and the observer adds the exit and `InvocationID`. Only a `launched`
+  record's own fresh exit is replayed; an older exit is a `leftover` for
+  retirement only. The unit is retired, and CeraUI restarted, only after the
+  exit is recorded (and the transcript read); a recorded finished unit is
+  never adopted again. The status file is a zero-filled 4 MiB reservation
+  opened with `3<>`, so a status write never allocates and cannot fail APT.
 - **Reattachment identity is a safety boundary.** Adoption requires the
   exact unit id and transient fragment path, transient-service description/type,
   exact non-duplicated `[Service]` stdout/stderr append destinations, no pre/post

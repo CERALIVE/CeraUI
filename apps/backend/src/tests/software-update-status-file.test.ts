@@ -1,9 +1,19 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+	chmod,
+	mkdtemp,
+	readFile,
+	rm,
+	stat,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildAptAllInstallArgs } from "../modules/system/apt-all-packages.ts";
-import { softwareUpdateOutputPaths } from "../modules/system/software-update-output.ts";
+import {
+	prepareSoftwareUpdateOutput,
+	softwareUpdateOutputPaths,
+} from "../modules/system/software-update-output.ts";
 import {
 	buildDetachedAptAllCommand,
 	buildDetachedAptUpgradeCommand,
@@ -131,10 +141,11 @@ test.each(["pinned", "direct"] as const)(
 		const barrier = join(dir, "barrier.fifo");
 		await Bun.spawn(["mkfifo", barrier]).exited;
 		const unit = runUnit(form, status, { BARRIER: barrier });
+		// Opening the FIFO returns once APT waits on it, after its first record.
 		await Bun.spawn([
 			"sh",
 			"-c",
-			'until [ -s "$1" ]; do sleep 0.01; done; rm "$1"; echo go > "$2"',
+			'exec 4>"$2"; rm "$1"; echo go >&4',
 			"remove",
 			status,
 			barrier,
@@ -159,6 +170,36 @@ test.each([
 		const runs = exit === "0" ? invocations[form] : 1;
 		expect(await readFile(status, "utf8")).toBe(
 			`${RECORDS.join("\n")}\n`.repeat(runs),
+		);
+	},
+);
+
+test.each(["pinned", "direct"] as const)(
+	"%s: APT's records are written inside the reserved status file, which never grows",
+	async (form) => {
+		const local = {
+			stdout: join(dir, "unit.stdout"),
+			stderr: join(dir, "unit.stderr"),
+			status: join(dir, "unit.status"),
+		};
+		const reserved = 64 * 1024;
+		expect(
+			await prepareSoftwareUpdateOutput(
+				local,
+				process.getuid?.() ?? 0,
+				reserved,
+			),
+		).toEqual({ status: true });
+		const before = await stat(local.status);
+		const result = await runUnit(form, local.status);
+		expect(result.code).toBe(0);
+		const after = await stat(local.status);
+		// No byte or block allocated after launch: a full /run cannot fail a write.
+		expect(after.size).toBe(reserved);
+		expect(after.blocks).toBe(before.blocks);
+		const text = await readFile(local.status, "utf8");
+		expect(text.slice(0, text.indexOf("\0"))).toBe(
+			`${RECORDS.join("\n")}\n`.repeat(invocations[form]),
 		);
 	},
 );

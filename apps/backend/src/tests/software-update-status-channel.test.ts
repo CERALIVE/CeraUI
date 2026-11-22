@@ -4,13 +4,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { buildAptAllInstallArgs } from "../modules/system/apt-all-packages.ts";
 import {
-	beginSoftwareUpdateAttempt,
 	prepareSoftwareUpdateOutput,
-	readSoftwareUpdateOutcome,
-	softwareUpdateOutcomePath,
+	readSoftwareUpdateAttempt,
+	type SoftwareUpdateAttempt,
+	STATUS_RESERVED_BYTES,
+	softwareUpdateAttemptPath,
 	softwareUpdateOutputPaths,
 	UnsafeSoftwareUpdateOutputPathError,
-	writeSoftwareUpdateOutcome,
+	writeSoftwareUpdateAttempt,
 } from "../modules/system/software-update-output.ts";
 import {
 	buildDetachedAptAllCommand,
@@ -36,7 +37,7 @@ const pinnedArgs = buildAptAllInstallArgs(
 const tail =
 	" ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=42 ; code=(null) ; status=0/0 }";
 const statusOpen =
-	"{ exec 3>>/run/ceralive/software-update.status; } 2>/dev/null || exec 3>/dev/null";
+	"{ exec 3<>/run/ceralive/software-update.status; } 2>/dev/null || exec 3>/dev/null";
 // Round 4's form, never released: a pipe whose reader could stall or fail APT.
 const pipeDrain =
 	"exec 3> >(set +e; echo -1000 2>/dev/null >/proc/self/oom_score_adj; cat 2>/dev/null >>/run/ceralive/software-update.status; exec cat >/dev/null) || exec 3>/dev/null";
@@ -111,14 +112,25 @@ describe("the detached unit writes APT status records to a private third file", 
 			const stat = await lstat(local.status);
 			expect(stat.isFile()).toBe(true);
 			expect(stat.mode & 0o777).toBe(0o600);
-			expect(stat.size).toBe(0);
+			// Reserved up front, so APT's writes never allocate.
+			expect(stat.size).toBe(STATUS_RESERVED_BYTES);
+			const bytes = await Bun.file(local.status).bytes();
+			expect(bytes.every((byte) => byte === 0)).toBe(true);
 		} finally {
 			await rm(directory, { recursive: true, force: true });
 		}
 	});
 
-	test("a new attempt starts with no recorded outcome", async () => {
-		const directory = await mkdtemp(path.join(tmpdir(), "ceraui-outcome-"));
+	const accepted: SoftwareUpdateAttempt = {
+		schema: 2,
+		attempt: "11111111-1111-4111-8111-111111111111",
+		phase: "accepted",
+		uptimeMs: 1_000,
+		leftover: { invocation: "a".repeat(32), exitCode: 0 },
+	};
+
+	test("the attempt record round-trips, and a record of another shape is never written", async () => {
+		const directory = await mkdtemp(path.join(tmpdir(), "ceraui-attempt-"));
 		const uid = process.getuid?.() ?? 0;
 		const local = {
 			stdout: path.join(directory, "software-update.stdout"),
@@ -126,28 +138,20 @@ describe("the detached unit writes APT status records to a private third file", 
 			status: path.join(directory, "software-update.status"),
 		};
 		try {
-			await prepareSoftwareUpdateOutput(local, uid);
-			await beginSoftwareUpdateAttempt(local, "attempt-a", uid);
-			await writeSoftwareUpdateOutcome(local, { exitCode: 0, at: 1 }, uid);
-			expect(await readSoftwareUpdateOutcome(local, uid)).toEqual({
-				exitCode: 0,
-				at: 1,
-				attempt: "attempt-a",
-			});
-			await beginSoftwareUpdateAttempt(local, "attempt-b", uid);
-			expect(await readSoftwareUpdateOutcome(local, uid)).toBeNull();
-			// Too little free space on /run: no status channel at all.
-			expect(
-				await prepareSoftwareUpdateOutput(local, uid, Number.MAX_SAFE_INTEGER),
-			).toEqual({ status: false });
-			expect(await Bun.file(local.status).exists()).toBe(false);
+			expect(readSoftwareUpdateAttempt(local, uid)).toBeNull();
+			writeSoftwareUpdateAttempt(local, accepted, uid);
+			expect(readSoftwareUpdateAttempt(local, uid)).toEqual(accepted);
+			expect(() =>
+				writeSoftwareUpdateAttempt(local, { ...accepted, exitCode: 256 }, uid),
+			).toThrow();
+			expect(readSoftwareUpdateAttempt(local, uid)).toEqual(accepted);
 		} finally {
 			await rm(directory, { recursive: true, force: true });
 		}
 	});
 
-	test("a recorded outcome is trusted only as a private record", async () => {
-		const directory = await mkdtemp(path.join(tmpdir(), "ceraui-outcome-"));
+	test("an attempt record is trusted only as a private, well-formed record", async () => {
+		const directory = await mkdtemp(path.join(tmpdir(), "ceraui-attempt-"));
 		const uid = process.getuid?.() ?? 0;
 		const local = {
 			stdout: path.join(directory, "software-update.stdout"),
@@ -155,11 +159,20 @@ describe("the detached unit writes APT status records to a private third file", 
 			status: path.join(directory, "software-update.status"),
 		};
 		try {
-			await writeSoftwareUpdateOutcome(local, { exitCode: 0, at: 1 }, uid);
-			await chmod(softwareUpdateOutcomePath(local), 0o644);
-			await expect(
-				readSoftwareUpdateOutcome(local, uid),
-			).rejects.toBeInstanceOf(UnsafeSoftwareUpdateOutputPathError);
+			writeSoftwareUpdateAttempt(local, accepted, uid);
+			await chmod(softwareUpdateAttemptPath(local), 0o644);
+			expect(() => readSoftwareUpdateAttempt(local, uid)).toThrow(
+				UnsafeSoftwareUpdateOutputPathError,
+			);
+			await rm(softwareUpdateAttemptPath(local));
+			await writeFile(
+				softwareUpdateAttemptPath(local),
+				JSON.stringify({ ...accepted, schema: 1 }),
+				{ mode: 0o600 },
+			);
+			expect(() => readSoftwareUpdateAttempt(local, uid)).toThrow(
+				UnsafeSoftwareUpdateOutputPathError,
+			);
 		} finally {
 			await rm(directory, { recursive: true, force: true });
 		}

@@ -236,9 +236,8 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 					stderr: "/run/ceralive/software-update.stderr",
 					status: "/run/ceralive/software-update.status",
 				},
-				readRecordedOutcome: async () => null,
-				recordOutcome: async () => {},
-				beginAttempt: async () => {},
+				readAttempt: () => null,
+				writeAttempt: () => undefined,
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () =>
@@ -297,9 +296,8 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 					stderr: "/run/ceralive/software-update.stderr",
 					status: "/run/ceralive/software-update.status",
 				},
-				readRecordedOutcome: async () => null,
-				recordOutcome: async () => {},
-				beginAttempt: async () => {},
+				readAttempt: () => null,
+				writeAttempt: () => undefined,
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {

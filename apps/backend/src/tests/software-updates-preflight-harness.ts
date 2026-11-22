@@ -37,9 +37,8 @@ export function useNoHostUpdateUnit(): void {
 			nextOffset: offset,
 		}),
 		sleep: async () => undefined,
-		readRecordedOutcome: async () => null,
-		recordOutcome: async () => undefined,
-		beginAttempt: async () => undefined,
+		readAttempt: () => null,
+		writeAttempt: () => undefined,
 	});
 }
 

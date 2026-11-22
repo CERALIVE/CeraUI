@@ -9,7 +9,8 @@
 */
 
 import { randomUUID } from "node:crypto";
-import type { RecordedSoftwareUpdateOutcome } from "./software-update-output.ts";
+import { uptime } from "node:os";
+import type { SoftwareUpdateAttempt } from "./software-update-output.ts";
 import {
 	buildDetachedAptAllCommand,
 	buildDetachedAptUpgradeCommand,
@@ -29,8 +30,15 @@ const RECORD_ATTEMPTS = 5;
 // 16 MiB per file per poll; a backlog beyond that is caught up on later polls.
 const MAX_READS_PER_DRAIN = 256;
 const INSPECT_RETRY_MAX_MS = 30_000;
-/** How long a retired unit's recorded outcome is told to reconnecting tabs. */
+/** How long a gone unit's recorded exit is told to reconnecting tabs. */
 export const RECORDED_OUTCOME_REPLAY_MS = 30 * 60_000;
+
+/** Boot-relative, so a wall-clock correction never makes a record look fresh or stale. */
+export function softwareUpdateUptimeMs(
+	deps: Pick<DetachedAptServiceDeps, "uptimeMs">,
+): number {
+	return deps.uptimeMs?.() ?? Math.round(uptime() * 1000);
+}
 
 export type SoftwareUpdateOutputHandlers = {
 	readonly onStdout: (chunk: string) => void;
@@ -46,6 +54,8 @@ export type SoftwareUpdateOutputHandlers = {
 	readonly onStatusLost?: () => void;
 	/** `aptStatus`: the recovered unit writes the status channel. */
 	readonly onAttached?: (aptStatus: boolean) => void;
+	/** After the exit: whether it is durably in the attempt record. */
+	readonly onOutcomeRecorded?: (recorded: boolean) => void;
 	readonly onObserverError?: (
 		error: unknown,
 		suppressedRetries?: number,
@@ -58,11 +68,10 @@ export type RecoveredDetachedAptUpgrade =
 	| AttachedDetachedAptUpgrade
 	| {
 			/**
-			 * An earlier lifetime observed this exit and acted on it: the unit is
-			 * gone, or it is a finished unit whose retirement failed. Never adopted
-			 * again, so a unit that cannot be retired cannot restart CeraUI twice.
+			 * The current attempt's exit, which an earlier lifetime recorded: the
+			 * unit is gone, or it is a finished unit never adopted again.
 			 */
-			readonly recorded: RecordedSoftwareUpdateOutcome;
+			readonly recorded: { readonly exitCode: number };
 			readonly unit: "absent" | "finished";
 	  };
 
@@ -103,12 +112,11 @@ export class DetachedAptServiceAlreadyExistsError extends Error {
 	}
 }
 
+/** The exit is recorded; only retiring the finished unit failed. */
 export class DetachedAptServiceCleanupError extends Error {
 	constructor(
 		readonly transactionExitCode: number,
 		readonly cleanupError: unknown,
-		/** false: nothing stops a later lifetime adopting this finished unit again. */
-		readonly outcomeRecorded: boolean,
 	) {
 		super("apt transaction finished, but its transient service cleanup failed");
 		this.name = "DetachedAptServiceCleanupError";
@@ -122,19 +130,38 @@ function reportObserverError(
 	handlers.onObserverError?.(error);
 }
 
+function readAttempt(
+	deps: DetachedAptUpgradeDeps,
+	handlers: SoftwareUpdateOutputHandlers,
+): SoftwareUpdateAttempt | null {
+	try {
+		return deps.readAttempt();
+	} catch (error) {
+		reportObserverError(handlers, error);
+		return null;
+	}
+}
+
 async function drainOutputCursor(
 	cursor: OutputCursor,
 	read: DetachedAptUpgradeDeps["readOutput"],
 ): Promise<{ readonly cursor: OutputCursor; readonly atEnd: boolean }> {
 	const next = await read(cursor.path, cursor.offset);
-	if (next.bytes.byteLength > 0) {
-		const text = cursor.decoder.decode(next.bytes, { stream: true });
+	let { bytes, nextOffset } = next;
+	// The status file is a zero-filled reservation: APT's records end at the first NUL.
+	const reserved = cursor.optional ? bytes.indexOf(0) : -1;
+	if (reserved >= 0) {
+		bytes = bytes.subarray(0, reserved);
+		nextOffset = cursor.offset + reserved;
+	}
+	if (bytes.byteLength > 0) {
+		const text = cursor.decoder.decode(bytes, { stream: true });
 		if (text.length > 0) cursor.emit(text);
 	}
-	// One read is bounded; only an empty read proves the file was drained.
+	// One read is bounded; only an empty read (or the reservation) proves the end.
 	return {
-		cursor: { ...cursor, offset: next.nextOffset },
-		atEnd: next.bytes.byteLength === 0,
+		cursor: { ...cursor, offset: nextOffset },
+		atEnd: reserved >= 0 || bytes.byteLength === 0,
 	};
 }
 
@@ -213,11 +240,26 @@ type FinishedState = Extract<
 	{ readonly kind: "finished" }
 >;
 
+/** Whether `record` holds this finished unit's own exit, or keeps it as a leftover. */
+function recordsExit(
+	record: SoftwareUpdateAttempt | null,
+	unit: FinishedState,
+	leftover = false,
+): boolean {
+	const exit = leftover
+		? record?.leftover
+		: record?.phase === "launched"
+			? record
+			: undefined;
+	return (
+		exit?.exitCode === unit.exitCode && exit?.invocation === unit.invocation
+	);
+}
+
 async function retireDetachedAptUnit(
 	state: FinishedState,
 	handlers: SoftwareUpdateOutputHandlers,
 	deps: DetachedAptUpgradeDeps,
-	outcomeRecorded: boolean,
 ): Promise<void> {
 	for (let attempt = 1; ; attempt++) {
 		try {
@@ -225,11 +267,7 @@ async function retireDetachedAptUnit(
 			return;
 		} catch (error) {
 			if (attempt === RETIRE_ATTEMPTS)
-				throw new DetachedAptServiceCleanupError(
-					state.exitCode,
-					error,
-					outcomeRecorded,
-				);
+				throw new DetachedAptServiceCleanupError(state.exitCode, error);
 			reportObserverError(handlers, error);
 			await deps.sleep(OUTPUT_POLL_INTERVAL_MS);
 		}
@@ -237,14 +275,31 @@ async function retireDetachedAptUnit(
 }
 
 export type ObserveOptions = {
-	/** false: observe only; the unit stays for a later owner to retire. */
-	readonly retire?: boolean;
+	/**
+	 * Who may retire the finished unit: this observer (true, the default),
+	 * nobody (false), or this observer once startup grants it ownership.
+	 */
+	readonly retire?: boolean | Promise<boolean>;
 };
+
+/** Runs `retire` now, once ownership is granted, or never; a deferred failure is reported. */
+async function whenOwned(
+	retire: ObserveOptions["retire"],
+	handlers: SoftwareUpdateOutputHandlers,
+	run: () => Promise<void>,
+): Promise<void> {
+	if (retire === undefined || retire === true) return run();
+	if (retire === false) return;
+	void retire
+		.then((owned) => (owned ? run() : undefined))
+		.catch((error: unknown) => reportObserverError(handlers, error));
+}
 
 async function observeDetachedAptUpgrade(
 	initialState: Exclude<DetachedAptServiceState, { readonly kind: "absent" }>,
 	handlers: SoftwareUpdateOutputHandlers,
 	deps: DetachedAptUpgradeDeps,
+	attempt: string,
 	options: ObserveOptions = {},
 ): Promise<number> {
 	let state: DetachedAptServiceState = initialState;
@@ -287,9 +342,11 @@ async function observeDetachedAptUpgrade(
 		if (state.kind === "absent") throw new DetachedAptServiceVanishedError();
 	}
 	if (state.kind !== "finished") throw new DetachedAptServiceVanishedError();
+	const finished = state;
 
 	let finalDrainFailures = 0;
 	let caughtUp = false;
+	let transcriptRead = true;
 	for (;;) {
 		const drained = await drainAvailableOutput(
 			cursors,
@@ -300,8 +357,10 @@ async function observeDetachedAptUpgrade(
 		caughtUp = drained.caughtUp;
 		if (caughtUp) break;
 		// The exit status is the outcome; unreadable output only costs its transcript.
-		if (drained.failed && ++finalDrainFailures >= FINAL_DRAIN_MAX_FAILURES)
+		if (drained.failed && ++finalDrainFailures >= FINAL_DRAIN_MAX_FAILURES) {
+			transcriptRead = false;
 			break;
+		}
 		await deps.sleep(OUTPUT_POLL_INTERVAL_MS);
 	}
 	for (const cursor of cursors) {
@@ -309,28 +368,32 @@ async function observeDetachedAptUpgrade(
 		if (tail.length > 0) cursor.emit(tail);
 	}
 	handlers.onDrained?.(caughtUp);
-	// APT has exited, so this read was complete; record before retiring. The
-	// exit itself is returned either way: a failed record only loses the replay.
-	let outcomeRecorded = false;
-	for (
-		let attempt = 1;
-		attempt <= RECORD_ATTEMPTS && !outcomeRecorded;
-		attempt++
-	) {
+	// APT has exited, so this read was complete. The exit is returned either
+	// way; only a durable record of it lets the unit go or CeraUI restart.
+	let recorded = false;
+	for (let tries = 1; tries <= RECORD_ATTEMPTS && !recorded; tries++) {
 		try {
-			await deps.recordOutcome({
-				exitCode: state.exitCode,
-				at: deps.now?.() ?? Date.now(),
+			deps.writeAttempt({
+				schema: 2,
+				attempt,
+				phase: "launched",
+				uptimeMs: softwareUpdateUptimeMs(deps),
+				...(finished.invocation ? { invocation: finished.invocation } : {}),
+				exitCode: finished.exitCode,
 			});
-			outcomeRecorded = true;
+			recorded = true;
 		} catch (error) {
 			reportObserverError(handlers, error);
-			if (attempt < RECORD_ATTEMPTS) await deps.sleep(OUTPUT_POLL_INTERVAL_MS);
+			if (tries < RECORD_ATTEMPTS) await deps.sleep(OUTPUT_POLL_INTERVAL_MS);
 		}
 	}
-	if (options.retire !== false)
-		await retireDetachedAptUnit(state, handlers, deps, outcomeRecorded);
-	return state.exitCode;
+	handlers.onOutcomeRecorded?.(recorded);
+	// Unrecorded, or with an unread transcript, the unit stays as the evidence.
+	if (recorded && transcriptRead)
+		await whenOwned(options.retire, handlers, () =>
+			retireDetachedAptUnit(finished, handlers, deps),
+		);
+	return finished.exitCode;
 }
 
 async function launchDetachedAptUnit(
@@ -341,48 +404,35 @@ async function launchDetachedAptUnit(
 	const existing = await deps.inspect();
 	if (existing.kind === "running")
 		throw new DetachedAptServiceAlreadyExistsError();
+	const record = readAttempt(deps, handlers);
 	if (existing.kind === "finished") {
-		// Only a leftover whose exit an observer recorded; only its retirement failed.
-		if (!(await deps.readRecordedOutcome()))
+		// Only a leftover whose exit is durably recorded; only its retirement failed.
+		if (!recordsExit(record, existing) && !recordsExit(record, existing, true))
 			throw new DetachedAptServiceAlreadyExistsError();
-		await retireDetachedAptUnit(existing, handlers, deps, true).catch(() => {
+		await retireDetachedAptUnit(existing, handlers, deps).catch(() => {
 			throw new DetachedAptServiceAlreadyExistsError();
 		});
 		if ((await deps.inspect()).kind !== "absent")
 			throw new DetachedAptServiceAlreadyExistsError();
 	}
 	const aptStatus = (await deps.prepareOutput())?.status !== false;
+	// The admitted attempt's id, or a new one for a caller that launches directly.
+	const attempt = record?.phase === "accepted" ? record.attempt : randomUUID();
+	// Before the unit exists, so a later lifetime that finds it knows whose it is.
+	deps.writeAttempt({
+		schema: 2,
+		attempt,
+		phase: "launched",
+		uptimeMs: softwareUpdateUptimeMs(deps),
+	});
 	await deps.start(command(aptStatus));
 	if (!aptStatus) handlers.onStatusLost?.();
 	return observeDetachedAptUpgrade(
 		aptStatus ? { kind: "running", aptStatus } : { kind: "running" },
 		handlers,
 		deps,
+		attempt,
 	);
-}
-
-/**
- * Starts an update attempt before its preflight: no unit may be registered
- * (a finished one is retired only when its exit was recorded), and the
- * attempt takes the outcome record, so an older exit is never this one's.
- */
-export async function beginDetachedAptAttempt(
-	deps: DetachedAptUpgradeDeps = defaultDetachedAptServiceDeps(),
-): Promise<void> {
-	const existing = await deps.inspect();
-	if (existing.kind === "running")
-		throw new DetachedAptServiceAlreadyExistsError();
-	if (existing.kind === "finished") {
-		if (!(await deps.readRecordedOutcome()))
-			throw new DetachedAptServiceAlreadyExistsError();
-		const quiet = { onStdout: () => undefined, onStderr: () => undefined };
-		await retireDetachedAptUnit(existing, quiet, deps, true).catch(() => {
-			throw new DetachedAptServiceAlreadyExistsError();
-		});
-		if ((await deps.inspect()).kind !== "absent")
-			throw new DetachedAptServiceAlreadyExistsError();
-	}
-	await deps.beginAttempt(randomUUID());
 }
 
 export async function runDetachedAptUpgrade(
@@ -417,39 +467,54 @@ export async function runDetachedAptAll(
 	);
 }
 
+/**
+ * Running: observed. Finished: its recorded exit is told and never adopted
+ * again; otherwise observed and recorded. Gone: only the current attempt's
+ * own fresh exit is told; an attempt with no recorded exit tells nothing.
+ */
 export async function recoverDetachedAptUpgrade(
 	handlers: SoftwareUpdateOutputHandlers,
 	deps: DetachedAptUpgradeDeps = defaultDetachedAptServiceDeps(),
 	options: ObserveOptions = {},
 ): Promise<RecoveredDetachedAptUpgrade | null> {
 	const state = await deps.inspect();
-	if (state.kind !== "running") {
-		const recorded = await deps
-			.readRecordedOutcome()
-			.catch((error: unknown) => {
-				reportObserverError(handlers, error);
-				return null;
-			});
-		if (state.kind === "absent") {
-			const now = deps.now?.() ?? Date.now();
-			return recorded && now - recorded.at < RECORDED_OUTCOME_REPLAY_MS
-				? { recorded, unit: "absent" }
+	const record = readAttempt(deps, handlers);
+	if (state.kind === "absent") {
+		if (record?.phase !== "launched" || record.exitCode === undefined)
+			return null;
+		const age = softwareUpdateUptimeMs(deps) - record.uptimeMs;
+		return age >= 0 && age < RECORDED_OUTCOME_REPLAY_MS
+			? { recorded: { exitCode: record.exitCode }, unit: "absent" }
+			: null;
+	}
+	if (state.kind === "finished") {
+		const own = recordsExit(record, state);
+		if (own || recordsExit(record, state, true)) {
+			await whenOwned(options.retire, handlers, () =>
+				deps
+					.cleanup(state)
+					.catch((error: unknown) => reportObserverError(handlers, error)),
+			);
+			// An older attempt's leftover tells the current attempt nothing.
+			return own
+				? { recorded: { exitCode: state.exitCode }, unit: "finished" }
 				: null;
 		}
-		if (recorded) {
-			if (options.retire !== false)
-				await deps
-					.cleanup(state)
-					.catch((error: unknown) => reportObserverError(handlers, error));
-			return {
-				recorded: { ...recorded, exitCode: state.exitCode },
-				unit: "finished",
-			};
-		}
 	}
+	// This attempt's own launched unit keeps its id; any other gets a new one.
+	const attempt =
+		record?.phase === "launched" && record.exitCode === undefined
+			? record.attempt
+			: randomUUID();
 	handlers.onAttached?.(state.aptStatus === true);
 	return {
-		completion: observeDetachedAptUpgrade(state, handlers, deps, options),
+		completion: observeDetachedAptUpgrade(
+			state,
+			handlers,
+			deps,
+			attempt,
+			options,
+		),
 		wasAlreadyFinished: state.kind === "finished",
 	};
 }

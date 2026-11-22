@@ -171,9 +171,8 @@ describe("best-effort post-clean", () => {
 						parseDetachedAptServiceState(
 							"LoadState=not-found\nActiveState=inactive\n",
 						),
-					readRecordedOutcome: async () => null,
-					recordOutcome: async () => {},
-					beginAttempt: async () => {},
+					readAttempt: () => null,
+					writeAttempt: () => undefined,
 					prepareOutput: async () => {
 						throw new Error("must not prepare");
 					},
