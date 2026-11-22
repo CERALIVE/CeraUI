@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { call } from "@orpc/server";
 import { loadConfig, setConfigFilePath } from "../modules/config.ts";
 import { mintLinkId } from "../modules/modems/physical-identity.ts";
 import { resolveModemPhysicalIdentity } from "../modules/modems/physical-identity-source.ts";
@@ -20,10 +21,12 @@ import {
 	refreshUsbNetMarkers,
 	resetUsbNetMarkers,
 } from "../modules/network/router-cellular-scan.ts";
+import { configureNetworkInterfaceProcedure } from "../rpc/procedures/network.procedure.ts";
 import { firstSightIfconfig } from "./helpers/bond-first-sight-fixture.ts";
 import {
 	clearBondNetworkFixture,
 	HUAWEI_TWIN_IP,
+	makeRpcContext,
 	resetBondFixture,
 } from "./helpers/bond-toggle-fixture.ts";
 import {
@@ -41,6 +44,9 @@ const noPath = (device: (typeof twins)[number]) => ({
 	...device,
 	udevadm: { ...device.udevadm, ID_PATH: "" },
 });
+const bWithoutSerial = twins
+	.filter((device) => device.ifname === b)
+	.map((device) => ({ ...device, serial: "" }));
 
 let dir: string;
 
@@ -157,9 +163,6 @@ test("a migrated twin's explicit port disable survives loss and return of its se
 	setPersistentBondOptOut(b, true);
 	await reload();
 
-	const bWithoutSerial = twins
-		.filter((device) => device.ifname === b)
-		.map((device) => ({ ...device, serial: "" }));
 	await scan(bWithoutSerial);
 	expect(resolveModemPhysicalIdentity(b).linkId).toBe(port);
 	expect(resolveModemPhysicalIdentity(b).legacyLinkId).toBeUndefined();
@@ -177,9 +180,6 @@ test("enabling an excluded, already migrated port survives return of its serial"
 	setPersistentBondOptOut(a, false);
 	expect(isBondOptedOut(b)).toBe(true);
 
-	const bWithoutSerial = twins
-		.filter((device) => device.ifname === b)
-		.map((device) => ({ ...device, serial: "" }));
 	await scan(bWithoutSerial);
 	expect(resolveModemPhysicalIdentity(b).linkId).toBe(port);
 	setPersistentBondOptOut(b, false);
@@ -188,4 +188,56 @@ test("enabling an excluded, already migrated port survives return of its serial"
 	await reload();
 	await scan(twins);
 	expect(isBondOptedOut(b)).toBe(false);
+});
+
+test("an enable at a port without serial evidence survives recognition of its twin group", async () => {
+	await scan(twins);
+	await scan(singleton);
+	setPersistentBondOptOut(a, false);
+	await reload();
+
+	await scan(bWithoutSerial.map(noPath));
+	setPersistentBondOptOut(b, true);
+	await scan(bWithoutSerial);
+	const port = resolveModemPhysicalIdentity(b).linkId;
+	expect(resolveModemPhysicalIdentity(b).legacyLinkId).toBeUndefined();
+	expect(isBondOptedOut(b)).toBe(true);
+	setPersistentBondOptOut(b, false);
+	expect(isBondOptedOut(b)).toBe(false);
+
+	await reload();
+	await scan(twins);
+	expect(resolveModemPhysicalIdentity(b).linkId).toBe(port);
+	expect(resolveModemPhysicalIdentity(b).legacyLinkId).toBe(group);
+	processIfconfigOutput(firstSightIfconfig(b, HUAWEI_TWIN_IP));
+	expect(netIfBuildMsg()[b]?.enabled).toBe(true);
+	expect(isBondOptedOut(a)).toBe(false);
+});
+
+test("enabling an unlocated twin of an excluded group is applied for the session", async () => {
+	await scan(twins);
+	await scan(singleton);
+	setPersistentBondOptOut(a, false);
+	await reload();
+
+	const bIp = "192.168.9.100";
+	await scan(
+		twins.map((device) => (device.ifname === b ? noPath(device) : device)),
+	);
+	expect(resolveModemPhysicalIdentity(b).anchor).toBe("ifname");
+	expect(resolveModemPhysicalIdentity(b).legacyLinkId).toBe(group);
+	processIfconfigOutput(
+		`${firstSightIfconfig(a, HUAWEI_TWIN_IP)}\n\n${firstSightIfconfig(b, bIp)}`,
+	);
+	expect(netIfBuildMsg()[b]?.enabled).toBe(false);
+
+	const result = await call(
+		configureNetworkInterfaceProcedure,
+		{ name: b, ip: bIp, enabled: true },
+		{ context: makeRpcContext() },
+	);
+	expect(result.success).toBe(true);
+	expect(result.applied?.enabled).toBe(true);
+	expect(netIfBuildMsg()[b]?.enabled).toBe(true);
+	expect(netIfBuildMsg()[a]?.enabled).toBe(true);
 });

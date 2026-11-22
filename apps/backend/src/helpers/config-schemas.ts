@@ -414,7 +414,7 @@ export const runtimeConfigSchema = z.object({
 	bond_legacy_opt_out: z
 		.record(z.string().min(1), z.record(z.string().min(1), z.literal(true)))
 		.optional(),
-	// Explicit reversals of a port exclusion without serial-group evidence.
+	// Explicit port enables made without serial-group evidence.
 	bond_port_opt_in: z.record(z.string().min(1), z.literal(true)).optional(),
 	// SHA-256 of vendor:serial pairs observed on distinct USB parents.
 	usb_serial_shared: z

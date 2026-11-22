@@ -7,7 +7,9 @@ import {
 } from "../modems/physical-identity.ts";
 import { resolveBondPhysicalIdentity } from "../streaming/bond-entry.ts";
 
-const sessionOptOut = new Set<string>();
+// The latest toggle per interface name this session (true = opted out). It is
+// the only choice an unlocated device can hold.
+const sessionChoice = new Map<string, boolean>();
 
 function serialGroupId(identity: PhysicalDeviceRecord): string | undefined {
 	return identity.anchor === "usb-serial"
@@ -22,44 +24,43 @@ export function bondPhysicalId(ifname: string): string | undefined {
 }
 
 export function isBondOptedOut(ifname: string): boolean {
-	if (sessionOptOut.has(ifname)) return true;
+	const session = sessionChoice.get(ifname);
+	if (session === true) return true;
 	const identity = resolveBondPhysicalIdentity(ifname);
 	if (identity === undefined) return false;
 	const legacy = serialGroupId(identity);
-	if (identity.anchor === "ifname" && legacy === undefined) return false;
 	const config = getConfig();
-	if (
-		identity.anchor !== "ifname" &&
-		config.bond_opt_out?.[identity.linkId] === true
-	)
-		return true;
+	if (identity.anchor === "ifname") {
+		// Known group membership excludes an unlocated twin; only this session's
+		// toggle can enable it, because it has no durable key.
+		if (legacy === undefined || session === false) return false;
+		return (
+			config.bond_opt_out?.[legacy] === true ||
+			config.bond_legacy_opt_out?.[legacy] !== undefined
+		);
+	}
+	if (config.bond_opt_out?.[identity.linkId] === true) return true;
 	if (legacy === undefined) return false;
 	if (config.bond_opt_out?.[legacy] === true) return true;
 	const enabledLinks = config.bond_legacy_opt_out?.[legacy];
 	if (enabledLinks === undefined) return false;
 
-	switch (identity.anchor) {
-		case "usb-serial":
-			// While trusted, the serial identifies one device. A port observation
-			// scopes its enable after a split; it is not the current read key.
-			return Object.keys(enabledLinks).length === 0;
-		case "id-path":
-			return (
-				config.bond_port_opt_in?.[identity.linkId] !== true &&
-				enabledLinks[identity.linkId] !== true
-			);
-		case "ifname":
-			// Group membership is known, but an exact enable cannot be resolved.
-			return true;
+	if (identity.anchor === "usb-serial") {
+		// While trusted, the serial identifies one device. A port observation
+		// scopes its enable after a split; it is not the current read key.
+		return Object.keys(enabledLinks).length === 0;
 	}
+	return (
+		config.bond_port_opt_in?.[identity.linkId] !== true &&
+		enabledLinks[identity.linkId] !== true
+	);
 }
 
 export function setPersistentBondOptOut(
 	ifname: string,
 	optOut: boolean,
 ): string | undefined {
-	if (optOut) sessionOptOut.add(ifname);
-	else sessionOptOut.delete(ifname);
+	sessionChoice.set(ifname, optOut);
 	const identity = resolveBondPhysicalIdentity(ifname);
 	if (identity === undefined || identity.anchor === "ifname") return undefined;
 
@@ -105,11 +106,11 @@ export function setPersistentBondOptOut(
 		};
 	}
 	if (identity.anchor === "id-path") {
-		// Remember a port-only reversal of an exact exclusion: clearing the
-		// negative flag alone would let a migrated group re-exclude it later.
+		// Without serial evidence the port is the only key an enable can keep;
+		// a group recognized here later must not override it.
 		const portEnables = { ...config.bond_port_opt_in };
 		if (optOut || legacy !== undefined) delete portEnables[physicalId];
-		else if (next[physicalId] === true) portEnables[physicalId] = true;
+		else portEnables[physicalId] = true;
 		config.bond_port_opt_in =
 			Object.keys(portEnables).length === 0 ? undefined : portEnables;
 	}
@@ -121,7 +122,7 @@ export function setPersistentBondOptOut(
 }
 
 export function resetPersistentBondOptOutForTest(): void {
-	sessionOptOut.clear();
+	sessionChoice.clear();
 	const config = getConfig();
 	config.bond_opt_out = undefined;
 	config.bond_legacy_opt_out = undefined;
@@ -129,5 +130,5 @@ export function resetPersistentBondOptOutForTest(): void {
 }
 
 export function resetSessionBondOptOutForTest(): void {
-	sessionOptOut.clear();
+	sessionChoice.clear();
 }
