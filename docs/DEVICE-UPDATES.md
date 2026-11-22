@@ -1,5 +1,164 @@
 # Device updates: the update orchestrator [PARTIAL]
 
+## Package update progress
+
+Progress comes only from the detached unit's own transcript: the stdout file
+systemd appends to (`/run/ceralive/software-update.stdout`; root-owned, mode
+0600, created exclusively). APT is given no telemetry descriptor: no
+`APT::Status-Fd`, no pipe, no extra file. The unit runs the released commands
+(`/usr/bin/apt-get` directly, or the pinned `/bin/sh -ec` pair under the update
+lock; `ExecStart` unchanged) with `LC_ALL=C` set on the unit: systemd hands a
+unit its manager's locale (`/etc/locale.conf`), and APT's and dpkg's lines are
+translated, so without it the counted lines would not be stable. APT 3.0.3 turns a failed write to its status descriptor into
+its pending error and fails the install after dpkg ran (`FileFd::Write`,
+`private-install.cc`), and a pipe would make APT wait for its reader; with no
+such descriptor nothing that reads progress can stall or fail APT. A reader
+that lags, dies or cannot read loses only display.
+
+`apt-progress.ts` counts only whole lines in APT's and dpkg's own shape, each
+archive and each package step once; a hook or script line that quotes them
+counts nothing:
+
+- `apt-get`'s plan (`N upgraded, M newly installed`, plus any reinstalled or
+  downgraded), printed before APT acts, gives the package count (APT 3.0's
+  `Summary:` layout is only the `apt` binary's default);
+- `Get:<n> <uri> ... [<size>]` while fetching gives the **Downloading** phase
+  only: APT prints it as each archive starts, several at once, and nothing
+  when one is done, so no line (its closing `Fetched` included) proves a share
+  of the download complete;
+- dpkg's `Unpacking <package> (<version>) ...` and `Setting up <package>
+  (<version>) ...`, two steps per package named in the plan's own lists
+  (upgraded, newly installed, reinstalled, downgraded): a step is done once
+  the next starts (**Installing**). A step of a package outside those lists
+  shows the phase and counts nothing.
+
+The UI shows three phases: **Preparing or downloading packages**,
+**Downloading** and **Installing**. A number appears only when the transcript
+proves one for the phase on screen (only **Installing** has one); it is
+floored and capped at 99 while the unit runs, and only a
+successful detached result shows 100%. A failure or interruption never shows
+completion. The percentage restarts when installing begins, so Settings names
+the phase next to the bar. A unit started by an older release (for example
+the very update that installs this version, adopted after the package
+restarts CeraUI) is read the same way: its stdout is the same transcript.
+
+One rule (`holdUpdateProgress` in `@ceraui/rpc/package-progress`) decides what
+a running transaction shows, in the backend (within one process) and in both
+browser views: the phase never moves back and, within a phase, the number never drops; a frame of
+the same phase without a number replaces a held number, because it means
+unknown, not unchanged. Only an outcome, or the next run after it, shows what
+arrived. The browser then shows a number only when the device's own latest
+frame on this connection carries it in the same phase, and not below a number
+already shown in that phase. From a drop until the device delivers that
+frame again on the new connection the number is hidden, and any delivery
+brings it back, an unchanged frame included: the status ingestion announces
+every delivery of `updating` and `update_state` (the store keeps an unchanged
+value's object, so only that announcement says it is fresh). A stale number is
+never shown, and a fresh one is never withheld. On pinned images the download runs
+in-process before the unit exists: the UI says **Downloading**, without a
+number, from the moment that transfer starts until the transcript shows the
+install. A failed pinned transfer is that process's own result, as on main:
+the tab and the orchestrator read the same failure.
+
+What a tab shows when something is lost (no wire field was added for any of
+these):
+
+| Situation | Shown |
+|---|---|
+| A read of the transcript fails | The phase without a number until new lines prove one |
+| The connection to the device dropped, or the latest frame does not carry the held number in the same phase | The held phase without a number, until the device delivers a frame carrying that number in that phase again (an unchanged frame counts) |
+| A number below one already shown in the phase, for example after the device said it does not know | The phase without a number, until the device sends one at or above it |
+| CeraUI restarted under the install and the new process says nothing is updating | The held phase without a number while the tab asks how the install ended (below) |
+
+The unit's handling is main's: the one fixed name
+`ceralive-software-update.service`, the released `ExecStart` commands, main's
+start, observer, retirement, recovery and Go Live stop. This change adds only
+`LC_ALL=C` on the unit and reads more of what main already reads: the
+observer's final drain keeps reading until both files give nothing more, so
+output larger than one 64 KiB read is replayed completely (main read one block
+per file and lost the rest). After a backend restart main's first status says
+`updating: null` until recovery has attached to the surviving unit; recovery
+then announces it (the empty frame) and publishes what its transcript proves.
+The overlay's hold keeps the phase it showed across all of that: the empty
+frame is an earlier phase and never shown, and the number returns only when a
+fresh frame carries it. Settings → Software Updates shows the device's own
+`update_state`: it holds within one continuous run of frames and starts over
+from what the device reports after the restart's gap (main's first status
+says nothing is updating); the overlay covers it meanwhile. A frame that names
+another vector (`updating.targets`) is another run: the overlay's hold and its
+live-number guard start over.
+
+### How an install ended, after CeraUI restarted [EXISTS; host-tested]
+
+A package's postinst can restart CeraUI during the install (the owner's case
+on the Rock 5B+), and a successful install restarts it once more. A tab can
+therefore miss the one frame that carries the result. The process that
+starts an install stamps every frame of it with the run's start
+(`updating.run`, epoch ms). A capable install also freezes its `name=version`
+vector once after discovery and uses it for the pinned recheck, the space
+preflight and the unit's argv. Every frame of that process then carries
+`updating.targets`, read from the pinned recheck's own `Inst` rows: the name
+apt-get was given, the candidate's architecture (`[arm64]`, `[all]`) and the
+version installed before (`[current]`, absent for a new install). Legacy runs
+carry no vector. A backend that recovered the unit after a restart knows
+neither and sends neither.
+
+The tab treats a frame with another `run` as another run: the hold, the
+live-number guard, the vector and any pending question start over. This
+includes a new run's first frame, before it names a vector, and a retry of
+the same vector. Frames without `run` continue the run the tab holds (the
+same unit, recovered after a restart). The tab latches the first vector of
+the run. When the install it showed ends with no result the device reported,
+it holds the phase and asks `system.updateOutcome` with that vector; a tab
+that never received one asks with none, which can learn only `running` or
+not confirmed. The device answers read-only (`software-update-outcome.ts`;
+nothing is written, claimed, stopped or retired), within one 20 s deadline
+for the whole question:
+
+| The device finds | Answer | The tab shows |
+|---|---|---|
+| The unit is still there and this process reports it itself (it observes it, or its recovery has not looked yet and startup was not refused) | `running` | The held phase; the observer's frames follow |
+| One complete, coherent `dpkg-query` read (exit 0, every row well-formed, unique per name and architecture, and asked for) in which each target's own instance (its package and architecture; another architecture's never counts) is `ii ` or `hi ` (held, but installed) at its version or later; each version installed before was below it (`dpkg --compare-versions`: epochs, `~`, `+`); and the fixed-name unit is neither running nor last finished non-zero | `success` | **Packages installed**: "The device now has this update's versions installed. CeraUI did not see the update finish." Never the observed exit's **Successfully Updated** |
+| Anything else: a target below its version, not installed or only another architecture's instance, unpacked, half-configured, trigger-pending or reinstall-required (`iiR`), already at that version before the run (a reinstall or downgrade), a running unit no process reports, a query exit 1 or malformed output, no answer in time, or no vector at all | `unknown`, with `exit: N` when the fixed-name unit last finished non-zero | **Outcome not confirmed**; with `exit`, "The update service last stopped with exit code N. That may have been a different update." |
+
+The unit's exit is never shown as **Update Failed** here: the fixed-name unit
+holds whichever run finished last, and it is read after the packages, so the
+hint can only be newer than the versions it sits beside. A failed exit also
+withholds the success, since it may be this very run's. An answer that does
+not arrive (the socket dropped again) is also **Outcome not confirmed**. Only
+the answer to the latest question counts: a running frame, a new run or a new
+question makes an earlier answer stale, in either reply order. After a
+`running` answer the tab follows the device's frames and asks again only if
+the install it shows ends without a result again. A device-reported `success`,
+`failed` or preflight refusal is announced as it is, without asking.
+
+A success says the device now has this install's own instances at their
+versions, each below them before the run. It does not say this tab saw the
+run finish, and the wording says so. Real `dpkg-query` and `dpkg` decide
+these rules in tests on inert databases (`software-update-outcome-dpkg.test.ts`).
+
+The English and es-419 user docs for these states (docs.ceralive.tv,
+`ceralive-docs`) follow in a separate, later docs change; this change ships
+the two new strings in all ten catalogs.
+
+What the simplification costs: there is no persistence. A tab opened or
+reloaded after the install began on another backend process, or after it
+ended, has no vector and says **Outcome not confirmed** at most; a tab that
+was offline through a whole later run, including that run's own restart,
+sees only its recovered frames, which carry no `run`; it cannot tell that run
+from its own, keeps its held phase without a number and asks about its own
+vector, whose answer speaks only of that vector's instances. Legacy runs have
+no vector, so their missed outcomes are **Outcome not confirmed**. A power
+loss or crash during the install honestly yields **Outcome not confirmed**
+unless the versions were already installed. Success means the instances are
+installed and configured, not that every maintainer script exited cleanly; a
+unit that failed after configuring them reads as not confirmed while its exit
+is still on the fixed-name unit. A boot whose update
+startup was refused reports a running unit as not confirmed at once. Main's
+own outcome rules are unchanged: a unit that vanishes, output that stays
+unreadable after the final drain, or a successful unit whose retirement fails
+are reported as failures, as main reports them.
+
 ## Pending disruptive effects [PARTIAL — host proof, board drill owed]
 
 Accepted device power/reset and timed OS activation hold an in-process reservation

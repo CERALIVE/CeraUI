@@ -39,6 +39,7 @@ const revokePersistentToken = vi.hoisted(() => vi.fn(async () => undefined));
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getStatus: () => undefined,
 	getUpdating: () => null,
+	getUpdateState: () => undefined,
 }));
 vi.mock("$lib/stores/offline-state.svelte", () => ({
 	getShouldShowOfflinePage: () => false,

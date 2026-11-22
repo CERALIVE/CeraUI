@@ -195,7 +195,7 @@ describe("F7: package progress with an unknown total", () => {
 			if (within(section).queryByRole("progressbar") === null)
 				throw new Error("no progress bar yet");
 		});
-		return within(section).getByRole("progressbar");
+		return within(section).getByRole("progressbar", { name: "Progress" });
 	}
 
 	it("is indeterminate, never a completed 100 %", async () => {
@@ -208,12 +208,49 @@ describe("F7: package progress with an unknown total", () => {
 		expect(bar.getAttribute("aria-valuenow")).toBeNull();
 	});
 
-	it("still reports a measured percentage when the total is known", async () => {
+	it("still reports a measured percentage when APT reports one", async () => {
 		const bar = await progressBar({
 			kind: "installing",
-			progress: { downloading: 2, unpacking: 1, setting_up: 0, total: 2 },
+			progress: {
+				downloading: 0,
+				unpacking: 0,
+				setting_up: 1,
+				total: 1,
+				percent: 50,
+			},
 		});
 
 		expect(bar.getAttribute("aria-valuenow")).toBe("50");
+		expect(bar.getAttribute("aria-valuemax")).toBe("100");
+		expect(bar.getAttribute("aria-valuetext")).toBe("50%");
+		expect(screen.getByTestId("update-package-phase").textContent).toBe(
+			"Installing · 50%",
+		);
+	});
+
+	it("names the download so its own percentage is not read as install progress", async () => {
+		const bar = await progressBar({
+			kind: "downloading",
+			progress: {
+				downloading: 1,
+				unpacking: 0,
+				setting_up: 0,
+				total: 1,
+				percent: 99,
+			},
+		});
+		expect(bar.getAttribute("aria-valuetext")).toBe("99%");
+		expect(screen.getByTestId("update-package-phase").textContent).toBe(
+			"Downloading · 99%",
+		);
+	});
+
+	it("does not count the only package as downloaded just because fetching began", async () => {
+		const bar = await progressBar({
+			kind: "downloading",
+			progress: { downloading: 1, unpacking: 0, setting_up: 0, total: 1 },
+		});
+
+		expect(bar.getAttribute("aria-valuenow")).toBeNull();
 	});
 });

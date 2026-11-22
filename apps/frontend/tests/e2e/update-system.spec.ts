@@ -153,6 +153,14 @@ test.describe('device update surfaces (Todo 41)', { tag: '@functional' }, () => 
 		await page.keyboard.press('Escape');
 		await expect(dialog).toBeHidden();
 
+		// An install with verified steps can report a percentage; unknown
+		// progress drops the number without losing the active phase.
+		wire.setOrchestrator(orchestratorState('committing', { percent: 66, etaSeconds: 0 }));
+		await expect(badge.getByTestId('update-orchestrator-badge-percent')).toHaveText('66%');
+		wire.setOrchestrator(orchestratorState('committing'));
+		await expect(badge.getByTestId('update-orchestrator-badge-phase')).toHaveText('Installing packages');
+		await expect(badge.getByTestId('update-orchestrator-badge-percent')).toHaveCount(0);
+
 		// A resting phase is nothing to announce app-wide.
 		wire.setOrchestrator(orchestratorState('idle'));
 		await expect(page.getByTestId('update-orchestrator-badge')).toHaveCount(0);
