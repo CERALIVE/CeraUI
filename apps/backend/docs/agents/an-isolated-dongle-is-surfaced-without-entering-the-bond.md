@@ -940,8 +940,28 @@ A non-placeholder serial shared by twins therefore switches to port identity
 once, when its twin is first seen, and remains there after the twin is removed.
 
 Affected devices change link id and steering mark once. The rejected serial's
-opaque `legacyLinkId` preserves an existing bond opt-out; toggling one twin first
-migrates the old exclusion to every present twin so its sibling stays excluded.
+opaque `legacyLinkId` names the twin group, and an exclusion saved under it
+(`bond_opt_out[legacyLinkId]`) is never deleted by a twin's own toggle, so a twin
+that is unplugged at that moment is still excluded when it returns. Enabling one
+twin saves ONE exception for its link id, valued with the group it was enabled
+under (`bond_opt_in[linkId] = legacyLinkId`); it admits that link only while the
+same group is shown, so an exception under a placeholder group never admits the
+real shared serial's group. Present twins with no choice of their own get an
+exact exclusion too, so they stay out if their serial later reads empty. A
+disable on the group's own serial key ends every exception granted under it.
+An enable the device cannot attach to one twin is refused before anything is
+saved (`bond_identity_unconfirmed`): a twin with no `ID_PATH`, or a lone twin
+whose shared-serial record was evicted while exceptions for its group exist.
+Limits, all fail closed except where noted: an enable made while the twin showed
+no excluded group (empty serial, unexcluded placeholder) records no exception;
+enabling a twin while it is still a lone serial (sharing not yet known) deletes
+the exclusion as before, so both twins are in once the sharing is recognized
+(also after eviction when no exception was ever saved); one exception per link
+id, so a later enable under another group replaces it; the same port and group
+is the same identity, so a twin moved into an enabled twin's port is in. On a
+rollback to v2026.11.3 the older reader ignores `bond_opt_in` and keeps every
+durably identified twin out, its save drops `bond_opt_in`, and its own twin
+toggle still deletes the group exclusion.
 Router login credentials are read only under the device's exact resolved
 `linkId`. A rejected serial's legacy id has no durable binding to a port, so it
 cannot transfer a login, even if only one twin remains or the backend restarts.

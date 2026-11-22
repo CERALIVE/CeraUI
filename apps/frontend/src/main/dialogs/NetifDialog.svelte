@@ -107,6 +107,7 @@ const SAVE_ERROR_KEY: Record<NetifConfigError | 'unknown', string> = {
 	enable_refused: 'network.netifSave.error.enableRefused',
 	disable_all_refused: 'network.netifSave.error.disableAllRefused',
 	bond_unmappable: 'network.netifSave.error.generic',
+	bond_identity_unconfirmed: 'network.netifSave.error.identityUnconfirmed',
 	unknown: 'network.netifSave.error.generic',
 };
 

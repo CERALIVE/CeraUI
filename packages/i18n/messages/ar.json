@@ -1828,6 +1828,7 @@
 	"network.netifSave.error.enableRefused": "رفض الجهاز إضافة هذه الواجهة إلى التجميع. السبب معروض في صفّها.",
 	"network.netifSave.error.disableAllRefused": "هذه آخر وصلة في التجميع، فأبقى عليها الجهاز. أضِف وصلة أخرى قبل إزالة هذه.",
 	"network.netifSave.error.generic": "رفض الجهاز التغيير، فلم يُحفَظ شيء.",
+	"network.netifSave.error.identityUnconfirmed": "لا يستطيع الجهاز بعدُ تحديد أيّ مودم هذا، فلم يُحفَظ شيء. انتظر بضع ثوانٍ ثم حاول مرة أخرى. إذا كنت تستخدم مودمين متطابقين، فوصّل كليهما أو أعد توصيل هذا أولًا.",
 	"network.sharing.title": "مشاركة الإنترنت",
 	"network.sharing.headline.activeTitle": "المشاركة نشطة",
 	"network.sharing.headline.activeBody": "{usable} من {total} وصلة صاعدة يمكنها حمل حركة الأجهزة المتصلة.",

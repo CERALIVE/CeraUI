@@ -1771,6 +1771,7 @@
 	"network.netifSave.error.enableRefused": "设备拒绝将此接口加入绑定。原因显示在它所在的行中。",
 	"network.netifSave.error.disableAllRefused": "这是绑定中的最后一条链路，设备予以保留。请先添加另一条链路，再移除这一条。",
 	"network.netifSave.error.generic": "设备拒绝了此更改，未保存任何内容。",
+	"network.netifSave.error.identityUnconfirmed": "设备尚无法确定这是哪一个调制解调器，因此未保存任何内容。请稍等几秒后重试。如果您使用两个相同的调制解调器，请先将两个都插上，或重新插拔这一个。",
 	"network.sharing.title": "互联网共享",
 	"network.sharing.headline.activeTitle": "共享已启用",
 	"network.sharing.headline.activeBody": "{total} 条上行链路中有 {usable} 条可承载客户端流量。",

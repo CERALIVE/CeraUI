@@ -1771,6 +1771,7 @@
 	"network.netifSave.error.enableRefused": "本体はこのインターフェースをボンドに追加することを拒否しました。理由はその行に表示されています。",
 	"network.netifSave.error.disableAllRefused": "これはボンド内で最後の回線のため、本体はそのまま残しました。この回線を外す前に別の回線を追加してください。",
 	"network.netifSave.error.generic": "本体が変更を拒否したため、何も保存されませんでした。",
+	"network.netifSave.error.identityUnconfirmed": "本体はまだこのモデムがどれかを特定できないため、何も保存されませんでした。数秒待ってからもう一度お試しください。同じモデムを2台使っている場合は、先に両方を接続するか、このモデムを挿し直してください。",
 	"network.sharing.title": "インターネット共有",
 	"network.sharing.headline.activeTitle": "共有は有効です",
 	"network.sharing.headline.activeBody": "{total} 本中 {usable} 本のアップリンクがクライアント通信を運べます。",

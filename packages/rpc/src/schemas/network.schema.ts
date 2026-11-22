@@ -288,12 +288,17 @@ export type NetifConfigInput = z.infer<typeof netifConfigInputSchema>;
 // has already moved and applying it would act on the operator's stale view. It
 // used to be answered with `{success:true}`, which reported a discarded save —
 // including a discarded bond toggle — as a successful one.
+//
+// `bond_identity_unconfirmed` refuses an enable before anything is saved when the
+// device cannot yet tell which physical modem the link is: its identity is still
+// pending, or it shares a serial with an excluded twin it cannot be told apart from.
 export const netifConfigErrorSchema = z.enum([
 	'unknown_interface',
 	'stale_address',
 	'enable_refused',
 	'disable_all_refused',
 	'bond_unmappable',
+	'bond_identity_unconfirmed',
 ]);
 export type NetifConfigError = z.infer<typeof netifConfigErrorSchema>;
 

@@ -604,7 +604,10 @@ boolean. Duplicate-IP links use one eligibility predicate for both the displayed
 Included/Excluded state and SRTLA IP-list/bind-map admission. A link with a valid
 physical bind row can be included; one that cannot be mapped is refused with
 `bond_unmappable`. Operator exclusions persist in `config.json` under canonical
-physical link IDs, so they survive backend restarts and interface renames.
+physical link IDs, so they survive backend restarts and interface renames. An
+exclusion saved for a twin group stays saved for every twin; enabling one twin
+stores an exception under `bond_opt_in`. An enable the device cannot attach to
+one physical modem yet is refused unsaved with `bond_identity_unconfirmed`.
 
 `streaming.start` accepts a partial config. An empty `{}` starts from the complete
 persisted stream configuration; defined fields override only their saved counterparts.

@@ -5,7 +5,17 @@
 `handleNetif` returns `NetifApplyOutcome` (`{ok:true}` or `{ok:false, reason}`),
 and `configureNetworkInterfaceProcedure` forwards a rejection as
 `{success:false, error}` typed by `netifConfigErrorSchema` — `unknown_interface`
-/ `stale_address` / `enable_refused` / `disable_all_refused`.
+/ `stale_address` / `enable_refused` / `disable_all_refused` / `bond_unmappable`
+/ `bond_identity_unconfirmed`.
+
+**`success:true` means the readback matches the request.** An enable is refused
+before anything is saved when the link would stay out anyway: the device cannot
+yet tell which physical modem it is (identity still pending, or a twin of an
+excluded group with no port path or no shared-serial record:
+`bond_identity_unconfirmed`), or another admission gate has no flag yet (a
+shared-lan role before the next poll stamps it: `enable_refused`). The check is
+`isBondCandidate` itself with the preference forced in, so a new gate is covered
+without a second list.
 
 Every one of those was a bare `return` reported as `{success:true}`. The
 `stale_address` path is the one that mattered: it is the CONCURRENCY guard
@@ -19,8 +29,10 @@ toggle riding alongside the address it was checking — so the operator was told
   legitimately refuses because the mock-overlaid IP differs. Reporting THAT as a
   failure would report a dev/e2e toggle that visibly worked as broken. Do not
   "unify" the two branches.
-- **The five reasons are not collapsible.** `enable_refused` already carries an
-  operator notification naming the blocking error; `disable_all_refused` is the
-  device protecting its last link; `unknown_interface` clears when the link comes
-  back; `stale_address` means re-read and retry.
+- **The reasons are not collapsible.** `enable_refused` already carries an
+  operator notification naming the blocking error (a not-yet-stamped gate shows
+  it on the row after the next poll); `disable_all_refused` is the device
+  protecting its last link; `unknown_interface` clears when the link comes back;
+  `stale_address` means re-read and retry; `bond_identity_unconfirmed` means wait
+  for identification, or plug both identical modems in.
 

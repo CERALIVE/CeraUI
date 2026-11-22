@@ -1771,6 +1771,7 @@
 	"network.netifSave.error.enableRefused": "기기가 이 인터페이스를 본딩에 추가하기를 거부했습니다. 이유는 해당 행에 표시됩니다.",
 	"network.netifSave.error.disableAllRefused": "본딩의 마지막 링크이므로 기기가 그대로 두었습니다. 이 링크를 제거하기 전에 다른 링크를 추가하세요.",
 	"network.netifSave.error.generic": "기기가 변경을 거부해 아무것도 저장되지 않았습니다.",
+	"network.netifSave.error.identityUnconfirmed": "기기가 아직 이 모뎀이 어느 것인지 확인할 수 없어 아무것도 저장되지 않았습니다. 몇 초 기다린 뒤 다시 시도하세요. 같은 모뎀을 두 대 사용한다면 먼저 둘 다 연결하거나 이 모뎀을 다시 연결하세요.",
 	"network.sharing.title": "인터넷 공유",
 	"network.sharing.headline.activeTitle": "공유가 활성 상태입니다",
 	"network.sharing.headline.activeBody": "업링크 {total}개 중 {usable}개가 클라이언트 트래픽을 처리할 수 있습니다.",

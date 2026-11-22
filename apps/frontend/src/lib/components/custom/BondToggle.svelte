@@ -114,6 +114,11 @@ async function toggle(next: boolean) {
 		target: next,
 		confirmOnResolve: true,
 		rpc: () => rpc.network.configure({ name, ip, enabled: next }),
+		// The one refusal a toggle cannot explain on the row: say why it was refused.
+		failMessage: (result) =>
+			result?.error === 'bond_identity_unconfirmed'
+				? m['network.netifSave.error.identityUnconfirmed']()
+				: m['network.os.operationFailed'](),
 	});
 	if (result?.success && result.applied?.enabled !== undefined) {
 		// Adopt the server-applied value; the lock is HELD until the matching netif

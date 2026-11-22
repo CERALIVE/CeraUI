@@ -901,6 +901,20 @@ describe("network.configure answers honestly when handleNetif rejects", () => {
 		expect(result.error).toBe("enable_refused");
 	});
 
+	test("an enable on a port whose shared-lan role is not stamped yet is refused, not reported saved", async () => {
+		processIfconfigOutput(twoPortTopology());
+		persistEthernetRole(SHARED_PORT, "shared-lan");
+
+		const result = await call(
+			configureNetworkInterfaceProcedure,
+			{ name: SHARED_PORT, ip: SHARED_IP, enabled: true },
+			{ context: makeContext() },
+		);
+
+		expect(result).toEqual({ success: false, error: "enable_refused" });
+		expect(netIfBuildMsg()[SHARED_PORT]?.enabled).toBe(false);
+	});
+
 	test("an APPLIED toggle still answers `success:true` with its applied fields", async () => {
 		processIfconfigOutput(twoPortTopology());
 

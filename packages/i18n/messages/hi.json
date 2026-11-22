@@ -1816,6 +1816,7 @@
 	"network.netifSave.error.enableRefused": "डिवाइस ने इस इंटरफ़ेस को बॉन्ड में जोड़ने से मना कर दिया। कारण इसकी पंक्ति में दिखाया गया है।",
 	"network.netifSave.error.disableAllRefused": "यह बॉन्ड की आख़िरी लिंक है, इसलिए डिवाइस ने इसे बनाए रखा। इसे हटाने से पहले कोई दूसरी लिंक जोड़ें।",
 	"network.netifSave.error.generic": "डिवाइस ने बदलाव अस्वीकार कर दिया, इसलिए कुछ भी सेव नहीं हुआ।",
+	"network.netifSave.error.identityUnconfirmed": "डिवाइस अभी यह नहीं पहचान पा रहा कि यह कौन-सा मॉडेम है, इसलिए कुछ भी सेव नहीं हुआ। कुछ सेकंड रुककर दोबारा कोशिश करें। अगर आप दो एक जैसे मॉडेम इस्तेमाल करते हैं, तो पहले दोनों को लगाएँ या इसे दोबारा जोड़ें।",
 	"network.sharing.title": "इंटरनेट साझाकरण",
 	"network.sharing.headline.activeTitle": "साझाकरण सक्रिय है",
 	"network.sharing.headline.activeBody": "{total} में से {usable} अपलिंक क्लाइंट ट्रैफ़िक ले जा सकते हैं।",
