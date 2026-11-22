@@ -3032,6 +3032,7 @@
 	"systemLogs.sharing.exportHintMoment": "يحفظ في ملف نصي الإدخالات المطابقة لعوامل تصفية السجلات الخام خلال الدقائق العشر المحيطة باللحظة المحددة.",
 	"systemLogs.sharing.exportSensitive": "قد يحتوي هذا الملف على بيانات حساسة مثل أسماء الشبكات والعناوين. راجعه قبل مشاركته.",
 	"systemLogs.sharing.exportDownload": "تنزيل التصدير",
+	"systemLogs.sharing.exportBetween": "من {from} إلى {to}",
 	"systemLogs.sharing.exportFrom": "من {time}",
 	"systemLogs.sharing.bundle": "حزمة الدعم",
 	"systemLogs.sharing.bundleHint": "ملف واحد لمن يساعدك: الإصدارات والأحداث والسجلات الحديثة والإعدادات، مع إزالة الأسرار المعروفة.",

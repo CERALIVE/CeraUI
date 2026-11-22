@@ -1,6 +1,7 @@
 /**
- * The two Sharing flows of System Logs. "Export this view" confirms, then asks
- * for a ticket for the Raw logs query in `view`; the support bundle previews its
+ * The two Sharing flows of System Logs. "Export this view" fixes its scope when
+ * the confirmation opens (`exportScope`), states it there and asks for a ticket
+ * for exactly that, whatever Raw publishes meanwhile; the support bundle previews its
  * manifest first, then asks for a ticket. One flow per open view, so it outlives
  * the Downloads region remounting across tabs and the 1024 px breakpoint;
  * `dispose()` when the view closes. Each step takes one request at a time.
@@ -16,6 +17,7 @@
  * there within 60 s. No timer is kept here.
  */
 import type {
+	LogBootInfo,
 	LogBundleFailureReason,
 	LogBundleManifest,
 	LogExportInput,
@@ -26,6 +28,8 @@ import type {
 import { onHistoryChanged } from "./history-bus";
 import {
 	bundleManifestReply,
+	captureExportScope,
+	type ExportScope,
 	type ExportSpan,
 	exportInput,
 	previewFailure,
@@ -43,8 +47,11 @@ export interface SharingDeps {
 		createBundle(): Promise<LogExportOutput>;
 	};
 	readonly download: (path: string) => void;
-	/** Narrows the published view to what Export saves (System Logs: the boot picker outside Raw logs). */
-	readonly scope?: (view: LogQueryInput, span: ExportSpan) => LogQueryInput;
+	/** The boot picker: Export follows it when it was used after Raw's last view. */
+	readonly picker?: {
+		readonly boot: LogBootInfo | null;
+		onPick(listener: () => void): () => void;
+	};
 }
 
 export type ExportStep = "closed" | "confirm" | "creating";
@@ -80,6 +87,8 @@ export class SharingFlow {
 	view = $state.raw<LogQueryInput>(RAW_OPENING_QUERY);
 	/** Whether {@link view} is the filters or the ten minutes around an exact anchor. */
 	viewSpan = $state<ExportSpan>("filters");
+	/** What the open Export confirmation states and its ticket request sends; null while closed. */
+	exportScope = $state.raw<ExportScope | null>(null);
 	exportStep = $state<ExportStep>("closed");
 	exportProblem = $state<SharingProblem | null>(null);
 	bundleStep = $state<BundleStep>("closed");
@@ -92,6 +101,9 @@ export class SharingFlow {
 
 	readonly #deps: SharingDeps;
 	readonly #stopHistory: () => void;
+	readonly #stopPick: (() => void) | undefined;
+	// Whether the picker was used after Raw last published (or Raw never did).
+	#pickerLeads = true;
 	#exportRun = 0;
 	#bundleRun = 0;
 	#viewOwner: object | undefined;
@@ -100,6 +112,9 @@ export class SharingFlow {
 	constructor(deps: SharingDeps) {
 		this.#deps = deps;
 		this.#stopHistory = onHistoryChanged(() => this.#historyChanged());
+		this.#stopPick = deps.picker?.onPick(() => {
+			this.#pickerLeads = true;
+		});
 	}
 
 	/** One mounted Raw panel publishes; its snapshot survives a switch to Storage. */
@@ -114,6 +129,7 @@ export class SharingFlow {
 				if (this.#viewOwner !== owner) return;
 				this.view = query;
 				this.viewSpan = span;
+				this.#pickerLeads = false;
 			},
 			dispose: () => {
 				if (this.#viewOwner === owner) this.#viewOwner = undefined;
@@ -121,22 +137,25 @@ export class SharingFlow {
 		};
 	}
 
-	/** What "Export this view" saves now; the confirmation states it. */
-	get exportQuery(): LogQueryInput {
-		return this.#deps.scope?.(this.view, this.viewSpan) ?? this.view;
-	}
-
 	openExport(): void {
 		if (this.exportStep !== "closed") return;
+		const picker = this.#deps.picker;
+		this.exportScope = captureExportScope(
+			this.view,
+			this.viewSpan,
+			picker?.boot ?? null,
+			picker !== undefined && this.#pickerLeads,
+		);
 		this.exportStep = "confirm";
 	}
 
 	async confirmExport(): Promise<void> {
-		if (this.exportStep !== "confirm") return;
+		const scope = this.exportScope;
+		if (this.exportStep !== "confirm" || scope === null) return;
 		const run = this.#exportRun;
 		this.exportStep = "creating";
 		this.exportProblem = null;
-		const input = exportInput(this.exportQuery);
+		const input = exportInput(scope.query);
 		const reply = await ticket(
 			() => this.#deps.logs.createExport(input),
 			"export",
@@ -154,6 +173,7 @@ export class SharingFlow {
 		this.#exportRun++;
 		this.exportStep = "closed";
 		this.exportProblem = null;
+		this.exportScope = null;
 	}
 
 	openBundle(): Promise<void> {
@@ -205,7 +225,9 @@ export class SharingFlow {
 		this.#viewOwner = undefined;
 		this.view = RAW_OPENING_QUERY;
 		this.viewSpan = "filters";
+		this.#pickerLeads = true;
 		this.#stopHistory();
+		this.#stopPick?.();
 		this.closeExport();
 		this.closeBundle();
 	}

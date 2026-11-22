@@ -21,23 +21,46 @@ const LAYOUTS = [
 	{ name: 'e-ink phone', size: { width: 375, height: 812 }, touch: false, eink: true, thumb: true },
 ] as const;
 
-/** Passes the app's socket through, refusing `refuse` with READ_FAILED, and records each logs.createExport input. */
-async function routeLogs(page: Page, pageRpc: PageRpc, refuse: readonly string[] = []): Promise<unknown[]> {
+type Frame = { readonly id?: unknown; readonly path?: unknown; readonly input?: unknown; result?: unknown };
+
+function frameOf(message: string | Buffer): Frame | undefined {
+	if (typeof message !== 'string') return undefined;
+	const value: unknown = JSON.parse(message);
+	return typeof value === 'object' && value !== null ? value : undefined;
+}
+
+/**
+ * Passes the app's socket through, records each logs.createExport input, refuses
+ * `refuse` with READ_FAILED and adds `boots` to the device's logs.boots reply.
+ */
+async function routeLogs(
+	page: Page,
+	pageRpc: PageRpc,
+	refuse: readonly string[] = [],
+	boots: readonly unknown[] = [],
+): Promise<unknown[]> {
 	const exports: unknown[] = [];
+	const bootReads = new Set<unknown>();
 	await page.routeWebSocket(/\/ws(?:\?|$)/, (socket) => {
 		const server = socket.connectToServer();
 		pageRpc.bindConnectionLifecycle(socket, server);
 		socket.onMessage((message) => {
-			const frame = typeof message === 'string' ? JSON.parse(message) : undefined;
+			const frame = frameOf(message);
 			const path = Array.isArray(frame?.path) ? frame.path.join('.') : '';
+			if (path === 'logs.createExport') exports.push(frame?.input);
+			if (path === 'logs.boots') bootReads.add(frame?.id);
 			if (refuse.includes(path)) {
-				socket.send(JSON.stringify({ id: frame.id, error: { message: 'READ_FAILED', code: 'INTERNAL_ERROR' } }));
+				socket.send(JSON.stringify({ id: frame?.id, error: { message: 'READ_FAILED', code: 'INTERNAL_ERROR' } }));
 				return;
 			}
-			if (path === 'logs.createExport') exports.push(frame.input);
 			server.send(message);
 		});
 		server.onMessage((message) => {
+			const frame = frameOf(message);
+			if (frame && bootReads.has(frame.id) && Array.isArray(frame.result)) {
+				frame.result = [...frame.result, ...boots];
+				message = JSON.stringify(frame);
+			}
 			socket.send(message);
 			pageRpc.acceptServerMessage(message);
 		});
@@ -171,6 +194,9 @@ test.describe('System Logs toolbar', { tag: '@desktop-only' }, () => {
 		await download.saveAs(file);
 		const text = await readFile(file, 'utf8');
 		expect(text.slice(0, 15).toLowerCase()).not.toBe('<!doctype html>');
+		// The device's own export file: its header lines, then the entry count footer.
+		expect(text).toMatch(/^# /);
+		expect(text).toMatch(/^# (complete: \d+ entries|incomplete: .+)$/m);
 		expect(download.suggestedFilename()).toMatch(/\.txt$/);
 	});
 
@@ -195,6 +221,68 @@ test.describe('System Logs toolbar', { tag: '@desktop-only' }, () => {
 		await expect(confirm).toHaveCount(0);
 		await expect(page.getByRole('group', { name: 'Downloads' })).toHaveCount(0);
 		await expect(bandBundle).toBeFocused();
+	});
+
+	test('a phone returns focus to the control that had it when a pointer opened the failure band dialogs without focusing (Safari default)', async ({ page, pageRpc }) => {
+		await routeLogs(page, pageRpc, ['logs.getStorage', 'logs.previewBundle']);
+		await openFailedLogsOnPhone(page);
+		const band = page.getByTestId('system-logs-check-failed');
+		const tryAgain = band.getByRole('button', { name: 'Try again', exact: true });
+		const bandBundle = band.getByRole('button', { name: 'Support bundle', exact: true });
+		const bundle = page.getByRole('dialog', { name: 'Support bundle' });
+		const confirm = page.getByRole('dialog', { name: 'Export this view' });
+		await tryAgain.focus();
+		// dispatchEvent clicks without moving focus, as WebKit does for a pointer press on a button.
+		await bandBundle.dispatchEvent('click');
+		await expect(bundle).toBeVisible();
+		await page.keyboard.press('Escape');
+		await expect(bundle).toHaveCount(0);
+		await expect(tryAgain).toBeFocused();
+
+		await bandBundle.dispatchEvent('click');
+		await bundle.getByRole('button', { name: 'Export this view', exact: true }).dispatchEvent('click');
+		await expect(confirm).toBeVisible();
+		await page.keyboard.press('Escape');
+		await expect(confirm).toHaveCount(0);
+		await expect(tryAgain).toBeFocused();
+	});
+
+	test('Export logs states and sends each boot picked in the real picker, a previous one included', async ({ page, pageRpc }) => {
+		const previous = {
+			bootId: '5e0f6b1c2d3a49e88f7a6b5c4d3e2f10', index: 1, current: false, shutdown: 'clean',
+			firstTs: Date.now() - 3 * 86_400_000, lastTs: Date.now() - 2 * 86_400_000,
+			evidence: [], logsAvailable: true, versions: null,
+		};
+		// Refused tickets keep the confirmation open, so each frame is read and the dialog cancelled.
+		const exports = await routeLogs(page, pageRpc, ['logs.createExport'], [previous]);
+		const logs = new SystemLogsPage(page);
+		await logs.open({ locale: 'en', size: { width: 1280, height: 800 }, touch: false, scheme: 'dark' });
+		const picker = page.getByTestId('boot-picker');
+		const confirm = page.getByRole('dialog', { name: 'Export this view' });
+		const exportWith = async (boot: string) => {
+			await page.getByRole('group', { name: 'Downloads' }).getByRole('button', { name: 'Export logs', exact: true }).click();
+			await expect(confirm.getByTestId('sharing-export-scope').locator('dt, dd')).toHaveText([
+				'Boots', boot, 'Level', 'Info', 'Sources', 'All sources',
+			]);
+			await confirm.getByRole('button', { name: 'Download export' }).click();
+			await expect(confirm.getByTestId('sharing-export-problem')).toBeVisible();
+			await confirm.getByRole('button', { name: 'Cancel' }).click();
+			await expect(confirm).toHaveCount(0);
+			return exports.at(-1);
+		};
+		const opening = { sources: [], levels: ['error', 'warning', 'info'] };
+		const earlier = picker.locator(`[data-boot-id="${previous.bootId}"]`);
+		const running = picker.locator(`[data-testid="boot-option"]:not([data-boot-id="${previous.bootId}"])`);
+
+		await earlier.click();
+		const started = (await earlier.locator('time').textContent())?.trim() ?? '';
+		expect(started).toMatch(/^Boot started /);
+		expect(await exportWith(started)).toEqual({ filter: opening, boot: previous.bootId });
+		await running.click();
+		expect(await exportWith('This boot')).toEqual({ filter: opening, boot: 'current' });
+		await picker.getByTestId('boot-option-all').click();
+		expect(await exportWith('All boots')).toEqual({ filter: opening, boot: 'all' });
+		expect(exports).toHaveLength(3);
 	});
 
 	test('Export logs states and saves the boots chosen: all boots on Events, this boot and its search on Raw, Raw\'s kept search until All boots is picked', async ({ page, pageRpc }) => {

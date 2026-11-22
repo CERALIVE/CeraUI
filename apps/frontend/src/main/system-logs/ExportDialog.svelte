@@ -1,7 +1,7 @@
 <!--
-  ExportDialog.svelte: the confirmation in front of "Export this view": what the
-  file holds (the Raw logs filters, or the ten minutes around an exact anchor)
-  and that it may contain sensitive data, before anything downloads.
+  ExportDialog.svelte: the confirmation in front of "Export this view": the scope
+  fixed when it opened (SharingFlow.exportScope), which is exactly what the
+  ticket request sends, and that it may contain sensitive data, before anything downloads.
   Download export asks the device for a ticket; Cancel, Escape and the close
   button discard a request still in flight.
 -->
@@ -12,7 +12,7 @@ import { ShieldAlert, TriangleAlert } from '@lucide/svelte';
 
 import { AppDialog } from '$lib/components/dialogs';
 import { formatBootTime } from '$lib/device-logs/boot-rows';
-import { bootSelection } from '$lib/device-logs/boot-selection.svelte';
+import { markParam, paramPieces } from '$lib/device-logs/param-parts';
 import { levelCovering, type RawLevel } from '$lib/device-logs/raw-filter';
 import type { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';
 
@@ -37,11 +37,14 @@ const SOURCES: Record<LogSource, () => string> = {
 	kernel: () => m['systemLogs.source.kernel'](),
 };
 
-// What the ticket will save, in the same words as the Raw logs controls and the boot picker.
-const scope = $derived.by(() => {
-	const query = sharing.exportQuery;
+// The scope fixed when this confirmation opened, which the ticket request sends,
+// in the words of the Raw logs controls and the boot picker; data params isolated.
+const rows = $derived.by((): [string, string][] => {
+	const scope = sharing.exportScope;
+	if (scope === null) return [];
+	const { query } = scope;
 	const locale = getLocale();
-	const chosen = bootSelection.boot;
+	const time = (ts: number) => markParam(formatBootTime(ts, locale));
 	// Absent fields take the wire defaults: this boot, every level.
 	const boot = query.boot ?? 'current';
 	const rows: [string, string][] = [
@@ -51,9 +54,9 @@ const scope = $derived.by(() => {
 				? m['systemLogs.boots.all']()
 				: boot === 'current'
 					? m['systemLogs.boots.current']()
-					: chosen !== null && chosen.bootId === boot
-						? m['systemLogs.boots.started']({ time: formatBootTime(chosen.firstTs, locale) })
-						: m['systemLogs.raw.timeBoot'](),
+					: scope.bootStart === null
+						? m['systemLogs.raw.timeBoot']()
+						: m['systemLogs.boots.started']({ time: time(scope.bootStart) }),
 		],
 		[m['systemLogs.raw.levelLabel'](), LEVELS[levelCovering(query.levels ?? LOG_LEVELS)]()],
 		[
@@ -61,9 +64,14 @@ const scope = $derived.by(() => {
 			query.sources?.length ? query.sources.map((source) => SOURCES[source]()).join(', ') : m['systemLogs.raw.sourceAll'](),
 		],
 	];
-	if (query.text) rows.push([m['systemLogs.raw.searchLabel'](), query.text]);
-	if (sharing.viewSpan === 'filters' && query.since !== undefined)
-		rows.push([m['systemLogs.raw.timeLabel'](), m['systemLogs.sharing.exportFrom']({ time: formatBootTime(query.since, locale) })]);
+	if (query.text) rows.push([m['systemLogs.raw.searchLabel'](), markParam(query.text)]);
+	if (query.since !== undefined)
+		rows.push([
+			m['systemLogs.raw.timeLabel'](),
+			query.until === undefined
+				? m['systemLogs.sharing.exportFrom']({ time: time(query.since) })
+				: m['systemLogs.sharing.exportBetween']({ from: time(query.since), to: time(query.until) }),
+		]);
 	return rows;
 });
 
@@ -85,11 +93,11 @@ const PROBLEM = {
 	title={m['systemLogs.sharing.export']()}
 >
 	<div class="flex flex-col gap-4 [word-break:auto-phrase] [&:lang(ko)]:break-keep [&:lang(zh)]:break-keep wrap-break-word text-pretty [&:lang(zh)]:text-balance">
-		<p class="text-sm"><KeepWords text={sharing.viewSpan === 'moment' ? m['systemLogs.sharing.exportHintMoment']() : m['systemLogs.sharing.exportHint']()} /></p>
+		<p class="text-sm"><KeepWords text={sharing.exportScope?.span === 'moment' ? m['systemLogs.sharing.exportHintMoment']() : m['systemLogs.sharing.exportHint']()} /></p>
 		<dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm" data-testid="sharing-export-scope">
-			{#each scope as [term, value] (term)}
+			{#each rows as [term, value] (term)}
 				<dt class="text-muted-foreground">{term}</dt>
-				<dd class="wrap-anywhere">{value}</dd>
+				<dd class="wrap-anywhere">{#each paramPieces(value) as piece, i (i)}{#if piece.param}<bdi>{piece.text}</bdi>{:else}{piece.text}{/if}{/each}</dd>
 			{/each}
 		</dl>
 		<div class="flex items-start gap-3 rounded-lg border p-3">

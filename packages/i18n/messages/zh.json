@@ -2975,6 +2975,7 @@
 	"systemLogs.sharing.exportHintMoment": "将所选时间前后各5分钟内符合原始日志筛选条件的条目保存为文本文件。",
 	"systemLogs.sharing.exportSensitive": "此文件可能包含网络名称和地址等敏感数据。分享前请先检查。",
 	"systemLogs.sharing.exportDownload": "下载导出文件",
+	"systemLogs.sharing.exportBetween": "{from} 至 {to}",
 	"systemLogs.sharing.exportFrom": "{time} 起",
 	"systemLogs.sharing.bundle": "支持包",
 	"systemLogs.sharing.bundleHint": "给协助者的单个文件：版本、事件、近期日志和设置，已移除已知的密钥信息。",

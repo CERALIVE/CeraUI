@@ -3023,6 +3023,7 @@
 	"systemLogs.sharing.exportHintMoment": "Enregistre dans un fichier texte les entrées qui correspondent aux filtres des journaux bruts, sur les 10 minutes autour du moment sélectionné.",
 	"systemLogs.sharing.exportSensitive": "Ce fichier peut contenir des données sensibles, comme des noms de réseau et des adresses. Vérifiez-le avant de le partager.",
 	"systemLogs.sharing.exportDownload": "Télécharger l'export",
+	"systemLogs.sharing.exportBetween": "De {from} à {to}",
 	"systemLogs.sharing.exportFrom": "À partir de {time}",
 	"systemLogs.sharing.bundle": "Paquet d'assistance",
 	"systemLogs.sharing.bundleHint": "Un seul fichier pour la personne qui vous aide : versions, événements, journaux récents et réglages, sans les secrets connus.",

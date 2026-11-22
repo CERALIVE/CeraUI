@@ -23,8 +23,10 @@ import {
 	vi,
 } from "vitest";
 import { exportScopeRows } from "$lib/device-logs/__fixtures__/sharing";
+import { formatBootTime } from "$lib/device-logs/boot-rows";
+import { bootSelection } from "$lib/device-logs/boot-selection.svelte";
 import { SharingFlow } from "$lib/device-logs/sharing-flow.svelte";
-
+import { RpcError } from "$lib/rpc/rpc-error";
 import { en } from "../../tests/helpers/catalog";
 import {
 	installMediaQueries,
@@ -40,6 +42,8 @@ const logs = vi.hoisted(() => ({
 	followStart: vi.fn(),
 	followStop: vi.fn(),
 	createExport: vi.fn(),
+	previewBundle: vi.fn(),
+	createBundle: vi.fn(),
 }));
 vi.mock("$lib/rpc/client", () => ({ rpc: { logs } }));
 vi.mock("$lib/helpers/SystemHelper", () => ({
@@ -128,6 +132,7 @@ beforeEach(() => {
 });
 afterEach(() => {
 	cleanup();
+	bootSelection.reset();
 	media.restore();
 	vi.restoreAllMocks();
 });
@@ -455,5 +460,325 @@ describe("System Logs deep-link integration", () => {
 		expect(logs.query).toHaveBeenCalledTimes(1);
 		expect(logs.around).toHaveBeenCalledTimes(2);
 		expect(screen.queryByTestId("raw-anchor")).toBeNull();
+	});
+});
+
+// A second, earlier boot, so every choice below names a different boot on the wire.
+const PREVIOUS = "5e0f6b1c2d3a49e88f7a6b5c4d3e2f10";
+const previous = logBootInfoSchema.parse({
+	bootId: PREVIOUS,
+	index: 1,
+	current: false,
+	shutdown: "clean",
+	firstTs: AT - 9_000_000,
+	lastTs: AT - 5_000_000,
+	evidence: [],
+	logsAvailable: true,
+	versions: null,
+});
+const OPENING_LEVELS = ["error", "warning", "info"];
+const started = (boot: { firstTs: number }) =>
+	boots.started.replace("{time}", formatBootTime(boot.firstTs, "en"));
+
+function phone(): void {
+	media.restore();
+	media = installMediaQueries(() => false);
+}
+
+/** The side picker's row when it is on the page; otherwise what the phone header picker calls. */
+async function pick(boot: typeof previous | null): Promise<void> {
+	const picker = screen.queryByTestId("boot-picker");
+	if (picker === null) {
+		bootSelection.choose(boot);
+		return;
+	}
+	const option = await waitFor(() => {
+		const row =
+			boot === null
+				? within(picker).getByTestId("boot-option-all")
+				: picker.querySelector<HTMLElement>(`[data-boot-id="${boot.bootId}"]`);
+		if (row === null) throw new Error("the boot is not listed yet");
+		return row;
+	});
+	await fireEvent.click(option);
+}
+
+async function showTab(name: string): Promise<void> {
+	await fireEvent.click(await screen.findByRole("tab", { name }));
+}
+
+type Entry = "events" | "raw" | "storage" | "band";
+
+/** Opens the Export confirmation the way the entry does. */
+async function openExport(entry: Entry): Promise<HTMLElement> {
+	if (entry === "band") {
+		const band = await screen.findByTestId("system-logs-check-failed");
+		await fireEvent.click(
+			await within(band).findByTestId("system-logs-check-bundle"),
+		);
+		const bundle = await screen.findByRole("dialog", {
+			name: en.systemLogs.sharing.bundle,
+		});
+		await fireEvent.click(
+			await within(bundle).findByRole("button", {
+				name: en.systemLogs.sharing.export,
+			}),
+		);
+	} else if (entry === "storage") {
+		await showTab(en.systemLogs.tabs.storage);
+		await fireEvent.click(await screen.findByTestId("sharing-open-export"));
+	} else {
+		await fireEvent.click(await screen.findByTestId("sharing-toolbar-export"));
+	}
+	return screen.findByRole("dialog", { name: en.systemLogs.sharing.export });
+}
+
+async function download(dialog: HTMLElement): Promise<void> {
+	await fireEvent.click(
+		within(dialog).getByRole("button", {
+			name: en.systemLogs.sharing.exportDownload,
+		}),
+	);
+	await waitFor(() => expect(logs.createExport).toHaveBeenCalledTimes(1));
+}
+
+const SELECTIONS = [
+	{ name: "All boots", boot: null, wire: "all", label: () => boots.all },
+	{
+		name: "a previous boot",
+		boot: previous,
+		wire: PREVIOUS,
+		label: () => started(previous),
+	},
+	{
+		name: "this boot",
+		boot: running,
+		wire: "current",
+		label: () => boots.current,
+	},
+] as const;
+const MATRIX = [
+	...(["events", "raw", "storage"] as const).flatMap((entry) =>
+		SELECTIONS.flatMap((selection) =>
+			[false, true].map((retained) => ({ entry, selection, retained })),
+		),
+	),
+	...SELECTIONS.map((selection) => ({
+		entry: "band" as const,
+		selection,
+		retained: false,
+	})),
+];
+
+describe("System Logs Export: one scope, stated and sent, by the operator's latest action", () => {
+	it.each(MATRIX)(
+		"from $entry with $selection.name picked, Raw filter set first: $retained",
+		async ({ entry, selection, retained }) => {
+			if (entry === "storage" || entry === "band") phone();
+			logs.boots.mockResolvedValue([running, previous]);
+			if (entry === "band") {
+				vi.spyOn(console, "error").mockImplementation(() => {});
+				logs.getStorage.mockRejectedValue(
+					new Error("Request timeout: logs.getStorage"),
+				);
+				logs.previewBundle.mockRejectedValue(
+					new RpcError({ message: "READ_FAILED", code: "INTERNAL_ERROR" }),
+				);
+			}
+			render(SystemLogsView);
+			if (retained) await rawWithErrors("needle");
+			if (entry === "raw" && !retained) await showTab(en.systemLogs.tabs.raw);
+			if (entry !== "raw" && retained) await showTab(en.systemLogs.tabs.events);
+			if (entry !== "band") await screen.findByTestId("sharing-toolbar-export");
+			await pick(selection.boot);
+
+			const dialog = await openExport(entry);
+
+			expect(exportScopeRows(dialog)).toEqual([
+				boots.heading,
+				selection.label(),
+				raw.levelLabel,
+				retained ? raw.levelErrors : raw.levelInfo,
+				raw.sourceLabel,
+				raw.sourceAll,
+				...(retained ? [raw.searchLabel, "needle"] : []),
+			]);
+			if (retained)
+				expect(within(dialog).getByText("needle").tagName).toBe("BDI");
+			await download(dialog);
+			expect(logs.createExport).toHaveBeenLastCalledWith({
+				filter: {
+					sources: [],
+					levels: retained ? ["error"] : OPENING_LEVELS,
+					text: retained ? "needle" : undefined,
+				},
+				boot: selection.wire,
+			});
+		},
+	);
+
+	it("states a bounded window by both ends, each time isolated, for a deep link's approximate Raw view", async () => {
+		render(SystemLogsView, { props: { context: { tab: "raw", at: AT } } });
+		await screen.findByTestId("raw-anchor-approximate");
+
+		const dialog = await openExport("raw");
+
+		const from = formatBootTime(AT - 60_000, "en");
+		const to = formatBootTime(AT + 60_000, "en");
+		expect(exportScopeRows(dialog)).toEqual([
+			boots.heading,
+			raw.timeBoot,
+			raw.levelLabel,
+			raw.levelEverything,
+			raw.sourceLabel,
+			raw.sourceAll,
+			raw.timeLabel,
+			`${from} to ${to}`,
+		]);
+		const isolated = within(dialog)
+			.getByTestId("sharing-export-scope")
+			.querySelectorAll("bdi");
+		expect([...isolated].map((node) => node.textContent)).toEqual([from, to]);
+		await download(dialog);
+		expect(logs.createExport).toHaveBeenLastCalledWith({
+			filter: { sources: [], levels: around.olderQuery.levels },
+			boot: BOOT,
+			since: AT - 60_000,
+			until: AT + 60_000,
+		});
+	});
+
+	it("keeps the stated scope and the request on what was confirmed while a deep link's Raw view arrives late", async () => {
+		const lookup = Promise.withResolvers<typeof around>();
+		logs.around.mockReturnValue(lookup.promise);
+		const ticket = Promise.withResolvers<{ ok: false; error: "BUSY" }>();
+		logs.createExport.mockReturnValue(ticket.promise);
+		render(SystemLogsView, { props: { context: { tab: "raw", at: AT } } });
+
+		const dialog = await openExport("raw");
+		const stated = exportScopeRows(dialog);
+		expect(stated).toEqual([
+			boots.heading,
+			boots.all,
+			raw.levelLabel,
+			raw.levelInfo,
+			raw.sourceLabel,
+			raw.sourceAll,
+		]);
+		await download(dialog);
+		lookup.resolve(around);
+		await screen.findByTestId("raw-anchor-approximate");
+		expect(exportScopeRows(dialog)).toEqual(stated);
+		ticket.resolve({ ok: false, error: "BUSY" });
+		await within(dialog).findByTestId("sharing-export-problem");
+
+		expect(exportScopeRows(dialog)).toEqual(stated);
+		expect(logs.createExport).toHaveBeenCalledExactlyOnceWith({
+			filter: { sources: [], levels: OPENING_LEVELS },
+			boot: "all",
+		});
+	});
+
+	it("keeps the stated scope and the request on what was confirmed when Raw publishes another view while it is open", async () => {
+		const bindings = vi.spyOn(SharingFlow.prototype, "bindView");
+		render(SystemLogsView);
+		await rawWithErrors();
+		const dialog = await openExport("raw");
+		const stated = exportScopeRows(dialog);
+		expect(stated).toEqual([
+			boots.heading,
+			boots.current,
+			raw.levelLabel,
+			raw.levelErrors,
+			raw.sourceLabel,
+			raw.sourceAll,
+		]);
+
+		bindings.mock.results.at(-1)?.value?.publish({
+			sources: ["kernel"],
+			levels: ["debug"],
+			boot: PREVIOUS,
+		});
+		await tick();
+		expect(exportScopeRows(dialog)).toEqual(stated);
+		await download(dialog);
+
+		expect(logs.createExport).toHaveBeenCalledExactlyOnceWith({
+			filter: { sources: [], levels: ["error"] },
+			boot: "current",
+		});
+	});
+
+	it.each([
+		{
+			name: "a previous boot",
+			boot: previous,
+			wire: PREVIOUS,
+			label: () => started(previous),
+		},
+		{
+			name: "All boots again",
+			boot: null,
+			wire: "all",
+			label: () => boots.all,
+		},
+	])(
+		"saves $name picked on Events after an exact Raw moment, not the moment",
+		async ({ boot, wire, label }) => {
+			logs.boots.mockResolvedValue([running, previous]);
+			logs.around.mockResolvedValue(exactAround);
+			render(SystemLogsView, {
+				props: { context: { tab: "raw", at: ENTRY_AT } },
+			});
+			await screen.findByTestId("raw-logs");
+			await showTab(en.systemLogs.tabs.events);
+			await pick(boot);
+
+			const dialog = await openExport("events");
+
+			expect(exportScopeRows(dialog)).toEqual([
+				boots.heading,
+				label(),
+				raw.levelLabel,
+				raw.levelEverything,
+				raw.sourceLabel,
+				raw.sourceAll,
+			]);
+			await download(dialog);
+			expect(logs.createExport).toHaveBeenLastCalledWith({
+				filter: { sources: [], levels: exactAround.olderQuery.levels },
+				boot: wire,
+			});
+		},
+	);
+
+	it("saves the boot picked on a phone when a Raw deep link could not load and the failure band hands off to Export", async () => {
+		phone();
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		logs.getStorage.mockRejectedValue(
+			new Error("Request timeout: logs.getStorage"),
+		);
+		logs.previewBundle.mockRejectedValue(
+			new RpcError({ message: "READ_FAILED", code: "INTERNAL_ERROR" }),
+		);
+		render(SystemLogsView, { props: { context: { tab: "raw", at: AT } } });
+		await screen.findByTestId("system-logs-check-failed");
+		bootSelection.choose(previous);
+
+		const dialog = await openExport("band");
+
+		expect(exportScopeRows(dialog)).toEqual([
+			boots.heading,
+			started(previous),
+			raw.levelLabel,
+			raw.levelInfo,
+			raw.sourceLabel,
+			raw.sourceAll,
+		]);
+		await download(dialog);
+		expect(logs.createExport).toHaveBeenLastCalledWith({
+			filter: { sources: [], levels: OPENING_LEVELS },
+			boot: PREVIOUS,
+		});
 	});
 });

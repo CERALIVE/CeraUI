@@ -2975,6 +2975,7 @@
 	"systemLogs.sharing.exportHintMoment": "선택한 시점 앞뒤 5분 동안 원본 로그 필터와 일치하는 항목을 텍스트 파일로 저장합니다.",
 	"systemLogs.sharing.exportSensitive": "이 파일에는 네트워크 이름과 주소 같은 민감한 데이터가 포함될 수 있습니다. 공유하기 전에 확인하세요.",
 	"systemLogs.sharing.exportDownload": "내보내기 다운로드",
+	"systemLogs.sharing.exportBetween": "{from}~{to}",
 	"systemLogs.sharing.exportFrom": "{time}부터",
 	"systemLogs.sharing.bundle": "지원 번들",
 	"systemLogs.sharing.bundleHint": "도움을 줄 사람에게 보낼 파일 하나: 버전, 이벤트, 최근 로그, 설정이 들어 있으며 알려진 비밀 값은 제거됩니다.",

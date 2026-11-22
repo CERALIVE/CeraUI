@@ -1018,21 +1018,66 @@ describe("SharingFlow: dispose", () => {
 	});
 });
 
-it("asks for the export ticket with the scoped query that the confirmation states", async () => {
-	const { createExport, previewBundle, createBundle, download } = setup();
-	createExport.mockResolvedValue({ ok: false, error: "BUSY" });
-	const flow = new SharingFlow({
-		logs: { createExport, previewBundle, createBundle },
-		download,
-		scope: (view) => ({ ...view, boot: "all" }),
+describe("SharingFlow: the export scope is fixed when the confirmation opens", () => {
+	const opened = {
+		...RAW_OPENING_QUERY,
+		levels: ["error"],
+		text: "needle",
+	} as const;
+	const later = {
+		sources: ["kernel"],
+		levels: ["debug"],
+		boot: "all",
+	} as const;
+
+	it("states and sends the scope it opened with, whatever Raw publishes meanwhile", async () => {
+		const { flow, createExport } = setup();
+		createExport.mockResolvedValue({ ok: false, error: "BUSY" });
+		const raw = flow.bindView();
+		raw.publish(opened);
+
+		flow.openExport();
+		const stated = flow.exportScope;
+		raw.publish(later, "moment");
+		await flow.confirmExport();
+
+		expect(flow.exportScope).toBe(stated);
+		expect(stated).toEqual({ query: opened, span: "filters", bootStart: null });
+		expect(createExport).toHaveBeenCalledExactlyOnceWith(exportInput(opened));
+		flow.closeExport();
+		expect(flow.exportScope).toBeNull();
 	});
-	flows.push(flow);
 
-	expect(flow.exportQuery).toEqual({ ...RAW_OPENING_QUERY, boot: "all" });
-	flow.openExport();
-	await flow.confirmExport();
+	it("follows the picker used after Raw's last view, and Raw again once it publishes", () => {
+		const { createExport, previewBundle, createBundle, download } = setup();
+		let picked = () => {};
+		const picker = {
+			boot: null,
+			onPick: (listener: () => void) => {
+				picked = listener;
+				return () => {};
+			},
+		};
+		const flow = new SharingFlow({
+			logs: { createExport, previewBundle, createBundle },
+			download,
+			picker,
+		});
+		flows.push(flow);
+		const scopeOnOpen = () => {
+			flow.openExport();
+			const scope = flow.exportScope?.query;
+			flow.closeExport();
+			return scope;
+		};
+		const raw = flow.bindView();
 
-	expect(createExport).toHaveBeenCalledExactlyOnceWith(
-		exportInput({ ...RAW_OPENING_QUERY, boot: "all" }),
-	);
+		expect(scopeOnOpen()).toEqual({ ...RAW_OPENING_QUERY, boot: "all" });
+		raw.publish(opened);
+		expect(scopeOnOpen()).toEqual(opened);
+		picked();
+		expect(scopeOnOpen()).toEqual({ ...opened, boot: "all" });
+		raw.publish(later);
+		expect(scopeOnOpen()).toEqual(later);
+	});
 });

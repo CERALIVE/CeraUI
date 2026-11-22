@@ -9,13 +9,13 @@ const exports = new WeakMap<Page, { promise: Promise<unknown>; resolve(value: un
 const exactAnchor = new WeakSet<Page>();
 const lowDisk = new WeakSet<Page>();
 const queries = new WeakMap<Page, LogQueryInput[]>();
-/** Holds a page's `logs.around` reply until the test releases it, then answers BUSY. */
 /** The newest listed event and the page's socket, so a test can push the next live event. */
 const newestEvent = new WeakMap<Page, { event: Record<string, unknown>; headSeq: number }>();
 const pushToPage = new WeakMap<Page, (message: string) => void>();
 const listReplies = new WeakMap<Page, PromiseWithResolvers<void>>();
 const replaceHistory = new WeakSet<Page>();
-const heldAround = new WeakMap<Page, { release: PromiseWithResolvers<void>; sent: number }>();
+/** Holds a page's `logs.around` reply until the test releases it, then answers BUSY, or the device's reply when `real`. */
+const heldAround = new WeakMap<Page, { release: PromiseWithResolvers<void>; sent: number; real?: boolean }>();
 
 /**
  * "View logs" beside a message that sends the operator to System Logs (mock
@@ -75,7 +75,7 @@ test.beforeEach(async ({ page, pageRpc }) => {
 			}
 			const held = heldAround.get(page);
 			if (held && typeof message === 'string' && aroundIds.has(JSON.parse(message).id)) {
-				const reply = JSON.stringify({ ...JSON.parse(message), result: { ok: false, error: 'BUSY' } });
+				const reply = held.real ? message : JSON.stringify({ ...JSON.parse(message), result: { ok: false, error: 'BUSY' } });
 				void held.release.promise.then(() => {
 					socket.send(reply);
 					pageRpc.acceptServerMessage(reply);
@@ -216,6 +216,34 @@ test('Export this view saves the Raw tab current levels and text after switching
 	await expect(exports.get(page)?.promise).resolves.toEqual({
 		filter: { sources: ['app'], levels: ['error', 'warning', 'info', 'debug'], text: marker },
 		boot: 'all', since: shown?.since,
+	});
+});
+
+test('Export keeps the scope it confirmed while the linked Raw view is still loading, and saves exactly that', async ({ page, pageRpc }) => {
+	const held = { release: Promise.withResolvers<void>(), sent: 0, real: true };
+	heldAround.set(page, held);
+	await emit(pageRpc, {
+		name: 'view-logs-late', type: 'error', msg: 'Stream failed',
+		key: 'notifications.streamStartInternalFailed',
+		is_dismissable: true, is_persistent: false, duration: 60,
+	});
+	await page.locator('[data-sonner-toast]').getByRole('button', { name: 'View logs' }).click();
+	const logs = page.getByRole('dialog', { name: 'System Logs' });
+	await expect.poll(() => held.sent).toBe(1);
+
+	await logs.getByRole('group', { name: 'Downloads' }).getByRole('button', { name: 'Export logs', exact: true }).click();
+	const confirm = page.getByRole('dialog', { name: 'Export this view' });
+	const scope = confirm.getByTestId('sharing-export-scope').locator('dt, dd');
+	const stated = ['Boots', 'All boots', 'Level', 'Info', 'Sources', 'All sources'];
+	await expect(scope).toHaveText(stated);
+	held.release.resolve();
+	await expect(logs.getByTestId('raw-anchor-approximate')).toBeVisible();
+
+	await expect(scope).toHaveText(stated);
+	await confirm.getByRole('button', { name: 'Download export' }).click();
+	await expect(exports.get(page)?.promise).resolves.toEqual({
+		filter: { sources: [], levels: ['error', 'warning', 'info'] },
+		boot: 'all',
 	});
 });
 

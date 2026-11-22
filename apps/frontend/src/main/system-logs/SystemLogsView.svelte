@@ -32,7 +32,7 @@ import * as Tabs from '$lib/components/ui/tabs';
 import { bootSelection } from '$lib/device-logs/boot-selection.svelte';
 import type { RawMoment } from '$lib/device-logs/raw-anchor';
 import type { AroundPage } from '$lib/device-logs/raw-view.svelte';
-import { selectionScope, startBackendDownload } from '$lib/device-logs/sharing';
+import { startBackendDownload } from '$lib/device-logs/sharing';
 import { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';
 import {
 	activeTab,
@@ -93,26 +93,15 @@ let view = $state<HTMLElement>();
 let tabList = $state<HTMLElement | null>(null);
 let storageHeading = $state<HTMLHeadingElement>();
 let checkRun = 0;
-// Export saves what Raw logs shows, and what it last showed after it closes, until the boot picker
-// is used outside it (or when Raw never opened): then Raw's filters with the picker's boots.
-let pickerScope = $state(true);
-const sharing = new SharingFlow({
-	logs: rpc.logs,
-	download: startBackendDownload,
-	scope: (view, span) => (span === 'moment' || current === 'raw' || !pickerScope ? view : selectionScope(view, bootSelection.boot)),
-});
-const stopPickerScope = bootSelection.onPick(() => {
-	if (current !== 'raw') pickerScope = true;
-});
+// Export follows Raw's last view or the boot picker, whichever the operator used last.
+const sharing = new SharingFlow({ logs: rpc.logs, download: startBackendDownload, picker: bootSelection });
 onDestroy(() => {
 	checkRun++;
-	stopPickerScope();
 	sharing.dispose();
 });
 // Where a sharing dialog returns focus when the control that opened it has left the page.
 let toolbarBundle = $state<HTMLElement | null>(null);
 let toolbarExport = $state<HTMLElement | null>(null);
-let failureBundle = $state<HTMLElement | null>(null);
 
 const tabs = $derived(shellTabs(wide.current));
 const current = $derived(activeTab(selected, tabs));
@@ -158,10 +147,6 @@ function selectTab(value: string): void {
 	momentUnknown = false;
 	around = undefined;
 }
-
-$effect(() => {
-	if (current === 'raw') pickerScope = false;
-});
 
 // Keep an approximate jump on its selected tab; an exact anchor focuses its row.
 $effect(() => {
@@ -221,7 +206,7 @@ $effect(() => {
 				<!-- Below 640 px each tab takes its label's width, so a long label (Spanish at 375 px) keeps to two lines,
 				     and the toolbar takes its own row above the tabs so their underline stays on the rule. The toolbar comes
 				     first in the DOM, so Tab still goes from the tabs straight into the panel; from 640 px it shows at the row's end. -->
-				<div class="flex flex-wrap items-end gap-x-3 border-b px-4" data-testid="system-logs-tabbar">
+				<div class="flex flex-wrap items-end gap-x-3 border-b px-4">
 					<SharingToolbar
 						bind:bundleButton={toolbarBundle}
 						bind:exportButton={toolbarExport}
@@ -306,7 +291,6 @@ $effect(() => {
 					</Button>
 					{#if copyLoaded}
 						<Button
-							bind:ref={failureBundle}
 							class="shrink-0 gap-1.5"
 							data-testid="system-logs-check-bundle"
 							data-variant="outline"
@@ -338,6 +322,5 @@ $effect(() => {
 	{/if}
 </div>
 
-<!-- Without the toolbar (the load failed) the band's Support bundle, which started the handoff, takes focus. -->
-<ExportDialog returnFocus={() => toolbarExport ?? failureBundle} {sharing} />
-<BundleDialog returnFocus={() => toolbarBundle ?? failureBundle} {sharing} />
+<ExportDialog returnFocus={() => toolbarExport} {sharing} />
+<BundleDialog returnFocus={() => toolbarBundle} {sharing} />

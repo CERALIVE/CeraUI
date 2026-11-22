@@ -33,22 +33,44 @@ export const RAW_OPENING_QUERY: LogQueryInput = {
 	boot: "current",
 };
 
+/** What one Export saves: fixed when its confirmation opens, stated there and sent as is. */
+export interface ExportScope {
+	readonly query: LogQueryInput;
+	readonly span: ExportSpan;
+	/** When the saved boot started, if it is the picker's boot; otherwise unknown. */
+	readonly bootStart: number | null;
+}
+
 /**
- * What Export saves outside Raw logs: Raw's filters with the boot picker's boots.
- * All boots keeps Raw's time window; a chosen boot replaces it, as it does in Raw.
+ * The operator's latest action decides what Export saves: Raw's view as it last
+ * published it (an exact moment included), unless the boot picker was used after
+ * it or Raw never published; then Raw's level, source and search filters with the
+ * picker's boots, which replace Raw's time window as they do in Raw.
  */
-export function selectionScope(
+export function captureExportScope(
 	view: LogQueryInput,
+	span: ExportSpan,
 	boot: LogBootInfo | null,
-): LogQueryInput {
-	if (boot === null) return { ...view, boot: "all" };
+	pickerLeads: boolean,
+): ExportScope {
+	if (!pickerLeads)
+		return Object.freeze({
+			query: Object.freeze({ ...view }),
+			span,
+			bootStart:
+				boot !== null && boot.bootId === view.boot ? boot.firstTs : null,
+		});
 	const { sources, levels, text } = view;
-	return {
-		sources,
-		levels,
-		text,
-		boot: boot.current ? "current" : boot.bootId,
-	};
+	return Object.freeze({
+		query: Object.freeze({
+			sources,
+			levels,
+			text,
+			boot: boot === null ? "all" : boot.current ? "current" : boot.bootId,
+		}),
+		span: "filters",
+		bootStart: boot?.firstTs ?? null,
+	});
 }
 
 export function exportInput(query: LogQueryInput): LogExportInput {
