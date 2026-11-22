@@ -374,11 +374,12 @@ separately-proven racer.
 another card and leaves the foreign-card gate unarmed. `isMeterSilencedByPick(asrc)`
 recognizes explicit `"No audio"` and idle `"Auto"` resolved to `no-capture-audio`,
 for example when HDMI-RX is still listed but has no capture PCM. The bridge emits
-the existing `mode_none` reason on entry and for each subsequent engine frame,
-including engine gaps. While streaming, a fresh idle Auto verdict does not silence
-the running program. Auto resolved to pipeline default still lets the engine choose;
-a concrete Auto card still uses the foreign-card gate. The schema and locale copy
-are unchanged.
+the existing `mode_none` reason on entry and for subsequent idle frames, including
+engine gaps. The Auto rule requires the `idle` lifecycle and no published live
+flag. A frame tagged `streaming` by the engine is exempt from the Auto rule even
+if it arrives before the control socket confirms the run. Auto resolved to pipeline
+default still lets the engine choose; a concrete Auto card still uses the foreign-card
+gate. The schema and locale copy are unchanged.
 
 ### …AND A SOURCE THAT BRINGS ITS OWN AUDIO HAS NO CARD TO METER [EXISTS]
 

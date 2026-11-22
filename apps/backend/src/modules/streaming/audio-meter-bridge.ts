@@ -113,7 +113,7 @@ export interface AudioMeterBridgeDeps {
 	 * Whether the selection is video-only: explicit "No audio" or idle Auto
 	 * with no capture audio. Neither may be shown as the engine's fallback card.
 	 */
-	meterSilenced: () => boolean;
+	meterSilenced: (programOwned?: boolean) => boolean;
 	/**
 	 * Whether a stream launch is currently acquiring the audio card. A launch
 	 * RELEASES the idle meter on purpose, so the level feed stopping is the
@@ -249,7 +249,8 @@ function defaultDeps(): AudioMeterBridgeDeps {
 		broadcast: (payload) => broadcastMsg("audio-level", payload),
 		meterPreference: () => resolveMeterPreference(getConfig().asrc),
 		meterPreferencePresent: () => isMeterPreferenceDevicePresent(),
-		meterSilenced: () => isMeterSilencedByPick(getConfig().asrc),
+		meterSilenced: (programOwned) =>
+			isMeterSilencedByPick(getConfig().asrc, programOwned),
 		launchInFlight: () => launchIsAcquiringAudio(getStreamLifecycleState()),
 		meterEmbedded: () => isMeterEmbeddedBySource(),
 		cardAliases: () => getAudioCardAliases(),
@@ -449,10 +450,10 @@ function projectLevel(
 	deps: AudioMeterBridgeDeps,
 ): AudioLevelMessage {
 	const message = toAudioLevelMessage(event);
-	if (getAudioMixActive() && message.source?.owner === "streaming")
-		return message;
+	const programOwned = message.source?.owner === "streaming";
+	if (getAudioMixActive() && programOwned) return message;
 	// A video-only selection outranks the engine's fallback card or gap reason.
-	if (deps.meterSilenced()) {
+	if (deps.meterSilenced(programOwned)) {
 		clearForeignCardRun();
 		return { unavailable: true, reason: "mode_none" };
 	}
@@ -462,7 +463,7 @@ function projectLevel(
 	// than a second lifecycle guess: a `streaming` level for this source IS the
 	// muxed track (cerastream meters `MeterMode::ProgramAudio` off the program
 	// leg), and suppressing it would kill the one reading the operator wants.
-	if (deps.meterEmbedded() && message.source?.owner !== "streaming") {
+	if (deps.meterEmbedded() && !programOwned) {
 		clearForeignCardRun();
 		return { unavailable: true, reason: "embedded_audio" };
 	}

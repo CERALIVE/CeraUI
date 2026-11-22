@@ -70,6 +70,7 @@ import {
 import { AUDIO_PROBE_TIMEOUT_MS } from "./constants.ts";
 import { reportActiveAudioSource } from "./lifecycle-indicators.ts";
 import { getEngineAudioDevices } from "./sources.ts";
+import { getStreamLifecycleState } from "./stream-lifecycle-status.ts";
 import { getIsStreaming } from "./streaming.ts";
 import { getStreamingProcesses } from "./streamloop/process-runner.ts";
 
@@ -195,9 +196,17 @@ export function resolveMeterPreference(
  */
 export function isMeterSilencedByPick(
 	asrc: string | undefined = getConfig().asrc,
+	programOwned = false,
 ): boolean {
 	if (asrc === NO_AUDIO_ID) return true;
-	if (asrc !== AUDIO_SOURCE_AUTO || getIsStreaming()) return false;
+	// The meter socket can report program audio before the control socket confirms live.
+	if (
+		asrc !== AUDIO_SOURCE_AUTO ||
+		programOwned ||
+		getStreamLifecycleState() !== "idle" ||
+		getIsStreaming()
+	)
+		return false;
 	try {
 		return resolveAutoAsrcFromLiveState().reason === "no-capture-audio";
 	} catch {

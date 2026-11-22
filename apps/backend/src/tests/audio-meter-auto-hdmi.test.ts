@@ -40,7 +40,6 @@ import {
 	isForeignCardLevel,
 	settleAudioMeterBridge,
 	stopAudioMeterBridge,
-	toAudioLevelMessage,
 } from "../modules/streaming/audio-meter-bridge.ts";
 import type { AutoAsrcResolution } from "../modules/streaming/auto-audio.ts";
 import { clearCapabilitiesCache } from "../modules/streaming/capabilities.ts";
@@ -52,6 +51,10 @@ import {
 	applyObservedEngineDevices,
 	resetEngineDeviceCache,
 } from "../modules/streaming/sources.ts";
+import {
+	getStreamLifecycleState,
+	seedStreamLifecycleState,
+} from "../modules/streaming/stream-lifecycle-status.ts";
 import { updateStatus } from "../modules/streaming/streaming.ts";
 import { setConfigProcedure } from "../rpc/procedures/streaming.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
@@ -273,7 +276,10 @@ describe("resolveMeterPreference — 'Auto' names the SAME card the start path w
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 
-function bridgeHarness(meterPreference?: () => string | null) {
+function bridgeHarness(
+	meterPreference?: () => string | null,
+	schemaVersion = "0.21.0",
+) {
 	let handler: EventHandler | undefined;
 	const broadcasts: AudioLevelMessage[] = [];
 	const reloads: unknown[] = [];
@@ -290,7 +296,7 @@ function bridgeHarness(meterPreference?: () => string | null) {
 		close: async () => {},
 		hello: {
 			protocol: "cerastream-ipc/1",
-			schema_version: "0.21.0",
+			schema_version: schemaVersion,
 			engine_version: "2026.9.8",
 		},
 		rawRequest: async (_method: string, params?: unknown) => {
@@ -329,15 +335,27 @@ function bridgeHarness(meterPreference?: () => string | null) {
 }
 
 /** The RØDE's real, moving level — ~49 % fill on both channels. */
-const foreignUsbLevel: Extract<EventParams, { type: "audio-level" }> = {
-	type: "audio-level",
-	seq: 7,
+const foreignUsbPayload = {
 	source: { identity: `card:${USB_CARD_ID}`, owner: "sidecar" },
 	channels: 2,
 	rms_db: [-30, -30.5],
 	peak_db: [-24, -24.5],
 	floor_db: -1e6,
-};
+} satisfies AudioLevelMessage;
+const foreignUsbLevel = {
+	type: "audio-level",
+	seq: 7,
+	...foreignUsbPayload,
+} satisfies EventParams;
+const hdmiProgramPayload = {
+	...foreignUsbPayload,
+	source: { identity: `card:${HDMI_CARD_ID}`, owner: "streaming" },
+} satisfies AudioLevelMessage;
+const hdmiProgramLevel = {
+	type: "audio-level",
+	seq: 8,
+	...hdmiProgramPayload,
+} satisfies EventParams;
 
 describe("audio-meter bridge — HDMI+Auto never draws another card's bars", () => {
 	let root: string | undefined;
@@ -522,6 +540,7 @@ describe("HDMI Auto meter — live source and audio inventory", () => {
 	let priorSource: string | undefined;
 	let priorAsrc: string | undefined;
 	let priorPipeline: string | undefined;
+	let priorLifecycle: ReturnType<typeof getStreamLifecycleState>;
 
 	beforeAll(async () => {
 		process.env.MOCK_MODE = "true";
@@ -532,6 +551,8 @@ describe("HDMI Auto meter — live source and audio inventory", () => {
 	});
 	beforeEach(async () => {
 		root = await scanBoardCards();
+		priorLifecycle = getStreamLifecycleState();
+		seedStreamLifecycleState("idle");
 		const config = getConfig();
 		priorSource = config.source;
 		priorAsrc = config.asrc;
@@ -549,6 +570,7 @@ describe("HDMI Auto meter — live source and audio inventory", () => {
 		config.pipeline = priorPipeline;
 		resetEngineDeviceCache();
 		updateStatus(false);
+		seedStreamLifecycleState(priorLifecycle);
 		if (root !== undefined) await rm(root, { recursive: true, force: true });
 		root = undefined;
 	});
@@ -581,15 +603,19 @@ describe("HDMI Auto meter — live source and audio inventory", () => {
 		await updateAudioDevices(root);
 		h.emit(foreignUsbLevel);
 
+		// An owner-tagged frame may arrive before control state catches up.
+		h.emit(hdmiProgramLevel);
+		h.emit(foreignUsbLevel);
+
 		const hdmiFloor = {
-			...foreignUsbLevel,
+			...foreignUsbPayload,
 			source: { identity: `card:${HDMI_CARD_ID}`, owner: "sidecar" },
 			rms_db: [-1e6, -1e6],
 			peak_db: [-1e6, -1e6],
-		} as const satisfies EventParams;
+		} satisfies AudioLevelMessage;
 		await mkdir(pcm);
 		await updateAudioDevices(root);
-		h.emit(hdmiFloor);
+		h.emit({ type: "audio-level", seq: 9, ...hdmiFloor });
 
 		// An unlisted HDMI card is a different Auto verdict: pipeline default.
 		await rm(join(root, "card3"), { recursive: true });
@@ -601,38 +627,46 @@ describe("HDMI Auto meter — live source and audio inventory", () => {
 			{ unavailable: true, reason: "mode_none" }, // capture PCM removed
 			{ unavailable: true, reason: "mode_none" }, // unrelated level suppressed
 			{ unavailable: true, reason: "mode_none" }, // no extra edge for unchanged scan
+			hdmiProgramPayload,
+			{ unavailable: true, reason: "mode_none" }, // program ownership is per frame
 			{ unavailable: true, reason: "handoff" }, // capture PCM restored
-			toAudioLevelMessage(hdmiFloor),
+			hdmiFloor,
 			{ unavailable: true, reason: "handoff" }, // HDMI card unlisted
-			toAudioLevelMessage(foreignUsbLevel),
+			foreignUsbPayload,
 		]);
 	});
 
-	test("a running HDMI program keeps its level after the idle capture verdict changes", async () => {
-		if (root === undefined) throw new Error("missing ALSA fixture");
-		applyObservedEngineDevices([videoDevice("video0", "hdmi")]);
-		getConfig().source = "video0";
-		const pcm = join(root, "card3", "pcmC3D0c");
-		await mkdir(pcm);
-		await updateAudioDevices(root);
-		const h = bridgeHarness();
-		initAudioMeterBridge(h.deps);
-		await settleAudioMeterBridge();
-		updateStatus(true);
+	test.each([
+		["starting", false, "0.21.0"],
+		["starting", false, SCHEMA_VERSION],
+		["streaming", true, "0.21.0"],
+		["stopping", false, "0.21.0"],
+		["reconciling", false, "0.21.0"],
+	] as const)(
+		"an HDMI program keeps its level during %s (published live: %s, schema: %s)",
+		async (lifecycle, publishedLive, schemaVersion) => {
+			if (root === undefined) throw new Error("missing ALSA fixture");
+			applyObservedEngineDevices([videoDevice("video0", "hdmi")]);
+			getConfig().source = "video0";
+			const pcm = join(root, "card3", "pcmC3D0c");
+			await mkdir(pcm);
+			await updateAudioDevices(root);
+			const h = bridgeHarness(undefined, schemaVersion);
+			initAudioMeterBridge(h.deps);
+			await settleAudioMeterBridge();
+			seedStreamLifecycleState(lifecycle);
+			updateStatus(publishedLive);
 
-		await rm(pcm, { recursive: true });
-		await updateAudioDevices(root);
-		const programLevel = {
-			...foreignUsbLevel,
-			source: { identity: `card:${HDMI_CARD_ID}`, owner: "streaming" },
-		} as const satisfies EventParams;
-		h.emit(programLevel);
+			await rm(pcm, { recursive: true });
+			await updateAudioDevices(root);
+			h.emit(hdmiProgramLevel);
 
-		expect(h.broadcasts).toEqual([
-			{ unavailable: true, reason: "handoff" },
-			toAudioLevelMessage(programLevel),
-		]);
-	});
+			expect(h.broadcasts).toEqual([
+				{ unavailable: true, reason: "handoff" },
+				hdmiProgramPayload,
+			]);
+		},
+	);
 
 	test("a source-only save re-pushes the newly-resolved meter device", async () => {
 		if (root === undefined) throw new Error("missing ALSA fixture");
