@@ -390,6 +390,14 @@ export function notificationExists(name: string, nowMs: number = getms()) {
 	return undefined;
 }
 
+export function hasLiveNotificationForDismissal(key: string): boolean {
+	const now = getms();
+	for (const [name, notification] of persistentNotifications)
+		if (notification.dismissalKey === key && notificationExists(name, now))
+			return true;
+	return false;
+}
+
 export function getPersistentNotifications(
 	isAuthed = false,
 	nowMs: number = getms(),

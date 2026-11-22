@@ -186,7 +186,7 @@ import {
 } from "./os-staged-receipt-retirement.ts";
 import { settleOsUnlaunchedWitness } from "./os-unlaunched-adapter.ts";
 import {
-	recordPackageOffer,
+	preparePackageAnnouncement,
 	runScheduledPackageCheck,
 } from "./package-offer-notice.ts";
 import { progressFromWire } from "./package-progress.ts";
@@ -1219,11 +1219,19 @@ async function runPackageCheckCycle(): Promise<void> {
 	packageCheckDeferral = null;
 	const now = deps.now();
 	dispatch({ type: "PACKAGE_CHECK_STARTED", now });
-	const observed: { offer?: Parameters<typeof recordPackageOffer>[0] } = {};
+	const observed: {
+		announcement?: ReturnType<typeof preparePackageAnnouncement>;
+	} = {};
 	const error =
 		(await readCapabilityRegime()) !== null
-			? await deps.runPackageCheck((offer) => {
-					observed.offer = offer;
+			? await deps.runPackageCheck(async (identity, proof) => {
+					const wire = deps.getPackageInstallWireState();
+					if (wire.kind === "available" && (wire.actionable_count ?? 0) > 0)
+						observed.announcement = preparePackageAnnouncement(
+							wire,
+							identity,
+							proof,
+						);
 				})
 			: "discovery_failed";
 	const outcomeNow = deps.now();
@@ -1237,31 +1245,8 @@ async function runPackageCheckCycle(): Promise<void> {
 					item.version ? [{ name: item.name, version: item.version }] : [],
 				) ?? [],
 			);
-			if (actionableCount > 0) {
-				const exact = observed.offer;
-				const id =
-					exact?.length === actionableCount &&
-					exact.every(({ name, version }) =>
-						wire.packages?.some(
-							(row) =>
-								row.actionable &&
-								row.name === name &&
-								(row.version === undefined || row.version === version),
-						),
-					)
-						? recordPackageOffer(exact)
-						: undefined;
-				notifyUpdate({
-					kind: "updates-available",
-					id:
-						id ??
-						wire.packages
-							?.map((item) => `${item.name}=${item.version ?? "unknown"}`)
-							.sort()
-							.join(",") ??
-						wire.identity.version,
-				});
-			}
+			if (actionableCount > 0)
+				(observed.announcement ?? preparePackageAnnouncement(wire))();
 		}
 		const nextAttemptAt =
 			outcomeNow +

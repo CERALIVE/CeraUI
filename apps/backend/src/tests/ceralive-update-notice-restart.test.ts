@@ -186,7 +186,7 @@ class Backend {
 					...(step.canonicalScheduler
 						? {
 								CERALIVE_TEST_BASELINE:
-									"665994c52f4580f2319d7cb7422d46b0eca396f2",
+									"3df836a8b910d38b7e5d4a6cae8ef8ba17b6e742",
 							}
 						: {}),
 					PORT: "0",
@@ -552,20 +552,25 @@ const canonicalNoticeId = (capable: boolean, rows: readonly AptPackage[]) =>
 		)
 		.sort()
 		.join(",");
-const exactNoticeId = (rows: readonly AptPackage[]) =>
-	`${noticePrefix}packages:${createHash("sha256")
+const exactNoticeId = (
+	rows: readonly AptPackage[],
+	display = rows,
+	capable = false,
+) => {
+	const vector = rows
+		.map(({ name, arch = "arm64", candidate, planned }) => [
+			name,
+			arch,
+			planned ?? candidate,
+		])
+		.sort(([a = ""], [b = ""]) => (a < b ? -1 : a > b ? 1 : 0));
+	const key = canonicalNoticeId(capable, display).slice(noticePrefix.length);
+	return `${noticePrefix}packages:${createHash("sha256")
 		.update(
-			JSON.stringify(
-				rows
-					.map(({ name, arch = "arm64", candidate, planned }) => [
-						name,
-						arch,
-						planned ?? candidate,
-					])
-					.sort(([a = ""], [b = ""]) => (a < b ? -1 : a > b ? 1 : 0)),
-			),
+			JSON.stringify(display.length === rows.length ? vector : [key, vector]),
 		)
 		.digest("hex")}`;
+};
 
 for (const capable of [false, true]) {
 	const image = capable ? "capable Debian" : "legacy roster";
@@ -731,7 +736,7 @@ for (const capable of [false, true]) {
 				expect(baseline).toEqual(
 					row.offered.length > 0 ? [[mainId], [mainId]] : [[], []],
 				);
-				const exactId = exactNoticeId(row.offered);
+				const exactId = exactNoticeId(row.offered, row.canonicalRows, capable);
 				const revised = await check(false);
 				expect(
 					revised.map((ids) => ids.map((id) => (id === exactId ? mainId : id))),
@@ -781,6 +786,118 @@ for (const capable of [false, true]) {
 				}
 			},
 			budget(1),
+		);
+	}
+
+	test(
+		`scheduled package notice matches main when receipt evidence changes for the same offer (${image})`,
+		async () => {
+			const pending = { upgradable: [independent] };
+			const detachedRefresh = REFRESH.replace(
+				"Hit:1 https://deb.debian.org/debian-security trixie-security InRelease",
+				"Ign:1 https://deb.debian.org/debian-security trixie-security InRelease\nHit:3 https://deb.debian.org/debian-security trixie-security Release",
+			);
+			const run = async (canonicalScheduler: boolean) => {
+				const backend = await Backend.start({
+					capable,
+					apt: pending,
+					canonicalScheduler,
+				});
+				const opened = scheduledTabs();
+				await reconnect(backend, opened);
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				const original = scheduledNames(opened);
+				expect(original.map((ids) => ids.length)).toEqual([1, 1]);
+				await backend.setApt({
+					...pending,
+					refresh: { stdout: detachedRefresh },
+				});
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				expect(scheduledNames(opened)).toEqual(original);
+				expect(removals(opened)).toEqual([0, 0]);
+				await backend.close();
+				await Promise.all(opened.map((tab) => tab.dropped()));
+			};
+			await run(true);
+			await run(false);
+		},
+		budget(2),
+	);
+
+	if (!capable) {
+		test(
+			"scheduled package notice matches main after the optional legacy size estimate fails",
+			async () => {
+				for (const canonicalScheduler of [true, false]) {
+					const backend = await Backend.start({
+						capable,
+						apt: { upgradable: [packageOffer] },
+						canonicalScheduler,
+					});
+					const opened = scheduledTabs();
+					await reconnect(backend, opened);
+					await backend.check();
+					await sync(opened);
+					expect(scheduledNames(opened)).toEqual([[], []]);
+					await backend.setApt({
+						...installed,
+						keptBack: [unrelated],
+						fallback: {
+							exitCode: 100,
+							stdout: "",
+							stderr: "E: size unavailable\n",
+						},
+					});
+					await backend.scheduledPackageCheck();
+					await sync(opened);
+					const original = canonicalNoticeId(false, [packageOffer]);
+					expect(scheduledNames(opened)).toEqual([[original], [original]]);
+					expect(removals(opened)).toEqual([0, 0]);
+					await backend.close();
+					await Promise.all(opened.map((tab) => tab.dropped()));
+				}
+			},
+			budget(2),
+		);
+
+		test(
+			"scheduled package notice matches main when only the legacy display rows change",
+			async () => {
+				const pending = { upgradable: [independent] };
+				for (const canonicalScheduler of [true, false]) {
+					const backend = await Backend.start({
+						capable,
+						apt: pending,
+						canonicalScheduler,
+					});
+					const opened = scheduledTabs();
+					await reconnect(backend, opened);
+					await backend.scheduledPackageCheck();
+					await sync(opened);
+					const original = scheduledNames(opened);
+					expect(original.map((ids) => ids.length)).toEqual([1, 1]);
+					await backend.setApt({
+						...pending,
+						keptBack: [unrelated],
+						holds: [unrelated.name],
+					});
+					await backend.scheduledPackageCheck();
+					await sync(opened);
+					const after = scheduledNames(opened);
+					expect(after.map((ids) => ids.length)).toEqual([2, 2]);
+					expect(
+						after.map((ids, index) =>
+							ids.filter((id) => original[index]?.includes(id)),
+						),
+					).toEqual(original);
+					expect(removals(opened)).toEqual([0, 0]);
+					await backend.close();
+					await Promise.all(opened.map((tab) => tab.dropped()));
+				}
+			},
+			budget(2),
 		);
 	}
 
@@ -962,6 +1079,42 @@ for (const capable of [false, true]) {
 	);
 
 	test(
+		`scheduled package notice keeps both versions when a later proof sees their shared package held (${image})`,
+		async () => {
+			const backend = await Backend.start({ capable, apt: pending("1", "2") });
+			const opened = scheduledTabs();
+			await reconnect(backend, opened);
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			await backend.setApt(pending("2", "3"));
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			const offered = scheduledNames(opened);
+			expect(offered[0]).toHaveLength(2);
+			expect(offered[1]).toEqual(offered[0]);
+
+			await backend.setApt(settled("3"));
+			await backend.pausePackageCompare();
+			await backend.startCheckAndWaitForCapturedCompare();
+			try {
+				await backend.setApt({ ...settled("3"), holds: ["cerastream"] });
+			} finally {
+				await backend.resumePackageCompare();
+			}
+			await sync(opened);
+			expect(scheduledNames(opened)).toEqual(offered);
+			expect(removals(opened)).toEqual([0, 0]);
+
+			await backend.setApt(settled("3"));
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			expect(scheduledNames(opened)).toEqual([[], []]);
+			expect(removals(opened)).toEqual([2, 2]);
+		},
+		budget(1),
+	);
+
+	test(
 		`scheduled package notice survives uncertain checks and reconnects, then clears on exact installed proof (${capable ? "capable Debian" : "legacy roster"})`,
 		async () => {
 			const pkg: AptPackage = capable
@@ -1035,7 +1188,7 @@ for (const capable of [false, true]) {
 						upgradable: [other],
 						keptBack: [pkg],
 					},
-					capable ? [] : [exactNoticeId([other])],
+					capable ? [] : [exactNoticeId([other], [other, pkg])],
 				],
 				[
 					"held even with the candidate configured",

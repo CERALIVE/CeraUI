@@ -2,6 +2,7 @@ import type { EventCode } from "@ceraui/rpc/events";
 import { logger } from "../../../helpers/logger.ts";
 import { emitEvent } from "../../events/emit.ts";
 import {
+	hasLiveNotificationForDismissal,
 	type NotificationOptions,
 	notificationExists,
 	notificationRemove,
@@ -189,7 +190,9 @@ const eventCodes = {
 /** Stable identity = event kind + exact transaction/version/unit; a retry is silent. */
 export function notifyUpdate(
 	event: UpdateNotice,
-	options: Pick<NotificationOptions, "beforeDismiss" | "onDismiss"> = {},
+	options: Pick<NotificationOptions, "beforeDismiss" | "onDismiss"> & {
+		readonly deliveryId?: string;
+	} = {},
 ): boolean {
 	// History is independent of whether the operator has seen or dismissed the notice.
 	try {
@@ -214,8 +217,15 @@ export function notifyUpdate(
 	} catch {
 		// Event history must not interrupt notification publication.
 	}
-	const name = `update:${event.kind}:${event.id}`;
-	if (notificationExists(name)) return false;
+	const { deliveryId = event.id, ...hooks } = options;
+	const name = `update:${event.kind}:${deliveryId}`;
+	const dismissalKey = `update:${event.kind}:${event.id}`;
+	if (
+		notificationExists(name) ||
+		(options.deliveryId !== undefined &&
+			hasLiveNotificationForDismissal(dismissalKey))
+	)
+		return false;
 	const notice = notices[event.kind];
 	const params: Record<string, string | number> = {};
 	switch (event.kind) {
@@ -280,14 +290,14 @@ export function notifyUpdate(
 			notice.key,
 			params,
 			{
-				...options,
+				...hooks,
 				action: {
 					schema: 1,
 					kind: "navigate",
 					target: "updates-dialog",
 					labelKey: "notifications.openUpdates",
 				},
-				dismissalKey: name,
+				dismissalKey,
 			},
 		) === true
 	);

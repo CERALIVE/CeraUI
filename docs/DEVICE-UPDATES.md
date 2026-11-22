@@ -1554,18 +1554,18 @@ The orchestrator's package `updates-available` notice has two paths, separate
 from the OS notice with the same wording:
 
 - **Announce:** the same available/actionable result that raises the notice
-  on main raises it here, regardless of a prior offer, the proof gates below,
-  or the state of the receipt file. Capable and legacy install admission
-  still decide the actionable set. If the same check also supplies an exact
-  actionable vector and can record it, the notice and dismissal key use its
-  `(name, architecture, version)` digest. Otherwise the canonical key shows
-  the notice without giving it an automatic withdrawal receipt. Neither case
-  changes the copy or wire payload.
+  on main raises it here. The complete display set controls deduplication and
+  dismissal, including informational rows. The legacy exception is that a
+  known new candidate version gets a distinct notice and dismissal, even if
+  the displayed package names are unchanged. Neither proof qualification nor
+  receipt storage changes those decisions. When the check can identify exact
+  instances, the wire name includes their `(name, architecture, version)`
+  digest so a withdrawal can address that copy. Copy and frame shape are unchanged.
 - **Withdraw:** require a conclusive check with no actionable packages, a
   recorded exact offer, and `system.updateOutcome`'s exact-instance Debian
   version readback. Every member must be configured at or above the offered
-  version and must not be held, including a hold (`hi `) observed by dpkg at
-  the later read after `apt-mark`. The outcome RPC's own configured-held
+  version and must not be held. A later dpkg read of a held instance (`hi `)
+  also invalidates earlier overlapping proofs in that withdrawal batch. The outcome RPC's own configured-held
   semantics are unchanged. A scoped hold or kept-back member protects that
   offer only; it does not prevent an independent announcement. On legacy, a
   kept-back-only check uses the original discovery rather than the optional
@@ -1583,9 +1583,9 @@ an announcement can carry an exact receipt, never whether to announce):
 | Removals and downgrades | Capable install admission rejects removals/purges; the scheduled notice does not infer a usable plan from that refusal. The accepted summary grammar does not establish downgrade plans as safe upgrade evidence. Legacy accounts for list counts and refuses unmodeled members of the Install roster, including removals or downgrades; named removals outside that roster do not themselves veto a well-formed plan. |
 
 The bounded `scheduled_package_offers.json` file next to the first-party
-record carries offered vectors, not proof or removals. If unreadable, unwritable
-or full (32 offers / 256 KiB), new notices still appear with the canonical
-key, but there is no new receipt. Retractions go live in typed and bare-name formats
+record carries issued notice IDs and their offered vectors, not proof or
+removals. If unreadable, unwritable or full (32 offers / 256 KiB), new notices
+still appear, but there is no new receipt. Retractions go live in typed and bare-name formats
 only to sessions already authenticated at the start of the check and still in
 that session at delivery. The notice issuance is checked again before removing
 it. If a session authenticated during the check, the offer remains on disk for

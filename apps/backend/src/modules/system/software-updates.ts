@@ -77,6 +77,7 @@ import {
 	deriveVerdict,
 	probeAptReachability,
 } from "./apt-reachability.ts";
+import { APT_SIMULATION_VERSION_RE } from "./apt-simulation-row.ts";
 import {
 	defaultAptSpaceDeps,
 	preflightAptSpace,
@@ -96,9 +97,12 @@ import {
 	normalizeAptCommandFailure,
 } from "./apt-transport-result.ts";
 import {
+	type AptRun,
+	candidateArch,
 	capableOffer,
 	hasOnePlanSummary,
 	legacyOffer,
+	type OfferedPackage,
 	type PackageOfferEvidence,
 	type ReportPackageOffer,
 	readPackageHolds,
@@ -181,6 +185,14 @@ export type { SoftUpdateStatus } from "./apt-progress.ts";
 let softUpdateStatus: SoftUpdateStatus | null = null;
 let aptGetUpdating = false;
 let aptDiscoveryRunning = false;
+type PackageNoticeIdentity = {
+	readonly versions?: readonly {
+		readonly name: string;
+		readonly version: string;
+	}[];
+	readonly targets?: readonly OfferedPackage[];
+};
+let packageNoticeIdentity: PackageNoticeIdentity = {};
 let aptGetUpdateFailures = 0;
 let aptHeldBackPackages: string | undefined;
 let actionableAppPackages: string[] = [];
@@ -350,6 +362,7 @@ export function isUpdating() {
 // and the last terminal outcome so a suite that leaves an update mid-flight
 // cannot refuse the next test's start with `already_updating`.
 export function resetSoftwareUpdateState(): void {
+	packageNoticeIdentity = {};
 	if (delayedSoftwareUpdateStart) clearTimeout(delayedSoftwareUpdateStart);
 	if (softwareUpdateRecoveryRetryTimer) {
 		clearTimeout(softwareUpdateRecoveryRetryTimer);
@@ -666,6 +679,16 @@ async function getCapableUpdateSize(
 		aptAllRefusal = null;
 		actionableAllPackages = result.actionable;
 		discoveredPackages = result.packages;
+		const instances = admittedTargets(simulation.stdout);
+		const targets = instances
+			?.filter(({ name, version }) =>
+				result.actionable.some(
+					(row) => row.name === name && row.version === version,
+				),
+			)
+			.map(({ name, arch, version }) => ({ name, arch, version }));
+		packageNoticeIdentity =
+			targets?.length === result.actionable.length ? { targets } : {};
 		const packageNames = result.packages.map((item) => item.name);
 		availableIdentity =
 			packageNames.length > 0
@@ -967,6 +990,7 @@ async function getSoftwareUpdateSize(
 	}
 	let res = parsedSummary.value;
 	let fromHeldBack = false;
+	let fallbackFailed = false;
 
 	if (res.upgradeCount === 0) {
 		const heldBackPackages = parseAptPackageList(
@@ -989,6 +1013,7 @@ async function getSoftwareUpdateSize(
 			if (!fallback.ok) {
 				logParseError(fallback);
 				failCurrentCheck("discovery_failed");
+				fallbackFailed = true;
 			} else {
 				res = fallback.value;
 			}
@@ -1006,23 +1031,36 @@ async function getSoftwareUpdateSize(
 		parseKeptBackPackageNames(upgrade.stdout),
 	);
 	const actionable = actionableAppNames(discovered);
-	// A failed estimate cannot preserve the previous check's actionable rows.
-	discoveredPackages = discovered;
-	actionableAppPackages = actionable;
-	availableIdentity =
-		res.upgradeCount > 0
-			? deriveUpdateIdentity(res.packages, res.upgradeCount, res.downloadSize)
-			: null;
-	availableUpdates = {
-		package_count: res.upgradeCount,
-		...(res.downloadSize !== undefined
-			? { download_size: res.downloadSize }
-			: {}),
+	const answers = new Map<string, ReturnType<AptRun>>();
+	const run: AptRun = (argv) => {
+		const key = JSON.stringify(argv);
+		const previous = answers.get(key);
+		if (previous) return previous;
+		const answer = runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS);
+		answers.set(key, answer);
+		return answer;
 	};
-	broadcastMsg("status", {
-		available_updates: availableUpdates,
-		update_state: getUpdateState(),
-	});
+	if (!fallbackFailed) {
+		discoveredPackages = discovered;
+		actionableAppPackages = actionable;
+		availableIdentity =
+			res.upgradeCount > 0
+				? deriveUpdateIdentity(res.packages, res.upgradeCount, res.downloadSize)
+				: null;
+		availableUpdates = {
+			package_count: res.upgradeCount,
+			...(res.downloadSize !== undefined
+				? { download_size: res.downloadSize }
+				: {}),
+		};
+		packageNoticeIdentity = reportPackageOffer
+			? await readLegacyNoticeIdentity(actionable, run)
+			: {};
+		broadcastMsg("status", {
+			available_updates: availableUpdates,
+			update_state: getUpdateState(),
+		});
+	}
 	// The scheduled notice uses the original plan; the later size probe for
 	// kept-back packages is not evidence of what Install would take.
 	const planned = listedPackages(upgrade.stdout);
@@ -1040,7 +1078,7 @@ async function getSoftwareUpdateSize(
 			planned: [...planned, ...untaken],
 			keptBack: keptBackNames(upgrade.stdout),
 			refresh,
-			run: (argv: string[]) => runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
+			run,
 		};
 		const offer = await legacyOffer(
 			check,
@@ -1052,6 +1090,40 @@ async function getSoftwareUpdateSize(
 	}
 
 	return null;
+}
+
+async function readLegacyNoticeIdentity(
+	names: readonly string[],
+	run: AptRun,
+): Promise<PackageNoticeIdentity> {
+	const versions: { name: string; version: string }[] = [];
+	const targets: OfferedPackage[] = [];
+	for (const name of names) {
+		const policy = await run(["/usr/bin/apt-cache", "policy", name]);
+		const version = /^\s*Candidate:\s*(\S+)/m.exec(policy.stdout)?.[1];
+		if (
+			policy.exitCode !== 0 ||
+			!version ||
+			!APT_SIMULATION_VERSION_RE.test(version)
+		)
+			return {};
+		versions.push({ name, version });
+		const record = await run([
+			"/usr/bin/apt-cache",
+			"show",
+			"--no-all-versions",
+			name,
+		]);
+		const arch =
+			record.exitCode === 0
+				? candidateArch(record.stdout, name, version)
+				: undefined;
+		if (arch) targets.push({ name, version, arch });
+	}
+	return {
+		versions,
+		...(targets.length === names.length ? { targets } : {}),
+	};
 }
 
 async function readPackageCapabilities(): Promise<UpdateCapabilities | null> {
@@ -1300,7 +1372,8 @@ export function resetSoftwareUpdateSizeRunner(): void {
 
 // Orchestrator checks own a full cycle, not discovery against previously fetched lists.
 type ObservePackageOffer = (
-	evidence: PackageOfferEvidence,
+	identity: PackageNoticeIdentity,
+	evidence: PackageOfferEvidence | undefined,
 	run: typeof spawnWithTimeout,
 ) => Promise<void>;
 
@@ -1380,13 +1453,12 @@ export async function runUpdateDiscoveryAndReport(
 				return "discovery_failed";
 			},
 		);
-		if (
-			discovery === null &&
-			observePackageOffer &&
-			evidence.packages &&
-			!network.aborted()
-		)
-			await observePackageOffer(evidence.packages, aptCommandRunner);
+		if (discovery === null && observePackageOffer && !network.aborted())
+			await observePackageOffer(
+				packageNoticeIdentity,
+				evidence.packages,
+				aptCommandRunner,
+			);
 		return discovery;
 	} catch (error) {
 		if (error instanceof PendingPackageSuccessError) return "discovery_failed";

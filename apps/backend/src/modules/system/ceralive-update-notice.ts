@@ -356,7 +356,7 @@ export async function legacyOffer(
 }
 
 // The architecture of the candidate's one package record; anything else is no answer.
-function candidateArch(
+export function candidateArch(
 	record: string,
 	name: string,
 	candidate: string,

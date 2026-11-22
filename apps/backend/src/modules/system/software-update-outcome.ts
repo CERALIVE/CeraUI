@@ -97,9 +97,11 @@ export async function targetsAttained(
 		now,
 		deadline = now() + UPDATE_OUTCOME_DEADLINE_MS,
 		requireUnheld = false,
+		onHeldInstance,
 	}: Pick<UpdateOutcomeDeps, "run" | "now"> & {
 		readonly deadline?: number;
 		readonly requireUnheld?: boolean;
+		readonly onHeldInstance?: (name: string, arch: string) => void;
 	},
 ): Promise<boolean> {
 	if (targets.length === 0) return false;
@@ -127,6 +129,10 @@ export async function targetsAttained(
 		)
 			return false;
 		rows.push({ name, arch, status, version });
+	}
+	if (onHeldInstance) {
+		for (const row of rows)
+			if (row.status.startsWith("h")) onHeldInstance(row.name, row.arch);
 	}
 	for (const target of targets) {
 		// Only the admitted instance counts: another architecture's is not it.
