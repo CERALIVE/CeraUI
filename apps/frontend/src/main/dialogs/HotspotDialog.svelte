@@ -72,7 +72,9 @@ import HotspotActivationConfirm from '$main/network/HotspotActivationConfirm.sve
 import WifiModeBadge from '$main/network/WifiModeBadge.svelte';
 import WifiModeSelector from '$main/network/WifiModeSelector.svelte';
 import {
+	actionableWifiModeConsequence,
 	deriveWifiAdapterModeView,
+	type WifiModeConfirmation,
 	wifiModeTarget,
 } from '$main/network/wifi-adapter-mode-view';
 import { withWifiEntryRetry } from '$main/network/wifi-entry-request';
@@ -179,6 +181,32 @@ $effect(() => {
 let toggleTarget = $state<'hotspot' | 'station' | null>(null);
 // The credential gate is open; the start is dispatched only from its confirm.
 let confirmingStart = $state(false);
+let confirmingMode = $state<WifiModeConfirmation>();
+let modePanel = $state<HTMLDivElement>();
+let toggleButton = $state<HTMLButtonElement | null>(null);
+let focusRecoveredStart = $state(false);
+const modeContext = $derived({
+	stationLinkLive: modeView?.displayMode !== 'hotspot' && Boolean(iface?.conn),
+	hotspotLive: isActive,
+});
+const modeOwnsConsent = $derived(Boolean(modeView && confirmingMode &&
+	(confirmingMode.kind === 'credentials' ||
+		actionableWifiModeConsequence(modeView, confirmingMode.mode, modeContext, toggling))));
+
+function enableHasFocus() {
+	return !isActive && toggleButton !== null && document.activeElement === toggleButton;
+}
+
+function reopenStartGate(unsupported = false) {
+	if (confirmingStart || modeOwnsConsent || isActive) return;
+	const focused = document.activeElement;
+	focusRecoveredStart = enableHasFocus() || (focused instanceof HTMLButtonElement &&
+		modePanel?.contains(focused) === true && focused.getAttribute('role') === 'radio' &&
+		focused.dataset.mode !== 'station');
+	if (unsupported) bindingUnsupported = true;
+	ownerSession += 1;
+	confirmingStart = true;
+}
 
 // ── Form state (synced once from props; user edits are never clobbered) ──
 let name = $state('');
@@ -207,6 +235,7 @@ let prevActive = false;
 $effect.pre(() => {
 	const opened = open;
 	const active = isActive;
+	const hasModeView = modeView !== undefined;
 	const next = { device: radioDevice, incarnation: radioToken, link: getLinkEpoch() };
 	radioReason;
 	untrack(() => {
@@ -220,6 +249,7 @@ $effect.pre(() => {
 			formBinding.link !== next.link
 		);
 		if (opened !== prevOpen || changed) ownerSession += 1;
+		if (!opened || !prevOpen || !hasModeView) confirmingMode = undefined;
 		if (opened && !prevOpen) confirmingStart = false;
 		if (opened && active) confirmingStart = false;
 		if (opened && ((!prevOpen) || (active && !prevActive) || changed)) {
@@ -317,15 +347,16 @@ $effect(() => {
 async function handleSave() {
 	const original = formBinding;
 	if (!isFormValid || configuring || !canEdit || !original?.incarnation) return;
-	let binding = original;
 	const controller = beginAdmission(original);
 	const input = {
-		device: binding.device, incarnation: binding.incarnation, name, password, channel,
+		device: original.device, name, password, channel,
 		...(security !== undefined ? { security } : {}),
 	};
-	configAdmissionKey = wifiHotspotConfigOpKey(binding.device, binding.incarnation);
+	const key = wifiHotspotConfigOpKey(original.device, original.incarnation);
+	configAdmissionKey = key;
+	let replaced = false;
 	await osCommand({
-		key: wifiHotspotConfigOpKey(binding.device, binding.incarnation),
+		key,
 		classify: classifyWifiMutation,
 		rpc: async (handoff) => {
 			const result = await withWifiEntryRetry(original,
@@ -337,21 +368,18 @@ async function handleSave() {
 				{
 					signal: controller.signal,
 					current: () => ownsAdmission(original),
-					rebind: (incarnation) => {
-						binding = { ...capture(), incarnation };
-						const next = wifiHotspotConfigOpKey(original.device, incarnation);
-						if (!handoff(next)) return false;
-						configAdmissionKey = next;
-						return true;
-					},
+					currentToken: () => radioToken,
+					canRetry: () => current(original) && handoff(key),
+					onReplacement: () => { replaced = handoff(key); },
 				},
 			);
 			if (!result && !controller.signal.aborted && ownsAdmission(original)) bindingUnsupported = true;
 			return result ?? { success: false, error: 'binding-required' };
 		},
-		isCurrent: () => current(binding) && admission === controller && !controller.signal.aborted,
+		isCurrent: () => admission === controller && !controller.signal.aborted &&
+			(current(original) || (replaced && ownsAdmission(original))),
 		onResult: (result) => {
-			if (wifiRadioChanged(result) && current(binding)) {
+			if (wifiRadioChanged(result) && current(original)) {
 				radioNotice = true;
 				formBinding = capture();
 				reloadForm();
@@ -385,10 +413,11 @@ async function handleToggle() {
 			failMessage: () => m["network.os.operationFailed"](),
 			busyMessage: () => m["network.os.deviceBusy"](),
 		});
-	} else {
+	} else if (!modeOwnsConsent) {
 		bindingUnsupported = false;
 		ownerSession += 1;
 		startRefused = undefined;
+		focusRecoveredStart = false;
 		confirmingStart = true;
 	}
 }
@@ -396,18 +425,20 @@ async function handleToggle() {
 async function startConfirmed(incarnation: string) {
 	const original = capture();
 	if (incarnation !== original.incarnation || radioReason) return;
-	let binding = original;
+	startRefused = undefined;
 	const controller = beginAdmission(original);
+	const key = wifiHotspotOpKey(original.device, incarnation);
 	let correlated = false;
+	let replaced = false;
 	const ownsStart = () => admission === controller && !controller.signal.aborted && ownsAdmission(original);
 	confirmingStart = false;
 	toggleTarget = 'hotspot';
 	await osCommand({
-		key: toggleKey,
+		key,
 		target: 'hotspot',
 		classify: classifyWifiMutation,
 		rpc: async (handoff) => {
-			startAdmission = { key: toggleKey, controller };
+			startAdmission = { key, controller };
 			const result = await withWifiEntryRetry(original,
 				(token) => withWifiStartReceipt(original.device,
 					(attempt) => rpc.wifi.hotspotStart({ device: original.device, incarnation: token, attempt }),
@@ -416,29 +447,20 @@ async function startConfirmed(incarnation: string) {
 				{
 					signal: controller.signal,
 					current: ownsStart,
-					rebind: (token) => {
-						binding = { ...capture(), incarnation: token };
-						const key = wifiHotspotOpKey(original.device, token);
-						if (!handoff(key)) return false;
-						startAdmission = { key, controller };
-						return true;
-					},
+					currentToken: () => radioToken,
+					canRetry: () => current(original) && handoff(key),
+					onReplacement: () => { replaced = handoff(key); },
 				},
 			);
 			correlated = result?.correlated === true;
-			if (!result && !controller.signal.aborted && ownsAdmission(original)) {
-				bindingUnsupported = true;
-				ownerSession += 1;
-				confirmingStart = true;
-			}
+			if (!result && ownsStart()) reopenStartGate(true);
 			return result ?? { success: false, error: 'binding-required', reason: undefined };
 		},
-		isCurrent: () => ownsStart() && (correlated || current(binding)),
+		isCurrent: () => ownsStart() && (replaced || correlated || current(original)),
 		onResult: (result) => {
 			if (wifiRadioChanged(result) && !confirmingStart) {
-				ownerSession += 1;
 				startRefused = result.reason === 'deactivation-failed' ? 'deactivation-failed' : 'radio-changed';
-				confirmingStart = startRefused === 'radio-changed' && !isActive;
+				if (startRefused === 'radio-changed') reopenStartGate();
 			}
 		},
 		failMessage: (result) => wifiFailureReason(result ?? {}) === 'hybrid-channel-not-permitted'
@@ -560,6 +582,7 @@ async function copyPassword() {
 		{#if modeView}
 			<!-- biome-ignore lint/a11y/useSemanticElements: This named wrapper groups the existing WiFi mode widget; a fieldset introduces intrinsic sizing and form-group layout. -->
 			<div
+				bind:this={modePanel}
 				class="rounded-lg border px-3 py-2.5"
 				data-testid="hotspot-concurrency-status"
 				role="group"
@@ -567,10 +590,10 @@ async function copyPassword() {
 			>
 				<WifiModeSelector
 					view={modeView}
-					context={{
-						stationLinkLive: modeView.displayMode !== 'hotspot' && Boolean(iface?.conn),
-						hotspotLive: isActive,
-					}}
+					bind:confirmation={confirmingMode}
+					consentBlocked={confirmingStart}
+					shouldFocusRecoveredGate={enableHasFocus}
+					context={modeContext}
 					lockedReason={toggling ? m["network.wifiStationLock.hotspotPending"]() : undefined}
 				/>
 			</div>
@@ -584,9 +607,14 @@ async function copyPassword() {
 					degradedReason={radioReason}
 					session={ownerSession}
 					reloaded={radioNotice}
+					focusOnOpen={focusRecoveredStart}
 					keepsStation={iface?.supports_ap_sta_concurrency === true &&
 						modeView?.desiredMode !== 'hotspot'}
-					onCancel={() => { ownerSession += 1; confirmingStart = false; }}
+					onCancel={() => {
+						startAdmission?.controller.abort();
+						ownerSession += 1;
+						confirmingStart = false;
+					}}
 					onConfirm={startConfirmed}
 				/>
 			{:else}
@@ -803,8 +831,9 @@ async function copyPassword() {
 		     live AP (`hotspotConfigure` refuses anything else). -->
 		{#if !confirmingStart && (isActive || radioReason !== 'permanent-mac-unresolved')}
 		<Button
+			bind:ref={toggleButton}
 			class="sm:min-w-28"
-			disabled={toggling}
+			disabled={toggling || (!isActive && modeOwnsConsent)}
 			onclick={handleToggle}
 			title={toggleDisabledReason}
 			variant="outline"
