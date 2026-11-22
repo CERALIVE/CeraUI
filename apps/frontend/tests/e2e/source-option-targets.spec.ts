@@ -266,9 +266,32 @@ test('an option without help keeps the whole row, so its title stays on one line
 	expect(rode?.lines, `"${rode?.name}" fits one line at 375 px`).toBe(1);
 });
 
+/** The RØDE camera's capture-format heading and help, measured against the header and the Live bar. */
+async function formatHelpFold(page: Page) {
+	await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+	return page.getByTestId('source-mode-info-usb').evaluate((element) => {
+		const header = document.querySelector('header')?.getBoundingClientRect().bottom ?? 0;
+		const bar = document.querySelector('[data-testid="live-bar"]')?.getBoundingClientRect().top ?? innerHeight;
+		// The format block's heading: its first words, whatever line holds the help.
+		const heading = document.querySelector('[data-testid="source-modes-usb"] span')?.getBoundingClientRect();
+		const icon = element.querySelector('svg')?.getBoundingClientRect();
+		const box = element.getBoundingClientRect();
+		const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+		return {
+			header,
+			bar,
+			heading: heading ? { top: heading.top, bottom: heading.bottom } : null,
+			icon: icon ? { top: icon.top, bottom: icon.bottom } : null,
+			box: { top: box.top, bottom: box.bottom, width: box.width, height: box.height },
+			tapped: hit !== null && (hit === element || element.contains(hit)),
+		};
+	});
+}
+
 for (const locale of ['en', 'de', 'ar']) {
-	test(`on a 390x844 phone's first screen the capture-format heading and its help sit above the Live bar, ${locale}`, { tag: '@desktop-only' }, async ({ page }) => {
+	test(`on a 390x844 phone's first screen the capture-format heading and its help sit above the Live bar, ${locale}`, { tag: '@desktop-only' }, async ({ page, pageRpc }) => {
 		test.setTimeout(120_000);
+		const live = await proxy(page, pageRpc, []);
 		await page.setViewportSize({ width: 390, height: 844 });
 		await page.goto('/');
 		await ensureAuthenticated(page);
@@ -277,39 +300,33 @@ for (const locale of ['en', 'de', 'ar']) {
 		await ensureAuthenticated(page);
 		await navigateTo(page, 'live');
 		await expect(page.locator('html')).toHaveAttribute('lang', locale);
-		const help = page.getByTestId('source-mode-info-usb');
-		await expect(help).toBeVisible({ timeout: 20_000 });
+		await expect(page.getByTestId('source-mode-info-usb')).toBeVisible({ timeout: 20_000 });
 		await expect(page.locator('li[data-testid^="source-row-"][data-selected="true"]'), 'nothing is selected yet').toHaveCount(0);
-		await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
-		const fold = await help.evaluate((element) => {
-			const header = document.querySelector('header')?.getBoundingClientRect().bottom ?? 0;
-			const bar = document.querySelector('[data-testid="live-bar"]')?.getBoundingClientRect().top ?? innerHeight;
-			// The format block's heading: its first words, whatever line holds the help.
-			const heading = document.querySelector('[data-testid="source-modes-usb"] span')?.getBoundingClientRect();
-			const icon = element.querySelector('svg')?.getBoundingClientRect();
-			const box = element.getBoundingClientRect();
-			const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
-			return {
-				header,
-				bar,
-				heading: heading ? { top: heading.top, bottom: heading.bottom } : null,
-				icon: icon ? { top: icon.top, bottom: icon.bottom } : null,
-				box: { top: box.top, bottom: box.bottom },
-				tapped: hit !== null && (hit === element || element.contains(hit)),
-			};
-		});
+
+		const fold = await formatHelpFold(page);
 		expect(fold.heading, 'the capture-format heading is rendered').not.toBeNull();
 		expect(fold.icon, 'the help draws its icon').not.toBeNull();
 		expect(fold.heading?.top ?? Number.NEGATIVE_INFINITY, 'the heading starts under the header').toBeGreaterThanOrEqual(fold.header);
 		expect(fold.heading?.bottom ?? Number.POSITIVE_INFINITY, 'the heading ends above the Live bar').toBeLessThanOrEqual(fold.bar);
 		expect(fold.icon?.bottom ?? Number.POSITIVE_INFINITY, 'the help\'s icon ends above the Live bar').toBeLessThanOrEqual(fold.bar);
 		expect(fold.tapped, 'a tap at the help\'s centre reaches the help').toBe(true);
-		// Main shows this help's whole 44 px target above the bar only in Arabic, where
-		// the rows above it are shorter; in English and German main's target already
-		// reached 12 px under the bar.
-		if (locale === 'ar') {
-			expect(fold.box.top, 'the help\'s target starts under the header').toBeGreaterThanOrEqual(fold.header);
-			expect(fold.box.bottom, 'the help\'s whole target ends above the Live bar').toBeLessThanOrEqual(fold.bar);
+		if (locale !== 'ar') return;
+
+		// Main shows this help's whole 44 px target above the bar only in Arabic, where the
+		// rows above it are shorter; in English and German main's target already reached
+		// 12 px under the bar. Here the whole target clears the bar in Arabic both before
+		// and after a source is selected.
+		const selected = page.getByTestId('source-row-hdmi');
+		for (const state of ['nothing selected', 'HDMI selected']) {
+			if (state === 'HDMI selected') {
+				live.ws?.send(JSON.stringify({ config: { source: 'hdmi' } }));
+				await expect(selected).toHaveAttribute('data-selected', 'true');
+			}
+			const whole = await formatHelpFold(page);
+			expect(Math.min(whole.box.width, whole.box.height), `${state}: the help's target is 44 px`).toBeGreaterThanOrEqual(MIN);
+			expect(whole.box.top, `${state}: the help's target starts under the header`).toBeGreaterThanOrEqual(whole.header);
+			expect(whole.box.bottom, `${state}: the help's whole target ends above the Live bar`).toBeLessThanOrEqual(whole.bar);
+			expect(whole.tapped, `${state}: a tap at the help's centre reaches the help`).toBe(true);
 		}
 	});
 }

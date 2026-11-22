@@ -10,10 +10,20 @@ test.describe('@visual Live destination snapshots', () => {
 	test('@visual live destination baseline', { tag: '@visual' }, async ({ authedPage: page }) => {
 		const live = new LivePage(page);
 		await live.open();
-		// The whole page, not only its first screen: the source options sit one per line
-		// and run past the first screen, yet this picture must keep every option main's
-		// first screen showed. A window as tall as the page leaves the Live bar over the
-		// page's own end, and every option must sit whole between the header and the bar.
+		await expect(page).toHaveScreenshot('live-desktop.png', {
+			stylePath: new URL('./mask.css', import.meta.url).pathname,
+			maxDiffPixels: 100,
+		});
+	});
+
+	test('@visual live destination, the whole page', { tag: '@visual' }, async ({ authedPage: page }) => {
+		const live = new LivePage(page);
+		await live.open();
+		// The whole page, beside the first screen above: the source options sit one per
+		// line and run past the first screen, so this picture keeps every option the
+		// first-screen picture shows and the rest. A window as tall as the page leaves the
+		// Live bar over the page's own end; every option must sit whole between the header
+		// and the bar.
 		const viewport = page.viewportSize();
 		if (viewport === null) throw new Error('the project sets a viewport');
 		const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
@@ -30,7 +40,7 @@ test.describe('@visual Live destination snapshots', () => {
 		});
 		expect(hidden, 'every source option is in the picture, clear of the header and the Live bar').toEqual([]);
 		await expect(page.locator('li[data-testid^="source-row-"]')).not.toHaveCount(0);
-		await expect(page).toHaveScreenshot('live-desktop.png', {
+		await expect(page).toHaveScreenshot('live-desktop-full.png', {
 			stylePath: new URL('./mask.css', import.meta.url).pathname,
 			maxDiffPixels: 100,
 		});

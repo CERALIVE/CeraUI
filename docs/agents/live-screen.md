@@ -509,8 +509,9 @@ bitrate editable while Edit waits for a source"), `SourceSection.test.ts` ("one
 option pattern"), the column and fold checks in
 `apps/frontend/tests/e2e/visual/live.visual.spec.ts` (at 375 px and 1024x600
 touch the capture-format note sits whole between the header and the Live bar),
-its Live page baselines (the whole page on the desktop and mobile projects, so
-they keep every option main's first-screen baselines showed), the idle snapshot in
+its Live page baselines (the first screen at 1280x800 and 390x844, as on main,
+and beside it the whole page, which keeps every option the first screen leaves
+below the bar), the idle snapshot in
 `apps/frontend/tests/e2e/visual/audio-mixer.visual.spec.ts` (the whole Audio
 card between the sticky header and the Live bar, failing first if anything
 covers the heading, its help or Codec & delay), and
@@ -528,7 +529,8 @@ help selects and a tap on it opens it, by touch at 1024x600 and 375 in touch
 and by mouse at 375; and on a 390x844 phone's first screen, in en, de and ar,
 the capture-format heading and its help's icon end above the Live bar and a tap
 at the help's centre reaches it; in ar, where main shows the help's whole
-target, the whole 44 px target ends above the bar).
+target, the whole 44 px target ends above the bar, with nothing selected and
+with HDMI selected).
 
 ### 1. Job and audience
 
