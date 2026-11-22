@@ -1,4 +1,7 @@
-import { requestLegacyLog } from "$lib/device-logs/download-gate";
+import {
+	legacyLocked,
+	requestLegacyLog,
+} from "$lib/device-logs/download-gate.svelte";
 import { getDeviceLog, getSystemLog } from "$lib/helpers/SystemHelper";
 
 export type LogKind = "device" | "system";
@@ -23,7 +26,7 @@ export class LogDownloads {
 	}
 
 	async download(kind: LogKind): Promise<void> {
-		if (this.downloading !== null || !this.#current()) return;
+		if (this.downloading !== null || !this.#current() || legacyLocked()) return;
 		this.downloading = kind;
 		this.failed = null;
 		try {

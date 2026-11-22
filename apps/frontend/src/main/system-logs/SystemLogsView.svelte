@@ -30,7 +30,7 @@ import { Button } from '$lib/components/ui/button';
 import { Skeleton } from '$lib/components/ui/skeleton';
 import * as Tabs from '$lib/components/ui/tabs';
 import { bootSelection } from '$lib/device-logs/boot-selection.svelte';
-import { startBackendDownload } from '$lib/device-logs/download-gate';
+import { startBackendDownload } from '$lib/device-logs/download-gate.svelte';
 import type { RawMoment } from '$lib/device-logs/raw-anchor';
 import type { AroundPage } from '$lib/device-logs/raw-view.svelte';
 import { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';

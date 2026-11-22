@@ -163,6 +163,7 @@ import { parseServerPing, shouldForceCloseHalfOpen } from "./half-open";
 import { createHeartbeatTracker, HEARTBEAT_THRESHOLD_MS } from "./heartbeat";
 import { NotSentError, RpcError, type RpcErrorEnvelope } from "./rpc-error";
 import { CallTimeoutError, RPC_CALL_TIMEOUT_MS } from "./rpc-timeouts";
+import { nextSocketEpoch } from "./socket-epoch.svelte";
 
 export class ConnectionResetError extends Error {
 	override readonly name = "ConnectionResetError";
@@ -282,6 +283,7 @@ class RPCClient {
 
 			socket.onopen = () => {
 				if (this.socket !== socket) return;
+				nextSocketEpoch();
 				this.setConnectionState("connected");
 				this.reconnectAttempts = 0;
 				this.heartbeatTracker.recordTraffic(Date.now());

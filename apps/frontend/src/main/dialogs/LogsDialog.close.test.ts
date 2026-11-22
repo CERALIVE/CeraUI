@@ -29,9 +29,10 @@ import {
 	exportScopeRows,
 } from "$lib/device-logs/__fixtures__/sharing";
 import { bootSelection } from "$lib/device-logs/boot-selection.svelte";
-import { deliverLegacyLog } from "$lib/device-logs/download-gate";
+import { deliverLegacyLog } from "$lib/device-logs/download-gate.svelte";
 import { getDeviceLog, getSystemLog } from "$lib/helpers/SystemHelper";
 import { CallTimeoutError } from "$lib/rpc/rpc-timeouts";
+import { nextSocketEpoch } from "$lib/rpc/socket-epoch.svelte";
 import type { LogsDialogContext } from "$lib/stores/dialog-request.svelte";
 
 import { en } from "../../tests/helpers/catalog";
@@ -215,6 +216,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	nextSocketEpoch();
 	rpc.tickets.sent = [];
 	rpc.tickets.replies = [];
 	rpc.tickets.reply = Promise.withResolvers<LogExportOutput>();
@@ -490,6 +492,36 @@ describe("LogsDialog: a legacy log file pushed after the close", () => {
 			expect(
 				deliverLegacyLog({ ...FILE, contents: "late", request: asked[0] }),
 			).toBe(false);
+			expect(anchorClicks).not.toHaveBeenCalled();
+		},
+	);
+
+	it.each([
+		{ kind: "device", ask: getDeviceLog },
+		{ kind: "system", ask: getSystemLog },
+	] as const)(
+		"after the $kind log's call timed out, both downloads stay locked with the reconnect hint until its late file arrives",
+		async ({ kind, ask }) => {
+			vi.mocked(ask).mockRejectedValue(new CallTimeoutError("Request timeout"));
+			render(LogsDialogHost).component.show();
+			await fireEvent.click(await screen.findByTestId(`log-download-${kind}`));
+			await screen.findByTestId("log-download-error");
+			const buttons = ["device", "system"].map(
+				(id) => screen.getByTestId(`log-download-${id}`) as HTMLButtonElement,
+			);
+			const hint = screen.getByTestId("log-download-locked");
+
+			expect(hint.getAttribute("role")).toBe("status");
+			expect(hint.textContent?.trim()).toBe(en.advanced.downloadLocked);
+			for (const button of buttons) {
+				expect(button.disabled).toBe(true);
+				expect(button.getAttribute("aria-describedby")).toBe(hint.id);
+			}
+			expect(deliverLegacyLog({ ...FILE, contents: "late" })).toBe(false);
+			await waitFor(() =>
+				expect(screen.queryByTestId("log-download-locked")).toBeNull(),
+			);
+			for (const button of buttons) expect(button.disabled).toBe(false);
 			expect(anchorClicks).not.toHaveBeenCalled();
 		},
 	);

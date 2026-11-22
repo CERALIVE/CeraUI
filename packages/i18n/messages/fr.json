@@ -55,6 +55,7 @@
 	"advanced.download": "Télécharger",
 	"advanced.downloadDeviceLog": "Télécharger le journal CeraLive",
 	"advanced.downloadFailed": "Impossible de télécharger le journal. Vérifiez la connexion et réessayez.",
+	"advanced.downloadLocked": "En attente de la réponse de l'appareil à une demande de journal précédente. Reconnectez-vous ou rechargez la page pour réessayer.",
 	"advanced.downloadSystemLog": "Télécharger le journal système",
 	"advanced.downloading": "Téléchargement…",
 	"advanced.hidePassword": "Masquer le mot de passe",

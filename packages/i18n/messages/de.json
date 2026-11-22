@@ -55,6 +55,7 @@
 	"advanced.download": "Herunterladen",
 	"advanced.downloadDeviceLog": "CeraLive-Logdatei herunterladen",
 	"advanced.downloadFailed": "Protokoll konnte nicht heruntergeladen werden. Prüfen Sie die Verbindung und versuchen Sie es erneut.",
+	"advanced.downloadLocked": "Das Gerät hat eine frühere Protokollanfrage noch nicht beantwortet. Verbinden Sie sich neu oder laden Sie die Seite neu, um es erneut zu versuchen.",
 	"advanced.downloadSystemLog": "System-Logdatei herunterladen",
 	"advanced.downloading": "Wird heruntergeladen…",
 	"advanced.hidePassword": "Passwort ausblenden",

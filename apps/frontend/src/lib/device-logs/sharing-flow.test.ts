@@ -23,7 +23,7 @@ import {
 	bundleManifest as manifest,
 	EXPORT_TICKET as TICKET,
 } from "./__fixtures__/sharing";
-import { startBackendDownload } from "./download-gate";
+import { startBackendDownload } from "./download-gate.svelte";
 
 import { notifyHistoryChanged, onHistoryChanged } from "./history-bus";
 import { exportInput, RAW_OPENING_QUERY } from "./sharing";

@@ -7,7 +7,7 @@ import { RpcError } from "$lib/rpc/rpc-error";
 
 import { BOOT_IDS, boot } from "./__fixtures__/boots";
 import { bundleManifest } from "./__fixtures__/sharing";
-import { startBackendDownload } from "./download-gate";
+import { startBackendDownload } from "./download-gate.svelte";
 import {
 	bundleManifestReply,
 	captureExportScope,

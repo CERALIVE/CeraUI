@@ -21,7 +21,7 @@ import { fourBoots } from "$lib/device-logs/__fixtures__/boots";
 import { eventPage } from "$lib/device-logs/__fixtures__/events";
 import { EXPORT_TICKET } from "$lib/device-logs/__fixtures__/sharing";
 import { bootSelection } from "$lib/device-logs/boot-selection.svelte";
-import { deliverLegacyLog } from "$lib/device-logs/download-gate";
+import { deliverLegacyLog } from "$lib/device-logs/download-gate.svelte";
 import { getDeviceLog } from "$lib/helpers/SystemHelper";
 import {
 	clearRequestedDialog,

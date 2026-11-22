@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CallTimeoutError } from "$lib/rpc/rpc-timeouts";
+import { nextSocketEpoch } from "$lib/rpc/socket-epoch.svelte";
 import {
 	deliverLegacyLog,
-	LATE_FILE_MS,
+	legacyLocked,
 	requestLegacyLog,
 	startBackendDownload,
-} from "./download-gate";
+} from "./download-gate.svelte";
 
 const FILE = { name: "ceralive_log.txt", contents: "  first \n\n second\n" };
 
@@ -14,6 +15,8 @@ let saved: { name: string; href: string }[];
 let blobs: Blob[];
 
 beforeEach(() => {
+	// A fresh socket: nothing a previous case left on the old one can still be answered.
+	nextSocketEpoch();
 	saved = [];
 	blobs = [];
 	vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
@@ -183,7 +186,7 @@ describe("download gate: a legacy log file pushed on the socket", () => {
 		},
 	);
 
-	it("holds the next request until a timed-out request's window ends, then sends it and saves its own file", async () => {
+	it("sends no other request after a timeout, however long it waits, until that request's late file arrives; the retry then saves only its own", async () => {
 		vi.useFakeTimers();
 		const asked: string[] = [];
 		await requestLegacyLog(
@@ -193,28 +196,96 @@ describe("download gate: a legacy log file pushed on the socket", () => {
 				return Promise.reject(new CallTimeoutError("Request timeout"));
 			},
 		).catch(() => undefined);
-		const next = requestLegacyLog(
+		const own = (request: string) => {
+			asked.push(request);
+			return Promise.resolve(
+				expect(deliverLegacyLog({ ...FILE, contents: "its own" })).toBe(true),
+			);
+		};
+
+		await vi.advanceTimersByTimeAsync(10 * 60_000);
+		await requestLegacyLog(() => true, own);
+		expect(legacyLocked()).toBe(true);
+		expect(asked).toHaveLength(1);
+		expect(deliverLegacyLog({ ...FILE, contents: "stale" })).toBe(false);
+		expect(legacyLocked()).toBe(false);
+		await requestLegacyLog(() => true, own);
+
+		expect(asked).toHaveLength(2);
+		expect(await Promise.all(blobs.map((blob) => blob.text()))).toEqual([
+			"its own",
+		]);
+	});
+
+	it("frees the downloads after a timeout once the socket is replaced, and the retry saves only its own file", async () => {
+		const asked: string[] = [];
+		await requestLegacyLog(
+			() => true,
+			(request) => {
+				asked.push(request);
+				return Promise.reject(new CallTimeoutError("Request timeout"));
+			},
+		).catch(() => undefined);
+		expect(legacyLocked()).toBe(true);
+
+		nextSocketEpoch();
+		expect(legacyLocked()).toBe(false);
+		await requestLegacyLog(
 			() => true,
 			(request) => {
 				asked.push(request);
 				return Promise.resolve(
-					expect(
-						deliverLegacyLog({ ...FILE, contents: "its own", request }),
-					).toBe(true),
+					expect(deliverLegacyLog({ ...FILE, contents: "its own" })).toBe(true),
 				);
 			},
 		);
 
-		await vi.advanceTimersByTimeAsync(LATE_FILE_MS - 1);
-		expect(asked).toHaveLength(1);
-		await vi.advanceTimersByTimeAsync(1);
-		await next;
-
 		expect(asked).toHaveLength(2);
-		expect(
-			deliverLegacyLog({ ...FILE, contents: "too late", request: asked[0] }),
-		).toBe(false);
 		expect(await Promise.all(blobs.map((blob) => blob.text()))).toEqual([
+			"its own",
+		]);
+	});
+
+	it("on a device that echoes the id, sends the retry at once and never gives it the timed-out request's late file, also while the retry is active", async () => {
+		const asked: string[] = [];
+		await requestLegacyLog(
+			() => true,
+			(request) => {
+				asked.push(request);
+				return Promise.resolve(
+					deliverLegacyLog({ ...FILE, contents: "first", request }),
+				);
+			},
+		);
+		await requestLegacyLog(
+			() => true,
+			(request) => {
+				asked.push(request);
+				return Promise.reject(new CallTimeoutError("Request timeout"));
+			},
+		).catch(() => undefined);
+		expect(legacyLocked()).toBe(false);
+		const retry = Promise.withResolvers<void>();
+		const active = requestLegacyLog(
+			() => true,
+			(request) => {
+				asked.push(request);
+				return retry.promise;
+			},
+		);
+
+		expect(asked).toHaveLength(3);
+		expect(
+			deliverLegacyLog({ ...FILE, contents: "too late", request: asked[1] }),
+		).toBe(false);
+		expect(
+			deliverLegacyLog({ ...FILE, contents: "its own", request: asked[2] }),
+		).toBe(true);
+		retry.resolve();
+		await active;
+
+		expect(await Promise.all(blobs.map((blob) => blob.text()))).toEqual([
+			"first",
 			"its own",
 		]);
 	});

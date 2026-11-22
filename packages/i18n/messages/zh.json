@@ -55,6 +55,7 @@
 	"advanced.download": "下载",
 	"advanced.downloadDeviceLog": "下载 CeraLive 日志",
 	"advanced.downloadFailed": "无法下载日志。请检查连接后重试。",
+	"advanced.downloadLocked": "仍在等待设备响应之前的日志请求。请重新连接或刷新页面后重试。",
 	"advanced.downloadSystemLog": "下载系统日志",
 	"advanced.downloading": "正在下载…",
 	"advanced.hidePassword": "隐藏密码",

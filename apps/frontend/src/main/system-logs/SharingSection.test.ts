@@ -23,7 +23,7 @@ import {
 	EXPORT_TICKET,
 	signalled,
 } from "$lib/device-logs/__fixtures__/sharing";
-import { startBackendDownload } from "$lib/device-logs/download-gate";
+import { startBackendDownload } from "$lib/device-logs/download-gate.svelte";
 import { notifyHistoryChanged } from "$lib/device-logs/history-bus";
 import { exportInput } from "$lib/device-logs/sharing";
 import { SharingFlow } from "$lib/device-logs/sharing-flow.svelte";

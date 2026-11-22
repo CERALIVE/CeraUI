@@ -55,6 +55,7 @@
 	"advanced.download": "डाउनलोड करें",
 	"advanced.downloadDeviceLog": "CeraLive लॉग डाउनलोड करें",
 	"advanced.downloadFailed": "लॉग डाउनलोड नहीं हो सका। कनेक्शन जाँचें और फिर से प्रयास करें।",
+	"advanced.downloadLocked": "डिवाइस ने अभी तक पिछले लॉग अनुरोध का जवाब नहीं दिया है। फिर से प्रयास करने के लिए दोबारा कनेक्ट करें या पेज रीलोड करें।",
 	"advanced.downloadSystemLog": "सिस्टम लॉग डाउनलोड करें",
 	"advanced.downloading": "डाउनलोड हो रहा है…",
 	"advanced.hidePassword": "पासवर्ड छिपाएँ",

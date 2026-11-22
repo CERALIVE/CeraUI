@@ -54,7 +54,7 @@ import {
 	setEthernetRoleInputSchema,
 	uplinkFlowsResetEventSchema,
 } from "@ceraui/rpc/schemas";
-import { deliverLegacyLog } from "$lib/device-logs/download-gate";
+import { deliverLegacyLog } from "$lib/device-logs/download-gate.svelte";
 import { wifiFailureReason } from "$lib/helpers/wifi-mode-outcome";
 import { isSameWireValue, preserveWireIdentity } from "$lib/rpc/value-identity";
 import { authStatusStore } from "$lib/stores/auth-status.svelte";
