@@ -22,6 +22,7 @@ import {
 	nmcliParseSep,
 	nmDevices,
 } from "../network/network-manager.ts";
+import { profileWritePermit } from "../network/profile-write-permit.ts";
 import { markBootDegraded } from "../system/readiness.ts";
 import { getHotspotCredentialOwners } from "./hotspot-credentials.ts";
 import {
@@ -75,7 +76,11 @@ import {
 	wifiAdapterKeyMac,
 	wifiAdapterKeyPort,
 } from "./wifi-permanent-mac.ts";
-import { sameRadioLifetime, wifiRadioIdentity } from "./wifi-radio-identity.ts";
+import {
+	radioInventoryFor,
+	sameRadioLifetime,
+	wifiRadioIdentity,
+} from "./wifi-radio-identity.ts";
 
 const MAX_RESTORE_ATTEMPTS = 3;
 
@@ -114,9 +119,14 @@ export async function reconcileWifiAdapterPolicies(
 	observation: WifiPolicyObservation,
 ): Promise<boolean> {
 	beginWifiAdapterOwnerObservation();
+	const pass = {
+		...observation,
+		readInventory:
+			observation.readInventory ?? radioInventoryFor(observation.identities),
+	};
 	for (const owner of getHotspotCredentialOwners()) {
 		const result = await withWifiAdapterLock(wifiAdapterLockKey(owner), () =>
-			reconcileWifiAdapterLocked(owner, observation),
+			reconcileWifiAdapterLocked(owner, pass),
 		);
 		if (!result.success)
 			return retryWifiAdapterReconcile(owner, undefined, "discovery");
@@ -242,10 +252,20 @@ export async function reconcileWifiAdapterStopLocked(
 			active: new Map(),
 			station: true,
 			write: operation
-				? async (uuid, fields) =>
+				? async (uuid, fields, permit) =>
 						(await operation.check()) &&
 						operation.current() &&
-						deps.nmConnSetFields(uuid, fields)
+						permit?.current?.() !== false &&
+						deps.nmConnSetFields(
+							uuid,
+							fields,
+							permit &&
+								profileWritePermit(async () =>
+									(await permit()) && (await operation.check())
+										? () => operation.current() && permit.current?.() !== false
+										: false,
+								),
+						)
 				: deps.nmConnSetFields,
 		},
 		reconciled,

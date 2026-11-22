@@ -29,6 +29,11 @@ export type NmProfileInstance = {
 		| undefined;
 };
 
+export type NmPruneProfileInstance = NmProfileInstance & {
+	readonly mac: string;
+	readonly port: string;
+};
+
 export function sameNmProfileFile(
 	expected: NmProfileInstance["file"],
 	observed: NmProfileInstance["file"],
@@ -132,9 +137,55 @@ async function profilePath(uuid: string): Promise<string | null | undefined> {
 			!value?.match(/^\/org\/freedesktop\/NetworkManager\/Settings\/\d+$/)
 		)
 			return undefined;
-		if (id === uuid) path = value;
+		if (id === uuid) {
+			if (path !== null) return undefined;
+			path = value;
+		}
 	}
 	return path;
+}
+
+/** Only settings identity and radio binding; stat the keyfile, never open it. */
+export async function readNmPruneProfileInstance(
+	uuid: string,
+	submitted?: Readonly<Record<string, string>>,
+): Promise<NmPruneProfileInstance | null | undefined> {
+	const runId = await nmRunId();
+	if (!runId) return undefined;
+	const path = await profilePath(uuid);
+	if (path === null || path === undefined) return path;
+	const trace: NmProfileReadTrace = {};
+	const file = await observeNmProfileFile(uuid, trace, "firstStat");
+	if (!file) return undefined;
+	const fields = [
+		"connection.id",
+		"802-11-wireless.mode",
+		"802-11-wireless.mac-address",
+		"match.path",
+	] as const;
+	const observed = await nmConnGetFields(uuid, fields, undefined, false);
+	if (!observed) return undefined;
+	const [id, mode, mac, port] = observed;
+	if (!id || mode !== "ap" || mac === undefined || port === undefined)
+		return undefined;
+	if (
+		(submitted && id !== submitted["connection.id"]) ||
+		(await profilePath(uuid)) !== path ||
+		!sameNmProfileFile(
+			file,
+			await observeNmProfileFile(uuid, trace, "secondStat"),
+		) ||
+		(await nmRunId()) !== runId
+	)
+		return undefined;
+	return {
+		path,
+		runId,
+		file,
+		mac,
+		port,
+		fingerprint: JSON.stringify(observed),
+	};
 }
 
 /** Null proves absence; undefined means NM could not establish an instance. */

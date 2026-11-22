@@ -151,3 +151,30 @@ test("Down cannot reuse the path and daemon name on a replacement bus", async ()
 	);
 	expect(calls).toEqual([]);
 });
+
+test("Down refuses inventory evidence invalidated during the active-object read", async () => {
+	const calls: MethodCall[] = [];
+	let current = true;
+	mockActivationBus(
+		() => RUN_ID.split("/")[0] ?? "",
+		(call) => {
+			calls.push(call);
+		},
+		undefined,
+		false,
+		() => {
+			current = false;
+		},
+	);
+	expect(
+		await nmDisconnect(
+			"policy-ap",
+			ACTIVE_PATH,
+			RUN_ID,
+			"wlan0",
+			() => current,
+		),
+	).toBe(false);
+	expect(current).toBe(false);
+	expect(calls).toEqual([]);
+});

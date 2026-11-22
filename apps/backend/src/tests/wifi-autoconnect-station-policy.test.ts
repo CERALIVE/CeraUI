@@ -19,7 +19,7 @@ import {
 import { registerWifiAdapterTeardownLocked } from "../modules/wifi/wifi-adapter-reconcile-retry.ts";
 import { reconcileWifiAdapterPolicies } from "../modules/wifi/wifi-adapter-reconciler.ts";
 import * as apSta from "../modules/wifi/wifi-ap-sta-capability.ts";
-import { hotspotAutoconnectFields } from "../modules/wifi/wifi-autoconnect-policy.ts";
+import { hotspotAutoconnectPolicy } from "../modules/wifi/wifi-autoconnect-policy.ts";
 import * as concurrent from "../modules/wifi/wifi-concurrent-interface.ts";
 import {
 	getWifiInterfacesByMacAddress,
@@ -63,6 +63,7 @@ test.each(["selection", "startup"] as const)(
 		});
 		if (source === "selection") {
 			f.persistMode(MAC, "hotspot");
+			await f.sample();
 			expect(
 				await setWifiAdapterMode(0, "station", {
 					...defaultAdapterModeDeps,
@@ -94,9 +95,75 @@ test("review R3 a rejected station policy write refuses success and restores pri
 		}),
 	).toEqual({ success: false, error: "deactivation-failed" });
 	expect(getConfig().wifi_modes).toEqual({ [MAC]: "hotspot" });
-	expect(write).toHaveBeenCalledWith(PROFILE, {
-		"connection.autoconnect": "no",
+	expect(write).toHaveBeenCalledWith(
+		PROFILE,
+		{ "connection.autoconnect": "no" },
+		expect.any(Function),
+	);
+});
+
+test("Station restores prior intent if pin readback is unavailable at the disarm guard", async () => {
+	profile()["match.path"] = PORT;
+	f.persistMode(MAC, "hotspot");
+	await f.sample();
+	const read = nm.nmConnGetFields;
+	const pinRead = spyOn(nm, "nmConnGetFields").mockImplementation(
+		(uuid, fields, separator, secrets) =>
+			fields.join(",") ===
+			"802-11-wireless.mac-address,match.path,connection.autoconnect"
+				? Promise.resolve(undefined)
+				: read(uuid, fields, separator, secrets),
+	);
+
+	expect(
+		await setWifiAdapterMode(0, "station", {
+			...defaultAdapterModeDeps,
+			publishOutcome: () => undefined,
+		}),
+	).toEqual({ success: false, error: "deactivation-failed" });
+	expect(pinRead).toHaveBeenCalledWith(
+		PROFILE,
+		["802-11-wireless.mac-address", "match.path", "connection.autoconnect"],
+		undefined,
+		false,
+	);
+	expect(f.effects).toEqual([]);
+	expect(profile()["connection.autoconnect"]).toBe("yes");
+	expect(getConfig().wifi_modes).toEqual({ [MAC]: "hotspot" });
+});
+
+test("Station refuses if pin readback fails only at Modify dispatch", async () => {
+	profile()["match.path"] = PORT;
+	f.persistMode(MAC, "hotspot");
+	await f.sample();
+	const modify = spyOn(nm, "nmConnSetFields");
+	const read = nm.nmConnGetFields;
+	let deniedAtDispatch = false;
+	spyOn(nm, "nmConnGetFields").mockImplementation(
+		(uuid, fields, separator, secrets) => {
+			if (
+				uuid === PROFILE &&
+				fields.join(",") ===
+					"802-11-wireless.mac-address,match.path,connection.autoconnect" &&
+				modify.mock.calls.length > 0
+			) {
+				deniedAtDispatch = true;
+				return Promise.resolve(undefined);
+			}
+			return read(uuid, fields, separator, secrets);
+		},
+	);
+
+	const result = await setWifiAdapterMode(0, "station", {
+		...defaultAdapterModeDeps,
+		publishOutcome: () => undefined,
 	});
+
+	expect(f.effects).toEqual([]);
+	expect(result).toEqual({ success: false, error: "deactivation-failed" });
+	expect(deniedAtDispatch).toBe(true);
+	expect(profile()["connection.autoconnect"]).toBe("yes");
+	expect(getConfig().wifi_modes).toEqual({ [MAC]: "hotspot" });
 });
 
 test("a rejected station policy write keeps Station intent and still downs the AP", async () => {
@@ -232,10 +299,12 @@ test.each([undefined, "station", "hotspot", "hybrid"] as const)(
 		if (intent !== undefined) f.persistMode(MAC, intent);
 		await f.sample();
 		expect(
-			hotspotAutoconnectFields(MAC, {
-				"802-11-wireless.mac-address": MAC,
-				"match.path": PORT,
-			})["connection.autoconnect"],
+			(
+				await hotspotAutoconnectPolicy(MAC, {
+					"802-11-wireless.mac-address": MAC,
+					"match.path": PORT,
+				})
+			)?.fields["connection.autoconnect"],
 		).toBe(intent === "hotspot" || intent === "hybrid" ? "yes" : "no");
 	},
 );

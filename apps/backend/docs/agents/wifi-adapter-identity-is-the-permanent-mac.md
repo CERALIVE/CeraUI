@@ -272,6 +272,37 @@ MAC and literal port prove the same owner. Up checks the selectors against
 the selected leg without allowing stale names. Boot restore does not prune
 superseded hotspot profiles.
 Eligible stale profiles can remain until the next operator Start.
+
+An explicit Start can rewrite the port pin for a recorded
+AP with autoconnect off, a matching unique permanent MAC and a roster that
+positively establishes the old port is empty. Missing or ambiguous physical
+port witnesses do not prove absence. A sole verified radio whose own path is
+unreadable may ask NetworkManager to activate its exclusively recorded AP
+as saved, without changing its port pin or autoconnect settings. A fresh,
+complete `iw phy` inventory must match the roster and show no other physical
+radio. The same inventory check gates absence claims about a legacy MAC or
+vacant port and any new autonomous activation policy. It counts registered
+PHYs, independent of AP capability or the presence of an interface. Discovery
+shares one lazy probe across policy and profile reads in each identity pass.
+The proof is tied to both the Wi-Fi identity publication and the network
+topology generation at roster capture. An observed netdev change invalidates
+it before the next identity publication; the current pass does not probe again.
+An unreadable, incomplete or stale inventory is unknown, not evidence of a
+duplicate MAC or a vacant port. Unknown evidence neither authorizes a profile
+change nor withholds the roster. Explicit Start can retain a correctly pinned
+profile's policy without the probe; a new binding starts with autoconnect off
+and is not armed if the inventory is unknown.
+An inventory-backed write carries its proof through the final NetworkManager
+permit. The writer rechecks both generations after its last async pin or
+profile check, before modify, keyfile publication/load, or inventory-dependent
+exact deactivation. If a post-Up proof
+has gone stale, Start still succeeds and leaves autoconnect off.
+The activation names the proven interface.
+Discovery logs and skips conflicting profile mutations without withholding the
+unrelated radio roster; a real write failure still uses the bounded retry. Cold
+Start can repair the recorded AP's observed legacy scan MAC if no other
+adapter claims it. Neither repair follows a conflicting pin introduced after
+Start's initial pin read.
 These are host-tested policies, not physical NetworkManager qualification.
 
 ### Concurrent target reuse [PARTIAL; host-tested, VM/W6 pending]
@@ -391,11 +422,11 @@ The explicit-MAC active path, saved-profile sweep, interface-name and
 `clap-<ifname>` matches, stored UUID hint, permanent-MAC match and persisted-SSID
 fallback all apply that check. A pin naming another present or persisted
 adapter is conflicting evidence even without a UUID claim. SSID equality
-cannot override either kind of conflict. Unowned legacy profiles with stale
-scan-time pins still migrate through the existing name or persisted-SSID
-evidence. A conflict leaves NetworkManager's active connection and mode
-observable, and leaves the foreign profile, credentials and autoconnect
-untouched.
+cannot override either kind of conflict or establish ownership by itself.
+Discovery repairs stale scan-time pins only for recorded profiles. An
+unrecorded saved profile is left alone; Prepare and Start resolve credentials
+without reusing its UUID. An independently active AP can still be observed
+without granting saved-profile edit authority.
 
 Ownership is checked again after awaited lookup, repair, save, activation and
 rollback work, using the current cache as well as the selected UUID. An empty

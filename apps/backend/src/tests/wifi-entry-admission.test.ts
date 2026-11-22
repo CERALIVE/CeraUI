@@ -590,6 +590,15 @@ test("a confirmation poll's discovery restores another radio's pending hotspot n
 	getWifiIdToMacAddress()[1] = MAC_B;
 	const modes = config.getConfig().wifi_modes;
 	config.getConfig().wifi_modes = { [MAC_B]: "hotspot" };
+	const getCredentials = spyOn(
+		defaultHotspotDeps.credentials,
+		"get",
+	).getMockImplementation();
+	spyOn(defaultHotspotDeps.credentials, "get").mockImplementation((owner) =>
+		owner === MAC_B
+			? { conn: "b-ap", ssid: "Restore AP", password: "restore-password" }
+			: getCredentials?.(owner),
+	);
 	const wifiState = getWifiState();
 	const streamingNow = spyOn(streaming, "getIsStreaming").mockReturnValue(true);
 	spyOn(defaultHotspotDeps, "nmConnect").mockImplementation(async (uuid) => {

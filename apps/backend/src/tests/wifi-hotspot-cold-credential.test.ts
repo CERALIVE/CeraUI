@@ -7,6 +7,7 @@ import * as exec from "../helpers/exec.ts";
 import {
 	getHotspotCredentials,
 	initHotspotCredentials,
+	rememberHotspotCredentials,
 } from "../modules/wifi/hotspot-credentials.ts";
 import { wifiBuildMsg } from "../modules/wifi/wifi.ts";
 import { handleHotspotConn } from "../modules/wifi/wifi-hotspot-discovery.ts";
@@ -108,8 +109,8 @@ for (const display of [
 			expect(initialRead).toBe(1);
 			expect({
 				publishedMatchesExpected: published === expected,
-				storedMatchesExpected: stored === expected,
-				persistedMatchesExpected: disk === expected,
+				storedUnclaimed: stored === undefined,
+				persistedUnclaimed: disk === undefined,
 				publishedStale: published === stale,
 				storedStale: stored === stale,
 				persistedStale: disk === stale,
@@ -118,13 +119,37 @@ for (const display of [
 				),
 			}).toEqual({
 				publishedMatchesExpected: true,
-				storedMatchesExpected: true,
-				persistedMatchesExpected: true,
+				storedUnclaimed: true,
+				persistedUnclaimed: true,
 				publishedStale: false,
 				storedStale: false,
 				persistedStale: false,
 				keyfilePreserved: true,
 			});
+
+			const oldPassword = `${f.secret}-previously-recorded`;
+			rememberHotspotCredentials(MAC, {
+				conn: uuid,
+				ssid: "First AP",
+				password: oldPassword,
+			});
+			await initHotspotCredentials(path);
+			delete f.row.hotspot.password;
+			initialRead = 0;
+			await handleHotspotConn(MAC, uuid, { active: true });
+			const ownedDisk = persistedCredentials.parse(
+				JSON.parse(await readFile(path, "utf8")),
+			);
+			const ownedExpected = expected ?? oldPassword;
+			expect(initialRead).toBe(1);
+			expect(wifiBuildMsg()[f.row.id]?.hotspot?.password).toBe(
+				display === "unavailable" ? undefined : ownedExpected,
+			);
+			expect(getHotspotCredentials(MAC)?.password).toBe(ownedExpected);
+			expect(ownedDisk.adapters[MAC]?.password).toBe(ownedExpected);
+			expect((await readFile(f.nm.files.filename(uuid))).equals(keyfile)).toBe(
+				true,
+			);
 		} finally {
 			await f.restore();
 			await rm(root, { recursive: true });

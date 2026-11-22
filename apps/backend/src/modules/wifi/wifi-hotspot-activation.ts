@@ -38,6 +38,10 @@ import {
 	isNmWifiSecretAvailable,
 	readVerifiedNmWifiSecret,
 } from "../network/network-manager-secret.ts";
+import {
+	type ProfileWriteAdmission,
+	profileAdmissionCurrent,
+} from "../network/profile-write-permit.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
 import {
 	hotspotCredentialsStore,
@@ -65,7 +69,7 @@ import {
 } from "./wifi-adapter-reconcile-retry.ts";
 import { reconcileWifiAdapterProfileLocked } from "./wifi-adapter-reconciler.ts";
 import {
-	hotspotAutoconnectFields,
+	hotspotAutoconnectPolicy,
 	hotspotDevicePath,
 } from "./wifi-autoconnect-policy.ts";
 import { admitWifiRequest } from "./wifi-binding.ts";
@@ -90,11 +94,12 @@ import {
 } from "./wifi-hotspot-activity.ts";
 import { cleanupCreatedHotspotProfile } from "./wifi-hotspot-cleanup.ts";
 import {
-	canAdoptHotspotProfile,
 	findHotspotConnForAdapter,
 	getHotspotProfilePin,
+	hasCompatibleHotspotProfile,
 	hotspotOwnershipGuard,
 	hotspotProfileMatchesRadio,
+	isObservedForeignHotspot,
 	pruneDuplicateHotspotConns,
 	rememberHotspotProfilePin,
 } from "./wifi-hotspot-discovery.ts";
@@ -106,8 +111,13 @@ import {
 } from "./wifi-hotspot-monitor.ts";
 import { publishHotspotOutcome } from "./wifi-hotspot-outcome.ts";
 import {
+	canWriteSavedHotspotPins,
 	type HotspotProfileOperation,
+	permitsHotspotProfilePins,
+	readHotspotProfilePins,
 	runHotspotProfileOperation,
+	savedHotspotStartPinGuard,
+	writeHotspotProfileFields,
 } from "./wifi-hotspot-profile-operation.ts";
 import {
 	DEFAULT_HOTSPOT_SECURITY,
@@ -169,6 +179,7 @@ export const defaultHotspotDeps: HotspotActivationDeps = {
 	nmConnDelete,
 	nmDisconnect,
 	readProfileInstance: readNmProfileInstance,
+	readProfilePins: readHotspotProfilePins,
 	wifiUpdateSavedConns,
 	broadcastState: broadcastWifiState,
 	setDupIpSuppression: setNetifDupIpSuppression,
@@ -296,7 +307,7 @@ async function selectHotspotProfile(
 	if (profileMatches) {
 		for (const uuid of new Set([stored?.conn, cached])) {
 			if (!uuid) continue;
-			if (!canAdoptHotspotProfile(owner, uuid, "")) return undefined;
+			if (!hasCompatibleHotspotProfile(owner, uuid, "")) return undefined;
 			const matches = await profileMatches(uuid);
 			if (matches) continue;
 			if (matches === false || (await deps.readProfileInstance(uuid)) !== null)
@@ -304,15 +315,17 @@ async function selectHotspotProfile(
 			if (cached === uuid) cached = undefined;
 		}
 	}
+	if (cached && !hasSavedHotspotProfile(stored, cached)) cached = undefined;
 	if (cached && hotspot.name && hotspot.password) return { cached, stored };
 	const existing = await deps.findHotspotConn(owner, stored);
 	if (!existing) return { cached, stored };
 	const pin = existing.macAddress ?? "";
 	if (
-		!canAdoptHotspotProfile(owner, existing.uuid, pin) ||
-		(profileMatches &&
-			((pin !== "" && normalizeMacAddress(pin) !== wifiAdapterKeyMac(owner)) ||
-				!(await profileMatches(existing.uuid))))
+		profileMatches &&
+		(!hasSavedHotspotProfile(stored, existing.uuid) ||
+			!hasCompatibleHotspotProfile(owner, existing.uuid, pin) ||
+			(pin !== "" && normalizeMacAddress(pin) !== wifiAdapterKeyMac(owner)) ||
+			!(await profileMatches(existing.uuid)))
 	)
 		return undefined;
 	return { cached, stored, existing };
@@ -334,6 +347,11 @@ async function resolveHotspotIdentity(
 	operation?: ReturnType<typeof wifiOperationGuard>,
 	portAlias?: string,
 	profileMatches?: ProfileMatches,
+	permitSavedWrite?: (
+		uuid: string,
+		profileMac?: string,
+	) => Promise<ProfileWriteAdmission>,
+	permitLiveWrite?: () => Promise<boolean>,
 ): Promise<HotspotIdentity | undefined> {
 	const hotspot = wifiInterface.hotspot;
 	const entryConn = hotspot.conn;
@@ -345,13 +363,27 @@ async function resolveHotspotIdentity(
 		deps,
 		profileMatches,
 	);
-	if (!selection || !owned() || hotspot.conn !== entryConn) return undefined;
-	const { cached, stored, existing } = selection;
-	if (hotspot.conn && !cached) {
+	if (!selection || !owned()) return undefined;
+	if (hotspot.conn !== entryConn) {
+		if (
+			profileMatches ||
+			!hotspot.conn ||
+			!hasSavedHotspotProfile(deps.credentials.get(macAddress), hotspot.conn)
+		)
+			return undefined;
+	} else if (hotspot.conn && !selection.cached) {
+		if (
+			isHotspotActive(wifiInterface) &&
+			isObservedForeignHotspot(hotspot, macAddress)
+		)
+			return undefined;
 		if (operation && !(await operation.permit())) return undefined;
 		if (!owned() || hotspot.conn !== entryConn) return undefined;
 		delete hotspot.conn;
+		delete hotspot.name;
+		delete hotspot.password;
 	}
+	const { stored, existing } = selection;
 	let profileMac = getHotspotProfilePin(hotspot, hotspot.conn);
 	const stillOwned = hotspotOwnershipGuard(
 		macAddress,
@@ -359,20 +391,28 @@ async function resolveHotspotIdentity(
 		stored?.conn,
 	);
 	if (!stillOwned()) return undefined;
-	if (existing) {
+	if (existing && !stillOwned(existing.uuid, existing.macAddress ?? ""))
+		return undefined;
+	if (
+		existing &&
+		(!hotspot.conn || !hotspot.name || !hotspot.password) &&
+		hasSavedHotspotProfile(deps.credentials.get(macAddress), existing.uuid)
+	) {
 		if (operation && (!(await operation.check()) || !operation.current()))
 			return undefined;
 		profileMac = existing.macAddress ?? "";
-		if (!stillOwned() || !stillOwned(existing.uuid, profileMac))
-			return undefined;
+		const canUse = () =>
+			stillOwned() &&
+			stillOwned(existing.uuid, profileMac) &&
+			hasSavedHotspotProfile(deps.credentials.get(macAddress), existing.uuid);
+		if (!canUse()) return undefined;
 		const password = await readVerifiedNmWifiSecret(existing.uuid, {
 			"802-11-wireless.ssid": existing.ssid,
 			"802-11-wireless.mac-address": profileMac,
 		});
 		if (operation && (!(await operation.check()) || !operation.current()))
 			return undefined;
-		if (!stillOwned() || !stillOwned(existing.uuid, profileMac))
-			return undefined;
+		if (!canUse()) return undefined;
 		if (password === undefined && isNmWifiSecretAvailable(existing.password))
 			return undefined;
 		rememberHotspotProfilePin(hotspot, existing.uuid, profileMac);
@@ -399,6 +439,30 @@ async function resolveHotspotIdentity(
 	// is about to be shown, so the display can never disagree with the AP.
 	if (hotspot.conn) {
 		const credentialUuid = hotspot.conn;
+		const permitCredentialWrite = async () => {
+			const admission = permitSavedWrite
+				? await permitSavedWrite(credentialUuid, profileMac)
+				: true;
+			if (
+				!admission ||
+				(profileMatches && !(await profileMatches(credentialUuid)))
+			)
+				return false;
+			if (
+				permitLiveWrite
+					? !(await permitLiveWrite())
+					: operation && !(await operation.permit())
+			)
+				return false;
+			return () =>
+				(!operation || operation.current()) &&
+				profileAdmissionCurrent(admission) &&
+				owned(credentialUuid, profileMac) &&
+				hasSavedHotspotProfile(
+					deps.credentials.get(macAddress),
+					credentialUuid,
+				);
+		};
 		const written = await runHotspotProfileOperation({
 			uuid: credentialUuid,
 			kind: "modify",
@@ -406,10 +470,13 @@ async function resolveHotspotIdentity(
 				"802-11-wireless.ssid": name,
 				"802-11-wireless-security.psk": password,
 			},
-			run: async (fields) =>
-				(!profileMatches || (await profileMatches(credentialUuid))) &&
-				(!operation || ((await operation.check()) && operation.current())) &&
-				deps.nmConnSetFields(credentialUuid, fields, operation?.permit),
+			run: (fields) =>
+				writeHotspotProfileFields(
+					deps.nmConnSetFields,
+					credentialUuid,
+					fields,
+					permitCredentialWrite,
+				),
 		});
 		if (!written.success) return undefined;
 		if (operation && (!(await operation.check()) || !operation.current()))
@@ -434,6 +501,13 @@ async function resolveHotspotIdentity(
 		password,
 		...(profileMac !== undefined ? { profileMac } : {}),
 	};
+}
+
+function hasSavedHotspotProfile(
+	saved: ReturnType<HotspotActivationDeps["credentials"]["get"]>,
+	uuid: string,
+): boolean {
+	return saved?.conn === uuid || saved?.previousConns?.includes(uuid) === true;
 }
 
 export type HotspotPrepareResult =
@@ -514,6 +588,10 @@ async function prepareHotspotLocked(
 	const hasPortCopy = isHotspotPortCredentialCopy(owner);
 	const owned = hotspotOwnershipGuard(owner, wifiInterface);
 	const operation = wifiOperationGuard(binding);
+	const port =
+		binding?.devicePath ?? hotspotDevicePath(physicalMac, wifiInterface.ifname);
+	const permitPins = (uuid: string) =>
+		permitsHotspotProfilePins(uuid, physicalMac, port, deps.readProfilePins);
 	const identity = await resolveHotspotIdentity(
 		owner,
 		physicalMac,
@@ -521,6 +599,8 @@ async function prepareHotspotLocked(
 		deps,
 		binding ? operation : undefined,
 		portAlias,
+		undefined,
+		permitPins,
 	);
 	if (
 		operation.changed ||
@@ -582,13 +662,25 @@ async function prepareHotspotLocked(
 					"802-11-wireless.ssid": chosen.name,
 					"802-11-wireless-security.psk": chosen.password,
 				},
-				run: async (fields) =>
-					(!binding || ((await operation.check()) && operation.current())) &&
-					owned(credentialUuid, identity.profileMac) &&
-					deps.nmConnSetFields(
+				run: (fields) =>
+					writeHotspotProfileFields(
+						deps.nmConnSetFields,
 						credentialUuid,
 						fields,
-						binding ? operation.permit : undefined,
+						async () => {
+							if (
+								!(await permitPins(credentialUuid)) ||
+								(binding && !(await operation.permit()))
+							)
+								return false;
+							return () =>
+								operation.current() &&
+								owned(credentialUuid, identity.profileMac) &&
+								hasSavedHotspotProfile(
+									deps.credentials.get(owner),
+									credentialUuid,
+								);
+						},
 					),
 			})
 		).success
@@ -995,15 +1087,18 @@ export async function startHotspotLocked(
 	const connect = (
 		uuid: string,
 		before: NmProfileInstance | null | undefined,
+		requestedIfname?: string,
 	) => {
 		const runId = before?.runId;
-		const activationIfname = concurrentInterface?.ifname ?? ifname;
 		const accept = (path: string) => {
 			activePath = path;
 			if (runId) activeReceipt = { path, runId, ifname: activationIfname };
 		};
-		return binding?.bootRestore
-			? deps.nmConnect(uuid, HOTSPOT_UP_TO, accept, undefined, activationIfname)
+		const dispatchIfname = binding?.bootRestore
+			? activationIfname
+			: requestedIfname;
+		return dispatchIfname
+			? deps.nmConnect(uuid, HOTSPOT_UP_TO, accept, undefined, dispatchIfname)
 			: deps.nmConnect(uuid, HOTSPOT_UP_TO, accept);
 	};
 	let activationAttempted = false;
@@ -1057,6 +1152,10 @@ export async function startHotspotLocked(
 					: {}),
 			};
 		}
+		const provenActivationIfname =
+			binding && (!concurrentInterface || targetRadio)
+				? activationIfname
+				: undefined;
 		const bindingFields: Record<string, string> = concurrentInterface
 			? {
 					...concurrentHotspotBindingFields(ifname),
@@ -1132,8 +1231,39 @@ export async function startHotspotLocked(
 			return refusal;
 		};
 
+		// The leg's bindings are rechecked before each write; its identity is part of every permit.
+		const leg = async (): Promise<boolean> => {
+			if (
+				!concurrentInterface ||
+				!deps.validateConcurrentInterface ||
+				(await deps.validateConcurrentInterface(concurrentInterface))
+			)
+				return true;
+			if (binding && targetRadio) operation.refuse();
+			channelRefused = true;
+			return false;
+		};
+		// Pins and selectors can await I/O; sample live state after those reads.
+		const permitLiveWrite = async () => {
+			if (binding && !(await operation.permit())) return false;
+			if (!(await stationCurrent())) {
+				channelRefused = true;
+				return false;
+			}
+			return operation.current();
+		};
+		const permitBindingWrite = async () => (await leg()) && permitLiveWrite();
+
 		// The SAME resolution `wifiHotspotPrepare` showed the operator, so the AP
 		// broadcasts exactly the credentials they acknowledged.
+		const port = binding?.devicePath ?? hotspotDevicePath(physicalMac, ifname);
+		const admitSavedPins = savedHotspotStartPinGuard(
+			owner,
+			physicalMac,
+			port,
+			deps.readProfilePins,
+			binding,
+		);
 		const identity = await resolveHotspotIdentity(
 			owner,
 			physicalMac,
@@ -1142,14 +1272,18 @@ export async function startHotspotLocked(
 			binding ? operation : undefined,
 			portAlias,
 			profileMatches,
+			async (uuid, observedMac) =>
+				canWriteSavedHotspotPins(await admitSavedPins(uuid, observedMac)),
+			permitBindingWrite,
 		);
 		if (!identity || !owned(identity.conn, identity.profileMac))
 			return rollback();
 		if (!identity.conn && binding?.bootRestore === "require-port-pin")
 			return rollback();
 		let conn = identity.conn;
-		// Boot rebinds transport fields, not the saved profile's security policy.
+		// Boot may repair an eligible leg name, but never repins a saved physical port.
 		if (binding?.bootRestore && conn) {
+			delete bindingFields["match.path"];
 			for (const field of Object.keys(bindingFields))
 				if (field.startsWith("802-11-wireless-security."))
 					delete bindingFields[field];
@@ -1171,18 +1305,6 @@ export async function startHotspotLocked(
 				"802-11-wireless.band": exclusiveChannel.nmBand,
 				"802-11-wireless.channel": exclusiveChannel.nmChannel,
 			});
-		// The leg's bindings are rechecked before each write; its identity is part of every permit.
-		const leg = async (): Promise<boolean> => {
-			if (
-				!concurrentInterface ||
-				!deps.validateConcurrentInterface ||
-				(await deps.validateConcurrentInterface(concurrentInterface))
-			)
-				return true;
-			if (binding && targetRadio) operation.refuse();
-			channelRefused = true;
-			return false;
-		};
 		const ready = async (): Promise<boolean> => {
 			if (!owned(conn, identity.profileMac)) return false;
 			if (!binding?.bootRestore && !(await stationCurrent())) {
@@ -1235,7 +1357,42 @@ export async function startHotspotLocked(
 			if (binding?.bootRestore) return;
 			void deps
 				.pruneHotspotConns(owner, keepUuid)
-				.catch((err) => logger.debug(`hotspot profile cleanup failed: ${err}`));
+				.catch(() => logger.debug("hotspot profile cleanup failed"));
+		};
+
+		const applyAutoconnect = async (
+			uuid: string,
+			permit: () => Promise<ProfileWriteAdmission>,
+		): Promise<boolean> => {
+			const policy = await hotspotAutoconnectPolicy(owner, bindingFields);
+			if (!policy) return true;
+			return reconcileWifiAdapterProfileLocked(owner, {
+				uuid,
+				fields: policy.fields,
+				write: async (id, fields) => {
+					let skipped = false;
+					const written = await writeProfile({
+						uuid: id,
+						kind: "modify",
+						fields,
+						run: (delta) =>
+							writeHotspotProfileFields(
+								deps.nmConnSetFields,
+								id,
+								delta,
+								async () => {
+									const admission = await permit();
+									return () => {
+										if (!profileAdmissionCurrent(admission)) return false;
+										skipped = policy.current?.() === false;
+										return !skipped;
+									};
+								},
+							),
+					});
+					return written || skipped;
+				},
+			});
 		};
 
 		if (conn) {
@@ -1244,33 +1401,68 @@ export async function startHotspotLocked(
 			if (profileMatches && !match) return rollback();
 			const staleMatch = match ? match.staleMatch : undefined;
 			if (staleMatch) bindingFields["match.interface-name"] = activationIfname;
-			// Boot already follows discovery; a second plain-key sweep must not
-			// replace the port owner's selected profile under this transaction.
-			if (!binding?.bootRestore) await deps.wifiUpdateSavedConns();
-			if (binding && !(await operation.permit())) return rollback();
-			if (!owned(conn, identity.profileMac)) return rollback();
+			const stillOwned = () =>
+				owned(existingUuid, identity.profileMac) &&
+				hasSavedHotspotProfile(deps.credentials.get(owner), existingUuid);
+			const readSavedPins = () =>
+				admitSavedPins(existingUuid, identity.profileMac);
+			const permission = await readSavedPins();
+			if (permission.kind === "refuse" || !stillOwned()) return rollback();
+			const activateOnly = permission.kind === "activate-only";
+			const keepPolicy =
+				permission.kind === "keep-policy" && !concurrentInterface;
+			if (activateOnly && concurrentInterface) return rollback();
+			const permitExistingWrite = async (
+				stage: "binding" | "discovery" | "policy",
+			) => {
+				const admission = canWriteSavedHotspotPins(await readSavedPins());
+				if (!admission) return false;
+				if (stage === "binding" && profileMatches) {
+					const current = await profileMatches(existingUuid);
+					if (!current || current.staleMatch !== staleMatch) return false;
+				}
+				// After Up the leg is no longer idle; check its bound lifetime instead.
+				const checkLive =
+					stage === "policy" ? permitLiveWrite : permitBindingWrite;
+				if (!(await checkLive())) return false;
+				return () =>
+					operation.current() &&
+					stillOwned() &&
+					profileAdmissionCurrent(admission);
+			};
+			// Boot already follows discovery; it must not run a second saved-profile sweep.
+			if (!activateOnly && !binding?.bootRestore) {
+				await deps.wifiUpdateSavedConns(undefined, undefined, (uuid) =>
+					uuid === existingUuid
+						? permitExistingWrite("discovery")
+						: Promise.resolve(false),
+				);
+				if (binding && !(await operation.permit())) return rollback();
+				if (!owned(conn, identity.profileMac)) return rollback();
+			}
 			profileInstance = await deps.readProfileInstance(conn);
-			const rebound = await writeProfile({
-				uuid: existingUuid,
-				kind: "modify",
-				fields: bindingFields,
-				run: async (fields) => {
-					if (profileMatches) {
-						const current = await profileMatches(existingUuid);
-						if (!current || current.staleMatch !== staleMatch) return false;
-					}
-					return (
-						(await leg()) &&
-						(!binding || (await permitBootDispatch())) &&
-						owned(existingUuid, identity.profileMac) &&
-						deps.nmConnSetFields(existingUuid, fields)
-					);
-				},
-			});
-			if (!owned(conn, identity.profileMac)) return rollback();
-			if (!rebound) return rollback();
+			if (!activateOnly) {
+				// Matching pins need no roster-dependent autoconnect policy change.
+				const {
+					"connection.autoconnect": _autoconnect,
+					...withoutAutoconnect
+				} = bindingFields;
+				const rebound = await writeProfile({
+					uuid: existingUuid,
+					kind: "modify",
+					fields: keepPolicy ? withoutAutoconnect : bindingFields,
+					run: (fields) =>
+						writeHotspotProfileFields(
+							deps.nmConnSetFields,
+							existingUuid,
+							fields,
+							() => permitExistingWrite("binding"),
+						),
+				});
+				if (!owned(conn, identity.profileMac) || !rebound) return rollback();
+			}
 			if (binding && !(await operation.permit())) return rollback();
-			prune(conn);
+			if (!activateOnly) prune(conn);
 			const changedAfterUp = async () => {
 				const result = rollback();
 				if (
@@ -1297,8 +1489,19 @@ export async function startHotspotLocked(
 					if (!(await ready())) return false;
 					if (profileMatches && !(await profileMatches(existingUuid, false)))
 						return false;
-					if (binding && !(await permitBootDispatch())) return false;
-					return connect(existingUuid, before);
+					if (activateOnly) {
+						const allowed = await readSavedPins();
+						if (
+							allowed.kind !== "activate-only" ||
+							!(await permitBindingWrite()) ||
+							!allowed.current?.()
+						)
+							return false;
+					} else if (binding && !(await permitBootDispatch())) return false;
+					return (
+						stillOwned() &&
+						connect(existingUuid, before, provenActivationIfname)
+					);
 				},
 			});
 			if (binding && (up || activePath) && !(await operation.permit()))
@@ -1307,19 +1510,8 @@ export async function startHotspotLocked(
 			if (!(await confirmed(conn)))
 				return operation.changed ? await changedAfterUp() : rollback();
 			if (!owned(conn, identity.profileMac)) return rollback();
-			await reconcileWifiAdapterProfileLocked(owner, {
-				uuid: conn,
-				fields: hotspotAutoconnectFields(owner, bindingFields),
-				write: (id, fields) =>
-					writeProfile({
-						uuid: id,
-						kind: "modify",
-						fields,
-						run: async (delta) =>
-							(!binding || (await permitBootDispatch())) &&
-							deps.nmConnSetFields(id, delta),
-					}),
-			});
+			if (!activateOnly && !keepPolicy)
+				await applyAutoconnect(conn, () => permitExistingWrite("policy"));
 			if (binding && !(await operation.permit())) return await changedAfterUp();
 			if (!owned(conn, identity.profileMac)) return rollback();
 			rememberIdentity(
@@ -1381,7 +1573,7 @@ export async function startHotspotLocked(
 			)
 				return rollback();
 			if (creationRecorded) clearWifiAdapterReconcile(owner, "authority");
-			await deps.wifiUpdateSavedConns();
+			await deps.wifiUpdateSavedConns(undefined, undefined, async () => false);
 			if (binding && !(await operation.permit())) return rollback();
 			if (!owned(uuid)) return rollback();
 			prune(uuid);
@@ -1393,7 +1585,7 @@ export async function startHotspotLocked(
 						if (!(await ready())) return false;
 						if (binding && !(await permitBootDispatch())) return false;
 						activationAttempted = true;
-						return connect(uuid, before);
+						return connect(uuid, before, provenActivationIfname);
 					},
 				}))
 			)
@@ -1402,18 +1594,15 @@ export async function startHotspotLocked(
 			if (binding && !(await operation.permit())) return rollback();
 			if (!owned(uuid)) return rollback();
 			if (
-				!(await reconcileWifiAdapterProfileLocked(owner, {
-					uuid,
-					fields: hotspotAutoconnectFields(owner, bindingFields),
-					write: (id, fields) =>
-						writeProfile({
-							uuid: id,
-							kind: "modify",
-							fields,
-							run: async (delta) =>
-								(!binding || (await permitBootDispatch())) &&
-								deps.nmConnSetFields(id, delta),
-						}),
+				!(await applyAutoconnect(uuid, async () => {
+					const admission = canWriteSavedHotspotPins(
+						await admitSavedPins(uuid),
+					);
+					if (!admission || !(await permitLiveWrite())) return false;
+					return () =>
+						operation.current() &&
+						owned(uuid) &&
+						profileAdmissionCurrent(admission);
 				}))
 			)
 				return rollback();

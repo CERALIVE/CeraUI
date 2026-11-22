@@ -47,9 +47,12 @@ export async function fixture() {
 				? (state.row.concurrentHotspot.activeConn ?? undefined)
 				: undefined,
 	);
-	spyOn(defaultHotspotDeps.credentials, "get").mockImplementation(() => {
+	spyOn(defaultHotspotDeps, "readProfilePins").mockResolvedValue(["", ""]);
+	spyOn(defaultHotspotDeps.credentials, "get").mockImplementation((owner) => {
 		effects.push("store-read");
-		return undefined;
+		return owner === "dc:a6:32:aa:bb:c0"
+			? { conn: "test-ap", ssid: "Original AP", password: "original-password" }
+			: undefined;
 	});
 	spyOn(defaultHotspotDeps.credentials, "remember").mockImplementation(() => {
 		effects.push("store-write");

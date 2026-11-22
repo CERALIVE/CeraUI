@@ -26,6 +26,10 @@ import type {
 	readNmProfileInstance,
 } from "../network/network-manager-profile-instance.ts";
 import type {
+	ProfileWriteAdmission,
+	ProfileWritePermit,
+} from "../network/profile-write-permit.ts";
+import type {
 	HotspotCredentials,
 	HotspotCredentialsStore,
 } from "./hotspot-credentials.ts";
@@ -197,6 +201,12 @@ export type HotspotActivationInstance = {
 	readonly activeRunId: string | undefined;
 };
 
+export type HotspotProfilePins = readonly [
+	mac: string,
+	port: string,
+	autoconnect?: string,
+];
+
 /**
  * Injectable side-effect surface for the hotspot start flow. Production wires
  * the real NetworkManager helpers; tests pass deterministic fakes. Monitor
@@ -212,15 +222,20 @@ export type HotspotActivationDeps = {
 	nmConnect: (...args: Parameters<typeof nmConnect>) => Promise<unknown>;
 	/** Production reads NM instance evidence; injected NM implementations supply their own. */
 	readProfileInstance: typeof readNmProfileInstance;
+	readProfilePins?: (uuid: string) => Promise<HotspotProfilePins | undefined>;
 	nmConnSetFields: (
 		uuid: string,
 		fields: Record<string, string>,
-		permit?: () => Promise<boolean>,
+		permit?: ProfileWritePermit,
 	) => Promise<unknown>;
 	nmApConnAdd: typeof nmApConnAdd;
 	nmConnDelete: typeof nmConnDelete;
 	nmDisconnect: typeof nmDisconnect;
-	wifiUpdateSavedConns: () => Promise<void>;
+	wifiUpdateSavedConns: (
+		signal?: AbortSignal,
+		onCommitted?: () => void,
+		permitHotspotWrite?: (uuid: string) => Promise<ProfileWriteAdmission>,
+	) => Promise<void>;
 	broadcastState: () => void;
 	setDupIpSuppression: (ifname: string, suppressed: boolean) => void;
 	/** Durable per-adapter hotspot identity, keyed by permanent MAC address. */

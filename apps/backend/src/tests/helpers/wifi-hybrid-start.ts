@@ -60,9 +60,14 @@ export async function hybridFixture(
 		ssid: "Original AP",
 		password: "original-password",
 		channel: "ch_11",
+		...(first ? {} : { conn: "test-ap" }),
 	};
 	const deps = {
 		...defaultHotspotDeps,
+		readProfilePins: async (): Promise<readonly [string, string]> => [
+			fields["802-11-wireless.mac-address"] ?? "",
+			fields["match.path"] ?? "",
+		],
 		readCapabilities: () => ({
 			staApCombo: { supported: true, sameChannelOnly: true },
 		}),

@@ -79,7 +79,7 @@ test("a refused creation-record write dispatches no add or activation", async ()
 	}
 });
 
-test("ordinary adoption of an operator AP cannot create first-start provenance", async () => {
+test("observing an operator AP cannot create ownership or first-start provenance", async () => {
 	const f = await firstAp();
 	const uuid = "22222222-2222-4222-8222-222222222222";
 	try {
@@ -106,7 +106,7 @@ test("ordinary adoption of an operator AP cannot create first-start provenance",
 			active: uuid,
 			autoconnect: true,
 			preserved: true,
-			owned: true,
+			owned: false,
 			intent: null,
 			deleted: false,
 		});

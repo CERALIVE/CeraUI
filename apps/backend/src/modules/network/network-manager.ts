@@ -25,12 +25,13 @@ import {
 	shouldMockWifi,
 } from "../../mocks/providers/wifi.ts";
 import {
-	describeCliError,
+	describePrivateCliError,
 	logParseError,
 	type ParseResult,
 	parseFail,
 	parseOk,
 } from "../system/cli-parse.ts";
+import { deleteInactiveHotspotProfile } from "../wifi/wifi-hotspot-activity.ts";
 import {
 	type HotspotProfileOperation,
 	type HotspotProfileOperationResult,
@@ -166,6 +167,7 @@ export async function nmConnGetFields<Tupel extends Readonly<Array<string>>>(
 	uuid: ConnectionUUID,
 	fields: Tupel,
 	layout?: "fixed",
+	secrets = true,
 ) {
 	try {
 		if (
@@ -175,7 +177,7 @@ export async function nmConnGetFields<Tupel extends Readonly<Array<string>>>(
 			const row = await readNmFields(
 				fields.join(","),
 				["connection", "show", argMatch(ID_RE, uuid)],
-				true,
+				secrets,
 			);
 			return fields.map((field) => row.get(field.toLowerCase()) ?? "") as {
 				[K in keyof Tupel]: string;
@@ -187,7 +189,7 @@ export async function nmConnGetFields<Tupel extends Readonly<Array<string>>>(
 				"--terse",
 				"--escape",
 				"no",
-				"--show-secrets",
+				...(secrets ? ["--show-secrets"] : []),
 				"--get-values",
 				fields.join(","),
 				"connection",
@@ -203,7 +205,7 @@ export async function nmConnGetFields<Tupel extends Readonly<Array<string>>>(
 			"--terse",
 			"--escape",
 			"no",
-			"--show-secrets",
+			...(secrets ? ["--show-secrets"] : []),
 			"--get-values",
 			fields.join(","),
 			"connection",
@@ -222,7 +224,7 @@ export async function nmConnGetFields<Tupel extends Readonly<Array<string>>>(
 export async function nmConnSetFields(
 	uuid: ConnectionUUID,
 	fields: Record<string, string>,
-	permit?: () => Promise<boolean>,
+	permit?: import("./profile-write-permit.ts").ProfileWritePermit,
 ) {
 	try {
 		// In mock mode, simulate successful modification
@@ -241,7 +243,8 @@ export async function nmConnSetFields(
 			args.push(field);
 			args.push(value);
 		}
-		if (permit && !(await permit())) return false;
+		if (permit && (!(await permit()) || permit.current?.() === false))
+			return false;
 		const stdout = await run("nmcli", args);
 		return stdout === "";
 	} catch {
@@ -268,7 +271,12 @@ export async function nmConnSetWifiMacAddress(
 	});
 }
 
-export async function nmConnDelete(uuid: ConnectionUUID) {
+export async function nmConnDelete(
+	uuid: ConnectionUUID,
+	settingsPath?: string,
+	runId?: string,
+	current?: () => boolean,
+) {
 	try {
 		// In mock mode, simulate successful deletion
 		if (shouldMockWifi()) {
@@ -276,10 +284,18 @@ export async function nmConnDelete(uuid: ConnectionUUID) {
 			return true;
 		}
 
+		if (settingsPath !== undefined) {
+			if (!runId || !current) return false;
+			const { deleteNmSettingsConnection } = await import(
+				"./network-manager-activation.ts"
+			);
+			return await deleteNmSettingsConnection(settingsPath, runId, current);
+		}
 		const stdout = await run("nmcli", ["conn", "del", argMatch(ID_RE, uuid)]);
 		if (parseNmConnDeleted(stdout)) return true;
 	} catch (err) {
-		logger.error(`nmConnDelete err: ${describeCliError(err)}`);
+		logWifiCommandFailure("nmConnDelete", err);
+		if (settingsPath !== undefined) return false;
 	}
 	const rows = await nmConnsGet("uuid");
 	return Boolean(
@@ -293,6 +309,11 @@ export async function nmConnDelete(uuid: ConnectionUUID) {
 
 const NM_ACTIVATED_PATH_RE =
 	/D-Bus active path: (\/org\/freedesktop\/NetworkManager\/ActiveConnection\/\d+)\)/;
+
+/** NM can echo credentials even when argv only names a connection. */
+function logWifiCommandFailure(operation: string, error: unknown): void {
+	logger.error(`${operation} failed: ${describePrivateCliError(error)}`);
+}
 
 export async function nmConnect(
 	uuid: ConnectionUUID,
@@ -340,7 +361,7 @@ export async function nmConnect(
 			if (path) onActivated?.(path);
 			onTimeout?.();
 		}
-		logger.error(`nmConnect err: ${describeCliError(err)}`);
+		logWifiCommandFailure("nmConnect", err);
 	}
 	return false;
 }
@@ -368,6 +389,7 @@ export async function nmDisconnect(
 	activePath?: string,
 	runId?: string,
 	ifname?: string,
+	current?: () => boolean,
 ) {
 	try {
 		// In mock mode, simulate successful disconnection
@@ -381,12 +403,19 @@ export async function nmDisconnect(
 			const { deactivateNmActivation } = await import(
 				"./network-manager-activation.ts"
 			);
-			return await deactivateNmActivation(activePath, runId, uuid, ifname);
+			return await deactivateNmActivation(
+				activePath,
+				runId,
+				uuid,
+				ifname,
+				current,
+			);
 		}
+		if (current && !current()) return false;
 		const stdout = await run("nmcli", ["conn", "down", argMatch(ID_RE, uuid)]);
 		return parseNmConnDeactivated(stdout);
 	} catch (err) {
-		logger.error(`nmDisconnect err: ${describeCliError(err)}`);
+		logWifiCommandFailure("nmDisconnect", err);
 	}
 	return false;
 }
@@ -416,7 +445,7 @@ export async function nmDevices(fields: string) {
 		]);
 		return stdout.split("\n");
 	} catch (err) {
-		logger.error(`nmDevices err: ${describeCliError(err)}`);
+		logWifiCommandFailure("nmDevices", err);
 	}
 	return undefined;
 }
@@ -477,19 +506,25 @@ export async function nmDeviceProp(
 		]);
 		return mode === "multiline" ? stdout.split("\n") : splitNmValues(stdout);
 	} catch (err) {
-		if (
+		const stderr =
 			typeof err === "object" &&
 			err !== null &&
 			"stderr" in err &&
-			typeof err.stderr === "string" &&
-			err.stderr.includes("invalid field")
+			typeof err.stderr === "string"
+				? err.stderr
+				: undefined;
+		if (
+			(err instanceof Error && "code" in err && err.code === 8) ||
+			stderr?.trim() === "Error: NetworkManager is not running."
 		) {
+			logger.error("nmDeviceProp failed: NetworkManager is not running");
+		} else if (stderr?.includes("invalid field")) {
 			if (!warnedInvalidDeviceFields.has(fields)) {
 				warnedInvalidDeviceFields.add(fields);
-				logger.warn(`nmDeviceProp err: ${describeCliError(err)}`);
+				logger.warn(`nmDeviceProp failed: ${describePrivateCliError(err)}`);
 			}
 		} else {
-			logger.error(`nmDeviceProp err: ${describeCliError(err)}`);
+			logWifiCommandFailure("nmDeviceProp", err);
 		}
 	}
 	return undefined;
@@ -514,7 +549,7 @@ export async function nmRescan(device?: string) {
 		const stdout = await run("nmcli", args);
 		return stdout === "";
 	} catch (err) {
-		logger.error(`nmRescan err: ${describeCliError(err)}`);
+		logWifiCommandFailure("nmRescan", err);
 	}
 	return false;
 }
@@ -550,7 +585,7 @@ export async function nmScanResults(fields: string) {
 		]);
 		return stdout.split("\n");
 	} catch (err) {
-		logger.error(`nmScanResults err: ${describeCliError(err)}`);
+		logWifiCommandFailure("nmScanResults", err);
 	}
 	return undefined;
 }
@@ -706,7 +741,13 @@ export async function nmApConnAdd(
 		const cleanupConfirmed = await act({
 			uuid,
 			kind: "delete",
-			run: () => nmConnDelete(uuid),
+			run: (before) =>
+				deleteInactiveHotspotProfile(
+					uuid,
+					before,
+					readNmProfileInstance,
+					() => true,
+				),
 		});
 		throw new NmApConnAddError(
 			uuid,

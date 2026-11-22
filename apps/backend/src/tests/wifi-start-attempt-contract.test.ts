@@ -91,6 +91,7 @@ test("a deferred replacement refusal echoes the Start UUID after its accepted re
 	);
 	spyOn(defaultHotspotDeps, "readCapabilities").mockReturnValue(undefined);
 	spyOn(defaultHotspotDeps, "readProfileInstance").mockResolvedValue(instance);
+	spyOn(defaultHotspotDeps, "readProfilePins").mockResolvedValue(["", ""]);
 	spyOn(defaultHotspotDeps, "pollHotspotActive").mockResolvedValue(false);
 	spyOn(defaultHotspotDeps, "wifiUpdateSavedConns").mockResolvedValue();
 	spyOn(defaultHotspotDeps, "nmConnSetFields").mockResolvedValue(true);
@@ -104,7 +105,11 @@ test("a deferred replacement refusal echoes the Start UUID after its accepted re
 	spyOn(defaultHotspotDeps, "pruneHotspotConns").mockResolvedValue();
 	spyOn(defaultHotspotDeps, "broadcastState").mockImplementation(() => {});
 	spyOn(defaultHotspotDeps, "setDupIpSuppression").mockImplementation(() => {});
-	spyOn(defaultHotspotDeps.credentials, "get").mockReturnValue(undefined);
+	spyOn(defaultHotspotDeps.credentials, "get").mockReturnValue({
+		conn: "test-ap",
+		ssid: "Original AP",
+		password: "original-password",
+	});
 	const attempt = crypto.randomUUID();
 	const outcomes = () =>
 		f.frames.flatMap((raw) => {

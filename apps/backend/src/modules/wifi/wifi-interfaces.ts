@@ -97,6 +97,8 @@ import {
 import { wifiAdapterKeyPort } from "./wifi-permanent-mac.ts";
 import {
 	type RadioIdentity,
+	type ReadRadioInventory,
+	radioInventoryFor,
 	recordWifiRadioShadowFailure,
 	sameRadioLifetime,
 	wifiRadioIdentity,
@@ -452,6 +454,7 @@ async function syncActiveConnection(
 	wifiInterface: WifiInterface,
 	macAddress: MacAddress,
 	activeConn: ConnectionUUID | null,
+	readInventory: ReadRadioInventory,
 ): Promise<boolean> {
 	const detailsBefore = hotspotObservation(wifiInterface);
 	const mode =
@@ -465,7 +468,10 @@ async function syncActiveConnection(
 		(wifiInterface.hotspot.conn !== activeConn ||
 			wifiInterface.degradedReason === "permanent-mac-unresolved")
 	) {
-		await handleHotspotConn(macAddress, activeConn, { active: true });
+		await handleHotspotConn(macAddress, activeConn, {
+			active: true,
+			readInventory,
+		});
 	}
 	return changed || detailsBefore !== hotspotObservation(wifiInterface);
 }
@@ -477,6 +483,7 @@ let queuedDiscovery:
 
 async function reconcileSampledWifiRegistry(): Promise<boolean> {
 	const observation = wifiRadioIdentity.publishedObservation;
+	const readInventory = radioInventoryFor();
 	const activeConnections = new Map<string, string | null>();
 	for (const row of Object.values(getWifiInterfacesByMacAddress())) {
 		activeConnections.set(row.ifname, row.activeConn ?? row.conn);
@@ -490,6 +497,7 @@ async function reconcileSampledWifiRegistry(): Promise<boolean> {
 		!(await quiesceHotspotAutoconnect(
 			wifiRadioIdentity.state.rows,
 			activeConnections,
+			readInventory,
 		))
 	) {
 		return false;
@@ -518,7 +526,8 @@ async function reconcileSampledWifiRegistry(): Promise<boolean> {
 				const active = activeConnections.get(row.ifname) ?? null;
 				if ((row.activeConn ?? row.conn) !== active) {
 					if (active === null) row.conn = null;
-					if (await syncActiveConnection(row, key, active)) statusChange = true;
+					if (await syncActiveConnection(row, key, active, readInventory))
+						statusChange = true;
 				}
 				if (
 					row.concurrentHotspot?.activeConn &&
@@ -673,6 +682,7 @@ async function discoverWifiDevices() {
 					})),
 					observation,
 					reconcileSampledWifiRegistry,
+					topologyGeneration,
 				);
 			} catch {
 				recordWifiRadioShadowFailure();
@@ -705,6 +715,7 @@ async function discoverWifiDevices() {
 				}),
 				observation,
 				reconcileSampledWifiRegistry,
+				topologyGeneration,
 			);
 			if (!sampled) return;
 		} catch {
@@ -786,7 +797,8 @@ async function discoverWifiDevices() {
 		operationPending = true;
 	}
 	if (operationPending) return;
-	if (!(await quiesceHotspotAutoconnect(identities, listed))) {
+	const readInventory = radioInventoryFor(identities);
+	if (!(await quiesceHotspotAutoconnect(identities, listed, readInventory))) {
 		return;
 	}
 	if (signal.aborted) return;
@@ -1066,6 +1078,7 @@ async function discoverWifiDevices() {
 									updatedInterface,
 									macAddress,
 									activeConn,
+									readInventory,
 								)
 							) {
 								statusChange = true;
@@ -1201,7 +1214,7 @@ async function discoverWifiDevices() {
 					? registryKey
 					: undefined,
 				activeConn,
-				{ active: true },
+				{ active: true, readInventory },
 			);
 			if (signal.aborted) return;
 		}
@@ -1230,7 +1243,7 @@ async function discoverWifiDevices() {
 	}
 
 	if (newDevices) {
-		await wifiUpdateSavedConns(signal);
+		await wifiUpdateSavedConns(signal, undefined, undefined, readInventory);
 		if (signal.aborted) return;
 		wifiScheduleScanRefresh();
 	}

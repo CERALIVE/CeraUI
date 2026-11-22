@@ -5,6 +5,7 @@ import * as mocks from "../../mocks/mock-service.ts";
 import { getConfig } from "../../modules/config.ts";
 import * as nm from "../../modules/network/network-manager.ts";
 import * as profileInstances from "../../modules/network/network-manager-profile-instance.ts";
+import * as nmSecrets from "../../modules/network/network-manager-secret.ts";
 import * as streaming from "../../modules/streaming/streaming.ts";
 import * as credentials from "../../modules/wifi/hotspot-credentials.ts";
 import {
@@ -105,6 +106,16 @@ export async function virtualBindingFixture() {
 	interfaces.resetWifiInterfaceDiscoveryForTest();
 	interfaces.resetWifiConnectionModeCache();
 	credentials.resetHotspotCredentialsForTest();
+	for (const conn of ["previous-parent", "old-ap"])
+		credentials.rememberHotspotCredentials(BINDING_MAC, {
+			conn,
+			ssid: conn,
+			password: "synthetic-binding-password",
+		});
+	spyOn(nmSecrets, "readVerifiedNmWifiSecret").mockImplementation(
+		async (uuid) =>
+			uuid === "station" ? undefined : "synthetic-binding-password",
+	);
 	setWifiState({});
 	onWifiChange(() => undefined);
 	for (const level of ["debug", "info", "warn", "error"] as const)
@@ -240,7 +251,7 @@ export async function virtualBindingFixture() {
 					created: false,
 				}),
 				readCapabilities: () => ({ staApCombo: { supported: true } }),
-				credentials: { get: () => undefined, remember: () => undefined },
+				credentials: credentials.hotspotCredentialsStore,
 				findHotspotConn: async () => undefined,
 				preferConcurrentAp: () => true,
 				nmApConnAdd: async () => (fail ? undefined : "old-ap"),

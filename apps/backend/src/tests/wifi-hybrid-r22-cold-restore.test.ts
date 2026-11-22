@@ -1,5 +1,8 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
+import { stat } from "node:fs/promises";
 import * as runner from "../helpers/run.ts";
+import * as instances from "../modules/network/network-manager-profile-instance.ts";
+import * as secrets from "../modules/network/network-manager-secret.ts";
 import {
 	hotspotCredentialsStore,
 	rememberHotspotCredentials,
@@ -27,6 +30,7 @@ import {
 	nmcliFieldNames,
 	nmcliFieldOutput,
 } from "./helpers/nmcli-field-output.ts";
+import { firstApKeyfiles } from "./helpers/wifi-first-ap-keyfiles.ts";
 import { hybridFixture, MAC } from "./helpers/wifi-hybrid-start.ts";
 import { targetFixture } from "./helpers/wifi-hybrid-target.ts";
 
@@ -451,6 +455,74 @@ test("hybrid restore does not dispatch Up if the matching interface selector cha
 		expect(f.effects).toEqual(["write"]);
 	} finally {
 		await f.restore();
+	}
+});
+
+test.each(["station channel", "AP leg"] as const)(
+	"hybrid restore does not modify or activate a saved profile when the %s changes during the dispatch pin read",
+	async (change) => {
+		const f = await verifiedProfileFixture(false);
+		try {
+			const leg = f.target.objects.get(NEW_LEG);
+			if (!leg) throw new Error("Missing borrowed AP leg");
+			let pinReads = 0;
+			let changed = false;
+			f.deps.readProfilePins = async () => {
+				// The first read admits the saved profile; the second is for Modify.
+				if (++pinReads === 2) {
+					changed = true;
+					if (change === "station channel") f.target.frequency(2437, "", 6);
+					else
+						f.target.objects.set(NEW_LEG, {
+							...leg,
+							ifindex: 99,
+							wdev: "0x99",
+						});
+				}
+				return [MAC, RESTORE_PORT, "no"];
+			};
+			await f.startVerified();
+			expect(changed).toBe(true);
+			expect(f.effects).toEqual([]);
+		} finally {
+			await f.restore();
+		}
+	},
+);
+
+test("boot credential repair refuses a selector changed during saved pin readback", async () => {
+	const f = await verifiedProfileFixture(false);
+	const files = firstApKeyfiles(() => "[connection]\nid=Original AP\n");
+	try {
+		const filename = files.filename(RESTORE_UUID);
+		const statInfo = await stat(filename, { bigint: true });
+		spyOn(instances, "readNmProfileInstance").mockResolvedValue({
+			path: "/org/freedesktop/NetworkManager/Settings/1",
+			fingerprint: "saved-ap",
+			file: {
+				filename,
+				device: String(statInfo.dev),
+				inode: String(statInfo.ino),
+				ctime: String(statInfo.ctimeNs),
+			},
+		});
+		spyOn(secrets, "serializeNmProfileModify").mockResolvedValue(
+			"[connection]\nid=Original AP\n[wifi-security]\npsk=original-password\n",
+		);
+		delete f.row.hotspot.password;
+		f.deps.readProfilePins = async () => {
+			f.profile["match.interface-name"] = "wlan0";
+			return [MAC, RESTORE_PORT, "no"];
+		};
+		expect(await f.startVerified()).toEqual({
+			success: false,
+			error: "activation-failed",
+		});
+		expect(f.profile["match.interface-name"]).toBe("wlan0");
+		expect(f.effects).toEqual([]);
+	} finally {
+		await f.restore();
+		files.close();
 	}
 });
 

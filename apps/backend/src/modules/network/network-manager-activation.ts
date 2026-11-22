@@ -1,4 +1,8 @@
-import { type DbusValue, isVariant } from "@ceralive/modem-control/transport";
+import {
+	type DbusTransport,
+	type DbusValue,
+	isVariant,
+} from "@ceralive/modem-control/transport";
 import { nmActivationBus } from "./network-manager-profile-instance.ts";
 
 const NM = "org.freedesktop.NetworkManager";
@@ -9,26 +13,58 @@ const ROOT = "/org/freedesktop/NetworkManager";
 const DEACTIVATED = 4;
 const DOWN_WAIT_MS = 10_000;
 
+async function ownerOnBus(bus: DbusTransport, runId: string) {
+	const [busId, owner] = runId.split("/");
+	if (!busId || !owner || !/^:[\w-]+(?:\.[\w-]+)+$/.test(owner))
+		return undefined;
+	await bus.connect();
+	const identity = await bus.callMethod({
+		destination: BUS,
+		path: "/org/freedesktop/DBus",
+		interface: BUS,
+		member: "GetId",
+		timeoutMs: 1000,
+	});
+	return identity.body[0] === busId ? owner : undefined;
+}
+
+/** Never resolve a new daemon while deleting a previously observed settings path. */
+export async function deleteNmSettingsConnection(
+	path: string,
+	runId: string,
+	current: () => boolean,
+): Promise<boolean> {
+	if (!/^\/org\/freedesktop\/NetworkManager\/Settings\/\d+$/.test(path))
+		return false;
+	const bus = nmActivationBus.open();
+	try {
+		const owner = await ownerOnBus(bus, runId);
+		if (!owner || !current()) return false;
+		await bus.callMethod({
+			destination: owner,
+			path,
+			interface: `${NM}.Settings.Connection`,
+			member: "Delete",
+			timeoutMs: DOWN_WAIT_MS,
+		});
+		return true;
+	} finally {
+		await bus.disconnect();
+	}
+}
+
 /** Validate the bus ID and address the original daemon on this same socket. */
 export async function deactivateNmActivation(
 	path: string,
 	runId: string,
 	uuid: string,
 	ifname: string,
+	current?: () => boolean,
 ): Promise<boolean> {
-	const [busId, owner] = runId.split("/");
-	if (!busId || !owner || !/^:[\w-]+(?:\.[\w-]+)+$/.test(owner)) return false;
 	const bus = nmActivationBus.open();
 	try {
-		await bus.connect();
-		const identity = await bus.callMethod({
-			destination: BUS,
-			path: "/org/freedesktop/DBus",
-			interface: BUS,
-			member: "GetId",
-			timeoutMs: 1000,
-		});
-		if (identity.body[0] !== busId) return false;
+		const owner = await ownerOnBus(bus, runId);
+		if (!owner) return false;
 		const property = async (object: string, iface: string, name: string) => {
 			const reply = await bus.callMethod({
 				destination: owner,
@@ -101,6 +137,7 @@ export async function deactivateNmActivation(
 		};
 		if (state !== 3) {
 			try {
+				if (current && !current()) return false;
 				await bus.callMethod({
 					destination: owner,
 					path: ROOT,

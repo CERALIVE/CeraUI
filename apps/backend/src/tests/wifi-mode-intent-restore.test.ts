@@ -276,13 +276,18 @@ beforeEach(async () => {
 				? undefined
 				: { staApCombo: { supported: row.supportsApStaConcurrency } },
 	});
+	spyOn(defaultHotspotDeps, "readProfilePins").mockResolvedValue(["", ""]);
 	spyOn(logger, "warn").mockImplementation((message) => {
 		warnings.push(String(message));
 		return logger;
 	});
 	spyOn(mocks, "shouldUseMocks").mockReturnValue(false);
 	spyOn(streaming, "getIsStreaming").mockImplementation(() => streamingOn);
-	spyOn(hotspotCredentialsStore, "get").mockReturnValue(undefined);
+	spyOn(hotspotCredentialsStore, "get").mockImplementation((owner) =>
+		owner === MAC && row?.hotspot.conn === PROFILE
+			? { conn: PROFILE, ssid: "Intent AP", password: "fixture-password" }
+			: undefined,
+	);
 	spyOn(hotspotCredentialsStore, "remember").mockImplementation(() => {});
 	spyOn(defaultHotspotDeps, "nmConnSetFields").mockImplementation(async () => {
 		effect("fields");

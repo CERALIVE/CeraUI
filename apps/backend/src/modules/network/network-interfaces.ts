@@ -75,6 +75,7 @@ import {
 	refreshDongleMetadata,
 } from "./dongle-metadata.ts";
 import { ethernetRoleForWire, isSharedLanPort } from "./ethernet-role.ts";
+import { advanceNetifTopologyGeneration } from "./netif-topology-generation.ts";
 import {
 	getRouterCellularAdmin,
 	type RouterAdminSim,
@@ -101,6 +102,8 @@ import {
 	getUnclaimedAdapters,
 	refreshUnclaimedAdapters,
 } from "./unclaimed-adapters.ts";
+
+export { getNetifTopologyGeneration } from "./netif-topology-generation.ts";
 
 export type NetworkInterface = {
 	usb?: boolean;
@@ -183,15 +186,10 @@ type NetdevBusEvidence = {
 };
 let netifSnapshotReady = false;
 let netifRefreshGeneration = 0;
-let netifTopologyGeneration = 0;
 const scanPublicationWarnings = new Set<string>();
 
 export function hasNetifSnapshot(): boolean {
 	return netifSnapshotReady;
-}
-
-export function getNetifTopologyGeneration(): number {
-	return netifTopologyGeneration;
 }
 
 export function getNetworkInterfaceIncarnation(
@@ -206,14 +204,14 @@ export function resetNetifSnapshotForTest(): void {
 	netif = {};
 	netifSnapshotReady = false;
 	netifRefreshGeneration++;
-	netifTopologyGeneration++;
+	advanceNetifTopologyGeneration();
 	scanPublicationWarnings.clear();
 	presenceEpoch.clear();
 	netifIdentities.clear();
 }
 
 function bumpPresence(name: string, removed = false): void {
-	const epoch = ++netifTopologyGeneration;
+	const epoch = advanceNetifTopologyGeneration();
 	presenceEpoch.set(name, epoch);
 	if (removed) {
 		netifIdentities.delete(name);
@@ -1141,7 +1139,7 @@ export function processIfconfigOutput(
 			const identity = netifIdentities.get(name);
 			if (previous && !identity) {
 				// Adopt the monitor's lifetime without invalidating its covering bus read.
-				netifTopologyGeneration++;
+				advanceNetifTopologyGeneration();
 			}
 			if (
 				previous &&
