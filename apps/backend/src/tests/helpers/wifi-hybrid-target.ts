@@ -24,6 +24,7 @@ export async function targetFixture(
 		readonly existing?: boolean;
 		readonly associateRow?: boolean;
 		readonly recordDiscovery?: boolean;
+		readonly distinctSentinel?: boolean;
 	} = {},
 ) {
 	const objects = new Map([
@@ -77,7 +78,10 @@ export async function targetFixture(
 	spyOn(radioIdentityReaders, "readText").mockImplementation(async (path) => {
 		if (path === "/proc/sys/kernel/random/boot_id") return boot;
 		if (path.endsWith("/index")) return "0";
-		if (path.endsWith("/macaddress")) return permanent;
+		if (path.endsWith("/macaddress"))
+			return options.distinctSentinel && path !== `${PHY}/macaddress`
+				? "dc:a6:32:aa:bb:ff"
+				: permanent;
 		if (path.endsWith("/flags"))
 			return path.includes("/wlan0/") ? "0x1" : "0x0";
 		const name = path.split("/").at(-2) ?? "";

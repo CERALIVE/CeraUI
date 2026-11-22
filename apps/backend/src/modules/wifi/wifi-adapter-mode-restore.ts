@@ -1,9 +1,13 @@
 import { logger } from "../../helpers/logger.ts";
+import { nmConnGetFields } from "../network/network-manager.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
-import { getHotspotCredentials } from "./hotspot-credentials.ts";
+import {
+	getHotspotCredentials,
+	isHotspotPortCredentialCopy,
+} from "./hotspot-credentials.ts";
 import {
 	wifiAdapterLockKey,
-	withWifiAdapterLock,
+	withWifiAdapterLocks,
 } from "./wifi-adapter-lock.ts";
 import {
 	getPersistedWifiAdapterModes,
@@ -27,6 +31,7 @@ import {
 	retryWifiAdapterReconcile,
 	type WifiRestoreCycle,
 } from "./wifi-adapter-reconciler.ts";
+import { uniqueHotspotAddress } from "./wifi-autoconnect-policy.ts";
 import { admitWifiRequest, withoutWifiRequestBinding } from "./wifi-binding.ts";
 import {
 	getWifiCapabilitiesForInterface,
@@ -37,9 +42,11 @@ import { canHotspot } from "./wifi-hotspot-types.ts";
 import { restoreLimitedHotspot } from "./wifi-limited-hotspot-restore.ts";
 import {
 	bindingForRow,
+	soleWifiPortAlias,
 	verifiedWifiPortKey,
 } from "./wifi-operation-binding.ts";
 import { wifiAdapterKeyMac } from "./wifi-permanent-mac.ts";
+import { wifiRadioIdentity } from "./wifi-radio-identity.ts";
 
 type Preferences = typeof getPersistedWifiAdapterModes;
 
@@ -72,8 +79,10 @@ async function applyWifiAdapterModes(
 						Object.values(deps.resolveInterfaces()).filter(canHotspot).length,
 					);
 			const owner = key ?? observedOwner;
-			const lock = await withWifiAdapterLock(
-				wifiAdapterLockKey(owner),
+			const binding = verified ? bindingForRow(registryKey, row) : undefined;
+			const solePort = soleWifiPortAlias(binding);
+			const lock = await withWifiAdapterLocks(
+				[owner, ...(solePort ? [solePort] : [])].map(wifiAdapterLockKey),
 				async () => {
 					if (cycle?.stopped() || deps.resolveInterfaces()[registryKey] !== row)
 						return;
@@ -92,6 +101,28 @@ async function applyWifiAdapterModes(
 						return key === undefined ? undefined : modes[key];
 					};
 					const desired = desiredMode();
+					// A matching port intent can identify the profile without changing
+					// which intent controls the sole adapter.
+					const portProfile =
+						solePort &&
+						desired &&
+						desired !== "station" &&
+						readPreferences()[solePort] === desired &&
+						!isHotspotPortCredentialCopy(solePort)
+							? getHotspotCredentials(solePort)?.conn
+							: undefined;
+					const plainProfile =
+						portProfile && getHotspotCredentials(owner)?.conn;
+					const plainPin = plainProfile
+						? (
+								await nmConnGetFields(plainProfile, ["match.path"] as const)
+							)?.[0]
+						: undefined;
+					const restoreProfile =
+						plainPin && plainPin !== binding?.devicePath
+							? portProfile
+							: undefined;
+					if (desiredMode() !== desired) return;
 					if (!verified) limitedVisited = true;
 					const readCapabilities =
 						deps.readCapabilities ?? getWifiCapabilitiesForInterface;
@@ -103,6 +134,7 @@ async function applyWifiAdapterModes(
 					const signature = JSON.stringify([
 						key,
 						desired,
+						restoreProfile,
 						row.ifname,
 						row.conn,
 						capability.staApComboSupported,
@@ -163,6 +195,13 @@ async function applyWifiAdapterModes(
 										);
 										return undefined;
 									}
+									const plainNeedsPortPin =
+										binding?.mac === owner &&
+										(wifiRadioIdentity.hasSeenSameAddressCollision(owner) ||
+											!uniqueHotspotAddress(
+												owner,
+												wifiRadioIdentity.state.rows,
+											));
 									return deps.startHotspot(
 										row.id,
 										(...args) => {
@@ -171,6 +210,21 @@ async function applyWifiAdapterModes(
 												settle(args[2].success);
 										},
 										attempt,
+										binding && {
+											...binding,
+											bootRestore:
+												plainNeedsPortPin || restoreProfile
+													? "require-port-pin"
+													: "verified",
+											...(solePort && restoreProfile
+												? {
+														restoreProfile: {
+															owner: solePort,
+															uuid: restoreProfile,
+														},
+													}
+												: {}),
+										},
 									);
 								},
 								(refusal) => refusal,

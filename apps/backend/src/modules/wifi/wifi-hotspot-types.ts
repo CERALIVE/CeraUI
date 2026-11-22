@@ -240,6 +240,7 @@ export type HotspotActivationDeps = {
 		ifname: string,
 		admitted?: () => boolean,
 		onRefusal?: (refusal: HybridTargetRefusal) => void,
+		beforeMutation?: () => Promise<boolean>,
 	) => Promise<HybridLegAllocation | typeof HYBRID_CHANNEL_REFUSAL | undefined>;
 	readHybridChannel?: typeof readHybridStationChannel;
 	validateConcurrentInterface?: typeof revalidateConcurrentApInterface;

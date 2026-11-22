@@ -96,6 +96,7 @@ export type RadioIdentityState = {
  */
 export class WifiRadioIdentityProducer {
 	private permanentMacByLifetime = new Map<string, MacAddress>();
+	private readonly sameAddressCollisions = new Set<MacAddress>();
 	private snapshot: RadioIdentityState = { rows: new Map(), changed: [] };
 	private sequence = 0;
 	private publishedSequence = 0;
@@ -106,6 +107,14 @@ export class WifiRadioIdentityProducer {
 
 	get state(): RadioIdentityState {
 		return this.snapshot;
+	}
+
+	hasSeenSameAddressCollision(mac: MacAddress): boolean {
+		return this.sameAddressCollisions.has(mac);
+	}
+
+	resetCollisionHistoryForTest(): void {
+		this.sameAddressCollisions.clear();
 	}
 
 	get publishedObservation(): number {
@@ -191,6 +200,7 @@ export class WifiRadioIdentityProducer {
 
 		const compositeMacs = new Set<MacAddress>();
 		for (const [mac, phys] of macPaths) {
+			if (phys.size > 1) this.sameAddressCollisions.add(mac);
 			if (
 				phys.size > 1 &&
 				[...phys].every((phy) => {

@@ -31,6 +31,7 @@ export function autoconnectNetworkFixture() {
 	const publications: string[] = [];
 	const reads: string[] = [];
 	const activations: string[] = [];
+	const deletions: string[] = [];
 	const resources = new Set<string>();
 	const serialized = new Map<string, string>();
 	let instances: ReturnType<typeof firstApInstances> | undefined;
@@ -62,6 +63,7 @@ export function autoconnectNetworkFixture() {
 		publications.length = 0;
 		reads.length = 0;
 		activations.length = 0;
+		deletions.length = 0;
 		pinAccepted = true;
 		listing = [];
 	}
@@ -105,7 +107,7 @@ export function autoconnectNetworkFixture() {
 			}
 			return ["Policy", "Radio", "yes", "no", "yes"];
 		});
-		spyOn(nm, "nmConnsGet").mockImplementation(async (fields) => {
+		const inventory = (fields: string) => {
 			const current = model();
 			return [...profiles.keys()].map((uuid) =>
 				fields
@@ -129,13 +131,31 @@ export function autoconnectNetworkFixture() {
 					)
 					.join(":"),
 			);
-		});
+		};
+		spyOn(nm, "nmConnsGet").mockImplementation(async (fields) =>
+			inventory(fields),
+		);
 		spyOn(nm, "nmScanResults").mockResolvedValue([]);
 		spyOn(devices, "wifiDeviceListGetMacAddress").mockReturnValue(MAC);
 		spyOn(devices, "wifiDeviceListGetInetAddress").mockReturnValue(null);
 		spyOn(runner, "run").mockImplementation(async (binary, args = []) => {
 			if (binary === "busctl") return model().busReply(args);
 			if (binary !== "nmcli") throw new Error("Unexpected binary");
+			if (
+				args[0] === "--terse" &&
+				args[1] === "--fields" &&
+				args[3] === "connection" &&
+				args[4] === "show" &&
+				args.length === 5
+			)
+				return inventory(args[2] ?? "").join("\n");
+			if (args[0] === "conn" && args[1] === "del") {
+				const uuid = args[2];
+				if (!uuid || !profiles.delete(uuid))
+					throw new Error("Fixture profile not found");
+				deletions.push(uuid);
+				return `Connection 'Hotspot' (${uuid}) successfully deleted.\n`;
+			}
 			if (args[0] === "connection" && args[1] === "load") {
 				const fields = decodeProfile(readFileSync(args[2] ?? "", "utf8"));
 				const uuid = fields["connection.uuid"];
@@ -173,6 +193,7 @@ export function autoconnectNetworkFixture() {
 			}
 			if (nmcliFieldNames(args).length > 0 && args.includes("connection")) {
 				const profile = profiles.get(args.at(-1) ?? "");
+				if (!profile) throw new Error("Fixture profile not found");
 				return nmcliFieldOutput(
 					args,
 					(field) =>
@@ -215,6 +236,7 @@ export function autoconnectNetworkFixture() {
 		publications,
 		reads,
 		activations,
+		deletions,
 		reset,
 		close: () => instances?.files.close(),
 		install,

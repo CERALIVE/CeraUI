@@ -1,7 +1,16 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { getConfig } from "../modules/config.ts";
 import { rememberHotspotCredentials } from "../modules/wifi/hotspot-credentials.ts";
 import { observedWifiAdapterMode } from "../modules/wifi/wifi-adapter-mode.ts";
+import {
+	addWifiInterface,
+	removeWifiInterface,
+} from "../modules/wifi/wifi-connections.ts";
+import {
+	defaultHotspotDeps,
+	startHotspotLocked,
+} from "../modules/wifi/wifi-hotspot-activation.ts";
+import { bindingForRow } from "../modules/wifi/wifi-operation-binding.ts";
 import {
 	autoconnectFixture,
 	MAC,
@@ -15,6 +24,116 @@ const profile = () => {
 	if (!value) throw new Error("Missing fixture profile");
 	return value;
 };
+
+test("verified hybrid boot preserves its saved physical port pin", async () => {
+	f.seed(true);
+	profile()["match.path"] = PORT;
+	await f.sample();
+	f.persistMode(MAC, "hybrid");
+	await f.restore();
+	expect(f.activations).toEqual([PROFILE]);
+	expect(profile()["match.path"]).toBe(PORT);
+});
+
+test.each(["absent", "unreadable"] as const)(
+	"verified boot recreates only a confirmed %s saved UUID",
+	async (state) => {
+		await f.sample();
+		f.persistMode(MAC, "hotspot");
+		f.profiles.delete(PROFILE);
+		spyOn(f.deps, "readProfileInstance").mockResolvedValue(
+			state === "absent" ? null : undefined,
+		);
+		const add = spyOn(f.deps, "nmApConnAdd").mockResolvedValue(undefined);
+		await f.restore();
+		expect(
+			add.mock.calls.map(([device, identity]) => [
+				device,
+				identity.name,
+				identity.password,
+			]),
+		).toEqual(
+			state === "absent" ? [["wlan0", "Policy AP", "fixture-password"]] : [],
+		);
+	},
+);
+
+test("restoring an independent port preserves that profile's WPA3 despite a WPA2 plain cache", async () => {
+	const owner = `${MAC}@${PORT}`;
+	const uuid = "independent-port-wpa3";
+	f.row().hotspot.security = "wpa2";
+	f.profiles.set(uuid, {
+		...profile(),
+		"match.path": PORT,
+		"802-11-wireless-security.key-mgmt": "sae",
+		"802-11-wireless-security.pmf": "3",
+	});
+	rememberHotspotCredentials(owner, {
+		ssid: "Policy AP",
+		password: "fixture-password",
+		conn: uuid,
+	});
+	spyOn(f.deps, "findHotspotConn").mockResolvedValue({
+		uuid,
+		ssid: "Policy AP",
+		password: "fixture-password",
+		channel: "auto",
+		macAddress: MAC,
+	});
+	const row = f.row();
+	f.witnesses.set("wlan1", {
+		ifindex: 5,
+		phy: "/sys/devices/policy/phy1",
+		mac: MAC,
+		path: "usb-twin:1.0",
+	});
+	removeWifiInterface(MAC);
+	addWifiInterface(owner, row);
+	delete row.hotspot.conn;
+	await f.sample();
+	const binding = bindingForRow(owner, row);
+	if (!binding) throw new Error("Missing verified port binding");
+	await startHotspotLocked(owner, row, f.deps, undefined, undefined, {
+		...binding,
+		bootRestore: "verified",
+	});
+	expect(f.activations).toEqual([uuid]);
+	expect(f.profiles.get(uuid)?.["802-11-wireless-security.key-mgmt"]).toBe(
+		"sae",
+	);
+	expect(f.profiles.get(uuid)?.["802-11-wireless-security.pmf"]).toBe("3");
+});
+
+test("verified boot does not prune saved profiles during radio restore", async () => {
+	const stale = "1e333a43-b83e-4ecf-95f8-599fa4ddbf26";
+	f.profiles.set(stale, { ...profile() });
+	const credentials = { ssid: "Policy AP", password: "fixture-password" };
+	rememberHotspotCredentials(MAC, { ...credentials, conn: stale });
+	rememberHotspotCredentials(MAC, { ...credentials, conn: PROFILE });
+	await f.sample();
+	f.persistMode(MAC, "hotspot");
+	const prune = spyOn(f.deps, "pruneHotspotConns");
+	prune.mockImplementation(defaultHotspotDeps.pruneHotspotConns);
+	await f.restore();
+	await Promise.all(prune.mock.results.map((result) => result.value));
+	expect(f.profiles.has(stale)).toBe(true);
+	expect(f.deletions).toEqual([]);
+	expect(f.activations).toEqual([PROFILE]);
+	expect(prune).not.toHaveBeenCalled();
+	// Positive control: the same production pruner must delete this profile.
+	await prune(MAC, PROFILE);
+	expect(f.profiles.has(stale)).toBe(false);
+	expect(f.deletions).toEqual([stale]);
+});
+
+test("verified restore refuses a saved UUID now used for a station profile", async () => {
+	await f.sample();
+	f.persistMode(MAC, "hotspot");
+	profile()["802-11-wireless.mode"] = "infrastructure";
+	await f.restore();
+	expect(f.activations).toEqual([]);
+	expect(f.effects).toEqual([]);
+});
 
 test("(1 / M1) a confirmed unique radio with both pins can autoconnect; clap shares its phy", async () => {
 	f.witnesses.set("clap-wlan0", {
@@ -108,14 +227,15 @@ test("(5 / M5) hybrid restore uses intent and never arms autonomous activation",
 	expect(profile()?.["connection.autoconnect"]).toBe("no");
 });
 
-test("(6 / M6) a moved known adapter is quiesced then restored with its new port and credentials", async () => {
+test("(6 / M6) boot does not rebind a quiesced profile with a contradictory port pin", async () => {
 	profile()["match.path"] = "usb-old-port";
 	await f.discover();
 	expect(profile()?.["connection.autoconnect"]).toBe("no");
 	await f.restore();
-	expect(profile()?.["match.path"]).toBe(PORT);
+	expect(profile()?.["match.path"]).toBe("usb-old-port");
 	expect(profile()?.["802-11-wireless.ssid"]).toBe("Policy AP");
-	expect(observedWifiAdapterMode(f.row())).toBe("hotspot");
+	expect(observedWifiAdapterMode(f.row())).toBe("station");
+	expect(f.activations).toEqual([]);
 });
 
 test("(7) a confirmed hybrid start explicitly leaves autoconnect no", async () => {

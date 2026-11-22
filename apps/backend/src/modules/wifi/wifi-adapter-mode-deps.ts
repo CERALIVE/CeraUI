@@ -23,7 +23,11 @@ import {
 import { publishHotspotOutcome } from "./wifi-hotspot-outcome.ts";
 import { canHotspot, type HotspotStartResult } from "./wifi-hotspot-types.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
-import { bindingForRow, wifiOperationGuard } from "./wifi-operation-binding.ts";
+import {
+	bindingForRow,
+	wifiOperationChanged,
+	wifiOperationGuard,
+} from "./wifi-operation-binding.ts";
 
 /**
  * Was the adapter busy at this instant? Acquires and releases immediately, so it
@@ -50,14 +54,16 @@ export const defaultAdapterModeDeps: AdapterModeTransitionDeps = {
 			? { success: false, error: "no-device" }
 			: !canHotspot(found.wifiInterface)
 				? { success: false, error: "unsupported" }
-				: await startHotspotLocked(
-						found.macAddress,
-						found.wifiInterface,
-						{ ...deps, publishOutcome: publish },
-						undefined,
-						restoreAttempt,
-						binding ?? bindingForRow(found.macAddress, found.wifiInterface),
-					);
+				: restoreAttempt && !binding
+					? wifiOperationChanged
+					: await startHotspotLocked(
+							found.macAddress,
+							found.wifiInterface,
+							{ ...deps, publishOutcome: publish },
+							undefined,
+							restoreAttempt,
+							binding ?? bindingForRow(found.macAddress, found.wifiInterface),
+						);
 		if (!result.success) publish("start", device, result);
 		return result;
 	},
