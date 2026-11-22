@@ -222,10 +222,10 @@ const activeSettings = $derived.by(() => {
 	return settings.length > 0 ? settings : [m["live.encoder.format.automaticUnknown"]()];
 });
 
-// Every "?" inside an option is a real 44 px box at every width. Its hit area
-// is then its box, laid out beside its neighbours: the touch layout's ::after
-// overlay on the 24 px icon reached 10 px into the select button and the
-// capture-format buttons.
+// Every "?" inside an option is a real 44 px box at every width, kept 8 px from
+// every other control (DESIGN.md TT-2): its hit area is then its box, beside
+// its neighbours. The touch layout's ::after overlay on the 24 px icon used to
+// reach 10 px into the select button and the capture-format buttons.
 const HELP_TARGET = 'sm:min-h-11 sm:min-w-11 sm:p-2.5';
 
 // Every badge on an option is this one pill; only its tone varies.
@@ -683,7 +683,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 				<span class="font-medium" data-testid="cap-device-max">{m["live.source.sourceMax"]()}</span>
 				<InfoPopover
 					body={m["live.education.field.mode.body"]()}
-					class="-my-2 {HELP_TARGET}"
+					class={HELP_TARGET}
 					testId="info-mode"
 					title={m["live.education.field.mode.title"]()}
 				/>
@@ -852,7 +852,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 							data-selected={selected}
 							data-unbound={coarseUnbound.unbound ? 'true' : undefined}
 						>
-							<div class="flex items-start">
+							<div class="flex items-start gap-2">
 								<button
 									class="group/row focus-visible:ring-ring flex min-w-0 flex-1 items-start gap-3 rounded-lg py-3 ps-3 pe-2 text-start outline-hidden focus-visible:ring-2 disabled:cursor-not-allowed"
 									data-select
@@ -978,7 +978,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 
 								<!-- The help slot: every "?" sits at the inline end of its own
 								     frame, OUTSIDE the select button (never a nested interactive). -->
-								<div class="flex shrink-0 items-start pe-1.5">
+								<div class="flex shrink-0 items-start gap-2 pe-1.5">
 									<!-- Same-LAN/WiFi education on ENABLED network rows. -->
 									{#if source.origin === 'network' && source.available}
 										<InfoPopover
@@ -1044,13 +1044,13 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 							</div>
 
 							{#if hasDetail}
-								<div class="space-y-3 pe-3 pb-3 ps-10">
+								<div class="space-y-3 pe-3 pt-2 pb-3 ps-10">
 									{#if selected && (hasActiveConfig || hasCapSummary)}
 										{@render activeConfigPanel(true)}
 									{/if}
 									{#if modeOptionsFor(source).length > 0}
 										{const activeMode = $derived(selectedModeFor(source))}
-										<div class="space-y-1.5" data-testid={`source-modes-${source.id}`}>
+										<div class="space-y-2" data-testid={`source-modes-${source.id}`}>
 											<div class="flex items-center gap-1">
 												<span class="text-muted-foreground text-xs font-medium">
 													{m["live.source.modeLabel"]()}

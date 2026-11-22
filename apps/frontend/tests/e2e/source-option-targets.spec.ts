@@ -20,6 +20,12 @@ type Box = { left: number; right: number; top: number; bottom: number };
 type Target = { name: string; help: boolean; box: Box };
 
 const MIN = 43.5;
+// DESIGN.md TT-2 / live-screen.md: neighbouring targets keep 8 px apart.
+const CLEARANCE = 7.5;
+
+function gap(a: Box, b: Box): number {
+	return Math.max(b.left - a.right, a.left - b.right, b.top - a.bottom, a.top - b.bottom);
+}
 
 async function proxy(page: Page, pageRpc: PageRpc, sent: string[]): Promise<{ ws?: WebSocketRoute }> {
 	const live: { ws?: WebSocketRoute } = {};
@@ -108,6 +114,8 @@ function problems(targets: Record<string, Target[]>, label: string): string[] {
 				const y = Math.min(help.box.bottom, other.box.bottom) - Math.max(help.box.top, other.box.top);
 				if (x > 0.5 && y > 0.5) {
 					found.push(`${label} ${row} ${help.name} overlaps ${other.name} by ${Math.round(x)}x${Math.round(y)}`);
+				} else if (gap(help.box, other.box) < CLEARANCE) {
+					found.push(`${label} ${row} ${help.name} is ${Math.round(gap(help.box, other.box))} px from ${other.name}`);
 				}
 			}
 		}
@@ -137,12 +145,15 @@ for (const locale of ['en', 'ar', 'de']) {
 			measured += Object.values(targets).flat().filter((control) => control.help).length;
 			found.push(...problems(targets, `${viewport.width}`));
 		}
-		await page.setViewportSize(KIOSK);
+		await page.setViewportSize(WIDTHS[1]);
 		await openLive(page, live, { locale, touch: true });
 		await expect(page.locator('html')).toHaveAttribute('data-layout-mode', 'touch');
-		const targets = await rowTargets(page);
-		measured += Object.values(targets).flat().filter((control) => control.help).length;
-		found.push(...problems(targets, '1024x600 touch'));
+		for (const viewport of [WIDTHS[1], KIOSK]) {
+			await page.setViewportSize(viewport);
+			const targets = await rowTargets(page);
+			measured += Object.values(targets).flat().filter((control) => control.help).length;
+			found.push(...problems(targets, `${viewport.width}x${viewport.height} touch`));
+		}
 		expect(measured, 'the options carry help buttons to measure').toBeGreaterThan(5);
 		expect(found).toEqual([]);
 	});
@@ -150,6 +161,7 @@ for (const locale of ['en', 'ar', 'de']) {
 
 for (const condition of [
 	{ name: '1024x600 touch', viewport: KIOSK, touch: true },
+	{ name: '375 touch', viewport: WIDTHS[1], touch: true },
 	{ name: '375 phone', viewport: WIDTHS[1], touch: false },
 ]) {
 	test(`a tap beside an option's help selects it, and a tap on the help opens it, ${condition.name}`, { tag: '@desktop-only' }, async ({ page, pageRpc }) => {
@@ -175,6 +187,9 @@ for (const condition of [
 		const helpBox = targets.find((target) => target.help)?.box;
 		const selectBox = (await row.locator('[data-select]').boundingBox()) ?? undefined;
 		if (!helpBox || !selectBox) throw new Error('option targets not measured');
+		const selectEdges = { left: selectBox.x, right: selectBox.x + selectBox.width, top: selectBox.y, bottom: selectBox.y + selectBox.height };
+		expect(gap(selectEdges, helpBox), 'clearance between Select and Help').toBeGreaterThanOrEqual(CLEARANCE);
+		expect(Math.min(selectBox.height, helpBox.right - helpBox.left, helpBox.bottom - helpBox.top)).toBeGreaterThanOrEqual(MIN);
 		const y = Math.min(Math.max((helpBox.top + helpBox.bottom) / 2, selectBox.y + 4), selectBox.y + selectBox.height - 4);
 
 		// Just inside the select button, at its edge facing the help (left to right).

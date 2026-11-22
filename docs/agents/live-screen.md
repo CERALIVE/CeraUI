@@ -430,8 +430,8 @@ set these rules:
   border plus a one-pixel ring in the primary colour), never tinted: muted text
   inside a lime-tinted frame measured 4.23:1 in dark, below AA.
   Every "?" inside an option (its help, the capture-format help and the
-  summary's help) is a real 44 px box at every width, so its hit area is its
-  box: the touch layout's `::after` overlay on the 24 px icon reached 10 px into
+  summary's help) is a real 44 px box at every width, kept 8 px from every other
+  control in the option (`DESIGN.md` TT-2), so its hit area is its box: the touch layout's `::after` overlay on the 24 px icon reached 10 px into
   the select button at 1024x600, so a tap meant for Select opened Help.
 - **The summary belongs to the selected option.** `source-active-config` sits
   inside the selected option and names its settings ("Automatic", the Encoder
@@ -471,7 +471,9 @@ option pattern"), the column check in
 measure the Output card too, and
 `apps/frontend/tests/e2e/source-option-targets.spec.ts` (no help hit area overlaps
 another control in any option at 320, 375, 768, 1280 and 1024x600 touch, in en,
-ar and de; a tap beside the help selects, a tap on it opens it).
+ar and de, and at 375 and 1024x600 touch: no overlap, at least 8 px apart, each
+help at least 44 px; a tap beside the help selects, a tap on it opens it, at
+1024x600 touch, 375 touch and 375).
 
 ### 1. Job and audience
 
