@@ -1556,60 +1556,58 @@ main's display id, dedupe by name, dismissal key and copy, on both images. The
 OS notice with the same wording (`update:updates-available:os:<version>`) is not
 touched.
 
-**Withdrawal, capable images only.** A capable id is main's `name=version`
-display id, so every copy of it, from any backend before or after a restart or a
-rollback, stands for the same versions. After main's cycle finished, a scheduled
-check may remove an earlier capable notice only when all of these hold:
+**Legacy images keep main's behavior exactly.** Legacy ids name packages without
+versions (`cerastream=unknown`). Every install through CeraUI restarts the
+backend, and after a restart no backend can tell which release a tab's copy
+shows: main after a rollback, an older OS slot or a manual downgrade can show
+the same id for another version. So a legacy check never reads, writes or
+removes a receipt and withdraws nothing. As on main, a legacy notice can outlive
+an install in an open tab until reload or dismissal, and a dismissal keeps
+hiding later versions of the same package set.
 
-- This backend recorded a receipt for it: the exact instances (name,
-  architecture, candidate) its showing stood for, from the same discovery. A
-  showing without exact evidence has no receipt and is never withdrawn.
-- Main ran the check to completion and every part of it is complete: no ignored
-  or failed index and every source the inventory lists refreshed, a complete
-  plan whose rows match its counts, no unfinished work, and clean stderr from the
-  simulation, hold list and inventory.
+**Capable images withdraw on strict proof.** A receipt records the exact
+instances (name, architecture, candidate) a showing of an id stood for. It holds
+only in its lineage: this boot and this exact backend executable (the boot id
+and the device, inode and change time of the running binary). The same display
+id can stand for another actionable subset or architecture when another backend
+shows it, and a rollback, a downgrade or a reinstall replaces the executable,
+while another OS slot needs a reboot. So a receipt from before any of them is
+discarded. Inside one lineage, announcing a recorded id for any other exact set
+poisons its receipt before the show, and a receipt binds only an offer whose
+every row carries the version the id names, with one planned instance per
+actionable name. After main's cycle, a scheduled check removes an earlier
+capable notice only when all of these hold:
+
+- This lineage holds an unpoisoned receipt for it, and this process could
+  rewrite the receipts (storage that refuses a write leaves none behind).
+- Every sub-read is positively complete: the refresh holds only index answers
+  and fetch summaries and ends with apt's own last line, every inventory source
+  is refreshed and every refreshed release is in the inventory, the inventory
+  lists each source with its release and origin up to its `Pinned packages:`
+  boundary, the plan is complete with no unfinished work, and the reads exit 0
+  with clean stderr.
 - The check lists none of the notice's packages: pending, kept back,
   configure-only or held.
 - One `dpkg-query` snapshot of the whole database shows every instance `ii `
-  (installed, configured, not held) at or above its candidate, no package
-  anywhere unfinished, and a second identical read at the end of the pass shows
-  that nothing moved meanwhile. A held, unfinished, lower or missing instance
-  keeps every notice that contains it.
+  (installed, configured, not held) at or above its candidate, a second identical
+  read ends the pass, `dpkg --audit` reports nothing, and every one of these
+  answers came back inside its own timeout (the runner can return exit 0 with a
+  partial answer only after its deadline).
 - The notice's live copy, if any, is the showing this process recorded.
 
 The removal goes, as a typed and a bare-name frame, only to the sessions
 authenticated before the check began. When a session authenticated during the
 check, the receipt stays for a later check. Startup, login, a restart and an
-install's exit never withdraw anything. After a proven withdrawal the live copy
-is gone, so a later announcement of the same id is shown again; on capable
-images that is the only way the visible sequence differs from main.
-
-**Legacy images keep main's behavior.** Legacy ids name packages without versions
-(`cerastream=unknown`). Inside one process the live slot identifies its showing,
-but every install through CeraUI restarts the backend, and after a restart no
-backend can tell which release a tab's copy shows: main after a rollback, an older
-OS slot or a manual downgrade may have shown the same id for another version. So
-legacy records no receipts and withdraws nothing, and a legacy notice can still
-outlive an install in an open tab until reload or dismissal, as on main.
-
-Whole-system facts the capable proof reads, and why each is safe:
-
-| Fact | Where it is read | Why it is safe |
-|---|---|---|
-| Refresh output | this check's `apt-get update` | Decides only completeness; an ignored, failed or missing index keeps every notice |
-| Source inventory | this check's `apt-cache policy` | Same; it lists the indexes the refresh must have reached |
-| Plan rows and counts | this check's simulation | Only names to keep; nothing is announced or withdrawn from a count |
-| Holds | this check's `apt-mark showhold` | Only names to keep |
-| dpkg database | one `dpkg-query -W`, confirmed by a second | Version, architecture and want/state per instance; one unfinished row anywhere keeps all |
-| Candidates | the simulation's `Inst` rows | Receipts only; a row without an exact instance records no receipt |
+install's exit never withdraw anything.
 
 `scheduled_package_notices.json` (bounded: 64 receipts, 256 KiB; the oldest goes
-first, which only leaves that notice as main would) stores ids and exact
-instances, never proof or a removal to replay. Known limits: a tab offline
-through a removal keeps its copy until reload or dismissal; notices main showed
-before this change have no receipt and stay until dismissed; a candidate pinned
-away or withdrawn from the archive before it was installed keeps its notice. No
-board qualification is claimed.
+first, which only leaves that notice as main would) stores the lineage, ids and
+exact instances, never proof or a removal to replay. Known limits, each keeping
+the notice as main would: a CeraUI install (a new backend executable) or a reboot
+between the showing and the proof; a tab offline through a removal; notices main
+showed before this change; a candidate pinned away or withdrawn before it was
+installed; one package offered for two architectures; a database `dpkg --audit`
+reports anything about. No board qualification is claimed.
 
 ### Download hold notice [EXISTS; host-tested, board qualification owed]
 

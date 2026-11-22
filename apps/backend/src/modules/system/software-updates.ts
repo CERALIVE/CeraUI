@@ -62,6 +62,7 @@ import {
 	logAptAllRefusal,
 	resetAptAllRefusalLogForTest,
 } from "./apt-all-refusal-log.ts";
+import { policySources } from "./apt-all-source-policy.ts";
 import { cleanAptCache } from "./apt-cache-clean.ts";
 /* Software updates */
 import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
@@ -209,9 +210,53 @@ export function lastScheduledPackageEvidence():
 	return scheduledPackageEvidence;
 }
 
-// Every index the refresh asked for answered: none ignored or failed.
-const refreshedEveryIndex = (refresh: string) =>
-	/^(?:Hit|Get):/m.test(refresh) && !/^(?:Ign|Err):/m.test(refresh);
+// apt-get update's whole answer: index answers and fetch summaries, then its last
+// line. A cut, an ignored or failed index, or any other line is incomplete.
+const refreshComplete = (refresh: string) => {
+	const lines = refresh.split("\n");
+	return (
+		lines.pop() === "" &&
+		/^Reading package lists\.\.\.(?: Done)?$/.test(lines.pop() ?? "") &&
+		lines.length > 0 &&
+		lines.every((line) => /^(?:(?:Hit|Get):\d+ \S+ \S|Fetched \S)/.test(line))
+	);
+};
+
+// apt-cache policy's whole inventory: every https source with its release and
+// origin lines, then the "Pinned packages:" boundary after the last one.
+const inventoryComplete = (inventory: string) => {
+	const lines = inventory.split("\n");
+	const end = lines.indexOf("Pinned packages:");
+	return (
+		lines[0] === "Package files:" &&
+		end > 0 &&
+		lines.at(-1) === "" &&
+		lines
+			.slice(1, end)
+			.every(
+				(line, index, files) =>
+					!/^\s*-?\d+ https?:\/\//.test(line) ||
+					(/^\s+release \S/.test(files[index + 1] ?? "") &&
+						/^\s+origin \S+$/.test(files[index + 2] ?? "")),
+			)
+	);
+};
+
+// Every release the refresh answered is one of the inventory's sources.
+const inventoryListsEveryRelease = (refresh: string, inventory: string) => {
+	const suites = new Set(
+		[...policySources(inventory).keys()].map((source) => {
+			const [uri = "", dist = ""] = source.split(/\s+/);
+			return `${uri} ${dist === "./" ? dist : (dist.split("/")[0] ?? "")}`;
+		}),
+	);
+	return refresh.split("\n").every((line) => {
+		const [, uri, suite] =
+			/^(?:Hit|Get):\d+ (\S+) (\S+) (?:In)?Release(?: \[.*\])?$/.exec(line) ??
+			[];
+		return uri === undefined || suites.has(`${uri} ${suite}`);
+	});
+};
 
 function capableEvidence(
 	actionable: readonly PinnedAptPackage[],
@@ -228,9 +273,11 @@ function capableEvidence(
 	const instances = admittedTargets(simulation);
 	const offer: OfferedPackage[] = [];
 	for (const { name, version } of actionable) {
-		const row = instances?.find(
-			(instance) => instance.name === name && instance.version === version,
-		);
+		// One name planned for two architectures is no single exact instance.
+		const own =
+			instances?.filter((instance) => instance.name.split(":")[0] === name) ??
+			[];
+		const row = own.length === 1 && own[0]?.version === version ? own[0] : null;
 		if (row)
 			offer.push({ name: row.name, arch: row.arch, version: row.version });
 	}
@@ -244,8 +291,10 @@ function capableEvidence(
 			clean &&
 			kept !== null &&
 			completePlan(simulation) &&
-			refreshedEveryIndex(refresh) &&
-			refreshedEverySource(refresh, sourcePolicy)
+			refreshComplete(refresh) &&
+			inventoryComplete(sourcePolicy) &&
+			refreshedEverySource(refresh, sourcePolicy) &&
+			inventoryListsEveryRelease(refresh, sourcePolicy)
 				? new Set([
 						...packages.map(({ name }) => name),
 						...kept,

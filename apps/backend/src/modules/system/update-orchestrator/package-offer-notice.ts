@@ -3,19 +3,22 @@
  * ("Updates are available. Review them in Software Updates."), on capable images.
  *
  * Announcing stays main's: runtime computes main's id and notifyUpdate dedupes,
- * dismisses and shows it unchanged. A capable id is main's `name=version` display
- * id, so every copy of it, from any backend before or after a restart, stands for
- * the same versions. Legacy ids name packages without versions, so no backend can
- * tell which release a copy shows; legacy keeps main's behavior and is never
- * withdrawn here.
+ * dismisses and shows it unchanged. A receipt records the exact instances (name,
+ * architecture, candidate) a showing of an id stood for, and holds only in its
+ * lineage: this boot and this exact backend executable. A rollback, a downgrade
+ * or a reinstall replaces the executable and another OS slot needs a reboot; any
+ * of them may have shown the same id for another offer, so a receipt from before
+ * is discarded. Inside a lineage, announcing a recorded id for any other exact set
+ * poisons its receipt before the show. Legacy checks carry no capable evidence and
+ * never read, write or remove receipts.
  *
- * After main's cycle, a capable scheduled check that main ran to completion may
- * remove an earlier notice only when this backend recorded the exact instances it
- * was announced for, the check lists none of them, and one dpkg snapshot shows
+ * After main's cycle, a complete capable check may remove an earlier notice only
+ * when the check lists none of its receipt's instances and one dpkg snapshot shows
  * every one installed, configured and not held at or above its candidate. The
  * removal reaches only the sessions authenticated before the check began.
  * Startup, login and an install's exit never remove anything here.
  */
+import { readFileSync, rmSync, statSync } from "node:fs";
 import type { UpdatePackage } from "@ceraui/rpc";
 import { z } from "zod";
 
@@ -42,11 +45,15 @@ const RECORD_FILE = "scheduled_package_notices.json";
 const RECORD_LIMIT = STORED_STATE_LIMITS.agent;
 // Oldest receipts go first past this; a dropped receipt only leaves its notice as main would.
 const RECEIPT_LIMIT = 64;
+const BOOT_ID = "/proc/sys/kernel/random/boot_id";
+// The running executable itself, even after its file was replaced.
+const BACKEND = "/proc/self/exe";
 
 const recordSchema = z
 	.object({
-		version: z.literal(1),
-		// Each announced id and the exact instances it stands for; null when one showing had none.
+		version: z.literal(2),
+		lineage: z.string().min(1).max(512),
+		// Each announced id and the exact instances it stands for; null when that is unknown.
 		notices: z
 			.array(
 				z
@@ -70,22 +77,31 @@ const recordSchema = z
 			.max(RECEIPT_LIMIT),
 	})
 	.strict();
-type NoticeRecord = z.infer<typeof recordSchema>;
+type Receipts = z.infer<typeof recordSchema>["notices"];
 
 type Store = {
 	readonly path: string;
 	readonly run: typeof spawnWithTimeout;
+	readonly read: (path: string) => string | null;
+	readonly write: (path: string, text: string) => void;
+	readonly lineage: string | null;
 };
 
 export type ScheduledPackageNoticeOptions = {
 	readonly path?: string;
 	readonly run?: typeof spawnWithTimeout;
+	// Where this boot's id and this backend's executable are read (tests stand in for both).
+	readonly boot?: string;
+	readonly backend?: string;
+	readonly read?: (path: string) => string | null;
+	readonly write?: (path: string, text: string) => void;
 };
 
-const empty = (): NoticeRecord => ({ version: 1, notices: [] });
 // Inert until startup opts in, so a process that never initializes writes and runs nothing.
 let store: Store | undefined;
-let record: NoticeRecord = empty();
+// Whether this process read and rewrote the receipts; unknown until its first capable check.
+let trusted: boolean | undefined;
+let receipts: Receipts = [];
 // Showings this process made with a receipt: notice name -> its release revision.
 const issued = new Map<string, number>();
 
@@ -93,72 +109,141 @@ const noticeName = (id: string) => `update:updates-available:${id}`;
 const bare = (name: string) => name.split(":")[0] ?? name;
 const sameInstance = (a: OfferedPackage, b: OfferedPackage) =>
 	a.name === b.name && a.arch === b.arch && a.version === b.version;
+const sameSet = (a: readonly OfferedPackage[], b: readonly OfferedPackage[]) =>
+	a.length === b.length &&
+	a.every((target) => b.some((other) => sameInstance(target, other)));
+const errorText = (error: unknown) =>
+	error instanceof Error ? error.message : String(error);
 
-/** Loads the receipts for this process; it announces, removes and runs nothing. */
+function lineageOf(boot: string, backend: string): string | null {
+	try {
+		const id = readFileSync(boot, "utf8").trim();
+		const { dev, ino, ctimeNs } = statSync(backend, { bigint: true });
+		if (id !== "") return `${id}:${dev}:${ino}:${ctimeNs}`;
+	} catch (error) {
+		logger.warn("Scheduled package notices are never withdrawn: no lineage", {
+			error: errorText(error),
+		});
+	}
+	return null;
+}
+
+/** Configures this process's receipts; reads, writes, announces and removes nothing. */
 export function initScheduledPackageNotice(
 	options: ScheduledPackageNoticeOptions = {},
 ): void {
 	store = {
 		path: options.path ?? RECORD_FILE,
 		run: options.run ?? spawnWithTimeout,
+		read:
+			options.read ?? ((path) => readStoredStateFileSync(path, RECORD_LIMIT)),
+		write: options.write ?? writeFileAtomicSync,
+		lineage: lineageOf(options.boot ?? BOOT_ID, options.backend ?? BACKEND),
 	};
+	trusted = undefined;
+	receipts = [];
 	issued.clear();
-	try {
-		const text = readStoredStateFileSync(store.path, RECORD_LIMIT);
-		record =
-			text === null ? empty() : recordSchema.parse(parseAuthorityJson(text));
-	} catch (error) {
-		record = empty();
-		logger.warn("Scheduled package notice record ignored", {
-			error: error instanceof Error ? error.message : String(error),
-		});
-	}
 }
 
-function commit(notices: NoticeRecord["notices"]): boolean {
-	if (store === undefined) return false;
-	const next: NoticeRecord = {
-		version: 1,
-		notices: notices.slice(-RECEIPT_LIMIT),
+// A write that failed leaves no receipt behind: one that could not change (or be
+// poisoned) must not outlive this process either.
+function commit(next: Receipts): boolean {
+	if (store?.lineage == null) return false;
+	const record = {
+		version: 2,
+		lineage: store.lineage,
+		notices: next.slice(-RECEIPT_LIMIT),
 	};
-	let text = JSON.stringify(next);
-	while (Buffer.byteLength(text) > RECORD_LIMIT && next.notices.length > 0) {
-		next.notices.shift();
-		text = JSON.stringify(next);
+	let text = JSON.stringify(record);
+	while (Buffer.byteLength(text) > RECORD_LIMIT && record.notices.length > 0) {
+		record.notices.shift();
+		text = JSON.stringify(record);
 	}
 	try {
-		writeFileAtomicSync(store.path, text);
+		store.write(store.path, text);
 	} catch (error) {
-		logger.warn("Scheduled package notice record unchanged: not persisted", {
-			error: error instanceof Error ? error.message : String(error),
+		trusted = false;
+		receipts = [];
+		issued.clear();
+		try {
+			rmSync(store.path, { force: true });
+		} catch (removal) {
+			logger.warn("Scheduled package notice receipts could not be removed", {
+				error: errorText(removal),
+			});
+		}
+		logger.warn("Scheduled package notice receipts dropped: not persisted", {
+			error: errorText(error),
 		});
 		return false;
 	}
-	record = next;
+	receipts = record.notices;
 	return true;
 }
 
+// Read on the first capable check and trusted only once this process rewrote them:
+// storage that refuses writes could not record a later poisoning.
+function loaded(): boolean {
+	if (store?.lineage == null) return false;
+	if (trusted !== undefined) return trusted;
+	let kept: Receipts = [];
+	try {
+		const text = store.read(store.path);
+		const record =
+			text === null ? null : recordSchema.parse(parseAuthorityJson(text));
+		if (record?.lineage === store.lineage) kept = record.notices;
+	} catch (error) {
+		logger.warn("Scheduled package notice record ignored", {
+			error: errorText(error),
+		});
+	}
+	trusted = commit(kept);
+	return trusted;
+}
+
+// This check's exact offer, bound to the id: every row carries the version the id
+// names, and each actionable row is exactly one planned instance at that version.
 function exactOffer(
 	rows: readonly UpdatePackage[] | undefined,
-	evidence: ScheduledPackageEvidence | undefined,
+	evidence: ScheduledPackageEvidence,
 ): readonly OfferedPackage[] | null {
-	const actionable = (rows ?? [])
-		.filter(({ actionable }) => actionable)
-		.map(({ name }) => name);
-	const offer = evidence?.offer ?? null;
-	return offer !== null &&
-		offer.length === actionable.length &&
-		offer.every(({ name }) => actionable.includes(name))
+	const offer = evidence.offer;
+	if (offer === null || !rows?.every(({ version }) => version !== undefined))
+		return null;
+	const actionable = rows.filter(({ actionable }) => actionable);
+	return offer.length === actionable.length &&
+		actionable.every((row) =>
+			offer.some(
+				(target) => target.name === row.name && target.version === row.version,
+			),
+		)
 		? offer
 		: null;
 }
 
 /**
- * Records what main's announcement of `id` stands for, after it was made. A
- * showing with this capable check's exact offer is a receipt; a showing without
- * one makes the id unprovable. A copy main left as it was (still shown, or
- * dismissed) only gains this check's exact offer when it already has a receipt.
- * Changes no notice.
+ * Before main's announcement of `id`: a receipt for it that names any other exact
+ * set than this check's (or this check has none) no longer says what a copy stands
+ * for, so it is poisoned before the show. Changes no notice.
+ */
+export function preparePackageAnnouncement(
+	id: string,
+	rows: readonly UpdatePackage[] | undefined,
+	evidence: ScheduledPackageEvidence | undefined,
+): void {
+	if (evidence === undefined || !loaded()) return;
+	const prior = receipts.find((notice) => notice.id === id)?.targets;
+	const offer = exactOffer(rows, evidence);
+	if (prior && !(offer !== null && sameSet(prior, offer)))
+		commit([
+			...receipts.filter((notice) => notice.id !== id),
+			{ id, targets: null },
+		]);
+}
+
+/**
+ * After main's announcement: a showing of an id without a receipt records this
+ * check's exact offer, or null when it has none. Changes no notice.
  */
 export function recordPackageAnnouncement(
 	id: string,
@@ -166,39 +251,18 @@ export function recordPackageAnnouncement(
 	rows: readonly UpdatePackage[] | undefined,
 	evidence: ScheduledPackageEvidence | undefined,
 ): void {
-	if (store === undefined) return;
+	if (evidence === undefined || !shown || !loaded()) return;
 	const name = noticeName(id);
 	const offer = exactOffer(rows, evidence);
-	const prior = record.notices.find((notice) => notice.id === id);
-	const merged = (targets: readonly OfferedPackage[]) => [
-		...targets,
-		...(offer ?? []).filter(
-			(target) => !targets.some((known) => sameInstance(known, target)),
-		),
-	];
-	const write = (targets: OfferedPackage[] | null) =>
-		commit([
-			...record.notices.filter((notice) => notice.id !== id),
-			{ id, targets },
-		]);
-	if (shown) {
-		const targets =
-			offer === null || prior?.targets === null
-				? null
-				: merged(prior?.targets ?? []);
-		const live = notificationExists(name);
-		if (write(targets) && targets !== null && live)
-			issued.set(name, live.releaseRevision);
-		else issued.delete(name);
-		return;
-	}
 	if (
-		offer !== null &&
-		prior?.targets &&
-		notificationExists(name) &&
-		merged(prior.targets).length > prior.targets.length
+		!receipts.some((notice) => notice.id === id) &&
+		!commit([...receipts, { id, targets: offer && [...offer] }])
 	)
-		write(merged(prior.targets));
+		return;
+	const live = notificationExists(name);
+	if (live && receipts.find((notice) => notice.id === id)?.targets)
+		issued.set(name, live.releaseRevision);
+	else issued.delete(name);
 }
 
 /**
@@ -214,9 +278,9 @@ export async function withdrawProvenPackageNotices(
 	evidence: ScheduledPackageEvidence | undefined,
 	announced: string | undefined,
 ): Promise<void> {
-	if (store === undefined || !evidence?.listed) return;
+	if (store === undefined || !evidence?.listed || !loaded()) return;
 	const listed = new Set([...evidence.listed].map(bare));
-	const candidates = record.notices.flatMap(({ id, targets }) => {
+	const candidates = receipts.flatMap(({ id, targets }) => {
 		const name = noticeName(id);
 		const issuance = notificationExists(name)?.releaseRevision;
 		return targets !== null &&
@@ -248,15 +312,8 @@ export async function withdrawProvenPackageNotices(
 			notices: proven.map(({ name }) => name),
 		},
 	);
-	if (
-		!hasLateSessions &&
-		!commit(
-			record.notices.filter(
-				({ id }) => !proven.some((notice) => notice.id === id),
-			),
-		)
-	)
-		logger.warn(
-			"Scheduled package notices withdrawn but still recorded: a later check sends the removal again",
+	if (!hasLateSessions)
+		commit(
+			receipts.filter(({ id }) => !proven.some((notice) => notice.id === id)),
 		);
 }

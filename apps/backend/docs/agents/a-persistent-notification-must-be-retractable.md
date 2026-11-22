@@ -283,8 +283,9 @@ solver's view looks like "none" to a complete check, and that banner is retired;
 Install would not take it either. A notice dismissed under a former key is shown
 once more, and a dismissal from an older frontend no longer sticks. The
 orchestrator's package `update:updates-available:*` notice keeps main's ids; on
-capable images it is withdrawn only on a receipt plus one whole-database dpkg
-snapshot, and legacy keeps main's behavior (its ids carry no versions). See
+capable images it is withdrawn only on a receipt of this boot and backend
+executable plus a positively complete check and dpkg proof, and legacy keeps
+main's behavior (its ids carry no versions). See
 [Scheduled package availability notice](../../../../docs/DEVICE-UPDATES.md#scheduled-package-availability-notice-exists-host-tested).
 
 Coverage: `tests/ceralive-update-notice-lifecycle.test.ts` (real check entries and

@@ -189,6 +189,7 @@ import {
 } from "./os-staged-receipt-retirement.ts";
 import { settleOsUnlaunchedWitness } from "./os-unlaunched-adapter.ts";
 import {
+	preparePackageAnnouncement,
 	recordPackageAnnouncement,
 	withdrawProvenPackageNotices,
 } from "./package-offer-notice.ts";
@@ -1247,6 +1248,8 @@ async function runPackageCheckCycle(): Promise<void> {
 						?.map((item) => `${item.name}=${item.version ?? "unknown"}`)
 						.sort()
 						.join(",") ?? wire.identity.version;
+				// Before the show, so no copy outlives a receipt that no longer matches it.
+				preparePackageAnnouncement(id, wire.packages, evidence);
 				announced = {
 					id,
 					shown: notifyUpdate({ kind: "updates-available", id }),

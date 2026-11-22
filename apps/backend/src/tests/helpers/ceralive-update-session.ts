@@ -14,6 +14,12 @@
 // main-backend-preload.ts: main's backend from before this notice owner, whose
 // own check raises the notice the way main did, and which never initializes or
 // writes the offer record.
+import {
+	appendFileSync,
+	existsSync,
+	readFileSync,
+	writeFileSync,
+} from "node:fs";
 import { defaultAptSpaceDeps } from "../../modules/system/apt-space-admission.ts";
 import * as updates from "../../modules/system/software-updates.ts";
 import { setStreamLivenessSourceForTest } from "../../modules/system/stream-liveness-source.ts";
@@ -54,6 +60,8 @@ export type SessionStep = {
 	readonly canonicalScheduler?: boolean;
 	readonly capable?: boolean;
 	readonly failWrites?: boolean;
+	// The scheduled package notice's receipt writes fail (its deletion still works).
+	readonly failReceiptWrites?: boolean;
 	readonly recoverFails?: boolean;
 };
 
@@ -146,7 +154,10 @@ for await (const command of console) {
 					: {}),
 			});
 		// Main's scheduler (the baseline child) has no such owner.
-		if (!step.olderBackend && !step.canonicalScheduler)
+		if (!step.olderBackend && !step.canonicalScheduler) {
+			for (const file of ["boot_id", "backend"])
+				if (!existsSync(`${step.scratch}/${file}`))
+					writeFileSync(`${step.scratch}/${file}`, `${crypto.randomUUID()}\n`);
 			(
 				await import(
 					"../../modules/system/update-orchestrator/package-offer-notice.ts"
@@ -154,7 +165,22 @@ for await (const command of console) {
 			).initScheduledPackageNotice({
 				path: `${step.scratch}/scheduled_package_notices.json`,
 				run: gated,
+				// Stand-ins the tests replace for a reboot and a backend reinstall.
+				boot: `${step.scratch}/boot_id`,
+				backend: `${step.scratch}/backend`,
+				// Every receipt read and write is logged, so a test sees a check that touches none.
+				read: (path) => {
+					appendFileSync(`${step.scratch}/receipt-io.log`, "read\n");
+					return existsSync(path) ? readFileSync(path, "utf8") : null;
+				},
+				write: (path, text) => {
+					appendFileSync(`${step.scratch}/receipt-io.log`, "write\n");
+					if (step.failReceiptWrites)
+						throw new Error("state directory is full");
+					writeFileSync(path, text);
+				},
 			});
+		}
 		process.stdout.write(`${HYDRATED_MARKER}\n`);
 	} else if (command.startsWith("apt ")) {
 		apt = scriptedApt(JSON.parse(command.slice(4)));

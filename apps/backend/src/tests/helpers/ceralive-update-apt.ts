@@ -56,6 +56,7 @@ export type AptRead =
 	| "package-record"
 	| "apt-mark"
 	| "dpkg-query"
+	| "dpkg-audit"
 	| "dpkg-compare";
 // How the command runner reports a child that never answered: a failed launch and a
 // timeout throw (runAptCommand turns both into exit 1 with a diagnostic), a signal
@@ -214,7 +215,7 @@ export function scriptedApt(script: AptScript) {
 function readOf(argv: readonly string[]): AptRead {
 	const [bin, verb] = argv;
 	if (bin === "dpkg-query") return "dpkg-query";
-	if (bin === "dpkg") return "dpkg-compare";
+	if (bin === "dpkg") return verb === "--audit" ? "dpkg-audit" : "dpkg-compare";
 	if (bin === "/usr/bin/apt-mark") return "apt-mark";
 	if (bin === "/usr/bin/apt-cache")
 		return argv.length === 2
@@ -339,6 +340,17 @@ function answer(script: AptScript) {
 					.map((name) => `dpkg-query: no packages found matching ${name}\n`)
 					.join(""),
 			};
+		}
+		// dpkg --audit names every package with unfinished work and is silent otherwise.
+		if (bin === "dpkg" && verb === "--audit") {
+			const open = present.filter((pkg) =>
+				/^.[HUFWt]|^..R/.test(script.dpkgStatus?.[pkg.name] ?? ""),
+			);
+			return ok(
+				open.length === 0
+					? ""
+					: `The following packages have unfinished work:\n${open.map((pkg) => ` ${pkg.name}\n`).join("")}`,
+			);
 		}
 		if (bin === "dpkg" && verb === "--compare-versions") {
 			const compared = Bun.spawnSync(["dpkg", ...argv.slice(1)]);

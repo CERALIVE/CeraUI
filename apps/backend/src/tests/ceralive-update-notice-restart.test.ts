@@ -12,11 +12,13 @@
  * (bare-name removals only).
  */
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import {
 	copyFile,
 	mkdir,
 	mkdtemp,
 	readFile,
+	rename,
 	rm,
 	writeFile,
 } from "node:fs/promises";
@@ -32,10 +34,13 @@ import { ceralivePackageList } from "../modules/system/package-layer.ts";
 import {
 	APPLIED_MARKER,
 	type AptPackage,
+	type AptRead,
 	type AptScript,
 	CHECKED_MARKER,
 	DEBIAN_ONLY_REFRESH,
+	type FailedRead,
 	HYDRATED_MARKER,
+	INVENTORY,
 	READY_PREFIX,
 	RECOVERY_FAILED_MARKER,
 	RECOVERY_RESTART_MARKER,
@@ -3397,3 +3402,440 @@ test(
 	},
 	budget(3),
 );
+
+// Capable proof classes: every incomplete sub-read, and every showing another
+// backend or another lineage may have made, keeps the notice.
+{
+	const offer: AptPackage = {
+		...cerastream("1", "2"),
+		name: "curl",
+		source: "debian",
+	};
+	const done: AptScript = { installed: [{ ...offer, installed: "2" }] };
+	const cut = (text: string, lines: number) =>
+		`${text.split("\n").slice(0, lines).join("\n")}\n`;
+	const answering: readonly FailedRead[] = [
+		"launch",
+		"timeout",
+		"signal",
+		"silent-exit-1",
+	];
+	const failures = (read: AptRead, modes: readonly FailedRead[]) =>
+		modes.map((mode) => ({
+			label: `${read} ${mode}`,
+			apt: { ...done, fail: { [read]: mode } },
+		}));
+	const incomplete: readonly {
+		readonly label: string;
+		readonly apt: AptScript;
+	}[] = [
+		{
+			label: "a refresh cut before its last line",
+			apt: { ...done, refresh: { stdout: cut(REFRESH, 2) } },
+		},
+		{ label: "an empty refresh", apt: { ...done, refresh: { stdout: "" } } },
+		{
+			label: "a refresh cut inside a line",
+			apt: { ...done, refresh: { stdout: REFRESH.slice(0, 40) } },
+		},
+		{
+			label: "a refresh missing a configured source",
+			apt: { ...done, refresh: { stdout: DEBIAN_ONLY_REFRESH } },
+		},
+		{
+			label: "a refresh answering a release the inventory lacks",
+			apt: {
+				...done,
+				refresh: {
+					stdout: REFRESH.replace(
+						"Reading",
+						"Hit:3 https://deb.debian.org/debian trixie InRelease\nReading",
+					),
+				},
+			},
+		},
+		{
+			label: "a refresh with a failed index",
+			apt: { ...done, refresh: { stdout: REFRESH.replace("Hit:1", "Err:1") } },
+		},
+		{
+			label: "a refresh with a warning",
+			apt: {
+				...done,
+				refresh: {
+					stdout: REFRESH.replace(
+						"Reading",
+						"W: Some index files failed to download\nReading",
+					),
+				},
+			},
+		},
+		{
+			label: "an inventory without its pinned boundary",
+			apt: { ...done, inventory: INVENTORY.replace("Pinned packages:\n", "") },
+		},
+		{
+			label: "a refresh and an inventory both cut after the Debian source",
+			apt: {
+				...done,
+				refresh: { stdout: DEBIAN_ONLY_REFRESH },
+				inventory: INVENTORY.split(" 500 https://apt")[0] ?? "",
+			},
+		},
+		{
+			label: "an inventory cut between a source and its release",
+			apt: {
+				...done,
+				inventory: INVENTORY.replace(
+					/(apt\.ceralive\.tv\/[^\n]* Packages\n)[^\n]*\n[^\n]*\n/,
+					"$1",
+				),
+			},
+		},
+		{ label: "an empty inventory", apt: { ...done, inventory: "" } },
+		{
+			label: "a hold list cut before the offer's hold",
+			apt: {
+				...done,
+				holds: ["adduser", offer.name],
+				fail: { "apt-mark": "truncated" },
+			},
+		},
+		{
+			label: "a dpkg snapshot cut before an unfinished package",
+			apt: {
+				installed: [
+					{ ...offer, installed: "2" },
+					{ name: "zlib1g", source: "debian", installed: "1", candidate: "1" },
+				],
+				dpkgStatus: { zlib1g: "iF " },
+				fail: { "dpkg-query": "truncated" },
+			},
+		},
+		...failures("refresh", [...answering, "truncated"]),
+		...failures("inventory", [...answering, "truncated"]),
+		...failures("simulation", [...answering, "truncated", "no-summary"]),
+		...failures("apt-mark", answering),
+		...failures("dpkg-query", answering),
+		...failures("dpkg-audit", [...answering, "truncated"]),
+	];
+	for (const { label, apt } of incomplete)
+		test(
+			`scheduled package notice is kept after an incomplete capable check (${label})`,
+			async () => {
+				const backend = await Backend.start({
+					capable: true,
+					apt: { upgradable: [offer] },
+				});
+				const opened = scheduledTabs();
+				await reconnect(backend, opened);
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				const shown = scheduledNames(opened);
+				expect(shown.map((names) => names.length)).toEqual([1, 1]);
+				await backend.setApt(apt);
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				expect(scheduledNames(opened)).toEqual(shown);
+				expect(removals(opened)).toEqual([0, 0]);
+				// The receipt survived: the same proof, complete, clears it.
+				await backend.setApt(done);
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				expect(scheduledNames(opened)).toEqual([[], []]);
+			},
+			budget(1),
+		);
+
+	const restartInto = async (backend: Backend, opened: Tab[], step: Step) => {
+		await backend.close();
+		await Promise.all(opened.map((tab) => tab.dropped()));
+		const next = await Backend.start(step);
+		await reconnect(next, opened);
+		return next;
+	};
+	// What every CeraUI install does to the backend executable: a new file renamed over it.
+	const reinstallBackend = async () => {
+		await writeFile(join(root, "backend.new"), crypto.randomUUID());
+		await rename(join(root, "backend.new"), join(root, "backend"));
+	};
+	const between: readonly {
+		readonly label: string;
+		readonly kept: boolean;
+		readonly act: () => Promise<void>;
+	}[] = [
+		{
+			label: "a restart of the same backend",
+			kept: false,
+			act: async () => {},
+		},
+		{
+			label: "a reboot",
+			kept: true,
+			act: () => writeFile(join(root, "boot_id"), `${crypto.randomUUID()}\n`),
+		},
+		{ label: "a reinstalled backend", kept: true, act: reinstallBackend },
+		{
+			label: "an unreadable boot id",
+			kept: true,
+			act: () => writeFile(join(root, "boot_id"), ""),
+		},
+	];
+	for (const { label, kept, act } of between)
+		test(
+			`scheduled package notice proof across ${label} (capable)`,
+			async () => {
+				let backend = await Backend.start({
+					capable: true,
+					apt: { upgradable: [offer] },
+				});
+				const opened = scheduledTabs();
+				await reconnect(backend, opened);
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				const shown = scheduledNames(opened);
+				expect(shown.map((names) => names.length)).toEqual([1, 1]);
+				await act();
+				backend = await restartInto(backend, opened, {
+					capable: true,
+					apt: done,
+				});
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				expect(scheduledNames(opened)).toEqual(kept ? shown : [[], []]);
+				expect(removals(opened)).toEqual(kept ? [0, 0] : [1, 1]);
+			},
+			budget(2),
+		);
+
+	const allArch: AptPackage = { ...offer, arch: "all", installedArch: "all" };
+	const rollbacks: readonly {
+		readonly label: string;
+		readonly head: AptScript;
+		readonly main: AptScript;
+		readonly after: AptScript;
+	}[] = [
+		{
+			label: "the same offer",
+			head: { upgradable: [offer] },
+			main: { upgradable: [offer] },
+			after: done,
+		},
+		{
+			label: "the same version for another architecture",
+			head: { upgradable: [allArch] },
+			main: { upgradable: [offer] },
+			after: { installed: [{ ...allArch, installed: "2" }] },
+		},
+		{
+			label: "another actionable subset",
+			// Debian's origin unaffirmed: curl is displayed, only cerastream is actionable.
+			head: {
+				upgradable: [cerastream("1", "2"), offer],
+				inventory: INVENTORY.replace("o=Debian,", "o=Unknown,"),
+			},
+			main: { upgradable: [cerastream("1", "2"), offer] },
+			after: { installed: [cerastream("2"), { ...offer, candidate: "1" }] },
+		},
+	];
+	for (const { label, head, main, after } of rollbacks)
+		test(
+			`scheduled package notice is kept after a rollback to main that showed ${label} under the same id (capable)`,
+			async () => {
+				let backend = await Backend.start({ capable: true, apt: head });
+				const opened = scheduledTabs();
+				await reconnect(backend, opened);
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				const shown = scheduledNames(opened);
+				expect(shown.map((names) => names.length)).toEqual([1, 1]);
+				await reinstallBackend();
+				backend = await restartInto(backend, opened, {
+					capable: true,
+					canonicalScheduler: true,
+					apt: main,
+				});
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				// Main's showing carries the same id: it replaced head's copy in both tabs.
+				expect(scheduledNames(opened)).toEqual(shown);
+				await reinstallBackend();
+				backend = await restartInto(backend, opened, {
+					capable: true,
+					apt: after,
+				});
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				expect(scheduledNames(opened)).toEqual(shown);
+				expect(removals(opened)).toEqual([0, 0]);
+			},
+			budget(3),
+		);
+
+	const keptThrough = async (start: AptScript, steps: readonly AptScript[]) => {
+		const backend = await Backend.start({ capable: true, apt: start });
+		const opened = scheduledTabs();
+		await reconnect(backend, opened);
+		await backend.scheduledPackageCheck();
+		await sync(opened);
+		const shown = scheduledNames(opened);
+		expect(shown.map((names) => names.length)).toEqual([1, 1]);
+		for (const apt of steps) {
+			await backend.setApt(apt);
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			expect(scheduledNames(opened)).toEqual(shown);
+		}
+		expect(removals(opened)).toEqual([0, 0]);
+		return { backend, opened };
+	};
+	test(
+		"scheduled package notice receipt is poisoned when its id is announced for another architecture (capable)",
+		async () => {
+			await keptThrough({ upgradable: [allArch] }, [
+				{ upgradable: [offer] },
+				{ installed: [{ ...allArch, installed: "2" }] },
+				done,
+			]);
+		},
+		budget(1),
+	);
+	test(
+		"scheduled package notice is kept when one package is offered for two architectures (capable)",
+		async () => {
+			const twin: AptPackage = {
+				...offer,
+				name: `${offer.name}:armhf`,
+				arch: "armhf",
+				installedArch: "armhf",
+			};
+			await keptThrough({ upgradable: [offer, twin] }, [
+				{
+					installed: [
+						{ ...offer, installed: "2" },
+						{ ...twin, candidate: "1" },
+					],
+				},
+			]);
+		},
+		budget(1),
+	);
+	test(
+		"scheduled package notice proves epoch, tilde and plus versions exactly (capable)",
+		async () => {
+			const epoch: AptPackage = {
+				...offer,
+				installed: "1:1.0~rc1",
+				candidate: "1:1.0+build2",
+			};
+			const { backend, opened } = await keptThrough({ upgradable: [epoch] }, [
+				{ installed: [{ ...epoch, installed: "1:1.0", candidate: "1:1.0" }] },
+			]);
+			await backend.setApt({
+				installed: [{ ...epoch, installed: "1:1.0+build2" }],
+			});
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			expect(scheduledNames(opened)).toEqual([[], []]);
+		},
+		budget(1),
+	);
+	test(
+		"scheduled package notice is kept when its receipt storage refuses writes (capable)",
+		async () => {
+			let backend = await Backend.start({
+				capable: true,
+				apt: { upgradable: [offer] },
+			});
+			const opened = scheduledTabs();
+			await reconnect(backend, opened);
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			const shown = scheduledNames(opened);
+			const receipts = join(root, "scheduled_package_notices.json");
+			expect(existsSync(receipts)).toBe(true);
+			// A receipt this process cannot rewrite is removed rather than trusted later.
+			backend = await restartInto(backend, opened, {
+				capable: true,
+				apt: done,
+				failReceiptWrites: true,
+			});
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			expect(existsSync(receipts)).toBe(false);
+			backend = await restartInto(backend, opened, {
+				capable: true,
+				apt: done,
+			});
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			expect(scheduledNames(opened)).toEqual(shown);
+			expect(removals(opened)).toEqual([0, 0]);
+		},
+		budget(3),
+	);
+	test(
+		"scheduled package notice ignores a receipt in the previous format (capable)",
+		async () => {
+			let backend = await Backend.start({
+				capable: true,
+				canonicalScheduler: true,
+				apt: { upgradable: [offer] },
+			});
+			const opened = scheduledTabs();
+			await reconnect(backend, opened);
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			const shown = scheduledNames(opened);
+			expect(shown.map((names) => names.length)).toEqual([1, 1]);
+			await writeFile(
+				join(root, "scheduled_package_notices.json"),
+				JSON.stringify({
+					version: 1,
+					notices: [
+						{
+							id: "curl=2",
+							targets: [{ name: "curl", arch: "arm64", version: "2" }],
+						},
+					],
+				}),
+			);
+			backend = await restartInto(backend, opened, {
+				capable: true,
+				apt: done,
+			});
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			expect(scheduledNames(opened)).toEqual(shown);
+			expect(removals(opened)).toEqual([0, 0]);
+		},
+		budget(2),
+	);
+	for (const capable of [false, true])
+		test(
+			`scheduled package notice receipts are read and written only by capable checks (${capable ? "capable" : "legacy"})`,
+			async () => {
+				const pkg = capable ? offer : cerastream("1", "2");
+				const backend = await Backend.start({
+					capable,
+					apt: { upgradable: [pkg] },
+				});
+				const opened = scheduledTabs();
+				await reconnect(backend, opened);
+				for (const apt of [
+					{ upgradable: [pkg] },
+					{ installed: [{ ...pkg, installed: "2" }] },
+				]) {
+					await backend.setApt(apt);
+					await backend.scheduledPackageCheck();
+					await sync(opened);
+				}
+				expect(
+					["receipt-io.log", "scheduled_package_notices.json"].map((file) =>
+						existsSync(join(root, file)),
+					),
+				).toEqual([capable, capable]);
+			},
+			budget(1),
+		);
+}

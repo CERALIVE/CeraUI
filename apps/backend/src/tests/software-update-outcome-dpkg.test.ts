@@ -10,7 +10,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { UpdateTarget } from "@ceraui/rpc/schemas";
 import { spawnWithTimeout } from "../helpers/spawn-policy.ts";
-import { readUpdateOutcome } from "../modules/system/software-update-outcome.ts";
+import {
+	readUpdateOutcome,
+	targetSetsAttained,
+} from "../modules/system/software-update-outcome.ts";
 
 let root: string;
 let native: string;
@@ -170,4 +173,84 @@ describe("dpkg's own order and states", () => {
 		});
 		expect(await read(db, [target()])).toEqual({ kind });
 	});
+});
+
+describe("the whole-database proof, as dpkg reports it", () => {
+	// A database dpkg --audit accepts: multiarch layout, a list and md5sums per instance.
+	async function audited(...installed: Installed[]): Promise<string> {
+		const dir = await database(...installed);
+		await writeFile(join(dir, "info", "format"), "1\n");
+		for (const { name, arch } of installed)
+			for (const file of ["list", "md5sums"])
+				await writeFile(join(dir, "info", `${name}:${arch}.${file}`), "");
+		return dir;
+	}
+	const demo = (version: string, status?: string): Installed => ({
+		name: "demo-pkg",
+		arch: native,
+		version,
+		...(status ? { status } : {}),
+	});
+	// The scheduled proof against `admindir`; `answer` may stand in for the runner's output.
+	const proof = (
+		admindir: string,
+		answer: (
+			result: Awaited<ReturnType<typeof spawnWithTimeout>>,
+			timeoutMs: number,
+		) => Promise<Awaited<ReturnType<typeof spawnWithTimeout>>> = async (
+			result,
+		) => result,
+	) =>
+		targetSetsAttained([[{ name: "demo-pkg", version: "2", arch: native }]], {
+			now: Date.now,
+			run: async (argv, opts) => {
+				const own = argv[0] === "dpkg-query" || argv[1] === "--audit";
+				const result = await spawnWithTimeout(
+					own
+						? [argv[0] ?? "", `--admindir=${admindir}`, ...argv.slice(1)]
+						: argv,
+					opts,
+				);
+				return argv[0] === "dpkg-query"
+					? answer(result, opts?.timeoutMs ?? 0)
+					: result;
+			},
+		});
+	const firstRow = (result: Awaited<ReturnType<typeof spawnWithTimeout>>) => ({
+		...result,
+		stdout: `${result.stdout.split("\n")[0]}\n`,
+	});
+
+	test("a clean database proves the set", async () => {
+		expect(await proof(await audited(demo("2")))).toEqual([true]);
+	});
+
+	test("unfinished work a cut snapshot hides keeps every set", async () => {
+		const db = await audited(demo("2"), {
+			name: "zz-other",
+			arch: native,
+			version: "1",
+			status: "install ok half-configured",
+		});
+		expect(await proof(db)).toEqual([false]);
+		// Only dpkg --audit still sees the half-configured package.
+		expect(await proof(db, async (result) => firstRow(result))).toEqual([
+			false,
+		]);
+	});
+
+	test("a database dpkg --audit finds damaged keeps every set", async () => {
+		expect(await proof(await database(demo("2")))).toEqual([false]);
+	});
+
+	test("an answer back only after its own timeout proves nothing", async () => {
+		const db = await audited(demo("2"));
+		// The runner's partial drain: exit 0 with what had arrived once the deadline fired.
+		expect(
+			await proof(db, async (result, timeoutMs) => {
+				await Bun.sleep(timeoutMs);
+				return firstRow(result);
+			}),
+		).toEqual([false]);
+	}, 30_000);
 });

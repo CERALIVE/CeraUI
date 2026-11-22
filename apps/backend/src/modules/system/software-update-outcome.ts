@@ -153,15 +153,27 @@ export async function targetsAttained(
  * whole database: every instance configured, not held, at its version or later.
  * Every set is judged from the same rows, and the pass ends with a second read
  * that must equal the first, so nothing changed while it judged. Unfinished
- * work on any package, a failed, partial or changed read, or no time left
- * proves no set.
+ * work on any package (by the snapshot or by `dpkg --audit`), a failed,
+ * partial or changed read, or no time left proves no set.
  */
 export async function targetSetsAttained(
 	sets: readonly (readonly UpdateTarget[])[],
 	deps: Pick<UpdateOutcomeDeps, "run" | "now">,
 ): Promise<boolean[]> {
 	const none = sets.map(() => false);
-	const ask = asker(deps, deps.now() + UPDATE_OUTCOME_DEADLINE_MS);
+	// The runner answers exit 0 with a partial drain once its deadline fired, so only
+	// an answer back inside its own timeout is whole.
+	const whole: typeof spawnWithTimeout = async (argv, options) => {
+		const started = performance.now();
+		const answer = await deps.run(argv, options);
+		return performance.now() - started < (options?.timeoutMs ?? 0)
+			? answer
+			: { exitCode: 1, stdout: "", stderr: "" };
+	};
+	const ask = asker(
+		{ run: whole, now: deps.now },
+		deps.now() + UPDATE_OUTCOME_DEADLINE_MS,
+	);
 	const read = () => ask(["dpkg-query", "-W", FORMAT]);
 	const snapshot = await read();
 	if (snapshot?.exitCode !== 0) return none;
@@ -174,7 +186,11 @@ export async function targetSetsAttained(
 			set.length > 0 && (await attainedFrom(set, rows, ask, CONFIGURED_UNHELD)),
 		);
 	const confirm = await read();
-	return confirm?.exitCode === 0 && confirm.stdout === snapshot.stdout
+	if (confirm?.exitCode !== 0 || confirm.stdout !== snapshot.stdout)
+		return none;
+	// A cut snapshot can hide unfinished work; any prefix of a report is not empty.
+	const audit = await ask(["dpkg", "--audit"]);
+	return audit?.exitCode === 0 && audit.stdout === "" && audit.stderr === ""
 		? verdicts
 		: none;
 }
