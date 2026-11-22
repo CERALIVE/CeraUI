@@ -113,7 +113,6 @@ function props(): ComponentProps<typeof IdleCockpit> {
 		onStop: noop,
 		onOpenSource: noop,
 		onGoNetwork: noop,
-		onOpenEncoder: noop,
 		activeInput: undefined,
 		switchingInput: undefined,
 		onSwitch: noop,
