@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
+import { CallTimeoutError } from "$lib/rpc/rpc-timeouts";
 import {
 	deliverLegacyLog,
 	LATE_FILE_MS,
@@ -90,10 +90,10 @@ describe("download gate: a legacy log file pushed on the socket", () => {
 
 	it("goes to its own request by the id the device echoes, each checked against its own open", async () => {
 		const first = Promise.withResolvers<void>();
-		const second = Promise.withResolvers<void>();
 		const asked: string[] = [];
+		let open = true;
 		const ended = requestLegacyLog(
-			() => false,
+			() => open,
 			(request) => {
 				asked.push(request);
 				return first.promise;
@@ -103,93 +103,139 @@ describe("download gate: a legacy log file pushed on the socket", () => {
 			() => true,
 			(request) => {
 				asked.push(request);
-				return second.promise;
+				return Promise.resolve(
+					expect(deliverLegacyLog({ ...FILE, request })).toBe(true),
+				);
 			},
 		);
 
+		open = false;
 		expect(deliverLegacyLog({ ...FILE, request: asked[0] })).toBe(false);
-		expect(deliverLegacyLog({ ...FILE, request: asked[1] })).toBe(true);
 		first.resolve();
-		second.resolve();
 		await Promise.all([ended, live]);
 
 		expect(saved).toHaveLength(1);
 	});
 
-	it("saves the reopened view's file and not the closed view's, also when the later request is answered first", async () => {
-		let open = true;
-		const asked: string[] = [];
-		const replies = [
-			Promise.withResolvers<void>(),
-			Promise.withResolvers<void>(),
-		];
-		const closed = requestLegacyLog(
-			() => open,
-			(request) => {
-				asked.push(request);
-				return replies[0]?.promise ?? Promise.resolve();
-			},
-		);
-		open = false;
-		const reopened = requestLegacyLog(
-			() => true,
-			(request) => {
-				asked.push(request);
-				return replies[1]?.promise ?? Promise.resolve();
-			},
-		);
+	it.each([{ echoed: true }, { echoed: false }])(
+		"keeps the reopened view's request waiting while the closed view's is outstanding, drops that file and saves its own (id echoed: $echoed)",
+		async ({ echoed }) => {
+			let open = true;
+			const asked: string[] = [];
+			const closedReply = Promise.withResolvers<void>();
+			const closed = requestLegacyLog(
+				() => open,
+				(request) => {
+					asked.push(request);
+					return closedReply.promise;
+				},
+			);
+			open = false;
+			const reopened = requestLegacyLog(
+				() => true,
+				(request) => {
+					asked.push(request);
+					const file = { ...FILE, contents: "reopened view" };
+					return Promise.resolve(
+						expect(deliverLegacyLog(echoed ? { ...file, request } : file)).toBe(
+							true,
+						),
+					);
+				},
+			);
+			await Promise.resolve();
 
-		expect(
-			deliverLegacyLog({
-				...FILE,
-				contents: "reopened view",
-				request: asked[1],
-			}),
-		).toBe(true);
-		replies[1]?.resolve();
-		expect(
-			deliverLegacyLog({ ...FILE, contents: "closed view", request: asked[0] }),
-		).toBe(false);
-		replies[0]?.resolve();
-		await Promise.all([closed, reopened]);
+			expect(asked).toHaveLength(1);
+			const late = { ...FILE, contents: "closed view" };
+			expect(
+				deliverLegacyLog(echoed ? { ...late, request: asked[0] } : late),
+			).toBe(false);
+			closedReply.resolve();
+			await Promise.all([closed, reopened]);
 
-		expect(await Promise.all(blobs.map((blob) => blob.text()))).toEqual([
-			"reopened view",
-		]);
-	});
+			expect(asked).toHaveLength(2);
+			expect(await Promise.all(blobs.map((blob) => blob.text()))).toEqual([
+				"reopened view",
+			]);
+		},
+	);
 
-	it("lets an unanswered request claim its late file only until its window ends, and never another request's", async () => {
+	it.each([{ echoed: true }, { echoed: false }])(
+		"saves nothing for a timed-out request's late file, also while its open is live (id echoed: $echoed)",
+		async ({ echoed }) => {
+			vi.useFakeTimers();
+			const asked: string[] = [];
+			const failed = requestLegacyLog(
+				() => true,
+				(request) => {
+					asked.push(request);
+					return Promise.reject(new CallTimeoutError("Request timeout"));
+				},
+			);
+
+			await expect(failed).rejects.toBeInstanceOf(CallTimeoutError);
+			const late = { ...FILE, contents: "late" };
+			expect(
+				deliverLegacyLog(echoed ? { ...late, request: asked[0] } : late),
+			).toBe(false);
+
+			expect(saved).toEqual([]);
+		},
+	);
+
+	it("holds the next request until a timed-out request's window ends, then sends it and saves its own file", async () => {
 		vi.useFakeTimers();
 		const asked: string[] = [];
-		const answer = Promise.withResolvers<void>();
 		await requestLegacyLog(
 			() => true,
 			(request) => {
 				asked.push(request);
-				return Promise.reject(new Error("timed out"));
+				return Promise.reject(new CallTimeoutError("Request timeout"));
 			},
 		).catch(() => undefined);
 		const next = requestLegacyLog(
 			() => true,
 			(request) => {
 				asked.push(request);
-				return answer.promise;
+				return Promise.resolve(
+					expect(
+						deliverLegacyLog({ ...FILE, contents: "its own", request }),
+					).toBe(true),
+				);
 			},
 		);
 
-		expect(deliverLegacyLog({ ...FILE, contents: "whose" })).toBe(false);
-		await vi.advanceTimersByTimeAsync(LATE_FILE_MS);
+		await vi.advanceTimersByTimeAsync(LATE_FILE_MS - 1);
+		expect(asked).toHaveLength(1);
+		await vi.advanceTimersByTimeAsync(1);
+		await next;
+
+		expect(asked).toHaveLength(2);
 		expect(
 			deliverLegacyLog({ ...FILE, contents: "too late", request: asked[0] }),
 		).toBe(false);
-		expect(
-			deliverLegacyLog({ ...FILE, contents: "its own", request: asked[1] }),
-		).toBe(true);
-		answer.resolve();
-		await next;
-
 		expect(await Promise.all(blobs.map((blob) => blob.text()))).toEqual([
 			"its own",
 		]);
+	});
+
+	it("sends the next request at once after a failure that sends no file", async () => {
+		const asked: string[] = [];
+		await requestLegacyLog(
+			() => true,
+			(request) => {
+				asked.push(request);
+				return Promise.reject(new Error("socket closed"));
+			},
+		).catch(() => undefined);
+		await requestLegacyLog(
+			() => true,
+			(request) => {
+				asked.push(request);
+				return Promise.resolve();
+			},
+		);
+
+		expect(asked).toHaveLength(2);
 	});
 });

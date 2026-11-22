@@ -31,6 +31,7 @@ import {
 import { bootSelection } from "$lib/device-logs/boot-selection.svelte";
 import { deliverLegacyLog } from "$lib/device-logs/download-gate";
 import { getDeviceLog, getSystemLog } from "$lib/helpers/SystemHelper";
+import { CallTimeoutError } from "$lib/rpc/rpc-timeouts";
 import type { LogsDialogContext } from "$lib/stores/dialog-request.svelte";
 
 import { en } from "../../tests/helpers/catalog";
@@ -420,7 +421,7 @@ describe("LogsDialog: a legacy log file pushed after the close", () => {
 		{ kind: "device", ask: getDeviceLog },
 		{ kind: "system", ask: getSystemLog },
 	] as const)(
-		"the $kind log a closed view still waits on is not saved, also answered after the reopened view's own, which is",
+		"the reopened view waits, busy, while the closed view's $kind log is outstanding, then saves its own and not that one",
 		async ({ kind, ask }) => {
 			const asked: (string | undefined)[] = [];
 			const replies: PromiseWithResolvers<void>[] = [];
@@ -438,6 +439,19 @@ describe("LogsDialog: a legacy log file pushed after the close", () => {
 			await tick();
 			await fireEvent.click(await screen.findByTestId(`log-download-${kind}`));
 
+			expect(asked).toHaveLength(1);
+			expect(
+				(screen.getByTestId(`log-download-${kind}`) as HTMLButtonElement)
+					.disabled,
+			).toBe(true);
+			expect(
+				deliverLegacyLog({
+					...FILE,
+					contents: "closed view",
+					request: asked[0],
+				}),
+			).toBe(false);
+			replies[0]?.resolve();
 			await waitFor(() => expect(asked).toHaveLength(2));
 			expect(
 				deliverLegacyLog({
@@ -447,14 +461,6 @@ describe("LogsDialog: a legacy log file pushed after the close", () => {
 				}),
 			).toBe(true);
 			replies[1]?.resolve();
-			expect(
-				deliverLegacyLog({
-					...FILE,
-					contents: "closed view",
-					request: asked[0],
-				}),
-			).toBe(false);
-			replies[0]?.resolve();
 
 			const saved = vi
 				.mocked(URL.createObjectURL)
@@ -462,6 +468,29 @@ describe("LogsDialog: a legacy log file pushed after the close", () => {
 			expect(await Promise.all(saved.map((blob) => blob.text()))).toEqual([
 				"reopened view",
 			]);
+		},
+	);
+
+	it.each([
+		{ kind: "device", ask: getDeviceLog },
+		{ kind: "system", ask: getSystemLog },
+	] as const)(
+		"the $kind log whose call timed out shows the failure, and its late file is not saved",
+		async ({ kind, ask }) => {
+			const asked: (string | undefined)[] = [];
+			vi.mocked(ask).mockImplementation((request?: string) => {
+				asked.push(request);
+				return Promise.reject(new CallTimeoutError("Request timeout"));
+			});
+			render(LogsDialogHost).component.show();
+
+			await fireEvent.click(await screen.findByTestId(`log-download-${kind}`));
+
+			expect(await screen.findByTestId("log-download-error")).toBeTruthy();
+			expect(
+				deliverLegacyLog({ ...FILE, contents: "late", request: asked[0] }),
+			).toBe(false);
+			expect(anchorClicks).not.toHaveBeenCalled();
 		},
 	);
 });

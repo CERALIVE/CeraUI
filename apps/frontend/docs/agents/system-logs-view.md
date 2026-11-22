@@ -138,10 +138,13 @@ density. It is not a redesign.
   the only place System Logs starts a browser download: each request carries the
   token of the open it was issued under, read again when the file is ready (a
   sharing ticket's URL, or a legacy file the device pushes as a `log` event before
-  it answers, tied to its request by the id the client sends and the device
-  echoes, never by order; from a device that echoes none, only while that request
-  is the one outstanding; an unanswered request keeps its late file from any
-  other for `LATE_FILE_MS`; a file no request claims saves nothing). The view and the phone header's boot button are keyed by the
+  it answers, one legacy request outstanding at a time across both kinds and
+  every open, so a file has one possible owner, also from a device that echoes no
+  id, and an echoed id must match it; the owner is current, abandoned (its open
+  ended), failed (its call timed out: revoked at once, the failure shown, and it
+  holds the slot for `LATE_FILE_MS` so its late file reaches no one) or done, and
+  only a current request with a live open is given its file; a later request
+  waits, shown as running). The view and the phone header's boot button are keyed by the
   generation, so the exit animation keeps neither, the flush after the close runs
   their teardown (probe fence, Raw lookup abort and paging invalidation, the flow's
   dispose), and a reopen, even within the same turn, mounts a fresh view.

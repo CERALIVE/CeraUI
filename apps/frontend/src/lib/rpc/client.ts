@@ -162,7 +162,7 @@ import { nextBackoffDelay } from "./backoff";
 import { parseServerPing, shouldForceCloseHalfOpen } from "./half-open";
 import { createHeartbeatTracker, HEARTBEAT_THRESHOLD_MS } from "./heartbeat";
 import { NotSentError, RpcError, type RpcErrorEnvelope } from "./rpc-error";
-import { RPC_CALL_TIMEOUT_MS } from "./rpc-timeouts";
+import { CallTimeoutError, RPC_CALL_TIMEOUT_MS } from "./rpc-timeouts";
 
 export class ConnectionResetError extends Error {
 	override readonly name = "ConnectionResetError";
@@ -528,7 +528,7 @@ class RPCClient {
 		return new Promise<T>((resolve, reject) => {
 			const timeoutHandle = setTimeout(() => {
 				this.pendingRequests.delete(id);
-				reject(new Error(`Request timeout: ${path.join(".")}`));
+				reject(new CallTimeoutError(`Request timeout: ${path.join(".")}`));
 			}, timeout);
 
 			this.pendingRequests.set(id, {
