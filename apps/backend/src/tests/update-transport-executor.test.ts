@@ -1,24 +1,30 @@
-import { expect, spyOn, test } from "bun:test";
+import { expect, mock, spyOn, test } from "bun:test";
+import { updateCapabilityFileSchema } from "@ceraui/rpc/schemas";
 import { logger } from "../helpers/logger.ts";
-import { UPDATE_INVENTORY_NMCLI_FIELDS } from "../modules/system/update-transport/candidate-inventory.ts";
 import { selectUpdateTransport } from "../modules/system/update-transport/executor.ts";
+import { createUpdatePinController } from "../modules/system/update-transport/pin.ts";
 import { assertNmDeviceShowFields } from "./helpers/nm-device-show-fixture.ts";
 
-const inventoryFields =
-	"GENERAL.DEVICE,GENERAL.IP-IFACE,GENERAL.TYPE,GENERAL.STATE,GENERAL.METERED";
-
-function assertInventoryQuery(argv: string[]): void {
-	expect(UPDATE_INVENTORY_NMCLI_FIELDS).toBe(inventoryFields);
-	assertNmDeviceShowFields(UPDATE_INVENTORY_NMCLI_FIELDS);
-	assertNmDeviceShowFields(argv[3] ?? "");
-	expect(argv).toEqual([
-		"nmcli",
-		"-t",
-		"-f",
-		inventoryFields,
-		"device",
-		"show",
-	]);
+function inventoryReply(argv: string[], ...records: readonly string[]) {
+	expect(argv).toContain("-t");
+	expect(argv.slice(-2)).toEqual(["device", "show"]);
+	const fieldOption = argv.indexOf("-f");
+	expect(fieldOption).toBeGreaterThan(0);
+	const fields = argv[fieldOption + 1] ?? "";
+	assertNmDeviceShowFields(fields);
+	const requested = new Set(fields.split(","));
+	return {
+		exitCode: 0,
+		stdout: records
+			.map((record) =>
+				record
+					.split("\n")
+					.filter((line) => requested.has(line.slice(0, line.indexOf(":"))))
+					.join("\n"),
+			)
+			.join("\n\n"),
+		stderr: "",
+	};
 }
 
 test("an OS selection logs every failed cellular interface and family once", async () => {
@@ -40,20 +46,15 @@ test("an OS selection logs every failed cellular interface and family once", asy
 				routerIfnames: () => [],
 				dongleIfnames: () => [],
 				run: async (argv) => {
-					if (argv[0] === "nmcli") assertInventoryQuery(argv);
-					return {
-						exitCode: argv[0] === "nmcli" ? 0 : 1,
-						stdout:
-							argv[0] === "nmcli"
-								? ["wwan0", "wwan1"]
-										.map(
-											(ifname, index) =>
-												`GENERAL.DEVICE:cdc-wdm${index}\nGENERAL.IP-IFACE:${ifname}\nGENERAL.TYPE:gsm\nGENERAL.STATE:100 (connected)\nGENERAL.METERED:yes`,
-										)
-										.join("\n\n")
-								: "",
-						stderr: "",
-					};
+					if (argv[0] === "nmcli")
+						return inventoryReply(
+							argv,
+							...["wwan0", "wwan1"].map(
+								(ifname, index) =>
+									`GENERAL.DEVICE:cdc-wdm${index}\nGENERAL.IP-IFACE:${ifname}\nGENERAL.TYPE:gsm\nGENERAL.STATE:100 (connected)\nGENERAL.METERED:yes`,
+							),
+						);
+					return { exitCode: 1, stdout: "", stderr: "" };
 				},
 			},
 		);
@@ -111,14 +112,11 @@ test.each(["eth0", "wwan0"])(
 					}),
 					run: async (argv) => {
 						calls.push(argv);
-						if (argv[0] === "nmcli") {
-							assertInventoryQuery(argv);
-							return {
-								exitCode: 0,
-								stdout: `GENERAL.DEVICE:${ifname === "wwan0" ? "cdc-wdm0" : ifname}\nGENERAL.IP-IFACE:${ifname}\nGENERAL.TYPE:${ifname === "wwan0" ? "gsm" : "ethernet"}\nGENERAL.STATE:100 (connected)\nGENERAL.METERED:no (guessed)`,
-								stderr: "",
-							};
-						}
+						if (argv[0] === "nmcli")
+							return inventoryReply(
+								argv,
+								`GENERAL.DEVICE:${ifname === "wwan0" ? "cdc-wdm0" : ifname}\nGENERAL.IP-IFACE:${ifname}\nGENERAL.TYPE:${ifname === "wwan0" ? "gsm" : "ethernet"}\nGENERAL.STATE:100 (connected)\nGENERAL.METERED:no (guessed)`,
+							);
 						if (argv[0] === "resolvectl")
 							return {
 								exitCode: 0,
@@ -162,6 +160,10 @@ test.each(["eth0", "wwan0"])(
 			);
 		const apt = await selection("apt");
 		expect(apt.status).toBe("selected");
+		const inventory = calls.find(([command]) => command === "nmcli") ?? [];
+		expect(inventory[inventory.indexOf("-f") + 1]?.split(",")).toContain(
+			"GENERAL.IP-IFACE",
+		);
 		if (apt.status === "selected") {
 			expect(apt.selected.family).toBe(4);
 			expect(apt.selected.candidate).toEqual({
@@ -195,7 +197,8 @@ test.each(["eth0", "wwan0"])(
 			),
 		).toBe(false);
 		calls.length = 0;
-		expect((await selection("os")).status).toBe("selected");
+		const os = await selection("os");
+		expect(os.status).toBe("selected");
 		expect(
 			calls.some(
 				(argv) =>
@@ -209,8 +212,34 @@ test.each(["eth0", "wwan0"])(
 		expect(
 			calls
 				.filter((argv) => argv[0] === "curl")
-				.every((argv) => argv.includes(`if!${ifname}`)),
+				.every(
+					(argv) => argv[argv.indexOf("--interface") + 1] === `if!${ifname}`,
+				),
 		).toBe(true);
+		if (ifname === "wwan0") {
+			const pin = createUpdatePinController({
+				readCapabilities: async () =>
+					updateCapabilityFileSchema.parse({
+						schema: 1,
+						features: ["transport-uidrange"],
+						apt_uid: 42042,
+						ota_uid: 42043,
+					}),
+				run: async () => "",
+			});
+			await pin.sweep();
+			const approveMetered = mock(() => false);
+			const start = mock(async () => "started");
+			await expect(
+				pin.run("os", os, start, { approveMetered }),
+			).rejects.toMatchObject({ reason: "no-transport" });
+			expect(approveMetered).toHaveBeenCalledWith(
+				expect.objectContaining({
+					candidate: { ifname: "wwan0", kind: "cellular", metered: true },
+				}),
+			);
+			expect(start).not.toHaveBeenCalled();
+		}
 	},
 );
 
@@ -232,15 +261,12 @@ async function probeOsSignature(input: {
 			dongleIfnames: () => [],
 			run: async (argv) => {
 				calls.push(argv);
-				if (argv[0] === "nmcli") {
-					assertInventoryQuery(argv);
-					return {
-						exitCode: 0,
-						stdout:
-							"GENERAL.DEVICE:eth0\nGENERAL.IP-IFACE:eth0\nGENERAL.TYPE:ethernet\nGENERAL.STATE:100 (connected)\nGENERAL.METERED:no (guessed)\n\nGENERAL.DEVICE:cdc-wdm0\nGENERAL.IP-IFACE:wwan0\nGENERAL.TYPE:gsm\nGENERAL.STATE:100 (connected)\nGENERAL.METERED:yes",
-						stderr: "",
-					};
-				}
+				if (argv[0] === "nmcli")
+					return inventoryReply(
+						argv,
+						"GENERAL.DEVICE:eth0\nGENERAL.IP-IFACE:eth0\nGENERAL.TYPE:ethernet\nGENERAL.STATE:100 (connected)\nGENERAL.METERED:no (guessed)",
+						"GENERAL.DEVICE:cdc-wdm0\nGENERAL.IP-IFACE:wwan0\nGENERAL.TYPE:gsm\nGENERAL.STATE:100 (connected)\nGENERAL.METERED:yes",
+					);
 				if (argv[0] === "resolvectl")
 					return argv.includes("-6")
 						? { exitCode: 1, stdout: "", stderr: "no IPv6 route" }

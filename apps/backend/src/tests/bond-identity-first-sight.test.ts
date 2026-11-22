@@ -18,7 +18,10 @@ import {
 	resetNetifSnapshotForTest,
 	updateNetif,
 } from "../modules/network/network-interfaces.ts";
-import { resetUsbNetMarkers } from "../modules/network/router-cellular-scan.ts";
+import {
+	resetUsbNetMarkers,
+	usbNetScanCovers,
+} from "../modules/network/router-cellular-scan.ts";
 import { setup } from "../modules/setup.ts";
 import { resetBindMapWriter } from "../modules/streaming/bind-map-writer.ts";
 import {
@@ -66,6 +69,32 @@ afterEach(async () => {
 	setup.ips_file = savedIps;
 	setup.bind_map_file = savedSidecar;
 	await rm(directory, { recursive: true, force: true });
+});
+
+test("the first modem snapshot has a covering USB scan commit", async () => {
+	jest.useFakeTimers();
+	const scan = firstSightScan(firstSightIfconfig(MODEM, IP));
+	let first:
+		| { readonly ip: string | undefined; readonly covered: boolean }
+		| undefined;
+	const unsubscribe = onNetworkInterfacesChange(() => {
+		const modem = getNetworkInterfaces()[MODEM];
+		if (modem) first ??= { ip: modem.ip, covered: usbNetScanCovers(MODEM) };
+	});
+	const publication = updateNetif();
+	try {
+		await Promise.race([scan.entered, publication]);
+		// Let a nonwaiting publisher finish its queued work while the read is parked.
+		await new Promise<void>((resolve) => setImmediate(resolve));
+		scan.release();
+		await publication;
+		expect(first).toEqual({ ip: IP, covered: true });
+	} finally {
+		scan.release();
+		await publication;
+		await scan.settle();
+		unsubscribe();
+	}
 });
 
 test("(a) a persisted physical opt-out excludes the modem on its first boot publication", async () => {
