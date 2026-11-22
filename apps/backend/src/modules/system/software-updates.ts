@@ -123,6 +123,7 @@ import {
 	DetachedAptServiceUnownedError,
 	DetachedAptServiceUnrecordedError,
 	DetachedAptServiceVanishedError,
+	interruptedForStreamStart,
 	type RetirementOutcome,
 	recoverDetachedAptUpgrade,
 	resetSoftwareUpdateUnitForTest,
@@ -1851,6 +1852,19 @@ export function createSoftwareUpdateProcessMonitor(
 		if (unitExit) {
 			claim = await claimOutcomeOf();
 			code = claim ? claim.exitCode : OUTCOME_UNKNOWN;
+			// Go Live signalled this run for a stream: an interruption, which the
+			// orchestrator reports as a paused download, never a failed update.
+			if (
+				claim &&
+				claim.exitCode !== 0 &&
+				interruptedForStreamStart(claim.invocation)
+			) {
+				logger.info("Software update: interrupted for a stream start", {
+					exit_code: claim.exitCode,
+				});
+				claim = null;
+				code = OUTCOME_UNKNOWN;
+			}
 		}
 
 		// Keep the in-flight latch until cleanup settles; its result cannot change code.
@@ -2408,7 +2422,10 @@ async function recoverSoftwareUpdate(
 	}
 	if ("recorded" in recovered) {
 		// Once per boot: a later recovery call finds the hold already settled.
-		if (recovered.unit === "absent" && !softUpdateRecoveryPending) return false;
+		if (recovered.unit === "absent" && !softUpdateRecoveryPending) {
+			lastInstallUnitVerdict = "absent";
+			return false;
+		}
 		if (!recovered.recorded.confirm()) return unknownUnit();
 		lastInstallUnitVerdict =
 			recovered.unit === "finished" ? "attached" : "absent";

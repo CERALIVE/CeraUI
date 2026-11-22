@@ -2,6 +2,7 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { rmSync } from "node:fs";
 import * as spawnPolicy from "../helpers/spawn-policy.ts";
 import { trackAptTransfer } from "../modules/system/apt-transfer-abort.ts";
+import { defaultDetachedAptServiceDeps } from "../modules/system/software-update-service.ts";
 import { startOsStageAttempt } from "../modules/system/update-orchestrator/os-stage-retry.ts";
 import {
 	admitAndPrepareStreamStart,
@@ -38,9 +39,20 @@ test("nonzero package stop keeps cancellation-before-stop ordering and emits onl
 		},
 	);
 	try {
+		// The stop finds a running unit still downloading, under the unit's lock.
 		const { deps } = abortSpyDeps({
 			downloadNotices: notices.worker,
-			stopPackageInstallUnit: stopPackageInstallUnitForStream,
+			stopPackageInstallUnit: () =>
+				stopPackageInstallUnitForStream({
+					commitStage: async () => false,
+					deps: {
+						...defaultDetachedAptServiceDeps(),
+						inspect: async () => ({
+							kind: "running",
+							invocation: "c".repeat(32),
+						}),
+					},
+				}),
 		});
 		setOrchestratorRuntimeDepsForTest(deps);
 		setOrchestratorStateForTest({
@@ -51,7 +63,7 @@ test("nonzero package stop keeps cancellation-before-stop ordering and emits onl
 		await notices.worker.settled();
 		expect(getOrchestratorState().phase).toBe("available");
 		expect(seen).toHaveLength(1);
-		expect(seen[0]?.slice(0, 2)).toEqual(["systemctl", "stop"]);
+		expect(seen[0]?.slice(0, 2)).toEqual(["systemctl", "kill"]);
 		expect(notices.publications).toHaveLength(1);
 	} finally {
 		spawn.mockRestore();

@@ -100,9 +100,14 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   and later its exit with `drained` and `transcript` (stdout inode:size:mtime),
   only into its own exit-less record (or none); a record of another attempt
   makes the exit unknown. A unit no record names (an older release's) is
-  adopted once (bound to its invocation and the saved plan of that moment) by
-  the same compare-and-set; otherwise it is watched for display only, never
-  recorded, claimed or retired. Only a `launched` record's own fresh
+  adopted once, bound to its invocation, and to the saved plan only when its
+  own `ExecStart` installs exactly that plan's package versions, by the same
+  compare-and-set; otherwise it is watched for display only, never recorded,
+  claimed or retired. The claim taken before a retirement is the one handed
+  on: nothing claims again once the unit is gone. Go Live's stop runs under the
+  same lock, signals only a running unit still downloading (never `stop`), and
+  its exit is reported as an interruption; only a probe that found no unit is
+  absence for a committing resume. Only a `launched` record's own fresh
   exit with an invocation is replayed, and only while stdout is still the file
   that exit was read from. Starts are refused until boot recovery has looked at
   the unit, and while a finished unit is left in place (`already_updating`);
@@ -132,4 +137,6 @@ Coverage: `tests/software-updates-start-refusal.test.ts`,
 an offline tab, five boots of a unit that cannot be retired, a restart at each step
 between accepting an update and starting its unit and at each step after it finished,
 and a predecessor that cannot be retired refusing the next start until it can be, then
-two more updates), `tests/software-update-claim-authority.test.ts`.
+two more updates), `tests/software-update-claim-authority.test.ts`,
+`tests/software-update-single-starter.test.ts` (Go Live under the lock, the handed-over claim,
+proven absence, ExecStart-bound legacy plans and the write-time rechecks).

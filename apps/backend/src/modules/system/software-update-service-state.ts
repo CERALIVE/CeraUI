@@ -24,6 +24,7 @@ export type DetachedAptServiceState =
 	| {
 			readonly kind: "running";
 			readonly invocation?: string;
+			readonly packages?: readonly InstalledPair[];
 	  }
 	| {
 			readonly kind: "finished";
@@ -31,7 +32,28 @@ export type DetachedAptServiceState =
 			readonly cleanup: "stop" | "reset-failed";
 			/** systemd's InvocationID: tells this run from another of the same unit. */
 			readonly invocation?: string;
+			/** The package/version pairs its ExecStart installs (the pinned script only). */
+			readonly packages?: readonly InstalledPair[];
 	  };
+
+export type InstalledPair = { readonly name: string; readonly version: string };
+
+// The released pinned script ends `... install <name>=<version> ...`; a plain
+// upgrade names packages without versions and so has no pairs.
+function installedPairs(
+	execStart: string | undefined,
+): readonly InstalledPair[] | undefined {
+	const install = / install ([^;]+?) ;/.exec(execStart ?? "")?.[1];
+	const pairs = install?.split(" ").map((token) => {
+		const at = token.indexOf("=");
+		return at > 0
+			? { name: token.slice(0, at), version: token.slice(at + 1) }
+			: undefined;
+	});
+	return pairs?.length && pairs.every((pair) => pair && pair.version)
+		? (pairs as InstalledPair[])
+		: undefined;
+}
 
 export type FinishedDetachedAptServiceState = Extract<
 	DetachedAptServiceState,
@@ -79,7 +101,11 @@ export function parseDetachedAptServiceState(
 	const subState = properties.get("SubState") ?? "dead";
 	const exit = parseSystemdExitFields(properties);
 	const invocation = properties.get("InvocationID");
-	const run = invocation ? { invocation } : {};
+	const packages = installedPairs(properties.get("ExecStart"));
+	const run = {
+		...(invocation ? { invocation } : {}),
+		...(packages ? { packages } : {}),
+	};
 
 	if (activeState === "failed" || subState === "failed") {
 		if (

@@ -69,6 +69,11 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 			kind: "finished",
 			exitCode: 0,
 			cleanup: "stop",
+			// What the unit installs, read from its own ExecStart.
+			packages: [
+				{ name: "ceralive-apt-credentials", version: "1.0.1" },
+				{ name: "cerastream", version: "2026.9.8" },
+			],
 		});
 	});
 
@@ -80,7 +85,13 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 					"SubState=running",
 				),
 			),
-		).toEqual({ kind: "running" });
+		).toEqual({
+			kind: "running",
+			packages: [
+				{ name: "ceralive-apt-credentials", version: "1.0.1" },
+				{ name: "cerastream", version: "2026.9.8" },
+			],
+		});
 	});
 
 	it.each(["--allow-unauthenticated", "-o", "-y", "+x", ".x", ":x", "~x"])(
@@ -156,6 +167,10 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 			kind: "finished",
 			exitCode: 0,
 			cleanup: "stop",
+			packages: [
+				{ name: "ceralive-apt-credentials", version: "1.0.1" },
+				{ name: "cerastream", version: "2026.9.8" },
+			],
 		});
 	});
 

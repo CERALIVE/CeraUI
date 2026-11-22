@@ -118,12 +118,17 @@ deliberate restart), the orchestrator's package state (`getPlanUpdateState`)
 and the unit's retirement all go through it; no other code reads a raw exit. The monitor claims a unit's exit before it does anything with it
 and uses only the claimed value; an exit nothing could record cannot be
 claimed, so it is no outcome (**Outcome not confirmed**, no restart, no
-commit) and the unit stays. Each later use confirms the claim against the
-record in one synchronous step (`claim.confirm()`): recovery's adoption of a
-recorded exit, every read of the orchestrator's package state, the pending
-success's persistence and the restart, which claims again and confirms once
-more right before the exit. An outcome nobody claimed takes no terminal effect,
-not even cleaning the APT cache. Every write is one compare-and-set step
+commit) and the unit stays. The observer hands the monitor the claim it took
+before it retired the unit, and recovery tells the claim it took before its
+retirement: nothing claims again once the unit is gone. Each later use
+confirms that claim against the record in one synchronous step
+(`claim.confirm()`): recovery's adoption of a recorded exit, every read of the
+orchestrator's package state, the pending success's persistence, the
+recovered success's write (`persistRecoveredCommitSuccess`, checked right
+before it persists), a failed commit's quarantine (read again after the reads
+that precede its write) and the restart, which confirms once more right before
+the exit. An outcome nobody claimed takes no terminal effect, not even
+cleaning the APT cache. Every write is one compare-and-set step
 (`updateSoftwareUpdateAttempt`, called only by that module): it reads the current
 record, decides from it, and writes the replacement to a temporary file
 renamed into place, all synchronously, so no other write of this backend can
@@ -159,8 +164,11 @@ replaced: the exit is then nobody's outcome (unknown: no success or failure,
 no restart). A unit no record names (one started by an older release) is
 adopted once, as a new attempt bound to the invocation systemd shows at that
 moment, only by the same compare-and-set and only when no other attempt is
-pending; it is bound to the saved plan of that moment, because it is the
-update that installed this release, which the orchestrator's plan waits on.
+pending. It is bound to the saved plan of that moment only when its own
+`ExecStart` installs exactly that plan's package versions (the released pinned
+script names every `<package>=<version>`): that is the proof it was started
+for the plan. Otherwise its exit is recorded for display and the unit's
+disposition, never as the plan's outcome.
 Otherwise it is watched for display only: nothing of it is recorded, claimed
 or retired, and its exit is unknown. A gone unit's exit is told only from a `launched` record with an
 exit and an invocation, within 30 minutes of boot-relative uptime, and only
@@ -205,8 +213,22 @@ At boot, recovery runs before any start is accepted and takes the same lock:
 the record's own unit (running, or finished with no recorded exit) is
 observed, a finished unit with a recorded exit is told and retired once after
 its claim, and an older release's running unit is adopted once, bound to its
-invocation. The D8 live-abort stop, the commit-stage probe and package
-recovery's absence proof name the same fixed unit, as on main.
+invocation. Only a probe that found no unit is absence: an unknown unit, or
+one never probed, leaves a committing resume `commit_resume_inconclusive`,
+never `commit_unit_absent_on_resume`. The 30 minutes before an unclaimable
+unit is retired run from when this backend first left it in place; a restart
+of CeraUI starts them again.
+
+Go Live's stop (D8) takes the same lock. In that one step it probes the unit
+and the commit stage again and signals (`systemctl kill --signal=SIGTERM`)
+only a running unit that is still downloading. It never stops the unit, so
+systemd keeps its exit for the observer to record, claim and retire; that exit
+is an interruption (the paused-download notice), never a failed update. A
+unit that finished meanwhile, one in its commit stage, or one nobody could
+probe makes the stream wait (the commit-stage refusal) instead of reporting an
+abort; a stream start on the in-process pinned download, or with no unit,
+aborts as before. The commit-stage probe and package recovery's absence proof
+name the same fixed unit, as on main.
 
 At boot a surviving unit is watched at once, independent of the slower
 startup checks: the tab sees its progress and outcome. Retiring it,

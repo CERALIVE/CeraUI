@@ -17,7 +17,13 @@
 import { logger } from "../../../helpers/logger.ts";
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
 import { abortAptTransferForStream } from "../apt-transfer-abort.ts";
+import {
+	type DetachedAptUpgradeDeps,
+	type StreamStopDisposition,
+	stopSoftwareUpdateUnitForStream,
+} from "../software-update-process.ts";
 import { SOFTWARE_UPDATE_UNIT } from "../software-update-service-contract.ts";
+import { isCommitStageRunning } from "./commit-stage-probe.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import { parseOsStageSystemdProperties } from "./os-stage-systemd.ts";
 
@@ -172,20 +178,35 @@ function scheduleRaucEscalation(
 
 /**
  * Keep the fresh-read/probe guard in the caller: stopping dpkg risks a
- * half-installed package.
+ * half-installed package. The unit is probed again, with the commit stage,
+ * under the update unit's lifecycle lock, and only a running unit still
+ * downloading is signalled: its exit stays for the observer to claim.
  */
-export async function stopPackageInstallUnitForStream(): Promise<void> {
+export async function stopPackageInstallUnitForStream(
+	probe: {
+		readonly commitStage?: () => Promise<boolean>;
+		readonly deps?: DetachedAptUpgradeDeps;
+	} = {},
+): Promise<StreamStopDisposition> {
 	abortAptTransferForStream();
-	const result = await spawnWithTimeout(
-		["systemctl", "stop", SOFTWARE_UPDATE_UNIT],
-		{ timeoutMs: SYSTEMD_COMMAND_TIMEOUT_MS },
+	return stopSoftwareUpdateUnitForStream(
+		{
+			commitStage: probe.commitStage ?? (() => isCommitStageRunning()),
+			signal: async () => {
+				const result = await spawnWithTimeout(
+					["systemctl", "kill", "--signal=SIGTERM", SOFTWARE_UPDATE_UNIT],
+					{ timeoutMs: SYSTEMD_COMMAND_TIMEOUT_MS },
+				);
+				if (result.exitCode !== 0) {
+					logger.warn(
+						"update-orchestrator: signalling the in-flight package-install unit for an admitted stream start did not exit cleanly",
+						{ exitCode: result.exitCode, stderr: result.stderr },
+					);
+				}
+			},
+		},
+		probe.deps,
 	);
-	if (result.exitCode !== 0) {
-		logger.warn(
-			"update-orchestrator: stopping the in-flight package-install unit for an admitted stream start did not exit cleanly",
-			{ exitCode: result.exitCode, stderr: result.stderr },
-		);
-	}
 }
 
 export async function killAndRestartRaucForStream(

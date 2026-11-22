@@ -45,6 +45,9 @@ function deps(overrides: Partial<OrchestratorResumeDeps> = {}): {
 			return wireImpl();
 		},
 		now: overrides.now ?? (() => 9999),
+		...(overrides.lastInstallUnitVerdict
+			? { lastInstallUnitVerdict: overrides.lastInstallUnitVerdict }
+			: {}),
 	};
 	return { deps: merged, calls };
 }
@@ -162,6 +165,8 @@ describe('resume from "committing" — the safety-critical crash-resume path', (
 	test("unit was genuinely ABSENT (recovered=false) -> conservative typed failure, NEVER a silent retry/re-run", async () => {
 		const { deps: d, calls } = deps({
 			recoverSoftwareUpdateIfRunning: async () => false,
+			// The probe itself found no unit: only that is absence.
+			lastInstallUnitVerdict: () => "absent",
 			getUpdateState: () => ({ kind: "idle" }) as UpdateState,
 		});
 		const resumed = await resumeOrchestratorState(persisted, d);

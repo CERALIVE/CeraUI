@@ -57,7 +57,9 @@ async function resumeCommitting(
 	}
 	// Absence proves neither success nor a bad candidate. Runtime separately proves
 	// current consistency before clearing this failure; no old plan is replayed.
-	if (!recovered) {
+	// Only a probe that found no unit is absence: a unit no attempt can claim,
+	// or one never probed, answers `false` too, and stays inconclusive.
+	if (!recovered && deps.lastInstallUnitVerdict?.() === "absent") {
 		return reduceOrchestrator(persisted, {
 			type: "COMMIT_RESUME_UNRESOLVED",
 			now,

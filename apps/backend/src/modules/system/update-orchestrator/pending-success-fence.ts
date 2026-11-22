@@ -105,7 +105,8 @@ class PendingSuccessFence {
 	invoke(hook: CommitExitHook): undefined | Promise<boolean> {
 		this.observe();
 		try {
-			const permission = hook();
+			// The hook's own write rechecks the success's claim where it persists.
+			const permission = hook(this.#success?.still);
 			if (permission !== undefined) return permission;
 			const current = this.#port?.snapshot();
 			if (current && this.pending) {

@@ -6,8 +6,11 @@ import type { SoftwareUpdateAttempt } from "../../modules/system/software-update
 import type { DetachedAptUpgradeDeps } from "../../modules/system/software-update-process.ts";
 import { currentSoftwareUpdatePlan } from "../../modules/system/software-updates.ts";
 
-/** The key of the orchestrator's saved plan a test runs under. */
-export const TEST_PLAN = softwarePlanKey([{ name: "cerastream" }]) ?? "";
+/** The packages of the orchestrator's saved plan a test runs under, as a pinned unit installs them. */
+export const TEST_PLAN_PACKAGES = [{ name: "cerastream", version: "2" }];
+
+/** The key of that saved plan. */
+export const TEST_PLAN = softwarePlanKey(TEST_PLAN_PACKAGES) ?? "";
 
 /** A fixed systemd InvocationID for fake units; a real one is always present. */
 export const TEST_INVOCATION = "abcdef0123456789abcdef0123456789";

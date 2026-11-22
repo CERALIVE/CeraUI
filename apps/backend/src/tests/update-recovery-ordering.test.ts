@@ -35,7 +35,7 @@ import {
 import { defaultOrchestratorRuntimeDeps } from "../modules/system/update-orchestrator/runtime.ts";
 import { buildInitialStatus } from "../rpc/procedures/status.procedure.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
-import { TEST_PLAN } from "./helpers/memory-attempt.ts";
+import { TEST_PLAN, TEST_PLAN_PACKAGES } from "./helpers/memory-attempt.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
 
 useSessionOwnerForFile();
@@ -145,8 +145,13 @@ function fakeUnit(o: {
 							exitCode: o.exitCode,
 							cleanup: o.exitCode === 0 ? "stop" : "reset-failed",
 							invocation: INVOCATION,
+							packages: TEST_PLAN_PACKAGES,
 						}
-					: { kind: "running", invocation: INVOCATION },
+					: {
+							kind: "running",
+							invocation: INVOCATION,
+							packages: TEST_PLAN_PACKAGES,
+						},
 		cleanup: async (finished) => {
 			events.push("retire");
 			const error = o.failCleanup?.(++cleanupAttempts);

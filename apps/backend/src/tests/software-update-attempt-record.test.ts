@@ -234,9 +234,14 @@ describe("the attempt record", () => {
 
 describe("adoption", () => {
 	test.each([
-		["a released package-scoped unit", aptExec],
-		["a released pinned unit", flockExec(releasedPinned)],
-	])("adopts %s, with its systemd invocation", (_name, execStart) => {
+		["a released package-scoped unit", aptExec, {}],
+		[
+			"a released pinned unit",
+			flockExec(releasedPinned),
+			// What it installs, read from its own ExecStart.
+			{ packages: [{ name: "cerastream", version: "2" }] },
+		],
+	])("adopts %s, with its systemd invocation", (_name, execStart, installs) => {
 		expect(() =>
 			validateDetachedAptServiceIdentity(show(execStart)),
 		).not.toThrow();
@@ -252,12 +257,14 @@ describe("adoption", () => {
 		expect(probe(true)).toEqual({
 			kind: "running",
 			invocation: "b".repeat(32),
+			...installs,
 		});
 		expect(probe(false)).toEqual({
 			kind: "finished",
 			exitCode: 100,
 			cleanup: "reset-failed",
 			invocation: "b".repeat(32),
+			...installs,
 		});
 	});
 

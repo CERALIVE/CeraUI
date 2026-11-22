@@ -989,7 +989,8 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		id: "updateOrchestrator.stopPackageInstallForStream",
 		file: "modules/system/update-orchestrator/stream-abort.ts",
 		symbol: "stopPackageInstallUnitForStream",
-		command: "[systemctl, stop, ceralive-software-update.service]",
+		command:
+			"[systemctl, kill, --signal=SIGTERM, ceralive-software-update.service]",
 		class: "bounded-command",
 		contract: {
 			timed: true,
@@ -1000,7 +1001,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		},
 		status: "enforced",
 		mechanism:
-			"D8 package-unit stop after the fresh wire read and commit-stage probe permit it; nonzero exits are logged, spawn failures/timeouts throw, and the later isUpdating() guard can still refuse launch",
+			"D8 package-unit signal, under the update unit's lifecycle lock, only for a running unit the commit-stage probe in that step still calls downloading; the unit and its exit stay for the observer's claim; nonzero exits are logged, spawn failures/timeouts throw, and the later isUpdating() guard can still refuse launch",
 	},
 	{
 		id: "updateOrchestrator.probeCommitStage",

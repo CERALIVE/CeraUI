@@ -66,6 +66,8 @@ async function fixture() {
 			};
 		},
 		getPackageInstallWireState: () => ({ kind: "idle" }),
+		// The unit probe at resume found no unit: a positive absence.
+		lastInstallUnitVerdict: () => "absent",
 		startPackageInstall: () => {
 			installs++;
 			return { started: true };

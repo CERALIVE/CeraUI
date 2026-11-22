@@ -74,6 +74,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as invariantModule from "../helpers/invariant.ts";
 import {
+	getLastInstallUnitVerdict,
 	getUpdateState,
 	recoverSoftwareUpdateIfRunning,
 	resetSoftwareUpdateRunner,
@@ -280,6 +281,8 @@ describe("boot double-recovery race — resume must not misread evidence a start
 		const resumed = await resumeOrchestratorState(persistedCommitting(10), {
 			recoverSoftwareUpdateIfRunning: () =>
 				recoverSoftwareUpdateIfRunning(NOTHING_LEFT_TO_RECOVER),
+			// As production wires it: the probe's own verdict says the unit is gone.
+			lastInstallUnitVerdict: getLastInstallUnitVerdict,
 			getUpdateState,
 			now: () => 9999,
 		});

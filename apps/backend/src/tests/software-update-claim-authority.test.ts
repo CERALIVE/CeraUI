@@ -306,12 +306,17 @@ test("an older release's running unit keeps the one fixed name: the stream stop 
 			phase: "launched",
 			invocation: INVOCATION_A,
 		});
-		await stopPackageInstallUnitForStream();
+		expect(
+			await stopPackageInstallUnitForStream({ commitStage: async () => false }),
+		).toBe("stopped");
 		await defaultCommitStageProbeDeps.showUnit();
-		expect(spawn.mock.calls.map(([command]) => command.slice(0, 3))).toEqual([
-			["systemctl", "stop", FIXED],
-			["systemctl", "show", FIXED],
+		expect(
+			spawn.mock.calls.map(([command]) => [command[1], command.at(-1)]),
+		).toEqual([
+			["kill", FIXED],
+			["show", "--no-pager"],
 		]);
+		expect(spawn.mock.calls[1]?.[0][2]).toBe(FIXED);
 		expect(
 			recovered && "completion" in recovered ? await recovered.completion : -1,
 		).toBe(0);

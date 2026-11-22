@@ -18,6 +18,7 @@ import {
 	launchAttempt,
 	RECORDED_OUTCOME_REPLAY_MS,
 	recordAttemptExit,
+	softwarePlanKey,
 	softwareUpdateUptimeMs,
 } from "./software-update-attempt.ts";
 import {
@@ -56,7 +57,11 @@ export type SoftwareUpdateOutputHandlers = {
 	readonly onAttached?: () => void;
 	/** A unit no record named became `attempt`; `planned`: bound once to the saved plan. */
 	readonly onAdopted?: (attempt: string, planned: boolean) => void;
-	/** After the exit: the claim that alone may authorize the attempt's own effects. */
+	/**
+	 * After the exit: the claim taken before the unit was retired, the only
+	 * authority for the attempt's own effects; each later use confirms it
+	 * against the record (`confirm()`) rather than claiming again.
+	 */
 	readonly onOutcome?: (claim: () => Promise<ClaimedOutcome | null>) => void;
 	/** What retiring the finished unit came to; settles later while ownership is pending. */
 	readonly onRetirement?: (outcome: Promise<RetirementOutcome>) => void;
@@ -258,6 +263,7 @@ export function softwareUpdateUnitKept(): boolean {
 
 export function resetSoftwareUpdateUnitForTest(): void {
 	kept = undefined;
+	interruptedForStream = undefined;
 	unitLock = Promise.resolve();
 }
 
@@ -500,7 +506,7 @@ async function observeDetachedAptUpgrade(
 			keep(deps);
 			throw new DetachedAptServiceUnrecordedError();
 		}
-		handlers.onOutcome?.(() => claimOutcome(deps, own, { unit: finished }));
+		handlers.onOutcome?.(async () => (claim.confirm() ? claim : null));
 		// With an unread transcript the unit stays as the evidence.
 		const retirement = whenOwned(options.retire, handlers, deps, () =>
 			retireClaimed(
@@ -573,6 +579,53 @@ export function settleKeptSoftwareUpdateUnit(
 		} catch (error) {
 			report(error);
 			return false;
+		}
+	});
+}
+
+// The invocation D8 signalled for a stream start: its exit is an interruption.
+let interruptedForStream: string | undefined;
+
+/** Whether this exit is of a run D8 interrupted for a stream start. */
+export function interruptedForStreamStart(invocation: string): boolean {
+	return interruptedForStream === invocation;
+}
+
+export type StreamStopDisposition =
+	| "stopped"
+	| "absent"
+	| "finished"
+	| "commit-stage"
+	| "unknown";
+
+/**
+ * Go Live's stop, under the same lock as every start and retirement: only a
+ * running unit is signalled, and only while the commit-stage probe, run in
+ * this same step, still says it is downloading. It is signalled, never
+ * stopped: systemd keeps the unit and its exit, so the observer records,
+ * claims and retires it like every other exit. A unit that finished meanwhile
+ * is left to that claim; a probe that fails is `unknown` and signals nothing.
+ */
+export function stopSoftwareUpdateUnitForStream(
+	port: {
+		readonly commitStage: () => Promise<boolean>;
+		readonly signal: () => Promise<void>;
+	},
+	deps: DetachedAptUpgradeDeps = defaultDetachedAptServiceDeps(),
+): Promise<StreamStopDisposition> {
+	return underUnitLock(async (): Promise<StreamStopDisposition> => {
+		try {
+			const state = await deps.inspect();
+			if (state.kind !== "running") return state.kind;
+			if (await port.commitStage()) return "commit-stage";
+			interruptedForStream = state.invocation;
+			await port.signal();
+			return "stopped";
+		} catch (error) {
+			logger.warn("Software update: the Go Live stop could not decide", {
+				error,
+			});
+			return "unknown";
 		}
 	});
 }
@@ -684,10 +737,10 @@ export function recoverDetachedAptUpgrade(
 				const retired =
 					options.retire instanceof Promise ? "kept" : await retiring;
 				if (retired === "replaced") return { unknown: true };
-				// Claimed again after the last await: an admission meanwhile wins.
-				const claim = await claimOutcome(deps, told.attempt, { unit: state });
-				return claim
-					? { recorded: claim, unit: "finished" }
+				// The claim taken before the retirement is the outcome, confirmed
+				// against the record now, after the last await.
+				return told.confirm()
+					? { recorded: told, unit: "finished" }
 					: { unknown: true };
 			}
 		}
@@ -701,8 +754,14 @@ export function recoverDetachedAptUpgrade(
 				: undefined;
 		if (attempt === undefined) {
 			try {
-				// Bound once, now, to its invocation and the saved plan it was started for.
-				const plan = options.plan?.();
+				// Bound once, now, to its invocation, and to the saved plan only when
+				// the unit installs exactly that plan's packages: its ExecStart is
+				// the proof of what it was started for.
+				const saved = options.plan?.();
+				const plan =
+					saved !== undefined && saved === softwarePlanKey(state.packages ?? [])
+						? saved
+						: undefined;
 				attempt = adoptUnit(deps, state.invocation, { plan }) ?? undefined;
 				if (attempt !== undefined)
 					handlers.onAdopted?.(attempt, plan !== undefined);

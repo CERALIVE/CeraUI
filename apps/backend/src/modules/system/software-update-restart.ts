@@ -2,7 +2,10 @@ import { logger } from "../../helpers/logger.ts";
 import { markBootDegraded } from "./readiness.ts";
 import { pendingPackageSuccess } from "./update-orchestrator/pending-success-fence.ts";
 
-export type CommitExitHook = (() => void) | (() => Promise<boolean>);
+/** `still`: the success's claim, to confirm again right before its write. */
+export type CommitExitHook =
+	| (() => void)
+	| ((still?: () => boolean) => Promise<boolean>);
 
 /** Settlement is separate: resume must read the outcome without waiting on itself. */
 export async function finishSoftwareUpdateRestart(
