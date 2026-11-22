@@ -56,7 +56,7 @@ engine's candidate list is ordered by enumeration and `"DJI Technology…"` sort
   source and rule 5 joins through the ENGINE's audio list, so switching camera → HDMI, or
   the engine's audio enumeration landing seconds after a hotplug, each move the resolved
   card with `config.asrc` untouched. Re-pushing an unchanged pick is free — the bridge
-  dedupes on the `(silenced, preference)` PAIR, so it broadcasts no gap — but SKIPPING a
+  dedupes on the gap reason and preference, so it broadcasts no gap — but SKIPPING a
   changed one is not: the engine's `set_preferred_device` early-returns on an unchanged
   value, so nothing later corrects it and the meter reports the previous device
   indefinitely.
@@ -314,8 +314,8 @@ un-retracted state lives in the ENGINE's meter sidecar.
   and a permanently-dead card still costs one cheap reload pair per
   `AUDIO_METER_REASSERT_INTERVAL_MS`. `reassertPreference(cause)` names which
   watchdog asked, so the log distinguishes a wrong card from a dead feed.
-- **It never fires for a silenced pick** (`meterSilenced()` — the operator asked for
-  silence) **nor for `null`** (Auto: the engine owns that selection). Both gates run
+- **It never fires for a video-only pick** (`meterSilenced()`)
+  **nor for `null`** (no preferred card to re-assert). Both gates run
   AFTER the re-arm, so a feed that is silent for a reason we refuse to act on today
   is still being watched when that reason changes.
 - **A missing client is the one case that does NOT re-arm** — there is nothing to
@@ -369,26 +369,17 @@ idle-meter → stream handoff can only be made atomic inside cerastream. Do NOT
 gate because the start still fails — the watchdog re-acquisition is a real,
 separately-proven racer.
 
-**"No audio" is NOT "Auto", and only the picker value can tell them apart.**
-`resolveMeterPreference` answered `null` for both, and `null` on the wire means
-"engine, choose for yourself" — so the one pick that means *meter nothing* made the
-engine auto-pick a card AND left `isForeignCardLevel` unarmed (it returns `false` for
-a `null` preference by design). The meter therefore rendered another card's real,
-moving audio under an "Audio source: No audio" label. (`"Auto"` no longer shares that
-`null` — see the resolution bullet above — but `"No audio"` still resolves to one, so
-this distinction remains load-bearing and is still the FIRST branch `projectLevel`
-applies. The two defects are the same shape reached by different picks.) Found live in Wave H QA; it read
-as a transient "few seconds of green bars" only because PR #232's frozen-content
-watchdog happened to age the bars out once that card's content stopped changing.
-`isMeterSilencedByPick(asrc)` (`audio.ts`, true for `NO_AUDIO_ID` alone) is the
-distinction, and `projectLevel` applies it BEFORE every other branch — including the
-engine's own `unavailable` reason, because the operator's explicit silence outranks
-whatever gap the engine is reporting. It reuses the existing `mode_none` reason
-(`resolveAudioMode("No audio")` is literally `{mode:"none"}`), so no schema or locale
-change was needed. `DEFAULT_AUDIO_ID` and `AUDIO_SOURCE_AUTO` are deliberately NOT
-silenced: the pipeline default really does hand sourcing to the engine, and `"Auto"` is
-resolved to a concrete card instead (so it is gated on THAT card, never silenced).
-Neither means "meter nothing".
+**A video-only pick is not the same as handing the meter back to the engine.**
+`resolveMeterPreference` returns `null` for either, which lets the engine pick
+another card and leaves the foreign-card gate unarmed. `isMeterSilencedByPick(asrc)`
+recognizes explicit `"No audio"` and idle `"Auto"` resolved to `no-capture-audio`,
+for example when HDMI-RX is still listed but has no capture PCM. The bridge emits
+the existing `mode_none` reason on entry and for subsequent idle frames, including
+engine gaps. The Auto rule requires the `idle` lifecycle and no published live
+flag. A frame tagged `streaming` by the engine is exempt from the Auto rule even
+if it arrives before the control socket confirms the run. Auto resolved to pipeline
+default still lets the engine choose; a concrete Auto card still uses the foreign-card
+gate. The schema and locale copy are unchanged.
 
 ### …AND A SOURCE THAT BRINGS ITS OWN AUDIO HAS NO CARD TO METER [EXISTS]
 
@@ -407,7 +398,7 @@ of course use its own metrics."*
 
 `isMeterEmbeddedBySource()` (`audio.ts`, over `auto-audio.ts`'s
 `selectedSourceCarriesEmbeddedAudio`) is the distinction, and `projectLevel`
-applies it immediately AFTER the explicit-silence gate. Five rules are
+applies it immediately AFTER the video-only gate. Five rules are
 load-bearing:
 
 - **It is keyed on the SOURCE, not on the pick and not on the Auto REASON.** Both
@@ -451,13 +442,11 @@ immediately on a changed pick: `mode_none` when the new pick is silenced,
 `embedded_audio` when the new source brings its own, `handoff` otherwise. Three
 properties are load-bearing:
 
-- **The change key is the TRIPLE** `(silenced, embedded, preference)`. "Auto" and
-  "No audio" both resolve to a `null` preference, so a preference-only diff cannot
-  see that switch — and an ingest source resolves to that same `null`, so without
-  the embedded arm a switch ONTO one moves no part of the key at all and the
-  previous device's bars stay up until the next engine frame.
+- **The change key pairs the gap reason with the preference** (null for
+  video-only). A preference-only diff cannot see a change from pipeline default
+  to video-only or an embedded source: all can resolve to the same `null`.
 - **It fires even while the bridge is disconnected.** `syncAudioMeterPreference()`
-  calls it BEFORE the client check: the stale level was already broadcast, so it must
+  calls it even with no client: the stale level was already broadcast, so it must
   be retired whether or not the engine can be told about the change yet.
 - **It never fires on the first connect** (no prior selection recorded ⇒ nothing has
   been shown) nor on a re-enumeration that re-syncs an UNCHANGED pick — otherwise
@@ -480,8 +469,8 @@ already on screen for `METER_UNAVAILABLE_DISPLAY_GRACE_MS` (1 200 ms, defined in
   side's own typed reason. Do not "simplify" a future paint problem by debouncing
   `noteMeterSelection` or the watchdogs instead — that would hide a real outage.
 - **`mode_none` and `embedded_audio` are NEVER graced** (`STATED_UNAVAILABLE_REASONS`,
-  read by `isTransientMeterGap`). Both are answers to something somebody just did —
-  the operator's own "No audio" pick, and a property of the selected source — and
+  read by `isTransientMeterGap`). They follow the video-only selection or the
+  selected source's embedded audio property, and
   both are published SYNCHRONOUSLY by `noteMeterSelection` on the selection change,
   i.e. squarely inside that window. Delaying either would make a deliberate action
   look laggy. A NEW stated reason published from this module must be added to that
@@ -501,6 +490,8 @@ Coverage for both: `tests/audio-meter-bridge.test.ts` (the silenced pick vs. Aut
 the same `null` preference, the engine-reason override, no re-assert while silenced,
 the switching gap before any frame, the Auto→No-audio pair key, the unchanged-pick and
 first-connect silences, the disconnected path, and the hand-back to the new device).
+`tests/audio-meter-auto-hdmi.test.ts` covers capture PCM loss and restoration,
+repeated no-PCM frames, pipeline-default fail-open, and the running program.
 
 Coverage: `tests/audio-meter-bridge.test.ts` (push on connect, `null` for Auto, re-push
 on change, nothing sent to a pre-0.9.0 engine, a refused reload leaves levels flowing,
