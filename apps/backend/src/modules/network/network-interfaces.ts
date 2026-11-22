@@ -1729,7 +1729,7 @@ function applyDongleProjection(m: NetworkInterfaceResponseMessage): void {
 	lastDongleMarked = marked;
 }
 
-function countActiveNetif() {
+function countRawEnabledNetif() {
 	let count = 0;
 	for (const int in netif) {
 		if (netif[int]?.enabled) count++;
@@ -1831,20 +1831,26 @@ export function handleNetif(
 					reason: "enable_refused",
 				});
 			}
-		} else {
-			if (int.enabled && countActiveNetif() === 1) {
-				notificationSend(
-					conn,
-					"netif_disable_all",
-					"error",
-					"Can't disable all networks",
-					10,
-				);
-				return finishBondMutation(msg, {
-					ok: false,
-					reason: "disable_all_refused",
-				});
-			}
+		} else if (
+			// Keep the existing refusal even if a mapped duplicate-IP peer is
+			// bonded with raw enabled=false.
+			(int.enabled && countRawEnabledNetif() === 1) ||
+			(isBondCandidate(msg.name, int) &&
+				!Object.entries(netif).some(
+					([name, entry]) => name !== msg.name && isBondCandidate(name, entry),
+				))
+		) {
+			notificationSend(
+				conn,
+				"netif_disable_all",
+				"error",
+				"Can't disable all networks",
+				10,
+			);
+			return finishBondMutation(msg, {
+				ok: false,
+				reason: "disable_all_refused",
+			});
 		}
 
 		int.enabled = msg.enabled;

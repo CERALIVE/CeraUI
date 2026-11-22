@@ -23,4 +23,10 @@ toggle riding alongside the address it was checking — so the operator was told
   operator notification naming the blocking error; `disable_all_refused` is the
   device protecting its last link; `unknown_interface` clears when the link comes
   back; `stale_address` means re-read and retry.
+- **The disable guard uses the same eligibility rule as the sender and netif
+  readback.** A raw-enabled peer does not keep the bond up if `isBondCandidate`
+  excludes it (for example, because it is opted out or serves shared LAN). The
+  existing refusal for the sole raw-enabled interface still applies when a
+  mapped duplicate-IP peer is bonded with raw `enabled: false`. The separate
+  duplicate-IP toggle path and the refusal message are unchanged.
 
