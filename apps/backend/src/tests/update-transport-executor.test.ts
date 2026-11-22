@@ -3,112 +3,54 @@ import { updateCapabilityFileSchema } from "@ceraui/rpc/schemas";
 import { logger } from "../helpers/logger.ts";
 import { selectUpdateTransport } from "../modules/system/update-transport/executor.ts";
 import { createUpdatePinController } from "../modules/system/update-transport/pin.ts";
-import { assertNmDeviceShowFields } from "./helpers/nm-device-show-fixture.ts";
+import {
+	inventoryQuery,
+	inventoryReply,
+} from "./helpers/nm-inventory-replay.ts";
 
-// Replay the all-device `device show` output options from nmcli(1), not a
-// specific argv: options precede the command and selectors determine the rows.
-function inventoryQuery(argv: readonly string[]) {
-	if (argv.at(-2) !== "device" || argv.at(-1) !== "show") return;
-	const options = argv.slice(1, -2);
-	let style: "normal" | "terse" | "pretty" = "normal";
-	let mode: "multiline" | "tabular" = "multiline";
-	let escapeValues = true;
-	let fields: string | undefined;
-	for (let i = 0; i < options.length; i++) {
-		const [option, inlineValue] = options[i]?.split("=", 2) ?? [];
-		switch (option) {
-			case "-t":
-			case "--terse":
-			case "-p":
-			case "--pretty":
-				// A repeated or conflicting print style is an nmcli input error.
-				if (style !== "normal" || inlineValue !== undefined) return;
-				style = option === "-t" || option === "--terse" ? "terse" : "pretty";
-				break;
-			case "-f":
-			case "--fields":
-				fields = inlineValue ?? options[++i];
-				if (fields === undefined) return;
-				break;
-			case "-m":
-			case "--mode": {
-				const value = inlineValue ?? options[++i];
-				if (value !== "multiline" && value !== "tabular") return;
-				mode = value;
-				break;
-			}
-			case "-e":
-			case "--escape": {
-				const value = inlineValue ?? options[++i];
-				if (value !== "yes" && value !== "no") return;
-				escapeValues = value === "yes";
-				break;
-			}
-			default:
-				return;
-		}
+test("the inventory replay distinguishes literal argv values from shell syntax", () => {
+	const record = "GENERAL.DEVICE:wwan0";
+	expect(
+		inventoryReply(
+			[
+				"nmcli",
+				"-ter",
+				"-m=tabular",
+				"--mo=mu",
+				"--fields=bad=selector",
+				"-f= , general.device , ",
+				"--",
+				"dev",
+				"sh",
+			],
+			record,
+		),
+	).toEqual({ exitCode: 0, stdout: record, stderr: "" });
+	expect(
+		inventoryReply(["nmcli", "-t", "--fields=", "device", "show"], record),
+	).toEqual({ exitCode: 0, stdout: "", stderr: "" });
+	for (const option of [
+		"--mode=multiline=tabular",
+		"--escape=yes=no",
+		"--fields=GENERAL.DEVICE=GENERAL.HWADDR",
+		"--mode=",
+		"--escape=",
+		'--mode="multiline"',
+		"--escape=y\\es",
+		"--fields=GENERAL.DEVıCE",
+		"--fields=GENERAL.DEVICE\\,",
+		"-tf",
+		"--terse=",
+		"--terse",
+	]) {
+		expect(
+			inventoryReply(
+				["nmcli", "-t", "-f", "GENERAL.DEVICE", option, "device", "show"],
+				record,
+			),
+		).toMatchObject({ exitCode: 2, stdout: "" });
 	}
-	return { style, mode, escapeValues, fields };
-}
-
-function inventoryReply(
-	argv: readonly string[],
-	...records: readonly string[]
-) {
-	const query = inventoryQuery(argv);
-	if (!query)
-		return { exitCode: 2, stdout: "", stderr: "Invalid inventory invocation" };
-	const selector = query.fields?.toUpperCase() ?? "COMMON";
-	if (selector === "") return { exitCode: 0, stdout: "", stderr: "" };
-	// Without -f, nmcli prints common fields, including HWADDR. Replay just
-	// the GENERAL fields needed to distinguish that wider, incompatible reply.
-	const fields =
-		selector === "COMMON" || selector === "ALL" || selector === "GENERAL"
-			? "GENERAL.DEVICE,GENERAL.TYPE,GENERAL.HWADDR,GENERAL.STATE"
-			: selector;
-	try {
-		assertNmDeviceShowFields(fields);
-	} catch (error) {
-		if (!(error instanceof Error && "code" in error && error.code === 2))
-			throw error;
-		return { exitCode: error.code, stdout: "", stderr: error.message };
-	}
-	const requested = fields.split(",");
-	return {
-		exitCode: 0,
-		stdout: records
-			.map((record) => {
-				const values = new Map(
-					record.split("\n").map((line) => {
-						const separator = line.indexOf(":");
-						return [line.slice(0, separator), line.slice(separator + 1)];
-					}),
-				);
-				// An allowed field still appears even if the fixture has no value.
-				const valueFor = (field: string) =>
-					values.get(field) ??
-					(field === "GENERAL.HWADDR" ? "02:00:00:00:00:00" : "--");
-				if (query.mode === "tabular") {
-					return requested
-						.map((field) => {
-							const value = valueFor(field);
-							return query.escapeValues
-								? value.replace(/[:\\]/g, "\\$&")
-								: value;
-						})
-						.join("\n");
-				}
-				return requested
-					.map((field) => {
-						const label = `${field}:`;
-						return `${query.style === "terse" ? label : label.padEnd(40)}${valueFor(field)}`;
-					})
-					.join("\n");
-			})
-			.join("\n\n"),
-		stderr: "",
-	};
-}
+});
 
 test("an OS selection logs every failed cellular interface and family once", async () => {
 	const logged: unknown[][] = [];
@@ -244,9 +186,7 @@ test.each(["eth0", "wwan0"])(
 		const apt = await selection("apt");
 		expect(apt.status).toBe("selected");
 		const inventory = calls.find(([command]) => command === "nmcli") ?? [];
-		expect(
-			inventoryQuery(inventory)?.fields?.toUpperCase().split(","),
-		).toContain("GENERAL.IP-IFACE");
+		expect(inventoryQuery(inventory)?.fields).toContain("GENERAL.IP-IFACE");
 		if (apt.status === "selected") {
 			expect(apt.selected.family).toBe(4);
 			expect(apt.selected.candidate).toEqual({
