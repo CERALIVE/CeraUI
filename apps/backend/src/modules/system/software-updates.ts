@@ -100,6 +100,7 @@ import {
 	legacyCeraliveOffer,
 	reconcileCeraliveUpdateNotice,
 	standingCeraliveOffer,
+	unfinishedAptWork,
 	withdrawCeraliveOfferIfInstalled,
 } from "./ceralive-update-notice.ts";
 import {
@@ -879,6 +880,25 @@ function keptBackNames(stdout: string): string[] | null {
 		: null;
 }
 
+// Every name the plan removes or downgrades, when each list names, once each,
+// exactly what the summary counts; otherwise null. No offer names these.
+function untakenPackages(stdout: string): string[] | null {
+	const names: string[] = [];
+	for (const [heading, counted] of [
+		["The following packages will be REMOVED:\n", / (\d+) to remove and /],
+		["The following packages will be DOWNGRADED:\n", / (\d+) downgraded, /],
+	] as const) {
+		const list = parseAptPackageList(stdout, heading);
+		const listed = list.ok && list.value ? list.value.split(" ") : [];
+		if (listed.length !== Number(counted.exec(stdout)?.[1] ?? 0)) return null;
+		names.push(...listed);
+	}
+	return names.every((name) => APT_PACKAGE_NAME_RE.test(name)) &&
+		new Set(names).size === names.length
+		? names
+		: null;
+}
+
 // Every name the upgrade and NEW lists carry (the summary counts both), or null
 // when one is malformed or repeated.
 function listedPackages(stdout: string): string[] | null {
@@ -985,18 +1005,22 @@ async function getSoftwareUpdateSize(
 		update_state: getUpdateState(),
 	});
 	// Not conclusive: a discovery that failed, the kept-back fallback (its own
-	// exit is not read), or lists that do not name exactly what the summary counts.
+	// exit is not read), lists that do not name exactly what the summary counts,
+	// or a package a transaction left unfinished (its setup is still pending).
 	const planned = listedPackages(upgrade.stdout);
+	const untaken = untakenPackages(upgrade.stdout);
 	if (
 		refresh !== undefined &&
 		isCleanAssumeNoDiscovery(upgradeResult) &&
 		!fromHeldBack &&
-		planned?.length === res.upgradeCount
+		planned?.length === res.upgradeCount &&
+		untaken !== null &&
+		!unfinishedAptWork(upgrade.stdout)
 	)
 		await reconcileCeraliveUpdateNotice(
 			await legacyCeraliveOffer(
 				actionableAppPackages,
-				planned,
+				[...planned, ...untaken],
 				keptBackNames(upgrade.stdout),
 				refresh,
 				(argv) => runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),

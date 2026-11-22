@@ -203,11 +203,22 @@ const PLAN_SUMMARY =
 	/^(\d+) upgraded, (\d+) newly installed, (\d+) to remove and \d+ not upgraded\.$/gm;
 
 /**
- * A simulated plan is complete only with APT's single summary line and exactly
- * the Inst and Remv rows it counts (APT prints the summary before the rows, so a
- * cut or partial answer loses rows the summary still counts).
+ * APT's own count, printed after its summary only when nonzero, of packages a
+ * transaction left unpacked or not configured: their setup is still pending
+ * (configure-only work has no `Inst` row and needs no newer candidate).
+ */
+export function unfinishedAptWork(output: string): boolean {
+	return /^[1-9]\d* not fully installed or removed\.$/m.test(output);
+}
+
+/**
+ * A simulated plan is complete only with APT's single summary line, no package
+ * left unfinished, and exactly the Inst and Remv rows it counts (APT prints the
+ * summary before the rows, so a cut or partial answer loses rows the summary
+ * still counts).
  */
 function completePlan(simulation: string): boolean {
+	if (unfinishedAptWork(simulation)) return false;
 	const summaries = [...simulation.matchAll(PLAN_SUMMARY)];
 	const summary = summaries[0];
 	if (summaries.length !== 1 || summary === undefined) return false;
@@ -222,7 +233,7 @@ function completePlan(simulation: string): boolean {
 /**
  * Legacy: the check's actionable first-party names, each with its candidate from
  * CeraLive's own source and that candidate's architecture. `planned` is every
- * name the upgrade and NEW lists carry, `keptBack` the kept-back list when it
+ * name the plan's upgrade, NEW, REMOVED and DOWNGRADED lists carry, `keptBack` the kept-back list when it
  * names exactly what the summary counts (else null). A first-party name either
  * carries that is not offered (a new install, another architecture, a held
  * package) makes the verdict unknown. Read-only `apt-cache`.

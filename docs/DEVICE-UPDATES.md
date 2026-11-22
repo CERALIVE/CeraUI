@@ -1534,8 +1534,10 @@ finds dpkg showing installed the offer this process shows (the same read
 `system.updateOutcome` uses, above), and when a complete check finds nothing
 pending (dpkg showing any stored offer installed) or exactly the dismissed set.
 Conclusive means the refresh hit or fetched every CeraLive source of the check's own
-inventory, and the discovery was clean and complete. Complete also means no held,
-kept-back, newly installed or other-architecture first-party package is left out.
+inventory, and the discovery was clean and complete. Complete also means APT
+reports no package left unfinished (an interrupted or failed setup: `N not fully
+installed or removed.`), and no held, kept-back, newly installed, removed,
+downgraded or other-architecture first-party package is left out.
 A tab that was not connected at the removal keeps its banner until a later
 complete check while it is connected. Kernel, OS and `update:*` notices are never
 touched. Contract, with the stale sequences it accepts:

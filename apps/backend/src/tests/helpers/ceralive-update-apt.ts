@@ -142,22 +142,34 @@ const keptBackList = (rows: readonly AptPackage[]) =>
 function simulation(
 	packages: readonly AptPackage[],
 	keptBack: readonly AptPackage[] = [],
+	unfinished: readonly AptPackage[] = [],
 ): string {
 	const rows = packages.map(
 		(pkg) =>
 			`Inst ${pkg.name}${isInstalled(pkg) ? ` [${pkg.installed}]` : ""} (${pkg.planned ?? pkg.candidate} stable [${pkg.arch ?? "arm64"}])\n`,
 	);
-	return `${PREAMBLE}${keptBackList(keptBack)}${counts(packages, keptBack.length)}${rows.join("")}`;
+	// Configure-only work: the version dpkg already unpacked, with no Inst row.
+	const configure = unfinished.map(
+		(pkg) =>
+			`Conf ${pkg.name} (${pkg.installed} stable [${pkg.installedArch ?? pkg.arch ?? "arm64"}])\n`,
+	);
+	return `${PREAMBLE}${keptBackList(keptBack)}${counts(packages, keptBack.length)}${unfinishedLine(unfinished)}${rows.join("")}${configure.join("")}`;
 }
 
 // What --assume-no discovery prints before its lists and summary.
 const CALCULATING = `${PREAMBLE}Calculating upgrade...\n`;
 
+// APT's line after its summary when a transaction left packages unpacked or not configured.
+const unfinishedLine = (rows: readonly AptPackage[]) =>
+	rows.length === 0 ? "" : `${rows.length} not fully installed or removed.\n`;
+
 function upgradePlan(
 	packages: readonly AptPackage[],
 	notUpgraded = 0,
+	unfinished: readonly AptPackage[] = [],
 ): SpawnWithTimeoutResult {
-	if (packages.length === 0) return ok(`${CALCULATING}${nothing(notUpgraded)}`);
+	if (packages.length === 0 && unfinished.length === 0)
+		return ok(`${CALCULATING}${nothing(notUpgraded)}`);
 	const list = (heading: string, rows: readonly AptPackage[]) =>
 		rows.length === 0
 			? ""
@@ -167,7 +179,7 @@ function upgradePlan(
 		stdout: `${CALCULATING}${list(
 			"The following NEW packages will be installed:",
 			packages.filter((pkg) => !isInstalled(pkg)),
-		)}${list("The following packages will be upgraded:", packages.filter(isInstalled))}${counts(packages, notUpgraded)}Need to get 4 kB of archives.\nDo you want to continue? [Y/n] N\nAbort.\n`,
+		)}${list("The following packages will be upgraded:", packages.filter(isInstalled))}${counts(packages, notUpgraded)}${unfinishedLine(unfinished)}${packages.length > 0 ? "Need to get 4 kB of archives.\n" : "After this operation, 0 B of additional disk space will be used.\n"}Do you want to continue? [Y/n] N\nAbort.\n`,
 		stderr: "",
 	};
 }
@@ -233,13 +245,18 @@ function answer(script: AptScript) {
 		...(script.installed ?? []),
 		...(script.available ?? []),
 	];
+	// Unpacked, half-installed, half-configured or awaiting triggers: APT counts it unfinished.
+	const unfinished = present.filter(
+		(pkg) =>
+			isInstalled(pkg) && /^.[HUFWt]/.test(script.dpkgStatus?.[pkg.name] ?? ""),
+	);
 	return async (argv: readonly string[]): Promise<SpawnWithTimeoutResult> => {
 		const [bin, verb] = argv;
 		const name = argv[2];
 		if (bin === "/usr/bin/apt-get" && verb === "update")
 			return { ...ok(REFRESH), ...script.refresh };
 		if (bin === "/usr/bin/apt-get" && verb === "dist-upgrade") {
-			const plan = upgradePlan(upgradable, keptBack.length);
+			const plan = upgradePlan(upgradable, keptBack.length, unfinished);
 			if (keptBack.length === 0) return { ...plan, ...script.discovery };
 			return {
 				...plan,
@@ -250,7 +267,7 @@ function answer(script: AptScript) {
 		if (bin === "/usr/bin/apt-get" && verb === "install")
 			return { ...upgradePlan(keptBack), ...script.fallback };
 		if (bin === "/usr/bin/apt-get" && verb === "-s")
-			return ok(simulation(upgradable, keptBack));
+			return ok(simulation(upgradable, keptBack, unfinished));
 		if (bin === "/usr/bin/apt-mark")
 			return ok((script.holds ?? []).map((name) => `${name}\n`).join(""));
 		// What #664's readback asks: `dpkg-query -W -f=<format> -- <names>`.

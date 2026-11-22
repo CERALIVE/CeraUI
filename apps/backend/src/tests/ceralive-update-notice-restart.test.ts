@@ -1732,6 +1732,25 @@ const oneRule: readonly [
 		},
 	],
 	[
+		"a standing offer left unfinished beside another package's upgrade",
+		"kept",
+		async (capable) => {
+			const backend = await Backend.start({ apt: pending("1", "2"), capable });
+			const opened = await tabs(backend);
+			await backend.check();
+			// cerastream 2 unpacked but not configured, srtla 2 upgradable beside it.
+			await backend.setApt({
+				...configuring("2"),
+				upgradable: [srtla("1", "2")],
+			});
+			await backend.check();
+			await sync(opened);
+			// srtla's upgrade is not shown in cerastream's place.
+			expect(histories(opened)).toEqual([["show"], ["show"]]);
+			return opened;
+		},
+	],
+	[
 		"the standing offer's hold changes, then a complete none",
 		"removed",
 		async (capable) => {
@@ -1773,3 +1792,29 @@ for (const capable of [false, true])
 			},
 			budget(3),
 		);
+
+for (const capable of [false, true])
+	test(
+		`an install APT reports unfinished keeps main's banner; once configured, a complete check clears it (${capable ? "capable" : "legacy"} image)`,
+		async () => {
+			// Given main's own backend, whose own check showed its offer in main-era and
+			// v2026.7.2 tabs; it recorded nothing for this process to read back.
+			const opened = await olderBackendTabs(pending("1", "2"), capable);
+			// When the transaction unpacked cerastream 2 but its setup failed: APT reports it
+			// not fully installed and plans only its configuration, with nothing to upgrade.
+			const backend = await Backend.start({ apt: configuring("2"), capable });
+			await reconnect(backend, opened);
+			await backend.check();
+			await sync(opened);
+			// Then that check is not complete: both tabs keep the banner.
+			expect(holding(opened)).toEqual([true, true]);
+			expect(removals(opened)).toEqual([0, 0]);
+			// Control: once dpkg shows it configured, the same process's complete check clears it.
+			await backend.setApt(settled("2"));
+			await backend.check();
+			await sync(opened);
+			expect(holding(opened)).toEqual([false, false]);
+			expect(removals(opened)).toEqual([1, 1]);
+		},
+		budget(3),
+	);

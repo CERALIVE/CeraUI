@@ -41,8 +41,10 @@ Install post-acceptance limits: D8 Known gaps (c). Check wire reference:
   and must not be captive; legacy `dist-upgrade --assume-no` must exit
   0, or 1 after its own `Abort.`, without `E:`, must not be the kept-back fallback,
   and its upgrade and NEW lists must name exactly what its summary counts, each
-  name once; no first-party name may be planned, kept back or newly installed
-  outside the offer;
+  name once, and its REMOVED and DOWNGRADED lists exactly what the summary counts;
+  no first-party name may be planned, kept back, newly installed, removed or
+  downgraded outside the offer; neither plan may report a package left unfinished
+  (`N not fully installed or removed.`);
   the capable plan must be complete; CeraLive's source must be in the check's
   inventory; and every first-party candidate must be verified. Any other check
   changes nothing, not even to show a verified subset. "None pending" withdraws

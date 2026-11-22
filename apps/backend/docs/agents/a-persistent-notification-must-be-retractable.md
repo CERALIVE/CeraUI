@@ -241,7 +241,7 @@ offer. Unknown always keeps the offer.
 | Removal (b): a complete check | It found none pending (with dpkg showing any stored offer installed: a held, pinned-away or pulled offer stays) or exactly the dismissed set. Then no copy a tab holds can be of another pending offer, so connected tabs are sent the removal, on every such check. Nothing outlives the check: no later login, reconnect or check acts on it. |
 | The readback | #664's `targetsAttained` (`software-update-outcome.ts`): one complete `dpkg-query -W`, each offered instance (name and architecture) `ii ` or `hi `, `dpkg --compare-versions <installed> ge <offered>` exiting 0. 5 s per command, 20 s in all. A check that recorded another offer while dpkg was read wins. |
 | Conclusive | The refresh exits 0 with no `Err:`, `E:`, failed-fetch or stale-index line and no captive signature, and hit or fetched the `InRelease`/`Release` of **every** CeraLive source the check's own `apt-cache policy` inventory lists (same URI and suite), with no `Ign:`/`Err:` for it. Legacy: `dist-upgrade --assume-no` exits 0, or 1 after its own `Abort.`, with no `E:`; not the kept-back fallback; the upgrade and NEW lists name exactly what the summary counts, each once. Capable: one summary line and exactly the `Inst`/`Remv` rows it counts; another architecture's instance of a roster package is unknown. |
-| Complete | Conclusive, the kept-back list names exactly what the summary counts as not upgraded, and no first-party name it, the upgrade list or the NEW list carries is left out of the offer (a held or solver-kept-back package, a new install, another architecture). Anything less is unknown: a verified subset is not shown, recorded, dismissable or proven installed in place of the standing offer. |
+| Complete | Conclusive, APT reports no package a transaction left unfinished (no `N not fully installed or removed.` line: an unpacked or half-configured package's setup is still pending, with no `Inst` row and no newer candidate), the kept-back list names exactly what the summary counts as not upgraded, and no first-party name it, the upgrade, NEW, REMOVED or DOWNGRADED list carries is left out of the offer (a held or solver-kept-back package, a new install, a removal or downgrade, another architecture; capable refuses removals and its summary admits no downgrade). Anything less is unknown: a verified subset is not shown, recorded, dismissable or proven installed in place of the standing offer, and "nothing pending" is not read as none. |
 | The offer | What the check found Install would take, each an exact instance. Capable: every first-party row of the check's own discovery, actionable with origin `apt.ceralive.tv`, its instance the check's own simulated `Inst` row (`admittedTargets`). Legacy: the actionable first-party names, each with its `apt-cache policy` candidate from CeraLive's own source and that candidate's architecture from `apt-cache show --no-all-versions` (exactly one record of that name and version). One unverified row makes the verdict unknown. |
 | Identity and record | Dismissal key `update:<name:arch=version,...>`, sorted. `ceralive_update_offer.json` is `{version:8, offer:[{name,arch,version}]|null}`, written only by a complete check, before anything is broadcast, validated by the writer with the reader's schema and limits. It is read only by the next check's "none" (dpkg must show it installed). No proof is ever stored. |
 | Dismissal | `releaseScoped`: `notifications.dismiss` carries the shown `revision` and `publisher`; only the current release is dismissed durably, and then removed from connected tabs (each was sent that copy). A tab that logs in later is not told. The store writes before it remembers. |
@@ -255,10 +255,11 @@ connected (checks run at boot, then about hourly), or by dismissing it:
 - any copy after a restart until that process's first complete check (fresh tabs
   see no banner until then); a recovery after a package-script restart removes
   nothing itself;
-- any banner while CeraLive's repository is unreachable, or while a first-party
-  package is held, kept back, newly installed beside a legacy upgrade, or of
-  another architecture. Such a check also shows no new offer: a missing banner,
-  while Settings → Software Updates still lists the update;
+- any banner while CeraLive's repository is unreachable, while a package's setup
+  is unfinished (APT reports it not fully installed), or while a first-party
+  package is held, kept back, newly installed beside a legacy upgrade, removed,
+  downgraded, or of another architecture. Such a check also shows no new offer: a
+  missing banner, while Settings → Software Updates still lists the update;
 - an offer dpkg does not show installed while nothing is pending, until a new
   offer or a dismissal;
 - while the state directory cannot be written, a new offer is not shown and a
@@ -278,7 +279,9 @@ install completion over scripted APT and dpkg, both images; a table of sequences
 asserting what a connected tab and a later login hold in both decoders, including
 evidence that changes before a login, a dismissal before a login, an incomplete
 check beside the standing offer and then the install of the other package (before
-and after a restart), incomplete then complete, and a hold that changes; every
+and after a restart), incomplete then complete, a hold that changes, and an
+install APT reports unfinished (with no stored offer, then configured, and beside
+another package's upgrade); every
 inconclusive and incomplete refresh and discovery; rate-limited releases; the
 readback inside the update's result step; dpkg's own order; dismissals through the
 RPC procedure; logins through the real login sender);
@@ -291,7 +294,9 @@ that commit, and its real check raises them. The file covers the reported journe
 an update from main's backend, rollbacks, a stored or dismissed offer under another
 backend's newer copy, a stored older offer during recovery, a tab logging in after
 the update's own proof, a held package with and without a stored offer, three
-releases inside a second, a table of the same sequences over real processes,
+releases inside a second, a table of the same sequences over real processes, an
+install APT reports unfinished under main's banner (kept, then cleared once
+configured),
 records, early tabs, dismissal across restart, the largest committable offer,
 refused records and stores, failed writes); and the frontend half
 (`apps/frontend/src/tests/notification-recovery-ingestion.test.ts`,

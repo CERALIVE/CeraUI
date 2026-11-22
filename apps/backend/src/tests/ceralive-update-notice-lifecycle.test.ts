@@ -535,6 +535,46 @@ describe("legacy image", () => {
 		expect(notificationExists(NOTICE)).toBeUndefined();
 	});
 
+	test('a plan that removes or downgrades a first-party package is no "none"', async () => {
+		await check({ upgradable: [cerastream("2")] });
+		const plan = (list: string, summary: string) => ({
+			installed: [cerastream("2", { installed: "2" })],
+			discovery: {
+				exitCode: 1,
+				stdout: `Reading package lists...\nBuilding dependency tree...\nReading state information...\nCalculating upgrade...\n${list}${summary}Need to get 4 kB of archives.\nDo you want to continue? [Y/n] N\nAbort.\n`,
+			},
+		});
+		// When the plan, with cerastream 2 installed, would remove or downgrade srtla.
+		for (const [label, list, summary] of [
+			[
+				"removal",
+				"The following packages will be REMOVED:\n  srtla\n",
+				"0 upgraded, 0 newly installed, 1 to remove and 0 not upgraded.\n",
+			],
+			[
+				"downgrade",
+				"The following packages will be DOWNGRADED:\n  srtla\n",
+				"0 upgraded, 0 newly installed, 1 downgraded, 0 to remove and 0 not upgraded.\n",
+			],
+		] as const) {
+			await check(plan(list, summary));
+			// Then no offer names that work: the check is not complete and the offer stays.
+			expect([label, liveRemovals()]).toEqual([label, []]);
+			expect([label, notificationExists(NOTICE)?.dismissalKey]).toEqual([
+				label,
+				"update:cerastream:arm64=2",
+			]);
+		}
+		// Control: a Debian package's removal is no first-party work; the complete none withdraws.
+		await check(
+			plan(
+				"The following packages will be REMOVED:\n  curl\n",
+				"0 upgraded, 0 newly installed, 1 to remove and 0 not upgraded.\n",
+			),
+		);
+		expect(liveRemovals()).toEqual([NOTICE]);
+	});
+
 	test("a dismissal hides that exact release only, even at the same download size", async () => {
 		await check({ upgradable: [cerastream("2")] });
 		const seen = shown();
@@ -1477,6 +1517,18 @@ for (const capable of [false, true])
 				check({ keptBack: [cerastream("2")], holds: ["cerastream"] }),
 			completeBoth: () =>
 				check({ upgradable: [cerastream("2"), srtla("2.0")] }),
+			// cerastream 2 unpacked but not configured: APT reports it not fully installed.
+			unfinishedA: () =>
+				check({
+					installed: [cerastream("2", { installed: "2" })],
+					dpkgStatus: { cerastream: "iF " },
+				}),
+			unfinishedBesideB: () =>
+				check({
+					installed: [cerastream("2", { installed: "2" })],
+					dpkgStatus: { cerastream: "iF " },
+					upgradable: [srtla("2.0")],
+				}),
 			// srtla 2.0 installed while cerastream stays kept back at 1.
 			proveB: () =>
 				proveInstalled({
@@ -1596,6 +1648,24 @@ for (const capable of [false, true])
 			[
 				"a stored offer, then a newer complete offer",
 				["offerA", "restart", "offerB"],
+				"kept",
+				"kept",
+			],
+			[
+				"an install APT reports unfinished, no stored offer",
+				["restart", "unfinishedA"],
+				"kept",
+				"kept",
+			],
+			[
+				"an install APT reports unfinished, then configured",
+				["restart", "unfinishedA", "noneInstalled"],
+				"removed",
+				"kept",
+			],
+			[
+				"a standing offer left unfinished beside another package's upgrade",
+				["offerA", "unfinishedBesideB", "proveB"],
 				"kept",
 				"kept",
 			],
