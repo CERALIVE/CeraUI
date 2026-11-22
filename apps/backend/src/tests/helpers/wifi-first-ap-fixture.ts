@@ -5,6 +5,7 @@ import { logger } from "../../helpers/logger.ts";
 import * as runner from "../../helpers/run.ts";
 import {
 	clearHotspotProfileCreation,
+	getHotspotCredentials,
 	recordHotspotProfileCreation,
 	rememberHotspotCredentials,
 } from "../../modules/wifi/hotspot-credentials.ts";
@@ -15,7 +16,10 @@ import {
 import { settlePending } from "../../modules/wifi/wifi-hotspot-monitor.ts";
 import { runHotspotProfileOperation } from "../../modules/wifi/wifi-hotspot-profile-operation.ts";
 import type { HotspotActivationDeps } from "../../modules/wifi/wifi-hotspot-types.ts";
-import { mockActivationBus } from "./wifi-active-observation.ts";
+import {
+	mockActivationBus,
+	mockSettingsDeletion,
+} from "./wifi-active-observation.ts";
 import { firstApInstances } from "./wifi-first-ap-instances.ts";
 import { decodeProfile, encodeProfile } from "./wifi-first-ap-keyfile-codec.ts";
 import { wifiFrameFixture } from "./wifi-frame-fixture.ts";
@@ -75,6 +79,14 @@ export async function firstAp(
 	let delayedDown: ReturnType<typeof Promise.withResolvers<void>> | undefined;
 	let onPostReplyRead: (() => void) | undefined;
 	const inspectedDownPaths: string[] = [];
+	const remove = (uuid: string) => {
+		if (faults.deleteFails) throw new Error("NM deletion unavailable");
+		profiles.delete(uuid);
+		autoconnect.delete(uuid);
+		if (active === uuid) active = undefined;
+		if (faults.deleteTimeout)
+			throw new Error("NM delete committed then timed out");
+	};
 	const terminalDown = mockActivationBus(
 		() => instances.run().bus.toString(16).padStart(32, "0"),
 		(call) => {
@@ -113,6 +125,17 @@ export async function firstAp(
 		false,
 		(path) => inspectedDownPaths.push(path),
 		() => onPostReplyRead?.(),
+	);
+	mockSettingsDeletion(
+		instances.run,
+		(path) => {
+			const uuid = instances.paths().find(([, target]) => target === path)?.[0];
+			if (!uuid || !profiles.has(uuid))
+				throw new Error("Unknown settings path");
+			commands.push(["conn", "del", "path", path]);
+			remove(uuid);
+		},
+		true,
 	);
 	for (const level of ["debug", "info", "warn", "error"] as const)
 		spyOn(logger, level).mockImplementation((message, ...metadata) => {
@@ -171,21 +194,20 @@ export async function firstAp(
 			return { stdout: "", stderr: "" };
 		}
 		if (args[0] === "conn" && args[1] === "del") {
-			if (faults.deleteFails) throw new Error("NM deletion unavailable");
-			profiles.delete(args[2] ?? "");
-			autoconnect.delete(args[2] ?? "");
-			if (active === args[2]) active = undefined;
-			if (faults.deleteTimeout)
-				throw new Error("NM delete committed then timed out");
+			const uuid = args[2];
+			if (!uuid || uuid === "path")
+				throw new Error("Expected an explicit Forget UUID");
+			remove(uuid);
 			return { stdout: "Connection successfully deleted", stderr: "" };
 		}
 		if (args[0] === "conn" && args[1] === "down") {
 			throw new Error("Hotspot deactivation must target a daemon-bound path");
 		}
 		if (args[0] === "-w" && args[2] === "conn" && args[3] === "up") {
-			if (!profiles.has(args[4] ?? "")) throw new Error("Unknown connection");
+			const uuid = args[4] === "uuid" ? args[5] : args[4];
+			if (!profiles.has(uuid ?? "")) throw new Error("Unknown connection");
 			if (failure === "up") throw new Error("NM refused activation");
-			active = args[4];
+			active = uuid;
 			const activePath = instances.activate(active);
 			if (faults.upTimeout)
 				throw Object.assign(new Error("NM up committed then timed out"), {
@@ -275,7 +297,8 @@ export async function firstAp(
 			created: false,
 		}),
 		credentials: {
-			get: () => ({ ssid: "First AP", password: secret }),
+			get: (owner) =>
+				getHotspotCredentials(owner) ?? { ssid: "First AP", password: secret },
 			remember: (owner, credentials) => {
 				if (failure === "post-up-throw" && active)
 					throw new Error("Post-up persistence failed");

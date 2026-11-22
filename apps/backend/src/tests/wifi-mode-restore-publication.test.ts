@@ -197,6 +197,7 @@ beforeEach(async () => {
 	setWifiState({});
 	spyOn(streaming, "getIsStreaming").mockReturnValue(false);
 	Object.assign(defaultHotspotDeps, {
+		readProfilePins: async () => ["", ""],
 		nmConnSetFields: async () => {
 			effects.push("fields");
 			return true;
@@ -207,7 +208,14 @@ beforeEach(async () => {
 		},
 		broadcastState: () => {},
 		setDupIpSuppression: () => {},
-		credentials: { get: () => undefined, remember: () => {} },
+		credentials: {
+			get: () => ({
+				conn: AP,
+				ssid: "Publication AP",
+				password: "fixture-password",
+			}),
+			remember: () => {},
+		},
 		pruneHotspotConns: async () => {},
 		releaseConcurrentInterface: async () => {
 			effects.push("release");

@@ -322,6 +322,11 @@ describe("hotspot start — identity reuse", () => {
 			},
 		});
 
+		rec.store.set(PERM_MAC, {
+			conn: "orphan-uuid",
+			ssid: "CERALIVE_9ca7",
+			password: "old-secret",
+		});
 		await startHotspotForInterface(PERM_MAC, makeHotspotIface(), rec.deps);
 
 		// NetworkManager matches mac-address against the PERMANENT address, so the
@@ -351,6 +356,11 @@ describe("hotspot start — identity reuse", () => {
 			nmConnect: async () => false,
 		});
 
+		rec.store.set(PERM_MAC, {
+			conn: "orphan-uuid",
+			ssid: "CERALIVE_9ca7",
+			password: "old-secret",
+		});
 		await startHotspotForInterface(PERM_MAC, makeHotspotIface(), rec.deps);
 
 		expect(armed).toEqual([]);
@@ -367,6 +377,11 @@ describe("hotspot start — identity reuse", () => {
 			nmConnect: async () => false,
 		});
 
+		rec.store.set(PERM_MAC, {
+			conn: "orphan-uuid",
+			ssid: "CERALIVE_9ca7",
+			password: "old-secret",
+		});
 		const result = await startHotspotForInterface(
 			PERM_MAC,
 			makeHotspotIface(),
@@ -432,6 +447,11 @@ describe("hotspot prepare — credentials before activation", () => {
 				channel: "auto",
 			}),
 		});
+		rec.store.set(PERM_MAC, {
+			conn: "profile-uuid",
+			ssid: "MyRig",
+			password: "profile-secret",
+		});
 		const shown = await prepareHotspotForInterface(
 			PERM_MAC,
 			makeHotspotIface(),
@@ -454,6 +474,11 @@ describe("hotspot prepare — credentials before activation", () => {
 				password: "old-secret",
 				channel: "auto",
 			}),
+		});
+		rec.store.set(PERM_MAC, {
+			conn: "profile-uuid",
+			ssid: "CERALIVE_791c",
+			password: "old-secret",
 		});
 		const iface = makeHotspotIface();
 		const shown = await prepareHotspotForInterface(
@@ -499,6 +524,11 @@ describe("hotspot prepare — credentials before activation", () => {
 			}),
 			nmConnSetFields: async () => false,
 		});
+		rec.store.set(PERM_MAC, {
+			conn: "profile-uuid",
+			ssid: "CERALIVE_791c",
+			password: "old-secret",
+		});
 		const iface = makeHotspotIface();
 		const result = await prepareHotspotForInterface(
 			PERM_MAC,
@@ -527,6 +557,11 @@ describe("hotspot prepare — credentials before activation", () => {
 
 	test("a live AP answers with its credentials and accepts no change here", async () => {
 		const rec = makeRecorder();
+		rec.store.set(PERM_MAC, {
+			conn: "live-uuid",
+			ssid: "Live",
+			password: "live-secret",
+		});
 		const iface = makeHotspotIface({ hotspotConn: "live-uuid" });
 		iface.conn = "live-uuid";
 		iface.hotspot.name = "Live";
@@ -779,6 +814,22 @@ function makeProfileDeps(profiles: FakeProfile[]): {
 					? `${p.uuid}:802-11-wireless:${p.name}`
 					: `${p.uuid}:802-11-wireless`,
 			),
+		readProfileInstance: async (uuid, submitted) => {
+			const profile = profiles.find((entry) => entry.uuid === uuid);
+			if (!profile) return null;
+			if (
+				profile.mode !== "ap" ||
+				(submitted && submitted["connection.id"] !== profile.name)
+			)
+				return undefined;
+			return {
+				path: `/fixture/${uuid}`,
+				fingerprint: uuid,
+				mac: profile.mac,
+				port: "",
+				file: { filename: uuid, device: "1", inode: uuid, ctime: "0" },
+			};
+		},
 		deleteConnection: async (uuid) => {
 			deleted.push(uuid);
 			return true;
@@ -789,6 +840,12 @@ function makeProfileDeps(profiles: FakeProfile[]): {
 
 describe("findHotspotConnForAdapter", () => {
 	test("matches on the adapter's permanent MAC, not on profile order or name", async () => {
+		for (const conn of ["orphan", "ours", "not-in-nm"])
+			rememberHotspotCredentials(PERM_MAC, {
+				ssid: "My AP",
+				password: "recorded-secret",
+				conn,
+			});
 		const { deps } = makeProfileDeps([
 			{
 				uuid: "orphan",
@@ -832,6 +889,12 @@ describe("findHotspotConnForAdapter", () => {
 	});
 
 	test("falls back to the persisted SSID for a profile with a stale binding", async () => {
+		for (const conn of ["legacy", "not-in-nm"])
+			rememberHotspotCredentials(PERM_MAC, {
+				ssid: "CERALIVE_eeca",
+				password: "legacy-secret",
+				conn,
+			});
 		const { deps } = makeProfileDeps([
 			{
 				uuid: "legacy",
@@ -949,7 +1012,7 @@ describe("pruneDuplicateHotspotConns", () => {
 				mode: "ap",
 				ssid: "CERALIVE_ce62",
 				psk: "x",
-				mac: RANDOM_MAC,
+				mac: "",
 			},
 			{
 				uuid: "orphan-b",
@@ -1200,6 +1263,7 @@ describe("hotspot deletion reservation", () => {
 		const readEntered = Promise.withResolvers<void>();
 		const releaseRead = Promise.withResolvers<void>();
 		const readProfile = deps.getApProfileFields;
+		const classify = deps.readProfileInstance;
 		const observed: boolean[] = [];
 		deps.getApProfileFields = async (uuid) => {
 			const snapshot = await readProfile(uuid);
@@ -1208,6 +1272,11 @@ describe("hotspot deletion reservation", () => {
 				readEntered.resolve();
 				await releaseRead.promise;
 			}
+			return snapshot;
+		};
+		deps.readProfileInstance = async (...args) => {
+			const snapshot = await classify(...args);
+			observed.push(Boolean(snapshot));
 			return snapshot;
 		};
 		const selection = findHotspotConnForAdapter(
@@ -1294,6 +1363,12 @@ describe("hotspot deletion reservation", () => {
 
 	test("selection skips a successfully deleted UUID and keeps another candidate", async () => {
 		const { profiles, deps, entered, resume } = deletingProfile();
+		for (const conn of ["survivor", "keep"])
+			rememberHotspotCredentials(PERM_MAC, {
+				ssid: OWNED_SSID,
+				password: "y",
+				conn,
+			});
 		profiles.push({
 			uuid: "survivor",
 			name: "Operator AP",
@@ -1305,6 +1380,7 @@ describe("hotspot deletion reservation", () => {
 		const readEntered = Promise.withResolvers<void>();
 		const releaseRead = Promise.withResolvers<void>();
 		const readProfile = deps.getApProfileFields;
+		const classify = deps.readProfileInstance;
 		const reads: string[] = [];
 		deps.getApProfileFields = async (uuid) => {
 			const snapshot = await readProfile(uuid);
@@ -1314,6 +1390,10 @@ describe("hotspot deletion reservation", () => {
 				await releaseRead.promise;
 			}
 			return snapshot;
+		};
+		deps.readProfileInstance = async (...args) => {
+			reads.push(args[0]);
+			return classify(...args);
 		};
 		const selection = findHotspotConnForAdapter(
 			PERM_MAC,
@@ -1436,12 +1516,12 @@ describe("hotspot deletion reservation", () => {
 	test("two concurrent prunes delete a reserved profile once", async () => {
 		const { deps, deleted, entered, resume } = deletingProfile();
 		const deleteProfile = deps.deleteConnection;
-		deps.deleteConnection = async (uuid) => {
+		deps.deleteConnection = async (uuid, classified, stillSuperseded) => {
 			if (deleted.includes(uuid)) {
 				deleted.push(uuid);
 				return false;
 			}
-			return deleteProfile(uuid);
+			return deleteProfile(uuid, classified, stillSuperseded);
 		};
 		const first = pruneDuplicateHotspotConns(PERM_MAC, "keep", deps);
 		await entered.promise;
@@ -1459,6 +1539,11 @@ describe("hotspot deletion reservation", () => {
 
 	test("an unreserved profile remains selectable during another deletion", async () => {
 		const { profiles, deps, entered, resume } = deletingProfile();
+		rememberHotspotCredentials(SECOND_PERM_MAC, {
+			ssid: "Other-AP",
+			password: "other-secret",
+			conn: "unrelated",
+		});
 		profiles.push({
 			uuid: "unrelated",
 			name: "Operator AP",
@@ -1602,16 +1687,16 @@ describe("pruneDuplicateHotspotConns — ownership evidence", () => {
 					await resume.promise;
 				};
 				const originalList = deps.listConnections;
-				const originalRead = deps.getApProfileFields;
+				const originalRead = deps.readProfileInstance;
 				if (pendingRead === "list") {
 					deps.listConnections = async (fields) => {
 						await waitForAdoption();
 						return originalList(fields);
 					};
 				} else {
-					deps.getApProfileFields = async (uuid) => {
+					deps.readProfileInstance = async (...args) => {
 						await waitForAdoption();
-						return originalRead(uuid);
+						return originalRead(...args);
 					};
 				}
 				const pruning = pruneDuplicateHotspotConns(PERM_MAC, "keep", deps);

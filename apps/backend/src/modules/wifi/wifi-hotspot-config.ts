@@ -84,7 +84,10 @@ import {
 	nmDisconnectActivation,
 	observeHotspotActivation,
 } from "./wifi-hotspot-activity.ts";
-import { hotspotOwnershipGuard } from "./wifi-hotspot-discovery.ts";
+import {
+	hotspotOwnershipGuard,
+	isObservedForeignHotspot,
+} from "./wifi-hotspot-discovery.ts";
 import {
 	beginHotspotTransition,
 	syncWifiStateCache,
@@ -703,7 +706,10 @@ async function reconfigureHotspotLocked(
 	const selected = hotspot.conn;
 	const owner = resolveWifiAdapterOwner(macAddress, wifiInterface);
 	const ownsProfile = hotspotOwnershipGuard(owner, wifiInterface, selected);
-	const owned = () => ownsProfile() && (!binding || hotspot.conn === selected);
+	const owned = () =>
+		!isObservedForeignHotspot(hotspot, owner) &&
+		ownsProfile() &&
+		(!binding || hotspot.conn === selected);
 	if (!owned()) {
 		return "saving";
 	}

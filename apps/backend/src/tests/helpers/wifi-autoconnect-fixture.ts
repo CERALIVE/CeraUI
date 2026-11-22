@@ -42,6 +42,7 @@ import {
 	startHotspotLocked,
 } from "../../modules/wifi/wifi-hotspot-activation.ts";
 import { settlePending } from "../../modules/wifi/wifi-hotspot-monitor.ts";
+import { readHotspotProfilePins } from "../../modules/wifi/wifi-hotspot-profile-operation.ts";
 import type {
 	HotspotActivationDeps,
 	WifiInterfaceWithHotspot,
@@ -51,6 +52,7 @@ import {
 	resetWifiInterfaceDiscoveryForTest,
 	wifiUpdateDevices,
 } from "../../modules/wifi/wifi-interfaces.ts";
+import { bindingForRow } from "../../modules/wifi/wifi-operation-binding.ts";
 import { wifiRadioIdentity } from "../../modules/wifi/wifi-radio-identity.ts";
 import { wifiRadioObservation } from "../../modules/wifi/wifi-radio-observation.ts";
 import {
@@ -83,7 +85,8 @@ export function autoconnectFixture() {
 		readProfileInstance: async () => undefined,
 		releaseConcurrentInterface: async () => true,
 		recordIntent: wifiAdapterModeRecorder,
-		nmConnSetFields: (uuid, fields) => nm.nmConnSetFields(uuid, fields),
+		nmConnSetFields: (uuid, fields, permit) =>
+			nm.nmConnSetFields(uuid, fields, permit),
 		nmConnect: async (uuid) => {
 			activations.push(uuid);
 			return true;
@@ -160,14 +163,19 @@ export function autoconnectFixture() {
 		);
 	}
 
-	async function start() {
+	async function start(overrides: Partial<HotspotActivationDeps> = {}) {
 		await sample();
-		const result = await startHotspotForInterface(MAC, row, deps);
+		const result = await startHotspotForInterface(MAC, row, {
+			...deps,
+			...overrides,
+		});
 		settlePending(row.ifname, true);
 		return result;
 	}
 
-	async function restore(): Promise<void> {
+	async function restore(
+		overrides: Partial<HotspotActivationDeps> = {},
+	): Promise<void> {
 		await reconcileWifiAdapterModes({
 			...defaultAdapterModeDeps,
 			resolveInterfaces: getWifiInterfacesByMacAddress,
@@ -178,10 +186,10 @@ export function autoconnectFixture() {
 				const result = await startHotspotLocked(
 					MAC,
 					row,
-					deps,
+					{ ...deps, readProfilePins: readHotspotProfilePins, ...overrides },
 					undefined,
 					attempt,
-					binding,
+					binding ?? bindingForRow(MAC, row),
 				);
 				settlePending(row.ifname, true);
 				return result;

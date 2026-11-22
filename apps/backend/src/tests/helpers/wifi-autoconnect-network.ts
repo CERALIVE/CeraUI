@@ -3,10 +3,12 @@ import { readFileSync } from "node:fs";
 import * as runner from "../../helpers/run.ts";
 import { getConfig } from "../../modules/config.ts";
 import * as nm from "../../modules/network/network-manager.ts";
+import * as regdomain from "../../modules/wifi/regdomain.ts";
 import * as devices from "../../modules/wifi/wifi-device-list.ts";
 import { radioIdentityReaders } from "../../modules/wifi/wifi-radio-identity.ts";
 import * as compat from "../../rpc/compat.ts";
 import { nmcliFieldNames, nmcliFieldOutput } from "./nmcli-field-output.ts";
+import { mockSettingsDeletion } from "./wifi-active-observation.ts";
 import { firstApInstances } from "./wifi-first-ap-instances.ts";
 import { decodeProfile, encodeProfile } from "./wifi-first-ap-keyfile-codec.ts";
 
@@ -68,6 +70,29 @@ export function autoconnectNetworkFixture() {
 		listing = [];
 	}
 	function install(): void {
+		mockSettingsDeletion(
+			() => model().run(),
+			(path) => {
+				const uuid = model()
+					.paths()
+					.find(([, target]) => target === path)?.[0];
+				if (!uuid || !profiles.delete(uuid))
+					throw new Error("Fixture settings path not found");
+				deletions.push(uuid);
+			},
+		);
+		const runIw = regdomain.runIw;
+		spyOn(regdomain, "runIw").mockImplementation(async (args) =>
+			args.length === 1 && args[0] === "phy"
+				? [
+						...new Set(
+							[...witnesses.values()].map(({ phy }) => phy.split("/").at(-1)),
+						),
+					]
+						.map((phy) => `Wiphy ${phy}`)
+						.join("\n")
+				: runIw(args),
+		);
 		spyOn(radioIdentityReaders, "readText").mockImplementation(async (path) => {
 			reads.push(path);
 			for (const [ifname, w] of witnesses) {
@@ -149,13 +174,6 @@ export function autoconnectNetworkFixture() {
 				args.length === 5
 			)
 				return inventory(args[2] ?? "").join("\n");
-			if (args[0] === "conn" && args[1] === "del") {
-				const uuid = args[2];
-				if (!uuid || !profiles.delete(uuid))
-					throw new Error("Fixture profile not found");
-				deletions.push(uuid);
-				return `Connection 'Hotspot' (${uuid}) successfully deleted.\n`;
-			}
 			if (args[0] === "connection" && args[1] === "load") {
 				const fields = decodeProfile(readFileSync(args[2] ?? "", "utf8"));
 				const uuid = fields["connection.uuid"];

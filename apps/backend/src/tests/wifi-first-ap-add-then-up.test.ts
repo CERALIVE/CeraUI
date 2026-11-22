@@ -1,7 +1,46 @@
 import { expect, spyOn, test } from "bun:test";
+import { nmActivationBus } from "../modules/network/network-manager-profile-instance.ts";
 import { withWifiRequestBinding } from "../modules/wifi/wifi-binding.ts";
+import { deleteInactiveHotspotProfile } from "../modules/wifi/wifi-hotspot-activity.ts";
 import { radioIdentityReaders } from "../modules/wifi/wifi-radio-identity.ts";
 import { firstAp, MAC, OTHER_UUID } from "./helpers/wifi-first-ap-fixture.ts";
+
+test("guarded deletion cannot address a reused settings path on a replacement bus", async () => {
+	const f = await firstAp();
+	try {
+		expect(await f.start()).toEqual({ success: true });
+		const uuid = f.created();
+		if (!uuid) throw new Error("Missing created profile");
+		f.observe(undefined, "ap");
+		const target = await f.deps.readProfileInstance(uuid);
+		expect(target?.path).toBeString();
+		const open = nmActivationBus.open;
+		spyOn(nmActivationBus, "open").mockImplementation(() => {
+			const bus = open();
+			const callMethod = bus.callMethod.bind(bus);
+			bus.callMethod = (call) =>
+				call.member === "GetId"
+					? Promise.resolve({
+							signature: "s",
+							body: ["00000000000000000000000000000002"],
+						})
+					: callMethod(call);
+			return bus;
+		});
+		expect(
+			await deleteInactiveHotspotProfile(
+				uuid,
+				target,
+				f.deps.readProfileInstance,
+				() => true,
+			),
+		).toBe(false);
+		expect(f.profiles.has(uuid)).toBe(true);
+		expect(f.commands.filter((args) => args[1] === "del")).toEqual([]);
+	} finally {
+		await f.restore();
+	}
+});
 
 for (const { hybrid, security } of [
 	{ hybrid: false, security: "wpa2" },
@@ -94,8 +133,10 @@ for (const failure of ["ownership", "uuid", "up"] as const) {
 			});
 			const uuid = f.created();
 			if (!uuid) throw new Error("Missing created profile");
+			const path = f.nm.paths().find(([id]) => id === uuid)?.[1];
+			if (!path) throw new Error("Missing created settings path");
 			expect(f.commands.filter((a) => a[1] === "del")).toEqual([
-				["conn", "del", uuid],
+				["conn", "del", "path", path],
 			]);
 			expect([...f.profiles]).toEqual([OTHER_UUID]);
 			expect(f.active()).toBeUndefined();
@@ -142,11 +183,13 @@ for (const failure of [
 			}
 			const uuid = f.created();
 			if (!uuid) throw new Error("Missing created profile");
+			const path = f.nm.paths().find(([id]) => id === uuid)?.[1];
+			if (!path) throw new Error("Missing created settings path");
 			expect(
 				f.commands.filter((a) => a[1] === "down" || a[1] === "del"),
 			).toEqual([
 				["conn", "down", "apath", f.nm.activePath()],
-				["conn", "del", uuid],
+				["conn", "del", "path", path],
 			]);
 			expect([...f.profiles]).toEqual([OTHER_UUID]);
 			expect(f.active()).toBeUndefined();
@@ -169,8 +212,10 @@ test("review: an add that creates then throws deletes only its generated UUID", 
 		});
 		const uuid = f.created();
 		if (!uuid) throw new Error("Missing created profile");
+		const path = f.nm.paths().find(([id]) => id === uuid)?.[1];
+		if (!path) throw new Error("Missing created settings path");
 		expect(f.commands.filter((a) => a[1] === "del")).toEqual([
-			["conn", "del", uuid],
+			["conn", "del", "path", path],
 		]);
 		expect([...f.profiles]).toEqual([OTHER_UUID]);
 		expect(f.active()).toBeUndefined();

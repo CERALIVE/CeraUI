@@ -31,7 +31,7 @@ import {
 	retryWifiAdapterReconcile,
 	type WifiRestoreCycle,
 } from "./wifi-adapter-reconciler.ts";
-import { uniqueHotspotAddress } from "./wifi-autoconnect-policy.ts";
+import { observedUniqueHotspotAddress } from "./wifi-autoconnect-policy.ts";
 import { admitWifiRequest, withoutWifiRequestBinding } from "./wifi-binding.ts";
 import {
 	getWifiCapabilitiesForInterface,
@@ -198,7 +198,7 @@ async function applyWifiAdapterModes(
 									const plainNeedsPortPin =
 										binding?.mac === owner &&
 										(wifiRadioIdentity.hasSeenSameAddressCollision(owner) ||
-											!uniqueHotspotAddress(
+											!observedUniqueHotspotAddress(
 												owner,
 												wifiRadioIdentity.state.rows,
 											));

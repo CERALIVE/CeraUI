@@ -387,7 +387,7 @@ type ParsedWifiScanRow = {
 
 // Parse one nmcli `device wifi list` terse row. A malformed row would otherwise
 // store NaN signal/chan — a wrong value silently broadcast to the UI; instead we
-// log the raw row and return null (a typed "no result") so callers skip it.
+// log only the parse failure and return null so callers skip the private row.
 // Format: IN-USE:BSSID:SSID:MODE:CHAN:RATE:SIGNAL:BARS:SECURITY
 export function parseWifiScanRow(raw: string): ParsedWifiScanRow | null {
 	const [active, bssid, ssid, _mode, chan, _rate, signal, _bars, security] =
@@ -409,9 +409,7 @@ export function parseWifiScanRow(raw: string): ParsedWifiScanRow | null {
 	const signalValue = Number.parseInt(signal ?? "", 10);
 	const chanValue = Number.parseInt(chan ?? "", 10);
 	if (Number.isNaN(signalValue) || Number.isNaN(chanValue)) {
-		logger.warn(
-			`wifiUpdateScanResult: skipping unparseable nmcli scan row: ${JSON.stringify(raw)}`,
-		);
+		logger.warn("wifiUpdateScanResult: skipping unparseable nmcli scan row");
 		return null;
 	}
 

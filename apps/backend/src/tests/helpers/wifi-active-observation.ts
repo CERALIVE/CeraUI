@@ -11,6 +11,61 @@ import * as profileInstance from "../../modules/network/network-manager-profile-
 export const ACTIVE_PATH = "/org/freedesktop/NetworkManager/ActiveConnection/1";
 export const RUN_ID = "00000000000000000000000000000001/:1.1";
 
+export function mockSettingsDeletion(
+	run: () => { readonly bus: number; readonly owner: number },
+	remove: (path: string) => void,
+	preserveActivation = false,
+) {
+	const open = spyOn(profileInstance.nmActivationBus, "open");
+	const previous = preserveActivation
+		? open.getMockImplementation()
+		: undefined;
+	open.mockImplementation(() => {
+		const identity = run();
+		const bus = previous?.();
+		let connected = false;
+		return {
+			connect: async () => {
+				await bus?.connect();
+				connected = true;
+			},
+			disconnect: async () => {
+				await bus?.disconnect();
+				connected = false;
+			},
+			isConnected: () => connected,
+			callMethod: async (call) => {
+				if (!connected) throw new Error("Bus is closed");
+				if (call.member === "GetId")
+					return {
+						signature: "s",
+						body: [identity.bus.toString(16).padStart(32, "0")],
+					};
+				if (call.member === "Delete") {
+					if (
+						call.destination !== `:1.${run().owner}` ||
+						identity.bus !== run().bus ||
+						call.interface !==
+							"org.freedesktop.NetworkManager.Settings.Connection"
+					)
+						throw new Error("No such settings daemon");
+					remove(call.path);
+					return { signature: "", body: [] };
+				}
+				if (bus) return bus.callMethod(call);
+				throw new Error("Unexpected settings bus call");
+			},
+			subscribeSignal: async (spec, listener) => {
+				if (bus) return bus.subscribeSignal(spec, listener);
+				throw new Error("Unexpected settings signal subscription");
+			},
+			on: (event, handler) => bus?.on(event, handler),
+			off: (event, handler) => bus?.off(event, handler),
+			subscriptionCount: () => bus?.subscriptionCount() ?? 0,
+		} satisfies DbusTransport;
+	});
+}
+
 export function mockActivationBus(
 	getId: () => string,
 	deactivate: (call: MethodCall) => void | Promise<void>,

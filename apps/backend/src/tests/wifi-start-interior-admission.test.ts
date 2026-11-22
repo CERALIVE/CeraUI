@@ -30,6 +30,7 @@ const secondMac = "dc:a6:32:aa:bb:c1";
 async function startFixture(active = false) {
 	const fixture = await wifiFrameFixture(active);
 	const priorCache = getWifiState();
+	spyOn(defaultHotspotDeps, "readProfilePins").mockResolvedValue(["", ""]);
 	spyOn(defaultHotspotDeps, "readCapabilities").mockReturnValue(undefined);
 	spyOn(defaultHotspotDeps, "readProfileInstance").mockResolvedValue(null);
 	spyOn(defaultHotspotDeps, "wifiUpdateSavedConns").mockResolvedValue();
@@ -40,7 +41,11 @@ async function startFixture(active = false) {
 	if (!intent)
 		throw new Error("Start fixture requires the production intent recorder");
 	spyOn(intent, "persist").mockImplementation(() => {});
-	spyOn(defaultHotspotDeps.credentials, "get").mockReturnValue(undefined);
+	spyOn(defaultHotspotDeps.credentials, "get").mockReturnValue({
+		conn: "test-ap",
+		ssid: "Original AP",
+		password: "original-password",
+	});
 	spyOn(defaultHotspotDeps.credentials, "remember").mockImplementation(
 		() => {},
 	);

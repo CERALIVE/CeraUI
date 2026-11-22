@@ -1,3 +1,4 @@
+import { lstatSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { nmConnsGet, nmcliParseSep } from "./network-manager.ts";
 import type { NmProfileReadTrace } from "./network-manager-profile-diagnostics.ts";
@@ -6,6 +7,28 @@ import {
 	nmProfileStat,
 	openNmProfileFile,
 } from "./network-manager-profile-write.ts";
+
+/** Check the on-disk receipt without yielding between an activity read and dispatch. */
+export function nmProfileFileStillMatches(
+	file: NmProfileInstance["file"],
+): boolean {
+	if (!file) return false;
+	try {
+		const info = lstatSync(file.filename, {
+			bigint: true,
+			throwIfNoEntry: false,
+		});
+		return Boolean(
+			info?.isFile() &&
+				String(info.dev) === file.device &&
+				String(info.ino) === file.inode &&
+				String(info.ctimeNs) === file.ctime,
+		);
+	} catch (error: unknown) {
+		if (error instanceof Error) return false;
+		throw error;
+	}
+}
 
 /** Secret authority comes from the guarded keyfile, never nmcli display visibility. */
 export async function readNmProfileFileSecret(
