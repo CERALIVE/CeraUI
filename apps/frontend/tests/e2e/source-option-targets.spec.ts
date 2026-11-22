@@ -294,6 +294,7 @@ for (const locale of ['en', 'de', 'ar']) {
 				bar,
 				heading: heading ? { top: heading.top, bottom: heading.bottom } : null,
 				icon: icon ? { top: icon.top, bottom: icon.bottom } : null,
+				box: { top: box.top, bottom: box.bottom },
 				tapped: hit !== null && (hit === element || element.contains(hit)),
 			};
 		});
@@ -303,5 +304,12 @@ for (const locale of ['en', 'de', 'ar']) {
 		expect(fold.heading?.bottom ?? Number.POSITIVE_INFINITY, 'the heading ends above the Live bar').toBeLessThanOrEqual(fold.bar);
 		expect(fold.icon?.bottom ?? Number.POSITIVE_INFINITY, 'the help\'s icon ends above the Live bar').toBeLessThanOrEqual(fold.bar);
 		expect(fold.tapped, 'a tap at the help\'s centre reaches the help').toBe(true);
+		// Main shows this help's whole 44 px target above the bar only in Arabic, where
+		// the rows above it are shorter; in English and German main's target already
+		// reached 12 px under the bar.
+		if (locale === 'ar') {
+			expect(fold.box.top, 'the help\'s target starts under the header').toBeGreaterThanOrEqual(fold.header);
+			expect(fold.box.bottom, 'the help\'s whole target ends above the Live bar').toBeLessThanOrEqual(fold.bar);
+		}
 	});
 }

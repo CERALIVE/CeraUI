@@ -438,8 +438,13 @@ set these rules:
   select button at 1024x600, so a tap meant for Select opened Help. The
   capture-format "?" follows its heading's words: that line is the help's
   44 px, 8 px from the select button above and the choices below, so on a
-  phone's first screen the heading and its "?" are above the Live bar (the
-  owner asked for that). The summary's "?" sits at the inline end of its
+  390x844 phone's first screen the heading and the "?" are above the Live bar
+  (the owner asked for that). Against main, on the first screen at 320, 375 and
+  390 px, nothing selected and with HDMI selected, in en, de and ar, the "?"'s
+  whole 44 px target sits nearer the top here in every case; main shows it
+  whole only at 390 px in ar with nothing selected, and so does this layout
+  (in en and de its target ends 1 px under the bar, where main's ended 12 px
+  under). The summary's "?" sits at the inline end of its
   Source max line, reaching only into the space above it where nothing can be
   tapped. The 8 px rule is for a help beside another control; the
   capture-format choices keep their 6 px gap. An option with no help or switch beside its select renders no
@@ -522,7 +527,8 @@ RTMP and SRT options carry a help and the test pattern none; a tap beside the
 help selects and a tap on it opens it, by touch at 1024x600 and 375 in touch
 and by mouse at 375; and on a 390x844 phone's first screen, in en, de and ar,
 the capture-format heading and its help's icon end above the Live bar and a tap
-at the help's centre reaches it).
+at the help's centre reaches it; in ar, where main shows the help's whole
+target, the whole 44 px target ends above the bar).
 
 ### 1. Job and audience
 
