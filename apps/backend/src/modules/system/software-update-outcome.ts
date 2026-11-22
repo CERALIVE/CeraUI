@@ -89,9 +89,10 @@ export async function readUpdateOutcome(
 		: { kind: "unknown", exit: failedExit };
 }
 
-async function targetsAttained(
+/** Whether one complete dpkg read shows every target's own instance configured at its version or later. */
+export async function targetsAttained(
 	targets: readonly UpdateTarget[],
-	{ run, now }: UpdateOutcomeDeps,
+	{ run, now }: Pick<UpdateOutcomeDeps, "run" | "now">,
 ): Promise<boolean> {
 	if (targets.length === 0) return false;
 	const deadline = now() + UPDATE_OUTCOME_DEADLINE_MS;

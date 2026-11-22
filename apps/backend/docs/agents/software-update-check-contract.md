@@ -34,14 +34,16 @@ Install post-acceptance limits: D8 Known gaps (c). Check wire reference:
   offers retain the documented wire precedence above; the failure survives in
   the port result and `lastCheckFailure`. A stream/concurrent-refresh refusal still
   returns `busy` without clearing evidence.
-- **Only a conclusive check, or a proven install, changes the "CeraLive update is available" notice.**
+- **Only a conclusive check, or dpkg showing the offer installed, changes the "CeraLive update is available" notice.**
   The refresh must exit 0 without `Err:`, failed-fetch, stale-index or `E:`
   diagnostics and must not be captive; legacy `dist-upgrade --assume-no` must exit
-  0, or 1 after its own `Abort.`, without `E:`; the capable plan must be complete;
-  CeraLive's source must be in the check's inventory; and every first-party
-  candidate must be verified. Besides such a check, only the updater's own install
-  of the offer, proven by dpkg before its restart, withdraws it. The advisory
-  discovery itself and its parsers are unchanged. Rules, persistence and coverage:
+  0, or 1 after its own `Abort.`, without `E:`, must not be the kept-back fallback,
+  and its upgrade and NEW lists must name as many packages as its summary counts;
+  the capable plan must be complete; CeraLive's source must be in the check's
+  inventory; and every first-party candidate must be verified. Besides such a
+  check, only #664's dpkg readback of the offer (in the update's own result step,
+  or at startup for a stored offer) withdraws it. The advisory discovery itself and
+  its parsers are unchanged. Rules, persistence and coverage:
   [the retraction contract](a-persistent-notification-must-be-retractable.md#the-ceralive-update-offer-is-withdrawn-only-on-positive-evidence-exists).
 - **A refused check restores what it did not replace.** `triggerManualUpdateCheck`
   save/restores `lastUpdateFailure`/`lastUpdateSucceeded` around dispatch, so a

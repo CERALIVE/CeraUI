@@ -181,8 +181,8 @@ and `tests/logger-listeners.test.ts`.
 frame has the same shape; after it, the one owner registered with
 `setAuthenticatedReplay` may add frames decided when that client authenticates:
 the CeraLive update notice sends one typed and one pre-#183 string-form `remove`
-only while its process holds a finished install's dpkg proof or the current offer
-is dismissed; a login runs no command. The frontend
+only while its own process established that no offer remains (dpkg, or a
+conclusive check) or the current offer is dismissed; a login runs no command. The frontend
 NotificationsPanel reads the live `notification` push cache; this RPC is the
 pull-equivalent (same data) for any consumer asking for the snapshot directly —
 keep it even though the panel does not call it.

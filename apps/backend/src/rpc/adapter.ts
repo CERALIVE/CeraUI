@@ -249,9 +249,7 @@ function sendInitialStatusToClient(ws: AppWebSocket): void {
 	// re-raised by its own loop — and the boot-time encoder-mode clamp is exactly
 	// that. The legacy relay path has always replayed these.
 	sendToClient(ws, "notification", buildInitialNotifications());
-	void replayToAuthenticated((frame) =>
-		sendToClient(ws, "notification", frame),
-	);
+	replayToAuthenticated((frame) => sendToClient(ws, "notification", frame));
 }
 
 /**

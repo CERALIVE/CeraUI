@@ -24,7 +24,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { notificationsMessageSchema } from "@ceraui/rpc/schemas";
 
-import { OFFER_VERSION_LIMIT } from "../modules/system/ceralive-update-notice.ts";
+import {
+	ARCH_LIMIT,
+	OFFER_VERSION_LIMIT,
+} from "../modules/system/ceralive-update-notice.ts";
 import { ceralivePackageList } from "../modules/system/package-layer.ts";
 import {
 	APPLIED_MARKER,
@@ -434,6 +437,15 @@ const failing = (state: AptScript): AptScript => ({
 	...state,
 	refresh: { exitCode: 100, stderr: "E: Could not get lock\n" },
 });
+// Mid-transaction: the package script restarted the backend while cerastream is configured.
+const configuring = (installed: string): AptScript => ({
+	...settled(installed),
+	dpkgStatus: { cerastream: "iF " },
+});
+const offered = (version: string) => ({
+	version: 8,
+	offer: [{ name: "cerastream", arch: "arm64", version }],
+});
 
 async function tabs(
 	backend: Backend,
@@ -477,20 +489,21 @@ async function proveNothingPending(
 }
 
 // A real install of cerastream 2: a check shows and records the offer, the package
-// script restarts the backend, and the new process recovers the finished install,
-// which dpkg proves, up to the update's own restart. The proof is not delivered yet.
+// script restarts the backend mid-transaction, and the new process recovers the
+// finished install, which dpkg proves, up to the update's own restart. The record
+// still names the offer, for that restart to read dpkg again.
 async function installProof(capable = false) {
 	const offering = await Backend.start({ apt: pending("1", "2"), capable });
 	await offering.check();
 	await offering.close();
-	const recovering = await Backend.start({ apt: settled("2"), capable });
+	const recovering = await Backend.start({
+		apt: configuring("2"),
+		capable,
+	});
+	await recovering.setApt(settled("2"));
 	await recovering.recover();
 	expect((await recovering.ended()).exit).toBe(RESTART_EXIT_CODE);
-	expect(JSON.parse(await readFile(record, "utf8"))).toEqual({
-		version: 7,
-		offer: null,
-		installed: [{ name: "cerastream", version: "2" }],
-	});
+	expect(JSON.parse(await readFile(record, "utf8"))).toEqual(offered("2"));
 }
 
 for (const capable of [false, true])
@@ -509,14 +522,19 @@ for (const capable of [false, true])
 				["show"],
 				["show"],
 			]);
-			// When the package script restarts the backend, the new process re-announces the stored offer.
+			// When the package script restarts the backend mid-transaction, the new process
+			// reads dpkg, which does not show the offer installed yet, and re-announces it.
 			await before.close();
-			const recovering = await Backend.start({ apt: settled("2"), capable });
+			const recovering = await Backend.start({
+				apt: configuring("2"),
+				capable,
+			});
 			await reconnect(recovering, connected);
 			expect(names(connected)).toEqual([[NOTICE], [NOTICE]]);
 			expect(removals(connected)).toEqual([0, 0]);
 			// And it recovers the finished install: dpkg shows cerastream 2 installed, so the
 			// tabs connected to it drop the offer before the update's own restart.
+			await recovering.setApt(settled("2"));
 			await recovering.recover();
 			await sync(connected);
 			expect(names(connected)).toEqual([[], []]);
@@ -526,8 +544,8 @@ for (const capable of [false, true])
 			expect(restart.stdout).toContain(RECOVERY_RESTART_MARKER);
 			expect(restart.stderr).not.toContain(RECOVERY_FAILED_MARKER);
 			for (const tab of connected) await tab.dropped();
-			// Then the install's own restart tells tabs that missed the proving process when
-			// they log in, even though its own refresh fails, and tells reconnecting tabs again.
+			// Then the install's own restart reads dpkg itself, records none, and tells tabs that
+			// missed the proving process when they log in, even though its own refresh fails.
 			const completion = await Backend.start({
 				apt: failing(settled("2")),
 				capable,
@@ -606,8 +624,13 @@ for (const capable of [false, true])
 			await sync(connected);
 			expect(names(connected)).toEqual([[], []]);
 			expect(removals(connected)).toEqual([1, 1]);
+			// And a tab that logs in to that process afterwards is told too.
+			const late = await olderBackendTabs();
+			await reconnect(completion, late);
+			expect(names(late)).toEqual([[], []]);
+			expect(removals(late)).toEqual([1, 1]);
 			await completion.close();
-			// A tab offline throughout is not told at login: a check's verdict is never delivered later.
+			// A tab offline throughout is not told by a later process: a check's verdict is its process's own.
 			const next = await Backend.start({ apt: failing(settled("2")), capable });
 			await reconnect(next, missing);
 			expect(names(missing)).toEqual([[NOTICE], [NOTICE]]);
@@ -619,20 +642,24 @@ for (const capable of [false, true])
 			expect(names(missing)).toEqual([[], []]);
 			expect(removals(missing)).toEqual([1, 1]);
 		},
-		budget(6),
+		budget(7),
 	);
 
 test(
 	"after a rollback, the offer an older backend shows survives the restored backend",
 	async () => {
-		// Given an install proven and delivered by the install's own restart.
-		await installProof();
-		const completion = await Backend.start({ apt: settled("2") });
-		await completion.close();
 		for (const [label, state] of [
 			["downgraded", pending("1", "2")],
 			["re-upgraded, newer release published", pending("2", "3")],
 		] as const) {
+			// Given an install proven and delivered by the install's own restart, which records none.
+			await installProof();
+			const completion = await Backend.start({ apt: settled("2") });
+			await completion.close();
+			expect([label, JSON.parse(await readFile(record, "utf8"))]).toEqual([
+				label,
+				{ version: 8, offer: null },
+			]);
 			// When a rollback runs an older backend that shows a valid offer.
 			const opened = await olderBackendTabs(state);
 			// And the restored backend restarts before any check, and the tabs re-authenticate.
@@ -656,7 +683,62 @@ test(
 		await reconnect(successor, opened);
 		expect(names(opened)).toEqual([[], []]);
 	},
-	budget(14),
+	budget(16),
+);
+
+test(
+	"a stored offer an older backend installed is withdrawn at the next start, even under that backend's newer offer, and shown again by the next conclusive check",
+	async () => {
+		// Given the offer of release 2 recorded, then installed by an older backend that records nothing.
+		const offering = await Backend.start({ apt: pending("1", "2") });
+		await offering.check();
+		await offering.close();
+		// And that older backend shows release 3 in both decoders.
+		const opened = await olderBackendTabs(pending("2", "3"));
+		// When this backend starts, dpkg shows the stored release 2 installed: positive evidence, by name.
+		const restored = await Backend.start({ apt: pending("2", "3") });
+		await reconnect(restored, opened);
+		expect(names(opened)).toEqual([[], []]);
+		expect(removals(opened)).toEqual([1, 1]);
+		// Then its own conclusive check shows release 3 again to the same tabs.
+		await restored.check();
+		await sync(opened);
+		expect(names(opened)).toEqual([[NOTICE], [NOTICE]]);
+	},
+	budget(3),
+);
+
+test(
+	"an install that ended before the recovering process read dpkg is told by that process; a tab offline for its whole life waits for a conclusive check",
+	async () => {
+		const offering = await Backend.start({ apt: pending("1", "2") });
+		const missing = await tabs(offering);
+		await offering.check();
+		await sync(missing);
+		await offering.close();
+		// When the recovering process starts after the transaction ended, its own startup read proves it.
+		const recovering = await Backend.start({ apt: settled("2") });
+		expect(JSON.parse(await readFile(record, "utf8"))).toEqual({
+			version: 8,
+			offer: null,
+		});
+		const connected = await olderBackendTabs();
+		await reconnect(recovering, connected);
+		expect(names(connected)).toEqual([[], []]);
+		await recovering.recover();
+		expect((await recovering.ended()).exit).toBe(RESTART_EXIT_CODE);
+		// Then the update's own restart has nothing stored to read: a tab offline until now keeps it.
+		const completion = await Backend.start({ apt: failing(settled("2")) });
+		await reconnect(completion, missing);
+		expect(names(missing)).toEqual([[NOTICE], [NOTICE]]);
+		expect(removals(missing)).toEqual([0, 0]);
+		// Until that process's conclusive check.
+		await completion.setApt(settled("2"));
+		await completion.check();
+		await sync(missing);
+		expect(names(missing)).toEqual([[], []]);
+	},
+	budget(5),
 );
 
 test(
@@ -685,13 +767,15 @@ test(
 test(
 	"a released hold with unchanged versions is new evidence: an older record cannot erase the offer",
 	async () => {
-		// Given a verdict taken while cerastream 2 was held back (nothing actionable).
+		// Given a check while cerastream 2 was held back: the kept-back plan is not conclusive.
 		const held: AptScript = {
 			keptBack: [cerastream("1", "2")],
 			holds: ["cerastream"],
 		};
 		await proveNothingPending(held);
-		const stale = await readFile(record, "utf8");
+		expect(await Bun.file(record).exists()).toBe(false);
+		// The "none" an earlier design recorded then.
+		const stale = JSON.stringify({ version: 8, offer: null });
 		// When the hold is released, the same versions become an offer that is shown.
 		const unheld = await Backend.start({ apt: pending("1", "2") });
 		const opened = await tabs(unheld);
@@ -772,7 +856,7 @@ test(
 		await offering.check();
 		await offering.close();
 		const real = JSON.parse(await readFile(record, "utf8"));
-		expect(real.offer).toEqual([{ name: "cerastream", version: "2" }]);
+		expect(real).toEqual(offered("2"));
 		await writeFile(record, JSON.stringify({ ...real, offer: null }));
 		const opened = await olderBackendTabs();
 		// When a backend starts under exactly that evidence.
@@ -938,13 +1022,14 @@ test(
 		await first.check();
 		await sync(groups.flat());
 		await first.close();
-		const recovering = await Backend.start({ apt: settled("2") });
+		const recovering = await Backend.start({ apt: configuring("2") });
+		await recovering.setApt(settled("2"));
 		await recovering.recover();
 		expect((await recovering.ended()).exit).toBe(RESTART_EXIT_CODE);
 		for (const [index, group] of groups.entries()) {
 			const restarted = await Backend.start({ apt: failing(settled("2")) });
 			await reconnect(restarted, group);
-			// The install's own restart delivers its proof; a later restart has none to deliver.
+			// The install's own restart reads dpkg and records none; a later restart has nothing to read.
 			expect([index, names(group), removals(group)]).toEqual(
 				index === 0
 					? [index, [[], []], [1, 1]]
@@ -984,7 +1069,7 @@ test(
 			await backend.close();
 			await rm(record, { recursive: true, force: true });
 		}
-		// The real record of an install's proof, then refused variants of it under the same evidence.
+		// The real record of an installed offer, then refused variants of it under the same evidence.
 		await installProof();
 		const valid = JSON.parse(await readFile(record, "utf8"));
 		await writeFile(
@@ -994,7 +1079,10 @@ test(
 				entries: [{ key: "update:cerastream=2,srtla=3", dismissedAt: 1 }],
 			}),
 		);
-		const forged = [{ name: "cerastream", version: "2,srtla=3" }];
+		const forged = [
+			{ name: "cerastream", arch: "arm64", version: "2,srtla=3" },
+		];
+		const bare = [{ name: "cerastream", version: "2" }];
 		const refused: Record<string, string> = {
 			corrupt: "{",
 			"prior v2": JSON.stringify({ version: 2, offer: [], withdrawn: [] }),
@@ -1006,18 +1094,24 @@ test(
 				inputs: "0".repeat(64),
 				offer: null,
 			}),
-			future: JSON.stringify({ ...valid, version: 8 }),
-			duplicate: `{"version":7,"offer":null,"installed":[],"installed":${JSON.stringify(valid.installed)}}`,
+			"prior v7 offer": JSON.stringify({ version: 7, offer: bare }),
+			"prior v7 proof": JSON.stringify({
+				version: 7,
+				offer: null,
+				installed: bare,
+			}),
+			future: JSON.stringify({ ...valid, version: 9 }),
+			duplicate: `{"version":8,"offer":null,"offer":${JSON.stringify(valid.offer)}}`,
 			oversized: JSON.stringify(valid).padEnd(5000, " "),
 			inputs: JSON.stringify({ ...valid, inputs: "not-a-fingerprint" }),
-			"proof beside an offer": JSON.stringify({
-				...valid,
-				offer: valid.installed,
+			"a proof member": JSON.stringify({ ...valid, installed: valid.offer }),
+			"an offer without its architecture": JSON.stringify({
+				version: 8,
+				offer: bare,
 			}),
-			"empty proof": JSON.stringify({ ...valid, installed: [] }),
+			"empty offer": JSON.stringify({ ...valid, offer: [] }),
 			// A forged multi-package key, whose acknowledgement is present, cannot be smuggled in.
-			forged: JSON.stringify({ version: 7, offer: forged }),
-			"forged proof": JSON.stringify({ ...valid, installed: forged }),
+			forged: JSON.stringify({ version: 8, offer: forged }),
 		};
 		for (const [kind, text] of Object.entries(refused)) {
 			await writeFile(record, text);
@@ -1078,7 +1172,7 @@ test(
 test(
 	"a record too large for the reader is ignored and the next conclusive check replaces it",
 	async () => {
-		// Given a current-schema record padded past the reader's limit.
+		// Given a current-schema record of an installed offer, padded past the reader's limit.
 		await installProof();
 		const padded = (await readFile(record, "utf8")).padEnd(5000, " ");
 		expect(Buffer.byteLength(padded)).toBeGreaterThan(4096);
@@ -1091,7 +1185,7 @@ test(
 		await sync(opened);
 		expect(names(opened)).toEqual([[], []]);
 		expect(JSON.parse(await readFile(record, "utf8"))).toEqual({
-			version: 7,
+			version: 8,
 			offer: null,
 		});
 	},
@@ -1099,15 +1193,18 @@ test(
 );
 
 test(
-	"the largest record a check or an install can commit is read back at restart",
+	"the largest record a check can commit is read back at restart, and read back against dpkg",
 	async () => {
 		const longest = (extra: number) =>
 			`2026.${"1".repeat(OFFER_VERSION_LIMIT - 5 + extra)}`;
+		// The longest architecture a record admits, on every package.
+		const arch = "a".repeat(ARCH_LIMIT);
 		const every = (installed: string, candidate: string): AptScript => ({
 			upgradable: ceralivePackageList.map((name) => ({
 				name,
 				installed,
 				candidate,
+				arch,
 			})),
 		});
 		const installedEvery = (version: string): AptScript => ({
@@ -1115,6 +1212,7 @@ test(
 				name,
 				installed: version,
 				candidate: version,
+				arch,
 			})),
 		});
 		// Given every roster package offered at the longest admitted version, then dismissed.
@@ -1129,7 +1227,9 @@ test(
 		await (dismissing as Tab).dismiss(NOTICE);
 		await (other as Tab).sync();
 		expect((other as Tab).removals()).toBe(1);
-		expect((await readFile(record)).byteLength).toBeLessThanOrEqual(4096);
+		const largest = await readFile(record, "utf8");
+		expect(JSON.parse(largest).offer).toHaveLength(ceralivePackageList.length);
+		expect(Buffer.byteLength(largest)).toBeLessThanOrEqual(4096);
 		await backend.close();
 		// Then a restart reads it back and still withdraws it from tabs that missed it.
 		const restarted = await Backend.start({ apt: every("1", longest(0)) });
@@ -1137,23 +1237,17 @@ test(
 		expect(names(missing)).toEqual([[], []]);
 		expect(removals(missing)).toEqual([1, 1]);
 		await restarted.close();
-		// And the install of that whole offer is proven, committed and read back.
-		const recovering = await Backend.start({
-			apt: installedEvery(longest(0)),
-		});
-		await recovering.recover();
-		expect((await recovering.ended()).exit).toBe(RESTART_EXIT_CODE);
-		const proof = await readFile(record, "utf8");
-		expect(JSON.parse(proof).installed).toHaveLength(
-			ceralivePackageList.length,
-		);
-		expect(Buffer.byteLength(proof)).toBeLessThanOrEqual(4096);
+		// And once the whole offer is installed, the next start's dpkg readback of it proves it.
 		const late = await olderBackendTabs();
 		const successor = await Backend.start({
 			apt: installedEvery(longest(0)),
 		});
 		await reconnect(successor, late);
 		expect(names(late)).toEqual([[], []]);
+		expect(JSON.parse(await readFile(record, "utf8"))).toEqual({
+			version: 8,
+			offer: null,
+		});
 		await successor.close();
 		// A version past the limit is not committed: neither shown, removed nor recorded.
 		await rm(record);
@@ -1168,7 +1262,7 @@ test(
 );
 
 test(
-	"a verdict that cannot be written changes nothing, in any direction",
+	"a verdict that cannot be written changes nothing, in any direction; an install's own result needs no write",
 	async () => {
 		// Given a durable "nothing pending".
 		await proveNothingPending();
@@ -1189,7 +1283,8 @@ test(
 		await sync(opened);
 		expect(names(opened)).toEqual([[NOTICE], [NOTICE]]);
 		await shown.close();
-		// When "nothing pending" cannot be persisted, no removal is sent.
+		const durable = await readFile(record, "utf8");
+		// When neither the startup readback's "none" nor a check's can be persisted, no removal is sent.
 		const kept = await Backend.start({ apt: settled("3"), failWrites: true });
 		await reconnect(kept, opened);
 		await kept.check();
@@ -1197,22 +1292,37 @@ test(
 		expect(removals(opened)).toEqual([0, 0]);
 		expect(names(opened)).toEqual([[NOTICE], [NOTICE]]);
 		await kept.close();
-		// When an install's proof cannot be persisted, no removal is sent either.
-		const unproven = await Backend.start({
+		// When an install of the offer finishes in a process that cannot write, its own result
+		// step still withdraws it live: that evidence is dpkg's, read then, and nothing is written.
+		const installing = await Backend.start({
+			apt: configuring("3"),
+			failWrites: true,
+		});
+		await reconnect(installing, opened);
+		await installing.setApt(settled("3"));
+		await installing.recover();
+		await sync(opened);
+		expect(names(opened)).toEqual([[], []]);
+		expect(removals(opened)).toEqual([1, 1]);
+		expect((await installing.ended()).exit).toBe(RESTART_EXIT_CODE);
+		for (const tab of opened) await tab.dropped();
+		expect(await readFile(record, "utf8")).toBe(durable);
+		// And a restart that still cannot write tells a fresh tab nothing at all.
+		const unwritable = await Backend.start({
 			apt: settled("3"),
 			failWrites: true,
 		});
-		await reconnect(unproven, opened);
-		await unproven.recover();
-		await sync(opened);
-		expect(removals(opened)).toEqual([0, 0]);
-		expect((await unproven.ended()).exit).toBe(RESTART_EXIT_CODE);
-		for (const tab of opened) await tab.dropped();
-		// And the next process still trusts the durable offer, not the lost verdicts.
+		expect(histories(await tabs(unwritable))).toEqual([[], []]);
+		await unwritable.close();
+		// Then the first process that can record "none" tells the tabs that missed it.
 		const next = await Backend.start({ apt: settled("3") });
-		await reconnect(next, opened);
-		expect(removals(opened)).toEqual([0, 0]);
-		expect(names(opened)).toEqual([[NOTICE], [NOTICE]]);
+		const missed = await olderBackendTabs();
+		await reconnect(next, missed);
+		expect(names(missed)).toEqual([[], []]);
+		expect(JSON.parse(await readFile(record, "utf8"))).toEqual({
+			version: 8,
+			offer: null,
+		});
 	},
-	budget(6),
+	budget(9),
 );

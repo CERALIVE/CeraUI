@@ -216,54 +216,66 @@ no-signal raise's own standing-advisory non-overwrite is unchanged).
 `ceralive_update` ("A CeraLive update is available") was raised by both discovery
 paths and never withdrawn. The backend map is process-local, a replay only adds,
 and an open tab's store survives reconnects, so after an update the banner stayed
-on screen even with the candidate installed (Rock 5B+, 2026-11-21). Nine review
+on screen even with the candidate installed (Rock 5B+, 2026-11-21). Ten review
 rounds of PR #670 showed that deriving "nothing is pending" from APT at startup or
 login always leaves another edge (a read APT outran, a partial plan, configured
-hooks a simulation still runs), so the rule is positive evidence only. Owner:
-`modules/system/ceralive-update-notice.ts`.
+hooks a simulation still runs, a stored proof replayed into the wrong process), so
+the rule is positive evidence only, and the evidence is always read by the process
+that acts on it. Owner: `modules/system/ceralive-update-notice.ts`.
 
 | Rule | How it is met |
 |---|---|
-| Two withdrawals | (a) The updater's own install finished with exit 0 and dpkg proves every offered package installed at or above its offered version. (b) A conclusive check of the update cycle finds no first-party update pending. A dismissal of the current release (below) also removes it. Nothing else withdraws it: not a restart, a login, an install exit by itself, or an empty restarted process. |
-| (a) The install proof | In `finish()` (`software-updates.ts`), after the update's durable success is persisted (`finishSoftwareUpdateRestart`) and before its deliberate restart, `withdrawCeraliveOfferIfInstalled` runs `dpkg-query -W -f '${Package}\t${Status}\t${Version}\n' <offered names>` (exit 0, nothing on stderr, one `install ok installed` or `hold ok installed` row per name) and `dpkg --compare-versions <installed> ge <offered>` for each (exit 0 only). Each command is bounded at 10 s; a failed, timed-out or killed command proves nothing. It proves only the offer this backend recorded, and a check that recorded a newer verdict meanwhile wins. The process that started the install and the one that recovered it after a package-script restart both pass through `finish()`. A banner raised by a backend from before this notice has no recorded offer, so only (b) clears it. |
-| (b) The check | Conclusive only when `apt-get update` exits 0 with no `Err:` line, no `E:`, failed-fetch or stale-index line and no captive signature (`isConclusiveAptRefresh`); a legacy `dist-upgrade --assume-no` exits 0, or 1 after its own `Abort.`, with no `E:` (`isCleanAssumeNoDiscovery`); the capable check's own simulated plan has one summary line and exactly the `Inst` and `Remv` rows it counts (`completePlan`); and CeraLive's source is in the check's own `apt-cache policy` inventory. The flag travels with the check callback into `runUpdateDiscoveryAndReport` on the manual, periodic and orchestrator entries. The notice runs no APT command of its own outside this admitted check. |
-| Every candidate verified | The offer is what Install takes. Capable: every first-party row of the check's own discovery is actionable with origin `apt.ceralive.tv` and a version (`firstPartyOffer`); a roster package the plan newly installs is part of it. Legacy: the check's actionable first-party names, each with its `apt-cache policy` candidate from CeraLive's own source (`legacyCeraliveOffer`); APT brings a newly installed dependency with them. One unverified row makes the verdict `unknown`, which changes nothing. |
+| Withdrawals | (a) dpkg shows every offered package instance installed at or above its offered version, read in the update's own result step or at startup for a stored offer. (b) A conclusive check of the update cycle finds no first-party update pending. A dismissal of the current release (below) also removes it. Nothing else withdraws it: not a restart, a login, an install exit by itself, or an empty restarted process. |
+| The readback | #664's `targetsAttained` (`software-update-outcome.ts`, the same read `system.updateOutcome` answers with): one `dpkg-query -W` of `Package/Architecture/db:Status-Abbrev/Version` for the offered names, a complete answer (exit 0, final newline, every row well-formed, asked for and unique per instance), each offered instance (name and architecture) `ii ` or `hi `, and `dpkg --compare-versions <installed> ge <offered>` exiting 0 for each. 5 s per command, 20 s in all. Anything else is unknown and keeps the offer. A check that recorded another offer while dpkg was read wins. |
+| (a) In the update's result step | `createSoftwareUpdateProcessMonitor` fixes the stored offer when it takes the update (launch, or recovery after a package-script restart). `settle()` reads dpkg for it after the cache cleanup and before it releases `softUpdateStatus`, so `isUpdating()` still refuses every check and start while dpkg is read. Only exit 0 reads anything. A proven offer is withdrawn in this process only: the record keeps it, so the update's own restart reads dpkg again for tabs that missed this process. The deliberate restart tail is unchanged. |
+| (a) At startup | A stored offer is read back against dpkg before anything is announced. Proven: the record becomes `{version:8, offer:null}` first, then the notice is withdrawn; if that write fails nothing is withdrawn or announced. Not proven: the offer is re-announced (a dismissed one is withdrawn instead). A stored "none" proves nothing. Because the first process that proves it records none, no later process acts on that offer again (for example after a rollback). Boot does not wait for this read. |
+| (b) The check | Conclusive only when `apt-get update` exits 0 with no `Err:` line, no `E:`, failed-fetch or stale-index line and no captive signature (`isConclusiveAptRefresh`); legacy: `dist-upgrade --assume-no` exits 0, or 1 after its own `Abort.`, with no `E:` (`isCleanAssumeNoDiscovery`), it is not the kept-back fallback (whose own exit is not read), and its upgrade and NEW lists name as many packages as its summary counts; capable: the check's own simulated plan has one summary line and exactly the `Inst` and `Remv` rows it counts; and CeraLive's source is in the check's own `apt-cache policy` inventory. The flag travels with the check callback into `runUpdateDiscoveryAndReport` on the manual, periodic and orchestrator entries. |
+| The offer | What Install takes, each an exact instance. Capable: every first-party row of the check's own discovery is actionable with origin `apt.ceralive.tv`, and its instance (name, architecture, version) is the check's own simulated `Inst` row (`admittedTargets`); a roster package the plan newly installs is part of it. Legacy: the check's actionable first-party names, each with its `apt-cache policy` candidate from CeraLive's own source and that candidate's architecture from `apt-cache show --no-all-versions` (exactly one record of that name and version). One unverified row makes the verdict `unknown`, which changes nothing. |
 | Identity | Dismissal key `update:<name=version,...>`, sorted with `compareAptPackageNames`. A same-size new release is a new key. |
-| Durable first | Every verdict is written atomically to `ceralive_update_offer.json` before anything is broadcast, and only when it changed: `{version:7, offer}` (the offered rows, or `null` for none), or after (a) `{version:7, offer:null, installed}`. The writer validates with the reader's own schema and byte limit (`STORED_STATE_LIMITS.scalar`, versions capped at `OFFER_VERSION_LIMIT`), so every committed record is readable at restart. A write that fails changes nothing on screen. |
-| Restarts | Startup re-announces a stored offer (a dismissed one is withdrawn instead) and never derives a withdrawal. A stored install proof is taken by the next process alone, which is the install's own restart: it rewrites the record to `{version:7, offer:null}`, keeps the proof in memory, removes the notice for tabs that authenticated early and tells every tab that logs in to it. If that rewrite fails it delivers nothing. Any later process (for example after a rollback) finds only "none". |
-| Logins | After the unchanged show replay, an authenticating tab gets the typed `remove` and the pre-#183 string frame only while this process holds an install proof, or while the current offer is dismissed. A login runs no command at all. A check's (b) verdict is sent live on every conclusive check, never at login. |
-| Dismissal | The notice is `releaseScoped`: `notifications.dismiss` carries the shown `revision` and `publisher`. Only a copy of the current release (same publisher, revision at or after the one that first carried the current key) is dismissed durably, and then its removal is replayed like a withdrawal. The dismissal store writes before it remembers: a failed write throws to the caller (the RPC fails) and leaves the in-memory set untouched, so no later check can read an unwritten dismissal as a reason to withdraw. A stale copy changes nothing and gets the current release back; a client that cannot attest (an older frontend) changes nothing. Other notices keep name-only dismissal. |
+| Durable first | A check's verdict is written atomically to `ceralive_update_offer.json` before anything is broadcast, and only when it changed: `{version:8, offer}` (the offered instances, or `null` for none). The writer validates with the reader's own schema and byte limit (`STORED_STATE_LIMITS.scalar`, versions capped at `OFFER_VERSION_LIMIT`, architectures at `ARCH_LIMIT`), so every committed record is readable at restart. A write that fails changes nothing on screen. No proof is ever stored. |
+| Logins | After the unchanged show replay, an authenticating tab gets the typed `remove` and the pre-#183 string frame only while this process itself established that no offer remains ((a) or (b) in this process), or while the current offer is dismissed. A new offer ends that. A login runs no command at all. |
+| Dismissal | The notice is `releaseScoped`: `notifications.dismiss` carries the shown `revision` and `publisher`. Only a copy of the current release (same publisher, revision at or after the one that first carried the current key) is dismissed durably, and then its removal is broadcast like a withdrawal. The dismissal store writes before it remembers: a failed write throws to the caller (the RPC fails) and leaves the in-memory set untouched. A stale copy changes nothing and gets the current release back; a client that cannot attest (an older frontend) changes nothing. Other notices keep name-only dismissal. |
 | Wire | Additive only: optional `revision`/`publisher` on the dismiss input (`notificationDismissInputSchema`) and separate removal frames after the unchanged replay frame. |
 
-Limits, each a stale banner rather than a lost offer, and each cleared by the next
-conclusive check while the tab is connected: a banner raised by a backend from
-before this notice, in a tab offline during the first conclusive check after the
-update; a tab offline for the whole life of the install's own restart; a tab that
-missed a check's withdrawal; an install that dpkg does not prove (a held package,
-an omitted dependency, a failed command). While the state directory cannot be
-written, a new offer is not shown and a withdrawal is not made; both are logged and
-retried by the next conclusive check. A proof record restored from a copy taken
-before its own restart started is delivered once more. A notice dismissed under the
+Limits. Stale banners, each cleared by the next conclusive check while the tab is
+connected: a banner raised by a backend from before this notice, in a tab offline
+while the process that ran the first conclusive check after the update lived; a tab
+offline through both the process that finished the install and the update's own
+restart; when the transaction already ended before the recovering process's own
+startup read, a tab offline for that process's whole life (that process records
+none, so the next one has nothing to read); an install dpkg does not prove (a held
+package below the offer, an omitted dependency, a failed or partial read, an
+instance under another architecture); a first-party package kept back on a legacy
+image. While the state directory cannot be written, a new offer is not shown and
+neither a check's nor a startup's "none" is acted on; the update's own result step
+still withdraws live, because it writes nothing. False removals, each healed by
+that process's own conclusive check: a stored offer that an older backend (which
+records nothing) installed is withdrawn at the next start even if that older
+backend showed a newer release, because a removal names the notice, not a release;
+a dismissed stored offer withdraws the same way. A notice dismissed under the
 former names/count/size key is shown once more, and a dismissal from an older
 frontend no longer sticks. The orchestrator's package `update:updates-available:*`
 notice has no retraction yet (separate follow-up).
 
 Coverage, as separate proofs: `tests/ceralive-update-notice-lifecycle.test.ts`
 (the real check entries and the real install completion over scripted APT and dpkg
-on both images: version keys, live withdrawal for current and emulated v2026.7.2 tabs
-with OS/kernel notices kept, each inconclusive refresh indicator, failed or partial
-discovery, origin and policy contradictions, the mixed dismissed subset on capable,
-kept-back packages, attested, stale and unattested dismissals through the RPC
-procedure, the manual and periodic entries, the install proof before the restart
-with dpkg's own version order, every unproven dpkg answer, a newer verdict that
-wins, startup re-announcement, one-process proof delivery, logins that run nothing);
-`tests/ceralive-update-notice-restart.test.ts` (fresh `bun` processes sharing only
-device files, real authenticated WebSocket tabs of both decoders, through the real
-check entry and the real recovery up to the update's deliberate restart: the
-install's restarts on both images, live and after a missed process, an update from
-main's backend, a rollback whose older-backend offer survives the restored backend,
+on both images: version keys, live and login withdrawal for current and emulated
+v2026.7.2 tabs with OS/kernel notices kept, each inconclusive refresh indicator,
+failed, partial, short-listed or kept-back discovery, origin, policy and candidate
+record contradictions, the mixed dismissed subset on capable, attested, stale and
+unattested dismissals through the RPC procedure, the manual and periodic entries,
+the readback inside the update's result step while the updater refuses a start,
+a failed install that reads nothing, dpkg's own version order on real Debian
+versions, every unproven dpkg answer including another architecture, a newer
+verdict that wins during either read, startup proof and re-announcement, logins
+that run nothing); `tests/ceralive-update-notice-restart.test.ts` (fresh `bun`
+processes sharing only device files, real authenticated WebSocket tabs of both
+decoders, through the real check entry and the real recovery up to the update's
+deliberate restart: the install's restarts on both images, live and after a missed
+process, an update from main's backend, a rollback whose older-backend offer
+survives the restored backend, the honest false removal and stale cases above,
 restored and edited records, a proof that stops at a newer offer, early tabs,
-dismissal across restart, the largest committable offer and proof read back,
+dismissal across restart, the largest committable offer read back against dpkg,
 missing/corrupt/duplicate/prior/future/oversized/forged records and unreadable
 dismissals, failed writes in every direction); and the frontend half
 (`apps/frontend/src/tests/notification-recovery-ingestion.test.ts`,

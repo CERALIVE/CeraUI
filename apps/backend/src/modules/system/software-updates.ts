@@ -96,10 +96,10 @@ import {
 	normalizeAptCommandFailure,
 } from "./apt-transport-result.ts";
 import {
-	completePlan,
 	firstPartyOffer,
 	legacyCeraliveOffer,
 	reconcileCeraliveUpdateNotice,
+	standingCeraliveOffer,
 	withdrawCeraliveOfferIfInstalled,
 } from "./ceralive-update-notice.ts";
 import {
@@ -189,8 +189,6 @@ let softwareUpdateRecoveryRetryTimer: ReturnType<typeof setTimeout> | undefined;
 const SOFTWARE_UPDATE_RECOVERY_RETRY_MS = 3_000;
 const APT_REFRESH_TIMEOUT_MS = 5 * oneMinute;
 const APT_DISCOVERY_TIMEOUT_MS = 2 * oneMinute;
-// Bounds each dpkg read that proves a finished install, so the restart it precedes never hangs.
-const DPKG_PROOF_TIMEOUT_MS = 10_000;
 // A backstop only: apt's own per-connection timeouts end a stalled fetch first.
 const APT_DOWNLOAD_TIMEOUT_MS = 60 * oneMinute;
 
@@ -672,9 +670,11 @@ async function getCapableUpdateSize(
 		});
 		if (refreshConclusive)
 			reconcileCeraliveUpdateNotice(
-				completePlan(simulation.stdout)
-					? firstPartyOffer(result.packages, sourcePolicy.stdout)
-					: "unknown",
+				firstPartyOffer(
+					result.packages,
+					sourcePolicy.stdout,
+					simulation.stdout,
+				),
 			);
 		return null;
 	} catch (error) {
@@ -860,6 +860,17 @@ function isCleanAssumeNoDiscovery(result: SpawnWithTimeoutResult): boolean {
 	);
 }
 
+// The names the upgrade and NEW lists carry; the summary counts both.
+function listedPackageCount(stdout: string): number {
+	return [
+		"The following packages will be upgraded:\n",
+		"The following NEW packages will be installed:\n",
+	].reduce((count, heading) => {
+		const list = parseAptPackageList(stdout, heading);
+		return count + (list.ok && list.value ? list.value.split(" ").length : 0);
+	}, 0);
+}
+
 async function getSoftwareUpdateSize(
 	reachability: AptReachability,
 	refreshConclusive = false,
@@ -949,8 +960,14 @@ async function getSoftwareUpdateSize(
 		available_updates: availableUpdates,
 		update_state: getUpdateState(),
 	});
-	// A check whose own discovery failed is not conclusive.
-	if (refreshConclusive && isCleanAssumeNoDiscovery(upgradeResult))
+	// Not conclusive: a discovery that failed, the kept-back fallback (its own
+	// exit is not read), or lists naming fewer packages than the summary counts.
+	if (
+		refreshConclusive &&
+		isCleanAssumeNoDiscovery(upgradeResult) &&
+		!fromHeldBack &&
+		listedPackageCount(upgrade.stdout) === res.upgradeCount
+	)
 		reconcileCeraliveUpdateNotice(
 			await legacyCeraliveOffer(actionableAppPackages, (argv) =>
 				runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
@@ -1575,6 +1592,8 @@ export function createSoftwareUpdateProcessMonitor(
 	prefetched = "",
 	launched: Pick<SoftUpdateStatus, "run" | "targets"> = {},
 ): SoftwareUpdateProcessMonitor {
+	// The CeraLive offer this update was taken against, fixed when it is taken.
+	const offer = standingCeraliveOffer();
 	let rebootAfterUpgrade = false;
 	let summaryParseLogged = false;
 	let aptLog = prefetched;
@@ -1657,6 +1676,9 @@ export function createSoftwareUpdateProcessMonitor(
 		const cleaned = await cleanAptCache(defaultAptSpaceDeps.run);
 		lastCleanupWarning =
 			code === 0 && !cleaned ? "post_clean_failed" : undefined;
+		// Read while this update still holds the updater, so no check or start interleaves.
+		if (code === 0 && softUpdateStatus)
+			await withdrawCeraliveOfferIfInstalled(offer);
 
 		if (softUpdateStatus) {
 			const failure =
@@ -1736,11 +1758,7 @@ export function createSoftwareUpdateProcessMonitor(
 			if (code === 0) {
 				// Persist the observed commit success before deliberately exiting;
 				// the observer has already drained output and cleaned up the unit.
-				void finishSoftwareUpdateRestart(onCommitSucceeded, async () => {
-					// The finished install is the CeraLive offer's positive evidence once dpkg confirms it.
-					await withdrawCeraliveOfferIfInstalled((argv) =>
-						runAptCommand(argv, DPKG_PROOF_TIMEOUT_MS),
-					);
+				void finishSoftwareUpdateRestart(onCommitSucceeded, () => {
 					if (rebootAfterUpgrade && !onCommitSucceeded) {
 						rebootAfterUpdate();
 					} else {

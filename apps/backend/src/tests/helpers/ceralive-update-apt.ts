@@ -3,8 +3,8 @@ import type { SpawnWithTimeoutResult } from "../../helpers/spawn-policy.ts";
 
 // Scripted APT answers for the CeraLive update notice tests: one package set
 // drives legacy dist-upgrade, the capable upgrade simulation, the source
-// inventory, per-package policy and dpkg's installed status, as a real device
-// would answer. Version comparison is the host's own dpkg.
+// inventory, per-package policy and record, and dpkg's installed instances, as a
+// real device would answer. Version comparison is the host's own dpkg.
 export type AptPackage = {
 	readonly name: string;
 	// "(none)" for a package that is not installed (a new install when planned).
@@ -15,6 +15,10 @@ export type AptPackage = {
 	readonly source?: "ceralive" | "debian";
 	// The candidate's priority in the policy version table.
 	readonly pin?: number;
+	// The candidate's own architecture (default arm64).
+	readonly arch?: string;
+	// The installed instance's architecture in dpkg, when it differs from the candidate's.
+	readonly installedArch?: string;
 };
 
 export type AptScript = {
@@ -26,11 +30,11 @@ export type AptScript = {
 	readonly inventory?: string;
 	// Installed with nothing pending (candidate equals installed).
 	readonly installed?: readonly AptPackage[];
-	// Names `apt-mark showhold` lists (dpkg then shows them as "hold ok installed").
+	// Names `apt-mark showhold` lists (dpkg then shows them held: `hi `).
 	readonly holds?: readonly string[];
 	// Known to APT with a candidate, not installed and not planned.
 	readonly available?: readonly AptPackage[];
-	// dpkg's status field for a package, instead of the one its state implies.
+	// dpkg's db:Status-Abbrev for a package, instead of the `ii ` its state implies.
 	readonly dpkgStatus?: Readonly<Record<string, string>>;
 	// How one command fails instead of answering (see FailedRead).
 	readonly fail?: Partial<Record<AptRead, FailedRead>>;
@@ -42,6 +46,7 @@ export type AptRead =
 	| "simulation"
 	| "inventory"
 	| "package-policy"
+	| "package-record"
 	| "apt-mark"
 	| "dpkg-query"
 	| "dpkg-compare";
@@ -127,7 +132,7 @@ function counts(packages: readonly AptPackage[]): string {
 function simulation(packages: readonly AptPackage[]): string {
 	const rows = packages.map(
 		(pkg) =>
-			`Inst ${pkg.name}${isInstalled(pkg) ? ` [${pkg.installed}]` : ""} (${pkg.planned ?? pkg.candidate} stable [arm64])\n`,
+			`Inst ${pkg.name}${isInstalled(pkg) ? ` [${pkg.installed}]` : ""} (${pkg.planned ?? pkg.candidate} stable [${pkg.arch ?? "arm64"}])\n`,
 	);
 	return `${PREAMBLE}${counts(packages)}${rows.join("")}`;
 }
@@ -162,11 +167,15 @@ export function scriptedApt(script: AptScript) {
 
 function readOf(argv: readonly string[]): AptRead {
 	const [bin, verb] = argv;
-	if (bin === "/usr/bin/dpkg-query") return "dpkg-query";
-	if (bin === "/usr/bin/dpkg") return "dpkg-compare";
+	if (bin === "dpkg-query") return "dpkg-query";
+	if (bin === "dpkg") return "dpkg-compare";
 	if (bin === "/usr/bin/apt-mark") return "apt-mark";
 	if (bin === "/usr/bin/apt-cache")
-		return argv.length === 2 ? "inventory" : "package-policy";
+		return argv.length === 2
+			? "inventory"
+			: verb === "show"
+				? "package-record"
+				: "package-policy";
 	if (verb === "update") return "refresh";
 	return verb === "-s" ? "simulation" : "discovery";
 }
@@ -229,14 +238,15 @@ function answer(script: AptScript) {
 			return ok(simulation(upgradable));
 		if (bin === "/usr/bin/apt-mark")
 			return ok((script.holds ?? []).map((name) => `${name}\n`).join(""));
-		if (bin === "/usr/bin/dpkg-query") {
-			const wanted = argv.slice(4);
+		// What #664's readback asks: `dpkg-query -W -f=<format> -- <names>`.
+		if (bin === "dpkg-query") {
+			const wanted = argv.slice(argv.indexOf("--") + 1);
 			const known = present.filter(
 				(pkg) => isInstalled(pkg) && wanted.includes(pkg.name),
 			);
 			const rows = known.map(
 				(pkg) =>
-					`${pkg.name}\t${script.dpkgStatus?.[pkg.name] ?? `${script.holds?.includes(pkg.name) ? "hold" : "install"} ok installed`}\t${pkg.installed}\n`,
+					`${pkg.name}\t${pkg.installedArch ?? pkg.arch ?? "arm64"}\t${script.dpkgStatus?.[pkg.name] ?? (script.holds?.includes(pkg.name) ? "hi " : "ii ")}\t${pkg.installed}\n`,
 			);
 			const absent = wanted.filter(
 				(name) => !known.some((pkg) => pkg.name === name),
@@ -250,9 +260,16 @@ function answer(script: AptScript) {
 					.join(""),
 			};
 		}
-		if (bin === "/usr/bin/dpkg" && verb === "--compare-versions") {
+		if (bin === "dpkg" && verb === "--compare-versions") {
 			const compared = Bun.spawnSync(["dpkg", ...argv.slice(1)]);
 			return { exitCode: compared.exitCode ?? 2, stdout: "", stderr: "" };
+		}
+		if (bin === "/usr/bin/apt-cache" && verb === "show") {
+			const pkg = present.find((candidate) => candidate.name === argv[3]);
+			if (pkg)
+				return ok(
+					`Package: ${pkg.name}\nArchitecture: ${pkg.arch ?? "arm64"}\nVersion: ${pkg.candidate}\nPriority: optional\n\n`,
+				);
 		}
 		if (bin === "/usr/bin/apt-cache" && verb === "policy") {
 			if (name === undefined) return ok(script.inventory ?? INVENTORY);

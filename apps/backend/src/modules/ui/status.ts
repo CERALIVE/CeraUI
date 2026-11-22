@@ -156,5 +156,5 @@ export function sendInitialStatus(conn: WebSocket) {
 	conn.send(buildMsg(BLUETOOTH_EVENT, getBluetoothStatusMessage()));
 	conn.send(buildMsg("revisions", getRevisions()));
 	conn.send(buildMsg("acodecs", AUDIO_CODECS));
-	void notificationSendPersistent(conn, true);
+	notificationSendPersistent(conn, true);
 }

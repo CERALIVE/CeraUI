@@ -7,7 +7,8 @@
 // the real package check over scripted APT, `apt <json>` replaces the device's
 // APT state, `recover` recovers a finished install through the real completion
 // path up to the update's deliberate restart, which it holds until `exit` (so a
-// test can sync its tabs first), `exit` ends it. With `olderBackend` it is a
+// test can sync its tabs first), `exit` ends it. The notice's dpkg readback reads
+// the same scripted device. With `olderBackend` it is a
 // backend from before this notice owner: it shows the notice the way main did
 // and never initializes or writes the offer record.
 import { defaultAptSpaceDeps } from "../../modules/system/apt-space-admission.ts";
@@ -97,8 +98,9 @@ process.stdout.write(`${READY_PREFIX}${getServer()?.port}\n`);
 for await (const command of console) {
 	if (command === "hydrate") {
 		if (!step.olderBackend)
-			initCeraliveUpdateNotice({
+			await initCeraliveUpdateNotice({
 				path: step.record,
+				run: (argv) => apt(argv),
 				observe: (outcome) =>
 					process.stdout.write(`${REPLAY_PREFIX}${outcome}\n`),
 				...(step.failWrites
@@ -143,10 +145,14 @@ for await (const command of console) {
 					? async () => {
 							throw new Error("detached update unit unreadable");
 						}
-					: async () => ({
-							completion: Promise.resolve(0),
-							wasAlreadyFinished: true,
-						}),
+					: async (handlers) => {
+							// As the real recovery does once it finds the unit.
+							handlers.onAttached?.();
+							return {
+								completion: Promise.resolve(0),
+								wasAlreadyFinished: true,
+							};
+						},
 				scheduleRetry: () => undefined,
 				resumePeriodicChecks: () => undefined,
 			})

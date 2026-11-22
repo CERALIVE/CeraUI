@@ -97,9 +97,7 @@ export type NotificationOptions = {
 
 const persistentNotifications = new Map<string, PersistentNotification>();
 // An owner's frames for each authenticating client, after the show replay.
-let authenticatedReplay:
-	| ((send: (frame: object) => void) => Promise<void>)
-	| undefined;
+let authenticatedReplay: ((send: (frame: object) => void) => void) | undefined;
 
 // Revisions start over when the backend restarts; this namespaces them.
 const publisher: string = crypto.randomUUID();
@@ -385,30 +383,27 @@ export function removalFrames(name: string): object[] {
 
 /** Lets one owner add frames, decided when each client authenticates, after its show replay. */
 export function setAuthenticatedReplay(
-	replay: ((send: (frame: object) => void) => Promise<void>) | undefined,
+	replay: ((send: (frame: object) => void) => void) | undefined,
 ): void {
 	authenticatedReplay = replay;
 }
 
-export function replayToAuthenticated(
-	send: (frame: object) => void,
-): Promise<void> {
-	return authenticatedReplay?.(send) ?? Promise.resolve();
+export function replayToAuthenticated(send: (frame: object) => void): void {
+	authenticatedReplay?.(send);
 }
 
 export function notificationSendPersistent(
 	conn: MessageSocket,
 	isAuthed = false,
-): Promise<void> {
+) {
 	conn.send(
 		buildMsg("notification", {
 			...getPersistentNotifications(isAuthed),
 			replay: true,
 		}),
 	);
-	return isAuthed
-		? replayToAuthenticated((frame) =>
-				conn.send(buildMsg("notification", frame)),
-			)
-		: Promise.resolve();
+	if (isAuthed)
+		replayToAuthenticated((frame) =>
+			conn.send(buildMsg("notification", frame)),
+		);
 }
