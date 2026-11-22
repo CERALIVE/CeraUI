@@ -9,6 +9,10 @@ import {
 	getHotspotCredentials,
 	rememberHotspotCredentials,
 } from "../modules/wifi/hotspot-credentials.ts";
+import {
+	getDerivedApChannels,
+	setDerivedApChannels,
+} from "../modules/wifi/regdomain.ts";
 import * as wifi from "../modules/wifi/wifi.ts";
 import { wifiAdapterModeCapability } from "../modules/wifi/wifi-adapter-mode.ts";
 import {
@@ -30,6 +34,8 @@ import {
 	resetWifiConnectionModeCache,
 	wifiUpdateDevices,
 } from "../modules/wifi/wifi-interfaces.ts";
+import * as limitedRestore from "../modules/wifi/wifi-limited-hotspot-restore.ts";
+import { wifiRadioIdentity } from "../modules/wifi/wifi-radio-identity.ts";
 import {
 	nmcliFieldNames,
 	nmcliFieldOutput,
@@ -464,7 +470,8 @@ test("startup leaves unqualified hybrid intent pending without exclusive fallbac
 
 for (const secondCard of [false, true]) {
 	test(`limited boot restore retains the sole-owner exception, second card=${secondCard}`, async () => {
-		const f = await hybridFixture();
+		wifiRadioIdentity.resetCollisionHistoryForTest();
+		const f = await hybridFixture(false, true, true);
 		if (secondCard) f.target.objects.delete("clap-wlan0");
 		f.target.permanent("00:00:00:00:00:00");
 		f.row.degradedReason = "permanent-mac-unresolved";
@@ -483,6 +490,9 @@ for (const secondCard of [false, true]) {
 				id: 1,
 				ifname: "wlan1",
 			});
+		const previousChannels = getDerivedApChannels();
+		setDerivedApChannels([{ band: "bg", channel: 1, freqMhz: 2412 }]);
+		f.row.hotspot.bandCapability = ["auto_24"];
 		// Owned writes now verify the predicted keyfile bytes, including on limited restore.
 		const profile: Record<string, string> = {
 			"connection.interface-name": "clap-wlan0",
@@ -491,6 +501,10 @@ for (const secondCard of [false, true]) {
 			"802-11-wireless.band": "bg",
 			"802-11-wireless.channel": "1",
 		};
+		const savedProfile = { ...profile };
+		f.useSavedProfileForUp((uuid) =>
+			uuid === "test-ap" ? profile : undefined,
+		);
 		const resources = firstApInstances(
 			new Set(["test-ap"]),
 			new Map([["test-ap", profile]]),
@@ -543,6 +557,7 @@ for (const secondCard of [false, true]) {
 		});
 		spyOn(nm, "nmConnect").mockImplementation(f.activationDeps.nmConnect);
 		spyOn(nm, "nmDisconnect").mockImplementation(f.activationDeps.nmDisconnect);
+		const restore = spyOn(limitedRestore, "restoreLimitedHotspot");
 		try {
 			await f.restoreFromIntent("hybrid");
 			expect(f.effects.filter((effect) => effect === "up")).toHaveLength(
@@ -555,13 +570,16 @@ for (const secondCard of [false, true]) {
 				channel: "ch_11",
 				conn: "test-ap",
 			});
-			if (!secondCard)
-				expect(f.fields).toMatchObject({
-					"connection.interface-name": "clap-wlan0",
-					"802-11-wireless.band": "bg",
-					"802-11-wireless.channel": "1",
-				});
+			expect(profile).toEqual(savedProfile);
+			expect(f.fields).toEqual({});
+			if (!secondCard) {
+				expect(await restore.mock.results[0]?.value).toEqual({ success: true });
+				expect(
+					await nm.nmDeviceProp("clap-wlan0", "GENERAL.STATE,GENERAL.CON-UUID"),
+				).toEqual(["100 (connected)", "test-ap"]);
+			}
 		} finally {
+			setDerivedApChannels(previousChannels);
 			resources.files.close();
 			await f.restore();
 		}

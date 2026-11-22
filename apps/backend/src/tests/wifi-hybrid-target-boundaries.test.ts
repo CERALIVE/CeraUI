@@ -89,8 +89,7 @@ for (const reason of [
 						[
 							"iw",
 							"--debug",
-							"dev",
-							"wlan0",
+							"phy#0",
 							"interface",
 							"add",
 							"clap-wlan0",

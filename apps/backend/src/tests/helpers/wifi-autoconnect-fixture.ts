@@ -174,8 +174,15 @@ export function autoconnectFixture() {
 			readCapabilities: () => ({
 				staApCombo: { supported: row.supportsApStaConcurrency === true },
 			}),
-			startHotspot: async () => {
-				const result = await startHotspotLocked(MAC, row, deps);
+			startHotspot: async (_device, _publish, attempt, binding) => {
+				const result = await startHotspotLocked(
+					MAC,
+					row,
+					deps,
+					undefined,
+					attempt,
+					binding,
+				);
 				settlePending(row.ifname, true);
 				return result;
 			},
@@ -242,6 +249,7 @@ export function autoconnectFixture() {
 		publications,
 		reads,
 		activations,
+		deletions: network.deletions,
 		deps,
 		seed,
 		sample,

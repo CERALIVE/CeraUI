@@ -331,6 +331,7 @@ export function resetWifiInterfaceDiscoveryForTest(): void {
 	discoveryController.abort();
 	discoveryController = new AbortController();
 	resetWifiScanRefreshForTest();
+	wifiRadioIdentity.resetCollisionHistoryForTest();
 	wifiIfId = 0;
 	wifiDeviceRefreshCompleted = false;
 	classifiedWifiIfnames.clear();

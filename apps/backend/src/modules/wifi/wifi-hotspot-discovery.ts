@@ -16,6 +16,7 @@
 */
 
 import { logger } from "../../helpers/logger.ts";
+import { ID_RE } from "../../helpers/run.ts";
 import {
 	type ConnectionUUID,
 	type MacAddress,
@@ -47,7 +48,10 @@ import {
 import { resolveWifiAdapterOwner } from "./wifi-adapter-owner.ts";
 import { admitWifiRequest } from "./wifi-binding.ts";
 import { channelFromNM } from "./wifi-channels.ts";
-import { isConcurrentApIfname } from "./wifi-concurrent-interface.ts";
+import {
+	concurrentApIfname,
+	isConcurrentApIfname,
+} from "./wifi-concurrent-interface.ts";
 import {
 	getWifiInterfaceByMacAddress,
 	getWifiInterfacesByMacAddress,
@@ -70,7 +74,10 @@ import {
 	wifiAdapterKeyMac,
 	wifiAdapterKeyPort,
 } from "./wifi-permanent-mac.ts";
-import { wifiRadioIdentity } from "./wifi-radio-identity.ts";
+import {
+	radioIdentityReaders,
+	wifiRadioIdentity,
+} from "./wifi-radio-identity.ts";
 
 const hotspotProfilePins = new WeakMap<
 	WifiHotspot,
@@ -819,13 +826,53 @@ async function profileMatchesPort(
 		"match.path",
 		"connection.interface-name",
 	] as const);
-	if (fields?.[0] === port) return true;
+	if (fields?.[0]) return fields[0] === port;
 	const ifname = fields?.[1];
 	return Boolean(
 		ifname &&
 			isConcurrentApIfname(ifname) &&
 			wifiRadioIdentity.state.rows.get(ifname.slice(5))?.devicePath === port,
 	);
+}
+
+/** A saved pin is not permission to move an AP to a different physical port. */
+export async function hotspotProfileMatchesRadio(
+	uuid: string,
+	ifname: string,
+	physicalMac: string,
+	devicePath: string | undefined,
+	requirePortPin: boolean,
+	hybrid?: { readonly ifname: string; readonly savedUuid: boolean },
+): Promise<{ readonly staleMatch?: string } | false | undefined> {
+	const fields = await nmConnGetFields(uuid, [
+		"match.path",
+		"connection.interface-name",
+		"802-11-wireless.mode",
+		"802-11-wireless.mac-address",
+		...(hybrid ? (["match.interface-name"] as const) : []),
+	] as const);
+	if (!fields) return undefined;
+	const [path, name, mode, mac, match] = fields;
+	if (mode !== "ap") return false;
+	if (mac && normalizeMacAddress(mac) !== physicalMac) return false;
+	if (path ? path !== devicePath : requirePortPin) return false;
+	if (!hybrid)
+		return !name || name === ifname || name === concurrentApIfname(ifname)
+			? {}
+			: false;
+	const stale = [name, match].filter((pin) => pin && pin !== hybrid.ifname);
+	if (!stale.length) return {};
+	// Hybrid profiles may omit the MAC pin. The saved UUID ties them to the
+	// owner whose permanent MAC and literal port the operation guard verifies.
+	if (
+		!hybrid.savedUuid ||
+		!path ||
+		stale.some((pin) => !isConcurrentApIfname(pin) || !ID_RE.test(pin))
+	)
+		return false;
+	const live = await radioIdentityReaders.listInterfaces();
+	if (!live || stale.some((pin) => live.includes(pin))) return false;
+	return match && match !== hybrid.ifname ? { staleMatch: match } : {};
 }
 
 /**
