@@ -40,6 +40,7 @@ import {
 	isForeignCardLevel,
 	settleAudioMeterBridge,
 	stopAudioMeterBridge,
+	toAudioLevelMessage,
 } from "../modules/streaming/audio-meter-bridge.ts";
 import type { AutoAsrcResolution } from "../modules/streaming/auto-audio.ts";
 import { clearCapabilitiesCache } from "../modules/streaming/capabilities.ts";
@@ -272,37 +273,43 @@ describe("resolveMeterPreference — 'Auto' names the SAME card the start path w
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 
-function bridgeHarness(meterPreference: () => string | null) {
+function bridgeHarness(meterPreference?: () => string | null) {
 	let handler: EventHandler | undefined;
 	const broadcasts: AudioLevelMessage[] = [];
 	const reloads: unknown[] = [];
 
 	const subscription: Subscription = {
-		result: { topics: ["audio-level"] },
+		result: { subscribed: ["audio-level"] },
 		close: () => {},
 	};
-	const client: CerastreamClient = {
+	const client = {
 		subscribeEvents: async (_params, h) => {
 			handler = h;
 			return subscription;
 		},
 		close: async () => {},
-		hello: { schema_version: "0.9.0" },
+		hello: {
+			protocol: "cerastream-ipc/1",
+			schema_version: "0.21.0",
+			engine_version: "2026.9.8",
+		},
 		rawRequest: async (_method: string, params?: unknown) => {
 			reloads.push(params);
 			return {};
 		},
-		// biome-ignore lint/suspicious/noExplicitAny: the bridge uses only these five members.
-	} as any;
+	} satisfies Pick<CerastreamClient, "subscribeEvents" | "close" | "hello"> & {
+		rawRequest: (method: string, params?: unknown) => Promise<unknown>;
+	};
 
-	const deps: AudioMeterBridgeDeps = {
-		connect: async () => client,
+	const deps: Partial<AudioMeterBridgeDeps> = {
+		// Only the subscription, handshake and raw reload are exercised.
+		connect: async () => client as unknown as CerastreamClient,
 		connectOptions: {},
 		broadcast: (payload) => broadcasts.push(payload),
-		// Production wiring, with the Auto resolution injected.
-		meterPreference,
-		meterPreferencePresent: () => false,
-		meterSilenced: () => false,
+		// Otherwise exercise the live selection and inventory with the real defaults.
+		...(meterPreference === undefined
+			? {}
+			: { meterPreference, meterPreferencePresent: () => false }),
 		logger: silent,
 		random: () => 0.5,
 		now: () => 1_000,
@@ -508,7 +515,7 @@ function videoDevice(inputId: string, kind: string): CaptureDevice {
  * nothing — the meter kept reporting the previous device indefinitely, since
  * `set_preferred_device` early-returns on an unchanged value.
  */
-describe("streaming.setConfig — a VIDEO source change re-points the idle meter under Auto", () => {
+describe("HDMI Auto meter — live source and audio inventory", () => {
 	const savedMockMode = process.env.MOCK_MODE;
 	const savedNodeEnv = process.env.NODE_ENV;
 	let root: string | undefined;
@@ -556,8 +563,83 @@ describe("streaming.setConfig — a VIDEO source change re-points the idle meter
 		else process.env.NODE_ENV = savedNodeEnv;
 	});
 
-	test("a source-only save re-pushes the newly-resolved meter device", async () => {
+	test("HDMI Auto without a capture PCM reports mode_none at the edge and on every idle frame", async () => {
+		if (root === undefined) throw new Error("missing ALSA fixture");
 		applyObservedEngineDevices([videoDevice("video0", "hdmi")]);
+		getConfig().source = "video0";
+		const pcm = join(root, "card3", "pcmC3D0c");
+		await mkdir(pcm);
+		await updateAudioDevices(root);
+		const h = bridgeHarness();
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+
+		h.emit(foreignUsbLevel);
+		await rm(pcm, { recursive: true });
+		await updateAudioDevices(root);
+		h.emit(foreignUsbLevel);
+		await updateAudioDevices(root);
+		h.emit(foreignUsbLevel);
+
+		const hdmiFloor = {
+			...foreignUsbLevel,
+			source: { identity: `card:${HDMI_CARD_ID}`, owner: "sidecar" },
+			rms_db: [-1e6, -1e6],
+			peak_db: [-1e6, -1e6],
+		} as const satisfies EventParams;
+		await mkdir(pcm);
+		await updateAudioDevices(root);
+		h.emit(hdmiFloor);
+
+		// An unlisted HDMI card is a different Auto verdict: pipeline default.
+		await rm(join(root, "card3"), { recursive: true });
+		await updateAudioDevices(root);
+		h.emit(foreignUsbLevel);
+
+		expect(h.broadcasts).toEqual([
+			{ unavailable: true, reason: "not_selected_device" },
+			{ unavailable: true, reason: "mode_none" }, // capture PCM removed
+			{ unavailable: true, reason: "mode_none" }, // unrelated level suppressed
+			{ unavailable: true, reason: "mode_none" }, // no extra edge for unchanged scan
+			{ unavailable: true, reason: "handoff" }, // capture PCM restored
+			toAudioLevelMessage(hdmiFloor),
+			{ unavailable: true, reason: "handoff" }, // HDMI card unlisted
+			toAudioLevelMessage(foreignUsbLevel),
+		]);
+	});
+
+	test("a running HDMI program keeps its level after the idle capture verdict changes", async () => {
+		if (root === undefined) throw new Error("missing ALSA fixture");
+		applyObservedEngineDevices([videoDevice("video0", "hdmi")]);
+		getConfig().source = "video0";
+		const pcm = join(root, "card3", "pcmC3D0c");
+		await mkdir(pcm);
+		await updateAudioDevices(root);
+		const h = bridgeHarness();
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+		updateStatus(true);
+
+		await rm(pcm, { recursive: true });
+		await updateAudioDevices(root);
+		const programLevel = {
+			...foreignUsbLevel,
+			source: { identity: `card:${HDMI_CARD_ID}`, owner: "streaming" },
+		} as const satisfies EventParams;
+		h.emit(programLevel);
+
+		expect(h.broadcasts).toEqual([
+			{ unavailable: true, reason: "handoff" },
+			toAudioLevelMessage(programLevel),
+		]);
+	});
+
+	test("a source-only save re-pushes the newly-resolved meter device", async () => {
+		if (root === undefined) throw new Error("missing ALSA fixture");
+		applyObservedEngineDevices([videoDevice("video0", "hdmi")]);
+		// The injected HDMI resolution names a card that can capture.
+		await mkdir(join(root, "card3", "pcmC3D0c"));
+		await updateAudioDevices(root);
 
 		// The engine's idle meter starts out following the USB card (the operator's
 		// previous camera resolved there); the HDMI source is what they pick next.
