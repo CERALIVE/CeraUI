@@ -182,7 +182,7 @@ The build pipeline runs manually via workflow dispatch.
 | Input | Required | Description |
 |-------|----------|-------------|
 | `release_type` | Yes | `stable` or `beta` |
-| `release_notes` | No | Description of changes |
+| `release_notes` | No | Maintainer-written Markdown describing what changed since the previous release |
 | `force_version` | No | Override auto-detected stable version (`YYYY.M.PATCH`; must match `package.json`) |
 
 ### Jobs
@@ -195,7 +195,25 @@ The build pipeline runs manually via workflow dispatch.
    - Rejects a calculated tag or GitHub release that already exists
    - Outputs version, tag, and beta status
 
-2. **release-package-contracts**
+2. **prepare-release-body**
+   - Leads with the supplied Markdown under **Release Notes**. Blank input uses
+     GitHub's **What's Changed** list of merged PR titles and numbers since the
+     nearest CeraUI CalVer tag on the dispatch commit's first-parent history.
+     If there is no such tag, GitHub chooses its initial range. If there are
+     no merged PRs in the range, the body says so.
+   - Ends with a collapsed **Dependencies** section containing the unchanged
+     download tables and dependency tree
+   - Keeps supplied notes unchanged. Notes may not contain literal `<details`
+     or `</details`, even in code, because the footer uses a `<details>` block
+     to collapse **Dependencies**. Preflight reports the offending notes line.
+   - Rejects a code fence or HTML block that swallows the generated footer,
+     or a complete body over 120,000 UTF-16 code units, below the publisher's
+     truncation limit.
+   - Stores the validated Markdown as a workflow artifact before builds or
+     publication. Only this job gets the write scope needed to preview GitHub
+     notes; it does not use release secrets or create a tag or release.
+
+3. **release-package-contracts**
    - Installs dependencies from the frozen Bun lockfile
    - Runs `bun run test:release-package-contracts`
    - Gates provenance, release dependency ordering, and dispatch-input security
@@ -204,16 +222,16 @@ The build pipeline runs manually via workflow dispatch.
    - Prepares the CI-only writable runtime directories required by backend tests
    - Must pass before archive builds, Debian builds, or federation publication
 
-3. **build-ceraui-system** (matrix: arm64, amd64)
+4. **build-ceraui-system** (matrix: arm64, amd64)
    - Builds full system with installation scripts
    - Creates compressed archive (.tar.gz)
    - Uploads artifact: `ceraui-system-{arch}`
 
-4. **build-debian-package** (matrix: arm64, amd64)
+5. **build-debian-package** (matrix: arm64, amd64)
    - Creates Debian package for target architecture
    - Uploads artifact: `ceraui-debian-{arch}`
 
-5. **publish-federation**
+6. **publish-federation**
    - Builds, signs, verifies, and conditionally uploads version-matched federation bundles
    - Federation compiles the complete catalog in an isolated Paraglide locale-module
      layout and fully minifies its final ES modules. It does not externalize i18n or
@@ -223,14 +241,14 @@ The build pipeline runs manually via workflow dispatch.
    - Reuses an existing version only when its signed payload digest matches
    - Rolls back keys created by a failed fresh attempt; never overwrites an existing key
 
-6. **create-release**
+7. **create-release**
    - Creates GitHub release with all assets
    - Creates the release tag from the exact workflow dispatch SHA
    - Rechecks that the tag/release is unused, then verifies the created tag commit
-   - Generates changelog from commit history
+   - Reads the validated body artifact without regenerating the notes
    - Marks beta releases as pre-release
 
-7. **dispatch-apt-reindex** (stable only)
+8. **dispatch-apt-reindex** (stable only)
    - Runs only after `create-release` attaches the ARM64 and AMD64 `.deb` assets
    - Dispatches `apt-reindex` to `CERALIVE/apt-worker`, the sole owner of R2
      uploads and signed APT metadata (`Packages`, `Release`, `InRelease`)
