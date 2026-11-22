@@ -3,8 +3,8 @@
 
   A thin AppDialog shell in the DeviceHealthDialog pattern: the header carries
   the stream-state pill at its inline end, and SystemLogsView owns the body. The
-  two shipped log downloads live in its Downloads region. No title icon: the
-  only lime in this view is the pill's Live state. Below 1024 px the header also
+  two shipped log downloads live in its Downloads region. No title icon: lime
+  marks the pill's Live state and the one primary sharing action, Export logs. Below 1024 px the header also
   holds the boot button (wider, the side column holds the boot picker).
   The chosen boot lives exactly as long as the open view: any close (its own or
   the parent's) or unmount drops it, so the next open starts on All boots, and

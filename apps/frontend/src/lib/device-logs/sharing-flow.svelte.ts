@@ -25,6 +25,8 @@ import type {
 	LogQueryInput,
 } from "@ceraui/rpc/schemas";
 
+import { untrack } from "svelte";
+
 import { onHistoryChanged } from "./history-bus";
 import {
 	bundleManifestReply,
@@ -47,10 +49,10 @@ export interface SharingDeps {
 		createBundle(): Promise<LogExportOutput>;
 	};
 	readonly download: (path: string) => void;
-	/** The boot picker: Export follows it when it was used after Raw's last view. */
+	/** The boot picker: Export follows it when it was used after Raw's last view (its `intent` moved on). */
 	readonly picker?: {
 		readonly boot: LogBootInfo | null;
-		onPick(listener: () => void): () => void;
+		readonly intent: number;
 	};
 }
 
@@ -101,9 +103,8 @@ export class SharingFlow {
 
 	readonly #deps: SharingDeps;
 	readonly #stopHistory: () => void;
-	readonly #stopPick: (() => void) | undefined;
-	// Whether the picker was used after Raw last published (or Raw never did).
-	#pickerLeads = true;
+	// The picker's intent when Raw last published; none until it does.
+	#publishedAt: number | undefined;
 	#exportRun = 0;
 	#bundleRun = 0;
 	#viewOwner: object | undefined;
@@ -112,9 +113,6 @@ export class SharingFlow {
 	constructor(deps: SharingDeps) {
 		this.#deps = deps;
 		this.#stopHistory = onHistoryChanged(() => this.#historyChanged());
-		this.#stopPick = deps.picker?.onPick(() => {
-			this.#pickerLeads = true;
-		});
 	}
 
 	/** One mounted Raw panel publishes; its snapshot survives a switch to Storage. */
@@ -129,7 +127,7 @@ export class SharingFlow {
 				if (this.#viewOwner !== owner) return;
 				this.view = query;
 				this.viewSpan = span;
-				this.#pickerLeads = false;
+				this.#publishedAt = this.#pickerIntent();
 			},
 			dispose: () => {
 				if (this.#viewOwner === owner) this.#viewOwner = undefined;
@@ -139,12 +137,12 @@ export class SharingFlow {
 
 	openExport(): void {
 		if (this.exportStep !== "closed") return;
-		const picker = this.#deps.picker;
+		const intent = this.#pickerIntent();
 		this.exportScope = captureExportScope(
 			this.view,
 			this.viewSpan,
-			picker?.boot ?? null,
-			picker !== undefined && this.#pickerLeads,
+			this.#deps.picker?.boot ?? null,
+			intent !== undefined && intent !== this.#publishedAt,
 		);
 		this.exportStep = "confirm";
 	}
@@ -225,11 +223,16 @@ export class SharingFlow {
 		this.#viewOwner = undefined;
 		this.view = RAW_OPENING_QUERY;
 		this.viewSpan = "filters";
-		this.#pickerLeads = true;
+		this.#publishedAt = undefined;
 		this.#stopHistory();
-		this.#stopPick?.();
 		this.closeExport();
 		this.closeBundle();
+	}
+
+	// Read without tracking: a publication can run inside a Raw effect.
+	#pickerIntent(): number | undefined {
+		const picker = this.#deps.picker;
+		return picker === undefined ? undefined : untrack(() => picker.intent);
 	}
 
 	async #preview(): Promise<void> {

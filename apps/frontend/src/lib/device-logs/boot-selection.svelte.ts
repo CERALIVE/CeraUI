@@ -19,7 +19,25 @@ class BootSelection {
 		| null
 	>(null);
 	readonly #listeners = new Set<BootListener>();
-	readonly #pickListeners = new Set<() => void>();
+	// Advanced by every pick, a repeat included, and never reset: an async result started under an
+	// older value lost to that pick (`since()`).
+	#intent = $state(0);
+	#openedAt = 0;
+
+	get intent(): number {
+		return this.#intent;
+	}
+
+	/** Whether the boot picker was used since the view opened, All boots included. */
+	get picked(): boolean {
+		return this.#intent !== this.#openedAt;
+	}
+
+	/** For an async result started now: false once any pick follows, so its reply must not apply. */
+	since(): () => boolean {
+		const at = this.#intent;
+		return () => this.#intent === at;
+	}
 
 	get boot(): LogBootInfo | null {
 		return this.#boot;
@@ -40,7 +58,7 @@ class BootSelection {
 
 	/** Reusing the same boot is a no-op only when Raw already shows its whole scope, not a moment in it. */
 	choose(boot: LogBootInfo | null): void {
-		for (const listener of this.#pickListeners) listener();
+		this.#intent += 1;
 		const bootId = boot?.bootId ?? null;
 		if (
 			bootId === this.bootId &&
@@ -58,14 +76,6 @@ class BootSelection {
 		}
 	}
 
-	/** Every choice, a repeat of the shown one included (System Logs: Export then follows the picker). */
-	onPick(listener: () => void): () => void {
-		this.#pickListeners.add(listener);
-		return () => {
-			this.#pickListeners.delete(listener);
-		};
-	}
-
 	onChoose(listener: BootListener): () => void {
 		this.#listeners.add(listener);
 		return () => {
@@ -77,22 +87,21 @@ class BootSelection {
 	reset(): void {
 		this.#boot = null;
 		this.rawScope = null;
+		this.#openedAt = this.#intent;
 	}
 
 	/**
 	 * After stored history was deleted: back to All boots, telling the stores,
 	 * when the device no longer lists the chosen boot. A failed read keeps the
-	 * choice, and so does a boot chosen while the list was being read.
+	 * choice, and so does any pick made while the list was being read.
 	 */
 	async recheck(read: () => Promise<readonly LogBootInfo[]>): Promise<void> {
 		const chosen = this.bootId;
 		if (chosen === null) return;
+		const still = this.since();
 		try {
 			const boots = await read();
-			if (
-				this.bootId === chosen &&
-				!boots.some((boot) => boot.bootId === chosen)
-			)
+			if (still() && !boots.some((boot) => boot.bootId === chosen))
 				this.choose(null);
 		} catch (error) {
 			console.error("System Logs could not re-check the chosen boot:", error);

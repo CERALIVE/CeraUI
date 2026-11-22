@@ -1050,14 +1050,7 @@ describe("SharingFlow: the export scope is fixed when the confirmation opens", (
 
 	it("follows the picker used after Raw's last view, and Raw again once it publishes", () => {
 		const { createExport, previewBundle, createBundle, download } = setup();
-		let picked = () => {};
-		const picker = {
-			boot: null,
-			onPick: (listener: () => void) => {
-				picked = listener;
-				return () => {};
-			},
-		};
+		const picker = { boot: null, intent: 0 };
 		const flow = new SharingFlow({
 			logs: { createExport, previewBundle, createBundle },
 			download,
@@ -1075,7 +1068,7 @@ describe("SharingFlow: the export scope is fixed when the confirmation opens", (
 		expect(scopeOnOpen()).toEqual({ ...RAW_OPENING_QUERY, boot: "all" });
 		raw.publish(opened);
 		expect(scopeOnOpen()).toEqual(opened);
-		picked();
+		picker.intent += 1;
 		expect(scopeOnOpen()).toEqual({ ...opened, boot: "all" });
 		raw.publish(later);
 		expect(scopeOnOpen()).toEqual(later);

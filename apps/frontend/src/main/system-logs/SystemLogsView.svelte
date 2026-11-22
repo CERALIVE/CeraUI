@@ -23,7 +23,7 @@
 import { m } from '@ceraui/i18n/svelte';
 import type { LogStorage } from '@ceraui/rpc/schemas';
 import { Info, LifeBuoy, RefreshCw, TriangleAlert } from '@lucide/svelte';
-import { onDestroy } from 'svelte';
+import { onDestroy, untrack } from 'svelte';
 import { MediaQuery } from 'svelte/reactivity';
 
 import { Button } from '$lib/components/ui/button';
@@ -89,6 +89,12 @@ let anchor = $derived<RawMoment | undefined>(
 );
 let momentUnknown = $derived(context?.tab === 'raw' && context.momentUnknown === true);
 let around = $state.raw<AroundPage>();
+// When the open link was issued (a deep link's context, a View raw logs reply): a boot picked after
+// it outranks it, also while this view still loads and Raw logs is not mounted.
+let linkStill = $state.raw<() => boolean>(() => true);
+$effect.pre(() => {
+	if (context !== undefined) linkStill = untrack(() => bootSelection.since());
+});
 let view = $state<HTMLElement>();
 let tabList = $state<HTMLElement | null>(null);
 let storageHeading = $state<HTMLHeadingElement>();
@@ -235,7 +241,7 @@ $effect(() => {
 					<!-- Tab goes from the tabs straight to the panel's controls; the panel itself is no stop. -->
 					<Tabs.Content class="min-h-0 overflow-y-auto" data-testid="system-logs-panel-{tab}" tabindex={-1} value={tab}>
 						{#if tab === 'events' && current === 'events'}
-							<EventsPanel onviewraw={(page) => { around = page; selected = 'raw'; }} />
+							<EventsPanel onviewraw={(page) => { around = page; linkStill = bootSelection.since(); selected = 'raw'; }} />
 						{/if}
 						{#if tab === 'storage' && current === 'storage'}
 							<div class="divide-y">
@@ -245,7 +251,7 @@ $effect(() => {
 						{/if}
 						{#if tab === 'raw' && current === 'raw'}
 							{#key anchor}
-								<RawLogsPanel {anchor} {around} {momentUnknown} {sharing} />
+								<RawLogsPanel {anchor} {around} {linkStill} {momentUnknown} {sharing} />
 							{/key}
 						{/if}
 					</Tabs.Content>

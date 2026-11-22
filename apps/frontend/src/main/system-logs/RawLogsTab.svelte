@@ -27,8 +27,7 @@ import KeepWords from './KeepWords.svelte';
 import RawLogList from './RawLogList.svelte';
 import RawLogsFilterBar from './RawLogsFilterBar.svelte';
 
-// `chosen`: the boot picker was used while the tab was opening, so it opens on that choice, All boots included.
-let { around, chosen = false, momentUnknown = false, onquery }: { around?: AroundPage; chosen?: boolean; momentUnknown?: boolean; onquery?: (query: LogQueryInput, span?: ExportSpan) => void } = $props();
+let { around, momentUnknown = false, onquery }: { around?: AroundPage; momentUnknown?: boolean; onquery?: (query: LogQueryInput, span?: ExportSpan) => void } = $props();
 
 const ANNOUNCE: Record<RawAnnouncement['kind'], (count: number) => string> = {
 	following: () => m['systemLogs.announce.following'](),
@@ -54,8 +53,10 @@ const view = new RawView({
 	now: () => Date.now(),
 	onQuery: (query, span) => onquery?.(query, span),
 });
-const initial = untrack(() => ({ around, boot: bootSelection.boot, chosen }));
-void (initial.around !== undefined || (initial.boot === null && !initial.chosen)
+// A link opens on its moment; otherwise the picker's choice once it was used in this view (All boots
+// included), else This boot.
+const initial = untrack(() => ({ around, boot: bootSelection.boot, picked: bootSelection.picked }));
+void (initial.around !== undefined || !initial.picked
 	? view.start(initial.around)
 	: view.chooseBoot(initial.boot?.bootId ?? null, initial.boot?.current ? initial.boot.bootId : undefined));
 const stopBoot = bootSelection.onChoose((bootId) =>

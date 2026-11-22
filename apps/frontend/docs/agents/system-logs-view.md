@@ -114,8 +114,8 @@ density. It is not a redesign.
   Downloads heading (`systemLogs.sharing.heading`). Export saves one scope,
   `SharingFlow.exportScope`, captured by `openExport()` (the toolbar, the
   Downloads row and a refused bundle's Export this view all call it), frozen,
-  rendered by the confirmation and sent by the ticket request as the same
-  object until the dialog closes; Raw publishing meanwhile changes neither.
+  rendered by the confirmation; the ticket request is built only from it until
+  the dialog closes, so Raw publishing meanwhile changes neither.
   `captureExportScope` (`lib/device-logs/sharing.ts`) is the one precedence
   rule, the operator's latest action: Raw's view as it last published it (an
   exact moment included, also after Raw closes) unless the boot picker was used
@@ -123,13 +123,30 @@ density. It is not a redesign.
   opened); then Raw's level, source and search filters with the picker's boots,
   which replace Raw's time window as Raw itself does on a pick
   (`raw-filter.ts` keeps a window only without a chosen boot;
-  `chooseBoot(null)` is All stored). Every choice counts, a repeat of the
-  highlighted boot included (`bootSelection.onPick`). A pick before the Raw tab shows
-  cancels a linked moment still loading, so Raw opens on the pick, All boots
-  included (`RawLogsPanel`, `chosen`); on anchored Raw any pick, the highlighted
-  boot included, leaves the moment for that whole boot, since `choose()` skips a
-  repeat only while Raw shows the boot's whole scope (`rawScope.anchored`). The
-  visible Raw view and the export therefore never disagree about a pick. The confirmation lists
+  `chooseBoot(null)` is All stored).
+  The order of actions is one counter, `bootSelection.intent`
+  (`lib/device-logs/boot-selection.svelte.ts`): every `choose()` advances it, a
+  repeat of the highlighted boot and All boots included, and it is never reset.
+  Each async result that could change Raw or the scope takes `since()` when it
+  starts and applies only while that still holds:
+  - a deep link (`SystemLogsView` takes it when the context arrives, before the
+    availability probe; `RawLogsPanel` skips the lookup, discards its reply, and
+    drops a link not yet shown, so Raw opens on the pick);
+  - an Events "View raw logs" lookup (`EventsTab` takes it at the click; a reply
+    after a pick does not open Raw; a new View raw logs after the pick does);
+  - the post-deletion boot recheck (`bootSelection.recheck`);
+  - the export ticket keeps its own run fence and reads only the frozen scope.
+  The flow compares the counter at Raw's last publication with the current one
+  (`#publishedAt`). Raw paging publishes the query it requests when the request
+  starts, with the pick already applied, and fences late page replies by
+  generation, so it needs no token. A plain Raw tab opens on the picker's choice
+  once the picker was used in this view (`bootSelection.picked`, All boots
+  included), else on This boot. On anchored Raw any pick, the highlighted boot
+  included, leaves the moment for that whole boot (`choose()` skips a repeat
+  only while Raw shows the boot's whole scope, `rawScope.anchored`). Not covered
+  by the counter: a link the operator asks for after a pick (it is the later
+  action and wins), and what the device still retains when the ticket runs.
+  The confirmation lists
   the scope in the Raw and boot picker words (`sharing-export-scope`: Boots,
   Level, Sources, then Search and Time when set; Time is "From {time}" or
   "{from} to {to}" for a bounded window; a concrete boot that is not the

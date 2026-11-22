@@ -16,12 +16,12 @@ import { onDestroy, untrack } from 'svelte';
 import { lazyDialog } from '$lib/components/dialogs/lazy-dialog.svelte';
 import { Button } from '$lib/components/ui/button';
 import { Skeleton } from '$lib/components/ui/skeleton';
-import { bootSelection } from '$lib/device-logs/boot-selection.svelte';
 import { locateMoment, type RawMoment } from '$lib/device-logs/raw-anchor';
 import type { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';
 import { rpc } from '$lib/rpc/client';
 
-let { anchor, around, momentUnknown = false, sharing }: { anchor?: RawMoment; around?: Extract<LogAroundOutput, { ok: true }>; momentUnknown?: boolean; sharing?: SharingFlow } = $props();
+// `linkStill`: false once a boot was picked after the link (the anchor or `around`) was issued.
+let { anchor, around, linkStill = () => true, momentUnknown = false, sharing }: { anchor?: RawMoment; around?: Extract<LogAroundOutput, { ok: true }>; linkStill?: () => boolean; momentUnknown?: boolean; sharing?: SharingFlow } = $props();
 const publisher = untrack(() => sharing?.bindView());
 let result = $state.raw<LogAroundOutput | null>(untrack(() => around ?? null));
 let pending = $state(false);
@@ -30,14 +30,14 @@ let missed = $state(false);
 let request: AbortController | undefined;
 
 async function locate(): Promise<void> {
-	if (anchor === undefined) return;
+	if (anchor === undefined || !linkStill()) return;
 	request?.abort();
 	const current = new AbortController();
 	request = current;
 	result = null;
 	pending = true;
 	const reply = await locateMoment(rpc, anchor, current.signal);
-	if (current.signal.aborted) return;
+	if (current.signal.aborted || !linkStill()) return;
 	result = reply;
 	missed = reply === null;
 	pending = false;
@@ -53,7 +53,6 @@ void untrack(locate);
 onDestroy(() => {
 	request?.abort();
 	publisher?.dispose();
-	stopPick();
 });
 
 const chunk = lazyDialog(() => import('./RawLogsTab.svelte'));
@@ -61,16 +60,15 @@ chunk.request();
 
 const RawLogsTab = $derived(chunk.current);
 
-// A boot picked before the tab shows outranks a linked moment still loading: the tab opens on the pick.
-let chosen = $state(false);
-const stopPick = bootSelection.onPick(() => {
-	if (RawLogsTab && !pending && result?.ok !== false) return;
-	chosen = true;
-	latest();
+// A pick after the link was issued outranks it, also one made before this panel mounted (the view
+// still loading): the tab opens on the pick. Once the tab shows the link, Raw follows later picks itself.
+const superseded = $derived(!linkStill());
+$effect(() => {
+	if (superseded) request?.abort();
 });
 </script>
 
-{#if result?.ok === false}
+{#if result?.ok === false && !superseded}
 	<div
 		class="border-status-warning/30 bg-status-warning/10 m-3 flex flex-col gap-3 rounded-lg border p-3"
 		data-testid="raw-anchor-failure"
@@ -89,8 +87,8 @@ const stopPick = bootSelection.onPick(() => {
 			<Button onclick={latest} size="sm" variant="ghost">{m['systemLogs.anchor.leave']()}</Button>
 		</div>
 	</div>
-{:else if RawLogsTab && !pending}
-	<RawLogsTab around={result?.ok ? result : undefined} {chosen} momentUnknown={!chosen && (momentUnknown || missed)} onquery={publisher?.publish} />
+{:else if RawLogsTab && (!pending || superseded)}
+	<RawLogsTab around={!superseded && result?.ok ? result : undefined} momentUnknown={!superseded && (momentUnknown || missed)} onquery={publisher?.publish} />
 {:else if chunk.failed}
 	<div
 		class="border-status-warning/30 bg-status-warning/10 m-4 flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center"

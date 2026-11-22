@@ -15,6 +15,8 @@ const pushToPage = new WeakMap<Page, (message: string) => void>();
 const listReplies = new WeakMap<Page, PromiseWithResolvers<void>>();
 const replaceHistory = new WeakSet<Page>();
 /** Holds a page's `logs.around` reply until the test releases it, then answers BUSY, or the device's reply when `real`. */
+/** Holds a page's `logs.getStorage` reply (System Logs' availability probe) until the test releases it. */
+const heldStorage = new WeakMap<Page, PromiseWithResolvers<void>>();
 const heldAround = new WeakMap<Page, { release: PromiseWithResolvers<void>; sent: number; real?: boolean }>();
 
 /**
@@ -40,6 +42,7 @@ test.beforeEach(async ({ page, pageRpc }) => {
 	await page.routeWebSocket(/\/ws(?:\?|$)/, socket => {
 		const server = socket.connectToServer();
 		const aroundIds = new Set<string>();
+		const storageIds = new Set<string>();
 		const listIds = new Set<string>();
 		pushToPage.set(page, message => {
 			socket.send(message);
@@ -55,6 +58,7 @@ test.beforeEach(async ({ page, pageRpc }) => {
 			if (Array.isArray(frame.path) && frame.path.join('.') === 'logs.around')
 				aroundIds.add(frame.id);
 			if (Array.isArray(frame.path) && frame.path.join('.') === 'events.list') listIds.add(frame.id);
+			if (Array.isArray(frame.path) && frame.path.join('.') === 'logs.getStorage') storageIds.add(frame.id);
 			const counted = heldAround.get(page);
 			if (counted && Array.isArray(frame.path) && frame.path.join('.') === 'logs.around') counted.sent += 1;
 			if (Array.isArray(frame.path) && frame.path.join('.') === 'logs.query')
@@ -72,6 +76,15 @@ test.beforeEach(async ({ page, pageRpc }) => {
 					frame.result.events[1].at += 1000;
 					message = JSON.stringify(frame);
 				}
+			}
+			const probe = heldStorage.get(page);
+			if (probe && typeof message === 'string' && storageIds.has(JSON.parse(message).id)) {
+				const reply = message;
+				void probe.promise.then(() => {
+					socket.send(reply);
+					pageRpc.acceptServerMessage(reply);
+				});
+				return;
 			}
 			const held = heldAround.get(page);
 			if (held && typeof message === 'string' && aroundIds.has(JSON.parse(message).id)) {
@@ -245,6 +258,67 @@ test('Export keeps the scope it confirmed while the linked Raw view is still loa
 		filter: { sources: [], levels: ['error', 'warning', 'info'] },
 		boot: 'all',
 	});
+});
+
+/** Export logs from the toolbar: the scope it states, then the request it sends. */
+async function exportAll(page: Page): Promise<void> {
+	const logs = page.getByRole('dialog', { name: 'System Logs' });
+	await logs.getByRole('group', { name: 'Downloads' }).getByRole('button', { name: 'Export logs', exact: true }).click();
+	const confirm = page.getByRole('dialog', { name: 'Export this view' });
+	await expect(confirm.getByTestId('sharing-export-scope').locator('dt, dd')).toHaveText([
+		'Boots', 'All boots', 'Level', 'Info', 'Sources', 'All sources',
+	]);
+	await confirm.getByRole('button', { name: 'Download export' }).click();
+	await expect(exports.get(page)?.promise).resolves.toEqual({
+		filter: { sources: [], levels: ['error', 'warning', 'info'] },
+		boot: 'all',
+	});
+}
+
+test('a phone pick of All boots while System Logs still loads outranks the linked moment, and a new Export saves it', { tag: '@desktop-only' }, async ({ page, pageRpc }) => {
+	const probe = Promise.withResolvers<void>();
+	heldStorage.set(page, probe);
+	await page.setViewportSize({ width: 375, height: 812 });
+	await emit(pageRpc, {
+		name: 'view-logs-pick', type: 'error', msg: 'Stream failed',
+		key: 'notifications.streamStartInternalFailed',
+		is_dismissable: true, is_persistent: false, duration: 60,
+	});
+	await page.locator('[data-sonner-toast]').getByRole('button', { name: 'View logs' }).click();
+	const logs = page.getByRole('dialog', { name: 'System Logs' });
+	await expect(logs.getByTestId('system-logs-loading')).toBeVisible();
+
+	// All boots is already highlighted; picking it again is still the operator's action.
+	await logs.getByRole('button', { name: /^Choose a boot/ }).click();
+	await page.getByTestId('boot-picker').getByTestId('boot-option-all').click();
+	probe.resolve();
+
+	await expect(logs.getByTestId('raw-logs')).toBeVisible();
+	await expect.poll(() => queries.get(page)?.at(-1)?.boot).toBe('all');
+	await expect(logs.getByTestId('raw-anchor')).toHaveCount(0);
+	await exportAll(page);
+});
+
+test('re-picking the highlighted All boots while View raw logs is out keeps its late reply from opening Raw, and a new Export saves All boots', { tag: '@desktop-only' }, async ({ page }) => {
+	const held = { release: Promise.withResolvers<void>(), sent: 0, real: true };
+	heldAround.set(page, held);
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await navigateTo(page, 'settings');
+	await page.getByRole('button', { name: 'System Logs' }).first().click();
+	const logs = page.getByRole('dialog', { name: 'System Logs' });
+	const link = logs.getByTestId('event-row').first().getByRole('button', { name: 'View raw logs' });
+	await link.click();
+	await expect(link).toHaveAttribute('aria-disabled', 'true');
+
+	await logs.getByTestId('boot-picker').getByTestId('boot-option-all').click();
+	held.release.resolve();
+
+	// Settled once the link is no longer pending; Events stays the tab and Raw never opened.
+	await expect(link).not.toHaveAttribute('aria-disabled');
+	await expect(logs.getByRole('tab', { name: 'Events' })).toHaveAttribute('aria-selected', 'true');
+	await expect(logs.getByTestId('raw-logs')).toHaveCount(0);
+	expect(held.sent).toBe(1);
+	await exportAll(page);
 });
 
 test('a notice that does not point to the logs offers no View logs', async ({ page, pageRpc }) => {
