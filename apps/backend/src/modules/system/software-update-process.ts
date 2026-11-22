@@ -208,6 +208,7 @@ async function observeDetachedAptUpgrade(
 	let finalDrainComplete = false;
 	let finalDrainFailures = 0;
 	while (!finalDrainComplete) {
+		const before = [stdoutCursor.offset, stderrCursor.offset];
 		const drained = await drainAvailableOutput(
 			stdoutCursor,
 			stderrCursor,
@@ -216,7 +217,12 @@ async function observeDetachedAptUpgrade(
 		);
 		stdoutCursor = drained.stdout;
 		stderrCursor = drained.stderr;
-		finalDrainComplete = drained.complete;
+		// Each read is one bounded block: the files are drained once they give nothing more.
+		finalDrainComplete =
+			drained.complete &&
+			stdoutCursor.offset === before[0] &&
+			stderrCursor.offset === before[1];
+		if (drained.complete) continue;
 		if (!finalDrainComplete) {
 			finalDrainFailures++;
 			if (finalDrainFailures >= FINAL_DRAIN_MAX_FAILURES) {

@@ -76,12 +76,33 @@ export const availableUpdatesSchema = z.object({
 });
 export type AvailableUpdates = z.infer<typeof availableUpdatesSchema>;
 
+// One package instance an install was launched to reach, as its pinned
+// simulation printed it: the name apt-get was given, the candidate's own
+// architecture, and the version installed before (absent: none was).
+export const updateTargetSchema = z.object({
+	name: z.string(),
+	version: z.string(),
+	arch: z.string(),
+	from: z.string().optional(),
+});
+export type UpdateTarget = z.infer<typeof updateTargetSchema>;
+
 // Update progress schema
 export const updateProgressSchema = z.object({
 	downloading: z.number(),
 	unpacking: z.number(),
 	setting_up: z.number(),
 	total: z.number(),
+	// The share of the phase above that APT's transcript proves done. A running
+	// transaction never reports 100: only a successful `result` completes it.
+	percent: z.number().int().min(0).max(99).optional(),
+	// The exact vector this install was launched with, on every frame of the
+	// process that launched it once known; absent where none is known.
+	targets: z.array(updateTargetSchema).max(512).optional(),
+	// The run's start (epoch ms) on every frame of the process that started
+	// it: a different value is another run. A process that recovered the unit
+	// after a restart does not know it and sends none.
+	run: z.number().int().optional(),
 	// `0` marks completion; a string carries the apt failure message the update
 	// loop broadcasts before clearing state.
 	result: z.union([z.number(), z.string()]).optional(),
@@ -272,6 +293,21 @@ export const updateStateSchema = z.discriminatedUnion('kind', [
 	}),
 ]);
 export type UpdateState = z.infer<typeof updateStateSchema>;
+
+// What an install a tab watched did, asked once CeraUI restarted under it:
+// the `targets` its running frames carried are the versions it must reach.
+export const updateOutcomeInputSchema = z.object({
+	targets: z.array(updateTargetSchema).max(512),
+});
+export type UpdateOutcomeInput = z.infer<typeof updateOutcomeInputSchema>;
+// `running`: the device still reports it. `exit` is the fixed-name unit's last
+// non-zero exit, which may be another run's: a hint, never this install's failure.
+export const updateOutcomeSchema = z.discriminatedUnion('kind', [
+	z.object({ kind: z.literal('running') }),
+	z.object({ kind: z.literal('success') }),
+	z.object({ kind: z.literal('unknown'), exit: z.number().int().optional() }),
+]);
+export type UpdateOutcome = z.infer<typeof updateOutcomeSchema>;
 
 // System command input schema
 export const systemCommandInputSchema = z.object({

@@ -798,6 +798,24 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			"spawnWithTimeout bounds each local state read; adoption verifies the exact unit id, no-hook transient-service posture, and canonical apt-get upgrade argv, while an unreadable or unknown state stays fail-closed behind a coalesced recovery retry",
 	},
 	{
+		id: "softwareUpdates.outcomeVersions",
+		file: "modules/system/software-update-outcome.ts",
+		symbol: "targetsAttained",
+		command:
+			"[dpkg-query, -W, -f=<Package Architecture Status-Abbrev Version>, --, ...targets] / [dpkg, --compare-versions, installed, ge, target]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"spawnWithTimeout bounds each read-only package and version read inside one whole-request deadline; names and versions are validated argv elements after --, and any non-answer is an unknown outcome",
+	},
+	{
 		id: "softwareUpdates.cleanupTransient",
 		file: "modules/system/software-update-service.ts",
 		symbol: "defaultDetachedAptServiceDeps.cleanup",
