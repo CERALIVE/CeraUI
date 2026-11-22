@@ -489,7 +489,7 @@ function assertVisualLane(jobs) {
 	);
 	assertExact(
 		findStep(steps, 'Visual Bun', 'test-visual').with['bun-version'],
-		'1.4.4',
+		'1.4.5',
 		'test-visual Bun',
 	);
 	const cache = findStep(steps, 'Visual Bun cache', 'test-visual');
