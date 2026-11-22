@@ -337,12 +337,21 @@ test.describe('@a11y Live screen design pass — caps-full', { tag: '@desktop-on
 		expect(hidden).toEqual([]);
 	});
 
-	test("scrolled to its end, every card's last control sits whole above the Live bar and takes the tap @a11y", async ({ page }) => {
+	test("scrolled to its end, every idle region's last control sits whole above the Live bar, enabled and under the tap @a11y", async ({ page }) => {
 		test.setTimeout(240_000);
 		// Instant scrolling: the position a scroll settles on is the one measured.
 		await page.emulateMedia({ reducedMotion: 'reduce' });
+		// Every region of the idle cockpit, each checked on its own: the source options
+		// apart from the Audio box that follows them, and both disclosures.
+		const regions = [
+			{ name: 'Preview', selector: '[data-testid="preview-disclosure"]' },
+			{ name: 'Source options', selector: '[data-testid="source-list"] > ul' },
+			{ name: 'Audio', selector: '[data-testid="audio-card"]' },
+			{ name: 'Output', selector: '[data-testid="output-card"]' },
+			{ name: 'Connections', selector: '[data-testid="connections-card"]' },
+			{ name: 'Roadmap', selector: '[data-testid="live-roadmap"]' },
+		];
 		const unreachable: string[] = [];
-		const checked = new Set<string>();
 		for (const condition of [
 			{ name: '390x844', viewport: { width: 390, height: 844 }, touch: false },
 			{ name: '1024x600 touch', viewport: KIOSK, touch: true },
@@ -350,37 +359,35 @@ test.describe('@a11y Live screen design pass — caps-full', { tag: '@desktop-on
 		]) {
 			await page.setViewportSize(condition.viewport);
 			await openLive(page, { touch: condition.touch });
-			// The cards, and which one ends lowest on the page: the one the page's own end shows.
-			const { cards, lowest } = await page.evaluate(() => {
-				const bottoms = [...document.querySelectorAll('[data-testid="idle-cockpit"] [data-slot="card"]')]
-					.filter((card) => !card.parentElement?.closest('[data-slot="card"]'))
-					.map((card) => card.getBoundingClientRect().bottom + window.scrollY);
-				return { cards: bottoms.length, lowest: bottoms.indexOf(Math.max(...bottoms)) };
-			});
-			expect(cards, `${condition.name}: the idle cockpit shows its cards`).toBeGreaterThan(1);
-			for (let index = 0; index < cards; index += 1) {
-				// Each card scrolled to its own end; the lowest card also with the page at its end.
-				for (const scroll of index === lowest ? ['card', 'page'] : ['card']) {
+			// The region that ends lowest is also checked with the page at its own end.
+			const lowest = await page.evaluate(
+				(selectors) => {
+					const bottoms = selectors.map(
+						(selector) => (document.querySelector(selector)?.getBoundingClientRect().bottom ?? Number.NEGATIVE_INFINITY) + window.scrollY,
+					);
+					return bottoms.indexOf(Math.max(...bottoms));
+				},
+				regions.map((region) => region.selector),
+			);
+			for (const [index, region] of regions.entries()) {
+				for (const scroll of index === lowest ? ['region', 'page'] : ['region']) {
 					const reach = await page.evaluate(
-						({ index, scroll, controls }) => {
-							const card = [...document.querySelectorAll('[data-testid="idle-cockpit"] [data-slot="card"]')].filter(
-								(each) => !each.parentElement?.closest('[data-slot="card"]'),
-							)[index];
-							const label =
-								card?.getAttribute('data-testid') ?? card?.querySelector('h2, h3')?.textContent?.trim() ?? `card ${index}`;
-							// The fixed Live bar renders inside the Stream setup card; its controls are
-							// always on screen and are not the card's own.
-							const control = [...(card?.querySelectorAll<HTMLElement>(controls) ?? [])]
+						({ selector, scroll, controls }) => {
+							const root = document.querySelector(selector);
+							if (!root) return { name: '', problems: ['is not on the page'] };
+							// What is not rendered (display: none, visibility: hidden, the body of a closed
+							// disclosure) is not a control; the fixed Live bar is always on screen and
+							// belongs to no region.
+							const control = [...root.querySelectorAll<HTMLElement>(controls)]
 								.filter(
 									(element) =>
-										element.getClientRects().length > 0 &&
-										getComputedStyle(element).visibility !== 'hidden' &&
+										element.checkVisibility({ visibilityProperty: true }) &&
 										!element.closest('[data-testid="live-bar"]'),
 								)
 								.at(-1);
-							if (!card || !control) return { label, name: '', problems: ['has no visible control'] };
+							if (!control) return { name: '', problems: ['has no visible control'] };
 							const name = (control.getAttribute('aria-label') ?? control.textContent ?? '').trim();
-							if (scroll === 'card') card.scrollIntoView({ block: 'end', behavior: 'instant' });
+							if (scroll === 'region') root.scrollIntoView({ block: 'end', behavior: 'instant' });
 							else window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' });
 							const box = control.getBoundingClientRect();
 							const header = document.querySelector('header')?.getBoundingClientRect().bottom ?? 0;
@@ -388,21 +395,22 @@ test.describe('@a11y Live screen design pass — caps-full', { tag: '@desktop-on
 							const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
 							const problems: string[] = [];
 							if (name === '') problems.push('has no name');
+							if (control.matches(':disabled') || control.getAttribute('aria-disabled') === 'true') problems.push('is disabled');
 							if (box.top < header - 0.5) problems.push(`starts at ${Math.round(box.top)}, under the header ending at ${Math.round(header)}`);
 							if (box.bottom > bar + 0.5) problems.push(`ends at ${Math.round(box.bottom)}, under the bar at ${Math.round(bar)}`);
 							if (hit === null || (hit !== control && !control.contains(hit))) {
 								problems.push(`a tap at its centre lands on ${hit?.closest('[data-testid]')?.getAttribute('data-testid') ?? hit?.tagName ?? 'nothing'}`);
 							}
-							return { label, name: name.slice(0, 40), problems };
+							return { name: name.slice(0, 40), problems };
 						},
-						{ index, scroll, controls: CONTROLS },
+						{ selector: region.selector, scroll, controls: CONTROLS },
 					);
-					checked.add(reach.label);
-					for (const problem of reach.problems) unreachable.push(`${condition.name} ${reach.label} "${reach.name}" (${scroll} end): ${problem}`);
+					for (const problem of reach.problems) {
+						unreachable.push(`${condition.name} ${region.name} "${reach.name}" (${scroll} end): ${problem}`);
+					}
 				}
 			}
 		}
-		expect([...checked]).toEqual(expect.arrayContaining(['source-section', 'stream-setup-chain']));
 		expect(unreachable).toEqual([]);
 	});
 

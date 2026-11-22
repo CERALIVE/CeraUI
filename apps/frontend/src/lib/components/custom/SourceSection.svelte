@@ -531,6 +531,11 @@ function captureBadgeLabel(source: CaptureStreamSource): string {
 // raw/other capture (which stay neutral). The text differs per kind regardless,
 // so colour is reinforcement, never the sole signal. A dual-codec device is
 // hardware-encoding on both, so it earns the same accent.
+// A kind the name already says ("HDMI Input" over "HDMI") is not shown a second
+// time; it stays for assistive technology, which reads the option as one phrase.
+function kindRepeatsName(source: CaptureStreamSource): boolean {
+	return rowLabel(source).toLocaleLowerCase().includes(captureBadgeLabel(source).toLocaleLowerCase());
+}
 function captureKindClass(source: CaptureStreamSource): string {
 	if (captureModeCodecs(source.modes).length >= 2) return 'text-primary';
 	return source.kind === 'uvc_h264' || source.kind === 'uvc_h265'
@@ -950,7 +955,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 											<span class="flex flex-wrap items-center gap-1.5">
 												{#if source.origin === 'capture'}
 													<span
-														class="text-xs group-disabled/row:opacity-60 {captureKindClass(source)}"
+														class="text-xs group-disabled/row:opacity-60 {captureKindClass(source)} {kindRepeatsName(source) ? 'sr-only' : ''}"
 														data-source-kind={source.kind}
 														data-testid={`source-kind-${source.id}`}
 													>
@@ -1088,44 +1093,45 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 									{/if}
 									{#if modeOptionsFor(source).length > 0}
 										{const activeMode = $derived(selectedModeFor(source))}
-										<div class="space-y-1.5 pt-2" data-testid={`source-modes-${source.id}`}>
-											<span class="text-muted-foreground block text-xs font-medium">
-												{m["live.source.modeLabel"]()}
-											</span>
-											<!-- The "?" sits at the inline end of the choices, as tall as they are,
-											     so it adds no line of its own. -->
-											<div class="flex items-start gap-2">
-												<div
-													aria-label={m["live.source.modeLabel"]()}
-													class="flex min-w-0 flex-1 flex-wrap gap-1.5"
-													role="radiogroup"
-												>
-													{#each modeOptionsFor(source) as option (option.inputMode)}
-														{const active = $derived(option.inputMode === activeMode)}
-														<!-- biome-ignore lint/a11y/useSemanticElements: Input-mode buttons select option.inputMode and lock for streaming or rowDisabled; native radios need separate labels and change their focus model. -->
-														<button
-															aria-checked={active}
-															class="min-h-11 rounded-md border px-2 py-1 text-xs font-medium transition-colors {active
-																? 'border-primary bg-primary/10 text-primary'
-																: 'border-border text-muted-foreground hover:bg-accent/50'} disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
-															data-active={active}
-															data-input-mode={option.inputMode}
-															data-testid={`source-mode-${source.id}-${option.inputMode}`}
-															disabled={isStreaming || rowDisabled(source)}
-															onclick={() => handleSelectMode(source, option.inputMode)}
-															role="radio"
-															type="button"
-														>
-															{t(inputModeLabelKey(option.inputMode))}
-														</button>
-													{/each}
-												</div>
+										<!-- The heading carries its "?" right after the words: the line is the help's
+										     44 px, 8 px (pt-2, space-y-2) from the select button above and the
+										     choices below, so the "?" shows on a phone's first screen. -->
+										<div class="space-y-2 pt-2" data-testid={`source-modes-${source.id}`}>
+											<div class="flex items-center gap-1">
+												<span class="text-muted-foreground text-xs font-medium">
+													{m["live.source.modeLabel"]()}
+												</span>
 												<InfoPopover
 													body={m["live.source.modeHint"]()}
 													class={HELP_TARGET}
 													testId={`source-mode-info-${source.id}`}
 													title={m["live.source.modeLabel"]()}
 												/>
+											</div>
+											<div
+												aria-label={m["live.source.modeLabel"]()}
+												class="flex flex-wrap gap-1.5"
+												role="radiogroup"
+											>
+												{#each modeOptionsFor(source) as option (option.inputMode)}
+													{const active = $derived(option.inputMode === activeMode)}
+													<!-- biome-ignore lint/a11y/useSemanticElements: Input-mode buttons select option.inputMode and lock for streaming or rowDisabled; native radios need separate labels and change their focus model. -->
+													<button
+														aria-checked={active}
+														class="min-h-11 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors {active
+															? 'border-primary bg-primary/10 text-primary'
+															: 'border-border text-muted-foreground hover:bg-accent/50'} disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
+														data-active={active}
+														data-input-mode={option.inputMode}
+														data-testid={`source-mode-${source.id}-${option.inputMode}`}
+														disabled={isStreaming || rowDisabled(source)}
+														onclick={() => handleSelectMode(source, option.inputMode)}
+														role="radio"
+														type="button"
+													>
+														{t(inputModeLabelKey(option.inputMode))}
+													</button>
+												{/each}
 											</div>
 											<p class="text-muted-foreground text-xs">
 												{m["live.source.modeApplyNote"]()}

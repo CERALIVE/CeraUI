@@ -265,3 +265,43 @@ test('an option without help keeps the whole row, so its title stays on one line
 	expect(rode?.spare).toBeLessThanOrEqual(0.5);
 	expect(rode?.lines, `"${rode?.name}" fits one line at 375 px`).toBe(1);
 });
+
+for (const locale of ['en', 'de', 'ar']) {
+	test(`on a 390x844 phone's first screen the capture-format heading and its help sit above the Live bar, ${locale}`, { tag: '@desktop-only' }, async ({ page }) => {
+		test.setTimeout(120_000);
+		await page.setViewportSize({ width: 390, height: 844 });
+		await page.goto('/');
+		await ensureAuthenticated(page);
+		await setLocale(page, locale);
+		await page.goto('/');
+		await ensureAuthenticated(page);
+		await navigateTo(page, 'live');
+		await expect(page.locator('html')).toHaveAttribute('lang', locale);
+		const help = page.getByTestId('source-mode-info-usb');
+		await expect(help).toBeVisible({ timeout: 20_000 });
+		await expect(page.locator('li[data-testid^="source-row-"][data-selected="true"]'), 'nothing is selected yet').toHaveCount(0);
+		await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+		const fold = await help.evaluate((element) => {
+			const header = document.querySelector('header')?.getBoundingClientRect().bottom ?? 0;
+			const bar = document.querySelector('[data-testid="live-bar"]')?.getBoundingClientRect().top ?? innerHeight;
+			// The format block's heading: its first words, whatever line holds the help.
+			const heading = document.querySelector('[data-testid="source-modes-usb"] span')?.getBoundingClientRect();
+			const icon = element.querySelector('svg')?.getBoundingClientRect();
+			const box = element.getBoundingClientRect();
+			const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+			return {
+				header,
+				bar,
+				heading: heading ? { top: heading.top, bottom: heading.bottom } : null,
+				icon: icon ? { top: icon.top, bottom: icon.bottom } : null,
+				tapped: hit !== null && (hit === element || element.contains(hit)),
+			};
+		});
+		expect(fold.heading, 'the capture-format heading is rendered').not.toBeNull();
+		expect(fold.icon, 'the help draws its icon').not.toBeNull();
+		expect(fold.heading?.top ?? Number.NEGATIVE_INFINITY, 'the heading starts under the header').toBeGreaterThanOrEqual(fold.header);
+		expect(fold.heading?.bottom ?? Number.POSITIVE_INFINITY, 'the heading ends above the Live bar').toBeLessThanOrEqual(fold.bar);
+		expect(fold.icon?.bottom ?? Number.POSITIVE_INFINITY, 'the help\'s icon ends above the Live bar').toBeLessThanOrEqual(fold.bar);
+		expect(fold.tapped, 'a tap at the help\'s centre reaches the help').toBe(true);
+	});
+}
