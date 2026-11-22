@@ -423,19 +423,23 @@ set these rules:
 - **One option pattern.** Every source option is a framed tile in one column:
   the kind icon, the name, one subtitle line (the capture kind, or the ingest
   service state, then the chips: Selected first, then Lost, Degraded, No
-  signal, Not connected or Includes audio, wrapping under it only when they do
-  not fit) and its help at the inline end, inside the frame. Every chip is the same pill; only its tone changes. Anything more
-  (the summary, capture formats, warnings, reasons and How to publish) sits
-  under them, inside the same frame. The selected option is outlined (its
+  signal, Not connected or Includes audio, each wrapping on its own when the
+  line is full) and, when it has one, its help at the inline end, inside the
+  frame. Every chip is the same pill; only its tone changes. Anything more (the
+  summary, capture formats, warnings, reasons and How to publish) sits under
+  them, inside the same frame. The selected option is outlined (its
   border plus a one-pixel ring in the primary colour), never tinted: muted text
   inside a lime-tinted frame measured 4.23:1 in dark, below AA.
   Every "?" inside an option (its help, the capture-format help and the
   summary's help) is a real 44 px box at every width, kept 8 px from every other
   control in the option (`DESIGN.md` TT-2), so its hit area is its box: the
   touch layout's `::after` overlay on the old 24 px icon reached 10 px into the
-  select button at 1024x600, so a tap meant for Select opened Help. The 8 px
-  rule is for a help beside another control; the capture-format choices keep
-  their 6 px gap. An option with no help or switch beside its select renders no
+  select button at 1024x600, so a tap meant for Select opened Help. No "?"
+  takes a line of its own: the capture-format one sits at the inline end of
+  the format choices, as tall as they are, and the summary's at the inline end
+  of its Source max line, reaching only into the space above it where nothing
+  can be tapped. The 8 px rule is for a help beside another control; the
+  capture-format choices keep their 6 px gap. An option with no help or switch beside its select renders no
   slot and no gap there, so the select keeps the header's whole width (a longer
   title still wraps, up to two lines).
 - **The summary belongs to the selected option.** `source-active-config` sits
@@ -445,24 +449,30 @@ set these rules:
   ("srt", a raw id) and said "Audio source" for what the option already called
   "Includes audio". It stands alone above the list only while no option on
   screen is the selection.
-- **Vertical rhythm, measured against main.** With the first enabled source
-  selected, the RØDE capture-format note ends above the fixed Live bar at
-  375 px (24 px clear in en and ar, 8 px in de; main: 27, 17 and 1) and at the
-  1024x600 kiosk in touch (66, 66 and 82 px; main: 79, 57 and 95); at 320 px
-  it is below the bar on both. The Source card is 3 to 13 px taller than main
-  at 375 px, and between 15 px shorter and 45 px taller at the kiosk. The
-  growth that remains is intended: the selected option holds the summary the
-  removed panel above the list held; a framed option adds its border and 12 px
-  of bottom padding; the kind is a subtitle line under the name (16 px); and a
-  capture-format "?" is a 44 px box kept 8 px from its neighbours where main's
-  was a 24 px icon, so that heading line is 44 px tall instead of 24. From
-  768 px the options sit one per line where main tiled them two across, so the
-  card is 49 to 117 px taller there, and the note stays more than 360 px
-  clear of the bar. With nothing selected (the first screen) the note is under
-  the bar on every phone on main too; the capture-format heading was 12 px
-  under it at 390 px in en and de and 8 px clear only in ar, and is now 37 and
-  17 px under, because the kind's subtitle line and the 44 px Source max help
-  each add 16 px above it. It is reached by scrolling.
+- **Vertical rhythm, measured against main.** Matched captures of main and
+  this layout, in en, de and ar at 320x640, 375x812, 390x844, 768x1024,
+  1280x800 and 1024x600 touch, on the first screen and with the first enabled
+  source selected. On every phone from 375 px the Source card is now 2 to 83 px
+  shorter than main; at 320 px it is 30 px taller on the first screen and 25 px
+  shorter with a source selected; at the kiosk it is 4 to 42 px taller on the
+  first screen and 7 to 67 px shorter with a source selected. With a source
+  selected and the cockpit scrolled into view, the RØDE capture-format note
+  ends 76 px above the Live bar at 375 px in en and de and 92 px in ar (main:
+  27, 1 and 17), and 118 to 134 px above it at the kiosk (main: 57 to 95). From
+  768 px the card is up to 128 px taller, because the options sit one per line
+  where main tiled them two across. So a first screen there shows fewer
+  options: at 1280x800 SRT Ingest (and, in en and ar, the Test Pattern title)
+  is below the bar; at 768x1024 with a source selected the Audio heading is;
+  at the kiosk with the cockpit in view, SRT Ingest's title (en) or its state
+  and help (ar) is. Two other moves cost a first-screen item: at 390 px in ar
+  the capture-format help now sits beside the format choices, below the bar,
+  and at 320 px with a source selected the Source max line now sits inside the
+  selected option. Every one of them is reached by scrolling: each card's last
+  control scrolls whole above the bar and takes a tap at 390x844, 1024x600
+  touch and 1280x800. The growth that remains is intended: the selected option
+  holds the summary the removed panel above the list held, a framed option adds
+  its border and 12 px of bottom padding, and the kind is a subtitle line under
+  the name.
 - **One audio box.** The Audio heading carries the help and "Codec & delay";
   the picker and its level meter share one box under it; notices about the
   pick follow the box.
@@ -490,13 +500,16 @@ Pinned by `StreamSetupChain.test.ts` ("one row pattern" and "keeps the
 bitrate editable while Edit waits for a source"), `SourceSection.test.ts` ("one
 option pattern"), the column and fold checks in
 `apps/frontend/tests/e2e/visual/live.visual.spec.ts` (at 375 px and 1024x600
-touch the capture-format note, and the card's last control once scrolled to,
-end above the Live bar), the idle snapshot in
+touch the capture-format note sits whole between the header and the Live bar),
+its Live page baselines (the whole page on the desktop and mobile projects, so
+they keep every option main's first-screen baselines showed), the idle snapshot in
 `apps/frontend/tests/e2e/visual/audio-mixer.visual.spec.ts` (the whole Audio
 card between the sticky header and the Live bar, failing first if anything
 covers the heading, its help or Codec & delay), and
 `apps/frontend/tests/e2e/live-design-a11y.spec.ts`, whose 44 px gates now
-measure the Output card too, and
+measure the Output card too and which scrolls each card to its end at 390x844,
+1024x600 touch and 1280x800 and requires its last control whole above the bar
+and under a tap at its centre, and
 `apps/frontend/tests/e2e/source-option-targets.spec.ts` (in en, ar and de, in the
 default layout at 320, 375, 768 and 1280 and in touch at those and 1024x600, with
 the selected option's How to publish open: no help hit area overlaps or comes

@@ -337,6 +337,75 @@ test.describe('@a11y Live screen design pass — caps-full', { tag: '@desktop-on
 		expect(hidden).toEqual([]);
 	});
 
+	test("scrolled to its end, every card's last control sits whole above the Live bar and takes the tap @a11y", async ({ page }) => {
+		test.setTimeout(240_000);
+		// Instant scrolling: the position a scroll settles on is the one measured.
+		await page.emulateMedia({ reducedMotion: 'reduce' });
+		const unreachable: string[] = [];
+		const checked = new Set<string>();
+		for (const condition of [
+			{ name: '390x844', viewport: { width: 390, height: 844 }, touch: false },
+			{ name: '1024x600 touch', viewport: KIOSK, touch: true },
+			{ name: '1280x800', viewport: { width: 1280, height: 800 }, touch: false },
+		]) {
+			await page.setViewportSize(condition.viewport);
+			await openLive(page, { touch: condition.touch });
+			// The cards, and which one ends lowest on the page: the one the page's own end shows.
+			const { cards, lowest } = await page.evaluate(() => {
+				const bottoms = [...document.querySelectorAll('[data-testid="idle-cockpit"] [data-slot="card"]')]
+					.filter((card) => !card.parentElement?.closest('[data-slot="card"]'))
+					.map((card) => card.getBoundingClientRect().bottom + window.scrollY);
+				return { cards: bottoms.length, lowest: bottoms.indexOf(Math.max(...bottoms)) };
+			});
+			expect(cards, `${condition.name}: the idle cockpit shows its cards`).toBeGreaterThan(1);
+			for (let index = 0; index < cards; index += 1) {
+				// Each card scrolled to its own end; the lowest card also with the page at its end.
+				for (const scroll of index === lowest ? ['card', 'page'] : ['card']) {
+					const reach = await page.evaluate(
+						({ index, scroll, controls }) => {
+							const card = [...document.querySelectorAll('[data-testid="idle-cockpit"] [data-slot="card"]')].filter(
+								(each) => !each.parentElement?.closest('[data-slot="card"]'),
+							)[index];
+							const label =
+								card?.getAttribute('data-testid') ?? card?.querySelector('h2, h3')?.textContent?.trim() ?? `card ${index}`;
+							// The fixed Live bar renders inside the Stream setup card; its controls are
+							// always on screen and are not the card's own.
+							const control = [...(card?.querySelectorAll<HTMLElement>(controls) ?? [])]
+								.filter(
+									(element) =>
+										element.getClientRects().length > 0 &&
+										getComputedStyle(element).visibility !== 'hidden' &&
+										!element.closest('[data-testid="live-bar"]'),
+								)
+								.at(-1);
+							if (!card || !control) return { label, name: '', problems: ['has no visible control'] };
+							const name = (control.getAttribute('aria-label') ?? control.textContent ?? '').trim();
+							if (scroll === 'card') card.scrollIntoView({ block: 'end', behavior: 'instant' });
+							else window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' });
+							const box = control.getBoundingClientRect();
+							const header = document.querySelector('header')?.getBoundingClientRect().bottom ?? 0;
+							const bar = document.querySelector('[data-testid="live-bar"]')?.getBoundingClientRect().top ?? innerHeight;
+							const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+							const problems: string[] = [];
+							if (name === '') problems.push('has no name');
+							if (box.top < header - 0.5) problems.push(`starts at ${Math.round(box.top)}, under the header ending at ${Math.round(header)}`);
+							if (box.bottom > bar + 0.5) problems.push(`ends at ${Math.round(box.bottom)}, under the bar at ${Math.round(bar)}`);
+							if (hit === null || (hit !== control && !control.contains(hit))) {
+								problems.push(`a tap at its centre lands on ${hit?.closest('[data-testid]')?.getAttribute('data-testid') ?? hit?.tagName ?? 'nothing'}`);
+							}
+							return { label, name: name.slice(0, 40), problems };
+						},
+						{ index, scroll, controls: CONTROLS },
+					);
+					checked.add(reach.label);
+					for (const problem of reach.problems) unreachable.push(`${condition.name} ${reach.label} "${reach.name}" (${scroll} end): ${problem}`);
+				}
+			}
+		}
+		expect([...checked]).toEqual(expect.arrayContaining(['source-section', 'stream-setup-chain']));
+		expect(unreachable).toEqual([]);
+	});
+
 	test('sliders draw their track and fill, and run with the reading direction @a11y', async ({ page }) => {
 		test.setTimeout(180_000);
 		const sliders = (state: State) =>

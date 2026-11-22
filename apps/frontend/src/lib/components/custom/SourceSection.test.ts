@@ -1004,8 +1004,8 @@ describe("SourceSection — one option pattern (live design pass)", () => {
 				`${id} help`,
 			).not.toBeNull();
 		}
-		// The kind opens the subtitle line under the name; the status chips follow it
-		// on that line as one group, never mixed in with the kind.
+		// The kind opens the subtitle line under the name, and every status chip
+		// follows it on that same line: never a badge ahead of it.
 		const name = container.querySelector(
 			'[data-testid="source-row-name-hdmi-rx"]',
 		);
@@ -1022,11 +1022,9 @@ describe("SourceSection — one option pattern (live design pass)", () => {
 		for (const node of [name, kind, noSignalChip, selectedChip, audio])
 			expect(node).not.toBeNull();
 		expect(kind?.parentElement?.parentElement).toBe(name?.parentElement);
-		expect(noSignalChip?.parentElement?.parentElement).toBe(
-			kind?.parentElement,
-		);
-		expect(noSignalChip?.parentElement).not.toBe(kind?.parentElement);
-		// Selected and every status badge share one chip group.
+		expect(noSignalChip?.parentElement).toBe(kind?.parentElement);
+		expect(kind?.parentElement?.firstElementChild).toBe(kind);
+		// Selected and every status badge share that one line.
 		expect(selectedChip?.parentElement).toBe(audio?.parentElement);
 	});
 

@@ -10,6 +10,26 @@ test.describe('@visual Live destination snapshots', () => {
 	test('@visual live destination baseline', { tag: '@visual' }, async ({ authedPage: page }) => {
 		const live = new LivePage(page);
 		await live.open();
+		// The whole page, not only its first screen: the source options sit one per line
+		// and run past the first screen, yet this picture must keep every option main's
+		// first screen showed. A window as tall as the page leaves the Live bar over the
+		// page's own end, and every option must sit whole between the header and the bar.
+		const viewport = page.viewportSize();
+		if (viewport === null) throw new Error('the project sets a viewport');
+		const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+		await page.setViewportSize({ width: viewport.width, height: Math.max(viewport.height, pageHeight) });
+		const hidden = await page.evaluate(() => {
+			const header = document.querySelector('header')?.getBoundingClientRect().bottom ?? 0;
+			const bar = document.querySelector('[data-testid="live-bar"]')?.getBoundingClientRect().top ?? innerHeight;
+			return [...document.querySelectorAll('li[data-testid^="source-row-"]')]
+				.filter((row) => {
+					const box = row.getBoundingClientRect();
+					return box.top < header - 0.5 || box.bottom > bar + 0.5;
+				})
+				.map((row) => row.getAttribute('data-testid'));
+		});
+		expect(hidden, 'every source option is in the picture, clear of the header and the Live bar').toEqual([]);
+		await expect(page.locator('li[data-testid^="source-row-"]')).not.toHaveCount(0);
 		await expect(page).toHaveScreenshot('live-desktop.png', {
 			stylePath: new URL('./mask.css', import.meta.url).pathname,
 			maxDiffPixels: 100,
@@ -114,8 +134,9 @@ type IdleGeometry = {
 	readonly lefts: Readonly<Record<string, number>>;
 	readonly gaps: readonly number[];
 	readonly openDetails: readonly string[];
+	readonly headerBottom: number;
 	readonly barTop: number;
-	readonly noteBottom: number | null;
+	readonly note: { readonly top: number; readonly bottom: number } | null;
 	readonly testIds: readonly string[];
 };
 
@@ -192,9 +213,13 @@ for (const condition of CONDITIONS) {
 						),
 						gaps,
 						openDetails: [...document.querySelectorAll('details[open]')].map(describe),
+						headerBottom: document.querySelector('header')?.getBoundingClientRect().bottom ?? 0,
 						barTop: document.querySelector('[data-testid="live-bar"]')?.getBoundingClientRect().top ?? 0,
-						noteBottom:
-							document.querySelector('[data-testid^="source-modes-"] > p')?.getBoundingClientRect().bottom ?? null,
+						// The RØDE camera's capture-format note, the paragraph under its choices.
+						note: (() => {
+							const box = document.querySelector('[data-testid="source-modes-usb"] > p')?.getBoundingClientRect();
+							return box ? { top: box.top, bottom: box.bottom } : null;
+						})(),
 						testIds: [
 							...new Set(
 								[...document.querySelectorAll('[data-testid]')].map(
@@ -294,21 +319,20 @@ for (const condition of CONDITIONS) {
 					`${condition.name}: a disclosure opened itself: ${geometry.openDetails.join(', ')}`,
 				).toEqual(condition.viewport.width >= 768 ? ['preview-disclosure'] : []);
 
-				// ── 8. The capture-format note clears the fixed Live bar at the fold ─────
-				// Main shows the whole note above the bar in this very state on a phone and
-				// at the kiosk; the redesign must not push it under the bar.
-				expect(geometry.noteBottom, `${condition.name}: the capture-format note is rendered`).not.toBeNull();
+				// ── 8. The capture-format note sits whole between the header and the Live bar ──
+				// Main shows the whole note in this very state on a phone and at the kiosk;
+				// the redesign must not push it under the bar. Whether every card's last
+				// control can be scrolled clear of the bar is its own test in
+				// live-design-a11y.spec.ts.
+				expect(geometry.note, `${condition.name}: the RØDE capture-format note is rendered`).not.toBeNull();
 				expect(
-					geometry.noteBottom ?? Number.POSITIVE_INFINITY,
+					geometry.note?.top ?? Number.NEGATIVE_INFINITY,
+					`${condition.name}: the capture-format note starts under the header`,
+				).toBeGreaterThanOrEqual(geometry.headerBottom);
+				expect(
+					geometry.note?.bottom ?? Number.POSITIVE_INFINITY,
 					`${condition.name}: the capture-format note ends under the Live bar`,
 				).toBeLessThanOrEqual(geometry.barTop);
-
-				// ── 9. The source card's last control can always be brought above the bar ──
-				const last = page.getByTestId('source-section').locator('button, summary, [role="combobox"]').last();
-				await last.evaluate((element) => element.scrollIntoView({ block: 'nearest' }));
-				const lastBottom = await last.evaluate((element) => element.getBoundingClientRect().bottom);
-				const barTop = await page.getByTestId('live-bar').evaluate((element) => element.getBoundingClientRect().top);
-				expect(lastBottom, `${condition.name}: the source card's last control stays under the Live bar`).toBeLessThanOrEqual(barTop);
 			},
 		);
 	});

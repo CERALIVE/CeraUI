@@ -728,25 +728,30 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 		{#if hasCapSummary}
 			<section
 				aria-label={m["live.source.capabilities"]()}
-				class="text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs"
+				class="text-muted-foreground flex items-start gap-2 text-xs"
 				data-testid="source-capabilities"
 			>
-				<span class="font-medium" data-testid="cap-device-max">{m["live.source.sourceMax"]()}</span>
+				<span class="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1">
+					<span class="font-medium" data-testid="cap-device-max">{m["live.source.sourceMax"]()}</span>
+					{#if capChips.length > 0}
+						<span class="tabular-nums">{capChips.join(' \u00b7 ')}</span>
+					{/if}
+					{#if capAudioShown}
+						<span class="{CHIP} border-border bg-muted text-muted-foreground" data-testid="cap-audio">
+							<Volume2 aria-hidden={true} class="size-3" />
+							{m["live.networkIngest.includesAudio"]()}
+						</span>
+					{/if}
+				</span>
+				<!-- At the inline end, like an option's help, centred on the first line: it
+				     reaches 14 px above the line, where nothing can be tapped, and keeps its
+				     whole height below, so a control under the line stays 8 px away. -->
 				<InfoPopover
 					body={m["live.education.field.mode.body"]()}
-					class="-mt-2 {HELP_TARGET}"
+					class="-mt-3.5 {HELP_TARGET}"
 					testId="info-mode"
 					title={m["live.education.field.mode.title"]()}
 				/>
-				{#if capChips.length > 0}
-					<span class="tabular-nums">{capChips.join(' \u00b7 ')}</span>
-				{/if}
-				{#if capAudioShown}
-					<span class="{CHIP} border-border bg-muted text-muted-foreground" data-testid="cap-audio">
-						<Volume2 aria-hidden={true} class="size-3" />
-						{m["live.networkIngest.includesAudio"]()}
-					</span>
-				{/if}
 			</section>
 		{/if}
 	</div>
@@ -939,10 +944,10 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 											>
 												{rowLabel(source)}
 											</span>
-										<!-- One subtitle line: the kind or service state, then every chip, wrapping
-										     only when they do not fit beside it. -->
+										<!-- One subtitle line: the kind or service state, then every chip, each
+										     wrapping on its own when the line is full. -->
 										{#if source.origin === 'capture' || source.origin === 'network' || hasChips}
-											<span class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+											<span class="flex flex-wrap items-center gap-1.5">
 												{#if source.origin === 'capture'}
 													<span
 														class="text-xs group-disabled/row:opacity-60 {captureKindClass(source)}"
@@ -961,75 +966,71 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 															: m["live.networkIngest.inactive"]()}
 													</span>
 												{/if}
-												{#if hasChips}
-													<span class="flex flex-wrap items-center gap-1.5">
-														{#if selected}
-															<span
-																class="{CHIP} group-disabled/row:opacity-60 {coarseUnbound.unbound
-																	? 'border-status-warning/60 bg-status-warning/10 text-status-warning'
-																	: 'border-primary/50 bg-primary/15 text-primary'}"
-																data-testid={`source-selected-${source.id}`}
-															>
-																{#if coarseUnbound.unbound}
-																	<TriangleAlert aria-hidden={true} class="size-3" />
-																{:else}
-																	<Check aria-hidden={true} class="size-3" />
-																{/if}
-																{m["live.inputPicker.selected"]()}
-															</span>
+												{#if selected}
+													<span
+														class="{CHIP} group-disabled/row:opacity-60 {coarseUnbound.unbound
+															? 'border-status-warning/60 bg-status-warning/10 text-status-warning'
+															: 'border-primary/50 bg-primary/15 text-primary'}"
+														data-testid={`source-selected-${source.id}`}
+													>
+														{#if coarseUnbound.unbound}
+															<TriangleAlert aria-hidden={true} class="size-3" />
+														{:else}
+															<Check aria-hidden={true} class="size-3" />
 														{/if}
-														{#if source.origin === 'capture'}
-															{#if source.lost}
-																<span
-																	class="{CHIP} border-destructive/30 bg-destructive/15 text-destructive"
-																	data-testid={`source-lost-${source.id}`}
-																>
-																	<Unplug aria-hidden={true} class="size-3" />
-																	{m["live.inputPicker.lost"]()}
-																</span>
-															{:else if source.degraded}
-																<!-- A THIRD state beside Lost and No signal, and the row is
-																     still selectable: the device is here and the encoder is
-																     merely struggling to read it. Amber + its own glyph, so it
-																     can never be read as the red "device is gone" badge. -->
-																<span
-																	class="{CHIP} border-status-warning/60 bg-status-warning/10 text-status-warning group-disabled/row:opacity-60"
-																	data-testid={`source-degraded-${source.id}`}
-																	title={source.degraded.reason ?? source.degraded.code}
-																>
-																	<Activity aria-hidden={true} class="size-3" />
-																	{m["live.source.degradedBadge"]()}
-																</span>
-															{:else if hasNoSignal(source)}
-																<!-- Calm amber, NOT the destructive red `lost` treatment: the
-																     device is fine, the cable is idle. The row stays selectable. -->
-																<span
-																	class="{CHIP} border-status-warning/60 bg-status-warning/10 text-status-warning group-disabled/row:opacity-60"
-																	data-testid={`source-no-signal-${source.id}`}
-																>
-																	<SignalZero aria-hidden={true} class="size-3" />
-																	{m["live.source.noSignal"]()}
-																</span>
-															{/if}
-														{/if}
-														{#if source.origin === 'coarse'}
-															<span
-																class="{CHIP} border-border bg-muted text-muted-foreground group-disabled/row:opacity-60"
-																data-testid={`source-not-connected-${source.id}`}
-															>
-																<Unplug aria-hidden={true} class="size-3" />
-																{m["live.source.notConnected"]()}
-															</span>
-														{/if}
-														{#if source.origin === 'network' && source.supportsAudio}
-															<span
-																class="{CHIP} border-border bg-muted text-muted-foreground group-disabled/row:opacity-60"
-																data-testid={`source-network-audio-${source.requiresGateway}`}
-															>
-																<Volume2 aria-hidden={true} class="size-3" />
-																{m["live.networkIngest.includesAudio"]()}
-															</span>
-														{/if}
+														{m["live.inputPicker.selected"]()}
+													</span>
+												{/if}
+												{#if source.origin === 'capture'}
+													{#if source.lost}
+														<span
+															class="{CHIP} border-destructive/30 bg-destructive/15 text-destructive"
+															data-testid={`source-lost-${source.id}`}
+														>
+															<Unplug aria-hidden={true} class="size-3" />
+															{m["live.inputPicker.lost"]()}
+														</span>
+													{:else if source.degraded}
+														<!-- A THIRD state beside Lost and No signal, and the row is
+														     still selectable: the device is here and the encoder is
+														     merely struggling to read it. Amber + its own glyph, so it
+														     can never be read as the red "device is gone" badge. -->
+														<span
+															class="{CHIP} border-status-warning/60 bg-status-warning/10 text-status-warning group-disabled/row:opacity-60"
+															data-testid={`source-degraded-${source.id}`}
+															title={source.degraded.reason ?? source.degraded.code}
+														>
+															<Activity aria-hidden={true} class="size-3" />
+															{m["live.source.degradedBadge"]()}
+														</span>
+													{:else if hasNoSignal(source)}
+														<!-- Calm amber, NOT the destructive red `lost` treatment: the
+														     device is fine, the cable is idle. The row stays selectable. -->
+														<span
+															class="{CHIP} border-status-warning/60 bg-status-warning/10 text-status-warning group-disabled/row:opacity-60"
+															data-testid={`source-no-signal-${source.id}`}
+														>
+															<SignalZero aria-hidden={true} class="size-3" />
+															{m["live.source.noSignal"]()}
+														</span>
+													{/if}
+												{/if}
+												{#if source.origin === 'coarse'}
+													<span
+														class="{CHIP} border-border bg-muted text-muted-foreground group-disabled/row:opacity-60"
+														data-testid={`source-not-connected-${source.id}`}
+													>
+														<Unplug aria-hidden={true} class="size-3" />
+														{m["live.source.notConnected"]()}
+													</span>
+												{/if}
+												{#if source.origin === 'network' && source.supportsAudio}
+													<span
+														class="{CHIP} border-border bg-muted text-muted-foreground group-disabled/row:opacity-60"
+														data-testid={`source-network-audio-${source.requiresGateway}`}
+													>
+														<Volume2 aria-hidden={true} class="size-3" />
+														{m["live.networkIngest.includesAudio"]()}
 													</span>
 												{/if}
 											</span>
@@ -1081,49 +1082,50 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 							</div>
 
 							{#if hasDetail}
-								<div class="space-y-3 pe-3 pb-3 ps-10">
+								<div class="space-y-3 pe-1.5 pb-3 ps-10">
 									{#if selected && (hasActiveConfig || hasCapSummary)}
 										{@render activeConfigPanel(true)}
 									{/if}
 									{#if modeOptionsFor(source).length > 0}
 										{const activeMode = $derived(selectedModeFor(source))}
-										<!-- pt-2: its "?" keeps 8 px from the select button above. -->
-										<div class="space-y-2 pt-2" data-testid={`source-modes-${source.id}`}>
-											<div class="flex items-center gap-1">
-												<span class="text-muted-foreground text-xs font-medium">
-													{m["live.source.modeLabel"]()}
-												</span>
+										<div class="space-y-1.5 pt-2" data-testid={`source-modes-${source.id}`}>
+											<span class="text-muted-foreground block text-xs font-medium">
+												{m["live.source.modeLabel"]()}
+											</span>
+											<!-- The "?" sits at the inline end of the choices, as tall as they are,
+											     so it adds no line of its own. -->
+											<div class="flex items-start gap-2">
+												<div
+													aria-label={m["live.source.modeLabel"]()}
+													class="flex min-w-0 flex-1 flex-wrap gap-1.5"
+													role="radiogroup"
+												>
+													{#each modeOptionsFor(source) as option (option.inputMode)}
+														{const active = $derived(option.inputMode === activeMode)}
+														<!-- biome-ignore lint/a11y/useSemanticElements: Input-mode buttons select option.inputMode and lock for streaming or rowDisabled; native radios need separate labels and change their focus model. -->
+														<button
+															aria-checked={active}
+															class="min-h-11 rounded-md border px-2 py-1 text-xs font-medium transition-colors {active
+																? 'border-primary bg-primary/10 text-primary'
+																: 'border-border text-muted-foreground hover:bg-accent/50'} disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
+															data-active={active}
+															data-input-mode={option.inputMode}
+															data-testid={`source-mode-${source.id}-${option.inputMode}`}
+															disabled={isStreaming || rowDisabled(source)}
+															onclick={() => handleSelectMode(source, option.inputMode)}
+															role="radio"
+															type="button"
+														>
+															{t(inputModeLabelKey(option.inputMode))}
+														</button>
+													{/each}
+												</div>
 												<InfoPopover
 													body={m["live.source.modeHint"]()}
 													class={HELP_TARGET}
 													testId={`source-mode-info-${source.id}`}
 													title={m["live.source.modeLabel"]()}
 												/>
-											</div>
-											<div
-												aria-label={m["live.source.modeLabel"]()}
-												class="flex flex-wrap gap-1.5"
-												role="radiogroup"
-											>
-												{#each modeOptionsFor(source) as option (option.inputMode)}
-													{const active = $derived(option.inputMode === activeMode)}
-													<!-- biome-ignore lint/a11y/useSemanticElements: Input-mode buttons select option.inputMode and lock for streaming or rowDisabled; native radios need separate labels and change their focus model. -->
-													<button
-														aria-checked={active}
-														class="min-h-11 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors {active
-															? 'border-primary bg-primary/10 text-primary'
-															: 'border-border text-muted-foreground hover:bg-accent/50'} disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
-														data-active={active}
-														data-input-mode={option.inputMode}
-														data-testid={`source-mode-${source.id}-${option.inputMode}`}
-														disabled={isStreaming || rowDisabled(source)}
-														onclick={() => handleSelectMode(source, option.inputMode)}
-														role="radio"
-														type="button"
-													>
-														{t(inputModeLabelKey(option.inputMode))}
-													</button>
-												{/each}
 											</div>
 											<p class="text-muted-foreground text-xs">
 												{m["live.source.modeApplyNote"]()}
