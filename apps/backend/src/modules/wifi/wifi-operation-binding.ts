@@ -18,6 +18,8 @@ export type WifiOperationBinding = {
 	readonly mac: string | undefined;
 	readonly devicePath?: string;
 	readonly lifetime: RadioLifetime;
+	readonly bootRestore?: "verified" | "require-port-pin";
+	readonly restoreProfile?: { readonly owner: string; readonly uuid: string };
 };
 
 export const wifiOperationChanged = {
@@ -126,10 +128,11 @@ export function wifiOperationGuard(
 	// Unavailable proof denies effects but is not evidence authorizing rollback Down.
 	const observe = async () => {
 		if (!binding) return "match";
-		const port = requirePort
-			? binding.devicePath
-			: wifiAdapterKeyPort(binding.key);
-		if (requirePort && !port) return "unavailable";
+		const restoring = binding.bootRestore !== undefined;
+		const port =
+			wifiAdapterKeyPort(binding.key) ??
+			(restoring || requirePort ? binding.devicePath : undefined);
+		if (requirePort && !binding.devicePath) return "unavailable";
 		const parent = await sampleWifiOperationRadio(
 			binding.ifname,
 			Boolean(port),
@@ -143,6 +146,8 @@ export function wifiOperationGuard(
 			(!parent.macReadFailed && parent.permanentMac !== binding.mac)
 		)
 			return "replaced";
+		if (restoring && (parent.macReadFailed || !parent.permanentMac))
+			return "unavailable";
 		return (port === undefined ||
 			(parent.devicePath === port && binding.devicePath === port)) &&
 			ownsWifiOperation(binding)

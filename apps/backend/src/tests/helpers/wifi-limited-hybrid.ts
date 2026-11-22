@@ -1,5 +1,6 @@
 import { spyOn } from "bun:test";
 import * as concurrent from "../../modules/wifi/wifi-concurrent-interface.ts";
+import { wifiRadioIdentity } from "../../modules/wifi/wifi-radio-identity.ts";
 import { targetFixture } from "./wifi-hybrid-target.ts";
 
 /** Add the current card/station/phy evidence around the legacy per-test target driver. */
@@ -17,10 +18,16 @@ export async function limitedHybridFixture() {
 	let creationScenario = false;
 	const select = concurrent.selectConcurrentApInterface;
 	spyOn(concurrent, "selectConcurrentApInterface").mockImplementation(
-		(parent, admitted) =>
+		(parent, admitted, createMissing, onRefusal, limitedRestore) =>
 			creationScenario
-				? concurrent.ensureConcurrentApInterface(parent, admitted)
-				: select(parent, admitted),
+				? concurrent.ensureConcurrentApInterface(
+						parent,
+						admitted,
+						undefined,
+						undefined,
+						limitedRestore,
+					)
+				: select(parent, admitted, createMissing, onRefusal, limitedRestore),
 	);
 	const install = concurrent.setConcurrentInterfaceDepsForTest;
 	spyOn(concurrent, "setConcurrentInterfaceDepsForTest").mockImplementation(
@@ -76,6 +83,36 @@ export async function limitedHybridFixture() {
 		},
 	);
 	return {
+		calls: kernel.calls,
+		observeParent: kernel.observeParent,
+		permanent: kernel.permanent,
+		roam: () => kernel.station("new-station"),
+		replaceParent: () => {
+			kernel.objects.set("wlan0", { ...parent, ifindex: 34, wdev: "0x34" });
+		},
+		replaceLeg: () => {
+			const current = kernel.objects.get("clap-wlan0");
+			if (!current) throw new Error("Missing AP leg");
+			kernel.objects.set("clap-wlan0", {
+				...current,
+				ifindex: 29,
+				wdev: "0x29",
+			});
+		},
+		cold: async () => {
+			kernel.objects.delete("clap-wlan0");
+			concurrent.resetConcurrentInterfaceDepsForTest();
+			install(
+				kernel.run,
+				async () => true,
+				async () => "fixture-boot",
+			);
+			await kernel.observeParent();
+			await concurrent.observeConcurrentInterfacesAtFirstDiscovery(
+				[...kernel.objects.keys()],
+				wifiRadioIdentity.state.rows,
+			);
+		},
 		created: () => {
 			kernel.objects.set("clap-wlan0", {
 				ifindex: 7,

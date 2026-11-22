@@ -32,9 +32,13 @@ import { targetFixture } from "./wifi-hybrid-target.ts";
 
 export const MAC = "dc:a6:32:aa:bb:c0";
 
-export async function hybridFixture(first = false, recordDiscovery = true) {
+export async function hybridFixture(
+	first = false,
+	recordDiscovery = true,
+	distinctSentinel = false,
+) {
 	const frame = await wifiFrameFixture(false);
-	const target = await targetFixture({ recordDiscovery });
+	const target = await targetFixture({ recordDiscovery, distinctSentinel });
 	frame.row.conn = "station-uuid";
 	frame.row.activeConn = "station-uuid";
 	frame.row.hotspot.channel = "ch_11";
@@ -48,6 +52,9 @@ export async function hybridFixture(first = false, recordDiscovery = true) {
 	const effects: string[] = [];
 	let beforeUp: (() => void) | undefined;
 	let failUp: (() => void) | undefined;
+	let readSavedProfile:
+		| ((uuid: string) => Readonly<Record<string, string>> | undefined)
+		| undefined;
 	let exclusive = false;
 	let saved: HotspotCredentials = {
 		ssid: "Original AP",
@@ -77,7 +84,13 @@ export async function hybridFixture(first = false, recordDiscovery = true) {
 			return "new-owned-ap";
 		},
 		nmConnDelete: async () => true,
-		nmConnect: (async (uuid, _timeout, receipt) => {
+		nmConnect: (async (
+			uuid,
+			_timeout,
+			receipt,
+			_onTimeout,
+			ifname?: string,
+		) => {
 			effects.push("up");
 			if (failUp) {
 				const action = failUp;
@@ -86,14 +99,20 @@ export async function hybridFixture(first = false, recordDiscovery = true) {
 				return false;
 			}
 			if (exclusive) return true;
+			const profile = readSavedProfile ? readSavedProfile(uuid) : fields;
+			const leg = target.objects.get("clap-wlan0");
 			const connected =
-				fields["802-11-wireless.band"] === "bg" &&
-				fields["802-11-wireless.channel"] === "1";
+				profile?.["802-11-wireless.band"] === "bg" &&
+				profile["802-11-wireless.channel"] === "1" &&
+				(!readSavedProfile ||
+					(leg !== undefined &&
+						ifname === "clap-wlan0" &&
+						profile["connection.interface-name"] === ifname &&
+						profile["802-11-wireless.mode"] === "ap"));
 			if (connected) {
 				target.active(uuid);
 				target.state("100 (connected)");
 				receipt?.(ACTIVE_PATH);
-				const leg = target.objects.get("clap-wlan0");
 				if (leg) leg.type = "AP";
 			}
 			return connected;
@@ -128,6 +147,9 @@ export async function hybridFixture(first = false, recordDiscovery = true) {
 		fields,
 		effects,
 		saved: () => saved,
+		useSavedProfileForUp: (read: NonNullable<typeof readSavedProfile>) => {
+			readSavedProfile = read;
+		},
 		failNextUp: (action: () => void = () => undefined) => {
 			failUp = action;
 		},

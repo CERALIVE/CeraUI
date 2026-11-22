@@ -299,6 +299,7 @@ export async function nmConnect(
 	timeout?: number,
 	onActivated?: (path: string) => void,
 	onTimeout?: () => void,
+	ifname?: string,
 ) {
 	try {
 		// In mock mode, simulate successful connection
@@ -310,7 +311,18 @@ export async function nmConnect(
 		const timeoutArgs = timeout ? ["-w", String(timeout)] : [];
 		const stdout = await run(
 			"nmcli",
-			timeoutArgs.concat(["conn", "up", argMatch(ID_RE, uuid)]),
+			timeoutArgs.concat(
+				ifname === undefined
+					? ["conn", "up", argMatch(ID_RE, uuid)]
+					: [
+							"conn",
+							"up",
+							"uuid",
+							argMatch(ID_RE, uuid),
+							"ifname",
+							argMatch(ID_RE, ifname),
+						],
+			),
 		);
 		const path = NM_ACTIVATED_PATH_RE.exec(stdout)?.[1];
 		if (path) onActivated?.(path);

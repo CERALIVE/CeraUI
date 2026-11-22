@@ -71,6 +71,12 @@ export async function ensureConcurrentApInterface(
 	admitted: () => boolean = () => true,
 	creationPermit?: ((created: CreatedInterface) => Promise<boolean>) | false,
 	onRefusal?: (reason: AllocationFailure) => void,
+	creation?: {
+		readonly beforeCreate: () => Promise<boolean>;
+		readonly beforePolicy?: (() => Promise<boolean>) | undefined;
+		readonly preserveDevicePolicy?: boolean;
+		readonly phy?: number;
+	},
 ): Promise<ConcurrentApInterface | undefined> {
 	const parent = argMatch(ID_RE, parentIfname);
 	const ifname = argMatch(ID_RE, concurrentApIfname(parentIfname));
@@ -92,6 +98,8 @@ export async function ensureConcurrentApInterface(
 		return { ifname, created: false, type: "managed" };
 	}
 	if (creationPermit === false) return refuse("create-forbidden");
+	if (creation && (!(await creation.beforeCreate()) || !admitted()))
+		return refuse("admission-lost-after-lookup");
 	const target: ConcurrentApInterface = {
 		ifname,
 		created: true,
@@ -101,10 +109,13 @@ export async function ensureConcurrentApInterface(
 	let handedOff = false;
 	let createCommandFailed = false;
 	try {
+		// shortcut: iw can bind to a wiphy index, not an atomic parent lifetime.
+		// Wiphy index reuse after the proof requires kernel-side lifetime binding.
 		const receipt = await interfaceRunner("iw", [
 			"--debug",
-			"dev",
-			parent,
+			...(creation?.phy === undefined
+				? ["dev", parent]
+				: [`phy#${creation.phy}`]),
 			"interface",
 			"add",
 			ifname,
@@ -157,7 +168,15 @@ export async function ensureConcurrentApInterface(
 				return refuse("created-identity-changed-after-wait");
 			if (creationPermit && !(await creationPermit(identity)))
 				return refuse("creation-permit-refused");
-			if (!(await setConcurrentAutoconnect(ifname, "no", matchesIdentity)))
+			if (
+				!creation?.preserveDevicePolicy &&
+				!(await setConcurrentAutoconnect(
+					ifname,
+					"no",
+					matchesIdentity,
+					creation?.beforePolicy,
+				))
+			)
 				return refuse("created-autoconnect-refused");
 			if (!admitted())
 				return refuse("admission-lost-after-created-autoconnect");

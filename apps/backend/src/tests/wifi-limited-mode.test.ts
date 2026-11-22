@@ -52,6 +52,7 @@ import {
 	wifiHotspotStop,
 } from "../modules/wifi/wifi-hotspot-config.ts";
 import { handleHotspotConn } from "../modules/wifi/wifi-hotspot-discovery.ts";
+import * as profileOperations from "../modules/wifi/wifi-hotspot-profile-operation.ts";
 import type { WifiInterfaceWithHotspot } from "../modules/wifi/wifi-hotspot-types.ts";
 import * as interfaces from "../modules/wifi/wifi-interfaces.ts";
 import { getWifiIdToMacAddress } from "../modules/wifi/wifi-interfaces.ts";
@@ -71,6 +72,11 @@ import {
 	ACTIVE_PATH,
 	mockRosterActivation,
 } from "./helpers/wifi-active-observation.ts";
+import { firstApInstances } from "./helpers/wifi-first-ap-instances.ts";
+import {
+	decodeProfile,
+	encodeProfile,
+} from "./helpers/wifi-first-ap-keyfile-codec.ts";
 import { limitedHybridFixture } from "./helpers/wifi-limited-hybrid.ts";
 import { wifiProtocolContext } from "./helpers/wifi-protocol-context.ts";
 import {
@@ -91,6 +97,8 @@ let reads: string[];
 let warnings: string[];
 let frames: string[];
 let channel: string;
+let profileBand: string;
+let profilePort: string;
 let profileIfname: string;
 let hasProfile: boolean;
 let streamingOn: boolean;
@@ -127,6 +135,8 @@ beforeEach(async () => {
 	warnings = [];
 	frames = [];
 	channel = "0";
+	profileBand = "";
+	profilePort = "";
 	profileIfname = "";
 	hasProfile = true;
 	streamingOn = false;
@@ -171,10 +181,11 @@ beforeEach(async () => {
 			"802-11-wireless.mode": "ap",
 			"802-11-wireless.ssid": NAME,
 			"802-11-wireless-security.psk": PASSWORD,
-			"802-11-wireless.band": "",
+			"802-11-wireless.band": profileBand,
 			"802-11-wireless.channel": channel,
 			"802-11-wireless-security.key-mgmt": "wpa-psk",
 			"connection.interface-name": profileIfname,
+			"match.path": profilePort,
 		};
 		return nmcliFieldOutput(args, (field) => values[field] ?? "");
 	});
@@ -516,6 +527,452 @@ test("limited restore counts nonstation address groups before plain record prece
 	expect(warnings).toEqual([
 		"limited restore: requires exactly one logical intent and profile owner on wlan0",
 	]);
+});
+
+test.each(["plain", "port-only"] as const)(
+	"limited boot requires lane A's plain intent for a correctly pinned profile (%s)",
+	async (intent) => {
+		const port = `${MAC}@usb-Port2:1.0`;
+		const key = intent === "plain" ? MAC : port;
+		getConfig().wifi_modes = { [key]: "hotspot" };
+		profilePort = "usb-Port2:1.0";
+		spyOn(radioIdentityReaders, "readDevicePath").mockResolvedValue(
+			profilePort,
+		);
+		spyOn(credentials, "getHotspotCredentials").mockImplementation((owner) =>
+			owner === key
+				? { ssid: NAME, password: PASSWORD, conn: UUID, channel: "auto" }
+				: undefined,
+		);
+		await reconcileWifiAdapterModes();
+		expect(effects).toEqual(intent === "plain" ? [`up:${UUID}`] : []);
+		expect(getConfig().wifi_modes).toEqual({ [key]: "hotspot" });
+	},
+);
+
+test("limited boot cannot inherit a port-only hybrid profile with no live path", async () => {
+	const port = `${MAC}@usb-Port2:1.0`;
+	getConfig().wifi_modes = { [port]: "hybrid" };
+	profileIfname = "clap-wlan0";
+	spyOn(credentials, "getHotspotCredentials").mockImplementation((key) =>
+		key === port ? { ssid: NAME, password: PASSWORD, conn: UUID } : undefined,
+	);
+	await reconcileWifiAdapterModes({
+		...defaultAdapterModeDeps,
+		readCapabilities: () => ({ staApCombo: { supported: true } }),
+	});
+	expect(effects).toEqual([]);
+});
+
+test.each(["missing", "matching"] as const)(
+	"D12 with a plain Hybrid intent checks the saved path against the %s live path",
+	async (path) => {
+		getConfig().wifi_modes = { [MAC]: "hybrid" };
+		profileIfname = "clap-wlan0";
+		profilePort = "usb-Port2:1.0";
+		spyOn(radioIdentityReaders, "readDevicePath").mockResolvedValue(
+			path === "matching" ? profilePort : undefined,
+		);
+		await reconcileWifiAdapterModes({
+			...defaultAdapterModeDeps,
+			readCapabilities: () => ({ staApCombo: { supported: true } }),
+		});
+		expect(effects).toEqual(path === "matching" ? [`up:${UUID}`] : []);
+		expect(warnings).toEqual(
+			path === "missing"
+				? [
+						"limited restore: available port does not prove the saved owner on wlan0",
+					]
+				: ["hotspot restored on an adapter that could not be identified"],
+		);
+	},
+);
+
+test("exclusive D12 refuses a profile pinned to an interface other than the selected radio", async () => {
+	profileIfname = "wlan9";
+	await reconcileWifiAdapterModes();
+	expect(effects).toEqual([]);
+});
+
+test("D12 sends the saved UUID and the verified interface to NetworkManager", async () => {
+	const connect = spyOn(nm, "nmConnect");
+	connect.mockRestore();
+	const cli = spyOn(runner, "run");
+	const read = cli.getMockImplementation();
+	if (!read) throw new Error("Missing test CLI");
+	const requests: string[][] = [];
+	cli.mockImplementation(async (binary, args) => {
+		if (binary === "nmcli" && args.includes("up")) {
+			requests.push([...args]);
+			return "Connection successfully activated";
+		}
+		return read(binary, args);
+	});
+	await reconcileWifiAdapterModes();
+	expect(requests).toEqual([
+		["-w", "30", "conn", "up", "uuid", UUID, "ifname", "wlan0"],
+	]);
+});
+
+test("limited exclusive restore rechecks sole-radio eligibility at Up dispatch", async () => {
+	// The profile-operation ownership preflight runs after D12's selection.
+	spyOn(credentials, "getHotspotCredentialOwners").mockImplementation(() => {
+		addWifiInterface("limited:4:1", radio(1));
+		return [];
+	});
+	await reconcileWifiAdapterModes();
+	expect(effects).toEqual([]);
+});
+
+test("limited hybrid restore rechecks intent at Up dispatch", async () => {
+	getConfig().wifi_modes = { [MAC]: "hybrid" };
+	profileIfname = "clap-wlan0";
+	spyOn(credentials, "getHotspotCredentialOwners").mockImplementation(() => {
+		getConfig().wifi_modes = { [MAC]: "station" };
+		return [];
+	});
+	await reconcileWifiAdapterModes({
+		...defaultAdapterModeDeps,
+		readCapabilities: () => ({ staApCombo: { supported: true } }),
+	});
+	expect(effects).toEqual([]);
+});
+
+function alreadyPinnedLimitedProfile() {
+	const profile = {
+		"connection.interface-name": "clap-wlan0",
+		"connection.autoconnect": "yes",
+		"802-11-wireless.mode": "ap",
+	};
+	const resources = firstApInstances(
+		new Set([UUID]),
+		new Map([[UUID, profile]]),
+	);
+	resources.add(UUID);
+	const observation = {
+		active: undefined,
+		pending: false,
+		mode: "ap",
+		ifname: profileIfname,
+	};
+	const inventory = spyOn(nm, "nmConnsGet");
+	const listing = inventory.getMockImplementation();
+	if (!listing) throw new Error("Missing fixture inventory");
+	inventory.mockImplementation(async (fields) =>
+		fields === "uuid,dbus-path" || fields === "uuid,filename"
+			? resources.read(["--fields", fields], observation).split("\n")
+			: listing(fields),
+	);
+	spyOn(credentials, "getHotspotCredentialOwners").mockImplementation((uuid) =>
+		uuid === UUID ? [MAC] : [],
+	);
+	spyOn(runner, "run").mockImplementation(async (binary, args = []) => {
+		if (binary === "busctl") return resources.busReply(args);
+		if (binary === "nmcli" && nmcliFieldNames(args).length)
+			return resources.read([...args], observation);
+		throw new Error("Unexpected profile command");
+	});
+	spyOn(runner, "runWithStdin").mockImplementation(
+		async (_binary, args, input) => {
+			const fields = decodeProfile(input);
+			for (let i = 3; i < args.length; i += 2) {
+				const key = args[i];
+				const value = args[i + 1];
+				if (key === undefined || value === undefined)
+					throw new Error("Invalid offline delta");
+				fields[key] = value;
+			}
+			return encodeProfile(fields);
+		},
+	);
+	return resources.files;
+}
+
+// Inject inside the caller's mutation guard, not on a global read count.
+function duringDispatchProfileRead(
+	change: () => void,
+	atBoundary: (arm: () => void) => void = atUpPreflight,
+) {
+	let changed = false;
+	let atDispatch = false;
+	atBoundary(() => {
+		atDispatch = true;
+	});
+	const read = nm.nmConnGetFields;
+	spyOn(nm, "nmConnGetFields").mockImplementation(async (uuid, fields) => {
+		const result = await read(uuid, fields);
+		if (
+			atDispatch &&
+			!changed &&
+			fields.includes("match.path") &&
+			fields[0] === "802-11-wireless.mode"
+		) {
+			changed = true;
+			change();
+		}
+		return result;
+	});
+	return () => changed;
+}
+
+function atCreatePreflight(change: () => void) {
+	const select = spyOn(concurrent, "selectConcurrentApInterface");
+	const implementation = select.getMockImplementation();
+	if (!implementation) throw new Error("Missing fixture selector");
+	select.mockImplementation((parent, admitted, create, onRefusal, guard) =>
+		implementation(
+			parent,
+			admitted,
+			create,
+			onRefusal,
+			guard && {
+				...guard,
+				beforeCreate: () => {
+					change();
+					return guard.beforeCreate();
+				},
+			},
+		),
+	);
+}
+
+function atUpPreflight(change: () => void) {
+	let dispatched = false;
+	const run = profileOperations.runHotspotProfileOperation;
+	spyOn(profileOperations, "runHotspotProfileOperation").mockImplementation(
+		(operation, evidence) => {
+			if (operation.kind !== "up") return run(operation, evidence);
+			const guarded: profileOperations.HotspotProfileOperation = {
+				...operation,
+				run: (...args: Parameters<typeof operation.run>) => {
+					dispatched = true;
+					change();
+					return operation.run(...args);
+				},
+			};
+			return run(guarded, evidence);
+		},
+	);
+	return () => dispatched;
+}
+
+test.each(["lifetime", "MAC", "port"] as const)(
+	"limited exclusive Up rejects unpublished changes to live %s evidence",
+	async (evidence) => {
+		if (!limitedKernel) throw new Error("Missing limited fixture");
+		const kernel = limitedKernel;
+		if (evidence === "port") profilePort = "original-port";
+		const published = wifiRadioIdentity.state;
+		const changed = duringDispatchProfileRead(() => {
+			switch (evidence) {
+				case "lifetime":
+					kernel.replaceParent();
+					break;
+				case "MAC":
+					kernel.permanent("dc:a6:32:aa:bb:cc");
+					break;
+				case "port":
+					spyOn(radioIdentityReaders, "readDevicePath").mockResolvedValue(
+						"replacement-port",
+					);
+					break;
+			}
+		});
+		await reconcileWifiAdapterModes();
+		expect(changed()).toBe(true);
+		expect(wifiRadioIdentity.state).toBe(published);
+		expect(effects).toEqual([]);
+	},
+);
+
+test("limited hybrid restore activates an already pinned profile without modifying it", async () => {
+	getConfig().wifi_modes = { [MAC]: "hybrid" };
+	profileIfname = "clap-wlan0";
+	const files = alreadyPinnedLimitedProfile();
+	spyOn(runner, "runWithStdin").mockRejectedValue(
+		new Error("Offline serialization unavailable"),
+	);
+	try {
+		const bytes = await Bun.file(files.filename(UUID)).text();
+		await reconcileWifiAdapterModes({
+			...defaultAdapterModeDeps,
+			readCapabilities: () => ({ staApCombo: { supported: true } }),
+		});
+		expect(effects).toEqual([`up:${UUID}`]);
+		expect(await Bun.file(files.filename(UUID)).text()).toBe(bytes);
+	} finally {
+		files.close();
+	}
+});
+
+test("limited hybrid restore does not change the target's device autoconnect policy", async () => {
+	getConfig().wifi_modes = { [MAC]: "hybrid" };
+	profileIfname = "clap-wlan0";
+	await reconcileWifiAdapterModes({
+		...defaultAdapterModeDeps,
+		readCapabilities: () => ({ staApCombo: { supported: true } }),
+	});
+	expect(effects).toContain(`up:${UUID}`);
+	expect(limitedKernel?.calls.filter(([binary]) => binary === "nmcli")).toEqual(
+		[],
+	);
+});
+
+test("limited hybrid cold restore creates its leg without changing device autoconnect", async () => {
+	getConfig().wifi_modes = { [MAC]: "hybrid" };
+	profileIfname = "clap-wlan0";
+	if (!limitedKernel) throw new Error("Missing hybrid fixture");
+	await limitedKernel.cold();
+	await reconcileWifiAdapterModes({
+		...defaultAdapterModeDeps,
+		readCapabilities: () => ({ staApCombo: { supported: true } }),
+	});
+	expect(effects).toContain(`up:${UUID}`);
+	expect(
+		limitedKernel.calls.filter((args) => args.includes("add")),
+	).toHaveLength(1);
+	expect(limitedKernel.calls.filter(([binary]) => binary === "nmcli")).toEqual(
+		[],
+	);
+});
+
+test("limited hybrid cold restore never adds a leg to an unpublished replacement parent", async () => {
+	getConfig().wifi_modes = { [MAC]: "hybrid" };
+	profileIfname = "clap-wlan0";
+	if (!limitedKernel) throw new Error("Missing hybrid fixture");
+	const kernel = limitedKernel;
+	await kernel.cold();
+	const published = wifiRadioIdentity.state;
+	const changed = duringDispatchProfileRead(
+		kernel.replaceParent,
+		atCreatePreflight,
+	);
+	await reconcileWifiAdapterModes({
+		...defaultAdapterModeDeps,
+		readCapabilities: () => ({ staApCombo: { supported: true } }),
+	});
+	expect(changed()).toBe(true);
+	expect(wifiRadioIdentity.state).toBe(published);
+	expect(kernel.calls.filter((args) => args.includes("add"))).toEqual([]);
+	expect(effects).toEqual([]);
+});
+
+test.each(["1", "11"])(
+	"limited same-channel hybrid restore checks saved channel %s against the station",
+	async (savedChannel) => {
+		getConfig().wifi_modes = { [MAC]: "hybrid" };
+		profileIfname = "clap-wlan0";
+		channel = savedChannel;
+		profileBand = "bg";
+		row.hotspot.bandCapability = ["auto", "auto_24"];
+		setDerivedApChannels([
+			{ channel: 1, freqMhz: 2412, band: "bg" },
+			{ channel: 11, freqMhz: 2462, band: "bg" },
+		]);
+		await reconcileWifiAdapterModes({
+			...defaultAdapterModeDeps,
+			readCapabilities: () => ({ staApCombo: { supported: true } }),
+		});
+		expect(effects.filter((effect) => effect.startsWith("up:"))).toEqual(
+			savedChannel === "1" ? [`up:${UUID}`] : [],
+		);
+	},
+);
+
+test("limited hybrid restore refuses a profile changed during the station probe", async () => {
+	getConfig().wifi_modes = { [MAC]: "hybrid" };
+	profileIfname = "clap-wlan0";
+	let checkingUp = false;
+	atUpPreflight(() => {
+		checkingUp = true;
+	});
+	spyOn(concurrent, "readHybridStationChannel").mockImplementation(async () => {
+		if (checkingUp) profileIfname = "unrelated-leg";
+		return {
+			identity: "station",
+			frequency: 2412,
+			fields: {},
+			sameChannelOnly: true,
+		};
+	});
+	await reconcileWifiAdapterModes({
+		...defaultAdapterModeDeps,
+		readCapabilities: () => ({ staApCombo: { supported: true } }),
+	});
+	expect(effects).toEqual([]);
+});
+
+test("limited hybrid Up refuses a roam during the dispatch leg identity check", async () => {
+	getConfig().wifi_modes = { [MAC]: "hybrid" };
+	profileIfname = "clap-wlan0";
+	const kernel = limitedKernel;
+	if (!kernel) throw new Error("Missing fixture");
+	let checkingUp = false;
+	let roamed = false;
+	atUpPreflight(() => {
+		checkingUp = true;
+	});
+	const readLeg = concurrent.readHybridTargetIdentity;
+	spyOn(concurrent, "readHybridTargetIdentity").mockImplementation(
+		async (...args) => {
+			const result = await readLeg(...args);
+			if (checkingUp) {
+				roamed = true;
+				kernel.roam();
+			}
+			return result;
+		},
+	);
+	await reconcileWifiAdapterModes({
+		...defaultAdapterModeDeps,
+		readCapabilities: () => ({ staApCombo: { supported: true } }),
+	});
+	expect(roamed).toBe(true);
+	expect(effects).toEqual([]);
+});
+
+test("limited hybrid Up refuses a station roam during the final profile read", async () => {
+	getConfig().wifi_modes = { [MAC]: "hybrid" };
+	profileIfname = "clap-wlan0";
+	let identity = "station";
+	spyOn(concurrent, "readHybridStationChannel").mockImplementation(
+		async () => ({
+			identity,
+			frequency: 2412,
+			fields: {},
+			sameChannelOnly: true,
+		}),
+	);
+	const roamed = duringDispatchProfileRead(() => {
+		identity = "roamed";
+	});
+	await reconcileWifiAdapterModes({
+		...defaultAdapterModeDeps,
+		readCapabilities: () => ({ staApCombo: { supported: true } }),
+	});
+	expect(roamed()).toBe(true);
+	expect(effects).toEqual([]);
+});
+
+test("limited hybrid Up refuses a replaced leg after the last profile read", async () => {
+	getConfig().wifi_modes = { [MAC]: "hybrid" };
+	profileIfname = "clap-wlan0";
+	if (!limitedKernel) throw new Error("Missing hybrid fixture");
+	const kernel = limitedKernel;
+	const files = alreadyPinnedLimitedProfile();
+	const replaced = duringDispatchProfileRead(kernel.replaceLeg);
+	try {
+		const bytes = await Bun.file(files.filename(UUID)).text();
+		await reconcileWifiAdapterModes({
+			...defaultAdapterModeDeps,
+			readCapabilities: () => ({ staApCombo: { supported: true } }),
+		});
+		expect(replaced()).toBe(true);
+		expect(effects).toEqual([]);
+		expect(await Bun.file(files.filename(UUID)).text()).toBe(bytes);
+	} finally {
+		files.close();
+	}
 });
 
 for (const boundary of ["info", "visibility"] as const) {
@@ -1102,7 +1559,7 @@ test("limited hybrid restore preserves the station and uses only the already bou
 		...defaultAdapterModeDeps,
 		readCapabilities: () => ({ staApCombo: { supported: true } }),
 	});
-	expect(effects).toEqual(["iw-add", "direct-modify", `up:${UUID}`]);
+	expect(effects).toEqual(["iw-add", `up:${UUID}`]);
 	expect(saved.channel).toBe("ch_11");
 	expect(row.hotspot.channel).toBe("ch_11");
 	expect(row.conn).toBe("station-uplink");
@@ -1133,7 +1590,11 @@ for (const scenario of [
 		if (scenario === "composite")
 			getConfig().wifi_modes = { [MAC]: "hotspot", [`${MAC}@port`]: "hotspot" };
 		if (scenario === "channel") channel = "165";
-		if (scenario === "replacement") row.ifname = "replacement";
+		if (scenario === "replacement") {
+			if (!limitedKernel) throw new Error("Missing limited fixture");
+			limitedKernel.replaceParent();
+			await limitedKernel.observeParent();
+		}
 		if (scenario === "missing-profile") hasProfile = false;
 		if (scenario === "streaming") {
 			streamingOn = true;
@@ -1211,11 +1672,11 @@ test.each(["initial", "target changed", "channel changed"] as const)(
 				maxAttempts: 3,
 			}),
 		]);
-		expect(effects).toEqual(stage === "initial" ? [] : ["direct-modify"]);
+		expect(effects).toEqual([]);
 	},
 );
 
-test("limited hybrid revalidation identifies lost admission after binding", async () => {
+test("limited hybrid revalidation identifies lost admission after checking the target", async () => {
 	getConfig().wifi_modes = { [MAC]: "hybrid" };
 	profileIfname = "clap-wlan0";
 	spyOn(concurrent, "readHybridStationChannel").mockResolvedValue({
@@ -1225,10 +1686,14 @@ test("limited hybrid revalidation identifies lost admission after binding", asyn
 		sameChannelOnly: true,
 	});
 	let preference: "hybrid" | "station" = "hybrid";
-	spyOn(nm, "nmConnSetFields").mockImplementation(async () => {
-		preference = "station";
-		return true;
-	});
+	const revalidate = concurrent.revalidateConcurrentApInterface;
+	spyOn(concurrent, "revalidateConcurrentApInterface").mockImplementation(
+		async (target) => {
+			const result = await revalidate(target);
+			preference = "station";
+			return result;
+		},
+	);
 	const warnings: unknown[][] = [];
 	spyOn(logger, "warn").mockImplementation((...args: unknown[]) => {
 		warnings.push(args);
