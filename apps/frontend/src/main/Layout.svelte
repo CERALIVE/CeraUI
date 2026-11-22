@@ -3,7 +3,7 @@ import { directionFor, getLocale, m } from '@ceraui/i18n/svelte';
 import { holdUpdateProgress } from '@ceraui/rpc/package-progress';
 import type { UpdateProgress } from '@ceraui/rpc/schemas';
 import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
-
+import { setContext } from 'svelte';
 import { OfflinePage, PWAStatus } from '$lib/components/custom/pwa';
 import { Button } from '$lib/components/ui/button';
 import * as Tooltip from '$lib/components/ui/tooltip';
@@ -23,8 +23,10 @@ import {
 	getGraceNow,
 } from '$lib/stores/connection-ux.svelte';
 import { getShouldShowOfflinePage } from '$lib/stores/offline-state.svelte';
+
 import { legacyInstall } from '$lib/updates/legacy-install';
 import { announceLegacyInstallOutcome, announceMissedInstallOutcome } from '$lib/updates/legacy-install-notice';
+import { CONNECTION_DROPPED, createLiveProgress } from '$lib/updates/live-progress';
 
 import Auth from './Auth.svelte';
 import DisconnectedBanner from './DisconnectedBanner.svelte';
@@ -70,13 +72,16 @@ $effect(() => (topBands ? publishHeight(topBands, '--top-bands-height') : undefi
 // What this tab last showed for the running install: a stale or empty frame
 // after a reconnect or a backend restart never moves it back.
 let shownInstall: UpdateProgress | undefined;
+const liveInstall = createLiveProgress();
+setContext(CONNECTION_DROPPED, () => getDisconnectedSince() !== null);
 const updatingStatus = $derived.by(() => {
-	const install = legacyInstall(getUpdating());
+	const updating = getUpdating();
+	const install = legacyInstall(updating);
 	shownInstall =
 		install.kind === 'running' && install.details
 			? holdUpdateProgress(shownInstall, install.details)
 			: undefined;
-	return shownInstall;
+	return liveInstall(shownInstall, updating, getDisconnectedSince() !== null);
 });
 // This tree receives the terminal frame, so it owns the announcement, once per
 // outcome (`Layout.update-terminal.test.ts`). It reads the dedicated selector,

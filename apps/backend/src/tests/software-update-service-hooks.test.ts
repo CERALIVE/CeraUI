@@ -137,7 +137,6 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 			{
 				stdout: "/run/ceralive/software-update.stdout",
 				stderr: "/run/ceralive/software-update.stderr",
-				status: "/run/ceralive/software-update.status",
 			},
 		);
 		const script = launcher.at(-1);
@@ -156,7 +155,6 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 			kind: "finished",
 			exitCode: 0,
 			cleanup: "stop",
-			aptStatus: true,
 		});
 	});
 
@@ -218,7 +216,6 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 					{
 						stdout: "/run/ceralive/software-update.stdout",
 						stderr: "/run/ceralive/software-update.stderr",
-						status: "/run/ceralive/software-update.status",
 					},
 				),
 			).toThrow(InvalidDetachedAptUpgradeArgumentsError);
@@ -234,10 +231,9 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 				outputPaths: {
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
-					status: "/run/ceralive/software-update.status",
 				},
 				readAttempt: () => null,
-				writeAttempt: () => undefined,
+				updateAttempt: (change) => change(null),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () =>
@@ -294,10 +290,9 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 				outputPaths: {
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
-					status: "/run/ceralive/software-update.status",
 				},
 				readAttempt: () => null,
-				writeAttempt: () => undefined,
+				updateAttempt: (change) => change(null),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {

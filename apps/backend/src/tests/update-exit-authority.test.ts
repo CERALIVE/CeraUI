@@ -180,10 +180,9 @@ test.each([undefined, "0garbage"])(
 				outputPaths: {
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
-					status: "/run/ceralive/software-update.status",
 				},
 				readAttempt: () => null,
-				writeAttempt: () => undefined,
+				updateAttempt: (change) => change(null),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {

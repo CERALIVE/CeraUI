@@ -14,26 +14,23 @@ import {
 	prepareSoftwareUpdateOutput,
 	readSoftwareUpdateAttempt,
 	readSoftwareUpdateOutput,
-	readSoftwareUpdateStatusDone,
 	type SoftwareUpdateAttempt,
 	type SoftwareUpdateOutputPaths,
 	type SoftwareUpdateOutputRead,
 	softwareUpdateOutputPaths,
 	UnsafeSoftwareUpdateOutputPathError,
-	writeSoftwareUpdateAttempt,
+	updateSoftwareUpdateAttempt,
 } from "./software-update-output.ts";
 import {
 	DetachedAptServiceCommandError,
 	DetachedAptServiceIdentityError,
 	expectedAptAllScript,
-	expectedAptUpgradeScript,
 	InvalidDetachedAptUpgradeArgumentsError,
 	isExpectedAptUpgradeArgv,
 	SOFTWARE_UPDATE_DESCRIPTION,
 	SOFTWARE_UPDATE_FRAGMENT_PATH,
 	SOFTWARE_UPDATE_LOCK,
 	SOFTWARE_UPDATE_UNIT,
-	STATUS_CHANNEL_SHELL,
 	validateDetachedAptServiceFragment,
 } from "./software-update-service-contract.ts";
 import {
@@ -71,10 +68,7 @@ export {
 
 export type DetachedAptServiceDeps = {
 	readonly outputPaths: SoftwareUpdateOutputPaths;
-	/** `status: false`: the status file could not be made, so it is not read. */
-	readonly prepareOutput: () => Promise<
-		{ readonly status: boolean } | undefined
-	>;
+	readonly prepareOutput: () => Promise<void>;
 	readonly start: (command: readonly string[]) => Promise<void>;
 	readonly inspect: () => Promise<DetachedAptServiceState>;
 	readonly cleanup: (state: FinishedDetachedAptServiceState) => Promise<void>;
@@ -84,14 +78,20 @@ export type DetachedAptServiceDeps = {
 	) => Promise<SoftwareUpdateOutputRead>;
 	readonly sleep: (milliseconds: number) => Promise<void>;
 	readonly now?: () => number;
-	/** The exit an observer recorded for the current unit; null until one did. */
 	/** The current attempt's durable record; synchronous so admission precedes any publication. */
 	readonly readAttempt: () => SoftwareUpdateAttempt | null;
-	readonly writeAttempt: (record: SoftwareUpdateAttempt) => void;
+	/**
+	 * The only way to write it: `change` sees the record it replaces in the
+	 * same synchronous step (null: write nothing), so no other writer can come
+	 * between the comparison and the write. Returns what was written.
+	 */
+	readonly updateAttempt: (
+		change: (
+			current: SoftwareUpdateAttempt | null,
+		) => SoftwareUpdateAttempt | null,
+	) => SoftwareUpdateAttempt | null;
 	/** Milliseconds since boot; defaults to the host's uptime. */
 	readonly uptimeMs?: () => number;
-	/** The status reader copied everything APT wrote; absent: never waited for. */
-	readonly statusDone?: () => Promise<boolean>;
 };
 
 function assertTrustedOutputPaths(
@@ -100,8 +100,7 @@ function assertTrustedOutputPaths(
 	const trusted = softwareUpdateOutputPaths();
 	if (
 		outputPaths.stdout !== trusted.stdout ||
-		outputPaths.stderr !== trusted.stderr ||
-		outputPaths.status !== trusted.status
+		outputPaths.stderr !== trusted.stderr
 	) {
 		throw new UnsafeSoftwareUpdateOutputPathError(
 			outputPaths.stdout,
@@ -110,11 +109,9 @@ function assertTrustedOutputPaths(
 	}
 }
 
-/** `aptStatus: false`: the pre-channel form, for a launch whose status file could not be made. */
 export function buildDetachedAptUpgradeCommand(
 	aptArgs: readonly string[],
 	outputPaths: SoftwareUpdateOutputPaths,
-	aptStatus = true,
 ): string[] {
 	if (!isExpectedAptUpgradeArgv(["/usr/bin/apt-get", ...aptArgs])) {
 		throw new InvalidDetachedAptUpgradeArgumentsError();
@@ -130,7 +127,16 @@ export function buildDetachedAptUpgradeCommand(
 	) {
 		throw new InvalidDetachedAptUpgradeArgumentsError();
 	}
-	assertTrustedOutputPaths(outputPaths);
+	const trustedPaths = softwareUpdateOutputPaths();
+	if (
+		outputPaths.stdout !== trustedPaths.stdout ||
+		outputPaths.stderr !== trustedPaths.stderr
+	) {
+		throw new UnsafeSoftwareUpdateOutputPathError(
+			outputPaths.stdout,
+			"runtime paths are fixed",
+		);
+	}
 	return [
 		"systemd-run",
 		`--unit=${SOFTWARE_UPDATE_UNIT}`,
@@ -142,9 +148,8 @@ export function buildDetachedAptUpgradeCommand(
 		`--property=StandardOutput=append:${outputPaths.stdout}`,
 		`--property=StandardError=append:${outputPaths.stderr}`,
 		"--",
-		...(aptStatus
-			? [STATUS_CHANNEL_SHELL, "-ec", expectedAptUpgradeScript(aptArgs)]
-			: ["/usr/bin/apt-get", ...aptArgs]),
+		"/usr/bin/apt-get",
+		...aptArgs,
 	];
 }
 
@@ -152,14 +157,21 @@ export function buildDetachedAptAllCommand(
 	installArgs: readonly string[],
 	verdict: "any" | "force_ipv4" | "force_ipv6",
 	outputPaths: SoftwareUpdateOutputPaths,
-	aptStatus = true,
 ): string[] {
 	const family =
 		verdict === "any"
 			? []
 			: ["-o", `Acquire::ForceIPv${verdict === "force_ipv4" ? "4" : "6"}=true`];
-	const script = expectedAptAllScript(installArgs, family, aptStatus);
-	assertTrustedOutputPaths(outputPaths);
+	const script = expectedAptAllScript(installArgs, family);
+	const trusted = softwareUpdateOutputPaths();
+	if (
+		outputPaths.stdout !== trusted.stdout ||
+		outputPaths.stderr !== trusted.stderr
+	)
+		throw new UnsafeSoftwareUpdateOutputPathError(
+			outputPaths.stdout,
+			"runtime paths are fixed",
+		);
 	return [
 		"systemd-run",
 		`--unit=${SOFTWARE_UPDATE_UNIT}`,
@@ -174,7 +186,7 @@ export function buildDetachedAptAllCommand(
 		"/usr/bin/flock",
 		"-x",
 		SOFTWARE_UPDATE_LOCK,
-		aptStatus ? STATUS_CHANNEL_SHELL : "/bin/sh",
+		"/bin/sh",
 		"-ec",
 		script,
 	];
@@ -247,7 +259,6 @@ export function defaultDetachedAptServiceDeps(): DetachedAptServiceDeps {
 		readOutput: readSoftwareUpdateOutput,
 		sleep: Bun.sleep,
 		readAttempt: () => readSoftwareUpdateAttempt(paths),
-		writeAttempt: (record) => writeSoftwareUpdateAttempt(paths, record),
-		statusDone: () => readSoftwareUpdateStatusDone(paths),
+		updateAttempt: (change) => updateSoftwareUpdateAttempt(paths, change),
 	};
 }

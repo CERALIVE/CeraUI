@@ -165,14 +165,13 @@ describe("best-effort post-clean", () => {
 					outputPaths: {
 						stdout: "/run/ceralive/software-update.stdout",
 						stderr: "/run/ceralive/software-update.stderr",
-						status: "/run/ceralive/software-update.status",
 					},
 					inspect: async () =>
 						parseDetachedAptServiceState(
 							"LoadState=not-found\nActiveState=inactive\n",
 						),
 					readAttempt: () => null,
-					writeAttempt: () => undefined,
+					updateAttempt: (change) => change(null),
 					prepareOutput: async () => {
 						throw new Error("must not prepare");
 					},

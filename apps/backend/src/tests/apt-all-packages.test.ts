@@ -126,7 +126,6 @@ describe("apt-all-packages admission", () => {
 				buildDetachedAptAllCommand(install, "any", {
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
-					status: "/run/ceralive/software-update.status",
 				}),
 			).toThrow();
 		},
@@ -151,7 +150,6 @@ describe("apt-all-packages admission", () => {
 				buildDetachedAptAllCommand(install, "any", {
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
-					status: "/run/ceralive/software-update.status",
 				}).at(-1),
 			).toContain(`install ${name}=1`);
 		}
@@ -633,26 +631,19 @@ describe("apt-all-packages admission", () => {
 		const command = buildDetachedAptAllCommand(args, "any", {
 			stdout: "/run/ceralive/software-update.stdout",
 			stderr: "/run/ceralive/software-update.stderr",
-			status: "/run/ceralive/software-update.status",
 		});
 		expect(command.filter((token) => token === "systemd-run")).toHaveLength(1);
 		expect(command).toContain("/usr/bin/flock");
 		const script = command[command.length - 1] ?? "";
-		const drain =
-			"exec 3> >(set +e; echo -1000 >/proc/self/oom_score_adj 2>/dev/null; cat >>/run/ceralive/software-update.status 2>/dev/null || exec cat >/dev/null; : >>/run/ceralive/software-update.status.done 2>/dev/null) || exec 3>/dev/null; ";
-		expect(script).toStartWith(drain);
 		expect(script).toContain(
-			"/usr/bin/apt-get -o APT::Status-Fd=3 -d -y upgrade --with-new-pkgs",
-		);
-		expect(script).toContain(
-			"/usr/bin/apt-get -o APT::Status-Fd=3 -y --no-download --no-remove -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install cerastream=2026.9.7",
+			"/usr/bin/apt-get -y --no-download --no-remove -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install cerastream=2026.9.7",
 		);
 		expect(script.indexOf("upgrade --with-new-pkgs")).toBeLessThan(
 			script.indexOf("install cerastream=2026.9.7"),
 		);
-		expect(script.slice(drain.length)).not.toContain("; /usr/bin/apt-get");
+		expect(script).not.toContain("; /usr/bin/apt-get");
 		const state = (body: string) =>
-			`Id=ceralive-software-update.service\nFragmentPath=/run/systemd/transient/ceralive-software-update.service\nDescription=CeraLive software update\nTransient=yes\nType=exec\nRemainAfterExit=yes\nStandardOutput=append\nStandardError=append\nUser=\nExecStartPre=\nExecStartPost=\nExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -x /run/lock/ceralive-update.lock ${command.at(-3)} -ec ${body} ; ignore_errors=no ; start_time=[Mon 2026-09-28 18:05:58 UTC] ; stop_time=[n/a] ; pid=1088904 ; code=(null) ; status=0/0 }\n`;
+			`Id=ceralive-software-update.service\nFragmentPath=/run/systemd/transient/ceralive-software-update.service\nDescription=CeraLive software update\nTransient=yes\nType=exec\nRemainAfterExit=yes\nStandardOutput=append\nStandardError=append\nUser=\nExecStartPre=\nExecStartPost=\nExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -x /run/lock/ceralive-update.lock /bin/sh -ec ${body} ; ignore_errors=no ; start_time=[Mon 2026-09-28 18:05:58 UTC] ; stop_time=[n/a] ; pid=1088904 ; code=(null) ; status=0/0 }\n`;
 		expect(() =>
 			validateDetachedAptServiceIdentity(state(script)),
 		).not.toThrow();
@@ -681,10 +672,9 @@ describe("apt-all-packages admission", () => {
 				outputPaths: {
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
-					status: "/run/ceralive/software-update.status",
 				},
 				readAttempt: () => null,
-				writeAttempt: () => undefined,
+				updateAttempt: (change) => change(null),
 				prepareOutput: async () => {},
 				start: async () => {
 					starts++;

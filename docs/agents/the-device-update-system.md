@@ -58,12 +58,13 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
   (`quarantine.json`), idle-only restart of stale services with a protected-unit
   list, and keyed update notifications. Contract:
   [`docs/UPDATE-RECOVERY.md`](../UPDATE-RECOVERY.md).
-- **[EXISTS] Package progress.** The detached unit writes APT's own
-  `APT::Status-Fd` records to a third durable file; the UI shows the phase
-  and APT's percentage for it, never counted steps, and only a successful
-  result shows 100%. A running transaction's phase and number never move
-  back, across a backend restart included. Units from a release without the
-  channel show phases only. See
+- **[EXISTS] Package progress.** APT gets no telemetry descriptor, so reading
+  progress can never stall or fail it: the phase and number come from the
+  unit's own stdout transcript (the plan, `Get:`/`Fetched`, dpkg's
+  `Unpacking`/`Setting up`), capped at 99, and only a successful result shows
+  100%. A running transaction's phase and number never move back, across a
+  backend restart included; a number that cannot be confirmed live (unreadable
+  transcript, dropped connection) is not shown. See
   [Package update progress](../DEVICE-UPDATES.md#package-update-progress).
 - **[EXISTS; host-tested] Download-hold notice.** Genuine D8 package/OS
   interruption captures an opaque attempt before awaits and publishes through a

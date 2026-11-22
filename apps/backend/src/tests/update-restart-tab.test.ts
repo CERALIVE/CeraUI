@@ -3,7 +3,7 @@
  * The owner's case end to end: one open tab across both restarts of a package
  * update. Every backend lifetime is a real fresh process (helpers/
  * update-restart-session.ts) sharing only the device's files; the detached
- * unit runs the real wrapper and its status file in its own session, so it keeps
+ * unit runs the real released command in its own session, so it keeps
  * running when the package's postinst kills the backend. The tab is a real
  * WebSocket client that sets the password, logs in, keeps its token, and
  * re-authenticates on every new process. The frames it receives are pinned in
@@ -62,20 +62,20 @@ const BARRIERS = [
 const FAKE_APT = `#!/bin/bash
 trap '' PIPE
 step() { read -r _ < "$SCRATCH/$1.fifo"; }
+# APT's transcript for a ten-package plan. Each moment is one printf, one
+# write, so the observer never reads half of it.
 echo "Reading package lists..."
-printf 'dlstatus:1:10.0000:Retrieving file 1 of 1\\n' >&3
+printf '%s\\n' "10 upgraded, 0 newly installed, 0 to remove and 0 not upgraded." "Get:"{1..2}" https://apt.invalid trixie/main arm64 p 2 [4 kB]"
 step download-10
-printf 'dlstatus:1:60.0000:Retrieving file 1 of 1\\n' >&3
+printf '%s\\n' "Get:"{3..7}" https://apt.invalid trixie/main arm64 p 2 [4 kB]"
 step download-60
-echo "Preparing to unpack .../cerastream_2_arm64.deb ..."
-printf 'pmstatus:dpkg-exec:0.0000:Running dpkg\\npmstatus:cerastream:40.0000:Unpacking cerastream\\n' >&3
+printf '%s\\n' "Fetched 40 kB in 7s (6 kB/s)" "Preparing to unpack .../p1_2_arm64.deb ..." "Unpacking p"{1..9}" (2) over (1) ..."
 step dpkg-40
 kill -TERM "$(cat "$SCRATCH/backend.pid")"
-printf 'pmstatus:cerastream:60.0000:Setting up cerastream\\n' >&3
+printf '%s\\n' "Unpacking p10 (2) over (1) ..." "Setting up p"{1..3}" (2) ..."
 step restarted
-printf 'pmstatus:cerastream:80.0000:Setting up cerastream\\n' >&3
+printf '%s\\n' "Setting up p"{4..7}" (2) ..."
 step finish
-echo "Setting up cerastream (2) ..."
 exit 0
 `;
 
@@ -209,21 +209,36 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-	for (const child of sessions.splice(0)) {
-		child.kill("SIGKILL");
-		await child.exited;
-	}
+	// A slow step is printed, so a slow cleanup on a hosted runner names its cause.
+	const timed = async (what: string, step: () => Promise<unknown>) => {
+		const start = performance.now();
+		await step();
+		const ms = Math.round(performance.now() - start);
+		if (ms > 1_000)
+			process.stderr.write(
+				`update-restart-tab: cleanup ${what} took ${ms} ms\n`,
+			);
+	};
+	const children = sessions.splice(0);
+	for (const child of children) child.kill("SIGKILL");
+	await timed(`reaping ${children.length} backends`, () =>
+		Promise.all(children.map((child) => child.exited)),
+	);
+	// Only a unit still running is signalled: a finished one's pid may name another process by now.
 	const unit = await readFile(join(scratch, "unit.pid"), "utf8").catch(
 		() => "",
 	);
-	if (unit)
+	if (unit && !(await Bun.file(join(scratch, "unit.exit")).exists()))
 		try {
 			process.kill(-Number(unit), "SIGKILL");
 		} catch {
-			// The unit already exited with its session.
+			// The unit exited between the check and the signal.
 		}
-	await rm(scratch, { recursive: true, force: true });
-	// Kill and reap up to seven backend lifetimes; on a loaded runner that outlasts 5 s.
+	await timed("removing the scratch directory", () =>
+		rm(scratch, { recursive: true, force: true }),
+	);
+	// Up to three backends are killed and reaped; on the hosted runner a
+	// whole-runner stall of 8-12 s was measured (see the PR), beyond 5 s.
 }, 60_000);
 
 function session(role: "first" | "after-postinst" | "after-outcome" | "boot") {
@@ -550,7 +565,6 @@ test("a successful unit that can never be retired restarts CeraUI once over five
 	for (const [file, text] of [
 		["stdout", "Setting up cerastream (2) ...\n"],
 		["stderr", ""],
-		["status", "pmstatus:cerastream:90.0000:Setting up cerastream\n"],
 	] as const)
 		await writeFile(join(scratch, `unit.${file}`), text, { mode: 0o600 });
 	const exits: (number | null)[] = [];
@@ -584,7 +598,6 @@ test("a successful unit that can never be retired restarts CeraUI once over five
 // apt and dpkg for an update that finishes at once.
 const QUICK_APT = `#!/bin/bash
 echo "Setting up cerastream (2) ..."
-printf 'pmstatus:cerastream:90.0000:Setting up cerastream\\n' >&3 || exit 100
 exit 0
 `;
 const outcomeOf = (seen: Seen) =>
@@ -601,68 +614,75 @@ const ADMISSION_STEPS = [
 	"unit-start",
 ] as const;
 
-test("a restart at any step before a new update's unit starts never tells the tab another update's outcome", async () => {
-	await writeFile(join(scratch, "apt-get"), QUICK_APT);
-	const tab = new Tab();
-	// Update A succeeds and restarts CeraUI once.
-	const first = session("first");
-	const token = await signIn(tab, await first.listening());
-	first.send("recover");
-	await first.line("session:recovered");
-	await tab.until("no unit at boot", (s) => updatingOf(s) === null);
-	const exitedA = first.child.exited;
-	expect(await tab.call(["system", "startUpdate"])).toMatchObject({
-		success: true,
-	});
-	await tab.until("A's outcome", (s) => outcomeOf(s) === "success");
-	expect(await exitedA).toBe(RESTART_EXIT_CODE);
+test.each(ADMISSION_STEPS)(
+	"a restart while a new update waits at %s never tells the tab the previous update's outcome",
+	async (step) => {
+		await writeFile(join(scratch, "apt-get"), QUICK_APT);
+		const tab = new Tab();
+		// Update A succeeds and restarts CeraUI once: its success is a fresh receipt.
+		const first = session("first");
+		const token = await signIn(tab, await first.listening());
+		first.send("recover");
+		await first.line("session:recovered");
+		await tab.until("no unit at boot", (s) => updatingOf(s) === null);
+		const exitedA = first.child.exited;
+		expect(await tab.call(["system", "startUpdate"])).toMatchObject({
+			success: true,
+		});
+		await tab.until("A's outcome", (s) => outcomeOf(s) === "success");
+		expect(await exitedA).toBe(RESTART_EXIT_CODE);
 
-	// Each lifetime knows only the device's files: it is told what the last
-	// one left, then accepts a new update and is killed while it waits at the
-	// next step. One lifetime per step keeps the processes few.
-	const toldSince = (from: string) => {
-		const at = tab.seen.findIndex((s) => s.at === "moment" && s.name === from);
-		return tab.seen.slice(at).filter((s) => outcomeOf(s) !== undefined);
-	};
-	const expectTold = (from: string, kind: string) => {
-		const told = toldSince(from);
+		// Update B is accepted while A's receipt is still fresh, then CeraUI is
+		// killed while B waits at `step`.
+		const second = session("first");
+		await tab.connect(await second.listening());
+		expect(await tab.call(["auth", "login"], { token })).toEqual({
+			success: true,
+		});
+		second.send("recover");
+		await second.line("session:recovered");
+		await tab.until(
+			"A's receipt told again",
+			(s) => outcomeOf(s) === "success",
+		);
+		second.send(`park ${step}`);
+		await second.line(`session:parking ${step}`);
+		expect(await tab.call(["system", "startUpdate"])).toMatchObject({
+			success: true,
+		});
+		await second.line(`session:parked ${step}`);
+		second.child.kill("SIGKILL");
+		await second.child.exited;
+		await tab.until("B's backend died", (s) => s.at === "disconnected");
+		tab.moment("killed during B");
+
+		// The next lifetime knows only the device's files.
+		const third = session("first");
+		await tab.connect(await third.listening());
+		expect(await tab.call(["auth", "login"], { token })).toEqual({
+			success: true,
+		});
+		third.send("recover");
+		await third.line("session:recovered");
+		await tab.pull();
+		const seen = [...tab.seen];
+		tab.close();
+		const told = seen
+			.slice(
+				seen.findIndex(
+					(s) => s.at === "moment" && s.name === "killed during B",
+				),
+			)
+			.filter((s) => outcomeOf(s) !== undefined);
 		expect(told.length).toBeGreaterThan(0);
-		expect(told.map(outcomeOf)).toEqual(told.map(() => kind));
+		// Neither A's success nor any failure is ever B's; B simply never ran.
+		expect(told.map(outcomeOf)).toEqual(told.map(() => "available"));
 		expect(
 			told.some((s) => {
 				const u = updatingOf(s) as { result?: unknown } | null | undefined;
 				return typeof u === "object" && u !== null && "result" in u;
 			}),
 		).toBe(false);
-	};
-	let previous = "A's restart";
-	let kind = "success";
-	tab.moment(previous);
-	for (const step of [...ADMISSION_STEPS, undefined]) {
-		const lifetime = session("first");
-		await tab.connect(await lifetime.listening());
-		expect(await tab.call(["auth", "login"], { token })).toEqual({
-			success: true,
-		});
-		lifetime.send("recover");
-		await lifetime.line("session:recovered");
-		await tab.pull();
-		// A's own success is told once more; an update killed before its unit
-		// started is never given any outcome.
-		expectTold(previous, kind);
-		if (step === undefined) break;
-		lifetime.send(`park ${step}`);
-		await lifetime.line(`session:parking ${step}`);
-		expect(await tab.call(["system", "startUpdate"])).toMatchObject({
-			success: true,
-		});
-		await lifetime.line(`session:parked ${step}`);
-		lifetime.child.kill("SIGKILL");
-		await lifetime.child.exited;
-		await tab.until(`killed at ${step}`, (s) => s.at === "disconnected");
-		previous = `killed at ${step}`;
-		tab.moment(previous);
-		kind = "available";
-	}
-	tab.close();
-}, 240_000);
+	},
+	120_000,
+);

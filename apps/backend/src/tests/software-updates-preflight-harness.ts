@@ -28,7 +28,7 @@ export const SPACE_TRANSCRIPT = `After this operation, 2 kB of additional disk s
 export function useNoHostUpdateUnit(): void {
 	setDetachedAptServiceDepsForTest({
 		outputPaths: softwareUpdateOutputPaths(),
-		prepareOutput: async () => ({ status: true }),
+		prepareOutput: async () => undefined,
 		start: async () => undefined,
 		inspect: async () => ({ kind: "absent" }),
 		cleanup: async () => undefined,
@@ -38,7 +38,7 @@ export function useNoHostUpdateUnit(): void {
 		}),
 		sleep: async () => undefined,
 		readAttempt: () => null,
-		writeAttempt: () => undefined,
+		updateAttempt: (change) => change(null),
 	});
 }
 

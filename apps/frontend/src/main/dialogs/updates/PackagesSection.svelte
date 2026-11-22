@@ -19,7 +19,7 @@ import { m } from '@ceraui/i18n/svelte';
 import { holdUpdateProgress } from '@ceraui/rpc/package-progress';
 import type { UpdateCheckClockSummary, UpdateProgress, UpdateTransportSummary } from '@ceraui/rpc/schemas';
 import { AlertTriangle, Download, RefreshCw } from '@lucide/svelte';
-import { untrack } from 'svelte';
+import { getContext, untrack } from 'svelte';
 
 import { AppDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
@@ -29,6 +29,7 @@ import { rpc } from '$lib/rpc/client';
 import { NotSentError } from '$lib/rpc/rpc-error';
 import { getUpdateState } from '$lib/rpc/subscriptions.svelte';
 import { actionableCountOf, availableOf, checkedAtOf } from '$lib/updates/legacy-packages';
+import { CONNECTION_DROPPED, createLiveProgress } from '$lib/updates/live-progress';
 import type { UpdateSurface } from '$lib/updates/update-surface.svelte';
 
 import ActionOutcomeBand from './ActionOutcomeBand.svelte';
@@ -52,12 +53,15 @@ const lastCheckedAt = $derived(checkedAtOf(updateState));
 // What this dialog last showed for the running install; a stale frame never moves it back.
 // `inProgress` reads it on every state, so the hold also ends with the run.
 let shownProgress: UpdateProgress | undefined;
+const liveProgress = createLiveProgress();
+// Outside the layout (a test mount) the connection counts as up.
+const connectionDropped = getContext<(() => boolean) | undefined>(CONNECTION_DROPPED);
 const progress = $derived.by(() => {
 	shownProgress =
 		updateState?.kind === 'downloading' || updateState?.kind === 'installing'
 			? holdUpdateProgress(shownProgress, updateState.progress)
 			: undefined;
-	return shownProgress;
+	return liveProgress(shownProgress, updateState, connectionDropped?.() ?? false);
 });
 const inProgress = $derived(progress !== undefined);
 // APT restarts its percentage for the install, so the phase names which one it is.

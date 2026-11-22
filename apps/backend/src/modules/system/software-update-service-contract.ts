@@ -123,36 +123,9 @@ export function isExpectedAptAllInstallArgv(argv: readonly string[]): boolean {
 	return true;
 }
 
-// Descriptor 3, never 2: apt marks its status descriptor close-on-exec before
-// forking dpkg, which would leave DPkg::Post-Invoke hooks without stderr.
-const APT_STATUS_OPTION = "-o APT::Status-Fd=3";
-
-/** The status forms need bash: its failed `exec` redirect returns, where sh exits. */
-export const STATUS_CHANNEL_SHELL = "/bin/bash";
-
-// APT writes its records into a pipe. Its reader appends them to the status
-// file and, on any write error (a full /run, a size limit), discards the rest,
-// so a status write never fails; it is exempt from the OOM killer, so only
-// stopping the unit, which ends APT too, ends it early. Once it has copied
-// everything it marks the end (`.done`), so the final read knows it is
-// complete; after an error it does not. A shell that cannot start it gives
-// APT /dev/null.
-function aptStatusRedirect(): string {
-	const status = softwareUpdateOutputPaths().status;
-	return `exec 3> >(set +e; echo -1000 >/proc/self/oom_score_adj 2>/dev/null; cat >>${status} 2>/dev/null || exec cat >/dev/null; : >>${status}.done 2>/dev/null) || exec 3>/dev/null`;
-}
-
-export function expectedAptUpgradeScript(aptArgs: readonly string[]): string {
-	if (!isExpectedAptUpgradeArgv(["/usr/bin/apt-get", ...aptArgs]))
-		throw new InvalidDetachedAptUpgradeArgumentsError();
-	return `${aptStatusRedirect()}; exec /usr/bin/apt-get ${APT_STATUS_OPTION} ${aptArgs.join(" ")}`;
-}
-
-/** `aptStatus: false` is the pre-channel script, kept only so it stays adoptable. */
 export function expectedAptAllScript(
 	install: readonly string[],
 	family: readonly string[],
-	aptStatus = true,
 ): string {
 	if (!isExpectedAptAllInstallArgv(["/usr/bin/apt-get", ...install]))
 		throw new InvalidDetachedAptUpgradeArgumentsError();
@@ -169,36 +142,10 @@ export function expectedAptAllScript(
 		throw new InvalidDetachedAptUpgradeArgumentsError();
 	if (family.length && !install.includes(family[1] ?? ""))
 		throw new InvalidDetachedAptUpgradeArgumentsError();
-	const apt = aptStatus
-		? `/usr/bin/apt-get ${APT_STATUS_OPTION}`
-		: "/usr/bin/apt-get";
-	const run = `${apt} -d -y upgrade --with-new-pkgs${family.length ? ` ${family.join(" ")}` : ""} && ${apt} ${install.join(" ")}`;
-	return aptStatus ? `${aptStatusRedirect()}; ${run}` : run;
+	return `/usr/bin/apt-get -d -y upgrade --with-new-pkgs${family.length ? ` ${family.join(" ")}` : ""} && /usr/bin/apt-get ${install.join(" ")}`;
 }
 
-const EXEC_START_TAIL =
-	/^ ; ignore_errors=no ; start_time=\[[^\]\n]+\] ; stop_time=\[[^\]\n]+\] ; pid=\d+ ; code=(?:\(null\)|exited|killed|dumped) ; status=\d+(?:\/[A-Za-z0-9_-]+)? }$/;
-
-function wrappedScript(execStart: string, argvPrefix: string): string | null {
-	const scriptEnd = execStart.indexOf(" ; ignore_errors=", argvPrefix.length);
-	return execStart.startsWith(argvPrefix) &&
-		scriptEnd >= 0 &&
-		EXEC_START_TAIL.test(execStart.slice(scriptEnd))
-		? execStart.slice(argvPrefix.length, scriptEnd)
-		: null;
-}
-
-function canonicalScript(build: () => string): string | null {
-	try {
-		return build();
-	} catch (error) {
-		if (error instanceof InvalidDetachedAptUpgradeArgumentsError) return null; // a foreign command is not adoptable
-		throw error;
-	}
-}
-
-/** Returns true when the unit writes APT status records to the status file. */
-export function validateDetachedAptServiceIdentity(output: string): boolean {
+export function validateDetachedAptServiceIdentity(output: string): void {
 	if (
 		output.split("\n").filter((line) => line.startsWith("ExecStart="))
 			.length !== 1
@@ -233,55 +180,39 @@ export function validateDetachedAptServiceIdentity(output: string): boolean {
 	}
 
 	const execStart = properties.get("ExecStart") ?? "";
-	if (execStart.startsWith("{ path=/usr/bin/flock ; ")) {
-		const flock = `{ path=/usr/bin/flock ; argv[]=/usr/bin/flock -x ${SOFTWARE_UPDATE_LOCK} `;
-		const status = wrappedScript(
-			execStart,
-			`${flock}${STATUS_CHANNEL_SHELL} -ec `,
-		);
-		const script = status ?? wrappedScript(execStart, `${flock}/bin/sh -ec `);
-		const aptStatus = status !== null;
-		const prefix = `${aptStatusRedirect()}; `;
-		const match =
-			/^\/usr\/bin\/apt-get(?: -o APT::Status-Fd=3)? -d -y upgrade --with-new-pkgs(?<family> -o Acquire::ForceIPv[46]=true)? && \/usr\/bin\/apt-get(?: -o APT::Status-Fd=3)? (?<install>.+)$/.exec(
-				aptStatus && script?.startsWith(prefix)
-					? script.slice(prefix.length)
-					: (script ?? ""),
-			);
-		const family = match?.groups?.family?.trim().split(" ") ?? [];
-		const install = match?.groups?.install?.split(" ") ?? [];
-		if (
-			script === null ||
-			canonicalScript(() =>
-				expectedAptAllScript(install, family, aptStatus),
-			) !== script
-		) {
-			throw new DetachedAptServiceIdentityError("flock wrapper does not match");
-		}
-		return aptStatus;
-	}
-	if (execStart.startsWith(`{ path=${STATUS_CHANNEL_SHELL} ; `)) {
-		const script = wrappedScript(
-			execStart,
-			`{ path=${STATUS_CHANNEL_SHELL} ; argv[]=${STATUS_CHANNEL_SHELL} -ec `,
-		);
-		const prefix = `${aptStatusRedirect()}; exec /usr/bin/apt-get ${APT_STATUS_OPTION} `;
-		const args = script?.startsWith(prefix)
-			? script.slice(prefix.length).split(" ")
-			: [];
-		if (
-			script === null ||
-			canonicalScript(() => expectedAptUpgradeScript(args)) !== script
-		) {
-			throw new DetachedAptServiceIdentityError(
-				"status wrapper does not match",
-			);
-		}
-		return true;
-	}
 	const argvMarker = "argv[]=";
 	const argvStart = execStart.indexOf(argvMarker);
 	const argvEnd = execStart.indexOf(" ;", argvStart);
+	if (execStart.startsWith("{ path=/usr/bin/flock ; ")) {
+		const prefix = `{ path=/usr/bin/flock ; argv[]=/usr/bin/flock -x ${SOFTWARE_UPDATE_LOCK} /bin/sh -ec `;
+		const scriptEnd = execStart.indexOf(" ; ignore_errors=", prefix.length);
+		if (
+			!execStart.startsWith(prefix) ||
+			scriptEnd < 0 ||
+			!/^ ; ignore_errors=no ; start_time=\[[^\]\n]+\] ; stop_time=\[[^\]\n]+\] ; pid=\d+ ; code=(?:\(null\)|exited|killed|dumped) ; status=\d+(?:\/[A-Za-z0-9_-]+)? }$/.test(
+				execStart.slice(scriptEnd),
+			)
+		) {
+			throw new DetachedAptServiceIdentityError("flock wrapper does not match");
+		}
+		const script = execStart.slice(prefix.length, scriptEnd);
+		const match =
+			/^\/usr\/bin\/apt-get -d -y upgrade --with-new-pkgs(?<family> -o Acquire::ForceIPv[46]=true)? && \/usr\/bin\/apt-get (?<install>.+)$/.exec(
+				script,
+			);
+		const family = match?.groups?.family?.trim().split(" ") ?? [];
+		const install = match?.groups?.install?.split(" ") ?? [];
+		let canonical = "";
+		try {
+			canonical = expectedAptAllScript(install, family);
+		} catch {
+			/* a foreign command is not adoptable */
+		}
+		if (canonical !== script) {
+			throw new DetachedAptServiceIdentityError("flock wrapper does not match");
+		}
+		return;
+	}
 	if (
 		!execStart.startsWith("{ path=/usr/bin/apt-get ; ") ||
 		argvStart < 0 ||
@@ -298,7 +229,6 @@ export function validateDetachedAptServiceIdentity(output: string): boolean {
 			"apt-get operation does not match",
 		);
 	}
-	return false;
 }
 
 export function validateDetachedAptServiceFragment(fragment: string): void {

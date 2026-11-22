@@ -23,7 +23,6 @@ export type DetachedAptServiceState =
 	| { readonly kind: "absent" }
 	| {
 			readonly kind: "running";
-			readonly aptStatus?: true;
 			readonly invocation?: string;
 	  }
 	| {
@@ -32,8 +31,6 @@ export type DetachedAptServiceState =
 			readonly cleanup: "stop" | "reset-failed";
 			/** systemd's InvocationID: tells this run from another of the same unit. */
 			readonly invocation?: string;
-			/** The unit writes APT status records; see software-update-service-contract.ts. */
-			readonly aptStatus?: true;
 	  };
 
 export type FinishedDetachedAptServiceState = Extract<
@@ -138,7 +135,6 @@ export function parseDetachedAptServiceProbe(
 	if (state.kind === "absent") {
 		return state;
 	}
-	return validateDetachedAptServiceIdentity(result.stdout)
-		? { ...state, aptStatus: true }
-		: state;
+	validateDetachedAptServiceIdentity(result.stdout);
+	return state;
 }

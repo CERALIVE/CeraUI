@@ -64,6 +64,7 @@ import {
 	deriveUpdateProgress,
 	PHASE_MARKERS,
 	type SoftUpdateStatus,
+	withoutNumber,
 } from "./apt-progress.ts";
 import {
 	type AptReachability,
@@ -108,13 +109,14 @@ import {
 } from "./disruptive-action-reservation.ts";
 import { classifyPackageLayer } from "./package-layer.ts";
 import { markBootDegraded } from "./readiness.ts";
-import type { SoftwareUpdateAttempt } from "./software-update-output.ts";
 import {
 	pendingAwareAptSpaceDeps,
 	runLegacyPackageEffects,
 } from "./software-update-pending-effects.ts";
 import {
 	DetachedAptServiceCleanupError,
+	DetachedAptServiceReplacedError,
+	DetachedAptServiceVanishedError,
 	recoverDetachedAptUpgrade,
 	runDetachedAptAll,
 	runDetachedAptUpgrade,
@@ -339,27 +341,18 @@ function settleSoftwareUpdateRecovery(): void {
 function admitSoftwareUpdateAttempt(): boolean {
 	const deps = defaultDetachedAptServiceDeps();
 	try {
-		let previous: SoftwareUpdateAttempt | null = null;
-		try {
-			previous = deps.readAttempt();
-		} catch (error) {
-			logger.warn(
-				"Software update: the previous attempt record is unreadable",
-				{
-					error,
-				},
-			);
-		}
-		const leftover =
-			previous?.exitCode !== undefined && previous.invocation !== undefined
-				? { invocation: previous.invocation, exitCode: previous.exitCode }
-				: previous?.leftover;
-		deps.writeAttempt({
-			schema: 2,
-			attempt: randomUUID(),
-			phase: "accepted",
-			uptimeMs: softwareUpdateUptimeMs(deps),
-			...(leftover ? { leftover } : {}),
+		deps.updateAttempt((previous) => {
+			const leftover =
+				previous?.exitCode !== undefined && previous.invocation !== undefined
+					? { invocation: previous.invocation, exitCode: previous.exitCode }
+					: previous?.leftover;
+			return {
+				schema: 2,
+				attempt: randomUUID(),
+				phase: "accepted",
+				uptimeMs: softwareUpdateUptimeMs(deps),
+				...(leftover ? { leftover } : {}),
+			};
 		});
 		return true;
 	} catch (error) {
@@ -1611,6 +1604,11 @@ type SoftwareUpdateProcessMonitor = {
 	) => Promise<void>;
 };
 
+// Polls (250 ms each) whose transcript could not be read before its number is dropped.
+const UNREADABLE_POLLS = 4;
+// An observer that lost its unit: no exit, so neither success nor failure.
+const OUTCOME_UNKNOWN = -1;
+
 export function createSoftwareUpdateProcessMonitor(
 	prefetched = "",
 	{
@@ -1626,11 +1624,10 @@ export function createSoftwareUpdateProcessMonitor(
 	let summaryParseLogged = false;
 	let aptLog = prefetched;
 	let aptErr = "";
-	let aptStatus = "";
 	// A reattached unit is announced by its first caught-up drain.
 	let announced = true;
-	// Live units write the status channel; a recovered one says whether it does.
-	let channel = true;
+	// Consecutive polls whose transcript could not be read.
+	let unreadablePolls = 0;
 	// Only a durably recorded exit may restart CeraUI; unrecorded, the unit is the evidence.
 	let outcomeRecorded = true;
 
@@ -1653,18 +1650,20 @@ export function createSoftwareUpdateProcessMonitor(
 	};
 	if (prefetched) observeRebootPackages();
 
-	const publishProgress = (caughtUp = true) => {
+	const publishProgress = (caughtUp = true, failed = false) => {
 		if (!softUpdateStatus) return;
+		unreadablePolls = failed ? unreadablePolls + 1 : 0;
 		observeRebootPackages();
 		// A recovered unit is announced only once its files are read to the end.
 		if (!announced && !caughtUp) return;
 		const previous = softUpdateStatus;
+		// Progress that cannot be read is unknown: the phase without a number,
+		// never the last number seen.
 		const next = holdUpdateProgress(
 			previous,
-			deriveUpdateProgress(
-				aptLog.slice(prefetched.length),
-				channel ? aptStatus : undefined,
-			),
+			unreadablePolls >= UNREADABLE_POLLS
+				? withoutNumber(previous)
+				: deriveUpdateProgress(aptLog.slice(prefetched.length)),
 		);
 		softUpdateStatus = next;
 		if (announced && next === previous) return;
@@ -1690,19 +1689,12 @@ export function createSoftwareUpdateProcessMonitor(
 		onStderr: (data) => {
 			aptErr += data;
 		},
-		onStatus: (data) => {
-			aptStatus += data;
-		},
 		onDrained: publishProgress,
-		onStatusLost: () => {
-			channel = false;
-		},
 		onOutcomeRecorded: (recorded) => {
 			outcomeRecorded = recorded;
 		},
-		onAttached: (aptStatus) => {
+		onAttached: () => {
 			announced = false;
-			channel = aptStatus;
 		},
 		onObserverError: (error, suppressedRetries = 0) => {
 			logger.warn(
@@ -1732,6 +1724,15 @@ export function createSoftwareUpdateProcessMonitor(
 						error: err.cleanupError,
 					},
 				);
+			} else if (
+				err instanceof DetachedAptServiceVanishedError ||
+				err instanceof DetachedAptServiceReplacedError
+			) {
+				logger.warn(
+					"Software update: the observed unit is gone; its outcome is unknown",
+					{ error: err },
+				);
+				code = OUTCOME_UNKNOWN;
 			} else {
 				const message = err instanceof Error ? err.message : String(err);
 				aptErr += aptErr.length > 0 ? `\n${message}` : message;
@@ -1747,6 +1748,26 @@ export function createSoftwareUpdateProcessMonitor(
 			code === 0 && !cleaned ? "post_clean_failed" : undefined;
 		// The outcome is known: initial pushes may report it again.
 		settleSoftwareUpdateRecovery();
+
+		if (code === OUTCOME_UNKNOWN) {
+			// Nothing proves success or failure, so neither is told: the tab sees
+			// the install end with no outcome and says it is not confirmed.
+			lastUpdateSucceeded = false;
+			lastUpdateFailure = null;
+			softUpdateStatus = null;
+			try {
+				broadcastMsg("status", {
+					updating: null,
+					update_state: getUpdateState(),
+				});
+				broadcastUpdateState();
+			} catch (broadcastError) {
+				logger.warn("Software update settle: broadcast failed", {
+					error: broadcastError,
+				});
+			}
+			return code;
+		}
 
 		if (softUpdateStatus) {
 			const failure =
@@ -2066,7 +2087,7 @@ async function prepareSoftwareUpdate(
 	// Fetch under the pin so the unit's own download stage is a cache hit.
 	let prefetched = "";
 	if (capable && network.pinned) {
-		// The transfer runs before the unit's status channel exists: name it.
+		// The transfer runs before the unit exists: name it.
 		if (softUpdateStatus) {
 			softUpdateStatus = { ...PHASE_MARKERS.downloading };
 			broadcastMsg("status", {
@@ -2171,7 +2192,7 @@ async function recoverSoftwareUpdate(
 	const recovered = await deps.recover(
 		{
 			...monitor.handlers,
-			onAttached: (aptStatus) => {
+			onAttached: () => {
 				softUpdateStatus = {
 					total: 0,
 					downloading: 0,
@@ -2185,7 +2206,7 @@ async function recoverSoftwareUpdate(
 				logger.warn(
 					"Software update: reattached to the detached apt transaction",
 				);
-				monitor.handlers.onAttached?.(aptStatus);
+				monitor.handlers.onAttached?.();
 			},
 		},
 		undefined,

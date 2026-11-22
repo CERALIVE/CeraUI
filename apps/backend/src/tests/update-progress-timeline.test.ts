@@ -24,12 +24,21 @@ const installingAt = (percent: number) => ({
 	setting_up: 1,
 	percent,
 });
-const pm = (percent: string) =>
-	`pmstatus:cerastream:${percent}:Unpacking cerastream\n`;
+// A five-package plan: dpkg's ten steps (each package unpacked, then set
+// up) make the number APT's transcript proves: `dpkgAt(60)` is the
+// transcript once six steps are done and the seventh has started.
+const PLAN = "5 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n";
+const PACKAGES = ["cerastream", "libapp", "libb", "libc", "libd"];
+const STEPS = [
+	...PACKAGES.map((name) => `Unpacking ${name} (2) over (1) ...\n`),
+	...PACKAGES.map((name) => `Setting up ${name} (2) ...\n`),
+];
+const dpkgAt = (percent: number) =>
+	PLAN + STEPS.slice(0, percent / 10 + 1).join("");
 const rank = (u: UpdateProgress) =>
 	(u.setting_up > 0 ? 2 : u.downloading > 0 ? 1 : 0) * 1000 + (u.percent ?? -1);
 
-type Files = { stdout: string; stderr: string; status: string };
+type Files = { stdout: string; stderr: string };
 
 // One detached unit seen by successive backend processes: all of them read the
 // same growing files, and each poll's sleep runs the next scripted moment.
@@ -47,28 +56,22 @@ function unitDeps(
 	return {
 		outputPaths: paths,
 		readAttempt: () => null,
-		writeAttempt: () => undefined,
+		updateAttempt: (change) => change(null),
 		prepareOutput: async () => {},
 		start: async () => o.onStart?.(),
 		inspect: async () => {
 			const state = o.state();
 			if (state === "absent") return { kind: "absent" };
-			if (state === "running") return { kind: "running", aptStatus: true };
+			if (state === "running") return { kind: "running" };
 			return {
 				kind: "finished",
 				exitCode: o.exitCode,
 				cleanup: o.exitCode === 0 ? "stop" : "reset-failed",
-				aptStatus: true,
 			};
 		},
 		cleanup: async () => {},
 		readOutput: async (path, offset) => {
-			const file =
-				path === paths.stdout
-					? "stdout"
-					: path === paths.stderr
-						? "stderr"
-						: "status";
+			const file = path === paths.stdout ? "stdout" : "stderr";
 			if (file === "stdout" && o.failFirstStdoutRead && ++stdoutReads === 1)
 				throw new Error("EIO");
 			const bytes = Buffer.from(files[file]);
@@ -111,7 +114,7 @@ test.each([
 			const see = (moment: string) => {
 				seen[moment] = structuredClone(tab);
 			};
-			const files: Files = { stdout: "", stderr: "", status: "" };
+			const files: Files = { stdout: "", stderr: "" };
 
 			// The original backend process.
 			const restarted = Promise.withResolvers<void>();
@@ -130,14 +133,14 @@ test.each([
 				exitCode,
 				onStart: () => {
 					stateA = "running";
-					files.stdout = "Reading package lists...\n";
+					files.stdout = `Reading package lists...\n${PLAN}`;
 				},
 				steps: [
 					() => {
 						see("unit cache hit");
 						files.stdout +=
 							"Preparing to unpack .../cerastream_2_arm64.deb ...\n";
-						files.status += `pmstatus:dpkg-exec:0.0000:Running dpkg\n${pm("40.0000")}`;
+						files.stdout += STEPS.slice(0, 5).join("");
 					},
 					() => {
 						see("dpkg in the original process");
@@ -158,7 +161,7 @@ test.each([
 			// The restarted backend process; the same unit is still running.
 			updates.resetSoftwareUpdateState();
 			updates.beginSoftwareUpdateRecovery();
-			files.status += pm("60.0000");
+			files.stdout += STEPS.slice(5, 7).join("");
 			connected = true;
 			apply(buildInitialStatus().status);
 			see("re-authenticated before recovery");
@@ -177,12 +180,11 @@ test.each([
 					},
 					() => {
 						see("caught up");
-						files.status +=
-							"pmstatus:man-db:55.0000:Processing triggers for man-db\n";
+						files.stdout += "Processing triggers for man-db (2.13) ...\n";
 					},
 					() => {
 						see("estimate dips");
-						files.status += pm("80.0000");
+						files.stdout += STEPS.slice(7, 9).join("");
 					},
 					() => {
 						see("later progress");
@@ -255,7 +257,7 @@ test("a pinned prefetch keeps the download phase when the unit starts", async ()
 	await withDeviceType("real", async () => {
 		const { h, run } = await install([sample("eth0", "ethernet", 6)]);
 		await using _h = h;
-		const files: Files = { stdout: "", stderr: "", status: "" };
+		const files: Files = { stdout: "", stderr: "" };
 		let state: "absent" | "running" | "finished" = "absent";
 		let firstDrain: unknown;
 		const deps = unitDeps(files, {

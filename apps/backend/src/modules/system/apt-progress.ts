@@ -6,8 +6,6 @@ export type SoftUpdateStatus = Omit<UpdateProgress, "result"> & {
 
 type Phase = "preparing" | "downloading" | "installing";
 
-const PHASE_ORDER = { preparing: 0, downloading: 1, installing: 2 } as const;
-
 // The step fields are phase markers: update-state reads a nonzero
 // unpacking/setting_up as "installing", and total stays at 1 so an older
 // release's page cannot compute a full bar from them.
@@ -17,59 +15,52 @@ export const PHASE_MARKERS = {
 	installing: { total: 1, downloading: 0, unpacking: 0, setting_up: 1 },
 } as const;
 
-// APT writes each APT::Status-Fd record as one complete line:
-// "dlstatus:<item>:<percent>:<text>" while fetching (apt-pkg/acquire.cc) and
-// "pmstatus:<package>:<percent>:<text>" from just before dpkg's first fork
-// (apt-pkg/install-progress.cc). The percentage counts dpkg state changes APT
-// verified for its own plan and keeps one step back from 100.
-const STATUS_RECORD = /^(dlstatus|pmstatus):[^:\n]*:(\d{1,3}(?:\.\d+)?):/;
+// Progress comes only from the unit's own stdout file: APT is given no
+// telemetry descriptor, so nothing that reads progress can block or fail it.
+// Only complete lines count. APT prints its plan ("N upgraded, M newly
+// installed") before acting, "Get:" as it starts each archive and "Fetched"
+// once all are in; dpkg prints "Unpacking" and "Setting up" as it starts each
+// package's two steps. A step counts as done once the next one has started.
+const SUMMARY = /^(\d+) upgraded, (\d+) newly installed/gm;
+const GET = /^Get:\d+ /gm;
+const FETCHED = /^Fetched /m;
+// Not anchored: dpkg's pseudo-terminal can append a step to an unfinished line.
+const DPKG_STEP = /(?:Unpacking|Setting up) [a-z0-9][a-z0-9+.:-]* \(/g;
 
-// Coarse evidence for a unit without the status channel: APT prints Get: only
-// while fetching and dpkg prints its records only once it runs, so neither can
-// appear early. It never yields a number.
-function transcriptPhase(stdout: string): Phase {
-	if (/(?:Unpacking|Setting up) [a-z0-9][a-z0-9+.:-]* \(/.test(stdout))
-		return "installing";
-	return /Get:\d+ /.test(stdout) ? "downloading" : "preparing";
-}
-
-/** `status` undefined: the unit has no readable status channel. */
 export function deriveUpdateProgress(
 	stdout: string,
-	status: string | undefined,
 ): Omit<SoftUpdateStatus, "result"> {
-	if (status === undefined)
-		return { ...PHASE_MARKERS[transcriptPhase(stdout)] };
-	let reported: Phase = "preparing";
-	let percent: number | undefined;
-	let failed = false;
-	// A record still being written earns nothing until its newline lands.
-	for (const line of status
-		.slice(0, status.lastIndexOf("\n") + 1)
-		.split("\n")) {
-		// A package error freezes the number; only the exit code can end the run.
-		if (line.startsWith("pmerror:")) failed = true;
-		const record = STATUS_RECORD.exec(line);
-		const value = Number(record?.[2]);
-		if (failed || !record || value > 100) continue;
-		const phase = record[1] === "pmstatus" ? "installing" : "downloading";
-		if (PHASE_ORDER[phase] < PHASE_ORDER[reported]) continue;
-		// APT's estimate can dip (a new fetch item, trigger work); hold the
-		// phase's highest so the number never moves backward.
-		const shown = Math.min(99, Math.floor(value));
-		percent =
-			phase === reported && percent !== undefined
-				? Math.max(percent, shown)
-				: shown;
-		reported = phase;
-	}
-	// The transcript proves a later phase than any complete record (an empty,
-	// partial or stalled channel): that phase, never a stale number.
-	const proven = transcriptPhase(stdout);
-	if (PHASE_ORDER[proven] > PHASE_ORDER[reported])
-		return { ...PHASE_MARKERS[proven] };
+	const lines = stdout.slice(0, stdout.lastIndexOf("\n") + 1);
+	const steps = lines.match(DPKG_STEP)?.length ?? 0;
+	const gets = lines.match(GET)?.length ?? 0;
+	const phase: Phase =
+		steps > 0 ? "installing" : gets > 0 ? "downloading" : "preparing";
+	let packages = 0;
+	for (const plan of lines.matchAll(SUMMARY))
+		packages = Number(plan[1]) + Number(plan[2]);
+	const done =
+		phase === "installing"
+			? steps - 1
+			: FETCHED.test(lines)
+				? packages
+				: gets - 1;
+	const of = phase === "installing" ? 2 * packages : packages;
+	if (phase === "preparing" || of === 0 || done <= 0)
+		return { ...PHASE_MARKERS[phase] };
+	// Kept one step back from 100: only the unit's exit status ends the run.
 	return {
-		...PHASE_MARKERS[reported],
-		...(percent !== undefined ? { percent } : {}),
+		...PHASE_MARKERS[phase],
+		percent: Math.min(99, Math.floor((done * 100) / of)),
+	};
+}
+
+/** The same phase without a number: what is shown while progress cannot be read. */
+export function withoutNumber(
+	status: Omit<SoftUpdateStatus, "result">,
+): Omit<SoftUpdateStatus, "result"> {
+	if (status.setting_up > 0 || status.unpacking > 0)
+		return { ...PHASE_MARKERS.installing };
+	return {
+		...PHASE_MARKERS[status.downloading > 0 ? "downloading" : "preparing"],
 	};
 }

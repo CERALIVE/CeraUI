@@ -33,8 +33,6 @@ export const SOFTWARE_UPDATE_OUTPUT_READ_BYTES = 64 * 1024;
 export type SoftwareUpdateOutputPaths = {
 	readonly stdout: string;
 	readonly stderr: string;
-	/** APT::Status-Fd records; only units that declare the channel write it. */
-	readonly status: string;
 };
 
 const ATTEMPT_FILE = "software-update.attempt";
@@ -90,7 +88,6 @@ export function softwareUpdateOutputPaths(): SoftwareUpdateOutputPaths {
 	return {
 		stdout: path.join(RUN_DIR, "software-update.stdout"),
 		stderr: path.join(RUN_DIR, "software-update.stderr"),
-		status: path.join(RUN_DIR, "software-update.status"),
 	};
 }
 
@@ -148,60 +145,17 @@ function createOutputFile(
 export async function prepareSoftwareUpdateOutput(
 	paths: SoftwareUpdateOutputPaths,
 	expectedUid = 0,
-): Promise<{ readonly status: boolean }> {
-	const files = [paths.stdout, paths.stderr, paths.status];
-	const directories = new Set(files.map((file) => path.dirname(file)));
-	if (directories.size !== 1) {
+): Promise<void> {
+	const directory = path.dirname(paths.stdout);
+	if (path.dirname(paths.stderr) !== directory) {
 		throw new UnsafeSoftwareUpdateOutputPathError(
 			paths.stdout,
 			"output files do not share a directory",
 		);
 	}
-	const directory = directories.values().next().value;
-	if (directory === undefined) {
-		throw new UnsafeSoftwareUpdateOutputPathError(
-			paths.stdout,
-			"missing directory",
-		);
-	}
 	secureOutputDirectory(directory, expectedUid);
 	createOutputFile(paths.stdout, expectedUid);
 	createOutputFile(paths.stderr, expectedUid);
-	// Progress is display only: a status file that cannot be made never blocks apt.
-	try {
-		rmSync(softwareUpdateStatusDonePath(paths), { force: true });
-		createOutputFile(paths.status, expectedUid);
-		return { status: true };
-	} catch (error) {
-		try {
-			rmSync(paths.status, { force: true });
-		} catch (cleanupError) {
-			logger.warn("Software update status file could not be removed", {
-				error: cleanupError,
-			});
-		}
-		logger.warn(
-			"Software update status file unavailable; showing phases only",
-			{ error },
-		);
-		return { status: false };
-	}
-}
-
-/** Made by the status reader once it copied everything APT wrote. */
-export function softwareUpdateStatusDonePath(
-	paths: SoftwareUpdateOutputPaths,
-): string {
-	return `${paths.status}.done`;
-}
-
-export async function readSoftwareUpdateStatusDone(
-	paths: SoftwareUpdateOutputPaths,
-): Promise<boolean> {
-	return fs
-		.lstat(softwareUpdateStatusDonePath(paths))
-		.then((stat) => stat.isFile())
-		.catch(() => false);
 }
 
 export function softwareUpdateAttemptPath(
@@ -264,16 +218,35 @@ export function readSoftwareUpdateAttempt(
 	}
 }
 
+/**
+ * Compare-and-set in one synchronous step: `change` sees the record it
+ * replaces, and no other writer in this process can run between that read
+ * and the rename. A record that cannot be read is passed as none.
+ */
+export function updateSoftwareUpdateAttempt(
+	paths: SoftwareUpdateOutputPaths,
+	change: (
+		current: SoftwareUpdateAttempt | null,
+	) => SoftwareUpdateAttempt | null,
+	expectedUid = 0,
+): SoftwareUpdateAttempt | null {
+	let current: SoftwareUpdateAttempt | null = null;
+	try {
+		current = readSoftwareUpdateAttempt(paths, expectedUid);
+	} catch (error) {
+		logger.warn("Software update: the attempt record is unreadable", { error });
+	}
+	const next = change(current);
+	if (next) writeSoftwareUpdateAttempt(paths, next, expectedUid);
+	return next;
+}
+
 export async function readSoftwareUpdateOutput(
 	filePath: string,
 	offset: number,
 ): Promise<SoftwareUpdateOutputRead> {
 	const paths = softwareUpdateOutputPaths();
-	if (
-		filePath !== paths.stdout &&
-		filePath !== paths.stderr &&
-		filePath !== paths.status
-	) {
+	if (filePath !== paths.stdout && filePath !== paths.stderr) {
 		throw new UnsafeSoftwareUpdateOutputPathError(
 			filePath,
 			"runtime paths are fixed",

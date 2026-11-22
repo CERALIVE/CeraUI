@@ -10,8 +10,15 @@ test('a running transaction never moves back a phase or a number', () => {
 	expect(holdUpdateProgress(at40, { ...downloading, percent: 96 })).toBe(at40);
 	expect(holdUpdateProgress(at40, preparing)).toBe(at40);
 	expect(holdUpdateProgress(at40, { ...installing, percent: 35 })).toBe(at40);
-	expect(holdUpdateProgress(at40, installing)).toBe(at40);
 	expect(holdUpdateProgress(at40, { ...installing, percent: 40 })).toBe(at40);
+});
+
+test('the same phase without a number replaces a held number: it is unknown now, not still 40', () => {
+	const at40 = { ...installing, percent: 40 };
+	const unknown = { ...installing };
+	expect(holdUpdateProgress(at40, unknown)).toBe(unknown);
+	const at45 = { ...installing, percent: 45 };
+	expect(holdUpdateProgress(unknown, at45)).toBe(at45);
 });
 
 test('a running transaction moves forward a phase or a number', () => {

@@ -42,12 +42,24 @@ const attemptOf = (): SoftwareUpdateAttempt => ({
 	invocation: INVOCATION,
 	drained: true,
 });
-type File = "stdout" | "stderr" | "status";
-const dl = (percent: string) =>
-	`dlstatus:1:${percent}:Retrieving file 1 of 1\n`;
-const pm = (percent: string) =>
-	`pmstatus:cerastream:${percent}:Unpacking cerastream\n`;
-const dpkgExec = "pmstatus:dpkg-exec:0.0000:Running dpkg\n";
+type File = "stdout" | "stderr";
+// A five-package plan: dpkg's ten steps (each package unpacked, then set
+// up) make the number APT's transcript proves: `dpkgAt(60)` is the
+// transcript once six steps are done and the seventh has started.
+const PLAN = "5 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n";
+const PACKAGES = ["cerastream", "libapp", "libb", "libc", "libd"];
+const STEPS = [
+	...PACKAGES.map((name) => `Unpacking ${name} (2) over (1) ...\n`),
+	...PACKAGES.map((name) => `Setting up ${name} (2) ...\n`),
+];
+const dpkgAt = (percent: number) =>
+	PLAN + STEPS.slice(0, percent / 10 + 1).join("");
+const fetches = (count: number) =>
+	Array.from(
+		{ length: count },
+		(_, i) =>
+			`Get:${i + 1} https://apt.invalid trixie/main arm64 p${i} 2 [1 kB]\n`,
+	).join("");
 const installingAt = (percent: number) => ({
 	total: 1,
 	downloading: 0,
@@ -77,7 +89,7 @@ function fakeUnit(o: {
 		: o.finished
 			? "finished"
 			: "running";
-	const reads: Record<File, number> = { stdout: 0, stderr: 0, status: 0 };
+	const reads: Record<File, number> = { stdout: 0, stderr: 0 };
 	const steps = [...(o.steps ?? [])];
 	let polls = 0;
 	let cleaned = 0;
@@ -93,7 +105,9 @@ function fakeUnit(o: {
 		outputPaths: paths,
 		uptimeMs: () => NOW,
 		readAttempt: () => recorded,
-		writeAttempt: (record) => {
+		updateAttempt: (change) => {
+			const record = change(recorded);
+			if (!record) return null;
 			if (record.exitCode !== undefined) {
 				recordAttempts++;
 				if (
@@ -104,6 +118,7 @@ function fakeUnit(o: {
 				events.push("record");
 			}
 			recorded = record;
+			return record;
 		},
 		prepareOutput: async () => {},
 		start: async (command) => {
@@ -118,10 +133,9 @@ function fakeUnit(o: {
 							kind: "finished",
 							exitCode: o.exitCode,
 							cleanup: o.exitCode === 0 ? "stop" : "reset-failed",
-							aptStatus: true,
 							invocation: INVOCATION,
 						}
-					: { kind: "running", aptStatus: true, invocation: INVOCATION },
+					: { kind: "running", invocation: INVOCATION },
 		cleanup: async (finished) => {
 			events.push("retire");
 			const error = o.failCleanup?.(++cleanupAttempts);
@@ -131,12 +145,7 @@ function fakeUnit(o: {
 			state = "absent";
 		},
 		readOutput: async (path, offset) => {
-			const file: File =
-				path === paths.stdout
-					? "stdout"
-					: path === paths.stderr
-						? "stderr"
-						: "status";
+			const file: File = path === paths.stdout ? "stdout" : "stderr";
 			if (o.firstRead) await o.firstRead;
 			reads[file]++;
 			const error = o.failRead?.(file, reads[file]);
@@ -201,9 +210,8 @@ test("a running reattach announces only the state its files reach, not an older 
 	await using h = await updateHarness();
 	const unit = fakeUnit({
 		files: {
-			stdout: "Reading package lists...\n",
+			stdout: `Reading package lists...\n${fetches(3_000)}${dpkgAt(60)}`,
 			stderr: "",
-			status: `${dl("96.0000").repeat(3_000)}${dpkgExec}${pm("60.0000")}`,
 		},
 		exitCode: 100,
 		steps: [() => {}],
@@ -219,9 +227,8 @@ test("a first read error announces nothing until the unit's files are read", asy
 	let framesBeforeRead = -1;
 	const unit = fakeUnit({
 		files: {
-			stdout: "Reading package lists...\n",
+			stdout: `Reading package lists...\n${dpkgAt(60)}`,
 			stderr: "",
-			status: `${dpkgExec}${pm("60.0000")}`,
 		},
 		exitCode: 100,
 		failRead: (file, attempt) =>
@@ -251,14 +258,10 @@ const args = buildAptAllInstallArgs(
 	[{ name: "cerastream", version: "2" }],
 	"any",
 );
-const quiet = { onStdout: () => {}, onStderr: () => {}, onStatus: () => {} };
+const quiet = { onStdout: () => {}, onStderr: () => {} };
 const eio = () => new Error("EIO");
 
 test.each([
-	["the status file is unreadable", "status", eio, 0, true],
-	["the status file is unreadable", "status", eio, 100, true],
-	["the status file is missing", "status", enoent, 0, true],
-	["the status file is unreadable", "status", eio, 137, true],
 	["stdout is unreadable", "stdout", eio, 0, false],
 	["stdout is unreadable", "stdout", eio, 100, false],
 	["stdout is unreadable", "stdout", eio, 137, false],
@@ -267,7 +270,7 @@ test.each([
 	"when %s, exit %d stays the outcome and the next update starts",
 	async (_name, faulty, error, exitCode, readable) => {
 		const unit = fakeUnit({
-			files: { stdout: "done\n", stderr: "", status: "" },
+			files: { stdout: "done\n", stderr: "" },
 			exitCode,
 			failRead: (file) => (file === faulty ? error() : undefined),
 			live: true,
@@ -291,7 +294,7 @@ test.each([
 
 test("a retirement that fails once is retried and the outcome stands", async () => {
 	const unit = fakeUnit({
-		files: { stdout: "done\n", stderr: "", status: "" },
+		files: { stdout: "done\n", stderr: "" },
 		exitCode: 0,
 		failCleanup: (attempt) =>
 			attempt === 1 ? new Error("systemctl stop failed") : undefined,
@@ -302,10 +305,34 @@ test("a retirement that fails once is retried and the outcome stands", async () 
 	expect(unit.retired).toEqual(["stop"]);
 });
 
+test("a retirement retry inspects again and leaves a unit that replaced the one it validated", async () => {
+	let replaced = false;
+	const unit = fakeUnit({
+		files: { stdout: "done\n", stderr: "" },
+		exitCode: 0,
+		failCleanup: (attempt) => {
+			if (attempt !== 1) return undefined;
+			// Another invocation of the fixed unit takes the name before the retry.
+			replaced = true;
+			return new Error("systemctl stop failed");
+		},
+		live: true,
+	});
+	const inspect = unit.deps.inspect;
+	Object.assign(unit.deps, {
+		inspect: async () =>
+			replaced ? { ...(await inspect()), invocation: OTHER } : inspect(),
+	});
+	expect(await runDetachedAptAll(args, "any", quiet, unit.deps)).toBe(0);
+	expect(unit.recorded()?.exitCode).toBe(0);
+	expect(unit.cleanupAttempts()).toBe(1);
+	expect(unit.retired).toEqual([]);
+});
+
 test("a unit that cannot be retired keeps its exit status and the next launch retires it", async () => {
 	let broken = true;
 	const unit = fakeUnit({
-		files: { stdout: "done\n", stderr: "", status: "" },
+		files: { stdout: "done\n", stderr: "" },
 		exitCode: 0,
 		failCleanup: () =>
 			broken ? new Error("systemctl stop failed") : undefined,
@@ -322,57 +349,6 @@ test("a unit that cannot be retired keeps its exit status and the next launch re
 	broken = false;
 	expect(await runDetachedAptAll(args, "any", quiet, unit.deps)).toBe(0);
 	expect(unit.retired).toEqual(["stop", "stop"]);
-});
-
-test("a status file that could not be prepared is never read", async () => {
-	const unit = fakeUnit({
-		files: {
-			stdout: "Unpacking cerastream\n",
-			stderr: "",
-			status: pm("50.0000"),
-		},
-		exitCode: 0,
-		live: true,
-	});
-	expect(
-		await runDetachedAptAll(args, "any", quiet, {
-			...unit.deps,
-			prepareOutput: async () => ({ status: false }),
-		}),
-	).toBe(0);
-	expect(unit.reads.status).toBe(0);
-});
-
-test("a status file that appears late still reports APT's records", async () => {
-	let status = "";
-	const unit = fakeUnit({
-		files: { stdout: "", stderr: "", status: `${dpkgExec}${pm("40.0000")}` },
-		exitCode: 0,
-		failRead: (file, attempt) =>
-			file === "status" && attempt <= 2 ? enoent() : undefined,
-		steps: [() => {}, () => {}],
-		live: true,
-	});
-	const args = buildAptAllInstallArgs(
-		[{ name: "cerastream", version: "2" }],
-		"any",
-	);
-	expect(
-		await runDetachedAptAll(
-			args,
-			"any",
-			{
-				onStdout: () => {},
-				onStderr: () => {},
-				onStatus: (chunk) => {
-					status += chunk;
-				},
-			},
-			unit.deps,
-		),
-	).toBe(0);
-	expect(status).toBe(`${dpkgExec}${pm("40.0000")}`);
-	expect(unit.cleaned()).toBe(1);
 });
 
 function recoveryOf(
@@ -400,9 +376,8 @@ function recoveryOf(
 }
 
 const installing = {
-	stdout: "Preparing to unpack .../cerastream_2_arm64.deb ...\n",
+	stdout: `Preparing to unpack .../cerastream_2_arm64.deb ...\n${dpkgAt(60)}`,
 	stderr: "",
-	status: `${dpkgExec}${pm("60.0000")}`,
 };
 
 test("a second recovery call while the first observer has read nothing changes nothing", async () => {
@@ -494,7 +469,7 @@ test("after a refused bootstrap a failed probe is retried, never taken for an an
 
 test("the observer records the exit after its final read, then retires the unit", async () => {
 	const unit = fakeUnit({
-		files: { stdout: "done\n", stderr: "", status: "" },
+		files: { stdout: "done\n", stderr: "" },
 		exitCode: 0,
 		live: true,
 	});
@@ -605,30 +580,21 @@ test.each([
 	},
 );
 
-test("a launch whose status file could not be made runs the pre-channel command", async () => {
-	let lost = 0;
+test("every launch runs the released command, which gives APT no telemetry descriptor", async () => {
 	const unit = fakeUnit({
-		files: { stdout: "Unpacking cerastream\n", stderr: "", status: "" },
+		files: { stdout: "Unpacking cerastream\n", stderr: "" },
 		exitCode: 0,
 		live: true,
 	});
-	expect(
-		await runDetachedAptAll(
-			args,
-			"any",
-			{ ...quiet, onStatusLost: () => lost++ },
-			{ ...unit.deps, prepareOutput: async () => ({ status: false }) },
-		),
-	).toBe(0);
+	expect(await runDetachedAptAll(args, "any", quiet, unit.deps)).toBe(0);
 	const command = unit.started[0] ?? [];
 	expect(command.join(" ")).not.toContain("Status-Fd");
 	expect(command.slice(-3, -1)).toEqual(["/bin/sh", "-ec"]);
-	expect(lost).toBe(1);
 });
 
 test("a launch never retires a finished unit whose exit nobody recorded", async () => {
 	const unit = fakeUnit({
-		files: { stdout: "done\n", stderr: "", status: "" },
+		files: { stdout: "done\n", stderr: "" },
 		exitCode: 0,
 		finished: true,
 	});
@@ -647,7 +613,7 @@ test("the read after the unit is inactive is complete, so its last records are s
 		exitCode: 0,
 		steps: [() => {}],
 		onFinish: () => {
-			files.status += pm("90.0000");
+			files.stdout += STEPS.slice(7, 10).join("");
 		},
 	});
 	expect(await await reattach(unit)).toBe(0);
@@ -689,7 +655,7 @@ test.each([
 	"an outcome record that fails %s keeps the exit, and the unit is retired only once it is recorded",
 	async (_name, failRecord, kept) => {
 		const unit = fakeUnit({
-			files: { stdout: "done\n", stderr: "", status: "" },
+			files: { stdout: "done\n", stderr: "" },
 			exitCode: 0,
 			live: true,
 			failRecord,
@@ -706,7 +672,7 @@ test("a truncated last record is never shown", async () => {
 	const unit = fakeUnit({
 		files: {
 			...installing,
-			status: `${dpkgExec}${pm("60.0000")}pmstatus:cerastream:9`,
+			stdout: `${installing.stdout}Setting up libb (2`,
 		},
 		exitCode: 0,
 		steps: [() => {}],
@@ -817,10 +783,10 @@ test("an exit is never written over a newer attempt's record", async () => {
 		uptimeMs: NOW,
 	};
 	const unit = fakeUnit({
-		files: { stdout: "done\n", stderr: "", status: "" },
+		files: { stdout: "done\n", stderr: "" },
 		exitCode: 0,
 		live: true,
-		steps: [() => unit.deps.writeAttempt(newer)],
+		steps: [() => unit.deps.updateAttempt(() => newer)],
 	});
 	expect(await runDetachedAptAll(args, "any", quiet, unit.deps)).toBe(0);
 	expect(unit.recorded()).toEqual(newer);

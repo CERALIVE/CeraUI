@@ -13,5 +13,8 @@ export function holdUpdateProgress<T extends UpdateProgress>(previous: T | undef
 	const before = phaseRank(previous);
 	const after = phaseRank(next);
 	if (after !== before) return after > before ? next : previous;
-	return (next.percent ?? -1) > (previous.percent ?? -1) ? next : previous;
+	// Same phase: a frame without a number says the number is unknown now, so it
+	// replaces a held one; a lower number never does.
+	if (next.percent === undefined) return previous.percent === undefined ? previous : next;
+	return next.percent > (previous.percent ?? -1) ? next : previous;
 }

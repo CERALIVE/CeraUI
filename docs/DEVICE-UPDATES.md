@@ -2,64 +2,55 @@
 
 ## Package update progress
 
-Progress comes from APT's own machine-readable channel, not from parsing
-apt/dpkg text. Every `apt-get` in the detached unit runs with
-`-o APT::Status-Fd=3`, and descriptor 3 is
-`/run/ceralive/software-update.status`, opened for append by the unit's own
-shell (prepared like the stdout and stderr logs: root-owned, mode 0600,
-created exclusively). APT writes one complete line per record:
+Progress comes only from the detached unit's own transcript: the stdout file
+systemd appends to (`/run/ceralive/software-update.stdout`; root-owned, mode
+0600, created exclusively). APT is given no telemetry descriptor: no
+`APT::Status-Fd`, no pipe, no extra file. The unit runs the released commands
+unchanged (`/usr/bin/apt-get` directly, or the pinned `/bin/sh -ec` pair under
+the update lock). APT 3.0.3 turns a failed write to its status descriptor into
+its pending error and fails the install after dpkg ran (`FileFd::Write`,
+`private-install.cc`), and a pipe would make APT wait for its reader; with no
+such descriptor nothing that reads progress can stall or fail APT. A reader
+that lags, dies or cannot read loses only display.
 
-- `dlstatus:<item>:<percent>:<text>` while fetching: APT's own download
-  estimate.
-- `pmstatus:<package>:<percent>:<text>` from just before dpkg's first fork.
-  APT counts only dpkg state changes it verified for packages in its own plan
-  and keeps one step back from 100, so triggers and spindown never show 100%.
-- `pmerror:...` when a package fails.
+`apt-progress.ts` counts complete lines of APT's and dpkg's own output:
 
-The UI shows three phases: **Preparing or downloading packages** (no record
-yet), **Downloading** and **Installing**. A number appears only when APT
-reported one for the phase on screen; it is floored and capped at 99 while
-the unit runs, frozen at the first `pmerror`, and only a successful detached
-result shows 100%. A failure or interruption never shows completion. The
-percentage restarts when installing begins, so Settings names the phase next
-to the bar. There are no counted steps.
+- the plan (`N upgraded, M newly installed`), printed before APT acts, gives
+  the package count;
+- `Get:` while fetching: an archive is done once the next one starts, and all
+  are once `Fetched` is printed (**Downloading**);
+- dpkg's `Unpacking` and `Setting up`, two steps per package: a step is done
+  once the next starts (**Installing**).
 
-Descriptor 3 rather than stderr: APT marks its status descriptor
-close-on-exec before forking dpkg, which on stderr would leave the image's
-`DPkg::Post-Invoke` hooks without stderr; stdout would interleave records
-with dpkg's PTY output.
+The UI shows three phases: **Preparing or downloading packages**,
+**Downloading** and **Installing**. A number appears only when the transcript
+proves one for the phase on screen; it is floored and capped at 99 while the
+unit runs (a dependency outside the plan only holds it there), and only a
+successful detached result shows 100%. A failure or interruption never shows
+completion. The percentage restarts when installing begins, so Settings names
+the phase next to the bar. A unit started by an older release (for example
+the very update that installs this version, adopted after the package
+restarts CeraUI) is read the same way: its stdout is the same transcript.
 
-The channel is best effort and cannot fail APT. APT writes its records into
-a pipe; a reader in the unit (exempt from the OOM killer) appends them to the
-status file and, on any write error (a full `/run`, a size limit, a file it
-cannot open), discards the rest. A status write therefore never fails and
-never waits on disk; only stopping the unit, which ends APT too, ends the
-reader early. APT 3.0.3 turns a failed status write into its pending error
-(`FileFd::Write`), and `private-install.cc` then fails the install after
-dpkg ran, which is why the write must not be able to fail. After a complete
-copy the reader creates `software-update.status.done`; the final read waits
-for it (bounded), and without it the channel is unknown and only transcript
-phases are shown. A status file the backend cannot make starts the released
-pre-channel command; a shell that cannot start the reader gives APT
-`/dev/null`. A file removed mid-run is not an error. The status forms
-run under `/bin/bash`, whose failed `exec` redirect returns where `sh`
-exits; the released pre-channel forms stay `/bin/sh` and remain adoptable.
+One rule (`holdUpdateProgress` in `@ceraui/rpc/package-progress`) decides what
+a running transaction shows, in the backend and in both browser views: the
+phase never moves back and, within a phase, the number never drops; a frame of
+the same phase without a number replaces a held number, because it means
+unknown, not unchanged. Only an outcome, or the next run after it, shows what
+arrived. On pinned images the download runs in-process before the unit
+exists: the UI says **Downloading**, without a number, from the moment that
+transfer starts until the transcript shows the install.
 
-A unit started by a release without the channel (for example the very update
-that installs this version, adopted after the package restarts CeraUI) shows
-phases only, from coarse transcript evidence: APT's `Get:` lines while
-fetching and dpkg's unpack/setup records once it runs. Its status file is
-never read, because it may hold an older run's records.
+What a tab shows when something is lost (no wire field was added for any of
+these):
 
-A unit with the channel takes its phase and number from the channel only.
-APT's own estimate can dip within a phase (a fetch item added, trigger work
-found), so one rule (`holdUpdateProgress` in `@ceraui/rpc/package-progress`)
-decides what a running transaction shows, in the backend and in both browser
-views: the phase never moves back and, within a phase, the number never
-drops. Only an outcome, or the next run after it, shows what arrived. On
-pinned images the download runs in-process before the unit (and its status
-channel) exists: the UI says **Downloading** from the moment that transfer
-starts, without a number, and keeps it until APT reports the install.
+| Situation | Shown |
+|---|---|
+| The transcript cannot be read for four polls in a row | The phase without a number until a read succeeds |
+| The connection to the device dropped | The held phase without a number while it is down, and after it returns until a new frame arrives |
+| The observer loses the unit (gone without an exit, or another invocation) | No outcome: `updating: null`, `update_state` neither success nor failure, no restart; the tab says **Outcome not confirmed** |
+| The unit is gone and its exit is recorded | That outcome, replayed (below) |
+| The unit is gone and no exit is recorded | **Outcome not confirmed** |
 
 After a backend restart nobody knows, until recovery has read the detached
 unit, whether an update is running. Until then the initial status push omits
@@ -77,26 +68,29 @@ download stays unproven for D8), so the withholding ends at once; mock mode
 never launches one.
 
 Live polling and reattachment derive progress from the same bytes: complete
-status lines only, so a record split across reads counts once it is whole.
-Each poll reads stdout, stderr and then the status file, each to its end
-(bounded per poll), and the final drain does the same, so output larger than
-one 64 KiB read is replayed completely. A reattached unit is announced only
-once a poll has read every file to its end without an error, so the tab never
-sees an empty frame, "0 of 1 steps" or an older block of the log.
+lines only, so a line split across reads counts once it is whole. Each poll
+reads stdout and then stderr, each to its end (bounded per poll), and the
+final drain does the same, so output larger than one 64 KiB read is replayed
+completely. A reattached unit is announced only once a poll has read both
+files to their end without an error, so the tab never sees an empty frame,
+"0 of 1 steps" or an older block of the log.
 
-The status file is display only. Its read errors never block a drain, change
-the outcome or keep the unit from being cleaned up; after 20 consecutive
-failures it is no longer read: the display keeps what it last showed and
-advances only on transcript phase evidence. Once systemd reports the unit
-finished, one final read is complete by construction: APT, the file's only
-writer, has exited. The unit's exit status alone decides success or failure,
-also when stdout or stderr stay unreadable (the final drain gives up after 20
-failed reads) or when retiring the unit fails. The orchestrator's Settings
-activity line resumes with APT's own number or none.
+The transcript is display only. Its read errors never block a drain, change
+the outcome or keep the unit from being cleaned up. Once systemd reports the
+unit finished, one final read is complete by construction: APT, the file's
+only writer, has exited. That read gives up after 20 failed reads and records
+`drained: false`. The unit's exit status alone decides success or failure,
+also when stdout or stderr stay unreadable or retiring the unit fails. The
+orchestrator's Settings activity line resumes with the transcript's number or
+none.
 
 One durable attempt record, `/run/ceralive/software-update.attempt` (root,
-0600, written synchronously and renamed into place), is the only thing
-replay and adjudication read. `startSoftwareUpdate` writes a new attempt
+0600), is the only thing replay and adjudication read. Every write is one
+compare-and-set step (`updateSoftwareUpdateAttempt`): it reads the current
+record, decides from it, and writes the replacement to a temporary file
+renamed into place, all synchronously, so no other write of this backend can
+come between; a writer that no longer owns the record writes nothing. Only
+the backend writes it, and only one backend runs per device. `startSoftwareUpdate` writes a new attempt
 (`accepted`, a fresh id, no exit) after its refusals and before it publishes
 anything or starts a check, so a restart at any step before the unit starts
 finds that attempt with no exit and tells nothing; an older attempt's
@@ -113,7 +107,11 @@ minutes of boot-relative uptime.
 
 The unit is retired only once its exit is durably recorded and its
 transcript was read, and only while systemd still shows that same finished
-invocation; otherwise it stays as the evidence, its exit is still
+invocation: a retry, or a retirement deferred until startup is admitted,
+inspects the unit again first and leaves a replaced one alone. `systemctl
+stop` and `reset-failed` name the unit, not an invocation; the inspect is
+immediately before the call, and only this backend starts the fixed unit,
+never while it retires one. Otherwise the unit stays as the evidence, its exit is still
 published, and the deliberate restart is withheld (boot marked degraded).
 A finished unit whose exit is recorded (same exit and invocation) is never
 adopted again: a later boot reports it and tries one retirement, so a unit

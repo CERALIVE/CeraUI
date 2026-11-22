@@ -45,10 +45,7 @@ import {
 	validateDetachedAptServiceFragment,
 	validateDetachedAptServiceIdentity,
 } from "../modules/system/software-update-service.ts";
-import {
-	expectedAptUpgradeScript,
-	isExpectedAptUpgradeArgv,
-} from "../modules/system/software-update-service-contract.ts";
+import { isExpectedAptUpgradeArgv } from "../modules/system/software-update-service-contract.ts";
 import {
 	actionableAppNames,
 	buildAptDiscoveryArgs,
@@ -298,7 +295,6 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 		const command = buildDetachedAptUpgradeCommand(DETACHED_APT_ARGS, {
 			stdout: "/run/ceralive/software-update.stdout",
 			stderr: "/run/ceralive/software-update.stderr",
-			status: "/run/ceralive/software-update.status",
 		});
 
 		expect(command).toEqual([
@@ -312,13 +308,9 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			"--property=StandardOutput=append:/run/ceralive/software-update.stdout",
 			"--property=StandardError=append:/run/ceralive/software-update.stderr",
 			"--",
-			"/bin/bash",
-			"-ec",
-			expectedAptUpgradeScript(DETACHED_APT_ARGS),
+			"/usr/bin/apt-get",
+			...DETACHED_APT_ARGS,
 		]);
-		expect(command.at(-1)).toBe(
-			`exec 3> >(set +e; echo -1000 >/proc/self/oom_score_adj 2>/dev/null; cat >>/run/ceralive/software-update.status 2>/dev/null || exec cat >/dev/null; : >>/run/ceralive/software-update.status.done 2>/dev/null) || exec 3>/dev/null; exec /usr/bin/apt-get -o APT::Status-Fd=3 ${DETACHED_APT_ARGS.join(" ")}`,
-		);
 		expect(command).not.toContain("--scope");
 		expect(command).not.toContain("--pipe");
 	});
@@ -328,7 +320,6 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			buildDetachedAptUpgradeCommand(DETACHED_APT_ARGS, {
 				stdout: "/tmp/update.stdout",
 				stderr: "/tmp/update.stderr",
-				status: "/tmp/update.status",
 			}),
 		).toThrow(/runtime paths are fixed/);
 	});
@@ -338,7 +329,6 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			buildDetachedAptUpgradeCommand(["-y", "remove", "ceralui"], {
 				stdout: "/run/ceralive/software-update.stdout",
 				stderr: "/run/ceralive/software-update.stderr",
-				status: "/run/ceralive/software-update.status",
 			}),
 		).toThrow(/arguments do not match/);
 	});
@@ -356,7 +346,6 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 				buildDetachedAptUpgradeCommand(aptArgs, {
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
-					status: "/run/ceralive/software-update.status",
 				}),
 			).toThrow(/arguments do not match/);
 		},
@@ -461,13 +450,11 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 		const victim = path.join(directory, "victim");
 		const stdout = path.join(directory, "software-update.stdout");
 		const stderr = path.join(directory, "software-update.stderr");
-		const status = path.join(directory, "software-update.status");
 		try {
 			await writeFile(victim, "must remain intact");
 			await symlink(victim, stdout);
-			await symlink(victim, status);
 			await prepareSoftwareUpdateOutput(
-				{ stdout, stderr, status },
+				{ stdout, stderr },
 				process.getuid?.() ?? 0,
 			);
 
@@ -475,8 +462,6 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			expect((await lstat(stdout)).isFile()).toBe(true);
 			expect((await lstat(stdout)).isSymbolicLink()).toBe(false);
 			expect((await lstat(stderr)).mode & 0o777).toBe(0o600);
-			expect((await lstat(status)).isSymbolicLink()).toBe(false);
-			expect((await lstat(status)).mode & 0o777).toBe(0o600);
 		} finally {
 			await rm(directory, { recursive: true, force: true });
 		}
@@ -492,7 +477,6 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 		const paths = {
 			stdout: "/run/ceralive/software-update.stdout",
 			stderr: "/run/ceralive/software-update.stderr",
-			status: "/run/ceralive/software-update.status",
 		};
 		const files = new Map<string, Uint8Array>();
 		const encoder = new TextEncoder();
@@ -512,7 +496,7 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			{
 				outputPaths: paths,
 				readAttempt: () => null,
-				writeAttempt: () => undefined,
+				updateAttempt: (change) => change(null),
 				prepareOutput: async () => {
 					files.set(paths.stdout, new Uint8Array());
 					files.set(paths.stderr, new Uint8Array());
@@ -564,10 +548,9 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 				outputPaths: {
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
-					status: "/run/ceralive/software-update.status",
 				},
 				readAttempt: () => null,
-				writeAttempt: () => undefined,
+				updateAttempt: (change) => change(null),
 				prepareOutput: async () => {
 					prepared++;
 				},
@@ -608,10 +591,9 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 				outputPaths: {
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
-					status: "/run/ceralive/software-update.status",
 				},
 				readAttempt: () => null,
-				writeAttempt: () => undefined,
+				updateAttempt: (change) => change(null),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
@@ -641,7 +623,6 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 		const paths = {
 			stdout: "/run/ceralive/software-update.stdout",
 			stderr: "/run/ceralive/software-update.stderr",
-			status: "/run/ceralive/software-update.status",
 		};
 		const stdoutBytes = new TextEncoder().encode("Unpacking package-a\n");
 		const stdoutOffsets: number[] = [];
@@ -661,7 +642,7 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			{
 				outputPaths: paths,
 				readAttempt: () => null,
-				writeAttempt: () => undefined,
+				updateAttempt: (change) => change(null),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
@@ -704,7 +685,6 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 		const paths = {
 			stdout: "/run/ceralive/software-update.stdout",
 			stderr: "/run/ceralive/software-update.stderr",
-			status: "/run/ceralive/software-update.status",
 		};
 		let inspections = 0;
 		let terminal = false;
@@ -723,7 +703,7 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			{
 				outputPaths: paths,
 				readAttempt: () => null,
-				writeAttempt: () => undefined,
+				updateAttempt: (change) => change(null),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
@@ -756,7 +736,6 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 		const paths = {
 			stdout: "/run/ceralive/software-update.stdout",
 			stderr: "/run/ceralive/software-update.stderr",
-			status: "/run/ceralive/software-update.status",
 		};
 		let inspections = 0;
 		let terminal = false;
@@ -774,7 +753,7 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			{
 				outputPaths: paths,
 				readAttempt: () => null,
-				writeAttempt: () => undefined,
+				updateAttempt: (change) => change(null),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
@@ -811,10 +790,9 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 				outputPaths: {
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
-					status: "/run/ceralive/software-update.status",
 				},
 				readAttempt: () => null,
-				writeAttempt: () => undefined,
+				updateAttempt: (change) => change(null),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
@@ -844,7 +822,6 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 		const paths = {
 			stdout: "/run/ceralive/software-update.stdout",
 			stderr: "/run/ceralive/software-update.stderr",
-			status: "/run/ceralive/software-update.status",
 		};
 		const encoder = new TextEncoder();
 		const files = new Map<string, Uint8Array>([
@@ -869,7 +846,7 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			{
 				outputPaths: paths,
 				readAttempt: () => null,
-				writeAttempt: () => undefined,
+				updateAttempt: (change) => change(null),
 				prepareOutput: async () => {
 					prepared++;
 				},
@@ -1125,7 +1102,7 @@ StandardError=append:/run/ceralive/software-update.stderr
 	});
 });
 
-describe("deriveUpdateProgress() — a transcript without the status channel", () => {
+describe("deriveUpdateProgress() — the unit's transcript", () => {
 	const installing = { total: 1, downloading: 0, unpacking: 0, setting_up: 1 };
 	const transcript = [
 		"The following packages have been kept back:",
@@ -1170,7 +1147,7 @@ describe("deriveUpdateProgress() — a transcript without the status channel", (
 			transcript.replace("Unpacking libapp (", "Unpacking libother ("),
 		],
 	])("shows the install phase and never a number for %s", (_name, output) => {
-		expect(deriveUpdateProgress(output, undefined)).toEqual(installing);
+		expect(deriveUpdateProgress(output)).toEqual(installing);
 	});
 
 	it("recognizes phase evidence split across several durable-file reads", () => {
@@ -1183,14 +1160,15 @@ describe("deriveUpdateProgress() — a transcript without the status channel", (
 			"ting up package-a (2) ...\n",
 		]) {
 			output += chunk;
-			phases.push(deriveUpdateProgress(output, undefined));
+			phases.push(deriveUpdateProgress(output));
 		}
 
 		expect(phases).toEqual([
 			{ total: 0, downloading: 0, unpacking: 0, setting_up: 0 },
 			{ total: 1, downloading: 1, unpacking: 0, setting_up: 0 },
 			installing,
-			installing,
+			// dpkg started package-a's second of four steps, so one is done.
+			{ ...installing, percent: 25 },
 		]);
 	});
 });

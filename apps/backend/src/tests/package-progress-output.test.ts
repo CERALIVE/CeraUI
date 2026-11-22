@@ -7,6 +7,7 @@ import {
 	softwareUpdateOutputPaths,
 } from "../modules/system/software-update-output.ts";
 import {
+	DetachedAptServiceVanishedError,
 	type DetachedAptUpgradeDeps,
 	recoverDetachedAptUpgrade,
 	runDetachedAptAll,
@@ -23,27 +24,16 @@ import { updateHarness } from "./software-updates-preflight-harness.ts";
 
 useSessionOwnerForFile();
 
-// Byte-exact APT::Status-Fd records as APT 3.0 writes them, one line per write
-// (apt-pkg/acquire.cc pkgAcquireStatus::Pulse, apt-pkg/install-progress.cc).
-const dl = (percent: string) =>
-	`dlstatus:1:${percent}:Retrieving file 1 of 1\n`;
-const pm = (pkg: string, percent: string, action: string) =>
-	`pmstatus:${pkg}:${percent}:${action}\n`;
-
-const fetchStatus = dl("0.0000") + dl("41.2500");
-const dpkgStatus =
-	fetchStatus +
-	pm("dpkg-exec", "0.0000", "Running dpkg") +
-	pm("cerastream", "20.0000", "Preparing cerastream") +
-	pm("cerastream", "40.0000", "Unpacking cerastream");
-const pmerror =
-	"pmerror:cerastream:arm64:40.0000:installed cerastream package post-installation script subprocess returned error exit status 1\n";
+// APT's transcript as the unit's stdout file holds it (non-interactive
+// apt-get: the plan, one "Get:" per archive as it starts, "Fetched" when all
+// are in; dpkg's "Unpacking" and "Setting up" as each step starts).
 const fetchLog =
 	"Reading package lists...\nThe following packages will be upgraded:\n  cerastream\n" +
 	"1 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n" +
 	"Get:1 https://apt.invalid trixie/main arm64 cerastream arm64 2 [48 MB]\n";
+const fetched = `${fetchLog}Fetched 48 MB in 7s (6,857 kB/s)\n`;
 const dpkgLog =
-	`${fetchLog}(Reading database ... 1234 files and directories currently installed.)\n` +
+	`${fetched}(Reading database ... 1234 files and directories currently installed.)\n` +
 	"Preparing to unpack .../cerastream_2_arm64.deb ...\n" +
 	"Unpacking cerastream (2) over (1) ...\nSetting up cerastream (2) ...\n";
 
@@ -67,100 +57,69 @@ const completeLines = (text: string) =>
 	text.slice(0, text.lastIndexOf("\n") + 1);
 
 describe("deriveUpdateProgress()", () => {
-	test("a declared channel with no complete record yet shows the transcript's phase, without a number", () => {
-		expect(deriveUpdateProgress(dpkgLog, "")).toEqual(installingAt());
-		expect(deriveUpdateProgress(fetchLog, "")).toEqual(downloadingAt());
-		expect(deriveUpdateProgress(dpkgLog, "pmstatus:cerastream:4")).toEqual(
-			installingAt(),
-		);
+	test("the transcript's own counts give the number for the phase it is in", () => {
+		expect(deriveUpdateProgress("")).toEqual(preparing);
+		// The only archive has started, none is in yet: no number.
+		expect(deriveUpdateProgress(fetchLog)).toEqual(downloadingAt());
+		expect(deriveUpdateProgress(fetched)).toEqual(downloadingAt(99));
+		// Unpacking is done once Setting up started: one of two steps.
+		expect(deriveUpdateProgress(dpkgLog)).toEqual(installingAt(50));
 	});
 
-	test("reports APT's own percentage for the phase it is in", () => {
-		expect(deriveUpdateProgress("", "")).toEqual(preparing);
-		expect(deriveUpdateProgress(fetchLog, fetchStatus)).toEqual(
-			downloadingAt(41),
-		);
-		expect(deriveUpdateProgress(dpkgLog, dpkgStatus)).toEqual(installingAt(40));
-	});
-
-	test("a record earns nothing until its line is complete, at every byte split", () => {
-		const status = dpkgStatus + pm("cerastream", "80.0000", "Installed x");
-		for (let end = 0; end <= status.length; end++) {
-			const prefix = status.slice(0, end);
-			expect(deriveUpdateProgress("", prefix)).toEqual(
-				deriveUpdateProgress("", completeLines(prefix)),
+	test("a line earns nothing until it is complete, at every byte split", () => {
+		for (let end = 0; end <= dpkgLog.length; end++) {
+			const prefix = dpkgLog.slice(0, end);
+			expect(deriveUpdateProgress(prefix)).toEqual(
+				deriveUpdateProgress(completeLines(prefix)),
 			);
 		}
 	});
 
 	test("never reports completion while the transaction is running", () => {
-		expect(deriveUpdateProgress("", dl("100.0000"))).toEqual(downloadingAt(99));
-		expect(
-			deriveUpdateProgress("", pm("cerastream", "99.9900", "Installed x")),
-		).toEqual(installingAt(99));
+		// A dependency outside the plan adds steps; the number stops at 99.
+		const extra =
+			"Unpacking libextra (1) ...\nSetting up libextra (1) ...\nProcessing triggers for libc-bin (2.41) ...\n";
+		expect(deriveUpdateProgress(dpkgLog + extra)).toEqual(installingAt(99));
 	});
 
-	test("a package error freezes the percentage APT reported before it", () => {
-		const status =
-			dpkgStatus + pmerror + pm("libother", "60.0000", "Installed libother");
-		expect(deriveUpdateProgress(dpkgLog, status)).toEqual(installingAt(40));
-	});
-
-	test("a later download record cannot move an install back to downloading", () => {
-		expect(deriveUpdateProgress("", dpkgStatus + dl("12.0000"))).toEqual(
-			installingAt(40),
-		);
-	});
-
-	test("ignores lines that are not well-formed status records", () => {
-		const noise =
-			"pmstatus:cerastream:nan:Unpacking\npmstatus:cerastream:150.0000:x\n" +
-			"dlstatus:1:-1:x\nmedia-change:x\nstatus: cerastream: unpacked\n" +
-			"E: Sub-process /usr/bin/dpkg returned an error code (1)\n";
-		expect(deriveUpdateProgress("", fetchStatus + noise)).toEqual(
-			downloadingAt(41),
-		);
-	});
-
-	test("without a status channel the transcript gives a phase and never a number", () => {
-		expect(deriveUpdateProgress(fetchLog, undefined)).toEqual(downloadingAt());
-		expect(deriveUpdateProgress(dpkgLog, undefined)).toEqual(installingAt());
-		// A PTY can append a record to an unterminated script line.
+	test("a later fetch line cannot move an install back to downloading", () => {
 		expect(
 			deriveUpdateProgress(
-				`${fetchLog}postinst outputSetting up cerastream (2) ...\n`,
-				undefined,
+				`${dpkgLog}Get:2 https://apt.invalid x arm64 y [1 kB]\n`,
 			),
-		).toEqual(installingAt());
+		).toEqual(installingAt(50));
 	});
 
-	test("the status channel gives the number; a transcript proving a later phase overrides a stale record", () => {
-		expect(deriveUpdateProgress(fetchLog, fetchStatus)).toEqual(
-			downloadingAt(41),
-		);
-		// dpkg is unpacking while the last complete record is a download one.
-		expect(deriveUpdateProgress(dpkgLog, fetchStatus)).toEqual(installingAt());
+	test("ignores lines that are not APT's or dpkg's own", () => {
+		const noise =
+			"Get: 3 not a fetch\nGet:x y\nsetting up cerastream (2)\n" +
+			"Unpacking (bad)\nE: Sub-process /usr/bin/dpkg returned an error code (1)\n";
+		expect(deriveUpdateProgress(fetchLog + noise)).toEqual(downloadingAt());
+	});
+
+	test("a dpkg line appended to an unterminated script line still counts", () => {
+		// dpkg's pseudo-terminal can append it to a postinst's unfinished line.
+		expect(
+			deriveUpdateProgress(
+				`${fetched}postinst outputUnpacking cerastream (2) over (1) ...\n`,
+			),
+		).toEqual(installingAt());
 	});
 });
 
 type Files = {
 	readonly stdout: string;
 	readonly stderr?: string;
-	readonly status?: string;
 };
 type Mode = "live" | "reattached" | "finished replay";
 
-async function observe(
-	mode: Mode,
-	checkpoints: readonly Files[],
-	aptStatus = true,
-) {
+async function observe(mode: Mode, checkpoints: readonly Files[]) {
 	await using h = await updateHarness();
 	const paths = softwareUpdateOutputPaths();
 	const points =
 		mode === "finished replay" ? checkpoints.slice(-1) : checkpoints;
-	const reads = { stdout: 0, stderr: 0, status: 0 };
-	const end = { stdout: 0, stderr: 0, status: 0 };
+	const reads = { stdout: 0, stderr: 0 };
+	const end = { stdout: 0, stderr: 0 };
 	let started = mode !== "live";
 	let cursor = 0;
 	let polls = 0;
@@ -172,18 +131,13 @@ async function observe(
 			!started
 				? { kind: "absent" }
 				: finished
-					? {
-							kind: "finished",
-							exitCode: 100,
-							cleanup: "reset-failed",
-							...(aptStatus ? { aptStatus: true } : {}),
-						}
-					: { kind: "running", ...(aptStatus ? { aptStatus: true } : {}) },
+					? { kind: "finished", exitCode: 100, cleanup: "reset-failed" }
+					: { kind: "running" },
 		start: async () => {
 			started = true;
 		},
 		readAttempt: () => null,
-		writeAttempt: () => undefined,
+		updateAttempt: (change) => change(null),
 		prepareOutput: async () => {},
 		readOutput: async (path, offset) => {
 			const file =
@@ -191,9 +145,8 @@ async function observe(
 					? "stdout"
 					: path === paths.stderr
 						? "stderr"
-						: path === paths.status
-							? "status"
-							: undefined;
+						: undefined;
+			// APT is given no telemetry file: nothing else is ever read.
 			if (file === undefined) throw new Error(`unexpected read of ${path}`);
 			reads[file]++;
 			const bytes = Buffer.from(points[cursor]?.[file] ?? "");
@@ -259,40 +212,38 @@ async function observe(
 }
 
 describe.each(["live", "reattached", "finished replay"] as const)(
-	"APT status progress (%s)",
+	"transcript progress (%s)",
 	(mode) => {
 		test("publishes the same final frame for the same bytes", async () => {
 			const { running, states } = await observe(mode, [
-				{ stdout: fetchLog, status: fetchStatus },
-				{ stdout: dpkgLog, status: dpkgStatus },
+				{ stdout: fetchLog },
+				{ stdout: dpkgLog },
 			]);
 			expect(running).toEqual(
 				mode === "live"
-					? [preparing, downloadingAt(41), installingAt(40)]
+					? [preparing, downloadingAt(), installingAt(50)]
 					: mode === "reattached"
-						? [downloadingAt(41), installingAt(40)]
-						: [installingAt(40)],
+						? [downloadingAt(), installingAt(50)]
+						: [installingAt(50)],
 			);
 			expect(
 				states.filter((state) => state.kind === "installing").at(-1),
-			).toEqual({ kind: "installing", progress: installingAt(40) });
+			).toEqual({ kind: "installing", progress: installingAt(50) });
 			expect(states.at(-1)?.kind).toBe("failed");
 		});
 
-		test("a failed package never earns more progress or completion", async () => {
+		test("a failed package never earns completion; its exit decides", async () => {
 			const { running, states } = await observe(mode, [
-				{ stdout: dpkgLog, status: dpkgStatus },
+				{ stdout: dpkgLog },
 				{
 					stdout: `${dpkgLog}dpkg: error processing package cerastream (--configure):\n`,
 					stderr: "E: Sub-process /usr/bin/dpkg returned an error code (1)\n",
-					status: `${dpkgStatus}${pmerror}${pm("libother", "60.0000", "Installed libother")}`,
 				},
 			]);
-			expect(running.at(-1)).toEqual(installingAt(40));
-			expect(running.every((frame) => (frame.percent ?? 0) <= 40)).toBe(true);
+			expect(running.at(-1)).toEqual(installingAt(50));
+			expect(running.every((frame) => (frame.percent ?? 0) <= 50)).toBe(true);
 			const failure = states.at(-1);
 			expect(failure?.kind).toBe("failed");
-			// Status records live in their own file, so the reason is apt's error text.
 			expect(failure?.kind === "failed" ? failure.reason : "").toBe(
 				"E: Sub-process /usr/bin/dpkg returned an error code (1)",
 			);
@@ -300,24 +251,13 @@ describe.each(["live", "reattached", "finished replay"] as const)(
 
 		test("reads output larger than one bounded read to the end", async () => {
 			const filler = "  postinst: rebuilding caches\n".repeat(4_000);
-			const status =
-				dl("1.0000").repeat(3_000) +
-				pm("dpkg-exec", "0.0000", "Running dpkg") +
-				pm("cerastream", "40.0000", "Unpacking cerastream");
 			const stdout = `${dpkgLog}${filler}`;
 			expect(Buffer.byteLength(stdout)).toBeGreaterThan(
 				SOFTWARE_UPDATE_OUTPUT_READ_BYTES,
 			);
-			expect(Buffer.byteLength(status)).toBeGreaterThan(
-				SOFTWARE_UPDATE_OUTPUT_READ_BYTES,
-			);
-			const { running, end } = await observe(mode, [{ stdout, status }]);
-			expect(running.at(-1)).toEqual(installingAt(40));
-			expect(end).toEqual({
-				stdout: Buffer.byteLength(stdout),
-				stderr: 0,
-				status: Buffer.byteLength(status),
-			});
+			const { running, end } = await observe(mode, [{ stdout }]);
+			expect(running.at(-1)).toEqual(installingAt(50));
+			expect(end).toEqual({ stdout: Buffer.byteLength(stdout), stderr: 0 });
 		});
 	},
 );
@@ -325,68 +265,47 @@ describe.each(["live", "reattached", "finished replay"] as const)(
 describe("reattachment", () => {
 	test("announces a recovered unit once, from what its files already prove", async () => {
 		const { running } = await observe("reattached", [
-			{ stdout: "", status: "" },
-			{ stdout: dpkgLog, status: dpkgStatus },
+			{ stdout: "" },
+			{ stdout: dpkgLog },
 		]);
-		expect(running).toEqual([preparing, installingAt(40)]);
+		expect(running).toEqual([preparing, installingAt(50)]);
 	});
 
-	test("a unit started before the status channel is never read for it and shows phases only", async () => {
-		const stale = pm("cerastream", "80.0000", "Installed cerastream");
-		const { running, reads } = await observe(
-			"reattached",
-			[
-				{ stdout: fetchLog, status: stale },
-				{ stdout: dpkgLog, status: stale },
-			],
-			false,
-		);
-		expect(reads.status).toBe(0);
-		expect(running).toEqual([downloadingAt(), installingAt()]);
-	});
-
-	test("finished replay of a pre-channel unit reads its whole transcript", async () => {
+	test("finished replay reads a unit's whole transcript", async () => {
 		const stdout = `${fetchLog}${"Fetched 48 MB in 7s (6,857 kB/s)\n".repeat(3_000)}Unpacking cerastream (2) over (1) ...\n`;
 		expect(Buffer.byteLength(stdout)).toBeGreaterThan(
 			SOFTWARE_UPDATE_OUTPUT_READ_BYTES,
 		);
-		const { running, end } = await observe(
-			"finished replay",
-			[{ stdout }],
-			false,
-		);
+		const { running, end } = await observe("finished replay", [{ stdout }]);
 		expect(running).toEqual([installingAt()]);
 		expect(end.stdout).toBe(Buffer.byteLength(stdout));
 	});
 });
 
-test("every read split of the status file converges without a partial number", async () => {
+test("every read split of the transcript converges without a partial count", async () => {
 	const allowed = [
 		preparing,
 		downloadingAt(),
-		downloadingAt(0),
-		downloadingAt(41),
-		installingAt(0),
-		installingAt(20),
-		installingAt(40),
+		downloadingAt(99),
+		installingAt(),
+		installingAt(50),
 	];
-	for (let split = 1; split < dpkgStatus.length; split += 7) {
+	for (let split = 1; split < dpkgLog.length; split += 7) {
 		const { running } = await observe("live", [
-			// apt writes each status record before the dpkg output it announces.
-			{ stdout: fetchLog, status: dpkgStatus.slice(0, split) },
-			{ stdout: dpkgLog, status: dpkgStatus },
+			{ stdout: dpkgLog.slice(0, split) },
+			{ stdout: dpkgLog },
 		]);
 		for (const frame of running) expect(allowed).toContainEqual(frame);
-		expect(running.at(-1)).toEqual(installingAt(40));
+		expect(running.at(-1)).toEqual(installingAt(50));
 	}
 });
 
-test("APT's percentage never moves backward within a phase", () => {
-	expect(deriveUpdateProgress("", dl("41.0000") + dl("30.0000"))).toEqual(
-		downloadingAt(41),
-	);
-	const status = `${dpkgStatus}${pm("cerastream", "35.0000", "Processing triggers")}`;
-	expect(deriveUpdateProgress("", status)).toEqual(installingAt(40));
+test("the counted number never moves backward within a phase", () => {
+	expect(
+		deriveUpdateProgress(
+			`${dpkgLog}Processing triggers for man-db (2.13) ...\n`,
+		),
+	).toEqual(installingAt(50));
 });
 
 describe("a reconnecting tab during recovery", () => {
@@ -414,7 +333,7 @@ describe("a reconnecting tab during recovery", () => {
 		expect(buildInitialStatus().status).not.toHaveProperty("updating");
 		let drained: (() => void) | undefined;
 		await recover((handlers) => {
-			handlers.onAttached?.(false);
+			handlers.onAttached?.();
 			drained = handlers.onDrained;
 		}, true);
 		// Attached but unread: still no claim either way, and no empty frame.
@@ -430,7 +349,7 @@ describe("a reconnecting tab during recovery", () => {
 		beginSoftwareUpdateRecovery();
 		await recoverSoftwareUpdateIfRunning({
 			recover: async (handlers) => {
-				handlers.onAttached?.(false);
+				handlers.onAttached?.();
 				return {
 					completion: Promise.reject(new Error("output unreadable")),
 					wasAlreadyFinished: true,
@@ -442,6 +361,56 @@ describe("a reconnecting tab during recovery", () => {
 		await h.settled();
 		expect(buildInitialStatus().status.update_state?.kind).toBe("failed");
 		expect(buildInitialStatus().status).toHaveProperty("updating", null);
+	});
+
+	test("an observer that loses the unit tells no outcome: not a failure, outcome not confirmed", async () => {
+		await using h = await updateHarness();
+		beginSoftwareUpdateRecovery();
+		await recoverSoftwareUpdateIfRunning({
+			recover: async (handlers) => {
+				handlers.onAttached?.();
+				handlers.onStdout(dpkgLog);
+				handlers.onDrained?.(true, false);
+				return {
+					completion: Promise.reject(new DetachedAptServiceVanishedError()),
+					wasAlreadyFinished: true,
+				};
+			},
+			scheduleRetry: () => {},
+			resumePeriodicChecks: () => {},
+		});
+		// An already finished unit is settled before recovery returns.
+		const status = buildInitialStatus().status;
+		expect(status).toHaveProperty("updating", null);
+		// The last frame about the install says it ended; the state broadcast follows it.
+		expect(
+			h.frames.findLast((frame) => "updating" in frame)?.updating,
+		).toBeNull();
+		expect(status.update_state?.kind).not.toBe("failed");
+		expect(status.update_state?.kind).not.toBe("success");
+		expect(
+			h.frames.some((frame) => frame.update_state?.kind === "failed"),
+		).toBe(false);
+		expect(h.restarts).toBe(0);
+	});
+
+	test("a transcript that cannot be read shows the phase without a number until it can", async () => {
+		await using h = await updateHarness();
+		beginSoftwareUpdateRecovery();
+		let handlers: Parameters<typeof recoverDetachedAptUpgrade>[0] | undefined;
+		await recover((attached) => {
+			attached.onAttached?.();
+			handlers = attached;
+		}, true);
+		handlers?.onStdout(dpkgLog);
+		handlers?.onDrained?.(true, false);
+		expect(h.frames.at(-1)?.updating).toEqual(installingAt(50));
+		for (let poll = 0; poll < 4; poll++) handlers?.onDrained?.(false, true);
+		// Unknown now: never the last number as if it were live.
+		expect(h.frames.at(-1)?.updating).toEqual(installingAt());
+		expect(buildInitialStatus().status.updating).toEqual(installingAt());
+		handlers?.onDrained?.(true, false);
+		expect(h.frames.at(-1)?.updating).toEqual(installingAt(50));
 	});
 
 	test("hears an explicit null once recovery finds no unit", async () => {

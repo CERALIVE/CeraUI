@@ -3,10 +3,9 @@ import { open, readFile, rm, writeFile } from "node:fs/promises";
 import {
 	prepareSoftwareUpdateOutput,
 	readSoftwareUpdateAttempt,
-	readSoftwareUpdateStatusDone,
 	SOFTWARE_UPDATE_OUTPUT_READ_BYTES,
 	softwareUpdateOutputPaths,
-	writeSoftwareUpdateAttempt,
+	updateSoftwareUpdateAttempt,
 } from "../../modules/system/software-update-output.ts";
 import type { DetachedAptServiceDeps } from "../../modules/system/software-update-service.ts";
 
@@ -15,9 +14,8 @@ export const RESTART_EXIT_CODE = 75;
 
 // The detached unit as PID 1 runs it: started in its own session, outside
 // every backend's process tree, so it keeps running when a backend dies; each
-// backend sees it only through files they all share. Its real command (the
-// shell wrapper and its status file) runs with apt-get and the status path
-// pointed at the scratch directory.
+// backend sees it only through files they all share. Its real command runs
+// with apt-get pointed at the scratch directory.
 export function restartTestUnit(
 	scratch: string,
 	o: {
@@ -33,7 +31,6 @@ export function restartTestUnit(
 	const local = {
 		stdout: `${unit}.stdout`,
 		stderr: `${unit}.stderr`,
-		status: `${unit}.status`,
 	};
 	const uid = process.getuid?.() ?? 0;
 	const text = (file: string) => readFile(file, "utf8").catch(() => undefined);
@@ -41,17 +38,12 @@ export function restartTestUnit(
 	return {
 		outputPaths: fixed,
 		readAttempt: () => readSoftwareUpdateAttempt(local, uid),
-		writeAttempt: (record) => writeSoftwareUpdateAttempt(local, record, uid),
-		statusDone: () => readSoftwareUpdateStatusDone(local),
+		updateAttempt: (change) => updateSoftwareUpdateAttempt(local, change, uid),
 		prepareOutput: () => prepareSoftwareUpdateOutput(local, uid),
 		start: async (command) => {
 			const argv = command
 				.slice(command.indexOf("--") + 1)
-				.map((arg) =>
-					arg
-						.replaceAll("/usr/bin/apt-get", `${scratch}/apt-get`)
-						.replaceAll(fixed.status, local.status),
-				);
+				.map((arg) => arg.replaceAll("/usr/bin/apt-get", `${scratch}/apt-get`));
 			const child = spawn(
 				"/bin/bash",
 				[
@@ -79,13 +71,12 @@ export function restartTestUnit(
 					kind: "finished",
 					exitCode,
 					cleanup: exitCode === 0 ? "stop" : "reset-failed",
-					aptStatus: true,
 					invocation,
 				};
 			}
 			return pid === undefined
 				? { kind: "absent" }
-				: { kind: "running", aptStatus: true, invocation };
+				: { kind: "running", invocation };
 		},
 		cleanup: async () => {
 			if (o.failCleanup) throw new Error("systemctl stop failed");
@@ -100,12 +91,7 @@ export function restartTestUnit(
 				if (stdoutReads === 2 && o.holdSecondStdoutRead)
 					await readFile(o.holdSecondStdoutRead, "utf8");
 			}
-			const path =
-				file === fixed.stdout
-					? local.stdout
-					: file === fixed.stderr
-						? local.stderr
-						: local.status;
+			const path = file === fixed.stdout ? local.stdout : local.stderr;
 			const handle = await open(path, "r");
 			try {
 				const bytes = new Uint8Array(SOFTWARE_UPDATE_OUTPUT_READ_BYTES);
