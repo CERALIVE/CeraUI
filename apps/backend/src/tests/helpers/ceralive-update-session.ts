@@ -8,18 +8,17 @@
 // APT state, `recover` recovers a finished install through the real completion
 // path up to the update's deliberate restart, which it holds until `exit` (so a
 // test can sync its tabs first), `exit` ends it. The notice's dpkg readback reads
-// the same scripted device. With `olderBackend` it is a
-// backend from before this notice owner: it shows the notice the way main did
-// and never initializes or writes the offer record.
+// the same scripted device. With `olderBackend` it is started with
+// main-backend-preload.ts: main's backend from before this notice owner, whose
+// own check raises the notice the way main did, and which never initializes or
+// writes the offer record.
 import { defaultAptSpaceDeps } from "../../modules/system/apt-space-admission.ts";
-import { initCeraliveUpdateNotice } from "../../modules/system/ceralive-update-notice.ts";
 import * as updates from "../../modules/system/software-updates.ts";
 import { setStreamLivenessSourceForTest } from "../../modules/system/stream-liveness-source.ts";
 import { setStreamReconciliationCompletedForTest } from "../../modules/system/stream-reconciliation-latch.ts";
 import { setCeraliveSourcesFileForTest } from "../../modules/system/update-apt-channel.ts";
 import { setUpdateCapabilityPathForTest } from "../../modules/system/update-capabilities.ts";
 import { setUpdateSettingsFilePathForTest } from "../../modules/system/update-settings.ts";
-import { notificationBroadcast } from "../../modules/ui/notifications.ts";
 import { getServer, initServer } from "../../rpc/server.ts";
 import { setPasswordHash } from "../../rpc/state/password.ts";
 import {
@@ -30,7 +29,6 @@ import {
 	READY_PREFIX,
 	RECOVERY_FAILED_MARKER,
 	RECOVERY_RESTART_MARKER,
-	REPLAY_PREFIX,
 	RESTART_EXIT_CODE,
 	SESSION_PASSWORD,
 	scriptedApt,
@@ -82,27 +80,18 @@ setPasswordHash(
 	await Bun.password.hash(SESSION_PASSWORD, { algorithm: "bcrypt", cost: 4 }),
 );
 
-if (step.olderBackend)
-	notificationBroadcast(
-		"ceralive_update",
-		"warning",
-		"A CeraLive update is available. Open Settings → Software Updates to install it.",
-		0,
-		true,
-		true,
-	);
-
 initServer();
 process.stdout.write(`${READY_PREFIX}${getServer()?.port}\n`);
 
 for await (const command of console) {
 	if (command === "hydrate") {
+		// Main's backend has no such module (and its notifications lack what it imports).
 		if (!step.olderBackend)
-			await initCeraliveUpdateNotice({
+			(
+				await import("../../modules/system/ceralive-update-notice.ts")
+			).initCeraliveUpdateNotice({
 				path: step.record,
 				run: (argv) => apt(argv),
-				observe: (outcome) =>
-					process.stdout.write(`${REPLAY_PREFIX}${outcome}\n`),
 				...(step.failWrites
 					? {
 							write: () => {

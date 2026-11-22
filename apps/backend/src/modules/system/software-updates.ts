@@ -96,7 +96,6 @@ import {
 	normalizeAptCommandFailure,
 } from "./apt-transport-result.ts";
 import {
-	ceraliveCheckStarted,
 	firstPartyOffer,
 	legacyCeraliveOffer,
 	reconcileCeraliveUpdateNotice,
@@ -1106,7 +1105,6 @@ function checkForSoftwareUpdates(
 	lastCheckFailure = null;
 	lastAptReachability = undefined;
 	aptGetUpdating = true;
-	ceraliveCheckStarted();
 	broadcastUpdateState();
 
 	void runLegacyPackageEffects(
@@ -1279,7 +1277,6 @@ export async function runUpdateDiscoveryAndReport(
 	if (pendingPackageSuccess.pending) return "discovery_failed";
 	if (aptDiscoveryRunning) return "busy";
 	aptDiscoveryRunning = true;
-	ceraliveCheckStarted();
 	lastCheckedAt = Date.now();
 	try {
 		const capabilities = await readPackageCapabilities();

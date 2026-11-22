@@ -39,7 +39,6 @@ import {
 	READY_PREFIX,
 	RECOVERY_FAILED_MARKER,
 	RECOVERY_RESTART_MARKER,
-	REPLAY_PREFIX,
 	RESTART_EXIT_CODE,
 	SESSION_PASSWORD,
 } from "./helpers/ceralive-update-apt.ts";
@@ -51,6 +50,10 @@ const DEADLINE_MS = 30_000;
 const budget = (backends: number) => (backends + 2) * DEADLINE_MS;
 const SESSION = new URL("./helpers/ceralive-update-session.ts", import.meta.url)
 	.pathname;
+const MAIN_BACKEND = new URL(
+	"./helpers/main-backend-preload.ts",
+	import.meta.url,
+).pathname;
 const SETUP = new URL("../../setup.json", import.meta.url).pathname;
 
 let root: string;
@@ -143,14 +146,11 @@ type Step = Omit<SessionStep, "record" | "scratch">;
 
 class Backend {
 	readonly port: number;
-	// True once this backend's notice owner answers every login with one delivery outcome.
-	replays = false;
 	private readonly out: Lines;
 	private readonly err: Lines;
 
 	private constructor(
 		private readonly child: Bun.Subprocess<"pipe", "pipe", "pipe">,
-		private readonly owner: boolean,
 		port: number,
 		out: Lines,
 		err: Lines,
@@ -166,7 +166,12 @@ class Backend {
 	): Promise<Backend> {
 		const input: SessionStep = { ...step, record, scratch: root };
 		const child = Bun.spawn(
-			[process.execPath, SESSION, JSON.stringify(input)],
+			[
+				process.execPath,
+				...(step.olderBackend ? ["--preload", MAIN_BACKEND] : []),
+				SESSION,
+				JSON.stringify(input),
+			],
 			{
 				cwd: join(root, "cwd"),
 				stdin: "pipe",
@@ -199,7 +204,6 @@ class Backend {
 		);
 		const backend = new Backend(
 			child,
-			step.olderBackend !== true,
 			Number(ready.slice(READY_PREFIX.length)),
 			out,
 			err,
@@ -223,16 +227,6 @@ class Backend {
 			this.out.next((line) => line === HYDRATED_MARKER),
 			"hydration",
 		);
-		this.replays = this.owner;
-	}
-
-	// The outcome of the next login delivery, printed after its frames were queued.
-	async nextReplay(): Promise<string> {
-		const line = await within(
-			this.out.next((entry) => entry.startsWith(REPLAY_PREFIX)),
-			"replay outcome",
-		);
-		return line.slice(REPLAY_PREFIX.length);
 	}
 
 	check(): Promise<void> {
@@ -315,10 +309,7 @@ class Tab {
 		return this.history.filter((event) => event === "remove").length;
 	}
 
-	async connect(
-		backend: Backend,
-		{ awaitReplay = backend.replays }: { awaitReplay?: boolean } = {},
-	): Promise<void> {
+	async connect(backend: Backend): Promise<void> {
 		const socket = new WebSocket(`ws://127.0.0.1:${backend.port}/ws`);
 		this.socket = socket;
 		this.closed = new Promise((resolve) =>
@@ -340,8 +331,6 @@ class Tab {
 			password: SESSION_PASSWORD,
 		});
 		expect(login).toMatchObject({ result: { success: true } });
-		// The login's replay is asynchronous; its outcome marker is the rendezvous.
-		if (awaitReplay) await backend.nextReplay();
 		await this.sync();
 	}
 
@@ -470,10 +459,19 @@ const removals = (opened: readonly Tab[]) =>
 	opened.map((tab) => tab.removals());
 const histories = (opened: readonly Tab[]) => opened.map((tab) => tab.history);
 
-// Tabs that show the offer the way main's backend raised it (no record written).
-async function olderBackendTabs(state: AptScript = pending("1", "2")) {
-	const older = await Backend.start({ olderBackend: true, apt: state });
+// Tabs that show the offer main's own backend raised in its own check (no record written).
+async function olderBackendTabs(
+	state: AptScript = pending("1", "2"),
+	capable = false,
+) {
+	const older = await Backend.start({
+		olderBackend: true,
+		apt: state,
+		capable,
+	});
 	const opened = await tabs(older);
+	await older.check();
+	await sync(opened);
 	expect(names(opened)).toEqual([[NOTICE], [NOTICE]]);
 	await older.close();
 	return opened;
@@ -563,17 +561,14 @@ for (const capable of [false, true])
 			const fresh = await tabs(completion);
 			expect(histories(fresh)).toEqual([[], []]);
 			// When that process's conclusive check finds nothing pending, dpkg showing the offer
-			// installed, every tab drops it: live, and at a later login.
+			// installed, every connected tab drops it live; a later login is told nothing.
 			await completion.setApt(settled("2"));
 			await completion.check();
 			await sync([...missing, ...connected, ...fresh]);
 			expect(names([...missing, ...connected])).toEqual([[], [], [], []]);
 			expect(removals([...missing, ...connected])).toEqual([1, 1, 1, 1]);
 			expect(removals(fresh)).toEqual([1, 1]);
-			expect(histories(await tabs(completion))).toEqual([
-				["remove"],
-				["remove"],
-			]);
+			expect(histories(await tabs(completion))).toEqual([[], []]);
 			// When a newer release appears, it is shown and nothing removes it.
 			await completion.setApt(pending("2", "3"));
 			await completion.check();
@@ -612,9 +607,10 @@ for (const capable of [false, true])
 	test(
 		`an update from a backend before this notice is cleared by the first conclusive check, in the tabs connected to it (${capable ? "capable" : "legacy"} image)`,
 		async () => {
-			// Given main's backend showing its offer in main-era and v2026.7.2 tabs; it recorded nothing.
-			const connected = await olderBackendTabs();
-			const missing = await olderBackendTabs();
+			// Given main's own backend, whose own check showed its offer in main-era and v2026.7.2
+			// tabs; it recorded nothing.
+			const connected = await olderBackendTabs(pending("1", "2"), capable);
+			const missing = await olderBackendTabs(pending("1", "2"), capable);
 			// When the package restart recovers the install while two tabs are connected.
 			const recovering = await Backend.start({ apt: settled("2"), capable });
 			await reconnect(recovering, connected);
@@ -635,9 +631,14 @@ for (const capable of [false, true])
 			await sync(connected);
 			expect(names(connected)).toEqual([[], []]);
 			expect(removals(connected)).toEqual([1, 1]);
-			// And a tab that logs in to that process afterwards is told too.
-			const late = await olderBackendTabs();
+			// And a tab that logs in to that process afterwards is not told; its next complete
+			// check while the tab is connected tells it.
+			const late = await olderBackendTabs(pending("1", "2"), capable);
 			await reconnect(completion, late);
+			expect(names(late)).toEqual([[NOTICE], [NOTICE]]);
+			expect(removals(late)).toEqual([0, 0]);
+			await completion.check();
+			await sync(late);
 			expect(names(late)).toEqual([[], []]);
 			expect(removals(late)).toEqual([1, 1]);
 			await completion.close();
@@ -828,7 +829,7 @@ for (const capable of [false, true])
 				{ ...settled("2"), available: [dependency] },
 				capable,
 			);
-			const opened = await olderBackendTabs();
+			const opened = await olderBackendTabs(pending("1", "2"), capable);
 			// When an out-of-roster upgrade now pulls it into the plan, every roster version unchanged.
 			const restarted = await Backend.start({
 				apt: { ...settled("2"), upgradable: [curl, dependency] },
@@ -1018,7 +1019,7 @@ test(
 		await sync(missing);
 		expect(names(missing)).toEqual([[], []]);
 		expect(removals(missing)).toEqual([1, 1]);
-		expect(histories(await tabs(restarted))).toEqual([["remove"], ["remove"]]);
+		expect(histories(await tabs(restarted))).toEqual([[], []]);
 		await restarted.close();
 		const newer = await Backend.start({ apt: pending("1", "3") });
 		await newer.check();
@@ -1156,6 +1157,10 @@ test(
 		}
 		await rm(record);
 		await rm(dismissals);
+		// Main's own backend shows these before the acknowledgement store becomes unreadable
+		// (its keyed notice waits for a readable store).
+		const late = await olderBackendTabs();
+		const later = await olderBackendTabs();
 		// Given an offer whose dismissal state cannot be read.
 		const offering = await Backend.start({ apt: pending("1", "2") });
 		const holding = await tabs(offering);
@@ -1181,16 +1186,18 @@ test(
 		await sync(holding);
 		expect(names(holding)).toEqual([[], []]);
 		await absent.close();
-		// Nor does a conclusive check's none at a later login (an install's proof alone tells it nothing).
-		const late = await olderBackendTabs();
+		// Nor is a later login told (an install's proof alone tells it nothing, and nor does a
+		// complete check's none): only that check's live removal, while the tab is connected.
 		await installProof();
 		const after = await Backend.start({ apt: failing(settled("2")) });
 		await reconnect(after, late);
 		expect(names(late)).toEqual([[NOTICE], [NOTICE]]);
 		await after.setApt(settled("2"));
 		await after.check();
-		const later = await olderBackendTabs();
 		await reconnect(after, later);
+		expect(names(later)).toEqual([[NOTICE], [NOTICE]]);
+		await after.check();
+		await sync(later);
 		expect(names(later)).toEqual([[], []]);
 	},
 	budget(44),
@@ -1378,7 +1385,7 @@ for (const capable of [false, true]) {
 			await offering.check();
 			await offering.close();
 			// And that older backend shows release 3 in both decoders.
-			const opened = await olderBackendTabs(pending("2", "3"));
+			const opened = await olderBackendTabs(pending("2", "3"), capable);
 			// When this backend starts: dpkg shows the stored release 2 installed, which says nothing about 3.
 			const restored = await Backend.start({ apt: pending("2", "3"), capable });
 			await reconnect(restored, opened);
@@ -1408,7 +1415,7 @@ for (const capable of [false, true]) {
 				}),
 			);
 			// And an older backend shows release 3 in both decoders.
-			const opened = await olderBackendTabs(pending("1", "3"));
+			const opened = await olderBackendTabs(pending("1", "3"), capable);
 			// When this backend starts, the dismissal of 2 is no authority over that copy.
 			const restored = await Backend.start({ apt: pending("1", "3"), capable });
 			await reconnect(restored, opened);
@@ -1443,7 +1450,7 @@ for (const capable of [false, true]) {
 			expect(removals(connected)).toEqual([1, 1]);
 			// When cerastream is rolled back before another tab logs in, that tab keeps its copy.
 			await recovering.setApt(pending("1", "2"));
-			const late = await olderBackendTabs();
+			const late = await olderBackendTabs(pending("1", "2"), capable);
 			await reconnect(recovering, late);
 			expect(names(late)).toEqual([[NOTICE], [NOTICE]]);
 			expect(removals(late)).toEqual([0, 0]);
@@ -1456,7 +1463,7 @@ for (const capable of [false, true]) {
 		`a refresh that never reached CeraLive's index is no check that nothing is pending (${image} image)`,
 		async () => {
 			// Given main's backend showing its offer; nothing was recorded.
-			const opened = await olderBackendTabs();
+			const opened = await olderBackendTabs(pending("1", "2"), capable);
 			// When a clean refresh reaches only Debian and the cached lists still list CeraLive with nothing pending.
 			const backend = await Backend.start({
 				apt: { ...settled("2"), refresh: { stdout: DEBIAN_ONLY_REFRESH } },
@@ -1522,7 +1529,7 @@ for (const capable of [false, true]) {
 			const offering = await Backend.start({ apt: pending("1", "2"), capable });
 			await offering.check();
 			await offering.close();
-			const opened = await olderBackendTabs(pending("1", "3"));
+			const opened = await olderBackendTabs(pending("1", "3"), capable);
 			// When the package script restarts this backend while cerastream 2 is configured.
 			const recovering = await Backend.start({
 				apt: configuring("2"),
@@ -1544,7 +1551,7 @@ for (const capable of [false, true]) {
 	test(
 		`a later check that is not conclusive voids the earlier "none" for tabs that reconnect (${image} image)`,
 		async () => {
-			const missing = await olderBackendTabs();
+			const missing = await olderBackendTabs(pending("1", "2"), capable);
 			const backend = await Backend.start({ apt: settled("2"), capable });
 			await backend.check();
 			// When the next check's refresh fails, a tab that reconnects is not told the old "none".
@@ -1565,7 +1572,7 @@ for (const capable of [false, true]) {
 	test(
 		`with no stored offer, a held CeraLive package beside an unrelated upgrade keeps another backend's banner (${image} image)`,
 		async () => {
-			const opened = await olderBackendTabs();
+			const opened = await olderBackendTabs(pending("1", "2"), capable);
 			const backend = await Backend.start({
 				apt: {
 					keptBack: [cerastream("1", "2")],
@@ -1608,3 +1615,161 @@ for (const capable of [false, true]) {
 		budget(2),
 	);
 }
+
+// One rule, over real processes, the real WebSocket server and both decoders: only a
+// complete check replaces or retires the standing offer, and no removal reaches a tab
+// that logs in. Each sequence asserts its deciding step, then the copy its tabs end with.
+const srtla = (installed: string, candidate: string): AptPackage => ({
+	name: "srtla",
+	installed,
+	candidate,
+});
+// cerastream 2 is kept back beside srtla 2's valid upgrade: the check is not complete.
+const keptBesideSrtla: AptScript = {
+	upgradable: [srtla("1", "2")],
+	keptBack: [cerastream("1", "2")],
+};
+// srtla 2 installed while cerastream stays kept back at 1.
+const srtlaInstalled: AptScript = {
+	installed: [srtla("2", "2")],
+	keptBack: [cerastream("1", "2")],
+};
+const holding = (opened: readonly Tab[]) =>
+	opened.map((tab) => tab.shown.has(NOTICE));
+
+const oneRule: readonly [
+	string,
+	"kept" | "removed",
+	(capable: boolean) => Promise<Tab[]>,
+][] = [
+	[
+		"a complete none, then the evidence changes before tabs that were away reconnect",
+		"kept",
+		async (capable) => {
+			const away = await olderBackendTabs(pending("1", "3"), capable);
+			const backend = await Backend.start({ apt: settled("2"), capable });
+			await backend.check();
+			// A rollback, and no check yet: the earlier none reaches no reconnecting tab.
+			await backend.setApt(pending("1", "2"));
+			await reconnect(backend, away);
+			expect(removals(away)).toEqual([0, 0]);
+			await backend.check();
+			await sync(away);
+			return away;
+		},
+	],
+	[
+		"a dismissal while tabs were away",
+		"kept",
+		async (capable) => {
+			const away = await olderBackendTabs(pending("1", "2"), capable);
+			const backend = await Backend.start({ apt: pending("1", "2"), capable });
+			const [dismissing] = await tabs(backend, ["typed"]);
+			await backend.check();
+			await (dismissing as Tab).sync();
+			await (dismissing as Tab).dismiss(NOTICE);
+			expect((dismissing as Tab).shown.has(NOTICE)).toBe(false);
+			await reconnect(backend, away);
+			return away;
+		},
+	],
+	[
+		"an incomplete check beside the standing offer, then the other package installs",
+		"kept",
+		async (capable) => {
+			const backend = await Backend.start({ apt: pending("1", "2"), capable });
+			const opened = await tabs(backend);
+			await backend.check();
+			await backend.setApt(keptBesideSrtla);
+			await backend.check();
+			await sync(opened);
+			// srtla's verified upgrade is not shown in cerastream's place.
+			expect(histories(opened)).toEqual([["show"], ["show"]]);
+			await backend.setApt(srtlaInstalled);
+			await backend.recover();
+			await sync(opened);
+			expect((await backend.ended()).exit).toBe(RESTART_EXIT_CODE);
+			return opened;
+		},
+	],
+	[
+		"a stored offer, an incomplete check beside it after a restart, then the other package installs",
+		"kept",
+		async (capable) => {
+			const offering = await Backend.start({ apt: pending("1", "2"), capable });
+			const opened = await tabs(offering);
+			await offering.check();
+			await sync(opened);
+			await offering.close();
+			const next = await Backend.start({ apt: keptBesideSrtla, capable });
+			await reconnect(next, opened);
+			await next.check();
+			await sync(opened);
+			expect(histories(opened)).toEqual([["show"], ["show"]]);
+			await next.setApt(srtlaInstalled);
+			await next.recover();
+			await sync(opened);
+			expect((await next.ended()).exit).toBe(RESTART_EXIT_CODE);
+			return opened;
+		},
+	],
+	[
+		"an incomplete check, then a complete one",
+		"kept",
+		async (capable) => {
+			const backend = await Backend.start({ apt: keptBesideSrtla, capable });
+			const opened = await tabs(backend);
+			await backend.check();
+			await sync(opened);
+			expect(histories(opened)).toEqual([[], []]);
+			await backend.setApt({
+				upgradable: [cerastream("1", "2"), srtla("1", "2")],
+			});
+			await backend.check();
+			await sync(opened);
+			expect(histories(opened)).toEqual([["show"], ["show"]]);
+			return opened;
+		},
+	],
+	[
+		"the standing offer's hold changes, then a complete none",
+		"removed",
+		async (capable) => {
+			const backend = await Backend.start({ apt: pending("1", "2"), capable });
+			const opened = await tabs(backend);
+			await backend.check();
+			await backend.setApt({
+				keptBack: [cerastream("1", "2")],
+				holds: ["cerastream"],
+			});
+			await backend.check();
+			await sync(opened);
+			expect(holding(opened)).toEqual([true, true]);
+			await backend.setApt(settled("2"));
+			await backend.check();
+			await sync(opened);
+			return opened;
+		},
+	],
+];
+
+for (const capable of [false, true])
+	for (const [label, outcome, run] of oneRule)
+		test(
+			`${label}: ${outcome} (${capable ? "capable" : "legacy"} image)`,
+			async () => {
+				const opened = await run(capable);
+				expect([holding(opened), removals(opened)]).toEqual(
+					outcome === "kept"
+						? [
+								[true, true],
+								[0, 0],
+							]
+						: [
+								[false, false],
+								[1, 1],
+							],
+				);
+			},
+			budget(3),
+		);

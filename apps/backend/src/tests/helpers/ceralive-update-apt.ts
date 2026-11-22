@@ -73,8 +73,6 @@ export const READY_PREFIX = "backend:ready:";
 export const CHECKED_MARKER = "backend:checked";
 export const HYDRATED_MARKER = "backend:hydrated";
 export const APPLIED_MARKER = "backend:apt-applied";
-// One per login, printed after its frames: `<prefix>sent|declined`.
-export const REPLAY_PREFIX = "backend:replay:";
 export const SESSION_PASSWORD = "ceralive-session-password";
 // Exit status of a session ended by the finished update's own restart (an uncaught throw).
 export const RESTART_EXIT_CODE = 75;

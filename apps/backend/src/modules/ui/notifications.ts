@@ -97,8 +97,6 @@ export type NotificationOptions = {
 
 const persistentNotifications = new Map<string, PersistentNotification>();
 // An owner's frames for each authenticating client, after the show replay.
-let authenticatedReplay: ((send: (frame: object) => void) => void) | undefined;
-
 // Revisions start over when the backend restarts; this namespaces them.
 const publisher: string = crypto.randomUUID();
 let revisionCounter = 0;
@@ -281,7 +279,7 @@ export function notificationRemove(name: string) {
 
 /**
  * Removes `name` live, as a typed and a separate pre-#183 frame. A client that
- * was offline learns of it only through its owner's authenticated replay.
+ * was offline is not told: a login is sent only what is shown now.
  */
 export function notificationWithdraw(name: string) {
 	return removeNotification(name, true);
@@ -378,25 +376,6 @@ export function getPersistentNotifications(
 	return { show: notifications };
 }
 
-/** Typed and pre-#183 removal frames for `name`, for a sender addressing one client. */
-export function removalFrames(name: string): object[] {
-	return [
-		{ remove: [{ id: name, revision: nextRevision() }] },
-		legacyRemoval([name]),
-	];
-}
-
-/** Lets one owner add frames, decided when each client authenticates, after its show replay. */
-export function setAuthenticatedReplay(
-	replay: ((send: (frame: object) => void) => void) | undefined,
-): void {
-	authenticatedReplay = replay;
-}
-
-export function replayToAuthenticated(send: (frame: object) => void): void {
-	authenticatedReplay?.(send);
-}
-
 export function notificationSendPersistent(
 	conn: MessageSocket,
 	isAuthed = false,
@@ -407,8 +386,4 @@ export function notificationSendPersistent(
 			replay: true,
 		}),
 	);
-	if (isAuthed)
-		replayToAuthenticated((frame) =>
-			conn.send(buildMsg("notification", frame)),
-		);
 }

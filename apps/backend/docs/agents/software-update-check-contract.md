@@ -34,20 +34,22 @@ Install post-acceptance limits: D8 Known gaps (c). Check wire reference:
   offers retain the documented wire precedence above; the failure survives in
   the port result and `lastCheckFailure`. A stream/concurrent-refresh refusal still
   returns `busy` without clearing evidence.
-- **Only a conclusive check, or dpkg showing the offer installed, changes the "CeraLive update is available" notice.**
+- **Only a complete check, or dpkg showing the offer installed, changes the "CeraLive update is available" notice.**
   The refresh must exit 0 having hit or fetched the `InRelease`/`Release` of every
   CeraLive source the check's own inventory lists (same URI and suite, no `Ign:`),
   without `Err:`, failed-fetch, stale-index or `E:` diagnostics,
   and must not be captive; legacy `dist-upgrade --assume-no` must exit
   0, or 1 after its own `Abort.`, without `E:`, must not be the kept-back fallback,
   and its upgrade and NEW lists must name exactly what its summary counts, each
-  name once; with no actionable first-party upgrade, no first-party name may remain
-  planned;
+  name once; no first-party name may be planned, kept back or newly installed
+  outside the offer;
   the capable plan must be complete; CeraLive's source must be in the check's
-  inventory; and every first-party candidate must be verified. "None pending"
-  withdraws only with #664's dpkg readback showing any stored offer installed.
-  Besides such a check, only that readback in the update's own result step, for
-  the offer the process shows, withdraws it from connected tabs. The advisory discovery itself and
+  inventory; and every first-party candidate must be verified. Any other check
+  changes nothing, not even to show a verified subset. "None pending" withdraws
+  only with #664's dpkg readback showing any stored offer installed. Besides such a
+  check, only that readback in the update's own result step, for the offer the
+  process shows, withdraws it. Both remove it live from connected tabs only, never
+  at login. The advisory discovery itself and
   its parsers are unchanged. Rules, persistence and coverage:
   [the retraction contract](a-persistent-notification-must-be-retractable.md#the-ceralive-update-offer-is-withdrawn-only-on-positive-evidence-exists).
 - **A refused check restores what it did not replace.** `triggerManualUpdateCheck`
