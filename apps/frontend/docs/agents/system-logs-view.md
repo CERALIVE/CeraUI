@@ -128,12 +128,16 @@ density. It is not a redesign.
   (`lib/device-logs/boot-selection.svelte.ts`): every `choose()` advances it, a
   repeat of the highlighted boot and All boots included, and it is never reset;
   a view closing (`reset()`) also makes every token taken in that open stale, so
-  nothing started in one open applies in the next.
+  nothing started in one open applies in the next. The view itself lives exactly
+  while the dialog is open (`LogsDialog` renders `SystemLogsView` only under
+  `open`): the close edge, not the end of the exit animation, retires it, so the
+  probe fence, the Raw lookup abort and paging invalidation, and the flow's dispose
+  (export and bundle runs: no ticket can start a download after the close) all run
+  at once, and a reopen during the exit mounts a fresh view.
   Each async result that could change Raw or the scope takes `since()` when it
   starts and applies only while that still holds:
-  - a deep link (`SystemLogsView` takes it as the view mounts with the context,
-    in the same synchronous step that starts the availability probe, so no pick
-    can come between; `RawLogsPanel` skips the lookup, discards its reply, and
+  - a deep link (`SystemLogsView` takes it in a pre-effect as the view mounts
+    with the context, before any picker action can run; `RawLogsPanel` skips the lookup, discards its reply, and
     drops a link not yet shown, so Raw opens on the pick);
   - an Events "View raw logs" lookup (taken at the click and kept by
     `EventsRawLink`: a pick clears the row's pending state at once, a reply after

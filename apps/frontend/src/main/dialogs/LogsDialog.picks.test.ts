@@ -346,6 +346,35 @@ describe("LogsDialog: a boot pick outranks a reply to anything started before it
 		});
 	});
 
+	it("opens a View raw logs pressed after a re-pick even while the superseded reply is still out, which then changes nothing", async () => {
+		viewport(true);
+		const at = RUNNING.firstTs + 60_000;
+		rpc.events.list.mockResolvedValue(
+			eventPage([
+				event(1, "device_started", {}, { bootId: RUNNING.bootId, at }),
+			]),
+		);
+		render(LogsDialog, { props: { open: true } });
+		const superseded = Promise.withResolvers<{ ok: false; error: "BUSY" }>();
+		rpc.logs.around.mockReturnValueOnce(superseded.promise);
+		const link = await screen.findByRole("button", {
+			name: en.systemLogs.events.viewRaw,
+		});
+		await fireEvent.click(link);
+		await pickInSide(null);
+
+		await fireEvent.click(link);
+		await screen.findByTestId("raw-anchor");
+		superseded.resolve({ ok: false, error: "BUSY" });
+		await superseded.promise;
+		await tick();
+
+		expect(selectedTab()).toBe(en.systemLogs.tabs.raw);
+		expect(screen.getByTestId("raw-anchor")).toBeTruthy();
+		expect(screen.queryByTestId("event-raw-note")).toBeNull();
+		expect(rpc.logs.around).toHaveBeenCalledTimes(2);
+	});
+
 	it("clears a View raw logs a re-pick superseded at once: no pending row, no late note, and a fresh link works", async () => {
 		viewport(true);
 		const at = RUNNING.firstTs + 60_000;

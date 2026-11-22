@@ -55,5 +55,9 @@ $effect(() => {
 			<BootButton />
 		{/if}
 	{/snippet}
-	<SystemLogsView {context} />
+	<!-- The view lives exactly while the dialog is open: a close retires its Raw, probe and sharing
+	     state at that moment, while the shell animates out, and a reopen mounts a fresh view. -->
+	{#if open}
+		<SystemLogsView {context} />
+	{/if}
 </AppDialog>

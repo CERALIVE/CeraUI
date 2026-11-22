@@ -15,17 +15,27 @@ const pushToPage = new WeakMap<Page, (message: string) => void>();
 const listReplies = new WeakMap<Page, PromiseWithResolvers<void>>();
 const replaceHistory = new WeakSet<Page>();
 /** Holds a page's `logs.around` reply until the test releases it, then answers BUSY, or the device's reply when `real`. */
-/** Holds a page's `logs.getStorage` reply (System Logs' availability probe) until the test releases it. */
-const heldStorage = new WeakMap<Page, PromiseWithResolvers<void>>();
 const heldAround = new WeakMap<Page, { release: PromiseWithResolvers<void>; sent: number; real?: boolean; ok?: unknown }>();
+/** Replies held by procedure path until the test releases them (System Logs' probe, an export ticket). */
+const heldReplies = new WeakMap<Page, Map<string, Promise<void>>>();
 
-/** A reply frame's id and its result's `ok`, narrowed from the wire text. */
-function replyOf(message: string): { id: unknown; ok: unknown } {
+/** Holds the page's replies to `path` until the returned release runs. */
+function holdReply(page: Page, path: string): () => void {
+	const release = Promise.withResolvers<void>();
+	const held = heldReplies.get(page) ?? new Map<string, Promise<void>>();
+	held.set(path, release.promise);
+	heldReplies.set(page, held);
+	return () => release.resolve();
+}
+
+/** A wire frame's id, procedure path and result `ok`, decoded once and narrowed from `unknown`. */
+function wire(message: string): { id: string | undefined; path: string | undefined; ok: unknown } {
 	const frame: unknown = JSON.parse(message);
-	if (typeof frame !== 'object' || frame === null) return { id: undefined, ok: undefined };
+	if (typeof frame !== 'object' || frame === null) return { id: undefined, path: undefined, ok: undefined };
 	const result = 'result' in frame ? frame.result : undefined;
 	return {
-		id: 'id' in frame ? frame.id : undefined,
+		id: 'id' in frame && frame.id !== undefined ? String(frame.id) : undefined,
+		path: 'path' in frame && Array.isArray(frame.path) ? frame.path.join('.') : undefined,
 		ok: typeof result === 'object' && result !== null && 'ok' in result ? result.ok : undefined,
 	};
 }
@@ -53,7 +63,7 @@ test.beforeEach(async ({ page, pageRpc }) => {
 	await page.routeWebSocket(/\/ws(?:\?|$)/, socket => {
 		const server = socket.connectToServer();
 		const aroundIds = new Set<string>();
-		const storageIds = new Set<string>();
+		const pathsById = new Map<string, string>();
 		const listIds = new Set<string>();
 		pushToPage.set(page, message => {
 			socket.send(message);
@@ -69,7 +79,8 @@ test.beforeEach(async ({ page, pageRpc }) => {
 			if (Array.isArray(frame.path) && frame.path.join('.') === 'logs.around')
 				aroundIds.add(frame.id);
 			if (Array.isArray(frame.path) && frame.path.join('.') === 'events.list') listIds.add(frame.id);
-			if (Array.isArray(frame.path) && frame.path.join('.') === 'logs.getStorage') storageIds.add(frame.id);
+			const sent = wire(message);
+			if (sent.id !== undefined && sent.path !== undefined) pathsById.set(sent.id, sent.path);
 			const counted = heldAround.get(page);
 			if (counted && Array.isArray(frame.path) && frame.path.join('.') === 'logs.around') counted.sent += 1;
 			if (Array.isArray(frame.path) && frame.path.join('.') === 'logs.query')
@@ -88,18 +99,21 @@ test.beforeEach(async ({ page, pageRpc }) => {
 					message = JSON.stringify(frame);
 				}
 			}
-			const probe = heldStorage.get(page);
-			if (probe && typeof message === 'string' && storageIds.has(String(replyOf(message).id))) {
-				const reply = message;
-				void probe.promise.then(() => {
-					socket.send(reply);
-					pageRpc.acceptServerMessage(reply);
-				});
-				return;
+			if (typeof message === 'string') {
+				const reply = wire(message);
+				const until = reply.id === undefined ? undefined : heldReplies.get(page)?.get(pathsById.get(reply.id) ?? '');
+				if (until) {
+					const text = message;
+					void until.then(() => {
+						socket.send(text);
+						pageRpc.acceptServerMessage(text);
+					});
+					return;
+				}
 			}
 			const held = heldAround.get(page);
 			if (held && typeof message === 'string' && aroundIds.has(JSON.parse(message).id)) {
-				held.ok = replyOf(message).ok;
+				held.ok = wire(message).ok;
 				const reply = held.real ? message : JSON.stringify({ ...JSON.parse(message), result: { ok: false, error: 'BUSY' } });
 				void held.release.promise.then(() => {
 					socket.send(reply);
@@ -288,8 +302,7 @@ async function exportAll(page: Page): Promise<void> {
 }
 
 test('a phone pick of All boots while System Logs still loads outranks the linked moment, and a new Export saves it', { tag: '@desktop-only' }, async ({ page, pageRpc }) => {
-	const probe = Promise.withResolvers<void>();
-	heldStorage.set(page, probe);
+	const releaseProbe = holdReply(page, 'logs.getStorage');
 	await page.setViewportSize({ width: 375, height: 812 });
 	await emit(pageRpc, {
 		name: 'view-logs-pick', type: 'error', msg: 'Stream failed',
@@ -303,7 +316,7 @@ test('a phone pick of All boots while System Logs still loads outranks the linke
 	// All boots is already highlighted; picking it again is still the operator's action.
 	await logs.getByRole('button', { name: /^Choose a boot/ }).click();
 	await page.getByTestId('boot-picker').getByTestId('boot-option-all').click();
-	probe.resolve();
+	releaseProbe();
 
 	await expect(logs.getByTestId('raw-logs')).toBeVisible();
 	await expect.poll(() => queries.get(page)?.at(-1)?.boot).toBe('all');
@@ -333,6 +346,124 @@ test('re-picking the highlighted All boots while View raw logs is out keeps its 
 	// The late reply was a real success, not a failure that never would have opened Raw.
 	expect(held.ok).toBe(true);
 	await exportAll(page);
+});
+
+/**
+ * Keeps the closing System Logs dialog (AppDialog's fullscreen content) on the page, as its exit
+ * animation would: Bits UI removes closing content only once `getAnimations()` on it have finished,
+ * so these never finish. Other dialogs close as usual.
+ */
+async function holdClosingDialogs(page: Page): Promise<void> {
+	await page.evaluate(() => {
+		const never = new Promise<void>(() => {});
+		const getAnimations = Element.prototype.getAnimations;
+		Element.prototype.getAnimations = function (this: Element, options?: GetAnimationsOptions) {
+			if (this.hasAttribute('data-app-dialog-fullscreen') && this.getAttribute('data-state') === 'closed')
+				return [{ finished: never, pending: false, playState: 'running' } as unknown as Animation];
+			return getAnimations.call(this, options);
+		};
+	});
+}
+
+/** Counts the export downloads the page starts, without fetching them. */
+async function countExportDownloads(page: Page): Promise<() => Promise<number>> {
+	await page.evaluate(() => {
+		const counter = window as unknown as { exportDownloads: number };
+		const click = HTMLAnchorElement.prototype.click;
+		counter.exportDownloads = 0;
+		HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+			if (this.href.includes('/api/logs/export')) counter.exportDownloads += 1;
+			else click.call(this);
+		};
+	});
+	return () => page.evaluate(() => (window as unknown as { exportDownloads: number }).exportDownloads);
+}
+
+/** Every reply already sent on the page's socket has reached the page once this notice shows. */
+async function barrier(page: Page, pageRpc: PageRpc, name: string): Promise<void> {
+	await emit(pageRpc, {
+		name, type: 'info', msg: 'Flows reset', key: 'notifications.uplinkFlowsReset',
+		params: { iface: 'eth9' }, is_dismissable: true, is_persistent: true, duration: 0,
+	});
+	await expect(page.locator(`[data-testid="persistent-notice"][data-notification="${name}"]`)).toHaveCount(1);
+}
+
+/** The scope a newly opened Export confirmation states, then cancelled. */
+async function statedScope(page: Page): Promise<string[]> {
+	const logs = page.getByRole('dialog', { name: 'System Logs' });
+	await logs.getByRole('group', { name: 'Downloads' }).getByRole('button', { name: 'Export logs', exact: true }).click();
+	const confirm = page.getByRole('dialog', { name: 'Export this view' });
+	const rows = await confirm.getByTestId('sharing-export-scope').locator('dt, dd').allTextContents();
+	await confirm.getByRole('button', { name: 'Cancel' }).click();
+	await expect(confirm).toHaveCount(0);
+	return rows.map((row) => row.trim());
+}
+
+const DEFAULT_SCOPE = ['Boots', 'All boots', 'Level', 'Info', 'Sources', 'All sources'];
+
+test('closing System Logs retires its view at once: a ticket answered during the exit starts no download, and a quick reopen exports the new view', { tag: '@desktop-only' }, async ({ page, pageRpc }) => {
+	await page.setViewportSize({ width: 1280, height: 800 });
+	const downloads = await countExportDownloads(page);
+	const releaseTicket = holdReply(page, 'logs.createExport');
+	await navigateTo(page, 'settings');
+	await page.getByTestId('settings-entry-logs').click();
+	const logs = page.getByRole('dialog', { name: 'System Logs' });
+	await logs.getByRole('tab', { name: 'Raw logs' }).click();
+	const marker = 'retired-view-marker';
+	await logs.getByTestId('raw-search').fill(marker);
+	await logs.getByTestId('raw-search').press('Enter');
+	await expect.poll(() => queries.get(page)?.at(-1)?.text).toBe(marker);
+	await logs.getByRole('group', { name: 'Downloads' }).getByRole('button', { name: 'Export logs', exact: true }).click();
+	const confirm = page.getByRole('dialog', { name: 'Export this view' });
+	await expect(confirm.getByTestId('sharing-export-scope')).toContainText(marker);
+	await confirm.getByRole('button', { name: 'Download export' }).click();
+	await exports.get(page)?.promise;
+
+	// The Settings binding closes the parent while the ticket is out; the shell stays, animating out.
+	await holdClosingDialogs(page);
+	await logs.getByTestId('app-dialog-close').dispatchEvent('click');
+	await expect(logs).toHaveAttribute('data-state', 'closed');
+	releaseTicket();
+	await barrier(page, pageRpc, 'late-ticket-barrier');
+	expect(await downloads()).toBe(0);
+
+	// A quick reopen from Settings (Events, not Raw) while the closing shell is still on the page.
+	await page.getByTestId('settings-entry-logs').dispatchEvent('click');
+	await expect(logs).toHaveAttribute('data-state', 'open');
+	await expect(logs.getByRole('tab', { name: 'Events' })).toHaveAttribute('aria-selected', 'true');
+	expect(await statedScope(page)).toEqual(DEFAULT_SCOPE);
+	expect(await downloads()).toBe(0);
+});
+
+test('a probe answered after System Logs closed opens nothing, and a quick reopen on Events exports the new view', { tag: '@desktop-only' }, async ({ page, pageRpc }) => {
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await navigateTo(page, 'settings');
+	const logs = page.getByRole('dialog', { name: 'System Logs' });
+	// Warm the Raw tab's chunk, so a view that outlived its close would mount Raw the moment its probe lands.
+	await page.getByTestId('settings-entry-logs').click();
+	await logs.getByRole('tab', { name: 'Raw logs' }).click();
+	await expect(logs.getByTestId('raw-logs')).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(logs).toHaveCount(0);
+	const releaseProbe = holdReply(page, 'logs.getStorage');
+	await emit(pageRpc, {
+		name: 'view-logs-late-probe', type: 'error', msg: 'Stream failed',
+		key: 'notifications.streamStartInternalFailed',
+		is_dismissable: true, is_persistent: false, duration: 60,
+	});
+	await page.locator('[data-sonner-toast]').getByRole('button', { name: 'View logs' }).click();
+	await expect(logs.getByTestId('system-logs-loading')).toBeVisible();
+
+	await holdClosingDialogs(page);
+	await logs.getByTestId('app-dialog-close').dispatchEvent('click');
+	await expect(logs).toHaveAttribute('data-state', 'closed');
+	releaseProbe();
+	await barrier(page, pageRpc, 'late-probe-barrier');
+
+	await page.getByTestId('settings-entry-logs').dispatchEvent('click');
+	await expect(logs).toHaveAttribute('data-state', 'open');
+	await expect(logs.getByRole('tab', { name: 'Events' })).toHaveAttribute('aria-selected', 'true');
+	expect(await statedScope(page)).toEqual(DEFAULT_SCOPE);
 });
 
 test('a notice that does not point to the logs offers no View logs', async ({ page, pageRpc }) => {

@@ -168,7 +168,7 @@ export class EventsView {
 	viewRaw(
 		event: DeviceEvent,
 		open: (page: AroundPage) => void,
-		still?: () => boolean,
+		still: () => boolean,
 	): Promise<void> {
 		return this.#raw.open(event, this.#deps.around, open, still);
 	}

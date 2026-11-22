@@ -37,7 +37,7 @@ export class EventsRawLink {
 		event: DeviceEvent,
 		around: (input: LogAroundInput) => Promise<LogAroundOutput>,
 		show: (page: AroundPage) => void,
-		still: () => boolean = () => true,
+		still: () => boolean,
 	): Promise<void> {
 		// The pending action stays focusable (aria-disabled), so a repeat press lands here; once a pick
 		// superseded it, a press asks again.
