@@ -190,26 +190,3 @@ export const updateBitrate = async (bitrate: number) => {
 		throw error;
 	}
 };
-export const downloadLog = ({
-	name,
-	contents,
-}: {
-	name: string;
-	contents: string;
-}) => {
-	const parsedContent = contents
-		.split("\n")
-		.map((line) => line.trim()) // Trim whitespace
-		.filter((line) => line.length > 0) // Remove empty lines
-		.join("\n"); // Join back into a string
-
-	const blob = new Blob([parsedContent], { type: "text/plain" });
-	const url = URL.createObjectURL(blob);
-	const a = document.createElement("a");
-	a.href = url;
-	a.download = name;
-	document.body.appendChild(a);
-	a.click();
-	document.body.removeChild(a);
-	URL.revokeObjectURL(url);
-};

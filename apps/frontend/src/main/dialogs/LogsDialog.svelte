@@ -41,10 +41,9 @@ const wide = new MediaQuery(WIDE_DESKTOP_QUERY);
 // scrollbars inherit the page's graphite palette from app.css.
 const SURFACES = 'selection:bg-status-info/30 selection:text-foreground';
 
-// A new value whenever `open` is written, null while closed: a result checked after a close or a
+// A new object whenever `open` is written, null while closed: a result checked after a close or a
 // reopen is stale in that same call, whoever wrote it (this dialog's control, Escape, the parent).
-let opens = 0;
-const generation = $derived(open ? ++opens : null);
+const generation = $derived(open ? {} : null);
 onDestroy(bootSelection.attach(() => generation));
 
 $effect(() => {
@@ -60,13 +59,17 @@ $effect(() => {
 <AppDialog bind:open contentClass={SURFACES} fullscreen hideFooter title={m["settings.index.logs"]()}>
 	{#snippet headerAside()}
 		<StreamStatePill />
-		{#if open && !wide.current}
-			<BootButton />
+		{#if generation !== null && !wide.current}
+			{#key generation}
+				<BootButton />
+			{/key}
 		{/if}
 	{/snippet}
-	<!-- The view lives exactly while the dialog is open: a close retires its Raw, probe and sharing
-	     state at that moment, while the shell animates out, and a reopen mounts a fresh view. -->
-	{#if open}
-		<SystemLogsView {context} />
+	<!-- One view per open generation: a close retires it while the shell animates out, and a reopen,
+	     even within the same turn, mounts a fresh one. -->
+	{#if generation !== null}
+		{#key generation}
+			<SystemLogsView {context} />
+		{/key}
 	{/if}
 </AppDialog>

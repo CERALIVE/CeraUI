@@ -23,8 +23,9 @@ import {
 	EXPORT_TICKET,
 	signalled,
 } from "$lib/device-logs/__fixtures__/sharing";
+import { startBackendDownload } from "$lib/device-logs/download-gate";
 import { notifyHistoryChanged } from "$lib/device-logs/history-bus";
-import { exportInput, startBackendDownload } from "$lib/device-logs/sharing";
+import { exportInput } from "$lib/device-logs/sharing";
 import { SharingFlow } from "$lib/device-logs/sharing-flow.svelte";
 import { getBackendHttpUrl } from "$lib/env";
 import { RpcError } from "$lib/rpc/rpc-error";
@@ -56,7 +57,7 @@ beforeEach(() => {
 	flow = new SharingFlow({
 		current: () => true,
 		logs: { createExport, previewBundle, createBundle },
-		download: startBackendDownload,
+		download: (path) => startBackendDownload(() => true, path),
 	});
 	render(SharingHarness, { props: { sharing: flow } });
 });

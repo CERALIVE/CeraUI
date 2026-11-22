@@ -16,7 +16,6 @@ import {
 	logExportOutputSchema,
 } from "@ceraui/rpc/schemas";
 
-import { getBackendHttpUrl } from "$lib/env";
 import { RpcError } from "$lib/rpc/rpc-error";
 
 export { chineseWordChunks } from "./cjk-words";
@@ -144,17 +143,4 @@ export function previewProblem(error: unknown): SharingProblem {
 	return error instanceof RpcError && error.message === "BUSY"
 		? "busy"
 		: "failed";
-}
-
-/** The browser streams the file to disk; the page never holds its bytes. */
-export function startBackendDownload(path: string): void {
-	const anchor = document.createElement("a");
-	anchor.href = getBackendHttpUrl(path);
-	anchor.download = "";
-	document.body.append(anchor);
-	try {
-		anchor.click();
-	} finally {
-		anchor.remove();
-	}
 }

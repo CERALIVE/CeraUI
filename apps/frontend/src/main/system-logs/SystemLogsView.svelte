@@ -30,9 +30,9 @@ import { Button } from '$lib/components/ui/button';
 import { Skeleton } from '$lib/components/ui/skeleton';
 import * as Tabs from '$lib/components/ui/tabs';
 import { bootSelection } from '$lib/device-logs/boot-selection.svelte';
+import { startBackendDownload } from '$lib/device-logs/download-gate';
 import type { RawMoment } from '$lib/device-logs/raw-anchor';
 import type { AroundPage } from '$lib/device-logs/raw-view.svelte';
-import { startBackendDownload } from '$lib/device-logs/sharing';
 import { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';
 import {
 	activeTab,
@@ -104,7 +104,7 @@ let checkRun = 0;
 // Export follows Raw's last view or the boot picker, whichever the operator used last.
 const sharing = new SharingFlow({
 	logs: rpc.logs,
-	download: startBackendDownload,
+	download: (path) => startBackendDownload(inOpen, path),
 	current: inOpen,
 	picker: bootSelection,
 });

@@ -7,6 +7,7 @@ import { RpcError } from "$lib/rpc/rpc-error";
 
 import { BOOT_IDS, boot } from "./__fixtures__/boots";
 import { bundleManifest } from "./__fixtures__/sharing";
+import { startBackendDownload } from "./download-gate";
 import {
 	bundleManifestReply,
 	captureExportScope,
@@ -16,7 +17,6 @@ import {
 	previewProblem,
 	RAW_OPENING_QUERY,
 	refusal,
-	startBackendDownload,
 	ticketReply,
 } from "./sharing";
 
@@ -205,7 +205,7 @@ describe("startBackendDownload: the browser saves the file", () => {
 		});
 		const path = "/api/logs/export?ticket=ab12";
 
-		startBackendDownload(path);
+		startBackendDownload(() => true, path);
 
 		expect(clicked).toStrictEqual([
 			{
@@ -226,9 +226,9 @@ describe("startBackendDownload: the browser saves the file", () => {
 			throw refused;
 		});
 
-		expect(() => startBackendDownload("/api/logs/export?ticket=ab12")).toThrow(
-			refused,
-		);
+		expect(() =>
+			startBackendDownload(() => true, "/api/logs/export?ticket=ab12"),
+		).toThrow(refused);
 		expect(document.querySelectorAll("a")).toHaveLength(0);
 	});
 });

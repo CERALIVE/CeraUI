@@ -22,10 +22,10 @@ class BootSelection {
 	// Advanced by every pick, a repeat included, and never reset: an async result started under an
 	// older value lost to that pick (`since()`).
 	#intent = $state(0);
-	// Advanced when a view closes: a result started in one open never applies in the next one.
-	#views = 0;
-	// LogsDialog's open generation (`attach`), `null` while closed; 0 with no dialog attached.
-	#generation: () => number | null = () => 0;
+	// The open view's generation, compared by identity, `null` while closed: LogsDialog's, derived
+	// from its `open` (`attach`); with no dialog attached, replaced when a view closes (`reset()`).
+	#view: object = {};
+	#generation: () => object | null = () => this.#view;
 	#openedAt = 0;
 
 	get intent(): number {
@@ -38,21 +38,17 @@ class BootSelection {
 	}
 
 	/** LogsDialog hands over its open generation, which changes with every write of its `open`. */
-	attach(generation: () => number | null): () => void {
+	attach(generation: () => object | null): () => void {
 		this.#generation = generation;
 		return () => {
-			if (this.#generation === generation) this.#generation = () => 0;
+			if (this.#generation === generation) this.#generation = () => this.#view;
 		};
 	}
 
 	/** For a side effect of the open view: false from the moment its dialog closes or reopens, or the view closes. */
 	opened(): () => boolean {
 		const generation = this.#generation();
-		const view = this.#views;
-		return () =>
-			generation !== null &&
-			this.#generation() === generation &&
-			this.#views === view;
+		return () => generation !== null && this.#generation() === generation;
 	}
 
 	/** For an async result started now: false once any pick follows or the view closes, so its reply must not apply. */
@@ -110,7 +106,7 @@ class BootSelection {
 	reset(): void {
 		this.#boot = null;
 		this.rawScope = null;
-		this.#views += 1;
+		this.#view = {};
 		this.#openedAt = this.#intent;
 	}
 

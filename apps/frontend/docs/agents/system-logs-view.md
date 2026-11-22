@@ -132,13 +132,17 @@ density. It is not a redesign.
   generation: `LogsDialog` derives it from `open` and attaches it to the boot
   selection, so the write that closes or reopens the dialog (its own control,
   Escape, or the parent) makes every `opened()` and `since()` token stale in that
-  same call, before Svelte's update flush. Every download start reads it at that
-  moment: an export or bundle ticket's success, and a legacy download request. The
-  view and the phone header's boot button live only while the dialog is open
-  (`LogsDialog` renders them under `open`), so the exit animation keeps neither:
-  the flush after the close unmounts them and runs their teardown (probe fence, Raw
-  lookup abort and paging invalidation, the flow's dispose), and a reopen mounts a
-  fresh view.
+  same call, before Svelte's update flush. Leaving Settings is a close too:
+  SettingsView writes `logsOpen` false from the router's synchronous
+  notification, before Settings unmounts. `lib/device-logs/download-gate.ts` is
+  the only place System Logs starts a browser download: each request carries the
+  token of the open it was issued under, read again when the file is ready (a
+  sharing ticket's URL, or a legacy file the device pushes as a `log` event before
+  it answers, matched to its request oldest first; a push no request waits for
+  saves nothing). The view and the phone header's boot button are keyed by the
+  generation, so the exit animation keeps neither, the flush after the close runs
+  their teardown (probe fence, Raw lookup abort and paging invalidation, the flow's
+  dispose), and a reopen, even within the same turn, mounts a fresh view.
   Each async result that could change Raw or the scope takes `since()` when it
   starts and applies only while that still holds:
   - a deep link (`SystemLogsView` takes it in a pre-effect as the view mounts

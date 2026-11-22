@@ -23,13 +23,10 @@ import {
 	bundleManifest as manifest,
 	EXPORT_TICKET as TICKET,
 } from "./__fixtures__/sharing";
+import { startBackendDownload } from "./download-gate";
 
 import { notifyHistoryChanged, onHistoryChanged } from "./history-bus";
-import {
-	exportInput,
-	RAW_OPENING_QUERY,
-	startBackendDownload,
-} from "./sharing";
+import { exportInput, RAW_OPENING_QUERY } from "./sharing";
 import { SharingFlow } from "./sharing-flow.svelte";
 
 // Use real ticket admission and redemption, without host journal or bundle data.
@@ -132,7 +129,7 @@ it.each(["export", "bundle"] as const)(
 				previewBundle: async () => manifest(3),
 				createBundle: () => create(issueBundle(conn)),
 			},
-			download: startBackendDownload,
+			download: (path) => startBackendDownload(() => true, path),
 		});
 		flows.push(flow);
 		const press =

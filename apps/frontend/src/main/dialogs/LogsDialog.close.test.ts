@@ -9,6 +9,7 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/svelte";
+import { tick } from "svelte";
 import {
 	afterEach,
 	beforeAll,
@@ -28,6 +29,8 @@ import {
 	exportScopeRows,
 } from "$lib/device-logs/__fixtures__/sharing";
 import { bootSelection } from "$lib/device-logs/boot-selection.svelte";
+import { deliverLegacyLog } from "$lib/device-logs/download-gate";
+import { getDeviceLog } from "$lib/helpers/SystemHelper";
 import type { LogsDialogContext } from "$lib/stores/dialog-request.svelte";
 
 import { en } from "../../tests/helpers/catalog";
@@ -221,6 +224,10 @@ beforeEach(() => {
 	anchorClicks = vi
 		.spyOn(HTMLAnchorElement.prototype, "click")
 		.mockImplementation(() => {});
+	Object.assign(URL, {
+		createObjectURL: vi.fn(() => "blob:log"),
+		revokeObjectURL: vi.fn(),
+	});
 	vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -292,4 +299,80 @@ describe("LogsDialog: closing ends the open view before any queued reply runs", 
 		}
 		expect(wrong).toEqual([]);
 	});
+
+	it.each([
+		{ name: "export", start: exportStarted, reply: EXPORT_TICKET },
+		{ name: "bundle", start: bundleStarted, reply: BUNDLE_TICKET },
+	] as const)(
+		"a close and a reopen on Events in one turn give the new view a working $name download",
+		async ({ name, start, reply }) => {
+			const host = render(LogsDialogHost).component;
+			host.show({ tab: "raw", at: AT, bootId: RUNNING.bootId });
+			await screen.findByTestId("raw-logs");
+
+			host.close();
+			host.show({ tab: "events" });
+			// The reopen's update flush, which mounts the new view: no one presses between two writes in one turn.
+			await tick();
+
+			if (name === "export") {
+				await fireEvent.click(
+					await screen.findByTestId("sharing-toolbar-export"),
+				);
+				const dialog = await screen.findByRole("dialog", {
+					name: sharing.export,
+				});
+				expect(exportScopeRows(dialog)).toEqual(ALL_BOOTS_SCOPE);
+				await fireEvent.click(
+					within(dialog).getByRole("button", { name: sharing.exportDownload }),
+				);
+				await waitFor(() => expect(rpc.tickets.sent).toEqual(["export"]));
+			} else await start();
+			rpc.tickets.reply.resolve(reply);
+
+			await waitFor(() => expect(anchorClicks).toHaveBeenCalledTimes(1));
+		},
+	);
+
+	it("a close and a reopen in one turn give the new view the bundle refusal it is answered with", async () => {
+		const host = render(LogsDialogHost).component;
+		host.show({ tab: "raw", at: AT, bootId: RUNNING.bootId });
+		await screen.findByTestId("raw-logs");
+
+		host.close();
+		host.show({ tab: "events" });
+		// The reopen's update flush, which mounts the new view: no one presses between two writes in one turn.
+		await tick();
+		await bundleStarted();
+		rpc.tickets.reply.resolve({ ok: false, error: "BUSY" });
+
+		expect(await screen.findByTestId("sharing-bundle-problem")).toBeTruthy();
+		expect(anchorClicks).not.toHaveBeenCalled();
+	});
+});
+
+describe("LogsDialog: a legacy log file pushed after the close", () => {
+	const FILE = { name: "ceralive_log.txt", contents: "first\n  second  \n" };
+
+	it.each([
+		{ name: "while open", close: false, downloads: 1 },
+		{ name: "after the parent closed the dialog", close: true, downloads: 0 },
+	] as const)(
+		"the device's file pushed $name downloads $downloads time(s)",
+		async ({ close, downloads }) => {
+			const host = render(LogsDialogHost).component;
+			host.show();
+			const pushed = Promise.withResolvers<boolean>();
+			vi.mocked(getDeviceLog).mockImplementation(() => {
+				if (close) host.close();
+				pushed.resolve(deliverLegacyLog(FILE));
+				return Promise.resolve();
+			});
+
+			await fireEvent.click(await screen.findByTestId("log-download-device"));
+
+			expect(await pushed.promise).toBe(downloads === 1);
+			expect(anchorClicks).toHaveBeenCalledTimes(downloads);
+		},
+	);
 });

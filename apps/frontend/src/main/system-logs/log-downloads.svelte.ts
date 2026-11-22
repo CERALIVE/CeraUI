@@ -1,3 +1,4 @@
+import { requestLegacyLog } from "$lib/device-logs/download-gate";
 import { getDeviceLog, getSystemLog } from "$lib/helpers/SystemHelper";
 
 export type LogKind = "device" | "system";
@@ -26,7 +27,10 @@ export class LogDownloads {
 		this.downloading = kind;
 		this.failed = null;
 		try {
-			await (kind === "device" ? getDeviceLog() : getSystemLog());
+			await requestLegacyLog(
+				this.#current,
+				kind === "device" ? getDeviceLog : getSystemLog,
+			);
 		} catch (error) {
 			console.error(`Failed to request ${kind} log:`, error);
 			this.failed = kind;
