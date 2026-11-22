@@ -102,6 +102,8 @@ const REFRESH = `Hit:1 https://deb.debian.org/debian-security trixie-security In
 Hit:2 https://apt.ceralive.tv/dists/stable/binary-arm64 ./ InRelease
 Reading package lists...
 `;
+// A clean refresh that never reached CeraLive's index (its source still in the cached lists).
+export const DEBIAN_ONLY_REFRESH = `${REFRESH.split("\n")[0]}\nReading package lists...\n`;
 // CeraLive's source disabled or absent: the inventory lists only Debian.
 export const DEBIAN_ONLY_INVENTORY = `${INVENTORY.split(` 500 ${CERALIVE_SOURCE}`)[0]}Pinned packages:\n`;
 const NOTHING =

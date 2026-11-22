@@ -35,14 +35,18 @@ Install post-acceptance limits: D8 Known gaps (c). Check wire reference:
   the port result and `lastCheckFailure`. A stream/concurrent-refresh refusal still
   returns `busy` without clearing evidence.
 - **Only a conclusive check, or dpkg showing the offer installed, changes the "CeraLive update is available" notice.**
-  The refresh must exit 0 without `Err:`, failed-fetch, stale-index or `E:`
-  diagnostics and must not be captive; legacy `dist-upgrade --assume-no` must exit
+  The refresh must exit 0 with a `Hit:`/`Get:` line for CeraLive's own host (and no
+  `Ign:` for it), without `Err:`, failed-fetch, stale-index or `E:` diagnostics,
+  and must not be captive; legacy `dist-upgrade --assume-no` must exit
   0, or 1 after its own `Abort.`, without `E:`, must not be the kept-back fallback,
-  and its upgrade and NEW lists must name as many packages as its summary counts;
+  and its upgrade and NEW lists must name exactly what its summary counts, each
+  name once; with no actionable first-party upgrade, no first-party name may remain
+  planned;
   the capable plan must be complete; CeraLive's source must be in the check's
-  inventory; and every first-party candidate must be verified. Besides such a
-  check, only #664's dpkg readback of the offer (in the update's own result step,
-  or at startup for a stored offer) withdraws it. The advisory discovery itself and
+  inventory; and every first-party candidate must be verified. "None pending"
+  withdraws only with #664's dpkg readback showing any stored offer installed.
+  Besides such a check, only that readback in the update's own result step, for
+  the offer the process shows, withdraws it from connected tabs. The advisory discovery itself and
   its parsers are unchanged. Rules, persistence and coverage:
   [the retraction contract](a-persistent-notification-must-be-retractable.md#the-ceralive-update-offer-is-withdrawn-only-on-positive-evidence-exists).
 - **A refused check restores what it did not replace.** `triggerManualUpdateCheck`

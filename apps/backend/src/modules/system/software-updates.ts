@@ -77,6 +77,7 @@ import {
 	deriveVerdict,
 	probeAptReachability,
 } from "./apt-reachability.ts";
+import { FIRST_PARTY_APT_HOST } from "./apt-source-origins.ts";
 import {
 	defaultAptSpaceDeps,
 	preflightAptSpace,
@@ -669,7 +670,7 @@ async function getCapableUpdateSize(
 			update_state: getUpdateState(),
 		});
 		if (refreshConclusive)
-			reconcileCeraliveUpdateNotice(
+			await reconcileCeraliveUpdateNotice(
 				firstPartyOffer(
 					result.packages,
 					sourcePolicy.stdout,
@@ -860,15 +861,20 @@ function isCleanAssumeNoDiscovery(result: SpawnWithTimeoutResult): boolean {
 	);
 }
 
-// The names the upgrade and NEW lists carry; the summary counts both.
-function listedPackageCount(stdout: string): number {
-	return [
+// Every name the upgrade and NEW lists carry (the summary counts both), or null
+// when one is malformed or repeated.
+function listedPackages(stdout: string): string[] | null {
+	const names = [
 		"The following packages will be upgraded:\n",
 		"The following NEW packages will be installed:\n",
-	].reduce((count, heading) => {
+	].flatMap((heading) => {
 		const list = parseAptPackageList(stdout, heading);
-		return count + (list.ok && list.value ? list.value.split(" ").length : 0);
-	}, 0);
+		return list.ok && list.value ? list.value.split(" ") : [];
+	});
+	return names.every((name) => APT_PACKAGE_NAME_RE.test(name)) &&
+		new Set(names).size === names.length
+		? names
+		: null;
 }
 
 async function getSoftwareUpdateSize(
@@ -961,15 +967,16 @@ async function getSoftwareUpdateSize(
 		update_state: getUpdateState(),
 	});
 	// Not conclusive: a discovery that failed, the kept-back fallback (its own
-	// exit is not read), or lists naming fewer packages than the summary counts.
+	// exit is not read), or lists that do not name exactly what the summary counts.
+	const planned = listedPackages(upgrade.stdout);
 	if (
 		refreshConclusive &&
 		isCleanAssumeNoDiscovery(upgradeResult) &&
 		!fromHeldBack &&
-		listedPackageCount(upgrade.stdout) === res.upgradeCount
+		planned?.length === res.upgradeCount
 	)
-		reconcileCeraliveUpdateNotice(
-			await legacyCeraliveOffer(actionableAppPackages, (argv) =>
+		await reconcileCeraliveUpdateNotice(
+			await legacyCeraliveOffer(actionableAppPackages, planned, (argv) =>
 				runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
 			),
 		);
@@ -1039,10 +1046,20 @@ export function classifyAptUpdateResult(
 	return null;
 }
 
-// apt-get update exits 0 when it keeps the old lists after a failed index fetch;
-// such a refresh concludes nothing about the CeraLive notice.
+// apt-get update exits 0 when it keeps the old lists after a failed index fetch,
+// or reaches only other sources; such a refresh concludes nothing about the
+// CeraLive notice. CeraLive's own index must be among those it hit or fetched.
+const CERALIVE_INDEX = new RegExp(
+	`^(Hit|Get|Ign):\\d+ https?://${FIRST_PARTY_APT_HOST.replaceAll(".", "\\.")}[/ ]`,
+	"gm",
+);
 function isConclusiveAptRefresh(result: SpawnWithTimeoutResult): boolean {
+	const ceralive = [...result.stdout.matchAll(CERALIVE_INDEX)].map(
+		(line) => line[1],
+	);
 	return (
+		ceralive.length > 0 &&
+		!ceralive.includes("Ign") &&
 		result.exitCode === 0 &&
 		classifyAptUpdateResult(0, result.stderr) !== "captive_portal" &&
 		!/^Err:/m.test(result.stdout) &&

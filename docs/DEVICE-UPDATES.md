@@ -1523,20 +1523,19 @@ This is host isolation evidence, not a shared-event-loop latency guarantee.
 `ceralive_update` ("A CeraLive update is available", `notifications.ceraliveUpdateAvailable`)
 is separate from `notifyUpdate()`. It names the exact first-party package instances
 the Install control would take, on both legacy and capable images, keyed by their
-`name=version` pairs, and is withdrawn only on positive evidence: dpkg showing every
-offered instance installed at or above its offered version (the same read
-`system.updateOutcome` uses, above), or a conclusive check (clean refresh and
-discovery, a complete plan, CeraLive's source listed) that finds nothing pending.
-dpkg is read in the update's own result step, while the update still holds the
-updater, and once at startup for a stored offer. A failed or stale refresh, a failed,
-partial or kept-back discovery, one unverified candidate, an install dpkg does not
-prove, a restart and a login change nothing. A check's verdict is written to
-`ceralive_update_offer.json` before any broadcast. A restarted backend that dpkg shows
-the stored offer installed records none and tells every tab that logs in to it,
-including a v2026.6.x or 7.x tab (string form), that the offer is gone; otherwise it
-re-announces the offer. Logins run no command. A dismissal counts only for the
-release the dismissing tab showed. Kernel, OS and `update:*` notices are never
-touched. Contract, with the stale and false-removal sequences it accepts:
+`name=version` pairs. Every shipped frontend removes it by name, so it is removed
+only where the backend knows that is right for every copy: from connected tabs when
+the update's own successful result step finds dpkg showing the offer this process
+shows installed (the same read `system.updateOutcome` uses, above); and from every
+tab, live and at login, after this process's own conclusive check finds nothing
+pending with dpkg showing any stored offer installed, or finds exactly the
+dismissed set. Conclusive means CeraLive's own index was hit or fetched by the
+refresh, a clean and complete discovery, and CeraLive's source listed. A failed,
+stale or Debian-only refresh, a partial, kept-back or foreign-architecture
+discovery, one unverified candidate, a held offered package, an install dpkg does
+not prove, a restart and a login change nothing. A restarted backend re-announces a
+stored offer dpkg does not show installed and removes nothing. Kernel, OS and
+`update:*` notices are never touched. Contract, with the stale sequences it accepts:
 [the retraction contract](../apps/backend/docs/agents/a-persistent-notification-must-be-retractable.md#the-ceralive-update-offer-is-withdrawn-only-on-positive-evidence-exists).
 Known gap: the orchestrator's package `updates-available` notice above has no
 retraction yet and can still outlive an installed update in an open tab.

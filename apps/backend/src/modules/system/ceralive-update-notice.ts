@@ -1,14 +1,17 @@
 /*
  * The "A CeraLive update is available" notice (`ceralive_update`).
  *
- * It is withdrawn only on positive evidence: a conclusive check that finds no
- * first-party update pending, or dpkg showing every offered package instance
- * installed at or above its offered version (the readback `system.updateOutcome`
- * uses). dpkg is read in the update's own result step, while the update still
- * holds the updater (withdrawn in that process only, so its restart reads dpkg
- * again), and at startup for a stored offer (recorded as none, so no later
- * process acts on it). A restart or a login decides nothing by itself, and
- * nothing unread, partial or ambiguous withdraws. Contract:
+ * Every shipped frontend removes it by name, whatever release a tab shows, so a
+ * removal is sent only where this process knows it is right for every copy:
+ * - live, after the update's own successful result, when dpkg shows every
+ *   instance of the offer this process shows to every tab installed at or above
+ *   its offered version (the readback `system.updateOutcome` uses);
+ * - live and at login, after this process's own conclusive check found the
+ *   complete first-party set: none pending (with dpkg showing any stored offer
+ *   installed), or the user dismissed exactly that set.
+ * A startup reads dpkg for a stored offer only to decide whether to re-announce
+ * it. A restart or a login decides nothing by itself, and nothing unread,
+ * partial or ambiguous withdraws. Only a check writes the record. Contract:
  * apps/backend/docs/agents/a-persistent-notification-must-be-retractable.md.
  */
 import type { UpdatePackage } from "@ceraui/rpc";
@@ -24,6 +27,7 @@ import {
 import { isNotificationDismissed } from "../ui/notification-dismissals.ts";
 import {
 	notificationBroadcast,
+	notificationExists,
 	notificationWithdraw,
 	removalFrames,
 	setAuthenticatedReplay,
@@ -115,8 +119,12 @@ export type CeraliveUpdateNoticeOptions = {
 let store: Store | undefined;
 let latest: OfferRecord | undefined;
 let persisted: string | undefined;
-// This process itself established that no offer remains: a conclusive check, or dpkg.
-let withdrawn = false;
+// `latest` is this process's own conclusive check's complete verdict, not only a stored one.
+let checkedHere = false;
+
+// Named for a first-party package, of any architecture.
+const firstPartyName = (name: string) =>
+	classifyPackageLayer(name.split(":")[0] ?? "") === "app";
 
 /**
  * Capable: the check's verified first-party rows, each the exact instance its own
@@ -134,11 +142,17 @@ export function firstPartyOffer(
 	if (instances === null) return "unknown";
 	const offer: OfferedPackage[] = [];
 	for (const { name, version, origin, actionable } of packages) {
-		if (classifyPackageLayer(name) !== "app") continue;
+		if (!firstPartyName(name)) continue;
 		const instance = instances.find(
 			(row) => row.name === name && row.version === version,
 		);
-		if (!actionable || origin !== FIRST_PARTY_APT_HOST || !instance)
+		// Another architecture's instance of a roster package is not an offer Install takes.
+		if (
+			classifyPackageLayer(name) !== "app" ||
+			!actionable ||
+			origin !== FIRST_PARTY_APT_HOST ||
+			!instance
+		)
 			return "unknown";
 		offer.push({ name, arch: instance.arch, version: instance.version });
 	}
@@ -173,16 +187,23 @@ function completePlan(simulation: string): boolean {
 
 /**
  * Legacy: the check's actionable first-party names, each with its candidate from
- * CeraLive's own source and that candidate's architecture. Read-only `apt-cache`.
+ * CeraLive's own source and that candidate's architecture. With none actionable,
+ * any first-party name the check still plans (a new install, another
+ * architecture) means unknown, never none. Read-only `apt-cache`.
  */
 export async function legacyCeraliveOffer(
 	names: readonly string[],
+	planned: readonly string[],
 	run: AptRun,
 ): Promise<CeraliveOffer> {
+	if (names.length === 0 && planned.some(firstPartyName)) return "unknown";
 	const inventory = await run(["/usr/bin/apt-cache", "policy"]);
-	if (inventory.exitCode !== 0 || !firstPartySourceListed(inventory.stdout))
-		return "unknown";
 	const sources = policySources(inventory.stdout);
+	if (
+		inventory.exitCode !== 0 ||
+		![...sources.values()].includes(FIRST_PARTY_APT_HOST)
+	)
+		return "unknown";
 	const offer: OfferedPackage[] = [];
 	for (const name of names) {
 		const policy = await run(["/usr/bin/apt-cache", "policy", name]);
@@ -255,9 +276,10 @@ function dismissed(offer: readonly OfferedPackage[]): boolean | undefined {
 function publish(offer: readonly OfferedPackage[]): void {
 	const acknowledged = dismissed(offer);
 	if (acknowledged === undefined) return;
-	// A dismissed successor must not keep its predecessor on screen.
+	// A dismissed successor must not keep its predecessor on screen, but only this
+	// process's own complete check knows no other release can be on screen.
 	if (acknowledged) {
-		notificationWithdraw(NOTICE);
+		if (checkedHere) notificationWithdraw(NOTICE);
 		return;
 	}
 	notificationBroadcast(
@@ -334,14 +356,23 @@ function readRecord(path: string) {
  * about CeraLive passes "unknown" and changes nothing). The verdict is
  * committed before it is broadcast.
  */
-export function reconcileCeraliveUpdateNotice(offer: CeraliveOffer): void {
+export async function reconcileCeraliveUpdateNotice(
+	offer: CeraliveOffer,
+): Promise<void> {
 	if (offer === "unknown") {
 		logger.warn("CeraLive update notice unchanged: check not conclusive");
 		return;
 	}
 	if (offer.length === 0) {
+		const standing = latest?.offer;
+		// "None pending" proves nothing about an offer dpkg does not show installed
+		// (held back, pinned away, withdrawn from the archive): it stays.
+		if (standing && !(await provenInstalled(standing))) return;
+		if (!persist(null)) return;
+		checkedHere = true;
+		logger.info("CeraLive update notice withdrawn: a conclusive check");
 		// Sent on every conclusive check, so a connected tab that missed one still hears it.
-		if (persist(null)) withdraw("a conclusive check found none pending");
+		notificationWithdraw(NOTICE);
 		return;
 	}
 	const sorted = [...offer].sort((a, b) =>
@@ -349,19 +380,18 @@ export function reconcileCeraliveUpdateNotice(offer: CeraliveOffer): void {
 	);
 	// A change that is not durable is not made, so no restart can act on an older verdict.
 	if (!persist(sorted)) return;
-	withdrawn = false;
+	checkedHere = true;
 	publish(sorted);
 }
 
 /** The offer an update taken now is proven against, or null when none stands. */
 export function standingCeraliveOffer(): readonly OfferedPackage[] | null {
-	return withdrawn ? null : (latest?.offer ?? null);
+	return latest?.offer ?? null;
 }
 
-function withdraw(evidence: string): void {
-	withdrawn = true;
-	logger.info("CeraLive update notice withdrawn", { evidence });
-	notificationWithdraw(NOTICE);
+// This process shows `offer`: every connected tab holds this copy, since it replaced theirs.
+function showing(offer: readonly OfferedPackage[]): boolean {
+	return notificationExists(NOTICE)?.dismissalKey === dismissalKey(offer);
 }
 
 // dpkg shows every instance of `offer` configured at or above its offered
@@ -388,28 +418,35 @@ async function provenInstalled(
 }
 
 /**
- * The update's own successful result: dpkg showing the offer it was taken
- * against installed withdraws it in this process. The record keeps it, so the
- * next process (the update's own restart) reads dpkg again. Never throws.
+ * The update's own successful result: when this process shows the offer it was
+ * taken against and dpkg shows it installed, connected tabs drop it. A tab that
+ * logs in later is not told (its copy may be another release's); the record
+ * keeps the offer for the next conclusive check. Never throws.
  */
 export async function withdrawCeraliveOfferIfInstalled(
 	offer: readonly OfferedPackage[] | null,
 ): Promise<void> {
-	if (offer !== null && (await provenInstalled(offer)))
-		withdraw("dpkg shows the install's offer");
+	if (offer === null || !showing(offer)) return;
+	if (!(await provenInstalled(offer)) || !showing(offer)) return;
+	logger.info(
+		"CeraLive update notice withdrawn: dpkg shows the install's offer",
+	);
+	notificationWithdraw(NOTICE);
 }
 
-// A tab that logs in is told when this process established that no offer
-// remains, or when the current offer is the user's dismissed release.
+// A tab that logs in may hold any release a predecessor showed. Only this
+// process's own complete check is authority over every copy: none pending, or
+// exactly the set the user dismissed.
 function deliverable(): boolean {
-	if (withdrawn) return true;
-	return latest?.offer != null && dismissed(latest.offer) === true;
+	if (!checkedHere || latest === undefined) return false;
+	return latest.offer === null || dismissed(latest.offer) === true;
 }
 
 /**
- * Loads the last verdict. A stored offer dpkg shows installed is recorded as
- * none and withdrawn; otherwise it is re-announced. A stored "none" proves
- * nothing. Resolves once that read is done (startup need not wait for it).
+ * Loads the last verdict. A stored offer dpkg shows installed is not
+ * re-announced; any other is (a dismissed one is neither shown nor removed).
+ * Nothing is removed and nothing written. Resolves once that read is done
+ * (startup need not wait for it).
  */
 export async function initCeraliveUpdateNotice(
 	options: CeraliveUpdateNoticeOptions = {},
@@ -422,19 +459,14 @@ export async function initCeraliveUpdateNotice(
 	};
 	latest = readRecord(store.path);
 	persisted = latest === undefined ? undefined : JSON.stringify(latest);
-	withdrawn = false;
+	checkedHere = false;
 	setAuthenticatedReplay((send) => {
 		const sent = deliverable();
 		if (sent) for (const frame of removalFrames(NOTICE)) send(frame);
 		store?.observe(sent ? "sent" : "declined");
 	});
 	const offer = latest?.offer;
-	if (!offer) return;
-	if (await provenInstalled(offer)) {
-		// Recorded first, so no later process acts on this offer again.
-		if (persist(null)) withdraw("dpkg shows the stored offer");
-		return;
-	}
-	// Unless a check replaced it, or the update withdrew it, meanwhile.
-	if (latest?.offer === offer && !withdrawn) publish(offer);
+	if (!offer || (await provenInstalled(offer))) return;
+	// Unless a check replaced it meanwhile.
+	if (latest?.offer === offer && !checkedHere) publish(offer);
 }
