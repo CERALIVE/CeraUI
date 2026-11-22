@@ -99,6 +99,14 @@ export function parseMessage(
 	}
 }
 
+/** An oRPC procedure carries its definition, with the handler, under "~orpc". */
+function isProcedure(value: unknown): boolean {
+	if (typeof value !== "object" && typeof value !== "function") return false;
+	if (value === null) return false;
+	const definition = (value as { "~orpc"?: { handler?: unknown } })["~orpc"];
+	return typeof definition?.handler === "function";
+}
+
 /**
  * Handle ORPC messages
  */
@@ -112,13 +120,24 @@ export async function handleORPCMessage(
 	const senderId = ws.data?.senderId;
 
 	try {
-		// Navigate to the procedure using the path
+		// Navigate to the procedure using the path. Only the router's own keys
+		// resolve: an inherited name such as "constructor" or "__proto__" is not
+		// a procedure, and neither is a namespace that holds procedures.
 		let procedure: unknown = router;
 		for (const segment of message.path || []) {
-			procedure = (procedure as Record<string, unknown>)[segment];
+			procedure =
+				typeof procedure === "object" &&
+				procedure !== null &&
+				typeof segment === "string" &&
+				Object.hasOwn(procedure, segment)
+					? (procedure as Record<string, unknown>)[segment]
+					: undefined;
 			if (!procedure) {
 				throw new Error(`Unknown procedure path: ${message.path?.join(".")}`);
 			}
+		}
+		if (!isProcedure(procedure)) {
+			throw new Error(`Unknown procedure path: ${message.path?.join(".")}`);
 		}
 
 		// Execute the procedure using ORPC's call function, wrapped in the

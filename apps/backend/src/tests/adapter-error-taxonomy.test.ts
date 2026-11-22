@@ -173,4 +173,24 @@ describe("rpc adapter error taxonomy", () => {
 		expect(envelope.error?.code).toBe("INTERNAL_ERROR");
 		expect(envelope.error?.fields).toBeUndefined();
 	});
+
+	test("inherited names and namespaces are unknown procedures, not engine errors", async () => {
+		for (const path of [
+			["constructor"],
+			["__proto__"],
+			["toString"],
+			["probe"],
+			["probe", "constructor"],
+			["probe", "hasOwnProperty"],
+			["probe", "inputFail", "handler"],
+		]) {
+			const ws = fakeWs();
+			await handleORPCMessage(ws, { id: "m5", path, input: {} }, testRouter);
+
+			const envelope = sentEnvelope(ws);
+			expect(envelope.error?.message).toBe(
+				`Unknown procedure path: ${path.join(".")}`,
+			);
+		}
+	});
 });
