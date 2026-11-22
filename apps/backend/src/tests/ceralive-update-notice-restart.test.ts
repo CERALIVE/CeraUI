@@ -471,12 +471,7 @@ class Tab {
 			return;
 		}
 		if (!("notification" in frame)) return;
-		this.frames.push(
-			JSON.stringify(frame.notification).replace(
-				/"publisher":"[^"]*"/g,
-				'"publisher":"<process>"',
-			),
-		);
+		this.record(frame.notification);
 		if (this.decoder === "typed") {
 			const parsed = notificationsMessageSchema.safeParse(frame.notification);
 			if (!parsed.success) return;
@@ -493,6 +488,32 @@ class Tab {
 		for (const { name } of message.show ?? []) this.show(name, {});
 		for (const entry of message.remove ?? [])
 			if (typeof entry === "string") this.remove(entry);
+	}
+
+	// Only the entries of notices this tab tracks: other owners' re-sends depend on
+	// a one-second rate limit, so their frames depend on how fast the steps ran.
+	private record(notification: unknown): void {
+		const { show, remove, replay } = notification as {
+			show?: { name?: unknown }[];
+			remove?: unknown[];
+			replay?: unknown;
+		};
+		const tracked = (name: unknown) =>
+			typeof name === "string" && this.tracks(name);
+		const shown = (show ?? []).filter(({ name }) => tracked(name));
+		const removed = (remove ?? []).filter((entry) =>
+			tracked(
+				typeof entry === "string" ? entry : (entry as { id?: unknown })?.id,
+			),
+		);
+		if (shown.length + removed.length === 0) return;
+		this.frames.push(
+			JSON.stringify({
+				...(shown.length > 0 ? { show: shown } : {}),
+				...(removed.length > 0 ? { remove: removed } : {}),
+				...(replay === undefined ? {} : { replay }),
+			}).replace(/"publisher":"[^"]*"/g, '"publisher":"<process>"'),
+		);
 	}
 
 	private show(name: string, copy: Copy) {
