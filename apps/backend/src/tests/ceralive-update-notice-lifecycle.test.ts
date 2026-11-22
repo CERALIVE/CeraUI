@@ -187,8 +187,15 @@ async function check(next: AptScript): Promise<SoftwareUpdateError> {
 	return runSoftwareUpdateCheck();
 }
 
+// Other files in the same process can leave persistent notices; every case starts and ends with none.
+function clearPersistentNotices(): void {
+	for (const { name } of getPersistentNotifications(true).show ?? [])
+		notificationRemove(name);
+}
+
 beforeEach(async () => {
 	dir = await mkdtemp(join(tmpdir(), "ceralive-update-notice-"));
+	clearPersistentNotices();
 	priorDismissals = process.env.CERALIVE_DISMISSALS_FILE;
 	process.env.CERALIVE_DISMISSALS_FILE = join(dir, "dismissals.json");
 	resetDismissalStoreForTests();
@@ -212,7 +219,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
 	broadcast.mockRestore();
-	for (const name of [NOTICE, OS_OFFER, KERNEL]) notificationRemove(name);
+	clearPersistentNotices();
 	setAptCommandRunnerForTest(null);
 	resetSoftwareUpdateCheckRunner();
 	setUpdateCapabilityPathForTest(null);

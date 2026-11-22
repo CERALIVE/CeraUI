@@ -659,7 +659,7 @@ async function getCapableUpdateSize(
 		if (refreshConclusive)
 			reconcileCeraliveUpdateNotice(
 				firstPartyOffer(result.packages, sourcePolicy.stdout),
-				await readCeraliveOfferInputs(),
+				await readCeraliveOfferInputs(sourcePolicy.stdout),
 			);
 		return null;
 	} catch (error) {
@@ -2065,9 +2065,12 @@ async function recoverSoftwareUpdate(
 }
 
 /** The local APT evidence a CeraLive offer verdict is computed from (fingerprint). */
-export function readCeraliveOfferInputs(): Promise<string | undefined> {
-	return readOfferInputs((argv) =>
-		runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
+export function readCeraliveOfferInputs(
+	inventory?: string,
+): Promise<string | undefined> {
+	return readOfferInputs(
+		(argv) => runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
+		inventory,
 	);
 }
 

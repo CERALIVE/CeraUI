@@ -194,28 +194,41 @@ function dismissed(offer: readonly PinnedAptPackage[]): boolean | undefined {
  */
 export async function readOfferInputs(
 	run: AptRun,
+	// The source inventory when the caller already read it in this check.
+	read?: string,
 ): Promise<string | undefined> {
-	const [inventory, policy] = await Promise.all([
-		run(["/usr/bin/apt-cache", "policy"]),
-		run(["/usr/bin/apt-cache", "policy", ...ceralivePackageList]),
-	]);
-	if (inventory.exitCode !== 0 || policy.exitCode !== 0) return undefined;
-	const sources = [...policySources(inventory.stdout)]
-		.filter(([, origin]) => origin === FIRST_PARTY_APT_HOST)
-		.map(([source]) => source)
-		.sort();
-	const versions = new Map<string, string[]>();
-	for (const [, name, installed, candidate] of policy.stdout.matchAll(
-		/^(\S+):\n\s+Installed: (\S+)\n\s+Candidate: (\S+)$/gm,
-	))
-		versions.set(name ?? "", [installed ?? "", candidate ?? ""]);
-	const packages = ceralivePackageList.map((name) => [
-		name,
-		...(versions.get(name) ?? []),
-	]);
-	return new Bun.CryptoHasher("sha256")
-		.update(JSON.stringify({ sources, packages }))
-		.digest("hex");
+	// Only a fingerprint: a failure to read it must never change the check's outcome.
+	try {
+		const [inventory, policy] = await Promise.all([
+			read ??
+				run(["/usr/bin/apt-cache", "policy"]).then((result) =>
+					result.exitCode === 0 ? result.stdout : undefined,
+				),
+			run(["/usr/bin/apt-cache", "policy", ...ceralivePackageList]),
+		]);
+		if (inventory === undefined || policy.exitCode !== 0) return undefined;
+		const sources = [...policySources(inventory)]
+			.filter(([, origin]) => origin === FIRST_PARTY_APT_HOST)
+			.map(([source]) => source)
+			.sort();
+		const versions = new Map<string, string[]>();
+		for (const [, name, installed, candidate] of policy.stdout.matchAll(
+			/^(\S+):\n\s+Installed: (\S+)\n\s+Candidate: (\S+)$/gm,
+		))
+			versions.set(name ?? "", [installed ?? "", candidate ?? ""]);
+		const packages = ceralivePackageList.map((name) => [
+			name,
+			...(versions.get(name) ?? []),
+		]);
+		return new Bun.CryptoHasher("sha256")
+			.update(JSON.stringify({ sources, packages }))
+			.digest("hex");
+	} catch (error) {
+		logger.warn("CeraLive update notice: APT evidence unreadable", {
+			error: error instanceof Error ? error.message : String(error),
+		});
+		return undefined;
+	}
 }
 
 function withdraw(): void {
