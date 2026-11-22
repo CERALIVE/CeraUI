@@ -114,6 +114,19 @@ async function goIdle(page: Page): Promise<void> {
 	});
 }
 
+/**
+ * Resize the page, then wait for its next rendering update. The app picks its desktop
+ * or phone chrome from a media query (svelte/reactivity `MediaQuery`), and the browser
+ * reports a media-query change only in that update, before it paints; layout read
+ * sooner still holds the previous size's chrome. A phone read straight after leaving
+ * 1280 px measured the desktop rail nav 188 to 260 px wider than the screen, a state no
+ * frame ever paints.
+ */
+async function resize(page: Page, viewport: { width: number; height: number }): Promise<void> {
+	await page.setViewportSize(viewport);
+	await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+}
+
 async function overflowPx(page: Page): Promise<number> {
 	return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 }
@@ -194,7 +207,7 @@ test.describe('@a11y Live screen design pass — caps-full', { tag: '@desktop-on
 			for (const state of ['idle', 'live'] as State[]) {
 				if (state === 'live') await goLive(page);
 				for (const viewport of VIEWPORTS) {
-					await page.setViewportSize(viewport);
+					await resize(page, viewport);
 					await expect(cockpit(page)).toBeVisible();
 					const px = await overflowPx(page);
 					if (px > 1) overflowing.push(`${locale} ${state} ${viewport.width}x${viewport.height}: ${px}px`);
@@ -247,7 +260,7 @@ test.describe('@a11y Live screen design pass — caps-full', { tag: '@desktop-on
 				for (const state of ['idle', 'live'] as State[]) {
 					if (state === 'live') await goLive(page);
 					for (const viewport of PHONES) {
-						await page.setViewportSize(viewport);
+						await resize(page, viewport);
 						for (const area of await regionTargets(page)) {
 							seen.add(area.region);
 							if (Math.min(area.hitWidth, area.hitHeight) < TARGET_PX - 0.5) {
@@ -278,7 +291,7 @@ test.describe('@a11y Live screen design pass — caps-full', { tag: '@desktop-on
 				if (state === 'live') await goLive(page);
 				const root = `[data-testid="${state}-cockpit"]`;
 				for (const viewport of [DESKTOP, PHONE]) {
-					await page.setViewportSize(viewport);
+					await resize(page, viewport);
 					await expect(page.locator(root)).toBeVisible();
 					// The encoder cell joins the live cockpit with the first load reading (a 2 s
 					// tick); scan only once it is there, so its text is always measured.
@@ -326,7 +339,7 @@ test.describe('@a11y Live screen design pass — caps-full', { tag: '@desktop-on
 		for (const state of ['idle', 'live'] as State[]) {
 			if (state === 'live') await goLive(page);
 			for (const viewport of [DESKTOP, KIOSK, PHONE]) {
-				await page.setViewportSize(viewport);
+				await resize(page, viewport);
 				await page.evaluate(() => window.scrollTo(0, 0));
 				for (const stop of await focusStopsUnderTheBar(page, `${state} ${viewport.width}x${viewport.height}`)) {
 					hidden.push(`${state} ${viewport.width}x${viewport.height} ${stop}`);
