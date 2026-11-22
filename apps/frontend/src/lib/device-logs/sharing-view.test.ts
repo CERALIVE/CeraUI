@@ -19,6 +19,7 @@ function flow() {
 	return {
 		createExport,
 		view: new SharingFlow({
+			current: () => true,
 			logs: { createExport, previewBundle: vi.fn(), createBundle: vi.fn() },
 			download: vi.fn(),
 		}),

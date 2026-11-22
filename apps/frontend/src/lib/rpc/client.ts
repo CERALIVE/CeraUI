@@ -53,6 +53,7 @@ import type {
 	LogFollowStartInput,
 	LogFollowStartOutput,
 	LogFollowStopOutput,
+	LogInput,
 	LoginInput,
 	LoginOutput,
 	LogoutOutput,
@@ -137,6 +138,7 @@ import type {
 	SwitchAudioOutput,
 	SwitchInputInput,
 	SwitchInputOutput,
+	SyslogInput,
 	UpdateCapabilities,
 	UpdateDetails,
 	UpdateOutcome,
@@ -162,7 +164,8 @@ import { nextBackoffDelay } from "./backoff";
 import { parseServerPing, shouldForceCloseHalfOpen } from "./half-open";
 import { createHeartbeatTracker, HEARTBEAT_THRESHOLD_MS } from "./heartbeat";
 import { NotSentError, RpcError, type RpcErrorEnvelope } from "./rpc-error";
-import { RPC_CALL_TIMEOUT_MS } from "./rpc-timeouts";
+import { CallTimeoutError, RPC_CALL_TIMEOUT_MS } from "./rpc-timeouts";
+import { nextSocketEpoch } from "./socket-epoch.svelte";
 
 export class ConnectionResetError extends Error {
 	override readonly name = "ConnectionResetError";
@@ -282,6 +285,7 @@ class RPCClient {
 
 			socket.onopen = () => {
 				if (this.socket !== socket) return;
+				nextSocketEpoch();
 				this.setConnectionState("connected");
 				this.reconnectAttempts = 0;
 				this.heartbeatTracker.recordTraffic(Date.now());
@@ -528,7 +532,7 @@ class RPCClient {
 		return new Promise<T>((resolve, reject) => {
 			const timeoutHandle = setTimeout(() => {
 				this.pendingRequests.delete(id);
-				reject(new Error(`Request timeout: ${path.join(".")}`));
+				reject(new CallTimeoutError(`Request timeout: ${path.join(".")}`));
 			}, timeout);
 
 			this.pendingRequests.set(id, {
@@ -950,8 +954,8 @@ export interface TypedRPC {
 	system: {
 		getRevisions: () => Promise<Revisions>;
 		getSensors: () => Promise<unknown>;
-		getLog: () => Promise<unknown>;
-		getSyslog: () => Promise<unknown>;
+		getLog: (input?: LogInput) => Promise<unknown>;
+		getSyslog: (input?: SyslogInput) => Promise<unknown>;
 		poweroff: () => Promise<SuccessResponse>;
 		reboot: () => Promise<SuccessResponse>;
 		startUpdate: () => Promise<SuccessResponse>;

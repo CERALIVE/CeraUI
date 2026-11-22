@@ -53,10 +53,12 @@ const view = new RawView({
 	now: () => Date.now(),
 	onQuery: (query, span) => onquery?.(query, span),
 });
-const initial = untrack(() => ({ around, boot: bootSelection.boot }));
-void (initial.around !== undefined || initial.boot === null
+// A link opens on its moment; otherwise the picker's choice once it was used in this view (All boots
+// included), else This boot.
+const initial = untrack(() => ({ around, boot: bootSelection.boot, picked: bootSelection.picked }));
+void (initial.around !== undefined || !initial.picked
 	? view.start(initial.around)
-	: view.chooseBoot(initial.boot.bootId, initial.boot.current ? initial.boot.bootId : undefined));
+	: view.chooseBoot(initial.boot?.bootId ?? null, initial.boot?.current ? initial.boot.bootId : undefined));
 const stopBoot = bootSelection.onChoose((bootId) =>
 	void view.chooseBoot(bootId, bootSelection.boot?.current ? bootSelection.boot.bootId : undefined),
 );
@@ -71,6 +73,7 @@ onDestroy(() => {
 $effect(() => {
 	const anchorBoot = view.anchor === null ? undefined : view.bottom?.query.boot;
 	bootSelection.rawScope = {
+		anchored: view.anchor !== null,
 		time: view.filter.time,
 		bootId: anchorBoot === undefined || anchorBoot === 'all' || anchorBoot === 'current' ? view.filter.bootId : anchorBoot,
 	};

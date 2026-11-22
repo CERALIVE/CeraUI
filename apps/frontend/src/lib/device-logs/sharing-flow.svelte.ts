@@ -1,6 +1,7 @@
 /**
- * The two Sharing flows of System Logs. "Export this view" confirms, then asks
- * for a ticket for the Raw logs query in `view`; the support bundle previews its
+ * The two Sharing flows of System Logs. "Export this view" fixes its scope when
+ * the confirmation opens (`exportScope`), states it there and asks for a ticket
+ * for exactly that, whatever Raw publishes meanwhile; the support bundle previews its
  * manifest first, then asks for a ticket. One flow per open view, so it outlives
  * the Downloads region remounting across tabs and the 1024 px breakpoint;
  * `dispose()` when the view closes. Each step takes one request at a time.
@@ -16,6 +17,7 @@
  * there within 60 s. No timer is kept here.
  */
 import type {
+	LogBootInfo,
 	LogBundleFailureReason,
 	LogBundleManifest,
 	LogExportInput,
@@ -23,9 +25,13 @@ import type {
 	LogQueryInput,
 } from "@ceraui/rpc/schemas";
 
+import { untrack } from "svelte";
+
 import { onHistoryChanged } from "./history-bus";
 import {
 	bundleManifestReply,
+	captureExportScope,
+	type ExportScope,
 	type ExportSpan,
 	exportInput,
 	previewFailure,
@@ -43,6 +49,13 @@ export interface SharingDeps {
 		createBundle(): Promise<LogExportOutput>;
 	};
 	readonly download: (path: string) => void;
+	/** Whether the view's open generation is still current, read the moment a ticket's download would start. */
+	readonly current: () => boolean;
+	/** The boot picker: Export follows it when it was used after Raw's last view (its `intent` moved on). */
+	readonly picker?: {
+		readonly boot: LogBootInfo | null;
+		readonly intent: number;
+	};
 }
 
 export type ExportStep = "closed" | "confirm" | "creating";
@@ -78,6 +91,8 @@ export class SharingFlow {
 	view = $state.raw<LogQueryInput>(RAW_OPENING_QUERY);
 	/** Whether {@link view} is the filters or the ten minutes around an exact anchor. */
 	viewSpan = $state<ExportSpan>("filters");
+	/** What the open Export confirmation states and its ticket request sends; null while closed. */
+	exportScope = $state.raw<ExportScope | null>(null);
 	exportStep = $state<ExportStep>("closed");
 	exportProblem = $state<SharingProblem | null>(null);
 	bundleStep = $state<BundleStep>("closed");
@@ -90,6 +105,8 @@ export class SharingFlow {
 
 	readonly #deps: SharingDeps;
 	readonly #stopHistory: () => void;
+	// The picker's intent when Raw last published; none until it does.
+	#publishedAt: number | undefined;
 	#exportRun = 0;
 	#bundleRun = 0;
 	#viewOwner: object | undefined;
@@ -112,6 +129,7 @@ export class SharingFlow {
 				if (this.#viewOwner !== owner) return;
 				this.view = query;
 				this.viewSpan = span;
+				this.#publishedAt = this.#pickerIntent();
 			},
 			dispose: () => {
 				if (this.#viewOwner === owner) this.#viewOwner = undefined;
@@ -121,20 +139,28 @@ export class SharingFlow {
 
 	openExport(): void {
 		if (this.exportStep !== "closed") return;
+		const intent = this.#pickerIntent();
+		this.exportScope = captureExportScope(
+			this.view,
+			this.viewSpan,
+			this.#deps.picker?.boot ?? null,
+			intent !== undefined && intent !== this.#publishedAt,
+		);
 		this.exportStep = "confirm";
 	}
 
 	async confirmExport(): Promise<void> {
-		if (this.exportStep !== "confirm") return;
+		const scope = this.exportScope;
+		if (this.exportStep !== "confirm" || scope === null) return;
 		const run = this.#exportRun;
 		this.exportStep = "creating";
 		this.exportProblem = null;
-		const input = exportInput(this.view);
+		const input = exportInput(scope.query);
 		const reply = await ticket(
 			() => this.#deps.logs.createExport(input),
 			"export",
 		);
-		if (run !== this.#exportRun) return;
+		if (run !== this.#exportRun || !this.#deps.current()) return;
 		if (reply.ok && started(this.#deps.download, reply.url)) {
 			this.closeExport();
 			return;
@@ -147,6 +173,7 @@ export class SharingFlow {
 		this.#exportRun++;
 		this.exportStep = "closed";
 		this.exportProblem = null;
+		this.exportScope = null;
 	}
 
 	openBundle(): Promise<void> {
@@ -166,7 +193,7 @@ export class SharingFlow {
 		this.bundleProblem = null;
 		this.bundleRefused = false;
 		const reply = await ticket(() => this.#deps.logs.createBundle(), "bundle");
-		if (run !== this.#bundleRun) return;
+		if (run !== this.#bundleRun || !this.#deps.current()) return;
 		if (reply.ok && started(this.#deps.download, reply.url)) {
 			this.closeBundle();
 			return;
@@ -198,9 +225,16 @@ export class SharingFlow {
 		this.#viewOwner = undefined;
 		this.view = RAW_OPENING_QUERY;
 		this.viewSpan = "filters";
+		this.#publishedAt = undefined;
 		this.#stopHistory();
 		this.closeExport();
 		this.closeBundle();
+	}
+
+	// Read without tracking: a publication can run inside a Raw effect.
+	#pickerIntent(): number | undefined {
+		const picker = this.#deps.picker;
+		return picker === undefined ? undefined : untrack(() => picker.intent);
 	}
 
 	async #preview(): Promise<void> {

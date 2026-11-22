@@ -145,15 +145,24 @@ The backend pushes typed events to all connected clients via `rpc/events.ts`. Ea
 
 `system.getLog` (device/application log, defaults to the `ceralive.service` unit)
 and `system.getSyslog` (full boot journal) both invoke `modules/system/logs.ts`
-`getLog(conn, service?)`, which `journalctl`s the journal, pushes it as a `log`
+`getLog(conn, service?, request?)`, which `journalctl`s the journal, pushes it as a `log`
 event the frontend `LogsDialog` turns into a file download, AND returns
-`{ name, contents }` so the RPC is a real data source (NOT the former
+`{ name, contents }`, which both procedures answer as `{ log: contents }`, so
+the RPC is a real data source (NOT the former
 `{ log: "" }` stub that fired no push). On a dev/CI host there is no systemd
 journal, so under `shouldUseMocks()` `getLog` serves the in-memory log ring
 buffer (`helpers/logger.ts` `getRecentLogLines`) — a bounded mirror of the same
 backend records fed by a Winston `Stream` transport after `redact()` — so the
 whole getLog → `log` push → download path is exercisable end-to-end without
 hardware (`tests/observable-logs.test.ts`, e2e `logs-dialog.spec.ts`).
+The push is sent before the call answers, on the same socket, and carries the
+client's `request` id when the call had one (`{ name, contents, request }`), so
+the frontend ties the file to the request that asked for it. A frontend talking
+to a device that echoes no id tells the unit log from the full journal by the
+file name (`ceralive_system_log.txt` is the full journal), so keep the names
+stable. A journal read that fails answers with an empty `log` and no push (plus
+a `log_error` notification); the frontend reports that download as failed once
+its file deadline passes.
 
 With `NODE_ENV=production`, the logger writes debug and above to the console
 for the journal (`journalctl -u ceralive`), with `<3>` for errors, `<4>` for

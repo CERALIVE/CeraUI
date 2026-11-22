@@ -106,6 +106,7 @@ describe("an RPC error's stage crosses the client only as a closed bundle stage"
 				vi.spyOn(console, "log").mockImplementation(() => {}),
 			];
 			const flow = new SharingFlow({
+				current: () => true,
 				logs: {
 					createExport: () => Promise.reject(new Error("unused")),
 					previewBundle: () => rpc.logs.previewBundle(),
