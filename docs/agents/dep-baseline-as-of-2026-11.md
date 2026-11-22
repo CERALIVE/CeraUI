@@ -20,7 +20,7 @@ documentation hat. Reference the root row here; let todo 49 write it there.
 | Package | Version |
 |---------|---------|
 | `@orpc/server` (backend), `@orpc/contract` (packages/rpc) | 2.0.0-beta.49, EXACT pin; see "oRPC" below |
-| Bun pin (`.bun-version`) | 1.4.4; exact in `package.json` `packageManager`, `mise.toml` and every workflow's `bun-version`; `@types/bun` resolves 1.4.4 with each package's existing range style. Historical measurements below retain their original runtime versions. |
+| Bun pin (`.bun-version`) | 1.4.5; exact in `package.json` `packageManager`, `mise.toml` and every workflow's `bun-version`; `@types/bun` resolves 1.4.5 with each package's existing range style. Historical measurements below retain their original runtime versions. |
 | `svelte` (frontend, i18n) | 5.57.0; EXACT, held back (see below) |
 | `vitest` | 5.1.0; EXACT. Current suite: **443 files / 7,435 tests, 0 failures** locally (measured on the reviewed held-dependency retry, November 9, 2026, Bun 1.4.4) |
 | `vite` | ^8.3.6, lock 8.3.6 |
@@ -326,7 +326,7 @@ documented operation genuinely exceeds the suite-wide budget.
 The same flip reaches `publish-release.yml`'s `frontend-tests` job for free, because it calls the
 same `bun run --filter frontend test` script — and that job never had a `setup-node` step, so
 before the flip it was running Vitest on whatever Node the runner shipped. It is now pinned to
-Bun 1.4.4 like every other command in it. That job's own step ORDER is a separate, documented
+Bun 1.4.5 like every other command in it. That job's own step ORDER is a separate, documented
 contract (vitest must stay immediately after `bun install`) and is untouched.
 
 **oRPC is pinned EXACT on a 2.0 beta.** `^2.0.0-beta.49` would range forward across betas and into stable

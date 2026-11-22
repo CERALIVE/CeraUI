@@ -7,7 +7,7 @@ Pass the full owner-approved commit SHA as `approved_sha` when dispatching Publi
 The `journal-conformance` Build Check job runs the real systemd 257 container
 suite for the existing `changes.outputs.code` gate, including backend changes.
 It inherits read-only contents permission and workflow cancellation, pins Bun
-1.4.4, and has a 15-minute timeout. The harness needs no dependency install.
+1.4.5, and has a 15-minute timeout. The harness needs no dependency install.
 The required `test` summary depends on this job and reads its result; failure,
 cancellation or a code-change skip therefore fails the summary.
 

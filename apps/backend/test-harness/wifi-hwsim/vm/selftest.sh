@@ -77,7 +77,7 @@ scp)
 install)
 	[[ ${@: -1} == "$CASE_DIR/guest/"* ]]
 	cp "${@: -2:1}" "${@: -1}" ;;
-bun | stub) [[ "$1" == --version ]]; printf '1.4.4\n' ;;
+bun | stub) [[ "$1" == --version ]]; printf '1.4.5\n' ;;
 NetworkManager | iw | wpa_supplicant) printf 'fixture-version\n' ;;
 *) echo "unexpected stub: $name" >&2; exit 99 ;;
 esac

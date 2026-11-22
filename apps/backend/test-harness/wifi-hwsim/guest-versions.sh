@@ -22,7 +22,8 @@ version() {
 		failures=$((failures + 1))
 	fi
 }
-version bun 1.4.4 bun --version
+# Recorded runs pass their own exact pin instead of using the live guest pin.
+version bun "${1:-1.4.5}" bun --version
 version NetworkManager 1.52.1 NetworkManager --version
 version nmcli '' /usr/bin/nmcli --version
 version iw '' iw --version

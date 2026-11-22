@@ -8,7 +8,12 @@ trap 'rm -rf -- "$root"' EXIT
 mkdir "$root/bin"
 printf '%s\n' '#!/usr/bin/env bash
 case "${0##*/}" in
-bun) [[ "$HWSIM_VERSION_CASE" != bun-mismatch ]] || { echo 1.4.3; exit; }; echo 1.4.4 ;;
+bun)
+	case "$HWSIM_VERSION_CASE" in
+	bun-mismatch) echo 1.4.3 ;;
+	captured-bun) echo 1.4.4 ;;
+	*) echo 1.4.5 ;;
+	esac ;;
 NetworkManager) [[ "$HWSIM_VERSION_CASE" != daemon-mismatch ]] || { echo 1.52.2; exit; }; echo 1.52.1 ;;
 iw) echo "iw version 6.9" ;;
 hostapd)
@@ -25,7 +30,7 @@ chmod 700 "$root/version-stub"
 for name in bun NetworkManager iw hostapd wpa_supplicant dnsmasq; do
 	ln -s "$root/version-stub" "$root/bin/$name"
 done
-for scenario in good hostapd-zero hostapd-no-banner hostapd-error bun-mismatch daemon-mismatch dnsmasq-error; do
+for scenario in good hostapd-zero hostapd-no-banner hostapd-error bun-mismatch captured-bun daemon-mismatch dnsmasq-error; do
 	rc=0
 	PATH="$root/bin:/usr/bin:/bin" HWSIM_VERSION_CASE="$scenario" \
 		bash "$harness/guest-versions.sh" >"$root/$scenario.log" 2>&1 || rc=$?
@@ -36,5 +41,9 @@ for scenario in good hostapd-zero hostapd-no-banner hostapd-error bun-mismatch d
 	# Every row must still run, including the last one after an earlier failure.
 	test "$(grep -Ec '^HWSIM-VERSION: [A-Za-z_]+ exit=' "$root/$scenario.log")" = 7
 	grep -q '^HWSIM-VERSION: dnsmasq exit=' "$root/$scenario.log"
+	if [[ "$scenario" == captured-bun ]]; then
+		grep -Fxq 'HWSIM-VERSION: bun exit=0 passed=0' "$root/$scenario.log"
+		grep -Fxq 'HWSIM-VERSION: bun expected=1.4.5' "$root/$scenario.log"
+	fi
 	printf 'VERSION-SELFTEST PASS %s\n' "$scenario"
 done
