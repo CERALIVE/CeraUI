@@ -81,7 +81,11 @@ const updatingStatus = $derived.by(() => {
 		install.kind === 'running' && install.details
 			? holdUpdateProgress(shownInstall, install.details)
 			: undefined;
-	return liveInstall(shownInstall, updating, getDisconnectedSince() !== null);
+	return liveInstall(
+		shownInstall,
+		typeof updating === 'object' ? updating : undefined,
+		getDisconnectedSince() !== null,
+	);
 });
 // This tree receives the terminal frame, so it owns the announcement, once per
 // outcome (`Layout.update-terminal.test.ts`). It reads the dedicated selector,

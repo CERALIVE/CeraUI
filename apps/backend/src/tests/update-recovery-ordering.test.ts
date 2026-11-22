@@ -1,6 +1,7 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import type { UpdateProgress } from "@ceraui/rpc";
 import { buildAptAllInstallArgs } from "../modules/system/apt-all-packages.ts";
+import * as readiness from "../modules/system/readiness.ts";
 import {
 	SOFTWARE_UPDATE_OUTPUT_READ_BYTES,
 	type SoftwareUpdateAttempt,
@@ -9,6 +10,7 @@ import {
 import {
 	DetachedAptServiceAlreadyExistsError,
 	DetachedAptServiceCleanupError,
+	DetachedAptServiceReplacedError,
 	type DetachedAptUpgradeDeps,
 	RECORDED_OUTCOME_REPLAY_MS,
 	recoverDetachedAptUpgrade,
@@ -788,7 +790,10 @@ test("an exit is never written over a newer attempt's record", async () => {
 		live: true,
 		steps: [() => unit.deps.updateAttempt(() => newer)],
 	});
-	expect(await runDetachedAptAll(args, "any", quiet, unit.deps)).toBe(0);
+	// The exit is not the newer attempt's outcome: nobody is told it.
+	await expect(
+		runDetachedAptAll(args, "any", quiet, unit.deps),
+	).rejects.toBeInstanceOf(DetachedAptServiceReplacedError);
 	expect(unit.recorded()).toEqual(newer);
 	expect(unit.recordAttempts()).toBe(0);
 	// Not recorded, so not retired: the unit stays as the evidence.
@@ -810,9 +815,19 @@ test("a retirement deferred until startup is admitted leaves a unit that was rep
 	Object.assign(unit.deps, {
 		inspect: async () => ({ ...(await inspect()), invocation: OTHER }),
 	});
-	adjudication.resolve(true);
-	await h.restarted();
-	expect(unit.retired).toEqual([]);
+	const degraded = Promise.withResolvers<string>();
+	const mark = spyOn(readiness, "markBootDegraded").mockImplementation(
+		(subsystem) => degraded.resolve(subsystem),
+	);
+	try {
+		adjudication.resolve(true);
+		// A unit that is no longer the one observed restarts nothing.
+		expect(await degraded.promise).toBe("software-update-replaced");
+		expect(h.restarts).toBe(0);
+		expect(unit.retired).toEqual([]);
+	} finally {
+		mark.mockRestore();
+	}
 });
 
 test("the completion hook startup reserves after the unit was attached is the one that guards the restart", async () => {
@@ -860,4 +875,91 @@ test("an exit recorded without its transcript keeps the unit on the next boot to
 	expect(unit.retired).toEqual([]);
 	expect(buildInitialStatus().status.update_state?.kind).toBe("success");
 	await h.settled();
+});
+
+test("a stale exit retry never replaces a newer attempt's recorded failure", async () => {
+	const newer = {
+		schema: 2 as const,
+		attempt: "22222222-2222-4222-8222-222222222222",
+		phase: "launched" as const,
+		uptimeMs: NOW,
+		invocation: OTHER,
+		exitCode: 100,
+		drained: true,
+	};
+	// This observer's first exit write fails; before its retry, a newer
+	// attempt's unit records its failure.
+	const unit = fakeUnit({
+		files: { stdout: "done\n", stderr: "" },
+		exitCode: 0,
+		live: true,
+		failRecord: 1,
+	});
+	const sleep = unit.deps.sleep;
+	let installed = false;
+	Object.assign(unit.deps, {
+		sleep: async (ms: number) => {
+			if (!installed && unit.recordAttempts() === 1) {
+				installed = true;
+				unit.deps.updateAttempt(() => newer);
+				return;
+			}
+			return sleep(ms);
+		},
+	});
+	await runDetachedAptAll(args, "any", quiet, unit.deps).catch(() => undefined);
+	expect(installed).toBe(true);
+	expect(unit.recorded()).toEqual(newer);
+	expect(unit.retired).toEqual([]);
+});
+
+test("the first retirement asks systemd again and leaves a unit that replaced the one observed", async () => {
+	const unit = fakeUnit({
+		files: { stdout: "done\n", stderr: "" },
+		exitCode: 0,
+		live: true,
+	});
+	const inspect = unit.deps.inspect;
+	Object.assign(unit.deps, {
+		inspect: async () =>
+			unit.events.includes("record")
+				? { ...(await inspect()), invocation: OTHER }
+				: inspect(),
+	});
+	expect(await runDetachedAptAll(args, "any", quiet, unit.deps)).toBe(0);
+	expect(unit.recorded()?.exitCode).toBe(0);
+	expect(unit.cleanupAttempts()).toBe(0);
+	expect(unit.retired).toEqual([]);
+});
+
+test("a recorded exit is not told once another run has rewritten the transcript", async () => {
+	await using h = await updateHarness();
+	const unit = fakeUnit({
+		files: { stdout: "", stderr: "" },
+		exitCode: 0,
+		live: true,
+		recorded: { exitCode: 0, drained: true, transcript: "7:120:1000" },
+	});
+	Object.assign(unit.deps, { transcript: async () => "8:64:2000" });
+	beginSoftwareUpdateRecovery();
+	expect(await recoverSoftwareUpdateIfRunning(recoveryOf(unit))).toBe(false);
+	expect(buildInitialStatus().status.update_state?.kind).not.toBe("success");
+	expect(h.frames.some((frame) => frame.update_state?.kind === "success")).toBe(
+		false,
+	);
+});
+
+test("a recorded exit is told while the transcript is the one it was recorded against", async () => {
+	await using h = await updateHarness();
+	const unit = fakeUnit({
+		files: { stdout: "", stderr: "" },
+		exitCode: 0,
+		live: true,
+		recorded: { exitCode: 0, drained: true, transcript: "7:120:1000" },
+	});
+	Object.assign(unit.deps, { transcript: async () => "7:120:1000" });
+	beginSoftwareUpdateRecovery();
+	await recoverSoftwareUpdateIfRunning(recoveryOf(unit));
+	expect(buildInitialStatus().status.update_state?.kind).toBe("success");
+	expect(h.restarts).toBe(0);
 });

@@ -8,6 +8,7 @@
 	(at your option) any later version.
 */
 
+import { stat } from "node:fs/promises";
 import { spawnWithTimeout } from "../../helpers/spawn-policy.ts";
 import { classifyPackageLayer } from "./package-layer.ts";
 import {
@@ -89,7 +90,10 @@ export type DetachedAptServiceDeps = {
 		change: (
 			current: SoftwareUpdateAttempt | null,
 		) => SoftwareUpdateAttempt | null,
+		options?: { readonly replaceUnreadable?: boolean },
 	) => SoftwareUpdateAttempt | null;
+	/** Which stdout file the transcript is: another run's launch makes a new one. */
+	readonly transcript?: () => Promise<string | undefined>;
 	/** Milliseconds since boot; defaults to the host's uptime. */
 	readonly uptimeMs?: () => number;
 };
@@ -248,6 +252,13 @@ export function defaultDetachedAptServiceDeps(): DetachedAptServiceDeps {
 		readOutput: readSoftwareUpdateOutput,
 		sleep: Bun.sleep,
 		readAttempt: () => readSoftwareUpdateAttempt(paths),
-		updateAttempt: (change) => updateSoftwareUpdateAttempt(paths, change),
+		updateAttempt: (change, options) =>
+			updateSoftwareUpdateAttempt(paths, change, 0, options),
+		transcript: async () => {
+			const file = await stat(paths.stdout, { bigint: true }).catch(
+				() => undefined,
+			);
+			return file && `${file.ino}:${file.size}:${file.mtimeNs}`;
+		},
 	};
 }

@@ -53,6 +53,8 @@ const attemptSchema = z
 		exitCode: exitCodeSchema.optional(),
 		/** With the exit: whether the unit's transcript was read to its end. */
 		drained: z.boolean().optional(),
+		/** With the exit: the stdout file it was read from (inode:size:mtime). */
+		transcript: z.string().max(64).optional(),
 		leftover: z
 			.object({ invocation: invocationSchema, exitCode: exitCodeSchema })
 			.strict()
@@ -64,7 +66,7 @@ const attemptSchema = z
  * The one durable record of the current update attempt; replay and
  * adjudication read only this. `accepted`: admitted, no unit started yet.
  * `launched`: its unit was about to start; `exitCode` (with the unit's
- * `invocation`) once an observer saw it exit. `leftover`: an older attempt's
+ * `invocation` and the `transcript` it was read from) once an observer saw it exit. `leftover`: an older attempt's
  * recorded exit, kept only so a launch may retire that finished unit.
  */
 export type SoftwareUpdateAttempt = z.infer<typeof attemptSchema>;
@@ -221,7 +223,8 @@ export function readSoftwareUpdateAttempt(
 /**
  * Compare-and-set in one synchronous step: `change` sees the record it
  * replaces, and no other writer in this process can run between that read
- * and the rename. A record that cannot be read is passed as none.
+ * and the rename. A record that cannot be read gives no authority: the write
+ * fails, unless the caller replaces whatever is there (`replaceUnreadable`).
  */
 export function updateSoftwareUpdateAttempt(
 	paths: SoftwareUpdateOutputPaths,
@@ -229,12 +232,16 @@ export function updateSoftwareUpdateAttempt(
 		current: SoftwareUpdateAttempt | null,
 	) => SoftwareUpdateAttempt | null,
 	expectedUid = 0,
+	{ replaceUnreadable = false }: { readonly replaceUnreadable?: boolean } = {},
 ): SoftwareUpdateAttempt | null {
 	let current: SoftwareUpdateAttempt | null = null;
 	try {
 		current = readSoftwareUpdateAttempt(paths, expectedUid);
 	} catch (error) {
-		logger.warn("Software update: the attempt record is unreadable", { error });
+		if (!replaceUnreadable) throw error;
+		logger.warn("Software update: replacing an unreadable attempt record", {
+			error,
+		});
 	}
 	const next = change(current);
 	if (next) writeSoftwareUpdateAttempt(paths, next, expectedUid);

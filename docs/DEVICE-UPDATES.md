@@ -15,7 +15,9 @@ its pending error and fails the install after dpkg ran (`FileFd::Write`,
 such descriptor nothing that reads progress can stall or fail APT. A reader
 that lags, dies or cannot read loses only display.
 
-`apt-progress.ts` counts complete lines of APT's and dpkg's own output:
+`apt-progress.ts` counts only whole lines in APT's and dpkg's own shape, each
+archive and each package step once; a hook or script line that quotes them
+counts nothing:
 
 - `apt-get`'s plan (`N upgraded, M newly installed`, plus any reinstalled or
   downgraded), printed before APT acts, gives the package count (APT 3.0's
@@ -50,7 +52,7 @@ these):
 | Situation | Shown |
 |---|---|
 | The transcript cannot be read for four polls in a row | The phase without a number until a read succeeds |
-| The connection to the device dropped | The held phase without a number while it is down, and after it returns until a new frame arrives |
+| The connection to the device dropped, or the latest frame does not carry the held number | The held phase without a number, until the device's own latest frame carries the number shown again |
 | The observer loses the unit (gone without an exit, or another invocation) | No outcome: `updating: null`, `update_state` neither success nor failure, no restart; the tab says **Outcome not confirmed** |
 | The unit is gone and its exit is recorded | That outcome, replayed (below) |
 | The unit is gone and no exit is recorded | **Outcome not confirmed** |
@@ -93,7 +95,9 @@ compare-and-set step (`updateSoftwareUpdateAttempt`): it reads the current
 record, decides from it, and writes the replacement to a temporary file
 renamed into place, all synchronously, so no other write of this backend can
 come between; a writer that no longer owns the record writes nothing. Only
-the backend writes it, and only one backend runs per device. `startSoftwareUpdate` writes a new attempt
+the backend writes it, and only one backend runs per device. A record that
+cannot be read gives no authority: every write refuses it, except a new
+admission, which replaces it. `startSoftwareUpdate` writes a new attempt
 (`accepted`, a fresh id, no exit) after its refusals and before it publishes
 anything or starts a check, so a restart at any step before the unit starts
 finds that attempt with no exit and tells nothing; an older attempt's
@@ -103,19 +107,29 @@ launch writes `launched` before the unit exists and the observer adds
 systemd's `InvocationID` as soon as it sees the unit: that invocation is the
 attempt's identity, and a different invocation of the fixed unit is a
 replaced unit, never this attempt's. After its final read the observer writes
-the exit (and `drained`, whether the transcript was read) unless the record
-now holds a newer pending attempt (five tries). A gone unit's exit is told
-only from a `launched` record with an exit and an invocation, within 30
-minutes of boot-relative uptime.
+the exit (with `drained`, whether the transcript was read, and `transcript`,
+which stdout file it was read from) only into this attempt's own record that
+still has no exit, or when no record exists (five tries, each comparing
+again). A record that now holds another attempt, finished or pending, is never
+replaced: the exit is then nobody's outcome (unknown: no success or failure,
+no restart). A unit no record names (one started by an older release) is
+adopted as a new attempt only by the same compare-and-set, when no other
+attempt is pending; otherwise it is watched for display and its exit is
+unknown. A gone unit's exit is told only from a `launched` record with an
+exit and an invocation, within 30 minutes of boot-relative uptime, and only
+while the stdout file is the one it was read from: any later run, including
+one an older release started, makes a new file.
 
 The unit is retired only once its exit is durably recorded and its
 transcript was read, and only while systemd still shows that same finished
-invocation: a retry, or a retirement deferred until startup is admitted,
-inspects the unit again first and leaves a replaced one alone. `systemctl
+invocation: systemd is asked again right before every stop, the first try
+included, and a replaced unit is left alone. `systemctl
 stop` and `reset-failed` name the unit, not an invocation; the inspect is
 immediately before the call, and only this backend starts the fixed unit,
 never while it retires one. Otherwise the unit stays as the evidence, its exit is still
-published, and the deliberate restart is withheld (boot marked degraded).
+published, and the deliberate restart is withheld (boot marked degraded). A
+retirement that finds another invocation holding the unit also withholds the
+restart; while ownership is pending the restart waits for that retirement.
 A finished unit whose exit is recorded (same exit and invocation) is never
 adopted again: a later boot reports it and tries one retirement, so a unit
 whose `systemctl stop` keeps failing restarts CeraUI at most once. A launch

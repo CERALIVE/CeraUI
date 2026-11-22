@@ -510,7 +510,7 @@ describe("UpdatesDialog — package progress never moves back", () => {
 	const phase = () =>
 		document.querySelector('[data-testid="update-package-phase"]')?.textContent;
 
-	it("keeps the install phase and number through a stale download frame", async () => {
+	it("keeps the install phase through a stale download frame, never its unconfirmed number", async () => {
 		reactiveUpdateState.value = {
 			kind: "installing",
 			progress: { ...installing, percent: 60 },
@@ -523,7 +523,8 @@ describe("UpdatesDialog — package progress never moves back", () => {
 			progress: { ...downloading, percent: 96 },
 		};
 		flushSync();
-		expect(phase()).toContain("Installing · 60%");
+		expect(phase()).toContain("Installing");
+		expect(phase()).not.toContain("%");
 
 		reactiveUpdateState.value = {
 			kind: "installing",

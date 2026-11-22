@@ -17,24 +17,31 @@ export const PHASE_MARKERS = {
 
 // Progress comes only from the unit's own stdout file: APT is given no
 // telemetry descriptor, so nothing that reads progress can block or fail it.
-// Only complete lines count. APT prints its plan ("N upgraded, M newly
-// installed") before acting, "Get:" as it starts each archive and "Fetched"
-// once all are in; dpkg prints "Unpacking" and "Setting up" as it starts each
-// package's two steps. A step counts as done once the next one has started.
-// apt-get's plan line (APT's new "Summary:" layout is the `apt` binary's only).
+// Only whole lines in APT's and dpkg's own shape (the unit runs in the C
+// locale) count, each archive and each package step once: a script or hook
+// line that quotes them is not work. apt-get prints its plan before acting,
+// "Get:<n>" as it starts each archive and "Fetched" once all are in; dpkg
+// prints "Unpacking" and "Setting up" as it starts each package's two steps.
+// A step counts as done once the next one has started.
 const SUMMARY =
-	/^(\d+) upgraded, (\d+) newly installed, (?:(\d+) reinstalled, )?(?:(\d+) downgraded, )?/gm;
-const GET = /^Get:\d+ /gm;
-const FETCHED = /^Fetched /m;
-// Not anchored: dpkg's pseudo-terminal can append a step to an unfinished line.
-const DPKG_STEP = /(?:Unpacking|Setting up) [a-z0-9][a-z0-9+.:-]* \(/g;
+	/^(\d+) upgraded, (\d+) newly installed, (?:(\d+) reinstalled, )?(?:(\d+) downgraded, )?\d+ to remove and \d+ not upgraded\.$/gm;
+const GET = /^Get:(\d+) \S+ .* \[[^\]]+\]$/gm;
+const FETCHED = /^Fetched \S+ \S+ in \S+/m;
+const DPKG_STEP =
+	/^(Unpacking|Setting up) ([a-z0-9][a-z0-9+.:-]*) \([^()\s]+\)(?: over \([^()\s]+\))? \.\.\.$/gm;
+
+const distinct = (
+	lines: string,
+	shape: RegExp,
+	key: (match: RegExpMatchArray) => string,
+) => new Set(Array.from(lines.matchAll(shape), key)).size;
 
 export function deriveUpdateProgress(
 	stdout: string,
 ): Omit<SoftUpdateStatus, "result"> {
 	const lines = stdout.slice(0, stdout.lastIndexOf("\n") + 1);
-	const steps = lines.match(DPKG_STEP)?.length ?? 0;
-	const gets = lines.match(GET)?.length ?? 0;
+	const steps = distinct(lines, DPKG_STEP, (step) => `${step[1]} ${step[2]}`);
+	const gets = distinct(lines, GET, (get) => get[1] ?? "");
 	const phase: Phase =
 		steps > 0 ? "installing" : gets > 0 ? "downloading" : "preparing";
 	let packages = 0;

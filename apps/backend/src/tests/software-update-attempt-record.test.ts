@@ -198,17 +198,34 @@ describe("the attempt record", () => {
 			);
 			expect(stale).toBeNull();
 			expect(readSoftwareUpdateAttempt(local, uid)).toEqual(accepted);
-			// A record that cannot be read is passed as none.
+			// A record that cannot be read gives no authority: nothing is written.
 			await chmod(softwareUpdateAttemptPath(local), 0o644);
-			updateSoftwareUpdateAttempt(
-				local,
-				(current) => {
-					seen = current;
-					return null;
-				},
-				uid,
-			);
+			seen = "unset";
+			expect(() =>
+				updateSoftwareUpdateAttempt(
+					local,
+					(current) => {
+						seen = current;
+						return { ...accepted, exitCode: 0 };
+					},
+					uid,
+				),
+			).toThrow(UnsafeSoftwareUpdateOutputPathError);
+			expect(seen).toBe("unset");
+			// Only a new admission may replace it, and sees none.
+			expect(
+				updateSoftwareUpdateAttempt(
+					local,
+					(current) => {
+						seen = current;
+						return accepted;
+					},
+					uid,
+					{ replaceUnreadable: true },
+				),
+			).toEqual(accepted);
 			expect(seen).toBeNull();
+			expect(readSoftwareUpdateAttempt(local, uid)).toEqual(accepted);
 		} finally {
 			await rm(directory, { recursive: true, force: true });
 		}

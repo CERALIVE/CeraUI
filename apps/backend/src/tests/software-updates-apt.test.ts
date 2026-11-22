@@ -1155,8 +1155,9 @@ describe("deriveUpdateProgress() — the unit's transcript", () => {
 		let output = "";
 		const phases: unknown[] = [];
 		for (const chunk of [
-			"The following packages will be upgraded:\n  package-a package-b\n2 upgraded, 0 newly installed, 0 to remove.\nGet:",
-			"1 package\nUnpack",
+			// apt-get's and dpkg's real line shapes: only whole ones count.
+			"The following packages will be upgraded:\n  package-a package-b\n2 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\nGet:",
+			"1 https://apt.invalid trixie/main arm64 package-a arm64 2 [4 kB]\nUnpack",
 			"ing package-a (2) over (1) ...\nSet",
 			"ting up package-a (2) ...\n",
 		]) {

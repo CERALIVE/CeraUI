@@ -41,7 +41,8 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   root-owned directory is not peer-writable, file creation is exclusive and
   no-follow, and the files are mode 0600. Caller-selected paths are rejected.
   Progress is a pure function of the complete stdout lines read
-  (`apt-progress.ts`): the plan's package count, `Get:`/`Fetched` while
+  (`apt-progress.ts`), counting only whole lines in APT's and dpkg's own shape,
+  each archive and package step once: the plan's package count, `Get:`/`Fetched` while
   fetching and dpkg's `Unpacking`/`Setting up` steps give the phase and a
   number capped at 99; the step fields are phase markers. No wall-clock
   deadline is added: a valid package transaction may run for minutes. Each
@@ -60,8 +61,8 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   failed one leaves the unit watched only. `holdUpdateProgress`
   (`@ceraui/rpc/package-progress`, shared with both browser views) keeps a
   running transaction's phase and in-phase number from moving back, and lets
-  a same-phase frame without a number replace a held one; the browser drops a
-  number received before a connection drop until a new frame arrives. The
+  a same-phase frame without a number replace a held one; the browser shows a
+  number only while the device's own latest frame on this connection carries it. The
   in-process pinned prefetch is announced as Downloading. The detached
   result alone settles the outcome, including when stdout/stderr stay
   unreadable (`drained: false` after 20 failed final reads) or retirement
@@ -69,16 +70,21 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   null`, no success or failure, no restart).
   One attempt record (`software-update.attempt`) is all replay reads, and
   every write is a synchronous compare-and-set (`updateSoftwareUpdateAttempt`)
-  that writes nothing when the writer no longer owns the record:
+  that writes nothing when the writer no longer owns the record, and an
+  unreadable record refuses every write but a new admission's:
   `startSoftwareUpdate` writes `accepted` (new id) before publishing or
   starting anything, the launch writes `launched` before the unit exists,
   and the observer adds the unit's `InvocationID` (the attempt's identity)
-  and later its exit with `drained`. Only a `launched` record's own fresh
-  exit with an invocation is replayed; an older exit is a `leftover` for
+  and later its exit with `drained` and `transcript` (stdout inode:size:mtime),
+  only into its own exit-less record (or none); a record of another attempt
+  makes the exit unknown. A unit no record names is adopted by the same
+  compare-and-set or watched for display only. Only a `launched` record's own fresh
+  exit with an invocation is replayed, and only while stdout is still the file
+  that exit was read from; an older exit is a `leftover` for
   retirement only. CeraUI restarts only after the exit is recorded; the unit
-  is retired only when, besides, its transcript was read and systemd, inspected
-  again on every retry and deferred retirement, still shows the same finished
-  invocation. A recorded finished unit is never adopted again. The
+  is retired only when, besides, its transcript was read and systemd, asked
+  again right before every stop, still shows the same finished invocation; a
+  retirement that finds a replacement vetoes the restart. A recorded finished unit is never adopted again. The
   completion hook of a unit watched at boot is read at hand-over.
 - **Reattachment identity is a safety boundary.** Adoption requires the
   exact unit id and transient fragment path, transient-service description/type,

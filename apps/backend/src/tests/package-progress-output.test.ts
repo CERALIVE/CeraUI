@@ -107,13 +107,35 @@ describe("deriveUpdateProgress()", () => {
 		expect(deriveUpdateProgress(fetchLog + noise)).toEqual(downloadingAt());
 	});
 
-	test("a dpkg line appended to an unterminated script line still counts", () => {
-		// dpkg's pseudo-terminal can append it to a postinst's unfinished line.
+	test("only whole lines in APT's and dpkg's own shape count", () => {
+		// A hook or script line that quotes dpkg is not package work.
+		const plan =
+			"2 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n";
+		expect(
+			deriveUpdateProgress(
+				`${plan}hook diagnostic: Unpacking dummy1 (0); Setting up dummy1 (0); Unpacking dummy2 (0); Setting up dummy2 (0)\n`,
+			),
+		).toEqual(preparing);
 		expect(
 			deriveUpdateProgress(
 				`${fetched}postinst outputUnpacking cerastream (2) over (1) ...\n`,
 			),
-		).toEqual(installingAt());
+		).toEqual(downloadingAt(99));
+	});
+
+	test("a repeated line counts once", () => {
+		const twice = `${dpkgLog}Setting up cerastream (2) ...\nUnpacking cerastream (2) over (1) ...\n`;
+		expect(deriveUpdateProgress(twice)).toEqual(installingAt(50));
+		expect(
+			deriveUpdateProgress(
+				fetchLog +
+					fetchLog
+						.split("\n")
+						.filter((line) => line.startsWith("Get:"))
+						.join("\n") +
+					"\n",
+			),
+		).toEqual(downloadingAt());
 	});
 });
 

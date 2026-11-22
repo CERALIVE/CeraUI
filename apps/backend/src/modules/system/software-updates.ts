@@ -117,6 +117,7 @@ import {
 	DetachedAptServiceCleanupError,
 	DetachedAptServiceReplacedError,
 	DetachedAptServiceVanishedError,
+	type RetirementOutcome,
 	recoverDetachedAptUpgrade,
 	runDetachedAptAll,
 	runDetachedAptUpgrade,
@@ -341,19 +342,23 @@ function settleSoftwareUpdateRecovery(): void {
 function admitSoftwareUpdateAttempt(): boolean {
 	const deps = defaultDetachedAptServiceDeps();
 	try {
-		deps.updateAttempt((previous) => {
-			const leftover =
-				previous?.exitCode !== undefined && previous.invocation !== undefined
-					? { invocation: previous.invocation, exitCode: previous.exitCode }
-					: previous?.leftover;
-			return {
-				schema: 2,
-				attempt: randomUUID(),
-				phase: "accepted",
-				uptimeMs: softwareUpdateUptimeMs(deps),
-				...(leftover ? { leftover } : {}),
-			};
-		});
+		deps.updateAttempt(
+			(previous) => {
+				const leftover =
+					previous?.exitCode !== undefined && previous.invocation !== undefined
+						? { invocation: previous.invocation, exitCode: previous.exitCode }
+						: previous?.leftover;
+				return {
+					schema: 2,
+					attempt: randomUUID(),
+					phase: "accepted",
+					uptimeMs: softwareUpdateUptimeMs(deps),
+					...(leftover ? { leftover } : {}),
+				};
+				// A new attempt may replace a record nobody can read; no unit runs now.
+			},
+			{ replaceUnreadable: true },
+		);
 		return true;
 	} catch (error) {
 		logger.warn("Software update refused: the attempt could not be recorded", {
@@ -1630,6 +1635,8 @@ export function createSoftwareUpdateProcessMonitor(
 	let unreadablePolls = 0;
 	// Only a durably recorded exit may restart CeraUI; unrecorded, the unit is the evidence.
 	let outcomeRecorded = true;
+	// A retirement that found another invocation holding the unit vetoes the restart.
+	let retirement: Promise<RetirementOutcome> = Promise.resolve("kept");
 
 	const observeRebootPackages = () => {
 		if (rebootAfterUpgrade) return;
@@ -1692,6 +1699,9 @@ export function createSoftwareUpdateProcessMonitor(
 		onDrained: publishProgress,
 		onOutcomeRecorded: (recorded) => {
 			outcomeRecorded = recorded;
+		},
+		onRetirement: (outcome) => {
+			retirement = outcome.catch((): RetirementOutcome => "kept");
 		},
 		onAttached: () => {
 			announced = false;
@@ -1878,6 +1888,14 @@ export function createSoftwareUpdateProcessMonitor(
 				}
 			}
 			if (code === 0) {
+				// Owned later, the unit is retired meanwhile: decide only once it is.
+				if ((await retirement) === "replaced") {
+					markBootDegraded("software-update-replaced");
+					logger.error(
+						"Software update: restart withheld; another invocation holds the update unit",
+					);
+					return;
+				}
 				// Persist the observed commit success before deliberately exiting.
 				void finishSoftwareUpdateRestart(hook, () => {
 					if (!outcomeRecorded) {

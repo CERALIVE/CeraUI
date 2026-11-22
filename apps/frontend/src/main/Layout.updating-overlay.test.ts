@@ -260,7 +260,8 @@ describe("Layout — the update overlay survives a backend restart", () => {
 		expect(overlayTitle()).toBe(mounted);
 		expect(bar()?.getAttribute("aria-valuenow")).toBe("40");
 
-		// A stale download frame or an empty one never rewinds this install.
+		// A stale download frame or an empty one never rewinds this install, and
+		// the 40 that no frame carries any more is not shown as live.
 		updating({
 			total: 1,
 			downloading: 1,
@@ -270,11 +271,13 @@ describe("Layout — the update overlay survives a backend restart", () => {
 		});
 		expect(overlayTitle()).toBe(mounted);
 		expect(phase()?.textContent).toContain("Installing");
-		expect(bar()?.getAttribute("aria-valuenow")).toBe("40");
+		expect(bar()?.getAttribute("data-state")).toBe("indeterminate");
+		expect(bar()?.getAttribute("aria-valuenow")).toBeNull();
 		updating(silent);
 		expect(overlayTitle()).toBe(mounted);
 		expect(phase()?.textContent).toContain("Installing");
-		expect(bar()?.getAttribute("aria-valuenow")).toBe("40");
+		expect(bar()?.getAttribute("data-state")).toBe("indeterminate");
+		expect(bar()?.getAttribute("aria-valuenow")).toBeNull();
 		expect(document.body.textContent).not.toMatch(/\d+\s+of\s+\d+\s+steps/);
 
 		// The new process replays the status file and publishes where APT is.
