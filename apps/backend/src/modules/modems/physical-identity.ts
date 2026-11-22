@@ -195,6 +195,10 @@ function usableSerial(observation: PhysicalObservation): string | undefined {
 	return usableUsbSerial(observation.serial);
 }
 
+export function portIdentityKey(stableKey: string): string {
+	return `id-path:${stableKey}`;
+}
+
 /** The identity key and the rung it came from. */
 function resolveIdentityKey(
 	observation: PhysicalObservation,
@@ -209,7 +213,7 @@ function resolveIdentityKey(
 		};
 	}
 	if (stableKey !== undefined) {
-		return { identityKey: `id-path:${stableKey}`, anchor: "id-path" };
+		return { identityKey: portIdentityKey(stableKey), anchor: "id-path" };
 	}
 	return { identityKey: `ifname:${observation.ifname}`, anchor: "ifname" };
 }

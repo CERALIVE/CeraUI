@@ -406,9 +406,16 @@ export const runtimeConfigSchema = z.object({
 	eth_roles: z.record(z.string(), ethernetRoleSchema).optional(),
 
 	// Operator exclusions from the SRTLA bond, keyed by the canonical physical
-	// link id. Values can only be true: absence means included. A bare ifname is
-	// never accepted as a durable identity because the Huawei twins swap names.
+	// link id. Values can only be true. A bare ifname is not a durable identity
+	// because the Huawei twins swap names.
 	bond_opt_out: z.record(z.string().min(1), z.literal(true)).optional(),
+	// Each legacy id still excludes matching devices except exact link ids in
+	// its enable list. An empty list preserves the exclusion for every twin.
+	bond_legacy_opt_out: z
+		.record(z.string().min(1), z.record(z.string().min(1), z.literal(true)))
+		.optional(),
+	// Explicit port enables made without serial-group evidence.
+	bond_port_opt_in: z.record(z.string().min(1), z.literal(true)).optional(),
 	// SHA-256 of vendor:serial pairs observed on distinct USB parents.
 	usb_serial_shared: z
 		.array(z.string().regex(/^[0-9a-f]{64}$/))

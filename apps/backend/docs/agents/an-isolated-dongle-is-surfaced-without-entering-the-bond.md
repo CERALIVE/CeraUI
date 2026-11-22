@@ -940,8 +940,25 @@ A non-placeholder serial shared by twins therefore switches to port identity
 once, when its twin is first seen, and remains there after the twin is removed.
 
 Affected devices change link id and steering mark once. The rejected serial's
-opaque `legacyLinkId` preserves an existing bond opt-out; toggling one twin first
-migrates the old exclusion to every present twin so its sibling stays excluded.
+opaque `legacyLinkId` preserves an existing bond opt-out. A toggle after the
+collision saves the migrated exclusion under the present twins' physical IDs
+for downgrade compatibility. Enabling a still-serial-anchored device also
+migrates its existing exclusion, even before any collision is seen. Both paths
+replace the raw serial entry with the same `bond_legacy_opt_out` fallback for
+unseen twins. While the serial is trusted, optional port evidence does not
+change the saved choice. The observed port scopes an enable after a split;
+without a known port, a serial-only enable cannot enable a particular twin.
+Known group membership still excludes an unlocated twin; an explicit enable of
+one lasts for the session only, because it has no durable key. An explicit
+disable keeps the exact exclusion in `bond_opt_out`, so it survives missing
+serial evidence at that port and remains readable on downgrade. An explicit
+enable made at a port without serial evidence records a port enable
+(`bond_port_opt_in`), not a serial alias, so a group recognized there later
+does not override it; a raw serial entry that no toggle has migrated yet still
+does. The fallback remains across reloads because no scan can prove all
+possible siblings have been seen. Older readers cannot enforce it for
+unrecorded ports, and rewriting config with one of those readers can drop the
+new fields.
 Router login credentials are read only under the device's exact resolved
 `linkId`. A rejected serial's legacy id has no durable binding to a port, so it
 cannot transfer a login, even if only one twin remains or the backend restarts.
