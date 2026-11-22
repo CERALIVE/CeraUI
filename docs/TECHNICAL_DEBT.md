@@ -227,27 +227,22 @@ the SPA splits the catalog into lazy namespace chunks where the federation bundl
 so the SPA pays the ten-locale tax per namespace rather than all at once. It is recorded
 separately because the remedies and the exit measurements differ.
 
-**2026-11-21: the System Logs toolbar crosses both aggregate ceilings
-(accepted footprint, debt still open).** With Bun 1.4.4 and the same build/report
-commands, main `c63e6eb7` (after #669) measures **1,269,477 B total SPA gzip /
-1,469,277 B precache**, only **538 B / 539 B** under the ceilings. The toolbar
-branch measures **1,270,364 B / 1,470,161 B**, adding **887 B / 884 B** and
-exceeding them by **349 B / 345 B**. The growth is the owner-requested Support
-bundle and Export logs toolbar, the Support bundle offered in the load-failure
-band, the export scope that follows the chosen boot and `AppDialog`'s opt-in
-focus fallback (about 0.8 KiB of code in the lazy System Logs chunk and the shared
-dialog), plus one new key across ten locales (about 62 B). Bytes were trimmed
-first: the bundle explanation reuses the existing `systemLogs.sharing.bundleHint`
-line instead of a new sentence (1,041 B less), and a redundant focus fallback was
-removed (within the build's own noise of a few tens of bytes). Dropping the
-toolbar, the failure-state action or the accessibility fixes would undo the
-change itself.
+**2026-11-22: Hotspot consent handling crosses both aggregate ceilings
+(accepted footprint, debt still open).** With Bun 1.4.4 and the same
+build/report commands, main `a5ad2281` measures **1,269,613 B total SPA gzip /
+1,469,412 B precache**. The rebased fix at `d543e160` measures
+**1,271,045 B / 1,470,838 B**, adding **1,432 B / 1,426 B** and exceeding the
+old ceilings by **1,030 B / 1,022 B**. These are the larger measurements
+from two builds of each tree. The change adds consent, focus and radio-bound
+recovery logic in `HotspotDialog`, `HotspotActivationConfirm`,
+`WifiModeSelector` and `wifi-entry-request`, with no new locale keys or
+catalog chunks.
 
 Under the accepted-footprint mechanism in `scripts/ci/bundle-report.mjs:16-18`,
-both baselines move to these measured totals: **1,253,631 -> 1,270,364 B** and
-**1,453,432 -> 1,470,161 B**. Both displaced baselines remain visible in every
-report. The **16 KiB absolute headroom** and ratios are unchanged, giving
-**1,286,748 B / 1,486,545 B** ceilings. Initial-route, single-chunk and
+both baselines move to these measured totals: **1,253,631 -> 1,271,045 B**
+and **1,453,432 -> 1,470,838 B**. Both displaced baselines remain visible
+in every report. Both **16 KiB absolute headrooms** and ratios are unchanged,
+giving **1,287,429 B / 1,487,222 B** ceilings. Initial-route, single-chunk and
 federation ceilings, Workbox patterns and its 2 MiB per-file limit are
 untouched. This entry remains open; no catalog reduction is claimed.
 

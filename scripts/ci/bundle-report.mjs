@@ -25,18 +25,17 @@ import { assertFederationAssetSet, discoverFederationAssets } from '../federatio
 const KIB = 1024;
 
 const SPA_BASELINE = {
-	// ACCEPTED, TRACKED REGRESSION: System Logs toolbar, measured 2026-11-21.
-	// Main c63e6eb7 (after #669): 1,269,477/1,469,277 B total/precache, 538/539 B
-	// under the ceilings; the toolbar branch: 1,270,364/1,470,161 B
-	// (+887/+884 B), over them by 349/345 B. The Support bundle and Export logs
-	// toolbar, the load-failure Support bundle, the chosen-boot export scope and
-	// AppDialog's focus fallback are the code; one key x ten locales adds about
-	// 62 B. The bundle explanation already reuses an existing key (a new sentence
-	// measured 1,041 B more), and removing a redundant focus fallback was within
-	// build noise. Rebaseline to the measured footprint under
-	// TD-spa-i18n-catalog-size (still open), retaining 1,253,631/1,453,432 B
-	// below. Both 16 KiB headrooms, ratios, route/chunk/federation and Workbox
-	// limits stay fixed.
+	// ACCEPTED, TRACKED REGRESSION: hotspot consent handling, measured 2026-11-22.
+	// Main a5ad2281: 1,269,613/1,469,412 B total/precache; d543e160:
+	// 1,271,045/1,470,838 B (+1,432/+1,426 B), over the old ceilings by
+	// 1,030/1,022 B. The growth comes from consent, focus and radio-bound
+	// recovery in HotspotDialog, HotspotActivationConfirm, WifiModeSelector
+	// and wifi-entry-request, with no new locale keys or catalog chunks.
+	// The figures use the larger of two Bun builds per tree; commit ID and
+	// build timestamp can vary the gzip size. Rebaseline to the measured
+	// footprint under TD-spa-i18n-catalog-size (still open), retaining
+	// 1,253,631/1,453,432 B below. Both 16 KiB headrooms, ratios,
+	// route/chunk/federation and Workbox limits stay fixed.
 	// ACCEPTED, TRACKED REGRESSION: System Logs, measured 2026-11-18.
 	// Main f6c9a2fb: 1,130,265/1,329,981 B total/precache; 0e347d01:
 	// 1,253,631/1,453,432 B (+123,366/+123,451 B), over the old ceilings by
@@ -106,10 +105,10 @@ const SPA_BASELINE = {
 	// single-chunk ceilings are NOT widened. Both aggregates now carry a SECOND,
 	// absolute ceiling so a re-derivation cannot hand back a fresh 12% to spend
 	// silently — precache gained one here for the reason totalGzip already had.
-	totalGzip: 1_270_364,
+	totalGzip: 1_271_045,
 	initialRouteGzip: 497_196,
 	largestChunkGzip: 461_577,
-	precacheGzip: 1_470_161,
+	precacheGzip: 1_470_838,
 };
 
 // The aggregate's binding constraint. A ratio applied to a freshly re-derived
@@ -154,7 +153,7 @@ const SPA_DISPLACED_BASELINES = {
 		},
 		{
 			bytes: 1_253_631,
-			label: 'pre-system-logs-toolbar',
+			label: 'pre-hotspot-consent',
 			debt: 'TD-spa-i18n-catalog-size',
 		},
 	],
@@ -202,7 +201,7 @@ const SPA_DISPLACED_BASELINES = {
 		},
 		{
 			bytes: 1_453_432,
-			label: 'pre-system-logs-toolbar',
+			label: 'pre-hotspot-consent',
 			debt: 'TD-spa-i18n-catalog-size',
 		},
 	],
