@@ -26,6 +26,10 @@ export type AptScript = {
 	readonly upgradable?: readonly AptPackage[];
 	readonly keptBack?: readonly AptPackage[];
 	readonly discovery?: Partial<SpawnWithTimeoutResult>;
+	// The kept-back fallback's own answer (`apt-get install --assume-no`), instead of its plan.
+	readonly fallback?: Partial<SpawnWithTimeoutResult>;
+	// A package's `apt-cache show --no-all-versions` text, instead of its candidate's record.
+	readonly records?: Readonly<Record<string, string>>;
 	readonly policyFails?: readonly string[];
 	readonly inventory?: string;
 	// Installed with nothing pending (candidate equals installed).
@@ -233,7 +237,7 @@ function answer(script: AptScript) {
 			};
 		}
 		if (bin === "/usr/bin/apt-get" && verb === "install")
-			return upgradePlan(keptBack);
+			return { ...upgradePlan(keptBack), ...script.fallback };
 		if (bin === "/usr/bin/apt-get" && verb === "-s")
 			return ok(simulation(upgradable));
 		if (bin === "/usr/bin/apt-mark")
@@ -265,6 +269,8 @@ function answer(script: AptScript) {
 			return { exitCode: compared.exitCode ?? 2, stdout: "", stderr: "" };
 		}
 		if (bin === "/usr/bin/apt-cache" && verb === "show") {
+			const record = script.records?.[argv[3] ?? ""];
+			if (record !== undefined) return ok(record);
 			const pkg = present.find((candidate) => candidate.name === argv[3]);
 			if (pkg)
 				return ok(

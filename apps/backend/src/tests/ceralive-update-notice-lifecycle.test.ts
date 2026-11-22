@@ -484,6 +484,26 @@ describe("legacy image", () => {
 				{ upgradable: [cerastream("2")], fail: { "package-record": how } },
 			],
 		),
+		[
+			"a candidate record of another version",
+			{
+				upgradable: [cerastream("2")],
+				records: {
+					cerastream:
+						"Package: cerastream\nArchitecture: arm64\nVersion: 1\n\n",
+				},
+			},
+		],
+		[
+			"two candidate records",
+			{
+				upgradable: [cerastream("2")],
+				records: {
+					cerastream:
+						"Package: cerastream\nArchitecture: arm64\nVersion: 2\n\nPackage: cerastream\nArchitecture: armhf\nVersion: 2\n\n",
+				},
+			},
+		],
 	] satisfies [string, AptScript][])(
 		"%s is not proof either way",
 		async (_label, contradiction) => {
@@ -1113,6 +1133,20 @@ const incomplete: readonly [
 		{ keptBack: [cerastream("2")] },
 		"legacy",
 	],
+	[
+		"a kept-back fallback that failed yet reads as nothing pending",
+		{
+			keptBack: [cerastream("2")],
+			fallback: {
+				exitCode: 100,
+				stdout:
+					"0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n",
+				stderr:
+					"E: Unable to correct problems, you have held broken packages.\n",
+			},
+		},
+		"legacy",
+	],
 ];
 
 for (const capable of [false, true])
@@ -1192,6 +1226,19 @@ for (const capable of [false, true])
 					? "update:ceralive-modem-support=2026.1,cerastream=2"
 					: "update:cerastream=2",
 			);
+		});
+
+		test("an architecture-independent package is offered and proven as its own instance", async () => {
+			await check({ upgradable: [cerastream("2", { arch: "all" })] });
+			expect(await recorded()).toEqual({
+				version: 8,
+				offer: [{ name: "cerastream", arch: "all", version: "2" }],
+			});
+			broadcast.mockClear();
+			await proveInstalled({
+				installed: [cerastream("2", { installed: "2", arch: "all" })],
+			});
+			expect(liveRemovals()).toEqual([NOTICE]);
 		});
 
 		test("a candidate the solver keeps back does not veto the valid upgrade beside it", async () => {
