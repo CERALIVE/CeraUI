@@ -64,3 +64,29 @@ test("cosmetic preference salvage retains valid safety fields", async () => {
 	expect(getConfig().modem_provisioning).toBe(false);
 	expect(getConfig().bond_opt_out).toEqual({ "usb:a": true });
 });
+
+test("T5: a malformed twin residual prevents load and save rather than lifting an exclusion", async () => {
+	writeFileSync(path, '{"bond_group_opt_out":{"group":[]}}');
+	await loadConfig();
+	const invalid = '{"max_br":"bad","bond_group_opt_out":{"group":"port"}}';
+	writeFileSync(path, invalid);
+	await expect(loadConfig()).rejects.toThrow(
+		"runtime_config_authority_unavailable",
+	);
+	expect(() => getConfig()).toThrow("runtime_config_authority_unavailable");
+	expect(() => saveConfig()).toThrow("runtime_config_authority_unavailable");
+	expect(readFileSync(path, "utf8")).toBe(invalid);
+});
+
+test("preference salvage preserves empty and nonempty twin residuals across a save and reload", async () => {
+	const residual = { excluded: [], split: ["port"] };
+	writeFileSync(
+		path,
+		JSON.stringify({ max_br: "bad", bond_group_opt_out: residual }),
+	);
+	await loadConfig();
+	expect(getConfig().max_br).toBe(5000);
+	saveConfig();
+	await loadConfig();
+	expect(getConfig().bond_group_opt_out).toEqual(residual);
+});

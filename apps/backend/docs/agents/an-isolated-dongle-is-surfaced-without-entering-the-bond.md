@@ -940,8 +940,24 @@ A non-placeholder serial shared by twins therefore switches to port identity
 once, when its twin is first seen, and remains there after the twin is removed.
 
 Affected devices change link id and steering mark once. The rejected serial's
-opaque `legacyLinkId` preserves an existing bond opt-out; toggling one twin first
-migrates the old exclusion to every present twin so its sibling stays excluded.
+opaque `legacyLinkId` preserves an existing bond opt-out. Toggling one twin
+migrates that exclusion to the exact keys of the present twins. The optional
+`bond_group_opt_out` field records which members the operator enabled under that
+group. Before notifying listeners, a committed USB scan writes an exact
+`bond_opt_out` entry for any other member that shows the group at a known port,
+including a sibling that was unplugged at the toggle. The bond reader still
+checks only exact and legacy keys in `bond_opt_out`. A durable disable removes
+the key from every enabled list; toggling the group itself ends its list.
+
+This choice is per port, not per physical unit. A twin moved to a new port, a
+twin enabled before it showed the group, and another device at a pinned port
+can start excluded. Enable the device again once its identity is settled at that
+port. A twin without `ID_PATH` still has no durable port exclusion. After
+shared-serial history eviction, a lone twin can still look like a singleton
+until the pair is relearned. Enabling that lone-serial identity ends the group
+record, as does enabling it before first recognition. Already-lost exclusions
+cannot be recovered.
+
 Router login credentials are read only under the device's exact resolved
 `linkId`. A rejected serial's legacy id has no durable binding to a port, so it
 cannot transfer a login, even if only one twin remains or the backend restarts.

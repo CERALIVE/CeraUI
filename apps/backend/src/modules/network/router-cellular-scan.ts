@@ -63,6 +63,7 @@ import {
 	setPresentPhysicalDevices,
 	usableUsbSerial,
 } from "../modems/physical-identity.ts";
+import { excludeResidualGroupMembers } from "./bond-preference.ts";
 import {
 	classifyUsbNetDevice,
 	modelLabel,
@@ -825,6 +826,7 @@ async function runUsbNetScan(
 		physicalDescriptors = scanned.physical;
 		coveredIfnames = new Set(ifnames.filter((name) => !stale.has(name)));
 		setPresentPhysicalDevices(presentDeviceRecords());
+		excludeResidualGroupMembers();
 		const changed = snapshotKey(cachedSets()) !== before;
 		if (changed) {
 			for (const listener of scanCommittedListeners) listener();
