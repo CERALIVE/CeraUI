@@ -5,26 +5,104 @@ import { selectUpdateTransport } from "../modules/system/update-transport/execut
 import { createUpdatePinController } from "../modules/system/update-transport/pin.ts";
 import { assertNmDeviceShowFields } from "./helpers/nm-device-show-fixture.ts";
 
-function inventoryReply(argv: string[], ...records: readonly string[]) {
-	expect(argv).toContain("-t");
-	expect(argv.slice(-2)).toEqual(["device", "show"]);
-	const fieldOption = argv.indexOf("-f");
-	expect(fieldOption).toBeGreaterThan(0);
-	const fields = argv[fieldOption + 1] ?? "";
-	assertNmDeviceShowFields(fields);
+// Replay the all-device `device show` output options from nmcli(1), not a
+// specific argv: options precede the command and selectors determine the rows.
+function inventoryQuery(argv: readonly string[]) {
+	if (argv.at(-2) !== "device" || argv.at(-1) !== "show") return;
+	const options = argv.slice(1, -2);
+	let style: "normal" | "terse" | "pretty" = "normal";
+	let mode: "multiline" | "tabular" = "multiline";
+	let escapeValues = true;
+	let fields: string | undefined;
+	for (let i = 0; i < options.length; i++) {
+		const [option, inlineValue] = options[i]?.split("=", 2) ?? [];
+		switch (option) {
+			case "-t":
+			case "--terse":
+			case "-p":
+			case "--pretty":
+				// A repeated or conflicting print style is an nmcli input error.
+				if (style !== "normal" || inlineValue !== undefined) return;
+				style = option === "-t" || option === "--terse" ? "terse" : "pretty";
+				break;
+			case "-f":
+			case "--fields":
+				fields = inlineValue ?? options[++i];
+				if (fields === undefined) return;
+				break;
+			case "-m":
+			case "--mode": {
+				const value = inlineValue ?? options[++i];
+				if (value !== "multiline" && value !== "tabular") return;
+				mode = value;
+				break;
+			}
+			case "-e":
+			case "--escape": {
+				const value = inlineValue ?? options[++i];
+				if (value !== "yes" && value !== "no") return;
+				escapeValues = value === "yes";
+				break;
+			}
+			default:
+				return;
+		}
+	}
+	return { style, mode, escapeValues, fields };
+}
+
+function inventoryReply(
+	argv: readonly string[],
+	...records: readonly string[]
+) {
+	const query = inventoryQuery(argv);
+	if (!query)
+		return { exitCode: 2, stdout: "", stderr: "Invalid inventory invocation" };
+	const selector = query.fields?.toUpperCase() ?? "COMMON";
+	if (selector === "") return { exitCode: 0, stdout: "", stderr: "" };
+	// Without -f, nmcli prints common fields, including HWADDR. Replay just
+	// the GENERAL fields needed to distinguish that wider, incompatible reply.
+	const fields =
+		selector === "COMMON" || selector === "ALL" || selector === "GENERAL"
+			? "GENERAL.DEVICE,GENERAL.TYPE,GENERAL.HWADDR,GENERAL.STATE"
+			: selector;
+	try {
+		assertNmDeviceShowFields(fields);
+	} catch (error) {
+		if (!(error instanceof Error && "code" in error && error.code === 2))
+			throw error;
+		return { exitCode: error.code, stdout: "", stderr: error.message };
+	}
 	const requested = fields.split(",");
 	return {
 		exitCode: 0,
 		stdout: records
 			.map((record) => {
-				const lines = new Map(
-					record
-						.split("\n")
-						.map((line) => [line.slice(0, line.indexOf(":")), line]),
+				const values = new Map(
+					record.split("\n").map((line) => {
+						const separator = line.indexOf(":");
+						return [line.slice(0, separator), line.slice(separator + 1)];
+					}),
 				);
-				// An allowed field still has a row when this fixture has no value for it.
+				// An allowed field still appears even if the fixture has no value.
+				const valueFor = (field: string) =>
+					values.get(field) ??
+					(field === "GENERAL.HWADDR" ? "02:00:00:00:00:00" : "--");
+				if (query.mode === "tabular") {
+					return requested
+						.map((field) => {
+							const value = valueFor(field);
+							return query.escapeValues
+								? value.replace(/[:\\]/g, "\\$&")
+								: value;
+						})
+						.join("\n");
+				}
 				return requested
-					.map((field) => lines.get(field) ?? `${field}:--`)
+					.map((field) => {
+						const label = `${field}:`;
+						return `${query.style === "terse" ? label : label.padEnd(40)}${valueFor(field)}`;
+					})
 					.join("\n");
 			})
 			.join("\n\n"),
@@ -166,9 +244,9 @@ test.each(["eth0", "wwan0"])(
 		const apt = await selection("apt");
 		expect(apt.status).toBe("selected");
 		const inventory = calls.find(([command]) => command === "nmcli") ?? [];
-		expect(inventory[inventory.indexOf("-f") + 1]?.split(",")).toContain(
-			"GENERAL.IP-IFACE",
-		);
+		expect(
+			inventoryQuery(inventory)?.fields?.toUpperCase().split(","),
+		).toContain("GENERAL.IP-IFACE");
 		if (apt.status === "selected") {
 			expect(apt.selected.family).toBe(4);
 			expect(apt.selected.candidate).toEqual({
@@ -253,6 +331,7 @@ async function probeOsSignature(input: {
 	readonly httpBody?: string;
 	readonly httpsCode?: number;
 	readonly httpsExit?: number;
+	readonly inventoryFailure?: "empty output" | "non-zero exit";
 }) {
 	const calls: string[][] = [];
 	const selection = await selectUpdateTransport(
@@ -266,12 +345,18 @@ async function probeOsSignature(input: {
 			dongleIfnames: () => [],
 			run: async (argv) => {
 				calls.push(argv);
-				if (argv[0] === "nmcli")
-					return inventoryReply(
+				if (argv[0] === "nmcli") {
+					const reply = inventoryReply(
 						argv,
 						"GENERAL.DEVICE:eth0\nGENERAL.IP-IFACE:eth0\nGENERAL.TYPE:ethernet\nGENERAL.STATE:100 (connected)\nGENERAL.METERED:no (guessed)",
 						"GENERAL.DEVICE:cdc-wdm0\nGENERAL.IP-IFACE:wwan0\nGENERAL.TYPE:gsm\nGENERAL.STATE:100 (connected)\nGENERAL.METERED:yes",
 					);
+					if (input.inventoryFailure === "empty output")
+						return { ...reply, stdout: "" };
+					if (input.inventoryFailure === "non-zero exit")
+						return { ...reply, exitCode: 1 };
+					return reply;
+				}
 				if (argv[0] === "resolvectl")
 					return argv.includes("-6")
 						? { exitCode: 1, stdout: "", stderr: "no IPv6 route" }
@@ -299,6 +384,15 @@ async function probeOsSignature(input: {
 	);
 	return { selection, calls };
 }
+
+test.each(["empty output", "non-zero exit"] as const)(
+	"no transport is probed after nmcli returns %s",
+	async (inventoryFailure) => {
+		const { selection, calls } = await probeOsSignature({ inventoryFailure });
+		expect(selection).toMatchObject({ status: "none", ranked: [] });
+		expect(calls.map(([command]) => command)).toEqual(["nmcli"]);
+	},
+);
 
 test.each([404, 410])(
 	"a verified images.ceralive.tv signature %i keeps the healthy eth0/IPv4 selectable",
