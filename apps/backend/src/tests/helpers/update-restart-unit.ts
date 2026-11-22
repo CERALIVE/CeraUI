@@ -52,7 +52,20 @@ export function restartTestUnit(
 					unit,
 					...argv,
 				],
-				{ detached: true, stdio: "ignore" },
+				{
+					detached: true,
+					stdio: "ignore",
+					// systemd puts the unit's --setenv assignments over its own environment.
+					env: {
+						...process.env,
+						...Object.fromEntries(
+							command
+								.slice(0, command.indexOf("--"))
+								.filter((arg) => arg.startsWith("--setenv="))
+								.map((arg) => arg.slice("--setenv=".length).split("=", 2)),
+						),
+					},
+				},
 			);
 			child.unref();
 			await writeFile(`${unit}.pid`, String(child.pid));

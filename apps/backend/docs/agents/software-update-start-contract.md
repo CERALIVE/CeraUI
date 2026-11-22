@@ -33,7 +33,9 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   transaction's output to the backend process and produced `SIGPIPE` after the
   parent unit stopped. The transient service appends stdout/stderr under
   fixed `/run/ceralive/software-update.{stdout,stderr}` files and runs the
-  released commands unchanged: APT gets no telemetry descriptor (no
+  released commands (`ExecStart` unchanged) with `LC_ALL=C` set on the unit
+  (`--setenv`; systemd gives a unit its manager's locale, not the caller's, and
+  the counted lines are translated). APT gets no telemetry descriptor (no
   `APT::Status-Fd`, pipe or extra file), because APT 3.0.3 fails an install
   whose status write failed and a pipe makes APT wait on its reader. The
   root-owned directory is not peer-writable, file creation is exclusive and

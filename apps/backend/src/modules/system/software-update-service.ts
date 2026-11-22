@@ -94,21 +94,6 @@ export type DetachedAptServiceDeps = {
 	readonly uptimeMs?: () => number;
 };
 
-function assertTrustedOutputPaths(
-	outputPaths: SoftwareUpdateOutputPaths,
-): void {
-	const trusted = softwareUpdateOutputPaths();
-	if (
-		outputPaths.stdout !== trusted.stdout ||
-		outputPaths.stderr !== trusted.stderr
-	) {
-		throw new UnsafeSoftwareUpdateOutputPathError(
-			outputPaths.stdout,
-			"runtime paths are fixed",
-		);
-	}
-}
-
 export function buildDetachedAptUpgradeCommand(
 	aptArgs: readonly string[],
 	outputPaths: SoftwareUpdateOutputPaths,
@@ -145,6 +130,8 @@ export function buildDetachedAptUpgradeCommand(
 		"--quiet",
 		"--service-type=exec",
 		"--expand-environment=no",
+		// Progress is read from APT's and dpkg's own lines: keep them untranslated.
+		"--setenv=LC_ALL=C",
 		`--property=StandardOutput=append:${outputPaths.stdout}`,
 		`--property=StandardError=append:${outputPaths.stderr}`,
 		"--",
@@ -180,6 +167,8 @@ export function buildDetachedAptAllCommand(
 		"--quiet",
 		"--service-type=exec",
 		"--expand-environment=no",
+		// Progress is read from APT's and dpkg's own lines: keep them untranslated.
+		"--setenv=LC_ALL=C",
 		`--property=StandardOutput=append:${outputPaths.stdout}`,
 		`--property=StandardError=append:${outputPaths.stderr}`,
 		"--",

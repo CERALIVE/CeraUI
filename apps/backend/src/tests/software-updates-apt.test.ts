@@ -305,6 +305,7 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			"--quiet",
 			"--service-type=exec",
 			"--expand-environment=no",
+			"--setenv=LC_ALL=C",
 			"--property=StandardOutput=append:/run/ceralive/software-update.stdout",
 			"--property=StandardError=append:/run/ceralive/software-update.stderr",
 			"--",

@@ -6,8 +6,10 @@ Progress comes only from the detached unit's own transcript: the stdout file
 systemd appends to (`/run/ceralive/software-update.stdout`; root-owned, mode
 0600, created exclusively). APT is given no telemetry descriptor: no
 `APT::Status-Fd`, no pipe, no extra file. The unit runs the released commands
-unchanged (`/usr/bin/apt-get` directly, or the pinned `/bin/sh -ec` pair under
-the update lock). APT 3.0.3 turns a failed write to its status descriptor into
+(`/usr/bin/apt-get` directly, or the pinned `/bin/sh -ec` pair under the update
+lock; `ExecStart` unchanged) with `LC_ALL=C` set on the unit: systemd hands a
+unit its manager's locale (`/etc/locale.conf`), and APT's and dpkg's lines are
+translated, so without it the counted lines would not be stable. APT 3.0.3 turns a failed write to its status descriptor into
 its pending error and fails the install after dpkg ran (`FileFd::Write`,
 `private-install.cc`), and a pipe would make APT wait for its reader; with no
 such descriptor nothing that reads progress can stall or fail APT. A reader
@@ -15,8 +17,9 @@ that lags, dies or cannot read loses only display.
 
 `apt-progress.ts` counts complete lines of APT's and dpkg's own output:
 
-- the plan (`N upgraded, M newly installed`), printed before APT acts, gives
-  the package count;
+- `apt-get`'s plan (`N upgraded, M newly installed`, plus any reinstalled or
+  downgraded), printed before APT acts, gives the package count (APT 3.0's
+  `Summary:` layout is only the `apt` binary's default);
 - `Get:` while fetching: an archive is done once the next one starts, and all
   are once `Fetched` is printed (**Downloading**);
 - dpkg's `Unpacking` and `Setting up`, two steps per package: a step is done

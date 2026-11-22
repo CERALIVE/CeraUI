@@ -82,6 +82,16 @@ describe("deriveUpdateProgress()", () => {
 		expect(deriveUpdateProgress(dpkgLog + extra)).toEqual(installingAt(99));
 	});
 
+	test("reinstalled and downgraded packages in the plan count too", () => {
+		// apt-get prints them between "newly installed" and "to remove".
+		const plan =
+			"1 upgraded, 0 newly installed, 1 reinstalled, 1 downgraded, 0 to remove and 0 not upgraded.\n";
+		const steps =
+			"Unpacking a (2) over (1) ...\nUnpacking b (1) over (1) ...\nUnpacking c (1) over (2) ...\nSetting up a (2) ...\n";
+		// Three of the six steps are done once the fourth has started.
+		expect(deriveUpdateProgress(plan + steps)).toEqual(installingAt(50));
+	});
+
 	test("a later fetch line cannot move an install back to downloading", () => {
 		expect(
 			deriveUpdateProgress(

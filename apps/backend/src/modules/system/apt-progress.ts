@@ -21,7 +21,9 @@ export const PHASE_MARKERS = {
 // installed") before acting, "Get:" as it starts each archive and "Fetched"
 // once all are in; dpkg prints "Unpacking" and "Setting up" as it starts each
 // package's two steps. A step counts as done once the next one has started.
-const SUMMARY = /^(\d+) upgraded, (\d+) newly installed/gm;
+// apt-get's plan line (APT's new "Summary:" layout is the `apt` binary's only).
+const SUMMARY =
+	/^(\d+) upgraded, (\d+) newly installed, (?:(\d+) reinstalled, )?(?:(\d+) downgraded, )?/gm;
 const GET = /^Get:\d+ /gm;
 const FETCHED = /^Fetched /m;
 // Not anchored: dpkg's pseudo-terminal can append a step to an unfinished line.
@@ -37,7 +39,9 @@ export function deriveUpdateProgress(
 		steps > 0 ? "installing" : gets > 0 ? "downloading" : "preparing";
 	let packages = 0;
 	for (const plan of lines.matchAll(SUMMARY))
-		packages = Number(plan[1]) + Number(plan[2]);
+		packages = plan
+			.slice(1)
+			.reduce((sum, count) => sum + Number(count ?? 0), 0);
 	const done =
 		phase === "installing"
 			? steps - 1

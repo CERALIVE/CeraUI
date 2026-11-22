@@ -43,16 +43,32 @@ const directArgs = [
 ];
 const afterRun = (command: string[]) =>
 	command.slice(command.indexOf("--") + 1);
-const forms = {
-	// flock's lock is not under test; the command after it runs as systemd would.
+const units = {
 	pinned: buildDetachedAptAllCommand(
 		buildAptAllInstallArgs([{ name: "cerastream", version: "2" }], "any"),
 		"any",
 		paths,
-	).slice(-3),
-	// Everything systemd-run is told to run, whatever shape the command has.
-	direct: afterRun(buildDetachedAptUpgradeCommand(directArgs, paths)),
+	),
+	direct: buildDetachedAptUpgradeCommand(directArgs, paths),
 };
+const forms = {
+	// flock's lock is not under test; the command after it runs as systemd would.
+	pinned: units.pinned.slice(-3),
+	// Everything systemd-run is told to run, whatever shape the command has.
+	direct: afterRun(units.direct),
+};
+// What systemd puts in the unit's environment on top of its manager's.
+const unitEnvironment = (command: string[]) =>
+	Object.fromEntries(
+		command
+			.slice(0, command.indexOf("--"))
+			.filter((arg) => arg.startsWith("--setenv="))
+			.map((arg) => {
+				const assignment = arg.slice("--setenv=".length);
+				const at = assignment.indexOf("=");
+				return [assignment.slice(0, at), assignment.slice(at + 1)];
+			}),
+	);
 
 test.each([
 	["pinned", "0"],
@@ -79,5 +95,37 @@ test.each([
 		expect(
 			(await readFile(join(dir, "writes"), "utf8")).trim().split("\n"),
 		).toEqual(Array(runs).fill("ran"));
+	},
+);
+
+// Progress is counted from APT's and dpkg's own lines, which gettext
+// translates. systemd hands a unit its manager's locale (/etc/locale.conf),
+// never the backend's LC_ALL=C, so the unit must set it itself.
+test.each(["pinned", "direct"] as const)(
+	"%s: APT runs in the C locale whatever locale the system manager passes on",
+	async (form) => {
+		await writeFile(
+			join(dir, "apt-get"),
+			'#!/bin/bash\necho "LC_ALL=$LC_ALL" >> "$WRITES"\n',
+		);
+		const argv = forms[form].map((arg) =>
+			arg.replaceAll("/usr/bin/apt-get", join(dir, "apt-get")),
+		);
+		const unit = Bun.spawn(argv, {
+			env: {
+				PATH: process.env.PATH ?? "/usr/bin:/bin",
+				WRITES: join(dir, "writes"),
+				LANG: "es_MX.UTF-8",
+				LANGUAGE: "es_MX:es",
+				...unitEnvironment(units[form]),
+			},
+			stdout: "ignore",
+			stderr: "ignore",
+		});
+		expect(await unit.exited).toBe(0);
+		const runs = form === "pinned" ? 2 : 1;
+		expect(
+			(await readFile(join(dir, "writes"), "utf8")).trim().split("\n"),
+		).toEqual(Array(runs).fill("LC_ALL=C"));
 	},
 );

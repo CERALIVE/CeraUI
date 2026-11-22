@@ -635,6 +635,7 @@ describe("apt-all-packages admission", () => {
 		expect(command.filter((token) => token === "systemd-run")).toHaveLength(1);
 		expect(command).toContain("/usr/bin/flock");
 		const script = command[command.length - 1] ?? "";
+		expect(script).toContain("/usr/bin/apt-get -d -y upgrade --with-new-pkgs");
 		expect(script).toContain(
 			"/usr/bin/apt-get -y --no-download --no-remove -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install cerastream=2026.9.7",
 		);
