@@ -51,7 +51,7 @@ import {
 	runSoftwareUpdateCheck,
 	type SoftwareUpdateError,
 	setSoftwareUpdatePlanReader,
-	startSoftwareUpdate,
+	startSoftwareUpdateWhenSettled,
 	type UpdateStartOutcome,
 } from "../software-updates.ts";
 import { isStreamConfirmedIdle } from "../stream-liveness-source.ts";
@@ -280,7 +280,9 @@ export interface OrchestratorRuntimeDeps {
 	readonly isStreamLive: () => boolean;
 	readonly onlyMeteredCandidateExists: () => Promise<boolean>;
 	readonly runPackageCheck: () => Promise<SoftwareUpdateError>;
-	readonly startPackageInstall: () => UpdateStartOutcome;
+	readonly startPackageInstall: () =>
+		| UpdateStartOutcome
+		| Promise<UpdateStartOutcome>;
 	readonly getPackageInstallWireState: () => UpdateState;
 	readonly stopPackageInstallUnit: () => Promise<void>;
 	readonly killAndRestartRaucForStream: () => Promise<void>;
@@ -433,7 +435,8 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	isStreamLive: () => !isStreamConfirmedIdle(),
 	onlyMeteredCandidateExists: defaultOnlyMeteredCandidateExists,
 	runPackageCheck: runSoftwareUpdateCheck,
-	startPackageInstall: () => startSoftwareUpdate(notePackageCommitSucceeded),
+	startPackageInstall: () =>
+		startSoftwareUpdateWhenSettled(notePackageCommitSucceeded),
 	// Settles the plan only from an exit its own attempt claimed.
 	getPackageInstallWireState: getPlanUpdateState,
 	stopPackageInstallUnit: stopPackageInstallUnitForStream,
@@ -1400,7 +1403,7 @@ async function maybeStartPackageInstall(opts: {
 		}
 		if (isDisruptiveActionPending())
 			return { started: false, reason: "already_updating" };
-		const result = deps.startPackageInstall();
+		const result = await deps.startPackageInstall();
 		if (!result.started) {
 			await deps.quarantine.clearPending();
 			return result; // stays awaiting-idle; retried next tick

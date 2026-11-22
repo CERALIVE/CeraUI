@@ -665,13 +665,34 @@ test("a recorded success is never told once another run has replaced the update'
 	expect(told.map(outcomeOf)).toEqual(told.map(() => "available"));
 }, 120_000);
 
-test("a successor attempt runs under its own unit while the earlier one's unit can never be retired", async () => {
+// systemd's view of the one unit, in order: `start <invocation>` and
+// `cleanup <invocation> retired|failed`.
+async function unitEvents(): Promise<string[]> {
+	return (
+		await readFile(join(scratch, "unit-events.log"), "utf8").catch(() => "")
+	)
+		.split("\n")
+		.filter(Boolean);
+}
+const startsOf = (events: readonly string[]) =>
+	events.filter((e) => e.startsWith("start ")).map((e) => e.slice(6));
+
+async function reconnect(tab: Tab, token: string) {
+	const backend = session("first");
+	await tab.connect(await backend.listening());
+	expect(await tab.call(["auth", "login"], { token })).toEqual({
+		success: true,
+	});
+	return backend;
+}
+
+test("while an earlier update's finished unit cannot be retired the next start is refused and its receipt kept; once it can be, every later start runs", async () => {
 	await writeFile(join(scratch, "apt-get"), QUICK_APT);
-	// Retiring the first unit ever started always fails, as a broken stop would.
-	const failFirst = { FAIL_FIRST_CLEANUP: "1" };
+	// Every retirement fails, as a broken `systemctl stop` would, until lifted.
+	await writeFile(join(scratch, "cleanup.fail"), "");
 	const tab = new Tab();
 	// Update A succeeds; its unit cannot be retired, and CeraUI restarts once.
-	const first = session("first", failFirst);
+	const first = session("first");
 	const token = await signIn(tab, await first.listening());
 	first.send("recover");
 	await first.line("session:recovered");
@@ -682,61 +703,153 @@ test("a successor attempt runs under its own unit while the earlier one's unit c
 	});
 	await tab.until("A's outcome", (s) => outcomeOf(s) === "success");
 	expect(await exitedA).toBe(RESTART_EXIT_CODE);
-
-	// The next lifetime tells A's success again: the positive control.
-	const second = session("first", failFirst);
-	await tab.connect(await second.listening());
-	expect(await tab.call(["auth", "login"], { token })).toEqual({
-		success: true,
-	});
-	second.send("recover");
-	await second.line("session:recovered");
-	await tab.until("A's receipt told again", (s) => outcomeOf(s) === "success");
-	const unitA = (await readFile(join(scratch, "first-unit"), "utf8")).trim();
-
-	// Update B: admitted, launched and finished while A's unit is still there.
-	const exitedB = second.child.exited;
-	tab.moment("B admitted");
-	expect(await tab.call(["system", "startUpdate"])).toMatchObject({
-		success: true,
-	});
-	await tab.until("B's outcome", (s) => {
-		const kind = outcomeOf(s);
-		return (
-			tab.seen.indexOf(s) >
-				tab.seen.findIndex(
-					(e) => e.at === "moment" && e.name === "B admitted",
-				) &&
-			(kind === "success" || kind === "failed")
-		);
-	});
-	const seen = [...tab.seen];
-	const fromB = seen.slice(
-		seen.findIndex((s) => s.at === "moment" && s.name === "B admitted"),
+	const receiptA = await readFile(
+		join(scratch, "software-update.attempt"),
+		"utf8",
 	);
-	// B's own outcome, never a failure because A's unit holds its name.
-	expect(
-		fromB.flatMap((s) =>
-			outcomeOf(s) === "failed" && (s.at === "push" || s.at === "pull")
-				? [(s.status.update_state as { reason?: unknown }).reason]
-				: [],
-		),
-	).toEqual([]);
-	expect(fromB.some((s) => outcomeOf(s) === "success")).toBe(true);
-	expect(await exitedB).toBe(RESTART_EXIT_CODE);
+
+	// The next lifetime tells A's success again and still cannot retire it.
+	let backend = await reconnect(tab, token);
+	backend.send("recover");
+	await backend.line("session:recovered");
+	await tab.until("A's receipt told again", (s) => outcomeOf(s) === "success");
+
+	// Update B: refused before anything is published, A's receipt untouched.
+	tab.moment("B asked");
+	expect(await tab.call(["system", "startUpdate"])).toEqual({
+		success: false,
+		error: "already_updating",
+	});
+	expect(await readFile(join(scratch, "software-update.attempt"), "utf8")).toBe(
+		receiptA,
+	);
+
+	// Once A's unit can be retired, C and then D each run to their own success.
+	await rm(join(scratch, "cleanup.fail"));
+	for (const name of ["C", "D"]) {
+		const exited = backend.child.exited;
+		tab.moment(`${name} asked`);
+		expect(await tab.call(["system", "startUpdate"])).toMatchObject({
+			success: true,
+		});
+		await tab.until(`${name}'s outcome`, (s) => {
+			const asked = tab.seen.findIndex(
+				(e) => e.at === "moment" && e.name === `${name} asked`,
+			);
+			return tab.seen.indexOf(s) > asked && outcomeOf(s) === "success";
+		});
+		expect(await exited).toBe(RESTART_EXIT_CODE);
+		backend = await reconnect(tab, token);
+		backend.send("recover");
+		await backend.line("session:recovered");
+	}
+	await tab.pull();
+	const seen = [...tab.seen];
 	tab.close();
-	// Every retirement named its own attempt's unit: A's never reached B's,
-	// and A's unit is still there as the evidence.
-	const cleanups = (await readFile(join(scratch, "cleanups.log"), "utf8"))
-		.trim()
-		.split("\n");
-	const unitB = cleanups.find((name) => name !== unitA);
-	expect(unitB).toBeDefined();
-	expect(unitB).not.toBe(unitA);
-	expect(cleanups.filter((name) => name === unitB)).toEqual([unitB]);
-	expect(cleanups.at(-1)).toBe(unitB);
-	expect(await readFile(join(scratch, `${unitA}.exit`), "utf8")).toBe("0\n");
+	const at = (name: string) =>
+		seen.findIndex((s) => s.at === "moment" && s.name === name);
+	// No failure was ever told, and B published no update at all.
+	expect(seen.filter((s) => outcomeOf(s) === "failed")).toEqual([]);
+	expect(
+		seen.slice(at("B asked"), at("C asked")).some((s) => {
+			const updating = updatingOf(s);
+			return typeof updating === "object" && updating !== null;
+		}),
+	).toBe(false);
+	// systemd saw three units under the one name, each retired once, and A's
+	// only after the lift, before C's unit started.
+	const events = await unitEvents();
+	const [unitA, unitC, unitD] = startsOf(events);
+	expect(startsOf(events)).toHaveLength(3);
+	expect(events.filter((e) => e === `cleanup ${unitA} retired`)).toHaveLength(
+		1,
+	);
+	expect(events.indexOf(`cleanup ${unitA} retired`)).toBeLessThan(
+		events.indexOf(`start ${unitC}`),
+	);
+	expect(events.indexOf(`cleanup ${unitC} retired`)).toBeLessThan(
+		events.indexOf(`start ${unitD}`),
+	);
+	expect(events.at(-1)).toBe(`cleanup ${unitD} retired`);
+	expect(
+		events
+			.filter((e) => e.endsWith(" failed"))
+			.every((e) => e === `cleanup ${unitA} failed`),
+	).toBe(true);
 }, 120_000);
+
+// Each step after the unit finished, in order: seen finished, its exit
+// recorded, its retirement.
+const TERMINAL_STEPS = ["unit-finished", "exit-recorded", "retire"] as const;
+
+test.each(TERMINAL_STEPS)(
+	"a restart at %s tells the update's success, retires its unit once after the claim, and the next update runs",
+	async (step) => {
+		await writeFile(join(scratch, "apt-get"), QUICK_APT);
+		const tab = new Tab();
+		const first = session("first");
+		const token = await signIn(tab, await first.listening());
+		first.send("recover");
+		await first.line("session:recovered");
+		await tab.until("no unit at boot", (s) => updatingOf(s) === null);
+		first.send(`crash ${step}`);
+		await first.line(`session:crashing ${step}`);
+		expect(await tab.call(["system", "startUpdate"])).toMatchObject({
+			success: true,
+		});
+		await first.child.exited;
+		expect(first.child.signalCode).toBe("SIGKILL");
+		await tab.until("A's backend died", (s) => s.at === "disconnected");
+		tab.moment("crashed");
+		// Killed before the exit was written, or after: the record says which.
+		const record = JSON.parse(
+			await readFile(join(scratch, "software-update.attempt"), "utf8"),
+		) as { readonly exitCode?: number };
+		expect(record.exitCode).toBe(step === "unit-finished" ? undefined : 0);
+		expect(
+			(await unitEvents()).filter((e) => e.startsWith("cleanup ")),
+		).toEqual([]);
+
+		// The next lifetime claims A's success and only then retires A's unit.
+		let backend = await reconnect(tab, token);
+		const exited = backend.child.exited;
+		backend.send("recover");
+		await tab.until("A's outcome", (s) => outcomeOf(s) === "success");
+		if (step === "unit-finished") {
+			// It observed the exit itself: its deliberate restart follows.
+			expect(await exited).toBe(RESTART_EXIT_CODE);
+			backend = await reconnect(tab, token);
+			backend.send("recover");
+		}
+		await backend.line("session:recovered");
+
+		// Update B is admitted, never refused because of A, and succeeds.
+		const exitedB = backend.child.exited;
+		tab.moment("B asked");
+		expect(await tab.call(["system", "startUpdate"])).toMatchObject({
+			success: true,
+		});
+		await tab.until("B's outcome", (s) => {
+			const asked = tab.seen.findIndex(
+				(e) => e.at === "moment" && e.name === "B asked",
+			);
+			return tab.seen.indexOf(s) > asked && outcomeOf(s) === "success";
+		});
+		expect(await exitedB).toBe(RESTART_EXIT_CODE);
+		const seen = [...tab.seen];
+		tab.close();
+		expect(seen.filter((s) => outcomeOf(s) === "failed")).toEqual([]);
+		const events = await unitEvents();
+		const [unitA, unitB] = startsOf(events);
+		expect(events).toEqual([
+			`start ${unitA}`,
+			`cleanup ${unitA} retired`,
+			`start ${unitB}`,
+			`cleanup ${unitB} retired`,
+		]);
+	},
+	120_000,
+);
 
 // Each step between accepting an update and starting its unit, in order.
 const ADMISSION_STEPS = [

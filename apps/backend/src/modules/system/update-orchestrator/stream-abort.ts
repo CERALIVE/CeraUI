@@ -17,7 +17,7 @@
 import { logger } from "../../../helpers/logger.ts";
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
 import { abortAptTransferForStream } from "../apt-transfer-abort.ts";
-import { inFlightSoftwareUpdateUnit } from "../software-update-process.ts";
+import { SOFTWARE_UPDATE_UNIT } from "../software-update-service-contract.ts";
 import { OsStageError } from "./os-stage-error.ts";
 import { parseOsStageSystemdProperties } from "./os-stage-systemd.ts";
 
@@ -177,7 +177,7 @@ function scheduleRaucEscalation(
 export async function stopPackageInstallUnitForStream(): Promise<void> {
 	abortAptTransferForStream();
 	const result = await spawnWithTimeout(
-		["systemctl", "stop", inFlightSoftwareUpdateUnit()],
+		["systemctl", "stop", SOFTWARE_UPDATE_UNIT],
 		{ timeoutMs: SYSTEMD_COMMAND_TIMEOUT_MS },
 	);
 	if (result.exitCode !== 0) {

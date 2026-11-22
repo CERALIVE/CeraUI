@@ -15,6 +15,8 @@ export class PendingPackageSuccessError extends Error {
 
 type PendingSuccess = {
 	readonly baseline: OrchestratorState;
+	/** The attempt's claim on its success, confirmed again before it is persisted. */
+	readonly still?: () => boolean;
 	readonly permission: ReturnType<typeof Promise.withResolvers<boolean>>;
 	readonly escalation: PendingSuccessEscalation;
 	intent: OrchestratorState | null;
@@ -52,11 +54,12 @@ class PendingSuccessFence {
 		this.#trackedBaseline = baseline;
 	}
 
-	observe(): void {
+	observe(still?: () => boolean): void {
 		if (!this.#port || this.#success) return;
 		const baseline = this.#trackedBaseline ?? this.#port.snapshot();
 		this.#success = {
 			baseline,
+			...(still ? { still } : {}),
 			intent: successState(baseline, this.#now()),
 			permission: Promise.withResolvers<boolean>(),
 			escalation: new PendingSuccessEscalation(),
@@ -75,6 +78,7 @@ class PendingSuccessFence {
 			);
 		this.#success = {
 			baseline: retained,
+			...(this.#success?.still ? { still: this.#success.still } : {}),
 			intent,
 			permission: this.#success?.permission ?? Promise.withResolvers<boolean>(),
 			escalation: this.#success?.escalation ?? new PendingSuccessEscalation(),
@@ -138,6 +142,7 @@ class PendingSuccessFence {
 		if (
 			!lease.held() ||
 			port.pending() ||
+			pending.still?.() === false ||
 			port.snapshot() !== current ||
 			!samePackageCompletion(pending.baseline, current) ||
 			!same(disk, current)
@@ -187,6 +192,7 @@ class PendingSuccessFence {
 			if (
 				!lease.held() ||
 				port.pending() ||
+				pending.still?.() === false ||
 				port.snapshot() !== before ||
 				!samePackageCompletion(pending.baseline, before) ||
 				!matches

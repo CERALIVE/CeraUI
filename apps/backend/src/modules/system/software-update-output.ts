@@ -39,15 +39,14 @@ const ATTEMPT_FILE = "software-update.attempt";
 const ATTEMPT_MAX_BYTES = 1024;
 const exitCodeSchema = z.number().int().min(0).max(255);
 const invocationSchema = z.string().regex(/^[0-9a-f]{32}$/);
-const attemptIdSchema = z
-	.string()
-	.regex(
-		/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-	);
 const attemptSchema = z
 	.object({
 		schema: z.literal(2),
-		attempt: attemptIdSchema,
+		attempt: z
+			.string()
+			.regex(
+				/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+			),
 		phase: z.enum(["accepted", "launched"]),
 		uptimeMs: z.number().int().nonnegative(),
 		invocation: invocationSchema.optional(),
@@ -61,15 +60,6 @@ const attemptSchema = z
 			.string()
 			.regex(/^[0-9a-f]{64}$/)
 			.optional(),
-		leftover: z
-			.object({
-				attempt: attemptIdSchema,
-				invocation: invocationSchema,
-				exitCode: exitCodeSchema,
-				drained: z.boolean().optional(),
-			})
-			.strict()
-			.optional(),
 	})
 	.strict();
 
@@ -77,8 +67,9 @@ const attemptSchema = z
  * The one durable record of the current update attempt; replay and
  * adjudication read only this. `accepted`: admitted, no unit started yet.
  * `launched`: its unit was about to start; `exitCode` (with the unit's
- * `invocation` and the `transcript` it was read from) once an observer saw it exit. `leftover`: an older attempt's
- * recorded exit, kept only so a launch may retire that finished unit.
+ * `invocation` and the `transcript` it was read from) once an observer saw it
+ * exit. One unit name serves every attempt, so a new attempt is admitted only
+ * once the previous attempt's unit is gone: nothing older is ever kept here.
  */
 export type SoftwareUpdateAttempt = z.infer<typeof attemptSchema>;
 

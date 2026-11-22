@@ -102,12 +102,15 @@ vi.mock("$lib/stores/offline-state.svelte", () => ({
 	getShouldShowOfflinePage: () => false,
 }));
 
-vi.mock("$lib/stores/connection-ux.svelte", () => ({
+// The drop stamp stays null unless a case sets it, as a drop the layout saw.
+vi.mock("$lib/stores/connection-ux.svelte", async () => ({
 	deriveConnectionSurfaceUx: () => ({
 		showOfflineBanner: false,
 		showAuthTimeout: false,
 	}),
-	getDisconnectedSince: () => null,
+	getDisconnectedSince: (
+		await import("../tests/fixtures/disconnected-since.svelte.ts")
+	).getDisconnectedSince,
 	getGraceNow: () => 0,
 	markAuthenticated: vi.fn(),
 	clearSessionExpired: vi.fn(),
@@ -134,6 +137,7 @@ import {
 	initSubscriptions,
 	resetState,
 } from "../lib/rpc/subscriptions.svelte.ts";
+import { setDisconnectedSince } from "../tests/fixtures/disconnected-since.svelte.ts";
 
 beforeAll(() => {
 	window.matchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -179,6 +183,7 @@ beforeEach(() => {
 	localStorage.setItem("auth", "token-abc");
 	transport.hydratedStatus = {};
 	transport.hydrateCalls = 0;
+	setDisconnectedSince(null);
 	resetState();
 	initSubscriptions();
 });
@@ -287,6 +292,32 @@ describe("Layout — the update overlay survives a backend restart", () => {
 		expect(bar()?.getAttribute("aria-valuenow")).toBe("60");
 		expect(bar()?.getAttribute("aria-valuemax")).toBe("100");
 		expect(bar()?.getAttribute("aria-valuetext")).toBe("60%");
+	});
+
+	it("an unchanged frame delivered after a drop shows its number again", async () => {
+		updating({ ...installing, percent: 60 });
+		render(Layout);
+		const bar = () =>
+			document.querySelector(
+				'[data-testid="updating-overlay"] [role="progressbar"]',
+			);
+		await waitFor(() =>
+			expect(bar()?.getAttribute("aria-valuenow")).toBe("60"),
+		);
+		// The socket drops: the held 60 is no longer live.
+		transport.connection?.("disconnected");
+		setDisconnectedSince(1);
+		flushSync();
+		expect(bar()?.getAttribute("aria-valuenow")).toBeNull();
+		// Back, re-authenticated, but nothing delivered on the new link yet.
+		transport.connection?.("connected");
+		setDisconnectedSince(null);
+		await vi.waitFor(() => expect(transport.hydrateCalls).toBeGreaterThan(0));
+		flushSync();
+		expect(bar()?.getAttribute("aria-valuenow")).toBeNull();
+		// The device's first frame is the same 60: delivered now, so live.
+		updating({ ...installing, percent: 60 });
+		expect(bar()?.getAttribute("aria-valuenow")).toBe("60");
 	});
 
 	it("starts the next install from its own phase, not the last one's", () => {

@@ -18,6 +18,7 @@ import {
 	RECORDED_OUTCOME_REPLAY_MS,
 	recoverDetachedAptUpgrade,
 	runDetachedAptAll,
+	settleKeptSoftwareUpdateUnit,
 } from "../modules/system/software-update-process.ts";
 import {
 	beginSoftwareUpdateRecovery,
@@ -334,7 +335,7 @@ test("a retirement retry inspects again and leaves a unit that replaced the one 
 	expect(unit.retired).toEqual([]);
 });
 
-test("a unit that cannot be retired keeps its exit status and the next launch retires it", async () => {
+test("a unit that cannot be retired keeps its exit status and the next start settles it first", async () => {
 	let broken = true;
 	const unit = fakeUnit({
 		files: { stdout: "done\n", stderr: "" },
@@ -351,7 +352,13 @@ test("a unit that cannot be retired keeps its exit status and the next launch re
 		0,
 	);
 	expect(unit.cleanupAttempts()).toBeGreaterThan(1);
+	// No launch starts past it: the start settles it first, claimed then retired.
+	await expect(
+		runDetachedAptAll(args, "any", quiet, unit.deps),
+	).rejects.toBeInstanceOf(DetachedAptServiceAlreadyExistsError);
+	expect(unit.started).toHaveLength(1);
 	broken = false;
+	expect(await settleKeptSoftwareUpdateUnit(unit.deps)).toBe(true);
 	expect(await runDetachedAptAll(args, "any", quiet, unit.deps)).toBe(0);
 	expect(unit.retired).toEqual(["stop", "stop"]);
 });
@@ -632,7 +639,7 @@ test.each([
 	["a running unit", {}, false],
 	["a finished unit nobody recorded", { finished: true }, false],
 	[
-		"a finished, recorded unit it retires first",
+		"a finished, recorded unit the start settles first",
 		{ finished: true, recorded: { exitCode: 0 } },
 		true,
 	],
@@ -640,15 +647,20 @@ test.each([
 	"a launch starts past %s only when no unit is left",
 	async (_name, o, starts) => {
 		const unit = fakeUnit({ files: installing, exitCode: 0, ...o });
-		const launched = runDetachedAptAll(args, "any", quiet, unit.deps);
+		// A launch never starts past a unit, nor retires one itself.
+		await expect(
+			runDetachedAptAll(args, "any", quiet, unit.deps),
+		).rejects.toBeInstanceOf(DetachedAptServiceAlreadyExistsError);
+		expect(unit.started).toEqual([]);
 		if (starts) {
-			await launched;
+			// The start settles it: its recorded outcome claimed, then the unit retired.
+			expect(await settleKeptSoftwareUpdateUnit(unit.deps)).toBe(true);
 			expect(unit.retired[0]).toBe("stop");
+			await runDetachedAptAll(args, "any", quiet, unit.deps);
 			expect(unit.started).toHaveLength(1);
 		} else {
-			await expect(launched).rejects.toBeInstanceOf(
-				DetachedAptServiceAlreadyExistsError,
-			);
+			if (o.finished)
+				expect(await settleKeptSoftwareUpdateUnit(unit.deps)).toBe(false);
 			expect(unit.cleaned()).toBe(0);
 			expect(unit.started).toEqual([]);
 		}

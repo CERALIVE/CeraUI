@@ -4,7 +4,8 @@
 // serves the real RPC WebSocket handler on a kernel-assigned loopback port,
 // and runs recovery when the test writes "recover" (twice, as the
 // orchestrator's resume and main's standalone call do). "park <step>" makes the
-// next update wait forever at that step, so the test can kill CeraUI there.
+// next update wait forever at that step, so the test can kill CeraUI there;
+// "crash <step>" kills this backend at once at a step after the unit finished.
 import { writeFile } from "node:fs/promises";
 import { loadConfig } from "../../modules/config.ts";
 import { setup } from "../../modules/setup.ts";
@@ -42,6 +43,10 @@ for (const event of ["uncaughtException", "unhandledRejection"] as const)
 	});
 
 let parkAt: string | undefined;
+let crashAt: string | undefined;
+function crash(step: string): void {
+	if (crashAt === step) process.kill(process.pid, "SIGKILL");
+}
 async function park(step: string): Promise<void> {
 	if (parkAt !== step) return;
 	process.stdout.write(`session:parked ${step}\n`);
@@ -92,13 +97,24 @@ const unit = restartTestUnit(
 				failFirstStdoutRead: true,
 				holdSecondStdoutRead: `${scratch}/second-read.fifo`,
 			}
-		: {
-				failCleanup: role === "boot",
-				failCleanupOfFirst: process.env.FAIL_FIRST_CLEANUP === "1",
-			},
+		: { failCleanup: role === "boot" },
 );
 setDetachedAptServiceDepsForTest({
 	...unit,
+	inspect: async () => {
+		const state = await unit.inspect();
+		if (state.kind === "finished") crash("unit-finished");
+		return state;
+	},
+	updateAttempt: (change, options) => {
+		const written = unit.updateAttempt(change, options);
+		if (written?.exitCode !== undefined) crash("exit-recorded");
+		return written;
+	},
+	cleanup: async (state) => {
+		crash("retire");
+		return unit.cleanup(state);
+	},
 	prepareOutput: async () => {
 		await park("prepare-output");
 		return unit.prepareOutput();
@@ -128,6 +144,11 @@ for await (const line of console) {
 		// A restart already decided would have ended the process first.
 		await new Promise((resolve) => setImmediate(resolve));
 		process.exit(0);
+	}
+	if (line.startsWith("crash ")) {
+		crashAt = line.slice("crash ".length).trim();
+		process.stdout.write(`session:crashing ${crashAt}\n`);
+		continue;
 	}
 	if (line.startsWith("park ")) {
 		parkAt = line.slice("park ".length).trim();

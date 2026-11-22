@@ -11,9 +11,11 @@ describe("createLiveProgress", () => {
 		expect(live(at60, at60, false)).toEqual(at60);
 		// The connection drops: the held number is no longer live.
 		expect(live(at60, at60, true)).toEqual(installing);
-		// Back, but the device has sent nothing new yet.
-		expect(live(at60, at60, false)).toEqual(installing);
-		// A new frame on this connection is live again.
+		// Back, but the frame has not been delivered on this connection yet.
+		expect(live(at60, at60, true)).toEqual(installing);
+		// Delivered again, unchanged (the store keeps its identity): live again.
+		expect(live(at60, at60, false)).toEqual(at60);
+		// A new frame on this connection is live too.
 		const at80 = { ...installing, percent: 80 };
 		expect(live(at80, at80, false)).toEqual(at80);
 	});

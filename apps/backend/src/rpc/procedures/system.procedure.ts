@@ -62,7 +62,7 @@ import {
 import { getSensors } from "../../modules/system/sensors.ts";
 import {
 	aptUpdatesEnabled,
-	startSoftwareUpdate,
+	startSoftwareUpdateWhenSettled,
 	triggerManualUpdateCheck,
 } from "../../modules/system/software-updates.ts";
 import {
@@ -223,8 +223,8 @@ export const rebootProcedure = authedProcedure
 // Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
 export const startUpdateProcedure = authedProcedure
 	.output(successResponseSchema)
-	.handler(() => {
-		const outcome = startSoftwareUpdate();
+	.handler(async () => {
+		const outcome = await startSoftwareUpdateWhenSettled();
 		if (!outcome.started) {
 			logger.info(`System: software update refused (${outcome.reason})`);
 			return { success: false, error: outcome.reason };

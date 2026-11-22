@@ -2,12 +2,13 @@ import type { UpdateProgress } from "@ceraui/rpc/schemas";
 
 /**
  * A number is shown only while it is live: the device's own latest frame,
- * received on this connection, carries it in the same phase, and it is not
- * below a number already shown in that phase. While the connection is down,
- * and after it returns until the device sends a frame again, the held phase
- * is shown without it (the indeterminate bar), never an older number.
+ * delivered on the current connection, carries it in the same phase, and it
+ * is not below a number already shown in that phase. From a drop until the
+ * frame is delivered again on the new connection (an identical frame counts),
+ * the held phase is shown without it (the indeterminate bar), never an older
+ * number.
  */
-/** Set by the layout: whether the connection to the device is down now. */
+/** Set by the layout: whether the connection dropped since `field` was last delivered. */
 export const CONNECTION_DROPPED = Symbol("update-connection-dropped");
 
 const phaseOf = (progress: UpdateProgress) =>
@@ -18,7 +19,6 @@ const phaseOf = (progress: UpdateProgress) =>
 			: 0;
 
 export function createLiveProgress() {
-	let beforeDrop: unknown;
 	let shownBefore:
 		| { readonly phase: number; readonly percent: number }
 		| undefined;
@@ -27,14 +27,12 @@ export function createLiveProgress() {
 		frame: UpdateProgress | null | undefined,
 		dropped: boolean,
 	): UpdateProgress | undefined => {
-		if (dropped) beforeDrop = frame;
 		if (!shown) shownBefore = undefined;
 		if (shown?.percent === undefined) return shown;
 		const phase = phaseOf(shown);
 		if (shownBefore && shownBefore.phase !== phase) shownBefore = undefined;
 		if (
 			!dropped &&
-			frame !== beforeDrop &&
 			frame &&
 			phaseOf(frame) === phase &&
 			frame.percent === shown.percent &&

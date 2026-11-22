@@ -15,29 +15,9 @@ import {
 import { softwareUpdateOutputPaths } from "./software-update-output.ts";
 import { parseOsStageSystemdProperties } from "./update-orchestrator/os-stage-systemd.ts";
 
-/** The fixed name: only an older release starts a unit under it now. */
 export const SOFTWARE_UPDATE_UNIT = "ceralive-software-update.service";
 export const SOFTWARE_UPDATE_DESCRIPTION = "CeraLive software update";
 export const SOFTWARE_UPDATE_FRAGMENT_PATH = `/run/systemd/transient/${SOFTWARE_UPDATE_UNIT}`;
-const ATTEMPT_ID =
-	/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const ATTEMPT_UNIT =
-	/^ceralive-software-update-[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.service$/;
-
-/**
- * Each attempt's own unit: a stop or reset-failed by this name can only ever
- * reach that attempt's unit, never a successor's.
- */
-export function softwareUpdateUnitFor(attempt: string): string {
-	if (!ATTEMPT_ID.test(attempt))
-		throw new DetachedAptServiceIdentityError("attempt id is not a UUID");
-	return `ceralive-software-update-${attempt}.service`;
-}
-
-/** An attempt's unit or an older release's fixed one. */
-export function isSoftwareUpdateUnit(unit: string): boolean {
-	return unit === SOFTWARE_UPDATE_UNIT || ATTEMPT_UNIT.test(unit);
-}
 export const SOFTWARE_UPDATE_LOCK = "/run/lock/ceralive-update.lock";
 
 const APT_UPGRADE_PREFIX = [
@@ -165,12 +145,7 @@ export function expectedAptAllScript(
 	return `/usr/bin/apt-get -d -y upgrade --with-new-pkgs${family.length ? ` ${family.join(" ")}` : ""} && /usr/bin/apt-get ${install.join(" ")}`;
 }
 
-export function validateDetachedAptServiceIdentity(
-	output: string,
-	unit: string = SOFTWARE_UPDATE_UNIT,
-): void {
-	if (!isSoftwareUpdateUnit(unit))
-		throw new DetachedAptServiceIdentityError("Id does not match");
+export function validateDetachedAptServiceIdentity(output: string): void {
 	if (
 		output.split("\n").filter((line) => line.startsWith("ExecStart="))
 			.length !== 1
@@ -183,8 +158,8 @@ export function validateDetachedAptServiceIdentity(
 	if (!properties)
 		throw new DetachedAptServiceIdentityError("unit properties contradictory");
 	const expected = new Map([
-		["Id", unit],
-		["FragmentPath", `/run/systemd/transient/${unit}`],
+		["Id", SOFTWARE_UPDATE_UNIT],
+		["FragmentPath", SOFTWARE_UPDATE_FRAGMENT_PATH],
 		["Description", SOFTWARE_UPDATE_DESCRIPTION],
 		["Transient", "yes"],
 		["Type", "exec"],

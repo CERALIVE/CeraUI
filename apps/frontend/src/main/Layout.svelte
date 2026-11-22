@@ -73,7 +73,25 @@ $effect(() => (topBands ? publishHeight(topBands, '--top-bands-height') : undefi
 // after a reconnect or a backend restart never moves it back.
 let shownInstall: UpdateProgress | undefined;
 const liveInstall = createLiveProgress();
-setContext(CONNECTION_DROPPED, () => getDisconnectedSince() !== null);
+// A field's number is stale from a drop until the status ingestion announces
+// that field delivered again; an identical frame counts, though the store keeps
+// the equal value's identity.
+let stale: Record<string, boolean> = {};
+let deliveries = $state(0);
+$effect(() => {
+	const delivered = (event: Event) => {
+		stale[(event as CustomEvent<string>).detail] = false;
+		deliveries = deliveries + 1;
+	};
+	addEventListener('ceralive:progress-delivered', delivered);
+	return () => removeEventListener('ceralive:progress-delivered', delivered);
+});
+const dropped = (field: string) => {
+	deliveries;
+	if (getDisconnectedSince() !== null) stale = { updating: true, update_state: true };
+	return stale[field] === true;
+};
+setContext(CONNECTION_DROPPED, dropped);
 const updatingStatus = $derived.by(() => {
 	const updating = getUpdating();
 	const install = legacyInstall(updating);
@@ -84,7 +102,7 @@ const updatingStatus = $derived.by(() => {
 	return liveInstall(
 		shownInstall,
 		typeof updating === 'object' ? updating : undefined,
-		getDisconnectedSince() !== null,
+		dropped('updating'),
 	);
 });
 // This tree receives the terminal frame, so it owns the announcement, once per

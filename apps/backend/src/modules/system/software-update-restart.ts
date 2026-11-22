@@ -8,7 +8,16 @@ export type CommitExitHook = (() => void) | (() => Promise<boolean>);
 export async function finishSoftwareUpdateRestart(
 	onCommitSucceeded: CommitExitHook | undefined,
 	exit: () => void,
+	/** The success's claim, confirmed again at each later point of use. */
+	still: () => boolean = () => true,
 ): Promise<void> {
+	const withheld = () => {
+		markBootDegraded("software-update-unproven");
+		logger.error(
+			"Software update restart withheld; the claimed success no longer holds",
+		);
+	};
+	if (!still()) return withheld();
 	try {
 		const permission =
 			onCommitSucceeded && pendingPackageSuccess.invoke(onCommitSucceeded);
@@ -30,6 +39,7 @@ export async function finishSoftwareUpdateRestart(
 		);
 		if (!(await pendingPackageSuccess.waitForDurability())) return;
 	}
+	if (!still()) return withheld();
 	// Intentionally outside the persistence catch: a deliberate exit cannot be swallowed.
 	exit();
 }

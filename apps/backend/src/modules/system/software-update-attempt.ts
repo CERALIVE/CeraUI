@@ -11,20 +11,16 @@
 /**
  * The one owner of the update attempt record. Nothing else reads or writes
  * it: admission, launch, invocation binding, the exit, and adoption are the
- * only writes, and a recorded exit is used only through `claimOutcome` (for
- * the attempt's own effects, and for the orchestrator's plan when the plan
- * admitted it) and `claimRetirement` (for retiring a finished unit). Each claim
- * compares everything in one synchronous step after its last await.
+ * only writes, and a recorded exit is used only through `claimOutcome`: for
+ * the attempt's own effects, for the orchestrator's plan when the plan
+ * admitted it, and for retiring the finished unit. Each claim compares
+ * everything in one synchronous step after its last await.
  */
 
 import { createHash, randomUUID } from "node:crypto";
 import { uptime } from "node:os";
 import type { SoftwareUpdateAttempt } from "./software-update-output.ts";
 import type { DetachedAptServiceDeps } from "./software-update-service.ts";
-import {
-	SOFTWARE_UPDATE_UNIT,
-	softwareUpdateUnitFor,
-} from "./software-update-service-contract.ts";
 
 /** How long a gone unit's recorded exit is told to reconnecting tabs. */
 export const RECORDED_OUTCOME_REPLAY_MS = 30 * 60_000;
@@ -80,30 +76,6 @@ export function softwarePlanKey(
 	return createHash("sha256").update(canonical).digest("hex");
 }
 
-/** The units the record names: this attempt's (once launched) and the earlier attempt's. */
-export function recordedUnits(deps: AttemptDeps): {
-	readonly own?: string;
-	readonly leftover?: string;
-} {
-	const record = readRecord(deps);
-	return {
-		...(record?.phase === "launched"
-			? { own: softwareUpdateUnitFor(record.attempt) }
-			: {}),
-		...(record?.leftover
-			? { leftover: softwareUpdateUnitFor(record.leftover.attempt) }
-			: {}),
-	};
-}
-
-/** The unit an in-flight update runs in: this attempt's, else an older release's fixed one. */
-export function inFlightUnit(deps: AttemptDeps): string {
-	const record = readRecord(deps);
-	return record?.phase === "launched" && record.exitCode === undefined
-		? softwareUpdateUnitFor(record.attempt)
-		: SOFTWARE_UPDATE_UNIT;
-}
-
 function readRecord(deps: AttemptDeps): SoftwareUpdateAttempt | null {
 	try {
 		return deps.readAttempt();
@@ -126,9 +98,10 @@ export function currentAttempt(deps: AttemptDeps): CurrentAttempt | null {
 }
 
 /**
- * A new attempt, written before anything is published or started. An older
- * attempt's recorded exit stays only as a `leftover` a launch may retire.
- * Throws when it cannot be written; an unreadable record is replaced.
+ * A new attempt, written before anything is published or started. Admission
+ * runs only once the previous attempt's unit is gone (its outcome claimed
+ * first), so the record it replaces is no longer evidence of a unit. Throws
+ * when it cannot be written; an unreadable record is replaced.
  */
 export function admitAttempt(
 	deps: AttemptDeps,
@@ -136,25 +109,13 @@ export function admitAttempt(
 ): string {
 	const attempt = randomUUID();
 	deps.updateAttempt(
-		(previous) => {
-			const leftover =
-				previous?.exitCode !== undefined && previous.invocation !== undefined
-					? {
-							attempt: previous.attempt,
-							invocation: previous.invocation,
-							exitCode: previous.exitCode,
-							drained: previous.drained === true,
-						}
-					: previous?.leftover;
-			return {
-				schema: 2,
-				attempt,
-				phase: "accepted",
-				uptimeMs: softwareUpdateUptimeMs(deps),
-				...(plan ? { plan } : {}),
-				...(leftover ? { leftover } : {}),
-			};
-		},
+		() => ({
+			schema: 2,
+			attempt,
+			phase: "accepted",
+			uptimeMs: softwareUpdateUptimeMs(deps),
+			...(plan ? { plan } : {}),
+		}),
 		{ replaceUnreadable: true },
 	);
 	return attempt;
@@ -189,7 +150,6 @@ export function launchAttempt(deps: AttemptDeps, admitted?: string): string {
 					...(current?.phase === "accepted" && current.plan
 						? { plan: current.plan }
 						: {}),
-					...(current?.leftover ? { leftover: current.leftover } : {}),
 				},
 	);
 	if (admitted !== undefined && launched?.attempt !== admitted)
@@ -247,7 +207,6 @@ export function recordAttemptExit(
 			phase: "launched",
 			uptimeMs: softwareUpdateUptimeMs(deps),
 			...(current?.plan ? { plan: current.plan } : {}),
-			...(current?.leftover ? { leftover: current.leftover } : {}),
 			...(exit.invocation ? { invocation: exit.invocation } : {}),
 			exitCode: exit.exitCode,
 			drained: exit.drained,
@@ -290,19 +249,23 @@ export function adoptUnit(
 
 /**
  * The only way to use a recorded exit. It is returned only while the record
- * is still `attempt`'s, launched, with an exit from its bound invocation (and
- * `invocation` when given), read from the stdout file that is there now, and,
- * with `fresh`, recorded within the replay window. All of it is compared in
+ * is still `attempt`'s, launched, with an exit from its bound invocation,
+ * read from the stdout file that is there now, and, with `fresh`, recorded
+ * within the replay window. `unit`: the finished unit systemd shows now, which
+ * must be that same invocation with that same exit. All of it is compared in
  * one synchronous step after the last await, so an admission meanwhile wins.
  */
 export async function claimOutcome(
 	deps: AttemptDeps,
 	attempt: string,
 	{
-		invocation,
+		unit,
 		fresh = false,
 	}: {
-		readonly invocation?: string | undefined;
+		readonly unit?: {
+			readonly invocation?: string | undefined;
+			readonly exitCode: number;
+		};
 		readonly fresh?: boolean;
 	} = {},
 ): Promise<ClaimedOutcome | null> {
@@ -313,7 +276,9 @@ export async function claimOutcome(
 		record.phase !== "launched" ||
 		record.exitCode === undefined ||
 		record.invocation === undefined ||
-		(invocation !== undefined && record.invocation !== invocation)
+		(unit !== undefined &&
+			(unit.invocation !== record.invocation ||
+				unit.exitCode !== record.exitCode))
 	)
 		return null;
 	// Any later run, an older release's included, makes a new stdout file.
@@ -346,26 +311,4 @@ export async function claimOutcome(
 			);
 		},
 	};
-}
-
-/**
- * Whether the finished unit `invocation` may be retired now: its exit is
- * recorded and its transcript was read, as the current attempt's own exit or
- * an older attempt's leftover. An unread transcript keeps the unit.
- */
-export function claimRetirement(
-	deps: AttemptDeps,
-	invocation: string | undefined,
-): boolean {
-	if (invocation === undefined) return false;
-	const record = readRecord(deps);
-	const own =
-		record?.phase === "launched" &&
-		record.exitCode !== undefined &&
-		record.invocation === invocation &&
-		record.drained === true;
-	const leftover =
-		record?.leftover?.invocation === invocation &&
-		record.leftover.drained === true;
-	return own || leftover;
 }

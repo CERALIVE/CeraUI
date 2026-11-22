@@ -125,9 +125,12 @@ import {
 	DetachedAptServiceVanishedError,
 	type RetirementOutcome,
 	recoverDetachedAptUpgrade,
+	resetSoftwareUpdateUnitForTest,
 	runDetachedAptAll,
 	runDetachedAptUpgrade,
 	type SoftwareUpdateOutputHandlers,
+	settleKeptSoftwareUpdateUnit,
+	softwareUpdateUnitKept,
 } from "./software-update-process.ts";
 import {
 	isSoftwareUpdateRecoveryInconclusive,
@@ -366,6 +369,11 @@ function claimedByCurrentPlan(claim: ClaimedOutcome | null): boolean {
 	return plan !== undefined && claim?.plan === plan;
 }
 
+/** At each later point of use: the record still holds the claim (and, for a plan's effect, that plan is the saved one). */
+function stillClaimed(claim: ClaimedOutcome, forPlan = true): () => boolean {
+	return () => claim.confirm() && (!forPlan || claimedByCurrentPlan(claim));
+}
+
 // The admitted attempt this process launches, and nothing else does.
 let admittedAttempt: string | undefined;
 
@@ -454,6 +462,7 @@ export function resetSoftwareUpdateState(): void {
 	delayedSoftwareUpdateStart = undefined;
 	softwareUpdateRecoveryRetryTimer = undefined;
 	resetSoftwareUpdateRecovery();
+	resetSoftwareUpdateUnitForTest();
 	lastInstallUnitVerdict = "not-probed";
 	aptDiscoveryRunning = false;
 	softUpdateStatus = null;
@@ -1586,10 +1595,16 @@ export function startSoftwareUpdate(
 	if (!aptUpdatesEnabled()) return refuseUpdateStart("updates_disabled");
 	if (!isStreamConfirmedIdle()) return refuseUpdateStart("streaming");
 	if (isUpdating()) return refuseUpdateStart("already_updating");
-	if (isSoftwareUpdateRecoveryInconclusive()) {
+	// Recovery runs first: until it has looked at the unit, a start could
+	// replace the record of a unit that survived the restart.
+	if (softUpdateRecoveryPending || isSoftwareUpdateRecoveryInconclusive()) {
 		return refuseUpdateStart("check_unavailable");
 	}
 	if (recoveredOwnershipPending) return refuseUpdateStart("check_unavailable");
+	// One unit name serves every attempt: while the previous attempt's finished
+	// unit is still there, a new attempt would replace the record of an outcome
+	// nobody has claimed. `startSoftwareUpdateWhenSettled` settles it first.
+	if (softwareUpdateUnitKept()) return refuseUpdateStart("already_updating");
 	// A start already waiting for discovery admits its own attempt then.
 	if (delayedSoftwareUpdateStart) return refuseUpdateStart("already_updating");
 	// Before anything is published or started: a restart from here on finds
@@ -1641,6 +1656,21 @@ export function startSoftwareUpdate(
 	}
 
 	return softwareUpdateRunner(onCommitSucceeded);
+}
+
+/**
+ * Every start the device is asked for: a finished unit left in place is
+ * settled first (its outcome claimed, then the unit retired), then the start
+ * is admitted in the same step, with nothing awaited between.
+ */
+export function startSoftwareUpdateWhenSettled(
+	onCommitSucceeded?: () => void,
+): UpdateStartOutcome | Promise<UpdateStartOutcome> {
+	if (!softwareUpdateUnitKept() || shouldUseMocks())
+		return startSoftwareUpdate(onCommitSucceeded);
+	return settleKeptSoftwareUpdateUnit().then(() =>
+		startSoftwareUpdate(onCommitSucceeded),
+	);
 }
 
 type SoftwareUpdateProcessMonitor = {
@@ -1824,9 +1854,17 @@ export function createSoftwareUpdateProcessMonitor(
 		}
 
 		// Keep the in-flight latch until cleanup settles; its result cannot change code.
-		// A recovered unit's cache waits until startup hands the unit over.
+		// A recovered unit's cache waits until startup hands the unit over, and
+		// an outcome nobody claimed takes no terminal effect at all.
 		const cleaned =
-			ownership !== undefined || (await cleanAptCache(defaultAptSpaceDeps.run));
+			code === OUTCOME_UNKNOWN ||
+			ownership !== undefined ||
+			(await cleanAptCache(defaultAptSpaceDeps.run));
+		// Confirmed again after the last await, right where it is used.
+		if (claim && !claim.confirm()) {
+			claim = null;
+			code = OUTCOME_UNKNOWN;
+		}
 		lastCleanupWarning =
 			code === 0 && !cleaned ? "post_clean_failed" : undefined;
 		// The outcome is known: initial pushes may report it again.
@@ -1873,8 +1911,14 @@ export function createSoftwareUpdateProcessMonitor(
 			if (claim) exitOutcome = { claimed: claim };
 			lastUpdateSucceeded = code === 0;
 			// Only the current saved plan's own claimed success is its to commit.
-			if (code === 0 && owned && !ownership && claimedByCurrentPlan(claim))
-				pendingPackageSuccess.observe();
+			if (
+				code === 0 &&
+				owned &&
+				!ownership &&
+				claim &&
+				claimedByCurrentPlan(claim)
+			)
+				pendingPackageSuccess.observe(stillClaimed(claim));
 			lastUpdateFailure = failure;
 			softUpdateStatus.result = code === 0 ? code : aptErr;
 			const settledStatus = softUpdateStatus;
@@ -1938,7 +1982,7 @@ export function createSoftwareUpdateProcessMonitor(
 				let owned = false;
 				try {
 					owned = await ownership;
-					if (owned) {
+					if (owned && code !== OUTCOME_UNKNOWN) {
 						hook = exitHook?.() ?? onCommitSucceeded;
 						const cleaned = await cleanAptCache(defaultAptSpaceDeps.run);
 						if (code === 0 && !cleaned) {
@@ -1986,18 +2030,24 @@ export function createSoftwareUpdateProcessMonitor(
 				}
 				// Only the current saved plan's own attempt commits the plan.
 				const planHook = claimedByCurrentPlan(claim) ? hook : undefined;
-				if (ownership && planHook) pendingPackageSuccess.observe();
-				// Persist the observed commit success before deliberately exiting.
-				void finishSoftwareUpdateRestart(planHook, () => {
-					if (rebootAfterUpgrade && !planHook) {
-						rebootAfterUpdate();
-					} else {
-						invariant(
-							false,
-							"software update complete; exiting to restart CeraUI",
-						);
-					}
-				});
+				const still = stillClaimed(claim, planHook !== undefined);
+				if (ownership && planHook) pendingPackageSuccess.observe(still);
+				// Persist the observed commit success before deliberately exiting;
+				// the claim is confirmed again right before the exit.
+				void finishSoftwareUpdateRestart(
+					planHook,
+					() => {
+						if (rebootAfterUpgrade && !planHook) {
+							rebootAfterUpdate();
+						} else {
+							invariant(
+								false,
+								"software update complete; exiting to restart CeraUI",
+							);
+						}
+					},
+					still,
+				);
 			}
 		});
 		return settled.then(() => undefined);

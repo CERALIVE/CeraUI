@@ -28,8 +28,8 @@ import {
 	expectedAptAllScript,
 	InvalidDetachedAptUpgradeArgumentsError,
 	isExpectedAptUpgradeArgv,
-	isSoftwareUpdateUnit,
 	SOFTWARE_UPDATE_DESCRIPTION,
+	SOFTWARE_UPDATE_FRAGMENT_PATH,
 	SOFTWARE_UPDATE_LOCK,
 	SOFTWARE_UPDATE_UNIT,
 	validateDetachedAptServiceFragment,
@@ -71,14 +71,8 @@ export type DetachedAptServiceDeps = {
 	readonly outputPaths: SoftwareUpdateOutputPaths;
 	readonly prepareOutput: () => Promise<void>;
 	readonly start: (command: readonly string[]) => Promise<void>;
-	/** `unit`: an attempt's own unit; omitted, an older release's fixed one. */
-	readonly inspect: (unit?: string) => Promise<DetachedAptServiceState>;
-	readonly cleanup: (
-		state: FinishedDetachedAptServiceState,
-		unit?: string,
-	) => Promise<void>;
-	/** Every update unit systemd has loaded, by name. */
-	readonly listUnits?: () => Promise<readonly string[]>;
+	readonly inspect: () => Promise<DetachedAptServiceState>;
+	readonly cleanup: (state: FinishedDetachedAptServiceState) => Promise<void>;
 	readonly readOutput: (
 		file: string,
 		offset: number,
@@ -107,7 +101,6 @@ export type DetachedAptServiceDeps = {
 export function buildDetachedAptUpgradeCommand(
 	aptArgs: readonly string[],
 	outputPaths: SoftwareUpdateOutputPaths,
-	unit: string = SOFTWARE_UPDATE_UNIT,
 ): string[] {
 	if (!isExpectedAptUpgradeArgv(["/usr/bin/apt-get", ...aptArgs])) {
 		throw new InvalidDetachedAptUpgradeArgumentsError();
@@ -135,7 +128,7 @@ export function buildDetachedAptUpgradeCommand(
 	}
 	return [
 		"systemd-run",
-		`--unit=${unit}`,
+		`--unit=${SOFTWARE_UPDATE_UNIT}`,
 		`--description=${SOFTWARE_UPDATE_DESCRIPTION}`,
 		"--remain-after-exit",
 		"--quiet",
@@ -155,7 +148,6 @@ export function buildDetachedAptAllCommand(
 	installArgs: readonly string[],
 	verdict: "any" | "force_ipv4" | "force_ipv6",
 	outputPaths: SoftwareUpdateOutputPaths,
-	unit: string = SOFTWARE_UPDATE_UNIT,
 ): string[] {
 	const family =
 		verdict === "any"
@@ -173,7 +165,7 @@ export function buildDetachedAptAllCommand(
 		);
 	return [
 		"systemd-run",
-		`--unit=${unit}`,
+		`--unit=${SOFTWARE_UPDATE_UNIT}`,
 		`--description=${SOFTWARE_UPDATE_DESCRIPTION}`,
 		"--remain-after-exit",
 		"--quiet",
@@ -207,23 +199,21 @@ async function requireSuccessfulCommand(command: string[]): Promise<string> {
 	return result.stdout;
 }
 
-async function inspectService(
-	unit: string = SOFTWARE_UPDATE_UNIT,
-): Promise<DetachedAptServiceState> {
+async function inspectService(): Promise<DetachedAptServiceState> {
 	const command = [
 		"systemctl",
 		"show",
-		unit,
+		SOFTWARE_UPDATE_UNIT,
 		"--property=Id,InvocationID,FragmentPath,Description,LoadState,ActiveState,SubState,Transient,Type,RemainAfterExit,User,ExecMainCode,ExecMainStatus,ExecStart,ExecStartPre,ExecStartPost,StandardOutput,StandardError",
 		"--no-pager",
 	];
 	const result = await spawnWithTimeout(command, {
 		timeoutMs: SYSTEMD_COMMAND_TIMEOUT_MS,
 	});
-	const state = parseDetachedAptServiceProbe(result, command, unit);
+	const state = parseDetachedAptServiceProbe(result, command);
 	if (state.kind !== "absent") {
 		const fragment = await readStoredStateFile(
-			`/run/systemd/transient/${unit}`,
+			SOFTWARE_UPDATE_FRAGMENT_PATH,
 			STORED_STATE_LIMITS.intent,
 		);
 		if (fragment === null)
@@ -252,25 +242,13 @@ export function defaultDetachedAptServiceDeps(): DetachedAptServiceDeps {
 			await requireSuccessfulCommand([...command]);
 		},
 		inspect: inspectService,
-		cleanup: async (state, unit = SOFTWARE_UPDATE_UNIT) => {
-			await requireSuccessfulCommand(["systemctl", state.cleanup, unit]);
+		cleanup: async (state) => {
+			await requireSuccessfulCommand([
+				"systemctl",
+				state.cleanup,
+				SOFTWARE_UPDATE_UNIT,
+			]);
 		},
-		listUnits: async () =>
-			(
-				await requireSuccessfulCommand([
-					"systemctl",
-					"list-units",
-					"--all",
-					"--plain",
-					"--no-legend",
-					"--full",
-					"--type=service",
-					"ceralive-software-update*",
-				])
-			)
-				.split("\n")
-				.map((line) => line.trim().split(/\s+/)[0] ?? "")
-				.filter(isSoftwareUpdateUnit),
 		readOutput: readSoftwareUpdateOutput,
 		sleep: Bun.sleep,
 		readAttempt: () => readSoftwareUpdateAttempt(paths),

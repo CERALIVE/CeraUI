@@ -55,12 +55,12 @@ const lastCheckedAt = $derived(checkedAtOf(updateState));
 let shownProgress: UpdateProgress | undefined;
 const liveProgress = createLiveProgress();
 // Outside the layout (a test mount) the connection counts as up.
-const connectionDropped = getContext<(() => boolean) | undefined>(CONNECTION_DROPPED);
+const connectionDropped = getContext<((field: string) => boolean) | undefined>(CONNECTION_DROPPED);
 const progress = $derived.by(() => {
 	const frame =
 		updateState?.kind === 'downloading' || updateState?.kind === 'installing' ? updateState.progress : undefined;
 	shownProgress = frame ? holdUpdateProgress(shownProgress, frame) : undefined;
-	return liveProgress(shownProgress, frame, connectionDropped?.() ?? false);
+	return liveProgress(shownProgress, frame, connectionDropped?.('update_state') ?? false);
 });
 const inProgress = $derived(progress !== undefined);
 // APT restarts its percentage for the install, so the phase names which one it is.

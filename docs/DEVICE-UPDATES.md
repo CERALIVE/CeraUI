@@ -49,10 +49,12 @@ the same phase without a number replaces a held number, because it means
 unknown, not unchanged. Only an outcome, or the next run after it, shows what
 arrived. The browser then shows a number only when the device's own latest
 frame on this connection carries it in the same phase, and not below a number
-already shown in that phase. After a reconnect the held number stays hidden
-until the device sends a changed frame (the store keeps the same object for an
-unchanged one), so an unchanged number the device sends again reappears at the
-next install step; a stale number is never shown. On pinned images the download runs
+already shown in that phase. From a drop until the device delivers that
+frame again on the new connection the number is hidden, and any delivery
+brings it back, an unchanged frame included: the status ingestion announces
+every delivery of `updating` and `update_state` (the store keeps an unchanged
+value's object, so only that announcement says it is fresh). A stale number is
+never shown, and a fresh one is never withheld. On pinned images the download runs
 in-process before the unit exists: the UI says **Downloading**, without a
 number, from the moment that transfer starts until the transcript shows the
 install. A failed pinned transfer is that process's own result: the tab is
@@ -64,7 +66,7 @@ these):
 | Situation | Shown |
 |---|---|
 | The transcript cannot be read for four polls in a row | The phase without a number until a read succeeds |
-| The connection to the device dropped, or the latest frame does not carry the held number in the same phase | The held phase without a number, until the device sends a new frame carrying that number in that phase |
+| The connection to the device dropped, or the latest frame does not carry the held number in the same phase | The held phase without a number, until the device delivers a frame carrying that number in that phase again (an unchanged frame counts) |
 | A number below one already shown in the phase, for example after the device said it does not know | The phase without a number, until the device sends one at or above it |
 | The observer loses the unit (gone without an exit, or another invocation) | No outcome: `updating: null`, `update_state` neither success nor failure, no restart; the tab says **Outcome not confirmed** |
 | The unit is gone and its exit is recorded | That outcome, replayed (below) |
@@ -93,8 +95,9 @@ completely. A reattached unit is announced only once a poll has read both
 files to their end without an error, so the tab never sees an empty frame,
 "0 of 1 steps" or an older block of the log.
 
-The transcript is display only. Its read errors never block a drain, change
-the outcome or keep the unit from being cleaned up. Once systemd reports the
+The transcript is display only. Its read errors never block a drain or change
+the outcome; a transcript that could not be read keeps the unit as the
+evidence (`drained: false`, below). Once systemd reports the
 unit finished, one final read is complete by construction: APT, the file's
 only writer, has exited. That read gives up after 20 failed reads and records
 `drained: false`. The unit's exit status alone decides success or failure,
@@ -112,14 +115,15 @@ that is there now (and, for a replay, within the window below), all compared
 in one synchronous step after the last await, so an admission meanwhile wins.
 The tab's replay, the attempt's own success effects (cache cleanup and the
 deliberate restart), the orchestrator's package state (`getPlanUpdateState`)
-and retirement (`claimRetirement`) all go through it; no other code reads a
-raw exit. The monitor claims a unit's exit before it does anything with it
+and the unit's retirement all go through it; no other code reads a raw exit. The monitor claims a unit's exit before it does anything with it
 and uses only the claimed value; an exit nothing could record cannot be
 claimed, so it is no outcome (**Outcome not confirmed**, no restart, no
 commit) and the unit stays. Each later use confirms the claim against the
 record in one synchronous step (`claim.confirm()`): recovery's adoption of a
-recorded exit, every read of the orchestrator's package state and the
-restart, which claims again. Every write is one compare-and-set step
+recorded exit, every read of the orchestrator's package state, the pending
+success's persistence and the restart, which claims again and confirms once
+more right before the exit. An outcome nobody claimed takes no terminal effect,
+not even cleaning the APT cache. Every write is one compare-and-set step
 (`updateSoftwareUpdateAttempt`, called only by that module): it reads the current
 record, decides from it, and writes the replacement to a temporary file
 renamed into place, all synchronously, so no other write of this backend can
@@ -137,9 +141,10 @@ for example) settles nothing; the strict `agent.json` schema is unchanged. A
 second start while the first waits for package discovery is refused
 (`already_updating`), so no admission replaces a waiting attempt's record.
 A restart at any step before the unit starts
-finds that attempt with no exit and tells nothing; an older attempt's
-recorded exit is kept only as a `leftover` a launch may use to retire that
-finished unit. When the record cannot be written the start is refused. The
+finds that attempt with no exit and tells nothing. No older exit is ever kept:
+a new attempt is admitted only once the previous attempt's unit is gone, its
+outcome claimed first (below). When the record cannot be written the start is
+refused. The
 launch writes `launched` before the unit exists, only for the caller's own
 admitted attempt (refused once another admission replaced it), and the
 observer adds
@@ -162,35 +167,46 @@ exit and an invocation, within 30 minutes of boot-relative uptime, and only
 while the stdout file is the one it was read from: any later run, including
 one an older release started, makes a new file.
 
-The unit is retired only once its exit is durably recorded and its
-transcript was read, and only while systemd still shows that same finished
-invocation: systemd is asked again right before every stop, the first try
-included, and a replaced unit is left alone. Each attempt's unit is named for
-it (`ceralive-software-update-<attempt>.service`), so a `systemctl stop` or
-`reset-failed` by name reaches only that attempt's unit, never a successor's;
-the fixed `ceralive-software-update.service` is only an older release's unit,
-adopted as before. Otherwise the unit stays as the evidence, its exit is still
+Every attempt runs under the one fixed name, `ceralive-software-update.service`,
+the same name and command every release uses, and CeraUI alone starts or
+retires it. One in-process lock (`software-update-process.ts`) serializes every
+launch, the observer's record-claim-retire step, recovery and the start's
+settle (below), each holding it across the systemd probe that decides an
+action and the action itself, so no other start or retirement can come
+between them and a probe is never stale. A launch starts only into an empty
+slot: it refuses while any unit is there. When the unit finishes, the
+observer records the exit, claims it and only then retires the unit, with the
+lock held; the unit is retired only while systemd, asked again right before
+every stop, still shows that same finished invocation and exit, and only once
+the claim succeeded with the transcript read. A replaced unit is left alone. A
+claim that fails keeps the unit as the only evidence: no retirement, no cache
+cleanup, no restart, and the tab says **Outcome not confirmed**. Otherwise the
+unit stays as the evidence, its exit is still
 published, and the deliberate restart is withheld (boot marked degraded). A
 retirement that finds another invocation holding the unit also withholds the
 restart; while ownership is pending the restart waits for that retirement.
 A finished unit whose exit is recorded (same exit and invocation) is never
 adopted again: a later boot reports it and tries one retirement, so a unit
-whose `systemctl stop` keeps failing restarts CeraUI at most once. A launch
-reads which update units systemd has loaded (`systemctl list-units`) and
-refuses while any runs. A finished one is retired when the record holds its
-exit and its transcript was read (`claimRetirement`, checked against the
-invocation systemd shows right before the stop); one that cannot be retired
-stays under its own name, and the launch goes ahead, because its transcript
-was read. An outcome whose transcript was not read (`drained: false`) is
-never retired by a launch and never restarts CeraUI: the launch refuses and
-the unit stays as the evidence until a reboot clears `/run`. Recovery finds
-the record's own unit by its name, then an older release's fixed one; another
-attempt's running unit is watched for display only, a finished one whose exit
-is recorded and read is retired once, and one that stays makes recovery
-report "not probed", never absence. The D8 live-abort stop and the
-commit-stage probe name the in-flight attempt's unit (else the fixed one);
-package recovery's absence proof needs every unit the record knows of, and
-the fixed one, to be not found.
+whose `systemctl stop` keeps failing restarts CeraUI at most once.
+
+A finished unit left in place (its outcome unclaimed or unread, or its
+retirement failed) blocks every new start (`already_updating`), so a new
+attempt never replaces the record of an outcome nobody claimed. Every start
+the device is asked for (the Settings button and the orchestrator's package
+start, through `startSoftwareUpdateWhenSettled`) first settles it under the
+lock: the record's attempt claims its outcome for that very invocation and
+exit, and only then is the unit retired; the start is admitted right after,
+with nothing awaited between. While it cannot be retired the start is
+refused and the receipt stays; once it can be, the next start runs. A unit
+that no attempt can claim, or whose transcript was never read (`drained:
+false`), is retired only after it has stayed for 30 minutes of uptime, with
+the reason logged, so it cannot block updates until a reboot clears `/run`.
+At boot, recovery runs before any start is accepted and takes the same lock:
+the record's own unit (running, or finished with no recorded exit) is
+observed, a finished unit with a recorded exit is told and retired once after
+its claim, and an older release's running unit is adopted once, bound to its
+invocation. The D8 live-abort stop, the commit-stage probe and package
+recovery's absence proof name the same fixed unit, as on main.
 
 At boot a surviving unit is watched at once, independent of the slower
 startup checks: the tab sees its progress and outcome. Retiring it,

@@ -120,7 +120,6 @@ export function parseDetachedAptServiceState(
 export function parseDetachedAptServiceProbe(
 	result: SpawnWithTimeoutResult,
 	command: readonly string[],
-	unit?: string,
 ): DetachedAptServiceState {
 	const state = parseDetachedAptServiceState(result.stdout);
 	if (result.exitCode !== 0) {
@@ -136,6 +135,6 @@ export function parseDetachedAptServiceProbe(
 	if (state.kind === "absent") {
 		return state;
 	}
-	validateDetachedAptServiceIdentity(result.stdout, unit);
+	validateDetachedAptServiceIdentity(result.stdout);
 	return state;
 }
