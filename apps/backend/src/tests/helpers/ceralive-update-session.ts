@@ -76,7 +76,12 @@ updates.setAptReachabilityProbeForTest(async () => ({
 	verdict: "any",
 	detail: [],
 }));
-let apt = scriptedApt(step.apt ?? {});
+// The APT state generation: it moves whenever the scripted device state does.
+let generation = 0;
+const moved = () => {
+	generation++;
+};
+let apt = scriptedApt(step.apt ?? {}, moved);
 let block: { bin: string; release?: () => void } | undefined;
 updates.setAptCommandRunnerForTest(async (argv) => {
 	const answer = apt(argv);
@@ -110,22 +115,29 @@ initServer();
 process.stdout.write(`${READY_PREFIX}${getServer()?.port}\n`);
 
 for await (const command of console) {
+	// Hydration and checks run beside the loop, so `apt`, `block` and `release` can
+	// arrive while one of their reads is held.
 	if (command === "hydrate") {
-		if (!step.olderBackend)
-			await initCeraliveUpdateNotice({
-				path: step.record,
-				evidence: () => updates.readCeraliveOfferEvidence(),
-				observe: (outcome) =>
-					process.stdout.write(`${REPLAY_PREFIX}${outcome}\n`),
-				...(step.failWrites
-					? {
-							write: () => {
-								throw new Error("state directory is read-only");
-							},
-						}
-					: {}),
-			});
-		process.stdout.write(`${HYDRATED_MARKER}\n`);
+		void (async () => {
+			if (!step.olderBackend)
+				await initCeraliveUpdateNotice({
+					path: step.record,
+					evidence: () => updates.readAdmittedCeraliveOfferEvidence(),
+					generation: () => String(generation),
+					observe: (outcome) =>
+						process.stdout.write(`${REPLAY_PREFIX}${outcome}\n`),
+					...(step.failWrites
+						? {
+								write: () => {
+									throw new Error("state directory is read-only");
+								},
+							}
+						: {}),
+				});
+			process.stdout.write(`${HYDRATED_MARKER}\n`);
+		})().catch((error) =>
+			process.stderr.write(`hydrate failed ${String(error)}\n`),
+		);
 	} else if (command.startsWith("block ")) {
 		block = { bin: command.slice(6) };
 		process.stdout.write(`${BLOCK_SET_MARKER}\n`);
@@ -134,11 +146,14 @@ for await (const command of console) {
 		block = undefined;
 		process.stdout.write(`${RELEASED_MARKER}\n`);
 	} else if (command.startsWith("apt ")) {
-		apt = scriptedApt(JSON.parse(command.slice(4)));
+		apt = scriptedApt(JSON.parse(command.slice(4)), moved);
+		moved();
 		process.stdout.write(`${APPLIED_MARKER}\n`);
 	} else if (command === "check") {
-		await updates.runSoftwareUpdateCheck();
-		process.stdout.write(`${CHECKED_MARKER}\n`);
+		void updates.runSoftwareUpdateCheck().then(
+			() => process.stdout.write(`${CHECKED_MARKER}\n`),
+			(error) => process.stderr.write(`check failed ${String(error)}\n`),
+		);
 	} else if (command === "recover") {
 		// Only the update's own success restart counts; any other error is a failed recovery.
 		for (const event of ["uncaughtException", "unhandledRejection"] as const)

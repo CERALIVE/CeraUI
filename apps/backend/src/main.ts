@@ -167,7 +167,7 @@ import {
 } from "./modules/system/sensors.ts";
 import {
 	periodicCheckForSoftwareUpdates,
-	readCeraliveOfferEvidence,
+	readAdmittedCeraliveOfferEvidence,
 	recoverSoftwareUpdateIfRunning,
 } from "./modules/system/software-updates.ts";
 import {
@@ -498,10 +498,14 @@ await guardNonCritical("apt-channel-reconcile", async () => {
 	const mode = (await readUpdateCapabilities()).mode;
 	if (mode === "capable") await reconcileAptChannel(mode);
 });
-// Before the first check: a withdrawal persisted by an earlier process must
-// still reach a tab that missed it across the update's restarts, but only while
-// the local APT evidence is the one it was computed from (gated asynchronously).
-void initCeraliveUpdateNotice({ evidence: () => readCeraliveOfferEvidence() });
+// A withdrawal persisted by an earlier process must still reach a tab that missed
+// it across the update's restarts, but only after the update startup is adjudicated,
+// while the updater would admit APT work, and only from a fenced read of exactly the
+// local APT evidence it was computed from.
+void initCeraliveUpdateNotice({
+	evidence: readAdmittedCeraliveOfferEvidence,
+	settled: awaitUpdateStartupAdjudication,
+});
 // Todo 36: the packages+OS+slot-sync orchestrator. Its own resume path (G17)
 // is the ONLY thing that reattaches to a persisted `committing` phase's
 // detached apt unit on this boot — running it BEFORE the general standalone

@@ -1364,7 +1364,8 @@ This is host isolation evidence, not a shared-event-loop latency guarantee.
 `ceralive_update` ("A CeraLive update is available", `notifications.ceraliveUpdateAvailable`)
 is separate from `notifyUpdate()`. It names the exact first-party packages the
 Install control would take, on both legacy and capable images, keyed by their
-`name=version` pairs. Only a conclusive check raises, rekeys or withdraws it, and
+`name=version` pairs. Only a conclusive check (a clean refresh that touched CeraLive's own index) raises,
+rekeys or withdraws it, and
 only when every first-party candidate is verified (CeraLive origin, policy
 candidate equal to the planned version; on legacy images through a simulation of
 the unchanged install argv). A failed or stale refresh, a failed discovery, one
@@ -1373,8 +1374,9 @@ nothing. Its last verdict is written to `ceralive_update_offer.json` before any
 broadcast. A restarted backend replays a recorded withdrawal to every reconnecting
 tab, including a v2026.6.x or 7.x tab (string form), but only while the device's local
 APT evidence (the installer's simulated plan, new dependencies included, the roster's
-policy, holds, dpkg state, CeraLive sources), read afresh after that tab logs in, is
-unchanged; a command that failed, timed out or answered only in part keeps the notice; so a
+policy, holds, dpkg state, CeraLive sources), read afresh after that tab logs in, as
+simulations only, while the updater would admit APT work and with no APT file changing
+during the read, is unchanged; a command that failed, timed out or answered only in part keeps the notice; so a
 tab that missed it during an update's restarts drops the notice even if that backend's
 own refresh fails, while after a rollback the offer an older backend showed stays. A dismissal counts
 only for the release the dismissing tab showed. Kernel, OS and `update:*` notices

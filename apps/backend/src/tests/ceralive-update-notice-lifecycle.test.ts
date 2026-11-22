@@ -26,7 +26,7 @@ import { initCeraliveUpdateNotice } from "../modules/system/ceralive-update-noti
 import {
 	getUpdateState,
 	periodicCheckForSoftwareUpdates,
-	readCeraliveOfferEvidence,
+	readAdmittedCeraliveOfferEvidence,
 	resetAptReachabilityProbeForTest,
 	resetSoftwareUpdateCheckRunner,
 	resetSoftwareUpdateState,
@@ -38,6 +38,7 @@ import {
 	startSoftwareUpdate,
 	triggerManualUpdateCheck,
 } from "../modules/system/software-updates.ts";
+import { setStreamLivenessSourceForTest } from "../modules/system/stream-liveness-source.ts";
 import { setCeraliveSourcesFileForTest } from "../modules/system/update-apt-channel.ts";
 import { setUpdateCapabilityPathForTest } from "../modules/system/update-capabilities.ts";
 import { setUpdateSettingsFilePathForTest } from "../modules/system/update-settings.ts";
@@ -66,6 +67,7 @@ import {
 	type AptScript,
 	DEBIAN_ONLY_INVENTORY,
 	type FailedRead,
+	REFRESH_WITHOUT_CERALIVE,
 	scriptedApt,
 } from "./helpers/ceralive-update-apt.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
@@ -103,6 +105,10 @@ const curl = {
 
 let dir: string;
 let script: AptScript;
+let runnerFor: AptScript | undefined;
+let runner = scriptedApt({});
+// Every APT argv the code under test ran in this case.
+let seen: string[][] = [];
 let broadcast: ReturnType<typeof spyOn<typeof websocket, "broadcastMsg">>;
 let priorEnabled: boolean | undefined;
 let priorDismissals: string | undefined;
@@ -231,10 +237,20 @@ beforeEach(async () => {
 		verdict: "any",
 		detail: [],
 	}));
-	setAptCommandRunnerForTest((argv) => scriptedApt(script)(argv));
+	seen = [];
+	// One scripted device per script, so a read sequence (inventoryLater) carries across commands.
+	setAptCommandRunnerForTest((argv) => {
+		seen.push([...argv]);
+		if (runnerFor !== script) {
+			runnerFor = script;
+			runner = scriptedApt(script);
+		}
+		return runner(argv);
+	});
 	await initCeraliveUpdateNotice({
 		path: join(dir, "offer.json"),
-		evidence: () => readCeraliveOfferEvidence(),
+		evidence: () => readAdmittedCeraliveOfferEvidence(),
+		generation: () => "lifecycle",
 	});
 	broadcast = spyOn(websocket, "broadcastMsg");
 });
@@ -749,3 +765,177 @@ for (const capable of [false, true])
 			expect(notificationExists(NOTICE)?.dismissalKey).toBe("update:srtla=2.0");
 		});
 	});
+
+// Round 9: a read is evidence only when every answer is complete and the check's refresh
+// touched CeraLive's index; an answer that is merely plausible is never "nothing pending".
+const incomplete: readonly [string, AptScript][] = [
+	[
+		"a refresh that never reached CeraLive's index",
+		{ refresh: { stdout: REFRESH_WITHOUT_CERALIVE } },
+	],
+	["a plan without its summary line", { fail: { simulation: "no-summary" } }],
+	["a plan cut to its first line", { fail: { simulation: "truncated" } }],
+	[
+		"an inventory without its Pinned packages terminator",
+		{ fail: { inventory: "no-summary" } },
+	],
+	[
+		"dpkg reporting config-files where APT reports it installed",
+		{ dpkgStatus: { cerastream: "deinstall ok config-files" } },
+	],
+	[
+		"dpkg holding a package apt-mark does not list",
+		{ dpkgStatus: { cerastream: "hold ok installed" } },
+	],
+];
+
+for (const capable of [false, true])
+	describe(`${capable ? "capable" : "legacy"} image: evidence that is incomplete or not this refresh's`, () => {
+		beforeEach(async () => {
+			if (capable) await useCapableImage();
+		});
+
+		for (const [label, variation] of incomplete)
+			test(`${label} keeps the offer and records nothing`, async () => {
+				// Given the offer shown and recorded.
+				await check({ upgradable: [cerastream("2")] });
+				const recorded = await readFile(join(dir, "offer.json"), "utf8");
+				// When it is installed and the next check's evidence is incomplete in this one way.
+				await check({ ...installedRelease, ...variation });
+				// Then nothing is removed, replayed or written.
+				expect(liveRemovals()).toEqual([]);
+				expect(notificationExists(NOTICE)?.dismissalKey).toBe(
+					"update:cerastream=2",
+				);
+				expect(await replayedRemovals()).toEqual([]);
+				expect(await readFile(join(dir, "offer.json"), "utf8")).toBe(recorded);
+			});
+
+		test("a plan cut right after its summary hides no first-party row", async () => {
+			await check({ upgradable: [cerastream("2")] });
+			const recorded = await readFile(join(dir, "offer.json"), "utf8");
+			// When the release is still pending but the plan's Inst rows are lost after its summary.
+			await check({
+				upgradable: [cerastream("2")],
+				fail: { simulation: "cut-after-summary" },
+			});
+			// Then the cut answer is not read as an empty plan.
+			expect(liveRemovals()).toEqual([]);
+			expect(notificationExists(NOTICE)?.dismissalKey).toBe(
+				"update:cerastream=2",
+			);
+			expect(await readFile(join(dir, "offer.json"), "utf8")).toBe(recorded);
+		});
+
+		test("a login and startup run APT only as simulations, never --assume-no", async () => {
+			// Given a recorded proof that nothing is pending.
+			await check(installedRelease);
+			seen = [];
+			// When a tab logs in and the process starts again.
+			expect(await replayedRemovals()).toHaveLength(2);
+			await initCeraliveUpdateNotice({
+				path: join(dir, "offer.json"),
+				evidence: () => readAdmittedCeraliveOfferEvidence(),
+				generation: () => "lifecycle",
+			});
+			// Then every apt-get it ran was a simulation.
+			const aptGet = seen.filter(([bin]) => bin === "/usr/bin/apt-get");
+			expect(aptGet.length).toBeGreaterThan(0);
+			expect(aptGet.filter((argv) => argv[1] !== "-s")).toEqual([]);
+			expect(aptGet.filter((argv) => argv.includes("--assume-no"))).toEqual([]);
+			if (!capable)
+				expect(aptGet[0]).toEqual([
+					"/usr/bin/apt-get",
+					"-s",
+					"-o",
+					"Debug::NoLocking=1",
+					"dist-upgrade",
+				]);
+		});
+
+		test("a login the updater would refuse runs no APT command and removes nothing", async () => {
+			await check(installedRelease);
+			for (const [label, refuse, restore] of [
+				[
+					"updates disabled",
+					() => {
+						setup.apt_update_enabled = false;
+					},
+					() => {
+						setup.apt_update_enabled = true;
+					},
+				],
+				[
+					"a live stream",
+					() => setStreamLivenessSourceForTest(() => "streaming"),
+					() => setStreamLivenessSourceForTest(null),
+				],
+			] as const) {
+				refuse();
+				seen = [];
+				const frames = await replayedRemovals();
+				restore();
+				expect([label, frames, seen]).toEqual([label, [], []]);
+			}
+			// Control: admitted again, the same login is told.
+			expect(await replayedRemovals()).toHaveLength(2);
+		});
+
+		test("no withdrawal is delivered before the update startup is settled", async () => {
+			await check(installedRelease);
+			const settled = Promise.withResolvers<void>();
+			const outcomes: string[] = [];
+			const starting = initCeraliveUpdateNotice({
+				path: join(dir, "offer.json"),
+				evidence: () => readAdmittedCeraliveOfferEvidence(),
+				generation: () => "lifecycle",
+				observe: (outcome) => outcomes.push(outcome),
+				settled: () => settled.promise,
+			});
+			seen = [];
+			// A login before adjudication reads nothing and is told nothing.
+			expect(await replayedRemovals()).toEqual([]);
+			expect(seen).toEqual([]);
+			settled.resolve();
+			await starting;
+			// After it, startup and the next login are told.
+			expect(await replayedRemovals()).toHaveLength(2);
+			expect(outcomes).toEqual(["declined", "sent", "sent"]);
+		});
+	});
+
+describe("capable image: each read takes its own inventory", () => {
+	beforeEach(useCapableImage);
+
+	test("a plan that only installs a roster dependency, cut after its summary, keeps the offer", async () => {
+		// Given the capable plan newly installs a roster package, and that offer is shown.
+		await check({ upgradable: [modemSupport("2026.1")] });
+		expect(notificationExists(NOTICE)?.dismissalKey).toBe(
+			"update:ceralive-modem-support=2026.1",
+		);
+		const recorded = await readFile(join(dir, "offer.json"), "utf8");
+		// When the next answer keeps "0 upgraded, 1 newly installed" but loses the Inst row.
+		await check({
+			upgradable: [modemSupport("2026.1")],
+			fail: { simulation: "cut-after-summary" },
+		});
+		// Then "0 upgraded" in the text is not read as an empty plan.
+		expect(liveRemovals()).toEqual([]);
+		expect(notificationExists(NOTICE)?.dismissalKey).toBe(
+			"update:ceralive-modem-support=2026.1",
+		);
+		expect(await readFile(join(dir, "offer.json"), "utf8")).toBe(recorded);
+	});
+
+	test("an inventory that no longer lists CeraLive after the check's own keeps the offer", async () => {
+		await check({ upgradable: [cerastream("2")] });
+		const recorded = await readFile(join(dir, "offer.json"), "utf8");
+		// When the check's discovery saw CeraLive's source but the evidence read does not.
+		await check({ ...installedRelease, inventoryLater: DEBIAN_ONLY_INVENTORY });
+		expect(liveRemovals()).toEqual([]);
+		expect(notificationExists(NOTICE)?.dismissalKey).toBe(
+			"update:cerastream=2",
+		);
+		expect(await readFile(join(dir, "offer.json"), "utf8")).toBe(recorded);
+	});
+});

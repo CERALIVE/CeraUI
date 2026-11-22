@@ -30,6 +30,10 @@ export type AptScript = {
 	readonly holds?: readonly string[];
 	// Known to APT with a candidate, not installed and not planned.
 	readonly available?: readonly AptPackage[];
+	// What the source inventory answers after its first read.
+	readonly inventoryLater?: string;
+	// dpkg's status field for a package, instead of the one its state implies.
+	readonly dpkgStatus?: Readonly<Record<string, string>>;
 	// How one command fails instead of answering (see FailedRead).
 	readonly fail?: Partial<Record<AptRead, FailedRead>>;
 	// The state the device moves to once the roster policy is first read.
@@ -37,21 +41,27 @@ export type AptScript = {
 };
 
 export type AptRead =
-	| "dpkg-query"
-	| "apt-mark"
-	| "roster-policy"
+	| "refresh"
+	| "discovery"
+	| "simulation"
 	| "inventory"
-	| "simulation";
+	| "package-policy"
+	| "roster-policy"
+	| "apt-mark"
+	| "dpkg-query";
 // How the command runner reports a child that never answered: a failed launch and a
 // timeout throw (runAptCommand turns both into exit 1 with a diagnostic), a signal
-// ends it with 128+n and partial output, a silent exit 1 says nothing at all, and a
-// truncated answer exits 0 with only its first line.
+// ends it with 128+n and partial output, a silent exit 1 says nothing at all. An
+// answer can also exit 0 incompletely: only its first line (truncated), without its
+// summary or terminator line (no-summary), or cut right after it (cut-after-summary).
 export type FailedRead =
 	| "launch"
 	| "timeout"
 	| "signal"
 	| "silent-exit-1"
-	| "truncated";
+	| "truncated"
+	| "no-summary"
+	| "cut-after-summary";
 
 // The restart-test backend child prints these on stdout.
 export const READY_PREFIX = "backend:ready:";
@@ -88,9 +98,17 @@ export const INVENTORY = `Package files:
 Pinned packages:
 `;
 // CeraLive's source disabled or absent: the refresh only ever saw Debian.
+// A refresh that checked every index, CeraLive's included, and one that never reached CeraLive.
+const DEBIAN_REFRESH = `Hit:1 https://deb.debian.org/debian-security trixie-security InRelease\n`;
+const REFRESH = `${DEBIAN_REFRESH}Hit:2 https://apt.ceralive.tv/dists/stable/binary-arm64 ./ InRelease\nReading package lists...\n`;
+export const REFRESH_WITHOUT_CERALIVE = `${DEBIAN_REFRESH}Reading package lists...\n`;
 export const DEBIAN_ONLY_INVENTORY = `${INVENTORY.split(` 500 ${CERALIVE_SOURCE}`)[0]}Pinned packages:\n`;
 const NOTHING =
 	"0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n";
+// What apt-get prints before its plan when it is not quiet.
+const PREAMBLE =
+	"Reading package lists...\nBuilding dependency tree...\nReading state information...\n";
+const SUMMARY = /^\d+ upgraded, |^Pinned packages:$/;
 
 function ok(stdout: string): SpawnWithTimeoutResult {
 	return { exitCode: 0, stdout, stderr: "" };
@@ -113,12 +131,13 @@ function counts(packages: readonly AptPackage[]): string {
 	return `${upgraded} upgraded, ${packages.length - upgraded} newly installed, 0 to remove and 0 not upgraded.\n`;
 }
 
+// APT's order: the summary comes before the Inst rows it counts.
 function simulation(packages: readonly AptPackage[]): string {
 	const rows = packages.map(
 		(pkg) =>
 			`Inst ${pkg.name}${isInstalled(pkg) ? ` [${pkg.installed}]` : ""} (${pkg.planned ?? pkg.candidate} stable [arm64])\n`,
 	);
-	return `${rows.join("")}${counts(packages)}`;
+	return `${PREAMBLE}${counts(packages)}${rows.join("")}`;
 }
 
 function upgradePlan(packages: readonly AptPackage[]): SpawnWithTimeoutResult {
@@ -137,29 +156,45 @@ function upgradePlan(packages: readonly AptPackage[]): SpawnWithTimeoutResult {
 	};
 }
 
-export function scriptedApt(initial: AptScript) {
+export function scriptedApt(initial: AptScript, onChange?: () => void) {
 	let script = initial;
+	let inventories = 0;
 	return async (argv: readonly string[]): Promise<SpawnWithTimeoutResult> => {
 		if (
 			script.thenState &&
 			argv[0] === "/usr/bin/apt-cache" &&
 			argv[1] === "policy" &&
 			argv.length > 3
-		)
+		) {
 			script = script.thenState;
-		const failure = script.fail?.[readOf(argv)];
+			onChange?.();
+		}
+		const read = readOf(argv);
+		const later =
+			read === "inventory" && inventories++ > 0
+				? script.inventoryLater
+				: undefined;
+		const current =
+			later === undefined ? script : { ...script, inventory: later };
+		const failure = script.fail?.[read];
 		return failure === undefined
-			? answer(script)(argv)
-			: failed(failure, argv, await answer(script)(argv));
+			? answer(current)(argv)
+			: failed(failure, argv, await answer(current)(argv));
 	};
 }
 
 function readOf(argv: readonly string[]): AptRead {
-	if (argv[0] === "/usr/bin/dpkg-query") return "dpkg-query";
-	if (argv[0] === "/usr/bin/apt-mark") return "apt-mark";
-	if (argv[0] === "/usr/bin/apt-cache")
-		return argv.length > 3 ? "roster-policy" : "inventory";
-	return "simulation";
+	const [bin, verb] = argv;
+	if (bin === "/usr/bin/dpkg-query") return "dpkg-query";
+	if (bin === "/usr/bin/apt-mark") return "apt-mark";
+	if (bin === "/usr/bin/apt-cache")
+		return argv.length === 2
+			? "inventory"
+			: argv.length === 3
+				? "package-policy"
+				: "roster-policy";
+	if (verb === "update") return "refresh";
+	return verb === "-s" ? "simulation" : "discovery";
 }
 
 function failed(
@@ -177,6 +212,16 @@ function failed(
 	if (how === "signal") return { exitCode: 137, stdout: partial, stderr: "" };
 	if (how === "truncated")
 		return { exitCode: 0, stdout: `${partial}\n`, stderr: "" };
+	const lines = would.stdout.split("\n");
+	if (how === "no-summary")
+		return {
+			...would,
+			stdout: lines.filter((line) => !SUMMARY.test(line)).join("\n"),
+		};
+	if (how === "cut-after-summary") {
+		const end = lines.findIndex((line) => SUMMARY.test(line));
+		return { ...would, stdout: `${lines.slice(0, end + 1).join("\n")}\n` };
+	}
 	return { exitCode: 1, stdout: "", stderr: "" };
 }
 
@@ -193,7 +238,7 @@ function answer(script: AptScript) {
 		const [bin, verb] = argv;
 		const name = argv[2];
 		if (bin === "/usr/bin/apt-get" && verb === "update")
-			return { ...ok(""), ...script.refresh };
+			return { ...ok(REFRESH), ...script.refresh };
 		if (bin === "/usr/bin/apt-get" && verb === "dist-upgrade") {
 			const plan = upgradePlan(upgradable);
 			if (keptBack.length === 0) return { ...plan, ...script.discovery };
@@ -218,7 +263,10 @@ function answer(script: AptScript) {
 						);
 			return ok(
 				simulation(
-					requested.filter((pkg) => !script.planOmits?.includes(pkg.name)),
+					// planOmits: the explicit install plan, unlike the upgrade plan, leaves them out.
+					requested.filter(
+						(pkg) => install < 0 || !script.planOmits?.includes(pkg.name),
+					),
 				),
 			);
 		}
@@ -231,7 +279,7 @@ function answer(script: AptScript) {
 			);
 			const rows = known.map(
 				(pkg) =>
-					`${pkg.name}\t${script.holds?.includes(pkg.name) ? "hold" : "install"} ok installed\t${pkg.installed}\n`,
+					`${pkg.name}\t${script.dpkgStatus?.[pkg.name] ?? `${script.holds?.includes(pkg.name) ? "hold" : "install"} ok installed`}\t${pkg.installed}\n`,
 			);
 			const absent = wanted.filter(
 				(name) => !known.some((pkg) => pkg.name === name),

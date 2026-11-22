@@ -87,7 +87,9 @@ import {
 	type AptRun,
 	type CeraliveOffer,
 	capableCeraliveOffer,
+	ceraliveIndexRefreshed,
 	collectOfferEvidence,
+	completePlan,
 	legacyCeraliveOffer,
 	type OfferEvidence,
 	reconcileCeraliveUpdateNotice,
@@ -660,9 +662,7 @@ async function getCapableUpdateSize(
 			update_state: getUpdateState(),
 		});
 		if (refreshConclusive)
-			await reconcileCeraliveUpdateNotice(() =>
-				readCeraliveOfferEvidence(sourcePolicy.stdout),
-			);
+			await reconcileCeraliveUpdateNotice(() => readCeraliveOfferEvidence());
 		return null;
 	} catch (error) {
 		if (!(error instanceof AptAllRefusalError)) throw error;
@@ -936,7 +936,8 @@ async function getSoftwareUpdateSize(
 		available_updates: availableUpdates,
 		update_state: getUpdateState(),
 	});
-	if (refreshConclusive)
+	// A check whose own discovery failed is not conclusive, whatever a later read says.
+	if (refreshConclusive && isCleanAssumeNoDiscovery(upgradeResult))
 		await reconcileCeraliveUpdateNotice(() => readCeraliveOfferEvidence());
 
 	return null;
@@ -1004,15 +1005,30 @@ export function classifyAptUpdateResult(
 	return null;
 }
 
-// apt-get update exits 0 when it keeps the old lists after a failed index fetch.
+// apt-get update exits 0 when it keeps the old lists after a failed index fetch, and the
+// CeraLive notice may only act on a refresh that touched CeraLive's own index.
 function isConclusiveAptRefresh(result: SpawnWithTimeoutResult): boolean {
 	return (
 		result.exitCode === 0 &&
+		ceraliveIndexRefreshed(result.stdout) &&
 		classifyAptUpdateResult(0, result.stderr) !== "captive_portal" &&
 		!/^Err:/m.test(result.stdout) &&
 		!/^(?:E:|W: (?:Failed to fetch|Some index files failed))/m.test(
 			result.stderr,
 		)
+	);
+}
+
+// The updater admits APT work only while it is enabled, idle, and no recovered
+// success, install, refresh or discovery is in flight.
+function aptWorkAdmitted(): boolean {
+	return (
+		!pendingPackageSuccess.pending &&
+		aptUpdatesEnabled() &&
+		isStreamConfirmedIdle() &&
+		!isUpdating() &&
+		!aptGetUpdating &&
+		!aptDiscoveryRunning
 	);
 }
 
@@ -1025,16 +1041,7 @@ function checkForSoftwareUpdates(
 		refreshConclusive?: boolean,
 	) => unknown,
 ): boolean {
-	if (pendingPackageSuccess.pending) return false;
-	if (!aptUpdatesEnabled()) return false;
-	if (
-		!isStreamConfirmedIdle() ||
-		isUpdating() ||
-		aptGetUpdating ||
-		aptDiscoveryRunning
-	) {
-		return false;
-	}
+	if (!aptWorkAdmitted()) return false;
 
 	lastCheckFailure = null;
 	lastAptReachability = undefined;
@@ -2054,19 +2061,25 @@ async function recoverSoftwareUpdate(
 	return true;
 }
 
-// The legacy installer's decision, read-only: the discovery the check runs, then the exact
-// install argv Install would run, simulated (local reads; no refresh, no family options).
+// The legacy installer's decision, simulated only (no lock, prompt, hook or fetch):
+// the dist-upgrade plan's first-party upgrades, then the exact install argv
+// Install would run for them.
 async function legacyInstallerOffer(run: AptRun): Promise<CeraliveOffer> {
-	const discovery = await run(buildAptDiscoveryArgs("any"));
-	if (!isCleanAssumeNoDiscovery(discovery)) return "unknown";
-	const summary = parseAptUpgradeSummary(discovery.stdout);
-	if (!summary.ok) return "unknown";
-	const names = actionableAppNames(
-		buildDiscoveredPackages(
-			summary.value.packages,
-			parseKeptBackPackageNames(discovery.stdout),
-		),
-	);
+	const discovery = await run([
+		"/usr/bin/apt-get",
+		"-s",
+		"-o",
+		"Debug::NoLocking=1",
+		"dist-upgrade",
+	]);
+	if (discovery.exitCode !== 0 || !completePlan(discovery.stdout))
+		return "unknown";
+	// An upgrade's Inst row carries the installed version; a new install's does not.
+	const names = discovery.stdout
+		.split("\n")
+		.flatMap((line) => /^Inst (\S+) \[/.exec(line)?.[1] ?? [])
+		.filter((name) => classifyPackageLayer(name) === "app")
+		.sort();
 	return legacyCeraliveOffer(
 		names,
 		buildAptUpgradeArgs(names, "any").filter((arg) => arg !== "-y"),
@@ -2075,17 +2088,25 @@ async function legacyInstallerOffer(run: AptRun): Promise<CeraliveOffer> {
 }
 
 /** One conclusive-or-nothing read of the evidence the CeraLive offer is decided from. */
-export function readCeraliveOfferEvidence(
-	inventory?: string,
-): Promise<OfferEvidence | undefined> {
+export function readCeraliveOfferEvidence(): Promise<
+	OfferEvidence | undefined
+> {
 	return collectOfferEvidence(
 		(argv) => runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
 		async (run) =>
 			(await readUpdateCapabilities()).mode === "capable"
 				? capableCeraliveOffer(run)
 				: legacyInstallerOffer(run),
-		inventory,
 	);
+}
+
+/** The same read for a login or startup, only while the updater would admit APT work. */
+export function readAdmittedCeraliveOfferEvidence(): Promise<
+	OfferEvidence | undefined
+> {
+	return aptWorkAdmitted()
+		? readCeraliveOfferEvidence()
+		: Promise.resolve(undefined);
 }
 
 /** The deliberate crash a finished update ends the process with, so systemd restarts CeraUI. */

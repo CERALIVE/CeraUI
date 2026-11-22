@@ -216,11 +216,23 @@ class Backend {
 	}
 
 	async hydrate(): Promise<void> {
-		await this.command("hydrate", HYDRATED_MARKER, "hydration");
-		if (!this.owner) return;
+		this.send("hydrate");
+		await this.hydrated();
 		// Startup's own replay (to tabs that authenticated early) has run.
-		await this.nextReplay();
-		this.replays = true;
+		if (this.owner) await this.nextReplay();
+	}
+
+	// Starts hydration without waiting, so its read can be held while the device changes.
+	startHydration(): void {
+		this.send("hydrate");
+	}
+
+	async hydrated(): Promise<void> {
+		await within(
+			this.out.next((line) => line === HYDRATED_MARKER),
+			"hydration",
+		);
+		this.replays = this.owner;
 	}
 
 	// The outcome of the next replay this backend ran, printed after its frames were queued.
@@ -250,6 +262,22 @@ class Backend {
 
 	check(): Promise<void> {
 		return this.command("check", CHECKED_MARKER, "check completion");
+	}
+
+	startCheck(): void {
+		this.send("check");
+	}
+
+	async checked(): Promise<void> {
+		await within(
+			this.out.next((line) => line === CHECKED_MARKER),
+			"check completion",
+		);
+	}
+
+	private send(text: string): void {
+		this.child.stdin.write(`${text}\n`);
+		this.child.stdin.flush();
 	}
 
 	// The device's APT evidence changes while this backend keeps running.
@@ -750,6 +778,72 @@ test(
 );
 
 test(
+	"a startup read that APT outran is delivered to no tab, early or late",
+	async () => {
+		// Given a proof taken while cerastream 2 was held back, and two pairs of offline
+		// tabs showing the offer an unheld producer raised.
+		const held: AptScript = {
+			keptBack: [cerastream("1", "2")],
+			holds: ["cerastream"],
+		};
+		await proveNothingPending(held);
+		const early = await olderBackendTabs();
+		const late = await olderBackendTabs();
+		// When the early tabs log in before hydration, and startup's read is held at its
+		// last command, after everything else it read still showed the hold.
+		const backend = await Backend.start({ apt: held }, { hydrate: false });
+		await reconnect(backend, early);
+		await backend.block("/usr/bin/dpkg-query");
+		backend.startHydration();
+		await backend.blocked();
+		// And the hold is released, and the late tabs log in, before that read ends.
+		await backend.setApt(pending("1", "2"));
+		for (const tab of late) await tab.connect(backend, { awaitReplay: false });
+		await backend.release();
+		const outcomes = [
+			await backend.nextReplay(),
+			await backend.nextReplay(),
+			await backend.nextReplay(),
+		];
+		await backend.hydrated();
+		await sync([...early, ...late]);
+		// Then no tab of either decoder is told to remove the now valid offer.
+		expect(names([...early, ...late])).toEqual([
+			[NOTICE],
+			[NOTICE],
+			[NOTICE],
+			[NOTICE],
+		]);
+		expect(removals([...early, ...late])).toEqual([0, 0, 0, 0]);
+		expect(outcomes).toEqual(["declined", "declined", "declined"]);
+	},
+	budget(6),
+);
+
+test(
+	"a check read that APT outran at its last command records and sends nothing",
+	async () => {
+		const opened = await olderBackendTabs();
+		const backend = await Backend.start({ apt: settled("2") });
+		await reconnect(backend, opened);
+		// When the check's evidence read is held at its last command, all it saw settled.
+		await backend.block("/usr/bin/dpkg-query");
+		backend.startCheck();
+		await backend.blocked();
+		// And a newer release reaches the device before that read ends.
+		await backend.setApt(pending("2", "3"));
+		await backend.release();
+		await backend.checked();
+		await sync(opened);
+		// Then the outrun read is neither recorded nor sent.
+		expect(names(opened)).toEqual([[NOTICE], [NOTICE]]);
+		expect(removals(opened)).toEqual([0, 0]);
+		expect(await Bun.file(record).exists()).toBe(false);
+	},
+	budget(3),
+);
+
+test(
 	"a login after the device changed is never served by a read that started before the change",
 	async () => {
 		// Given a proof taken while cerastream 2 was held back, and offline tabs showing
@@ -780,8 +874,9 @@ test(
 		// Then the tabs that logged in after the change keep the offer: no removal reached them.
 		expect(names(late)).toEqual([[NOTICE], [NOTICE]]);
 		expect(removals(late)).toEqual([0, 0]);
-		// The read that began before the change served only the login that came before it.
-		expect(outcomes).toEqual(["sent", "declined", "declined"]);
+		// No read APT outran was delivered: the earlier login's read is discarded when it ends,
+		// and its fresh read, like the later logins' reads, no longer matches the proof.
+		expect(outcomes).toEqual(["declined", "declined", "declined"]);
 	},
 	budget(5),
 );
