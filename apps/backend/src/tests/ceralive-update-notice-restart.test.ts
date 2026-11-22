@@ -12,7 +12,6 @@
  * (bare-name removals only).
  */
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { createHash } from "node:crypto";
 import {
 	copyFile,
 	mkdir,
@@ -186,7 +185,7 @@ class Backend {
 					...(step.canonicalScheduler
 						? {
 								CERALIVE_TEST_BASELINE:
-									"3df836a8b910d38b7e5d4a6cae8ef8ba17b6e742",
+									"500ab9ef24d39abb2d02947475a38c0b1b8334c9",
 							}
 						: {}),
 					PORT: "0",
@@ -288,6 +287,30 @@ class Backend {
 		);
 	}
 
+	// Holds the scheduled notice's next dpkg read, before it reads or after it answered.
+	async startCheckPausedAtDpkgRead(when: "before" | "after"): Promise<void> {
+		await this.command(
+			`pause-dpkg-read ${when}`,
+			"backend:dpkg-read-armed",
+			"dpkg read barrier armed",
+		);
+		await this.command(
+			"scheduled-package-check",
+			when === "before"
+				? "backend:dpkg-read-pending"
+				: "backend:dpkg-read-captured",
+			"paused dpkg read",
+		);
+	}
+
+	resumeDpkgRead(): Promise<void> {
+		return this.command(
+			"resume-dpkg-read",
+			CHECKED_MARKER,
+			"scheduled package check completion",
+		);
+	}
+
 	resumePackageHolds(): Promise<void> {
 		return this.command(
 			"resume-package-holds",
@@ -355,6 +378,8 @@ class Tab {
 	readonly shown = new Map<string, Copy>();
 	// Every CeraLive show and removal the tab received, in order.
 	readonly history: ("show" | "remove")[] = [];
+	// Every notification frame as sent, the publisher's per-process id aside.
+	readonly frames: string[] = [];
 	private socket: WebSocket | undefined;
 	private closed: Promise<void> = Promise.resolve();
 	private readonly answers = new Map<string, (frame: unknown) => void>();
@@ -446,6 +471,12 @@ class Tab {
 			return;
 		}
 		if (!("notification" in frame)) return;
+		this.frames.push(
+			JSON.stringify(frame.notification).replace(
+				/"publisher":"[^"]*"/g,
+				'"publisher":"<process>"',
+			),
+		);
 		if (this.decoder === "typed") {
 			const parsed = notificationsMessageSchema.safeParse(frame.notification);
 			if (!parsed.success) return;
@@ -552,25 +583,242 @@ const canonicalNoticeId = (capable: boolean, rows: readonly AptPackage[]) =>
 		)
 		.sort()
 		.join(",");
-const exactNoticeId = (
-	rows: readonly AptPackage[],
-	display = rows,
-	capable = false,
-) => {
-	const vector = rows
-		.map(({ name, arch = "arm64", candidate, planned }) => [
-			name,
-			arch,
-			planned ?? candidate,
-		])
-		.sort(([a = ""], [b = ""]) => (a < b ? -1 : a > b ? 1 : 0));
-	const key = canonicalNoticeId(capable, display).slice(noticePrefix.length);
-	return `${noticePrefix}packages:${createHash("sha256")
-		.update(
-			JSON.stringify(display.length === rows.length ? vector : [key, vector]),
-		)
-		.digest("hex")}`;
+// One step of a differential sequence; each ends with a scheduled check and a sync of every tab.
+type Act = {
+	readonly apt: AptScript;
+	// First, the first pair's typed tab dismisses its newest scheduled copy.
+	readonly dismiss?: true;
+	// First, the backend restarts (tabs keep their copies) as the next process of the run.
+	readonly restart?: true;
+	// First, another pair of tabs authenticates.
+	readonly join?: true;
 };
+// What every tab shows after a step, and every notification frame it received during it.
+type Observed = { readonly names: string[][]; readonly frames: string[][] };
+
+// The same steps on main's scheduler, on this branch, or main then (after a restart) this branch.
+async function playScheduled(
+	capable: boolean,
+	acts: readonly Act[],
+	run: "main" | "head" | "upgrade",
+): Promise<Observed[]> {
+	// Each run starts as a fresh device: no dismissal, offer record or receipt from the other.
+	await Promise.all(
+		[dismissals, record, join(root, "scheduled_package_notices.json")].map(
+			(path) => rm(path, { force: true }),
+		),
+	);
+	let main = run !== "head";
+	let backend = await Backend.start({ capable, canonicalScheduler: main });
+	const opened = scheduledTabs();
+	await reconnect(backend, opened);
+	const observed: Observed[] = [];
+	for (const act of acts) {
+		const before = new Map(opened.map((tab) => [tab, tab.frames.length]));
+		if (act.restart) {
+			await backend.close();
+			await Promise.all(opened.map((tab) => tab.dropped()));
+			if (run === "upgrade") main = false;
+			backend = await Backend.start({ capable, canonicalScheduler: main });
+			await reconnect(backend, opened);
+		}
+		await backend.setApt(act.apt);
+		if (act.join) {
+			const pair = scheduledTabs();
+			await reconnect(backend, pair);
+			opened.push(...pair);
+		}
+		if (act.dismiss) {
+			const [typed] = opened;
+			const newest = typed?.names().filter(scheduledNotice).at(-1);
+			if (newest) await typed?.dismiss(newest);
+		}
+		await backend.scheduledPackageCheck();
+		await sync(opened);
+		observed.push({
+			names: scheduledNames(opened),
+			frames: opened.map((tab) => tab.frames.slice(before.get(tab) ?? 0)),
+		});
+	}
+	await backend.close();
+	await Promise.all(opened.map((tab) => tab.dropped()));
+	return observed;
+}
+
+const srtlaOffer = cerastream("1:1.0~rc1", "1:1.0+build2", { name: "srtla" });
+const tzdata: AptPackage = {
+	name: "tzdata",
+	source: "debian",
+	installed: "1",
+	candidate: "2",
+};
+const detachedRefresh = REFRESH.replace(
+	"Hit:1 https://deb.debian.org/debian-security trixie-security InRelease",
+	"Ign:1 https://deb.debian.org/debian-security trixie-security InRelease\nHit:3 https://deb.debian.org/debian-security trixie-security Release",
+);
+const offerOnly: AptScript = { upgradable: [srtlaOffer] };
+const unreadableCandidate: AptScript = {
+	...offerOnly,
+	fail: { "package-policy": "silent-exit-1" },
+};
+// Announce-only sequences: the offer stays pending throughout, so nothing may be withdrawn.
+const differential: readonly {
+	readonly label: string;
+	readonly acts: readonly Act[];
+	readonly run?: "upgrade";
+	readonly legacyOnly?: true;
+}[] = [
+	{
+		label:
+			"a refresh that falls back to a detached Release, a reconnect and a late tab",
+		acts: [
+			{ apt: offerOnly },
+			{ apt: { ...offerOnly, refresh: { stdout: detachedRefresh } } },
+			{ apt: offerOnly, restart: true },
+			{ apt: offerOnly, join: true },
+			{ apt: offerOnly },
+		],
+	},
+	{
+		label: "the displayed list grows by a held kept-back package",
+		acts: [
+			{ apt: offerOnly },
+			{ apt: { ...offerOnly, keptBack: [tzdata], holds: [tzdata.name] } },
+			{ apt: { ...offerOnly, keptBack: [tzdata] } },
+		],
+	},
+	{
+		label: "held, kept-back, unfinished, foreign, NEW and boot-held neighbours",
+		acts: [
+			{ apt: offerOnly },
+			{
+				apt: {
+					...offerOnly,
+					installed: [cerastream("2")],
+					holds: ["cerastream"],
+				},
+			},
+			{ apt: { ...offerOnly, keptBack: [cerastream("1", "2")] } },
+			{
+				apt: {
+					...offerOnly,
+					installed: [tzdata],
+					dpkgStatus: { tzdata: "iF " },
+				},
+			},
+			{
+				apt: {
+					upgradable: [
+						srtlaOffer,
+						{ ...tzdata, name: "libc6:armhf", arch: "armhf" },
+					],
+				},
+			},
+			{
+				apt: {
+					upgradable: [
+						srtlaOffer,
+						cerastream("(none)", "2", { name: "modemmanager" }),
+					],
+				},
+			},
+			{
+				apt: {
+					...offerOnly,
+					holds: [bootPackage.name],
+					installed: [bootPackage],
+				},
+			},
+		],
+	},
+	{
+		label: "removals and downgrades in the plan",
+		acts: [
+			{ apt: offerOnly },
+			{ apt: { ...offerOnly, removed: [tzdata] } },
+			{
+				apt: {
+					...offerOnly,
+					downgraded: [{ ...tzdata, installed: "2", candidate: "1" }],
+				},
+			},
+			{ apt: offerOnly },
+		],
+	},
+	{
+		label: "an epoch, tilde and plus candidate goes lower and back",
+		acts: [
+			{ apt: offerOnly },
+			{ apt: { upgradable: [{ ...srtlaOffer, candidate: "1:1.0" }] } },
+			{ apt: offerOnly },
+		],
+	},
+	{
+		label: "dismissed, then an unreadable candidate, then a changed display",
+		acts: [
+			{ apt: offerOnly },
+			{ apt: offerOnly, dismiss: true },
+			{ apt: unreadableCandidate },
+			{ apt: { ...offerOnly, keptBack: [tzdata] } },
+		],
+	},
+	{
+		label: "a candidate read that fails and recovers",
+		acts: [
+			{ apt: offerOnly },
+			{ apt: unreadableCandidate },
+			{ apt: offerOnly },
+			{ apt: { ...offerOnly, records: { srtla: "Package: srtla\n" } } },
+			{ apt: offerOnly },
+			{ apt: offerOnly, restart: true },
+		],
+	},
+	{
+		label: "tabs kept open across the upgrade from main",
+		run: "upgrade",
+		acts: [
+			{ apt: offerOnly },
+			{ apt: offerOnly, restart: true },
+			{ apt: offerOnly },
+		],
+	},
+	{
+		label: "an installed offer while the optional size estimate keeps failing",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "2") },
+			...[1, 2, 3].map(() => ({
+				apt: {
+					...settled("2"),
+					keptBack: [tzdata],
+					fallback: {
+						exitCode: 100,
+						stdout: "",
+						stderr: "E: size unavailable\n",
+					},
+				},
+			})),
+		],
+	},
+];
+
+for (const capable of [false, true])
+	for (const { label, acts, run, legacyOnly } of differential)
+		if (!capable || !legacyOnly)
+			test(
+				`scheduled package notice frames match main's exactly (${capable ? "capable" : "legacy"}, ${label})`,
+				async () => {
+					const main = await playScheduled(capable, acts, "main");
+					// The sequence exercises main's notice at all before it is compared.
+					expect(
+						main.some(({ names }) => names.some((ids) => ids.length > 0)),
+					).toBe(true);
+					expect(await playScheduled(capable, acts, run ?? "head")).toEqual(
+						main,
+					);
+				},
+				budget(2 * (1 + acts.filter((act) => act.restart).length)),
+			);
 
 for (const capable of [false, true]) {
 	const image = capable ? "capable Debian" : "legacy roster";
@@ -679,7 +927,8 @@ for (const capable of [false, true]) {
 			canonicalRows: capable ? [independent, newcomer] : [independent],
 			offered: capable ? [independent, newcomer] : [independent],
 			withdraw: { ...installed, upgradable: [newcomer] },
-			clears: false,
+			// Legacy discovery cannot parse a plan whose only change is a NEW package: main fails that check.
+			clears: capable,
 		},
 		{
 			label: "hold after snapshot",
@@ -736,11 +985,7 @@ for (const capable of [false, true]) {
 				expect(baseline).toEqual(
 					row.offered.length > 0 ? [[mainId], [mainId]] : [[], []],
 				);
-				const exactId = exactNoticeId(row.offered, row.canonicalRows, capable);
-				const revised = await check(false);
-				expect(
-					revised.map((ids) => ids.map((id) => (id === exactId ? mainId : id))),
-				).toEqual(baseline);
+				expect(await check(false)).toEqual(baseline);
 			},
 			budget(2),
 		);
@@ -756,18 +1001,19 @@ for (const capable of [false, true]) {
 				await reconnect(backend, opened);
 				await backend.scheduledPackageCheck();
 				await sync(opened);
-				const id = exactNoticeId([packageOffer]);
+				const id = canonicalNoticeId(capable, [packageOffer]);
 				expect(scheduledNames(opened)).toEqual([[id], [id]]);
 				await backend.setApt(row.withdraw);
 				if (row.lateHold) {
-					await backend.startCheckAndCaptureHolds();
+					// The check's own reads saw no hold; it appears before the proof's dpkg read.
+					await backend.startCheckPausedAtDpkgRead("before");
 					try {
 						await backend.setApt({
 							...row.withdraw,
 							holds: [packageOffer.name],
 						});
 					} finally {
-						await backend.resumePackageHolds();
+						await backend.resumeDpkgRead();
 					}
 				} else {
 					await backend.scheduledPackageCheck();
@@ -937,12 +1183,6 @@ for (const capable of [false, true]) {
 			await backend.setApt({
 				installed: [{ ...packageOffer, installed: "2" }],
 				keptBack,
-				// The optional legacy size probe is not the original plan.
-				fallback: {
-					exitCode: 100,
-					stdout: "",
-					stderr: "E: size unavailable\n",
-				},
 			});
 			await backend.scheduledPackageCheck();
 			await sync(opened);
@@ -951,6 +1191,51 @@ for (const capable of [false, true]) {
 		},
 		budget(1),
 	);
+
+	if (!capable)
+		test(
+			"scheduled package notice is kept while the optional legacy size estimate fails",
+			async () => {
+				const backend = await Backend.start({
+					capable,
+					apt: { upgradable: [packageOffer] },
+				});
+				const opened = scheduledTabs();
+				await reconnect(backend, opened);
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				const offer = canonicalNoticeId(capable, [packageOffer]);
+				expect(scheduledNames(opened)).toEqual([[offer], [offer]]);
+				const installedBesideKeptBack: AptScript = {
+					installed: [{ ...packageOffer, installed: "2" }],
+					keptBack,
+				};
+				// Main counts this check as failed: no withdrawal, and no second copy either.
+				for (const _ of [1, 2]) {
+					await backend.setApt({
+						...installedBesideKeptBack,
+						fallback: {
+							exitCode: 100,
+							stdout: "",
+							stderr: "E: size unavailable\n",
+						},
+					});
+					await backend.scheduledPackageCheck();
+					await sync(opened);
+					expect(scheduledNames(opened)).toEqual([[offer], [offer]]);
+					expect(histories(opened)).toEqual([["show"], ["show"]]);
+				}
+				await backend.setApt(installedBesideKeptBack);
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				expect(scheduledNames(opened)).toEqual([[], []]);
+				expect(histories(opened)).toEqual([
+					["show", "remove"],
+					["show", "remove"],
+				]);
+			},
+			budget(1),
+		);
 
 	test(
 		`scheduled package notice keeps an offered member listed as kept back (${image})`,
@@ -1052,15 +1337,14 @@ for (const capable of [false, true]) {
 			await Promise.all([...early, ...late].map((tab) => tab.dropped()));
 			backend = await Backend.start({ capable, apt: configured });
 			await reconnect(backend, early);
-			await backend.pausePackageCompare();
-			await backend.startCheckAndWaitForCapturedCompare();
+			await backend.startCheckPausedAtDpkgRead("after");
 			try {
-				await backend.setApt(offered);
+				// Authenticated after the check began: its proof is not for this pair.
 				await reconnect(backend, late);
 				expect(scheduledNames(late)).toEqual([[offer], [offer]]);
 				expect(removals(late)).toEqual([0, 0]);
 			} finally {
-				await backend.resumePackageCompare();
+				await backend.resumeDpkgRead();
 			}
 			await sync([...early, ...late]);
 			expect(scheduledNames(late)).toEqual([[offer], [offer]]);
@@ -1123,34 +1407,8 @@ for (const capable of [false, true]) {
 			const other = cerastream("1", "2", { name: "srtla" });
 			const configured = { ...pkg, installed: pkg.candidate };
 			const installed = { installed: [configured] };
-			const opened = [
-				new Tab("typed", scheduledNotice),
-				new Tab("v2026.7.2", scheduledNotice),
-			];
-			const offline = [
-				new Tab("typed", scheduledNotice),
-				new Tab("v2026.7.2", scheduledNotice),
-			];
-			let backend = await Backend.start({
-				capable,
-				apt: { upgradable: [pkg] },
-			});
-			await reconnect(backend, opened);
-			await backend.scheduledPackageCheck();
-			await sync(opened);
-			const offer = opened[0]?.names().find(scheduledNotice) ?? "";
-			expect(offer).not.toBe("");
-			const shown = () =>
-				names(opened).map((items) => items.filter(scheduledNotice));
-			expect(shown()).toEqual([[offer], [offer]]);
-			await reconnect(backend, offline);
-			expect(names(offline).map((items) => items.includes(offer))).toEqual([
-				true,
-				true,
-			]);
-
-			let expected = [offer];
-			for (const [label, apt, adds] of [
+			const offer = canonicalNoticeId(capable, [pkg]);
+			const steps: readonly (readonly [string, AptScript])[] = [
 				["failed refresh", failing(installed)],
 				[
 					"index omitted",
@@ -1188,7 +1446,6 @@ for (const capable of [false, true]) {
 						upgradable: [other],
 						keptBack: [pkg],
 					},
-					capable ? [] : [exactNoticeId([other], [other, pkg])],
 				],
 				[
 					"held even with the candidate configured",
@@ -1204,7 +1461,6 @@ for (const capable of [false, true]) {
 						holds: [`${pkg.name}:arm64`],
 						upgradable: [other],
 					},
-					capable ? [] : [exactNoticeId([other])],
 				],
 				[
 					"unpacked or unconfigured",
@@ -1229,26 +1485,49 @@ for (const capable of [false, true]) {
 					"readback failed",
 					{ ...installed, fail: { "dpkg-query": "silent-exit-1" } },
 				],
-			] satisfies readonly (readonly [
-				string,
-				AptScript,
-				(readonly string[])?,
-			])[]) {
-				await backend.setApt(apt);
+			];
+			const shownBy = (opened: readonly Tab[]) =>
+				names(opened).map((items) => items.filter(scheduledNotice));
+			// Each uncertain step keeps the offer with no removal, and the surviving set is main's.
+			const walk = async (canonicalScheduler: boolean) => {
+				const opened = scheduledTabs();
+				const offline = scheduledTabs();
+				const backend = await Backend.start({
+					capable,
+					apt: { upgradable: [pkg] },
+					canonicalScheduler,
+				});
+				await reconnect(backend, opened);
 				await backend.scheduledPackageCheck();
 				await sync(opened);
-				expect([
-					label,
-					shown().map((items) => items.includes(offer)),
-					removals(opened),
-				]).toEqual([label, [true, true], [0, 0]]);
-				expected = [...new Set([...expected, ...(adds ?? [])])];
-				expect(shown()).toEqual([expected, expected]);
-			}
+				expect(shownBy(opened)).toEqual([[offer], [offer]]);
+				await reconnect(backend, offline);
+				expect(names(offline).map((items) => items.includes(offer))).toEqual([
+					true,
+					true,
+				]);
+				const sets: string[][][] = [];
+				for (const [label, apt] of steps) {
+					await backend.setApt(apt);
+					await backend.scheduledPackageCheck();
+					await sync(opened);
+					expect([
+						label,
+						shownBy(opened).map((items) => items.includes(offer)),
+						removals(opened),
+					]).toEqual([label, [true, true], [0, 0]]);
+					sets.push(shownBy(opened));
+				}
+				await backend.close();
+				await Promise.all([...opened, ...offline].map((tab) => tab.dropped()));
+				return { opened, offline, sets };
+			};
+			const main = await walk(true);
+			const { opened, offline, sets } = await walk(false);
+			expect(sets).toEqual(main.sets);
+			const shown = () => shownBy(opened);
 
-			await backend.close();
-			await Promise.all([...opened, ...offline].map((tab) => tab.dropped()));
-			backend = await Backend.start({ capable, apt: installed });
+			const backend = await Backend.start({ capable, apt: installed });
 			await reconnect(backend, opened);
 			expect(shown().map((items) => items.includes(offer))).toEqual([
 				true,
@@ -1274,7 +1553,7 @@ for (const capable of [false, true]) {
 			]);
 			expect(removals(offline)).toEqual([0, 0]);
 		},
-		budget(3),
+		budget(4),
 	);
 
 	test(
@@ -1327,6 +1606,105 @@ for (const capable of [false, true]) {
 			expect(successor).toHaveLength(1);
 			expect(successor).not.toContain(newer);
 			expect(opened[1]?.names()).toEqual(expect.arrayContaining(successor));
+
+			// The same pending version after a restart is the same notice, not a second copy.
+			const held = scheduledNames(opened);
+			await backend.close();
+			await Promise.all(opened.map((tab) => tab.dropped()));
+			const restarted = await Backend.start({
+				capable,
+				apt: pending("2", "4"),
+			});
+			await reconnect(restarted, opened);
+			await restarted.scheduledPackageCheck();
+			await sync(opened);
+			expect(scheduledNames(opened)).toEqual(held);
+		},
+		budget(2),
+	);
+
+	for (const [change, apt] of [
+		["below both offered versions", settled("1")],
+		["half-configured", { ...settled("3"), dpkgStatus: { cerastream: "iF " } }],
+		["unpacked", { ...settled("3"), dpkgStatus: { cerastream: "iU " } }],
+	] satisfies readonly (readonly [string, AptScript])[])
+		test(
+			`scheduled package withdrawal keeps both versions when dpkg moves ${change} during its pass (${image})`,
+			async () => {
+				const backend = await Backend.start({
+					capable,
+					apt: pending("1", "2"),
+				});
+				const opened = scheduledTabs();
+				await reconnect(backend, opened);
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				await backend.setApt(pending("2", "3"));
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				const offered = scheduledNames(opened);
+				expect(offered.map((ids) => ids.length)).toEqual([2, 2]);
+
+				// The pass's first dpkg read shows version 3 configured; the package then moves.
+				await backend.setApt(settled("3"));
+				await backend.startCheckPausedAtDpkgRead("after");
+				try {
+					await backend.setApt(apt);
+				} finally {
+					await backend.resumeDpkgRead();
+				}
+				await sync(opened);
+				expect(scheduledNames(opened)).toEqual(offered);
+				expect(removals(opened)).toEqual([0, 0]);
+
+				await backend.setApt(settled("3"));
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				expect(scheduledNames(opened)).toEqual([[], []]);
+				expect(removals(opened)).toEqual([2, 2]);
+			},
+			budget(1),
+		);
+
+	test(
+		`scheduled package withdrawal keeps the offer whose package is held before the proof read and withdraws the other (${image})`,
+		async () => {
+			const backend = await Backend.start({
+				capable,
+				apt: { upgradable: [packageOffer, independent] },
+			});
+			const opened = scheduledTabs();
+			await reconnect(backend, opened);
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			const both = canonicalNoticeId(capable, [packageOffer, independent]);
+			expect(scheduledNames(opened)).toEqual([[both], [both]]);
+			await backend.setApt({
+				upgradable: [independent],
+				installed: [configured],
+			});
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			const srtlaOnly = canonicalNoticeId(capable, [independent]);
+			expect(scheduledNames(opened)).toEqual([
+				[both, srtlaOnly],
+				[both, srtlaOnly],
+			]);
+
+			// Both offers installed; a hold on ${packageOffer.name} lands right before the proof read.
+			const done = {
+				installed: [configured, { ...independent, installed: "2" }],
+			};
+			await backend.setApt(done);
+			await backend.startCheckPausedAtDpkgRead("before");
+			try {
+				await backend.setApt({ ...done, holds: [packageOffer.name] });
+			} finally {
+				await backend.resumeDpkgRead();
+			}
+			await sync(opened);
+			expect(scheduledNames(opened)).toEqual([[both], [both]]);
+			expect(removals(opened)).toEqual([1, 1]);
 		},
 		budget(1),
 	);

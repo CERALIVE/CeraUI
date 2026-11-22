@@ -180,6 +180,7 @@ import { reconcileAptChannel } from "./modules/system/update-apt-channel.ts";
 import { runUpdateBootstrap } from "./modules/system/update-bootstrap.ts";
 import { readUpdateCapabilities } from "./modules/system/update-capabilities.ts";
 import { reconcileOsStageStartup } from "./modules/system/update-orchestrator/os-stage-startup.ts";
+import { initScheduledPackageNotice } from "./modules/system/update-orchestrator/package-offer-notice.ts";
 import {
 	awaitUpdateStartupAdjudication,
 	startUpdateOrchestrator,
@@ -500,6 +501,8 @@ await guardNonCritical("apt-channel-reconcile", async () => {
 // Loads the stored CeraLive offer before recovery takes an update against it; only this
 // process's own conclusive check announces or withdraws the notice.
 initCeraliveUpdateNotice();
+// Loads the scheduled package notice's receipts; only a later complete scheduled check withdraws.
+initScheduledPackageNotice();
 // Todo 36: the packages+OS+slot-sync orchestrator. Its own resume path (G17)
 // is the ONLY thing that reattaches to a persisted `committing` phase's
 // detached apt unit on this boot — running it BEFORE the general standalone

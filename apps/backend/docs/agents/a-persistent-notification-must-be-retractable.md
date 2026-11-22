@@ -282,8 +282,9 @@ Without a stored record (a banner main raised), a candidate pinned out of the
 solver's view looks like "none" to a complete check, and that banner is retired;
 Install would not take it either. A notice dismissed under a former key is shown
 once more, and a dismissal from an older frontend no longer sticks. The
-orchestrator's package `update:updates-available:*` notice has independent
-exact-set identities and shares the evidence parsers and dpkg readback. See
+orchestrator's package `update:updates-available:*` notice keeps main's ids
+(legacy: a distinct id only for a newer candidate) and is withdrawn only on a
+receipt plus one whole-database dpkg snapshot. See
 [Scheduled package availability notice](../../../../docs/DEVICE-UPDATES.md#scheduled-package-availability-notice-exists-host-tested).
 
 Coverage: `tests/ceralive-update-notice-lifecycle.test.ts` (real check entries and

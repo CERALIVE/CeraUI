@@ -305,11 +305,12 @@ export function notificationWithdraw(
 	return removeNotification(name, true, recipients);
 }
 
-/** Capture authenticated sessions before the evidence-producing operation begins. */
+/** The authenticated sessions now, captured before the evidence for a removal is read. */
 export function captureNotificationAudience(): ReadonlySet<AbortSignal> {
 	return new Set(getAuthenticatedClients().map(socketSessionSignal));
 }
 
+/** The sockets still in a captured session, and whether any session authenticated since. */
 export function liveNotificationAudience(snapshot: ReadonlySet<AbortSignal>) {
 	const active = getAuthenticatedClients();
 	const recipients = active.filter((socket) =>
@@ -388,14 +389,6 @@ export function notificationExists(name: string, nowMs: number = getms()) {
 
 	if (_notificationIsLive(pn, nowMs) !== false) return pn;
 	return undefined;
-}
-
-export function hasLiveNotificationForDismissal(key: string): boolean {
-	const now = getms();
-	for (const [name, notification] of persistentNotifications)
-		if (notification.dismissalKey === key && notificationExists(name, now))
-			return true;
-	return false;
 }
 
 export function getPersistentNotifications(

@@ -1550,50 +1550,78 @@ touched. Contract, with the stale sequences it accepts:
 
 ### Scheduled package availability notice [EXISTS; host-tested]
 
-The orchestrator's package `updates-available` notice has two paths, separate
-from the OS notice with the same wording:
+The orchestrator's package notice `update:updates-available:<id>` ("Updates are
+available. Review them in Software Updates.") has two separate paths. The OS
+notice with the same wording (`update:updates-available:os:<version>`) is not
+part of either.
 
-- **Announce:** the same available/actionable result that raises the notice
-  on main raises it here. The complete display set controls deduplication and
-  dismissal, including informational rows. The legacy exception is that a
-  known new candidate version gets a distinct notice and dismissal, even if
-  the displayed package names are unchanged. Neither proof qualification nor
-  receipt storage changes those decisions. When the check can identify exact
-  instances, the wire name includes their `(name, architecture, version)`
-  digest so a withdrawal can address that copy. Copy and frame shape are unchanged.
-- **Withdraw:** require a conclusive check with no actionable packages, a
-  recorded exact offer, and `system.updateOutcome`'s exact-instance Debian
-  version readback. Every member must be configured at or above the offered
-  version and must not be held. A later dpkg read of a held instance (`hi `)
-  also invalidates earlier overlapping proofs in that withdrawal batch. The outcome RPC's own configured-held
-  semantics are unchanged. A scoped hold or kept-back member protects that
-  offer only; it does not prevent an independent announcement. On legacy, a
-  kept-back-only check uses the original discovery rather than the optional
-  size estimate. An older proof, install exit, restart, startup or login
-  cannot remove a newer or independent notice.
+**Announce, as main does.** A scheduled check announces from the same
+available/actionable result as main, with main's display id (`name=version`
+rows on capable images, `name=unknown` on legacy images, kept-back rows
+included), main's dedupe by name, main's dismissal key and main's copy. The one
+owner-approved exception is legacy, whose display id carries no versions: when
+an actionable package's candidate, read exactly by the first-party verdict, is
+newer (`dpkg --compare-versions`) than the one its display set was last
+announced for, the notice gets a distinct id (the display id with those
+candidates in place of `unknown`) and therefore a distinct dismissal. An
+unreadable, unchanged or lower candidate keeps the id the display set already
+has, and a display set's first announcement uses main's id, so a tab kept open
+across the upgrade from main, a restart, or a dismissal made on main behaves as
+before. Withdrawal evidence never decides whether, under which id or to whom a
+notice is announced. The differential tests run main's own scheduler (backend
+sources at the pinned main commit) and this branch over the same scripted APT
+sequences and require identical notification frames in every tab, for both
+images and both decoders.
 
-Whole-system APT evidence used to qualify withdrawal (and to decide whether
-an announcement can carry an exact receipt, never whether to announce):
+**Withdraw, additive and strict.** After main's cycle finished, a scheduled check
+may remove an earlier notice only when all of these hold:
 
-| Evidence | Scope and reason |
-|---|---|
-| Holds and kept-back lists | Exact name, with architecture when APT supplies it. The kept-back list must account for all names in the solver count before it can be used. Existing capable first-party hold admission remains a prerequisite to a usable plan. |
-| Upgrade and new-install counts | Account for the full plan, including rows outside the legacy Install set: missing/duplicate rows can conceal offer members. Legacy uses only its admitted upgrade names, not global counts or NEW rows as candidates. Capable includes admitted `Inst` rows, including eligible new dependencies. Nonempty exact offers do not authorize retirement. |
-| `not fully installed or removed` and unmatched `Conf` rows | Still fail closed: the aggregate unfinished-work line does not identify affected packages; a configure-only row is work outside the proven `Inst` vector. A complete plan and the exact configured dpkg proof are both required. |
-| Removals and downgrades | Capable install admission rejects removals/purges; the scheduled notice does not infer a usable plan from that refusal. The accepted summary grammar does not establish downgrade plans as safe upgrade evidence. Legacy accounts for list counts and refuses unmodeled members of the Install roster, including removals or downgrades; named removals outside that roster do not themselves veto a well-formed plan. |
+- This process recorded a receipt for it: the exact instances (name,
+  architecture, candidate) its showing stood for, from the same discovery. A
+  showing without exact evidence has no receipt and is never withdrawn.
+- Main ran the check to completion and every part of it is complete: no
+  ignored or failed index in the refresh; every source the inventory lists
+  refreshed (capable), or every CeraLive source refreshed and every first-party
+  candidate read (legacy); the plan's lists match its counts; no unfinished
+  work. When the optional legacy size estimate fails, main counts the check as
+  failed, and nothing is withdrawn.
+- The check lists none of the notice's packages: pending, kept back, removed,
+  downgraded, configure-only or (capable) held.
+- One `dpkg-query` snapshot of the whole database shows every instance `ii `
+  (installed, configured, not held) at or above its candidate, no package
+  anywhere unfinished, and a second identical read at the end of the pass
+  shows that nothing moved meanwhile. A held, unfinished, lower or missing
+  instance keeps every notice that contains it.
+- The notice's live copy, if any, is the showing this process recorded.
 
-The bounded `scheduled_package_offers.json` file next to the first-party
-record carries issued notice IDs and their offered vectors, not proof or
-removals. If unreadable, unwritable or full (32 offers / 256 KiB), new notices
-still appear, but there is no new receipt. Retractions go live in typed and bare-name formats
-only to sessions already authenticated at the start of the check and still in
-that session at delivery. The notice issuance is checked again before removing
-it. If a session authenticated during the check, the offer remains on disk for
-a later fresh check, not for login replay. A tab offline throughout a retirement
-can keep its copy until reload or dismissal; pre-fix notices have no exact
-recorded set and cannot be retired automatically. Back-to-back nonempty plans
-do not retire older vectors. If the file fills, a complete empty check can
-make room by proving stored offers. No board qualification is claimed.
+The removal goes, as a typed and a bare-name frame, only to the sessions
+authenticated before the check began. When a session authenticated during the
+check, the receipt stays for a later check. Startup, login, a restart and an
+install's exit never withdraw anything. After a proven withdrawal the live
+copy is gone, so a later announcement of the same id is shown again; that is
+the only way the visible sequence can differ from main.
+
+Whole-system facts the proof reads, and why each is safe:
+
+| Fact | Where it is read | Why it is safe |
+|---|---|---|
+| Refresh output | this check's `apt-get update` | Decides only completeness; an ignored, failed or missing index keeps every notice |
+| Source inventory (capable) | this check's `apt-cache policy` | Same; it lists the indexes the refresh must have reached |
+| Plan lists and counts | this check's simulation or discovery | Only names to keep; nothing is announced or withdrawn from a count |
+| Holds (capable) | this check's `apt-mark showhold` | Only names to keep |
+| dpkg database | one `dpkg-query -W`, confirmed by a second | Version, architecture and want/state per instance; one unfinished row anywhere keeps all |
+| Candidates | first-party verdict `apt-cache policy`/`show` (legacy), the simulation's `Inst` rows (capable) | Receipts and the legacy newer-candidate id only; a failed read keeps the old id and records no receipt |
+
+`scheduled_package_notices.json` (bounded: 64 receipts, 64 legacy display ids,
+256 KiB; the oldest entry goes first, which only leaves that notice as main
+would) stores ids, exact instances and legacy candidates, never proof or a
+removal to replay. Known limits: a tab offline through a removal keeps its copy
+until reload or dismissal; notices main showed before this change have no
+receipt and stay until dismissed; a candidate pinned away or withdrawn from the
+archive before it was installed keeps its notice; on legacy, the newer-candidate
+id and receipts need the first-party verdict, so a check that keeps a
+first-party package back neither mints a newer id nor records a receipt. No
+board qualification is claimed.
 
 ### Download hold notice [EXISTS; host-tested, board qualification owed]
 

@@ -27,6 +27,7 @@ import { logger } from "../../../helpers/logger.ts";
 import { shouldUseMocks } from "../../../mocks/mock-service.ts";
 import { emitEvent } from "../../events/emit.ts";
 import { currentLifecycleHolder } from "../../streaming/lifecycle-admission.ts";
+import { captureNotificationAudience } from "../../ui/notifications.ts";
 import { broadcastMsg } from "../../ui/websocket-server.ts";
 import { cleanAptCache } from "../apt-cache-clean.ts";
 import { isRealDevice } from "../device-detection.ts";
@@ -46,7 +47,9 @@ import {
 	getLastInstallUnitVerdict,
 	getUpdateState,
 	type InstallUnitVerdict,
+	lastScheduledPackageEvidence,
 	recoverSoftwareUpdateIfRunning,
+	runSoftwareUpdateCheck,
 	type SoftwareUpdateError,
 	startSoftwareUpdate,
 	type UpdateStartOutcome,
@@ -186,8 +189,9 @@ import {
 } from "./os-staged-receipt-retirement.ts";
 import { settleOsUnlaunchedWitness } from "./os-unlaunched-adapter.ts";
 import {
-	preparePackageAnnouncement,
-	runScheduledPackageCheck,
+	packageNoticeId,
+	recordPackageAnnouncement,
+	withdrawProvenPackageNotices,
 } from "./package-offer-notice.ts";
 import { progressFromWire } from "./package-progress.ts";
 import {
@@ -280,7 +284,7 @@ export interface OrchestratorRuntimeDeps {
 	readonly isIdle: (schedule: UpdateSettings["schedule"]) => Promise<boolean>;
 	readonly isStreamLive: () => boolean;
 	readonly onlyMeteredCandidateExists: () => Promise<boolean>;
-	readonly runPackageCheck: typeof runScheduledPackageCheck;
+	readonly runPackageCheck: () => Promise<SoftwareUpdateError>;
 	readonly startPackageInstall: () => UpdateStartOutcome;
 	readonly getPackageInstallWireState: () => UpdateState;
 	readonly stopPackageInstallUnit: () => Promise<void>;
@@ -433,7 +437,7 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 		(await getIdleStatus({ now: Date.now(), schedule })).idle,
 	isStreamLive: () => !isStreamConfirmedIdle(),
 	onlyMeteredCandidateExists: defaultOnlyMeteredCandidateExists,
-	runPackageCheck: runScheduledPackageCheck,
+	runPackageCheck: runSoftwareUpdateCheck,
 	startPackageInstall: () => startSoftwareUpdate(notePackageCommitSucceeded),
 	getPackageInstallWireState: getUpdateState,
 	stopPackageInstallUnit: stopPackageInstallUnitForStream,
@@ -1219,24 +1223,17 @@ async function runPackageCheckCycle(): Promise<void> {
 	packageCheckDeferral = null;
 	const now = deps.now();
 	dispatch({ type: "PACKAGE_CHECK_STARTED", now });
-	const observed: {
-		announcement?: ReturnType<typeof preparePackageAnnouncement>;
-	} = {};
+	// Sessions that may hear a removal this check proves: those authenticated before it.
+	const audience = captureNotificationAudience();
 	const error =
 		(await readCapabilityRegime()) !== null
-			? await deps.runPackageCheck(async (identity, proof) => {
-					const wire = deps.getPackageInstallWireState();
-					if (wire.kind === "available" && (wire.actionable_count ?? 0) > 0)
-						observed.announcement = preparePackageAnnouncement(
-							wire,
-							identity,
-							proof,
-						);
-				})
+			? await deps.runPackageCheck()
 			: "discovery_failed";
 	const outcomeNow = deps.now();
 	if (error === null) {
 		const wire = deps.getPackageInstallWireState();
+		const evidence = lastScheduledPackageEvidence();
+		let announced: { readonly id: string; readonly shown: boolean } | undefined;
 		const actionableCount =
 			wire.kind === "available" ? (wire.actionable_count ?? 0) : 0;
 		if (wire.kind === "available") {
@@ -1245,8 +1242,19 @@ async function runPackageCheckCycle(): Promise<void> {
 					item.version ? [{ name: item.name, version: item.version }] : [],
 				) ?? [],
 			);
-			if (actionableCount > 0)
-				(observed.announcement ?? preparePackageAnnouncement(wire))();
+			if (actionableCount > 0) {
+				const id = await packageNoticeId(
+					wire.packages
+						?.map((item) => `${item.name}=${item.version ?? "unknown"}`)
+						.sort()
+						.join(",") ?? wire.identity.version,
+					evidence,
+				);
+				announced = {
+					id,
+					shown: notifyUpdate({ kind: "updates-available", id }),
+				};
+			}
 		}
 		const nextAttemptAt =
 			outcomeNow +
@@ -1272,6 +1280,15 @@ async function runPackageCheckCycle(): Promise<void> {
 					},
 		);
 		await kernelRuntime.check();
+		// Additive, after main's cycle: a receipt for what was announced, then strict withdrawal.
+		if (announced)
+			recordPackageAnnouncement(
+				announced.id,
+				announced.shown,
+				wire.kind === "available" ? wire.packages : undefined,
+				evidence,
+			);
+		await withdrawProvenPackageNotices(audience, evidence, announced?.id);
 		return;
 	}
 	const rateLimited =

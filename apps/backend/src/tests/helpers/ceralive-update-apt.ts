@@ -38,6 +38,9 @@ export type AptScript = {
 	readonly holds?: readonly string[];
 	// Known to APT with a candidate, not installed and not planned.
 	readonly available?: readonly AptPackage[];
+	// Installed packages the plan removes, and installed packages it downgrades to their candidate.
+	readonly removed?: readonly AptPackage[];
+	readonly downgraded?: readonly AptPackage[];
 	// dpkg's db:Status-Abbrev for a package, instead of the `ii ` its state implies.
 	readonly dpkgStatus?: Readonly<Record<string, string>>;
 	// How one command fails instead of answering (see FailedRead).
@@ -127,9 +130,16 @@ function policy(pkg: AptPackage): string {
 	return `${pkg.name}:\n  Installed: ${pkg.installed}\n  Candidate: ${pkg.candidate}\n  Version table:\n     ${pkg.candidate} ${pin}\n        ${pin} ${source}\n${local}`;
 }
 
-function counts(packages: readonly AptPackage[], notUpgraded = 0): string {
+function counts(
+	packages: readonly AptPackage[],
+	notUpgraded = 0,
+	removed = 0,
+	downgraded = 0,
+): string {
 	const upgraded = packages.filter(isInstalled).length;
-	return `${upgraded} upgraded, ${packages.length - upgraded} newly installed, 0 to remove and ${notUpgraded} not upgraded.\n`;
+	// APT names downgrades only when there are some.
+	const down = downgraded > 0 ? `${downgraded} downgraded, ` : "";
+	return `${upgraded} upgraded, ${packages.length - upgraded} newly installed, ${down}${removed} to remove and ${notUpgraded} not upgraded.\n`;
 }
 
 const KEPT_BACK = "The following packages have been kept back:";
@@ -143,8 +153,10 @@ function simulation(
 	packages: readonly AptPackage[],
 	keptBack: readonly AptPackage[] = [],
 	unfinished: readonly AptPackage[] = [],
+	removed: readonly AptPackage[] = [],
+	downgraded: readonly AptPackage[] = [],
 ): string {
-	const rows = packages.map(
+	const rows = [...packages, ...downgraded].map(
 		(pkg) =>
 			`Inst ${pkg.name}${isInstalled(pkg) ? ` [${pkg.installed}]` : ""} (${pkg.planned ?? pkg.candidate} stable [${pkg.arch ?? "arm64"}])\n`,
 	);
@@ -153,7 +165,10 @@ function simulation(
 		(pkg) =>
 			`Conf ${pkg.name} (${pkg.installed} stable [${pkg.installedArch ?? pkg.arch ?? "arm64"}])\n`,
 	);
-	return `${PREAMBLE}${keptBackList(keptBack)}${counts(packages, keptBack.length)}${unfinishedLine(unfinished)}${rows.join("")}${configure.join("")}`;
+	const removals = removed.map(
+		(pkg) => `Remv ${pkg.name} [${pkg.installed}]\n`,
+	);
+	return `${PREAMBLE}${keptBackList(keptBack)}${counts(packages, keptBack.length, removed.length, downgraded.length)}${unfinishedLine(unfinished)}${rows.join("")}${configure.join("")}${removals.join("")}`;
 }
 
 // What --assume-no discovery prints before its lists and summary.
@@ -167,8 +182,11 @@ function upgradePlan(
 	packages: readonly AptPackage[],
 	notUpgraded = 0,
 	unfinished: readonly AptPackage[] = [],
+	removed: readonly AptPackage[] = [],
+	downgraded: readonly AptPackage[] = [],
 ): SpawnWithTimeoutResult {
-	if (packages.length === 0 && unfinished.length === 0)
+	const changes = packages.length + removed.length + downgraded.length;
+	if (changes === 0 && unfinished.length === 0)
 		return ok(`${CALCULATING}${nothing(notUpgraded)}`);
 	const list = (heading: string, rows: readonly AptPackage[]) =>
 		rows.length === 0
@@ -179,7 +197,7 @@ function upgradePlan(
 		stdout: `${CALCULATING}${list(
 			"The following NEW packages will be installed:",
 			packages.filter((pkg) => !isInstalled(pkg)),
-		)}${list("The following packages will be upgraded:", packages.filter(isInstalled))}${counts(packages, notUpgraded)}${unfinishedLine(unfinished)}${packages.length > 0 ? "Need to get 4 kB of archives.\n" : "After this operation, 0 B of additional disk space will be used.\n"}Do you want to continue? [Y/n] N\nAbort.\n`,
+		)}${list("The following packages will be REMOVED:", removed)}${list("The following packages will be DOWNGRADED:", downgraded)}${list("The following packages will be upgraded:", packages.filter(isInstalled))}${counts(packages, notUpgraded, removed.length, downgraded.length)}${unfinishedLine(unfinished)}${packages.length + downgraded.length > 0 ? "Need to get 4 kB of archives.\n" : "After this operation, 0 B of additional disk space will be used.\n"}Do you want to continue? [Y/n] N\nAbort.\n`,
 		stderr: "",
 	};
 }
@@ -240,11 +258,22 @@ function answer(script: AptScript) {
 	const upgradable = script.upgradable ?? [];
 	const keptBack = script.keptBack ?? [];
 	const all = [...upgradable, ...keptBack];
+	const removed = script.removed ?? [];
+	const downgraded = script.downgraded ?? [];
 	const present = [
 		...all,
 		...(script.installed ?? []),
 		...(script.available ?? []),
+		...removed,
+		...downgraded,
 	];
+	// dpkg holds the instance apt-mark names, bare or architecture-qualified.
+	const held = (pkg: AptPackage) =>
+		script.holds?.some(
+			(name) =>
+				name === pkg.name ||
+				name === `${pkg.name}:${pkg.installedArch ?? pkg.arch ?? "arm64"}`,
+		) === true;
 	// Unpacked, half-installed, half-configured or awaiting triggers: APT counts it unfinished.
 	const unfinished = present.filter(
 		(pkg) =>
@@ -256,7 +285,13 @@ function answer(script: AptScript) {
 		if (bin === "/usr/bin/apt-get" && verb === "update")
 			return { ...ok(REFRESH), ...script.refresh };
 		if (bin === "/usr/bin/apt-get" && verb === "dist-upgrade") {
-			const plan = upgradePlan(upgradable, keptBack.length, unfinished);
+			const plan = upgradePlan(
+				upgradable,
+				keptBack.length,
+				unfinished,
+				removed,
+				downgraded,
+			);
 			if (keptBack.length === 0) return { ...plan, ...script.discovery };
 			return {
 				...plan,
@@ -267,18 +302,26 @@ function answer(script: AptScript) {
 		if (bin === "/usr/bin/apt-get" && verb === "install")
 			return { ...upgradePlan(keptBack), ...script.fallback };
 		if (bin === "/usr/bin/apt-get" && verb === "-s")
-			return ok(simulation(upgradable, keptBack, unfinished));
+			return ok(
+				simulation(upgradable, keptBack, unfinished, removed, downgraded),
+			);
 		if (bin === "/usr/bin/apt-mark")
 			return ok((script.holds ?? []).map((name) => `${name}\n`).join(""));
-		// What #664's readback asks: `dpkg-query -W -f=<format> -- <names>`.
+		// What #664's readback asks: `dpkg-query -W -f=<format> -- <names>`,
+		// or without names, every package dpkg's database lists.
 		if (bin === "dpkg-query") {
-			const wanted = argv.slice(argv.indexOf("--") + 1);
+			const all = !argv.includes("--");
+			const wanted = all ? [] : argv.slice(argv.indexOf("--") + 1);
 			const known = present.filter(
-				(pkg) => isInstalled(pkg) && wanted.includes(pkg.name),
+				(pkg, index) =>
+					isInstalled(pkg) &&
+					(all
+						? present.findIndex((other) => other.name === pkg.name) === index
+						: wanted.includes(pkg.name)),
 			);
 			const rows = known.map(
 				(pkg) =>
-					`${pkg.name}\t${pkg.installedArch ?? pkg.arch ?? "arm64"}\t${script.dpkgStatus?.[pkg.name] ?? (script.holds?.includes(pkg.name) ? "hi " : "ii ")}\t${pkg.installed}\n`,
+					`${pkg.name}\t${pkg.installedArch ?? pkg.arch ?? "arm64"}\t${script.dpkgStatus?.[pkg.name] ?? (held(pkg) ? "hi " : "ii ")}\t${pkg.installed}\n`,
 			);
 			const absent = wanted.filter(
 				(name) => !known.some((pkg) => pkg.name === name),

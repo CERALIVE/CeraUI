@@ -33,6 +33,10 @@ const ROW =
 	/^([a-z0-9][a-z0-9+.-]*)\t([a-z0-9][a-z0-9-]*)\t([uihrp][ncHUFWti][ R])\t([0-9][A-Za-z0-9.+:~-]*)?$/;
 // Installed and configured with no reinstall required; a hold changes no state.
 const CONFIGURED = /^[ih]i $/;
+// The same, and not held: a held package is one the operator keeps where it is.
+const CONFIGURED_UNHELD = /^ii $/;
+// Half-installed, unpacked, half-configured, awaiting or pending triggers, or reinstall required.
+const UNFINISHED = /^.[HUFWt]|^..R/;
 const ARCH = /^[a-z0-9][a-z0-9-]*$/;
 
 type Row = {
@@ -89,24 +93,16 @@ export async function readUpdateOutcome(
 		: { kind: "unknown", exit: failedExit };
 }
 
-/** Whether one complete dpkg read shows every target's own instance configured at its version or later. */
-export async function targetsAttained(
-	targets: readonly UpdateTarget[],
-	{
-		run,
-		now,
-		deadline = now() + UPDATE_OUTCOME_DEADLINE_MS,
-		requireUnheld = false,
-		onHeldInstance,
-	}: Pick<UpdateOutcomeDeps, "run" | "now"> & {
-		readonly deadline?: number;
-		readonly requireUnheld?: boolean;
-		readonly onHeldInstance?: (name: string, arch: string) => void;
-	},
-): Promise<boolean> {
-	if (targets.length === 0) return false;
-	// A timeout, a throw or no time left is no answer.
-	const ask = (argv: string[]) => {
+type Ask = (
+	argv: string[],
+) => Promise<Awaited<ReturnType<typeof spawnWithTimeout>> | null> | null;
+
+// A timeout, a throw or no time left is no answer.
+function asker(
+	{ run, now }: Pick<UpdateOutcomeDeps, "run" | "now">,
+	deadline: number,
+): Ask {
+	return (argv) => {
 		const left = deadline - now();
 		return left > 0
 			? run(argv, { timeoutMs: Math.min(PROBE_TIMEOUT_MS, left) }).catch(
@@ -114,38 +110,85 @@ export async function targetsAttained(
 				)
 			: null;
 	};
-	const packages = [...new Set(targets.map(packageOf))];
-	const query = await ask(["dpkg-query", "-W", FORMAT, "--", ...packages]);
-	// Exit 1 is a name dpkg does not know: no complete read either.
-	if (query?.exitCode !== 0 || !query.stdout.endsWith("\n")) return false;
+}
+
+// One complete dpkg-query answer as rows: one per instance, each of `packages` when given.
+function readRows(stdout: string, packages?: readonly string[]): Row[] | null {
+	if (!stdout.endsWith("\n")) return null;
 	const rows: Row[] = [];
-	for (const line of query.stdout.slice(0, -1).split("\n")) {
+	for (const line of stdout.slice(0, -1).split("\n")) {
 		const [, name = "", arch = "", status = "", version = ""] =
 			ROW.exec(line) ?? [];
 		if (
 			!status ||
-			!packages.includes(name) ||
+			(packages !== undefined && !packages.includes(name)) ||
 			rows.some((row) => row.name === name && row.arch === arch)
 		)
-			return false;
+			return null;
 		rows.push({ name, arch, status, version });
 	}
-	if (onHeldInstance) {
-		for (const row of rows)
-			if (row.status.startsWith("h")) onHeldInstance(row.name, row.arch);
-	}
+	return rows;
+}
+
+/** Whether one complete dpkg read shows every target's own instance configured at its version or later. */
+export async function targetsAttained(
+	targets: readonly UpdateTarget[],
+	deps: Pick<UpdateOutcomeDeps, "run" | "now">,
+): Promise<boolean> {
+	if (targets.length === 0) return false;
+	const ask = asker(deps, deps.now() + UPDATE_OUTCOME_DEADLINE_MS);
+	const packages = [...new Set(targets.map(packageOf))];
+	const query = await ask(["dpkg-query", "-W", FORMAT, "--", ...packages]);
+	// Exit 1 is a name dpkg does not know: no complete read either.
+	if (query?.exitCode !== 0) return false;
+	const rows = readRows(query.stdout, packages);
+	return rows !== null && attainedFrom(targets, rows, ask, CONFIGURED);
+}
+
+/**
+ * Whether each set of targets is installed, judged from one snapshot of dpkg's
+ * whole database: every instance configured, not held, at its version or later.
+ * Every set is judged from the same rows, and the pass ends with a second read
+ * that must equal the first, so nothing changed while it judged. Unfinished
+ * work on any package, a failed, partial or changed read, or no time left
+ * proves no set.
+ */
+export async function targetSetsAttained(
+	sets: readonly (readonly UpdateTarget[])[],
+	deps: Pick<UpdateOutcomeDeps, "run" | "now">,
+): Promise<boolean[]> {
+	const none = sets.map(() => false);
+	const ask = asker(deps, deps.now() + UPDATE_OUTCOME_DEADLINE_MS);
+	const read = () => ask(["dpkg-query", "-W", FORMAT]);
+	const snapshot = await read();
+	if (snapshot?.exitCode !== 0) return none;
+	const rows = readRows(snapshot.stdout);
+	if (rows === null || rows.some(({ status }) => UNFINISHED.test(status)))
+		return none;
+	const verdicts: boolean[] = [];
+	for (const set of sets)
+		verdicts.push(
+			set.length > 0 && (await attainedFrom(set, rows, ask, CONFIGURED_UNHELD)),
+		);
+	const confirm = await read();
+	return confirm?.exitCode === 0 && confirm.stdout === snapshot.stdout
+		? verdicts
+		: none;
+}
+
+async function attainedFrom(
+	targets: readonly UpdateTarget[],
+	rows: readonly Row[],
+	ask: Ask,
+	configured: RegExp,
+): Promise<boolean> {
 	for (const target of targets) {
 		// Only the admitted instance counts: another architecture's is not it.
 		const row = rows.find(
 			(candidate) =>
 				candidate.name === packageOf(target) && candidate.arch === target.arch,
 		);
-		if (
-			!row ||
-			!CONFIGURED.test(row.status) ||
-			(requireUnheld && row.status.startsWith("h"))
-		)
-			return false;
+		if (!row || !configured.test(row.status)) return false;
 		const reached = await ask([
 			"dpkg",
 			"--compare-versions",

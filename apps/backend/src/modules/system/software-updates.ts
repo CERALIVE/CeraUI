@@ -77,7 +77,6 @@ import {
 	deriveVerdict,
 	probeAptReachability,
 } from "./apt-reachability.ts";
-import { APT_SIMULATION_VERSION_RE } from "./apt-simulation-row.ts";
 import {
 	defaultAptSpaceDeps,
 	preflightAptSpace,
@@ -97,16 +96,13 @@ import {
 	normalizeAptCommandFailure,
 } from "./apt-transport-result.ts";
 import {
-	type AptRun,
-	candidateArch,
-	capableOffer,
-	hasOnePlanSummary,
-	legacyOffer,
+	type CeraliveVerdict,
+	completePlan,
+	firstPartyOffer,
+	legacyCeraliveOffer,
 	type OfferedPackage,
-	type PackageOfferEvidence,
-	type ReportPackageOffer,
-	readPackageHolds,
 	reconcileCeraliveUpdateNotice,
+	refreshedEverySource,
 	standingCeraliveOffer,
 	unfinishedAptWork,
 	withdrawCeraliveOfferIfInstalled,
@@ -185,14 +181,6 @@ export type { SoftUpdateStatus } from "./apt-progress.ts";
 let softUpdateStatus: SoftUpdateStatus | null = null;
 let aptGetUpdating = false;
 let aptDiscoveryRunning = false;
-type PackageNoticeIdentity = {
-	readonly versions?: readonly {
-		readonly name: string;
-		readonly version: string;
-	}[];
-	readonly targets?: readonly OfferedPackage[];
-};
-let packageNoticeIdentity: PackageNoticeIdentity = {};
 let aptGetUpdateFailures = 0;
 let aptHeldBackPackages: string | undefined;
 let actionableAppPackages: string[] = [];
@@ -200,6 +188,75 @@ let actionableAllPackages: PinnedAptPackage[] = [];
 let aptAllRefusal: AptAllRefusalError | null = null;
 let aptAllMode = false;
 let discoveredPackages: UpdatePackage[] = [];
+
+/**
+ * What the last discovery after a refresh saw, read for the scheduled package
+ * notice's receipt and withdrawal only (update-orchestrator/
+ * package-offer-notice.ts). Taken from what discovery already holds; it changes
+ * nothing discovery decides, writes or broadcasts.
+ */
+export type ScheduledPackageEvidence = {
+	readonly image: "capable" | "legacy";
+	/** Each actionable row's exact instance, or null when one has none. */
+	readonly offer: readonly OfferedPackage[] | null;
+	/** Every name the plan lists (kept back included), or null when any part of this check is incomplete. */
+	readonly listed: ReadonlySet<string> | null;
+};
+let scheduledPackageEvidence: ScheduledPackageEvidence | undefined;
+
+export function lastScheduledPackageEvidence():
+	| ScheduledPackageEvidence
+	| undefined {
+	return scheduledPackageEvidence;
+}
+
+// Every index the refresh asked for answered: none ignored or failed.
+const refreshedEveryIndex = (refresh: string) =>
+	/^(?:Hit|Get):/m.test(refresh) && !/^(?:Ign|Err):/m.test(refresh);
+
+function capableEvidence(
+	actionable: readonly PinnedAptPackage[],
+	packages: readonly UpdatePackage[],
+	reads: {
+		readonly simulation: string;
+		readonly holds: string;
+		readonly sourcePolicy: string;
+	},
+	refresh: string,
+	clean: boolean,
+): ScheduledPackageEvidence {
+	const { simulation, holds, sourcePolicy } = reads;
+	const instances = admittedTargets(simulation);
+	const offer: OfferedPackage[] = [];
+	for (const { name, version } of actionable) {
+		const row = instances?.find(
+			(instance) => instance.name === name && instance.version === version,
+		);
+		if (row)
+			offer.push({ name: row.name, arch: row.arch, version: row.version });
+	}
+	const kept = keptBackNames(simulation);
+	const rows = [...simulation.matchAll(/^(?:Inst|Conf|Remv|Purg) (\S+)/gm)].map(
+		([, name]) => name ?? "",
+	);
+	return {
+		image: "capable",
+		offer: offer.length === actionable.length ? offer : null,
+		listed:
+			clean &&
+			kept !== null &&
+			completePlan(simulation) &&
+			refreshedEveryIndex(refresh) &&
+			refreshedEverySource(refresh, sourcePolicy)
+				? new Set([
+						...packages.map(({ name }) => name),
+						...kept,
+						...rows,
+						...holds.split(/\s+/).filter(Boolean),
+					])
+				: null,
+	};
+}
 let lastAptReachability: AptReachabilityWire | undefined;
 let delayedSoftwareUpdateStart: ReturnType<typeof setTimeout> | undefined;
 let softwareUpdateRecoveryRetryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -362,7 +419,6 @@ export function isUpdating() {
 // and the last terminal outcome so a suite that leaves an update mid-flight
 // cannot refuse the next test's start with `already_updating`.
 export function resetSoftwareUpdateState(): void {
-	packageNoticeIdentity = {};
 	if (delayedSoftwareUpdateStart) clearTimeout(delayedSoftwareUpdateStart);
 	if (softwareUpdateRecoveryRetryTimer) {
 		clearTimeout(softwareUpdateRecoveryRetryTimer);
@@ -387,6 +443,7 @@ export function resetSoftwareUpdateState(): void {
 	resetAptAllRefusalLogForTest();
 	aptAllMode = false;
 	discoveredPackages = [];
+	scheduledPackageEvidence = undefined;
 }
 
 export type SoftwareUpdateRecoveryDeps = {
@@ -613,7 +670,6 @@ export function buildAptDiscoveryArgs(
 async function getCapableUpdateSize(
 	reachability: AptReachability,
 	refresh?: string,
-	reportPackageOffer?: ReportPackageOffer,
 ): Promise<SoftwareUpdateError> {
 	aptAllMode = true;
 	pendingPackageSuccess.assertEffectsAllowed();
@@ -656,7 +712,6 @@ async function getCapableUpdateSize(
 				exit: sourcePolicy.exitCode,
 				detail: sourcePolicy.stderr,
 			});
-		let policyClean = true;
 		const result = await discoverAptAllPackages(
 			simulation.stdout,
 			holds.stdout,
@@ -670,7 +725,6 @@ async function getCapableUpdateSize(
 						exit: policy.exitCode,
 						detail: policy.stderr,
 					});
-				policyClean &&= policy.stderr === "";
 				return policy.stdout;
 			},
 			sourcePolicy.stdout,
@@ -679,16 +733,6 @@ async function getCapableUpdateSize(
 		aptAllRefusal = null;
 		actionableAllPackages = result.actionable;
 		discoveredPackages = result.packages;
-		const instances = admittedTargets(simulation.stdout);
-		const targets = instances
-			?.filter(({ name, version }) =>
-				result.actionable.some(
-					(row) => row.name === name && row.version === version,
-				),
-			)
-			.map(({ name, arch, version }) => ({ name, arch, version }));
-		packageNoticeIdentity =
-			targets?.length === result.actionable.length ? { targets } : {};
 		const packageNames = result.packages.map((item) => item.name);
 		availableIdentity =
 			packageNames.length > 0
@@ -700,24 +744,26 @@ async function getCapableUpdateSize(
 			update_state: getUpdateState(),
 		});
 		if (refresh !== undefined) {
-			const check = {
-				packages: result.packages,
-				sourcePolicy: sourcePolicy.stdout,
-				simulation: simulation.stdout,
+			await reconcileCeraliveUpdateNotice(
+				firstPartyOffer(
+					result.packages,
+					sourcePolicy.stdout,
+					simulation.stdout,
+					refresh,
+					keptBackNames(simulation.stdout),
+				),
+			);
+			scheduledPackageEvidence = capableEvidence(
+				result.actionable,
+				result.packages,
+				{
+					simulation: simulation.stdout,
+					holds: holds.stdout,
+					sourcePolicy: sourcePolicy.stdout,
+				},
 				refresh,
-				keptBack: keptBackNames(simulation.stdout),
-			};
-			if (
-				reportPackageOffer &&
-				policyClean &&
-				[simulation, sourcePolicy, holds].every(({ stderr }) => stderr === "")
-			) {
-				const offer = capableOffer(check, "packages");
-				const held = readPackageHolds(holds.stdout);
-				if (offer !== "unknown" && held !== null && check.keptBack !== null)
-					reportPackageOffer({ offer, held, keptBack: check.keptBack });
-			}
-			await reconcileCeraliveUpdateNotice(capableOffer(check, "first-party"));
+				[simulation, holds, sourcePolicy].every(({ stderr }) => stderr === ""),
+			);
 		}
 		return null;
 	} catch (error) {
@@ -958,7 +1004,6 @@ function listedPackages(stdout: string): string[] | null {
 async function getSoftwareUpdateSize(
 	reachability: AptReachability,
 	refresh?: string,
-	reportPackageOffer?: ReportPackageOffer,
 ) {
 	if (!aptUpdatesEnabled()) return null;
 	if (!isStreamConfirmedIdle() || isUpdating() || aptGetUpdating) return "busy";
@@ -966,7 +1011,7 @@ async function getSoftwareUpdateSize(
 	if (capabilities === null) return "discovery_failed";
 	pendingPackageSuccess.assertEffectsAllowed();
 	if (capabilities.mode === "capable")
-		return getCapableUpdateSize(reachability, refresh, reportPackageOffer);
+		return getCapableUpdateSize(reachability, refresh);
 	aptAllMode = false;
 
 	const upgradeResult = await runAptCommand(
@@ -982,7 +1027,7 @@ async function getSoftwareUpdateSize(
 		failCurrentCheck("discovery_failed");
 		return null;
 	}
-	const parsedSummary = parseAptUpgradeSummary(upgrade.stdout);
+	let parsedSummary = parseAptUpgradeSummary(upgrade.stdout);
 	if (!parsedSummary.ok) {
 		logParseError(parsedSummary);
 		failCurrentCheck("discovery_failed");
@@ -990,7 +1035,6 @@ async function getSoftwareUpdateSize(
 	}
 	let res = parsedSummary.value;
 	let fromHeldBack = false;
-	let fallbackFailed = false;
 
 	if (res.upgradeCount === 0) {
 		const heldBackPackages = parseAptPackageList(
@@ -1009,14 +1053,13 @@ async function getSoftwareUpdateSize(
 				parseHeldBackPackages(aptHeldBackPackages),
 				reachability.verdict,
 			);
-			const fallback = parseAptUpgradeSummary(stdout);
-			if (!fallback.ok) {
-				logParseError(fallback);
+			parsedSummary = parseAptUpgradeSummary(stdout);
+			if (!parsedSummary.ok) {
+				logParseError(parsedSummary);
 				failCurrentCheck("discovery_failed");
-				fallbackFailed = true;
-			} else {
-				res = fallback.value;
+				return null;
 			}
+			res = parsedSummary.value;
 		}
 	} else {
 		aptHeldBackPackages = undefined;
@@ -1026,104 +1069,84 @@ async function getSoftwareUpdateSize(
 	// packages alongside real upgrades, and an operator must be told about them
 	// either way. In the held-back fallback branch `res` describes the explicit
 	// install plan rather than an upgrade set, so nothing there is upgradable.
-	const discovered = buildDiscoveredPackages(
-		parsedSummary.value.packages,
+	discoveredPackages = buildDiscoveredPackages(
+		fromHeldBack ? [] : res.packages,
 		parseKeptBackPackageNames(upgrade.stdout),
 	);
-	const actionable = actionableAppNames(discovered);
-	const answers = new Map<string, ReturnType<AptRun>>();
-	const run: AptRun = (argv) => {
-		const key = JSON.stringify(argv);
-		const previous = answers.get(key);
-		if (previous) return previous;
-		const answer = runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS);
-		answers.set(key, answer);
-		return answer;
+	actionableAppPackages = actionableAppNames(discoveredPackages);
+
+	availableIdentity =
+		res.upgradeCount > 0
+			? deriveUpdateIdentity(res.packages, res.upgradeCount, res.downloadSize)
+			: null;
+
+	availableUpdates = {
+		package_count: res.upgradeCount,
+		...(res.downloadSize !== undefined
+			? { download_size: res.downloadSize }
+			: {}),
 	};
-	if (!fallbackFailed) {
-		discoveredPackages = discovered;
-		actionableAppPackages = actionable;
-		availableIdentity =
-			res.upgradeCount > 0
-				? deriveUpdateIdentity(res.packages, res.upgradeCount, res.downloadSize)
-				: null;
-		availableUpdates = {
-			package_count: res.upgradeCount,
-			...(res.downloadSize !== undefined
-				? { download_size: res.downloadSize }
-				: {}),
-		};
-		packageNoticeIdentity = reportPackageOffer
-			? await readLegacyNoticeIdentity(actionable, run)
-			: {};
-		broadcastMsg("status", {
-			available_updates: availableUpdates,
-			update_state: getUpdateState(),
-		});
-	}
-	// The scheduled notice uses the original plan; the later size probe for
-	// kept-back packages is not evidence of what Install would take.
+	broadcastMsg("status", {
+		available_updates: availableUpdates,
+		update_state: getUpdateState(),
+	});
+	// Not conclusive: a discovery that failed, the kept-back fallback (its own
+	// exit is not read), lists that do not name exactly what the summary counts,
+	// or a package a transaction left unfinished (its setup is still pending).
 	const planned = listedPackages(upgrade.stdout);
 	const untaken = untakenPackages(upgrade.stdout);
+	let verdict: CeraliveVerdict = "unknown";
 	if (
 		refresh !== undefined &&
 		isCleanAssumeNoDiscovery(upgradeResult) &&
-		(!fromHeldBack || reportPackageOffer !== undefined) &&
-		planned?.length === parsedSummary.value.upgradeCount &&
+		!fromHeldBack &&
+		planned?.length === res.upgradeCount &&
 		untaken !== null &&
 		!unfinishedAptWork(upgrade.stdout)
 	) {
-		const check = {
-			names: actionable,
-			planned: [...planned, ...untaken],
-			keptBack: keptBackNames(upgrade.stdout),
+		verdict = await legacyCeraliveOffer(
+			actionableAppPackages,
+			[...planned, ...untaken],
+			keptBackNames(upgrade.stdout),
 			refresh,
-			run,
-		};
-		const offer = await legacyOffer(
-			check,
-			upgrade.stderr === "" && hasOnePlanSummary(upgrade.stdout)
-				? reportPackageOffer
-				: undefined,
+			(argv) => runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
 		);
-		if (!fromHeldBack) await reconcileCeraliveUpdateNotice(offer);
+		await reconcileCeraliveUpdateNotice(verdict);
+	}
+	if (refresh !== undefined) {
+		// The original plan complete, CeraLive's sources refreshed and every candidate read.
+		const counted = parseUpgradePackageCount(upgrade.stdout);
+		const kept = keptBackNames(upgrade.stdout);
+		const complete =
+			isCleanAssumeNoDiscovery(upgradeResult) &&
+			counted.ok &&
+			planned?.length === counted.value &&
+			untaken !== null &&
+			kept !== null &&
+			!unfinishedAptWork(upgrade.stdout) &&
+			refreshedEveryIndex(refresh);
+		// Only kept-back rows: the first-party verdict above is not taken, so read it for this evidence.
+		const read =
+			complete && fromHeldBack
+				? await legacyCeraliveOffer(
+						actionableAppPackages,
+						[...planned, ...untaken],
+						kept,
+						refresh,
+						(argv) => runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
+					)
+				: verdict;
+		scheduledPackageEvidence = {
+			image: "legacy",
+			offer: verdict === "unknown" ? null : verdict,
+			listed:
+				complete && read !== "unknown"
+					? new Set([...planned, ...untaken, ...kept])
+					: null,
+		};
 	}
 
 	return null;
-}
-
-async function readLegacyNoticeIdentity(
-	names: readonly string[],
-	run: AptRun,
-): Promise<PackageNoticeIdentity> {
-	const versions: { name: string; version: string }[] = [];
-	const targets: OfferedPackage[] = [];
-	for (const name of names) {
-		const policy = await run(["/usr/bin/apt-cache", "policy", name]);
-		const version = /^\s*Candidate:\s*(\S+)/m.exec(policy.stdout)?.[1];
-		if (
-			policy.exitCode !== 0 ||
-			!version ||
-			!APT_SIMULATION_VERSION_RE.test(version)
-		)
-			return {};
-		versions.push({ name, version });
-		const record = await run([
-			"/usr/bin/apt-cache",
-			"show",
-			"--no-all-versions",
-			name,
-		]);
-		const arch =
-			record.exitCode === 0
-				? candidateArch(record.stdout, name, version)
-				: undefined;
-		if (arch) targets.push({ name, version, arch });
-	}
-	return {
-		versions,
-		...(targets.length === names.length ? { targets } : {}),
-	};
 }
 
 async function readPackageCapabilities(): Promise<UpdateCapabilities | null> {
@@ -1355,7 +1378,6 @@ export function resetSoftwareUpdateCheckRunner(): void {
 type SoftwareUpdateSizeRunner = (
 	reachability: AptReachability,
 	refresh?: string,
-	reportPackageOffer?: ReportPackageOffer,
 ) => Promise<SoftwareUpdateError>;
 
 let softwareUpdateSizeRunner: SoftwareUpdateSizeRunner = getSoftwareUpdateSize;
@@ -1371,15 +1393,7 @@ export function resetSoftwareUpdateSizeRunner(): void {
 }
 
 // Orchestrator checks own a full cycle, not discovery against previously fetched lists.
-type ObservePackageOffer = (
-	identity: PackageNoticeIdentity,
-	evidence: PackageOfferEvidence | undefined,
-	run: typeof spawnWithTimeout,
-) => Promise<void>;
-
-export function runSoftwareUpdateCheck(
-	observePackageOffer?: ObservePackageOffer,
-): Promise<SoftwareUpdateError> {
+export function runSoftwareUpdateCheck(): Promise<SoftwareUpdateError> {
 	return new Promise((resolve, reject) => {
 		const started = softwareUpdateCheckRunner((refresh, _, refreshed) => {
 			// Exit-zero warnings are benign; discovery must retain a real refresh failure.
@@ -1389,7 +1403,7 @@ export function runSoftwareUpdateCheck(
 				resolve(failure);
 				return;
 			}
-			void runUpdateDiscoveryAndReport(refreshed, observePackageOffer).then(
+			void runUpdateDiscoveryAndReport(refreshed).then(
 				(discovery) => resolve(failure ?? discovery),
 				reject,
 			);
@@ -1402,11 +1416,11 @@ export function runSoftwareUpdateCheck(
 // Only discovery after a conclusive refresh (its output) may change the CeraLive update notice.
 export async function runUpdateDiscoveryAndReport(
 	refresh?: string,
-	observePackageOffer?: ObservePackageOffer,
 ): Promise<SoftwareUpdateError> {
 	if (pendingPackageSuccess.pending) return "discovery_failed";
 	if (aptDiscoveryRunning) return "busy";
 	aptDiscoveryRunning = true;
+	scheduledPackageEvidence = undefined;
 	lastCheckedAt = Date.now();
 	try {
 		const capabilities = await readPackageCapabilities();
@@ -1430,21 +1444,12 @@ export async function runUpdateDiscoveryAndReport(
 			failCurrentCheck("captive_portal");
 			return "captive_portal";
 		}
-		const evidence: { packages?: PackageOfferEvidence } = {};
-		const discovery = await network.within<SoftwareUpdateError>(
+		return await network.within(
 			(attempt) =>
 				runLegacyPackageEffects(
 					() => {
 						lastAptReachability = aptReachabilityWire(attempt);
-						return softwareUpdateSizeRunner(
-							attempt,
-							refresh,
-							observePackageOffer
-								? (verdict) => {
-										evidence.packages = verdict;
-									}
-								: undefined,
-						);
+						return softwareUpdateSizeRunner(attempt, refresh);
 					},
 					() => "discovery_failed" as const,
 				),
@@ -1453,13 +1458,6 @@ export async function runUpdateDiscoveryAndReport(
 				return "discovery_failed";
 			},
 		);
-		if (discovery === null && observePackageOffer && !network.aborted())
-			await observePackageOffer(
-				packageNoticeIdentity,
-				evidence.packages,
-				aptCommandRunner,
-			);
-		return discovery;
 	} catch (error) {
 		if (error instanceof PendingPackageSuccessError) return "discovery_failed";
 		throw error;

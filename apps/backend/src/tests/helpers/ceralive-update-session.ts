@@ -7,7 +7,9 @@
 // the real package check over scripted APT, `apt <json>` replaces the device's
 // APT state, `recover` recovers a finished install through the real completion
 // path up to the update's deliberate restart, which it holds until `exit` (so a
-// test can sync its tabs first), `exit` ends it. The notice's dpkg readback reads
+// test can sync its tabs first), `exit` ends it. `pause-dpkg-read before|after`
+// holds the next dpkg read of the device (the scheduled notice's proof) until
+// `resume-dpkg-read`. The notice's dpkg readback reads
 // the same scripted device. With `olderBackend` it is started with
 // main-backend-preload.ts: main's backend from before this notice owner, whose
 // own check raises the notice the way main did, and which never initializes or
@@ -85,8 +87,27 @@ updates.setAptReachabilityProbeForTest(async () => ({
 let apt = scriptedApt(step.apt ?? {});
 let compareGate: ReturnType<typeof Promise.withResolvers<void>> | undefined;
 let holdGate: ReturnType<typeof Promise.withResolvers<void>> | undefined;
-updates.setAptCommandRunnerForTest(async (argv) => {
+// The next dpkg-query this runner serves pauses before it reads, or after it answered.
+let readGate:
+	| {
+			readonly when: "before" | "after";
+			readonly gate: ReturnType<typeof Promise.withResolvers<void>>;
+	  }
+	| undefined;
+let releaseRead: (() => void) | undefined;
+// Discovery and the scheduled package notice read the device through this runner.
+const gated = async (argv: readonly string[]) => {
+	const paused = argv[0] === "dpkg-query" ? readGate : undefined;
+	if (paused) readGate = undefined;
+	if (paused?.when === "before") {
+		process.stdout.write("backend:dpkg-read-pending\n");
+		await paused.gate.promise;
+	}
 	const answer = await apt(argv);
+	if (paused?.when === "after") {
+		process.stdout.write("backend:dpkg-read-captured\n");
+		await paused.gate.promise;
+	}
 	if (argv[0] === "dpkg" && argv[1] === "--compare-versions" && compareGate) {
 		process.stdout.write("backend:compare-captured\n");
 		await compareGate.promise;
@@ -96,7 +117,8 @@ updates.setAptCommandRunnerForTest(async (argv) => {
 		await holdGate.promise;
 	}
 	return answer;
-});
+};
+updates.setAptCommandRunnerForTest(gated);
 // Set once the finished install reached the update's own restart.
 let restarting = false;
 setPasswordHash(
@@ -123,6 +145,16 @@ for await (const command of console) {
 						}
 					: {}),
 			});
+		// Main's scheduler (the baseline child) has no such owner.
+		if (!step.olderBackend && !step.canonicalScheduler)
+			(
+				await import(
+					"../../modules/system/update-orchestrator/package-offer-notice.ts"
+				)
+			).initScheduledPackageNotice({
+				path: `${step.scratch}/scheduled_package_notices.json`,
+				run: gated,
+			});
 		process.stdout.write(`${HYDRATED_MARKER}\n`);
 	} else if (command.startsWith("apt ")) {
 		apt = scriptedApt(JSON.parse(command.slice(4)));
@@ -136,6 +168,17 @@ for await (const command of console) {
 	} else if (command === "resume-package-holds") {
 		holdGate?.resolve();
 		holdGate = undefined;
+	} else if (command.startsWith("pause-dpkg-read ")) {
+		const gate = Promise.withResolvers<void>();
+		readGate = {
+			when: command.endsWith("before") ? "before" : "after",
+			gate,
+		};
+		releaseRead = gate.resolve;
+		process.stdout.write("backend:dpkg-read-armed\n");
+	} else if (command === "resume-dpkg-read") {
+		releaseRead?.();
+		releaseRead = undefined;
 	} else if (command === "resume-package-compare") {
 		compareGate?.resolve();
 		compareGate = undefined;
