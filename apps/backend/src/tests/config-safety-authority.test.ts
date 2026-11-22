@@ -29,6 +29,7 @@ test.each([
 	'{"bond_opt_out":{"usb:a":true},"bond_opt_out":{}}',
 	'{"bond_opt_out":{"usb:a":false}}',
 	'{"bond_legacy_opt_out":{"usb:shared":true}}',
+	'{"bond_port_opt_in":{"usb:port":false}}',
 	'{"autostart":true',
 ])(
 	"ambiguous runtime config grants no safety permission: %s",

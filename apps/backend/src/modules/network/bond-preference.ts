@@ -15,13 +15,6 @@ function serialGroupId(identity: PhysicalDeviceRecord): string | undefined {
 		: identity.legacyLinkId;
 }
 
-function enableExceptionId(identity: PhysicalDeviceRecord): string {
-	// Keep the exception on the same port when a serial identity splits.
-	return identity.anchor === "usb-serial" && identity.stableKey !== undefined
-		? mintLinkId(portIdentityKey(identity.stableKey))
-		: identity.linkId;
-}
-
 export function bondPhysicalId(ifname: string): string | undefined {
 	const identity = resolveBondPhysicalIdentity(ifname);
 	if (identity === undefined || identity.anchor === "ifname") return undefined;
@@ -31,19 +24,34 @@ export function bondPhysicalId(ifname: string): string | undefined {
 export function isBondOptedOut(ifname: string): boolean {
 	if (sessionOptOut.has(ifname)) return true;
 	const identity = resolveBondPhysicalIdentity(ifname);
-	if (identity === undefined || identity.anchor === "ifname") return false;
-	const config = getConfig();
-	if (config.bond_opt_out?.[identity.linkId] === true) return true;
+	if (identity === undefined) return false;
 	const legacy = serialGroupId(identity);
+	if (identity.anchor === "ifname" && legacy === undefined) return false;
+	const config = getConfig();
+	if (
+		identity.anchor !== "ifname" &&
+		config.bond_opt_out?.[identity.linkId] === true
+	)
+		return true;
 	if (legacy === undefined) return false;
-	const enabledLinks = config.bond_legacy_opt_out?.[legacy];
 	if (config.bond_opt_out?.[legacy] === true) return true;
+	const enabledLinks = config.bond_legacy_opt_out?.[legacy];
 	if (enabledLinks === undefined) return false;
-	const exceptionId = enableExceptionId(identity);
-	return (
-		config.bond_opt_out?.[exceptionId] === true ||
-		enabledLinks[exceptionId] !== true
-	);
+
+	switch (identity.anchor) {
+		case "usb-serial":
+			// While trusted, the serial identifies one device. A port observation
+			// scopes its enable after a split; it is not the current read key.
+			return Object.keys(enabledLinks).length === 0;
+		case "id-path":
+			return (
+				config.bond_port_opt_in?.[identity.linkId] !== true &&
+				enabledLinks[identity.linkId] !== true
+			);
+		case "ifname":
+			// Group membership is known, but an exact enable cannot be resolved.
+			return true;
+	}
 }
 
 export function setPersistentBondOptOut(
@@ -64,7 +72,7 @@ export function setPersistentBondOptOut(
 	const migrating =
 		legacy !== undefined &&
 		next[legacy] === true &&
-		(legacy !== physicalId || !optOut || enabledLinks !== undefined);
+		(legacy !== physicalId || !optOut);
 	// Replace the raw entry, but retain its default: a scan cannot see absent twins.
 	if (legacy !== undefined && (migrating || enabledLinks !== undefined)) {
 		if (migrating) {
@@ -75,21 +83,38 @@ export function setPersistentBondOptOut(
 			}
 			delete next[legacy];
 		}
-		const exceptionId = enableExceptionId(identity);
-		const exceptions = { ...enabledLinks };
-		if (optOut) delete exceptions[exceptionId];
-		else exceptions[exceptionId] = true;
-		delete next[exceptionId];
-		delete next[physicalId];
+
+		let exceptions = { ...enabledLinks };
+		if (identity.anchor === "usb-serial") {
+			if (optOut) exceptions = {};
+			else if (identity.stableKey !== undefined) {
+				exceptions = {
+					[mintLinkId(portIdentityKey(identity.stableKey))]: true,
+				};
+			} else if (Object.keys(exceptions).length === 0) {
+				// A serial-only enable stops applying once that serial splits.
+				exceptions[legacy] = true;
+			}
+		} else {
+			if (optOut) delete exceptions[physicalId];
+			else exceptions[physicalId] = true;
+		}
 		config.bond_legacy_opt_out = {
 			...config.bond_legacy_opt_out,
 			[legacy]: exceptions,
 		};
-	} else if (optOut) {
-		next[physicalId] = true;
-	} else {
-		delete next[physicalId];
 	}
+	if (identity.anchor === "id-path") {
+		// Remember a port-only reversal of an exact exclusion: clearing the
+		// negative flag alone would let a migrated group re-exclude it later.
+		const portEnables = { ...config.bond_port_opt_in };
+		if (optOut || legacy !== undefined) delete portEnables[physicalId];
+		else if (next[physicalId] === true) portEnables[physicalId] = true;
+		config.bond_port_opt_in =
+			Object.keys(portEnables).length === 0 ? undefined : portEnables;
+	}
+	if (optOut) next[physicalId] = true;
+	else delete next[physicalId];
 	config.bond_opt_out = Object.keys(next).length === 0 ? undefined : next;
 	saveConfig();
 	return physicalId;
@@ -100,6 +125,7 @@ export function resetPersistentBondOptOutForTest(): void {
 	const config = getConfig();
 	config.bond_opt_out = undefined;
 	config.bond_legacy_opt_out = undefined;
+	config.bond_port_opt_in = undefined;
 }
 
 export function resetSessionBondOptOutForTest(): void {

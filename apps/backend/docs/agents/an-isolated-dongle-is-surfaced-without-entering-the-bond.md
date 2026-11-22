@@ -945,13 +945,16 @@ collision saves the migrated exclusion under the present twins' physical IDs
 for downgrade compatibility. Enabling a still-serial-anchored device also
 migrates its existing exclusion, even before any collision is seen. Both paths
 replace the raw serial entry with the same `bond_legacy_opt_out` fallback for
-unseen twins. An explicit enable records an exception under the observed port's
-link ID when available, so it survives config reload and a later switch to
-port identity without enabling another port. Without a port ID, a serial-only
-exception cannot follow the device once that serial is rejected. Disabling a
-migrated link removes its exception; neither reloads nor repeated toggles add
-duplicate entries. The fallback remains because no scan can prove that all
-possible siblings have been seen.
+unseen twins. While the serial is trusted, optional port evidence does not
+change the saved choice. The observed port scopes an enable after a split;
+without a known port, a serial-only enable cannot enable a particular twin.
+Known group membership still excludes an unlocated twin. An explicit disable
+keeps the exact exclusion in `bond_opt_out`, so it survives missing serial
+evidence at that port and remains readable on downgrade. Reversing an exact
+exclusion without serial evidence records a port enable, not a serial alias.
+The fallback remains across reloads because no scan can prove all possible
+siblings have been seen. Older readers cannot enforce it for unrecorded ports,
+and rewriting config with one of those readers can drop the new fields.
 Router login credentials are read only under the device's exact resolved
 `linkId`. A rejected serial's legacy id has no durable binding to a port, so it
 cannot transfer a login, even if only one twin remains or the backend restarts.
