@@ -82,7 +82,15 @@ updates.setAptReachabilityProbeForTest(async () => ({
 	detail: [],
 }));
 let apt = scriptedApt(step.apt ?? {});
-updates.setAptCommandRunnerForTest((argv) => apt(argv));
+let compareGate: ReturnType<typeof Promise.withResolvers<void>> | undefined;
+updates.setAptCommandRunnerForTest(async (argv) => {
+	const answer = await apt(argv);
+	if (argv[0] === "dpkg" && argv[1] === "--compare-versions" && compareGate) {
+		process.stdout.write("backend:compare-captured\n");
+		await compareGate.promise;
+	}
+	return answer;
+});
 // Set once the finished install reached the update's own restart.
 let restarting = false;
 setPasswordHash(
@@ -113,6 +121,12 @@ for await (const command of console) {
 	} else if (command.startsWith("apt ")) {
 		apt = scriptedApt(JSON.parse(command.slice(4)));
 		process.stdout.write(`${APPLIED_MARKER}\n`);
+	} else if (command === "pause-package-compare") {
+		compareGate = Promise.withResolvers<void>();
+		process.stdout.write("backend:compare-armed\n");
+	} else if (command === "resume-package-compare") {
+		compareGate?.resolve();
+		compareGate = undefined;
 	} else if (command === "check") {
 		void updates.runSoftwareUpdateCheck().then(
 			() => process.stdout.write(`${CHECKED_MARKER}\n`),
@@ -149,8 +163,10 @@ for await (const command of console) {
 				report: () => undefined,
 			}),
 		});
-		await runOrchestratorTick();
-		process.stdout.write(`${CHECKED_MARKER}\n`);
+		void runOrchestratorTick().then(
+			() => process.stdout.write(`${CHECKED_MARKER}\n`),
+			(error) => process.stderr.write(`check failed ${String(error)}\n`),
+		);
 	} else if (command === "recover") {
 		// Only the update's own success restart counts; any other error is a failed recovery.
 		for (const event of ["uncaughtException", "unhandledRejection"] as const)

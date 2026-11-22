@@ -96,11 +96,12 @@ import {
 	normalizeAptCommandFailure,
 } from "./apt-transport-result.ts";
 import {
-	type CeraliveVerdict,
 	capableOffer,
 	hasOnePlanSummary,
 	legacyOffer,
+	type PackageOfferEvidence,
 	type ReportPackageOffer,
+	readPackageHolds,
 	reconcileCeraliveUpdateNotice,
 	standingCeraliveOffer,
 	unfinishedAptWork,
@@ -686,13 +687,12 @@ async function getCapableUpdateSize(
 			if (
 				reportPackageOffer &&
 				policyClean &&
-				[simulation, sourcePolicy, holds].every(
-					({ stderr }) => stderr === "",
-				) &&
-				holds.stdout.trim() === ""
+				[simulation, sourcePolicy, holds].every(({ stderr }) => stderr === "")
 			) {
 				const offer = capableOffer(check, "packages");
-				if (offer !== "unknown") reportPackageOffer(offer);
+				const held = readPackageHolds(holds.stdout);
+				if (offer !== "unknown" && held !== null)
+					reportPackageOffer({ offer, held });
 			}
 			await reconcileCeraliveUpdateNotice(capableOffer(check, "first-party"));
 		}
@@ -1301,7 +1301,7 @@ export function resetSoftwareUpdateSizeRunner(): void {
 
 // Orchestrator checks own a full cycle, not discovery against previously fetched lists.
 type ObservePackageOffer = (
-	offer: Parameters<ReportPackageOffer>[0],
+	evidence: PackageOfferEvidence,
 	run: typeof spawnWithTimeout,
 ) => Promise<void>;
 
@@ -1358,7 +1358,7 @@ export async function runUpdateDiscoveryAndReport(
 			failCurrentCheck("captive_portal");
 			return "captive_portal";
 		}
-		const evidence: { offer: CeraliveVerdict } = { offer: "unknown" };
+		const evidence: { packages?: PackageOfferEvidence } = {};
 		const discovery = await network.within<SoftwareUpdateError>(
 			(attempt) =>
 				runLegacyPackageEffects(
@@ -1369,7 +1369,7 @@ export async function runUpdateDiscoveryAndReport(
 							refresh,
 							observePackageOffer
 								? (verdict) => {
-										evidence.offer = verdict;
+										evidence.packages = verdict;
 									}
 								: undefined,
 						);
@@ -1384,10 +1384,10 @@ export async function runUpdateDiscoveryAndReport(
 		if (
 			discovery === null &&
 			observePackageOffer &&
-			evidence.offer !== "unknown" &&
+			evidence.packages &&
 			!network.aborted()
 		)
-			await observePackageOffer(evidence.offer, aptCommandRunner);
+			await observePackageOffer(evidence.packages, aptCommandRunner);
 		return discovery;
 	} catch (error) {
 		if (error instanceof PendingPackageSuccessError) return "discovery_failed";

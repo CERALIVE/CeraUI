@@ -3,16 +3,23 @@ import { z } from "zod";
 import { writeFileAtomicSync } from "../../../helpers/config-loader.ts";
 import { logger } from "../../../helpers/logger.ts";
 import type { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
-import { notificationWithdraw } from "../../ui/notifications.ts";
+import {
+	captureNotificationAudience,
+	liveNotificationAudience,
+	notificationExists,
+	notificationWithdraw,
+} from "../../ui/notifications.ts";
 import { compareAptPackageNames } from "../apt-package-name.ts";
 import {
 	type OfferedPackage,
+	type PackageOfferEvidence,
 	packageOfferSchema,
 } from "../ceralive-update-notice.ts";
 import {
 	targetsAttained,
 	UPDATE_OUTCOME_DEADLINE_MS,
 } from "../software-update-outcome.ts";
+import { runSoftwareUpdateCheck } from "../software-updates.ts";
 import { notifyUpdate } from "./notifications.ts";
 import {
 	readStoredStateFileSync,
@@ -35,14 +42,22 @@ function offerId(offer: readonly OfferedPackage[]): string {
 	return `packages:${createHash("sha256").update(JSON.stringify(vector)).digest("hex")}`;
 }
 
+export function runScheduledPackageCheck() {
+	const audience = captureNotificationAudience();
+	return runSoftwareUpdateCheck((evidence, run) =>
+		reconcileScheduledPackageOffer(evidence, run, audience),
+	);
+}
+
 /**
  * The stored list contains offers, never proof. Only a conclusive check reaches
  * this owner. Exact notice names allow a live removal even after process restart
  * without removing another release in either WebSocket decoder.
  */
-export async function reconcileScheduledPackageOffer(
-	offer: readonly OfferedPackage[],
+async function reconcileScheduledPackageOffer(
+	{ offer, held }: PackageOfferEvidence,
 	run: typeof spawnWithTimeout,
+	audience: ReadonlySet<AbortSignal>,
 ): Promise<void> {
 	try {
 		const text = readStoredStateFileSync(PATH, LIMIT);
@@ -50,7 +65,12 @@ export async function reconcileScheduledPackageOffer(
 			text === null
 				? { version: 1, offers: [] }
 				: schema.parse(parseAuthorityJson(text));
+		const containsHold = (set: readonly OfferedPackage[]) =>
+			set.some(
+				({ name, arch }) => held.has(name) || held.has(`${name}:${arch}`),
+			);
 		if (offer.length > 0) {
+			if (containsHold(offer) || record.offers.some(containsHold)) return;
 			const sorted = [...offer].sort((a, b) =>
 				compareAptPackageNames(a.name, b.name),
 			);
@@ -62,19 +82,30 @@ export async function reconcileScheduledPackageOffer(
 			return;
 		}
 		const deadline = Date.now() + UPDATE_OUTCOME_DEADLINE_MS;
-		const pending: Record["offers"] = [];
-		const attained: string[] = [];
+		const proofs = new Map<string, number | undefined>();
 		for (const standing of record.offers) {
+			if (containsHold(standing)) continue;
+			const name = `update:updates-available:${offerId(standing)}`;
+			const issuance = notificationExists(name)?.releaseRevision;
 			if (await targetsAttained(standing, { run, now: Date.now, deadline })) {
-				attained.push(offerId(standing));
-			} else {
-				pending.push(standing);
+				proofs.set(name, issuance);
 			}
 		}
-		if (attained.length === 0) return;
-		commit({ version: 1, offers: pending });
-		for (const id of attained)
-			notificationWithdraw(`update:updates-available:${id}`);
+		for (const [name, issuance] of proofs)
+			if (notificationExists(name)?.releaseRevision !== issuance)
+				proofs.delete(name);
+		if (proofs.size === 0) return;
+		const { recipients, hasLateSessions } = liveNotificationAudience(audience);
+		// Late sessions cannot consume this result; leave the offer available for a fresh check.
+		if (!hasLateSessions)
+			commit({
+				version: 1,
+				offers: record.offers.filter(
+					(standing) =>
+						!proofs.has(`update:updates-available:${offerId(standing)}`),
+				),
+			});
+		for (const name of proofs.keys()) notificationWithdraw(name, recipients);
 	} catch (error) {
 		logger.warn("Scheduled package offer notices unchanged", {
 			error: error instanceof Error ? error.message : String(error),

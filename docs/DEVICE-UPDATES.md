@@ -1559,9 +1559,12 @@ version)` vector. Dismissing one offer still suppresses that offer, not a newer
 one. The wire payload and translation key are unchanged.
 
 The package notice shares the CeraLive notice's APT evidence parsers. It
-requires participation from every indexed repository, a complete plan and no
-held, kept-back, ambiguous or unfinished work. Unknown or partial checks leave
-existing offers alone and do not announce a subset. A complete orchestrator
+requires participation from every indexed repository and a complete plan
+without kept-back, ambiguous or unfinished work. APT holds are matched to
+the exact new and standing offers. An unrelated, already-current hold such
+as the stock boot stack does not veto a show or withdrawal. A hold on an
+offered package keeps that offer and prevents announcing a subset. The
+capable install admission and legacy roster are unchanged. A complete orchestrator
 check with no actionable packages reads dpkg using `system.updateOutcome`'s
 exact-instance and Debian-version comparison. It withdraws only stored sets for
 which every member is installed and configured at or above the offered version.
@@ -1571,10 +1574,15 @@ startup alone, and login/reconnect never remove it.
 The bounded `scheduled_package_offers.json` file next to the first-party
 record carries offered vectors, not proof or removals. If unreadable, unwritable
 or full (32 offers / 256 KiB), the notice fails closed; the package check and
-Software Updates still work. Retractions go live in typed and bare-name formats,
-only to tabs connected then. A tab that missed a removal can keep its stale copy
-until reload or dismissal; pre-fix package notices also have no exact recorded
-instance set and cannot be retired automatically. No board qualification is
+Software Updates still work. Retractions go live in typed and bare-name formats
+only to sessions already authenticated at the start of the check and still in
+that session at delivery. The notice issuance is checked again before removing
+it. If a session authenticated during the check, the offer remains on disk for
+a later fresh check, not for login replay. A tab offline throughout a retirement
+can keep its copy until reload or dismissal; pre-fix notices have no exact
+recorded set and cannot be retired automatically. Back-to-back nonempty plans
+do not retire older vectors. If the record fills, new announcements wait for
+a complete empty check to prove and retire offers. No board qualification is
 claimed.
 
 ### Download hold notice [EXISTS; host-tested, board qualification owed]

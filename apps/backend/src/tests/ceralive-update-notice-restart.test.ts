@@ -242,6 +242,30 @@ class Backend {
 		);
 	}
 
+	pausePackageCompare(): Promise<void> {
+		return this.command(
+			"pause-package-compare",
+			"backend:compare-armed",
+			"comparison barrier armed",
+		);
+	}
+
+	startCheckAndWaitForCapturedCompare(): Promise<void> {
+		return this.command(
+			"scheduled-package-check",
+			"backend:compare-captured",
+			"captured dpkg comparison",
+		);
+	}
+
+	resumePackageCompare(): Promise<void> {
+		return this.command(
+			"resume-package-compare",
+			CHECKED_MARKER,
+			"scheduled package check completion",
+		);
+	}
+
 	private send(text: string): void {
 		this.child.stdin.write(`${text}\n`);
 		this.child.stdin.flush();
@@ -476,7 +500,127 @@ const scheduledNotice = (name: string) =>
 	name.startsWith("update:updates-available:") &&
 	!name.startsWith("update:updates-available:os:");
 
+const scheduledNames = (opened: readonly Tab[]) =>
+	names(opened).map((items) => items.filter(scheduledNotice));
+const scheduledTabs = () => [
+	new Tab("typed", scheduledNotice),
+	new Tab("v2026.7.2", scheduledNotice),
+];
+const bootPackage: AptPackage = {
+	name: "linux-image-7.2.0-ceralive-rk3588",
+	installed: "7.2.0",
+	candidate: "7.2.0",
+};
+
 for (const capable of [false, true]) {
+	const image = capable ? "capable Debian" : "legacy roster";
+	const packageOffer: AptPackage = capable
+		? { ...cerastream("1", "2"), name: "curl", source: "debian" }
+		: cerastream("1", "2");
+	const stockHold: AptScript = {
+		holds: [bootPackage.name],
+		installed: [bootPackage],
+	};
+
+	test(
+		`scheduled package notice announces an eligible offer with the stock boot hold (${image})`,
+		async () => {
+			const backend = await Backend.start({
+				capable,
+				apt: { ...stockHold, upgradable: [packageOffer] },
+			});
+			const opened = scheduledTabs();
+			await reconnect(backend, opened);
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			const offer = opened[0]?.names().find(scheduledNotice) ?? "";
+			expect(offer).not.toBe("");
+			expect(scheduledNames(opened)).toEqual([[offer], [offer]]);
+		},
+		budget(1),
+	);
+
+	test(
+		`scheduled package notice clears a proven offer with the stock boot hold (${image})`,
+		async () => {
+			const backend = await Backend.start({
+				capable,
+				apt: { upgradable: [packageOffer] },
+			});
+			const opened = scheduledTabs();
+			await reconnect(backend, opened);
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			const offer = opened[0]?.names().find(scheduledNotice) ?? "";
+			expect(offer).not.toBe("");
+			expect(scheduledNames(opened)).toEqual([[offer], [offer]]);
+
+			await backend.setApt({
+				holds: [bootPackage.name],
+				installed: [
+					bootPackage,
+					{ ...packageOffer, installed: capable ? "1:1" : "2+b1" },
+				],
+			});
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			expect(scheduledNames(opened)).toEqual([[], []]);
+			expect(removals(opened)).toEqual([1, 1]);
+		},
+		budget(1),
+	);
+
+	test(
+		`scheduled package notice does not send captured proof to late authenticators (${image})`,
+		async () => {
+			const offered = { upgradable: [packageOffer] };
+			const configured = {
+				installed: [{ ...packageOffer, installed: "2" }],
+			};
+			let backend = await Backend.start({ capable, apt: offered });
+			const early = scheduledTabs();
+			const late = scheduledTabs();
+			await reconnect(backend, [...early, ...late]);
+			await backend.scheduledPackageCheck();
+			await sync([...early, ...late]);
+			const offer = early[0]?.names().find(scheduledNotice) ?? "";
+			expect(offer).not.toBe("");
+			expect(scheduledNames([...early, ...late])).toEqual([
+				[offer],
+				[offer],
+				[offer],
+				[offer],
+			]);
+			await backend.close();
+			await Promise.all([...early, ...late].map((tab) => tab.dropped()));
+			backend = await Backend.start({ capable, apt: configured });
+			await reconnect(backend, early);
+			await backend.pausePackageCompare();
+			await backend.startCheckAndWaitForCapturedCompare();
+			try {
+				await backend.setApt(offered);
+				await reconnect(backend, late);
+				expect(scheduledNames(late)).toEqual([[offer], [offer]]);
+				expect(removals(late)).toEqual([0, 0]);
+			} finally {
+				await backend.resumePackageCompare();
+			}
+			await sync([...early, ...late]);
+			expect(scheduledNames(late)).toEqual([[offer], [offer]]);
+			expect(removals(late)).toEqual([0, 0]);
+			expect(scheduledNames(early)).toEqual([[], []]);
+			expect(removals(early)).toEqual([1, 1]);
+
+			// The late pair needs a new check; no cached proof authorizes it.
+			await backend.setApt(configured);
+			await backend.scheduledPackageCheck();
+			await sync(late);
+			expect(scheduledNames(late)).toEqual([[], []]);
+			expect(removals(late)).toEqual([1, 1]);
+		},
+		budget(2),
+	);
+
 	test(
 		`scheduled package notice survives uncertain checks and reconnects, then clears on exact installed proof (${capable ? "capable Debian" : "legacy roster"})`,
 		async () => {
@@ -559,6 +703,14 @@ for (const capable of [false, true]) {
 					},
 				],
 				[
+					"an architecture-qualified hold beside another offer",
+					{
+						...installed,
+						holds: [`${pkg.name}:arm64`],
+						upgradable: [other],
+					},
+				],
+				[
 					"unpacked or unconfigured",
 					{
 						...installed,
@@ -569,6 +721,12 @@ for (const capable of [false, true]) {
 					"only foreign instance installed",
 					{
 						installed: [{ ...configured, installedArch: "amd64" }],
+					},
+				],
+				[
+					"only a lower Debian prerelease installed",
+					{
+						installed: [{ ...configured, installed: `${pkg.candidate}~rc1` }],
 					},
 				],
 				[
@@ -584,6 +742,7 @@ for (const capable of [false, true]) {
 					shown().map((items) => items.includes(offer)),
 					removals(opened),
 				]).toEqual([label, [true, true], [0, 0]]);
+				expect(shown()).toEqual([[offer], [offer]]);
 			}
 
 			await backend.close();

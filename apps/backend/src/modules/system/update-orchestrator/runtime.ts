@@ -47,7 +47,6 @@ import {
 	getUpdateState,
 	type InstallUnitVerdict,
 	recoverSoftwareUpdateIfRunning,
-	runSoftwareUpdateCheck,
 	type SoftwareUpdateError,
 	startSoftwareUpdate,
 	type UpdateStartOutcome,
@@ -186,7 +185,7 @@ import {
 	retireStagedReceipt,
 } from "./os-staged-receipt-retirement.ts";
 import { settleOsUnlaunchedWitness } from "./os-unlaunched-adapter.ts";
-import { reconcileScheduledPackageOffer } from "./package-offer-notice.ts";
+import { runScheduledPackageCheck } from "./package-offer-notice.ts";
 import { progressFromWire } from "./package-progress.ts";
 import {
 	type PackageRecoveryEvidence,
@@ -431,7 +430,7 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 		(await getIdleStatus({ now: Date.now(), schedule })).idle,
 	isStreamLive: () => !isStreamConfirmedIdle(),
 	onlyMeteredCandidateExists: defaultOnlyMeteredCandidateExists,
-	runPackageCheck: () => runSoftwareUpdateCheck(reconcileScheduledPackageOffer),
+	runPackageCheck: runScheduledPackageCheck,
 	startPackageInstall: () => startSoftwareUpdate(notePackageCommitSucceeded),
 	getPackageInstallWireState: getUpdateState,
 	stopPackageInstallUnit: stopPackageInstallUnitForStream,

@@ -74,7 +74,18 @@ export type OfferedPackage = Readonly<Required<Omit<UpdateTarget, "from">>>;
  * package it plans or keeps back; anything less is unknown.
  */
 export type CeraliveVerdict = readonly OfferedPackage[] | "unknown";
-export type ReportPackageOffer = (offer: readonly OfferedPackage[]) => void;
+export type PackageOfferEvidence = {
+	readonly offer: readonly OfferedPackage[];
+	readonly held: ReadonlySet<string>;
+};
+export type ReportPackageOffer = (evidence: PackageOfferEvidence) => void;
+
+export function readPackageHolds(stdout: string): ReadonlySet<string> | null {
+	const names = stdout.trim().split(/\s+/).filter(Boolean);
+	return names.every((name) => APT_PACKAGE_NAME_RE.test(name))
+		? new Set(names)
+		: null;
+}
 
 export type AptRun = (argv: string[]) => Promise<SpawnWithTimeoutResult>;
 
@@ -334,12 +345,10 @@ export async function legacyOffer(
 	}
 	if (packagePlanComplete && reportPackageOffer) {
 		const holds = await run(["/usr/bin/apt-mark", "showhold"]);
-		if (
-			holds.exitCode === 0 &&
-			holds.stderr === "" &&
-			holds.stdout.trim() === ""
-		)
-			reportPackageOffer(offer);
+		if (holds.exitCode === 0 && holds.stderr === "") {
+			const held = readPackageHolds(holds.stdout);
+			if (held !== null) reportPackageOffer({ offer, held });
+		}
 	}
 	return offer;
 }

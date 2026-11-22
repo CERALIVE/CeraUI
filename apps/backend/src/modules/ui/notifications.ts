@@ -32,6 +32,12 @@ import type { NotificationAction, NotificationType } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
 import { getms } from "../../helpers/time.ts";
+import {
+	getAuthenticatedClients,
+	socketSessionSignal,
+} from "../../rpc/context.ts";
+import { sendToClient } from "../../rpc/events.ts";
+import type { AppWebSocket } from "../../rpc/types.ts";
 import type { MessageSocket } from "./message-socket.ts";
 import {
 	isNotificationDismissed,
@@ -254,16 +260,27 @@ export function notificationBroadcast(
 	);
 }
 
-function removeNotification(name: string, legacy: boolean) {
+function removeNotification(
+	name: string,
+	legacy: boolean,
+	recipients?: readonly AppWebSocket[],
+) {
 	const n = persistentNotifications.get(name);
 	persistentNotifications.delete(name);
 
 	const revision = nextRevision();
 	const msg = { remove: [{ id: name, revision }] };
 	const authedOnly = !n || n.authedOnly;
-	broadcastMsg("notification", msg, 0, authedOnly);
-	if (legacy)
-		broadcastMsg("notification", legacyRemoval([name]), 0, authedOnly);
+	if (recipients === undefined) {
+		broadcastMsg("notification", msg, 0, authedOnly);
+		if (legacy)
+			broadcastMsg("notification", legacyRemoval([name]), 0, authedOnly);
+	} else {
+		for (const socket of recipients) {
+			sendToClient(socket, "notification", msg);
+			if (legacy) sendToClient(socket, "notification", legacyRemoval([name]));
+		}
+	}
 	return msg;
 }
 
@@ -281,8 +298,24 @@ export function notificationRemove(name: string) {
  * Removes `name` live, as a typed and a separate pre-#183 frame. A client that
  * was offline is not told: a login is sent only what is shown now.
  */
-export function notificationWithdraw(name: string) {
-	return removeNotification(name, true);
+export function notificationWithdraw(
+	name: string,
+	recipients?: readonly AppWebSocket[],
+) {
+	return removeNotification(name, true, recipients);
+}
+
+/** Capture authenticated sessions before the evidence-producing operation begins. */
+export function captureNotificationAudience(): ReadonlySet<AbortSignal> {
+	return new Set(getAuthenticatedClients().map(socketSessionSignal));
+}
+
+export function liveNotificationAudience(snapshot: ReadonlySet<AbortSignal>) {
+	const active = getAuthenticatedClients();
+	const recipients = active.filter((socket) =>
+		snapshot.has(socketSessionSignal(socket)),
+	);
+	return { recipients, hasLateSessions: recipients.length !== active.length };
 }
 
 // Persists the dismissal (survives reload + restart) only when the notification
