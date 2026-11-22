@@ -3,11 +3,11 @@
 ## Package update progress
 
 Progress comes from APT's own machine-readable channel, not from parsing
-apt/dpkg text. The detached unit opens
-`/run/ceralive/software-update.status` as descriptor 3 and runs every
-`apt-get` with `-o APT::Status-Fd=3`; the file is prepared like the stdout
-and stderr logs (root-owned, mode 0600, created exclusively). APT writes one
-complete line per record:
+apt/dpkg text. Every `apt-get` in the detached unit runs with
+`-o APT::Status-Fd=3`, and descriptor 3 is a pipe read by a drain that
+appends APT's records to `/run/ceralive/software-update.status` (prepared
+like the stdout and stderr logs: root-owned, mode 0600, created
+exclusively). APT writes one complete line per record:
 
 - `dlstatus:<item>:<percent>:<text>` while fetching: APT's own download
   estimate.
@@ -28,6 +28,17 @@ Descriptor 3 rather than stderr: APT marks its status descriptor
 close-on-exec before forking dpkg, which on stderr would leave the image's
 `DPkg::Post-Invoke` hooks without stderr; stdout would interleave records
 with dpkg's PTY output.
+
+The channel is best effort and can never break the install. APT 3.0.3 turns
+any failed status write into its pending error (`FileFd::Write`), and
+`private-install.cc` fails the install on a pending error after dpkg ran;
+it ignores SIGPIPE, so a closed pipe would be the same failure. So descriptor
+3 is never the file: it is a pipe whose reader (bash process substitution)
+only stops at EOF, appends best effort, discards after any open or write
+failure, and is exempt from the OOM killer. If the pipe cannot be created,
+APT gets `/dev/null`. A status file that cannot be prepared only drops the
+numbers. The status forms run under `/bin/bash`; the released pre-channel
+forms stay `/bin/sh` and remain adoptable.
 
 A unit started by a release without the channel (for example the very update
 that installs this version, adopted after the package restarts CeraUI) shows
@@ -50,9 +61,15 @@ unit, whether an update is running. Until then the initial status push omits
 `updating` and `update_state`, which the browser keeps as its last frames,
 instead of sending `null`, an empty frame or idle package state; recovery
 then publishes the recovered state, or an explicit `null` when systemd shows
-the unit is gone. A bootstrap that refuses to run recovery stops withholding
-only once `systemctl show` reports the unit `not-found`; an unknown answer
-keeps the last frames.
+the unit is gone. Recovery is one entry per unit: once it has attached, a
+later caller (the orchestrator's resume and `main.ts`'s standalone call run
+on the same boot) gets the same answer and changes nothing. The withholding
+ends only on the observer's first complete read, on proven absence, or with
+the outcome. A refused or failed bootstrap still watches the unit to its real
+outcome, without retiring it, cleaning the APT cache or restarting CeraUI.
+With APT updates disabled CeraUI starts no unit and never probes (a deferred
+download stays unproven for D8), so the withholding ends at once; mock mode
+never launches one.
 
 Live polling and reattachment derive progress from the same bytes: complete
 status lines only, so a record split across reads counts once it is whole.
@@ -66,7 +83,11 @@ The status file is display only. Its read errors never block a drain, change
 the outcome or keep the unit from being cleaned up; after 20 consecutive
 failures it is no longer read: the display keeps what it last showed and
 advances only on transcript phase evidence. The unit's exit status alone
-decides success or failure.
+decides success or failure, also when stdout or stderr stay unreadable (the
+final drain gives up after 20 failed reads) or when retiring the unit fails.
+Retirement is retried five times; a finished unit left behind is retired by
+the next launch, so the next update can always start. The orchestrator's
+Settings activity line resumes with APT's own number or none.
 
 ## Pending disruptive effects [PARTIAL — host proof, board drill owed]
 

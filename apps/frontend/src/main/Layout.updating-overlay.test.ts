@@ -22,6 +22,7 @@
 import type { StatusMessage } from "@ceraui/rpc/schemas";
 import { render, waitFor } from "@testing-library/svelte";
 import { flushSync, tick } from "svelte";
+import { toast } from "svelte-sonner";
 import {
 	afterEach,
 	beforeAll,
@@ -31,7 +32,8 @@ import {
 	it,
 	vi,
 } from "vitest";
-
+import restart from "../tests/fixtures/update-restart-tab.json";
+import PackagesSection from "./dialogs/updates/PackagesSection.svelte";
 import Layout from "./Layout.svelte";
 
 const noop = vi.hoisted(
@@ -359,5 +361,117 @@ describe("Layout — the update overlay survives a backend restart", () => {
 		// The progress moved, so the mount really is reading the post-reconnect
 		// frame rather than a frozen pre-drop snapshot.
 		expect(document.body.textContent).toContain("58%");
+	});
+});
+
+describe("Layout — one tab across the owner's two-restart update", () => {
+	type Seen =
+		| { readonly at: "connected" | "disconnected" }
+		| { readonly at: "push" | "pull"; readonly status: Record<string, unknown> }
+		| { readonly at: "moment"; readonly name: string };
+
+	// What the open tab shows: the overlay's phase and number, and Settings' line.
+	function view(): string {
+		const overlay = document.querySelector('[data-testid="updating-overlay"]');
+		const phase = document.querySelector('[data-testid="update-phase"]');
+		const bar = overlay?.querySelector('[role="progressbar"]');
+		const settings = document.querySelector(
+			'[data-testid="update-package-phase"]',
+		);
+		const text = (node: Element | null | undefined) =>
+			node?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+		return [
+			overlay
+				? `overlay: ${text(phase)} ${bar?.getAttribute("aria-valuenow") ?? "-"}`
+				: "no overlay",
+			`settings: ${text(settings) || "-"}`,
+		].join(" | ");
+	}
+
+	it("renders every moment the real backend processes sent it", async () => {
+		const seen = restart.seen as Seen[];
+		render(Layout);
+		render(PackagesSection, {
+			props: {
+				surface: {
+					packagesReady: true,
+					packagesOutcome: undefined,
+					installPackages: vi.fn(),
+					observeLegacy: vi.fn(),
+					pending: () => false,
+				} as never,
+			},
+		});
+		// A tab that is opening has no connection yet.
+		transport.connection?.("disconnected");
+		const moments: Record<string, string> = {};
+		const trace: string[] = [];
+		for (const [index, event] of seen.entries()) {
+			if (event.at === "connected") {
+				const next = seen.slice(index + 1).find((e) => e.at !== "moment");
+				transport.hydratedStatus = next?.at === "pull" ? next.status : {};
+				const calls = transport.hydrateCalls;
+				transport.connection?.("connected");
+				await vi.waitFor(() =>
+					expect(transport.hydrateCalls).toBeGreaterThan(calls),
+				);
+				await tick();
+			} else if (event.at === "disconnected") {
+				transport.connection?.("disconnected");
+			} else if (event.at === "push") {
+				pushStatus(event.status);
+			} else if (event.at === "moment") {
+				moments[event.name] = view();
+				continue;
+			}
+			flushSync();
+			trace.push(view());
+		}
+
+		const installing = (n: number) =>
+			`overlay: Installing ${n} | settings: Installing · ${n}%`;
+		const downloading = (n: number) =>
+			`overlay: Downloading ${n} | settings: Downloading · ${n}%`;
+		const nothing = "no overlay | settings: -";
+		expect(moments).toEqual({
+			"signed in before the first recovery": nothing,
+			idle: nothing,
+			"downloading 10%": downloading(10),
+			"downloading 60%": downloading(60),
+			"installing 40%": installing(40),
+			"postinst stopped the backend": installing(40),
+			"re-authenticated before recovery": installing(40),
+			"attached, nothing read yet": installing(40),
+			"recovered at installing 60%": installing(60),
+			"installing 80%": installing(80),
+			outcome: nothing,
+			"completion restart": nothing,
+			"re-authenticated after the outcome": nothing,
+			"no unit after the outcome": nothing,
+		});
+		// After every event: no step counts, and from the first download to the
+		// outcome never an empty frame, a lower phase or a lower number.
+		expect(trace.some((shown) => /\bsteps?\b|\bof\b/.test(shown))).toBe(false);
+		const first = trace.indexOf(downloading(10));
+		const closed = trace.findIndex(
+			(shown, i) => i > first && shown === nothing,
+		);
+		const rank = (shown: string) => {
+			const [, phase, n] = /overlay: (\w+) (\d+)/.exec(shown) ?? [];
+			return (
+				(phase === "Installing" ? 2 : phase === "Downloading" ? 1 : 0) * 1000 +
+				Number(n ?? -1)
+			);
+		};
+		const live = trace.slice(first, closed);
+		expect(live.every((shown) => rank(shown) > 1000)).toBe(true);
+		for (let i = 1; i < live.length; i++)
+			expect(rank(live[i] ?? "")).toBeGreaterThanOrEqual(
+				rank(live[i - 1] ?? ""),
+			);
+		expect(trace.slice(closed).every((shown) => shown === nothing)).toBe(true);
+		// The outcome is announced once, as a success.
+		expect(vi.mocked(toast.success)).toHaveBeenCalledTimes(1);
+		expect(vi.mocked(toast.error)).not.toHaveBeenCalled();
 	});
 });

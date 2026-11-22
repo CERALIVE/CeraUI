@@ -203,7 +203,17 @@ async function inspectService(): Promise<DetachedAptServiceState> {
 	return state;
 }
 
+let detachedAptServiceDepsForTest: DetachedAptServiceDeps | null = null;
+
+/** Tests running real backend processes give them a unit that outlives each one. */
+export function setDetachedAptServiceDepsForTest(
+	deps: DetachedAptServiceDeps | null,
+): void {
+	detachedAptServiceDepsForTest = deps;
+}
+
 export function defaultDetachedAptServiceDeps(): DetachedAptServiceDeps {
+	if (detachedAptServiceDepsForTest) return detachedAptServiceDepsForTest;
 	const paths = softwareUpdateOutputPaths();
 	return {
 		outputPaths: paths,
