@@ -1,12 +1,14 @@
 /*
  * The "A CeraLive update is available" notice (`ceralive_update`).
  *
- * Only a conclusive check may change it, and only after its verdict is
- * durable: every first-party candidate must be verified, and the verdict is
- * written before anything is broadcast, together with the hash of the one
- * evidence snapshot the verdict was derived from. A recorded withdrawal reaches a
- * tab only while the evidence read at that moment hashes the same. An empty verdict also needs CeraLive's verified source in the
- * refreshed inventory. Contract:
+ * Only a conclusive check may change it, and only with a verdict the
+ * installer's own decision procedure (the simulated install plan and its
+ * verified first-party rows) computes from command transcripts that read the
+ * same twice in a row. The verdict is written with the SHA-256 of those
+ * transcripts before anything is broadcast. A recorded withdrawal reaches a tab
+ * only through an evidence read that started after the tab logged in and hashes
+ * the same. A command that failed, timed out or answered incompletely makes the
+ * read inconclusive: the offer stays and nothing is stored. Contract:
  * apps/backend/docs/agents/a-persistent-notification-must-be-retractable.md.
  */
 import type { UpdatePackage } from "@ceraui/rpc";
@@ -24,6 +26,7 @@ import {
 } from "../ui/notifications.ts";
 import {
 	AptAllRefusalError,
+	buildAptAllDiscoveryArgs,
 	discoverAptAllPackages,
 	type PinnedAptPackage,
 } from "./apt-all-packages.ts";
@@ -48,11 +51,30 @@ const RECORD_FILE = "ceralive_update_offer.json";
 const RECORD_LIMIT = STORED_STATE_LIMITS.scalar;
 // Keeps the largest exact-roster record within RECORD_LIMIT (pinned by the restart test).
 export const OFFER_VERSION_LIMIT = 160;
+const INVENTORY = ["/usr/bin/apt-cache", "policy"];
+const DPKG_ROSTER = [
+	"/usr/bin/dpkg-query",
+	"-W",
+	"-f",
+	"$" + "{Package}\t$" + "{Status}\t$" + "{Version}\n",
+	...ceralivePackageList,
+];
+// dpkg-query's own words for a name it does not know; its only exit-1 answer that is evidence.
+const DPKG_ABSENT = /^dpkg-query: no packages found matching (\S+)$/;
 
 /** The first-party packages Install would take; an empty list proves none remain. */
 export type CeraliveOffer = readonly PinnedAptPackage[] | "unknown";
 
-type AptRun = (argv: string[]) => Promise<SpawnWithTimeoutResult>;
+/** A conclusive evidence read: the offer it derives and the hash of everything read. */
+export type OfferEvidence = {
+	readonly offer: readonly PinnedAptPackage[];
+	readonly inputs: string;
+};
+
+export type AptRun = (argv: string[]) => Promise<SpawnWithTimeoutResult>;
+
+/** What one tab's (or startup's) replay did, for observers. */
+export type ReplayOutcome = "sent" | "declined";
 
 const offerSchema = z
 	.array(
@@ -77,52 +99,39 @@ const offerSchema = z
 		),
 	);
 // The one durable state: the last conclusive verdict (`offer` rows, or `null`
-// for none) and `inputs`, the hash of the one evidence snapshot it was derived
-// from (see readOfferSnapshot). No counter or identity to rewind.
+// for none) and `inputs`, the hash of the transcripts it was computed from (see
+// collectOfferEvidence). No counter or identity to rewind.
 const recordSchema = z
 	.object({
-		version: z.literal(5),
+		version: z.literal(6),
 		inputs: z.string().regex(/^[0-9a-f]{64}$/),
 		offer: offerSchema.min(1).nullable(),
 	})
 	.strict();
 type OfferRecord = z.infer<typeof recordSchema>;
 
-/** One read of the local evidence an offer verdict depends on. */
-export type OfferSnapshot = {
-	// The verified CeraLive package files APT lists (suite and architecture).
-	readonly sources: readonly string[];
-	readonly packages: readonly {
-		readonly name: string;
-		// dpkg's "want ok state" and version; empty when dpkg does not know the package.
-		readonly status: string;
-		readonly installed: string;
-		// APT's view, with the candidate's version-table lines (priority and package file).
-		readonly policyInstalled: string;
-		readonly candidate: string;
-		readonly candidateFrom: readonly string[];
-		readonly held: boolean;
-	}[];
-};
-
 type Store = {
 	readonly path: string;
 	readonly write: (path: string, text: string) => void;
-	readonly snapshot: () => Promise<OfferSnapshot | undefined>;
+	readonly evidence: () => Promise<OfferEvidence | undefined>;
+	readonly observe: (outcome: ReplayOutcome) => void;
 };
 
 export type CeraliveUpdateNoticeOptions = {
 	readonly path?: string;
 	readonly write?: (path: string, text: string) => void;
 	// Reads the current evidence; a replay happens only when it hashes to the record's.
-	readonly snapshot?: () => Promise<OfferSnapshot | undefined>;
+	readonly evidence?: () => Promise<OfferEvidence | undefined>;
+	readonly observe?: (outcome: ReplayOutcome) => void;
 };
 
 // Inert until startup opts in, so a process that never initializes writes nothing.
 let store: Store | undefined;
 let latest: OfferRecord | undefined;
 let persisted: string | undefined;
-let reading: Promise<OfferSnapshot | undefined> | undefined;
+// The evidence read running now, and the one queued to start after it.
+let running: Promise<OfferEvidence | undefined> | undefined;
+let queued: Promise<OfferEvidence | undefined> | undefined;
 
 export function firstPartyOffer(
 	packages: readonly UpdatePackage[],
@@ -147,13 +156,57 @@ function firstPartySourceListed(sourcePolicy: string): boolean {
 	);
 }
 
+// A simulated plan's first-party rows, verified exactly as capable discovery verifies them.
+async function verifiedPlanOffer(
+	simulation: string,
+	holds: string,
+	inventory: string,
+	run: AptRun,
+): Promise<CeraliveOffer> {
+	try {
+		const { packages } = await discoverAptAllPackages(
+			simulation,
+			holds,
+			async (name) => {
+				const policy = await run(["/usr/bin/apt-cache", "policy", name]);
+				if (policy.exitCode !== 0)
+					throw new AptAllRefusalError("discovery_failed", "package-policy");
+				return policy.stdout;
+			},
+			inventory,
+		);
+		return firstPartyOffer(packages, inventory);
+	} catch (error) {
+		if (error instanceof AptAllRefusalError) return "unknown";
+		throw error;
+	}
+}
+
+/** Capable: the installer's own `upgrade --with-new-pkgs` plan, new dependencies included. */
+export async function capableCeraliveOffer(
+	run: AptRun,
+): Promise<CeraliveOffer> {
+	const simulation = await run(buildAptAllDiscoveryArgs([]));
+	if (simulation.exitCode !== 0) return "unknown";
+	const holds = await run(["/usr/bin/apt-mark", "showhold"]);
+	if (holds.exitCode !== 0) return "unknown";
+	const inventory = await run(INVENTORY);
+	if (inventory.exitCode !== 0) return "unknown";
+	return verifiedPlanOffer(
+		simulation.stdout,
+		holds.stdout,
+		inventory.stdout,
+		run,
+	);
+}
+
 /** Legacy: verify the exact install plan's first-party rows the way capable discovery does. */
 export async function legacyCeraliveOffer(
 	names: readonly string[],
 	plan: readonly string[],
 	run: AptRun,
 ): Promise<CeraliveOffer> {
-	const inventory = await run(["/usr/bin/apt-cache", "policy"]);
+	const inventory = await run(INVENTORY);
 	if (inventory.exitCode !== 0 || !firstPartySourceListed(inventory.stdout))
 		return "unknown";
 	if (names.length === 0) return [];
@@ -165,27 +218,158 @@ export async function legacyCeraliveOffer(
 		...plan,
 	]);
 	if (simulation.exitCode !== 0) return "unknown";
+	const offer = await verifiedPlanOffer(
+		simulation.stdout,
+		"",
+		inventory.stdout,
+		run,
+	);
+	// The plan must take every first-party package discovery listed.
+	return offer !== "unknown" &&
+		names.every((name) => offer.some((row) => row.name === name))
+		? offer
+		: "unknown";
+}
+
+// Runs each distinct command once per read and keeps what it answered, in order.
+function recording(
+	run: AptRun,
+	seeded: ReadonlyMap<string, SpawnWithTimeoutResult>,
+) {
+	const transcript: [string, number, string][] = [];
+	const answers = new Map<string, Promise<SpawnWithTimeoutResult>>(
+		[...seeded].map(([command, result]) => [command, Promise.resolve(result)]),
+	);
+	const recorded = new Set<string>();
+	const record: AptRun = async (argv) => {
+		const command = argv.join(" ");
+		let answer = answers.get(command);
+		if (answer === undefined) {
+			answer = run(argv);
+			answers.set(command, answer);
+		}
+		const result = await answer;
+		if (!recorded.has(command)) {
+			recorded.add(command);
+			transcript.push([command, result.exitCode, result.stdout]);
+		}
+		return result;
+	};
+	return { transcript, run: record };
+}
+
+// APT's "Installed:" per package block of a multi-name policy; undefined on a repeated block.
+function installedVersions(policy: string): Map<string, string> | undefined {
+	const versions = new Map<string, string>();
+	let name: string | undefined;
+	for (const line of policy.split("\n")) {
+		const header = /^(\S+):$/.exec(line)?.[1];
+		if (header !== undefined) {
+			if (versions.has(header)) return undefined;
+			name = header;
+			versions.set(header, "");
+			continue;
+		}
+		const installed = /^ {2}Installed: (\S+)$/.exec(line)?.[1];
+		if (installed !== undefined && name !== undefined)
+			versions.set(name, installed);
+	}
+	return versions;
+}
+
+/**
+ * dpkg's roster answer is evidence only when the query ran and accounted for
+ * every name exactly once: exit 0, or exit 1 with nothing on stderr but dpkg's
+ * own "no packages found" lines. A failed launch, timeout or abort (which the
+ * runner reports as exit 1 with a diagnostic), a signal, a silent exit 1,
+ * partial or repeated rows, a reinstall-required flag or a package mid-change
+ * are not.
+ */
+function settledRoster(dpkg: SpawnWithTimeoutResult, policy: string): boolean {
+	const absent = dpkg.stderr
+		.split("\n")
+		.filter(Boolean)
+		.map((line) => DPKG_ABSENT.exec(line)?.[1]);
+	if (
+		absent.includes(undefined) ||
+		dpkg.exitCode !== (absent.length > 0 ? 1 : 0)
+	)
+		return false;
+	const rows = dpkg.stdout
+		.split("\n")
+		.filter(Boolean)
+		.map((line) => line.split("\t"));
+	const named = [...rows.map(([name]) => name), ...absent];
+	if (
+		named.length !== ceralivePackageList.length ||
+		ceralivePackageList.some((name) => !named.includes(name))
+	)
+		return false;
+	const installed = installedVersions(policy);
+	return (
+		installed !== undefined &&
+		rows.every(([name = "", status = "", version = "", ...extra]) => {
+			const [, flag, state] = status.split(" ");
+			if (extra.length > 0 || flag !== "ok") return false;
+			if (state === "installed") return installed.get(name) === version;
+			return state === "not-installed" || state === "config-files";
+		})
+	);
+}
+
+/**
+ * One read of the evidence the offer is decided from: `decide` runs the
+ * installer's own procedure, then APT's roster policy, the holds and dpkg's
+ * status are read. Every command is recorded; the hash covers all of them, so a
+ * changed plan, hold, pin, origin or package state changes it. Undefined, which
+ * changes nothing, when any answer is incomplete or the procedure is unsure.
+ */
+export async function collectOfferEvidence(
+	run: AptRun,
+	decide: (run: AptRun) => Promise<CeraliveOffer>,
+	// The source inventory when the caller already read it in this check.
+	inventory?: string,
+): Promise<OfferEvidence | undefined> {
+	const recorder = recording(
+		run,
+		new Map(
+			inventory === undefined
+				? []
+				: [
+						[
+							INVENTORY.join(" "),
+							{ exitCode: 0, stdout: inventory, stderr: "" },
+						],
+					],
+		),
+	);
 	try {
-		const { packages } = await discoverAptAllPackages(
-			simulation.stdout,
-			"",
-			async (name) => {
-				const policy = await run(["/usr/bin/apt-cache", "policy", name]);
-				if (policy.exitCode !== 0)
-					throw new AptAllRefusalError("discovery_failed", "package-policy");
-				return policy.stdout;
-			},
-			inventory.stdout,
-		);
-		const offer = firstPartyOffer(packages, inventory.stdout);
-		// The plan must take every first-party package discovery listed.
-		return offer !== "unknown" &&
-			names.every((name) => offer.some((row) => row.name === name))
-			? offer
-			: "unknown";
+		const offer = await decide(recorder.run);
+		if (offer === "unknown") return undefined;
+		const policy = await recorder.run([
+			"/usr/bin/apt-cache",
+			"policy",
+			...ceralivePackageList,
+		]);
+		const holds = await recorder.run(["/usr/bin/apt-mark", "showhold"]);
+		const dpkg = await recorder.run(DPKG_ROSTER);
+		if (
+			policy.exitCode !== 0 ||
+			holds.exitCode !== 0 ||
+			!settledRoster(dpkg, policy.stdout)
+		)
+			return undefined;
+		return {
+			offer: [...offer].sort((a, b) => compareAptPackageNames(a.name, b.name)),
+			inputs: new Bun.CryptoHasher("sha256")
+				.update(JSON.stringify(recorder.transcript))
+				.digest("hex"),
+		};
 	} catch (error) {
-		if (error instanceof AptAllRefusalError) return "unknown";
-		throw error;
+		logger.warn("CeraLive update notice: APT evidence unreadable", {
+			error: error instanceof Error ? error.message : String(error),
+		});
+		return undefined;
 	}
 }
 
@@ -205,133 +389,6 @@ function dismissed(offer: readonly PinnedAptPackage[]): boolean | undefined {
 		});
 		return undefined;
 	}
-}
-
-/**
- * Reads, once, everything an offer verdict depends on: the verified CeraLive
- * package files, each roster package's APT policy (installed, candidate and the
- * candidate's version-table lines), the APT holds, and dpkg's status. All local;
- * any failure yields no snapshot, which never authorizes a change.
- */
-export async function readOfferSnapshot(
-	run: AptRun,
-	// The source inventory when the caller already read it in this check.
-	read?: string,
-): Promise<OfferSnapshot | undefined> {
-	try {
-		const [inventory, policy, holds, dpkg] = await Promise.all([
-			read ??
-				run(["/usr/bin/apt-cache", "policy"]).then((result) =>
-					result.exitCode === 0 ? result.stdout : undefined,
-				),
-			run(["/usr/bin/apt-cache", "policy", ...ceralivePackageList]),
-			run(["/usr/bin/apt-mark", "showhold"]),
-			run([
-				"/usr/bin/dpkg-query",
-				"-W",
-				"-f",
-				"$" + "{Package}\t$" + "{Status}\t$" + "{Version}\n",
-				...ceralivePackageList,
-			]),
-		]);
-		// dpkg-query exits 1 when some names are unknown; it still lists the known ones.
-		if (
-			inventory === undefined ||
-			policy.exitCode !== 0 ||
-			holds.exitCode !== 0 ||
-			dpkg.exitCode > 1
-		)
-			return undefined;
-		const sources = [...policySources(inventory)]
-			.filter(([, origin]) => origin === FIRST_PARTY_APT_HOST)
-			.map(([source]) => source)
-			.sort();
-		const held = new Set(holds.stdout.split(/\s+/).filter(Boolean));
-		const status = new Map(
-			dpkg.stdout
-				.split("\n")
-				.filter(Boolean)
-				.map((line) => {
-					const [name = "", state = "", version = ""] = line.split("\t");
-					return [name, [state, version]] as const;
-				}),
-		);
-		const blocks = new Map(
-			policy.stdout
-				.split(/^(?=\S+:$)/m)
-				.map((block) => [block.slice(0, block.indexOf(":")), block] as const),
-		);
-		const packages = ceralivePackageList.map((name) => {
-			const block = blocks.get(name) ?? "";
-			const policyInstalled = /^\s+Installed: (\S+)$/m.exec(block)?.[1] ?? "";
-			const candidate = /^\s+Candidate: (\S+)$/m.exec(block)?.[1] ?? "";
-			const [state = "", installed = ""] = status.get(name) ?? [];
-			return {
-				name,
-				status: state,
-				installed,
-				policyInstalled,
-				candidate,
-				candidateFrom: versionTableLines(block, candidate),
-				held: held.has(name),
-			};
-		});
-		return { sources, packages };
-	} catch (error) {
-		logger.warn("CeraLive update notice: APT evidence unreadable", {
-			error: error instanceof Error ? error.message : String(error),
-		});
-		return undefined;
-	}
-}
-
-// The "priority package-file" lines listed under `version` in a policy version table.
-function versionTableLines(block: string, version: string): string[] {
-	const lines: string[] = [];
-	let inside = false;
-	for (const line of block.split("\n")) {
-		const entry = /^ (?:\*\*\*| {3}) (\S+) -?\d+$/.exec(line);
-		if (entry) inside = entry[1] === version;
-		else if (inside && /^ {8}-?\d+ /.test(line)) lines.push(line.trim());
-	}
-	return lines;
-}
-
-/**
- * The verdict a snapshot alone supports: an offer row for every installed,
- * unheld roster package whose candidate differs and comes from a verified
- * CeraLive package file, sorted by name. Unknown without a CeraLive source, for a package dpkg
- * has half-installed, when dpkg and APT disagree, or for a candidate from elsewhere.
- */
-export function snapshotOffer(snapshot: OfferSnapshot): CeraliveOffer {
-	if (snapshot.sources.length === 0) return "unknown";
-	const offer: PinnedAptPackage[] = [];
-	for (const pkg of snapshot.packages) {
-		const state = pkg.status.split(" ")[2] ?? "";
-		if (
-			pkg.status === "" ||
-			state === "not-installed" ||
-			state === "config-files"
-		)
-			continue;
-		if (state !== "installed" || pkg.installed !== pkg.policyInstalled)
-			return "unknown";
-		const selectedHold = pkg.status.startsWith("hold ");
-		if (pkg.held || selectedHold || pkg.candidate === pkg.installed) continue;
-		if (pkg.candidate === "(none)") continue;
-		const fromCeralive = pkg.candidateFrom.some((line) =>
-			snapshot.sources.includes(line.replace(/^-?\d+ /, "")),
-		);
-		if (!fromCeralive) return "unknown";
-		offer.push({ name: pkg.name, version: pkg.candidate });
-	}
-	return offer.sort((a, b) => compareAptPackageNames(a.name, b.name));
-}
-
-function fingerprint(snapshot: OfferSnapshot): string {
-	return new Bun.CryptoHasher("sha256")
-		.update(JSON.stringify(snapshot))
-		.digest("hex");
 }
 
 function sameOffer(
@@ -425,30 +482,27 @@ function readRecord(path: string) {
 }
 
 /**
- * Applies a conclusive check's verdict together with the evidence snapshot read
- * after it. Only a verdict the snapshot alone supports is committed, with the
- * snapshot's hash in the same record; `unknown`, a missing snapshot or a
- * disagreement (the state moved between the reads) change nothing.
+ * Applies a conclusive check: `read` is taken twice, and only when both reads
+ * are conclusive and hash the same (nothing moved while the check looked) is
+ * the verdict committed, with that hash, before it is broadcast.
  */
-export function reconcileCeraliveUpdateNotice(
-	verdict: CeraliveOffer,
-	snapshot: OfferSnapshot | undefined,
-): void {
-	if (verdict === "unknown" || snapshot === undefined) return;
-	const offer = [...verdict].sort((a, b) =>
-		compareAptPackageNames(a.name, b.name),
-	);
-	const supported = snapshotOffer(snapshot);
-	if (supported === "unknown" || !sameOffer(supported, offer)) {
-		logger.warn(
-			"CeraLive update notice unchanged: verdict and evidence disagree",
-		);
+export async function reconcileCeraliveUpdateNotice(
+	read: () => Promise<OfferEvidence | undefined>,
+): Promise<void> {
+	const first = await read();
+	const second = first === undefined ? undefined : await read();
+	if (first === undefined || second === undefined) {
+		logger.warn("CeraLive update notice unchanged: evidence inconclusive");
+		return;
+	}
+	if (second.inputs !== first.inputs) {
+		logger.warn("CeraLive update notice unchanged: evidence moved");
 		return;
 	}
 	const record: OfferRecord = {
-		version: 5,
-		inputs: fingerprint(snapshot),
-		offer: offer.length > 0 ? offer : null,
+		version: 6,
+		inputs: first.inputs,
+		offer: first.offer.length > 0 ? [...first.offer] : null,
 	};
 	// A change that is not durable is not made, so no restart can act on an older verdict.
 	if (!persist(record)) return;
@@ -457,27 +511,58 @@ export function reconcileCeraliveUpdateNotice(
 	else publish(record.offer);
 }
 
-// Delivers the recorded withdrawal only if the evidence read now hashes to the
-// record's and no newer verdict arrived meanwhile. Re-evaluated on every call.
+// An evidence read that starts no earlier than this call: callers that arrive
+// while one runs share the next one instead of joining it.
+function readStartingNow(
+	evidence: () => Promise<OfferEvidence | undefined>,
+): Promise<OfferEvidence | undefined> {
+	if (running === undefined) {
+		running = evidence().finally(() => {
+			running = undefined;
+		});
+		return running;
+	}
+	const next = (): Promise<OfferEvidence | undefined> => {
+		queued = undefined;
+		return readStartingNow(evidence);
+	};
+	queued ??= running.then(next, next);
+	return queued;
+}
+
+function withdrawn(record: OfferRecord | undefined): record is OfferRecord {
+	return (
+		record !== undefined &&
+		latest === record &&
+		(record.offer === null || dismissed(record.offer) === true)
+	);
+}
+
+// Delivers the recorded withdrawal only if a read that started now derives the
+// record's own verdict from evidence that hashes the same.
 async function replay(deliver: () => void): Promise<void> {
+	const current = store;
+	if (current === undefined) return;
 	const record = latest;
-	if (store === undefined || record === undefined) return;
-	if (record.offer !== null && dismissed(record.offer) !== true) return;
-	reading ??= store.snapshot().finally(() => {
-		reading = undefined;
-	});
-	const current = await reading;
-	if (current === undefined || latest !== record) return;
-	if (fingerprint(current) !== record.inputs) return;
-	deliver();
+	const evidence = withdrawn(record)
+		? await readStartingNow(current.evidence)
+		: undefined;
+	const matches =
+		evidence !== undefined &&
+		withdrawn(record) &&
+		evidence.inputs === record.inputs &&
+		sameOffer(evidence.offer, record.offer ?? []);
+	if (matches) deliver();
+	current.observe(matches ? "sent" : "declined");
 }
 
 /**
  * Loads the last verdict. Every authenticating tab is then told of a recorded
- * withdrawal (none, or a dismissed offer) only while the current evidence is
- * exactly the one it was derived from; otherwise the record is ignored until a
- * fresh conclusive check. Startup never republishes an offer from the record.
- * Runs after the socket is bound, so it also tells tabs that authenticated early.
+ * withdrawal (none, or a dismissed offer) only while a fresh read of the
+ * evidence is exactly the one it was derived from; otherwise the record is
+ * ignored until a fresh conclusive check. Startup never republishes an offer
+ * from the record. Runs after the socket is bound, so it also tells tabs that
+ * authenticated early.
  */
 export async function initCeraliveUpdateNotice(
 	options: CeraliveUpdateNoticeOptions = {},
@@ -485,7 +570,8 @@ export async function initCeraliveUpdateNotice(
 	store = {
 		path: options.path ?? RECORD_FILE,
 		write: options.write ?? writeFileAtomicSync,
-		snapshot: options.snapshot ?? (async () => undefined),
+		evidence: options.evidence ?? (async () => undefined),
+		observe: options.observe ?? (() => undefined),
 	};
 	const record = readRecord(store.path);
 	latest = record;

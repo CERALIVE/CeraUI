@@ -84,10 +84,12 @@ import {
 	normalizeAptCommandFailure,
 } from "./apt-transport-result.ts";
 import {
-	firstPartyOffer,
+	type AptRun,
+	type CeraliveOffer,
+	capableCeraliveOffer,
+	collectOfferEvidence,
 	legacyCeraliveOffer,
-	type OfferSnapshot,
-	readOfferSnapshot,
+	type OfferEvidence,
 	reconcileCeraliveUpdateNotice,
 } from "./ceralive-update-notice.ts";
 import {
@@ -658,9 +660,8 @@ async function getCapableUpdateSize(
 			update_state: getUpdateState(),
 		});
 		if (refreshConclusive)
-			reconcileCeraliveUpdateNotice(
-				firstPartyOffer(result.packages, sourcePolicy.stdout),
-				await readCeraliveOfferSnapshot(sourcePolicy.stdout),
+			await reconcileCeraliveUpdateNotice(() =>
+				readCeraliveOfferEvidence(sourcePolicy.stdout),
 			);
 		return null;
 	} catch (error) {
@@ -936,19 +937,7 @@ async function getSoftwareUpdateSize(
 		update_state: getUpdateState(),
 	});
 	if (refreshConclusive)
-		reconcileCeraliveUpdateNotice(
-			isCleanAssumeNoDiscovery(upgradeResult)
-				? await legacyCeraliveOffer(
-						actionableAppPackages,
-						buildAptUpgradeArgs(
-							actionableAppPackages,
-							reachability.verdict,
-						).filter((arg) => arg !== "-y"),
-						(argv) => runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
-					)
-				: "unknown",
-			await readCeraliveOfferSnapshot(),
-		);
+		await reconcileCeraliveUpdateNotice(() => readCeraliveOfferEvidence());
 
 	return null;
 }
@@ -2065,12 +2054,36 @@ async function recoverSoftwareUpdate(
 	return true;
 }
 
-/** One read of the local APT evidence a CeraLive offer verdict depends on. */
-export function readCeraliveOfferSnapshot(
+// The legacy installer's decision, read-only: the discovery the check runs, then the exact
+// install argv Install would run, simulated (local reads; no refresh, no family options).
+async function legacyInstallerOffer(run: AptRun): Promise<CeraliveOffer> {
+	const discovery = await run(buildAptDiscoveryArgs("any"));
+	if (!isCleanAssumeNoDiscovery(discovery)) return "unknown";
+	const summary = parseAptUpgradeSummary(discovery.stdout);
+	if (!summary.ok) return "unknown";
+	const names = actionableAppNames(
+		buildDiscoveredPackages(
+			summary.value.packages,
+			parseKeptBackPackageNames(discovery.stdout),
+		),
+	);
+	return legacyCeraliveOffer(
+		names,
+		buildAptUpgradeArgs(names, "any").filter((arg) => arg !== "-y"),
+		run,
+	);
+}
+
+/** One conclusive-or-nothing read of the evidence the CeraLive offer is decided from. */
+export function readCeraliveOfferEvidence(
 	inventory?: string,
-): Promise<OfferSnapshot | undefined> {
-	return readOfferSnapshot(
+): Promise<OfferEvidence | undefined> {
+	return collectOfferEvidence(
 		(argv) => runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
+		async (run) =>
+			(await readUpdateCapabilities()).mode === "capable"
+				? capableCeraliveOffer(run)
+				: legacyInstallerOffer(run),
 		inventory,
 	);
 }

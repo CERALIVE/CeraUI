@@ -15,7 +15,7 @@ import {
 	spyOn,
 	test,
 } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { notificationsMessageSchema } from "@ceraui/rpc/schemas";
@@ -26,7 +26,7 @@ import { initCeraliveUpdateNotice } from "../modules/system/ceralive-update-noti
 import {
 	getUpdateState,
 	periodicCheckForSoftwareUpdates,
-	readCeraliveOfferSnapshot,
+	readCeraliveOfferEvidence,
 	resetAptReachabilityProbeForTest,
 	resetSoftwareUpdateCheckRunner,
 	resetSoftwareUpdateState,
@@ -62,8 +62,10 @@ import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 import {
 	type AptPackage,
+	type AptRead,
 	type AptScript,
 	DEBIAN_ONLY_INVENTORY,
+	type FailedRead,
 	scriptedApt,
 } from "./helpers/ceralive-update-apt.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
@@ -85,6 +87,12 @@ const srtla = (candidate: string, more: Partial<AptPackage> = {}) => ({
 	installed: "1.0",
 	candidate,
 	...more,
+});
+// A roster package that is not installed; a plan that installs it is part of the offer.
+const modemSupport = (candidate: string) => ({
+	name: "ceralive-modem-support",
+	installed: "(none)",
+	candidate,
 });
 const curl = {
 	name: "curl",
@@ -226,7 +234,7 @@ beforeEach(async () => {
 	setAptCommandRunnerForTest((argv) => scriptedApt(script)(argv));
 	await initCeraliveUpdateNotice({
 		path: join(dir, "offer.json"),
-		snapshot: () => readCeraliveOfferSnapshot(),
+		evidence: () => readCeraliveOfferEvidence(),
 	});
 	broadcast = spyOn(websocket, "broadcastMsg");
 });
@@ -672,3 +680,72 @@ test("a successful install is not evidence that no offer remains", async () => {
 		getPersistentNotifications(true).show.map(({ name }) => name),
 	).toContain(NOTICE);
 });
+
+// A read that did not answer, on any evidence command, is never "nothing pending".
+const unanswered: readonly [AptRead, FailedRead][] = [
+	["dpkg-query", "launch"],
+	["dpkg-query", "timeout"],
+	["dpkg-query", "signal"],
+	["dpkg-query", "silent-exit-1"],
+	["dpkg-query", "truncated"],
+	["apt-mark", "launch"],
+	["apt-mark", "timeout"],
+	["roster-policy", "launch"],
+	["roster-policy", "timeout"],
+];
+const installedRelease: AptScript = {
+	installed: [cerastream("2", { installed: "2" })],
+};
+
+for (const capable of [false, true])
+	describe(`${capable ? "capable" : "legacy"} image: evidence that did not answer`, () => {
+		beforeEach(async () => {
+			if (capable) await useCapableImage();
+		});
+
+		for (const [read, how] of unanswered)
+			test(`${read} ${how} keeps the offer and records nothing`, async () => {
+				// Given the offer shown and recorded.
+				await check({ upgradable: [cerastream("2")] });
+				expect(notificationExists(NOTICE)?.dismissalKey).toBe(
+					"update:cerastream=2",
+				);
+				const recorded = await readFile(join(dir, "offer.json"), "utf8");
+				// When it is installed and one command of the next conclusive check does not answer
+				// (capable discovery runs apt-mark itself, so there the whole check already refuses).
+				expect(
+					await check({ ...installedRelease, fail: { [read]: how } }),
+				).toBe(capable && read === "apt-mark" ? "discovery_failed" : null);
+				// Then nothing is removed, replayed or written.
+				expect(liveRemovals()).toEqual([]);
+				expect(notificationExists(NOTICE)?.dismissalKey).toBe(
+					"update:cerastream=2",
+				);
+				expect(await replayedRemovals()).toEqual([]);
+				expect(await readFile(join(dir, "offer.json"), "utf8")).toBe(recorded);
+			});
+
+		test("a package dpkg genuinely does not know is evidence: the proven none withdraws", async () => {
+			await check({ upgradable: [cerastream("2")] });
+			// When the same check answers completely (14 roster names absent, named on stderr).
+			await check(installedRelease);
+			expect(liveRemovals()).toEqual([NOTICE]);
+			expect(
+				JSON.parse(await readFile(join(dir, "offer.json"), "utf8")),
+			).toMatchObject({ version: 6, offer: null });
+		});
+
+		test("a roster dependency the plan installs is part of the offer", async () => {
+			// When the plan upgrades cerastream and newly installs a roster package with it.
+			await check({ upgradable: [cerastream("2"), modemSupport("2026.1")] });
+			// Then both are the offer, keyed by their exact versions.
+			expect(notificationExists(NOTICE)?.dismissalKey).toBe(
+				"update:ceralive-modem-support=2026.1,cerastream=2",
+			);
+		});
+
+		test("a candidate the solver keeps back does not veto the valid upgrade beside it", async () => {
+			await check({ upgradable: [srtla("2.0")], keptBack: [cerastream("2")] });
+			expect(notificationExists(NOTICE)?.dismissalKey).toBe("update:srtla=2.0");
+		});
+	});

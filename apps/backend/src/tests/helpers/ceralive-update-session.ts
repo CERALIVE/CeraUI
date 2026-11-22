@@ -5,7 +5,8 @@
 // main.ts but only after binding (production order: `hydrate` runs it while
 // tabs may already be authenticated), and obeys stdin commands: `check` runs
 // the real package check over scripted APT, `apt <json>` replaces the device's
-// APT state, `recover` recovers a finished install (which ends the process
+// APT state, `block <bin>` holds the next run of that command (its answer fixed
+// by the state when it starts) until `release`, `recover` recovers a finished install (which ends the process
 // through the update's deliberate restart), `exit` ends it. With
 // `olderBackend` it is a backend from before this notice owner: it shows the
 // notice the way main did and never initializes or writes the offer record.
@@ -23,11 +24,15 @@ import { setPasswordHash } from "../../rpc/state/password.ts";
 import {
 	APPLIED_MARKER,
 	type AptScript,
+	BLOCK_SET_MARKER,
+	BLOCKED_MARKER,
 	CHECKED_MARKER,
 	HYDRATED_MARKER,
 	READY_PREFIX,
 	RECOVERY_FAILED_MARKER,
 	RECOVERY_RESTART_MARKER,
+	RELEASED_MARKER,
+	REPLAY_PREFIX,
 	RESTART_EXIT_CODE,
 	SESSION_PASSWORD,
 	scriptedApt,
@@ -72,7 +77,21 @@ updates.setAptReachabilityProbeForTest(async () => ({
 	detail: [],
 }));
 let apt = scriptedApt(step.apt ?? {});
-updates.setAptCommandRunnerForTest((argv) => apt(argv));
+let block: { bin: string; release?: () => void } | undefined;
+updates.setAptCommandRunnerForTest(async (argv) => {
+	const answer = apt(argv);
+	if (
+		block !== undefined &&
+		block.release === undefined &&
+		argv[0] === block.bin
+	) {
+		const held = Promise.withResolvers<void>();
+		block.release = held.resolve;
+		process.stdout.write(`${BLOCKED_MARKER}\n`);
+		await held.promise;
+	}
+	return answer;
+});
 setPasswordHash(
 	await Bun.password.hash(SESSION_PASSWORD, { algorithm: "bcrypt", cost: 4 }),
 );
@@ -95,7 +114,9 @@ for await (const command of console) {
 		if (!step.olderBackend)
 			await initCeraliveUpdateNotice({
 				path: step.record,
-				snapshot: () => updates.readCeraliveOfferSnapshot(),
+				evidence: () => updates.readCeraliveOfferEvidence(),
+				observe: (outcome) =>
+					process.stdout.write(`${REPLAY_PREFIX}${outcome}\n`),
 				...(step.failWrites
 					? {
 							write: () => {
@@ -105,6 +126,13 @@ for await (const command of console) {
 					: {}),
 			});
 		process.stdout.write(`${HYDRATED_MARKER}\n`);
+	} else if (command.startsWith("block ")) {
+		block = { bin: command.slice(6) };
+		process.stdout.write(`${BLOCK_SET_MARKER}\n`);
+	} else if (command === "release") {
+		block?.release?.();
+		block = undefined;
+		process.stdout.write(`${RELEASED_MARKER}\n`);
 	} else if (command.startsWith("apt ")) {
 		apt = scriptedApt(JSON.parse(command.slice(4)));
 		process.stdout.write(`${APPLIED_MARKER}\n`);

@@ -29,11 +29,15 @@ import {
 	APPLIED_MARKER,
 	type AptPackage,
 	type AptScript,
+	BLOCK_SET_MARKER,
+	BLOCKED_MARKER,
 	CHECKED_MARKER,
 	HYDRATED_MARKER,
 	READY_PREFIX,
 	RECOVERY_FAILED_MARKER,
 	RECOVERY_RESTART_MARKER,
+	RELEASED_MARKER,
+	REPLAY_PREFIX,
 	RESTART_EXIT_CODE,
 	SESSION_PASSWORD,
 } from "./helpers/ceralive-update-apt.ts";
@@ -85,9 +89,10 @@ async function within<T>(promise: Promise<T>, what: string): Promise<T> {
 }
 
 // A child's output, read as it arrives so a full pipe never blocks the child.
+// Each wait takes the first matching line not taken yet, so markers never skip each other.
 class Lines {
 	private readonly seen: string[] = [];
-	private cursor = 0;
+	private readonly taken = new Set<number>();
 	private wake: (() => void) | undefined;
 	private ended = false;
 
@@ -114,10 +119,10 @@ class Lines {
 	async next(match: (line: string) => boolean): Promise<string> {
 		for (;;) {
 			const at = this.seen.findIndex(
-				(line, index) => index >= this.cursor && match(line),
+				(line, index) => !this.taken.has(index) && match(line),
 			);
 			if (at >= 0) {
-				this.cursor = at + 1;
+				this.taken.add(at);
 				return this.seen[at] ?? "";
 			}
 			if (this.ended) throw new Error(`output ended:\n${this.text()}`);
@@ -136,11 +141,14 @@ type Step = Omit<SessionStep, "record" | "scratch">;
 
 class Backend {
 	readonly port: number;
+	// True once this backend's notice owner answers every login with one replay outcome.
+	replays = false;
 	private readonly out: Lines;
 	private readonly err: Lines;
 
 	private constructor(
 		private readonly child: Bun.Subprocess<"pipe", "pipe", "pipe">,
+		private readonly owner: boolean,
 		port: number,
 		out: Lines,
 		err: Lines,
@@ -189,6 +197,7 @@ class Backend {
 		);
 		const backend = new Backend(
 			child,
+			step.olderBackend !== true,
 			Number(ready.slice(READY_PREFIX.length)),
 			out,
 			err,
@@ -206,8 +215,37 @@ class Backend {
 		);
 	}
 
-	hydrate(): Promise<void> {
-		return this.command("hydrate", HYDRATED_MARKER, "hydration");
+	async hydrate(): Promise<void> {
+		await this.command("hydrate", HYDRATED_MARKER, "hydration");
+		if (!this.owner) return;
+		// Startup's own replay (to tabs that authenticated early) has run.
+		await this.nextReplay();
+		this.replays = true;
+	}
+
+	// The outcome of the next replay this backend ran, printed after its frames were queued.
+	async nextReplay(): Promise<string> {
+		const line = await within(
+			this.out.next((entry) => entry.startsWith(REPLAY_PREFIX)),
+			"replay outcome",
+		);
+		return line.slice(REPLAY_PREFIX.length);
+	}
+
+	// Holds the next run of `bin`; its answer is the device state when it starts.
+	block(bin: string): Promise<void> {
+		return this.command(`block ${bin}`, BLOCK_SET_MARKER, "block");
+	}
+
+	async blocked(): Promise<void> {
+		await within(
+			this.out.next((line) => line === BLOCKED_MARKER),
+			"blocked command",
+		);
+	}
+
+	release(): Promise<void> {
+		return this.command("release", RELEASED_MARKER, "release");
 	}
 
 	check(): Promise<void> {
@@ -242,10 +280,12 @@ class Backend {
 }
 
 type Decoder = "typed" | "v2026.7.2";
+// The revision and publisher of the copy a tab shows (sent back when it dismisses).
+type Copy = { revision?: number | undefined; publisher?: string | undefined };
 
 class Tab {
 	// What the tab shows, with the copy's revision and publisher (for dismissal).
-	readonly shown = new Map<string, { revision?: number; publisher?: string }>();
+	readonly shown = new Map<string, Copy>();
 	// Every CeraLive show and removal the tab received, in order.
 	readonly history: ("show" | "remove")[] = [];
 	private socket: WebSocket | undefined;
@@ -265,7 +305,10 @@ class Tab {
 		return this.history.filter((event) => event === "remove").length;
 	}
 
-	async connect(backend: Backend): Promise<void> {
+	async connect(
+		backend: Backend,
+		{ awaitReplay = backend.replays }: { awaitReplay?: boolean } = {},
+	): Promise<void> {
 		const socket = new WebSocket(`ws://127.0.0.1:${backend.port}/ws`);
 		this.socket = socket;
 		this.closed = new Promise((resolve) =>
@@ -287,6 +330,8 @@ class Tab {
 			password: SESSION_PASSWORD,
 		});
 		expect(login).toMatchObject({ result: { success: true } });
+		// The login's replay is asynchronous; its outcome marker is the rendezvous.
+		if (awaitReplay) await backend.nextReplay();
 		await this.sync();
 	}
 
@@ -353,7 +398,7 @@ class Tab {
 			if (typeof entry === "string") this.remove(entry);
 	}
 
-	private show(name: string, copy: { revision?: number; publisher?: string }) {
+	private show(name: string, copy: Copy) {
 		if (name === NOTICE) this.history.push("show");
 		this.shown.set(name, copy);
 	}
@@ -416,8 +461,11 @@ async function olderBackendTabs(state: AptScript = pending("1", "2")) {
 }
 
 // A conclusive "nothing pending" proof at cerastream 2, recorded by a real check.
-async function proveNothingPending(state: AptScript = settled("2")) {
-	const proof = await Backend.start({ apt: state });
+async function proveNothingPending(
+	state: AptScript = settled("2"),
+	capable = false,
+) {
+	const proof = await Backend.start({ apt: state, capable });
 	await proof.check();
 	await proof.close();
 }
@@ -645,6 +693,99 @@ test(
 	budget(8),
 );
 
+const curl: AptPackage = {
+	name: "curl",
+	installed: "8.1",
+	candidate: "8.2",
+	source: "debian",
+};
+
+for (const capable of [false, true])
+	test(
+		`a changed install plan with unchanged installed versions is new evidence: nothing replays (${capable ? "capable" : "legacy"} image)`,
+		async () => {
+			const dependency: AptPackage = {
+				name: "ceralive-modem-support",
+				installed: "(none)",
+				candidate: "2026.1",
+			};
+			// Given a proof taken while a roster dependency was only available, not planned.
+			await proveNothingPending(
+				{ ...settled("2"), available: [dependency] },
+				capable,
+			);
+			const opened = await olderBackendTabs();
+			// When an out-of-roster upgrade now pulls it into the plan, every roster version unchanged.
+			const restarted = await Backend.start({
+				apt: { ...settled("2"), upgradable: [curl, dependency] },
+				capable,
+			});
+			await reconnect(restarted, opened);
+			// Then neither decoder is told to remove the offer.
+			expect(names(opened)).toEqual([[NOTICE], [NOTICE]]);
+			expect(removals(opened)).toEqual([0, 0]);
+		},
+		budget(4),
+	);
+
+test(
+	"a record whose verdict is not its own evidence's is never replayed",
+	async () => {
+		// Given the real record of an offer, edited to claim "none" under the same hash.
+		const offering = await Backend.start({ apt: pending("1", "2") });
+		await offering.check();
+		await offering.close();
+		const real = JSON.parse(await readFile(record, "utf8"));
+		expect(real.offer).toEqual([{ name: "cerastream", version: "2" }]);
+		await writeFile(record, JSON.stringify({ ...real, offer: null }));
+		const opened = await olderBackendTabs();
+		// When a backend starts under exactly that evidence.
+		const restarted = await Backend.start({ apt: pending("1", "2") });
+		await reconnect(restarted, opened);
+		// Then the edited withdrawal reaches neither decoder.
+		expect(names(opened)).toEqual([[NOTICE], [NOTICE]]);
+		expect(removals(opened)).toEqual([0, 0]);
+	},
+	budget(4),
+);
+
+test(
+	"a login after the device changed is never served by a read that started before the change",
+	async () => {
+		// Given a proof taken while cerastream 2 was held back, and offline tabs showing
+		// the offer an unheld producer raised.
+		const held: AptScript = {
+			keptBack: [cerastream("1", "2")],
+			holds: ["cerastream"],
+		};
+		await proveNothingPending(held);
+		const late = await olderBackendTabs();
+		const backend = await Backend.start({ apt: held });
+		// When one login's read is held at its last command, everything before it read held.
+		await backend.block("/usr/bin/dpkg-query");
+		const early = new Tab("typed");
+		await early.connect(backend, { awaitReplay: false });
+		await backend.blocked();
+		// And the hold is released while that read is still running.
+		await backend.setApt(pending("1", "2"));
+		// And the offline tabs log in after the change, then the held read finishes.
+		for (const tab of late) await tab.connect(backend, { awaitReplay: false });
+		await backend.release();
+		const outcomes = [
+			await backend.nextReplay(),
+			await backend.nextReplay(),
+			await backend.nextReplay(),
+		];
+		await sync([early, ...late]);
+		// Then the tabs that logged in after the change keep the offer: no removal reached them.
+		expect(names(late)).toEqual([[NOTICE], [NOTICE]]);
+		expect(removals(late)).toEqual([0, 0]);
+		// The read that began before the change served only the login that came before it.
+		expect(outcomes).toEqual(["sent", "declined", "declined"]);
+	},
+	budget(5),
+);
+
 test(
 	"a verdict whose evidence moved before the snapshot was read is not recorded or sent",
 	async () => {
@@ -850,8 +991,9 @@ test(
 			"prior v2": JSON.stringify({ version: 2, offer: [], withdrawn: [] }),
 			"prior v3": JSON.stringify({ ...valid, version: 3 }),
 			"prior v4": JSON.stringify({ ...valid, version: 4 }),
-			future: JSON.stringify({ ...valid, version: 6 }),
-			duplicate: `{"version":5,"inputs":"${"0".repeat(64)}","offer":null,"inputs":"${valid.inputs}"}`,
+			"prior v5": JSON.stringify({ ...valid, version: 5 }),
+			future: JSON.stringify({ ...valid, version: 7 }),
+			duplicate: `{"version":6,"inputs":"${"0".repeat(64)}","offer":null,"inputs":"${valid.inputs}"}`,
 			oversized: JSON.stringify(valid).padEnd(5000, " "),
 			inputs: JSON.stringify({ ...valid, inputs: "not-a-fingerprint" }),
 			// A forged multi-package key, whose acknowledgement is present, cannot be smuggled in.
