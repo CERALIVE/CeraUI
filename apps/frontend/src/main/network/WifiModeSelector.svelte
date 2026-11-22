@@ -50,9 +50,11 @@ import { cn } from '$lib/utils';
 import HotspotActivationConfirm from './HotspotActivationConfirm.svelte';
 import WifiModeErrorBand from './WifiModeErrorBand.svelte';
 import {
+	actionableWifiModeConsequence,
 	deriveWifiModeConsequence,
 	type WifiAdapterModeContext,
 	type WifiAdapterModeView,
+	type WifiModeConfirmation,
 	wifiModeConsequenceKeys,
 	wifiModeDescriptionKey,
 	wifiModeLabelKey,
@@ -63,6 +65,12 @@ import { wifiModeOpKey } from './wifi-station-lock';
 
 interface Props {
 	view: WifiAdapterModeView;
+	/** The host can see when either mode confirmation owns the consent slot. */
+	confirmation?: WifiModeConfirmation;
+	/** A sibling Start gate already owns the host's consent slot. */
+	consentBlocked?: boolean;
+	/** True if the recovered gate is about to disable the host's focused control. */
+	shouldFocusRecoveredGate?: () => boolean;
 	/** What the radio is doing now — decides whether a transition destroys anything. */
 	context: WifiAdapterModeContext;
 	/**
@@ -81,8 +89,11 @@ interface Props {
 	errorPlacement?: 'inline' | 'host';
 }
 
-const {
+let {
 	view,
+	confirmation = $bindable(),
+	consentBlocked = false,
+	shouldFocusRecoveredGate,
 	context,
 	lockedReason,
 	compact = false,
@@ -102,10 +113,12 @@ const GLYPH: Record<WifiAdapterMode, typeof Wifi> = {
 	hybrid: Waypoints,
 };
 
-/** The mode an inline confirm is armed for. Arming dispatches nothing. */
-let armed = $state<WifiAdapterMode | undefined>(undefined);
-/** The AP mode whose credential gate is open. Opening it dispatches nothing. */
-let gated = $state<WifiAdapterMode | undefined>(undefined);
+const armed = $derived(confirmation?.kind === 'inline' ? confirmation.mode : undefined);
+const gated = $derived(confirmation?.kind === 'credentials' ? confirmation.mode : undefined);
+const armedConsequence = $derived(armed === undefined ? undefined :
+	actionableWifiModeConsequence(view, armed, context, consentBlocked || lockedReason !== undefined));
+let modeOptions: HTMLDivElement;
+let inlinePanel = $state<HTMLDivElement>();
 let session = $state(0);
 const radioDevice = $derived(view.device);
 const radioToken = $derived(view.incarnation);
@@ -115,6 +128,7 @@ let admission: AbortController | undefined;
 let admissionOwner: WifiRadioBinding | undefined;
 let bindingUnsupported = $state(false);
 let reloaded = $state(false);
+let focusRecoveredGate = $state(false);
 
 function capture(): WifiRadioBinding {
 	return { device: view.device, incarnation: view.incarnation, link: getLinkEpoch(), session };
@@ -127,37 +141,52 @@ function current(binding: WifiRadioBinding): boolean {
 $effect.pre(() => {
 	const binding = { device: radioDevice, incarnation: radioToken, link: getLinkEpoch() };
 	radioReason;
+	const inlineActionable = armedConsequence !== undefined;
 	untrack(() => {
 		if (admissionOwner && (admissionOwner.device !== binding.device ||
 			admissionOwner.link !== binding.link)) admission?.abort();
-		if (previous && (previous.device !== binding.device ||
-			previous.incarnation !== binding.incarnation || previous.link !== binding.link)) {
+		const changed = previous && (previous.device !== binding.device ||
+			previous.incarnation !== binding.incarnation || previous.link !== binding.link);
+		if (changed) {
 			bindingUnsupported = false;
 			session += 1;
-			armed = undefined;
+		}
+		if (confirmation?.kind === 'inline' && (changed || !inlineActionable)) {
+			if (inlinePanel?.contains(document.activeElement)) {
+				const option = view.options.find((option) => option.mode === confirmation?.mode);
+				const canFocusOption = option?.available && !view.pending && lockedReason === undefined &&
+					(!consentBlocked || option.mode === 'station');
+				const button = canFocusOption && modeOptions?.querySelector<HTMLButtonElement>(
+					`button[data-mode="${option.mode}"]:not(:disabled)`,
+				);
+				(button || modeOptions)?.focus();
+			}
+			confirmation = undefined;
 		}
 		previous = { ...binding, session };
 	});
 });
 onDestroy(() => { session += 1; admission?.abort(); });
 
-const armedConsequence = $derived(
-	armed === undefined
-		? undefined
-		: deriveWifiModeConsequence(view.displayMode, armed, context),
-);
-
 const unavailable = $derived(view.options.filter((option) => !option.available));
+
+function reopenGate(mode: WifiAdapterMode, unsupported = false) {
+	if (confirmation || consentBlocked) return;
+	focusRecoveredGate = shouldFocusRecoveredGate?.() === true;
+	if (unsupported) bindingUnsupported = true;
+	else reloaded = true;
+	session += 1;
+	confirmation = { kind: 'credentials', mode };
+}
 
 async function apply(mode: WifiAdapterMode, incarnation = view.incarnation) {
 	const original = capture();
-	let binding = original;
 	if (incarnation !== original.incarnation ||
-		(mode !== 'station' && (!incarnation || view.degradedReason))) return;
-	armed = undefined;
-	gated = undefined;
+		(mode !== 'station' && (!incarnation || view.degradedReason || consentBlocked))) return;
+	confirmation = undefined;
+	let replaced = false;
 	await osCommand({
-		key: wifiModeOpKey(binding.device, incarnation),
+		key: wifiModeOpKey(original.device, incarnation),
 		classify: classifyWifiMutation,
 		target: mode,
 		rpc: async (handoff) => {
@@ -169,29 +198,23 @@ async function apply(mode: WifiAdapterMode, incarnation = view.incarnation) {
 			const controller = new AbortController();
 			admission = controller;
 			admissionOwner = original;
-			const owned = () => view.device === original.device && getLinkEpoch() === original.link;
+			const key = wifiModeOpKey(original.device, incarnation);
+			const owned = () => admission === controller && view.device === original.device &&
+				getLinkEpoch() === original.link;
 			const result = await withWifiEntryRetry(original, invoke, {
 				signal: controller.signal,
 				current: owned,
-				rebind: (token) => {
-					binding = { ...capture(), incarnation: token };
-					return handoff(wifiModeOpKey(original.device, token));
-				},
+				currentToken: () => view.incarnation,
+				canRetry: () => current(original) && handoff(key),
+				onReplacement: () => { replaced = handoff(key); },
 			});
-			if (!result && !controller.signal.aborted && owned()) {
-				bindingUnsupported = true;
-				session += 1;
-				gated = mode;
-			}
+			if (!result && !controller.signal.aborted && owned()) reopenGate(mode, true);
 			return result ?? { success: false, error: 'binding-required' };
 		},
-		isCurrent: () => current(binding),
+		isCurrent: () => current(original) || (replaced && admissionOwner === original &&
+			!admission?.signal.aborted && view.device === original.device && getLinkEpoch() === original.link),
 		onResult: (result) => {
-			if (mode !== 'station' && wifiRadioChanged(result) && current(binding) && !gated) {
-				session += 1;
-				reloaded = true;
-				gated = mode;
-			}
+			if (mode !== 'station' && wifiRadioChanged(result)) reopenGate(mode);
 		},
 		// The reason renders inline beneath the control; a toast would say the
 		// same thing twice and then take it away.
@@ -200,19 +223,18 @@ async function apply(mode: WifiAdapterMode, incarnation = view.incarnation) {
 }
 
 function request(mode: WifiAdapterMode) {
-	if (mode === view.displayMode) return;
+	if (mode === view.displayMode || (consentBlocked && mode !== 'station')) return;
 	admission?.abort();
 	bindingUnsupported = false;
 	reloaded = false;
+	focusRecoveredGate = false;
 	session += 1;
 	if ((view.displayMode === 'station' || !view.incarnation || view.degradedReason) && mode !== 'station') {
-		armed = undefined;
-		gated = mode;
+		confirmation = { kind: 'credentials', mode };
 		return;
 	}
-	gated = undefined;
 	if (deriveWifiModeConsequence(view.displayMode, mode, context) !== undefined) {
-		armed = mode;
+		if (!consentBlocked) confirmation = { kind: 'inline', mode };
 		return;
 	}
 	void apply(mode);
@@ -227,12 +249,15 @@ function request(mode: WifiAdapterMode) {
 	data-testid="wifi-mode-selector"
 >
 	<div
+		bind:this={modeOptions}
 		aria-label={m["network.wifiMode.label"]()}
 		class="flex flex-wrap gap-1.5"
 		role="radiogroup"
+		tabindex="-1"
 	>
 		{#each view.options as option (option.mode)}
-			{const blocked = $derived(!option.available || view.pending || lockedReason !== undefined)}
+			{const blocked = $derived(!option.available || view.pending || lockedReason !== undefined ||
+				(consentBlocked && option.mode !== 'station'))}
 			<!-- biome-ignore lint/a11y/useSemanticElements: Mode choices contain pending and unavailable glyphs with gated button activation; native radios change the content and activation model. -->
 			<button
 				aria-checked={option.selected}
@@ -326,8 +351,9 @@ function request(mode: WifiAdapterMode) {
 			degradedReason={view.degradedReason}
 			{session}
 			{reloaded}
+			focusOnOpen={focusRecoveredGate}
 			keepsStation={gated === 'hybrid'}
-			onCancel={() => { admission?.abort(); session += 1; gated = undefined; }}
+			onCancel={() => { admission?.abort(); session += 1; confirmation = undefined; }}
 			onConfirm={(incarnation) => gated && apply(gated, incarnation)}
 		/>
 	{/if}
@@ -335,6 +361,7 @@ function request(mode: WifiAdapterMode) {
 	{#if armed && armedConsequence}
 		{const keys = $derived(wifiModeConsequenceKeys(armedConsequence))}
 		<div
+			bind:this={inlinePanel}
 			class="border-status-warning/30 bg-status-warning/10 space-y-2 rounded-lg border px-2.5 py-2"
 			data-consequence={armedConsequence}
 			data-target={armed}
@@ -349,7 +376,7 @@ function request(mode: WifiAdapterMode) {
 				<Button
 					class="h-8 min-h-[var(--touch-target-min)] px-2.5"
 					data-testid="wifi-mode-confirm-apply-{view.device}"
-					onclick={() => armed && apply(armed)}
+					onclick={() => armed && armedConsequence && apply(armed)}
 					size="sm"
 					variant="destructive"
 				>
@@ -358,7 +385,7 @@ function request(mode: WifiAdapterMode) {
 				<Button
 					class="h-8 min-h-[var(--touch-target-min)] px-2.5"
 					data-testid="wifi-mode-confirm-cancel-{view.device}"
-					onclick={() => { session += 1; armed = undefined; }}
+					onclick={() => { session += 1; confirmation = undefined; }}
 					size="sm"
 					variant="secondary"
 				>
