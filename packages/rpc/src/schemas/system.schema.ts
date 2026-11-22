@@ -305,15 +305,15 @@ export type LogOutput = z.infer<typeof logOutputSchema>;
 // so a `service` value cannot carry a journalctl command injection.
 export const SERVICE_RE = /^[A-Za-z0-9@._:-]+$/;
 
-// Log input schema — `service` is validated at the oRPC boundary so a malicious
-// unit name is rejected before reaching getLog(). Optional/absent input is the
-// whole-system log.
 // A client's id for one legacy log request, echoed in the `log` push that carries its file.
 const logRequestSchema = z
 	.string()
 	.regex(/^[A-Za-z0-9-]{1,64}$/)
 	.optional();
 
+// Log input schema: `service` is validated at the oRPC boundary so a malicious
+// unit name is rejected before reaching getLog(). An absent `service` reads the
+// `ceralive.service` unit; getSyslog reads the whole boot journal.
 export const logInputSchema = z
 	.object({
 		service: z.string().regex(SERVICE_RE).optional(),

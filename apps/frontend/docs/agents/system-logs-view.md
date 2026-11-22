@@ -134,24 +134,26 @@ density. It is not a redesign.
   Escape, or the parent) makes every `opened()` and `since()` token stale in that
   same call, before Svelte's update flush. Leaving Settings is a close too:
   SettingsView writes `logsOpen` false from the router's synchronous
-  notification, before Settings unmounts. `lib/device-logs/download-gate.ts` is
+  notification, before Settings unmounts. `lib/device-logs/download-gate.svelte.ts` is
   the only place System Logs starts a browser download: each request carries the
   token of the open it was issued under, read again when the file is ready (a
   sharing ticket's URL, or a legacy file the device pushes as a `log` event before
-  it answers, one slot per kind (device log, system log), and one kind never
-  blocks the other. A request ends on the first of its two signals: its file,
-  consumed (saved or dropped) exactly once, ends it at once and its later reply
-  is ignored (no failure shown, no slot held); a reply before the file ends it
-  too, an error as a failure and an answer as no file (the device pushes the file
-  before it answers on the same ordered socket). The client pairs each reply with
-  its own call, so one request's reply never touches another. A file is matched by its echoed id; once a socket has
-  carried one echoed id, only exact ids are accepted on it. Before that, a file
-  with no id goes to the request in its kind's slot on the current socket (the
-  kind comes from the file name). It is saved only if that request's reply is
-  still awaited and its open is live. A slot is held while the reply is awaited,
-  or after a timeout while the file is still awaited on the same socket from a
-  device not known to echo ids (the lock): only that file or a new socket
-  (`lib/rpc/socket-epoch.svelte.ts`) frees it, never elapsed time, and a consumed
+  it answers, one slot per kind (device log, system log); the lock below is
+  per kind, while the two buttons still share the view's one running state. A
+  request owns its kind's slot until its file outcome is known: its file,
+  consumed (saved or dropped) exactly once, ends it at once and its later reply is
+  ignored (no failure shown, no slot held); an error reply before the file fails
+  it; an OK reply only acknowledges the call, and the request keeps its slot
+  waiting for its file until `FILE_AFTER_REPLY_MS` passes, then fails with the
+  usual failure band (the stock device answers a failed journal read with an
+  empty log and no file). The client pairs each reply with its own call. A file
+  is matched by its echoed id; once a socket has carried one echoed id, only
+  exact ids are accepted on it; before that, a file with no id goes to its kind's
+  request on the current socket (the kind comes from the file name). It is saved
+  only if that request's call has not failed and its open is live. A call that
+  timed out with its file still awaited, on a device not known to echo ids,
+  locks its kind until that file arrives (then dropped) or the socket is
+  replaced (`lib/rpc/socket-epoch.svelte.ts`), never by elapsed time; a consumed
   file never locks. A locked kind's button is disabled and described by a status
   line asking to reconnect or reload). The view and the phone header's boot button are keyed by the
   generation, so the exit animation keeps neither, the flush after the close runs

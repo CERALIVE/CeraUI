@@ -17,7 +17,22 @@ import { LogDownloads } from "./log-downloads.svelte";
 
 const getDeviceLog = vi.hoisted(() => vi.fn());
 const getSystemLog = vi.hoisted(() => vi.fn());
-vi.mock("$lib/helpers/SystemHelper", () => ({ getDeviceLog, getSystemLog }));
+vi.mock("$lib/helpers/SystemHelper", async () => {
+	const { deliverLegacyLog } = await import(
+		"$lib/device-logs/download-gate.svelte"
+	);
+	// A device that answers a successful request after pushing its file, as the real one does.
+	const answering =
+		(ask: (request?: string) => unknown, name: string) =>
+		async (request?: string) => {
+			await ask(request);
+			deliverLegacyLog({ name, contents: "log", request });
+		};
+	return {
+		getDeviceLog: answering(getDeviceLog, "ceralive.service_log.txt"),
+		getSystemLog: answering(getSystemLog, "ceralive_system_log.txt"),
+	};
+});
 
 function deferred(): {
 	promise: Promise<void>;
@@ -36,6 +51,11 @@ function deferred(): {
 beforeEach(() => {
 	getDeviceLog.mockReset();
 	getSystemLog.mockReset();
+	vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+	Object.assign(URL, {
+		createObjectURL: vi.fn(() => "blob:log"),
+		revokeObjectURL: vi.fn(),
+	});
 });
 
 afterEach(() => {

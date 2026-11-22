@@ -4,6 +4,7 @@ import { CallTimeoutError } from "$lib/rpc/rpc-timeouts";
 import { nextSocketEpoch } from "$lib/rpc/socket-epoch.svelte";
 import {
 	deliverLegacyLog,
+	FILE_AFTER_REPLY_MS,
 	legacyLocked,
 	requestLegacyLog,
 	startBackendDownload,
@@ -84,11 +85,14 @@ describe("download gate: a legacy log file pushed on the socket", () => {
 	});
 
 	it("is not saved when no request is waiting for it, also after one was answered without a file", async () => {
-		await requestLegacyLog(
+		vi.useFakeTimers();
+		const answered = requestLegacyLog(
 			"device",
 			() => true,
 			() => Promise.resolve(),
 		);
+		await vi.advanceTimersByTimeAsync(FILE_AFTER_REPLY_MS);
+		await expect(answered).rejects.toThrow();
 
 		expect(deliverLegacyLog(FILE)).toBe(false);
 		expect(saved).toEqual([]);
@@ -319,7 +323,7 @@ describe("download gate: a legacy log file pushed on the socket", () => {
 			() => true,
 			(request) => {
 				asked.push(request);
-				return Promise.resolve();
+				return Promise.resolve(deliverLegacyLog({ ...FILE, request }));
 			},
 		);
 

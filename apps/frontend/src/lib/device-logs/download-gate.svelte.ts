@@ -40,13 +40,16 @@ export type LegacyKind = "device" | "system";
 // The file name the device gives the full journal; every other legacy file is a unit's log.
 const SYSTEM_LOG_FILE = "ceralive_system_log.txt";
 
+/** How long an answered request still waits for its file before it is reported failed. */
+export const FILE_AFTER_REPLY_MS = 10_000;
+
 /**
- * One legacy request, ended by whichever of its two signals settles it first. Its
- * file push, saved or dropped, ends it at once, and its reply is then ignored. A
- * reply before the file ends it too: an error fails it, and an answer means no
- * file will come, since the device pushes the file before it answers on the same
- * ordered socket. Only a request whose reply is still awaited, with a live open,
- * is given its file.
+ * One legacy request, owned until its file outcome is known. Its file push, saved
+ * or dropped, ends it at once, and its reply is then ignored. An error reply
+ * before the file fails it. An OK reply only acknowledges the call: the request
+ * keeps its slot and waits for its file until `FILE_AFTER_REPLY_MS` has passed,
+ * then fails (a device that could not read its journal answers with no file).
+ * Only a request whose call has not failed, with a live open, is given its file.
  */
 interface LegacyRequest {
 	readonly id: string;
@@ -59,6 +62,7 @@ interface LegacyRequest {
 	readonly outcome: PromiseWithResolvers<void>;
 	// Resolves once, when the request ends: a waiting request of the same kind may go.
 	readonly ended: PromiseWithResolvers<void>;
+	deadline?: ReturnType<typeof setTimeout>;
 }
 
 const slots: Record<LegacyKind, LegacyRequest | undefined> = {
@@ -82,7 +86,7 @@ function tagged(): boolean {
  */
 function holds(request: LegacyRequest): boolean {
 	if (request.file === "consumed") return false;
-	if (request.reply === "awaited") return true;
+	if (request.reply === "awaited" || request.reply === "answered") return true;
 	return (
 		request.reply === "timed-out" &&
 		request.epoch === socketEpoch() &&
@@ -100,7 +104,9 @@ function release(request: LegacyRequest): void {
 export function legacyLocked(kind: LegacyKind): boolean {
 	void changes;
 	const request = slots[kind];
-	return request !== undefined && request.reply !== "awaited" && holds(request);
+	return (
+		request !== undefined && request.reply === "timed-out" && holds(request)
+	);
 }
 
 /**
@@ -118,7 +124,7 @@ export async function requestLegacyLog(
 			slots[kind] = undefined;
 			break;
 		}
-		if (held.reply !== "awaited") return;
+		if (held.reply === "timed-out") return;
 		await held.ended.promise;
 	}
 	if (!issued()) return;
@@ -136,10 +142,15 @@ export async function requestLegacyLog(
 	slots[kind] = request;
 	changes += 1;
 	// The reply settles only this request: the client pairs it with its call by id.
-	send(request.id).then(
+	Promise.resolve(send(request.id)).then(
 		() => {
 			request.reply = "answered";
-			if (request.file === "awaited") end(request);
+			if (request.file !== "awaited") return;
+			request.deadline = setTimeout(() => {
+				if (request.file !== "awaited") return;
+				request.reply = "failed";
+				end(request, new Error("The device answered but sent no log file"));
+			}, FILE_AFTER_REPLY_MS);
 		},
 		(error: unknown) => {
 			request.reply =
@@ -152,6 +163,7 @@ export async function requestLegacyLog(
 
 /** Ends a request once: its caller learns the outcome, its slot frees unless it is the lock. */
 function end(request: LegacyRequest, error?: unknown): void {
+	clearTimeout(request.deadline);
 	if (error === undefined) request.outcome.resolve();
 	else request.outcome.reject(error);
 	request.ended.resolve();
@@ -184,8 +196,9 @@ export function deliverLegacyLog(file: {
 	const request = owner(file);
 	if (request === undefined || request.file === "consumed") return false;
 	request.file = "consumed";
-	const current = request.reply === "awaited" && request.issued();
-	if (request.reply === "awaited") end(request);
+	const owned = request.reply === "awaited" || request.reply === "answered";
+	const current = owned && request.issued();
+	if (owned) end(request);
 	else release(request);
 	if (!current) return false;
 	const contents = file.contents

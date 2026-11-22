@@ -89,7 +89,7 @@ boundary reports the gap and reads from the retained start.
 | Retention upper bound | checked against the ceiling in `setRetention` | `apps/backend/src/modules/device-logs/retention.ts:113-120` |
 | Bundle manifest | sections `versions`, `events`, `journal`, `settings` with `entries` and `redactions`; journal also has `bootsCovered` and `complete`; `exportedBy`; `boots` with versions | `logBundleManifestSchema` |
 
-`system.getLog` and `system.getSyslog` are unchanged
+`system.getLog` and `system.getSyslog` take one additive, optional field, `request` (1-64 letters, digits or `-`): the device echoes it in the `log` push that carries the file, so the client ties the file to its own request; older clients send none and older devices echo none. Their behavior is otherwise unchanged
 (`src/contracts/system.contract.ts`).
 
 ## Tests
