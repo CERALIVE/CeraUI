@@ -68,9 +68,10 @@ list, which already reflects this):
   source/network/destination/engine) — the verdict is consumed byte-unchanged and
   never re-derived here. Each row fuses a readiness-state dot with the migrated
   config-row summary/edit affordance (same testids/lock semantics as the retired
-  `StreamSettingsCard`); the Destination row also carries the traffic-light chip
-  (fed by the destination-validation store, below) and the Encoder row a
-  bitrate-ceiling chip. Audio is deliberately NOT a row (live-correctness-pass
+  `StreamSettingsCard`) in one pattern: dot, title, one summary line, one
+  trailing action. The Destination row also carries the traffic-light chip (fed
+  by the destination-validation store, below), and its dot stays hollow until
+  that check passes; the Encoder row's summary carries the bitrate ceiling. Audio is deliberately NOT a row (live-correctness-pass
   Todo #11 — see "LIVE-CORRECTNESS-PASS FIXES" below); the ENGINE gate is also not
   a row (owned by the `CapabilityTierBanner` + the Start button's disabled
   reason). It detects a sole-camera device with no `config.source` set and folds
@@ -81,12 +82,14 @@ list, which already reflects this):
   order ([live-screen.md](live-screen.md)): `ProgramDesk` (`program-desk`: the
   Preview `<details>` disclosure, open by default from 768 px with the operator's
   choice kept in `localStorage` `ceraui.live.previewOpen`, then `layout-controls`
-  while the engine advertises composition) → `SourceSection` (source tiles, then
-  `audio-card`) → `StreamSetupChain` (readiness rows + the Live bar with Start,
+  while the engine advertises composition) → `SourceSection` (framed source options,
+  the selected one holding its summary, then `audio-card`) → `StreamSetupChain` (readiness rows + the Live bar with Start,
   mounted exactly once) → a collapsed Roadmap `<details>` disclosure (the
   relocated `TD-pip`/`TD-mode-fallback`/`TD-embedded-audio` "coming soon" pills).
-  From 1024 px the desk is the wider inline-start column. Pure prop pass-through
-  — no `$state`, no RPC.
+  From 1024 px the desk and, under it, the stream setup and roadmap fill the
+  wider inline-start column, and the source card is the panel beside them (grid
+  placement; the DOM order is unchanged). Pure prop pass-through — no `$state`,
+  no RPC.
 - **`LiveCockpit.svelte`** — streaming wrapper: the status banners →
   `ProgramDesk` (preview → `LiveSummaryStrip` → `LiveSourceSwitch` →
   `layout-controls`) → `telemetry-card` (telemetry strip + `IngestStats`) → the

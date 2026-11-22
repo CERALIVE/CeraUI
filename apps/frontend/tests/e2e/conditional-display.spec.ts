@@ -235,9 +235,9 @@ test.describe('conditional-display state lock (T11)', () => {
 			card.locator('[data-testid="setup-row"][data-row="destination"][data-state="blocked"]'),
 		).toHaveCount(0);
 
-		// Bitrate is first-class on the idle surface, but via the tap-to-edit ceiling
-		// chip that opens EncoderDialog (T12 one-owner) — NOT a live idle slider.
-		await expect(page.getByTestId('bitrate-ceiling-chip')).toBeVisible();
+		// Bitrate is first-class on the idle surface, in the encoder row's summary
+		// whose one action opens EncoderDialog (T12 one-owner) — NOT a live idle slider.
+		await expect(card.locator('[data-testid="setup-row"][data-row="encoder"]')).toContainText('Mbps');
 		await expect(page.getByRole('slider')).toHaveCount(0);
 
 		await assertNoNewA11y(page);
@@ -279,8 +279,8 @@ test.describe('conditional-display state lock (T11)', () => {
 		await expect(networkRow.getByTestId('setup-row-fix')).toHaveAttribute('data-fix', 'goNetwork');
 
 		// Sibling branch absent: the network gate is not ok. The idle bitrate ceiling
-		// chip is present regardless of link readiness (T12) — never a live slider.
-		await expect(page.getByTestId('bitrate-ceiling-chip')).toBeVisible();
+		// reads in the encoder row regardless of link readiness (T12) — never a live slider.
+		await expect(card.locator('[data-testid="setup-row"][data-row="encoder"]')).toContainText('Mbps');
 		await expect(page.getByRole('slider')).toHaveCount(0);
 
 		await assertNoNewA11y(page);
@@ -311,8 +311,8 @@ test.describe('conditional-display state lock (T11)', () => {
 		await navigateTo(page, 'live');
 		ws.push({ status: { is_streaming: false } });
 
-		// Open EncoderDialog via the idle bitrate-ceiling chip, edit the ceiling, Save.
-		await page.getByTestId('bitrate-ceiling-chip').click();
+		// Open EncoderDialog from the encoder row's action, edit the ceiling, Save.
+		await page.getByTestId('open-encoder-dialog').click();
 		const dialog = page.getByRole('dialog', { name: 'Encoder Settings' });
 		await expect(dialog).toBeVisible();
 		const bitrateInput = dialog.locator('#encoder-bitrate');

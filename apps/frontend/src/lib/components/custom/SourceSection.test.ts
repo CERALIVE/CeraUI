@@ -907,6 +907,140 @@ describe("SourceSection — network-ingest rows folded into the list (Task 12)",
 	});
 });
 
+describe("SourceSection — one option pattern (live design pass)", () => {
+	const NET_SRT: NetworkStreamSource = {
+		...netRtmp(true),
+		id: "srt",
+		pipelineId: "srt",
+		labelKey: "settings.sources.srt",
+		requiresGateway: "srt",
+		url: "srt://192.168.1.100:4001",
+	};
+
+	it("summarises the selected source inside its own option, never repeating its name or its audio", () => {
+		const { container } = mount({
+			sources: sourcesMsg([RODE, netRtmp(true), NET_SRT, VIRTUAL_TEST]),
+			capabilities: CAPS,
+			config: {
+				source: "srt",
+				resolution: "1080p",
+				framerate: 30,
+				video_codec: "h265",
+			},
+		});
+		const row = container.querySelector<HTMLElement>(
+			'[data-testid="source-row-srt"]',
+		);
+		const summary = row?.querySelector('[data-testid="source-active-config"]');
+		expect(summary, "the summary lives in the selected option").not.toBeNull();
+		expect(
+			container.querySelectorAll('[data-testid="source-active-config"]'),
+		).toHaveLength(1);
+		const value =
+			summary?.querySelector('[data-testid="active-config-value"]')
+				?.textContent ?? "";
+		expect(value).toContain("1080p");
+		// The option's own title names it; the raw `srt` id never reaches the screen.
+		expect(value).not.toMatch(/srt/i);
+		expect(
+			summary?.querySelector('[data-testid="source-capabilities"]'),
+		).not.toBeNull();
+		expect(row?.textContent?.match(/Includes audio/g)).toHaveLength(1);
+		expect(
+			row?.querySelector(
+				'[data-testid="source-network-ingest-instructions-toggle-srt"]',
+			),
+		).not.toBeNull();
+	});
+
+	it("says Automatic for a selected source with no saved format, instead of repeating its name", () => {
+		const { container } = mount({
+			sources: sourcesMsg([NET_SRT]),
+			capabilities: CAPS,
+			config: { source: "srt" },
+		});
+		expect(
+			container
+				.querySelector('[data-testid="active-config-value"]')
+				?.textContent?.trim(),
+		).toBe("Automatic");
+	});
+
+	it("keeps a standalone summary above the options only while no option is selected", () => {
+		const { container } = mount({
+			sources: sourcesMsg([RODE]),
+			capabilities: CAPS,
+		});
+		const summary = container.querySelector(
+			'[data-testid="source-active-config"]',
+		);
+		expect(summary).not.toBeNull();
+		expect(summary?.closest('[data-testid^="source-row-"]')).toBeNull();
+	});
+
+	it("frames help, kind, status and badges inside each option, in the same slots", () => {
+		const noSignal: CaptureStreamSource = { ...HDMI_CAPTURE, signal: "absent" };
+		const { container } = mount({
+			sources: sourcesMsg([noSignal, netRtmp(true), NET_SRT, COARSE_HDMI]),
+			config: { source: "srt" },
+		});
+		const cases: [string, string][] = [
+			["hdmi-rx", "source-no-signal-info-hdmi-rx"],
+			["rtmp", "source-network-ingest-info-rtmp"],
+			["srt", "source-network-ingest-info-srt"],
+			["hdmi", "source-not-connected-info-hdmi"],
+		];
+		for (const [id, info] of cases) {
+			const row = container.querySelector<HTMLElement>(
+				`[data-testid="source-row-${id}"]`,
+			);
+			// The option itself is the framed tile, so its "?" sits inside the frame.
+			expect(
+				row?.classList.contains("border"),
+				`${id} is the framed tile`,
+			).toBe(true);
+			expect(
+				row?.querySelector(`[data-testid="${info}"]`),
+				`${id} help`,
+			).not.toBeNull();
+		}
+		// The kind is a subtitle under the name, not a badge among the statuses.
+		const kind = container.querySelector('[data-testid="source-kind-hdmi-rx"]');
+		const name = container.querySelector(
+			'[data-testid="source-row-name-hdmi-rx"]',
+		);
+		expect(kind?.parentElement).toBe(name?.parentElement);
+		expect(kind?.parentElement).not.toBe(
+			container.querySelector('[data-testid="source-no-signal-hdmi-rx"]')
+				?.parentElement,
+		);
+		// Selected and every status badge share one chip slot.
+		expect(
+			container.querySelector('[data-testid="source-selected-srt"]')
+				?.parentElement,
+		).toBe(
+			container.querySelector('[data-testid="source-network-audio-srt"]')
+				?.parentElement,
+		);
+	});
+
+	it("holds the audio picker and its level meter in one box, apart from the heading", () => {
+		const { container } = mount({
+			sources: sourcesMsg([netRtmp(true)]),
+			config: { source: "rtmp" },
+			onOpenAudioDialog: vi.fn(),
+		});
+		const box = container.querySelector(
+			'[data-testid="audio-source-embedded"]',
+		)?.parentElement;
+		expect(box?.getAttribute("data-testid")).not.toBe("source-audio");
+		expect(
+			box?.querySelector('[data-testid="live-audio-meter"]'),
+		).not.toBeNull();
+		expect(box?.querySelector('[data-testid="open-audio-dialog"]')).toBeNull();
+	});
+});
+
 describe("SourceSection — capability summary (kept)", () => {
 	it("derives a compact capability summary (res/fps/codec) from capabilities", () => {
 		const { container } = mount({
@@ -1243,7 +1377,11 @@ describe("SourceSection — audio source single vs multiple (kept)", () => {
 		const audio = container.querySelector<HTMLElement>(
 			'[data-testid="source-audio"]',
 		);
-		expect(audio?.textContent).toContain("Audio source");
+		// The block's one heading names it; the picked device reads beside it.
+		expect(
+			audio?.querySelector("#live-audio-card-title")?.textContent?.trim(),
+		).toBe("Audio");
+		expect(audio?.textContent).toContain("alsa:hdmi");
 		expect(audio?.textContent).not.toContain("Coming soon");
 	});
 

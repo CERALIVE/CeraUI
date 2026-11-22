@@ -111,6 +111,7 @@ const CONDITIONS: readonly Condition[] = [
 
 type IdleGeometry = {
 	readonly blocks: readonly string[];
+	readonly lefts: Readonly<Record<string, number>>;
 	readonly gaps: readonly number[];
 	readonly openDetails: readonly string[];
 	readonly testIds: readonly string[];
@@ -184,6 +185,9 @@ for (const condition of CONDITIONS) {
 
 					return {
 						blocks: laidOut.map(describe),
+						lefts: Object.fromEntries(
+							laidOut.map((el) => [describe(el), Math.round(el.getBoundingClientRect().left)]),
+						),
 						gaps,
 						openDetails: [...document.querySelectorAll('details[open]')].map(describe),
 						testIds: [
@@ -264,7 +268,22 @@ for (const condition of CONDITIONS) {
 					`${condition.name}: the four blocks must share ONE gap rhythm, measured ${geometry.gaps.join(' / ')}px`,
 				).toHaveLength(1);
 
-				// ── 6. Only the preview opens by default, and only from 768 px ───────
+				// ── 6. Two balanced columns from 1024 px ────────────────────────────────────
+				// The stream setup fills the space under the picture instead of
+				// stacking below the source card and leaving the picture's column empty.
+				const { lefts } = geometry;
+				if (condition.viewport.width >= 1024) {
+					expect(lefts['stream-setup-chain'], `${condition.name}: stream setup under the picture`).toBe(
+						lefts['program-desk'],
+					);
+					expect(lefts['source-section'], `${condition.name}: source in its own column`).toBeGreaterThan(
+						lefts['program-desk'] ?? 0,
+					);
+				} else {
+					expect(new Set(Object.values(lefts)).size, `${condition.name}: one column`).toBe(1);
+				}
+
+				// ── 7. Only the preview opens by default, and only from 768 px ───────
 				expect(
 					geometry.openDetails,
 					`${condition.name}: a disclosure opened itself: ${geometry.openDetails.join(', ')}`,

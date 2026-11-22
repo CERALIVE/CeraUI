@@ -1174,12 +1174,10 @@ const configRows = $derived<ConfigRow[]>([
 			{isStreaming}
 			optimismState={streamingOptimismState}
 			{destinationValidated}
-			maxBitrate={config?.max_br}
 			onStart={handleStart}
 			onStop={handleStop}
 			onOpenSource={handleOpenSource}
 			onGoNetwork={handleManageLinks}
-			onOpenEncoder={() => (encoderOpen = true)}
 			{activeInput}
 			{switchingInput}
 			onSwitch={handleSwitchInput}
