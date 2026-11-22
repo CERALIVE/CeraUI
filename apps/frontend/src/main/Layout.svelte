@@ -26,7 +26,8 @@ import { getShouldShowOfflinePage } from '$lib/stores/offline-state.svelte';
 
 import { legacyInstall } from '$lib/updates/legacy-install';
 import { announceLegacyInstallOutcome, announceMissedInstallOutcome } from '$lib/updates/legacy-install-notice';
-import { CONNECTION_DROPPED, createLiveProgress } from '$lib/updates/live-progress';
+import { createLiveProgress, PROGRESS_CURRENT, type ProgressCurrent } from '$lib/updates/live-progress';
+import { progressDeliveredOnLink } from '$lib/updates/progress-delivery.svelte';
 
 import Auth from './Auth.svelte';
 import DisconnectedBanner from './DisconnectedBanner.svelte';
@@ -73,7 +74,7 @@ $effect(() => (topBands ? publishHeight(topBands, '--top-bands-height') : undefi
 // after a reconnect or a backend restart never moves it back.
 let shownInstall: UpdateProgress | undefined;
 const liveInstall = createLiveProgress();
-setContext(CONNECTION_DROPPED, () => getDisconnectedSince() !== null);
+setContext<ProgressCurrent>(PROGRESS_CURRENT, progressDeliveredOnLink);
 const updatingStatus = $derived.by(() => {
 	const updating = getUpdating();
 	const install = legacyInstall(updating);
@@ -84,7 +85,7 @@ const updatingStatus = $derived.by(() => {
 	return liveInstall(
 		shownInstall,
 		typeof updating === 'object' ? updating : undefined,
-		getDisconnectedSince() !== null,
+		progressDeliveredOnLink('updating'),
 	);
 });
 // This tree receives the terminal frame, so it owns the announcement, once per

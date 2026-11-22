@@ -36,7 +36,7 @@ import {
 	type SpawnWithTimeoutResult,
 	spawnWithTimeout,
 } from "../../../helpers/spawn-policy.ts";
-import { SOFTWARE_UPDATE_UNIT } from "../software-update-service-contract.ts";
+import { inFlightSoftwareUpdateUnit } from "../software-update-process.ts";
 import { parseOsStageSystemdProperties } from "./os-stage-systemd.ts";
 
 const SYSTEMCTL_SHOW_TIMEOUT_MS = 5_000;
@@ -54,7 +54,7 @@ export const defaultCommitStageProbeDeps: CommitStageProbeDeps = {
 			[
 				"systemctl",
 				"show",
-				SOFTWARE_UPDATE_UNIT,
+				inFlightSoftwareUpdateUnit(),
 				"--property=LoadState,ActiveState,SubState,ControlGroup",
 				"--no-pager",
 			],

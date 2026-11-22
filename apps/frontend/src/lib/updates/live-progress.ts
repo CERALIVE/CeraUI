@@ -1,13 +1,11 @@
 import type { UpdateProgress } from "@ceraui/rpc/schemas";
 
 /**
- * A number is shown only while it is live: the device's own latest frame,
- * received on this connection, carries it. While the connection is down, and
- * after it returns until the device sends that number again, the held phase is
- * shown without it (the indeterminate bar), never an older number.
+ * Set by the layout: whether the device delivered a progress field on the
+ * link that is up now. Outside the layout (a test mount) it counts as current.
  */
-/** Set by the layout: whether the connection to the device is down now. */
-export const CONNECTION_DROPPED = Symbol("update-connection-dropped");
+export const PROGRESS_CURRENT = Symbol("update-progress-current");
+export type ProgressCurrent = (field: "updating" | "update_state") => boolean;
 
 const phaseOf = (progress: UpdateProgress) =>
 	progress.setting_up > 0 || progress.unpacking > 0
@@ -16,24 +14,36 @@ const phaseOf = (progress: UpdateProgress) =>
 			? 1
 			: 0;
 
+/**
+ * A number is shown only while it is live: the device's latest frame,
+ * delivered on the link that is up now (`current`), carries it in the same
+ * phase, and it is not below a number already shown in that phase. Otherwise
+ * the held phase is shown without a number (the indeterminate bar).
+ */
 export function createLiveProgress() {
-	let beforeDrop: unknown;
+	let shownBefore:
+		| { readonly phase: number; readonly percent: number }
+		| undefined;
 	return (
 		shown: UpdateProgress | undefined,
 		frame: UpdateProgress | null | undefined,
-		dropped: boolean,
+		current: boolean,
 	): UpdateProgress | undefined => {
-		if (dropped) beforeDrop = frame;
+		if (!shown) shownBefore = undefined;
+		if (shown?.percent === undefined) return shown;
+		const phase = phaseOf(shown);
+		if (shownBefore && shownBefore.phase !== phase) shownBefore = undefined;
 		if (
-			shown?.percent === undefined ||
-			(!dropped &&
-				frame !== beforeDrop &&
-				frame &&
-				phaseOf(frame) === phaseOf(shown) &&
-				frame.percent === shown.percent)
-		)
+			current &&
+			frame &&
+			phaseOf(frame) === phase &&
+			frame.percent === shown.percent &&
+			shown.percent >= (shownBefore?.percent ?? 0)
+		) {
+			shownBefore = { phase, percent: shown.percent };
 			return shown;
-		const { percent: _held, ...phase } = shown;
-		return phase;
+		}
+		const { percent: _held, ...held } = shown;
+		return held;
 	};
 }

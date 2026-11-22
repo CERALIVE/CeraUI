@@ -17,10 +17,14 @@
  * compares everything in one synchronous step after its last await.
  */
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { uptime } from "node:os";
 import type { SoftwareUpdateAttempt } from "./software-update-output.ts";
 import type { DetachedAptServiceDeps } from "./software-update-service.ts";
+import {
+	SOFTWARE_UPDATE_UNIT,
+	softwareUpdateUnitFor,
+} from "./software-update-service-contract.ts";
 
 /** How long a gone unit's recorded exit is told to reconnecting tabs. */
 export const RECORDED_OUTCOME_REPLAY_MS = 30 * 60_000;
@@ -48,12 +52,57 @@ export type CurrentAttempt = {
 /** A recorded exit, claimed by the attempt it belongs to. */
 export type ClaimedOutcome = {
 	readonly attempt: string;
+	readonly invocation: string;
 	readonly exitCode: number;
 	/** The unit's transcript was read to its end. */
 	readonly drained: boolean;
-	/** Admitted for the orchestrator's plan. */
-	readonly plan: boolean;
+	/** The key of the orchestrator's saved plan that admitted it. */
+	readonly plan?: string;
+	/**
+	 * At the point of use: the record, read again in the same synchronous
+	 * step, still holds exactly this claim. Anything else means unknown.
+	 */
+	readonly confirm: () => boolean;
 };
+
+/** The saved plan's identity: its exact package list, as every release writes it. */
+export function softwarePlanKey(
+	packages: readonly {
+		readonly name: string;
+		readonly version?: string | undefined;
+	}[],
+): string | undefined {
+	if (packages.length === 0) return undefined;
+	const canonical = packages
+		.map(({ name, version }) => `${name}=${version ?? ""}`)
+		.sort()
+		.join("\n");
+	return createHash("sha256").update(canonical).digest("hex");
+}
+
+/** The units the record names: this attempt's (once launched) and the earlier attempt's. */
+export function recordedUnits(deps: AttemptDeps): {
+	readonly own?: string;
+	readonly leftover?: string;
+} {
+	const record = readRecord(deps);
+	return {
+		...(record?.phase === "launched"
+			? { own: softwareUpdateUnitFor(record.attempt) }
+			: {}),
+		...(record?.leftover
+			? { leftover: softwareUpdateUnitFor(record.leftover.attempt) }
+			: {}),
+	};
+}
+
+/** The unit an in-flight update runs in: this attempt's, else an older release's fixed one. */
+export function inFlightUnit(deps: AttemptDeps): string {
+	const record = readRecord(deps);
+	return record?.phase === "launched" && record.exitCode === undefined
+		? softwareUpdateUnitFor(record.attempt)
+		: SOFTWARE_UPDATE_UNIT;
+}
 
 function readRecord(deps: AttemptDeps): SoftwareUpdateAttempt | null {
 	try {
@@ -83,7 +132,7 @@ export function currentAttempt(deps: AttemptDeps): CurrentAttempt | null {
  */
 export function admitAttempt(
 	deps: AttemptDeps,
-	{ plan }: { readonly plan: boolean },
+	{ plan }: { readonly plan?: string | undefined },
 ): string {
 	const attempt = randomUUID();
 	deps.updateAttempt(
@@ -91,6 +140,7 @@ export function admitAttempt(
 			const leftover =
 				previous?.exitCode !== undefined && previous.invocation !== undefined
 					? {
+							attempt: previous.attempt,
 							invocation: previous.invocation,
 							exitCode: previous.exitCode,
 							drained: previous.drained === true,
@@ -101,7 +151,7 @@ export function admitAttempt(
 				attempt,
 				phase: "accepted",
 				uptimeMs: softwareUpdateUptimeMs(deps),
-				...(plan ? { plan: true } : {}),
+				...(plan ? { plan } : {}),
 				...(leftover ? { leftover } : {}),
 			};
 		},
@@ -110,18 +160,40 @@ export function admitAttempt(
 	return attempt;
 }
 
+/** This launch is not the admitted attempt's: another admission replaced it. */
+export class SoftwareUpdateAttemptSupersededError extends Error {
+	constructor() {
+		super("the admitted software-update attempt is no longer the current one");
+		this.name = "SoftwareUpdateAttemptSupersededError";
+	}
+}
+
 /**
- * Before the unit or its output files exist: the admitted attempt keeps its
- * id (and plan); a launch nothing admitted gets a new one.
+ * Before the unit or its output files exist. `admitted`: the caller's own
+ * attempt, which must still be the accepted one (its id and plan are kept);
+ * otherwise nothing is written and the launch is refused. Without it (a unit
+ * started outside admission, as tests do) a new id is used.
  */
-export function launchAttempt(deps: AttemptDeps): string {
-	const launched = deps.updateAttempt((current) => ({
-		schema: 2,
-		attempt: current?.phase === "accepted" ? current.attempt : randomUUID(),
-		phase: "launched",
-		uptimeMs: softwareUpdateUptimeMs(deps),
-		...(current?.phase === "accepted" && current.plan ? { plan: true } : {}),
-	}));
+export function launchAttempt(deps: AttemptDeps, admitted?: string): string {
+	const launched = deps.updateAttempt((current) =>
+		admitted !== undefined &&
+		!(current?.phase === "accepted" && current.attempt === admitted)
+			? null
+			: {
+					schema: 2,
+					attempt:
+						admitted ??
+						(current?.phase === "accepted" ? current.attempt : randomUUID()),
+					phase: "launched",
+					uptimeMs: softwareUpdateUptimeMs(deps),
+					...(current?.phase === "accepted" && current.plan
+						? { plan: current.plan }
+						: {}),
+					...(current?.leftover ? { leftover: current.leftover } : {}),
+				},
+	);
+	if (admitted !== undefined && launched?.attempt !== admitted)
+		throw new SoftwareUpdateAttemptSupersededError();
 	// A test unit that keeps no record still needs an id to observe under.
 	return launched?.attempt ?? randomUUID();
 }
@@ -174,7 +246,8 @@ export function recordAttemptExit(
 			attempt,
 			phase: "launched",
 			uptimeMs: softwareUpdateUptimeMs(deps),
-			...(current?.plan ? { plan: true } : {}),
+			...(current?.plan ? { plan: current.plan } : {}),
+			...(current?.leftover ? { leftover: current.leftover } : {}),
 			...(exit.invocation ? { invocation: exit.invocation } : {}),
 			exitCode: exit.exitCode,
 			drained: exit.drained,
@@ -193,7 +266,7 @@ export function recordAttemptExit(
 export function adoptUnit(
 	deps: AttemptDeps,
 	invocation: string | undefined,
-	{ plan }: { readonly plan: boolean },
+	{ plan }: { readonly plan?: string | undefined },
 ): string | null {
 	if (invocation === undefined) return null;
 	const attempt = randomUUID();
@@ -208,7 +281,7 @@ export function adoptUnit(
 					phase: "launched",
 					uptimeMs: softwareUpdateUptimeMs(deps),
 					invocation,
-					...(plan ? { plan: true } : {}),
+					...(plan ? { plan } : {}),
 				}
 			: null,
 	);
@@ -253,11 +326,25 @@ export async function claimOutcome(
 		const age = softwareUpdateUptimeMs(deps) - record.uptimeMs;
 		if (!(age >= 0 && age < RECORDED_OUTCOME_REPLAY_MS)) return null;
 	}
+	const claimed = record;
 	return {
 		attempt,
+		invocation: record.invocation,
 		exitCode: record.exitCode,
 		drained: record.drained === true,
-		plan: record.plan === true,
+		...(record.plan ? { plan: record.plan } : {}),
+		confirm: () => {
+			const now = readRecord(deps);
+			return (
+				now?.attempt === claimed.attempt &&
+				now.phase === "launched" &&
+				now.invocation === claimed.invocation &&
+				now.exitCode === claimed.exitCode &&
+				now.drained === claimed.drained &&
+				now.transcript === claimed.transcript &&
+				now.plan === claimed.plan
+			);
+		},
 	};
 }
 

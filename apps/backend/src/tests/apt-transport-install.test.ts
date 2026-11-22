@@ -52,6 +52,21 @@ test("install whose every pair fails to fetch ends on the existing failed-transa
 	});
 });
 
+test("a pinned fetch that fails is the same failure for the orchestrator's plan as for the tab", async () => {
+	// Given both pairs fail to fetch archives: the transfer runs in this process.
+	t.download = async () => FETCH_FAILURE;
+	await withDeviceType("real", async () => {
+		const { h, run } = await install(RANKED);
+		await using _h = h;
+		await run();
+		// Then the plan reads the same failure, so it leaves Downloading.
+		expect(updates.getPlanUpdateState()).toMatchObject({
+			kind: "failed",
+			reason: FETCH_FAILURE.stderr.trim(),
+		});
+	});
+});
+
 test("install with no healthy pair refuses with the existing reason and fetches nothing", async () => {
 	await withDeviceType("real", async () => {
 		// Given only a captive pair.

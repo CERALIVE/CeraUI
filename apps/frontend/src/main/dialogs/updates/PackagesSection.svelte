@@ -29,7 +29,7 @@ import { rpc } from '$lib/rpc/client';
 import { NotSentError } from '$lib/rpc/rpc-error';
 import { getUpdateState } from '$lib/rpc/subscriptions.svelte';
 import { actionableCountOf, availableOf, checkedAtOf } from '$lib/updates/legacy-packages';
-import { CONNECTION_DROPPED, createLiveProgress } from '$lib/updates/live-progress';
+import { createLiveProgress, PROGRESS_CURRENT, type ProgressCurrent } from '$lib/updates/live-progress';
 import type { UpdateSurface } from '$lib/updates/update-surface.svelte';
 
 import ActionOutcomeBand from './ActionOutcomeBand.svelte';
@@ -54,13 +54,13 @@ const lastCheckedAt = $derived(checkedAtOf(updateState));
 // `inProgress` reads it on every state, so the hold also ends with the run.
 let shownProgress: UpdateProgress | undefined;
 const liveProgress = createLiveProgress();
-// Outside the layout (a test mount) the connection counts as up.
-const connectionDropped = getContext<(() => boolean) | undefined>(CONNECTION_DROPPED);
+// Outside the layout (a test mount) every delivery counts as current.
+const progressCurrent = getContext<ProgressCurrent | undefined>(PROGRESS_CURRENT);
 const progress = $derived.by(() => {
 	const frame =
 		updateState?.kind === 'downloading' || updateState?.kind === 'installing' ? updateState.progress : undefined;
 	shownProgress = frame ? holdUpdateProgress(shownProgress, frame) : undefined;
-	return liveProgress(shownProgress, frame, connectionDropped?.() ?? false);
+	return liveProgress(shownProgress, frame, progressCurrent?.('update_state') ?? true);
 });
 const inProgress = $derived(progress !== undefined);
 // APT restarts its percentage for the install, so the phase names which one it is.

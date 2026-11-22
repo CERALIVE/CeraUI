@@ -60,9 +60,10 @@ const completeLines = (text: string) =>
 describe("deriveUpdateProgress()", () => {
 	test("the transcript's own counts give the number for the phase it is in", () => {
 		expect(deriveUpdateProgress("")).toEqual(preparing);
-		// The only archive has started, none is in yet: no number.
+		// APT prints `Get:` as an archive starts and nothing as one is done,
+		// so a download shows its phase without a number, also once fetched.
 		expect(deriveUpdateProgress(fetchLog)).toEqual(downloadingAt());
-		expect(deriveUpdateProgress(fetched)).toEqual(downloadingAt(99));
+		expect(deriveUpdateProgress(fetched)).toEqual(downloadingAt());
 		// Unpacking is done once Setting up started: one of two steps.
 		expect(deriveUpdateProgress(dpkgLog)).toEqual(installingAt(50));
 	});
@@ -126,22 +127,29 @@ describe("deriveUpdateProgress()", () => {
 			deriveUpdateProgress(
 				`${fetched}postinst outputUnpacking cerastream (2) over (1) ...\n`,
 			),
-		).toEqual(downloadingAt(99));
+		).toEqual(downloadingAt());
 	});
 
-	test("only APT's own Fetched line ends the download", () => {
+	test("a download shows its phase only: no APT line proves a share of it done", () => {
 		const plan =
 			"The following packages will be upgraded:\n  a b\n2 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n";
 		const get =
 			"Get:1 https://apt.invalid trixie/main arm64 a arm64 2 [4 kB]\n";
+		const both = `${get}Get:2 https://apt.invalid trixie/main arm64 b arm64 2 [4 kB]\n`;
+		// Archives that started, and APT's closing summary, are not completions.
+		expect(deriveUpdateProgress(`${plan}${both}`)).toEqual(downloadingAt());
+		expect(
+			deriveUpdateProgress(`${plan}${both}Fetched 8 kB in 0s (40 kB/s)\n`),
+		).toEqual(downloadingAt());
 		expect(
 			deriveUpdateProgress(
 				`${plan}${get}Fetched ready logs in process -- diagnostic\n`,
 			),
 		).toEqual(downloadingAt());
+		// A Get-shaped line without APT's size is not a fetch at all.
 		expect(
-			deriveUpdateProgress(`${plan}${get}Fetched 8 kB in 0s (40 kB/s)\n`),
-		).toEqual(downloadingAt(99));
+			deriveUpdateProgress(`${plan}Get:2 garbage looks like get [not bytes]\n`),
+		).toEqual(preparing);
 	});
 
 	test("only the plan's packages' dpkg steps are counted", () => {

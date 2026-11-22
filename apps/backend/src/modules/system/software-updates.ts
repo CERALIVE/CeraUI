@@ -120,6 +120,8 @@ import {
 import {
 	DetachedAptServiceCleanupError,
 	DetachedAptServiceReplacedError,
+	DetachedAptServiceUnownedError,
+	DetachedAptServiceUnrecordedError,
 	DetachedAptServiceVanishedError,
 	type RetirementOutcome,
 	recoverDetachedAptUpgrade,
@@ -341,10 +343,36 @@ function settleSoftwareUpdateRecovery(): void {
 	softUpdateRecoveryPending = false;
 }
 
-/** The new attempt's record; `plan`: the orchestrator's plan admits it and settles from it. */
-function admitSoftwareUpdateAttempt(plan: boolean): boolean {
+// The orchestrator's saved plan, read where it is used; registered by the orchestrator.
+let readPlanKey: () => string | undefined = () => undefined;
+
+/** How the orchestrator's saved plan is read: its key binds an attempt to that plan. Returns the previous reader. */
+export function setSoftwareUpdatePlanReader(
+	read: () => string | undefined,
+): () => string | undefined {
+	const previous = readPlanKey;
+	readPlanKey = read;
+	return previous;
+}
+
+/** The saved plan's key now; undefined without one. */
+export function currentSoftwareUpdatePlan(): string | undefined {
+	return readPlanKey();
+}
+
+/** Whether the claim was admitted by the saved plan that is current now. */
+function claimedByCurrentPlan(claim: ClaimedOutcome | null): boolean {
+	const plan = readPlanKey();
+	return plan !== undefined && claim?.plan === plan;
+}
+
+// The admitted attempt this process launches, and nothing else does.
+let admittedAttempt: string | undefined;
+
+/** The new attempt's record; `plan`: the saved plan's key when the orchestrator admits it. */
+function admitSoftwareUpdateAttempt(plan: string | undefined): boolean {
 	try {
-		admitAttempt(defaultDetachedAptServiceDeps(), { plan });
+		admittedAttempt = admitAttempt(defaultDetachedAptServiceDeps(), { plan });
 		return true;
 	} catch (error) {
 		logger.warn("Software update refused: the attempt could not be recorded", {
@@ -355,33 +383,33 @@ function admitSoftwareUpdateAttempt(plan: boolean): boolean {
 }
 
 // Where the current outcome came from: undefined when not a unit's exit (a
-// refusal or a preflight failure); otherwise the attempt's claim on that exit
-// for the orchestrator's plan (null until, or unless, the plan's own attempt
-// claimed it). Every admission clears it, so it never outlives its attempt.
-let exitOutcome: { claimed: ClaimedOutcome | null } | undefined;
-
-function claimedForPlan(claim: ClaimedOutcome | null): ClaimedOutcome | null {
-	return claim?.plan ? claim : null;
-}
+// refusal, a preflight or an in-process download failure); otherwise the
+// attempt's claim on that exit. Every admission clears it, so it never
+// outlives its attempt.
+let exitOutcome: { claimed: ClaimedOutcome } | undefined;
 
 /**
- * The orchestrator's view: an outcome that came from a unit's exit counts only
- * once the plan's own attempt has claimed it; until then nothing is settled.
+ * The orchestrator's view. An outcome that came from a unit's exit counts
+ * only while, read again now, the record still holds that claim and the claim
+ * was admitted by the saved plan that is current now; otherwise nothing is
+ * settled. Every other outcome is the same one the tab is told.
  */
 export function getPlanUpdateState(): UpdateState {
 	const wire = getUpdateState();
 	if ((wire.kind !== "success" && wire.kind !== "failed") || !exitOutcome)
 		return wire;
-	const claimed = exitOutcome.claimed;
-	return claimed && (claimed.exitCode === 0) === (wire.kind === "success")
+	const { claimed } = exitOutcome;
+	return claimedByCurrentPlan(claimed) &&
+		claimed.confirm() &&
+		(claimed.exitCode === 0) === (wire.kind === "success")
 		? wire
 		: { kind: "idle" };
 }
 
-/** A unit's exit that an earlier lifetime observed and recorded, claimed now. */
+/** A unit's exit that an earlier lifetime observed and recorded, confirmed now. */
 function adoptRecordedOutcome(claim: ClaimedOutcome): void {
 	const exitCode = claim.exitCode;
-	exitOutcome = { claimed: claimedForPlan(claim) };
+	exitOutcome = { claimed: claim };
 	softUpdateStatus = null;
 	lastUpdateSucceeded = exitCode === 0;
 	lastUpdateFailure =
@@ -1568,7 +1596,9 @@ export function startSoftwareUpdate(
 	// this attempt's record, never an older attempt's exit.
 	if (
 		!shouldUseMocks() &&
-		!admitSoftwareUpdateAttempt(onCommitSucceeded !== undefined)
+		!admitSoftwareUpdateAttempt(
+			onCommitSucceeded === undefined ? undefined : readPlanKey(),
+		)
 	)
 		return refuseUpdateStart("check_unavailable");
 
@@ -1624,6 +1654,7 @@ type SoftwareUpdateProcessMonitor = {
 	readonly finish: (
 		completion: Promise<number>,
 		onCommitSucceeded?: CommitExitHook,
+		options?: { readonly local?: boolean },
 	) => Promise<void>;
 };
 
@@ -1746,15 +1777,17 @@ export function createSoftwareUpdateProcessMonitor(
 	const settle = async (
 		completion: Promise<number>,
 		owned: boolean,
+		local: boolean,
 	): Promise<number> => {
 		let code: number;
-		// A unit's exit, as opposed to a launch or observer error.
-		let fromExit = true;
+		// A unit ended and its exit is recorded, as opposed to an in-process
+		// result (`local`), a launch or observer error, or an unknown end.
+		let unitExit = !local;
 		try {
 			code = await completion;
 		} catch (err) {
 			if (err instanceof DetachedAptServiceCleanupError) {
-				// The verified, recorded exit is the outcome; the next launch retires the unit.
+				// The recorded exit stands; only retiring the unit failed.
 				code = err.transactionExitCode;
 				logger.error(
 					"Software update: the finished unit could not be retired",
@@ -1764,19 +1797,30 @@ export function createSoftwareUpdateProcessMonitor(
 				);
 			} else if (
 				err instanceof DetachedAptServiceVanishedError ||
-				err instanceof DetachedAptServiceReplacedError
+				err instanceof DetachedAptServiceReplacedError ||
+				err instanceof DetachedAptServiceUnownedError ||
+				err instanceof DetachedAptServiceUnrecordedError
 			) {
-				logger.warn(
-					"Software update: the observed unit is gone; its outcome is unknown",
-					{ error: err },
-				);
+				logger.warn("Software update: the observed unit's outcome is unknown", {
+					error: err,
+				});
 				code = OUTCOME_UNKNOWN;
+				unitExit = false;
 			} else {
 				const message = err instanceof Error ? err.message : String(err);
 				aptErr += aptErr.length > 0 ? `\n${message}` : message;
 				code = 1;
-				fromExit = false;
+				unitExit = false;
 			}
+		}
+		// A unit's exit is used only as its attempt claims it, and claimed
+		// first: everything below uses the claimed value, and an exit nothing
+		// can claim is no outcome. The in-flight latch keeps every admission
+		// out until this settles, so the claim stays the current one.
+		let claim: ClaimedOutcome | null = null;
+		if (unitExit) {
+			claim = await claimOutcomeOf();
+			code = claim ? claim.exitCode : OUTCOME_UNKNOWN;
 		}
 
 		// Keep the in-flight latch until cleanup settles; its result cannot change code.
@@ -1826,16 +1870,11 @@ export function createSoftwareUpdateProcessMonitor(
 			// unconditionally, before any broadcast/notification call below —
 			// a caller awaiting settle() must observe the real outcome even if
 			// a broadcast fails for some unrelated reason.
-			if (fromExit) {
-				// The plan settles from this exit only once its own attempt claims it.
-				const outcome: { claimed: ClaimedOutcome | null } = { claimed: null };
-				exitOutcome = outcome;
-				void claimOutcomeOf().then((claim) => {
-					outcome.claimed = claimedForPlan(claim);
-				});
-			}
+			if (claim) exitOutcome = { claimed: claim };
 			lastUpdateSucceeded = code === 0;
-			if (code === 0 && owned && !ownership) pendingPackageSuccess.observe();
+			// Only the current saved plan's own claimed success is its to commit.
+			if (code === 0 && owned && !ownership && claimedByCurrentPlan(claim))
+				pendingPackageSuccess.observe();
 			lastUpdateFailure = failure;
 			softUpdateStatus.result = code === 0 ? code : aptErr;
 			const settledStatus = softUpdateStatus;
@@ -1884,8 +1923,10 @@ export function createSoftwareUpdateProcessMonitor(
 	const finish = (
 		completion: Promise<number>,
 		onCommitSucceeded?: CommitExitHook,
+		/** An in-process result, not a unit's exit: told as it is, never claimed. */
+		{ local = false }: { readonly local?: boolean } = {},
 	): Promise<void> => {
-		const settled = settle(completion, onCommitSucceeded !== undefined);
+		const settled = settle(completion, onCommitSucceeded !== undefined, local);
 		if (ownership) recoveredOwnershipPending = true;
 		// Keep the deliberate restart detached so a caller's catch cannot swallow it.
 		void settled.then(async (code) => {
@@ -1923,7 +1964,7 @@ export function createSoftwareUpdateProcessMonitor(
 					return;
 				}
 			}
-			if (code === 0) {
+			if (code === 0 && !local) {
 				// Owned later, the unit is retired meanwhile: decide only once it is.
 				if ((await retirement) === "replaced") {
 					markBootDegraded("software-update-replaced");
@@ -1943,8 +1984,8 @@ export function createSoftwareUpdateProcessMonitor(
 					);
 					return;
 				}
-				// Only the plan's own attempt commits the plan.
-				const planHook = claim.plan ? hook : undefined;
+				// Only the current saved plan's own attempt commits the plan.
+				const planHook = claimedByCurrentPlan(claim) ? hook : undefined;
 				if (ownership && planHook) pendingPackageSuccess.observe();
 				// Persist the observed commit success before deliberately exiting.
 				void finishSoftwareUpdateRestart(planHook, () => {
@@ -2171,7 +2212,11 @@ async function prepareSoftwareUpdate(
 			const failed = createSoftwareUpdateProcessMonitor();
 			failed.handlers.onStdout(fetched.stdout);
 			failed.handlers.onStderr(fetched.stderr);
-			await failed.finish(Promise.resolve(fetched.exitCode));
+			// The transfer's own exit, in this process: the same failure for the
+			// tab and for the orchestrator's plan.
+			await failed.finish(Promise.resolve(fetched.exitCode), undefined, {
+				local: true,
+			});
 			return;
 		}
 		prefetched = fetched.stdout;
@@ -2200,8 +2245,19 @@ async function prepareSoftwareUpdate(
 	// reattaches to its durable output instead of relaunching apt.
 	void monitor.finish(
 		capable
-			? runDetachedAptAll(detachedArgs, finalFamily, monitor.handlers)
-			: runDetachedAptUpgrade(args, monitor.handlers),
+			? runDetachedAptAll(
+					detachedArgs,
+					finalFamily,
+					monitor.handlers,
+					undefined,
+					admittedAttempt,
+				)
+			: runDetachedAptUpgrade(
+					args,
+					monitor.handlers,
+					undefined,
+					admittedAttempt,
+				),
 		capable ? onCommitSucceeded : undefined,
 	);
 }
@@ -2273,8 +2329,20 @@ async function recoverSoftwareUpdate(
 			},
 		},
 		undefined,
-		{ retire: ownership ?? true },
+		{ retire: ownership ?? true, plan: readPlanKey },
 	);
+	// A unit is there that this boot may neither tell nor watch, or a claim
+	// that no longer holds at the point of use: that is not proof of absence.
+	const unknownUnit = () => {
+		lastInstallUnitVerdict = "not-probed";
+		settleSoftwareUpdateRecovery();
+		broadcastMsg("status", {
+			updating: null,
+			update_state: getUpdateState(),
+		});
+		return false;
+	};
+	if (recovered && "unknown" in recovered) return unknownUnit();
 	// `null`: no unit, or one whose exit tells the current attempt nothing.
 	if (!recovered) {
 		lastInstallUnitVerdict = "absent";
@@ -2291,6 +2359,7 @@ async function recoverSoftwareUpdate(
 	if ("recorded" in recovered) {
 		// Once per boot: a later recovery call finds the hold already settled.
 		if (recovered.unit === "absent" && !softUpdateRecoveryPending) return false;
+		if (!recovered.recorded.confirm()) return unknownUnit();
 		lastInstallUnitVerdict =
 			recovered.unit === "finished" ? "attached" : "absent";
 		adoptRecordedOutcome(recovered.recorded);

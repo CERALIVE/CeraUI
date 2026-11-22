@@ -32,6 +32,8 @@ import {
 	it,
 	vi,
 } from "vitest";
+import { PROGRESS_CURRENT } from "$lib/updates/live-progress";
+import { progressDeliveredOnLink } from "$lib/updates/progress-delivery.svelte";
 import restart from "../tests/fixtures/update-restart-tab.json";
 import offline from "../tests/fixtures/update-restart-tab-offline.json";
 import PackagesSection from "./dialogs/updates/PackagesSection.svelte";
@@ -395,7 +397,9 @@ describe("Layout — one tab across the owner's two-restart update", () => {
 	// Feeds the real backend's frames through the real store, as the tab got them.
 	async function replay(seen: readonly Seen[]) {
 		render(Layout);
+		// Inside the app the dialog gets the layout's delivery rule; so does this mount.
 		render(PackagesSection, {
+			context: new Map([[PROGRESS_CURRENT, progressDeliveredOnLink]]),
 			props: {
 				surface: {
 					packagesReady: true,
@@ -439,8 +443,7 @@ describe("Layout — one tab across the owner's two-restart update", () => {
 
 	const installing = (n: number) =>
 		`overlay: Installing ${n} | settings: Installing · ${n}%`;
-	const downloading = (n: number) =>
-		`overlay: Downloading ${n} | settings: Downloading · ${n}%`;
+	const held = (phase: string) => `overlay: ${phase} - | settings: ${phase}`;
 	const nothing = "no overlay | settings: -";
 
 	it("renders every moment the real backend processes sent it", async () => {
@@ -449,12 +452,13 @@ describe("Layout — one tab across the owner's two-restart update", () => {
 		expect(moments).toEqual({
 			"signed in before the first recovery": nothing,
 			idle: nothing,
-			"downloading 10%": downloading(10),
-			"downloading 60%": downloading(60),
+			downloading: held("Downloading"),
 			"installing 40%": installing(40),
-			"postinst stopped the backend": installing(40),
-			"re-authenticated before recovery": installing(40),
-			"attached, nothing read yet": installing(40),
+			// The number came on a link that is gone: held without it until the
+			// new backend sends its own.
+			"postinst stopped the backend": held("Installing"),
+			"re-authenticated before recovery": held("Installing"),
+			"attached, nothing read yet": held("Installing"),
 			"recovered at installing 60%": installing(60),
 			"installing 80%": installing(80),
 			outcome: nothing,
@@ -465,23 +469,28 @@ describe("Layout — one tab across the owner's two-restart update", () => {
 		// After every event: no step counts, and from the first download to the
 		// outcome never an empty frame, a lower phase or a lower number.
 		expect(trace.some((shown) => /\bsteps?\b|\bof\b/.test(shown))).toBe(false);
-		const first = trace.indexOf(downloading(10));
+		const first = trace.indexOf(held("Downloading"));
 		const closed = trace.findIndex(
 			(shown, i) => i > first && shown === nothing,
 		);
-		const rank = (shown: string) => {
-			const [, phase, n] = /overlay: (\w+) (\d+)/.exec(shown) ?? [];
-			return (
-				(phase === "Installing" ? 2 : phase === "Downloading" ? 1 : 0) * 1000 +
-				Number(n ?? -1)
-			);
+		// A phase held without its number is unknown, never a lower number.
+		const parse = (shown: string) => {
+			const [, phase, n] = /overlay: (\w+) (\d+|-)/.exec(shown) ?? [];
+			return {
+				phase: phase === "Installing" ? 2 : phase === "Downloading" ? 1 : 0,
+				n: n === undefined || n === "-" ? undefined : Number(n),
+			};
 		};
-		const live = trace.slice(first, closed);
-		expect(live.every((shown) => rank(shown) > 1000)).toBe(true);
-		for (let i = 1; i < live.length; i++)
-			expect(rank(live[i] ?? "")).toBeGreaterThanOrEqual(
-				rank(live[i - 1] ?? ""),
-			);
+		const live = trace.slice(first, closed).map(parse);
+		expect(live.every((frame) => frame.phase >= 1)).toBe(true);
+		let reached = { phase: 0, n: -1 };
+		for (const frame of live) {
+			expect(frame.phase).toBeGreaterThanOrEqual(reached.phase);
+			if (frame.phase > reached.phase) reached = { phase: frame.phase, n: -1 };
+			if (frame.n === undefined) continue;
+			expect(frame.n).toBeGreaterThanOrEqual(reached.n);
+			reached = { ...reached, n: frame.n };
+		}
 		expect(trace.slice(closed).every((shown) => shown === nothing)).toBe(true);
 		// The outcome is announced once, as a success.
 		expect(vi.mocked(toast.success)).toHaveBeenCalledTimes(1);
@@ -489,12 +498,75 @@ describe("Layout — one tab across the owner's two-restart update", () => {
 		expect(vi.mocked(toast.warning)).not.toHaveBeenCalled();
 	});
 
+	it("a frame the device sends again unchanged after a reconnect shows its number again", async () => {
+		const frame = {
+			total: 1,
+			downloading: 0,
+			unpacking: 0,
+			setting_up: 1,
+			percent: 60,
+		};
+		const at60 = {
+			updating: frame,
+			update_state: { kind: "installing", progress: frame },
+		};
+		const { moments } = await replay([
+			{ at: "connected" },
+			{ at: "pull", status: at60 },
+			{ at: "moment", name: "live" },
+			{ at: "disconnected" },
+			{ at: "moment", name: "dropped" },
+			{ at: "connected" },
+			{ at: "pull", status: {} },
+			{ at: "moment", name: "withheld" },
+			{ at: "push", status: at60 },
+			{ at: "moment", name: "sent again" },
+		]);
+		expect(moments).toEqual({
+			live: installing(60),
+			dropped: held("Installing"),
+			withheld: held("Installing"),
+			"sent again": installing(60),
+		});
+	});
+
+	it("a lower number after the device said it does not know is never shown", async () => {
+		const frame = (percent?: number) => ({
+			total: 1,
+			downloading: 0,
+			unpacking: 0,
+			setting_up: 1,
+			...(percent === undefined ? {} : { percent }),
+		});
+		const at = (percent?: number) => ({
+			updating: frame(percent),
+			update_state: { kind: "installing", progress: frame(percent) },
+		});
+		const { moments } = await replay([
+			{ at: "connected" },
+			{ at: "pull", status: at(60) },
+			{ at: "moment", name: "60" },
+			{ at: "push", status: at() },
+			{ at: "moment", name: "unknown" },
+			{ at: "push", status: at(40) },
+			{ at: "moment", name: "40" },
+			{ at: "push", status: at(70) },
+			{ at: "moment", name: "70" },
+		]);
+		expect(moments).toEqual({
+			"60": installing(60),
+			unknown: held("Installing"),
+			"40": held("Installing"),
+			"70": installing(70),
+		});
+	});
+
 	it("a tab offline through the outcome learns it from the next backend", async () => {
 		const { moments } = await replay(offline.seen as Seen[]);
 		expect(moments).toMatchObject({
 			"installing 80%": installing(80),
-			"offline through the outcome": installing(80),
-			"re-authenticated after the outcome": installing(80),
+			"offline through the outcome": held("Installing"),
+			"re-authenticated after the outcome": held("Installing"),
 			"outcome replayed": nothing,
 		});
 		expect(vi.mocked(toast.success)).toHaveBeenCalledTimes(1);

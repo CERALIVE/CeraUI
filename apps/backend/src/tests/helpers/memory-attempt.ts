@@ -1,5 +1,13 @@
+import {
+	type ClaimedOutcome,
+	softwarePlanKey,
+} from "../../modules/system/software-update-attempt.ts";
 import type { SoftwareUpdateAttempt } from "../../modules/system/software-update-output.ts";
 import type { DetachedAptUpgradeDeps } from "../../modules/system/software-update-process.ts";
+import { currentSoftwareUpdatePlan } from "../../modules/system/software-updates.ts";
+
+/** The key of the orchestrator's saved plan a test runs under. */
+export const TEST_PLAN = softwarePlanKey([{ name: "cerastream" }]) ?? "";
 
 /** A fixed systemd InvocationID for fake units; a real one is always present. */
 export const TEST_INVOCATION = "abcdef0123456789abcdef0123456789";
@@ -26,12 +34,21 @@ export function memoryAttempt(): Pick<
 	};
 }
 
-/** What the real observer hands the monitor once a unit's exit is recorded and read: its claim. */
+/**
+ * What the real observer hands the monitor once a unit's exit is recorded and
+ * read: its claim, by an attempt the saved plan current now admitted (as a
+ * start by that plan records it), and still held by the record.
+ */
 export function recordedClaim(completion: Promise<number> | number) {
-	return async () => ({
-		attempt: "11111111-1111-4111-8111-111111111111",
-		exitCode: await completion,
-		drained: true,
-		plan: true,
-	});
+	return async (): Promise<ClaimedOutcome> => {
+		const plan = currentSoftwareUpdatePlan();
+		return {
+			attempt: "11111111-1111-4111-8111-111111111111",
+			invocation: TEST_INVOCATION,
+			exitCode: await completion,
+			drained: true,
+			...(plan ? { plan } : {}),
+			confirm: () => true,
+		};
+	};
 }

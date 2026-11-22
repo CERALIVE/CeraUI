@@ -1,7 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { z } from "zod";
 import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
-import { SOFTWARE_UPDATE_UNIT } from "../software-update-service-contract.ts";
+import { knownSoftwareUpdateUnits } from "../software-update-process.ts";
 import { readBoardIdentity, readBootId } from "./os-identity.ts";
 import { readBootedOsReleaseVersion } from "./os-manifest.ts";
 import { observationAbsent } from "./os-stage-read-errors.ts";
@@ -104,9 +104,13 @@ export function createRecoveryProbes(
 				(unit.get("Job") === "0" || unit.get("Job") === "")
 			);
 		},
-		unitAbsent: async () =>
-			(await unitProperties(io, SOFTWARE_UPDATE_UNIT)).get("LoadState") ===
-			"not-found",
+		unitAbsent: async () => {
+			// Every update unit the record knows of, and an older release's fixed one.
+			for (const unit of knownSoftwareUpdateUnits())
+				if ((await unitProperties(io, unit)).get("LoadState") !== "not-found")
+					return false;
+			return true;
+		},
 		operationsIdle: async () => {
 			const entries = await io.list("/proc");
 			for (const entry of entries) {

@@ -92,7 +92,10 @@ const unit = restartTestUnit(
 				failFirstStdoutRead: true,
 				holdSecondStdoutRead: `${scratch}/second-read.fifo`,
 			}
-		: { failCleanup: role === "boot" },
+		: {
+				failCleanup: role === "boot",
+				failCleanupOfFirst: process.env.FAIL_FIRST_CLEANUP === "1",
+			},
 );
 setDetachedAptServiceDepsForTest({
 	...unit,

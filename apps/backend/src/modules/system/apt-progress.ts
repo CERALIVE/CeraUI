@@ -18,16 +18,15 @@ export const PHASE_MARKERS = {
 // Progress comes only from the unit's own stdout file: APT is given no
 // telemetry descriptor, so nothing that reads progress can block or fail it.
 // Only whole lines in APT's and dpkg's own shape (the unit runs in the C
-// locale) count, each archive and each package step once: a script or hook
-// line that quotes them is not work. apt-get prints its plan before acting,
-// "Get:<n>" as it starts each archive and "Fetched" once all are in; dpkg
-// prints "Unpacking" and "Setting up" as it starts each package's two steps.
-// A step counts as done once the next one has started.
+// locale) count, each package step once: a script or hook line that quotes
+// them is not work. apt-get prints its plan before acting and "Get:<n>" as it
+// STARTS each archive (several at once, and nothing when one is done), so a
+// download shows its phase only: no line proves a share of it complete. dpkg
+// prints "Unpacking" and "Setting up" as it starts each package's two steps,
+// one at a time, so a step counts as done once the next one has started.
 const SUMMARY =
 	/^(\d+) upgraded, (\d+) newly installed, (?:(\d+) reinstalled, )?(?:(\d+) downgraded, )?\d+ to remove and \d+ not upgraded\.$/gm;
-const GET = /^Get:(\d+) \S+ .* \[[^\]]+\]$/gm;
-const FETCHED =
-	/^Fetched [0-9][0-9.,]* [kMGT]?B in [0-9][0-9a-z ]* \([0-9][0-9.,]* [kMGT]?B\/s\)$/m;
+const GET = /^Get:\d+ \S+ .* \[[0-9][0-9.,]* [kMGT]?B\]$/m;
 // apt-get's own plan lists; only their packages' dpkg steps are counted.
 const PLAN_LIST =
 	/^The following (?:NEW )?packages will be (?:upgraded|installed|REINSTALLED|DOWNGRADED):\n((?: {2}.*\n)+)/gm;
@@ -44,12 +43,6 @@ function plannedPackages(lines: string): ReadonlySet<string> {
 const DPKG_STEP =
 	/^(Unpacking|Setting up) ([a-z0-9][a-z0-9+.:-]*) \([^()\s]+\)(?: over \([^()\s]+\))? \.\.\.$/gm;
 
-const distinct = (
-	lines: string,
-	shape: RegExp,
-	key: (match: RegExpMatchArray) => string,
-) => new Set(Array.from(lines.matchAll(shape), key)).size;
-
 export function deriveUpdateProgress(
 	stdout: string,
 ): Omit<SoftUpdateStatus, "result"> {
@@ -62,11 +55,10 @@ export function deriveUpdateProgress(
 			.filter((step) => planned.has(nameOf(step[2] ?? "")))
 			.map((step) => `${step[1]} ${nameOf(step[2] ?? "")}`),
 	).size;
-	const gets = distinct(lines, GET, (get) => get[1] ?? "");
 	const phase: Phase =
 		stepLines.length > 0
 			? "installing"
-			: gets > 0
+			: GET.test(lines)
 				? "downloading"
 				: "preparing";
 	let packages = 0;
@@ -74,14 +66,9 @@ export function deriveUpdateProgress(
 		packages = plan
 			.slice(1)
 			.reduce((sum, count) => sum + Number(count ?? 0), 0);
-	const done =
-		phase === "installing"
-			? steps - 1
-			: FETCHED.test(lines)
-				? packages
-				: gets - 1;
-	const of = phase === "installing" ? 2 * packages : packages;
-	if (phase === "preparing" || of === 0 || done <= 0)
+	const done = steps - 1;
+	const of = 2 * packages;
+	if (phase !== "installing" || of === 0 || done <= 0)
 		return { ...PHASE_MARKERS[phase] };
 	// Kept one step back from 100: only the unit's exit status ends the run.
 	return {

@@ -41,6 +41,7 @@ import {
 } from "../disruptive-action-reservation.ts";
 import { withServiceReservation } from "../disruptive-service-reservation.ts";
 import { getIdleStatus } from "../idle-activity.ts";
+import { softwarePlanKey } from "../software-update-attempt.ts";
 import {
 	aptUpdatesEnabled,
 	getLastInstallUnitVerdict,
@@ -49,6 +50,7 @@ import {
 	recoverSoftwareUpdateIfRunning,
 	runSoftwareUpdateCheck,
 	type SoftwareUpdateError,
+	setSoftwareUpdatePlanReader,
 	startSoftwareUpdate,
 	type UpdateStartOutcome,
 } from "../software-updates.ts";
@@ -521,6 +523,16 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 };
 
 let deps: OrchestratorRuntimeDeps = defaultOrchestratorRuntimeDeps;
+// The saved plan's key, read where it is used: only an attempt this plan
+// admitted settles it. A plan that cannot be read binds nothing.
+setSoftwareUpdatePlanReader(() => {
+	try {
+		const pending = deps.quarantine.readPendingSync();
+		return pending && softwarePlanKey(pending);
+	} catch {
+		return undefined;
+	}
+});
 let state: OrchestratorState = initialOrchestratorState(Date.now());
 let tickTimer: ReturnType<typeof setTimeout> | undefined;
 let started = false;

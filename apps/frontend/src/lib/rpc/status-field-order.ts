@@ -1,4 +1,5 @@
 import type { StatusResponse } from "@ceraui/rpc/schemas";
+import { noteProgressDelivery } from "$lib/updates/progress-delivery.svelte";
 import {
 	admitStatusFrame,
 	getLinkEpoch,
@@ -87,6 +88,7 @@ export function selectStatusFields(
 	});
 	if (fields.some(([field]) => isStreamFact(field))) admitStatusFrame(receipt);
 	for (const [field] of fields) {
+		noteProgressDelivery(field, receipt.link);
 		const previous = deliveries.get(field);
 		const sameLink = previous?.link === receipt.link;
 		deliveries.set(field, {

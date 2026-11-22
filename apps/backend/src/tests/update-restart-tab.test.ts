@@ -192,6 +192,14 @@ const running = (percent: number, phase: "downloading" | "setting_up") => ({
 	setting_up: phase === "setting_up" ? 1 : 0,
 	percent,
 });
+// APT prints `Get:` as each archive starts, never when one is done: the
+// download shows its phase, and no number.
+const downloadingPhase = {
+	total: 1,
+	downloading: 1,
+	unpacking: 0,
+	setting_up: 0,
+};
 
 let scratch: string;
 const sessions: Bun.Subprocess[] = [];
@@ -241,9 +249,13 @@ afterEach(async () => {
 	// whole-runner stall of 8-12 s was measured (see the PR), beyond 5 s.
 }, 60_000);
 
-function session(role: "first" | "after-postinst" | "after-outcome" | "boot") {
+function session(
+	role: "first" | "after-postinst" | "after-outcome" | "boot",
+	extra: Record<string, string> = {},
+) {
 	const env: Record<string, string | undefined> = {
 		...process.env,
+		...extra,
 		SCRATCH: scratch,
 		NODE_ENV: "production",
 		CERALIVE_STREAMING_MARKER: join(scratch, "streaming"),
@@ -365,15 +377,12 @@ async function toInstalling80(tab: Tab) {
 	expect(await tab.call(["system", "startUpdate"])).toMatchObject({
 		success: true,
 	});
-	await tab.until("download 10%", (s) =>
-		Bun.deepEquals(updatingOf(s), running(10, "downloading")),
+	await tab.until("downloading", (s) =>
+		Bun.deepEquals(updatingOf(s), downloadingPhase),
 	);
-	tab.moment("downloading 10%");
+	tab.moment("downloading");
+	// More archives start: nothing proves any done, so the frame stays.
 	await release("download-10");
-	await tab.until("download 60%", (s) =>
-		Bun.deepEquals(updatingOf(s), running(60, "downloading")),
-	);
-	tab.moment("downloading 60%");
 	await release("download-60");
 	await tab.until("installing 40%", (s) =>
 		Bun.deepEquals(updatingOf(s), running(40, "setting_up")),
@@ -484,9 +493,7 @@ test("one open tab sees steady progress across the postinst restart and the comp
 	const frames = between("idle", "outcome")
 		.map(updatingOf)
 		.filter((u) => u !== undefined) as Frame[];
-	const started = frames.findIndex((u) =>
-		Bun.deepEquals(u, running(10, "downloading")),
-	);
+	const started = frames.findIndex((u) => Bun.deepEquals(u, downloadingPhase));
 	const ended = frames.findIndex((u) => u?.result !== undefined);
 	// The outcome is the last frame, and only after the unit exited.
 	expect(ended).toBe(frames.length - 1);
@@ -656,6 +663,79 @@ test("a recorded success is never told once another run has replaced the update'
 	expect(told.length).toBeGreaterThan(0);
 	// A's success belongs to a transcript that is gone: never told again.
 	expect(told.map(outcomeOf)).toEqual(told.map(() => "available"));
+}, 120_000);
+
+test("a successor attempt runs under its own unit while the earlier one's unit can never be retired", async () => {
+	await writeFile(join(scratch, "apt-get"), QUICK_APT);
+	// Retiring the first unit ever started always fails, as a broken stop would.
+	const failFirst = { FAIL_FIRST_CLEANUP: "1" };
+	const tab = new Tab();
+	// Update A succeeds; its unit cannot be retired, and CeraUI restarts once.
+	const first = session("first", failFirst);
+	const token = await signIn(tab, await first.listening());
+	first.send("recover");
+	await first.line("session:recovered");
+	await tab.until("no unit at boot", (s) => updatingOf(s) === null);
+	const exitedA = first.child.exited;
+	expect(await tab.call(["system", "startUpdate"])).toMatchObject({
+		success: true,
+	});
+	await tab.until("A's outcome", (s) => outcomeOf(s) === "success");
+	expect(await exitedA).toBe(RESTART_EXIT_CODE);
+
+	// The next lifetime tells A's success again: the positive control.
+	const second = session("first", failFirst);
+	await tab.connect(await second.listening());
+	expect(await tab.call(["auth", "login"], { token })).toEqual({
+		success: true,
+	});
+	second.send("recover");
+	await second.line("session:recovered");
+	await tab.until("A's receipt told again", (s) => outcomeOf(s) === "success");
+	const unitA = (await readFile(join(scratch, "first-unit"), "utf8")).trim();
+
+	// Update B: admitted, launched and finished while A's unit is still there.
+	const exitedB = second.child.exited;
+	tab.moment("B admitted");
+	expect(await tab.call(["system", "startUpdate"])).toMatchObject({
+		success: true,
+	});
+	await tab.until("B's outcome", (s) => {
+		const kind = outcomeOf(s);
+		return (
+			tab.seen.indexOf(s) >
+				tab.seen.findIndex(
+					(e) => e.at === "moment" && e.name === "B admitted",
+				) &&
+			(kind === "success" || kind === "failed")
+		);
+	});
+	const seen = [...tab.seen];
+	const fromB = seen.slice(
+		seen.findIndex((s) => s.at === "moment" && s.name === "B admitted"),
+	);
+	// B's own outcome, never a failure because A's unit holds its name.
+	expect(
+		fromB.flatMap((s) =>
+			outcomeOf(s) === "failed" && (s.at === "push" || s.at === "pull")
+				? [(s.status.update_state as { reason?: unknown }).reason]
+				: [],
+		),
+	).toEqual([]);
+	expect(fromB.some((s) => outcomeOf(s) === "success")).toBe(true);
+	expect(await exitedB).toBe(RESTART_EXIT_CODE);
+	tab.close();
+	// Every retirement named its own attempt's unit: A's never reached B's,
+	// and A's unit is still there as the evidence.
+	const cleanups = (await readFile(join(scratch, "cleanups.log"), "utf8"))
+		.trim()
+		.split("\n");
+	const unitB = cleanups.find((name) => name !== unitA);
+	expect(unitB).toBeDefined();
+	expect(unitB).not.toBe(unitA);
+	expect(cleanups.filter((name) => name === unitB)).toEqual([unitB]);
+	expect(cleanups.at(-1)).toBe(unitB);
+	expect(await readFile(join(scratch, `${unitA}.exit`), "utf8")).toBe("0\n");
 }, 120_000);
 
 // Each step between accepting an update and starting its unit, in order.

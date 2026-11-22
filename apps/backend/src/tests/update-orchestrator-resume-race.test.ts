@@ -83,6 +83,7 @@ import {
 	saveOrchestratorState,
 	setOrchestratorStateFilePathForTest,
 } from "../modules/system/update-orchestrator/persistence.ts";
+import { UpdateQuarantine } from "../modules/system/update-orchestrator/quarantine.ts";
 import { resumeOrchestratorState } from "../modules/system/update-orchestrator/resume.ts";
 import {
 	defaultOrchestratorRuntimeDeps,
@@ -129,6 +130,9 @@ describe("boot double-recovery race — resume must not misread evidence a start
 			phase: "committing",
 			progress: { percent: 50, etaSeconds: 10 },
 		});
+		// The plan the install was started for, saved before it, as every start does.
+		const quarantine = new UpdateQuarantine(join(tempRoot, "quarantine.json"));
+		await quarantine.savePending([{ name: "cerastream", version: "2" }]);
 
 		const order: string[] = [];
 		const exited = Promise.withResolvers<void>();
@@ -162,6 +166,7 @@ describe("boot double-recovery race — resume must not misread evidence a start
 						resumePeriodicChecks: () => {},
 					}),
 				getPackageInstallWireState: getUpdateState,
+				quarantine,
 				persist: (state) => {
 					order.push(`persist:${state.phase}`);
 					saveOrchestratorState(state);

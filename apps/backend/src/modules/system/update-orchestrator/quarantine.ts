@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { z } from "zod";
@@ -121,6 +122,19 @@ export class UpdateQuarantine {
 		const path = this.pendingPath();
 		const value = await readStoredStateFile(path, STORED_STATE_LIMITS.packages);
 		return value === null ? [] : pendingSchema.parse(parseAuthorityJson(value));
+	}
+
+	/** The saved plan now, read where it is used; undefined when it cannot be read. */
+	readPendingSync(): PendingPackage[] | undefined {
+		try {
+			const text = readFileSync(this.pendingPath(), "utf8");
+			if (text.length > STORED_STATE_LIMITS.packages) return undefined;
+			return pendingSchema.parse(parseAuthorityJson(text));
+		} catch (error) {
+			return (error as { readonly code?: unknown }).code === "ENOENT"
+				? []
+				: undefined;
+		}
 	}
 
 	async clearPending(): Promise<void> {

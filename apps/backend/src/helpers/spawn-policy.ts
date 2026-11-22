@@ -784,7 +784,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		file: "modules/system/software-update-service.ts",
 		symbol: "inspectService",
 		command:
-			"[systemctl, show, ceralive-software-update.service, ...properties]",
+			"[systemctl, show, <attempt unit ceralive-software-update-<uuid>.service, or an older release's ceralive-software-update.service>, ...properties]",
 		class: "bounded-probe",
 		contract: {
 			timed: true,
@@ -801,7 +801,8 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		id: "softwareUpdates.cleanupTransient",
 		file: "modules/system/software-update-service.ts",
 		symbol: "defaultDetachedAptServiceDeps.cleanup",
-		command: "[systemctl, stop|reset-failed, ceralive-software-update.service]",
+		command:
+			"[systemctl, stop|reset-failed, <the inspected attempt's own unit>]",
 		class: "bounded-command",
 		contract: {
 			timed: true,
@@ -812,7 +813,25 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		},
 		status: "enforced",
 		mechanism:
-			"spawnWithTimeout bounds terminal service cleanup after stdout/stderr and ExecMainStatus have been consumed; cleanup failure remains an explicit failed update outcome rather than being reported as success",
+			"spawnWithTimeout bounds terminal service cleanup after stdout/stderr and ExecMainStatus have been consumed; cleanup names the attempt's own unit, so it can never reach a successor's",
+	},
+	{
+		id: "softwareUpdates.listTransient",
+		file: "modules/system/software-update-service.ts",
+		symbol: "defaultDetachedAptServiceDeps.listUnits",
+		command:
+			"[systemctl, list-units, --all, --plain, --no-legend, --full, --type=service, ceralive-software-update*]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"spawnWithTimeout bounds one read of which update units are loaded; launch refuses while any runs or holds an unread transcript, and recovery reads it before trusting absence",
 	},
 	{
 		id: "updateOrchestrator.restartHealthcheck",
@@ -989,7 +1008,8 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		id: "updateOrchestrator.stopPackageInstallForStream",
 		file: "modules/system/update-orchestrator/stream-abort.ts",
 		symbol: "stopPackageInstallUnitForStream",
-		command: "[systemctl, stop, ceralive-software-update.service]",
+		command:
+			"[systemctl, stop, <in-flight attempt's unit, else ceralive-software-update.service>]",
 		class: "bounded-command",
 		contract: {
 			timed: true,
@@ -1007,7 +1027,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		file: "modules/system/update-orchestrator/commit-stage-probe.ts",
 		symbol: "defaultCommitStageProbeDeps.showUnit",
 		command:
-			"[systemctl, show, ceralive-software-update.service, --property=LoadState,ActiveState,SubState,ControlGroup, --no-pager]",
+			"[systemctl, show, <in-flight attempt's unit, else ceralive-software-update.service>, --property=LoadState,ActiveState,SubState,ControlGroup, --no-pager]",
 		class: "bounded-probe",
 		contract: {
 			timed: true,

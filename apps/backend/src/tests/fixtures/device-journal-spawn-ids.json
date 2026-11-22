@@ -51,6 +51,7 @@
 	"softwareUpdates.cleanupTransient",
 	"softwareUpdates.discoverUpgrade",
 	"softwareUpdates.inspectTransient",
+	"softwareUpdates.listTransient",
 	"softwareUpdates.refreshPackageLists",
 	"softwareUpdates.startTransient",
 	"srtlaSend.capabilityProbe",

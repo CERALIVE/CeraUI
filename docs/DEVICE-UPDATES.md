@@ -22,9 +22,10 @@ counts nothing:
 - `apt-get`'s plan (`N upgraded, M newly installed`, plus any reinstalled or
   downgraded), printed before APT acts, gives the package count (APT 3.0's
   `Summary:` layout is only the `apt` binary's default);
-- `Get:` while fetching: an archive is done once the next one starts, and all
-  are once APT's own `Fetched <size> in <time> (<rate>)` line is printed
-  (**Downloading**);
+- `Get:<n> <uri> ... [<size>]` while fetching gives the **Downloading** phase
+  only: APT prints it as each archive starts, several at once, and nothing
+  when one is done, so no line (its closing `Fetched` included) proves a share
+  of the download complete;
 - dpkg's `Unpacking <package> (<version>) ...` and `Setting up <package>
   (<version>) ...`, two steps per package named in the plan's own lists
   (upgraded, newly installed, reinstalled, downgraded): a step is done once
@@ -33,8 +34,8 @@ counts nothing:
 
 The UI shows three phases: **Preparing or downloading packages**,
 **Downloading** and **Installing**. A number appears only when the transcript
-proves one for the phase on screen; it is floored and capped at 99 while the
-unit runs, and only a
+proves one for the phase on screen (only **Installing** has one); it is
+floored and capped at 99 while the unit runs, and only a
 successful detached result shows 100%. A failure or interruption never shows
 completion. The percentage restarts when installing begins, so Settings names
 the phase next to the bar. A unit started by an older release (for example
@@ -46,9 +47,16 @@ a running transaction shows, in the backend and in both browser views: the
 phase never moves back and, within a phase, the number never drops; a frame of
 the same phase without a number replaces a held number, because it means
 unknown, not unchanged. Only an outcome, or the next run after it, shows what
-arrived. On pinned images the download runs in-process before the unit
-exists: the UI says **Downloading**, without a number, from the moment that
-transfer starts until the transcript shows the install.
+arrived. The browser then shows a number only when the device's latest frame,
+delivered on the link that is up now, carries it in the same phase, and not
+below a number already shown in that phase: the link that delivered each
+progress field is noted where status deliveries are admitted
+(`progress-delivery.svelte.ts`), so a frame the device sends again unchanged
+on a new link shows its number again. On pinned images the download runs
+in-process before the unit exists: the UI says **Downloading**, without a
+number, from the moment that transfer starts until the transcript shows the
+install. A failed pinned transfer is that process's own result: the tab is
+told it and the orchestrator reads the same failure (no unit, so no claim).
 
 What a tab shows when something is lost (no wire field was added for any of
 these):
@@ -56,7 +64,8 @@ these):
 | Situation | Shown |
 |---|---|
 | The transcript cannot be read for four polls in a row | The phase without a number until a read succeeds |
-| The connection to the device dropped, or the latest frame does not carry the held number in the same phase | The held phase without a number, until the device's own latest frame carries the number shown again, in that phase |
+| The latest frame came on a link that is gone (the connection dropped, or the next backend has not sent it yet), or it does not carry the held number in the same phase | The held phase without a number, until the device delivers that number on the link that is up now |
+| A number below one already shown in the phase, for example after the device said it does not know | The phase without a number, until the device sends one at or above it |
 | The observer loses the unit (gone without an exit, or another invocation) | No outcome: `updating: null`, `update_state` neither success nor failure, no restart; the tab says **Outcome not confirmed** |
 | The unit is gone and its exit is recorded | That outcome, replayed (below) |
 | The unit is gone and no exit is recorded | **Outcome not confirmed** |
@@ -104,7 +113,13 @@ in one synchronous step after the last await, so an admission meanwhile wins.
 The tab's replay, the attempt's own success effects (cache cleanup and the
 deliberate restart), the orchestrator's package state (`getPlanUpdateState`)
 and retirement (`claimRetirement`) all go through it; no other code reads a
-raw exit. Every write is one compare-and-set step
+raw exit. The monitor claims a unit's exit before it does anything with it
+and uses only the claimed value; an exit nothing could record cannot be
+claimed, so it is no outcome (**Outcome not confirmed**, no restart, no
+commit) and the unit stays. Each later use confirms the claim against the
+record in one synchronous step (`claim.confirm()`): recovery's adoption of a
+recorded exit, every read of the orchestrator's package state and the
+restart, which claims again. Every write is one compare-and-set step
 (`updateSoftwareUpdateAttempt`, called only by that module): it reads the current
 record, decides from it, and writes the replacement to a temporary file
 renamed into place, all synchronously, so no other write of this backend can
@@ -112,16 +127,22 @@ come between; a writer that no longer owns the record writes nothing. Only
 the backend writes it, and only one backend runs per device. A record that
 cannot be read gives no authority: every write refuses it, except a new
 admission, which replaces it. `startSoftwareUpdate` writes a new attempt
-(`accepted`, a fresh id, no exit; `plan` when the orchestrator's plan started
-it, and the orchestrator settles its plan only from a `plan` attempt's claim)
-after its refusals and before it publishes anything or starts a check. A
+(`accepted`, a fresh id, no exit) after its refusals and before it publishes
+anything or starts a check. When the orchestrator starts it, `plan` is the key
+of its saved plan: a hash of the pending package list it writes to `/data`
+before every start, as every release does. The orchestrator settles only from
+a claim whose `plan` is the saved plan's key at the moment it reads, so a
+changed or missing saved plan (one an older release saved after a rollback,
+for example) settles nothing; the strict `agent.json` schema is unchanged. A
 second start while the first waits for package discovery is refused
 (`already_updating`), so no admission replaces a waiting attempt's record.
 A restart at any step before the unit starts
 finds that attempt with no exit and tells nothing; an older attempt's
 recorded exit is kept only as a `leftover` a launch may use to retire that
 finished unit. When the record cannot be written the start is refused. The
-launch writes `launched` before the unit exists and the observer adds
+launch writes `launched` before the unit exists, only for the caller's own
+admitted attempt (refused once another admission replaced it), and the
+observer adds
 systemd's `InvocationID` as soon as it sees the unit: that invocation is the
 attempt's identity, and a different invocation of the fixed unit is a
 replaced unit, never this attempt's. After its final read the observer writes
@@ -133,9 +154,10 @@ replaced: the exit is then nobody's outcome (unknown: no success or failure,
 no restart). A unit no record names (one started by an older release) is
 adopted once, as a new attempt bound to the invocation systemd shows at that
 moment, only by the same compare-and-set and only when no other attempt is
-pending; it is marked `plan`, because it is the update that installed this
-release, which the orchestrator's plan waits on. Otherwise it is watched for
-display and its exit is unknown. A gone unit's exit is told only from a `launched` record with an
+pending; it is bound to the saved plan of that moment, because it is the
+update that installed this release, which the orchestrator's plan waits on.
+Otherwise it is watched for display only: nothing of it is recorded, claimed
+or retired, and its exit is unknown. A gone unit's exit is told only from a `launched` record with an
 exit and an invocation, within 30 minutes of boot-relative uptime, and only
 while the stdout file is the one it was read from: any later run, including
 one an older release started, makes a new file.
@@ -143,21 +165,32 @@ one an older release started, makes a new file.
 The unit is retired only once its exit is durably recorded and its
 transcript was read, and only while systemd still shows that same finished
 invocation: systemd is asked again right before every stop, the first try
-included, and a replaced unit is left alone. `systemctl
-stop` and `reset-failed` name the unit, not an invocation; the inspect is
-immediately before the call, and only this backend starts the fixed unit,
-never while it retires one. Otherwise the unit stays as the evidence, its exit is still
+included, and a replaced unit is left alone. Each attempt's unit is named for
+it (`ceralive-software-update-<attempt>.service`), so a `systemctl stop` or
+`reset-failed` by name reaches only that attempt's unit, never a successor's;
+the fixed `ceralive-software-update.service` is only an older release's unit,
+adopted as before. Otherwise the unit stays as the evidence, its exit is still
 published, and the deliberate restart is withheld (boot marked degraded). A
 retirement that finds another invocation holding the unit also withholds the
 restart; while ownership is pending the restart waits for that retirement.
 A finished unit whose exit is recorded (same exit and invocation) is never
 adopted again: a later boot reports it and tries one retirement, so a unit
 whose `systemctl stop` keeps failing restarts CeraUI at most once. A launch
-retires a finished leftover only when the record holds its exit and its
-transcript was read (`claimRetirement`, checked against the invocation
-systemd shows right before the stop); an outcome whose transcript was not
-read (`drained: false`) is never retired by a launch and never restarts
-CeraUI: the launch refuses and the unit stays as the evidence.
+reads which update units systemd has loaded (`systemctl list-units`) and
+refuses while any runs. A finished one is retired when the record holds its
+exit and its transcript was read (`claimRetirement`, checked against the
+invocation systemd shows right before the stop); one that cannot be retired
+stays under its own name, and the launch goes ahead, because its transcript
+was read. An outcome whose transcript was not read (`drained: false`) is
+never retired by a launch and never restarts CeraUI: the launch refuses and
+the unit stays as the evidence until a reboot clears `/run`. Recovery finds
+the record's own unit by its name, then an older release's fixed one; another
+attempt's running unit is watched for display only, a finished one whose exit
+is recorded and read is retired once, and one that stays makes recovery
+report "not probed", never absence. The D8 live-abort stop and the
+commit-stage probe name the in-flight attempt's unit (else the fixed one);
+package recovery's absence proof needs every unit the record knows of, and
+the fixed one, to be not found.
 
 At boot a surviving unit is watched at once, independent of the slower
 startup checks: the tab sees its progress and outcome. Retiring it,

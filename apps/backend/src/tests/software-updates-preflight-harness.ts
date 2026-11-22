@@ -15,7 +15,11 @@ import * as transaction from "../modules/system/software-update-process.ts";
 import { setDetachedAptServiceDepsForTest } from "../modules/system/software-update-service.ts";
 import * as updates from "../modules/system/software-updates.ts";
 import * as compat from "../rpc/compat.ts";
-import { memoryAttempt, recordedClaim } from "./helpers/memory-attempt.ts";
+import {
+	memoryAttempt,
+	recordedClaim,
+	TEST_PLAN,
+} from "./helpers/memory-attempt.ts";
 import { observeTestUpdateExit } from "./software-update-exit-harness.ts";
 import { armedMarkerFixture } from "./software-updates-marker-harness.ts";
 
@@ -86,6 +90,10 @@ export async function updateHarness() {
 		restartExit: (() => never) | undefined;
 		beforeClean: (() => Promise<void>) | undefined;
 		completion: Promise<number>;
+		/** The observer could not claim the exit (nothing recorded it). */
+		unclaimed: boolean;
+		/** The key of the orchestrator's saved plan now. */
+		plan: string;
 		markerBefore: string;
 		frames: StatusResponse[];
 		onFrame: ((frame: StatusResponse) => void) | undefined;
@@ -102,6 +110,8 @@ export async function updateHarness() {
 		restartExit: undefined,
 		beforeClean: undefined,
 		completion: Promise.resolve(100),
+		unclaimed: false,
+		plan: TEST_PLAN,
 		markerBefore: markerFixture.before,
 		frames,
 		onFrame: undefined,
@@ -175,12 +185,14 @@ export async function updateHarness() {
 			handlers.onStderr("original transaction failure");
 			// The claim the real observer hands over once the exit is recorded and read.
 			handlers.onOutcome?.(
-				recordedClaim(
-					h.completion.catch(
-						(error: { readonly transactionExitCode?: number }) =>
-							error.transactionExitCode ?? -1,
-					),
-				),
+				h.unclaimed
+					? async () => null
+					: recordedClaim(
+							h.completion.catch(
+								(error: { readonly transactionExitCode?: number }) =>
+									error.transactionExitCode ?? -1,
+							),
+						),
 			);
 			return h.completion;
 		},
@@ -198,6 +210,8 @@ export async function updateHarness() {
 		},
 	);
 	const restartTail = observeTestUpdateExit();
+	// The orchestrator saves its plan before every start; this is that plan.
+	const restorePlan = updates.setSoftwareUpdatePlanReader(() => h.plan);
 	updates.setAptReachabilityProbeForTest(async () => ({
 		ipv4: "ok",
 		ipv6: "ok",
@@ -240,6 +254,7 @@ export async function updateHarness() {
 			return markerFixture.read();
 		},
 		async [Symbol.asyncDispose]() {
+			updates.setSoftwareUpdatePlanReader(restorePlan);
 			setDetachedAptServiceDepsForTest(null);
 			updates.resetSoftwareUpdateState();
 			// Reset retires outcomes, not availability; withdraw the fixture's discovered packages too.

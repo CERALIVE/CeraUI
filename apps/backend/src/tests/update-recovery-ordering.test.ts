@@ -3,6 +3,7 @@ import type { UpdateProgress } from "@ceraui/rpc";
 import * as spawnPolicy from "../helpers/spawn-policy.ts";
 import { buildAptAllInstallArgs } from "../modules/system/apt-all-packages.ts";
 import * as readiness from "../modules/system/readiness.ts";
+import { softwarePlanKey } from "../modules/system/software-update-attempt.ts";
 import {
 	SOFTWARE_UPDATE_OUTPUT_READ_BYTES,
 	type SoftwareUpdateAttempt,
@@ -12,6 +13,7 @@ import {
 	DetachedAptServiceAlreadyExistsError,
 	DetachedAptServiceCleanupError,
 	DetachedAptServiceReplacedError,
+	DetachedAptServiceUnrecordedError,
 	type DetachedAptUpgradeDeps,
 	RECORDED_OUTCOME_REPLAY_MS,
 	recoverDetachedAptUpgrade,
@@ -32,6 +34,7 @@ import {
 import { defaultOrchestratorRuntimeDeps } from "../modules/system/update-orchestrator/runtime.ts";
 import { buildInitialStatus } from "../rpc/procedures/status.procedure.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
+import { TEST_PLAN } from "./helpers/memory-attempt.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
 
 useSessionOwnerForFile();
@@ -556,6 +559,8 @@ test.each([
 ] as const)(
 	"a successful unit that %s restarts CeraUI at most once over five boots",
 	async (_name, failRecord, failCleanup, restarts, adoptions) => {
+		// An exit nothing could record cannot be claimed: it is no outcome.
+		const told = failRecord ? "available" : "success";
 		await using h = await updateHarness();
 		const unit = fakeUnit({
 			files: installing,
@@ -573,7 +578,7 @@ test.each([
 			const deps = recoveryOf(unit);
 			expect(await recoverSoftwareUpdateIfRunning(deps)).toBe(true);
 			if (deps.completion) adopted++;
-			expect(buildInitialStatus().status.update_state?.kind).toBe("success");
+			expect(buildInitialStatus().status.update_state?.kind).toBe(told);
 		}
 		expect(adopted).toBe(adoptions);
 		expect(h.restarts).toBe(restarts);
@@ -654,7 +659,7 @@ test.each([
 	["always", true, false],
 	["twice, then not", 2, true],
 ] as const)(
-	"an outcome record that fails %s keeps the exit, and the unit is retired only once it is recorded",
+	"an outcome record that fails %s: only a recorded exit is the outcome, and the unit is retired only once it is recorded",
 	async (_name, failRecord, kept) => {
 		const unit = fakeUnit({
 			files: { stdout: "done\n", stderr: "" },
@@ -662,7 +667,12 @@ test.each([
 			live: true,
 			failRecord,
 		});
-		expect(await runDetachedAptAll(args, "any", quiet, unit.deps)).toBe(0);
+		const run = runDetachedAptAll(args, "any", quiet, unit.deps);
+		if (kept) expect(await run).toBe(0);
+		else
+			await expect(run).rejects.toBeInstanceOf(
+				DetachedAptServiceUnrecordedError,
+			);
 		expect(unit.recordAttempts()).toBe(kept ? 3 : 5);
 		expect(unit.recorded()?.exitCode).toBe(kept ? 0 : undefined);
 		expect(unit.retired).toEqual(kept ? ["stop"] : []);
@@ -1024,9 +1034,10 @@ test("an exit whose transcript could not be read never restarts CeraUI", async (
 
 test.each([
 	[undefined, "idle"],
-	[true, "success"],
+	[TEST_PLAN, "success"],
+	[softwarePlanKey([{ name: "cerastream", version: "3" }]), "idle"],
 ] as const)(
-	"the orchestrator settles its plan only from an exit its own attempt claimed (plan %s)",
+	"the orchestrator settles its plan only from an exit the current saved plan's own attempt claimed (plan %s)",
 	async (plan, kind) => {
 		await using h = await updateHarness();
 		const unit = fakeUnit({

@@ -39,14 +39,15 @@ const ATTEMPT_FILE = "software-update.attempt";
 const ATTEMPT_MAX_BYTES = 1024;
 const exitCodeSchema = z.number().int().min(0).max(255);
 const invocationSchema = z.string().regex(/^[0-9a-f]{32}$/);
+const attemptIdSchema = z
+	.string()
+	.regex(
+		/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+	);
 const attemptSchema = z
 	.object({
 		schema: z.literal(2),
-		attempt: z
-			.string()
-			.regex(
-				/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-			),
+		attempt: attemptIdSchema,
 		phase: z.enum(["accepted", "launched"]),
 		uptimeMs: z.number().int().nonnegative(),
 		invocation: invocationSchema.optional(),
@@ -55,10 +56,14 @@ const attemptSchema = z
 		drained: z.boolean().optional(),
 		/** With the exit: the stdout file it was read from (inode:size:mtime). */
 		transcript: z.string().max(64).optional(),
-		/** Admitted for the orchestrator's plan, whose settlement claims it. */
-		plan: z.literal(true).optional(),
+		/** The orchestrator's saved plan that admitted it (its key); only that plan settles from it. */
+		plan: z
+			.string()
+			.regex(/^[0-9a-f]{64}$/)
+			.optional(),
 		leftover: z
 			.object({
+				attempt: attemptIdSchema,
 				invocation: invocationSchema,
 				exitCode: exitCodeSchema,
 				drained: z.boolean().optional(),

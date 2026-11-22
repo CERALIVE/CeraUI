@@ -121,7 +121,11 @@ describe("the attempt record", () => {
 		attempt: "11111111-1111-4111-8111-111111111111",
 		phase: "accepted",
 		uptimeMs: 1_000,
-		leftover: { invocation: "a".repeat(32), exitCode: 0 },
+		leftover: {
+			attempt: "33333333-3333-4333-8333-333333333333",
+			invocation: "a".repeat(32),
+			exitCode: 0,
+		},
 	};
 	const scratch = async () => {
 		const directory = await mkdtemp(path.join(tmpdir(), "ceraui-attempt-"));

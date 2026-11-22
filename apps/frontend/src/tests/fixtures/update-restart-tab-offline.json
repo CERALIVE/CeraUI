@@ -120,8 +120,7 @@
 					"total": 1,
 					"downloading": 1,
 					"unpacking": 0,
-					"setting_up": 0,
-					"percent": 10
+					"setting_up": 0
 				},
 				"update_state": {
 					"kind": "downloading",
@@ -129,41 +128,14 @@
 						"total": 1,
 						"downloading": 1,
 						"unpacking": 0,
-						"setting_up": 0,
-						"percent": 10
+						"setting_up": 0
 					}
 				}
 			}
 		},
 		{
 			"at": "moment",
-			"name": "downloading 10%"
-		},
-		{
-			"at": "push",
-			"status": {
-				"updating": {
-					"total": 1,
-					"downloading": 1,
-					"unpacking": 0,
-					"setting_up": 0,
-					"percent": 60
-				},
-				"update_state": {
-					"kind": "downloading",
-					"progress": {
-						"total": 1,
-						"downloading": 1,
-						"unpacking": 0,
-						"setting_up": 0,
-						"percent": 60
-					}
-				}
-			}
-		},
-		{
-			"at": "moment",
-			"name": "downloading 60%"
+			"name": "downloading"
 		},
 		{
 			"at": "push",
