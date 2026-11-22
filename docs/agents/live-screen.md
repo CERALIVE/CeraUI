@@ -50,7 +50,7 @@ tokens, motion, copy tone and states.
 | `program-desk` | The preview (`preview-disclosure`) and, after it, `layout-controls`. While live, also `LiveSummaryStrip` and `LiveSourceSwitch`. | In both cockpits. |
 | `layout-controls` | The controls of `CompositionCard`. | When the engine advertises the `composition` feature. |
 | `audio-card` | Idle: the `source-audio` block. Live: the mixer strips. | Idle: when the `source-audio` block renders. Live: when the engine advertises `audio_mix`. |
-| `output-card` | The encoder row and the destination row of the stream setup, with the destination check (`destination-traffic-light`). | Idle, when those rows render. |
+| `output-card` | The encoder row and the destination row of the stream setup, with the bitrate-ceiling chip (the bitrate in the encoder summary, tappable) and the destination traffic light. | Idle, when those rows render. |
 | `connections-card` | The network row. | Idle. |
 | `telemetry-card` | `StreamTelemetryStrip` and `IngestStats`. | Live, and in the post-stream summary window. |
 | `live-bar` | Idle: the first blocking reason or a ready state, and Start. Live: `BitrateAdjuster` and Stop. Summary window: Done. | In both cockpits. |
@@ -172,7 +172,7 @@ a time; a dialog opened over it is outside this rule.
 #### Dialogs
 
 The Encoder, Audio and Server dialogs must stay dialogs. `output-card` must
-open the Encoder dialog (encoder row) and the Server
+open the Encoder dialog (encoder row, bitrate-ceiling chip) and the Server
 dialog (destination row); `audio-card` must open the Audio dialog; the network
 row must go to the Network destination.
 
@@ -439,9 +439,11 @@ set these rules:
   pick follow the box.
 - **One setup row pattern.** Every Stream setup row is a status dot, the title,
   one summary line and one trailing action at the same inline end (the words
-  and a chevron, the chevron alone below 640 px). The encoder row's summary
-  carries the bitrate once; the separate bitrate-ceiling chip repeated it and
-  opened the same dialog as Edit, so it is gone. The destination check is a
+  and a chevron, the chevron alone below 640 px). The encoder row says the
+  bitrate once, at the end of its summary, and that figure is the
+  bitrate-ceiling chip (`bitrate-ceiling-chip`): it was a separate pill that
+  repeated the summary. It still opens the Encoder dialog while Edit waits for
+  a source, so the bitrate stays editable before a pick. The destination check is a
   chip beside the title, and the dot follows it: a destination that passes the
   gate but was never checked shows a hollow dot (`data-tone="unchecked"`),
   because green claimed a check that never happened.

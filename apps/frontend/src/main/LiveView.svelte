@@ -841,11 +841,16 @@ const encoderSummary = $derived.by(() => {
 				: m["live.reconfigureRequired"](),
 		);
 	}
-	if (bitrate) parts.push(formatBitrate(bitrate));
-	if (parts.length === 0) return m["general.notConfigured"]();
+	// The bitrate is NOT a part: the encoder row says it once, after this value,
+	// as its own tappable figure (`encoderBitrate`).
+	if (parts.length === 0 && !bitrate) return m["general.notConfigured"]();
 	// Todo 12: transport token dropped here — the Destination/server row
 	// (`serverSummary`) is the ONE idle surface that names the transport.
 	return parts.join(' · ');
+});
+const encoderBitrate = $derived.by(() => {
+	const bitrate = encoderConfig.bitrate ?? config?.max_br;
+	return bitrate ? formatBitrate(bitrate) : undefined;
 });
 // The encoder row's route line: the same resolveRoute the Encoder dialog shows,
 // from the saved settings and the configured source (the Output card is idle-only).
@@ -1030,6 +1035,7 @@ const configRows = $derived<ConfigRow[]>([
 		testId: 'open-encoder-dialog',
 		warn: pipelineNeedsReconfigure,
 		...(encoderRoute ? { route: encoderRoute } : {}),
+		...(encoderBitrate ? { bitrate: encoderBitrate } : {}),
 	},
 	{
 		icon: Server,

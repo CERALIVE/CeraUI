@@ -16,8 +16,8 @@
  *
  *   1. Encoder     — state = the SOURCE gate (blocked wins), warn when the
  *                    encoder config row flags `pipelineNeedsReconfigure`. Summary =
- *                    encoderSummary (it carries the bitrate ceiling, said once);
- *                    Edit opens the EncoderDialog.
+ *                    encoderSummary, then the bitrate ceiling, said once and itself
+ *                    tappable; it and Edit open the EncoderDialog.
  *   2. Destination — state = the DESTINATION gate. Summary = serverSummary; the
  *                    check chip beside the title; Edit opens the ServerDialog.
  *   3. Network     — state = the NETWORK gate. Summary = the enabled-link count
@@ -351,12 +351,22 @@ const networkView = $derived<SetupRowView>({
 					</span>
 				{/if}
 			</p>
+			<!-- The encoder's bitrate is said once, after its value, and is itself the
+			     bitrate-ceiling control: it opens the Encoder dialog even while Edit
+			     waits for a source, as the separate pill it replaces did. -->
 			<p
 				class="text-sm break-words {view.state === 'warn'
 					? 'text-status-warning font-medium'
 					: 'text-muted-foreground'}"
 			>
-				{view.value}
+				{view.value}{#if row?.bitrate}{view.value ? ' \u00b7 ' : ''}<button
+						class="hover:text-foreground focus-visible:ring-ring relative rounded underline underline-offset-2 outline-hidden focus-visible:ring-2"
+						data-testid="bitrate-ceiling-chip"
+						data-touch-target="hit-area"
+						onclick={row.onEdit}
+						title={m["live.goLive.maxBitrate"]()}
+						type="button">{row.bitrate}</button
+					>{/if}
 			</p>
 			{#if view.reasonKey}
 				<p class="text-muted-foreground text-xs break-words" data-testid="setup-row-reason">

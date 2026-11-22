@@ -484,13 +484,14 @@ function captureKindClass(source: CaptureStreamSource): string {
 // The option's frame carries its state, so the "?" inside it belongs to it. A
 // disabled option dims the frame to 60% of each colour's alpha, never the whole
 // tile: opacity on an ancestor would paint the red Lost word below AA.
-function frameClass(selected: boolean, unbound: boolean): string {
-	if (!selected) {
-		return 'border-border has-[[data-select]:disabled]:border-border/60 has-[[data-select]:enabled:hover]:bg-accent/50';
+function frameClass(selected: boolean, unbound: boolean, dimmed: boolean): string {
+	if (!selected) return dimmed ? 'border-border/60' : 'border-border hover:bg-accent/50';
+	if (unbound) {
+		return dimmed
+			? 'border-status-warning/36 bg-status-warning/6'
+			: 'border-status-warning/60 bg-status-warning/10';
 	}
-	return unbound
-		? 'border-status-warning/60 bg-status-warning/10 has-[[data-select]:disabled]:border-status-warning/36 has-[[data-select]:disabled]:bg-status-warning/6'
-		: 'border-primary bg-primary/10 has-[[data-select]:disabled]:border-primary/60 has-[[data-select]:disabled]:bg-primary/6';
+	return dimmed ? 'border-primary/60 bg-primary/6' : 'border-primary bg-primary/10';
 }
 function rowIcon(source: StreamSource) {
 	if (source.origin === 'capture') return KIND_ICON[kindFamily(source.kind)];
@@ -837,7 +838,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 						     end. Anything more (summary, formats, warnings, how to publish)
 						     sits under them, still inside the frame. -->
 						<li
-							class="min-w-0 rounded-lg border transition-colors has-[[data-select]:focus-visible]:ring-[3px] has-[[data-select]:focus-visible]:ring-ring/50 {frameClass(selected, coarseUnbound.unbound)}"
+							class="min-w-0 rounded-lg border transition-colors {frameClass(selected, coarseUnbound.unbound, disabled || isStreaming)}"
 							data-testid={`source-row-${source.id}`}
 							data-origin={source.origin}
 							data-selected={selected}
@@ -845,7 +846,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 						>
 							<div class="flex items-start">
 								<button
-									class="group/row flex min-w-0 flex-1 items-start gap-3 py-3 ps-3 pe-2 text-start outline-none disabled:cursor-not-allowed"
+									class="group/row focus-visible:ring-ring flex min-w-0 flex-1 items-start gap-3 rounded-lg py-3 ps-3 pe-2 text-start outline-hidden focus-visible:ring-2 disabled:cursor-not-allowed"
 									data-select
 									data-selected={selected}
 									data-testid={source.origin === 'network'

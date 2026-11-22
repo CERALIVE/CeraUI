@@ -117,7 +117,8 @@ function configRows(h: Handlers, opts: RowOptions = {}): ConfigRow[] {
 		{
 			icon: Cpu,
 			label: "Encoder",
-			value: "1080p60 · 6 Mbps",
+			value: "1080p60",
+			bitrate: "6 Mbps",
 			section: "encoder",
 			onEdit: h.onOpenEncoder,
 			testId: "open-encoder-dialog",
@@ -273,19 +274,37 @@ describe("StreamSetupChain — encoder row (source gate)", () => {
 		expect((start as HTMLButtonElement).disabled).toBe(false);
 	});
 
-	it("shows the bitrate once, in the encoder summary, and opens the encoder from the row's one action", async () => {
+	it("shows the bitrate-ceiling chip and opens the encoder from it", async () => {
 		const { container, onOpenEncoder } = renderChain({
 			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
 		});
-		const encoder = rowFor(container, "encoder");
-		// The "6 Mbps" pill under a summary that already said "6 Mbps" was a repeat.
+		const chip = container.querySelector<HTMLElement>(
+			'[data-testid="bitrate-ceiling-chip"]',
+		);
+		expect(chip, "bitrate chip renders").not.toBeNull();
+		expect(chip?.textContent).toContain("6");
+		// Said once: the chip IS the summary's bitrate, never a second copy of it.
 		expect(
-			container.querySelector('[data-testid="bitrate-ceiling-chip"]'),
-		).toBeNull();
-		expect(encoder?.textContent?.match(/6 Mbps/g)).toHaveLength(1);
+			rowFor(container, "encoder")?.textContent?.match(/6 Mbps/g),
+		).toHaveLength(1);
+		await fireEvent.click(chip as HTMLElement);
+		expect(onOpenEncoder).toHaveBeenCalledTimes(1);
+	});
+
+	it("keeps the bitrate editable while Edit waits for a source", async () => {
+		const { container, onOpenEncoder } = renderChain({
+			config: { relay_server: "fra" } as ConfigMessage,
+			sources: makeSources(capture("cam-1", "HDMI"), capture("cam-2", "USB")),
+		});
+		const encoder = rowFor(container, "encoder");
+		expect(
+			encoder?.querySelector<HTMLButtonElement>(
+				'[data-testid="open-encoder-dialog"]',
+			)?.disabled,
+		).toBe(true);
 		await fireEvent.click(
 			encoder?.querySelector(
-				'[data-testid="open-encoder-dialog"]',
+				'[data-testid="bitrate-ceiling-chip"]',
 			) as HTMLElement,
 		);
 		expect(onOpenEncoder).toHaveBeenCalledTimes(1);

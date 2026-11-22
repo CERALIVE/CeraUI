@@ -71,7 +71,8 @@ list, which already reflects this):
   `StreamSettingsCard`) in one pattern: dot, title, one summary line, one
   trailing action. The Destination row also carries the traffic-light chip (fed
   by the destination-validation store, below), and its dot stays hollow until
-  that check passes; the Encoder row's summary carries the bitrate ceiling. Audio is deliberately NOT a row (live-correctness-pass
+  that check passes; the Encoder row's summary ends with the bitrate ceiling,
+  which is itself the tap-to-edit bitrate-ceiling chip. Audio is deliberately NOT a row (live-correctness-pass
   Todo #11 — see "LIVE-CORRECTNESS-PASS FIXES" below); the ENGINE gate is also not
   a row (owned by the `CapabilityTierBanner` + the Start button's disabled
   reason). It detects a sole-camera device with no `config.source` set and folds
