@@ -76,7 +76,7 @@ function handleToggle(event: Event & { currentTarget: HTMLDetailsElement }) {
 	data-testid="preview-disclosure"
 	ontoggle={handleToggle}
 >
-	<summary class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none">
+	<summary class="cursor-pointer list-none px-4 py-3 text-base font-semibold select-none">
 		{m["live.modes.preview"]()}
 	</summary>
 	<div class="px-4 pb-4">

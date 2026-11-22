@@ -93,9 +93,33 @@ test.describe('@visual audio mixer', () => {
 	});
 
 	test('@visual idle — strips under the picker', { tag: ['@visual', '@desktop-only'] }, async ({ page }) => {
+		// The 689 px card cannot fit between the 57 px sticky header and the 75 px Live
+		// bar at the desktop project's 800 px: a taller window keeps it all on screen.
+		await page.setViewportSize({ width: 1280, height: 900 });
 		await idleWithTwoInputs(page);
 		const card = page.getByTestId('idle-cockpit').getByTestId('audio-card');
 		await expect(card.getByTestId('audio-mixer')).toBeVisible();
+		// Frame the card from its top, just under the sticky header, so every run
+		// captures the same pixels and the whole card clears both pinned bars.
+		const frame = await card.evaluate((element) => {
+			const header = document.querySelector('header')?.getBoundingClientRect().bottom ?? 0;
+			window.scrollBy({ top: element.getBoundingClientRect().top - header - 16, behavior: 'instant' });
+			const box = element.getBoundingClientRect();
+			const bar = document.querySelector('[data-testid="live-bar"]')?.getBoundingClientRect().top ?? innerHeight;
+			return { top: box.top, bottom: box.bottom, header, bar };
+		});
+		expect(frame.top, 'the Audio card starts under the sticky header').toBeGreaterThanOrEqual(frame.header);
+		expect(frame.bottom, 'the Audio card ends above the Live bar').toBeLessThanOrEqual(frame.bar);
+		// The snapshot must show the heading row: nothing on screen may cover the
+		// heading, its help or Codec & delay when the card is captured.
+		for (const target of [card.locator('#live-audio-card-title'), card.getByTestId('info-audio'), card.getByTestId('open-audio-dialog')]) {
+			const uncovered = await target.evaluate((element) => {
+				const box = element.getBoundingClientRect();
+				const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+				return hit !== null && (hit === element || element.contains(hit));
+			});
+			expect(uncovered, 'the Audio heading row is covered when the card is captured').toBe(true);
+		}
 		await expect(card).toHaveScreenshot('audio-mixer-idle.png', { maxDiffPixels: 100 });
 	});
 
