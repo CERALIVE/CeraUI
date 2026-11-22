@@ -126,15 +126,21 @@ density. It is not a redesign.
   `chooseBoot(null)` is All stored).
   The order of actions is one counter, `bootSelection.intent`
   (`lib/device-logs/boot-selection.svelte.ts`): every `choose()` advances it, a
-  repeat of the highlighted boot and All boots included, and it is never reset.
+  repeat of the highlighted boot and All boots included, and it is never reset;
+  a view closing (`reset()`) also makes every token taken in that open stale, so
+  nothing started in one open applies in the next.
   Each async result that could change Raw or the scope takes `since()` when it
   starts and applies only while that still holds:
-  - a deep link (`SystemLogsView` takes it when the context arrives, before the
-    availability probe; `RawLogsPanel` skips the lookup, discards its reply, and
+  - a deep link (`SystemLogsView` takes it as the view mounts with the context,
+    in the same synchronous step that starts the availability probe, so no pick
+    can come between; `RawLogsPanel` skips the lookup, discards its reply, and
     drops a link not yet shown, so Raw opens on the pick);
-  - an Events "View raw logs" lookup (`EventsTab` takes it at the click; a reply
-    after a pick does not open Raw; a new View raw logs after the pick does);
-  - the post-deletion boot recheck (`bootSelection.recheck`);
+  - an Events "View raw logs" lookup (taken at the click and kept by
+    `EventsRawLink`: a pick clears the row's pending state at once, a reply after
+    it, success or failure, opens nothing and shows no note, and a new View raw
+    logs works at once);
+  - the post-deletion boot recheck (`bootSelection.recheck`), also across a
+    close and reopen;
   - the export ticket keeps its own run fence and reads only the frozen scope.
   The flow compares the counter at Raw's last publication with the current one
   (`#publishedAt`). Raw paging publishes the query it requests when the request

@@ -17,7 +17,18 @@ const replaceHistory = new WeakSet<Page>();
 /** Holds a page's `logs.around` reply until the test releases it, then answers BUSY, or the device's reply when `real`. */
 /** Holds a page's `logs.getStorage` reply (System Logs' availability probe) until the test releases it. */
 const heldStorage = new WeakMap<Page, PromiseWithResolvers<void>>();
-const heldAround = new WeakMap<Page, { release: PromiseWithResolvers<void>; sent: number; real?: boolean }>();
+const heldAround = new WeakMap<Page, { release: PromiseWithResolvers<void>; sent: number; real?: boolean; ok?: unknown }>();
+
+/** A reply frame's id and its result's `ok`, narrowed from the wire text. */
+function replyOf(message: string): { id: unknown; ok: unknown } {
+	const frame: unknown = JSON.parse(message);
+	if (typeof frame !== 'object' || frame === null) return { id: undefined, ok: undefined };
+	const result = 'result' in frame ? frame.result : undefined;
+	return {
+		id: 'id' in frame ? frame.id : undefined,
+		ok: typeof result === 'object' && result !== null && 'ok' in result ? result.ok : undefined,
+	};
+}
 
 /**
  * "View logs" beside a message that sends the operator to System Logs (mock
@@ -78,7 +89,7 @@ test.beforeEach(async ({ page, pageRpc }) => {
 				}
 			}
 			const probe = heldStorage.get(page);
-			if (probe && typeof message === 'string' && storageIds.has(JSON.parse(message).id)) {
+			if (probe && typeof message === 'string' && storageIds.has(String(replyOf(message).id))) {
 				const reply = message;
 				void probe.promise.then(() => {
 					socket.send(reply);
@@ -88,6 +99,7 @@ test.beforeEach(async ({ page, pageRpc }) => {
 			}
 			const held = heldAround.get(page);
 			if (held && typeof message === 'string' && aroundIds.has(JSON.parse(message).id)) {
+				held.ok = replyOf(message).ok;
 				const reply = held.real ? message : JSON.stringify({ ...JSON.parse(message), result: { ok: false, error: 'BUSY' } });
 				void held.release.promise.then(() => {
 					socket.send(reply);
@@ -318,6 +330,8 @@ test('re-picking the highlighted All boots while View raw logs is out keeps its 
 	await expect(logs.getByRole('tab', { name: 'Events' })).toHaveAttribute('aria-selected', 'true');
 	await expect(logs.getByTestId('raw-logs')).toHaveCount(0);
 	expect(held.sent).toBe(1);
+	// The late reply was a real success, not a failure that never would have opened Raw.
+	expect(held.ok).toBe(true);
 	await exportAll(page);
 });
 

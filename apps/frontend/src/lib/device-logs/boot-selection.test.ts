@@ -61,17 +61,13 @@ describe("bootSelection", () => {
 		expect(bootSelection.boot).toBe(clean);
 	});
 
-	it("advances its intent on every choice, a repeat of the shown one included, so a reply started before goes stale", () => {
-		const opened = bootSelection.intent;
-		const still = bootSelection.since();
-
-		bootSelection.choose(null);
-		bootSelection.choose(clean);
-		bootSelection.choose(clean);
-
-		expect(bootSelection.intent).toBe(opened + 3);
-		expect(still()).toBe(false);
-		expect(bootSelection.since()()).toBe(true);
+	it("makes a reply started before each choice stale, a repeat of the shown one included", () => {
+		for (const boot of [null, clean, clean]) {
+			const still = bootSelection.since();
+			bootSelection.choose(boot);
+			expect(still()).toBe(false);
+			expect(bootSelection.since()()).toBe(true);
+		}
 	});
 
 	it("counts a pick, All boots included, until the view closes", () => {
@@ -227,6 +223,22 @@ describe("bootSelection.recheck: after stored history is deleted", () => {
 		await recheck;
 
 		expect(bootSelection.boot).toBe(unclean);
+	});
+
+	it("ignores a recheck started before the view closed, also once a new view shows This boot", async () => {
+		bootSelection.choose(clean);
+		const reply = Promise.withResolvers<LogBootInfo[]>();
+		const recheck = bootSelection.recheck(() => reply.promise);
+		bootSelection.reset();
+		bootSelection.rawScope = { time: "current", bootId: null };
+		const raw = vi.fn();
+		listen(raw);
+
+		reply.resolve([current, unclean]);
+		await recheck;
+
+		expect(raw).not.toHaveBeenCalled();
+		expect(bootSelection.picked).toBe(false);
 	});
 
 	it("leaves a repeat pick of the chosen boot made while the list was being read", async () => {

@@ -22,6 +22,8 @@ class BootSelection {
 	// Advanced by every pick, a repeat included, and never reset: an async result started under an
 	// older value lost to that pick (`since()`).
 	#intent = $state(0);
+	// Advanced when a view closes: a result started in one open never applies in the next one.
+	#views = 0;
 	#openedAt = 0;
 
 	get intent(): number {
@@ -33,10 +35,11 @@ class BootSelection {
 		return this.#intent !== this.#openedAt;
 	}
 
-	/** For an async result started now: false once any pick follows, so its reply must not apply. */
+	/** For an async result started now: false once any pick follows or the view closes, so its reply must not apply. */
 	since(): () => boolean {
 		const at = this.#intent;
-		return () => this.#intent === at;
+		const view = this.#views;
+		return () => this.#intent === at && this.#views === view;
 	}
 
 	get boot(): LogBootInfo | null {
@@ -87,6 +90,7 @@ class BootSelection {
 	reset(): void {
 		this.#boot = null;
 		this.rawScope = null;
+		this.#views += 1;
 		this.#openedAt = this.#intent;
 	}
 

@@ -12,6 +12,7 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/svelte";
+import { tick } from "svelte";
 import {
 	afterEach,
 	beforeAll,
@@ -22,11 +23,12 @@ import {
 	vi,
 } from "vitest";
 
-import { fourBoots } from "$lib/device-logs/__fixtures__/boots";
+import { BOOT_IDS, fourBoots } from "$lib/device-logs/__fixtures__/boots";
 import { event, eventPage } from "$lib/device-logs/__fixtures__/events";
 import { exportScopeRows } from "$lib/device-logs/__fixtures__/sharing";
 import { formatBootTime } from "$lib/device-logs/boot-rows";
 import { bootSelection } from "$lib/device-logs/boot-selection.svelte";
+import { notifyHistoryChanged } from "$lib/device-logs/history-bus";
 
 import { en } from "../../tests/helpers/catalog";
 import {
@@ -69,7 +71,13 @@ vi.mock("$lib/stores/hud.svelte", () => ({
 	getHudState: () => ({ isStreaming: false, isFullyStale: false }),
 }));
 
-const [RUNNING, PREVIOUS] = fourBoots() as [LogBootInfo, LogBootInfo];
+function listed(bootId: string): LogBootInfo {
+	const found = fourBoots().find((boot) => boot.bootId === bootId);
+	if (found === undefined) throw new Error(`fourBoots() lists no ${bootId}`);
+	return found;
+}
+const RUNNING = listed(BOOT_IDS.current);
+const PREVIOUS = listed(BOOT_IDS.clean);
 const AT = RUNNING.firstTs + 60_000;
 const OPENING_LEVELS = ["error", "warning", "info"];
 const sharing = en.systemLogs.sharing;
@@ -335,6 +343,125 @@ describe("LogsDialog: a boot pick outranks a reply to anything started before it
 		expect(sent).toEqual({
 			filter: { sources: [], levels: OPENING_LEVELS },
 			boot: "all",
+		});
+	});
+
+	it("clears a View raw logs a re-pick superseded at once: no pending row, no late note, and a fresh link works", async () => {
+		viewport(true);
+		const at = RUNNING.firstTs + 60_000;
+		rpc.events.list.mockResolvedValue(
+			eventPage([
+				event(1, "device_started", {}, { bootId: RUNNING.bootId, at }),
+			]),
+		);
+		render(LogsDialog, { props: { open: true } });
+		const lookup = Promise.withResolvers<{ ok: false; error: "BUSY" }>();
+		rpc.logs.around.mockReturnValueOnce(lookup.promise);
+		const link = await screen.findByRole("button", {
+			name: en.systemLogs.events.viewRaw,
+		});
+		await fireEvent.click(link);
+		expect(link.getAttribute("aria-disabled")).toBe("true");
+
+		await pickInSide(null);
+		await waitFor(() => expect(link.getAttribute("aria-disabled")).toBeNull());
+		lookup.resolve({ ok: false, error: "BUSY" });
+		await lookup.promise;
+		await tick();
+
+		expect(screen.queryByTestId("event-raw-note")).toBeNull();
+		await fireEvent.click(link);
+		await screen.findByTestId("raw-anchor");
+		expect(rpc.logs.around).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe("LogsDialog: a boot recheck still out when the view closed changes nothing in the next one", () => {
+	const ALL_LEVELS = ["error", "warning", "info", "debug"];
+
+	async function recheckOutAcrossClose(): Promise<{
+		reopen: (props: Record<string, unknown>) => Promise<void>;
+		release: () => Promise<void>;
+	}> {
+		viewport(true);
+		const view = render(LogsDialog, { props: { open: true } });
+		await pickInSide(PREVIOUS);
+		const read = Promise.withResolvers<LogBootInfo[]>();
+		rpc.logs.boots.mockImplementation(() => read.promise);
+		const calls = rpc.logs.boots.mock.calls.length;
+		notifyHistoryChanged();
+		await waitFor(() =>
+			expect(rpc.logs.boots.mock.calls.length).toBeGreaterThan(calls),
+		);
+		await view.rerender({ open: false });
+		await waitFor(() => expect(screen.queryByRole("tablist")).toBeNull());
+		rpc.logs.boots.mockReset().mockResolvedValue(fourBoots());
+		return {
+			reopen: async (props) => {
+				await view.rerender({ open: true, ...props });
+				await screen.findByRole("tablist");
+			},
+			// The device no longer lists the boot the closed view had chosen.
+			release: async () => {
+				read.resolve(
+					fourBoots().filter((boot) => boot.bootId !== PREVIOUS.bootId),
+				);
+				await read.promise;
+				await tick();
+			},
+		};
+	}
+
+	it("keeps a fresh linked moment on Raw, and Export saves that moment", async () => {
+		const { reopen, release } = await recheckOutAcrossClose();
+		await reopen({ context: { tab: "raw", at: AT, bootId: RUNNING.bootId } });
+		await screen.findByTestId("raw-anchor");
+
+		await release();
+
+		expect(screen.getByTestId("raw-anchor")).toBeTruthy();
+		const { rows, sent } = await exportFromToolbar();
+		expect(rows).toEqual([
+			boots.heading,
+			raw.timeBoot,
+			raw.levelLabel,
+			raw.levelEverything,
+			raw.sourceLabel,
+			raw.sourceAll,
+			raw.timeLabel,
+			`${formatBootTime(AT - 300_000, "en")} to ${formatBootTime(AT + 300_000, "en")}`,
+		]);
+		expect(sent).toEqual({
+			filter: { sources: [], levels: ALL_LEVELS },
+			boot: RUNNING.bootId,
+			since: AT - 300_000,
+			until: AT + 300_000,
+		});
+	});
+
+	it("keeps a newly opened plain Raw tab on This boot, and Export saves this boot", async () => {
+		const { reopen, release } = await recheckOutAcrossClose();
+		await reopen({ context: undefined });
+		await fireEvent.click(
+			await screen.findByRole("tab", { name: en.systemLogs.tabs.raw }),
+		);
+		await screen.findByTestId("raw-logs");
+		const thisBoot = logQueryInputSchema.parse({
+			levels: OPENING_LEVELS,
+			boot: "current",
+		});
+		await waitFor(() =>
+			expect(rpc.logs.query).toHaveBeenLastCalledWith(thisBoot),
+		);
+
+		await release();
+
+		expect(rpc.logs.query).toHaveBeenLastCalledWith(thisBoot);
+		const { rows, sent } = await exportFromToolbar();
+		expect(rows).toEqual(opening(boots.current));
+		expect(sent).toEqual({
+			filter: { sources: [], levels: OPENING_LEVELS },
+			boot: "current",
 		});
 	});
 });
