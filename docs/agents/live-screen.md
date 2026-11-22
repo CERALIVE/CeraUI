@@ -429,6 +429,10 @@ set these rules:
   under them, inside the same frame. The selected option is outlined (its
   border plus a one-pixel ring in the primary colour), never tinted: muted text
   inside a lime-tinted frame measured 4.23:1 in dark, below AA.
+  Every "?" inside an option (its help, the capture-format help and the
+  summary's help) is a real 44 px box at every width, so its hit area is its
+  box: the touch layout's `::after` overlay on the 24 px icon reached 10 px into
+  the select button at 1024x600, so a tap meant for Select opened Help.
 - **The summary belongs to the selected option.** `source-active-config` sits
   inside the selected option and names its settings ("Automatic", the Encoder
   dialog's word, while no format is saved) and the hardware ceiling, never the
@@ -464,7 +468,10 @@ bitrate editable while Edit waits for a source"), `SourceSection.test.ts` ("one
 option pattern"), the column check in
 `apps/frontend/tests/e2e/visual/live.visual.spec.ts`, and
 `apps/frontend/tests/e2e/live-design-a11y.spec.ts`, whose 44 px gates now
-measure the Output card too.
+measure the Output card too, and
+`apps/frontend/tests/e2e/source-option-targets.spec.ts` (no help hit area overlaps
+another control in any option at 320, 375, 768, 1280 and 1024x600 touch, in en,
+ar and de; a tap beside the help selects, a tap on it opens it).
 
 ### 1. Job and audience
 

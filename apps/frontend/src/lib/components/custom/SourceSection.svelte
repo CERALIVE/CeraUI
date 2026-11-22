@@ -222,6 +222,12 @@ const activeSettings = $derived.by(() => {
 	return settings.length > 0 ? settings : [m["live.encoder.format.automaticUnknown"]()];
 });
 
+// Every "?" inside an option is a real 44 px box at every width. Its hit area
+// is then its box, laid out beside its neighbours: the touch layout's ::after
+// overlay on the 24 px icon reached 10 px into the select button and the
+// capture-format buttons.
+const HELP_TARGET = 'sm:min-h-11 sm:min-w-11 sm:p-2.5';
+
 // Every badge on an option is this one pill; only its tone varies.
 const CHIP = 'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium';
 
@@ -677,7 +683,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 				<span class="font-medium" data-testid="cap-device-max">{m["live.source.sourceMax"]()}</span>
 				<InfoPopover
 					body={m["live.education.field.mode.body"]()}
-					class="-my-2"
+					class="-my-2 {HELP_TARGET}"
 					testId="info-mode"
 					title={m["live.education.field.mode.title"]()}
 				/>
@@ -972,11 +978,12 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 
 								<!-- The help slot: every "?" sits at the inline end of its own
 								     frame, OUTSIDE the select button (never a nested interactive). -->
-								<div class="flex shrink-0 items-center pt-1.5 pe-1.5">
+								<div class="flex shrink-0 items-start pe-1.5">
 									<!-- Same-LAN/WiFi education on ENABLED network rows. -->
 									{#if source.origin === 'network' && source.available}
 										<InfoPopover
 											body={m["live.networkIngest.infoBody"]()}
+											class={HELP_TARGET}
 											testId={`source-network-ingest-info-${source.requiresGateway}`}
 											title={m["live.networkIngest.infoTitle"]()}
 										/>
@@ -985,6 +992,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 									{#if source.origin === 'coarse'}
 										<InfoPopover
 											body={m["live.source.notConnectedBody"]()}
+											class={HELP_TARGET}
 											testId={`source-not-connected-info-${source.id}`}
 											title={m["live.source.notConnectedTitle"]()}
 										/>
@@ -993,6 +1001,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 									{#if hasNoSignal(source)}
 										<InfoPopover
 											body={m["live.source.noSignalBody"]()}
+											class={HELP_TARGET}
 											testId={`source-no-signal-info-${source.id}`}
 											title={m["live.source.noSignalTitle"]()}
 										/>
@@ -1003,6 +1012,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 											body={m["live.source.mjpegBody"]()}
 											learnMoreLabel={m["live.source.mjpegLearnMore"]()}
 											learnMoreUrl={UVC_H264_DETECTION_DOC_URL}
+											class={HELP_TARGET}
 											testId={`source-mjpeg-info-${source.id}`}
 											title={m["live.source.mjpegTitle"]()}
 										/>
@@ -1047,6 +1057,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 												</span>
 												<InfoPopover
 													body={m["live.source.modeHint"]()}
+													class={HELP_TARGET}
 													testId={`source-mode-info-${source.id}`}
 													title={m["live.source.modeLabel"]()}
 												/>
