@@ -90,3 +90,20 @@ test("preference salvage preserves empty and nonempty twin residuals across a sa
 	await loadConfig();
 	expect(getConfig().bond_group_opt_out).toEqual(residual);
 });
+
+test("scan pin evidence survives preference salvage but malformed product evidence refuses authority", async () => {
+	const valid = '{"max_br":"bad","bond_group_opt_out":{"port":"413c:81d7"}}';
+	writeFileSync(path, valid);
+	await loadConfig();
+	saveConfig();
+	await loadConfig();
+	expect(getConfig().bond_group_opt_out).toEqual({ port: "413c:81d7" });
+
+	const invalid = '{"max_br":"bad","bond_group_opt_out":{"port":"413c"}}';
+	writeFileSync(path, invalid);
+	await expect(loadConfig()).rejects.toThrow(
+		"runtime_config_authority_unavailable",
+	);
+	expect(() => saveConfig()).toThrow("runtime_config_authority_unavailable");
+	expect(readFileSync(path, "utf8")).toBe(invalid);
+});

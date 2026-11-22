@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import {
+	chmodSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	statSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { call } from "@orpc/server";
@@ -91,8 +97,12 @@ function ip(ifname: string): string {
 	return value;
 }
 
-function attach(devices: readonly { ifname: string }[], pending?: string) {
-	const names = [...devices, ETH, LAN].map(({ ifname }) => ifname);
+function attach(
+	devices: readonly { ifname: string }[],
+	pending?: string,
+	builtIns = [ETH, LAN],
+) {
+	const names = [...devices, ...builtIns].map(({ ifname }) => ifname);
 	processIfconfigOutput(
 		names.map((name) => firstSightIfconfig(name, ip(name))).join("\n\n"),
 		undefined,
@@ -240,7 +250,7 @@ test("S10 / D2a: enabling a pending twin does not authorize the as-yet unseen gr
 	expect(enabled(twinA, twinB)).toEqual([true, false]);
 });
 
-test("S12: a serial-less replacement inherits the returning twin's port pin until explicitly enabled", async () => {
+test("S12: a serial-less device of the pinned product stays out until explicitly enabled", async () => {
 	await seed([G]);
 	await plug(twinA);
 	await toggle(twinA, true);
@@ -250,6 +260,72 @@ test("S12: a serial-less replacement inherits the returning twin's port pin unti
 	expect(enabled(noSerialB)).toEqual([false]);
 	await toggle(noSerialB, true);
 	expect(enabled(noSerialB)).toEqual([true]);
+});
+
+test("R1: a different USB product keeps its uplink after Ethernet is disabled at a scan-pinned port", async () => {
+	await seed([G]);
+	await plug(twinA);
+	await toggle(twinA, true);
+	await plug(twinA, twinB);
+	await plug();
+
+	const replacement = { ...noSerialB, idProduct: "9091" };
+	const publications = await plug(replacement);
+	const { anchor, legacyLinkId, pid } = resolveModemPhysicalIdentity(B.ifname);
+	expect([anchor, legacyLinkId, pid]).toEqual(["id-path", undefined, "9091"]);
+	attach([replacement], undefined, [ETH]);
+	await toggle(ETH, false);
+	expect({ publications, afterEthernetOff: enabled(replacement, ETH) }).toEqual(
+		{
+			publications: [[true]],
+			afterEthernetOff: [true, false],
+		},
+	);
+});
+
+test("a dormant scan pin survives a different product and restart but does not override a port disable", async () => {
+	await seed([G]);
+	await plug(twinA);
+	await toggle(twinA, true);
+	await plug(twinA, twinB);
+	const replacement = { ...noSerialB, idProduct: "9091" };
+	expect(await plug(replacement)).toEqual([[true]]);
+	await toggle(replacement, true);
+	await reload();
+	expect(await plug(twinA, noSerialB)).toEqual([[true, false]]);
+	await toggle(noSerialB, false);
+	await reload();
+	expect(await plug(replacement)).toEqual([[false]]);
+});
+
+test("R2: blocked scan pins persist once storage recovers and survive restart without a serial", async () => {
+	await seed([G]);
+	await plug(twinA);
+	await toggle(twinA, true);
+	await reload();
+
+	const before = readFileSync(configPath, "utf8");
+	chmodSync(dir, 0o500);
+	try {
+		expect(await plug(twinA, twinB)).toEqual([[true, false]]);
+		expect(readFileSync(configPath, "utf8")).toBe(before);
+	} finally {
+		chmodSync(dir, 0o700);
+	}
+
+	// Recovery must not depend on getting a new pin to write.
+	await plug(twinA);
+	await plug(twinA, twinB);
+	const recoveredInode = statSync(configPath).ino;
+	await plug(twinA, twinB);
+	expect(statSync(configPath).ino).toBe(recoveredInode);
+	await reload();
+	await plug(twinA, noSerialB);
+	expect(resolveModemPhysicalIdentity(B.ifname).legacyLinkId).toBeUndefined();
+	expect({
+		saved: readFileSync(configPath, "utf8") !== before,
+		published: enabled(twinA, noSerialB),
+	}).toEqual({ saved: true, published: [true, false] });
 });
 
 test("#688 H1: an unrelated group enable cannot lift an exact exclusion on same-port serial loss", async () => {

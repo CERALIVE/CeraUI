@@ -409,10 +409,16 @@ export const runtimeConfigSchema = z.object({
 	// link id. Values can only be true: absence means included. A bare ifname is
 	// never accepted as a durable identity because the Huawei twins swap names.
 	bond_opt_out: z.record(z.string().min(1), z.literal(true)).optional(),
-	// Group link id -> member link ids enabled after splitting its exclusion.
-	// An empty list keeps all members excluded as they are seen.
+	// Group link id -> enabled member ids (empty keeps all members excluded).
+	// Port link id -> VID:PID evidence for a scan-owned exact exclusion.
 	bond_group_opt_out: z
-		.record(z.string().min(1), z.array(z.string().min(1)))
+		.record(
+			z.string().min(1),
+			z.union([
+				z.array(z.string().min(1)),
+				z.string().regex(/^[0-9a-f]{4}:[0-9a-f]{4}$/),
+			]),
+		)
 		.optional(),
 	// SHA-256 of vendor:serial pairs observed on distinct USB parents.
 	usb_serial_shared: z

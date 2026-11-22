@@ -942,21 +942,33 @@ once, when its twin is first seen, and remains there after the twin is removed.
 Affected devices change link id and steering mark once. The rejected serial's
 opaque `legacyLinkId` preserves an existing bond opt-out. Toggling one twin
 migrates that exclusion to the exact keys of the present twins. The optional
-`bond_group_opt_out` field records which members the operator enabled under that
-group. Before notifying listeners, a committed USB scan writes an exact
-`bond_opt_out` entry for any other member that shows the group at a known port,
-including a sibling that was unplugged at the toggle. The bond reader still
-checks only exact and legacy keys in `bond_opt_out`. A durable disable removes
-the key from every enabled list; toggling the group itself ends its list.
+`bond_group_opt_out` field records enabled member lists by group key and
+scan-owned pins by port key with their USB vendor/product IDs. Before notifying
+listeners, a committed USB scan writes an exact `bond_opt_out` entry for an
+ungranted member that shows the group at a known port. Once pinned, a device
+with matching vendor/product IDs and port identity stays out even without a
+serial. A different product without matching group evidence makes only that
+scan-owned pin dormant. Exact entries from operator toggles or the original
+present-member migration are still port-wide. The bond reader still checks only
+exact and legacy keys. A failed scan save leaves the reconciled state in memory
+and retries at most once per later commit until saved, with one warning per
+failure episode. A durable disable removes the key from every enabled list;
+toggling the group itself ends its list.
 
-This choice is per port, not per physical unit. A twin moved to a new port, a
-twin enabled before it showed the group, and another device at a pinned port
-can start excluded. Enable the device again once its identity is settled at that
-port. A twin without `ID_PATH` still has no durable port exclusion. After
+This choice is per port, not per physical unit. A same-product device can
+inherit the pin; twins moved or enabled before showing their group can also
+start excluded. Enable the intended device after its identity settles at
+that port. A twin without `ID_PATH`, or one that returns without its group
+before there is a saved matching pin, can still join as on main. A USB
+composition change can look like a different product until the group is seen
+again. After
 shared-serial history eviction, a lone twin can still look like a singleton
 until the pair is relearned. Enabling that lone-serial identity ends the group
 record, as does enabling it before first recognition. Already-lost exclusions
-cannot be recovered.
+cannot be recovered. Ending a group record does not erase earlier pins; the
+64-entry serial history does not cap retained group or port records. On
+v2026.11.3, an active exact pin remains port-wide and a dormant pin has no
+effect. A clean save on that release drops the evidence and residual lists.
 
 Router login credentials are read only under the device's exact resolved
 `linkId`. A rejected serial's legacy id has no durable binding to a port, so it
