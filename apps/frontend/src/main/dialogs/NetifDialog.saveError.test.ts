@@ -21,6 +21,7 @@
  * inline, beside the Save it answers, and stays there. A thrown rpc keeps the
  * toast — a transport fault names no reason worth standing.
  */
+import { m } from "@ceraui/i18n/svelte";
 import type { NetifEntry } from "@ceraui/rpc/schemas";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import {
@@ -141,6 +142,10 @@ describe("NetifDialog — the stale-address refusal is rendered honestly", () =>
 		["stale_address", "address changed while the dialog was open"],
 		["enable_refused", "refused to add this interface to the bond"],
 		["disable_all_refused", "last link in the bond"],
+		[
+			"bond_identity_unconfirmed",
+			m["network.netifSave.error.identityUnconfirmed"](),
+		],
 	])("gives %s its own sentence", async (error, fragment) => {
 		configure.mockResolvedValueOnce({ success: false, error });
 

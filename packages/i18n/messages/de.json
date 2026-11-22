@@ -1816,6 +1816,7 @@
 	"network.netifSave.error.enableRefused": "Das Gerät hat es abgelehnt, diese Schnittstelle ins Bündel aufzunehmen. Der Grund steht in ihrer Zeile.",
 	"network.netifSave.error.disableAllRefused": "Dies ist die letzte Leitung im Bündel, deshalb hat das Gerät sie behalten. Fügen Sie eine weitere Leitung hinzu, bevor Sie diese entfernen.",
 	"network.netifSave.error.generic": "Das Gerät hat die Änderung abgelehnt, es wurde nichts gespeichert.",
+	"network.netifSave.error.identityUnconfirmed": "Das Gerät kann noch nicht erkennen, welches Modem das ist, es wurde nichts gespeichert. Warten Sie einige Sekunden und versuchen Sie es erneut. Wenn Sie zwei baugleiche Modems verwenden, schließen Sie zuerst beide an oder stecken Sie dieses neu ein.",
 	"network.sharing.title": "Internetfreigabe",
 	"network.sharing.headline.activeTitle": "Freigabe aktiv",
 	"network.sharing.headline.activeBody": "{usable} von {total} Uplinks können Client-Datenverkehr übernehmen.",

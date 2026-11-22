@@ -24,6 +24,7 @@
  *  6. Success releases — a confirmed reply resolves the async-op immediately
  *                        (no TTL lingering): a subsequent toggle dispatches again.
  */
+import { m } from "@ceraui/i18n/svelte";
 import { fireEvent, render, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -178,6 +179,27 @@ describe("BondToggle — osCommand composition (Task 20)", () => {
 		expect(toastSuccess).not.toHaveBeenCalled();
 		// No confirming echo is coming → the lock releases to the authoritative
 		// prior `enabled` (false), so the switch reverts to OFF.
+		await waitFor(() => expect(sw.getAttribute("aria-checked")).toBe("false"));
+	});
+
+	it("names the reason when the device cannot tell which modem the link is", async () => {
+		configure.mockResolvedValueOnce({
+			success: false,
+			error: "bond_identity_unconfirmed",
+		});
+
+		const { getByRole } = render(BondToggle, {
+			props: { name: "wwu1c2", enabled: false },
+		});
+		const sw = getByRole("switch");
+		await fireEvent.click(sw);
+
+		await waitFor(() =>
+			expect(toastError).toHaveBeenCalledWith(
+				m["network.netifSave.error.identityUnconfirmed"](),
+			),
+		);
+		expect(toastError).toHaveBeenCalledTimes(1);
 		await waitFor(() => expect(sw.getAttribute("aria-checked")).toBe("false"));
 	});
 

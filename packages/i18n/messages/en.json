@@ -1816,6 +1816,7 @@
 	"network.netifSave.error.enableRefused": "The device refused to add this interface to the bond. The reason is shown on its row.",
 	"network.netifSave.error.disableAllRefused": "This is the last link in the bond, so the device kept it. Add another link before removing this one.",
 	"network.netifSave.error.generic": "The device refused the change, so nothing was saved.",
+	"network.netifSave.error.identityUnconfirmed": "The device can't tell yet which modem this is, so nothing was saved. Wait a few seconds and try again. If you use two identical modems, plug both in or reconnect this one first.",
 	"network.sharing.title": "Internet Sharing",
 	"network.sharing.headline.activeTitle": "Sharing is active",
 	"network.sharing.headline.activeBody": "{usable} of {total} uplinks can carry client traffic.",

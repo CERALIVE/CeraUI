@@ -1819,6 +1819,7 @@
 	"network.netifSave.error.enableRefused": "El equipo se negó a añadir esta interfaz al enlace. El motivo aparece en su fila.",
 	"network.netifSave.error.disableAllRefused": "Este es el último enlace del grupo, así que el equipo lo mantuvo. Añade otro enlace antes de quitar este.",
 	"network.netifSave.error.generic": "El equipo rechazó el cambio, así que no se guardó nada.",
+	"network.netifSave.error.identityUnconfirmed": "El equipo todavía no puede identificar qué módem es este, así que no se guardó nada. Espera unos segundos e inténtalo de nuevo. Si usas dos módems idénticos, conecta ambos o vuelve a conectar este primero.",
 	"network.sharing.title": "Compartir internet",
 	"network.sharing.headline.activeTitle": "Compartir está activo",
 	"network.sharing.headline.activeBody": "{usable} de {total} enlaces pueden transportar el tráfico de los clientes.",

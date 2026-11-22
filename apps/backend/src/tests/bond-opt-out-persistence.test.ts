@@ -65,7 +65,7 @@ describe("operator bond opt-out — config.json restart persistence", () => {
 		setConfigFilePath("config.json");
 	});
 
-	test("migrates a legacy opt-out to both twins before admitting one", async () => {
+	test("keeps a legacy opt-out for both twins while admitting one", async () => {
 		clearBondNetworkFixture();
 		setBondIdentityResolverForTest(null);
 		await refreshUsbNetMarkers(
@@ -83,7 +83,7 @@ describe("operator bond opt-out — config.json restart persistence", () => {
 		setPersistentBondOptOut("wwu1u4c2", false);
 		expect(isBondOptedOut("wwu1u4c2")).toBe(false);
 		expect(isBondOptedOut("wwu1c2")).toBe(true);
-		expect(getConfig().bond_opt_out?.[legacy]).toBeUndefined();
+		expect(getConfig().bond_opt_out?.[legacy]).toBe(true);
 		const twinId = resolveModemPhysicalIdentity("wwu1c2").linkId;
 		resetBondOptOutSession();
 		await loadConfig();

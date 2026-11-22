@@ -63,6 +63,7 @@ import {
 import { scheduleWifiUpdate } from "../wifi/wifi-interfaces.ts";
 import {
 	bondPhysicalId,
+	isBondEnableUnconfirmed,
 	isBondOptedOut,
 	resetPersistentBondOptOutForTest,
 	resetSessionBondOptOutForTest,
@@ -327,13 +328,17 @@ export function isBondIdentityPending(
  * OTHER error (a hotspot radio) disqualifies it outright, and an operator who
  * toggled the link out of the bond is honoured in both cases.
  */
-export function isBondCandidate(name: string, int: NetworkInterface): boolean {
+export function isBondCandidate(
+	name: string,
+	int: NetworkInterface,
+	optedOut?: boolean,
+): boolean {
 	if (!int.ip) return false;
 	if (isBondIdentityPending(name, int)) return false;
 	if (isConcurrentApIfname(name)) return false;
 	if (isSharedLanPort(name)) return false;
 	if ((int.error & ~NETIF_ERR_DUPIPV4) !== 0) return false;
-	if (isBondOptedOut(name)) return false;
+	if (optedOut ?? isBondOptedOut(name)) return false;
 	if (isDupIpOnly(int)) return isBondLinkMappable(name, int.ip);
 	return int.enabled;
 }
@@ -1779,6 +1784,11 @@ function finishBondMutation(
 	return { ok: true, applied };
 }
 
+/** Whether the link would stay out of the bond even after its enable is saved. */
+function enableStaysOut(name: string, int: NetworkInterface): boolean {
+	return !isBondCandidate(name, { ...int, enabled: true }, false);
+}
+
 export function handleNetif(
 	conn: WebSocket,
 	msg: NetworkInterfaceMessage["netif"],
@@ -1799,6 +1809,19 @@ export function handleNetif(
 	}
 
 	if (msg.enabled === true || msg.enabled === false) {
+		// Refused before anything is saved: until the device knows which physical
+		// modem this is, an enable could admit an excluded twin or never apply.
+		if (
+			msg.enabled &&
+			(isBondIdentityPending(msg.name, int) ||
+				isBondEnableUnconfirmed(msg.name))
+		) {
+			return finishBondMutation(msg, {
+				ok: false,
+				reason: "bond_identity_unconfirmed",
+			});
+		}
+
 		// A duplicate-IP link's `enabled` is forced false by the flag itself, so a
 		// toggle on it can only be recorded as the operator's bond choice. The flag
 		// (and its warning band) is deliberately left standing: the link is still
@@ -1809,6 +1832,9 @@ export function handleNetif(
 					ok: false,
 					reason: "bond_unmappable",
 				});
+			}
+			if (msg.enabled && enableStaysOut(msg.name, int)) {
+				return finishBondMutation(msg, { ok: false, reason: "enable_refused" });
 			}
 			setBondOptOut(msg.name, !msg.enabled);
 			triggerNetworkInterfacesChange();
@@ -1830,6 +1856,11 @@ export function handleNetif(
 					ok: false,
 					reason: "enable_refused",
 				});
+			}
+			// A gate with no flag yet (a shared-LAN role before the next poll) would
+			// otherwise be answered as a saved enable that never applies.
+			if (enableStaysOut(msg.name, int)) {
+				return finishBondMutation(msg, { ok: false, reason: "enable_refused" });
 			}
 		} else {
 			if (int.enabled && countActiveNetif() === 1) {
