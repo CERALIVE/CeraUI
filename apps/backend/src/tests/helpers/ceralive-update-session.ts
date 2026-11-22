@@ -18,6 +18,15 @@ import { setStreamLivenessSourceForTest } from "../../modules/system/stream-live
 import { setStreamReconciliationCompletedForTest } from "../../modules/system/stream-reconciliation-latch.ts";
 import { setCeraliveSourcesFileForTest } from "../../modules/system/update-apt-channel.ts";
 import { setUpdateCapabilityPathForTest } from "../../modules/system/update-capabilities.ts";
+import { DownloadPausedLedger } from "../../modules/system/update-orchestrator/download-paused-ledger.ts";
+import { DownloadPausedNotices } from "../../modules/system/update-orchestrator/download-paused-notices.ts";
+import { UpdateQuarantine } from "../../modules/system/update-orchestrator/quarantine.ts";
+import {
+	runOrchestratorTick,
+	setOrchestratorRuntimeDepsForTest,
+	setOrchestratorStateForTest,
+} from "../../modules/system/update-orchestrator/runtime.ts";
+import { initialOrchestratorState } from "../../modules/system/update-orchestrator/types.ts";
 import { setUpdateSettingsFilePathForTest } from "../../modules/system/update-settings.ts";
 import { getServer, initServer } from "../../rpc/server.ts";
 import { setPasswordHash } from "../../rpc/state/password.ts";
@@ -109,6 +118,39 @@ for await (const command of console) {
 			() => process.stdout.write(`${CHECKED_MARKER}\n`),
 			(error) => process.stderr.write(`check failed ${String(error)}\n`),
 		);
+	} else if (command === "scheduled-package-check") {
+		// Take the real scheduler path at a due, idle check boundary without
+		// running unrelated OS observers or touching the machine's state.
+		const now = Date.now();
+		setOrchestratorStateForTest(initialOrchestratorState(now));
+		setOrchestratorRuntimeDepsForTest({
+			now: () => now,
+			persist: () => undefined,
+			isUpdateAdmissionReady: async () => true,
+			readOsReceiptEvidence: async () => undefined,
+			isReceiptAckPending: () => false,
+			observeCredentials: async () => undefined,
+			onlyMeteredCandidateExists: async () => false,
+			quarantine: new UpdateQuarantine(`${step.scratch}/quarantine.json`),
+			loadSettings: async () => ({
+				packagesAuto: true,
+				systemAuto: false,
+				schedule: { mode: "any-idle", start: "03:00", end: "05:00" },
+				channel: "stable",
+				allowPackagesOverCellular: false,
+				allowSystemOverCellular: false,
+			}),
+			downloadNotices: new DownloadPausedNotices({
+				ledger: new DownloadPausedLedger(
+					`${step.scratch}/download-notices.json`,
+				),
+				publish: () => undefined,
+				clear: () => undefined,
+				report: () => undefined,
+			}),
+		});
+		await runOrchestratorTick();
+		process.stdout.write(`${CHECKED_MARKER}\n`);
 	} else if (command === "recover") {
 		// Only the update's own success restart counts; any other error is a failed recovery.
 		for (const event of ["uncaughtException", "unhandledRejection"] as const)

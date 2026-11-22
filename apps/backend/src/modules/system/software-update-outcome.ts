@@ -92,10 +92,15 @@ export async function readUpdateOutcome(
 /** Whether one complete dpkg read shows every target's own instance configured at its version or later. */
 export async function targetsAttained(
 	targets: readonly UpdateTarget[],
-	{ run, now }: Pick<UpdateOutcomeDeps, "run" | "now">,
+	{
+		run,
+		now,
+		deadline = now() + UPDATE_OUTCOME_DEADLINE_MS,
+	}: Pick<UpdateOutcomeDeps, "run" | "now"> & {
+		readonly deadline?: number;
+	},
 ): Promise<boolean> {
 	if (targets.length === 0) return false;
-	const deadline = now() + UPDATE_OUTCOME_DEADLINE_MS;
 	// A timeout, a throw or no time left is no answer.
 	const ask = (argv: string[]) => {
 		const left = deadline - now();

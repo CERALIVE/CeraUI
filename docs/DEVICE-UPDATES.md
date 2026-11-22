@@ -1547,8 +1547,35 @@ A tab that was not connected at the removal keeps its banner until a later
 complete check while it is connected. Kernel, OS and `update:*` notices are never
 touched. Contract, with the stale sequences it accepts:
 [the retraction contract](../apps/backend/docs/agents/a-persistent-notification-must-be-retractable.md#the-ceralive-update-offer-is-withdrawn-only-on-positive-evidence-exists).
-Known gap: the orchestrator's package `updates-available` notice above has no
-retraction yet and can still outlive an installed update in an open tab.
+
+### Scheduled package availability notice [EXISTS; host-tested]
+
+The orchestrator's package `updates-available` notice (not the OS notice with
+the same wording) records the exact actionable set from its own check before
+announcing it. Capable images use the discovery's admitted APT rows, including
+Debian packages; legacy images use the existing actionable Install roster.
+The name and dismissal key include a digest of the sorted `(name, architecture,
+version)` vector. Dismissing one offer still suppresses that offer, not a newer
+one. The wire payload and translation key are unchanged.
+
+The package notice shares the CeraLive notice's APT evidence parsers. It
+requires participation from every indexed repository, a complete plan and no
+held, kept-back, ambiguous or unfinished work. Unknown or partial checks leave
+existing offers alone and do not announce a subset. A complete orchestrator
+check with no actionable packages reads dpkg using `system.updateOutcome`'s
+exact-instance and Debian-version comparison. It withdraws only stored sets for
+which every member is installed and configured at or above the offered version.
+An older proof cannot remove a newer offer's name. An install exit or restart,
+startup alone, and login/reconnect never remove it.
+
+The bounded `scheduled_package_offers.json` file next to the first-party
+record carries offered vectors, not proof or removals. If unreadable, unwritable
+or full (32 offers / 256 KiB), the notice fails closed; the package check and
+Software Updates still work. Retractions go live in typed and bare-name formats,
+only to tabs connected then. A tab that missed a removal can keep its stale copy
+until reload or dismissal; pre-fix package notices also have no exact recorded
+instance set and cannot be retired automatically. No board qualification is
+claimed.
 
 ### Download hold notice [EXISTS; host-tested, board qualification owed]
 

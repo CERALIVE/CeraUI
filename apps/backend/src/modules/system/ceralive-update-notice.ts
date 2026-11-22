@@ -74,18 +74,15 @@ export type OfferedPackage = Readonly<Required<Omit<UpdateTarget, "from">>>;
  * package it plans or keeps back; anything less is unknown.
  */
 export type CeraliveVerdict = readonly OfferedPackage[] | "unknown";
+export type ReportPackageOffer = (offer: readonly OfferedPackage[]) => void;
 
 export type AptRun = (argv: string[]) => Promise<SpawnWithTimeoutResult>;
 
-const offerSchema = z
+export const packageOfferSchema = z
 	.array(
 		z
 			.object({
-				name: z
-					.string()
-					.regex(APT_PACKAGE_NAME_RE)
-					// Any first-party name either image offers (the legacy roster is part of it).
-					.refine(isFirstPartyPackage),
+				name: z.string().regex(APT_PACKAGE_NAME_RE),
 				arch: z
 					.string()
 					.max(ARCH_LIMIT)
@@ -107,7 +104,12 @@ const offerSchema = z
 	);
 // The one durable state, written only by a check: the current offer, or `null` for none.
 const recordSchema = z
-	.object({ version: z.literal(8), offer: offerSchema.nullable() })
+	.object({
+		version: z.literal(8),
+		offer: packageOfferSchema
+			.refine((rows) => rows.every(({ name }) => isFirstPartyPackage(name)))
+			.nullable(),
+	})
 	.strict();
 type OfferRecord = z.infer<typeof recordSchema>;
 
@@ -143,16 +145,20 @@ const capableFirstParty = (name: string) =>
  * The refresh hit or fetched the index of every CeraLive source the check's own
  * inventory lists (the same URI and suite), and skipped none of them.
  */
-function refreshedEveryCeraliveSource(
+function refreshedEverySource(
 	refresh: string,
 	sources: ReadonlyMap<string, string | null>,
+	scope: "first-party" | "packages",
 ): boolean {
-	const ceralive = [...sources]
-		.filter(([, origin]) => origin === FIRST_PARTY_APT_HOST)
+	if (![...sources.values()].includes(FIRST_PARTY_APT_HOST)) return false;
+	const selected = [...sources]
+		.filter(
+			([, origin]) => scope === "packages" || origin === FIRST_PARTY_APT_HOST,
+		)
 		.map(([source]) => source.split(/\s+/));
 	return (
-		ceralive.length > 0 &&
-		ceralive.every(([uri = "", dist = ""]) => {
+		selected.length > 0 &&
+		selected.every(([uri = "", dist = ""]) => {
 			const suite = dist === "./" ? dist : (dist.split("/")[0] ?? "");
 			const lines = refresh
 				.split("\n")
@@ -174,25 +180,37 @@ function refreshedEveryCeraliveSource(
  * simulation keeps back, means unknown. `keptBack` is the simulation's kept-back
  * list when it names exactly what it counts, else null.
  */
-export function firstPartyOffer(
-	packages: readonly UpdatePackage[],
-	sourcePolicy: string,
-	simulation: string,
-	refresh: string,
-	keptBack: readonly string[] | null,
+export function capableOffer(
+	check: {
+		readonly packages: readonly UpdatePackage[];
+		readonly sourcePolicy: string;
+		readonly simulation: string;
+		readonly refresh: string;
+		readonly keptBack: readonly string[] | null;
+	},
+	scope: "first-party" | "packages",
 ): CeraliveVerdict {
+	const { packages, sourcePolicy, simulation, refresh, keptBack } = check;
+	const all = scope === "packages";
 	if (
 		keptBack === null ||
-		keptBack.some(capableFirstParty) ||
-		!refreshedEveryCeraliveSource(refresh, policySources(sourcePolicy)) ||
+		(all ? keptBack.length > 0 : keptBack.some(capableFirstParty)) ||
+		(all && !/^Pinned packages:$/m.test(sourcePolicy)) ||
+		!refreshedEverySource(refresh, policySources(sourcePolicy), scope) ||
 		!completePlan(simulation)
 	)
 		return "unknown";
 	const instances = admittedTargets(simulation);
 	if (instances === null) return "unknown";
+	if (all) {
+		// A configure-only row is unfinished work even without the count line.
+		const names = new Set(instances.map(({ name }) => name));
+		for (const [, name] of simulation.matchAll(/^Conf (\S+)/gm))
+			if (!name || !names.has(name)) return "unknown";
+	}
 	const offer: OfferedPackage[] = [];
 	for (const { name, version, origin, actionable } of packages) {
-		if (!capableFirstParty(name)) continue;
+		if (!all && !capableFirstParty(name)) continue;
 		const instance = instances.find(
 			(row) => row.name === name && row.version === version,
 		);
@@ -200,7 +218,7 @@ export function firstPartyOffer(
 		if (
 			name.includes(":") ||
 			!actionable ||
-			origin !== FIRST_PARTY_APT_HOST ||
+			(!all && origin !== FIRST_PARTY_APT_HOST) ||
 			!instance
 		)
 			return "unknown";
@@ -211,6 +229,10 @@ export function firstPartyOffer(
 
 const PLAN_SUMMARY =
 	/^(\d+) upgraded, (\d+) newly installed, (\d+) to remove and \d+ not upgraded\.$/gm;
+
+export function hasOnePlanSummary(output: string): boolean {
+	return [...output.matchAll(PLAN_SUMMARY)].length === 1;
+}
 
 /**
  * APT's own count, printed after its summary only when nonzero, of packages a
@@ -248,13 +270,17 @@ function completePlan(simulation: string): boolean {
  * carries that is not offered (a new install, another architecture, a held
  * package) makes the verdict unknown. Read-only `apt-cache`.
  */
-export async function legacyCeraliveOffer(
-	names: readonly string[],
-	planned: readonly string[],
-	keptBack: readonly string[] | null,
-	refresh: string,
-	run: AptRun,
+export async function legacyOffer(
+	check: {
+		readonly names: readonly string[];
+		readonly planned: readonly string[];
+		readonly keptBack: readonly string[] | null;
+		readonly refresh: string;
+		readonly run: AptRun;
+	},
+	reportPackageOffer?: ReportPackageOffer,
 ): Promise<CeraliveVerdict> {
+	const { names, planned, keptBack, refresh, run } = check;
 	if (
 		keptBack === null ||
 		[...planned, ...keptBack].some(
@@ -266,9 +292,15 @@ export async function legacyCeraliveOffer(
 	const sources = policySources(inventory.stdout);
 	if (
 		inventory.exitCode !== 0 ||
-		!refreshedEveryCeraliveSource(refresh, sources)
+		!refreshedEverySource(refresh, sources, "first-party")
 	)
 		return "unknown";
+	let packagePlanComplete =
+		reportPackageOffer !== undefined &&
+		keptBack.length === 0 &&
+		inventory.stderr === "" &&
+		/^Pinned packages:$/m.test(inventory.stdout) &&
+		refreshedEverySource(refresh, sources, "packages");
 	const offer: OfferedPackage[] = [];
 	for (const name of names) {
 		const policy = await run(["/usr/bin/apt-cache", "policy", name]);
@@ -291,7 +323,23 @@ export async function legacyCeraliveOffer(
 				? candidateArch(record.stdout, name, candidate)
 				: undefined;
 		if (arch === undefined) return "unknown";
+		const installed = /^\s*Installed:\s*(\S+)/m.exec(policy.stdout)?.[1];
+		packagePlanComplete &&=
+			policy.stderr === "" &&
+			record.stderr === "" &&
+			installed !== undefined &&
+			APT_SIMULATION_VERSION_RE.test(installed) &&
+			installed !== candidate;
 		offer.push({ name, arch, version: candidate });
+	}
+	if (packagePlanComplete && reportPackageOffer) {
+		const holds = await run(["/usr/bin/apt-mark", "showhold"]);
+		if (
+			holds.exitCode === 0 &&
+			holds.stderr === "" &&
+			holds.stdout.trim() === ""
+		)
+			reportPackageOffer(offer);
 	}
 	return offer;
 }

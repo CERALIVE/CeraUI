@@ -186,6 +186,7 @@ import {
 	retireStagedReceipt,
 } from "./os-staged-receipt-retirement.ts";
 import { settleOsUnlaunchedWitness } from "./os-unlaunched-adapter.ts";
+import { reconcileScheduledPackageOffer } from "./package-offer-notice.ts";
 import { progressFromWire } from "./package-progress.ts";
 import {
 	type PackageRecoveryEvidence,
@@ -430,7 +431,7 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 		(await getIdleStatus({ now: Date.now(), schedule })).idle,
 	isStreamLive: () => !isStreamConfirmedIdle(),
 	onlyMeteredCandidateExists: defaultOnlyMeteredCandidateExists,
-	runPackageCheck: runSoftwareUpdateCheck,
+	runPackageCheck: () => runSoftwareUpdateCheck(reconcileScheduledPackageOffer),
 	startPackageInstall: () => startSoftwareUpdate(notePackageCommitSucceeded),
 	getPackageInstallWireState: getUpdateState,
 	stopPackageInstallUnit: stopPackageInstallUnitForStream,
@@ -1231,15 +1232,6 @@ async function runPackageCheckCycle(): Promise<void> {
 					item.version ? [{ name: item.name, version: item.version }] : [],
 				) ?? [],
 			);
-			if (actionableCount > 0)
-				notifyUpdate({
-					kind: "updates-available",
-					id:
-						wire.packages
-							?.map((item) => `${item.name}=${item.version ?? "unknown"}`)
-							.sort()
-							.join(",") ?? wire.identity.version,
-				});
 		}
 		const nextAttemptAt =
 			outcomeNow +

@@ -39,6 +39,7 @@ import {
 	READY_PREFIX,
 	RECOVERY_FAILED_MARKER,
 	RECOVERY_RESTART_MARKER,
+	REFRESH,
 	RESTART_EXIT_CODE,
 	SESSION_PASSWORD,
 } from "./helpers/ceralive-update-apt.ts";
@@ -233,6 +234,14 @@ class Backend {
 		return this.command("check", CHECKED_MARKER, "check completion");
 	}
 
+	scheduledPackageCheck(): Promise<void> {
+		return this.command(
+			"scheduled-package-check",
+			CHECKED_MARKER,
+			"scheduled package check completion",
+		);
+	}
+
 	private send(text: string): void {
 		this.child.stdin.write(`${text}\n`);
 		this.child.stdin.flush();
@@ -297,7 +306,11 @@ class Tab {
 	private readonly answers = new Map<string, (frame: unknown) => void>();
 	private requests = 0;
 
-	constructor(readonly decoder: Decoder) {
+	constructor(
+		readonly decoder: Decoder,
+		private readonly tracks: (name: string) => boolean = (name) =>
+			name === NOTICE,
+	) {
 		live.push(this);
 	}
 
@@ -398,12 +411,12 @@ class Tab {
 	}
 
 	private show(name: string, copy: Copy) {
-		if (name === NOTICE) this.history.push("show");
+		if (this.tracks(name)) this.history.push("show");
 		this.shown.set(name, copy);
 	}
 
 	private remove(name: string): void {
-		if (name === NOTICE) this.history.push("remove");
+		if (this.tracks(name)) this.history.push("remove");
 		this.shown.delete(name);
 	}
 }
@@ -458,6 +471,206 @@ const names = (opened: readonly Tab[]) => opened.map((tab) => tab.names());
 const removals = (opened: readonly Tab[]) =>
 	opened.map((tab) => tab.removals());
 const histories = (opened: readonly Tab[]) => opened.map((tab) => tab.history);
+
+const scheduledNotice = (name: string) =>
+	name.startsWith("update:updates-available:") &&
+	!name.startsWith("update:updates-available:os:");
+
+for (const capable of [false, true]) {
+	test(
+		`scheduled package notice survives uncertain checks and reconnects, then clears on exact installed proof (${capable ? "capable Debian" : "legacy roster"})`,
+		async () => {
+			const pkg: AptPackage = capable
+				? { ...cerastream("1", "2"), name: "curl", source: "debian" }
+				: cerastream("1", "2");
+			const other = cerastream("1", "2", { name: "srtla" });
+			const configured = { ...pkg, installed: pkg.candidate };
+			const installed = { installed: [configured] };
+			const opened = [
+				new Tab("typed", scheduledNotice),
+				new Tab("v2026.7.2", scheduledNotice),
+			];
+			const offline = [
+				new Tab("typed", scheduledNotice),
+				new Tab("v2026.7.2", scheduledNotice),
+			];
+			let backend = await Backend.start({
+				capable,
+				apt: { upgradable: [pkg] },
+			});
+			await reconnect(backend, opened);
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			const offer = opened[0]?.names().find(scheduledNotice) ?? "";
+			expect(offer).not.toBe("");
+			const shown = () =>
+				names(opened).map((items) => items.filter(scheduledNotice));
+			expect(shown()).toEqual([[offer], [offer]]);
+			await reconnect(backend, offline);
+			expect(names(offline).map((items) => items.includes(offer))).toEqual([
+				true,
+				true,
+			]);
+
+			for (const [label, apt] of [
+				["failed refresh", failing(installed)],
+				[
+					"index omitted",
+					{
+						...installed,
+						refresh: {
+							stdout: capable
+								? REFRESH.split("\n").slice(1).join("\n")
+								: DEBIAN_ONLY_REFRESH,
+						},
+					},
+				],
+				[
+					"missing summary",
+					{
+						...installed,
+						fail: capable
+							? { simulation: "no-summary" }
+							: { discovery: "no-summary" },
+					},
+				],
+				[
+					"partial plan beside installed offer",
+					{
+						...installed,
+						upgradable: [other],
+						fail: capable
+							? { simulation: "cut-after-summary" }
+							: { discovery: "cut-after-summary" },
+					},
+				],
+				[
+					"kept back beside another offer",
+					{
+						upgradable: [other],
+						keptBack: [pkg],
+					},
+				],
+				[
+					"held even with the candidate configured",
+					{
+						...installed,
+						holds: [pkg.name],
+					},
+				],
+				[
+					"unpacked or unconfigured",
+					{
+						...installed,
+						dpkgStatus: { [pkg.name]: "iF " },
+					},
+				],
+				[
+					"only foreign instance installed",
+					{
+						installed: [{ ...configured, installedArch: "amd64" }],
+					},
+				],
+				[
+					"readback failed",
+					{ ...installed, fail: { "dpkg-query": "silent-exit-1" } },
+				],
+			] satisfies readonly (readonly [string, AptScript])[]) {
+				await backend.setApt(apt);
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				expect([
+					label,
+					shown().map((items) => items.includes(offer)),
+					removals(opened),
+				]).toEqual([label, [true, true], [0, 0]]);
+			}
+
+			await backend.close();
+			await Promise.all([...opened, ...offline].map((tab) => tab.dropped()));
+			backend = await Backend.start({ capable, apt: installed });
+			await reconnect(backend, opened);
+			expect(shown().map((items) => items.includes(offer))).toEqual([
+				true,
+				true,
+			]);
+			expect(removals(opened)).toEqual([0, 0]);
+
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			expect(shown().map((items) => items.includes(offer))).toEqual([
+				false,
+				false,
+			]);
+			expect(removals(opened)).toEqual([1, 1]);
+
+			// The other pair missed the live removal. Reauth must not replay it,
+			// especially after the device's candidate became pending again.
+			await backend.setApt({ upgradable: [pkg] });
+			await reconnect(backend, offline);
+			expect(names(offline).map((items) => items.includes(offer))).toEqual([
+				true,
+				true,
+			]);
+			expect(removals(offline)).toEqual([0, 0]);
+		},
+		budget(3),
+	);
+
+	test(
+		`scheduled package notice gives a newer offer its own identity (${capable ? "capable" : "legacy"})`,
+		async () => {
+			const backend = await Backend.start({ capable, apt: pending("1", "2") });
+			const opened = [
+				new Tab("typed", scheduledNotice),
+				new Tab("v2026.7.2", scheduledNotice),
+			];
+			await reconnect(backend, opened);
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			const original = opened[0]?.names().find(scheduledNotice) ?? "";
+			expect(original).not.toBe("");
+
+			await backend.setApt(pending("2", "3"));
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			const newer =
+				opened[0]
+					?.names()
+					.find((name) => scheduledNotice(name) && name !== original) ?? "";
+			expect(newer).not.toBe("");
+			expect(names(opened).map((items) => items.includes(newer))).toEqual([
+				true,
+				true,
+			]);
+
+			// A complete check has no remaining actionable rows, but version 3
+			// was pinned out. The installed readback proves only version 2.
+			await backend.setApt(settled("2"));
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			expect(
+				names(opened).map((items) => items.filter(scheduledNotice)),
+			).toEqual([[newer], [newer]]);
+
+			// The matching version's dismissal suppresses it, but cannot
+			// suppress the next version of the same package.
+			await opened[0]?.dismiss(newer);
+			await backend.setApt(pending("2", "3"));
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			expect(opened[0]?.names().filter(scheduledNotice)).toEqual([]);
+			await backend.setApt(pending("2", "4"));
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			const successor = opened[0]?.names().filter(scheduledNotice) ?? [];
+			expect(successor).toHaveLength(1);
+			expect(successor).not.toContain(newer);
+			expect(opened[1]?.names()).toEqual(expect.arrayContaining(successor));
+		},
+		budget(1),
+	);
+}
 
 // Tabs that show the offer main's own backend raised in its own check (no record written).
 async function olderBackendTabs(

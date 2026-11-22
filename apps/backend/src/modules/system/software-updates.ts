@@ -96,8 +96,11 @@ import {
 	normalizeAptCommandFailure,
 } from "./apt-transport-result.ts";
 import {
-	firstPartyOffer,
-	legacyCeraliveOffer,
+	type CeraliveVerdict,
+	capableOffer,
+	hasOnePlanSummary,
+	legacyOffer,
+	type ReportPackageOffer,
 	reconcileCeraliveUpdateNotice,
 	standingCeraliveOffer,
 	unfinishedAptWork,
@@ -596,6 +599,7 @@ export function buildAptDiscoveryArgs(
 async function getCapableUpdateSize(
 	reachability: AptReachability,
 	refresh?: string,
+	reportPackageOffer?: ReportPackageOffer,
 ): Promise<SoftwareUpdateError> {
 	aptAllMode = true;
 	pendingPackageSuccess.assertEffectsAllowed();
@@ -638,6 +642,7 @@ async function getCapableUpdateSize(
 				exit: sourcePolicy.exitCode,
 				detail: sourcePolicy.stderr,
 			});
+		let policyClean = true;
 		const result = await discoverAptAllPackages(
 			simulation.stdout,
 			holds.stdout,
@@ -651,6 +656,7 @@ async function getCapableUpdateSize(
 						exit: policy.exitCode,
 						detail: policy.stderr,
 					});
+				policyClean &&= policy.stderr === "";
 				return policy.stdout;
 			},
 			sourcePolicy.stdout,
@@ -669,16 +675,27 @@ async function getCapableUpdateSize(
 			available_updates: availableUpdates,
 			update_state: getUpdateState(),
 		});
-		if (refresh !== undefined)
-			await reconcileCeraliveUpdateNotice(
-				firstPartyOffer(
-					result.packages,
-					sourcePolicy.stdout,
-					simulation.stdout,
-					refresh,
-					keptBackNames(simulation.stdout),
-				),
-			);
+		if (refresh !== undefined) {
+			const check = {
+				packages: result.packages,
+				sourcePolicy: sourcePolicy.stdout,
+				simulation: simulation.stdout,
+				refresh,
+				keptBack: keptBackNames(simulation.stdout),
+			};
+			if (
+				reportPackageOffer &&
+				policyClean &&
+				[simulation, sourcePolicy, holds].every(
+					({ stderr }) => stderr === "",
+				) &&
+				holds.stdout.trim() === ""
+			) {
+				const offer = capableOffer(check, "packages");
+				if (offer !== "unknown") reportPackageOffer(offer);
+			}
+			await reconcileCeraliveUpdateNotice(capableOffer(check, "first-party"));
+		}
 		return null;
 	} catch (error) {
 		if (!(error instanceof AptAllRefusalError)) throw error;
@@ -918,6 +935,7 @@ function listedPackages(stdout: string): string[] | null {
 async function getSoftwareUpdateSize(
 	reachability: AptReachability,
 	refresh?: string,
+	reportPackageOffer?: ReportPackageOffer,
 ) {
 	if (!aptUpdatesEnabled()) return null;
 	if (!isStreamConfirmedIdle() || isUpdating() || aptGetUpdating) return "busy";
@@ -925,7 +943,7 @@ async function getSoftwareUpdateSize(
 	if (capabilities === null) return "discovery_failed";
 	pendingPackageSuccess.assertEffectsAllowed();
 	if (capabilities.mode === "capable")
-		return getCapableUpdateSize(reachability, refresh);
+		return getCapableUpdateSize(reachability, refresh, reportPackageOffer);
 	aptAllMode = false;
 
 	const upgradeResult = await runAptCommand(
@@ -1016,16 +1034,23 @@ async function getSoftwareUpdateSize(
 		planned?.length === res.upgradeCount &&
 		untaken !== null &&
 		!unfinishedAptWork(upgrade.stdout)
-	)
+	) {
+		const check = {
+			names: actionableAppPackages,
+			planned: [...planned, ...untaken],
+			keptBack: keptBackNames(upgrade.stdout),
+			refresh,
+			run: (argv: string[]) => runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
+		};
 		await reconcileCeraliveUpdateNotice(
-			await legacyCeraliveOffer(
-				actionableAppPackages,
-				[...planned, ...untaken],
-				keptBackNames(upgrade.stdout),
-				refresh,
-				(argv) => runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
+			await legacyOffer(
+				check,
+				upgrade.stderr === "" && hasOnePlanSummary(upgrade.stdout)
+					? reportPackageOffer
+					: undefined,
 			),
 		);
+	}
 
 	return null;
 }
@@ -1259,6 +1284,7 @@ export function resetSoftwareUpdateCheckRunner(): void {
 type SoftwareUpdateSizeRunner = (
 	reachability: AptReachability,
 	refresh?: string,
+	reportPackageOffer?: ReportPackageOffer,
 ) => Promise<SoftwareUpdateError>;
 
 let softwareUpdateSizeRunner: SoftwareUpdateSizeRunner = getSoftwareUpdateSize;
@@ -1274,7 +1300,14 @@ export function resetSoftwareUpdateSizeRunner(): void {
 }
 
 // Orchestrator checks own a full cycle, not discovery against previously fetched lists.
-export function runSoftwareUpdateCheck(): Promise<SoftwareUpdateError> {
+type ObservePackageOffer = (
+	offer: Parameters<ReportPackageOffer>[0],
+	run: typeof spawnWithTimeout,
+) => Promise<void>;
+
+export function runSoftwareUpdateCheck(
+	observePackageOffer?: ObservePackageOffer,
+): Promise<SoftwareUpdateError> {
 	return new Promise((resolve, reject) => {
 		const started = softwareUpdateCheckRunner((refresh, _, refreshed) => {
 			// Exit-zero warnings are benign; discovery must retain a real refresh failure.
@@ -1284,7 +1317,7 @@ export function runSoftwareUpdateCheck(): Promise<SoftwareUpdateError> {
 				resolve(failure);
 				return;
 			}
-			void runUpdateDiscoveryAndReport(refreshed).then(
+			void runUpdateDiscoveryAndReport(refreshed, observePackageOffer).then(
 				(discovery) => resolve(failure ?? discovery),
 				reject,
 			);
@@ -1297,6 +1330,7 @@ export function runSoftwareUpdateCheck(): Promise<SoftwareUpdateError> {
 // Only discovery after a conclusive refresh (its output) may change the CeraLive update notice.
 export async function runUpdateDiscoveryAndReport(
 	refresh?: string,
+	observePackageOffer?: ObservePackageOffer,
 ): Promise<SoftwareUpdateError> {
 	if (pendingPackageSuccess.pending) return "discovery_failed";
 	if (aptDiscoveryRunning) return "busy";
@@ -1324,12 +1358,21 @@ export async function runUpdateDiscoveryAndReport(
 			failCurrentCheck("captive_portal");
 			return "captive_portal";
 		}
-		return await network.within(
+		const evidence: { offer: CeraliveVerdict } = { offer: "unknown" };
+		const discovery = await network.within<SoftwareUpdateError>(
 			(attempt) =>
 				runLegacyPackageEffects(
 					() => {
 						lastAptReachability = aptReachabilityWire(attempt);
-						return softwareUpdateSizeRunner(attempt, refresh);
+						return softwareUpdateSizeRunner(
+							attempt,
+							refresh,
+							observePackageOffer
+								? (verdict) => {
+										evidence.offer = verdict;
+									}
+								: undefined,
+						);
 					},
 					() => "discovery_failed" as const,
 				),
@@ -1338,6 +1381,14 @@ export async function runUpdateDiscoveryAndReport(
 				return "discovery_failed";
 			},
 		);
+		if (
+			discovery === null &&
+			observePackageOffer &&
+			evidence.offer !== "unknown" &&
+			!network.aborted()
+		)
+			await observePackageOffer(evidence.offer, aptCommandRunner);
+		return discovery;
 	} catch (error) {
 		if (error instanceof PendingPackageSuccessError) return "discovery_failed";
 		throw error;
