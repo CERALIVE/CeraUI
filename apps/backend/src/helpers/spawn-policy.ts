@@ -766,7 +766,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		file: "modules/system/software-update-service.ts",
 		symbol: "defaultDetachedAptServiceDeps.start",
 		command:
-			"[systemd-run, ...serviceArgs, --, /bin/bash, -ec, <status file append; exec /usr/bin/apt-get ...upgradeArgs>] | [systemd-run, ...serviceArgs, --, /usr/bin/flock, -x, <lock>, /bin/bash, -ec, <status file append; apt-get download && apt-get install>] | the pre-channel forms when no status file could be made",
+			"[systemd-run, ...serviceArgs, --, /usr/bin/apt-get, ...upgradeArgs]",
 		class: "bounded-command",
 		contract: {
 			timed: true,
@@ -796,6 +796,24 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		status: "enforced",
 		mechanism:
 			"spawnWithTimeout bounds each local state read; adoption verifies the exact unit id, no-hook transient-service posture, and canonical apt-get upgrade argv, while an unreadable or unknown state stays fail-closed behind a coalesced recovery retry",
+	},
+	{
+		id: "softwareUpdates.outcomeVersions",
+		file: "modules/system/software-update-outcome.ts",
+		symbol: "reachedTargets",
+		command:
+			"[dpkg-query, -W, -f=<Package Status-Abbrev Version>, --, ...packages] / [dpkg, --compare-versions, installed, ge, target]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"spawnWithTimeout bounds each read-only package and version read; names and versions are validated argv elements after --, and any non-answer is an unknown outcome",
 	},
 	{
 		id: "softwareUpdates.cleanupTransient",
@@ -989,8 +1007,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		id: "updateOrchestrator.stopPackageInstallForStream",
 		file: "modules/system/update-orchestrator/stream-abort.ts",
 		symbol: "stopPackageInstallUnitForStream",
-		command:
-			"[systemctl, kill, --signal=SIGTERM, ceralive-software-update.service]",
+		command: "[systemctl, stop, ceralive-software-update.service]",
 		class: "bounded-command",
 		contract: {
 			timed: true,
@@ -1001,7 +1018,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		},
 		status: "enforced",
 		mechanism:
-			"D8 package-unit signal, under the update unit's lifecycle lock, only for a running unit the commit-stage probe in that step still calls downloading; the unit and its exit stay for the observer's claim; nonzero exits are logged, spawn failures/timeouts throw, and the later isUpdating() guard can still refuse launch",
+			"D8 package-unit stop after the fresh wire read and commit-stage probe permit it; nonzero exits are logged, spawn failures/timeouts throw, and the later isUpdating() guard can still refuse launch",
 	},
 	{
 		id: "updateOrchestrator.probeCommitStage",

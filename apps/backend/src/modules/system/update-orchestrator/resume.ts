@@ -18,7 +18,6 @@
 
 import type { UpdateState } from "@ceraui/rpc/schemas";
 import type { InstallUnitVerdict } from "../software-updates.ts";
-import { progressFromWire } from "./package-progress.ts";
 import { reduceOrchestrator } from "./reducer.ts";
 import type { OrchestratorState } from "./types.ts";
 
@@ -33,6 +32,17 @@ export interface OrchestratorResumeDeps {
 	readonly now: () => number;
 }
 
+function estimateCommitProgress(
+	state: Extract<UpdateState, { kind: "installing" | "downloading" }>,
+) {
+	const { total, unpacking, setting_up: settingUp } = state.progress;
+	const percent =
+		total > 0
+			? Math.min(100, Math.round(((unpacking + settingUp) / (2 * total)) * 100))
+			: 0;
+	return { percent, etaSeconds: 0 };
+}
+
 async function resumeCommitting(
 	persisted: OrchestratorState,
 	deps: OrchestratorResumeDeps,
@@ -42,8 +52,7 @@ async function resumeCommitting(
 	const wire = deps.getUpdateState();
 
 	if (wire.kind === "installing" || wire.kind === "downloading") {
-		// APT's own number for the phase, or unknown: never one made from counters.
-		return { ...persisted, progress: progressFromWire(wire.progress) };
+		return { ...persisted, progress: estimateCommitProgress(wire) };
 	}
 	if (wire.kind === "success") {
 		return reduceOrchestrator(persisted, { type: "COMMIT_SUCCEEDED", now });
@@ -57,9 +66,7 @@ async function resumeCommitting(
 	}
 	// Absence proves neither success nor a bad candidate. Runtime separately proves
 	// current consistency before clearing this failure; no old plan is replayed.
-	// Only a probe that found no unit is absence: a unit no attempt can claim,
-	// or one never probed, answers `false` too, and stays inconclusive.
-	if (!recovered && deps.lastInstallUnitVerdict?.() === "absent") {
+	if (!recovered) {
 		return reduceOrchestrator(persisted, {
 			type: "COMMIT_RESUME_UNRESOLVED",
 			now,

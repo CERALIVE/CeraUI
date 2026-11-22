@@ -22,7 +22,6 @@ import {
 } from "../modules/system/update-orchestrator/runtime.ts";
 import { reconcileStaleUnits } from "../modules/system/update-orchestrator/stale-services.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
-import { recordedClaim } from "./helpers/memory-attempt.ts";
 import { runtimeFixture } from "./helpers/os-unlaunched-runtime-fixture.ts";
 import {
 	TestUpdateExit,
@@ -67,9 +66,8 @@ for (const recovered of [false, true]) {
 			recoverSoftwareUpdateIfRunning: recovered
 				? () =>
 						updates.recoverSoftwareUpdateIfRunning({
-							recover: async ({ onAttached, onOutcome }) => {
-								onAttached?.(false);
-								onOutcome?.(recordedClaim(completion.promise));
+							recover: async ({ onAttached }) => {
+								onAttached?.();
 								return {
 									completion: completion.promise,
 									wasAlreadyFinished: false,

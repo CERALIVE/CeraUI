@@ -41,18 +41,15 @@ import {
 } from "../disruptive-action-reservation.ts";
 import { withServiceReservation } from "../disruptive-service-reservation.ts";
 import { getIdleStatus } from "../idle-activity.ts";
-import { softwarePlanKey } from "../software-update-attempt.ts";
-import type { StreamStopDisposition } from "../software-update-process.ts";
 import {
 	aptUpdatesEnabled,
 	getLastInstallUnitVerdict,
-	getPlanUpdateState,
+	getUpdateState,
 	type InstallUnitVerdict,
 	recoverSoftwareUpdateIfRunning,
 	runSoftwareUpdateCheck,
 	type SoftwareUpdateError,
-	setSoftwareUpdatePlanReader,
-	startSoftwareUpdateWhenSettled,
+	startSoftwareUpdate,
 	type UpdateStartOutcome,
 } from "../software-updates.ts";
 import { isStreamConfirmedIdle } from "../stream-liveness-source.ts";
@@ -281,12 +278,9 @@ export interface OrchestratorRuntimeDeps {
 	readonly isStreamLive: () => boolean;
 	readonly onlyMeteredCandidateExists: () => Promise<boolean>;
 	readonly runPackageCheck: () => Promise<SoftwareUpdateError>;
-	readonly startPackageInstall: () =>
-		| UpdateStartOutcome
-		| Promise<UpdateStartOutcome>;
+	readonly startPackageInstall: () => UpdateStartOutcome;
 	readonly getPackageInstallWireState: () => UpdateState;
-	/** What the Go Live stop found; a fake that returns nothing stopped the unit. */
-	readonly stopPackageInstallUnit: () => Promise<StreamStopDisposition | void>;
+	readonly stopPackageInstallUnit: () => Promise<void>;
 	readonly killAndRestartRaucForStream: () => Promise<void>;
 	readonly isCommitStageRunning: () => Promise<boolean>;
 	readonly checkOsManifest: (channel?: "stable" | "beta") => Promise<{
@@ -437,10 +431,8 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	isStreamLive: () => !isStreamConfirmedIdle(),
 	onlyMeteredCandidateExists: defaultOnlyMeteredCandidateExists,
 	runPackageCheck: runSoftwareUpdateCheck,
-	startPackageInstall: () =>
-		startSoftwareUpdateWhenSettled(notePackageCommitSucceeded),
-	// Settles the plan only from an exit its own attempt claimed.
-	getPackageInstallWireState: getPlanUpdateState,
+	startPackageInstall: () => startSoftwareUpdate(notePackageCommitSucceeded),
+	getPackageInstallWireState: getUpdateState,
 	stopPackageInstallUnit: stopPackageInstallUnitForStream,
 	killAndRestartRaucForStream,
 	isCommitStageRunning: async () =>
@@ -528,16 +520,6 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 };
 
 let deps: OrchestratorRuntimeDeps = defaultOrchestratorRuntimeDeps;
-// The saved plan's key, read where it is used: only an attempt this plan
-// admitted settles it. A plan that cannot be read binds nothing.
-setSoftwareUpdatePlanReader(() => {
-	try {
-		const pending = deps.quarantine.readPendingSync();
-		return pending && softwarePlanKey(pending);
-	} catch {
-		return undefined;
-	}
-});
 let state: OrchestratorState = initialOrchestratorState(Date.now());
 let tickTimer: ReturnType<typeof setTimeout> | undefined;
 let started = false;
@@ -1176,13 +1158,8 @@ export async function admitAndPrepareStreamStart(): Promise<StreamStartUpdateAdm
 			return COMMIT_STAGE_REFUSAL;
 		}
 		if (pendingPackageSuccess.pending) return COMMIT_STAGE_REFUSAL;
-		const stopped = (await deps.stopPackageInstallUnit()) ?? "stopped";
+		await deps.stopPackageInstallUnit();
 		if (pendingPackageSuccess.pending) return COMMIT_STAGE_REFUSAL;
-		// Only a download that was signalled, or had no unit, was aborted. A unit
-		// in its commit stage, one that finished (its claim settles the plan) or
-		// one nobody could probe is not: the stream waits, like any commit stage.
-		if (stopped !== "stopped" && stopped !== "absent")
-			return COMMIT_STAGE_REFUSAL;
 		dispatch({ type: "DOWNLOAD_ABORTED_FOR_STREAM", now: deps.now() });
 		// The notice is informational. Restart-safe dedup, rehydration and acknowledgement
 		// are guaranteed for every intent that reached the ledger. If the backend dies
@@ -1410,7 +1387,7 @@ async function maybeStartPackageInstall(opts: {
 		}
 		if (isDisruptiveActionPending())
 			return { started: false, reason: "already_updating" };
-		const result = await deps.startPackageInstall();
+		const result = deps.startPackageInstall();
 		if (!result.started) {
 			await deps.quarantine.clearPending();
 			return result; // stays awaiting-idle; retried next tick
@@ -1480,8 +1457,6 @@ async function pollPackageInstallProgress(): Promise<void> {
 			dispatch({ type: "DOWNLOAD_FAILED", ...failure });
 		} else {
 			const pending = await deps.quarantine.readPending();
-			// Confirmed again at the write: the failure is still this plan's claim.
-			if (deps.getPackageInstallWireState().kind !== "failed") return;
 			await deps.quarantine.recordPackageFailure(
 				pending.flatMap((item) =>
 					item.version ? [{ name: item.name, version: item.version }] : [],
@@ -3205,7 +3180,7 @@ async function startOrchestratorRuntime(
 	);
 	if (baseline.phase === "committing" || baseline.phase === "downloading") {
 		pendingPackageSuccess.trackStartup(baseline);
-		reserveRecoveredUpdateExit(async (signal, still) => {
+		reserveRecoveredUpdateExit(async (signal) => {
 			if (!(await awaitUpdateStartupAdjudication())) return false;
 			if (signal.aborted) return false;
 			return persistRecoveredCommitSuccess(
@@ -3215,7 +3190,6 @@ async function startOrchestratorRuntime(
 					publishWireState();
 				},
 				deps.now(),
-				still,
 			).catch((error: unknown) => {
 				if (signal.aborted) return false;
 				throw error;

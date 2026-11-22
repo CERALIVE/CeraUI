@@ -33,7 +33,6 @@ import {
 	setUpdateCapabilityPathForTest,
 } from "../modules/system/update-capabilities.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
-import { memoryAttempt, TEST_INVOCATION } from "./helpers/memory-attempt.ts";
 
 useSessionOwnerForFile();
 
@@ -675,20 +674,14 @@ describe("apt-all-packages admission", () => {
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
 				},
-				...memoryAttempt(),
 				prepareOutput: async () => {},
 				start: async () => {
 					starts++;
 				},
 				inspect: async () =>
 					running
-						? { kind: "running", invocation: TEST_INVOCATION }
-						: {
-								kind: "finished",
-								exitCode: 0,
-								cleanup: "stop",
-								invocation: TEST_INVOCATION,
-							},
+						? { kind: "running" }
+						: { kind: "finished", exitCode: 0, cleanup: "stop" },
 				cleanup: async () => {
 					release = true;
 				},
@@ -702,11 +695,7 @@ describe("apt-all-packages admission", () => {
 				},
 			},
 		);
-		expect(
-			await (recovered && "completion" in recovered
-				? recovered.completion
-				: undefined),
-		).toBe(0);
+		expect(await recovered?.completion).toBe(0);
 		expect(starts).toBe(0);
 		expect(release).toBe(true);
 	});

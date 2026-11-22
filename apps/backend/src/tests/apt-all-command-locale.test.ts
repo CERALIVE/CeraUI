@@ -1,10 +1,9 @@
 /// <reference types="bun" />
 
-import { afterEach, beforeEach, expect, it } from "bun:test";
+import { expect, it } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { setDetachedAptServiceDepsForTest } from "../modules/system/software-update-service.ts";
 import * as updates from "../modules/system/software-updates.ts";
 import { setCeraliveSourcesFileForTest } from "../modules/system/update-apt-channel.ts";
 import { setUpdateCapabilityPathForTest } from "../modules/system/update-capabilities.ts";
@@ -12,15 +11,6 @@ import { setUpdateSettingsFilePathForTest } from "../modules/system/update-setti
 import { notificationRemove } from "../modules/ui/notifications.ts";
 import { opiAptSection } from "./helpers/apt-opi-capture.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
-import { useNoHostUpdateUnit } from "./software-updates-preflight-harness.ts";
-
-// Starts here admit an attempt: record it in a fake unit, never the host's /run.
-beforeEach(() => {
-	useNoHostUpdateUnit();
-});
-afterEach(() => {
-	setDetachedAptServiceDepsForTest(null);
-});
 
 useSessionOwnerForFile();
 

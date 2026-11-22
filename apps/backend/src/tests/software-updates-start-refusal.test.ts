@@ -27,9 +27,9 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { call } from "@orpc/server";
+
 import { initMockService, shouldUseMocks } from "../mocks/mock-service.ts";
 import { setup } from "../modules/setup.ts";
-import { setDetachedAptServiceDepsForTest } from "../modules/system/software-update-service.ts";
 import {
 	isUpdating,
 	periodicCheckForSoftwareUpdates,
@@ -42,15 +42,6 @@ import {
 } from "../modules/system/software-updates.ts";
 import { startUpdateProcedure } from "../rpc/procedures/system.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
-import { useNoHostUpdateUnit } from "./software-updates-preflight-harness.ts";
-
-// Starts here admit an attempt: record it in a fake unit, never the host's /run.
-beforeEach(() => {
-	useNoHostUpdateUnit();
-});
-afterEach(() => {
-	setDetachedAptServiceDepsForTest(null);
-});
 
 function makeContext(): RPCContext {
 	const ws = {

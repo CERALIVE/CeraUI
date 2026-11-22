@@ -4,14 +4,6 @@
 			"at": "connected"
 		},
 		{
-			"at": "pull",
-			"status": {}
-		},
-		{
-			"at": "moment",
-			"name": "signed in before the first recovery"
-		},
-		{
 			"at": "push",
 			"status": {
 				"updating": null,
@@ -36,6 +28,62 @@
 						"ipv6": "ok",
 						"used": "any"
 					}
+				}
+			}
+		},
+		{
+			"at": "pull",
+			"status": {
+				"updating": null,
+				"update_state": {
+					"kind": "available",
+					"identity": {
+						"version": "5002667e93d7",
+						"packages": ["cerastream"]
+					},
+					"package_count": 1,
+					"download_size": "4 kB",
+					"reachability": {
+						"ipv4": "ok",
+						"ipv6": "ok",
+						"used": "any"
+					},
+					"packages": [
+						{
+							"name": "cerastream",
+							"layer": "app",
+							"actionable": true
+						}
+					],
+					"actionable_count": 1
+				}
+			}
+		},
+		{
+			"at": "pull",
+			"status": {
+				"updating": null,
+				"update_state": {
+					"kind": "available",
+					"identity": {
+						"version": "5002667e93d7",
+						"packages": ["cerastream"]
+					},
+					"package_count": 1,
+					"download_size": "4 kB",
+					"reachability": {
+						"ipv4": "ok",
+						"ipv6": "ok",
+						"used": "any"
+					},
+					"packages": [
+						{
+							"name": "cerastream",
+							"layer": "app",
+							"actionable": true
+						}
+					],
+					"actionable_count": 1
 				}
 			}
 		},
@@ -174,16 +222,72 @@
 			"at": "connected"
 		},
 		{
+			"at": "push",
+			"status": {
+				"updating": null,
+				"update_state": {
+					"kind": "idle"
+				}
+			}
+		},
+		{
 			"at": "pull",
-			"status": {}
+			"status": {
+				"updating": null,
+				"update_state": {
+					"kind": "idle"
+				}
+			}
 		},
 		{
 			"at": "moment",
 			"name": "re-authenticated before recovery"
 		},
 		{
+			"at": "asked",
+			"outcome": {
+				"kind": "running"
+			}
+		},
+		{
+			"at": "push",
+			"status": {
+				"updating": {
+					"total": 0,
+					"downloading": 0,
+					"unpacking": 0,
+					"setting_up": 0
+				},
+				"update_state": {
+					"kind": "downloading",
+					"progress": {
+						"total": 0,
+						"downloading": 0,
+						"unpacking": 0,
+						"setting_up": 0
+					}
+				}
+			}
+		},
+		{
 			"at": "pull",
-			"status": {}
+			"status": {
+				"updating": {
+					"downloading": 0,
+					"unpacking": 0,
+					"setting_up": 0,
+					"total": 0
+				},
+				"update_state": {
+					"kind": "downloading",
+					"progress": {
+						"downloading": 0,
+						"unpacking": 0,
+						"setting_up": 0,
+						"total": 0
+					}
+				}
+			}
 		},
 		{
 			"at": "moment",
@@ -280,25 +384,32 @@
 			"at": "connected"
 		},
 		{
+			"at": "push",
+			"status": {
+				"updating": null,
+				"update_state": {
+					"kind": "idle"
+				}
+			}
+		},
+		{
 			"at": "pull",
-			"status": {}
+			"status": {
+				"updating": null,
+				"update_state": {
+					"kind": "idle"
+				}
+			}
 		},
 		{
 			"at": "moment",
 			"name": "re-authenticated after the outcome"
 		},
 		{
-			"at": "push",
-			"status": {
-				"updating": null,
-				"update_state": {
-					"kind": "success"
-				}
+			"at": "asked",
+			"outcome": {
+				"kind": "success"
 			}
-		},
-		{
-			"at": "moment",
-			"name": "no unit after the outcome"
 		}
 	]
 }

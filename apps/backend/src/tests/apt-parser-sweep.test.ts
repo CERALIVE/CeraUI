@@ -1,12 +1,12 @@
 import { expect, it } from "bun:test";
 import { discoverAptAllPackages } from "../modules/system/apt-all-packages.ts";
-import { deriveUpdateProgress } from "../modules/system/apt-progress.ts";
 import {
 	parseAptArchivePath,
 	parseAptSpaceProbe,
 } from "../modules/system/apt-space-parser.ts";
 import {
 	buildDiscoveredPackages,
+	deriveAptProgress,
 	parseAptPackageList,
 	parseAptUpgradeSummary,
 	parseHeldBackPackages,
@@ -109,10 +109,13 @@ it.each(["\n", "\r\n"])(
 
 it("keeps simulation actions out of live download/unpack/configure progress", () => {
 	// Given/When
-	const actual = deriveUpdateProgress(simulation, undefined);
+	const actual = deriveAptProgress(
+		{ total: 0, downloading: 0, unpacking: 0, setting_up: 0 },
+		simulation,
+	);
 	// Then
 	expect(actual).toEqual({
-		total: 0,
+		total: 3,
 		downloading: 0,
 		unpacking: 0,
 		setting_up: 0,

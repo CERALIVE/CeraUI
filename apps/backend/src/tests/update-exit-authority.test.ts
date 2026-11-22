@@ -3,7 +3,6 @@ import { recoverDetachedAptUpgrade } from "../modules/system/software-update-pro
 import { validateDetachedAptServiceIdentity } from "../modules/system/software-update-service-contract.ts";
 import { parseDetachedAptServiceProbe } from "../modules/system/software-update-service-state.ts";
 import { classifySlotSyncProbe } from "../modules/system/update-orchestrator/lock.ts";
-import { memoryAttempt, withInvocation } from "./helpers/memory-attempt.ts";
 
 const owned = `Id=ceralive-software-update.service
 FragmentPath=/run/systemd/transient/ceralive-software-update.service
@@ -182,19 +181,16 @@ test.each([undefined, "0garbage"])(
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
 				},
-				...memoryAttempt(),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
 					inspections++;
 					return probe(
-						withInvocation(
-							inspections === 1
-								? owned.replace("SubState=exited", "SubState=running")
-								: inspections === 2
-									? unknown
-									: owned,
-						),
+						inspections === 1
+							? owned.replace("SubState=exited", "SubState=running")
+							: inspections === 2
+								? unknown
+								: owned,
 					);
 				},
 				cleanup: async () => {

@@ -12,7 +12,11 @@
  * field changes, so the same outcome would be announced again (early oracle R3).
  */
 import { m } from "@ceraui/i18n/svelte";
-import type { StatusMessage, UpdateState } from "@ceraui/rpc/schemas";
+import type {
+	StatusMessage,
+	UpdateOutcome,
+	UpdateState,
+} from "@ceraui/rpc/schemas";
 import { toast } from "svelte-sonner";
 
 import { viewLogsToast } from "$lib/device-logs/view-logs";
@@ -56,14 +60,18 @@ export function announceLegacyInstallOutcome(
 
 const ENDED = { total: 0, downloading: 0, unpacking: 0, setting_up: 0 };
 
-/** An install this tab showed ended without its result reaching the tab. */
+/**
+ * An install this tab showed ended without its result reaching the tab: what
+ * the device reported, or what it read back (`success` only when the offered
+ * versions are installed); anything else is not confirmed.
+ */
 export function announceMissedInstallOutcome(
-	state: UpdateState | undefined,
+	state: UpdateState | UpdateOutcome | undefined,
 ): void {
 	if (state?.kind === "success")
 		announceLegacyInstallOutcome({ ...ENDED, result: 0 });
 	else if (state?.kind === "failed")
-		announceLegacyInstallOutcome({ ...ENDED, result: state.reason });
+		announceLegacyInstallOutcome({ ...ENDED, result: state.reason ?? "" });
 	else if (state?.kind !== "update_preflight_failed")
 		toast.warning(m["settings.updates.unconfirmed.title"]());
 }

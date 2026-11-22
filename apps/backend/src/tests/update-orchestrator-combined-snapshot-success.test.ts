@@ -16,7 +16,6 @@ import {
 	startUpdateOrchestrator,
 } from "../modules/system/update-orchestrator/runtime.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
-import { recordedClaim } from "./helpers/memory-attempt.ts";
 import { runtimeFixture } from "./helpers/os-unlaunched-runtime-fixture.ts";
 import {
 	TestUpdateExit,
@@ -58,9 +57,8 @@ for (const first of ["package", "snapshot"] as const) {
 			},
 			recoverSoftwareUpdateIfRunning: () =>
 				updates.recoverSoftwareUpdateIfRunning({
-					recover: async ({ onAttached, onOutcome }) => {
-						onAttached?.(false);
-						onOutcome?.(recordedClaim(completion.promise));
+					recover: async ({ onAttached }) => {
+						onAttached?.();
 						return {
 							completion: completion.promise,
 							wasAlreadyFinished: first === "package",
@@ -81,13 +79,8 @@ for (const first of ["package", "snapshot"] as const) {
 		});
 		// The initial baseline must be durable before the production fault is armed.
 		fault = false;
-		// A reading from before the restart, so resume makes a durable change under the fault.
 		saveOrchestratorState(
-			{
-				...initialOrchestratorState(0),
-				phase: "committing",
-				progress: { percent: 40, etaSeconds: 0 },
-			},
+			{ ...initialOrchestratorState(0), phase: "committing" },
 			f.file,
 		);
 		fault = true;

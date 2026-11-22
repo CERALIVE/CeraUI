@@ -10,7 +10,6 @@ import {
 } from "../modules/system/update-orchestrator/persistence.ts";
 import { startUpdateOrchestrator } from "../modules/system/update-orchestrator/runtime.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
-import { recordedClaim } from "./helpers/memory-attempt.ts";
 import { acquireTestOsStageControl } from "./helpers/os-stage-test-control.ts";
 import { runtimeFixture } from "./helpers/os-unlaunched-runtime-fixture.ts";
 import {
@@ -42,12 +41,11 @@ for (const phase of ["committing", "downloading"] as const) {
 			};
 			const recover = () =>
 				recoverSoftwareUpdateIfRunning({
-					recover: async ({ onAttached, onOutcome }) => {
+					recover: async ({ onAttached }) => {
 						probes++;
 						if (consumed) return null;
 						consumed = true;
-						onAttached?.(false);
-						onOutcome?.(recordedClaim(completion.promise));
+						onAttached?.();
 						attached.resolve();
 						return {
 							completion: completion.promise,
@@ -120,9 +118,8 @@ test("recovered success keeps the backend alive when its authoritative tail cann
 	const f = runtimeFixture({
 		recoverSoftwareUpdateIfRunning: () =>
 			recoverSoftwareUpdateIfRunning({
-				recover: async ({ onAttached, onOutcome }) => {
-					onAttached?.(false);
-					onOutcome?.(recordedClaim(Promise.resolve(0)));
+				recover: async ({ onAttached }) => {
+					onAttached?.();
 					return { completion: Promise.resolve(0), wasAlreadyFinished: true };
 				},
 				scheduleRetry: () => {},

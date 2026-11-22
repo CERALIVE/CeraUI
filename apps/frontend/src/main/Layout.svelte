@@ -1,7 +1,7 @@
 <script lang="ts">
 import { directionFor, getLocale, m } from '@ceraui/i18n/svelte';
 import { holdUpdateProgress } from '@ceraui/rpc/package-progress';
-import type { UpdateProgress } from '@ceraui/rpc/schemas';
+import type { UpdateOutcome, UpdatePackage, UpdateProgress, UpdateState } from '@ceraui/rpc/schemas';
 import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
 import { setContext } from 'svelte';
 import { OfflinePage, PWAStatus } from '$lib/components/custom/pwa';
@@ -72,6 +72,12 @@ $effect(() => (topBands ? publishHeight(topBands, '--top-bands-height') : undefi
 // What this tab last showed for the running install: a stale or empty frame
 // after a reconnect or a backend restart never moves it back.
 let shownInstall: UpdateProgress | undefined;
+// The install this tab showed ended with no result the device reported: its
+// phase is held, without a number, until the device answers the tab's question.
+let unanswered = false;
+let answers = $state(0);
+const reported = (state?: UpdateState) =>
+	state?.kind === 'success' || state?.kind === 'failed' || state?.kind === 'update_preflight_failed';
 const liveInstall = createLiveProgress();
 // A field's number is stale from a drop until the status ingestion announces
 // that field delivered again; an identical frame counts, though the store keeps
@@ -93,12 +99,12 @@ const dropped = (field: string) => {
 };
 setContext(CONNECTION_DROPPED, dropped);
 const updatingStatus = $derived.by(() => {
+	answers;
 	const updating = getUpdating();
 	const install = legacyInstall(updating);
-	shownInstall =
-		install.kind === 'running' && install.details
-			? holdUpdateProgress(shownInstall, install.details)
-			: undefined;
+	unanswered = install.kind === 'none' && shownInstall !== undefined && !reported(getUpdateState());
+	if (install.kind === 'running' && install.details) shownInstall = holdUpdateProgress(shownInstall, install.details);
+	else if (!unanswered) shownInstall = undefined;
 	return liveInstall(
 		shownInstall,
 		typeof updating === 'object' ? updating : undefined,
@@ -113,11 +119,23 @@ $effect(() => {
 	announceLegacyInstallOutcome(getUpdating());
 });
 // A tab told only that the install it showed is over (it missed the result
-// while reconnecting) says what the device reports, or that nobody knows.
+// while CeraUI restarted) says what the device reports; otherwise it asks
+// whether the versions the device offered are installed, holding the phase.
 let showedInstall = false;
+let offered: UpdatePackage[] = [];
+const told = (outcome?: UpdateOutcome) => {
+	if (!unanswered || outcome?.kind === 'running') return;
+	shownInstall = undefined;
+	answers = answers + 1;
+	announceMissedInstallOutcome(outcome);
+};
 $effect(() => {
 	const kind = legacyInstall(getUpdating()).kind;
-	if (showedInstall && kind === 'none') announceMissedInstallOutcome(getUpdateState());
+	const state = getUpdateState();
+	if (state?.kind === 'available') offered = state.packages ?? [];
+	if (kind === 'none' && showedInstall)
+		if (reported(state)) announceMissedInstallOutcome(state);
+		else rpc.system.updateOutcome({ packages: offered }).then(told, () => told());
 	showedInstall = kind === 'running';
 });
 // Environment probes computed once (used to size the auth-check timeout).

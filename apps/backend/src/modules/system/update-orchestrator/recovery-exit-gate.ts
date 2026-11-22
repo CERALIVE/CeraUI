@@ -6,23 +6,21 @@ import { toPersisted } from "./persistence.ts";
 import { reduceOrchestrator } from "./reducer.ts";
 import type { OrchestratorState } from "./types.ts";
 
-let recoveredExitHook:
-	| ((still?: () => boolean) => Promise<boolean>)
-	| undefined;
+let recoveredExitHook: (() => Promise<boolean>) | undefined;
 let exitController = new AbortController();
 
 export function reserveRecoveredUpdateExit(
-	hook: (signal: AbortSignal, still?: () => boolean) => Promise<boolean>,
+	hook: (signal: AbortSignal) => Promise<boolean>,
 ): void {
 	// A retried startup joins the original recovery owner, never replaces its hook.
 	const signal = exitController.signal;
-	recoveredExitHook ??= async (still) => {
+	recoveredExitHook ??= async () => {
 		if (signal.aborted) return false;
 		const cancelled = Promise.withResolvers<boolean>();
 		const abort = () => cancelled.resolve(false);
 		signal.addEventListener("abort", abort, { once: true });
 		try {
-			return await Promise.race([hook(signal, still), cancelled.promise]);
+			return await Promise.race([hook(signal), cancelled.promise]);
 		} finally {
 			signal.removeEventListener("abort", abort);
 		}
@@ -30,7 +28,7 @@ export function reserveRecoveredUpdateExit(
 }
 
 export function getRecoveredUpdateExitHook():
-	| ((still?: () => boolean) => Promise<boolean>)
+	| (() => Promise<boolean>)
 	| undefined {
 	return recoveredExitHook;
 }
@@ -45,8 +43,6 @@ export async function persistRecoveredCommitSuccess(
 	port: OsRecoverySettlementPort & { readonly signal?: AbortSignal },
 	accept: (state: OrchestratorState) => void,
 	now: number,
-	/** The recovered success's claim (attempt, invocation and plan), confirmed at the write. */
-	still?: () => boolean,
 ): Promise<boolean> {
 	await using lease = await port.acquireControl();
 	if (port.signal?.aborted) return false;
@@ -56,7 +52,6 @@ export async function persistRecoveredCommitSuccess(
 	if (
 		!lease.held() ||
 		port.pending() ||
-		still?.() === false ||
 		port.snapshot() !== before ||
 		!persisted ||
 		!isDeepStrictEqual(toPersisted(before), toPersisted(persisted))

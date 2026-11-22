@@ -21,39 +21,12 @@ import {
 
 export type DetachedAptServiceState =
 	| { readonly kind: "absent" }
-	| {
-			readonly kind: "running";
-			readonly invocation?: string;
-			readonly packages?: readonly InstalledPair[];
-	  }
+	| { readonly kind: "running" }
 	| {
 			readonly kind: "finished";
 			readonly exitCode: number;
 			readonly cleanup: "stop" | "reset-failed";
-			/** systemd's InvocationID: tells this run from another of the same unit. */
-			readonly invocation?: string;
-			/** The package/version pairs its ExecStart installs (the pinned script only). */
-			readonly packages?: readonly InstalledPair[];
 	  };
-
-export type InstalledPair = { readonly name: string; readonly version: string };
-
-// The released pinned script ends `... install <name>=<version> ...`; a plain
-// upgrade names packages without versions and so has no pairs.
-function installedPairs(
-	execStart: string | undefined,
-): readonly InstalledPair[] | undefined {
-	const install = / install ([^;]+?) ;/.exec(execStart ?? "")?.[1];
-	const pairs = install?.split(" ").map((token) => {
-		const at = token.indexOf("=");
-		return at > 0
-			? { name: token.slice(0, at), version: token.slice(at + 1) }
-			: undefined;
-	});
-	return pairs?.length && pairs.every((pair) => pair && pair.version)
-		? (pairs as InstalledPair[])
-		: undefined;
-}
 
 export type FinishedDetachedAptServiceState = Extract<
 	DetachedAptServiceState,
@@ -100,12 +73,6 @@ export function parseDetachedAptServiceState(
 	const activeState = properties.get("ActiveState") ?? "inactive";
 	const subState = properties.get("SubState") ?? "dead";
 	const exit = parseSystemdExitFields(properties);
-	const invocation = properties.get("InvocationID");
-	const packages = installedPairs(properties.get("ExecStart"));
-	const run = {
-		...(invocation ? { invocation } : {}),
-		...(packages ? { packages } : {}),
-	};
 
 	if (activeState === "failed" || subState === "failed") {
 		if (
@@ -114,23 +81,17 @@ export function parseDetachedAptServiceState(
 			subState !== "failed" ||
 			exit.mainStatus === 0
 		)
-			return { kind: "running", ...run };
+			return { kind: "running" };
 		return {
 			kind: "finished",
 			exitCode: processExitCode(exit.mainCode, exit.mainStatus),
 			cleanup: "reset-failed",
-			...run,
 		};
 	}
 	if (subState === "exited") {
 		if (!exit || activeState !== "active" || exit.mainCode !== 1)
-			return { kind: "running", ...run };
-		return {
-			kind: "finished",
-			exitCode: exit.mainStatus,
-			cleanup: "stop",
-			...run,
-		};
+			return { kind: "running" };
+		return { kind: "finished", exitCode: exit.mainStatus, cleanup: "stop" };
 	}
 	if (
 		activeState === "active" ||
@@ -138,7 +99,7 @@ export function parseDetachedAptServiceState(
 		activeState === "reloading" ||
 		activeState === "deactivating"
 	) {
-		return { kind: "running", ...run };
+		return { kind: "running" };
 	}
 	throw new DetachedAptServiceStateError(activeState, subState);
 }

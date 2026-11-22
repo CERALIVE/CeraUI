@@ -6,7 +6,6 @@ import {
 	InvalidDetachedAptUpgradeArgumentsError,
 } from "../modules/system/software-update-service-contract.ts";
 import { parseDetachedAptServiceProbe } from "../modules/system/software-update-service-state.ts";
-import { memoryAttempt, withInvocation } from "./helpers/memory-attempt.ts";
 
 // From Rock 5B+ systemctl show after our detached apt-get completed. systemd
 // omits unset ExecStartPre/ExecStartPost even when --property names both.
@@ -69,11 +68,6 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 			kind: "finished",
 			exitCode: 0,
 			cleanup: "stop",
-			// What the unit installs, read from its own ExecStart.
-			packages: [
-				{ name: "ceralive-apt-credentials", version: "1.0.1" },
-				{ name: "cerastream", version: "2026.9.8" },
-			],
 		});
 	});
 
@@ -85,13 +79,7 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 					"SubState=running",
 				),
 			),
-		).toEqual({
-			kind: "running",
-			packages: [
-				{ name: "ceralive-apt-credentials", version: "1.0.1" },
-				{ name: "cerastream", version: "2026.9.8" },
-			],
-		});
+		).toEqual({ kind: "running" });
 	});
 
 	it.each(["--allow-unauthenticated", "-o", "-y", "+x", ".x", ":x", "~x"])(
@@ -153,25 +141,16 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 		);
 		const script = launcher.at(-1);
 		expect(script).toBeDefined();
-		const rendered = () =>
+		expect(() =>
 			probe(
 				flockUnit(
 					flockFinishedExecStart.replace(
 						/^ExecStart=.*? \/bin\/sh -ec .*? ; ignore_errors=/,
-						`ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -x /run/lock/ceralive-update.lock ${launcher.at(-3)} -ec ${script} ; ignore_errors=`,
+						`ExecStart={ path=/usr/bin/flock ; argv[]=/usr/bin/flock -x /run/lock/ceralive-update.lock /bin/sh -ec ${script} ; ignore_errors=`,
 					),
 				),
-			);
-		expect(rendered).not.toThrow();
-		expect(rendered()).toEqual({
-			kind: "finished",
-			exitCode: 0,
-			cleanup: "stop",
-			packages: [
-				{ name: "ceralive-apt-credentials", version: "1.0.1" },
-				{ name: "cerastream", version: "2026.9.8" },
-			],
-		});
+			),
+		).not.toThrow();
 	});
 
 	it.each([
@@ -248,16 +227,13 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
 				},
-				...memoryAttempt(),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () =>
 					probe(
-						withInvocation(
-							reads === 0
-								? finishedUnit.replace("SubState=exited", "SubState=running")
-								: finishedUnit,
-						),
+						reads === 0
+							? finishedUnit.replace("SubState=exited", "SubState=running")
+							: finishedUnit,
 					),
 				cleanup: async () => {
 					cleaned++;
@@ -272,11 +248,7 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 			},
 		);
 		expect(recovered).not.toBeNull();
-		expect(
-			await (recovered && "completion" in recovered
-				? recovered.completion
-				: undefined),
-		).toBe(0);
+		expect(await recovered?.completion).toBe(0);
 		expect(cleaned).toBe(1);
 	});
 
@@ -308,14 +280,13 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
 				},
-				...memoryAttempt(),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
 					inspections++;
-					if (inspections === 1) return probe(withInvocation(running));
+					if (inspections === 1) return probe(running);
 					if (inspections <= 9) return probe(foreign);
-					return probe(withInvocation(flockUnit(flockFinishedExecStart)));
+					return probe(flockUnit(flockFinishedExecStart));
 				},
 				cleanup: async () => {
 					cleaned++;
@@ -331,11 +302,7 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 				now: () => clock,
 			},
 		);
-		expect(
-			await (recovered && "completion" in recovered
-				? recovered.completion
-				: undefined),
-		).toBe(0);
+		expect(await recovered?.completion).toBe(0);
 		expect(cleaned).toBe(1);
 		expect(sleeps).toEqual([
 			250, 1_000, 250, 2_000, 250, 4_000, 250, 8_000, 250, 16_000, 250, 30_000,

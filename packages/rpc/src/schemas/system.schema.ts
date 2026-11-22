@@ -276,6 +276,19 @@ export const updateStateSchema = z.discriminatedUnion('kind', [
 ]);
 export type UpdateState = z.infer<typeof updateStateSchema>;
 
+// What an install a tab watched did, asked once CeraUI restarted under it:
+// the packages the device offered are the versions it must have reached.
+export const updateOutcomeInputSchema = z.object({
+	packages: z.array(updatePackageSchema).max(512),
+});
+export type UpdateOutcomeInput = z.infer<typeof updateOutcomeInputSchema>;
+// `running`: the device still reports it; `failed` is the unit's own exit.
+export const updateOutcomeSchema = z.object({
+	kind: z.enum(['running', 'success', 'failed', 'unknown']),
+	reason: z.string().optional(),
+});
+export type UpdateOutcome = z.infer<typeof updateOutcomeSchema>;
+
 // System command input schema
 export const systemCommandInputSchema = z.object({
 	command: z.enum([

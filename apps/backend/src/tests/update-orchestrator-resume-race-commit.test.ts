@@ -95,7 +95,6 @@ import {
 } from "../modules/system/update-orchestrator/runtime.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
 import { useIdleStreamLivenessForFile } from "./helpers/bind-session-owner.ts";
-import { recordedClaim } from "./helpers/memory-attempt.ts";
 import { acquireTestOsStageControl } from "./helpers/os-stage-test-control.ts";
 import {
 	TestUpdateExit,
@@ -149,8 +148,6 @@ describe("boot double-recovery race — resume must not misread evidence a start
 		});
 		setOrchestratorStateForTest(persistedCommitting(50));
 		const monitor = createSoftwareUpdateProcessMonitor();
-		// The claim the real observer hands over once the exit is recorded and read.
-		monitor.handlers.onOutcome?.(recordedClaim(0));
 
 		const commitEntered = Promise.withResolvers<void>();
 		const releaseCommit = Promise.withResolvers<void>();

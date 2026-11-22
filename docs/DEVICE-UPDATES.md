@@ -43,8 +43,8 @@ the very update that installs this version, adopted after the package
 restarts CeraUI) is read the same way: its stdout is the same transcript.
 
 One rule (`holdUpdateProgress` in `@ceraui/rpc/package-progress`) decides what
-a running transaction shows, in the backend and in both browser views: the
-phase never moves back and, within a phase, the number never drops; a frame of
+a running transaction shows, in the backend (within one process) and in both
+browser views (across restarts too): the phase never moves back and, within a phase, the number never drops; a frame of
 the same phase without a number replaces a held number, because it means
 unknown, not unchanged. Only an outcome, or the next run after it, shows what
 arrived. The browser then shows a number only when the device's own latest
@@ -57,194 +57,68 @@ value's object, so only that announcement says it is fresh). A stale number is
 never shown, and a fresh one is never withheld. On pinned images the download runs
 in-process before the unit exists: the UI says **Downloading**, without a
 number, from the moment that transfer starts until the transcript shows the
-install. A failed pinned transfer is that process's own result: the tab is
-told it and the orchestrator reads the same failure (no unit, so no claim).
+install. A failed pinned transfer is that process's own result, as on main:
+the tab and the orchestrator read the same failure.
 
 What a tab shows when something is lost (no wire field was added for any of
 these):
 
 | Situation | Shown |
 |---|---|
-| The transcript cannot be read for four polls in a row | The phase without a number until a read succeeds |
+| A read of the transcript fails | The phase without a number until new lines prove one |
 | The connection to the device dropped, or the latest frame does not carry the held number in the same phase | The held phase without a number, until the device delivers a frame carrying that number in that phase again (an unchanged frame counts) |
 | A number below one already shown in the phase, for example after the device said it does not know | The phase without a number, until the device sends one at or above it |
-| The observer loses the unit (gone without an exit, or another invocation) | No outcome: `updating: null`, `update_state` neither success nor failure, no restart; the tab says **Outcome not confirmed** |
-| The unit is gone and its exit is recorded | That outcome, replayed (below) |
-| The unit is gone and no exit is recorded | **Outcome not confirmed** |
+| CeraUI restarted under the install and the new process says nothing is updating | The held phase without a number while the tab asks how the install ended (below) |
 
-After a backend restart nobody knows, until recovery has read the detached
-unit, whether an update is running. Until then the initial status push omits
-`updating` and `update_state`, which the browser keeps as its last frames,
-instead of sending `null`, an empty frame or idle package state; recovery
-then publishes the recovered state, or an explicit `null` when systemd shows
-the unit is gone. Recovery is one entry per unit: once it has attached, a
-later caller (the orchestrator's resume and `main.ts`'s standalone call run
-on the same boot) gets the same answer and changes nothing. The withholding
-ends only on the observer's first complete read, on proven absence, or with
-the outcome. A refused or failed bootstrap still watches the unit to its real
-outcome, without retiring it, cleaning the APT cache or restarting CeraUI.
-With APT updates disabled CeraUI starts no unit and never probes (a deferred
-download stays unproven for D8), so the withholding ends at once; mock mode
-never launches one.
+The unit's handling is main's: the one fixed name
+`ceralive-software-update.service`, the released `ExecStart` commands, main's
+start, observer, retirement, recovery and Go Live stop. This change adds only
+`LC_ALL=C` on the unit and reads more of what main already reads: the
+observer's final drain keeps reading until both files give nothing more, so
+output larger than one 64 KiB read is replayed completely (main read one block
+per file and lost the rest). After a backend restart main's first status says
+`updating: null` until recovery has attached to the surviving unit; recovery
+then announces it (the empty frame) and publishes what its transcript proves.
+The browser's hold keeps the phase it showed across all of that: the empty
+frame is an earlier phase and never shown, and the number returns only when a
+fresh frame carries it.
 
-Live polling and reattachment derive progress from the same bytes: complete
-lines only, so a line split across reads counts once it is whole. Each poll
-reads stdout and then stderr, each to its end (bounded per poll), and the
-final drain does the same, so output larger than one 64 KiB read is replayed
-completely. A reattached unit is announced only once a poll has read both
-files to their end without an error, so the tab never sees an empty frame,
-"0 of 1 steps" or an older block of the log.
+### How an install ended, after CeraUI restarted [EXISTS; host-tested]
 
-The transcript is display only. Its read errors never block a drain or change
-the outcome; a transcript that could not be read keeps the unit as the
-evidence (`drained: false`, below). Once systemd reports the
-unit finished, one final read is complete by construction: APT, the file's
-only writer, has exited. That read gives up after 20 failed reads and records
-`drained: false`. The unit's exit status alone decides success or failure,
-also when stdout or stderr stay unreadable or retiring the unit fails. The
-orchestrator's Settings activity line resumes with the transcript's number or
-none.
+A package's postinst can restart CeraUI during the install (the owner's case
+on the Rock 5B+), and a successful install restarts it once more. A tab can
+therefore miss the one frame that carries the result. It remembers what the
+device last offered (`update_state.available.packages`: the target versions)
+and, when the install it showed ends with no result the device reported, it
+holds the phase and asks `system.updateOutcome` with those packages. The
+device answers read-only (`software-update-outcome.ts`; nothing is written,
+claimed, stopped or retired):
 
-One durable attempt record, `/run/ceralive/software-update.attempt` (root,
-0600), is the only thing replay and adjudication read, and one module,
-`software-update-attempt.ts`, owns it: nothing else reads or writes it. A
-recorded exit is used only through `claimOutcome(attempt, { invocation })`,
-which returns it only while the record is still that admitted attempt's,
-launched, with an exit from its bound invocation, read from the stdout file
-that is there now (and, for a replay, within the window below), all compared
-in one synchronous step after the last await, so an admission meanwhile wins.
-The tab's replay, the attempt's own success effects (cache cleanup and the
-deliberate restart), the orchestrator's package state (`getPlanUpdateState`)
-and the unit's retirement all go through it; no other code reads a raw exit. The monitor claims a unit's exit before it does anything with it
-and uses only the claimed value; an exit nothing could record cannot be
-claimed, so it is no outcome (**Outcome not confirmed**, no restart, no
-commit) and the unit stays. The observer hands the monitor the claim it took
-before it retired the unit, and recovery tells the claim it took before its
-retirement: nothing claims again once the unit is gone. Each later use
-confirms that claim against the record in one synchronous step
-(`claim.confirm()`): recovery's adoption of a recorded exit, every read of the
-orchestrator's package state, the pending success's persistence, the
-recovered success's write (`persistRecoveredCommitSuccess`, checked right
-before it persists), a failed commit's quarantine (read again after the reads
-that precede its write) and the restart, which confirms once more right before
-the exit. An outcome nobody claimed takes no terminal effect, not even
-cleaning the APT cache. Every write is one compare-and-set step
-(`updateSoftwareUpdateAttempt`, called only by that module): it reads the current
-record, decides from it, and writes the replacement to a temporary file
-renamed into place, all synchronously, so no other write of this backend can
-come between; a writer that no longer owns the record writes nothing. Only
-the backend writes it, and only one backend runs per device. A record that
-cannot be read gives no authority: every write refuses it, except a new
-admission, which replaces it. `startSoftwareUpdate` writes a new attempt
-(`accepted`, a fresh id, no exit) after its refusals and before it publishes
-anything or starts a check. When the orchestrator starts it, `plan` is the key
-of its saved plan: a hash of the pending package list it writes to `/data`
-before every start, as every release does. The orchestrator settles only from
-a claim whose `plan` is the saved plan's key at the moment it reads, so a
-changed or missing saved plan (one an older release saved after a rollback,
-for example) settles nothing; the strict `agent.json` schema is unchanged. A
-second start while the first waits for package discovery is refused
-(`already_updating`), so no admission replaces a waiting attempt's record.
-A restart at any step before the unit starts
-finds that attempt with no exit and tells nothing. No older exit is ever kept:
-a new attempt is admitted only once the previous attempt's unit is gone, its
-outcome claimed first (below). When the record cannot be written the start is
-refused. The
-launch writes `launched` before the unit exists, only for the caller's own
-admitted attempt (refused once another admission replaced it), and the
-observer adds
-systemd's `InvocationID` as soon as it sees the unit: that invocation is the
-attempt's identity, and a different invocation of the fixed unit is a
-replaced unit, never this attempt's. After its final read the observer writes
-the exit (with `drained`, whether the transcript was read, and `transcript`,
-which stdout file it was read from) only into this attempt's own record that
-still has no exit, or when no record exists (five tries, each comparing
-again). A record that now holds another attempt, finished or pending, is never
-replaced: the exit is then nobody's outcome (unknown: no success or failure,
-no restart). A unit no record names (one started by an older release) is
-adopted once, as a new attempt bound to the invocation systemd shows at that
-moment, only by the same compare-and-set and only when no other attempt is
-pending. It is bound to the saved plan of that moment only when its own
-`ExecStart` installs exactly that plan's package versions (the released pinned
-script names every `<package>=<version>`): that is the proof it was started
-for the plan. Otherwise its exit is recorded for display and the unit's
-disposition, never as the plan's outcome.
-Otherwise it is watched for display only: nothing of it is recorded, claimed
-or retired, and its exit is unknown. A gone unit's exit is told only from a `launched` record with an
-exit and an invocation, within 30 minutes of boot-relative uptime, and only
-while the stdout file is the one it was read from: any later run, including
-one an older release started, makes a new file.
+| The device finds | Answer | The tab shows |
+|---|---|---|
+| The unit is still there and this process reports it itself (it observes it, or its recovery has not looked yet and startup was not refused) | `running` | The held phase; the observer's frames follow |
+| Every offered package installed (`dpkg-query` status `ii`) at its version or later (`dpkg --compare-versions`: epochs, `~`, `+`) | `success` | **Update Successful** |
+| A package below its offer and the unit finished with a non-zero exit (`ExecMainStatus`, read once) | `failed`, `apt-get exited with code N` | **Update Failed**, as a hint |
+| Anything else: a package below its offer with no failed exit, a read that gives no answer, no versioned offer (legacy images offer names only) | `unknown` | **Outcome not confirmed** |
 
-Every attempt runs under the one fixed name, `ceralive-software-update.service`,
-the same name and command every release uses, and CeraUI alone starts or
-retires it. One in-process lock (`software-update-process.ts`) serializes every
-launch, the observer's record-claim-retire step, recovery and the start's
-settle (below), each holding it across the systemd probe that decides an
-action and the action itself, so no other start or retirement can come
-between them and a probe is never stale. A launch starts only into an empty
-slot: it refuses while any unit is there. When the unit finishes, the
-observer records the exit, claims it and only then retires the unit, with the
-lock held; the unit is retired only while systemd, asked again right before
-every stop, still shows that same finished invocation and exit, and only once
-the claim succeeded with the transcript read. A replaced unit is left alone. A
-claim that fails keeps the unit as the only evidence: no retirement, no cache
-cleanup, no restart, and the tab says **Outcome not confirmed**. Otherwise the
-unit stays as the evidence, its exit is still
-published, and the deliberate restart is withheld (boot marked degraded). A
-retirement that finds another invocation holding the unit also withholds the
-restart; while ownership is pending the restart waits for that retirement.
-A finished unit whose exit is recorded (same exit and invocation) is never
-adopted again: a later boot reports it and tries one retirement, so a unit
-whose `systemctl stop` keeps failing restarts CeraUI at most once.
+An answer that does not arrive (the socket dropped again) is also **Outcome
+not confirmed**. The tab asks once per ended install; after a `running` answer
+it follows the device's frames and asks again only if the install it shows
+ends without a result again. A device-reported `success`, `failed` or
+preflight refusal in the same frame is announced as it is, without asking.
 
-A finished unit left in place (its outcome unclaimed or unread, or its
-retirement failed) blocks every new start (`already_updating`), so a new
-attempt never replaces the record of an outcome nobody claimed. Every start
-the device is asked for (the Settings button and the orchestrator's package
-start, through `startSoftwareUpdateWhenSettled`) first settles it under the
-lock: the record's attempt claims its outcome for that very invocation and
-exit, and only then is the unit retired; the start is admitted right after,
-with nothing awaited between. While it cannot be retired the start is
-refused and the receipt stays; once it can be, the next start runs. A unit
-that no attempt can claim, or whose transcript was never read (`drained:
-false`), is retired only after it has stayed for 30 minutes of uptime, with
-the reason logged, so it cannot block updates until a reboot clears `/run`.
-At boot, recovery runs before any start is accepted and takes the same lock:
-the record's own unit (running, or finished with no recorded exit) is
-observed, a finished unit with a recorded exit is told and retired once after
-its claim, and an older release's running unit is adopted once, bound to its
-invocation. Only a probe that found no unit is absence: an unknown unit, or
-one never probed, leaves a committing resume `commit_resume_inconclusive`,
-never `commit_unit_absent_on_resume`. The 30 minutes before an unclaimable
-unit is retired run from when this backend first left it in place; a restart
-of CeraUI starts them again.
-
-Go Live's stop (D8) takes the same lock. In that one step it probes the unit
-and the commit stage again and signals (`systemctl kill --signal=SIGTERM`)
-only a running unit that is still downloading. It never stops the unit, so
-systemd keeps its exit for the observer to record, claim and retire; that exit
-is an interruption (the paused-download notice), never a failed update. A
-unit that finished meanwhile, one in its commit stage, or one nobody could
-probe makes the stream wait (the commit-stage refusal) instead of reporting an
-abort; a stream start on the in-process pinned download, or with no unit,
-aborts as before. The commit-stage probe and package recovery's absence proof
-name the same fixed unit, as on main.
-
-At boot a surviving unit is watched at once, independent of the slower
-startup checks: the tab sees its progress and outcome. Retiring it,
-cleaning the APT cache and restarting CeraUI wait until startup is admitted,
-and the orchestrator's completion check is read only then (startup reserves
-it while adjudicating), so a restart runs it whenever one is reserved; a
-refused or failed startup leaves it watched only, and new starts are
-refused while that hand-over is pending.
-
-A tab can miss the single outcome push while it reconnects across the
-completion restart. Once recovery finds the unit gone, the next backend
-replays a recorded outcome younger than 30 minutes, once per boot, as
-`update_state` success or failure with `updating: null`. A tab that was
-showing the install announces that outcome as the overlay closes; one told
-only that the install ended, with no outcome known, says **Outcome not
-confirmed** instead of closing silently.
+What the simplification costs: the outcome after a restart is only as good as
+the offer the tab remembered. A tab opened after the install began, or
+reloaded, has nothing to ask with and says nothing (as on main); a legacy
+image's offer has no versions, so its missed outcomes are **Outcome not
+confirmed**. A power loss or crash during the install honestly yields **Outcome
+not confirmed** unless the versions were already installed. Success means the
+versions are installed, not that every maintainer script exited cleanly; a
+unit that failed after installing them reads as success. A boot whose update
+startup was refused reports a running unit as not confirmed at once. Main's
+own outcome rules are unchanged: a unit that vanishes, output that stays
+unreadable after the final drain, or a successful unit whose retirement fails
+are reported as failures, as main reports them.
 
 ## Pending disruptive effects [PARTIAL — host proof, board drill owed]
 

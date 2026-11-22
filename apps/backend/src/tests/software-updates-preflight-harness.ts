@@ -10,16 +10,9 @@ import { setup } from "../modules/setup.ts";
 import { readArmedStreamMarker } from "../modules/streaming/armed-stream-marker.ts";
 import type { AptReachability } from "../modules/system/apt-reachability.ts";
 import { defaultAptSpaceDeps } from "../modules/system/apt-space-admission.ts";
-import { softwareUpdateOutputPaths } from "../modules/system/software-update-output.ts";
 import * as transaction from "../modules/system/software-update-process.ts";
-import { setDetachedAptServiceDepsForTest } from "../modules/system/software-update-service.ts";
 import * as updates from "../modules/system/software-updates.ts";
 import * as compat from "../rpc/compat.ts";
-import {
-	memoryAttempt,
-	recordedClaim,
-	TEST_PLAN,
-} from "./helpers/memory-attempt.ts";
 import { observeTestUpdateExit } from "./software-update-exit-harness.ts";
 import { armedMarkerFixture } from "./software-updates-marker-harness.ts";
 
@@ -28,23 +21,6 @@ export { TestUpdateExit } from "./software-update-exit-harness.ts";
 export const SPACE_TRANSCRIPT = `After this operation, 2 kB of additional disk space will be used.
 'https://repo.invalid/a.deb' a.deb 4000 SHA256:abc
 `;
-
-/** No host systemctl or /run: an update attempt finds no unit and owns the record. */
-export function useNoHostUpdateUnit(): void {
-	setDetachedAptServiceDepsForTest({
-		outputPaths: softwareUpdateOutputPaths(),
-		prepareOutput: async () => undefined,
-		start: async () => undefined,
-		inspect: async () => ({ kind: "absent" }),
-		cleanup: async () => undefined,
-		readOutput: async (_file, offset) => ({
-			bytes: new Uint8Array(),
-			nextOffset: offset,
-		}),
-		sleep: async () => undefined,
-		...memoryAttempt(),
-	});
-}
 
 export async function updateHarness() {
 	const markerFixture = await armedMarkerFixture();
@@ -57,7 +33,6 @@ export async function updateHarness() {
 	delete process.env.MOCK_MODE;
 	setup.apt_update_enabled = true;
 	updates.resetSoftwareUpdateState();
-	useNoHostUpdateUnit();
 	const frames: StatusResponse[] = [];
 	let terminal = Promise.withResolvers<void>();
 	const restarted = Promise.withResolvers<void>();
@@ -90,10 +65,6 @@ export async function updateHarness() {
 		restartExit: (() => never) | undefined;
 		beforeClean: (() => Promise<void>) | undefined;
 		completion: Promise<number>;
-		/** The observer could not claim the exit (nothing recorded it). */
-		unclaimed: boolean;
-		/** The key of the orchestrator's saved plan now. */
-		plan: string;
 		markerBefore: string;
 		frames: StatusResponse[];
 		onFrame: ((frame: StatusResponse) => void) | undefined;
@@ -110,8 +81,6 @@ export async function updateHarness() {
 		restartExit: undefined,
 		beforeClean: undefined,
 		completion: Promise.resolve(100),
-		unclaimed: false,
-		plan: TEST_PLAN,
 		markerBefore: markerFixture.before,
 		frames,
 		onFrame: undefined,
@@ -183,17 +152,6 @@ export async function updateHarness() {
 			h.markerAtLaunch =
 				readArmedStreamMarker()?.plannedShutdown?.reason === "software_update";
 			handlers.onStderr("original transaction failure");
-			// The claim the real observer hands over once the exit is recorded and read.
-			handlers.onOutcome?.(
-				h.unclaimed
-					? async () => null
-					: recordedClaim(
-							h.completion.catch(
-								(error: { readonly transactionExitCode?: number }) =>
-									error.transactionExitCode ?? -1,
-							),
-						),
-			);
 			return h.completion;
 		},
 	);
@@ -210,8 +168,6 @@ export async function updateHarness() {
 		},
 	);
 	const restartTail = observeTestUpdateExit();
-	// The orchestrator saves its plan before every start; this is that plan.
-	const restorePlan = updates.setSoftwareUpdatePlanReader(() => h.plan);
 	updates.setAptReachabilityProbeForTest(async () => ({
 		ipv4: "ok",
 		ipv6: "ok",
@@ -254,8 +210,6 @@ export async function updateHarness() {
 			return markerFixture.read();
 		},
 		async [Symbol.asyncDispose]() {
-			updates.setSoftwareUpdatePlanReader(restorePlan);
-			setDetachedAptServiceDepsForTest(null);
 			updates.resetSoftwareUpdateState();
 			// Reset retires outcomes, not availability; withdraw the fixture's discovered packages too.
 			const emptyDiscovery = spyOn(

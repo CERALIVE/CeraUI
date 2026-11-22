@@ -74,7 +74,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as invariantModule from "../helpers/invariant.ts";
 import {
-	getLastInstallUnitVerdict,
 	getUpdateState,
 	recoverSoftwareUpdateIfRunning,
 	resetSoftwareUpdateRunner,
@@ -84,7 +83,6 @@ import {
 	saveOrchestratorState,
 	setOrchestratorStateFilePathForTest,
 } from "../modules/system/update-orchestrator/persistence.ts";
-import { UpdateQuarantine } from "../modules/system/update-orchestrator/quarantine.ts";
 import { resumeOrchestratorState } from "../modules/system/update-orchestrator/resume.ts";
 import {
 	defaultOrchestratorRuntimeDeps,
@@ -94,7 +92,6 @@ import {
 } from "../modules/system/update-orchestrator/runtime.ts";
 import { initialOrchestratorState } from "../modules/system/update-orchestrator/types.ts";
 import * as compat from "../rpc/compat.ts";
-import { recordedClaim } from "./helpers/memory-attempt.ts";
 import { acquireTestOsStageControl } from "./helpers/os-stage-test-control.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
 
@@ -131,9 +128,6 @@ describe("boot double-recovery race — resume must not misread evidence a start
 			phase: "committing",
 			progress: { percent: 50, etaSeconds: 10 },
 		});
-		// The plan the install was started for, saved before it, as every start does.
-		const quarantine = new UpdateQuarantine(join(tempRoot, "quarantine.json"));
-		await quarantine.savePending([{ name: "cerastream", version: "2" }]);
 
 		const order: string[] = [];
 		const exited = Promise.withResolvers<void>();
@@ -155,9 +149,8 @@ describe("boot double-recovery race — resume must not misread evidence a start
 				startupRetryClock: { wait: () => Promise.resolve() },
 				recoverSoftwareUpdateIfRunning: () =>
 					recoverSoftwareUpdateIfRunning({
-						recover: async ({ onAttached, onOutcome }) => {
+						recover: async ({ onAttached }) => {
 							onAttached?.();
-							onOutcome?.(recordedClaim(Promise.resolve(0)));
 							return {
 								completion: Promise.resolve(0),
 								wasAlreadyFinished: true,
@@ -167,7 +160,6 @@ describe("boot double-recovery race — resume must not misread evidence a start
 						resumePeriodicChecks: () => {},
 					}),
 				getPackageInstallWireState: getUpdateState,
-				quarantine,
 				persist: (state) => {
 					order.push(`persist:${state.phase}`);
 					saveOrchestratorState(state);
@@ -189,9 +181,8 @@ describe("boot double-recovery race — resume must not misread evidence a start
 		// The boot-level standalone recovery call: finds the detached unit
 		// already finished with exit 0.
 		const bootRecovered = await recoverSoftwareUpdateIfRunning({
-			recover: async ({ onAttached, onOutcome }) => {
+			recover: async ({ onAttached }) => {
 				onAttached?.();
-				onOutcome?.(recordedClaim(Promise.resolve(0)));
 				return { completion: Promise.resolve(0), wasAlreadyFinished: true };
 			},
 			scheduleRetry: () => {},
@@ -222,9 +213,8 @@ describe("boot double-recovery race — resume must not misread evidence a start
 		await using h = await updateHarness();
 
 		const bootRecovered = await recoverSoftwareUpdateIfRunning({
-			recover: async ({ onAttached, onOutcome }) => {
+			recover: async ({ onAttached }) => {
 				onAttached?.();
-				onOutcome?.(recordedClaim(Promise.resolve(100)));
 				return { completion: Promise.resolve(100), wasAlreadyFinished: true };
 			},
 			scheduleRetry: () => {},
@@ -255,9 +245,8 @@ describe("boot double-recovery race — resume must not misread evidence a start
 		);
 		try {
 			const bootRecovered = await recoverSoftwareUpdateIfRunning({
-				recover: async ({ onAttached, onOutcome }) => {
+				recover: async ({ onAttached }) => {
 					onAttached?.();
-					onOutcome?.(recordedClaim(Promise.resolve(0)));
 					return { completion: Promise.resolve(0), wasAlreadyFinished: true };
 				},
 				scheduleRetry: () => {},
@@ -281,8 +270,6 @@ describe("boot double-recovery race — resume must not misread evidence a start
 		const resumed = await resumeOrchestratorState(persistedCommitting(10), {
 			recoverSoftwareUpdateIfRunning: () =>
 				recoverSoftwareUpdateIfRunning(NOTHING_LEFT_TO_RECOVER),
-			// As production wires it: the probe's own verdict says the unit is gone.
-			lastInstallUnitVerdict: getLastInstallUnitVerdict,
 			getUpdateState,
 			now: () => 9999,
 		});

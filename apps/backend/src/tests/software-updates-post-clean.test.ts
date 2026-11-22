@@ -1,10 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { cleanAptCache } from "../modules/system/apt-cache-clean.ts";
 import { defaultAptSpaceDeps } from "../modules/system/apt-space-admission.ts";
-import {
-	DetachedAptServiceCleanupError,
-	recoverDetachedAptUpgrade,
-} from "../modules/system/software-update-process.ts";
+import { recoverDetachedAptUpgrade } from "../modules/system/software-update-process.ts";
 import { parseDetachedAptServiceState } from "../modules/system/software-update-service.ts";
 import {
 	getUpdateState,
@@ -16,7 +13,6 @@ import {
 	triggerManualUpdateCheck,
 } from "../modules/system/software-updates.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
-import { memoryAttempt, recordedClaim } from "./helpers/memory-attempt.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
 
 useSessionOwnerForFile();
@@ -37,31 +33,7 @@ describe("best-effort post-clean", () => {
 					: { kind: "success" },
 			);
 			expect(h.cleanCount).toBe(2);
-			await h.restarted();
 			expect(h.restarts).toBe(1);
-		},
-	);
-	test.each([
-		[0, "success"],
-		[100, "failed"],
-	] as const)(
-		"a unit whose retirement fails after exit %d keeps that outcome",
-		async (exitCode, kind) => {
-			await using h = await updateHarness();
-			const retirementFailed = Promise.reject(
-				new DetachedAptServiceCleanupError(
-					exitCode,
-					new Error("systemctl stop failed"),
-					true,
-				),
-			);
-			retirementFailed.catch(() => {});
-			h.completion = retirementFailed;
-			startSoftwareUpdate();
-			await h.check();
-			expect(getUpdateState().kind).toBe(kind);
-			if (exitCode === 0) await h.restarted();
-			expect(h.restarts).toBe(exitCode === 0 ? 1 : 0);
 		},
 	);
 	test("legacy completion keeps its original exit without calling the orchestrator hook", async () => {
@@ -75,7 +47,6 @@ describe("best-effort post-clean", () => {
 		await h.check();
 
 		expect(getUpdateState()).toEqual({ kind: "success" });
-		await h.restarted();
 		expect(hookCalls).toBe(0);
 		expect(h.restarts).toBe(1);
 	});
@@ -133,9 +104,8 @@ describe("best-effort post-clean", () => {
 		h.cleanCount = 1;
 		h.postCleanFails = true;
 		await recoverSoftwareUpdateIfRunning({
-			recover: async ({ onAttached, onOutcome }) => {
-				onAttached?.(false);
-				onOutcome?.(recordedClaim(Promise.resolve(0)));
+			recover: async ({ onAttached }) => {
+				onAttached?.();
 				return { completion: Promise.resolve(0), wasAlreadyFinished: true };
 			},
 			scheduleRetry: () => {},
@@ -175,7 +145,6 @@ describe("best-effort post-clean", () => {
 						parseDetachedAptServiceState(
 							"LoadState=not-found\nActiveState=inactive\n",
 						),
-					...memoryAttempt(),
 					prepareOutput: async () => {
 						throw new Error("must not prepare");
 					},

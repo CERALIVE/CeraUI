@@ -159,6 +159,7 @@ import {
 	sshStartProcedure,
 	sshStopProcedure,
 	startUpdateProcedure,
+	updateOutcomeProcedure,
 } from "./procedures/system.procedure.ts";
 import { heartbeatProcedure } from "./procedures/ui.procedure.ts";
 import {
@@ -315,6 +316,7 @@ const stableRoutes = {
 		poweroff: poweroffProcedure,
 		reboot: rebootProcedure,
 		startUpdate: startUpdateProcedure,
+		updateOutcome: updateOutcomeProcedure,
 		getUpdateSettings: getUpdateSettingsProcedure,
 		setUpdateSettings: setUpdateSettingsProcedure,
 		getUpdateCapabilities: getUpdateCapabilitiesProcedure,

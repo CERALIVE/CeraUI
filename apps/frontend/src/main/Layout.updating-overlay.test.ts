@@ -69,6 +69,8 @@ const transport = vi.hoisted(() => ({
 	// a hydrate that omits the field must not retract an update in progress.
 	hydratedStatus: {} as Record<string, unknown>,
 	hydrateCalls: 0,
+	// What the device answers, in order, when the tab asks how an install ended.
+	outcomes: [] as unknown[],
 }));
 
 vi.mock("$lib/rpc/client", () => ({
@@ -76,6 +78,11 @@ vi.mock("$lib/rpc/client", () => ({
 		auth: { login: vi.fn(async () => ({ success: true })) },
 		streaming: { getConfig: vi.fn(async () => ({})) },
 		ui: { heartbeat: vi.fn(async () => undefined) },
+		system: {
+			updateOutcome: vi.fn(
+				async () => transport.outcomes.shift() ?? { kind: "unknown" },
+			),
+		},
 		status: {
 			getStatus: vi.fn(async () => {
 				transport.hydrateCalls += 1;
@@ -133,6 +140,7 @@ vi.mock("$lib/stores/auth-status.svelte", () => ({
 	},
 }));
 
+import { rpc } from "$lib/rpc/client";
 import {
 	initSubscriptions,
 	resetState,
@@ -183,6 +191,7 @@ beforeEach(() => {
 	localStorage.setItem("auth", "token-abc");
 	transport.hydratedStatus = {};
 	transport.hydrateCalls = 0;
+	transport.outcomes = [];
 	setDisconnectedSince(null);
 	resetState();
 	initSubscriptions();
@@ -403,7 +412,8 @@ describe("Layout — one tab across the owner's two-restart update", () => {
 	type Seen =
 		| { readonly at: "connected" | "disconnected" }
 		| { readonly at: "push" | "pull"; readonly status: Record<string, unknown> }
-		| { readonly at: "moment"; readonly name: string };
+		| { readonly at: "moment"; readonly name: string }
+		| { readonly at: "asked"; readonly outcome: unknown };
 
 	// What the open tab shows: the overlay's phase and number, and Settings' line.
 	function view(): string {
@@ -437,6 +447,10 @@ describe("Layout — one tab across the owner's two-restart update", () => {
 				} as never,
 			},
 		});
+		// The device answers the tab's questions as it answered the recorded tab.
+		transport.outcomes = seen.flatMap((e) =>
+			e.at === "asked" ? [e.outcome] : [],
+		);
 		// A tab that is opening has no connection yet.
 		transport.connection?.("disconnected");
 		const moments: Record<string, string> = {};
@@ -461,6 +475,10 @@ describe("Layout — one tab across the owner's two-restart update", () => {
 			} else if (event.at === "moment") {
 				moments[event.name] = view();
 				continue;
+			} else if (event.at === "asked") {
+				// The tab acts on the answer to its last question before the next event.
+				await vi.mocked(rpc.system.updateOutcome).mock.results.at(-1)?.value;
+				await tick();
 			}
 			flushSync();
 			trace.push(view());
@@ -472,24 +490,43 @@ describe("Layout — one tab across the owner's two-restart update", () => {
 		`overlay: Installing ${n} | settings: Installing · ${n}%`;
 	const held = (phase: string) => `overlay: ${phase} - | settings: ${phase}`;
 	const nothing = "no overlay | settings: -";
+	const asking = "overlay: Installing - | settings: -";
+	const offeredIn = (seen: readonly Seen[]) =>
+		seen
+			.flatMap((e) => {
+				const state =
+					e.at === "push" || e.at === "pull"
+						? (e.status.update_state as
+								| { kind?: string; packages?: unknown }
+								| undefined)
+						: undefined;
+				return state?.kind === "available" ? [state.packages ?? []] : [];
+			})
+			.at(-1);
 
 	it("renders every moment the real backend processes sent it", async () => {
 		const { moments, trace } = await replay(restart.seen as Seen[]);
 
 		expect(moments).toEqual({
-			"signed in before the first recovery": nothing,
 			idle: nothing,
 			downloading: held("Downloading"),
 			"installing 40%": installing(40),
 			"postinst stopped the backend": installing(40),
-			"re-authenticated before recovery": installing(40),
-			"attached, nothing read yet": installing(40),
+			// main's first status says nothing is updating: the tab holds the phase
+			// without its number while it asks, and the device says it still runs.
+			"re-authenticated before recovery": asking,
+			// The reattached unit's first frame is an earlier phase: never shown.
+			"attached, nothing read yet": `overlay: Installing - | settings: Preparing or downloading packages`,
 			"recovered at installing 60%": installing(60),
 			"installing 80%": installing(80),
 			outcome: nothing,
 			"completion restart": nothing,
 			"re-authenticated after the outcome": nothing,
-			"no unit after the outcome": nothing,
+		});
+		// It asked once, sending the packages the device had offered.
+		expect(rpc.system.updateOutcome).toHaveBeenCalledTimes(1);
+		expect(rpc.system.updateOutcome).toHaveBeenCalledWith({
+			packages: offeredIn(restart.seen as Seen[]),
 		});
 		// After every event: no step counts, and from the first download to the
 		// outcome never an empty frame, a lower phase or a lower number.
@@ -555,13 +592,17 @@ describe("Layout — one tab across the owner's two-restart update", () => {
 	});
 
 	it("a tab offline through the outcome learns it from the next backend", async () => {
-		const { moments } = await replay(offline.seen as Seen[]);
+		const { moments, trace } = await replay(offline.seen as Seen[]);
 		expect(moments).toMatchObject({
 			"installing 80%": installing(80),
 			"offline through the outcome": installing(80),
-			"re-authenticated after the outcome": installing(80),
-			"outcome replayed": nothing,
+			// Told only that nothing is updating: it holds the phase and asks.
+			"re-authenticated after the outcome": asking,
 		});
+		// The device answers from the installed versions: the overlay closes on success.
+		expect(trace.at(-1)).toBe(nothing);
+		// Asked after each restart: told the unit still runs, then that it succeeded.
+		expect(rpc.system.updateOutcome).toHaveBeenCalledTimes(2);
 		expect(vi.mocked(toast.success)).toHaveBeenCalledTimes(1);
 		expect(vi.mocked(toast.error)).not.toHaveBeenCalled();
 		expect(vi.mocked(toast.warning)).not.toHaveBeenCalled();
@@ -592,16 +633,109 @@ describe("Layout — a tab that missed the install's result is told what the dev
 		},
 	);
 
-	it("says the outcome is not confirmed when the device does not know it", () => {
+	// What the device offered before the install: the versions it must reach.
+	const offered = [
+		{
+			name: "ceralive-ui",
+			version: "2026.11.3",
+			layer: "app",
+			actionable: true,
+		},
+	];
+	const asked = () => vi.mocked(rpc.system.updateOutcome);
+	async function endsAndAsks(answer: Promise<unknown>) {
+		pushStatus({
+			update_state: {
+				kind: "available",
+				identity: { version: "2026.11.3", packages: ["ceralive-ui"] },
+				package_count: 1,
+				packages: offered,
+			},
+		});
 		updating({ ...installing, percent: 70 });
 		render(Layout);
+		const title = overlayTitle();
+		asked().mockReturnValueOnce(answer as never);
 		ended({ kind: "idle" });
+		expect(asked()).toHaveBeenCalledWith({ packages: offered });
+		// Until the device answers, the phase is held without its number.
+		expect(overlayTitle()).toBe(title);
+		expect(
+			document.querySelector('[data-testid="update-phase"]')?.textContent,
+		).toContain("Installing");
+		expect(
+			document
+				.querySelector('[role="progressbar"]')
+				?.getAttribute("aria-valuenow"),
+		).toBeNull();
+		await answer.catch(() => undefined);
+		await tick();
+		flushSync();
+	}
+
+	it("says the outcome is not confirmed when the device does not know it", async () => {
+		await endsAndAsks(Promise.resolve({ kind: "unknown" }));
 		expect(overlayTitle()).toBeUndefined();
 		expect(vi.mocked(toast.warning)).toHaveBeenCalledWith(
 			"Outcome not confirmed",
 		);
 		expect(vi.mocked(toast.success)).not.toHaveBeenCalled();
 		expect(vi.mocked(toast.error)).not.toHaveBeenCalled();
+	});
+
+	it("says the outcome is not confirmed when its question gets no answer", async () => {
+		await endsAndAsks(Promise.reject(new Error("socket closed")));
+		expect(overlayTitle()).toBeUndefined();
+		expect(vi.mocked(toast.warning)).toHaveBeenCalledWith(
+			"Outcome not confirmed",
+		);
+		expect(vi.mocked(toast.success)).not.toHaveBeenCalled();
+	});
+
+	it("announces success when the device reads the offered versions as installed", async () => {
+		await endsAndAsks(Promise.resolve({ kind: "success" }));
+		expect(overlayTitle()).toBeUndefined();
+		expect(vi.mocked(toast.success)).toHaveBeenCalledTimes(1);
+		expect(vi.mocked(toast.warning)).not.toHaveBeenCalled();
+		expect(vi.mocked(toast.error)).not.toHaveBeenCalled();
+	});
+
+	it("announces the unit's failed exit as the failure", async () => {
+		await endsAndAsks(
+			Promise.resolve({
+				kind: "failed",
+				reason: "apt-get exited with code 100",
+			}),
+		);
+		expect(overlayTitle()).toBeUndefined();
+		expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
+			"Update Failed",
+			expect.objectContaining({ description: "apt-get exited with code 100" }),
+		);
+		expect(vi.mocked(toast.success)).not.toHaveBeenCalled();
+		expect(vi.mocked(toast.warning)).not.toHaveBeenCalled();
+	});
+
+	it("keeps the phase while the device still reports the unit, and follows its frames again", async () => {
+		await endsAndAsks(Promise.resolve({ kind: "running" }));
+		const title = overlayTitle();
+		expect(title).toBeDefined();
+		expect(vi.mocked(toast.success)).not.toHaveBeenCalled();
+		expect(vi.mocked(toast.warning)).not.toHaveBeenCalled();
+		updating({ ...installing, percent: 80 });
+		expect(overlayTitle()).toBe(title);
+		expect(
+			document
+				.querySelector('[role="progressbar"]')
+				?.getAttribute("aria-valuenow"),
+		).toBe("80");
+		pushStatus({
+			updating: { ...installing, percent: 80, result: 0 },
+			update_state: { kind: "success" },
+		});
+		expect(overlayTitle()).toBeUndefined();
+		expect(vi.mocked(toast.success)).toHaveBeenCalledTimes(1);
+		expect(asked()).toHaveBeenCalledTimes(1);
 	});
 
 	it("leaves a refused preflight to its own notice", () => {

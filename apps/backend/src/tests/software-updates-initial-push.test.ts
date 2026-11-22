@@ -33,7 +33,7 @@ describe("software-update status reaches clients across recovery", () => {
 	test("a freshly authenticated client receives both fields in the initial status", async () => {
 		const recovered = await recoverSoftwareUpdateIfRunning({
 			recover: async ({ onAttached }) => {
-				onAttached?.(false);
+				onAttached?.();
 				return undefined as never;
 			},
 			scheduleRetry: () => {},
@@ -53,10 +53,8 @@ describe("software-update status reaches clients across recovery", () => {
 		addClient(client);
 
 		await recoverSoftwareUpdateIfRunning({
-			// The observer announces a reattached unit after its first drain.
-			recover: async ({ onAttached, onDrained }) => {
-				onAttached?.(false);
-				onDrained?.();
+			recover: async ({ onAttached }) => {
+				onAttached?.();
 				return undefined as never;
 			},
 			scheduleRetry: () => {},

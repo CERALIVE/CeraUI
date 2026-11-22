@@ -25,6 +25,8 @@ import {
 	successResponseSchema,
 	updateCapabilitiesSchema,
 	updateDetailsSchema,
+	updateOutcomeInputSchema,
+	updateOutcomeSchema,
 	updateSettingsInputSchema,
 	updateSettingsSchema,
 } from "@ceraui/rpc/schemas";
@@ -62,7 +64,8 @@ import {
 import { getSensors } from "../../modules/system/sensors.ts";
 import {
 	aptUpdatesEnabled,
-	startSoftwareUpdateWhenSettled,
+	readSoftwareUpdateOutcome,
+	startSoftwareUpdate,
 	triggerManualUpdateCheck,
 } from "../../modules/system/software-updates.ts";
 import {
@@ -223,8 +226,8 @@ export const rebootProcedure = authedProcedure
 // Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
 export const startUpdateProcedure = authedProcedure
 	.output(successResponseSchema)
-	.handler(async () => {
-		const outcome = await startSoftwareUpdateWhenSettled();
+	.handler(() => {
+		const outcome = startSoftwareUpdate();
 		if (!outcome.started) {
 			logger.info(`System: software update refused (${outcome.reason})`);
 			return { success: false, error: outcome.reason };
@@ -232,6 +235,12 @@ export const startUpdateProcedure = authedProcedure
 		logger.info("System: software update started");
 		return { success: true };
 	});
+
+/** Read-only: what an install a tab watched did, once CeraUI restarted under it. */
+export const updateOutcomeProcedure = authedProcedure
+	.input(updateOutcomeInputSchema)
+	.output(updateOutcomeSchema)
+	.handler(({ input }) => readSoftwareUpdateOutcome(input.packages));
 
 /**
  * Both actions bypass idle. `checkUpdatesNow` has no stream check;

@@ -188,6 +188,13 @@ number. Both the overlay and the inline bar show that percentage, never
 counted steps; the inline bar names the phase because APT restarts its
 percentage for the install. Only a terminal `result: 0` shows 100%.
 
+An install the tab showed that ends with no result the device reported (CeraUI
+restarted under it) holds its phase without a number while the tab asks
+`system.updateOutcome` with the packages the device last offered; it announces
+**Update Successful** only when the device reads those versions as installed,
+**Update Failed** for the unit's own failed exit below them, and otherwise
+**Outcome not confirmed** (`Layout.updating-overlay.test.ts`).
+
 ### A terminal install releases the takeover [EXISTS]
 
 The legacy `status.updating` push has ONE reading, `legacy-install.ts`:

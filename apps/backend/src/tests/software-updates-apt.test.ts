@@ -19,7 +19,6 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { type UpdatePackage, updateStateSchema } from "@ceraui/rpc";
-import { deriveUpdateProgress } from "../modules/system/apt-progress.ts";
 import { isParseError } from "../modules/system/cli-parse.ts";
 import {
 	ceralivePackageList,
@@ -32,6 +31,7 @@ import {
 } from "../modules/system/software-update-output.ts";
 import {
 	buildDetachedAptUpgradeCommand,
+	DetachedAptOutputUnavailableError,
 	DetachedAptServiceAlreadyExistsError,
 	DetachedAptServiceCleanupError,
 	recoverDetachedAptUpgrade,
@@ -54,6 +54,7 @@ import {
 	buildAptUpgradeArgs,
 	buildDiscoveredPackages,
 	classifyAptUpdateResult,
+	deriveAptProgress,
 	getUpdateState,
 	isSoftwareUpdateRecoveryInconclusive,
 	parseAptUpgradeSummary,
@@ -68,7 +69,6 @@ import {
 	setSoftwareUpdateSizeRunner,
 } from "../modules/system/software-updates.ts";
 import { deriveUpdateState } from "../modules/system/update-state.ts";
-import { memoryAttempt, TEST_INVOCATION } from "./helpers/memory-attempt.ts";
 
 const SOFTWARE_UPDATES_PATH = new URL(
 	"../modules/system/software-updates.ts",
@@ -306,7 +306,6 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			"--quiet",
 			"--service-type=exec",
 			"--expand-environment=no",
-			"--setenv=LC_ALL=C",
 			"--property=StandardOutput=append:/run/ceralive/software-update.stdout",
 			"--property=StandardError=append:/run/ceralive/software-update.stderr",
 			"--",
@@ -497,7 +496,6 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			},
 			{
 				outputPaths: paths,
-				...memoryAttempt(),
 				prepareOutput: async () => {
 					files.set(paths.stdout, new Uint8Array());
 					files.set(paths.stderr, new Uint8Array());
@@ -507,13 +505,8 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 					inspections++;
 					if (inspections === 1) return { kind: "absent" };
 					return finished
-						? {
-								kind: "finished",
-								exitCode: 0,
-								cleanup: "stop",
-								invocation: TEST_INVOCATION,
-							}
-						: { kind: "running", invocation: TEST_INVOCATION };
+						? { kind: "finished", exitCode: 0, cleanup: "stop" }
+						: { kind: "running" };
 				},
 				cleanup: async () => {
 					cleanupCalls++;
@@ -555,14 +548,13 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
 				},
-				...memoryAttempt(),
 				prepareOutput: async () => {
 					prepared++;
 				},
 				start: async () => {
 					started++;
 				},
-				inspect: async () => ({ kind: "running", invocation: TEST_INVOCATION }),
+				inspect: async () => ({ kind: "running" }),
 				cleanup: async () => {},
 				readOutput: async (_file, offset) => ({
 					bytes: new Uint8Array(),
@@ -597,7 +589,6 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
 				},
-				...memoryAttempt(),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
@@ -605,12 +596,7 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 					if (inspections === 1) return { kind: "absent" };
 					if (inspections === 2)
 						throw new Error("systemctl temporarily failed");
-					return {
-						kind: "finished",
-						exitCode: 0,
-						cleanup: "stop",
-						invocation: TEST_INVOCATION,
-					};
+					return { kind: "finished", exitCode: 0, cleanup: "stop" };
 				},
 				cleanup: async () => {},
 				readOutput: async (_file, offset) => {
@@ -650,20 +636,13 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			},
 			{
 				outputPaths: paths,
-				...memoryAttempt(),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
 					inspections++;
 					if (inspections === 1) return { kind: "absent" };
-					if (inspections === 2)
-						return { kind: "running", invocation: TEST_INVOCATION };
-					return {
-						kind: "finished",
-						exitCode: 0,
-						cleanup: "stop",
-						invocation: TEST_INVOCATION,
-					};
+					if (inspections === 2) return { kind: "running" };
+					return { kind: "finished", exitCode: 0, cleanup: "stop" };
 				},
 				cleanup: async () => {},
 				readOutput: async (file, offset) => {
@@ -685,10 +664,8 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 
 		expect(code).toBe(0);
 		expect(stdout.join("")).toBe("Unpacking package-a\n");
-		// Each poll reads to an empty read; the retained cursor never rewinds to 0.
 		expect(stdoutOffsets).toEqual([
 			0,
-			stdoutBytes.byteLength,
 			stdoutBytes.byteLength,
 			stdoutBytes.byteLength,
 		]);
@@ -716,19 +693,13 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			},
 			{
 				outputPaths: paths,
-				...memoryAttempt(),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
 					inspections++;
 					if (inspections === 1) return { kind: "absent" };
 					terminal = true;
-					return {
-						kind: "finished",
-						exitCode: 0,
-						cleanup: "stop",
-						invocation: TEST_INVOCATION,
-					};
+					return { kind: "finished", exitCode: 0, cleanup: "stop" };
 				},
 				cleanup: async () => {
 					cleanupCalls++;
@@ -770,19 +741,13 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			},
 			{
 				outputPaths: paths,
-				...memoryAttempt(),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
 					inspections++;
 					if (inspections === 1) return { kind: "absent" };
 					terminal = true;
-					return {
-						kind: "finished",
-						exitCode: 0,
-						cleanup: "stop",
-						invocation: TEST_INVOCATION,
-					};
+					return { kind: "finished", exitCode: 0, cleanup: "stop" };
 				},
 				cleanup: async () => {
 					cleanupCalls++;
@@ -797,8 +762,9 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			},
 		);
 
-		// The exit status is the outcome; the unit stays as the evidence.
-		await expect(completion).resolves.toBe(0);
+		await expect(completion).rejects.toBeInstanceOf(
+			DetachedAptOutputUnavailableError,
+		);
 		expect(observerErrors).toBe(20);
 		expect(cleanupCalls).toBe(0);
 	});
@@ -813,19 +779,13 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 					stdout: "/run/ceralive/software-update.stdout",
 					stderr: "/run/ceralive/software-update.stderr",
 				},
-				...memoryAttempt(),
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
 					inspections++;
 					return inspections === 1
 						? { kind: "absent" }
-						: {
-								kind: "finished",
-								exitCode: 0,
-								cleanup: "stop",
-								invocation: TEST_INVOCATION,
-							};
+						: { kind: "finished", exitCode: 0, cleanup: "stop" };
 				},
 				cleanup: async () => {
 					throw new Error("systemctl stop failed");
@@ -871,7 +831,6 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			},
 			{
 				outputPaths: paths,
-				...memoryAttempt(),
 				prepareOutput: async () => {
 					prepared++;
 				},
@@ -880,13 +839,8 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 				},
 				inspect: async () =>
 					finished
-						? {
-								kind: "finished",
-								exitCode: 0,
-								cleanup: "stop",
-								invocation: TEST_INVOCATION,
-							}
-						: { kind: "running", invocation: TEST_INVOCATION },
+						? { kind: "finished", exitCode: 0, cleanup: "stop" }
+						: { kind: "running" },
 				cleanup: async () => {
 					cleaned++;
 				},
@@ -1132,75 +1086,31 @@ StandardError=append:/run/ceralive/software-update.stderr
 	});
 });
 
-describe("deriveUpdateProgress() — the unit's transcript", () => {
-	const installing = { total: 1, downloading: 0, unpacking: 0, setting_up: 1 };
-	const transcript = [
-		"The following packages have been kept back:",
-		"  libkept",
-		"The following held packages will be changed:",
-		"  libapp",
-		"The following packages will be upgraded:",
-		"  libapp",
-		"1 upgraded, 0 newly installed, 0 to remove and 1 not upgraded.",
-		"Selecting previously unselected package libapp.",
-		"Preparing to unpack libapp.deb ...",
-		"Unpacking libapp (2) over (1) ...",
-		"Processing triggers for libkept (1) ...",
-		"dpkg: error processing package libapp (--configure): interrupted",
-		"",
-	].join("\n");
-
-	it.each([
-		["an interrupted configure", transcript],
-		[
-			"an unsupported removal",
-			transcript
-				.replace(
-					"1 upgraded,",
-					"The following packages will be REMOVED:\n  libremove\n1 upgraded,",
-				)
-				.replace("0 to remove", "1 to remove"),
-		],
-		[
-			"a pre-existing partial install",
-			transcript.replace(
-				"Selecting previously",
-				"1 not fully installed or removed.\nSelecting previously",
-			),
-		],
-		[
-			"an architecture-qualified record",
-			transcript.replace("Unpacking libapp (", "Unpacking libapp:arm64 ("),
-		],
-		[
-			"an unpack missing from the plan",
-			transcript.replace("Unpacking libapp (", "Unpacking libother ("),
-		],
-	])("shows the install phase and never a number for %s", (_name, output) => {
-		expect(deriveUpdateProgress(output)).toEqual(installing);
-	});
-
-	it("recognizes phase evidence split across several durable-file reads", () => {
+describe("deriveAptProgress() — arbitrary output chunk boundaries", () => {
+	it("recognizes progress tokens split across several durable-file reads", () => {
+		let status = {
+			total: 0,
+			downloading: 0,
+			unpacking: 0,
+			setting_up: 0,
+		};
 		let output = "";
-		const phases: unknown[] = [];
 		for (const chunk of [
-			// apt-get's and dpkg's real line shapes: only whole ones count.
-			"The following packages will be upgraded:\n  package-a package-b\n2 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\nGet:",
-			"1 https://apt.invalid trixie/main arm64 package-a arm64 2 [4 kB]\nUnpack",
-			"ing package-a (2) over (1) ...\nSet",
-			"ting up package-a (2) ...\n",
+			"2 upgraded, 0 newly installed, 0 to remove.\nGet:",
+			"1 package\nUnpack",
+			"ing package-a\nSet",
+			"ting up package-a\n",
 		]) {
 			output += chunk;
-			phases.push(deriveUpdateProgress(output));
+			status = deriveAptProgress(status, output);
 		}
 
-		expect(phases).toEqual([
-			{ total: 0, downloading: 0, unpacking: 0, setting_up: 0 },
-			{ total: 1, downloading: 1, unpacking: 0, setting_up: 0 },
-			installing,
-			// dpkg started package-a's second of four steps, so one is done.
-			{ ...installing, percent: 25 },
-		]);
+		expect(status).toEqual({
+			total: 2,
+			downloading: 2,
+			unpacking: 1,
+			setting_up: 1,
+		});
 	});
 });
 

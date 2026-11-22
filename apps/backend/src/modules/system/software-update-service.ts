@@ -8,19 +8,15 @@
 	(at your option) any later version.
 */
 
-import { stat } from "node:fs/promises";
 import { spawnWithTimeout } from "../../helpers/spawn-policy.ts";
 import { classifyPackageLayer } from "./package-layer.ts";
 import {
 	prepareSoftwareUpdateOutput,
-	readSoftwareUpdateAttempt,
 	readSoftwareUpdateOutput,
-	type SoftwareUpdateAttempt,
 	type SoftwareUpdateOutputPaths,
 	type SoftwareUpdateOutputRead,
 	softwareUpdateOutputPaths,
 	UnsafeSoftwareUpdateOutputPathError,
-	updateSoftwareUpdateAttempt,
 } from "./software-update-output.ts";
 import {
 	DetachedAptServiceCommandError,
@@ -79,23 +75,6 @@ export type DetachedAptServiceDeps = {
 	) => Promise<SoftwareUpdateOutputRead>;
 	readonly sleep: (milliseconds: number) => Promise<void>;
 	readonly now?: () => number;
-	/** The current attempt's durable record; synchronous so admission precedes any publication. */
-	readonly readAttempt: () => SoftwareUpdateAttempt | null;
-	/**
-	 * The only way to write it: `change` sees the record it replaces in the
-	 * same synchronous step (null: write nothing), so no other writer can come
-	 * between the comparison and the write. Returns what was written.
-	 */
-	readonly updateAttempt: (
-		change: (
-			current: SoftwareUpdateAttempt | null,
-		) => SoftwareUpdateAttempt | null,
-		options?: { readonly replaceUnreadable?: boolean },
-	) => SoftwareUpdateAttempt | null;
-	/** Which stdout file the transcript is: another run's launch makes a new one. */
-	readonly transcript?: () => Promise<string | undefined>;
-	/** Milliseconds since boot; defaults to the host's uptime. */
-	readonly uptimeMs?: () => number;
 };
 
 export function buildDetachedAptUpgradeCommand(
@@ -204,7 +183,7 @@ async function inspectService(): Promise<DetachedAptServiceState> {
 		"systemctl",
 		"show",
 		SOFTWARE_UPDATE_UNIT,
-		"--property=Id,InvocationID,FragmentPath,Description,LoadState,ActiveState,SubState,Transient,Type,RemainAfterExit,User,ExecMainCode,ExecMainStatus,ExecStart,ExecStartPre,ExecStartPost,StandardOutput,StandardError",
+		"--property=Id,FragmentPath,Description,LoadState,ActiveState,SubState,Transient,Type,RemainAfterExit,User,ExecMainCode,ExecMainStatus,ExecStart,ExecStartPre,ExecStartPost,StandardOutput,StandardError",
 		"--no-pager",
 	];
 	const result = await spawnWithTimeout(command, {
@@ -251,14 +230,5 @@ export function defaultDetachedAptServiceDeps(): DetachedAptServiceDeps {
 		},
 		readOutput: readSoftwareUpdateOutput,
 		sleep: Bun.sleep,
-		readAttempt: () => readSoftwareUpdateAttempt(paths),
-		updateAttempt: (change, options) =>
-			updateSoftwareUpdateAttempt(paths, change, 0, options),
-		transcript: async () => {
-			const file = await stat(paths.stdout, { bigint: true }).catch(
-				() => undefined,
-			);
-			return file && `${file.ino}:${file.size}:${file.mtimeNs}`;
-		},
 	};
 }

@@ -1,38 +1,28 @@
 import { spawn } from "node:child_process";
-import {
-	appendFile,
-	open,
-	readFile,
-	rm,
-	stat,
-	writeFile,
-} from "node:fs/promises";
+import { appendFile, open, readFile, rm, writeFile } from "node:fs/promises";
 import {
 	prepareSoftwareUpdateOutput,
-	readSoftwareUpdateAttempt,
-	SOFTWARE_UPDATE_OUTPUT_READ_BYTES,
 	softwareUpdateOutputPaths,
-	updateSoftwareUpdateAttempt,
 } from "../../modules/system/software-update-output.ts";
 import type { DetachedAptServiceDeps } from "../../modules/system/software-update-service.ts";
 
 /** Exit status of a session ended by the finished update's own restart. */
 export const RESTART_EXIT_CODE = 75;
 
+// The production reader's bound per read (software-update-output.ts).
+const READ_BYTES = 64 * 1024;
+
 // The detached unit as PID 1 runs it: started in its own session, outside
 // every backend's process tree, so it keeps running when a backend dies; each
 // backend sees it only through files they all share. Its real command runs
 // with apt-get pointed at the scratch directory. Every start and retirement
-// is appended to `unit-events.log` with the invocation it reached, in order;
-// while `cleanup.fail` exists every retirement fails, as a broken stop would.
+// is appended to `unit-events.log` in order.
 export function restartTestUnit(
 	scratch: string,
 	o: {
 		readonly failFirstStdoutRead?: boolean;
 		/** A FIFO the second stdout read waits on: the test's attached-but-unread window. */
 		readonly holdSecondStdoutRead?: string;
-		/** Retirement always fails, as a broken `systemctl stop` would. */
-		readonly failCleanup?: boolean;
 	} = {},
 ): DetachedAptServiceDeps {
 	const fixed = softwareUpdateOutputPaths();
@@ -43,23 +33,12 @@ export function restartTestUnit(
 	};
 	const uid = process.getuid?.() ?? 0;
 	const text = (file: string) => readFile(file, "utf8").catch(() => undefined);
-	const invocationOf = (pid: string | undefined) =>
-		(pid ? Number(pid.trim()).toString(16) : "f").padStart(32, "0");
 	const event = (line: string) =>
 		appendFile(`${scratch}/unit-events.log`, `${line}\n`);
 	let stdoutReads = 0;
 	return {
 		outputPaths: fixed,
-		readAttempt: () => readSoftwareUpdateAttempt(local, uid),
-		updateAttempt: (change) => updateSoftwareUpdateAttempt(local, change, uid),
 		prepareOutput: () => prepareSoftwareUpdateOutput(local, uid),
-		// The production fingerprint: which stdout file this is.
-		transcript: async () => {
-			const file = await stat(local.stdout, { bigint: true }).catch(
-				() => undefined,
-			);
-			return file && `${file.ino}:${file.size}:${file.mtimeNs}`;
-		},
 		start: async (command) => {
 			const argv = command
 				.slice(command.indexOf("--") + 1)
@@ -89,12 +68,9 @@ export function restartTestUnit(
 			);
 			child.unref();
 			await writeFile(`${unit}.pid`, String(child.pid));
-			await event(`start ${invocationOf(String(child.pid))}`);
+			await event("start");
 		},
 		inspect: async () => {
-			// systemd's InvocationID: one per started unit (a fixed one for a seeded unit).
-			const pid = await text(`${unit}.pid`);
-			const invocation = invocationOf(pid);
 			const exit = await text(`${unit}.exit`);
 			if (exit !== undefined) {
 				const exitCode = Number(exit.trim());
@@ -102,24 +78,16 @@ export function restartTestUnit(
 					kind: "finished",
 					exitCode,
 					cleanup: exitCode === 0 ? "stop" : "reset-failed",
-					invocation,
 				};
 			}
-			return pid === undefined
+			return (await text(`${unit}.pid`)) === undefined
 				? { kind: "absent" }
-				: { kind: "running", invocation };
+				: { kind: "running" };
 		},
-		cleanup: async (state) => {
-			if (
-				o.failCleanup ||
-				(await text(`${scratch}/cleanup.fail`)) !== undefined
-			) {
-				await event(`cleanup ${state.invocation} failed`);
-				throw new Error("systemctl stop failed");
-			}
+		cleanup: async () => {
 			await rm(`${unit}.exit`, { force: true });
 			await rm(`${unit}.pid`, { force: true });
-			await event(`cleanup ${state.invocation} retired`);
+			await event("retired");
 		},
 		readOutput: async (file, offset) => {
 			if (file === fixed.stdout && o.failFirstStdoutRead) {
@@ -132,7 +100,7 @@ export function restartTestUnit(
 			const path = file === fixed.stdout ? local.stdout : local.stderr;
 			const handle = await open(path, "r");
 			try {
-				const bytes = new Uint8Array(SOFTWARE_UPDATE_OUTPUT_READ_BYTES);
+				const bytes = new Uint8Array(READ_BYTES);
 				const { bytesRead } = await handle.read(
 					bytes,
 					0,

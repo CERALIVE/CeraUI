@@ -2,10 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { StatusResponse, UpdateProgress } from "@ceraui/rpc";
 import { buildAptAllInstallArgs } from "../modules/system/apt-all-packages.ts";
 import { deriveUpdateProgress } from "../modules/system/apt-progress.ts";
-import {
-	SOFTWARE_UPDATE_OUTPUT_READ_BYTES,
-	softwareUpdateOutputPaths,
-} from "../modules/system/software-update-output.ts";
+import { softwareUpdateOutputPaths } from "../modules/system/software-update-output.ts";
 import {
 	DetachedAptServiceVanishedError,
 	type DetachedAptUpgradeDeps,
@@ -13,17 +10,18 @@ import {
 	runDetachedAptAll,
 } from "../modules/system/software-update-process.ts";
 import {
-	beginSoftwareUpdateRecovery,
 	createSoftwareUpdateProcessMonitor,
 	recoverSoftwareUpdateIfRunning,
 	startSoftwareUpdate,
 } from "../modules/system/software-updates.ts";
 import { buildInitialStatus } from "../rpc/procedures/status.procedure.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
-import { memoryAttempt, TEST_INVOCATION } from "./helpers/memory-attempt.ts";
 import { updateHarness } from "./software-updates-preflight-harness.ts";
 
 useSessionOwnerForFile();
+
+// The production reader returns at most this much per read (software-update-output.ts).
+const SOFTWARE_UPDATE_OUTPUT_READ_BYTES = 64 * 1024;
 
 // APT's transcript as the unit's stdout file holds it (non-interactive
 // apt-get: the plan, one "Get:" per archive as it starts, "Fetched" when all
@@ -203,13 +201,11 @@ async function observe(mode: Mode, checkpoints: readonly Files[]) {
 							kind: "finished",
 							exitCode: 100,
 							cleanup: "reset-failed",
-							invocation: TEST_INVOCATION,
 						}
-					: { kind: "running", invocation: TEST_INVOCATION },
+					: { kind: "running" },
 		start: async () => {
 			started = true;
 		},
-		...memoryAttempt(),
 		prepareOutput: async () => {},
 		readOutput: async (path, offset) => {
 			const file =
@@ -295,8 +291,8 @@ describe.each(["live", "reattached", "finished replay"] as const)(
 				mode === "live"
 					? [preparing, downloadingAt(), installingAt(50)]
 					: mode === "reattached"
-						? [downloadingAt(), installingAt(50)]
-						: [installingAt(50)],
+						? [preparing, downloadingAt(), installingAt(50)]
+						: [preparing, installingAt(50)],
 			);
 			expect(
 				states.filter((state) => state.kind === "installing").at(-1),
@@ -349,7 +345,8 @@ describe("reattachment", () => {
 			SOFTWARE_UPDATE_OUTPUT_READ_BYTES,
 		);
 		const { running, end } = await observe("finished replay", [{ stdout }]);
-		expect(running).toEqual([installingAt()]);
+		// Each bounded block is published as it is read; the last is the whole file's.
+		expect(running).toEqual([preparing, downloadingAt(), installingAt()]);
 		expect(end.stdout).toBe(Buffer.byteLength(stdout));
 	});
 });
@@ -399,26 +396,8 @@ describe("a reconnecting tab during recovery", () => {
 			resumePeriodicChecks: () => {},
 		});
 
-	test("is not told nothing is updating before the unit's output was read", async () => {
-		await using h = await updateHarness();
-		beginSoftwareUpdateRecovery();
-		expect(buildInitialStatus().status).not.toHaveProperty("updating");
-		let drained: (() => void) | undefined;
-		await recover((handlers) => {
-			handlers.onAttached?.();
-			drained = handlers.onDrained;
-		}, true);
-		// Attached but unread: still no claim either way, and no empty frame.
-		expect(buildInitialStatus().status).not.toHaveProperty("updating");
-		expect(h.frames.some((frame) => frame.updating !== undefined)).toBe(false);
-		drained?.();
-		expect(buildInitialStatus().status.updating).toEqual(preparing);
-		expect(h.frames.at(-1)?.updating).toEqual(preparing);
-	});
-
 	test("is told the outcome when the reattached unit settles before any read", async () => {
 		await using h = await updateHarness();
-		beginSoftwareUpdateRecovery();
 		await recoverSoftwareUpdateIfRunning({
 			recover: async (handlers) => {
 				handlers.onAttached?.();
@@ -435,14 +414,12 @@ describe("a reconnecting tab during recovery", () => {
 		expect(buildInitialStatus().status).toHaveProperty("updating", null);
 	});
 
-	test("an observer that loses the unit tells no outcome: not a failure, outcome not confirmed", async () => {
+	test("an observer that loses the unit reports main's failure, never a success or a restart", async () => {
 		await using h = await updateHarness();
-		beginSoftwareUpdateRecovery();
 		await recoverSoftwareUpdateIfRunning({
 			recover: async (handlers) => {
 				handlers.onAttached?.();
 				handlers.onStdout(dpkgLog);
-				handlers.onDrained?.(true, false);
 				return {
 					completion: Promise.reject(new DetachedAptServiceVanishedError()),
 					wasAlreadyFinished: true,
@@ -451,45 +428,30 @@ describe("a reconnecting tab during recovery", () => {
 			scheduleRetry: () => {},
 			resumePeriodicChecks: () => {},
 		});
-		// An already finished unit is settled before recovery returns.
+		await h.settled();
 		const status = buildInitialStatus().status;
 		expect(status).toHaveProperty("updating", null);
-		// The last frame about the install says it ended; the state broadcast follows it.
+		expect(status.update_state?.kind).toBe("failed");
 		expect(
-			h.frames.findLast((frame) => "updating" in frame)?.updating,
-		).toBeNull();
-		expect(status.update_state?.kind).not.toBe("failed");
-		expect(status.update_state?.kind).not.toBe("success");
-		expect(
-			h.frames.some((frame) => frame.update_state?.kind === "failed"),
+			h.frames.some((frame) => frame.update_state?.kind === "success"),
 		).toBe(false);
 		expect(h.restarts).toBe(0);
 	});
 
-	test("a transcript that cannot be read shows the phase without a number until it can", async () => {
+	test("a transcript that cannot be read shows the phase without a number until new lines prove one", async () => {
 		await using h = await updateHarness();
-		beginSoftwareUpdateRecovery();
 		let handlers: Parameters<typeof recoverDetachedAptUpgrade>[0] | undefined;
 		await recover((attached) => {
 			attached.onAttached?.();
 			handlers = attached;
 		}, true);
 		handlers?.onStdout(dpkgLog);
-		handlers?.onDrained?.(true, false);
 		expect(h.frames.at(-1)?.updating).toEqual(installingAt(50));
-		for (let poll = 0; poll < 4; poll++) handlers?.onDrained?.(false, true);
+		handlers?.onObserverError?.(new Error("EIO: injected read failure"));
 		// Unknown now: never the last number as if it were live.
 		expect(h.frames.at(-1)?.updating).toEqual(installingAt());
 		expect(buildInitialStatus().status.updating).toEqual(installingAt());
-		handlers?.onDrained?.(true, false);
+		handlers?.onStdout("Processing triggers for man-db (2.13) ...\n");
 		expect(h.frames.at(-1)?.updating).toEqual(installingAt(50));
-	});
-
-	test("hears an explicit null once recovery finds no unit", async () => {
-		await using h = await updateHarness();
-		beginSoftwareUpdateRecovery();
-		await recover(() => {}, false);
-		expect(h.frames.at(-1)?.updating).toBeNull();
-		expect(buildInitialStatus().status.updating).toBeNull();
 	});
 });

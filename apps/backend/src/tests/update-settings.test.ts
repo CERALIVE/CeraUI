@@ -1,12 +1,4 @@
-import {
-	afterAll,
-	afterEach,
-	beforeEach,
-	describe,
-	expect,
-	spyOn,
-	test,
-} from "bun:test";
+import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test";
 import {
 	chmodSync,
 	existsSync,
@@ -24,7 +16,6 @@ import { z } from "zod";
 import * as configLoader from "../helpers/config-loader.ts";
 import { logger } from "../helpers/logger.ts";
 import { setup } from "../modules/setup.ts";
-import { setDetachedAptServiceDepsForTest } from "../modules/system/software-update-service.ts";
 import {
 	aptUpdatesEnabled,
 	startSoftwareUpdate,
@@ -46,15 +37,6 @@ import {
 	setUpdateSettingsProcedure,
 } from "../rpc/procedures/system.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
-import { useNoHostUpdateUnit } from "./software-updates-preflight-harness.ts";
-
-// Starts here admit an attempt: record it in a fake unit, never the host's /run.
-beforeEach(() => {
-	useNoHostUpdateUnit();
-});
-afterEach(() => {
-	setDetachedAptServiceDepsForTest(null);
-});
 
 const dir = mkdtempSync(join(tmpdir(), "ceraui-update-settings-"));
 const file = join(dir, "update-settings.json");
