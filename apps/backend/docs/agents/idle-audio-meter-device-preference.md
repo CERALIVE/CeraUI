@@ -198,7 +198,7 @@ selection leaves real, moving bars on screen that belong to a different device �
 meter lies rather than goes quiet. Found live on a Rock 5B+ with nothing plugged into
 the HDMI-RX port: the operator selected `HDMI Input`, and the meter reported the RØDE
 (`card:usbaudio`, rms ≈ −30 dBFS ⇒ ~49% fill on BOTH channels), which reads as healthy
-embedded HDMI audio. `projectLevel()` therefore drops a level whose reported
+embedded HDMI audio. `projectLevel()` therefore drops a non-program level whose reported
 `source.identity` names a different ALSA card than `meterPreference()` and broadcasts
 the ADR's existing `unavailable` + `no_device` gap instead. `alsaCardKey()` reduces both
 sides to the bare card id (mirroring cerastream's own `alsa_card_key`), so
@@ -379,7 +379,17 @@ engine gaps. The Auto rule requires the `idle` lifecycle and no published live
 flag. A frame tagged `streaming` by the engine is exempt from the Auto rule even
 if it arrives before the control socket confirms the run. Auto resolved to pipeline
 default still lets the engine choose; a concrete Auto card still uses the foreign-card
-gate. The schema and locale copy are unchanged.
+gate for non-program levels. The schema and locale copy are unchanged.
+
+**The idle preference never identifies the running program.** A live video switch
+persists the video selection but defers Auto audio follow until the next Start. An
+HDMI capture PCM appearing after the switch can re-point the idle preference while
+the program still uses USB. `projectLevel()` uses each frame's engine
+`source.owner === "streaming"` to bypass idle attribution and clear any foreign
+sidecar run. It does not infer ownership from lifecycle, the latest card selection,
+mix data, or the position of a `handoff`. This also applies to schema 0.21.0 frames
+without mix information. Ownerless gaps and sidecar frames still use the existing
+projection rules, and explicit No audio and active mix keep their existing precedence.
 
 ### …AND A SOURCE THAT BRINGS ITS OWN AUDIO HAS NO CARD TO METER [EXISTS]
 
@@ -398,7 +408,7 @@ of course use its own metrics."*
 
 `isMeterEmbeddedBySource()` (`audio.ts`, over `auto-audio.ts`'s
 `selectedSourceCarriesEmbeddedAudio`) is the distinction, and `projectLevel`
-applies it immediately AFTER the video-only gate. Five rules are
+applies it after the video-only and program-ownership gates. Five rules are
 load-bearing:
 
 - **It is keyed on the SOURCE, not on the pick and not on the Auto REASON.** Both

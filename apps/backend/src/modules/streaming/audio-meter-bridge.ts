@@ -457,13 +457,14 @@ function projectLevel(
 		clearForeignCardRun();
 		return { unavailable: true, reason: "mode_none" };
 	}
-	// A source that brings its own audio owns no card the IDLE sidecar could be
-	// metering, so a sidecar level here belongs to an unrelated device however
-	// real its bars are. The discriminator is the engine's OWN `owner` tag rather
-	// than a second lifecycle guess: a `streaming` level for this source IS the
-	// muxed track (cerastream meters `MeterMode::ProgramAudio` off the program
-	// leg), and suppressing it would kill the one reading the operator wants.
-	if (deps.meterEmbedded() && !programOwned) {
+	// A live video switch can move the idle preference before the program audio
+	// changes. Only the engine's per-frame owner tells us which leg was metered.
+	if (programOwned) {
+		clearForeignCardRun();
+		return message;
+	}
+	// An embedded source has no card for the sidecar to meter.
+	if (deps.meterEmbedded()) {
 		clearForeignCardRun();
 		return { unavailable: true, reason: "embedded_audio" };
 	}

@@ -2,6 +2,12 @@
 
 ## CONVENTIONS
 
+The [audio meter bridge](../../../backend/docs/agents/idle-audio-meter-device-preference.md)
+attributes program readings to the engine's `source.owner`, not the UI's saved
+source. A live video switch can change the idle meter preference while audio
+follow is still pending. The next program reading still belongs to the running
+audio leg, including after a `handoff`; idle sidecar rules are unchanged.
+
 **2026-10-14 dispatch/lifetime amendment (FIX-16-F6).** The historical F5
 receipt-only settlement wording below is superseded: receipt orders arrival,
 not device computation or causality. A pull also needs dispatch after the claim
