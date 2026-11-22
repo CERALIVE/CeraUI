@@ -118,6 +118,10 @@ function answer(id: string): void {
 	socket().receive({ id, result: { log: "" } });
 }
 
+function refuse(id: string): void {
+	socket().receive({ id, error: { code: "INTERNAL_ERROR", message: "late" } });
+}
+
 /** The device stays silent past the call's timeout, while the socket stays alive. */
 async function silence(): Promise<void> {
 	for (let elapsed = 0; elapsed <= RPC_CALL_TIMEOUT_MS; elapsed += 5_000) {
@@ -294,4 +298,118 @@ describe("legacy log downloads over the socket", () => {
 			expect(await saved()).toEqual(["warm", "tagged"]);
 		},
 	);
+
+	const BOTH = KINDS.flatMap(({ kind, other }) =>
+		[true, false].map((echoed) => ({ kind, other, echoed })),
+	);
+	const tag = (echoed: boolean, request?: string) =>
+		echoed ? request : undefined;
+
+	it.each(BOTH)(
+		"a saved $kind file ends its request at once: the retry goes out while its reply is pending, and the late answer changes nothing (id echoed: $echoed)",
+		async ({ kind, echoed }) => {
+			const view = new LogDownloads(() => true);
+			const first = view.download(kind);
+			push(kind, "first", tag(echoed, nth(kind, 0).request));
+			await vi.waitFor(() => expect(view.downloading).toBeNull());
+			await first;
+
+			const retry = view.download(kind);
+			expect(asked(kind)).toHaveLength(2);
+			answer(nth(kind, 0).id);
+			expect(view.downloading).toBe(kind);
+			push(kind, "second", tag(echoed, nth(kind, 1).request));
+			answer(nth(kind, 1).id);
+			await retry;
+
+			expect(view.failed).toBeNull();
+			expect(await saved()).toEqual(["first", "second"]);
+		},
+	);
+
+	it.each(BOTH)(
+		"a saved $kind file is not reported failed by its late error reply, and the active retry is untouched (id echoed: $echoed)",
+		async ({ kind, echoed }) => {
+			const view = new LogDownloads(() => true);
+			const first = view.download(kind);
+			push(kind, "first", tag(echoed, nth(kind, 0).request));
+			await vi.waitFor(() => expect(view.downloading).toBeNull());
+			await first;
+
+			const retry = view.download(kind);
+			refuse(nth(kind, 0).id);
+			expect(view.failed).toBeNull();
+			expect(view.downloading).toBe(kind);
+			push(kind, "second", tag(echoed, nth(kind, 1).request));
+			answer(nth(kind, 1).id);
+			await retry;
+
+			expect(view.failed).toBeNull();
+			expect(await saved()).toEqual(["first", "second"]);
+		},
+	);
+
+	it.each(BOTH)(
+		"a closed view's dropped $kind file frees the slot: the reopened view's request is active while the late reply lands, and saves only its own (id echoed: $echoed)",
+		async ({ kind, echoed }) => {
+			let open = true;
+			const closed = new LogDownloads(() => open);
+			const first = closed.download(kind);
+			open = false;
+			push(kind, "closed view", tag(echoed, nth(kind, 0).request));
+			await vi.waitFor(() => expect(closed.downloading).toBeNull());
+			await first;
+
+			const reopened = new LogDownloads(() => true);
+			const fresh = reopened.download(kind);
+			expect(asked(kind)).toHaveLength(2);
+			answer(nth(kind, 0).id);
+			expect(reopened.downloading).toBe(kind);
+			push(kind, "reopened view", tag(echoed, nth(kind, 1).request));
+			answer(nth(kind, 1).id);
+			await fresh;
+
+			expect(await saved()).toEqual(["reopened view"]);
+		},
+	);
+
+	it.each(KINDS)(
+		"an error reply before the $kind file fails it, and that request's late file is dropped while the retry saves its own",
+		async ({ kind }) => {
+			const view = new LogDownloads(() => true);
+			const first = view.download(kind);
+			refuse(nth(kind, 0).id);
+			await first;
+			expect(view.failed).toBe(kind);
+
+			const retry = view.download(kind);
+			expect(asked(kind)).toHaveLength(2);
+			push(kind, "late", nth(kind, 0).request);
+			push(kind, "fresh", nth(kind, 1).request);
+			answer(nth(kind, 1).id);
+			await retry;
+
+			expect(view.failed).toBeNull();
+			expect(await saved()).toEqual(["fresh"]);
+		},
+	);
+
+	it("a saved device file with its reply pending leaves the system log free, and neither late reply moves the other", async () => {
+		const view = new LogDownloads(() => true);
+		const device = view.download("device");
+		push("device", "device log");
+		await vi.waitFor(() => expect(view.downloading).toBeNull());
+		await device;
+
+		const system = view.download("system");
+		expect(asked("system")).toHaveLength(1);
+		answer(nth("device", 0).id);
+		expect(view.downloading).toBe("system");
+		push("system", "system log");
+		answer(nth("system", 0).id);
+		await system;
+
+		expect(view.failed).toBeNull();
+		expect(await saved()).toEqual(["device log", "system log"]);
+	});
 });

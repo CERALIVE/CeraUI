@@ -41,10 +41,12 @@ export type LegacyKind = "device" | "system";
 const SYSTEM_LOG_FILE = "ceralive_system_log.txt";
 
 /**
- * One legacy request. Its file is `awaited` until a push is matched to it, then
- * `consumed` (saved or dropped) exactly once. Its reply is `awaited` until the
- * call settles. It is current while its reply is awaited and its open is live,
- * and only a current request whose file is awaited is given that file.
+ * One legacy request, ended by whichever of its two signals settles it first. Its
+ * file push, saved or dropped, ends it at once, and its reply is then ignored. A
+ * reply before the file ends it too: an error fails it, and an answer means no
+ * file will come, since the device pushes the file before it answers on the same
+ * ordered socket. Only a request whose reply is still awaited, with a live open,
+ * is given its file.
  */
 interface LegacyRequest {
 	readonly id: string;
@@ -53,7 +55,10 @@ interface LegacyRequest {
 	readonly epoch: number;
 	file: "awaited" | "consumed";
 	reply: "awaited" | "answered" | "timed-out" | "failed";
-	readonly settled: PromiseWithResolvers<void>;
+	// Settles once, when the request ends: the caller's outcome.
+	readonly outcome: PromiseWithResolvers<void>;
+	// Resolves once, when the request ends: a waiting request of the same kind may go.
+	readonly ended: PromiseWithResolvers<void>;
 }
 
 const slots: Record<LegacyKind, LegacyRequest | undefined> = {
@@ -76,10 +81,10 @@ function tagged(): boolean {
  * to echo ids. Only that file, or a new socket, can then prove a later file's owner.
  */
 function holds(request: LegacyRequest): boolean {
+	if (request.file === "consumed") return false;
 	if (request.reply === "awaited") return true;
 	return (
 		request.reply === "timed-out" &&
-		request.file === "awaited" &&
 		request.epoch === socketEpoch() &&
 		!tagged()
 	);
@@ -114,7 +119,7 @@ export async function requestLegacyLog(
 			break;
 		}
 		if (held.reply !== "awaited") return;
-		await held.settled.promise;
+		await held.ended.promise;
 	}
 	if (!issued()) return;
 	sequence += 1;
@@ -125,20 +130,32 @@ export async function requestLegacyLog(
 		epoch: socketEpoch(),
 		file: "awaited",
 		reply: "awaited",
-		settled: Promise.withResolvers<void>(),
+		outcome: Promise.withResolvers<void>(),
+		ended: Promise.withResolvers<void>(),
 	};
 	slots[kind] = request;
 	changes += 1;
-	try {
-		await send(request.id);
-		request.reply = "answered";
-	} catch (error) {
-		request.reply = error instanceof CallTimeoutError ? "timed-out" : "failed";
-		throw error;
-	} finally {
-		request.settled.resolve();
-		release(request);
-	}
+	// The reply settles only this request: the client pairs it with its call by id.
+	send(request.id).then(
+		() => {
+			request.reply = "answered";
+			if (request.file === "awaited") end(request);
+		},
+		(error: unknown) => {
+			request.reply =
+				error instanceof CallTimeoutError ? "timed-out" : "failed";
+			if (request.file === "awaited") end(request, error);
+		},
+	);
+	return request.outcome.promise;
+}
+
+/** Ends a request once: its caller learns the outcome, its slot frees unless it is the lock. */
+function end(request: LegacyRequest, error?: unknown): void {
+	if (error === undefined) request.outcome.resolve();
+	else request.outcome.reject(error);
+	request.ended.resolve();
+	release(request);
 }
 
 /** The request a pushed file answers, or none when its owner cannot be proven. */
@@ -167,8 +184,10 @@ export function deliverLegacyLog(file: {
 	const request = owner(file);
 	if (request === undefined || request.file === "consumed") return false;
 	request.file = "consumed";
-	release(request);
-	if (request.reply !== "awaited" || !request.issued()) return false;
+	const current = request.reply === "awaited" && request.issued();
+	if (request.reply === "awaited") end(request);
+	else release(request);
+	if (!current) return false;
 	const contents = file.contents
 		.split("\n")
 		.map((line) => line.trim())

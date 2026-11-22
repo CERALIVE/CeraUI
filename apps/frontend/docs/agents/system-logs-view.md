@@ -139,9 +139,12 @@ density. It is not a redesign.
   token of the open it was issued under, read again when the file is ready (a
   sharing ticket's URL, or a legacy file the device pushes as a `log` event before
   it answers, one slot per kind (device log, system log), and one kind never
-  blocks the other. A request's file is awaited until a push is matched to it,
-  then consumed (saved or dropped) exactly once; its reply is awaited, answered,
-  timed out or failed. A file is matched by its echoed id; once a socket has
+  blocks the other. A request ends on the first of its two signals: its file,
+  consumed (saved or dropped) exactly once, ends it at once and its later reply
+  is ignored (no failure shown, no slot held); a reply before the file ends it
+  too, an error as a failure and an answer as no file (the device pushes the file
+  before it answers on the same ordered socket). The client pairs each reply with
+  its own call, so one request's reply never touches another. A file is matched by its echoed id; once a socket has
   carried one echoed id, only exact ids are accepted on it. Before that, a file
   with no id goes to the request in its kind's slot on the current socket (the
   kind comes from the file name). It is saved only if that request's reply is
