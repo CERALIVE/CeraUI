@@ -93,25 +93,38 @@ live-number guard start over.
 A package's postinst can restart CeraUI during the install (the owner's case
 on the Rock 5B+), and a successful install restarts it once more. A tab can
 therefore miss the one frame that carries the result. The process that
-launches a capable install freezes the `name=version` vector once after
-discovery and uses it for the pinned recheck, the space preflight and the
-unit's argv; every running frame of that process carries it as
-`updating.targets` (legacy runs carry none, and a backend that recovered the
-unit after a restart does not know it). The tab latches the first vector of
-the run and, when the install it showed ends with no result the device
-reported, holds the phase and asks `system.updateOutcome` with it. The device
-answers read-only (`software-update-outcome.ts`; nothing is written, claimed,
-stopped or retired), within one 20 s deadline for the whole question:
+starts an install stamps every frame of it with the run's start
+(`updating.run`, epoch ms). A capable install also freezes its `name=version`
+vector once after discovery and uses it for the pinned recheck, the space
+preflight and the unit's argv. Every frame of that process then carries
+`updating.targets`, read from the pinned recheck's own `Inst` rows: the name
+apt-get was given, the candidate's architecture (`[arm64]`, `[all]`) and the
+version installed before (`[current]`, absent for a new install). Legacy runs
+carry no vector. A backend that recovered the unit after a restart knows
+neither and sends neither.
+
+The tab treats a frame with another `run` as another run: the hold, the
+live-number guard, the vector and any pending question start over. This
+includes a new run's first frame, before it names a vector, and a retry of
+the same vector. Frames without `run` continue the run the tab holds (the
+same unit, recovered after a restart). The tab latches the first vector of
+the run. When the install it showed ends with no result the device reported,
+it holds the phase and asks `system.updateOutcome` with that vector; a tab
+that never received one asks with none, which can learn only `running` or
+not confirmed. The device answers read-only (`software-update-outcome.ts`;
+nothing is written, claimed, stopped or retired), within one 20 s deadline
+for the whole question:
 
 | The device finds | Answer | The tab shows |
 |---|---|---|
 | The unit is still there and this process reports it itself (it observes it, or its recovery has not looked yet and startup was not refused) | `running` | The held phase; the observer's frames follow |
-| One complete, coherent `dpkg-query` read (exit 0, every row well-formed, unique per name and architecture, and asked for) in which every installed instance of every target is `ii ` or `hi ` (held, but installed) at its version or later (`dpkg --compare-versions`: epochs, `~`, `+`) | `success` | **Successfully Updated**: "The device now has this update's versions installed. CeraUI did not see the update finish." |
-| Anything else: a target below its version, not installed, unpacked, half-configured, trigger-pending or reinstall-required (`iiR`), a query exit 1 or malformed output, no answer in time, or no vector at all | `unknown`, with `exit: N` when the fixed-name unit last finished non-zero | **Outcome not confirmed**; with `exit`, "The update service last stopped with exit code N. That may have been a different update." |
+| One complete, coherent `dpkg-query` read (exit 0, every row well-formed, unique per name and architecture, and asked for) in which each target's own instance (its package and architecture; another architecture's never counts) is `ii ` or `hi ` (held, but installed) at its version or later; each version installed before was below it (`dpkg --compare-versions`: epochs, `~`, `+`); and the fixed-name unit is neither running nor last finished non-zero | `success` | **Packages installed**: "The device now has this update's versions installed. CeraUI did not see the update finish." Never the observed exit's **Successfully Updated** |
+| Anything else: a target below its version, not installed or only another architecture's instance, unpacked, half-configured, trigger-pending or reinstall-required (`iiR`), already at that version before the run (a reinstall or downgrade), a running unit no process reports, a query exit 1 or malformed output, no answer in time, or no vector at all | `unknown`, with `exit: N` when the fixed-name unit last finished non-zero | **Outcome not confirmed**; with `exit`, "The update service last stopped with exit code N. That may have been a different update." |
 
 The unit's exit is never shown as **Update Failed** here: the fixed-name unit
 holds whichever run finished last, and it is read after the packages, so the
-hint can only be newer than the versions it sits beside. An answer that does
+hint can only be newer than the versions it sits beside. A failed exit also
+withholds the success, since it may be this very run's. An answer that does
 not arrive (the socket dropped again) is also **Outcome not confirmed**. Only
 the answer to the latest question counts: a running frame, a new run or a new
 question makes an earlier answer stale, in either reply order. After a
@@ -119,11 +132,10 @@ question makes an earlier answer stale, in either reply order. After a
 the install it shows ends without a result again. A device-reported `success`,
 `failed` or preflight refusal is announced as it is, without asking.
 
-The vector comes from apt's own simulations, which list an `Inst` row only for
-a package that changes, and the pinned recheck must match the pins exactly,
-so every target was below its version when the install was admitted. A
-success therefore says the device reached this install's versions; it does
-not say this tab saw the run finish, and the wording says so.
+A success says the device now has this install's own instances at their
+versions, each below them before the run. It does not say this tab saw the
+run finish, and the wording says so. Real `dpkg-query` and `dpkg` decide
+these rules in tests on inert databases (`software-update-outcome-dpkg.test.ts`).
 
 The English and es-419 user docs for these states (docs.ceralive.tv,
 `ceralive-docs`) follow in a separate, later docs change; this change ships
@@ -132,14 +144,16 @@ the two new strings in all ten catalogs.
 What the simplification costs: there is no persistence. A tab opened or
 reloaded after the install began on another backend process, or after it
 ended, has no vector and says **Outcome not confirmed** at most; a tab that
-was offline through a whole later run cannot tell that run from its own when
-the later run's frames carry no vector (after its restart), so it keeps its
-held phase without a number and asks about its own vector. Legacy runs have
+was offline through a whole later run, including that run's own restart,
+sees only its recovered frames, which carry no `run`; it cannot tell that run
+from its own, keeps its held phase without a number and asks about its own
+vector, whose answer speaks only of that vector's instances. Legacy runs have
 no vector, so their missed outcomes are **Outcome not confirmed**. A power
 loss or crash during the install honestly yields **Outcome not confirmed**
-unless the versions were already installed. Success means the versions are
+unless the versions were already installed. Success means the instances are
 installed and configured, not that every maintainer script exited cleanly; a
-unit that failed after configuring them reads as success. A boot whose update
+unit that failed after configuring them reads as not confirmed while its exit
+is still on the fixed-name unit. A boot whose update
 startup was refused reports a running unit as not confirmed at once. Main's
 own outcome rules are unchanged: a unit that vanishes, output that stays
 unreadable after the final drain, or a successful unit whose retirement fails

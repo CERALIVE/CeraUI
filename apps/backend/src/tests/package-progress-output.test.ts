@@ -291,8 +291,11 @@ async function observe(mode: Mode, checkpoints: readonly Files[]) {
 			typeof updating === "object" &&
 			updating &&
 			updating.result === undefined
-		)
-			running.push(updating);
+		) {
+			// The run's start is identity, not progress (update-progress-timeline.test.ts).
+			const { run: _run, ...progress } = updating;
+			running.push(progress);
+		}
 		if (frame.update_state) states.push(frame.update_state);
 	}
 	const last = points.at(-1);

@@ -24,7 +24,7 @@ export type UpdateOutcomeDeps = {
 };
 
 const PROBE_TIMEOUT_MS = 5_000;
-// One package query plus one comparison per installed row, ample for the 512
+// One package query plus up to two comparisons per target, ample for the 512
 // targets the RPC accepts; past it nothing is proven.
 export const UPDATE_OUTCOME_DEADLINE_MS = 20_000;
 const FORMAT = `-f=${["Package", "Architecture", "db:Status-Abbrev", "Version"].map((field) => `\${${field}}`).join("\\t")}\\n`;
@@ -33,8 +33,7 @@ const ROW =
 	/^([a-z0-9][a-z0-9+.-]*)\t([a-z0-9][a-z0-9-]*)\t([uihrp][ncHUFWti][ R])\t([0-9][A-Za-z0-9.+:~-]*)?$/;
 // Installed and configured with no reinstall required; a hold changes no state.
 const CONFIGURED = /^[ih]i $/;
-// Not-installed or config-files only: no instance of the package is there.
-const NO_INSTANCE = /^.[nc]/;
+const ARCH = /^[a-z0-9][a-z0-9-]*$/;
 
 type Row = {
 	readonly name: string;
@@ -43,20 +42,20 @@ type Row = {
 	readonly version: string;
 };
 
-const answers = (target: UpdateTarget) => {
-	const [name, arch] = target.name.split(":");
-	return (row: Row) =>
-		row.name === name && (arch === undefined || row.arch === arch);
-};
+// apt prints a foreign instance as `name:arch`; dpkg-query lists the bare name.
+const packageOf = (target: UpdateTarget) => target.name.split(":")[0] ?? "";
 
 /**
  * What the install a tab watched did, asked once CeraUI restarted under it.
  * `targets` is the vector that install was launched with, as its own running
- * frames carried it. Success only when one complete read of dpkg's database
- * shows every target installed, configured and at its version or later
- * (dpkg's order). Otherwise unknown; the fixed-name unit's non-zero exit, read
- * after the packages, is attached only as a hint, because it may be another
- * run's. Read-only: nothing here writes, claims, stops or retires anything.
+ * frames carried it: each target an exact instance (name and architecture)
+ * and the version installed before. Success only when one complete read of
+ * dpkg's database shows every target's own instance configured at its
+ * version or later (dpkg's order), none was already there before, and the
+ * fixed-name unit is neither running nor last failed. Otherwise unknown; that
+ * unit's non-zero exit, read after the packages, is attached only as a hint,
+ * because it may be another run's. Read-only: nothing here writes, claims,
+ * stops or retires anything.
  */
 export async function readUpdateOutcome(
 	targets: readonly UpdateTarget[],
@@ -64,9 +63,11 @@ export async function readUpdateOutcome(
 ): Promise<UpdateOutcome> {
 	if (
 		targets.some(
-			({ name, version }) =>
+			({ name, version, arch, from }) =>
 				!APT_PACKAGE_NAME_RE.test(name) ||
-				!APT_SIMULATION_VERSION_RE.test(version),
+				!APT_SIMULATION_VERSION_RE.test(version) ||
+				!ARCH.test(arch) ||
+				(from !== undefined && !APT_SIMULATION_VERSION_RE.test(from)),
 		)
 	)
 		return { kind: "unknown" };
@@ -76,10 +77,16 @@ export async function readUpdateOutcome(
 	// cannot tell whether one is still to come.
 	if (deps.observed() && unit?.kind !== "absent")
 		return unit ? { kind: "running" } : { kind: "unknown" };
-	if (attained) return { kind: "success" };
-	return unit?.kind === "finished" && unit.exitCode !== 0
-		? { kind: "unknown", exit: unit.exitCode }
-		: { kind: "unknown" };
+	const failedExit =
+		unit?.kind === "finished" && unit.exitCode !== 0
+			? unit.exitCode
+			: undefined;
+	// A running unit has not finished; a failed one may be this very run.
+	if (attained && unit?.kind !== "running" && failedExit === undefined)
+		return { kind: "success" };
+	return failedExit === undefined
+		? { kind: "unknown" }
+		: { kind: "unknown", exit: failedExit };
 }
 
 async function targetsAttained(
@@ -97,13 +104,8 @@ async function targetsAttained(
 				)
 			: null;
 	};
-	const query = await ask([
-		"dpkg-query",
-		"-W",
-		FORMAT,
-		"--",
-		...targets.map(({ name }) => name),
-	]);
+	const packages = [...new Set(targets.map(packageOf))];
+	const query = await ask(["dpkg-query", "-W", FORMAT, "--", ...packages]);
 	// Exit 1 is a name dpkg does not know: no complete read either.
 	if (query?.exitCode !== 0 || !query.stdout.endsWith("\n")) return false;
 	const rows: Row[] = [];
@@ -112,32 +114,37 @@ async function targetsAttained(
 			ROW.exec(line) ?? [];
 		if (
 			!status ||
-			rows.some((row) => row.name === name && row.arch === arch) ||
-			!targets.some((target) =>
-				answers(target)({ name, arch, status, version }),
-			)
+			!packages.includes(name) ||
+			rows.some((row) => row.name === name && row.arch === arch)
 		)
 			return false;
 		rows.push({ name, arch, status, version });
 	}
 	for (const target of targets) {
-		const present = rows
-			.filter(answers(target))
-			.filter((row) => !NO_INSTANCE.test(row.status));
-		if (
-			present.length === 0 ||
-			present.some((row) => !CONFIGURED.test(row.status))
-		)
-			return false;
-		for (const row of present) {
-			const compared = await ask([
+		// Only the admitted instance counts: another architecture's is not it.
+		const row = rows.find(
+			(candidate) =>
+				candidate.name === packageOf(target) && candidate.arch === target.arch,
+		);
+		if (!row || !CONFIGURED.test(row.status)) return false;
+		const reached = await ask([
+			"dpkg",
+			"--compare-versions",
+			row.version,
+			"ge",
+			target.version,
+		]);
+		if (reached?.exitCode !== 0) return false;
+		// Already at that version before the run: nothing proves this run did it.
+		if (target.from !== undefined) {
+			const before = await ask([
 				"dpkg",
 				"--compare-versions",
-				row.version,
-				"ge",
+				target.from,
+				"lt",
 				target.version,
 			]);
-			if (compared?.exitCode !== 0) return false;
+			if (before?.exitCode !== 0) return false;
 		}
 	}
 	return true;

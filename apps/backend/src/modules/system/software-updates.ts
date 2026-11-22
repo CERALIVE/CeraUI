@@ -50,6 +50,7 @@ import {
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import {
 	AptAllRefusalError,
+	admittedTargets,
 	assertPinnedInstallSimulation,
 	buildAptAllDiscoveryArgs,
 	buildAptAllDownloadArgs,
@@ -1410,7 +1411,13 @@ const defaultSoftwareUpdateRunner: SoftwareUpdateRunner = (
 	// AGENTS.md.
 	if (!checkStarted) return refuseUpdateStart("check_unavailable");
 
-	softUpdateStatus = { downloading: 0, unpacking: 0, setting_up: 0, total: 0 };
+	softUpdateStatus = {
+		downloading: 0,
+		unpacking: 0,
+		setting_up: 0,
+		total: 0,
+		run: Date.now(),
+	};
 	broadcastMsg("status", {
 		updating: softUpdateStatus,
 		update_state: getUpdateState(),
@@ -1536,9 +1543,8 @@ type SoftwareUpdateProcessMonitor = {
 
 export function createSoftwareUpdateProcessMonitor(
 	prefetched = "",
-	targets?: readonly UpdateTarget[],
+	launched: Pick<SoftUpdateStatus, "run" | "targets"> = {},
 ): SoftwareUpdateProcessMonitor {
-	const launched = targets ? { targets: [...targets] } : {};
 	let rebootAfterUpgrade = false;
 	let summaryParseLogged = false;
 	let aptLog = prefetched;
@@ -1816,6 +1822,7 @@ async function prepareSoftwareUpdate(
 				installFamily(network.reachability.verdict),
 			)
 		: buildAptUpgradeArgs(actionableAppPackages, reachability.verdict);
+	let targets: UpdateTarget[] | undefined;
 	if (admitted) {
 		try {
 			const probe = await network.within(
@@ -1841,6 +1848,7 @@ async function prepareSoftwareUpdate(
 					detail: probe.stderr,
 				});
 			assertPinnedInstallSimulation(probe.stdout, admitted);
+			targets = admittedTargets(probe.stdout) ?? undefined;
 		} catch (error) {
 			if (!(error instanceof AptAllRefusalError)) throw error;
 			logAptAllRefusal(error);
@@ -1905,7 +1913,8 @@ async function prepareSoftwareUpdate(
 		if (softUpdateStatus) {
 			softUpdateStatus = {
 				...PHASE_MARKERS.downloading,
-				targets: [...(admitted ?? [])],
+				run: softUpdateStatus.run,
+				...(targets ? { targets } : {}),
 			};
 			broadcastMsg("status", {
 				updating: softUpdateStatus,
@@ -1940,7 +1949,10 @@ async function prepareSoftwareUpdate(
 	}
 	pendingPackageSuccess.assertEffectsAllowed();
 	notePlannedShutdown("software_update");
-	const monitor = createSoftwareUpdateProcessMonitor(prefetched, admitted);
+	const monitor = createSoftwareUpdateProcessMonitor(prefetched, {
+		run: softUpdateStatus?.run,
+		...(targets ? { targets } : {}),
+	});
 	const finalFamily = installFamily(network.reachability.verdict);
 	const detachedArgs =
 		admitted && network.pinned

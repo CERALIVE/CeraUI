@@ -94,14 +94,27 @@ test("a pinned prefetch keeps the download phase when the unit starts, naming th
 				version: pair.slice(pair.indexOf("=") + 1),
 			}));
 		expect(targets.length).toBeGreaterThan(0);
-		expect(firstDrain).toEqual({ ...downloading, targets });
+		// Each pin as the pinned recheck printed it: its architecture, the version before.
+		expect(firstDrain).toEqual({
+			...downloading,
+			run: expect.any(Number),
+			targets: targets.map((pin) => ({
+				...pin,
+				arch: expect.stringMatching(/^[a-z0-9][a-z0-9-]*$/),
+				from: expect.any(String),
+			})),
+		});
 		// From the admission on, every frame of this run names that same vector.
 		const updating = h.frames.map((frame) => frame.updating);
 		const admitted = updating.findIndex(
 			(u) => typeof u === "object" && u !== null && "targets" in u,
 		);
 		expect(admitted).toBeGreaterThan(0);
+		const started = (firstDrain as { run?: number }).run;
 		for (const u of updating.slice(admitted).filter(Boolean))
-			expect(u).toMatchObject({ targets });
+			expect(u).toMatchObject({
+				run: started,
+				targets: (firstDrain as { targets: unknown }).targets,
+			});
 	});
 });

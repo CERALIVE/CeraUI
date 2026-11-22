@@ -80,11 +80,13 @@ vi.mock("$lib/rpc/client", () => ({
 		ui: { heartbeat: vi.fn(async () => undefined) },
 		system: {
 			// The device answers only the question it was asked.
-			updateOutcome: vi.fn(async (input: unknown) => {
+			updateOutcome: vi.fn((input: unknown) => {
 				const next = transport.outcomes.shift();
-				return next && JSON.stringify(next.request) === JSON.stringify(input)
-					? next.outcome
-					: { kind: "unknown" };
+				return Promise.resolve(
+					next && JSON.stringify(next.request) === JSON.stringify(input)
+						? next.outcome
+						: { kind: "unknown" },
+				);
 			}),
 		},
 		status: {
@@ -676,7 +678,14 @@ describe("Layout — a tab that missed the install's result is told what the dev
 	);
 
 	// The vector the install was launched with, as its own frames carry it.
-	const targets = [{ name: "ceralive-ui", version: "2026.11.3" }];
+	const targets = [
+		{
+			name: "ceralive-ui",
+			version: "2026.11.3",
+			arch: "arm64",
+			from: "2026.11.2",
+		},
+	];
 	const asked = () => vi.mocked(rpc.system.updateOutcome);
 	async function endsAndAsks(answer: Promise<unknown>) {
 		// An offer the tab saw earlier is not what it asks about.
@@ -690,7 +699,7 @@ describe("Layout — a tab that missed the install's result is told what the dev
 				],
 			},
 		});
-		updating({ ...installing, percent: 70, targets });
+		updating({ ...installing, percent: 70, run: 1, targets });
 		render(Layout);
 		const title = overlayTitle();
 		asked().mockReturnValueOnce(answer as never);
@@ -733,9 +742,9 @@ describe("Layout — a tab that missed the install's result is told what the dev
 	it("announces success when the device reads the install's own versions as installed", async () => {
 		await endsAndAsks(Promise.resolve({ kind: "success" }));
 		expect(overlayTitle()).toBeUndefined();
-		// Versions reached, said as such: the tab did not see the run finish.
+		// Versions reached, said as such: never the observed exit's title.
 		expect(vi.mocked(toast.success)).toHaveBeenCalledWith(
-			"Successfully Updated",
+			"Packages installed",
 			{
 				description:
 					"The device now has this update's versions installed. CeraUI did not see the update finish.",
@@ -826,13 +835,21 @@ describe("Layout — a tab that missed the install's result is told what the dev
 });
 
 describe("Layout — an answer counts only for the question it was given", () => {
-	const A = [{ name: "ceralive-ui", version: "2026.11.3" }];
-	const B = [{ name: "ceralive-ui", version: "2026.11.4" }];
+	const target = (version: string) => [
+		{ name: "ceralive-ui", version, arch: "arm64", from: "2026.11.2" },
+	];
+	const A = target("2026.11.3");
+	const B = target("2026.11.4");
+	// Each launched run's frames carry its start, as the backend sends them.
+	const RUN = new Map([
+		[A, 1],
+		[B, 2],
+	]);
 	const asked = () => vi.mocked(rpc.system.updateOutcome);
 	const phase = () =>
 		document.querySelector('[data-testid="update-phase"]')?.textContent ?? "";
-	const runs = (targets: typeof A, percent: number) =>
-		updating({ ...installing, percent, targets });
+	const runs = (targets: typeof A, percent: number, run = RUN.get(targets)) =>
+		updating({ ...installing, percent, run, targets });
 	const endsUnseen = () =>
 		pushStatus({ updating: null, update_state: { kind: "idle" } });
 	async function settle() {
@@ -891,21 +908,11 @@ describe("Layout — an answer counts only for the question it was given", () =>
 		).toBe("20");
 	});
 
-	it("a fresh connection into an active new run drops the old run's phase and ceiling", async () => {
-		runs(A, 80);
-		render(Layout);
-		expect(phase()).toContain("Installing");
+	async function reconnectInto(frame: Record<string, unknown>) {
 		transport.connection?.("disconnected");
-		const downloading = {
-			total: 1,
-			downloading: 1,
-			unpacking: 0,
-			setting_up: 0,
-			targets: B,
-		};
 		transport.hydratedStatus = {
-			updating: downloading,
-			update_state: { kind: "downloading", progress: downloading },
+			updating: frame,
+			update_state: { kind: "downloading", progress: frame },
 		};
 		const calls = transport.hydrateCalls;
 		transport.connection?.("connected");
@@ -913,12 +920,101 @@ describe("Layout — an answer counts only for the question it was given", () =>
 			expect(transport.hydrateCalls).toBeGreaterThan(calls),
 		);
 		await settle();
-		expect(phase()).toContain("Downloading");
+	}
+	const downloadingOf = (run: number, targets?: typeof A) => ({
+		total: 1,
+		downloading: 1,
+		unpacking: 0,
+		setting_up: 0,
+		run,
+		...(targets ? { targets } : {}),
+	});
+
+	it.each([
+		["its admitted frame (another vector)", downloadingOf(2, B), B],
+		["a same-vector retry", downloadingOf(2, A), A],
+	])(
+		"a fresh connection into an active new run drops the old run's phase and ceiling: %s",
+		async (_, frame, asks) => {
+			runs(A, 80);
+			render(Layout);
+			expect(phase()).toContain("Installing");
+			await reconnectInto(frame);
+			expect(phase()).toContain("Downloading");
+			expect(phase()).not.toContain("Installing");
+			// When the new run ends unseen, the question is about its own vector.
+			asked().mockResolvedValueOnce({ kind: "unknown" } as never);
+			endsUnseen();
+			expect(asked()).toHaveBeenLastCalledWith({ targets: asks });
+		},
+	);
+
+	it("a fresh connection into a new run's first frame, before it names a vector, holds nothing of the old run", async () => {
+		runs(A, 80);
+		render(Layout);
+		await reconnectInto({
+			total: 0,
+			downloading: 0,
+			unpacking: 0,
+			setting_up: 0,
+			run: 2,
+		});
+		expect(phase()).toContain("Preparing or downloading packages");
 		expect(phase()).not.toContain("Installing");
-		// When B ends unseen, the question is about B's vector.
+		// The run then names its vector; a missed end asks about that one.
+		updating(downloadingOf(2, B));
+		expect(phase()).toContain("Downloading");
 		asked().mockResolvedValueOnce({ kind: "unknown" } as never);
 		endsUnseen();
 		expect(asked()).toHaveBeenLastCalledWith({ targets: B });
+	});
+
+	it.each([
+		["the later answer first", ["second", "first"]],
+		["the earlier answer first", ["first", "second"]],
+	] as const)(
+		"two quick runs of the same vector: only the later question's answer counts (%s)",
+		async (_, order) => {
+			const answers = {
+				first: Promise.withResolvers<unknown>(),
+				second: Promise.withResolvers<unknown>(),
+			};
+			asked()
+				.mockReturnValueOnce(answers.first.promise as never)
+				.mockReturnValueOnce(answers.second.promise as never);
+			runs(A, 70, 1);
+			render(Layout);
+			endsUnseen();
+			runs(A, 30, 2);
+			endsUnseen();
+			expect(asked().mock.calls).toEqual([[{ targets: A }], [{ targets: A }]]);
+			const replies = {
+				first: { kind: "success" },
+				second: { kind: "unknown" },
+			};
+			for (const which of order) {
+				answers[which].resolve(replies[which]);
+				await settle();
+			}
+			expect(vi.mocked(toast.success)).not.toHaveBeenCalled();
+			expect(vi.mocked(toast.warning)).toHaveBeenCalledTimes(1);
+		},
+	);
+
+	it("a tab opened mid-run has no vector: it shows progress, and its question names none", async () => {
+		// A recovered unit's frames: no run start, no vector.
+		updating({ ...installing, percent: 50 });
+		render(Layout);
+		expect(phase()).toContain("Installing");
+		asked().mockResolvedValueOnce({ kind: "unknown" } as never);
+		endsUnseen();
+		// An empty question can learn only running or not confirmed.
+		expect(asked()).toHaveBeenLastCalledWith({ targets: [] });
+		await settle();
+		expect(vi.mocked(toast.warning)).toHaveBeenCalledWith(
+			"Outcome not confirmed",
+		);
+		expect(vi.mocked(toast.success)).not.toHaveBeenCalled();
 	});
 
 	it("a reconnect into the same run (no vector after a restart) keeps its phase", async () => {

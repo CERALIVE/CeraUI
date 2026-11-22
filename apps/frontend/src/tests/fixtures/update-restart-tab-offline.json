@@ -420,7 +420,8 @@
 					"downloading": 0,
 					"unpacking": 0,
 					"setting_up": 0,
-					"total": 0
+					"total": 0,
+					"run": 1
 				},
 				"update_state": {
 					"kind": "downloading",
@@ -428,7 +429,8 @@
 						"downloading": 0,
 						"unpacking": 0,
 						"setting_up": 0,
-						"total": 0
+						"total": 0,
+						"run": 1
 					}
 				}
 			}
@@ -442,7 +444,8 @@
 						"downloading": 0,
 						"unpacking": 0,
 						"setting_up": 0,
-						"total": 0
+						"total": 0,
+						"run": 1
 					}
 				}
 			}
@@ -456,7 +459,8 @@
 						"downloading": 0,
 						"unpacking": 0,
 						"setting_up": 0,
-						"total": 0
+						"total": 0,
+						"run": 1
 					}
 				}
 			}
@@ -470,7 +474,8 @@
 						"downloading": 0,
 						"unpacking": 0,
 						"setting_up": 0,
-						"total": 0
+						"total": 0,
+						"run": 1
 					}
 				}
 			}
@@ -483,46 +488,67 @@
 					"downloading": 1,
 					"unpacking": 0,
 					"setting_up": 0,
+					"run": 1,
 					"targets": [
 						{
 							"name": "p1",
-							"version": "2"
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
 						},
 						{
 							"name": "p10",
-							"version": "2"
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
 						},
 						{
 							"name": "p2",
-							"version": "2"
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
 						},
 						{
 							"name": "p3",
-							"version": "2"
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
 						},
 						{
 							"name": "p4",
-							"version": "2"
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
 						},
 						{
 							"name": "p5",
-							"version": "2"
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
 						},
 						{
 							"name": "p6",
-							"version": "2"
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
 						},
 						{
 							"name": "p7",
-							"version": "2"
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
 						},
 						{
 							"name": "p8",
-							"version": "2"
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
 						},
 						{
 							"name": "p9",
-							"version": "2"
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
 						}
 					]
 				},
@@ -533,46 +559,67 @@
 						"downloading": 1,
 						"unpacking": 0,
 						"setting_up": 0,
+						"run": 1,
 						"targets": [
 							{
 								"name": "p1",
-								"version": "2"
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
 							},
 							{
 								"name": "p10",
-								"version": "2"
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
 							},
 							{
 								"name": "p2",
-								"version": "2"
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
 							},
 							{
 								"name": "p3",
-								"version": "2"
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
 							},
 							{
 								"name": "p4",
-								"version": "2"
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
 							},
 							{
 								"name": "p5",
-								"version": "2"
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
 							},
 							{
 								"name": "p6",
-								"version": "2"
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
 							},
 							{
 								"name": "p7",
-								"version": "2"
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
 							},
 							{
 								"name": "p8",
-								"version": "2"
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
 							},
 							{
 								"name": "p9",
-								"version": "2"
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
 							}
 						]
 					}
@@ -592,46 +639,67 @@
 					"unpacking": 0,
 					"setting_up": 1,
 					"percent": 40,
+					"run": 1,
 					"targets": [
 						{
 							"name": "p1",
-							"version": "2"
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
 						},
 						{
 							"name": "p10",
-							"version": "2"
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
 						},
 						{
 							"name": "p2",
-							"version": "2"
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
 						},
 						{
 							"name": "p3",
-							"version": "2"
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
 						},
 						{
 							"name": "p4",
-							"version": "2"
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
 						},
 						{
 							"name": "p5",
-							"version": "2"
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
 						},
 						{
 							"name": "p6",
-							"version": "2"
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
 						},
 						{
 							"name": "p7",
-							"version": "2"
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
 						},
 						{
 							"name": "p8",
-							"version": "2"
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
 						},
 						{
 							"name": "p9",
-							"version": "2"
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
 						}
 					]
 				},
@@ -643,46 +711,67 @@
 						"unpacking": 0,
 						"setting_up": 1,
 						"percent": 40,
+						"run": 1,
 						"targets": [
 							{
 								"name": "p1",
-								"version": "2"
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
 							},
 							{
 								"name": "p10",
-								"version": "2"
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
 							},
 							{
 								"name": "p2",
-								"version": "2"
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
 							},
 							{
 								"name": "p3",
-								"version": "2"
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
 							},
 							{
 								"name": "p4",
-								"version": "2"
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
 							},
 							{
 								"name": "p5",
-								"version": "2"
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
 							},
 							{
 								"name": "p6",
-								"version": "2"
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
 							},
 							{
 								"name": "p7",
-								"version": "2"
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
 							},
 							{
 								"name": "p8",
-								"version": "2"
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
 							},
 							{
 								"name": "p9",
-								"version": "2"
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
 							}
 						]
 					}
@@ -731,43 +820,63 @@
 				"targets": [
 					{
 						"name": "p1",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p10",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p2",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p3",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p4",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p5",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p6",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p7",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p8",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p9",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					}
 				]
 			},
@@ -909,43 +1018,63 @@
 				"targets": [
 					{
 						"name": "p1",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p10",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p2",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p3",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p4",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p5",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p6",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p7",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p8",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p9",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					}
 				]
 			},
@@ -959,43 +1088,63 @@
 				"targets": [
 					{
 						"name": "p1",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p10",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p2",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p3",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p4",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p5",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p6",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p7",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p8",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					},
 					{
 						"name": "p9",
-						"version": "2"
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
 					}
 				]
 			},

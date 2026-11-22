@@ -71,12 +71,13 @@ export function announceMissedInstallOutcome(state: UpdateState): void {
 /**
  * What the device read back for an install whose result never reached the
  * tab: `success` means the install's own versions are there, not that the tab
- * saw it finish. Anything else is not confirmed; the fixed-name unit's exit is
- * only a hint, since it may be another run's.
+ * saw it finish, so it is never the observed exit's "Successfully Updated".
+ * Anything else is not confirmed; the fixed-name unit's exit is only a hint,
+ * since it may be another run's.
  */
 export function announceReadOutcome(outcome: UpdateOutcome | undefined): void {
 	if (outcome?.kind === "success") {
-		toast.success(m["updatingOverlay.successMessage"](), {
+		toast.success(m["settings.updates.phase.settled"](), {
 			description: m["updatingOverlay.versionsInstalledDescription"](),
 		});
 		return;

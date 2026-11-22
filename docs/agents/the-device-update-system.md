@@ -69,10 +69,13 @@ ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
   connection) is not shown. See
   [Package update progress](../DEVICE-UPDATES.md#package-update-progress).
 - **[EXISTS; host-tested] Outcome after a restart.** A tab that missed an
-  install's result asks the device, read-only, whether the vector that
-  install's own frames carried (`updating.targets`) is installed and
-  configured (`system.updateOutcome`); the fixed-name unit's exit is only an
-  unattributed hint, never **Update Failed**; unit handling stays main's.
+  install's result asks the device, read-only, whether the exact instances
+  that install's own frames carried (`updating.targets`: name, architecture,
+  version before) are installed and configured (`system.updateOutcome`); a
+  frame with another `updating.run` is a new run; the read-back success says
+  **Packages installed**, never **Successfully Updated**; the fixed-name
+  unit's exit is only an unattributed hint, never **Update Failed**; unit
+  handling stays main's.
 - **[EXISTS; host-tested] Download-hold notice.** Genuine D8 package/OS
   interruption captures an opaque attempt before awaits and publishes through a
   detached macrotask and separate strict ledger. Committed intents rehydrate and

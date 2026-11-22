@@ -1,16 +1,19 @@
 /// <reference types="bun" />
 /*
  * What an install a tab watched did, read once CeraUI restarted under it:
- * success iff one complete dpkg read shows every target of the vector that
- * install was launched with installed, configured and at its version or
- * later; otherwise unknown ("Outcome not confirmed"), with the fixed-name
- * unit's non-zero exit only as an unattributed hint. The version order is
+ * success iff one complete dpkg read shows the exact instance (name and
+ * architecture) of every target of the vector that install was launched with
+ * configured at its version or later, none was already there before, and the
+ * fixed-name unit is neither running nor last failed; otherwise unknown
+ * ("Outcome not confirmed"), with that unit's non-zero exit only as an
+ * unattributed hint. The version order is
  * dpkg's: the fake below answers from an explicit order that has an epoch, a
  * tilde and a plus, as `dpkg --compare-versions` does on the device.
  */
 import { describe, expect, test } from "bun:test";
 import type { UpdateTarget } from "@ceraui/rpc/schemas";
 import type { SpawnWithTimeoutResult } from "../helpers/spawn-policy.ts";
+import { admittedTargets } from "../modules/system/apt-all-packages.ts";
 import {
 	readUpdateOutcome,
 	UPDATE_OUTCOME_DEADLINE_MS,
@@ -32,8 +35,14 @@ const QUERY = [
 	`-f=\${Package}\\t\${Architecture}\\t\${db:Status-Abbrev}\\t\${Version}\\n`,
 	"--",
 ];
+const at = (name: string, version: string, from?: string): UpdateTarget => ({
+	name,
+	version,
+	arch: "arm64",
+	...(from === undefined ? {} : { from }),
+});
 const launched = (...extra: UpdateTarget[]): UpdateTarget[] => [
-	{ name: "ceralive-ui", version: TARGET },
+	at("ceralive-ui", TARGET, "2026.11.2"),
 	...extra,
 ];
 const finished = (exitCode: number): DetachedAptServiceState => ({
@@ -94,8 +103,9 @@ function device(o: {
 					return answer(rows.length === names.length ? 0 : 1, rows.join(""));
 				}
 				if (o.compareExit !== undefined) return answer(o.compareExit);
-				const [, , left = "", , right = ""] = argv;
-				return answer(ORDER.indexOf(left) >= ORDER.indexOf(right) ? 0 : 1);
+				const [, , left = "", op, right = ""] = argv;
+				const order = ORDER.indexOf(left) - ORDER.indexOf(right);
+				return answer((op === "lt" ? order < 0 : order >= 0) ? 0 : 1);
 			},
 		},
 	};
@@ -107,10 +117,7 @@ describe("success is decided by the installed versions", () => {
 		["a later build (+)", "2026.11.3+b1"],
 		["a higher epoch", "1:2026.1.0"],
 	])("installed at %s: success", async (_, installed) => {
-		const d = device({
-			installed: { "ceralive-ui": installed },
-			unit: finished(100),
-		});
+		const d = device({ installed: { "ceralive-ui": installed } });
 		expect(await readUpdateOutcome(launched(), d.deps)).toEqual({
 			kind: "success",
 		});
@@ -124,7 +131,7 @@ describe("success is decided by the installed versions", () => {
 	});
 
 	test("every launched package must be reached, not only one", async () => {
-		const targets = launched({ name: "cerastream", version: "2026.11.3" });
+		const targets = launched(at("cerastream", "2026.11.3"));
 		const d = device({
 			installed: { "ceralive-ui": TARGET, cerastream: "2026.11.2" },
 			unit: finished(100),
@@ -208,19 +215,27 @@ describe("only a complete, coherent read decides", () => {
 		});
 	});
 
-	test("every installed architecture of an unqualified name must be reached", async () => {
-		const both = (foreign: string) =>
-			`ceralive-ui\tarm64\tii \t${TARGET}\nceralive-ui\tarmhf\tii \t${foreign}\n`;
-		expect(
-			await readUpdateOutcome(launched(), device({ rows: both(TARGET) }).deps),
-		).toEqual({ kind: "success" });
+	test("only the admitted architecture's instance decides, never another's", async () => {
+		const rows = (native: string, foreign: string) =>
+			`ceralive-ui\tarm64\tii \t${native}\nceralive-ui\tarmhf\tii \t${foreign}\n`;
+		// The native instance reached; a foreign one behind is not this target.
 		expect(
 			await readUpdateOutcome(
 				launched(),
-				device({ rows: both("2026.11.2") }).deps,
+				device({ rows: rows(TARGET, "2026.11.2") }).deps,
+			),
+		).toEqual({ kind: "success" });
+		// A foreign instance at the version never stands in for the native one.
+		expect(
+			await readUpdateOutcome(
+				launched(),
+				device({ rows: rows("2026.11.2", TARGET) }).deps,
 			),
 		).toEqual({ kind: "unknown" });
-		// A removed foreign instance is no instance.
+		const foreignOnly = `ceralive-ui\tarmhf\tii \t${TARGET}\n`;
+		expect(
+			await readUpdateOutcome(launched(), device({ rows: foreignOnly }).deps),
+		).toEqual({ kind: "unknown" });
 		const removed = `ceralive-ui\tarm64\tii \t${TARGET}\nceralive-ui\tarmhf\trc \t2026.11.2\n`;
 		expect(
 			await readUpdateOutcome(launched(), device({ rows: removed }).deps),
@@ -231,19 +246,16 @@ describe("only a complete, coherent read decides", () => {
 		const d = device({
 			rows: `libfoo\tarmhf\tii \t${TARGET}\n`,
 		});
-		expect(
-			await readUpdateOutcome(
-				[{ name: "libfoo:armhf", version: TARGET }],
-				d.deps,
-			),
-		).toEqual({ kind: "success" });
+		const foreign = { name: "libfoo:armhf", version: TARGET, arch: "armhf" };
+		expect(await readUpdateOutcome([foreign], d.deps)).toEqual({
+			kind: "success",
+		});
+		// dpkg-query is asked for the package itself, all its instances.
+		expect(d.calls[0]?.at(-1)).toBe("libfoo");
 		const other = device({ rows: `libfoo\tarm64\tii \t${TARGET}\n` });
-		expect(
-			await readUpdateOutcome(
-				[{ name: "libfoo:armhf", version: TARGET }],
-				other.deps,
-			),
-		).toEqual({ kind: "unknown" });
+		expect(await readUpdateOutcome([foreign], other.deps)).toEqual({
+			kind: "unknown",
+		});
 	});
 
 	test("the whole request has one deadline; past it, unknown", async () => {
@@ -254,13 +266,37 @@ describe("only a complete, coherent read decides", () => {
 		});
 		expect(
 			await readUpdateOutcome(
-				many.map((name) => ({ name, version: TARGET })),
+				many.map((name) => at(name, TARGET)),
 				d.deps,
 			),
 		).toEqual({ kind: "unknown" });
 		// Each read gets at most what is left, and none starts after it is spent.
 		expect(d.calls.length).toBe(UPDATE_OUTCOME_DEADLINE_MS / 4_000);
 		expect(d.timeouts).toEqual([5_000, 5_000, 5_000, 5_000, 4_000]);
+	});
+});
+
+describe("a target already met before the run proves nothing", () => {
+	test.each([
+		["a reinstall of the same version", TARGET],
+		["a downgrade from a later version", "1:2026.1.0"],
+	])("%s: not confirmed", async (_, from) => {
+		const d = device({ installed: { "ceralive-ui": "1:2026.1.0" } });
+		expect(
+			await readUpdateOutcome([at("ceralive-ui", TARGET, from)], d.deps),
+		).toEqual({ kind: "unknown" });
+	});
+
+	test("a new install (nothing before) and an upgrade from below are this run's", async () => {
+		const d = device({
+			installed: { "ceralive-ui": TARGET, cerastream: "2026.11.3" },
+		});
+		expect(
+			await readUpdateOutcome(
+				[at("ceralive-ui", TARGET, "2026.11.2"), at("cerastream", "2026.11.3")],
+				d.deps,
+			),
+		).toEqual({ kind: "success" });
 	});
 });
 
@@ -346,9 +382,11 @@ describe("a read that gives no answer is unknown", () => {
 
 	test("an option-shaped or empty name or version never reaches dpkg", async () => {
 		for (const bad of [
-			{ name: "-x", version: TARGET },
-			{ name: "ceralive-ui", version: "--force" },
-			{ name: "ceralive-ui", version: "" },
+			at("-x", TARGET),
+			at("ceralive-ui", "--force"),
+			at("ceralive-ui", ""),
+			{ ...at("ceralive-ui", TARGET), arch: "-x" },
+			at("ceralive-ui", TARGET, "--force"),
 		]) {
 			const d = device({ installed: { "ceralive-ui": TARGET } });
 			expect(await readUpdateOutcome([bad], d.deps)).toEqual({
@@ -386,6 +424,16 @@ describe("a unit this process reports itself is still running", () => {
 		});
 	});
 
+	test("a running unit no process will report is never complete, versions reached or not", async () => {
+		const d = device({
+			installed: { "ceralive-ui": TARGET },
+			unit: { kind: "running" },
+		});
+		expect(await readUpdateOutcome(launched(), d.deps)).toEqual({
+			kind: "unknown",
+		});
+	});
+
 	test("with no unit left, an observing process decides from the versions", async () => {
 		const d = device({
 			installed: { "ceralive-ui": TARGET },
@@ -402,10 +450,7 @@ test("it only reads: the query's ABI, then version comparisons, one unit probe",
 		installed: { "ceralive-ui": TARGET, cerastream: "2026.11.3" },
 		unit: finished(0),
 	});
-	await readUpdateOutcome(
-		launched({ name: "cerastream", version: "2026.11.3" }),
-		d.deps,
-	);
+	await readUpdateOutcome(launched(at("cerastream", "2026.11.3")), d.deps);
 	expect(d.inspections()).toBe(1);
 	expect(d.calls[0]).toEqual([...QUERY, "ceralive-ui", "cerastream"]);
 	for (const argv of d.calls.slice(1))
@@ -413,7 +458,7 @@ test("it only reads: the query's ABI, then version comparisons, one unit probe",
 			"dpkg",
 			"--compare-versions",
 			expect.any(String),
-			"ge",
+			expect.stringMatching(/^(?:ge|lt)$/),
 			expect.any(String),
 		]);
 });
@@ -431,14 +476,15 @@ describe("ported: an older run never answers for a newer vector", () => {
 		});
 	});
 
-	test("an older run's failure does not hide that the newer vector is installed", async () => {
+	test("a failed exit beside the installed vector is not confirmed: it may be this run's", async () => {
 		// Was: a newer attempt's terminal state is never overwritten by an older one.
 		const d = device({
 			installed: { "ceralive-ui": TARGET },
 			unit: finished(100),
 		});
 		expect(await readUpdateOutcome(launched(), d.deps)).toEqual({
-			kind: "success",
+			kind: "unknown",
+			exit: 100,
 		});
 	});
 
@@ -451,5 +497,37 @@ describe("ported: an older run never answers for a newer vector", () => {
 		const outcome = await readUpdateOutcome(launched(), d.deps);
 		expect(outcome.kind).toBe("unknown");
 		expect(outcome).not.toHaveProperty("reason");
+	});
+});
+
+describe("the vector a run publishes is the pinned recheck's own rows", () => {
+	test("each pin's instance: its architecture and the version installed before", () => {
+		expect(
+			admittedTargets(
+				[
+					"Inst ceralive-ui [2026.11.2] (2026.11.3 CeraLive:stable [arm64])",
+					"Inst libfoo:armhf [1] (2 Debian:13/stable [armhf])",
+					"Inst fonts-x [1] (2 Debian:13/stable [all])",
+					"Inst fresh (1 CeraLive:stable [arm64])",
+					"Conf ceralive-ui (2026.11.3 CeraLive:stable [arm64])",
+				].join("\n"),
+			),
+		).toEqual([
+			{
+				name: "ceralive-ui",
+				version: "2026.11.3",
+				arch: "arm64",
+				from: "2026.11.2",
+			},
+			{ name: "fonts-x", version: "2", arch: "all", from: "1" },
+			{ name: "fresh", version: "1", arch: "arm64" },
+			{ name: "libfoo:armhf", version: "2", arch: "armhf", from: "1" },
+		]);
+	});
+
+	test("a row that does not say its architecture publishes no vector at all", () => {
+		expect(
+			admittedTargets("Inst ceralive-ui [2026.11.2] (2026.11.3)\n"),
+		).toBeNull();
 	});
 });

@@ -76,10 +76,14 @@ export const availableUpdatesSchema = z.object({
 });
 export type AvailableUpdates = z.infer<typeof availableUpdatesSchema>;
 
-// One package an install was launched to reach, as apt-get was given it.
+// One package instance an install was launched to reach, as its pinned
+// simulation printed it: the name apt-get was given, the candidate's own
+// architecture, and the version installed before (absent: none was).
 export const updateTargetSchema = z.object({
 	name: z.string(),
 	version: z.string(),
+	arch: z.string(),
+	from: z.string().optional(),
 });
 export type UpdateTarget = z.infer<typeof updateTargetSchema>;
 
@@ -92,9 +96,13 @@ export const updateProgressSchema = z.object({
 	// The share of the phase above that APT's transcript proves done. A running
 	// transaction never reports 100: only a successful `result` completes it.
 	percent: z.number().int().min(0).max(99).optional(),
-	// The exact `name=version` vector this install was launched with, on every
-	// frame of the process that launched it; absent where none is known.
+	// The exact vector this install was launched with, on every frame of the
+	// process that launched it once known; absent where none is known.
 	targets: z.array(updateTargetSchema).max(512).optional(),
+	// The run's start (epoch ms) on every frame of the process that started
+	// it: a different value is another run. A process that recovered the unit
+	// after a restart does not know it and sends none.
+	run: z.number().int().optional(),
 	// `0` marks completion; a string carries the apt failure message the update
 	// loop broadcasts before clearing state.
 	result: z.union([z.number(), z.string()]).optional(),

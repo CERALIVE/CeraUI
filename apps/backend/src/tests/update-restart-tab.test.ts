@@ -124,10 +124,10 @@ for name in "$@"; do
 done
 exit $missing
 `;
-// dpkg --compare-versions A ge B, for this test's integer versions.
+// dpkg --compare-versions A ge|lt B, for this test's integer versions.
 const FAKE_DPKG = `#!/bin/bash
-[ "$1" = --compare-versions ] && [ "$3" = ge ] && { [ "$2" -ge "$4" ]; exit $?; }
-exit 2
+[ "$1" = --compare-versions ] || exit 2
+case "$3" in ge) [ "$2" -ge "$4" ];; lt) [ "$2" -lt "$4" ];; *) exit 2;; esac
 `;
 
 type Status = Record<string, unknown>;
@@ -166,6 +166,20 @@ class Tab {
 	#from = 0;
 	// As the frontend: the vector of the first running frame that carried one.
 	#targets: unknown;
+	// Each distinct run start, as 1, 2, ... in order: identity kept, values stable.
+	#runs = new Map<unknown, number>();
+
+	#stable(fields: Status): Status {
+		const mark = (progress: unknown) => {
+			const p = progress as { run?: unknown } | null | undefined;
+			if (typeof p !== "object" || p === null || p.run === undefined) return;
+			if (!this.#runs.has(p.run)) this.#runs.set(p.run, this.#runs.size + 1);
+			p.run = this.#runs.get(p.run);
+		};
+		mark(fields.updating);
+		mark((fields.update_state as { progress?: unknown } | undefined)?.progress);
+		return fields;
+	}
 
 	#record(entry: Seen) {
 		const updating = updatingOf(entry) as
@@ -200,7 +214,7 @@ class Tab {
 				socket.send(JSON.stringify({ pong: frame.ping }));
 			const status = frame.status as Status | undefined;
 			const fields = status && packageFields(status);
-			if (fields) this.#record({ at: "push", status: fields });
+			if (fields) this.#record({ at: "push", status: this.#stable(fields) });
 		};
 		this.#socket = socket;
 		await opened.promise;
@@ -216,7 +230,10 @@ class Tab {
 
 	async pull() {
 		const status = await this.call<Status>(["status", "getStatus"]);
-		this.#record({ at: "pull", status: packageFields(status) ?? {} });
+		this.#record({
+			at: "pull",
+			status: this.#stable(packageFields(status) ?? {}),
+		});
 	}
 
 	// What the frontend asks once the install it showed ended without its result.
@@ -545,7 +562,12 @@ async function toInstalling80(tab: Tab) {
 }
 
 // The vector discovery admitted: ten pins at version 2, in apt-get's order.
-const TARGETS = RESTART_PACKAGES.map((name) => ({ name, version: "2" }));
+const TARGETS = RESTART_PACKAGES.map((name) => ({
+	name,
+	version: "2",
+	arch: "arm64",
+	from: "1",
+}));
 const withTargets = <T extends object>(frame: T) => ({
 	...frame,
 	targets: TARGETS,
@@ -611,9 +633,10 @@ test("one open tab across the postinst restart and the completion restart: the d
 	expect(
 		pushedUpdating(between(seen, "idle", "postinst stopped the backend")),
 	).toEqual([
-		preparing,
-		withTargets(downloadingPhase),
-		withTargets(running(40)),
+		// The launching process names its run on every frame; recovery cannot.
+		{ ...preparing, run: 1 },
+		withTargets({ ...downloadingPhase, run: 1 }),
+		withTargets({ ...running(40), run: 1 }),
 	]);
 	expect(
 		pushedUpdating(

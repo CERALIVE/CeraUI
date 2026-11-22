@@ -77,8 +77,12 @@ $effect(() => (topBands ? publishHeight(topBands, '--top-bands-height') : undefi
 // after a reconnect or a backend restart never moves it back.
 let shownInstall: UpdateProgress | undefined;
 // The vector that install was launched with, from the first of its frames to
-// carry one; never replaced inside the run. A frame naming another is a new run.
+// carry one; never replaced inside the run.
 let watched: UpdateTarget[] | undefined;
+// The run's start, from the process that started it. A frame with another is
+// another run; frames of a process that recovered the unit after a restart
+// carry none and continue the run this tab holds.
+let watchedRun: number | undefined;
 // The install this tab showed ended with no result the device reported: its
 // phase is held, without a number, until the device answers the tab's question.
 let unanswered = false;
@@ -114,11 +118,12 @@ const updatingStatus = $derived.by(() => {
 	const install = legacyInstall(updating);
 	unanswered = install.kind === 'none' && shownInstall !== undefined && !reported(getUpdateState());
 	if (install.kind === 'running' && install.details) {
-		const targets = install.details.targets;
+		const { run, targets } = install.details;
 		question += 1;
-		if (targets && watched && JSON.stringify(targets) !== JSON.stringify(watched)) {
+		if (run !== undefined && run !== watchedRun) {
 			shownInstall = undefined;
 			liveInstall = createLiveProgress();
+			watchedRun = run;
 		}
 		if (!shownInstall) watched = undefined;
 		watched ??= targets;
@@ -126,6 +131,7 @@ const updatingStatus = $derived.by(() => {
 	} else if (!unanswered) {
 		shownInstall = undefined;
 		watched = undefined;
+		watchedRun = undefined;
 	}
 	return liveInstall(
 		shownInstall,
@@ -148,6 +154,7 @@ const told = (asked: number, outcome?: UpdateOutcome) => {
 	if (asked !== question || !unanswered || outcome?.kind === 'running') return;
 	shownInstall = undefined;
 	watched = undefined;
+	watchedRun = undefined;
 	answers = answers + 1;
 	announceReadOutcome(outcome);
 };
