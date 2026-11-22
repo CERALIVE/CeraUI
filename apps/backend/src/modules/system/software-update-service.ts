@@ -12,11 +12,14 @@ import { spawnWithTimeout } from "../../helpers/spawn-policy.ts";
 import { classifyPackageLayer } from "./package-layer.ts";
 import {
 	prepareSoftwareUpdateOutput,
+	type RecordedSoftwareUpdateOutcome,
+	readSoftwareUpdateOutcome,
 	readSoftwareUpdateOutput,
 	type SoftwareUpdateOutputPaths,
 	type SoftwareUpdateOutputRead,
 	softwareUpdateOutputPaths,
 	UnsafeSoftwareUpdateOutputPathError,
+	writeSoftwareUpdateOutcome,
 } from "./software-update-output.ts";
 import {
 	DetachedAptServiceCommandError,
@@ -80,6 +83,11 @@ export type DetachedAptServiceDeps = {
 	) => Promise<SoftwareUpdateOutputRead>;
 	readonly sleep: (milliseconds: number) => Promise<void>;
 	readonly now?: () => number;
+	/** The exit an observer recorded for the current unit; null until one did. */
+	readonly readRecordedOutcome: () => Promise<RecordedSoftwareUpdateOutcome | null>;
+	readonly recordOutcome: (
+		outcome: RecordedSoftwareUpdateOutcome,
+	) => Promise<void>;
 };
 
 function assertTrustedOutputPaths(
@@ -98,9 +106,11 @@ function assertTrustedOutputPaths(
 	}
 }
 
+/** `aptStatus: false`: the pre-channel form, for a launch whose status file could not be made. */
 export function buildDetachedAptUpgradeCommand(
 	aptArgs: readonly string[],
 	outputPaths: SoftwareUpdateOutputPaths,
+	aptStatus = true,
 ): string[] {
 	if (!isExpectedAptUpgradeArgv(["/usr/bin/apt-get", ...aptArgs])) {
 		throw new InvalidDetachedAptUpgradeArgumentsError();
@@ -128,9 +138,9 @@ export function buildDetachedAptUpgradeCommand(
 		`--property=StandardOutput=append:${outputPaths.stdout}`,
 		`--property=StandardError=append:${outputPaths.stderr}`,
 		"--",
-		STATUS_CHANNEL_SHELL,
-		"-ec",
-		expectedAptUpgradeScript(aptArgs),
+		...(aptStatus
+			? [STATUS_CHANNEL_SHELL, "-ec", expectedAptUpgradeScript(aptArgs)]
+			: ["/usr/bin/apt-get", ...aptArgs]),
 	];
 }
 
@@ -138,12 +148,13 @@ export function buildDetachedAptAllCommand(
 	installArgs: readonly string[],
 	verdict: "any" | "force_ipv4" | "force_ipv6",
 	outputPaths: SoftwareUpdateOutputPaths,
+	aptStatus = true,
 ): string[] {
 	const family =
 		verdict === "any"
 			? []
 			: ["-o", `Acquire::ForceIPv${verdict === "force_ipv4" ? "4" : "6"}=true`];
-	const script = expectedAptAllScript(installArgs, family);
+	const script = expectedAptAllScript(installArgs, family, aptStatus);
 	assertTrustedOutputPaths(outputPaths);
 	return [
 		"systemd-run",
@@ -159,7 +170,7 @@ export function buildDetachedAptAllCommand(
 		"/usr/bin/flock",
 		"-x",
 		SOFTWARE_UPDATE_LOCK,
-		STATUS_CHANNEL_SHELL,
+		aptStatus ? STATUS_CHANNEL_SHELL : "/bin/sh",
 		"-ec",
 		script,
 	];
@@ -231,5 +242,7 @@ export function defaultDetachedAptServiceDeps(): DetachedAptServiceDeps {
 		},
 		readOutput: readSoftwareUpdateOutput,
 		sleep: Bun.sleep,
+		readRecordedOutcome: () => readSoftwareUpdateOutcome(paths),
+		recordOutcome: (outcome) => writeSoftwareUpdateOutcome(paths, outcome),
 	};
 }

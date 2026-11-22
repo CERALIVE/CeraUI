@@ -50,6 +50,7 @@ describe("best-effort post-clean", () => {
 				new DetachedAptServiceCleanupError(
 					exitCode,
 					new Error("systemctl stop failed"),
+					true,
 				),
 			);
 			retirementFailed.catch(() => {});
@@ -170,6 +171,8 @@ describe("best-effort post-clean", () => {
 						parseDetachedAptServiceState(
 							"LoadState=not-found\nActiveState=inactive\n",
 						),
+					readRecordedOutcome: async () => null,
+					recordOutcome: async () => {},
 					prepareOutput: async () => {
 						throw new Error("must not prepare");
 					},

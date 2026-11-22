@@ -236,6 +236,8 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 					stderr: "/run/ceralive/software-update.stderr",
 					status: "/run/ceralive/software-update.status",
 				},
+				readRecordedOutcome: async () => null,
+				recordOutcome: async () => {},
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () =>
@@ -257,7 +259,11 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 			},
 		);
 		expect(recovered).not.toBeNull();
-		expect(await recovered?.completion).toBe(0);
+		expect(
+			await (recovered && "completion" in recovered
+				? recovered.completion
+				: undefined),
+		).toBe(0);
 		expect(cleaned).toBe(1);
 	});
 
@@ -290,6 +296,8 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 					stderr: "/run/ceralive/software-update.stderr",
 					status: "/run/ceralive/software-update.status",
 				},
+				readRecordedOutcome: async () => null,
+				recordOutcome: async () => {},
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
@@ -312,7 +320,11 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 				now: () => clock,
 			},
 		);
-		expect(await recovered?.completion).toBe(0);
+		expect(
+			await (recovered && "completion" in recovered
+				? recovered.completion
+				: undefined),
+		).toBe(0);
 		expect(cleaned).toBe(1);
 		expect(sleeps).toEqual([
 			250, 1_000, 250, 2_000, 250, 4_000, 250, 8_000, 250, 16_000, 250, 30_000,

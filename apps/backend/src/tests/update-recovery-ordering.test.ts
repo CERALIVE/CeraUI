@@ -2,12 +2,15 @@ import { expect, test } from "bun:test";
 import type { UpdateProgress } from "@ceraui/rpc";
 import { buildAptAllInstallArgs } from "../modules/system/apt-all-packages.ts";
 import {
+	type RecordedSoftwareUpdateOutcome,
 	SOFTWARE_UPDATE_OUTPUT_READ_BYTES,
 	softwareUpdateOutputPaths,
 } from "../modules/system/software-update-output.ts";
 import {
+	DetachedAptServiceAlreadyExistsError,
 	DetachedAptServiceCleanupError,
 	type DetachedAptUpgradeDeps,
+	RECORDED_OUTCOME_REPLAY_MS,
 	recoverDetachedAptUpgrade,
 	runDetachedAptAll,
 } from "../modules/system/software-update-process.ts";
@@ -15,6 +18,7 @@ import {
 	beginSoftwareUpdateRecovery,
 	observeSoftwareUpdateWithoutOwning,
 	recoverSoftwareUpdateIfRunning,
+	resetSoftwareUpdateState,
 	type SoftwareUpdateRecoveryDeps,
 } from "../modules/system/software-updates.ts";
 import { buildInitialStatus } from "../rpc/procedures/status.procedure.ts";
@@ -48,18 +52,38 @@ function fakeUnit(o: {
 	live?: boolean;
 	failCleanup?: (attempt: number) => Error | undefined;
 	firstRead?: Promise<void>;
+	recorded?: RecordedSoftwareUpdateOutcome;
+	failRecord?: boolean;
+	finished?: boolean;
+	onFinish?: () => void;
 }) {
-	let state: "running" | "finished" | "absent" = o.live ? "absent" : "running";
+	let state: "running" | "finished" | "absent" = o.live
+		? "absent"
+		: o.finished
+			? "finished"
+			: "running";
 	const reads: Record<File, number> = { stdout: 0, stderr: 0, status: 0 };
 	const steps = [...(o.steps ?? [])];
 	let polls = 0;
 	let cleaned = 0;
 	let cleanupAttempts = 0;
 	const retired: string[] = [];
+	const events: string[] = [];
+	const started: (readonly string[])[] = [];
+	let recorded = o.recorded ?? null;
 	const deps: DetachedAptUpgradeDeps = {
 		outputPaths: paths,
-		prepareOutput: async () => {},
-		start: async () => {
+		readRecordedOutcome: async () => recorded,
+		recordOutcome: async (outcome) => {
+			if (o.failRecord) throw new Error("ENOSPC: /run is full");
+			events.push("record");
+			recorded = outcome;
+		},
+		prepareOutput: async () => {
+			recorded = null;
+		},
+		start: async (command) => {
+			started.push(command);
 			state = "running";
 		},
 		inspect: async () =>
@@ -74,6 +98,7 @@ function fakeUnit(o: {
 						}
 					: { kind: "running", aptStatus: true },
 		cleanup: async (finished) => {
+			events.push("retire");
 			const error = o.failCleanup?.(++cleanupAttempts);
 			if (error) throw error;
 			cleaned++;
@@ -102,13 +127,19 @@ function fakeUnit(o: {
 			if (++polls > 200) throw new Error("observer kept polling");
 			const step = steps.shift();
 			if (step) step();
-			else if (state === "running") state = "finished";
+			else if (state === "running") {
+				o.onFinish?.();
+				state = "finished";
+			}
 		},
 	};
 	return {
 		deps,
 		reads,
 		retired,
+		events,
+		started,
+		recorded: () => recorded,
 		cleaned: () => cleaned,
 		cleanupAttempts: () => cleanupAttempts,
 	};
@@ -127,7 +158,10 @@ async function reattach(unit: ReturnType<typeof fakeUnit>) {
 		await recoverSoftwareUpdateIfRunning({
 			recover: async (handlers) => {
 				const recovered = await recoverDetachedAptUpgrade(handlers, unit.deps);
-				completion = recovered?.completion;
+				completion =
+					recovered && "completion" in recovered
+						? recovered.completion
+						: undefined;
 				return recovered;
 			},
 			scheduleRetry: () => {},
@@ -323,7 +357,10 @@ function recoveryOf(
 				unit.deps,
 				options,
 			);
-			deps.completion = recovered?.completion;
+			deps.completion =
+				recovered && "completion" in recovered
+					? recovered.completion
+					: undefined;
 			return recovered;
 		},
 		scheduleRetry: () => {},
@@ -418,4 +455,156 @@ test("after a refused bootstrap a failed probe is retried, never taken for an an
 	await h.settled();
 	expect(running(h.frames)).toEqual([installingAt(60)]);
 	expect(h.frames.at(-1)?.update_state?.kind).toBe("success");
+});
+
+test("the observer records the exit after its final read, then retires the unit", async () => {
+	const unit = fakeUnit({
+		files: { stdout: "done\n", stderr: "", status: "" },
+		exitCode: 0,
+		live: true,
+	});
+	expect(await runDetachedAptAll(args, "any", quiet, unit.deps)).toBe(0);
+	expect(unit.events).toEqual(["record", "retire"]);
+	expect(unit.recorded()?.exitCode).toBe(0);
+});
+
+test.each([0, 100])(
+	"a finished unit whose exit %d an earlier lifetime recorded is never adopted again",
+	async (exitCode) => {
+		await using h = await updateHarness();
+		const unit = fakeUnit({
+			files: installing,
+			exitCode,
+			finished: true,
+			recorded: { exitCode, at: Date.now() - 2 * RECORDED_OUTCOME_REPLAY_MS },
+			failCleanup: () => new Error("systemctl stop failed"),
+		});
+		const deps = recoveryOf(unit);
+		beginSoftwareUpdateRecovery();
+		expect(await recoverSoftwareUpdateIfRunning(deps)).toBe(true);
+		expect(deps.completion).toBeUndefined();
+		expect(running(h.frames)).toEqual([]);
+		expect(unit.cleanupAttempts()).toBe(1);
+		expect(h.restarts).toBe(0);
+		expect(h.cleanCount).toBe(0);
+		expect(buildInitialStatus().status.update_state?.kind).toBe(
+			exitCode === 0 ? "success" : "failed",
+		);
+		expect(h.frames.at(-1)?.updating).toBeNull();
+	},
+);
+
+test.each([
+	[0, "success"],
+	[100, "failed"],
+] as const)(
+	"a retired unit's recorded exit %d is what a reconnecting tab is told",
+	async (exitCode, kind) => {
+		await using h = await updateHarness();
+		const unit = fakeUnit({
+			files: installing,
+			exitCode,
+			live: true,
+			recorded: { exitCode, at: Date.now() },
+		});
+		beginSoftwareUpdateRecovery();
+		expect(await recoverSoftwareUpdateIfRunning(recoveryOf(unit))).toBe(false);
+		const status = buildInitialStatus().status;
+		expect(status.updating).toBeNull();
+		expect(status.update_state?.kind).toBe(kind);
+		expect(h.frames.at(-1)?.update_state?.kind).toBe(kind);
+		expect(h.restarts).toBe(0);
+	},
+);
+
+test("a recorded outcome older than the replay window is not told again", async () => {
+	await using h = await updateHarness();
+	const unit = fakeUnit({
+		files: installing,
+		exitCode: 0,
+		live: true,
+		recorded: { exitCode: 0, at: Date.now() - RECORDED_OUTCOME_REPLAY_MS - 1 },
+	});
+	beginSoftwareUpdateRecovery();
+	expect(await recoverSoftwareUpdateIfRunning(recoveryOf(unit))).toBe(false);
+	expect(buildInitialStatus().status.update_state?.kind).not.toBe("success");
+	expect(h.frames.at(-1)?.updating).toBeNull();
+});
+
+test.each([
+	["recorded", false, 1, 1],
+	["could not be recorded", true, 0, 5],
+] as const)(
+	"a successful unit that can never be retired, whose exit %s, restarts CeraUI at most once over five boots",
+	async (_name, failRecord, restarts, adoptions) => {
+		await using h = await updateHarness();
+		const unit = fakeUnit({
+			files: installing,
+			exitCode: 0,
+			finished: true,
+			failRecord,
+			failCleanup: () => new Error("systemctl stop failed"),
+		});
+		let adopted = 0;
+		for (let boot = 1; boot <= 5; boot++) {
+			resetSoftwareUpdateState();
+			beginSoftwareUpdateRecovery();
+			const deps = recoveryOf(unit);
+			expect(await recoverSoftwareUpdateIfRunning(deps)).toBe(true);
+			if (deps.completion) adopted++;
+			expect(buildInitialStatus().status.update_state?.kind).toBe("success");
+		}
+		expect(adopted).toBe(adoptions);
+		expect(h.restarts).toBe(restarts);
+	},
+);
+
+test("a launch whose status file could not be made runs the pre-channel command", async () => {
+	let lost = 0;
+	const unit = fakeUnit({
+		files: { stdout: "Unpacking cerastream\n", stderr: "", status: "" },
+		exitCode: 0,
+		live: true,
+	});
+	expect(
+		await runDetachedAptAll(
+			args,
+			"any",
+			{ ...quiet, onStatusLost: () => lost++ },
+			{ ...unit.deps, prepareOutput: async () => ({ status: false }) },
+		),
+	).toBe(0);
+	const command = unit.started[0] ?? [];
+	expect(command.join(" ")).not.toContain("Status-Fd");
+	expect(command.slice(-3, -1)).toEqual(["/bin/sh", "-ec"]);
+	expect(lost).toBe(1);
+});
+
+test("a launch never retires a finished unit whose exit nobody recorded", async () => {
+	const unit = fakeUnit({
+		files: { stdout: "done\n", stderr: "", status: "" },
+		exitCode: 0,
+		finished: true,
+	});
+	await expect(
+		runDetachedAptAll(args, "any", quiet, unit.deps),
+	).rejects.toBeInstanceOf(DetachedAptServiceAlreadyExistsError);
+	expect(unit.cleanupAttempts()).toBe(0);
+	expect(unit.started).toEqual([]);
+});
+
+test("the read after the unit is inactive is complete, so its last records are shown", async () => {
+	await using h = await updateHarness();
+	const files = { ...installing };
+	const unit = fakeUnit({
+		files,
+		exitCode: 0,
+		steps: [() => {}],
+		onFinish: () => {
+			files.status += pm("90.0000");
+		},
+	});
+	expect(await await reattach(unit)).toBe(0);
+	await h.settled();
+	expect(running(h.frames)).toEqual([installingAt(60), installingAt(90)]);
 });

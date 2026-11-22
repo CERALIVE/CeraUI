@@ -182,6 +182,8 @@ test.each([undefined, "0garbage"])(
 					stderr: "/run/ceralive/software-update.stderr",
 					status: "/run/ceralive/software-update.status",
 				},
+				readRecordedOutcome: async () => null,
+				recordOutcome: async () => {},
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {

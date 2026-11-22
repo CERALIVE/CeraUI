@@ -11,7 +11,7 @@ import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
 import { publishHeight } from '$lib/layout';
 import { rpc } from '$lib/rpc';
 import { getSessionReady } from '$lib/rpc/session-epoch.svelte';
-import { getUpdating } from '$lib/rpc/subscriptions.svelte';
+import { getUpdateState, getUpdating } from '$lib/rpc/subscriptions.svelte';
 import {
 	authenticateWithToken,
 	authStatusStore,
@@ -24,7 +24,7 @@ import {
 } from '$lib/stores/connection-ux.svelte';
 import { getShouldShowOfflinePage } from '$lib/stores/offline-state.svelte';
 import { legacyInstall } from '$lib/updates/legacy-install';
-import { announceLegacyInstallOutcome } from '$lib/updates/legacy-install-notice';
+import { announceLegacyInstallOutcome, announceMissedInstallOutcome } from '$lib/updates/legacy-install-notice';
 
 import Auth from './Auth.svelte';
 import DisconnectedBanner from './DisconnectedBanner.svelte';
@@ -84,6 +84,14 @@ const updatingStatus = $derived.by(() => {
 // status is a new object whenever any sibling field moves (FIX-16-FRONT3 R3).
 $effect(() => {
 	announceLegacyInstallOutcome(getUpdating());
+});
+// A tab told only that the install it showed is over (it missed the result
+// while reconnecting) says what the device reports, or that nobody knows.
+let showedInstall = false;
+$effect(() => {
+	const kind = legacyInstall(getUpdating()).kind;
+	if (showedInstall && kind === 'none') announceMissedInstallOutcome(getUpdateState());
+	showedInstall = kind === 'running';
 });
 // Environment probes computed once (used to size the auth-check timeout).
 const isMobile = /iphone|ipad|ipod|android/i.test(navigator.userAgent);

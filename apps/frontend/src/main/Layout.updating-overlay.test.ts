@@ -33,6 +33,7 @@ import {
 	vi,
 } from "vitest";
 import restart from "../tests/fixtures/update-restart-tab.json";
+import offline from "../tests/fixtures/update-restart-tab-offline.json";
 import PackagesSection from "./dialogs/updates/PackagesSection.svelte";
 import Layout from "./Layout.svelte";
 
@@ -53,7 +54,7 @@ vi.mock("$lib/components/custom/pwa", async () => {
 });
 
 vi.mock("svelte-sonner", () => ({
-	toast: { success: vi.fn(), error: vi.fn() },
+	toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }));
 
 // The ONLY double: the RPC transport. `initSubscriptions()` registers the real
@@ -388,8 +389,8 @@ describe("Layout — one tab across the owner's two-restart update", () => {
 		].join(" | ");
 	}
 
-	it("renders every moment the real backend processes sent it", async () => {
-		const seen = restart.seen as Seen[];
+	// Feeds the real backend's frames through the real store, as the tab got them.
+	async function replay(seen: readonly Seen[]) {
 		render(Layout);
 		render(PackagesSection, {
 			props: {
@@ -420,6 +421,9 @@ describe("Layout — one tab across the owner's two-restart update", () => {
 				transport.connection?.("disconnected");
 			} else if (event.at === "push") {
 				pushStatus(event.status);
+			} else if (event.at === "pull") {
+				// The hydrate at connect already applied it; a later pull is ingested too.
+				if (seen[index - 1]?.at !== "connected") pushStatus(event.status);
 			} else if (event.at === "moment") {
 				moments[event.name] = view();
 				continue;
@@ -427,12 +431,18 @@ describe("Layout — one tab across the owner's two-restart update", () => {
 			flushSync();
 			trace.push(view());
 		}
+		return { moments, trace };
+	}
 
-		const installing = (n: number) =>
-			`overlay: Installing ${n} | settings: Installing · ${n}%`;
-		const downloading = (n: number) =>
-			`overlay: Downloading ${n} | settings: Downloading · ${n}%`;
-		const nothing = "no overlay | settings: -";
+	const installing = (n: number) =>
+		`overlay: Installing ${n} | settings: Installing · ${n}%`;
+	const downloading = (n: number) =>
+		`overlay: Downloading ${n} | settings: Downloading · ${n}%`;
+	const nothing = "no overlay | settings: -";
+
+	it("renders every moment the real backend processes sent it", async () => {
+		const { moments, trace } = await replay(restart.seen as Seen[]);
+
 		expect(moments).toEqual({
 			"signed in before the first recovery": nothing,
 			idle: nothing,
@@ -472,6 +482,70 @@ describe("Layout — one tab across the owner's two-restart update", () => {
 		expect(trace.slice(closed).every((shown) => shown === nothing)).toBe(true);
 		// The outcome is announced once, as a success.
 		expect(vi.mocked(toast.success)).toHaveBeenCalledTimes(1);
+		expect(vi.mocked(toast.error)).not.toHaveBeenCalled();
+		expect(vi.mocked(toast.warning)).not.toHaveBeenCalled();
+	});
+
+	it("a tab offline through the outcome learns it from the next backend", async () => {
+		const { moments } = await replay(offline.seen as Seen[]);
+		expect(moments).toMatchObject({
+			"installing 80%": installing(80),
+			"offline through the outcome": installing(80),
+			"re-authenticated after the outcome": installing(80),
+			"outcome replayed": nothing,
+		});
+		expect(vi.mocked(toast.success)).toHaveBeenCalledTimes(1);
+		expect(vi.mocked(toast.error)).not.toHaveBeenCalled();
+		expect(vi.mocked(toast.warning)).not.toHaveBeenCalled();
+	});
+});
+
+describe("Layout — a tab that missed the install's result is told what the device knows", () => {
+	const ended = (update_state: Record<string, unknown>) =>
+		pushStatus({ updating: null, update_state });
+
+	it.each([
+		["success", { kind: "success" }, "success"],
+		[
+			"failure",
+			{ kind: "failed", reason: "E: dpkg returned an error code (1)" },
+			"error",
+		],
+	] as const)(
+		"announces the device's %s as the overlay closes",
+		(_name, state, method) => {
+			updating({ ...installing, percent: 70 });
+			render(Layout);
+			expect(overlayTitle()).toBeDefined();
+			ended(state);
+			expect(overlayTitle()).toBeUndefined();
+			expect(vi.mocked(toast[method])).toHaveBeenCalledTimes(1);
+			expect(vi.mocked(toast.warning)).not.toHaveBeenCalled();
+		},
+	);
+
+	it("says the outcome is not confirmed when the device does not know it", () => {
+		updating({ ...installing, percent: 70 });
+		render(Layout);
+		ended({ kind: "idle" });
+		expect(overlayTitle()).toBeUndefined();
+		expect(vi.mocked(toast.warning)).toHaveBeenCalledWith(
+			"Outcome not confirmed",
+		);
+		expect(vi.mocked(toast.success)).not.toHaveBeenCalled();
+		expect(vi.mocked(toast.error)).not.toHaveBeenCalled();
+	});
+
+	it("leaves a refused preflight to its own notice", () => {
+		updating({ total: 0, downloading: 0, unpacking: 0, setting_up: 0 });
+		render(Layout);
+		ended({
+			kind: "update_preflight_failed",
+			preflight_reason: "insufficient_space",
+		});
+		expect(overlayTitle()).toBeUndefined();
+		expect(vi.mocked(toast.warning)).not.toHaveBeenCalled();
+		expect(vi.mocked(toast.success)).not.toHaveBeenCalled();
 		expect(vi.mocked(toast.error)).not.toHaveBeenCalled();
 	});
 });

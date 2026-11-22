@@ -127,15 +127,14 @@ export function isExpectedAptAllInstallArgv(argv: readonly string[]): boolean {
 // forking dpkg, which would leave DPkg::Post-Invoke hooks without stderr.
 const APT_STATUS_OPTION = "-o APT::Status-Fd=3";
 
-/** The status forms need bash for process substitution; pre-channel forms stay sh. */
+/** The status forms need bash: its failed `exec` redirect returns, where sh exits. */
 export const STATUS_CHANNEL_SHELL = "/bin/bash";
 
-// A failed status write fails APT's install (FileFd::Write sets its pending
-// error), so descriptor 3 is a pipe, never the file: its reader only stops at
-// EOF, appends best-effort, then discards. /dev/null if the pipe cannot exist.
+// APT appends its records to the status file itself: a regular file never
+// blocks it, and no reader can die under it. One it cannot open gives APT
+// /dev/null, so the install still runs, without numbers.
 function aptStatusRedirect(): string {
-	const drain = `set +e; echo -1000 2>/dev/null >/proc/self/oom_score_adj; cat 2>/dev/null >>${softwareUpdateOutputPaths().status}; exec cat >/dev/null`;
-	return `exec 3> >(${drain}) || exec 3>/dev/null`;
+	return `{ exec 3>>${softwareUpdateOutputPaths().status}; } 2>/dev/null || exec 3>/dev/null`;
 }
 
 export function expectedAptUpgradeScript(aptArgs: readonly string[]): string {

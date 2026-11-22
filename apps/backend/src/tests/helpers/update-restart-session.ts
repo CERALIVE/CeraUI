@@ -1,19 +1,25 @@
 // One backend lifetime for update-restart-tab.test.ts, run as a fresh `bun`
 // process that shares only the device's files with the others. It boots like
-// main.ts (initial pushes withhold package progress before the server binds),
-// serves the real WebSocket server, and runs recovery when the test writes
-// "recover" (twice, as the orchestrator's resume and main's standalone call do).
+// main.ts (initial pushes withhold package progress before the socket binds),
+// serves the real RPC WebSocket handler on a kernel-assigned loopback port,
+// and runs recovery when the test writes "recover" (twice, as the
+// orchestrator's resume and main's standalone call do).
 import { writeFile } from "node:fs/promises";
 import { loadConfig } from "../../modules/config.ts";
 import { setup } from "../../modules/setup.ts";
 import { defaultAptSpaceDeps } from "../../modules/system/apt-space-admission.ts";
 import { setDetachedAptServiceDepsForTest } from "../../modules/system/software-update-service.ts";
 import * as updates from "../../modules/system/software-updates.ts";
+import { setSshStatusDepsForTest } from "../../modules/system/ssh.ts";
 import { setStreamLivenessSourceForTest } from "../../modules/system/stream-liveness-source.ts";
 import { setStreamReconciliationCompletedForTest } from "../../modules/system/stream-reconciliation-latch.ts";
 import { setUpdateCapabilityPathForTest } from "../../modules/system/update-capabilities.ts";
 import { setUpdateSettingsFilePathForTest } from "../../modules/system/update-settings.ts";
-import { initServer } from "../../rpc/server.ts";
+import {
+	createServerWebSocketHandler,
+	initSocketData,
+} from "../../rpc/adapter.ts";
+import type { ServerSocketData } from "../../rpc/types.ts";
 import { scriptedApt } from "./update-restart-apt.ts";
 import { RESTART_EXIT_CODE, restartTestUnit } from "./update-restart-unit.ts";
 
@@ -41,6 +47,11 @@ setStreamReconciliationCompletedForTest(true);
 setStreamLivenessSourceForTest(() => "idle");
 setUpdateCapabilityPathForTest(`${scratch}/absent-capabilities.json`);
 setUpdateSettingsFilePathForTest(`${scratch}/settings.json`);
+setSshStatusDepsForTest({
+	systemctlIsActive: async () => ({ stdout: "inactive\n", stderr: "" }),
+	systemctlIsEnabled: async () => ({ stdout: "disabled\n", stderr: "" }),
+	readShadow: () => "",
+});
 updates.setAptReachabilityProbeForTest(async () => ({
 	ipv4: "ok",
 	ipv6: "ok",
@@ -71,16 +82,30 @@ setDetachedAptServiceDepsForTest(
 					failFirstStdoutRead: true,
 					holdSecondStdoutRead: `${scratch}/second-read.fifo`,
 				}
-			: {},
+			: { failCleanup: role === "boot" },
 	),
 );
 
 updates.beginSoftwareUpdateRecovery();
 if (role === "first") await updates.runUpdateDiscoveryAndReport();
-initServer();
-process.stdout.write("session:listening\n");
+const server = Bun.serve<ServerSocketData>({
+	hostname: "127.0.0.1",
+	port: 0,
+	fetch: (request, srv) =>
+		new URL(request.url).pathname === "/ws" &&
+		srv.upgrade(request, { data: initSocketData() })
+			? undefined
+			: new Response(null, { status: 404 }),
+	websocket: createServerWebSocketHandler(),
+});
+process.stdout.write(`session:listening ${server.port}\n`);
 
 for await (const line of console) {
+	if (line.trim() === "exit") {
+		// A restart already decided would have ended the process first.
+		await new Promise((resolve) => setImmediate(resolve));
+		process.exit(0);
+	}
 	if (line.trim() !== "recover") continue;
 	await updates.recoverSoftwareUpdateIfRunning();
 	await updates.recoverSoftwareUpdateIfRunning();

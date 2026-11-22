@@ -766,7 +766,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		file: "modules/system/software-update-service.ts",
 		symbol: "defaultDetachedAptServiceDeps.start",
 		command:
-			"[systemd-run, ...serviceArgs, --, /bin/bash, -ec, <status drain; exec /usr/bin/apt-get ...upgradeArgs>] | [systemd-run, ...serviceArgs, --, /usr/bin/flock, -x, <lock>, /bin/bash, -ec, <status drain; apt-get download && apt-get install>]",
+			"[systemd-run, ...serviceArgs, --, /bin/bash, -ec, <status file append; exec /usr/bin/apt-get ...upgradeArgs>] | [systemd-run, ...serviceArgs, --, /usr/bin/flock, -x, <lock>, /bin/bash, -ec, <status file append; apt-get download && apt-get install>] | the pre-channel forms when no status file could be made",
 		class: "bounded-command",
 		contract: {
 			timed: true,

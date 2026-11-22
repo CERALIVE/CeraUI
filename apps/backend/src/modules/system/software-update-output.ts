@@ -11,6 +11,7 @@
 import { constants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { z } from "zod";
 import { logger } from "../../helpers/logger.ts";
 
 const RUN_DIR = "/run/ceralive";
@@ -22,6 +23,20 @@ export type SoftwareUpdateOutputPaths = {
 	/** APT::Status-Fd records; only units that declare the channel write it. */
 	readonly status: string;
 };
+
+/** The exit status an observer saw, kept beside its unit's logs until the next launch. */
+export type RecordedSoftwareUpdateOutcome = {
+	readonly exitCode: number;
+	readonly at: number;
+};
+
+const OUTCOME_FILE = "software-update.outcome";
+const OUTCOME_MAX_BYTES = 1024;
+const recordedOutcomeSchema = z.object({
+	schema: z.literal(1),
+	exitCode: z.number().int().min(0).max(255),
+	at: z.number().int().nonnegative(),
+});
 
 export type SoftwareUpdateOutputRead = {
 	readonly bytes: Uint8Array;
@@ -70,6 +85,7 @@ async function secureOutputDirectory(
 async function createOutputFile(
 	filePath: string,
 	expectedUid: number,
+	content?: string,
 ): Promise<void> {
 	await fs.rm(filePath, { force: true });
 	const handle = await fs.open(
@@ -89,6 +105,7 @@ async function createOutputFile(
 			);
 		}
 		await handle.chmod(0o600);
+		if (content !== undefined) await handle.write(content);
 	} finally {
 		await handle.close();
 	}
@@ -114,6 +131,8 @@ export async function prepareSoftwareUpdateOutput(
 		);
 	}
 	await secureOutputDirectory(directory, expectedUid);
+	// A new unit's outcome is unknown until its own observer records it.
+	await fs.rm(softwareUpdateOutcomePath(paths), { force: true });
 	await createOutputFile(paths.stdout, expectedUid);
 	await createOutputFile(paths.stderr, expectedUid);
 	// Progress is display only: a status file that cannot be made never blocks apt.
@@ -128,6 +147,65 @@ export async function prepareSoftwareUpdateOutput(
 			},
 		);
 		return { status: false };
+	}
+}
+
+export function softwareUpdateOutcomePath(
+	paths: SoftwareUpdateOutputPaths,
+): string {
+	return path.join(path.dirname(paths.stdout), OUTCOME_FILE);
+}
+
+export async function writeSoftwareUpdateOutcome(
+	paths: SoftwareUpdateOutputPaths,
+	outcome: RecordedSoftwareUpdateOutcome,
+	expectedUid = 0,
+): Promise<void> {
+	const target = softwareUpdateOutcomePath(paths);
+	const pending = `${target}.part`;
+	await createOutputFile(
+		pending,
+		expectedUid,
+		JSON.stringify({ schema: 1, ...outcome }),
+	);
+	await fs.rename(pending, target);
+}
+
+/** null: no observer recorded this unit's exit. */
+export async function readSoftwareUpdateOutcome(
+	paths: SoftwareUpdateOutputPaths,
+	expectedUid = 0,
+): Promise<RecordedSoftwareUpdateOutcome | null> {
+	const file = softwareUpdateOutcomePath(paths);
+	let handle: fs.FileHandle;
+	try {
+		handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+		throw error;
+	}
+	try {
+		const stat = await handle.stat();
+		if (
+			!stat.isFile() ||
+			stat.uid !== expectedUid ||
+			stat.nlink !== 1 ||
+			(stat.mode & 0o777) !== 0o600 ||
+			stat.size > OUTCOME_MAX_BYTES
+		) {
+			throw new UnsafeSoftwareUpdateOutputPathError(
+				file,
+				"not a private root-owned record",
+			);
+		}
+		const parsed = recordedOutcomeSchema.safeParse(
+			JSON.parse(await handle.readFile("utf8")),
+		);
+		if (!parsed.success)
+			throw new UnsafeSoftwareUpdateOutputPathError(file, "malformed record");
+		return { exitCode: parsed.data.exitCode, at: parsed.data.at };
+	} finally {
+		await handle.close();
 	}
 }
 

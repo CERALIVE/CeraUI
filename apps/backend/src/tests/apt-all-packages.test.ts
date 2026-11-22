@@ -639,7 +639,7 @@ describe("apt-all-packages admission", () => {
 		expect(command).toContain("/usr/bin/flock");
 		const script = command[command.length - 1] ?? "";
 		const drain =
-			"exec 3> >(set +e; echo -1000 2>/dev/null >/proc/self/oom_score_adj; cat 2>/dev/null >>/run/ceralive/software-update.status; exec cat >/dev/null) || exec 3>/dev/null; ";
+			"{ exec 3>>/run/ceralive/software-update.status; } 2>/dev/null || exec 3>/dev/null; ";
 		expect(script).toStartWith(drain);
 		expect(script).toContain(
 			"/usr/bin/apt-get -o APT::Status-Fd=3 -d -y upgrade --with-new-pkgs",
@@ -683,6 +683,8 @@ describe("apt-all-packages admission", () => {
 					stderr: "/run/ceralive/software-update.stderr",
 					status: "/run/ceralive/software-update.status",
 				},
+				readRecordedOutcome: async () => null,
+				recordOutcome: async () => {},
 				prepareOutput: async () => {},
 				start: async () => {
 					starts++;
@@ -704,7 +706,11 @@ describe("apt-all-packages admission", () => {
 				},
 			},
 		);
-		expect(await recovered?.completion).toBe(0);
+		expect(
+			await (recovered && "completion" in recovered
+				? recovered.completion
+				: undefined),
+		).toBe(0);
 		expect(starts).toBe(0);
 		expect(release).toBe(true);
 	});

@@ -4,10 +4,10 @@
 
 Progress comes from APT's own machine-readable channel, not from parsing
 apt/dpkg text. Every `apt-get` in the detached unit runs with
-`-o APT::Status-Fd=3`, and descriptor 3 is a pipe read by a drain that
-appends APT's records to `/run/ceralive/software-update.status` (prepared
-like the stdout and stderr logs: root-owned, mode 0600, created
-exclusively). APT writes one complete line per record:
+`-o APT::Status-Fd=3`, and descriptor 3 is
+`/run/ceralive/software-update.status`, opened for append by the unit's own
+shell (prepared like the stdout and stderr logs: root-owned, mode 0600,
+created exclusively). APT writes one complete line per record:
 
 - `dlstatus:<item>:<percent>:<text>` while fetching: APT's own download
   estimate.
@@ -29,16 +29,18 @@ close-on-exec before forking dpkg, which on stderr would leave the image's
 `DPkg::Post-Invoke` hooks without stderr; stdout would interleave records
 with dpkg's PTY output.
 
-The channel is best effort and can never break the install. APT 3.0.3 turns
-any failed status write into its pending error (`FileFd::Write`), and
-`private-install.cc` fails the install on a pending error after dpkg ran;
-it ignores SIGPIPE, so a closed pipe would be the same failure. So descriptor
-3 is never the file: it is a pipe whose reader (bash process substitution)
-only stops at EOF, appends best effort, discards after any open or write
-failure, and is exempt from the OOM killer. If the pipe cannot be created,
-APT gets `/dev/null`. A status file that cannot be prepared only drops the
-numbers. The status forms run under `/bin/bash`; the released pre-channel
-forms stay `/bin/sh` and remain adoptable.
+The channel is best effort. APT writes its records into the file itself,
+with no reader process: a regular file on `/run` never blocks APT, and
+nothing can stall or die under it. A file the shell cannot open gives APT
+`/dev/null`, so the install runs without numbers; a status file the
+backend could not prepare starts the released pre-channel command instead,
+so the unit's command always says whether it writes the channel. A file
+removed mid-run is not an error (APT keeps its open descriptor). APT 3.0.3
+does turn a failed status write into its pending error (`FileFd::Write`),
+and `private-install.cc` then fails the install after dpkg ran; on a
+regular tmpfs file that happens only when `/run` is full. The status forms
+run under `/bin/bash`, whose failed `exec` redirect returns where `sh`
+exits; the released pre-channel forms stay `/bin/sh` and remain adoptable.
 
 A unit started by a release without the channel (for example the very update
 that installs this version, adopted after the package restarts CeraUI) shows
@@ -82,12 +84,31 @@ sees an empty frame, "0 of 1 steps" or an older block of the log.
 The status file is display only. Its read errors never block a drain, change
 the outcome or keep the unit from being cleaned up; after 20 consecutive
 failures it is no longer read: the display keeps what it last showed and
-advances only on transcript phase evidence. The unit's exit status alone
-decides success or failure, also when stdout or stderr stay unreadable (the
-final drain gives up after 20 failed reads) or when retiring the unit fails.
-Retirement is retried five times; a finished unit left behind is retired by
-the next launch, so the next update can always start. The orchestrator's
-Settings activity line resumes with APT's own number or none.
+advances only on transcript phase evidence. Once systemd reports the unit
+finished, one final read is complete by construction: APT, the file's only
+writer, has exited. The unit's exit status alone decides success or failure,
+also when stdout or stderr stay unreadable (the final drain gives up after 20
+failed reads) or when retiring the unit fails. The orchestrator's Settings
+activity line resumes with APT's own number or none.
+
+The observer records the exit status it saw (`/run/ceralive/software-update.outcome`:
+exit code and time, root-owned, mode 0600) after its final read and before
+retiring the unit; a launch removes the record before it starts a new unit.
+Retirement is retried five times. A finished unit whose exit is recorded is
+never adopted again: a later boot reports the recorded outcome, tries one
+retirement, marks boot degraded and never restarts CeraUI for it, so a unit
+whose `systemctl stop` keeps failing restarts CeraUI at most once. When
+neither the retirement nor the record succeeded, the deliberate restart is
+withheld instead. A launch retires a finished leftover only when its exit is
+recorded, and refuses otherwise.
+
+A tab can miss the single outcome push while it reconnects across the
+completion restart. Once recovery finds the unit gone, the next backend
+replays a recorded outcome younger than 30 minutes, once per boot, as
+`update_state` success or failure with `updating: null`. A tab that was
+showing the install announces that outcome as the overlay closes; one told
+only that the install ended, with no outcome known, says **Outcome not
+confirmed** instead of closing silently.
 
 ## Pending disruptive effects [PARTIAL — host proof, board drill owed]
 

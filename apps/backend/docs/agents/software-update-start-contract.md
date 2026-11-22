@@ -33,9 +33,10 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   transaction's output to the backend process and produced `SIGPIPE` after the
   parent unit stopped. The transient service appends stdout/stderr under
   fixed `/run/ceralive/software-update.{stdout,stderr}` files and its
-  `/bin/bash` wrapper gives `apt-get -o APT::Status-Fd=3` a pipe read by a
-  drain that appends to `/run/ceralive/software-update.status` best effort
-  (a failed status write would fail APT's install). The root-owned directory is not
+  `/bin/bash` wrapper opens `/run/ceralive/software-update.status` for append
+  as descriptor 3 for `apt-get -o APT::Status-Fd=3` (`/dev/null` if it cannot);
+  no reader process sits between APT and the file. A status file the backend
+  could not prepare launches the pre-channel form. The root-owned directory is not
   peer-writable, file creation is exclusive and no-follow, and the files are
   mode 0600. Caller-selected paths are rejected.
   Progress is a pure function of the bytes read (`apt-progress.ts`): APT's
@@ -60,12 +61,16 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   Downloading. Status-file read errors never block a drain or cleanup and
   never change the outcome; after 20 consecutive failures the file is
   dropped (`onStatusLost`). The detached result alone settles the outcome,
-  including when stdout/stderr stay unreadable or retirement fails;
-  retirement is retried and a finished leftover is retired at the next launch.
+  including when stdout/stderr stay unreadable or retirement fails.
+  The observer records the exit (`software-update.outcome`) before retiring
+  the unit; a recorded finished unit is never adopted again (no second
+  restart), an absent unit's fresh record is replayed once per boot, and a
+  restart is withheld when neither retirement nor the record succeeded.
+  Retirement is retried; a launch retires only a recorded leftover.
 - **Reattachment identity is a safety boundary.** Adoption requires the
   exact unit id and transient fragment path, transient-service description/type,
   exact non-duplicated `[Service]` stdout/stderr append destinations, no pre/post
-  hooks, and one canonical command: the status-channel `/bin/sh -ec` wrapper
+  hooks, and one canonical command: the status-channel `/bin/bash -ec` wrapper
   or pinned flock script, or the pre-channel `/usr/bin/apt-get` argv or flock
   script a previous release started. Only units in the status-channel form
   have their status file read. Do not loosen these checks to adopt a foreign
@@ -77,6 +82,7 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
 Coverage: `tests/software-updates-start-refusal.test.ts`,
 `tests/software-updates-apt.test.ts`, `tests/package-progress-output.test.ts`,
 `tests/software-update-status-channel.test.ts`, `tests/update-progress-timeline.test.ts`,
-`tests/update-recovery-ordering.test.ts`, `tests/software-update-status-drain.test.ts`,
-`tests/update-restart-tab.test.ts` (real backend processes and a real tab socket).
+`tests/update-recovery-ordering.test.ts`, `tests/software-update-status-file.test.ts`,
+`tests/update-restart-tab.test.ts` (real backend processes on loopback, a real tab socket,
+an offline tab and five boots of a unit that cannot be retired).
 

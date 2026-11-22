@@ -2,8 +2,10 @@ import { spawn } from "node:child_process";
 import { open, readFile, rm, writeFile } from "node:fs/promises";
 import {
 	prepareSoftwareUpdateOutput,
+	readSoftwareUpdateOutcome,
 	SOFTWARE_UPDATE_OUTPUT_READ_BYTES,
 	softwareUpdateOutputPaths,
+	writeSoftwareUpdateOutcome,
 } from "../../modules/system/software-update-output.ts";
 import type { DetachedAptServiceDeps } from "../../modules/system/software-update-service.ts";
 
@@ -13,7 +15,7 @@ export const RESTART_EXIT_CODE = 75;
 // The detached unit as PID 1 runs it: started in its own session, outside
 // every backend's process tree, so it keeps running when a backend dies; each
 // backend sees it only through files they all share. Its real command (the
-// shell wrapper and its status drain) runs with apt-get and the status path
+// shell wrapper and its status file) runs with apt-get and the status path
 // pointed at the scratch directory.
 export function restartTestUnit(
 	scratch: string,
@@ -21,6 +23,8 @@ export function restartTestUnit(
 		readonly failFirstStdoutRead?: boolean;
 		/** A FIFO the second stdout read waits on: the test's attached-but-unread window. */
 		readonly holdSecondStdoutRead?: string;
+		/** Retirement always fails, as a broken `systemctl stop` would. */
+		readonly failCleanup?: boolean;
 	} = {},
 ): DetachedAptServiceDeps {
 	const fixed = softwareUpdateOutputPaths();
@@ -30,12 +34,14 @@ export function restartTestUnit(
 		stderr: `${unit}.stderr`,
 		status: `${unit}.status`,
 	};
+	const uid = process.getuid?.() ?? 0;
 	const text = (file: string) => readFile(file, "utf8").catch(() => undefined);
 	let stdoutReads = 0;
 	return {
 		outputPaths: fixed,
-		prepareOutput: () =>
-			prepareSoftwareUpdateOutput(local, process.getuid?.() ?? 0),
+		readRecordedOutcome: () => readSoftwareUpdateOutcome(local, uid),
+		recordOutcome: (outcome) => writeSoftwareUpdateOutcome(local, outcome, uid),
+		prepareOutput: () => prepareSoftwareUpdateOutput(local, uid),
 		start: async (command) => {
 			const argv = command
 				.slice(command.indexOf("--") + 1)
@@ -73,6 +79,7 @@ export function restartTestUnit(
 				: { kind: "running", aptStatus: true };
 		},
 		cleanup: async () => {
+			if (o.failCleanup) throw new Error("systemctl stop failed");
 			await rm(`${unit}.exit`, { force: true });
 			await rm(`${unit}.pid`, { force: true });
 		},

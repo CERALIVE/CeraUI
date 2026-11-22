@@ -46,6 +46,8 @@ function unitDeps(
 	let stdoutReads = 0;
 	return {
 		outputPaths: paths,
+		readRecordedOutcome: async () => null,
+		recordOutcome: async () => {},
 		prepareOutput: async () => {},
 		start: async () => o.onStart?.(),
 		inspect: async () => {
@@ -192,7 +194,10 @@ test.each([
 			await updates.recoverSoftwareUpdateIfRunning({
 				recover: async (handlers) => {
 					const recovered = await realRecover(handlers, depsB);
-					completion = recovered?.completion;
+					completion =
+						recovered && "completion" in recovered
+							? recovered.completion
+							: undefined;
 					return recovered;
 				},
 				scheduleRetry: () => {},

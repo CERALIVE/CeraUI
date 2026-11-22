@@ -3,11 +3,11 @@
  * The owner's case end to end: one open tab across both restarts of a package
  * update. Every backend lifetime is a real fresh process (helpers/
  * update-restart-session.ts) sharing only the device's files; the detached
- * unit runs the real wrapper and status drain in its own session, so it keeps
+ * unit runs the real wrapper and its status file in its own session, so it keeps
  * running when the package's postinst kills the backend. The tab is a real
  * WebSocket client that sets the password, logs in, keeps its token, and
  * re-authenticates on every new process. The frames it receives are pinned in
- * the frontend fixture that Layout.update-restart-replay.test.ts renders.
+ * the frontend fixtures that Layout.updating-overlay.test.ts renders.
  */
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import {
@@ -27,11 +27,26 @@ import { RESTART_EXIT_CODE } from "./helpers/update-restart-unit.ts";
 const SESSION = new URL("./helpers/update-restart-session.ts", import.meta.url)
 	.pathname;
 const SETUP = new URL("../../setup.json", import.meta.url).pathname;
-const FIXTURE = new URL(
-	"../../../frontend/src/tests/fixtures/update-restart-tab.json",
-	import.meta.url,
-).pathname;
+const fixture = (name: string) =>
+	new URL(`../../../frontend/src/tests/fixtures/${name}.json`, import.meta.url)
+		.pathname;
 const WAIT_MS = 20_000;
+
+/** A deadline that a wait clears once it is answered, so it never fires later. */
+async function within<T>(
+	what: () => string,
+	wait: (deadline: Promise<never>) => Promise<T>,
+): Promise<T> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const deadline = new Promise<never>((_, reject) => {
+		timer = setTimeout(() => reject(new Error(what())), WAIT_MS);
+	});
+	try {
+		return await wait(deadline);
+	} finally {
+		clearTimeout(timer);
+	}
+}
 const BARRIERS = [
 	"download-10",
 	"download-60",
@@ -91,6 +106,8 @@ class Tab {
 	#replies = new Map<string, PromiseWithResolvers<unknown>>();
 	#changed = Promise.withResolvers<void>();
 	#id = 0;
+	// Each wait starts after the previous match, so an old event never answers it.
+	#from = 0;
 
 	#record(entry: Seen) {
 		this.seen.push(entry);
@@ -143,16 +160,22 @@ class Tab {
 		this.#record({ at: "moment", name });
 	}
 
-	async until(label: string, test: (seen: Seen) => boolean) {
-		const deadline = Bun.sleep(WAIT_MS).then(() => {
-			throw new Error(`tab never saw: ${label}`);
-		});
-		for (let from = 0; ; ) {
-			const hit = this.seen.slice(from).find(test);
-			if (hit) return hit;
-			from = this.seen.length;
-			await Promise.race([this.#changed.promise, deadline]);
-		}
+	until(label: string, test: (seen: Seen) => boolean) {
+		return within(
+			() => `tab never saw: ${label}`,
+			async (deadline) => {
+				for (;;) {
+					const index = this.seen.findIndex(
+						(seen, i) => i >= this.#from && test(seen),
+					);
+					if (index >= 0) {
+						this.#from = index + 1;
+						return this.seen[index];
+					}
+					await Promise.race([this.#changed.promise, deadline]);
+				}
+			},
+		);
 	}
 
 	close() {
@@ -171,7 +194,6 @@ const running = (percent: number, phase: "downloading" | "setting_up") => ({
 });
 
 let scratch: string;
-let port: number;
 const sessions: Bun.Subprocess[] = [];
 
 beforeEach(async () => {
@@ -184,13 +206,13 @@ beforeEach(async () => {
 		"mkfifo",
 		...BARRIERS.map((b) => join(scratch, `${b}.fifo`)),
 	]).exited;
-	const probe = Bun.serve({ port: 0, fetch: () => new Response() });
-	port = probe.port ?? 0;
-	await probe.stop(true);
 });
 
 afterEach(async () => {
-	for (const child of sessions.splice(0)) child.kill("SIGKILL");
+	for (const child of sessions.splice(0)) {
+		child.kill("SIGKILL");
+		await child.exited;
+	}
 	const unit = await readFile(join(scratch, "unit.pid"), "utf8").catch(
 		() => "",
 	);
@@ -203,11 +225,10 @@ afterEach(async () => {
 	await rm(scratch, { recursive: true, force: true });
 });
 
-function session(role: "first" | "after-postinst" | "after-outcome") {
+function session(role: "first" | "after-postinst" | "after-outcome" | "boot") {
 	const env: Record<string, string | undefined> = {
 		...process.env,
 		SCRATCH: scratch,
-		PORT: String(port),
 		NODE_ENV: "production",
 		CERALIVE_STREAMING_MARKER: join(scratch, "streaming"),
 		CERALIVE_EVENTS_DIR: join(scratch, "events"),
@@ -215,6 +236,7 @@ function session(role: "first" | "after-postinst" | "after-outcome") {
 		DOCKER_HOST: "unix:///nonexistent/docker.sock",
 	};
 	delete env.MOCK_MODE;
+	delete env.PORT;
 	const child = Bun.spawn([process.execPath, SESSION, role], {
 		cwd: join(scratch, "cwd"),
 		env,
@@ -226,8 +248,13 @@ function session(role: "first" | "after-postinst" | "after-outcome") {
 	});
 	sessions.push(child);
 	const lines: string[] = [];
+	let stderr = "";
 	let heard = Promise.withResolvers<void>();
-	const stderr = new Response(child.stderr).text();
+	void (async () => {
+		const decoder = new TextDecoder();
+		for await (const chunk of child.stderr)
+			stderr += decoder.decode(chunk, { stream: true });
+	})();
 	void (async () => {
 		const decoder = new TextDecoder();
 		let pending = "";
@@ -241,39 +268,61 @@ function session(role: "first" | "after-postinst" | "after-outcome") {
 		}
 		heard.resolve();
 	})();
+	const printed = (match: (line: string) => boolean, what: string) =>
+		within(
+			() => `${role} never printed ${what}: ${stderr}`,
+			async (deadline) => {
+				for (;;) {
+					const hit = lines.find(match);
+					if (hit !== undefined) return hit;
+					await Promise.race([heard.promise, child.exited, deadline]);
+					if (child.exitCode !== null && !lines.some(match))
+						throw new Error(
+							`${role} exited ${child.exitCode} before ${what}: ${stderr}`,
+						);
+				}
+			},
+		);
 	return {
 		child,
+		output: () => `${lines.join("\n")}\n${stderr}`,
 		async line(text: string) {
-			const deadline = Bun.sleep(WAIT_MS).then(async () => {
-				throw new Error(`${role} never printed ${text}: ${await stderr}`);
-			});
-			while (!lines.includes(text))
-				await Promise.race([heard.promise, deadline]);
+			await printed((line) => line === text, text);
+		},
+		async listening(): Promise<number> {
+			const line = await printed(
+				(entry) => entry.startsWith("session:listening "),
+				"its port",
+			);
+			return Number(line.slice("session:listening ".length));
 		},
 		send(text: string) {
-			child.stdin.write(`${text}\n`);
-			child.stdin.flush();
+			try {
+				child.stdin.write(`${text}\n`);
+				child.stdin.flush();
+			} catch (error) {
+				// A session its own restart just ended has no stdin left to write.
+				if (child.exitCode === null) throw error;
+			}
 		},
 	};
 }
 
 async function release(barrier: string) {
-	await Bun.spawn([
-		"sh",
-		"-c",
-		'echo go > "$1"',
-		"release",
-		join(scratch, `${barrier}.fifo`),
-	]).exited;
+	const writer = Bun.spawn(
+		["sh", "-c", 'echo go > "$1"', "release", join(scratch, `${barrier}.fifo`)],
+		{ timeout: WAIT_MS, killSignal: "SIGKILL" },
+	);
+	if ((await writer.exited) !== 0)
+		throw new Error(`nothing waited on barrier ${barrier}`);
 }
 
-test("one open tab sees steady progress across the postinst restart and the completion restart", async () => {
-	const tab = new Tab();
-
+// The first lifetime launches the update; the postinst ends it during dpkg;
+// the second recovers the same unit, which reaches Installing 80%.
+async function toInstalling80(tab: Tab) {
 	// The backend that starts the update.
 	const first = session("first");
-	await first.line("session:listening");
-	await tab.connect(port);
+	await tab.connect(await first.listening());
 	expect(
 		await tab.call(["auth", "setPassword"], { password: "restart-test" }),
 	).toEqual({ success: true });
@@ -314,8 +363,7 @@ test("one open tab sees steady progress across the postinst restart and the comp
 
 	// The backend the postinst started; the same unit keeps running.
 	const second = session("after-postinst");
-	await second.line("session:listening");
-	await tab.connect(port);
+	await tab.connect(await second.listening());
 	expect(await tab.call(["auth", "login"], { token })).toEqual({
 		success: true,
 	});
@@ -336,6 +384,12 @@ test("one open tab sees steady progress across the postinst restart and the comp
 		Bun.deepEquals(updatingOf(s), running(80, "setting_up")),
 	);
 	tab.moment("installing 80%");
+	return { second, token };
+}
+
+test("one open tab sees steady progress across the postinst restart and the completion restart", async () => {
+	const tab = new Tab();
+	const { second, token } = await toInstalling80(tab);
 	const exited = second.child.exited;
 	await release("finish");
 	await tab.until("the outcome", (s) => {
@@ -349,8 +403,7 @@ test("one open tab sees steady progress across the postinst restart and the comp
 
 	// The backend after the outcome: no unit is left.
 	const third = session("after-outcome");
-	await third.line("session:listening");
-	await tab.connect(port);
+	await tab.connect(await third.listening());
 	expect(await tab.call(["auth", "login"], { token })).toEqual({
 		success: true,
 	});
@@ -421,8 +474,101 @@ test("one open tab sees steady progress across the postinst restart and the comp
 			rank(live[i - 1] as never),
 		);
 	// What this tab received is what the frontend replay renders.
-	const fixture = JSON.parse(await readFile(FIXTURE, "utf8")) as {
-		seen: Seen[];
-	};
-	expect(seen).toEqual(fixture.seen);
+	const pinned = JSON.parse(
+		await readFile(fixture("update-restart-tab"), "utf8"),
+	) as { seen: Seen[] };
+	expect(seen).toEqual(pinned.seen);
+}, 120_000);
+
+test("a tab offline through the outcome and the completion restart learns the outcome when it reconnects", async () => {
+	const tab = new Tab();
+	const { second, token } = await toInstalling80(tab);
+	// The tab's network drops before the unit finishes.
+	tab.close();
+	await tab.until("the tab goes offline", (s) => s.at === "disconnected");
+	tab.moment("offline through the outcome");
+	const exited = second.child.exited;
+	await release("finish");
+	expect(await exited).toBe(RESTART_EXIT_CODE);
+
+	const third = session("after-outcome");
+	await tab.connect(await third.listening());
+	expect(await tab.call(["auth", "login"], { token })).toEqual({
+		success: true,
+	});
+	await tab.pull();
+	tab.moment("re-authenticated after the outcome");
+	third.send("recover");
+	await third.line("session:recovered");
+	await tab.until(
+		"the recorded outcome",
+		(s) =>
+			s.at === "push" &&
+			(s.status.update_state as Status | undefined)?.kind === "success",
+	);
+	tab.moment("outcome replayed");
+	const seen = [...tab.seen];
+	tab.close();
+	const at = (name: string) =>
+		seen.findIndex((s) => s.at === "moment" && s.name === name);
+	const carries = (s: Seen) =>
+		(s.at === "push" || s.at === "pull") &&
+		("updating" in s.status || "update_state" in s.status);
+	// Nothing about packages reaches the reconnected tab before recovery read the record.
+	expect(
+		seen
+			.slice(
+				at("offline through the outcome"),
+				at("re-authenticated after the outcome"),
+			)
+			.some(carries),
+	).toBe(false);
+	// Then one frame: no install running, and the unit's recorded success.
+	expect(
+		seen
+			.slice(at("re-authenticated after the outcome"), at("outcome replayed"))
+			.filter(carries)
+			.map((s) => (s.at === "push" || s.at === "pull" ? s.status : undefined)),
+	).toEqual([{ updating: null, update_state: { kind: "success" } }]);
+	const pinned = JSON.parse(
+		await readFile(fixture("update-restart-tab-offline"), "utf8"),
+	) as { seen: Seen[] };
+	expect(seen).toEqual(pinned.seen);
+}, 120_000);
+
+test("a successful unit that can never be retired restarts CeraUI once over five boots", async () => {
+	// A finished, successful unit no backend could retire: `systemctl stop` always fails.
+	await writeFile(join(scratch, "unit.exit"), "0\n");
+	for (const [file, text] of [
+		["stdout", "Setting up cerastream (2) ...\n"],
+		["stderr", ""],
+		["status", "pmstatus:cerastream:90.0000:Setting up cerastream\n"],
+	] as const)
+		await writeFile(join(scratch, `unit.${file}`), text, { mode: 0o600 });
+	const exits: (number | null)[] = [];
+	let adoptions = 0;
+	for (let boot = 1; boot <= 5; boot++) {
+		const lifetime = session("boot");
+		await lifetime.listening();
+		lifetime.send("recover");
+		const recovered = await Promise.race([
+			lifetime.line("session:recovered").then(() => true),
+			lifetime.child.exited.then(() => false),
+		]);
+		if (recovered) lifetime.send("exit");
+		exits.push(await lifetime.child.exited);
+		if (
+			lifetime.output().includes("reattached to the detached apt transaction")
+		)
+			adoptions++;
+	}
+	expect(exits).toEqual([RESTART_EXIT_CODE, 0, 0, 0, 0]);
+	expect(adoptions).toBe(1);
+	// The unit was never retired, and its exit is recorded beside its logs.
+	expect(await readFile(join(scratch, "unit.exit"), "utf8")).toBe("0\n");
+	expect(
+		JSON.parse(
+			await readFile(join(scratch, "software-update.outcome"), "utf8"),
+		),
+	).toMatchObject({ schema: 1, exitCode: 0 });
 }, 120_000);

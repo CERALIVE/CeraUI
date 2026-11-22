@@ -107,6 +107,7 @@ import {
 	resetDisruptiveActionReservationForTest,
 } from "./disruptive-action-reservation.ts";
 import { classifyPackageLayer } from "./package-layer.ts";
+import { markBootDegraded } from "./readiness.ts";
 import {
 	pendingAwareAptSpaceDeps,
 	runLegacyPackageEffects,
@@ -326,6 +327,21 @@ export function beginSoftwareUpdateRecovery(): void {
 
 function settleSoftwareUpdateRecovery(): void {
 	softUpdateRecoveryPending = false;
+}
+
+/** A unit's exit that an earlier lifetime observed and recorded. */
+function adoptRecordedOutcome(exitCode: number): void {
+	softUpdateStatus = null;
+	lastUpdateSucceeded = exitCode === 0;
+	lastUpdateFailure =
+		exitCode === 0
+			? null
+			: {
+					reason: `apt-get exited with code ${exitCode}`,
+					failure_id: randomUUID(),
+				};
+	lastPreflightFailure = null;
+	lastCleanupWarning = undefined;
 }
 
 /** Package progress for an initial push; omitted while recovery is pending. */
@@ -1561,6 +1577,7 @@ export function createSoftwareUpdateProcessMonitor(
 	let announced = true;
 	// Live units write the status channel; a recovered one says whether it does.
 	let channel = true;
+	let restartWithheld = false;
 
 	const observeRebootPackages = () => {
 		if (rebootAfterUpgrade) return;
@@ -1651,6 +1668,8 @@ export function createSoftwareUpdateProcessMonitor(
 			if (err instanceof DetachedAptServiceCleanupError) {
 				// The verified exit is the outcome; the next launch retires the unit.
 				code = err.transactionExitCode;
+				// With no record, the next boot would adopt this unit again: no restart.
+				restartWithheld = !err.outcomeRecorded;
 				logger.error(
 					"Software update: the finished unit could not be retired",
 					{
@@ -1752,7 +1771,12 @@ export function createSoftwareUpdateProcessMonitor(
 				// Persist the observed commit success before deliberately exiting;
 				// the observer has already drained output and cleaned up the unit.
 				void finishSoftwareUpdateRestart(onCommitSucceeded, () => {
-					if (rebootAfterUpgrade && !onCommitSucceeded) {
+					if (restartWithheld) {
+						markBootDegraded("software-update-retirement");
+						logger.error(
+							"Software update: restart withheld; the finished unit was neither retired nor recorded",
+						);
+					} else if (rebootAfterUpgrade && !onCommitSucceeded) {
 						rebootAfterUpdate();
 					} else {
 						invariant(
@@ -2093,6 +2117,27 @@ async function recoverSoftwareUpdate(
 			});
 		}
 		return false;
+	}
+	if ("recorded" in recovered) {
+		// Once per boot: a later recovery call finds the hold already settled.
+		if (recovered.unit === "absent" && !softUpdateRecoveryPending) return false;
+		if (owner)
+			lastInstallUnitVerdict =
+				recovered.unit === "finished" ? "attached" : "absent";
+		adoptRecordedOutcome(recovered.recorded.exitCode);
+		if (recovered.unit === "finished") {
+			markBootDegraded("software-update-retirement");
+			logger.error(
+				"Software update: a finished unit could not be retired; its recorded outcome stands and it is not adopted again",
+			);
+		}
+		settleSoftwareUpdateRecovery();
+		// A tab that missed the result across the restarts learns it now.
+		broadcastMsg("status", {
+			updating: null,
+			update_state: getUpdateState(),
+		});
+		return owner && recovered.unit === "finished";
 	}
 	if (!owner) {
 		void monitor.finish(recovered.completion);

@@ -8,6 +8,7 @@
 	(at your option) any later version.
 */
 
+import type { RecordedSoftwareUpdateOutcome } from "./software-update-output.ts";
 import {
 	buildDetachedAptAllCommand,
 	buildDetachedAptUpgradeCommand,
@@ -26,6 +27,8 @@ const RETIRE_ATTEMPTS = 5;
 // 16 MiB per file per poll; a backlog beyond that is caught up on later polls.
 const MAX_READS_PER_DRAIN = 256;
 const INSPECT_RETRY_MAX_MS = 30_000;
+/** How long a retired unit's recorded outcome is told to reconnecting tabs. */
+export const RECORDED_OUTCOME_REPLAY_MS = 30 * 60_000;
 
 export type SoftwareUpdateOutputHandlers = {
 	readonly onStdout: (chunk: string) => void;
@@ -49,7 +52,19 @@ export type SoftwareUpdateOutputHandlers = {
 
 export type DetachedAptUpgradeDeps = DetachedAptServiceDeps;
 
-export type RecoveredDetachedAptUpgrade = {
+export type RecoveredDetachedAptUpgrade =
+	| AttachedDetachedAptUpgrade
+	| {
+			/**
+			 * An earlier lifetime observed this exit and acted on it: the unit is
+			 * gone, or it is a finished unit whose retirement failed. Never adopted
+			 * again, so a unit that cannot be retired cannot restart CeraUI twice.
+			 */
+			readonly recorded: RecordedSoftwareUpdateOutcome;
+			readonly unit: "absent" | "finished";
+	  };
+
+export type AttachedDetachedAptUpgrade = {
 	readonly completion: Promise<number>;
 	/**
 	 * True when the unit was ALREADY in its "finished" state at the moment we
@@ -90,6 +105,8 @@ export class DetachedAptServiceCleanupError extends Error {
 	constructor(
 		readonly transactionExitCode: number,
 		readonly cleanupError: unknown,
+		/** false: nothing stops a later lifetime adopting this finished unit again. */
+		readonly outcomeRecorded: boolean,
 	) {
 		super("apt transaction finished, but its transient service cleanup failed");
 		this.name = "DetachedAptServiceCleanupError";
@@ -198,6 +215,7 @@ async function retireDetachedAptUnit(
 	state: FinishedState,
 	handlers: SoftwareUpdateOutputHandlers,
 	deps: DetachedAptUpgradeDeps,
+	outcomeRecorded: boolean,
 ): Promise<void> {
 	for (let attempt = 1; ; attempt++) {
 		try {
@@ -205,7 +223,11 @@ async function retireDetachedAptUnit(
 			return;
 		} catch (error) {
 			if (attempt === RETIRE_ATTEMPTS)
-				throw new DetachedAptServiceCleanupError(state.exitCode, error);
+				throw new DetachedAptServiceCleanupError(
+					state.exitCode,
+					error,
+					outcomeRecorded,
+				);
 			reportObserverError(handlers, error);
 			await deps.sleep(OUTPUT_POLL_INTERVAL_MS);
 		}
@@ -285,13 +307,26 @@ async function observeDetachedAptUpgrade(
 		if (tail.length > 0) cursor.emit(tail);
 	}
 	handlers.onDrained?.(caughtUp);
+	// APT has exited, so this read was complete; record before retiring.
+	const outcomeRecorded = await deps
+		.recordOutcome({
+			exitCode: state.exitCode,
+			at: deps.now?.() ?? Date.now(),
+		})
+		.then(
+			() => true,
+			(error: unknown) => {
+				reportObserverError(handlers, error);
+				return false;
+			},
+		);
 	if (options.retire !== false)
-		await retireDetachedAptUnit(state, handlers, deps);
+		await retireDetachedAptUnit(state, handlers, deps, outcomeRecorded);
 	return state.exitCode;
 }
 
 async function launchDetachedAptUnit(
-	command: readonly string[],
+	command: (aptStatus: boolean) => readonly string[],
 	handlers: SoftwareUpdateOutputHandlers,
 	deps: DetachedAptUpgradeDeps,
 ): Promise<number> {
@@ -299,19 +334,20 @@ async function launchDetachedAptUnit(
 	if (existing.kind === "running")
 		throw new DetachedAptServiceAlreadyExistsError();
 	if (existing.kind === "finished") {
-		// Its outcome was observed when it finished; only its retirement failed.
-		await retireDetachedAptUnit(existing, handlers, deps).catch(() => {
+		// Only a leftover whose exit an observer recorded; only its retirement failed.
+		if (!(await deps.readRecordedOutcome()))
+			throw new DetachedAptServiceAlreadyExistsError();
+		await retireDetachedAptUnit(existing, handlers, deps, true).catch(() => {
 			throw new DetachedAptServiceAlreadyExistsError();
 		});
 		if ((await deps.inspect()).kind !== "absent")
 			throw new DetachedAptServiceAlreadyExistsError();
 	}
-	const prepared = await deps.prepareOutput();
-	await deps.start(command);
+	const aptStatus = (await deps.prepareOutput())?.status !== false;
+	await deps.start(command(aptStatus));
+	if (!aptStatus) handlers.onStatusLost?.();
 	return observeDetachedAptUpgrade(
-		prepared?.status === false
-			? { kind: "running" }
-			: { kind: "running", aptStatus: true },
+		aptStatus ? { kind: "running", aptStatus } : { kind: "running" },
 		handlers,
 		deps,
 	);
@@ -323,7 +359,8 @@ export async function runDetachedAptUpgrade(
 	deps: DetachedAptUpgradeDeps = defaultDetachedAptServiceDeps(),
 ): Promise<number> {
 	return launchDetachedAptUnit(
-		buildDetachedAptUpgradeCommand(aptArgs, deps.outputPaths),
+		(aptStatus) =>
+			buildDetachedAptUpgradeCommand(aptArgs, deps.outputPaths, aptStatus),
 		handlers,
 		deps,
 	);
@@ -336,7 +373,13 @@ export async function runDetachedAptAll(
 	deps: DetachedAptUpgradeDeps = defaultDetachedAptServiceDeps(),
 ): Promise<number> {
 	return launchDetachedAptUnit(
-		buildDetachedAptAllCommand(installArgs, verdict, deps.outputPaths),
+		(aptStatus) =>
+			buildDetachedAptAllCommand(
+				installArgs,
+				verdict,
+				deps.outputPaths,
+				aptStatus,
+			),
 		handlers,
 		deps,
 	);
@@ -348,7 +391,30 @@ export async function recoverDetachedAptUpgrade(
 	options: ObserveOptions = {},
 ): Promise<RecoveredDetachedAptUpgrade | null> {
 	const state = await deps.inspect();
-	if (state.kind === "absent") return null;
+	if (state.kind !== "running") {
+		const recorded = await deps
+			.readRecordedOutcome()
+			.catch((error: unknown) => {
+				reportObserverError(handlers, error);
+				return null;
+			});
+		if (state.kind === "absent") {
+			const now = deps.now?.() ?? Date.now();
+			return recorded && now - recorded.at < RECORDED_OUTCOME_REPLAY_MS
+				? { recorded, unit: "absent" }
+				: null;
+		}
+		if (recorded) {
+			if (options.retire !== false)
+				await deps
+					.cleanup(state)
+					.catch((error: unknown) => reportObserverError(handlers, error));
+			return {
+				recorded: { ...recorded, exitCode: state.exitCode },
+				unit: "finished",
+			};
+		}
+	}
 	handlers.onAttached?.(state.aptStatus === true);
 	return {
 		completion: observeDetachedAptUpgrade(state, handlers, deps, options),

@@ -172,6 +172,8 @@ async function observe(
 		start: async () => {
 			started = true;
 		},
+		readRecordedOutcome: async () => null,
+		recordOutcome: async () => {},
 		prepareOutput: async () => {},
 		readOutput: async (path, offset) => {
 			const file =
@@ -217,7 +219,10 @@ async function observe(
 			await recoverSoftwareUpdateIfRunning({
 				recover: async (handlers) => {
 					const recovered = await recoverDetachedAptUpgrade(handlers, deps);
-					settled = recovered?.completion;
+					settled =
+						recovered && "completion" in recovered
+							? recovered.completion
+							: undefined;
 					return recovered;
 				},
 				scheduleRetry: () => {},

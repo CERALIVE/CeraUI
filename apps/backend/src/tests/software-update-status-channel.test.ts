@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { buildAptAllInstallArgs } from "../modules/system/apt-all-packages.ts";
 import {
 	prepareSoftwareUpdateOutput,
+	readSoftwareUpdateOutcome,
+	softwareUpdateOutcomePath,
 	softwareUpdateOutputPaths,
+	UnsafeSoftwareUpdateOutputPathError,
+	writeSoftwareUpdateOutcome,
 } from "../modules/system/software-update-output.ts";
 import {
 	buildDetachedAptAllCommand,
@@ -30,10 +34,13 @@ const pinnedArgs = buildAptAllInstallArgs(
 );
 const tail =
 	" ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=42 ; code=(null) ; status=0/0 }";
-const drain =
+const statusOpen =
+	"{ exec 3>>/run/ceralive/software-update.status; } 2>/dev/null || exec 3>/dev/null";
+// Round 4's form, never released: a pipe whose reader could stall or fail APT.
+const pipeDrain =
 	"exec 3> >(set +e; echo -1000 2>/dev/null >/proc/self/oom_score_adj; cat 2>/dev/null >>/run/ceralive/software-update.status; exec cat >/dev/null) || exec 3>/dev/null";
-const legacyScript = `${drain}; exec /usr/bin/apt-get -o APT::Status-Fd=3 ${legacyArgs.join(" ")}`;
-const pinnedScript = `${drain}; /usr/bin/apt-get -o APT::Status-Fd=3 -d -y upgrade --with-new-pkgs && /usr/bin/apt-get -o APT::Status-Fd=3 ${pinnedArgs.join(" ")}`;
+const legacyScript = `${statusOpen}; exec /usr/bin/apt-get -o APT::Status-Fd=3 ${legacyArgs.join(" ")}`;
+const pinnedScript = `${statusOpen}; /usr/bin/apt-get -o APT::Status-Fd=3 -d -y upgrade --with-new-pkgs && /usr/bin/apt-get -o APT::Status-Fd=3 ${pinnedArgs.join(" ")}`;
 const unreleasedScript = `exec 3>>/run/ceralive/software-update.status && exec /usr/bin/apt-get -o APT::Status-Fd=3 ${legacyArgs.join(" ")}`;
 const preChannelPinned = `/usr/bin/apt-get -d -y upgrade --with-new-pkgs && /usr/bin/apt-get ${pinnedArgs.join(" ")}`;
 
@@ -108,6 +115,47 @@ describe("the detached unit writes APT status records to a private third file", 
 			await rm(directory, { recursive: true, force: true });
 		}
 	});
+
+	test("a launch's prepared output starts with no recorded outcome", async () => {
+		const directory = await mkdtemp(path.join(tmpdir(), "ceraui-outcome-"));
+		const uid = process.getuid?.() ?? 0;
+		const local = {
+			stdout: path.join(directory, "software-update.stdout"),
+			stderr: path.join(directory, "software-update.stderr"),
+			status: path.join(directory, "software-update.status"),
+		};
+		try {
+			await prepareSoftwareUpdateOutput(local, uid);
+			await writeSoftwareUpdateOutcome(local, { exitCode: 0, at: 1 }, uid);
+			expect(await readSoftwareUpdateOutcome(local, uid)).toEqual({
+				exitCode: 0,
+				at: 1,
+			});
+			await prepareSoftwareUpdateOutput(local, uid);
+			expect(await readSoftwareUpdateOutcome(local, uid)).toBeNull();
+		} finally {
+			await rm(directory, { recursive: true, force: true });
+		}
+	});
+
+	test("a recorded outcome is trusted only as a private record", async () => {
+		const directory = await mkdtemp(path.join(tmpdir(), "ceraui-outcome-"));
+		const uid = process.getuid?.() ?? 0;
+		const local = {
+			stdout: path.join(directory, "software-update.stdout"),
+			stderr: path.join(directory, "software-update.stderr"),
+			status: path.join(directory, "software-update.status"),
+		};
+		try {
+			await writeSoftwareUpdateOutcome(local, { exitCode: 0, at: 1 }, uid);
+			await chmod(softwareUpdateOutcomePath(local), 0o644);
+			await expect(
+				readSoftwareUpdateOutcome(local, uid),
+			).rejects.toBeInstanceOf(UnsafeSoftwareUpdateOutputPathError);
+		} finally {
+			await rm(directory, { recursive: true, force: true });
+		}
+	});
 });
 
 test("a status file that cannot be prepared never blocks the launch", async () => {
@@ -169,12 +217,18 @@ describe("adoption identifies which units write the status channel", () => {
 		],
 		[
 			"a status option without the descriptor",
-			shExec(legacyScript.replace(`${drain}; `, "")),
+			shExec(legacyScript.replace(`${statusOpen}; `, "")),
 		],
 		["apt not exec'd", shExec(legacyScript.replace("; exec /usr", "; /usr"))],
 		[
-			"a drain that stops at its first failure",
-			shExec(legacyScript.replace("set +e; ", "")),
+			"a status open without its /dev/null fallback",
+			shExec(legacyScript.replace(" || exec 3>/dev/null", "")),
+		],
+		[
+			"the status pipe and drain, never released",
+			shExec(
+				`${pipeDrain}; exec /usr/bin/apt-get -o APT::Status-Fd=3 ${legacyArgs.join(" ")}`,
+			),
 		],
 		[
 			"the status file opened directly, never released",
