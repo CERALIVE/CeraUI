@@ -40,9 +40,11 @@ export function restartTestUnit(
 		outputPaths: fixed,
 		prepareOutput: () => prepareSoftwareUpdateOutput(local, uid),
 		start: async (command) => {
-			const argv = command
-				.slice(command.indexOf("--") + 1)
-				.map((arg) => arg.replaceAll("/usr/bin/apt-get", `${scratch}/apt-get`));
+			const tail = command.slice(command.indexOf("--") + 1);
+			// flock's lock (under /run) is not under test; what it runs is.
+			const argv = (tail[0] === "/usr/bin/flock" ? tail.slice(3) : tail).map(
+				(arg) => arg.replaceAll("/usr/bin/apt-get", `${scratch}/apt-get`),
+			);
 			const child = spawn(
 				"/bin/bash",
 				[

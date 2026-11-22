@@ -6,11 +6,14 @@
  * the detached unit runs the real released command in its own session, so it
  * keeps running when the package's postinst kills the backend. The tab is a
  * real WebSocket client that sets the password, logs in, keeps its token and
- * re-authenticates on every new process. When the install it showed ends
- * without its result reaching it, it asks what the frontend asks: whether
- * the versions the device offered are installed. The frames and answers it
- * receives are pinned in the frontend fixtures Layout.updating-overlay.test.ts
- * renders.
+ * re-authenticates on every new process. The device is capable: discovery
+ * and the pinned recheck run as on a device, and the unit is started with the
+ * `name=version` pins they admitted. When the install it showed ends without
+ * its result reaching it, the tab asks what the frontend asks, about the
+ * vector that install's own frames carried. The fake apt installs exactly the
+ * operands it was given, so the command, the installed rows, the question and
+ * the answers concern one vector. The frames, questions and answers are pinned
+ * in the frontend fixtures Layout.updating-overlay.test.ts renders.
  */
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { watch } from "node:fs";
@@ -26,6 +29,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { RESTART_PACKAGES } from "./helpers/update-restart-apt.ts";
 import { RESTART_EXIT_CODE } from "./helpers/update-restart-unit.ts";
 
 const SESSION = new URL("./helpers/update-restart-session.ts", import.meta.url)
@@ -51,58 +55,72 @@ async function within<T>(
 		clearTimeout(timer);
 	}
 }
-const BARRIERS = [
-	"download-10",
-	"download-60",
-	"dpkg-40",
-	"second-read",
-	"restarted",
-	"finish",
-];
-const PACKAGES = Array.from({ length: 10 }, (_, i) => `p${i + 1}`);
-// What the device offered: every package at version 2 (it runs version 1).
-const OFFER = PACKAGES.map((name) => ({
-	name,
-	version: "2",
-	layer: "app",
-	actionable: true,
-}));
+const BARRIERS = ["install", "dpkg-40", "second-read", "restarted", "finish"];
+const PACKAGES = RESTART_PACKAGES.join(" ");
+const QUERY_FORMAT = `-f=\${Package}\\t\${Architecture}\\t\${db:Status-Abbrev}\\t\${Version}\\n`;
 
-// apt and dpkg as the unit runs them. Each barrier is a FIFO the test opens
-// only after the tab showed the state before it; the postinst stops the
-// backend that launched the unit, as the real package's restart does. The
-// last step installs version 2 of every package, or fails with 100 when
-// `fail` exists.
+// apt-get as the unit runs it: `-d` is its download stage (unpinned, the unit
+// fetches the archives itself), then the install stage installs
+// exactly its operands, `name=version` pins or bare names (version 2). Each
+// barrier is a FIFO the test opens only after the tab showed the state before
+// it; the postinst stops the backend that launched the unit, as the real
+// package's restart does, unless `no-postinst` exists. It fails with 100 when
+// `fail` exists. Each moment is one printf, one write, so the observer never
+// reads half of it.
 const FAKE_APT = `#!/bin/bash
 trap '' PIPE
 step() { read -r _ < "$SCRATCH/$1.fifo"; }
-# APT's transcript for a ten-package plan. Each moment is one printf, one
-# write, so the observer never reads half of it.
-echo "Reading package lists..."
-printf '%s\\n' "The following packages will be upgraded:" "  p1 p2 p3 p4 p5 p6 p7 p8 p9 p10" "10 upgraded, 0 newly installed, 0 to remove and 0 not upgraded." "Get:"{1..2}" https://apt.invalid trixie/main arm64 p 2 [4 kB]"
-step download-10
-printf '%s\\n' "Get:"{3..7}" https://apt.invalid trixie/main arm64 p 2 [4 kB]"
-step download-60
-printf '%s\\n' "Fetched 40 kB in 7s (6 kB/s)" "Preparing to unpack .../p1_2_arm64.deb ..." "Unpacking p"{1..9}" (2) over (1) ..."
-step dpkg-40
-kill -TERM "$(cat "$SCRATCH/backend.pid")"
-printf '%s\\n' "Unpacking p10 (2) over (1) ..." "Setting up p"{1..3}" (2) ..."
-step restarted
-printf '%s\\n' "Setting up p"{4..7}" (2) ..."
-step finish
+lines() { printf '%s\\n' "$@"; }
+if [ "$1" = -d ]; then
+  out=$(lines "Reading package lists..." "The following packages will be upgraded:" "  ${PACKAGES}" "10 upgraded, 0 newly installed, 0 to remove and 0 not upgraded."
+    for name in ${PACKAGES}; do echo "Get:1 https://apt.invalid trixie/main arm64 $name 2 [4 kB]"; done
+    lines "Fetched 40 kB in 0s (400 kB/s)" "Download complete and in download only mode")
+  lines "$out"
+  exit 0
+fi
+echo "$*" >> "$SCRATCH/apt-argv.log"
+pairs=(); found=
+for arg in "$@"; do
+  [ -n "$found" ] && pairs+=("$arg")
+  [ "$arg" = install ] && found=1
+done
+names=("\${pairs[@]%%=*}")
+lines "Reading package lists..." "The following packages will be upgraded:" "  \${names[*]}" "\${#names[@]} upgraded, 0 newly installed, 0 to remove and 0 not upgraded."
+unpack() { printf 'Unpacking %s (2) over (1) ...\\n' "$@"; }
+setup() { printf 'Setting up %s (2) ...\\n' "$@"; }
+if [ -e "$SCRATCH/no-postinst" ]; then
+  out=$(unpack "\${names[@]}"; setup "\${names[@]}"); lines "$out"
+  step finish
+else
+  step install
+  out=$(unpack "\${names[@]:0:9}"); lines "$out"
+  step dpkg-40
+  kill -TERM "$(cat "$SCRATCH/backend.pid")"
+  out=$(unpack "\${names[9]}"; setup "\${names[@]:0:3}"); lines "$out"
+  step restarted
+  out=$(setup "\${names[@]:3:4}"); lines "$out"
+  step finish
+fi
 if [ -e "$SCRATCH/fail" ]; then echo "E: Sub-process /usr/bin/dpkg returned an error code (1)" >&2; exit 100; fi
-printf 'p%s\\t2\\n' {1..10} > "$SCRATCH/installed"
+for pair in "\${pairs[@]}"; do
+  version=\${pair#*=}; [ "$version" = "$pair" ] && version=2
+  printf '%s\\t%s\\n' "\${pair%%=*}" "$version"
+done > "$SCRATCH/installed.new"
+awk -F '\\t' 'NR == FNR { done[$1] = 1; next } !($1 in done)' "$SCRATCH/installed.new" "$SCRATCH/installed" >> "$SCRATCH/installed.new"
+mv "$SCRATCH/installed.new" "$SCRATCH/installed"
 exit 0
 `;
-// dpkg-query -W -f=<Package\tStatus\tVersion> -- names: what is installed,
-// exit 1 for a name it does not list; exit 2 while `dpkg-query.fail` exists.
+// dpkg-query answering only the production query shape, from what is
+// installed: exit 1 for a name it does not list; exit 2 while
+// `dpkg-query.fail` exists.
 const FAKE_DPKG_QUERY = `#!/bin/bash
 [ -e "$SCRATCH/dpkg-query.fail" ] && { echo "dpkg-query: error" >&2; exit 2; }
-while [ "$1" != "--" ]; do shift; done; shift
+[ "$1" = -W ] && [ "$2" = '${QUERY_FORMAT}' ] && [ "$3" = -- ] || exit 2
+shift 3
 missing=0
 for name in "$@"; do
   version=$(awk -F '\\t' -v n="$name" '$1 == n { print $2 }' "$SCRATCH/installed")
-  if [ -n "$version" ]; then printf '%s\\tii \\t%s\\n' "$name" "$version"; else missing=1; fi
+  if [ -n "$version" ]; then printf '%s\\tarm64\\tii \\t%s\\n' "$name" "$version"; else missing=1; fi
 done
 exit $missing
 `;
@@ -117,7 +135,11 @@ type Seen =
 	| { readonly at: "connected" | "disconnected" }
 	| { readonly at: "push" | "pull"; readonly status: Status }
 	| { readonly at: "moment"; readonly name: string }
-	| { readonly at: "asked"; readonly outcome: unknown };
+	| {
+			readonly at: "asked";
+			readonly request: unknown;
+			readonly outcome: unknown;
+	  };
 
 // The fields a tab's package views read; volatile stamps are dropped.
 function packageFields(status: Status): Status | undefined {
@@ -142,8 +164,15 @@ class Tab {
 	#id = 0;
 	// Each wait starts after the previous match, so an old event never answers it.
 	#from = 0;
+	// As the frontend: the vector of the first running frame that carried one.
+	#targets: unknown;
 
 	#record(entry: Seen) {
+		const updating = updatingOf(entry) as
+			| { targets?: unknown; result?: unknown }
+			| null
+			| undefined;
+		if (updating?.result === undefined) this.#targets ??= updating?.targets;
 		this.seen.push(entry);
 		this.#changed.resolve();
 		this.#changed = Promise.withResolvers<void>();
@@ -192,10 +221,9 @@ class Tab {
 
 	// What the frontend asks once the install it showed ended without its result.
 	async ask() {
-		const outcome = await this.call(["system", "updateOutcome"], {
-			packages: OFFER,
-		});
-		this.#record({ at: "asked", outcome });
+		const request = { targets: this.#targets ?? [] };
+		const outcome = await this.call(["system", "updateOutcome"], request);
+		this.#record({ at: "asked", request, outcome });
 		return outcome;
 	}
 
@@ -226,8 +254,31 @@ class Tab {
 	}
 }
 
-const updatingOf = (seen: Seen) =>
-	seen.at === "push" || seen.at === "pull" ? seen.status.updating : undefined;
+function updatingOf(seen: Seen): unknown {
+	return seen.at === "push" || seen.at === "pull"
+		? seen.status.updating
+		: undefined;
+}
+// The phase a running frame shows, as the frontend reads it; independent of
+// how the number is derived.
+function phaseOf(seen: Seen): string | undefined {
+	const u = updatingOf(seen) as
+		| {
+				downloading: number;
+				unpacking: number;
+				setting_up: number;
+				result?: unknown;
+		  }
+		| null
+		| undefined;
+	if (typeof u !== "object" || u === null || u.result !== undefined)
+		return undefined;
+	return u.setting_up > 0 || u.unpacking > 0
+		? "installing"
+		: u.downloading > 0
+			? "downloading"
+			: "preparing";
+}
 const running = (percent: number) => ({
 	total: 1,
 	downloading: 0,
@@ -263,7 +314,17 @@ beforeEach(async () => {
 	}
 	await writeFile(
 		join(scratch, "installed"),
-		PACKAGES.map((name) => `${name}\t1\n`).join(""),
+		[...RESTART_PACKAGES, "cerastream"].map((name) => `${name}\t1\n`).join(""),
+	);
+	// A capable device: every role but "legacy-first" reads this.
+	await writeFile(
+		join(scratch, "capabilities.json"),
+		JSON.stringify({
+			schema: 1,
+			features: ["apt-all-packages"],
+			ota_uid: 0,
+			apt_uid: 0,
+		}),
 	);
 	await Bun.spawn([
 		"mkfifo",
@@ -289,7 +350,12 @@ afterEach(async () => {
 }, 60_000);
 
 function session(
-	role: "first" | "after-postinst" | "after-outcome" | "refused",
+	role:
+		| "first"
+		| "after-postinst"
+		| "after-outcome"
+		| "refused"
+		| "legacy-first",
 ) {
 	const env: Record<string, string | undefined> = {
 		...process.env,
@@ -443,16 +509,11 @@ async function toPostinst(tab: Tab): Promise<string> {
 	expect(await tab.call(["system", "startUpdate"])).toMatchObject({
 		success: true,
 	});
-	await tab.until("downloading", (s) =>
-		Bun.deepEquals(updatingOf(s), downloadingPhase),
-	);
+	// Waits name phases only, so this choreography runs on any release.
+	await tab.until("downloading", (s) => phaseOf(s) === "downloading");
 	tab.moment("downloading");
-	// More archives start: nothing proves any done, so the frame stays.
-	await release("download-10");
-	await release("download-60");
-	await tab.until("installing 40%", (s) =>
-		Bun.deepEquals(updatingOf(s), running(40)),
-	);
+	await release("install");
+	await tab.until("installing", (s) => phaseOf(s) === "installing");
 	tab.moment("installing 40%");
 	await release("dpkg-40");
 	await tab.until("the postinst restart", (s) => s.at === "disconnected");
@@ -475,16 +536,42 @@ async function toInstalling80(tab: Tab) {
 	await tab.pull();
 	tab.moment("attached, nothing read yet");
 	await release("second-read");
-	await tab.until("recovered installing 60%", (s) =>
-		Bun.deepEquals(updatingOf(s), running(60)),
-	);
+	await tab.until("recovered installing", (s) => phaseOf(s) === "installing");
 	tab.moment("recovered at installing 60%");
 	await release("restarted");
-	await tab.until("installing 80%", (s) =>
-		Bun.deepEquals(updatingOf(s), running(80)),
-	);
+	await tab.until("installing again", (s) => phaseOf(s) === "installing");
 	tab.moment("installing 80%");
 	return { second, token };
+}
+
+// The vector discovery admitted: ten pins at version 2, in apt-get's order.
+const TARGETS = RESTART_PACKAGES.map((name) => ({ name, version: "2" }));
+const withTargets = <T extends object>(frame: T) => ({
+	...frame,
+	targets: TARGETS,
+});
+
+/** The unit's command, the installed rows and the question are one vector. */
+async function oneVector(seen: readonly Seen[]) {
+	const argv = (await readFile(join(scratch, "apt-argv.log"), "utf8"))
+		.trim()
+		.split("\n");
+	expect(argv).toHaveLength(1);
+	const operands = (argv[0] ?? "").split(" ");
+	expect(operands.slice(operands.indexOf("install") + 1)).toEqual(
+		TARGETS.map(({ name, version }) => `${name}=${version}`),
+	);
+	const installed = Object.fromEntries(
+		(await readFile(join(scratch, "installed"), "utf8"))
+			.trim()
+			.split("\n")
+			.map((row) => row.split("\t")),
+	);
+	for (const { name, version } of TARGETS)
+		expect(installed[name]).toBe(version);
+	for (const entry of seen)
+		if (entry.at === "asked")
+			expect(entry.request).toEqual({ targets: TARGETS });
 }
 
 const pushedUpdating = (seen: readonly Seen[]) =>
@@ -523,7 +610,11 @@ test("one open tab across the postinst restart and the completion restart: the d
 	// attached before reading it, then exactly what its files reached.
 	expect(
 		pushedUpdating(between(seen, "idle", "postinst stopped the backend")),
-	).toEqual([preparing, downloadingPhase, running(40)]);
+	).toEqual([
+		preparing,
+		withTargets(downloadingPhase),
+		withTargets(running(40)),
+	]);
 	expect(
 		pushedUpdating(
 			between(seen, "re-authenticated before recovery", "installing 80%"),
@@ -542,9 +633,18 @@ test("one open tab across the postinst restart and the completion restart: the d
 		expect(pulled?.at === "pull" && pulled.status.updating).toBeNull();
 	}
 	expect(seen.filter((s) => s.at === "asked")).toEqual([
-		{ at: "asked", outcome: { kind: "running" } },
-		{ at: "asked", outcome: { kind: "success" } },
+		{
+			at: "asked",
+			request: { targets: TARGETS },
+			outcome: { kind: "running" },
+		},
+		{
+			at: "asked",
+			request: { targets: TARGETS },
+			outcome: { kind: "success" },
+		},
 	]);
+	await oneVector(seen);
 	// What this tab received is what the frontend replay renders.
 	const pinned = JSON.parse(
 		await readFile(fixture("update-restart-tab"), "utf8"),
@@ -577,13 +677,14 @@ test("a tab offline through the outcome and the completion restart learns it fro
 	expect(await tab.ask()).toEqual({ kind: "unknown" });
 	const seen = [...tab.seen];
 	tab.close();
+	await oneVector(seen);
 	const pinned = JSON.parse(
 		await readFile(fixture("update-restart-tab-offline"), "utf8"),
 	) as { seen: Seen[] };
 	expect(seen).toEqual(pinned.seen);
 }, 120_000);
 
-test("after a refused boot the unit is reported by nobody: not confirmed while it runs, its failure exit as the hint once it ends below the offer", async () => {
+test("after a refused boot the unit is reported by nobody: not confirmed while it runs, its failure exit only a hint once it ends below the target", async () => {
 	const tab = new Tab();
 	const token = await toPostinst(tab);
 	const refused = session("refused");
@@ -595,10 +696,8 @@ test("after a refused boot the unit is reported by nobody: not confirmed while i
 	await release("restarted");
 	await release("finish");
 	await exited;
-	expect(await tab.ask()).toEqual({
-		kind: "failed",
-		reason: "apt-get exited with code 100",
-	});
+	// Never "Update Failed": the fixed-name unit's exit may be another run's.
+	expect(await tab.ask()).toEqual({ kind: "unknown", exit: 100 });
 	// The refused boot never retired, restarted or reported anything itself:
 	// its only word about packages is main's first status, nothing updating.
 	expect(refused.child.exitCode).toBeNull();
@@ -614,5 +713,71 @@ test("after a refused boot the unit is reported by nobody: not confirmed while i
 	expect(await readFile(join(scratch, "unit-events.log"), "utf8")).toBe(
 		"start\n",
 	);
+	tab.close();
+}, 120_000);
+
+test("legacy mode launches no vector: a tab that missed the end is not confirmed, though the install succeeded", async () => {
+	await writeFile(join(scratch, "no-postinst"), "");
+	const tab = new Tab();
+	const legacy = session("legacy-first");
+	const token = await signIn(tab, await legacy.listening());
+	legacy.send("recover");
+	await legacy.line("session:recovered");
+	await tab.pull();
+	expect(await tab.call(["system", "startUpdate"])).toMatchObject({
+		success: true,
+	});
+	await tab.until("installing", (s) => phaseOf(s) === "installing");
+	tab.close();
+	await tab.until("the tab goes offline", (s) => s.at === "disconnected");
+	const exited = legacy.child.exited;
+	await release("finish");
+	expect(await exited).toBe(RESTART_EXIT_CODE);
+	const third = session("after-outcome");
+	await reconnect(tab, await third.listening(), token);
+	// No frame named a vector, so the question names none: nothing is decided.
+	expect(
+		tab.seen.some(
+			(s) =>
+				typeof updatingOf(s) === "object" && "targets" in (updatingOf(s) ?? {}),
+		),
+	).toBe(false);
+	expect(await tab.ask()).toEqual({ kind: "unknown" });
+	expect(tab.seen.at(-1)).toMatchObject({ request: { targets: [] } });
+	expect(await readFile(join(scratch, "installed"), "utf8")).toContain(
+		"cerastream\t2\n",
+	);
+	tab.close();
+}, 120_000);
+
+test("a capable install that fails with no restart: the tab gets the device's own failure and asks nothing", async () => {
+	await writeFile(join(scratch, "no-postinst"), "");
+	await writeFile(join(scratch, "fail"), "");
+	const tab = new Tab();
+	const first = session("first");
+	await signIn(tab, await first.listening());
+	first.send("recover");
+	await first.line("session:recovered");
+	expect(await tab.call(["system", "startUpdate"])).toMatchObject({
+		success: true,
+	});
+	await tab.until("installing", (s) => phaseOf(s) === "installing");
+	await release("finish");
+	const failure = (await tab.until("the failure", (s) => {
+		const u = updatingOf(s) as { result?: unknown } | null | undefined;
+		return typeof u?.result === "string";
+	})) as { status: { updating: { result: string; targets: unknown } } };
+	expect(failure.status.updating.targets).toEqual(TARGETS);
+	expect(failure.status.updating.result).not.toBe("");
+	await tab.until("the failed state", (s) => {
+		const state =
+			s.at === "push"
+				? (s.status.update_state as { kind?: string })
+				: undefined;
+		return state?.kind === "failed";
+	});
+	expect(tab.seen.some((s) => s.at === "asked")).toBe(false);
+	// Nothing restarts CeraUI after a failure.
+	expect(first.child.exitCode).toBeNull();
 	tab.close();
 }, 120_000);

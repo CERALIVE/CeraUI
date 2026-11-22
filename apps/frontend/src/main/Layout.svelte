@@ -1,7 +1,7 @@
 <script lang="ts">
 import { directionFor, getLocale, m } from '@ceraui/i18n/svelte';
 import { holdUpdateProgress } from '@ceraui/rpc/package-progress';
-import type { UpdateOutcome, UpdatePackage, UpdateProgress, UpdateState } from '@ceraui/rpc/schemas';
+import type { UpdateOutcome, UpdateProgress, UpdateState, UpdateTarget } from '@ceraui/rpc/schemas';
 import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
 import { setContext } from 'svelte';
 import { OfflinePage, PWAStatus } from '$lib/components/custom/pwa';
@@ -25,7 +25,11 @@ import {
 import { getShouldShowOfflinePage } from '$lib/stores/offline-state.svelte';
 
 import { legacyInstall } from '$lib/updates/legacy-install';
-import { announceLegacyInstallOutcome, announceMissedInstallOutcome } from '$lib/updates/legacy-install-notice';
+import {
+	announceLegacyInstallOutcome,
+	announceMissedInstallOutcome,
+	announceReadOutcome,
+} from '$lib/updates/legacy-install-notice';
 import { CONNECTION_DROPPED, createLiveProgress } from '$lib/updates/live-progress';
 
 import Auth from './Auth.svelte';
@@ -72,13 +76,19 @@ $effect(() => (topBands ? publishHeight(topBands, '--top-bands-height') : undefi
 // What this tab last showed for the running install: a stale or empty frame
 // after a reconnect or a backend restart never moves it back.
 let shownInstall: UpdateProgress | undefined;
+// The vector that install was launched with, from the first of its frames to
+// carry one; never replaced inside the run. A frame naming another is a new run.
+let watched: UpdateTarget[] | undefined;
 // The install this tab showed ended with no result the device reported: its
 // phase is held, without a number, until the device answers the tab's question.
 let unanswered = false;
+// Only the answer to the latest question counts; a new run or a running frame
+// makes every earlier question stale.
+let question = 0;
 let answers = $state(0);
 const reported = (state?: UpdateState) =>
 	state?.kind === 'success' || state?.kind === 'failed' || state?.kind === 'update_preflight_failed';
-const liveInstall = createLiveProgress();
+let liveInstall = createLiveProgress();
 // A field's number is stale from a drop until the status ingestion announces
 // that field delivered again; an identical frame counts, though the store keeps
 // the equal value's identity.
@@ -103,8 +113,20 @@ const updatingStatus = $derived.by(() => {
 	const updating = getUpdating();
 	const install = legacyInstall(updating);
 	unanswered = install.kind === 'none' && shownInstall !== undefined && !reported(getUpdateState());
-	if (install.kind === 'running' && install.details) shownInstall = holdUpdateProgress(shownInstall, install.details);
-	else if (!unanswered) shownInstall = undefined;
+	if (install.kind === 'running' && install.details) {
+		const targets = install.details.targets;
+		question += 1;
+		if (targets && watched && JSON.stringify(targets) !== JSON.stringify(watched)) {
+			shownInstall = undefined;
+			liveInstall = createLiveProgress();
+		}
+		if (!shownInstall) watched = undefined;
+		watched ??= targets;
+		shownInstall = holdUpdateProgress(shownInstall, install.details);
+	} else if (!unanswered) {
+		shownInstall = undefined;
+		watched = undefined;
+	}
 	return liveInstall(
 		shownInstall,
 		typeof updating === 'object' ? updating : undefined,
@@ -120,22 +142,29 @@ $effect(() => {
 });
 // A tab told only that the install it showed is over (it missed the result
 // while CeraUI restarted) says what the device reports; otherwise it asks
-// whether the versions the device offered are installed, holding the phase.
+// whether that install's own vector is installed, holding the phase.
 let showedInstall = false;
-let offered: UpdatePackage[] = [];
-const told = (outcome?: UpdateOutcome) => {
-	if (!unanswered || outcome?.kind === 'running') return;
+const told = (asked: number, outcome?: UpdateOutcome) => {
+	if (asked !== question || !unanswered || outcome?.kind === 'running') return;
 	shownInstall = undefined;
+	watched = undefined;
 	answers = answers + 1;
-	announceMissedInstallOutcome(outcome);
+	announceReadOutcome(outcome);
 };
 $effect(() => {
+	// The hold and the question are settled by the same frame.
+	updatingStatus;
 	const kind = legacyInstall(getUpdating()).kind;
 	const state = getUpdateState();
-	if (state?.kind === 'available') offered = state.packages ?? [];
 	if (kind === 'none' && showedInstall)
-		if (reported(state)) announceMissedInstallOutcome(state);
-		else rpc.system.updateOutcome({ packages: offered }).then(told, () => told());
+		if (state && reported(state)) announceMissedInstallOutcome(state);
+		else {
+			const asked = ++question;
+			rpc.system.updateOutcome({ targets: watched ?? [] }).then(
+				(outcome) => told(asked, outcome),
+				() => told(asked)
+			);
+		}
 	showedInstall = kind === 'running';
 });
 // Environment probes computed once (used to size the auth-check timeout).

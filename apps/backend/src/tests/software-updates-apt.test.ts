@@ -19,6 +19,10 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { type UpdatePackage, updateStateSchema } from "@ceraui/rpc";
+import {
+	deriveUpdateProgress,
+	PHASE_MARKERS,
+} from "../modules/system/apt-progress.ts";
 import { isParseError } from "../modules/system/cli-parse.ts";
 import {
 	ceralivePackageList,
@@ -54,7 +58,6 @@ import {
 	buildAptUpgradeArgs,
 	buildDiscoveredPackages,
 	classifyAptUpdateResult,
-	deriveAptProgress,
 	getUpdateState,
 	isSoftwareUpdateRecoveryInconclusive,
 	parseAptUpgradeSummary,
@@ -306,6 +309,9 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 			"--quiet",
 			"--service-type=exec",
 			"--expand-environment=no",
+			// APT's lines are counted for progress; systemd gives a unit its
+			// manager's locale, so the unit sets the C locale itself.
+			"--setenv=LC_ALL=C",
 			"--property=StandardOutput=append:/run/ceralive/software-update.stdout",
 			"--property=StandardError=append:/run/ceralive/software-update.stderr",
 			"--",
@@ -1086,31 +1092,29 @@ StandardError=append:/run/ceralive/software-update.stderr
 	});
 });
 
-describe("deriveAptProgress() — arbitrary output chunk boundaries", () => {
+describe("deriveUpdateProgress() — arbitrary output chunk boundaries", () => {
 	it("recognizes progress tokens split across several durable-file reads", () => {
-		let status = {
-			total: 0,
-			downloading: 0,
-			unpacking: 0,
-			setting_up: 0,
-		};
+		const seen: unknown[] = [];
 		let output = "";
+		// apt-get's own lines, each token split across two reads.
 		for (const chunk of [
-			"2 upgraded, 0 newly installed, 0 to remove.\nGet:",
-			"1 package\nUnpack",
-			"ing package-a\nSet",
-			"ting up package-a\n",
+			"The following packages will be upgraded:\n  package-a package-b\n2 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\nGet:",
+			"1 https://apt.invalid trixie/main arm64 package-a arm64 2 [4 kB]\nUnpack",
+			"ing package-a (2) over (1) ...\nSet",
+			"ting up package-a (2) ...\n",
 		]) {
 			output += chunk;
-			status = deriveAptProgress(status, output);
+			seen.push(deriveUpdateProgress(output));
 		}
 
-		expect(status).toEqual({
-			total: 2,
-			downloading: 2,
-			unpacking: 1,
-			setting_up: 1,
-		});
+		// A split token earns nothing until its line is complete; then the
+		// download's phase, then one of the plan's four steps done.
+		expect(seen).toEqual([
+			PHASE_MARKERS.preparing,
+			PHASE_MARKERS.downloading,
+			PHASE_MARKERS.installing,
+			{ ...PHASE_MARKERS.installing, percent: 25 },
+		]);
 	});
 });
 

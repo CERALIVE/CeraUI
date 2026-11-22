@@ -190,10 +190,16 @@ percentage for the install. Only a terminal `result: 0` shows 100%.
 
 An install the tab showed that ends with no result the device reported (CeraUI
 restarted under it) holds its phase without a number while the tab asks
-`system.updateOutcome` with the packages the device last offered; it announces
-**Update Successful** only when the device reads those versions as installed,
-**Update Failed** for the unit's own failed exit below them, and otherwise
-**Outcome not confirmed** (`Layout.updating-overlay.test.ts`).
+`system.updateOutcome` with the vector the install's own frames carried
+(`updating.targets`, latched from the first frame of the run that carries one,
+never the mutable offer). It announces **Successfully Updated** with "The
+device now has this update's versions installed. CeraUI did not see the update
+finish." only when the device reads that vector as installed, and otherwise
+**Outcome not confirmed**; the fixed-name unit's failed exit is shown only as
+an unattributed hint under it, never **Update Failed**. Only the answer to the
+latest question counts: every running frame and every new question makes
+earlier answers stale. A frame naming another vector is a new run: the hold
+and the live-number guard start over (`Layout.updating-overlay.test.ts`).
 
 ### A terminal install releases the takeover [EXISTS]
 

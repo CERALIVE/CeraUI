@@ -2480,6 +2480,8 @@
 	"updatingOverlay.description": "Podrás utilizarlo una vez que se complete el proceso de actualización",
 	"updatingOverlay.downloading": "Descargando",
 	"updatingOverlay.preparingOrDownloading": "Preparando o descargando paquetes",
+	"updatingOverlay.versionsInstalledDescription": "El dispositivo ya tiene instaladas las versiones de esta actualización. CeraUI no vio terminar la actualización.",
+	"updatingOverlay.unitExitHint": "El servicio de actualización se detuvo por última vez con el código de salida {code}. Puede que haya sido otra actualización.",
 	"updatingOverlay.failedDescription": "No se pudo completar la actualización. El dispositivo no se modificó.",
 	"updatingOverlay.failedMessage": "Error en la Actualización",
 	"updatingOverlay.installing": "Instalando",

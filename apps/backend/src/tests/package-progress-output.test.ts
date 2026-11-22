@@ -52,8 +52,20 @@ const installingAt = (percent?: number) => ({
 	...(percent === undefined ? {} : { percent }),
 });
 
-const completeLines = (text: string) =>
-	text.slice(0, text.lastIndexOf("\n") + 1);
+// What each line of `dpkgLog` proves once it is complete, known independently
+// of the parser: the plan, the first archive's start, then dpkg's two steps.
+const MILESTONES = [
+	preparing, // Reading package lists...
+	preparing, // The following packages will be upgraded:
+	preparing, //   cerastream
+	preparing, // 1 upgraded, ...
+	downloadingAt(), // Get:1 ...
+	downloadingAt(), // Fetched ...
+	downloadingAt(), // (Reading database ...)
+	downloadingAt(), // Preparing to unpack ...
+	installingAt(), // Unpacking cerastream ...: no step done yet
+	installingAt(50), // Setting up cerastream ...: one of two done
+];
 
 describe("deriveUpdateProgress()", () => {
 	test("the transcript's own counts give the number for the phase it is in", () => {
@@ -67,10 +79,18 @@ describe("deriveUpdateProgress()", () => {
 	});
 
 	test("a line earns nothing until it is complete, at every byte split", () => {
+		const ends: number[] = [];
+		for (
+			let at = dpkgLog.indexOf("\n");
+			at >= 0;
+			at = dpkgLog.indexOf("\n", at + 1)
+		)
+			ends.push(at + 1);
+		expect(ends).toHaveLength(MILESTONES.length);
 		for (let end = 0; end <= dpkgLog.length; end++) {
-			const prefix = dpkgLog.slice(0, end);
-			expect(deriveUpdateProgress(prefix)).toEqual(
-				deriveUpdateProgress(completeLines(prefix)),
+			const complete = ends.filter((lineEnd) => lineEnd <= end).length;
+			expect(deriveUpdateProgress(dpkgLog.slice(0, end))).toEqual(
+				complete === 0 ? preparing : MILESTONES[complete - 1],
 			);
 		}
 	});

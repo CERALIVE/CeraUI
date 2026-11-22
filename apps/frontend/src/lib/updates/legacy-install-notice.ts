@@ -60,18 +60,31 @@ export function announceLegacyInstallOutcome(
 
 const ENDED = { total: 0, downloading: 0, unpacking: 0, setting_up: 0 };
 
-/**
- * An install this tab showed ended without its result reaching the tab: what
- * the device reported, or what it read back (`success` only when the offered
- * versions are installed); anything else is not confirmed.
- */
-export function announceMissedInstallOutcome(
-	state: UpdateState | UpdateOutcome | undefined,
-): void {
-	if (state?.kind === "success")
+/** An install this tab showed ended without its result reaching the tab, but the device reported it. */
+export function announceMissedInstallOutcome(state: UpdateState): void {
+	if (state.kind === "success")
 		announceLegacyInstallOutcome({ ...ENDED, result: 0 });
-	else if (state?.kind === "failed")
+	else if (state.kind === "failed")
 		announceLegacyInstallOutcome({ ...ENDED, result: state.reason ?? "" });
-	else if (state?.kind !== "update_preflight_failed")
-		toast.warning(m["settings.updates.unconfirmed.title"]());
+}
+
+/**
+ * What the device read back for an install whose result never reached the
+ * tab: `success` means the install's own versions are there, not that the tab
+ * saw it finish. Anything else is not confirmed; the fixed-name unit's exit is
+ * only a hint, since it may be another run's.
+ */
+export function announceReadOutcome(outcome: UpdateOutcome | undefined): void {
+	if (outcome?.kind === "success") {
+		toast.success(m["updatingOverlay.successMessage"](), {
+			description: m["updatingOverlay.versionsInstalledDescription"](),
+		});
+		return;
+	}
+	const title = m["settings.updates.unconfirmed.title"]();
+	if (outcome?.kind === "unknown" && outcome.exit !== undefined)
+		toast.warning(title, {
+			description: m["updatingOverlay.unitExitHint"]({ code: outcome.exit }),
+		});
+	else toast.warning(title);
 }

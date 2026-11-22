@@ -8,7 +8,7 @@
 	(at your option) any later version.
 */
 
-import type { UpdateOutcome, UpdatePackage } from "@ceraui/rpc/schemas";
+import type { UpdateOutcome, UpdateTarget } from "@ceraui/rpc/schemas";
 import type { spawnWithTimeout } from "../../helpers/spawn-policy.ts";
 import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
 import { APT_SIMULATION_VERSION_RE } from "./apt-simulation-row.ts";
@@ -20,29 +20,48 @@ export type UpdateOutcomeDeps = {
 	/** This process reports the unit's end itself: it observes it, or its recovery is still to look. */
 	readonly observed: () => boolean;
 	readonly run: typeof spawnWithTimeout;
+	readonly now: () => number;
 };
 
-type Target = { readonly name: string; readonly version: string };
-
 const PROBE_TIMEOUT_MS = 5_000;
-const UNKNOWN: UpdateOutcome = { kind: "unknown" };
+// One package query plus one comparison per installed row, ample for the 512
+// targets the RPC accepts; past it nothing is proven.
+export const UPDATE_OUTCOME_DEADLINE_MS = 20_000;
+const FORMAT = `-f=${["Package", "Architecture", "db:Status-Abbrev", "Version"].map((field) => `\${${field}}`).join("\\t")}\\n`;
+// db:Status-Abbrev is want (unknown/install/hold/remove/purge), state, error flag.
+const ROW =
+	/^([a-z0-9][a-z0-9+.-]*)\t([a-z0-9][a-z0-9-]*)\t([uihrp][ncHUFWti][ R])\t([0-9][A-Za-z0-9.+:~-]*)?$/;
+// Installed and configured with no reinstall required; a hold changes no state.
+const CONFIGURED = /^[ih]i $/;
+// Not-installed or config-files only: no instance of the package is there.
+const NO_INSTANCE = /^.[nc]/;
+
+type Row = {
+	readonly name: string;
+	readonly arch: string;
+	readonly status: string;
+	readonly version: string;
+};
+
+const answers = (target: UpdateTarget) => {
+	const [name, arch] = target.name.split(":");
+	return (row: Row) =>
+		row.name === name && (arch === undefined || row.arch === arch);
+};
 
 /**
- * What an install a tab watched did, asked once CeraUI restarted under it:
- * success iff every package the device offered to install is installed at
- * its version or later (dpkg's own comparison); otherwise the unit's non-zero
- * exit, read once, as a hint; otherwise unknown. Read-only: nothing here
- * writes, claims, stops or retires anything.
+ * What the install a tab watched did, asked once CeraUI restarted under it.
+ * `targets` is the vector that install was launched with, as its own running
+ * frames carried it. Success only when one complete read of dpkg's database
+ * shows every target installed, configured and at its version or later
+ * (dpkg's order). Otherwise unknown; the fixed-name unit's non-zero exit, read
+ * after the packages, is attached only as a hint, because it may be another
+ * run's. Read-only: nothing here writes, claims, stops or retires anything.
  */
 export async function readUpdateOutcome(
-	packages: readonly UpdatePackage[],
+	targets: readonly UpdateTarget[],
 	deps: UpdateOutcomeDeps,
 ): Promise<UpdateOutcome> {
-	const targets = packages.flatMap((pkg): Target[] =>
-		pkg.actionable === true && pkg.version !== undefined
-			? [{ name: pkg.name, version: pkg.version }]
-			: [],
-	);
 	if (
 		targets.some(
 			({ name, version }) =>
@@ -50,57 +69,76 @@ export async function readUpdateOutcome(
 				!APT_SIMULATION_VERSION_RE.test(version),
 		)
 	)
-		return UNKNOWN;
-	try {
-		const unit = await deps.inspect();
-		// Its end reaches the tab as the observer's own frame.
-		if (unit.kind !== "absent" && deps.observed()) return { kind: "running" };
-		const reached = await reachedTargets(targets, deps.run);
-		if (reached) return { kind: "success" };
-		if (reached === false && unit.kind === "finished" && unit.exitCode !== 0)
-			return {
-				kind: "failed",
-				reason: `apt-get exited with code ${unit.exitCode}`,
-			};
-	} catch {
-		// A probe that gives no answer proves nothing either way.
-	}
-	return UNKNOWN;
+		return { kind: "unknown" };
+	const attained = await targetsAttained(targets, deps);
+	const unit = await deps.inspect().catch(() => undefined);
+	// Its end reaches the tab as the observer's own frame; a failed probe
+	// cannot tell whether one is still to come.
+	if (deps.observed() && unit?.kind !== "absent")
+		return unit ? { kind: "running" } : { kind: "unknown" };
+	if (attained) return { kind: "success" };
+	return unit?.kind === "finished" && unit.exitCode !== 0
+		? { kind: "unknown", exit: unit.exitCode }
+		: { kind: "unknown" };
 }
 
-/** null: no target is known, or dpkg gave no answer. */
-async function reachedTargets(
-	targets: readonly Target[],
-	run: UpdateOutcomeDeps["run"],
-): Promise<boolean | null> {
-	if (targets.length === 0) return null;
-	const query = await run(
-		[
-			"dpkg-query",
-			"-W",
-			"-f=$" + "{Package}\\t$" + "{db:Status-Abbrev}\\t$" + "{Version}\\n",
-			"--",
-			...targets.map(({ name }) => name),
-		],
-		{ timeoutMs: PROBE_TIMEOUT_MS },
-	);
-	// 1: a name is not installed at all; anything else is no answer.
-	if (query.exitCode !== 0 && query.exitCode !== 1) return null;
-	const installed = new Map<string, string>();
-	for (const line of query.stdout.split("\n")) {
-		const [name, status, version] = line.split("\t");
-		if (name && version && status?.startsWith("ii"))
-			installed.set(name, version);
+async function targetsAttained(
+	targets: readonly UpdateTarget[],
+	{ run, now }: UpdateOutcomeDeps,
+): Promise<boolean> {
+	if (targets.length === 0) return false;
+	const deadline = now() + UPDATE_OUTCOME_DEADLINE_MS;
+	// A timeout, a throw or no time left is no answer.
+	const ask = (argv: string[]) => {
+		const left = deadline - now();
+		return left > 0
+			? run(argv, { timeoutMs: Math.min(PROBE_TIMEOUT_MS, left) }).catch(
+					() => null,
+				)
+			: null;
+	};
+	const query = await ask([
+		"dpkg-query",
+		"-W",
+		FORMAT,
+		"--",
+		...targets.map(({ name }) => name),
+	]);
+	// Exit 1 is a name dpkg does not know: no complete read either.
+	if (query?.exitCode !== 0 || !query.stdout.endsWith("\n")) return false;
+	const rows: Row[] = [];
+	for (const line of query.stdout.slice(0, -1).split("\n")) {
+		const [, name = "", arch = "", status = "", version = ""] =
+			ROW.exec(line) ?? [];
+		if (
+			!status ||
+			rows.some((row) => row.name === name && row.arch === arch) ||
+			!targets.some((target) =>
+				answers(target)({ name, arch, status, version }),
+			)
+		)
+			return false;
+		rows.push({ name, arch, status, version });
 	}
 	for (const target of targets) {
-		const version = installed.get(target.name);
-		if (version === undefined) return false;
-		const compared = await run(
-			["dpkg", "--compare-versions", version, "ge", target.version],
-			{ timeoutMs: PROBE_TIMEOUT_MS },
-		);
-		if (compared.exitCode === 1) return false;
-		if (compared.exitCode !== 0) return null;
+		const present = rows
+			.filter(answers(target))
+			.filter((row) => !NO_INSTANCE.test(row.status));
+		if (
+			present.length === 0 ||
+			present.some((row) => !CONFIGURED.test(row.status))
+		)
+			return false;
+		for (const row of present) {
+			const compared = await ask([
+				"dpkg",
+				"--compare-versions",
+				row.version,
+				"ge",
+				target.version,
+			]);
+			if (compared?.exitCode !== 0) return false;
+		}
 	}
 	return true;
 }

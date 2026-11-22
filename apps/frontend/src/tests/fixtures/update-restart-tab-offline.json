@@ -10,19 +10,94 @@
 				"update_state": {
 					"kind": "available",
 					"identity": {
-						"version": "5002667e93d7",
-						"packages": ["cerastream"]
+						"version": "a986d7f374a0",
+						"packages": [
+							"p1",
+							"p10",
+							"p2",
+							"p3",
+							"p4",
+							"p5",
+							"p6",
+							"p7",
+							"p8",
+							"p9"
+						]
 					},
-					"package_count": 1,
-					"download_size": "4 kB",
+					"package_count": 10,
 					"packages": [
 						{
-							"name": "cerastream",
+							"name": "p1",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p10",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p2",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p3",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p4",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p5",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p6",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p7",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p8",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p9",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
 							"layer": "app",
 							"actionable": true
 						}
 					],
-					"actionable_count": 1,
+					"actionable_count": 10,
 					"reachability": {
 						"ipv4": "ok",
 						"ipv6": "ok",
@@ -38,11 +113,21 @@
 				"update_state": {
 					"kind": "available",
 					"identity": {
-						"version": "5002667e93d7",
-						"packages": ["cerastream"]
+						"version": "a986d7f374a0",
+						"packages": [
+							"p1",
+							"p10",
+							"p2",
+							"p3",
+							"p4",
+							"p5",
+							"p6",
+							"p7",
+							"p8",
+							"p9"
+						]
 					},
-					"package_count": 1,
-					"download_size": "4 kB",
+					"package_count": 10,
 					"reachability": {
 						"ipv4": "ok",
 						"ipv6": "ok",
@@ -50,12 +135,77 @@
 					},
 					"packages": [
 						{
-							"name": "cerastream",
+							"name": "p1",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p10",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p2",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p3",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p4",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p5",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p6",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p7",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p8",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p9",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
 							"layer": "app",
 							"actionable": true
 						}
 					],
-					"actionable_count": 1
+					"actionable_count": 10
 				}
 			}
 		},
@@ -66,11 +216,21 @@
 				"update_state": {
 					"kind": "available",
 					"identity": {
-						"version": "5002667e93d7",
-						"packages": ["cerastream"]
+						"version": "a986d7f374a0",
+						"packages": [
+							"p1",
+							"p10",
+							"p2",
+							"p3",
+							"p4",
+							"p5",
+							"p6",
+							"p7",
+							"p8",
+							"p9"
+						]
 					},
-					"package_count": 1,
-					"download_size": "4 kB",
+					"package_count": 10,
 					"reachability": {
 						"ipv4": "ok",
 						"ipv6": "ok",
@@ -78,12 +238,77 @@
 					},
 					"packages": [
 						{
-							"name": "cerastream",
+							"name": "p1",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p10",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p2",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p3",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p4",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p5",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p6",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p7",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p8",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p9",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
 							"layer": "app",
 							"actionable": true
 						}
 					],
-					"actionable_count": 1
+					"actionable_count": 10
 				}
 			}
 		},
@@ -97,19 +322,94 @@
 				"update_state": {
 					"kind": "available",
 					"identity": {
-						"version": "5002667e93d7",
-						"packages": ["cerastream"]
+						"version": "a986d7f374a0",
+						"packages": [
+							"p1",
+							"p10",
+							"p2",
+							"p3",
+							"p4",
+							"p5",
+							"p6",
+							"p7",
+							"p8",
+							"p9"
+						]
 					},
-					"package_count": 1,
-					"download_size": "4 kB",
+					"package_count": 10,
 					"packages": [
 						{
-							"name": "cerastream",
+							"name": "p1",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p10",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p2",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p3",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p4",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p5",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p6",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p7",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p8",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p9",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
 							"layer": "app",
 							"actionable": true
 						}
 					],
-					"actionable_count": 1
+					"actionable_count": 10
 				}
 			}
 		},
@@ -164,11 +464,67 @@
 		{
 			"at": "push",
 			"status": {
+				"update_state": {
+					"kind": "downloading",
+					"progress": {
+						"downloading": 0,
+						"unpacking": 0,
+						"setting_up": 0,
+						"total": 0
+					}
+				}
+			}
+		},
+		{
+			"at": "push",
+			"status": {
 				"updating": {
 					"total": 1,
 					"downloading": 1,
 					"unpacking": 0,
-					"setting_up": 0
+					"setting_up": 0,
+					"targets": [
+						{
+							"name": "p1",
+							"version": "2"
+						},
+						{
+							"name": "p10",
+							"version": "2"
+						},
+						{
+							"name": "p2",
+							"version": "2"
+						},
+						{
+							"name": "p3",
+							"version": "2"
+						},
+						{
+							"name": "p4",
+							"version": "2"
+						},
+						{
+							"name": "p5",
+							"version": "2"
+						},
+						{
+							"name": "p6",
+							"version": "2"
+						},
+						{
+							"name": "p7",
+							"version": "2"
+						},
+						{
+							"name": "p8",
+							"version": "2"
+						},
+						{
+							"name": "p9",
+							"version": "2"
+						}
+					]
 				},
 				"update_state": {
 					"kind": "downloading",
@@ -176,7 +532,49 @@
 						"total": 1,
 						"downloading": 1,
 						"unpacking": 0,
-						"setting_up": 0
+						"setting_up": 0,
+						"targets": [
+							{
+								"name": "p1",
+								"version": "2"
+							},
+							{
+								"name": "p10",
+								"version": "2"
+							},
+							{
+								"name": "p2",
+								"version": "2"
+							},
+							{
+								"name": "p3",
+								"version": "2"
+							},
+							{
+								"name": "p4",
+								"version": "2"
+							},
+							{
+								"name": "p5",
+								"version": "2"
+							},
+							{
+								"name": "p6",
+								"version": "2"
+							},
+							{
+								"name": "p7",
+								"version": "2"
+							},
+							{
+								"name": "p8",
+								"version": "2"
+							},
+							{
+								"name": "p9",
+								"version": "2"
+							}
+						]
 					}
 				}
 			}
@@ -193,7 +591,49 @@
 					"downloading": 0,
 					"unpacking": 0,
 					"setting_up": 1,
-					"percent": 40
+					"percent": 40,
+					"targets": [
+						{
+							"name": "p1",
+							"version": "2"
+						},
+						{
+							"name": "p10",
+							"version": "2"
+						},
+						{
+							"name": "p2",
+							"version": "2"
+						},
+						{
+							"name": "p3",
+							"version": "2"
+						},
+						{
+							"name": "p4",
+							"version": "2"
+						},
+						{
+							"name": "p5",
+							"version": "2"
+						},
+						{
+							"name": "p6",
+							"version": "2"
+						},
+						{
+							"name": "p7",
+							"version": "2"
+						},
+						{
+							"name": "p8",
+							"version": "2"
+						},
+						{
+							"name": "p9",
+							"version": "2"
+						}
+					]
 				},
 				"update_state": {
 					"kind": "installing",
@@ -202,7 +642,49 @@
 						"downloading": 0,
 						"unpacking": 0,
 						"setting_up": 1,
-						"percent": 40
+						"percent": 40,
+						"targets": [
+							{
+								"name": "p1",
+								"version": "2"
+							},
+							{
+								"name": "p10",
+								"version": "2"
+							},
+							{
+								"name": "p2",
+								"version": "2"
+							},
+							{
+								"name": "p3",
+								"version": "2"
+							},
+							{
+								"name": "p4",
+								"version": "2"
+							},
+							{
+								"name": "p5",
+								"version": "2"
+							},
+							{
+								"name": "p6",
+								"version": "2"
+							},
+							{
+								"name": "p7",
+								"version": "2"
+							},
+							{
+								"name": "p8",
+								"version": "2"
+							},
+							{
+								"name": "p9",
+								"version": "2"
+							}
+						]
 					}
 				}
 			}
@@ -245,6 +727,50 @@
 		},
 		{
 			"at": "asked",
+			"request": {
+				"targets": [
+					{
+						"name": "p1",
+						"version": "2"
+					},
+					{
+						"name": "p10",
+						"version": "2"
+					},
+					{
+						"name": "p2",
+						"version": "2"
+					},
+					{
+						"name": "p3",
+						"version": "2"
+					},
+					{
+						"name": "p4",
+						"version": "2"
+					},
+					{
+						"name": "p5",
+						"version": "2"
+					},
+					{
+						"name": "p6",
+						"version": "2"
+					},
+					{
+						"name": "p7",
+						"version": "2"
+					},
+					{
+						"name": "p8",
+						"version": "2"
+					},
+					{
+						"name": "p9",
+						"version": "2"
+					}
+				]
+			},
 			"outcome": {
 				"kind": "running"
 			}
@@ -379,12 +905,100 @@
 		},
 		{
 			"at": "asked",
+			"request": {
+				"targets": [
+					{
+						"name": "p1",
+						"version": "2"
+					},
+					{
+						"name": "p10",
+						"version": "2"
+					},
+					{
+						"name": "p2",
+						"version": "2"
+					},
+					{
+						"name": "p3",
+						"version": "2"
+					},
+					{
+						"name": "p4",
+						"version": "2"
+					},
+					{
+						"name": "p5",
+						"version": "2"
+					},
+					{
+						"name": "p6",
+						"version": "2"
+					},
+					{
+						"name": "p7",
+						"version": "2"
+					},
+					{
+						"name": "p8",
+						"version": "2"
+					},
+					{
+						"name": "p9",
+						"version": "2"
+					}
+				]
+			},
 			"outcome": {
 				"kind": "success"
 			}
 		},
 		{
 			"at": "asked",
+			"request": {
+				"targets": [
+					{
+						"name": "p1",
+						"version": "2"
+					},
+					{
+						"name": "p10",
+						"version": "2"
+					},
+					{
+						"name": "p2",
+						"version": "2"
+					},
+					{
+						"name": "p3",
+						"version": "2"
+					},
+					{
+						"name": "p4",
+						"version": "2"
+					},
+					{
+						"name": "p5",
+						"version": "2"
+					},
+					{
+						"name": "p6",
+						"version": "2"
+					},
+					{
+						"name": "p7",
+						"version": "2"
+					},
+					{
+						"name": "p8",
+						"version": "2"
+					},
+					{
+						"name": "p9",
+						"version": "2"
+					}
+				]
+			},
 			"outcome": {
 				"kind": "unknown"
 			}

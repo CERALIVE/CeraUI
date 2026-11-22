@@ -2432,6 +2432,8 @@
 	"updatingOverlay.description": "更新処理が完了すると使用できるようになります",
 	"updatingOverlay.downloading": "ダウンロード中",
 	"updatingOverlay.preparingOrDownloading": "パッケージを準備またはダウンロード中",
+	"updatingOverlay.versionsInstalledDescription": "このアップデートのバージョンがデバイスにインストールされています。CeraUI はアップデートの完了を確認していません。",
+	"updatingOverlay.unitExitHint": "アップデートサービスは最後に終了コード {code} で停止しました。別のアップデートだった可能性があります。",
 	"updatingOverlay.failedDescription": "更新を完了できませんでした。デバイスは変更されていません。",
 	"updatingOverlay.failedMessage": "更新に失敗しました",
 	"updatingOverlay.installing": "インストール中",

@@ -4,7 +4,8 @@
 // initial status (nothing about a surviving unit until recovery has looked),
 // and runs main's recovery when the test writes "recover". The "refused" role
 // is a boot whose update startup was refused, as main.ts marks it, so recovery
-// never looks at the unit. dpkg-query and dpkg are the test's, on PATH.
+// never looks at the unit. The device is capable (versioned pins) except in
+// the "legacy-first" role. dpkg-query and dpkg are the test's, on PATH.
 import { writeFile } from "node:fs/promises";
 import { loadConfig } from "../../modules/config.ts";
 import { setup } from "../../modules/setup.ts";
@@ -15,6 +16,7 @@ import * as updates from "../../modules/system/software-updates.ts";
 import { setSshStatusDepsForTest } from "../../modules/system/ssh.ts";
 import { setStreamLivenessSourceForTest } from "../../modules/system/stream-liveness-source.ts";
 import { setStreamReconciliationCompletedForTest } from "../../modules/system/stream-reconciliation-latch.ts";
+import { setCeraliveSourcesFileForTest } from "../../modules/system/update-apt-channel.ts";
 import { setUpdateCapabilityPathForTest } from "../../modules/system/update-capabilities.ts";
 import { setUpdateSettingsFilePathForTest } from "../../modules/system/update-settings.ts";
 import {
@@ -47,7 +49,12 @@ await loadConfig();
 setup.apt_update_enabled = true;
 setStreamReconciliationCompletedForTest(true);
 setStreamLivenessSourceForTest(() => "idle");
-setUpdateCapabilityPathForTest(`${scratch}/absent-capabilities.json`);
+setUpdateCapabilityPathForTest(
+	role === "legacy-first"
+		? `${scratch}/absent-capabilities.json`
+		: `${scratch}/capabilities.json`,
+);
+setCeraliveSourcesFileForTest(`${scratch}/ceralive.sources`);
 setUpdateSettingsFilePathForTest(`${scratch}/settings.json`);
 setSshStatusDepsForTest({
 	systemctlIsActive: async () => ({ stdout: "inactive\n", stderr: "" }),
@@ -88,7 +95,8 @@ setDetachedAptServiceDepsForTest(
 	),
 );
 
-if (role === "first") await updates.runUpdateDiscoveryAndReport();
+if (role === "first" || role === "legacy-first")
+	await updates.runUpdateDiscoveryAndReport();
 if (role === "refused") markBootDegraded("update-orchestrator-maintenance");
 const server = Bun.serve<ServerSocketData>({
 	hostname: "127.0.0.1",

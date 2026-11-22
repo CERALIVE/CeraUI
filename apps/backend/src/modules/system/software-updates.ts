@@ -25,7 +25,11 @@ import {
 	type UpdatePreflightReason,
 } from "@ceraui/rpc";
 import { holdUpdateProgress } from "@ceraui/rpc/package-progress";
-import type { UpdateCapabilities, UpdateOutcome } from "@ceraui/rpc/schemas";
+import type {
+	UpdateCapabilities,
+	UpdateOutcome,
+	UpdateTarget,
+} from "@ceraui/rpc/schemas";
 import { invariant } from "../../helpers/invariant.ts";
 import { logger } from "../../helpers/logger.ts";
 import { run } from "../../helpers/run.ts";
@@ -1532,7 +1536,9 @@ type SoftwareUpdateProcessMonitor = {
 
 export function createSoftwareUpdateProcessMonitor(
 	prefetched = "",
+	targets?: readonly UpdateTarget[],
 ): SoftwareUpdateProcessMonitor {
+	const launched = targets ? { targets: [...targets] } : {};
 	let rebootAfterUpgrade = false;
 	let summaryParseLogged = false;
 	let aptLog = prefetched;
@@ -1563,12 +1569,12 @@ export function createSoftwareUpdateProcessMonitor(
 		if (!softUpdateStatus) return;
 		observeRebootPackages();
 		const previous = softUpdateStatus;
-		const next = holdUpdateProgress(
-			previous,
-			unreadable
+		const next = holdUpdateProgress(previous, {
+			...(unreadable
 				? withoutNumber(previous)
-				: deriveUpdateProgress(aptLog.slice(prefetched.length)),
-		);
+				: deriveUpdateProgress(aptLog.slice(prefetched.length))),
+			...launched,
+		});
 		if (next === previous) return;
 		softUpdateStatus = next;
 		broadcastMsg("status", { updating: next, update_state: getUpdateState() });
@@ -1773,15 +1779,15 @@ async function prepareSoftwareUpdate(
 			return;
 		}
 	}
+	// The one vector this run simulates, sizes, launches and publishes.
+	const admitted = capable ? actionableAllPackages : undefined;
 	lastAptReachability = aptReachabilityWire(reachability);
 	if (
 		reachability.verdict === "unreachable" ||
 		reachability.verdict === "captive_portal" ||
 		reachability.verdict === "probe_unavailable" ||
 		reachability.verdict === "credentials_invalid" ||
-		(capable
-			? actionableAllPackages.length === 0
-			: actionableAppPackages.length === 0)
+		(admitted ? admitted.length === 0 : actionableAppPackages.length === 0)
 	) {
 		const reason =
 			reachability.verdict === "captive_portal"
@@ -1804,13 +1810,13 @@ async function prepareSoftwareUpdate(
 		broadcastUpdateState();
 		return;
 	}
-	const args = capable
+	const args = admitted
 		? buildAptAllInstallArgs(
-				actionableAllPackages,
+				admitted,
 				installFamily(network.reachability.verdict),
 			)
 		: buildAptUpgradeArgs(actionableAppPackages, reachability.verdict);
-	if (capable) {
+	if (admitted) {
 		try {
 			const probe = await network.within(
 				(attempt) =>
@@ -1821,7 +1827,7 @@ async function prepareSoftwareUpdate(
 							"-o",
 							"Debug::NoLocking=1",
 							...buildAptAllInstallArgs(
-								actionableAllPackages,
+								admitted,
 								installFamily(attempt.verdict),
 							).filter((arg) => arg !== "-y" && arg !== "--no-download"),
 						],
@@ -1834,7 +1840,7 @@ async function prepareSoftwareUpdate(
 					exit: probe.exitCode,
 					detail: probe.stderr,
 				});
-			assertPinnedInstallSimulation(probe.stdout, actionableAllPackages);
+			assertPinnedInstallSimulation(probe.stdout, admitted);
 		} catch (error) {
 			if (!(error instanceof AptAllRefusalError)) throw error;
 			logAptAllRefusal(error);
@@ -1865,11 +1871,8 @@ async function prepareSoftwareUpdate(
 		await network.within(
 			(attempt) =>
 				preflightAptSpace(
-					capable && network.pinned
-						? buildAptAllInstallArgs(
-								actionableAllPackages,
-								installFamily(attempt.verdict),
-							)
+					admitted && network.pinned
+						? buildAptAllInstallArgs(admitted, installFamily(attempt.verdict))
 						: args,
 					pendingAwareAptSpaceDeps,
 				),
@@ -1900,7 +1903,10 @@ async function prepareSoftwareUpdate(
 	if (capable && network.pinned) {
 		// The transfer runs before the unit exists: name it.
 		if (softUpdateStatus) {
-			softUpdateStatus = { ...PHASE_MARKERS.downloading };
+			softUpdateStatus = {
+				...PHASE_MARKERS.downloading,
+				targets: [...(admitted ?? [])],
+			};
 			broadcastMsg("status", {
 				updating: softUpdateStatus,
 				update_state: getUpdateState(),
@@ -1934,11 +1940,11 @@ async function prepareSoftwareUpdate(
 	}
 	pendingPackageSuccess.assertEffectsAllowed();
 	notePlannedShutdown("software_update");
-	const monitor = createSoftwareUpdateProcessMonitor(prefetched);
+	const monitor = createSoftwareUpdateProcessMonitor(prefetched, admitted);
 	const finalFamily = installFamily(network.reachability.verdict);
 	const detachedArgs =
-		capable && network.pinned
-			? buildAptAllInstallArgs(actionableAllPackages, finalFamily)
+		admitted && network.pinned
+			? buildAptAllInstallArgs(admitted, finalFamily)
 			: args;
 	lastAptReachability = aptReachabilityWire(network.reachability);
 
@@ -1976,11 +1982,11 @@ export function getLastInstallUnitVerdict(): InstallUnitVerdict {
 
 /** What an install a tab watched did, read once CeraUI restarted under it. */
 export function readSoftwareUpdateOutcome(
-	packages: readonly UpdatePackage[],
+	targets: readonly UpdateTarget[],
 ): Promise<UpdateOutcome> {
 	if (!aptUpdatesEnabled() || shouldUseMocks())
 		return Promise.resolve({ kind: "unknown" });
-	return readUpdateOutcome(packages, {
+	return readUpdateOutcome(targets, {
 		inspect: () => defaultDetachedAptServiceDeps().inspect(),
 		// Recovery looks at the unit after startup unless startup refused it.
 		observed: () =>
@@ -1990,6 +1996,7 @@ export function readSoftwareUpdateOutcome(
 					"update-orchestrator-maintenance",
 				)),
 		run: spawnWithTimeout,
+		now: Date.now,
 	});
 }
 

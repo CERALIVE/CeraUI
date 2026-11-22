@@ -10,7 +10,7 @@ import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
 useSessionOwnerForFile();
 
 const realRun = transaction.runDetachedAptAll;
-const { t, install } = aptEntryHarness();
+const { install } = aptEntryHarness();
 const paths = softwareUpdateOutputPaths();
 const downloading = { total: 1, downloading: 1, unpacking: 0, setting_up: 0 };
 type Files = { stdout: string; stderr: string };
@@ -56,10 +56,11 @@ function unitDeps(
 	};
 }
 
-test("a pinned prefetch keeps the download phase when the unit starts", async () => {
+test("a pinned prefetch keeps the download phase when the unit starts, naming the vector the unit got", async () => {
 	await withDeviceType("real", async () => {
 		const { h, run } = await install([sample("eth0", "ethernet", 6)]);
 		await using _h = h;
+		let launched: readonly string[] = [];
 		const files: Files = { stdout: "", stderr: "" };
 		let state: "absent" | "running" | "finished" = "absent";
 		let firstDrain: unknown;
@@ -78,10 +79,29 @@ test("a pinned prefetch keeps the download phase when the unit starts", async ()
 			],
 		});
 		spyOn(transaction, "runDetachedAptAll").mockImplementation(
-			(args, verdict, handlers) => realRun(args, verdict, handlers, deps),
+			(args, verdict, handlers) => {
+				launched = args;
+				return realRun(args, verdict, handlers, deps);
+			},
 		);
 		await run();
 		await h.settled();
-		expect(firstDrain).toEqual(downloading);
+		// apt-get's own `name=version` operands, as the unit was started with them.
+		const targets = launched
+			.slice(launched.indexOf("install") + 1)
+			.map((pair) => ({
+				name: pair.slice(0, pair.indexOf("=")),
+				version: pair.slice(pair.indexOf("=") + 1),
+			}));
+		expect(targets.length).toBeGreaterThan(0);
+		expect(firstDrain).toEqual({ ...downloading, targets });
+		// From the admission on, every frame of this run names that same vector.
+		const updating = h.frames.map((frame) => frame.updating);
+		const admitted = updating.findIndex(
+			(u) => typeof u === "object" && u !== null && "targets" in u,
+		);
+		expect(admitted).toBeGreaterThan(0);
+		for (const u of updating.slice(admitted).filter(Boolean))
+			expect(u).toMatchObject({ targets });
 	});
 });

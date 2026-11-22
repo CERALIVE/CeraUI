@@ -800,9 +800,9 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 	{
 		id: "softwareUpdates.outcomeVersions",
 		file: "modules/system/software-update-outcome.ts",
-		symbol: "reachedTargets",
+		symbol: "targetsAttained",
 		command:
-			"[dpkg-query, -W, -f=<Package Status-Abbrev Version>, --, ...packages] / [dpkg, --compare-versions, installed, ge, target]",
+			"[dpkg-query, -W, -f=<Package Architecture Status-Abbrev Version>, --, ...targets] / [dpkg, --compare-versions, installed, ge, target]",
 		class: "bounded-probe",
 		contract: {
 			timed: true,
@@ -813,7 +813,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		},
 		status: "enforced",
 		mechanism:
-			"spawnWithTimeout bounds each read-only package and version read; names and versions are validated argv elements after --, and any non-answer is an unknown outcome",
+			"spawnWithTimeout bounds each read-only package and version read inside one whole-request deadline; names and versions are validated argv elements after --, and any non-answer is an unknown outcome",
 	},
 	{
 		id: "softwareUpdates.cleanupTransient",

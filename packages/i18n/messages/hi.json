@@ -2477,6 +2477,8 @@
 	"updatingOverlay.description": "अपडेट प्रक्रिया पूरी होने के बाद आप इसका उपयोग कर सकेंगे",
 	"updatingOverlay.downloading": "डाउनलोड हो रहा है",
 	"updatingOverlay.preparingOrDownloading": "पैकेज तैयार या डाउनलोड हो रहे हैं",
+	"updatingOverlay.versionsInstalledDescription": "डिवाइस पर अब इस अपडेट के संस्करण इंस्टॉल हैं। CeraUI ने अपडेट को पूरा होते नहीं देखा।",
+	"updatingOverlay.unitExitHint": "अपडेट सेवा पिछली बार निकास कोड {code} के साथ रुकी थी। हो सकता है वह कोई दूसरा अपडेट रहा हो।",
 	"updatingOverlay.failedDescription": "अपडेट पूरा नहीं हो सका। डिवाइस में कोई बदलाव नहीं हुआ।",
 	"updatingOverlay.failedMessage": "अपडेट विफल रहा",
 	"updatingOverlay.installing": "इंस्टॉल हो रहा है",

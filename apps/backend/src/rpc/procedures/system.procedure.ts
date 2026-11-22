@@ -240,7 +240,7 @@ export const startUpdateProcedure = authedProcedure
 export const updateOutcomeProcedure = authedProcedure
 	.input(updateOutcomeInputSchema)
 	.output(updateOutcomeSchema)
-	.handler(({ input }) => readSoftwareUpdateOutcome(input.packages));
+	.handler(({ input }) => readSoftwareUpdateOutcome(input.targets));
 
 /**
  * Both actions bypass idle. `checkUpdatesNow` has no stream check;
