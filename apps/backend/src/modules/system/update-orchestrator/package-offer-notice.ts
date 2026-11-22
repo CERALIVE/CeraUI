@@ -1,22 +1,20 @@
 /*
- * The orchestrator's package notice, `update:updates-available:<id>` ("Updates
- * are available. Review them in Software Updates."), has two separate paths.
+ * Withdrawal of the orchestrator's package notice, `update:updates-available:<id>`
+ * ("Updates are available. Review them in Software Updates."), on capable images.
  *
- * Announce stays main's: runtime computes main's display id, and notifyUpdate
- * dedupes, dismisses and shows it unchanged. The one exception is legacy
- * images, whose display id names packages without versions: when an actionable
- * package's candidate is newer than the one its display set was last announced
- * for, `packageNoticeId` gives the notice a distinct id. An unknown, equal or
- * lower candidate keeps the id the display set has, so a failed read, a
- * restart or an upgrade from main never mints a second copy.
+ * Announcing stays main's: runtime computes main's id and notifyUpdate dedupes,
+ * dismisses and shows it unchanged. A capable id is main's `name=version` display
+ * id, so every copy of it, from any backend before or after a restart, stands for
+ * the same versions. Legacy ids name packages without versions, so no backend can
+ * tell which release a copy shows; legacy keeps main's behavior and is never
+ * withdrawn here.
  *
- * Withdrawal is additive and strict. After main's cycle, a scheduled check that
- * main ran to completion may remove an earlier notice only when this process
- * recorded the exact instances that notice was announced for, the check lists
- * none of them, and one dpkg snapshot shows every one installed, configured
- * and not held at or above its candidate. The removal reaches only the
- * sessions authenticated before the check began. Startup, login and an
- * install's exit never remove anything here.
+ * After main's cycle, a capable scheduled check that main ran to completion may
+ * remove an earlier notice only when this backend recorded the exact instances it
+ * was announced for, the check lists none of them, and one dpkg snapshot shows
+ * every one installed, configured and not held at or above its candidate. The
+ * removal reaches only the sessions authenticated before the check began.
+ * Startup, login and an install's exit never remove anything here.
  */
 import type { UpdatePackage } from "@ceraui/rpc";
 import { z } from "zod";
@@ -42,41 +40,25 @@ import { parseAuthorityJson } from "./strict-authority-json.ts";
 
 const RECORD_FILE = "scheduled_package_notices.json";
 const RECORD_LIMIT = STORED_STATE_LIMITS.agent;
-// Oldest entries go first past this; a dropped entry only leaves its notice as main would.
-const ENTRY_LIMIT = 64;
-const COMPARE_TIMEOUT_MS = 5_000;
+// Oldest receipts go first past this; a dropped receipt only leaves its notice as main would.
+const RECEIPT_LIMIT = 64;
 
-const nameSchema = z.string().regex(APT_PACKAGE_NAME_RE);
-const versionSchema = z.string().regex(APT_SIMULATION_VERSION_RE);
-const idSchema = z.string().min(1).max(8192);
 const recordSchema = z
 	.object({
 		version: z.literal(1),
-		// Legacy: the id each display set was last announced under, and its candidates.
-		displays: z
-			.array(
-				z
-					.object({
-						display: idSchema,
-						id: idSchema,
-						versions: z.record(nameSchema, versionSchema),
-					})
-					.strict(),
-			)
-			.max(ENTRY_LIMIT),
 		// Each announced id and the exact instances it stands for; null when one showing had none.
 		notices: z
 			.array(
 				z
 					.object({
-						id: idSchema,
+						id: z.string().min(1).max(8192),
 						targets: z
 							.array(
 								z
 									.object({
-										name: nameSchema,
+										name: z.string().regex(APT_PACKAGE_NAME_RE),
 										arch: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
-										version: versionSchema,
+										version: z.string().regex(APT_SIMULATION_VERSION_RE),
 									})
 									.strict(),
 							)
@@ -85,25 +67,22 @@ const recordSchema = z
 					})
 					.strict(),
 			)
-			.max(ENTRY_LIMIT),
+			.max(RECEIPT_LIMIT),
 	})
 	.strict();
 type NoticeRecord = z.infer<typeof recordSchema>;
-type DisplayEntry = NoticeRecord["displays"][number];
 
 type Store = {
 	readonly path: string;
-	readonly write: (path: string, text: string) => void;
 	readonly run: typeof spawnWithTimeout;
 };
 
 export type ScheduledPackageNoticeOptions = {
 	readonly path?: string;
-	readonly write?: (path: string, text: string) => void;
 	readonly run?: typeof spawnWithTimeout;
 };
 
-const empty = (): NoticeRecord => ({ version: 1, displays: [], notices: [] });
+const empty = (): NoticeRecord => ({ version: 1, notices: [] });
 // Inert until startup opts in, so a process that never initializes writes and runs nothing.
 let store: Store | undefined;
 let record: NoticeRecord = empty();
@@ -115,13 +94,12 @@ const bare = (name: string) => name.split(":")[0] ?? name;
 const sameInstance = (a: OfferedPackage, b: OfferedPackage) =>
 	a.name === b.name && a.arch === b.arch && a.version === b.version;
 
-/** Loads the record for this process; it announces, removes and runs nothing. */
+/** Loads the receipts for this process; it announces, removes and runs nothing. */
 export function initScheduledPackageNotice(
 	options: ScheduledPackageNoticeOptions = {},
 ): void {
 	store = {
 		path: options.path ?? RECORD_FILE,
-		write: options.write ?? writeFileAtomicSync,
 		run: options.run ?? spawnWithTimeout,
 	};
 	issued.clear();
@@ -137,114 +115,27 @@ export function initScheduledPackageNotice(
 	}
 }
 
-function commit(next: NoticeRecord): boolean {
+function commit(notices: NoticeRecord["notices"]): boolean {
 	if (store === undefined) return false;
-	const bounded: NoticeRecord = {
+	const next: NoticeRecord = {
 		version: 1,
-		displays: next.displays.slice(-ENTRY_LIMIT),
-		notices: next.notices.slice(-ENTRY_LIMIT),
+		notices: notices.slice(-RECEIPT_LIMIT),
 	};
-	let text = JSON.stringify(bounded);
-	while (
-		Buffer.byteLength(text) > RECORD_LIMIT &&
-		bounded.displays.length + bounded.notices.length > 0
-	) {
-		if (bounded.notices.length >= bounded.displays.length)
-			bounded.notices.shift();
-		else bounded.displays.shift();
-		text = JSON.stringify(bounded);
-	}
-	if (!recordSchema.safeParse(bounded).success) {
-		logger.warn("Scheduled package notice record unchanged: invalid entry");
-		return false;
+	let text = JSON.stringify(next);
+	while (Buffer.byteLength(text) > RECORD_LIMIT && next.notices.length > 0) {
+		next.notices.shift();
+		text = JSON.stringify(next);
 	}
 	try {
-		store.write(store.path, text);
+		writeFileAtomicSync(store.path, text);
 	} catch (error) {
 		logger.warn("Scheduled package notice record unchanged: not persisted", {
 			error: error instanceof Error ? error.message : String(error),
 		});
 		return false;
 	}
-	record = bounded;
+	record = next;
 	return true;
-}
-
-// Main's display id with these candidates in place of `unknown`, in main's order.
-function versionedId(display: string, versions: Record<string, string>) {
-	return display
-		.split(",")
-		.map((item) => {
-			const name = item.slice(0, item.lastIndexOf("="));
-			const version = versions[name];
-			return version === undefined ? item : `${name}=${version}`;
-		})
-		.sort()
-		.join(",");
-}
-
-async function someNewer(
-	offer: readonly OfferedPackage[],
-	carried: Readonly<Record<string, string>>,
-): Promise<boolean> {
-	for (const { name, version } of offer) {
-		const before = carried[name];
-		if (before === undefined || before === version || store === undefined)
-			continue;
-		const compared = await store
-			.run(["dpkg", "--compare-versions", version, "gt", before], {
-				timeoutMs: COMPARE_TIMEOUT_MS,
-			})
-			.catch(() => null);
-		if (compared?.exitCode === 0) return true;
-	}
-	return false;
-}
-
-function rememberDisplay(entry: DisplayEntry): void {
-	commit({
-		...record,
-		displays: [
-			...record.displays.filter(({ display }) => display !== entry.display),
-			entry,
-		],
-	});
-}
-
-/**
- * The id for main's display id `display`. Capable images, and any check
- * without this process's store, keep main's id. On legacy it is the id the
- * display set was last announced under (main's id the first time), replaced by
- * a new id only when an actionable candidate this check read exactly is newer
- * than the one that id carries. Never throws.
- */
-export async function packageNoticeId(
-	display: string,
-	evidence: ScheduledPackageEvidence | undefined,
-): Promise<string> {
-	if (store === undefined || evidence?.image !== "legacy") return display;
-	const prior = record.displays.find((entry) => entry.display === display);
-	const offer = evidence.offer;
-	if (offer === null) return prior?.id ?? display;
-	const versions = Object.fromEntries(
-		offer.map(({ name, version }) => [name, version]),
-	);
-	if (prior === undefined) {
-		rememberDisplay({ display, id: display, versions });
-		return display;
-	}
-	if (!(await someNewer(offer, prior.versions))) {
-		// A name the entry did not carry yet is adopted, never compared away.
-		if (offer.some(({ name }) => prior.versions[name] === undefined))
-			rememberDisplay({
-				...prior,
-				versions: { ...versions, ...prior.versions },
-			});
-		return prior.id;
-	}
-	const id = versionedId(display, versions);
-	rememberDisplay({ display, id, versions });
-	return id;
 }
 
 function exactOffer(
@@ -264,10 +155,10 @@ function exactOffer(
 
 /**
  * Records what main's announcement of `id` stands for, after it was made. A
- * showing with this check's exact offer is a receipt; a showing without one
- * makes the id unprovable. A copy main left as it was (still shown, or
- * dismissed) only gains this check's exact offer when it already has a
- * receipt. Changes no notice.
+ * showing with this capable check's exact offer is a receipt; a showing without
+ * one makes the id unprovable. A copy main left as it was (still shown, or
+ * dismissed) only gains this check's exact offer when it already has a receipt.
+ * Changes no notice.
  */
 export function recordPackageAnnouncement(
 	id: string,
@@ -286,13 +177,10 @@ export function recordPackageAnnouncement(
 		),
 	];
 	const write = (targets: OfferedPackage[] | null) =>
-		commit({
-			...record,
-			notices: [
-				...record.notices.filter((notice) => notice.id !== id),
-				{ id, targets },
-			],
-		});
+		commit([
+			...record.notices.filter((notice) => notice.id !== id),
+			{ id, targets },
+		]);
 	if (shown) {
 		const targets =
 			offer === null || prior?.targets === null
@@ -314,12 +202,12 @@ export function recordPackageAnnouncement(
 }
 
 /**
- * Removes each recorded notice this complete check proves installed: the
+ * Removes each recorded notice this complete capable check proves installed: the
  * check lists none of its instances, one dpkg snapshot shows every one
- * configured, not held, at or above its candidate, and its live copy (if any)
- * is the showing this process recorded. Only sessions in `audience` are told.
- * When a session authenticated during the check, the receipt is kept so a
- * later check proves it again for that session.
+ * configured, not held, at or above its candidate, and its live copy (if any) is
+ * the showing this process recorded. Only sessions in `audience` are told. When
+ * a session authenticated during the check, the receipt is kept so a later
+ * check proves it again for that session.
  */
 export async function withdrawProvenPackageNotices(
 	audience: ReadonlySet<AbortSignal>,
@@ -362,12 +250,11 @@ export async function withdrawProvenPackageNotices(
 	);
 	if (
 		!hasLateSessions &&
-		!commit({
-			...record,
-			notices: record.notices.filter(
+		!commit(
+			record.notices.filter(
 				({ id }) => !proven.some((notice) => notice.id === id),
 			),
-		})
+		)
 	)
 		logger.warn(
 			"Scheduled package notices withdrawn but still recorded: a later check sends the removal again",

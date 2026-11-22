@@ -96,7 +96,6 @@ import {
 	normalizeAptCommandFailure,
 } from "./apt-transport-result.ts";
 import {
-	type CeraliveVerdict,
 	completePlan,
 	firstPartyOffer,
 	legacyCeraliveOffer,
@@ -190,13 +189,13 @@ let aptAllMode = false;
 let discoveredPackages: UpdatePackage[] = [];
 
 /**
- * What the last discovery after a refresh saw, read for the scheduled package
- * notice's receipt and withdrawal only (update-orchestrator/
+ * What the last capable discovery after a refresh saw, read for the scheduled
+ * package notice's receipt and withdrawal only (update-orchestrator/
  * package-offer-notice.ts). Taken from what discovery already holds; it changes
- * nothing discovery decides, writes or broadcasts.
+ * nothing discovery decides, writes or broadcasts. Legacy discovery records
+ * none: its notice ids carry no versions, so no proof can name a copy.
  */
 export type ScheduledPackageEvidence = {
-	readonly image: "capable" | "legacy";
 	/** Each actionable row's exact instance, or null when one has none. */
 	readonly offer: readonly OfferedPackage[] | null;
 	/** Every name the plan lists (kept back included), or null when any part of this check is incomplete. */
@@ -240,7 +239,6 @@ function capableEvidence(
 		([, name]) => name ?? "",
 	);
 	return {
-		image: "capable",
 		offer: offer.length === actionable.length ? offer : null,
 		listed:
 			clean &&
@@ -1095,7 +1093,6 @@ async function getSoftwareUpdateSize(
 	// or a package a transaction left unfinished (its setup is still pending).
 	const planned = listedPackages(upgrade.stdout);
 	const untaken = untakenPackages(upgrade.stdout);
-	let verdict: CeraliveVerdict = "unknown";
 	if (
 		refresh !== undefined &&
 		isCleanAssumeNoDiscovery(upgradeResult) &&
@@ -1103,48 +1100,16 @@ async function getSoftwareUpdateSize(
 		planned?.length === res.upgradeCount &&
 		untaken !== null &&
 		!unfinishedAptWork(upgrade.stdout)
-	) {
-		verdict = await legacyCeraliveOffer(
-			actionableAppPackages,
-			[...planned, ...untaken],
-			keptBackNames(upgrade.stdout),
-			refresh,
-			(argv) => runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
+	)
+		await reconcileCeraliveUpdateNotice(
+			await legacyCeraliveOffer(
+				actionableAppPackages,
+				[...planned, ...untaken],
+				keptBackNames(upgrade.stdout),
+				refresh,
+				(argv) => runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
+			),
 		);
-		await reconcileCeraliveUpdateNotice(verdict);
-	}
-	if (refresh !== undefined) {
-		// The original plan complete, CeraLive's sources refreshed and every candidate read.
-		const counted = parseUpgradePackageCount(upgrade.stdout);
-		const kept = keptBackNames(upgrade.stdout);
-		const complete =
-			isCleanAssumeNoDiscovery(upgradeResult) &&
-			counted.ok &&
-			planned?.length === counted.value &&
-			untaken !== null &&
-			kept !== null &&
-			!unfinishedAptWork(upgrade.stdout) &&
-			refreshedEveryIndex(refresh);
-		// Only kept-back rows: the first-party verdict above is not taken, so read it for this evidence.
-		const read =
-			complete && fromHeldBack
-				? await legacyCeraliveOffer(
-						actionableAppPackages,
-						[...planned, ...untaken],
-						kept,
-						refresh,
-						(argv) => runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
-					)
-				: verdict;
-		scheduledPackageEvidence = {
-			image: "legacy",
-			offer: verdict === "unknown" ? null : verdict,
-			listed:
-				complete && read !== "unknown"
-					? new Set([...planned, ...untaken, ...kept])
-					: null,
-		};
-	}
 
 	return null;
 }

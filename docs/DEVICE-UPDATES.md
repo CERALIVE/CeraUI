@@ -1551,76 +1551,64 @@ touched. Contract, with the stale sequences it accepts:
 ### Scheduled package availability notice [EXISTS; host-tested]
 
 The orchestrator's package notice `update:updates-available:<id>` ("Updates are
-available. Review them in Software Updates.") has two separate paths. The OS
-notice with the same wording (`update:updates-available:os:<version>`) is not
-part of either.
+available. Review them in Software Updates.") is announced exactly as on main:
+main's display id, dedupe by name, dismissal key and copy, on both images. The
+OS notice with the same wording (`update:updates-available:os:<version>`) is not
+touched.
 
-**Announce, as main does.** A scheduled check announces from the same
-available/actionable result as main, with main's display id (`name=version`
-rows on capable images, `name=unknown` on legacy images, kept-back rows
-included), main's dedupe by name, main's dismissal key and main's copy. The one
-owner-approved exception is legacy, whose display id carries no versions: when
-an actionable package's candidate, read exactly by the first-party verdict, is
-newer (`dpkg --compare-versions`) than the one its display set was last
-announced for, the notice gets a distinct id (the display id with those
-candidates in place of `unknown`) and therefore a distinct dismissal. An
-unreadable, unchanged or lower candidate keeps the id the display set already
-has, and a display set's first announcement uses main's id, so a tab kept open
-across the upgrade from main, a restart, or a dismissal made on main behaves as
-before. Withdrawal evidence never decides whether, under which id or to whom a
-notice is announced. The differential tests run main's own scheduler (backend
-sources at the pinned main commit) and this branch over the same scripted APT
-sequences and require identical notification frames in every tab, for both
-images and both decoders.
+**Withdrawal, capable images only.** A capable id is main's `name=version`
+display id, so every copy of it, from any backend before or after a restart or a
+rollback, stands for the same versions. After main's cycle finished, a scheduled
+check may remove an earlier capable notice only when all of these hold:
 
-**Withdraw, additive and strict.** After main's cycle finished, a scheduled check
-may remove an earlier notice only when all of these hold:
-
-- This process recorded a receipt for it: the exact instances (name,
+- This backend recorded a receipt for it: the exact instances (name,
   architecture, candidate) its showing stood for, from the same discovery. A
   showing without exact evidence has no receipt and is never withdrawn.
-- Main ran the check to completion and every part of it is complete: no
-  ignored or failed index in the refresh; every source the inventory lists
-  refreshed (capable), or every CeraLive source refreshed and every first-party
-  candidate read (legacy); the plan's lists match its counts; no unfinished
-  work. When the optional legacy size estimate fails, main counts the check as
-  failed, and nothing is withdrawn.
-- The check lists none of the notice's packages: pending, kept back, removed,
-  downgraded, configure-only or (capable) held.
+- Main ran the check to completion and every part of it is complete: no ignored
+  or failed index and every source the inventory lists refreshed, a complete
+  plan whose rows match its counts, no unfinished work, and clean stderr from the
+  simulation, hold list and inventory.
+- The check lists none of the notice's packages: pending, kept back,
+  configure-only or held.
 - One `dpkg-query` snapshot of the whole database shows every instance `ii `
   (installed, configured, not held) at or above its candidate, no package
-  anywhere unfinished, and a second identical read at the end of the pass
-  shows that nothing moved meanwhile. A held, unfinished, lower or missing
-  instance keeps every notice that contains it.
+  anywhere unfinished, and a second identical read at the end of the pass shows
+  that nothing moved meanwhile. A held, unfinished, lower or missing instance
+  keeps every notice that contains it.
 - The notice's live copy, if any, is the showing this process recorded.
 
 The removal goes, as a typed and a bare-name frame, only to the sessions
 authenticated before the check began. When a session authenticated during the
 check, the receipt stays for a later check. Startup, login, a restart and an
-install's exit never withdraw anything. After a proven withdrawal the live
-copy is gone, so a later announcement of the same id is shown again; that is
-the only way the visible sequence can differ from main.
+install's exit never withdraw anything. After a proven withdrawal the live copy
+is gone, so a later announcement of the same id is shown again; on capable
+images that is the only way the visible sequence differs from main.
 
-Whole-system facts the proof reads, and why each is safe:
+**Legacy images keep main's behavior.** Legacy ids name packages without versions
+(`cerastream=unknown`). Inside one process the live slot identifies its showing,
+but every install through CeraUI restarts the backend, and after a restart no
+backend can tell which release a tab's copy shows: main after a rollback, an older
+OS slot or a manual downgrade may have shown the same id for another version. So
+legacy records no receipts and withdraws nothing, and a legacy notice can still
+outlive an install in an open tab until reload or dismissal, as on main.
+
+Whole-system facts the capable proof reads, and why each is safe:
 
 | Fact | Where it is read | Why it is safe |
 |---|---|---|
 | Refresh output | this check's `apt-get update` | Decides only completeness; an ignored, failed or missing index keeps every notice |
-| Source inventory (capable) | this check's `apt-cache policy` | Same; it lists the indexes the refresh must have reached |
-| Plan lists and counts | this check's simulation or discovery | Only names to keep; nothing is announced or withdrawn from a count |
-| Holds (capable) | this check's `apt-mark showhold` | Only names to keep |
+| Source inventory | this check's `apt-cache policy` | Same; it lists the indexes the refresh must have reached |
+| Plan rows and counts | this check's simulation | Only names to keep; nothing is announced or withdrawn from a count |
+| Holds | this check's `apt-mark showhold` | Only names to keep |
 | dpkg database | one `dpkg-query -W`, confirmed by a second | Version, architecture and want/state per instance; one unfinished row anywhere keeps all |
-| Candidates | first-party verdict `apt-cache policy`/`show` (legacy), the simulation's `Inst` rows (capable) | Receipts and the legacy newer-candidate id only; a failed read keeps the old id and records no receipt |
+| Candidates | the simulation's `Inst` rows | Receipts only; a row without an exact instance records no receipt |
 
-`scheduled_package_notices.json` (bounded: 64 receipts, 64 legacy display ids,
-256 KiB; the oldest entry goes first, which only leaves that notice as main
-would) stores ids, exact instances and legacy candidates, never proof or a
-removal to replay. Known limits: a tab offline through a removal keeps its copy
-until reload or dismissal; notices main showed before this change have no
-receipt and stay until dismissed; a candidate pinned away or withdrawn from the
-archive before it was installed keeps its notice; on legacy, the newer-candidate
-id and receipts need the first-party verdict, so a check that keeps a
-first-party package back neither mints a newer id nor records a receipt. No
+`scheduled_package_notices.json` (bounded: 64 receipts, 256 KiB; the oldest goes
+first, which only leaves that notice as main would) stores ids and exact
+instances, never proof or a removal to replay. Known limits: a tab offline
+through a removal keeps its copy until reload or dismissal; notices main showed
+before this change have no receipt and stay until dismissed; a candidate pinned
+away or withdrawn from the archive before it was installed keeps its notice. No
 board qualification is claimed.
 
 ### Download hold notice [EXISTS; host-tested, board qualification owed]

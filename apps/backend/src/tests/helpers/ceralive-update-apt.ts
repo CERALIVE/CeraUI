@@ -316,7 +316,12 @@ function answer(script: AptScript) {
 				(pkg, index) =>
 					isInstalled(pkg) &&
 					(all
-						? present.findIndex((other) => other.name === pkg.name) === index
+						? present.findIndex(
+								(other) =>
+									other.name === pkg.name &&
+									(other.installedArch ?? other.arch) ===
+										(pkg.installedArch ?? pkg.arch),
+							) === index
 						: wanted.includes(pkg.name)),
 			);
 			const rows = known.map(

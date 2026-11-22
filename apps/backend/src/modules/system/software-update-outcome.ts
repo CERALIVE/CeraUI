@@ -116,15 +116,18 @@ function asker(
 function readRows(stdout: string, packages?: readonly string[]): Row[] | null {
 	if (!stdout.endsWith("\n")) return null;
 	const rows: Row[] = [];
+	const instances = new Set<string>();
 	for (const line of stdout.slice(0, -1).split("\n")) {
 		const [, name = "", arch = "", status = "", version = ""] =
 			ROW.exec(line) ?? [];
+		const instance = `${name}\t${arch}`;
 		if (
 			!status ||
 			(packages !== undefined && !packages.includes(name)) ||
-			rows.some((row) => row.name === name && row.arch === arch)
+			instances.has(instance)
 		)
 			return null;
+		instances.add(instance);
 		rows.push({ name, arch, status, version });
 	}
 	return rows;

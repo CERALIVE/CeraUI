@@ -378,8 +378,11 @@ class Tab {
 	readonly shown = new Map<string, Copy>();
 	// Every CeraLive show and removal the tab received, in order.
 	readonly history: ("show" | "remove")[] = [];
-	// Every notification frame as sent, the publisher's per-process id aside.
+	// The tracked notices' frames as received (see record()).
 	readonly frames: string[] = [];
+	private readonly publishers = new Map<string, string>();
+	private readonly revisions = new Map<string, string>();
+	private connections = 0;
 	private socket: WebSocket | undefined;
 	private closed: Promise<void> = Promise.resolve();
 	private readonly answers = new Map<string, (frame: unknown) => void>();
@@ -402,6 +405,7 @@ class Tab {
 	}
 
 	async connect(backend: Backend): Promise<void> {
+		this.connections++;
 		const socket = new WebSocket(`ws://127.0.0.1:${backend.port}/ws`);
 		this.socket = socket;
 		this.closed = new Promise((resolve) =>
@@ -492,27 +496,56 @@ class Tab {
 
 	// Only the entries of notices this tab tracks: other owners' re-sends depend on
 	// a one-second rate limit, so their frames depend on how fast the steps ran.
+	// Publishers and revisions become tokens in order of first sight, so the
+	// comparison keeps which copies share a process and a revision, not counters.
 	private record(notification: unknown): void {
-		const { show, remove, replay } = notification as {
-			show?: { name?: unknown }[];
-			remove?: unknown[];
-			replay?: unknown;
-		};
+		if (typeof notification !== "object" || notification === null) return;
+		const { show, remove, replay } = notification as Record<string, unknown>;
+		const entries = (value: unknown) => (Array.isArray(value) ? value : []);
+		const idOf = (entry: unknown) =>
+			typeof entry === "string"
+				? entry
+				: typeof entry === "object" && entry !== null && "id" in entry
+					? entry.id
+					: undefined;
+		const nameOf = (entry: unknown) =>
+			typeof entry === "object" && entry !== null && "name" in entry
+				? entry.name
+				: undefined;
 		const tracked = (name: unknown) =>
 			typeof name === "string" && this.tracks(name);
-		const shown = (show ?? []).filter(({ name }) => tracked(name));
-		const removed = (remove ?? []).filter((entry) =>
-			tracked(
-				typeof entry === "string" ? entry : (entry as { id?: unknown })?.id,
-			),
-		);
+		const shown = entries(show).filter((entry) => tracked(nameOf(entry)));
+		const removed = entries(remove).filter((entry) => tracked(idOf(entry)));
 		if (shown.length + removed.length === 0) return;
+		const token = (map: Map<string, string>, prefix: string, key: string) => {
+			if (!map.has(key)) map.set(key, `${prefix}${map.size}`);
+			return map.get(key);
+		};
+		// A connection reaches one process: its revisions are that process's.
+		const revision = (entry: object) =>
+			"revision" in entry
+				? {
+						revision: token(
+							this.revisions,
+							"R",
+							`${this.connections}:${String(entry.revision)}`,
+						),
+					}
+				: {};
+		const publisher = (entry: object) =>
+			"publisher" in entry
+				? { publisher: token(this.publishers, "P", String(entry.publisher)) }
+				: {};
+		const normalized = (entry: unknown) =>
+			typeof entry === "object" && entry !== null
+				? { ...entry, ...revision(entry), ...publisher(entry) }
+				: entry;
 		this.frames.push(
 			JSON.stringify({
-				...(shown.length > 0 ? { show: shown } : {}),
-				...(removed.length > 0 ? { remove: removed } : {}),
+				...(shown.length > 0 ? { show: shown.map(normalized) } : {}),
+				...(removed.length > 0 ? { remove: removed.map(normalized) } : {}),
 				...(replay === undefined ? {} : { replay }),
-			}).replace(/"publisher":"[^"]*"/g, '"publisher":"<process>"'),
+			}),
 		);
 	}
 
@@ -617,11 +650,12 @@ type Act = {
 // What every tab shows after a step, and every notification frame it received during it.
 type Observed = { readonly names: string[][]; readonly frames: string[][] };
 
-// The same steps on main's scheduler, on this branch, or main then (after a restart) this branch.
+// The same steps on main's scheduler, on this branch, main then (after a restart)
+// this branch, or this branch, main, this branch again (each restart switches).
 async function playScheduled(
 	capable: boolean,
 	acts: readonly Act[],
-	run: "main" | "head" | "upgrade",
+	run: "main" | "head" | "upgrade" | "rollback",
 ): Promise<Observed[]> {
 	// Each run starts as a fresh device: no dismissal, offer record or receipt from the other.
 	await Promise.all(
@@ -629,7 +663,7 @@ async function playScheduled(
 			(path) => rm(path, { force: true }),
 		),
 	);
-	let main = run !== "head";
+	let main = run === "main" || run === "upgrade";
 	let backend = await Backend.start({ capable, canonicalScheduler: main });
 	const opened = scheduledTabs();
 	await reconnect(backend, opened);
@@ -640,6 +674,7 @@ async function playScheduled(
 			await backend.close();
 			await Promise.all(opened.map((tab) => tab.dropped()));
 			if (run === "upgrade") main = false;
+			if (run === "rollback") main = !main;
 			backend = await Backend.start({ capable, canonicalScheduler: main });
 			await reconnect(backend, opened);
 		}
@@ -686,7 +721,7 @@ const unreadableCandidate: AptScript = {
 const differential: readonly {
 	readonly label: string;
 	readonly acts: readonly Act[];
-	readonly run?: "upgrade";
+	readonly run?: "upgrade" | "rollback";
 	readonly legacyOnly?: true;
 }[] = [
 	{
@@ -801,6 +836,194 @@ const differential: readonly {
 			{ apt: offerOnly },
 			{ apt: offerOnly, restart: true },
 			{ apt: offerOnly },
+		],
+	},
+	{
+		label:
+			"size estimate failing, partial, answering with an error exit, or timing out after an install",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "2") },
+			...[
+				{ exitCode: 100, stdout: "", stderr: "E: size unavailable\n" },
+				{ stdout: "Reading package lists...\n" },
+				{
+					exitCode: 100,
+					stderr: "E: Sub-process /usr/bin/dpkg returned an error code (1)\n",
+				},
+				{
+					exitCode: 124,
+					stdout: "Reading package lists...\nBuilding dependency tree...\n",
+					stderr: "timed out\n",
+				},
+				{},
+			].map((fallback) => ({
+				apt: { ...settled("2"), keptBack: [tzdata], fallback },
+			})),
+		],
+	},
+	{
+		label:
+			"a failed size estimate after an installed release, a newer dismissed release and late tabs",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "2") },
+			{ apt: settled("2") },
+			{ apt: pending("2", "3") },
+			{ apt: pending("2", "3"), dismiss: true },
+			...[1, 2].map(() => ({
+				apt: {
+					...settled("3"),
+					keptBack: [tzdata],
+					fallback: {
+						exitCode: 100,
+						stdout: "",
+						stderr: "E: size unavailable\n",
+					},
+				},
+				join: true as const,
+			})),
+		],
+	},
+	{
+		label:
+			"a refresh missing a configured source, cut short, failing or falling back after an install",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "2") },
+			{
+				apt: {
+					...settled("2"),
+					refresh: { stdout: REFRESH.split("\n").slice(1).join("\n") },
+				},
+			},
+			{
+				apt: {
+					...settled("2"),
+					refresh: { stdout: `${REFRESH.split("\n")[0]}\n` },
+				},
+			},
+			{ apt: failing(settled("2")) },
+			{ apt: { ...settled("2"), refresh: { stdout: detachedRefresh } } },
+			{ apt: settled("2") },
+		],
+	},
+	{
+		label: "a rollback to main and a new upgrade with tabs kept open",
+		legacyOnly: true,
+		run: "rollback",
+		acts: [
+			{ apt: pending("1", "2") },
+			{ apt: pending("2", "3"), restart: true },
+			{ apt: settled("2"), restart: true },
+			{ apt: settled("2") },
+		],
+	},
+	{
+		label:
+			"the same display set across versions, installed, then offered again",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "2") },
+			{ apt: pending("2", "3") },
+			{ apt: settled("3") },
+			{ apt: pending("3", "4") },
+		],
+	},
+	{
+		label: "a dismissal across restarts with the same and a newer candidate",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "2") },
+			{ apt: pending("1", "2"), dismiss: true },
+			{ apt: pending("1", "2"), restart: true },
+			{ apt: pending("1", "3") },
+			{ apt: pending("1", "3"), restart: true },
+		],
+	},
+	{
+		label: "a lower, then a newer candidate",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "3") },
+			{ apt: pending("1", "2.5") },
+			{ apt: pending("1", "4") },
+		],
+	},
+	{
+		label: "an unparseable or missing candidate record",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "2") },
+			{
+				apt: {
+					...pending("1", "2"),
+					records: {
+						cerastream: "Package: cerastream\nVersion: not-a-version\n",
+					},
+				},
+			},
+			{ apt: { ...pending("1", "2"), policyFails: ["cerastream"] } },
+			{ apt: pending("1", "2") },
+		],
+	},
+	{
+		label:
+			"an install proven while late tabs log in, with a stock boot hold and a kept-back neighbour",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "2") },
+			{ apt: settled("2"), join: true },
+			{ apt: { ...settled("2"), keptBack: [tzdata] } },
+			{
+				apt: {
+					holds: [bootPackage.name],
+					installed: [bootPackage, cerastream("2+b1")],
+				},
+			},
+		],
+	},
+	{
+		label:
+			"two versions, then installed while dpkg is held, below, half-configured or unpacked",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "2") },
+			{ apt: pending("2", "3") },
+			{ apt: { ...settled("3"), holds: ["cerastream"] } },
+			{ apt: settled("1") },
+			{ apt: { ...settled("3"), dpkgStatus: { cerastream: "iF " } } },
+			{ apt: { ...settled("3"), dpkgStatus: { cerastream: "iU " } } },
+			{ apt: settled("3") },
+		],
+	},
+	{
+		label: "two offers, one held before the proof",
+		legacyOnly: true,
+		acts: [
+			{ apt: { upgradable: [cerastream("1", "2"), srtlaOffer] } },
+			{ apt: { upgradable: [srtlaOffer], installed: [cerastream("2")] } },
+			{
+				apt: {
+					installed: [
+						cerastream("2"),
+						{ ...srtlaOffer, installed: srtlaOffer.candidate },
+					],
+					holds: ["cerastream"],
+				},
+			},
+		],
+	},
+	{
+		label: "a newer version after a dismissal, then a restart",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "2") },
+			{ apt: pending("2", "3") },
+			{ apt: settled("2") },
+			{ apt: pending("2", "3"), dismiss: true },
+			{ apt: pending("2", "4") },
+			{ apt: pending("2", "4"), restart: true },
 		],
 	},
 	{
@@ -1011,49 +1234,71 @@ for (const capable of [false, true]) {
 			budget(2),
 		);
 
-		test(
-			`scheduled package notice strict withdraw (${image}, ${row.label})`,
-			async () => {
-				const backend = await Backend.start({
-					capable,
-					apt: { upgradable: [packageOffer] },
-				});
-				const opened = scheduledTabs();
-				await reconnect(backend, opened);
-				await backend.scheduledPackageCheck();
-				await sync(opened);
-				const id = canonicalNoticeId(capable, [packageOffer]);
-				expect(scheduledNames(opened)).toEqual([[id], [id]]);
-				await backend.setApt(row.withdraw);
-				if (row.lateHold) {
-					// The check's own reads saw no hold; it appears before the proof's dpkg read.
-					await backend.startCheckPausedAtDpkgRead("before");
-					try {
-						await backend.setApt({
-							...row.withdraw,
-							holds: [packageOffer.name],
-						});
-					} finally {
-						await backend.resumeDpkgRead();
-					}
-				} else {
-					await backend.scheduledPackageCheck();
-				}
-				await sync(opened);
-				expect(scheduledNames(opened).map((ids) => ids.includes(id))).toEqual(
-					row.clears ? [false, false] : [true, true],
-				);
-				expect(removals(opened)).toEqual(row.clears ? [1, 1] : [0, 0]);
-				if (row.lateHold) {
-					await backend.setApt(installed);
+		if (capable)
+			test(
+				`scheduled package notice strict withdraw (${image}, ${row.label})`,
+				async () => {
+					const backend = await Backend.start({
+						capable,
+						apt: { upgradable: [packageOffer] },
+					});
+					const opened = scheduledTabs();
+					await reconnect(backend, opened);
 					await backend.scheduledPackageCheck();
 					await sync(opened);
-					expect(scheduledNames(opened)).toEqual([[], []]);
-					expect(removals(opened)).toEqual([1, 1]);
-				}
-			},
-			budget(1),
-		);
+					const id = canonicalNoticeId(capable, [packageOffer]);
+					expect(scheduledNames(opened)).toEqual([[id], [id]]);
+					await backend.setApt(row.withdraw);
+					if (row.lateHold) {
+						// The check's own reads saw no hold; it appears before the proof's dpkg read.
+						await backend.startCheckPausedAtDpkgRead("before");
+						try {
+							await backend.setApt({
+								...row.withdraw,
+								holds: [packageOffer.name],
+							});
+						} finally {
+							await backend.resumeDpkgRead();
+						}
+					} else {
+						await backend.scheduledPackageCheck();
+					}
+					await sync(opened);
+					expect(scheduledNames(opened).map((ids) => ids.includes(id))).toEqual(
+						row.clears ? [false, false] : [true, true],
+					);
+					expect(removals(opened)).toEqual(row.clears ? [1, 1] : [0, 0]);
+					if (row.lateHold) {
+						await backend.setApt(installed);
+						await backend.scheduledPackageCheck();
+						await sync(opened);
+						expect(scheduledNames(opened)).toEqual([[], []]);
+						expect(removals(opened)).toEqual([1, 1]);
+					}
+				},
+				budget(1),
+			);
+
+		// Legacy ids carry no versions, so legacy keeps main's behavior exactly.
+		if (!capable)
+			test(
+				`scheduled package notice withdraw step matches main exactly (${image}, ${row.label})`,
+				async () => {
+					const acts: Act[] = [
+						{ apt: { upgradable: [packageOffer] } },
+						{ apt: row.withdraw },
+						...(row.lateHold
+							? [
+									{ apt: { ...row.withdraw, holds: [packageOffer.name] } },
+									{ apt: installed },
+								]
+							: []),
+					];
+					const main = await playScheduled(false, acts, "main");
+					expect(await playScheduled(false, acts, "head")).toEqual(main);
+				},
+				budget(2),
+			);
 	}
 
 	test(
@@ -1186,32 +1431,33 @@ for (const capable of [false, true]) {
 		budget(1),
 	);
 
-	test(
-		`scheduled package notice clears installed proof beside an unrelated kept-back package (${image})`,
-		async () => {
-			const backend = await Backend.start({
-				capable,
-				apt: { upgradable: [packageOffer] },
-			});
-			const opened = scheduledTabs();
-			await reconnect(backend, opened);
-			await backend.scheduledPackageCheck();
-			await sync(opened);
-			const offer = opened[0]?.names().find(scheduledNotice) ?? "";
-			expect(offer).not.toBe("");
-			expect(scheduledNames(opened)).toEqual([[offer], [offer]]);
+	if (capable)
+		test(
+			`scheduled package notice clears installed proof beside an unrelated kept-back package (${image})`,
+			async () => {
+				const backend = await Backend.start({
+					capable,
+					apt: { upgradable: [packageOffer] },
+				});
+				const opened = scheduledTabs();
+				await reconnect(backend, opened);
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				const offer = opened[0]?.names().find(scheduledNotice) ?? "";
+				expect(offer).not.toBe("");
+				expect(scheduledNames(opened)).toEqual([[offer], [offer]]);
 
-			await backend.setApt({
-				installed: [{ ...packageOffer, installed: "2" }],
-				keptBack,
-			});
-			await backend.scheduledPackageCheck();
-			await sync(opened);
-			expect(scheduledNames(opened)).toEqual([[], []]);
-			expect(removals(opened)).toEqual([1, 1]);
-		},
-		budget(1),
-	);
+				await backend.setApt({
+					installed: [{ ...packageOffer, installed: "2" }],
+					keptBack,
+				});
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				expect(scheduledNames(opened)).toEqual([[], []]);
+				expect(removals(opened)).toEqual([1, 1]);
+			},
+			budget(1),
+		);
 
 	if (!capable)
 		test(
@@ -1246,14 +1492,12 @@ for (const capable of [false, true]) {
 					expect(scheduledNames(opened)).toEqual([[offer], [offer]]);
 					expect(histories(opened)).toEqual([["show"], ["show"]]);
 				}
+				// Legacy is never withdrawn (its ids carry no versions): main's behavior.
 				await backend.setApt(installedBesideKeptBack);
 				await backend.scheduledPackageCheck();
 				await sync(opened);
-				expect(scheduledNames(opened)).toEqual([[], []]);
-				expect(histories(opened)).toEqual([
-					["show", "remove"],
-					["show", "remove"],
-				]);
+				expect(scheduledNames(opened)).toEqual([[offer], [offer]]);
+				expect(histories(opened)).toEqual([["show"], ["show"]]);
 			},
 			budget(1),
 		);
@@ -1303,121 +1547,127 @@ for (const capable of [false, true]) {
 		budget(1),
 	);
 
-	test(
-		`scheduled package notice clears a proven offer with the stock boot hold (${image})`,
-		async () => {
-			const backend = await Backend.start({
-				capable,
-				apt: { upgradable: [packageOffer] },
-			});
-			const opened = scheduledTabs();
-			await reconnect(backend, opened);
-			await backend.scheduledPackageCheck();
-			await sync(opened);
-			const offer = opened[0]?.names().find(scheduledNotice) ?? "";
-			expect(offer).not.toBe("");
-			expect(scheduledNames(opened)).toEqual([[offer], [offer]]);
+	if (capable)
+		test(
+			`scheduled package notice clears a proven offer with the stock boot hold (${image})`,
+			async () => {
+				const backend = await Backend.start({
+					capable,
+					apt: { upgradable: [packageOffer] },
+				});
+				const opened = scheduledTabs();
+				await reconnect(backend, opened);
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				const offer = opened[0]?.names().find(scheduledNotice) ?? "";
+				expect(offer).not.toBe("");
+				expect(scheduledNames(opened)).toEqual([[offer], [offer]]);
 
-			await backend.setApt({
-				holds: [bootPackage.name],
-				installed: [
-					bootPackage,
-					{ ...packageOffer, installed: capable ? "1:1" : "2+b1" },
-				],
-			});
-			await backend.scheduledPackageCheck();
-			await sync(opened);
-			expect(scheduledNames(opened)).toEqual([[], []]);
-			expect(removals(opened)).toEqual([1, 1]);
-		},
-		budget(1),
-	);
+				await backend.setApt({
+					holds: [bootPackage.name],
+					installed: [
+						bootPackage,
+						{ ...packageOffer, installed: capable ? "1:1" : "2+b1" },
+					],
+				});
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				expect(scheduledNames(opened)).toEqual([[], []]);
+				expect(removals(opened)).toEqual([1, 1]);
+			},
+			budget(1),
+		);
 
-	test(
-		`scheduled package notice does not send captured proof to late authenticators (${image})`,
-		async () => {
-			const offered = { upgradable: [packageOffer] };
-			const configured = {
-				installed: [{ ...packageOffer, installed: "2" }],
-			};
-			let backend = await Backend.start({ capable, apt: offered });
-			const early = scheduledTabs();
-			const late = scheduledTabs();
-			await reconnect(backend, [...early, ...late]);
-			await backend.scheduledPackageCheck();
-			await sync([...early, ...late]);
-			const offer = early[0]?.names().find(scheduledNotice) ?? "";
-			expect(offer).not.toBe("");
-			expect(scheduledNames([...early, ...late])).toEqual([
-				[offer],
-				[offer],
-				[offer],
-				[offer],
-			]);
-			await backend.close();
-			await Promise.all([...early, ...late].map((tab) => tab.dropped()));
-			backend = await Backend.start({ capable, apt: configured });
-			await reconnect(backend, early);
-			await backend.startCheckPausedAtDpkgRead("after");
-			try {
-				// Authenticated after the check began: its proof is not for this pair.
-				await reconnect(backend, late);
+	if (capable)
+		test(
+			`scheduled package notice does not send captured proof to late authenticators (${image})`,
+			async () => {
+				const offered = { upgradable: [packageOffer] };
+				const configured = {
+					installed: [{ ...packageOffer, installed: "2" }],
+				};
+				let backend = await Backend.start({ capable, apt: offered });
+				const early = scheduledTabs();
+				const late = scheduledTabs();
+				await reconnect(backend, [...early, ...late]);
+				await backend.scheduledPackageCheck();
+				await sync([...early, ...late]);
+				const offer = early[0]?.names().find(scheduledNotice) ?? "";
+				expect(offer).not.toBe("");
+				expect(scheduledNames([...early, ...late])).toEqual([
+					[offer],
+					[offer],
+					[offer],
+					[offer],
+				]);
+				await backend.close();
+				await Promise.all([...early, ...late].map((tab) => tab.dropped()));
+				backend = await Backend.start({ capable, apt: configured });
+				await reconnect(backend, early);
+				await backend.startCheckPausedAtDpkgRead("after");
+				try {
+					// Authenticated after the check began: its proof is not for this pair.
+					await reconnect(backend, late);
+					expect(scheduledNames(late)).toEqual([[offer], [offer]]);
+					expect(removals(late)).toEqual([0, 0]);
+				} finally {
+					await backend.resumeDpkgRead();
+				}
+				await sync([...early, ...late]);
 				expect(scheduledNames(late)).toEqual([[offer], [offer]]);
 				expect(removals(late)).toEqual([0, 0]);
-			} finally {
-				await backend.resumeDpkgRead();
-			}
-			await sync([...early, ...late]);
-			expect(scheduledNames(late)).toEqual([[offer], [offer]]);
-			expect(removals(late)).toEqual([0, 0]);
-			expect(scheduledNames(early)).toEqual([[], []]);
-			expect(removals(early)).toEqual([1, 1]);
+				expect(scheduledNames(early)).toEqual([[], []]);
+				expect(removals(early)).toEqual([1, 1]);
 
-			// The late pair needs a new check; no cached proof authorizes it.
-			await backend.setApt(configured);
-			await backend.scheduledPackageCheck();
-			await sync(late);
-			expect(scheduledNames(late)).toEqual([[], []]);
-			expect(removals(late)).toEqual([1, 1]);
-		},
-		budget(2),
-	);
+				// The late pair needs a new check; no cached proof authorizes it.
+				await backend.setApt(configured);
+				await backend.scheduledPackageCheck();
+				await sync(late);
+				expect(scheduledNames(late)).toEqual([[], []]);
+				expect(removals(late)).toEqual([1, 1]);
+			},
+			budget(2),
+		);
 
-	test(
-		`scheduled package notice keeps both versions when a later proof sees their shared package held (${image})`,
-		async () => {
-			const backend = await Backend.start({ capable, apt: pending("1", "2") });
-			const opened = scheduledTabs();
-			await reconnect(backend, opened);
-			await backend.scheduledPackageCheck();
-			await sync(opened);
-			await backend.setApt(pending("2", "3"));
-			await backend.scheduledPackageCheck();
-			await sync(opened);
-			const offered = scheduledNames(opened);
-			expect(offered[0]).toHaveLength(2);
-			expect(offered[1]).toEqual(offered[0]);
+	if (capable)
+		test(
+			`scheduled package notice keeps both versions when a later proof sees their shared package held (${image})`,
+			async () => {
+				const backend = await Backend.start({
+					capable,
+					apt: pending("1", "2"),
+				});
+				const opened = scheduledTabs();
+				await reconnect(backend, opened);
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				await backend.setApt(pending("2", "3"));
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				const offered = scheduledNames(opened);
+				expect(offered[0]).toHaveLength(2);
+				expect(offered[1]).toEqual(offered[0]);
 
-			await backend.setApt(settled("3"));
-			await backend.pausePackageCompare();
-			await backend.startCheckAndWaitForCapturedCompare();
-			try {
-				await backend.setApt({ ...settled("3"), holds: ["cerastream"] });
-			} finally {
-				await backend.resumePackageCompare();
-			}
-			await sync(opened);
-			expect(scheduledNames(opened)).toEqual(offered);
-			expect(removals(opened)).toEqual([0, 0]);
+				await backend.setApt(settled("3"));
+				await backend.pausePackageCompare();
+				await backend.startCheckAndWaitForCapturedCompare();
+				try {
+					await backend.setApt({ ...settled("3"), holds: ["cerastream"] });
+				} finally {
+					await backend.resumePackageCompare();
+				}
+				await sync(opened);
+				expect(scheduledNames(opened)).toEqual(offered);
+				expect(removals(opened)).toEqual([0, 0]);
 
-			await backend.setApt(settled("3"));
-			await backend.scheduledPackageCheck();
-			await sync(opened);
-			expect(scheduledNames(opened)).toEqual([[], []]);
-			expect(removals(opened)).toEqual([2, 2]);
-		},
-		budget(1),
-	);
+				await backend.setApt(settled("3"));
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				expect(scheduledNames(opened)).toEqual([[], []]);
+				expect(removals(opened)).toEqual([2, 2]);
+			},
+			budget(1),
+		);
 
 	test(
 		`scheduled package notice survives uncertain checks and reconnects, then clears on exact installed proof (${capable ? "capable Debian" : "legacy roster"})`,
@@ -1558,11 +1808,11 @@ for (const capable of [false, true]) {
 
 			await backend.scheduledPackageCheck();
 			await sync(opened);
-			expect(shown().map((items) => items.includes(offer))).toEqual([
-				false,
-				false,
-			]);
-			expect(removals(opened)).toEqual([1, 1]);
+			// Capable proves the exact offer; legacy keeps main's copy (no version to prove).
+			expect(shown().map((items) => items.includes(offer))).toEqual(
+				capable ? [false, false] : [true, true],
+			);
+			expect(removals(opened)).toEqual(capable ? [1, 1] : [0, 0]);
 
 			// The other pair missed the live removal. Reauth must not replay it,
 			// especially after the device's candidate became pending again.
@@ -1577,158 +1827,164 @@ for (const capable of [false, true]) {
 		budget(4),
 	);
 
-	test(
-		`scheduled package notice gives a newer offer its own identity (${capable ? "capable" : "legacy"})`,
-		async () => {
-			const backend = await Backend.start({ capable, apt: pending("1", "2") });
-			const opened = [
-				new Tab("typed", scheduledNotice),
-				new Tab("v2026.7.2", scheduledNotice),
-			];
-			await reconnect(backend, opened);
-			await backend.scheduledPackageCheck();
-			await sync(opened);
-			const original = opened[0]?.names().find(scheduledNotice) ?? "";
-			expect(original).not.toBe("");
+	if (capable)
+		test(
+			`scheduled package notice gives a newer offer its own identity (${capable ? "capable" : "legacy"})`,
+			async () => {
+				const backend = await Backend.start({
+					capable,
+					apt: pending("1", "2"),
+				});
+				const opened = [
+					new Tab("typed", scheduledNotice),
+					new Tab("v2026.7.2", scheduledNotice),
+				];
+				await reconnect(backend, opened);
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				const original = opened[0]?.names().find(scheduledNotice) ?? "";
+				expect(original).not.toBe("");
 
-			await backend.setApt(pending("2", "3"));
-			await backend.scheduledPackageCheck();
-			await sync(opened);
-			const newer =
-				opened[0]
-					?.names()
-					.find((name) => scheduledNotice(name) && name !== original) ?? "";
-			expect(newer).not.toBe("");
-			expect(names(opened).map((items) => items.includes(newer))).toEqual([
-				true,
-				true,
-			]);
+				await backend.setApt(pending("2", "3"));
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				const newer =
+					opened[0]
+						?.names()
+						.find((name) => scheduledNotice(name) && name !== original) ?? "";
+				expect(newer).not.toBe("");
+				expect(names(opened).map((items) => items.includes(newer))).toEqual([
+					true,
+					true,
+				]);
 
-			// A complete check has no remaining actionable rows, but version 3
-			// was pinned out. The installed readback proves only version 2.
-			await backend.setApt(settled("2"));
-			await backend.scheduledPackageCheck();
-			await sync(opened);
-			expect(
-				names(opened).map((items) => items.filter(scheduledNotice)),
-			).toEqual([[newer], [newer]]);
+				// A complete check has no remaining actionable rows, but version 3
+				// was pinned out. The installed readback proves only version 2.
+				await backend.setApt(settled("2"));
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				expect(
+					names(opened).map((items) => items.filter(scheduledNotice)),
+				).toEqual([[newer], [newer]]);
 
-			// The matching version's dismissal suppresses it, but cannot
-			// suppress the next version of the same package.
-			await opened[0]?.dismiss(newer);
-			await backend.setApt(pending("2", "3"));
-			await backend.scheduledPackageCheck();
-			await sync(opened);
-			expect(opened[0]?.names().filter(scheduledNotice)).toEqual([]);
-			await backend.setApt(pending("2", "4"));
-			await backend.scheduledPackageCheck();
-			await sync(opened);
-			const successor = opened[0]?.names().filter(scheduledNotice) ?? [];
-			expect(successor).toHaveLength(1);
-			expect(successor).not.toContain(newer);
-			expect(opened[1]?.names()).toEqual(expect.arrayContaining(successor));
+				// The matching version's dismissal suppresses it, but cannot
+				// suppress the next version of the same package.
+				await opened[0]?.dismiss(newer);
+				await backend.setApt(pending("2", "3"));
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				expect(opened[0]?.names().filter(scheduledNotice)).toEqual([]);
+				await backend.setApt(pending("2", "4"));
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				const successor = opened[0]?.names().filter(scheduledNotice) ?? [];
+				expect(successor).toHaveLength(1);
+				expect(successor).not.toContain(newer);
+				expect(opened[1]?.names()).toEqual(expect.arrayContaining(successor));
 
-			// The same pending version after a restart is the same notice, not a second copy.
-			const held = scheduledNames(opened);
-			await backend.close();
-			await Promise.all(opened.map((tab) => tab.dropped()));
-			const restarted = await Backend.start({
-				capable,
-				apt: pending("2", "4"),
-			});
-			await reconnect(restarted, opened);
-			await restarted.scheduledPackageCheck();
-			await sync(opened);
-			expect(scheduledNames(opened)).toEqual(held);
-		},
-		budget(2),
-	);
+				// The same pending version after a restart is the same notice, not a second copy.
+				const held = scheduledNames(opened);
+				await backend.close();
+				await Promise.all(opened.map((tab) => tab.dropped()));
+				const restarted = await Backend.start({
+					capable,
+					apt: pending("2", "4"),
+				});
+				await reconnect(restarted, opened);
+				await restarted.scheduledPackageCheck();
+				await sync(opened);
+				expect(scheduledNames(opened)).toEqual(held);
+			},
+			budget(2),
+		);
 
 	for (const [change, apt] of [
 		["below both offered versions", settled("1")],
 		["half-configured", { ...settled("3"), dpkgStatus: { cerastream: "iF " } }],
 		["unpacked", { ...settled("3"), dpkgStatus: { cerastream: "iU " } }],
 	] satisfies readonly (readonly [string, AptScript])[])
+		if (capable)
+			test(
+				`scheduled package withdrawal keeps both versions when dpkg moves ${change} during its pass (${image})`,
+				async () => {
+					const backend = await Backend.start({
+						capable,
+						apt: pending("1", "2"),
+					});
+					const opened = scheduledTabs();
+					await reconnect(backend, opened);
+					await backend.scheduledPackageCheck();
+					await sync(opened);
+					await backend.setApt(pending("2", "3"));
+					await backend.scheduledPackageCheck();
+					await sync(opened);
+					const offered = scheduledNames(opened);
+					expect(offered.map((ids) => ids.length)).toEqual([2, 2]);
+
+					// The pass's first dpkg read shows version 3 configured; the package then moves.
+					await backend.setApt(settled("3"));
+					await backend.startCheckPausedAtDpkgRead("after");
+					try {
+						await backend.setApt(apt);
+					} finally {
+						await backend.resumeDpkgRead();
+					}
+					await sync(opened);
+					expect(scheduledNames(opened)).toEqual(offered);
+					expect(removals(opened)).toEqual([0, 0]);
+
+					await backend.setApt(settled("3"));
+					await backend.scheduledPackageCheck();
+					await sync(opened);
+					expect(scheduledNames(opened)).toEqual([[], []]);
+					expect(removals(opened)).toEqual([2, 2]);
+				},
+				budget(1),
+			);
+
+	if (capable)
 		test(
-			`scheduled package withdrawal keeps both versions when dpkg moves ${change} during its pass (${image})`,
+			`scheduled package withdrawal keeps the offer whose package is held before the proof read and withdraws the other (${image})`,
 			async () => {
 				const backend = await Backend.start({
 					capable,
-					apt: pending("1", "2"),
+					apt: { upgradable: [packageOffer, independent] },
 				});
 				const opened = scheduledTabs();
 				await reconnect(backend, opened);
 				await backend.scheduledPackageCheck();
 				await sync(opened);
-				await backend.setApt(pending("2", "3"));
+				const both = canonicalNoticeId(capable, [packageOffer, independent]);
+				expect(scheduledNames(opened)).toEqual([[both], [both]]);
+				await backend.setApt({
+					upgradable: [independent],
+					installed: [configured],
+				});
 				await backend.scheduledPackageCheck();
 				await sync(opened);
-				const offered = scheduledNames(opened);
-				expect(offered.map((ids) => ids.length)).toEqual([2, 2]);
+				const srtlaOnly = canonicalNoticeId(capable, [independent]);
+				expect(scheduledNames(opened)).toEqual([
+					[both, srtlaOnly],
+					[both, srtlaOnly],
+				]);
 
-				// The pass's first dpkg read shows version 3 configured; the package then moves.
-				await backend.setApt(settled("3"));
-				await backend.startCheckPausedAtDpkgRead("after");
+				// Both offers installed; a hold on ${packageOffer.name} lands right before the proof read.
+				const done = {
+					installed: [configured, { ...independent, installed: "2" }],
+				};
+				await backend.setApt(done);
+				await backend.startCheckPausedAtDpkgRead("before");
 				try {
-					await backend.setApt(apt);
+					await backend.setApt({ ...done, holds: [packageOffer.name] });
 				} finally {
 					await backend.resumeDpkgRead();
 				}
 				await sync(opened);
-				expect(scheduledNames(opened)).toEqual(offered);
-				expect(removals(opened)).toEqual([0, 0]);
-
-				await backend.setApt(settled("3"));
-				await backend.scheduledPackageCheck();
-				await sync(opened);
-				expect(scheduledNames(opened)).toEqual([[], []]);
-				expect(removals(opened)).toEqual([2, 2]);
+				expect(scheduledNames(opened)).toEqual([[both], [both]]);
+				expect(removals(opened)).toEqual([1, 1]);
 			},
 			budget(1),
 		);
-
-	test(
-		`scheduled package withdrawal keeps the offer whose package is held before the proof read and withdraws the other (${image})`,
-		async () => {
-			const backend = await Backend.start({
-				capable,
-				apt: { upgradable: [packageOffer, independent] },
-			});
-			const opened = scheduledTabs();
-			await reconnect(backend, opened);
-			await backend.scheduledPackageCheck();
-			await sync(opened);
-			const both = canonicalNoticeId(capable, [packageOffer, independent]);
-			expect(scheduledNames(opened)).toEqual([[both], [both]]);
-			await backend.setApt({
-				upgradable: [independent],
-				installed: [configured],
-			});
-			await backend.scheduledPackageCheck();
-			await sync(opened);
-			const srtlaOnly = canonicalNoticeId(capable, [independent]);
-			expect(scheduledNames(opened)).toEqual([
-				[both, srtlaOnly],
-				[both, srtlaOnly],
-			]);
-
-			// Both offers installed; a hold on ${packageOffer.name} lands right before the proof read.
-			const done = {
-				installed: [configured, { ...independent, installed: "2" }],
-			};
-			await backend.setApt(done);
-			await backend.startCheckPausedAtDpkgRead("before");
-			try {
-				await backend.setApt({ ...done, holds: [packageOffer.name] });
-			} finally {
-				await backend.resumeDpkgRead();
-			}
-			await sync(opened);
-			expect(scheduledNames(opened)).toEqual([[both], [both]]);
-			expect(removals(opened)).toEqual([1, 1]);
-		},
-		budget(1),
-	);
 }
 
 // Tabs that show the offer main's own backend raised in its own check (no record written).

@@ -189,7 +189,6 @@ import {
 } from "./os-staged-receipt-retirement.ts";
 import { settleOsUnlaunchedWitness } from "./os-unlaunched-adapter.ts";
 import {
-	packageNoticeId,
 	recordPackageAnnouncement,
 	withdrawProvenPackageNotices,
 } from "./package-offer-notice.ts";
@@ -1243,13 +1242,11 @@ async function runPackageCheckCycle(): Promise<void> {
 				) ?? [],
 			);
 			if (actionableCount > 0) {
-				const id = await packageNoticeId(
+				const id =
 					wire.packages
 						?.map((item) => `${item.name}=${item.version ?? "unknown"}`)
 						.sort()
-						.join(",") ?? wire.identity.version,
-					evidence,
-				);
+						.join(",") ?? wire.identity.version;
 				announced = {
 					id,
 					shown: notifyUpdate({ kind: "updates-available", id }),
