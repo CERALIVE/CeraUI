@@ -33,6 +33,16 @@ for (const path of ["created Start", "borrowed Start", "borrowed release"]) {
 				if (release) {
 					expect(await f.start()).toEqual({ success: true });
 					settlePending("wlan0", true);
+					spyOn(nm, "nmDevices").mockImplementation(async () => {
+						const [uplink] =
+							(await nm.nmDeviceProp("wlan0", "GENERAL.CON-UUID")) ?? [];
+						const [ap] =
+							(await nm.nmDeviceProp("clap-wlan0", "GENERAL.CON-UUID")) ?? [];
+						return [
+							`wlan0:wifi:connected:${uplink}`,
+							`clap-wlan0:wifi:${ap ? `connected:${ap}` : "disconnected:"}`,
+						];
+					});
 				}
 				const previous = release ? "no" : "yes";
 				const written = release ? "yes" : "no";

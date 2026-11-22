@@ -22,6 +22,7 @@ import {
 	sensorsStatusSchema,
 	sshPersistentInputSchema,
 	successResponseSchema,
+	syslogInputSchema,
 	updateCapabilitiesSchema,
 	updateDetailsSchema,
 	updateOutcomeInputSchema,
@@ -49,7 +50,7 @@ export const systemContract = oc.router({
 	/**
 	 * Get system log
 	 */
-	getSyslog: oc.output(logOutputSchema),
+	getSyslog: oc.input(syslogInputSchema).output(logOutputSchema),
 
 	/**
 	 * Power off the device

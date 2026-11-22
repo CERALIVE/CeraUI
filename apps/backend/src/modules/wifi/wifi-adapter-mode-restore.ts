@@ -1,5 +1,6 @@
 import { logger } from "../../helpers/logger.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
+import { getHotspotCredentials } from "./hotspot-credentials.ts";
 import {
 	wifiAdapterLockKey,
 	withWifiAdapterLock,
@@ -20,6 +21,7 @@ import {
 	defaultAdapterModeDeps,
 } from "./wifi-adapter-mode-transition.ts";
 import { resolveWifiAdapterOwner } from "./wifi-adapter-owner.ts";
+import { hasDeferredWifiStationIntent } from "./wifi-adapter-reconcile-retry.ts";
 import {
 	reconcileWifiAdapterRestoreLocked,
 	retryWifiAdapterReconcile,
@@ -33,6 +35,10 @@ import {
 import { HYBRID_CHANNEL_REFUSAL } from "./wifi-concurrent-interface.ts";
 import { canHotspot } from "./wifi-hotspot-types.ts";
 import { restoreLimitedHotspot } from "./wifi-limited-hotspot-restore.ts";
+import {
+	bindingForRow,
+	verifiedWifiPortKey,
+} from "./wifi-operation-binding.ts";
 import { wifiAdapterKeyMac } from "./wifi-permanent-mac.ts";
 
 type Preferences = typeof getPersistedWifiAdapterModes;
@@ -71,8 +77,21 @@ async function applyWifiAdapterModes(
 				async () => {
 					if (cycle?.stopped() || deps.resolveInterfaces()[registryKey] !== row)
 						return;
-					const desired =
-						key === undefined ? undefined : readPreferences()[key];
+					const desiredMode = () => {
+						const modes = readPreferences();
+						const alias = verifiedWifiPortKey(bindingForRow(registryKey, row));
+						// A positive Station choice for this physical port cannot fall
+						// through to another AP profile just because its twin is gone.
+						if (
+							alias &&
+							getHotspotCredentials(alias)?.conn &&
+							(modes[alias] === "station" ||
+								hasDeferredWifiStationIntent(alias))
+						)
+							return "station";
+						return key === undefined ? undefined : modes[key];
+					};
+					const desired = desiredMode();
 					if (!verified) limitedVisited = true;
 					const readCapabilities =
 						deps.readCapabilities ?? getWifiCapabilitiesForInterface;
@@ -98,8 +117,7 @@ async function applyWifiAdapterModes(
 						...(cycle ? { cycle } : {}),
 						isCurrent: () =>
 							deps.resolveInterfaces()[registryKey] === row &&
-							(key === undefined ? undefined : readPreferences()[key]) ===
-								desired,
+							desiredMode() === desired,
 						activate: (settle, attempt) =>
 							admitWifiRequest(
 								row,

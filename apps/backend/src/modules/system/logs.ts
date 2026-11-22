@@ -42,6 +42,7 @@ function buildMockJournal(service?: string): string {
 export async function getLog(
 	conn: MessageSocket,
 	service?: string,
+	request?: string,
 ): Promise<LogResult | undefined> {
 	const senderId = getSocketSenderId(conn);
 	// Argv-only: each token is a discrete element, so a `service` value can never
@@ -60,7 +61,16 @@ export async function getLog(
 			: await run("journalctl", args, { maxBuffer: 10 * 1024 * 1024 });
 		// Pushed as a `log` event the frontend turns into a file download; also
 		// returned so the getLog/getSyslog RPC is itself a real data source.
-		conn.send(buildMsg("log", { name, contents }, senderId));
+		// The client's request id, when it sent one, ties this file to that request.
+		conn.send(
+			buildMsg(
+				"log",
+				request === undefined
+					? { name, contents }
+					: { name, contents, request },
+				senderId,
+			),
+		);
 		return { name, contents };
 	} catch (err) {
 		const msg = `Failed to fetch the log: ${err}`;

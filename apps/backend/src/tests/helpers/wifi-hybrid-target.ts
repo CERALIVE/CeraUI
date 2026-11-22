@@ -1,6 +1,7 @@
 import { spyOn } from "bun:test";
 import * as fs from "node:fs";
 import * as nm from "../../modules/network/network-manager.ts";
+import * as profileInstance from "../../modules/network/network-manager-profile-instance.ts";
 import * as concurrent from "../../modules/wifi/wifi-concurrent-interface.ts";
 import { getWifiInterfacesByMacAddress } from "../../modules/wifi/wifi-connections.ts";
 import {
@@ -8,6 +9,7 @@ import {
 	wifiRadioIdentity,
 } from "../../modules/wifi/wifi-radio-identity.ts";
 import { iwCreationReceipt } from "./iw-creation-receipt.ts";
+import { ACTIVE_PATH, RUN_ID } from "./wifi-active-observation.ts";
 
 const PHY = "/sys/devices/pci0000:00/0000:00:01.0/ieee80211/phy0";
 const COMBINATION =
@@ -87,6 +89,7 @@ export async function targetFixture(
 		return objects.get(name)?.phy;
 	});
 	spyOn(radioIdentityReaders, "readDevicePath").mockResolvedValue(undefined);
+	spyOn(profileInstance, "nmRunId").mockResolvedValue(RUN_ID);
 	spyOn(nm, "nmDeviceProp").mockImplementation(async (name, fields) =>
 		fields.split(",").map((field) => {
 			if (field === "GENERAL.VENDOR") return "Fixture";
@@ -98,6 +101,8 @@ export async function targetFixture(
 				return name === "wlan0" || managed ? "yes" : "no";
 			if (field === "GENERAL.CON-UUID")
 				return name === "wlan0" ? station : active;
+			if (field === "GENERAL.CON-PATH")
+				return (name === "wlan0" ? station : active) ? ACTIVE_PATH : "";
 			if (field === "GENERAL.AUTOCONNECT") return autoconnect;
 			return "";
 		}),

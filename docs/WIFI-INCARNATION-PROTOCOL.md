@@ -21,8 +21,21 @@ still pending.
 
 A sole adapter uses the plain MAC record, including when returning from a
 verified pair. Discovery preserves independent port state for the next proven
-pair. A destination row cannot accept a concurrent Stop while its active UUID
-is changing during a port swap.
+pair. During a port swap, token-free Stop and Station can wait briefly for
+discovery to prove the live target instead of requiring a second request. They
+do not guess the target when that proof does not arrive in time.
+
+A successful Stop or Station retires the independently saved intent of the
+selected radio's verified permanent MAC and literal port. It does so on
+both sole and composite rows, including when the AP is already down or the
+plain-MAC AP is running. Other independent ports keep their intent.
+If the selected live AP belongs to the current port, only that owning port
+gets Station; otherwise the plain record and its credential-only copies
+also get Station. An unsaved Station choice blocks restore for the affected
+owners while its write is retried. An accepted explicit Hotspot or Hybrid
+supersedes it; a refused choice reinstates the previous durable and deferred
+intent. The deferred retry is in memory and cannot survive power loss while
+configuration is still unwritable.
 
 ## Backend limited mode [EXISTS; host and mock-browser proof only]
 
@@ -160,7 +173,37 @@ the selected radio and profile before the forward write, reactivation, any
 rollback, and the credential commit. If proof is lost before dispatch, the
 operation refuses without effects. If a write may already have changed the
 profile, Configure reports `activating` and suppresses further writes and Up.
-The limited-radio regulatory Stop retains its UUID-based authority.
+An exclusive restart needs a fresh physical port observation and matching
+saved profile pins. If proof is lost after a forward or rollback Up, Configure
+and regulatory restart use the captured active path and daemon identity to
+take down only their own activation, never a later activation of the UUID.
+Both forward and rollback hybrid Up require confirmation of the command's
+active path and daemon, on the selected AP leg with the expected UUID, as
+well as the station/AP channel check. UUID and channel alone cannot confirm
+Save. The same active path, daemon, UUID and connected AP leg are rechecked
+after refreshing saved connections and before committing credentials. A
+rollback whose Up acknowledged but whose profile readback failed still
+undergoes hybrid confirmation and exact cleanup; it is not a clean refusal.
+If confirmation fails, cleanup uses only the command receipt. Before Up,
+channel refusal may stop an AP proven active on the selected leg. Stop, Station and discovery
+policy obtain a fresh device activation path on the selected radio or AP leg;
+a saved UUID, cached live state or global roster never authorizes Down.
+Station checks a fresh device roster even when its cached mode is Station.
+An unreadable or unclassified local activation requests a rescan and returns
+`deactivation-failed`. When the radio has no selected AP to stop, a failed
+owner policy pass refuses Station and restores the prior intent; the owner's
+policy retry remains scheduled. This does not gate Down of a live AP.
+Legacy Wi-Fi Disconnect has only a UUID on the wire:
+it requires one unambiguous selected Station row, or returns `generic`.
+An Up timeout is uncertain, not a clean refusal. Re-read the selected AP leg
+and compare it to the pre-Up path and profile instance; do not dispatch a
+rollback Up on timeout. A live AP positively re-observed on the unchanged
+target can settle the Save. That observation never becomes a command receipt.
+If confirmation fails or continuity is lost, only a daemon-returned receipt
+authorizes cleanup. An interrupted Save reports `activating`, not success,
+and logs unproved cleanup. A channel refusal whose exact Down cannot be
+proved reports `activation-failed` with reason `deactivation-failed`.
+The same path requirement applies to limited-radio regulatory Stop.
 
 The credential writer stages the keyfile, re-reads the profile and requires
 the same NetworkManager resource, and only then requests the operation's
@@ -247,8 +290,14 @@ report uncertain outcomes rather than claiming an atomic transaction.
   (`wifi-credential-publish-radio.test.ts`). Restored files retain their
   bytes and inode, not their original ctime.
 - **Activation rollback and profile deletion.** Rollback binds the Up path
-  to its original NetworkManager bus and daemon identity. Every exact Down
-  rechecks that identity before dispatch. A missing path, a different run,
+  to its original NetworkManager bus and daemon identity. The shared Down
+  primitive checks the bus ID on a non-reconnecting connection and sends
+  `DeactivateConnection` to the recorded unique daemon owner, by path, after
+  checking the active object's UUID and device. Method acknowledgement alone
+  is not completion: the same bus must prove the exact object deactivated
+  or removed within the bounded wait. An unproved Stop keeps live state and
+  returns `deactivation-failed` for retry, without releasing the AP leg.
+  A missing path, a different run,
   or unreadable identity never authorizes a Down by path or UUID. Cleanup
   checks fresh activity instead. If activity is unknown or the profile still has
   an active connection, retain it and issue the existing unknown-mode
@@ -262,9 +311,11 @@ report uncertain outcomes rather than claiming an atomic transaction.
   unacknowledged Down, without repeating the command.
   NetworkManager does not offer a delete-if-inactive transaction: an
   independent activation after the final inventory answer can still race
-  Delete. NetworkManager can also restart between the final run check and
-  `nmcli` dispatch; `nmcli` itself cannot bind its request to a daemon run.
-  The renumbering tests cover restarts before the check, not inside that gap.
+  Delete. The remaining `nmcli` operations, including Up and Delete, cannot
+  bind dispatch to a daemon run, so NetworkManager can restart after their
+  last check. Exact Down is not an `nmcli` operation: its D-Bus call targets
+  the captured daemon owner on the verified bus. The CLI renumbering tests
+  cover restarts before the check, not inside the CLI dispatch gap.
 - **Deferred borrowed-leg release.** Expiry and failed exact Down both try
   release using Start's allocator receipt under the owner lock. Only the
   still-owned idle leg can regain its previous autoconnect. Busy or

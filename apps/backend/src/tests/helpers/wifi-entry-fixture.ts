@@ -20,6 +20,7 @@ import {
 	hotspotStartProcedure,
 	setWifiAdapterModeProcedure,
 } from "../../rpc/procedures/wifi.procedure.ts";
+import { mockActiveObservation } from "./wifi-active-observation.ts";
 import { wifiFrameFixture } from "./wifi-frame-fixture.ts";
 
 const chosen = { name: "Admission AP", password: "admission-password" };
@@ -37,6 +38,15 @@ export async function fixture() {
 	const state = await wifiFrameFixture();
 	const effects: unknown[] = [];
 	spyOn(nm, "nmConnsGet").mockResolvedValue([]);
+	mockActiveObservation((ifname) =>
+		ifname === state.row.ifname
+			? state.row.activeMode === "ap"
+				? (state.row.activeConn ?? state.row.conn ?? undefined)
+				: undefined
+			: state.row.concurrentHotspot?.ifname === ifname
+				? (state.row.concurrentHotspot.activeConn ?? undefined)
+				: undefined,
+	);
 	spyOn(defaultHotspotDeps.credentials, "get").mockImplementation(() => {
 		effects.push("store-read");
 		return undefined;

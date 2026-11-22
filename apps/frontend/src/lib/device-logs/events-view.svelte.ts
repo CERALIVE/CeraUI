@@ -165,8 +165,12 @@ export class EventsView {
 	}
 
 	/** Asks for the raw entries around `event`; only the newest request may open them. */
-	viewRaw(event: DeviceEvent, open: (page: AroundPage) => void): Promise<void> {
-		return this.#raw.open(event, this.#deps.around, open);
+	viewRaw(
+		event: DeviceEvent,
+		open: (page: AroundPage) => void,
+		still: () => boolean,
+	): Promise<void> {
+		return this.#raw.open(event, this.#deps.around, open, still);
 	}
 
 	dispose(): void {

@@ -16,6 +16,7 @@ type OwnerRecovery = {
 	pending: Set<string>;
 	teardown?: () => Promise<WifiPendingTeardownResult>;
 	legRelease?: () => Promise<boolean>;
+	stationIntent?: () => void;
 };
 
 const owners = new Map<string, OwnerRecovery>();
@@ -27,6 +28,53 @@ function recoveryFor(owner: string): OwnerRecovery {
 		owners.set(owner, state);
 	}
 	return state;
+}
+
+export function deferWifiStationIntent(owner: string, persist: () => void) {
+	const state = recoveryFor(owner);
+	const previous = state.stationIntent;
+	state.stationIntent = persist;
+	retryWifiAdapterReconcile(
+		owner,
+		"station preference not saved",
+		"station-intent",
+	);
+	return () => {
+		if (owners.get(owner)?.stationIntent !== persist) return;
+		if (previous) state.stationIntent = previous;
+		else clearDeferredWifiStationIntent(owner);
+	};
+}
+
+export function clearDeferredWifiStationIntent(owner: string): void {
+	const state = owners.get(owner);
+	if (!state?.stationIntent) return;
+	delete state.stationIntent;
+	clearWifiAdapterReconcile(owner, "station-intent");
+}
+
+export function hasDeferredWifiStationIntent(owner: string): boolean {
+	return owners.get(owner)?.stationIntent !== undefined;
+}
+
+/** Save the retry before a successful intent write clears it. */
+export function snapshotDeferredWifiStationIntent(owner: string): () => void {
+	const previous = owners.get(owner)?.stationIntent;
+	return () => {
+		if (previous && !hasDeferredWifiStationIntent(owner))
+			deferWifiStationIntent(owner, previous);
+	};
+}
+
+export function retryDeferredWifiStationIntent(owner: string): void {
+	const persist = owners.get(owner)?.stationIntent;
+	if (!persist) return;
+	try {
+		persist();
+		clearDeferredWifiStationIntent(owner);
+	} catch {
+		retryWifiAdapterReconcile(owner, undefined, "station-intent");
+	}
 }
 
 /** Captured-resource executors submit obligations under the existing owner lock. */
