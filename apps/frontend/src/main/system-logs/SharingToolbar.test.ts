@@ -33,6 +33,7 @@ beforeEach(() => {
 	createBundle.mockReset();
 	previewBundle.mockReturnValue(new Promise<never>(() => {}));
 	flow = new SharingFlow({
+		current: () => true,
 		logs: { createExport, previewBundle, createBundle },
 		download: vi.fn(),
 	});

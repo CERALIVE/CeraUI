@@ -9,9 +9,12 @@
   The chosen boot lives exactly as long as the open view: any close (its own or
   the parent's) or unmount drops it, so the next open starts on All boots, and
   while open, deleting stored history drops it once the device stops listing it.
+  The open generation is derived from `open` itself, so the write that closes
+  the dialog ends it at once, before the update flush tears the view down.
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
+import { onDestroy } from 'svelte';
 import { MediaQuery } from 'svelte/reactivity';
 
 import { AppDialog } from '$lib/components/dialogs';
@@ -38,6 +41,12 @@ const wide = new MediaQuery(WIDE_DESKTOP_QUERY);
 // scrollbars inherit the page's graphite palette from app.css.
 const SURFACES = 'selection:bg-status-info/30 selection:text-foreground';
 
+// A new value whenever `open` is written, null while closed: a result checked after a close or a
+// reopen is stale in that same call, whoever wrote it (this dialog's control, Escape, the parent).
+let opens = 0;
+const generation = $derived(open ? ++opens : null);
+onDestroy(bootSelection.attach(() => generation));
+
 $effect(() => {
 	if (!open) return;
 	const stop = onHistoryChanged(() => void bootSelection.recheck(() => rpc.logs.boots()));
@@ -51,7 +60,7 @@ $effect(() => {
 <AppDialog bind:open contentClass={SURFACES} fullscreen hideFooter title={m["settings.index.logs"]()}>
 	{#snippet headerAside()}
 		<StreamStatePill />
-		{#if !wide.current}
+		{#if open && !wide.current}
 			<BootButton />
 		{/if}
 	{/snippet}

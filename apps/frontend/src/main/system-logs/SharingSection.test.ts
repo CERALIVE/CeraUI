@@ -54,6 +54,7 @@ beforeEach(() => {
 		clicked.resolve(this.href);
 	});
 	flow = new SharingFlow({
+		current: () => true,
 		logs: { createExport, previewBundle, createBundle },
 		download: startBackendDownload,
 	});

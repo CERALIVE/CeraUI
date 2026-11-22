@@ -24,6 +24,8 @@ class BootSelection {
 	#intent = $state(0);
 	// Advanced when a view closes: a result started in one open never applies in the next one.
 	#views = 0;
+	// LogsDialog's open generation (`attach`), `null` while closed; 0 with no dialog attached.
+	#generation: () => number | null = () => 0;
 	#openedAt = 0;
 
 	get intent(): number {
@@ -35,11 +37,29 @@ class BootSelection {
 		return this.#intent !== this.#openedAt;
 	}
 
+	/** LogsDialog hands over its open generation, which changes with every write of its `open`. */
+	attach(generation: () => number | null): () => void {
+		this.#generation = generation;
+		return () => {
+			if (this.#generation === generation) this.#generation = () => 0;
+		};
+	}
+
+	/** For a side effect of the open view: false from the moment its dialog closes or reopens, or the view closes. */
+	opened(): () => boolean {
+		const generation = this.#generation();
+		const view = this.#views;
+		return () =>
+			generation !== null &&
+			this.#generation() === generation &&
+			this.#views === view;
+	}
+
 	/** For an async result started now: false once any pick follows or the view closes, so its reply must not apply. */
 	since(): () => boolean {
 		const at = this.#intent;
-		const view = this.#views;
-		return () => this.#intent === at && this.#views === view;
+		const open = this.opened();
+		return () => this.#intent === at && open();
 	}
 
 	get boot(): LogBootInfo | null {

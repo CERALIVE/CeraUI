@@ -128,12 +128,17 @@ density. It is not a redesign.
   (`lib/device-logs/boot-selection.svelte.ts`): every `choose()` advances it, a
   repeat of the highlighted boot and All boots included, and it is never reset;
   a view closing (`reset()`) also makes every token taken in that open stale, so
-  nothing started in one open applies in the next. The view itself lives exactly
-  while the dialog is open (`LogsDialog` renders `SystemLogsView` only under
-  `open`): the close edge, not the end of the exit animation, retires it, so the
-  probe fence, the Raw lookup abort and paging invalidation, and the flow's dispose
-  (export and bundle runs: no ticket can start a download after the close) all run
-  at once, and a reopen during the exit mounts a fresh view.
+  nothing started in one open applies in the next. The close itself ends the open
+  generation: `LogsDialog` derives it from `open` and attaches it to the boot
+  selection, so the write that closes or reopens the dialog (its own control,
+  Escape, or the parent) makes every `opened()` and `since()` token stale in that
+  same call, before Svelte's update flush. Every download start reads it at that
+  moment: an export or bundle ticket's success, and a legacy download request. The
+  view and the phone header's boot button live only while the dialog is open
+  (`LogsDialog` renders them under `open`), so the exit animation keeps neither:
+  the flush after the close unmounts them and runs their teardown (probe fence, Raw
+  lookup abort and paging invalidation, the flow's dispose), and a reopen mounts a
+  fresh view.
   Each async result that could change Raw or the scope takes `since()` when it
   starts and applies only while that still holds:
   - a deep link (`SystemLogsView` takes it in a pre-effect as the view mounts

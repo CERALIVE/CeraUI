@@ -45,7 +45,9 @@ afterEach(() => {
 });
 
 const mount = () =>
-	render(LegacyLogDownloads, { props: { downloads: new LogDownloads() } });
+	render(LegacyLogDownloads, {
+		props: { downloads: new LogDownloads(() => true) },
+	});
 
 const button = (kind: "device" | "system") =>
 	screen.getByTestId(`log-download-${kind}`) as HTMLButtonElement;
@@ -326,5 +328,16 @@ describe("LegacyLogDownloads: inline recovery", () => {
 		expect(screen.queryByTestId("log-download-error")).toBeNull();
 		pending.resolve();
 		await expect.poll(() => button("system").disabled).toBe(false);
+	});
+});
+
+describe("LogDownloads: a stale open", () => {
+	it("sends no request for a download asked once its view's open has ended", async () => {
+		const downloads = new LogDownloads(() => false);
+
+		await downloads.download("device");
+
+		expect(getDeviceLog).not.toHaveBeenCalled();
+		expect(downloads.downloading).toBeNull();
 	});
 });

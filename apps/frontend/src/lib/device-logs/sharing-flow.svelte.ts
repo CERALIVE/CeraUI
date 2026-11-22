@@ -49,6 +49,8 @@ export interface SharingDeps {
 		createBundle(): Promise<LogExportOutput>;
 	};
 	readonly download: (path: string) => void;
+	/** Whether the view's open generation is still current, read the moment a ticket's download would start. */
+	readonly current: () => boolean;
 	/** The boot picker: Export follows it when it was used after Raw's last view (its `intent` moved on). */
 	readonly picker?: {
 		readonly boot: LogBootInfo | null;
@@ -158,7 +160,7 @@ export class SharingFlow {
 			() => this.#deps.logs.createExport(input),
 			"export",
 		);
-		if (run !== this.#exportRun) return;
+		if (run !== this.#exportRun || !this.#deps.current()) return;
 		if (reply.ok && started(this.#deps.download, reply.url)) {
 			this.closeExport();
 			return;
@@ -191,7 +193,7 @@ export class SharingFlow {
 		this.bundleProblem = null;
 		this.bundleRefused = false;
 		const reply = await ticket(() => this.#deps.logs.createBundle(), "bundle");
-		if (run !== this.#bundleRun) return;
+		if (run !== this.#bundleRun || !this.#deps.current()) return;
 		if (reply.ok && started(this.#deps.download, reply.url)) {
 			this.closeBundle();
 			return;

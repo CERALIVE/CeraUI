@@ -19,6 +19,7 @@ import {
 } from "../../../../backend/src/modules/device-logs/export";
 import {
 	BUNDLE_TICKET,
+	EXPORT_TICKET,
 	bundleManifest as manifest,
 	EXPORT_TICKET as TICKET,
 } from "./__fixtures__/sharing";
@@ -60,19 +61,48 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-function setup() {
+function setup(current: () => boolean = () => true) {
 	const createExport =
 		vi.fn<(input: LogExportInput) => Promise<LogExportOutput>>();
 	const previewBundle = vi.fn<() => Promise<LogBundleManifest>>();
 	const createBundle = vi.fn<() => Promise<LogExportOutput>>();
 	const download = vi.fn<(path: string) => void>();
 	const flow = new SharingFlow({
+		current,
 		logs: { createExport, previewBundle, createBundle },
 		download,
 	});
 	flows.push(flow);
 	return { flow, createExport, previewBundle, createBundle, download };
 }
+
+it.each(["export", "bundle"] as const)(
+	"starts no %s download for a ticket answered once the view's open has ended",
+	async (kind) => {
+		let open = true;
+		const { flow, createExport, previewBundle, createBundle, download } = setup(
+			() => open,
+		);
+		const held = Promise.withResolvers<LogExportOutput>();
+		createExport.mockReturnValue(held.promise);
+		createBundle.mockReturnValue(held.promise);
+		previewBundle.mockResolvedValue(manifest(3));
+		let press: Promise<void>;
+		if (kind === "export") {
+			flow.openExport();
+			press = flow.confirmExport();
+		} else {
+			await flow.openBundle();
+			press = flow.downloadBundle();
+		}
+
+		open = false;
+		held.resolve(kind === "export" ? EXPORT_TICKET : BUNDLE_TICKET);
+		await press;
+
+		expect(download).not.toHaveBeenCalled();
+	},
+);
 
 it.each(["export", "bundle"] as const)(
 	"starts a new %s download on the second press after a synchronous browser refusal",
@@ -96,6 +126,7 @@ it.each(["export", "bundle"] as const)(
 				throw new DOMException("blocked", "SecurityError");
 			});
 		const flow = new SharingFlow({
+			current: () => true,
 			logs: {
 				createExport: (input) => create(issueExport(conn, input)),
 				previewBundle: async () => manifest(3),
@@ -1052,6 +1083,7 @@ describe("SharingFlow: the export scope is fixed when the confirmation opens", (
 		const { createExport, previewBundle, createBundle, download } = setup();
 		const picker = { boot: null, intent: 0 };
 		const flow = new SharingFlow({
+			current: () => true,
 			logs: { createExport, previewBundle, createBundle },
 			download,
 			picker,

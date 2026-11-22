@@ -14,9 +14,15 @@ export class LogDownloads {
 	// with no backend progress events, so "progress" is the in-flight indicator.
 	downloading = $state<LogKind | null>(null);
 	failed = $state<LogKind | null>(null);
+	readonly #current: () => boolean;
+
+	/** `current`: whether the view that asks is still open, read as each download starts. */
+	constructor(current: () => boolean) {
+		this.#current = current;
+	}
 
 	async download(kind: LogKind): Promise<void> {
-		if (this.downloading !== null) return;
+		if (this.downloading !== null || !this.#current()) return;
 		this.downloading = kind;
 		this.failed = null;
 		try {

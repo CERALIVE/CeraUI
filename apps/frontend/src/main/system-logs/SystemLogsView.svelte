@@ -79,7 +79,9 @@ let status = $state<ShellStatus>('loading');
 // A failed check may still have loaded this view's copy, which the failure band's Support bundle needs.
 let copyLoaded = $state(false);
 let storage = $state.raw<LogStorage | null>();
-const legacyDownloads = new LogDownloads();
+// This open's generation: the dialog's close ends it at once, before this view is torn down.
+const inOpen = bootSelection.opened();
+const legacyDownloads = new LogDownloads(inOpen);
 // Each new deep link selects its tab again; the operator's own choice overrides it.
 let selected = $derived<string | undefined>(context?.tab);
 let anchor = $derived<RawMoment | undefined>(
@@ -100,7 +102,12 @@ let tabList = $state<HTMLElement | null>(null);
 let storageHeading = $state<HTMLHeadingElement>();
 let checkRun = 0;
 // Export follows Raw's last view or the boot picker, whichever the operator used last.
-const sharing = new SharingFlow({ logs: rpc.logs, download: startBackendDownload, picker: bootSelection });
+const sharing = new SharingFlow({
+	logs: rpc.logs,
+	download: startBackendDownload,
+	current: inOpen,
+	picker: bootSelection,
+});
 onDestroy(() => {
 	checkRun++;
 	sharing.dispose();

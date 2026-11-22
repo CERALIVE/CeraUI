@@ -1,0 +1,295 @@
+// @vitest-environment jsdom
+import type { LogBootInfo, LogExportOutput } from "@ceraui/rpc/schemas";
+import { logAroundOutputSchema } from "@ceraui/rpc/schemas";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/svelte";
+import {
+	afterEach,
+	beforeAll,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vitest";
+
+import { BOOT_IDS, fourBoots } from "$lib/device-logs/__fixtures__/boots";
+import { eventPage } from "$lib/device-logs/__fixtures__/events";
+import {
+	BUNDLE_TICKET,
+	bundleManifest,
+	EXPORT_TICKET,
+	exportScopeRows,
+} from "$lib/device-logs/__fixtures__/sharing";
+import { bootSelection } from "$lib/device-logs/boot-selection.svelte";
+import type { LogsDialogContext } from "$lib/stores/dialog-request.svelte";
+
+import { en } from "../../tests/helpers/catalog";
+import {
+	installMediaQueries,
+	type MediaQueryControl,
+} from "../../tests/helpers/media-query";
+
+import LogsDialogHost from "./__fixtures__/LogsDialogHost.svelte";
+
+/**
+ * Closing System Logs ends its open view in the same call that sets `open`
+ * false: a ticket answered just before the close, whose continuation runs
+ * after the close but before Svelte's update flush tears the view down, starts
+ * no download, and a reopen on another entry exports its own view. The real
+ * dialog, its own close control and the real browser hand-off.
+ */
+
+const rpc = vi.hoisted(() => {
+	const tickets = {
+		sent: [] as string[],
+		reply: Promise.withResolvers<LogExportOutput>(),
+	};
+	const hold = (kind: string) => {
+		tickets.sent.push(kind);
+		return tickets.reply.promise;
+	};
+	return {
+		tickets,
+		logs: {
+			getStorage: vi.fn(),
+			boots: vi.fn(),
+			around: vi.fn(),
+			query: vi.fn(),
+			previewBundle: vi.fn(),
+			// Plain functions, not mocks: a mock's own bookkeeping adds a promise step
+			// between the device's reply and the flow, which moves the window under test.
+			createExport: () => hold("export"),
+			createBundle: () => hold("bundle"),
+		},
+		events: { list: vi.fn() },
+	};
+});
+vi.mock("$lib/rpc/client", () => ({ rpc }));
+vi.mock("$lib/rpc/subscriptions.svelte", async () => ({
+	...(await import(
+		"$lib/components/custom/__fixtures__/connection-state.svelte"
+	)),
+	setLogFollowListener: vi.fn(),
+	setEventFeedListener: vi.fn(),
+}));
+vi.mock("$lib/helpers/SystemHelper", () => ({
+	getDeviceLog: vi.fn(),
+	getSystemLog: vi.fn(),
+}));
+vi.mock("$lib/stores/hud.svelte", () => ({
+	getHudState: () => ({ isStreaming: false, isFullyStale: false }),
+}));
+
+const sharing = en.systemLogs.sharing;
+const raw = en.systemLogs.raw;
+const boots = en.systemLogs.boots;
+function running(): LogBootInfo {
+	const found = fourBoots().find((boot) => boot.bootId === BOOT_IDS.current);
+	if (found === undefined) throw new Error("fourBoots() lists no running boot");
+	return found;
+}
+const RUNNING = running();
+const AT = RUNNING.firstTs + 60_000;
+const ALL_BOOTS_SCOPE = [
+	boots.heading,
+	boots.all,
+	raw.levelLabel,
+	raw.levelInfo,
+	raw.sourceLabel,
+	raw.sourceAll,
+];
+
+let media: MediaQueryControl | undefined;
+let anchorClicks: ReturnType<typeof vi.spyOn>;
+
+function linkedMoment() {
+	const page = {
+		ok: true,
+		entries: [],
+		hasMore: false,
+		termination: "end",
+		continuation: null,
+		historyEpoch: 0,
+		bootId: RUNNING.bootId,
+	};
+	return logAroundOutputSchema.parse({
+		ok: true,
+		approximate: false,
+		anchor: {
+			cursor: "s=anchor",
+			ts: AT,
+			bootId: RUNNING.bootId,
+			level: "error",
+			source: "app",
+			unit: "ceraui.service",
+			message: "linked moment",
+			truncated: false,
+			marker: null,
+		},
+		older: page,
+		newer: page,
+		olderQuery: { boot: RUNNING.bootId, direction: "older", limit: 50 },
+		newerQuery: { boot: RUNNING.bootId, direction: "newer", limit: 50 },
+	});
+}
+
+/**
+ * The parent's close written `hops` microtasks after the device answers the
+ * held ticket, the way SettingsView writes `open`. Whether the reply's own
+ * continuation (which starts the download) runs before or after the close and
+ * the update flush it schedules depends on the hop, so every hop up to
+ * `MAX_HOPS` is tried. The dialog's own close control is not the path here: it
+ * first dismisses the nested sharing dialog, which already discards the ticket.
+ */
+async function closeAfter(
+	start: () => Promise<void>,
+	reply: LogExportOutput,
+	hops: number,
+	entry?: LogsDialogContext,
+): Promise<{ late: boolean; host: { show(next?: LogsDialogContext): void } }> {
+	rpc.tickets.sent = [];
+	rpc.tickets.reply = Promise.withResolvers<LogExportOutput>();
+	const host = render(LogsDialogHost).component;
+	host.show(entry);
+	await start();
+	let closed = false;
+	let late = false;
+	anchorClicks.mockImplementation(() => {
+		if (closed) late = true;
+	});
+	rpc.tickets.reply.resolve(reply);
+	let hop = Promise.resolve();
+	for (let i = 0; i < hops; i++) hop = hop.then(() => {});
+	void hop.then(() => {
+		closed = true;
+		host.close();
+	});
+	// A task boundary: every continuation queued by the reply and the close has run.
+	await new Promise((resolve) => setTimeout(resolve));
+	return { late, host };
+}
+
+const MAX_HOPS = 12;
+const HOPS = Array.from({ length: MAX_HOPS + 1 }, (_, hops) => hops);
+
+async function exportStarted(): Promise<void> {
+	await fireEvent.click(await screen.findByTestId("sharing-toolbar-export"));
+	const dialog = await screen.findByRole("dialog", { name: sharing.export });
+	await fireEvent.click(
+		within(dialog).getByRole("button", { name: sharing.exportDownload }),
+	);
+	await waitFor(() => expect(rpc.tickets.sent).toEqual(["export"]));
+}
+
+async function bundleStarted(): Promise<void> {
+	await fireEvent.click(await screen.findByTestId("sharing-toolbar-bundle"));
+	const dialog = await screen.findByRole("dialog", { name: sharing.bundle });
+	await within(dialog).findByRole("table");
+	await fireEvent.click(
+		within(dialog).getByRole("button", { name: sharing.bundleDownload }),
+	);
+	await waitFor(() => expect(rpc.tickets.sent).toEqual(["bundle"]));
+}
+
+beforeAll(async () => {
+	await Promise.all([
+		import("../system-logs/EventsTab.svelte"),
+		import("../system-logs/RawLogsTab.svelte"),
+	]);
+});
+
+beforeEach(() => {
+	vi.clearAllMocks();
+	rpc.tickets.sent = [];
+	rpc.tickets.reply = Promise.withResolvers<LogExportOutput>();
+	media = installMediaQueries((query) => query === "(min-width: 1024px)");
+	rpc.logs.getStorage.mockReset().mockResolvedValue({});
+	rpc.logs.boots.mockReset().mockResolvedValue(fourBoots());
+	rpc.logs.around.mockReset().mockResolvedValue(linkedMoment());
+	rpc.logs.query
+		.mockReset()
+		.mockResolvedValue({ ok: false, error: "READ_FAILED" });
+	rpc.logs.previewBundle.mockReset().mockResolvedValue(bundleManifest(3));
+	rpc.events.list.mockReset().mockResolvedValue(eventPage([]));
+	anchorClicks = vi
+		.spyOn(HTMLAnchorElement.prototype, "click")
+		.mockImplementation(() => {});
+	vi.spyOn(console, "error").mockImplementation(() => {});
+});
+
+afterEach(() => {
+	cleanup();
+	bootSelection.reset();
+	media?.restore();
+	media = undefined;
+	vi.restoreAllMocks();
+});
+
+const CASES = [
+	{ name: "an export", start: exportStarted, ticket: EXPORT_TICKET },
+	{ name: "a support bundle", start: bundleStarted, ticket: BUNDLE_TICKET },
+] as const;
+
+describe("LogsDialog: closing ends the open view before any queued reply runs", () => {
+	it.each(CASES)(
+		"the same successful $name ticket starts one download while open",
+		async ({ start, ticket }) => {
+			render(LogsDialogHost).component.show();
+			await start();
+
+			rpc.tickets.reply.resolve(ticket);
+
+			await waitFor(() => expect(anchorClicks).toHaveBeenCalledTimes(1));
+		},
+	);
+
+	it.each(CASES)(
+		"$name ticket answered around the parent's close starts no download after it",
+		async ({ start, ticket }) => {
+			const late: number[] = [];
+			for (const hops of HOPS) {
+				if ((await closeAfter(start, ticket, hops)).late) late.push(hops);
+				cleanup();
+				bootSelection.reset();
+			}
+			expect(late).toEqual([]);
+		},
+	);
+
+	it("a reopen on Events after such a close exports its own view", async () => {
+		const wrong: number[] = [];
+		for (const hops of HOPS) {
+			const linked = async () => {
+				await screen.findByTestId("raw-logs");
+				await exportStarted();
+			};
+			const { late, host } = await closeAfter(linked, EXPORT_TICKET, hops, {
+				tab: "raw",
+				at: AT,
+				bootId: RUNNING.bootId,
+			});
+			host.show({ tab: "events" });
+			await fireEvent.click(
+				await screen.findByTestId("sharing-toolbar-export"),
+			);
+			const reopened = await screen.findByRole("dialog", {
+				name: sharing.export,
+			});
+			if (
+				late ||
+				exportScopeRows(reopened).join("|") !== ALL_BOOTS_SCOPE.join("|")
+			)
+				wrong.push(hops);
+			cleanup();
+			bootSelection.reset();
+		}
+		expect(wrong).toEqual([]);
+	});
+});
