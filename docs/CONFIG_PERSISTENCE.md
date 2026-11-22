@@ -44,7 +44,8 @@ board. Changing pacing/start-limit policy remains an owner/image decision.
 
 Every file CeraUI's backend writes at runtime, grouped by durability
 category. "Atomic" means the write goes through `writeFileAtomicSync`
-(`apps/backend/src/helpers/config-loader.ts:278`): write to a sibling temp
+(`apps/backend/src/helpers/config-loader.ts:278`) or its asynchronous runtime
+config equivalent: write to a sibling temp
 file, `fsync`, then `rename` over the target — a crash mid-write can never
 leave a truncated or half-written file on disk, because POSIX `rename` is
 atomic. The exact temp-file name is:
@@ -60,6 +61,12 @@ orphan matching that one pattern and nothing else. T7's boot sweep
 (`apps/backend/src/helpers/boot-cleanup.ts`, wired into `main.ts` right after
 config load) matches that exact glob (`/^\.[^./][^/]*\.\d+\.tmp$/`) and unlinks
 any leftover from a prior crash, fail-soft, every boot.
+
+USB twin scan changes use a separate `.config.json.scan.<pid>.tmp` sibling,
+also covered by the boot sweep. Scan publication uses the updated in-memory
+config without waiting for disk. A later scan can retry a failed save; a
+synchronous `saveConfig()` supersedes an older background snapshot before
+writing its own. Other runtime config writes keep their synchronous contract.
 
 Damaged-record preservation is a separate immutable-copy writer. Its discoverable
 `<file>.damaged-<sha256>` name is unchanged. Before allocating any temp it strictly

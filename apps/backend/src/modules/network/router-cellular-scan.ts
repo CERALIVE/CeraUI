@@ -450,6 +450,8 @@ export type UsbPhysicalDescriptor = {
 	idPath?: string;
 	hwdbVendor?: string;
 	hwdbModel?: string;
+	pinManufacturer?: string | undefined;
+	pinProduct?: string | undefined;
 };
 
 /** Everything one sysfs sweep produces, each map keyed by interface name. */
@@ -591,6 +593,8 @@ function physicalDescriptor(
 		model: modelLabel(device),
 		deviceClass: verdict.deviceClass,
 		usbParent: device.usbParent,
+		pinManufacturer: descriptorStringDigest(device.manufacturer),
+		pinProduct: descriptorStringDigest(device.product),
 		...(device.serialNumber !== undefined
 			? { serial: device.serialNumber }
 			: {}),
@@ -602,6 +606,14 @@ function physicalDescriptor(
 			? { hwdbModel: device.databaseModel }
 			: {}),
 	};
+}
+
+function descriptorStringDigest(value: string | undefined): string | undefined {
+	if (value === undefined) return undefined;
+	return new Bun.CryptoHasher("sha256")
+		.update(value)
+		.digest("hex")
+		.slice(0, 32);
 }
 
 /** The router-mode cellular half of {@link scanUsbNetMarkers}. */
@@ -721,9 +733,18 @@ function snapshotKey(current: UsbNetMarkerSets): string {
 		modem: [...current.modemNet.entries()].sort(([a], [b]) =>
 			a.localeCompare(b),
 		),
-		physical: [...current.physical.entries()].sort(([a], [b]) =>
-			a.localeCompare(b),
-		),
+		physical: [...current.physical.entries()]
+			.sort(([a], [b]) => a.localeCompare(b))
+			.map(
+				([
+					name,
+					{
+						pinManufacturer: _manufacturer,
+						pinProduct: _product,
+						...descriptor
+					},
+				]) => [name, descriptor],
+			),
 	});
 }
 
@@ -826,8 +847,8 @@ async function runUsbNetScan(
 		physicalDescriptors = scanned.physical;
 		coveredIfnames = new Set(ifnames.filter((name) => !stale.has(name)));
 		setPresentPhysicalDevices(presentDeviceRecords());
-		excludeResidualGroupMembers();
-		const changed = snapshotKey(cachedSets()) !== before;
+		const bondChanged = excludeResidualGroupMembers();
+		const changed = bondChanged || snapshotKey(cachedSets()) !== before;
 		if (changed) {
 			for (const listener of scanCommittedListeners) listener();
 		}

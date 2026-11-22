@@ -1,11 +1,14 @@
-import { logger } from "../../helpers/logger.ts";
-import { getConfig, isRuntimeConfigAvailable, saveConfig } from "../config.ts";
+import {
+	getConfig,
+	isRuntimeConfigAvailable,
+	saveConfig,
+	saveConfigInBackground,
+} from "../config.ts";
 import { listPresentPhysicalDevices } from "../modems/physical-identity.ts";
 import { resolveBondPhysicalIdentity } from "../streaming/bond-entry.ts";
+import { getUsbPhysicalDescriptor } from "./router-cellular-scan.ts";
 
 const sessionOptOut = new Set<string>();
-// A reload replaces the config object, so pending writes cannot cross a reload.
-const unsavedScanChanges = new WeakSet<ReturnType<typeof getConfig>>();
 
 export function bondPhysicalId(ifname: string): string | undefined {
 	const identity = resolveBondPhysicalIdentity(ifname);
@@ -22,6 +25,41 @@ export function isBondOptedOut(ifname: string): boolean {
 		stored?.[identity.linkId] === true ||
 		(identity.legacyLinkId !== undefined &&
 			stored?.[identity.legacyLinkId] === true)
+	);
+}
+
+type GroupEntries = NonNullable<
+	ReturnType<typeof getConfig>["bond_group_opt_out"]
+>;
+type Pin = Exclude<GroupEntries[string], string | string[]>;
+
+function pinObservation(ifname: string) {
+	const descriptor = getUsbPhysicalDescriptor(ifname);
+	return descriptor === undefined
+		? undefined
+		: {
+				sku: `${descriptor.vid}:${descriptor.pid}`,
+				manufacturer: descriptor.pinManufacturer,
+				product: descriptor.pinProduct,
+			};
+}
+
+function matchesPin(
+	pin: Pin | string,
+	observed: ReturnType<typeof pinObservation>,
+): boolean {
+	if (observed === undefined) return false;
+	if (typeof pin === "string") return pin === observed.sku;
+	// A missing string proves nothing. Only a positively different descriptor
+	// can release a scan pin when the original USB serial is unavailable.
+	return (
+		pin.sku === observed.sku &&
+		(pin.manufacturer === undefined ||
+			observed.manufacturer === undefined ||
+			pin.manufacturer === observed.manufacturer) &&
+		(pin.product === undefined ||
+			observed.product === undefined ||
+			pin.product === observed.product)
 	);
 }
 
@@ -42,11 +80,20 @@ export function setPersistentBondOptOut(
 	if (legacy !== undefined && next[legacy] === true) {
 		for (const present of listPresentPhysicalDevices()) {
 			if (present.legacyLinkId === legacy && present.anchor !== "ifname") {
-				next[present.linkId] = true;
-				// Baseline migration owns this exact key, not the scan.
-				if (typeof groups[present.linkId] === "string") {
-					delete groups[present.linkId];
+				const observed = pinObservation(present.ifname);
+				const existing = groups[present.linkId];
+				if (typeof existing === "object" && !Array.isArray(existing)) {
+					groups[present.linkId] = { ...existing, portWide: true };
+				} else if (observed !== undefined) {
+					// Keep main's port-wide migration, but remember which split
+					// supplied it if the operator enables the port without a serial.
+					groups[present.linkId] = {
+						group: legacy,
+						...observed,
+						portWide: true,
+					};
 				}
+				next[present.linkId] = true;
 			}
 		}
 	}
@@ -58,20 +105,27 @@ export function setPersistentBondOptOut(
 			}
 		}
 	}
-	const grant = legacy === undefined ? undefined : groups[legacy];
-	if (legacy !== undefined && (next[legacy] === true || Array.isArray(grant))) {
+	const pin = groups[physicalId];
+	const pinnedGroup =
+		!optOut &&
+		next[physicalId] === true &&
+		typeof pin === "object" &&
+		!Array.isArray(pin) &&
+		matchesPin(pin, pinObservation(ifname))
+			? pin.group
+			: undefined;
+	for (const group of new Set([legacy, pinnedGroup])) {
+		if (group === undefined) continue;
+		const grant = groups[group];
+		if (next[group] !== true && !Array.isArray(grant)) continue;
 		const enabled = Array.isArray(grant) ? grant : [];
-		groups[legacy] = optOut
+		groups[group] = optOut
 			? enabled
 			: [...new Set([...enabled, physicalId])].sort();
 	}
 	// Enabling a replacement for which the pin is dormant does not release
 	// the original product. A real exact toggle takes ownership of the key.
-	if (
-		optOut ||
-		next[physicalId] === true ||
-		Array.isArray(groups[physicalId])
-	) {
+	if (optOut || next[physicalId] === true || Array.isArray(pin)) {
 		delete groups[physicalId];
 	}
 	if (optOut) next[physicalId] = true;
@@ -81,13 +135,12 @@ export function setPersistentBondOptOut(
 	config.bond_group_opt_out =
 		Object.keys(groups).length === 0 ? undefined : groups;
 	saveConfig();
-	unsavedScanChanges.delete(config);
 	return physicalId;
 }
 
 /** Reconcile scan-owned exact exclusions before publishing a USB scan. */
-export function excludeResidualGroupMembers(): void {
-	if (!isRuntimeConfigAvailable()) return;
+export function excludeResidualGroupMembers(): boolean {
+	if (!isRuntimeConfigAvailable()) return false;
 	const config = getConfig();
 	const groups = config.bond_group_opt_out;
 	let next: typeof config.bond_opt_out;
@@ -96,25 +149,31 @@ export function excludeResidualGroupMembers(): void {
 		legacyLinkId,
 		anchor,
 		linkId,
-		vid,
-		pid,
+		ifname,
 	} of listPresentPhysicalDevices()) {
-		if (anchor !== "id-path" || vid === undefined || pid === undefined)
-			continue;
-		const product = `${vid}:${pid}`;
-		const evidence = (nextGroups ?? groups)?.[linkId];
+		if (anchor !== "id-path") continue;
+		const observed = pinObservation(ifname);
+		if (observed === undefined) continue;
+		const entry = (nextGroups ?? groups)?.[linkId];
+		const evidence = Array.isArray(entry) ? undefined : entry;
 		const exact = (next ?? config.bond_opt_out)?.[linkId] === true;
 		const enabled =
 			legacyLinkId === undefined ? undefined : groups?.[legacyLinkId];
-		const fromGroup = Array.isArray(enabled) && !enabled.includes(linkId);
-
-		// Never retire or claim an exact exclusion written by the operator.
-		if (exact && typeof evidence !== "string") continue;
-		if (fromGroup && evidence !== product) {
+		// An existing pin owns its evidence, even if a different product happens
+		// to show the same rejected group serial.
+		if (typeof evidence === "object" && evidence.portWide) continue;
+		if (exact && evidence === undefined) continue;
+		const fromGroup =
+			legacyLinkId !== undefined &&
+			Array.isArray(enabled) &&
+			!enabled.includes(linkId);
+		if (evidence === undefined && fromGroup) {
 			nextGroups ??= { ...groups };
-			nextGroups[linkId] = product;
+			nextGroups[linkId] = { group: legacyLinkId, ...observed };
 		}
-		if (exact === (fromGroup || evidence === product)) continue;
+		const excluded =
+			evidence === undefined ? fromGroup : matchesPin(evidence, observed);
+		if (exact === excluded) continue;
 		next ??= { ...config.bond_opt_out };
 		if (exact) delete next[linkId];
 		else next[linkId] = true;
@@ -122,18 +181,8 @@ export function excludeResidualGroupMembers(): void {
 
 	if (next !== undefined) config.bond_opt_out = next;
 	if (nextGroups !== undefined) config.bond_group_opt_out = nextGroups;
-	const retrying = unsavedScanChanges.has(config);
-	if (next === undefined && nextGroups === undefined && !retrying) return;
-	try {
-		saveConfig();
-		unsavedScanChanges.delete(config);
-	} catch (error) {
-		// One save per scan and one warning per failure episode; publish the
-		// reconciled state even when the filesystem cannot take the write.
-		unsavedScanChanges.add(config);
-		if (!retrying)
-			logger.warn("bond: could not persist twin port exclusions", { error });
-	}
+	saveConfigInBackground(next !== undefined || nextGroups !== undefined);
+	return next !== undefined;
 }
 
 export function resetPersistentBondOptOutForTest(): void {
@@ -141,7 +190,6 @@ export function resetPersistentBondOptOutForTest(): void {
 	const config = getConfig();
 	config.bond_opt_out = undefined;
 	config.bond_group_opt_out = undefined;
-	unsavedScanChanges.delete(config);
 }
 
 export function resetSessionBondOptOutForTest(): void {

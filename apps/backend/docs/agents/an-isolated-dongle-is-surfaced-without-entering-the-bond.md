@@ -942,26 +942,33 @@ once, when its twin is first seen, and remains there after the twin is removed.
 Affected devices change link id and steering mark once. The rejected serial's
 opaque `legacyLinkId` preserves an existing bond opt-out. Toggling one twin
 migrates that exclusion to the exact keys of the present twins. The optional
-`bond_group_opt_out` field records enabled member lists by group key and
-scan-owned pins by port key with their USB vendor/product IDs. Before notifying
-listeners, a committed USB scan writes an exact `bond_opt_out` entry for an
-ungranted member that shows the group at a known port. Once pinned, a device
-with matching vendor/product IDs and port identity stays out even without a
-serial. A different product without matching group evidence makes only that
-scan-owned pin dormant. Exact entries from operator toggles or the original
-present-member migration are still port-wide. The bond reader still checks only
-exact and legacy keys. A failed scan save leaves the reconciled state in memory
-and retries at most once per later commit until saved, with one warning per
-failure episode. A durable disable removes the key from every enabled list;
-toggling the group itself ends its list.
+`bond_group_opt_out` records enabled ports by group and pin provenance by port.
+Before listeners run, a committed scan pins an ungranted member in
+`bond_opt_out`. Scan pins remember the originating group, VID:PID, and hashes of
+available USB manufacturer/product strings. A positive descriptor mismatch
+makes a scan pin dormant even when the rejected group serial matches, without
+replacing its original evidence. Exact entries written by operator disables or
+present-member migration remain port-wide. Enabling a matching active pin at
+its port grants its recorded group even if the serial is currently unreadable.
+A durable disable removes the port from every grant; toggling a lone group
+identity ends its grant list. The bond reader still checks only exact and
+legacy keys.
 
-This choice is per port, not per physical unit. A same-product device can
-inherit the pin; twins moved or enabled before showing their group can also
-start excluded. Enable the intended device after its identity settles at
-that port. A twin without `ID_PATH`, or one that returns without its group
-before there is a saved matching pin, can still join as on main. A USB
-composition change can look like a different product until the group is seen
-again. After
+The scan publishes the in-memory decision without waiting for the config file.
+At most one background atomic save is in flight, with scan-count backoff capped
+at eight skipped scans and one warning per failure episode. Ordinary synchronous config
+writes take precedence over a pending scan snapshot. A restart can lose a
+decision that did not reach disk.
+
+This choice is per port, not per unit. A replacement that reports the same
+available descriptors can inherit the pin, as can a replacement whose missing
+descriptors prevent a positive mismatch. The last-uplink guard can count that
+excluded replacement and accept disabling the remaining effective uplink.
+Twins moved or enabled before the group or pin can be identified may start
+excluded; enable them at the settled port. A twin without `ID_PATH`, or one
+that returns without its group before a matching pin is saved, can still join
+as on main. A different USB composition can leave an original pin dormant, even
+if the same group serial is observed. After
 shared-serial history eviction, a lone twin can still look like a singleton
 until the pair is relearned. Enabling that lone-serial identity ends the group
 record, as does enabling it before first recognition. Already-lost exclusions
@@ -969,6 +976,8 @@ cannot be recovered. Ending a group record does not erase earlier pins; the
 64-entry serial history does not cap retained group or port records. On
 v2026.11.3, an active exact pin remains port-wide and a dormant pin has no
 effect. A clean save on that release drops the evidence and residual lists.
+After cosmetic config salvage, the old release may retain them and a subsequent
+upgrade may reapply a pin despite an enable on the old release.
 
 Router login credentials are read only under the device's exact resolved
 `linkId`. A rejected serial's legacy id has no durable binding to a port, so it
