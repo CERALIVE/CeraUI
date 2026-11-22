@@ -1,10 +1,12 @@
 /// <reference types="bun" />
 /*
  * The update that the "CeraLive update is available" notice offers restarts the
- * backend twice, and a tab can be offline for both. Each session below is a real
- * fresh backend process (helpers/ceralive-update-session.ts) sharing only the
- * files a device keeps; the frames it prints are what an authenticating tab
- * receives, applied here to a current tab, a pre-#183 tab and a fresh tab.
+ * backend, and a tab can stay open, or be offline, throughout. Each backend
+ * below is a real fresh process (helpers/ceralive-update-session.ts) serving the
+ * real WebSocket control server over the same device files. Each tab is a real
+ * authenticated WebSocket client that keeps what it was shown across restarts
+ * and decodes frames like the current and main-era frontends (typed removals)
+ * or like v2026.7.2 (bare-name removals only).
  */
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import {
@@ -18,23 +20,29 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { notificationsMessageSchema } from "@ceraui/rpc/schemas";
-import { z } from "zod";
-import { OFFER_VERSION_LIMIT } from "../modules/system/ceralive-update-notice.ts";
+
+import {
+	OFFER_VERSION_LIMIT,
+	readOfferInputs,
+} from "../modules/system/ceralive-update-notice.ts";
 import { ceralivePackageList } from "../modules/system/package-layer.ts";
 import {
+	type AptPackage,
 	type AptScript,
-	FRAMES_PREFIX,
+	CHECKED_MARKER,
+	READY_PREFIX,
 	RECOVERY_FAILED_MARKER,
 	RECOVERY_RESTART_MARKER,
 	RESTART_EXIT_CODE,
+	SESSION_PASSWORD,
+	scriptedApt,
 } from "./helpers/ceralive-update-apt.ts";
 import type { SessionStep } from "./helpers/ceralive-update-session.ts";
 
 const NOTICE = "ceralive_update";
-const SESSION_TIMEOUT_MS = 45_000;
-const SEQUENCE_TIMEOUT_MS = 8 * SESSION_TIMEOUT_MS;
-// A sequence's deadline covers every child it starts, plus one.
-const budget = (children: number) => (children + 1) * SESSION_TIMEOUT_MS;
+// Bound for one awaited event (a marker, a frame answer, an exit); never a sleep.
+const DEADLINE_MS = 30_000;
+const budget = (backends: number) => (backends + 2) * DEADLINE_MS;
 const SESSION = new URL("./helpers/ceralive-update-session.ts", import.meta.url)
 	.pathname;
 const SETUP = new URL("../../setup.json", import.meta.url).pathname;
@@ -42,6 +50,7 @@ const SETUP = new URL("../../setup.json", import.meta.url).pathname;
 let root: string;
 let record: string;
 let dismissals: string;
+let live: { close(): Promise<void> }[] = [];
 
 beforeEach(async () => {
 	root = await mkdtemp(join(tmpdir(), "ceralive-update-restart-"));
@@ -52,313 +61,456 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+	await Promise.all(live.map((item) => item.close()));
+	live = [];
 	await rm(root, { recursive: true, force: true });
 });
 
-type Step = Omit<SessionStep, "record" | "scratch">;
-
-async function session(step: Step = {}) {
-	const input: SessionStep = { ...step, record, scratch: root };
-	await using child = Bun.spawn(
-		[process.execPath, SESSION, JSON.stringify(input)],
-		{
-			cwd: join(root, "cwd"),
-			timeout: SESSION_TIMEOUT_MS,
-			killSignal: "SIGKILL",
-			stdout: "pipe",
-			stderr: "pipe",
-			env: {
-				...process.env,
-				CERALIVE_DISMISSALS_FILE: dismissals,
-				CERALIVE_STREAMING_MARKER: join(root, "streaming"),
-				CERALIVE_EVENTS_DIR: join(root, "events"),
-				DOCKER_HOST: "unix:///nonexistent/docker.sock",
-			},
-		},
-	);
-	const [stdout, stderr, exit] = await Promise.all([
-		new Response(child.stdout).text(),
-		new Response(child.stderr).text(),
-		child.exited,
-	]);
-	const line = stdout
-		.split("\n")
-		.find((entry) => entry.startsWith(FRAMES_PREFIX));
-	if (line === undefined)
-		throw new Error(`no frames (exit ${exit}): ${stderr}`);
-	if (!step.recoverInstall && exit !== 0)
-		throw new Error(`session exited ${exit}: ${stderr}`);
-	return {
-		exit,
-		stdout,
-		stderr,
-		frames: z
-			.array(z.unknown())
-			.parse(JSON.parse(line.slice(FRAMES_PREFIX.length))),
-	};
+async function within<T>(promise: Promise<T>, what: string): Promise<T> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	try {
+		return await Promise.race([
+			promise,
+			new Promise<never>((_, reject) => {
+				timer = setTimeout(
+					() => reject(new Error(`no ${what} within ${DEADLINE_MS} ms`)),
+					DEADLINE_MS,
+				);
+			}),
+		]);
+	} finally {
+		clearTimeout(timer);
+	}
 }
 
-type Issuance = { lineage: string; generation: number };
-// What a current tab holds: each notice name and the issuance its copy carries
-// (none for copies from producers that predate issuances).
-type Tab = ReadonlyMap<string, Issuance | undefined>;
-const copy = (issuance?: Issuance): Tab => new Map([[NOTICE, issuance]]);
+// A child's output, read as it arrives so a full pipe never blocks the child.
+class Lines {
+	private readonly seen: string[] = [];
+	private cursor = 0;
+	private wake: (() => void) | undefined;
+	private ended = false;
 
-// The current frontend: a scoped removal retires only this lineage's issuances
-// up to its generation; an unscoped one removes by name.
-function tabOf(frames: readonly unknown[], start: Tab = new Map()): Tab {
-	const held = new Map(start);
-	for (const frame of frames) {
-		const parsed = notificationsMessageSchema.safeParse(frame);
-		if (!parsed.success) continue;
-		for (const { name, issuance } of parsed.data.show ?? [])
-			held.set(name, issuance);
-		for (const { id, issuance: scope } of parsed.data.remove ?? []) {
-			const copyHeld = held.get(id);
-			if (
-				!scope ||
-				(copyHeld?.lineage === scope.lineage &&
-					copyHeld.generation <= scope.generation)
-			)
-				held.delete(id);
+	constructor(stream: ReadableStream<Uint8Array>) {
+		void this.pump(stream);
+	}
+
+	private async pump(stream: ReadableStream<Uint8Array>) {
+		const decoder = new TextDecoder();
+		let rest = "";
+		for await (const chunk of stream) {
+			const parts = (rest + decoder.decode(chunk, { stream: true })).split(
+				"\n",
+			);
+			rest = parts.pop() ?? "";
+			this.seen.push(...parts);
+			this.wake?.();
+		}
+		this.seen.push(rest);
+		this.ended = true;
+		this.wake?.();
+	}
+
+	async next(match: (line: string) => boolean): Promise<string> {
+		for (;;) {
+			const at = this.seen.findIndex(
+				(line, index) => index >= this.cursor && match(line),
+			);
+			if (at >= 0) {
+				this.cursor = at + 1;
+				return this.seen[at] ?? "";
+			}
+			if (this.ended) throw new Error(`output ended:\n${this.text()}`);
+			await new Promise<void>((resolve) => {
+				this.wake = resolve;
+			});
 		}
 	}
-	return held;
-}
 
-function currentTab(frames: readonly unknown[], start: Tab = new Map()) {
-	return [...tabOf(frames, start).keys()];
-}
-
-// A bundle from main (after #183): typed frames, `remove` drops by id, no scope.
-function mainTab(frames: readonly unknown[], start: string[] = []) {
-	const shown = new Set(start);
-	for (const frame of frames) {
-		const parsed = notificationsMessageSchema.safeParse(frame);
-		if (!parsed.success) continue;
-		for (const { name } of parsed.data.show ?? []) shown.add(name);
-		for (const { id } of parsed.data.remove ?? []) shown.delete(id);
+	text(): string {
+		return this.seen.join("\n");
 	}
-	return [...shown];
 }
 
-// The v2026.7.2 frontend: no validation, `remove` entries go straight to the store.
-function legacyTab(frames: readonly unknown[], start: string[] = []) {
-	const shown = new Set<unknown>(start);
-	for (const frame of frames) {
-		const message = frame as { show?: { name: string }[]; remove?: unknown[] };
-		for (const { name } of message.show ?? []) shown.add(name);
-		for (const entry of message.remove ?? []) shown.delete(entry);
+type Step = Omit<SessionStep, "record" | "scratch">;
+
+class Backend {
+	private constructor(
+		private readonly child: Bun.Subprocess<"pipe", "pipe", "pipe">,
+		private readonly out: Lines,
+		private readonly err: Lines,
+		readonly port: number,
+	) {}
+
+	static async start(step: Step = {}): Promise<Backend> {
+		const input: SessionStep = { ...step, record, scratch: root };
+		const child = Bun.spawn(
+			[process.execPath, SESSION, JSON.stringify(input)],
+			{
+				cwd: join(root, "cwd"),
+				stdin: "pipe",
+				stdout: "pipe",
+				stderr: "pipe",
+				env: {
+					...process.env,
+					PORT: "0",
+					CERALIVE_DISMISSALS_FILE: dismissals,
+					CERALIVE_STREAMING_MARKER: join(root, "streaming"),
+					CERALIVE_EVENTS_DIR: join(root, "events"),
+					DOCKER_HOST: "unix:///nonexistent/docker.sock",
+				},
+			},
+		);
+		const out = new Lines(child.stdout);
+		const err = new Lines(child.stderr);
+		const ready = await within(
+			out.next((line) => line.startsWith(READY_PREFIX)),
+			"backend ready",
+		);
+		const backend = new Backend(
+			child,
+			out,
+			err,
+			Number(ready.slice(READY_PREFIX.length)),
+		);
+		live.push(backend);
+		return backend;
 	}
-	return [...shown].map(String);
+
+	async check(): Promise<void> {
+		this.child.stdin.write("check\n");
+		this.child.stdin.flush();
+		await within(
+			this.out.next((line) => line === CHECKED_MARKER),
+			"check completion",
+		);
+	}
+
+	// What the package script's restart does to the running backend.
+	async close(): Promise<void> {
+		this.child.kill("SIGTERM");
+		await this.child.exited;
+	}
+
+	async recover() {
+		this.child.stdin.write("recover\n");
+		this.child.stdin.flush();
+		const exit = await within(this.child.exited, "recovery exit");
+		return { exit, stdout: this.out.text(), stderr: this.err.text() };
+	}
 }
 
-// Every copy a session's frames show, as [name, issuance].
-function shows(frames: readonly unknown[]) {
-	return frames.flatMap((frame) =>
-		(notificationsMessageSchema.safeParse(frame).data?.show ?? []).map(
-			({ name, issuance }) => [name, issuance],
-		),
-	);
+type Decoder = "typed" | "v2026.7.2";
+
+class Tab {
+	// What the tab shows, with the copy's revision and publisher (for dismissal).
+	readonly shown = new Map<string, { revision?: number; publisher?: string }>();
+	readonly removed: string[] = [];
+	private socket: WebSocket | undefined;
+	private closed: Promise<void> = Promise.resolve();
+	private readonly answers = new Map<string, (frame: unknown) => void>();
+	private requests = 0;
+
+	constructor(readonly decoder: Decoder) {
+		live.push(this);
+	}
+
+	names(): string[] {
+		return [...this.shown.keys()];
+	}
+
+	async connect(backend: Backend): Promise<void> {
+		const socket = new WebSocket(`ws://127.0.0.1:${backend.port}/ws`);
+		this.socket = socket;
+		this.closed = new Promise((resolve) =>
+			socket.addEventListener("close", () => resolve()),
+		);
+		socket.addEventListener("message", (event) =>
+			this.receive(JSON.parse(String(event.data))),
+		);
+		await within(
+			new Promise<void>((resolve, reject) => {
+				socket.addEventListener("open", () => resolve());
+				socket.addEventListener("error", () =>
+					reject(new Error("socket error")),
+				);
+			}),
+			"socket open",
+		);
+		const login = await this.request(["auth", "login"], {
+			password: SESSION_PASSWORD,
+		});
+		expect(login).toMatchObject({ result: { success: true } });
+		await this.sync();
+	}
+
+	// Answered only after every frame the server queued before it on this socket.
+	async sync(): Promise<void> {
+		await this.request(["notifications", "getPersistent"]);
+	}
+
+	async dismiss(name: string): Promise<void> {
+		await this.request(["notifications", "dismiss"], {
+			name,
+			...this.shown.get(name),
+		});
+	}
+
+	// The socket drops when its backend exits; the tab keeps what it shows.
+	async dropped(): Promise<void> {
+		await within(this.closed, "socket close");
+	}
+
+	async close(): Promise<void> {
+		this.socket?.close();
+		await this.closed;
+	}
+
+	private request(path: string[], input?: unknown): Promise<unknown> {
+		const id = `r${++this.requests}`;
+		const answer = new Promise<unknown>((resolve) =>
+			this.answers.set(id, resolve),
+		);
+		this.socket?.send(
+			JSON.stringify({ id, path, ...(input === undefined ? {} : { input }) }),
+		);
+		return within(answer, path.join("."));
+	}
+
+	private receive(frame: Record<string, unknown>): void {
+		if ("ping" in frame) {
+			this.socket?.send(JSON.stringify({ pong: true }));
+			return;
+		}
+		const answer = typeof frame.id === "string" && this.answers.get(frame.id);
+		if (answer) {
+			this.answers.delete(String(frame.id));
+			answer(frame);
+			return;
+		}
+		if (!("notification" in frame)) return;
+		if (this.decoder === "typed") {
+			const parsed = notificationsMessageSchema.safeParse(frame.notification);
+			if (!parsed.success) return;
+			for (const { name, revision, publisher } of parsed.data.show ?? [])
+				this.shown.set(name, { revision, publisher });
+			for (const { id } of parsed.data.remove ?? []) this.remove(id);
+			return;
+		}
+		// v2026.7.2: no validation, and `remove` entries go to the store by value.
+		const message = frame.notification as {
+			show?: { name: string }[];
+			remove?: unknown[];
+		};
+		for (const { name } of message.show ?? []) this.shown.set(name, {});
+		for (const entry of message.remove ?? [])
+			if (typeof entry === "string") this.remove(entry);
+	}
+
+	private remove(name: string): void {
+		if (name === NOTICE) this.removed.push(name);
+		this.shown.delete(name);
+	}
 }
 
-// Every removal a session's frames carry, in each wire form.
-function removals(frames: readonly unknown[]) {
-	return frames.flatMap((frame) =>
-		((frame as { remove?: unknown[] }).remove ?? []).map((entry) =>
-			typeof entry === "string"
-				? ["string", entry]
-				: [
-						"typed",
-						(entry as { id: string }).id,
-						(entry as { issuance?: Issuance }).issuance,
-					],
-		),
-	);
-}
-
-async function lineage(): Promise<string> {
-	return z
-		.object({ lineage: z.string() })
-		.parse(JSON.parse(await readFile(record, "utf8"))).lineage;
-}
-
-const pending = (version: string): AptScript => ({
-	upgradable: [{ name: "cerastream", installed: "1", candidate: version }],
+const cerastream = (installed: string, candidate = installed): AptPackage => ({
+	name: "cerastream",
+	installed,
+	candidate,
 });
-const NOTHING_PENDING: AptScript = {};
-const REFRESH_FAILS: AptScript = {
+// The device's APT state: an offer pending, or installed with nothing pending.
+const pending = (installed: string, candidate: string): AptScript => ({
+	upgradable: [cerastream(installed, candidate)],
+});
+const settled = (installed: string): AptScript => ({
+	installed: [cerastream(installed)],
+});
+const failing = (state: AptScript): AptScript => ({
+	...state,
 	refresh: { exitCode: 100, stderr: "E: Could not get lock\n" },
-};
+});
 
-test(
-	"install, package-script restart, completion restart and reconnect clear the offer in open and fresh tabs",
-	async () => {
-		// Given tabs of each frontend generation showing issuance 1 before the install.
-		const before = await session({ check: pending("2") });
-		const issued = { lineage: await lineage(), generation: 1 };
-		expect(shows(before.frames)).toEqual([[NOTICE, issued]]);
-		const open = tabOf(before.frames);
-		const main = mainTab(before.frames);
-		const legacy = legacyTab(before.frames);
-		// When the package script restarts the backend: it recovers the finished
-		// install and exits through exactly the update's own restart, with no check run.
-		const packageRestart = await session({ recoverInstall: true });
-		expect(packageRestart.exit).toBe(RESTART_EXIT_CODE);
-		expect(packageRestart.stdout).toContain(RECOVERY_RESTART_MARKER);
-		expect(packageRestart.stderr).not.toContain(RECOVERY_FAILED_MARKER);
-		// An install result is not evidence: a tab reconnecting now keeps its copy.
-		expect(removals(packageRestart.frames)).toEqual([]);
-		// When the completion restart's conclusive check finds nothing pending,
-		// a tab connected to it drops the offer in every frontend generation.
-		const completion = await session({ check: NOTHING_PENDING });
-		expect(currentTab(completion.frames, open)).toEqual([]);
-		expect(mainTab(completion.frames, main)).toEqual([]);
-		expect(legacyTab(completion.frames, legacy)).toEqual([]);
-		// Then a tab that missed that process still drops it on reconnect, even
-		// though this process's own refresh fails.
-		const reconnect = await session({ check: REFRESH_FAILS });
-		expect(removals(reconnect.frames)).toEqual([
-			["typed", NOTICE, issued],
-			["string", NOTICE],
-		]);
-		expect(currentTab(reconnect.frames, open)).toEqual([]);
-		expect(mainTab(reconnect.frames, main)).toEqual([]);
-		expect(legacyTab(reconnect.frames, legacy)).toEqual([]);
-		// And a freshly opened tab never shows it.
-		expect(currentTab(reconnect.frames)).toEqual([]);
-		// When a later process finds a newer release, it shows a new issuance and removes nothing.
-		const newer = await session({ check: pending("3") });
-		expect(shows(newer.frames)).toEqual([
-			[NOTICE, { lineage: issued.lineage, generation: 2 }],
-		]);
-		expect(removals(newer.frames)).toEqual([]);
-		// And a restart that runs no check shows nothing and removes nothing.
-		const idle = await session();
-		expect(shows(idle.frames)).toEqual([]);
-		expect(removals(idle.frames)).toEqual([]);
-	},
-	budget(7),
-);
+async function tabs(
+	backend: Backend,
+	decoders: Decoder[] = ["typed", "v2026.7.2"],
+) {
+	const opened = decoders.map((decoder) => new Tab(decoder));
+	for (const tab of opened) await tab.connect(backend);
+	return opened;
+}
+
+async function reconnect(backend: Backend, opened: readonly Tab[]) {
+	for (const tab of opened) await tab.connect(backend);
+}
+
+const names = (opened: readonly Tab[]) => opened.map((tab) => tab.names());
+
+for (const capable of [false, true])
+	test(
+		`an update's restarts clear the offer in open tabs, live and after a missed proof, and a fresh tab never shows it (${capable ? "capable" : "legacy"} image)`,
+		async () => {
+			// Given tabs of both decoders showing the offer before the install.
+			const before = await Backend.start({ apt: pending("1", "2"), capable });
+			const connected = await tabs(before);
+			const missing = await tabs(before);
+			await before.check();
+			for (const tab of [...connected, ...missing]) await tab.sync();
+			expect(names([...connected, ...missing])).toEqual([
+				[NOTICE],
+				[NOTICE],
+				[NOTICE],
+				[NOTICE],
+			]);
+			// When the package script restarts the backend: the new process recovers
+			// the finished install and exits through exactly the update's own restart.
+			await before.close();
+			const recovering = await Backend.start({ apt: settled("2"), capable });
+			await reconnect(recovering, connected);
+			// An install result is not evidence: the open tabs keep the offer.
+			expect(names(connected)).toEqual([[NOTICE], [NOTICE]]);
+			const restart = await recovering.recover();
+			expect(restart.exit).toBe(RESTART_EXIT_CODE);
+			expect(restart.stdout).toContain(RECOVERY_RESTART_MARKER);
+			expect(restart.stderr).not.toContain(RECOVERY_FAILED_MARKER);
+			for (const tab of connected) await tab.dropped();
+			// When the completion restart's conclusive check finds nothing pending,
+			// the tabs connected to it drop the offer from the live frames.
+			const completion = await Backend.start({ apt: settled("2"), capable });
+			await reconnect(completion, connected);
+			expect(names(connected)).toEqual([[NOTICE], [NOTICE]]);
+			await completion.check();
+			for (const tab of connected) await tab.sync();
+			expect(names(connected)).toEqual([[], []]);
+			await completion.close();
+			// Then tabs that missed that process drop it when they re-authenticate to
+			// the next one, even though its own refresh fails.
+			const next = await Backend.start({ apt: failing(settled("2")), capable });
+			await reconnect(next, missing);
+			expect(names(missing)).toEqual([[], []]);
+			await next.check();
+			for (const tab of missing) await tab.sync();
+			expect(names(missing)).toEqual([[], []]);
+			// And a freshly opened tab never shows it.
+			const fresh = await tabs(next);
+			expect(names(fresh)).toEqual([[], []]);
+		},
+		budget(4),
+	);
 
 test(
 	"a recovery that fails is never taken for the update's restart",
 	async () => {
-		const failed = await session({ recoverInstall: true, recoverFails: true });
+		const backend = await Backend.start({ recoverFails: true });
+		const failed = await backend.recover();
 		expect(failed.exit).not.toBe(RESTART_EXIT_CODE);
 		expect(failed.stdout).not.toContain(RECOVERY_RESTART_MARKER);
 		expect(failed.stderr).toContain(RECOVERY_FAILED_MARKER);
 	},
-	SEQUENCE_TIMEOUT_MS,
+	budget(1),
 );
 
 for (const capable of [false, true])
 	test(
-		`an update from a backend before this notice clears tabs that missed the proving process (${capable ? "capable" : "legacy"} image)`,
+		`an update from a backend before this notice clears tabs that missed the proof (${capable ? "capable" : "legacy"} image)`,
 		async () => {
-			// Given main's backend showing its offer (no issuance) in a main-era and a v2026.7.2 tab.
-			const older = await session({ olderBackend: true });
-			const main = mainTab(older.frames);
-			const legacy = legacyTab(older.frames);
-			expect([main, legacy]).toEqual([[NOTICE], [NOTICE]]);
-			// When the package script restarts into this backend, which recovers the install.
-			const packageRestart = await session({ recoverInstall: true, capable });
-			expect(packageRestart.exit).toBe(RESTART_EXIT_CODE);
-			expect(packageRestart.stdout).toContain(RECOVERY_RESTART_MARKER);
-			expect(removals(packageRestart.frames)).toEqual([]);
-			expect([
-				mainTab(packageRestart.frames, main),
-				legacyTab(packageRestart.frames, legacy),
-			]).toEqual([[NOTICE], [NOTICE]]);
-			// When the completion process proves nothing pending while both tabs are offline.
-			await session({ check: NOTHING_PENDING, capable });
-			// Then the next process, whose own refresh fails, clears both on reconnect.
-			const reconnect = await session({ check: REFRESH_FAILS, capable });
-			expect(mainTab(reconnect.frames, main)).toEqual([]);
-			expect(legacyTab(reconnect.frames, legacy)).toEqual([]);
-			// And every later conclusive check repeats it for tabs that stayed connected.
-			const again = await session({ check: NOTHING_PENDING, capable });
-			expect(legacyTab(again.frames, [NOTICE])).toEqual([]);
-			expect(mainTab(again.frames, [NOTICE])).toEqual([]);
+			// Given main's backend showing its offer in a main-era and a v2026.7.2 tab.
+			const older = await Backend.start({
+				olderBackend: true,
+				apt: pending("1", "2"),
+			});
+			const opened = await tabs(older);
+			expect(names(opened)).toEqual([[NOTICE], [NOTICE]]);
+			await older.close();
+			// When the package restart recovers the install and the completion process
+			// proves nothing pending while both tabs are offline.
+			const recovering = await Backend.start({ apt: settled("2"), capable });
+			expect((await recovering.recover()).exit).toBe(RESTART_EXIT_CODE);
+			const completion = await Backend.start({ apt: settled("2"), capable });
+			await completion.check();
+			await completion.close();
+			// Then the next backend, whose own refresh fails, clears both on re-auth.
+			const next = await Backend.start({ apt: failing(settled("2")), capable });
+			await reconnect(next, opened);
+			expect(names(opened)).toEqual([[], []]);
+			expect(opened.map((tab) => tab.removed)).toEqual([[NOTICE], [NOTICE]]);
 		},
-		budget(5),
+		budget(4),
 	);
 
 test(
-	"an older backend's offer survives in a current tab across the restored backend's replay",
+	"after a rollback, the offer an older backend shows survives the restored backend",
 	async () => {
-		// Given issuance 1 shown, then proven obsolete and recorded.
-		const shown = await session({ check: pending("2") });
-		const offline = tabOf(shown.frames);
-		await session({ check: NOTHING_PENDING });
-		const issued = { lineage: await lineage(), generation: 1 };
-		// When a rollback runs an older backend: it shows its offer the way main
-		// did and never touches the record.
-		const older = await session({ olderBackend: true });
-		const holding = tabOf(older.frames, tabOf(shown.frames));
-		expect([...holding]).toEqual([[NOTICE, undefined]]);
-		// When the original backend is restored and replays before any check.
-		const restored = await session();
-		expect(removals(restored.frames)).toEqual([
-			["typed", NOTICE, issued],
-			["string", NOTICE],
-		]);
-		// Then a current tab keeps the older backend's offer and drops issuance 1.
-		expect(currentTab(restored.frames, holding)).toEqual([NOTICE]);
-		expect(currentTab(restored.frames, offline)).toEqual([]);
-		// Older bundles cannot tell the two copies apart, so they clear (the
-		// accepted trade-off); the restored backend's first conclusive check re-shows a real offer.
-		expect(mainTab(restored.frames, mainTab(older.frames))).toEqual([]);
-		expect(legacyTab(restored.frames, legacyTab(older.frames))).toEqual([]);
-		const rechecked = await session({ check: pending("4") });
-		expect(currentTab(rechecked.frames)).toEqual([NOTICE]);
+		// Given a proof that nothing is pending at cerastream 2.
+		await (await Backend.start({ apt: pending("1", "2") })).check();
+		const proof = await Backend.start({ apt: settled("2") });
+		await proof.check();
+		await proof.close();
+		for (const [label, state] of [
+			["downgraded", pending("1", "2")],
+			["re-upgraded, newer release published", pending("2", "3")],
+		] as const) {
+			// When a rollback runs an older backend that shows a valid offer.
+			const older = await Backend.start({ olderBackend: true, apt: state });
+			const opened = await tabs(older);
+			await older.close();
+			// And the restored backend restarts before any check, and the tabs re-authenticate.
+			const restored = await Backend.start({ apt: state });
+			await reconnect(restored, opened);
+			// Then both decoders still show it: the recorded proof is for other evidence.
+			expect([label, names(opened)]).toEqual([label, [[NOTICE], [NOTICE]]]);
+			expect([label, opened.map((tab) => tab.removed)]).toEqual([
+				label,
+				[[], []],
+			]);
+			await restored.close();
+		}
+		// Control: back at exactly the proven state, a tab still showing the offer drops it.
+		const older = await Backend.start({
+			olderBackend: true,
+			apt: pending("1", "2"),
+		});
+		const opened = await tabs(older);
+		await older.close();
+		const restored = await Backend.start({ apt: settled("2") });
+		await reconnect(restored, opened);
+		expect(names(opened)).toEqual([[], []]);
 	},
-	budget(5),
+	budget(8),
 );
 
 test(
-	"an old record's replay never retires a newer issuance, even of the same packages",
+	"a restored older record is ignored under other evidence and never erases a newer offer",
 	async () => {
-		await session({ check: pending("2") });
-		await session({ check: NOTHING_PENDING });
-		const line = await lineage();
+		const proof = await Backend.start({ apt: settled("2") });
+		await proof.check();
+		await proof.close();
 		const stale = await readFile(record, "utf8");
-		// Given the same packages offered again (issuance 2), then a different release (issuance 3).
-		const again = await session({ check: pending("2") });
-		expect(shows(again.frames)).toEqual([
-			[NOTICE, { lineage: line, generation: 2 }],
-		]);
-		const reissued = tabOf(again.frames);
-		const next = await session({ check: pending("3") });
-		expect(shows(next.frames)).toEqual([
-			[NOTICE, { lineage: line, generation: 3 }],
-		]);
-		const successor = tabOf(next.frames);
-		// When the earlier record is restored (state recovery) and a backend replays it.
+		// Given a newer release found later and shown.
+		const newer = await Backend.start({ apt: pending("2", "3") });
+		const opened = await tabs(newer);
+		await newer.check();
+		for (const tab of opened) await tab.sync();
+		expect(names(opened)).toEqual([[NOTICE], [NOTICE]]);
+		await newer.close();
+		// When the earlier record is restored and a backend starts before any check.
 		await writeFile(record, stale);
-		const restored = await session();
-		expect(removals(restored.frames)).toEqual([
-			["typed", NOTICE, { lineage: line, generation: 1 }],
-			["string", NOTICE],
-		]);
-		// Then only issuance 1 is retired in a current tab.
-		expect(currentTab(restored.frames, reissued)).toEqual([NOTICE]);
-		expect(currentTab(restored.frames, successor)).toEqual([NOTICE]);
-		expect(
-			currentTab(restored.frames, copy({ lineage: line, generation: 1 })),
-		).toEqual([]);
-		expect(
-			currentTab(restored.frames, copy({ lineage: "other", generation: 1 })),
-		).toEqual([NOTICE]);
+		const restored = await Backend.start({ apt: pending("2", "3") });
+		await reconnect(restored, opened);
+		// Then nothing is replayed and the newer offer stays.
+		expect(names(opened)).toEqual([[NOTICE], [NOTICE]]);
+		expect(opened.map((tab) => tab.removed)).toEqual([[], []]);
 	},
-	budget(5),
+	budget(3),
 );
 
 test(
 	"a fresh backend that finds an already-dismissed successor withdraws the predecessor",
 	async () => {
-		const before = await session({ check: pending("2") });
-		const open = tabOf(before.frames);
+		const first = await Backend.start({ apt: pending("1", "2") });
+		const connected = await tabs(first);
+		const missing = await tabs(first);
+		await first.check();
+		for (const tab of [...connected, ...missing]) await tab.sync();
+		await first.close();
 		// Given the operator dismissed release 3 elsewhere.
 		await writeFile(
 			dismissals,
@@ -367,102 +519,64 @@ test(
 				entries: [{ key: "update:cerastream=3", dismissedAt: 1 }],
 			}),
 		);
-		// When a fresh process conclusively finds release 3.
-		const successor = await session({ check: pending("3") });
-		expect(currentTab(successor.frames, open)).toEqual([]);
-		// Then the withdrawal also survives into the next process, for either issuance.
-		const line = await lineage();
-		const next = await session();
-		expect(currentTab(next.frames, open)).toEqual([]);
-		expect(
-			currentTab(next.frames, copy({ lineage: line, generation: 2 })),
-		).toEqual([]);
-		expect(legacyTab(next.frames, [NOTICE])).toEqual([]);
+		// When a fresh process conclusively finds release 3, connected tabs drop the offer.
+		const successor = await Backend.start({ apt: pending("1", "3") });
+		await reconnect(successor, connected);
+		await successor.check();
+		for (const tab of connected) await tab.sync();
+		expect(names(connected)).toEqual([[], []]);
+		await successor.close();
+		// Then the withdrawal also reaches tabs that missed it, after a restart.
+		const idle = await Backend.start({ apt: pending("1", "3") });
+		await reconnect(idle, missing);
+		expect(names(missing)).toEqual([[], []]);
+		await idle.close();
 		// And a release that was never dismissed is offered again.
-		expect(currentTab((await session({ check: pending("4") })).frames)).toEqual(
-			[NOTICE],
-		);
+		const later = await Backend.start({ apt: pending("1", "4") });
+		await later.check();
+		expect(names(await tabs(later))).toEqual([[NOTICE], [NOTICE]]);
 	},
 	budget(4),
 );
 
 test(
-	"a dismissal reaches other tabs after a restart and covers that release only",
+	"a dismissal reaches other tabs live and after a restart, and covers that release only",
 	async () => {
-		const dismissed = await session({ check: pending("2"), dismiss: true });
-		const first = { lineage: await lineage(), generation: 1 };
-		expect(currentTab(dismissed.frames, copy(first))).toEqual([]);
-		expect(currentTab((await session()).frames, copy(first))).toEqual([]);
-		expect(
-			currentTab((await session({ check: pending("2") })).frames, copy(first)),
-		).toEqual([]);
-		expect(currentTab((await session({ check: pending("3") })).frames)).toEqual(
-			[NOTICE],
-		);
+		const backend = await Backend.start({ apt: pending("1", "2") });
+		const [dismissing, other] = await tabs(backend, ["typed", "typed"]);
+		const missing = await tabs(backend);
+		await backend.check();
+		for (const tab of [dismissing, other, ...missing])
+			await (tab as Tab).sync();
+		await (dismissing as Tab).dismiss(NOTICE);
+		await (other as Tab).sync();
+		expect(names([dismissing as Tab, other as Tab])).toEqual([[], []]);
+		await backend.close();
+		const restarted = await Backend.start({ apt: pending("1", "2") });
+		await reconnect(restarted, missing);
+		expect(names(missing)).toEqual([[], []]);
+		await restarted.check();
+		expect(names(await tabs(restarted))).toEqual([[], []]);
+		await restarted.close();
+		const newer = await Backend.start({ apt: pending("1", "3") });
+		await newer.check();
+		expect(names(await tabs(newer))).toEqual([[NOTICE], [NOTICE]]);
 	},
-	budget(4),
-);
-
-test(
-	"a restored withdrawal retires this lineage's issuances up to its generation, however many restarts later",
-	async () => {
-		await session({ check: pending("2") });
-		await session({ check: NOTHING_PENDING });
-		const line = await lineage();
-		for (let restart = 0; restart < 2; restart++) {
-			const replay = (await session()).frames;
-			expect(
-				currentTab(replay, copy({ lineage: line, generation: 1 })),
-			).toEqual([]);
-			// A newer issuance, another lineage, or a copy from an older producer is kept.
-			expect(
-				currentTab(replay, copy({ lineage: line, generation: 2 })),
-			).toEqual([NOTICE]);
-			expect(
-				currentTab(replay, copy({ lineage: "other", generation: 1 })),
-			).toEqual([NOTICE]);
-			expect(currentTab(replay, copy())).toEqual([NOTICE]);
-			// Older bundles hear it on every reconnect.
-			expect(legacyTab(replay, [NOTICE])).toEqual([]);
-			expect(mainTab(replay, [NOTICE])).toEqual([]);
-		}
-		// A process's own conclusive check proves nothing is pending at all: every copy goes.
-		const proven = await session({ check: NOTHING_PENDING });
-		expect(currentTab(proven.frames, copy())).toEqual([]);
-		expect(legacyTab(proven.frames, [NOTICE])).toEqual([]);
-	},
-	budget(5),
+	budget(3),
 );
 
 test(
 	"startup derives nothing without a readable, current-schema record and acknowledgement store",
 	async () => {
-		const L0 = "1b4e28ba-2fa1-41d2-883f-0016d3cca427";
-		const first = { lineage: L0, generation: 1 };
-		// Given no record at all.
-		expect(removals((await session()).frames)).toEqual([]);
-		// Given an acknowledgement for release 2, so an accepted record would act.
-		await writeFile(
-			dismissals,
-			JSON.stringify({
-				version: 1,
-				entries: [
-					{ key: "update:cerastream=2", dismissedAt: 1 },
-					{ key: "update:cerastream=2,srtla=3", dismissedAt: 1 },
-				],
-			}),
-		);
-		const row = { name: "cerastream", version: "2" };
-		const valid = { version: 3, lineage: L0, generation: 1, offer: [row] };
+		const inputs = await readOfferInputs(scriptedApt(settled("2")));
+		const valid = { version: 4, inputs, offer: null };
 		const refused: Record<string, string> = {
 			corrupt: "{",
-			prior: JSON.stringify({ version: 2, offer: [row], withdrawn: [] }),
-			future: JSON.stringify({ ...valid, version: 4 }),
-			duplicate: `{"version":3,"lineage":"${L0}","generation":1,"offer":null,"offer":[${JSON.stringify(row)}]}`,
+			prior: JSON.stringify({ ...valid, version: 3 }),
+			future: JSON.stringify({ ...valid, version: 5 }),
+			duplicate: `{"version":4,"inputs":"${"0".repeat(64)}","offer":null,"inputs":"${inputs}"}`,
 			oversized: JSON.stringify(valid).padEnd(5000, " "),
-			impossible: JSON.stringify({ ...valid, generation: 0 }),
-			lineage: JSON.stringify({ ...valid, lineage: "not-a-uuid" }),
-			// A forged multi-package key cannot be smuggled into one row's version.
+			inputs: JSON.stringify({ ...valid, inputs: "not-a-fingerprint" }),
 			forged: JSON.stringify({
 				...valid,
 				offer: [{ name: "cerastream", version: "2,srtla=3" }],
@@ -470,58 +584,70 @@ test(
 		};
 		for (const [kind, text] of Object.entries(refused)) {
 			await writeFile(record, text);
-			expect([kind, removals((await session()).frames)]).toEqual([kind, []]);
+			const backend = await Backend.start({ apt: settled("2") });
+			const older = await Backend.start({ olderBackend: true });
+			const opened = await tabs(older);
+			await older.close();
+			await reconnect(backend, opened);
+			expect([kind, names(opened)]).toEqual([kind, [[NOTICE], [NOTICE]]]);
+			await backend.close();
 		}
-		// Control: the same acknowledgement under a valid record does retire issuance 1.
+		// Control: the same state under a valid record does clear both tabs.
 		await writeFile(record, JSON.stringify(valid));
-		expect(currentTab((await session()).frames, copy(first))).toEqual([]);
+		const older = await Backend.start({ olderBackend: true });
+		const opened = await tabs(older);
+		await older.close();
+		const backend = await Backend.start({ apt: settled("2") });
+		await reconnect(backend, opened);
+		expect(names(opened)).toEqual([[], []]);
+		await backend.close();
 		await rm(record);
-		await rm(dismissals);
-		// Given a directory where the record should be.
-		await mkdir(record);
-		expect(removals((await session()).frames)).toEqual([]);
-		await rm(record, { recursive: true });
 		// Given an offer whose dismissal state cannot be read.
-		const shown = await session({ check: pending("2") });
-		const open = tabOf(shown.frames);
+		const offering = await Backend.start({ apt: pending("1", "2") });
+		const holding = await tabs(offering);
+		await offering.check();
+		for (const tab of holding) await tab.sync();
+		await offering.close();
 		await mkdir(dismissals);
-		expect(removals((await session()).frames)).toEqual([]);
-		// A new release found then is recorded but neither shown nor used to retract.
-		const unread = await session({ check: pending("3") });
-		expect([shows(unread.frames), removals(unread.frames)]).toEqual([[], []]);
-		expect(removals((await session()).frames)).toEqual([]);
-		// A proven absence needs no acknowledgement store, live and on later replay.
-		const absent = await session({ check: NOTHING_PENDING });
-		expect(currentTab(absent.frames, open)).toEqual([]);
-		expect(legacyTab(absent.frames, [NOTICE])).toEqual([]);
-		const later = await session();
-		expect(currentTab(later.frames, open)).toEqual([]);
-		expect(legacyTab(later.frames, [NOTICE])).toEqual([]);
+		const unreadable = await Backend.start({ apt: pending("1", "2") });
+		await reconnect(unreadable, holding);
+		expect(names(holding)).toEqual([[NOTICE], [NOTICE]]);
+		await unreadable.close();
+		// A proven absence needs no acknowledgement store, live and on later re-auth.
+		const absent = await Backend.start({ apt: settled("2") });
+		await reconnect(absent, holding);
+		await absent.check();
+		for (const tab of holding) await tab.sync();
+		expect(names(holding)).toEqual([[], []]);
+		await absent.close();
+		const late = await tabs(await Backend.start({ olderBackend: true }));
+		const after = await Backend.start({ apt: failing(settled("2")) });
+		await reconnect(after, late);
+		expect(names(late)).toEqual([[], []]);
 	},
-	budget(19),
+	budget(24),
 );
 
 test(
 	"a record too large for the reader is ignored and the next conclusive check replaces it",
 	async () => {
-		// Given a round-4-shaped history larger than the reader accepts.
-		const rows = ceralivePackageList.map((name) => ({
-			name,
-			version: "2026.11.9-1~trixie1",
-		}));
 		const history = JSON.stringify({
-			version: 2,
-			offer: [],
-			withdrawn: Array.from({ length: 8 }, () => rows),
+			version: 3,
+			offer: null,
+			padding: "x".repeat(6000),
 		});
-		expect(Buffer.byteLength(history)).toBeGreaterThan(4096);
 		await writeFile(record, history);
-		expect(removals((await session()).frames)).toEqual([]);
-		// When a conclusive check proves none, the record is rewritten and replayed.
-		await session({ check: NOTHING_PENDING });
-		const replay = (await session({ check: REFRESH_FAILS })).frames;
-		expect(legacyTab(replay, [NOTICE])).toEqual([]);
-		expect(mainTab(replay, [NOTICE])).toEqual([]);
+		const older = await Backend.start({ olderBackend: true });
+		const opened = await tabs(older);
+		await older.close();
+		const ignoring = await Backend.start({ apt: settled("2") });
+		await reconnect(ignoring, opened);
+		expect(names(opened)).toEqual([[NOTICE], [NOTICE]]);
+		await ignoring.check();
+		await ignoring.close();
+		const after = await Backend.start({ apt: failing(settled("2")) });
+		await reconnect(after, opened);
+		expect(names(opened)).toEqual([[], []]);
 	},
 	budget(3),
 );
@@ -539,21 +665,24 @@ test(
 			})),
 		});
 		// Given every roster package offered at the longest admitted version, then dismissed.
-		const shown = await session({ check: every(longest(0)), dismiss: true });
-		const issued = { lineage: await lineage(), generation: 1 };
-		const bytes = (await readFile(record)).byteLength;
-		expect(bytes).toBeLessThanOrEqual(4096);
-		expect(bytes).toBeGreaterThan(2800);
-		expect(currentTab(shown.frames, copy(issued))).toEqual([]);
-		// Then a restart reads it back and still retires that issuance.
-		expect(removals((await session()).frames)).toEqual([
-			["typed", NOTICE, issued],
-			["string", NOTICE],
-		]);
+		const backend = await Backend.start({ apt: every(longest(0)) });
+		const [dismissing] = await tabs(backend, ["typed"]);
+		const missing = await tabs(backend);
+		await backend.check();
+		for (const tab of [dismissing as Tab, ...missing]) await tab.sync();
+		await (dismissing as Tab).dismiss(NOTICE);
+		expect((await readFile(record)).byteLength).toBeLessThanOrEqual(4096);
+		await backend.close();
+		// Then a restart reads it back and still withdraws it from tabs that missed it.
+		const restarted = await Backend.start({ apt: every(longest(0)) });
+		await reconnect(restarted, missing);
+		expect(names(missing)).toEqual([[], []]);
+		await restarted.close();
 		// A version past the limit is not committed, so it is neither shown nor recorded.
 		await rm(record);
-		const refused = await session({ check: every(longest(1)) });
-		expect([shows(refused.frames), removals(refused.frames)]).toEqual([[], []]);
+		const refusing = await Backend.start({ apt: every(longest(1)) });
+		await refusing.check();
+		expect(names(await tabs(refusing))).toEqual([[], []]);
 		expect(await Bun.file(record).exists()).toBe(false);
 	},
 	budget(3),
@@ -562,27 +691,36 @@ test(
 test(
 	"a verdict that cannot be written changes nothing, in either direction",
 	async () => {
-		// Given a durable "nothing pending" and no offer anywhere.
-		await session({ check: NOTHING_PENDING });
-		const none = { lineage: await lineage(), generation: 0 };
-		// When a newer offer is found but cannot be persisted.
-		const unwritten = await session({ check: pending("2"), failWrites: true });
-		// Then it is not shown; the frames carry only the durable none's replay.
-		expect(shows(unwritten.frames)).toEqual([]);
-		expect(removals(unwritten.frames)).toEqual([
-			["typed", NOTICE, none],
-			["string", NOTICE],
-		]);
+		// Given a durable "nothing pending".
+		await (await Backend.start({ apt: settled("2") })).check();
+		// When a newer offer is found but cannot be persisted, it is not shown.
+		const unwritten = await Backend.start({
+			apt: pending("2", "3"),
+			failWrites: true,
+		});
+		const watching = await tabs(unwritten);
+		await unwritten.check();
+		for (const tab of watching) await tab.sync();
+		expect(names(watching)).toEqual([[], []]);
+		await unwritten.close();
 		// Given the offer is durable and shown.
-		const shown = await session({ check: pending("2") });
-		const open = tabOf(shown.frames);
-		expect([...open]).toEqual([[NOTICE, { ...none, generation: 1 }]]);
+		const shown = await Backend.start({ apt: pending("2", "3") });
+		const opened = await tabs(shown);
+		await shown.check();
+		for (const tab of opened) await tab.sync();
+		expect(names(opened)).toEqual([[NOTICE], [NOTICE]]);
+		await shown.close();
 		// When "nothing pending" cannot be persisted, the offer is not withdrawn.
-		const kept = await session({ check: NOTHING_PENDING, failWrites: true });
-		expect(removals(kept.frames)).toEqual([]);
-		expect(currentTab(kept.frames, open)).toEqual([NOTICE]);
+		const kept = await Backend.start({ apt: settled("3"), failWrites: true });
+		await reconnect(kept, opened);
+		await kept.check();
+		for (const tab of opened) await tab.sync();
+		expect(names(opened)).toEqual([[NOTICE], [NOTICE]]);
+		await kept.close();
 		// And the next process still trusts the durable offer, not the lost verdict.
-		expect(currentTab((await session()).frames, open)).toEqual([NOTICE]);
+		const next = await Backend.start({ apt: settled("3") });
+		await reconnect(next, opened);
+		expect(names(opened)).toEqual([[NOTICE], [NOTICE]]);
 	},
 	budget(5),
 );

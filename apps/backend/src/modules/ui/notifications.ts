@@ -28,11 +28,7 @@
   isDismissable - is the user allowed to hide it?
 */
 
-import type {
-	NotificationAction,
-	NotificationIssuance,
-	NotificationType,
-} from "@ceraui/rpc/schemas";
+import type { NotificationAction, NotificationType } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
 import { getms } from "../../helpers/time.ts";
@@ -66,7 +62,6 @@ type Notification = {
 	action?: NotificationAction;
 	dismissalKey?: string;
 	releaseScoped?: boolean;
-	issuance?: NotificationIssuance;
 	beforeDismiss?: () => void;
 	onDismiss?: () => void;
 };
@@ -95,7 +90,6 @@ export type NotificationOptions = {
 	 * replayed like {@link notificationWithdraw}.
 	 */
 	releaseScoped?: boolean;
-	issuance?: NotificationIssuance;
 	beforeDismiss?: () => void;
 	/** A producer's durable acknowledgement must succeed before removal. */
 	onDismiss?: () => void;
@@ -103,10 +97,7 @@ export type NotificationOptions = {
 
 const persistentNotifications = new Map<string, PersistentNotification>();
 // Withdrawn names and their removal revisions, replayed until the name is shown again.
-const replayedRemovals = new Map<
-	string,
-	{ revision: number; issuance?: NotificationIssuance }
->();
+const replayedRemovals = new Map<string, number>();
 
 // Revisions start over when the backend restarts; this namespaces them.
 const publisher: string = crypto.randomUUID();
@@ -129,7 +120,6 @@ export function buildNotificationMsg(
 		...(n.params !== undefined ? { params: n.params } : {}),
 		...(n.action !== undefined ? { action: n.action } : {}),
 		...(revision !== undefined ? { revision, publisher } : {}),
-		...(n.issuance !== undefined ? { issuance: n.issuance } : {}),
 		is_dismissable: n.isDismissable,
 		is_persistent: n.isPersistent,
 		duration,
@@ -178,7 +168,6 @@ export function notificationSend(
 		...(opts?.action !== undefined ? { action: opts.action } : {}),
 		...(dismissalKey !== undefined ? { dismissalKey } : {}),
 		...(opts?.releaseScoped ? { releaseScoped: true } : {}),
-		...(opts?.issuance ? { issuance: opts.issuance } : {}),
 		...(opts?.beforeDismiss ? { beforeDismiss: opts.beforeDismiss } : {}),
 		...(opts?.onDismiss ? { onDismiss: opts.onDismiss } : {}),
 		isDismissable,
@@ -263,22 +252,16 @@ export function notificationBroadcast(
 	);
 }
 
-function removeNotification(
-	name: string,
-	replay: boolean,
-	issuance?: NotificationIssuance,
-) {
+function removeNotification(name: string, replay: boolean) {
 	const n = persistentNotifications.get(name);
 	persistentNotifications.delete(name);
 
 	const revision = nextRevision();
-	const msg = {
-		remove: [{ id: name, revision, ...(issuance ? { issuance } : {}) }],
-	};
+	const msg = { remove: [{ id: name, revision }] };
 	const authedOnly = !n || n.authedOnly;
 	broadcastMsg("notification", msg, 0, authedOnly);
 	if (replay) {
-		replayedRemovals.set(name, { revision, ...(issuance ? { issuance } : {}) });
+		replayedRemovals.set(name, revision);
 		broadcastMsg("notification", legacyRemoval([name]), 0, authedOnly);
 	} else {
 		// A plain removal ends any replay of the name.
@@ -301,11 +284,8 @@ export function notificationRemove(name: string) {
  * Removes `name` and keeps the removal in every authenticated replay until the
  * name is shown again, so a client that was offline still learns of it.
  */
-export function notificationWithdraw(
-	name: string,
-	issuance?: NotificationIssuance,
-) {
-	return removeNotification(name, true, issuance);
+export function notificationWithdraw(name: string) {
+	return removeNotification(name, true);
 }
 
 // Persists the dismissal (survives reload + restart) only when the notification
@@ -405,9 +385,9 @@ export function getPersistentNotifications(
  */
 export function replayedRemovalFrames(isAuthed = false) {
 	if (!isAuthed || replayedRemovals.size === 0) return [];
-	const typed = [...replayedRemovals].map(([id, removal]) => ({
+	const typed = [...replayedRemovals].map(([id, revision]) => ({
 		id,
-		...removal,
+		revision,
 	}));
 	return [{ remove: typed }, legacyRemoval([...replayedRemovals.keys()])];
 }

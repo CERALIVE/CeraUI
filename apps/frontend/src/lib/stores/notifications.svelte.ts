@@ -51,10 +51,7 @@ import {
 
 /** A render-ready notification: text already resolved, duration in ms. */
 export interface ActiveNotification
-	extends Pick<
-		Notification,
-		"key" | "params" | "publisher" | "revision" | "issuance"
-	> {
+	extends Pick<Notification, "key" | "params" | "publisher" | "revision"> {
 	/** Stable dedup key (== {@link Notification.name}). */
 	name: string;
 	/** Toast severity. */
@@ -208,9 +205,6 @@ export function toActiveNotification(
 			: {}),
 		...(notification.publisher !== undefined
 			? { publisher: notification.publisher }
-			: {}),
-		...(notification.issuance !== undefined
-			? { issuance: notification.issuance }
 			: {}),
 		isDismissable: notification.is_dismissable,
 		isPersistent: notification.is_persistent,

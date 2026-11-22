@@ -179,7 +179,7 @@ and `tests/logger-listeners.test.ts`.
 `notifications.getPersistent` returns the live persistent set via
 `getPersistentNotifications(true)` (not an empty stub). The post-auth replay
 frame has the same shape; after it, `replayedRemovalFrames(true)` adds one typed
-(optionally `issuance`-scoped) and one pre-#183 string-form `remove` frame for each
+and one pre-#183 string-form `remove` frame for each
 name withdrawn with `notificationWithdraw` (or dismissed while `releaseScoped`) and not
 shown since. The frontend
 NotificationsPanel reads the live `notification` push cache; this RPC is the

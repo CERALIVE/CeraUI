@@ -86,11 +86,6 @@ for frontends before #183, which this frontend's schema rejects and ignores. Nev
 treat a notice missing from a replay as withdrawn: a restarted backend has not
 re-raised anything yet. The tab open during an update still runs the previous
 bundle, which is why the withdrawal relies on long-shipped `remove` handling.
-A typed `remove` may carry an `issuance` scope (a restarted backend replaying an
-earlier verdict): the decoder then drops the notice only while the copy it holds
-is of that lineage with a generation at or below the scope, so a newer issuance or
-a copy another backend showed since is never removed by an old verdict. Older
-bundles ignore the scope and remove by name.
 Dismissal sends the shown `revision` and `publisher` with the name, so the device
 dismisses a release-scoped notice only for the release this tab showed. Coverage:
 `src/tests/notification-recovery-ingestion.test.ts`,

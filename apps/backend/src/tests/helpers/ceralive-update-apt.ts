@@ -20,10 +20,14 @@ export type AptScript = {
 	readonly policyFails?: readonly string[];
 	readonly planOmits?: readonly string[];
 	readonly inventory?: string;
+	// Installed with nothing pending (candidate equals installed).
+	readonly installed?: readonly AptPackage[];
 };
 
-// Marks the line a restart-test session prints its authentication frames on.
-export const FRAMES_PREFIX = "auth-replay:";
+// The restart-test backend child prints these on stdout.
+export const READY_PREFIX = "backend:ready:";
+export const CHECKED_MARKER = "backend:checked";
+export const SESSION_PASSWORD = "ceralive-session-password";
 // Exit status of a session ended by the finished update's own restart (an uncaught throw).
 export const RESTART_EXIT_CODE = 75;
 // Printed only when the process ends through exactly that restart.
@@ -82,6 +86,7 @@ export function scriptedApt(script: AptScript) {
 	const upgradable = script.upgradable ?? [];
 	const keptBack = script.keptBack ?? [];
 	const all = [...upgradable, ...keptBack];
+	const present = [...all, ...(script.installed ?? [])];
 	return async (argv: readonly string[]): Promise<SpawnWithTimeoutResult> => {
 		const [bin, verb] = argv;
 		const name = argv[2];
@@ -116,7 +121,16 @@ export function scriptedApt(script: AptScript) {
 			if (name === undefined) return ok(script.inventory ?? INVENTORY);
 			if (script.policyFails?.includes(name))
 				return { exitCode: 100, stdout: "", stderr: `E: ${name}\n` };
-			const pkg = all.find((candidate) => candidate.name === name);
+			// Several names: one block per known package, as APT prints them.
+			if (argv.length > 3)
+				return ok(
+					argv
+						.slice(2)
+						.flatMap((wanted) => present.filter((pkg) => pkg.name === wanted))
+						.map(policy)
+						.join(""),
+				);
+			const pkg = present.find((candidate) => candidate.name === name);
 			if (pkg) return ok(policy(pkg));
 		}
 		throw new Error(`unexpected APT command: ${JSON.stringify(argv)}`);

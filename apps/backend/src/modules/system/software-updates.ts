@@ -86,6 +86,7 @@ import {
 import {
 	firstPartyOffer,
 	legacyCeraliveOffer,
+	readOfferInputs,
 	reconcileCeraliveUpdateNotice,
 } from "./ceralive-update-notice.ts";
 import {
@@ -658,6 +659,7 @@ async function getCapableUpdateSize(
 		if (refreshConclusive)
 			reconcileCeraliveUpdateNotice(
 				firstPartyOffer(result.packages, sourcePolicy.stdout),
+				await readCeraliveOfferInputs(),
 			);
 		return null;
 	} catch (error) {
@@ -944,6 +946,7 @@ async function getSoftwareUpdateSize(
 						(argv) => runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
 					)
 				: "unknown",
+			await readCeraliveOfferInputs(),
 		);
 
 	return null;
@@ -2059,6 +2062,13 @@ async function recoverSoftwareUpdate(
 		void monitor.finish(recovered.completion, getRecoveredUpdateExitHook());
 	}
 	return true;
+}
+
+/** The local APT evidence a CeraLive offer verdict is computed from (fingerprint). */
+export function readCeraliveOfferInputs(): Promise<string | undefined> {
+	return readOfferInputs((argv) =>
+		runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
+	);
 }
 
 /** The deliberate crash a finished update ends the process with, so systemd restarts CeraUI. */

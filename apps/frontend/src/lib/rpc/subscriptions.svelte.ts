@@ -62,7 +62,6 @@ import { ingestBuffering } from "$lib/stores/buffering.svelte";
 import { markSessionExpired } from "$lib/stores/connection-ux.svelte";
 import {
 	dismiss as dismissNotification,
-	getPersistent,
 	push as pushNotification,
 	pushReplayed as pushReplayedNotification,
 } from "$lib/stores/notifications.svelte";
@@ -1054,7 +1053,7 @@ function handleMessage(
 
 		// SINGULAR: the backend broadcasts `buildMsg("notification", …)`; the plural never hits the wire.
 		case "notification": {
-			// `show` adds/updates; typed `remove` drops by id, or only the issuances its scope names. A malformed frame is
+			// `show` adds/updates; typed `remove` drops by id. A malformed frame is
 			// skipped rather than cast blindly into the store.
 			const parsed = notificationsMessageSchema.safeParse(data);
 			if (!parsed.success) break;
@@ -1064,16 +1063,8 @@ function handleMessage(
 				if (message.replay) pushReplayedNotification(notification);
 				else pushNotification(notification);
 			}
-			for (const { id, issuance: scope } of message.remove ?? []) {
-				// A scoped removal retires only this lineage's issuances up to its generation.
-				const held =
-					scope && getPersistent().find((n) => n.name === id)?.issuance;
-				if (
-					!scope ||
-					(held?.lineage === scope.lineage &&
-						held.generation <= scope.generation)
-				)
-					dismissNotification(id);
+			for (const entry of message.remove ?? []) {
+				dismissNotification(entry.id);
 			}
 			break;
 		}
