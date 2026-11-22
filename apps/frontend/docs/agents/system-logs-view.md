@@ -111,15 +111,22 @@ density. It is not a redesign.
   through the view's `SharingFlow`. The two dialogs mount once in
   `SystemLogsView`, so they also open from Events on a phone, where the
   Downloads region is not mounted. The group's accessible name is the
-  Downloads heading (`systemLogs.sharing.heading`). While Raw logs is not the
-  open tab, choosing a boot sets what Export saves to what Raw would open on for
-  that boot (`rawOpeningQuery` in `lib/device-logs/sharing.ts`: a previous boot,
-  else this boot, with the opening filters), so exporting from Events after
-  picking an earlier boot saves that boot; an open Raw tab publishes its own
-  filters. When the control that opened a sharing dialog has left the page (a
-  resize moved Downloads into the Storage tab), closing the dialog returns focus
-  to the toolbar's matching button through `AppDialog`'s `returnFocus`, never to
-  `<body>`.
+  Downloads heading (`systemLogs.sharing.heading`). What Export saves is
+  `SharingFlow.exportQuery`: the view an open Raw tab publishes (and, after Raw
+  closes, what it last showed) until the boot picker is used outside Raw or when
+  Raw never opened; then Raw's level, source and search filters with the
+  picker's boots (`selectionScope` in `lib/device-logs/sharing.ts`: All boots
+  keeps Raw's time window, a chosen boot replaces it). Re-picking the
+  highlighted boot counts (`bootSelection.onPick` fires on every choice). A
+  moment export keeps its exact window. The confirmation lists that scope in
+  the Raw and boot picker words (`sharing-export-scope`: Boots, Level, Sources,
+  then Search and "From {time}" when set), built from the same value the ticket
+  request sends. When the control that opened a sharing dialog has left the page (a
+  resize moved Downloads between the side column and the Storage tab), closing
+  the dialog returns focus to the toolbar's matching button through
+  `AppDialog`'s `returnFocus`, never to `<body>`; without the toolbar (the load
+  failed) the band's Support bundle is the target, which is also where a
+  refused bundle's Export this view returns.
 - **Side column (>= 1024 px).** 320 px at the inline end, its own scroll, three
   regions in this order with a heading each: Boots (the boot picker), Storage,
   Downloads. Regions are separated by whitespace and a neutral 1 px rule, not
@@ -570,6 +577,7 @@ Rules for this copy:
 | `systemLogs.sharing.exportHintMoment` | Saves the entries that match the Raw logs filters from the 10 minutes around the selected moment as a text file. | Export confirmation while an exact anchor is open |
 | `systemLogs.sharing.exportSensitive` | This file may contain sensitive data such as network names and addresses. Review it before sharing. | Shown before the export download starts |
 | `systemLogs.sharing.exportDownload` | Download export | Confirmation button |
+| `systemLogs.sharing.exportFrom` | From {time} | Export confirmation scope: start of Raw's time window |
 | `systemLogs.sharing.bundle` | Support bundle | Row title, logs toolbar and load-failure action, nested dialog title |
 | `systemLogs.sharing.bundleHint` | One file for a helper: versions, events, recent logs and settings, with known secrets removed. | Row description; first line of the bundle dialog, above the privacy note |
 | `systemLogs.sharing.bundlePreparing` | Preparing the preview… | Bundle dialog loading status |

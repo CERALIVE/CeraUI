@@ -61,6 +61,19 @@ describe("bootSelection", () => {
 		expect(bootSelection.boot).toBe(clean);
 	});
 
+	it("tells pick listeners about every choice, a repeat of the shown one included", () => {
+		const picks = vi.fn();
+		const stop = bootSelection.onPick(picks);
+
+		bootSelection.choose(null);
+		bootSelection.choose(clean);
+		bootSelection.choose(clean);
+		stop();
+		bootSelection.choose(unclean);
+
+		expect(picks).toHaveBeenCalledTimes(3);
+	});
+
 	it("stays quiet when All boots is chosen while All boots is shown", () => {
 		const raw = vi.fn();
 		listen(raw);

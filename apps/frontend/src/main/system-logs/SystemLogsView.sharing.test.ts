@@ -18,8 +18,10 @@ import { BOOT_IDS, boot } from "$lib/device-logs/__fixtures__/boots";
 import {
 	bundleManifest,
 	EXPORT_TICKET,
+	exportScopeRows,
 	signalled,
 } from "$lib/device-logs/__fixtures__/sharing";
+import { formatBootTime } from "$lib/device-logs/boot-rows";
 import { bootSelection } from "$lib/device-logs/boot-selection.svelte";
 import { notifyHistoryChanged } from "$lib/device-logs/history-bus";
 import { exportInput, RAW_OPENING_QUERY } from "$lib/device-logs/sharing";
@@ -260,10 +262,11 @@ describe("SystemLogsView: the logs toolbar", () => {
 	});
 });
 
-describe("SystemLogsView: Export logs saves the boot the operator chose", () => {
-	async function exportFromToolbar(): Promise<void> {
+describe("SystemLogsView: Export logs saves the boots the operator chose", () => {
+	async function exportFromToolbar(): Promise<string[]> {
 		await fireEvent.click(screen.getByTestId("sharing-toolbar-export"));
 		const body = await screen.findByRole("dialog", { name: sharing.export });
+		const scope = exportScopeRows(body);
 		await fireEvent.click(
 			within(body).getByRole("button", { name: sharing.exportDownload }),
 		);
@@ -271,36 +274,79 @@ describe("SystemLogsView: Export logs saves the boot the operator chose", () => 
 		await fireEvent.click(
 			within(body).getByRole("button", { name: en.dialogs.cancel }),
 		);
+		return scope;
 	}
 
-	// Raw logs opens on the chosen boot, or on this boot when the running one (or none) is chosen.
+	const raw = en.systemLogs.raw;
+	const boots = en.systemLogs.boots;
+	const opening = (boot: string) => [
+		boots.heading,
+		boot,
+		raw.levelLabel,
+		raw.levelInfo,
+		raw.sourceLabel,
+		raw.sourceAll,
+	];
+
+	// Outside Raw logs, Export follows the boot picker: All boots (the default), a previous boot, this boot.
 	it.each([true, false])(
-		"exports this boot by default, then a previous boot chosen on Events, without Raw logs ever opening (wide=%s)",
+		"exports all boots by default, then a previous boot, then this boot, each named in the confirmation (wide=%s)",
 		async (wide) => {
 			viewport(wide);
 			logs.createExport.mockResolvedValue({ ok: false, error: "BUSY" });
 			render(SystemLogsView);
 			await screen.findByRole("tablist");
 
-			await exportFromToolbar();
+			expect(await exportFromToolbar()).toEqual(opening(boots.all));
 			expect(logs.createExport).toHaveBeenLastCalledWith(
-				exportInput(RAW_OPENING_QUERY),
+				exportInput({ ...RAW_OPENING_QUERY, boot: "all" }),
 			);
 
-			bootSelection.choose(boot(BOOT_IDS.clean, "clean"));
-			await exportFromToolbar();
+			const previous = boot(BOOT_IDS.clean, "clean");
+			bootSelection.choose(previous);
+			expect((await exportFromToolbar())[1]).toBe(
+				boots.started.replace("{time}", formatBootTime(previous.firstTs, "en")),
+			);
 			expect(logs.createExport).toHaveBeenLastCalledWith(
 				exportInput({ ...RAW_OPENING_QUERY, boot: BOOT_IDS.clean }),
 			);
 
 			bootSelection.choose(boot(BOOT_IDS.current, "current"));
-			await exportFromToolbar();
+			expect(await exportFromToolbar()).toEqual(opening(boots.current));
 			expect(logs.createExport).toHaveBeenLastCalledWith(
 				exportInput(RAW_OPENING_QUERY),
 			);
 			expect(logs.createExport).toHaveBeenCalledTimes(3);
 		},
 	);
+
+	it("exports the boot picked on Events from Storage's Downloads row on a phone", async () => {
+		viewport(false);
+		logs.createExport.mockResolvedValue({ ok: false, error: "BUSY" });
+		render(SystemLogsView);
+		await screen.findByRole("tablist");
+		const previous = boot(BOOT_IDS.clean, "clean");
+		bootSelection.choose(previous);
+
+		await fireEvent.click(
+			screen.getByRole("tab", { name: en.systemLogs.tabs.storage }),
+		);
+		await fireEvent.click(await screen.findByTestId("sharing-open-export"));
+		const body = await screen.findByRole("dialog", { name: sharing.export });
+
+		expect(exportScopeRows(body).slice(0, 2)).toEqual([
+			boots.heading,
+			boots.started.replace("{time}", formatBootTime(previous.firstTs, "en")),
+		]);
+		await fireEvent.click(
+			within(body).getByRole("button", { name: sharing.exportDownload }),
+		);
+		await waitFor(() =>
+			expect(logs.createExport).toHaveBeenCalledExactlyOnceWith(
+				exportInput({ ...RAW_OPENING_QUERY, boot: BOOT_IDS.clean }),
+			),
+		);
+	});
 });
 
 describe("SystemLogsView: a sharing dialog returns focus to a visible control", () => {
@@ -326,6 +372,36 @@ describe("SystemLogsView: a sharing dialog returns focus to a visible control", 
 				screen.getByTestId("sharing-toolbar-bundle"),
 			),
 		);
+	});
+
+	it("returns focus to the failure band's Support bundle after handing a refused bundle to Export this view, with no toolbar on the page", async () => {
+		viewport(false);
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		logs.getStorage.mockRejectedValue(
+			new Error("Request timeout: logs.getStorage"),
+		);
+		logs.previewBundle.mockRejectedValue(
+			new RpcError({ message: "READ_FAILED", code: "INTERNAL_ERROR" }),
+		);
+		render(SystemLogsView);
+		const band = await screen.findByTestId("system-logs-check-failed");
+		const bandBundle = within(band).getByTestId("system-logs-check-bundle");
+		bandBundle.focus();
+		await fireEvent.click(bandBundle);
+		const bundle = await screen.findByRole("dialog", { name: sharing.bundle });
+		await fireEvent.click(
+			await within(bundle).findByRole("button", { name: sharing.export }),
+		);
+		const exportBody = await screen.findByRole("dialog", {
+			name: sharing.export,
+		});
+
+		await fireEvent.click(
+			within(exportBody).getByRole("button", { name: en.dialogs.cancel }),
+		);
+
+		expect(screen.queryByTestId("sharing-toolbar")).toBeNull();
+		await waitFor(() => expect(document.activeElement).toBe(bandBundle));
 	});
 
 	it("still returns focus to the control that opened the dialog while it is on the page", async () => {

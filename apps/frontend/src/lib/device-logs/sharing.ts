@@ -33,11 +33,22 @@ export const RAW_OPENING_QUERY: LogQueryInput = {
 	boot: "current",
 };
 
-/** What Raw logs opens on for the boot picker's choice: a previous boot, else this boot. */
-export function rawOpeningQuery(boot: LogBootInfo | null): LogQueryInput {
-	return boot === null || boot.current
-		? RAW_OPENING_QUERY
-		: { ...RAW_OPENING_QUERY, boot: boot.bootId };
+/**
+ * What Export saves outside Raw logs: Raw's filters with the boot picker's boots.
+ * All boots keeps Raw's time window; a chosen boot replaces it, as it does in Raw.
+ */
+export function selectionScope(
+	view: LogQueryInput,
+	boot: LogBootInfo | null,
+): LogQueryInput {
+	if (boot === null) return { ...view, boot: "all" };
+	const { sources, levels, text } = view;
+	return {
+		sources,
+		levels,
+		text,
+		boot: boot.current ? "current" : boot.bootId,
+	};
 }
 
 export function exportInput(query: LogQueryInput): LogExportInput {

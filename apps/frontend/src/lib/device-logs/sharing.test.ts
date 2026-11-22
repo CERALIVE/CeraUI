@@ -14,8 +14,8 @@ import {
 	previewFailure,
 	previewProblem,
 	RAW_OPENING_QUERY,
-	rawOpeningQuery,
 	refusal,
+	selectionScope,
 	startBackendDownload,
 	ticketReply,
 } from "./sharing";
@@ -64,19 +64,33 @@ describe("exportInput: the Raw logs query as an export", () => {
 	});
 });
 
-describe("rawOpeningQuery: what Raw logs opens on for the boot picker's choice", () => {
-	it("opens on this boot when no boot or the running boot is chosen", () => {
-		expect(rawOpeningQuery(null)).toEqual(RAW_OPENING_QUERY);
-		expect(rawOpeningQuery(boot(BOOT_IDS.current, "current"))).toEqual(
-			RAW_OPENING_QUERY,
-		);
+describe("selectionScope: what Export saves outside Raw logs", () => {
+	const raw = {
+		...RAW_OPENING_QUERY,
+		levels: ["error", "warning", "info", "debug"],
+		text: "wwan0",
+		since: 1_000,
+		direction: "older",
+		limit: 100,
+	} as const;
+
+	it("keeps Raw's filters and time window for All boots", () => {
+		expect(selectionScope(raw, null)).toEqual({ ...raw, boot: "all" });
 	});
 
-	it("opens on a previous boot with the opening filters", () => {
-		expect(rawOpeningQuery(boot(BOOT_IDS.unclean, "unclean"))).toEqual({
-			sources: [],
-			levels: ["error", "warning", "info"],
+	it("keeps Raw's filters and drops its time window for a chosen boot", () => {
+		const filters = {
+			sources: raw.sources,
+			levels: raw.levels,
+			text: raw.text,
+		};
+		expect(selectionScope(raw, boot(BOOT_IDS.unclean, "unclean"))).toEqual({
+			...filters,
 			boot: BOOT_IDS.unclean,
+		});
+		expect(selectionScope(raw, boot(BOOT_IDS.current, "current"))).toEqual({
+			...filters,
+			boot: "current",
 		});
 	});
 });

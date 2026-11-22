@@ -32,7 +32,7 @@ import * as Tabs from '$lib/components/ui/tabs';
 import { bootSelection } from '$lib/device-logs/boot-selection.svelte';
 import type { RawMoment } from '$lib/device-logs/raw-anchor';
 import type { AroundPage } from '$lib/device-logs/raw-view.svelte';
-import { rawOpeningQuery, startBackendDownload } from '$lib/device-logs/sharing';
+import { selectionScope, startBackendDownload } from '$lib/device-logs/sharing';
 import { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';
 import {
 	activeTab,
@@ -93,21 +93,26 @@ let view = $state<HTMLElement>();
 let tabList = $state<HTMLElement | null>(null);
 let storageHeading = $state<HTMLHeadingElement>();
 let checkRun = 0;
-const sharing = new SharingFlow({ logs: rpc.logs, download: startBackendDownload });
-// Raw logs publishes its own view while open; otherwise Export saves what Raw would open on for the chosen boot.
-const stopBootScope = bootSelection.onChoose(() => {
-	if (current === 'raw') return;
-	sharing.view = rawOpeningQuery(bootSelection.boot);
-	sharing.viewSpan = 'filters';
+// Export saves what Raw logs shows, and what it last showed after it closes, until the boot picker
+// is used outside it (or when Raw never opened): then Raw's filters with the picker's boots.
+let pickerScope = $state(true);
+const sharing = new SharingFlow({
+	logs: rpc.logs,
+	download: startBackendDownload,
+	scope: (view, span) => (span === 'moment' || current === 'raw' || !pickerScope ? view : selectionScope(view, bootSelection.boot)),
+});
+const stopPickerScope = bootSelection.onPick(() => {
+	if (current !== 'raw') pickerScope = true;
 });
 onDestroy(() => {
 	checkRun++;
-	stopBootScope();
+	stopPickerScope();
 	sharing.dispose();
 });
 // Where a sharing dialog returns focus when the control that opened it has left the page.
 let toolbarBundle = $state<HTMLElement | null>(null);
 let toolbarExport = $state<HTMLElement | null>(null);
+let failureBundle = $state<HTMLElement | null>(null);
 
 const tabs = $derived(shellTabs(wide.current));
 const current = $derived(activeTab(selected, tabs));
@@ -153,6 +158,10 @@ function selectTab(value: string): void {
 	momentUnknown = false;
 	around = undefined;
 }
+
+$effect(() => {
+	if (current === 'raw') pickerScope = false;
+});
 
 // Keep an approximate jump on its selected tab; an exact anchor focuses its row.
 $effect(() => {
@@ -297,6 +306,7 @@ $effect(() => {
 					</Button>
 					{#if copyLoaded}
 						<Button
+							bind:ref={failureBundle}
 							class="shrink-0 gap-1.5"
 							data-testid="system-logs-check-bundle"
 							data-variant="outline"
@@ -328,5 +338,6 @@ $effect(() => {
 	{/if}
 </div>
 
-<ExportDialog returnFocus={() => toolbarExport} {sharing} />
-<BundleDialog returnFocus={() => toolbarBundle} {sharing} />
+<!-- Without the toolbar (the load failed) the band's Support bundle, which started the handoff, takes focus. -->
+<ExportDialog returnFocus={() => toolbarExport ?? failureBundle} {sharing} />
+<BundleDialog returnFocus={() => toolbarBundle ?? failureBundle} {sharing} />

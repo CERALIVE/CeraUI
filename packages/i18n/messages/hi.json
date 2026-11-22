@@ -3020,6 +3020,7 @@
 	"systemLogs.sharing.exportHintMoment": "चुने गए समय से 5 मिनट पहले से 5 मिनट बाद तक की, रॉ लॉग फ़िल्टर से मेल खाने वाली एंट्री को टेक्स्ट फ़ाइल के रूप में सहेजता है।",
 	"systemLogs.sharing.exportSensitive": "इस फ़ाइल में नेटवर्क के नाम और पते जैसा संवेदनशील डेटा हो सकता है। साझा करने से पहले इसकी समीक्षा करें।",
 	"systemLogs.sharing.exportDownload": "एक्सपोर्ट डाउनलोड करें",
+	"systemLogs.sharing.exportFrom": "{time} से",
 	"systemLogs.sharing.bundle": "सपोर्ट बंडल",
 	"systemLogs.sharing.bundleHint": "मदद करने वाले के लिए एक फ़ाइल: संस्करण, इवेंट, हाल के लॉग और सेटिंग्स, ज्ञात सीक्रेट हटाकर।",
 	"systemLogs.sharing.bundlePreparing": "प्रीव्यू तैयार हो रहा है…",

@@ -3020,6 +3020,7 @@
 	"systemLogs.sharing.exportHintMoment": "Speichert die Einträge, die den Filtern der Rohprotokolle entsprechen, aus den 10 Minuten rund um den gewählten Zeitpunkt als Textdatei.",
 	"systemLogs.sharing.exportSensitive": "Diese Datei kann sensible Daten wie Netzwerknamen und Adressen enthalten. Prüfe sie, bevor du sie teilst.",
 	"systemLogs.sharing.exportDownload": "Export herunterladen",
+	"systemLogs.sharing.exportFrom": "Ab {time}",
 	"systemLogs.sharing.bundle": "Support-Paket",
 	"systemLogs.sharing.bundleHint": "Eine Datei für Helfer: Versionen, Ereignisse, aktuelle Protokolle und Einstellungen, ohne bekannte Geheimnisse.",
 	"systemLogs.sharing.bundlePreparing": "Vorschau wird vorbereitet…",

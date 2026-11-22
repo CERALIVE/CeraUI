@@ -1017,3 +1017,22 @@ describe("SharingFlow: dispose", () => {
 		expect(flow.bundleStep).toBe("preview");
 	});
 });
+
+it("asks for the export ticket with the scoped query that the confirmation states", async () => {
+	const { createExport, previewBundle, createBundle, download } = setup();
+	createExport.mockResolvedValue({ ok: false, error: "BUSY" });
+	const flow = new SharingFlow({
+		logs: { createExport, previewBundle, createBundle },
+		download,
+		scope: (view) => ({ ...view, boot: "all" }),
+	});
+	flows.push(flow);
+
+	expect(flow.exportQuery).toEqual({ ...RAW_OPENING_QUERY, boot: "all" });
+	flow.openExport();
+	await flow.confirmExport();
+
+	expect(createExport).toHaveBeenCalledExactlyOnceWith(
+		exportInput({ ...RAW_OPENING_QUERY, boot: "all" }),
+	);
+});

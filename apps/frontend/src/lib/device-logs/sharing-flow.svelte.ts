@@ -43,6 +43,8 @@ export interface SharingDeps {
 		createBundle(): Promise<LogExportOutput>;
 	};
 	readonly download: (path: string) => void;
+	/** Narrows the published view to what Export saves (System Logs: the boot picker outside Raw logs). */
+	readonly scope?: (view: LogQueryInput, span: ExportSpan) => LogQueryInput;
 }
 
 export type ExportStep = "closed" | "confirm" | "creating";
@@ -119,6 +121,11 @@ export class SharingFlow {
 		};
 	}
 
+	/** What "Export this view" saves now; the confirmation states it. */
+	get exportQuery(): LogQueryInput {
+		return this.#deps.scope?.(this.view, this.viewSpan) ?? this.view;
+	}
+
 	openExport(): void {
 		if (this.exportStep !== "closed") return;
 		this.exportStep = "confirm";
@@ -129,7 +136,7 @@ export class SharingFlow {
 		const run = this.#exportRun;
 		this.exportStep = "creating";
 		this.exportProblem = null;
-		const input = exportInput(this.view);
+		const input = exportInput(this.exportQuery);
 		const reply = await ticket(
 			() => this.#deps.logs.createExport(input),
 			"export",

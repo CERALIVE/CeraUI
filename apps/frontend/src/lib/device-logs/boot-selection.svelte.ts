@@ -15,6 +15,7 @@ class BootSelection {
 	#boot = $state.raw<LogBootInfo | null>(null);
 	rawScope = $state.raw<Pick<RawFilter, "time" | "bootId"> | null>(null);
 	readonly #listeners = new Set<BootListener>();
+	readonly #pickListeners = new Set<() => void>();
 
 	get boot(): LogBootInfo | null {
 		return this.#boot;
@@ -35,6 +36,7 @@ class BootSelection {
 
 	/** Reusing the same boot is a no-op only when Raw already shows its scope. */
 	choose(boot: LogBootInfo | null): void {
+		for (const listener of this.#pickListeners) listener();
 		const bootId = boot?.bootId ?? null;
 		if (bootId === this.bootId && this.isSelected(boot)) return;
 		this.#boot = boot;
@@ -45,6 +47,14 @@ class BootSelection {
 				console.error("System Logs boot listener failed:", error);
 			}
 		}
+	}
+
+	/** Every choice, a repeat of the shown one included (System Logs: Export then follows the picker). */
+	onPick(listener: () => void): () => void {
+		this.#pickListeners.add(listener);
+		return () => {
+			this.#pickListeners.delete(listener);
+		};
 	}
 
 	onChoose(listener: BootListener): () => void {

@@ -22,6 +22,7 @@ import {
 	it,
 	vi,
 } from "vitest";
+import { exportScopeRows } from "$lib/device-logs/__fixtures__/sharing";
 import { SharingFlow } from "$lib/device-logs/sharing-flow.svelte";
 
 import { en } from "../../tests/helpers/catalog";
@@ -144,6 +145,49 @@ async function exportView() {
 	await waitFor(() => expect(logs.createExport).toHaveBeenCalledTimes(1));
 	return logs.createExport.mock.calls[0]?.[0];
 }
+
+/** Opens Export from the Downloads row, reads its scope, asks for a ticket (BUSY) and cancels. */
+async function exportScope(): Promise<string[]> {
+	await fireEvent.click(await screen.findByTestId("sharing-open-export"));
+	const body = await screen.findByRole("dialog", {
+		name: en.systemLogs.sharing.export,
+	});
+	const scope = exportScopeRows(body);
+	await fireEvent.click(
+		within(body).getByRole("button", {
+			name: en.systemLogs.sharing.exportDownload,
+		}),
+	);
+	await within(body).findByTestId("sharing-export-problem");
+	await fireEvent.click(
+		within(body).getByRole("button", { name: en.dialogs.cancel }),
+	);
+	return scope;
+}
+
+async function rawWithErrors(text?: string): Promise<void> {
+	await fireEvent.click(
+		await screen.findByRole("tab", { name: en.systemLogs.tabs.raw }),
+	);
+	await screen.findByTestId("raw-logs");
+	await fireEvent.click(
+		screen.getByRole("radio", { name: en.systemLogs.raw.levelErrors }),
+	);
+	if (text !== undefined) {
+		await fireEvent.input(screen.getByTestId("raw-search"), {
+			target: { value: text },
+		});
+		await fireEvent.keyDown(screen.getByTestId("raw-search"), { key: "Enter" });
+	}
+	await waitFor(() =>
+		expect(logs.query).toHaveBeenLastCalledWith(
+			logQueryInputSchema.parse({ levels: ["error"], text }),
+		),
+	);
+}
+
+const raw = en.systemLogs.raw;
+const boots = en.systemLogs.boots;
 
 describe("System Logs deep-link integration", () => {
 	it("resolves the running boot and opens the real Raw tab around the message, not the latest query", async () => {
@@ -271,6 +315,73 @@ describe("System Logs deep-link integration", () => {
 			boot: "current",
 			since: undefined,
 			until: undefined,
+		});
+	});
+
+	it("states Raw's kept filters on Events after Raw closes, then saves them across all boots once All boots is picked", async () => {
+		render(SystemLogsView);
+		await rawWithErrors("needle");
+		await fireEvent.click(
+			screen.getByRole("tab", { name: en.systemLogs.tabs.events }),
+		);
+		const kept = [
+			raw.levelLabel,
+			raw.levelErrors,
+			raw.sourceLabel,
+			raw.sourceAll,
+			raw.searchLabel,
+			"needle",
+		];
+
+		expect(await exportScope()).toEqual([
+			boots.heading,
+			boots.current,
+			...kept,
+		]);
+		expect(logs.createExport).toHaveBeenLastCalledWith({
+			filter: { sources: [], levels: ["error"], text: "needle" },
+			boot: "current",
+		});
+
+		// All boots is already highlighted; picking it again is still the operator's choice.
+		await fireEvent.click(screen.getByTestId("boot-option-all"));
+		expect(await exportScope()).toEqual([boots.heading, boots.all, ...kept]);
+		expect(logs.createExport).toHaveBeenLastCalledWith({
+			filter: { sources: [], levels: ["error"], text: "needle" },
+			boot: "all",
+		});
+	});
+
+	it("states and saves what Raw logs shows when exported from Raw, following a boot picked there", async () => {
+		render(SystemLogsView);
+		await rawWithErrors();
+		const levels = [
+			raw.levelLabel,
+			raw.levelErrors,
+			raw.sourceLabel,
+			raw.sourceAll,
+		];
+
+		expect(await exportScope()).toEqual([
+			boots.heading,
+			boots.current,
+			...levels,
+		]);
+		expect(logs.createExport).toHaveBeenLastCalledWith({
+			filter: { sources: [], levels: ["error"] },
+			boot: "current",
+		});
+
+		await fireEvent.click(screen.getByTestId("boot-option-all"));
+		await waitFor(() =>
+			expect(logs.query).toHaveBeenLastCalledWith(
+				logQueryInputSchema.parse({ levels: ["error"], boot: "all" }),
+			),
+		);
+		expect(await exportScope()).toEqual([boots.heading, boots.all, ...levels]);
+		expect(logs.createExport).toHaveBeenLastCalledWith({
+			filter: { sources: [], levels: ["error"] },
+			boot: "all",
 		});
 	});
 

@@ -2975,6 +2975,7 @@
 	"systemLogs.sharing.exportHintMoment": "選択した時刻の前後5分間で、生ログのフィルターに一致するエントリーをテキストファイルとして保存します。",
 	"systemLogs.sharing.exportSensitive": "このファイルにはネットワーク名やアドレスなどの機密データが含まれる場合があります。共有する前に内容を確認してください。",
 	"systemLogs.sharing.exportDownload": "エクスポートをダウンロード",
+	"systemLogs.sharing.exportFrom": "{time} 以降",
 	"systemLogs.sharing.bundle": "サポートバンドル",
 	"systemLogs.sharing.bundleHint": "サポート担当者向けの 1 つのファイル: バージョン、イベント、最近のログ、設定。既知のシークレットは除去されます。",
 	"systemLogs.sharing.bundlePreparing": "プレビューを準備中…",

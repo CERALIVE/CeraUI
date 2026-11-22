@@ -1,6 +1,9 @@
 import { readFile } from 'node:fs/promises';
 
+import type { Page } from '@playwright/test';
+
 import { expect, test } from './fixtures/index.js';
+import type { PageRpc } from './fixtures/page-rpc.js';
 import { ensureAuthenticated, navigateTo } from './helpers/index.js';
 import { type SystemLogsTab, SystemLogsPage } from './pages/system-logs.js';
 
@@ -17,6 +20,38 @@ const LAYOUTS = [
 	{ name: 'desktop', size: { width: 1280, height: 800 }, touch: false, eink: false, thumb: false },
 	{ name: 'e-ink phone', size: { width: 375, height: 812 }, touch: false, eink: true, thumb: true },
 ] as const;
+
+/** Passes the app's socket through, refusing `refuse` with READ_FAILED, and records each logs.createExport input. */
+async function routeLogs(page: Page, pageRpc: PageRpc, refuse: readonly string[] = []): Promise<unknown[]> {
+	const exports: unknown[] = [];
+	await page.routeWebSocket(/\/ws(?:\?|$)/, (socket) => {
+		const server = socket.connectToServer();
+		pageRpc.bindConnectionLifecycle(socket, server);
+		socket.onMessage((message) => {
+			const frame = typeof message === 'string' ? JSON.parse(message) : undefined;
+			const path = Array.isArray(frame?.path) ? frame.path.join('.') : '';
+			if (refuse.includes(path)) {
+				socket.send(JSON.stringify({ id: frame.id, error: { message: 'READ_FAILED', code: 'INTERNAL_ERROR' } }));
+				return;
+			}
+			if (path === 'logs.createExport') exports.push(frame.input);
+			server.send(message);
+		});
+		server.onMessage((message) => {
+			socket.send(message);
+			pageRpc.acceptServerMessage(message);
+		});
+	});
+	return exports;
+}
+
+async function openFailedLogsOnPhone(page: Page): Promise<void> {
+	await page.setViewportSize({ width: 375, height: 812 });
+	await page.goto('/');
+	await ensureAuthenticated(page);
+	await navigateTo(page, 'settings');
+	await page.getByTestId('settings-entry-logs').click();
+}
 
 test.describe('System Logs toolbar', { tag: '@desktop-only' }, () => {
 	for (const layout of LAYOUTS) {
@@ -68,28 +103,36 @@ test.describe('System Logs toolbar', { tag: '@desktop-only' }, () => {
 		});
 	}
 
-	test('a phone gets 44 px Try again and Support bundle when System Logs cannot load', async ({ page, pageRpc }) => {
-		await page.routeWebSocket(/\/ws(?:\?|$)/, (socket) => {
-			const server = socket.connectToServer();
-			pageRpc.bindConnectionLifecycle(socket, server);
-			socket.onMessage((message) => {
-				const frame = typeof message === 'string' ? JSON.parse(message) : undefined;
-				if (Array.isArray(frame?.path) && frame.path.join('.') === 'logs.getStorage') {
-					socket.send(JSON.stringify({ id: frame.id, error: { message: 'READ_FAILED', code: 'INTERNAL_ERROR' } }));
-					return;
-				}
-				server.send(message);
-			});
-			server.onMessage((message) => {
-				socket.send(message);
-				pageRpc.acceptServerMessage(message);
-			});
+	for (const action of [
+		{ row: 'sharing-open-export', toolbar: 'Export logs', dialog: 'Export this view' },
+		{ row: 'sharing-open-bundle', toolbar: 'Support bundle', dialog: 'Support bundle' },
+	] as const) {
+		test(`returns focus to the toolbar's ${action.toolbar} when widening moved the phone's Storage row that opened ${action.dialog}`, async ({ page }) => {
+			const logs = new SystemLogsPage(page);
+			await logs.open({ locale: 'en', size: { width: 375, height: 812 }, touch: false, scheme: 'dark' });
+			await logs.show('storage');
+			const opener = await page.getByTestId(action.row).elementHandle();
+			await page.getByTestId(action.row).focus();
+			await page.keyboard.press('Enter');
+			const dialog = page.getByRole('dialog', { name: action.dialog });
+			await expect(dialog).toBeVisible();
+
+			// From 1024 px Downloads renders in the side column: the row that opened the dialog is replaced.
+			await page.setViewportSize({ width: 1280, height: 800 });
+			await expect(page.getByTestId('system-logs-side').getByTestId(action.row)).toBeVisible();
+			expect(await opener?.evaluate((node) => node.isConnected)).toBe(false);
+			await page.keyboard.press('Escape');
+			await expect(dialog).toHaveCount(0);
+
+			await expect(
+				page.getByRole('group', { name: 'Downloads' }).getByRole('button', { name: action.toolbar, exact: true }),
+			).toBeFocused();
 		});
-		await page.setViewportSize({ width: 375, height: 812 });
-		await page.goto('/');
-		await ensureAuthenticated(page);
-		await navigateTo(page, 'settings');
-		await page.getByTestId('settings-entry-logs').click();
+	}
+
+	test('a phone gets 44 px Try again and Support bundle when System Logs cannot load', async ({ page, pageRpc }) => {
+		await routeLogs(page, pageRpc, ['logs.getStorage']);
+		await openFailedLogsOnPhone(page);
 
 		const band = page.getByTestId('system-logs-check-failed');
 		for (const name of ['Try again', 'Support bundle']) {
@@ -129,5 +172,61 @@ test.describe('System Logs toolbar', { tag: '@desktop-only' }, () => {
 		const text = await readFile(file, 'utf8');
 		expect(text.slice(0, 15).toLowerCase()).not.toBe('<!doctype html>');
 		expect(download.suggestedFilename()).toMatch(/\.txt$/);
+	});
+
+	test('a phone returns focus to the failure band after a refused support bundle hands off to Export this view', async ({ page, pageRpc }) => {
+		await routeLogs(page, pageRpc, ['logs.getStorage', 'logs.previewBundle']);
+		await openFailedLogsOnPhone(page);
+		const bandBundle = page.getByTestId('system-logs-check-failed').getByRole('button', { name: 'Support bundle', exact: true });
+		const bundle = page.getByRole('dialog', { name: 'Support bundle' });
+		await bandBundle.click();
+		await expect(bundle.getByRole('button', { name: 'Export this view', exact: true })).toBeVisible();
+		await page.keyboard.press('Escape');
+		await expect(bundle).toHaveCount(0);
+		await expect(bandBundle).toBeFocused();
+
+		await bandBundle.click();
+		await bundle.getByRole('button', { name: 'Export this view', exact: true }).click();
+		const confirm = page.getByRole('dialog', { name: 'Export this view' });
+		await expect(confirm).toBeVisible();
+		await expect(bundle).toHaveCount(0);
+
+		await page.keyboard.press('Escape');
+		await expect(confirm).toHaveCount(0);
+		await expect(page.getByRole('group', { name: 'Downloads' })).toHaveCount(0);
+		await expect(bandBundle).toBeFocused();
+	});
+
+	test('Export logs states and saves the boots chosen: all boots on Events, this boot and its search on Raw, Raw\'s kept search until All boots is picked', async ({ page, pageRpc }) => {
+		const exports = await routeLogs(page, pageRpc);
+		const logs = new SystemLogsPage(page);
+		await logs.open({ locale: 'en', size: { width: 1280, height: 800 }, touch: false, scheme: 'dark' });
+		const confirm = page.getByRole('dialog', { name: 'Export this view' });
+		const exportLogs = page.getByRole('group', { name: 'Downloads' }).getByRole('button', { name: 'Export logs', exact: true });
+		const exportWith = async (scope: readonly string[]) => {
+			await exportLogs.click();
+			await expect(confirm.getByTestId('sharing-export-scope').locator('dt, dd')).toHaveText(scope);
+			await Promise.all([page.waitForEvent('download'), confirm.getByRole('button', { name: 'Download export' }).click()]);
+			await expect(confirm).toHaveCount(0);
+			await expect(exportLogs).toBeFocused();
+			return exports.at(-1);
+		};
+		const marker = 'scope-marker';
+		const opening = { sources: [], levels: ['error', 'warning', 'info'] };
+		const levels = ['Level', 'Info', 'Sources', 'All sources'];
+		const searched = [...levels, 'Search messages', marker];
+
+		expect(await exportWith(['Boots', 'All boots', ...levels])).toEqual({ filter: opening, boot: 'all' });
+
+		await logs.show('raw');
+		await page.getByTestId('raw-search').fill(marker);
+		await page.getByTestId('raw-search').press('Enter');
+		expect(await exportWith(['Boots', 'This boot', ...searched])).toEqual({ filter: { ...opening, text: marker }, boot: 'current' });
+
+		await logs.show('events');
+		expect(await exportWith(['Boots', 'This boot', ...searched])).toEqual({ filter: { ...opening, text: marker }, boot: 'current' });
+		await page.getByTestId('boot-option-all').click();
+		expect(await exportWith(['Boots', 'All boots', ...searched])).toEqual({ filter: { ...opening, text: marker }, boot: 'all' });
+		expect(exports).toHaveLength(4);
 	});
 });
