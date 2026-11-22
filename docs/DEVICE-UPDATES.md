@@ -47,12 +47,12 @@ a running transaction shows, in the backend and in both browser views: the
 phase never moves back and, within a phase, the number never drops; a frame of
 the same phase without a number replaces a held number, because it means
 unknown, not unchanged. Only an outcome, or the next run after it, shows what
-arrived. The browser then shows a number only when the device's latest frame,
-delivered on the link that is up now, carries it in the same phase, and not
-below a number already shown in that phase: the link that delivered each
-progress field is noted where status deliveries are admitted
-(`progress-delivery.svelte.ts`), so a frame the device sends again unchanged
-on a new link shows its number again. On pinned images the download runs
+arrived. The browser then shows a number only when the device's own latest
+frame on this connection carries it in the same phase, and not below a number
+already shown in that phase. After a reconnect the held number stays hidden
+until the device sends a changed frame (the store keeps the same object for an
+unchanged one), so an unchanged number the device sends again reappears at the
+next install step; a stale number is never shown. On pinned images the download runs
 in-process before the unit exists: the UI says **Downloading**, without a
 number, from the moment that transfer starts until the transcript shows the
 install. A failed pinned transfer is that process's own result: the tab is
@@ -64,7 +64,7 @@ these):
 | Situation | Shown |
 |---|---|
 | The transcript cannot be read for four polls in a row | The phase without a number until a read succeeds |
-| The latest frame came on a link that is gone (the connection dropped, or the next backend has not sent it yet), or it does not carry the held number in the same phase | The held phase without a number, until the device delivers that number on the link that is up now |
+| The connection to the device dropped, or the latest frame does not carry the held number in the same phase | The held phase without a number, until the device sends a new frame carrying that number in that phase |
 | A number below one already shown in the phase, for example after the device said it does not know | The phase without a number, until the device sends one at or above it |
 | The observer loses the unit (gone without an exit, or another invocation) | No outcome: `updating: null`, `update_state` neither success nor failure, no restart; the tab says **Outcome not confirmed** |
 | The unit is gone and its exit is recorded | That outcome, replayed (below) |

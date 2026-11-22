@@ -64,9 +64,8 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   (`@ceraui/rpc/package-progress`, shared with both browser views) keeps a
   running transaction's phase and in-phase number from moving back, and lets
   a same-phase frame without a number replace a held one; the browser shows a
-  number only while the device's latest frame, delivered on the link that is
-  up now (`progress-delivery.svelte.ts`), carries it in the same phase and not
-  below one already shown in that phase. The in-process pinned prefetch is
+  number only while the device's own latest frame on this connection carries
+  it in the same phase and not below one already shown in that phase. The in-process pinned prefetch is
   announced as Downloading, and its failure is the same failure for the tab
   and the orchestrator (`finish(..., { local: true })`: no unit, no claim). The detached
   result alone settles the outcome, including when stdout/stderr stay
