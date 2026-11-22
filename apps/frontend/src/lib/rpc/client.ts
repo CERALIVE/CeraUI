@@ -53,6 +53,7 @@ import type {
 	LogFollowStartInput,
 	LogFollowStartOutput,
 	LogFollowStopOutput,
+	LogInput,
 	LoginInput,
 	LoginOutput,
 	LogoutOutput,
@@ -137,6 +138,7 @@ import type {
 	SwitchAudioOutput,
 	SwitchInputInput,
 	SwitchInputOutput,
+	SyslogInput,
 	UpdateCapabilities,
 	UpdateDetails,
 	UpdateSettings,
@@ -948,8 +950,8 @@ export interface TypedRPC {
 	system: {
 		getRevisions: () => Promise<Revisions>;
 		getSensors: () => Promise<unknown>;
-		getLog: () => Promise<unknown>;
-		getSyslog: () => Promise<unknown>;
+		getLog: (input?: LogInput) => Promise<unknown>;
+		getSyslog: (input?: SyslogInput) => Promise<unknown>;
 		poweroff: () => Promise<SuccessResponse>;
 		reboot: () => Promise<SuccessResponse>;
 		startUpdate: () => Promise<SuccessResponse>;

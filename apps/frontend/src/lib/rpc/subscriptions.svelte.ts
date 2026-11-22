@@ -1137,7 +1137,9 @@ function handleMessage(
 		case "log":
 			// A legacy log file System Logs asked for: saved only while that open is still live.
 			if (typeof data === "object" && data !== null) {
-				deliverLegacyLog(data as { name: string; contents: string });
+				deliverLegacyLog(
+					data as { name: string; contents: string; request?: string },
+				);
 			}
 			break;
 

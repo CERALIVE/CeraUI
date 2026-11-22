@@ -23,6 +23,7 @@ import {
 	sensorsStatusSchema,
 	sshPersistentInputSchema,
 	successResponseSchema,
+	syslogInputSchema,
 	updateCapabilitiesSchema,
 	updateDetailsSchema,
 	updateSettingsInputSchema,
@@ -148,6 +149,7 @@ export const getLogProcedure = authedProcedure
 		const result = await getLog(
 			context.ws,
 			input?.service ?? "ceralive.service",
+			input?.request,
 		);
 		return { log: result?.contents ?? "" };
 	});
@@ -156,9 +158,10 @@ export const getLogProcedure = authedProcedure
  * Get system log procedure — the full boot journal (no unit filter).
  */
 export const getSyslogProcedure = authedProcedure
+	.input(syslogInputSchema)
 	.output(logOutputSchema)
-	.handler(async ({ context }) => {
-		const result = await getLog(context.ws);
+	.handler(async ({ input, context }) => {
+		const result = await getLog(context.ws, undefined, input?.request);
 		return { log: result?.contents ?? "" };
 	});
 

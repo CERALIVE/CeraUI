@@ -32,33 +32,55 @@ export function startBackendDownload(issued: Issued, path: string): boolean {
 	return true;
 }
 
-// Legacy log requests not yet answered, oldest first. The device pushes each
-// request's file as a `log` event before it answers that request, in order.
-const legacy: Issued[] = [];
+/** How long a request the device never answered (a timeout, a dropped socket) still claims its late file. */
+export const LATE_FILE_MS = 60_000;
 
-/** Sends a legacy log request under `issued`: its pushed file downloads only while that open is live. */
-export async function requestLegacyLog(
-	issued: Issued,
-	send: () => Promise<unknown>,
-): Promise<void> {
-	const request: Issued = () => issued();
-	legacy.push(request);
-	try {
-		await send();
-	} finally {
-		// Answered without a file (the device failed to read it): no push will come for it.
-		const at = legacy.indexOf(request);
-		if (at !== -1) legacy.splice(at, 1);
-	}
+interface LegacyRequest {
+	readonly id: string;
+	readonly issued: Issued;
 }
 
-/** The socket's `log` push: the oldest waiting request's file, saved only while its open is live. */
+// Sent and not yet given their file. The device reads the journals concurrently,
+// so a file is tied to its request by the id it echoes, never by order.
+const outstanding = new Map<string, LegacyRequest>();
+let sequence = 0;
+
+/** Sends a legacy log request under `issued`; `send` passes its id on for the device to echo with the file. */
+export async function requestLegacyLog(
+	issued: Issued,
+	send: (request: string) => Promise<unknown>,
+): Promise<void> {
+	sequence += 1;
+	const request: LegacyRequest = { id: String(sequence), issued };
+	outstanding.set(request.id, request);
+	try {
+		await send(request.id);
+	} catch (error) {
+		// Unanswered: its file may still come, and must not reach another request.
+		setTimeout(() => outstanding.delete(request.id), LATE_FILE_MS);
+		throw error;
+	}
+	// Answered: the device pushes the file before it answers, so none comes now.
+	outstanding.delete(request.id);
+}
+
+/** The request a pushed file answers: by its echoed id, or the only one outstanding from a device that sends none. */
+function answered(file: { request?: string }): LegacyRequest | undefined {
+	if (file.request !== undefined) return outstanding.get(file.request);
+	const [only, other] = outstanding.values();
+	return other === undefined ? only : undefined;
+}
+
+/** The socket's `log` push: saved only for the request it answers, and only while that request's open is live. */
 export function deliverLegacyLog(file: {
 	name: string;
 	contents: string;
+	request?: string;
 }): boolean {
-	const issued = legacy.shift();
-	if (issued === undefined || !issued()) return false;
+	const request = answered(file);
+	if (request === undefined) return false;
+	outstanding.delete(request.id);
+	if (!request.issued()) return false;
 	const contents = file.contents
 		.split("\n")
 		.map((line) => line.trim())

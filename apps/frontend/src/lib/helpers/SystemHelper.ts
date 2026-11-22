@@ -56,18 +56,18 @@ export const resetSSHPasword = async () => {
 	}
 };
 
-export const getSystemLog = async () => {
+export const getSystemLog = async (request?: string) => {
 	try {
-		await rpc.system.getSyslog();
+		await rpc.system.getSyslog({ request });
 	} catch (error) {
 		console.error("Failed to get system log:", error);
 		throw error;
 	}
 };
 
-export const getDeviceLog = async () => {
+export const getDeviceLog = async (request?: string) => {
 	try {
-		await rpc.system.getLog();
+		await rpc.system.getLog({ request });
 	} catch (error) {
 		console.error("Failed to get device log:", error);
 		throw error;

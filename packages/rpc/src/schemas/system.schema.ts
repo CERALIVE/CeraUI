@@ -308,12 +308,22 @@ export const SERVICE_RE = /^[A-Za-z0-9@._:-]+$/;
 // Log input schema — `service` is validated at the oRPC boundary so a malicious
 // unit name is rejected before reaching getLog(). Optional/absent input is the
 // whole-system log.
+// A client's id for one legacy log request, echoed in the `log` push that carries its file.
+const logRequestSchema = z
+	.string()
+	.regex(/^[A-Za-z0-9-]{1,64}$/)
+	.optional();
+
 export const logInputSchema = z
 	.object({
 		service: z.string().regex(SERVICE_RE).optional(),
+		request: logRequestSchema,
 	})
 	.optional();
 export type LogInput = z.infer<typeof logInputSchema>;
+
+export const syslogInputSchema = z.object({ request: logRequestSchema }).optional();
+export type SyslogInput = z.infer<typeof syslogInputSchema>;
 
 // Autostart config input schema
 export const autostartInputSchema = z.object({

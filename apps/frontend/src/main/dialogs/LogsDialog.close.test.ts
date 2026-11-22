@@ -30,7 +30,7 @@ import {
 } from "$lib/device-logs/__fixtures__/sharing";
 import { bootSelection } from "$lib/device-logs/boot-selection.svelte";
 import { deliverLegacyLog } from "$lib/device-logs/download-gate";
-import { getDeviceLog } from "$lib/helpers/SystemHelper";
+import { getDeviceLog, getSystemLog } from "$lib/helpers/SystemHelper";
 import type { LogsDialogContext } from "$lib/stores/dialog-request.svelte";
 
 import { en } from "../../tests/helpers/catalog";
@@ -53,9 +53,12 @@ const rpc = vi.hoisted(() => {
 	const tickets = {
 		sent: [] as string[],
 		reply: Promise.withResolvers<LogExportOutput>(),
+		replies: [] as PromiseWithResolvers<LogExportOutput>[],
 	};
 	const hold = (kind: string) => {
 		tickets.sent.push(kind);
+		tickets.reply = Promise.withResolvers<LogExportOutput>();
+		tickets.replies.push(tickets.reply);
 		return tickets.reply.promise;
 	};
 	return {
@@ -111,6 +114,7 @@ const ALL_BOOTS_SCOPE = [
 
 let media: MediaQueryControl | undefined;
 let anchorClicks: ReturnType<typeof vi.spyOn>;
+let hrefs: string[];
 
 function linkedMoment() {
 	const page = {
@@ -211,6 +215,7 @@ beforeAll(async () => {
 beforeEach(() => {
 	vi.clearAllMocks();
 	rpc.tickets.sent = [];
+	rpc.tickets.replies = [];
 	rpc.tickets.reply = Promise.withResolvers<LogExportOutput>();
 	media = installMediaQueries((query) => query === "(min-width: 1024px)");
 	rpc.logs.getStorage.mockReset().mockResolvedValue({});
@@ -221,9 +226,12 @@ beforeEach(() => {
 		.mockResolvedValue({ ok: false, error: "READ_FAILED" });
 	rpc.logs.previewBundle.mockReset().mockResolvedValue(bundleManifest(3));
 	rpc.events.list.mockReset().mockResolvedValue(eventPage([]));
+	hrefs = [];
 	anchorClicks = vi
 		.spyOn(HTMLAnchorElement.prototype, "click")
-		.mockImplementation(() => {});
+		.mockImplementation(function (this: HTMLAnchorElement) {
+			hrefs.push(this.href);
+		});
 	Object.assign(URL, {
 		createObjectURL: vi.fn(() => "blob:log"),
 		revokeObjectURL: vi.fn(),
@@ -351,6 +359,38 @@ describe("LogsDialog: closing ends the open view before any queued reply runs", 
 	});
 });
 
+describe("LogsDialog: a reply for the closed view after a same-turn reopen", () => {
+	it.each([
+		{ name: "export", start: exportStarted, ticket: EXPORT_TICKET },
+		{ name: "bundle", start: bundleStarted, ticket: BUNDLE_TICKET },
+	] as const)(
+		"the closed view's $name ticket starts nothing, and the new view's own one downloads",
+		async ({ start, ticket }) => {
+			const older = {
+				...ticket,
+				url: ticket.url.replace(/[0-9a-f]{64}$/, "a".repeat(64)),
+			};
+			const host = render(LogsDialogHost).component;
+			host.show();
+			await start();
+			host.close();
+			host.show({ tab: "events" });
+			// The reopen's update flush, which mounts the new view: no one presses between two writes in one turn.
+			await tick();
+			rpc.tickets.sent = [];
+			await start();
+
+			rpc.tickets.replies[0]?.resolve(older);
+			rpc.tickets.replies[1]?.resolve(ticket);
+
+			await waitFor(() => expect(anchorClicks).toHaveBeenCalledTimes(1));
+			expect(hrefs.map((href) => new URL(href).search)).toEqual([
+				new URL(ticket.url, "http://device").search,
+			]);
+		},
+	);
+});
+
 describe("LogsDialog: a legacy log file pushed after the close", () => {
 	const FILE = { name: "ceralive_log.txt", contents: "first\n  second  \n" };
 
@@ -373,6 +413,55 @@ describe("LogsDialog: a legacy log file pushed after the close", () => {
 
 			expect(await pushed.promise).toBe(downloads === 1);
 			expect(anchorClicks).toHaveBeenCalledTimes(downloads);
+		},
+	);
+
+	it.each([
+		{ kind: "device", ask: getDeviceLog },
+		{ kind: "system", ask: getSystemLog },
+	] as const)(
+		"the $kind log a closed view still waits on is not saved, also answered after the reopened view's own, which is",
+		async ({ kind, ask }) => {
+			const asked: (string | undefined)[] = [];
+			const replies: PromiseWithResolvers<void>[] = [];
+			vi.mocked(ask).mockImplementation((request?: string) => {
+				asked.push(request);
+				const reply = Promise.withResolvers<void>();
+				replies.push(reply);
+				return reply.promise;
+			});
+			const host = render(LogsDialogHost).component;
+			host.show();
+			await fireEvent.click(await screen.findByTestId(`log-download-${kind}`));
+			host.close();
+			host.show();
+			await tick();
+			await fireEvent.click(await screen.findByTestId(`log-download-${kind}`));
+
+			await waitFor(() => expect(asked).toHaveLength(2));
+			expect(
+				deliverLegacyLog({
+					...FILE,
+					contents: "reopened view",
+					request: asked[1],
+				}),
+			).toBe(true);
+			replies[1]?.resolve();
+			expect(
+				deliverLegacyLog({
+					...FILE,
+					contents: "closed view",
+					request: asked[0],
+				}),
+			).toBe(false);
+			replies[0]?.resolve();
+
+			const saved = vi
+				.mocked(URL.createObjectURL)
+				.mock.calls.map(([blob]) => blob as Blob);
+			expect(await Promise.all(saved.map((blob) => blob.text()))).toEqual([
+				"reopened view",
+			]);
 		},
 	);
 });
