@@ -833,6 +833,14 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 							selected,
 							sources?.sources,
 						))}
+						<!-- The help slot, and with it the 8 px gap, exists only on an option that has
+						     a help or switch to put in it: an empty slot cost every other title 14 px. -->
+						{const hasHelp = $derived(
+							(source.origin === 'network' && source.available) ||
+								source.origin === 'coarse' ||
+								hasNoSignal(source) ||
+								(source.origin === 'capture' && (source.kind === 'mjpeg' || isStreaming)),
+						)}
 						{const hasDetail = $derived(
 							selected ||
 								modeOptionsFor(source).length > 0 ||
@@ -978,6 +986,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 
 								<!-- The help slot: every "?" sits at the inline end of its own
 								     frame, OUTSIDE the select button (never a nested interactive). -->
+								{#if hasHelp}
 								<div class="flex shrink-0 items-start gap-2 pe-1.5">
 									<!-- Same-LAN/WiFi education on ENABLED network rows. -->
 									{#if source.origin === 'network' && source.available}
@@ -1041,6 +1050,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 										</Button>
 									{/if}
 								</div>
+								{/if}
 							</div>
 
 							{#if hasDetail}

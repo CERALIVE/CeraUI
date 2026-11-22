@@ -431,7 +431,9 @@ set these rules:
   inside a lime-tinted frame measured 4.23:1 in dark, below AA.
   Every "?" inside an option (its help, the capture-format help and the
   summary's help) is a real 44 px box at every width, kept 8 px from every other
-  control in the option (`DESIGN.md` TT-2), so its hit area is its box: the touch layout's `::after` overlay on the 24 px icon reached 10 px into
+  control in the option (`DESIGN.md` TT-2), so its hit area is its box; an
+  option with no help renders no help slot and no gap, so its title keeps the
+  whole row: the touch layout's `::after` overlay on the 24 px icon reached 10 px into
   the select button at 1024x600, so a tap meant for Select opened Help.
 - **The summary belongs to the selected option.** `source-active-config` sits
   inside the selected option and names its settings ("Automatic", the Encoder

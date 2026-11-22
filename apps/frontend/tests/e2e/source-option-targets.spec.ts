@@ -101,6 +101,28 @@ async function rowTargets(page: Page): Promise<Record<string, Target[]>> {
 	});
 }
 
+/** Options with no help or switch beside their select: the space the select leaves, and its title's line count. */
+async function helpless(page: Page): Promise<{ row: string; name: string; spare: number; lines: number }[]> {
+	return page.evaluate(() =>
+		[...document.querySelectorAll<HTMLElement>('li[data-testid^="source-row-"]')].flatMap((row) => {
+			const header = row.firstElementChild as HTMLElement | null;
+			const select = header?.querySelector<HTMLElement>('[data-select]');
+			const name = row.querySelector<HTMLElement>('[data-testid^="source-row-name-"]');
+			if (!header || !select || !name) return [];
+			if (header.querySelector('button:not([data-select])')) return [];
+			const lineHeight = Number.parseFloat(getComputedStyle(name).lineHeight) || 20;
+			return [
+				{
+					row: row.dataset.testid ?? '',
+					name: (name.textContent ?? '').trim(),
+					spare: header.getBoundingClientRect().width - select.getBoundingClientRect().width,
+					lines: Math.round(name.getBoundingClientRect().height / lineHeight),
+				},
+			];
+		}),
+	);
+}
+
 function problems(targets: Record<string, Target[]>, label: string): string[] {
 	const found: string[] = [];
 	for (const [row, controls] of Object.entries(targets)) {
@@ -144,6 +166,10 @@ for (const locale of ['en', 'ar', 'de']) {
 			const targets = await rowTargets(page);
 			measured += Object.values(targets).flat().filter((control) => control.help).length;
 			found.push(...problems(targets, `${viewport.width}`));
+			// An option with no help reserves nothing for one: its select takes the row.
+			for (const option of await helpless(page)) {
+				if (option.spare > 0.5) found.push(`${viewport.width} ${option.row} reserves ${Math.round(option.spare)} px for a help it lacks`);
+			}
 		}
 		await page.setViewportSize(WIDTHS[1]);
 		await openLive(page, live, { locale, touch: true });
@@ -153,6 +179,9 @@ for (const locale of ['en', 'ar', 'de']) {
 			const targets = await rowTargets(page);
 			measured += Object.values(targets).flat().filter((control) => control.help).length;
 			found.push(...problems(targets, `${viewport.width}x${viewport.height} touch`));
+			for (const option of await helpless(page)) {
+				if (option.spare > 0.5) found.push(`${viewport.width}x${viewport.height} touch ${option.row} reserves ${Math.round(option.spare)} px for a help it lacks`);
+			}
 		}
 		expect(measured, 'the options carry help buttons to measure').toBeGreaterThan(5);
 		expect(found).toEqual([]);
@@ -205,3 +234,15 @@ for (const condition of [
 		await page.keyboard.press('Escape');
 	});
 }
+
+test('an option without help keeps the whole row, so its title stays on one line on a phone', { tag: '@desktop-only' }, async ({ page, pageRpc }) => {
+	test.setTimeout(120_000);
+	const live = await proxy(page, pageRpc, []);
+	await page.setViewportSize(WIDTHS[1]);
+	await openLive(page, live, { locale: 'en', touch: false });
+	const options = await helpless(page);
+	const rode = options.find((option) => option.name.startsWith('RØDE'));
+	expect(rode, 'the RØDE camera is listed with no help beside it').toBeDefined();
+	expect(rode?.spare).toBeLessThanOrEqual(0.5);
+	expect(rode?.lines, `"${rode?.name}" fits one line at 375 px`).toBe(1);
+});
