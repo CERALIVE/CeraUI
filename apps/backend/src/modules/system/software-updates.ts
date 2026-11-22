@@ -691,8 +691,8 @@ async function getCapableUpdateSize(
 			) {
 				const offer = capableOffer(check, "packages");
 				const held = readPackageHolds(holds.stdout);
-				if (offer !== "unknown" && held !== null)
-					reportPackageOffer({ offer, held });
+				if (offer !== "unknown" && held !== null && check.keptBack !== null)
+					reportPackageOffer({ offer, held, keptBack: check.keptBack });
 			}
 			await reconcileCeraliveUpdateNotice(capableOffer(check, "first-party"));
 		}
@@ -959,7 +959,7 @@ async function getSoftwareUpdateSize(
 		failCurrentCheck("discovery_failed");
 		return null;
 	}
-	let parsedSummary = parseAptUpgradeSummary(upgrade.stdout);
+	const parsedSummary = parseAptUpgradeSummary(upgrade.stdout);
 	if (!parsedSummary.ok) {
 		logParseError(parsedSummary);
 		failCurrentCheck("discovery_failed");
@@ -967,6 +967,7 @@ async function getSoftwareUpdateSize(
 	}
 	let res = parsedSummary.value;
 	let fromHeldBack = false;
+	let fallbackFailed = false;
 
 	if (res.upgradeCount === 0) {
 		const heldBackPackages = parseAptPackageList(
@@ -985,13 +986,14 @@ async function getSoftwareUpdateSize(
 				parseHeldBackPackages(aptHeldBackPackages),
 				reachability.verdict,
 			);
-			parsedSummary = parseAptUpgradeSummary(stdout);
-			if (!parsedSummary.ok) {
-				logParseError(parsedSummary);
+			const fallback = parseAptUpgradeSummary(stdout);
+			if (!fallback.ok) {
+				logParseError(fallback);
 				failCurrentCheck("discovery_failed");
-				return null;
+				fallbackFailed = true;
+			} else {
+				res = fallback.value;
 			}
-			res = parsedSummary.value;
 		}
 	} else {
 		aptHeldBackPackages = undefined;
@@ -1001,55 +1003,55 @@ async function getSoftwareUpdateSize(
 	// packages alongside real upgrades, and an operator must be told about them
 	// either way. In the held-back fallback branch `res` describes the explicit
 	// install plan rather than an upgrade set, so nothing there is upgradable.
-	discoveredPackages = buildDiscoveredPackages(
-		fromHeldBack ? [] : res.packages,
+	const discovered = buildDiscoveredPackages(
+		parsedSummary.value.packages,
 		parseKeptBackPackageNames(upgrade.stdout),
 	);
-	actionableAppPackages = actionableAppNames(discoveredPackages);
-
-	availableIdentity =
-		res.upgradeCount > 0
-			? deriveUpdateIdentity(res.packages, res.upgradeCount, res.downloadSize)
-			: null;
-
-	availableUpdates = {
-		package_count: res.upgradeCount,
-		...(res.downloadSize !== undefined
-			? { download_size: res.downloadSize }
-			: {}),
-	};
-	broadcastMsg("status", {
-		available_updates: availableUpdates,
-		update_state: getUpdateState(),
-	});
-	// Not conclusive: a discovery that failed, the kept-back fallback (its own
-	// exit is not read), lists that do not name exactly what the summary counts,
-	// or a package a transaction left unfinished (its setup is still pending).
+	const actionable = actionableAppNames(discovered);
+	if (!fallbackFailed) {
+		discoveredPackages = discovered;
+		actionableAppPackages = actionable;
+		availableIdentity =
+			res.upgradeCount > 0
+				? deriveUpdateIdentity(res.packages, res.upgradeCount, res.downloadSize)
+				: null;
+		availableUpdates = {
+			package_count: res.upgradeCount,
+			...(res.downloadSize !== undefined
+				? { download_size: res.downloadSize }
+				: {}),
+		};
+		broadcastMsg("status", {
+			available_updates: availableUpdates,
+			update_state: getUpdateState(),
+		});
+	}
+	// The scheduled notice uses the original plan; the later size probe for
+	// kept-back packages is not evidence of what Install would take.
 	const planned = listedPackages(upgrade.stdout);
 	const untaken = untakenPackages(upgrade.stdout);
 	if (
 		refresh !== undefined &&
 		isCleanAssumeNoDiscovery(upgradeResult) &&
-		!fromHeldBack &&
-		planned?.length === res.upgradeCount &&
+		(!fromHeldBack || reportPackageOffer !== undefined) &&
+		planned?.length === parsedSummary.value.upgradeCount &&
 		untaken !== null &&
 		!unfinishedAptWork(upgrade.stdout)
 	) {
 		const check = {
-			names: actionableAppPackages,
+			names: actionable,
 			planned: [...planned, ...untaken],
 			keptBack: keptBackNames(upgrade.stdout),
 			refresh,
 			run: (argv: string[]) => runAptCommand(argv, APT_DISCOVERY_TIMEOUT_MS),
 		};
-		await reconcileCeraliveUpdateNotice(
-			await legacyOffer(
-				check,
-				upgrade.stderr === "" && hasOnePlanSummary(upgrade.stdout)
-					? reportPackageOffer
-					: undefined,
-			),
+		const offer = await legacyOffer(
+			check,
+			upgrade.stderr === "" && hasOnePlanSummary(upgrade.stdout)
+				? reportPackageOffer
+				: undefined,
 		);
+		if (!fromHeldBack) await reconcileCeraliveUpdateNotice(offer);
 	}
 
 	return null;

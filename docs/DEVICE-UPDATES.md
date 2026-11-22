@@ -1559,17 +1559,28 @@ version)` vector. Dismissing one offer still suppresses that offer, not a newer
 one. The wire payload and translation key are unchanged.
 
 The package notice shares the CeraLive notice's APT evidence parsers. It
-requires participation from every indexed repository and a complete plan
-without kept-back, ambiguous or unfinished work. APT holds are matched to
-the exact new and standing offers. An unrelated, already-current hold such
-as the stock boot stack does not veto a show or withdrawal. A hold on an
-offered package keeps that offer and prevents announcing a subset. The
-capable install admission and legacy roster are unchanged. A complete orchestrator
+requires a complete, unambiguous plan and refresh participation from every
+HTTP(S) package source in the APT policy inventory. Holds and fully accounted
+kept-back names are matched to the exact new and standing offers. An unrelated
+hold or kept-back package is not itself a veto. A matching hold or kept-back
+member keeps that offer and prevents announcing a subset. On legacy, even a
+kept-back-only plan uses the original discovery, not the optional follow-up
+size estimate. The capable install admission and legacy roster are unchanged.
+A complete orchestrator
 check with no actionable packages reads dpkg using `system.updateOutcome`'s
 exact-instance and Debian-version comparison. It withdraws only stored sets for
 which every member is installed and configured at or above the offered version.
 An older proof cannot remove a newer offer's name. An install exit or restart,
 startup alone, and login/reconnect never remove it.
+
+Whole-system APT evidence used by the scheduled notice:
+
+| Evidence | Scope and reason |
+|---|---|
+| Holds and kept-back lists | Exact name, with architecture when APT supplies it. The kept-back list must account for all names in the solver count before it can be used. Existing capable first-party hold admission remains a prerequisite to a usable plan. |
+| Upgrade and new-install counts | Account for the full plan, including rows outside the legacy Install set: missing/duplicate rows can conceal offer members. Legacy uses only its admitted upgrade names, not global counts or NEW rows as candidates. Capable includes admitted `Inst` rows, including eligible new dependencies. Nonempty exact offers do not authorize retirement. |
+| `not fully installed or removed` and unmatched `Conf` rows | Still fail closed: the aggregate unfinished-work line does not identify affected packages; a configure-only row is work outside the proven `Inst` vector. A complete plan and the exact configured dpkg proof are both required. |
+| Removals and downgrades | Capable install admission rejects removals/purges; the scheduled notice does not infer a usable plan from that refusal. The accepted summary grammar does not establish downgrade plans as safe upgrade evidence. Legacy accounts for list counts and refuses unmodeled members of the Install roster, including removals or downgrades; named removals outside that roster do not themselves veto a well-formed plan. |
 
 The bounded `scheduled_package_offers.json` file next to the first-party
 record carries offered vectors, not proof or removals. If unreadable, unwritable

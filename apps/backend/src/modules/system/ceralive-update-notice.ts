@@ -77,6 +77,7 @@ export type CeraliveVerdict = readonly OfferedPackage[] | "unknown";
 export type PackageOfferEvidence = {
 	readonly offer: readonly OfferedPackage[];
 	readonly held: ReadonlySet<string>;
+	readonly keptBack: readonly string[];
 };
 export type ReportPackageOffer = (evidence: PackageOfferEvidence) => void;
 
@@ -205,7 +206,7 @@ export function capableOffer(
 	const all = scope === "packages";
 	if (
 		keptBack === null ||
-		(all ? keptBack.length > 0 : keptBack.some(capableFirstParty)) ||
+		(!all && keptBack.some(capableFirstParty)) ||
 		(all && !/^Pinned packages:$/m.test(sourcePolicy)) ||
 		!refreshedEverySource(refresh, policySources(sourcePolicy), scope) ||
 		!completePlan(simulation)
@@ -294,11 +295,13 @@ export async function legacyOffer(
 	const { names, planned, keptBack, refresh, run } = check;
 	if (
 		keptBack === null ||
-		[...planned, ...keptBack].some(
-			(name) => rosterName(name) && !names.includes(name),
-		)
+		planned.some((name) => rosterName(name) && !names.includes(name))
 	)
 		return "unknown";
+	const firstPartyComplete = !keptBack.some(
+		(name) => rosterName(name) && !names.includes(name),
+	);
+	if (!firstPartyComplete && !reportPackageOffer) return "unknown";
 	const inventory = await run(["/usr/bin/apt-cache", "policy"]);
 	const sources = policySources(inventory.stdout);
 	if (
@@ -308,7 +311,6 @@ export async function legacyOffer(
 		return "unknown";
 	let packagePlanComplete =
 		reportPackageOffer !== undefined &&
-		keptBack.length === 0 &&
 		inventory.stderr === "" &&
 		/^Pinned packages:$/m.test(inventory.stdout) &&
 		refreshedEverySource(refresh, sources, "packages");
@@ -347,10 +349,10 @@ export async function legacyOffer(
 		const holds = await run(["/usr/bin/apt-mark", "showhold"]);
 		if (holds.exitCode === 0 && holds.stderr === "") {
 			const held = readPackageHolds(holds.stdout);
-			if (held !== null) reportPackageOffer({ offer, held });
+			if (held !== null) reportPackageOffer({ offer, held, keptBack });
 		}
 	}
-	return offer;
+	return firstPartyComplete ? offer : "unknown";
 }
 
 // The architecture of the candidate's one package record; anything else is no answer.

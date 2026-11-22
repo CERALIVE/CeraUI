@@ -55,7 +55,7 @@ export function runScheduledPackageCheck() {
  * without removing another release in either WebSocket decoder.
  */
 async function reconcileScheduledPackageOffer(
-	{ offer, held }: PackageOfferEvidence,
+	{ offer, held, keptBack }: PackageOfferEvidence,
 	run: typeof spawnWithTimeout,
 	audience: ReadonlySet<AbortSignal>,
 ): Promise<void> {
@@ -65,12 +65,13 @@ async function reconcileScheduledPackageOffer(
 			text === null
 				? { version: 1, offers: [] }
 				: schema.parse(parseAuthorityJson(text));
-		const containsHold = (set: readonly OfferedPackage[]) =>
+		const blocked = new Set([...held, ...keptBack]);
+		const isBlocked = (set: readonly OfferedPackage[]) =>
 			set.some(
-				({ name, arch }) => held.has(name) || held.has(`${name}:${arch}`),
+				({ name, arch }) => blocked.has(name) || blocked.has(`${name}:${arch}`),
 			);
 		if (offer.length > 0) {
-			if (containsHold(offer) || record.offers.some(containsHold)) return;
+			if (isBlocked(offer) || record.offers.some(isBlocked)) return;
 			const sorted = [...offer].sort((a, b) =>
 				compareAptPackageNames(a.name, b.name),
 			);
@@ -84,7 +85,7 @@ async function reconcileScheduledPackageOffer(
 		const deadline = Date.now() + UPDATE_OUTCOME_DEADLINE_MS;
 		const proofs = new Map<string, number | undefined>();
 		for (const standing of record.offers) {
-			if (containsHold(standing)) continue;
+			if (isBlocked(standing)) continue;
 			const name = `update:updates-available:${offerId(standing)}`;
 			const issuance = notificationExists(name)?.releaseRevision;
 			if (await targetsAttained(standing, { run, now: Date.now, deadline })) {

@@ -521,6 +521,87 @@ for (const capable of [false, true]) {
 		holds: [bootPackage.name],
 		installed: [bootPackage],
 	};
+	const keptBack = [
+		{ ...cerastream("1", "2"), name: "tzdata", source: "debian" as const },
+	];
+
+	test(
+		`scheduled package notice announces beside an unrelated kept-back package (${image})`,
+		async () => {
+			const backend = await Backend.start({
+				capable,
+				apt: { upgradable: [packageOffer], keptBack },
+			});
+			const opened = scheduledTabs();
+			await reconnect(backend, opened);
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			const offer = opened[0]?.names().find(scheduledNotice) ?? "";
+			expect(offer).not.toBe("");
+			expect(scheduledNames(opened)).toEqual([[offer], [offer]]);
+		},
+		budget(1),
+	);
+
+	test(
+		`scheduled package notice clears installed proof beside an unrelated kept-back package (${image})`,
+		async () => {
+			const backend = await Backend.start({
+				capable,
+				apt: { upgradable: [packageOffer] },
+			});
+			const opened = scheduledTabs();
+			await reconnect(backend, opened);
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			const offer = opened[0]?.names().find(scheduledNotice) ?? "";
+			expect(offer).not.toBe("");
+			expect(scheduledNames(opened)).toEqual([[offer], [offer]]);
+
+			await backend.setApt({
+				installed: [{ ...packageOffer, installed: "2" }],
+				keptBack,
+				// The optional legacy size probe is not the original plan.
+				fallback: {
+					exitCode: 100,
+					stdout: "",
+					stderr: "E: size unavailable\n",
+				},
+			});
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			expect(scheduledNames(opened)).toEqual([[], []]);
+			expect(removals(opened)).toEqual([1, 1]);
+		},
+		budget(1),
+	);
+
+	test(
+		`scheduled package notice keeps an offered member listed as kept back (${image})`,
+		async () => {
+			const backend = await Backend.start({
+				capable,
+				apt: { upgradable: [packageOffer] },
+			});
+			const opened = scheduledTabs();
+			await reconnect(backend, opened);
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			const offer = opened[0]?.names().find(scheduledNotice) ?? "";
+			expect(offer).not.toBe("");
+			expect(scheduledNames(opened)).toEqual([[offer], [offer]]);
+			// dpkg would meet the old offered version, but APT still lists
+			// this exact member as kept back at a later candidate.
+			await backend.setApt({
+				keptBack: [{ ...packageOffer, installed: "2", candidate: "3" }],
+			});
+			await backend.scheduledPackageCheck();
+			await sync(opened);
+			expect(scheduledNames(opened)).toEqual([[offer], [offer]]);
+			expect(removals(opened)).toEqual([0, 0]);
+		},
+		budget(1),
+	);
 
 	test(
 		`scheduled package notice announces an eligible offer with the stock boot hold (${image})`,
