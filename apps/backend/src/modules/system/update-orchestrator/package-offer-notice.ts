@@ -20,7 +20,6 @@ import {
 	UPDATE_OUTCOME_DEADLINE_MS,
 } from "../software-update-outcome.ts";
 import { runSoftwareUpdateCheck } from "../software-updates.ts";
-import { notifyUpdate } from "./notifications.ts";
 import {
 	readStoredStateFileSync,
 	STORED_STATE_LIMITS,
@@ -42,11 +41,44 @@ function offerId(offer: readonly OfferedPackage[]): string {
 	return `packages:${createHash("sha256").update(JSON.stringify(vector)).digest("hex")}`;
 }
 
-export function runScheduledPackageCheck() {
+export function runScheduledPackageCheck(
+	capture: (offer: readonly OfferedPackage[]) => void,
+) {
 	const audience = captureNotificationAudience();
-	return runSoftwareUpdateCheck((evidence, run) =>
-		reconcileScheduledPackageOffer(evidence, run, audience),
+	return runSoftwareUpdateCheck(async (evidence, run) => {
+		if (evidence.offer.length > 0) {
+			capture(evidence.offer);
+			return;
+		}
+		await withdrawInstalledPackageOffers(evidence, run, audience);
+	});
+}
+
+export function recordPackageOffer(
+	offer: readonly OfferedPackage[],
+): string | undefined {
+	const sorted = [...offer].sort((a, b) =>
+		compareAptPackageNames(a.name, b.name),
 	);
+	const id = offerId(sorted);
+	try {
+		const record = readRecord();
+		if (!record.offers.some((standing) => offerId(standing) === id))
+			commit({ version: 1, offers: [...record.offers, sorted] });
+		return id;
+	} catch (error) {
+		logger.warn("Scheduled package announcement has no withdrawal receipt", {
+			error: error instanceof Error ? error.message : String(error),
+		});
+		return undefined;
+	}
+}
+
+function readRecord(): Record {
+	const text = readStoredStateFileSync(PATH, LIMIT);
+	return text === null
+		? { version: 1, offers: [] }
+		: schema.parse(parseAuthorityJson(text));
 }
 
 /**
@@ -54,41 +86,32 @@ export function runScheduledPackageCheck() {
  * this owner. Exact notice names allow a live removal even after process restart
  * without removing another release in either WebSocket decoder.
  */
-async function reconcileScheduledPackageOffer(
-	{ offer, held, keptBack }: PackageOfferEvidence,
+async function withdrawInstalledPackageOffers(
+	{ held, keptBack }: PackageOfferEvidence,
 	run: typeof spawnWithTimeout,
 	audience: ReadonlySet<AbortSignal>,
 ): Promise<void> {
 	try {
-		const text = readStoredStateFileSync(PATH, LIMIT);
-		const record: Record =
-			text === null
-				? { version: 1, offers: [] }
-				: schema.parse(parseAuthorityJson(text));
+		const record = readRecord();
 		const blocked = new Set([...held, ...keptBack]);
 		const isBlocked = (set: readonly OfferedPackage[]) =>
 			set.some(
 				({ name, arch }) => blocked.has(name) || blocked.has(`${name}:${arch}`),
 			);
-		if (offer.length > 0) {
-			if (isBlocked(offer) || record.offers.some(isBlocked)) return;
-			const sorted = [...offer].sort((a, b) =>
-				compareAptPackageNames(a.name, b.name),
-			);
-			const id = offerId(sorted);
-			if (!record.offers.some((standing) => offerId(standing) === id)) {
-				commit({ version: 1, offers: [...record.offers, sorted] });
-			}
-			notifyUpdate({ kind: "updates-available", id });
-			return;
-		}
 		const deadline = Date.now() + UPDATE_OUTCOME_DEADLINE_MS;
 		const proofs = new Map<string, number | undefined>();
 		for (const standing of record.offers) {
 			if (isBlocked(standing)) continue;
 			const name = `update:updates-available:${offerId(standing)}`;
 			const issuance = notificationExists(name)?.releaseRevision;
-			if (await targetsAttained(standing, { run, now: Date.now, deadline })) {
+			if (
+				await targetsAttained(standing, {
+					run,
+					now: Date.now,
+					deadline,
+					requireUnheld: true,
+				})
+			) {
 				proofs.set(name, issuance);
 			}
 		}

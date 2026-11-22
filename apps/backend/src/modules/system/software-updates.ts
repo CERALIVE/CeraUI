@@ -967,7 +967,6 @@ async function getSoftwareUpdateSize(
 	}
 	let res = parsedSummary.value;
 	let fromHeldBack = false;
-	let fallbackFailed = false;
 
 	if (res.upgradeCount === 0) {
 		const heldBackPackages = parseAptPackageList(
@@ -990,7 +989,6 @@ async function getSoftwareUpdateSize(
 			if (!fallback.ok) {
 				logParseError(fallback);
 				failCurrentCheck("discovery_failed");
-				fallbackFailed = true;
 			} else {
 				res = fallback.value;
 			}
@@ -1008,24 +1006,23 @@ async function getSoftwareUpdateSize(
 		parseKeptBackPackageNames(upgrade.stdout),
 	);
 	const actionable = actionableAppNames(discovered);
-	if (!fallbackFailed) {
-		discoveredPackages = discovered;
-		actionableAppPackages = actionable;
-		availableIdentity =
-			res.upgradeCount > 0
-				? deriveUpdateIdentity(res.packages, res.upgradeCount, res.downloadSize)
-				: null;
-		availableUpdates = {
-			package_count: res.upgradeCount,
-			...(res.downloadSize !== undefined
-				? { download_size: res.downloadSize }
-				: {}),
-		};
-		broadcastMsg("status", {
-			available_updates: availableUpdates,
-			update_state: getUpdateState(),
-		});
-	}
+	// A failed estimate cannot preserve the previous check's actionable rows.
+	discoveredPackages = discovered;
+	actionableAppPackages = actionable;
+	availableIdentity =
+		res.upgradeCount > 0
+			? deriveUpdateIdentity(res.packages, res.upgradeCount, res.downloadSize)
+			: null;
+	availableUpdates = {
+		package_count: res.upgradeCount,
+		...(res.downloadSize !== undefined
+			? { download_size: res.downloadSize }
+			: {}),
+	};
+	broadcastMsg("status", {
+		available_updates: availableUpdates,
+		update_state: getUpdateState(),
+	});
 	// The scheduled notice uses the original plan; the later size probe for
 	// kept-back packages is not evidence of what Install would take.
 	const planned = listedPackages(upgrade.stdout);

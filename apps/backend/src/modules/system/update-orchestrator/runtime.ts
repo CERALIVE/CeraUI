@@ -185,7 +185,10 @@ import {
 	retireStagedReceipt,
 } from "./os-staged-receipt-retirement.ts";
 import { settleOsUnlaunchedWitness } from "./os-unlaunched-adapter.ts";
-import { runScheduledPackageCheck } from "./package-offer-notice.ts";
+import {
+	recordPackageOffer,
+	runScheduledPackageCheck,
+} from "./package-offer-notice.ts";
 import { progressFromWire } from "./package-progress.ts";
 import {
 	type PackageRecoveryEvidence,
@@ -277,7 +280,7 @@ export interface OrchestratorRuntimeDeps {
 	readonly isIdle: (schedule: UpdateSettings["schedule"]) => Promise<boolean>;
 	readonly isStreamLive: () => boolean;
 	readonly onlyMeteredCandidateExists: () => Promise<boolean>;
-	readonly runPackageCheck: () => Promise<SoftwareUpdateError>;
+	readonly runPackageCheck: typeof runScheduledPackageCheck;
 	readonly startPackageInstall: () => UpdateStartOutcome;
 	readonly getPackageInstallWireState: () => UpdateState;
 	readonly stopPackageInstallUnit: () => Promise<void>;
@@ -1216,9 +1219,12 @@ async function runPackageCheckCycle(): Promise<void> {
 	packageCheckDeferral = null;
 	const now = deps.now();
 	dispatch({ type: "PACKAGE_CHECK_STARTED", now });
+	const observed: { offer?: Parameters<typeof recordPackageOffer>[0] } = {};
 	const error =
 		(await readCapabilityRegime()) !== null
-			? await deps.runPackageCheck()
+			? await deps.runPackageCheck((offer) => {
+					observed.offer = offer;
+				})
 			: "discovery_failed";
 	const outcomeNow = deps.now();
 	if (error === null) {
@@ -1231,6 +1237,31 @@ async function runPackageCheckCycle(): Promise<void> {
 					item.version ? [{ name: item.name, version: item.version }] : [],
 				) ?? [],
 			);
+			if (actionableCount > 0) {
+				const exact = observed.offer;
+				const id =
+					exact?.length === actionableCount &&
+					exact.every(({ name, version }) =>
+						wire.packages?.some(
+							(row) =>
+								row.actionable &&
+								row.name === name &&
+								(row.version === undefined || row.version === version),
+						),
+					)
+						? recordPackageOffer(exact)
+						: undefined;
+				notifyUpdate({
+					kind: "updates-available",
+					id:
+						id ??
+						wire.packages
+							?.map((item) => `${item.name}=${item.version ?? "unknown"}`)
+							.sort()
+							.join(",") ??
+						wire.identity.version,
+				});
+			}
 		}
 		const nextAttemptAt =
 			outcomeNow +

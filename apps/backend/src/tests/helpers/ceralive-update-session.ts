@@ -49,6 +49,7 @@ export type SessionStep = {
 	// The device's APT answers for this process's whole life.
 	readonly apt?: AptScript;
 	readonly olderBackend?: boolean;
+	readonly canonicalScheduler?: boolean;
 	readonly capable?: boolean;
 	readonly failWrites?: boolean;
 	readonly recoverFails?: boolean;
@@ -83,11 +84,16 @@ updates.setAptReachabilityProbeForTest(async () => ({
 }));
 let apt = scriptedApt(step.apt ?? {});
 let compareGate: ReturnType<typeof Promise.withResolvers<void>> | undefined;
+let holdGate: ReturnType<typeof Promise.withResolvers<void>> | undefined;
 updates.setAptCommandRunnerForTest(async (argv) => {
 	const answer = await apt(argv);
 	if (argv[0] === "dpkg" && argv[1] === "--compare-versions" && compareGate) {
 		process.stdout.write("backend:compare-captured\n");
 		await compareGate.promise;
+	}
+	if (argv[0] === "/usr/bin/apt-mark" && argv[1] === "showhold" && holdGate) {
+		process.stdout.write("backend:holds-captured\n");
+		await holdGate.promise;
 	}
 	return answer;
 });
@@ -124,6 +130,12 @@ for await (const command of console) {
 	} else if (command === "pause-package-compare") {
 		compareGate = Promise.withResolvers<void>();
 		process.stdout.write("backend:compare-armed\n");
+	} else if (command === "pause-package-holds") {
+		holdGate = Promise.withResolvers<void>();
+		process.stdout.write("backend:holds-armed\n");
+	} else if (command === "resume-package-holds") {
+		holdGate?.resolve();
+		holdGate = undefined;
 	} else if (command === "resume-package-compare") {
 		compareGate?.resolve();
 		compareGate = undefined;

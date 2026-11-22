@@ -1550,30 +1550,30 @@ touched. Contract, with the stale sequences it accepts:
 
 ### Scheduled package availability notice [EXISTS; host-tested]
 
-The orchestrator's package `updates-available` notice (not the OS notice with
-the same wording) records the exact actionable set from its own check before
-announcing it. Capable images use the discovery's admitted APT rows, including
-Debian packages; legacy images use the existing actionable Install roster.
-The name and dismissal key include a digest of the sorted `(name, architecture,
-version)` vector. Dismissing one offer still suppresses that offer, not a newer
-one. The wire payload and translation key are unchanged.
+The orchestrator's package `updates-available` notice has two paths, separate
+from the OS notice with the same wording:
 
-The package notice shares the CeraLive notice's APT evidence parsers. It
-requires a complete, unambiguous plan and refresh participation from every
-HTTP(S) package source in the APT policy inventory. Holds and fully accounted
-kept-back names are matched to the exact new and standing offers. An unrelated
-hold or kept-back package is not itself a veto. A matching hold or kept-back
-member keeps that offer and prevents announcing a subset. On legacy, even a
-kept-back-only plan uses the original discovery, not the optional follow-up
-size estimate. The capable install admission and legacy roster are unchanged.
-A complete orchestrator
-check with no actionable packages reads dpkg using `system.updateOutcome`'s
-exact-instance and Debian-version comparison. It withdraws only stored sets for
-which every member is installed and configured at or above the offered version.
-An older proof cannot remove a newer offer's name. An install exit or restart,
-startup alone, and login/reconnect never remove it.
+- **Announce:** the same available/actionable result that raises the notice
+  on main raises it here, regardless of a prior offer, the proof gates below,
+  or the state of the receipt file. Capable and legacy install admission
+  still decide the actionable set. If the same check also supplies an exact
+  actionable vector and can record it, the notice and dismissal key use its
+  `(name, architecture, version)` digest. Otherwise the canonical key shows
+  the notice without giving it an automatic withdrawal receipt. Neither case
+  changes the copy or wire payload.
+- **Withdraw:** require a conclusive check with no actionable packages, a
+  recorded exact offer, and `system.updateOutcome`'s exact-instance Debian
+  version readback. Every member must be configured at or above the offered
+  version and must not be held, including a hold (`hi `) observed by dpkg at
+  the later read after `apt-mark`. The outcome RPC's own configured-held
+  semantics are unchanged. A scoped hold or kept-back member protects that
+  offer only; it does not prevent an independent announcement. On legacy, a
+  kept-back-only check uses the original discovery rather than the optional
+  size estimate. An older proof, install exit, restart, startup or login
+  cannot remove a newer or independent notice.
 
-Whole-system APT evidence used by the scheduled notice:
+Whole-system APT evidence used to qualify withdrawal (and to decide whether
+an announcement can carry an exact receipt, never whether to announce):
 
 | Evidence | Scope and reason |
 |---|---|
@@ -1584,17 +1584,16 @@ Whole-system APT evidence used by the scheduled notice:
 
 The bounded `scheduled_package_offers.json` file next to the first-party
 record carries offered vectors, not proof or removals. If unreadable, unwritable
-or full (32 offers / 256 KiB), the notice fails closed; the package check and
-Software Updates still work. Retractions go live in typed and bare-name formats
+or full (32 offers / 256 KiB), new notices still appear with the canonical
+key, but there is no new receipt. Retractions go live in typed and bare-name formats
 only to sessions already authenticated at the start of the check and still in
 that session at delivery. The notice issuance is checked again before removing
 it. If a session authenticated during the check, the offer remains on disk for
 a later fresh check, not for login replay. A tab offline throughout a retirement
 can keep its copy until reload or dismissal; pre-fix notices have no exact
 recorded set and cannot be retired automatically. Back-to-back nonempty plans
-do not retire older vectors. If the record fills, new announcements wait for
-a complete empty check to prove and retire offers. No board qualification is
-claimed.
+do not retire older vectors. If the file fills, a complete empty check can
+make room by proving stored offers. No board qualification is claimed.
 
 ### Download hold notice [EXISTS; host-tested, board qualification owed]
 

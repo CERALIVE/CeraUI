@@ -12,6 +12,7 @@
  * (bare-name removals only).
  */
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import {
 	copyFile,
 	mkdir,
@@ -169,7 +170,9 @@ class Backend {
 		const child = Bun.spawn(
 			[
 				process.execPath,
-				...(step.olderBackend ? ["--preload", MAIN_BACKEND] : []),
+				...(step.olderBackend || step.canonicalScheduler
+					? ["--preload", MAIN_BACKEND]
+					: []),
 				SESSION,
 				JSON.stringify(input),
 			],
@@ -180,6 +183,12 @@ class Backend {
 				stderr: "pipe",
 				env: {
 					...process.env,
+					...(step.canonicalScheduler
+						? {
+								CERALIVE_TEST_BASELINE:
+									"665994c52f4580f2319d7cb7422d46b0eca396f2",
+							}
+						: {}),
 					PORT: "0",
 					CERALIVE_RUN_DIR: join(root, "run"),
 					CERALIVE_DISMISSALS_FILE: dismissals,
@@ -261,6 +270,27 @@ class Backend {
 	resumePackageCompare(): Promise<void> {
 		return this.command(
 			"resume-package-compare",
+			CHECKED_MARKER,
+			"scheduled package check completion",
+		);
+	}
+
+	async startCheckAndCaptureHolds(): Promise<void> {
+		await this.command(
+			"pause-package-holds",
+			"backend:holds-armed",
+			"hold barrier armed",
+		);
+		await this.command(
+			"scheduled-package-check",
+			"backend:holds-captured",
+			"captured apt-mark answer",
+		);
+	}
+
+	resumePackageHolds(): Promise<void> {
+		return this.command(
+			"resume-package-holds",
 			CHECKED_MARKER,
 			"scheduled package check completion",
 		);
@@ -512,6 +542,31 @@ const bootPackage: AptPackage = {
 	candidate: "7.2.0",
 };
 
+const noticePrefix = "update:updates-available:";
+const canonicalNoticeId = (capable: boolean, rows: readonly AptPackage[]) =>
+	noticePrefix +
+	rows
+		.map(
+			({ name, candidate, planned }) =>
+				`${name}=${capable ? (planned ?? candidate) : "unknown"}`,
+		)
+		.sort()
+		.join(",");
+const exactNoticeId = (rows: readonly AptPackage[]) =>
+	`${noticePrefix}packages:${createHash("sha256")
+		.update(
+			JSON.stringify(
+				rows
+					.map(({ name, arch = "arm64", candidate, planned }) => [
+						name,
+						arch,
+						planned ?? candidate,
+					])
+					.sort(([a = ""], [b = ""]) => (a < b ? -1 : a > b ? 1 : 0)),
+			),
+		)
+		.digest("hex")}`;
+
 for (const capable of [false, true]) {
 	const image = capable ? "capable Debian" : "legacy roster";
 	const packageOffer: AptPackage = capable
@@ -524,6 +579,210 @@ for (const capable of [false, true]) {
 	const keptBack = [
 		{ ...cerastream("1", "2"), name: "tzdata", source: "debian" as const },
 	];
+	const unrelated: AptPackage = {
+		name: "tzdata",
+		source: "debian",
+		installed: "1",
+		candidate: "2",
+	};
+	const independent = cerastream("1", "2", { name: "srtla" });
+	const configured = { ...packageOffer, installed: "2" };
+	const installed = { installed: [configured] };
+	const foreign: AptPackage = {
+		name: "libc6:armhf",
+		arch: "armhf",
+		source: "debian",
+		installed: "1",
+		candidate: "2",
+	};
+	const newcomer = cerastream("(none)", "2", { name: "modemmanager" });
+	const blockedA = { ...configured, candidate: "3" };
+	const unfinished = { installed: [unrelated], dpkgStatus: { tzdata: "iF " } };
+
+	const matrix: readonly {
+		readonly label: string;
+		readonly announce: AptScript;
+		readonly canonicalRows: readonly AptPackage[];
+		readonly offered: readonly AptPackage[];
+		readonly withdraw: AptScript;
+		readonly clears: boolean;
+		readonly lateHold?: true;
+	}[] = [
+		{
+			label: "nothing",
+			announce: {},
+			canonicalRows: [],
+			offered: [],
+			withdraw: installed,
+			clears: true,
+		},
+		{
+			label: "held offered",
+			announce: {
+				upgradable: [independent],
+				installed: [packageOffer],
+				holds: [packageOffer.name],
+			},
+			canonicalRows: [independent],
+			offered: [independent],
+			withdraw: { ...installed, holds: [packageOffer.name] },
+			clears: false,
+		},
+		{
+			label: "kept-back offered",
+			announce: { upgradable: [independent], keptBack: [packageOffer] },
+			canonicalRows: capable ? [independent] : [independent, packageOffer],
+			offered: [independent],
+			withdraw: { keptBack: [blockedA] },
+			clears: false,
+		},
+		{
+			label: "unrelated held and kept back",
+			announce: {
+				upgradable: [independent],
+				keptBack: [unrelated],
+				holds: [unrelated.name],
+			},
+			canonicalRows: capable ? [independent] : [independent, unrelated],
+			offered: [independent],
+			withdraw: {
+				...installed,
+				keptBack: [unrelated],
+				holds: [unrelated.name],
+			},
+			clears: true,
+		},
+		{
+			label: "unfinished unrelated",
+			announce: { ...unfinished, upgradable: [independent] },
+			canonicalRows: [independent],
+			offered: [independent],
+			withdraw: { ...unfinished, installed: [configured, unrelated] },
+			clears: false,
+		},
+		{
+			label: "foreign architecture",
+			announce: { upgradable: [independent, foreign] },
+			canonicalRows: [independent, foreign],
+			offered: capable ? [independent, foreign] : [independent],
+			withdraw: { installed: [{ ...configured, installedArch: "armhf" }] },
+			clears: false,
+		},
+		{
+			label: "NEW entry",
+			announce: { upgradable: [independent, newcomer] },
+			canonicalRows: capable ? [independent, newcomer] : [independent],
+			offered: capable ? [independent, newcomer] : [independent],
+			withdraw: { ...installed, upgradable: [newcomer] },
+			clears: false,
+		},
+		{
+			label: "hold after snapshot",
+			announce: {
+				upgradable: [independent],
+				installed: [configured],
+				dpkgStatus: { [configured.name]: "hi " },
+			},
+			canonicalRows: [independent],
+			offered: [independent],
+			withdraw: installed,
+			clears: false,
+			lateHold: true,
+		},
+	];
+
+	for (const row of matrix) {
+		test(
+			`scheduled package notice differential announce (${image}, ${row.label})`,
+			async () => {
+				const before = { upgradable: [packageOffer] };
+				const check = async (canonicalScheduler: boolean) => {
+					const backend = await Backend.start({
+						capable,
+						apt: before,
+						canonicalScheduler,
+					});
+					const opened = scheduledTabs();
+					await reconnect(backend, opened);
+					await backend.scheduledPackageCheck();
+					await sync(opened);
+					const initial = scheduledNames(opened);
+					expect(initial.map((ids) => ids.length)).toEqual([1, 1]);
+					await backend.setApt(row.announce);
+					await backend.scheduledPackageCheck();
+					await sync(opened);
+					const final = scheduledNames(opened);
+					const added = final.map((ids, index) =>
+						ids.filter((id) => !initial[index]?.includes(id)),
+					);
+					expect(
+						final.map((ids, index) =>
+							ids.filter((id) => initial[index]?.includes(id)),
+						),
+					).toEqual(initial);
+					expect(removals(opened)).toEqual([0, 0]);
+					await backend.close();
+					await Promise.all(opened.map((tab) => tab.dropped()));
+					return added;
+				};
+
+				const baseline = await check(true);
+				const mainId = canonicalNoticeId(capable, row.canonicalRows);
+				expect(baseline).toEqual(
+					row.offered.length > 0 ? [[mainId], [mainId]] : [[], []],
+				);
+				const exactId = exactNoticeId(row.offered);
+				const revised = await check(false);
+				expect(
+					revised.map((ids) => ids.map((id) => (id === exactId ? mainId : id))),
+				).toEqual(baseline);
+			},
+			budget(2),
+		);
+
+		test(
+			`scheduled package notice strict withdraw (${image}, ${row.label})`,
+			async () => {
+				const backend = await Backend.start({
+					capable,
+					apt: { upgradable: [packageOffer] },
+				});
+				const opened = scheduledTabs();
+				await reconnect(backend, opened);
+				await backend.scheduledPackageCheck();
+				await sync(opened);
+				const id = exactNoticeId([packageOffer]);
+				expect(scheduledNames(opened)).toEqual([[id], [id]]);
+				await backend.setApt(row.withdraw);
+				if (row.lateHold) {
+					await backend.startCheckAndCaptureHolds();
+					try {
+						await backend.setApt({
+							...row.withdraw,
+							holds: [packageOffer.name],
+						});
+					} finally {
+						await backend.resumePackageHolds();
+					}
+				} else {
+					await backend.scheduledPackageCheck();
+				}
+				await sync(opened);
+				expect(scheduledNames(opened).map((ids) => ids.includes(id))).toEqual(
+					row.clears ? [false, false] : [true, true],
+				);
+				expect(removals(opened)).toEqual(row.clears ? [1, 1] : [0, 0]);
+				if (row.lateHold) {
+					await backend.setApt(installed);
+					await backend.scheduledPackageCheck();
+					await sync(opened);
+					expect(scheduledNames(opened)).toEqual([[], []]);
+					expect(removals(opened)).toEqual([1, 1]);
+				}
+			},
+			budget(1),
+		);
+	}
 
 	test(
 		`scheduled package notice announces beside an unrelated kept-back package (${image})`,
@@ -737,7 +996,8 @@ for (const capable of [false, true]) {
 				true,
 			]);
 
-			for (const [label, apt] of [
+			let expected = [offer];
+			for (const [label, apt, adds] of [
 				["failed refresh", failing(installed)],
 				[
 					"index omitted",
@@ -775,6 +1035,7 @@ for (const capable of [false, true]) {
 						upgradable: [other],
 						keptBack: [pkg],
 					},
+					capable ? [] : [exactNoticeId([other])],
 				],
 				[
 					"held even with the candidate configured",
@@ -790,6 +1051,7 @@ for (const capable of [false, true]) {
 						holds: [`${pkg.name}:arm64`],
 						upgradable: [other],
 					},
+					capable ? [] : [exactNoticeId([other])],
 				],
 				[
 					"unpacked or unconfigured",
@@ -814,7 +1076,11 @@ for (const capable of [false, true]) {
 					"readback failed",
 					{ ...installed, fail: { "dpkg-query": "silent-exit-1" } },
 				],
-			] satisfies readonly (readonly [string, AptScript])[]) {
+			] satisfies readonly (readonly [
+				string,
+				AptScript,
+				(readonly string[])?,
+			])[]) {
 				await backend.setApt(apt);
 				await backend.scheduledPackageCheck();
 				await sync(opened);
@@ -823,7 +1089,8 @@ for (const capable of [false, true]) {
 					shown().map((items) => items.includes(offer)),
 					removals(opened),
 				]).toEqual([label, [true, true], [0, 0]]);
-				expect(shown()).toEqual([[offer], [offer]]);
+				expected = [...new Set([...expected, ...(adds ?? [])])];
+				expect(shown()).toEqual([expected, expected]);
 			}
 
 			await backend.close();

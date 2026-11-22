@@ -96,8 +96,10 @@ export async function targetsAttained(
 		run,
 		now,
 		deadline = now() + UPDATE_OUTCOME_DEADLINE_MS,
+		requireUnheld = false,
 	}: Pick<UpdateOutcomeDeps, "run" | "now"> & {
 		readonly deadline?: number;
+		readonly requireUnheld?: boolean;
 	},
 ): Promise<boolean> {
 	if (targets.length === 0) return false;
@@ -132,7 +134,12 @@ export async function targetsAttained(
 			(candidate) =>
 				candidate.name === packageOf(target) && candidate.arch === target.arch,
 		);
-		if (!row || !CONFIGURED.test(row.status)) return false;
+		if (
+			!row ||
+			!CONFIGURED.test(row.status) ||
+			(requireUnheld && row.status.startsWith("h"))
+		)
+			return false;
 		const reached = await ask([
 			"dpkg",
 			"--compare-versions",
