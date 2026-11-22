@@ -14,11 +14,14 @@ export function isBondOptedOut(ifname: string): boolean {
 	if (sessionOptOut.has(ifname)) return true;
 	const identity = resolveBondPhysicalIdentity(ifname);
 	if (identity === undefined || identity.anchor === "ifname") return false;
-	const stored = getConfig().bond_opt_out;
+	const config = getConfig();
+	if (config.bond_opt_out?.[identity.linkId] === true) return true;
+	const legacy = identity.legacyLinkId;
+	if (legacy === undefined) return false;
+	const enabledLinks = config.bond_legacy_opt_out?.[legacy];
 	return (
-		stored?.[identity.linkId] === true ||
-		(identity.legacyLinkId !== undefined &&
-			stored?.[identity.legacyLinkId] === true)
+		config.bond_opt_out?.[legacy] === true ||
+		(enabledLinks !== undefined && enabledLinks[identity.linkId] !== true)
 	);
 }
 
@@ -28,30 +31,46 @@ export function setPersistentBondOptOut(
 ): string | undefined {
 	if (optOut) sessionOptOut.add(ifname);
 	else sessionOptOut.delete(ifname);
-	const physicalId = bondPhysicalId(ifname);
-	if (physicalId === undefined) return undefined;
-
-	const next = { ...getConfig().bond_opt_out };
 	const identity = resolveBondPhysicalIdentity(ifname);
-	const legacy = identity?.legacyLinkId;
-	if (legacy !== undefined && next[legacy] === true) {
-		for (const present of listPresentPhysicalDevices()) {
-			if (present.legacyLinkId === legacy && present.anchor !== "ifname") {
-				next[present.linkId] = true;
+	if (identity === undefined || identity.anchor === "ifname") return undefined;
+
+	const { linkId: physicalId, legacyLinkId: legacy } = identity;
+	const config = getConfig();
+	const next = { ...config.bond_opt_out };
+	if (legacy !== undefined) {
+		const enabledLinks = config.bond_legacy_opt_out?.[legacy];
+		const migrating = next[legacy] === true;
+		if (migrating) {
+			for (const present of listPresentPhysicalDevices()) {
+				if (present.legacyLinkId === legacy && present.anchor !== "ifname") {
+					next[present.linkId] = true;
+				}
 			}
+			delete next[legacy];
+		}
+		// A scan cannot prove all siblings are plugged in.
+		if (migrating || enabledLinks !== undefined) {
+			const exceptions = { ...enabledLinks };
+			if (optOut) delete exceptions[physicalId];
+			else exceptions[physicalId] = true;
+			config.bond_legacy_opt_out = {
+				...config.bond_legacy_opt_out,
+				[legacy]: exceptions,
+			};
 		}
 	}
 	if (optOut) next[physicalId] = true;
 	else delete next[physicalId];
-	if (legacy !== undefined) delete next[legacy];
-	getConfig().bond_opt_out = Object.keys(next).length === 0 ? undefined : next;
+	config.bond_opt_out = Object.keys(next).length === 0 ? undefined : next;
 	saveConfig();
 	return physicalId;
 }
 
 export function resetPersistentBondOptOutForTest(): void {
 	sessionOptOut.clear();
-	getConfig().bond_opt_out = undefined;
+	const config = getConfig();
+	config.bond_opt_out = undefined;
+	config.bond_legacy_opt_out = undefined;
 }
 
 export function resetSessionBondOptOutForTest(): void {

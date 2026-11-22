@@ -20,14 +20,18 @@ import {
 	getNetworkInterfaces,
 	isBondCandidate,
 	netIfBuildMsg,
+	onNetworkInterfacesChange,
+	processIfconfigOutput,
 	resetBondOptOutSession,
 } from "../modules/network/network-interfaces.ts";
 import {
+	getUsbPhysicalDescriptor,
 	refreshUsbNetMarkers,
 	resetUsbNetMarkers,
 } from "../modules/network/router-cellular-scan.ts";
 import { setBondIdentityResolverForTest } from "../modules/streaming/bond-entry.ts";
 import { configureNetworkInterfaceProcedure } from "../rpc/procedures/network.procedure.ts";
+import { firstSightIfconfig } from "./helpers/bond-first-sight-fixture.ts";
 import {
 	attachHuaweiTwins,
 	clearBondNetworkFixture,
@@ -89,6 +93,59 @@ describe("operator bond opt-out — config.json restart persistence", () => {
 		await loadConfig();
 		expect(getConfig().bond_opt_out?.[twinId]).toBe(true);
 		expect(isBondOptedOut("wwu1c2")).toBe(true);
+	});
+
+	test("keeps an unplugged twin out of the first bond snapshot after its sibling is enabled", async () => {
+		const a = "wwu1u4c2";
+		const b = "wwu1c2";
+		const aIfconfig = firstSightIfconfig(a, HUAWEI_TWIN_IP);
+		clearBondNetworkFixture();
+		setBondIdentityResolverForTest(null);
+		await refreshUsbNetMarkers(
+			[a],
+			constructedTwinDeps(constructedTwins.filter((d) => d.ifname === a)),
+		);
+		expect(getUsbPhysicalDescriptor(b)).toBeUndefined();
+		processIfconfigOutput(aIfconfig);
+		getConfig().bond_opt_out = {
+			[mintLinkId("usb-serial:413c:0123456789ABCDEF")]: true,
+		};
+		saveConfig();
+		expect(netIfBuildMsg()[a]?.enabled).toBe(false);
+
+		const result = await call(
+			configureNetworkInterfaceProcedure,
+			{ name: a, ip: HUAWEI_TWIN_IP, enabled: true },
+			{ context: makeRpcContext() },
+		);
+		expect(result.success).toBe(true);
+		expect(netIfBuildMsg()[a]?.enabled).toBe(true);
+		resetBondOptOutSession();
+		clearBondNetworkFixture();
+		resetUsbNetMarkers();
+		await loadConfig();
+
+		let first: ReturnType<typeof netIfBuildMsg> | undefined;
+		const unsubscribe = onNetworkInterfacesChange(() => {
+			const snapshot = netIfBuildMsg();
+			if (snapshot[b] !== undefined) first ??= snapshot;
+		});
+		try {
+			await refreshUsbNetMarkers([a, b], constructedTwinDeps());
+			processIfconfigOutput(
+				`${aIfconfig}\n\n${firstSightIfconfig(b, HUAWEI_TWIN_IP)}`,
+			);
+			expect(first?.[a]?.enabled).toBe(true);
+			expect(first?.[b]?.enabled).toBe(false);
+		} finally {
+			unsubscribe();
+		}
+
+		setPersistentBondOptOut(b, false);
+		expect(netIfBuildMsg()[b]?.enabled).toBe(true);
+		setPersistentBondOptOut(b, true);
+		expect(netIfBuildMsg()[a]?.enabled).toBe(true);
+		expect(netIfBuildMsg()[b]?.enabled).toBe(false);
 	});
 
 	test("an opt-out survives a simulated backend restart and follows the physical port", async () => {

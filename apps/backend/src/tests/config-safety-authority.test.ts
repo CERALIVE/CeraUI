@@ -28,6 +28,7 @@ test.each([
 	'{"modem_capabilities":{"fcc_auto_unlock":false,"fcc_auto_unlock":true}}',
 	'{"bond_opt_out":{"usb:a":true},"bond_opt_out":{}}',
 	'{"bond_opt_out":{"usb:a":false}}',
+	'{"bond_legacy_opt_out":{"usb:shared":true}}',
 	'{"autostart":true',
 ])(
 	"ambiguous runtime config grants no safety permission: %s",

@@ -940,8 +940,10 @@ A non-placeholder serial shared by twins therefore switches to port identity
 once, when its twin is first seen, and remains there after the twin is removed.
 
 Affected devices change link id and steering mark once. The rejected serial's
-opaque `legacyLinkId` preserves an existing bond opt-out; toggling one twin first
-migrates the old exclusion to every present twin so its sibling stays excluded.
+opaque `legacyLinkId` preserves an existing bond opt-out. The first toggle saves
+the exclusion under the present twins' physical IDs and retains it as a
+fallback in `bond_legacy_opt_out` for twins that were unplugged. An explicit
+enable applies only to that exact physical ID, including after config reload.
 Router login credentials are read only under the device's exact resolved
 `linkId`. A rejected serial's legacy id has no durable binding to a port, so it
 cannot transfer a login, even if only one twin remains or the backend restarts.
