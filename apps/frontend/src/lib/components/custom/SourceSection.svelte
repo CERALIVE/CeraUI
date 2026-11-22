@@ -483,15 +483,17 @@ function captureKindClass(source: CaptureStreamSource): string {
 
 // The option's frame carries its state, so the "?" inside it belongs to it. A
 // disabled option dims the frame to 60% of each colour's alpha, never the whole
-// tile: opacity on an ancestor would paint the red Lost word below AA.
+// tile: opacity on an ancestor would paint the red Lost word below AA. The
+// selected frame is a ring, not a tint: muted text inside a lime-tinted frame
+// (the summary, the capture formats) fell to 4.2:1 in dark, below AA.
 function frameClass(selected: boolean, unbound: boolean, dimmed: boolean): string {
 	if (!selected) return dimmed ? 'border-border/60' : 'border-border hover:bg-accent/50';
 	if (unbound) {
 		return dimmed
-			? 'border-status-warning/36 bg-status-warning/6'
-			: 'border-status-warning/60 bg-status-warning/10';
+			? 'border-status-warning/36 ring-status-warning/36 ring-1'
+			: 'border-status-warning ring-status-warning ring-1';
 	}
-	return dimmed ? 'border-primary/60 bg-primary/6' : 'border-primary bg-primary/10';
+	return dimmed ? 'border-primary/60 ring-primary/60 ring-1' : 'border-primary ring-primary ring-1';
 }
 function rowIcon(source: StreamSource) {
 	if (source.origin === 'capture') return KIND_ICON[kindFamily(source.kind)];

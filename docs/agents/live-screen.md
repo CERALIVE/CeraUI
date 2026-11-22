@@ -426,7 +426,9 @@ set these rules:
   Not connected or Includes audio) and its help at the inline end, inside the
   frame. Every chip is the same pill; only its tone changes. Anything more
   (the summary, capture formats, warnings, reasons and How to publish) sits
-  under them, inside the same frame.
+  under them, inside the same frame. The selected option is outlined (its
+  border plus a one-pixel ring in the primary colour), never tinted: muted text
+  inside a lime-tinted frame measured 4.23:1 in dark, below AA.
 - **The summary belongs to the selected option.** `source-active-config` sits
   inside the selected option and names its settings ("Automatic", the Encoder
   dialog's word, while no format is saved) and the hardware ceiling, never the
@@ -443,7 +445,10 @@ set these rules:
   bitrate once, at the end of its summary, and that figure is the
   bitrate-ceiling chip (`bitrate-ceiling-chip`): it was a separate pill that
   repeated the summary. It still opens the Encoder dialog while Edit waits for
-  a source, so the bitrate stays editable before a pick. The destination check is a
+  a source, so the bitrate stays editable before a pick. Its text is one line
+  tall, so an `::after` overlay 12 px past each edge makes the target 44 px at
+  every width, and the summary line pads 12 px and gives it back as a negative
+  margin so the overlay stays inside the line's own box. The destination check is a
   chip beside the title, and the dot follows it: a destination that passes the
   gate but was never checked shows a hollow dot (`data-tone="unchecked"`),
   because green claimed a check that never happened.
@@ -454,9 +459,12 @@ set these rules:
   use the UI face too.
 - **Two balanced columns** from 1024 px, as "Screen sizes" states.
 
-Pinned by `StreamSetupChain.test.ts` ("one row pattern"),
-`SourceSection.test.ts` ("one option pattern") and the column check in
-`apps/frontend/tests/e2e/visual/live.visual.spec.ts`.
+Pinned by `StreamSetupChain.test.ts` ("one row pattern" and "keeps the
+bitrate editable while Edit waits for a source"), `SourceSection.test.ts` ("one
+option pattern"), the column check in
+`apps/frontend/tests/e2e/visual/live.visual.spec.ts`, and
+`apps/frontend/tests/e2e/live-design-a11y.spec.ts`, whose 44 px gates now
+measure the Output card too.
 
 ### 1. Job and audience
 

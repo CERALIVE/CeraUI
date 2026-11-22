@@ -18,8 +18,9 @@ import { ensureAuthenticated, navigateTo, setLocale, setTheme } from './helpers/
  *
  *  - nothing overflows sideways at 375x812, 768x1024, 1280x900 and 1024x600, idle
  *    and live, in English, Spanish and Arabic;
- *  - in touch layout every control of the Audio card, the layout controls and
- *    the Live bar answers to at least 44 px on its shorter side (DESIGN.md TT-1),
+ *  - in touch layout every control of the Audio card, the layout controls, the
+ *    Output card (the inline bitrate included) and the Live bar answers to at
+ *    least 44 px on its shorter side (DESIGN.md TT-1),
  *    at 375x812 and at the 1024x600 kiosk; switches and slider thumbs reach it
  *    through the token layer's `::after` hit area, never a grown box;
  *  - every slider has a name, every button has a name at phone width, and text
@@ -57,7 +58,7 @@ const KIOSK = VIEWPORTS[3];
 
 const TARGET_PX = 44;
 const PHONES = [PHONE, { width: 360, height: 640 }, { width: 320, height: 640 }];
-const TOUCH_REGIONS = ['audio-card', 'layout-controls', 'live-bar'] as const;
+const TOUCH_REGIONS = ['audio-card', 'layout-controls', 'live-bar', 'output-card'] as const;
 const CONTROLS =
 	'button, [role="slider"], [role="switch"], [role="radio"], [role="combobox"], input:not([type="hidden"]), select, a[href], summary';
 
@@ -204,7 +205,7 @@ test.describe('@a11y Live screen design pass — caps-full', { tag: '@desktop-on
 		expect(overflowing).toEqual([]);
 	});
 
-	test('touch layout gives every Audio, layout and Live bar control a 44 px hit area @a11y', async ({ page }) => {
+	test('touch layout gives every Audio, layout, Output and Live bar control a 44 px hit area @a11y', async ({ page }) => {
 		test.setTimeout(180_000);
 		const short: string[] = [];
 		const grown: string[] = [];
@@ -233,7 +234,7 @@ test.describe('@a11y Live screen design pass — caps-full', { tag: '@desktop-on
 	});
 
 	for (const theme of ['dark', 'light'] as const) {
-	test(`default layout gives every Audio, layout and Live bar control a 44 px target on a phone, ${theme} @a11y`, async ({ page }) => {
+	test(`default layout gives every Audio, layout, Output and Live bar control a 44 px target on a phone, ${theme} @a11y`, async ({ page }) => {
 		test.setTimeout(300_000);
 		const short: string[] = [];
 		const seen = new Set<string>();

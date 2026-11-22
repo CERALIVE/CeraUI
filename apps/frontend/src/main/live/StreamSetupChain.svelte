@@ -353,14 +353,20 @@ const networkView = $derived<SetupRowView>({
 			</p>
 			<!-- The encoder's bitrate is said once, after its value, and is itself the
 			     bitrate-ceiling control: it opens the Encoder dialog even while Edit
-			     waits for a source, as the separate pill it replaces did. -->
+			     waits for a source, as the separate pill it replaces did. Its text box
+			     is one line tall, so an ::after overlay 12 px past each edge gives it a
+			     44 px target at every width without growing the line. -->
+			<!-- With the bitrate, the line pads 12 px on every side and gives it back as
+			     a negative margin (10 px below, keeping the column's 2 px rhythm): the
+			     layout stays put while the overlay stays inside the line's own box, so
+			     the line never reads as clipped. -->
 			<p
 				class="text-sm break-words {view.state === 'warn'
 					? 'text-status-warning font-medium'
-					: 'text-muted-foreground'}"
+					: 'text-muted-foreground'} {row?.bitrate ? '-mx-3 -mt-3 -mb-2.5 p-3' : ''}"
 			>
 				{view.value}{#if row?.bitrate}{view.value ? ' \u00b7 ' : ''}<button
-						class="hover:text-foreground focus-visible:ring-ring relative rounded underline underline-offset-2 outline-hidden focus-visible:ring-2"
+						class="hover:text-foreground focus-visible:ring-ring relative rounded underline underline-offset-2 outline-hidden after:absolute after:-inset-3 focus-visible:ring-2"
 						data-testid="bitrate-ceiling-chip"
 						data-touch-target="hit-area"
 						onclick={row.onEdit}
