@@ -80,9 +80,10 @@ function tagged(): boolean {
 }
 
 /**
- * Whether the request holds its kind's slot: while its reply is awaited, or once
- * it timed out on this socket with its file still awaited from a device not known
- * to echo ids. Only that file, or a new socket, can then prove a later file's owner.
+ * Whether the request holds its kind's slot: while its file is awaited and its
+ * reply is awaited or was an OK (the file deadline then ends it), or once it timed
+ * out on this socket with its file still awaited from a device not known to echo
+ * ids. Only that file, or a new socket, can then prove a later file's owner.
  */
 function holds(request: LegacyRequest): boolean {
 	if (request.file === "consumed") return false;

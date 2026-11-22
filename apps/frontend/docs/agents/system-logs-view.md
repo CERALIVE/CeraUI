@@ -146,11 +146,15 @@ density. It is not a redesign.
   it; an OK reply only acknowledges the call, and the request keeps its slot
   waiting for its file until `FILE_AFTER_REPLY_MS` passes, then fails with the
   usual failure band (the stock device answers a failed journal read with an
-  empty log and no file). The client pairs each reply with its own call. A file
+  empty log and no file); a reconnect does not end it early, the deadline
+  still does. The client pairs each reply with its own call. A file
   is matched by its echoed id; once a socket has carried one echoed id, only
-  exact ids are accepted on it; before that, a file with no id goes to its kind's
+  exact ids are accepted on it and no kind stays locked on it; before that, a file with no id goes to its kind's
   request on the current socket (the kind comes from the file name). It is saved
-  only if that request's call has not failed and its open is live. A call that
+  only if that request's call has not failed and its open is live. On a device
+  that echoes no id, a file pushed after its request ended (after an error reply
+  or the deadline) cannot be told from a same-kind successor's; the stock device
+  pushes before it answers, so only a non-stock producer sends one. A call that
   timed out with its file still awaited, on a device not known to echo ids,
   locks its kind until that file arrives (then dropped) or the socket is
   replaced (`lib/rpc/socket-epoch.svelte.ts`), never by elapsed time; a consumed

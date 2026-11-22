@@ -6,11 +6,7 @@ import { RPC_CALL_TIMEOUT_MS } from "$lib/rpc/rpc-timeouts";
 import { initSubscriptions, resetState } from "$lib/rpc/subscriptions.svelte";
 
 import { LogDownloads } from "../../main/system-logs/log-downloads.svelte";
-import {
-	FILE_AFTER_REPLY_MS,
-	type LegacyKind,
-	legacyLocked,
-} from "./download-gate.svelte";
+import { type LegacyKind, legacyLocked } from "./download-gate.svelte";
 
 /**
  * The legacy log downloads through the real transport: LogDownloads, the gate,
@@ -70,6 +66,8 @@ const KINDS = [
 	{ kind: "device", other: "system" },
 	{ kind: "system", other: "device" },
 ] as const;
+// The documented window: an OK reply waits 10 s for its file, counted from the OK, not the send.
+const FILE_WINDOW_MS = 10_000;
 
 const realWebSocket = globalThis.WebSocket;
 // biome-ignore lint/complexity/useLiteralKeys: test-only private transport seam
@@ -150,8 +148,8 @@ function file(kind: LegacyKind, text: string): { name: string; text: string } {
 }
 
 /** Lets every queued continuation run, the late replies' included. */
-function drain(): Promise<void> {
-	return vi.advanceTimersByTimeAsync(0);
+async function drain(): Promise<void> {
+	await vi.advanceTimersByTimeAsync(0);
 }
 
 beforeEach(() => {
@@ -265,6 +263,7 @@ describe("legacy log downloads over the socket", () => {
 			await silence();
 			await first;
 
+			expect(view.failed).toBeNull();
 			expect(legacyLocked(kind)).toBe(false);
 			void view.download(kind);
 			expect(asked(kind)).toHaveLength(2);
@@ -342,11 +341,15 @@ describe("legacy log downloads over the socket", () => {
 			throw new Error("the client sent no request id to echo");
 		return echoed ? request : undefined;
 	};
-	const distinctIds = (kind: LegacyKind) => {
-		const ids = asked(kind).map(({ request }) => request);
-		expect(ids.every((id) => id !== undefined)).toBe(true);
+	/** Each id is a genuine one the client sent, and no two are the same. */
+	const distinct = (...ids: (string | undefined)[]) => {
+		expect(ids.every((id) => typeof id === "string" && id.length > 0)).toBe(
+			true,
+		);
 		expect(new Set(ids).size).toBe(ids.length);
 	};
+	const distinctIds = (kind: LegacyKind) =>
+		distinct(...asked(kind).map(({ request }) => request));
 
 	it.each(BOTH)(
 		"a saved $kind file ends its request at once: the retry goes out while its reply is pending, and the late answer changes nothing (id echoed: $echoed)",
@@ -423,6 +426,7 @@ describe("legacy log downloads over the socket", () => {
 			answer(nth(kind, 1).id);
 			await fresh;
 
+			if (echoed) distinctIds(kind);
 			expect(await handed()).toEqual([file(kind, "reopened view")]);
 		},
 	);
@@ -443,6 +447,7 @@ describe("legacy log downloads over the socket", () => {
 			answer(nth(kind, 1).id);
 			await retry;
 
+			distinctIds(kind);
 			expect(view.failed).toBeNull();
 			expect(await handed()).toEqual([file(kind, "fresh")]);
 		},
@@ -497,8 +502,9 @@ describe("legacy log downloads over the socket", () => {
 		async ({ kind, echoed }) => {
 			const view = new LogDownloads(() => true);
 			const first = view.download(kind);
+			await vi.advanceTimersByTimeAsync(4_000);
 			answer(nth(kind, 0).id);
-			await vi.advanceTimersByTimeAsync(FILE_AFTER_REPLY_MS - 1);
+			await vi.advanceTimersByTimeAsync(FILE_WINDOW_MS - 1);
 			expect(view.downloading).toBe(kind);
 			await vi.advanceTimersByTimeAsync(1);
 			await first;
@@ -527,12 +533,19 @@ describe("legacy log downloads over the socket", () => {
 			expect(asked("device")).toHaveLength(1);
 			expect(asked("system")).toHaveLength(1);
 
+			if (echoed) distinct(nth("device", 0).request, nth("system", 0).request);
 			push("system", "system bytes", tag(echoed, nth("system", 0).request));
+			await vi.waitFor(() => expect(systemView.downloading).toBeNull());
+			expect(deviceView.downloading).toBe("device");
+			expect(await handed()).toEqual([file("system", "system bytes")]);
 			push("device", "device bytes", tag(echoed, nth("device", 0).request));
+			await vi.waitFor(() => expect(deviceView.downloading).toBeNull());
 			answer(nth("system", 0).id);
 			answer(nth("device", 0).id);
 			await Promise.all([device, system]);
 
+			expect(deviceView.failed).toBeNull();
+			expect(systemView.failed).toBeNull();
 			expect(await handed()).toEqual([
 				file("system", "system bytes"),
 				file("device", "device bytes"),
@@ -591,12 +604,203 @@ describe("legacy log downloads over the socket", () => {
 				id: "device",
 			});
 			old.receive({ id: request.id, result: { log: "" } });
+			// Its stale socket callbacks too: none may reset, fail or re-epoch the retry.
+			old.onerror?.();
+			old.onopen?.();
+			old.onclose?.();
 			await drain();
 			expect(view.downloading).toBe(kind);
 			push(kind, "new socket", tag(echoed, nth(kind, 0).request));
 			answer(nth(kind, 0).id);
 			await retry;
 
+			if (echoed) distinct(request.request, nth(kind, 0).request);
+			expect(view.failed).toBeNull();
+			expect(await handed()).toEqual([file(kind, "new socket")]);
+		},
+	);
+
+	it.each(BOTH)(
+		"after an OK reply, a live $kind request still owns its slot: another view's request waits, the file is handed off once to the first, and only then the second goes out and saves its own (id echoed: $echoed)",
+		async ({ kind, echoed }) => {
+			const view = new LogDownloads(() => true);
+			const first = view.download(kind);
+			answer(nth(kind, 0).id);
+			await drain();
+			const other = new LogDownloads(() => true);
+			const second = other.download(kind);
+			await drain();
+			expect(asked(kind)).toHaveLength(1);
+			expect(view.downloading).toBe(kind);
+
+			push(kind, "first", tag(echoed, nth(kind, 0).request));
+			await first;
+			await vi.waitFor(() => expect(asked(kind)).toHaveLength(2));
+			push(kind, "second", tag(echoed, nth(kind, 1).request));
+			answer(nth(kind, 1).id);
+			await second;
+
+			if (echoed) distinctIds(kind);
+			expect(view.failed).toBeNull();
+			expect(other.failed).toBeNull();
+			expect(await handed()).toEqual([
+				file(kind, "first"),
+				file(kind, "second"),
+			]);
+		},
+	);
+
+	it.each(BOTH)(
+		"after an OK reply, a closed view's $kind request still owns its slot: the reopened view's request waits, the closed view's file is dropped, not handed to it, and the retry then saves its own (id echoed: $echoed)",
+		async ({ kind, echoed }) => {
+			let open = true;
+			const closed = new LogDownloads(() => open);
+			const first = closed.download(kind);
+			answer(nth(kind, 0).id);
+			await drain();
+			open = false;
+			const reopened = new LogDownloads(() => true);
+			const retry = reopened.download(kind);
+			await drain();
+			expect(asked(kind)).toHaveLength(1);
+			expect(reopened.downloading).toBe(kind);
+
+			push(kind, "closed view", tag(echoed, nth(kind, 0).request));
+			await first;
+			await vi.waitFor(() => expect(asked(kind)).toHaveLength(2));
+			push(kind, "reopened view", tag(echoed, nth(kind, 1).request));
+			answer(nth(kind, 1).id);
+			await retry;
+
+			if (echoed) distinctIds(kind);
+			expect(reopened.failed).toBeNull();
+			expect(await handed()).toEqual([file(kind, "reopened view")]);
+		},
+	);
+
+	it.each(BOTH)(
+		"an OK reply with no $kind file keeps its slot until the file deadline: another view's request goes out only when the first fails, and saves its own (id echoed: $echoed)",
+		async ({ kind, echoed }) => {
+			const view = new LogDownloads(() => true);
+			const first = view.download(kind);
+			await vi.advanceTimersByTimeAsync(4_000);
+			answer(nth(kind, 0).id);
+			await drain();
+			const other = new LogDownloads(() => true);
+			const second = other.download(kind);
+			await vi.advanceTimersByTimeAsync(FILE_WINDOW_MS - 1);
+			expect(asked(kind)).toHaveLength(1);
+			expect(other.downloading).toBe(kind);
+			await vi.advanceTimersByTimeAsync(1);
+			await first;
+
+			expect(view.failed).toBe(kind);
+			await vi.waitFor(() => expect(asked(kind)).toHaveLength(2));
+			push(kind, "second", tag(echoed, nth(kind, 1).request));
+			answer(nth(kind, 1).id);
+			await second;
+
+			if (echoed) distinctIds(kind);
+			expect(other.failed).toBeNull();
+			expect(await handed()).toEqual([file(kind, "second")]);
+		},
+	);
+
+	it.each(BOTH)(
+		"after an OK reply with no $kind file, a closed view's request holds its slot until the file deadline: the reopened view's request goes out only then, and only its file reaches the browser (id echoed: $echoed)",
+		async ({ kind, echoed }) => {
+			let open = true;
+			const closed = new LogDownloads(() => open);
+			const first = closed.download(kind);
+			await vi.advanceTimersByTimeAsync(4_000);
+			answer(nth(kind, 0).id);
+			await drain();
+			open = false;
+			const reopened = new LogDownloads(() => true);
+			const retry = reopened.download(kind);
+			await vi.advanceTimersByTimeAsync(FILE_WINDOW_MS - 1);
+			expect(asked(kind)).toHaveLength(1);
+			expect(reopened.downloading).toBe(kind);
+			await vi.advanceTimersByTimeAsync(1);
+			await first;
+
+			await vi.waitFor(() => expect(asked(kind)).toHaveLength(2));
+			push(kind, "reopened view", tag(echoed, nth(kind, 1).request));
+			answer(nth(kind, 1).id);
+			await retry;
+
+			if (echoed) distinctIds(kind);
+			expect(reopened.failed).toBeNull();
+			expect(await handed()).toEqual([file(kind, "reopened view")]);
+		},
+	);
+
+	it.each(BOTH)(
+		"a saved $kind file is not reported failed when its socket then drops with the reply pending, and the retry on the new socket saves its own (id echoed: $echoed)",
+		async ({ kind, echoed }) => {
+			const view = new LogDownloads(() => true);
+			const first = view.download(kind);
+			const request = nth(kind, 0);
+			push(kind, "first", tag(echoed, request.request));
+			await first;
+			const old = socket();
+			old.close();
+			await vi.advanceTimersByTimeAsync(30_000);
+			socket().open();
+			expect(socket()).not.toBe(old);
+
+			expect(view.failed).toBeNull();
+			expect(legacyLocked(kind)).toBe(false);
+			const retry = view.download(kind);
+			expect(asked(kind)).toHaveLength(1);
+			push(kind, "second", tag(echoed, nth(kind, 0).request));
+			answer(nth(kind, 0).id);
+			await retry;
+
+			if (echoed) expect(nth(kind, 0).request).not.toBe(request.request);
+			expect(view.failed).toBeNull();
+			expect(await handed()).toEqual([
+				file(kind, "first"),
+				file(kind, "second"),
+			]);
+		},
+	);
+
+	it.each(BOTH)(
+		"an OK reply whose socket then drops before its $kind file fails at its file deadline, the old socket's late file reaches nothing, and the retry on the new socket saves its own (id echoed: $echoed)",
+		async ({ kind, echoed }) => {
+			const view = new LogDownloads(() => true);
+			const first = view.download(kind);
+			const request = nth(kind, 0);
+			answer(request.id);
+			await drain();
+			const old = socket();
+			old.close();
+			await vi.advanceTimersByTimeAsync(FILE_WINDOW_MS);
+			await first;
+			socket().open();
+			expect(socket()).not.toBe(old);
+
+			expect(view.failed).toBe(kind);
+			expect(legacyLocked(kind)).toBe(false);
+			const retry = view.download(kind);
+			expect(asked(kind)).toHaveLength(1);
+			old.receive({
+				log: {
+					name: FILE_NAME[kind],
+					contents: "old socket",
+					...(echoed ? { request: request.request } : {}),
+				},
+				id: "device",
+			});
+			await drain();
+			expect(view.downloading).toBe(kind);
+			push(kind, "new socket", tag(echoed, nth(kind, 0).request));
+			answer(nth(kind, 0).id);
+			await retry;
+
+			if (echoed) expect(nth(kind, 0).request).not.toBe(request.request);
+			expect(view.failed).toBeNull();
 			expect(await handed()).toEqual([file(kind, "new socket")]);
 		},
 	);

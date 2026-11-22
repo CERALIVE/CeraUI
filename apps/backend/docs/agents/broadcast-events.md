@@ -147,7 +147,8 @@ The backend pushes typed events to all connected clients via `rpc/events.ts`. Ea
 and `system.getSyslog` (full boot journal) both invoke `modules/system/logs.ts`
 `getLog(conn, service?, request?)`, which `journalctl`s the journal, pushes it as a `log`
 event the frontend `LogsDialog` turns into a file download, AND returns
-`{ name, contents }` so the RPC is a real data source (NOT the former
+`{ name, contents }`, which both procedures answer as `{ log: contents }`, so
+the RPC is a real data source (NOT the former
 `{ log: "" }` stub that fired no push). On a dev/CI host there is no systemd
 journal, so under `shouldUseMocks()` `getLog` serves the in-memory log ring
 buffer (`helpers/logger.ts` `getRecentLogLines`) — a bounded mirror of the same

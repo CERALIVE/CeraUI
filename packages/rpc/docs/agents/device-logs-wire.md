@@ -90,7 +90,7 @@ boundary reports the gap and reads from the retained start.
 | Bundle manifest | sections `versions`, `events`, `journal`, `settings` with `entries` and `redactions`; journal also has `bootsCovered` and `complete`; `exportedBy`; `boots` with versions | `logBundleManifestSchema` |
 
 `system.getLog` and `system.getSyslog` take one additive, optional field, `request` (1-64 letters, digits or `-`): the device echoes it in the `log` push that carries the file, so the client ties the file to its own request; older clients send none and older devices echo none. Their behavior is otherwise unchanged
-(`src/contracts/system.contract.ts`).
+(`src/contracts/system.contract.ts`): the push goes out before the call answers, on the same socket; a client talking to a device that echoes no id tells the unit log from the full journal by the pushed file name (`ceralive_system_log.txt` is the full journal, any other name a unit's log), so the names are part of this contract; and a journal read that fails answers `{ log: "" }` with no push (plus a `log_error` notification), which the client reports as a failed download once its file deadline after the answer passes.
 
 ## Tests
 
