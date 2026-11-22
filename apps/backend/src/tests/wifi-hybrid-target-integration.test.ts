@@ -304,6 +304,8 @@ for (const outcome of ["configured", "rollback", "illegal-rollback"] as const) {
 			expect(await f.start()).toEqual({ success: true });
 			settlePending("wlan0", true);
 			f.effects.length = 0;
+			const previousSsid = f.row.hotspot.name;
+			const write = spyOn(f.activationDeps, "nmConnSetFields");
 			if (outcome === "rollback") f.failNextUp();
 			if (outcome === "illegal-rollback")
 				f.failNextUp(() =>
@@ -311,6 +313,26 @@ for (const outcome of ["configured", "rollback", "illegal-rollback"] as const) {
 				);
 			await f.configure();
 			expect(f.fields["802-11-wireless.channel"]).toBe("1");
+			expect(
+				write.mock.calls.map(([uuid, fields]) => [
+					uuid,
+					fields["802-11-wireless.channel"],
+				]),
+			).toContainEqual(["test-ap", "1"]);
+			expect(
+				write.mock.calls.map(([uuid, fields]) => [
+					uuid,
+					fields["802-11-wireless.ssid"],
+					fields["802-11-wireless.channel"],
+				]),
+			).toEqual(
+				outcome === "configured"
+					? [["test-ap", "Configured AP", "1"]]
+					: [
+							["test-ap", "Configured AP", "1"],
+							["test-ap", previousSsid, "1"],
+						],
+			);
 			expect(f.effects.filter((effect) => effect === "up")).toHaveLength(
 				outcome === "rollback" ? 2 : 1,
 			);
@@ -336,11 +358,20 @@ test("an unchanged saved channel outside the current offering never refuses hybr
 		settlePending("wlan0", true);
 		f.row.hotspot.availableChannels = ["auto", "ch_1"];
 		f.row.hotspot.derivedChannels = [{ channel: 1, freqMhz: 2412, band: "bg" }];
+		// Only the selected parent participates in this Save's identity observation.
+		await f.target.observeParent();
+		const write = spyOn(f.activationDeps, "nmConnSetFields");
 		await f.configure();
 		expect(f.frames.at(-1)).toContain('"success":true');
 		expect(f.saved().ssid).toBe("Configured AP");
 		expect(f.saved().channel).toBe("ch_11");
 		expect(f.fields["802-11-wireless.channel"]).toBe("1");
+		expect(
+			write.mock.calls.map(([uuid, fields]) => [
+				uuid,
+				fields["802-11-wireless.channel"],
+			]),
+		).toContainEqual(["test-ap", "1"]);
 	} finally {
 		await f.restore();
 	}

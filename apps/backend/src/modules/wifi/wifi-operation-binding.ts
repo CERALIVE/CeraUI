@@ -53,9 +53,16 @@ export function bindingForRow(
 	};
 }
 
-export function soleWifiPortAlias(binding: WifiOperationBinding | undefined) {
-	return binding?.mac && binding.key === binding.mac && binding.devicePath
+/** Intent follows the verified radio, not its registry key or active profile. */
+export function verifiedWifiPortKey(binding: WifiOperationBinding | undefined) {
+	return binding?.mac && binding.devicePath
 		? `${binding.mac}@${binding.devicePath}`
+		: undefined;
+}
+
+export function soleWifiPortAlias(binding: WifiOperationBinding | undefined) {
+	return binding?.key === binding?.mac
+		? verifiedWifiPortKey(binding)
 		: undefined;
 }
 
@@ -106,7 +113,10 @@ export async function sampleWifiOperationRadio(
  * Every effect of a bound operation goes through `check`/`permit`. Once a hybrid
  * AP leg is bound, the same proof also covers that leg.
  */
-export function wifiOperationGuard(binding: WifiOperationBinding | undefined) {
+export function wifiOperationGuard(
+	binding: WifiOperationBinding | undefined,
+	requirePort = false,
+) {
 	let changed = false;
 	let legCurrent: (() => Promise<boolean | undefined>) | undefined;
 	const current = () => {
@@ -116,7 +126,10 @@ export function wifiOperationGuard(binding: WifiOperationBinding | undefined) {
 	// Unavailable proof denies effects but is not evidence authorizing rollback Down.
 	const observe = async () => {
 		if (!binding) return "match";
-		const port = wifiAdapterKeyPort(binding.key);
+		const port = requirePort
+			? binding.devicePath
+			: wifiAdapterKeyPort(binding.key);
+		if (requirePort && !port) return "unavailable";
 		const parent = await sampleWifiOperationRadio(
 			binding.ifname,
 			Boolean(port),

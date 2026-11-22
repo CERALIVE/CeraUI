@@ -1,4 +1,4 @@
-import { nmConnSetFields, nmDisconnect } from "../network/network-manager.ts";
+import { nmConnSetFields } from "../network/network-manager.ts";
 import { readNmProfileInstance } from "../network/network-manager-profile-instance.ts";
 import type { DeviceLockResult } from "../network/state/device-lock.ts";
 import {
@@ -24,13 +24,22 @@ import {
 import type { WifiPolicyObservation } from "./wifi-adapter-reconciler.ts";
 import { uniqueHotspotAddress } from "./wifi-autoconnect-policy.ts";
 import { getWifiInterfacesByMacAddress } from "./wifi-connections.ts";
+import {
+	nmDisconnectActivation,
+	observeHotspotActivation,
+} from "./wifi-hotspot-activity.ts";
 import { observeHotspotProfile } from "./wifi-hotspot-profile-observation.ts";
 import {
 	type HotspotProfileOperation,
 	runHotspotProfileOperation,
 } from "./wifi-hotspot-profile-operation.ts";
 import { canHotspot } from "./wifi-hotspot-types.ts";
-import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
+import { sampleWifiOperationRadio } from "./wifi-operation-binding.ts";
+import {
+	normalizeMacAddress,
+	wifiAdapterKeyPort,
+} from "./wifi-permanent-mac.ts";
+import { sameRadioLifetime } from "./wifi-radio-identity.ts";
 import { literalWifiDevicePath } from "./wifi-radio-read-budget.ts";
 
 /** Checked profile actions; the reconciler owns serialization, health and retries. */
@@ -167,16 +176,54 @@ export async function applyHotspotProfilePolicy(
 									(pin !== undefined && candidate.permanentMac === pin)),
 						});
 				if (station || failedFirstStart) {
-					if (resolved && [...observation.active.values()].includes(uuid)) {
+					const activeIfnames = [...observation.active]
+						.filter(([, active]) => active === uuid)
+						.flatMap(([ifname]) => (ifname ? [ifname] : []));
+					const port = wifiAdapterKeyPort(owner);
+					const eligible = candidates.filter(
+						(candidate) =>
+							(!port || candidate.devicePath === port) &&
+							(candidate.permanentMac === mac ||
+								(!candidate.permanentMac &&
+									candidates.length === 1 &&
+									(!pathPin || candidate.devicePath === pathPin))),
+					);
+					const owned = activeIfnames.filter((ifname) =>
+						eligible.some((candidate) => {
+							if (ifname !== (hybrid ? profile.ifname : candidate.ifname))
+								return false;
+							const parentPhy = candidate.lifetime?.phyPath;
+							return (
+								!hybrid ||
+								(parentPhy !== undefined &&
+									observation.identities.get(ifname)?.lifetime?.phyPath ===
+										parentPhy)
+							);
+						}),
+					);
+					if (resolved && owned.length === 1) {
+						const ifname = owned[0];
+						if (ifname === undefined) return undefined;
 						const disconnected = await act({
 							uuid,
 							kind: "down",
-							run: () => nmDisconnect(uuid),
+							run: async () => {
+								const lifetime = observation.identities.get(ifname)?.lifetime;
+								return nmDisconnectActivation(
+									uuid,
+									await observeHotspotActivation(uuid, ifname),
+									undefined,
+									async () =>
+										sameRadioLifetime(
+											lifetime,
+											(await sampleWifiOperationRadio(ifname))?.lifetime,
+										),
+								);
+							},
 						});
 						if (disconnected === undefined) return undefined;
 						if (!disconnected) return `could not deactivate ${uuid}`;
-						for (const [ifname, active] of observation.active)
-							if (active === uuid) observation.active.set(ifname, null);
+						observation.active.set(ifname, null);
 					}
 				} else {
 					if (profile.autoconnect !== "yes") return undefined;

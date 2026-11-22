@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { getConfig } from "../modules/config.ts";
 import * as nm from "../modules/network/network-manager.ts";
+import * as profileInstances from "../modules/network/network-manager-profile-instance.ts";
 import {
 	getWifiState,
 	setWifiState,
@@ -19,6 +20,7 @@ import * as profileOperations from "../modules/wifi/wifi-hotspot-profile-operati
 import { targetRecords } from "../modules/wifi/wifi-hybrid-target-record.ts";
 import { bindingForRow } from "../modules/wifi/wifi-operation-binding.ts";
 import { radioIdentityReaders } from "../modules/wifi/wifi-radio-identity.ts";
+import { RUN_ID } from "./helpers/wifi-active-observation.ts";
 import { request } from "./helpers/wifi-entry-fixture.ts";
 import { wifiFrameFixture } from "./helpers/wifi-frame-fixture.ts";
 import { mockQualifiedHybridActivation } from "./helpers/wifi-hotspot-test-setup.ts";
@@ -95,11 +97,12 @@ test.each(["stopped", "failed", "new-active-path", "new-profile"] as const)(
 		const instance = {
 			path: "/org/freedesktop/NetworkManager/Settings/1",
 			fingerprint: "test-ap",
-			runId: "test",
+			runId: RUN_ID,
 			file: { filename: "test", device: "1", inode: "2", ctime: "3" },
 		};
 		const activePath = "/org/freedesktop/NetworkManager/ActiveConnection/6";
 		let upUuid: string | undefined;
+		spyOn(profileInstances, "nmRunId").mockResolvedValue(RUN_ID);
 		spyOn(profileOperations, "runHotspotProfileOperation").mockImplementation(
 			async (operation) => ({
 				checked: true,
@@ -145,7 +148,7 @@ test.each(["stopped", "failed", "new-active-path", "new-profile"] as const)(
 			});
 			expect(down.mock.calls).toEqual(
 				scenario === "failed" || scenario === "stopped"
-					? [[upUuid, activePath]]
+					? [[upUuid, activePath, RUN_ID, "wlan0"]]
 					: [],
 			);
 		} finally {
@@ -302,10 +305,11 @@ test.each([true, false])(
 		const instance = {
 			path: "/org/freedesktop/NetworkManager/Settings/1",
 			fingerprint: "test-ap",
-			runId: "test",
+			runId: RUN_ID,
 			file: { filename: "test", device: "1", inode: "2", ctime: "3" },
 		};
 		const activePath = "/org/freedesktop/NetworkManager/ActiveConnection/6";
+		spyOn(profileInstances, "nmRunId").mockResolvedValue(RUN_ID);
 		spyOn(nm, "nmDevices").mockResolvedValue(["wlan0:wifi:connected:test-ap"]);
 		spyOn(nm, "nmDeviceProp").mockResolvedValue(["100", "test-ap", activePath]);
 		spyOn(defaultHotspotDeps, "readProfileInstance").mockResolvedValue(
@@ -353,7 +357,9 @@ test.each([true, false])(
 			await Promise.race([reading.promise, confirmation]);
 			release.resolve();
 			await confirmation;
-			expect(down.mock.calls).toEqual([["test-ap", activePath]]);
+			expect(down.mock.calls).toEqual([
+				["test-ap", activePath, RUN_ID, "wlan0"],
+			]);
 			expect(publish.mock.calls).toEqual([
 				[
 					"start",

@@ -18,21 +18,29 @@ even when there is a plain-MAC profile. A returning sole adapter uses the
 plain-MAC credentials, mode intent and lock even when its port is known. Stop
 or choosing Station records station intent for the plain MAC and all its
 credential-only port copies, even when the current port cannot be read.
-No credentials or profiles are deleted. Independent port profiles,
-credentials and mode intent stay saved until distinct twins are proven again.
-If you stop an independently configured port AP while its adapter is alone,
-that AP comes back when the twin returns with proven ports and the saved port
-mode still calls for an AP.
+No credentials or profiles are deleted. Stop or Station on a still-live,
+independently owned port AP records Station for that port owner, not for the
+sole row's plain-MAC preferences. If the port AP is already down or the
+plain-MAC AP is running, Stop and Station retire the selected radio's
+independent intent in addition to the plain choice and its copies. The
+verified permanent MAC and literal port select that intent on both sole
+and composite rows, even if a twin returns while the plain AP is live. Other
+independent ports keep their preferences. The port AP will not restore when its twin
+returns merely because it was started before the handoff. While that physical
+port is proven, its independent Station intent also blocks fallback to the
+plain-MAC profile without changing the plain preference for other ports.
 No discovery transition removes a profile or stops an AP by itself merely
 because a twin arrives. Address-only owned profiles disarm before the new
 verified rows publish. Discovery withholds those rows when it cannot verify
 the legacy profile's autoconnect state. A port swap holds both row locks in
 stable order until it refreshes the new active connection identities.
 When a twin arrives or leaves, discovery can expose the destination row before
-it knows the active connection. Stop, Start and mode changes (including choosing
-Station) return `DEVICE_BUSY` without saving a mode until discovery resolves the
-active connection, including any hybrid AP leg. Each such refusal requests a
-fresh discovery pass. Retry after the row refreshes.
+it knows the active connection. Stop and Station wait up to two seconds for a
+coalesced discovery refresh before taking the adapter locks. If the refresh
+proves the AP target, the same request takes it down. If the target is still
+unproved, the request returns `DEVICE_BUSY` without saving a mode or guessing
+which connection to deactivate. Refresh and retry in that case. Start and AP
+mode changes retain their immediate handoff refusal.
 
 ### Hotspot profile writes [EXISTS; native requalification pending]
 
@@ -500,8 +508,17 @@ UUID and retires the durable creation record, even when no activation path
 was captured. Retain the record while the owned profile is still active and
 cleanup remains pending; restart recovery can still need that evidence.
 The Up path is scoped to the original NetworkManager bus and daemon run.
-The rollback Down seam rechecks that run before dispatch; a mismatch only
-allows recovery from fresh inventory, never reuse of an old activation path.
+The shared Down seam checks the bus ID, verifies the active object's UUID
+and device on that bus, and addresses the recorded unique daemon. It waits
+for that path to reach `DEACTIVATED` or leave the daemon's active list; the
+method reply is only acknowledgement. Missing proof or a bounded wait
+expiry refuses completion. A daemon mismatch allows recovery from fresh
+inventory only, never reuse of an old activation path. Save does not turn
+pathless timeout readback into a cleanup receipt, and both forward and
+rollback hybrid Up must confirm the command's exact path and channel. An
+acknowledged rollback with failed profile readback still runs confirmation
+and exact cleanup. Save rechecks the original connected activation on the
+same leg after refreshing saved profiles and before writing credentials.
 
 Monitor events trigger confirmation rather than proving it. The pending
 activation captures its UUID, hotspot object, activation interface, profile
@@ -786,13 +803,30 @@ restore pending hybrid without recreating or manually repairing the row. Actual
 concurrent-interface allocation remains the final admission check; successful
 allocation updates the row's concurrent path state before confirmation.
 
-Stop records station under the same key before teardown, including the
-already-stopped shortcut. A disconnect refusal or throw restores the previous
-value, deleting a previously absent key. Policy failure after a successful Stop
-keeps station intent, reports stopped, and retries with recoverable degradation.
+Stop and Station try to record station under the live AP's owner before
+teardown, including the already-stopped shortcut. A config write failure does
+not block Down. Bounded owner reconciliation retries persistence and suppresses
+runtime AP restore while the choice is not saved. A reboot before a successful
+retry can still read the last durable choice. A disconnect refusal or throw
+undoes the choice, deleting a previously absent key. Historical profile repair
+and unrelated pending cleanup do not veto a confirmed live Down; they retain
+their own recovery status. Stop and discovery Station policy require a
+daemon-bound activation path observed on the selected radio or AP leg.
+When this port has an independent Station intent, a later explicit Hotspot
+or Hybrid choice on the sole verified row supersedes it on that port only.
+On refusal, the prior durable and unsaved Station intent is restored for
+each affected owner, including the primary owner. Deferred intent suppresses
+restore until persistence recovers; it does not survive process loss.
+Neither independent
+profiles nor Station choices on other ports are changed.
+No roster or UUID-only Down is permitted. Credential-only Prepare does not supersede an
+unsaved Station choice or its retry.
 An accepted Start that is still activating is not already stopped: Stop
-disarms its selected profile, retires pending confirmation, and awaits NM down
-before reporting success. A late connected event cannot confirm that retired
+disarms its selected profile, retires pending confirmation, and requires
+terminal proof for the selected activation before reporting success. On
+unproved teardown it reports `deactivation-failed`, requests a rescan, and
+does not release the leg. Cached Station requires a fresh local check before
+reporting `applied: "station"`. A late connected event cannot confirm that retired
 Start. Create/up work still holding the adapter lock continues to refuse Stop
 with DEVICE_BUSY and leaves intent and NM state untouched.
 The selected UUID is captured before awaited disarm. An absent observer

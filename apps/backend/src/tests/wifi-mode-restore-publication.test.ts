@@ -54,6 +54,7 @@ import type {
 } from "../modules/wifi/wifi-hotspot-types.ts";
 import * as interfaces from "../modules/wifi/wifi-interfaces.ts";
 import { wifiRadioObservation } from "../modules/wifi/wifi-radio-observation.ts";
+import { mockRosterActivation } from "./helpers/wifi-active-observation.ts";
 import { mockHotspotConfirmationPoll } from "./helpers/wifi-hotspot-test-setup.ts";
 import { fakeShadowSysfs } from "./helpers/wifi-radio-equivalence-shadow.ts";
 import {
@@ -195,6 +196,15 @@ beforeEach(async () => {
 		},
 	} satisfies Partial<HotspotActivationDeps>);
 	mockHotspotConfirmationPoll();
+	spyOn(nm, "nmDevices").mockImplementation(async () => [
+		`wlan0:wifi:${row.activeConn ? `connected:${row.activeConn}` : "disconnected:"}`,
+		...(row.concurrentHotspot?.activeConn
+			? [
+					`${row.concurrentHotspot.ifname}:wifi:connected:${row.concurrentHotspot.activeConn}`,
+				]
+			: []),
+	]);
+	mockRosterActivation();
 	Object.assign(defaultHotspotStopDeps, {
 		nmConnSetFields: async () => true,
 		nmDisconnect: async () => {
@@ -311,9 +321,9 @@ test("real discovery replacing an active marker with idle during teardown still 
 	row.concurrentHotspot = { ifname: "clap-wlan0", activeConn: AP };
 	persistWifiAdapterMode(MAC, "hybrid");
 	await prove();
-	spyOn(nm, "nmDevices").mockResolvedValue([
+	const roster = spyOn(nm, "nmDevices").mockResolvedValue([
 		"wlan0:wifi:connected:station",
-		"clap-wlan0:wifi:disconnected:",
+		`clap-wlan0:wifi:connected:${AP}`,
 	]);
 	spyOn(nm, "nmConnGetFields").mockResolvedValue(["infrastructure"]);
 	spyOn(devices, "wifiDeviceListGetMacAddress").mockReturnValue(MAC);
@@ -322,6 +332,10 @@ test("real discovery replacing an active marker with idle during teardown still 
 	spyOn(connections, "wifiScheduleScanRefresh").mockImplementation(() => {});
 	spyOn(defaultHotspotStopDeps, "nmDisconnect").mockImplementation(async () => {
 		effects.push("down");
+		roster.mockResolvedValue([
+			"wlan0:wifi:connected:station",
+			"clap-wlan0:wifi:disconnected:",
+		]);
 		await interfaces.wifiUpdateDevices();
 		return true;
 	});
@@ -406,10 +420,8 @@ for (const parent of ["disconnected", "new-station"] as const) {
 		row.activeMode = "ap";
 		persistWifiAdapterMode(MAC, "hotspot");
 		await prove();
-		spyOn(nm, "nmDevices").mockResolvedValue([
-			parent === "disconnected"
-				? "wlan0:wifi:disconnected:"
-				: "wlan0:wifi:connected:new-station",
+		const roster = spyOn(nm, "nmDevices").mockResolvedValue([
+			`wlan0:wifi:connected:${AP}`,
 			"clap-wlan0:wifi:disconnected:",
 		]);
 		spyOn(nm, "nmConnGetFields").mockResolvedValue(["infrastructure"]);
@@ -420,6 +432,12 @@ for (const parent of ["disconnected", "new-station"] as const) {
 		spyOn(defaultHotspotStopDeps, "nmDisconnect").mockImplementation(
 			async () => {
 				effects.push("down");
+				roster.mockResolvedValue([
+					parent === "disconnected"
+						? "wlan0:wifi:disconnected:"
+						: "wlan0:wifi:connected:new-station",
+					"clap-wlan0:wifi:disconnected:",
+				]);
 				await interfaces.wifiUpdateDevices();
 				return true;
 			},

@@ -1,3 +1,4 @@
+import { createDbusTransport } from "@ceralive/modem-control/transport";
 import { run } from "../../helpers/run.ts";
 import {
 	nmConnGetFields,
@@ -42,8 +43,18 @@ export function sameNmProfileFile(
 	);
 }
 
+export const nmActivationBus = {
+	open: () =>
+		createDbusTransport({
+			busAddress:
+				process.env.DBUS_SYSTEM_BUS_ADDRESS?.trim() ||
+				"unix:path=/var/run/dbus/system_bus_socket",
+			reconnect: { enabled: false },
+		}),
+};
+
 /** A unique NM connection name, scoped by the bus UUID so reboot cannot reuse it. */
-async function nmRunId(): Promise<string | undefined> {
+export async function nmRunId(): Promise<string | undefined> {
 	const target = [
 		"--system",
 		"call",

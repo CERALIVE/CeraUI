@@ -1,5 +1,7 @@
 import { spyOn } from "bun:test";
 import type { WifiAdapterMode } from "@ceraui/rpc/schemas";
+import type { nmConnect } from "../../modules/network/network-manager.ts";
+import * as profileInstance from "../../modules/network/network-manager-profile-instance.ts";
 import type { HotspotCredentials } from "../../modules/wifi/hotspot-credentials.ts";
 import {
 	defaultAdapterModeDeps,
@@ -24,6 +26,7 @@ import {
 	stopWifiUpdateLoopForTest,
 	wifiUpdateDevices,
 } from "../../modules/wifi/wifi-interfaces.ts";
+import { ACTIVE_PATH, RUN_ID } from "./wifi-active-observation.ts";
 import { wifiFrameFixture } from "./wifi-frame-fixture.ts";
 import { targetFixture } from "./wifi-hybrid-target.ts";
 
@@ -74,7 +77,7 @@ export async function hybridFixture(first = false, recordDiscovery = true) {
 			return "new-owned-ap";
 		},
 		nmConnDelete: async () => true,
-		nmConnect: async (uuid: string) => {
+		nmConnect: (async (uuid, _timeout, receipt) => {
 			effects.push("up");
 			if (failUp) {
 				const action = failUp;
@@ -89,11 +92,12 @@ export async function hybridFixture(first = false, recordDiscovery = true) {
 			if (connected) {
 				target.active(uuid);
 				target.state("100 (connected)");
+				receipt?.(ACTIVE_PATH);
 				const leg = target.objects.get("clap-wlan0");
 				if (leg) leg.type = "AP";
 			}
 			return connected;
-		},
+		}) satisfies typeof nmConnect,
 		nmDisconnect: async (uuid: string) => {
 			effects.push(`down:${uuid}`);
 			target.active("");
@@ -168,8 +172,13 @@ export async function hybridFixture(first = false, recordDiscovery = true) {
 				setDupIpSuppression: deps.setDupIpSuppression,
 				rescan: async () => undefined,
 			}),
-		configure: () =>
-			wifiHotspotConfig(
+		configure: () => {
+			spyOn(profileInstance, "readNmProfileInstance").mockResolvedValue({
+				path: "/org/freedesktop/NetworkManager/Settings/1",
+				fingerprint: "hybrid-test-profile",
+				runId: RUN_ID,
+			});
+			return wifiHotspotConfig(
 				frame.context.ws,
 				{
 					device: 0,
@@ -187,7 +196,8 @@ export async function hybridFixture(first = false, recordDiscovery = true) {
 					getCapabilities: () => undefined,
 					rememberCredentials: deps.credentials.remember,
 				},
-			),
+			);
+		},
 		observeRoam: (observe: () => Promise<unknown> = wifiUpdateDevices) => {
 			spyOn(defaultHotspotStopDeps, "nmDisconnect").mockImplementation(
 				deps.nmDisconnect,

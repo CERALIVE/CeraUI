@@ -67,6 +67,10 @@ import {
 	nmcliFieldNames,
 	nmcliFieldOutput,
 } from "./helpers/nmcli-field-output.ts";
+import {
+	ACTIVE_PATH,
+	mockRosterActivation,
+} from "./helpers/wifi-active-observation.ts";
 import { limitedHybridFixture } from "./helpers/wifi-limited-hybrid.ts";
 import { wifiProtocolContext } from "./helpers/wifi-protocol-context.ts";
 import {
@@ -177,9 +181,10 @@ beforeEach(async () => {
 	spyOn(nmSecrets, "readVerifiedNmWifiSecret").mockImplementation(
 		async (uuid) => (uuid === UUID ? PASSWORD : undefined),
 	);
-	spyOn(nm, "nmConnect").mockImplementation(async (uuid) => {
+	spyOn(nm, "nmConnect").mockImplementation(async (uuid, _timeout, receipt) => {
 		effects.push(`up:${uuid}`);
 		limitedKernel?.connected(uuid);
+		receipt?.(ACTIVE_PATH);
 		return true;
 	});
 	spyOn(nm, "nmConnSetFields").mockImplementation(async () => {
@@ -218,6 +223,7 @@ beforeEach(async () => {
 	);
 	spyOn(defaultHotspotStopDeps, "rescan").mockImplementation(async () => {});
 	limitedKernel = await limitedHybridFixture();
+	spyOn(nm, "nmDevices").mockResolvedValue(["wlan0:wifi:disconnected:"]);
 	spyOn(nm, "nmDisconnect").mockImplementation(async (uuid) => {
 		effects.push(`down:${uuid}`);
 		limitedKernel?.disconnected();
@@ -337,6 +343,8 @@ test("limited configure sends the typed terminal frame without effects", async (
 });
 
 test("only the active profile supplies limited details and Stop only deactivates its UUID", async () => {
+	spyOn(nm, "nmDevices").mockResolvedValue([`wlan0:wifi:connected:${UUID}`]);
+	mockRosterActivation();
 	row.activeConn = UUID;
 	row.activeMode = "ap";
 	await handleHotspotConn(KEY, "unrelated-profile");
@@ -355,6 +363,8 @@ test("only the active profile supplies limited details and Stop only deactivates
 });
 
 test("an unreadable active profile still leaves its observed UUID stoppable", async () => {
+	spyOn(nm, "nmDevices").mockResolvedValue([`wlan0:wifi:connected:${UUID}`]);
+	mockRosterActivation();
 	row.activeConn = UUID;
 	row.activeMode = "ap";
 	spyOn(nm, "nmConnGetFields").mockResolvedValue(undefined);
@@ -364,6 +374,11 @@ test("an unreadable active profile still leaves its observed UUID stoppable", as
 });
 
 test("an unreadable concurrent active profile still leaves its observed UUID stoppable", async () => {
+	spyOn(nm, "nmDevices").mockResolvedValue([
+		"wlan0:wifi:connected:station-uplink",
+		`clap-wlan0:wifi:connected:${UUID}`,
+	]);
+	mockRosterActivation();
 	row.conn = "station-uplink";
 	row.activeConn = row.conn;
 	row.activeMode = "infrastructure";
@@ -384,6 +399,10 @@ test("an unreadable switched AP profile clears the previous profile details", as
 		password: PASSWORD,
 	});
 	row.activeConn = "replacement-ap";
+	spyOn(nm, "nmDevices").mockResolvedValue([
+		"wlan0:wifi:connected:replacement-ap",
+	]);
+	mockRosterActivation();
 	spyOn(nm, "nmConnGetFields").mockResolvedValue(undefined);
 	await handleHotspotConn(KEY, row.activeConn, { active: true });
 	const visible = wifiBuildMsg()["0"]?.hotspot;
@@ -825,15 +844,20 @@ for (const outcome of [
 			return true;
 		};
 		let cancel = (): void => {};
-		spyOn(nm, "nmConnect").mockImplementation(async () => {
-			if (outcome === "throws") throw new Error("Activation failed");
-			if (outcome === "replacement")
-				fixture.targets.set("clap-wlan0", { ifindex: 99, wdev: "0x99" });
-			if (outcome === "cancel") cancel();
-			const accepted = outcome === "success" || outcome === "cancel";
-			if (accepted) limitedKernel?.connected(UUID);
-			return accepted;
-		});
+		spyOn(nm, "nmConnect").mockImplementation(
+			async (_uuid, _timeout, receipt) => {
+				if (outcome === "throws") throw new Error("Activation failed");
+				if (outcome === "replacement")
+					fixture.targets.set("clap-wlan0", { ifindex: 99, wdev: "0x99" });
+				if (outcome === "cancel") cancel();
+				const accepted = outcome === "success" || outcome === "cancel";
+				if (accepted) {
+					limitedKernel?.connected(UUID);
+					receipt?.(ACTIVE_PATH);
+				}
+				return accepted;
+			},
+		);
 		const feed = restoreFeed();
 		cancel = startWifiAdapterModeRestore(
 			{
@@ -1032,7 +1056,13 @@ test("limited Stop and station selection cannot clear another present radio's in
 	row.activeConn = UUID;
 	row.activeMode = "ap";
 	row.hotspot.conn = UUID;
+	const roster = spyOn(nm, "nmDevices").mockResolvedValue([
+		`wlan0:wifi:connected:${UUID}`,
+	]);
+	mockRosterActivation();
 	expect(await wifiHotspotStop({ device: 0 })).toEqual({ success: true });
+	expect(getConfig().wifi_modes).toEqual({ [other]: "hotspot" });
+	roster.mockResolvedValue(["wlan0:wifi:disconnected:"]);
 	expect(await setWifiAdapterMode(0, "station")).toEqual({
 		success: true,
 		applied: "station",
@@ -1226,6 +1256,8 @@ test("limited hybrid revalidation identifies lost admission after binding", asyn
 });
 
 test("regulatory change stops a limited live AP without profile or intent writes", async () => {
+	spyOn(nm, "nmDevices").mockResolvedValue([`wlan0:wifi:connected:${UUID}`]);
+	mockRosterActivation();
 	row.activeConn = UUID;
 	row.activeMode = "ap";
 	Object.assign(row.hotspot, {
