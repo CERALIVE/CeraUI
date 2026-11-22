@@ -97,6 +97,12 @@ function seedIndependentPorts() {
 	f.persistMode(MAC, "hotspot");
 }
 
+function pinRestoredPlainProfile() {
+	const profile = f.profiles.get(PROFILE);
+	if (!profile) throw new Error("Missing plain profile");
+	profile["match.path"] = PORT;
+}
+
 async function chooseStation(action: "stop" | "station", key = MAC) {
 	const id = row(key).id;
 	if (action === "stop")
@@ -138,6 +144,7 @@ for (const action of ["stop", "station"] as const) {
 		`${action} retires only the current independent port when %s`,
 		async (ap) => {
 			seedIndependentPorts();
+			if (ap === "port live") pinRestoredPlainProfile();
 			addTwin();
 			f.list([
 				`wlan0:wifi:connected:${PORT_PROFILE}`,
@@ -317,7 +324,10 @@ test.each(["refused twice", "refused then accepted"] as const)(
 			await f.restore();
 			expect(f.activations).toEqual([]);
 		} else {
-			start.mockResolvedValue({ success: true });
+			start.mockImplementation(async () => {
+				pinRestoredPlainProfile();
+				return { success: true };
+			});
 			expect(await chooseHotspot()).toEqual({
 				success: true,
 				accepted: true,
@@ -627,6 +637,7 @@ test.each(["accepted", "refused"] as const)(
 			intentAtStart = getConfig().wifi_modes?.[FIRST];
 			if (outcome === "refused")
 				return { success: false, error: "activation-failed" };
+			pinRestoredPlainProfile();
 			f.list([`wlan0:wifi:connected:${PROFILE}`]);
 			return { success: true };
 		});

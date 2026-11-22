@@ -37,6 +37,16 @@ supersedes it; a refused choice reinstates the previous durable and deferred
 intent. The deferred retry is in memory and cannot survive power loss while
 configuration is still unwritable.
 
+Boot restore rechecks current physical proof and refuses to rebind a profile
+with a contradictory saved pin.
+Verified hybrid checks both saved interface selectors and the port before
+allocating or mutating the AP leg. An old AP-leg name may be rebound only when
+it is absent from the live interface list and the saved UUID, permanent MAC
+and literal port prove the same owner. The selectors must match the new leg
+before Up. Boot does not prune superseded profiles; eligible stale profiles
+can remain until the next operator Start.
+The service remembers observed address collisions across empty discovery passes.
+
 ## Backend limited mode [EXISTS; host and mock-browser proof only]
 
 Rows with unresolved permanent identity retain
@@ -54,15 +64,25 @@ nor repairs a limited profile. A regulatory change that would restart that AP
 stops it with a warning instead, leaving persisted mode intent unchanged.
 
 Boot alone may restore an existing owned profile under D12: one hotspot-capable
-adapter, one logical non-station intent (MAC and MAC@port count as one), the
-plain record's profile, a currently
+adapter, one address group with non-Station intent (MAC and MAC@port count as
+one), a non-Station plain MAC record with an owned profile, a currently
 permitted stored channel or `auto`, and no disruptive streaming transition.
-Hybrid requires proven concurrency and the existing fixed interface binding.
-No credential, autoconnect or mode-intent write is allowed.
+Hybrid requires proven concurrency and an already-correct interface pin; any
+fixed channel must match the live station on same-channel hardware. D12
+requires a live matching path when the profile has a saved port pin.
+An unpinned plain owner is eligible only without known collision history.
+D12 rechecks the selected radio and uses UUID plus interface for Up; the last
+asynchronous hybrid Up guard samples the live station. Cold hybrid creation
+rechecks the parent and addresses its sampled wiphy index. D12 does not
+write the profile, credentials, device autoconnect or mode intent.
 Every failed condition logs once per unchanged edge; success logs
 `hotspot restored on an adapter that could not be identified`.
-Replacing that sole unidentifiable adapter is undetectable and restores the same
-profile: this is the accepted D12 limit, proven on the host only.
+A replacement already selected at discovery can still receive an eligible
+pathless plain profile if there is no contradictory evidence. The checks
+refuse a detected change but are not atomic with NetworkManager's interface
+resolution or the kernel's wiphy lookup. Same-identifier reuse and station
+roam after the last applicable read remain possible. D12 is proven on the
+host only.
 
 The frontend maps the refusal to existing localized unverified copy without
 adding strings. The `wifi-limited` mock scenario and

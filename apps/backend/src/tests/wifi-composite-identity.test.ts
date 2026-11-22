@@ -1,6 +1,7 @@
 import { beforeEach, expect, spyOn, test } from "bun:test";
 import * as runner from "../helpers/run.ts";
 import { getConfig, getConfigFilePath } from "../modules/config.ts";
+import * as nm from "../modules/network/network-manager.ts";
 import {
 	getHotspotCredentialOwners,
 	getHotspotCredentials,
@@ -8,9 +9,14 @@ import {
 	rememberHotspotCredentials,
 } from "../modules/wifi/hotspot-credentials.ts";
 import { wifiAdapterLockKeyForDeviceId } from "../modules/wifi/wifi-adapter-lock.ts";
+import { reconcileWifiAdapterModes } from "../modules/wifi/wifi-adapter-mode-restore.ts";
+import { defaultAdapterModeDeps } from "../modules/wifi/wifi-adapter-mode-transition.ts";
 import { resolveWifiBinding } from "../modules/wifi/wifi-binding.ts";
 import { getWifiInterfacesByMacAddress } from "../modules/wifi/wifi-connections.ts";
-import { prepareHotspotForInterface } from "../modules/wifi/wifi-hotspot-activation.ts";
+import {
+	defaultHotspotDeps,
+	prepareHotspotForInterface,
+} from "../modules/wifi/wifi-hotspot-activation.ts";
 import { canHotspot } from "../modules/wifi/wifi-hotspot-types.ts";
 import { wifiRadioIdentity } from "../modules/wifi/wifi-radio-identity.ts";
 import * as released from "./helpers/released/hotspot-credentials-v2026.11.2.ts";
@@ -113,6 +119,200 @@ test("R2 cold twins publish two stable verified rows with independent locks", as
 	expect(rows()[second]?.degradedReason).toBeUndefined();
 	expect(wifiAdapterLockKeyForDeviceId(a.id)).toBe(primary);
 	expect(wifiAdapterLockKeyForDeviceId(b.id)).toBe(second);
+});
+
+test("boot restore uses only the independently verified twin's profile", async () => {
+	const remainingUuid = "surviving-port-ap";
+	const legacy = f.profiles.get(PROFILE);
+	if (!legacy) throw new Error("Missing plain profile");
+	legacy["match.path"] = PORT;
+	f.profiles.set(remainingUuid, {
+		...legacy,
+		"802-11-wireless.ssid": "Port two AP",
+		"match.path": SECOND_PORT,
+		"connection.autoconnect": "no",
+	});
+	rememberHotspotCredentials(second, {
+		ssid: "Port two AP",
+		password: "fixture-password",
+		conn: remainingUuid,
+	});
+	addTwin();
+	await f.discover();
+	expect(rowFor("wlan1")[0]).toBe(second);
+	getConfig().wifi_modes = { [primary]: "station", [second]: "hotspot" };
+	const up = spyOn(defaultHotspotDeps, "nmConnect").mockImplementation(
+		async (uuid) => {
+			f.activations.push(uuid);
+			return false;
+		},
+	);
+	await reconcileWifiAdapterModes();
+	expect(f.activations).toEqual([remainingUuid]);
+	expect(legacy["match.path"]).toBe(PORT);
+	expect(up.mock.calls.map(([uuid]) => uuid)).toEqual([remainingUuid]);
+});
+
+test("boot restore keeps the remaining twin's port-qualified profile", async () => {
+	const remainingUuid = "surviving-port-ap";
+	const legacy = f.profiles.get(PROFILE);
+	if (!legacy) throw new Error("Missing plain profile");
+	legacy["match.path"] = PORT;
+	f.profiles.set(remainingUuid, {
+		...legacy,
+		"802-11-wireless.ssid": "Port two AP",
+		"match.path": SECOND_PORT,
+		"connection.autoconnect": "no",
+	});
+	rememberHotspotCredentials(second, {
+		ssid: "Port two AP",
+		password: "fixture-password",
+		conn: remainingUuid,
+	});
+	addTwin();
+	await f.discover();
+	f.witnesses.delete("wlan0");
+	f.list(["wlan1:wifi:disconnected:"]);
+	await f.discover();
+	expect(Object.keys(rows())).toEqual([MAC]);
+	getConfig().wifi_modes = { [MAC]: "hotspot", [second]: "hotspot" };
+	const up = spyOn(defaultHotspotDeps, "nmConnect").mockImplementation(
+		async (uuid) => {
+			f.activations.push(uuid);
+			return false;
+		},
+	);
+	await reconcileWifiAdapterModes();
+	expect(f.activations).toEqual([remainingUuid]);
+	expect(legacy["match.path"]).toBe(PORT);
+	expect(up.mock.calls.map(([uuid]) => uuid)).toEqual([remainingUuid]);
+});
+
+test("boot restore cannot rebind a plain profile pinned to another port", async () => {
+	const legacy = f.profiles.get(PROFILE);
+	const remaining = f.witnesses.get("wlan0");
+	if (!legacy || !remaining) throw new Error("Missing plain profile or radio");
+	legacy["match.path"] = PORT;
+	f.witnesses.set("wlan0", { ...remaining, path: SECOND_PORT });
+	await f.sample();
+	getConfig().wifi_modes = { [MAC]: "hotspot" };
+	const up = spyOn(defaultHotspotDeps, "nmConnect").mockResolvedValue(false);
+	await reconcileWifiAdapterModes();
+	expect(up).not.toHaveBeenCalled();
+	expect(f.profiles.get(PROFILE)?.["match.path"]).toBe(PORT);
+});
+
+test("an unconfigured surviving twin does not inherit an address-only legacy AP", async () => {
+	addTwin();
+	await f.discover();
+	f.witnesses.delete("wlan0");
+	f.list(["wlan1:wifi:disconnected:"]);
+	await f.discover();
+	getConfig().wifi_modes = { [MAC]: "hotspot" };
+	const up = spyOn(defaultHotspotDeps, "nmConnect").mockResolvedValue(false);
+	await reconcileWifiAdapterModes();
+	expect(up).not.toHaveBeenCalled();
+	expect(f.profiles.get(PROFILE)?.["match.path"] ?? "").toBe("");
+});
+
+test("a twin cannot inherit an address-only legacy AP after an empty roster", async () => {
+	addTwin();
+	await f.discover();
+	const twin = f.witnesses.get("wlan1");
+	if (!twin) throw new Error("Missing twin");
+	f.witnesses.clear();
+	f.list([]);
+	await f.discover();
+	expect(Object.keys(rows())).toEqual([]);
+	f.witnesses.set("wlan0", twin);
+	f.list(["wlan0:wifi:disconnected:"]);
+	await f.discover();
+	getConfig().wifi_modes = { [MAC]: "hotspot" };
+	const up = spyOn(defaultHotspotDeps, "nmConnect").mockResolvedValue(false);
+	await reconcileWifiAdapterModes();
+	expect(up).not.toHaveBeenCalled();
+	expect(f.profiles.get(PROFILE)?.["match.path"] ?? "").toBe("");
+});
+
+test("D12 does not start an unpinned legacy AP on an unidentified twin with port evidence", async () => {
+	addTwin();
+	await f.discover();
+	const twin = f.witnesses.get("wlan1");
+	if (!twin) throw new Error("Missing twin");
+	f.witnesses.clear();
+	f.list([]);
+	await f.discover();
+	f.witnesses.set("wlan0", { ...twin, mac: undefined });
+	f.list(["wlan0:wifi:disconnected:"]);
+	await f.discover();
+	const [, limited] = rowFor("wlan0");
+	expect(limited.degradedReason).toBe("permanent-mac-unresolved");
+	expect(wifiRadioIdentity.state.rows.get("wlan0")?.devicePath).toBe(
+		SECOND_PORT,
+	);
+	getConfig().wifi_modes = { [MAC]: "hotspot" };
+	const up = spyOn(nm, "nmConnect").mockResolvedValue(false);
+	await reconcileWifiAdapterModes();
+	expect(up).not.toHaveBeenCalled();
+});
+
+test("verified hybrid restore keeps the required port pin while bringing up the owned AP", async () => {
+	const profile = f.profiles.get(PROFILE);
+	if (!profile) throw new Error("Missing legacy profile");
+	profile["match.path"] = PORT;
+	addTwin();
+	await f.discover();
+	f.witnesses.delete("wlan1");
+	f.list(["wlan0:wifi:disconnected:"]);
+	await f.discover();
+	getConfig().wifi_modes = { [MAC]: "hybrid" };
+	spyOn(defaultHotspotDeps, "readCapabilities").mockReturnValue({
+		staApCombo: { supported: true },
+	});
+	spyOn(defaultHotspotDeps, "readHybridChannel").mockResolvedValue({
+		identity: "station",
+		frequency: 2412,
+		fields: {},
+		sameChannelOnly: true,
+	});
+	spyOn(defaultHotspotDeps, "ensureConcurrentInterface").mockResolvedValue({
+		ifname: "clap-wlan0",
+		created: false,
+	});
+	spyOn(defaultHotspotDeps, "validateConcurrentInterface").mockResolvedValue(
+		true,
+	);
+	spyOn(defaultHotspotDeps, "releaseConcurrentInterface").mockResolvedValue(
+		true,
+	);
+	const up = spyOn(defaultHotspotDeps, "nmConnect").mockResolvedValue(false);
+	await reconcileWifiAdapterModes({
+		...defaultAdapterModeDeps,
+		readCapabilities: () => ({ staApCombo: { supported: true } }),
+	});
+	expect(f.profiles.get(PROFILE)?.["match.path"]).toBe(PORT);
+	expect(up.mock.calls.map(([uuid]) => uuid)).toEqual([PROFILE]);
+});
+
+test("boot restore does not start from a cached key without a published witness", async () => {
+	getConfig().wifi_modes = { [MAC]: "hotspot" };
+	f.witnesses.clear();
+	const up = spyOn(defaultHotspotDeps, "nmConnect").mockResolvedValue(false);
+	await reconcileWifiAdapterModes();
+	expect(up).not.toHaveBeenCalled();
+	expect(f.effects).toEqual([]);
+});
+
+test("normal restore does not use the previous MAC when the fresh sample cannot read it", async () => {
+	await f.sample();
+	getConfig().wifi_modes = { [MAC]: "hotspot" };
+	const radio = f.witnesses.get("wlan0");
+	if (!radio) throw new Error("Missing radio witness");
+	f.witnesses.set("wlan0", { ...radio, mac: undefined });
+	const up = spyOn(defaultHotspotDeps, "nmConnect").mockResolvedValue(false);
+	await reconcileWifiAdapterModes();
+	expect(up).not.toHaveBeenCalled();
+	expect(f.effects).toEqual([]);
 });
 
 test("Save refuses a port-only move after admission without changing NetworkManager", async () => {
