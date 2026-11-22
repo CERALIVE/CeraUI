@@ -124,7 +124,12 @@ density. It is not a redesign.
   which replace Raw's time window as Raw itself does on a pick
   (`raw-filter.ts` keeps a window only without a chosen boot;
   `chooseBoot(null)` is All stored). Every choice counts, a repeat of the
-  highlighted boot included (`bootSelection.onPick`). The confirmation lists
+  highlighted boot included (`bootSelection.onPick`). A pick before the Raw tab shows
+  cancels a linked moment still loading, so Raw opens on the pick, All boots
+  included (`RawLogsPanel`, `chosen`); on anchored Raw any pick, the highlighted
+  boot included, leaves the moment for that whole boot, since `choose()` skips a
+  repeat only while Raw shows the boot's whole scope (`rawScope.anchored`). The
+  visible Raw view and the export therefore never disagree about a pick. The confirmation lists
   the scope in the Raw and boot picker words (`sharing-export-scope`: Boots,
   Level, Sources, then Search and Time when set; Time is "From {time}" or
   "{from} to {to}" for a bounded window; a concrete boot that is not the
@@ -134,7 +139,10 @@ density. It is not a redesign.
   the dialog returns focus to the toolbar's matching button through
   `AppDialog`'s `returnFocus`; otherwise bits-ui returns it to the opener,
   which on the failure band is its Support bundle, or the control that kept
-  focus when a pointer press did not move it (WebKit).
+  focus when a pointer press did not move it (WebKit). Without the toolbar (the
+  load failed) a resize can remove that control (the phone header boot picker, a
+  side-column button), so the band's Support bundle is the fallback target, also
+  after a refused bundle's Export this view; without it focus fell to `<body>`.
 - **Side column (>= 1024 px).** 320 px at the inline end, its own scroll, three
   regions in this order with a heading each: Boots (the boot picker), Storage,
   Downloads. Regions are separated by whitespace and a neutral 1 px rule, not

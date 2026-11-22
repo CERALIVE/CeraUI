@@ -102,6 +102,7 @@ onDestroy(() => {
 // Where a sharing dialog returns focus when the control that opened it has left the page.
 let toolbarBundle = $state<HTMLElement | null>(null);
 let toolbarExport = $state<HTMLElement | null>(null);
+let failureBundle = $state<HTMLElement | null>(null);
 
 const tabs = $derived(shellTabs(wide.current));
 const current = $derived(activeTab(selected, tabs));
@@ -291,6 +292,7 @@ $effect(() => {
 					</Button>
 					{#if copyLoaded}
 						<Button
+							bind:ref={failureBundle}
 							class="shrink-0 gap-1.5"
 							data-testid="system-logs-check-bundle"
 							data-variant="outline"
@@ -322,5 +324,6 @@ $effect(() => {
 	{/if}
 </div>
 
-<ExportDialog returnFocus={() => toolbarExport} {sharing} />
-<BundleDialog returnFocus={() => toolbarBundle} {sharing} />
+<!-- Without the toolbar (the load failed), a resize can remove the control that had focus: the band's Support bundle stays. -->
+<ExportDialog returnFocus={() => toolbarExport ?? failureBundle} {sharing} />
+<BundleDialog returnFocus={() => toolbarBundle ?? failureBundle} {sharing} />

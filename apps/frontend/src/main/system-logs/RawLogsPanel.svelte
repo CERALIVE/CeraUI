@@ -16,6 +16,7 @@ import { onDestroy, untrack } from 'svelte';
 import { lazyDialog } from '$lib/components/dialogs/lazy-dialog.svelte';
 import { Button } from '$lib/components/ui/button';
 import { Skeleton } from '$lib/components/ui/skeleton';
+import { bootSelection } from '$lib/device-logs/boot-selection.svelte';
 import { locateMoment, type RawMoment } from '$lib/device-logs/raw-anchor';
 import type { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';
 import { rpc } from '$lib/rpc/client';
@@ -52,12 +53,21 @@ void untrack(locate);
 onDestroy(() => {
 	request?.abort();
 	publisher?.dispose();
+	stopPick();
 });
 
 const chunk = lazyDialog(() => import('./RawLogsTab.svelte'));
 chunk.request();
 
 const RawLogsTab = $derived(chunk.current);
+
+// A boot picked before the tab shows outranks a linked moment still loading: the tab opens on the pick.
+let chosen = $state(false);
+const stopPick = bootSelection.onPick(() => {
+	if (RawLogsTab && !pending && result?.ok !== false) return;
+	chosen = true;
+	latest();
+});
 </script>
 
 {#if result?.ok === false}
@@ -80,7 +90,7 @@ const RawLogsTab = $derived(chunk.current);
 		</div>
 	</div>
 {:else if RawLogsTab && !pending}
-	<RawLogsTab around={result?.ok ? result : undefined} momentUnknown={momentUnknown || missed} onquery={publisher?.publish} />
+	<RawLogsTab around={result?.ok ? result : undefined} {chosen} momentUnknown={!chosen && (momentUnknown || missed)} onquery={publisher?.publish} />
 {:else if chunk.failed}
 	<div
 		class="border-status-warning/30 bg-status-warning/10 m-4 flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center"

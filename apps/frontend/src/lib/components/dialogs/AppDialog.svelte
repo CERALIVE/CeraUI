@@ -124,13 +124,19 @@ let {
 	returnFocus,
 }: Props = $props();
 
-// The control focused when the dialog opened, where bits-ui returns focus on close.
+// The control focused when the dialog opened, where bits-ui returns focus on close. Read when bits-ui
+// moves focus in, so a dialog closing in the same step has already restored its own; once per open,
+// so a Dialog/Sheet swap keeps it.
 let opener: Element | null = null;
 let shown = false;
 $effect.pre(() => {
-	if (open && !shown) opener = document.activeElement;
-	shown = open;
+	if (!open) shown = false;
 });
+function openAutoFocus(): void {
+	if (shown) return;
+	shown = true;
+	opener = document.activeElement;
+}
 
 // A real close (not a Dialog/Sheet swap) whose opener left the page goes to returnFocus, never <body>.
 function closeAutoFocus(event: Event): void {
@@ -265,6 +271,7 @@ const fullscreenSurfaceClass = 'inset-0 max-h-none max-w-none rounded-none ring-
 			class={cn(surfaceClass, fullscreen ? fullscreenSurfaceClass : 'sm:max-w-lg', contentClass)}
 			data-app-dialog-fullscreen={fullscreen ? '' : undefined}
 			onCloseAutoFocus={closeAutoFocus}
+			onOpenAutoFocus={openAutoFocus}
 			showCloseButton={false}
 			style={fullscreen ? 'translate: none' : undefined}
 		>
@@ -276,6 +283,7 @@ const fullscreenSurfaceClass = 'inset-0 max-h-none max-w-none rounded-none ring-
 		<Sheet.Content
 			class={cn(surfaceClass, 'rounded-t-2xl', contentClass)}
 			onCloseAutoFocus={closeAutoFocus}
+			onOpenAutoFocus={openAutoFocus}
 			showCloseButton={false}
 			side="bottom"
 		>

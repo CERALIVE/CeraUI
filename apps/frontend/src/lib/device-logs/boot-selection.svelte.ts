@@ -13,7 +13,11 @@ type BootListener = (bootId: string | null) => void;
 
 class BootSelection {
 	#boot = $state.raw<LogBootInfo | null>(null);
-	rawScope = $state.raw<Pick<RawFilter, "time" | "bootId"> | null>(null);
+	/** What an open Raw logs tab shows; `anchored` while it shows a moment within that scope. */
+	rawScope = $state.raw<
+		| (Pick<RawFilter, "time" | "bootId"> & { readonly anchored?: boolean })
+		| null
+	>(null);
 	readonly #listeners = new Set<BootListener>();
 	readonly #pickListeners = new Set<() => void>();
 
@@ -34,11 +38,16 @@ class BootSelection {
 			: scope.time === "current" && boot.current;
 	}
 
-	/** Reusing the same boot is a no-op only when Raw already shows its scope. */
+	/** Reusing the same boot is a no-op only when Raw already shows its whole scope, not a moment in it. */
 	choose(boot: LogBootInfo | null): void {
 		for (const listener of this.#pickListeners) listener();
 		const bootId = boot?.bootId ?? null;
-		if (bootId === this.bootId && this.isSelected(boot)) return;
+		if (
+			bootId === this.bootId &&
+			this.isSelected(boot) &&
+			!this.rawScope?.anchored
+		)
+			return;
 		this.#boot = boot;
 		for (const listener of this.#listeners) {
 			try {

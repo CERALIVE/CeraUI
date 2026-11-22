@@ -74,6 +74,24 @@ describe("bootSelection", () => {
 		expect(picks).toHaveBeenCalledTimes(3);
 	});
 
+	it("tells the stores about a repeat of the shown boot while Raw shows a moment in it, not its whole scope", () => {
+		bootSelection.choose(clean);
+		const raw = vi.fn();
+		listen(raw);
+
+		bootSelection.rawScope = { time: "current", bootId: BOOT_IDS.clean };
+		bootSelection.choose(clean);
+		expect(raw).not.toHaveBeenCalled();
+
+		bootSelection.rawScope = {
+			time: "current",
+			bootId: BOOT_IDS.clean,
+			anchored: true,
+		};
+		bootSelection.choose(clean);
+		expect(raw).toHaveBeenCalledExactlyOnceWith(BOOT_IDS.clean);
+	});
+
 	it("stays quiet when All boots is chosen while All boots is shown", () => {
 		const raw = vi.fn();
 		listen(raw);

@@ -782,3 +782,117 @@ describe("System Logs Export: one scope, stated and sent, by the operator's late
 		});
 	});
 });
+
+/** Opens the confirmation, reads what it states and cancels without asking for a ticket. */
+async function peekScope(entry: Entry): Promise<string[]> {
+	const dialog = await openExport(entry);
+	const rows = exportScopeRows(dialog);
+	await fireEvent.click(
+		within(dialog).getByRole("button", { name: en.dialogs.cancel }),
+	);
+	await waitFor(() =>
+		expect(
+			screen.queryByRole("dialog", { name: en.systemLogs.sharing.export }),
+		).toBeNull(),
+	);
+	return rows;
+}
+
+const MOMENT = [
+	raw.timeLabel,
+	`${formatBootTime(ENTRY_AT - 300_000, "en")} to ${formatBootTime(ENTRY_AT + 300_000, "en")}`,
+];
+
+describe("System Logs Export: a boot pick is the operator's latest action, also against a linked moment", () => {
+	it.each([
+		{
+			name: "a previous boot",
+			boot: previous,
+			wire: PREVIOUS,
+			label: () => started(previous),
+		},
+		{
+			name: "All boots again",
+			boot: null,
+			wire: "all",
+			label: () => boots.all,
+		},
+	])(
+		"picking $name while a linked moment still loads opens Raw on the pick, and a new Export saves it",
+		async ({ boot, wire, label }) => {
+			logs.boots.mockResolvedValue([running, previous]);
+			const lookup = Promise.withResolvers<typeof exactAround>();
+			logs.around.mockReturnValue(lookup.promise);
+			render(SystemLogsView, {
+				props: { context: { tab: "raw", at: ENTRY_AT } },
+			});
+			await waitFor(() => expect(logs.around).toHaveBeenCalledTimes(1));
+
+			await pick(boot);
+			lookup.resolve(exactAround);
+			await screen.findByTestId("raw-logs");
+			await waitFor(() =>
+				expect(logs.query).toHaveBeenLastCalledWith(
+					logQueryInputSchema.parse({ levels: OPENING_LEVELS, boot: wire }),
+				),
+			);
+			expect(screen.queryByTestId("raw-anchor")).toBeNull();
+			await showTab(en.systemLogs.tabs.events);
+
+			const dialog = await openExport("events");
+			expect(exportScopeRows(dialog)).toEqual([
+				boots.heading,
+				label(),
+				raw.levelLabel,
+				raw.levelInfo,
+				raw.sourceLabel,
+				raw.sourceAll,
+			]);
+			await download(dialog);
+			expect(logs.createExport).toHaveBeenLastCalledWith({
+				filter: { sources: [], levels: OPENING_LEVELS },
+				boot: wire,
+			});
+		},
+	);
+
+	it.each([
+		{ ordering: "chosen on Events before the link opened", chosenFirst: true },
+		{ ordering: "with nothing chosen before", chosenFirst: false },
+	])(
+		"re-picking the boot a linked moment is in ($ordering) shows that whole boot in Raw, and Export saves it",
+		async ({ chosenFirst }) => {
+			logs.boots.mockResolvedValue([running, previous]);
+			logs.around.mockResolvedValue(exactAround);
+			if (chosenFirst) bootSelection.choose(running);
+			render(SystemLogsView, {
+				props: { context: { tab: "raw", at: ENTRY_AT } },
+			});
+			await screen.findByTestId("raw-anchor");
+			expect((await peekScope("raw")).slice(-2)).toEqual(MOMENT);
+
+			await pick(running);
+
+			await waitFor(() =>
+				expect(screen.queryByTestId("raw-anchor")).toBeNull(),
+			);
+			expect(logs.query).toHaveBeenLastCalledWith(
+				logQueryInputSchema.parse({ levels: OPENING_LEVELS, boot: "current" }),
+			);
+			const dialog = await openExport("raw");
+			expect(exportScopeRows(dialog)).toEqual([
+				boots.heading,
+				boots.current,
+				raw.levelLabel,
+				raw.levelInfo,
+				raw.sourceLabel,
+				raw.sourceAll,
+			]);
+			await download(dialog);
+			expect(logs.createExport).toHaveBeenLastCalledWith({
+				filter: { sources: [], levels: OPENING_LEVELS },
+				boot: "current",
+			});
+		},
+	);
+});

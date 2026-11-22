@@ -68,8 +68,11 @@ async function routeLogs(
 	return exports;
 }
 
-async function openFailedLogsOnPhone(page: Page): Promise<void> {
-	await page.setViewportSize({ width: 375, height: 812 });
+const PHONE = { width: 375, height: 812 };
+const DESKTOP = { width: 1280, height: 800 };
+
+async function openFailedLogs(page: Page, size: { width: number; height: number } = PHONE): Promise<void> {
+	await page.setViewportSize(size);
 	await page.goto('/');
 	await ensureAuthenticated(page);
 	await navigateTo(page, 'settings');
@@ -155,7 +158,7 @@ test.describe('System Logs toolbar', { tag: '@desktop-only' }, () => {
 
 	test('a phone gets 44 px Try again and Support bundle when System Logs cannot load', async ({ page, pageRpc }) => {
 		await routeLogs(page, pageRpc, ['logs.getStorage']);
-		await openFailedLogsOnPhone(page);
+		await openFailedLogs(page);
 
 		const band = page.getByTestId('system-logs-check-failed');
 		for (const name of ['Try again', 'Support bundle']) {
@@ -202,7 +205,7 @@ test.describe('System Logs toolbar', { tag: '@desktop-only' }, () => {
 
 	test('a phone returns focus to the failure band after a refused support bundle hands off to Export this view', async ({ page, pageRpc }) => {
 		await routeLogs(page, pageRpc, ['logs.getStorage', 'logs.previewBundle']);
-		await openFailedLogsOnPhone(page);
+		await openFailedLogs(page);
 		const bandBundle = page.getByTestId('system-logs-check-failed').getByRole('button', { name: 'Support bundle', exact: true });
 		const bundle = page.getByRole('dialog', { name: 'Support bundle' });
 		await bandBundle.click();
@@ -225,7 +228,7 @@ test.describe('System Logs toolbar', { tag: '@desktop-only' }, () => {
 
 	test('a phone returns focus to the control that had it when a pointer opened the failure band dialogs without focusing (Safari default)', async ({ page, pageRpc }) => {
 		await routeLogs(page, pageRpc, ['logs.getStorage', 'logs.previewBundle']);
-		await openFailedLogsOnPhone(page);
+		await openFailedLogs(page);
 		const band = page.getByTestId('system-logs-check-failed');
 		const tryAgain = band.getByRole('button', { name: 'Try again', exact: true });
 		const bandBundle = band.getByRole('button', { name: 'Support bundle', exact: true });
@@ -246,6 +249,47 @@ test.describe('System Logs toolbar', { tag: '@desktop-only' }, () => {
 		await expect(confirm).toHaveCount(0);
 		await expect(tryAgain).toBeFocused();
 	});
+
+	for (const move of [
+		{
+			name: 'widening to desktop removes the phone header boot picker that had focus',
+			from: PHONE,
+			to: DESKTOP,
+			opener: (page: Page) => page.getByRole('dialog', { name: 'System Logs' }).getByRole('button', { name: /^Choose a boot/ }),
+		},
+		{
+			name: 'narrowing to a phone removes the side column control that had focus',
+			from: DESKTOP,
+			to: PHONE,
+			opener: (page: Page) => page.getByTestId('system-logs-side').getByRole('button').first(),
+		},
+	] as const) {
+		for (const handoff of [false, true]) {
+			test(`returns focus to the failure band's Support bundle, never the page, when ${move.name}${handoff ? ', after the refused-bundle handoff' : ''}`, async ({ page, pageRpc }) => {
+				await routeLogs(page, pageRpc, ['logs.getStorage', 'logs.previewBundle']);
+				await openFailedLogs(page, move.from);
+				const opener = move.opener(page);
+				await opener.focus();
+				await expect(opener).toBeFocused();
+				const bandBundle = page.getByTestId('system-logs-check-failed').getByRole('button', { name: 'Support bundle', exact: true });
+				const bundle = page.getByRole('dialog', { name: 'Support bundle' });
+				const confirm = page.getByRole('dialog', { name: 'Export this view' });
+				// A pointer press that leaves focus where it was (WebKit), so the dialog's opener is the moving control.
+				await bandBundle.dispatchEvent('click');
+				if (handoff) await bundle.getByRole('button', { name: 'Export this view', exact: true }).dispatchEvent('click');
+				const open = handoff ? confirm : bundle;
+				await expect(open).toBeVisible();
+
+				await page.setViewportSize(move.to);
+				await expect(move.opener(page)).toHaveCount(0);
+				await page.keyboard.press('Escape');
+				await expect(open).toHaveCount(0);
+
+				await expect(bandBundle).toBeFocused();
+				expect(await page.evaluate(() => document.activeElement === document.body)).toBe(false);
+			});
+		}
+	}
 
 	test('Export logs states and sends each boot picked in the real picker, a previous one included', async ({ page, pageRpc }) => {
 		const previous = {

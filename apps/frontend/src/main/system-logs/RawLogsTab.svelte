@@ -27,7 +27,8 @@ import KeepWords from './KeepWords.svelte';
 import RawLogList from './RawLogList.svelte';
 import RawLogsFilterBar from './RawLogsFilterBar.svelte';
 
-let { around, momentUnknown = false, onquery }: { around?: AroundPage; momentUnknown?: boolean; onquery?: (query: LogQueryInput, span?: ExportSpan) => void } = $props();
+// `chosen`: the boot picker was used while the tab was opening, so it opens on that choice, All boots included.
+let { around, chosen = false, momentUnknown = false, onquery }: { around?: AroundPage; chosen?: boolean; momentUnknown?: boolean; onquery?: (query: LogQueryInput, span?: ExportSpan) => void } = $props();
 
 const ANNOUNCE: Record<RawAnnouncement['kind'], (count: number) => string> = {
 	following: () => m['systemLogs.announce.following'](),
@@ -53,10 +54,10 @@ const view = new RawView({
 	now: () => Date.now(),
 	onQuery: (query, span) => onquery?.(query, span),
 });
-const initial = untrack(() => ({ around, boot: bootSelection.boot }));
-void (initial.around !== undefined || initial.boot === null
+const initial = untrack(() => ({ around, boot: bootSelection.boot, chosen }));
+void (initial.around !== undefined || (initial.boot === null && !initial.chosen)
 	? view.start(initial.around)
-	: view.chooseBoot(initial.boot.bootId, initial.boot.current ? initial.boot.bootId : undefined));
+	: view.chooseBoot(initial.boot?.bootId ?? null, initial.boot?.current ? initial.boot.bootId : undefined));
 const stopBoot = bootSelection.onChoose((bootId) =>
 	void view.chooseBoot(bootId, bootSelection.boot?.current ? bootSelection.boot.bootId : undefined),
 );
@@ -71,6 +72,7 @@ onDestroy(() => {
 $effect(() => {
 	const anchorBoot = view.anchor === null ? undefined : view.bottom?.query.boot;
 	bootSelection.rawScope = {
+		anchored: view.anchor !== null,
 		time: view.filter.time,
 		bootId: anchorBoot === undefined || anchorBoot === 'all' || anchorBoot === 'current' ? view.filter.bootId : anchorBoot,
 	};
