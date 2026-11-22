@@ -56,6 +56,7 @@ describe("download gate: a backend download", () => {
 describe("download gate: a legacy log file pushed on the socket", () => {
 	it("is saved, trimmed, for a request whose open is still live", async () => {
 		await requestLegacyLog(
+			"device",
 			() => true,
 			(request) =>
 				Promise.resolve(
@@ -70,6 +71,7 @@ describe("download gate: a legacy log file pushed on the socket", () => {
 	it("is not saved once the open its request was issued under has ended", async () => {
 		let open = true;
 		await requestLegacyLog(
+			"device",
 			() => open,
 			() => {
 				open = false;
@@ -83,6 +85,7 @@ describe("download gate: a legacy log file pushed on the socket", () => {
 
 	it("is not saved when no request is waiting for it, also after one was answered without a file", async () => {
 		await requestLegacyLog(
+			"device",
 			() => true,
 			() => Promise.resolve(),
 		);
@@ -96,6 +99,7 @@ describe("download gate: a legacy log file pushed on the socket", () => {
 		const asked: string[] = [];
 		let open = true;
 		const ended = requestLegacyLog(
+			"device",
 			() => open,
 			(request) => {
 				asked.push(request);
@@ -103,6 +107,7 @@ describe("download gate: a legacy log file pushed on the socket", () => {
 			},
 		);
 		const live = requestLegacyLog(
+			"device",
 			() => true,
 			(request) => {
 				asked.push(request);
@@ -127,6 +132,7 @@ describe("download gate: a legacy log file pushed on the socket", () => {
 			const asked: string[] = [];
 			const closedReply = Promise.withResolvers<void>();
 			const closed = requestLegacyLog(
+				"device",
 				() => open,
 				(request) => {
 					asked.push(request);
@@ -135,6 +141,7 @@ describe("download gate: a legacy log file pushed on the socket", () => {
 			);
 			open = false;
 			const reopened = requestLegacyLog(
+				"device",
 				() => true,
 				(request) => {
 					asked.push(request);
@@ -169,6 +176,7 @@ describe("download gate: a legacy log file pushed on the socket", () => {
 			vi.useFakeTimers();
 			const asked: string[] = [];
 			const failed = requestLegacyLog(
+				"device",
 				() => true,
 				(request) => {
 					asked.push(request);
@@ -190,6 +198,7 @@ describe("download gate: a legacy log file pushed on the socket", () => {
 		vi.useFakeTimers();
 		const asked: string[] = [];
 		await requestLegacyLog(
+			"device",
 			() => true,
 			(request) => {
 				asked.push(request);
@@ -204,12 +213,12 @@ describe("download gate: a legacy log file pushed on the socket", () => {
 		};
 
 		await vi.advanceTimersByTimeAsync(10 * 60_000);
-		await requestLegacyLog(() => true, own);
-		expect(legacyLocked()).toBe(true);
+		await requestLegacyLog("device", () => true, own);
+		expect(legacyLocked("device")).toBe(true);
 		expect(asked).toHaveLength(1);
 		expect(deliverLegacyLog({ ...FILE, contents: "stale" })).toBe(false);
-		expect(legacyLocked()).toBe(false);
-		await requestLegacyLog(() => true, own);
+		expect(legacyLocked("device")).toBe(false);
+		await requestLegacyLog("device", () => true, own);
 
 		expect(asked).toHaveLength(2);
 		expect(await Promise.all(blobs.map((blob) => blob.text()))).toEqual([
@@ -220,17 +229,19 @@ describe("download gate: a legacy log file pushed on the socket", () => {
 	it("frees the downloads after a timeout once the socket is replaced, and the retry saves only its own file", async () => {
 		const asked: string[] = [];
 		await requestLegacyLog(
+			"device",
 			() => true,
 			(request) => {
 				asked.push(request);
 				return Promise.reject(new CallTimeoutError("Request timeout"));
 			},
 		).catch(() => undefined);
-		expect(legacyLocked()).toBe(true);
+		expect(legacyLocked("device")).toBe(true);
 
 		nextSocketEpoch();
-		expect(legacyLocked()).toBe(false);
+		expect(legacyLocked("device")).toBe(false);
 		await requestLegacyLog(
+			"device",
 			() => true,
 			(request) => {
 				asked.push(request);
@@ -249,6 +260,7 @@ describe("download gate: a legacy log file pushed on the socket", () => {
 	it("on a device that echoes the id, sends the retry at once and never gives it the timed-out request's late file, also while the retry is active", async () => {
 		const asked: string[] = [];
 		await requestLegacyLog(
+			"device",
 			() => true,
 			(request) => {
 				asked.push(request);
@@ -258,15 +270,17 @@ describe("download gate: a legacy log file pushed on the socket", () => {
 			},
 		);
 		await requestLegacyLog(
+			"device",
 			() => true,
 			(request) => {
 				asked.push(request);
 				return Promise.reject(new CallTimeoutError("Request timeout"));
 			},
 		).catch(() => undefined);
-		expect(legacyLocked()).toBe(false);
+		expect(legacyLocked("device")).toBe(false);
 		const retry = Promise.withResolvers<void>();
 		const active = requestLegacyLog(
+			"device",
 			() => true,
 			(request) => {
 				asked.push(request);
@@ -293,6 +307,7 @@ describe("download gate: a legacy log file pushed on the socket", () => {
 	it("sends the next request at once after a failure that sends no file", async () => {
 		const asked: string[] = [];
 		await requestLegacyLog(
+			"device",
 			() => true,
 			(request) => {
 				asked.push(request);
@@ -300,6 +315,7 @@ describe("download gate: a legacy log file pushed on the socket", () => {
 			},
 		).catch(() => undefined);
 		await requestLegacyLog(
+			"device",
 			() => true,
 			(request) => {
 				asked.push(request);

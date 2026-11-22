@@ -500,28 +500,35 @@ describe("LogsDialog: a legacy log file pushed after the close", () => {
 		{ kind: "device", ask: getDeviceLog },
 		{ kind: "system", ask: getSystemLog },
 	] as const)(
-		"after the $kind log's call timed out, both downloads stay locked with the reconnect hint until its late file arrives",
+		"after the $kind log's call timed out, that download stays locked with the reconnect hint until its late file arrives, and the other one does not",
 		async ({ kind, ask }) => {
 			vi.mocked(ask).mockRejectedValue(new CallTimeoutError("Request timeout"));
 			render(LogsDialogHost).component.show();
 			await fireEvent.click(await screen.findByTestId(`log-download-${kind}`));
 			await screen.findByTestId("log-download-error");
-			const buttons = ["device", "system"].map(
-				(id) => screen.getByTestId(`log-download-${id}`) as HTMLButtonElement,
-			);
+			const locked = screen.getByTestId(
+				`log-download-${kind}`,
+			) as HTMLButtonElement;
+			const other = screen.getByTestId(
+				`log-download-${kind === "device" ? "system" : "device"}`,
+			) as HTMLButtonElement;
 			const hint = screen.getByTestId("log-download-locked");
 
 			expect(hint.getAttribute("role")).toBe("status");
 			expect(hint.textContent?.trim()).toBe(en.advanced.downloadLocked);
-			for (const button of buttons) {
-				expect(button.disabled).toBe(true);
-				expect(button.getAttribute("aria-describedby")).toBe(hint.id);
-			}
-			expect(deliverLegacyLog({ ...FILE, contents: "late" })).toBe(false);
+			expect(locked.disabled).toBe(true);
+			expect(locked.getAttribute("aria-describedby")).toBe(hint.id);
+			expect(other.disabled).toBe(false);
+			expect(other.getAttribute("aria-describedby")).toBeNull();
+			const name =
+				kind === "system"
+					? "ceralive_system_log.txt"
+					: "ceralive.service_log.txt";
+			expect(deliverLegacyLog({ name, contents: "late" })).toBe(false);
 			await waitFor(() =>
 				expect(screen.queryByTestId("log-download-locked")).toBeNull(),
 			);
-			for (const button of buttons) expect(button.disabled).toBe(false);
+			expect(locked.disabled).toBe(false);
 			expect(anchorClicks).not.toHaveBeenCalled();
 		},
 	);

@@ -34,90 +34,128 @@ export function startBackendDownload(issued: Issued, path: string): boolean {
 	return true;
 }
 
+/** The two legacy log downloads, each with its own request slot and lock. */
+export type LegacyKind = "device" | "system";
+
+// The file name the device gives the full journal; every other legacy file is a unit's log.
+const SYSTEM_LOG_FILE = "ceralive_system_log.txt";
+
 /**
- * A legacy request's one owner state. `current`: sent, its open live. Abandoned
- * (`current` once `issued()` turns false): its open ended. `failed`: its call
- * failed, so it is revoked even if the device still answers. Only a current
- * request with a live open is given its file.
+ * One legacy request. Its file is `awaited` until a push is matched to it, then
+ * `consumed` (saved or dropped) exactly once. Its reply is `awaited` until the
+ * call settles. It is current while its reply is awaited and its open is live,
+ * and only a current request whose file is awaited is given that file.
  */
 interface LegacyRequest {
 	readonly id: string;
+	readonly kind: LegacyKind;
 	readonly issued: Issued;
 	readonly epoch: number;
-	failed: boolean;
-	answered: boolean;
-	readonly done: PromiseWithResolvers<void>;
+	file: "awaited" | "consumed";
+	reply: "awaited" | "answered" | "timed-out" | "failed";
+	readonly settled: PromiseWithResolvers<void>;
 }
 
-// The one legacy request in flight, across both kinds and every open, so a file
-// from a device that echoes no id has one possible owner.
-let outstanding: LegacyRequest | undefined;
-// A timed-out request such a device may still answer on this socket: until that
-// file arrives or the socket is replaced, no other request may be sent.
-let held = $state.raw<LegacyRequest | null>(null);
-// The socket epoch on which the device echoed a request id: its files carry their owner.
+const slots: Record<LegacyKind, LegacyRequest | undefined> = {
+	device: undefined,
+	system: undefined,
+};
+// The socket epoch on which the device echoed a request id: on it, a file is matched by id only.
 let taggedOn: number | null = null;
 let sequence = 0;
+// Bumped on every slot change, so `legacyLocked` is read reactively.
+let changes = $state(0);
 
-function finish(request: LegacyRequest): void {
-	if (outstanding === request) outstanding = undefined;
-	request.done.resolve();
-}
-
-/** Whether a new legacy request must wait for a reconnect or an earlier request's late file. */
-export function legacyLocked(): boolean {
-	return held !== null && held.epoch === socketEpoch();
+function tagged(): boolean {
+	return taggedOn === socketEpoch();
 }
 
 /**
- * Sends a legacy log request under `issued` once no other is in flight (the
- * caller shows it as running meanwhile), or not at all while locked. `send`
- * passes its id on for the device to echo with the file.
+ * Whether the request holds its kind's slot: while its reply is awaited, or once
+ * it timed out on this socket with its file still awaited from a device not known
+ * to echo ids. Only that file, or a new socket, can then prove a later file's owner.
+ */
+function holds(request: LegacyRequest): boolean {
+	if (request.reply === "awaited") return true;
+	return (
+		request.reply === "timed-out" &&
+		request.file === "awaited" &&
+		request.epoch === socketEpoch() &&
+		!tagged()
+	);
+}
+
+function release(request: LegacyRequest): void {
+	if (slots[request.kind] === request && !holds(request))
+		slots[request.kind] = undefined;
+	changes += 1;
+}
+
+/** Whether a new request of this kind must wait for a reconnect or a timed-out request's late file. */
+export function legacyLocked(kind: LegacyKind): boolean {
+	void changes;
+	const request = slots[kind];
+	return request !== undefined && request.reply !== "awaited" && holds(request);
+}
+
+/**
+ * Sends a legacy log request of `kind` under `issued` once no other of that kind
+ * is in flight (the caller shows it as running meanwhile), or not at all while
+ * that kind is locked. `send` passes its id on for the device to echo.
  */
 export async function requestLegacyLog(
+	kind: LegacyKind,
 	issued: Issued,
 	send: (request: string) => Promise<unknown>,
 ): Promise<void> {
-	while (outstanding !== undefined) await outstanding.done.promise;
-	if (!issued() || legacyLocked()) return;
+	for (let held = slots[kind]; held !== undefined; held = slots[kind]) {
+		if (!holds(held)) {
+			slots[kind] = undefined;
+			break;
+		}
+		if (held.reply !== "awaited") return;
+		await held.settled.promise;
+	}
+	if (!issued()) return;
 	sequence += 1;
 	const request: LegacyRequest = {
 		id: String(sequence),
+		kind,
 		issued,
 		epoch: socketEpoch(),
-		failed: false,
-		answered: false,
-		done: Promise.withResolvers<void>(),
+		file: "awaited",
+		reply: "awaited",
+		settled: Promise.withResolvers<void>(),
 	};
-	outstanding = request;
+	slots[kind] = request;
+	changes += 1;
 	try {
 		await send(request.id);
+		request.reply = "answered";
 	} catch (error) {
-		request.failed = true;
-		// Timed out on a live socket: the device may still send the file, and only its
-		// id, or this socket closing, can prove which request a file answers.
-		if (
-			error instanceof CallTimeoutError &&
-			taggedOn !== request.epoch &&
-			request.epoch === socketEpoch()
-		)
-			held = request;
+		request.reply = error instanceof CallTimeoutError ? "timed-out" : "failed";
 		throw error;
 	} finally {
-		// Answered or failed: the device pushes a file before it answers, so none comes for it now.
-		finish(request);
+		request.settled.resolve();
+		release(request);
 	}
 }
 
 /** The request a pushed file answers, or none when its owner cannot be proven. */
-function owner(file: { request?: string }): LegacyRequest | undefined {
+function owner(file: {
+	name: string;
+	request?: string;
+}): LegacyRequest | undefined {
 	if (file.request !== undefined) {
-		taggedOn = socketEpoch();
-		if (held?.id === file.request) return held;
-		return outstanding?.id === file.request ? outstanding : undefined;
+		if (!tagged()) {
+			taggedOn = socketEpoch();
+			changes += 1;
+		}
+		return Object.values(slots).find((request) => request?.id === file.request);
 	}
-	if (legacyLocked()) return held ?? undefined;
-	return outstanding?.epoch === socketEpoch() ? outstanding : undefined;
+	if (tagged()) return undefined;
+	const request = slots[file.name === SYSTEM_LOG_FILE ? "system" : "device"];
+	return request?.epoch === socketEpoch() ? request : undefined;
 }
 
 /** The socket's `log` push: saved only for the current request it answers, while that request's open is live. */
@@ -127,10 +165,10 @@ export function deliverLegacyLog(file: {
 	request?: string;
 }): boolean {
 	const request = owner(file);
-	if (request === undefined || request.answered) return false;
-	request.answered = true;
-	if (held === request) held = null;
-	if (request.failed || !request.issued()) return false;
+	if (request === undefined || request.file === "consumed") return false;
+	request.file = "consumed";
+	release(request);
+	if (request.reply !== "awaited" || !request.issued()) return false;
 	const contents = file.contents
 		.split("\n")
 		.map((line) => line.trim())

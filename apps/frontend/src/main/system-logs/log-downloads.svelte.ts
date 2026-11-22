@@ -26,11 +26,13 @@ export class LogDownloads {
 	}
 
 	async download(kind: LogKind): Promise<void> {
-		if (this.downloading !== null || !this.#current() || legacyLocked()) return;
+		if (this.downloading !== null || !this.#current() || legacyLocked(kind))
+			return;
 		this.downloading = kind;
 		this.failed = null;
 		try {
 			await requestLegacyLog(
+				kind,
 				this.#current,
 				kind === "device" ? getDeviceLog : getSystemLog,
 			);

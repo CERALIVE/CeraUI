@@ -138,15 +138,19 @@ density. It is not a redesign.
   the only place System Logs starts a browser download: each request carries the
   token of the open it was issued under, read again when the file is ready (a
   sharing ticket's URL, or a legacy file the device pushes as a `log` event before
-  it answers, one legacy request in flight at a time across both kinds and
-  every open; a file is delivered only if its echoed id matches, or it carries no
-  id and is for the one request in flight on the current socket, and only to a
-  current request with a live open (abandoned: its open ended; failed: its call
-  failed). A timed-out request on a device not known to echo ids locks legacy
-  downloads until its late file arrives (then dropped) or the socket is replaced
-  (`lib/rpc/socket-epoch.svelte.ts`): elapsed time never decides ownership. While
-  locked, both buttons are disabled and described by a status line asking to
-  reconnect or reload). The view and the phone header's boot button are keyed by the
+  it answers, one slot per kind (device log, system log), and one kind never
+  blocks the other. A request's file is awaited until a push is matched to it,
+  then consumed (saved or dropped) exactly once; its reply is awaited, answered,
+  timed out or failed. A file is matched by its echoed id; once a socket has
+  carried one echoed id, only exact ids are accepted on it. Before that, a file
+  with no id goes to the request in its kind's slot on the current socket (the
+  kind comes from the file name). It is saved only if that request's reply is
+  still awaited and its open is live. A slot is held while the reply is awaited,
+  or after a timeout while the file is still awaited on the same socket from a
+  device not known to echo ids (the lock): only that file or a new socket
+  (`lib/rpc/socket-epoch.svelte.ts`) frees it, never elapsed time, and a consumed
+  file never locks. A locked kind's button is disabled and described by a status
+  line asking to reconnect or reload). The view and the phone header's boot button are keyed by the
   generation, so the exit animation keeps neither, the flush after the close runs
   their teardown (probe fence, Raw lookup abort and paging invalidation, the flow's
   dispose), and a reopen, even within the same turn, mounts a fresh view.
