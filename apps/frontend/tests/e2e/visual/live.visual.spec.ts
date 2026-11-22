@@ -114,6 +114,8 @@ type IdleGeometry = {
 	readonly lefts: Readonly<Record<string, number>>;
 	readonly gaps: readonly number[];
 	readonly openDetails: readonly string[];
+	readonly barTop: number;
+	readonly noteBottom: number | null;
 	readonly testIds: readonly string[];
 };
 
@@ -190,6 +192,9 @@ for (const condition of CONDITIONS) {
 						),
 						gaps,
 						openDetails: [...document.querySelectorAll('details[open]')].map(describe),
+						barTop: document.querySelector('[data-testid="live-bar"]')?.getBoundingClientRect().top ?? 0,
+						noteBottom:
+							document.querySelector('[data-testid^="source-modes-"] > p')?.getBoundingClientRect().bottom ?? null,
 						testIds: [
 							...new Set(
 								[...document.querySelectorAll('[data-testid]')].map(
@@ -288,6 +293,22 @@ for (const condition of CONDITIONS) {
 					geometry.openDetails,
 					`${condition.name}: a disclosure opened itself: ${geometry.openDetails.join(', ')}`,
 				).toEqual(condition.viewport.width >= 768 ? ['preview-disclosure'] : []);
+
+				// ── 8. The capture-format note clears the fixed Live bar at the fold ─────
+				// Main shows the whole note above the bar in this very state on a phone and
+				// at the kiosk; the redesign must not push it under the bar.
+				expect(geometry.noteBottom, `${condition.name}: the capture-format note is rendered`).not.toBeNull();
+				expect(
+					geometry.noteBottom ?? Number.POSITIVE_INFINITY,
+					`${condition.name}: the capture-format note ends under the Live bar`,
+				).toBeLessThanOrEqual(geometry.barTop);
+
+				// ── 9. The source card's last control can always be brought above the bar ──
+				const last = page.getByTestId('source-section').locator('button, summary, [role="combobox"]').last();
+				await last.evaluate((element) => element.scrollIntoView({ block: 'nearest' }));
+				const lastBottom = await last.evaluate((element) => element.getBoundingClientRect().bottom);
+				const barTop = await page.getByTestId('live-bar').evaluate((element) => element.getBoundingClientRect().top);
+				expect(lastBottom, `${condition.name}: the source card's last control stays under the Live bar`).toBeLessThanOrEqual(barTop);
 			},
 		);
 	});

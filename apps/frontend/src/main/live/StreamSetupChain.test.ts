@@ -302,11 +302,14 @@ describe("StreamSetupChain — encoder row (source gate)", () => {
 				'[data-testid="open-encoder-dialog"]',
 			)?.disabled,
 		).toBe(true);
-		await fireEvent.click(
-			encoder?.querySelector(
-				'[data-testid="bitrate-ceiling-chip"]',
-			) as HTMLElement,
+		const chip = encoder?.querySelector<HTMLElement>(
+			'[data-testid="bitrate-ceiling-chip"]',
 		);
+		if (!chip)
+			throw new Error(
+				"the bitrate chip must render while Edit waits for a source",
+			);
+		await fireEvent.click(chip);
 		expect(onOpenEncoder).toHaveBeenCalledTimes(1);
 	});
 });
@@ -553,9 +556,12 @@ describe("StreamSetupChain — one row pattern", () => {
 		const { container } = renderChain({
 			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
 		});
+		const card = container.querySelector('[data-testid="stream-setup-chain"]');
+		expect(card, "the card renders").not.toBeNull();
 		expect(
-			container.querySelector('[data-testid="stream-setup-chain"] .font-mono'),
-		).toBeNull();
+			card?.querySelectorAll('[data-testid="setup-row"]').length,
+		).toBeGreaterThan(0);
+		expect(card?.querySelector(".font-mono")).toBeNull();
 	});
 });
 

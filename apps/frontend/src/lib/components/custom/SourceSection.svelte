@@ -197,12 +197,16 @@ const hasCapSummary = $derived(capChips.length > 0 || summary?.audioSupported ==
 const activeSummary = $derived(
 	deriveActiveSummary(config, activeEncode, capabilities, sources?.sources),
 );
-const activeParts = $derived.by(() => {
+// The format alone (resolution, frame rate, codec), then the line with the source.
+const settingParts = $derived.by(() => {
 	const parts: string[] = [];
-	if (activeSummary.source) parts.push(activeSummary.source);
 	if (activeSummary.resolution) parts.push(activeSummary.resolution);
 	if (typeof activeSummary.framerate === 'number') parts.push(`${activeSummary.framerate}fps`);
 	if (activeSummary.codec) parts.push(activeSummary.codec);
+	return parts;
+});
+const activeParts = $derived.by(() => {
+	const parts = activeSummary.source ? [activeSummary.source, ...settingParts] : [...settingParts];
 	// Todo 12: the transport token is dropped from the IDLE active-config line —
 	// the Destination/server row is the ONE idle surface that shows it.
 	// `deriveActiveSummary` still emits `transport` for LiveCockpit's LIVE strip;
@@ -217,16 +221,63 @@ const hasActiveConfig = $derived(
 // The settings alone, for the summary the selected option hosts: its own title
 // already names the source, so the line never repeats it. With no saved format
 // the device picks one, and the line says so in the Encoder dialog's own word.
-const activeSettings = $derived.by(() => {
-	const settings = activeParts.slice(activeSummary.source ? 1 : 0);
-	return settings.length > 0 ? settings : [m["live.encoder.format.automaticUnknown"]()];
-});
+const activeSettings = $derived(
+	settingParts.length > 0 ? settingParts : [m["live.encoder.format.automaticUnknown"]()],
+);
 
 // Every "?" inside an option is a real 44 px box at every width, kept 8 px from
 // every other control (DESIGN.md TT-2): its hit area is then its box, beside
 // its neighbours. The touch layout's ::after overlay on the 24 px icon used to
 // reach 10 px into the select button and the capture-format buttons.
 const HELP_TARGET = 'sm:min-h-11 sm:min-w-11 sm:p-2.5';
+
+type OptionHelp = {
+	testId: string;
+	title: string;
+	body: string;
+	learnMoreLabel?: string;
+	learnMoreUrl?: string;
+};
+// Every "?" an option carries beside its select, in one list: the slot renders
+// these, so it can never be shown empty or miss one.
+function optionHelps(source: StreamSource): OptionHelp[] {
+	const helps: OptionHelp[] = [];
+	// Same-LAN/WiFi education on ENABLED network rows.
+	if (source.origin === 'network' && source.available) {
+		helps.push({
+			testId: `source-network-ingest-info-${source.requiresGateway}`,
+			title: m["live.networkIngest.infoTitle"](),
+			body: m["live.networkIngest.infoBody"](),
+		});
+	}
+	// Coarse rows: nothing is plugged in for this capability.
+	if (source.origin === 'coarse') {
+		helps.push({
+			testId: `source-not-connected-info-${source.id}`,
+			title: m["live.source.notConnectedTitle"](),
+			body: m["live.source.notConnectedBody"](),
+		});
+	}
+	// Present-but-signal-less device: the cable/source is missing.
+	if (hasNoSignal(source)) {
+		helps.push({
+			testId: `source-no-signal-info-${source.id}`,
+			title: m["live.source.noSignalTitle"](),
+			body: m["live.source.noSignalBody"](),
+		});
+	}
+	// MJPEG capture: why it is not hardware H.264/H.265.
+	if (source.origin === 'capture' && source.kind === 'mjpeg') {
+		helps.push({
+			testId: `source-mjpeg-info-${source.id}`,
+			title: m["live.source.mjpegTitle"](),
+			body: m["live.source.mjpegBody"](),
+			learnMoreLabel: m["live.source.mjpegLearnMore"](),
+			learnMoreUrl: UVC_H264_DETECTION_DOC_URL,
+		});
+	}
+	return helps;
+}
 
 // Every badge on an option is this one pill; only its tone varies.
 const CHIP = 'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium';
@@ -683,7 +734,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 				<span class="font-medium" data-testid="cap-device-max">{m["live.source.sourceMax"]()}</span>
 				<InfoPopover
 					body={m["live.education.field.mode.body"]()}
-					class={HELP_TARGET}
+					class="-mt-2 {HELP_TARGET}"
 					testId="info-mode"
 					title={m["live.education.field.mode.title"]()}
 				/>
@@ -814,10 +865,9 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 
 		<!-- Unified device-first source list: capture / coarse / virtual / network rows.
 		     Selecting a row persists config.source through the field-sync lock.
-		     Live screen contract: the rows are tiles, a grid from 768 px. A row that
-		     opens any detail below its tile (modes, warnings, ingest instructions)
-		     spans the full width, so the detail sits under it and every other tile
-		     keeps one height. -->
+		     Live screen contract: the rows are framed tiles, one per line. A tile's
+		     detail (summary, formats, warnings, ingest instructions) opens inside its
+		     own frame. -->
 		{#if hasSources}
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 			<div class="space-y-2" data-testid="source-list" tabindex={-1}>
@@ -833,13 +883,12 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 							selected,
 							sources?.sources,
 						))}
-						<!-- The help slot, and with it the 8 px gap, exists only on an option that has
-						     a help or switch to put in it: an empty slot cost every other title 14 px. -->
-						{const hasHelp = $derived(
-							(source.origin === 'network' && source.available) ||
+						{const helps = $derived(optionHelps(source))}
+						{const hasChips = $derived(
+							selected ||
 								source.origin === 'coarse' ||
-								hasNoSignal(source) ||
-								(source.origin === 'capture' && (source.kind === 'mjpeg' || isStreaming)),
+								(source.origin === 'capture' && (source.lost || source.degraded || hasNoSignal(source))) ||
+								(source.origin === 'network' && source.supportsAudio),
 						)}
 						{const hasDetail = $derived(
 							selected ||
@@ -881,102 +930,106 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 												: 'text-primary'
 											: 'text-muted-foreground'}"
 									/>
-									<span class="flex min-w-0 flex-1 flex-col gap-1.5">
-										<span class="flex min-w-0 flex-col group-disabled/row:opacity-60">
+									<span class="flex min-w-0 flex-1 flex-col">
 											<span
-												class="line-clamp-2 text-sm font-medium break-words {source.origin === 'coarse'
+												class="line-clamp-2 text-sm font-medium break-words group-disabled/row:opacity-60 {source.origin === 'coarse'
 													? 'text-muted-foreground'
 													: ''}"
 												data-testid={`source-row-name-${source.id}`}
 											>
 												{rowLabel(source)}
 											</span>
-											{#if source.origin === 'capture'}
-												<span
-													class="text-xs {captureKindClass(source)}"
-													data-source-kind={source.kind}
-													data-testid={`source-kind-${source.id}`}
-												>
-													{captureBadgeLabel(source)}
-												</span>
-											{:else if source.origin === 'network'}
-												<span
-													class="text-xs {source.available ? 'text-muted-foreground' : 'text-status-warning'}"
-													data-testid={`source-network-ingest-status-${source.requiresGateway}`}
-												>
-													{source.available
-														? m["live.networkIngest.active"]()
-														: m["live.networkIngest.inactive"]()}
-												</span>
-											{/if}
-										</span>
-										{#if selected || source.origin === 'coarse' || (source.origin === 'capture' && (source.lost || source.degraded || hasNoSignal(source))) || (source.origin === 'network' && source.supportsAudio)}
-											<span class="flex flex-wrap items-center gap-1.5">
-												{#if selected}
-													<span
-														class="{CHIP} group-disabled/row:opacity-60 {coarseUnbound.unbound
-															? 'border-status-warning/60 bg-status-warning/10 text-status-warning'
-															: 'border-primary/50 bg-primary/15 text-primary'}"
-														data-testid={`source-selected-${source.id}`}
-													>
-														{#if coarseUnbound.unbound}
-															<TriangleAlert aria-hidden={true} class="size-3" />
-														{:else}
-															<Check aria-hidden={true} class="size-3" />
-														{/if}
-														{m["live.inputPicker.selected"]()}
-													</span>
-												{/if}
+										<!-- One subtitle line: the kind or service state, then every chip, wrapping
+										     only when they do not fit beside it. -->
+										{#if source.origin === 'capture' || source.origin === 'network' || hasChips}
+											<span class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
 												{#if source.origin === 'capture'}
-													{#if source.lost}
-														<span
-															class="{CHIP} border-destructive/30 bg-destructive/15 text-destructive"
-															data-testid={`source-lost-${source.id}`}
-														>
-															<Unplug aria-hidden={true} class="size-3" />
-															{m["live.inputPicker.lost"]()}
-														</span>
-													{:else if source.degraded}
-														<!-- A THIRD state beside Lost and No signal, and the row is
-														     still selectable: the device is here and the encoder is
-														     merely struggling to read it. Amber + its own glyph, so it
-														     can never be read as the red "device is gone" badge. -->
-														<span
-															class="{CHIP} border-status-warning/60 bg-status-warning/10 text-status-warning group-disabled/row:opacity-60"
-															data-testid={`source-degraded-${source.id}`}
-															title={source.degraded.reason ?? source.degraded.code}
-														>
-															<Activity aria-hidden={true} class="size-3" />
-															{m["live.source.degradedBadge"]()}
-														</span>
-													{:else if hasNoSignal(source)}
-														<!-- Calm amber, NOT the destructive red `lost` treatment: the
-														     device is fine, the cable is idle. The row stays selectable. -->
-														<span
-															class="{CHIP} border-status-warning/60 bg-status-warning/10 text-status-warning group-disabled/row:opacity-60"
-															data-testid={`source-no-signal-${source.id}`}
-														>
-															<SignalZero aria-hidden={true} class="size-3" />
-															{m["live.source.noSignal"]()}
-														</span>
-													{/if}
-												{/if}
-												{#if source.origin === 'coarse'}
 													<span
-														class="{CHIP} border-border bg-muted text-muted-foreground group-disabled/row:opacity-60"
-														data-testid={`source-not-connected-${source.id}`}
+														class="text-xs group-disabled/row:opacity-60 {captureKindClass(source)}"
+														data-source-kind={source.kind}
+														data-testid={`source-kind-${source.id}`}
 													>
-														<Unplug aria-hidden={true} class="size-3" />
-														{m["live.source.notConnected"]()}
+														{captureBadgeLabel(source)}
+													</span>
+												{:else if source.origin === 'network'}
+													<span
+														class="text-xs group-disabled/row:opacity-60 {source.available ? 'text-muted-foreground' : 'text-status-warning'}"
+														data-testid={`source-network-ingest-status-${source.requiresGateway}`}
+													>
+														{source.available
+															? m["live.networkIngest.active"]()
+															: m["live.networkIngest.inactive"]()}
 													</span>
 												{/if}
-												{#if source.origin === 'network' && source.supportsAudio}
-													<span
-														class="{CHIP} border-border bg-muted text-muted-foreground group-disabled/row:opacity-60"
-														data-testid={`source-network-audio-${source.requiresGateway}`}
-													>
-														<Volume2 aria-hidden={true} class="size-3" />
-														{m["live.networkIngest.includesAudio"]()}
+												{#if hasChips}
+													<span class="flex flex-wrap items-center gap-1.5">
+														{#if selected}
+															<span
+																class="{CHIP} group-disabled/row:opacity-60 {coarseUnbound.unbound
+																	? 'border-status-warning/60 bg-status-warning/10 text-status-warning'
+																	: 'border-primary/50 bg-primary/15 text-primary'}"
+																data-testid={`source-selected-${source.id}`}
+															>
+																{#if coarseUnbound.unbound}
+																	<TriangleAlert aria-hidden={true} class="size-3" />
+																{:else}
+																	<Check aria-hidden={true} class="size-3" />
+																{/if}
+																{m["live.inputPicker.selected"]()}
+															</span>
+														{/if}
+														{#if source.origin === 'capture'}
+															{#if source.lost}
+																<span
+																	class="{CHIP} border-destructive/30 bg-destructive/15 text-destructive"
+																	data-testid={`source-lost-${source.id}`}
+																>
+																	<Unplug aria-hidden={true} class="size-3" />
+																	{m["live.inputPicker.lost"]()}
+																</span>
+															{:else if source.degraded}
+																<!-- A THIRD state beside Lost and No signal, and the row is
+																     still selectable: the device is here and the encoder is
+																     merely struggling to read it. Amber + its own glyph, so it
+																     can never be read as the red "device is gone" badge. -->
+																<span
+																	class="{CHIP} border-status-warning/60 bg-status-warning/10 text-status-warning group-disabled/row:opacity-60"
+																	data-testid={`source-degraded-${source.id}`}
+																	title={source.degraded.reason ?? source.degraded.code}
+																>
+																	<Activity aria-hidden={true} class="size-3" />
+																	{m["live.source.degradedBadge"]()}
+																</span>
+															{:else if hasNoSignal(source)}
+																<!-- Calm amber, NOT the destructive red `lost` treatment: the
+																     device is fine, the cable is idle. The row stays selectable. -->
+																<span
+																	class="{CHIP} border-status-warning/60 bg-status-warning/10 text-status-warning group-disabled/row:opacity-60"
+																	data-testid={`source-no-signal-${source.id}`}
+																>
+																	<SignalZero aria-hidden={true} class="size-3" />
+																	{m["live.source.noSignal"]()}
+																</span>
+															{/if}
+														{/if}
+														{#if source.origin === 'coarse'}
+															<span
+																class="{CHIP} border-border bg-muted text-muted-foreground group-disabled/row:opacity-60"
+																data-testid={`source-not-connected-${source.id}`}
+															>
+																<Unplug aria-hidden={true} class="size-3" />
+																{m["live.source.notConnected"]()}
+															</span>
+														{/if}
+														{#if source.origin === 'network' && source.supportsAudio}
+															<span
+																class="{CHIP} border-border bg-muted text-muted-foreground group-disabled/row:opacity-60"
+																data-testid={`source-network-audio-${source.requiresGateway}`}
+															>
+																<Volume2 aria-hidden={true} class="size-3" />
+																{m["live.networkIngest.includesAudio"]()}
+															</span>
+														{/if}
 													</span>
 												{/if}
 											</span>
@@ -986,46 +1039,20 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 
 								<!-- The help slot: every "?" sits at the inline end of its own
 								     frame, OUTSIDE the select button (never a nested interactive). -->
-								{#if hasHelp}
+								<!-- Rendered only with a help or a live switch to hold: an empty slot and
+								     its 8 px gap would cost every other title 14 px. -->
+								{#if helps.length > 0 || (source.origin === 'capture' && isStreaming)}
 								<div class="flex shrink-0 items-start gap-2 pe-1.5">
-									<!-- Same-LAN/WiFi education on ENABLED network rows. -->
-									{#if source.origin === 'network' && source.available}
+									{#each helps as help (help.testId)}
 										<InfoPopover
-											body={m["live.networkIngest.infoBody"]()}
+											body={help.body}
 											class={HELP_TARGET}
-											testId={`source-network-ingest-info-${source.requiresGateway}`}
-											title={m["live.networkIngest.infoTitle"]()}
+											learnMoreLabel={help.learnMoreLabel}
+											learnMoreUrl={help.learnMoreUrl}
+											testId={help.testId}
+											title={help.title}
 										/>
-									{/if}
-									<!-- Coarse rows: nothing is plugged in for this capability. -->
-									{#if source.origin === 'coarse'}
-										<InfoPopover
-											body={m["live.source.notConnectedBody"]()}
-											class={HELP_TARGET}
-											testId={`source-not-connected-info-${source.id}`}
-											title={m["live.source.notConnectedTitle"]()}
-										/>
-									{/if}
-									<!-- Present-but-signal-less device: the cable/source is missing. -->
-									{#if hasNoSignal(source)}
-										<InfoPopover
-											body={m["live.source.noSignalBody"]()}
-											class={HELP_TARGET}
-											testId={`source-no-signal-info-${source.id}`}
-											title={m["live.source.noSignalTitle"]()}
-										/>
-									{/if}
-									<!-- MJPEG capture: why it is not hardware H.264/H.265. -->
-									{#if source.origin === 'capture' && source.kind === 'mjpeg'}
-										<InfoPopover
-											body={m["live.source.mjpegBody"]()}
-											learnMoreLabel={m["live.source.mjpegLearnMore"]()}
-											learnMoreUrl={UVC_H264_DETECTION_DOC_URL}
-											class={HELP_TARGET}
-											testId={`source-mjpeg-info-${source.id}`}
-											title={m["live.source.mjpegTitle"]()}
-										/>
-									{/if}
+									{/each}
 									<!-- Capture-row trailing action: a live input switch while STREAMING
 									     (onSwitch → LiveView switchInput). -->
 									{#if source.origin === 'capture' && isStreaming}
@@ -1054,13 +1081,14 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 							</div>
 
 							{#if hasDetail}
-								<div class="space-y-3 pe-3 pt-2 pb-3 ps-10">
+								<div class="space-y-3 pe-3 pb-3 ps-10">
 									{#if selected && (hasActiveConfig || hasCapSummary)}
 										{@render activeConfigPanel(true)}
 									{/if}
 									{#if modeOptionsFor(source).length > 0}
 										{const activeMode = $derived(selectedModeFor(source))}
-										<div class="space-y-2" data-testid={`source-modes-${source.id}`}>
+										<!-- pt-2: its "?" keeps 8 px from the select button above. -->
+										<div class="space-y-2 pt-2" data-testid={`source-modes-${source.id}`}>
 											<div class="flex items-center gap-1">
 												<span class="text-muted-foreground text-xs font-medium">
 													{m["live.source.modeLabel"]()}

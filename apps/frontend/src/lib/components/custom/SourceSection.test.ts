@@ -1004,24 +1004,30 @@ describe("SourceSection — one option pattern (live design pass)", () => {
 				`${id} help`,
 			).not.toBeNull();
 		}
-		// The kind is a subtitle under the name, not a badge among the statuses.
-		const kind = container.querySelector('[data-testid="source-kind-hdmi-rx"]');
+		// The kind opens the subtitle line under the name; the status chips follow it
+		// on that line as one group, never mixed in with the kind.
 		const name = container.querySelector(
 			'[data-testid="source-row-name-hdmi-rx"]',
 		);
-		expect(kind?.parentElement).toBe(name?.parentElement);
-		expect(kind?.parentElement).not.toBe(
-			container.querySelector('[data-testid="source-no-signal-hdmi-rx"]')
-				?.parentElement,
+		const kind = container.querySelector('[data-testid="source-kind-hdmi-rx"]');
+		const noSignalChip = container.querySelector(
+			'[data-testid="source-no-signal-hdmi-rx"]',
 		);
-		// Selected and every status badge share one chip slot.
-		expect(
-			container.querySelector('[data-testid="source-selected-srt"]')
-				?.parentElement,
-		).toBe(
-			container.querySelector('[data-testid="source-network-audio-srt"]')
-				?.parentElement,
+		const selectedChip = container.querySelector(
+			'[data-testid="source-selected-srt"]',
 		);
+		const audio = container.querySelector(
+			'[data-testid="source-network-audio-srt"]',
+		);
+		for (const node of [name, kind, noSignalChip, selectedChip, audio])
+			expect(node).not.toBeNull();
+		expect(kind?.parentElement?.parentElement).toBe(name?.parentElement);
+		expect(noSignalChip?.parentElement?.parentElement).toBe(
+			kind?.parentElement,
+		);
+		expect(noSignalChip?.parentElement).not.toBe(kind?.parentElement);
+		// Selected and every status badge share one chip group.
+		expect(selectedChip?.parentElement).toBe(audio?.parentElement);
 	});
 
 	it("holds the audio picker and its level meter in one box, apart from the heading", () => {
@@ -1033,6 +1039,7 @@ describe("SourceSection — one option pattern (live design pass)", () => {
 		const box = container.querySelector(
 			'[data-testid="audio-source-embedded"]',
 		)?.parentElement;
+		expect(box, "the embedded-audio row sits in a box").toBeTruthy();
 		expect(box?.getAttribute("data-testid")).not.toBe("source-audio");
 		expect(
 			box?.querySelector('[data-testid="live-audio-meter"]'),

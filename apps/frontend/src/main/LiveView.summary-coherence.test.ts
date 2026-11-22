@@ -143,8 +143,9 @@ describe("LiveView — summary coherence (Task 12)", () => {
 			'[data-testid="setup-row"][data-section="encoder"]',
 		);
 		expect(encoderRow, "encoder setup-row renders").not.toBeNull();
-		// The summary <p> is the second paragraph in the row's label column.
-		const value = encoderRow?.querySelectorAll("p")[1];
+		// The row's text column: its title, then the summary paragraph.
+		const [title, value] = encoderRow?.querySelectorAll("p") ?? [];
+		expect(title?.textContent?.trim()).toBe("Encoder Settings");
 		expect(value?.textContent?.trim()).toBe(
 			"RØDE HDMI to USB-C: RØDE HDMI · 5 Mbps",
 		);
