@@ -1523,7 +1523,12 @@ This is host isolation evidence, not a shared-event-loop latency guarantee.
 `ceralive_update` ("A CeraLive update is available", `notifications.ceraliveUpdateAvailable`)
 is separate from `notifyUpdate()`. It names the exact first-party package instances
 (name, architecture, version) the backend's own check found the Install control
-would take, on both legacy and capable images. Only a complete check of that process
+would take, on both legacy and capable images. First-party means, on a capable
+image, every name the capable path refuses to see held (`isFirstPartyPackage`:
+any `ceralive-*` such as `ceralive-apt-credentials`, `cerastream`, `srtla`, the
+CeraLive media and modem packages), from CeraLive's origin; on a legacy image, the
+roster legacy Install takes (`package-layer.ts`). Both contain every package
+main's own check announced on that image. Only a complete check of that process
 replaces or retires it. An unknown, partial or incomplete check changes nothing,
 and neither does a startup, a login, a stored record or a recovered install. Each
 new release reaches every connected tab, and a login is sent only what the slot

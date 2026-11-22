@@ -47,6 +47,15 @@ export class AptAllRefusalError extends Error {
 const FIRST_PARTY =
 	/^(?:ceralive-|cerastream$|srtla$|libsrt1\.5-ceralive$|gstreamer1\.0-(?:libuvcsrc|rockchip-ceralive)$|librga2-ceralive$|lib(?:mm-glib0|mbim-(?:glib4|proxy|utils)|qmi-(?:glib5|proxy|utils)|qrtr-glib0)$|modemmanager$)/;
 
+/**
+ * A CeraLive (first-party) package on a capable image: the names this path
+ * refuses to see held. It contains main's capable announcement rule
+ * (`ceralive-*`, `cerastream`) and the legacy roster (`package-layer.ts`).
+ */
+export function isFirstPartyPackage(name: string): boolean {
+	return FIRST_PARTY.test(name);
+}
+
 export function parseAptSimulation(
 	text: string,
 	step: "parse-simulation" | "pinned-recheck" = "parse-simulation",
@@ -143,7 +152,7 @@ export async function discoverAptAllPackages(
 	readonly actionable: PinnedAptPackage[];
 }> {
 	const held = new Set(holds.trim().split(/\s+/).filter(Boolean));
-	if ([...held].some((name) => FIRST_PARTY.test(name)))
+	if ([...held].some(isFirstPartyPackage))
 		throw new AptAllRefusalError("first_party_held_back", "held-packages", {
 			detail: "first-party package held",
 		});

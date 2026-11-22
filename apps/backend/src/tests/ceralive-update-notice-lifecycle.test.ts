@@ -25,11 +25,13 @@ import { notificationsMessageSchema } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 
 import { setup } from "../modules/setup.ts";
+import { isFirstPartyPackage } from "../modules/system/apt-all-packages.ts";
 import {
 	initCeraliveUpdateNotice,
 	standingCeraliveOffer,
 	withdrawCeraliveOfferIfInstalled,
 } from "../modules/system/ceralive-update-notice.ts";
+import { ceralivePackageList } from "../modules/system/package-layer.ts";
 import {
 	getUpdateState,
 	isUpdating,
@@ -93,6 +95,13 @@ const cerastream = (candidate: string, more: Partial<AptPackage> = {}) => ({
 const srtla = (candidate: string, more: Partial<AptPackage> = {}) => ({
 	name: "srtla",
 	installed: "1.0",
+	candidate,
+	...more,
+});
+// A capable-image first-party package outside the legacy roster.
+const credentials = (candidate: string, more: Partial<AptPackage> = {}) => ({
+	name: "ceralive-apt-credentials",
+	installed: "1.0.0",
 	candidate,
 	...more,
 });
@@ -535,6 +544,18 @@ describe("legacy image", () => {
 		expect(notificationExists(NOTICE)).toBeUndefined();
 	});
 
+	test("ceralive-apt-credentials, which legacy Install never takes, is no CeraLive update on a legacy image", async () => {
+		await check({ upgradable: [credentials("1.0.1")] });
+		expect(notificationExists(NOTICE)).toBeUndefined();
+		// And beside an installed offer it leaves a complete none, as on main's legacy check.
+		await check({ upgradable: [cerastream("2")] });
+		await check({
+			installed: [cerastream("2", { installed: "2" })],
+			upgradable: [credentials("1.0.1")],
+		});
+		expect(liveRemovals()).toEqual([NOTICE]);
+	});
+
 	test('a plan that removes or downgrades a first-party package is no "none"', async () => {
 		await check({ upgradable: [cerastream("2")] });
 		const plan = (list: string, summary: string) => ({
@@ -689,6 +710,53 @@ describe("legacy image", () => {
 
 describe("capable image", () => {
 	beforeEach(useCapableImage);
+
+	test("the capable first-party set contains main's capable announcement rule and the whole legacy roster", () => {
+		for (const name of [
+			...ceralivePackageList,
+			"cerastream",
+			"ceralive-apt-credentials",
+			"ceralive-device",
+		])
+			expect([name, isFirstPartyPackage(name)]).toEqual([name, true]);
+		for (const name of ["curl", "cerastream-dbg", "libsrt1.5"])
+			expect([name, isFirstPartyPackage(name)]).toEqual([name, false]);
+	});
+
+	test("ceralive-apt-credentials from the CeraLive origin is a CeraLive update, shown and recorded by its exact instance", async () => {
+		await check({ upgradable: [credentials("1.0.1")] });
+		expect(notificationExists(NOTICE)?.dismissalKey).toBe(
+			"update:ceralive-apt-credentials:arm64=1.0.1",
+		);
+		expect(await recorded()).toEqual({
+			version: 8,
+			offer: [
+				{ name: "ceralive-apt-credentials", arch: "arm64", version: "1.0.1" },
+			],
+		});
+	});
+
+	test("a pending credentials upgrade beside an installed ordinary offer keeps the notice", async () => {
+		await check({ upgradable: [cerastream("2")] });
+		await check({
+			installed: [cerastream("2", { installed: "2" })],
+			upgradable: [credentials("1.0.1")],
+		});
+		expect(liveRemovals()).toEqual([]);
+		expect(notificationExists(NOTICE)?.dismissalKey).toBe(
+			"update:ceralive-apt-credentials:arm64=1.0.1",
+		);
+	});
+
+	test("a pending credentials upgrade beside a dismissed ordinary offer keeps the notice", async () => {
+		await check({ upgradable: [cerastream("2")] });
+		notificationDismiss(NOTICE, shown());
+		await check({ upgradable: [cerastream("2"), credentials("1.0.1")] });
+		expect(liveRemovals()).toEqual([]);
+		expect(notificationExists(NOTICE)?.dismissalKey).toBe(
+			"update:ceralive-apt-credentials:arm64=1.0.1,cerastream:arm64=2",
+		);
+	});
 
 	test("srtla from the CeraLive origin raises the localized notice keyed by version", async () => {
 		expect(await check({ upgradable: [srtla("2.0")] })).toBeNull();

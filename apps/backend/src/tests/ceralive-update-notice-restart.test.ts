@@ -1818,3 +1818,54 @@ for (const capable of [false, true])
 		},
 		budget(3),
 	);
+
+const credentials = (installed: string, candidate: string): AptPackage => ({
+	name: "ceralive-apt-credentials",
+	installed,
+	candidate,
+});
+
+test(
+	"a credentials-only update main raised stays while pending and while unfinished, and clears once dpkg shows it configured at the candidate (capable image)",
+	async () => {
+		// Given main's own capable backend, whose own check showed its offer for a
+		// ceralive-apt-credentials upgrade alone, in main-era and v2026.7.2 tabs.
+		const pendingCredentials: AptScript = {
+			upgradable: [credentials("1.0.0", "1.0.1")],
+		};
+		const opened = await olderBackendTabs(pendingCredentials, true);
+		// When this backend's own complete check finds that same upgrade still pending.
+		const backend = await Backend.start({
+			apt: pendingCredentials,
+			capable: true,
+		});
+		await reconnect(backend, opened);
+		await backend.check();
+		await sync(opened);
+		// Then it is this process's offer too: both tabs keep the banner.
+		expect(holding(opened)).toEqual([true, true]);
+		expect(removals(opened)).toEqual([0, 0]);
+		expect(JSON.parse(await readFile(record, "utf8"))).toEqual({
+			version: 8,
+			offer: [
+				{ name: "ceralive-apt-credentials", arch: "arm64", version: "1.0.1" },
+			],
+		});
+		// And while 1.0.1 is unpacked but not configured, the check is not complete.
+		await backend.setApt({
+			installed: [credentials("1.0.1", "1.0.1")],
+			dpkgStatus: { "ceralive-apt-credentials": "iF " },
+		});
+		await backend.check();
+		await sync(opened);
+		expect(holding(opened)).toEqual([true, true]);
+		expect(removals(opened)).toEqual([0, 0]);
+		// Control: once configured, dpkg shows 1.0.1 installed at the offered version.
+		await backend.setApt({ installed: [credentials("1.0.1", "1.0.1")] });
+		await backend.check();
+		await sync(opened);
+		expect(holding(opened)).toEqual([false, false]);
+		expect(removals(opened)).toEqual([1, 1]);
+	},
+	budget(3),
+);

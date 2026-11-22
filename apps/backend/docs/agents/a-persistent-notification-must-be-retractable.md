@@ -242,10 +242,21 @@ offer. Unknown always keeps the offer.
 | The readback | #664's `targetsAttained` (`software-update-outcome.ts`): one complete `dpkg-query -W`, each offered instance (name and architecture) `ii ` or `hi `, `dpkg --compare-versions <installed> ge <offered>` exiting 0. 5 s per command, 20 s in all. A check that recorded another offer while dpkg was read wins. |
 | Conclusive | The refresh exits 0 with no `Err:`, `E:`, failed-fetch or stale-index line and no captive signature, and hit or fetched the `InRelease`/`Release` of **every** CeraLive source the check's own `apt-cache policy` inventory lists (same URI and suite), with no `Ign:`/`Err:` for it. Legacy: `dist-upgrade --assume-no` exits 0, or 1 after its own `Abort.`, with no `E:`; not the kept-back fallback; the upgrade and NEW lists name exactly what the summary counts, each once. Capable: one summary line and exactly the `Inst`/`Remv` rows it counts; another architecture's instance of a roster package is unknown. |
 | Complete | Conclusive, APT reports no package a transaction left unfinished (no `N not fully installed or removed.` line: an unpacked or half-configured package's setup is still pending, with no `Inst` row and no newer candidate), the kept-back list names exactly what the summary counts as not upgraded, and no first-party name it, the upgrade, NEW, REMOVED or DOWNGRADED list carries is left out of the offer (a held or solver-kept-back package, a new install, a removal or downgrade, another architecture; capable refuses removals and its summary admits no downgrade). Anything less is unknown: a verified subset is not shown, recorded, dismissable or proven installed in place of the standing offer, and "nothing pending" is not read as none. |
-| The offer | What the check found Install would take, each an exact instance. Capable: every first-party row of the check's own discovery, actionable with origin `apt.ceralive.tv`, its instance the check's own simulated `Inst` row (`admittedTargets`). Legacy: the actionable first-party names, each with its `apt-cache policy` candidate from CeraLive's own source and that candidate's architecture from `apt-cache show --no-all-versions` (exactly one record of that name and version). One unverified row makes the verdict unknown. |
+| The offer | What the check found Install would take, each an exact instance (which names count: the eligibility table below). Capable: every first-party row of the check's own discovery, actionable with origin `apt.ceralive.tv`, its instance the check's own simulated `Inst` row (`admittedTargets`). Legacy: the actionable first-party names, each with its `apt-cache policy` candidate from CeraLive's own source and that candidate's architecture from `apt-cache show --no-all-versions` (exactly one record of that name and version). One unverified row makes the verdict unknown. |
 | Identity and record | Dismissal key `update:<name:arch=version,...>`, sorted. `ceralive_update_offer.json` is `{version:8, offer:[{name,arch,version}]|null}`, written only by a complete check, before anything is broadcast, validated by the writer with the reader's schema and limits. It is read only by the next check's "none" (dpkg must show it installed). No proof is ever stored. |
 | Dismissal | `releaseScoped`: `notifications.dismiss` carries the shown `revision` and `publisher`; only the current release is dismissed durably, and then removed from connected tabs (each was sent that copy). A tab that logs in later is not told. The store writes before it remembers. |
 | Wire | Additive only: optional `revision`/`publisher` on the dismiss input and separate live removal frames (typed, then the pre-#183 bare name). The login frame is main's. |
+
+**Which packages count, per image.** Audited against main's two producers
+(`541ae1e2:software-updates.ts`) and each image's Install vector (#664's
+`targets`); no second list is kept.
+
+| Image | Main raised the banner for | Install takes | This notice counts as first-party |
+|---|---|---|---|
+| Capable | an actionable row named `ceralive-*` or `cerastream` (e.g. `ceralive-apt-credentials`) | every admitted row of the plan (`actionableAllPackages`), Debian ones included | `isFirstPartyPackage` (`apt-all-packages.ts`, the set this path already refuses to see held): any `ceralive-*`, `cerastream`, `srtla`, `libsrt1.5-ceralive`, `gstreamer1.0-libuvcsrc`, `gstreamer1.0-rockchip-ceralive`, `librga2-ceralive`, `modemmanager` and its `libmm`/`libmbim`/`libqmi`/`libqrtr` libraries. It contains main's rule and the whole legacy roster, so no package main announced can be absent from a capable "none". Each must come from CeraLive's origin, or the check is unknown. |
+| Legacy | an upgraded package in the roster (`classifyPackageLayer`, `package-layer.ts`) | only roster names (`buildAptUpgradeArgs`) | the same roster. A non-roster package such as `ceralive-apt-credentials` is neither announced nor taken by legacy Install, so it neither raises the banner nor blocks a legacy "none", exactly as on main. |
+
+The record accepts any name `isFirstPartyPackage` admits (the roster is part of it).
 
 Limits, each a stale banner cleared by a later complete check while the tab is
 connected (checks run at boot, then about hourly), or by dismissing it:
@@ -296,7 +307,8 @@ backend's newer copy, a stored older offer during recovery, a tab logging in aft
 the update's own proof, a held package with and without a stored offer, three
 releases inside a second, a table of the same sequences over real processes, an
 install APT reports unfinished under main's banner (kept, then cleared once
-configured),
+configured), a credentials-only capable update under main's banner (kept while
+pending and unfinished, cleared once dpkg shows it configured at the candidate),
 records, early tabs, dismissal across restart, the largest committable offer,
 refused records and stores, failed writes); and the frontend half
 (`apps/frontend/src/tests/notification-recovery-ingestion.test.ts`,

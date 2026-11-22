@@ -36,7 +36,11 @@ import {
 	notificationExists,
 	notificationWithdraw,
 } from "../ui/notifications.ts";
-import { admittedTargets, candidateOrigin } from "./apt-all-packages.ts";
+import {
+	admittedTargets,
+	candidateOrigin,
+	isFirstPartyPackage,
+} from "./apt-all-packages.ts";
 import { policySources } from "./apt-all-source-policy.ts";
 import {
 	APT_PACKAGE_NAME_RE,
@@ -80,7 +84,8 @@ const offerSchema = z
 				name: z
 					.string()
 					.regex(APT_PACKAGE_NAME_RE)
-					.refine((name) => classifyPackageLayer(name) === "app"),
+					// Any first-party name either image offers (the legacy roster is part of it).
+					.refine(isFirstPartyPackage),
 				arch: z
 					.string()
 					.max(ARCH_LIMIT)
@@ -126,8 +131,13 @@ let persisted: string | undefined;
 let slotGeneration = 0;
 
 // Named for a first-party package, of any architecture.
-const firstPartyName = (name: string) =>
+// Legacy: the roster legacy Install takes and main's legacy check announced.
+const rosterName = (name: string) =>
 	classifyPackageLayer(name.split(":")[0] ?? "") === "app";
+// Capable: the first-party set the capable path already refuses to hold, which
+// contains main's capable announcement rule (`ceralive-*`, `cerastream`) and the roster.
+const capableFirstParty = (name: string) =>
+	isFirstPartyPackage(name.split(":")[0] ?? "");
 
 /**
  * The refresh hit or fetched the index of every CeraLive source the check's own
@@ -173,7 +183,7 @@ export function firstPartyOffer(
 ): CeraliveVerdict {
 	if (
 		keptBack === null ||
-		keptBack.some(firstPartyName) ||
+		keptBack.some(capableFirstParty) ||
 		!refreshedEveryCeraliveSource(refresh, policySources(sourcePolicy)) ||
 		!completePlan(simulation)
 	)
@@ -182,13 +192,13 @@ export function firstPartyOffer(
 	if (instances === null) return "unknown";
 	const offer: OfferedPackage[] = [];
 	for (const { name, version, origin, actionable } of packages) {
-		if (!firstPartyName(name)) continue;
+		if (!capableFirstParty(name)) continue;
 		const instance = instances.find(
 			(row) => row.name === name && row.version === version,
 		);
-		// Another architecture's instance of a roster package is not an offer Install takes.
+		// Another architecture's instance of a first-party package is not an offer Install takes.
 		if (
-			classifyPackageLayer(name) !== "app" ||
+			name.includes(":") ||
 			!actionable ||
 			origin !== FIRST_PARTY_APT_HOST ||
 			!instance
@@ -248,7 +258,7 @@ export async function legacyCeraliveOffer(
 	if (
 		keptBack === null ||
 		[...planned, ...keptBack].some(
-			(name) => firstPartyName(name) && !names.includes(name),
+			(name) => rosterName(name) && !names.includes(name),
 		)
 	)
 		return "unknown";
