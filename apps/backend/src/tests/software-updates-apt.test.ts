@@ -513,6 +513,7 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 				outputPaths: paths,
 				readRecordedOutcome: async () => null,
 				recordOutcome: async () => {},
+				beginAttempt: async () => {},
 				prepareOutput: async () => {
 					files.set(paths.stdout, new Uint8Array());
 					files.set(paths.stderr, new Uint8Array());
@@ -568,6 +569,7 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 				},
 				readRecordedOutcome: async () => null,
 				recordOutcome: async () => {},
+				beginAttempt: async () => {},
 				prepareOutput: async () => {
 					prepared++;
 				},
@@ -612,6 +614,7 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 				},
 				readRecordedOutcome: async () => null,
 				recordOutcome: async () => {},
+				beginAttempt: async () => {},
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
@@ -662,6 +665,7 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 				outputPaths: paths,
 				readRecordedOutcome: async () => null,
 				recordOutcome: async () => {},
+				beginAttempt: async () => {},
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
@@ -724,6 +728,7 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 				outputPaths: paths,
 				readRecordedOutcome: async () => null,
 				recordOutcome: async () => {},
+				beginAttempt: async () => {},
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
@@ -775,6 +780,7 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 				outputPaths: paths,
 				readRecordedOutcome: async () => null,
 				recordOutcome: async () => {},
+				beginAttempt: async () => {},
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
@@ -815,6 +821,7 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 				},
 				readRecordedOutcome: async () => null,
 				recordOutcome: async () => {},
+				beginAttempt: async () => {},
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {
@@ -870,6 +877,7 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 				outputPaths: paths,
 				readRecordedOutcome: async () => null,
 				recordOutcome: async () => {},
+				beginAttempt: async () => {},
 				prepareOutput: async () => {
 					prepared++;
 				},

@@ -169,6 +169,7 @@ import {
 	observeSoftwareUpdateWithoutOwning,
 	periodicCheckForSoftwareUpdates,
 	recoverSoftwareUpdateIfRunning,
+	settleSoftwareUpdateRecoveryIfUnitAbsent,
 } from "./modules/system/software-updates.ts";
 import {
 	ensureSshPasswordProvisioned,
@@ -516,6 +517,11 @@ void guardNonCritical("update-bootstrap", () =>
 	runUpdateBootstrap({
 		start: async () => {
 			await guardNonCritical("update-orchestrator", startUpdateOrchestrator);
+			// A gone unit needs no adjudication to tell the tab its outcome.
+			void guardNonCritical(
+				"software-update-absent-settle",
+				settleSoftwareUpdateRecoveryIfUnitAbsent,
+			);
 			const admitted = await awaitUpdateStartupAdjudication();
 			// A refused bootstrap never owns the unit; it still shows the tab its outcome.
 			if (!admitted) void observeSoftwareUpdateWithoutOwning();

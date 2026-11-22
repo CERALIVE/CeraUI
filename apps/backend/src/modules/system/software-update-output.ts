@@ -28,14 +28,19 @@ export type SoftwareUpdateOutputPaths = {
 export type RecordedSoftwareUpdateOutcome = {
 	readonly exitCode: number;
 	readonly at: number;
+	/** The attempt that owned the record when this exit was written. */
+	readonly attempt?: string;
 };
 
 const OUTCOME_FILE = "software-update.outcome";
 const OUTCOME_MAX_BYTES = 1024;
-const recordedOutcomeSchema = z.object({
+// Below this much free space on /run the unit gets no status channel at all.
+export const STATUS_FREE_BYTES_FLOOR = 4 * 1024 * 1024;
+const recordSchema = z.object({
 	schema: z.literal(1),
-	exitCode: z.number().int().min(0).max(255),
-	at: z.number().int().nonnegative(),
+	attempt: z.string().max(64).optional(),
+	exitCode: z.number().int().min(0).max(255).optional(),
+	at: z.number().int().nonnegative().optional(),
 });
 
 export type SoftwareUpdateOutputRead = {
@@ -114,6 +119,7 @@ async function createOutputFile(
 export async function prepareSoftwareUpdateOutput(
 	paths: SoftwareUpdateOutputPaths,
 	expectedUid = 0,
+	statusFreeBytesFloor = STATUS_FREE_BYTES_FLOOR,
 ): Promise<{ readonly status: boolean }> {
 	const files = [paths.stdout, paths.stderr, paths.status];
 	const directories = new Set(files.map((file) => path.dirname(file)));
@@ -131,12 +137,17 @@ export async function prepareSoftwareUpdateOutput(
 		);
 	}
 	await secureOutputDirectory(directory, expectedUid);
-	// A new unit's outcome is unknown until its own observer records it.
-	await fs.rm(softwareUpdateOutcomePath(paths), { force: true });
 	await createOutputFile(paths.stdout, expectedUid);
 	await createOutputFile(paths.stderr, expectedUid);
 	// Progress is display only: a status file that cannot be made never blocks apt.
 	try {
+		// A full /run would turn a status write into APT's own failure.
+		const space = await fs.statfs(directory);
+		if (space.bavail * space.bsize < statusFreeBytesFloor) {
+			await fs.rm(paths.status, { force: true });
+			logger.warn("Software update: /run is nearly full; showing phases only");
+			return { status: false };
+		}
 		await createOutputFile(paths.status, expectedUid);
 		return { status: true };
 	} catch (error) {
@@ -156,26 +167,71 @@ export function softwareUpdateOutcomePath(
 	return path.join(path.dirname(paths.stdout), OUTCOME_FILE);
 }
 
+async function writeRecord(
+	paths: SoftwareUpdateOutputPaths,
+	record: z.infer<typeof recordSchema>,
+	expectedUid: number,
+): Promise<void> {
+	const target = softwareUpdateOutcomePath(paths);
+	const pending = `${target}.part`;
+	await createOutputFile(pending, expectedUid, JSON.stringify(record));
+	await fs.rename(pending, target);
+}
+
+/** The exit an observer saw, written under the attempt that owns the record. */
 export async function writeSoftwareUpdateOutcome(
 	paths: SoftwareUpdateOutputPaths,
 	outcome: RecordedSoftwareUpdateOutcome,
 	expectedUid = 0,
 ): Promise<void> {
-	const target = softwareUpdateOutcomePath(paths);
-	const pending = `${target}.part`;
-	await createOutputFile(
-		pending,
+	const attempt = (await readRecord(paths, expectedUid).catch(() => null))
+		?.attempt;
+	await writeRecord(
+		paths,
+		{
+			schema: 1,
+			exitCode: outcome.exitCode,
+			at: outcome.at,
+			...(attempt ? { attempt } : {}),
+		},
 		expectedUid,
-		JSON.stringify({ schema: 1, ...outcome }),
 	);
-	await fs.rename(pending, target);
 }
 
-/** null: no observer recorded this unit's exit. */
+/** A new attempt owns the record before its preflight: no older exit survives it. */
+export async function beginSoftwareUpdateAttempt(
+	paths: SoftwareUpdateOutputPaths,
+	attempt: string,
+	expectedUid = 0,
+): Promise<void> {
+	try {
+		await writeRecord(paths, { schema: 1, attempt }, expectedUid);
+	} catch (error) {
+		// No new record: the old one must go, or the attempt cannot start.
+		await fs.rm(softwareUpdateOutcomePath(paths), { force: true });
+		logger.warn("Software update: attempt not recorded", { error });
+	}
+}
+
+/** null: no observer recorded an exit for the current attempt. */
 export async function readSoftwareUpdateOutcome(
 	paths: SoftwareUpdateOutputPaths,
 	expectedUid = 0,
 ): Promise<RecordedSoftwareUpdateOutcome | null> {
+	const record = await readRecord(paths, expectedUid);
+	return record?.exitCode === undefined || record.at === undefined
+		? null
+		: {
+				exitCode: record.exitCode,
+				at: record.at,
+				...(record.attempt ? { attempt: record.attempt } : {}),
+			};
+}
+
+async function readRecord(
+	paths: SoftwareUpdateOutputPaths,
+	expectedUid: number,
+): Promise<z.infer<typeof recordSchema> | null> {
 	const file = softwareUpdateOutcomePath(paths);
 	let handle: fs.FileHandle;
 	try {
@@ -198,12 +254,12 @@ export async function readSoftwareUpdateOutcome(
 				"not a private root-owned record",
 			);
 		}
-		const parsed = recordedOutcomeSchema.safeParse(
+		const parsed = recordSchema.safeParse(
 			JSON.parse(await handle.readFile("utf8")),
 		);
 		if (!parsed.success)
 			throw new UnsafeSoftwareUpdateOutputPathError(file, "malformed record");
-		return { exitCode: parsed.data.exitCode, at: parsed.data.at };
+		return parsed.data;
 	} finally {
 		await handle.close();
 	}

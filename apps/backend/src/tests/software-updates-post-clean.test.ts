@@ -173,6 +173,7 @@ describe("best-effort post-clean", () => {
 						),
 					readRecordedOutcome: async () => null,
 					recordOutcome: async () => {},
+					beginAttempt: async () => {},
 					prepareOutput: async () => {
 						throw new Error("must not prepare");
 					},

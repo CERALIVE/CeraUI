@@ -11,6 +11,7 @@
 import { spawnWithTimeout } from "../../helpers/spawn-policy.ts";
 import { classifyPackageLayer } from "./package-layer.ts";
 import {
+	beginSoftwareUpdateAttempt,
 	prepareSoftwareUpdateOutput,
 	type RecordedSoftwareUpdateOutcome,
 	readSoftwareUpdateOutcome,
@@ -88,6 +89,8 @@ export type DetachedAptServiceDeps = {
 	readonly recordOutcome: (
 		outcome: RecordedSoftwareUpdateOutcome,
 	) => Promise<void>;
+	/** Make `attempt` the record's owner; an older attempt's exit is dropped. */
+	readonly beginAttempt: (attempt: string) => Promise<void>;
 };
 
 function assertTrustedOutputPaths(
@@ -244,5 +247,6 @@ export function defaultDetachedAptServiceDeps(): DetachedAptServiceDeps {
 		sleep: Bun.sleep,
 		readRecordedOutcome: () => readSoftwareUpdateOutcome(paths),
 		recordOutcome: (outcome) => writeSoftwareUpdateOutcome(paths, outcome),
+		beginAttempt: (attempt) => beginSoftwareUpdateAttempt(paths, attempt),
 	};
 }

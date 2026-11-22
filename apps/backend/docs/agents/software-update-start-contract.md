@@ -66,7 +66,12 @@ Post-acceptance limits: root AGENTS.md D8 Known gaps (c).
   the unit; a recorded finished unit is never adopted again (no second
   restart), an absent unit's fresh record is replayed once per boot, and a
   restart is withheld when neither retirement nor the record succeeded.
-  Retirement is retried; a launch retires only a recorded leftover.
+  Retirement and the record write are retried; a launch retires only a
+  recorded leftover. Each attempt takes the record (new attempt id, no exit)
+  before preflight, so an older exit is never replayed for it; an attempt
+  that cannot take the record, or finds a registered unit, is refused. Below
+  4 MiB free on `/run` there is no status channel. A pending boot whose unit
+  is absent settles from the record without waiting for adjudication.
 - **Reattachment identity is a safety boundary.** Adoption requires the
   exact unit id and transient fragment path, transient-service description/type,
   exact non-duplicated `[Service]` stdout/stderr append destinations, no pre/post

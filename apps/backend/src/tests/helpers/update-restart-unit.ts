@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { open, readFile, rm, writeFile } from "node:fs/promises";
 import {
+	beginSoftwareUpdateAttempt,
 	prepareSoftwareUpdateOutput,
 	readSoftwareUpdateOutcome,
 	SOFTWARE_UPDATE_OUTPUT_READ_BYTES,
@@ -41,6 +42,7 @@ export function restartTestUnit(
 		outputPaths: fixed,
 		readRecordedOutcome: () => readSoftwareUpdateOutcome(local, uid),
 		recordOutcome: (outcome) => writeSoftwareUpdateOutcome(local, outcome, uid),
+		beginAttempt: (attempt) => beginSoftwareUpdateAttempt(local, attempt, uid),
 		prepareOutput: () => prepareSoftwareUpdateOutput(local, uid),
 		start: async (command) => {
 			const argv = command

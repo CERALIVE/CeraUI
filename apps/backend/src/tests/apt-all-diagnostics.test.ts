@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { logger } from "../helpers/logger.ts";
 import type { SpawnWithTimeoutResult } from "../helpers/spawn-policy.ts";
+import { setDetachedAptServiceDepsForTest } from "../modules/system/software-update-service.ts";
 import {
 	getUpdateState,
 	resetAptReachabilityProbeForTest,
@@ -21,6 +22,7 @@ import { UpdateQuarantine } from "../modules/system/update-orchestrator/quaranti
 import { setUpdateSettingsFilePathForTest } from "../modules/system/update-settings.ts";
 import * as notifications from "../modules/ui/notifications.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
+import { useNoHostUpdateUnit } from "./software-updates-preflight-harness.ts";
 
 useSessionOwnerForFile();
 const sentinel = "DISCOVERY_AUDIT_SENTINEL";
@@ -50,6 +52,7 @@ let notification: ReturnType<
 >;
 
 beforeEach(async () => {
+	useNoHostUpdateUnit();
 	// Given: a private capable image, explicit idle owner and argv-only APT port.
 	dir = await mkdtemp(join(tmpdir(), "apt-diag-"));
 	const capability = join(dir, "capabilities.json");
@@ -100,6 +103,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+	setDetachedAptServiceDepsForTest(null);
 	warn.mockRestore();
 	notification.mockRestore();
 	setAptCommandRunnerForTest(null);

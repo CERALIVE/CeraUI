@@ -238,6 +238,7 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 				},
 				readRecordedOutcome: async () => null,
 				recordOutcome: async () => {},
+				beginAttempt: async () => {},
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () =>
@@ -298,6 +299,7 @@ describe("detached apt unit hook identity on a real systemd show", () => {
 				},
 				readRecordedOutcome: async () => null,
 				recordOutcome: async () => {},
+				beginAttempt: async () => {},
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {

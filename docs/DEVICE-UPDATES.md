@@ -93,8 +93,18 @@ activity line resumes with APT's own number or none.
 
 The observer records the exit status it saw (`/run/ceralive/software-update.outcome`:
 exit code and time, root-owned, mode 0600) after its final read and before
-retiring the unit; a launch removes the record before it starts a new unit.
-Retirement is retried five times. A finished unit whose exit is recorded is
+retiring the unit; a failed write is retried five times and the exit is
+published either way. Every update attempt takes the record before its
+preflight (a fresh attempt id, no exit), so a restart during a new attempt's
+preflight or download never replays the previous attempt's success; when the
+record cannot be taken or removed, or any unit is still registered (a finished
+one is first retired only when its exit was recorded), the attempt is refused.
+Below 4 MiB free on `/run` the unit runs without a status channel (phases
+only), so a status write cannot meet a full `/run`; the remaining risk is a
+`/run` filled by something else during the install, the same risk the
+unit's stdout file already carries. While startup adjudication is pending, a
+unit that is already gone settles the tab at once from its recorded exit (or
+none). Retirement is retried five times. A finished unit whose exit is recorded is
 never adopted again: a later boot reports the recorded outcome, tries one
 retirement, marks boot degraded and never restarts CeraUI for it, so a unit
 whose `systemctl stop` keeps failing restarts CeraUI at most once. When

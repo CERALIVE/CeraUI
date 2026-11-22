@@ -10,7 +10,9 @@ import { setup } from "../modules/setup.ts";
 import { readArmedStreamMarker } from "../modules/streaming/armed-stream-marker.ts";
 import type { AptReachability } from "../modules/system/apt-reachability.ts";
 import { defaultAptSpaceDeps } from "../modules/system/apt-space-admission.ts";
+import { softwareUpdateOutputPaths } from "../modules/system/software-update-output.ts";
 import * as transaction from "../modules/system/software-update-process.ts";
+import { setDetachedAptServiceDepsForTest } from "../modules/system/software-update-service.ts";
 import * as updates from "../modules/system/software-updates.ts";
 import * as compat from "../rpc/compat.ts";
 import { observeTestUpdateExit } from "./software-update-exit-harness.ts";
@@ -21,6 +23,25 @@ export { TestUpdateExit } from "./software-update-exit-harness.ts";
 export const SPACE_TRANSCRIPT = `After this operation, 2 kB of additional disk space will be used.
 'https://repo.invalid/a.deb' a.deb 4000 SHA256:abc
 `;
+
+/** No host systemctl or /run: an update attempt finds no unit and owns the record. */
+export function useNoHostUpdateUnit(): void {
+	setDetachedAptServiceDepsForTest({
+		outputPaths: softwareUpdateOutputPaths(),
+		prepareOutput: async () => ({ status: true }),
+		start: async () => undefined,
+		inspect: async () => ({ kind: "absent" }),
+		cleanup: async () => undefined,
+		readOutput: async (_file, offset) => ({
+			bytes: new Uint8Array(),
+			nextOffset: offset,
+		}),
+		sleep: async () => undefined,
+		readRecordedOutcome: async () => null,
+		recordOutcome: async () => undefined,
+		beginAttempt: async () => undefined,
+	});
+}
 
 export async function updateHarness() {
 	const markerFixture = await armedMarkerFixture();
@@ -33,6 +54,7 @@ export async function updateHarness() {
 	delete process.env.MOCK_MODE;
 	setup.apt_update_enabled = true;
 	updates.resetSoftwareUpdateState();
+	useNoHostUpdateUnit();
 	const frames: StatusResponse[] = [];
 	let terminal = Promise.withResolvers<void>();
 	const restarted = Promise.withResolvers<void>();
@@ -210,6 +232,7 @@ export async function updateHarness() {
 			return markerFixture.read();
 		},
 		async [Symbol.asyncDispose]() {
+			setDetachedAptServiceDepsForTest(null);
 			updates.resetSoftwareUpdateState();
 			// Reset retires outcomes, not availability; withdraw the fixture's discovered packages too.
 			const emptyDiscovery = spyOn(

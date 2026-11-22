@@ -48,6 +48,7 @@ function unitDeps(
 		outputPaths: paths,
 		readRecordedOutcome: async () => null,
 		recordOutcome: async () => {},
+		beginAttempt: async () => {},
 		prepareOutput: async () => {},
 		start: async () => o.onStart?.(),
 		inspect: async () => {

@@ -113,7 +113,10 @@ import {
 	runLegacyPackageEffects,
 } from "./software-update-pending-effects.ts";
 import {
+	beginDetachedAptAttempt,
+	DetachedAptServiceAlreadyExistsError,
 	DetachedAptServiceCleanupError,
+	RECORDED_OUTCOME_REPLAY_MS,
 	recoverDetachedAptUpgrade,
 	runDetachedAptAll,
 	runDetachedAptUpgrade,
@@ -128,6 +131,10 @@ import {
 	type CommitExitHook,
 	finishSoftwareUpdateRestart,
 } from "./software-update-restart.ts";
+import {
+	type DetachedAptServiceDeps,
+	defaultDetachedAptServiceDeps,
+} from "./software-update-service.ts";
 import { isStreamConfirmedIdle } from "./stream-liveness-source.ts";
 import { reconcileAptChannel } from "./update-apt-channel.ts";
 import {
@@ -327,6 +334,26 @@ export function beginSoftwareUpdateRecovery(): void {
 
 function settleSoftwareUpdateRecovery(): void {
 	softUpdateRecoveryPending = false;
+}
+
+/**
+ * While startup adjudication is pending, a unit that is already gone cannot be
+ * observed: settle now from its recorded exit (or none), never hold the tab.
+ */
+export async function settleSoftwareUpdateRecoveryIfUnitAbsent(
+	deps: Pick<
+		DetachedAptServiceDeps,
+		"inspect" | "readRecordedOutcome"
+	> = defaultDetachedAptServiceDeps(),
+): Promise<void> {
+	if (!softUpdateRecoveryPending) return;
+	if ((await deps.inspect()).kind !== "absent") return;
+	const recorded = await deps.readRecordedOutcome();
+	if (!softUpdateRecoveryPending) return;
+	if (recorded && Date.now() - recorded.at < RECORDED_OUTCOME_REPLAY_MS)
+		adoptRecordedOutcome(recorded.exitCode);
+	settleSoftwareUpdateRecovery();
+	broadcastMsg("status", { updating: null, update_state: getUpdateState() });
 }
 
 /** A unit's exit that an earlier lifetime observed and recorded. */
@@ -1815,6 +1842,23 @@ async function prepareSoftwareUpdate(
 ): Promise<void> {
 	pendingPackageSuccess.assertEffectsAllowed();
 	if (!aptUpdatesEnabled() || !isStreamConfirmedIdle()) return;
+	// Before preflight: a restart from here on never replays an older exit.
+	try {
+		await beginDetachedAptAttempt();
+	} catch (error) {
+		logger.warn("Software update refused: an earlier update unit remains", {
+			error,
+		});
+		lastUpdateFailure = {
+			reason:
+				error instanceof DetachedAptServiceAlreadyExistsError
+					? "An earlier software update is still registered on the device."
+					: "The device could not record a new software update attempt.",
+		};
+		softUpdateStatus = null;
+		broadcastMsg("status", { updating: null, update_state: getUpdateState() });
+		return;
+	}
 
 	const capabilities = await readPackageCapabilities();
 	if (capabilities === null) {

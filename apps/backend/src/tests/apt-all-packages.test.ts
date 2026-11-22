@@ -685,6 +685,7 @@ describe("apt-all-packages admission", () => {
 				},
 				readRecordedOutcome: async () => null,
 				recordOutcome: async () => {},
+				beginAttempt: async () => {},
 				prepareOutput: async () => {},
 				start: async () => {
 					starts++;

@@ -7,6 +7,7 @@ import {
 	softwareUpdateOutputPaths,
 } from "../modules/system/software-update-output.ts";
 import {
+	beginDetachedAptAttempt,
 	DetachedAptServiceAlreadyExistsError,
 	DetachedAptServiceCleanupError,
 	type DetachedAptUpgradeDeps,
@@ -20,6 +21,7 @@ import {
 	recoverSoftwareUpdateIfRunning,
 	resetSoftwareUpdateState,
 	type SoftwareUpdateRecoveryDeps,
+	settleSoftwareUpdateRecoveryIfUnitAbsent,
 } from "../modules/system/software-updates.ts";
 import { buildInitialStatus } from "../rpc/procedures/status.procedure.ts";
 import { useSessionOwnerForFile } from "./helpers/bind-session-owner.ts";
@@ -53,7 +55,7 @@ function fakeUnit(o: {
 	failCleanup?: (attempt: number) => Error | undefined;
 	firstRead?: Promise<void>;
 	recorded?: RecordedSoftwareUpdateOutcome;
-	failRecord?: boolean;
+	failRecord?: boolean | number;
 	finished?: boolean;
 	onFinish?: () => void;
 }) {
@@ -71,17 +73,24 @@ function fakeUnit(o: {
 	const events: string[] = [];
 	const started: (readonly string[])[] = [];
 	let recorded = o.recorded ?? null;
+	let recordAttempts = 0;
 	const deps: DetachedAptUpgradeDeps = {
 		outputPaths: paths,
 		readRecordedOutcome: async () => recorded,
 		recordOutcome: async (outcome) => {
-			if (o.failRecord) throw new Error("ENOSPC: /run is full");
+			recordAttempts++;
+			if (
+				o.failRecord === true ||
+				(typeof o.failRecord === "number" && recordAttempts <= o.failRecord)
+			)
+				throw new Error("ENOSPC: /run is full");
 			events.push("record");
 			recorded = outcome;
 		},
-		prepareOutput: async () => {
+		beginAttempt: async () => {
 			recorded = null;
 		},
+		prepareOutput: async () => {},
 		start: async (command) => {
 			started.push(command);
 			state = "running";
@@ -140,6 +149,7 @@ function fakeUnit(o: {
 		events,
 		started,
 		recorded: () => recorded,
+		recordAttempts: () => recordAttempts,
 		cleaned: () => cleaned,
 		cleanupAttempts: () => cleanupAttempts,
 	};
@@ -607,4 +617,109 @@ test("the read after the unit is inactive is complete, so its last records are s
 	expect(await await reattach(unit)).toBe(0);
 	await h.settled();
 	expect(running(h.frames)).toEqual([installingAt(60), installingAt(90)]);
+});
+
+test("a restart during a new attempt's preflight never reports the earlier attempt's exit", async () => {
+	await using h = await updateHarness();
+	const unit = fakeUnit({
+		files: installing,
+		exitCode: 0,
+		live: true,
+		recorded: { exitCode: 0, at: Date.now() },
+	});
+	await beginDetachedAptAttempt(unit.deps);
+	beginSoftwareUpdateRecovery();
+	expect(await recoverSoftwareUpdateIfRunning(recoveryOf(unit))).toBe(false);
+	expect(buildInitialStatus().status.update_state?.kind).not.toBe("success");
+	expect(h.frames.at(-1)?.updating).toBeNull();
+	expect(h.restarts).toBe(0);
+});
+
+test.each([
+	["a running unit", {}, false],
+	["a finished unit nobody recorded", { finished: true }, false],
+	[
+		"a finished, recorded unit it retires first",
+		{ finished: true, recorded: { exitCode: 0, at: 1 } },
+		true,
+	],
+] as const)(
+	"an attempt starts past %s only when no unit is left",
+	async (_name, o, starts) => {
+		const unit = fakeUnit({ files: installing, exitCode: 0, ...o });
+		const begun = beginDetachedAptAttempt(unit.deps);
+		if (starts) {
+			await begun;
+			expect(unit.retired).toEqual(["stop"]);
+			expect(unit.recorded()).toBeNull();
+		} else {
+			await expect(begun).rejects.toBeInstanceOf(
+				DetachedAptServiceAlreadyExistsError,
+			);
+			expect(unit.cleaned()).toBe(0);
+		}
+	},
+);
+
+test.each([
+	["always", true, false],
+	["twice, then not", 2, true],
+] as const)(
+	"an outcome record that fails %s keeps the exit and retires the unit",
+	async (_name, failRecord, kept) => {
+		const unit = fakeUnit({
+			files: { stdout: "done\n", stderr: "", status: "" },
+			exitCode: 0,
+			live: true,
+			failRecord,
+		});
+		expect(await runDetachedAptAll(args, "any", quiet, unit.deps)).toBe(0);
+		expect(unit.recordAttempts()).toBe(kept ? 3 : 5);
+		expect(unit.recorded() !== null).toBe(kept);
+		expect(unit.retired).toEqual(["stop"]);
+	},
+);
+
+test("a truncated last record is never shown", async () => {
+	await using h = await updateHarness();
+	const unit = fakeUnit({
+		files: {
+			...installing,
+			status: `${dpkgExec}${pm("60.0000")}pmstatus:cerastream:9`,
+		},
+		exitCode: 0,
+		steps: [() => {}],
+	});
+	expect(await await reattach(unit)).toBe(0);
+	await h.settled();
+	expect(running(h.frames)).toEqual([installingAt(60)]);
+});
+
+test.each([
+	["its recorded success", { exitCode: 0, at: Date.now() }, "success"],
+	["no recorded exit", null, "available"],
+] as const)(
+	"a pending boot whose unit is gone settles from %s before adjudication",
+	async (_name, recorded, kind) => {
+		await using h = await updateHarness();
+		beginSoftwareUpdateRecovery();
+		expect(buildInitialStatus().status.updating).toBeUndefined();
+		await settleSoftwareUpdateRecoveryIfUnitAbsent({
+			inspect: async () => ({ kind: "absent" }),
+			readRecordedOutcome: async () => recorded,
+		});
+		expect(h.frames.at(-1)?.updating).toBeNull();
+		expect(buildInitialStatus().status.update_state?.kind).toBe(kind);
+	},
+);
+
+test("a pending boot whose unit still runs keeps waiting for the owner", async () => {
+	await using h = await updateHarness();
+	beginSoftwareUpdateRecovery();
+	await settleSoftwareUpdateRecoveryIfUnitAbsent({
+		inspect: async () => ({ kind: "running" }) as never,
+		readRecordedOutcome: async () => null,
+	});
+	expect(h.frames).toEqual([]);
+	expect(buildInitialStatus().status.updating).toBeUndefined();
 });

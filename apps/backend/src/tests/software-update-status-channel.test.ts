@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { buildAptAllInstallArgs } from "../modules/system/apt-all-packages.ts";
 import {
+	beginSoftwareUpdateAttempt,
 	prepareSoftwareUpdateOutput,
 	readSoftwareUpdateOutcome,
 	softwareUpdateOutcomePath,
@@ -116,7 +117,7 @@ describe("the detached unit writes APT status records to a private third file", 
 		}
 	});
 
-	test("a launch's prepared output starts with no recorded outcome", async () => {
+	test("a new attempt starts with no recorded outcome", async () => {
 		const directory = await mkdtemp(path.join(tmpdir(), "ceraui-outcome-"));
 		const uid = process.getuid?.() ?? 0;
 		const local = {
@@ -126,13 +127,20 @@ describe("the detached unit writes APT status records to a private third file", 
 		};
 		try {
 			await prepareSoftwareUpdateOutput(local, uid);
+			await beginSoftwareUpdateAttempt(local, "attempt-a", uid);
 			await writeSoftwareUpdateOutcome(local, { exitCode: 0, at: 1 }, uid);
 			expect(await readSoftwareUpdateOutcome(local, uid)).toEqual({
 				exitCode: 0,
 				at: 1,
+				attempt: "attempt-a",
 			});
-			await prepareSoftwareUpdateOutput(local, uid);
+			await beginSoftwareUpdateAttempt(local, "attempt-b", uid);
 			expect(await readSoftwareUpdateOutcome(local, uid)).toBeNull();
+			// Too little free space on /run: no status channel at all.
+			expect(
+				await prepareSoftwareUpdateOutput(local, uid, Number.MAX_SAFE_INTEGER),
+			).toEqual({ status: false });
+			expect(await Bun.file(local.status).exists()).toBe(false);
 		} finally {
 			await rm(directory, { recursive: true, force: true });
 		}

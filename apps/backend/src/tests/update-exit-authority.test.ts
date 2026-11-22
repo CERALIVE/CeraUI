@@ -184,6 +184,7 @@ test.each([undefined, "0garbage"])(
 				},
 				readRecordedOutcome: async () => null,
 				recordOutcome: async () => {},
+				beginAttempt: async () => {},
 				prepareOutput: async () => {},
 				start: async () => {},
 				inspect: async () => {

@@ -174,6 +174,7 @@ async function observe(
 		},
 		readRecordedOutcome: async () => null,
 		recordOutcome: async () => {},
+		beginAttempt: async () => {},
 		prepareOutput: async () => {},
 		readOutput: async (path, offset) => {
 			const file =

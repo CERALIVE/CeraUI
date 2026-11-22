@@ -8,6 +8,7 @@
 	(at your option) any later version.
 */
 
+import { randomUUID } from "node:crypto";
 import type { RecordedSoftwareUpdateOutcome } from "./software-update-output.ts";
 import {
 	buildDetachedAptAllCommand,
@@ -24,6 +25,7 @@ export { buildDetachedAptUpgradeCommand } from "./software-update-service.ts";
 const OUTPUT_POLL_INTERVAL_MS = 250;
 const FINAL_DRAIN_MAX_FAILURES = 20;
 const RETIRE_ATTEMPTS = 5;
+const RECORD_ATTEMPTS = 5;
 // 16 MiB per file per poll; a backlog beyond that is caught up on later polls.
 const MAX_READS_PER_DRAIN = 256;
 const INSPECT_RETRY_MAX_MS = 30_000;
@@ -307,19 +309,25 @@ async function observeDetachedAptUpgrade(
 		if (tail.length > 0) cursor.emit(tail);
 	}
 	handlers.onDrained?.(caughtUp);
-	// APT has exited, so this read was complete; record before retiring.
-	const outcomeRecorded = await deps
-		.recordOutcome({
-			exitCode: state.exitCode,
-			at: deps.now?.() ?? Date.now(),
-		})
-		.then(
-			() => true,
-			(error: unknown) => {
-				reportObserverError(handlers, error);
-				return false;
-			},
-		);
+	// APT has exited, so this read was complete; record before retiring. The
+	// exit itself is returned either way: a failed record only loses the replay.
+	let outcomeRecorded = false;
+	for (
+		let attempt = 1;
+		attempt <= RECORD_ATTEMPTS && !outcomeRecorded;
+		attempt++
+	) {
+		try {
+			await deps.recordOutcome({
+				exitCode: state.exitCode,
+				at: deps.now?.() ?? Date.now(),
+			});
+			outcomeRecorded = true;
+		} catch (error) {
+			reportObserverError(handlers, error);
+			if (attempt < RECORD_ATTEMPTS) await deps.sleep(OUTPUT_POLL_INTERVAL_MS);
+		}
+	}
 	if (options.retire !== false)
 		await retireDetachedAptUnit(state, handlers, deps, outcomeRecorded);
 	return state.exitCode;
@@ -351,6 +359,30 @@ async function launchDetachedAptUnit(
 		handlers,
 		deps,
 	);
+}
+
+/**
+ * Starts an update attempt before its preflight: no unit may be registered
+ * (a finished one is retired only when its exit was recorded), and the
+ * attempt takes the outcome record, so an older exit is never this one's.
+ */
+export async function beginDetachedAptAttempt(
+	deps: DetachedAptUpgradeDeps = defaultDetachedAptServiceDeps(),
+): Promise<void> {
+	const existing = await deps.inspect();
+	if (existing.kind === "running")
+		throw new DetachedAptServiceAlreadyExistsError();
+	if (existing.kind === "finished") {
+		if (!(await deps.readRecordedOutcome()))
+			throw new DetachedAptServiceAlreadyExistsError();
+		const quiet = { onStdout: () => undefined, onStderr: () => undefined };
+		await retireDetachedAptUnit(existing, quiet, deps, true).catch(() => {
+			throw new DetachedAptServiceAlreadyExistsError();
+		});
+		if ((await deps.inspect()).kind !== "absent")
+			throw new DetachedAptServiceAlreadyExistsError();
+	}
+	await deps.beginAttempt(randomUUID());
 }
 
 export async function runDetachedAptUpgrade(
