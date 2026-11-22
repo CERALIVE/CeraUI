@@ -19,12 +19,16 @@ import type {
 	Subscription,
 } from "@ceralive/cerastream";
 import { SCHEMA_VERSION } from "@ceralive/cerastream";
-import type { AudioLevelMessage, CaptureDevice } from "@ceraui/rpc/schemas";
+import type { AudioLevelMessage } from "@ceraui/rpc/schemas";
 import { AUDIO_SOURCE_AUTO } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 
 import { initMockService, stopMockService } from "../mocks/mock-service.ts";
-import { getConfig } from "../modules/config.ts";
+import {
+	getConfig,
+	getConfigFilePath,
+	setConfigFilePath,
+} from "../modules/config.ts";
 import {
 	getAudioDevices,
 	isMeterPreferenceDevicePresent,
@@ -41,7 +45,13 @@ import {
 	settleAudioMeterBridge,
 	stopAudioMeterBridge,
 } from "../modules/streaming/audio-meter-bridge.ts";
-import type { AutoAsrcResolution } from "../modules/streaming/auto-audio.ts";
+import {
+	type AutoAsrcResolution,
+	getResolvedAsrc,
+	resetAutoAudioState,
+	resolveAutoAsrcFromLiveState,
+	setResolvedAsrcFromStart,
+} from "../modules/streaming/auto-audio.ts";
 import { clearCapabilitiesCache } from "../modules/streaming/capabilities.ts";
 import {
 	initPipelines,
@@ -49,6 +59,7 @@ import {
 } from "../modules/streaming/pipelines.ts";
 import {
 	applyObservedEngineDevices,
+	refreshEngineDeviceCache,
 	resetEngineDeviceCache,
 } from "../modules/streaming/sources.ts";
 import {
@@ -56,7 +67,10 @@ import {
 	seedStreamLifecycleState,
 } from "../modules/streaming/stream-lifecycle-status.ts";
 import { updateStatus } from "../modules/streaming/streaming.ts";
-import { setConfigProcedure } from "../rpc/procedures/streaming.procedure.ts";
+import {
+	applySwitchInputFollow,
+	setConfigProcedure,
+} from "../rpc/procedures/streaming.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 
 /*
@@ -356,6 +370,10 @@ const hdmiProgramLevel = {
 	seq: 8,
 	...hdmiProgramPayload,
 } satisfies EventParams;
+const usbProgramPayload = {
+	...foreignUsbPayload,
+	source: { identity: `card:${USB_CARD_ID}`, owner: "streaming" },
+} satisfies AudioLevelMessage;
 
 describe("audio-meter bridge — HDMI+Auto never draws another card's bars", () => {
 	let root: string | undefined;
@@ -507,12 +525,12 @@ function provide() {
 	};
 }
 
-function videoDevice(inputId: string, kind: string): CaptureDevice {
+function videoDevice(inputId: string, kind: "hdmi" | "uvc_h264") {
 	return {
 		input_id: inputId,
 		device_path: `/dev/${inputId}`,
 		display_name: inputId,
-		media_class: "video",
+		media_class: "video" as const,
 		kind,
 		caps: [
 			{
@@ -522,8 +540,7 @@ function videoDevice(inputId: string, kind: string): CaptureDevice {
 				media_type: "video/x-h264",
 			},
 		],
-		// biome-ignore lint/suspicious/noExplicitAny: only the fields buildSources reads.
-	} as any;
+	};
 }
 
 /*
@@ -540,6 +557,9 @@ describe("HDMI Auto meter — live source and audio inventory", () => {
 	let priorSource: string | undefined;
 	let priorAsrc: string | undefined;
 	let priorPipeline: string | undefined;
+	let priorVideoInput: string | undefined;
+	let priorSourceAnchor: string | undefined;
+	let priorConfigFile: string;
 	let priorLifecycle: ReturnType<typeof getStreamLifecycleState>;
 
 	beforeAll(async () => {
@@ -557,6 +577,10 @@ describe("HDMI Auto meter — live source and audio inventory", () => {
 		priorSource = config.source;
 		priorAsrc = config.asrc;
 		priorPipeline = config.pipeline;
+		priorVideoInput = config.selected_video_input;
+		priorSourceAnchor = config.source_stable_id;
+		priorConfigFile = getConfigFilePath();
+		setConfigFilePath(join(root, "config.json"));
 		resetEngineDeviceCache();
 		config.asrc = AUDIO_SOURCE_AUTO;
 		config.source = undefined;
@@ -568,6 +592,10 @@ describe("HDMI Auto meter — live source and audio inventory", () => {
 		config.source = priorSource;
 		config.asrc = priorAsrc;
 		config.pipeline = priorPipeline;
+		config.selected_video_input = priorVideoInput;
+		config.source_stable_id = priorSourceAnchor;
+		setConfigFilePath(priorConfigFile);
+		resetAutoAudioState();
 		resetEngineDeviceCache();
 		updateStatus(false);
 		seedStreamLifecycleState(priorLifecycle);
@@ -701,4 +729,105 @@ describe("HDMI Auto meter — live source and audio inventory", () => {
 		]);
 		expect(h.broadcasts).toEqual([{ unavailable: true, reason: "handoff" }]);
 	});
+
+	test.each(["0.21.0", SCHEMA_VERSION])(
+		"keeps the USB program level after a live switch and HDMI PCM restoration (schema %s)",
+		async (schemaVersion) => {
+			if (root === undefined) throw new Error("missing ALSA fixture");
+			const physical_group_id = "usb:1-1";
+			await refreshEngineDeviceCache({
+				fetchEngineDevices: async () => ({
+					devices: [
+						videoDevice("video0", "hdmi"),
+						{ ...videoDevice("video1", "uvc_h264"), physical_group_id },
+						{
+							input_id: "usb-audio-1",
+							device_path: "",
+							display_name: "USB audio",
+							media_class: "audio",
+							kind: "audio",
+							alsa_card_id: USB_CARD_ID,
+							physical_group_id,
+						},
+					],
+				}),
+			});
+			getConfig().source = "video1";
+			const usbPick = pickerKeyFor(USB_CARD_ID);
+			const start = resolveAutoAsrcFromLiveState();
+			expect(start.asrcKey).toBe(usbPick);
+			setResolvedAsrcFromStart(start.asrcKey, start.reason);
+			seedStreamLifecycleState("streaming");
+			updateStatus(true);
+
+			const h = bridgeHarness(undefined, schemaVersion);
+			initAudioMeterBridge(h.deps);
+			await settleAudioMeterBridge();
+			h.emit({ type: "audio-level", seq: 1, ...usbProgramPayload });
+			const switched = applySwitchInputFollow("video0", {
+				success: true,
+				active_input: "video0",
+				gap_ms: 8,
+			});
+			expect(switched.audio_follow_pending).toBe(true);
+			expect(getConfig().source).toBe("video0");
+
+			await updateAudioDevices(root);
+			h.emit({ type: "audio-level", seq: 2, ...usbProgramPayload });
+			expect(h.reloads.at(-1)).toEqual({ audio: { meter_device: null } });
+			expect(h.broadcasts).toEqual([
+				usbProgramPayload,
+				{ unavailable: true, reason: "handoff" },
+				usbProgramPayload,
+			]);
+			const afterSwitch = h.broadcasts.length - 1;
+
+			await mkdir(join(root, "card3", "pcmC3D0c"));
+			await updateAudioDevices(root);
+			h.emit({ type: "audio-level", seq: 3, ...usbProgramPayload });
+
+			expect(getResolvedAsrc()).toBe(usbPick);
+			expect(h.reloads.at(-1)).toEqual({
+				audio: { meter_device: `hw:CARD=${HDMI_CARD_ID}` },
+			});
+			expect(h.broadcasts.slice(afterSwitch)).toEqual([
+				usbProgramPayload,
+				{ unavailable: true, reason: "handoff" },
+				usbProgramPayload,
+			]);
+		},
+	);
+
+	test.each(["starting", "stopping", "idle"] as const)(
+		"uses each frame's owner across a handoff while control reports %s",
+		async (lifecycle) => {
+			if (root === undefined) throw new Error("missing ALSA fixture");
+			applyObservedEngineDevices([videoDevice("video0", "hdmi")]);
+			getConfig().source = "video0";
+			seedStreamLifecycleState(lifecycle);
+			const h = bridgeHarness();
+			initAudioMeterBridge(h.deps);
+			await settleAudioMeterBridge();
+
+			await mkdir(join(root, "card3", "pcmC3D0c"));
+			await updateAudioDevices(root);
+			h.emit({ type: "audio-level", seq: 1, ...usbProgramPayload });
+			h.emit({
+				type: "audio-level",
+				seq: 2,
+				unavailable: true,
+				reason: "handoff",
+			});
+			h.emit({ type: "audio-level", seq: 3, ...usbProgramPayload });
+			h.emit({ ...foreignUsbLevel, seq: 4 });
+
+			expect(h.broadcasts).toEqual([
+				{ unavailable: true, reason: "handoff" },
+				usbProgramPayload,
+				{ unavailable: true, reason: "handoff" },
+				usbProgramPayload,
+				{ unavailable: true, reason: "not_selected_device" },
+			]);
+		},
+	);
 });
