@@ -69,18 +69,19 @@ edges are delivered without it.
 
 That transient refusal does not close the Prepare gate or fail a pending
 config/mode operation. The frontend waits at most three seconds for the next
-status frame for the row and retries the same call once with that frame's
-token. A token-less frame selects `hotspotConfirm.bindingUnsupported` and
-sends no request; a missing frame expires to that same state. A second refusal
-uses the existing reloaded-details handling. Closing the owner or changing
-device/link retires the waiting request. There is no automatic retry loop.
-Before resending, the retry moves its pending operation to the new token's key,
-so the echoed terminal frame, pending protection and a deferred failure follow
-the resent request. If another operation already holds the retry's key, either
-the new token's key or its own key taken over by another client's transition,
-the retry is not sent and the first refusal takes the existing changed-radio
-handling. A rejected Prepare resend fails against the binding it was
-accepted under.
+status frame for the row and retries the same call once only if its original
+token still matches the frame and the current view. If the token changes,
+the original operation ends; the editor reloads, and an activation or AP
+mode switch needs fresh acknowledgement. A setup gate loads the replacement's
+details without the old draft and without inheriting its retry. A token-less
+frame or an expired wait selects `hotspotConfirm.bindingUnsupported` and
+sends no request. A second refusal uses the existing reloaded-details
+handling. Closing the owner or changing device/link retires the wait. There
+is no automatic retry loop. The retry stays on its original key, and is not
+sent if another transition has taken over that key.
+An open Start or mode confirmation, including the inline warning before dropping
+an uplink, keeps the dialog's consent slot; the other action cannot open a
+second confirmation while it is occupied.
 
 Configure keeps this same recovery owner alive after the RPC dispatch
 acknowledgement until its captured config terminal arrives. A deferred
@@ -109,8 +110,8 @@ revive a cancelled Save. Every delivered captured terminal drains its local
 reservation before filtering by the displayed token. Repeated token rotations
 therefore retain no records for terminals already delivered.
 
-A terminal outcome received before handoff prevents a resend, including one
-under the same token; the existing confirmed or failed state remains visible.
+A terminal outcome received before the retry prevents a resend; the existing
+confirmed or failed state remains visible.
 The abandoned retry does not replace that feedback with its earlier refusal.
 Attempt ownership belongs to one begin identity. A pending mode echo replaces
 that identity even when its key and target match, so a losing RPC cannot settle
