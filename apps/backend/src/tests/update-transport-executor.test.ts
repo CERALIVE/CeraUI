@@ -12,16 +12,21 @@ function inventoryReply(argv: string[], ...records: readonly string[]) {
 	expect(fieldOption).toBeGreaterThan(0);
 	const fields = argv[fieldOption + 1] ?? "";
 	assertNmDeviceShowFields(fields);
-	const requested = new Set(fields.split(","));
+	const requested = fields.split(",");
 	return {
 		exitCode: 0,
 		stdout: records
-			.map((record) =>
-				record
-					.split("\n")
-					.filter((line) => requested.has(line.slice(0, line.indexOf(":"))))
-					.join("\n"),
-			)
+			.map((record) => {
+				const lines = new Map(
+					record
+						.split("\n")
+						.map((line) => [line.slice(0, line.indexOf(":")), line]),
+				);
+				// An allowed field still has a row when this fixture has no value for it.
+				return requested
+					.map((field) => lines.get(field) ?? `${field}:--`)
+					.join("\n");
+			})
 			.join("\n\n"),
 		stderr: "",
 	};
