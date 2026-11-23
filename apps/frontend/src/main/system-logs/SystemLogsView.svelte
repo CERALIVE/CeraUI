@@ -219,7 +219,8 @@ $effect(() => {
 			<Tabs.Root class="min-h-0 flex-1 gap-0" onValueChange={selectTab} value={current}>
 				<!-- Below 640 px each tab takes its label's width, so a long label (Spanish at 375 px) keeps to two lines,
 				     and the toolbar takes its own row above the tabs so their underline stays on the rule. The toolbar comes
-				     first in the DOM, so Tab still goes from the tabs straight into the panel; from 640 px it shows at the row's end. -->
+				     first in the DOM, so Tab still goes from the tabs straight into the panel; from 640 px it shows at the row's end.
+				     On short screens, tab and toolbar sizes must settle immediately: resizing aligns the Raw results to that geometry. -->
 				<div class="flex flex-wrap items-end gap-x-3 border-b px-4">
 					<SharingToolbar
 						bind:bundleButton={toolbarBundle}
@@ -236,7 +237,7 @@ $effect(() => {
 						{#each tabs as tab (tab)}
 							<!-- bits-ui sets data-state, not the primitive's data-active, so the selected look is set here. -->
 							<Tabs.Trigger
-								class="h-auto min-h-(--touch-target-min) whitespace-normal text-center max-sm:flex-auto sm:whitespace-nowrap data-[state=active]:text-foreground dark:data-[state=active]:text-foreground data-[state=active]:after:opacity-100"
+								class="h-auto min-h-(--touch-target-min) whitespace-normal text-center max-sm:flex-auto sm:whitespace-nowrap data-[state=active]:text-foreground dark:data-[state=active]:text-foreground data-[state=active]:after:opacity-100 short-logs:transition"
 								value={tab}
 							>
 								{TAB_LABELS[tab]()}
