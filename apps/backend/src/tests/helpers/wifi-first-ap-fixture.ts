@@ -5,6 +5,7 @@ import { logger } from "../../helpers/logger.ts";
 import * as runner from "../../helpers/run.ts";
 import {
 	clearHotspotProfileCreation,
+	getHotspotCredentials,
 	recordHotspotProfileCreation,
 	rememberHotspotCredentials,
 } from "../../modules/wifi/hotspot-credentials.ts";
@@ -15,6 +16,10 @@ import {
 import { settlePending } from "../../modules/wifi/wifi-hotspot-monitor.ts";
 import { runHotspotProfileOperation } from "../../modules/wifi/wifi-hotspot-profile-operation.ts";
 import type { HotspotActivationDeps } from "../../modules/wifi/wifi-hotspot-types.ts";
+import {
+	mockActivationBus,
+	mockSettingsDeletion,
+} from "./wifi-active-observation.ts";
 import { firstApInstances } from "./wifi-first-ap-instances.ts";
 import { decodeProfile, encodeProfile } from "./wifi-first-ap-keyfile-codec.ts";
 import { wifiFrameFixture } from "./wifi-frame-fixture.ts";
@@ -71,6 +76,67 @@ export async function firstAp(
 	};
 	let created: string | undefined;
 	let active: string | undefined;
+	let delayedDown: ReturnType<typeof Promise.withResolvers<void>> | undefined;
+	let onPostReplyRead: (() => void) | undefined;
+	const inspectedDownPaths: string[] = [];
+	const remove = (uuid: string) => {
+		if (faults.deleteFails) throw new Error("NM deletion unavailable");
+		profiles.delete(uuid);
+		autoconnect.delete(uuid);
+		if (active === uuid) active = undefined;
+		if (faults.deleteTimeout)
+			throw new Error("NM delete committed then timed out");
+	};
+	const terminalDown = mockActivationBus(
+		() => instances.run().bus.toString(16).padStart(32, "0"),
+		(call) => {
+			const path = call.args?.[0];
+			if (
+				typeof path !== "string" ||
+				call.destination !== `:1.${instances.run().owner}`
+			)
+				throw new Error("Down did not target the original daemon");
+			// Keep simulator effects in the existing selector transcript.
+			commands.push(["conn", "down", "apath", path]);
+			if (faults.downFails) throw new Error("NM deactivation unavailable");
+			if (!active || instances.activePath() !== path)
+				throw new Error("Connection is not active");
+			if (delayedDown) {
+				const receiptPath = path;
+				void delayedDown.promise.then(() => {
+					if (instances.activePath() === receiptPath) active = undefined;
+					terminalDown(receiptPath);
+				});
+			} else {
+				active = undefined;
+				terminalDown(path);
+			}
+			if (faults.downTimeout)
+				throw new Error("NM down committed then timed out");
+		},
+		() =>
+			active && instances.activePath()
+				? {
+						uuid: active,
+						ifname: hybrid ? "clap-wlan0" : "wlan0",
+						path: instances.activePath(),
+					}
+				: undefined,
+		false,
+		(path) => inspectedDownPaths.push(path),
+		() => onPostReplyRead?.(),
+	);
+	mockSettingsDeletion(
+		instances.run,
+		(path) => {
+			const uuid = instances.paths().find(([, target]) => target === path)?.[0];
+			if (!uuid || !profiles.has(uuid))
+				throw new Error("Unknown settings path");
+			commands.push(["conn", "del", "path", path]);
+			remove(uuid);
+		},
+		true,
+	);
 	for (const level of ["debug", "info", "warn", "error"] as const)
 		spyOn(logger, level).mockImplementation((message, ...metadata) => {
 			logs.push(
@@ -128,36 +194,25 @@ export async function firstAp(
 			return { stdout: "", stderr: "" };
 		}
 		if (args[0] === "conn" && args[1] === "del") {
-			if (faults.deleteFails) throw new Error("NM deletion unavailable");
-			profiles.delete(args[2] ?? "");
-			autoconnect.delete(args[2] ?? "");
-			if (active === args[2]) active = undefined;
-			if (faults.deleteTimeout)
-				throw new Error("NM delete committed then timed out");
+			const uuid = args[2];
+			if (!uuid || uuid === "path")
+				throw new Error("Expected an explicit Forget UUID");
+			remove(uuid);
 			return { stdout: "Connection successfully deleted", stderr: "" };
 		}
 		if (args[0] === "conn" && args[1] === "down") {
-			if (faults.downFails) throw new Error("NM deactivation unavailable");
-			if (args[2] === "apath") {
-				if (!active || instances.activePath() !== args[3])
-					throw new Error("Connection is not active");
-				active = undefined;
-				if (faults.downTimeout)
-					throw new Error("NM down committed then timed out");
-				return { stdout: "Connection successfully deactivated", stderr: "" };
-			}
-			if (active !== args[2]) throw new Error("Connection is not active");
-			if (active === args[2]) active = undefined;
-			if (faults.downTimeout)
-				throw new Error("NM down committed then timed out");
-			return { stdout: "Connection successfully deactivated", stderr: "" };
+			throw new Error("Hotspot deactivation must target a daemon-bound path");
 		}
 		if (args[0] === "-w" && args[2] === "conn" && args[3] === "up") {
-			if (!profiles.has(args[4] ?? "")) throw new Error("Unknown connection");
+			const uuid = args[4] === "uuid" ? args[5] : args[4];
+			if (!profiles.has(uuid ?? "")) throw new Error("Unknown connection");
 			if (failure === "up") throw new Error("NM refused activation");
-			active = args[4];
+			active = uuid;
 			const activePath = instances.activate(active);
-			if (faults.upTimeout) throw new Error("NM up committed then timed out");
+			if (faults.upTimeout)
+				throw Object.assign(new Error("NM up committed then timed out"), {
+					code: 3,
+				});
 			if (failure === "ownership-up")
 				state.row.hotspot = { ...state.row.hotspot, conn: OTHER_UUID };
 			return {
@@ -242,7 +297,8 @@ export async function firstAp(
 			created: false,
 		}),
 		credentials: {
-			get: () => ({ ssid: "First AP", password: secret }),
+			get: (owner) =>
+				getHotspotCredentials(owner) ?? { ssid: "First AP", password: secret },
 			remember: (owner, credentials) => {
 				if (failure === "post-up-throw" && active)
 					throw new Error("Post-up persistence failed");
@@ -276,6 +332,14 @@ export async function firstAp(
 		deps,
 		created: () => created,
 		active: () => active,
+		inspectedDownPaths,
+		delayDown() {
+			const postReplyRead = Promise.withResolvers<void>();
+			const terminal = Promise.withResolvers<void>();
+			delayedDown = terminal;
+			onPostReplyRead = postReplyRead.resolve;
+			return { postReplyRead: postReplyRead.promise, finish: terminal.resolve };
+		},
 		armRetainedProfile: async () => {
 			if (!created) throw new Error("Missing retained profile to arm");
 			const uuid = created;

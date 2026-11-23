@@ -74,7 +74,6 @@ function renderChain(configRows: ConfigRow[]) {
 			onStop: vi.fn(),
 			onOpenSource: vi.fn(),
 			onGoNetwork: vi.fn(),
-			onOpenEncoder: vi.fn(),
 		},
 	});
 }

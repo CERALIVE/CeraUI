@@ -5,6 +5,7 @@ import {
 	foldedFilterCount,
 	followBlock,
 	followInput,
+	isDefaultFilter,
 	LEVEL_SETS,
 	levelCovering,
 	queryInput,
@@ -30,6 +31,19 @@ describe("raw-filter: defaults and level sets", () => {
 			text: "",
 			order: "newest",
 		});
+	});
+
+	it("recognises a re-applied default by value and any changed field as a change", () => {
+		expect(isDefaultFilter(filter())).toBe(true);
+		for (const patch of [
+			{ sources: ["app"] },
+			{ level: "errors" },
+			{ time: "1h" },
+			{ bootId: BOOT },
+			{ text: "x" },
+			{ order: "oldest" },
+		] satisfies Partial<RawFilter>[])
+			expect(isDefaultFilter(filter(patch)), JSON.stringify(patch)).toBe(false);
 	});
 
 	it("maps each level position to the set it shows", () => {

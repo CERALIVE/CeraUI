@@ -6,14 +6,17 @@ composition (todo 19) calls creation. Creation parses the export and query
 schemas, pins the requested boot and history epoch, and reserves sharing with a
 32-byte random hex ticket. A ticket expires after 60 seconds and is consumed by
 one GET to `/api/logs/export`. Missing, unknown, expired and reused tickets return
-an empty 403; other methods return 405 without consuming a ticket. The server
-routes this path before frontend proxying or static serving.
+an empty 403, as do replaced tickets; other methods return 405 without
+consuming a ticket. The server routes this path before frontend proxying or
+static serving.
 
-`sharing.ts` provides `reserveLogSharing()` for exports and the subsequent bundle
-service. A reservation exposes `start()` and `release()`: start makes a ticket's
-reservation active; release follows stream completion or joined cancellation.
-An unused reservation expires opportunistically, without a timer. Only one
-reservation or active download exists device-wide.
+`sharing.ts` owns one device-wide lease: preparing, issued, or streaming.
+The authenticated WebSocket that requested a ticket can replace it while it
+is still unused, with either kind of download. The lease revokes the previous
+ticket from its issuing service before the new request proceeds. Other
+connections get `BUSY` until the ticket expires; no request can replace
+preparation or streaming. Expiry is checked opportunistically, without a
+timer. Stream completion or joined cancellation releases the lease.
 
 `export-format.ts` owns the attachment filename and plain text formatting.
 The header distinguishes current `exported-by` versions from each covered boot's
@@ -45,7 +48,8 @@ fence header collection and page/entry delivery. Footers state either
 `# complete: <n> entries` (including gap records) or `# incomplete: <reason>`.
 
 Tests are `src/tests/device-logs-export.test.ts`,
-`src/tests/device-logs-sharing.test.ts` and
+`src/tests/device-logs-sharing.test.ts`,
+`src/tests/device-logs-sharing-replace.test.ts` and
 `src/tests/device-logs-export-http.test.ts`; the latter downloads through the
 real Bun HTTP server. This service is not a released viewer. Physical device
 latency, CPU and streaming journal volume remain unmeasured. User documentation

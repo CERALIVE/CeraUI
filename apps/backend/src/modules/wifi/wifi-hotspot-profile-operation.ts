@@ -1,3 +1,4 @@
+import { nmConnGetFields } from "../network/network-manager.ts";
 import {
 	type NmProfileReadTrace,
 	nmProfileObservation,
@@ -11,18 +12,207 @@ import {
 import { openNmProfileFile } from "../network/network-manager-profile-write.ts";
 import { serializeNmProfileModify } from "../network/network-manager-secret.ts";
 import {
+	type ProfileWriteAdmission,
+	type ProfileWritePermit,
+	profileWritePermit,
+} from "../network/profile-write-permit.ts";
+import {
 	clearHotspotProfileCreation,
 	getHotspotCredentialOwners,
 	getPendingHotspotCreation,
 	getPendingHotspotCreationInstance,
 	recordHotspotProfileCreation,
 } from "./hotspot-credentials.ts";
+import { uniqueHotspotAddress } from "./wifi-autoconnect-policy.ts";
+import { getWifiInterfacesByMacAddress } from "./wifi-connections.ts";
 import {
 	getPendingHotspotProfile,
 	recordPendingHotspotModify,
 } from "./wifi-hotspot-monitor.ts";
 import { retireHotspotProfileAuthority } from "./wifi-hotspot-profile-observation.ts";
 import { classifyHotspotProfileReadback } from "./wifi-hotspot-profile-readback.ts";
+import type {
+	HotspotActivationDeps,
+	HotspotProfilePins,
+} from "./wifi-hotspot-types.ts";
+import {
+	ownsWifiOperation,
+	type WifiOperationBinding,
+} from "./wifi-operation-binding.ts";
+import {
+	normalizeMacAddress,
+	wifiAdapterKeyMac,
+} from "./wifi-permanent-mac.ts";
+import {
+	radioInventoryFor,
+	wifiPhysicalPortWitnesses,
+	wifiRadioIdentity,
+} from "./wifi-radio-identity.ts";
+import { literalWifiDevicePath } from "./wifi-radio-read-budget.ts";
+
+export function readHotspotProfilePins(uuid: string) {
+	return nmConnGetFields(
+		uuid,
+		[
+			"802-11-wireless.mac-address",
+			"match.path",
+			"connection.autoconnect",
+		] as const,
+		undefined,
+		false,
+	);
+}
+
+export async function permitsHotspotProfilePins(
+	uuid: string,
+	mac: string,
+	port: string | undefined,
+	read?: HotspotActivationDeps["readProfilePins"],
+	compatibleLegacyMac?: (mac: string) => Promise<boolean>,
+): Promise<boolean> {
+	if (!read) return true; // Injected, non-NM activation dependencies own their writes.
+	const pins = await read(uuid);
+	return Boolean(
+		pins &&
+			(!pins[0] ||
+				normalizeMacAddress(pins[0]) === mac ||
+				(await compatibleLegacyMac?.(pins[0]))) &&
+			(!pins[1] || pins[1] === port),
+	);
+}
+
+type SavedPinAdmission = {
+	readonly kind: "write" | "keep-policy" | "activate-only" | "refuse";
+	readonly current?: () => boolean;
+};
+
+export function canWriteSavedHotspotPins(
+	admission: false | SavedPinAdmission,
+): ProfileWriteAdmission {
+	return admission &&
+		(admission.kind === "write" || admission.kind === "keep-policy")
+		? (admission.current ?? true)
+		: false;
+}
+
+/** A legacy MAC may be replaced only after ruling out both live and saved owners. */
+export async function legacyHotspotMacClaim(
+	rawMac: string,
+	readInventory = radioInventoryFor(),
+): Promise<"proven-unclaimed" | "proven-claimed" | "unknown"> {
+	const mac = normalizeMacAddress(rawMac);
+	if (!mac) return "unknown";
+	const inventory = await readInventory();
+	if (inventory.kind === "unknown") return "unknown";
+	const physical = wifiPhysicalPortWitnesses(inventory.rows);
+	if (
+		physical.some((radio) => radio.permanentMac === mac) ||
+		[
+			...Object.keys(getWifiInterfacesByMacAddress()),
+			...getHotspotCredentialOwners(),
+		].some((key) => wifiAdapterKeyMac(key) === mac)
+	)
+		return "proven-claimed";
+	return physical.some((radio) => radio.permanentMac === undefined)
+		? "unknown"
+		: "proven-unclaimed";
+}
+
+/** Start may repair a recorded pin, not adopt a new pin observed mid-write. */
+export function savedHotspotStartPinGuard(
+	owner: string,
+	mac: string,
+	port: string | undefined,
+	read: HotspotActivationDeps["readProfilePins"],
+	binding: WifiOperationBinding | undefined,
+) {
+	let initial:
+		| { readonly uuid: string; readonly pins: HotspotProfilePins }
+		| undefined;
+	return async (
+		uuid: string,
+		observedMac?: string,
+	): Promise<SavedPinAdmission> => {
+		if (!read) return { kind: "write" };
+		const pins = await read(uuid);
+		if (!pins) return { kind: "refuse" };
+		initial ??= { uuid, pins };
+		const [rawMac, livePort, autoconnect] = pins;
+		const liveMac = normalizeMacAddress(rawMac);
+		const macMatches = !rawMac || liveMac === mac;
+		const portMatches = !livePort || livePort === port;
+		if (macMatches && portMatches)
+			return liveMac === mac && livePort && initial.pins[1] === livePort
+				? { kind: "keep-policy" }
+				: { kind: "write" };
+		if (
+			initial.uuid !== uuid ||
+			initial.pins[0] !== rawMac ||
+			initial.pins[1] !== livePort
+		)
+			return { kind: "refuse" };
+		const owners = getHotspotCredentialOwners(uuid);
+		if (owners.length !== 1 || owners[0] !== owner) return { kind: "refuse" };
+		const radios = wifiRadioIdentity.state.rows;
+		const inventory = radioInventoryFor(radios);
+		if (!macMatches)
+			return portMatches &&
+				liveMac !== undefined &&
+				liveMac === normalizeMacAddress(observedMac) &&
+				(await legacyHotspotMacClaim(rawMac, inventory)) === "proven-unclaimed"
+				? { kind: "write", current: inventory.current }
+				: { kind: "refuse" };
+		if (
+			liveMac !== mac ||
+			owner !== mac ||
+			!literalWifiDevicePath(livePort) ||
+			!binding ||
+			!ownsWifiOperation(binding)
+		)
+			return { kind: "refuse" };
+		const physical = wifiPhysicalPortWitnesses(radios);
+		// NM can attempt the existing binding without us guessing or changing it.
+		if (
+			port === undefined &&
+			physical.length === 1 &&
+			physical[0]?.ifname === binding.ifname
+		) {
+			if ((await inventory()).kind === "complete" && ownsWifiOperation(binding))
+				return { kind: "activate-only", current: inventory.current };
+			return { kind: "refuse" };
+		}
+		// An exact MAC, unique bound owner and quiesced unused port prove a move,
+		// not a new claim on an unpinned or same-MAC twin's profile.
+		return autoconnect === "no" &&
+			binding.devicePath &&
+			(await uniqueHotspotAddress(mac, inventory)) === "proven-unique" &&
+			physical.every(
+				(radio) =>
+					radio.devicePath !== undefined && radio.devicePath !== livePort,
+			)
+			? { kind: "write", current: inventory.current }
+			: { kind: "refuse" };
+	};
+}
+
+/** Check before entering the writer and again at its actual dispatch boundary. */
+export async function writeHotspotProfileFields(
+	write: (
+		uuid: string,
+		fields: Record<string, string>,
+		permit?: ProfileWritePermit,
+	) => Promise<unknown>,
+	uuid: string,
+	fields: Record<string, string>,
+	permit: () => Promise<ProfileWriteAdmission>,
+): Promise<boolean> {
+	const guarded = profileWritePermit(permit);
+	return (
+		(await guarded()) &&
+		guarded.current?.() !== false &&
+		Boolean(await write(uuid, fields, guarded))
+	);
+}
 
 type ProfileOperationTarget = {
 	readonly uuid: string;

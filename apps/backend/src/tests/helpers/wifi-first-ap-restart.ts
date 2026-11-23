@@ -59,6 +59,7 @@ test("replay persisted first-start NM state", async () => {
 		if (persistent.legacy && profile) profile["connection.id"] = "Hotspot";
 		for (const uuid of persistent.autoconnect) f.autoconnect.add(uuid);
 		f.observe(persistent.uuid, "ap");
+		if (!f.nm.activePath()) f.nm.activate(persistent.uuid);
 		if (persistent.store) {
 			const path = join(dir, "hotspot_credentials.json");
 			await Bun.write(path, JSON.stringify(persistent.store));

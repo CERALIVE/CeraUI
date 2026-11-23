@@ -63,7 +63,7 @@ describe("update-orchestrator reducer — pure state machine", () => {
 
 		state = reduceOrchestrator(state, { type: "INSTALL_UNIT_STARTED", now: 4 });
 		expect(state.phase).toBe("downloading");
-		expect(state.progress).toEqual({ percent: 0, etaSeconds: 0 });
+		expect(state.progress).toBeNull();
 
 		state = reduceOrchestrator(state, {
 			type: "DOWNLOAD_PROGRESS",

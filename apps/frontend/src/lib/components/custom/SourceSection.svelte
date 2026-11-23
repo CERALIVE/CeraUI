@@ -52,7 +52,6 @@ import {
 	ChevronRight,
 	Columns3,
 	Copy,
-	Pencil,
 	QrCode,
 	Radio,
 	SignalZero,
@@ -198,12 +197,16 @@ const hasCapSummary = $derived(capChips.length > 0 || summary?.audioSupported ==
 const activeSummary = $derived(
 	deriveActiveSummary(config, activeEncode, capabilities, sources?.sources),
 );
-const activeParts = $derived.by(() => {
+// The format alone (resolution, frame rate, codec), then the line with the source.
+const settingParts = $derived.by(() => {
 	const parts: string[] = [];
-	if (activeSummary.source) parts.push(activeSummary.source);
 	if (activeSummary.resolution) parts.push(activeSummary.resolution);
 	if (typeof activeSummary.framerate === 'number') parts.push(`${activeSummary.framerate}fps`);
 	if (activeSummary.codec) parts.push(activeSummary.codec);
+	return parts;
+});
+const activeParts = $derived.by(() => {
+	const parts = activeSummary.source ? [activeSummary.source, ...settingParts] : [...settingParts];
 	// Todo 12: the transport token is dropped from the IDLE active-config line —
 	// the Destination/server row is the ONE idle surface that shows it.
 	// `deriveActiveSummary` still emits `transport` for LiveCockpit's LIVE strip;
@@ -215,6 +218,69 @@ const hasActiveConfig = $derived(
 	activeSummary.live ||
 		Boolean(activeSummary.source || activeSummary.resolution || activeSummary.codec),
 );
+// The settings alone, for the summary the selected option hosts: its own title
+// already names the source, so the line never repeats it. With no saved format
+// the device picks one, and the line says so in the Encoder dialog's own word.
+const activeSettings = $derived(
+	settingParts.length > 0 ? settingParts : [m["live.encoder.format.automaticUnknown"]()],
+);
+
+// Every "?" inside an option is a real 44 px box at every width, kept 8 px from
+// every other control (DESIGN.md TT-2): its hit area is then its box, beside
+// its neighbours. The touch layout's ::after overlay on the 24 px icon used to
+// reach 10 px into the select button and the capture-format buttons.
+const HELP_TARGET = 'sm:min-h-11 sm:min-w-11 sm:p-2.5';
+
+type OptionHelp = {
+	testId: string;
+	title: string;
+	body: string;
+	learnMoreLabel?: string;
+	learnMoreUrl?: string;
+};
+// Every "?" an option carries beside its select, in one list: the slot renders
+// these, so it can never be shown empty or miss one.
+function optionHelps(source: StreamSource): OptionHelp[] {
+	const helps: OptionHelp[] = [];
+	// Same-LAN/WiFi education on ENABLED network rows.
+	if (source.origin === 'network' && source.available) {
+		helps.push({
+			testId: `source-network-ingest-info-${source.requiresGateway}`,
+			title: m["live.networkIngest.infoTitle"](),
+			body: m["live.networkIngest.infoBody"](),
+		});
+	}
+	// Coarse rows: nothing is plugged in for this capability.
+	if (source.origin === 'coarse') {
+		helps.push({
+			testId: `source-not-connected-info-${source.id}`,
+			title: m["live.source.notConnectedTitle"](),
+			body: m["live.source.notConnectedBody"](),
+		});
+	}
+	// Present-but-signal-less device: the cable/source is missing.
+	if (hasNoSignal(source)) {
+		helps.push({
+			testId: `source-no-signal-info-${source.id}`,
+			title: m["live.source.noSignalTitle"](),
+			body: m["live.source.noSignalBody"](),
+		});
+	}
+	// MJPEG capture: why it is not hardware H.264/H.265.
+	if (source.origin === 'capture' && source.kind === 'mjpeg') {
+		helps.push({
+			testId: `source-mjpeg-info-${source.id}`,
+			title: m["live.source.mjpegTitle"](),
+			body: m["live.source.mjpegBody"](),
+			learnMoreLabel: m["live.source.mjpegLearnMore"](),
+			learnMoreUrl: UVC_H264_DETECTION_DOC_URL,
+		});
+	}
+	return helps;
+}
+
+// Every badge on an option is this one pill; only its tone varies.
+const CHIP = 'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium';
 
 // i18n key resolver (mirrors AudioDialog) — resolves a dotted labelKey to a locale
 // string without a store dep, with safe key-passthrough on a miss.
@@ -269,6 +335,16 @@ const visibleSources = $derived(
 	),
 );
 const hasSources = $derived(visibleSources.length > 0);
+// The selected option hosts the summary; it stands alone above the options only
+// while no option on screen is the selection (none yet, or a legacy config).
+const selectedRowVisible = $derived(
+	visibleSources.some((source) => source.id === config?.source),
+);
+// A network option already says "Includes audio" itself; its summary does not.
+const capAudioShown = $derived(
+	summary?.audioSupported === true &&
+		!(selectedRowVisible && activeSource?.origin === 'network' && activeSource.supportsAudio),
+);
 
 // Lost-device explanation: any reported capture device that vanished mid-session.
 const lostCaptures = $derived(captureSources.filter((s) => s.lost === true));
@@ -455,11 +531,31 @@ function captureBadgeLabel(source: CaptureStreamSource): string {
 // raw/other capture (which stay neutral). The text differs per kind regardless,
 // so colour is reinforcement, never the sole signal. A dual-codec device is
 // hardware-encoding on both, so it earns the same accent.
-function captureBadgeClass(source: CaptureStreamSource): string {
-	if (captureModeCodecs(source.modes).length >= 2) return 'bg-primary/10 text-primary';
+// A kind the name already says ("HDMI Input" over "HDMI") is not shown a second
+// time; it stays for assistive technology, which reads the option as one phrase.
+function kindRepeatsName(source: CaptureStreamSource): boolean {
+	return rowLabel(source).toLocaleLowerCase().includes(captureBadgeLabel(source).toLocaleLowerCase());
+}
+function captureKindClass(source: CaptureStreamSource): string {
+	if (captureModeCodecs(source.modes).length >= 2) return 'text-primary';
 	return source.kind === 'uvc_h264' || source.kind === 'uvc_h265'
-		? 'bg-primary/10 text-primary'
-		: 'bg-muted text-muted-foreground';
+		? 'text-primary'
+		: 'text-muted-foreground';
+}
+
+// The option's frame carries its state, so the "?" inside it belongs to it. A
+// disabled option dims the frame to 60% of each colour's alpha, never the whole
+// tile: opacity on an ancestor would paint the red Lost word below AA. The
+// selected frame is a ring, not a tint: muted text inside a lime-tinted frame
+// (the summary, the capture formats) fell to 4.2:1 in dark, below AA.
+function frameClass(selected: boolean, unbound: boolean, dimmed: boolean): string {
+	if (!selected) return dimmed ? 'border-border/60' : 'border-border hover:bg-accent/50';
+	if (unbound) {
+		return dimmed
+			? 'border-status-warning/36 ring-status-warning/36 ring-1'
+			: 'border-status-warning ring-status-warning ring-1';
+	}
+	return dimmed ? 'border-primary/60 ring-primary/60 ring-1' : 'border-primary ring-primary ring-1';
 }
 function rowIcon(source: StreamSource) {
 	if (source.origin === 'capture') return KIND_ICON[kindFamily(source.kind)];
@@ -620,12 +716,57 @@ const audioEmbeddedActive = $derived(activeSource?.audioKind === 'embedded');
 const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 </script>
 
+{#snippet activeConfigPanel(hosted: boolean)}
+	<!-- WHAT the source is set to (engine truth while streaming, else the saved
+	     config), then the CEILING its hardware can reach: two facts, two lines.
+	     Hosted in the selected option, the line drops the name its title shows. -->
+	{const parts = $derived(hosted ? activeSettings : activeParts)}
+	<div
+		class="space-y-1 {hosted ? '' : 'bg-muted/30 rounded-lg border px-3 py-2.5'}"
+		data-testid="source-active-config"
+	>
+		{#if hasActiveConfig && parts.length > 0}
+			<p class="text-foreground text-sm tabular-nums break-words" data-testid="active-config-value">
+				{parts.join(' \u00b7 ')}
+			</p>
+		{/if}
+		{#if hasCapSummary}
+			<section
+				aria-label={m["live.source.capabilities"]()}
+				class="text-muted-foreground flex items-start gap-2 text-xs"
+				data-testid="source-capabilities"
+			>
+				<span class="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1">
+					<span class="font-medium" data-testid="cap-device-max">{m["live.source.sourceMax"]()}</span>
+					{#if capChips.length > 0}
+						<span class="tabular-nums">{capChips.join(' \u00b7 ')}</span>
+					{/if}
+					{#if capAudioShown}
+						<span class="{CHIP} border-border bg-muted text-muted-foreground" data-testid="cap-audio">
+							<Volume2 aria-hidden={true} class="size-3" />
+							{m["live.networkIngest.includesAudio"]()}
+						</span>
+					{/if}
+				</span>
+				<!-- At the inline end, like an option's help, centred on the first line: it
+				     reaches 14 px above the line, where nothing can be tapped, and keeps its
+				     whole height below, so a control under the line stays 8 px away. -->
+				<InfoPopover
+					body={m["live.education.field.mode.body"]()}
+					class="-mt-3.5 {HELP_TARGET}"
+					testId="info-mode"
+					title={m["live.education.field.mode.title"]()}
+				/>
+			</section>
+		{/if}
+	</div>
+{/snippet}
+
 <Card.Root data-testid="source-section" tabindex={-1}>
-	<!-- `px-*` only: `Card.Root` already owns the vertical inset (`py-4`), and the
-	     old `p-4 sm:p-6` doubled it — 40px of dead height above the title at
-	     desktop, against StreamSetupChain's 16px, so the two cards in one column
-	     opened on two different rhythms. -->
-	<Card.Content class="space-y-5 px-4 sm:px-6">
+	<!-- No padding override: `Card.Root` owns the vertical inset (`py-4`) and
+	     `Card.Content` the inline one (`px-4`), the same in every Live card, so the
+	     cards in one column open and indent on one rhythm. -->
+	<Card.Content class="space-y-5">
 		<!-- Header (design-pass-24): the section title and ONE state signal.
 		     The capability cluster used to sit here as a six-element row opposite
 		     the title, with the active-config box as a SECOND competing band
@@ -638,7 +779,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 		>
 			<div class="flex items-center gap-1">
 				<Video aria-hidden={true} class="text-primary size-4 shrink-0" />
-				<span class="text-sm font-semibold">{m["live.source.label"]()}</span>
+				<h2 class="text-base font-semibold">{m["live.source.label"]()}</h2>
 				<InfoPopover
 					body={m["live.education.field.source.body"]()}
 					testId="info-source"
@@ -660,55 +801,10 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 			{/if}
 		</div>
 
-		<!-- Selected-source panel: WHAT the device is set to (engine truth while
-		     streaming, else the saved config) on the lead line, and the hardware
-		     CEILING that source can reach on the demoted second one. The two are
-		     different facts — settings vs. what the hardware could do — so the
-		     ceiling stays visually quieter rather than sharing the lead line. -->
-		{#if hasActiveConfig || hasCapSummary}
-			<div
-				class="bg-muted/30 space-y-1.5 rounded-lg border px-3 py-2"
-				data-testid="source-active-config"
-			>
-				{#if hasActiveConfig}
-					<p
-						class="text-foreground truncate font-mono text-sm"
-						data-testid="active-config-value"
-					>
-						{activeParts.join(' \u00b7 ')}
-					</p>
-				{/if}
-				{#if hasCapSummary}
-					<section
-						class="flex flex-wrap items-center gap-1.5"
-						data-testid="source-capabilities"
-						aria-label={m["live.source.capabilities"]()}
-					>
-						<span class="text-muted-foreground text-xs font-medium" data-testid="cap-device-max">
-							{m["live.source.sourceMax"]()}
-						</span>
-						<InfoPopover
-							body={m["live.education.field.mode.body"]()}
-							testId="info-mode"
-							title={m["live.education.field.mode.title"]()}
-						/>
-						{#each capChips as chip (chip)}
-							<span class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-xs">
-								{chip}
-							</span>
-						{/each}
-						{#if summary?.audioSupported}
-							<span
-								class="bg-primary/10 text-primary inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium"
-								data-testid="cap-audio"
-							>
-								<Volume2 aria-hidden={true} class="size-3" />
-								{m["settings.audioSource"]()}
-							</span>
-						{/if}
-					</section>
-				{/if}
-			</div>
+		<!-- The selected option hosts this summary (see the list below); it stands
+		     alone here only while no option on screen is the selection. -->
+		{#if (hasActiveConfig || hasCapSummary) && !selectedRowVisible}
+			{@render activeConfigPanel(false)}
 		{/if}
 
 		<!-- Lost-device explanation: explicit badge + body + recovery hint -->
@@ -779,14 +875,13 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 
 		<!-- Unified device-first source list: capture / coarse / virtual / network rows.
 		     Selecting a row persists config.source through the field-sync lock.
-		     Live screen contract: the rows are tiles, a grid from 768 px. A row that
-		     opens any detail below its tile (modes, warnings, ingest instructions)
-		     spans the full width, so the detail sits under it and every other tile
-		     keeps one height. -->
+		     Live screen contract: the rows are framed tiles, one per line. A tile's
+		     detail (summary, formats, warnings, ingest instructions) opens inside its
+		     own frame. -->
 		{#if hasSources}
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 			<div class="space-y-2" data-testid="source-list" tabindex={-1}>
-				<ul class="grid gap-2 md:grid-cols-2">
+				<ul class="space-y-2">
 					{#each visibleSources as source (source.id)}
 						{const selected = $derived(config?.source === source.id)}
 						{const disabled = $derived(rowDisabled(source))}
@@ -798,20 +893,36 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 							selected,
 							sources?.sources,
 						))}
+						{const helps = $derived(optionHelps(source))}
+						{const hasChips = $derived(
+							selected ||
+								source.origin === 'coarse' ||
+								(source.origin === 'capture' && (source.lost || source.degraded || hasNoSignal(source))) ||
+								(source.origin === 'network' && source.supportsAudio),
+						)}
+						{const hasDetail = $derived(
+							selected ||
+								modeOptionsFor(source).length > 0 ||
+								coarseUnbound.unbound ||
+								(rowDisabled(source) && source.origin === 'network') ||
+								isOperatorDisabled(source),
+						)}
+						<!-- ONE option pattern: the frame carries the state; inside it the
+						     kind icon, the name, one subtitle (kind or service), one chip slot
+						     (Selected first, then every status), and the "?" at the inline
+						     end. Anything more (summary, formats, warnings, how to publish)
+						     sits under them, still inside the frame. -->
 						<li
-							class="min-w-0 md:has-[>:nth-child(2)]:col-span-full"
+							class="min-w-0 rounded-lg border transition-colors {frameClass(selected, coarseUnbound.unbound, disabled || isStreaming)}"
 							data-testid={`source-row-${source.id}`}
 							data-origin={source.origin}
 							data-selected={selected}
 							data-unbound={coarseUnbound.unbound ? 'true' : undefined}
 						>
-							<div class="flex items-center gap-2">
+							<div class="flex items-start gap-2">
 								<button
-									class="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-lg border px-3 py-3 text-left transition-colors {selected
-										? coarseUnbound.unbound
-											? 'border-status-warning/60 bg-status-warning/10'
-											: 'border-primary bg-primary/10'
-										: 'border-border hover:bg-accent/50'} disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
+									class="group/row focus-visible:ring-ring flex min-w-0 flex-1 items-start gap-3 rounded-lg py-3 ps-3 pe-2 text-start outline-hidden focus-visible:ring-2 disabled:cursor-not-allowed"
+									data-select
 									data-selected={selected}
 									data-testid={source.origin === 'network'
 										? `source-network-ingest-select-${source.requiresGateway}`
@@ -821,388 +932,368 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 									title={disabled ? rowReason(source) : undefined}
 									type="button"
 								>
-									<span class="flex min-w-0 items-center gap-2.5">
-										<RowIcon
-											aria-hidden={true}
-											class="size-4 shrink-0 {selected
-												? coarseUnbound.unbound
-													? 'text-status-warning'
-													: 'text-primary'
-												: 'text-muted-foreground'}"
-										/>
-										<span class="flex min-w-0 flex-col">
+									<RowIcon
+										aria-hidden={true}
+										class="mt-0.5 size-4 shrink-0 group-disabled/row:opacity-60 {selected
+											? coarseUnbound.unbound
+												? 'text-status-warning'
+												: 'text-primary'
+											: 'text-muted-foreground'}"
+									/>
+									<span class="flex min-w-0 flex-1 flex-col">
 											<span
-												class="line-clamp-2 text-sm font-medium break-words {source.origin === 'coarse'
+												class="line-clamp-2 text-sm font-medium break-words group-disabled/row:opacity-60 {source.origin === 'coarse'
 													? 'text-muted-foreground'
 													: ''}"
 												data-testid={`source-row-name-${source.id}`}
 											>
 												{rowLabel(source)}
 											</span>
-											{#if source.origin === 'network'}
-												<span
-													class="text-xs {source.available ? 'text-muted-foreground' : 'text-status-warning'}"
-													data-testid={`source-network-ingest-status-${source.requiresGateway}`}
-												>
-													{source.available
-														? m["live.networkIngest.active"]()
-														: m["live.networkIngest.inactive"]()}
-												</span>
-											{/if}
-										</span>
-									</span>
-									<span class="flex shrink-0 items-center gap-1.5">
-										{#if source.origin === 'capture'}
-											<span
-												class="{captureBadgeClass(source)} rounded px-1.5 py-0.5 text-xs font-medium"
-												data-source-kind={source.kind}
-												data-testid={`source-kind-${source.id}`}
-											>
-												{captureBadgeLabel(source)}
-											</span>
-											{#if source.lost}
-												<span
-													class="bg-destructive/15 text-destructive inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
-													data-testid={`source-lost-${source.id}`}
-												>
-													<Unplug aria-hidden={true} class="size-3" />
-													{m["live.inputPicker.lost"]()}
-												</span>
-											{:else if source.degraded}
-												<!-- A THIRD state beside Lost and No signal, and the row is
-												     still selectable: the device is here and the encoder is
-												     merely struggling to read it. Amber + its own glyph, so it
-												     can never be read as the red "device is gone" badge —
-												     colour is reinforcement, never the sole signal. -->
-												<span
-													class="border-status-warning/60 bg-status-warning/10 text-status-warning inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium"
-													data-testid={`source-degraded-${source.id}`}
-													title={source.degraded.reason ?? source.degraded.code}
-												>
-													<Activity aria-hidden={true} class="size-3" />
-													{m["live.source.degradedBadge"]()}
-												</span>
-											{:else if hasNoSignal(source)}
-												<!-- Calm amber, NOT the destructive red `lost` treatment: the
-												     device is fine, the cable is idle. The row stays selectable —
-												     a signal can appear at any moment. -->
-												<span
-													class="border-status-warning/60 bg-status-warning/10 text-status-warning inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium"
-													data-testid={`source-no-signal-${source.id}`}
-												>
-													<SignalZero aria-hidden={true} class="size-3" />
-													{m["live.source.noSignal"]()}
-												</span>
-											{/if}
-										{/if}
-										{#if source.origin === 'coarse'}
-											<span
-												class="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
-												data-testid={`source-not-connected-${source.id}`}
-											>
-												<Unplug aria-hidden={true} class="size-3" />
-												{m["live.source.notConnected"]()}
-											</span>
-										{/if}
-										{#if source.origin === 'network' && source.supportsAudio}
-											<span
-												class="bg-primary/10 text-primary inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium"
-												data-testid={`source-network-audio-${source.requiresGateway}`}
-											>
-												<Volume2 aria-hidden={true} class="size-3" />
-												{m["live.networkIngest.includesAudio"]()}
-											</span>
-										{/if}
-										{#if selected}
-											<span
-												class="inline-flex items-center gap-1 text-xs font-semibold {coarseUnbound.unbound
-													? 'text-status-warning'
-													: 'text-primary'}"
-												data-testid={`source-selected-${source.id}`}
-											>
-												{#if coarseUnbound.unbound}
-													<TriangleAlert aria-hidden={true} class="size-4" />
-												{:else}
-													<Check aria-hidden={true} class="size-4" />
+										<!-- One subtitle line: the kind or service state, then every chip, each
+										     wrapping on its own when the line is full. -->
+										{#if source.origin === 'capture' || source.origin === 'network' || hasChips}
+											<span class="flex flex-wrap items-center gap-1.5">
+												{#if source.origin === 'capture'}
+													<span
+														class="text-xs group-disabled/row:opacity-60 {captureKindClass(source)} {kindRepeatsName(source) ? 'sr-only' : ''}"
+														data-source-kind={source.kind}
+														data-testid={`source-kind-${source.id}`}
+													>
+														{captureBadgeLabel(source)}
+													</span>
+												{:else if source.origin === 'network'}
+													<span
+														class="text-xs group-disabled/row:opacity-60 {source.available ? 'text-muted-foreground' : 'text-status-warning'}"
+														data-testid={`source-network-ingest-status-${source.requiresGateway}`}
+													>
+														{source.available
+															? m["live.networkIngest.active"]()
+															: m["live.networkIngest.inactive"]()}
+													</span>
 												{/if}
-												{m["live.inputPicker.selected"]()}
+												{#if selected}
+													<span
+														class="{CHIP} group-disabled/row:opacity-60 {coarseUnbound.unbound
+															? 'border-status-warning/60 bg-status-warning/10 text-status-warning'
+															: 'border-primary/50 bg-primary/15 text-primary'}"
+														data-testid={`source-selected-${source.id}`}
+													>
+														{#if coarseUnbound.unbound}
+															<TriangleAlert aria-hidden={true} class="size-3" />
+														{:else}
+															<Check aria-hidden={true} class="size-3" />
+														{/if}
+														{m["live.inputPicker.selected"]()}
+													</span>
+												{/if}
+												{#if source.origin === 'capture'}
+													{#if source.lost}
+														<span
+															class="{CHIP} border-destructive/30 bg-destructive/15 text-destructive"
+															data-testid={`source-lost-${source.id}`}
+														>
+															<Unplug aria-hidden={true} class="size-3" />
+															{m["live.inputPicker.lost"]()}
+														</span>
+													{:else if source.degraded}
+														<!-- A THIRD state beside Lost and No signal, and the row is
+														     still selectable: the device is here and the encoder is
+														     merely struggling to read it. Amber + its own glyph, so it
+														     can never be read as the red "device is gone" badge. -->
+														<span
+															class="{CHIP} border-status-warning/60 bg-status-warning/10 text-status-warning group-disabled/row:opacity-60"
+															data-testid={`source-degraded-${source.id}`}
+															title={source.degraded.reason ?? source.degraded.code}
+														>
+															<Activity aria-hidden={true} class="size-3" />
+															{m["live.source.degradedBadge"]()}
+														</span>
+													{:else if hasNoSignal(source)}
+														<!-- Calm amber, NOT the destructive red `lost` treatment: the
+														     device is fine, the cable is idle. The row stays selectable. -->
+														<span
+															class="{CHIP} border-status-warning/60 bg-status-warning/10 text-status-warning group-disabled/row:opacity-60"
+															data-testid={`source-no-signal-${source.id}`}
+														>
+															<SignalZero aria-hidden={true} class="size-3" />
+															{m["live.source.noSignal"]()}
+														</span>
+													{/if}
+												{/if}
+												{#if source.origin === 'coarse'}
+													<span
+														class="{CHIP} border-border bg-muted text-muted-foreground group-disabled/row:opacity-60"
+														data-testid={`source-not-connected-${source.id}`}
+													>
+														<Unplug aria-hidden={true} class="size-3" />
+														{m["live.source.notConnected"]()}
+													</span>
+												{/if}
+												{#if source.origin === 'network' && source.supportsAudio}
+													<span
+														class="{CHIP} border-border bg-muted text-muted-foreground group-disabled/row:opacity-60"
+														data-testid={`source-network-audio-${source.requiresGateway}`}
+													>
+														<Volume2 aria-hidden={true} class="size-3" />
+														{m["live.networkIngest.includesAudio"]()}
+													</span>
+												{/if}
 											</span>
 										{/if}
 									</span>
 								</button>
 
-								<!-- Capture-row trailing action: a live input switch while STREAMING
-								     (onSwitch → LiveView switchInput). -->
-								{#if source.origin === 'capture' && isStreaming}
-									<Button
-										aria-label={`${m["live.inputPicker.switch"]()} \u2013 ${source.displayName}`}
-										data-switch-input={source.id}
-										disabled={source.id === activeInput ||
-											source.id === switchingInput ||
-											source.lost === true}
-										onclick={() => onSwitch?.(source.id)}
-										size="sm"
-										variant={source.id === activeInput ? 'secondary' : 'default'}
-									>
-										{#if source.id === switchingInput}
-											{m["live.inputPicker.switching"]()}
-										{:else if source.id === activeInput}
-											{m["live.inputPicker.active"]()}
-										{:else}
-											{m["live.inputPicker.switch"]()}
-										{/if}
-									</Button>
-								{/if}
-
-								<!-- Same-LAN/WiFi education on ENABLED network rows: the "?" popover
-								     reuses the Network-ingest info copy (publish from a phone/encoder
-								     on the same local network). Sits OUTSIDE the select button so it is
-								     its own keyboard/touch target (never a nested interactive). -->
-								{#if source.origin === 'network' && source.available}
-									<InfoPopover
-										body={m["live.networkIngest.infoBody"]()}
-										testId={`source-network-ingest-info-${source.requiresGateway}`}
-										title={m["live.networkIngest.infoTitle"]()}
-									/>
-								{/if}
-
-								<!-- Coarse rows are capability placeholders with no concrete device
-								     bound. The "?" explains the "Not connected" state (sits OUTSIDE
-								     the select button — never a nested interactive). -->
-								{#if source.origin === 'coarse'}
-									<InfoPopover
-										body={m["live.source.notConnectedBody"]()}
-										testId={`source-not-connected-info-${source.id}`}
-										title={m["live.source.notConnectedTitle"]()}
-									/>
-								{/if}
-
-								<!-- Present-but-signal-less capture device: explain that the input
-								     itself is fine and the cable/source is what's missing (sits
-								     OUTSIDE the select button — never a nested interactive). -->
-								{#if hasNoSignal(source)}
-									<InfoPopover
-										body={m["live.source.noSignalBody"]()}
-										testId={`source-no-signal-info-${source.id}`}
-										title={m["live.source.noSignalTitle"]()}
-									/>
-								{/if}
-
-								<!-- MJPEG capture: explain WHY a device shows MJPEG instead of
-								     hardware H.264/H.265 (accurate hardware description, not a fault). -->
-								{#if source.origin === 'capture' && source.kind === 'mjpeg'}
-									<InfoPopover
-										body={m["live.source.mjpegBody"]()}
-										learnMoreLabel={m["live.source.mjpegLearnMore"]()}
-										learnMoreUrl={UVC_H264_DETECTION_DOC_URL}
-										testId={`source-mjpeg-info-${source.id}`}
-										title={m["live.source.mjpegTitle"]()}
-									/>
+								<!-- The help slot: every "?" sits at the inline end of its own
+								     frame, OUTSIDE the select button (never a nested interactive). -->
+								<!-- Rendered only with a help or a live switch to hold: an empty slot and
+								     its 8 px gap would cost every other title 14 px. -->
+								{#if helps.length > 0 || (source.origin === 'capture' && isStreaming)}
+								<div class="flex shrink-0 items-start gap-2 pe-1.5">
+									{#each helps as help (help.testId)}
+										<InfoPopover
+											body={help.body}
+											class={HELP_TARGET}
+											learnMoreLabel={help.learnMoreLabel}
+											learnMoreUrl={help.learnMoreUrl}
+											testId={help.testId}
+											title={help.title}
+										/>
+									{/each}
+									<!-- Capture-row trailing action: a live input switch while STREAMING
+									     (onSwitch → LiveView switchInput). -->
+									{#if source.origin === 'capture' && isStreaming}
+										<Button
+											aria-label={`${m["live.inputPicker.switch"]()} \u2013 ${source.displayName}`}
+											class="my-1.5"
+											data-switch-input={source.id}
+											disabled={source.id === activeInput ||
+												source.id === switchingInput ||
+												source.lost === true}
+											onclick={() => onSwitch?.(source.id)}
+											size="sm"
+											variant={source.id === activeInput ? 'secondary' : 'default'}
+										>
+											{#if source.id === switchingInput}
+												{m["live.inputPicker.switching"]()}
+											{:else if source.id === activeInput}
+												{m["live.inputPicker.active"]()}
+											{:else}
+												{m["live.inputPicker.switch"]()}
+											{/if}
+										</Button>
+									{/if}
+								</div>
 								{/if}
 							</div>
 
-							<!-- Multi-format devices ONLY: a single-format device has no choice to
-							     offer, and a control on every row turns the picker into a form.
-							     Locked while streaming — the format is baked into the graph. -->
-							{#if modeOptionsFor(source).length > 0}
-								{const activeMode = $derived(selectedModeFor(source))}
-								<div class="mt-2 space-y-1.5" data-testid={`source-modes-${source.id}`}>
-									<div class="flex items-center gap-1">
-										<span
-											class="text-muted-foreground text-[0.65rem] font-semibold tracking-wide uppercase"
-										>
-											{m["live.source.modeLabel"]()}
-										</span>
-										<InfoPopover
-											body={m["live.source.modeHint"]()}
-											testId={`source-mode-info-${source.id}`}
-											title={m["live.source.modeLabel"]()}
-										/>
-									</div>
-									<div
-										aria-label={m["live.source.modeLabel"]()}
-										class="flex flex-wrap gap-1.5"
-										role="radiogroup"
-									>
-										{#each modeOptionsFor(source) as option (option.inputMode)}
-											{const active = $derived(option.inputMode === activeMode)}
-											<!-- biome-ignore lint/a11y/useSemanticElements: Input-mode buttons select option.inputMode and lock for streaming or rowDisabled; native radios need separate labels and change their focus model. -->
-											<button
-												aria-checked={active}
-												class="min-h-11 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors {active
-													? 'border-primary bg-primary/10 text-primary'
-													: 'border-border text-muted-foreground hover:bg-accent/50'} disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
-												data-active={active}
-												data-input-mode={option.inputMode}
-												data-testid={`source-mode-${source.id}-${option.inputMode}`}
-												disabled={isStreaming || rowDisabled(source)}
-												onclick={() => handleSelectMode(source, option.inputMode)}
-												role="radio"
-												type="button"
+							{#if hasDetail}
+								<div class="space-y-3 pe-1.5 pb-3 ps-10">
+									{#if selected && (hasActiveConfig || hasCapSummary)}
+										{@render activeConfigPanel(true)}
+									{/if}
+									{#if modeOptionsFor(source).length > 0}
+										{const activeMode = $derived(selectedModeFor(source))}
+										<!-- The heading carries its "?" right after the words: the line is the help's
+										     44 px, 8 px (pt-2, space-y-2) from the select button above and the
+										     choices below, so the "?" shows on a phone's first screen. -->
+										<div class="space-y-2 pt-2" data-testid={`source-modes-${source.id}`}>
+											<div class="flex items-center gap-1">
+												<span class="text-muted-foreground text-xs font-medium">
+													{m["live.source.modeLabel"]()}
+												</span>
+												<InfoPopover
+													body={m["live.source.modeHint"]()}
+													class={HELP_TARGET}
+													testId={`source-mode-info-${source.id}`}
+													title={m["live.source.modeLabel"]()}
+												/>
+											</div>
+											<div
+												aria-label={m["live.source.modeLabel"]()}
+												class="flex flex-wrap gap-1.5"
+												role="radiogroup"
 											>
-												{t(inputModeLabelKey(option.inputMode))}
-											</button>
-										{/each}
-									</div>
-									<p class="text-muted-foreground text-xs">
-										{m["live.source.modeApplyNote"]()}
-									</p>
-								</div>
-							{/if}
-
-							<!-- Selected-but-unbound coarse row: the honest "Not connected" pill
-							     above stays, and this band makes the consequence impossible to
-							     miss — plus a one-tap route to the connected device whose real
-							     hardware name matches what this capability is called. -->
-							{#if coarseUnbound.unbound}
-								<div
-									class="border-status-warning/40 bg-status-warning/10 mt-2 flex items-start gap-3 rounded-lg border p-3"
-									data-testid={`source-coarse-unbound-${source.id}`}
-									role="status"
-								>
-									<TriangleAlert
-										aria-hidden={true}
-										class="text-status-warning mt-0.5 size-4 shrink-0"
-									/>
-									<div class="min-w-0 flex-1 space-y-1.5">
-										<p class="text-status-warning text-sm font-medium">
-											{m["live.source.coarseUnboundTitle"]()}
-										</p>
-										<p class="text-muted-foreground text-xs leading-relaxed">
-											{m["live.source.coarseUnboundBody"]()}
-										</p>
-										{#if coarseUnbound.suggestions.length > 0}
-											{const only =
-												$derived(coarseUnbound.suggestions.length === 1
-													? coarseUnbound.suggestions[0]
-													: undefined)}
-											<p
-												class="text-foreground text-xs font-medium"
-												data-testid={`source-coarse-suggestion-lead-${source.id}`}
-											>
-												{only
-													? m["live.source.coarseSuggestionOne"]({ name: only.displayName })
-													: m["live.source.coarseSuggestionMany"]()}
-											</p>
-											<div class="flex flex-wrap gap-2 pt-0.5">
-												{#each coarseUnbound.suggestions as suggestion (suggestion.id)}
-													{const SuggestionIcon = $derived(rowIcon(suggestion))}
-													<!-- Overrides the Button base's shrink-0/nowrap: a long
-													     device name must wrap inside the band, not overflow it. -->
-													<Button
-														class="h-auto max-w-full min-h-11 shrink py-2 text-left leading-snug whitespace-normal"
-														data-testid={`source-coarse-suggestion-${suggestion.id}`}
-														disabled={isStreaming}
-														onclick={() => handleSelectSource(suggestion)}
-														size="sm"
-														variant="outline"
+												{#each modeOptionsFor(source) as option (option.inputMode)}
+													{const active = $derived(option.inputMode === activeMode)}
+													<!-- biome-ignore lint/a11y/useSemanticElements: Input-mode buttons select option.inputMode and lock for streaming or rowDisabled; native radios need separate labels and change their focus model. -->
+													<button
+														aria-checked={active}
+														class="min-h-11 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors {active
+															? 'border-primary bg-primary/10 text-primary'
+															: 'border-border text-muted-foreground hover:bg-accent/50'} disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
+														data-active={active}
+														data-input-mode={option.inputMode}
+														data-testid={`source-mode-${source.id}-${option.inputMode}`}
+														disabled={isStreaming || rowDisabled(source)}
+														onclick={() => handleSelectMode(source, option.inputMode)}
+														role="radio"
+														type="button"
 													>
-														<SuggestionIcon aria-hidden={true} class="size-3.5" />
-														<span class="min-w-0 break-words">
-															{m["live.source.coarseSuggestionAction"]({
-																name: suggestion.displayName,
-															})}
-														</span>
-													</Button>
+														{t(inputModeLabelKey(option.inputMode))}
+													</button>
 												{/each}
 											</div>
-										{/if}
-									</div>
-								</div>
-							{/if}
-
-							{#if source.origin === 'network' && !source.available}
-								<p
-									class="text-status-warning mt-1 text-xs"
-									data-testid={`source-network-ingest-reason-${source.requiresGateway}`}
-								>
-									{rowReason(source)}
-								</p>
-								<!-- Fail-visible selected-but-disabled row: point the operator at the
-								     Settings toggle that re-enables it (SourceSection can't navigate —
-								     this is a text hint, not a link). -->
-								{#if isOperatorDisabled(source)}
-									<p
-										class="text-muted-foreground mt-0.5 text-xs"
-										data-testid={`source-network-ingest-settings-hint-${source.requiresGateway}`}
-									>
-										{m["live.networkIngest.disabledInSettingsHint"]()}
-									</p>
-								{/if}
-							{/if}
-
-							<!-- Origin-neutral fail-visible block (Todo 7): a NON-network source the
-							     operator hid in Settings (e.g. the test-pattern virtual row) is only
-							     ever reached here when it IS the selected source (else filtered out).
-							     Mirror the network two-line treatment above, but with origin-neutral
-							     testids keyed on source.id — source.requiresGateway is undefined off
-							     the network origin, so its testids can't be reused. -->
-							{#if source.origin !== 'network' && isOperatorDisabled(source)}
-								<p
-									class="text-status-warning mt-1 text-xs"
-									data-testid={`source-hidden-reason-${source.id}`}
-								>
-									{rowReason(source)}
-								</p>
-								<p
-									class="text-muted-foreground mt-0.5 text-xs"
-									data-testid={`source-hidden-settings-hint-${source.id}`}
-								>
-									{m["live.networkIngest.disabledInSettingsHint"]()}
-								</p>
-							{/if}
-
-							{#if source.origin === 'network' && source.url && selected}
-								<details class="group mt-1.5">
-									<summary
-										class="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1.5 text-xs font-medium select-none"
-										data-testid={`source-network-ingest-instructions-toggle-${source.requiresGateway}`}
-									>
-										<QrCode aria-hidden={true} class="size-3.5" />
-										{m["live.networkIngest.instructionsToggle"]()}
-									</summary>
-									<div
-										class="bg-muted/40 mt-2 flex flex-col items-center gap-3 rounded-lg border p-4"
-										data-testid={`source-network-ingest-instructions-${source.requiresGateway}`}
-									>
-										{#if networkQrDataUrls[source.id]}
-											<img
-												class="size-40 rounded-md bg-white p-2"
-												alt={m["live.networkIngest.qrLabel"]()}
-												data-testid={`source-network-ingest-qr-${source.requiresGateway}`}
-												src={networkQrDataUrls[source.id]}
-											/>
-										{/if}
-										<div class="flex w-full items-center gap-2">
-											<!-- dir="ltr": the URL is always Latin/ASCII; never mirror it. -->
-											<code
-												class="bg-background min-w-0 flex-1 truncate rounded-md border px-2.5 py-2 font-mono text-xs"
-												data-testid={`source-network-ingest-url-${source.requiresGateway}`}
-												dir="ltr"
-											>
-												{source.url}
-											</code>
-											<Button
-												aria-label={m["live.networkIngest.copy"]()}
-												data-testid={`source-network-ingest-copy-${source.requiresGateway}`}
-												onclick={() => copyNetworkIngestUrl(source.url)}
-												size="icon"
-												title={m["live.networkIngest.copy"]()}
-												variant="outline"
-											>
-												<Copy class="size-4" />
-											</Button>
+											<p class="text-muted-foreground text-xs">
+												{m["live.source.modeApplyNote"]()}
+											</p>
 										</div>
-										<p
-											class="text-muted-foreground w-full text-xs leading-relaxed"
-											data-testid={`source-network-ingest-codec-education-${source.requiresGateway}`}
+									{/if}
+
+									<!-- Selected-but-unbound coarse row: the honest "Not connected" pill
+									     above stays, and this band makes the consequence impossible to
+									     miss — plus a one-tap route to the connected device whose real
+									     hardware name matches what this capability is called. -->
+									{#if coarseUnbound.unbound}
+										<div
+											class="flex items-start gap-3"
+											data-testid={`source-coarse-unbound-${source.id}`}
+											role="status"
 										>
-											{source.requiresGateway === 'rtmp'
-												? m["live.networkIngest.codecEducation.rtmp"]()
-												: m["live.networkIngest.codecEducation.srt"]()}
+											<TriangleAlert
+												aria-hidden={true}
+												class="text-status-warning mt-0.5 size-4 shrink-0"
+											/>
+											<div class="min-w-0 flex-1 space-y-1.5">
+												<p class="text-status-warning text-sm font-medium">
+													{m["live.source.coarseUnboundTitle"]()}
+												</p>
+												<p class="text-muted-foreground text-xs leading-relaxed">
+													{m["live.source.coarseUnboundBody"]()}
+												</p>
+												{#if coarseUnbound.suggestions.length > 0}
+													{const only =
+														$derived(coarseUnbound.suggestions.length === 1
+															? coarseUnbound.suggestions[0]
+															: undefined)}
+													<p
+														class="text-foreground text-xs font-medium"
+														data-testid={`source-coarse-suggestion-lead-${source.id}`}
+													>
+														{only
+															? m["live.source.coarseSuggestionOne"]({ name: only.displayName })
+															: m["live.source.coarseSuggestionMany"]()}
+													</p>
+													<div class="flex flex-wrap gap-2 pt-0.5">
+														{#each coarseUnbound.suggestions as suggestion (suggestion.id)}
+															{const SuggestionIcon = $derived(rowIcon(suggestion))}
+															<!-- Overrides the Button base's shrink-0/nowrap: a long
+															     device name must wrap inside the band, not overflow it. -->
+															<Button
+																class="h-auto max-w-full min-h-11 shrink py-2 text-left leading-snug whitespace-normal"
+																data-testid={`source-coarse-suggestion-${suggestion.id}`}
+																disabled={isStreaming}
+																onclick={() => handleSelectSource(suggestion)}
+																size="sm"
+																variant="outline"
+															>
+																<SuggestionIcon aria-hidden={true} class="size-3.5" />
+																<span class="min-w-0 break-words">
+																	{m["live.source.coarseSuggestionAction"]({
+																		name: suggestion.displayName,
+																	})}
+																</span>
+															</Button>
+														{/each}
+													</div>
+												{/if}
+											</div>
+										</div>
+									{/if}
+
+									{#if source.origin === 'network' && !source.available}
+										<p
+											class="text-status-warning text-xs"
+											data-testid={`source-network-ingest-reason-${source.requiresGateway}`}
+										>
+											{rowReason(source)}
 										</p>
-									</div>
-								</details>
+										<!-- Fail-visible selected-but-disabled row: point the operator at the
+										     Settings toggle that re-enables it (SourceSection can't navigate —
+										     this is a text hint, not a link). -->
+										{#if isOperatorDisabled(source)}
+											<p
+												class="text-muted-foreground text-xs"
+												data-testid={`source-network-ingest-settings-hint-${source.requiresGateway}`}
+											>
+												{m["live.networkIngest.disabledInSettingsHint"]()}
+											</p>
+										{/if}
+									{/if}
+
+									<!-- Origin-neutral fail-visible block (Todo 7): a NON-network source the
+									     operator hid in Settings (e.g. the test-pattern virtual row) is only
+									     ever reached here when it IS the selected source (else filtered out).
+									     Mirror the network two-line treatment above, but with origin-neutral
+									     testids keyed on source.id — source.requiresGateway is undefined off
+									     the network origin, so its testids can't be reused. -->
+									{#if source.origin !== 'network' && isOperatorDisabled(source)}
+										<p
+											class="text-status-warning text-xs"
+											data-testid={`source-hidden-reason-${source.id}`}
+										>
+											{rowReason(source)}
+										</p>
+										<p
+											class="text-muted-foreground text-xs"
+											data-testid={`source-hidden-settings-hint-${source.id}`}
+										>
+											{m["live.networkIngest.disabledInSettingsHint"]()}
+										</p>
+									{/if}
+
+									{#if source.origin === 'network' && source.url && selected}
+										<details class="group">
+											<summary
+												class="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1.5 text-xs font-medium select-none"
+												data-testid={`source-network-ingest-instructions-toggle-${source.requiresGateway}`}
+											>
+												<QrCode aria-hidden={true} class="size-3.5" />
+												{m["live.networkIngest.instructionsToggle"]()}
+											</summary>
+											<div
+												class="bg-muted/40 mt-2 flex flex-col items-center gap-3 rounded-lg border p-4"
+												data-testid={`source-network-ingest-instructions-${source.requiresGateway}`}
+											>
+												{#if networkQrDataUrls[source.id]}
+													<img
+														class="size-40 rounded-md bg-white p-2"
+														alt={m["live.networkIngest.qrLabel"]()}
+														data-testid={`source-network-ingest-qr-${source.requiresGateway}`}
+														src={networkQrDataUrls[source.id]}
+													/>
+												{/if}
+												<div class="flex w-full items-center gap-2">
+													<!-- dir="ltr": the URL is always Latin/ASCII; never mirror it. -->
+													<code
+														class="bg-background min-w-0 flex-1 truncate rounded-md border px-2.5 py-2 font-mono text-xs"
+														data-testid={`source-network-ingest-url-${source.requiresGateway}`}
+														dir="ltr"
+													>
+														{source.url}
+													</code>
+													<Button
+														aria-label={m["live.networkIngest.copy"]()}
+														data-testid={`source-network-ingest-copy-${source.requiresGateway}`}
+														onclick={() => copyNetworkIngestUrl(source.url)}
+														size="icon"
+														title={m["live.networkIngest.copy"]()}
+														variant="outline"
+													>
+														<Copy class="size-4" />
+													</Button>
+												</div>
+												<p
+													class="text-muted-foreground w-full text-xs leading-relaxed"
+													data-testid={`source-network-ingest-codec-education-${source.requiresGateway}`}
+												>
+													{source.requiresGateway === 'rtmp'
+														? m["live.networkIngest.codecEducation.rtmp"]()
+														: m["live.networkIngest.codecEducation.srt"]()}
+												</p>
+											</div>
+										</details>
+									{/if}
+								</div>
 							{/if}
 						</li>
 					{/each}
@@ -1232,305 +1323,306 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 			{/if}
 		{/if}
 
-		<!-- Audio source — THE one audio surface (T11): inline picker + a "Codec &
-		     delay" affordance opening the AudioDialog, hidden while streaming so the
-		     surface stays read-only mid-stream (audioReadOnly gate unchanged).
-		     C1: the whole surface is gated on an effective source existing (explicit
-		     config.source or the implicit sole camera) — fail-open when `sources` is
-		     undefined (standalone / federation mount). -->
+		<!-- Audio source — THE one audio surface (T11): the picker and its level meter
+		     in ONE box under the section heading, whose "Codec & delay" affordance opens
+		     the AudioDialog (hidden while streaming, so the surface stays read-only
+		     mid-stream; the audioReadOnly gate is unchanged). Notices about the pick
+		     sit under the box. C1: the whole surface is gated on an effective source
+		     (explicit config.source or the implicit sole camera) — fail-open when
+		     `sources` is undefined (standalone / federation mount). -->
 		{#if showAudioSurface}
-		<!-- Live screen contract: the audio card is a titled group after the tiles,
-		     split from them by a hairline — never a card inside this card. -->
-		<section
-			aria-labelledby="live-audio-card-title"
-			class="space-y-3 border-t pt-5"
-			data-testid="audio-card" data-touch-region
-		>
-		<h2 class="text-muted-foreground text-xs font-medium" id="live-audio-card-title">
-			{m["live.audioCard.title"]()}
-		</h2>
-		<div class="space-y-2" data-testid="source-audio">
-			<div class="flex items-center gap-1">
-				<Volume2 aria-hidden={true} class="text-muted-foreground size-4 shrink-0" />
-				<span class="text-sm font-medium">{m["settings.audioSource"]()}</span>
-				<InfoPopover
-					body={m["live.education.field.audio.body"]()}
-					testId="info-audio"
-					title={m["live.education.field.audio.title"]()}
-				/>
-				{#if onOpenAudioDialog && !isStreaming}
-					<Button
-						class="ml-auto min-h-11 gap-1.5"
-						data-testid="open-audio-dialog"
-						onclick={() => onOpenAudioDialog?.()}
-						size="sm"
-						variant="ghost"
-					>
-						<Pencil aria-hidden={true} class="size-3.5" />
-						<span>{m["live.source.audioEdit"]()}</span>
-						<ChevronRight aria-hidden={true} class="size-4 rtl:-scale-x-100" />
-					</Button>
-				{/if}
-			</div>
-
-			<!-- Resolved-audio preview (T6): while Auto is the active selection and the
-			     source is NOT embedded, show what Auto resolved to ("Auto → device"),
-			     or an em-dash when genuinely unresolved (old backend). -->
-			{#if audioIsAuto && !showEmbedded && resolvedAudio.sameDeviceState === undefined}
-				<p
-					class="text-muted-foreground font-mono text-xs"
-					data-testid="audio-source-auto-resolved"
-				>
-					{resolvedAudio.current ?? '\u2014'}
-				</p>
-			{/if}
-
-			<!-- Auto found several, or no, audio devices on the camera's OWN physical
-			     device. It deliberately does not guess across devices, so the operator
-			     is told which state they are in and asked to pick. -->
-			{#if audioIsAuto && !showEmbedded && resolvedAudio.sameDeviceState !== undefined}
-				<div
-					class="border-status-warning/60 bg-status-warning/10 space-y-1 rounded-lg border px-3 py-2"
-					data-testid={resolvedAudio.sameDeviceState === 'ambiguous'
-						? 'audio-same-device-ambiguous'
-						: resolvedAudio.sameDeviceState === 'no-capture'
-							? 'audio-no-capture'
-							: 'audio-no-same-device'}
-					role="status"
-				>
-					<p class="text-sm font-medium">
-						{resolvedAudio.sameDeviceState === 'ambiguous'
-							? m["live.source.audioAmbiguousTitle"]()
-							: resolvedAudio.sameDeviceState === 'no-capture'
-								? m["live.source.audioNoCaptureTitle"]()
-								: m["live.source.audioNoSameDeviceTitle"]()}
-					</p>
-					<p class="text-muted-foreground text-xs">
-						{resolvedAudio.sameDeviceState === 'ambiguous'
-							? m["live.source.audioAmbiguousBody"]()
-							: resolvedAudio.sameDeviceState === 'no-capture'
-								? m["live.source.audioNoCaptureBody"]()
-								: m["live.source.audioNoSameDeviceBody"]()}
-					</p>
-					{#if resolvedAudio.sameDeviceCandidates.length > 0}
-						<ul class="flex flex-wrap gap-1.5" data-testid="audio-same-device-candidates">
-							{#each resolvedAudio.sameDeviceCandidates as candidate (candidate)}
-								<li
-									class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 font-mono text-xs"
-								>
-									{candidate}
-								</li>
-							{/each}
-						</ul>
-					{/if}
-				</div>
-			{/if}
-			{#if resolvedAudio.pending !== undefined}
-				<p class="text-status-info text-xs" data-testid="audio-follow-pending">
-					{m["live.inputPicker.audioFollowsOnRestart"]()}
-				</p>
-			{/if}
-
-			{#if showEmbedded}
-				<!-- Engine routes the incoming stream's embedded audio — no ALSA pick. -->
-				<div
-					class="bg-muted/40 flex min-h-11 flex-wrap items-center gap-2 rounded-lg border px-3 py-2"
-					data-testid="audio-source-embedded"
-				>
-					<Volume2 aria-hidden={true} class="text-muted-foreground size-4 shrink-0" />
-					<span class="text-sm">{m["live.source.audioEmbedded"]()}</span>
-				</div>
-			{:else if audioMode === 'none'}
-				<p class="text-muted-foreground text-sm" data-testid="audio-source-none">
-					{m["live.source.audioNone"]()}
-				</p>
-			{:else if audioReadOnly}
-				<!-- Single source, or streaming (live switch gated) → read-only. -->
-				<div
-					class="bg-muted/40 flex min-h-11 flex-wrap items-center gap-x-2 rounded-lg border px-3 py-2"
-					data-testid="audio-source-readonly"
-					title={displayedAudioDetail}
-				>
-					<span class="truncate font-mono text-sm">
-						{displayedAudioLabel ?? m["live.source.audioNone"]()}
-					</span>
-					{#if displayedAudioExternal}
-						<Badge
-							data-testid="audio-source-external"
-							label={m["settings.audioDeviceExternal"]()}
-							size="micro"
-							title={m["settings.audioDeviceExternalHint"]()}
-							variant="info"
+			<!-- Live screen contract: the audio card is a titled group after the options,
+			     split from them by a hairline — never a card inside this card. -->
+			<section
+				aria-labelledby="live-audio-card-title"
+				class="space-y-3 border-t pt-5"
+				data-testid="audio-card"
+				data-touch-region
+			>
+				<div class="space-y-3" data-testid="source-audio">
+					<div class="flex items-center gap-1">
+						<h3 class="text-sm font-semibold" id="live-audio-card-title">
+							{m["live.audioCard.title"]()}
+						</h3>
+						<InfoPopover
+							body={m["live.education.field.audio.body"]()}
+							testId="info-audio"
+							title={m["live.education.field.audio.title"]()}
 						/>
-					{/if}
-					{#if displayedAudioQuality}
-						<span
-							class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 font-mono text-xs"
-							data-quality={displayedAudioQuality.kind}
-							data-testid="audio-source-quality"
-						>
-							{t(displayedAudioQuality.key, displayedAudioQuality.params)}
-						</span>
-					{/if}
-					{#if notAvailableAudioSource}
-						<span
-							class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium"
-							data-testid="audio-source-unavailable"
-						>
-							{m["settings.notAvailableAudioSource"]()}
-						</span>
-					{/if}
-				</div>
-				{#if audioLiveSwitchBlocked}
-					<p
-						class="text-status-warning text-xs"
-						data-testid="audio-bluetooth-live-switch"
-						role="status"
-					>
-						{m["live.source.audioBluetoothLiveSwitch"]()}
-					</p>
-				{/if}
-			{:else}
-				<!-- Multiple sources, pre-start → selectable. -->
-				<Select.Root
-					onValueChange={(value) => onSelectAudioSource?.(value)}
-					type="single"
-					value={selectedAudioSource}
-				>
-					<Select.Trigger
-						aria-labelledby="sourceAudioSelectLabel"
-						class="min-h-11 w-full"
-						data-testid="audio-source-select"
-						id="sourceAudioSelect"
-					>
-						{#if notAvailableAudioSource}
-							<span id="sourceAudioSelectLabel" data-testid="audio-source-unavailable">
-								{`${notAvailableAudioSource} (${m["settings.notAvailableAudioSource"]()})`}
-							</span>
-						{:else}
-							<span id="sourceAudioSelectLabel" class="flex min-w-0 items-center gap-2">
-								<span class="truncate">{displayedAudioLabel ?? m["settings.selectAudioSource"]()}</span>
+						{#if onOpenAudioDialog && !isStreaming}
+							<Button
+								class="-my-2.5 ms-auto min-h-11 gap-1"
+								data-testid="open-audio-dialog"
+								onclick={() => onOpenAudioDialog?.()}
+								size="sm"
+								variant="ghost"
+							>
+								<span>{m["live.source.audioEdit"]()}</span>
+								<ChevronRight aria-hidden={true} class="size-4 rtl:-scale-x-100" />
+							</Button>
+						{/if}
+					</div>
+
+					<div class="bg-muted/30 divide-border divide-y rounded-lg border">
+						{#if showEmbedded}
+							<!-- Engine routes the incoming stream's embedded audio — no ALSA pick. -->
+							<div
+								class="flex min-h-11 items-center gap-2 px-3 py-2"
+								data-testid="audio-source-embedded"
+							>
+								<Volume2 aria-hidden={true} class="text-muted-foreground size-4 shrink-0" />
+								<span class="text-sm">{m["live.source.audioEmbedded"]()}</span>
+							</div>
+						{:else if audioMode === 'none'}
+							<p class="text-muted-foreground px-3 py-2.5 text-sm" data-testid="audio-source-none">
+								{m["live.source.audioNone"]()}
+							</p>
+						{:else if audioReadOnly}
+							<!-- Single source, or streaming (live switch gated) → read-only. -->
+							<div
+								class="flex min-h-11 flex-wrap items-center gap-x-2 px-3 py-2"
+								data-testid="audio-source-readonly"
+								title={displayedAudioDetail}
+							>
+								<span class="truncate text-sm">
+									{displayedAudioLabel ?? m["live.source.audioNone"]()}
+								</span>
 								{#if displayedAudioExternal}
 									<Badge
 										data-testid="audio-source-external"
 										label={m["settings.audioDeviceExternal"]()}
 										size="micro"
+										title={m["settings.audioDeviceExternalHint"]()}
 										variant="info"
 									/>
 								{/if}
 								{#if displayedAudioQuality}
 									<span
-										class="bg-muted text-muted-foreground shrink-0 rounded-full px-2 py-0.5 font-mono text-xs"
+										class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs"
 										data-quality={displayedAudioQuality.kind}
 										data-testid="audio-source-quality"
 									>
 										{t(displayedAudioQuality.key, displayedAudioQuality.params)}
 									</span>
 								{/if}
-							</span>
-						{/if}
-					</Select.Trigger>
-					<Select.Content>
-						<Select.Group>
-							<!-- Auto renders FIRST, above every device entry (FE-injected). -->
-							<Select.Item
-								data-testid="audio-source-auto-option"
-								label={t('audio.sources.auto')}
-								value={AUDIO_SOURCE_AUTO}
-							></Select.Item>
-							{#each groupedAudio.devices as entry (entry.id)}
-								{const quality = $derived(audioQualityChip(entry))}
-								{const blockedKey = $derived(audioSourceUnavailableReasonKey(entry))}
-								{const blockedHintKey = $derived(audioSourceUnavailableHintKey(entry))}
-								<Select.Item
-									aria-disabled={blockedKey ? 'true' : undefined}
-									disabled={blockedKey !== undefined}
-									label={audioSourceLabel(entry, t)}
-									title={blockedHintKey ? t(blockedHintKey) : entry.detail}
-									value={entry.id}
-								>
-									<span class="flex min-w-0 items-center gap-2">
-										<span class="truncate">{audioSourceLabel(entry, t)}</span>
-										{#if isExternalAudioSource(entry)}
-											<Badge
-												data-testid="audio-option-external-{entry.id}"
-												label={m["settings.audioDeviceExternal"]()}
-												size="micro"
-												variant="info"
-											/>
-										{/if}
-										{#if quality}
-											<span
-												class="bg-muted text-muted-foreground shrink-0 rounded-full px-2 py-0.5 font-mono text-xs"
-												data-quality={quality.kind}
-												data-testid="audio-option-quality-{entry.id}"
-											>
-												{t(quality.key, quality.params)}
-											</span>
-										{/if}
-										{#if blockedKey}
-											<span
-												class="text-status-warning shrink-0 text-xs"
-												data-testid="audio-option-blocked-{entry.id}"
-											>
-												{t(blockedKey)}
-											</span>
-										{/if}
+								{#if notAvailableAudioSource}
+									<span
+										class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium"
+										data-testid="audio-source-unavailable"
+									>
+										{m["settings.notAvailableAudioSource"]()}
 									</span>
-								</Select.Item>
-							{/each}
-							{#if notAvailableAudioSource}
-								<!-- Listed so the operator sees what is selected, disabled because
-								     re-picking it only buys another failed start. -->
-								<Select.Item
-									aria-disabled="true"
-									data-testid="audio-option-unavailable"
-									disabled
-									label={`${notAvailableAudioSource} (${m["settings.notAvailableAudioSource"]()})`}
-									title={m["settings.notAvailableAudioSourceHint"]()}
-									value={notAvailableAudioSource}
-								></Select.Item>
+								{/if}
+							</div>
+						{:else}
+							<!-- Multiple sources, pre-start → selectable. The box is its frame, so
+							     the trigger drops its own border and reads as the box's first row. -->
+							<Select.Root
+								onValueChange={(value) => onSelectAudioSource?.(value)}
+								type="single"
+								value={selectedAudioSource}
+							>
+								<Select.Trigger
+									aria-labelledby="sourceAudioSelectLabel"
+									class="min-h-11 w-full rounded-lg border-0 bg-transparent px-3 shadow-none dark:bg-transparent dark:hover:bg-accent/50"
+									data-testid="audio-source-select"
+									id="sourceAudioSelect"
+								>
+									{#if notAvailableAudioSource}
+										<span id="sourceAudioSelectLabel" data-testid="audio-source-unavailable">
+											{`${notAvailableAudioSource} (${m["settings.notAvailableAudioSource"]()})`}
+										</span>
+									{:else}
+										<span id="sourceAudioSelectLabel" class="flex min-w-0 items-center gap-2">
+											<span class="truncate">{displayedAudioLabel ?? m["settings.selectAudioSource"]()}</span>
+											{#if displayedAudioExternal}
+												<Badge
+													data-testid="audio-source-external"
+													label={m["settings.audioDeviceExternal"]()}
+													size="micro"
+													variant="info"
+												/>
+											{/if}
+											{#if displayedAudioQuality}
+												<span
+													class="bg-muted text-muted-foreground shrink-0 rounded-full px-2 py-0.5 text-xs"
+													data-quality={displayedAudioQuality.kind}
+													data-testid="audio-source-quality"
+												>
+													{t(displayedAudioQuality.key, displayedAudioQuality.params)}
+												</span>
+											{/if}
+										</span>
+									{/if}
+								</Select.Trigger>
+								<Select.Content>
+									<Select.Group>
+										<!-- Auto renders FIRST, above every device entry (FE-injected). -->
+										<Select.Item
+											data-testid="audio-source-auto-option"
+											label={t('audio.sources.auto')}
+											value={AUDIO_SOURCE_AUTO}
+										></Select.Item>
+										{#each groupedAudio.devices as entry (entry.id)}
+											{const quality = $derived(audioQualityChip(entry))}
+											{const blockedKey = $derived(audioSourceUnavailableReasonKey(entry))}
+											{const blockedHintKey = $derived(audioSourceUnavailableHintKey(entry))}
+											<Select.Item
+												aria-disabled={blockedKey ? 'true' : undefined}
+												disabled={blockedKey !== undefined}
+												label={audioSourceLabel(entry, t)}
+												title={blockedHintKey ? t(blockedHintKey) : entry.detail}
+												value={entry.id}
+											>
+												<span class="flex min-w-0 items-center gap-2">
+													<span class="truncate">{audioSourceLabel(entry, t)}</span>
+													{#if isExternalAudioSource(entry)}
+														<Badge
+															data-testid="audio-option-external-{entry.id}"
+															label={m["settings.audioDeviceExternal"]()}
+															size="micro"
+															variant="info"
+														/>
+													{/if}
+													{#if quality}
+														<span
+															class="bg-muted text-muted-foreground shrink-0 rounded-full px-2 py-0.5 font-mono text-xs"
+															data-quality={quality.kind}
+															data-testid="audio-option-quality-{entry.id}"
+														>
+															{t(quality.key, quality.params)}
+														</span>
+													{/if}
+													{#if blockedKey}
+														<span
+															class="text-status-warning shrink-0 text-xs"
+															data-testid="audio-option-blocked-{entry.id}"
+														>
+															{t(blockedKey)}
+														</span>
+													{/if}
+												</span>
+											</Select.Item>
+										{/each}
+										{#if notAvailableAudioSource}
+											<!-- Listed so the operator sees what is selected, disabled because
+											     re-picking it only buys another failed start. -->
+											<Select.Item
+												aria-disabled="true"
+												data-testid="audio-option-unavailable"
+												disabled
+												label={`${notAvailableAudioSource} (${m["settings.notAvailableAudioSource"]()})`}
+												title={m["settings.notAvailableAudioSourceHint"]()}
+												value={notAvailableAudioSource}
+											></Select.Item>
+										{/if}
+									</Select.Group>
+									{#if groupedAudio.pseudo.length > 0}
+										<Select.Separator />
+										<Select.Group>
+											{#each groupedAudio.pseudo as entry (entry.id)}
+												<Select.Item
+													class="text-muted-foreground"
+													label={audioSourceLabel(entry, t)}
+													value={entry.id}
+												></Select.Item>
+											{/each}
+										</Select.Group>
+								{/if}
+							</Select.Content>
+							</Select.Root>
+						{/if}
+
+						<!-- Resolved-audio preview (T6): while Auto is the active selection and the
+						     source is NOT embedded, what Auto resolved to ("Auto → device"), or an
+						     em-dash when genuinely unresolved (old backend). -->
+						{#if audioIsAuto && !showEmbedded && resolvedAudio.sameDeviceState === undefined}
+							<p
+								class="text-muted-foreground px-3 py-2 text-xs"
+								data-testid="audio-source-auto-resolved"
+							>
+								{resolvedAudio.current ?? '\u2014'}
+							</p>
+						{/if}
+
+						<!-- The level meter for the pick above, in the same box, so the bars sit
+						     with the device they belong to. Always mounted: the meter's own
+						     unavailable copy is the honest answer when no level frame has arrived.
+						     With the mixer, the main input's strip carries it instead. -->
+						{#if !mixerShown}
+							<LiveAudioMeter class="px-3 py-2.5" />
+						{/if}
+					</div>
+					<!-- Auto found several, or no, audio devices on the camera's OWN physical
+					     device. It deliberately does not guess across devices, so the operator
+					     is told which state they are in and asked to pick. -->
+					{#if audioIsAuto && !showEmbedded && resolvedAudio.sameDeviceState !== undefined}
+						<div
+							class="border-status-warning/60 bg-status-warning/10 space-y-1 rounded-lg border px-3 py-2"
+							data-testid={resolvedAudio.sameDeviceState === 'ambiguous'
+								? 'audio-same-device-ambiguous'
+								: resolvedAudio.sameDeviceState === 'no-capture'
+									? 'audio-no-capture'
+									: 'audio-no-same-device'}
+							role="status"
+						>
+							<p class="text-sm font-medium">
+								{resolvedAudio.sameDeviceState === 'ambiguous'
+									? m["live.source.audioAmbiguousTitle"]()
+									: resolvedAudio.sameDeviceState === 'no-capture'
+										? m["live.source.audioNoCaptureTitle"]()
+										: m["live.source.audioNoSameDeviceTitle"]()}
+							</p>
+							<p class="text-muted-foreground text-xs">
+								{resolvedAudio.sameDeviceState === 'ambiguous'
+									? m["live.source.audioAmbiguousBody"]()
+									: resolvedAudio.sameDeviceState === 'no-capture'
+										? m["live.source.audioNoCaptureBody"]()
+										: m["live.source.audioNoSameDeviceBody"]()}
+							</p>
+							{#if resolvedAudio.sameDeviceCandidates.length > 0}
+								<ul class="flex flex-wrap gap-1.5" data-testid="audio-same-device-candidates">
+									{#each resolvedAudio.sameDeviceCandidates as candidate (candidate)}
+										<li
+											class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 font-mono text-xs"
+										>
+											{candidate}
+										</li>
+									{/each}
+								</ul>
 							{/if}
-						</Select.Group>
-						{#if groupedAudio.pseudo.length > 0}
-							<Select.Separator />
-							<Select.Group>
-								{#each groupedAudio.pseudo as entry (entry.id)}
-									<Select.Item
-										class="text-muted-foreground"
-										label={audioSourceLabel(entry, t)}
-										value={entry.id}
-									></Select.Item>
-								{/each}
-							</Select.Group>
+						</div>
 					{/if}
-				</Select.Content>
-			</Select.Root>
-		{/if}
+					{#if resolvedAudio.pending !== undefined}
+						<p class="text-status-info text-xs" data-testid="audio-follow-pending">
+							{m["live.inputPicker.audioFollowsOnRestart"]()}
+						</p>
+					{/if}
 
-			{#if audioMixLive}
-				<p
-					class="text-status-warning text-xs"
-					data-testid="audio-source-mix-locked"
-					role="status"
-				>
-					{m["live.audioMixer.error.audio_mix_active"]()}
-				</p>
-			{/if}
+					{#if audioLiveSwitchBlocked}
+						<p
+							class="text-status-warning text-xs"
+							data-testid="audio-bluetooth-live-switch"
+							role="status"
+						>
+							{m["live.source.audioBluetoothLiveSwitch"]()}
+						</p>
+					{/if}
+					{#if audioMixLive}
+						<p
+							class="text-status-warning text-xs"
+							data-testid="audio-source-mix-locked"
+							role="status"
+						>
+							{m["live.audioMixer.error.audio_mix_active"]()}
+						</p>
+					{/if}
 
-			<!-- Live level meter for the source picked directly above — a slim inline
-			     strip, not its own page section, so the bars sit next to the device
-			     they belong to. Always mounted: the meter's own unavailable copy is
-			     the honest answer when no level frame has arrived. With the mixer,
-			     the main input's strip carries it instead. -->
-			{#if !mixerShown}
-				<LiveAudioMeter class="pt-0.5" />
-			{/if}
-		</div>
-		{#if mixerShown}
-			<AudioMixer {capabilities} {config} {isStreaming} />
-		{/if}
-		</section>
+				</div>
+				{#if mixerShown}
+					<AudioMixer {capabilities} {config} {isStreaming} />
+				{/if}
+			</section>
 		{/if}
 	</Card.Content>
 </Card.Root>

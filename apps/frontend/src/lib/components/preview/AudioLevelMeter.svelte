@@ -74,7 +74,7 @@ const silent = $derived(channels.length === 0 || channels.every((c) => c.peak ==
 >
 	{#if unavailable}
 		<p
-			class="text-muted-foreground font-mono text-[11px] tracking-wide"
+			class="text-muted-foreground text-xs"
 			data-testid="audio-unavailable"
 			role="status"
 		>
@@ -83,7 +83,7 @@ const silent = $derived(channels.length === 0 || channels.every((c) => c.peak ==
 				>{/if}
 		</p>
 	{:else if silent}
-		<p class="text-muted-foreground font-mono text-[11px] tracking-wide" data-testid="audio-silent">
+		<p class="text-muted-foreground text-xs" data-testid="audio-silent">
 			{m["live.preview.audioSilent"]()}
 		</p>
 	{:else}

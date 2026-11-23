@@ -1,6 +1,14 @@
-import type { ConnectionUUID } from "../network/network-manager.ts";
+import {
+	type ConnectionUUID,
+	nmcliParseSep,
+	nmDevices,
+} from "../network/network-manager.ts";
 import { concurrentApIfname } from "./wifi-concurrent-interface.ts";
-import { readHotspotProfileActivity } from "./wifi-hotspot-activity.ts";
+import {
+	nmDisconnectActivation,
+	observeHotspotActivation,
+	readHotspotProfileActivity,
+} from "./wifi-hotspot-activity.ts";
 import type {
 	HotspotStopDeps,
 	HotspotStopResult,
@@ -16,10 +24,12 @@ import {
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
 import {
+	sampleWifiOperationRadio,
 	wifiOperationChanged,
 	type wifiOperationGuard,
 } from "./wifi-operation-binding.ts";
-import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
+import { wifiAdapterKeyMac } from "./wifi-permanent-mac.ts";
+import { sameRadioLifetime, wifiRadioIdentity } from "./wifi-radio-identity.ts";
 import { transitionVirtualBinding } from "./wifi-virtual-binding.ts";
 
 export async function teardownHotspotLocked(
@@ -30,14 +40,18 @@ export async function teardownHotspotLocked(
 	options: {
 		readonly operation: ReturnType<typeof wifiOperationGuard> | undefined;
 		readonly pendingCleanup: boolean;
+		readonly targetIfname: string;
 	},
 ): Promise<HotspotStopResult> {
-	const { operation, pendingCleanup } = options;
+	const { operation, pendingCleanup, targetIfname } = options;
 	if (!conn) return { success: true };
-	if (
-		!isHotspotActive(wifiInterface) &&
-		wifiInterface.hotspot.transition !== "activating"
-	) {
+	const concurrent = wifiInterface.concurrentHotspot;
+	const live =
+		concurrent?.activeConn === conn ||
+		(wifiInterface.activeMode === "ap" && wifiInterface.activeConn === conn) ||
+		isHotspotActive(wifiInterface);
+	const activating = wifiInterface.hotspot.transition === "activating";
+	if (!live && !activating) {
 		const activity = await readHotspotProfileActivity(conn);
 		if (activity === "inactive" || activity === "absent")
 			return { success: true };
@@ -48,9 +62,13 @@ export async function teardownHotspotLocked(
 	// Read BEFORE the teardown clears it: the dup-IP suppression release below has
 	// to pair with whichever interface took it on the way in, and a capable radio
 	// hosting an EXCLUSIVE hotspot has no virtual netdev at all.
-	const concurrent = wifiInterface.concurrentHotspot;
 	const virtualIfname =
 		concurrent?.ifname ?? concurrentApIfname(wifiInterface.ifname);
+	const identities = wifiRadioIdentity.state.rows;
+	const parentPhy = identities.get(wifiInterface.ifname)?.lifetime?.phyPath;
+	const ownsVirtual =
+		parentPhy !== undefined &&
+		identities.get(virtualIfname)?.lifetime?.phyPath === parentPhy;
 	const wasConcurrent = concurrent !== undefined;
 	const activeConn = wifiInterface.activeConn;
 	const activeMode = wifiInterface.activeMode;
@@ -69,8 +87,32 @@ export async function teardownHotspotLocked(
 			run: async () => {
 				if (operation && (!(await operation.check()) || !operation.current()))
 					return false;
-				dispatched = true;
-				return deps.nmDisconnect(conn);
+				const roster = await nmDevices("device,type,state,con-uuid");
+				const on = roster
+					?.map(nmcliParseSep)
+					.filter(([, type, , uuid]) => type === "wifi" && uuid === conn);
+				const local = on?.find(
+					([name]) =>
+						name === targetIfname || (ownsVirtual && name === virtualIfname),
+				);
+				const ifname = local?.[0] ?? targetIfname;
+				const activation = await observeHotspotActivation(conn, ifname);
+				if (!activation)
+					return !live && !activating && !local && Boolean(on?.length);
+				const lifetime = identities.get(ifname)?.lifetime;
+				return nmDisconnectActivation(conn, activation, deps, async () => {
+					if (operation && !(await operation.permit())) return false;
+					if (
+						lifetime &&
+						!sameRadioLifetime(
+							lifetime,
+							(await sampleWifiOperationRadio(ifname))?.lifetime,
+						)
+					)
+						return false;
+					dispatched = true;
+					return true;
+				});
 			},
 		})
 	).success;
@@ -112,7 +154,7 @@ export async function teardownHotspotLocked(
 			(current.activeConn === conn || current.activeConn === null)
 		) {
 			transitionVirtualBinding(wifiInterface, { kind: "retire" });
-			if (normalizeMacAddress(macAddress))
+			if (wifiAdapterKeyMac(macAddress))
 				await deps.releaseConcurrentInterface(virtualIfname);
 		}
 	}

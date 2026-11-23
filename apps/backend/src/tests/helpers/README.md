@@ -10,7 +10,7 @@ bounds. Reader closure counts as EOF only before cancellation. The original
 stall diagnostic coverage, not a flake repair or a proven historical cause.
 
 The diagnostic signal field derives from Bun's `Subprocess["signalCode"]` type,
-including numeric signals on the pinned Bun 1.4.4. Snapshots preserve that evidence as JSON
+including numeric signals on the pinned Bun 1.4.5. Snapshots preserve that evidence as JSON
 numbers rather than converting or rejecting it; this does not change collection,
 termination or reservation settlement.
 

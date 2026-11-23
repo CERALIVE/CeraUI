@@ -2,10 +2,12 @@
 
 ## Release & CI rules
 
+Pass the full owner-approved commit SHA as `approved_sha` when dispatching Publish Release; a mismatch stops the release before checkout, and leaving it empty preserves the existing behavior.
+
 The `journal-conformance` Build Check job runs the real systemd 257 container
 suite for the existing `changes.outputs.code` gate, including backend changes.
 It inherits read-only contents permission and workflow cancellation, pins Bun
-1.4.4, and has a 15-minute timeout. The harness needs no dependency install.
+1.4.5, and has a 15-minute timeout. The harness needs no dependency install.
 The required `test` summary depends on this job and reads its result; failure,
 cancellation or a code-change skip therefore fails the summary.
 
@@ -81,6 +83,11 @@ JUnit reporter, requires a non-empty report, and checks each manifest file's
 descendant cases and receipt-set test with zero skips or failures. The checker
 unit tests run separately from backend discovery. Add future kernel files to both
 the manifest and `apps/backend/tsconfig.tests.json`.
+
+Publish Release keeps frontend unit tests first and enables unprivileged user
+namespaces before package and backend contracts. Its release/package gate mirrors
+the Build Check sender fixture and runs the opt-in netns cases separately,
+including rootful UID routing, so the bundled backend run's skips are covered.
 
 Four further Build Check facts, all landed 2026-08-14:
 

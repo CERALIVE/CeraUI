@@ -46,6 +46,9 @@ interface FieldDelivery {
 	readonly dispatchedAt: number;
 }
 
+/** The window event that announces a delivered `updating` or `update_state`. */
+const PROGRESS_DELIVERED = "ceralive:progress-delivered";
+
 // Page-clock ordering survives resetState; a new link ignores old-link marks.
 const deliveries = new Map<string, FieldDelivery>();
 
@@ -87,6 +90,12 @@ export function selectStatusFields(
 	});
 	if (fields.some(([field]) => isStreamFact(field))) admitStatusFrame(receipt);
 	for (const [field] of fields) {
+		// Every delivery of update progress, an unchanged one included: the
+		// store keeps an equal value's identity, so only this says it is fresh.
+		if (field === "updating" || field === "update_state")
+			globalThis.dispatchEvent?.(
+				new CustomEvent(PROGRESS_DELIVERED, { detail: field }),
+			);
 		const previous = deliveries.get(field);
 		const sameLink = previous?.link === receipt.link;
 		deliveries.set(field, {

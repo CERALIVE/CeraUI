@@ -5,7 +5,7 @@
   Install is destructive: it routes through a confirmation AppDialog before
   calling the surface's capability-selected package action. While an update runs, a progress indicator
   replaces the install action; the full-screen overlay (Layout, off
-  `status.updating`) carries the real percentage.
+  `status.updating`) shows the phase and the percentage APT reports for it.
 
   Every conclusion is the device's (round-3 review C, C3-4): the start runs
   through the same action machine as the orchestrator controls (action
@@ -16,9 +16,10 @@
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
-import type { UpdateCheckClockSummary, UpdateTransportSummary } from '@ceraui/rpc/schemas';
+import { holdUpdateProgress } from '@ceraui/rpc/package-progress';
+import type { UpdateCheckClockSummary, UpdateProgress, UpdateTransportSummary } from '@ceraui/rpc/schemas';
 import { AlertTriangle, Download, RefreshCw } from '@lucide/svelte';
-import { untrack } from 'svelte';
+import { getContext, untrack } from 'svelte';
 
 import { AppDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
@@ -28,6 +29,7 @@ import { rpc } from '$lib/rpc/client';
 import { NotSentError } from '$lib/rpc/rpc-error';
 import { getUpdateState } from '$lib/rpc/subscriptions.svelte';
 import { actionableCountOf, availableOf, checkedAtOf } from '$lib/updates/legacy-packages';
+import { CONNECTION_DROPPED, createLiveProgress } from '$lib/updates/live-progress';
 import type { UpdateSurface } from '$lib/updates/update-surface.svelte';
 
 import ActionOutcomeBand from './ActionOutcomeBand.svelte';
@@ -48,13 +50,28 @@ const failed = $derived(updateState?.kind === 'failed');
 const succeeded = $derived(updateState?.kind === 'success');
 const preflightFailed = $derived(updateState?.kind === 'update_preflight_failed');
 const lastCheckedAt = $derived(checkedAtOf(updateState));
-const inProgress = $derived(updateState?.kind === 'downloading' || updateState?.kind === 'installing');
-const progressValue = $derived.by(() => {
-	const p = updateState?.kind === 'downloading' || updateState?.kind === 'installing' ? updateState.progress : undefined;
-	if (!p?.total || p.total <= 0) return undefined;
-	const done = (p.downloading ?? 0) + (p.unpacking ?? 0) + (p.setting_up ?? 0);
-	return Math.min(100, Math.max(0, Math.round((100 * done) / (3 * p.total))));
+// What this dialog last showed for the running install; a stale frame never moves it back.
+// `inProgress` reads it on every state, so the hold also ends with the run.
+let shownProgress: UpdateProgress | undefined;
+const liveProgress = createLiveProgress();
+// Outside the layout (a test mount) the connection counts as up.
+const connectionDropped = getContext<((field: string) => boolean) | undefined>(CONNECTION_DROPPED);
+const progress = $derived.by(() => {
+	const frame =
+		updateState?.kind === 'downloading' || updateState?.kind === 'installing' ? updateState.progress : undefined;
+	shownProgress = frame ? holdUpdateProgress(shownProgress, frame) : undefined;
+	return liveProgress(shownProgress, frame, connectionDropped?.('update_state') ?? false);
 });
+const inProgress = $derived(progress !== undefined);
+// APT restarts its percentage for the install, so the phase names which one it is.
+const progressPercent = $derived(progress?.percent);
+const phaseLabel = $derived(
+	progress && (progress.unpacking > 0 || progress.setting_up > 0)
+		? m['updatingOverlay.installing']()
+		: progress && progress.downloading > 0
+			? m['updatingOverlay.downloading']()
+			: m['updatingOverlay.preparingOrDownloading']()
+);
 
 let confirmOpen = $state(false);
 
@@ -182,8 +199,16 @@ $effect(() => () => clearTimeout(checkTimeout));
 				<RefreshCw class="text-primary size-4 motion-safe:animate-spin" />
 				{m["settings.dialogs.updating"]()}
 			</div>
-			<!-- An unknown total is indeterminate progress, never a finished bar. -->
-			<Progress value={progressValue ?? null} />
+			<p class="text-muted-foreground text-sm" data-testid="update-package-phase">
+				{phaseLabel}{progressPercent === undefined ? '' : ` · ${progressPercent}%`}
+			</p>
+			<Progress
+				class="package-update-progress"
+				aria-label={m["updatingOverlay.progress"]()}
+				aria-valuetext={progressPercent === undefined ? undefined : `${progressPercent}%`}
+				max={100}
+				value={progressPercent ?? null}
+			/>
 		</div>
 	{:else if starting}
 		<div class="flex items-center gap-2 text-sm font-medium" aria-live="polite">

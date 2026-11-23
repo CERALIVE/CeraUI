@@ -132,7 +132,7 @@ const TONES: Record<NotificationType, string> = {
 							variant="ghost"
 							aria-label={m["notifications.panel.dismiss"]()}
 							data-testid="notification-dismiss"
-							onclick={() => void dismissPersistentNotification(item.name)}
+							onclick={() => void dismissPersistentNotification(item)}
 						>
 							<XIcon class="size-4" />
 						</Button>

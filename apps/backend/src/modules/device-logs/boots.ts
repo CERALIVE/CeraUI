@@ -7,18 +7,23 @@ import { assembleBootList, journalBootsSchema } from "./boot-list.ts";
 import { scanMockJournal } from "./mock-journal.ts";
 import { JournalReadError } from "./reader.ts";
 
+const mockBootStarts = new Map<string, number>();
+
 export async function listBoots(): Promise<LogBootInfo[]> {
 	const current = currentBootId();
 	const stored = readBoots();
 	if (shouldUseMocks()) {
 		if (current === undefined) throw new JournalReadError("READ_FAILED");
-		let first: number | undefined;
+		let first = mockBootStarts.get(current);
+		if (first === undefined) {
+			first = Date.now();
+			mockBootStarts.set(current, first);
+		}
 		let last = 0;
 		await scanMockJournal({
 			options: [],
 			matches: [],
 			onRecord(record) {
-				first ??= record.ts;
 				last = record.ts;
 				return "continue";
 			},
@@ -28,7 +33,7 @@ export async function listBoots(): Promise<LogBootInfo[]> {
 				{
 					boot_id: current,
 					index: 0,
-					first_entry: (first ?? 0) * 1000,
+					first_entry: first * 1000,
 					last_entry: last * 1000,
 				},
 			],
@@ -38,7 +43,11 @@ export async function listBoots(): Promise<LogBootInfo[]> {
 	}
 	let value: unknown;
 	try {
-		value = JSON.parse(await run("journalctl", ["--list-boots", "-o", "json"]));
+		value = JSON.parse(
+			await run("journalctl", ["--list-boots", "-o", "json"], {
+				timeout: 30_000,
+			}),
+		);
 	} catch (error) {
 		if (error instanceof Error && "code" in error && error.code === "ENOENT")
 			throw new JournalReadError("JOURNAL_UNAVAILABLE");

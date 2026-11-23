@@ -53,6 +53,7 @@ import type {
 	LogFollowStartInput,
 	LogFollowStartOutput,
 	LogFollowStopOutput,
+	LogInput,
 	LoginInput,
 	LoginOutput,
 	LogoutOutput,
@@ -137,8 +138,11 @@ import type {
 	SwitchAudioOutput,
 	SwitchInputInput,
 	SwitchInputOutput,
+	SyslogInput,
 	UpdateCapabilities,
 	UpdateDetails,
+	UpdateOutcome,
+	UpdateOutcomeInput,
 	UpdateSettings,
 	UsbModeOptionsInput,
 	UsbModeOptionsOutput,
@@ -160,7 +164,8 @@ import { nextBackoffDelay } from "./backoff";
 import { parseServerPing, shouldForceCloseHalfOpen } from "./half-open";
 import { createHeartbeatTracker, HEARTBEAT_THRESHOLD_MS } from "./heartbeat";
 import { NotSentError, RpcError, type RpcErrorEnvelope } from "./rpc-error";
-import { RPC_CALL_TIMEOUT_MS } from "./rpc-timeouts";
+import { CallTimeoutError, RPC_CALL_TIMEOUT_MS } from "./rpc-timeouts";
+import { nextSocketEpoch } from "./socket-epoch.svelte";
 
 export class ConnectionResetError extends Error {
 	override readonly name = "ConnectionResetError";
@@ -280,6 +285,7 @@ class RPCClient {
 
 			socket.onopen = () => {
 				if (this.socket !== socket) return;
+				nextSocketEpoch();
 				this.setConnectionState("connected");
 				this.reconnectAttempts = 0;
 				this.heartbeatTracker.recordTraffic(Date.now());
@@ -526,7 +532,7 @@ class RPCClient {
 		return new Promise<T>((resolve, reject) => {
 			const timeoutHandle = setTimeout(() => {
 				this.pendingRequests.delete(id);
-				reject(new Error(`Request timeout: ${path.join(".")}`));
+				reject(new CallTimeoutError(`Request timeout: ${path.join(".")}`));
 			}, timeout);
 
 			this.pendingRequests.set(id, {
@@ -614,11 +620,24 @@ class RPCClient {
  *
  * `logs.previewBundle` and `logs.createBundle` run the support-bundle pipeline
  * up to its 60s device deadline before they reply.
+ *
+ * Storage and cleanup add 15s to the device bound and round up to 5s.
+ * A regular command allows 30.25s including retirement; Rotate allows 30s.
+ * Each journal scan, filesystem readout or legacy deletion allows 3.1s.
+ * getStorage: disk usage + 4 readouts = 42.65s.
+ * setRetention: 10s admission + 3 commands + 5 readouts = 116.25s.
+ * deleteLegacyDebug: 10s admission + deletion + getStorage = 55.75s.
+ * clearAll: 10s admission + 15s drain + 4 commands + Rotate + deletion
+ *           + 4 readouts = 191.5s. Late settlement is not on the reply path.
  */
 const PROCEDURE_TIMEOUT_MS: Readonly<Record<string, number>> = {
 	"streaming.start": 75_000,
 	"logs.previewBundle": 75_000,
 	"logs.createBundle": 75_000,
+	"logs.getStorage": 60_000,
+	"logs.setRetention": 135_000,
+	"logs.deleteLegacyDebug": 75_000,
+	"logs.clearAll": 210_000,
 };
 
 function createRPCProxy<T extends object>(
@@ -935,11 +954,12 @@ export interface TypedRPC {
 	system: {
 		getRevisions: () => Promise<Revisions>;
 		getSensors: () => Promise<unknown>;
-		getLog: () => Promise<unknown>;
-		getSyslog: () => Promise<unknown>;
+		getLog: (input?: LogInput) => Promise<unknown>;
+		getSyslog: (input?: SyslogInput) => Promise<unknown>;
 		poweroff: () => Promise<SuccessResponse>;
 		reboot: () => Promise<SuccessResponse>;
 		startUpdate: () => Promise<SuccessResponse>;
+		updateOutcome: (input: UpdateOutcomeInput) => Promise<UpdateOutcome>;
 		checkForUpdates: () => Promise<SuccessResponse>;
 		sshStart: () => Promise<SuccessResponse>;
 		sshStop: () => Promise<SuccessResponse>;

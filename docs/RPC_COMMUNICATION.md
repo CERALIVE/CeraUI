@@ -505,17 +505,24 @@ acodecs     — available audio codecs
 
 ### Re-authentication on reconnect
 
-When the socket reconnects after the operator has already authenticated this page-load, the new socket is unauthenticated. `subscriptions.svelte.ts` detects the `"connected"` transition and, if `wasAuthenticated()` is true, calls `runReconnectReauth()`.
+When transport reconnects with the authenticated shell still mounted, the new
+socket is a guest. `subscriptions.svelte.ts` owns one replay on its OPEN edge;
+initial sign-in is separate. See [connection patterns](FRONTEND_CONNECTION_PATTERNS.md#reconnect-re-auth-and-safety-hydrate).
 
 `reauthenticateAndHydrate` in `apps/frontend/src/lib/rpc/reconnect.ts`:
 
 1. Reads the stored credential from `localStorage["auth"]`.
-2. Calls `rpc.auth.login({ password: storedToken, persistent_token: true })`.
+2. Calls `rpc.auth.login({ token: storedToken, persistent_token: true })`.
 3. Dispatches the auth result through `handleMessage("auth", result)`.
-4. On success, fires a **safety hydrate**: config and status reads run in parallel and are consumed independently. Status carries request-dispatch plus browser-receipt marks, never a stamp minted at later ingestion. Withhold stream facts from a pull dispatched before an intervening stream intent or newer STREAM-FACT observation; merge its unrelated fields independently, then allow at most one bounded fresh read. Failed or twice-stream-superseded reads settle nothing. This is defense-in-depth on top of the server's post-login push.
-5. On credential rejection, clears the stored token and calls `routeToLogin()`.
+4. On success, publishes current-socket admission for Raw, Events and heartbeat,
+   then runs parallel config and status safety reads. Each is consumed
+   independently with the status evidence rules below.
+5. On rejection, clears only the rejected value if still saved and opens Sign
+   in. A current live-socket deadline opens the password form but preserves
+   the saved token.
 
-The `reauthInFlight` flag prevents concurrent re-auth attempts.
+A retired socket cannot settle its replacement's admission, credentials or
+hydration. The replacement can make its own attempt.
 
 Receipt order establishes arrival, not computation order or causality. A pull
 can settle a stream claim only if dispatched after that claim on the current
@@ -644,13 +651,13 @@ Client                                    Server
   |                                          |
   |  seqTracker.resetOnReconnect()           |  ← all lastSeen cleared
   |                                          |
-  |  wasAuthenticated() === true?            |
+  |  Authenticated shell still mounted?      |
   |  → runReconnectReauth()                  |
   |                                          |
-  |-------- auth.login(storedPassword) ---->|
+  |-------- auth.login({ token, ... }) ---->|
   |<------- { success: true } --------------|
   |                                          |
-  |  dispatch("auth", { success: true })     |
+  |  publish current-socket admission       |
   |                                          |
   |<------- post-login push (7 unicasts) ---|  ← config, pipelines, relays,
   |                                          |    status, netif, sensors,
@@ -690,13 +697,11 @@ Client                                    Server
 ### Credential expiry path
 
 ```
-  |-------- auth.login(storedPassword) ---->|
+  |-------- auth.login({ token, ... }) ---->|
   |<------- { success: false } -------------|
   |                                          |
-  |  clearStoredToken()                      |
-  |  routeToLogin()                          |
-  |  [DisconnectedBanner shows session-      |
-  |   expired state]                         |
+  |  clear the rejected token if still saved|
+  |  show Sign in with session-expired notice|
 ```
 
 ---

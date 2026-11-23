@@ -28,19 +28,23 @@ const tickets = new Map<string, Ticket>();
 const active = new Map<AbortController, Promise<void>>();
 
 export async function createExport(
-	_conn: object,
+	conn: object,
 	input: LogExportInput,
 	signal?: AbortSignal,
 ): Promise<LogExportOutput> {
 	const parsed = logExportInputSchema.parse(input);
 	return (
 		(await withHistoryAdmission(signal, (epoch) =>
-			issueTicket(parsed, epoch),
+			issueTicket(conn, parsed, epoch),
 		)) ?? { ok: false, error: "READ_FAILED" }
 	);
 }
 
-function issueTicket(parsed: LogExportInput, epoch: number): LogExportOutput {
+function issueTicket(
+	conn: object,
+	parsed: LogExportInput,
+	epoch: number,
+): LogExportOutput {
 	const query = logQueryInputSchema.parse({
 		...parsed.filter,
 		boot: parsed.boot,
@@ -56,18 +60,12 @@ function issueTicket(parsed: LogExportInput, epoch: number): LogExportOutput {
 				? currentBootId()
 				: query.boot;
 	if (bootId === undefined) return { ok: false, error: "BOOT_UNAVAILABLE" };
-	const now = Date.now();
-	for (const [key, value] of tickets) {
-		if (value.expiresAt <= now) {
-			tickets.delete(key);
-			value.lease.release();
-		}
-	}
-	const lease = reserveLogSharing(now);
-	if (!lease) return { ok: false, error: "BUSY" };
 	const ticket = Buffer.from(
 		crypto.getRandomValues(new Uint8Array(32)),
 	).toString("hex");
+	const now = Date.now();
+	const lease = reserveLogSharing(conn, now);
+	if (!lease) return { ok: false, error: "BUSY" };
 	const expiresAt = now + 60_000;
 	tickets.set(ticket, {
 		query,
@@ -76,6 +74,7 @@ function issueTicket(parsed: LogExportInput, epoch: number): LogExportOutput {
 		expiresAt,
 		lease,
 	});
+	lease.issue(expiresAt, () => tickets.delete(ticket));
 	return { ok: true, url: `/api/logs/export?ticket=${ticket}`, expiresAt };
 }
 
@@ -134,7 +133,7 @@ function redeemTicket(
 	const ticket = takeTicket(key);
 	if (!ticket) return new Response(null, { status: 403 });
 	if (ticket.epoch !== epoch) return interruptedExport(ticket, "cleared");
-	ticket.lease.start();
+	ticket.lease.stream();
 	const controller = new AbortController();
 	const done = Promise.withResolvers<void>();
 	active.set(controller, done.promise);

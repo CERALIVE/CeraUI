@@ -1,28 +1,30 @@
 <!--
-  BundleDialog.svelte: the support bundle's preview. It opens on the device's
-  manifest: each section with its entries and removed values, the boots covered
+  BundleDialog.svelte: the support bundle's preview. It opens on the same plain
+  line as its Downloads row (what the bundle holds and who it is for), then the
+  device's manifest: each section with its entries and removed values, the boots covered
   and the versions running now, and the statement that the file is reduced, not
   free of personal data. The downloaded file carries no such warning of its own,
   so this is where it is said, before Download bundle can be pressed. A refused
   preview (including the device's fail-closed identifier collision, which reads
-  as READ_FAILED) offers Retry; under the band, a bundle the device refused to
-  prepare also points to Export this view, which does not go through that
-  collision. Cancel, Escape and the close button discard a request still in
-  flight.
+  as READ_FAILED) offers Retry; a collision or journal_read stage gets its own
+  sentence. Under the band, a bundle the device refused to prepare also points
+  to Export this view, which does not go through that collision. Cancel, Escape
+  and the close button discard a request still in flight.
 -->
 <script lang="ts">
-import { getLocale, m } from '@ceraui/i18n/svelte';
+import { getLocale, m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { LogBundleManifest, VersionContext } from '@ceraui/rpc/schemas';
 import { RefreshCw, ShieldAlert, TriangleAlert } from '@lucide/svelte';
 
 import { AppDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
 import { Skeleton } from '$lib/components/ui/skeleton';
+import { BUNDLE_FAILURE_COPY_KEYS } from '$lib/device-logs/sharing';
 import type { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';
 
 import KeepWords from './KeepWords.svelte';
 
-let { sharing }: { sharing: SharingFlow } = $props();
+let { sharing, returnFocus }: { sharing: SharingFlow; returnFocus?: () => HTMLElement | null } = $props();
 const uid = $props.id();
 
 type SectionId = LogBundleManifest['sections'][number]['id'];
@@ -48,7 +50,7 @@ const VERSIONS: ReadonlyArray<[Exclude<keyof VersionContext, 'bootId'>, () => st
 
 const PREVIEW_PROBLEM = {
 	busy: () => m['systemLogs.sharing.busy'](),
-	failed: () => m['systemLogs.sharing.bundleFailed'](),
+	failed: () => resolveMessageKey(BUNDLE_FAILURE_COPY_KEYS[sharing.bundleFailure ?? 'internal']),
 };
 const CREATE_PROBLEM = {
 	busy: () => m['systemLogs.sharing.busy'](),
@@ -92,9 +94,12 @@ const status = $derived(
 	primaryDisabled={sharing.manifest === null}
 	primaryLabel={m['systemLogs.sharing.bundleDownload']()}
 	primaryLoading={sharing.bundleStep === 'creating'}
+	{returnFocus}
 	title={m['systemLogs.sharing.bundle']()}
+	touchRegion
 >
 	<div class="flex flex-col gap-4 [word-break:auto-phrase] [&:lang(ko)]:break-keep [&:lang(zh)]:break-keep wrap-break-word text-pretty [&:lang(zh)]:text-balance">
+		<p class="text-sm" data-testid="sharing-bundle-about"><KeepWords text={m['systemLogs.sharing.bundleHint']()} /></p>
 		<div class="flex items-start gap-3 rounded-lg border p-3">
 			<ShieldAlert aria-hidden="true" class="text-muted-foreground mt-0.5 size-4 shrink-0" />
 			<p class="text-sm" data-testid="sharing-bundle-sensitive"><KeepWords text={m['systemLogs.sharing.bundleSensitive']()} /></p>

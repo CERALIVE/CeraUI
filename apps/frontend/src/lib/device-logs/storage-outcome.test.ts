@@ -142,7 +142,7 @@ type Member = readonly [path: string, nullable: boolean, wrongType: unknown];
 const STORAGE_MEMBERS: readonly Member[] = [
 	["journalBytes", true, "48"],
 	["journalDirBytes", true, "48"],
-	["legacyDebugBytes", false, "5"],
+	["legacyDebugBytes", true, "5"],
 	["ceiling", true, "256"],
 	["ceiling.maxSizeMb", false, "256"],
 	["ceiling.maxAgeDays", false, "30"],
@@ -260,6 +260,29 @@ describe("successful replies: every required member, absent, null or of the wron
 				),
 			).toBe("failed");
 			expect(report).toHaveBeenCalledOnce();
+		},
+	);
+
+	const unknownSize = { ...storage, legacyDebugBytes: null };
+	it.each([
+		[
+			"logs.setRetention and deleteLegacyDebug",
+			storageReply,
+			{ ok: true, storage: unknownSize },
+		],
+		[
+			"logs.clearAll",
+			clearAllReply,
+			{ ok: true, storage: unknownSize, bootsBefore: 17, bootsAfter: 4 },
+		],
+	] as const)(
+		"settles %s with storage.legacyDebugBytes null without reporting an error",
+		async (_name, read, reply) => {
+			const report = vi.spyOn(console, "error").mockImplementation(() => {});
+			expect(
+				await settleAction<ActionReply>(() => Promise.resolve(reply), read),
+			).toEqual(reply);
+			expect(report).not.toHaveBeenCalled();
 		},
 	);
 

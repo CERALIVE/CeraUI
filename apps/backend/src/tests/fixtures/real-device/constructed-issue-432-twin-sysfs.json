@@ -1,5 +1,5 @@
 {
-	"provenance": "Constructed from issue #432 and its reproduction; replace with bench capture before merge. Only serial and parent paths were reported; other capture fields are constructed.",
+	"provenance": "Constructed from the issue #432 report, not captured from hardware. The real redacted sysfs and udev captures are retained as bench evidence but do not reproduce the USB serial collision: the QMI twins have distinct serials and the Huawei twins have no serial attribute.",
 	"devices": [
 		{
 			"ifname": "wwu1u4c2",

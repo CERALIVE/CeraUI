@@ -584,6 +584,23 @@ describe("StorageSection: limits", () => {
 		).toBeTruthy();
 	});
 
+	it("says once, under the Detail options, how skipped bonding sender lines are reported", () => {
+		mount();
+
+		const detail = screen.getByRole("group", { name: copy.detailLabel });
+		const notes = within(detail).getAllByText(copy.detailSenderNote);
+		expect(notes).toHaveLength(1);
+		const note = notes[0] as HTMLElement;
+		expect(note.className.split(/\s+/)).toEqual(
+			expect.arrayContaining(["text-muted-foreground", "text-xs"]),
+		);
+		const lastOption = within(detail).getAllByRole("radio").at(-1);
+		expect(
+			(lastOption?.compareDocumentPosition(note) ?? 0) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+	});
+
 	it("applies nothing until Save, then saves exactly the chosen limits", async () => {
 		const saved = logStorage({
 			retention: { maxAgeDays: 7, maxSizeMb: 64, detail: "debug" },
@@ -821,6 +838,58 @@ describe("StorageSection: limits", () => {
 });
 
 describe("StorageSection: cleanup", () => {
+	it("offers cleanup with a sizeless label when leftover file size is not reported", async () => {
+		rpc.logs.deleteLegacyDebug.mockResolvedValue({
+			ok: true,
+			storage: logStorage({ legacyDebugBytes: 0 }),
+		});
+		mount(logStorage({ legacyDebugBytes: null }));
+
+		const action = screen.getByRole("button", {
+			name: copy.deleteLegacyUnknown,
+		});
+		await fireEvent.click(action);
+
+		expect(rpc.logs.deleteLegacyDebug).toHaveBeenCalledTimes(1);
+		await waitFor(() =>
+			expect(screen.queryByTestId("storage-delete-legacy")).toBeNull(),
+		);
+	});
+
+	it("switches to the sizeless cleanup label when deletion succeeds with an unknown size", async () => {
+		rpc.logs.deleteLegacyDebug.mockResolvedValue({
+			ok: true,
+			storage: logStorage({ legacyDebugBytes: null }),
+		});
+		mount(logStorage({ legacyDebugBytes: 2 * MIB }));
+
+		await fireEvent.click(
+			screen.getByRole("button", {
+				name: fill(copy.deleteLegacy, { size: "2\u00a0MB" }),
+			}),
+		);
+
+		const button = await screen.findByRole<HTMLButtonElement>("button", {
+			name: copy.deleteLegacyUnknown,
+		});
+		expect(button.disabled).toBe(false);
+		expect(screen.queryByTestId("storage-cleanup-failed")).toBeNull();
+	});
+
+	it("shows a typed Clear all failure without a success line or history broadcast", async () => {
+		rpc.logs.clearAll.mockResolvedValue({ ok: false, error: "READ_FAILED" });
+		mount();
+
+		await confirmAction(copy.clearAll, copy.clearAllConfirm);
+
+		const band = await screen.findByTestId("storage-cleanup-failed");
+		expect(within(band).getByText(copy.actionFailed)).toBeTruthy();
+		expect(
+			screen.getByTestId("storage-cleanup-status").textContent?.trim(),
+		).toBe("");
+		expect(historyChanged).not.toHaveBeenCalled();
+	});
+
 	it("renders nothing for leftover debug files when there are none", () => {
 		mount(logStorage({ legacyDebugBytes: 0 }));
 

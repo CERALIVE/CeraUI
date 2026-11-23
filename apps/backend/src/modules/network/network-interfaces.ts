@@ -35,13 +35,19 @@ import { logger } from "../../helpers/logger.ts";
 import { run } from "../../helpers/run.ts";
 import { ACTIVE_TO } from "../../helpers/shared.ts";
 import { getms } from "../../helpers/time.ts";
-import { getMockState, shouldUseMocks } from "../../mocks/mock-service.ts";
+import {
+	getMockState,
+	isDevelopment,
+	shouldUseMocks,
+} from "../../mocks/mock-service.ts";
 import {
 	getMockIfconfigOutput,
 	getMockModemNetMarker,
 	shouldMockNetwork,
 } from "../../mocks/providers/network.ts";
-import { isBondLinkMappable } from "../streaming/bond-entry.ts";
+import { isRuntimeConfigAvailable } from "../config.ts";
+import { isMappableEntry } from "../streaming/bind-map.ts";
+import { isBondLinkMappable, peekBondKeys } from "../streaming/bond-entry.ts";
 // Type-only: erased at build time, so it adds no runtime edge back into
 // `modules/streaming/`, which imports this module.
 import type { BondMappingState } from "../streaming/link-mapping-report.ts";
@@ -64,6 +70,7 @@ import { scheduleWifiUpdate } from "../wifi/wifi-interfaces.ts";
 import {
 	bondPhysicalId,
 	isBondOptedOut,
+	previewBondOptOut,
 	resetPersistentBondOptOutForTest,
 	resetSessionBondOptOutForTest,
 	setPersistentBondOptOut,
@@ -75,12 +82,15 @@ import {
 	refreshDongleMetadata,
 } from "./dongle-metadata.ts";
 import { ethernetRoleForWire, isSharedLanPort } from "./ethernet-role.ts";
+import { shouldUseMockMonitor } from "./monitor/mock-monitor.ts";
+import { advanceNetifTopologyGeneration } from "./netif-topology-generation.ts";
 import {
 	getRouterCellularAdmin,
 	type RouterAdminSim,
 	refreshRouterCellularAdmin,
 } from "./router-cellular-admin.ts";
 import {
+	getIdentityDeadlineAt,
 	getModemNetMarker,
 	getRouterCellularMarker,
 	getRouterCellularMarkers,
@@ -101,6 +111,8 @@ import {
 	getUnclaimedAdapters,
 	refreshUnclaimedAdapters,
 } from "./unclaimed-adapters.ts";
+
+export { getNetifTopologyGeneration } from "./netif-topology-generation.ts";
 
 export type NetworkInterface = {
 	usb?: boolean;
@@ -183,15 +195,10 @@ type NetdevBusEvidence = {
 };
 let netifSnapshotReady = false;
 let netifRefreshGeneration = 0;
-let netifTopologyGeneration = 0;
 const scanPublicationWarnings = new Set<string>();
 
 export function hasNetifSnapshot(): boolean {
 	return netifSnapshotReady;
-}
-
-export function getNetifTopologyGeneration(): number {
-	return netifTopologyGeneration;
 }
 
 export function getNetworkInterfaceIncarnation(
@@ -206,14 +213,14 @@ export function resetNetifSnapshotForTest(): void {
 	netif = {};
 	netifSnapshotReady = false;
 	netifRefreshGeneration++;
-	netifTopologyGeneration++;
+	advanceNetifTopologyGeneration();
 	scanPublicationWarnings.clear();
 	presenceEpoch.clear();
 	netifIdentities.clear();
 }
 
 function bumpPresence(name: string, removed = false): void {
-	const epoch = ++netifTopologyGeneration;
+	const epoch = advanceNetifTopologyGeneration();
 	presenceEpoch.set(name, epoch);
 	if (removed) {
 		netifIdentities.delete(name);
@@ -313,11 +320,19 @@ export function isBondIdentityPending(
 	name: string,
 	int: NetworkInterface,
 ): boolean {
+	return bondIdentityPending(name, int, identityDeadlineExpired);
+}
+
+function bondIdentityPending(
+	name: string,
+	int: NetworkInterface,
+	deadlineElapsed: (name: string) => boolean,
+): boolean {
 	return (
 		(int.usb === true || int.busUnreadable === true) &&
 		!int.identitySettled &&
 		!usbNetScanCovers(name) &&
-		!identityDeadlineExpired(name)
+		!deadlineElapsed(name)
 	);
 }
 
@@ -330,13 +345,31 @@ export function isBondIdentityPending(
  * toggled the link out of the bond is honoured in both cases.
  */
 export function isBondCandidate(name: string, int: NetworkInterface): boolean {
+	return admitsBondLink(name, int, observedBondView);
+}
+
+const observedBondView = {
+	deadlineElapsed: identityDeadlineExpired,
+	optedOut: isBondOptedOut,
+	mappable: isBondLinkMappable,
+};
+
+function admitsBondLink(
+	name: string,
+	int: NetworkInterface,
+	view: {
+		deadlineElapsed: (name: string) => boolean;
+		optedOut: (name: string) => boolean;
+		mappable: (name: string, ip: string) => boolean;
+	},
+): boolean {
 	if (!int.ip) return false;
-	if (isBondIdentityPending(name, int)) return false;
+	if (bondIdentityPending(name, int, view.deadlineElapsed)) return false;
 	if (isConcurrentApIfname(name)) return false;
 	if (isSharedLanPort(name)) return false;
 	if ((int.error & ~NETIF_ERR_DUPIPV4) !== 0) return false;
-	if (isBondOptedOut(name)) return false;
-	if (isDupIpOnly(int)) return isBondLinkMappable(name, int.ip);
+	if (view.optedOut(name)) return false;
+	if (isDupIpOnly(int)) return view.mappable(name, int.ip);
 	return int.enabled;
 }
 
@@ -815,7 +848,10 @@ async function refreshDongleState(): Promise<void> {
 export function initNetworkInterfaceMonitoring() {
 	onNetifChange(broadcastNetif);
 	void updateNetif();
-	setInterval(updateNetif, NETIF_POLL_INTERVAL_MS);
+	setInterval(() => {
+		refreshBondDisableEvidence();
+		void updateNetif();
+	}, NETIF_POLL_INTERVAL_MS);
 	void import("./gateways.ts")
 		.then((m) => setQueueUpdateGwHook(() => m.queueUpdateGw()))
 		.catch((err: unknown) => {
@@ -1141,7 +1177,7 @@ export function processIfconfigOutput(
 			const identity = netifIdentities.get(name);
 			if (previous && !identity) {
 				// Adopt the monitor's lifetime without invalidating its covering bus read.
-				netifTopologyGeneration++;
+				advanceNetifTopologyGeneration();
 			}
 			if (
 				previous &&
@@ -1739,6 +1775,80 @@ function countActiveNetif() {
 	return count;
 }
 
+type BondDisableContext = Pick<
+	import("../system/device-detection.ts").BondGuardDeviceObserver,
+	"isStillReal" | "refresh"
+>;
+let realBondDisableContext: BondDisableContext | undefined;
+
+export function bondDisableSimulationSelected(): boolean {
+	return (
+		isDevelopment() ||
+		shouldUseMockMonitor() ||
+		process.env.HWSIM_REPO !== undefined
+	);
+}
+
+function refreshBondDisableEvidence(): void {
+	if (!bondDisableSimulationSelected() && isRuntimeConfigAvailable())
+		realBondDisableContext?.refresh();
+}
+
+export function setBondDisableGuardContext(
+	observer: BondDisableContext | undefined,
+	realMonitor: boolean,
+): void {
+	realBondDisableContext = realMonitor ? observer : undefined;
+	refreshBondDisableEvidence();
+}
+
+function wouldRemoveLastBondCandidate(target: string): boolean {
+	if (
+		!realBondDisableContext ||
+		bondDisableSimulationSelected() ||
+		!isRuntimeConfigAvailable() ||
+		!realBondDisableContext.isStillReal()
+	)
+		return false;
+
+	const identities = new Map<string, ReturnType<typeof peekBondKeys>>();
+	const keys = (name: string) => {
+		if (!identities.has(name)) identities.set(name, peekBondKeys(name));
+		return identities.get(name);
+	};
+	const optedOut = previewBondOptOut(target, keys(target));
+	let earliestBefore = Infinity;
+	let earliestAfter = Infinity;
+	const projection = {
+		deadlineElapsed: () => true,
+		mappable: (iface: string, ip: string) => {
+			const linkId = keys(iface)?.linkId;
+			return linkId !== undefined && isMappableEntry({ iface, ip, linkId });
+		},
+	};
+	const before = {
+		...projection,
+		optedOut: (name: string) => optedOut(name, keys(name), "before"),
+	};
+	const after = {
+		...projection,
+		optedOut: (name: string) => optedOut(name, keys(name), "after"),
+	};
+	for (const [name, int] of Object.entries(netif)) {
+		const readyAt = bondIdentityPending(name, int, () => false)
+			? (getIdentityDeadlineAt(name) ?? Infinity)
+			: -Infinity;
+		if (readyAt < earliestAfter && admitsBondLink(name, int, after))
+			earliestAfter = readyAt;
+		if (readyAt < earliestBefore && admitsBondLink(name, int, before))
+			earliestBefore = readyAt;
+	}
+	// Judge both views at one request-time instant, after preparing their
+	// readiness thresholds. A later sender refresh can see a peer become ready.
+	const now = getms();
+	return earliestBefore <= now && now < earliestAfter;
+}
+
 /**
  * Whether `handleNetif` applied anything, and if not, why.
  *
@@ -1781,6 +1891,18 @@ function finishBondMutation(
 	return { ok: true, applied };
 }
 
+const disableAllRefused = { ok: false, reason: "disable_all_refused" } as const;
+
+function notifyDisableAll(conn: WebSocket): void {
+	notificationSend(
+		conn,
+		"netif_disable_all",
+		"error",
+		"Can't disable all networks",
+		10,
+	);
+}
+
 export function handleNetif(
 	conn: WebSocket,
 	msg: NetworkInterfaceMessage["netif"],
@@ -1812,6 +1934,10 @@ export function handleNetif(
 					reason: "bond_unmappable",
 				});
 			}
+			if (!msg.enabled && wouldRemoveLastBondCandidate(msg.name)) {
+				notifyDisableAll(conn);
+				return disableAllRefused;
+			}
 			setBondOptOut(msg.name, !msg.enabled);
 			triggerNetworkInterfacesChange();
 			conn.send(buildMsg("netif", netIfBuildMsg()));
@@ -1833,22 +1959,15 @@ export function handleNetif(
 					reason: "enable_refused",
 				});
 			}
-		} else {
-			if (int.enabled && countActiveNetif() === 1) {
-				notificationSend(
-					conn,
-					"netif_disable_all",
-					"error",
-					"Can't disable all networks",
-					10,
-				);
-				return finishBondMutation(msg, {
-					ok: false,
-					reason: "disable_all_refused",
-				});
-			}
+		} else if (int.enabled && countActiveNetif() === 1) {
+			notifyDisableAll(conn);
+			return finishBondMutation(msg, disableAllRefused);
 		}
 
+		if (!msg.enabled && wouldRemoveLastBondCandidate(msg.name)) {
+			notifyDisableAll(conn);
+			return disableAllRefused;
+		}
 		int.enabled = msg.enabled;
 		setBondOptOut(msg.name, !msg.enabled);
 		triggerNetworkInterfacesChange();

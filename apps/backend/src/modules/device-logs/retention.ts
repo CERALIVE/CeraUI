@@ -30,24 +30,71 @@ import {
 	saveLogSettings,
 	updateLogState,
 } from "./settings.ts";
-import { getStorage, readJournalUsage, readOldestEntry } from "./storage.ts";
+import {
+	getStorage,
+	readJournalUsage,
+	readOldestEntry,
+	withinStorageDeadline,
+} from "./storage.ts";
 
 export { parseDiskUsage, readJournalCeiling } from "./ceiling.ts";
 export { getStorage } from "./storage.ts";
 
-let tail: Promise<unknown> = Promise.resolve();
+const queuedMutations = new Set<() => Promise<void>>();
+let mutationActive = false;
 let daily: ReturnType<typeof setInterval> | undefined;
+const ADMIT_MS = 10_000;
 const busy = { ok: false, error: "BUSY" } as const;
+const readFailed = { ok: false, error: "READ_FAILED" } as const;
+type RetainUntil = (pending: Promise<unknown>) => void;
+
+export function queuedRetentionMutationsForTest(): number {
+	return queuedMutations.size;
+}
+
+function startNextMutation(): void {
+	const start = queuedMutations.values().next().value;
+	if (!start) {
+		mutationActive = false;
+		return;
+	}
+	queuedMutations.delete(start);
+	void start().then(startNextMutation);
+}
+
 function exclusive<T, R>(
-	operation: () => Promise<T>,
+	operation: (retainUntil: RetainUntil) => Promise<T>,
 	refused: R,
 ): Promise<T | R> {
 	if (historyClearAwaitingSettlement()) return Promise.resolve(refused);
-	const result = tail.then<T | R>(() =>
-		historyClearAwaitingSettlement() ? refused : operation(),
-	);
-	tail = result.catch(() => undefined);
-	return result;
+	const result = Promise.withResolvers<T | R>();
+	const start = async () => {
+		clearTimeout(timer);
+		if (historyClearAwaitingSettlement()) {
+			result.resolve(refused);
+			return;
+		}
+		let pending: Promise<unknown> | undefined;
+		try {
+			const reply = await operation((settlement) => {
+				pending = settlement;
+			});
+			result.resolve(reply);
+		} catch (error) {
+			result.reject(error);
+		}
+		// A caller's reply is not permission to overlap a pending unlink.
+		if (pending) await Promise.allSettled([pending]);
+	};
+	const timer = setTimeout(() => {
+		if (queuedMutations.delete(start)) result.resolve(refused);
+	}, ADMIT_MS);
+	queuedMutations.add(start);
+	if (!mutationActive) {
+		mutationActive = true;
+		queueMicrotask(startNextMutation);
+	}
+	return result.promise;
 }
 function ceiling() {
 	return shouldUseMocks()
@@ -92,7 +139,7 @@ async function maintenance(): Promise<void> {
 	];
 	let ok = true;
 	try {
-		if (!shouldUseMocks()) await run("journalctl", args);
+		if (!shouldUseMocks()) await run("journalctl", args, { timeout: 30_000 });
 	} catch {
 		ok = false;
 	}
@@ -141,13 +188,22 @@ export function setRetention(next: LogRetention): Promise<LogStorageOutput> {
 async function countStoredBoots(): Promise<number> {
 	return (await listBoots()).filter((boot) => boot.logsAvailable).length;
 }
+async function deleteLegacyBeforeDeadline(
+	retainUntil: RetainUntil,
+): Promise<boolean> {
+	const deletion = deleteLegacyDebugFiles();
+	if ((await withinStorageDeadline(deletion, false)) !== false) return true;
+	// A rejected unlink has stopped mutating too, unlike a lost Rotate observation.
+	retainUntil(Promise.allSettled([deletion]));
+	return false;
+}
 export function deleteLegacyDebug(): Promise<LogStorageOutput> {
-	return exclusive<LogStorageOutput, typeof busy>(async () => {
+	return exclusive<LogStorageOutput, typeof busy>(async (retainUntil) => {
 		try {
-			await deleteLegacyDebugFiles();
+			if (!(await deleteLegacyBeforeDeadline(retainUntil))) return readFailed;
 			return { ok: true, storage: await getStorage() };
 		} catch {
-			return { ok: false, error: "READ_FAILED" };
+			return readFailed;
 		}
 	}, busy);
 }
@@ -159,7 +215,7 @@ function updateBusy(): boolean {
 }
 
 export function clearAll(): Promise<LogClearAllOutput> {
-	return exclusive<LogClearAllOutput, typeof busy>(async () => {
+	return exclusive<LogClearAllOutput, typeof busy>(async (retainUntil) => {
 		let reopen: (() => void) | undefined;
 		let release: (() => void) | undefined;
 		let settlement: Promise<unknown> | undefined;
@@ -197,7 +253,15 @@ export function clearAll(): Promise<LogClearAllOutput> {
 					settlement = pending;
 				});
 			}
-			await deleteLegacyDebugFiles();
+			const deleted = await deleteLegacyBeforeDeadline((pending) => {
+				const joined = settlement
+					? Promise.all([settlement, pending])
+					: pending;
+				settlement = joined;
+				// A lost journal acknowledgement must not shorten the unlink hold.
+				retainUntil(pending.then(() => joined));
+			});
+			if (!deleted) return readFailed;
 			// Mock Clear empties the captured ring before writing its first new marker.
 			if (mock) clearRecentLogLines();
 			logger.info("device logs cleared", { module: "device-logs" });

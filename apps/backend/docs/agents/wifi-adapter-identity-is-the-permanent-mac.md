@@ -3,9 +3,50 @@
 ## WIFI ADAPTER IDENTITY IS THE PERMANENT MAC [EXISTS]
 
 Every adapter-keyed Wi-Fi structure uses the coherent lifetime sample from
-`WifiRadioIdentityProducer`. A verified adapter keeps its normalized permanent
-hardware address as the registry, numeric-id-map and credential-store key;
-NetworkManager profiles are pinned to that permanent address.
+`WifiRadioIdentityProducer`. A sole verified radio normally keeps its permanent
+MAC as its key. Same-address radios each use `MAC@port` only when every member
+has its own phy and a unique literal NetworkManager `GENERAL.PATH`. If any
+member lacks that proof, the group stays limited. A port change invalidates
+outstanding hotspot operations. NM hardware pins use the sampled MAC, and
+exclusive profiles also carry `match.path`.
+
+The version 2 credential store still reads released plain-MAC and version 1
+records. A sole radio can seed its observed port with just the name, password
+and channel. The plain record keeps its UUID and ownership history. A twin
+uses its own port record and profile. An unseeded port needs first-time setup
+even when there is a plain-MAC profile. The sole radio keeps its plain registry
+key. Boot restore tries the independent saved profile at the verified port
+only when both records have the same non-Station intent and the saved plain
+profile is pinned to a different port. It holds both locks during the handoff.
+It requires a fresh physical sample and will not rebind a profile whose saved
+port contradicts it. After a known same-address collision, the plain profile
+must have a matching port pin, including on hybrid restore. The collision
+remains known for the lifetime of the service, even if discovery sees no radios.
+Stop or choosing Station records station intent for the plain MAC and all its
+credential-only port copies, even when the current port cannot be read.
+No credentials or profiles are deleted. Stop or Station on a still-live,
+independently owned port AP records Station for that port owner, not for the
+sole row's plain-MAC preferences. If the port AP is already down or the
+plain-MAC AP is running, Stop and Station retire the selected radio's
+independent intent in addition to the plain choice and its copies. The
+verified permanent MAC and literal port select that intent on both sole
+and composite rows, even if a twin returns while the plain AP is live. Other
+independent ports keep their preferences. The port AP will not restore when its twin
+returns merely because it was started before the handoff. While that physical
+port is proven, its independent Station intent also blocks fallback to the
+plain-MAC profile without changing the plain preference for other ports.
+No discovery transition removes a profile or stops an AP by itself merely
+because a twin arrives. Address-only owned profiles disarm before the new
+verified rows publish. Discovery withholds those rows when it cannot verify
+the legacy profile's autoconnect state. A port swap holds both row locks in
+stable order until it refreshes the new active connection identities.
+When a twin arrives or leaves, discovery can expose the destination row before
+it knows the active connection. Stop and Station wait up to two seconds for a
+coalesced discovery refresh before taking the adapter locks. If the refresh
+proves the AP target, the same request takes it down. If the target is still
+unproved, the request returns `DEVICE_BUSY` without saving a mode or guessing
+which connection to deactivate. Refresh and retry in that case. Start and AP
+mode changes retain their immediate handoff refusal.
 
 ### Hotspot profile writes [EXISTS; native requalification pending]
 
@@ -219,9 +260,49 @@ token, then notifies mode reconciliation. A failed pass withholds that
 publication and schedules the existing bounded discovery retry.
 
 Moving a known adapter to a new port preserves its credentials; its old path
-does not autoconnect there. Bound restore rewrites the port pin. Rolling back
-to an older backend retains that pin, so a moved USB adapter may require a
-fresh hotspot Start. Hybrid and pathless restore depend on CeraUI starting.
+does not autoconnect there. Bound restore refuses a contradictory saved port
+pin and leaves it unchanged. A moved USB adapter with a stale pin needs a
+fresh hotspot Start to bind the new port. Hybrid and pathless restore depend
+on CeraUI starting.
+Verified hybrid restore checks both interface selectors and the port before
+allocating a leg and rechecks before creating it or setting its device
+autoconnect policy. A stale AP-leg name can be rebound only if a live
+interface inventory proves the old name absent and the saved UUID, permanent
+MAC and literal port prove the same owner. Up checks the selectors against
+the selected leg without allowing stale names. Boot restore does not prune
+superseded hotspot profiles.
+Eligible stale profiles can remain until the next operator Start.
+
+An explicit Start can rewrite the port pin for a recorded
+AP with autoconnect off, a matching unique permanent MAC and a roster that
+positively establishes the old port is empty. Missing or ambiguous physical
+port witnesses do not prove absence. A sole verified radio whose own path is
+unreadable may ask NetworkManager to activate its exclusively recorded AP
+as saved, without changing its port pin or autoconnect settings. A fresh,
+complete `iw phy` inventory must match the roster and show no other physical
+radio. The same inventory check gates absence claims about a legacy MAC or
+vacant port and any new autonomous activation policy. It counts registered
+PHYs, independent of AP capability or the presence of an interface. Discovery
+shares one lazy probe across policy and profile reads in each identity pass.
+The proof is tied to both the Wi-Fi identity publication and the network
+topology generation at roster capture. An observed netdev change invalidates
+it before the next identity publication; the current pass does not probe again.
+An unreadable, incomplete or stale inventory is unknown, not evidence of a
+duplicate MAC or a vacant port. Unknown evidence neither authorizes a profile
+change nor withholds the roster. Explicit Start can retain a correctly pinned
+profile's policy without the probe; a new binding starts with autoconnect off
+and is not armed if the inventory is unknown.
+An inventory-backed write carries its proof through the final NetworkManager
+permit. The writer rechecks both generations after its last async pin or
+profile check, before modify, keyfile publication/load, or inventory-dependent
+exact deactivation. If a post-Up proof
+has gone stale, Start still succeeds and leaves autoconnect off.
+The activation names the proven interface.
+Discovery logs and skips conflicting profile mutations without withholding the
+unrelated radio roster; a real write failure still uses the bounded retry. Cold
+Start can repair the recorded AP's observed legacy scan MAC if no other
+adapter claims it. Neither repair follows a conflicting pin introduced after
+Start's initial pin read.
 These are host-tested policies, not physical NetworkManager qualification.
 
 ### Concurrent target reuse [PARTIAL; host-tested, VM/W6 pending]
@@ -341,11 +422,11 @@ The explicit-MAC active path, saved-profile sweep, interface-name and
 `clap-<ifname>` matches, stored UUID hint, permanent-MAC match and persisted-SSID
 fallback all apply that check. A pin naming another present or persisted
 adapter is conflicting evidence even without a UUID claim. SSID equality
-cannot override either kind of conflict. Unowned legacy profiles with stale
-scan-time pins still migrate through the existing name or persisted-SSID
-evidence. A conflict leaves NetworkManager's active connection and mode
-observable, and leaves the foreign profile, credentials and autoconnect
-untouched.
+cannot override either kind of conflict or establish ownership by itself.
+Discovery repairs stale scan-time pins only for recorded profiles. An
+unrecorded saved profile is left alone; Prepare and Start resolve credentials
+without reusing its UUID. An independently active AP can still be observed
+without granting saved-profile edit authority.
 
 Ownership is checked again after awaited lookup, repair, save, activation and
 rollback work, using the current cache as well as the selected UUID. An empty
@@ -473,8 +554,17 @@ UUID and retires the durable creation record, even when no activation path
 was captured. Retain the record while the owned profile is still active and
 cleanup remains pending; restart recovery can still need that evidence.
 The Up path is scoped to the original NetworkManager bus and daemon run.
-The rollback Down seam rechecks that run before dispatch; a mismatch only
-allows recovery from fresh inventory, never reuse of an old activation path.
+The shared Down seam checks the bus ID, verifies the active object's UUID
+and device on that bus, and addresses the recorded unique daemon. It waits
+for that path to reach `DEACTIVATED` or leave the daemon's active list; the
+method reply is only acknowledgement. Missing proof or a bounded wait
+expiry refuses completion. A daemon mismatch allows recovery from fresh
+inventory only, never reuse of an old activation path. Save does not turn
+pathless timeout readback into a cleanup receipt, and both forward and
+rollback hybrid Up must confirm the command's exact path and channel. An
+acknowledged rollback with failed profile readback still runs confirmation
+and exact cleanup. Save rechecks the original connected activation on the
+same leg after refreshing saved profiles and before writing credentials.
 
 Monitor events trigger confirmation rather than proving it. The pending
 activation captures its UUID, hotspot object, activation interface, profile
@@ -673,20 +763,34 @@ it instead and logs a warning; that maintenance path leaves mode intent intact.
 
 The boot restore has one private exception (D12). Exactly one hotspot-capable
 adapter and one logical non-station intent must remain. Plain MAC and MAC@port
-keys for the same address count as one. All address groups with any non-station
-record are counted before precedence is applied; the plain record wins, or a
-single composite record when no plain record exists. Its owned AP profile must exist,
-and its stored channel must be `auto` or among the currently derived permitted
+keys for the same address count as one. All address groups with any non-Station
+record are counted before precedence is applied. A non-Station plain MAC record
+and its owned AP profile are required; a port-only record is not eligible.
+A saved port pin requires a matching live path.
+Only a pathless plain owner with no known collision can use the unidentified
+radio exception. The profile's stored channel must be `auto` or
+among the currently derived permitted
 channels for that adapter's bands. Streaming must permit the transition.
 Hybrid also requires proven concurrency and a profile already bound to the
 current fixed virtual-interface name; otherwise it stays pending rather than
 becoming exclusive.
 
 Only boot restore may activate that existing profile on a limited adapter.
-Cancellation and the current adapter roster, exact row, intent, streaming and
-channel eligibility are rechecked after awaited prerequisites, including hybrid
-interface allocation, before activation. The same admission predicate reaches
-the fixed-name allocator's internal awaits and precedes its mutations.
+After its profile recheck, restore refreshes radio and leg evidence and checks
+any available permanent address and port against the saved owner. For hybrid
+Up, the last asynchronous guard rechecks the station channel. Up passes the
+UUID and selected interface to NetworkManager; an exclusive profile pinned
+to any other interface is refused. Cancellation, roster,
+row, intent, profile ownership, streaming and channel eligibility still apply.
+Hybrid restore does not write the profile or device autoconnect policy. On
+same-channel hardware, a saved channel or band that conflicts with the live
+station is refused before activation.
+Cold hybrid selection rechecks the parent after the restore guard and submits
+`iw` creation by wiphy index, not by the parent interface name. NetworkManager
+still resolves an interface name for Up; the kernel still resolves the wiphy
+index for creation. Those commands do not atomically compare the sampled
+lifetime or station channel. A replacement reusing the same identifier or a
+roam after the final applicable read remains a residual window.
 An incompatible or invisible existing interface is refused without deletion.
 Creation records private kernel ifindex/wdev evidence from the add command's own
 nl80211 NEW_INTERFACE reply. `iw --debug` exposes that reply on stderr; its
@@ -718,8 +822,9 @@ stopped hotspot is not restored again. This recovery requires the same sole
 hotspot-capable adapter condition; with another such adapter present, a limited
 radio cannot clear that other adapter's persisted intent.
 
-Accepted limit: a replacement of that sole unidentifiable adapter cannot be
-distinguished from the original and receives the same boot restore. An
+Accepted limit: a replacement that discovery already selected before restore
+can receive the same boot restore for an unpinned plain owner with no known
+collision. A lifetime change detected at recheck refuses dispatch. An
 exclusive profile independently auto-activated by NetworkManager remains
 observable and stoppable outside D12. Physical limited-radio restore is
 unqualified; both lab radios have verifiable identities.
@@ -759,13 +864,30 @@ restore pending hybrid without recreating or manually repairing the row. Actual
 concurrent-interface allocation remains the final admission check; successful
 allocation updates the row's concurrent path state before confirmation.
 
-Stop records station under the same key before teardown, including the
-already-stopped shortcut. A disconnect refusal or throw restores the previous
-value, deleting a previously absent key. Policy failure after a successful Stop
-keeps station intent, reports stopped, and retries with recoverable degradation.
+Stop and Station try to record station under the live AP's owner before
+teardown, including the already-stopped shortcut. A config write failure does
+not block Down. Bounded owner reconciliation retries persistence and suppresses
+runtime AP restore while the choice is not saved. A reboot before a successful
+retry can still read the last durable choice. A disconnect refusal or throw
+undoes the choice, deleting a previously absent key. Historical profile repair
+and unrelated pending cleanup do not veto a confirmed live Down; they retain
+their own recovery status. Stop and discovery Station policy require a
+daemon-bound activation path observed on the selected radio or AP leg.
+When this port has an independent Station intent, a later explicit Hotspot
+or Hybrid choice on the sole verified row supersedes it on that port only.
+On refusal, the prior durable and unsaved Station intent is restored for
+each affected owner, including the primary owner. Deferred intent suppresses
+restore until persistence recovers; it does not survive process loss.
+Neither independent
+profiles nor Station choices on other ports are changed.
+No roster or UUID-only Down is permitted. Credential-only Prepare does not supersede an
+unsaved Station choice or its retry.
 An accepted Start that is still activating is not already stopped: Stop
-disarms its selected profile, retires pending confirmation, and awaits NM down
-before reporting success. A late connected event cannot confirm that retired
+disarms its selected profile, retires pending confirmation, and requires
+terminal proof for the selected activation before reporting success. On
+unproved teardown it reports `deactivation-failed`, requests a rescan, and
+does not release the leg. Cached Station requires a fresh local check before
+reporting `applied: "station"`. A late connected event cannot confirm that retired
 Start. Create/up work still holding the adapter lock continues to refuse Stop
 with DEVICE_BUSY and leaves intent and NM state untouched.
 The selected UUID is captured before awaited disarm. An absent observer

@@ -1,12 +1,15 @@
 import { expect, it } from "bun:test";
 import { discoverAptAllPackages } from "../modules/system/apt-all-packages.ts";
 import {
+	deriveUpdateProgress,
+	PHASE_MARKERS,
+} from "../modules/system/apt-progress.ts";
+import {
 	parseAptArchivePath,
 	parseAptSpaceProbe,
 } from "../modules/system/apt-space-parser.ts";
 import {
 	buildDiscoveredPackages,
-	deriveAptProgress,
 	parseAptPackageList,
 	parseAptUpgradeSummary,
 	parseHeldBackPackages,
@@ -108,18 +111,17 @@ it.each(["\n", "\r\n"])(
 );
 
 it("keeps simulation actions out of live download/unpack/configure progress", () => {
-	// Given/When
-	const actual = deriveAptProgress(
-		{ total: 0, downloading: 0, unpacking: 0, setting_up: 0 },
-		simulation,
-	);
+	// Given/When: the captured simulation's Inst/Conf rows are not dpkg steps.
+	const actual = deriveUpdateProgress(simulation);
 	// Then
-	expect(actual).toEqual({
-		total: 3,
-		downloading: 0,
-		unpacking: 0,
-		setting_up: 0,
-	});
+	expect(actual).toEqual(PHASE_MARKERS.preparing);
+	// Control: its plan (3 packages, 6 steps) is read, so dpkg's own first
+	// two steps after it are one of six done.
+	expect(
+		deriveUpdateProgress(
+			`${simulation}Unpacking nginx-common (1.26.3-3+deb13u10) over (1.26.3-3+deb13u9) ...\nSetting up nginx-common (1.26.3-3+deb13u10) ...\n`,
+		),
+	).toEqual({ ...PHASE_MARKERS.installing, percent: 16 });
 });
 
 it.each([

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 
 import {
 	createFormatters,
@@ -9,6 +9,7 @@ import {
 	formatTemp,
 	formatVoltage,
 } from "../src/formatters.js";
+import { LOCALES } from "../src/locale-lifecycle.js";
 
 describe("formatBitrate", () => {
 	it("renders sub-1000 kbps as kbps", () => {
@@ -61,9 +62,38 @@ describe("formatPercent", () => {
 });
 
 describe("formatRelativeTime", () => {
-	it("returns 'just now' within the recency window", () => {
-		expect(formatRelativeTime("en")(new Date(Date.now() - 2000))).toBe(
-			"just now",
+	const now = Date.UTC(2026, 0, 1);
+
+	beforeEach(() => {
+		spyOn(Date, "now").mockReturnValue(now);
+	});
+	afterEach(() => {
+		mock.restore();
+	});
+
+	it.each(LOCALES.map(({ code }) => code))(
+		"returns the %s word for now at three seconds",
+		(locale) => {
+			const expected = new Intl.RelativeTimeFormat(locale, {
+				numeric: "auto",
+			}).format(0, "second");
+
+			expect(formatRelativeTime(locale)(new Date(now - 3000))).toBe(expected);
+		},
+	);
+
+	it("still uses the locale's word for now at nine seconds", () => {
+		expect(formatRelativeTime("es")(new Date(now - 9000))).toBe(
+			new Intl.RelativeTimeFormat("es", { numeric: "auto" }).format(0, "second"),
+		);
+	});
+
+	it("returns a numeric relative time at ten seconds", () => {
+		expect(formatRelativeTime("es")(new Date(now - 10_000))).toBe(
+			new Intl.RelativeTimeFormat("es", { numeric: "always" }).format(
+				-10,
+				"second",
+			),
 		);
 	});
 

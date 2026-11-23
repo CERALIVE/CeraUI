@@ -37,6 +37,7 @@ import { m } from '@ceraui/i18n/svelte';
 import { Download, LoaderCircle, Share, WifiOff } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
+import { publishHeight } from '$lib/layout';
 import {
 	deriveConnectionSurfaceUx,
 	getConnectionLossCause,
@@ -60,6 +61,11 @@ const showOfflineBanner = $derived(
 // is "offline"; a dropped device socket on a working network is named as such,
 // and its wording must not suggest the device stopped streaming.
 const browserOffline = $derived(getConnectionLossCause() === 'browser-offline');
+
+// The bar is fixed over the top of the page and takes no space of its own; the
+// height it publishes is what app.css moves the page and its sticky bands by.
+let offlineBar: HTMLDivElement | undefined = $state();
+$effect(() => (offlineBar ? publishHeight(offlineBar, '--offline-bar-height') : undefined));
 
 // Reactive derived values for PWA state
 const canInstallApp = $derived(getCanInstall());
@@ -173,7 +179,9 @@ async function handleMobileInstall() {
 <!-- Offline Status Banner -->
 {#if showOfflineBanner}
 	<div
+		bind:this={offlineBar}
 		class="bg-destructive text-destructive-foreground animate-in slide-in-from-top fixed top-0 right-0 left-0 z-50 p-3 text-center"
+		data-testid="offline-bar"
 	>
 		<div class="flex items-center justify-center gap-2">
 			{#if browserOffline}

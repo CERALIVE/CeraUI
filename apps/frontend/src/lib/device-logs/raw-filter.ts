@@ -34,6 +34,19 @@ export const DEFAULT_RAW_FILTER: RawFilter = {
 	order: "newest",
 };
 
+/** Whether a filter shows what a fresh view shows; a re-applied default is a new object. */
+export function isDefaultFilter(filter: RawFilter): boolean {
+	const fresh = DEFAULT_RAW_FILTER;
+	return (
+		filter.sources.length === 0 &&
+		filter.level === fresh.level &&
+		filter.time === fresh.time &&
+		filter.bootId === fresh.bootId &&
+		filter.text === fresh.text &&
+		filter.order === fresh.order
+	);
+}
+
 export const LEVEL_SETS: Readonly<Record<RawLevel, readonly LogLevel[]>> = {
 	errors: ["error"],
 	warnings: ["error", "warning"],

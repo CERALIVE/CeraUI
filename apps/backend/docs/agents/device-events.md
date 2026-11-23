@@ -66,8 +66,8 @@ subprocess or threshold for an event. Named exception: `disk_low` and
 | Directory: `CERALIVE_EVENTS_DIR`, else `CERALIVE_DATA_DIR/ceralive/events`, else a dev temp dir, else `/data/ceralive/events` | `store.ts:55-66` |
 | `mkdir` mode 0700, active file `fchmod` 0600 on append | `store.ts:103,137` |
 | Readers skip oversized files, the unterminated last line, unparsable lines and records failing the `v: 1` schema | `store.ts:160-161,174-190` |
-| Ring epoch: a UUID in `events.epoch`, mode 0600, kept across reads, rotation and restarts; a missing or damaged file gets a new one on the next `events.list`, and one that cannot be read or written is omitted from the reply | `epoch.ts:12-41`; `events.procedure.ts:34,41` |
-| `events.clear` leaves every generation intact if unlinking `events.epoch` or syncing the directory fails. Once the epoch is invalidated, it attempts every event generation and preserves the boot files. | `events.procedure.ts:51`, `store.ts:213-243` |
+| Ring epoch: a UUID in `events.epoch`, created or replaced with mode 0600. A valid ID survives rotation and restarts. The backend serves a valid cached ID for the resolved store without touching disk until a clear durably removes the epoch. On a cache miss, `events.list` reads, creates or repairs the ID; if no ID can be obtained, the reply omits `epoch`. A directory at the epoch path is left untouched. | `epoch.ts:39-72,97-170`; `events.procedure.ts:34,41` |
+| `events.clear` leaves every generation and the cached ID intact if unlinking `events.epoch` or syncing the directory fails. After a durable unlink it invalidates the cache, attempts every event generation and preserves the boot files. | `events.procedure.ts:51`; `store.ts:224-253` |
 
 ## Sync
 
@@ -77,10 +77,13 @@ subprocess or threshold for an event. Named exception: `disk_low` and
 | `device_started`, severity `error` or `warning` | at most once per second | `emit.ts:118-125` |
 | Others | no | `emit.ts:123-127` |
 | Boot records | yes | `store.ts:157` |
-| Ring epoch | yes | `epoch.ts:35` |
 
-The store calls `fdatasyncSync` when `sync` is set (`store.ts:139`). It
-catches failures and logs one warning (`store.ts:77-87`).
+For record appends the store calls `fdatasyncSync` when `sync` is set. It
+catches failures and logs a warning.
+
+Epoch writes instead `fsync` a private staging file before publishing it by
+link (create) or rename (repair). The backend `fsync`s the store directory
+before returning and caching the ID (`epoch.ts:97-133,158-170`).
 
 ## Adding an event
 

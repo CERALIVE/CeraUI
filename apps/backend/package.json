@@ -21,7 +21,7 @@
 		"xml2js": "^0.6.2"
 	},
 	"devDependencies": {
-		"@types/bun": "^1.4.4",
+		"@types/bun": "^1.4.5",
 		"@types/ws": "^8.18.2",
 		"@types/xml2js": "^0.4.14",
 		"typescript": "catalog:"

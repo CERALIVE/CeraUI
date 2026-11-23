@@ -3,6 +3,8 @@
  * saves, how a refusal reads, and how a ticketed file reaches the browser.
  */
 import type {
+	LogBootInfo,
+	LogBundleFailureReason,
 	LogBundleManifest,
 	LogErrorCode,
 	LogExportInput,
@@ -14,7 +16,6 @@ import {
 	logExportOutputSchema,
 } from "@ceraui/rpc/schemas";
 
-import { getBackendHttpUrl } from "$lib/env";
 import { RpcError } from "$lib/rpc/rpc-error";
 
 export { chineseWordChunks } from "./cjk-words";
@@ -30,6 +31,46 @@ export const RAW_OPENING_QUERY: LogQueryInput = {
 	levels: ["error", "warning", "info"],
 	boot: "current",
 };
+
+/** What one Export saves: fixed when its confirmation opens, stated there and sent as is. */
+export interface ExportScope {
+	readonly query: LogQueryInput;
+	readonly span: ExportSpan;
+	/** When the saved boot started, if it is the picker's boot; otherwise unknown. */
+	readonly bootStart: number | null;
+}
+
+/**
+ * The operator's latest action decides what Export saves: Raw's view as it last
+ * published it (an exact moment included), unless the boot picker was used after
+ * it or Raw never published; then Raw's level, source and search filters with the
+ * picker's boots, which replace Raw's time window as they do in Raw.
+ */
+export function captureExportScope(
+	view: LogQueryInput,
+	span: ExportSpan,
+	boot: LogBootInfo | null,
+	pickerLeads: boolean,
+): ExportScope {
+	if (!pickerLeads)
+		return Object.freeze({
+			query: Object.freeze({ ...view }),
+			span,
+			bootStart:
+				boot !== null && boot.bootId === view.boot ? boot.firstTs : null,
+		});
+	const { sources, levels, text } = view;
+	return Object.freeze({
+		query: Object.freeze({
+			sources,
+			levels,
+			text,
+			boot: boot === null ? "all" : boot.current ? "current" : boot.bootId,
+		}),
+		span: "filters",
+		bootStart: boot?.firstTs ?? null,
+	});
+}
 
 export function exportInput(query: LogQueryInput): LogExportInput {
 	const { sources, levels, text, boot, since, until } = query;
@@ -70,29 +111,36 @@ export function refusal(error: LogErrorCode): SharingProblem {
 }
 
 /**
- * The device refused to prepare the bundle: its sanitized READ_FAILED, which
- * includes the fail-closed collision of a held secret with a structured value.
+ * The stage at which the device refused to prepare the bundle: its sanitized
+ * READ_FAILED (which includes the fail-closed collision of a held secret with a
+ * structured value) and the envelope's additive stage. An older device sends no
+ * stage, which reads as unclassified. Null when the device did not refuse.
  */
-export function preparationRefused(error: unknown): boolean {
-	return error instanceof RpcError && error.message === "READ_FAILED";
+export function previewFailure(error: unknown): LogBundleFailureReason | null {
+	if (!(error instanceof RpcError) || error.message !== "READ_FAILED")
+		return null;
+	return error.stage ?? "internal";
 }
+
+/**
+ * Each stage's sentence. Only collision (change that credential) and
+ * journal_read (restart the device) need a remedy the band's Retry and Export
+ * this view do not already offer; the 64 KiB secret budget is not reachable
+ * with real credentials. The SPA size budget leaves no room for the rest.
+ */
+export const BUNDLE_FAILURE_COPY_KEYS = {
+	collision: "systemLogs.sharing.bundleFailedCollision",
+	journal_read: "systemLogs.sharing.bundleFailedJournal",
+	pattern: "systemLogs.sharing.bundleFailed",
+	budget: "systemLogs.sharing.bundleFailed",
+	deadline: "systemLogs.sharing.bundleFailed",
+	abort: "systemLogs.sharing.bundleFailed",
+	internal: "systemLogs.sharing.bundleFailed",
+} as const satisfies Record<LogBundleFailureReason, string>;
 
 /** A preview rejects with its sanitized code as the message (apps/backend/docs/agents/device-log-bundle.md). */
 export function previewProblem(error: unknown): SharingProblem {
 	return error instanceof RpcError && error.message === "BUSY"
 		? "busy"
 		: "failed";
-}
-
-/** The browser streams the file to disk; the page never holds its bytes. */
-export function startBackendDownload(path: string): void {
-	const anchor = document.createElement("a");
-	anchor.href = getBackendHttpUrl(path);
-	anchor.download = "";
-	document.body.append(anchor);
-	try {
-		anchor.click();
-	} finally {
-		anchor.remove();
-	}
 }

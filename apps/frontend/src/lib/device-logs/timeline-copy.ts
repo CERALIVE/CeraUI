@@ -150,20 +150,13 @@ export function eventTime(
 	readonly absolute: string;
 	readonly relative: string;
 } {
-	const today = new Date(at).toDateString() === new Date().toDateString();
-	const relative = formatRelativeTime(locale)(new Date(at));
+	const date = new Date(at);
+	const today = date.toDateString() === new Date().toDateString();
 	return {
-		iso: new Date(at).toISOString(),
+		iso: date.toISOString(),
 		absolute: today
 			? new Intl.DateTimeFormat(locale, { timeStyle: "medium" }).format(at)
 			: formatBootTime(at, locale),
-		// The shared formatter answers its last few seconds in English (DESIGN-FOLLOWUPS DF-32).
-		relative:
-			relative === "just now"
-				? new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(
-						0,
-						"second",
-					)
-				: relative,
+		relative: formatRelativeTime(locale)(date),
 	};
 }

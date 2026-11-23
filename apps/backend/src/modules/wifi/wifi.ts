@@ -50,11 +50,10 @@ import {
 	nmConnSetWifiMacAddress,
 	nmConnsGet,
 	nmcliParseSep,
-	nmDisconnect,
 	parseNmConnActivated,
 	parseNmConnAddUuid,
 } from "../network/network-manager.ts";
-import { logParseError } from "../system/cli-parse.ts";
+import type { ProfileWriteAdmission } from "../network/profile-write-permit.ts";
 import type { MessageSocket } from "../ui/message-socket.ts";
 import {
 	broadcastMsg,
@@ -62,6 +61,10 @@ import {
 	buildMsg,
 	getSocketSenderId,
 } from "../ui/websocket-server.ts";
+import {
+	wifiAdapterLockKey,
+	withWifiAdapterLock,
+} from "./wifi-adapter-lock.ts";
 import {
 	getWifiCapabilitiesForInterface,
 	getWifiLinkTelemetryForInterface,
@@ -79,11 +82,16 @@ import {
 } from "./wifi-connections.ts";
 import { wifiHotspotStart } from "./wifi-hotspot-activation.ts";
 import {
+	nmDisconnectActivation,
+	observeHotspotActivation,
+} from "./wifi-hotspot-activity.ts";
+import {
 	buildHotspotClients,
 	type HotspotClients,
 	hotspotClientsForMessage,
 	recordHotspotClientsBroadcast,
 } from "./wifi-hotspot-clients.ts";
+import { bindingForRow } from "./wifi-operation-binding.ts";
 import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 
 export { currentHotspotApIfnames } from "./wifi-hotspot-clients.ts";
@@ -114,7 +122,10 @@ import {
 	type WifiInterface,
 	type WifiInterfaceId,
 } from "./wifi-interfaces.ts";
-import { wifiRadioIdentity } from "./wifi-radio-identity.ts";
+import {
+	type ReadRadioInventory,
+	wifiRadioIdentity,
+} from "./wifi-radio-identity.ts";
 import {
 	projectWifiRadioIncarnation,
 	setWifiRadioPublicationListener,
@@ -483,6 +494,8 @@ let savedConnectionsRefresh: symbol | undefined;
 export async function wifiUpdateSavedConns(
 	signal?: AbortSignal,
 	onCommitted?: () => void,
+	permitHotspotWrite?: (uuid: string) => Promise<ProfileWriteAdmission>,
+	readInventory?: ReadRadioInventory,
 ): Promise<void> {
 	if (signal?.aborted) return;
 	const refresh = Symbol();
@@ -558,7 +571,12 @@ export async function wifiUpdateSavedConns(
 
 			const macAddress = macTmp.toLowerCase();
 			if (mode === "ap") {
-				await handleHotspotConn(macAddress, uuid);
+				if (permitHotspotWrite || readInventory)
+					await handleHotspotConn(macAddress, uuid, {
+						...(permitHotspotWrite ? { permitWrite: permitHotspotWrite } : {}),
+						...(readInventory ? { readInventory } : {}),
+					});
+				else await handleHotspotConn(macAddress, uuid);
 			} else if (mode === "infrastructure") {
 				registerSavedWifiConnection(savedInterfaces, macAddress, ssid, uuid);
 			}
@@ -605,13 +623,33 @@ function wifiSearchConnection(uuid: string) {
 	return connFound;
 }
 
-async function wifiDisconnect(uuid: ConnectionUUID) {
-	if (wifiSearchConnection(uuid) === undefined) return;
-
-	if (await nmDisconnect(uuid)) {
-		await wifiUpdateScanResult();
-		wifiScheduleScanRefresh();
-	}
+export async function wifiDisconnect(uuid: ConnectionUUID) {
+	const candidates = Object.entries(getWifiInterfacesByMacAddress()).filter(
+		([, row]) => row.conn === uuid && Object.values(row.saved).includes(uuid),
+	);
+	const selected = candidates.length === 1 ? candidates[0] : undefined;
+	if (!selected) return { success: false, error: "generic" } as const;
+	const [key, row] = selected;
+	const locked = await withWifiAdapterLock(
+		wifiAdapterLockKey(key),
+		async () => {
+			if (getWifiInterfaceByMacAddress(key) !== row || row.conn !== uuid)
+				return false;
+			const receipt = await observeHotspotActivation(uuid, row.ifname);
+			return nmDisconnectActivation(
+				uuid,
+				receipt,
+				undefined,
+				async () =>
+					getWifiInterfaceByMacAddress(key) === row && row.conn === uuid,
+			);
+		},
+	);
+	if (!locked.success) return { success: false, error: "DEVICE_BUSY" } as const;
+	if (!locked.result) return { success: false, error: "generic" } as const;
+	await wifiUpdateScanResult();
+	wifiScheduleScanRefresh();
+	return { success: true } as const;
 }
 
 /*
@@ -703,8 +741,6 @@ type WifiJoinOutcome = {
 	readonly ok: boolean;
 	readonly uuid?: string;
 	readonly authFailed: boolean;
-	readonly stdout: string;
-	readonly stderr: string;
 };
 
 const wantedSecrets = (output: string) =>
@@ -716,15 +752,13 @@ async function joinViaNmAuto(args: string[]): Promise<WifiJoinOutcome> {
 		return {
 			ok: false,
 			authFailed: wantedSecrets(`${stdout}\n${stderr}`),
-			stdout,
-			stderr,
 		};
 	}
 	const success = stdout.match(/successfully activated with '(.+)'/);
 	const uuid = success?.[1];
 	return uuid === undefined
-		? { ok: true, authFailed: false, stdout, stderr }
-		: { ok: true, uuid, authFailed: false, stdout, stderr };
+		? { ok: true, authFailed: false }
+		: { ok: true, uuid, authFailed: false };
 }
 
 async function retrySavedJoin(
@@ -744,8 +778,6 @@ async function retrySavedJoin(
 		return {
 			ok: false,
 			authFailed: wantedSecrets(`${changed.stdout}\n${changed.stderr}`),
-			stdout: changed.stdout,
-			stderr: changed.stderr,
 		};
 	const ifname = connectArgs[connectArgs.indexOf("ifname") + 1];
 	const activated = await joinViaNmAuto([
@@ -771,19 +803,17 @@ async function joinViaSaeProfile(addArgs: string[]): Promise<WifiJoinOutcome> {
 		return {
 			ok: false,
 			authFailed: false,
-			stdout: added.stdout,
-			stderr: added.stderr,
 		};
 	}
 
 	const parsed = parseNmConnAddUuid(added.stdout);
 	if (!parsed.ok) {
-		logParseError(parsed);
+		logger.warn(
+			"wifiNew: NetworkManager returned no confirmed SAE profile UUID",
+		);
 		return {
 			ok: false,
 			authFailed: false,
-			stdout: added.stdout,
-			stderr: added.stderr,
 		};
 	}
 
@@ -794,16 +824,12 @@ async function joinViaSaeProfile(addArgs: string[]): Promise<WifiJoinOutcome> {
 			ok: false,
 			uuid,
 			authFailed: wantedSecrets(`${activated.stdout}${activated.stderr}`),
-			stdout: activated.stdout,
-			stderr: activated.stderr,
 		};
 	}
 	return {
 		ok: true,
 		uuid,
 		authFailed: false,
-		stdout: activated.stdout,
-		stderr: activated.stderr,
 	};
 }
 
@@ -907,7 +933,7 @@ async function runWifiNew(
 
 	if (outcome.uuid === undefined) {
 		logger.warn(
-			`wifiNew: no error but not matching a successful connection msg in:\n${outcome.stdout}\n${outcome.stderr}`,
+			"wifiNew: NetworkManager returned no confirmed connection UUID",
 		);
 		/*
 		  nmcli reported no error and named no connection, so nothing here can say
@@ -928,9 +954,13 @@ async function runWifiNew(
 		return;
 	}
 
+	const currentRow = getWifiInterfaceByMacAddress(macAddress);
+	const hardwareMac =
+		(currentRow && bindingForRow(macAddress, currentRow)?.mac) ??
+		normalizeMacAddress(macAddress);
 	if (
-		normalizeMacAddress(macAddress) &&
-		!(await nmConnSetWifiMacAddress(outcome.uuid, macAddress))
+		hardwareMac &&
+		!(await nmConnSetWifiMacAddress(outcome.uuid, hardwareMac))
 	) {
 		logger.warn(
 			"Failed to set the MAC address for the newly created connection",

@@ -12,6 +12,12 @@ token, and is a recorded deviation from plan todo 24 described in the
 Authoritative Wi-Fi status still confirms Start and Stop, including on older
 backends that omit the echo. See the [binding contract](../../../../docs/HOTSPOT-DRAFT-BINDING.md).
 
+A refused support-bundle preview keeps the constant `READ_FAILED` message and
+adds the envelope's optional `stage` (a closed `logBundleFailureReasonSchema`
+value). `RpcError` validates it against that schema when it is constructed, so
+any other wire value becomes `undefined` and never reaches an error log; the
+System Logs sharing flow reads only that closed value.
+
 Update actions retain the RPC envelope's optional `retryable` and distinct
 `UPDATE_ORCHESTRATOR_INITIALIZING` code before `osCommand` consumes a rejection.
 The existing Updates refusal band resolves that code to translated initialising/

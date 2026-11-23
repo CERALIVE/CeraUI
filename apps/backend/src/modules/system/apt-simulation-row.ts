@@ -7,6 +7,10 @@ export type AptSimulationRow =
 			readonly kind: "Inst";
 			readonly name: string;
 			readonly version: string | undefined;
+			/** The version installed now (`[current]`); absent for a new install. */
+			readonly from?: string;
+			/** The candidate's own architecture (`[arm64]`, `[all]`). */
+			readonly arch?: string;
 	  }
 	| { readonly kind: "Conf"; readonly name: string }
 	| { readonly kind: "Remv" | "Purg"; readonly name: string };
@@ -14,7 +18,7 @@ export type AptSimulationRow =
 // apt 3.0.3 algorithms.cc:82-269; pkgcache.cc:909-960. Release display is
 // context, not repository authority; ambiguous/control-bearing displays refuse.
 const CANDIDATE =
-	/^ \(([0-9][A-Za-z0-9.+:~-]*) (?:([^\p{Cc}\p{Cf};[\]]*) \[[a-z0-9][a-z0-9-]*\])?\)/u;
+	/^ \(([0-9][A-Za-z0-9.+:~-]*) (?:([^\p{Cc}\p{Cf};[\]]*) \[([a-z0-9][a-z0-9-]*)\])?\)/u;
 const FULL_NAME = /^[a-z0-9][a-z0-9+.-]*:[a-z0-9][a-z0-9-]*$/;
 
 export function parseAptSimulationRow(line: string): AptSimulationRow | null {
@@ -23,15 +27,21 @@ export function parseAptSimulationRow(line: string): AptSimulationRow | null {
 	const name = head?.[2];
 	if (!head || !name || !APT_PACKAGE_NAME_RE.test(name)) return null;
 	let rest = line.slice(head[0].length);
+	let from: string | undefined;
 	if (verb !== "Conf") {
 		const current = /^ \[([0-9][A-Za-z0-9.+:~-]*)\]/.exec(rest);
-		if (current) rest = rest.slice(current[0].length);
+		if (current) {
+			from = current[1];
+			rest = rest.slice(current[0].length);
+		}
 	}
 	let version: string | undefined;
+	let arch: string | undefined;
 	if (verb === "Inst" || verb === "Conf") {
 		const candidate = CANDIDATE.exec(rest);
 		if (candidate) {
 			version = candidate[1];
+			arch = candidate[3];
 			rest = rest.slice(candidate[0].length);
 		}
 	}
@@ -57,7 +67,13 @@ export function parseAptSimulationRow(line: string): AptSimulationRow | null {
 	}
 	switch (verb) {
 		case "Inst":
-			return { kind: verb, name, version };
+			return {
+				kind: verb,
+				name,
+				version,
+				...(from === undefined ? {} : { from }),
+				...(arch === undefined ? {} : { arch }),
+			};
 		case "Conf":
 			return { kind: verb, name };
 		case "Remv":

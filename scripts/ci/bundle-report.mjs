@@ -25,6 +25,17 @@ import { assertFederationAssetSet, discoverFederationAssets } from '../federatio
 const KIB = 1024;
 
 const SPA_BASELINE = {
+	// ACCEPTED, TRACKED REGRESSION: hotspot consent handling, measured 2026-11-22.
+	// Main a5ad2281: 1,269,613/1,469,412 B total/precache; d543e160:
+	// 1,271,045/1,470,838 B (+1,432/+1,426 B), over the old ceilings by
+	// 1,030/1,022 B. The growth comes from consent, focus and radio-bound
+	// recovery in HotspotDialog, HotspotActivationConfirm, WifiModeSelector
+	// and wifi-entry-request, with no new locale keys or catalog chunks.
+	// The figures use the larger of two Bun builds per tree; commit ID and
+	// build timestamp can vary the gzip size. Rebaseline to the measured
+	// footprint under TD-spa-i18n-catalog-size (still open), retaining
+	// 1,253,631/1,453,432 B below. Both 16 KiB headrooms, ratios,
+	// route/chunk/federation and Workbox limits stay fixed.
 	// ACCEPTED, TRACKED REGRESSION: System Logs, measured 2026-11-18.
 	// Main f6c9a2fb: 1,130,265/1,329,981 B total/precache; 0e347d01:
 	// 1,253,631/1,453,432 B (+123,366/+123,451 B), over the old ceilings by
@@ -94,10 +105,10 @@ const SPA_BASELINE = {
 	// single-chunk ceilings are NOT widened. Both aggregates now carry a SECOND,
 	// absolute ceiling so a re-derivation cannot hand back a fresh 12% to spend
 	// silently — precache gained one here for the reason totalGzip already had.
-	totalGzip: 1_253_631,
+	totalGzip: 1_271_045,
 	initialRouteGzip: 497_196,
 	largestChunkGzip: 461_577,
-	precacheGzip: 1_453_432,
+	precacheGzip: 1_470_838,
 };
 
 // The aggregate's binding constraint. A ratio applied to a freshly re-derived
@@ -138,6 +149,11 @@ const SPA_DISPLACED_BASELINES = {
 		{
 			bytes: 1_235_713,
 			label: 'pre-system-logs',
+			debt: 'TD-spa-i18n-catalog-size',
+		},
+		{
+			bytes: 1_253_631,
+			label: 'pre-hotspot-consent',
 			debt: 'TD-spa-i18n-catalog-size',
 		},
 	],
@@ -181,6 +197,11 @@ const SPA_DISPLACED_BASELINES = {
 		{
 			bytes: 1_435_424,
 			label: 'pre-system-logs',
+			debt: 'TD-spa-i18n-catalog-size',
+		},
+		{
+			bytes: 1_453_432,
+			label: 'pre-hotspot-consent',
 			debt: 'TD-spa-i18n-catalog-size',
 		},
 	],

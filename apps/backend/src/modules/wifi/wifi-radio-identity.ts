@@ -1,5 +1,7 @@
 import { readdir, realpath } from "node:fs/promises";
+import { getNetifTopologyGeneration } from "../network/netif-topology-generation.ts";
 import type { MacAddress } from "../network/network-manager.ts";
+import { runIw } from "./regdomain.ts";
 import type {
 	BaseWifiInterface,
 	WifiAdapterDegradedReason,
@@ -44,11 +46,13 @@ export function getWifiRadioShadowFailures(): number {
 
 type RadioRosterReaders = RadioIdentityReaders & {
 	readonly listInterfaces: () => Promise<string[] | undefined>;
+	readonly readPhyInventory: () => Promise<string>;
 };
 
 // The bracketed lifetime sample owns adapter identity.
 export const radioIdentityReaders: RadioRosterReaders = {
 	listInterfaces: () => readdir("/sys/class/net").catch(() => undefined),
+	readPhyInventory: () => runIw(["phy"]),
 	readDevicePath: async (ifname) => {
 		const { nmDeviceProp } = await import("../network/network-manager.ts");
 		return (await nmDeviceProp(ifname, "GENERAL.PATH"))?.[0];
@@ -91,14 +95,100 @@ export type RadioIdentityState = {
 	readonly changed: readonly string[];
 };
 
+/** Only a same-phy AP leg is redundant for physical port occupancy. */
+export function wifiPhysicalPortWitnesses(
+	rows: ReadonlyMap<string, RadioIdentity>,
+) {
+	const radios = [...rows.values()];
+	const parentPhys = new Set(
+		radios
+			.filter((row) => !row.ifname.startsWith("clap-"))
+			.map((row) => row.lifetime?.phyPath),
+	);
+	return radios.filter(
+		(row) =>
+			!row.ifname.startsWith("clap-") ||
+			!row.lifetime ||
+			!parentPhys.has(row.lifetime.phyPath),
+	);
+}
+
+type CompleteRadioInventory = {
+	readonly kind: "complete";
+	readonly rows: ReadonlyMap<string, RadioIdentity>;
+};
+
+const unknownInventory = { kind: "unknown" } as const;
+type RadioInventory = CompleteRadioInventory | typeof unknownInventory;
+export type ReadRadioInventory = (() => Promise<RadioInventory>) & {
+	readonly current: () => boolean;
+};
+
+/** Reuse one kernel inventory within a pass, never across identity samples. */
+export function radioInventoryFor(
+	rows = wifiRadioIdentity.state.rows,
+): ReadRadioInventory {
+	const observation =
+		rows === wifiRadioIdentity.state.rows
+			? wifiRadioIdentity.publishedObservation
+			: undefined;
+	const topologyGeneration = wifiRadioIdentity.publishedTopologyGeneration;
+	const isCurrent = () =>
+		observation !== undefined &&
+		observation === wifiRadioIdentity.publishedObservation &&
+		topologyGeneration === getNetifTopologyGeneration();
+	let probe: Promise<RadioInventory> | undefined;
+	return Object.assign(
+		async () => {
+			if (!isCurrent()) return unknownInventory;
+			probe ??= proveRadioInventory(rows);
+			const proof = await probe;
+			return isCurrent() ? proof : unknownInventory;
+		},
+		{ current: isCurrent },
+	);
+}
+
+/** Absence claims need the complete kernel PHY set, not just NM's selected rows. */
+async function proveRadioInventory(
+	rows: ReadonlyMap<string, RadioIdentity>,
+): Promise<RadioInventory> {
+	const expected = new Map<string, string>();
+	for (const radio of rows.values()) {
+		const path = radio.lifetime?.phyPath;
+		const phy = path?.split("/").at(-1);
+		if (!path || !phy || (expected.has(phy) && expected.get(phy) !== path))
+			return unknownInventory;
+		expected.set(phy, path);
+	}
+	try {
+		const dump = await radioIdentityReaders.readPhyInventory();
+		const seen = new Set<string>();
+		for (const line of dump.split("\n")) {
+			if (!line.trim() || /^\s/.test(line)) continue;
+			const phy = /^Wiphy\s+(\S+)\s*$/.exec(line)?.[1];
+			if (!phy || seen.has(phy) || !expected.has(phy)) return unknownInventory;
+			seen.add(phy);
+		}
+		return seen.size === expected.size && (seen.size > 0 || !dump.trim())
+			? { kind: "complete", rows }
+			: unknownInventory;
+	} catch (error: unknown) {
+		if (!(error instanceof Error)) throw error;
+		return unknownInventory;
+	}
+}
+
 /**
  * Coherent lifetime evidence selects registry keys before discovery publishes.
  */
 export class WifiRadioIdentityProducer {
 	private permanentMacByLifetime = new Map<string, MacAddress>();
+	private readonly sameAddressCollisions = new Set<MacAddress>();
 	private snapshot: RadioIdentityState = { rows: new Map(), changed: [] };
 	private sequence = 0;
 	private publishedSequence = 0;
+	private sampledTopologyGeneration: number | undefined;
 	// Discovery can publish rows before a capacity-deferred sample begins.
 	private observedRows = new Map<string, BaseWifiInterface>();
 
@@ -108,8 +198,20 @@ export class WifiRadioIdentityProducer {
 		return this.snapshot;
 	}
 
+	hasSeenSameAddressCollision(mac: MacAddress): boolean {
+		return this.sameAddressCollisions.has(mac);
+	}
+
+	resetCollisionHistoryForTest(): void {
+		this.sameAddressCollisions.clear();
+	}
+
 	get publishedObservation(): number {
 		return this.publishedSequence;
+	}
+
+	get publishedTopologyGeneration(): number | undefined {
+		return this.sampledTopologyGeneration;
 	}
 
 	captureObservation(): number {
@@ -135,6 +237,7 @@ export class WifiRadioIdentityProducer {
 		devices: readonly RadioObservation[],
 		sequence?: number,
 		signal?: AbortSignal,
+		topologyGeneration = getNetifTopologyGeneration(),
 	): Promise<void> {
 		const generation = sequence ?? this.captureObservation();
 		if (signal?.aborted || generation < this.publishedSequence) return;
@@ -147,6 +250,7 @@ export class WifiRadioIdentityProducer {
 		const samples = new Map<string, RadioSample | undefined>();
 		const seen = new Set<string>();
 		const macPaths = new Map<MacAddress, Set<string>>();
+		const pathByPhy = new Map<string, string>();
 		const interfacesByPhy = new Map<string, number>();
 		const devicePaths = new Map<string, Set<string>>();
 		// Finish classification before publishing any healthy identity edge.
@@ -167,6 +271,7 @@ export class WifiRadioIdentityProducer {
 				if (!ifname.startsWith("clap-")) {
 					interfacesByPhy.set(path, (interfacesByPhy.get(path) ?? 0) + 1);
 					if (sample.devicePath) {
+						pathByPhy.set(path, sample.devicePath);
 						const phys =
 							devicePaths.get(sample.devicePath) ?? new Set<string>();
 						phys.add(path);
@@ -187,6 +292,25 @@ export class WifiRadioIdentityProducer {
 			if (!seen.has(pair)) cache.delete(pair);
 		}
 
+		const compositeMacs = new Set<MacAddress>();
+		for (const [mac, phys] of macPaths) {
+			if (phys.size > 1) this.sameAddressCollisions.add(mac);
+			if (
+				phys.size > 1 &&
+				[...phys].every((phy) => {
+					const port = pathByPhy.get(phy);
+					return (
+						interfacesByPhy.get(phy) === 1 &&
+						port !== undefined &&
+						devicePaths.get(port)?.size === 1
+					);
+				})
+			)
+				compositeMacs.add(mac);
+		}
+		const uncertain = [...samples.values()].some(
+			(other) => other === undefined,
+		);
 		const rows = new Map<string, RadioIdentity>();
 		for (const device of devices) {
 			const row =
@@ -196,10 +320,15 @@ export class WifiRadioIdentityProducer {
 					: undefined);
 			const sample = samples.get(device.ifname);
 			const mac = sample?.permanentMac;
+			const twins = mac !== undefined && (macPaths.get(mac)?.size ?? 0) > 1;
+			const compositePort =
+				mac && sample && compositeMacs.has(mac)
+					? pathByPhy.get(sample.lifetime.phyPath)
+					: undefined;
 			const shared =
 				// A still-listed uncertain witness cannot establish MAC uniqueness.
-				[...samples.values()].some((other) => other === undefined) ||
-				(mac !== undefined && (macPaths.get(mac)?.size ?? 0) > 1) ||
+				uncertain ||
+				(twins && !compositePort) ||
 				(sample !== undefined &&
 					(interfacesByPhy.get(sample.lifetime.phyPath) ?? 0) > 1);
 			const classification = !sample
@@ -219,7 +348,9 @@ export class WifiRadioIdentityProducer {
 			);
 			let key =
 				classification === "verified" && mac
-					? mac
+					? compositePort
+						? `${mac}@${compositePort}`
+						: mac
 					: classification === "limited" && sample
 						? `limited:${sample.lifetime.ifindex}:${sample.lifetime.wiphy}`
 						: `degraded:${device.ifname}`;
@@ -238,6 +369,12 @@ export class WifiRadioIdentityProducer {
 						previous.ifname !== device.ifname)) &&
 				previous.classification === classification &&
 				previous.permanentMac === mac &&
+				(classification !== "verified" ||
+					previous.devicePath ===
+						(sample?.devicePath &&
+						devicePaths.get(sample.devicePath)?.size === 1
+							? sample.devicePath
+							: undefined)) &&
 				previous.degradedReason === degradedReason;
 			rows.set(device.ifname, {
 				ifname: device.ifname,
@@ -264,6 +401,7 @@ export class WifiRadioIdentityProducer {
 		}
 		this.permanentMacByLifetime = cache;
 		this.publishedSequence = generation;
+		this.sampledTopologyGeneration = topologyGeneration;
 		this.project(rows);
 	}
 

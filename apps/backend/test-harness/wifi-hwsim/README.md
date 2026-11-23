@@ -21,7 +21,7 @@ The first-AP shim installs an exclusive `/usr/local/bin/nmcli` link to its
 private executable in the exported repository and removes its owned link on
 close, uncaught process exit, SIGINT and SIGTERM. `/run` may remain `noexec`.
 That launcher directory is already
-on the guest's startup PATH. Bun 1.4.4's env-less product execution path retains
+on the guest's startup PATH. Bun 1.4.5's env-less product execution path retains
 the startup PATH, while the stdin runner receives the current environment;
 prepending a private directory after startup alone does not intercept both.
 An existing `/usr/local/bin/nmcli` is never overwritten.
@@ -98,7 +98,7 @@ shared-IPv4 hotspot profiles; the container uses `debian:trixie-slim`.
 It requires Linux with readable/writable `/dev/kvm`, QEMU (`qemu-system-x86_64`
 and `qemu-img`), xorriso, OpenSSH, curl, coreutils, find, flock, tar, Git and Python
 with `os.pidfd_open`/`signal.pidfd_send_signal` support (Linux, Python 3.9+).
-`--repo` additionally requires the workstation's Bun 1.4.4 binary.
+`--repo` additionally requires the workstation's Bun 1.4.5 binary.
 No host module, Docker or administrator password is needed. This remains
 local-only infrastructure, outside shared CI.
 
@@ -136,7 +136,7 @@ Flags:
 | Flag | Effect |
 |---|---|
 | `--radios N` | Create 2 to 100 radios, default 2. |
-| `--repo PATH` | Normalize PATH to its Git work-tree root, export one committed revision (default `HEAD`) to `/repo`, copy workstation Bun 1.4.4, and run `bun install --frozen-lockfile --linker=hoisted` in the guest. Hoisting makes workspace dependencies available to root-level gate imports. Commands start in `/repo`; `HWSIM_REPO=/repo` is available. Uncommitted files, workstation dependencies and submodules are excluded. |
+| `--repo PATH` | Normalize PATH to its Git work-tree root, export one committed revision (default `HEAD`) to `/repo`, copy workstation Bun 1.4.5, and run `bun install --frozen-lockfile --linker=hoisted` in the guest. Hoisting makes workspace dependencies available to root-level gate imports. Commands start in `/repo`; `HWSIM_REPO=/repo` is available. Uncommitted files, workstation dependencies and submodules are excluded. |
 | `--ref REV` | With `--repo`, select a commit from that repository's object store without checking it out or changing any worktree. The resolved commit supplies both checks and product code. |
 | `--no-install` | Skip the guest dependency install for self-contained repository commands. Without `--repo`, commands start in `/harness`. |
 | `--keep` | After a successful command, print the SSH command and hold the VM up for inspection until the runner is interrupted or one hour elapses. Keep the runner alive in its terminal; it still owns cleanup. |
@@ -251,9 +251,9 @@ The simulator now uses Debian 13 trixie to match the device OS and its
 NetworkManager `1.52.x` series; its generic amd64 kernel remains different.
 Device qualification remains separate. hwsim does not model physical driver,
 firmware, RF, USB/PCI topology or physical interface limits, so a passing VM gate
-does not prove slot-limit behavior. Duplicate-address behavior is unqualified
-here: its later gate must record the actual Debian result with a working
-distinct-address control, rather than infer it from an upstream error string.
+does not prove slot-limit behavior. See [Equal permanent MAC and guest port
+identity](#equal-permanent-mac-and-guest-port-identity) for the current
+duplicate-address simulator procedure and its distinct-address control.
 
 The unchanged `integration-test.sh` accepts any state output containing
 `connected`, including `disconnected`. Its PASS marker alone is insufficient:
@@ -276,11 +276,37 @@ loads a host module and remains outside shared CI.
 ### Later gates
 
 Run `replacement.ts` on four radios to check that Start refuses after the
-physical names are swapped during saved-profile refresh before Up. Duplicate-address
-testing needs a working distinct-address creation control first. Require state
-100 **and the intended active profile/SSID** for association; the integration
-script's `connected` substring alone accepts `disconnected`. Establish positive
-controls before treating application refusal as a passing negative control.
+physical names are swapped during saved-profile refresh before Up. The
+duplicate-address gate has its own [current procedure](#equal-permanent-mac-and-guest-port-identity).
+
+### Equal permanent MAC and guest port identity
+
+Validate both rule layouts offline, then run the check from a committed CeraUI
+checkout with a disk-backed `TMPDIR` outside the worktree:
+
+```bash
+harness=apps/backend/test-harness/wifi-hwsim
+bash "$harness/vm/duplicate-address-ports.sh" --verify-rules
+bash "$harness/vm/run-vm.sh" --radios 4 --repo "$PWD" --ref HEAD -- \
+  bun "$harness/checks/duplicate-address.ts"
+```
+
+Offline verification uses `udevadm verify` without loading host rules. The
+check requires the native VM and its runner marker before touching NetworkManager.
+After the distinct-address AP control, it creates a second radio with the same
+permanent MAC. The guest assigns `ID_PATH` by hwsim parent and reads it back
+from udev and NetworkManager before each layout. Guest-only metadata lets
+CeraUI enroll both radios using normal discovery; the check waits for settled
+identity publication.
+
+The same-path layout must refuse both radios with exactly `radio-unverified`.
+With distinct paths, both APs must still be active after the second starts,
+each on its own device with the expected UUID, SSID and AP mode.
+
+Historically, unconfigured hwsim radios reported no NetworkManager port paths,
+so that setup exercised the fail-closed path only. The explicit paths now let
+the VM exercise both layouts. This is simulator evidence, not physical
+same-address hardware qualification.
 
 ### #603 secret boundary
 
@@ -615,7 +641,9 @@ Adding execute permission to the placeholder would not repair that inode error.
 `guest-versions.sh` prints every command's exit status and verdict. A valid
 hostapd version banner may accompany exit 1 on Debian 13's hostapd 2.10;
 that property applies only to this version probe. Other tool failures still
-fail the group, and the exact Bun/NM daemon pins remain 1.4.4/1.52.1.
+fail the group, and the live guest requires Bun 1.4.5 and NetworkManager 1.52.1.
+The R21 replay passes its exact historical Bun 1.4.4 pin to the same checker;
+live preflight does not pass an override.
 
 ```bash
 taskset -c 0-3 bash apps/backend/test-harness/wifi-hwsim/guest-versions.selftest.sh

@@ -96,6 +96,11 @@ All getters are plain functions that return Svelte 5 `$state` values. Because th
 
 **Do not** read connection state from `lib/stores/offline-state.svelte` in authenticated components. That store only covers the browser-offline PWA case. Use `getIsConnected()` / `getConnectionState()` from `subscriptions.svelte.ts` — these survive socket replacement across reconnect cycles.
 
+`getSessionReady()` in `session-epoch.svelte.ts` means the current socket has
+passed `auth.login`. Raw's boot check, the Events history check and Layout's
+heartbeat wait for this signal, not transport OPEN. It goes false on link loss
+and does not wait for the safety hydrate.
+
 ---
 
 ## Dirty-registry field-lock contract
@@ -163,16 +168,37 @@ The `netif` message handler guards only the `enabled` field per interface, keyed
 
 **File:** `apps/frontend/src/lib/rpc/reconnect.ts`
 
-When the WebSocket reconnects after the operator has already authenticated, the new socket is unauthenticated. The backend only pushes device state after a successful `auth.login`. Without re-auth, the UI shows the authenticated shell with blank views.
+Each replacement socket starts unauthenticated. If the shell is still signed
+in when transport opens, the subscription owner attempts one remembered-token
+login on that socket. This covers both interactive and saved-token sign-in;
+Layout still owns initial saved-token login.
 
 `reauthenticateAndHydrate(deps)` handles this:
 
 1. Reads the device-issued, revocable token from `localStorage["auth"]`; the password is never persisted.
 2. Calls `deps.login(token)` — wired to `rpc.auth.login({ token, persistent_token: true })`.
-3. Dispatches the auth result through `handleMessage` (the canonical path).
-4. On success: fires config and status safety reads in parallel, consuming each independently. Status carries BOTH request dispatch and browser receipt provenance. An intervening intent or newer STREAM-FACT observation supersedes a pull's stream evidence: withhold that group, merge unrelated supplied fields independently, and allow at most one fresh read. Only `is_streaming`, `stream_lifecycle` and unclassified names (fail closed) advance that atomic horizon; telemetry/Wi-Fi/modem/SSH-only pushes do not. Preserve a newer overlapping push after dispatch or a newer field receipt/read, not a blanket whole-answer rejection. A twice-stream-superseded or failed read supplies no stream settlement. Config failure never withholds successful status. Restoration is decided after both paths settle (see START-LIFECYCLE, FIX-16-F7).
-5. On explicit server rejection: clears the stored credential (loop break — the next reconnect finds no token and short-circuits) and routes to the login screen.
-6. On a socket reset, timeout, or other transport failure: returns `unreachable`, retaining the credential and auth state for a later reconnect. A failed safety hydrate likewise retains the authenticated session.
+3. Accepts results only for the current link; a retired link cannot admit,
+   sign out or hydrate its replacement.
+4. On success: publishes admission and starts parallel config and status
+   safety reads, consuming each independently. See the evidence-order rules
+   below. Restoration is declared after both paths settle, even if one failed;
+   the backend's post-login push remains a separate source of state.
+5. On explicit rejection: clears the saved credential only if it is still the
+   one rejected, then opens Sign in. No credential also opens Sign in without
+   sending a login request. Neither case loops.
+6. If login reaches its deadline on a still-live socket, the shell returns to
+   the password form without deleting the saved token. If the socket drops
+   before a verdict, the replacement can make its own attempt. Failure of a
+   safety read after accepted login does not sign the operator out.
+
+First-run mode is a prompt from the current socket, not persistent device
+telemetry. On a new OPEN edge the subscription cache discards the previous
+socket's `set_password: true`. An unconfigured device sends a fresh prompt;
+a configured device does not. This lets a tab show Sign in after setup and
+rejected replay, including when setup was completed in another tab before
+reconnect. An unsuccessful setup on the same socket does not clear the prompt.
+Confirmed local setup also clears the shared prompt before the form starts
+sign-in, so unrelated status pushes cannot put the form back in setup mode.
 
 Initial page-load restoration uses `authenticateWithToken()` in the auth store,
 returning the same `AuthAttempt` variants as password login: `ok`, `rejected`, or
@@ -190,15 +216,21 @@ The function is dependency-injected and rune-free, so it runs under the plain vi
 
 | Outcome | Meaning |
 |---|---|
-| `"no-token"` | No stored credential; first-time login owns the initial auth |
-| `"hydrated"` | Re-auth succeeded and the safety hydrate ran |
-| `"expired"` | Stored credential rejected; cleared, routed to login |
+| `"no-token"` | No stored credential; no replay RPC |
+| `"hydrated"` | Re-auth succeeded and both safety reads settled |
+| `"expired"` | Stored credential rejected; the attempted value is cleared if still saved |
+| `"unreachable"` | Current login attempt failed without a credential verdict |
+| `"superseded"` | The attempt no longer owns the link or session |
 
 ### Wiring in subscriptions.svelte.ts
 
-`runReconnectReauth()` is called from `handleConnectionChange` when `state === "connected"` and `wasAuthenticated()` is true. A `reauthInFlight` flag prevents concurrent re-auth attempts across rapid reconnect cycles.
-
 The seq tracker is reset on every reconnect (`seqTracker.resetOnReconnect()`) so a restarted server whose sequence numbers reset to 0 is accepted cleanly.
+
+Status carries request-dispatch and browser-receipt provenance. An intervening
+intent or newer stream fact supersedes a pull's stream group (`is_streaming`,
+`stream_lifecycle` and unclassified fields), not unrelated supplied fields.
+Keep newer overlapping field evidence and allow at most one fresh read. A
+failed or twice-superseded read supplies no stream settlement.
 
 Receipt is arrival at the browser; it is not device computation time. Ingestion
 uses the carried receipt rather than minting a new delivery. For pulled stream
@@ -332,8 +364,7 @@ The `"failed"` mode shows a "Retry now" button. Clicking it calls `retryConnecti
 | `getIsRebooting()` | Whether a reboot/poweroff is in progress |
 | `getSessionExpired()` | Whether the session expired mid-session |
 | `markRebooting()` | Flag that a reboot was triggered |
-| `markSessionExpired()` | Flag that the auth token expired mid-session |
-| `clearSessionExpired()` | Clear the expiry flag on fresh login |
+| `markSessionExpired()` | Return to sign-in with the session-expired notice; a successful login clears it |
 | `retryConnection()` | Reset attempt counter and nudge the transport |
 
 ---

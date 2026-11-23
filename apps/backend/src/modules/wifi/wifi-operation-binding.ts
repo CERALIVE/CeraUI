@@ -1,5 +1,6 @@
 import { getWifiInterfacesByMacAddress } from "./wifi-connections.ts";
 import type { BaseWifiInterface } from "./wifi-interfaces.ts";
+import { wifiAdapterKeyPort } from "./wifi-permanent-mac.ts";
 import {
 	type RadioLifetime,
 	radioIdentityReaders,
@@ -15,7 +16,10 @@ export type WifiOperationBinding = {
 	readonly ifname: string;
 	readonly token: string;
 	readonly mac: string | undefined;
+	readonly devicePath?: string;
 	readonly lifetime: RadioLifetime;
+	readonly bootRestore?: "verified" | "require-port-pin";
+	readonly restoreProfile?: { readonly owner: string; readonly uuid: string };
 };
 
 export const wifiOperationChanged = {
@@ -33,6 +37,7 @@ export function bindingForRow(
 	const token = projectWifiRadioIncarnation(row, identity);
 	if (
 		getWifiInterfacesByMacAddress()[key] !== row ||
+		identity?.key !== key ||
 		identity?.classification !== "verified" ||
 		identity.degradedReason ||
 		!identity.lifetime ||
@@ -45,8 +50,22 @@ export function bindingForRow(
 		ifname,
 		token,
 		mac: identity.permanentMac,
+		...(identity.devicePath ? { devicePath: identity.devicePath } : {}),
 		lifetime: identity.lifetime,
 	};
+}
+
+/** Intent follows the verified radio, not its registry key or active profile. */
+export function verifiedWifiPortKey(binding: WifiOperationBinding | undefined) {
+	return binding?.mac && binding.devicePath
+		? `${binding.mac}@${binding.devicePath}`
+		: undefined;
+}
+
+export function soleWifiPortAlias(binding: WifiOperationBinding | undefined) {
+	return binding?.key === binding?.mac
+		? verifiedWifiPortKey(binding)
+		: undefined;
 }
 
 export function ownsWifiOperation(binding: WifiOperationBinding): boolean {
@@ -56,6 +75,7 @@ export function ownsWifiOperation(binding: WifiOperationBinding): boolean {
 		binding.row.ifname === binding.ifname &&
 		binding.row.degradedReason !== "permanent-mac-unresolved" &&
 		current?.row === binding.row &&
+		current.key === binding.key &&
 		current.classification === "verified" &&
 		!current.degradedReason &&
 		current.incarnation === binding.token &&
@@ -66,6 +86,7 @@ export function ownsWifiOperation(binding: WifiOperationBinding): boolean {
 
 export async function sampleWifiOperationRadio(
 	ifname: string,
+	includePort = false,
 ): Promise<RadioSample | undefined> {
 	const controller = new AbortController();
 	const expired = Promise.withResolvers<undefined>();
@@ -74,9 +95,13 @@ export async function sampleWifiOperationRadio(
 		expired.resolve(undefined);
 	}, 2000);
 	try {
-		const { readText, realpath } = radioIdentityReaders;
+		const { readText, realpath, readDevicePath } = radioIdentityReaders;
 		return await Promise.race([
-			sampleRadio(ifname, { readText, realpath }, controller.signal),
+			sampleRadio(
+				ifname,
+				{ readText, realpath, ...(includePort ? { readDevicePath } : {}) },
+				controller.signal,
+			),
 			expired.promise,
 		]);
 	} finally {
@@ -85,24 +110,15 @@ export async function sampleWifiOperationRadio(
 	}
 }
 
-export function matchesWifiOperationRadio(
-	binding: WifiOperationBinding,
-	sample: RadioSample | undefined,
-): boolean {
-	return (
-		sample !== undefined &&
-		sameRadioLifetime(binding.lifetime, sample.lifetime) &&
-		(sample.macReadFailed || sample.permanentMac === binding.mac) &&
-		ownsWifiOperation(binding)
-	);
-}
-
 /**
  * A refusal is sticky: later reads may not rebind a transaction or allow a retry.
  * Every effect of a bound operation goes through `check`/`permit`. Once a hybrid
  * AP leg is bound, the same proof also covers that leg.
  */
-export function wifiOperationGuard(binding: WifiOperationBinding | undefined) {
+export function wifiOperationGuard(
+	binding: WifiOperationBinding | undefined,
+	requirePort = false,
+) {
 	let changed = false;
 	let legCurrent: (() => Promise<boolean | undefined>) | undefined;
 	const current = () => {
@@ -112,7 +128,15 @@ export function wifiOperationGuard(binding: WifiOperationBinding | undefined) {
 	// Unavailable proof denies effects but is not evidence authorizing rollback Down.
 	const observe = async () => {
 		if (!binding) return "match";
-		const parent = await sampleWifiOperationRadio(binding.ifname);
+		const restoring = binding.bootRestore !== undefined;
+		const port =
+			wifiAdapterKeyPort(binding.key) ??
+			(restoring || requirePort ? binding.devicePath : undefined);
+		if (requirePort && !binding.devicePath) return "unavailable";
+		const parent = await sampleWifiOperationRadio(
+			binding.ifname,
+			Boolean(port),
+		);
 		if (!parent) return "unavailable";
 		const leg = legCurrent ? await legCurrent() : true;
 		if (leg === undefined) return "unavailable";
@@ -122,7 +146,13 @@ export function wifiOperationGuard(binding: WifiOperationBinding | undefined) {
 			(!parent.macReadFailed && parent.permanentMac !== binding.mac)
 		)
 			return "replaced";
-		return ownsWifiOperation(binding) ? "match" : "unavailable";
+		if (restoring && (parent.macReadFailed || !parent.permanentMac))
+			return "unavailable";
+		return (port === undefined ||
+			(parent.devicePath === port && binding.devicePath === port)) &&
+			ownsWifiOperation(binding)
+			? "match"
+			: "unavailable";
 	};
 	const check = async () => {
 		if (binding && current()) changed ||= (await observe()) !== "match";

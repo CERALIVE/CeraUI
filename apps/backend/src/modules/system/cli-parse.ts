@@ -120,6 +120,15 @@ export function describeCliError(err: unknown): string {
 	return err instanceof Error ? err.message : String(err);
 }
 
+/** For private commands, arbitrary error text and output are never safe to log. */
+export function describePrivateCliError(error: unknown): string {
+	return error instanceof Error &&
+		"code" in error &&
+		typeof error.code === "number"
+		? `exit=${error.code}`
+		: "subprocess diagnostic omitted";
+}
+
 function truncateRaw(raw: string): string {
 	const trimmed = raw.trim();
 	if (trimmed.length <= MAX_RAW_PARSE_CHARS) return trimmed;

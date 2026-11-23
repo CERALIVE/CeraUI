@@ -1,3 +1,7 @@
+import {
+	legacyLocked,
+	requestLegacyLog,
+} from "$lib/device-logs/download-gate.svelte";
 import { getDeviceLog, getSystemLog } from "$lib/helpers/SystemHelper";
 
 export type LogKind = "device" | "system";
@@ -14,13 +18,24 @@ export class LogDownloads {
 	// with no backend progress events, so "progress" is the in-flight indicator.
 	downloading = $state<LogKind | null>(null);
 	failed = $state<LogKind | null>(null);
+	readonly #current: () => boolean;
+
+	/** `current`: whether the view that asks is still open, read as each download starts. */
+	constructor(current: () => boolean) {
+		this.#current = current;
+	}
 
 	async download(kind: LogKind): Promise<void> {
-		if (this.downloading !== null) return;
+		if (this.downloading !== null || !this.#current() || legacyLocked(kind))
+			return;
 		this.downloading = kind;
 		this.failed = null;
 		try {
-			await (kind === "device" ? getDeviceLog() : getSystemLog());
+			await requestLegacyLog(
+				kind,
+				this.#current,
+				kind === "device" ? getDeviceLog : getSystemLog,
+			);
 		} catch (error) {
 			console.error(`Failed to request ${kind} log:`, error);
 			this.failed = kind;

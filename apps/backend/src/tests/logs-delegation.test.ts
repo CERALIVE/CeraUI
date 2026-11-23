@@ -6,7 +6,7 @@ import * as exporting from "../modules/device-logs/export.ts";
 import * as following from "../modules/device-logs/follow.ts";
 import * as querying from "../modules/device-logs/query.ts";
 import * as retention from "../modules/device-logs/retention.ts";
-import { socketSessionSignal } from "../rpc/context.ts";
+import { closeSocketSession, socketSessionSignal } from "../rpc/context.ts";
 import { appRouter } from "../rpc/router.ts";
 import type { RPCContext } from "../rpc/types.ts";
 import { logsSockets } from "./helpers/logs-rpc.ts";
@@ -49,23 +49,34 @@ const queryInput = {
 const aroundInput = { bootId, at: 2, eventId: "event-42" };
 const followInput = { ...input, afterCursor: "s=42" };
 const exportInput = { filter: input, boot: bootId, since: 1, until: 3 };
-const cases = [
+const slotWaitMs = 3100;
+const interactiveCases = [
 	{
 		name: "query",
 		spy: () => spyOn(querying, "queryLogs"),
-		invoke: (context: RPCContext) =>
-			call(appRouter.logs.query, queryInput, { context }),
-		args: (context: RPCContext) => [context.ws, queryInput],
+		invoke: (context: RPCContext, signal?: AbortSignal) =>
+			call(appRouter.logs.query, queryInput, { context, signal }),
+		input: queryInput,
 		invalid: () => spyOn(querying, "queryLogs").mockResolvedValue(invalid),
 	},
 	{
 		name: "around",
 		spy: () => spyOn(querying, "locateAround"),
-		invoke: (context: RPCContext) =>
-			call(appRouter.logs.around, aroundInput, { context }),
-		args: (context: RPCContext) => [context.ws, aroundInput],
+		invoke: (context: RPCContext, signal?: AbortSignal) =>
+			call(appRouter.logs.around, aroundInput, { context, signal }),
+		input: aroundInput,
 		invalid: () => spyOn(querying, "locateAround").mockResolvedValue(invalid),
 	},
+];
+const cases = [
+	...interactiveCases.map((row) => ({
+		...row,
+		args: (context: RPCContext) => [
+			context.ws,
+			row.input,
+			{ interactive: socketSessionSignal(context.ws), timeoutMs: slotWaitMs },
+		],
+	})),
 	{
 		name: "boots",
 		spy: () => spyOn(boots, "listBoots"),
@@ -189,11 +200,50 @@ test.each(cases)(
 				const firstCall: readonly unknown[] | undefined = owner.mock.calls[0];
 				expect(firstCall?.[0]).toBe(sockets.ws);
 			}
+			if (row.name === "query" || row.name === "around") {
+				const admission = owner.mock.calls[0]?.[2];
+				expect(
+					admission && "interactive" in admission && admission.interactive,
+				).toBe(socketSessionSignal(sockets.ws));
+			}
 		} finally {
 			owner.mockRestore();
 		}
 	},
 );
+
+for (const row of interactiveCases) {
+	test.each(["session", "caller"] as const)(
+		`${row.name} cancels slot admission when the %s aborts`,
+		async (origin) => {
+			const caller = new AbortController();
+			const owner = row.spy().mockResolvedValue(invalid);
+			try {
+				await expect(
+					row.invoke(sockets.context, caller.signal),
+				).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+				const forwarded = owner.mock.calls[0]?.[2]?.interactive;
+				expect(forwarded?.aborted).toBe(false);
+				let notifications = 0;
+				forwarded?.addEventListener("abort", () => {
+					notifications++;
+				});
+				const session = socketSessionSignal(sockets.ws);
+				if (origin === "session") {
+					closeSocketSession(sockets.ws);
+					expect(caller.signal.aborted).toBe(false);
+				} else {
+					caller.abort();
+					expect(session.aborted).toBe(false);
+				}
+				expect(forwarded?.aborted).toBe(true);
+				expect(notifications).toBe(1);
+			} finally {
+				owner.mockRestore();
+			}
+		},
+	);
+}
 test.each(cases)(
 	"$name validates the owner's reply before exposing it",
 	async (row) => {

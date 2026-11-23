@@ -3,14 +3,18 @@
   fullscreen AppDialog. Shape: apps/frontend/docs/agents/system-logs-view.md.
 
   Tabs Events (default) and Raw logs; at >= 1024 px a 320 px side column holds
-  Boots, Storage and Downloads, below it Storage is a third tab. The tabs and the
-  Boots and Storage regions wait for this view's lazy copy and one logs probe;
-  Downloads (the two shipped downloads) renders at once and never waits. An older
-  backend gets one calm notice instead of the tabs, with Downloads below it and
-  no side column; any other failure a recovery band with Retry. Once the tabs
-  are ready Downloads adds Sharing (export this view, support bundle), whose
-  flows live here and are disposed with the view. A panel's
-  content mounts only while its tab is active, so a hidden tab never reads logs.
+  Boots, Storage and Downloads, below it Storage is a third tab led by Downloads.
+  The tabs and the Boots and Storage regions wait for this view's lazy copy and
+  one logs probe; Downloads (the two shipped downloads) renders at once and never
+  waits. An older backend gets one calm notice instead of the tabs, with
+  Downloads below it and no side column; any other failure a recovery band with
+  Retry and, once this view's copy loaded, Support bundle. Once the tabs are
+  ready the logs toolbar (Support bundle, Export logs) shares the tab strip's
+  row, above the tabs below 640 px, and Downloads leads with Sharing (support
+  bundle, export this view). The flows and their two dialogs live here, so any
+  of those actions opens them whichever tab is showing, and they are disposed
+  with the view. A panel's content mounts only while its tab is active, so a
+  hidden tab never reads logs.
   Each panel owns its scroll. The downloads' state lives here, so a failed
   download keeps its retry band wherever the Downloads region remounts. When the
   tabs appear the selected tab takes focus, unless focus is already in the view.
@@ -18,16 +22,17 @@
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
 import type { LogStorage } from '@ceraui/rpc/schemas';
-import { Info, RefreshCw, TriangleAlert } from '@lucide/svelte';
-import { onDestroy } from 'svelte';
+import { Info, LifeBuoy, RefreshCw, TriangleAlert } from '@lucide/svelte';
+import { onDestroy, untrack } from 'svelte';
 import { MediaQuery } from 'svelte/reactivity';
 
 import { Button } from '$lib/components/ui/button';
 import { Skeleton } from '$lib/components/ui/skeleton';
 import * as Tabs from '$lib/components/ui/tabs';
+import { bootSelection } from '$lib/device-logs/boot-selection.svelte';
+import { startBackendDownload } from '$lib/device-logs/download-gate.svelte';
 import type { RawMoment } from '$lib/device-logs/raw-anchor';
 import type { AroundPage } from '$lib/device-logs/raw-view.svelte';
-import { startBackendDownload } from '$lib/device-logs/sharing';
 import { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';
 import {
 	activeTab,
@@ -44,11 +49,14 @@ import { rpc } from '$lib/rpc/client';
 import type { LogsDialogContext } from '$lib/stores/dialog-request.svelte';
 
 import BootPicker from './BootPicker.svelte';
+import BundleDialog from './BundleDialog.svelte';
 import EventsPanel from './EventsPanel.svelte';
+import ExportDialog from './ExportDialog.svelte';
 import LegacyLogDownloads from './LegacyLogDownloads.svelte';
 import { LogDownloads } from './log-downloads.svelte';
 import RawLogsPanel from './RawLogsPanel.svelte';
 import SharingSection from './SharingSection.svelte';
+import SharingToolbar from './SharingToolbar.svelte';
 import StorageSection from './StorageSection.svelte';
 
 const TAB_LABELS: Record<ShellTab, () => string> = {
@@ -68,8 +76,12 @@ const wide = new MediaQuery(WIDE_DESKTOP_QUERY);
 const uid = $props.id();
 
 let status = $state<ShellStatus>('loading');
+// A failed check may still have loaded this view's copy, which the failure band's Support bundle needs.
+let copyLoaded = $state(false);
 let storage = $state.raw<LogStorage | null>();
-const legacyDownloads = new LogDownloads();
+// This open's generation: the dialog's close ends it at once, before this view is torn down.
+const inOpen = bootSelection.opened();
+const legacyDownloads = new LogDownloads(inOpen);
 // Each new deep link selects its tab again; the operator's own choice overrides it.
 let selected = $derived<string | undefined>(context?.tab);
 let anchor = $derived<RawMoment | undefined>(
@@ -79,15 +91,31 @@ let anchor = $derived<RawMoment | undefined>(
 );
 let momentUnknown = $derived(context?.tab === 'raw' && context.momentUnknown === true);
 let around = $state.raw<AroundPage>();
+// When the open link was issued (a deep link's context, a View raw logs reply): a boot picked after
+// it outranks it, also while this view still loads and Raw logs is not mounted.
+let linkStill = $state.raw<() => boolean>(() => true);
+$effect.pre(() => {
+	if (context !== undefined) linkStill = untrack(() => bootSelection.since());
+});
 let view = $state<HTMLElement>();
 let tabList = $state<HTMLElement | null>(null);
 let storageHeading = $state<HTMLHeadingElement>();
 let checkRun = 0;
-const sharing = new SharingFlow({ logs: rpc.logs, download: startBackendDownload });
+// Export follows Raw's last view or the boot picker, whichever the operator used last.
+const sharing = new SharingFlow({
+	logs: rpc.logs,
+	download: (path) => startBackendDownload(inOpen, path),
+	current: inOpen,
+	picker: bootSelection,
+});
 onDestroy(() => {
 	checkRun++;
 	sharing.dispose();
 });
+// Where a sharing dialog returns focus when the control that opened it has left the page.
+let toolbarBundle = $state<HTMLElement | null>(null);
+let toolbarExport = $state<HTMLElement | null>(null);
+let failureBundle = $state<HTMLElement | null>(null);
 
 const tabs = $derived(shellTabs(wide.current));
 const current = $derived(activeTab(selected, tabs));
@@ -99,7 +127,10 @@ async function check(): Promise<void> {
 	const run = ++checkRun;
 	let reading: unknown;
 	const result = await checkLogViewer(
-		() => ensureDialogNamespaces('systemLogs'),
+		async () => {
+			await ensureDialogNamespaces('systemLogs');
+			copyLoaded = true;
+		},
 		async () => {
 			reading = await rpc.logs.getStorage();
 		},
@@ -170,29 +201,43 @@ $effect(() => {
 		{#if hasCopy}
 			<h3 class="text-sm font-semibold" id="{uid}-downloads">{m['systemLogs.sharing.heading']()}</h3>
 		{/if}
-		<LegacyLogDownloads downloads={legacyDownloads} />
 		{#if status === 'ready'}
 			<SharingSection {sharing} />
 		{/if}
+		<div class="flex flex-col gap-3 {status === 'ready' ? 'border-t pt-3' : ''}" data-testid="downloads-files">
+			{#if hasCopy}
+				<h4 class="text-muted-foreground text-xs font-medium">{m['systemLogs.sharing.filesHeading']()}</h4>
+			{/if}
+			<LegacyLogDownloads downloads={legacyDownloads} />
+		</div>
 	</section>
 {/snippet}
 
-<div bind:this={view} class="flex min-h-0 flex-1" data-testid="system-logs-view">
+<div bind:this={view} class="flex min-h-0 flex-1" data-raw-active={status === 'ready' && current === 'raw' ? '' : undefined} data-testid="system-logs-view" style:--raw-controls-max="round(down, clamp(3.5rem, 27dvh, 10rem), 1px)">
 	<div class="flex min-h-0 min-w-0 flex-1 flex-col">
 		{#if status === 'ready'}
 			<Tabs.Root class="min-h-0 flex-1 gap-0" onValueChange={selectTab} value={current}>
-				<!-- Below 640 px each tab takes its label's width, so a long label (Spanish at 375 px) keeps to two lines. -->
-				<div class="border-b px-4">
+				<!-- Below 640 px each tab takes its label's width, so a long label (Spanish at 375 px) keeps to two lines,
+				     and the toolbar takes its own row above the tabs so their underline stays on the rule. The toolbar comes
+				     first in the DOM, so Tab still goes from the tabs straight into the panel; from 640 px it shows at the row's end.
+				     On short screens, tab and toolbar sizes must settle immediately: resizing aligns the Raw results to that geometry. -->
+				<div class="flex flex-wrap items-end gap-x-3 border-b px-4">
+					<SharingToolbar
+						bind:bundleButton={toolbarBundle}
+						bind:exportButton={toolbarExport}
+						class="ms-auto self-center py-1 max-sm:w-full max-sm:pt-3 max-sm:pb-1.5 sm:order-last"
+						{sharing}
+					/>
 					<Tabs.List
 						aria-label={m['systemLogs.tabs.label']()}
 						bind:ref={tabList}
-						class="w-full items-stretch gap-2 sm:w-fit"
+						class="w-full items-stretch gap-2 max-sm:group-data-horizontal/tabs:h-auto sm:w-fit"
 						variant="line"
 					>
 						{#each tabs as tab (tab)}
 							<!-- bits-ui sets data-state, not the primitive's data-active, so the selected look is set here. -->
 							<Tabs.Trigger
-								class="h-auto min-h-(--touch-target-min) whitespace-normal text-center max-sm:flex-auto sm:whitespace-nowrap data-[state=active]:text-foreground dark:data-[state=active]:text-foreground data-[state=active]:after:opacity-100"
+								class="h-auto min-h-(--touch-target-min) whitespace-normal text-center max-sm:flex-auto sm:whitespace-nowrap data-[state=active]:text-foreground dark:data-[state=active]:text-foreground data-[state=active]:after:opacity-100 short-logs:transition"
 								value={tab}
 							>
 								{TAB_LABELS[tab]()}
@@ -202,19 +247,19 @@ $effect(() => {
 				</div>
 				{#each tabs as tab (tab)}
 					<!-- Tab goes from the tabs straight to the panel's controls; the panel itself is no stop. -->
-					<Tabs.Content class="min-h-0 overflow-y-auto" data-testid="system-logs-panel-{tab}" tabindex={-1} value={tab}>
+					<Tabs.Content class={tab === 'raw' ? 'min-h-0 overflow-y-auto short-logs:min-h-[calc(5.5rem+var(--raw-controls-max))] short-logs:overflow-visible' : 'min-h-0 overflow-y-auto'} data-testid="system-logs-panel-{tab}" tabindex={-1} value={tab}>
 						{#if tab === 'events' && current === 'events'}
-							<EventsPanel onviewraw={(page) => { around = page; selected = 'raw'; }} />
+							<EventsPanel onviewraw={(page) => { around = page; linkStill = bootSelection.since(); selected = 'raw'; }} />
 						{/if}
 						{#if tab === 'storage' && current === 'storage'}
 							<div class="divide-y">
-								{@render storageRegion()}
 								{@render downloadsRegion()}
+								{@render storageRegion()}
 							</div>
 						{/if}
 						{#if tab === 'raw' && current === 'raw'}
 							{#key anchor}
-								<RawLogsPanel {anchor} {around} {momentUnknown} {sharing} />
+								<RawLogsPanel {anchor} {around} {linkStill} {momentUnknown} {sharing} />
 							{/key}
 						{/if}
 					</Tabs.Content>
@@ -247,16 +292,33 @@ $effect(() => {
 					<p class="text-sm font-semibold">{m['errorBoundary.title']()}</p>
 					<p class="text-sm">{m['errorBoundary.description']()}</p>
 				</div>
-				<Button
-					class="shrink-0 gap-1.5"
-					data-testid="system-logs-check-retry"
-					onclick={retry}
-					size="sm"
-					variant="outline"
-				>
-					<RefreshCw class="size-4" />
-					{m['errorBoundary.retry']()}
-				</Button>
+				<!-- A phone is thumbed, so below 640 px both recovery actions take 44 px (app.css). -->
+				<div class="flex shrink-0 flex-wrap gap-2" data-touch-region>
+					<Button
+						class="shrink-0 gap-1.5"
+						data-testid="system-logs-check-retry"
+						onclick={retry}
+						size="sm"
+						variant="outline"
+					>
+						<RefreshCw class="size-4" />
+						{m['errorBoundary.retry']()}
+					</Button>
+					{#if copyLoaded}
+						<Button
+							bind:ref={failureBundle}
+							class="shrink-0 gap-1.5"
+							data-testid="system-logs-check-bundle"
+							data-variant="outline"
+							onclick={() => void sharing.openBundle()}
+							size="sm"
+							variant="outline"
+						>
+							<LifeBuoy aria-hidden="true" class="size-4" />
+							{m['systemLogs.sharing.bundle']()}
+						</Button>
+					{/if}
+				</div>
 			</div>
 		{/if}
 
@@ -275,3 +337,7 @@ $effect(() => {
 		</div>
 	{/if}
 </div>
+
+<!-- Without the toolbar (the load failed), a resize can remove the control that had focus: the band's Support bundle stays. -->
+<ExportDialog returnFocus={() => toolbarExport ?? failureBundle} {sharing} />
+<BundleDialog returnFocus={() => toolbarBundle ?? failureBundle} {sharing} />

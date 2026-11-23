@@ -41,10 +41,12 @@ vi.mock("$lib/rpc", async () => ({
 	rpc: (await import("../lib/rpc/client")).rpc,
 }));
 vi.mock("$lib/rpc/subscriptions.svelte", async () => ({
+	clearPasswordSetup: vi.fn(),
 	getStatus: (await import("./__fixtures__/auth-feed.svelte")).getStatusFeed,
 	getNotifications: (await import("./__fixtures__/auth-feed.svelte"))
 		.getNotificationsFeed,
 	getUpdating: () => null,
+	getUpdateState: () => undefined,
 }));
 vi.mock("$lib/stores/offline-state.svelte", async () => ({
 	getShouldShowOfflinePage: (await import("./__fixtures__/auth-feed.svelte"))

@@ -18,7 +18,7 @@ import { getRestoredSessions } from "$lib/rpc/session-epoch.svelte";
 export interface ScriptedTransport {
 	message: ((type: string, data: unknown, seq?: number) => void) | undefined;
 	connection: ((state: string) => void) | undefined;
-	/** What `wasAuthenticated()` answers: only a re-login re-hydrates. */
+	/** Whether the established shell owns reconnect login and hydration. */
 	authenticated: boolean;
 }
 

@@ -294,6 +294,7 @@ describe("auth-status — single mutation path", () => {
 		const inflight = mod.authenticate("hunter2", true);
 		expect(login).not.toHaveBeenCalled();
 
+		seedConnectionState = "connected";
 		onConnectionChangeHandler?.("connected");
 		const attempt = await inflight;
 

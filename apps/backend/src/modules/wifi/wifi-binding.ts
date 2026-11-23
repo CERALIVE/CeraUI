@@ -5,7 +5,7 @@ import {
 	getMacAddressForWifiInterface,
 } from "./wifi-interfaces.ts";
 import type { WifiOperationBinding } from "./wifi-operation-binding.ts";
-import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
+import { wifiAdapterKeyMac, wifiAdapterKeyPort } from "./wifi-permanent-mac.ts";
 import {
 	radioIdentityReaders,
 	wifiRadioIdentity,
@@ -136,7 +136,7 @@ export async function resolveWifiBinding(
 	const row = mac === undefined ? undefined : interfaces[mac];
 	if (mac === undefined || !row) return { success: false, error: "no-device" };
 	if (
-		!normalizeMacAddress(mac) ||
+		!wifiAdapterKeyMac(mac) ||
 		row.degradedReason === "permanent-mac-unresolved"
 	)
 		return { success: false, error: "radio-unverified" };
@@ -190,6 +190,7 @@ export async function resolveWifiBinding(
 			);
 			if (controller.signal.aborted) return unobserved;
 			const current = wifiRadioIdentity.state.rows.get(row.ifname);
+			const port = wifiAdapterKeyPort(mac);
 			if (getWifiInterfacesByMacAddress()[mac] !== row) return changed;
 			const currentToken = projectWifiRadioIncarnation(row, current);
 			if (currentToken === undefined) return unobserved;
@@ -197,11 +198,14 @@ export async function resolveWifiBinding(
 				!fresh ||
 				!current?.lifetime ||
 				currentToken !== expected ||
+				current.key !== mac ||
 				current.classification !== "verified" ||
 				current.degradedReason ||
 				fresh.lifetime.ifindex !== current.lifetime.ifindex ||
 				fresh.lifetime.wiphy !== current.lifetime.wiphy ||
 				fresh.lifetime.phyPath !== current.lifetime.phyPath ||
+				(port !== undefined &&
+					(fresh.devicePath !== port || current.devicePath !== port)) ||
 				(!fresh.macReadFailed && fresh.permanentMac !== current.permanentMac)
 			)
 				return changed;
@@ -215,6 +219,9 @@ export async function resolveWifiBinding(
 					ifname: current.ifname,
 					token: currentToken,
 					mac: current.permanentMac,
+					...(current.devicePath && fresh.devicePath === current.devicePath
+						? { devicePath: current.devicePath }
+						: {}),
 					lifetime: fresh.lifetime,
 				},
 			} as const;

@@ -19,6 +19,10 @@ on:
         description: "Override auto-detected version (optional, e.g., 2026.1.0)"
         required: false
         type: string
+      approved_sha:
+        description: "Full commit SHA approved for this release (optional)"
+        required: false
+        type: string
 
 env:
   NODE_VERSION: "26"
@@ -50,6 +54,16 @@ jobs:
             echo "::error::releases must be dispatched from ${DEFAULT_REF}, not ${DISPATCH_REF}"
             exit 1
           }
+
+      - name: Verify approved commit
+        env:
+          APPROVED_SHA: ${{ inputs.approved_sha }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          if [[ -n "$APPROVED_SHA" && "$GITHUB_SHA" != "$APPROVED_SHA" ]]; then
+            printf '::error::release commit %s is not the approved %s\n' "$GITHUB_SHA" "$APPROVED_SHA"
+            exit 1
+          fi
 
       - name: Checkout CeraUI
         uses: actions/checkout@v7
@@ -189,25 +203,44 @@ jobs:
           require_missing "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" "git tag"
           require_missing "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" "GitHub release"
 
-      - name: Version Summary
+  prepare-release-body:
+    name: Prepare and validate release body
+    runs-on: ubuntu-latest
+    needs: calculate-version
+    permissions:
+      contents: write # Required by GitHub's generate-notes preview endpoint.
+    steps:
+      - name: Checkout CeraUI
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          no-cache: true
+
+      - name: Generate and validate release body
         env:
-          VERSION: ${{ steps.calver.outputs.version }}
-          TAG: ${{ steps.calver.outputs.tag }}
-          IS_BETA: ${{ steps.calver.outputs.is_beta }}
-        run: |
-          TYPE_LABEL=$([[ "$IS_BETA" == "true" ]] && echo "🧪 Beta" || echo "✅ Stable")
-          {
-            echo "## 🏷️ Version Calculated"
-            echo ""
-            echo "**Version:** \`${VERSION}\`"
-            echo "**Tag:** \`${TAG}\`"
-            echo "**Type:** ${TYPE_LABEL}"
-          } >> "$GITHUB_STEP_SUMMARY"
+          VERSION: ${{ needs.calculate-version.outputs.version }}
+          TAG: ${{ needs.calculate-version.outputs.tag }}
+          IS_BETA: ${{ needs.calculate-version.outputs.is_beta }}
+          RELEASE_NOTES: ${{ github.event.inputs.release_notes }}
+          GH_TOKEN: ${{ github.token }}
+        run: bun scripts/ci/release-body.mjs scripts/ci/release-dependencies.md release-body.md
+
+      - name: Store validated release body
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-body
+          path: release-body.md
+          if-no-files-found: error
 
   release-package-contracts:
     name: Release/package contracts
     runs-on: ubuntu-latest
-    needs: calculate-version
+    needs: [calculate-version, prepare-release-body]
     steps:
       - name: Checkout CeraUI
         uses: actions/checkout@v7
@@ -218,10 +251,11 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
+          no-cache: true
 
-      - name: Cache Bun install
-        uses: actions/cache@v6
+      - name: Restore Bun install cache
+        uses: actions/cache/restore@v6
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-store-${{ hashFiles('CeraUI/bun.lock') }}
@@ -245,8 +279,8 @@ jobs:
         working-directory: CeraUI
         run: bun run --filter frontend test
 
-      - name: Cache Ruby gems (fpm)
-        uses: actions/cache@v6
+      - name: Restore Ruby gems cache (fpm)
+        uses: actions/cache/restore@v6
         with:
           path: /var/lib/gems
           key: ${{ runner.os }}-ruby-gems-fpm-v1
@@ -262,6 +296,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ruby-dev gcc g++
           sudo gem install --no-document fpm
+
+      # Both the package mount fixture and the backend kernel tests need real user namespaces.
+      - name: Enable unprivileged user namespaces (Ubuntu AppArmor restriction)
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
       - name: Run release/package contracts
         working-directory: CeraUI
@@ -289,13 +327,38 @@ jobs:
         working-directory: CeraUI
         run: bun run test:service-contract
 
-      # Per-workspace rather than the combined `bun run test`, and the FRONTEND
-      # suite deliberately lives in its own job below. These three run after a
-      # .deb build, a full lint/typecheck and a service contract on this runner;
-      # the frontend suite is the one that cannot absorb that (see that job).
-      # Per-workspace rather than the combined `bun run test`, because the
-      # frontend suite has already run above, on a fresh runner. Together these
-      # cover exactly what `bun run test` chained: rpc, i18n, frontend, backend.
+      # The live-producer contract skips unless this verified sender is exported.
+      - name: Prepare pinned srtla-send runtime
+        working-directory: CeraUI
+        run: |
+          set -euo pipefail
+          package_dir="dist/ci-packages"
+          package_path="$package_dir/srtla_4.2.0_amd64.deb"
+          runtime_root="dist/ci-runtime"
+          mkdir -p "$package_dir" "$runtime_root"
+
+          curl --fail --location --silent --show-error \
+            --output "$package_path" \
+            https://github.com/CERALIVE/srtla-send-rs/releases/download/v4.2.0/srtla_4.2.0_amd64.deb
+          printf '%s  %s\n' \
+            ec6ed389cf80c472dd1ebf3d8fd820c3bd1517517d54fbf24420322a7affd14f \
+            "$package_path" | sha256sum --check
+          test "$(dpkg-deb --field "$package_path" Package)" = srtla
+          test "$(dpkg-deb --field "$package_path" Version)" = 4.2.0
+          test "$(dpkg-deb --field "$package_path" Architecture)" = amd64
+          dpkg-deb --extract "$package_path" "$runtime_root"
+          test -f "$runtime_root/usr/bin/srtla_send"
+
+      - name: Export the live sender binary
+        working-directory: CeraUI
+        run: |
+          set -euo pipefail
+          runtime_bin="$GITHUB_WORKSPACE/CeraUI/dist/ci-runtime/usr/bin/srtla_send"
+          chmod +x "$runtime_bin"
+          test -x "$runtime_bin"
+          echo "SRTLA_SEND_BIN=$runtime_bin" >> "$GITHUB_ENV"
+
+      # The frontend suite already ran above on a fresh runner.
       - name: Run unit tests
         working-directory: CeraUI
         run: |
@@ -303,10 +366,23 @@ jobs:
           bun run --filter @ceraui/i18n test
           bun run --filter backend test
 
+      # The bundled run skips these opt-in cases; the statistical tests need CPU headroom.
+      - name: netns-semantics (isolated — statistical assertions need CPU headroom)
+        working-directory: CeraUI
+        env:
+          CERALIVE_NETNS_ISOLATED: "1"
+        run: bun test apps/backend/src/tests/uplink-steering-netns.test.ts apps/backend/src/tests/uplink-shaper-netns.test.ts apps/backend/src/tests/update-transport-netns.test.ts
+
+      # The UID-routing fixture needs a nonzero UID in a private rootful network namespace.
+      - name: update UID routing (rootful netns)
+        working-directory: CeraUI
+        run: sudo -n unshare -n env CERALIVE_NETNS_ISOLATED=1 "$(command -v bun)" test apps/backend/src/tests/update-transport-pin-netns.test.ts
+
   build-ceraui-system:
     name: Build CeraUI Full System
     runs-on: ubuntu-latest
-    needs: [calculate-version, release-package-contracts]
+    needs: [calculate-version, release-package-contracts, build-debian-package]
+    if: success()
     strategy:
       matrix:
         architecture: [arm64, amd64]
@@ -324,7 +400,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
 
       - name: Cache Bun install
         uses: actions/cache@v6
@@ -364,12 +440,9 @@ jobs:
           path: CeraUI/dist/compressed/*.tar.gz
 
   build-debian-package:
-    name: Build Debian Package
+    name: Build and Verify Debian Packages
     runs-on: ubuntu-latest
     needs: [calculate-version, release-package-contracts]
-    strategy:
-      matrix:
-        architecture: [arm64, amd64]
     steps:
       - name: Checkout CeraUI
         uses: actions/checkout@v7
@@ -384,15 +457,26 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
+          no-cache: true
 
-      - name: Cache Bun install
-        uses: actions/cache@v6
+      - name: Restore Bun install cache
+        id: bun-cache
+        uses: actions/cache/restore@v6
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-store-${{ hashFiles('CeraUI/bun.lock') }}
           restore-keys: |
             ${{ runner.os }}-bun-store-
+
+      - name: Restore Ruby gems cache (fpm)
+        id: fpm-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: /var/lib/gems
+          key: ${{ runner.os }}-ruby-gems-fpm-v1
+          restore-keys: |
+            ${{ runner.os }}-ruby-gems-fpm-
 
       - name: Install Ruby and FPM
         run: |
@@ -404,23 +488,76 @@ jobs:
         working-directory: CeraUI
         run: bun install --frozen-lockfile
 
-      - name: Build Debian package for ${{ matrix.architecture }}
+      # Keep both packages local until both pass; a matrix would upload one
+      # package while the other was still unverified.
+      - name: Build Debian packages
+        id: build-debs
         working-directory: CeraUI
-        run: ./scripts/build/build-debian-package.sh
+        shell: bash
+        run: |
+          for arch in arm64 amd64; do
+            BUILD_ARCH="$arch" ./scripts/build/build-debian-package.sh
+            stage="$RUNNER_TEMP/ceraui-debian/$arch"
+            mkdir -p "$stage"
+            cp dist/debian/*.deb "$stage/"
+          done
         env:
           BUILD_VERSION: ${{ needs.calculate-version.outputs.version }}
-          BUILD_ARCH: ${{ matrix.architecture }}
 
-      - name: Upload Debian package (${{ matrix.architecture }})
+      - name: Verify both Debian package systemd floors
+        id: verify-debs
+        working-directory: CeraUI
+        shell: bash
+        run: |
+          shopt -s nullglob
+          for arch in arm64 amd64; do
+            packages=("$RUNNER_TEMP/ceraui-debian/$arch/"*.deb)
+            if (( ${#packages[@]} != 1 )); then
+              echo "::error::Expected exactly one $arch Debian package"
+              exit 1
+            fi
+
+            deb="${packages[0]}"
+            if [[ "$(dpkg-deb --field "$deb" Architecture)" != "$arch" ]]; then
+              echo "::error::$deb must be a $arch package"
+              exit 1
+            fi
+            depends="$(dpkg-deb --field "$deb" Depends)"
+            depends="${depends//$'\n'/ }"
+            printf '%s Depends: %s\n' "$deb" "$depends"
+            if ! grep -Eq '(^|,)[[:space:]]*systemd \(>= 257\)[[:space:]]*(,|$)' <<< "$depends"; then
+              echo "::error::$deb must depend on systemd (>= 257)"
+              exit 1
+            fi
+          done
+
+      - name: Upload verified Debian packages
         uses: actions/upload-artifact@v7
+        if: success()
         with:
-          name: ceraui-debian-${{ matrix.architecture }}
-          path: CeraUI/dist/debian/*.deb
+          name: ceraui-debian
+          path: ${{ runner.temp }}/ceraui-debian/*/*.deb
+          if-no-files-found: error
+
+      - name: Save Bun install cache
+        if: success() && steps.bun-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ steps.bun-cache.outputs.cache-primary-key }}
+
+      - name: Save Ruby gems cache (fpm)
+        if: success() && steps.fpm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: /var/lib/gems
+          key: ${{ steps.fpm-cache.outputs.cache-primary-key }}
 
   publish-federation:
     name: Publish Federation Bundles to R2
     runs-on: ubuntu-latest
-    needs: [calculate-version, release-package-contracts]
+    needs: [calculate-version, release-package-contracts, build-debian-package]
+    if: success()
     permissions:
       contents: read
     steps:
@@ -437,7 +574,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
 
       - name: Cache Bun install
         uses: actions/cache@v6
@@ -538,6 +675,7 @@ jobs:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: [calculate-version, build-ceraui-system, build-debian-package, publish-federation]
+    if: success()
     permissions:
       contents: write
     steps:
@@ -553,6 +691,7 @@ jobs:
 
       - name: Prepare release assets
         run: |
+          test -s release-assets/release-body/release-body.md
           mkdir -p final-assets
 
           # Move all archives and packages to final-assets
@@ -567,83 +706,6 @@ jobs:
 
           echo "📦 Release assets:"
           ls -la
-
-      - name: Generate release body
-        working-directory: CeraUI
-        env:
-          VERSION: ${{ needs.calculate-version.outputs.version }}
-          TAG: ${{ needs.calculate-version.outputs.tag }}
-          IS_BETA: ${{ needs.calculate-version.outputs.is_beta }}
-          RELEASE_NOTES: ${{ github.event.inputs.release_notes }}
-        run: |
-          # Get the previous tag for changelog
-          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-
-          # Generate changelog
-          if [ -n "$PREV_TAG" ]; then
-            CHANGELOG_HEADER="Changes since ${PREV_TAG}:"
-            CHANGELOG=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s" --no-merges | head -20)
-          else
-            CHANGELOG_HEADER="Recent commits:"
-            CHANGELOG=$(git log --pretty=format:"- %s" --no-merges -20)
-          fi
-
-          DATE=$(date -u +"%Y-%m-%d")
-
-          # Build release body using echo (more reliable in CI)
-          {
-            echo "# CeraUI ${TAG}"
-            echo ""
-            if [ "$IS_BETA" == "true" ]; then
-              echo "> ⚠️ **This is a beta release.** It may contain bugs or incomplete features. Use in production at your own risk."
-              echo ""
-            fi
-            echo "**Release Date:** ${DATE}"
-            echo ""
-            echo "## 📦 Dependency Chain"
-            echo ""
-            echo "Installing \`ceralive-device\` will automatically pull in all dependencies:"
-            echo ""
-            echo "\`\`\`"
-            echo "srt (SRT library with bonding)"
-            echo "gstlibuvcsrc ─────┤"
-            echo "                  │"
-            echo "                  └── ceralive-device (this package)"
-            echo "                        ├── Depends: cerastream"
-            echo "                        ├── Depends: network-manager (nmcli)"
-            echo "                        └── Depends: modemmanager (mmcli)"
-            echo "\`\`\`"
-            echo ""
-            echo "## 📦 Downloads"
-            echo ""
-            echo "### System Archives (with install scripts)"
-            echo "| Architecture | File | Target Hardware |"
-            echo "|--------------|------|-----------------|"
-            echo "| ARM64 | \`ceraui-${VERSION}-arm64.tar.gz\` | Orange Pi 5+, Rock 5B+ |"
-            echo "| AMD64 | \`ceraui-${VERSION}-amd64.tar.gz\` | Intel N100/N200, AMD Ryzen |"
-            echo ""
-            echo "### Debian Packages (apt/dpkg install)"
-            echo "| Architecture | File |"
-            echo "|--------------|------|"
-            echo "| ARM64 | \`ceralive-device_${VERSION}_arm64.deb\` |"
-            echo "| AMD64 | \`ceralive-device_${VERSION}_amd64.deb\` |"
-            echo ""
-            echo "## 📝 Release Notes"
-            echo ""
-            echo "${RELEASE_NOTES:-No release notes provided.}"
-            echo ""
-            echo "## 🔄 What's Changed"
-            echo ""
-            echo "${CHANGELOG_HEADER}"
-            echo ""
-            echo "${CHANGELOG}"
-            echo ""
-            echo "---"
-            echo "🤖 Generated with GitHub Actions"
-          } > release-body.md
-
-          echo "📄 Generated release body:"
-          cat release-body.md
 
       - name: Ensure release target is still unused
         env:
@@ -681,7 +743,7 @@ jobs:
           tag_name: ${{ needs.calculate-version.outputs.tag }}
           target_commitish: ${{ github.sha }}
           name: CeraUI ${{ needs.calculate-version.outputs.tag }}${{ needs.calculate-version.outputs.is_beta == 'true' && ' (Beta)' || '' }}
-          body_path: CeraUI/release-body.md
+          body_path: release-assets/release-body/release-body.md
           files: final-assets/*
           draft: false
           prerelease: ${{ needs.calculate-version.outputs.is_beta == 'true' }}
@@ -724,7 +786,7 @@ jobs:
     name: Dispatch stable APT reindex
     runs-on: ubuntu-latest
     needs: [calculate-version, create-release]
-    if: needs.calculate-version.outputs.is_beta != 'true'
+    if: success() && needs.calculate-version.outputs.is_beta != 'true'
     steps:
       - name: Trigger centralized APT reindex
         uses: peter-evans/repository-dispatch@v4

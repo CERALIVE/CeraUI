@@ -44,10 +44,20 @@ Rule: boot-time frontend code imports `@ceraui/rpc/schemas`, not
 `@ceraui/rpc/events`. No bundle measurement backs this section. See
 [device-events-wire.md](device-events-wire.md).
 
+### Package update progress hold [EXISTS]
+
+`@ceraui/rpc/package-progress` resolves to `src/package-progress.ts` and
+exports `holdUpdateProgress`, the one rule for what a running package
+transaction shows: its phase never moves back and, within a phase, neither
+does APT's number. The backend monitor, the update overlay and the Settings
+packages section all apply it. See
+[Package update progress](../../../../docs/DEVICE-UPDATES.md#package-update-progress).
+
 ```typescript
 import { appContract, type AppContract } from '@ceraui/rpc';           // root router
 import { streamingContract } from '@ceraui/rpc/contracts';             // granular
 import { loginInputSchema } from '@ceraui/rpc/schemas';                // validation
 import { EVENT_REGISTRY } from '@ceraui/rpc/events';                  // event registry; not for boot-time code
+import { holdUpdateProgress } from '@ceraui/rpc/package-progress';    // running package progress never moves back
 ```
 

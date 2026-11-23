@@ -60,11 +60,16 @@ for mask in 077 022; do
     }
     # shellcheck source=/dev/null
     source "$work/stage.sh" > "$work/$mask-fpm.log" 2>&1
-    dpkg-deb --fsys-tarfile dist/debian/ceralive-device-modes_0.0.0-test_arm64.deb > "$work/$mask.tar"
+    deb=dist/debian/ceralive-device-modes_0.0.0-test_arm64.deb
+    depends="$(dpkg-deb --field "$deb" Depends)"
+    printf 'Depends: %s\n' "$depends"
+    printf '%s\n' "$depends" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | grep -Fx 'systemd (>= 257)' >/dev/null \
+      || fail 'built Debian package must depend on systemd (>= 257)'
+    dpkg-deb --fsys-tarfile "$deb" > "$work/$mask.tar"
     tar -tvf "$work/$mask.tar" | sed -E 's/^(.{10}) [^ ]+ +[0-9]+ [0-9-]+ [0-9:]+ /\1 /' | sort > "$work/$mask.modes"
     cut -d ' ' -f1 "$work/$mask.modes" | sort | uniq -c > "$work/$mask.histogram"
     mkdir extracted
-    dpkg-deb -x dist/debian/ceralive-device-modes_0.0.0-test_arm64.deb extracted
+    dpkg-deb -x "$deb" extracted
     (
       cd "$TEMP_DIR"
       find . -type f -print0 | sort -z | xargs -0 sha256sum > "$work/$mask.hashes"

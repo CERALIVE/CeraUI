@@ -65,6 +65,13 @@ APT compares versions in two stages:
 
 This means a rebuild of the same tagged version still wins over an older build, because the timestamp advances.
 
+## Upgrade Requirement
+
+`ceralive-device` requires systemd 257 or newer. Devices that cannot satisfy
+that dependency stay on their current CeraLive version. Both stable and beta
+release builds check the `Depends` fields of the arm64 and amd64 packages
+before any release artifact upload or publication.
+
 ## Build Metadata
 
 The build script writes `package-info-{arch}.json` alongside the `.deb`:

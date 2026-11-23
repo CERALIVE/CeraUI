@@ -20,6 +20,7 @@ import {
 	hotspotStartProcedure,
 	setWifiAdapterModeProcedure,
 } from "../../rpc/procedures/wifi.procedure.ts";
+import { mockActiveObservation } from "./wifi-active-observation.ts";
 import { wifiFrameFixture } from "./wifi-frame-fixture.ts";
 
 const chosen = { name: "Admission AP", password: "admission-password" };
@@ -37,9 +38,21 @@ export async function fixture() {
 	const state = await wifiFrameFixture();
 	const effects: unknown[] = [];
 	spyOn(nm, "nmConnsGet").mockResolvedValue([]);
-	spyOn(defaultHotspotDeps.credentials, "get").mockImplementation(() => {
+	mockActiveObservation((ifname) =>
+		ifname === state.row.ifname
+			? state.row.activeMode === "ap"
+				? (state.row.activeConn ?? state.row.conn ?? undefined)
+				: undefined
+			: state.row.concurrentHotspot?.ifname === ifname
+				? (state.row.concurrentHotspot.activeConn ?? undefined)
+				: undefined,
+	);
+	spyOn(defaultHotspotDeps, "readProfilePins").mockResolvedValue(["", ""]);
+	spyOn(defaultHotspotDeps.credentials, "get").mockImplementation((owner) => {
 		effects.push("store-read");
-		return undefined;
+		return owner === "dc:a6:32:aa:bb:c0"
+			? { conn: "test-ap", ssid: "Original AP", password: "original-password" }
+			: undefined;
 	});
 	spyOn(defaultHotspotDeps.credentials, "remember").mockImplementation(() => {
 		effects.push("store-write");

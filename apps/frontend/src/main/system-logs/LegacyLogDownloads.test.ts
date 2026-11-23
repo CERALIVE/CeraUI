@@ -17,7 +17,22 @@ import { LogDownloads } from "./log-downloads.svelte";
 
 const getDeviceLog = vi.hoisted(() => vi.fn());
 const getSystemLog = vi.hoisted(() => vi.fn());
-vi.mock("$lib/helpers/SystemHelper", () => ({ getDeviceLog, getSystemLog }));
+vi.mock("$lib/helpers/SystemHelper", async () => {
+	const { deliverLegacyLog } = await import(
+		"$lib/device-logs/download-gate.svelte"
+	);
+	// A device that answers a successful request after pushing its file, as the real one does.
+	const answering =
+		(ask: (request?: string) => unknown, name: string) =>
+		async (request?: string) => {
+			await ask(request);
+			deliverLegacyLog({ name, contents: "log", request });
+		};
+	return {
+		getDeviceLog: answering(getDeviceLog, "ceralive.service_log.txt"),
+		getSystemLog: answering(getSystemLog, "ceralive_system_log.txt"),
+	};
+});
 
 function deferred(): {
 	promise: Promise<void>;
@@ -36,6 +51,11 @@ function deferred(): {
 beforeEach(() => {
 	getDeviceLog.mockReset();
 	getSystemLog.mockReset();
+	vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+	Object.assign(URL, {
+		createObjectURL: vi.fn(() => "blob:log"),
+		revokeObjectURL: vi.fn(),
+	});
 });
 
 afterEach(() => {
@@ -45,7 +65,9 @@ afterEach(() => {
 });
 
 const mount = () =>
-	render(LegacyLogDownloads, { props: { downloads: new LogDownloads() } });
+	render(LegacyLogDownloads, {
+		props: { downloads: new LogDownloads(() => true) },
+	});
 
 const button = (kind: "device" | "system") =>
 	screen.getByTestId(`log-download-${kind}`) as HTMLButtonElement;
@@ -143,6 +165,8 @@ describe("LegacyLogDownloads: the shipped anatomy", () => {
 					"border-border",
 				]),
 			);
+			// Secondary files: never lime-filled (DESIGN.md IH-5).
+			expect(button(kind).dataset.variant).toBe("outline");
 		}
 		expect(tokens(button("system").querySelector("svg"))).toContain("size-4");
 
@@ -324,5 +348,16 @@ describe("LegacyLogDownloads: inline recovery", () => {
 		expect(screen.queryByTestId("log-download-error")).toBeNull();
 		pending.resolve();
 		await expect.poll(() => button("system").disabled).toBe(false);
+	});
+});
+
+describe("LogDownloads: a stale open", () => {
+	it("sends no request for a download asked once its view's open has ended", async () => {
+		const downloads = new LogDownloads(() => false);
+
+		await downloads.download("device");
+
+		expect(getDeviceLog).not.toHaveBeenCalled();
+		expect(downloads.downloading).toBeNull();
 	});
 });

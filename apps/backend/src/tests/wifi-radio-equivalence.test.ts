@@ -18,6 +18,17 @@ const bindingFields = {
 	"802-11-wireless-security.key-mgmt": "wpa-psk",
 	"802-11-wireless-security.pmf": "disable",
 };
+const renameOwner = bindingFields["802-11-wireless.mac-address"];
+const savedStartReads = {
+	// Confirm that the selected UUID is still recorded before refreshing saved profiles.
+	beforeRefresh: renameOwner,
+	// Recheck recorded ownership immediately before the binding write.
+	beforeBind: renameOwner,
+	// Recheck recorded ownership after prune is scheduled, before NM activation.
+	beforeUp: renameOwner,
+	// Recheck recorded ownership after activation, before the autoconnect write.
+	beforePolicy: renameOwner,
+} as const;
 // Keep the recorded baseline immutable; apply the approved bindings and refresh.
 const verifiedTranscript = {
 	...golden.transcripts["verified fresh"],
@@ -32,11 +43,7 @@ const transcripts: Readonly<
 	"verified fresh": verifiedTranscript,
 	rename: {
 		...golden.transcripts.rename,
-		calls: golden.transcripts.rename.calls.flatMap((call, index) => {
-			if (index === 20)
-				return [["wifiUpdateSavedConns"], [call[0], call[1], bindingFields]];
-			return [index === 9 ? [call[0], call[1], bindingFields] : call];
-		}),
+		calls: expectedRenameCalls(),
 	},
 	replug: {
 		...golden.transcripts.replug,
@@ -55,6 +62,55 @@ const transcripts: Readonly<
 };
 const broadcastTranscripts: Readonly<Record<string, unknown>> =
 	golden.broadcasts;
+
+function expectedRenameCalls() {
+	let renamed = false;
+	return golden.transcripts.rename.calls.flatMap(
+		(call): readonly (readonly unknown[])[] => {
+			const [effect, target, fields] = call;
+			if (effect === "setDupIpSuppression" && target === "wlp-renamed")
+				renamed = true;
+			if (
+				effect === "nmConnSetFields" &&
+				fields &&
+				typeof fields === "object"
+			) {
+				if ("802-11-wireless.mac-address" in fields) {
+					const bind = [effect, target, bindingFields];
+					return renamed
+						? [
+								["credentials.get", savedStartReads.beforeRefresh],
+								["wifiUpdateSavedConns"],
+								["credentials.get", savedStartReads.beforeBind],
+								["credentials.get", savedStartReads.beforeBind],
+								bind,
+							]
+						: [bind];
+				}
+				if (renamed)
+					return [
+						["credentials.get", savedStartReads.beforePolicy],
+						["credentials.get", savedStartReads.beforePolicy],
+						call,
+					];
+			}
+			if (renamed && effect === "nmConnect")
+				return [["credentials.get", savedStartReads.beforeUp], call];
+			return [call];
+		},
+	);
+}
+
+function renameTranscriptBytes<
+	T extends { readonly calls: readonly (readonly unknown[])[] },
+>(transcript: T): string {
+	return JSON.stringify({
+		...transcript,
+		calls: transcript.calls.map((call) =>
+			call[0] === "credentials.get" ? ["credential-read", call[1]] : call,
+		),
+	});
+}
 
 /** B7 changes only first-profile creation; retain the recorded main oracle. */
 function firstApTranscript<
@@ -88,6 +144,51 @@ for (const fixture of radioEquivalenceCases) {
 		const { broadcasts, ...transcript } =
 			await radioEquivalenceTranscript(fixture);
 		expect(transcript.unexpected).toEqual([]);
+		if (fixture.name === "duplicate MAC") {
+			const [frame] = transcript.frames;
+			const keys = [
+				"58:02:05:e1:79:1c@platform-equivalence-phy0",
+				"58:02:05:e1:79:1c@platform-equivalence-phy1",
+			];
+			expect(transcript.frames).toHaveLength(1);
+			expect(frame?.discovered.keys).toEqual(keys);
+			expect(frame?.discovered.ids).toEqual({ 0: keys[0], 1: keys[1] });
+			expect(
+				frame?.activations.map(({ device, prepare, start }) => ({
+					device,
+					prepare: prepare.success,
+					start,
+				})),
+			).toEqual([
+				{ device: 0, prepare: true, start: { success: true } },
+				{ device: 1, prepare: true, start: { success: true } },
+			]);
+			expect(
+				transcript.calls.filter(([effect]) => effect === "nmConnect"),
+			).toEqual([
+				["nmConnect", "fixture-uuid-wlan0"],
+				["nmConnect", "fixture-uuid-wlan1"],
+			]);
+			expect(
+				broadcasts
+					.filter(({ phase }) => phase === "discovery:pending")
+					.map(({ payload }) => {
+						if (
+							typeof payload !== "object" ||
+							!payload ||
+							!("wifi" in payload) ||
+							typeof payload.wifi !== "object" ||
+							!payload.wifi
+						)
+							throw new Error("Missing twin broadcast");
+						return Object.keys(payload.wifi);
+					}),
+			).toEqual([
+				["0", "1"],
+				["0", "1"],
+			]);
+			return;
+		}
 		for (const [index, frame] of transcript.frames.entries()) {
 			for (const activation of frame.activations) {
 				const admitted = fixture.limitedFrames?.includes(index)
@@ -166,19 +267,92 @@ for (const fixture of radioEquivalenceCases) {
 			expect(broadcasts).toEqual(expectedBroadcasts);
 			return;
 		}
-		const bytes = JSON.stringify(transcript);
+		const bytes =
+			fixture.name === "rename"
+				? renameTranscriptBytes(transcript)
+				: JSON.stringify(transcript);
 		if (fixture.name === "rename")
 			expect(JSON.stringify(transcript.frames)).toBe(
 				JSON.stringify(golden.transcripts.rename.frames),
 			);
+		const expected = firstApTranscript(transcripts[fixture.name]);
 		expect(bytes).toBe(
-			JSON.stringify(firstApTranscript(transcripts[fixture.name])),
+			fixture.name === "rename"
+				? renameTranscriptBytes(expected)
+				: JSON.stringify(expected),
 		);
 		expect(JSON.stringify(broadcasts)).toBe(
 			JSON.stringify(broadcastTranscripts[fixture.name]),
 		);
 	});
 }
+
+const renameMutations = [
+	"omit",
+	"duplicate",
+	"wrong owner",
+	"cross a write",
+	"reorder effects",
+	"swap only effects",
+] as const;
+test.each(renameMutations)(
+	"the real rename transcript rejects credential/effect drift: %s",
+	async (mutation) => {
+		const rename = radioEquivalenceCases.find(({ name }) => name === "rename");
+		if (!rename) throw new Error("Missing rename fixture");
+		const { broadcasts: _broadcasts, ...actual } =
+			await radioEquivalenceTranscript(rename);
+		const expected = firstApTranscript(transcripts.rename);
+		const calls = actual.calls.map((call) => [...call]);
+		const write = calls.findLastIndex(
+			([effect]) => effect === "nmConnSetFields",
+		);
+		const read = calls[write - 1];
+		const boundary = calls[write];
+		if (read?.[0] !== "credentials.get" || !boundary)
+			throw new Error(
+				"Missing the saved AP's final policy write and owner read",
+			);
+		switch (mutation) {
+			case "omit":
+				calls.splice(write - 1, 1);
+				break;
+			case "duplicate":
+				calls.splice(write, 0, read);
+				break;
+			case "wrong owner":
+				calls[write - 1] = ["credentials.get", "foreign-owner"];
+				break;
+			case "cross a write":
+				calls.splice(write - 1, 2, boundary, read);
+				break;
+			case "reorder effects":
+				calls.reverse();
+				break;
+			case "swap only effects": {
+				const bind = calls.findLastIndex(
+					([effect], index) => effect === "nmConnSetFields" && index < write,
+				);
+				const activation = calls.findLastIndex(
+					([effect]) => effect === "nmConnect",
+				);
+				const first = calls[bind];
+				const second = calls[activation];
+				if (!first || !second || bind >= activation)
+					throw new Error("Missing ordered binding and activation effects");
+				calls[bind] = second;
+				calls[activation] = first;
+				for (const [index, call] of actual.calls.entries())
+					if (call[0] === "credentials.get") expect(calls[index]).toEqual(call);
+				break;
+			}
+		}
+		const matches = (transcript: typeof actual) =>
+			renameTranscriptBytes(transcript) === renameTranscriptBytes(expected);
+		expect(matches(actual)).toBe(true);
+		expect(matches({ ...actual, calls })).toBe(false);
+	},
+);
 
 test("the parity oracle rejects an extra real Wi-Fi broadcast", async () => {
 	const fixture = radioEquivalenceCases[0];

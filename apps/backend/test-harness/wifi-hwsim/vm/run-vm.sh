@@ -70,7 +70,7 @@ if [[ -n "$repo" ]]; then
 		;;
 	esac
 	bun_path=$(readlink -f "$(command -v bun)")
-	[[ "$("$bun_path" --version)" == 1.4.4 ]] || die "--repo requires workstation Bun 1.4.4"
+	[[ "$("$bun_path" --version)" == 1.4.5 ]] || die "--repo requires workstation Bun 1.4.5"
 fi
 for tool in qemu-system-x86_64 qemu-img xorriso ssh ssh-keygen scp curl sha512sum python3 timeout flock tar git find; do
 	command -v "$tool" >/dev/null || die "required executable missing: $tool"

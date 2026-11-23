@@ -8,11 +8,16 @@ import type {
 } from "./wifi-hotspot-types.ts";
 import type { HybridRestoreAttempt } from "./wifi-hybrid-target-diagnostics.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
-import type { RadioIdentity, RadioLifetime } from "./wifi-radio-identity.ts";
+import type {
+	RadioIdentity,
+	RadioLifetime,
+	ReadRadioInventory,
+} from "./wifi-radio-identity.ts";
 
 export type WifiPolicyObservation = {
 	readonly identities: ReadonlyMap<string, RadioIdentity>;
 	readonly active: Map<string | undefined, string | null>;
+	readonly readInventory?: ReadRadioInventory;
 	readonly station?: boolean;
 	readonly write?: typeof nmConnSetFields;
 };

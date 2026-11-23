@@ -152,7 +152,7 @@ bun run check
 bun run test
 ```
 
-The package's `test` script runs `bun test --parallel` on the pinned Bun 1.4.4.
+The package's `test` script runs `bun test --parallel` on the pinned Bun 1.4.5.
 Parallel execution was adopted on 1.4.2 after five smoke runs and twenty consecutive
 clean full-suite runs. Files run
 in isolated worker globals across worker processes, but filesystem paths are still shared. Tests that
@@ -898,7 +898,7 @@ only actual child exit plus ESRCH from the negative owned PGID settles that boun
 Fixed root-only spawning retains child-only timeout signaling and partial output.
 Only the runner's own pre-spawn checks/preparation/abort or Bun Error tags
 `socketpair`/`fcntl`/`posix_spawn` prove no dispatch and release without probes/retries,
-preserving the original error. Audited at bun-v1.4.2..v1.4.4; classification unchanged.
+preserving the original error. Audited at bun-v1.4.2..v1.4.5; classification unchanged.
 1.4.3 added kill-then-reap on `pidfd_open` failure (oven-sh/bun#40080, f86be9d).
 Exec can still precede that throw without a handle. This, absent/unknown tags and non-Error throws
 recover through the launcher's pre-exec `$$` file, never a census. The checked launcher

@@ -22,8 +22,11 @@ import {
 	sensorsStatusSchema,
 	sshPersistentInputSchema,
 	successResponseSchema,
+	syslogInputSchema,
 	updateCapabilitiesSchema,
 	updateDetailsSchema,
+	updateOutcomeInputSchema,
+	updateOutcomeSchema,
 	updateSettingsInputSchema,
 	updateSettingsSchema,
 } from '../schemas';
@@ -47,7 +50,7 @@ export const systemContract = oc.router({
 	/**
 	 * Get system log
 	 */
-	getSyslog: oc.output(logOutputSchema),
+	getSyslog: oc.input(syslogInputSchema).output(logOutputSchema),
 
 	/**
 	 * Power off the device
@@ -63,6 +66,8 @@ export const systemContract = oc.router({
 	 * Start software update
 	 */
 	startUpdate: oc.output(successResponseSchema),
+	/** Read-only: what an install a tab watched did, once CeraUI restarted under it. */
+	updateOutcome: oc.input(updateOutcomeInputSchema).output(updateOutcomeSchema),
 	getUpdateSettings: oc.output(updateSettingsSchema),
 	setUpdateSettings: oc.input(updateSettingsInputSchema).output(updateSettingsSchema),
 	getUpdateCapabilities: oc.output(updateCapabilitiesSchema),

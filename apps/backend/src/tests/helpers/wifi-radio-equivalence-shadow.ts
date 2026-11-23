@@ -7,6 +7,14 @@ import { wifiRadioObservation } from "../../modules/wifi/wifi-radio-observation.
 import type { RadioFixture } from "./wifi-radio-equivalence.ts";
 
 export async function fakeShadowSysfs(radios: () => readonly RadioFixture[]) {
+	const inventory = spyOn(
+		radioIdentityReaders,
+		"readPhyInventory",
+	).mockImplementation(async () =>
+		[...new Set(radios().map(({ phy }) => phy))]
+			.map((phy) => `Wiphy phy${phy}`)
+			.join("\n"),
+	);
 	const devicePath = spyOn(
 		radioIdentityReaders,
 		"readDevicePath",
@@ -46,5 +54,6 @@ export async function fakeShadowSysfs(radios: () => readonly RadioFixture[]) {
 		realpath.mockRestore();
 		text.mockRestore();
 		devicePath.mockRestore();
+		inventory.mockRestore();
 	};
 }

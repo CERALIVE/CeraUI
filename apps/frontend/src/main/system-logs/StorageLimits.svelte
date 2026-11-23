@@ -136,7 +136,7 @@ async function save(): Promise<void> {
 					>
 						{@render sentence(limit.describe(draft[limit.key]))}
 					</Select.Trigger>
-					<Select.Content class={LINE_BREAKS}>
+					<Select.Content class={LINE_BREAKS} data-touch-region>
 						{#each [null, ...limit.options] as option (option)}
 							<Select.Item class="min-h-(--touch-target-min)" label={plain(limit.describe(option))} value={limitValue(option)}>
 								{@render sentence(limit.describe(option))}
@@ -176,6 +176,8 @@ async function save(): Promise<void> {
 						</span>
 					</label>
 				{/each}
+				<!-- Both levels store the bonding sender, so its skipped-lines warning gets one note, not a line per option. -->
+				<p class="text-muted-foreground text-xs" data-testid="storage-detail-sender-note">{m['systemLogs.storage.detailSenderNote']()}</p>
 			</div>
 		</fieldset>
 
