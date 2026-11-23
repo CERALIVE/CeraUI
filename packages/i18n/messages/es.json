@@ -941,7 +941,7 @@
 	"live.starting": "Iniciando...",
 	"live.stopStream": "Detener transmisión",
 	"live.stopConfirm.title": "¿Terminar la transmisión?",
-	"live.stopConfirm.body": "El equipo deja de enviar la transmisión.",
+	"live.stopConfirm.body": "El equipo dejará de enviar la transmisión.",
 	"live.stopConfirm.keep": "Seguir transmitiendo",
 	"live.stopConfirm.end": "Terminar transmisión",
 	"live.stopStuck.message": "Detener está tardando más de lo esperado",

@@ -4,7 +4,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures/index.js';
 import { focusMainContent } from './helpers/focus-main-content.js';
 import { measureHitAreas } from './helpers/hit-area.js';
-import { ensureAuthenticated, navigateTo, setLocale, setTheme } from './helpers/index.js';
+import { endStream, ensureAuthenticated, navigateTo, setLocale, setTheme } from './helpers/index.js';
 
 /**
  * The Live screen and the Encoder dialog after the final design pass (Live
@@ -108,7 +108,7 @@ async function goLive(page: Page): Promise<void> {
 }
 
 async function goIdle(page: Page): Promise<void> {
-	await page.getByTestId('live-bar').getByRole('button').last().click();
+	await endStream(page);
 	await expect(page.getByTestId('live-cockpit').getByTestId('audio-mixer-next-start')).toHaveCount(0, {
 		timeout: 15_000,
 	});

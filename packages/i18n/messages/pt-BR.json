@@ -941,7 +941,7 @@
 	"live.starting": "Iniciando...",
 	"live.stopStream": "Parar transmissão",
 	"live.stopConfirm.title": "Encerrar a transmissão?",
-	"live.stopConfirm.body": "O aparelho para de enviar a transmissão.",
+	"live.stopConfirm.body": "O aparelho deixará de enviar a transmissão.",
 	"live.stopConfirm.keep": "Continuar transmitindo",
 	"live.stopConfirm.end": "Encerrar transmissão",
 	"live.stopStuck.message": "A parada está demorando mais do que o esperado",

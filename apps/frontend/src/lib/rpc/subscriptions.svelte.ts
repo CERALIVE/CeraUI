@@ -105,11 +105,14 @@ import { pullStatusEvidence } from "./pulled-status";
 import { reauthenticateAndHydrate } from "./reconnect";
 import { createSeqTracker } from "./seq-guard";
 import {
+	getLifecycleDelivery,
 	getLinkEpoch,
+	getStreamSessionEpoch,
 	noteAuthenticatedLink,
 	noteLifecycleDelivered,
 	noteLinkState,
 	noteSessionRestored,
+	noteStreamSessionBoundary,
 	type Receipt,
 	type RequestDispatch,
 	receiveEvidence,
@@ -172,6 +175,7 @@ let statusState = $state.raw<
 
 // Individual status components
 let isStreamingState = $state<boolean>(false);
+let streamingStatusLink = $state<number>();
 let sshState = $state.raw<StatusResponse["ssh"] | undefined>(undefined);
 let availableUpdatesState = $state.raw<
 	StatusResponse["available_updates"] | undefined
@@ -357,6 +361,20 @@ export function clearPasswordSetup(): void {
 
 export function getIsStreaming() {
 	return isStreamingState;
+}
+
+/** Only this socket's admitted stream facts can authorize a Live-bar Stop. */
+export function getConfirmedLiveStopEpoch(): number | undefined {
+	const link = getLinkEpoch();
+	if (!isConnectedState || !isStreamingState || streamingStatusLink !== link)
+		return undefined;
+	const lifecycle =
+		getLifecycleDelivery().link === link
+			? statusState?.stream_lifecycle
+			: undefined;
+	// Legacy devices omit the lifecycle; a current live boolean still counts.
+	if (lifecycle !== undefined && lifecycle !== "streaming") return undefined;
+	return getStreamSessionEpoch();
 }
 
 export function getSsh() {
@@ -603,7 +621,10 @@ function handleMessage(
 
 			// Update individual states
 			if (statusData.is_streaming !== undefined) {
+				if (statusData.is_streaming !== isStreamingState)
+					noteStreamSessionBoundary();
 				isStreamingState = statusData.is_streaming;
+				if (isConnectedState) streamingStatusLink = received.link;
 			}
 			if (statusData.ssh !== undefined) {
 				sshState = preserveWireIdentity(sshState, statusData.ssh);
@@ -659,7 +680,16 @@ function handleMessage(
 				modems: modemsState ?? {},
 			} as Exclude<typeof statusState, undefined>;
 			statusState = preserveWireIdentity(statusState, nextStatus);
-			if ("stream_lifecycle" in statusData) noteLifecycleDelivered(received);
+			if ("stream_lifecycle" in statusData) {
+				noteLifecycleDelivered(received);
+				// Invalidate even if a replacement live frame arrives before render
+				// or the device has not published is_streaming=false yet.
+				if (
+					statusData.stream_lifecycle !== undefined &&
+					statusData.stream_lifecycle !== "streaming"
+				)
+					noteStreamSessionBoundary();
+			}
 			const recoveredStart = settleStartRecoveryEvidence(statusData, received);
 			if (recoveredStart !== undefined)
 				supersedeStartingOptimism(recoveredStart);
@@ -1328,7 +1358,9 @@ export function resetState(): void {
 	authState = undefined;
 	configState = undefined;
 	statusState = undefined;
+	if (isStreamingState) noteStreamSessionBoundary();
 	isStreamingState = false;
+	streamingStatusLink = undefined;
 	sshState = undefined;
 	availableUpdatesState = undefined;
 	updatingState = null;

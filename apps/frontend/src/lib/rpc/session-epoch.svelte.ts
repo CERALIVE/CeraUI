@@ -46,9 +46,24 @@ export function getLinkEpoch(): number {
 	return links;
 }
 
+let streamSession = $state(0);
+
+/** Identity of the observed stream, not a count of status frames. */
+export function getStreamSessionEpoch(): number {
+	return streamSession;
+}
+
+export function noteStreamSessionBoundary(): void {
+	streamSession += 1;
+}
+
 export function noteLinkState(state: string): void {
 	const up = state === "connected";
-	if (linkUp && !up) links += 1;
+	if (linkUp && !up) {
+		links += 1;
+		// The stream can be replaced while this page is disconnected.
+		noteStreamSessionBoundary();
+	}
 	linkUp = up;
 }
 

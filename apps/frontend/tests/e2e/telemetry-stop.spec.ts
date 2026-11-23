@@ -3,7 +3,7 @@ import fs from "node:fs";
 import type { Page, WebSocketRoute } from "@playwright/test";
 
 import { expect, test } from "./fixtures/index.js";
-import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers/index.js";
+import { endStream, ensureAuthenticated, evidencePath, navigateTo } from "./helpers/index.js";
 
 /**
  * Telemetry lifecycle end-to-end gate (ceraui-experience-simplification, Todo 22).
@@ -107,21 +107,6 @@ function setWindowNumber(page: Page, key: string, value: number): Promise<void> 
 		},
 		{ key, value },
 	);
-}
-
-/** The real Stop control inside the Live cockpit (arms the stopping watchdog). */
-function stopButton(page: Page) {
-	return page
-		.getByTestId("live-cockpit")
-		.getByRole("button", { name: /stop stream/i });
-}
-
-/** Answer End stream: the Live bar's Stop asks before it sends the stop. */
-async function confirmEnd(page: Page): Promise<void> {
-	await page
-		.getByRole("alertdialog", { name: /end the stream/i })
-		.getByRole("button", { name: /end stream/i })
-		.click();
 }
 
 /** A window marker that would vanish on a full reload — proves in-app recovery. */
@@ -355,8 +340,7 @@ test.describe("Telemetry lifecycle (clears on stop)", () => {
 		// we KEEP desiredStreaming=true so any stop push is rewritten back to true — the
 		// single authoritative false PUSH is LOST client-side (the field bug). A retry
 		// stop would generate no new change-broadcast either (no-rebroadcast trap).
-		await stopButton(page).click();
-		await confirmEnd(page);
+		await endStream(page);
 
 		// The watchdog's authoritative status PULL (real backend is_streaming:false,
 		// which the push-rewrite cannot touch) reconciles the store → summary → Idle,
@@ -386,8 +370,7 @@ test.describe("Telemetry lifecycle (clears on stop)", () => {
 		// The backend genuinely cannot stop: force the watchdog's authoritative PULL to
 		// keep reporting is_streaming:true (and keep the push rewritten to true too).
 		forcePullStreaming = true;
-		await stopButton(page).click();
-		await confirmEnd(page);
+		await endStream(page);
 
 		// The watchdog pulls (still streaming) → re-dispatches → pulls (still streaming)
 		// → exposes the truthful banner with Retry. The view stays TRUTHFULLY live
