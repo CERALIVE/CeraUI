@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, jest, spyOn, test } from "bun:test";
+import * as runner from "../helpers/run.ts";
 import { buildModemsWireMessage } from "../modules/modems/modem-status.ts";
 import {
 	listPresentPhysicalDevices,
@@ -164,4 +165,91 @@ test("a monitor down-state on a name still present keeps its committed identity"
 	]);
 	expect(presence).toHaveBeenCalledWith(ROUTER);
 	expect(rosterFrames()).toEqual([]);
+});
+
+function pollRouter(ifindex: number) {
+	processIfconfigOutput(
+		firstSightIfconfig(ROUTER, IP),
+		undefined,
+		undefined,
+		undefined,
+		new Map([[ROUTER, ifindex]]),
+	);
+}
+
+function routerState(state: string) {
+	handleNetifMonitorEvent({ type: "device-state", device: ROUTER, state });
+}
+
+function expectRouterIdentity(kept: boolean) {
+	expect(usbNetScanCovers(ROUTER)).toBe(kept);
+	expect(getUsbPhysicalDescriptor(ROUTER) !== undefined).toBe(kept);
+	expect(getRouterCellularMarker(ROUTER) !== undefined).toBe(kept);
+	expect(listPresentPhysicalDevices().length).toBe(kept ? 1 : 0);
+}
+
+for (const replacement of [
+	"before-down",
+	"before-up",
+	"before-poll",
+] as const) {
+	test(`same-name router replacement drops the committed identity at ${replacement}`, async () => {
+		await routerScan().settle();
+		pollRouter(7);
+		let ifindex = replacement === "before-down" ? 8 : 7;
+		spyOn(netdevPresence, "inSysfs").mockReturnValue(true);
+		spyOn(netdevPresence, "ifindex").mockImplementation(() => ifindex);
+
+		routerState("disconnected");
+		if (replacement !== "before-down") {
+			expectRouterIdentity(true);
+			ifindex = 8;
+			if (replacement === "before-up") routerState("connected");
+			else pollRouter(8);
+		}
+
+		expectRouterIdentity(false);
+	});
+}
+
+test("a link flap under the same ifindex keeps the committed identity", async () => {
+	await routerScan().settle();
+	pollRouter(7);
+	spyOn(netdevPresence, "inSysfs").mockReturnValue(true);
+	spyOn(netdevPresence, "ifindex").mockReturnValue(7);
+
+	routerState("disconnected");
+	routerState("connected");
+	pollRouter(7);
+
+	expectRouterIdentity(true);
+});
+
+test("a poll sampled before a replacement does not restore the old ifindex", async () => {
+	await routerScan().settle();
+	pollRouter(7);
+	let ifindex = 7;
+	spyOn(netdevPresence, "inSysfs").mockReturnValue(true);
+	spyOn(netdevPresence, "ifindex").mockImplementation(() => ifindex);
+	let releaseIfconfig: (output: string) => void = () => {};
+	const ifconfig = new Promise<string>((resolve) => {
+		releaseIfconfig = resolve;
+	});
+	spyOn(runner, "run").mockImplementation(async (bin) =>
+		bin === "ifconfig"
+			? ifconfig
+			: `7: ${ROUTER}: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500\n    inet ${IP}/24 scope global ${ROUTER}\n`,
+	);
+	const poll = updateNetif();
+	await new Promise<void>((resolve) => setImmediate(resolve));
+
+	ifindex = 8;
+	routerState("disconnected");
+	routerState("connected");
+	releaseIfconfig(firstSightIfconfig(ROUTER, IP));
+	await poll;
+	await routerScan().settle();
+	pollRouter(8);
+
+	expectRouterIdentity(true);
 });

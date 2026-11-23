@@ -1045,12 +1045,18 @@ kernel no longer lists in `/sys/class/net` — including one before first
 publication, or a poll that drops an existing entry invalidates its pending
 reading and immediately removes its committed descriptor, markers and coverage.
 A monitor down state on a name still present in sysfs is a link flap on a
-plugged-in device and keeps that incarnation's committed identity. An unplug
-whose sysfs node lingers past the monitor event is therefore not invalidated by
-the next poll: the monitor already dropped the netif entry, so the poll no
-longer reports a removal. Its committed coverage and descriptor survive until
-the next periodic USB scan (at most 5 s), and a flapping modem keeps its
-identity only until that scan. Removal republishes `netif` and the modem roster
+plugged-in device and keeps that incarnation's committed identity, unless the
+kernel's ifindex for the name differs from the one the last poll recorded. A
+different ifindex means a replacement reuses the name, so the old identity is
+removed and a poll already in flight, whose sample may predate the replacement,
+is discarded. A monitor up state makes the same comparison, and so does the
+first poll that sees the name again after a flap. Without a polled ifindex the
+sysfs check alone decides. An unplug whose sysfs node lingers past the monitor
+event, with no replacement yet, is not invalidated by the next poll: the
+monitor already dropped the netif entry, so the poll no longer reports a
+removal. Its committed coverage and descriptor survive until the next periodic
+USB scan (at most 5 s), and a flapping modem keeps its identity only until that
+scan. Removal republishes `netif` and the modem roster
 itself, the edge the following scan used to report, so a removed router
 dongle's row is retracted on the same tick rather than a later sweep. The
 present-device view used to carry a legacy shared-serial bond opt-out to every
