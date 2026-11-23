@@ -4,7 +4,13 @@
  */
 
 import { logBundleFailureReasonSchema } from "@ceraui/rpc/schemas";
-import { call, ORPCError } from "@orpc/server";
+import {
+	call,
+	getRouter,
+	ORPCError,
+	Procedure,
+	type Router,
+} from "@orpc/server";
 import type { ServerWebSocket, WebSocketHandler } from "bun";
 
 import { logger, logRedact } from "../helpers/logger.ts";
@@ -41,7 +47,12 @@ import {
 import { appRouter } from "./router.ts";
 import { instrumentRpcCall } from "./rpc-logging.ts";
 import { getPasswordHash } from "./state/password.ts";
-import type { AppWebSocket, ServerSocketData, SocketData } from "./types.ts";
+import type {
+	AppWebSocket,
+	RPCContext,
+	ServerSocketData,
+	SocketData,
+} from "./types.ts";
 
 /** Cap on the redacted frame preview so a stray giant payload never bloats a log. */
 const FRAME_PREVIEW_MAX_CHARS = 100;
@@ -50,10 +61,9 @@ const FRAME_PREVIEW_MAX_CHARS = 100;
  * ORPC message format
  */
 interface ORPCMessage {
-	id?: string;
-	method?: string;
-	path?: string[];
-	input?: unknown;
+	readonly id?: string | number | undefined;
+	readonly path: readonly string[] | null;
+	readonly input?: unknown;
 }
 
 /**
@@ -64,20 +74,38 @@ export function parseMessage(
 	ws: AppWebSocket,
 ): ORPCMessage | null {
 	try {
-		const parsed = JSON.parse(data);
+		const parsed: unknown = JSON.parse(data);
 
-		// ORPC messages have a specific structure with path array
-		if (parsed.path && Array.isArray(parsed.path)) {
-			return parsed as ORPCMessage;
+		if (typeof parsed !== "object" || parsed === null) return null;
+
+		// Keep a malformed RPC request dispatchable so its caller gets a reply.
+		if ("path" in parsed && Object.hasOwn(parsed, "path")) {
+			const { path } = parsed;
+			return {
+				// Echo a JSON string or finite number unchanged; never coerce anything else.
+				id:
+					"id" in parsed &&
+					(typeof parsed.id === "string" ||
+						(typeof parsed.id === "number" && Number.isFinite(parsed.id)))
+						? parsed.id
+						: undefined,
+				path:
+					Array.isArray(path) &&
+					path.length > 0 &&
+					path.every((segment: unknown) => typeof segment === "string")
+						? path
+						: null,
+				input: "input" in parsed ? parsed.input : undefined,
+			};
 		}
 
 		// Handle keepalive messages silently
-		if (parsed.keepalive !== undefined) {
+		if ("keepalive" in parsed) {
 			return null;
 		}
 
 		// Handle the client's heartbeat pong (answer to each server ping) silently
-		if (parsed.pong !== undefined) {
+		if ("pong" in parsed) {
 			return null;
 		}
 
@@ -99,57 +127,30 @@ export function parseMessage(
 	}
 }
 
-/** An oRPC procedure carries its definition, with the handler, under "~orpc". */
-function isProcedure(value: unknown): boolean {
-	if (typeof value !== "object" && typeof value !== "function") return false;
-	if (value === null) return false;
-	const definition = (value as { "~orpc"?: { handler?: unknown } })["~orpc"];
-	return typeof definition?.handler === "function";
-}
-
 /**
  * Handle ORPC messages
  */
 export async function handleORPCMessage(
 	ws: AppWebSocket,
 	message: ORPCMessage,
-	router: unknown = appRouter,
+	router: Router<RPCContext> = appRouter,
 ): Promise<void> {
 	const context = createContext(ws);
 	const clientId = ws.remoteAddress;
 	const senderId = ws.data?.senderId;
+	const { path } = message;
+	const label = path?.join(".") ?? "<invalid path>";
 
 	try {
-		// Navigate to the procedure using the path. Only the router's own keys
-		// resolve: an inherited name such as "constructor" or "__proto__" is not
-		// a procedure, and neither is a namespace that holds procedures.
-		let procedure: unknown = router;
-		for (const segment of message.path || []) {
-			procedure =
-				typeof procedure === "object" &&
-				procedure !== null &&
-				typeof segment === "string" &&
-				Object.hasOwn(procedure, segment)
-					? (procedure as Record<string, unknown>)[segment]
-					: undefined;
-			if (!procedure) {
-				throw new Error(`Unknown procedure path: ${message.path?.join(".")}`);
-			}
-		}
-		if (!isProcedure(procedure)) {
-			throw new Error(`Unknown procedure path: ${message.path?.join(".")}`);
+		const procedure = path === null ? undefined : getRouter(router, path);
+		if (path === null || !(procedure instanceof Procedure)) {
+			throw new Error(`Unknown procedure path: ${label}`);
 		}
 
 		// Execute the procedure using ORPC's call function, wrapped in the
 		// per-RPC logging interceptor (cid + latency + ok/err, dev/debug-gated).
-		const result = await instrumentRpcCall(
-			message.path ?? [],
-			message.input,
-			context,
-			() =>
-				call(procedure as Parameters<typeof call>[0], message.input, {
-					context,
-				}),
+		const result = await instrumentRpcCall(path, message.input, context, () =>
+			call(procedure, message.input, { context }),
 		);
 
 		// Send response
@@ -161,17 +162,14 @@ export async function handleORPCMessage(
 		);
 
 		// Handle post-login actions
-		if (
-			message.path?.join(".") === "auth.login" &&
-			(result as { success: boolean })?.success
-		) {
+		if (label === "auth.login" && (result as { success: boolean })?.success) {
 			sendInitialStatusToClient(ws);
 		}
 	} catch (error) {
 		const validation = extractValidationDetails(error);
 		logger.error("rpc: handler error", {
 			module: "rpc.adapter",
-			procedure: message.path?.join("."),
+			procedure: label,
 			messageId: message.id,
 			clientId,
 			senderId,
@@ -309,7 +307,14 @@ export function createWebSocketHandler(): WebSocketHandler<SocketData> {
 				return;
 			}
 
-			void handleORPCMessage(ws, message);
+			return handleORPCMessage(ws, message).catch((err) => {
+				logger.error("rpc: message dispatch failed", {
+					module: "rpc.adapter",
+					messageId: message.id,
+					clientId: ws.remoteAddress,
+					err,
+				});
+			});
 		},
 
 		async close(ws: AppWebSocket, code: number, reason: string) {
@@ -351,7 +356,7 @@ export function createServerWebSocketHandler(): WebSocketHandler<ServerSocketDat
 			if (isPreviewSocket(ws)) {
 				preview.message(ws, data);
 			} else {
-				rpc.message?.(asRpc(ws), data);
+				return rpc.message?.(asRpc(ws), data);
 			}
 		},
 		close(ws, code, reason) {

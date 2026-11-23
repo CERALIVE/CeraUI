@@ -20,7 +20,11 @@ import { os } from "@orpc/server";
 import { z } from "zod";
 
 import { logger, REDACTED } from "../helpers/logger.ts";
-import { handleORPCMessage, parseMessage } from "../rpc/adapter.ts";
+import {
+	createWebSocketHandler,
+	handleORPCMessage,
+	parseMessage,
+} from "../rpc/adapter.ts";
 import { extractValidationDetails } from "../rpc/error-enrichment.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 
@@ -184,6 +188,30 @@ describe("adapter diagnostics", () => {
 
 		expect(result).toBeNull();
 		expect(cap.logs.find((l) => l.level === "warn")).toBeUndefined();
+	});
+
+	test("the WebSocket message callback logs a failed error reply without rejecting", async () => {
+		const ws = fakeWs();
+		const sendFailure = new Error("socket write failed");
+		ws.send = () => {
+			throw sendFailure;
+		};
+
+		await createWebSocketHandler().message?.(
+			ws,
+			JSON.stringify({ id: "failed-reply", path: ["missingProcedure"] }),
+		);
+
+		expect(cap.logs).toContainEqual({
+			level: "error",
+			message: "rpc: message dispatch failed",
+			meta: {
+				module: "rpc.adapter",
+				messageId: "failed-reply",
+				clientId: ws.remoteAddress,
+				err: sendFailure,
+			},
+		});
 	});
 
 	test("extractValidationDetails returns undefined for a non-validation error", () => {
