@@ -27,7 +27,7 @@ const PROBE_TIMEOUT_MS = 5_000;
 // One package query plus up to two comparisons per target, ample for the 512
 // targets the RPC accepts; past it nothing is proven.
 export const UPDATE_OUTCOME_DEADLINE_MS = 20_000;
-const FORMAT = `-f=${["Package", "Architecture", "db:Status-Abbrev", "Version"].map((field) => `\${${field}}`).join("\\t")}\\n`;
+export const DPKG_QUERY_FORMAT = `-f=${["Package", "Architecture", "db:Status-Abbrev", "Version"].map((field) => `\${${field}}`).join("\\t")}\\n`;
 // db:Status-Abbrev is want (unknown/install/hold/remove/purge), state, error flag.
 const ROW =
 	/^([a-z0-9][a-z0-9+.-]*)\t([a-z0-9][a-z0-9-]*)\t([uihrp][ncHUFWti][ R])\t([0-9][A-Za-z0-9.+:~-]*)?$/;
@@ -35,12 +35,32 @@ const ROW =
 const CONFIGURED = /^[ih]i $/;
 const ARCH = /^[a-z0-9][a-z0-9-]*$/;
 
-type Row = {
+export type DpkgRow = {
 	readonly name: string;
 	readonly arch: string;
 	readonly status: string;
 	readonly version: string;
 };
+
+/** dpkg-query's DPKG_QUERY_FORMAT rows, one per instance of `packages`; null unless every line is one. */
+export function parseDpkgRows(
+	stdout: string,
+	packages: readonly string[],
+): readonly DpkgRow[] | null {
+	const rows: DpkgRow[] = [];
+	for (const line of stdout.slice(0, -1).split("\n")) {
+		const [, name = "", arch = "", status = "", version = ""] =
+			ROW.exec(line) ?? [];
+		if (
+			!status ||
+			!packages.includes(name) ||
+			rows.some((row) => row.name === name && row.arch === arch)
+		)
+			return null;
+		rows.push({ name, arch, status, version });
+	}
+	return rows;
+}
 
 // apt prints a foreign instance as `name:arch`; dpkg-query lists the bare name.
 const packageOf = (target: UpdateTarget) => target.name.split(":")[0] ?? "";
@@ -106,21 +126,17 @@ export async function targetsAttained(
 			: null;
 	};
 	const packages = [...new Set(targets.map(packageOf))];
-	const query = await ask(["dpkg-query", "-W", FORMAT, "--", ...packages]);
+	const query = await ask([
+		"dpkg-query",
+		"-W",
+		DPKG_QUERY_FORMAT,
+		"--",
+		...packages,
+	]);
 	// Exit 1 is a name dpkg does not know: no complete read either.
 	if (query?.exitCode !== 0 || !query.stdout.endsWith("\n")) return false;
-	const rows: Row[] = [];
-	for (const line of query.stdout.slice(0, -1).split("\n")) {
-		const [, name = "", arch = "", status = "", version = ""] =
-			ROW.exec(line) ?? [];
-		if (
-			!status ||
-			!packages.includes(name) ||
-			rows.some((row) => row.name === name && row.arch === arch)
-		)
-			return false;
-		rows.push({ name, arch, status, version });
-	}
+	const rows = parseDpkgRows(query.stdout, packages);
+	if (!rows) return false;
 	for (const target of targets) {
 		// Only the admitted instance counts: another architecture's is not it.
 		const row = rows.find(

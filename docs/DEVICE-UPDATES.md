@@ -1547,8 +1547,99 @@ A tab that was not connected at the removal keeps its banner until a later
 complete check while it is connected. Kernel, OS and `update:*` notices are never
 touched. Contract, with the stale sequences it accepts:
 [the retraction contract](../apps/backend/docs/agents/a-persistent-notification-must-be-retractable.md#the-ceralive-update-offer-is-withdrawn-only-on-positive-evidence-exists).
-Known gap: the orchestrator's package `updates-available` notice above has no
-retraction yet and can still outlive an installed update in an open tab.
+The orchestrator's package `updates-available` notice has its own rule, below.
+
+### Scheduled package notice [EXISTS; host-tested, board qualification owed]
+
+The scheduled package check raises `update:updates-available:<id>` ("Updates are
+available") exactly as main does: `runPackageCheckCycle` (`runtime.ts`) builds
+`<id>` from every row the check displayed, `name=version` sorted, and
+`notifyUpdate` dedupes by that name, records a dismissal under it and logs the id
+as an `update_updates_available` device event. Ids, dedupe, dismissal, text and
+timing are unchanged on both images.
+
+On capable images only, the same successful check then withdraws a notice once
+dpkg shows every package its name lists installed
+(`update-orchestrator/package-notice-retirement.ts`). Every shipped frontend
+removes this notice by name alone, and every backend that ever issued a name
+(main, this build, an older or newer one, before or after a rollback) used it for
+the same claim: these packages can move to these versions. So the proof is about
+the name's own content, not about who sent the copy a tab holds: no receipt,
+record or lineage exists. A bare name (`curl=2`) means the package, its native or
+`Architecture: all` instance (dpkg holds at most one of those); `curl:armhf=2`
+means that instance only.
+
+A notice is withdrawn only when all of these hold:
+
+- The package check succeeded and its discovery was the capable one
+  (`apt-all-packages`). Startup, login, reconnect, a restart or a recovered
+  install alone withdraw nothing; a failed check runs nothing.
+- The name is a live slot of this process, or one of the 32 most recent distinct
+  ids in the device events (so a notice main or an earlier process raised is
+  covered). Every element is `package[:arch]=version`, each instance once, with a
+  version that starts with a digit. Anything else (`os:<version>`, a legacy
+  `=unknown` id, the identity fallback, other kinds) is skipped before any command.
+- No element of the name is a row of this check: those rows are what main has
+  just announced as pending.
+- One `dpkg-query -W` of the name's packages shows each target's instance exactly
+  once, `ii ` (installed and configured, not held), at exactly the named version;
+  or past it (`dpkg --compare-versions <installed> gt <named>`) while `apt-cache
+  policy <package>` shows exactly one `Installed:` and one `Candidate:` line, both
+  dpkg's version, so a pending downgrade back to the named version keeps it.
+- The notice was neither shown again nor dismissed while dpkg was read.
+
+The withdrawal goes live, as a typed and a separate bare-name frame (both
+decoders), to the tabs connected then, and again on every later capable check
+while the name stays a candidate, so a tab that was offline clears at a later
+check while it is connected. A notice raised again later (the package rolled back)
+is shown once by main's own code; a dismissed one stays dismissed.
+
+What the proof reads, and why no failed or partial read can remove a notice:
+
+| Read | Counts only as | Otherwise |
+|---|---|---|
+| `dpkg --print-architecture` | exit 0, empty stderr, one line | nothing else is read; every notice stays |
+| `dpkg-query -W -f=<#664's format> -- <the name's packages>` | exit 0, empty stderr, newline-terminated, every line a complete row, each instance once | kept |
+| `dpkg --compare-versions <installed> gt <named>` (only past the named version) | exit 0, no output | kept |
+| `apt-cache policy <package>` (only past the named version) | exit 0, empty stderr, newline-terminated, the package's header, exactly one `Installed:` and one `Candidate:` line, both dpkg's version | kept |
+
+Each command has 5 s and a pass 20 s (#664's bounds). Every deciding fact is the
+presence of a complete line with a specific value. A cut answer is a prefix of the
+real one: it can lose a deciding line (kept) or end inside a line (rejected), never
+create one. That is why the refresh, source inventory, hold list and plan are not
+inputs: nothing is concluded from what they omit, so a warning, a cut or a partial
+answer there cannot remove a notice. A held target at its version (`hi `) counts as
+not installed, unlike #664's install outcome, which reads a hold as configured.
+
+Legacy images never withdraw this notice: their ids carry `unknown` versions
+(`cerastream=unknown`), so a name says nothing dpkg could confirm, and one id is
+reused for every release of the same set. The withdrawal code does not run there:
+no command, frame or file differs from main.
+
+Limits, each a stale banner as on main, which a dismissal clears:
+
+- every legacy-image copy;
+- a held, pinned-away, kept-back or never-installed target, and any name listing a
+  package that never reaches its version;
+- a tab not connected at any withdrawal while the name is still a candidate (the
+  32 most recent ids; Clear logs empties them): an old open tab may need one reload
+  or dismissal;
+- the time until the next successful capable check after the install;
+- a manual dpkg change between the read and the withdrawal (at most one pass); the
+  next check raises the notice again if its claim became true again.
+
+Coverage: `tests/ceralive-update-notice-restart.test.ts` (real backend processes,
+authenticated WebSocket tabs of both decoders, the real scheduler tick): a seeded
+model of checks, installs, holds, restarts into main and back, tabs that connect,
+authenticate late, disconnect and dismiss, against an oracle of attained targets
+(fixed seeds in CI; `CERALIVE_NOTICE_SEEDS=<comma-separated seeds>
+CERALIVE_NOTICE_SHRINK=1 bun test ./apps/backend/src/tests/ceralive-update-notice-restart.test.ts -t 'scheduled notice model'`
+sweeps more and shrinks a failure); the frame-for-frame differential against
+main's scheduler; the recovered install; same-id rollbacks and stale-index
+re-shows that must keep; every byte prefix and fault of the dpkg read; a hold seen
+only by dpkg; version skips and late tabs; a reinstall row and an `all` instance; a
+dismissal during the read. `tests/scheduled-notice-retirement.test.ts` holds the
+id grammar and every byte prefix and fault of each read.
 
 ### Download hold notice [EXISTS; host-tested, board qualification owed]
 

@@ -282,8 +282,8 @@ Without a stored record (a banner main raised), a candidate pinned out of the
 solver's view looks like "none" to a complete check, and that banner is retired;
 Install would not take it either. A notice dismissed under a former key is shown
 once more, and a dismissal from an older frontend no longer sticks. The
-orchestrator's package `update:updates-available:*` notice has no retraction yet
-(separate follow-up).
+orchestrator's package `update:updates-available:*` notice is withdrawn by its own
+rule (next section).
 
 Coverage: `tests/ceralive-update-notice-lifecycle.test.ts` (real check entries and
 install completion over scripted APT and dpkg, both images; a table of sequences
@@ -313,3 +313,25 @@ records, early tabs, dismissal across restart, the largest committable offer,
 refused records and stores, failed writes); and the frontend half
 (`apps/frontend/src/tests/notification-recovery-ingestion.test.ts`,
 `apps/frontend/src/main/notifications/notification-presentation.test.ts`).
+
+## THE SCHEDULED PACKAGE NOTICE IS WITHDRAWN BY ITS OWN NAME [EXISTS]
+
+`update:updates-available:<p1=v1,...>` keeps main's announcement byte for byte
+(`runPackageCheckCycle`, `notifyUpdate`). PR #684 tried for eight review rounds
+to bind a server-side receipt to the copy a tab holds and to read "no longer
+pending" from what refresh, inventory, holds or the plan left out. Neither can
+work: several processes issue the same name with other subsets or architectures,
+neither shipped decoder carries anything about the issuance on removal, and any
+partial read made absence look like proof. Owner:
+`modules/system/update-orchestrator/package-notice-retirement.ts`.
+
+**The rule.** After a successful capable check, a name is withdrawn only when its
+own claim is false for every possible issuer: one clean `dpkg-query` shows each
+named instance `ii ` at the named version, or past it while `apt-cache policy`
+shows the installed version as the candidate. Candidates are this process's live
+slots plus main's own `update_updates_available` event ids; a name sharing a row
+with the current check, or shown or dismissed during the read
+(`fenceNotification`), is kept. Do not add receipts, ledgers or lineage, do not
+conclude anything from absence, do not run it on legacy images (`=unknown` ids are
+unprovable) and never at startup or login. Full contract and limits:
+[DEVICE-UPDATES.md](../../../../docs/DEVICE-UPDATES.md#scheduled-package-notice-exists-host-tested-board-qualification-owed).

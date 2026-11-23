@@ -34,15 +34,27 @@ import {
 	type AptPackage,
 	type AptScript,
 	CHECKED_MARKER,
+	COMMANDS_PREFIX,
 	DEBIAN_ONLY_REFRESH,
 	HYDRATED_MARKER,
+	INVENTORY,
 	READY_PREFIX,
 	RECOVERY_FAILED_MARKER,
 	RECOVERY_RESTART_MARKER,
+	REFRESH,
 	RESTART_EXIT_CODE,
 	SESSION_PASSWORD,
 } from "./helpers/ceralive-update-apt.ts";
 import type { SessionStep } from "./helpers/ceralive-update-session.ts";
+import {
+	attained,
+	device,
+	generate,
+	installed,
+	type Operation,
+	offer,
+	shrink,
+} from "./helpers/scheduled-notice-model.ts";
 
 const NOTICE = "ceralive_update";
 // Bound for one awaited event (a marker, a frame answer, an exit); never a sleep.
@@ -168,8 +180,12 @@ class Backend {
 		const child = Bun.spawn(
 			[
 				process.execPath,
-				...(step.olderBackend ? ["--preload", MAIN_BACKEND] : []),
-				SESSION,
+				...(step.olderBackend || step.canonicalScheduler
+					? ["--preload", MAIN_BACKEND]
+					: []),
+				step.canonicalScheduler || step.olderBackend
+					? SESSION
+					: (process.env.CERALIVE_TEST_NOTICE_SESSION ?? SESSION),
 				JSON.stringify(input),
 			],
 			{
@@ -179,6 +195,12 @@ class Backend {
 				stderr: "pipe",
 				env: {
 					...process.env,
+					...(step.canonicalScheduler
+						? {
+								CERALIVE_TEST_BASELINE:
+									"6b9f316c89965c0e13602ca1ad43ec3fcb2b52e1",
+							}
+						: {}),
 					PORT: "0",
 					CERALIVE_RUN_DIR: join(root, "run"),
 					CERALIVE_DISMISSALS_FILE: dismissals,
@@ -231,6 +253,93 @@ class Backend {
 
 	check(): Promise<void> {
 		return this.command("check", CHECKED_MARKER, "check completion");
+	}
+
+	// Every command the device runner served since the last call.
+	async commands(): Promise<string[]> {
+		this.send("commands");
+		const line = await within(
+			this.out.next((text) => text.startsWith(COMMANDS_PREFIX)),
+			"command log",
+		);
+		return JSON.parse(line.slice(COMMANDS_PREFIX.length));
+	}
+
+	scheduledPackageCheck(): Promise<void> {
+		return this.command(
+			"scheduled-package-check",
+			CHECKED_MARKER,
+			"scheduled package check completion",
+		);
+	}
+
+	pausePackageCompare(): Promise<void> {
+		return this.command(
+			"pause-package-compare",
+			"backend:compare-armed",
+			"comparison barrier armed",
+		);
+	}
+
+	startCheckAndWaitForCapturedCompare(): Promise<void> {
+		return this.command(
+			"scheduled-package-check",
+			"backend:compare-captured",
+			"captured dpkg comparison",
+		);
+	}
+
+	resumePackageCompare(): Promise<void> {
+		return this.command(
+			"resume-package-compare",
+			CHECKED_MARKER,
+			"scheduled package check completion",
+		);
+	}
+
+	async startCheckAndCaptureHolds(): Promise<void> {
+		await this.command(
+			"pause-package-holds",
+			"backend:holds-armed",
+			"hold barrier armed",
+		);
+		await this.command(
+			"scheduled-package-check",
+			"backend:holds-captured",
+			"captured apt-mark answer",
+		);
+	}
+
+	// Holds the scheduled notice's next dpkg read, before it reads or after it answered.
+	async startCheckPausedAtDpkgRead(when: "before" | "after"): Promise<void> {
+		await this.command(
+			`pause-dpkg-read ${when}`,
+			"backend:dpkg-read-armed",
+			"dpkg read barrier armed",
+		);
+		await this.command(
+			"scheduled-package-check",
+			when === "before"
+				? "backend:dpkg-read-pending"
+				: "backend:dpkg-read-captured",
+			"paused dpkg read",
+		);
+	}
+
+	resumeDpkgRead(): Promise<void> {
+		return this.command(
+			"resume-dpkg-read",
+			CHECKED_MARKER,
+			"scheduled package check completion",
+		);
+	}
+
+	resumePackageHolds(): Promise<void> {
+		return this.command(
+			"resume-package-holds",
+			CHECKED_MARKER,
+			"scheduled package check completion",
+		);
 	}
 
 	private send(text: string): void {
@@ -292,12 +401,22 @@ class Tab {
 	readonly shown = new Map<string, Copy>();
 	// Every CeraLive show and removal the tab received, in order.
 	readonly history: ("show" | "remove")[] = [];
+	// The tracked notices' frames as received (see record()).
+	readonly frames: string[] = [];
+	readonly removedNames: string[] = [];
+	private readonly publishers = new Map<string, string>();
+	private readonly revisions = new Map<string, string>();
+	private connections = 0;
 	private socket: WebSocket | undefined;
 	private closed: Promise<void> = Promise.resolve();
 	private readonly answers = new Map<string, (frame: unknown) => void>();
 	private requests = 0;
 
-	constructor(readonly decoder: Decoder) {
+	constructor(
+		readonly decoder: Decoder,
+		private readonly tracks: (name: string) => boolean = (name) =>
+			name === NOTICE,
+	) {
 		live.push(this);
 	}
 
@@ -310,6 +429,12 @@ class Tab {
 	}
 
 	async connect(backend: Backend): Promise<void> {
+		await this.open(backend);
+		await this.authenticate();
+	}
+
+	async open(backend: Backend): Promise<void> {
+		this.connections++;
 		const socket = new WebSocket(`ws://127.0.0.1:${backend.port}/ws`);
 		this.socket = socket;
 		this.closed = new Promise((resolve) =>
@@ -327,6 +452,9 @@ class Tab {
 			}),
 			"socket open",
 		);
+	}
+
+	async authenticate(): Promise<void> {
 		const login = await this.request(["auth", "login"], {
 			password: SESSION_PASSWORD,
 		});
@@ -379,6 +507,7 @@ class Tab {
 			return;
 		}
 		if (!("notification" in frame)) return;
+		this.record(frame.notification);
 		if (this.decoder === "typed") {
 			const parsed = notificationsMessageSchema.safeParse(frame.notification);
 			if (!parsed.success) return;
@@ -397,13 +526,71 @@ class Tab {
 			if (typeof entry === "string") this.remove(entry);
 	}
 
+	// Only the entries of notices this tab tracks: other owners' re-sends depend on
+	// a one-second rate limit, so their frames depend on how fast the steps ran.
+	// Publishers and revisions become tokens in order of first sight, so the
+	// comparison keeps which copies share a process and a revision, not counters.
+	private record(notification: unknown): void {
+		if (typeof notification !== "object" || notification === null) return;
+		const { show, remove, replay } = notification as Record<string, unknown>;
+		const entries = (value: unknown) => (Array.isArray(value) ? value : []);
+		const idOf = (entry: unknown) =>
+			typeof entry === "string"
+				? entry
+				: typeof entry === "object" && entry !== null && "id" in entry
+					? entry.id
+					: undefined;
+		const nameOf = (entry: unknown) =>
+			typeof entry === "object" && entry !== null && "name" in entry
+				? entry.name
+				: undefined;
+		const tracked = (name: unknown) =>
+			typeof name === "string" && this.tracks(name);
+		const shown = entries(show).filter((entry) => tracked(nameOf(entry)));
+		const removed = entries(remove).filter((entry) => tracked(idOf(entry)));
+		if (shown.length + removed.length === 0) return;
+		const token = (map: Map<string, string>, prefix: string, key: string) => {
+			if (!map.has(key)) map.set(key, `${prefix}${map.size}`);
+			return map.get(key);
+		};
+		// A connection reaches one process: its revisions are that process's.
+		const revision = (entry: object) =>
+			"revision" in entry
+				? {
+						revision: token(
+							this.revisions,
+							"R",
+							`${this.connections}:${String(entry.revision)}`,
+						),
+					}
+				: {};
+		const publisher = (entry: object) =>
+			"publisher" in entry
+				? { publisher: token(this.publishers, "P", String(entry.publisher)) }
+				: {};
+		const normalized = (entry: unknown) =>
+			typeof entry === "object" && entry !== null
+				? { ...entry, ...revision(entry), ...publisher(entry) }
+				: entry;
+		this.frames.push(
+			JSON.stringify({
+				...(shown.length > 0 ? { show: shown.map(normalized) } : {}),
+				...(removed.length > 0 ? { remove: removed.map(normalized) } : {}),
+				...(replay === undefined ? {} : { replay }),
+			}),
+		);
+	}
+
 	private show(name: string, copy: Copy) {
-		if (name === NOTICE) this.history.push("show");
+		if (this.tracks(name)) this.history.push("show");
 		this.shown.set(name, copy);
 	}
 
 	private remove(name: string): void {
-		if (name === NOTICE) this.history.push("remove");
+		if (this.tracks(name)) {
+			this.history.push("remove");
+			this.removedNames.push(name);
+		}
 		this.shown.delete(name);
 	}
 }
@@ -460,6 +647,964 @@ const removals = (opened: readonly Tab[]) =>
 const histories = (opened: readonly Tab[]) => opened.map((tab) => tab.history);
 
 // Tabs that show the offer main's own backend raised in its own check (no record written).
+const noticePrefix = "update:updates-available:";
+const scheduledNotice = (name: string) =>
+	name.startsWith(noticePrefix) &&
+	!name.startsWith("update:updates-available:os:");
+
+const scheduledNames = (opened: readonly Tab[]) =>
+	names(opened).map((items) => items.filter(scheduledNotice));
+const scheduledTabs = () => [
+	new Tab("typed", scheduledNotice),
+	new Tab("v2026.7.2", scheduledNotice),
+];
+const bootPackage: AptPackage = {
+	name: "linux-image-7.2.0-ceralive-rk3588",
+	installed: "7.2.0",
+	candidate: "7.2.0",
+};
+
+// One step of a differential sequence; each ends with a scheduled check and a sync of every tab.
+type Act = {
+	readonly apt: AptScript;
+	// First, the first pair's typed tab dismisses its newest scheduled copy.
+	readonly dismiss?: true;
+	// First, the backend restarts (tabs keep their copies) as the next process of the run.
+	readonly restart?: true;
+	// First, another pair of tabs authenticates.
+	readonly join?: true;
+};
+// What every tab shows after a step, and every notification frame it received during it.
+type Observed = { readonly names: string[][]; readonly frames: string[][] };
+
+// The same steps on main's scheduler, on this branch, main then (after a restart)
+// this branch, or this branch, main, this branch again (each restart switches).
+async function playScheduled(
+	capable: boolean,
+	acts: readonly Act[],
+	run: "main" | "head" | "upgrade" | "rollback",
+): Promise<Observed[]> {
+	// Each run starts as a fresh device: no dismissal, offer record or receipt from the other.
+	await Promise.all(
+		[
+			dismissals,
+			record,
+			join(root, "scheduled_package_notices.json"),
+			join(root, "events"),
+		].map((path) => rm(path, { recursive: true, force: true })),
+	);
+	let main = run === "main" || run === "upgrade";
+	let backend = await Backend.start({ capable, canonicalScheduler: main });
+	const opened = scheduledTabs();
+	await reconnect(backend, opened);
+	const observed: Observed[] = [];
+	for (const act of acts) {
+		const before = new Map(opened.map((tab) => [tab, tab.frames.length]));
+		if (act.restart) {
+			await backend.close();
+			await Promise.all(opened.map((tab) => tab.dropped()));
+			if (run === "upgrade") main = false;
+			if (run === "rollback") main = !main;
+			backend = await Backend.start({ capable, canonicalScheduler: main });
+			await reconnect(backend, opened);
+		}
+		await backend.setApt(act.apt);
+		if (act.join) {
+			const pair = scheduledTabs();
+			await reconnect(backend, pair);
+			opened.push(...pair);
+		}
+		if (act.dismiss) {
+			const [typed] = opened;
+			const newest = typed?.names().filter(scheduledNotice).at(-1);
+			if (newest) await typed?.dismiss(newest);
+		}
+		await backend.scheduledPackageCheck();
+		await sync(opened);
+		observed.push({
+			names: scheduledNames(opened),
+			frames: opened.map((tab) => tab.frames.slice(before.get(tab) ?? 0)),
+		});
+	}
+	await backend.close();
+	await Promise.all(opened.map((tab) => tab.dropped()));
+	return observed;
+}
+
+const srtlaOffer = cerastream("1:1.0~rc1", "1:1.0+build2", { name: "srtla" });
+const tzdata: AptPackage = {
+	name: "tzdata",
+	source: "debian",
+	installed: "1",
+	candidate: "2",
+};
+const detachedRefresh = REFRESH.replace(
+	"Hit:1 https://deb.debian.org/debian-security trixie-security InRelease",
+	"Ign:1 https://deb.debian.org/debian-security trixie-security InRelease\nHit:3 https://deb.debian.org/debian-security trixie-security Release",
+);
+const offerOnly: AptScript = { upgradable: [srtlaOffer] };
+const unreadableCandidate: AptScript = {
+	...offerOnly,
+	fail: { "package-policy": "silent-exit-1" },
+};
+// Announce-only sequences: the offer stays pending throughout, so nothing may be withdrawn.
+const differential: readonly {
+	readonly label: string;
+	readonly acts: readonly Act[];
+	readonly run?: "upgrade" | "rollback";
+	readonly legacyOnly?: true;
+}[] = [
+	{
+		label:
+			"a refresh that falls back to a detached Release, a reconnect and a late tab",
+		acts: [
+			{ apt: offerOnly },
+			{ apt: { ...offerOnly, refresh: { stdout: detachedRefresh } } },
+			{ apt: offerOnly, restart: true },
+			{ apt: offerOnly, join: true },
+			{ apt: offerOnly },
+		],
+	},
+	{
+		label: "the displayed list grows by a held kept-back package",
+		acts: [
+			{ apt: offerOnly },
+			{ apt: { ...offerOnly, keptBack: [tzdata], holds: [tzdata.name] } },
+			{ apt: { ...offerOnly, keptBack: [tzdata] } },
+		],
+	},
+	{
+		label: "held, kept-back, unfinished, foreign, NEW and boot-held neighbours",
+		acts: [
+			{ apt: offerOnly },
+			{
+				apt: {
+					...offerOnly,
+					installed: [cerastream("2")],
+					holds: ["cerastream"],
+				},
+			},
+			{ apt: { ...offerOnly, keptBack: [cerastream("1", "2")] } },
+			{
+				apt: {
+					...offerOnly,
+					installed: [tzdata],
+					dpkgStatus: { tzdata: "iF " },
+				},
+			},
+			{
+				apt: {
+					upgradable: [
+						srtlaOffer,
+						{ ...tzdata, name: "libc6:armhf", arch: "armhf" },
+					],
+				},
+			},
+			{
+				apt: {
+					upgradable: [
+						srtlaOffer,
+						cerastream("(none)", "2", { name: "modemmanager" }),
+					],
+				},
+			},
+			{
+				apt: {
+					...offerOnly,
+					holds: [bootPackage.name],
+					installed: [bootPackage],
+				},
+			},
+		],
+	},
+	{
+		label: "removals and downgrades in the plan",
+		acts: [
+			{ apt: offerOnly },
+			{ apt: { ...offerOnly, removed: [tzdata] } },
+			{
+				apt: {
+					...offerOnly,
+					downgraded: [{ ...tzdata, installed: "2", candidate: "1" }],
+				},
+			},
+			{ apt: offerOnly },
+		],
+	},
+	{
+		label: "an epoch, tilde and plus candidate goes lower and back",
+		acts: [
+			{ apt: offerOnly },
+			{ apt: { upgradable: [{ ...srtlaOffer, candidate: "1:1.0" }] } },
+			{ apt: offerOnly },
+		],
+	},
+	{
+		label: "dismissed, then an unreadable candidate, then a changed display",
+		acts: [
+			{ apt: offerOnly },
+			{ apt: offerOnly, dismiss: true },
+			{ apt: unreadableCandidate },
+			{ apt: { ...offerOnly, keptBack: [tzdata] } },
+		],
+	},
+	{
+		label: "a candidate read that fails and recovers",
+		acts: [
+			{ apt: offerOnly },
+			{ apt: unreadableCandidate },
+			{ apt: offerOnly },
+			{ apt: { ...offerOnly, records: { srtla: "Package: srtla\n" } } },
+			{ apt: offerOnly },
+			{ apt: offerOnly, restart: true },
+		],
+	},
+	{
+		label: "tabs kept open across the upgrade from main",
+		run: "upgrade",
+		acts: [
+			{ apt: offerOnly },
+			{ apt: offerOnly, restart: true },
+			{ apt: offerOnly },
+		],
+	},
+	{
+		label:
+			"size estimate failing, partial, answering with an error exit, or timing out after an install",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "2") },
+			...[
+				{ exitCode: 100, stdout: "", stderr: "E: size unavailable\n" },
+				{ stdout: "Reading package lists...\n" },
+				{
+					exitCode: 100,
+					stderr: "E: Sub-process /usr/bin/dpkg returned an error code (1)\n",
+				},
+				{
+					exitCode: 124,
+					stdout: "Reading package lists...\nBuilding dependency tree...\n",
+					stderr: "timed out\n",
+				},
+				{},
+			].map((fallback) => ({
+				apt: { ...settled("2"), keptBack: [tzdata], fallback },
+			})),
+		],
+	},
+	{
+		label:
+			"a failed size estimate after an installed release, a newer dismissed release and late tabs",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "2") },
+			{ apt: settled("2") },
+			{ apt: pending("2", "3") },
+			{ apt: pending("2", "3"), dismiss: true },
+			...[1, 2].map(() => ({
+				apt: {
+					...settled("3"),
+					keptBack: [tzdata],
+					fallback: {
+						exitCode: 100,
+						stdout: "",
+						stderr: "E: size unavailable\n",
+					},
+				},
+				join: true as const,
+			})),
+		],
+	},
+	{
+		label:
+			"a refresh missing a configured source, cut short, failing or falling back after an install",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "2") },
+			{
+				apt: {
+					...settled("2"),
+					refresh: { stdout: REFRESH.split("\n").slice(1).join("\n") },
+				},
+			},
+			{
+				apt: {
+					...settled("2"),
+					refresh: { stdout: `${REFRESH.split("\n")[0]}\n` },
+				},
+			},
+			{ apt: failing(settled("2")) },
+			{ apt: { ...settled("2"), refresh: { stdout: detachedRefresh } } },
+			{ apt: settled("2") },
+		],
+	},
+	{
+		label: "a rollback to main and a new upgrade with tabs kept open",
+		legacyOnly: true,
+		run: "rollback",
+		acts: [
+			{ apt: pending("1", "2") },
+			{ apt: pending("2", "3"), restart: true },
+			{ apt: settled("2"), restart: true },
+			{ apt: settled("2") },
+		],
+	},
+	{
+		label:
+			"the same display set across versions, installed, then offered again",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "2") },
+			{ apt: pending("2", "3") },
+			{ apt: settled("3") },
+			{ apt: pending("3", "4") },
+		],
+	},
+	{
+		label: "a dismissal across restarts with the same and a newer candidate",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "2") },
+			{ apt: pending("1", "2"), dismiss: true },
+			{ apt: pending("1", "2"), restart: true },
+			{ apt: pending("1", "3") },
+			{ apt: pending("1", "3"), restart: true },
+		],
+	},
+	{
+		label: "a lower, then a newer candidate",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "3") },
+			{ apt: pending("1", "2.5") },
+			{ apt: pending("1", "4") },
+		],
+	},
+	{
+		label: "an unparseable or missing candidate record",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "2") },
+			{
+				apt: {
+					...pending("1", "2"),
+					records: {
+						cerastream: "Package: cerastream\nVersion: not-a-version\n",
+					},
+				},
+			},
+			{ apt: { ...pending("1", "2"), policyFails: ["cerastream"] } },
+			{ apt: pending("1", "2") },
+		],
+	},
+	{
+		label:
+			"an install proven while late tabs log in, with a stock boot hold and a kept-back neighbour",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "2") },
+			{ apt: settled("2"), join: true },
+			{ apt: { ...settled("2"), keptBack: [tzdata] } },
+			{
+				apt: {
+					holds: [bootPackage.name],
+					installed: [bootPackage, cerastream("2+b1")],
+				},
+			},
+		],
+	},
+	{
+		label:
+			"two versions, then installed while dpkg is held, below, half-configured or unpacked",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "2") },
+			{ apt: pending("2", "3") },
+			{ apt: { ...settled("3"), holds: ["cerastream"] } },
+			{ apt: settled("1") },
+			{ apt: { ...settled("3"), dpkgStatus: { cerastream: "iF " } } },
+			{ apt: { ...settled("3"), dpkgStatus: { cerastream: "iU " } } },
+			{ apt: settled("3") },
+		],
+	},
+	{
+		label: "two offers, one held before the proof",
+		legacyOnly: true,
+		acts: [
+			{ apt: { upgradable: [cerastream("1", "2"), srtlaOffer] } },
+			{ apt: { upgradable: [srtlaOffer], installed: [cerastream("2")] } },
+			{
+				apt: {
+					installed: [
+						cerastream("2"),
+						{ ...srtlaOffer, installed: srtlaOffer.candidate },
+					],
+					holds: ["cerastream"],
+				},
+			},
+		],
+	},
+	{
+		label: "a newer version after a dismissal, then a restart",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "2") },
+			{ apt: pending("2", "3") },
+			{ apt: settled("2") },
+			{ apt: pending("2", "3"), dismiss: true },
+			{ apt: pending("2", "4") },
+			{ apt: pending("2", "4"), restart: true },
+		],
+	},
+	{
+		label: "an installed offer while the optional size estimate keeps failing",
+		legacyOnly: true,
+		acts: [
+			{ apt: pending("1", "2") },
+			...[1, 2, 3].map(() => ({
+				apt: {
+					...settled("2"),
+					keptBack: [tzdata],
+					fallback: {
+						exitCode: 100,
+						stdout: "",
+						stderr: "E: size unavailable\n",
+					},
+				},
+			})),
+		],
+	},
+];
+
+for (const capable of [false, true])
+	for (const { label, acts, run, legacyOnly } of differential)
+		if (!capable || !legacyOnly)
+			test(
+				`scheduled package notice frames match main's exactly (${capable ? "capable" : "legacy"}, ${label})`,
+				async () => {
+					const main = await playScheduled(capable, acts, "main");
+					// The sequence exercises main's notice at all before it is compared.
+					expect(
+						main.some(({ names }) => names.some((ids) => ids.length > 0)),
+					).toBe(true);
+					expect(await playScheduled(capable, acts, run ?? "head")).toEqual(
+						main,
+					);
+				},
+				budget(2 * (1 + acts.filter((act) => act.restart).length)),
+			);
+
+class ModelMismatch extends Error {
+	constructor(
+		readonly invariant: string,
+		step: Operation,
+		actual: unknown,
+		expected: unknown,
+	) {
+		super(
+			`${invariant} after ${JSON.stringify(step)}: ${JSON.stringify({ actual, expected })}`,
+		);
+	}
+}
+
+const packageNotice = `${noticePrefix}cerastream=2`;
+const cleanTrace = async () => {
+	await Promise.all(
+		[dismissals, record, join(root, "events")].map((path) =>
+			rm(path, { recursive: true, force: true }),
+		),
+	);
+};
+
+async function runModel(capable: boolean, trace: readonly Operation[]) {
+	await cleanTrace();
+	const early = scheduledTabs();
+	const roaming = scheduledTabs();
+	const all = [...early, ...roaming];
+	const known = capable ? packageNotice : `${noticePrefix}cerastream=unknown`;
+	let backend = await Backend.start({ capable });
+	let baseline = false;
+	let link: "closed" | "open" | "authed" = "closed";
+	let recorded = false;
+	try {
+		await reconnect(backend, early);
+		for (const step of trace) {
+			const seen = all.map((tab) => tab.removedNames.length);
+			let expected: string | undefined;
+			switch (step.kind) {
+				case "check":
+					await backend.setApt(device(step.fact));
+					await backend.scheduledPackageCheck();
+					// This fixture has one possible issue name. Learn only whether it
+					// was issued, not the verdict, from the real announcement.
+					recorded ||= early.some((tab) => tab.shown.has(known));
+					if (capable && !baseline && recorded && attained(step.fact))
+						expected = known;
+					break;
+				case "restart":
+					await backend.close();
+					await Promise.all(all.map((tab) => tab.dropped()));
+					baseline = step.main;
+					backend = await Backend.start({
+						capable,
+						canonicalScheduler: baseline,
+					});
+					await reconnect(backend, early);
+					if (link === "authed") await reconnect(backend, roaming);
+					if (link === "open")
+						await Promise.all(roaming.map((tab) => tab.open(backend)));
+					break;
+				case "open":
+					if (link === "closed") {
+						await Promise.all(roaming.map((tab) => tab.open(backend)));
+						link = "open";
+					}
+					break;
+				case "auth":
+					if (link === "open") {
+						await Promise.all(roaming.map((tab) => tab.authenticate()));
+						link = "authed";
+					}
+					break;
+				case "disconnect":
+					await Promise.all(roaming.map((tab) => tab.close()));
+					link = "closed";
+					break;
+				case "dismiss":
+					if (early[0]?.shown.has(known)) await early[0].dismiss(known);
+					break;
+			}
+			await sync(link === "authed" ? all : early);
+			if (step.kind === "dismiss") continue; // Main's explicit user action.
+			for (const [index, tab] of all.entries()) {
+				const received = tab.removedNames.slice(seen[index]);
+				const delivered =
+					expected && (index < early.length || link === "authed")
+						? [expected]
+						: [];
+				if (JSON.stringify(received) !== JSON.stringify(delivered))
+					throw new ModelMismatch(
+						received.length ? "wrong withdrawal" : "missed withdrawal",
+						step,
+						received,
+						delivered,
+					);
+				if (delivered.length && tab.shown.has(known))
+					throw new ModelMismatch(
+						"copy survives remove",
+						step,
+						tab.names(),
+						[],
+					);
+			}
+		}
+	} finally {
+		await backend.close();
+		await Promise.all(all.map((tab) => tab.dropped()));
+	}
+}
+
+const seeds = (
+	process.env.CERALIVE_NOTICE_SEEDS ?? "0x684001,0x80d48c7a,0xc0ffee"
+)
+	.split(",")
+	.map(Number);
+for (const capable of [true, false])
+	for (const seed of seeds)
+		test(
+			`scheduled notice model (${capable ? "capable" : "legacy"}, seed ${seed.toString(16)})`,
+			async () => {
+				const trace = generate(seed);
+				try {
+					await runModel(capable, trace);
+				} catch (error) {
+					if (!(error instanceof ModelMismatch)) throw error;
+					const minimal =
+						process.env.CERALIVE_NOTICE_SHRINK === "1"
+							? await shrink(trace, async (candidate) => {
+									try {
+										await runModel(capable, candidate);
+										return false;
+									} catch (next) {
+										if (!(next instanceof ModelMismatch)) throw next;
+										return (
+											next.invariant === error.invariant &&
+											next.message === error.message
+										);
+									}
+								})
+							: trace;
+					throw new Error(
+						`${error.message}\nseed=${seed} trace=${JSON.stringify(minimal)}`,
+					);
+				}
+			},
+			budget(20),
+		);
+
+// The only commands the withdrawal adds to a check, all reads.
+const proofRead = (command: string) =>
+	command === "dpkg --print-architecture" ||
+	command.startsWith("dpkg-query -W -f=") ||
+	command.startsWith("dpkg --compare-versions ") ||
+	/^\/usr\/bin\/apt-cache policy [^ ]+$/.test(command);
+
+async function commandLog(capable: boolean, main: boolean) {
+	await cleanTrace();
+	const backend = await Backend.start({ capable, canonicalScheduler: main });
+	const opened = scheduledTabs();
+	await reconnect(backend, opened);
+	const log: string[][] = [];
+	for (const apt of [pending("1", "2"), settled("2"), settled("3")]) {
+		await scheduledStep(backend, apt, opened);
+		log.push(await backend.commands());
+	}
+	await backend.close();
+	await Promise.all(opened.map((tab) => tab.dropped()));
+	return log;
+}
+
+for (const capable of [false, true])
+	test(
+		`scheduled package notice runs main's commands, plus only trailing dpkg and apt reads on a capable image (${capable ? "capable" : "legacy"})`,
+		async () => {
+			const main = await commandLog(capable, true);
+			const head = await commandLog(capable, false);
+			if (!capable) {
+				expect(head).toEqual(main);
+				return;
+			}
+			const added = head.map((step, index) => {
+				const before = main[index] ?? [];
+				expect(step.slice(0, before.length)).toEqual(before);
+				return step.slice(before.length);
+			});
+			expect(added.flat().every(proofRead)).toBe(true);
+			// The pending check reads nothing; the installed one reads dpkg.
+			expect(added[0]).toEqual([]);
+			expect(added[1]?.[0]).toBe("dpkg --print-architecture");
+		},
+		budget(2),
+	);
+
+async function scheduledStep(
+	backend: Backend,
+	apt: AptScript,
+	opened: readonly Tab[],
+) {
+	await backend.setApt(apt);
+	await backend.scheduledPackageCheck();
+	await sync(opened);
+}
+
+// The reported bug: the scheduled notice outlives a recovered install of its offer.
+test(
+	"scheduled notice outliving a recovered install clears only at the next check",
+	async () => {
+		const offering = await Backend.start({ capable: true });
+		const opened = scheduledTabs();
+		await reconnect(offering, opened);
+		await scheduledStep(offering, pending("1", "2"), opened);
+		expect(scheduledNames(opened)).toEqual([[packageNotice], [packageNotice]]);
+		// The package script restarts the backend mid-transaction.
+		await offering.close();
+		await Promise.all(opened.map((tab) => tab.dropped()));
+		const recovering = await Backend.start({
+			capable: true,
+			apt: configuring("2"),
+		});
+		await reconnect(recovering, opened);
+		await recovering.setApt(settled("2"));
+		await recovering.recover();
+		expect((await recovering.ended()).exit).toBe(RESTART_EXIT_CODE);
+		await Promise.all(opened.map((tab) => tab.dropped()));
+		// Neither restart nor login withdraws anything.
+		const restarted = await Backend.start({ capable: true, apt: settled("2") });
+		await reconnect(restarted, opened);
+		expect(scheduledNames(opened)).toEqual([[packageNotice], [packageNotice]]);
+		expect(removals(opened)).toEqual([0, 0]);
+		await scheduledStep(restarted, settled("2"), opened);
+		expect(opened.map((tab) => tab.removedNames)).toEqual([
+			[packageNotice],
+			[packageNotice],
+		]);
+		expect(scheduledNames(opened)).toEqual([[], []]);
+		const late = scheduledTabs();
+		await reconnect(restarted, late);
+		expect(scheduledNames(late)).toEqual([[], []]);
+	},
+	budget(3),
+);
+
+const debianCurl: AptPackage = {
+	name: "curl",
+	installed: "1",
+	candidate: "2",
+	source: "debian",
+};
+const reinstalledCurl = `${noticePrefix}curl=2`;
+const combinedNotice = `${noticePrefix}cerastream=2,curl=2`;
+const narrowOffer: AptScript = {
+	upgradable: [offer, debianCurl],
+	inventory: INVENTORY.replace("o=Debian,", "o=Unknown,"),
+};
+const wideOffer: AptScript = { upgradable: [offer, debianCurl] };
+
+for (const trajectory of ["rollback", "old-index fallback"] as const)
+	test(
+		`scheduled notice never removes a still-unmet member after same-id ${trajectory}`,
+		async () => {
+			const retained = scheduledTabs();
+			const fresh = scheduledTabs();
+			const wideFirst = trajectory === "rollback";
+			const boot = await Backend.start({
+				capable: true,
+				canonicalScheduler: wideFirst,
+			});
+			await reconnect(boot, retained);
+			await scheduledStep(boot, wideFirst ? wideOffer : narrowOffer, retained);
+			expect(scheduledNames(retained)).toEqual([
+				[combinedNotice],
+				[combinedNotice],
+			]);
+			await boot.close();
+			await Promise.all(retained.map((tab) => tab.dropped()));
+			const other = await Backend.start({ capable: true });
+			const audience = wideFirst ? fresh : [...retained, ...fresh];
+			await reconnect(other, audience);
+			await scheduledStep(
+				other,
+				wideFirst
+					? narrowOffer
+					: {
+							...wideOffer,
+							refresh: {
+								stderr:
+									"W: Some index files failed to download. They have been ignored, or old ones used instead.\n",
+							},
+						},
+				audience,
+			);
+			expect(scheduledNames(fresh)).toEqual([
+				[combinedNotice],
+				[combinedNotice],
+			]);
+			await other.close();
+			await Promise.all(audience.map((tab) => tab.dropped()));
+			const last = await Backend.start({ capable: true });
+			const all = [...retained, ...fresh];
+			await reconnect(last, all);
+			await scheduledStep(
+				last,
+				{ installed: [installed, { ...debianCurl, candidate: "1" }] },
+				all,
+			);
+			expect(all.map((tab) => tab.removedNames)).toEqual([[], [], [], []]);
+			expect(scheduledNames(all)).toEqual(all.map(() => [combinedNotice]));
+		},
+		budget(3),
+	);
+
+test(
+	"scheduled notice requires all dpkg lines, clean status, and candidate equality for newer targets",
+	async () => {
+		const backend = await Backend.start({ capable: true });
+		const opened = scheduledTabs();
+		await reconnect(backend, opened);
+		await scheduledStep(backend, wideOffer, opened);
+		expect(scheduledNames(opened)).toEqual([
+			[combinedNotice],
+			[combinedNotice],
+		]);
+		const done = { installed: [installed, { ...debianCurl, installed: "2" }] };
+		const curled = "curl\tarm64\tii \t2\n";
+		const lines = `cerastream\tarm64\tii \t2\n${curled}`;
+		const negatives: readonly AptScript[] = [
+			...Array.from({ length: lines.length }, (_, end) => ({
+				...done,
+				proof: { "dpkg-query": { stdout: lines.slice(0, end) } },
+			})),
+			{
+				...done,
+				proof: {
+					"dpkg-query": { stderr: "dpkg-query: warning: incomplete read\n" },
+				},
+			},
+			{ ...done, proof: { "dpkg-query": { exitCode: 1 } } },
+			{ ...done, proof: { "dpkg-query": { stdout: `${lines}${curled}` } } },
+			{ ...done, proof: { "dpkg-query": { stdout: `${lines}malformed\n` } } },
+			{
+				...done,
+				proof: {
+					"dpkg-query": { stdout: lines.replace("curl\tarm64", "curl\tarmhf") },
+				},
+			},
+			{ ...done, fail: { "dpkg-query": "timeout" } },
+			{ ...done, fail: { "dpkg-query": "launch" } },
+			{ ...done, fail: { "dpkg-query": "signal" } },
+			{ ...done, holds: ["curl"] },
+			{ ...done, dpkgStatus: { curl: "iU " } },
+			{ ...done, dpkgStatus: { curl: "iF " } },
+			{ installed: [installed, { ...debianCurl, installed: "3" }] },
+			{
+				installed: [
+					installed,
+					{ ...debianCurl, installed: "3", candidate: "3" },
+				],
+				proof: {
+					"package-policy": {
+						stdout: "curl:\n  Installed: 2\n  Candidate: 3\n",
+					},
+				},
+			},
+			{
+				...done,
+				upgradable: [{ ...debianCurl, installed: "2" }],
+				installed: [installed],
+			},
+		];
+		for (const [index, apt] of negatives.entries()) {
+			await scheduledStep(backend, apt, opened);
+			expect({
+				index,
+				removals: opened.map((tab) => tab.removedNames),
+			}).toEqual({ index, removals: [[], []] });
+		}
+		// D4: no conclusion is drawn from absence in discovery, holds or inventory,
+		// and an unrelated kept-back package vetoes nothing (round 2).
+		await scheduledStep(
+			backend,
+			{
+				...done,
+				keptBack: [tzdata],
+				refresh: { stderr: "W: Duplicate target Packages in sources list\n" },
+				proof: { "apt-mark": { stdout: "unrelated-hold\n" } },
+			},
+			opened,
+		);
+		// The reinstall row above raised curl=2 on its own; it is attained too.
+		expect(opened.map((tab) => [...tab.removedNames].sort())).toEqual(
+			opened.map(() => [combinedNotice, reinstalledCurl].sort()),
+		);
+	},
+	budget(2),
+);
+
+test(
+	"scheduled notice uses dpkg's hold at the proof boundary, not the earlier apt-mark snapshot",
+	async () => {
+		const backend = await Backend.start({ capable: true });
+		const opened = scheduledTabs();
+		await reconnect(backend, opened);
+		await scheduledStep(backend, device("pending"), opened);
+		await backend.setApt(device("installed"));
+		await backend.startCheckAndCaptureHolds();
+		await backend.setApt(device("held"));
+		const late = scheduledTabs();
+		await reconnect(backend, late);
+		const all = [...opened, ...late];
+		await backend.resumePackageHolds();
+		await sync(all);
+		expect(all.map((tab) => tab.removedNames)).toEqual([[], [], [], []]);
+		expect(scheduledNames(all)).toEqual(all.map(() => [packageNotice]));
+		await scheduledStep(backend, device("installed"), all);
+		expect(scheduledNames(all)).toEqual([[], [], [], []]);
+	},
+	budget(1),
+);
+
+test(
+	"scheduled notice catches up following a missed withdrawal and Debian version skips",
+	async () => {
+		const initial = await Backend.start({
+			capable: true,
+			canonicalScheduler: true,
+		});
+		const retained = scheduledTabs();
+		await reconnect(initial, retained);
+		const old = `${noticePrefix}cerastream=1:1.0~rc1`;
+		const newer = `${noticePrefix}cerastream=1:1.0+build2`;
+		const versions = ["1:1.0~rc1", "1:1.0+build2"] as const;
+		for (const version of versions)
+			await scheduledStep(initial, pending("1", version), retained);
+		expect(scheduledNames(retained)).toEqual(retained.map(() => [old, newer]));
+		await initial.close();
+		await Promise.all(retained.map((tab) => tab.dropped()));
+		const backend = await Backend.start({ capable: true });
+		const early = scheduledTabs();
+		await reconnect(backend, early);
+		await scheduledStep(backend, settled(versions[1]), early);
+		expect(early.map((tab) => [...tab.removedNames].sort())).toEqual(
+			early.map(() => [old, newer].sort()),
+		);
+		await reconnect(backend, retained);
+		expect(scheduledNames(retained)).toEqual(retained.map(() => [old, newer]));
+		await scheduledStep(backend, settled(versions[1]), [...early, ...retained]);
+		expect(scheduledNames(retained)).toEqual([[], []]);
+	},
+	budget(2),
+);
+
+test(
+	"scheduled notice keeps a bare package's reinstall but accepts its installed all architecture",
+	async () => {
+		const backend = await Backend.start({ capable: true });
+		const opened = scheduledTabs();
+		await reconnect(backend, opened);
+		await scheduledStep(backend, device("pending"), opened);
+		const allArch = { ...installed, arch: "all" };
+		await scheduledStep(backend, { upgradable: [allArch] }, opened);
+		expect(opened.map((tab) => tab.removedNames)).toEqual([[], []]);
+		await scheduledStep(backend, { installed: [allArch] }, opened);
+		expect(opened.map((tab) => tab.removedNames)).toEqual([
+			[packageNotice],
+			[packageNotice],
+		]);
+		await scheduledStep(backend, device("pending"), opened);
+		await scheduledStep(backend, device("pending"), opened);
+		expect(histories(opened)).toEqual(
+			opened.map(() => ["show", "remove", "show"]),
+		);
+	},
+	budget(1),
+);
+
+test(
+	"scheduled notice fences a dismissal while allowing a late login to replay until proof",
+	async () => {
+		const backend = await Backend.start({ capable: true });
+		const opened = scheduledTabs();
+		const late = scheduledTabs();
+		await reconnect(backend, opened);
+		await scheduledStep(backend, device("pending"), opened);
+		await backend.setApt(device("installed"));
+		await backend.startCheckPausedAtDpkgRead("before");
+		await reconnect(backend, late);
+		expect(scheduledNames(late)).toEqual(late.map(() => [packageNotice]));
+		await opened[0]?.dismiss(packageNotice);
+		await backend.resumeDpkgRead();
+		const all = [...opened, ...late];
+		await sync(all);
+		// Main's user dismissal is typed-only; there is no automatic bare removal yet.
+		expect(all.map((tab) => tab.removedNames)).toEqual([
+			[packageNotice],
+			[],
+			[packageNotice],
+			[],
+		]);
+		await scheduledStep(backend, device("pending"), all);
+		expect(histories(all)).toEqual([
+			["show", "remove"],
+			["show"],
+			["show", "remove"],
+			["show"],
+		]);
+		await scheduledStep(backend, device("installed"), all);
+		expect(scheduledNames(all)).toEqual([[], [], [], []]);
+	},
+	budget(1),
+);
+
 async function olderBackendTabs(
 	state: AptScript = pending("1", "2"),
 	capable = false,

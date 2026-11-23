@@ -46,6 +46,7 @@ import {
 	getLastInstallUnitVerdict,
 	getUpdateState,
 	type InstallUnitVerdict,
+	isAptAllDiscovery,
 	recoverSoftwareUpdateIfRunning,
 	runSoftwareUpdateCheck,
 	type SoftwareUpdateError,
@@ -186,6 +187,7 @@ import {
 	retireStagedReceipt,
 } from "./os-staged-receipt-retirement.ts";
 import { settleOsUnlaunchedWitness } from "./os-unlaunched-adapter.ts";
+import { retireFulfilledPackageNotices } from "./package-notice-retirement.ts";
 import { progressFromWire } from "./package-progress.ts";
 import {
 	type PackageRecoveryEvidence,
@@ -1265,6 +1267,14 @@ async function runPackageCheckCycle(): Promise<void> {
 					},
 		);
 		await kernelRuntime.check();
+		if (isAptAllDiscovery())
+			await retireFulfilledPackageNotices(
+				wire.kind === "available"
+					? (wire.packages ?? []).map(
+							(item) => `${item.name}=${item.version ?? "unknown"}`,
+						)
+					: [],
+			);
 		return;
 	}
 	const rateLimited =

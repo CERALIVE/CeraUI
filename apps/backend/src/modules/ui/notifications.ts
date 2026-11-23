@@ -96,6 +96,31 @@ export type NotificationOptions = {
 };
 
 const persistentNotifications = new Map<string, PersistentNotification>();
+// Readers watching a name: a later show or dismissal of it breaks their watch.
+const fences = new Map<string, Set<{ intact: boolean }>>();
+
+/** Watches `name`; the returned call ends the watch: true if it was neither shown nor dismissed meanwhile. */
+export function fenceNotification(name: string): () => boolean {
+	const fence = { intact: true };
+	const open = fences.get(name) ?? new Set();
+	fences.set(name, open.add(fence));
+	return () => {
+		open.delete(fence);
+		if (open.size === 0 && fences.get(name) === open) fences.delete(name);
+		return fence.intact;
+	};
+}
+
+function breakFences(name: string): void {
+	for (const fence of fences.get(name) ?? []) fence.intact = false;
+}
+
+/** The live persistent notifications whose name starts with `prefix`. */
+export function persistentNotificationNames(prefix: string): string[] {
+	return [...persistentNotifications.keys()].filter((name) =>
+		name.startsWith(prefix),
+	);
+}
 // An owner's frames for each authenticating client, after the show replay.
 // Revisions start over when the backend restarts; this namespaces them.
 const publisher: string = crypto.randomUUID();
@@ -176,6 +201,7 @@ export function notificationSend(
 	let doSend = true;
 	let revision: number | undefined;
 	if (isPersistent) {
+		breakFences(name);
 		let pn = persistentNotifications.get(name);
 		if (pn) {
 			const releaseChanged = pn.dismissalKey !== dismissalKey;
@@ -295,6 +321,7 @@ export function notificationDismiss(
 	seen: NotificationSeen = {},
 	requester?: MessageSocket,
 ) {
+	breakFences(name);
 	const pn = persistentNotifications.get(name);
 	if (pn?.releaseScoped && !sawCurrentRelease(pn, seen)) {
 		if (requester && seen.revision !== undefined) resend(requester, pn);
