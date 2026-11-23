@@ -573,13 +573,13 @@
 				"countPlural"
 			],
 			"match": {
-				"countPlural=zero": "{count}  للتجميع",
+				"countPlural=zero": "{count} روابط جاهزة للتجميع",
 				"countPlural=one": "{count} رابط جاهز للتجميع",
-				"countPlural=two": "{count}  للتجميع",
+				"countPlural=two": "{count} رابطان جاهزان للتجميع",
 				"countPlural=few": "{count} روابط جاهزة للتجميع",
-				"countPlural=many": "{count} روابط جاهزة للتجميع",
-				"countPlural=other": "{count} روابط جاهزة للتجميع",
-				"countPlural=*": "{count} روابط جاهزة للتجميع"
+				"countPlural=many": "{count} رابطًا جاهزًا للتجميع",
+				"countPlural=other": "{count} رابط جاهز للتجميع",
+				"countPlural=*": "{count} رابط جاهز للتجميع"
 			}
 		}
 	],
@@ -779,12 +779,12 @@
 			],
 			"match": {
 				"countPlural=zero": "{count} روابط جاهزة",
-				"countPlural=one": "{count} رابط جاهزة",
-				"countPlural=two": "{count} رابطان جاهزة",
+				"countPlural=one": "{count} رابط جاهز",
+				"countPlural=two": "{count} رابطان جاهزان",
 				"countPlural=few": "{count} روابط جاهزة",
-				"countPlural=many": "{count} رابطًا جاهزة",
-				"countPlural=other": "{count} رابط جاهزة",
-				"countPlural=*": "{count} رابط جاهزة"
+				"countPlural=many": "{count} رابطًا جاهزًا",
+				"countPlural=other": "{count} رابط جاهز",
+				"countPlural=*": "{count} رابط جاهز"
 			}
 		}
 	],

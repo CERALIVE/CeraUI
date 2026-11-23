@@ -166,6 +166,11 @@ migration's mandate is byte parity; correcting the Arabic copy is a SEPARATE,
 separately-reviewed translation PR. Emit variants that reproduce the empty
 branches.
 
+**Since corrected.** That translation change has landed: `linksReadyCount` now
+has its own text for every Arabic category, `live.setup.linksReady` agrees its
+adjective with the masculine noun, and both keys' fixture entries were re-frozen
+with the copy. The inventory above stays as the migration-time record.
+
 ### 2e. Fixed count set
 
 The oracle renders every plural key at **{0, 1, 2, 5, 11, 100}** — the set that
