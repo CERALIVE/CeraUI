@@ -53,7 +53,11 @@ transition still broadcasts, including a same-state reconciliation.
 
 The launch transaction owns rollback and phase deadlines. Rollback completion is
 not idle proof: internal failure liveness is confirmed only before Start dispatch
-or after the matching rollback Stop acknowledges idle. The original failure
+or after the matching rollback Stop acknowledges idle. A Start refused as
+`already_streaming` sends no rollback Stop (the unscoped Stop would end the
+session that caused the refusal, which may be another client's) and stays
+unknown; a leftover session of our own then also waits for the operator's Stop.
+The original failure
 class/code is preserved when cleanup is unknown; no retry or replacement Start
 is admitted. Connect/subscribe acquisitions and Start submission recheck launch
 ownership. The retry runner starts the next connect attempt only after confirmed
