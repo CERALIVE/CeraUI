@@ -335,6 +335,9 @@ reads cannot prove a coherent set of candidates. Candidates
 are this process's live slots and main's `update_updates_available` event ids.
 Keep the name if it shares a row with the check, if a new package check starts,
 or if the name is shown or dismissed during the read (`fenceNotification`).
+The proof releases its watch even if the read throws. Expected command faults
+keep the name and let the pass continue. Unexpected faults end the proof pass
+and are logged without failing the package check.
 Do not add receipts, ledgers or lineage, do not
 conclude anything from absence, do not run it on legacy images (`=unknown` ids are
 unprovable) and never at startup or login. Full contract and limits:

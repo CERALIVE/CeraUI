@@ -21,7 +21,6 @@
  * docs/DEVICE-UPDATES.md, "The scheduled package notice".
  */
 
-import { SpawnTimeoutError } from "../../../helpers/bounded-spawn.ts";
 import { logger } from "../../../helpers/logger.ts";
 import { readEvents } from "../../events/store.ts";
 import {
@@ -84,13 +83,11 @@ function bounded(): Ask {
 			argv,
 			Math.min(PROBE_TIMEOUT_MS, left),
 			undefined,
-			"throw",
+			"throw-unexpected",
 		).catch((error: unknown) => {
 			if (
 				error instanceof PendingPackageSuccessError ||
-				error instanceof DisruptiveActionRefusal ||
-				error instanceof SpawnTimeoutError ||
-				(error instanceof Error && "code" in error && error.code === "ENOENT")
+				error instanceof DisruptiveActionRefusal
 			)
 				return null;
 			throw error;
@@ -175,10 +172,16 @@ export async function retireFulfilledPackageNotices(
 	for (const { id, targets } of provable) {
 		if (!isCurrent()) return;
 		const name = PREFIX + id;
-		const unchanged = fenceNotification(name);
-		const proven = await installed(targets, arch, ask);
+		const endWatch = fenceNotification(name);
+		let unchanged: boolean;
+		let proven: boolean;
+		try {
+			proven = await installed(targets, arch, ask);
+		} finally {
+			unchanged = endWatch();
+		}
 		// Shown again or dismissed while dpkg was read: keep it.
-		if (!unchanged() || !proven) continue;
+		if (!unchanged || !proven) continue;
 		if (!isCurrent()) return;
 		const live = notificationExists(name) !== undefined;
 		notificationWithdraw(name);

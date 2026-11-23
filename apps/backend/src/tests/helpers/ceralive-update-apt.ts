@@ -245,7 +245,7 @@ function failed(
 	if (how === "launch")
 		throw Object.assign(
 			new Error(`ENOENT: no such file or directory, posix_spawn '${argv[0]}'`),
-			{ code: "ENOENT" },
+			{ code: "ENOENT", errno: -2, syscall: "posix_spawn", path: argv[0] },
 		);
 	if (how === "timeout") throw new SpawnTimeoutError(argv.join(" "), partial);
 	if (how === "signal") return { exitCode: 137, stdout: partial, stderr: "" };
