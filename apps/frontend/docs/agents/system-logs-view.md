@@ -1014,8 +1014,13 @@ widths are not measured in this lane.
   height and the virtualized results reserve at least 88 CSS px. At the ends
   of either scroller, input can continue scrolling the surrounding view to
   reach the tabs and toolbar. The dialog header stays put. When a resize
-  clips a focused filter, keep it visible along with the results. The kiosk,
-  tablet and desktop keep their existing scroll ownership.
+  clips a focused filter, keep it visible along with the results. Tab and
+  toolbar dimensions change immediately in the short layout so they cannot
+  shift the results after that scroll alignment. The kiosk, tablet and desktop
+  keep their existing scroll ownership.
+- Portaled phone selects cap the popup at the space available on short
+  viewports. The options scroll inside it instead of clipping against the
+  browser edge, and retain their 44 CSS px target height.
 - `raw-logs-scroll-input.spec.ts` checks wheel, touch, Tab focus and clipped
   geometry in all ten locales and both themes, with filters open and closed
   at 390×440, 360×360, 320×480, 390×260 (simulated keyboard), 844×390,

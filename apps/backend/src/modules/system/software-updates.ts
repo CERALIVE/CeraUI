@@ -183,6 +183,10 @@ let actionableAppPackages: string[] = [];
 let actionableAllPackages: PinnedAptPackage[] = [];
 let aptAllRefusal: AptAllRefusalError | null = null;
 let aptAllMode = false;
+/** Whether the last discovery was the capable image's (apt-all-packages) one. */
+export function isAptAllDiscovery(): boolean {
+	return aptAllMode;
+}
 let discoveredPackages: UpdatePackage[] = [];
 let lastAptReachability: AptReachabilityWire | undefined;
 let delayedSoftwareUpdateStart: ReturnType<typeof setTimeout> | undefined;
@@ -266,7 +270,7 @@ export function setAptCommandRunnerForTest(
 	aptCommandRunner = runner ?? defaultAptCommandRunner;
 }
 
-async function runAptCommand(
+export async function runAptCommand(
 	argv: string[],
 	timeoutMs: number,
 	signal?: AbortSignal,

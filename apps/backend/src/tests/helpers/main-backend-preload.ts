@@ -9,7 +9,9 @@ import { plugin } from "bun";
 
 export const MAIN_BEFORE_NOTICE = "541ae1e2c3c7d6d746954bbb247a95b302990fbc";
 
-const git = (args: string[], cwd: string) => Bun.$`git ${args}`.cwd(cwd).text();
+const baseline = process.env.CERALIVE_TEST_BASELINE ?? MAIN_BEFORE_NOTICE;
+const git = (args: string[], cwd: string) =>
+	Bun.$`env GIT_MASTER=1 git ${args}`.cwd(cwd).text();
 const repo = (
 	await git(["rev-parse", "--show-toplevel"], import.meta.dir)
 ).trim();
@@ -19,7 +21,7 @@ const changed = (
 			"diff",
 			"--name-only",
 			"--diff-filter=M",
-			MAIN_BEFORE_NOTICE,
+			baseline,
 			"--",
 			"apps/backend/src",
 			":!apps/backend/src/tests",
@@ -35,7 +37,7 @@ const sources = new Map<string, string>(
 			async (path) =>
 				[
 					`${repo}/${path}`,
-					await git(["show", `${MAIN_BEFORE_NOTICE}:${path}`], repo),
+					await git(["show", `${baseline}:${path}`], repo),
 				] as const,
 		),
 	),
@@ -43,7 +45,7 @@ const sources = new Map<string, string>(
 const literal = (path: string) => path.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 
 plugin({
-	name: `backend at ${MAIN_BEFORE_NOTICE}`,
+	name: `backend at ${baseline}`,
 	setup(build) {
 		build.onLoad(
 			{

@@ -7,8 +7,9 @@
 // the real package check over scripted APT, `apt <json>` replaces the device's
 // APT state, `recover` recovers a finished install through the real completion
 // path up to the update's deliberate restart, which it holds until `exit` (so a
-// test can sync its tabs first), `exit` ends it. The notice's dpkg readback reads
-// the same scripted device. With `olderBackend` it is started with
+// test can sync its tabs first), `exit` ends it. The scheduled-check driver
+// adds barriers before/after the fake dpkg read and after apt-mark. The
+// notice readbacks see the same scripted device. With `olderBackend` it is started with
 // main-backend-preload.ts: main's backend from before this notice owner, whose
 // own check raises the notice the way main did, and which never initializes or
 // writes the offer record.
@@ -18,6 +19,16 @@ import { setStreamLivenessSourceForTest } from "../../modules/system/stream-live
 import { setStreamReconciliationCompletedForTest } from "../../modules/system/stream-reconciliation-latch.ts";
 import { setCeraliveSourcesFileForTest } from "../../modules/system/update-apt-channel.ts";
 import { setUpdateCapabilityPathForTest } from "../../modules/system/update-capabilities.ts";
+import { DownloadPausedLedger } from "../../modules/system/update-orchestrator/download-paused-ledger.ts";
+import { DownloadPausedNotices } from "../../modules/system/update-orchestrator/download-paused-notices.ts";
+import { UpdateQuarantine } from "../../modules/system/update-orchestrator/quarantine.ts";
+import {
+	checkUpdatesNow,
+	runOrchestratorTick,
+	setOrchestratorRuntimeDepsForTest,
+	setOrchestratorStateForTest,
+} from "../../modules/system/update-orchestrator/runtime.ts";
+import { initialOrchestratorState } from "../../modules/system/update-orchestrator/types.ts";
 import { setUpdateSettingsFilePathForTest } from "../../modules/system/update-settings.ts";
 import { getServer, initServer } from "../../rpc/server.ts";
 import { setPasswordHash } from "../../rpc/state/password.ts";
@@ -25,6 +36,7 @@ import {
 	APPLIED_MARKER,
 	type AptScript,
 	CHECKED_MARKER,
+	COMMANDS_PREFIX,
 	HYDRATED_MARKER,
 	READY_PREFIX,
 	RECOVERY_FAILED_MARKER,
@@ -40,6 +52,7 @@ export type SessionStep = {
 	// The device's APT answers for this process's whole life.
 	readonly apt?: AptScript;
 	readonly olderBackend?: boolean;
+	readonly canonicalScheduler?: boolean;
 	readonly capable?: boolean;
 	readonly failWrites?: boolean;
 	readonly recoverFails?: boolean;
@@ -73,7 +86,55 @@ updates.setAptReachabilityProbeForTest(async () => ({
 	detail: [],
 }));
 let apt = scriptedApt(step.apt ?? {});
-updates.setAptCommandRunnerForTest((argv) => apt(argv));
+let nextPolicyState:
+	| { readonly pkg: string; readonly apt: AptScript }
+	| undefined;
+let compareGate: ReturnType<typeof Promise.withResolvers<void>> | undefined;
+let holdGate: ReturnType<typeof Promise.withResolvers<void>> | undefined;
+// The next dpkg-query this runner serves pauses before it reads, or after it answered.
+let readGate:
+	| {
+			readonly when: "before" | "after";
+			readonly gate: ReturnType<typeof Promise.withResolvers<void>>;
+	  }
+	| undefined;
+let releaseRead: (() => void) | undefined;
+// Discovery and the scheduled package notice read the device through this runner.
+// Every command discovery and the scheduled notice ran, for `commands`.
+const ran: string[] = [];
+const gated = async (argv: readonly string[]) => {
+	ran.push(argv.join(" "));
+	const paused = argv[0] === "dpkg-query" ? readGate : undefined;
+	if (paused) readGate = undefined;
+	if (paused?.when === "before") {
+		process.stdout.write("backend:dpkg-read-pending\n");
+		await paused.gate.promise;
+	}
+	const answer = await apt(argv);
+	if (
+		nextPolicyState &&
+		argv[0] === "/usr/bin/apt-cache" &&
+		argv[1] === "policy" &&
+		argv[2] === nextPolicyState.pkg
+	) {
+		apt = scriptedApt(nextPolicyState.apt);
+		nextPolicyState = undefined;
+	}
+	if (paused?.when === "after") {
+		process.stdout.write("backend:dpkg-read-captured\n");
+		await paused.gate.promise;
+	}
+	if (argv[0] === "dpkg" && argv[1] === "--compare-versions" && compareGate) {
+		process.stdout.write("backend:compare-captured\n");
+		await compareGate.promise;
+	}
+	if (argv[0] === "/usr/bin/apt-mark" && argv[1] === "showhold" && holdGate) {
+		process.stdout.write("backend:holds-captured\n");
+		await holdGate.promise;
+	}
+	return answer;
+};
+updates.setAptCommandRunnerForTest(gated);
 // Set once the finished install reached the update's own restart.
 let restarting = false;
 setPasswordHash(
@@ -104,8 +165,76 @@ for await (const command of console) {
 	} else if (command.startsWith("apt ")) {
 		apt = scriptedApt(JSON.parse(command.slice(4)));
 		process.stdout.write(`${APPLIED_MARKER}\n`);
+	} else if (command.startsWith("swap-after-policy ")) {
+		nextPolicyState = JSON.parse(command.slice("swap-after-policy ".length));
+		process.stdout.write(`${APPLIED_MARKER}\n`);
+	} else if (command === "pause-package-compare") {
+		compareGate = Promise.withResolvers<void>();
+		process.stdout.write("backend:compare-armed\n");
+	} else if (command === "pause-package-holds") {
+		holdGate = Promise.withResolvers<void>();
+		process.stdout.write("backend:holds-armed\n");
+	} else if (command === "resume-package-holds") {
+		holdGate?.resolve();
+		holdGate = undefined;
+	} else if (command.startsWith("pause-dpkg-read ")) {
+		const gate = Promise.withResolvers<void>();
+		readGate = {
+			when: command.endsWith("before") ? "before" : "after",
+			gate,
+		};
+		releaseRead = gate.resolve;
+		process.stdout.write("backend:dpkg-read-armed\n");
+	} else if (command === "resume-dpkg-read") {
+		releaseRead?.();
+		releaseRead = undefined;
+	} else if (command === "resume-package-compare") {
+		compareGate?.resolve();
+		compareGate = undefined;
+	} else if (command === "commands") {
+		process.stdout.write(
+			`${COMMANDS_PREFIX}${JSON.stringify(ran.splice(0))}\n`,
+		);
 	} else if (command === "check") {
 		void updates.runSoftwareUpdateCheck().then(
+			() => process.stdout.write(`${CHECKED_MARKER}\n`),
+			(error) => process.stderr.write(`check failed ${String(error)}\n`),
+		);
+	} else if (command === "manual-package-check") {
+		const result = await checkUpdatesNow();
+		process.stdout.write(`backend:manual-check:${result.started}\n`);
+	} else if (command === "scheduled-package-check") {
+		// Take the real scheduler path at a due, idle check boundary without
+		// running unrelated OS observers or touching the machine's state.
+		const now = Date.now();
+		setOrchestratorStateForTest(initialOrchestratorState(now));
+		setOrchestratorRuntimeDepsForTest({
+			now: () => now,
+			persist: () => undefined,
+			isUpdateAdmissionReady: async () => true,
+			readOsReceiptEvidence: async () => undefined,
+			isReceiptAckPending: () => false,
+			observeCredentials: async () => undefined,
+			onlyMeteredCandidateExists: async () => false,
+			quarantine: new UpdateQuarantine(`${step.scratch}/quarantine.json`),
+			loadSettings: async () => ({
+				packagesAuto: true,
+				systemAuto: false,
+				schedule: { mode: "any-idle", start: "03:00", end: "05:00" },
+				channel: "stable",
+				allowPackagesOverCellular: false,
+				allowSystemOverCellular: false,
+			}),
+			downloadNotices: new DownloadPausedNotices({
+				ledger: new DownloadPausedLedger(
+					`${step.scratch}/download-notices.json`,
+				),
+				publish: () => undefined,
+				clear: () => undefined,
+				report: () => undefined,
+			}),
+		});
+		void runOrchestratorTick().then(
 			() => process.stdout.write(`${CHECKED_MARKER}\n`),
 			(error) => process.stderr.write(`check failed ${String(error)}\n`),
 		);

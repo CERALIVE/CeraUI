@@ -681,16 +681,19 @@ export function notePublishedNetifSnapshot(
 	}
 }
 
+export function getIdentityDeadlineAt(ifname: string): number | undefined {
+	const firstSeen = identityFirstPublishedAt.get(ifname);
+	return firstSeen === undefined
+		? undefined
+		: firstSeen + IDENTITY_READINESS_DEADLINE_MS;
+}
+
 export function identityDeadlineExpired(
 	ifname: string,
 	now: number = getms(),
 ): boolean {
-	const firstSeen = identityFirstPublishedAt.get(ifname);
-	if (
-		firstSeen === undefined ||
-		now - firstSeen < IDENTITY_READINESS_DEADLINE_MS
-	)
-		return false;
+	const deadline = getIdentityDeadlineAt(ifname);
+	if (deadline === undefined || now < deadline) return false;
 	if (!usbNetScanCovers(ifname) && !identityDeadlineWarnings.has(ifname)) {
 		identityDeadlineWarnings.add(ifname);
 		logger.warn("USB identity deadline expired; using fallback identity", {

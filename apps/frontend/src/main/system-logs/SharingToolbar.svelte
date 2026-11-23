@@ -44,7 +44,7 @@ let {
 >
 	<Button
 		bind:ref={bundleButton}
-		class="h-auto max-w-full gap-1.5 py-1.5 whitespace-normal max-sm:flex-auto"
+		class="h-auto max-w-full gap-1.5 py-1.5 whitespace-normal max-sm:flex-auto short-logs:transition"
 		data-testid="sharing-toolbar-bundle"
 		data-variant="outline"
 		onclick={() => void sharing.openBundle()}
@@ -55,7 +55,7 @@ let {
 	</Button>
 	<Button
 		bind:ref={exportButton}
-		class="h-auto max-w-full gap-1.5 py-1.5 whitespace-normal max-sm:flex-auto"
+		class="h-auto max-w-full gap-1.5 py-1.5 whitespace-normal max-sm:flex-auto short-logs:transition"
 		data-testid="sharing-toolbar-export"
 		data-variant="default"
 		onclick={() => sharing.openExport()}

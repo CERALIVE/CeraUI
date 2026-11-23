@@ -64,6 +64,77 @@ async function swipe(session: CDPSession, { x, y }: { x: number; y: number }, di
 	await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
 }
 
+for (const size of [{ width: 390, height: 260 }, { width: 360, height: 240 }, { width: 412, height: 300 }]) {
+	test(`Raw Time keeps the first option readable and tappable at ${size.width}×${size.height} @mobile-only`, async ({ page }) => {
+		const logs = new SystemLogsPage(page);
+		await logs.open({ locale: 'en', size, touch: false, scheme: 'light' });
+		await logs.show('raw');
+		await page.getByTestId('raw-filters-toggle').tap();
+		const time = page.getByTestId('raw-time');
+		const menu = page.getByRole('listbox');
+		const first = menu.getByRole('option', { name: 'This boot', exact: true });
+		const reachFirst = async () => {
+			await expect(first).toBeAttached();
+			await logs.settle();
+			const target = await region(first);
+			expect(target.boxHeight).toBeGreaterThanOrEqual(44);
+			expect(target.visible, 'the first option must be fully visible without browser auto-scrolling').toBe(target.boxHeight);
+			expect(target.hit).toBe(true);
+			await page.touchscreen.tap(target.x, target.y);
+			await expect(menu).toHaveCount(0);
+		};
+
+		await time.tap();
+		await reachFirst();
+		await time.tap();
+		await menu.getByRole('option', { name: 'Last 15 minutes', exact: true }).tap();
+		await expect(time).toHaveText('Last 15 minutes');
+		await time.tap();
+		await reachFirst();
+		await expect(time).toHaveText('This boot');
+	});
+}
+
+test('Raw results stay visible on a second short resize after using Time @mobile-only', async ({ page }, info) => {
+	const logs = new SystemLogsPage(page);
+	await logs.open({ locale: 'en', size: OPENING, touch: false, scheme: 'light' });
+	await logs.show('raw');
+	const filters = page.getByTestId('raw-filters');
+	const toggle = page.getByTestId('raw-filters-toggle');
+	const search = page.getByTestId('raw-search');
+	const list = page.getByTestId('raw-scroller');
+	const raw = page.getByTestId('system-logs-view').getByRole('tab').nth(1);
+	const focusSearch = async () => {
+		await raw.focus();
+		await page.keyboard.press('Tab');
+		await expect(filters.getByRole('radio', { checked: true }).first()).toBeFocused();
+		await page.keyboard.press('Tab');
+		await expect(search).toBeFocused();
+	};
+	await toggle.tap();
+	await focusSearch();
+	await page.setViewportSize({ width: 667, height: 350 });
+	await logs.settle();
+	const time = page.getByTestId('raw-time');
+	await time.tap();
+	await expect(page.getByRole('listbox')).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(page.getByRole('listbox')).toHaveCount(0);
+	await expect(time).toBeFocused();
+
+	await page.setViewportSize(OPENING);
+	await focusSearch();
+	await page.setViewportSize({ width: 390, height: 260 });
+	await logs.settle();
+	await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+	await expect(search).toBeFocused();
+	const results = await region(list);
+	const focus = await region(search);
+	await info.attach('second short resize', { body: JSON.stringify({ results, focus }), contentType: 'application/json' });
+	expect(focus.visible + 0.5).toBeGreaterThanOrEqual(focus.boxHeight);
+	expect(results.visible, '88 px of entries must remain visible without scrolling again').toBeGreaterThanOrEqual(87.5);
+});
+
 for (const locale of LOCALES) {
 	for (const scheme of ['light', 'dark'] as const) {
 		test(`${locale} ${scheme}: Raw filters and results remain reachable by input on short screens @mobile-only`, async ({ page }, info) => {
