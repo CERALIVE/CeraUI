@@ -15,6 +15,8 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import fs, { constants } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import type { AddonConfig, AddonState } from "@ceraui/rpc/schemas";
 
 import {
@@ -60,8 +62,32 @@ export function setConfigFilePath(filePath: string): void {
 
 let config: RuntimeConfig = {};
 let authorityFailure: RuntimeConfigAuthorityError | undefined;
+export type BondPinConfig = Pick<
+	RuntimeConfig,
+	"bond_opt_out" | "bond_group_opt_out"
+>;
+let savedConfig: object & BondPinConfig = {};
+let pending: BondPinConfig | undefined;
+let inFlight: Promise<void> | undefined;
+let failedAttempts = 0;
+let scansUntilRetry = 0;
+
+function snapshotSavedConfig(raw: unknown, bond: BondPinConfig): void {
+	savedConfig = {
+		...(typeof raw === "object" && raw !== null ? raw : {}),
+		bond_opt_out: structuredClone(bond.bond_opt_out),
+		bond_group_opt_out: structuredClone(bond.bond_group_opt_out),
+	};
+}
+
+function clearPendingSave(): void {
+	pending = undefined;
+	failedAttempts = 0;
+	scansUntilRetry = 0;
+}
 
 export async function loadConfig() {
+	clearPendingSave();
 	authorityFailure = new RuntimeConfigAuthorityError();
 	let raw: unknown;
 	try {
@@ -80,6 +106,7 @@ export async function loadConfig() {
 		{ parsed: raw },
 	);
 	config = coerceLegacySource(result.data);
+	snapshotSavedConfig(structuredClone(raw), config);
 	authorityFailure = undefined;
 
 	// Apply mock pairing AFTER file load so it overrides any absent/undefined remote_key in config.json
@@ -112,10 +139,104 @@ export function saveConfig() {
 		password_hash: getPasswordHash(),
 		ssh_pass_hash: getSshPasswordHash(),
 	};
-	// Must stay sync: sync callers (setBitrate/setAutostart) depend on the write
-	// finishing before return. Atomic (temp+fsync+rename) so a crash mid-write
-	// can't corrupt config.json — add-on state lives here too (E3).
-	writeFileAtomicSync(configFile, JSON.stringify(dataToSave));
+	const contents = JSON.stringify(dataToSave);
+	writeFileAtomicSync(configFile, contents);
+	snapshotSavedConfig(JSON.parse(contents), dataToSave);
+	clearPendingSave();
+}
+
+async function persistPendingConfig(): Promise<void> {
+	const writing = pending;
+	if (writing === undefined) {
+		inFlight = undefined;
+		return;
+	}
+	const target = configFile;
+	const temp = join(
+		dirname(target),
+		`.${basename(target)}.scan.${process.pid}.tmp`,
+	);
+	let opened = false;
+	try {
+		const nextSaved = { ...savedConfig, ...writing };
+		const contents = JSON.stringify(nextSaved);
+		const file = await fs.promises.open(
+			temp,
+			constants.O_WRONLY |
+				constants.O_CREAT |
+				constants.O_TRUNC |
+				constants.O_NOFOLLOW |
+				constants.O_NONBLOCK,
+			0o600,
+		);
+		opened = true;
+		try {
+			await file.writeFile(contents);
+			await file.sync();
+		} finally {
+			await file.close();
+		}
+		if (pending !== writing || configFile !== target) return;
+		// No yield between the fence and publication: a synchronous save or
+		// reload can supersede this draft without relying on staged-file cleanup.
+		fs.renameSync(temp, target);
+		opened = false;
+		savedConfig = nextSaved;
+		clearPendingSave();
+	} catch (error) {
+		if (pending && !authorityFailure && configFile === target) {
+			if (failedAttempts === 0)
+				logger.warn("bond: could not persist twin port exclusions", { error });
+			// Try the first few commits, then back off by at most eight commits.
+			failedAttempts = Math.min(failedAttempts + 1, 6);
+			scansUntilRetry = failedAttempts < 3 ? 0 : 2 ** (failedAttempts - 3);
+		}
+	} finally {
+		if (opened) {
+			await fs.promises.unlink(temp).catch((error: unknown) => {
+				if (
+					!(
+						error instanceof Error &&
+						"code" in error &&
+						error.code === "ENOENT"
+					)
+				) {
+					logger.warn("bond: could not remove staged twin port exclusions", {
+						error,
+					});
+				}
+			});
+		}
+		inFlight = undefined;
+	}
+}
+
+/** Reconcile only scan-owned edits against the last successful load/save. */
+export function saveConfigInBackground(
+	reconcile?: (bond: BondPinConfig) => void,
+): Promise<void> | undefined {
+	if (reconcile === undefined) return inFlight;
+	const base = pending ?? savedConfig;
+	const bond: BondPinConfig = {
+		bond_opt_out: base.bond_opt_out,
+		bond_group_opt_out: base.bond_group_opt_out,
+	};
+	reconcile(bond);
+	if (
+		bond.bond_opt_out !== base.bond_opt_out ||
+		bond.bond_group_opt_out !== base.bond_group_opt_out
+	) {
+		pending = bond;
+	}
+	if (pending && inFlight === undefined) {
+		if (scansUntilRetry > 0) {
+			scansUntilRetry--;
+			return undefined;
+		}
+		// Defer even preparation until after the winning scan has published.
+		inFlight = Promise.resolve().then(persistPendingConfig);
+	}
+	return inFlight;
 }
 
 /** False until a strict load has succeeded; the boot owner retries until it does. */

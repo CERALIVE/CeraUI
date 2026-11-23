@@ -24,7 +24,7 @@
   the resolver the same facts in the same order.
 */
 
-import { getUsbPhysicalDescriptor } from "../network/router-cellular-scan.ts";
+import { getUsbPhysicalDescriptor } from "../network/usb-physical-descriptors.ts";
 
 import {
 	describePhysicalBondKeys,

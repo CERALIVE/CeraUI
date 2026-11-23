@@ -44,7 +44,8 @@ board. Changing pacing/start-limit policy remains an owner/image decision.
 
 Every file CeraUI's backend writes at runtime, grouped by durability
 category. "Atomic" means the write goes through `writeFileAtomicSync`
-(`apps/backend/src/helpers/config-loader.ts:278`): write to a sibling temp
+(`apps/backend/src/helpers/config-loader.ts:278`) or its asynchronous runtime
+config equivalent: write to a sibling temp
 file, `fsync`, then `rename` over the target — a crash mid-write can never
 leave a truncated or half-written file on disk, because POSIX `rename` is
 atomic. The exact temp-file name is:
@@ -60,6 +61,23 @@ orphan matching that one pattern and nothing else. T7's boot sweep
 (`apps/backend/src/helpers/boot-cleanup.ts`, wired into `main.ts` right after
 config load) matches that exact glob (`/^\.[^./][^/]*\.\d+\.tmp$/`) and unlinks
 any leftover from a prior crash, fail-soft, every boot.
+
+USB twin scan changes use a separate `.config.json.scan.<pid>.tmp` sibling,
+also covered by the boot sweep. Scan publication uses the updated in-memory
+config without waiting for disk. A later scan can retry pin reconciliation
+against the last successfully loaded or saved config. It does not publish
+unsaved operator edits, including bond edits. After asynchronous staging, the
+draft check and final rename run without yielding; a successful
+`saveConfig()` or reload supersedes an older draft even if staged-file cleanup
+fails. Other runtime config writes keep their synchronous contract.
+
+A settled include from a dormant pin's own group releases that pin, even if
+the twin currently reports a different PID or product string. An include alone
+on an unrelated replacement does not release a dormant pin; an off/on toggle
+does replace it with the operator's port setting. It does not grant the original
+twin membership in a group it was never included in. For a confirmed shared
+serial, a previously granted port keeps that grant across toggles made without
+the serial. While the port is disabled, its exact exclusion wins.
 
 Damaged-record preservation is a separate immutable-copy writer. Its discoverable
 `<file>.damaged-<sha256>` name is unchanged. Before allocating any temp it strictly
