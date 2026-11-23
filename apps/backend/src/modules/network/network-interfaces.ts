@@ -35,7 +35,11 @@ import { logger } from "../../helpers/logger.ts";
 import { run } from "../../helpers/run.ts";
 import { ACTIVE_TO } from "../../helpers/shared.ts";
 import { getms } from "../../helpers/time.ts";
-import { getMockState, shouldUseMocks } from "../../mocks/mock-service.ts";
+import {
+	getMockState,
+	isDevelopment,
+	shouldUseMocks,
+} from "../../mocks/mock-service.ts";
 import {
 	getMockIfconfigOutput,
 	getMockModemNetMarker,
@@ -45,6 +49,7 @@ import { isBondLinkMappable } from "../streaming/bond-entry.ts";
 // Type-only: erased at build time, so it adds no runtime edge back into
 // `modules/streaming/`, which imports this module.
 import type { BondMappingState } from "../streaming/link-mapping-report.ts";
+import { isRealDevice } from "../system/device-detection.ts";
 import {
 	notificationBroadcast,
 	notificationRemove,
@@ -75,6 +80,7 @@ import {
 	refreshDongleMetadata,
 } from "./dongle-metadata.ts";
 import { ethernetRoleForWire, isSharedLanPort } from "./ethernet-role.ts";
+import { shouldUseMockMonitor } from "./monitor/mock-monitor.ts";
 import { advanceNetifTopologyGeneration } from "./netif-topology-generation.ts";
 import {
 	getRouterCellularAdmin,
@@ -1737,6 +1743,40 @@ function countActiveNetif() {
 	return count;
 }
 
+// Resolved once at boot so `handleNetif` decides and writes in one synchronous
+// step: an await here would let a later request overtake an earlier disable.
+let lastUplinkGuardOnRealDevice = false;
+
+export async function initLastUplinkGuard(): Promise<void> {
+	lastUplinkGuardOnRealDevice = await isRealDevice();
+}
+
+/**
+ * Would disabling `name` take out the only link the bond would use? Real
+ * devices only: development, mock mode, the scripted network monitor and the
+ * native hwsim guest (`HWSIM_REPO=/repo`, set by its VM runner) keep the
+ * raw-count guard alone.
+ */
+function removesLastBondCandidate(
+	name: string,
+	int: NetworkInterface,
+): boolean {
+	if (
+		!lastUplinkGuardOnRealDevice ||
+		isDevelopment() ||
+		shouldUseMockMonitor() ||
+		process.env.HWSIM_REPO === "/repo" ||
+		!isBondCandidate(name, int)
+	) {
+		return false;
+	}
+	for (const other in netif) {
+		const entry = netif[other];
+		if (other !== name && entry && isBondCandidate(other, entry)) return false;
+	}
+	return true;
+}
+
 /**
  * Whether `handleNetif` applied anything, and if not, why.
  *
@@ -1779,6 +1819,20 @@ function finishBondMutation(
 	return { ok: true, applied };
 }
 
+function refuseDisableAll(
+	conn: WebSocket,
+	msg: NetworkInterfaceMessage["netif"],
+): NetifApplyOutcome {
+	notificationSend(
+		conn,
+		"netif_disable_all",
+		"error",
+		"Can't disable all networks",
+		10,
+	);
+	return finishBondMutation(msg, { ok: false, reason: "disable_all_refused" });
+}
+
 export function handleNetif(
 	conn: WebSocket,
 	msg: NetworkInterfaceMessage["netif"],
@@ -1810,6 +1864,9 @@ export function handleNetif(
 					reason: "bond_unmappable",
 				});
 			}
+			if (!msg.enabled && removesLastBondCandidate(msg.name, int)) {
+				return refuseDisableAll(conn, msg);
+			}
 			setBondOptOut(msg.name, !msg.enabled);
 			triggerNetworkInterfacesChange();
 			conn.send(buildMsg("netif", netIfBuildMsg()));
@@ -1831,20 +1888,11 @@ export function handleNetif(
 					reason: "enable_refused",
 				});
 			}
-		} else {
-			if (int.enabled && countActiveNetif() === 1) {
-				notificationSend(
-					conn,
-					"netif_disable_all",
-					"error",
-					"Can't disable all networks",
-					10,
-				);
-				return finishBondMutation(msg, {
-					ok: false,
-					reason: "disable_all_refused",
-				});
-			}
+		} else if (
+			(int.enabled && countActiveNetif() === 1) ||
+			removesLastBondCandidate(msg.name, int)
+		) {
+			return refuseDisableAll(conn, msg);
 		}
 
 		int.enabled = msg.enabled;

@@ -95,6 +95,7 @@ import {
 import { reconcileIngestDesiredState } from "./modules/network/network-ingest-control.ts";
 import {
 	handleNetifMonitorEvent,
+	initLastUplinkGuard,
 	initNetworkInterfaceMonitoring,
 	updateNetif,
 } from "./modules/network/network-interfaces.ts";
@@ -530,6 +531,7 @@ void guardNonCritical("update-bootstrap", () =>
 	}),
 );
 
+await guardNonCritical("last-uplink-guard", initLastUplinkGuard);
 initNetworkInterfaceMonitoring();
 initUplinkHealth();
 await guardNonCritical("uplink-steering", initUplinkSteering);
