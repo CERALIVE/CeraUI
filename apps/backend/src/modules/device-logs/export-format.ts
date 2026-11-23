@@ -60,28 +60,31 @@ export function exportHeader(
 	// Replace held values in a string, then check the serialized value again:
 	// JSON escaping can turn other text into a held value (a line break becomes
 	// a backslash and "n"). A value that still matches is replaced as a whole.
+	const fallback =
+		known(REDACTED_HEADER_VALUE).redactions === 0
+			? REDACTED_HEADER_VALUE
+			: '""';
 	const value = (raw: string | number | null): string => {
 		const serialized = JSON.stringify(
 			typeof raw === "string" ? known(raw).text : raw,
 		);
 		const content =
 			typeof raw === "string" ? serialized.slice(1, -1) : serialized;
-		return known(content).redactions === 0 ? serialized : REDACTED_HEADER_VALUE;
+		return known(content).redactions === 0 ? serialized : fallback;
 	};
 	const versionLines = (context: VersionContext) =>
 		Object.entries(context).map(([key, raw]) => `${key}: ${value(raw)}`);
-	const filter = Object.entries({
-		sources: [...new Set(query.sources)].sort(),
-		levels: [...new Set(query.levels)].sort(),
-		text: query.text,
-		since: query.since,
-		until: query.until,
-	})
-		.filter(([, raw]) => raw !== undefined)
-		.map(
-			([key, raw]) =>
-				`${JSON.stringify(key)}:${Array.isArray(raw) ? `[${raw.map(value).join(",")}]` : value(raw as string | number)}`,
-		);
+	const array = (values: readonly string[]) => {
+		const serialized = `[${[...new Set(values)].sort().map(value).join(",")}]`;
+		return known(serialized).redactions === 0 ? serialized : fallback;
+	};
+	const filter = [
+		`"sources":${array(query.sources)}`,
+		`"levels":${array(query.levels)}`,
+		...(query.text === undefined ? [] : [`"text":${value(query.text)}`]),
+		...(query.since === undefined ? [] : [`"since":${value(query.since)}`]),
+		...(query.until === undefined ? [] : [`"until":${value(query.until)}`]),
+	];
 	const lines = [
 		"exported-by",
 		...versionLines(current),
@@ -92,7 +95,7 @@ export function exportHeader(
 				: ["versions: not recorded"]),
 		]),
 		`filter: {${filter.join(",")}}`,
-		`createdAt: ${new Date(at).toISOString()}`,
+		`createdAt: ${known(new Date(at).toISOString()).text}`,
 		"newest first",
 		...shortValuesLines(unredacted, known),
 		"may contain sensitive data: review before sharing",

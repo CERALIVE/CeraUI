@@ -4,12 +4,14 @@ import { getStoredModemCredentials } from "../modems/modem-credentials.ts";
 import { getModems } from "../modems/modems-state.ts";
 import { getRouterCellularMarkers } from "../network/router-cellular-scan.ts";
 import { getRelays } from "../remote/remote-relays.ts";
+import { getManagedIngestAccounts } from "../remote-control/ingest-slots.ts";
 import { getDeviceStatsSnapshot } from "../system/device-stats-snapshot.ts";
 import { getHardwareKindCached } from "../system/hardware-kind.ts";
 import { readUpdateChannel } from "../system/update-settings.ts";
 import { collectVersionContext } from "../system/version-context.ts";
 import { getAllHotspotCredentials } from "../wifi/hotspot-credentials.ts";
 import { listBoots } from "./boots.ts";
+import { MIN_REDACTED_LENGTH } from "./redaction.ts";
 import { getLogSettings, getLogState } from "./settings.ts";
 
 interface BundleData {
@@ -35,8 +37,8 @@ interface BundleData {
 /**
  * Held kinds whose values the log export still sends when they are too short
  * for the matcher (`MIN_REDACTED_LENGTH`). They name a stream, an APN account,
- * a router account or a device rather than unlock something: a manually set
- * SRT stream ID is often a short label such as "cam". A short value of any
+ * a router account or a device. Short stream IDs are treated as labels only
+ * with no receiver configured or with a loopback receiver. A short value of any
  * other kind, including the APN and router passwords, the relay stream key
  * and any kind added later, still stops the export.
  */
@@ -62,7 +64,21 @@ export function collectHeldSecrets(): Array<{ kind: string; value: string }> {
 	add("password", config.password);
 	add("ssh", config.ssh_pass);
 	add("remote_key", config.remote_key);
-	add("stream", config.srt_streamid);
+	const externalReceiver =
+		config.srtla_addr &&
+		config.srtla_addr !== "127.0.0.1" &&
+		config.srtla_addr !== "::1";
+	const shortAmbiguousStream =
+		(config.srt_streamid?.length ?? 0) < MIN_REDACTED_LENGTH &&
+		(externalReceiver || config.relay_server || config.relay_account);
+	add(
+		config.selected_ingest_endpoint || shortAmbiguousStream
+			? "ingest_key"
+			: "stream",
+		config.srt_streamid,
+	);
+	for (const account of getManagedIngestAccounts())
+		add("ingest_key", account.key);
 	// The relay override carries the selected account's ingest key.
 	add("relay", config.relay_streamid_override);
 	add("pairing", config.pairing_secret);
