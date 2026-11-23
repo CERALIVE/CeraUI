@@ -10,6 +10,42 @@ export function bondPhysicalId(ifname: string): string | undefined {
 	return identity.linkId;
 }
 
+/**
+ * Read-only view of the exclusion change a disable would make. A stable key
+ * can exclude multiple live rows; deleting a legacy key can also admit a row
+ * whose exclusion is not migrated to an observed exact identity.
+ */
+export function previewBondOptOut(target: string) {
+	const identity = resolveBondPhysicalIdentity(target, "preview");
+	const exact = identity?.anchor === "ifname" ? undefined : identity?.linkId;
+	const legacy = exact === undefined ? undefined : identity?.legacyLinkId;
+	const stored = getConfig().bond_opt_out;
+	const migrated = new Set(
+		legacy !== undefined && stored?.[legacy] === true
+			? listPresentPhysicalDevices()
+					.filter(
+						(row) => row.anchor !== "ifname" && row.legacyLinkId === legacy,
+					)
+					.map((row) => row.linkId)
+			: [],
+	);
+	return (name: string, phase: "before" | "after") => {
+		if (sessionOptOut.has(name) || (phase === "after" && name === target))
+			return true;
+		const peer = resolveBondPhysicalIdentity(name, "preview");
+		if (peer === undefined || peer.anchor === "ifname") return false;
+		const excluded = (key: string) =>
+			phase === "before"
+				? stored?.[key] === true
+				: key !== legacy &&
+					(key === exact || migrated.has(key) || stored?.[key] === true);
+		return (
+			excluded(peer.linkId) ||
+			(peer.legacyLinkId !== undefined && excluded(peer.legacyLinkId))
+		);
+	};
+}
+
 export function isBondOptedOut(ifname: string): boolean {
 	if (sessionOptOut.has(ifname)) return true;
 	const identity = resolveBondPhysicalIdentity(ifname);

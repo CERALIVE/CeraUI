@@ -342,6 +342,15 @@ export function listPresentPhysicalDevices(): readonly PhysicalDeviceRecord[] {
 export function resolvePhysicalDevice(
 	observation: PhysicalObservation,
 ): PhysicalDeviceRecord {
+	const record = describePhysicalDevice(observation);
+	records.set(record.identityKey, record);
+	return record;
+}
+
+/** Project an identity without publishing it to the link-ID registry. */
+export function describePhysicalDevice(
+	observation: PhysicalObservation,
+): PhysicalDeviceRecord {
 	const stableKey = deriveModemStableKey(observation.idPath);
 	const { identityKey, anchor } = resolveIdentityKey(observation, stableKey);
 	const serial = usableSerial(observation);
@@ -366,7 +375,7 @@ export function resolvePhysicalDevice(
 				}
 			: undefined;
 
-	const record: PhysicalDeviceRecord = {
+	return {
 		identityKey,
 		anchor,
 		linkId: mintLinkId(identityKey),
@@ -383,9 +392,6 @@ export function resolvePhysicalDevice(
 			? { routerAdmin: observation.routerAdmin }
 			: {}),
 	};
-
-	records.set(identityKey, record);
-	return record;
 }
 
 /** The record behind a minted `link_id`, for the consumers of todos 11 and 12. */

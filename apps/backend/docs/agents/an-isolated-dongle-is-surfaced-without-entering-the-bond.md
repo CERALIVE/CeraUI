@@ -1298,6 +1298,21 @@ a bit the error path overwrites. A link that cannot be DESCRIBED
 (`isMappableEntry`: valid iface name, valid `link_id`, non-empty ip) is not made
 eligible by wishing.
 
+**Disabling the last effective WAN candidate.** After boot confirms a real
+device and installs the real network monitor, `network.configure` refuses an
+off request that would take the sender's candidate set from nonempty to empty.
+The decision accounts for mapped duplicates, shared physical identities and
+stored exclusions, not just the raw enabled bits. It runs synchronously before
+changing interface state, publishing the change, or attempting a config save.
+The existing refusal tells the operator to include another uplink first.
+
+The old input checks and raw-count refusal still apply. Boot before confirmation,
+overlay/mock, simulated monitor, hwsim and emulated paths retain their old
+behavior. Only a new last-candidate refusal takes precedence over a storage
+error the skipped save might have encountered; all writes that actually run
+keep their usual error handling. Membership is not a guarantee of link health,
+and this rule does not prevent unplugging the last uplink.
+
 **…AND THE NOTICE THE OPERATOR SEES IS A SEPARATE, RE-EVALUATED DECISION.**
 The flag above answers a policy question; `netif_dup_ip` answers an honesty one,
 and it is decided by `decideDupIpNotice(groups, deps)`

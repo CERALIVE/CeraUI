@@ -86,7 +86,10 @@ import {
 	stopGatewayRoutes,
 } from "./modules/network/gateway-route-lifecycle.ts";
 import { UPDATE_GW_INT, updateGwWrapper } from "./modules/network/gateways.ts";
-import { createMonitorManager } from "./modules/network/monitor/monitor-manager.ts";
+import {
+	createMonitorManager,
+	NmcliMonitorManager,
+} from "./modules/network/monitor/monitor-manager.ts";
 import {
 	buildGatewayProbe,
 	refreshAndBroadcastNetworkIngest,
@@ -96,6 +99,7 @@ import { reconcileIngestDesiredState } from "./modules/network/network-ingest-co
 import {
 	handleNetifMonitorEvent,
 	initNetworkInterfaceMonitoring,
+	setBondDisableGuardContext,
 	updateNetif,
 } from "./modules/network/network-interfaces.ts";
 import { initSharingDiag } from "./modules/network/sharing-diag/runtime.ts";
@@ -318,7 +322,8 @@ if (!configAvailableAtBind) {
 //     crashes and the WS server (bound above) stays reachable. ---
 
 // Recovery must finish before an update may install any new UID routing rule.
-if (await isRealDevice())
+const realDeviceAtBoot = await isRealDevice();
+if (realDeviceAtBoot)
 	void guardNonCritical("update-route-sweep", async () => {
 		await reconcileOsStageStartup();
 	});
@@ -540,6 +545,10 @@ await guardNonCritical("sharing-diag", initSharingDiag);
 const networkMonitor = createMonitorManager(() => updateNetif());
 networkMonitor.on("monitor-event", handleNetifMonitorEvent);
 networkMonitor.start();
+setBondDisableGuardContext(
+	realDeviceAtBoot,
+	networkMonitor instanceof NmcliMonitorManager,
+);
 
 // Event-driven wifi: same monitor drives connection up/down + diff broadcast
 wifiStateInit(networkMonitor);

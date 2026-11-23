@@ -1,6 +1,9 @@
 import { logger } from "../../helpers/logger.ts";
 import type { PhysicalDeviceRecord } from "../modems/physical-identity.ts";
-import { resolveModemPhysicalIdentity } from "../modems/physical-identity-source.ts";
+import {
+	describeModemPhysicalIdentity,
+	resolveModemPhysicalIdentity,
+} from "../modems/physical-identity-source.ts";
 import {
 	type BondEntry,
 	isMappableEntry,
@@ -11,6 +14,12 @@ export type BondIdentityResolver = typeof resolveModemPhysicalIdentity;
 
 let identityResolver: BondIdentityResolver = resolveModemPhysicalIdentity;
 
+function bondIdentity(ifname: string, mode: "observe" | "preview") {
+	return mode === "preview" && identityResolver === resolveModemPhysicalIdentity
+		? describeModemPhysicalIdentity(ifname)
+		: identityResolver(ifname);
+}
+
 export function setBondIdentityResolverForTest(
 	fn: BondIdentityResolver | null,
 ): void {
@@ -19,9 +28,10 @@ export function setBondIdentityResolverForTest(
 
 export function resolveBondPhysicalIdentity(
 	ifname: string,
+	mode: "observe" | "preview" = "observe",
 ): PhysicalDeviceRecord | undefined {
 	try {
-		return identityResolver(ifname);
+		return bondIdentity(ifname, mode);
 	} catch {
 		return undefined;
 	}
@@ -31,9 +41,10 @@ export function describeBondEntry(
 	ifname: string,
 	ip: string,
 	logFailure = true,
+	mode: "observe" | "preview" = "observe",
 ): BondEntry {
 	try {
-		const record = identityResolver(ifname);
+		const record = bondIdentity(ifname, mode);
 		return {
 			ip,
 			iface: ifname,
@@ -51,6 +62,10 @@ export function describeBondEntry(
 	}
 }
 
-export function isBondLinkMappable(ifname: string, ip: string): boolean {
-	return isMappableEntry(describeBondEntry(ifname, ip, false));
+export function isBondLinkMappable(
+	ifname: string,
+	ip: string,
+	mode: "observe" | "preview" = "observe",
+): boolean {
+	return isMappableEntry(describeBondEntry(ifname, ip, false, mode));
 }

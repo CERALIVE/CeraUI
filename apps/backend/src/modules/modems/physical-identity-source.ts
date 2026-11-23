@@ -27,6 +27,7 @@
 import { getUsbPhysicalDescriptor } from "../network/router-cellular-scan.ts";
 
 import {
+	describePhysicalDevice,
 	type PhysicalDeviceRecord,
 	type PhysicalObservation,
 	resolvePhysicalDevice,
@@ -45,8 +46,21 @@ export function resolveModemPhysicalIdentity(
 	ifname: string,
 	extra: Omit<PhysicalObservation, "ifname"> = {},
 ): PhysicalDeviceRecord {
+	return resolvePhysicalDevice(observeModemIdentity(ifname, extra));
+}
+
+export function describeModemPhysicalIdentity(
+	ifname: string,
+): PhysicalDeviceRecord {
+	return describePhysicalDevice(observeModemIdentity(ifname));
+}
+
+function observeModemIdentity(
+	ifname: string,
+	extra: Omit<PhysicalObservation, "ifname"> = {},
+): PhysicalObservation {
 	const descriptor = getUsbPhysicalDescriptor(ifname);
-	return resolvePhysicalDevice({
+	return {
 		ifname,
 		...(descriptor !== undefined
 			? {
@@ -72,5 +86,5 @@ export function resolveModemPhysicalIdentity(
 				}
 			: {}),
 		...extra,
-	});
+	};
 }
