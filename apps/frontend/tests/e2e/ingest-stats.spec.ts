@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import type { LinkTelemetryMessage, ModemList, NetifMessage } from "@ceraui/rpc/schemas";
+import type { LinkTelemetryMessage, ModemList, NetifMessage, StatusResponse } from "@ceraui/rpc/schemas";
 import type { WebSocketRoute } from "@playwright/test";
 
 import { expect, test } from "./fixtures/index.js";
@@ -71,9 +71,13 @@ test.describe("Task 21 — ingest stats panel", () => {
 	);
 
 	let pageWs: WebSocketRoute | null;
+	let streaming: boolean;
+	let seq: number;
 
 	test.beforeEach(async ({ page }) => {
 		pageWs = null;
+		streaming = true;
+		seq = 9_000_000;
 
 		// Force streaming on (so the streaming-only panel mounts) and drop the
 		// backend's null linkTelemetry so injected frames are the only source.
@@ -86,7 +90,8 @@ test.describe("Task 21 — ingest stats panel", () => {
 				try {
 					const frame = JSON.parse(text) as { status?: Record<string, unknown> };
 					if (frame?.status) {
-						frame.status.is_streaming = true;
+						frame.status.is_streaming = streaming;
+						delete frame.status.stream_lifecycle;
 						delete frame.status.linkTelemetry;
 						ws.send(JSON.stringify(frame));
 						return;
@@ -110,6 +115,46 @@ test.describe("Task 21 — ingest stats panel", () => {
 				status: { is_streaming: true, linkTelemetry: links === null ? null : { links } },
 			}),
 		);
+	}
+
+	for (const [locale, labels] of [
+		["en", ["Peak", "Avg", "Drops", "Duration", "Transferred"]],
+		["es", ["Pico", "Prom", "Caídas", "Duración", "Transferido"]],
+		["ar", ["الذروة", "المتوسط", "حالات الانقطاع", "المدة", "المنقول"]],
+	] as const) {
+		test(`summary labels fit at 390 px in ${locale} @mobile-only`, async ({ page }) => {
+			await page.setViewportSize({ width: 390, height: 844 });
+			await page.addInitScript((code) => {
+				localStorage.setItem("locale", JSON.stringify({ code }));
+				localStorage.removeItem("ceraui.live.detailsOpen");
+			}, locale);
+			await page.reload();
+			await ensureAuthenticated(page);
+			await navigateTo(page, "live");
+			await expect(page.locator("html")).toHaveAttribute("lang", locale);
+			const send = (status: StatusResponse) => {
+				if (!pageWs) throw new Error("Missing Live control socket");
+				pageWs.send(JSON.stringify({ status, seq: ++seq }));
+			};
+			send({ is_streaming: true, stream_lifecycle: "streaming", linkTelemetry: {
+				links: TWO_LINKS,
+				measured_bps: 4_200_000,
+				bytes_sent_total: 7 * 1024 * 1024,
+			} });
+			const panel = page.getByTestId("ingest-stats");
+			await expect(panel.getByTestId("ingest-row")).toHaveCount(2);
+			await expect(panel).toBeHidden();
+			streaming = false;
+			send({ is_streaming: false, stream_lifecycle: "idle", linkTelemetry: null });
+			const summary = panel.getByTestId("ingest-summary");
+			await expect(summary).toBeVisible();
+			for (const text of labels) {
+				const label = summary.getByText(text, { exact: true });
+				await expect(label).toBeVisible();
+				// A CSS ellipsis leaves full text in the DOM but clips its painted width.
+				expect(await label.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+			}
+		});
 	}
 
 	test("populated: two link rows render with totals summing to 100%", async ({
@@ -239,6 +284,7 @@ test("a standalone modems frame updates the bonded name on Live, HUD and Network
 		links: [{ conn_id: "0", link_id: "modem-31", iface: "wwan3", rtt_ms: rtt, nak_count: 0, weight_percent: 100, stale: false }],
 	});
 	socket.send(JSON.stringify({ status: { is_streaming: true, linkTelemetry: sample(20) } }));
+	await openLiveDetails(page);
 	const row = page.locator('[data-testid="ingest-row"][data-iface="wwan3"]');
 	const name = row.locator("[data-link-name]");
 	await expect(name).toContainText("Northwind");
@@ -254,6 +300,12 @@ test("a standalone modems frame updates the bonded name on Live, HUD and Network
 	// No new aggregate status or telemetry frame yet: only Live used to lag.
 	await expect(name).toContainText(carrier);
 	await expect(name).toHaveText(`${carrier} · RM520N`);
+	const viewport = page.viewportSize();
+	if (!viewport) throw new Error("Live naming check needs a configured viewport");
+	await page.setViewportSize({ width: 390, height: 844 });
+	const glance = page.getByRole("region", { name: "Stream", exact: true });
+	await expect(glance.getByText(`${carrier} · RM520N`, { exact: true })).toBeVisible();
+	await page.setViewportSize(viewport);
 
 	socket.send(JSON.stringify({ status: { linkTelemetry: sample(23) } }));
 	await expect(row.getByTestId("ingest-rtt")).toHaveText("23 ms");

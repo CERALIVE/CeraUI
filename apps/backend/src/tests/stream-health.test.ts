@@ -345,4 +345,75 @@ describe("broadcastHealthIfChanged — transition-only broadcast", () => {
 		const second = broadcastHealthIfChanged();
 		expect(second.state).toBe("healthy");
 	});
+
+	test("publishes lost bond evidence without recovery, then publishes a fresh recovery", () => {
+		const sink: string[] = [];
+		const client = captureClient(sink);
+		const up = { ...HEALTHY, linkCount: 2, activeLinks: 2 };
+		const down = { ...up, activeLinks: 0 };
+		const unknown = {
+			...down,
+			bondActivityUnknown: true,
+		} satisfies LivenessSources;
+		let source = down;
+		setLivenessSourcesForTest(() => source);
+		addClient(client);
+		try {
+			for (const frame of [down, unknown, unknown, up, unknown, up]) {
+				source = frame;
+				broadcastHealthIfChanged();
+			}
+			const frames = healthPayloads(sink);
+			expect(frames.map((frame) => frame.state)).toEqual([
+				"degraded",
+				"unknown",
+				"healthy",
+				"unknown",
+				"healthy",
+			]);
+			expect(frames[0]).toMatchObject({
+				bond: { linkCount: 2, activeLinks: 0 },
+				reason: { component: "links" },
+			});
+			expect(frames[1]).toMatchObject({
+				bond: { linkCount: 2, activity_unknown: true },
+			});
+			expect(frames[1]).not.toHaveProperty("reason");
+			expect(frames[2]).toMatchObject({
+				bond: { linkCount: 2, activeLinks: 2 },
+			});
+			expect(frames[3]).toMatchObject({ bond: { activity_unknown: true } });
+			expect(frames[4]).not.toHaveProperty("bond.activity_unknown");
+		} finally {
+			removeClient(client);
+		}
+	});
+
+	test("publishes changed bond detail even when a frame stall keeps health degraded", () => {
+		const sink: string[] = [];
+		const client = captureClient(sink);
+		let source = FRAME_STALL;
+		setLivenessSourcesForTest(() => source);
+		addClient(client);
+		try {
+			broadcastHealthIfChanged();
+			source = { ...FRAME_STALL, activeLinks: 0, bondActivityUnknown: true };
+			broadcastHealthIfChanged();
+			broadcastHealthIfChanged();
+			expect(healthPayloads(sink)).toMatchObject([
+				{
+					state: "degraded",
+					reason: { component: "frames" },
+					bond: { linkCount: 3, activeLinks: 3 },
+				},
+				{
+					state: "degraded",
+					reason: { component: "frames" },
+					bond: { linkCount: 3, activity_unknown: true },
+				},
+			]);
+		} finally {
+			removeClient(client);
+		}
+	});
 });

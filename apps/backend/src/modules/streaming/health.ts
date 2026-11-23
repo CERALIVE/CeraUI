@@ -30,6 +30,7 @@ export interface LivenessSources {
 	reconnectCount: number;
 	linkCount: number;
 	activeLinks: number;
+	bondActivityUnknown?: true;
 }
 
 export const HEALTH_EVENT_TYPE = "health";
@@ -90,6 +91,9 @@ function deriveReason(s: LivenessSources): StreamHealthReason | undefined {
 	if (s.framesAdvancing !== true) {
 		return { component: "frames", detail: "No frames advancing" };
 	}
+	if (s.bondActivityUnknown) {
+		return undefined;
+	}
 	if (s.linkCount === 0) {
 		return { component: "links", detail: "No bonded links configured" };
 	}
@@ -119,16 +123,18 @@ export function deriveStreamHealth(s: LivenessSources): StreamHealthOutput {
 	} else if (
 		s.captureState === "standby" ||
 		s.framesAdvancing !== true ||
-		s.linkCount === 0 ||
-		s.activeLinks < s.linkCount
+		(!s.bondActivityUnknown &&
+			(s.linkCount === 0 || s.activeLinks < s.linkCount))
 	) {
 		state = "degraded";
+	} else if (s.bondActivityUnknown) {
+		state = "unknown";
 	} else {
 		state = "healthy";
 	}
 
 	const reason =
-		state === "healthy" || state === "idle" ? undefined : deriveReason(s);
+		state === "degraded" || state === "dead" ? deriveReason(s) : undefined;
 
 	return {
 		state,
@@ -142,7 +148,11 @@ export function deriveStreamHealth(s: LivenessSources): StreamHealthOutput {
 			reconnecting: idle ? null : s.reconnecting,
 			reconnectCount: s.reconnectCount,
 		},
-		bond: { linkCount: s.linkCount, activeLinks: s.activeLinks },
+		bond: {
+			linkCount: s.linkCount,
+			activeLinks: s.activeLinks,
+			...(s.bondActivityUnknown ? { activity_unknown: true } : {}),
+		},
 	};
 }
 
@@ -185,30 +195,25 @@ export function clearStreamProcessExit(): void {
 	processExited = false;
 }
 
-// Bond counts from the srtla stats file's per-link entries (fresh-within-threshold
-// = active). No telemetry snapshot yet while streaming ⇒ fall back to the
-// configured source-IP count so the bond is not misreported as "none configured"
-// during the first ~1s before srtla_send writes its stats (none are active yet).
-// Idle ⇒ no srtla process, no telemetry ⇒ 0/0.
-function deriveBond(isStreaming: boolean): {
-	linkCount: number;
-	activeLinks: number;
-} {
+// A roster (even one with fresh rates) doesn't establish connectivity. A
+// file-only or stale source can supply a count but not the sender's verdict.
+function deriveBond(
+	isStreaming: boolean,
+): Pick<LivenessSources, "linkCount" | "activeLinks" | "bondActivityUnknown"> {
+	if (!isStreaming) return { linkCount: 0, activeLinks: 0 };
 	const telemetry = buildLinkTelemetry();
-	if (telemetry) {
-		return {
-			linkCount: telemetry.links.length,
-			activeLinks: telemetry.links.filter((link) => !link.stale).length,
-		};
-	}
-	if (isStreaming)
-		return { linkCount: genSrtlaIpList().length, activeLinks: 0 };
-	return { linkCount: 0, activeLinks: 0 };
+	return {
+		linkCount: telemetry?.links.length ?? genSrtlaIpList().length,
+		activeLinks: telemetry?.active_links ?? 0,
+		...(telemetry?.active_links === undefined
+			? { bondActivityUnknown: true }
+			: {}),
+	};
 }
 
 // Device path: truthful telemetry — process liveness from the supervised stream
 // process, frame advancement from the engine's real `active_encode.frames_emitted`
-// counter (raw event bridge), bond from the srtla stats file. NO synthetic values:
+// counter (raw event bridge), bond activity from the sender's control stats. NO synthetic values:
 // SRT reconnect is `null` (the stats-file source carries no reconnect flag), and
 // idle reports the IDLE posture (process/frames/SRT unknown), never "dead".
 function collectRealLiveness(): LivenessSources {
@@ -223,8 +228,7 @@ function collectRealLiveness(): LivenessSources {
 			frameCount: null,
 			reconnecting: null,
 			reconnectCount: 0,
-			linkCount: bond.linkCount,
-			activeLinks: bond.activeLinks,
+			...bond,
 		};
 	}
 
@@ -258,8 +262,7 @@ function collectRealLiveness(): LivenessSources {
 		frameCount,
 		reconnecting: null,
 		reconnectCount: 0,
-		linkCount: bond.linkCount,
-		activeLinks: bond.activeLinks,
+		...bond,
 	};
 }
 
@@ -273,21 +276,21 @@ export function getStreamHealth(): StreamHealthOutput {
 	return deriveStreamHealth(collectLivenessSources());
 }
 
-let lastBroadcastState: StreamHealthOutput["state"] | null = null;
+let lastBroadcastVerdict: string | null = null;
 
 export function resetHealthBroadcastState(): void {
-	lastBroadcastState = null;
+	lastBroadcastVerdict = null;
 }
 
 /**
- * Emit a `health` event only when the rolled-up state transitions. Called on the
- * existing 5s heartbeat tick — read-only, never triggers restart logic.
+ * Publish verdict and bond detail changes, not every increment of a frame counter.
  */
 export function broadcastHealthIfChanged(): StreamHealthOutput {
 	const sources = collectLivenessSources();
 	const health = deriveStreamHealth(sources);
-	if (health.state !== lastBroadcastState) {
-		lastBroadcastState = health.state;
+	const verdict = JSON.stringify([health.state, health.reason, health.bond]);
+	if (verdict !== lastBroadcastVerdict) {
+		lastBroadcastVerdict = verdict;
 		broadcast(HEALTH_EVENT_TYPE, health);
 	}
 	// Lifecycle indicator: all bonded links down mid-stream (0 active of N>0) is a
@@ -296,7 +299,7 @@ export function broadcastHealthIfChanged(): StreamHealthOutput {
 	reportAllLinksDown({
 		isStreaming: sources.isStreaming,
 		linkCount: sources.linkCount,
-		activeLinks: sources.activeLinks,
+		activeLinks: sources.bondActivityUnknown ? null : sources.activeLinks,
 	});
 	return health;
 }

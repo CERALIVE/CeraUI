@@ -4,7 +4,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures/index.js';
 import { focusMainContent } from './helpers/focus-main-content.js';
 import { measureHitAreas } from './helpers/hit-area.js';
-import { endStream, ensureAuthenticated, navigateTo, setLocale, setTheme } from './helpers/index.js';
+import { endStream, ensureAuthenticated, navigateTo, openLiveDetails, setLocale, setTheme } from './helpers/index.js';
 
 /**
  * The Live screen and the Encoder dialog after the final design pass (Live
@@ -293,6 +293,8 @@ test.describe('@a11y Live screen design pass — caps-full', { tag: '@desktop-on
 				for (const viewport of [DESKTOP, PHONE]) {
 					await resize(page, viewport);
 					await expect(page.locator(root)).toBeVisible();
+					// Below 1024 px the live telemetry, encoder cell included, starts folded in Details.
+					if (state === 'live' && viewport.width < 1024) await openLiveDetails(page);
 					// The encoder cell joins the live cockpit with the first load reading (a 2 s
 					// tick); scan only once it is there, so its text is always measured.
 					if (state === 'live') await expect(page.locator(root).getByTestId('encoder-status-headline')).toBeVisible();

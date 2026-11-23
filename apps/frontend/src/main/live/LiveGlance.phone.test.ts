@@ -4,6 +4,8 @@
  * telemetry folded into Details (LiveDetails) and the bitrate slider in a
  * sheet (PhoneBitrateControl).
  */
+
+import { setLocale } from "@ceraui/i18n/svelte";
 import type { LinkTelemetryMessage } from "@ceraui/rpc/schemas";
 import {
 	cleanup,
@@ -11,28 +13,34 @@ import {
 	render,
 	screen,
 	waitFor,
+	within,
 } from "@testing-library/svelte";
 import { createRawSnippet } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { en } from "../../tests/helpers/catalog";
+import { projectIngestLinks } from "$lib/components/custom/ingest-link-view";
+import { en, es } from "../../tests/helpers/catalog";
+import CompactRate from "./CompactRate.svelte";
 import LiveDetails from "./LiveDetails.svelte";
 import LiveGlance from "./LiveGlance.svelte";
 import PhoneBitrateControl from "./PhoneBitrateControl.svelte";
 
 function telemetry(
-	links: { iface: string; weight: number; stale?: boolean }[],
-): LinkTelemetryMessage {
-	return {
+	links: { iface: string; weight: number; bps?: number; stale?: boolean }[],
+) {
+	const frame: LinkTelemetryMessage = {
 		links: links.map((l, i) => ({
-			conn_id: i + 1,
+			conn_id: String(i + 1),
+			link_id: `link-${l.iface}`,
 			iface: l.iface,
 			rtt_ms: 40,
 			nak_count: 0,
 			weight_percent: l.weight,
+			bitrate_bps: l.bps,
 			stale: l.stale ?? false,
 		})),
-	} as unknown as LinkTelemetryMessage;
+	};
+	return projectIngestLinks(frame.links);
 }
 
 describe("LiveGlance", () => {
@@ -41,87 +49,119 @@ describe("LiveGlance", () => {
 	it("shows the bitrate, one verdict and a bar per link, without engine numbers", () => {
 		const { container } = render(LiveGlance, {
 			props: {
-				bitrate: "4.2 Mbps",
+				bitrateKbps: 4200,
 				bitrateMeasured: true,
-				telemetry: telemetry([
-					{ iface: "usb0", weight: 60 },
-					{ iface: "wlan0", weight: 40 },
+				feed: "fresh",
+				rows: telemetry([
+					{ iface: "usb0", weight: 100, bps: 3_000_000 },
+					{ iface: "wlan0", weight: 0, bps: 1_200_000 },
 				]),
 			},
 		});
-		expect(container.textContent).toContain("4.2 Mbps");
+		expect(screen.getByRole("img", { name: "4.2 Mbps" })).toBeDefined();
 		expect(container.textContent).toContain(en.hud.bitrateSending);
 		expect(container.textContent).toContain(en.live.glance.allSending);
 		expect(container.querySelectorAll("li")).toHaveLength(2);
-		expect(container.textContent).toContain("60%");
+		expect(screen.getAllByRole("listitem")[1]?.textContent).toContain(
+			"1.2 Mbps",
+		);
 		expect(container.textContent).not.toContain(en.live.ingest.rtt);
 		expect(container.textContent).not.toContain(en.live.ingest.nak);
 	});
 
-	it("says a link stopped reporting and marks it, without claiming it failed", () => {
-		const { container } = render(LiveGlance, {
+	it("marks the snapshot stale without claiming a link failed", () => {
+		render(LiveGlance, {
 			props: {
-				bitrate: "2 Mbps",
-				telemetry: telemetry([
-					{ iface: "usb0", weight: 100 },
-					{ iface: "wlan0", weight: 0, stale: true },
+				bitrateKbps: 2000,
+				feed: "stale",
+				rows: telemetry([
+					{ iface: "usb0", weight: 100, bps: 2_000_000, stale: true },
+					{ iface: "wlan0", weight: 0, bps: 0, stale: true },
 				]),
 			},
 		});
-		expect(
-			container.querySelector("[data-verdict]")?.getAttribute("data-verdict"),
-		).toBe("stopped-reporting");
-		expect(container.textContent).toContain(en.live.glance.linkDown);
-		expect(
-			container.querySelector('li[data-stale="true"]')?.textContent,
-		).toContain(en.live.glance.down);
+		expect(screen.getByRole("status").textContent?.trim()).toBe(
+			en.live.glance.linkDown,
+		);
+		for (const row of screen.getAllByRole("listitem"))
+			expect(row.textContent).toContain("—");
 	});
 
-	it("a fresh link with no share of the bond reads idle, not sending", () => {
+	it("a fresh link with zero traffic reads idle and draws no fill despite positive allocation", () => {
 		const { container } = render(LiveGlance, {
 			props: {
-				bitrate: "2 Mbps",
-				telemetry: telemetry([
-					{ iface: "usb0", weight: 100 },
-					{ iface: "wlan0", weight: 0 },
+				bitrateKbps: 2000,
+				feed: "fresh",
+				rows: telemetry([
+					{ iface: "usb0", weight: 60, bps: 2_000_000 },
+					{ iface: "wlan0", weight: 40, bps: 0 },
 				]),
 			},
 		});
+		expect(screen.getByRole("status").textContent?.trim()).toBe(
+			en.live.glance.linkIdle,
+		);
 		expect(
-			container.querySelector("[data-verdict]")?.getAttribute("data-verdict"),
-		).toBe("idle");
+			screen.getAllByRole("listitem")[1]?.querySelector("[style*=width]"),
+		).toBeNull();
 		expect(container.textContent).toContain(en.live.glance.linkIdle);
 		expect(container.textContent).not.toContain(en.live.glance.allSending);
 	});
 
-	it("stacks the unit (Mb over s) and keeps the plain rate for screen readers", () => {
-		const { container } = render(LiveGlance, {
-			props: { bitrate: "3.6 Mbps", telemetry: null },
+	it("keeps a single intelligible rate for screen readers", () => {
+		render(LiveGlance, {
+			props: { bitrateKbps: 3600, rows: [], feed: "waiting" },
 		});
-		const rate = container.querySelector("[data-compact-rate]");
-		expect(rate?.querySelector(".sr-only")?.textContent).toBe("3.6 Mbps");
-		expect(rate?.textContent?.replace(/\s+/g, "")).toContain("3.6Mbs");
+		expect(screen.getByRole("img", { name: "3.6 Mbps" })).toBeDefined();
 	});
 
 	it("waits while no link has reported", () => {
 		const { container } = render(LiveGlance, {
-			props: { bitrate: "6 Mbps", telemetry: null },
+			props: { bitrateKbps: 6000, rows: [], feed: "waiting" },
 		});
-		expect(
-			container.querySelector("[data-verdict]")?.getAttribute("data-verdict"),
-		).toBe("waiting");
+		expect(screen.getByRole("status").textContent?.trim()).toBe(
+			en.live.ingest.waiting,
+		);
 		expect(container.querySelectorAll("li")).toHaveLength(0);
 	});
 
-	it("is hidden from 1024 px, so the desktop screen is unchanged", () => {
-		const { container } = render(LiveGlance, {
-			props: { bitrate: "6 Mbps", telemetry: null },
+	it("keeps an absent headline distinct from a measured zero", async () => {
+		const { rerender } = render(CompactRate, {
+			props: { kbps: undefined },
 		});
-		expect(
-			container
-				.querySelector("[data-live-glance]")
-				?.classList.contains("lg:hidden"),
-		).toBe(true);
+		expect(screen.getByText("—")).toBeDefined();
+		await rerender({ kbps: 0 });
+		expect(screen.getByRole("img", { name: "0 kbps" })).toBeDefined();
+	});
+
+	it("does not infer traffic from a weight-only snapshot", () => {
+		render(LiveGlance, {
+			props: {
+				rows: telemetry([{ iface: "usb0", weight: 100 }]),
+				feed: "fresh",
+			},
+		});
+		expect(screen.getByRole("status").textContent?.trim()).toBe(
+			en.live.glance.down,
+		);
+		expect(screen.getByRole("listitem").textContent).toContain("—");
+	});
+
+	it("keeps link names and readings paired when a sender reorders the roster", async () => {
+		const wired = { iface: "eth0", weight: 50, bps: 2_000_000 };
+		const wifi = { iface: "wlan0", weight: 50, bps: 1_000_000 };
+		const { rerender } = render(LiveGlance, {
+			props: { rows: telemetry([wired, wifi]), feed: "fresh" },
+		});
+		const readRows = () =>
+			screen
+				.getAllByRole("listitem")
+				.map((row) => row.textContent?.replace(/\s+/g, " ").trim());
+		const [first, second] = readRows();
+		expect(first).toBe("Ethernet 1 2 Mbps");
+		expect(second).toBe("Wi-Fi 1 1 Mbps");
+		await rerender({ rows: telemetry([wifi, wired]) });
+		expect(readRows()).toEqual([second, first]);
 	});
 });
 
@@ -149,7 +189,9 @@ describe("LiveDetails", () => {
 	});
 
 	function details(container: HTMLElement): HTMLDetailsElement {
-		return container.querySelector("details") as HTMLDetailsElement;
+		const element = container.querySelector("details");
+		if (!element) throw new Error("Details disclosure did not render");
+		return element;
 	}
 
 	it("starts folded on a phone, with its content still mounted", () => {
@@ -188,8 +230,10 @@ describe("LiveDetails", () => {
 		const { container, rerender } = render(LiveDetails, {
 			props: { children: body, forceOpen: true },
 		});
-		const summary = container.querySelector("summary") as HTMLElement;
-		expect(summary.classList.contains("hidden")).toBe(true);
+		let visibility: string | undefined;
+		const summary = container.querySelector("summary");
+		if (summary) visibility = getComputedStyle(summary).display;
+		expect(visibility).toBe("none");
 		// Closing it some other way is undone while forced open.
 		details(container).open = false;
 		await fireEvent(details(container), new Event("toggle"));
@@ -199,33 +243,25 @@ describe("LiveDetails", () => {
 		expect(details(container).open).toBe(false);
 	});
 
-	it("uses the width-only breakpoint, the same as the stream card", () => {
-		render(LiveDetails, { props: { children: body } });
-		const calls = (
-			window.matchMedia as unknown as { mock: { calls: string[][] } }
-		).mock.calls;
-		expect(calls.at(-1)?.[0]).toBe("(min-width: 1024px)");
+	it("does not overwrite the phone's folded preference while wide", () => {
+		localStorage.setItem("ceraui.live.detailsOpen", "false");
+		wide = true;
+		const first = render(LiveDetails, { props: { children: body } });
+		expect(details(first.container).open).toBe(true);
+		cleanup();
+		wide = false;
+		const second = render(LiveDetails, { props: { children: body } });
+		expect(details(second.container).open).toBe(false);
 	});
 
-	it("names what is inside, in every locale", async () => {
-		const { ar, de, es, fr, hi, ja, ko, ptBR, zh } = await import(
-			"../../tests/helpers/catalog"
-		);
-		for (const dict of [en, ar, de, es, fr, hi, ja, ko, ptBR, zh]) {
-			const g = dict.live.glance;
-			for (const v of [
-				g.title,
-				g.allSending,
-				g.linkDown,
-				g.linkIdle,
-				g.down,
-				g.details,
-				g.detailsHint,
-				g.changeBitrate,
-			]) {
-				expect(v.length).toBeGreaterThan(0);
-			}
-			expect(g.changeBitrate).toContain("{bitrate}");
+	it("renders localized Details copy that names what is inside", () => {
+		setLocale("es");
+		try {
+			render(LiveDetails, { props: { children: body } });
+			expect(screen.getByText(es.live.glance.details)).toBeDefined();
+			expect(screen.getByText(es.live.glance.detailsHint)).toBeDefined();
+		} finally {
+			setLocale("en");
 		}
 	});
 });
@@ -273,7 +309,7 @@ describe("PhoneBitrateControl", () => {
 			},
 		});
 		await fireEvent.click(
-			screen.getByRole("button", { name: "Change bitrate, now 5 Mbps" }),
+			screen.getByRole("button", { name: "Change bitrate limit, now 5 Mbps" }),
 		);
 		await screen.findByRole("dialog");
 		query.matches = true;
@@ -298,15 +334,14 @@ describe("PhoneBitrateControl", () => {
 			},
 		});
 		const open = screen.getByRole("button", {
-			name: "Change bitrate, now 5 Mbps",
+			name: "Change bitrate limit, now 5 Mbps",
 		});
 		await fireEvent.click(open);
 		const sheet = await screen.findByRole("dialog");
 		expect(sheet.textContent).toContain(en.live.adjustBitrate);
-		const plus = [...sheet.querySelectorAll("button")].find((b) =>
-			b.getAttribute("aria-label")?.startsWith("+"),
+		await fireEvent.click(
+			within(sheet).getByRole("button", { name: /^\+250 / }),
 		);
-		await fireEvent.click(plus as HTMLButtonElement);
 		await waitFor(() => expect(onStep).toHaveBeenCalledWith(250));
 	});
 });

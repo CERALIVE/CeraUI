@@ -52,7 +52,7 @@ const {
 			class="font-mono text-base font-semibold tabular-nums"
 			style="color: var(--status-live);"
 		>
-			{bitrateLabel}
+			<bdi dir="ltr">{bitrateLabel}</bdi>
 		</p>
 	</div>
 	<div class="flex items-center gap-3">

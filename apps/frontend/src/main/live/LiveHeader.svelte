@@ -18,7 +18,7 @@ const { isStreaming, unconfirmed = false }: Props = $props();
 <!-- Header: stream status + title only (T12 demotion). The server destination now
      lives in the GoLiveCard traffic-light row (T10), so the header no longer hosts
      a server-edit chip — it is title + live-state chip only. -->
-<header class="flex items-center gap-3">
+<header class="flex items-center gap-3" class:short-live={isStreaming && !unconfirmed}>
 	{#if isStreaming}
 		<span
 			class="flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold tracking-wide uppercase"
@@ -42,7 +42,20 @@ const { isStreaming, unconfirmed = false }: Props = $props();
 	     state, so below 640 px the header is the state chip alone; the title stays
 	     in the page for screen readers and the heading outline. -->
 	<div class="min-w-0">
-		<h1 class="text-2xl font-bold tracking-tight max-sm:sr-only">{m["live.title"]()}</h1>
-		<p class="text-muted-foreground text-sm max-sm:sr-only">{m["live.description"]()}</p>
+		<h1 class={['text-2xl font-bold tracking-tight', isStreaming && !unconfirmed && 'max-sm:sr-only']}>{m["live.title"]()}</h1>
+		<p class={['text-muted-foreground text-sm', isStreaming && !unconfirmed && 'max-sm:sr-only']}>{m["live.description"]()}</p>
 	</div>
 </header>
+
+<style>
+	@media (orientation: landscape) and (max-height: 420px) and (width < 1024px) {
+		.short-live > div {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			overflow: hidden;
+			clip-path: inset(50%);
+			white-space: nowrap;
+		}
+	}
+</style>

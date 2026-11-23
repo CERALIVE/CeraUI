@@ -2,7 +2,7 @@
  * Per-session ingest rollup — device-local only.
  *
  * Folds the live `status.linkTelemetry` feed (already broadcast by the backend,
- * no new collector) plus the bitrate the engine is APPLYING into a single
+ * no new collector) plus the measured bitrate into a single
  * end-of-stream summary: peak/avg bitrate, per-link uptime %, and a bond
  * drop-event count. The IngestStats panel samples one {@link SessionSample} per
  * telemetry tick while streaming, then calls {@link computeSessionRollup} on the
@@ -32,8 +32,8 @@ export interface SessionSampleLink {
 
 /** One sampled instant of a streaming session. */
 export interface SessionSample {
-	/** Applied bitrate at sample time, in kbps (what the engine encoded, not the ceiling). */
-	bitrateKbps: number;
+	/** Measured wire rate in kbps, or null when there was no fresh reading. */
+	bitrateKbps: number | null;
 	/** Wall-clock instant the sample was taken, ms epoch (drives duration). */
 	capturedAt: number;
 	/**
@@ -68,10 +68,10 @@ export interface SessionLinkRollup {
 export interface SessionRollup {
 	/** Number of telemetry samples folded into this rollup. */
 	sampleCount: number;
-	/** Highest applied bitrate observed during the session, kbps. */
-	peakBitrateKbps: number;
-	/** Mean applied bitrate across the session, kbps (rounded). */
-	avgBitrateKbps: number;
+	/** Highest measured rate, kbps; null if none was measured. */
+	peakBitrateKbps: number | null;
+	/** Mean of measured rates, kbps (rounded); null if none was measured. */
+	avgBitrateKbps: number | null;
 	/**
 	 * Bond drop events: each time any link transitioned from up (present + fresh)
 	 * to down (absent or stale) between consecutive samples. Summed across links.
@@ -105,11 +105,8 @@ function asCumulativeBytes(value: unknown): number | undefined {
 }
 
 /**
- * Build a {@link SessionSample} from the applied bitrate and a telemetry frame's
- * links. `undefined`/invalid bitrate collapses to 0.
- *
- * `bytesSentTotal` is the ONE field that must not collapse to 0 on absence: a
- * zero would be reported to the operator as "you transferred nothing".
+ * Build a {@link SessionSample} from measured bitrate and a telemetry frame's
+ * link diagnostics. Missing rates and byte counts never collapse to zero.
  */
 export function createSample(
 	bitrateKbps: number | undefined,
@@ -131,7 +128,12 @@ export function createSample(
 ): SessionSample {
 	const cumulative = asCumulativeBytes(bytesSentTotal);
 	return {
-		bitrateKbps: asCount(bitrateKbps),
+		bitrateKbps:
+			bitrateKbps !== undefined &&
+			Number.isFinite(bitrateKbps) &&
+			bitrateKbps >= 0
+				? Math.trunc(bitrateKbps)
+				: null,
 		capturedAt,
 		...(cumulative === undefined ? {} : { bytesSentTotal: cumulative }),
 		links: (links ?? []).map((l) => ({
@@ -154,8 +156,8 @@ export function sessionLinkKey(
 
 /**
  * Reduce a session's samples into a {@link SessionRollup}. An empty session
- * yields zeroed metrics and no links (never throws). Bitrate peak/avg are over
- * the applied bitrate; uptime and drops are derived purely from per-link
+ * yields no rate and no links (never throws). Bitrate peak/avg are over
+ * measured samples; uptime and drops are derived from per-link
  * presence + staleness across the sample sequence.
  */
 export function computeSessionRollup(
@@ -165,8 +167,8 @@ export function computeSessionRollup(
 	if (sampleCount === 0) {
 		return {
 			sampleCount: 0,
-			peakBitrateKbps: 0,
-			avgBitrateKbps: 0,
+			peakBitrateKbps: null,
+			avgBitrateKbps: null,
 			dropCount: 0,
 			durationMs: 0,
 			links: [],
@@ -175,11 +177,15 @@ export function computeSessionRollup(
 
 	let peak = 0;
 	let sum = 0;
+	let measuredCount = 0;
 	let bytesSentTotal: number | undefined;
 	for (const s of samples) {
-		const br = asCount(s.bitrateKbps);
-		if (br > peak) peak = br;
-		sum += br;
+		const br = s.bitrateKbps;
+		if (br !== null && Number.isFinite(br) && br >= 0) {
+			peak = Math.max(peak, br);
+			sum += br;
+			measuredCount++;
+		}
 		const cumulative = asCumulativeBytes(s.bytesSentTotal);
 		if (cumulative !== undefined && (bytesSentTotal ?? -1) < cumulative) {
 			bytesSentTotal = cumulative;
@@ -239,8 +245,9 @@ export function computeSessionRollup(
 
 	return {
 		sampleCount,
-		peakBitrateKbps: peak,
-		avgBitrateKbps: Math.round(sum / sampleCount),
+		peakBitrateKbps: measuredCount === 0 ? null : peak,
+		avgBitrateKbps:
+			measuredCount === 0 ? null : Math.round(sum / measuredCount),
 		dropCount,
 		durationMs,
 		...(bytesSentTotal === undefined ? {} : { bytesSentTotal }),
@@ -271,8 +278,8 @@ function csvField(value: string | number): string {
 export function rollupToCsv(rollup: SessionRollup): string {
 	const lines: string[] = [
 		"metric,value",
-		`peak_bitrate_kbps,${csvField(rollup.peakBitrateKbps)}`,
-		`avg_bitrate_kbps,${csvField(rollup.avgBitrateKbps)}`,
+		`peak_bitrate_kbps,${csvField(rollup.peakBitrateKbps ?? "")}`,
+		`avg_bitrate_kbps,${csvField(rollup.avgBitrateKbps ?? "")}`,
 		`drop_count,${csvField(rollup.dropCount)}`,
 		`sample_count,${csvField(rollup.sampleCount)}`,
 		`duration_ms,${csvField(rollup.durationMs)}`,

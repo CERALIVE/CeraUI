@@ -23,7 +23,10 @@ import { untrack } from 'svelte';
 import Badge from '$lib/components/custom/Badge.svelte';
 import {
 	createLinkViewCache,
+	type IngestLink,
+	ingestLinkKey,
 	type LinkViewComputed,
+	projectIngestLinks,
 	RING_CAPACITY,
 	type Sample,
 	SPARK_H,
@@ -44,14 +47,9 @@ import { cn } from '$lib/utils';
 
 interface Props {
 	telemetry: LinkTelemetryMessage | null | undefined;
+	rows?: IngestLink[];
 	isStreaming?: boolean | undefined;
-	/**
-	 * The live bitrate headline, kbps — the MEASURED bond throughput when
-	 * srtla_send reports one, else the engine's target. Sampled once per
-	 * telemetry tick into the session peak/avg rollup. Never the configured
-	 * ceiling: that value is constant for a session, so peak and avg would both
-	 * restate the setting instead of reporting what the bond actually carried.
-	 */
+	/** Fresh measured bond throughput in kbps. No target or ceiling fallback. */
 	bitrateKbps?: number | undefined;
 	/**
 	 * The link's name for people ("Northwind · RM520N", "Wi-Fi · HomeNetwork"),
@@ -64,15 +62,15 @@ interface Props {
 
 const {
 	telemetry = undefined,
+	rows,
 	isStreaming = undefined,
 	bitrateKbps = undefined,
 	linkName = undefined,
 	class: className = undefined,
 }: Props = $props();
 
-const nameOf = (iface: string): string => linkName?.(iface) ?? iface;
-
 const links = $derived<LinkTelemetryEntry[]>(telemetry?.links ?? []);
+const projected = $derived(rows ?? projectIngestLinks(links, [], linkName ? { label: linkName } : undefined));
 const hasLinks = $derived(links.length > 0);
 
 // Bond-level rollups across every reported uplink.
@@ -116,29 +114,30 @@ $effect(() => {
 	untrack(() => {
 		const next: Record<string, Sample[]> = { ...history };
 		for (const link of current) {
-			const prev = next[link.conn_id] ?? [];
+			const key = ingestLinkKey(link);
+			const prev = next[key] ?? [];
 			const buf = [
 				...prev,
 				{ rtt: link.rtt_ms, nak: link.nak_count, weight: link.weight_percent },
 			];
 			if (buf.length > RING_CAPACITY) buf.splice(0, buf.length - RING_CAPACITY);
-			next[link.conn_id] = buf;
+			next[key] = buf;
 		}
 		history = next;
 	});
 });
 
-type LinkView = LinkViewComputed & { link: LinkTelemetryEntry };
+type LinkView = LinkViewComputed & IngestLink;
 
-// Memoized per conn_id: a link whose samples buffer is reference-unchanged since
+// Memoized per link: a link whose samples buffer is reference-unchanged since
 // the last derivation reuses its cached view (path string + trend + health) rather
 // than rebuilding the SVG path. The ring effect only swaps a link's array when it
 // appends a sample, so the audit's per-tick redraw cost is now paid only on a
 // genuinely new sample for that link — not on every component re-render.
 const linkViews = $derived<LinkView[]>(
-	links.map((link) => ({
-		link,
-		...viewCache.get(link.conn_id, history[link.conn_id] ?? EMPTY_SAMPLES),
+	projected.map((row) => ({
+		...row,
+		...viewCache.get(row.key, history[row.key] ?? EMPTY_SAMPLES),
 	})),
 );
 
@@ -156,8 +155,8 @@ let sessionNames = createSessionLinkNames();
 let summaryNames = $state<ReadonlyMap<string, readonly string[]>>(new Map());
 
 function recordNames(links: readonly LinkTelemetryEntry[] | undefined) {
-	for (const link of links ?? []) {
-		if (!link.stale) sessionNames.record(sessionLinkKey(link), nameOf(link.iface));
+	for (const { link, label } of projected) {
+		if (!link.stale) sessionNames.record(sessionLinkKey(link), label);
 	}
 }
 
@@ -215,7 +214,8 @@ const summaryTransferred = $derived(
 	rollup?.bytesSentTotal === undefined ? EM_DASH : formatBytes(loc)(rollup.bytesSentTotal),
 );
 
-function formatBitrate(kbps: number): string {
+function formatBitrate(kbps: number | null): string {
+	if (kbps === null) return EM_DASH;
 	if (kbps >= 1000) {
 		const mbps = kbps / 1000;
 		const value = Number.isInteger(mbps) ? String(mbps) : mbps.toFixed(1);
@@ -310,13 +310,13 @@ function exportCsv(): void {
 	{#if showSummary && rollup}
 		<!-- Per-session summary: peak/avg bitrate, drops, then per-link uptime. -->
 		<div data-testid="ingest-summary">
-			<div class="grid grid-cols-5 gap-3">
+			<div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
 				<div class="bg-secondary/40 flex flex-col gap-1.5 rounded-lg p-3">
 					<div
 						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
 					>
 						<TrendingUp aria-hidden="true" class="size-3 shrink-0" />
-						<span class="truncate">{m["live.ingest.peak"]()}</span>
+						<span>{m["live.ingest.peak"]()}</span>
 					</div>
 					<div
 						data-testid="ingest-summary-peak"
@@ -330,7 +330,7 @@ function exportCsv(): void {
 						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
 					>
 						<Activity aria-hidden="true" class="size-3 shrink-0" />
-						<span class="truncate">{m["live.ingest.avg"]()}</span>
+						<span>{m["live.ingest.avg"]()}</span>
 					</div>
 					<div
 						data-testid="ingest-summary-avg"
@@ -344,7 +344,7 @@ function exportCsv(): void {
 						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
 					>
 						<AlertTriangle aria-hidden="true" class="size-3 shrink-0" />
-						<span class="truncate">{m["live.ingest.drops"]()}</span>
+						<span>{m["live.ingest.drops"]()}</span>
 					</div>
 					<!-- Informational, not actionable: a passive drop tally uses the
 					     info token; amber is reserved for the actionable alert. -->
@@ -363,7 +363,7 @@ function exportCsv(): void {
 						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
 					>
 						<Clock aria-hidden="true" class="size-3 shrink-0" />
-						<span class="truncate">{m["live.ingest.duration"]()}</span>
+						<span>{m["live.ingest.duration"]()}</span>
 					</div>
 					<div
 						data-testid="ingest-summary-duration"
@@ -377,7 +377,7 @@ function exportCsv(): void {
 						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
 					>
 						<Upload aria-hidden="true" class="size-3 shrink-0" />
-						<span class="truncate">{m["live.ingest.transferred"]()}</span>
+						<span>{m["live.ingest.transferred"]()}</span>
 					</div>
 					<div
 						data-testid="ingest-summary-transferred"
@@ -511,13 +511,13 @@ function exportCsv(): void {
 			<span class="ps-4">{m["live.ingest.link"]()}</span>
 			<span class="text-end">{m["live.ingest.rtt"]()}</span>
 			<span class="text-end">{m["live.ingest.nak"]()}</span>
-			<span class="text-end">{m["live.ingest.weight"]()}</span>
+			<span class="text-end">{m["live.ingest.allocation"]()}</span>
 		</div>
 
 		<!-- per-link rows -->
 		<!-- biome-ignore lint/a11y/noRedundantRoles: The live per-link telemetry list needs its explicit list role for Safari when Tailwind removes list markers. -->
 		<ul role="list">
-			{#each linkViews as view, i (view.link.conn_id)}
+			{#each linkViews as view (view.key)}
 				{const link = $derived(view.link)}
 				<li
 					data-testid="ingest-row"
@@ -535,11 +535,11 @@ function exportCsv(): void {
 							<span
 								aria-hidden="true"
 								class="size-2 shrink-0 rounded-full"
-								style={`background-color: var(--link-${(i % 6) + 1})`}
+								style:background-color={view.color}
 							></span>
 							<span class="min-w-0">
-								<span class="line-clamp-2 block font-medium break-words" data-link-name>{nameOf(link.iface)}</span>
-								{#if nameOf(link.iface) !== link.iface}
+								<span class="line-clamp-2 block font-medium break-words" data-link-name>{view.label}</span>
+								{#if view.label !== link.iface}
 									<span class="text-muted-foreground block truncate font-mono text-[10px]">{link.iface}</span>
 								{/if}
 							</span>
@@ -577,7 +577,7 @@ function exportCsv(): void {
 								view.degraded ? 'text-status-warning' : 'text-primary',
 							)}
 							role="img"
-							aria-label={m["live.ingest.trendLabel"]({ iface: nameOf(link.iface) })}
+							aria-label={m["live.ingest.trendLabel"]({ iface: view.label })}
 						>
 							<!-- Baseline track so a short/empty trace still reads as calibrated. -->
 							<line

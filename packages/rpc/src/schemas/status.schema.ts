@@ -186,6 +186,10 @@ export type LinkTelemetryEntry = z.infer<typeof linkTelemetryEntrySchema>;
 
 export const linkTelemetryMessageSchema = z.object({
 	links: z.array(linkTelemetryEntrySchema),
+	/** The sender read was stale, even if the cached roster had zero rows. */
+	stale: z.literal(true).optional(),
+	/** Active links reported by the fresh sender control snapshot, not inferred from traffic or weight. */
+	active_links: z.number().int().nonnegative().optional(),
 	/**
 	 * Sum of every link's `bitrate_bps` — the bond's total measured wire
 	 * throughput, bits/s. Summed once on the backend so consumers cannot
@@ -468,6 +472,8 @@ export const statusResponseSchema = z.object({
 	set_password: z.boolean().optional(),
 	remote: remoteStatusSchema.optional(),
 	linkTelemetry: linkTelemetryMessageSchema.nullable().optional(),
+	/** An active watcher is waiting for its first snapshot. False when no watcher is running or a snapshot exists. */
+	link_telemetry_waiting: z.boolean().optional(),
 	// Published as an EXPLICIT value (null when there is no bond to describe) on
 	// every frame, never present-only-when-degraded: the frontend status merge
 	// preserves an omitted field, so a raise-only band could never be retracted —

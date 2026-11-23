@@ -123,22 +123,64 @@ must contain the `source-audio` block with its ids unchanged.
 5. `live-bar`, with `BitrateAdjuster` and the Stop button, or the Done button
    in the post-stream summary window.
 
-**Proposal (phones, below 1024 px):** the stream comes first. `LiveGlance`
-(`data-live-glance`, hidden from 1024 px) opens the cards: the headline
-bitrate (its unit stacked, "Mb" over "s"), one verdict and one bar per link
-with its share of the bond. The verdict says only what the rows show: waiting
-(no rows), a link stopped reporting (a stale row, which is not proof the link
-failed), a link is idle (a fresh row with no share) or all links sending. Inside `telemetry-card`,
-`StreamTelemetryStrip` and `IngestStats` sit in `LiveDetails`
-(`data-live-details`), a disclosure that is closed by default on phones, keeps
-the streamer's choice in `localStorage` under `ceraui.live.detailsOpen`, is
-always open from 1024 px (the width-only breakpoint `LiveGlance` uses; its
-summary hidden) and is forced open, without a toggle, in the post-stream
-summary window. The header is the state chip alone below 640 px (title and
-subtitle stay for screen readers). It never unmounts its content, so the session
-rollup survives. In `live-bar` the bitrate control is a value button beside
-Stop below 640 px and opens `BitrateAdjuster` in a bottom sheet (closed again
-when the screen widens past 640 px); from 640 px it is inline as before. Desktop layout is unchanged.
+**Stream-first Live layout [EXISTS].** Below 1024 px, the order while live is
+alerts → Stream glance → program desk → Audio (when supported) → engineering
+telemetry → fixed Live bar. At 1024 px and wider, the glance is hidden and the
+two-column layout above is unchanged. The width rule includes landscape
+phones, 768 px tablets and the 800×480 kiosk; the kiosk still uses its rail
+chrome and bottom-aligned bar. Alerts and Stop must fit at all these sizes.
+Below 1024 px on landscape screens 420 px tall or shorter, the live glance
+uses two columns and tighter spacing to clear the fixed bar.
+
+The Stream glance and IngestStats share rows named by `getLinkNames()`, the
+same projection the HUD and Network use. Row identity uses the published
+`link_id`; colors reserve the current HUD slots before assigning any remaining
+slots in stable identity order. Link bars show
+shares of reported, measured SRTLA wire traffic (`bitrate_bps`); measured zero
+has no fill. Allocation weight is a separate diagnostic, not a traffic reading.
+A fresh positive rate means sending; fresh zero means idle; missing rate is
+unknown. Waiting for a watcher's first snapshot, an explicit empty roster,
+stale sender data (the whole feed, not a single link), telemetry unavailable
+(including non-bonded transports) and a lost device connection have distinct
+copy. A replaced control socket must deliver new evidence before readings can
+look fresh again. Even after reconnect, the producer expires a silent sender's
+cached measurements at the stats-file age limit. Stale readings raise an
+observation warning, not an outage; only fresh sender connection state can
+raise All bonded links down. The headline stays Sending for a fresh aggregate
+(including zero), otherwise Target or a dash. Session Summary peak and average
+use fresh measured samples only, never Target. With no measurement both
+display a dash. Below 640 px the summary uses two columns with wrapping labels.
+
+The health HUD shows Unknown when bond activity is unknown and no other
+observation establishes a fault. Bond detail clears even if another fault keeps
+the health verdict unchanged. Loss of observation never announces recovery;
+the recovery toast waits for a confirmed Healthy verdict after a confirmed fault.
+The sender's `stats.update` normally arrives once per second. An explicit loss
+of the control subscription invalidates activity immediately; silence expires
+it at the existing five-second limit. After a gap in an otherwise healthy
+bond, require two all-up pushes no more than two seconds apart (the normal
+interval plus one missed push) to restore Healthy. A fresh report showing a
+link down still applies immediately, and one fresh all-up report after a
+confirmed link fault restores Healthy. This does not change rate freshness,
+the stats-file fallback or the sender wire format.
+
+`telemetry-card` keeps `StreamTelemetryStrip` and `IngestStats` mounted in
+Details while live. It starts folded below 1024 px and remembers the choice in
+`ceraui.live.detailsOpen`. At 1024 px and wider and in the post-stop summary,
+Details opens without a toggle, without overwriting that choice or remounting
+the session sampler. Below 640 px **while confirmed live only**, the header
+title and subtitle are visually hidden, not removed from the heading outline.
+Idle and unconfirmed headers retain both. Below 640 px the bitrate-limit
+button opens one adjuster in a bottom sheet. At 640 px and wider it is inline
+beside Stop; resizing an open sheet closes it and focuses the inline slider
+because the trigger is no longer present. Ordinary dismissal restores the
+trigger; resizing back with focus on the inline control transfers it to the
+trigger. Both use the same live RPC and draft.
+
+`telemetry-stop.spec.ts` must exercise the real Live entry: header states,
+truthful glance, 639/640 and 1023/1024 transitions, sheet edit/refusal/focus,
+Stop and alert fit including short landscape/kiosk, and the real session
+rollup visible after Stop even if Details was never opened.
 
 #### The Live bar
 
@@ -653,7 +695,8 @@ with HDMI selected).
 - **Fidelity.** Production. Each change must ship behind its own tests.
 - **Must not change.** `deriveGoLiveReadiness` and its gate order; the Encoder,
   Audio and Server dialogs as surfaces; anything `LiveView` renders above the
-  cockpit roots; the HUD; the Network and Settings destinations; the design
+  cockpit roots except the confirmed-live compact header; the HUD;
+  the Network and Settings destinations; the design
   tokens; any deprecation shim registered in `docs/TECHNICAL_DEBT.md`; the test
   ids listed above.
 - **Anti-goals.**
@@ -694,7 +737,8 @@ The screen must handle each of these states:
 
 - **Hierarchy.** Idle: the picture, then what feeds it and its audio, then
   where it goes and over which links, then the roadmap. Live: alerts first,
-  then the picture and what is on air, then audio, then telemetry.
+  then the Stream glance below 1024 px, the picture and what is on air,
+  audio, then engineering telemetry.
 - **Two columns.** The desk column must be the wider one, because the preview
   is 16:9. "Left" means the inline-start side. Inside `live-cockpit` the
   banners must lead the cards column.

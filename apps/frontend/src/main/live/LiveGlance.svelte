@@ -13,45 +13,36 @@
  * Presentational: every value is a prop, nothing is derived from a store.
  */
 import { m } from '@ceraui/i18n/svelte';
-import type { LinkTelemetryMessage } from '@ceraui/rpc/schemas';
+import type { IngestLink } from '$lib/components/custom/ingest-link-view';
 
+import { formatBitrate } from './bitrate-display';
 import CompactRate from './CompactRate.svelte';
 
 interface Props {
-	/** The headline rate, already formatted. */
-	bitrate: string;
-	/** Whether `bitrate` is a measurement rather than the engine's target. */
+	bitrateKbps?: number | undefined;
 	bitrateMeasured?: boolean;
-	telemetry: LinkTelemetryMessage | null | undefined;
+	rows: IngestLink[];
+	feed: 'disconnected' | 'waiting' | 'unavailable' | 'stale' | 'fresh';
 }
 
-const { bitrate, bitrateMeasured = false, telemetry }: Props = $props();
+const { bitrateKbps, bitrateMeasured = false, rows, feed }: Props = $props();
 
-const links = $derived(telemetry?.links ?? []);
-// What the rows can actually show. A stale row is a link whose report has not
-// been refreshed, which is not proof the link failed, so it reads as "stopped
-// reporting". A fresh row with no share of the bond is idle. Only when every
-// row is fresh and carrying a share does it read "All links sending".
-type Verdict = 'waiting' | 'stopped-reporting' | 'idle' | 'sending';
-const verdictKind = $derived<Verdict>(
-	links.length === 0
-		? 'waiting'
-		: links.some((link) => link.stale)
-			? 'stopped-reporting'
-			: links.some((link) => !(link.weight_percent > 0))
-				? 'idle'
-				: 'sending',
-);
-const verdict = $derived(
-	verdictKind === 'waiting'
-		? m["live.ingest.waiting"]()
-		: verdictKind === 'stopped-reporting'
-			? m["live.glance.linkDown"]()
-			: verdictKind === 'idle'
-				? m["live.glance.linkIdle"]()
-				: m["live.glance.allSending"](),
-);
-const anyDown = $derived(verdictKind !== 'sending');
+const sending = $derived(feed === 'fresh' && rows.length > 0 &&
+	rows.every(({ link }) => (link.bitrate_bps ?? 0) > 0));
+const verdict = $derived.by(() => {
+	switch (feed) {
+		case 'disconnected': return m["live.glance.disconnected"]();
+		case 'waiting': return m["live.ingest.waiting"]();
+		case 'unavailable': return m["live.glance.unavailable"]();
+		case 'stale': return m["live.glance.linkDown"]();
+		case 'fresh':
+			if (rows.length === 0) return m["live.glance.empty"]();
+			if (sending) return rows.length === 1 ? m["live.glance.linkSending"]() : m["live.glance.allSending"]();
+			if (rows.some(({ link }) => link.bitrate_bps === 0)) return m["live.glance.linkIdle"]();
+			return m["live.glance.down"]();
+	}
+});
+const total = $derived(rows.reduce((sum, { link }) => sum + (link.bitrate_bps ?? 0), 0));
 </script>
 
 <section
@@ -66,46 +57,60 @@ const anyDown = $derived(verdictKind !== 'sending');
 				{bitrateMeasured ? m["hud.bitrateSending"]() : m["hud.bitrateTarget"]()}
 			</p>
 			<p class="font-mono text-2xl font-semibold" style="color: var(--status-live);">
-				<CompactRate value={bitrate} />
+				<CompactRate kbps={bitrateKbps} />
 			</p>
 		</div>
 		<p
-			class="mt-1 inline-flex shrink-0 items-center gap-1.5 text-sm font-medium"
-			data-verdict={verdictKind}
+			class="mt-1 inline-flex min-w-0 items-baseline gap-1.5 text-sm font-medium"
 			role="status"
 		>
 			<span
 				aria-hidden={true}
-				class="size-2 rounded-full"
-				style="background: {verdictKind === 'waiting'
-					? 'var(--muted-foreground)'
-					: anyDown
-						? 'var(--status-warning)'
-						: 'var(--status-success)'};"
+				class="size-2 shrink-0 rounded-full"
+				style:background={sending ? 'var(--status-success)' : 'var(--muted-foreground)'}
 			></span>
 			{verdict}
 		</p>
 	</div>
 
-	{#if links.length > 0}
+	{#if rows.length > 0}
 		<!-- biome-ignore lint/a11y/noRedundantRoles: Safari drops the list role once Tailwind removes the markers. -->
 		<ul class="space-y-2" role="list">
-			{#each links as link, i (`${link.conn_id}:${link.iface}:${i}`)}
-				<li class="space-y-1" data-iface={link.iface} data-stale={link.stale ? 'true' : 'false'}>
+			{#each rows as { link, key, label, color, identity } (key)}
+				{const rate = $derived(feed === 'fresh' ? link.bitrate_bps : undefined)}
+				<li class="space-y-1">
 					<div class="flex items-baseline justify-between gap-3 text-sm">
-						<span class="min-w-0 truncate font-medium">{link.iface}</span>
-						<span class="text-muted-foreground shrink-0 font-mono text-xs tabular-nums">
-							{link.stale ? m["live.glance.down"]() : `${link.weight_percent}%`}
+						<span class="min-w-0 break-words font-medium">
+							{label}
+							{#if identity}
+								<small class="text-muted-foreground block">{identity}</small>
+							{/if}
+						</span>
+						<span class="text-muted-foreground shrink-0 font-mono text-xs tabular-nums" dir="ltr">
+							{formatBitrate(rate === undefined ? undefined : rate / 1000)}
 						</span>
 					</div>
 					<div aria-hidden={true} class="bg-muted h-1.5 overflow-hidden rounded-full">
-						<div
-							class="h-full rounded-full transition-[width] duration-500 motion-reduce:transition-none"
-							style="width: {link.stale ? 0 : Math.max(2, Math.min(100, link.weight_percent))}%; background-color: var(--link-{(i % 6) + 1});"
-						></div>
+						{#if rate && total > 0}
+							<div
+								class="h-full rounded-full transition-[width] duration-500 motion-reduce:transition-none"
+								data-testid="live-traffic-fill"
+								style:width={`${(100 * rate) / total}%`}
+								style:background-color={color}
+							></div>
+						{/if}
 					</div>
 				</li>
 			{/each}
 		</ul>
 	{/if}
 </section>
+
+<style>
+	@media (orientation: landscape) and (max-height: 420px) and (width < 1024px) {
+		section { padding-block: 0.5rem; }
+		section > :not(:last-child) { margin-block-end: 0.375rem; }
+		ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem 1rem; }
+		li { margin-block: 0; }
+	}
+</style>

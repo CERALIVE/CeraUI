@@ -1190,7 +1190,7 @@ export type StreamingStartOutputExtended = z.infer<typeof streamingStartOutputSc
 // posture: the device is up but no stream is requested, so process/frame
 // liveness is UNKNOWN (rendered as `null`), never "dead". A consumer that
 // predates `idle` still parses the enum by widening; the shipped HUD renders it.
-export const healthStateSchema = z.enum(['healthy', 'degraded', 'dead', 'idle']);
+export const healthStateSchema = z.enum(['healthy', 'degraded', 'dead', 'idle', 'unknown']);
 export type HealthState = z.infer<typeof healthStateSchema>;
 
 // The single most-actionable cause behind a non-healthy state — `component`
@@ -1227,6 +1227,8 @@ export const streamHealthOutputSchema = z.object({
 	bond: z.object({
 		linkCount: z.number().int().nonnegative(),
 		activeLinks: z.number().int().nonnegative(),
+		/** When true, the legacy count is not an observation of active links. */
+		activity_unknown: z.literal(true).optional(),
 	}),
 });
 export type StreamHealthOutput = z.infer<typeof streamHealthOutputSchema>;

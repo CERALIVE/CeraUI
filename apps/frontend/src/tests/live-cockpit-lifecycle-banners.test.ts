@@ -181,21 +181,41 @@ describe("LiveCockpit — active audio device loss banner", () => {
 });
 
 describe("LiveCockpit — all-links-down banner", () => {
-	it("shows when every link is stale while streaming", async () => {
-		const { getByTestId } = render(
+	it("reports observation loss, not a dead bond, when every link is stale", async () => {
+		const { getByTestId, queryByTestId } = render(
 			LiveCockpit,
-			baseProps({ telemetry: { links: [link(true), link(true)] } }),
+			baseProps({
+				telemetry: { links: [link(true), { ...link(false), stale: true }] },
+			}),
+		);
+		await tick();
+		expect(getByTestId("link-observation-lost-banner").textContent).toContain(
+			en.live.glance.linkDown,
+		);
+		expect(queryByTestId("all-links-down-banner")).toBeNull();
+	});
+
+	it("reports a dead bond only with fresh sender connection evidence", async () => {
+		const { getByTestId, queryByTestId } = render(
+			LiveCockpit,
+			baseProps({ telemetry: { links: [link(false)], active_links: 0 } }),
 		);
 		await tick();
 		expect(getByTestId("all-links-down-banner").textContent).toContain(
 			en.live.source.linksDownStreamingTitle,
 		);
+		expect(queryByTestId("link-observation-lost-banner")).toBeNull();
 	});
 
 	it("does NOT show when at least one link is active (partial drop)", async () => {
 		const { queryByTestId } = render(
 			LiveCockpit,
-			baseProps({ telemetry: { links: [link(true), link(false)] } }),
+			baseProps({
+				telemetry: {
+					links: [{ ...link(true), stale: false }, link(false)],
+					active_links: 1,
+				},
+			}),
 		);
 		await tick();
 		expect(queryByTestId("all-links-down-banner")).toBeNull();
@@ -204,7 +224,7 @@ describe("LiveCockpit — all-links-down banner", () => {
 	it("does NOT show with no links reported", async () => {
 		const { queryByTestId } = render(
 			LiveCockpit,
-			baseProps({ telemetry: { links: [] } }),
+			baseProps({ telemetry: { links: [], active_links: 0 } }),
 		);
 		await tick();
 		expect(queryByTestId("all-links-down-banner")).toBeNull();
@@ -215,7 +235,7 @@ describe("LiveCockpit — all-links-down banner", () => {
 			LiveCockpit,
 			baseProps({
 				isStreaming: false,
-				telemetry: { links: [link(true)] },
+				telemetry: { links: [link(false)], active_links: 0 },
 			}),
 		);
 		await tick();

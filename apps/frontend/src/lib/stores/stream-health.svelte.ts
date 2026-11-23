@@ -35,10 +35,8 @@ import { push as pushNotification } from "$lib/stores/notifications.svelte";
 // ============================================
 
 /**
- * The render-ready health indicator. The backend broadcasts
- * `healthy` | `degraded` | `dead` | `idle` (`idle` = the truthful non-streaming
- * posture, device-stability Todo 19); `unknown` is the pre-broadcast state before
- * any `health` event has arrived (and after a reset on stream stop).
+ * The render-ready health indicator. `idle` is the non-streaming posture;
+ * `unknown` means no verdict has arrived or bond observation has been lost.
  */
 export type HealthIndicator =
 	| "healthy"
@@ -54,12 +52,6 @@ export interface HealthSnapshot {
 }
 
 /**
- * Per-subsystem breakdown carried by every `health` broadcast (Task 13's
- * `StreamHealthOutput`), surfaced in the HUD rollup so the UI shows why the
- * rolled-up state is what it is, not just the tri-state dot. `state` is always
- * concrete here; a broadcast never carries `unknown`.
- */
-/**
  * The single most-actionable cause behind a non-healthy rollup, mirrored from
  * the backend `reason` field. Present only when the stream is degraded or dead.
  */
@@ -68,8 +60,9 @@ export interface HealthReason {
 	detail: string;
 }
 
+/** The latest per-subsystem health detail surfaced in the HUD. */
 export interface HealthRollup {
-	state: Exclude<HealthIndicator, "unknown">;
+	state: HealthIndicator;
 	reason?: HealthReason;
 	// `null` = unknown (idle posture / tri-state SRT); a boolean is a real
 	// streaming observation. Never coerce `null` to `false` — that is the
@@ -77,7 +70,7 @@ export interface HealthRollup {
 	process: { alive: boolean | null };
 	frames: { advancing: boolean | null; count: number | null };
 	srt: { reconnecting: boolean | null; reconnectCount: number };
-	bond: { linkCount: number; activeLinks: number };
+	bond: { linkCount: number; activeLinks: number; activity_unknown?: true };
 }
 
 const KNOWN_STATES: ReadonlySet<string> = new Set([
@@ -128,13 +121,6 @@ function asNullableCount(value: unknown): number | null {
 	return asCount(value);
 }
 
-/**
- * Extract the full {@link HealthRollup} from a raw `health` broadcast payload.
- * Returns `null` when the payload has no recognised tri-state (so the consumer
- * keeps its last-known rollup rather than blanking). Every sub-field is coerced
- * defensively (missing booleans collapse to `false`, missing/invalid counts to
- * `0`) so a partial frame can never crash the HUD rollup.
- */
 function parseHealthReason(value: unknown): HealthReason | undefined {
 	if (value === null || typeof value !== "object") return undefined;
 	const component = (value as { component?: unknown }).component;
@@ -145,18 +131,28 @@ function parseHealthReason(value: unknown): HealthReason | undefined {
 	return undefined;
 }
 
+/**
+ * Returns `null` for an unrecognized frame so the HUD keeps its last rollup.
+ * Missing booleans and invalid counts fall back to `false` and `0`.
+ */
 export function parseHealthRollup(data: unknown): HealthRollup | null {
 	const state = parseHealthState(data);
-	if (state === "unknown") return null;
+	if (!data || typeof data !== "object") return null;
 	const d = data as Record<string, unknown>;
 	const process = (d.process ?? {}) as Record<string, unknown>;
 	const frames = (d.frames ?? {}) as Record<string, unknown>;
 	const srt = (d.srt ?? {}) as Record<string, unknown>;
 	const bond = (d.bond ?? {}) as Record<string, unknown>;
+	const activityUnknown = bond.activity_unknown === true;
+	// An explicit neutral verdict is evidence, unlike a malformed event. Older
+	// producers may incorrectly call the same observation gap healthy.
+	if (state === "unknown" && (d.state !== "unknown" || !activityUnknown))
+		return null;
+	const next = state === "healthy" && activityUnknown ? "unknown" : state;
 	const reason = parseHealthReason(d.reason);
 	return {
-		state,
-		...(reason ? { reason } : {}),
+		state: next,
+		...(reason && next !== "unknown" ? { reason } : {}),
 		process: { alive: asNullableFlag(process.alive) },
 		frames: {
 			advancing: asNullableFlag(frames.advancing),
@@ -169,6 +165,7 @@ export function parseHealthRollup(data: unknown): HealthRollup | null {
 		bond: {
 			linkCount: asCount(bond.linkCount),
 			activeLinks: asCount(bond.activeLinks),
+			...(activityUnknown ? { activity_unknown: true } : {}),
 		},
 	};
 }
@@ -320,40 +317,39 @@ interface StreamHealthStore {
 function createStreamHealthStore(): StreamHealthStore {
 	let snapshot = $state<HealthSnapshot>(initialHealthSnapshot());
 	let rollup = $state<HealthRollup | null>(null);
+	let lastConfirmed: HealthIndicator = "unknown";
 
 	const ingest = (data: unknown): void => {
-		const next = parseHealthState(data);
-		// A malformed / unrecognised frame parses to `unknown`; never let it grey
-		// out the last-known-good indicator. `unknown` is reachable only as the
-		// pre-broadcast initial state or via an explicit reset(), never a broadcast.
-		if (next === "unknown") return;
-		// Parse the rollup BEFORE deciding the toast: the notification names its
-		// cause from this frame's own `reason`, so reading it after would caption
-		// the transition with the PREVIOUS frame's cause.
 		const nextRollup = parseHealthRollup(data);
-		const notification = notificationForTransition(
-			snapshot.current,
-			next,
-			nextRollup?.reason,
-		);
+		if (!nextRollup) return;
+		const { state: next, reason } = nextRollup;
+		// Silence is neither recovery nor a new outage. Keep the confirmed
+		// state for notifications, while showing the operator the latest detail.
+		if (next !== "unknown") {
+			const notification = notificationForTransition(
+				lastConfirmed,
+				next,
+				reason,
+			);
+			lastConfirmed = next;
+			if (notification) pushNotification(notification);
+		}
 		snapshot = reduceHealth(snapshot, next);
 		rollup = nextRollup;
-		if (notification) pushNotification(notification);
 	};
 
+	const reset = () => {
+		snapshot = initialHealthSnapshot();
+		rollup = null;
+		lastConfirmed = "unknown";
+	};
 	return {
 		ingest,
 		getState: () => snapshot.current,
 		getSnapshot: () => snapshot,
 		getRollup: () => rollup,
-		reset: () => {
-			snapshot = initialHealthSnapshot();
-			rollup = null;
-		},
-		destroy: () => {
-			snapshot = initialHealthSnapshot();
-			rollup = null;
-		},
+		reset,
+		destroy: reset,
 	};
 }
 

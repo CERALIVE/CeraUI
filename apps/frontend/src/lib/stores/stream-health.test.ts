@@ -17,6 +17,7 @@ vi.mock("@ceraui/i18n/svelte", () => ({ m: {} }));
 
 import { clearNotifications, getActive } from "./notifications.svelte";
 import {
+	getStreamHealthRollup,
 	getStreamHealthSnapshot,
 	getStreamHealthState,
 	type HealthIndicator,
@@ -391,6 +392,61 @@ describe("stream-health store (reactive API)", () => {
 			(n) => n.name === "stream-health-recovered",
 		);
 		expect(recovered?.type).toBe("success");
+	});
+
+	it("replaces lost bond detail without toasting until fresh recovery", () => {
+		const bond = { linkCount: 2, activeLinks: 0 };
+		ingestStreamHealth({
+			state: "degraded",
+			reason: { component: "links", detail: "All 2 links down" },
+			bond,
+		});
+		expect(getStreamHealthState()).toBe("degraded");
+		expect(getStreamHealthRollup()).toMatchObject({
+			bond,
+			reason: { component: "links" },
+		});
+		expect(getActive().map(({ name }) => name)).toEqual([
+			"stream-health-degraded",
+		]);
+		clearNotifications();
+
+		// Transitional compatibility: this wire shape used to produce a recovery toast.
+		ingestStreamHealth({
+			state: "healthy",
+			bond: { ...bond, activity_unknown: true },
+		});
+		expect(getStreamHealthState()).toBe("unknown");
+		expect(getStreamHealthRollup()).toMatchObject({
+			bond: { activity_unknown: true },
+		});
+		expect(getStreamHealthRollup()).not.toHaveProperty("reason");
+		expect(getActive()).toHaveLength(0);
+
+		ingestStreamHealth({ state: "healthy", bond: { ...bond, activeLinks: 2 } });
+		expect(getStreamHealthState()).toBe("healthy");
+		expect(getStreamHealthRollup()?.bond).toEqual({
+			linkCount: 2,
+			activeLinks: 2,
+		});
+		expect(getActive().map(({ name }) => name)).toEqual([
+			"stream-health-recovered",
+		]);
+		clearNotifications();
+
+		ingestStreamHealth({
+			state: "unknown",
+			bond: { ...bond, activity_unknown: true },
+		});
+		expect(getStreamHealthState()).toBe("unknown");
+		expect(getActive()).toHaveLength(0);
+		expect(getStreamHealthRollup()?.bond).toEqual({
+			...bond,
+			activity_unknown: true,
+		});
+		ingestStreamHealth({ state: "healthy", bond: { ...bond, activeLinks: 2 } });
+		expect(getStreamHealthState()).toBe("healthy");
+		expect(getActive()).toHaveLength(0);
 	});
 
 	it("never crashes and settles on the final state across 20 rapid flaps", () => {

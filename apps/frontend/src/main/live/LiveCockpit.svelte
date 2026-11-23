@@ -44,13 +44,16 @@ import type {
 import { Gauge, Layers, MonitorOff, Repeat, TriangleAlert } from '@lucide/svelte';
 
 import IngestStats from '$lib/components/custom/IngestStats.svelte';
+import { projectIngestLinks } from '$lib/components/custom/ingest-link-view';
 import { Button } from '$lib/components/ui/button';
+import type { LinkNames } from '$lib/helpers/link-names';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
 import { deriveCaptureBands, type MatchAction } from '$lib/streaming/capture-failover';
 import { compositionGeometrySupported, compositionSupported } from '$lib/streaming/compositionSupport';
 import type { EncoderLoadReading } from '$lib/streaming/encoder-load';
 import { deriveLiveSourceState } from '$lib/streaming/live-source-state';
 import type { ActiveSummary } from '$lib/streaming/sourceSummary';
+import type { LinkSignal } from '$lib/types/hud';
 
 import AudioMixer from './AudioMixer.svelte';
 import CompositionCard from './CompositionCard.svelte';
@@ -110,12 +113,17 @@ interface Props {
 	onStep: (delta: number) => void;
 	onSliderChange: (value: number) => void;
 	onSliderCommit: (value: number) => void;
+	onSliderCancel?: (() => void) | undefined;
 	// ── IngestStats ─────────────────────────────────────────────────────────────
 	telemetry: LinkTelemetryMessage | null | undefined;
-	/** APPLIED bitrate in kbps — folded into the session peak/avg rollup. */
+	telemetryConnected?: boolean;
+	telemetryWaiting?: boolean;
+	hudLinks?: LinkSignal[] | undefined;
+	linkNames?: LinkNames;
+	/** Glance headline: Sending when measured, otherwise Target. */
 	bitrateKbps?: number;
-	/** Names links for people (`$lib/helpers/link-names`); IngestStats shows it. */
-	linkName?: ((iface: string) => string) | undefined;
+	/** Fresh measured rate only, never the headline's fallback. */
+	measuredBitrateKbps?: number;
 	// ── Mid-stream lifecycle banners ───────────────────────────────────────────
 	// The selected audio device vanished mid-stream (LiveView derives it from the
 	// available audio sources vs config.asrc). Video-source-lost and all-links-down
@@ -171,9 +179,14 @@ const {
 	onStep,
 	onSliderChange,
 	onSliderCommit,
+	onSliderCancel,
 	telemetry,
+	telemetryConnected = true,
+	telemetryWaiting = false,
+	hudLinks,
+	linkNames,
 	bitrateKbps,
-	linkName = undefined,
+	measuredBitrateKbps,
 	audioSourceLost = false,
 	videoSignalLost = false,
 	isStreaming,
@@ -182,6 +195,15 @@ const {
 	summaryMode = false,
 	onCloseSummary = undefined,
 }: Props = $props();
+
+const rows = $derived(projectIngestLinks(telemetry?.links ?? [], hudLinks, linkNames));
+const feed = $derived(
+	!telemetryConnected ? 'disconnected'
+		: telemetry === undefined || (telemetry === null && telemetryWaiting) ? 'waiting'
+		: telemetry === null ? 'unavailable'
+		: telemetry.stale || rows.some(({ link }) => link.stale) ? 'stale'
+		: 'fresh',
+);
 
 // Mid-stream active-source loss. The idle `source-lost-banner` lives in
 // SourceSection, which never mounts while streaming — so an unplugged running
@@ -213,14 +235,15 @@ const onStandby = $derived(
 );
 const showSourceLost = $derived(activeSourceLost && !onStandby);
 
-// All bonded links down mid-stream: every reported link is stale while ≥1 link
-// exists. Distinct from a partial drop (some links still active).
+// Fresh sender connection state can establish an outage; stale rates cannot.
 const allLinksDown = $derived(
 	isStreaming &&
 		!summaryMode &&
+		feed === 'fresh' &&
 		(telemetry?.links.length ?? 0) > 0 &&
-		(telemetry?.links.every((link) => link.stale) ?? false),
+		telemetry?.active_links === 0,
 );
+const observationLost = $derived(isStreaming && !summaryMode && feed === 'stale');
 
 const showAudioLost = $derived(isStreaming && !summaryMode && audioSourceLost);
 
@@ -240,7 +263,7 @@ const canMix = $derived(capabilities?.audio_mix !== undefined);
 // Whether any banner is up: the banners lead the cards column only when they
 // exist, so an alert-free stream opens no empty row above the telemetry card.
 const hasBanners = $derived(
-	captureBands.length > 0 || showSourceLost || showVideoSignalLost || showAudioLost || allLinksDown,
+	captureBands.length > 0 || showSourceLost || showVideoSignalLost || showAudioLost || allLinksDown || observationLost,
 );
 
 const BAND_CLASS =
@@ -353,18 +376,20 @@ const BAND_ICON_CLASS = 'text-status-warning mt-0.5 size-4 shrink-0';
 				</div>
 			{/if}
 
-			{#if allLinksDown}
+			{#if allLinksDown || observationLost}
 				<div
-					class="border-destructive/40 bg-destructive/10 flex items-start gap-3 rounded-lg border p-3"
-					data-testid="all-links-down-banner"
-					role="alert"
+					class={allLinksDown ? 'border-destructive/40 bg-destructive/10 flex items-start gap-3 rounded-lg border p-3' : BAND_CLASS}
+					data-testid={allLinksDown ? 'all-links-down-banner' : 'link-observation-lost-banner'}
+					role={allLinksDown ? 'alert' : 'status'}
 				>
-					<TriangleAlert aria-hidden={true} class="text-destructive mt-0.5 size-4 shrink-0" />
+					<TriangleAlert aria-hidden={true} class={allLinksDown ? 'text-destructive mt-0.5 size-4 shrink-0' : BAND_ICON_CLASS} />
 					<div class="min-w-0 space-y-0.5">
-						<p class="text-destructive text-sm font-medium">
-							{m["live.source.linksDownStreamingTitle"]()}
+						<p class={allLinksDown ? 'text-destructive text-sm font-medium' : 'text-sm font-medium'}>
+							{allLinksDown ? m["live.source.linksDownStreamingTitle"]() : m["live.glance.linkDown"]()}
 						</p>
-						<p class="text-muted-foreground text-xs">{m["live.source.linksDownStreamingBody"]()}</p>
+						<p class="text-muted-foreground text-xs">
+							{allLinksDown ? m["live.source.linksDownStreamingBody"]() : m["live.glance.observationLostHint"]()}
+						</p>
 					</div>
 				</div>
 			{/if}
@@ -374,7 +399,9 @@ const BAND_ICON_CLASS = 'text-status-warning mt-0.5 size-4 shrink-0';
 	{#if !summaryMode}
 		<!-- Phones (below 1024 px) open on the stream itself: bitrate, one verdict,
 		     a bar per link. The engineering numbers stay in Details below. -->
-		<LiveGlance {bitrate} {bitrateMeasured} {telemetry} />
+		{#if isStreaming}
+			<LiveGlance {bitrateKbps} {bitrateMeasured} {rows} {feed} />
+		{/if}
 
 		<!-- Mid-stream preview: the engine already publishes MSE during an active
 		     session (wave2 14e), so the desk's disclosure dials the same single-use-
@@ -463,7 +490,7 @@ const BAND_ICON_CLASS = 'text-status-warning mt-0.5 size-4 shrink-0';
 				/>
 			{/if}
 
-			<IngestStats {telemetry} {isStreaming} {bitrateKbps} {linkName} />
+			<IngestStats {telemetry} {rows} {isStreaming} bitrateKbps={measuredBitrateKbps} />
 		</LiveDetails>
 	</section>
 
@@ -491,6 +518,7 @@ const BAND_ICON_CLASS = 'text-status-warning mt-0.5 size-4 shrink-0';
 					{bitrateMin}
 					onSliderChange={onSliderChange}
 					onSliderCommit={onSliderCommit}
+					{onSliderCancel}
 					onStep={onStep}
 					{sliderMax}
 					{sliderMin}

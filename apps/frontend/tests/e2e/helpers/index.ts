@@ -88,11 +88,6 @@ export async function endStream(page: Page): Promise<void> {
 }
 
 /**
- * Navigate to a primary destination by clicking the active nav control.
- * Works in both layouts: desktop rail (`#nav-tab-*`) and mobile dock
- * (`#mobile-nav-tab-*`), clicking whichever is currently visible.
- */
-/**
  * Open the live Details section. Below 1024 px the encoder load and the
  * per-link ingest table are folded behind it; from 1024 px it is always open,
  * so this is a no-op there.
@@ -100,11 +95,16 @@ export async function endStream(page: Page): Promise<void> {
 export async function openLiveDetails(page: Page): Promise<void> {
 	const details = page.locator('[data-live-details]');
 	await expect(details).toHaveCount(1, { timeout: 15_000 });
-	if (await details.evaluate((el) => (el as HTMLDetailsElement).open)) return;
+	if (await details.evaluate((el) => el instanceof HTMLDetailsElement && el.open)) return;
 	await details.locator('summary').click();
-	await expect.poll(() => details.evaluate((el) => (el as HTMLDetailsElement).open)).toBe(true);
+	await expect(details).toHaveAttribute('open', '');
 }
 
+/**
+ * Navigate to a primary destination by clicking the active nav control.
+ * Works in both layouts: desktop rail (`#nav-tab-*`) and mobile dock
+ * (`#mobile-nav-tab-*`), clicking whichever is currently visible.
+ */
 export async function navigateTo(page: Page, destination: Destination): Promise<void> {
 	const desktopTab = page.locator(`#nav-tab-${destination}`);
 	const mobileTab = page.locator(`#mobile-nav-tab-${destination}`);

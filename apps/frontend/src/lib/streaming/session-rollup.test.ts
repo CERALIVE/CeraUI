@@ -181,18 +181,18 @@ describe("computeSessionRollup — mock session", () => {
 		]);
 	});
 
-	it("zeroes an empty session instead of throwing", () => {
+	it("reports no measured rate for an empty session", () => {
 		expect(computeSessionRollup([])).toEqual({
 			sampleCount: 0,
-			peakBitrateKbps: 0,
-			avgBitrateKbps: 0,
+			peakBitrateKbps: null,
+			avgBitrateKbps: null,
 			dropCount: 0,
 			durationMs: 0,
 			links: [],
 		});
 	});
 
-	it("coerces a missing/invalid bitrate to 0 via createSample", () => {
+	it("retains an unknown rate without discarding the link sample", () => {
 		const s = createSample(
 			undefined,
 			[
@@ -206,7 +206,7 @@ describe("computeSessionRollup — mock session", () => {
 			],
 			1234,
 		);
-		expect(s.bitrateKbps).toBe(0);
+		expect(s.bitrateKbps).toBeNull();
 		expect(s.capturedAt).toBe(1234);
 		expect(s.links).toEqual([
 			{ iface: "eth0", stale: false, rtt: 12, nak: 3, weight: 40 },
@@ -308,8 +308,7 @@ describe("computeSessionRollup — edge cases", () => {
 	});
 
 	it("keeps peak/avg at 0 for an all-zero-bitrate session", () => {
-		// A configured bitrate of 0 across the session is a valid (idle-encoder)
-		// state: peak and avg collapse to 0 while link uptime is still computed.
+		// A measured zero is valid. It does not erase the link diagnostics.
 		const zeroBitrate: SessionSample[] = [
 			sample(0, 0, [link("eth0", false, 10, 0, 100)]),
 			sample(0, 5000, [link("eth0", false, 10, 0, 100)]),
@@ -326,6 +325,26 @@ describe("computeSessionRollup — edge cases", () => {
 				avgRtt: 10,
 			},
 		]);
+	});
+
+	it("excludes unknown rates from the mean but includes measured zero", () => {
+		const frames = [
+			createSample(undefined, [], 0),
+			createSample(4200, [], 1000),
+			createSample(0, [], 2000),
+			createSample(undefined, [], 3000),
+		];
+		expect(computeSessionRollup(frames)).toMatchObject({
+			peakBitrateKbps: 4200,
+			avgBitrateKbps: 2100,
+			sampleCount: 4,
+		});
+		expect(
+			computeSessionRollup([createSample(undefined, [], 0)]),
+		).toMatchObject({
+			peakBitrateKbps: null,
+			avgBitrateKbps: null,
+		});
 	});
 
 	it("rounds fractional uptime to the nearest integer percent", () => {
@@ -366,15 +385,15 @@ describe("computeSessionRollup — edge cases", () => {
 });
 
 describe("rollup export — empty session", () => {
-	// The export path must serialise a zeroed rollup without emitting any per-link
+	// The export path must serialise an empty rollup without emitting any per-link
 	// rows (no links → only the header line survives in the CSV link block).
 	const empty = computeSessionRollup([]);
 
-	it("JSON export carries zeroed fields and an empty links array", () => {
+	it("JSON export carries unknown rates and an empty links array", () => {
 		expect(JSON.parse(rollupToJson(empty))).toEqual({
 			sampleCount: 0,
-			peakBitrateKbps: 0,
-			avgBitrateKbps: 0,
+			peakBitrateKbps: null,
+			avgBitrateKbps: null,
 			dropCount: 0,
 			durationMs: 0,
 			links: [],
@@ -383,8 +402,8 @@ describe("rollup export — empty session", () => {
 
 	it("CSV export keeps the metric block and an empty link block", () => {
 		const csv = rollupToCsv(empty);
-		expect(csv).toContain("peak_bitrate_kbps,0");
-		expect(csv).toContain("avg_bitrate_kbps,0");
+		expect(csv).toContain("peak_bitrate_kbps,\n");
+		expect(csv).toContain("avg_bitrate_kbps,\n");
 		expect(csv).toContain("drop_count,0");
 		expect(csv).toContain("sample_count,0");
 		expect(csv).toContain("duration_ms,0");
