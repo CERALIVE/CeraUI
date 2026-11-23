@@ -56,7 +56,7 @@ $effect(() => {
 });
 </script>
 
-<AppDialog bind:open contentClass={SURFACES} fullscreen hideFooter title={m["settings.index.logs"]()}>
+<AppDialog bind:open contentClass={SURFACES} fullscreen hideFooter title={m["settings.index.logs"]()} touchRegion>
 	{#snippet headerAside()}
 		<StreamStatePill />
 		{#if generation !== null && !wide.current}

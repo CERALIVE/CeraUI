@@ -54,6 +54,7 @@ const uid = $props.id();
 function openOnCancel(id: string) {
 	return {
 		id,
+		'data-touch-region': '',
 		// The dialog's own open focus is turned off; Cancel takes focus instead.
 		onOpenAutoFocus: (event: Event) => {
 			event.preventDefault();

@@ -64,7 +64,7 @@ const boot = $derived(bootSelection.boot);
 		</span>
 		<ChevronDown class="size-4 shrink-0" />
 	</Button>
-	<AppDialog bind:open hideFooter title={m['systemLogs.boots.heading']()}>
+	<AppDialog bind:open hideFooter title={m['systemLogs.boots.heading']()} touchRegion>
 		<BootPicker onchoose={() => (open = false)} />
 	</AppDialog>
 {/if}

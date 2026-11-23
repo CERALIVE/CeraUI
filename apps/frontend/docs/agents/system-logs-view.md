@@ -971,8 +971,10 @@ widths are not measured in this lane.
   DE cases at 375x812, 768x1024, 1280x800, and touch 1024x600. The dialog width
   matched the viewport width in those cases. The audit
   checked horizontal overflow and the bounds of visible state, severity, and
-  action elements in those cases and at 320x720 and 375x812 in all ten
-  locales. At the tested widths of 375 px or above, the audited tab labels used
+  action elements in those cases and at 320x720, 375x812 and 390x844 in all ten
+  locales. At 390x844, both themes also audit the 44×44 CSS px minimum through
+  Events, Raw logs and Storage, including open filters, Search Clear, and the
+  Raw and Storage select menus. At tested widths of 375 px or above, tab labels used
   at most two lines. The Spanish Raw logs label used three unclipped lines at
   320 px (DESIGN-FOLLOWUPS DF-26). The 12 principal cases reported no critical
   or serious scoped axe violations in Events, Raw logs, or Storage. The
@@ -989,13 +991,17 @@ widths are not measured in this lane.
   the 800x480 kiosk and the widths between the measured ones are not measured.
 - An 800x480 kiosk follows the 768 column with the folded bars, since it is
   below 1024 px wide and at most 600 px tall.
-- Touch layout (`[data-layout-mode='touch']`): every interactive element reaches
-  `--touch-target-min` through the existing touch layer, the
+- Touch layout (`[data-layout-mode='touch']`) and phones below 640 px in
+  default mode: every interactive element reaches `--touch-target-min`
+  through the existing touch layer, the
   `data-touch-target="hit-area"` overlay or, for the select options in
   `StorageLimits.svelte` and `RawLogsFilterBar.svelte`, a local
   `min-h-(--touch-target-min)` class, with at least 8 px between neighbours;
   disabled controls keep their full size (DESIGN.md TT-1..TT-5). Never a
-  hard-coded 44px. The spec measures the gap only between distinct controls:
+  hard-coded 44px on a control. The System Logs dialog and its portaled
+  dialogs and select menus opt in with `data-touch-region`, so the title
+  bar and panel controls share the same token without changing kiosk sizing
+  or desktop density. The spec measures the gap only between distinct controls:
   members of one radiogroup, listbox, Raw list or boot picker, nested hit
   areas, and targets scrolled partly out of view are not paired
   (`tests/e2e/helpers/system-logs-audit.ts`, spacing check).
@@ -1003,6 +1009,17 @@ widths are not measured in this lane.
   placeholder (`systemLogs.raw.searchShort`) and keeps the full label as its
   accessible name; with the filters inline the full label is the placeholder
   (`RawLogsFilterBar.svelte`).
+- Short Raw view (below 1024 px wide and at most 480 px tall, or below 640 px
+  wide and at most 600 px tall): the filter and notice area has a bounded
+  height and the virtualized results reserve at least 88 CSS px. At the ends
+  of either scroller, input can continue scrolling the surrounding view to
+  reach the tabs and toolbar. The dialog header stays put. When a resize
+  clips a focused filter, keep it visible along with the results. The kiosk,
+  tablet and desktop keep their existing scroll ownership.
+- `raw-logs-scroll-input.spec.ts` checks wheel, touch, Tab focus and clipped
+  geometry in all ten locales and both themes, with filters open and closed
+  at 390×440, 360×360, 320×480, 390×260 (simulated keyboard), 844×390,
+  740×360, 667×375 and 667×350.
 - RTL (`ar`): logical properties only; the close button sits at the inline end;
   the side column sits at the inline end; chevrons mirror (`rtl:-scale-x-100`);
   raw unit and message keep `dir="ltr"`; data params in `<bdi>`, Storage sizes
