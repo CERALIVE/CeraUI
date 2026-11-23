@@ -387,7 +387,16 @@ export class WifiRadioIdentityProducer {
 				classification,
 				degradedReason,
 				incarnation: unchanged ? previous.incarnation : crypto.randomUUID(),
-				...(row ? { row, observation: generation } : {}),
+				...(row
+					? { row, observation: generation }
+					: // A physical sample that a newer observation superseded carries no
+						// row. An unchanged identity keeps its row association, so an
+						// operation bound to this radio still owns it.
+						unchanged &&
+							previous.ifname === device.ifname &&
+							previous.row !== undefined
+						? { row: previous.row, observation: previous.observation }
+						: {}),
 			});
 		}
 		this.permanentMacByLifetime = cache;
