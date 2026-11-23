@@ -21,6 +21,7 @@ import {
 	render,
 } from "@testing-library/svelte";
 import { flushSync } from "svelte";
+import { toast } from "svelte-sonner";
 import {
 	afterEach,
 	beforeAll,
@@ -132,6 +133,9 @@ vi.mock("$main/live/CapabilityTierBanner.svelte", noop);
 vi.mock("$main/dialogs/ServerDialog.svelte", noop);
 vi.mock("$main/dialogs/AudioDialog.svelte", noop);
 vi.mock("$main/dialogs/EncoderDialog.svelte", noop);
+vi.mock("$lib/components/ui/sonner", async () => ({
+	Toaster: (await import("../tests/fixtures/Noop.svelte")).default,
+}));
 
 import {
 	destroyAsyncOperations,
@@ -154,6 +158,7 @@ import {
 	receivePulledStatus,
 	resetState,
 } from "../lib/rpc/subscriptions.svelte";
+import { clearNotifications } from "../lib/stores/notifications.svelte";
 import {
 	clearStartRecoveryUnknown,
 	latestStopOwner,
@@ -163,8 +168,10 @@ import {
 	startRecoveryUnknown,
 } from "../lib/streaming/unresolved-stream-actions.svelte";
 import Noop from "../tests/fixtures/Noop.svelte";
+import { en } from "../tests/helpers/catalog";
 import UpdatesDialog from "./dialogs/UpdatesDialog.svelte";
 import LiveView from "./LiveView.svelte";
+import LayoutToastHost from "./layout/LayoutToastHost.svelte";
 import {
 	publishNavigation,
 	resetNavigationFeed,
@@ -566,6 +573,86 @@ async function exhaustStart(
 }
 
 const F10_IDLE = [{ label: "Start Stream", disabled: false }] as const;
+
+function deliverStartFailureNotice(attemptId: string, replay = false) {
+	socket().deliver({
+		notification: {
+			replay,
+			show: [
+				{
+					name: "stream_start_failed",
+					type: "error",
+					msg: `Background start failed: ${attemptId}`,
+					params: { attemptId },
+					is_dismissable: true,
+					is_persistent: false,
+					duration: 10,
+				},
+			],
+		},
+	});
+}
+
+describe("start refusal presentation across the socket", () => {
+	beforeEach(() => {
+		vi.mocked(toast.error).mockClear();
+		clearNotifications();
+	});
+
+	afterEach(clearNotifications);
+
+	it.each(["notice first", "reply first"] as const)(
+		"shows one local failure with arrival order %s, ignoring exact replays",
+		async (order) => {
+			render(LayoutToastHost);
+			const { container } = render(LiveView);
+			await fireEvent.click(button(container, "Start Stream"));
+			await settle();
+			const attemptId = `paired-${order}`;
+			if (order === "notice first") {
+				deliverStartFailureNotice(attemptId);
+				await settle();
+				expect(toast.error).not.toHaveBeenCalled();
+			}
+			answer("streaming.start", {
+				success: false,
+				result: "failed",
+				attemptId,
+				failure: {
+					attemptId,
+					class: "engine_unavailable",
+					phase: "connect",
+					retriable: true,
+				},
+			});
+			await settle();
+			if (order === "reply first") deliverStartFailureNotice(attemptId);
+			await settle();
+			deliverStartFailureNotice(attemptId, true);
+			await settle();
+			expect(toast.error).toHaveBeenCalledTimes(1);
+			expect(toast.error).toHaveBeenCalledWith(
+				expect.stringContaining(en.live.startFailure.class.engine_unavailable),
+				expect.anything(),
+			);
+		},
+	);
+
+	it("keeps an unpaired device failure when the local Start reply is lost", async () => {
+		render(LayoutToastHost);
+		const { container } = render(LiveView);
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		deliverStartFailureNotice("unpaired");
+		await settle();
+		dropLink();
+		await settle();
+		expect(toast.error).toHaveBeenCalledExactlyOnceWith(
+			"Background start failed: unpaired",
+			expect.anything(),
+		);
+	});
+});
 
 describe("F11 real-socket Start timeout probe", () => {
 	it.each(["later-live", "later-idle", "silent"] as const)(

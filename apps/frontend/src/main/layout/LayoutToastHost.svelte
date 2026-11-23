@@ -18,6 +18,10 @@ import {
 	dismiss,
 	getActive,
 } from '$lib/stores/notifications.svelte';
+import {
+	claimStartFailurePresentation,
+	startFailureNoticePending,
+} from '$lib/streaming/start-failure-presentation.svelte';
 
 // Resolve the action label i18n key against the live message registry, falling
 // back to the raw key so an unknown label never blocks the deep-link affordance.
@@ -55,6 +59,11 @@ $effect(() => {
 	for (const notification of active) {
 		activeNames.add(notification.name);
 		if (renderedAt.get(notification.name) === notification.receivedAt) continue;
+		const attemptId = notification.params?.attemptId;
+		if (notification.name === 'stream_start_failed' && typeof attemptId === 'string') {
+			if (startFailureNoticePending()) continue;
+			if (!claimStartFailurePresentation(attemptId)) continue;
+		}
 		renderedAt.set(notification.name, notification.receivedAt);
 
 		const action = notification.action;
