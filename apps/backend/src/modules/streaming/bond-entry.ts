@@ -1,7 +1,10 @@
 import { logger } from "../../helpers/logger.ts";
-import type { PhysicalDeviceRecord } from "../modems/physical-identity.ts";
+import type {
+	PhysicalBondKeys,
+	PhysicalDeviceRecord,
+} from "../modems/physical-identity.ts";
 import {
-	describeModemPhysicalIdentity,
+	describeModemBondKeys,
 	resolveModemPhysicalIdentity,
 } from "../modems/physical-identity-source.ts";
 import {
@@ -14,12 +17,6 @@ export type BondIdentityResolver = typeof resolveModemPhysicalIdentity;
 
 let identityResolver: BondIdentityResolver = resolveModemPhysicalIdentity;
 
-function bondIdentity(ifname: string, mode: "observe" | "preview") {
-	return mode === "preview" && identityResolver === resolveModemPhysicalIdentity
-		? describeModemPhysicalIdentity(ifname)
-		: identityResolver(ifname);
-}
-
 export function setBondIdentityResolverForTest(
 	fn: BondIdentityResolver | null,
 ): void {
@@ -28,10 +25,19 @@ export function setBondIdentityResolverForTest(
 
 export function resolveBondPhysicalIdentity(
 	ifname: string,
-	mode: "observe" | "preview" = "observe",
 ): PhysicalDeviceRecord | undefined {
 	try {
-		return bondIdentity(ifname, mode);
+		return identityResolver(ifname);
+	} catch {
+		return undefined;
+	}
+}
+
+export function peekBondKeys(ifname: string): PhysicalBondKeys | undefined {
+	try {
+		return identityResolver === resolveModemPhysicalIdentity
+			? describeModemBondKeys(ifname)
+			: identityResolver(ifname);
 	} catch {
 		return undefined;
 	}
@@ -41,10 +47,9 @@ export function describeBondEntry(
 	ifname: string,
 	ip: string,
 	logFailure = true,
-	mode: "observe" | "preview" = "observe",
 ): BondEntry {
 	try {
-		const record = bondIdentity(ifname, mode);
+		const record = identityResolver(ifname);
 		return {
 			ip,
 			iface: ifname,
@@ -62,10 +67,6 @@ export function describeBondEntry(
 	}
 }
 
-export function isBondLinkMappable(
-	ifname: string,
-	ip: string,
-	mode: "observe" | "preview" = "observe",
-): boolean {
-	return isMappableEntry(describeBondEntry(ifname, ip, false, mode));
+export function isBondLinkMappable(ifname: string, ip: string): boolean {
+	return isMappableEntry(describeBondEntry(ifname, ip, false));
 }

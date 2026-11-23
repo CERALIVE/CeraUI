@@ -10,7 +10,11 @@ import {
 	saveConfig,
 	setConfigFilePath,
 } from "../modules/config.ts";
-import { setPresentPhysicalDevices } from "../modules/modems/physical-identity.ts";
+import {
+	listPhysicalDevices,
+	resetPhysicalIdentityRegistry,
+	setPresentPhysicalDevices,
+} from "../modules/modems/physical-identity.ts";
 import { isBondOptedOut } from "../modules/network/bond-preference.ts";
 import { MockMonitorEmitter } from "../modules/network/monitor/mock-monitor.ts";
 import {
@@ -18,7 +22,12 @@ import {
 	NmcliMonitorManager,
 } from "../modules/network/monitor/monitor-manager.ts";
 import * as netif from "../modules/network/network-interfaces.ts";
-import { resetUsbNetMarkers } from "../modules/network/router-cellular-scan.ts";
+import {
+	invalidateUsbNetReading,
+	notePublishedNetifSnapshot,
+	refreshUsbNetMarkers,
+	resetUsbNetMarkers,
+} from "../modules/network/router-cellular-scan.ts";
 import {
 	getNetifState,
 	onNetifChange,
@@ -47,6 +56,10 @@ import {
 	physicalRecord,
 	resetBondFixture,
 } from "./helpers/bond-toggle-fixture.ts";
+import {
+	constructedTwinDeps,
+	constructedTwins,
+} from "./helpers/constructed-usb-twins.ts";
 
 const envKeys = [
 	"NODE_ENV",
@@ -77,6 +90,10 @@ type Topology =
 	| "empty"
 	| "raw-last"
 	| "overlap"
+	| "deadline"
+	| "marker"
+	| "alias"
+	| "alias-survivor"
 	| "migrate"
 	| "unseen-legacy";
 const IP = "192.0.2.20";
@@ -110,7 +127,7 @@ function setBootContext(
 	real: boolean,
 	monitor: ReturnType<typeof createMonitorManager>,
 ) {
-	const set = Reflect.get(netif, "setBondDisableGuardContext");
+	const set: unknown = Reflect.get(netif, "setBondDisableGuardContext");
 	if (typeof set === "function")
 		set(real, monitor instanceof NmcliMonitorManager);
 }
@@ -130,6 +147,13 @@ function add(name: string, changes: Partial<netif.NetworkInterface> = {}) {
 
 function seed(topology: Topology) {
 	add("eth0");
+	if (topology === "alias" || topology === "alias-survivor") {
+		add("eth0", { error: netif.NETIF_ERR_SHAREDLAN });
+		add("held0", { error: netif.NETIF_ERR_SHAREDLAN });
+		add("wwu0", { usb: true, identitySettled: true });
+		if (topology === "alias-survivor") add("eth1");
+		return;
+	}
 	if (topology === "migrate" || topology === "unseen-legacy") {
 		const legacy = physicalRecord("legacy", "fixture:legacy").linkId;
 		const identity = (name: string) => ({
@@ -144,7 +168,7 @@ function seed(topology: Topology) {
 		return;
 	}
 	setBondIdentityResolverForTest(
-		topology === "fallback"
+		topology === "fallback" || topology === "deadline" || topology === "marker"
 			? null
 			: (name) =>
 					physicalRecord(
@@ -152,7 +176,22 @@ function seed(topology: Topology) {
 						`fixture:${topology === "shared-key" && name === "eth1" ? "eth0" : name}`,
 					),
 	);
-	if (topology === "twins" || topology === "fallback") {
+	if (topology === "deadline") {
+		add("wwu0", { usb: true });
+		add("wwu1");
+		netif.setBondOptOut("wwu1", true);
+		notePublishedNetifSnapshot(
+			Object.keys(netif.getNetworkInterfaces()),
+			10_000,
+		);
+	} else if (topology === "marker") {
+		const [first, second] = constructedTwins;
+		if (!first || !second) throw new Error("Expected two USB fixtures");
+		for (const { ifname } of [first, second]) {
+			add(ifname, { usb: true, identitySettled: true });
+			netif.setBondOptOut(ifname, true);
+		}
+	} else if (topology === "twins" || topology === "fallback") {
 		for (const name of ["wwan0", "wwan1"]) {
 			add(name);
 			netif.setBondOptOut(name, true);
@@ -163,8 +202,10 @@ function seed(topology: Topology) {
 		add("eth0", { enabled: false });
 	} else if (topology !== "raw-last") {
 		add("eth1", { enabled: topology !== "overlap" });
-		if (topology === "overlap")
+		if (topology === "overlap") {
 			add("held0", { error: netif.NETIF_ERR_SHAREDLAN });
+			netif.setBondOptOut("eth1", true);
+		}
 	}
 }
 
@@ -250,6 +291,31 @@ async function replay(
 		netif.resetNetifSnapshotForTest();
 		resetUsbNetMarkers();
 		seed(topology);
+		if (topology === "marker")
+			await refreshUsbNetMarkers(
+				constructedTwins.map(({ ifname }) => ifname),
+				constructedTwinDeps(),
+			);
+		if (topology === "alias" || topology === "alias-survivor") {
+			const fixture = constructedTwins[0];
+			if (fixture === undefined) throw new Error("Missing USB fixture");
+			// Two network functions from one USB parent, not two ports with
+			// a factory serial collision.
+			const siblingLink = fixture.readlink.replace(/:\d+\.\d+$/, ":1.1");
+			const devices = [
+				{ ...fixture, ifname: "wwu0", serial: "FIXTURE-UNIT-A" },
+				{
+					...fixture,
+					ifname: "eth0",
+					readlink: siblingLink,
+					serial: "FIXTURE-UNIT-A",
+				},
+			];
+			await refreshUsbNetMarkers(
+				["wwu0", "eth0"],
+				constructedTwinDeps(devices),
+			);
+		}
 		if (monitor instanceof MockMonitorEmitter) {
 			const delivered = Promise.withResolvers<void>();
 			monitor.on("monitor-event", (event) => {
@@ -271,8 +337,22 @@ async function replay(
 		if (mode === "FLIP-MONITOR") delete process.env.MOCK_SCENARIO;
 		if (mode === "FLIP-DEVICE") process.env.CERALIVE_DEVICE_TYPE = "emulated";
 		const watcher = watchConfigWrite(file, fault);
+		const requestMs =
+			label === "deadline-after"
+				? 25_001
+				: label === "deadline-at"
+					? 25_000
+					: 24_999;
+		const timeTuple = (ms: number): [number, number] => [
+			Math.floor(ms / 1000),
+			(ms % 1000) * 1_000_000,
+		];
+		const deadlineClock =
+			topology === "deadline"
+				? spyOn(process, "hrtime").mockReturnValue(timeTuple(requestMs))
+				: undefined;
 		try {
-			const before = snapshot(file);
+			let monotonic = requestMs;
 			addClient(observer);
 			broadcastMsg("netif", netif.netIfBuildMsg());
 			const anchor: unknown = JSON.parse(trace.pop()?.frame ?? "{}");
@@ -284,6 +364,15 @@ async function replay(
 			)
 				throw new Error("Missing sequence anchor");
 			const seq = anchor.seq;
+			const retractionName =
+				topology === "marker" ? constructedTwins[0]?.ifname : undefined;
+			if (retractionName) {
+				expect(anchor).toMatchObject({
+					netif: { [retractionName]: { usb_modem_net: expect.any(Object) } },
+				});
+				invalidateUsbNetReading(retractionName, 1);
+			}
+			const before = snapshot(file);
 			const stopWire = onNetifChange(() =>
 				broadcastMsg("netif", netif.netIfBuildMsg()),
 			);
@@ -291,7 +380,20 @@ async function replay(
 			const stopEdges = netif.onNetworkInterfacesChange(() => {
 				edges.push(genSrtlaBondEntries().map((entry) => entry.iface));
 			});
+			if (retractionName) resetPhysicalIdentityRegistry();
+			const beforeRegistry = listPhysicalDevices();
+			let afterRegistry = beforeRegistry;
 			try {
+				deadlineClock?.mockImplementation(
+					Object.assign(
+						(): [number, number] => {
+							const ms = monotonic;
+							if (label === "deadline-crossing") monotonic = 25_000;
+							return timeTuple(ms);
+						},
+						{ bigint: process.hrtime.bigint },
+					),
+				);
 				const socket = requester("requester");
 				await Promise.all(
 					requests.map((input, i) =>
@@ -302,7 +404,10 @@ async function replay(
 						}),
 					),
 				);
+				afterRegistry = listPhysicalDevices();
+				if (retractionName) broadcastMsg("netif", netif.netIfBuildMsg());
 			} finally {
+				deadlineClock?.mockReturnValue(timeTuple(monotonic));
 				stopEdges();
 				stopWire();
 			}
@@ -339,6 +444,19 @@ async function replay(
 				frames: normalized,
 				edges,
 				steps,
+				...(retractionName === undefined
+					? {}
+					: {
+							retraction: {
+								name: retractionName,
+								observerCount: normalized.filter(
+									({ source, frame }) =>
+										source === "observer" &&
+										frame.includes('"usb_modem_net":null'),
+								).length,
+								registryChanged: afterRegistry.length !== beforeRegistry.length,
+							},
+						}),
 			};
 			if (process.env.BOND_VETO_TRACE)
 				appendFileSync(process.env.BOND_VETO_TRACE, `${JSON.stringify(row)}\n`);
@@ -348,6 +466,7 @@ async function replay(
 			return { ...row, frames };
 		} finally {
 			watcher.restore();
+			deadlineClock?.mockRestore();
 		}
 	} finally {
 		removeClient(observer);
@@ -357,6 +476,7 @@ async function replay(
 		if (monitor instanceof MockMonitorEmitter) monitor.reset();
 		resetBondFixture();
 		resetUsbNetMarkers();
+		netif.resetModemNetTracking();
 		updateMockState({ initialized, netifConfigs });
 		for (const [key, value] of priorEnv) {
 			if (value === undefined) delete process.env[key];
@@ -443,8 +563,8 @@ for (const mode of modes)
 					reverse ? [off, backupOff] : [backupOff, off],
 					split,
 				);
-				if (mode === "REAL" && !reverse)
-					await replay(
+				if (mode === "REAL" && !reverse) {
+					const control = await replay(
 						"overlap-surviving-step",
 						mode,
 						"none",
@@ -452,6 +572,31 @@ for (const mode of modes)
 						[backupOn],
 						split,
 					);
+					expect(control.frames.at(-1)).toEqual({
+						id: "request-0",
+						result: { success: true, applied: backupOn },
+					});
+					expect(control.steps.filter((step) => step === "rename")).toEqual([
+						"rename",
+					]);
+					expect(control.before.preferences).toEqual({
+						[physicalRecord("eth1", "fixture:eth1").linkId]: true,
+					});
+					expect(
+						JSON.parse(
+							Buffer.from(
+								control.after.disk && "bytes" in control.after.disk
+									? (control.after.disk.bytes ?? "")
+									: "",
+								"base64",
+							).toString(),
+						),
+					).not.toHaveProperty("bond_opt_out");
+					expect(control.after.bond.map(({ iface }) => iface)).toEqual([
+						"eth0",
+						"eth1",
+					]);
+				}
 				expect(row.edges).toEqual(
 					reverse
 						? [["eth0", "eth1"], ["eth1"]]
@@ -492,7 +637,47 @@ test("real zero-to-zero, stale, malformed and legacy-refused inputs keep their o
 	).toEqual([notice, refused(0)]);
 });
 
-test("legacy migration can retain an exclusion, while removing an unmigrated legacy key can admit a peer", async () => {
+test("a veto leaves the pending modem marker retraction for the next observer broadcast", async () => {
+	const row = await replay("marker-retraction", "REAL", "none", "marker", [
+		off,
+	]);
+	expect(row.retraction?.observerCount).toBe(1);
+	expect(row.retraction?.registryChanged).toBe(false);
+	expectVeto(row);
+});
+
+test("a later sender crossing the cutoff does not change the earlier request-time decision", async () => {
+	const row = await replay("deadline-crossing", "REAL", "none", "deadline", [
+		off,
+	]);
+	expect(row.before.bond.map(({ iface }) => iface)).toEqual(["eth0"]);
+	expect(row.frames).toEqual([notice, refused(0)]);
+	expect(row.edges).toEqual([]);
+	expect(row.steps).toEqual([]);
+	expect(row.after.bond.map(({ iface }) => iface)).toEqual(["eth0", "wwu0"]);
+});
+
+test("a stable identity deadline is inclusive and does not release a peer early", async () => {
+	const before = await replay("deadline-before", "REAL", "none", "deadline", [
+		off,
+	]);
+	const at = await replay("deadline-at", "REAL", "none", "deadline", [off]);
+	const after = await replay("deadline-after", "REAL", "none", "deadline", [
+		off,
+	]);
+	for (const ready of [at, after]) {
+		expect(ready.before.bond.map(({ iface }) => iface)).toEqual([
+			"eth0",
+			"wwu0",
+		]);
+		expect(ready.frames.at(-1)).toEqual(changed);
+		expect(ready.edges).toEqual([["wwu0"]]);
+		expect(ready.after.bond.map(({ iface }) => iface)).toEqual(["wwu0"]);
+	}
+	expectVeto(before);
+});
+
+test("an ineligible alias is vetoed only if the actual legacy migration leaves no candidate", async () => {
 	const request = { ...backupOff, name: "held0" };
 	const migrated = await replay("legacy-migrated", "REAL", "none", "migrate", [
 		request,
@@ -510,4 +695,25 @@ test("legacy migration can retain an exclusion, while removing an unmigrated leg
 	});
 	expect(unseen.after.bond.map(({ iface }) => iface)).toEqual(["eth1"]);
 	expectVeto(migrated);
+});
+
+test("a held USB function is vetoed only if the shared exact opt-out removes the last candidate", async () => {
+	const last = await replay("held-exact-alias", "REAL", "none", "alias", [off]);
+	const survivor = await replay(
+		"held-exact-survivor",
+		"REAL",
+		"none",
+		"alias-survivor",
+		[off],
+	);
+	expect(last.before.bond.map(({ iface }) => iface)).toEqual(["wwu0"]);
+	expect(survivor.frames.at(-1)).toEqual(changed);
+	expect(survivor.after.bond.map(({ iface }) => iface)).toEqual(["eth1"]);
+	const exact = last.before.bond[0]?.linkId;
+	if (exact === undefined) throw new Error("Expected a stable exact key");
+	expect(survivor.after.preferences).toEqual({ [exact]: true });
+	expect(survivor.steps.filter((step) => step === "rename")).toEqual([
+		"rename",
+	]);
+	expectVeto(last);
 });

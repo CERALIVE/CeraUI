@@ -27,7 +27,8 @@
 import { getUsbPhysicalDescriptor } from "../network/router-cellular-scan.ts";
 
 import {
-	describePhysicalDevice,
+	describePhysicalBondKeys,
+	type PhysicalBondKeys,
 	type PhysicalDeviceRecord,
 	type PhysicalObservation,
 	resolvePhysicalDevice,
@@ -49,10 +50,8 @@ export function resolveModemPhysicalIdentity(
 	return resolvePhysicalDevice(observeModemIdentity(ifname, extra));
 }
 
-export function describeModemPhysicalIdentity(
-	ifname: string,
-): PhysicalDeviceRecord {
-	return describePhysicalDevice(observeModemIdentity(ifname));
+export function describeModemBondKeys(ifname: string): PhysicalBondKeys {
+	return describePhysicalBondKeys(observeModemIdentity(ifname));
 }
 
 function observeModemIdentity(

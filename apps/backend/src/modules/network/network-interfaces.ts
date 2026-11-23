@@ -46,7 +46,8 @@ import {
 	shouldMockNetwork,
 } from "../../mocks/providers/network.ts";
 import { isRuntimeConfigAvailable } from "../config.ts";
-import { isBondLinkMappable } from "../streaming/bond-entry.ts";
+import { isMappableEntry } from "../streaming/bind-map.ts";
+import { isBondLinkMappable, peekBondKeys } from "../streaming/bond-entry.ts";
 // Type-only: erased at build time, so it adds no runtime edge back into
 // `modules/streaming/`, which imports this module.
 import type { BondMappingState } from "../streaming/link-mapping-report.ts";
@@ -89,10 +90,10 @@ import {
 	refreshRouterCellularAdmin,
 } from "./router-cellular-admin.ts";
 import {
+	getIdentityDeadlineAt,
 	getModemNetMarker,
 	getRouterCellularMarker,
 	getRouterCellularMarkers,
-	hasIdentityDeadlineElapsed,
 	identityDeadlineExpired,
 	invalidateUsbNetReading,
 	type NetdevBus,
@@ -1792,27 +1793,42 @@ function wouldRemoveLastBondCandidate(target: string): boolean {
 	)
 		return false;
 
-	const optedOut = previewBondOptOut(target);
-	const now = getms();
+	const identities = new Map<string, ReturnType<typeof peekBondKeys>>();
+	const keys = (name: string) => {
+		if (!identities.has(name)) identities.set(name, peekBondKeys(name));
+		return identities.get(name);
+	};
+	const optedOut = previewBondOptOut(target, keys(target));
+	let earliestBefore = Infinity;
+	let earliestAfter = Infinity;
 	const projection = {
-		deadlineElapsed: (name: string) => hasIdentityDeadlineElapsed(name, now),
-		mappable: (name: string, ip: string) =>
-			isBondLinkMappable(name, ip, "preview"),
+		deadlineElapsed: () => true,
+		mappable: (iface: string, ip: string) => {
+			const linkId = keys(iface)?.linkId;
+			return linkId !== undefined && isMappableEntry({ iface, ip, linkId });
+		},
 	};
 	const before = {
 		...projection,
-		optedOut: (name: string) => optedOut(name, "before"),
+		optedOut: (name: string) => optedOut(name, keys(name), "before"),
 	};
 	const after = {
 		...projection,
-		optedOut: (name: string) => optedOut(name, "after"),
+		optedOut: (name: string) => optedOut(name, keys(name), "after"),
 	};
-	let hadCandidate = false;
 	for (const [name, int] of Object.entries(netif)) {
-		if (admitsBondLink(name, int, after)) return false;
-		hadCandidate ||= admitsBondLink(name, int, before);
+		const readyAt = bondIdentityPending(name, int, () => false)
+			? (getIdentityDeadlineAt(name) ?? Infinity)
+			: -Infinity;
+		if (readyAt < earliestAfter && admitsBondLink(name, int, after))
+			earliestAfter = readyAt;
+		if (readyAt < earliestBefore && admitsBondLink(name, int, before))
+			earliestBefore = readyAt;
 	}
-	return hadCandidate;
+	// Judge both views at one request-time instant, after preparing their
+	// readiness thresholds. A later sender refresh can see a peer become ready.
+	const now = getms();
+	return earliestBefore <= now && now < earliestAfter;
 }
 
 /**
@@ -1857,10 +1873,9 @@ function finishBondMutation(
 	return { ok: true, applied };
 }
 
-function refuseDisableAll(
-	conn: WebSocket,
-	msg: NetworkInterfaceMessage["netif"],
-): NetifApplyOutcome {
+const disableAllRefused = { ok: false, reason: "disable_all_refused" } as const;
+
+function notifyDisableAll(conn: WebSocket): void {
 	notificationSend(
 		conn,
 		"netif_disable_all",
@@ -1868,7 +1883,6 @@ function refuseDisableAll(
 		"Can't disable all networks",
 		10,
 	);
-	return finishBondMutation(msg, { ok: false, reason: "disable_all_refused" });
 }
 
 export function handleNetif(
@@ -1902,8 +1916,10 @@ export function handleNetif(
 					reason: "bond_unmappable",
 				});
 			}
-			if (!msg.enabled && wouldRemoveLastBondCandidate(msg.name))
-				return refuseDisableAll(conn, msg);
+			if (!msg.enabled && wouldRemoveLastBondCandidate(msg.name)) {
+				notifyDisableAll(conn);
+				return disableAllRefused;
+			}
 			setBondOptOut(msg.name, !msg.enabled);
 			triggerNetworkInterfacesChange();
 			conn.send(buildMsg("netif", netIfBuildMsg()));
@@ -1925,13 +1941,15 @@ export function handleNetif(
 					reason: "enable_refused",
 				});
 			}
-		} else if (
-			(int.enabled && countActiveNetif() === 1) ||
-			wouldRemoveLastBondCandidate(msg.name)
-		) {
-			return refuseDisableAll(conn, msg);
+		} else if (int.enabled && countActiveNetif() === 1) {
+			notifyDisableAll(conn);
+			return finishBondMutation(msg, disableAllRefused);
 		}
 
+		if (!msg.enabled && wouldRemoveLastBondCandidate(msg.name)) {
+			notifyDisableAll(conn);
+			return disableAllRefused;
+		}
 		int.enabled = msg.enabled;
 		setBondOptOut(msg.name, !msg.enabled);
 		triggerNetworkInterfacesChange();

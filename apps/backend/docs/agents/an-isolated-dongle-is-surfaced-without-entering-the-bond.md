@@ -1301,10 +1301,18 @@ eligible by wishing.
 **Disabling the last effective WAN candidate.** After boot confirms a real
 device and installs the real network monitor, `network.configure` refuses an
 off request that would take the sender's candidate set from nonempty to empty.
-The decision accounts for mapped duplicates, shared physical identities and
-stored exclusions, not just the raw enabled bits. It runs synchronously before
-changing interface state, publishing the change, or attempting a config save.
-The existing refusal tells the operator to include another uplink first.
+The decision uses the actual preference change, including mapped duplicates,
+legacy exclusions and all rows sharing an exact physical identity. A held or
+otherwise ineligible target can still exclude its eligible sibling; the veto
+applies only if no candidate would remain. It does not veto an already empty
+bond. The decision runs synchronously before changing state, publishing, or
+attempting a config save. The refusal itself does not consume pending markers.
+The existing notice tells the operator to include another uplink first.
+
+Both candidate views use one monotonic instant at the request decision. A USB
+identity becomes eligible for fallback at its first publication plus 15 s,
+inclusive. A peer can reach that deadline after a refusal; retrying then can
+succeed. Wire and sender refreshes still use live time.
 
 The old input checks and raw-count refusal still apply. Boot before confirmation,
 overlay/mock, simulated monitor, hwsim and emulated paths retain their old

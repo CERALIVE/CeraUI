@@ -144,6 +144,11 @@ export interface PhysicalDeviceRecord {
 	readonly displayName: string;
 }
 
+export type PhysicalBondKeys = Pick<
+	PhysicalDeviceRecord,
+	"anchor" | "linkId" | "legacyLinkId"
+>;
+
 const LINK_ID_PREFIX = "lnk_";
 const LINK_ID_DIGEST_CHARS = 16;
 
@@ -347,11 +352,20 @@ export function resolvePhysicalDevice(
 	return record;
 }
 
-/** Project an identity without publishing it to the link-ID registry. */
-export function describePhysicalDevice(
+/** Resolve only the keys needed for bond preferences and address mapping. */
+export function describePhysicalBondKeys(
 	observation: PhysicalObservation,
-): PhysicalDeviceRecord {
-	const stableKey = deriveModemStableKey(observation.idPath);
+): PhysicalBondKeys {
+	return physicalBondKeys(
+		observation,
+		deriveModemStableKey(observation.idPath),
+	);
+}
+
+function physicalBondKeys(
+	observation: PhysicalObservation,
+	stableKey: string | undefined,
+) {
 	const { identityKey, anchor } = resolveIdentityKey(observation, stableKey);
 	const serial = usableSerial(observation);
 	const rawSerial = observation.serial?.trim();
@@ -363,6 +377,19 @@ export function describePhysicalDevice(
 					vid ? `usb-serial:${vid}:${rawSerial}` : `usb-serial:${rawSerial}`,
 				)
 			: undefined);
+	return {
+		identityKey,
+		anchor,
+		linkId: mintLinkId(identityKey),
+		...(legacyLinkId !== undefined ? { legacyLinkId } : {}),
+	};
+}
+
+function describePhysicalDevice(
+	observation: PhysicalObservation,
+): PhysicalDeviceRecord {
+	const stableKey = deriveModemStableKey(observation.idPath);
+	const serial = usableSerial(observation);
 	const hwdb =
 		observation.hwdbVendor !== undefined || observation.hwdbModel !== undefined
 			? {
@@ -376,10 +403,7 @@ export function describePhysicalDevice(
 			: undefined;
 
 	return {
-		identityKey,
-		anchor,
-		linkId: mintLinkId(identityKey),
-		...(legacyLinkId !== undefined ? { legacyLinkId } : {}),
+		...physicalBondKeys(observation, stableKey),
 		ifname: observation.ifname,
 		displayName: resolveDisplayName(observation),
 		...(stableKey !== undefined ? { stableKey } : {}),
