@@ -31,7 +31,7 @@ interface WsHandle {
 
 async function attachWs(page: Page, hooks: WsHooks): Promise<WsHandle> {
 	let route: WebSocketRoute | null = null;
-	await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
+	await page.routeWebSocket((url) => url.pathname === '/ws', (ws) => {
 		route = ws;
 		const server = ws.connectToServer();
 		ws.onMessage((message) => {
@@ -104,7 +104,11 @@ const START_SOURCE = {
  * destination / network / engine — resolve green and Start is enabled), and
  * replies to the streaming.start RPC with the supplied structured result.
  */
-async function startWithReply(page: Page, result: Frame): Promise<void> {
+async function startWithReply(
+	page: Page,
+	result: Frame | (() => Frame),
+	onPowerCall?: (path: string) => void,
+): Promise<WsHandle> {
 	const ws = await attachWs(page, {
 		mutateInbound: (frame) => {
 			const status = frame.status as Frame | undefined;
@@ -119,8 +123,14 @@ async function startWithReply(page: Page, result: Frame): Promise<void> {
 			return !('pipelines' in frame) && !('sources' in frame);
 		},
 		interceptOutbound: (frame, reply) => {
-			if (rpcPath(frame) === 'streaming.start') {
-				reply({ id: frame.id, result });
+			const path = rpcPath(frame);
+			if (path === 'streaming.start') {
+				reply({ id: frame.id, result: typeof result === 'function' ? result() : result });
+				return true;
+			}
+			if (onPowerCall && (path === 'system.reboot' || path === 'system.poweroff')) {
+				onPowerCall(path);
+				reply({ id: frame.id, result: { success: false } });
 				return true;
 			}
 			return false;
@@ -145,11 +155,46 @@ async function startWithReply(page: Page, result: Frame): Promise<void> {
 	ws.push({ sources: { hardware: 'generic', sources: [START_SOURCE] } });
 	ws.push({ config: { pipeline: KNOWN_PIPELINE, source: KNOWN_SOURCE, srtla_addr: '127.0.0.1' } });
 
-	const start = page.getByRole('button', { name: 'Start Stream' });
+	const start = page.getByTestId('live-bar').getByRole('button');
 	await expect(start).toBeVisible();
 	await expect(start).toBeEnabled();
 	await start.click();
+	return ws;
 }
+
+test('Restart box opens Power and waits for the nested reboot confirmation', async ({ page }) => {
+	let attempt = 0;
+	const powerCalls: string[] = [];
+	await startWithReply(page, () => {
+		const attemptId = `power-${++attempt}`;
+		return {
+			result: 'failed', success: false, attemptId,
+			failure: { attemptId, phase: 'connect', class: 'engine_unavailable', retriable: true },
+		};
+	}, (path) => powerCalls.push(path));
+	await page.getByRole('button', { name: 'Try again', exact: true }).click();
+	await page.getByRole('button', { name: 'Restart box', exact: true }).click();
+	const power = page.getByRole('dialog', { name: 'Reboot / Power' });
+	await expect(power).toBeVisible();
+	expect(powerCalls).toEqual([]);
+	await power.getByRole('button', { name: 'Reboot', exact: true }).click();
+	const confirmation = page.getByRole('dialog', { name: 'Are you sure?' });
+	await expect(confirmation).toBeVisible();
+	expect(powerCalls).toEqual([]);
+	await confirmation.getByRole('button', { name: 'Reboot', exact: true }).click();
+	await expect.poll(() => powerCalls).toEqual(['system.reboot']);
+});
+
+test('Open stream setup focuses the shipped card heading', async ({ page }) => {
+	const attemptId = 'invalid-setup';
+	await startWithReply(page, {
+		result: 'failed', success: false, attemptId,
+		failure: { attemptId, phase: 'params', class: 'start_invalid', retriable: false },
+	});
+	await page.getByRole('button', { name: 'Open stream setup', exact: true }).press('Enter');
+	const heading = page.getByTestId('stream-setup-chain').getByRole('heading', { name: 'Stream setup' });
+	await expect(heading).toBeFocused();
+});
 
 test.describe('stream-start failure reason in the toast (T16)', () => {
 	test.beforeEach(({ browserName }, testInfo) => {
@@ -183,3 +228,46 @@ test.describe('stream-start failure reason in the toast (T16)', () => {
 		await expect(page.getByText(SRT_CONNECT_TEXT)).toHaveCount(0);
 	});
 });
+
+for (const [locale, theme] of [['en', 'light'], ['ar', 'dark']] as const) {
+	test(`refusal actions fit at 390×390 and follow reading order in ${locale} ${theme}`, async ({ page }) => {
+		await page.setViewportSize({ width: 390, height: 390 });
+		await page.emulateMedia({ reducedMotion: 'reduce' });
+		await page.addInitScript(({ locale, theme }) => {
+			localStorage.setItem('locale', JSON.stringify({ code: locale }));
+			localStorage.setItem('theme', JSON.stringify(theme));
+			localStorage.setItem('mode-watcher-mode', theme);
+		}, { locale, theme });
+		const attemptId = `phone-${locale}`;
+		const ws = await startWithReply(page, {
+			result: 'failed', success: false, attemptId,
+			failure: { attemptId, phase: 'connect', class: 'engine_unavailable', retriable: true },
+		});
+		const toast = page.locator('[data-sonner-toast]').filter({ hasText: locale === 'ar' ? 'حاول مرة أخرى' : 'Try again' });
+		const primary = toast.getByRole('button', { name: locale === 'ar' ? 'حاول مرة أخرى' : 'Try again', exact: true });
+		const logs = toast.getByRole('button', { name: locale === 'ar' ? 'عرض السجلات' : 'View logs', exact: true });
+		await expect(primary).toBeVisible();
+		await expect(logs).toBeVisible();
+		await expect(page.locator('html')).toHaveAttribute('dir', locale === 'ar' ? 'rtl' : 'ltr');
+		await expect(page.locator('[data-sonner-toaster]').first()).toHaveAttribute('data-sonner-theme', theme);
+		await expect(page.locator('section[aria-live="polite"]').filter({ has: toast })).toHaveCount(1);
+		const [p, l] = await Promise.all([primary.boundingBox(), logs.boundingBox()]);
+		const bar = await page.getByTestId('live-bar').boundingBox();
+		if (!p || !l || !bar) throw new Error('missing refusal action or Live bar bounds');
+		for (const box of [p, l]) {
+			expect(box.height).toBeGreaterThanOrEqual(44);
+			expect(box.x).toBeGreaterThanOrEqual(0);
+			expect(box.x + box.width).toBeLessThanOrEqual(390);
+			expect(box.y).toBeGreaterThanOrEqual(0);
+			expect(box.y + box.height).toBeLessThanOrEqual(bar.y);
+		}
+		expect(p.y < l.y || (p.y === l.y && (locale === 'ar' ? p.x > l.x : p.x < l.x))).toBe(true);
+		await primary.focus();
+		await page.keyboard.press('Tab');
+		await expect(logs).toBeFocused();
+		ws.push({ netif: { eth0: { enabled: false } } });
+		await expect(page.getByTestId('live-bar').getByRole('button')).toBeDisabled();
+		await primary.press('Enter');
+		await expect(logs).toBeVisible();
+	});
+}

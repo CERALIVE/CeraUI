@@ -17,7 +17,7 @@ import { untrack } from 'svelte';
 import { toast } from 'svelte-sonner';
 import { LazyDialog, LazyDialogFallback, lazyDialog } from '$lib/components/dialogs';
 import { platformCapsForHardware } from '$lib/components/streaming/ValidationAdapter';
-import { VIEW_LOGS_TOAST_CLASS, viewLogs, viewLogsToast } from '$lib/device-logs/view-logs';
+import { viewLogs, viewLogsToast } from '$lib/device-logs/view-logs';
 import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
 import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
 import { rpc } from '$lib/rpc';
@@ -140,6 +140,7 @@ import LiveHeader from '$main/live/LiveHeader.svelte';
 import type { ConfigRow } from '$main/live/StreamSettingsCard.svelte';
 import UnconfirmedStreamBand from '$main/live/UnconfirmedStreamBand.svelte';
 import UpdateRefusalBand from '$main/live/UpdateRefusalBand.svelte';
+import StartRefusalActions from './live/StartRefusalActions.svelte';
 
 // Reactive state — non-deprecated subscriptions getters only.
 const config = $derived(getConfig());
@@ -365,7 +366,7 @@ function runNextStep(step: StartFailureNextStep, attempt: string) {
 			powerOpen = true;
 			break;
 		case 'openNetwork': void handleManageLinks(); break;
-		case 'openSetup': handleOpenSetup(); break;
+		case 'openSetup': return handleOpenSetup();
 	}
 	return true;
 }
@@ -389,16 +390,24 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 		return;
 	}
 	const at = Date.now();
-	toast.error(message, {
-		class: VIEW_LOGS_TOAST_CLASS,
+	const id = toast.error<typeof StartRefusalActions>(message, {
+		class: 'motion-reduce:transition-none! [&>[data-content]]:min-w-0 [word-break:auto-phrase] [&:lang(ko)]:break-keep [&:lang(zh)]:break-keep',
 		duration: 12_000,
-		action: {
-			label: m[NEXT_STEP_ACTION[step]](),
-			onClick: (event) => {
-				if (!runNextStep(step, attempt)) event.preventDefault();
+		description: StartRefusalActions,
+		componentProps: {
+			primary: {
+				label: m[NEXT_STEP_ACTION[step]](),
+				activate: () => {
+					if (!runNextStep(step, attempt)) return false;
+					toast.dismiss(id);
+					return true;
+				},
+			},
+			logs: () => {
+				viewLogs(at);
+				toast.dismiss(id);
 			},
 		},
-		cancel: { label: m["notifications.viewLogs"](), onClick: () => viewLogs(at) },
 	});
 }
 
@@ -517,10 +526,6 @@ async function handleSwitchAudio(inputId: string) {
 const serverTarget = $derived(config?.srtla_addr || config?.relay_server || '');
 const hasServer = $derived(Boolean(serverTarget));
 
-// Network readiness for the Network gate fix + the readiness card. Network = at
-// least one enabled bonded interface that has an IP.
-const netif = $derived(getNetif());
-
 // Destination + receiver kind for the header chip (T5 helpers). Managed shows a
 // provider label, custom shows the endpoint; both append the transport badge.
 // Brand provider names are non-translated literals (i18n branding convention;
@@ -609,11 +614,11 @@ function handleOpenSource() {
 // Start-refusal "Open stream setup": bring the setup card into view and put
 // focus on its first control, so the operator lands on the settings to check.
 function handleOpenSetup() {
-	if (typeof document === 'undefined') return;
-	const card = document.querySelector<HTMLElement>('[data-testid="stream-setup-chain"]');
-	if (!card) return;
-	card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-	card.querySelector<HTMLElement>('button:not([disabled])')?.focus({ preventScroll: true });
+	const title = document.getElementById('live-stream-setup-title');
+	if (!title) return false;
+	title.focus({ preventScroll: true });
+	title.scrollIntoView({ block: 'center', behavior: 'instant' });
+	return true;
 }
 
 // ── Dialog open state ──────────────────────────────────────────────────────

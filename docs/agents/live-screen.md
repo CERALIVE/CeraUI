@@ -151,30 +151,21 @@ must contain the `source-audio` block with its ids unchanged.
 
 #### Start refusals end in an action
 
-A typed start refusal is a toast. Where the next step is decided, the toast's
-button is that step and View logs sits beside it
-(`startFailureNextStep`, `apps/frontend/src/lib/streaming/start-failure-copy.ts`):
+A Live Start refusal and its device notice share one presentation per attempt.
+If the RPC cannot present the failure, the device notice remains available.
+Other clients and the device's logs and event history are unchanged.
 
-- `engine_internal`, `engine_unavailable`, `start_timeout`: Try again. It is
-  admitted only where the idle Live bar offers Start (`idleStartAdmitted` in
-  `LiveView.svelte`: no live or summary cockpit, no unresolved stream outcome,
-  no Start in flight). It then goes through the Live bar's own gate
-  (`idleStartGate`, the same readiness verdict with the implicit sole camera
-  folded in), decided at the tap from the same input object the bar renders
-  from (`idleGateInputs`), and does nothing when that refusal is no longer
-  current or the view is gone. A Try again on an engine refusal is remembered
-  against the attempt generation of the Start it dispatches, written only
-  after validation passed. When the typed refusal of that same generation
-  comes back within two minutes, the toast offers Restart box, which opens the
-  same reboot sheet as Settings, so the operator still confirms. A proven
-  non-dispatch, a Start from the Live bar, a newer attempt, a running stream
-  or the two minutes clear it.
-- `start_invalid`: Open stream setup (scrolls to the setup card and focuses
-  it).
-- `mutation_blocked`: Open Network, where the modem controls live.
+Try again uses the Live bar's readiness projection (including an implicit sole
+camera), plus a settled idle lifecycle and the current refusal's identity. It
+is not offered for post-connect timeout, unresolved Stop, or a known engine
+state conflict. If conditions change after the toast appears, a blocked tap
+keeps both the toast and View logs. Network opens the modem controls; Stream
+setup focuses the card heading. The update refusal retains its wait message.
 
-The other classes keep their copy and View logs. The copy for these classes no
-longer says "Open Settings → System Logs".
+A repeat belongs only to the retry's generation and must arrive less than two
+minutes from dispatch on the monotonic clock. A fresh Start, observed running
+stream, or proven non-dispatch clears that record. Restart box opens the
+existing Power sheet only; reboot still needs its own confirmation.
 
 #### Screen sizes
 

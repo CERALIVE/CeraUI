@@ -947,6 +947,7 @@
 	"live.startFailure.next.openSetup": "Check the stream setup, then start again.",
 	"live.startFailure.mutationBlockedNetwork": "A modem change could not be undone, so its state is unknown. Check that modem in Network before streaming.",
 	"live.startFailure.action.tryAgain": "Try again",
+	"live.startFailure.actionUnavailable": "That action is no longer available. Check Live for the current stream state.",
 	"live.startFailure.action.restartBox": "Restart box",
 	"live.startFailure.action.openSetup": "Open stream setup",
 	"live.startFailure.action.openNetwork": "Open Network",

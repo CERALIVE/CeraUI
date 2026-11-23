@@ -403,7 +403,7 @@ const networkView = $derived<SetupRowView>({
 
 <Card.Root data-testid="stream-setup-chain">
 	<Card.Content class="space-y-5">
-		<h2 class="text-base font-semibold">{m["live.setup.title"]()}</h2>
+		<h2 id="live-stream-setup-title" tabindex="-1" class="text-base font-semibold">{m["live.setup.title"]()}</h2>
 
 		<!-- Sole-camera auto-select line — only while config.source is unset and a
 		     single capture source exists. Writes NO config; Change opens the list. -->

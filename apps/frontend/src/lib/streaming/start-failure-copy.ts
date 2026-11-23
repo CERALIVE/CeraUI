@@ -100,6 +100,13 @@ export const NEXT_STEP_ACTION: Record<StartFailureNextStep, MessageKey> = {
 };
 
 function classReason(failure: StartFailureCopyInput): string {
+	if (
+		failure.class === "capture_source_unavailable" &&
+		failure.captureCause === undefined
+	)
+		return m["notifications.streamStartCaptureSourceUnavailableFailed"]();
+	if (failure.class === "audio_source_unavailable")
+		return m["notifications.streamStartAudioSourceUnavailableFailed"]();
 	const key =
 		failure.class === "mutation_blocked"
 			? "live.startFailure.mutationBlockedNetwork"
