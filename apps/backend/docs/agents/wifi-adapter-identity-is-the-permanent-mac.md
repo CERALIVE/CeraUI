@@ -172,9 +172,10 @@ discarding current credentials. Unreadable UUIDs retain ownership and retry.
 Only positively read AP profiles with one current UUID claimant grant startup
 deactivation authority. Competing unresolved claimants preserve a live AP even
 when one claimant requests station; safe autoconnect disarming remains separate.
-Fresh connection observations remain available during an admitted operation;
-policy writes, registry transfer and publication wait. Stop preserves a newer
-station UUID observed while deactivation was pending.
+Fresh physical and connection observations remain available during an admitted
+operation. A busy discovery pass defers policy writes, registry transfer and
+fresh row association, not physical sampling. Stop preserves a newer station
+UUID observed while deactivation was pending.
 After an awaited profile read, policy retains the current aliases of its
 candidate and observed/cached target rows through binding and every NM action.
 The retained operation's old key therefore remains an admission barrier during
@@ -204,10 +205,13 @@ owner keys and `wifi_modes`.
 Hybrid profiles explicitly remain autoconnect off. Direct Starts retain their
 mode intent even when no safe autoconnect path exists; B2 restores that intent.
 
-Start retains the verified row and lifetime obtained at lock entry. The
-physical recheck before each activation effect is independent of saved-profile
-and UUID ownership. The adapter lock orders CeraUI writers but does not prevent
-the kernel from reprobeing or renaming the radio during a NetworkManager call.
+Start retains the verified row and lifetime obtained at lock entry. A rowless
+refresh that proves the same identity at the same ifname can preserve that
+exact operation binding without restoring the public token. Start still
+rechecks physical identity before each activation effect, independently of
+saved-profile and UUID ownership. The adapter lock orders CeraUI writers but
+does not prevent the kernel from reprobeing or renaming the radio during a
+NetworkManager call.
 
 Before discovery publishes rows, it examines
 every persisted current and historical owned AP UUID under Start's canonical
@@ -623,12 +627,22 @@ single-interface Orange topology retain their normal verified classification.
 
 A private weak association binds each sampled token to the exact registry
 object and observation generation before scan refresh or other discovery
-broadcasts can publish it. Witness, classification and degraded edges rotate
-incarnations; repeated evidence and true same-lifetime renames retain them.
-An incomplete or failed proof has no wire incarnation. A failed-proof
-replacement uses a fresh degraded object/id and removes the predecessor's
-registry entry; it never inherits the predecessor's token. Recovery gets a
-fresh token, while a successful same-lifetime recovery keeps its token.
+broadcasts can publish it. Discovery invalidates the row's publication marker
+before sampling. If the current physical sample has no row, it can carry the
+previous exact row and its original stamp only for an unchanged identity at the
+same ifname. This preserves ownership for an already-bound operation that still
+owns the registry row and passes its live checks. The old stamp does not match
+the new marker, so status stays tokenless and fresh requests cannot use the
+carried association. Fresh admission needs a coherent association with the
+current row marker and a live recheck. A sample older than the latest committed
+observation cannot publish.
+
+Witness, classification and degraded edges rotate incarnations; repeated
+evidence and true same-lifetime renames retain them. An incomplete or failed
+proof has no wire incarnation. A failed-proof replacement uses a fresh
+degraded object/id and removes the predecessor's registry entry; it never
+inherits the predecessor's token. Recovery gets a fresh token, while a
+successful same-lifetime recovery keeps its token.
 
 Monitor events still carry ifnames. A virtual/non-Wi-Fi unavailable event
 cannot cancel another radio's sample. A real unavailable event rotates only

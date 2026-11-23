@@ -7,13 +7,7 @@ import { wifiRadioIdentity } from "../modules/wifi/wifi-radio-identity.ts";
 import { projectWifiRadioIncarnation } from "../modules/wifi/wifi-radio-publication.ts";
 import { wifiFrameFixture } from "./helpers/wifi-frame-fixture.ts";
 
-/*
-  A device refresh captures a new radio observation and queues a physical
-  sample (ifname only) under that sequence. When a second refresh captures a
-  newer observation before the first sample publishes, the sample still
-  publishes for its own sequence. The radio did not change: an operation bound
-  to it must still own it, and its published incarnation must not vanish.
-*/
+// A newer capture alone does not commit a sample or invalidate the row's wire evidence.
 test("a superseded physical sample does not orphan a bound operation's radio", async () => {
 	const f = await wifiFrameFixture();
 	try {

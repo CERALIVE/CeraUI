@@ -376,6 +376,18 @@ export class WifiRadioIdentityProducer {
 							? sample.devicePath
 							: undefined)) &&
 				previous.degradedReason === degradedReason;
+			let association: Pick<RadioIdentity, "row" | "observation"> = {};
+			if (row) {
+				association = { row, observation: generation };
+			} else if (
+				unchanged &&
+				previous.ifname === device.ifname &&
+				previous.row &&
+				previous.observation !== undefined
+			) {
+				// Preserve exact operation ownership for this proven lifetime without making the old association fresh admission evidence.
+				association = { row: previous.row, observation: previous.observation };
+			}
 			rows.set(device.ifname, {
 				ifname: device.ifname,
 				key,
@@ -387,16 +399,7 @@ export class WifiRadioIdentityProducer {
 				classification,
 				degradedReason,
 				incarnation: unchanged ? previous.incarnation : crypto.randomUUID(),
-				...(row
-					? { row, observation: generation }
-					: // A physical sample that a newer observation superseded carries no
-						// row. An unchanged identity keeps its row association, so an
-						// operation bound to this radio still owns it.
-						unchanged &&
-							previous.ifname === device.ifname &&
-							previous.row !== undefined
-						? { row: previous.row, observation: previous.observation }
-						: {}),
+				...association,
 			});
 		}
 		this.permanentMacByLifetime = cache;
