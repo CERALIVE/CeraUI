@@ -175,7 +175,7 @@ let statusState = $state.raw<
 
 // Individual status components
 let isStreamingState = $state<boolean>(false);
-let streamingStatusLink = $state<number>();
+let streamingStatusReceipt = $state.raw<Receipt>();
 let sshState = $state.raw<StatusResponse["ssh"] | undefined>(undefined);
 let availableUpdatesState = $state.raw<
 	StatusResponse["available_updates"] | undefined
@@ -366,14 +366,26 @@ export function getIsStreaming() {
 /** Only this socket's admitted stream facts can authorize a Live-bar Stop. */
 export function getConfirmedLiveStopEpoch(): number | undefined {
 	const link = getLinkEpoch();
-	if (!isConnectedState || !isStreamingState || streamingStatusLink !== link)
+	if (
+		!isConnectedState ||
+		!isStreamingState ||
+		streamingStatusReceipt?.link !== link
+	)
 		return undefined;
+	const delivery = getLifecycleDelivery();
 	const lifecycle =
-		getLifecycleDelivery().link === link
-			? statusState?.stream_lifecycle
-			: undefined;
-	// Legacy devices omit the lifecycle; a current live boolean still counts.
-	if (lifecycle !== undefined && lifecycle !== "streaming") return undefined;
+		delivery.link === link ? statusState?.stream_lifecycle : undefined;
+	// A newer live flag can precede the lifecycle update at the start edge.
+	if (lifecycle === "idle" || lifecycle === "starting") {
+		if (delivery.seq >= streamingStatusReceipt.at) return undefined;
+	} else if (
+		lifecycle !== undefined &&
+		lifecycle !== "streaming" &&
+		lifecycle !== "reconfiguring"
+	) {
+		// These phases can retain a true flag even though liveness is unknown.
+		return undefined;
+	}
 	return getStreamSessionEpoch();
 }
 
@@ -624,7 +636,8 @@ function handleMessage(
 				if (statusData.is_streaming !== isStreamingState)
 					noteStreamSessionBoundary();
 				isStreamingState = statusData.is_streaming;
-				if (isConnectedState) streamingStatusLink = received.link;
+				// Admission proves provenance; connectivity is checked when Stop is used.
+				streamingStatusReceipt = received;
 			}
 			if (statusData.ssh !== undefined) {
 				sshState = preserveWireIdentity(sshState, statusData.ssh);
@@ -1360,7 +1373,7 @@ export function resetState(): void {
 	statusState = undefined;
 	if (isStreamingState) noteStreamSessionBoundary();
 	isStreamingState = false;
-	streamingStatusLink = undefined;
+	streamingStatusReceipt = undefined;
 	sshState = undefined;
 	availableUpdatesState = undefined;
 	updatingState = null;

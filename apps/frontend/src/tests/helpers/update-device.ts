@@ -145,13 +145,14 @@ export function dropLink(): void {
 }
 
 /** The client's reconnect loop opens a new socket and the device accepts it. */
-export async function restoreLink(): Promise<void> {
+export async function restoreLink(beforeOpen?: () => void): Promise<void> {
 	const dropped = FakeWebSocket.current;
 	for (let waited = 0; FakeWebSocket.current === dropped; waited += 250) {
 		if (waited > 60_000) throw new Error("the client never reconnected");
 		await vi.advanceTimersByTimeAsync(250);
 	}
 	socket().readyState = FakeWebSocket.OPEN;
+	beforeOpen?.();
 	socket().onopen?.();
 	await flush();
 }
