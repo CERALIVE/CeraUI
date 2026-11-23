@@ -87,6 +87,26 @@ notification obligation or cross-process exactly-once guarantee.
 
 ### Durable device config
 
+USB modem bond choices use `bond_connector_choice`: an explicit choice is
+keyed by the fixed platform controller and the kernel's downstream port
+chain, independently of the udev label or USB mode. An ON follows a same-VID
+replacement on that connector. An ON made with a confirmed shared serial
+does not override a different confirmed pair; an ON made without one can.
+Scans only observe this state; they never save bond preferences.
+
+On the first connector choice, `bond_legacy_out` preserves existing opaque
+exclusions for the current reader, including pair defaults. The legacy
+`bond_opt_out` projection omits them once connector choices exist: the old
+reader has no positive override, and an exact path pin can hit an included
+modem after a relabel. Rolling back to v2026.11.4 can therefore add links
+that were excluded. A clean save on that release drops the new fields.
+Both new fields are optional and validated with config authority.
+
+One legacy alias-only OFF retains the old migration: a peer covered by an
+old pair exclusion but absent from the physical registry may join. The
+last-uplink guard evaluates the actual write and still refuses a disable
+that would leave no effective candidate.
+
 The optional `ssh_persistent` boolean in `config.json` stores the operator's
 SSH-at-boot choice across OS slots. `setSshPersistent` saves it after the unit
 confirms the change. Boot adopts the unit's enabled/disabled state when the

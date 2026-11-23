@@ -112,6 +112,8 @@ export interface PhysicalObservation {
 	readonly serial?: string;
 	/** Previous serial-based link id when the scan rejected a shared serial. */
 	readonly legacyLinkId?: string;
+	readonly connectorLinkId?: string;
+	readonly sharedSerial?: boolean;
 	/** udev hwdb enrichment (`ID_VENDOR_FROM_DATABASE` / `ID_MODEL_FROM_DATABASE`). */
 	readonly hwdbVendor?: string;
 	readonly hwdbModel?: string;
@@ -132,6 +134,8 @@ export interface PhysicalDeviceRecord {
 	/** Minted here, deterministically. See {@link mintLinkId}. */
 	readonly linkId: string;
 	readonly legacyLinkId?: string;
+	readonly connectorLinkId?: string;
+	readonly sharedSerial?: boolean;
 	/** The ID_PATH-derived wire key, omitted when the device reports no ID_PATH. */
 	readonly stableKey?: string;
 	readonly ifname: string;
@@ -146,7 +150,12 @@ export interface PhysicalDeviceRecord {
 
 export type PhysicalBondKeys = Pick<
 	PhysicalDeviceRecord,
-	"anchor" | "linkId" | "legacyLinkId"
+	| "anchor"
+	| "linkId"
+	| "legacyLinkId"
+	| "connectorLinkId"
+	| "sharedSerial"
+	| "vid"
 >;
 
 const LINK_ID_PREFIX = "lnk_";
@@ -201,6 +210,8 @@ type BondKeyObservation = {
 	readonly serial?: string | undefined;
 	readonly vid?: string | undefined;
 	readonly legacyLinkId?: string | undefined;
+	readonly connectorLinkId?: string | undefined;
+	readonly sharedSerial?: boolean | undefined;
 	readonly idPath?: string | undefined;
 };
 
@@ -391,6 +402,11 @@ function physicalBondKeys(
 		anchor,
 		linkId: mintLinkId(identityKey),
 		...(legacyLinkId !== undefined ? { legacyLinkId } : {}),
+		...(observation.connectorLinkId !== undefined
+			? { connectorLinkId: observation.connectorLinkId }
+			: {}),
+		...(observation.sharedSerial === true ? { sharedSerial: true } : {}),
+		...(vid !== undefined ? { vid } : {}),
 	};
 }
 

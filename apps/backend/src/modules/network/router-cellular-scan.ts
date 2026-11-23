@@ -63,6 +63,7 @@ import {
 	setPresentPhysicalDevices,
 	usableUsbSerial,
 } from "../modems/physical-identity.ts";
+import { usbBondConnector } from "./usb-bond-connector.ts";
 import {
 	classifyUsbNetDevice,
 	modelLabel,
@@ -444,6 +445,8 @@ export type UsbPhysicalDescriptor = {
 	deviceClass: UsbNetClass;
 	serial?: string;
 	legacyLinkId?: string;
+	connectorLinkId?: string;
+	sharedSerial?: boolean;
 	/** Resolved sysfs USB parent; grouping only, never a stable_key override. */
 	usbParent: string;
 	idPath?: string;
@@ -567,6 +570,7 @@ function rejectSharedSerial(
 	descriptor.legacyLinkId = mintLinkId(
 		`usb-serial:${descriptor.vid.toLowerCase()}:${serial}`,
 	);
+	descriptor.sharedSerial = usableUsbSerial(serial) !== undefined;
 	delete descriptor.serial;
 }
 
@@ -582,6 +586,7 @@ function physicalDescriptor(
 	device: UsbNetDevice & { usbParent: string },
 	verdict: UsbNetClassification,
 ): UsbPhysicalDescriptor {
+	const connectorLinkId = usbBondConnector(device.usbParent);
 	return {
 		ifname,
 		vid: device.vendorId,
@@ -590,6 +595,7 @@ function physicalDescriptor(
 		model: modelLabel(device),
 		deviceClass: verdict.deviceClass,
 		usbParent: device.usbParent,
+		...(connectorLinkId !== undefined ? { connectorLinkId } : {}),
 		...(device.serialNumber !== undefined
 			? { serial: device.serialNumber }
 			: {}),

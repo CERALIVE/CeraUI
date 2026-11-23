@@ -69,6 +69,7 @@ import {
 import { scheduleWifiUpdate } from "../wifi/wifi-interfaces.ts";
 import {
 	bondPhysicalId,
+	hasLegacyBondAlias,
 	isBondOptedOut,
 	previewBondOptOut,
 	resetPersistentBondOptOutForTest,
@@ -309,7 +310,7 @@ export function resetBondOptOutSession(): void {
 }
 
 export function setBondOptOut(ifname: string, optOut: boolean): void {
-	setPersistentBondOptOut(ifname, optOut);
+	setPersistentBondOptOut(ifname, optOut, Object.keys(netif));
 }
 
 export function isDupIpOnly(int: NetworkInterface): boolean {
@@ -1816,7 +1817,12 @@ function wouldRemoveLastBondCandidate(target: string): boolean {
 		if (!identities.has(name)) identities.set(name, peekBondKeys(name));
 		return identities.get(name);
 	};
-	const optedOut = previewBondOptOut(target, keys(target));
+	const identity = keys(target);
+	const optedOut = previewBondOptOut(
+		target,
+		identity,
+		hasLegacyBondAlias(target, identity, Object.keys(netif), keys),
+	);
 	let earliestBefore = Infinity;
 	let earliestAfter = Infinity;
 	const projection = {
