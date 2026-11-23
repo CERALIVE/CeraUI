@@ -375,16 +375,25 @@ export function getConfirmedLiveStopEpoch(): number | undefined {
 	const delivery = getLifecycleDelivery();
 	const lifecycle =
 		delivery.link === link ? statusState?.stream_lifecycle : undefined;
-	// A newer live flag can precede the lifecycle update at the start edge.
-	if (lifecycle === "idle" || lifecycle === "starting") {
-		if (delivery.seq >= streamingStatusReceipt.at) return undefined;
-	} else if (
-		lifecycle !== undefined &&
-		lifecycle !== "streaming" &&
-		lifecycle !== "reconfiguring"
-	) {
+	switch (lifecycle) {
+		case undefined:
+		case "streaming":
+		case "reconfiguring":
+			break;
+		// A newer live flag can precede the lifecycle update at the start edge.
+		case "idle":
+		case "starting":
+			if (delivery.seq >= streamingStatusReceipt.at) return undefined;
+			break;
 		// These phases can retain a true flag even though liveness is unknown.
-		return undefined;
+		case "stopping":
+		case "stop_failed":
+		case "reconciling":
+			return undefined;
+		default:
+			// A new lifecycle must decide here whether it authorizes Stop.
+			lifecycle satisfies never;
+			return undefined;
 	}
 	return getStreamSessionEpoch();
 }
