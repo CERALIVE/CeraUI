@@ -17,6 +17,12 @@ export type {
 import type { SetWifiAdapterModeOutput } from "@ceraui/rpc/schemas";
 import { logger } from "../../helpers/logger.ts";
 import { getms } from "../../helpers/time.ts";
+import {
+	nmConnGetFields,
+	nmcliParseSep,
+	nmDevices,
+} from "../network/network-manager.ts";
+import { profileWritePermit } from "../network/profile-write-permit.ts";
 import { markBootDegraded } from "../system/readiness.ts";
 import { getHotspotCredentialOwners } from "./hotspot-credentials.ts";
 import {
@@ -28,18 +34,20 @@ import {
 	getWifiAdapterModeDiscoveryRevision,
 	wifiHotspotLossVersion,
 } from "./wifi-adapter-mode-events.ts";
-
 import {
 	beginWifiAdapterOwnerObservation,
 	resolveWifiAdapterOwner,
 } from "./wifi-adapter-owner.ts";
 import {
 	clearWifiAdapterReconcile,
+	hasDeferredWifiStationIntent,
 	rearmWifiAdapterReconcile,
 	reconcileWifiAdapterTeardownLocked,
+	retryDeferredWifiStationIntent,
 	retryWifiAdapterReconcile,
 	type WifiPendingTeardownResult,
 } from "./wifi-adapter-reconcile-retry.ts";
+import { concurrentApIfname } from "./wifi-concurrent-interface.ts";
 import type {
 	HotspotStopDeps,
 	HotspotStopResult,
@@ -48,23 +56,31 @@ import { runHotspotProfileOperation } from "./wifi-hotspot-profile-operation.ts"
 import { applyHotspotProfilePolicy } from "./wifi-hotspot-profile-policy.ts";
 import { teardownHotspotLocked } from "./wifi-hotspot-teardown.ts";
 import {
+	canHotspot,
 	type HotspotActivationDeps,
 	isHotspotActive,
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
 import {
+	bindingForRow,
+	verifiedWifiPortKey,
 	wifiOperationChanged,
 	type wifiOperationGuard,
 } from "./wifi-operation-binding.ts";
 
 export { retryWifiAdapterReconcile } from "./wifi-adapter-reconcile-retry.ts";
 
+import { wifiRescan } from "./wifi-connections.ts";
 import {
 	normalizeMacAddress,
 	wifiAdapterKeyMac,
 	wifiAdapterKeyPort,
 } from "./wifi-permanent-mac.ts";
-import { sameRadioLifetime, wifiRadioIdentity } from "./wifi-radio-identity.ts";
+import {
+	radioInventoryFor,
+	sameRadioLifetime,
+	wifiRadioIdentity,
+} from "./wifi-radio-identity.ts";
 
 const MAX_RESTORE_ATTEMPTS = 3;
 
@@ -81,9 +97,15 @@ export async function reconcileWifiAdapterLocked(
 	teardown?: WifiPendingTeardownResult,
 ): Promise<boolean> {
 	if (!normalizeMacAddress(owner.split("@")[0])) return true;
+	retryDeferredWifiStationIntent(owner);
 	if (!(teardown ?? (await reconcileWifiAdapterTeardownLocked(owner))).complete)
 		return false;
-	const applied = await applyHotspotProfilePolicy(owner, observation);
+	const applied = await applyHotspotProfilePolicy(
+		owner,
+		hasDeferredWifiStationIntent(owner)
+			? { ...observation, station: true }
+			: observation,
+	);
 	if (!applied.success)
 		return retryWifiAdapterReconcile(owner, undefined, "discovery");
 	const failure = applied.result;
@@ -97,9 +119,14 @@ export async function reconcileWifiAdapterPolicies(
 	observation: WifiPolicyObservation,
 ): Promise<boolean> {
 	beginWifiAdapterOwnerObservation();
+	const pass = {
+		...observation,
+		readInventory:
+			observation.readInventory ?? radioInventoryFor(observation.identities),
+	};
 	for (const owner of getHotspotCredentialOwners()) {
 		const result = await withWifiAdapterLock(wifiAdapterLockKey(owner), () =>
-			reconcileWifiAdapterLocked(owner, observation),
+			reconcileWifiAdapterLocked(owner, pass),
 		);
 		if (!result.success)
 			return retryWifiAdapterReconcile(owner, undefined, "discovery");
@@ -124,7 +151,28 @@ export async function reconcileWifiAdapterProfileLocked(
 	return true;
 }
 
-/** Stop reports actual teardown; policy failure remains recoverable owner health. */
+/** The live AP's owner can differ from either side of a same-address handoff. */
+export function wifiStopTarget(
+	registryKey: string,
+	row: WifiInterfaceWithHotspot,
+) {
+	const active =
+		row.concurrentHotspot?.activeConn ??
+		(row.activeMode === "ap" ? row.activeConn : undefined);
+	const owners = active ? getHotspotCredentialOwners(active) : [];
+	const liveOwner = owners.length === 1 ? owners[0] : undefined;
+	const mac = wifiAdapterKeyMac(registryKey);
+	const provenOwner =
+		liveOwner && mac && mac === wifiAdapterKeyMac(liveOwner)
+			? liveOwner
+			: undefined;
+	return {
+		owner: provenOwner ?? resolveWifiAdapterOwner(registryKey, row),
+		conn: active ?? row.hotspot.conn,
+		port: verifiedWifiPortKey(bindingForRow(registryKey, row)),
+	};
+}
+
 export async function reconcileWifiAdapterStopLocked(
 	registryKey: string,
 	row: WifiInterfaceWithHotspot,
@@ -133,21 +181,29 @@ export async function reconcileWifiAdapterStopLocked(
 ): Promise<HotspotStopResult> {
 	if (operation && (!(await operation.check()) || !operation.current()))
 		return wifiOperationChanged;
-	const owner = resolveWifiAdapterOwner(registryKey, row);
-	const cleanup = await reconcileWifiAdapterTeardownLocked(owner);
-	const active =
-		row.concurrentHotspot?.activeConn ??
-		(row.activeMode === "ap" ? row.activeConn : undefined);
-	const returningPortAp =
-		normalizeMacAddress(registryKey) &&
-		active &&
-		getHotspotCredentialOwners(active).some((key) => wifiAdapterKeyPort(key));
-	const conn =
-		(wifiAdapterKeyPort(registryKey) || returningPortAp ? active : undefined) ??
-		row.hotspot.conn;
+	const { owner, conn } = wifiStopTarget(registryKey, row);
+	const activating = row.hotspot.transition === "activating";
+	const virtual = row.concurrentHotspot;
+	const targetIfname =
+		virtual && (virtual.activeConn === conn || activating)
+			? virtual.ifname
+			: row.ifname;
+	const returningPort =
+		normalizeMacAddress(registryKey) && wifiAdapterKeyPort(owner);
+	const live = Boolean(
+		row.concurrentHotspot?.activeConn ||
+			row.activeMode === "ap" ||
+			isHotspotActive(row),
+	);
+	// Without an observed live choice, let an exact pending cleanup settle its
+	// own attempt first. It must not veto Down of a different live AP.
+	const cleanup = live
+		? undefined
+		: await reconcileWifiAdapterTeardownLocked(owner);
 	const owners = conn ? getHotspotCredentialOwners(conn) : [];
 	if (
 		wifiAdapterKeyMac(registryKey) &&
+		!returningPort &&
 		row.degradedReason !== "permanent-mac-unresolved" &&
 		(isHotspotActive(row) || row.hotspot.transition === "activating") &&
 		conn &&
@@ -170,15 +226,25 @@ export async function reconcileWifiAdapterStopLocked(
 	if (operation?.changed) return wifiOperationChanged;
 	const result = await teardownHotspotLocked(registryKey, row, deps, conn, {
 		operation,
-		pendingCleanup: !cleanup.stopped,
+		pendingCleanup: cleanup?.stopped === false,
+		targetIfname,
 	});
+	// A failed Down must not commit deferred Station before the caller undoes it.
+	if (!result.success) return result;
 	if (operation && (!(await operation.check()) || !operation.current()))
 		return result;
-	// Explicit Stop can select the current AP even when rollback lacked authority to Down it.
-	const reconciled =
-		result.success && !cleanup.stopped
-			? await reconcileWifiAdapterTeardownLocked(owner)
-			: cleanup;
+	const reconciled = cleanup?.complete
+		? cleanup
+		: await reconcileWifiAdapterTeardownLocked(owner);
+	if (!live && !reconciled.stopped)
+		return { success: false, error: "deactivation-failed" };
+	// The sole row can stop an observed independent port profile, but policy
+	// writes for the port stay with the discovery reconciliation pass.
+	if (returningPort) {
+		retryDeferredWifiStationIntent(owner);
+		clearWifiAdapterReconcile(owner, "restore");
+		return result;
+	}
 	await reconcileWifiAdapterLocked(
 		owner,
 		{
@@ -186,19 +252,26 @@ export async function reconcileWifiAdapterStopLocked(
 			active: new Map(),
 			station: true,
 			write: operation
-				? async (uuid, fields) =>
+				? async (uuid, fields, permit) =>
 						(await operation.check()) &&
 						operation.current() &&
-						deps.nmConnSetFields(uuid, fields)
+						permit?.current?.() !== false &&
+						deps.nmConnSetFields(
+							uuid,
+							fields,
+							permit &&
+								profileWritePermit(async () =>
+									(await permit()) && (await operation.check())
+										? () => operation.current() && permit.current?.() !== false
+										: false,
+								),
+						)
 				: deps.nmConnSetFields,
 		},
 		reconciled,
 	);
-	if (result.success && reconciled.stopped)
-		clearWifiAdapterReconcile(owner, "restore");
-	return reconciled.stopped
-		? result
-		: { success: false, error: "deactivation-failed" };
+	clearWifiAdapterReconcile(owner, "restore");
+	return result;
 }
 
 /** Physical recovery episodes share boot confirmation and the same owner retry state. */
@@ -209,6 +282,7 @@ export async function reconcileWifiAdapterRestoreLocked(
 	const { row, desired, signature, cycle } = request;
 	if (cycle?.stopped()) return;
 	if (
+		hasDeferredWifiStationIntent(owner) ||
 		desired === "station" ||
 		(desired === undefined && row.degradedReason !== "permanent-mac-unresolved")
 	) {
@@ -355,29 +429,75 @@ export async function reconcileWifiAdapterModeLocked(
 	request: WifiModeReconcileRequest,
 ): Promise<SetWifiAdapterModeOutput> {
 	const { row, target, publish } = request;
-	if (
-		target === "station" &&
-		!(await reconcileWifiAdapterLocked(owner, {
-			identities: wifiRadioIdentity.state.rows,
-			active: new Map(),
-			station: true,
-		}))
-	) {
-		const result = { success: false, error: "deactivation-failed" } as const;
-		publish(row.id, result);
-		return result;
-	}
 	// A returning sole row can see the live virtual leg without adopting its
 	// port-owned profile. Station still owes that AP a Down.
 	const current = row.concurrentHotspot?.activeConn
 		? "hybrid"
 		: observedWifiAdapterMode(row);
-	if (current === target) {
+	const activating = canHotspot(row) && row.hotspot.transition === "activating";
+	// Cached Station is not proof that the selected radio is still idle.
+	if (
+		current === "station" &&
+		target === "station" &&
+		!activating &&
+		canHotspot(row)
+	) {
+		const roster = await nmDevices("device,type,state,con-uuid");
+		const leg = row.concurrentHotspot?.ifname ?? concurrentApIfname(row.ifname);
+		let selectedAp = false;
+		let uncertain = roster === undefined;
+		for (const line of roster ?? []) {
+			if (!line) continue;
+			const [name, type, state, uuid] = nmcliParseSep(line);
+			if (!name || !type || !state || uuid === undefined) {
+				uncertain = true;
+				continue;
+			}
+			if (type !== "wifi" || (name !== row.ifname && name !== leg)) continue;
+			if (!uuid || uuid === "--") {
+				if (state?.startsWith("connected") || state?.startsWith("connecting"))
+					uncertain = true;
+				continue;
+			}
+			if (uuid === row.hotspot.conn) selectedAp = true;
+			else {
+				const mode = (
+					await nmConnGetFields(uuid, ["802-11-wireless.mode"])
+				)?.[0];
+				if (mode !== "infrastructure" && mode !== "adhoc" && mode !== "mesh")
+					uncertain = true;
+			}
+		}
+		if (uncertain) {
+			void wifiRescan();
+			const failure = { success: false, error: "deactivation-failed" } as const;
+			publish(row.id, failure);
+			return failure;
+		}
+		if (!selectedAp) {
+			if (
+				!(await reconcileWifiAdapterLocked(owner, {
+					identities: wifiRadioIdentity.state.rows,
+					active: new Map(),
+					station: true,
+				}))
+			) {
+				const failure = {
+					success: false,
+					error: "deactivation-failed",
+				} as const;
+				publish(row.id, failure);
+				return failure;
+			}
+			publish(row.id, { success: true, mode: target });
+			return { success: true, applied: target };
+		}
+	} else if (current === target && (target !== "station" || !activating)) {
 		publish(row.id, { success: true, mode: target });
 		return { success: true, applied: target };
 	}
 	request.publishPending();
-	if (current !== "station") {
+	if (current !== "station" || target === "station") {
 		const stopped = await request.stop(target === "station");
 		if (!stopped.success) {
 			if (target !== "station") publish(row.id, stopped);

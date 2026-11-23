@@ -1,7 +1,7 @@
 {
 	"name": "ceralive-workspace",
 	"private": true,
-	"version": "2026.11.3",
+	"version": "2026.11.5",
 	"description": "Monorepo workspace containing CeraUI frontend and CeraLive backend",
 	"type": "module",
 	"repository": {
@@ -57,7 +57,7 @@
 	"volta": {
 		"node": "26.0.0"
 	},
-	"packageManager": "bun@1.4.4",
+	"packageManager": "bun@1.4.5",
 	"workspaces": {
 		"packages": [
 			"apps/*",

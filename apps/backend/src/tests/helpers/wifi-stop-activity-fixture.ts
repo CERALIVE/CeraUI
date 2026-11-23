@@ -14,6 +14,7 @@ import type {
 } from "../../modules/wifi/wifi-hotspot-types.ts";
 import { getWifiIdToMacAddress } from "../../modules/wifi/wifi-interfaces.ts";
 import { nmcliFieldNames, nmcliFieldOutput } from "./nmcli-field-output.ts";
+import { mockActivationBus } from "./wifi-active-observation.ts";
 import {
 	autoconnectFixture,
 	MAC,
@@ -47,6 +48,12 @@ export function stopActivityFixture(): (
 		const row = f.row();
 		row.supportsApStaConcurrency = mode === "hybrid";
 		getWifiIdToMacAddress()[0] = MAC;
+		const target = mode === "hybrid" ? "clap-wlan0" : "wlan0";
+		if (mode === "hybrid") {
+			const parent = f.witnesses.get("wlan0");
+			if (!parent) throw new Error("Missing hybrid parent witness");
+			f.witnesses.set(target, { ...parent, ifindex: 7 });
+		}
 		await f.sample();
 		const model: Scenario["model"] = {
 			phase: "inactive",
@@ -56,6 +63,37 @@ export function stopActivityFixture(): (
 		const commands: string[] = [],
 			downs: string[] = [],
 			queries: string[] = [];
+		const activePath = "/org/freedesktop/NetworkManager/ActiveConnection/1";
+		mockActivationBus(
+			() => "00000000000000000000000000000001",
+			(call) => {
+				if (call.destination !== ":1.1" || call.args?.[0] !== activePath)
+					throw new Error("Down did not target the selected activation");
+				downs.push(PROFILE);
+				if (model.reply !== "refuse") model.phase = "inactive";
+				if (model.reply !== "ok") throw new Error("memory down reply failed");
+			},
+			() =>
+				model.phase === "inactive"
+					? undefined
+					: {
+							uuid: PROFILE,
+							path: activePath,
+							ifname: target,
+						},
+		);
+		const deviceProp = spyOn(nm, "nmDeviceProp");
+		const otherDeviceFields = deviceProp.getMockImplementation();
+		deviceProp.mockImplementation(async (ifname, fields, mode) => {
+			if (fields === "GENERAL.STATE,GENERAL.CON-UUID,GENERAL.CON-PATH")
+				return ifname === target && model.phase !== "inactive"
+					? [model.phase === "activated" ? "100" : "70", PROFILE, activePath]
+					: ["30", "", ""];
+			return otherDeviceFields?.(ifname, fields, mode);
+		});
+		spyOn(nm, "nmDevices").mockImplementation(async () => [
+			`${target}:wifi:${model.phase === "inactive" ? "disconnected:" : `${model.phase}:${PROFILE}`}`,
+		]);
 		const events: Scenario["events"] = [];
 		let disarm: ReturnType<Scenario["holdDisarm"]> | undefined;
 		let entered: ReturnType<typeof Promise.withResolvers<void>> | undefined;
@@ -85,12 +123,6 @@ export function stopActivityFixture(): (
 					await released?.promise;
 				}
 				return "";
-			}
-			if (args[0] === "conn" && args[1] === "down") {
-				downs.push(args[2] ?? "");
-				if (model.reply !== "refuse") model.phase = "inactive";
-				if (model.reply !== "ok") throw new Error("memory down reply failed");
-				return "Connection successfully deactivated";
 			}
 			const fieldsAt = args.indexOf("--fields");
 			if (
@@ -154,7 +186,7 @@ export function stopActivityFixture(): (
 		const stop: HotspotStopDeps = {
 			recordIntent: wifiAdapterModeRecorder,
 			nmConnSetFields: (uuid, fields) => nm.nmConnSetFields(uuid, fields),
-			nmDisconnect: (uuid) => nm.nmDisconnect(uuid),
+			nmDisconnect: (...args) => nm.nmDisconnect(...args),
 			releaseConcurrentInterface: async () => true,
 			broadcastState: () => undefined,
 			setDupIpSuppression: () => undefined,
@@ -183,7 +215,6 @@ export function stopActivityFixture(): (
 			},
 			async lateConnected() {
 				if (model.phase !== "inactive") model.phase = "activated";
-				const target = mode === "hybrid" ? "clap-wlan0" : "wlan0";
 				f.list([
 					`${target}:wifi:${model.phase === "activated" ? `connected:${PROFILE}` : "disconnected:"}`,
 				]);

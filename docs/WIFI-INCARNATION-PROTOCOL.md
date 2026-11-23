@@ -21,8 +21,31 @@ still pending.
 
 A sole adapter uses the plain MAC record, including when returning from a
 verified pair. Discovery preserves independent port state for the next proven
-pair. A destination row cannot accept a concurrent Stop while its active UUID
-is changing during a port swap.
+pair. During a port swap, token-free Stop and Station can wait briefly for
+discovery to prove the live target instead of requiring a second request. They
+do not guess the target when that proof does not arrive in time.
+
+A successful Stop or Station retires the independently saved intent of the
+selected radio's verified permanent MAC and literal port. It does so on
+both sole and composite rows, including when the AP is already down or the
+plain-MAC AP is running. Other independent ports keep their intent.
+If the selected live AP belongs to the current port, only that owning port
+gets Station; otherwise the plain record and its credential-only copies
+also get Station. An unsaved Station choice blocks restore for the affected
+owners while its write is retried. An accepted explicit Hotspot or Hybrid
+supersedes it; a refused choice reinstates the previous durable and deferred
+intent. The deferred retry is in memory and cannot survive power loss while
+configuration is still unwritable.
+
+Boot restore rechecks current physical proof and refuses to rebind a profile
+with a contradictory saved pin.
+Verified hybrid checks both saved interface selectors and the port before
+allocating or mutating the AP leg. An old AP-leg name may be rebound only when
+it is absent from the live interface list and the saved UUID, permanent MAC
+and literal port prove the same owner. The selectors must match the new leg
+before Up. Boot does not prune superseded profiles; eligible stale profiles
+can remain until the next operator Start.
+The service remembers observed address collisions across empty discovery passes.
 
 ## Backend limited mode [EXISTS; host and mock-browser proof only]
 
@@ -41,15 +64,25 @@ nor repairs a limited profile. A regulatory change that would restart that AP
 stops it with a warning instead, leaving persisted mode intent unchanged.
 
 Boot alone may restore an existing owned profile under D12: one hotspot-capable
-adapter, one logical non-station intent (MAC and MAC@port count as one), the
-plain record's profile, a currently
+adapter, one address group with non-Station intent (MAC and MAC@port count as
+one), a non-Station plain MAC record with an owned profile, a currently
 permitted stored channel or `auto`, and no disruptive streaming transition.
-Hybrid requires proven concurrency and the existing fixed interface binding.
-No credential, autoconnect or mode-intent write is allowed.
+Hybrid requires proven concurrency and an already-correct interface pin; any
+fixed channel must match the live station on same-channel hardware. D12
+requires a live matching path when the profile has a saved port pin.
+An unpinned plain owner is eligible only without known collision history.
+D12 rechecks the selected radio and uses UUID plus interface for Up; the last
+asynchronous hybrid Up guard samples the live station. Cold hybrid creation
+rechecks the parent and addresses its sampled wiphy index. D12 does not
+write the profile, credentials, device autoconnect or mode intent.
 Every failed condition logs once per unchanged edge; success logs
 `hotspot restored on an adapter that could not be identified`.
-Replacing that sole unidentifiable adapter is undetectable and restores the same
-profile: this is the accepted D12 limit, proven on the host only.
+A replacement already selected at discovery can still receive an eligible
+pathless plain profile if there is no contradictory evidence. The checks
+refuse a detected change but are not atomic with NetworkManager's interface
+resolution or the kernel's wiphy lookup. Same-identifier reuse and station
+roam after the last applicable read remain possible. D12 is proven on the
+host only.
 
 The frontend maps the refusal to existing localized unverified copy without
 adding strings. The `wifi-limited` mock scenario and
@@ -160,7 +193,37 @@ the selected radio and profile before the forward write, reactivation, any
 rollback, and the credential commit. If proof is lost before dispatch, the
 operation refuses without effects. If a write may already have changed the
 profile, Configure reports `activating` and suppresses further writes and Up.
-The limited-radio regulatory Stop retains its UUID-based authority.
+An exclusive restart needs a fresh physical port observation and matching
+saved profile pins. If proof is lost after a forward or rollback Up, Configure
+and regulatory restart use the captured active path and daemon identity to
+take down only their own activation, never a later activation of the UUID.
+Both forward and rollback hybrid Up require confirmation of the command's
+active path and daemon, on the selected AP leg with the expected UUID, as
+well as the station/AP channel check. UUID and channel alone cannot confirm
+Save. The same active path, daemon, UUID and connected AP leg are rechecked
+after refreshing saved connections and before committing credentials. A
+rollback whose Up acknowledged but whose profile readback failed still
+undergoes hybrid confirmation and exact cleanup; it is not a clean refusal.
+If confirmation fails, cleanup uses only the command receipt. Before Up,
+channel refusal may stop an AP proven active on the selected leg. Stop, Station and discovery
+policy obtain a fresh device activation path on the selected radio or AP leg;
+a saved UUID, cached live state or global roster never authorizes Down.
+Station checks a fresh device roster even when its cached mode is Station.
+An unreadable or unclassified local activation requests a rescan and returns
+`deactivation-failed`. When the radio has no selected AP to stop, a failed
+owner policy pass refuses Station and restores the prior intent; the owner's
+policy retry remains scheduled. This does not gate Down of a live AP.
+Legacy Wi-Fi Disconnect has only a UUID on the wire:
+it requires one unambiguous selected Station row, or returns `generic`.
+An Up timeout is uncertain, not a clean refusal. Re-read the selected AP leg
+and compare it to the pre-Up path and profile instance; do not dispatch a
+rollback Up on timeout. A live AP positively re-observed on the unchanged
+target can settle the Save. That observation never becomes a command receipt.
+If confirmation fails or continuity is lost, only a daemon-returned receipt
+authorizes cleanup. An interrupted Save reports `activating`, not success,
+and logs unproved cleanup. A channel refusal whose exact Down cannot be
+proved reports `activation-failed` with reason `deactivation-failed`.
+The same path requirement applies to limited-radio regulatory Stop.
 
 The credential writer stages the keyfile, re-reads the profile and requires
 the same NetworkManager resource, and only then requests the operation's
@@ -247,8 +310,14 @@ report uncertain outcomes rather than claiming an atomic transaction.
   (`wifi-credential-publish-radio.test.ts`). Restored files retain their
   bytes and inode, not their original ctime.
 - **Activation rollback and profile deletion.** Rollback binds the Up path
-  to its original NetworkManager bus and daemon identity. Every exact Down
-  rechecks that identity before dispatch. A missing path, a different run,
+  to its original NetworkManager bus and daemon identity. The shared Down
+  primitive checks the bus ID on a non-reconnecting connection and sends
+  `DeactivateConnection` to the recorded unique daemon owner, by path, after
+  checking the active object's UUID and device. Method acknowledgement alone
+  is not completion: the same bus must prove the exact object deactivated
+  or removed within the bounded wait. An unproved Stop keeps live state and
+  returns `deactivation-failed` for retry, without releasing the AP leg.
+  A missing path, a different run,
   or unreadable identity never authorizes a Down by path or UUID. Cleanup
   checks fresh activity instead. If activity is unknown or the profile still has
   an active connection, retain it and issue the existing unknown-mode
@@ -262,9 +331,11 @@ report uncertain outcomes rather than claiming an atomic transaction.
   unacknowledged Down, without repeating the command.
   NetworkManager does not offer a delete-if-inactive transaction: an
   independent activation after the final inventory answer can still race
-  Delete. NetworkManager can also restart between the final run check and
-  `nmcli` dispatch; `nmcli` itself cannot bind its request to a daemon run.
-  The renumbering tests cover restarts before the check, not inside that gap.
+  Delete. The remaining `nmcli` operations, including Up and Delete, cannot
+  bind dispatch to a daemon run, so NetworkManager can restart after their
+  last check. Exact Down is not an `nmcli` operation: its D-Bus call targets
+  the captured daemon owner on the verified bus. The CLI renumbering tests
+  cover restarts before the check, not inside the CLI dispatch gap.
 - **Deferred borrowed-leg release.** Expiry and failed exact Down both try
   release using Start's allocator receipt under the owner lock. Only the
   still-owned idle leg can regain its previous autoconnect. Busy or
@@ -435,6 +506,13 @@ or when no current coherent observation exists, the field is absent. Discovery
 invalidates prior evidence before publishing or mutating rows, including reused
 row objects. Detached samples carry their captured row and generation; a late,
 failed, timed-out or incoherent observation cannot authorize an older token.
+An observation older than the latest committed sample cannot publish. A rowless
+sample can carry the previous exact row and its original stamp for an unchanged
+identity at the same ifname. This preserves ownership for an already-bound
+operation only while its registry row and live proof still match. It does not
+make that stamp current: after invalidation, status stays tokenless and new
+requests cannot use the carried association until coherent evidence matches
+the current row marker. Request admission also requires its own live recheck.
 After a detached publication, the producer compares each current row's projected
 wire token with its value before publication. A changed token sends exactly one
 Wi-Fi status frame to authenticated local clients through `broadcastMsgLocal`;

@@ -4,6 +4,7 @@ import {
 	generateDeviceAccessQr,
 	generateWifiQr,
 	hotspotQrSecurity,
+	networkRename,
 } from "./NetworkHelper";
 
 const toDataURL = vi.hoisted(() =>
@@ -129,5 +130,18 @@ describe("NetworkHelper", () => {
 			await generateWifiQr("a\\;b", "c\\:d", hotspotQrSecurity("wpa3-sae"));
 			expect(lastEncodedPayload()).toBe("WIFI:T:SAE;S:a\\\\\\;b;P:c\\\\\\:d;;");
 		});
+	});
+});
+
+describe("networkRename", () => {
+	it("numbers kernel-indexed interfaces from one", () => {
+		expect(networkRename("wlan0")).toBe("Wi-Fi 1");
+		expect(networkRename("eth1")).toBe("Ethernet 2");
+	});
+	// A USB radio named after its MAC used to read as "Wi-Fi 28".
+	it("names interfaces named after their MAC address by the MAC's tail", () => {
+		expect(networkRename("wlx020000002f27")).toBe("Wi-Fi (2f27)");
+		expect(networkRename("wlx02000000b83e")).toBe("Wi-Fi (b83e)");
+		expect(networkRename("enx00e04c680001")).toBe("Ethernet (0001)");
 	});
 });

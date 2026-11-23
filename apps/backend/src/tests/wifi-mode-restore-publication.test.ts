@@ -11,6 +11,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { WifiAdapterMode } from "@ceraui/rpc/schemas";
+import * as runner from "../helpers/run.ts";
 import { run } from "../helpers/run.ts";
 import * as config from "../modules/config.ts";
 import * as nm from "../modules/network/network-manager.ts";
@@ -53,7 +54,13 @@ import type {
 	WifiInterfaceWithHotspot,
 } from "../modules/wifi/wifi-hotspot-types.ts";
 import * as interfaces from "../modules/wifi/wifi-interfaces.ts";
+import { wifiRadioIdentity } from "../modules/wifi/wifi-radio-identity.ts";
 import { wifiRadioObservation } from "../modules/wifi/wifi-radio-observation.ts";
+import {
+	nmcliFieldNames,
+	nmcliFieldOutput,
+} from "./helpers/nmcli-field-output.ts";
+import { mockRosterActivation } from "./helpers/wifi-active-observation.ts";
 import { mockHotspotConfirmationPoll } from "./helpers/wifi-hotspot-test-setup.ts";
 import { fakeShadowSysfs } from "./helpers/wifi-radio-equivalence-shadow.ts";
 import {
@@ -78,6 +85,23 @@ let restoreShadow: () => Promise<void>;
 const flush = async () => {
 	for (let i = 0; i < 1000; i++) await Promise.resolve();
 };
+
+async function publishVerifiedRestoreInputs() {
+	await wifiRadioIdentity.discover([{ ifname: "wlan0", row }]);
+	const saved: Readonly<Record<string, string>> = {
+		"match.path": "platform-equivalence-phy0",
+		"connection.interface-name": "clap-wlan0",
+		"802-11-wireless.mode": "ap",
+		"802-11-wireless.mac-address": MAC,
+	};
+	const command = runner.run;
+	spyOn(runner, "run").mockImplementation(async (binary, args, options) =>
+		binary === "nmcli" && args?.at(-1) === AP && nmcliFieldNames(args).length
+			? nmcliFieldOutput(args, (field) => saved[field] ?? "")
+			: command(binary, args, options),
+	);
+}
+
 async function prove(
 	supported = true,
 	now = () => 0,
@@ -173,6 +197,7 @@ beforeEach(async () => {
 	setWifiState({});
 	spyOn(streaming, "getIsStreaming").mockReturnValue(false);
 	Object.assign(defaultHotspotDeps, {
+		readProfilePins: async () => ["", ""],
 		nmConnSetFields: async () => {
 			effects.push("fields");
 			return true;
@@ -183,7 +208,14 @@ beforeEach(async () => {
 		},
 		broadcastState: () => {},
 		setDupIpSuppression: () => {},
-		credentials: { get: () => undefined, remember: () => {} },
+		credentials: {
+			get: () => ({
+				conn: AP,
+				ssid: "Publication AP",
+				password: "fixture-password",
+			}),
+			remember: () => {},
+		},
 		pruneHotspotConns: async () => {},
 		releaseConcurrentInterface: async () => {
 			effects.push("release");
@@ -195,6 +227,15 @@ beforeEach(async () => {
 		},
 	} satisfies Partial<HotspotActivationDeps>);
 	mockHotspotConfirmationPoll();
+	spyOn(nm, "nmDevices").mockImplementation(async () => [
+		`wlan0:wifi:${row.activeConn ? `connected:${row.activeConn}` : "disconnected:"}`,
+		...(row.concurrentHotspot?.activeConn
+			? [
+					`${row.concurrentHotspot.ifname}:wifi:connected:${row.concurrentHotspot.activeConn}`,
+				]
+			: []),
+	]);
+	mockRosterActivation();
 	Object.assign(defaultHotspotStopDeps, {
 		nmConnSetFields: async () => true,
 		nmDisconnect: async () => {
@@ -311,9 +352,9 @@ test("real discovery replacing an active marker with idle during teardown still 
 	row.concurrentHotspot = { ifname: "clap-wlan0", activeConn: AP };
 	persistWifiAdapterMode(MAC, "hybrid");
 	await prove();
-	spyOn(nm, "nmDevices").mockResolvedValue([
+	const roster = spyOn(nm, "nmDevices").mockResolvedValue([
 		"wlan0:wifi:connected:station",
-		"clap-wlan0:wifi:disconnected:",
+		`clap-wlan0:wifi:connected:${AP}`,
 	]);
 	spyOn(nm, "nmConnGetFields").mockResolvedValue(["infrastructure"]);
 	spyOn(devices, "wifiDeviceListGetMacAddress").mockReturnValue(MAC);
@@ -322,6 +363,10 @@ test("real discovery replacing an active marker with idle during teardown still 
 	spyOn(connections, "wifiScheduleScanRefresh").mockImplementation(() => {});
 	spyOn(defaultHotspotStopDeps, "nmDisconnect").mockImplementation(async () => {
 		effects.push("down");
+		roster.mockResolvedValue([
+			"wlan0:wifi:connected:station",
+			"clap-wlan0:wifi:disconnected:",
+		]);
 		await interfaces.wifiUpdateDevices();
 		return true;
 	});
@@ -406,10 +451,8 @@ for (const parent of ["disconnected", "new-station"] as const) {
 		row.activeMode = "ap";
 		persistWifiAdapterMode(MAC, "hotspot");
 		await prove();
-		spyOn(nm, "nmDevices").mockResolvedValue([
-			parent === "disconnected"
-				? "wlan0:wifi:disconnected:"
-				: "wlan0:wifi:connected:new-station",
+		const roster = spyOn(nm, "nmDevices").mockResolvedValue([
+			`wlan0:wifi:connected:${AP}`,
 			"clap-wlan0:wifi:disconnected:",
 		]);
 		spyOn(nm, "nmConnGetFields").mockResolvedValue(["infrastructure"]);
@@ -420,6 +463,12 @@ for (const parent of ["disconnected", "new-station"] as const) {
 		spyOn(defaultHotspotStopDeps, "nmDisconnect").mockImplementation(
 			async () => {
 				effects.push("down");
+				roster.mockResolvedValue([
+					parent === "disconnected"
+						? "wlan0:wifi:disconnected:"
+						: "wlan0:wifi:connected:new-station",
+					"clap-wlan0:wifi:disconnected:",
+				]);
 				await interfaces.wifiUpdateDevices();
 				return true;
 			},
@@ -480,6 +529,7 @@ for (const replacement of ["same", "idle", "other-interface"] as const) {
 for (const accepted of [false, true]) {
 	test(`coalesced invalidation and recovery survive a waiting activation; accepted=${accepted}`, async () => {
 		persistWifiAdapterMode(MAC, "hybrid");
+		await publishVerifiedRestoreInputs();
 		await prove();
 		const entered = Promise.withResolvers<void>();
 		const finish = Promise.withResolvers<boolean>();
@@ -515,6 +565,7 @@ for (const accepted of [false, true]) {
 
 test("identical successful capability publications never re-arm a refused activation", async () => {
 	persistWifiAdapterMode(MAC, "hybrid");
+	await publishVerifiedRestoreInputs();
 	await prove();
 	let attempts = 0;
 	spyOn(defaultHotspotDeps, "nmConnect").mockImplementation(async () => {
@@ -534,6 +585,7 @@ test("identical successful capability publications never re-arm a refused activa
 
 test("a coalesced binding change re-arms pending intent even when support stays true", async () => {
 	persistWifiAdapterMode(MAC, "hybrid");
+	await publishVerifiedRestoreInputs();
 	await prove();
 	const entered = Promise.withResolvers<void>();
 	const finish = Promise.withResolvers<boolean>();

@@ -75,3 +75,12 @@ export async function signalled<T>(
 		clearTimeout(timer);
 	}
 }
+
+/** The export confirmation's scope list as term, value, term, value... */
+export function exportScopeRows(dialog: HTMLElement): string[] {
+	const list = dialog.querySelector('[data-testid="sharing-export-scope"]');
+	if (list === null) throw new Error("the export confirmation states no scope");
+	return [...list.querySelectorAll("dt, dd")].map(
+		(cell) => cell.textContent?.trim() ?? "",
+	);
+}

@@ -165,8 +165,8 @@ for (const window of [
 				resetBootReadiness();
 				f.faults.deleteFails = false;
 				const down = f.deps.nmDisconnect;
-				f.deps.nmDisconnect = async (target, path) => {
-					const result = await down(target, path);
+				f.deps.nmDisconnect = async (target, path, runId, ifname) => {
+					const result = await down(target, path, runId, ifname);
 					restore(target);
 					return result;
 				};

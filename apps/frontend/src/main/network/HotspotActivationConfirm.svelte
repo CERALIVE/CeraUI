@@ -40,6 +40,7 @@ interface Props {
 	degradedReason?: WifiInterface['degraded_reason'];
 	session?: number;
 	reloaded?: boolean;
+	focusOnOpen?: boolean;
 	/** The radio's station leg survives (hybrid), so no disconnect is threatened. */
 	keepsStation?: boolean;
 	/** Action label; defaults to "Turn on hotspot". */
@@ -50,8 +51,15 @@ interface Props {
 	onCancel: () => void;
 }
 
-const { device, incarnation, degradedReason, session = 0, reloaded = false, keepsStation = false, confirmLabel, detail, onConfirm, onCancel }: Props =
+const { device, incarnation, degradedReason, session = 0, reloaded = false, focusOnOpen = false, keepsStation = false, confirmLabel, detail, onConfirm, onCancel }: Props =
 	$props();
+const uid = $props.id();
+let panel: HTMLDivElement;
+let cancelButton = $state<HTMLButtonElement | null>(null);
+
+$effect(() => {
+	if (focusOnOpen) cancelButton?.focus();
+});
 
 const bounds = networkConstraints.hotspot;
 
@@ -82,15 +90,15 @@ function current(seq: number, captured: WifiRadioBinding): boolean {
 
 onDestroy(() => { attempt += 1; observation?.abort(); });
 
-async function prepare(captured: WifiRadioBinding, seq: number, chosen?: { name: string; password: string }) {
-	if (!captured.incarnation) return;
-	const invoke = (token: string) => rpc.wifi.hotspotPrepare({
+async function prepare(captured: WifiRadioBinding, seq: number, chosen?: { name: string; password: string }, recover = true) {
+	const { incarnation: token } = captured;
+	if (!token) return;
+	const invoke = () => rpc.wifi.hotspotPrepare({
 		device: captured.device, incarnation: token, ...chosen,
 	});
-	let accepted = captured;
 	let retried = false;
-	let result = await invoke(captured.incarnation);
-	if (result.reason === 'current-unobserved' && current(seq, captured)) {
+	let result = await invoke();
+	if (recover && result.reason === 'current-unobserved' && current(seq, captured)) {
 		const controller = new AbortController();
 		observation = controller;
 		awaitingStatus = true;
@@ -98,16 +106,35 @@ async function prepare(captured: WifiRadioBinding, seq: number, chosen?: { name:
 		await tick();
 		if (observation === controller) { observation = undefined; awaitingStatus = false; }
 		if (seq !== attempt || captured.device !== device || captured.link !== getLinkEpoch()) return;
-		if (!next?.incarnation) { phase = 'unsupported'; acknowledged = false; return; }
-		accepted = { ...captured, incarnation: next.incarnation, session };
-		binding = accepted;
+		if (!next?.incarnation) {
+			focusBeforeReload();
+			phase = 'unsupported';
+			acknowledged = false;
+			return;
+		}
+		if (next.incarnation !== token || !current(seq, captured)) {
+			invalidated = true;
+			acknowledged = false;
+			// A fresh load has no draft and does not inherit this recovery.
+			if (incarnation && incarnation !== token) void load(false);
+			else {
+				focusBeforeReload();
+				phase = 'load-failed';
+			}
+			return;
+		}
 		retried = true;
-		result = await invoke(next.incarnation);
+		result = await invoke();
 	}
-	return { result, captured: accepted, retried };
+	return { result, retried };
 }
 
-async function load() {
+function focusBeforeReload() {
+	if (panel?.contains(document.activeElement)) cancelButton?.focus();
+}
+
+async function load(recover = true): Promise<void> {
+	focusBeforeReload();
 	observation?.abort();
 	observation = undefined;
 	awaitingStatus = false;
@@ -130,8 +157,8 @@ async function load() {
 	}
 	phase = 'loading';
 	try {
-		const response = await prepare(captured, seq);
-		if (!response || !current(seq, response.captured)) return;
+		const response = await prepare(captured, seq, undefined, recover);
+		if (!response || !current(seq, captured)) return;
 		const { result } = response;
 		if (result.error === 'radio-unverified') {
 			phase = 'unverified';
@@ -150,8 +177,7 @@ async function load() {
 		password = result.password;
 		phase = 'ready';
 	} catch {
-		// A rebound retry rejects against the binding it was accepted under.
-		if (binding && current(seq, binding)) phase = 'load-failed';
+		if (current(seq, captured)) phase = 'load-failed';
 	}
 }
 
@@ -217,15 +243,14 @@ async function confirm() {
 	const seq = attempt;
 	if (!canConfirm || !captured?.incarnation || !current(seq, captured)) return;
 	const chosen = { name, password };
-	let accepted = captured;
 	if (name !== loaded.name || password !== loaded.password) {
 		phase = 'saving';
 		try {
 			const response = await prepare(captured, seq, chosen);
-			if (!response || !current(seq, response.captured)) return;
-			accepted = response.captured;
+			if (!response || !current(seq, captured)) return;
 			const { result } = response;
 			if (result.error === 'radio-unverified') {
+				focusBeforeReload();
 				phase = 'unverified';
 				acknowledged = false;
 				return;
@@ -242,30 +267,31 @@ async function confirm() {
 			}
 			loaded = chosen;
 		} catch {
-			if (!binding || !current(seq, binding)) return;
+			if (!current(seq, captured)) return;
 			phase = 'ready';
 			saveFailed = true;
 			return;
 		}
 		phase = 'ready';
 	}
-	if (accepted.incarnation && current(seq, accepted)) onConfirm(accepted.incarnation);
+	if (current(seq, captured)) onConfirm(captured.incarnation);
 }
 </script>
 
 <!-- biome-ignore lint/a11y/useSemanticElements: This warning and confirmation panel is a named action group; a fieldset introduces form-group sizing and an anonymous content box. -->
 <div
+	bind:this={panel}
 	class="border-status-warning/30 bg-status-warning/10 space-y-3 rounded-lg border p-3"
 	data-device={device}
 	data-phase={phase}
 	data-testid="hotspot-activation-confirm"
 	role="group"
-	aria-labelledby="hotspot-confirm-title-{device}"
+	aria-labelledby="hotspot-confirm-title-{uid}"
 >
 	<div class="flex items-start gap-2">
 		<TriangleAlert aria-hidden="true" class="text-status-warning mt-0.5 size-4 shrink-0" />
 		<div class="space-y-1">
-			<p id="hotspot-confirm-title-{device}" class="text-sm font-semibold">
+			<p id="hotspot-confirm-title-{uid}" class="text-sm font-semibold">
 				{firstTime ? m['hotspotConfirm.firstTimeTitle']() : m['hotspotConfirm.title']()}
 			</p>
 			{#if firstTime}
@@ -303,18 +329,18 @@ async function confirm() {
 	{:else if phase === 'load-failed'}
 		<div class="space-y-2" role="alert" data-testid="hotspot-confirm-load-failed">
 			<p class="text-destructive text-xs">{m['hotspotConfirm.loadFailed']()}</p>
-			<Button class="h-8 min-h-[var(--touch-target-min)]" onclick={load} size="sm" variant="secondary">
+			<Button class="h-8 min-h-[var(--touch-target-min)]" onclick={() => load()} size="sm" variant="secondary">
 				{m['hotspotConfirm.retry']()}
 			</Button>
 		</div>
 	{:else}
 		<div class="space-y-1.5">
-			<Label class="text-xs font-medium" for="hotspot-confirm-name-{device}">
+			<Label class="text-xs font-medium" for="hotspot-confirm-name-{uid}">
 				{m['network.hotspot.name']()}
 			</Label>
 			<div class="relative">
 				<Input
-					id="hotspot-confirm-name-{device}"
+					id="hotspot-confirm-name-{uid}"
 					class="bg-background pe-10 font-mono"
 					autocapitalize="none"
 					autocomplete="off"
@@ -344,13 +370,13 @@ async function confirm() {
 		</div>
 
 		<div class="space-y-1.5">
-			<Label class="text-xs font-medium" for="hotspot-confirm-password-{device}">
+			<Label class="text-xs font-medium" for="hotspot-confirm-password-{uid}">
 				{m['network.hotspot.password']()}
 			</Label>
 			<div class="relative">
 				<!-- Visible by default: the whole point is that it gets written down. -->
 				<Input
-					id="hotspot-confirm-password-{device}"
+					id="hotspot-confirm-password-{uid}"
 					class="bg-background pe-10 font-mono"
 					autocapitalize="none"
 					autocomplete="off"
@@ -391,9 +417,9 @@ async function confirm() {
 			</Button>
 		</div>
 
-		<label class="flex cursor-pointer items-start gap-2.5 text-xs" for="hotspot-confirm-ack-{device}">
+		<label class="flex cursor-pointer items-start gap-2.5 text-xs" for="hotspot-confirm-ack-{uid}">
 			<Checkbox
-				id="hotspot-confirm-ack-{device}"
+				id="hotspot-confirm-ack-{uid}"
 				class="mt-0.5 size-5"
 				data-testid="hotspot-confirm-ack"
 				bind:checked={acknowledged}
@@ -410,6 +436,7 @@ async function confirm() {
 
 	<div class="flex flex-wrap justify-end gap-2">
 		<Button
+			bind:ref={cancelButton}
 			class="h-9 min-h-[var(--touch-target-min)]"
 			data-testid="hotspot-confirm-cancel"
 			onclick={onCancel}

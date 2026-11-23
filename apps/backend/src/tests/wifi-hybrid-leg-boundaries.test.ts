@@ -2,6 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import * as retries from "../helpers/retry.ts";
 import * as nm from "../modules/network/network-manager.ts";
+import * as profiles from "../modules/network/network-manager-profile-instance.ts";
 import * as secrets from "../modules/network/network-manager-secret.ts";
 import {
 	wifiAdapterLockKey,
@@ -255,9 +256,9 @@ test("a saved hybrid Start restores its borrowed leg's autoconnect after its sta
 			(release = releaseLeg(...args));
 		const down = f.deps.nmDisconnect;
 		// NetworkManager completes this Down after any release already checking the leg.
-		f.deps.nmDisconnect = async (id) => {
+		f.deps.nmDisconnect = async (...args) => {
 			await release;
-			return down(id);
+			return down(...args);
 		};
 		const connect = f.deps.nmConnect;
 		f.deps.nmConnect = async (...args) => {
@@ -490,9 +491,9 @@ test.each(["original", "successor"] as const)(
 			expect((await f.start()).success).toBeTrue();
 			if (selection === "successor") {
 				const down = f.deps.nmDisconnect;
-				f.deps.nmDisconnect = async (id) => {
+				f.deps.nmDisconnect = async (...args) => {
 					leg.succeed();
-					return down(id);
+					return down(...args);
 				};
 			}
 			const beginning = f.frames.length;
@@ -693,6 +694,212 @@ test("a saved hybrid channel refusal without an Up path does not Down the succes
 			reason: "deactivation-failed",
 		});
 		expect(f.active()).toBe(uuid);
+	} finally {
+		await f.restore();
+	}
+});
+
+test("a pre-Up hybrid Save refusal leaves the profile active off the selected leg", async () => {
+	const f = await hybrid();
+	try {
+		const uuid = await f.afterSavedStart();
+		f.observe(uuid, "ap");
+		f.row.concurrentHotspot = { ifname: LEG, activeConn: uuid };
+		const readDevice = nm.nmDeviceProp;
+		spyOn(nm, "nmDeviceProp").mockImplementation(
+			async (ifname, fields, mode) =>
+				fields.startsWith("GENERAL.STATE") && ifname === LEG
+					? ["30", "", ""]
+					: readDevice(ifname, fields, mode),
+		);
+		const beginning = f.commands.length;
+		expect(
+			await reconfigureHotspotForRegdomain(MAC, f.row, "auto", {
+				...defaultHotspotConfigDeps,
+				...qualifiedHybridEvidence,
+				readHybridChannel: async () => undefined,
+				readHybridTargetIdentity: async () => f.leg(),
+			}),
+		).toBe(false);
+		expect(f.active()).toBe(uuid);
+		expect(
+			f.commands.slice(beginning).filter((args) => args[1] === "down"),
+		).toEqual([]);
+	} finally {
+		await f.restore();
+	}
+});
+
+test("a station roam during rollback Up stops only the unconfirmed hybrid activation", async () => {
+	const f = await hybrid();
+	try {
+		const uuid = await f.afterSavedStart();
+		f.row.concurrentHotspot = { ifname: LEG, activeConn: uuid };
+		const beginning = f.commands.length;
+		const stableChannel = qualifiedHybridEvidence.readHybridChannel;
+		let roamed = false;
+		let rollbackPath = "";
+		let ups = 0;
+		expect(
+			await reconfigureHotspotForRegdomain(MAC, f.row, "auto", {
+				...defaultHotspotConfigDeps,
+				...qualifiedHybridEvidence,
+				readHybridChannel: stableChannel,
+				readHybridTargetIdentity: async () => f.leg(),
+				nmConnect: async (...args) => {
+					if (++ups === 1) return false;
+					const result = await defaultHotspotConfigDeps.nmConnect(...args);
+					rollbackPath = f.nm.activePath();
+					roamed = true;
+					return result;
+				},
+				confirmHybridActivation: async () => !roamed,
+				broadcastState: () => undefined,
+			}),
+		).toBe(false);
+		expect(ups).toBe(2);
+		expect(f.active()).toBeUndefined();
+		expect(rollbackPath).not.toBe("");
+		expect(
+			f.commands.slice(beginning).filter((args) => args[1] === "down"),
+		).toEqual([["conn", "down", "apath", rollbackPath]]);
+	} finally {
+		await f.restore();
+	}
+});
+
+test("a same-UUID same-channel successor cannot confirm hybrid Save", async () => {
+	const f = await hybrid();
+	try {
+		const uuid = await f.afterSavedStart();
+		f.row.concurrentHotspot = { ifname: LEG, activeConn: uuid };
+		let ownedPath = "";
+		const remember = spyOn(defaultHotspotConfigDeps, "rememberCredentials");
+		const result = await reconfigureHotspotForRegdomain(MAC, f.row, "auto", {
+			...defaultHotspotConfigDeps,
+			...qualifiedHybridEvidence,
+			readHybridTargetIdentity: async () => f.leg(),
+			confirmHybridActivation: async () => {
+				ownedPath = f.nm.activePath();
+				f.nm.activate(uuid);
+				return true;
+			},
+			broadcastState: () => undefined,
+		});
+		expect(result).toBe(false);
+		expect(ownedPath).not.toBe("");
+		expect(f.nm.activePath()).not.toBe(ownedPath);
+		expect(f.active()).toBe(uuid);
+		expect(remember).not.toHaveBeenCalled();
+	} finally {
+		await f.restore();
+	}
+});
+
+test("hybrid Save refuses a same-UUID successor created during saved-profile refresh", async () => {
+	const f = await hybrid();
+	try {
+		const uuid = await f.afterSavedStart();
+		f.row.concurrentHotspot = { ifname: LEG, activeConn: uuid };
+		let original = "";
+		let successor = "";
+		const remember = spyOn(defaultHotspotConfigDeps, "rememberCredentials");
+		const result = await reconfigureHotspotForRegdomain(MAC, f.row, "auto", {
+			...defaultHotspotConfigDeps,
+			...qualifiedHybridEvidence,
+			readHybridTargetIdentity: async () => f.leg(),
+			wifiUpdateSavedConns: async () => {
+				original = f.nm.activePath();
+				successor = f.nm.activate(uuid);
+			},
+			broadcastState: () => undefined,
+		});
+		expect(result).toBe(false);
+		expect(remember).not.toHaveBeenCalled();
+		expect(f.inspectedDownPaths).toEqual([original]);
+		expect(successor).not.toBe(original);
+		expect(f.nm.activePath()).toBe(successor);
+		expect(f.active()).toBe(uuid);
+	} finally {
+		await f.restore();
+	}
+});
+
+test("an acknowledged rollback with failed profile readback confirms and cleans up its exact hybrid Up", async () => {
+	const f = await hybrid();
+	try {
+		const uuid = await f.afterSavedStart();
+		f.row.concurrentHotspot = { ifname: LEG, activeConn: uuid };
+		const hotspot = f.row.hotspot;
+		const beginning = f.commands.length;
+		const readProfile = profiles.readNmProfileInstance;
+		const instance = spyOn(profiles, "readNmProfileInstance");
+		const confirmations: string[] = [];
+		let ups = 0;
+		let rollbackPath = "";
+		const result = await reconfigureHotspotForRegdomain(MAC, f.row, "auto", {
+			...defaultHotspotConfigDeps,
+			...qualifiedHybridEvidence,
+			readHybridTargetIdentity: async () => f.leg(),
+			confirmHybridActivation: async (
+				_parent,
+				_leg,
+				_id,
+				_channel,
+				receipt,
+			) => {
+				if (receipt) confirmations.push(receipt.path);
+				return false;
+			},
+			nmConnect: async (...args) => {
+				if (++ups === 1) return false;
+				const up = await defaultHotspotConfigDeps.nmConnect(...args);
+				rollbackPath = f.nm.activePath();
+				instance.mockImplementationOnce(async () => undefined);
+				return up;
+			},
+			broadcastState: () => undefined,
+		});
+		expect(result).toBe(false);
+		expect(ups).toBe(2);
+		expect(f.row.hotspot).toBe(hotspot);
+		expect(f.row.hotspot.conn).toBe(uuid);
+		expect(await readProfile(uuid)).toBeDefined();
+		expect(f.active()).toBeUndefined();
+		expect(confirmations).toEqual([rollbackPath]);
+		expect(
+			f.commands.slice(beginning).filter((args) => args[1] === "down"),
+		).toEqual([["conn", "down", "apath", rollbackPath]]);
+	} finally {
+		await f.restore();
+	}
+});
+
+test("a post-Up hybrid Save channel refusal leaves a same-profile successor active", async () => {
+	const f = await hybrid();
+	try {
+		const uuid = await f.afterSavedStart();
+		f.row.concurrentHotspot = { ifname: LEG, activeConn: uuid };
+		const beginning = f.commands.length;
+		let restartPath = "";
+		const result = await reconfigureHotspotForRegdomain(MAC, f.row, "auto", {
+			...defaultHotspotConfigDeps,
+			...qualifiedHybridEvidence,
+			readHybridTargetIdentity: async () => f.leg(),
+			confirmHybridActivation: async () => {
+				restartPath = f.nm.activePath();
+				f.nm.activate(uuid);
+				return false;
+			},
+			broadcastState: () => undefined,
+		});
+		expect(result).toBe(false);
+		expect(restartPath).not.toBe("");
+		expect(f.active()).toBe(uuid);
+		expect(
+			f.commands.slice(beginning).filter((args) => args[1] === "down"),
+		).toEqual([]);
+		expect(f.inspectedDownPaths).toEqual([restartPath]);
 	} finally {
 		await f.restore();
 	}

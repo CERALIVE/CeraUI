@@ -17,17 +17,28 @@ Shapes: `src/schemas/logs.schema.ts`. Procedures: `src/contracts/logs.contract.t
 | `deleteLegacyDebug` | none | `logStorageOutputSchema` | `{ ok: false, error }` |
 | `clearAll` | none | `logClearAllOutputSchema` (includes boot counts) | `{ ok: false, error }` |
 | `createExport` | `logExportInputSchema` | `logExportOutputSchema` | `{ ok: false, error }` |
-| `previewBundle` | none | `logBundleManifestSchema` | thrown oRPC error, code `READ_FAILED` or `BUSY` |
+| `previewBundle` | none | `logBundleManifestSchema` | thrown oRPC error, code and message `READ_FAILED` or `BUSY`; a classified `READ_FAILED` adds `data.stage` |
 | `createBundle` | none | `logExportOutputSchema` | `{ ok: false, error }` |
 
 Sources: `src/contracts/logs.contract.ts`;
 `apps/backend/src/rpc/procedures/logs.procedure.ts`; `apps/backend/src/modules/device-logs/follow.ts:52`;
-`apps/backend/src/modules/device-logs/bundle.ts:85-90`;
-`apps/backend/src/modules/device-logs/redaction.ts:1-5`. `{ ok: false, error }` uses `logErrorSchema` with the nine
+`apps/backend/src/modules/device-logs/bundle.ts:100-105`;
+`apps/backend/src/modules/device-logs/redaction.ts:4-12`. `{ ok: false, error }` uses `logErrorSchema` with the nine
 `LOG_ERROR_CODES` (`logs.schema.ts:21-31`). The 12 handlers are built on
 `authedProcedure`, whose middleware throws oRPC `UNAUTHORIZED`
 (`apps/backend/src/rpc/procedures/logs.procedure.ts`;
 `apps/backend/src/rpc/middleware/auth.middleware.ts:19-25`).
+
+The preview stage is the closed `logBundleFailureReasonSchema` in
+`logs-boot.schema.ts`: `collision`, `pattern`, `budget`, `journal_read`,
+`deadline`, `abort` and `internal`. It is additive: the message stays exactly
+`READ_FAILED` or `BUSY`, which older and federated frontends match, and the
+stage rides oRPC `data.stage` and the WS envelope's optional `stage` (the
+adapter forwards only a value this schema accepts). An unclassified refusal and
+BUSY carry no stage, so their envelopes are unchanged. A frontend reads a
+missing or unknown stage as `internal`. The stage never carries a cause, input
+text, secret or position. `createBundle` keeps `{ ok: false, error }` without a
+stage.
 
 ## Follow push
 
@@ -78,8 +89,8 @@ boundary reports the gap and reads from the retained start.
 | Retention upper bound | checked against the ceiling in `setRetention` | `apps/backend/src/modules/device-logs/retention.ts:113-120` |
 | Bundle manifest | sections `versions`, `events`, `journal`, `settings` with `entries` and `redactions`; journal also has `bootsCovered` and `complete`; `exportedBy`; `boots` with versions | `logBundleManifestSchema` |
 
-`system.getLog` and `system.getSyslog` are unchanged
-(`src/contracts/system.contract.ts`).
+`system.getLog` and `system.getSyslog` take one additive, optional field, `request` (1-64 letters, digits or `-`): the device echoes it in the `log` push that carries the file, so the client ties the file to its own request; older clients send none and older devices echo none. Their behavior is otherwise unchanged
+(`src/contracts/system.contract.ts`): the push goes out before the call answers, on the same socket; a client talking to a device that echoes no id tells the unit log from the full journal by the pushed file name (`ceralive_system_log.txt` is the full journal, any other name a unit's log), so the names are part of this contract; and a journal read that fails answers `{ log: "" }` with no push (plus a `log_error` notification), which the client reports as a failed download once its file deadline after the answer passes.
 
 ## Tests
 

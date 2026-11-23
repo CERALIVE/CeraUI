@@ -1,0 +1,1114 @@
+{
+	"seen": [
+		{
+			"at": "connected"
+		},
+		{
+			"at": "push",
+			"status": {
+				"updating": null,
+				"update_state": {
+					"kind": "available",
+					"identity": {
+						"version": "a986d7f374a0",
+						"packages": [
+							"p1",
+							"p10",
+							"p2",
+							"p3",
+							"p4",
+							"p5",
+							"p6",
+							"p7",
+							"p8",
+							"p9"
+						]
+					},
+					"package_count": 10,
+					"packages": [
+						{
+							"name": "p1",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p10",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p2",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p3",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p4",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p5",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p6",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p7",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p8",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p9",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						}
+					],
+					"actionable_count": 10,
+					"reachability": {
+						"ipv4": "ok",
+						"ipv6": "ok",
+						"used": "any"
+					}
+				}
+			}
+		},
+		{
+			"at": "pull",
+			"status": {
+				"updating": null,
+				"update_state": {
+					"kind": "available",
+					"identity": {
+						"version": "a986d7f374a0",
+						"packages": [
+							"p1",
+							"p10",
+							"p2",
+							"p3",
+							"p4",
+							"p5",
+							"p6",
+							"p7",
+							"p8",
+							"p9"
+						]
+					},
+					"package_count": 10,
+					"reachability": {
+						"ipv4": "ok",
+						"ipv6": "ok",
+						"used": "any"
+					},
+					"packages": [
+						{
+							"name": "p1",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p10",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p2",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p3",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p4",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p5",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p6",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p7",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p8",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p9",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						}
+					],
+					"actionable_count": 10
+				}
+			}
+		},
+		{
+			"at": "pull",
+			"status": {
+				"updating": null,
+				"update_state": {
+					"kind": "available",
+					"identity": {
+						"version": "a986d7f374a0",
+						"packages": [
+							"p1",
+							"p10",
+							"p2",
+							"p3",
+							"p4",
+							"p5",
+							"p6",
+							"p7",
+							"p8",
+							"p9"
+						]
+					},
+					"package_count": 10,
+					"reachability": {
+						"ipv4": "ok",
+						"ipv6": "ok",
+						"used": "any"
+					},
+					"packages": [
+						{
+							"name": "p1",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p10",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p2",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p3",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p4",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p5",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p6",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p7",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p8",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p9",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						}
+					],
+					"actionable_count": 10
+				}
+			}
+		},
+		{
+			"at": "moment",
+			"name": "idle"
+		},
+		{
+			"at": "push",
+			"status": {
+				"update_state": {
+					"kind": "available",
+					"identity": {
+						"version": "a986d7f374a0",
+						"packages": [
+							"p1",
+							"p10",
+							"p2",
+							"p3",
+							"p4",
+							"p5",
+							"p6",
+							"p7",
+							"p8",
+							"p9"
+						]
+					},
+					"package_count": 10,
+					"packages": [
+						{
+							"name": "p1",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p10",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p2",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p3",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p4",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p5",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p6",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p7",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p8",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						},
+						{
+							"name": "p9",
+							"version": "2",
+							"origin": "apt.ceralive.tv",
+							"layer": "app",
+							"actionable": true
+						}
+					],
+					"actionable_count": 10
+				}
+			}
+		},
+		{
+			"at": "push",
+			"status": {
+				"updating": {
+					"downloading": 0,
+					"unpacking": 0,
+					"setting_up": 0,
+					"total": 0,
+					"run": 1
+				},
+				"update_state": {
+					"kind": "downloading",
+					"progress": {
+						"downloading": 0,
+						"unpacking": 0,
+						"setting_up": 0,
+						"total": 0,
+						"run": 1
+					}
+				}
+			}
+		},
+		{
+			"at": "push",
+			"status": {
+				"update_state": {
+					"kind": "downloading",
+					"progress": {
+						"downloading": 0,
+						"unpacking": 0,
+						"setting_up": 0,
+						"total": 0,
+						"run": 1
+					}
+				}
+			}
+		},
+		{
+			"at": "push",
+			"status": {
+				"update_state": {
+					"kind": "downloading",
+					"progress": {
+						"downloading": 0,
+						"unpacking": 0,
+						"setting_up": 0,
+						"total": 0,
+						"run": 1
+					}
+				}
+			}
+		},
+		{
+			"at": "push",
+			"status": {
+				"update_state": {
+					"kind": "downloading",
+					"progress": {
+						"downloading": 0,
+						"unpacking": 0,
+						"setting_up": 0,
+						"total": 0,
+						"run": 1
+					}
+				}
+			}
+		},
+		{
+			"at": "push",
+			"status": {
+				"updating": {
+					"total": 1,
+					"downloading": 1,
+					"unpacking": 0,
+					"setting_up": 0,
+					"run": 1,
+					"targets": [
+						{
+							"name": "p1",
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
+						},
+						{
+							"name": "p10",
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
+						},
+						{
+							"name": "p2",
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
+						},
+						{
+							"name": "p3",
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
+						},
+						{
+							"name": "p4",
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
+						},
+						{
+							"name": "p5",
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
+						},
+						{
+							"name": "p6",
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
+						},
+						{
+							"name": "p7",
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
+						},
+						{
+							"name": "p8",
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
+						},
+						{
+							"name": "p9",
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
+						}
+					]
+				},
+				"update_state": {
+					"kind": "downloading",
+					"progress": {
+						"total": 1,
+						"downloading": 1,
+						"unpacking": 0,
+						"setting_up": 0,
+						"run": 1,
+						"targets": [
+							{
+								"name": "p1",
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
+							},
+							{
+								"name": "p10",
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
+							},
+							{
+								"name": "p2",
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
+							},
+							{
+								"name": "p3",
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
+							},
+							{
+								"name": "p4",
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
+							},
+							{
+								"name": "p5",
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
+							},
+							{
+								"name": "p6",
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
+							},
+							{
+								"name": "p7",
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
+							},
+							{
+								"name": "p8",
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
+							},
+							{
+								"name": "p9",
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
+							}
+						]
+					}
+				}
+			}
+		},
+		{
+			"at": "moment",
+			"name": "downloading"
+		},
+		{
+			"at": "push",
+			"status": {
+				"updating": {
+					"total": 1,
+					"downloading": 0,
+					"unpacking": 0,
+					"setting_up": 1,
+					"percent": 40,
+					"run": 1,
+					"targets": [
+						{
+							"name": "p1",
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
+						},
+						{
+							"name": "p10",
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
+						},
+						{
+							"name": "p2",
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
+						},
+						{
+							"name": "p3",
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
+						},
+						{
+							"name": "p4",
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
+						},
+						{
+							"name": "p5",
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
+						},
+						{
+							"name": "p6",
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
+						},
+						{
+							"name": "p7",
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
+						},
+						{
+							"name": "p8",
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
+						},
+						{
+							"name": "p9",
+							"version": "2",
+							"arch": "arm64",
+							"from": "1"
+						}
+					]
+				},
+				"update_state": {
+					"kind": "installing",
+					"progress": {
+						"total": 1,
+						"downloading": 0,
+						"unpacking": 0,
+						"setting_up": 1,
+						"percent": 40,
+						"run": 1,
+						"targets": [
+							{
+								"name": "p1",
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
+							},
+							{
+								"name": "p10",
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
+							},
+							{
+								"name": "p2",
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
+							},
+							{
+								"name": "p3",
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
+							},
+							{
+								"name": "p4",
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
+							},
+							{
+								"name": "p5",
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
+							},
+							{
+								"name": "p6",
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
+							},
+							{
+								"name": "p7",
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
+							},
+							{
+								"name": "p8",
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
+							},
+							{
+								"name": "p9",
+								"version": "2",
+								"arch": "arm64",
+								"from": "1"
+							}
+						]
+					}
+				}
+			}
+		},
+		{
+			"at": "moment",
+			"name": "installing 40%"
+		},
+		{
+			"at": "disconnected"
+		},
+		{
+			"at": "moment",
+			"name": "postinst stopped the backend"
+		},
+		{
+			"at": "connected"
+		},
+		{
+			"at": "push",
+			"status": {
+				"updating": null,
+				"update_state": {
+					"kind": "idle"
+				}
+			}
+		},
+		{
+			"at": "pull",
+			"status": {
+				"updating": null,
+				"update_state": {
+					"kind": "idle"
+				}
+			}
+		},
+		{
+			"at": "moment",
+			"name": "re-authenticated before recovery"
+		},
+		{
+			"at": "asked",
+			"request": {
+				"targets": [
+					{
+						"name": "p1",
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
+					},
+					{
+						"name": "p10",
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
+					},
+					{
+						"name": "p2",
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
+					},
+					{
+						"name": "p3",
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
+					},
+					{
+						"name": "p4",
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
+					},
+					{
+						"name": "p5",
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
+					},
+					{
+						"name": "p6",
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
+					},
+					{
+						"name": "p7",
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
+					},
+					{
+						"name": "p8",
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
+					},
+					{
+						"name": "p9",
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
+					}
+				]
+			},
+			"outcome": {
+				"kind": "running"
+			}
+		},
+		{
+			"at": "push",
+			"status": {
+				"updating": {
+					"total": 0,
+					"downloading": 0,
+					"unpacking": 0,
+					"setting_up": 0
+				},
+				"update_state": {
+					"kind": "downloading",
+					"progress": {
+						"total": 0,
+						"downloading": 0,
+						"unpacking": 0,
+						"setting_up": 0
+					}
+				}
+			}
+		},
+		{
+			"at": "pull",
+			"status": {
+				"updating": {
+					"downloading": 0,
+					"unpacking": 0,
+					"setting_up": 0,
+					"total": 0
+				},
+				"update_state": {
+					"kind": "downloading",
+					"progress": {
+						"downloading": 0,
+						"unpacking": 0,
+						"setting_up": 0,
+						"total": 0
+					}
+				}
+			}
+		},
+		{
+			"at": "moment",
+			"name": "attached, nothing read yet"
+		},
+		{
+			"at": "push",
+			"status": {
+				"updating": {
+					"total": 1,
+					"downloading": 0,
+					"unpacking": 0,
+					"setting_up": 1,
+					"percent": 60
+				},
+				"update_state": {
+					"kind": "installing",
+					"progress": {
+						"total": 1,
+						"downloading": 0,
+						"unpacking": 0,
+						"setting_up": 1,
+						"percent": 60
+					}
+				}
+			}
+		},
+		{
+			"at": "moment",
+			"name": "recovered at installing 60%"
+		},
+		{
+			"at": "push",
+			"status": {
+				"updating": {
+					"total": 1,
+					"downloading": 0,
+					"unpacking": 0,
+					"setting_up": 1,
+					"percent": 80
+				},
+				"update_state": {
+					"kind": "installing",
+					"progress": {
+						"total": 1,
+						"downloading": 0,
+						"unpacking": 0,
+						"setting_up": 1,
+						"percent": 80
+					}
+				}
+			}
+		},
+		{
+			"at": "moment",
+			"name": "installing 80%"
+		},
+		{
+			"at": "push",
+			"status": {
+				"updating": {
+					"total": 1,
+					"downloading": 0,
+					"unpacking": 0,
+					"setting_up": 1,
+					"percent": 80,
+					"result": 0
+				},
+				"update_state": {
+					"kind": "success"
+				}
+			}
+		},
+		{
+			"at": "moment",
+			"name": "outcome"
+		},
+		{
+			"at": "push",
+			"status": {
+				"update_state": {
+					"kind": "success"
+				}
+			}
+		},
+		{
+			"at": "disconnected"
+		},
+		{
+			"at": "moment",
+			"name": "completion restart"
+		},
+		{
+			"at": "connected"
+		},
+		{
+			"at": "push",
+			"status": {
+				"updating": null,
+				"update_state": {
+					"kind": "idle"
+				}
+			}
+		},
+		{
+			"at": "pull",
+			"status": {
+				"updating": null,
+				"update_state": {
+					"kind": "idle"
+				}
+			}
+		},
+		{
+			"at": "moment",
+			"name": "re-authenticated after the outcome"
+		},
+		{
+			"at": "asked",
+			"request": {
+				"targets": [
+					{
+						"name": "p1",
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
+					},
+					{
+						"name": "p10",
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
+					},
+					{
+						"name": "p2",
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
+					},
+					{
+						"name": "p3",
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
+					},
+					{
+						"name": "p4",
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
+					},
+					{
+						"name": "p5",
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
+					},
+					{
+						"name": "p6",
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
+					},
+					{
+						"name": "p7",
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
+					},
+					{
+						"name": "p8",
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
+					},
+					{
+						"name": "p9",
+						"version": "2",
+						"arch": "arm64",
+						"from": "1"
+					}
+				]
+			},
+			"outcome": {
+				"kind": "success"
+			}
+		}
+	]
+}

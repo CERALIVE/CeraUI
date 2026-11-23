@@ -29,7 +29,7 @@ import {
 	ScrollText,
 	SquareTerminal,
 } from '@lucide/svelte';
-import type { Component } from 'svelte';
+import { type Component, onDestroy } from 'svelte';
 import { MediaQuery } from 'svelte/reactivity';
 
 import AsyncSwitch from '$lib/components/custom/async-switch.svelte';
@@ -46,6 +46,7 @@ import {
 	getRequestedDialogContext,
 	type LogsDialogContext,
 } from '$lib/stores/dialog-request.svelte';
+import { currentNavigation } from '$lib/stores/navigation.svelte';
 import { cn } from '$lib/utils';
 
 import DeviceStatsSection from './settings/DeviceStatsSection.svelte';
@@ -217,6 +218,13 @@ let networkIngestOpen = $state(false);
 let sshOpen = $state(false);
 let logsOpen = $state(false);
 let logsContext = $state<LogsDialogContext>();
+// The router notifies in the same call that changes the route: leaving Settings closes System Logs
+// at once, so nothing it started applies once the route has left, before Settings unmounts.
+onDestroy(
+	currentNavigation.subscribe((current) => {
+		if (!('settings' in current)) logsOpen = false;
+	}),
+);
 let updatesOpen = $state(false);
 let powerOpen = $state(false);
 let versionsOpen = $state(false);

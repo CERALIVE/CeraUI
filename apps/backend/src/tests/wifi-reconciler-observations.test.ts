@@ -85,17 +85,22 @@ test("r4 code3 refused station selection schedules policy recovery", async () =>
 	profile["match.path"] = PORT;
 	await f.discover();
 	wifiCancelScanRefresh();
+	const subsystem = `wifi-hotspot-autoconnect:${MAC}`;
+	expect(getBootReadiness().degradedSubsystems).not.toContain(subsystem);
+	expect(jest.getTimerCount()).toBe(0);
 	const read = spyOn(nm, "nmConnGetFields").mockResolvedValue(undefined);
-	expect(
-		await setWifiAdapterMode(0, "station", {
-			...defaultAdapterModeDeps,
-			publishOutcome: () => undefined,
-		}),
-	).toEqual({ success: false, error: "deactivation-failed" });
+	const result = await setWifiAdapterMode(0, "station", {
+		...defaultAdapterModeDeps,
+		publishOutcome: () => undefined,
+	});
+	expect(getBootReadiness().degradedSubsystems).toContain(subsystem);
+	expect(result).toEqual({ success: false, error: "deactivation-failed" });
 	expect(getConfig().wifi_modes).toEqual({ [MAC]: "hotspot" });
 	expect(jest.getTimerCount()).toBe(1);
 	read.mockRestore();
+	const retryRead = spyOn(nm, "nmConnGetFields");
 	await advancePolicy(3000);
+	expect(retryRead.mock.calls.some(([uuid]) => uuid === PROFILE)).toBe(true);
 	expect(getBootReadiness().degraded).toBe(false);
 });
 

@@ -137,6 +137,31 @@ test.describe('a11y', () => {
 		});
 	}
 
+	for (const { locale, scheme } of [
+		{ locale: 'en', scheme: 'light' },
+		{ locale: 'ar', scheme: 'light' },
+		{ locale: 'ar', scheme: 'dark' },
+		{ locale: 'ja', scheme: 'light' },
+	] as const) {
+		test(`System Logs storage: no critical or serious violations inline (${locale}, ${scheme}) @a11y`, async ({
+			page,
+		}, testInfo) => {
+			test.skip(testInfo.project.name !== 'desktop', 'a11y gate runs once, on desktop');
+
+			const logs = new SystemLogsPage(page);
+			await logs.open({ locale, scheme, size: { width: 1024, height: 600 }, touch: false });
+			await logs.show('storage');
+
+			// Storage must be visible alongside Events and Raw, not as a third tab.
+			await expect(page.locator(SYSTEM_LOGS_DIALOG).getByRole('tab')).toHaveCount(2);
+			const theme = expect(page.locator('html'));
+			if (scheme === 'dark') await theme.toHaveClass(/\bdark\b/);
+			else await theme.not.toHaveClass(/\bdark\b/);
+
+			expect(await runAxe(page, { include: [SYSTEM_LOGS_DIALOG] })).toEqual([]);
+		});
+	}
+
 	test('HUD telemetry exposes labelled badges + polite live regions @a11y', async ({
 		authedPage: page,
 	}, testInfo) => {

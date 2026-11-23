@@ -212,11 +212,19 @@ async function probeSshUserHash(
  * Returns the current cached status (same wire shape as before) for callers
  * that want an immediate value.
  */
+let sshStatusDepsForTest: Partial<SshStatusDeps> = {};
+
+/** Real-process tests keep status hydration off the host's systemctl and /etc/shadow. */
+export function setSshStatusDepsForTest(deps: Partial<SshStatusDeps>): void {
+	sshStatusDepsForTest = deps;
+}
+
 export async function getSshStatus(
 	deps: Partial<SshStatusDeps> = {},
 ): Promise<SshStatus | undefined> {
 	const { systemctlIsActive, systemctlIsEnabled, readShadow, broadcast } = {
 		...defaultSshStatusDeps,
+		...sshStatusDepsForTest,
 		...deps,
 	};
 

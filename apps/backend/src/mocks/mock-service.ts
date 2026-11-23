@@ -21,6 +21,7 @@ import type {
 	AddonConfig,
 	AddonState,
 	RequiresGateway,
+	WifiStatus,
 } from "@ceraui/rpc/schemas";
 import { logger } from "../helpers/logger.ts";
 import {
@@ -527,13 +528,18 @@ export async function runMockFeedbackBroadcast(): Promise<void> {
 	}
 
 	const { wifiBuildMsg } = await import("../modules/wifi/wifi.ts");
-	const wifi = wifiBuildMsg();
-	// Hotspot mode and connection changes must not depend on signal jitter.
+	publishMockWifiStatus(wifiBuildMsg(), { coalesce: true });
+}
+
+export function publishMockWifiStatus(
+	wifi: WifiStatus,
+	{ coalesce = false } = {},
+): void {
 	const wifiFingerprint = JSON.stringify(wifi);
-	if (wifiFingerprint !== lastEmittedWifiFingerprint) {
-		lastEmittedWifiFingerprint = wifiFingerprint;
-		broadcastMsg("status", { wifi });
-	}
+	// Only ticks coalesce: a client may have read a newer state since the last push.
+	if (coalesce && wifiFingerprint === lastEmittedWifiFingerprint) return;
+	lastEmittedWifiFingerprint = wifiFingerprint;
+	broadcastMsg("status", { wifi });
 }
 
 // Schedules the coalesced feedback tick. Guarded on shouldUseMocks() so a

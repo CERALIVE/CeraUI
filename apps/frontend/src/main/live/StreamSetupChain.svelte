@@ -16,12 +16,17 @@
  *
  *   1. Encoder     — state = the SOURCE gate (blocked wins), warn when the
  *                    encoder config row flags `pipelineNeedsReconfigure`. Summary =
- *                    encoderSummary; trailing bitrate-ceiling chip; Edit opens the
- *                    EncoderDialog.
- *   2. Destination — state = the DESTINATION gate. Summary = serverSummary;
- *                    trailing traffic-light chip; Edit opens the ServerDialog.
+ *                    encoderSummary, then the bitrate ceiling, said once and itself
+ *                    tappable; it and Edit open the EncoderDialog.
+ *   2. Destination — state = the DESTINATION gate. Summary = serverSummary; the
+ *                    check chip beside the title; Edit opens the ServerDialog.
  *   3. Network     — state = the NETWORK gate. Summary = the enabled-link count
  *                    from netif; the row's action navigates to the Network view.
+ *
+ * Every row is ONE pattern: a status dot, the title, one summary line, then one
+ * trailing action at the same inline end. The dot is the row's tone, not its
+ * gate: a destination that passes the gate but was never checked shows a hollow
+ * dot, because green would claim a check that never happened.
  *
  * The ENGINE gate is intentionally NOT a row — the CapabilityTierBanner and the
  * Start button's disabled reason own it (readiness blocking semantics unchanged).
@@ -47,7 +52,7 @@ import type {
 	RelayMessage,
 	SourcesMessage,
 } from '@ceraui/rpc/schemas';
-import { ChevronRight, Lock, Network, Pencil } from '@lucide/svelte';
+import { ChevronRight, Lock } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
@@ -86,8 +91,6 @@ interface Props {
 	optimismState: StreamingOptimismState;
 	// ── Destination traffic-light: green when the last relay.validate passed ────
 	destinationValidated?: boolean;
-	// ── Bitrate-ceiling chip (opens EncoderDialog) ──────────────────────────────
-	maxBitrate?: number;
 	// ── Actions ─────────────────────────────────────────────────────────────────
 	/** Start the stream. `overrides.source` carries the implicit sole-camera id. */
 	onStart: (overrides: { source?: string }) => void;
@@ -96,8 +99,6 @@ interface Props {
 	onOpenSource: () => void;
 	/** Network-row action — navigate to the Network destination. */
 	onGoNetwork: () => void;
-	/** Bitrate-ceiling chip — open EncoderDialog. */
-	onOpenEncoder: () => void;
 }
 
 const {
@@ -114,12 +115,10 @@ const {
 	isStreaming,
 	optimismState,
 	destinationValidated,
-	maxBitrate,
 	onStart,
 	onStop,
 	onOpenSource,
 	onGoNetwork,
-	onOpenEncoder,
 }: Props = $props();
 
 // ── Derivations carried over VERBATIM from GoLiveCard (readiness wiring) ──────
@@ -193,26 +192,20 @@ function handleStartClick() {
 	onStart({ source: soleCamera?.id });
 }
 
-function stateColor(state: GateStatus): string {
-	if (state === 'ok') return 'var(--status-success)';
-	if (state === 'warn') return 'var(--status-warning)';
-	return 'var(--destructive)';
-}
+// The dot's tone. `unchecked` is a hollow ring, so it reads as "not known yet"
+// without colour too (e-ink renders every status token in greys).
+type Tone = GateStatus | 'unchecked';
+const TONE_DOT: Record<Tone, string> = {
+	ok: 'bg-status-success',
+	warn: 'bg-status-warning',
+	blocked: 'bg-destructive',
+	unchecked: 'border-muted-foreground border',
+};
 
 // i18n dot-path resolver (mirrors LiveView) — the readiness reasonKeys point at
 // EXISTING leaves; resolve them without adding a switch per key.
 function resolveReason(key: string): string {
 	return resolveMessageKey(key);
-}
-
-function formatBitrate(kbps: number | undefined): string {
-	if (kbps === undefined || kbps === null) return '—';
-	if (kbps >= 1000) {
-		const mbps = kbps / 1000;
-		const value = Number.isInteger(mbps) ? String(mbps) : mbps.toFixed(1);
-		return `${value} ${m["units.mbps"]()}`;
-	}
-	return `${kbps} ${m["units.kbps"]()}`;
 }
 
 // ── Row projection (presentation-only remap of the readiness verdict) ─────────
@@ -271,157 +264,192 @@ const networkSummary = $derived(
 		? m["live.setup.linksReady"]({ count: enabledLinkCount })
 		: m["live.setup.noLinks"](),
 );
+
+interface SetupRowView {
+	key: 'encoder' | 'destination' | 'network';
+	label: string;
+	value: string;
+	state: GateStatus;
+	tone: Tone;
+	reasonKey: string | undefined;
+	/** The migrated config row behind an editable row; the network row has none. */
+	row?: ConfigRow;
+}
+
+const rows = $derived.by(() => {
+	const views: SetupRowView[] = [];
+	if (encoderRow) {
+		views.push({
+			key: 'encoder',
+			label: encoderRow.label,
+			value: encoderRow.value,
+			state: encoderState,
+			tone: encoderState,
+			reasonKey: encoderReason,
+			row: encoderRow,
+		});
+	}
+	if (serverRow) {
+		views.push({
+			key: 'destination',
+			label: serverRow.label,
+			value: serverRow.value,
+			state: destinationState,
+			tone:
+				destinationState === 'ok' && destinationValidated !== true
+					? 'unchecked'
+					: destinationState,
+			reasonKey: destinationReason,
+			row: serverRow,
+		});
+	}
+	return views;
+});
+const networkView = $derived<SetupRowView>({
+	key: 'network',
+	label: m["live.goLive.gate.network"](),
+	value: networkSummary,
+	state: networkState,
+	tone: networkState,
+	reasonKey: networkReason,
+});
 </script>
 
-{#snippet setupRow(
-	key: 'encoder' | 'destination',
-	row: ConfigRow,
-	state: GateStatus,
-	reasonKey: string | undefined,
-	chip: 'bitrate' | 'traffic-light' | undefined,
-	onFix: (() => void) | undefined,
-)}
-	{const locked = $derived(isSectionLocked(row.section, isStreaming))}
+{#snippet setupRow(view: SetupRowView)}
+	{const row = $derived(view.row)}
+	{const locked = $derived(row !== undefined && isSectionLocked(row.section, isStreaming))}
 	<!-- C3: Encoder Edit is disabled-with-reason while no source resolves (encoder
 	     settings key off the active source) — the Fix affordance stays the path. -->
-	{const editDisabled = $derived(key === 'encoder' && !effectiveSourceId)}
+	{const editDisabled = $derived(view.key === 'encoder' && !effectiveSourceId)}
 	<div
-		class="py-2.5 first:pt-0"
+		class="flex items-start gap-3 py-3 first:pt-0"
 		data-testid="setup-row"
-		data-row={key}
-		data-state={state}
-		data-section={row.section}
+		data-row={view.key}
+		data-state={view.state}
+		data-section={row?.section}
 	>
-		<!-- The text keeps at least 12rem; when the actions do not fit beside it they
-		     wrap under it, at the inline end, instead of squeezing the value. -->
-		<div class="flex flex-wrap items-center gap-x-4 gap-y-1">
-			<div class="flex min-w-0 flex-[1_1_12rem] items-start gap-2.5">
-				<span
-					class="mt-1.5 size-2 shrink-0 rounded-full"
-					style="background: {stateColor(state)};"
-					aria-hidden={true}
-				></span>
-				<row.icon
-					aria-hidden={true}
-					class="text-muted-foreground mt-0.5 size-4 shrink-0"
-				/>
-				<div class="min-w-0">
-					<p class="text-sm font-medium">{row.label}</p>
-					<p
-						class="font-mono text-sm break-words {state === 'warn'
-							? 'font-medium'
-							: 'text-muted-foreground'}"
-						style={state === 'warn' ? 'color: var(--status-warning);' : undefined}
-					>
-						{row.value}
-					</p>
-					{#if reasonKey}
-						<p
-							class="text-muted-foreground text-xs break-words"
-							data-testid="setup-row-reason"
-						>
-							{resolveReason(reasonKey)}
-						</p>
-						{#if onFix && state === 'blocked'}
-							<!-- Source-gate fix: retargets to the source list (LiveView scrolls/
-							     focuses it) — it does NOT open the encoder dialog. -->
-							<button
-								class="text-primary mt-1.5 inline-flex min-h-[44px] items-center gap-1 text-xs font-medium hover:underline focus-visible:underline focus-visible:outline-none"
-								data-testid="setup-row-fix"
-								data-fix="openSource"
-								onclick={onFix}
-								type="button"
-							>
-								{m["live.goLive.fix.openSource"]()}
-								<ChevronRight aria-hidden={true} class="h-3.5 w-3.5 rtl:-scale-x-100" />
-							</button>
-						{/if}
-					{/if}
-				</div>
-			</div>
-			<div class="ms-auto flex shrink-0 items-center gap-2">
-				{#if chip === 'traffic-light'}
-					<!-- Traffic-light: green = validated, neutral = unchecked. Never blocks
-					     Start. -->
+		<span
+			aria-hidden={true}
+			class="mt-1.5 size-2 shrink-0 rounded-full {TONE_DOT[view.tone]}"
+			data-tone={view.tone}
+		></span>
+		<div class="min-w-0 flex-1 space-y-0.5">
+			<p class="flex flex-wrap items-center gap-x-2 gap-y-1">
+				<span class="text-sm font-medium">{view.label}</span>
+				{#if view.key === 'destination'}
+					<!-- The check's words: never blocks Start, and the dot follows it. -->
 					<span
-						class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium"
+						class="rounded-full px-2 py-0.5 text-xs font-medium {destinationValidated === true
+							? 'bg-status-success/10 text-status-success'
+							: 'bg-muted text-muted-foreground'}"
 						data-testid="destination-traffic-light"
 						data-validated={destinationValidated === true}
-						style={destinationValidated === true
-							? 'color: var(--status-success);'
-							: undefined}
 					>
-						<span
-							class="size-2 rounded-full"
-							style="background: {destinationValidated === true
-								? 'var(--status-success)'
-								: 'var(--muted-foreground)'};"
-							aria-hidden={true}
-						></span>
-						<span>
-							{destinationValidated === true
-								? m["live.goLive.validated"]()
-								: m["live.goLive.notChecked"]()}
-						</span>
+						{destinationValidated === true
+							? m["live.goLive.validated"]()
+							: m["live.goLive.notChecked"]()}
 					</span>
 				{/if}
-				{#if chip === 'bitrate' && maxBitrate}
-					<!-- Bitrate-ceiling tap-to-edit chip — opens EncoderDialog. -->
-					<button
-						class="bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex min-h-[44px] items-center rounded-md px-2 font-mono text-xs font-medium"
+			</p>
+			<!-- The encoder's bitrate is said once, after its value, and is itself the
+			     bitrate-ceiling control: it opens the Encoder dialog even while Edit
+			     waits for a source, as the separate pill it replaces did. Its text box
+			     is one line tall, so an ::after overlay 12 px past each edge gives it a
+			     44 px target at every width without growing the line. -->
+			<!-- With the bitrate, the line pads 12 px on every side and gives it back as
+			     a negative margin (10 px below, keeping the column's 2 px rhythm): the
+			     layout stays put while the overlay stays inside the line's own box, so
+			     the line never reads as clipped. -->
+			<p
+				class="text-sm break-words {view.state === 'warn'
+					? 'text-status-warning font-medium'
+					: 'text-muted-foreground'} {row?.bitrate ? '-mx-3 -mt-3 -mb-2.5 p-3' : ''}"
+			>
+				{view.value}{#if row?.bitrate}{view.value ? ' \u00b7 ' : ''}<button
+						class="hover:text-foreground focus-visible:ring-ring relative rounded underline underline-offset-2 outline-hidden after:absolute after:-inset-3 focus-visible:ring-2"
 						data-testid="bitrate-ceiling-chip"
-						onclick={onOpenEncoder}
+						data-touch-target="hit-area"
+						onclick={row.onEdit}
 						title={m["live.goLive.maxBitrate"]()}
+						type="button">{row.bitrate}</button
+					>{/if}
+			</p>
+			{#if view.reasonKey}
+				<p class="text-muted-foreground text-xs break-words" data-testid="setup-row-reason">
+					{resolveReason(view.reasonKey)}
+				</p>
+				{#if view.key === 'encoder' && view.state === 'blocked'}
+					<!-- Source-gate fix: retargets to the source list (LiveView scrolls/
+					     focuses it) — it does NOT open the encoder dialog. -->
+					<button
+						class="text-primary inline-flex min-h-11 items-center gap-1 text-xs font-medium hover:underline focus-visible:underline focus-visible:outline-none"
+						data-testid="setup-row-fix"
+						data-fix="openSource"
+						onclick={onOpenSource}
 						type="button"
 					>
-						{formatBitrate(maxBitrate)}
+						{m["live.goLive.fix.openSource"]()}
+						<ChevronRight aria-hidden={true} class="size-3.5 rtl:-scale-x-100" />
 					</button>
 				{/if}
-				{#if locked}
-					<span
-						class="text-muted-foreground inline-flex min-h-[44px] items-center gap-1.5 rounded-md px-2 text-xs font-medium"
-						title={m["live.stopToChange"]()}
-					>
-						<Lock aria-hidden={true} class="h-3.5 w-3.5" />
-						<span class="hidden sm:inline">{m["live.stopToChange"]()}</span>
-					</span>
-				{:else}
-					<Button
-						class="min-h-[44px] gap-1.5"
-						data-testid={row.testId}
-						disabled={editDisabled}
-						onclick={row.onEdit}
-						size="sm"
-						title={editDisabled ? resolveReason(READINESS_SOURCE_REASON) : undefined}
-						variant="ghost"
-					>
-						<Pencil aria-hidden={true} class="h-3.5 w-3.5" />
-						<span class="max-sm:sr-only">{m["live.editSettings"]()}</span>
-						<ChevronRight aria-hidden={true} class="h-4 w-4 rtl:-scale-x-100" />
-					</Button>
-				{/if}
-			</div>
+			{/if}
+			{#if row?.route}
+				<p
+					class="pt-1 text-xs {row.route.outcome === 'forceUnavailable'
+						? 'text-status-warning font-medium'
+						: 'text-muted-foreground'}"
+					data-route={row.route.outcome}
+				>
+					{row.route.text}
+				</p>
+			{/if}
 		</div>
-		<!-- The encoder's route line spans the row under the text column, so it reads as
-		     one or two lines instead of a narrow column beside the chips. -->
-		{#if row.route}
-			<p
-				class="ps-11 pt-1.5 text-xs {row.route.outcome === 'forceUnavailable'
-					? 'text-status-warning font-medium'
-					: 'text-muted-foreground'}"
-				data-route={row.route.outcome}
+		<!-- The ONE trailing action, at the same inline end on every row. Below
+		     640 px it is the chevron alone; its words stay its accessible name. -->
+		{#if row === undefined}
+			<Button
+				class="-my-2.5 min-h-11 min-w-11 shrink-0 gap-1"
+				data-fix="goNetwork"
+				data-row-action
+				data-testid="setup-row-fix"
+				onclick={onGoNetwork}
+				size="sm"
+				variant="ghost"
 			>
-				{row.route.text}
-			</p>
+				<span class="max-sm:sr-only">{m["live.goLive.fix.goNetwork"]()}</span>
+				<ChevronRight aria-hidden={true} class="size-4 rtl:-scale-x-100" />
+			</Button>
+		{:else if locked}
+			<span
+				class="text-muted-foreground -my-2.5 inline-flex min-h-11 shrink-0 items-center gap-1.5 px-2 text-xs font-medium"
+				data-row-action
+				title={m["live.stopToChange"]()}
+			>
+				<Lock aria-hidden={true} class="size-3.5" />
+				<span class="max-sm:sr-only">{m["live.stopToChange"]()}</span>
+			</span>
+		{:else}
+			<Button
+				class="-my-2.5 min-h-11 min-w-11 shrink-0 gap-1"
+				data-row-action
+				data-testid={row.testId}
+				disabled={editDisabled}
+				onclick={row.onEdit}
+				size="sm"
+				title={editDisabled ? resolveReason(READINESS_SOURCE_REASON) : undefined}
+				variant="ghost"
+			>
+				<span class="max-sm:sr-only">{m["live.editSettings"]()}</span>
+				<ChevronRight aria-hidden={true} class="size-4 rtl:-scale-x-100" />
+			</Button>
 		{/if}
 	</div>
 {/snippet}
 
-<Card.Root class="overflow-hidden" data-testid="stream-setup-chain">
-	<Card.Header class="pb-3">
-		<Card.Title class="text-sm font-semibold">{m["live.setup.title"]()}</Card.Title>
-	</Card.Header>
-	<Card.Content class="space-y-4 py-0">
+<Card.Root data-testid="stream-setup-chain">
+	<Card.Content class="space-y-5">
+		<h2 class="text-base font-semibold">{m["live.setup.title"]()}</h2>
+
 		<!-- Sole-camera auto-select line — only while config.source is unset and a
 		     single capture source exists. Writes NO config; Change opens the list. -->
 		{#if soleCamera}
@@ -434,7 +462,7 @@ const networkSummary = $derived(
 					{m["live.goLive.autoSelected"]({ name: soleCamera.displayName })}
 				</p>
 				<Button
-					class="min-h-[44px] shrink-0 gap-1.5"
+					class="min-h-11 shrink-0 gap-1.5"
 					data-testid="sole-camera-change"
 					onclick={onOpenSource}
 					size="sm"
@@ -447,94 +475,28 @@ const networkSummary = $derived(
 
 		<!-- Setup rows in signal order — always fully rendered (no collapse). Titled
 		     groups inside this card, split by a hairline, never cards in a card. -->
-		{#if encoderRow || serverRow}
-			<section
-				aria-labelledby="live-output-card-title"
-				class="space-y-2"
-				data-testid="output-card"
-			>
-				<h2 class="text-muted-foreground text-xs font-medium" id="live-output-card-title">
+		{#if rows.length > 0}
+			<section aria-labelledby="live-output-card-title" data-testid="output-card">
+				<h3 class="pb-3 text-sm font-semibold" id="live-output-card-title">
 					{m["live.outputCard.title"]()}
-				</h2>
+				</h3>
 				<div class="divide-border divide-y">
-					{#if encoderRow}
-						{@render setupRow(
-							'encoder',
-							encoderRow,
-							encoderState,
-							encoderReason,
-							'bitrate',
-							onOpenSource,
-						)}
-					{/if}
-					{#if serverRow}
-						{@render setupRow(
-							'destination',
-							serverRow,
-							destinationState,
-							destinationReason,
-							'traffic-light',
-							undefined,
-						)}
-					{/if}
+					{#each rows as view (view.key)}
+						{@render setupRow(view)}
+					{/each}
 				</div>
 			</section>
 		{/if}
 
 		<section
 			aria-labelledby="live-connections-card-title"
-			class="space-y-2 border-t pt-4"
+			class="border-t pt-5"
 			data-testid="connections-card"
 		>
-			<h2 class="text-muted-foreground text-xs font-medium" id="live-connections-card-title">
+			<h3 class="pb-3 text-sm font-semibold" id="live-connections-card-title">
 				{m["live.connectionsCard.title"]()}
-			</h2>
-			<!-- Network — synthesized (no config dialog); action navigates to Network. -->
-			<div>
-				<div
-					class="flex flex-wrap items-center gap-x-4 gap-y-1 py-2.5 first:pt-0"
-					data-testid="setup-row"
-					data-row="network"
-					data-state={networkState}
-				>
-					<div class="flex min-w-0 flex-[1_1_12rem] items-start gap-2.5">
-						<span
-							class="mt-1.5 size-2 shrink-0 rounded-full"
-							style="background: {stateColor(networkState)};"
-							aria-hidden={true}
-						></span>
-						<Network
-							aria-hidden={true}
-							class="text-muted-foreground mt-0.5 size-4 shrink-0"
-						/>
-						<div class="min-w-0">
-							<p class="text-sm font-medium">{m["live.goLive.gate.network"]()}</p>
-							<p class="text-muted-foreground font-mono text-sm break-words">
-								{networkSummary}
-							</p>
-							{#if networkReason}
-								<p
-									class="text-muted-foreground text-xs break-words"
-									data-testid="setup-row-reason"
-								>
-									{resolveReason(networkReason)}
-								</p>
-							{/if}
-						</div>
-					</div>
-					<Button
-						class="ms-auto min-h-[44px] shrink-0 gap-1.5"
-						data-testid="setup-row-fix"
-						data-fix="goNetwork"
-						onclick={onGoNetwork}
-						size="sm"
-						variant="ghost"
-					>
-						{m["live.goLive.fix.goNetwork"]()}
-						<ChevronRight aria-hidden={true} class="h-4 w-4 rtl:-scale-x-100" />
-					</Button>
-				</div>
-			</div>
+			</h3>
+			{@render setupRow(networkView)}
 		</section>
 
 		<LiveBar

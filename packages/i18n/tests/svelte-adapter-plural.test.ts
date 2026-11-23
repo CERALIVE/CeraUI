@@ -26,10 +26,11 @@ import {
 // So the render path here is the NEW store's own — `generated/registry.js`, the
 // module `@ceraui/i18n/svelte` re-exports as `m` — and the oracle is the FROZEN
 // old-implementation capture (plan todo 19). Every assertion is an exact string,
-// including the shipped Arabic `linksReadyCount` defect (`{count}  للتجميع`,
-// double space: a 2-branch source key whose absent `zero`/`two` branches render
-// empty). Reproducing a defect byte-for-byte is the point — a copy fix is a
-// separate, separately-reviewed translation PR that updates the fixtures.
+// including the Arabic `linksReadyCount` and `linksReady` forms, whose copy fix
+// (empty `zero`/`two` branches, adjective agreement with the masculine noun)
+// landed as its own translation change that updated the fixtures with it.
+// Reproducing the catalog byte-for-byte is the point — a copy change updates
+// the fixtures in a separately reviewed translation change.
 //
 // WHAT REPLACED THE SYNTHETIC-TEMPLATE CASES. The legacy file also drove 17
 // hand-written templates through the resolver to cover legacy grammar the
@@ -134,23 +135,25 @@ describe("Arabic six-way selection reaches every CLDR bucket", () => {
 			many: "مجمّع عبر 11 رابطًا",
 			other: "مجمّع عبر 100 رابط",
 		},
+		// The adjective agrees with the masculine noun; the broken plural of
+		// 3-10 takes the feminine singular, as non-human plurals do.
 		"live.setup.linksReady": {
 			zero: "0 روابط جاهزة",
-			one: "1 رابط جاهزة",
-			two: "2 رابطان جاهزة",
+			one: "1 رابط جاهز",
+			two: "2 رابطان جاهزان",
 			few: "5 روابط جاهزة",
-			many: "11 رابطًا جاهزة",
-			other: "100 رابط جاهزة",
+			many: "11 رابطًا جاهزًا",
+			other: "100 رابط جاهز",
 		},
-		// The SHIPPED defect, frozen: `zero` and `two` select branches the source
-		// key never declared, so they render empty and leave a double space.
+		// Every category has its own form: `zero` and `two` no longer render
+		// empty with a double space.
 		"live.ingest.linksReadyCount": {
-			zero: "0  للتجميع",
+			zero: "0 روابط جاهزة للتجميع",
 			one: "1 رابط جاهز للتجميع",
-			two: "2  للتجميع",
+			two: "2 رابطان جاهزان للتجميع",
 			few: "5 روابط جاهزة للتجميع",
-			many: "11 روابط جاهزة للتجميع",
-			other: "100 روابط جاهزة للتجميع",
+			many: "11 رابطًا جاهزًا للتجميع",
+			other: "100 رابط جاهز للتجميع",
 		},
 	} as const;
 

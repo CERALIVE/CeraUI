@@ -13,6 +13,7 @@ import { join } from "node:path";
 import type { WifiAdapterMode } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 import { logger } from "../helpers/logger.ts";
+import * as runner from "../helpers/run.ts";
 import * as mocks from "../mocks/mock-service.ts";
 import {
 	getConfig,
@@ -56,7 +57,10 @@ import {
 	resetWifiCapabilitiesForTest,
 	setWifiCapabilityDepsForTest,
 } from "../modules/wifi/wifi-capabilities.ts";
-import { addWifiInterface } from "../modules/wifi/wifi-connections.ts";
+import {
+	addWifiInterface,
+	getWifiInterfacesByMacAddress,
+} from "../modules/wifi/wifi-connections.ts";
 import {
 	defaultHotspotDeps,
 	wifiHotspotStart,
@@ -73,13 +77,20 @@ import {
 	getWifiIdToMacAddress,
 	wifiUpdateDevices,
 } from "../modules/wifi/wifi-interfaces.ts";
+import { wifiRadioIdentity } from "../modules/wifi/wifi-radio-identity.ts";
 import { wifiRadioObservation } from "../modules/wifi/wifi-radio-observation.ts";
 import {
 	hotspotStartProcedure,
 	hotspotStopProcedure,
 } from "../rpc/procedures/wifi.procedure.ts";
+import {
+	nmcliFieldNames,
+	nmcliFieldOutput,
+} from "./helpers/nmcli-field-output.ts";
+import { mockActiveObservation } from "./helpers/wifi-active-observation.ts";
 import { mockHotspotConfirmationPoll } from "./helpers/wifi-hotspot-test-setup.ts";
 import { wifiProtocolContext } from "./helpers/wifi-protocol-context.ts";
+import { fakeShadowSysfs } from "./helpers/wifi-radio-equivalence-shadow.ts";
 import {
 	isolateWifiRegistry,
 	restoreWifiRegistry,
@@ -101,6 +112,7 @@ let transcript: string[];
 let modesAtEffect: Array<WifiAdapterMode | undefined>;
 let warnings: string[];
 let stopRestore: (() => void) | undefined;
+let restoreSysfs: () => Promise<void>;
 
 function radio(capability: boolean | undefined): WifiInterfaceWithHotspot {
 	return {
@@ -129,6 +141,10 @@ function seed(next = radio(false)): void {
 	row = next;
 	addWifiInterface(MAC, row);
 	getWifiIdToMacAddress()[0] = MAC;
+}
+
+async function publishFixtureRadio(): Promise<void> {
+	await wifiRadioIdentity.discover([{ ifname: IFNAME, row }]);
 }
 
 function effect(name: string): void {
@@ -164,7 +180,11 @@ function bootSource() {
 			};
 		},
 		publish: async (discovery = true) => {
-			published ||= discovery;
+			if (discovery) {
+				published = true;
+				if (getWifiInterfacesByMacAddress()[MAC] === row)
+					await publishFixtureRadio();
+			}
 			await listener?.();
 		},
 	};
@@ -256,13 +276,18 @@ beforeEach(async () => {
 				? undefined
 				: { staApCombo: { supported: row.supportsApStaConcurrency } },
 	});
+	spyOn(defaultHotspotDeps, "readProfilePins").mockResolvedValue(["", ""]);
 	spyOn(logger, "warn").mockImplementation((message) => {
 		warnings.push(String(message));
 		return logger;
 	});
 	spyOn(mocks, "shouldUseMocks").mockReturnValue(false);
 	spyOn(streaming, "getIsStreaming").mockImplementation(() => streamingOn);
-	spyOn(hotspotCredentialsStore, "get").mockReturnValue(undefined);
+	spyOn(hotspotCredentialsStore, "get").mockImplementation((owner) =>
+		owner === MAC && row?.hotspot.conn === PROFILE
+			? { conn: PROFILE, ssid: "Intent AP", password: "fixture-password" }
+			: undefined,
+	);
 	spyOn(hotspotCredentialsStore, "remember").mockImplementation(() => {});
 	spyOn(defaultHotspotDeps, "nmConnSetFields").mockImplementation(async () => {
 		effect("fields");
@@ -272,6 +297,22 @@ beforeEach(async () => {
 		effect("activate");
 		return acceptsActivation;
 	});
+	const run = runner.run;
+	spyOn(runner, "run").mockImplementation((bin, args, options) =>
+		bin === "nmcli" &&
+		args?.at(-1) === PROFILE &&
+		nmcliFieldNames(args)[0] === "match.path"
+			? Promise.resolve(
+					nmcliFieldOutput(args, (field) =>
+						field === "match.path"
+							? "platform-equivalence-phy1"
+							: field === "802-11-wireless.mode"
+								? "ap"
+								: "",
+					),
+				)
+			: run(bin, args, options),
+	);
 	spyOn(defaultHotspotDeps, "nmApConnAdd").mockImplementation(async () => {
 		effect("create");
 		return PROFILE;
@@ -291,6 +332,16 @@ beforeEach(async () => {
 		async () => true,
 	);
 	mockHotspotConfirmationPoll();
+	mockActiveObservation((ifname) =>
+		ifname === IFNAME
+			? row.activeMode === "ap" ||
+				(row.conn === PROFILE && observedWifiAdapterMode(row) === "hotspot")
+				? (row.activeConn ?? row.conn ?? undefined)
+				: undefined
+			: row.concurrentHotspot?.ifname === ifname
+				? (row.concurrentHotspot.activeConn ?? undefined)
+				: undefined,
+	);
 	spyOn(defaultHotspotStopDeps, "nmConnSetFields").mockImplementation(
 		async () => {
 			effect("stop-fields");
@@ -311,6 +362,16 @@ beforeEach(async () => {
 	);
 	spyOn(defaultHotspotStopDeps, "rescan").mockImplementation(async () => {});
 	seed();
+	restoreSysfs = await fakeShadowSysfs(() => [
+		{
+			ifname: IFNAME,
+			operational: MAC,
+			permanent: MAC,
+			ifindex: 10,
+			phy: 1,
+			state: "connected",
+		},
+	]);
 });
 
 afterEach(async () => {
@@ -320,6 +381,7 @@ afterEach(async () => {
 	resetWifiCapabilitiesForTest();
 	resetApStaCapabilityStateForTest();
 	await settlePending(IFNAME, false);
+	await restoreSysfs();
 	jest.clearAllTimers();
 	jest.useRealTimers();
 	mock.restore();
@@ -574,6 +636,7 @@ test("unknown capability preserves a station choice instead of pinning exclusive
 
 test("capability arrival retries pending hybrid once and a duplicate edge does not start twice", async () => {
 	await seedFailedProbe();
+	await publishFixtureRadio();
 	persistWifiAdapterMode(MAC, "hybrid");
 	stopRestore = transition.startWifiAdapterModeRestore(modeDeps());
 	await notifyWifiAdapterModeDiscovery();
@@ -717,6 +780,11 @@ for (const succeeds of [true, false]) {
 		observed("hotspot");
 		persistWifiAdapterMode(MAC, "hotspot");
 		const binding = await wifiRequestBinding(MAC, row);
+		spyOn(networkManager, "nmConnGetFields").mockResolvedValue([
+			MAC,
+			"platform-equivalence-phy1",
+			"",
+		]);
 		let forward = true;
 		const result = await reconfigureHotspotForRegdomain(MAC, row, "auto", {
 			...defaultHotspotConfigDeps,
@@ -759,6 +827,7 @@ test("real discovery, capability publication and streaming clearance drive the b
 	for (let turn = 0; turn < 30; turn++) await Promise.resolve();
 	expect(warnings).toEqual([]);
 	seed();
+	await publishFixtureRadio();
 	setWifiCapabilityDepsForTest({
 		runIw: async (args) => (args[0] === "reg" ? "country US: DFS-FCC\n" : ""),
 		readPhyName: async () => undefined,
@@ -780,7 +849,7 @@ test("real discovery, capability publication and streaming clearance drive the b
 	streamingOn = false;
 	streaming.updateStatus(false);
 	await applied.promise;
-	for (let turn = 0; turn < 30; turn++) await Promise.resolve();
+	await notifyWifiAdapterModeEdge();
 	await settlePending(IFNAME, true);
 	expect(observedWifiAdapterMode(row)).toBe("hotspot");
 	expect(await diskModes()).toEqual({ [MAC]: "hotspot" });
@@ -865,8 +934,13 @@ for (const path of ["direct-start", "direct-stop", "mode"] as const) {
 					: path === "direct-stop"
 						? wifiHotspotStop({ device: 0 })
 						: transition.setWifiAdapterMode(0, "hotspot", modeDeps());
-			await expect(operation).rejects.toThrow();
-			expect(transcript).toEqual([]);
+			if (path === "direct-stop") {
+				expect(await operation).toEqual({ success: true });
+				expect(transcript).toEqual(["stop-fields", "disconnect"]);
+			} else {
+				await expect(operation).rejects.toThrow();
+				expect(transcript).toEqual([]);
+			}
 			expect(getPersistedWifiAdapterModes()).toEqual(before);
 			setConfigFilePath(durablePath);
 			expect(await diskModes()).toEqual(before);

@@ -117,7 +117,8 @@ function configRows(h: Handlers, opts: RowOptions = {}): ConfigRow[] {
 		{
 			icon: Cpu,
 			label: "Encoder",
-			value: "1080p60 · 6 Mbps",
+			value: "1080p60",
+			bitrate: "6 Mbps",
 			section: "encoder",
 			onEdit: h.onOpenEncoder,
 			testId: "open-encoder-dialog",
@@ -156,7 +157,6 @@ interface Overrides {
 	relays?: RelayMessage | undefined;
 	managedSlots?: readonly ManagedIngestAccount[] | undefined;
 	destinationValidated?: boolean;
-	maxBitrate?: number;
 	rowOptions?: RowOptions;
 }
 
@@ -176,7 +176,6 @@ function renderChain(over: Overrides = {}) {
 		isStreaming: over.isStreaming ?? false,
 		optimismState: over.optimismState ?? ("idle" as StreamingOptimismState),
 		destinationValidated: over.destinationValidated,
-		maxBitrate: over.maxBitrate,
 		...h,
 	};
 	const view = render(StreamSetupChain, { props });
@@ -278,14 +277,39 @@ describe("StreamSetupChain — encoder row (source gate)", () => {
 	it("shows the bitrate-ceiling chip and opens the encoder from it", async () => {
 		const { container, onOpenEncoder } = renderChain({
 			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
-			maxBitrate: 6000,
 		});
 		const chip = container.querySelector<HTMLElement>(
 			'[data-testid="bitrate-ceiling-chip"]',
 		);
 		expect(chip, "bitrate chip renders").not.toBeNull();
 		expect(chip?.textContent).toContain("6");
+		// Said once: the chip IS the summary's bitrate, never a second copy of it.
+		expect(
+			rowFor(container, "encoder")?.textContent?.match(/6 Mbps/g),
+		).toHaveLength(1);
 		await fireEvent.click(chip as HTMLElement);
+		expect(onOpenEncoder).toHaveBeenCalledTimes(1);
+	});
+
+	it("keeps the bitrate editable while Edit waits for a source", async () => {
+		const { container, onOpenEncoder } = renderChain({
+			config: { relay_server: "fra" } as ConfigMessage,
+			sources: makeSources(capture("cam-1", "HDMI"), capture("cam-2", "USB")),
+		});
+		const encoder = rowFor(container, "encoder");
+		expect(
+			encoder?.querySelector<HTMLButtonElement>(
+				'[data-testid="open-encoder-dialog"]',
+			)?.disabled,
+		).toBe(true);
+		const chip = encoder?.querySelector<HTMLElement>(
+			'[data-testid="bitrate-ceiling-chip"]',
+		);
+		if (!chip)
+			throw new Error(
+				"the bitrate chip must render while Edit waits for a source",
+			);
+		await fireEvent.click(chip);
 		expect(onOpenEncoder).toHaveBeenCalledTimes(1);
 	});
 });
@@ -460,6 +484,84 @@ describe("StreamSetupChain — destination row", () => {
 			name: /start stream/i,
 		});
 		expect((start as HTMLButtonElement).disabled).toBe(true);
+	});
+});
+
+describe("StreamSetupChain — one row pattern", () => {
+	function dotTone(container: HTMLElement, key: string): string | null {
+		return (
+			rowFor(container, key)
+				?.querySelector("[data-tone]")
+				?.getAttribute("data-tone") ?? null
+		);
+	}
+
+	it("never paints an unchecked destination as healthy: the dot turns green only once validated", () => {
+		const unchecked = renderChain({
+			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
+		});
+		// The gate still passes, so Start is not blocked by the missing check…
+		expect(
+			rowFor(unchecked.container, "destination")?.getAttribute("data-state"),
+		).toBe("ok");
+		// …but the dot says "not checked", in step with the words beside it.
+		expect(dotTone(unchecked.container, "destination")).toBe("unchecked");
+		expect(
+			unchecked.container.querySelector(
+				'[data-testid="destination-traffic-light"]',
+			)?.textContent,
+		).toContain("Not checked");
+		unchecked.unmount();
+
+		const validated = renderChain({
+			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
+			destinationValidated: true,
+		});
+		expect(dotTone(validated.container, "destination")).toBe("ok");
+		validated.unmount();
+
+		const blocked = renderChain({
+			config: { source: "cam-1" } as ConfigMessage,
+		});
+		expect(dotTone(blocked.container, "destination")).toBe("blocked");
+	});
+
+	it("gives the encoder and network rows a dot that follows their gate", () => {
+		const { container } = renderChain({
+			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
+			netif: undefined,
+			rowOptions: { encoderWarn: true },
+		});
+		expect(dotTone(container, "encoder")).toBe("warn");
+		expect(dotTone(container, "network")).toBe("blocked");
+	});
+
+	it("ends every row in exactly one trailing action, idle and while streaming", () => {
+		for (const isStreaming of [false, true]) {
+			const { container, unmount } = renderChain({
+				config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
+				isStreaming,
+			});
+			for (const key of ["encoder", "destination", "network"]) {
+				expect(
+					rowFor(container, key)?.querySelectorAll("[data-row-action]"),
+					`${key} row (streaming: ${isStreaming})`,
+				).toHaveLength(1);
+			}
+			unmount();
+		}
+	});
+
+	it("sets every label and value in the one UI face, never mixing in monospace", () => {
+		const { container } = renderChain({
+			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
+		});
+		const card = container.querySelector('[data-testid="stream-setup-chain"]');
+		expect(card, "the card renders").not.toBeNull();
+		expect(
+			card?.querySelectorAll('[data-testid="setup-row"]').length,
+		).toBeGreaterThan(0);
+		expect(card?.querySelector(".font-mono")).toBeNull();
 	});
 });
 

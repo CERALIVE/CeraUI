@@ -27,6 +27,7 @@
 	"advanced.download": "다운로드",
 	"advanced.downloadDeviceLog": "CeraLive 로그 다운로드",
 	"advanced.downloadFailed": "로그를 다운로드하지 못했습니다. 연결을 확인하고 다시 시도하세요.",
+	"advanced.downloadLocked": "이전 로그 요청에 대한 기기의 응답을 기다리는 중입니다. 다시 시도하려면 다시 연결하거나 페이지를 새로 고치세요.",
 	"advanced.downloadSystemLog": "시스템 로그 다운로드",
 	"advanced.downloading": "다운로드 중…",
 	"advanced.hidePassword": "비밀번호 숨기기",

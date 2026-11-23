@@ -22,7 +22,8 @@ Every candidate, including the in-memory UUID, is subject to the
 [profile ownership rule](wifi-adapter-identity-is-the-permanent-mac.md#hotspot-profile-ownership-exists-host-tested-only).
 Another adapter's current or previous UUID, or a known conflicting MAC pin,
 cannot supply this adapter's credentials. Absent adapters retain ownership.
-Legacy unowned profiles still migrate when the existing evidence supports it.
+An unrecorded saved profile is foreign, even when its MAC or SSID matches.
+Only recorded legacy profiles may be reused or repaired.
 
 **The identity is resolved BEFORE any start can drop the link (#413).**
 `wifi.hotspotPrepare` runs the SAME resolution (`resolveHotspotIdentity`, shared
@@ -116,6 +117,11 @@ including modem reads. Protected client password updates use this same instance
 observation without requiring hotspot ownership. A rejected write logs its
 whitelisted check reason, never a credential, raw reply or command.
 
+Saved-profile Start reads pins and evaluates its selectors before the final
+live-radio, AP-leg, and station-channel checks. Ownership and any inventory
+proof are checked again at dispatch without another I/O step. Post-Up policy
+checks the bound leg's lifetime rather than requiring the active leg to be idle.
+
 Known limits are explicit: **LOW-1**, no-op prediction can miss temporary live
 autoconnect drift (A -> B -> A), and **LOW-2**, option B proves resulting bytes
 rather than the identity of the last writer. A foreign byte-identical
@@ -124,17 +130,27 @@ can be overwritten. See the [named limits](wifi-adapter-identity-is-the-permanen
 This round documents them without changing option B behavior.
 
 **Duplicate consolidation requires POSITIVE ownership evidence, and ABSENCE is
-never evidence.** `pruneDuplicateHotspotConns()` runs best-effort after a
-successful start (never blocking or failing it) and deletes a profile only when
-ALL of the following hold: its uuid is one the credential store positively
-claims, no adapter is currently using it, and it is still an AP-mode profile
-carrying the nmcli-generated id (`Hotspot`, `Hotspot-N`).
+never evidence.** `pruneDuplicateHotspotConns()` runs in the background after
+Start selects or creates a profile, before the activation attempt completes.
+It can therefore run even when activation later fails. A candidate must be
+exclusively in the requesting owner's history, unused by any adapter, still
+in AP mode with a generated ID (`Hotspot`, `Hotspot-N`), and free of conflicting
+live MAC and port pins. The deletion receipt compares the settings path, daemon
+identity, and keyfile metadata without opening the keyfile or reading its PSK.
 
-The claim is computed by `collectSupersededHotspotConns()` — the union of every
-adapter's current `conn` and its `previousConns` history, MINUS every adapter's
-current `conn`. So a profile that is some adapter's live identity is protected
-even when that adapter also appears in another's history, and a uuid the store
-has never seen is simply unknown and always survives.
+Historical pruning and failed-Start rollback share the same delete guard.
+The guard checks inactivity at the exact settings path, re-reads the classified
+instance, checks inactivity again, and verifies the daemon and keyfile.
+It sends D-Bus `Delete` to the checked settings path and original unique
+daemon on the verified bus. A mismatch or unreadable result retains the
+profile; the guard never falls back to deleting by UUID. The daemon can
+still activate the profile between the last activity check and the delete;
+NetworkManager does not provide an atomic inactive-only delete. Explicit
+Forget has a separate, user-selected contract.
+
+The claim comes from the requesting owner's `previousConns`, not the union of
+all recorded histories. A current, jointly claimed, pending, or unknown UUID
+always survives.
 
 The retired rule also deleted a generated-name AP profile "bound to an address
 no present adapter has". That reads absence as abandonment, and a temporarily

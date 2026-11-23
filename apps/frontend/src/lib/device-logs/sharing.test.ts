@@ -5,15 +5,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { getBackendHttpUrl } from "$lib/env";
 import { RpcError } from "$lib/rpc/rpc-error";
 
+import { BOOT_IDS, boot } from "./__fixtures__/boots";
 import { bundleManifest } from "./__fixtures__/sharing";
+import { startBackendDownload } from "./download-gate.svelte";
 import {
 	bundleManifestReply,
+	captureExportScope,
 	chineseWordChunks,
 	exportInput,
+	previewFailure,
 	previewProblem,
 	RAW_OPENING_QUERY,
 	refusal,
-	startBackendDownload,
 	ticketReply,
 } from "./sharing";
 
@@ -61,6 +64,65 @@ describe("exportInput: the Raw logs query as an export", () => {
 	});
 });
 
+describe("captureExportScope: the operator's latest action decides what Export saves", () => {
+	const raw = {
+		...RAW_OPENING_QUERY,
+		levels: ["error", "warning", "info", "debug"],
+		text: "wwan0",
+		since: 1_000,
+		until: 2_000,
+		direction: "older",
+		limit: 100,
+	} as const;
+	const unclean = boot(BOOT_IDS.unclean, "unclean");
+
+	it("keeps Raw's view as published, an exact moment included, while Raw was used last", () => {
+		expect(captureExportScope(raw, "moment", null, false)).toEqual({
+			query: raw,
+			span: "moment",
+			bootStart: null,
+		});
+		const onPicked = { ...raw, boot: BOOT_IDS.unclean };
+		expect(captureExportScope(onPicked, "filters", unclean, false)).toEqual({
+			query: onPicked,
+			span: "filters",
+			bootStart: unclean.firstTs,
+		});
+	});
+
+	it("takes Raw's level, source and search filters with the picker's boots once the picker was used last", () => {
+		const filters = {
+			sources: raw.sources,
+			levels: raw.levels,
+			text: raw.text,
+		};
+		expect(captureExportScope(raw, "moment", null, true)).toEqual({
+			query: { ...filters, boot: "all" },
+			span: "filters",
+			bootStart: null,
+		});
+		expect(captureExportScope(raw, "moment", unclean, true)).toEqual({
+			query: { ...filters, boot: BOOT_IDS.unclean },
+			span: "filters",
+			bootStart: unclean.firstTs,
+		});
+		expect(
+			captureExportScope(
+				raw,
+				"filters",
+				boot(BOOT_IDS.current, "current"),
+				true,
+			).query,
+		).toEqual({ ...filters, boot: "current" });
+	});
+
+	it("returns a value no later change can edit", () => {
+		const scope = captureExportScope(raw, "filters", null, false);
+		expect(Object.isFrozen(scope)).toBe(true);
+		expect(Object.isFrozen(scope.query)).toBe(true);
+	});
+});
+
 describe("refusal: a ticket reply's error code", () => {
 	it("reads BUSY as another export running", () => {
 		expect(refusal("BUSY")).toBe("busy");
@@ -86,11 +148,42 @@ describe("previewProblem: a rejected bundle preview", () => {
 			"the sanitized READ_FAILED (a read error or an identifier collision)",
 			new RpcError({ message: "READ_FAILED", code: "INTERNAL_ERROR" }),
 		],
+		[
+			"a READ_FAILED carrying its stage",
+			new RpcError({
+				message: "READ_FAILED",
+				code: "INTERNAL_ERROR",
+				stage: "collision",
+			}),
+		],
 		["a reply that never arrived", new Error("Request timeout: logs.x")],
 		["a plain error that only says BUSY", new Error("BUSY")],
 		["a thrown non-error", "BUSY"],
 	])("reads %s as a failure", (_name, error) => {
 		expect(previewProblem(error)).toBe("failed");
+	});
+});
+
+describe("previewFailure: the stage of a preview the device refused", () => {
+	const refused = (stage?: string, message = "READ_FAILED") =>
+		new RpcError({ message, code: "INTERNAL_ERROR", stage });
+
+	it("reads the envelope's additive stage on the legacy READ_FAILED message", () => {
+		expect(previewFailure(refused("collision"))).toBe("collision");
+	});
+
+	it("reads a READ_FAILED from an older device, or with a stage it does not know, as unclassified", () => {
+		expect(previewFailure(refused())).toBe("internal");
+		expect(previewFailure(refused("future_stage"))).toBe("internal");
+	});
+
+	it.each([
+		["BUSY, even with a stage", refused("collision", "BUSY")],
+		["a timeout", new Error("Request timeout: logs.previewBundle")],
+		["a local error with the same text", new Error("READ_FAILED")],
+		["a thrown non-error", "READ_FAILED"],
+	])("reads %s as no device refusal", (_name, error) => {
+		expect(previewFailure(error)).toBeNull();
 	});
 });
 
@@ -112,7 +205,7 @@ describe("startBackendDownload: the browser saves the file", () => {
 		});
 		const path = "/api/logs/export?ticket=ab12";
 
-		startBackendDownload(path);
+		startBackendDownload(() => true, path);
 
 		expect(clicked).toStrictEqual([
 			{
@@ -133,9 +226,9 @@ describe("startBackendDownload: the browser saves the file", () => {
 			throw refused;
 		});
 
-		expect(() => startBackendDownload("/api/logs/export?ticket=ab12")).toThrow(
-			refused,
-		);
+		expect(() =>
+			startBackendDownload(() => true, "/api/logs/export?ticket=ab12"),
+		).toThrow(refused);
 		expect(document.querySelectorAll("a")).toHaveLength(0);
 	});
 });

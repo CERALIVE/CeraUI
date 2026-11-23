@@ -83,7 +83,7 @@ function chooseTime(value: string): void {
 			<Search class="text-muted-foreground pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2" />
 			<Input
 				aria-label={m['systemLogs.raw.searchLabel']()}
-				class="min-h-(--touch-target-min) ps-8 pe-9 text-ellipsis"
+				class={cn('min-h-(--touch-target-min) ps-8 pe-9 text-ellipsis', view.draft !== '' && 'max-sm:pe-14')}
 				data-testid="raw-search"
 				enterkeyhint="search"
 				oninput={(event) => view.setDraft(event.currentTarget.value)}
@@ -96,7 +96,7 @@ function chooseTime(value: string): void {
 			{#if view.draft !== ''}
 				<button
 					aria-label={m['systemLogs.raw.searchClear']()}
-					class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 absolute end-1 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-md outline-none focus-visible:ring-3"
+					class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 absolute end-1 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-md outline-none focus-visible:ring-3 max-sm:end-3"
 					data-testid="raw-search-clear"
 					data-touch-target="hit-area"
 					onclick={() => view.clearSearch()}
@@ -140,7 +140,7 @@ function chooseTime(value: string): void {
 					<Select.Trigger aria-labelledby="{uid}-sources" class="w-full data-placeholder:text-foreground" data-testid="raw-sources">
 						{sourceCount === 0 ? m['systemLogs.raw.sourceAll']() : m['systemLogs.raw.sourceCount']({ count: sourceCount })}
 					</Select.Trigger>
-					<Select.Content>
+					<Select.Content data-touch-region>
 						{#each LOG_SOURCES as source (source)}
 							<Select.Item
 								class="min-h-(--touch-target-min)"
@@ -158,7 +158,7 @@ function chooseTime(value: string): void {
 					<Select.Trigger aria-labelledby="{uid}-time" class="w-full" data-testid="raw-time">
 						{times.find((time) => time.value === timeValue)?.label}
 					</Select.Trigger>
-					<Select.Content>
+					<Select.Content data-touch-region>
 						{#each times as time (time.value)}
 							<Select.Item
 								class="min-h-(--touch-target-min)"

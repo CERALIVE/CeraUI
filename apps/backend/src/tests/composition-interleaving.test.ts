@@ -12,9 +12,14 @@
  * the device's saved composition equals a plain reference model that applies
  * each control's intent to the device's own state, and while live the engine
  * runs exactly what is saved: a Start runs the saved composition, and every
- * applied change is what was saved.
+ * applied change is what was saved. The saved composition is also read back
+ * from `config.json` after every step, and every step that changes it flushes
+ * the file. The flush itself is stubbed: the atomic-write tests own durability,
+ * and a real fsync per save made this file slow enough to time out under
+ * parallel test runs.
  */
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import fs, { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -181,6 +186,14 @@ function pickOp(
 let directory: string;
 let previousPath: string;
 let previousConfig: ReturnType<typeof getConfig>;
+let flushes = 0;
+
+/** The composition `config.json` holds now, as a reboot would load it. */
+function savedOnDisk(): Composition {
+	const file = getConfigFilePath();
+	if (!existsSync(file)) return undefined;
+	return JSON.parse(readFileSync(file, "utf8")).composition;
+}
 
 beforeEach(async () => {
 	directory = await mkdtemp(join(tmpdir(), "composition-interleaving-"));
@@ -190,6 +203,10 @@ beforeEach(async () => {
 	getConfig().composition = undefined;
 	spyOn(defaultStagingDeps, "writeMarker").mockImplementation(() => {});
 	spyOn(defaultStagingDeps, "removeMarker").mockImplementation(() => {});
+	flushes = 0;
+	spyOn(fs, "fsyncSync").mockImplementation(() => {
+		flushes += 1;
+	});
 	clearCapabilitiesCache();
 	await initPipelines({
 		fetchEngineCapabilities: async () => ({
@@ -205,6 +222,7 @@ afterEach(async () => {
 	clearStagedConfigChange();
 	spyOn(defaultStagingDeps, "writeMarker").mockRestore();
 	spyOn(defaultStagingDeps, "removeMarker").mockRestore();
+	spyOn(fs, "fsyncSync").mockRestore();
 	clearCapabilitiesCache();
 	for (const key of Object.keys(getConfig()))
 		Reflect.deleteProperty(getConfig(), key);
@@ -245,6 +263,7 @@ for (const seed of [7, 1337, 20261115]) {
 			engine.refuses = live && next() < 0.2;
 			engine.saw = null;
 			steps += 1;
+			const flushesBefore = flushes;
 
 			const result = await call(setConfigProcedure, wireInput(op, live), {
 				context: makeRpcContext(),
@@ -255,6 +274,9 @@ for (const seed of [7, 1337, 20261115]) {
 			const step = { seed, steps, client, op, live, device, result };
 
 			expect(getConfig().composition, JSON.stringify(step)).toEqual(expected);
+			expect(savedOnDisk(), JSON.stringify(step)).toEqual(expected);
+			if (!Bun.deepEquals(expected, device))
+				expect(flushes, JSON.stringify(step)).toBeGreaterThan(flushesBefore);
 			if (device === undefined && op.kind !== "enable" && op.kind !== "disable")
 				expect(result, JSON.stringify(step)).toMatchObject({
 					success: false,

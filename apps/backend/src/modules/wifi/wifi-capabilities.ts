@@ -588,7 +588,7 @@ export function parseIwLinkTelemetry(
 		return parseFail(
 			"parseIwLinkTelemetry",
 			"no `Connected to <BSSID> (on <ifname>)` header",
-			output,
+			"",
 		);
 	}
 
@@ -598,7 +598,7 @@ export function parseIwLinkTelemetry(
 		return parseFail(
 			"parseIwLinkTelemetry",
 			"no readable receive or transmit bitrate",
-			output,
+			"",
 		);
 	}
 
@@ -1027,10 +1027,10 @@ async function readLinkTelemetry(ifname: string): Promise<void> {
 	let dump: string;
 	try {
 		dump = await deps.runIw(["dev", argMatch(ID_RE, ifname), "link"]);
-	} catch (err) {
+	} catch {
 		// A statement about the READ, not about the link. The previous reading
 		// stands — the same spawn-vs-parse split `computeCapabilities` draws.
-		logger.debug(`wifi link telemetry: ${ifname} link read failed: ${err}`);
+		logger.debug(`wifi link telemetry: ${ifname} link read failed`);
 		return;
 	}
 

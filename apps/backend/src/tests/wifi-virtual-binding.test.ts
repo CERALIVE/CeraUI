@@ -81,6 +81,14 @@ for (const source of sources)
 				) {
 					expect(await fixture.stop()).toEqual({ success: true });
 					if (event === "Start-rollback") {
+						if (parent === "changed") {
+							// The independent parent AP is still up after the leg's Down.
+							// Move it back to Station so this Start exercises rollback.
+							await fixture.discover([
+								bindingParent,
+								{ ...bindingVirtual, active: "" },
+							]);
+						}
 						expect(await fixture.start(true)).toEqual({
 							success: false,
 							error: "activation-failed",

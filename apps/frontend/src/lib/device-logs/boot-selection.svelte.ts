@@ -13,8 +13,50 @@ type BootListener = (bootId: string | null) => void;
 
 class BootSelection {
 	#boot = $state.raw<LogBootInfo | null>(null);
-	rawScope = $state.raw<Pick<RawFilter, "time" | "bootId"> | null>(null);
+	/** What an open Raw logs tab shows; `anchored` while it shows a moment within that scope. */
+	rawScope = $state.raw<
+		| (Pick<RawFilter, "time" | "bootId"> & { readonly anchored?: boolean })
+		| null
+	>(null);
 	readonly #listeners = new Set<BootListener>();
+	// Advanced by every pick, a repeat included, and never reset: an async result started under an
+	// older value lost to that pick (`since()`).
+	#intent = $state(0);
+	// The open view's generation, compared by identity, `null` while closed: LogsDialog's, derived
+	// from its `open` (`attach`); with no dialog attached, replaced when a view closes (`reset()`).
+	#view: object = {};
+	#generation: () => object | null = () => this.#view;
+	#openedAt = 0;
+
+	get intent(): number {
+		return this.#intent;
+	}
+
+	/** Whether the boot picker was used since the view opened, All boots included. */
+	get picked(): boolean {
+		return this.#intent !== this.#openedAt;
+	}
+
+	/** LogsDialog hands over its open generation, which changes with every write of its `open`. */
+	attach(generation: () => object | null): () => void {
+		this.#generation = generation;
+		return () => {
+			if (this.#generation === generation) this.#generation = () => this.#view;
+		};
+	}
+
+	/** For a side effect of the open view: false from the moment its dialog closes or reopens, or the view closes. */
+	opened(): () => boolean {
+		const generation = this.#generation();
+		return () => generation !== null && this.#generation() === generation;
+	}
+
+	/** For an async result started now: false once any pick follows or the view closes, so its reply must not apply. */
+	since(): () => boolean {
+		const at = this.#intent;
+		const open = this.opened();
+		return () => this.#intent === at && open();
+	}
 
 	get boot(): LogBootInfo | null {
 		return this.#boot;
@@ -33,10 +75,16 @@ class BootSelection {
 			: scope.time === "current" && boot.current;
 	}
 
-	/** Reusing the same boot is a no-op only when Raw already shows its scope. */
+	/** Reusing the same boot is a no-op only when Raw already shows its whole scope, not a moment in it. */
 	choose(boot: LogBootInfo | null): void {
+		this.#intent += 1;
 		const bootId = boot?.bootId ?? null;
-		if (bootId === this.bootId && this.isSelected(boot)) return;
+		if (
+			bootId === this.bootId &&
+			this.isSelected(boot) &&
+			!this.rawScope?.anchored
+		)
+			return;
 		this.#boot = boot;
 		for (const listener of this.#listeners) {
 			try {
@@ -58,22 +106,22 @@ class BootSelection {
 	reset(): void {
 		this.#boot = null;
 		this.rawScope = null;
+		this.#view = {};
+		this.#openedAt = this.#intent;
 	}
 
 	/**
 	 * After stored history was deleted: back to All boots, telling the stores,
 	 * when the device no longer lists the chosen boot. A failed read keeps the
-	 * choice, and so does a boot chosen while the list was being read.
+	 * choice, and so does any pick made while the list was being read.
 	 */
 	async recheck(read: () => Promise<readonly LogBootInfo[]>): Promise<void> {
 		const chosen = this.bootId;
 		if (chosen === null) return;
+		const still = this.since();
 		try {
 			const boots = await read();
-			if (
-				this.bootId === chosen &&
-				!boots.some((boot) => boot.bootId === chosen)
-			)
+			if (still() && !boots.some((boot) => boot.bootId === chosen))
 				this.choose(null);
 		} catch (error) {
 			console.error("System Logs could not re-check the chosen boot:", error);

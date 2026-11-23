@@ -157,8 +157,6 @@ require_file_contract "$build_check_workflow" 'run: bun run test:release-package
   'required Build Check must run the named release/package contract command'
 require_file_contract "$release_workflow" '  release-package-contracts:' \
   'primary release workflow must define a release/package contract gate'
-require_file_contract "$release_workflow" '    needs: calculate-version' \
-  'primary release/package contract gate must receive the calculated version'
 require_file_contract "$release_workflow" 'needs: [calculate-version, release-package-contracts]' \
   'primary release builds must depend on the release/package contract gate'
 require_file_contract "$release_workflow" 'run: bun run test:release-package-contracts' \

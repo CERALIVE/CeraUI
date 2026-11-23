@@ -469,8 +469,14 @@ const pendingConnectChanges = $derived(
 // no gsm one is on it), so a real edit on a CONNECTED modem costs a reconnect.
 // Say so before the operator commits rather than letting the link drop unasked;
 // with no bearer up there is nothing to interrupt and no warning to give.
+// Use the same disabled and loading gates as Save. Without a reported profile,
+// Automatic APN is a suggestion, not a change to a profile the backend can write.
 const reconnectExpected = $derived(
-	pendingConnectChanges.length > 0 && modem.status?.connection === 'connected',
+	!primaryDisabled &&
+		!savePending &&
+		modem.config !== undefined &&
+		pendingConnectChanges.length > 0 &&
+		modem.status?.connection === 'connected',
 );
 
 // The typed refusal from the last save, held here rather than read off the

@@ -19,13 +19,13 @@ function renumberingDaemon(f: Awaited<ReturnType<typeof firstAp>>) {
 	let renumbered = false;
 	f.deps.nmConnect = (uuid, timeout, capture) =>
 		connect(uuid, timeout, () => capture?.(reusedPath));
-	f.deps.nmDisconnect = async (uuid, path) => {
+	f.deps.nmDisconnect = async (uuid, path, runId, ifname) => {
 		if (renumbered && path === reusedPath) {
 			// apath identifies the new daemon's object regardless of the UUID.
 			f.observe(undefined, "ap");
 			return true;
 		}
-		return disconnect(uuid, path);
+		return disconnect(uuid, path, runId, ifname);
 	};
 	return () => {
 		f.nm.restart();

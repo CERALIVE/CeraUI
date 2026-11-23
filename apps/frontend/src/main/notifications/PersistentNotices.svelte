@@ -101,7 +101,7 @@ const frozen = $derived(prefersEinkTheme(getDisplayProfile()));
 							variant="ghost"
 							aria-label={m["notifications.panel.dismiss"]()}
 							data-testid="persistent-notice-dismiss"
-							onclick={() => void dismissPersistentNotification(item.name)}
+							onclick={() => void dismissPersistentNotification(item)}
 						>
 							<XIcon class="size-4" />
 						</Button>

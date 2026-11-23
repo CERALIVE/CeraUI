@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { m } from "@ceraui/i18n/svelte";
 import { fireEvent, render, screen, within } from "@testing-library/svelte";
+import { flushSync } from "svelte";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { destroyAsyncOperations } from "$lib/rpc/async-operation.svelte";
@@ -9,6 +10,7 @@ import {
 	getRequestedDialog,
 	requestDialog,
 } from "$lib/stores/dialog-request.svelte";
+import { navigateTo, resetNavigation } from "$lib/stores/navigation.svelte";
 
 import SettingsView from "./SettingsView.svelte";
 
@@ -146,5 +148,20 @@ describe("SettingsView: System Logs deep links", () => {
 		expect(updates.dataset.open).toBe("true");
 		expect(getRequestedDialog()).toBeUndefined();
 		expect(screen.queryByTestId("logs-dialog-probe")).toBeNull();
+	});
+});
+
+describe("SettingsView: leaving Settings", () => {
+	afterEach(() => resetNavigation());
+
+	it("closes System Logs in the same call that changes the route, before Settings is torn down", async () => {
+		render(SettingsView);
+		requestDialog("logs", { tab: "raw", at: 5 });
+		await expect.poll(probe).toMatchObject({ open: "true" });
+
+		navigateTo({ network: { label: "network", component: SettingsView } });
+		flushSync();
+
+		expect(screen.getByTestId("logs-dialog-probe").dataset.open).toBe("false");
 	});
 });

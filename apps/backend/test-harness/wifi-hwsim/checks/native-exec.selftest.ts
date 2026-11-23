@@ -35,7 +35,7 @@ bash "$2/apps/backend/test-harness/wifi-hwsim/native-exec.sh" bash -c '
 	test "$PWD" = /var/tmp/lifecycle &&
 	test ! -e /proc/self/fd/9 &&
 	test "$(bun -e "process.stdout.write(process.execPath)")" = /usr/local/bin/bun &&
-	test "$(bun --version)" = 1.4.4
+	test "$(bun --version)" = 1.4.5
 '
 for mode in throw term; do
 	set +e

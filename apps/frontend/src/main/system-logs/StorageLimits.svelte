@@ -136,7 +136,7 @@ async function save(): Promise<void> {
 					>
 						{@render sentence(limit.describe(draft[limit.key]))}
 					</Select.Trigger>
-					<Select.Content class={LINE_BREAKS}>
+					<Select.Content class={LINE_BREAKS} data-touch-region>
 						{#each [null, ...limit.options] as option (option)}
 							<Select.Item class="min-h-(--touch-target-min)" label={plain(limit.describe(option))} value={limitValue(option)}>
 								{@render sentence(limit.describe(option))}

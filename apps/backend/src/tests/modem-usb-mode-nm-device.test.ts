@@ -433,6 +433,31 @@ describe("#434 NM 1.52.1 twin profile replay", () => {
 			error.mockRestore();
 		}
 	});
+
+	test("nmcli status 8 reports a fixed daemon-down error without localized stderr", async () => {
+		const stderr =
+			"Erreur : NetworkManager ne fonctionne pas. diagnostic-prive";
+		const run = spyOn(runner, "run").mockRejectedValue(
+			Object.assign(new Error("command failed"), { code: 8, stderr }),
+		);
+		const warn = spyOn(logger, "warn").mockImplementation(() => {});
+		const error = spyOn(logger, "error").mockImplementation(() => {});
+		try {
+			await withDeviceType("real", async () => {
+				await expect(
+					nmDeviceProp("cdc-wdm0", "GENERAL.STATE"),
+				).resolves.toBeUndefined();
+			});
+			expect(warn).not.toHaveBeenCalled();
+			expect(error.mock.calls).toEqual([
+				["nmDeviceProp failed: NetworkManager is not running"],
+			]);
+		} finally {
+			run.mockRestore();
+			warn.mockRestore();
+			error.mockRestore();
+		}
+	});
 });
 
 describe("B7 — one NM-device resolution for both call sites", () => {
