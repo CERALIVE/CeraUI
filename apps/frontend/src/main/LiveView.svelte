@@ -136,6 +136,10 @@ import {
 	startFailureNextStep,
 	startFailureRetryKey,
 } from '$lib/streaming/start-failure-copy';
+import {
+	claimStartFailurePresentation,
+	holdStartFailureNotice,
+} from '$lib/streaming/start-failure-presentation.svelte';
 import { buildStartConfig } from '$lib/streaming/startStreaming';
 import { showUnconfirmedStreamStop, startOptimismSuperseded } from '$lib/streaming/unconfirmed-stream';
 import {
@@ -394,6 +398,7 @@ function runNextStep(step: StartFailureNextStep, attempt: string | undefined, en
 
 function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 	const attempt = (failure as { attemptId?: string }).attemptId;
+	if (attempt !== undefined && !claimStartFailurePresentation(attempt)) return;
 	const engine = isEngineStartFailure(failure);
 	let repeated = false;
 	if (attempt === undefined || attempt !== failureMemory.lastAttempt) {
@@ -1117,6 +1122,7 @@ async function handleStart(overrides: { source?: string } = {}, opts: { engineRe
 	// only now that it passed validation and is being sent.
 	failureMemory.retry = opts.engineRetry ? { generation: attempt, at: Date.now() } : undefined;
 
+	const releaseNotice = holdStartFailureNotice();
 	try {
 		const startResult = await startStreaming(result.config);
 		if (startResult && !startResult.success) {
@@ -1138,6 +1144,8 @@ async function handleStart(overrides: { source?: string } = {}, opts: { engineRe
 		const reason =
 			error instanceof Error ? error.message : 'unknown_error';
 		revertStreamingOptimism(reason, attempt);
+	} finally {
+		void releaseNotice();
 	}
 }
 

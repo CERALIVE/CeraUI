@@ -651,7 +651,7 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 			class: "engine_internal",
 			phase: "start-rpc",
 			retriable: false,
-			attemptId: "att_r1",
+			attemptId: "att_reboot_first",
 		};
 		render(LiveView);
 		await tick();
@@ -663,7 +663,7 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 			class: "engine_internal",
 			phase: "start-rpc",
 			retriable: false,
-			attemptId: "att_r2",
+			attemptId: "att_reboot_second",
 		};
 		const { findByTestId } = render(LiveView);
 		await tick();
