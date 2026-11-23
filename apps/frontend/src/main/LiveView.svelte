@@ -343,6 +343,7 @@ function startFailedMessage(code: string): string {
 // offers Restart box instead of another Try again.
 let viewMounted = true;
 let retryQueued = false;
+let refusedStart: { readonly id: string; readonly intent: StartIntent } | undefined;
 let refusalToastId: ReturnType<typeof toast.error> | undefined;
 $effect(() => () => {
 	viewMounted = false;
@@ -392,6 +393,7 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 	const link = getLinkEpoch();
 	const activity = getStreamActivity();
 	const generation = getStreamingAttemptGeneration();
+	const intent = refusedStart?.id === attempt ? refusedStart.intent : undefined;
 	const id = toast.error<typeof StartRefusalActions>(message, {
 		// A separate corner keeps later notices from stacking this card offscreen.
 		position: 'bottom-left',
@@ -409,19 +411,20 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 						link === getLinkEpoch() && activity === getStreamActivity() &&
 						generation === getStreamingAttemptGeneration();
 					if (step === 'tryAgain') {
-						const configGeneration = getStartConfigGeneration();
-						const audio = audioOverride;
-						const source = idleStartGate(readIdleGateInputs()).source;
+						if (!intent || retryQueued) return false;
 						const beforeSend = () => current() && idleStartAdmitted &&
-							configGeneration === getStartConfigGeneration() && audio === audioOverride &&
+							intent.configGeneration === getStartConfigGeneration() &&
+							intent.audio === audioOverride &&
+							intent.destination === currentDestinationFingerprint() &&
 							!getIsStreaming() && getStreamingOptimismState() === 'idle' &&
-							checkRetryGate(source);
-						if (retryQueued || !beforeSend()) return false;
-						return handleStart({}, {
+							checkRetryGate(intent.implicitSource);
+						if (!beforeSend()) return false;
+						void dispatchStart(intent, {
 							beforeSend,
 							onSent: () => toast.dismiss(id),
 							onBlocked,
 						});
+						return true;
 					}
 					if (step === 'restartBox' && !current()) return false;
 					if (!runNextStep(step, attempt)) return false;
@@ -1101,7 +1104,19 @@ type RetryDispatch = NonNullable<Parameters<typeof startStreaming>[1]> & {
 	readonly onBlocked?: (() => void) | undefined;
 };
 
-function handleStart(overrides: { source?: string } = {}, retry?: RetryDispatch) {
+type StartIntent = {
+	readonly config: ConfigMessage;
+	readonly configGeneration: number;
+	readonly audio: AudioConfigValues | null;
+	readonly implicitSource: string | undefined;
+	readonly destination: string;
+};
+
+function currentDestinationFingerprint() {
+	return fingerprintForValidation(getConfig(), getRelays(), getManagedIngestAccounts());
+}
+
+function handleStart(overrides: { source?: string } = {}) {
 	const gate = idleStartGate(readIdleGateInputs());
 	if (getStreamingOptimismState() !== 'idle' || getIsStreaming() || !gate.canStart) return false;
 
@@ -1115,20 +1130,27 @@ function handleStart(overrides: { source?: string } = {}, retry?: RetryDispatch)
 
 	const result = buildStartConfig(startBase, audioOverride, pipelines);
 	if (!result.ok) {
-		if (!retry) toast.error(
+		toast.error(
 			result.error === 'missingServer' ? m["live.cannotStartNoServer"]() : m["live.cannotStartNoPipeline"](),
 		);
 		return false;
 	}
 
-	void dispatchStart(result.config, retry);
+	void dispatchStart({
+		config: result.config,
+		configGeneration: getStartConfigGeneration(),
+		audio: audioOverride,
+		implicitSource: gate.source,
+		destination: currentDestinationFingerprint(),
+	});
 	return true;
 }
 
-async function dispatchStart(nextConfig: ConfigMessage, retry?: RetryDispatch) {
+async function dispatchStart(intent: StartIntent, retry?: RetryDispatch) {
 	let attempt: number | undefined;
 	let releaseNotice: (() => Promise<void>) | undefined;
 	const begin = () => {
+		refusedStart = undefined;
 		startStreamingOptimism();
 		attempt = getStreamingAttemptGeneration();
 		releaseNotice = holdStartFailureNotice();
@@ -1139,7 +1161,7 @@ async function dispatchStart(nextConfig: ConfigMessage, retry?: RetryDispatch) {
 		begin();
 	}
 	try {
-		const startResult = await startStreaming(nextConfig, retry && {
+		const startResult = await startStreaming(intent.config, retry && {
 			beforeSend: retry.beforeSend,
 			onSent: () => {
 				begin();
@@ -1150,6 +1172,9 @@ async function dispatchStart(nextConfig: ConfigMessage, retry?: RetryDispatch) {
 		if (attempt === undefined || getIsStreaming()) return;
 		if (startResult && !startResult.success) {
 			if ('failure' in startResult && startResult.failure) {
+				if (attempt === getStreamingAttemptGeneration()) {
+					refusedStart = { id: startResult.failure.attemptId, intent };
+				}
 				revertStreamingOptimismFailure(startResult.failure, attempt);
 			} else {
 				revertStreamingOptimism(startResult.error ?? 'unknown_error', attempt);

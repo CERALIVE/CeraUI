@@ -244,10 +244,12 @@ camera), plus a settled idle lifecycle and the current refusal's identity. It
 is not offered for post-connect timeout, unresolved Stop, or a known engine
 state conflict. If conditions change after the toast appears, a blocked tap
 keeps both the toast and View logs. Network opens the modem controls; Stream
-setup focuses the card heading. A retry waiting behind a composition write
-rechecks readiness and the accepted config generation before dispatch;
-changed settings leave the refusal available. The update refusal retains its
-wait message.
+setup focuses the card heading. Retry uses the refused Start's original
+payload. At the tap and before dispatch it checks the accepted config
+generation and resolved destination against that Start, even if settings
+changed before the refusal arrived. A changed destination requires a fresh
+Start from the bar; the refusal and View logs stay available. The update
+refusal retains its wait message.
 
 Layout: the actionable refusal has its own toast stack above the Live bar and
 dock. On short phones the reason scrolls independently, with a line visible
