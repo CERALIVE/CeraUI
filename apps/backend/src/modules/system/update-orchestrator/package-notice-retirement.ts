@@ -105,8 +105,10 @@ function candidateIds(): Set<string> {
 	return new Set([...ids, ...announced]);
 }
 
-// All targets must match in one dpkg snapshot. Separate APT policy reads
-// cannot prove that different candidates were ever current at the same time.
+// All targets must match in one dpkg-query read, not an atomic snapshot.
+// An outside dpkg/apt change during or after the read can invalidate a match
+// without changing the version (for example, by putting a package on hold).
+// Only a later successful check finding actionable updates announces them.
 async function installed(
 	targets: readonly Target[],
 	native: string,

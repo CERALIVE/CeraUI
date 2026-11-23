@@ -1,7 +1,7 @@
 /// <reference types="bun" />
 /*
  * Each case runs the real withdrawal pass over a scripted device and a real
- * notification slot. A clean dpkg snapshot at the exact version can clear it;
+ * notification slot. A clean dpkg-query read at the exact version can clear it;
  * APT policy cannot authorize withdrawal of a skipped version.
  */
 import { afterEach, expect, test } from "bun:test";
