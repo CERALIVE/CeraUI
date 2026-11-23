@@ -1009,6 +1009,14 @@ widths are not measured in this lane.
   placeholder (`systemLogs.raw.searchShort`) and keeps the full label as its
   accessible name; with the filters inline the full label is the placeholder
   (`RawLogsFilterBar.svelte`).
+- Short phones (under 640 px wide and at most 600 px tall): Raw filter controls
+  and notices scroll separately from the results when space runs out. The
+  controls scroller holds at least one full target and the virtualized results
+  reserve two targets' worth of height (88 CSS px). If both do not fit under
+  the tabs, the outer Raw panel scrolls far enough to reach both. The browser regression checks
+  populated results and reachability with filters open at 390×440, 360×360 and
+  320×480 in English, Arabic and German. Wider layouts keep the existing scroll
+  ownership.
 - RTL (`ar`): logical properties only; the close button sits at the inline end;
   the side column sits at the inline end; chevrons mirror (`rtl:-scale-x-100`);
   raw unit and message keep `dir="ltr"`; data params in `<bdi>`, Storage sizes

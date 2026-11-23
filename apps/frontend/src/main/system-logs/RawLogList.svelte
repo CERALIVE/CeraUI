@@ -227,7 +227,7 @@ async function readGap(action: HTMLElement, gap: { key: string; continuation: st
 {#if view.top !== null}
 	<div bind:this={top} class="border-b" data-testid="raw-top">{@render edge('top', view.top)}</div>
 {/if}
-<div class="relative flex min-h-0 flex-1 flex-col">
+<div class="relative flex min-h-0 flex-1 flex-col max-sm:[@media(max-height:600px)]:min-h-[calc(2*var(--touch-target-min))]">
 	{#if heldCount > 0}
 		<Button
 			class="absolute inset-x-0 top-2 z-10 mx-auto w-fit shadow-sm"

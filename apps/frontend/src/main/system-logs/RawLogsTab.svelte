@@ -114,8 +114,7 @@ const band = $derived.by(() => {
 });
 </script>
 
-<!-- CJK chrome copy breaks by phrase in Japanese, at spaces in Korean, and never leaves one character alone. -->
-<div class="flex h-full min-h-0 flex-col text-pretty [word-break:auto-phrase] [&:lang(ko)]:break-keep" data-testid="raw-logs">
+{#snippet controls()}
 	<RawLogsFilterBar {view} />
 	{#if view.stale}
 		<div class="text-muted-foreground flex items-start gap-2 border-b px-4 py-2 text-sm" data-testid="raw-disconnected">
@@ -167,6 +166,14 @@ const band = $derived.by(() => {
 	{#if view.gapLimitReached}
 		<p class="text-muted-foreground border-b px-4 py-2 text-xs">{m['systemLogs.marker.recoveryLimit']()}</p>
 	{/if}
+{/snippet}
+
+<!-- CJK chrome copy breaks by phrase in Japanese, at spaces in Korean, and never leaves one character alone. -->
+<div class="flex h-full min-h-0 flex-col text-pretty [word-break:auto-phrase] [&:lang(ko)]:break-keep" data-testid="raw-logs">
+	<!-- On short phones, keep one full target visible in the controls scroller. -->
+	<div class="contents max-sm:[@media(max-height:600px)]:block max-sm:[@media(max-height:600px)]:min-h-(--touch-target-min) max-sm:[@media(max-height:600px)]:overflow-y-auto max-sm:[@media(max-height:600px)]:overscroll-y-contain">
+		{@render controls()}
+	</div>
 	<RawLogList {view} />
 	<div aria-live="polite" class="sr-only" data-testid="raw-status" role="status">
 		{#key view.announcement?.serial}{view.announcement === null
