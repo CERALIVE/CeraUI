@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { accessSync, constants } from "node:fs";
+import {
+	chmod,
+	mkdtemp,
+	readdir,
+	readFile,
+	rm,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { call } from "@orpc/server";
@@ -30,6 +38,7 @@ import {
 } from "../rpc/procedures/network.procedure.ts";
 import {
 	installHuaweiIdentityResolver,
+	lastNetifEnabled,
 	makeRpcContext,
 	resetBondFixture,
 } from "./helpers/bond-toggle-fixture.ts";
@@ -121,12 +130,35 @@ async function observeDisable(name: string, ip: string) {
 		return {
 			reply,
 			wire,
-			requester: requester.map((frame) => JSON.parse(frame)),
+			requester: requester.map((frame): unknown => JSON.parse(frame)),
 			observer,
 		};
 	} finally {
 		removeClient(client);
 	}
+}
+
+function replies(frames: readonly string[]): unknown[] {
+	return frames
+		.map((frame): unknown => JSON.parse(frame))
+		.filter(
+			(frame) =>
+				typeof frame === "object" &&
+				frame !== null &&
+				("result" in frame || "error" in frame),
+		);
+}
+
+async function disableThroughAdapter(name: string, ip: string) {
+	const frames: string[] = [];
+	const { ws } = makeRpcContext(frames);
+	setSocketSenderId(ws, "last-uplink-test");
+	await handleORPCMessage(ws, {
+		id: "off",
+		path: ["network", "configure"],
+		input: { name, ip, enabled: false },
+	});
+	return frames.map((frame): unknown => JSON.parse(frame));
 }
 
 function holdSharedLanPeer(): void {
@@ -137,6 +169,7 @@ function holdSharedLanPeer(): void {
 
 describe("network.configure last effective uplink", () => {
 	let directory: string;
+	let configPath: string;
 	let priorMode: Mode;
 
 	beforeEach(async () => {
@@ -148,9 +181,9 @@ describe("network.configure last effective uplink", () => {
 		resetNetifSnapshotForTest();
 		resetUsbNetMarkers();
 		directory = await mkdtemp(join(tmpdir(), "bond-last-uplink-"));
-		const path = join(directory, "config.json");
-		await writeFile(path, "{}");
-		setConfigFilePath(path);
+		configPath = join(directory, "config.json");
+		await writeFile(configPath, "{}");
+		setConfigFilePath(configPath);
 		await loadConfig();
 		getNetworkInterfaces().eth0 = iface(ETHERNET_IP);
 	});
@@ -264,7 +297,17 @@ describe("network.configure last effective uplink", () => {
 		},
 	);
 
-	test("keeps main's accepted disable before the boot resolution has run", async () => {
+	test("keeps main's accepted disable when the boot-time scenario selector is cleared later", async () => {
+		await enterMode({ ...REAL, MOCK_SCENARIO: "multi-modem-wifi" });
+		setMode(REAL);
+		holdSharedLanPeer();
+		expect(await toggle("eth0", ETHERNET_IP, false)).toEqual(
+			applied("eth0", ETHERNET_IP, false),
+		);
+		expect(bondedNames()).toEqual([]);
+	});
+
+	test("keeps main's accepted disable until a real environment arms the guard", async () => {
 		await enterMode(EMULATED);
 		setMode(REAL);
 		holdSharedLanPeer();
@@ -294,9 +337,12 @@ describe("network.configure last effective uplink", () => {
 					event: { type: "device-state", device: "wlan0", state: "connected" },
 				},
 			]);
-			monitor.start();
-			await delivered;
-			monitor.reset();
+			try {
+				monitor.start();
+				await delivered;
+			} finally {
+				monitor.reset();
+			}
 			expect(getNetworkInterfaces().wlan0).toMatchObject({ enabled: true });
 			expect(bondedNames()).toEqual(["eth0"]);
 
@@ -326,17 +372,49 @@ describe("network.configure last effective uplink", () => {
 					}),
 				),
 			);
-			const parsed = frames.map((frame) => JSON.parse(frame));
 			expect(
-				parsed
-					.filter((frame) => "netif" in frame)
-					.map((frame) => frame.netif.eth0.enabled),
+				frames.flatMap((frame) => lastNetifEnabled([frame], "eth0") ?? []),
 			).toEqual([false, true]);
-			expect(parsed.filter((frame) => "result" in frame)).toEqual([
+			expect(replies(frames)).toEqual([
 				{ id: "off", result: applied("eth0", ETHERNET_IP, false) },
 				{ id: "on", result: applied("eth0", ETHERNET_IP, true) },
 			]);
 			expect(bondedNames()).toEqual(["eth0", "wlan0"]);
 		},
 	);
+
+	test("keeps main's write error when the config directory cannot be written", async () => {
+		installHuaweiIdentityResolver();
+		holdSharedLanPeer();
+		const saved = await readFile(configPath, "utf8");
+		await chmod(directory, 0o500);
+		try {
+			expect(() => accessSync(directory, constants.W_OK)).toThrow();
+			const frames = await disableThroughAdapter("eth0", ETHERNET_IP);
+			expect(frames).toHaveLength(1);
+			expect(frames[0]).toMatchObject({
+				id: "off",
+				error: {
+					code: "INTERNAL_ERROR",
+					message: expect.stringContaining("EACCES"),
+				},
+			});
+			expect(bondedNames()).toEqual([]);
+			expect(await readFile(configPath, "utf8")).toBe(saved);
+		} finally {
+			await chmod(directory, 0o700);
+		}
+	});
+
+	test("still refuses when only the config file is read-only, which the atomic save replaces", async () => {
+		installHuaweiIdentityResolver();
+		holdSharedLanPeer();
+		const saved = await readFile(configPath, "utf8");
+		await chmod(configPath, 0o444);
+		const frames = await disableThroughAdapter("eth0", ETHERNET_IP);
+		expect(frames).toEqual([DISABLE_NOTICE, { id: "off", result: REFUSED }]);
+		expect(bondedNames()).toEqual(["eth0"]);
+		expect(await readFile(configPath, "utf8")).toBe(saved);
+		expect(await readdir(directory)).toEqual(["config.json"]);
+	});
 });

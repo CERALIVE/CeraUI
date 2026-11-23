@@ -19,6 +19,7 @@ import type { AddonConfig, AddonState } from "@ceraui/rpc/schemas";
 
 import {
 	loadJsonConfig,
+	probeFileAtomicWriteSync,
 	writeFileAtomicSync,
 } from "../helpers/config-loader.ts";
 import {
@@ -105,17 +106,26 @@ export async function loadConfig() {
 	config.ssh_pass_hash = undefined;
 }
 
-export function saveConfig() {
+function serializedConfig(): string {
 	if (authorityFailure) throw authorityFailure;
 	const dataToSave: RuntimeConfig = {
 		...config,
 		password_hash: getPasswordHash(),
 		ssh_pass_hash: getSshPasswordHash(),
 	};
+	return JSON.stringify(dataToSave);
+}
+
+export function saveConfig() {
 	// Must stay sync: sync callers (setBitrate/setAutostart) depend on the write
 	// finishing before return. Atomic (temp+fsync+rename) so a crash mid-write
 	// can't corrupt config.json — add-on state lives here too (E3).
-	writeFileAtomicSync(configFile, JSON.stringify(dataToSave));
+	writeFileAtomicSync(configFile, serializedConfig());
+}
+
+/** Throws what `saveConfig()` would throw before replacing config.json. */
+export function probeSaveConfig(): void {
+	probeFileAtomicWriteSync(configFile, serializedConfig());
 }
 
 /** False until a strict load has succeeded; the boot owner retries until it does. */

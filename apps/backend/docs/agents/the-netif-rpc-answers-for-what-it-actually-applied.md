@@ -25,14 +25,21 @@ toggle riding alongside the address it was checking — so the operator was told
   admits, in the normal and the duplicate-IP branch alike. A raw-enabled peer
   that is opted out, gated (shared LAN, pending identity, concurrent AP) or
   unaddressed no longer keeps the bond up; disabling such a peer still works.
-  The real-device answer is resolved once at boot (`initLastUplinkGuard`,
-  awaited in `main.ts` before netif polling), so the check and the write stay
-  one synchronous step and overlapping requests apply in arrival order.
+  An addressed, eligible link counts even without a gateway: membership is not
+  route health. The guard only replaces a disable main would complete: when
+  the opt-out save would fail, a dry run of that save (`probeSaveConfig`,
+  stopping before the rename) lets main's path run on and return its error.
+  The real-device answer and the simulation selectors are read once at boot
+  (`initLastUplinkGuard`, awaited in `main.ts` before netif polling, the same
+  moment the network monitor is chosen), so the check and the write stay one
+  synchronous step and overlapping requests apply in arrival order.
   Development, mock mode, the scripted network monitor (`MOCK_SCENARIO`,
-  `NODE_ENV=test`) and the hwsim guest keep the raw-count guard alone. A
-  harness that sets the environment must call `initLastUplinkGuard()` after it,
-  as boot does. Not covered: a disable whose bond opt-out also lands on a peer
-  sharing the target's physical link id (an identity collision).
+  `NODE_ENV=test`) and the hwsim guest keep the raw-count guard alone, whether
+  selected at boot or set later; the device type is a startup selector, as for
+  uplink steering and shaping. A harness that sets the environment must call
+  `initLastUplinkGuard()` after it, as boot does. Not covered: a disable whose
+  bond opt-out also lands on a peer sharing the target's physical link id (an
+  identity collision), and a save that would fail only at its final rename.
 - **The five reasons are not collapsible.** `enable_refused` already carries an
   operator notification naming the blocking error; `disable_all_refused` is the
   device protecting its last link; `unknown_interface` clears when the link comes
