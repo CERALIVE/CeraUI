@@ -252,3 +252,42 @@ test("replacement markers cannot reintroduce a held value into an entry", async 
 	expect(text).not.toContain("fixture-secret");
 	expect(text).toEndWith("# complete: 1 entries\n");
 });
+
+test.each([
+	{
+		label: "pairing key in a path",
+		config: { pairing_secret: "Qk+9xZr/7mWq3Tz+Lp0aB8vN2cY4dHs6fJ1gK5uE+o0=" },
+		message: "GET /claim/Qk+9xZr%2F7mWq3Tz+Lp0aB8vN2cY4dHs6fJ1gK5uE+o0=",
+	},
+	{
+		label: "password plus between percent-escaped spaces",
+		config: { ssh_pass: "my pass+word 42" },
+		message: "p=my%20pass+word%2042",
+	},
+	{
+		label: "encodeURI with a literal plus and slash",
+		config: { remote_key: "Fx+pw 77/Lm-Q" },
+		message: "u=Fx+pw%2077/Lm-Q",
+	},
+	{
+		label: "encodeURI with a literal plus and escaped percent",
+		config: { remote_key: "Fx+pw%77Lm-Qz" },
+		message: "u=Fx+pw%2577Lm-Qz",
+	},
+])(
+	"redacts $label without treating the plus as a form space",
+	async ({ config, message }) => {
+		credentials.mockReturnValue(config);
+		fixture.scan.mockImplementation(
+			journal([
+				record(1, { MESSAGE: message }),
+				record(2, { MESSAGE: "unrelated log entry" }),
+			]),
+		);
+		const text = await (await openExport()).text();
+		expect(text).not.toContain(message);
+		expect(text).toContain("[REDACTED]");
+		expect(text).toContain("ceralive: unrelated log entry");
+		expect(text).toEndWith("# complete: 2 entries\n");
+	},
+);
