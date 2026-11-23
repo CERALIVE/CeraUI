@@ -25,11 +25,11 @@ function unwrapped(text: string): string {
 		.normalize("NFC");
 }
 
-function decoded(text: string): string {
+function decoded(text: string, formSpaces: boolean): string {
 	return text.replace(
 		/(?:%[\da-f]{2})+|\+|&(?:#(?:x[\da-f]+|\d+)|amp|lt|gt|quot|apos|nbsp);/gi,
 		(token) => {
-			if (token === "+") return " ";
+			if (token === "+") return formSpaces ? " " : token;
 			if (token.startsWith("%")) {
 				try {
 					return decodeURIComponent(token);
@@ -103,7 +103,9 @@ export function exportCredentialPolicy(): CredentialPolicy {
 		const matches = (text: string) =>
 			exact.known(text).redactions > 0 ||
 			canonical.known(unwrapped(text)).redactions > 0 ||
-			canonical.known(unwrapped(decoded(text))).redactions > 0;
+			canonical.known(unwrapped(decoded(text, false))).redactions > 0 ||
+			(text.includes("+") &&
+				canonical.known(unwrapped(decoded(text, true))).redactions > 0);
 		const known: KnownMatch = (text) => {
 			const result = exact.known(text);
 			if (!matches(result.text)) return result;
