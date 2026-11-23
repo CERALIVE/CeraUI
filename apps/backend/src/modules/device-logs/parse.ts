@@ -12,6 +12,11 @@ export type RawJournalRecord = LogEntry & {
 const objectSchema = z.record(z.string(), z.unknown());
 const eventMetaSchema = z.object({ event_id: z.string().min(1) });
 const MESSAGE_BYTES = 16 * 1024;
+// Only the export projection reads pre-cut text. It must never enter the RPC entry.
+const preCut = new WeakMap<
+	RawJournalRecord,
+	{ readonly unit: string | undefined; readonly message: string | undefined }
+>();
 const LEGACY_LEVELS: Readonly<Record<string, LogLevel>> = {
 	error: "error",
 	warn: "warning",
@@ -99,18 +104,13 @@ export function parseRecord(input: unknown): RawJournalRecord | null {
 			if (!(error instanceof SyntaxError)) throw error;
 		}
 	}
-	const bytes = new TextEncoder().encode(text);
-	if (bytes.byteLength > MESSAGE_BYTES) {
-		text = new TextDecoder().decode(bytes.subarray(0, MESSAGE_BYTES), {
-			stream: true,
-		});
-		truncated = true;
-	}
+	const clipped = clipJournalMessage(text);
+	truncated ||= clipped !== text;
 	const messageId = stringField(obj.MESSAGE_ID);
 	const rawPid = obj._PID;
 	const pid =
 		typeof rawPid === "string" && /^\d+$/.test(rawPid) ? Number(rawPid) : NaN;
-	return {
+	const record: RawJournalRecord = {
 		cursor,
 		ts,
 		bootId,
@@ -123,7 +123,7 @@ export function parseRecord(input: unknown): RawJournalRecord | null {
 						systemUnit ?? identifier ?? "",
 						systemUnit ? processSource : undefined,
 					),
-		message: text,
+		message: clipped,
 		truncated,
 		marker:
 			messageId === "a596d6fe7bfa4994828e72309e95d61e" ? "suppressed" : null,
@@ -132,6 +132,26 @@ export function parseRecord(input: unknown): RawJournalRecord | null {
 		pid: Number.isSafeInteger(pid) && pid > 0 ? pid : null,
 		...(eventId === undefined ? {} : { eventId }),
 	};
+	const rawUnit = systemUnit === `${unit}.service` ? systemUnit : undefined;
+	if (rawUnit || clipped !== text)
+		preCut.set(record, {
+			unit: rawUnit,
+			message: clipped === text ? undefined : text,
+		});
+	return record;
+}
+
+export function clipJournalMessage(text: string): string {
+	const bytes = new TextEncoder().encode(text);
+	return bytes.byteLength <= MESSAGE_BYTES
+		? text
+		: new TextDecoder().decode(bytes.subarray(0, MESSAGE_BYTES), {
+				stream: true,
+			});
+}
+
+export function journalTextBeforeCut(record: RawJournalRecord) {
+	return preCut.get(record);
 }
 
 export function toLogEntry(record: RawJournalRecord): LogEntry {
