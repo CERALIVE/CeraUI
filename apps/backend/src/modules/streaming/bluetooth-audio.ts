@@ -507,7 +507,9 @@ function defaultEngineSupportsPipewireCapture(): boolean {
  * Answers whether the published list CHANGED, so the caller can keep the audio
  * broadcast on its on-change cadence. Never throws.
  */
-export async function refreshBluetoothAudioSources(): Promise<boolean> {
+export async function refreshBluetoothAudioSources(
+	current: () => boolean = () => true,
+): Promise<boolean> {
 	const active = activeDeps();
 	const provider = await (active.readAudioProvider?.() ??
 		defaultReadAudioProvider());
@@ -551,13 +553,16 @@ export async function refreshBluetoothAudioSources(): Promise<boolean> {
 	}
 
 	if (JSON.stringify(next) === JSON.stringify(cachedSources)) return false;
+	if (!current()) return false;
 	cachedSources = next;
 	return true;
 }
 
-export async function refreshPipewireBluetoothAudioSourcesForEngineChange(): Promise<boolean> {
+export async function refreshPipewireBluetoothAudioSourcesForEngineChange(
+	current: () => boolean = () => true,
+): Promise<boolean> {
 	if (!activeDeps().engineSupportsPipewireCapture()) return false;
-	return refreshBluetoothAudioSources();
+	return refreshBluetoothAudioSources(current);
 }
 
 export function getBluetoothAudioSources(): readonly BluetoothAudioSource[] {

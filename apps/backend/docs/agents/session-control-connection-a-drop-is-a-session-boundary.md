@@ -42,9 +42,10 @@ minutes.
    a fresh `streaming.start` was inadmissible; forced through, an engine with no
    memory of the session answered an RPC error classified `engine_internal`.
 
-`engine-reconnect.ts` does NOT cover this: it SETTLES (`state.stopped = true`)
-once the engine is reachable at boot and never re-arms, and it heals the
-capability probe — a short-lived connection — not a session's dedicated one.
+`engine-reconnect.ts` does NOT cover this: it heals the capability probe — a
+short-lived connection — not a session's dedicated one. A proven session loss
+re-arms it (`deps.onEngineUnreachable`, after `onSessionConnectionLost`) so the
+capability snapshot the loss invalidated is refreshed once the engine is back.
 
 **The rule.** cerastream is systemd-owned (ADR-0005), so a dropped control
 connection means the process CeraUI was driving went away; a restarted engine has
@@ -55,7 +56,8 @@ the ONLY handle on the engine-side pipeline, so losing it retires the session.
 PROOF — a `CerastreamConnectionError` from the client we are STILL holding, for a
 session we still believe is `active`. An engine RPC error, a request timeout, a
 rejection from an already-superseded client, and our own `stop()`'s close (which
-clears `active` first) are all deliberately NOT proof.
+clears `active` first) are all deliberately NOT proof. A hung engine that keeps
+its socket open is ended by its own watchdog within 90 s; that close is the proof.
 
 | Concern | Rule |
 |---------|------|
@@ -65,8 +67,15 @@ clears `active` first) are all deliberately NOT proof.
 | `active` | Deliberately LEFT SET, so `stop()` still recognises the session it must tear down — clearing it makes `stop()` return `false` and trips `reportSessionInvariant`. |
 | Reaction | `deps.onSessionConnectionLost(site)`. Production wiring raises the EXISTING `engine-crashed` lifecycle indicator (before the stop, since the reporter is gated on `isStreaming`), then retires the session via `stopStreamSession()` — its single owner. Fire-and-forget: it runs inside a rejected RPC's catch and must never replace the caller's error. |
 
-Net effect: the board lands in a real `idle` and the next `streaming.start` dials
-a fresh connection and succeeds — no `ceralive.service` restart.
+Net effect, when the retirement's Stop is acknowledged: the board lands in a real
+`idle` and the next `streaming.start` dials a fresh connection and succeeds — no
+`ceralive.service` restart. When the engine is still gone, that Stop fails and the
+session stays `stop_failed`. Restoration's reconcile adopts the restarted engine's
+idle if it answers within restoration's window; otherwise the session stays
+unconfirmed (`stop_failed`, or `reconciling` once that window lapses): Start is
+refused and the Live view offers the operator's Stop, whose acknowledged result
+re-admits Start. The engine-reconnect re-arm only republishes availability and does
+not clear this state.
 
 **STOP uses a second connection, and success means engine Idle.** The IPC server
 dispatches at most one request per connection. Reusing the session client for

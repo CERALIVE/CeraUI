@@ -82,6 +82,13 @@ export type StartRetryRunDeps = {
 	readonly suppressionContext?: () => SuppressionContext;
 	readonly reportRetry?: (diagnostic: StartRetryDiagnostic) => void;
 	readonly reportTerminalFailure?: (diagnostic: StartRetryDiagnostic) => void;
+	/**
+	 * A launch could not reach the engine at all (`engine_unavailable`). Every
+	 * start origin passes through here, and a cancelled attempt (an operator
+	 * Stop closing a pending Start) returns before it, so this is exactly the
+	 * evidence that the engine went away while no session held a connection.
+	 */
+	readonly onEngineUnavailable?: () => void;
 };
 
 const NO_SUPPRESSION: SuppressionContext = {
@@ -274,6 +281,13 @@ export async function runStartWithRetry(
 				error instanceof StreamStartFailure
 					? error.failure
 					: deps.classifyUnknown(error);
+			if (classified.class === "engine_unavailable") {
+				try {
+					deps.onEngineUnavailable?.();
+				} catch {
+					// Reconnect bookkeeping must not change the start's outcome.
+				}
+			}
 			const liveness =
 				launch.result === "timed_out" && !launch.observeRuntime
 					? "idle"

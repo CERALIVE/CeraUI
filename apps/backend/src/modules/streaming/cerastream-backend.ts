@@ -255,6 +255,10 @@ export interface CerastreamBackendDeps {
 	// Called at most ONCE per session, when the session's control connection is
 	// PROVEN dead (see the module header). `site` names the call that found it.
 	onSessionConnectionLost: (site: string) => void;
+	// Called once per proven loss of the session's control connection, after
+	// `onSessionConnectionLost`, so the reconnect loop keeps asking the engine
+	// until it answers again. Defaults to re-arming the engine reconnect loop.
+	onEngineUnreachable?: (site: string) => void;
 	onConfigChangePhase?: (event: {
 		attemptId: string;
 		phase: ConfigChangePhase;
@@ -594,11 +598,11 @@ function defaultOnSessionConnectionLost(
 				"cerastream: engine session retired after a control-connection loss",
 				{ site },
 			);
-			// The engine-loss retirement IS the reconnect event for a SIGKILLed
-			// engine: the reconnect loop settled at boot and never re-arms, so
-			// nothing else notices systemd bringing cerastream back. The run polls
-			// for an authoritative runtime state and is self-serialising, so a
-			// second loss cannot start a second one.
+			// The engine-loss retirement is the restoration trigger for a SIGKILLed
+			// engine: the reconnect loop this loss re-arms only republishes engine
+			// availability and never restores. The run polls for an authoritative
+			// runtime state and is self-serialising, so a second loss cannot start
+			// a second one.
 			const { runStreamRestoration } = await import("./stream-restoration.ts");
 			if (current()) void runStreamRestoration();
 		} catch (err) {
@@ -608,6 +612,22 @@ function defaultOnSessionConnectionLost(
 			);
 		}
 	})();
+}
+
+/**
+ * Keep asking the engine after a proven loss, so the capability snapshot the
+ * loss invalidated is refreshed (and broadcast) once systemd brings it back.
+ * Resolves once the reconnect loop has been told (test seam).
+ */
+export function defaultOnEngineUnreachable(site: string): Promise<void> {
+	return import("./engine-reconnect.ts")
+		.then(({ rearmEngineReconnect }) => rearmEngineReconnect(site))
+		.catch((err) => {
+			defaultLogger.error("cerastream: could not re-arm the engine reconnect", {
+				site,
+				err,
+			});
+		});
 }
 
 function defaultCerastreamBackendDeps(
@@ -1816,6 +1836,8 @@ export class CerastreamBackend implements StreamingBackend {
 		this.telemetry = null;
 		this.deps.bridge.broadcastStatus();
 		this.deps.onSessionConnectionLost(site);
+		// The production binding unless a test injects its own.
+		void (this.deps.onEngineUnreachable ?? defaultOnEngineUnreachable)(site);
 	}
 
 	/**
