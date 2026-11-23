@@ -64,6 +64,37 @@ async function swipe(session: CDPSession, { x, y }: { x: number; y: number }, di
 	await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
 }
 
+for (const size of [{ width: 390, height: 260 }, { width: 360, height: 240 }, { width: 412, height: 300 }]) {
+	test(`Raw Time keeps the first option readable and tappable at ${size.width}×${size.height} @mobile-only`, async ({ page }) => {
+		const logs = new SystemLogsPage(page);
+		await logs.open({ locale: 'en', size, touch: false, scheme: 'light' });
+		await logs.show('raw');
+		await page.getByTestId('raw-filters-toggle').tap();
+		const time = page.getByTestId('raw-time');
+		const menu = page.getByRole('listbox');
+		const first = menu.getByRole('option', { name: 'This boot', exact: true });
+		const reachFirst = async () => {
+			await expect(first).toBeAttached();
+			await logs.settle();
+			const target = await region(first);
+			expect(target.boxHeight).toBeGreaterThanOrEqual(44);
+			expect(target.visible, 'the first option must be fully visible without browser auto-scrolling').toBe(target.boxHeight);
+			expect(target.hit).toBe(true);
+			await page.touchscreen.tap(target.x, target.y);
+			await expect(menu).toHaveCount(0);
+		};
+
+		await time.tap();
+		await reachFirst();
+		await time.tap();
+		await menu.getByRole('option', { name: 'Last 15 minutes', exact: true }).tap();
+		await expect(time).toHaveText('Last 15 minutes');
+		await time.tap();
+		await reachFirst();
+		await expect(time).toHaveText('This boot');
+	});
+}
+
 test('Raw results stay visible on a second short resize after using Time @mobile-only', async ({ page }, info) => {
 	const logs = new SystemLogsPage(page);
 	await logs.open({ locale: 'en', size: OPENING, touch: false, scheme: 'light' });
