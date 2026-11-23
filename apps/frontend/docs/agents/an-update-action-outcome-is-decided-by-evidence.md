@@ -181,8 +181,29 @@ says only a cellular connection exists (early oracle F5).
 The withheld-packages band is headed **Not included in this update**. A row
 says "Ships with the next OS image" only for `layer: platform` (the wire
 schema's documented meaning of that layer) and "Held back by the system" only
-for `kept_back`; `actionable: false` alone adds nothing. A progress frame whose
-total is unknown renders an indeterminate bar, never 100 % (early oracle F7).
+for `kept_back`; `actionable: false` alone adds nothing. The named package
+progress bar is indeterminate until the frame carries APT's own `percent`
+for the phase shown (early oracle F7); the phase markers alone never produce a
+number. Both the overlay and the inline bar show that percentage, never
+counted steps; the inline bar names the phase because APT restarts its
+percentage for the install. Only a terminal `result: 0` shows 100%.
+
+An install the tab showed that ends with no result the device reported (CeraUI
+restarted under it) holds its phase without a number while the tab asks
+`system.updateOutcome` with the vector the install's own frames carried
+(`updating.targets`, latched from the first frame of the run that carries one,
+never the mutable offer). It announces **Packages installed** (never the
+observed exit's **Successfully Updated**) with "The device now has this
+update's versions installed. CeraUI did not see the update finish." only when
+the device reads that vector as installed, and otherwise
+**Outcome not confirmed**; the fixed-name unit's failed exit is shown only as
+an unattributed hint under it, never **Update Failed**. Only the answer to the
+latest question counts: every running frame and every new question makes
+earlier answers stale. A frame with another `updating.run` (the run's start,
+sent by the process that started it) is a new run, a targetless first frame
+and a same-vector retry included: the hold, the live-number guard and the
+vector start over. Frames without `run` (a recovered unit) continue the held
+run (`Layout.updating-overlay.test.ts`).
 
 ### A terminal install releases the takeover [EXISTS]
 

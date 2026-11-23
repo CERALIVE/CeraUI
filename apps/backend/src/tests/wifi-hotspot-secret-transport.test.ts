@@ -5,7 +5,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as exec from "../helpers/exec.ts";
 import * as runner from "../helpers/run.ts";
-import { nmConnSetFields } from "../modules/network/network-manager.ts";
+import {
+	nmConnDelete,
+	nmConnect,
+	nmConnSetFields,
+	nmDeviceProp,
+	nmDevices,
+	nmDisconnect,
+} from "../modules/network/network-manager.ts";
 import { prepareHotspotForInterface } from "../modules/wifi/wifi-hotspot-activation.ts";
 import {
 	defaultHotspotConfigDeps,
@@ -16,6 +23,62 @@ import { statusClient } from "./helpers/status-client.ts";
 import { firstAp } from "./helpers/wifi-first-ap-fixture.ts";
 
 const stdinRunner = runner.runWithStdin;
+
+test.each([
+	["nmDevices", () => nmDevices("device,type")],
+	["nmDeviceProp", () => nmDeviceProp("wlan0", "GENERAL.CONNECTION")],
+	["nmDeviceProp", () => nmDeviceProp("wlan0", "GENERAL.TEST-INVALID")],
+] as const)(
+	"failed %s does not log private device diagnostics",
+	async (name, invoke) => {
+		const f = await firstAp();
+		try {
+			const ssid = "private-device-ssid-sentinel";
+			const password = "private-device-psk-sentinel";
+			const stderr = `invalid field: ${ssid} ${password}`;
+			spyOn(exec, "execFileP").mockRejectedValue(
+				Object.assign(new Error(stderr), { code: 2, stderr }),
+			);
+			expect(await invoke()).toBeUndefined();
+			expect(f.logs.some((line) => line.includes(name))).toBe(true);
+			expect(f.logs.join("\n")).not.toContain(ssid);
+			expect(f.logs.join("\n")).not.toContain(password);
+		} finally {
+			await f.restore();
+		}
+	},
+);
+
+test.each([
+	["nmConnect", "up", nmConnect],
+	["nmDisconnect", "down", nmDisconnect],
+	["nmConnDelete", "del", nmConnDelete],
+] as const)(
+	"failed %s never logs credentials echoed by nmcli",
+	async (name, verb, command) => {
+		const f = await firstAp();
+		const ssid = "activation-private-ssid";
+		const password = "activation-private-passphrase";
+		try {
+			const stderr = `Cannot activate ${ssid}; rejected passphrase ${password}`;
+			const child = spyOn(exec, "execFileP").mockRejectedValue(
+				Object.assign(new Error(stderr), { code: 4, stderr }),
+			);
+			expect(await command("saved-ap")).toBe(false);
+			expect(child).toHaveBeenCalledWith(
+				"nmcli",
+				["conn", verb, "saved-ap"],
+				expect.anything(),
+			);
+			expect(f.logs.some((line) => line.includes(name))).toBe(true);
+			expect(
+				f.logs.some((line) => line.includes(ssid) || line.includes(password)),
+			).toBe(false);
+		} finally {
+			await f.restore();
+		}
+	},
+);
 
 test("first AP persists its credential without exposing it in any process argv", async () => {
 	const f = await firstAp();
@@ -32,6 +95,7 @@ test("first AP persists its credential without exposing it in any process argv",
 			f.commands.some((args) => args.some((arg) => arg.includes(f.secret))),
 		).toBe(false);
 		expect(f.logs.some((message) => message.includes(f.secret))).toBe(false);
+		expect(f.logs.some((message) => message.includes("First AP"))).toBe(false);
 	} finally {
 		await f.restore();
 	}
@@ -71,11 +135,46 @@ process.stdout.write(encodeProfile(fields));
 			observations.every((value) => value.argvClean && value.environmentClean),
 		).toBe(true);
 		expect(f.logs.some((message) => message.includes(f.secret))).toBe(false);
+
+		const uuid = f.created();
+		if (!uuid) throw new Error("Missing saved AP");
+		const ssid = "Private saved SSID via stdin";
+		const password = `${f.secret}-private-update`;
+		expect(
+			await nmConnSetFields(uuid, {
+				"802-11-wireless.ssid": ssid,
+				"802-11-wireless-security.psk": password,
+			}),
+		).toBe(true);
+		expect(f.settings.get(uuid)?.["802-11-wireless.ssid"]).toBe(ssid);
+		expect(
+			f.logs.some((line) => line.includes(ssid) || line.includes(password)),
+		).toBe(false);
 	} finally {
 		if (path === undefined) delete process.env.PATH;
 		else process.env.PATH = path;
 		await f.restore();
 		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("an SSID-only profile update does not log the submitted SSID", async () => {
+	const f = await firstAp();
+	const ssid = "Synthetic private SSID";
+	try {
+		expect((await f.start()).success).toBe(true);
+		const uuid = f.created();
+		if (!uuid) throw new Error("Missing saved AP");
+		f.logs.length = 0;
+		expect(await nmConnSetFields(uuid, { "802-11-wireless.ssid": ssid })).toBe(
+			true,
+		);
+		expect(f.settings.get(uuid)?.["802-11-wireless.ssid"]).toBe(ssid);
+		expect(
+			f.logs.some((line) => line.includes(ssid) || line.includes(f.secret)),
+		).toBe(false);
+	} finally {
+		await f.restore();
 	}
 });
 
@@ -258,6 +357,7 @@ test("the shared profile update keeps a replacement credential out of argv", asy
 			f.commands.some((args) => args.some((arg) => arg.includes(next))),
 		).toBe(false);
 		expect(f.logs.some((message) => message.includes(next))).toBe(false);
+		expect(f.logs.some((message) => message.includes("Saved AP"))).toBe(false);
 	} finally {
 		await f.restore();
 	}

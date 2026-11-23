@@ -12,9 +12,12 @@
  *      Connections card (network row) and the Live bar with Start.
  *   4. A collapsed "Roadmap" `<details>` disclosure of calm not-yet-available pills.
  *
- * From 1024 px the desk is the wider inline-start column and 2-4 stack in the
- * other; below that everything is one column in the order above. The Live bar is
- * fixed to the viewport bottom, so the root reserves its height at the end.
+ * From 1024 px the page is two balanced columns: the desk, then the stream setup
+ * and the roadmap, fill the wider inline-start column, and the source card (with
+ * its audio) is the panel beside them. Grid placement does the moving, so the DOM
+ * (and with it the reading and Tab order) keeps the order above; below 1024 px
+ * everything is one column in that order. The Live bar is fixed to the viewport
+ * bottom, so the root reserves its height at the end.
  *
  * The Start control is mounted EXACTLY ONCE — inside the Live bar of
  * {@link StreamSetupChain}. IdleCockpit does NOT mount its own StreamControlButton
@@ -65,14 +68,12 @@ interface Props {
 	isStreaming: boolean;
 	optimismState: StreamingOptimismState;
 	destinationValidated?: boolean;
-	maxBitrate?: number;
 	// ── StreamSetupChain: actions (callbacks owned by LiveView) ────────────────
 	onStart: (overrides: { source?: string }) => void;
 	onStop: () => void;
 	/** Source-gate fix + sole-camera "Change" — LiveView scrolls/focuses the list. */
 	onOpenSource: () => void;
 	onGoNetwork: () => void;
-	onOpenEncoder: () => void;
 	// ── SourceSection: unified device-first source list + audio (Task 13) ──────
 	// The live input switch (streaming-only capture-row affordance) still routes
 	// through LiveView; SourceSection forwards it on its capture rows.
@@ -109,12 +110,10 @@ const {
 	isStreaming,
 	optimismState,
 	destinationValidated,
-	maxBitrate,
 	onStart,
 	onStop,
 	onOpenSource,
 	onGoNetwork,
-	onOpenEncoder,
 	activeInput,
 	switchingInput,
 	onSwitch,
@@ -158,13 +157,16 @@ const audioEmbeddedComingSoon = $derived(
      becomes conditional. The measured 24px is unchanged — mechanism, not value.
      `pb-(--live-bar-height)`: the fixed Live bar publishes its own height, so the
      last block always scrolls clear of it. -->
+<!-- From 1024 px: rows `auto auto 1fr`, so the desk and the stream setup keep
+     their own heights and the source card, spanning all three, never stretches
+     the gap between them. -->
 <div
-	class="flex flex-col gap-6 pb-(--live-bar-height) lg:grid lg:grid-cols-5 lg:items-start"
+	class="flex flex-col gap-6 pb-(--live-bar-height) lg:grid lg:grid-cols-5 lg:grid-rows-[auto_auto_1fr] lg:items-start"
 	data-testid="idle-cockpit"
 >
 	<!-- The picture leads. PreviewCanvas watches the APPLIED config.source and
 	     redials on a confirmed source change. -->
-	<ProgramDesk class="lg:col-span-3" placement={canPlace ? config?.composition : undefined}>
+	<ProgramDesk class="lg:col-span-3 lg:col-start-1 lg:row-start-1" placement={canPlace ? config?.composition : undefined}>
 		<!-- Composition: mounted ONLY while the engine advertises the feature, so a
 		     board that cannot compose renders no node at all rather than a disabled
 		     card. The stale-config notice is its counterpart on the absent branch. -->
@@ -195,7 +197,7 @@ const audioEmbeddedComingSoon = $derived(
 		{/if}
 	</ProgramDesk>
 
-	<div class="flex min-w-0 flex-col gap-6 lg:col-span-2">
+	<div class="min-w-0 lg:col-span-2 lg:col-start-4 lg:row-span-3 lg:row-start-1">
 		<SourceSection
 			{activeEncode}
 			{activeInput}
@@ -213,9 +215,11 @@ const audioEmbeddedComingSoon = $derived(
 			{sources}
 			{switchingInput}
 		/>
+	</div>
 
-		<!-- Stream setup: the Output and Connections cards + the Live bar with Start
-		     (StreamControlButton is mounted ONCE here, never a second time — T10). -->
+	<!-- Stream setup: the Output and Connections cards + the Live bar with Start
+	     (StreamControlButton is mounted ONCE here, never a second time — T10). -->
+	<div class="min-w-0 lg:col-span-3 lg:col-start-1 lg:row-start-2">
 		<StreamSetupChain
 			{config}
 			{caps}
@@ -230,48 +234,49 @@ const audioEmbeddedComingSoon = $derived(
 			{isStreaming}
 			{optimismState}
 			{destinationValidated}
-			{maxBitrate}
 			{onStart}
 			{onStop}
 			{onOpenSource}
 			{onGoNetwork}
-			{onOpenEncoder}
 		/>
+	</div>
 
-		<!--
-			Roadmap disclosure (T12) — genuine future features surfaced as calm, purely
-			informational pills (NOT the disabled-with-reason warning treatment),
-			collapsed by default at the very bottom of the idle cockpit. Each ComingSoon
-			renders a dynamic data-debt-id into the DOM for tests; the static bindings the
-			CI gate (scripts/check-tech-debt.mjs) verifies live in the literal ids in the
-			comments beside each call site.
-			roadmap: data-debt-id="TD-mode-fallback"
-		-->
-		<details class="bg-muted/30 rounded-xl border" data-testid="live-roadmap">
-			<summary
-				class="text-muted-foreground cursor-pointer list-none px-4 py-3 text-sm font-medium select-none"
-			>
-				{m["live.comingSoon.roadmap"]()}
-			</summary>
-			<div class="flex flex-col gap-2.5 px-4 pb-4">
+	<!--
+		Roadmap disclosure (T12) — genuine future features surfaced as calm, purely
+		informational pills (NOT the disabled-with-reason warning treatment),
+		collapsed by default at the very bottom of the idle cockpit. Each ComingSoon
+		renders a dynamic data-debt-id into the DOM for tests; the static bindings the
+		CI gate (scripts/check-tech-debt.mjs) verifies live in the literal ids in the
+		comments beside each call site.
+		roadmap: data-debt-id="TD-mode-fallback"
+	-->
+	<details
+		class="bg-muted/30 rounded-xl border lg:col-span-3 lg:col-start-1 lg:row-start-3"
+		data-testid="live-roadmap"
+	>
+		<summary
+			class="text-muted-foreground cursor-pointer list-none px-4 py-3 text-sm font-medium select-none"
+		>
+			{m["live.comingSoon.roadmap"]()}
+		</summary>
+		<div class="flex flex-col gap-2.5 px-4 pb-4">
+			<div class="flex items-center justify-between gap-3">
+				<span class="text-muted-foreground flex items-center gap-2 text-sm">
+					<Shuffle aria-hidden={true} class="size-4 shrink-0" />
+					{m["live.comingSoon.modeFallback"]()}
+				</span>
+				<ComingSoon debtId="TD-mode-fallback" />
+			</div>
+			{#if audioEmbeddedComingSoon}
 				<div class="flex items-center justify-between gap-3">
 					<span class="text-muted-foreground flex items-center gap-2 text-sm">
-						<Shuffle aria-hidden={true} class="size-4 shrink-0" />
-						{m["live.comingSoon.modeFallback"]()}
+						<Volume2 aria-hidden={true} class="size-4 shrink-0" />
+						{m["live.comingSoon.embeddedAudio"]()}
 					</span>
-					<ComingSoon debtId="TD-mode-fallback" />
+					<!-- CI gate static marker (component renders data-debt-id dynamically): data-debt-id="TD-embedded-audio" -->
+					<ComingSoon debtId="TD-embedded-audio" label={m["live.comingSoon.embeddedAudio"]()} />
 				</div>
-				{#if audioEmbeddedComingSoon}
-					<div class="flex items-center justify-between gap-3">
-						<span class="text-muted-foreground flex items-center gap-2 text-sm">
-							<Volume2 aria-hidden={true} class="size-4 shrink-0" />
-							{m["live.comingSoon.embeddedAudio"]()}
-						</span>
-						<!-- CI gate static marker (component renders data-debt-id dynamically): data-debt-id="TD-embedded-audio" -->
-						<ComingSoon debtId="TD-embedded-audio" label={m["live.comingSoon.embeddedAudio"]()} />
-					</div>
-				{/if}
-			</div>
-		</details>
-	</div>
+			{/if}
+		</div>
+	</details>
 </div>

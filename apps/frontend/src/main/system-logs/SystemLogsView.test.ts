@@ -44,7 +44,22 @@ vi.mock("$lib/rpc/subscriptions.svelte", async () => ({
 	)),
 	setLogFollowListener: vi.fn(),
 }));
-vi.mock("$lib/helpers/SystemHelper", () => ({ getDeviceLog, getSystemLog }));
+vi.mock("$lib/helpers/SystemHelper", async () => {
+	const { deliverLegacyLog } = await import(
+		"$lib/device-logs/download-gate.svelte"
+	);
+	// A device that answers a successful request after pushing its file, as the real one does.
+	const answering =
+		(ask: (request?: string) => unknown, name: string) =>
+		async (request?: string) => {
+			await ask(request);
+			deliverLegacyLog({ name, contents: "log", request });
+		};
+	return {
+		getDeviceLog: answering(getDeviceLog, "ceralive.service_log.txt"),
+		getSystemLog: answering(getSystemLog, "ceralive_system_log.txt"),
+	};
+});
 vi.mock(
 	"@ceraui/i18n/svelte",
 	async (
@@ -81,6 +96,11 @@ beforeEach(() => {
 	ensureNamespaces.mockResolvedValue(undefined);
 	getDeviceLog.mockReset();
 	getSystemLog.mockReset();
+	vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+	Object.assign(URL, {
+		createObjectURL: vi.fn(() => "blob:log"),
+		revokeObjectURL: vi.fn(),
+	});
 });
 
 afterEach(() => {
@@ -116,10 +136,10 @@ const FILES_ORDER = [
 	"log-download-device outline",
 	"log-download-system outline",
 ];
-// Lime fills only the bundle, the region's primary action (DESIGN.md IH-5).
+// Lime fills only the logs toolbar's Export logs, so every Downloads action is outline (DESIGN.md IH-5).
 const READY_ORDER = [
 	`H3 ${en.systemLogs.sharing.heading}`,
-	"sharing-open-bundle default",
+	"sharing-open-bundle outline",
 	"sharing-open-export outline",
 	...FILES_ORDER,
 ];

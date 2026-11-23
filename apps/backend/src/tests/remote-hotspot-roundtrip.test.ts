@@ -8,6 +8,7 @@ import {
 	wifiInterfaceSchema,
 } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
+import * as nm from "../modules/network/network-manager.ts";
 import {
 	PROTOCOL_VERSION,
 	StatusSchema,
@@ -19,6 +20,7 @@ import {
 } from "../modules/remote-control/status-relay.ts";
 import { wifiBuildMsg } from "../modules/wifi/wifi.ts";
 import { defaultHotspotConfigDeps } from "../modules/wifi/wifi-hotspot-config.ts";
+import { wifiRadioIdentity } from "../modules/wifi/wifi-radio-identity.ts";
 import { hotspotConfigureProcedure } from "../rpc/procedures/wifi.procedure.ts";
 import { object } from "./helpers/remote-privacy-cases.ts";
 import { wifiFrameFixture } from "./helpers/wifi-frame-fixture.ts";
@@ -53,6 +55,26 @@ test("remote status exposes the live hotspot password and a new password reaches
 		});
 		const profile = join(scratch, "nm-hotspot.json");
 		const identity = join(scratch, "hotspot-identity.json");
+		const radio = wifiRadioIdentity.state.rows.get(fixture.row.ifname);
+		if (!radio?.permanentMac || !radio.devicePath)
+			throw new Error("Missing verified radio pins");
+		const readFields = nm.nmConnGetFields;
+		spyOn(nm, "nmConnGetFields").mockImplementation(
+			<Fields extends readonly string[]>(uuid: string, fields: Fields) =>
+				uuid === fixture.row.hotspot.conn &&
+				fields.includes("match.path") &&
+				fields.length === 3
+					? Promise.resolve(
+							fields.map((field) =>
+								field === "match.path"
+									? (radio.devicePath ?? "")
+									: field === "802-11-wireless.mac-address"
+										? (radio.permanentMac ?? "")
+										: "",
+							) as { [K in keyof Fields]: string },
+						)
+					: readFields(uuid, fields),
+		);
 		spyOn(defaultHotspotConfigDeps, "getCapabilities").mockReturnValue(
 			undefined,
 		);

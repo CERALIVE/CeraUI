@@ -23,11 +23,12 @@ set -euo pipefail
 # The replay must work on runners without /usr/bin/nmcli installed.
 nmcli_fixture="$1/nmcli"
 function /usr/bin/nmcli() { "$nmcli_fixture" "$@"; }
-source "$2/guest-versions.sh"
+source "$2/guest-versions.sh" 1.4.4
 `,
 	);
 	expect(result.code).toBe(0);
 	expect(result.stderr).toBe('');
+	expect(result.stdout).toContain('HWSIM-VERSION: bun exit=0 passed=1');
 	expect(result.stdout).toContain('HWSIM-VERSION: hostapd exit=1 passed=1');
 });
 

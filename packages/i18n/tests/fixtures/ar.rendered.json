@@ -27,6 +27,7 @@
 	"advanced.download": "تنزيل",
 	"advanced.downloadDeviceLog": "تنزيل سجل CeraLive",
 	"advanced.downloadFailed": "تعذّر تنزيل السجل. تحقق من الاتصال وحاول مرة أخرى.",
+	"advanced.downloadLocked": "لا يزال بانتظار رد الجهاز على طلب سجل سابق. أعد الاتصال أو أعد تحميل الصفحة للمحاولة مرة أخرى.",
 	"advanced.downloadSystemLog": "تنزيل سجل النظام",
 	"advanced.downloading": "جارٍ التنزيل…",
 	"advanced.hidePassword": "إخفاء كلمة المرور",

@@ -208,7 +208,7 @@ export function auditSystemLogs(input: AuditInput): AuditResult {
 			const w = hit.right - hit.left;
 			const h = hit.bottom - hit.top;
 			targets.push({ name: name(el), width: w, height: h });
-			if (w < 43.5 || h < 43.5) found.push(`target ${name(el)} is ${w.toFixed(1)} x ${h.toFixed(1)} px, under 44 x 44`);
+			if (w < 44 || h < 44) found.push(`target ${name(el)} is ${w.toFixed(1)} x ${h.toFixed(1)} px, under 44 x 44`);
 		}
 		const entries = [...hits];
 		for (let i = 0; i < entries.length; i++) {

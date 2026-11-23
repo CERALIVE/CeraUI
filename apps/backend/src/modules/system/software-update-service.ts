@@ -113,6 +113,8 @@ export function buildDetachedAptUpgradeCommand(
 		"--quiet",
 		"--service-type=exec",
 		"--expand-environment=no",
+		// Progress is read from APT's and dpkg's own lines: keep them untranslated.
+		"--setenv=LC_ALL=C",
 		`--property=StandardOutput=append:${outputPaths.stdout}`,
 		`--property=StandardError=append:${outputPaths.stderr}`,
 		"--",
@@ -148,6 +150,8 @@ export function buildDetachedAptAllCommand(
 		"--quiet",
 		"--service-type=exec",
 		"--expand-environment=no",
+		// Progress is read from APT's and dpkg's own lines: keep them untranslated.
+		"--setenv=LC_ALL=C",
 		`--property=StandardOutput=append:${outputPaths.stdout}`,
 		`--property=StandardError=append:${outputPaths.stderr}`,
 		"--",
@@ -198,7 +202,17 @@ async function inspectService(): Promise<DetachedAptServiceState> {
 	return state;
 }
 
+let detachedAptServiceDepsForTest: DetachedAptServiceDeps | null = null;
+
+/** Tests running real backend processes give them a unit that outlives each one. */
+export function setDetachedAptServiceDepsForTest(
+	deps: DetachedAptServiceDeps | null,
+): void {
+	detachedAptServiceDepsForTest = deps;
+}
+
 export function defaultDetachedAptServiceDeps(): DetachedAptServiceDeps {
+	if (detachedAptServiceDepsForTest) return detachedAptServiceDepsForTest;
 	const paths = softwareUpdateOutputPaths();
 	return {
 		outputPaths: paths,

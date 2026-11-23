@@ -93,10 +93,12 @@ async function main() {
 								Object.defineProperty(radioIdentityReaders, "readText", { value: changed });
 								return up;
 							},
-							nmDisconnect: async (id, activePath) => {
+							nmDisconnect: async (id, activePath, runId, ifname) => {
 								assert.equal(id, uuid);
 								assert(activePath, "Native Up did not return an active path");
-								stoppedUp = await defaultHotspotDeps.nmDisconnect(id, activePath);
+								assert(runId, "Native Up did not bind the daemon run");
+								assert.equal(ifname, a);
+								stoppedUp = await defaultHotspotDeps.nmDisconnect(id, activePath, runId, ifname);
 								return stoppedUp;
 							},
 						},

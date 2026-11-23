@@ -2,8 +2,11 @@
  * Notifications ORPC Contract
  */
 import { oc } from '@orpc/contract';
-import { z } from 'zod';
-import { notificationsMessageSchema, successResponseSchema } from '../schemas';
+import {
+	notificationDismissInputSchema,
+	notificationsMessageSchema,
+	successResponseSchema,
+} from '../schemas';
 
 export const notificationsContract = oc.router({
 	/**
@@ -14,7 +17,7 @@ export const notificationsContract = oc.router({
 	/**
 	 * Dismiss a notification
 	 */
-	dismiss: oc.input(z.object({ name: z.string() })).output(successResponseSchema),
+	dismiss: oc.input(notificationDismissInputSchema).output(successResponseSchema),
 
 	/**
 	 * Subscribe to notifications

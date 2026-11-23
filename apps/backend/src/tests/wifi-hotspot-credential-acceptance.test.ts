@@ -33,9 +33,20 @@ for (const entry of ["prepare", "start", "prepare-start"] as const) {
 				const uuid = f.created();
 				if (!uuid) throw new Error("Missing existing native-shaped AP");
 				const bytes = await readFile(f.nm.files.filename(uuid));
-				await writeFile(path, JSON.stringify({ version: 2, adapters: {} }), {
-					mode: 0o600,
-				});
+				await writeFile(
+					path,
+					JSON.stringify({
+						version: 2,
+						adapters: {
+							[MAC]: {
+								ssid: "First AP",
+								password: stale,
+								previousConns: [uuid],
+							},
+						},
+					}),
+					{ mode: 0o600 },
+				);
 				await initHotspotCredentials(path);
 				f.deps.credentials = hotspotCredentialsStore;
 				f.deps.findHotspotConn = findHotspotConnForAdapter;

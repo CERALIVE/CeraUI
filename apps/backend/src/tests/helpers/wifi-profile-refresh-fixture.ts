@@ -1,16 +1,21 @@
 import { spyOn } from "bun:test";
 import * as runner from "../../helpers/run.ts";
+import { rememberHotspotCredentials } from "../../modules/wifi/hotspot-credentials.ts";
 import {
 	ownsWifiAdapterLock,
 	wifiAdapterLockKey,
 } from "../../modules/wifi/wifi-adapter-lock.ts";
 import { nmcliFieldNames, nmcliFieldOutput } from "./nmcli-field-output.ts";
+import { firstApInstances } from "./wifi-first-ap-instances.ts";
+import { decodeProfile, encodeProfile } from "./wifi-first-ap-keyfile-codec.ts";
 import { wifiFrameFixture } from "./wifi-frame-fixture.ts";
 
-export async function profileRefreshFixture() {
+export async function profileRefreshFixture(
+	uuid = "observed-ap",
+	overrides: Readonly<Record<string, string>> = {},
+) {
 	const frame = await wifiFrameFixture(false);
 	const mac = "dc:a6:32:aa:bb:c0";
-	const uuid = "observed-ap";
 	const fields: Record<string, string> = {
 		"connection.interface-name": "wlan0",
 		"connection.autoconnect": "yes",
@@ -29,18 +34,23 @@ export async function profileRefreshFixture() {
 		"802-11-wireless-security.pmf": "1",
 		"ipv4.method": "shared",
 		"ipv6.method": "ignore",
+		...overrides,
 	};
 	const writes: {
 		readonly uuid: string;
 		readonly fields: Record<string, string>;
 		readonly ownsLock: boolean;
 	}[] = [];
+	const instances = firstApInstances(
+		new Set([uuid]),
+		new Map([[uuid, fields]]),
+	);
+	let beforeWrite:
+		| ((fields: Readonly<Record<string, string>>) => Promise<void>)
+		| undefined;
 	spyOn(runner, "run").mockImplementation(async (command, args) => {
-		if (command === "busctl") {
-			return args.includes("GetId")
-				? 's "0123456789abcdef0123456789abcdef"'
-				: 's ":1.42"';
-		}
+		instances.sync();
+		if (command === "busctl") return instances.busReply(args);
 		if (command !== "nmcli")
 			throw new Error(`Unexpected profile-refresh command: ${command}`);
 		if (nmcliFieldNames(args).length)
@@ -52,6 +62,7 @@ export async function profileRefreshFixture() {
 				const value = args[index + 1];
 				if (key && value !== undefined) update[key] = value;
 			}
+			await beforeWrite?.(update);
 			writes.push({
 				uuid: args[2] ?? "",
 				fields: update,
@@ -63,8 +74,37 @@ export async function profileRefreshFixture() {
 		if (args[2] === "uuid,type") return `${uuid}:802-11-wireless`;
 		if (args[2] === "uuid,dbus-path")
 			return `${uuid}:/org/freedesktop/NetworkManager/Settings/1`;
-		if (args[2] === "uuid,filename") return `${uuid}:`;
+		if (args[2] === "uuid,filename")
+			return `${uuid}:${instances.files.filename(uuid)}`;
 		throw new Error("Unexpected profile-refresh NM request");
 	});
-	return { ...frame, mac, uuid, fields, writes };
+	spyOn(runner, "runWithStdin").mockImplementation(async (_, args, input) => {
+		const modified = decodeProfile(input);
+		for (let index = 3; index < args.length; index += 2) {
+			const key = args[index];
+			const value = args[index + 1];
+			if (key && value !== undefined) modified[key] = value;
+		}
+		return encodeProfile(modified);
+	});
+	return {
+		...frame,
+		mac,
+		uuid,
+		fields,
+		writes,
+		own: (conn = uuid) =>
+			rememberHotspotCredentials(mac, {
+				conn,
+				ssid: "Original AP",
+				password: "original-password",
+			}),
+		beforeWrite: (hook: NonNullable<typeof beforeWrite>) => {
+			beforeWrite = hook;
+		},
+		restore: async () => {
+			await frame.restore();
+			instances.files.close();
+		},
+	};
 }

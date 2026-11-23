@@ -10,6 +10,7 @@ import {
 	sameNmProfileResource,
 } from "./network-manager-profile-instance.ts";
 import { openNmProfileFile } from "./network-manager-profile-write.ts";
+import type { ProfileWritePermit } from "./profile-write-permit.ts";
 
 /** Secret-display placeholders are unavailable reads, never credentials. */
 export function isNmWifiSecretAvailable(
@@ -90,7 +91,7 @@ export async function readVerifiedNmWifiSecret(
 export async function writeNmWifiSecret(
 	uuid: string,
 	fields: Readonly<Record<string, string>>,
-	permit?: () => Promise<boolean>,
+	permit?: ProfileWritePermit,
 ): Promise<boolean> {
 	const reject = (
 		reason:
@@ -156,10 +157,12 @@ export async function writeNmWifiSecret(
 		}
 		if (!sameNmProfileResource(before, await readNmProfileInstance(uuid)))
 			return reject("pre-write-resource-changed");
-		if (permit && !(await permit())) return false;
+		if (permit && (!(await permit()) || permit.current?.() === false))
+			return false;
 		if (!publication.publish(submitted))
 			return reject("publish-target-replaced");
-		if (permit && !(await permit())) return reject("publish-proof-changed");
+		if (permit && (!(await permit()) || permit.current?.() === false))
+			return reject("publish-proof-changed");
 		if (!publication.ownsLive(submitted))
 			return reject("publish-target-replaced");
 		stage = "load-failed";

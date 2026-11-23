@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import { logger } from "../helpers/logger.ts";
 
 import { MockMonitorEmitter } from "../modules/network/monitor/mock-monitor.ts";
 import {
@@ -228,6 +229,33 @@ describe("NmcliMonitorManager — death detection / restart", () => {
 // ─── 3. malformed line resilience ───────────────────────────────────────────────
 
 describe("NmcliMonitorManager — resilience", () => {
+	test("unparsed primary connection lines do not log the SAE profile name", async () => {
+		const secret = "private-sae-profile-name";
+		const debug = spyOn(logger, "debug").mockImplementation(() => logger);
+		const mgr = new NmcliMonitorManager(
+			() => {},
+			() =>
+				makeFakeProc(
+					[`Primary connection changed to '${secret}'`, "eth0: disconnected"],
+					{ hang: true },
+				),
+		);
+		const seen = Promise.withResolvers<void>();
+		mgr.on("monitor-event", () => seen.resolve());
+		try {
+			mgr.start();
+			await seen.promise;
+			expect(
+				debug.mock.calls.some(([line]) =>
+					String(line).includes("monitor (skipped)"),
+				),
+			).toBe(true);
+			expect(JSON.stringify(debug.mock.calls)).not.toContain(secret);
+		} finally {
+			mgr.stop();
+			debug.mockRestore();
+		}
+	});
 	test("garbage input does not crash; stream continues and valid events still emit", async () => {
 		const spawn = () =>
 			makeFakeProc(

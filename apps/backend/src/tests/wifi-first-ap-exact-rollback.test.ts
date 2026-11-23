@@ -43,9 +43,9 @@ test.each(["before Down", "after Down"] as const)(
 		try {
 			const down = f.deps.nmDisconnect;
 			const connect = f.deps.nmConnect;
-			f.deps.nmDisconnect = async (uuid, path) => {
+			f.deps.nmDisconnect = async (uuid, path, runId, ifname) => {
 				if (when === "before Down") await connect(uuid, HOTSPOT_UP_TO);
-				const stopped = await down(uuid, path);
+				const stopped = await down(uuid, path, runId, ifname);
 				if (when === "after Down") await connect(uuid, HOTSPOT_UP_TO);
 				return stopped;
 			};

@@ -71,6 +71,7 @@ onDestroy(
 onDestroy(bootSelection.onChoose((bootId) => view.setBoot(bootId)));
 onDestroy(() => view.dispose());
 
+
 $effect(() => {
 	const ready = getSessionReady();
 	untrack(() => view.connectionChanged(ready ? 'connected' : 'disconnected'));
@@ -265,7 +266,7 @@ $effect(() => {
 								{names}
 								onfocusin={() => { stopId = item.event.id; focusedRow = item.event; }}
 								onkeydown={(keyEvent) => navigate(keyEvent, item.event.id)}
-								onviewraw={() => void view.viewRaw(item.event, onviewraw)}
+								onviewraw={() => void view.viewRaw(item.event, onviewraw, bootSelection.since())}
 								rawLink={view.rawLink?.id === item.event.id ? view.rawLink.state : null}
 								stale={view.stale}
 								stop={item.event.id === tabStop}

@@ -57,6 +57,16 @@ export const notificationRemoveSchema = z.object({
 });
 export type NotificationRemove = z.infer<typeof notificationRemoveSchema>;
 
+// A dismissal request. `revision` and `publisher` echo the copy the client shows,
+// so a release-scoped notice is dismissed only for the release the client saw;
+// both are optional so clients that predate them keep working.
+export const notificationDismissInputSchema = z.object({
+	name: z.string(),
+	revision: z.number().int().optional(),
+	publisher: z.string().min(1).optional(),
+});
+export type NotificationDismissInput = z.infer<typeof notificationDismissInputSchema>;
+
 // Notifications message schema. Both arrays are optional: a `show` frame carries
 // no `remove`, and a `remove`-only frame carries no `show`.
 export const notificationsMessageSchema = z.object({

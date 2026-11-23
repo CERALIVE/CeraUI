@@ -8,7 +8,15 @@ import {
 	within,
 } from "@testing-library/svelte";
 import { tick } from "svelte";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeAll,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vitest";
 
 import { fourBoots } from "$lib/device-logs/__fixtures__/boots";
 import { eventPage } from "$lib/device-logs/__fixtures__/events";
@@ -59,6 +67,15 @@ function selected(): string | undefined {
 		.find((node) => node.getAttribute("aria-selected") === "true")
 		?.textContent?.trim();
 }
+
+// The Events and Raw logs tabs are lazy chunks; loading them here keeps their first,
+// cold transform out of a test's bounded wait when the whole suite runs.
+beforeAll(async () => {
+	await Promise.all([
+		import("../system-logs/EventsTab.svelte"),
+		import("../system-logs/RawLogsTab.svelte"),
+	]);
+});
 
 beforeEach(() => {
 	vi.clearAllMocks();

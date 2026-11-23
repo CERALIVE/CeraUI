@@ -25,6 +25,8 @@ import {
 	requiresSaeKeyMgmt,
 	wifiJoinRefusal,
 } from "@ceraui/rpc";
+import { logger } from "../helpers/logger.ts";
+import type { MacAddress } from "../modules/network/network-manager.ts";
 import * as networkManager from "../modules/network/network-manager.ts";
 import type { MessageSocket } from "../modules/ui/message-socket.ts";
 import * as websocket from "../modules/ui/websocket-server.ts";
@@ -42,7 +44,6 @@ import {
 } from "../modules/wifi/wifi-connections.ts";
 import {
 	getWifiIdToMacAddress,
-	type MacAddress,
 	type WifiInterface,
 } from "../modules/wifi/wifi-interfaces.ts";
 import {
@@ -83,7 +84,7 @@ let restoreTransportMocks = () => {};
 async function join(security: string | undefined): Promise<string[][]> {
 	const frames: string[] = [];
 	const conn: MessageSocket = { send: (frame) => frames.push(frame) };
-	handleWifi(conn, {
+	await handleWifi(conn, {
 		new: {
 			device: 0,
 			ssid: SSID,
@@ -250,7 +251,7 @@ describe("a SAE-only network is BUILT with key-mgmt sae", () => {
 		];
 		const sent: { wifi?: { new?: { error?: string } } }[] = [];
 
-		handleWifi(
+		await handleWifi(
 			{ send: (message: string) => sent.push(JSON.parse(message)) },
 			{ new: { device: 0, ssid: SSID, password: PASSWORD, security: "WPA3" } },
 		);
@@ -300,7 +301,7 @@ test.each([
 				: [{ stdout: "Unconfirmed", stderr: "", exitCode: 0 }];
 		try {
 			const frames: string[] = [];
-			handleWifi(
+			await handleWifi(
 				{ send: (frame) => frames.push(frame) },
 				{
 					new: {
@@ -339,6 +340,67 @@ test.each([
 	},
 );
 
+test("a successful join skips malformed scan rows without logging their SSID", async () => {
+	const malformed = `*:00\\:11\\:22\\:33\\:44\\:55:${SSID}:Infra:bad:100:90:****:WPA2`;
+	spyOn(networkManager, "nmScanResults").mockResolvedValue([malformed]);
+	replies = [
+		{ stdout: ADDED, stderr: "", exitCode: 0 },
+		{
+			stdout: ACTIVATED,
+			stderr: "",
+			exitCode: 0,
+		},
+	];
+	const warn = spyOn(logger, "warn").mockImplementation(() => logger);
+	try {
+		await join("WPA3");
+		expect(
+			warn.mock.calls.some(([line]) =>
+				String(line).includes("unparseable nmcli scan row"),
+			),
+		).toBe(true);
+		expect(JSON.stringify(warn.mock.calls)).not.toContain(SSID);
+		expect(JSON.stringify(warn.mock.calls)).not.toContain(PASSWORD);
+	} finally {
+		warn.mockRestore();
+	}
+});
+
+test.each([
+	["WPA2", "ambiguous"],
+	["WPA3", "generic"],
+] as const)(
+	"an unrecognized %s success logs no subprocess transcript",
+	async (security, error) => {
+		const stdout = `Unrecognized success with password ${PASSWORD}`;
+		const otherPsk = "another-synthetic-psk";
+		const stderr = `Synthetic diagnostic containing ${otherPsk}`;
+		replies = [{ stdout, stderr, exitCode: 0 }];
+		const warning = spyOn(logger, "warn").mockImplementation(() => logger);
+		try {
+			const frames: string[] = [];
+			void handleWifi(
+				{ send: (frame) => frames.push(frame) },
+				{ new: { device: 0, ssid: SSID, password: PASSWORD, security } },
+			);
+			await waitFor(() => frames.length > 0);
+			expect(JSON.parse(frames[0] ?? "null").wifi.new).toEqual({
+				error,
+				device: 0,
+			});
+			const log = JSON.stringify(warning.mock.calls);
+			expect(warning).toHaveBeenCalled();
+			expect(
+				[PASSWORD, otherPsk, stdout, stderr].map((value) =>
+					log.includes(value),
+				),
+			).toEqual([false, false, false, false]);
+		} finally {
+			warning.mockRestore();
+		}
+	},
+);
+
 test("a rejected retained-profile refresh cannot change or delay the refusal", async () => {
 	const listing = Promise.withResolvers<string[] | undefined>();
 	const profiles = spyOn(networkManager, "nmConnsGet").mockReturnValue(
@@ -357,7 +419,7 @@ test("a rejected retained-profile refresh cannot change or delay the refusal", a
 	adapter.savedAll[SSID] = ["existing-profile"];
 	const frames: string[] = [];
 	try {
-		handleWifi(
+		await handleWifi(
 			{ send: (frame) => frames.push(frame) },
 			{
 				new: { device: 0, ssid: SSID, password: PASSWORD, security: "WPA3" },
@@ -503,7 +565,7 @@ test.each([
 	async (_name, security, scripted, error) => {
 		replies = scripted;
 		const sent: { wifi?: { new?: { error?: string; device?: number } } }[] = [];
-		handleWifi(
+		await handleWifi(
 			{ send: (message) => sent.push(JSON.parse(message)) },
 			{ new: { device: 0, ssid: SSID, password: PASSWORD, security } },
 		);
@@ -543,7 +605,7 @@ describe("everything else keeps the single-step path, unchanged", () => {
 		replies = [{ stdout: CONNECTED, stderr: "", exitCode: 0 }];
 		const sent: { wifi?: { new?: { success?: boolean } } }[] = [];
 
-		handleWifi(
+		await handleWifi(
 			{ send: (message: string) => sent.push(JSON.parse(message)) },
 			{ new: { device: 0, ssid: SSID, password: PASSWORD, security: "WPA2" } },
 		);
@@ -658,7 +720,7 @@ test("authentication refusal on stderr resolves the join as an auth error", asyn
 		},
 	];
 	const frames: string[] = [];
-	handleWifi(
+	await handleWifi(
 		{ send: (frame) => frames.push(frame) },
 		{
 			new: { device: 0, ssid: SSID, password: PASSWORD, security: "WPA2" },

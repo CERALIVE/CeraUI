@@ -1,7 +1,9 @@
 <script lang="ts">
 import { directionFor, getLocale, m } from '@ceraui/i18n/svelte';
+import { holdUpdateProgress } from '@ceraui/rpc/package-progress';
+import type { UpdateOutcome, UpdateProgress, UpdateState, UpdateTarget } from '@ceraui/rpc/schemas';
 import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
-
+import { setContext } from 'svelte';
 import { OfflinePage, PWAStatus } from '$lib/components/custom/pwa';
 import { Button } from '$lib/components/ui/button';
 import * as Tooltip from '$lib/components/ui/tooltip';
@@ -9,7 +11,7 @@ import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
 import { publishHeight } from '$lib/layout';
 import { rpc } from '$lib/rpc';
 import { getSessionReady } from '$lib/rpc/session-epoch.svelte';
-import { getUpdating } from '$lib/rpc/subscriptions.svelte';
+import { getUpdateState, getUpdating } from '$lib/rpc/subscriptions.svelte';
 import {
 	authenticateWithToken,
 	authStatusStore,
@@ -21,8 +23,14 @@ import {
 	getGraceNow,
 } from '$lib/stores/connection-ux.svelte';
 import { getShouldShowOfflinePage } from '$lib/stores/offline-state.svelte';
+
 import { legacyInstall } from '$lib/updates/legacy-install';
-import { announceLegacyInstallOutcome } from '$lib/updates/legacy-install-notice';
+import {
+	announceLegacyInstallOutcome,
+	announceMissedInstallOutcome,
+	announceReadOutcome,
+} from '$lib/updates/legacy-install-notice';
+import { CONNECTION_DROPPED, createLiveProgress } from '$lib/updates/live-progress';
 
 import Auth from './Auth.svelte';
 import DisconnectedBanner from './DisconnectedBanner.svelte';
@@ -65,9 +73,71 @@ $effect(() => (topBands ? publishHeight(topBands, '--top-bands-height') : undefi
 // `Layout.updating-overlay.test.ts`. Only a RUNNING install takes over: the
 // device's terminal object (success or failure) is the last `updating` frame the
 // store keeps, so mounting on it would leave a takeover nobody can dismiss.
+// What this tab last showed for the running install: a stale or empty frame
+// after a reconnect or a backend restart never moves it back.
+let shownInstall: UpdateProgress | undefined;
+// The vector that install was launched with, from the first of its frames to
+// carry one; never replaced inside the run.
+let watched: UpdateTarget[] | undefined;
+// The run's start, from the process that started it. A frame with another is
+// another run; frames of a process that recovered the unit after a restart
+// carry none and continue the run this tab holds.
+let watchedRun: number | undefined;
+// The install this tab showed ended with no result the device reported: its
+// phase is held, without a number, until the device answers the tab's question.
+let unanswered = false;
+// Only the answer to the latest question counts; a new run or a running frame
+// makes every earlier question stale.
+let question = 0;
+let answers = $state(0);
+const reported = (state?: UpdateState) =>
+	state?.kind === 'success' || state?.kind === 'failed' || state?.kind === 'update_preflight_failed';
+let liveInstall = createLiveProgress();
+// A field's number is stale from a drop until the status ingestion announces
+// that field delivered again; an identical frame counts, though the store keeps
+// the equal value's identity.
+let stale: Record<string, boolean> = {};
+let deliveries = $state(0);
+$effect(() => {
+	const delivered = (event: Event) => {
+		stale[(event as CustomEvent<string>).detail] = false;
+		deliveries = deliveries + 1;
+	};
+	addEventListener('ceralive:progress-delivered', delivered);
+	return () => removeEventListener('ceralive:progress-delivered', delivered);
+});
+const dropped = (field: string) => {
+	deliveries;
+	if (getDisconnectedSince() !== null) stale = { updating: true, update_state: true };
+	return stale[field] === true;
+};
+setContext(CONNECTION_DROPPED, dropped);
 const updatingStatus = $derived.by(() => {
-	const install = legacyInstall(getUpdating());
-	return install.kind === 'running' ? install.details : undefined;
+	answers;
+	const updating = getUpdating();
+	const install = legacyInstall(updating);
+	unanswered = install.kind === 'none' && shownInstall !== undefined && !reported(getUpdateState());
+	if (install.kind === 'running' && install.details) {
+		const { run, targets } = install.details;
+		question += 1;
+		if (run !== undefined && run !== watchedRun) {
+			shownInstall = undefined;
+			liveInstall = createLiveProgress();
+			watchedRun = run;
+		}
+		if (!shownInstall) watched = undefined;
+		watched ??= targets;
+		shownInstall = holdUpdateProgress(shownInstall, install.details);
+	} else if (!unanswered) {
+		shownInstall = undefined;
+		watched = undefined;
+		watchedRun = undefined;
+	}
+	return liveInstall(
+		shownInstall,
+		typeof updating === 'object' ? updating : undefined,
+		dropped('updating'),
+	);
 });
 // This tree receives the terminal frame, so it owns the announcement, once per
 // outcome (`Layout.update-terminal.test.ts`). It reads the dedicated selector,
@@ -75,6 +145,34 @@ const updatingStatus = $derived.by(() => {
 // status is a new object whenever any sibling field moves (FIX-16-FRONT3 R3).
 $effect(() => {
 	announceLegacyInstallOutcome(getUpdating());
+});
+// A tab told only that the install it showed is over (it missed the result
+// while CeraUI restarted) says what the device reports; otherwise it asks
+// whether that install's own vector is installed, holding the phase.
+let showedInstall = false;
+const told = (asked: number, outcome?: UpdateOutcome) => {
+	if (asked !== question || !unanswered || outcome?.kind === 'running') return;
+	shownInstall = undefined;
+	watched = undefined;
+	watchedRun = undefined;
+	answers = answers + 1;
+	announceReadOutcome(outcome);
+};
+$effect(() => {
+	// The hold and the question are settled by the same frame.
+	updatingStatus;
+	const kind = legacyInstall(getUpdating()).kind;
+	const state = getUpdateState();
+	if (kind === 'none' && showedInstall)
+		if (state && reported(state)) announceMissedInstallOutcome(state);
+		else {
+			const asked = ++question;
+			rpc.system.updateOutcome({ targets: watched ?? [] }).then(
+				(outcome) => told(asked, outcome),
+				() => told(asked)
+			);
+		}
+	showedInstall = kind === 'running';
 });
 // Environment probes computed once (used to size the auth-check timeout).
 const isMobile = /iphone|ipad|ipod|android/i.test(navigator.userAgent);
