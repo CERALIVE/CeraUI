@@ -31,8 +31,10 @@ import { onHistoryChanged } from "./history-bus";
 import {
 	bundleManifestReply,
 	captureExportScope,
+	type ExportProblem,
 	type ExportScope,
 	type ExportSpan,
+	exportCredentialProblem,
 	exportInput,
 	previewFailure,
 	previewProblem,
@@ -94,7 +96,7 @@ export class SharingFlow {
 	/** What the open Export confirmation states and its ticket request sends; null while closed. */
 	exportScope = $state.raw<ExportScope | null>(null);
 	exportStep = $state<ExportStep>("closed");
-	exportProblem = $state<SharingProblem | null>(null);
+	exportProblem = $state<ExportProblem | null>(null);
 	bundleStep = $state<BundleStep>("closed");
 	bundleProblem = $state<SharingProblem | null>(null);
 	/** The bundle problem is the device refusing to prepare it, which Export this view avoids. */
@@ -156,16 +158,22 @@ export class SharingFlow {
 		this.exportStep = "creating";
 		this.exportProblem = null;
 		const input = exportInput(scope.query);
-		const reply = await ticket(
-			() => this.#deps.logs.createExport(input),
-			"export",
-		);
+		let reply = UNANSWERED;
+		let credentialProblem: ExportProblem | null = null;
+		try {
+			reply = ticketReply(await this.#deps.logs.createExport(input), "export");
+		} catch (error) {
+			credentialProblem = exportCredentialProblem(error);
+			if (!credentialProblem)
+				console.error("System Logs sharing failed:", error);
+		}
 		if (run !== this.#exportRun || !this.#deps.current()) return;
 		if (reply.ok && started(this.#deps.download, reply.url)) {
 			this.closeExport();
 			return;
 		}
-		this.exportProblem = reply.ok ? "failed" : refusal(reply.error);
+		this.exportProblem =
+			credentialProblem ?? (reply.ok ? "failed" : refusal(reply.error));
 		this.exportStep = "confirm";
 	}
 

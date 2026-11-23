@@ -217,6 +217,26 @@ describe("SystemLogsView: the logs toolbar", () => {
 		);
 	});
 
+	it("shows actionable copy in the export dialog when credentials are still loading", async () => {
+		viewport(false);
+		logs.createExport.mockRejectedValue(
+			new RpcError({ code: "INTERNAL_ERROR", message: "CREDENTIALS_LOADING" }),
+		);
+		render(SystemLogsView);
+		await fireEvent.click(await screen.findByTestId("sharing-toolbar-export"));
+		const dialog = await screen.findByRole("dialog", { name: sharing.export });
+		await fireEvent.click(
+			within(dialog).getByRole("button", { name: sharing.exportDownload }),
+		);
+
+		expect(
+			(
+				await within(dialog).findByTestId("sharing-export-problem")
+			).textContent?.trim(),
+		).toBe(sharing.exportCredentialsLoading);
+		expect(anchorClicks).not.toHaveBeenCalled();
+	});
+
 	// Lime fills one sharing action in the whole view (DESIGN.md IH-5).
 	it("fills only Export logs among the toolbar and Downloads sharing actions", async () => {
 		viewport(true);
