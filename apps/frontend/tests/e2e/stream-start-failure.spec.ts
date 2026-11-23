@@ -433,3 +433,20 @@ test('Spanish retry feedback names the Live tab verbatim', async ({ page }) => {
 	await page.getByRole('button', { name: 'Intentar de nuevo', exact: true }).press('Enter');
 	await expect(page.getByText('Esta acción ya no está disponible. Revisa el estado de la transmisión en Live.', { exact: true })).toBeVisible();
 });
+
+test('all desktop recovery actions have 44 px hit targets @desktop-only', async ({ page }) => {
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	const attemptId = 'desktop-touch-targets';
+	await startWithReply(page, {
+		result: 'failed', success: false, attemptId,
+		failure: { attemptId, phase: 'params', class: 'mutation_blocked', retriable: false },
+	});
+	const buttons = page.locator('.start-refusal-toast').getByRole('button');
+	await expect(buttons).toHaveCount(3);
+	for (const action of await buttons.all()) {
+		await expect(action).toBeInViewport({ ratio: 1 });
+		expect((await action.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+		expect(await centerHits(action)).toBe(true);
+	}
+});
