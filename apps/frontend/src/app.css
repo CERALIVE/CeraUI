@@ -373,6 +373,23 @@
 		-webkit-tap-highlight-color: rgba(128, 138, 150, 0.35);
 	}
 
+	/* The colour scheme of the theme actually painted, for native controls,
+	   scrollbars and browser auto dark modes. mode-watcher writes a plain inline
+	   `light` or `dark`; these win over it so the light themes say `only light`,
+	   which stops Chromium's auto dark mode from inverting them. E-ink is white
+	   paper in either mode. */
+	:root {
+		color-scheme: only light !important;
+	}
+
+	:root.dark {
+		color-scheme: dark !important;
+	}
+
+	:root.dark:is([data-display='eink'], [data-theme='eink']) {
+		color-scheme: only light !important;
+	}
+
 	/* A fullscreen dialog is fixed to the viewport, which excludes the reserved
 	   gutter; while one is open the page cannot scroll, so the gutter goes. */
 	html:has([data-app-dialog-fullscreen]) {

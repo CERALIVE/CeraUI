@@ -44,6 +44,32 @@ for (const scheme of ['dark', 'light'] as const) {
 	});
 }
 
+/**
+ * The page tells the browser it draws its own themes, so browser auto dark
+ * modes and the Dark Reader extension leave it alone: the root's colour scheme
+ * matches the painted theme even after mode-watcher writes its inline one, and
+ * a light theme says `only light`, which Chromium's auto dark mode honours.
+ */
+for (const [scheme, display, expected] of [
+	['dark', 'lcd', 'dark'],
+	['light', 'lcd', 'light only'],
+	['dark', 'eink', 'light only'],
+] as const) {
+	test(`the root declares ${expected} for the ${scheme} mode on ${display}`, async ({ page }) => {
+		await page.emulateMedia({ colorScheme: scheme });
+		await page.addInitScript((mode) => localStorage.setItem('mode-watcher-mode', mode), scheme);
+		await page.goto(`/?display=${display}`);
+		await ensureAuthenticated(page);
+		const html = page.locator('html');
+		await expect(html).toHaveAttribute('data-display', display);
+		await expect.poll(() => html.evaluate((root) => root.style.colorScheme)).toBe(scheme);
+
+		expect(await html.evaluate((root) => getComputedStyle(root).colorScheme)).toBe(expected);
+		await expect(page.locator('meta[name="color-scheme"]')).toHaveAttribute('content', 'light dark');
+		await expect(page.locator('meta[name="darkreader-lock"]')).toHaveCount(1);
+	});
+}
+
 test('a toast is set in the app typeface', async ({ page, pageRpc }) => {
 	await page.goto('/');
 	await ensureAuthenticated(page);
