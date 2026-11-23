@@ -338,6 +338,7 @@ function startFailedMessage(code: string): string {
 // An engine refusal that comes back after Try again on an engine refusal
 // offers Restart box instead of another Try again.
 let viewMounted = true;
+let retryQueued = false;
 $effect(() => () => {
 	viewMounted = false;
 });
@@ -348,20 +349,10 @@ $effect(() => () => {
 // decided from the same inputs at the moment of the tap (a link may have dropped
 // since the refusal), with the implicit sole camera folded in as the bar does.
 // It does nothing when the view is gone or a newer refusal (or none) is current.
-function retryStart(attempt: string) {
-	if (!viewMounted || !idleStartAdmitted) return false;
-	// The raw flag too: a stream reported this tick has not reached every
-	// derived value yet.
-	if (getIsStreaming() || getStreamingOptimismState() !== 'idle') return false;
-	const current = getStreamingStartFailure();
-	if (current?.attemptId !== attempt) return false;
-	return handleStart({}, true);
-}
-
 function runNextStep(step: StartFailureNextStep, attempt: string) {
 	if (!viewMounted || getStreamingStartFailure()?.attemptId !== attempt) return false;
 	switch (step) {
-		case 'tryAgain': return retryStart(attempt);
+		case 'tryAgain': return false; // dispatched with a send receipt below
 		case 'restartBox':
 			if (!idleStartAdmitted || !idleStartGate(readIdleGateInputs()).canStart) return false;
 			powerOpen = true;
@@ -401,10 +392,23 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 		componentProps: {
 			primary: {
 				label: m[NEXT_STEP_ACTION[step]](),
-				activate: () => {
-					if ((step === 'tryAgain' || step === 'restartBox') &&
-						(link !== getLinkEpoch() || activity !== getStreamActivity() ||
-							generation !== getStreamingAttemptGeneration())) return false;
+				activate: (onBlocked?: () => void) => {
+					const current = () =>
+						viewMounted && getStreamingStartFailure()?.attemptId === attempt &&
+						link === getLinkEpoch() && activity === getStreamActivity() &&
+						generation === getStreamingAttemptGeneration();
+					if (step === 'tryAgain') {
+						const beforeSend = () => current() && idleStartAdmitted &&
+							!getIsStreaming() && getStreamingOptimismState() === 'idle' &&
+							idleStartGate(readIdleGateInputs()).canStart;
+						if (retryQueued || !beforeSend()) return false;
+						return handleStart({}, {
+							beforeSend,
+							onSent: () => toast.dismiss(id),
+							onBlocked,
+						});
+					}
+					if (step === 'restartBox' && !current()) return false;
 					if (!runNextStep(step, attempt)) return false;
 					toast.dismiss(id);
 					return true;
@@ -1082,7 +1086,11 @@ const summaryAudio = $derived.by(() => {
 // idle UI is driven by getIsStreaming(), updated by the backend status push —
 // never set locally here. Optimistic transient: Start button shows `starting`
 // immediately on click, then reconciles to authoritative is_streaming.
-function handleStart(overrides: { source?: string } = {}, engineRetry = false) {
+type RetryDispatch = NonNullable<Parameters<typeof startStreaming>[1]> & {
+	readonly onBlocked?: (() => void) | undefined;
+};
+
+function handleStart(overrides: { source?: string } = {}, retry?: RetryDispatch) {
 	const gate = idleStartGate(readIdleGateInputs());
 	if (getStreamingOptimismState() !== 'idle' || getIsStreaming() || !gate.canStart) return false;
 
@@ -1096,36 +1104,39 @@ function handleStart(overrides: { source?: string } = {}, engineRetry = false) {
 
 	const result = buildStartConfig(startBase, audioOverride, pipelines);
 	if (!result.ok) {
-		if (!engineRetry) toast.error(
+		if (!retry) toast.error(
 			result.error === 'missingServer' ? m["live.cannotStartNoServer"]() : m["live.cannotStartNoPipeline"](),
 		);
 		return false;
 	}
 
-	void dispatchStart(result.config, engineRetry);
+	void dispatchStart(result.config, retry);
 	return true;
 }
 
-async function dispatchStart(nextConfig: ConfigMessage, engineRetry = false) {
-	try {
+async function dispatchStart(nextConfig: ConfigMessage, retry?: RetryDispatch) {
+	let attempt: number | undefined;
+	let releaseNotice: (() => Promise<void>) | undefined;
+	const begin = () => {
+		startStreamingOptimism();
+		attempt = getStreamingAttemptGeneration();
+		releaseNotice = holdStartFailureNotice();
+	};
+	if (retry) retryQueued = true;
+	else {
 		toast.dismiss();
-	} catch {
-		/* dismiss is best-effort */
+		begin();
 	}
-
-	// Optimistic transient: show `starting` immediately, and capture THIS attempt's
-	// generation so a late reply from a superseded attempt cannot clobber a newer
-	// one (Todo 29 generation identity).
-	startStreamingOptimism();
-	const attempt = getStreamingAttemptGeneration();
-	// Try again on an engine refusal is remembered against this very attempt, and
-	// only now that it passed validation and is being sent.
-	if (engineRetry) recordStartRetry(attempt);
-
-	const releaseNotice = holdStartFailureNotice();
 	try {
-		const startResult = await startStreaming(nextConfig);
-		if (getIsStreaming()) return;
+		const startResult = await startStreaming(nextConfig, retry && {
+			beforeSend: retry.beforeSend,
+			onSent: () => {
+				begin();
+				recordStartRetry(getStreamingAttemptGeneration());
+				retry.onSent();
+			},
+		});
+		if (attempt === undefined || getIsStreaming()) return;
 		if (startResult && !startResult.success) {
 			if ('failure' in startResult && startResult.failure) {
 				revertStreamingOptimismFailure(startResult.failure, attempt);
@@ -1134,6 +1145,10 @@ async function dispatchStart(nextConfig: ConfigMessage, engineRetry = false) {
 			}
 		}
 	} catch (error) {
+		if (attempt === undefined) {
+			retry?.onBlocked?.();
+			return;
+		}
 		// Only proven non-dispatch permits a retry; losing a reply proves no idle.
 		if (!(error instanceof NotSentError)) {
 			noteLostStartReply(attempt);
@@ -1146,7 +1161,8 @@ async function dispatchStart(nextConfig: ConfigMessage, engineRetry = false) {
 			error instanceof Error ? error.message : 'unknown_error';
 		revertStreamingOptimism(reason, attempt);
 	} finally {
-		void releaseNotice();
+		if (retry) retryQueued = false;
+		void releaseNotice?.();
 	}
 }
 

@@ -521,6 +521,7 @@ class RPCClient {
 		path: string[],
 		input?: unknown,
 		timeout = RPC_CALL_TIMEOUT_MS,
+		onSent?: () => void,
 	): Promise<T> {
 		if (this.socket?.readyState !== WebSocket.OPEN) {
 			throw new NotSentError();
@@ -542,7 +543,15 @@ class RPCClient {
 				path,
 			});
 
-			this.socket?.send(JSON.stringify(request));
+			try {
+				this.socket?.send(JSON.stringify(request));
+			} catch (error) {
+				clearTimeout(timeoutHandle);
+				this.pendingRequests.delete(id);
+				reject(error);
+				return;
+			}
+			onSent?.();
 		});
 	}
 
@@ -1046,6 +1055,18 @@ export interface TypedRPC {
  * Usage: await rpc.auth.login({ password: "xxx" })
  */
 export const rpc: TypedRPC = createRPCProxy<TypedRPC>(rpcClient);
+
+export function sendGuardedStreamStart(
+	input: Parameters<TypedRPC["streaming"]["start"]>[0],
+	onSent: () => void,
+): ReturnType<TypedRPC["streaming"]["start"]> {
+	return rpcClient.call(
+		["streaming", "start"],
+		input,
+		PROCEDURE_TIMEOUT_MS["streaming.start"],
+		onSent,
+	);
+}
 
 /**
  * Initialize the RPC client

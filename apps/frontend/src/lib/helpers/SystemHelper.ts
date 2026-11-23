@@ -6,7 +6,8 @@ import type {
 	StreamingConfigInput,
 } from "@ceraui/rpc/schemas";
 
-import { rpc } from "$lib/rpc/client";
+import { rpc, sendGuardedStreamStart } from "$lib/rpc/client";
+import { NotSentError } from "$lib/rpc/rpc-error";
 import { createPassword } from "$lib/stores/auth-status.svelte";
 import { sendSessionTransition } from "$lib/streaming/compositionWrites.svelte";
 
@@ -132,7 +133,10 @@ export const stopStreaming = async () => {
 	}
 };
 
-export const startStreaming = async (config: ConfigMessage) => {
+export const startStreaming = async (
+	config: ConfigMessage,
+	retry?: { readonly beforeSend: () => boolean; readonly onSent: () => void },
+) => {
 	try {
 		// Forward EVERY field present in both ConfigMessage and
 		// StreamingConfigInput: an incomplete allowlist silently drops persisted
@@ -165,9 +169,11 @@ export const startStreaming = async (config: ConfigMessage) => {
 		};
 		// In order with this tab's composition writes, so a placement made before
 		// Start is saved before Start reads it (`compositionWrites`).
-		return await sendSessionTransition("live", () =>
-			rpc.streaming.start(input),
-		);
+		return await sendSessionTransition("live", async () => {
+			if (!retry) return rpc.streaming.start(input);
+			if (!retry.beforeSend()) throw new NotSentError();
+			return sendGuardedStreamStart(input, retry.onSent);
+		});
 	} catch (error) {
 		console.error("Failed to start streaming:", error);
 		throw error;

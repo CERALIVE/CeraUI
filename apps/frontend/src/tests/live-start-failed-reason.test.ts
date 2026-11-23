@@ -53,7 +53,15 @@ vi.mock("$lib/stores/navigation-lazy", () => ({
 }));
 
 vi.mock("$lib/helpers/SystemHelper", () => ({
-	startStreaming,
+	startStreaming: async (
+		config: unknown,
+		retry?: { beforeSend(): boolean; onSent(): void },
+	) => {
+		if (retry && !retry.beforeSend()) throw new NotSentError();
+		const result = await startStreaming(config);
+		retry?.onSent();
+		return result;
+	},
 	stopStreaming: vi.fn(),
 	reboot,
 }));
@@ -534,7 +542,10 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 		await tick();
 		startStreaming.mockRejectedValue(new NotSentError());
 		action()?.action.onClick();
-		await waitFor(() => expect(state.revertOptimism).toHaveBeenCalledTimes(1));
+		await waitFor(() => expect(startStreaming).toHaveBeenCalledTimes(1));
+		expect(state.revertOptimism).not.toHaveBeenCalled();
+		expect(state.startOptimism).not.toHaveBeenCalled();
+		expect(toastError).toHaveBeenCalledTimes(1);
 		expect(startStreaming).toHaveBeenCalledTimes(1);
 		cleanup();
 		toastError.mockReset();
