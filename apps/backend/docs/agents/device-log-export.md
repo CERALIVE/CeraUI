@@ -52,6 +52,11 @@ browser a ticket. **Export this view** keeps the existing dialog open and shows
 localized advice to wait and retry, change or remove a short credential, or
 contact support if a read failure persists. The attachment checks independently
 when streaming starts, since credentials can change after the ticket was issued.
+On the WebSocket, the adapter sends `INTERNAL_ERROR` with the fixed message
+`CREDENTIALS_LOADING`, `CREDENTIAL_TOO_SHORT` or `CREDENTIAL_READ_FAILED`.
+Sharing admission still returns `{ ok: false, error: "BUSY" }` for a competing
+request. A failed credential store stays failed until successful reinitialization;
+repairing its file alone does not clear the running process's state.
 A refusal then sends only a footer:
 
 - `# incomplete: CREDENTIALS_LOADING` while the hotspot or modem credential store
@@ -63,14 +68,14 @@ A refusal then sends only a footer:
   four characters (`MIN_REDACTED_LENGTH`, counted in UTF-16 code units), which
   the matcher skips, is a password, key (including a managed ingest key),
   pairing or relay secret, hotspot, APN or router password, or any kind not
-  listed below. The export also refuses if a nonempty value's normalized form
-  is too short to match safely. Only those kinds are named. If the
+  listed below. The export also refuses if a matchable value normalizes to a
+  nonempty form below the minimum. Only those kinds are named. If the
   footer with its generated kind list would match a held value, it is just
   `# incomplete: CREDENTIAL_TOO_SHORT`, which is fixed text.
 
 Short values of the kinds in `SHORT_VALUE_EXPORT_KINDS` (`bundle-data.ts`):
-`stream` (a short `srt_streamid` with an unconfigured or literal loopback
-receiver and no managed/relay selection), `apn_user`, `router_user` and `serial`
+`stream` (a short `srt_streamid` with an unconfigured receiver or literal
+`127.0.0.1` or `::1`, and no managed/relay selection), `apn_user`, `router_user` and `serial`
 do not stop the export. A selected managed slot always classifies the configured
 ID as an ingest key, even with no cached slots. A non-loopback manual
 receiver may authenticate by stream ID, so ambiguous short IDs also refuse. The matcher skips
@@ -92,14 +97,25 @@ Limits:
   header, after page reads and at delivery boundaries. An observed change stops
   it with `# incomplete: CREDENTIALS_CHANGED`; retry the export. Already sent
   bytes cannot be recalled. Earlier or transient values absent at every
-  comparison, and values not held by the inventory, are not covered.
-- **Representations.** Whole-value literal, JSON string escaping, URI component
-  escapes (either hex case), base64 and padded/unpadded base64url are matched.
-  Export also checks NFC, CR/LF and default-ignorable Unicode splits, one URL
-  decode pass (including form spaces), and numeric/common named HTML entities.
-  These are bounded checks, not arbitrary decoding or deobfuscation. Separate
-  journal records, nested/composite encodings, and fragments already lost
-  upstream of the device journal reader are not reconstructed.
+  comparison are not covered. The inventory deliberately excludes SIM PINs
+  (loaded on demand), login and SSH hash verifiers, transient preview, UI, kiosk
+  and dongle-admin tokens/session material, derived pairing claim codes, and
+  Wi-Fi station passwords held by NetworkManager. Review new credential owners
+  for inventory coverage; an inventoried new kind refuses by default when short.
+- **Representations.** The matcher checks whole-value literals,
+  `JSON.stringify`-style escaping, URI component escapes (either hex case),
+  standard base64 with padding when required, and padded/unpadded base64url.
+  The export additionally checks NFC, CR/LF and default-ignorable Unicode splits,
+  one URL decode pass (both literal `+` and form-space `+`, preserving malformed
+  UTF-8 escapes without discarding neighboring valid ones), and semicolon-terminated
+  numeric/common named HTML entities. It does not match alternate JSON spellings
+  such as Python `\u00e4`, PHP `\/` or Go `\u003c`, nested JSON, composite encodings
+  such as HTTP Basic's `base64(user:password)`, or arbitrary extra URL/HTML layers.
+  Hex, shell/C/systemd escapes, case folding, compatibility normalization, and
+  breaks other than CR/LF or default-ignorable characters are not covered.
+- **Fragments.** The export does not reconstruct separate journal records,
+  fragments lost upstream of the reader, or partial strings deliberately placed
+  in a search filter. Overlapping held values may leave a partial second match.
 - **Fixed text.** Footers, the header's fixed labels and the attachment filename
   are not passed through the matcher, apart from the generated kind lists
   described above. They carry only status codes, credential kinds, counts and
@@ -128,10 +144,13 @@ closes without requiring another read.
 Clear calls `abortLogExports()` in addition to updating the history epoch.
 It invalidates pending tickets and joins active downloads. Epoch checks also
 fence header collection and page/entry delivery. Footers state either
-`# complete: <n> entries` (including gap records) or `# incomplete: <reason>`.
+`# complete: <n> entries` (including gap records and wholly masked entries) or
+`# incomplete: <reason>`.
 
 Tests are `src/tests/device-logs-export.test.ts`,
 `src/tests/device-logs-export-held-secrets.test.ts`,
+`src/tests/device-logs-export-boundaries.test.ts`,
+`src/tests/logs-procedures.test.ts`,
 `src/tests/device-logs-sharing.test.ts`,
 `src/tests/device-logs-sharing-replace.test.ts` and
 `src/tests/device-logs-export-http.test.ts`; the latter downloads through the
