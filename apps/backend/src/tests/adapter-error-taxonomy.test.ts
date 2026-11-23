@@ -23,13 +23,14 @@ import { describe, expect, test } from "bun:test";
 import { ORPCError, os } from "@orpc/server";
 import { z } from "zod";
 
-import { handleORPCMessage } from "../rpc/adapter.ts";
+import { handleORPCMessage, parseMessage } from "../rpc/adapter.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 
 const KNOWN_SECRET = "v4.public.shouldNeverSurface";
 
-interface ErrorEnvelope {
+interface ResponseEnvelope {
 	id?: string;
+	result?: unknown;
 	error?: { message: string; code: string; fields?: string[]; stage?: string };
 }
 
@@ -48,14 +49,16 @@ function fakeWs(): AppWebSocket & { __sent: string[] } {
 			return payload.length;
 		},
 		__sent: sent,
+	} satisfies Pick<AppWebSocket, "remoteAddress" | "data" | "send"> & {
+		__sent: string[];
 	};
-	return ws as unknown as AppWebSocket & { __sent: string[] };
+	return ws as AppWebSocket & { __sent: string[] };
 }
 
-/** Pull the single error envelope the adapter sent to the client. */
-function sentEnvelope(ws: { __sent: string[] }): ErrorEnvelope {
+/** Pull the single response envelope the adapter sent to the client. */
+function sentEnvelope(ws: { __sent: string[] }): ResponseEnvelope {
 	expect(ws.__sent.length).toBe(1);
-	return JSON.parse(ws.__sent[0] as string) as ErrorEnvelope;
+	return JSON.parse(ws.__sent[0] as string) as ResponseEnvelope;
 }
 
 // Tiny router with no auth gate: one procedure that fails INPUT validation, one
@@ -89,6 +92,25 @@ const testRouter = os.$context<RPCContext>().router({
 			}),
 	}),
 });
+
+const echo = base.handler(() => "own procedure reached");
+const namespace: { own: { echo: typeof echo }; leaf: typeof echo } =
+	Object.assign(Object.create({ inherited: echo }), {
+		own: { echo },
+		leaf: Object.assign(
+			base.handler(() => "leaf reached"),
+			{ echo },
+		),
+	});
+const nestedRouter = { probe: namespace };
+
+async function dispatchFrame(id: string, path: unknown) {
+	const ws = fakeWs();
+	const message = parseMessage(JSON.stringify({ id, path }), ws);
+	if (message === null) throw new Error("Expected an RPC request");
+	await handleORPCMessage(ws, message, nestedRouter);
+	return sentEnvelope(ws);
+}
 
 describe("rpc adapter error taxonomy", () => {
 	test("INPUT validation failure → VALIDATION_ERROR + field path", async () => {
@@ -192,5 +214,43 @@ describe("rpc adapter error taxonomy", () => {
 				`Unknown procedure path: ${path.join(".")}`,
 			);
 		}
+	});
+
+	test.each([
+		{ name: "non-array path", path: "probe.own.echo" },
+		{ name: "empty path", path: [] },
+		{ name: "numeric segment", path: ["probe", 0] },
+		{ name: "non-coercible JSON segment", path: ["probe", { toString: 1 }] },
+	])(
+		"$name gets one correlated error with a fixed label",
+		async ({ name, path }) => {
+			expect(await dispatchFrame(name, path)).toEqual({
+				id: name,
+				error: {
+					message: "Unknown procedure path: <invalid path>",
+					code: "INTERNAL_ERROR",
+				},
+			});
+		},
+	);
+
+	test.each([
+		["inherited procedure", ["probe", "inherited"]],
+		["procedure beyond a leaf", ["probe", "leaf", "echo"]],
+	])("%s is not a routable leaf", async (id, path) => {
+		expect(await dispatchFrame(id, path)).toEqual({
+			id,
+			error: {
+				message: `Unknown procedure path: ${path.join(".")}`,
+				code: "INTERNAL_ERROR",
+			},
+		});
+	});
+
+	test("an own nested procedure returns one correlated result", async () => {
+		expect(await dispatchFrame("nested", ["probe", "own", "echo"])).toEqual({
+			id: "nested",
+			result: "own procedure reached",
+		});
 	});
 });

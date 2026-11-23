@@ -339,6 +339,15 @@ are declared as a bare `oc`. Do not reintroduce route metadata — CeraUI serves
 Reserved router keys in v2 (`then`, `bind`, `valueOf`, `toString`, `toJSON`) must never be used as a
 procedure or child-router key.
 
+The Bun WebSocket adapter parses `path` at the frame boundary as a non-empty
+array of strings. It uses the public `getRouter()` to walk only own router keys
+and stop at procedures, and calls only leaves that satisfy `instanceof Procedure`.
+A malformed `path` gets the existing `INTERNAL_ERROR` envelope with the request
+`id` and `Unknown procedure path: <invalid path>`; raw segments are never coerced
+for the reply or the log. Well-formed route misses use the validated dotted label.
+Resolved calls keep the existing validation/error taxonomy and optional closed
+support-bundle `stage`.
+
 Beta.31's breaking change remains outside CeraUI's surface: it changes only
 `CORSHandlerPlugin`'s HTTP response default from reflected origin to `*` and permits async
 `origin`/`timingOrigin` resolvers. Beta.32 adds the prototype-pollution protection handler plugin,
