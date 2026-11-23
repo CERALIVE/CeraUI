@@ -18,6 +18,7 @@ import {
 	resetUsbNetMarkers,
 } from "../modules/network/router-cellular-scan.ts";
 import { genSrtlaBondEntries } from "../modules/streaming/srtla.ts";
+import { withDeviceType } from "../modules/system/device-detection.ts";
 import { setSocketSenderId } from "../rpc/compat.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
 import {
@@ -95,8 +96,11 @@ async function observeDisable(name: string, ip: string) {
 
 describe("network.configure last-uplink protection", () => {
 	let directory: string;
+	let priorDeviceType: string | undefined;
 
 	beforeEach(async () => {
+		priorDeviceType = process.env.CERALIVE_DEVICE_TYPE;
+		process.env.CERALIVE_DEVICE_TYPE = "real";
 		resetBondFixture();
 		resetNetifSnapshotForTest();
 		resetUsbNetMarkers();
@@ -109,6 +113,8 @@ describe("network.configure last-uplink protection", () => {
 	});
 
 	afterEach(async () => {
+		if (priorDeviceType === undefined) delete process.env.CERALIVE_DEVICE_TYPE;
+		else process.env.CERALIVE_DEVICE_TYPE = priorDeviceType;
 		resetBondFixture();
 		resetNetifSnapshotForTest();
 		resetUsbNetMarkers();
@@ -170,6 +176,26 @@ describe("network.configure last-uplink protection", () => {
 
 		expect(await toggle("eth0", ETHERNET_IP, false)).toEqual(REFUSED);
 		expect(bondedNames()).toEqual(["eth0"]);
+	});
+
+	test("keeps the raw guard in emulated mode when the peer only serves shared LAN", async () => {
+		await withDeviceType("emulated", async () => {
+			getNetworkInterfaces().eth1 = iface(SHARED_IP);
+			persistEthernetRole("eth1", "shared-lan");
+			expect(bondedNames()).toEqual(["eth0"]);
+
+			const { reply, wire, requester } = await observeDisable(
+				"eth0",
+				ETHERNET_IP,
+			);
+			expect(reply).toEqual({
+				success: true,
+				applied: { name: "eth0", ip: ETHERNET_IP, enabled: false },
+			});
+			expect(lastNetifEnabled(requester, "eth0")).toBe(false);
+			expect(wire.eth0?.enabled).toBe(false);
+			expect(bondedNames()).toEqual([]);
+		});
 	});
 
 	test("reads back effective eligibility when an enable is recorded before modem identity settles", async () => {

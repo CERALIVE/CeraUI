@@ -25,6 +25,7 @@ toggle riding alongside the address it was checking — so the operator was told
   bond candidate.** A raw-enabled peer does not keep the bond up if the
   sender's `isBondCandidate` rule excludes it (for example, because it is
   opted out or serves shared LAN). The raw guard still applies first and is
-  the only guard in development, mock mode, and the native hwsim guest.
+  the only guard in emulated mode, development, mock mode, and the native
+  hwsim guest.
   The separate duplicate-IP toggle path is unchanged.
 

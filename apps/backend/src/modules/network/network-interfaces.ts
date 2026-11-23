@@ -35,11 +35,7 @@ import { logger } from "../../helpers/logger.ts";
 import { run } from "../../helpers/run.ts";
 import { ACTIVE_TO } from "../../helpers/shared.ts";
 import { getms } from "../../helpers/time.ts";
-import {
-	getMockState,
-	isDevelopment,
-	shouldUseMocks,
-} from "../../mocks/mock-service.ts";
+import { getMockState, shouldUseMocks } from "../../mocks/mock-service.ts";
 import {
 	getMockIfconfigOutput,
 	getMockModemNetMarker,
@@ -1786,6 +1782,7 @@ function finishBondMutation(
 export function handleNetif(
 	conn: WebSocket,
 	msg: NetworkInterfaceMessage["netif"],
+	realDevice: boolean,
 ): NetifApplyOutcome {
 	const int = netif[msg.name];
 	if (!int) {
@@ -1837,9 +1834,7 @@ export function handleNetif(
 			}
 		} else if (
 			(int.enabled && countActiveNetif() === 1) ||
-			// Dev/mock and the hwsim guest keep the raw-only guard.
-			(!isDevelopment() &&
-				process.env.HWSIM_REPO !== "/repo" &&
+			(realDevice &&
 				isBondCandidate(msg.name, int) &&
 				!Object.entries(netif).some(
 					([name, entry]) => name !== msg.name && isBondCandidate(name, entry),
