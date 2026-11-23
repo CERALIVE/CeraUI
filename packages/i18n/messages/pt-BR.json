@@ -969,6 +969,7 @@
 	"live.startFailure.next.openSetup": "Confira a configuração da transmissão e inicie de novo.",
 	"live.startFailure.mutationBlockedNetwork": "Não foi possível desfazer uma alteração no modem, então o estado dele é desconhecido. Confira esse modem em Rede antes de transmitir.",
 	"live.startFailure.action.tryAgain": "Tentar de novo",
+	"live.startFailure.actionUnavailable": "Essa ação não está mais disponível. Confira o estado da transmissão em Ao vivo.",
 	"live.startFailure.action.restartBox": "Reiniciar aparelho",
 	"live.startFailure.action.openSetup": "Abrir configuração",
 	"live.startFailure.action.openNetwork": "Abrir Rede",

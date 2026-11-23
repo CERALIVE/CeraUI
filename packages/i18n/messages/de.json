@@ -963,6 +963,7 @@
 	"live.startFailure.next.openSetup": "Prüfe die Stream-Einrichtung und starte dann erneut.",
 	"live.startFailure.mutationBlockedNetwork": "Eine Modem-Änderung konnte nicht rückgängig gemacht werden, ihr Zustand ist daher unbekannt. Prüfe das Modem unter Netzwerk, bevor du streamst.",
 	"live.startFailure.action.tryAgain": "Erneut versuchen",
+	"live.startFailure.actionUnavailable": "Diese Aktion ist nicht mehr verfügbar. Prüfe den Stream-Status unter Live.",
 	"live.startFailure.action.restartBox": "Box neu starten",
 	"live.startFailure.action.openSetup": "Stream-Einrichtung öffnen",
 	"live.startFailure.action.openNetwork": "Netzwerk öffnen",
