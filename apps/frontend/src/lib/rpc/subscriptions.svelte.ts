@@ -54,7 +54,7 @@ import {
 	setEthernetRoleInputSchema,
 	uplinkFlowsResetEventSchema,
 } from "@ceraui/rpc/schemas";
-import { downloadLog } from "$lib/helpers/SystemHelper";
+import { deliverLegacyLog } from "$lib/device-logs/download-gate.svelte";
 import { wifiFailureReason } from "$lib/helpers/wifi-mode-outcome";
 import { isSameWireValue, preserveWireIdentity } from "$lib/rpc/value-identity";
 import { authStatusStore } from "$lib/stores/auth-status.svelte";
@@ -1135,9 +1135,11 @@ function handleMessage(
 		}
 
 		case "log":
-			// Download log file
+			// A legacy log file System Logs asked for: saved only while that open is still live.
 			if (typeof data === "object" && data !== null) {
-				downloadLog(data as { name: string; contents: string });
+				deliverLegacyLog(
+					data as { name: string; contents: string; request?: string },
+				);
 			}
 			break;
 

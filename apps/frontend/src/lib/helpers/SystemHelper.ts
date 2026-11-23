@@ -56,18 +56,18 @@ export const resetSSHPasword = async () => {
 	}
 };
 
-export const getSystemLog = async () => {
+export const getSystemLog = async (request?: string) => {
 	try {
-		await rpc.system.getSyslog();
+		await rpc.system.getSyslog({ request });
 	} catch (error) {
 		console.error("Failed to get system log:", error);
 		throw error;
 	}
 };
 
-export const getDeviceLog = async () => {
+export const getDeviceLog = async (request?: string) => {
 	try {
-		await rpc.system.getLog();
+		await rpc.system.getLog({ request });
 	} catch (error) {
 		console.error("Failed to get device log:", error);
 		throw error;
@@ -189,27 +189,4 @@ export const updateBitrate = async (bitrate: number) => {
 		console.error("Failed to update bitrate:", error);
 		throw error;
 	}
-};
-export const downloadLog = ({
-	name,
-	contents,
-}: {
-	name: string;
-	contents: string;
-}) => {
-	const parsedContent = contents
-		.split("\n")
-		.map((line) => line.trim()) // Trim whitespace
-		.filter((line) => line.length > 0) // Remove empty lines
-		.join("\n"); // Join back into a string
-
-	const blob = new Blob([parsedContent], { type: "text/plain" });
-	const url = URL.createObjectURL(blob);
-	const a = document.createElement("a");
-	a.href = url;
-	a.download = name;
-	document.body.appendChild(a);
-	a.click();
-	document.body.removeChild(a);
-	URL.revokeObjectURL(url);
 };

@@ -60,6 +60,20 @@ describe("legacy system log download path", () => {
 		expectLogPush(sent, "ceralive.service_log.txt", contents);
 	});
 
+	it("echoes the client's request id in the frame, for a unit or the full journal", async () => {
+		spyOn(runModule, "run").mockResolvedValue("journal output");
+		spyOn(mockService, "shouldUseMocks").mockReturnValue(false);
+		const sent: string[] = [];
+
+		await getLog(fakeConn(sent), "ceralive.service", "7");
+		await getLog(fakeConn(sent), undefined, "8");
+
+		expect(sent.map((frame) => JSON.parse(frame).log.request)).toEqual([
+			"7",
+			"8",
+		]);
+	});
+
 	it("gets the full boot journal when no service is supplied", async () => {
 		const contents = "full journal output";
 		const runSpy = spyOn(runModule, "run").mockResolvedValue(contents);

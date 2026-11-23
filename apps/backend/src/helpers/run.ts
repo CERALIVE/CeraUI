@@ -180,6 +180,8 @@ export function argMatch(re: RegExp, v: string): string {
 
 /** Argv tokens whose *following* token is a secret and must not be logged. */
 const SECRET_FLAG_RE = /pass(word)?|secret|psk|token|key|pin|puk/i;
+const isSensitiveArg = (arg: string) =>
+	SECRET_FLAG_RE.test(arg) || /^(?:802-11-wireless|wifi)\.ssid$/i.test(arg);
 
 /**
  * Produce a log-safe rendering of argv. Two shapes are redacted, because the
@@ -196,12 +198,12 @@ function redactArgs(args: string[]): string {
 	for (let i = 0; i < args.length; i++) {
 		const arg = args[i] ?? "";
 		const prev = i > 0 ? args[i - 1] : undefined;
-		if (prev !== undefined && SECRET_FLAG_RE.test(prev)) {
+		if (prev !== undefined && isSensitiveArg(prev)) {
 			out.push("***");
 			continue;
 		}
 		const eq = arg.indexOf("=");
-		if (eq > 0 && SECRET_FLAG_RE.test(arg.slice(0, eq))) {
+		if (eq > 0 && isSensitiveArg(arg.slice(0, eq))) {
 			out.push(`${arg.slice(0, eq)}=***`);
 			continue;
 		}

@@ -53,10 +53,12 @@ const view = new RawView({
 	now: () => Date.now(),
 	onQuery: (query, span) => onquery?.(query, span),
 });
-const initial = untrack(() => ({ around, boot: bootSelection.boot }));
-void (initial.around !== undefined || initial.boot === null
+// A link opens on its moment; otherwise the picker's choice once it was used in this view (All boots
+// included), else This boot.
+const initial = untrack(() => ({ around, boot: bootSelection.boot, picked: bootSelection.picked }));
+void (initial.around !== undefined || !initial.picked
 	? view.start(initial.around)
-	: view.chooseBoot(initial.boot.bootId, initial.boot.current ? initial.boot.bootId : undefined));
+	: view.chooseBoot(initial.boot?.bootId ?? null, initial.boot?.current ? initial.boot.bootId : undefined));
 const stopBoot = bootSelection.onChoose((bootId) =>
 	void view.chooseBoot(bootId, bootSelection.boot?.current ? bootSelection.boot.bootId : undefined),
 );
@@ -71,6 +73,7 @@ onDestroy(() => {
 $effect(() => {
 	const anchorBoot = view.anchor === null ? undefined : view.bottom?.query.boot;
 	bootSelection.rawScope = {
+		anchored: view.anchor !== null,
 		time: view.filter.time,
 		bootId: anchorBoot === undefined || anchorBoot === 'all' || anchorBoot === 'current' ? view.filter.bootId : anchorBoot,
 	};
@@ -109,10 +112,20 @@ const band = $derived.by(() => {
 		run: () => view.retry(),
 	};
 });
+let controlsRegion: HTMLDivElement;
+let panel: HTMLDivElement;
+
+function keepFocusedControlVisible(): void {
+	const focused = document.activeElement;
+	if (!(focused instanceof HTMLElement) || !controlsRegion.contains(focused)) return;
+	if (getComputedStyle(controlsRegion).overflowY !== 'auto') return;
+	// A keyboard can shrink the viewport without changing which control is focused.
+	panel.scrollIntoView({ block: 'end', inline: 'nearest', behavior: 'instant' });
+	focused.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+}
 </script>
 
-<!-- CJK chrome copy breaks by phrase in Japanese, at spaces in Korean, and never leaves one character alone. -->
-<div class="flex h-full min-h-0 flex-col text-pretty [word-break:auto-phrase] [&:lang(ko)]:break-keep" data-testid="raw-logs">
+{#snippet controls()}
 	<RawLogsFilterBar {view} />
 	{#if view.stale}
 		<div class="text-muted-foreground flex items-start gap-2 border-b px-4 py-2 text-sm" data-testid="raw-disconnected">
@@ -164,6 +177,15 @@ const band = $derived.by(() => {
 	{#if view.gapLimitReached}
 		<p class="text-muted-foreground border-b px-4 py-2 text-xs">{m['systemLogs.marker.recoveryLimit']()}</p>
 	{/if}
+{/snippet}
+
+<!-- CJK chrome copy breaks by phrase in Japanese, at spaces in Korean, and never leaves one character alone. -->
+<svelte:window onresize={keepFocusedControlVisible} />
+<div bind:this={panel} class="flex h-full min-h-0 flex-col text-pretty [word-break:auto-phrase] [&:lang(ko)]:break-keep" data-testid="raw-logs">
+	<!-- The fixed header stays visible; the toolbar/tabs are reachable through the view's outer scroller. -->
+	<div bind:this={controlsRegion} class="contents short-logs:block short-logs:max-h-(--raw-controls-max) short-logs:overflow-y-auto">
+		{@render controls()}
+	</div>
 	<RawLogList {view} />
 	<div aria-live="polite" class="sr-only" data-testid="raw-status" role="status">
 		{#key view.announcement?.serial}{view.announcement === null

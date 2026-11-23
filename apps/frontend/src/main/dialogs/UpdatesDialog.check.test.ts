@@ -504,6 +504,55 @@ describe("UpdatesDialog — Install is gated on the ACTIONABLE set", () => {
 	});
 });
 
+describe("UpdatesDialog — package progress never moves back", () => {
+	const installing = { total: 1, downloading: 0, unpacking: 0, setting_up: 1 };
+	const downloading = { total: 1, downloading: 1, unpacking: 0, setting_up: 0 };
+	const phase = () =>
+		document.querySelector('[data-testid="update-package-phase"]')?.textContent;
+
+	it("keeps the install phase through a stale download frame, never its unconfirmed number", async () => {
+		reactiveUpdateState.value = {
+			kind: "installing",
+			progress: { ...installing, percent: 60 },
+		};
+		render(UpdatesDialog, { open: true });
+		await waitFor(() => expect(phase()).toContain("Installing · 60%"));
+
+		reactiveUpdateState.value = {
+			kind: "downloading",
+			progress: { ...downloading, percent: 96 },
+		};
+		flushSync();
+		expect(phase()).toContain("Installing");
+		expect(phase()).not.toContain("%");
+
+		reactiveUpdateState.value = {
+			kind: "installing",
+			progress: { ...installing, percent: 80 },
+		};
+		flushSync();
+		expect(phase()).toContain("Installing · 80%");
+	});
+
+	it("shows the next run's own phase once the last one is over", async () => {
+		reactiveUpdateState.value = {
+			kind: "installing",
+			progress: { ...installing, percent: 60 },
+		};
+		render(UpdatesDialog, { open: true });
+		await waitFor(() => expect(phase()).toContain("Installing · 60%"));
+		reactiveUpdateState.value = { kind: "idle" };
+		flushSync();
+
+		reactiveUpdateState.value = {
+			kind: "downloading",
+			progress: { ...downloading, percent: 10 },
+		};
+		flushSync();
+		expect(phase()).toContain("Downloading · 10%");
+	});
+});
+
 describe("UpdatesDialog — a failed install never prints the device's raw reason", () => {
 	it("resolves a known reason to keyed copy", async () => {
 		reactiveUpdateState.value = { kind: "failed", reason: "repos_unreachable" };

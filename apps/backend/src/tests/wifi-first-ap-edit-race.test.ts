@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import * as exec from "../helpers/exec.ts";
 import * as runner from "../helpers/run.ts";
 import { readNmProfileInstance } from "../modules/network/network-manager-profile-instance.ts";
 import { readNmVersionId } from "../modules/network/network-manager-profile-write.ts";
@@ -18,6 +19,49 @@ import {
 	decodeProfile,
 	encodeProfile,
 } from "./helpers/wifi-first-ap-keyfile-codec.ts";
+
+test("failed Start retains an inactive replacement that reuses the UUID during the delete activity read", async () => {
+	const f = await firstAp("up");
+	const original = spyOn(exec, "execFileP").getMockImplementation();
+	if (!original) throw new Error("Missing fake NM command boundary");
+	let replaced = false;
+	try {
+		spyOn(exec, "execFileP").mockImplementation(async (bin, args, options) => {
+			const reply = await original(bin, args, options);
+			const uuid = f.created();
+			if (
+				!replaced &&
+				uuid &&
+				bin === "nmcli" &&
+				args?.some(
+					(arg) => arg === "uuid,active" || arg === "uuid,active,dbus-path",
+				) &&
+				f.commands.filter((cmd) =>
+					cmd.some(
+						(arg) => arg === "uuid,active" || arg === "uuid,active,dbus-path",
+					),
+				).length === 2
+			) {
+				f.nm.replace(uuid, "Inactive successor");
+				replaced = true;
+			}
+			return reply;
+		});
+		expect((await f.start()).success).toBe(false);
+		const uuid = f.created();
+		if (!uuid) throw new Error("Missing failed Start target");
+		expect(replaced).toBe(true);
+		expect(f.profiles.has(uuid)).toBe(true);
+		expect(f.settings.get(uuid)?.["802-11-wireless.ssid"]).toBe(
+			"Inactive successor",
+		);
+		expect(
+			f.commands.some((args) => args[0] === "conn" && args[1] === "del"),
+		).toBe(false);
+	} finally {
+		await f.restore();
+	}
+});
 
 for (const window of [
 	"restore",
@@ -90,6 +134,7 @@ for (const window of [
 					iface: f.row,
 					hotspot: f.row.hotspot,
 					activationAttempted: true,
+					activation: undefined,
 					instance: getPendingHotspotCreationInstance(MAC),
 				},
 				f.deps,

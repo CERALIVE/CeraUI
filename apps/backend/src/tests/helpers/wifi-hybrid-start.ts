@@ -1,5 +1,7 @@
 import { spyOn } from "bun:test";
 import type { WifiAdapterMode } from "@ceraui/rpc/schemas";
+import type { nmConnect } from "../../modules/network/network-manager.ts";
+import * as profileInstance from "../../modules/network/network-manager-profile-instance.ts";
 import type { HotspotCredentials } from "../../modules/wifi/hotspot-credentials.ts";
 import {
 	defaultAdapterModeDeps,
@@ -24,14 +26,19 @@ import {
 	stopWifiUpdateLoopForTest,
 	wifiUpdateDevices,
 } from "../../modules/wifi/wifi-interfaces.ts";
+import { ACTIVE_PATH, RUN_ID } from "./wifi-active-observation.ts";
 import { wifiFrameFixture } from "./wifi-frame-fixture.ts";
 import { targetFixture } from "./wifi-hybrid-target.ts";
 
 export const MAC = "dc:a6:32:aa:bb:c0";
 
-export async function hybridFixture(first = false, recordDiscovery = true) {
+export async function hybridFixture(
+	first = false,
+	recordDiscovery = true,
+	distinctSentinel = false,
+) {
 	const frame = await wifiFrameFixture(false);
-	const target = await targetFixture({ recordDiscovery });
+	const target = await targetFixture({ recordDiscovery, distinctSentinel });
 	frame.row.conn = "station-uuid";
 	frame.row.activeConn = "station-uuid";
 	frame.row.hotspot.channel = "ch_11";
@@ -45,14 +52,22 @@ export async function hybridFixture(first = false, recordDiscovery = true) {
 	const effects: string[] = [];
 	let beforeUp: (() => void) | undefined;
 	let failUp: (() => void) | undefined;
+	let readSavedProfile:
+		| ((uuid: string) => Readonly<Record<string, string>> | undefined)
+		| undefined;
 	let exclusive = false;
 	let saved: HotspotCredentials = {
 		ssid: "Original AP",
 		password: "original-password",
 		channel: "ch_11",
+		...(first ? {} : { conn: "test-ap" }),
 	};
 	const deps = {
 		...defaultHotspotDeps,
+		readProfilePins: async (): Promise<readonly [string, string]> => [
+			fields["802-11-wireless.mac-address"] ?? "",
+			fields["match.path"] ?? "",
+		],
 		readCapabilities: () => ({
 			staApCombo: { supported: true, sameChannelOnly: true },
 		}),
@@ -74,7 +89,13 @@ export async function hybridFixture(first = false, recordDiscovery = true) {
 			return "new-owned-ap";
 		},
 		nmConnDelete: async () => true,
-		nmConnect: async (uuid: string) => {
+		nmConnect: (async (
+			uuid,
+			_timeout,
+			receipt,
+			_onTimeout,
+			ifname?: string,
+		) => {
 			effects.push("up");
 			if (failUp) {
 				const action = failUp;
@@ -83,17 +104,24 @@ export async function hybridFixture(first = false, recordDiscovery = true) {
 				return false;
 			}
 			if (exclusive) return true;
+			const profile = readSavedProfile ? readSavedProfile(uuid) : fields;
+			const leg = target.objects.get("clap-wlan0");
 			const connected =
-				fields["802-11-wireless.band"] === "bg" &&
-				fields["802-11-wireless.channel"] === "1";
+				profile?.["802-11-wireless.band"] === "bg" &&
+				profile["802-11-wireless.channel"] === "1" &&
+				(!readSavedProfile ||
+					(leg !== undefined &&
+						ifname === "clap-wlan0" &&
+						profile["connection.interface-name"] === ifname &&
+						profile["802-11-wireless.mode"] === "ap"));
 			if (connected) {
 				target.active(uuid);
 				target.state("100 (connected)");
-				const leg = target.objects.get("clap-wlan0");
+				receipt?.(ACTIVE_PATH);
 				if (leg) leg.type = "AP";
 			}
 			return connected;
-		},
+		}) satisfies typeof nmConnect,
 		nmDisconnect: async (uuid: string) => {
 			effects.push(`down:${uuid}`);
 			target.active("");
@@ -124,6 +152,9 @@ export async function hybridFixture(first = false, recordDiscovery = true) {
 		fields,
 		effects,
 		saved: () => saved,
+		useSavedProfileForUp: (read: NonNullable<typeof readSavedProfile>) => {
+			readSavedProfile = read;
+		},
 		failNextUp: (action: () => void = () => undefined) => {
 			failUp = action;
 		},
@@ -168,8 +199,13 @@ export async function hybridFixture(first = false, recordDiscovery = true) {
 				setDupIpSuppression: deps.setDupIpSuppression,
 				rescan: async () => undefined,
 			}),
-		configure: () =>
-			wifiHotspotConfig(
+		configure: () => {
+			spyOn(profileInstance, "readNmProfileInstance").mockResolvedValue({
+				path: "/org/freedesktop/NetworkManager/Settings/1",
+				fingerprint: "hybrid-test-profile",
+				runId: RUN_ID,
+			});
+			return wifiHotspotConfig(
 				frame.context.ws,
 				{
 					device: 0,
@@ -187,7 +223,8 @@ export async function hybridFixture(first = false, recordDiscovery = true) {
 					getCapabilities: () => undefined,
 					rememberCredentials: deps.credentials.remember,
 				},
-			),
+			);
+		},
 		observeRoam: (observe: () => Promise<unknown> = wifiUpdateDevices) => {
 			spyOn(defaultHotspotStopDeps, "nmDisconnect").mockImplementation(
 				deps.nmDisconnect,

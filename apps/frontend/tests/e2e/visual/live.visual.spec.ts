@@ -15,6 +15,36 @@ test.describe('@visual Live destination snapshots', () => {
 			maxDiffPixels: 100,
 		});
 	});
+
+	test('@visual live destination, the whole page', { tag: '@visual' }, async ({ authedPage: page }) => {
+		const live = new LivePage(page);
+		await live.open();
+		// The whole page, beside the first screen above: the source options sit one per
+		// line and run past the first screen, so this picture keeps every option the
+		// first-screen picture shows and the rest. A window as tall as the page leaves the
+		// Live bar over the page's own end; every option must sit whole between the header
+		// and the bar.
+		const viewport = page.viewportSize();
+		if (viewport === null) throw new Error('the project sets a viewport');
+		const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+		await page.setViewportSize({ width: viewport.width, height: Math.max(viewport.height, pageHeight) });
+		const hidden = await page.evaluate(() => {
+			const header = document.querySelector('header')?.getBoundingClientRect().bottom ?? 0;
+			const bar = document.querySelector('[data-testid="live-bar"]')?.getBoundingClientRect().top ?? innerHeight;
+			return [...document.querySelectorAll('li[data-testid^="source-row-"]')]
+				.filter((row) => {
+					const box = row.getBoundingClientRect();
+					return box.top < header - 0.5 || box.bottom > bar + 0.5;
+				})
+				.map((row) => row.getAttribute('data-testid'));
+		});
+		expect(hidden, 'every source option is in the picture, clear of the header and the Live bar').toEqual([]);
+		await expect(page.locator('li[data-testid^="source-row-"]')).not.toHaveCount(0);
+		await expect(page).toHaveScreenshot('live-desktop-full.png', {
+			stylePath: new URL('./mask.css', import.meta.url).pathname,
+			maxDiffPixels: 100,
+		});
+	});
 });
 
 /**
@@ -111,8 +141,12 @@ const CONDITIONS: readonly Condition[] = [
 
 type IdleGeometry = {
 	readonly blocks: readonly string[];
+	readonly lefts: Readonly<Record<string, number>>;
 	readonly gaps: readonly number[];
 	readonly openDetails: readonly string[];
+	readonly headerBottom: number;
+	readonly barTop: number;
+	readonly note: { readonly top: number; readonly bottom: number } | null;
 	readonly testIds: readonly string[];
 };
 
@@ -184,8 +218,18 @@ for (const condition of CONDITIONS) {
 
 					return {
 						blocks: laidOut.map(describe),
+						lefts: Object.fromEntries(
+							laidOut.map((el) => [describe(el), Math.round(el.getBoundingClientRect().left)]),
+						),
 						gaps,
 						openDetails: [...document.querySelectorAll('details[open]')].map(describe),
+						headerBottom: document.querySelector('header')?.getBoundingClientRect().bottom ?? 0,
+						barTop: document.querySelector('[data-testid="live-bar"]')?.getBoundingClientRect().top ?? 0,
+						// The RØDE camera's capture-format note, the paragraph under its choices.
+						note: (() => {
+							const box = document.querySelector('[data-testid="source-modes-usb"] > p')?.getBoundingClientRect();
+							return box ? { top: box.top, bottom: box.bottom } : null;
+						})(),
 						testIds: [
 							...new Set(
 								[...document.querySelectorAll('[data-testid]')].map(
@@ -264,11 +308,41 @@ for (const condition of CONDITIONS) {
 					`${condition.name}: the four blocks must share ONE gap rhythm, measured ${geometry.gaps.join(' / ')}px`,
 				).toHaveLength(1);
 
-				// ── 6. Only the preview opens by default, and only from 768 px ───────
+				// ── 6. Two balanced columns from 1024 px ────────────────────────────────────
+				// The stream setup fills the space under the picture instead of
+				// stacking below the source card and leaving the picture's column empty.
+				const { lefts } = geometry;
+				if (condition.viewport.width >= 1024) {
+					expect(lefts['stream-setup-chain'], `${condition.name}: stream setup under the picture`).toBe(
+						lefts['program-desk'],
+					);
+					expect(lefts['source-section'], `${condition.name}: source in its own column`).toBeGreaterThan(
+						lefts['program-desk'] ?? 0,
+					);
+				} else {
+					expect(new Set(Object.values(lefts)).size, `${condition.name}: one column`).toBe(1);
+				}
+
+				// ── 7. Only the preview opens by default, and only from 768 px ───────
 				expect(
 					geometry.openDetails,
 					`${condition.name}: a disclosure opened itself: ${geometry.openDetails.join(', ')}`,
 				).toEqual(condition.viewport.width >= 768 ? ['preview-disclosure'] : []);
+
+				// ── 8. The capture-format note sits whole between the header and the Live bar ──
+				// Main shows the whole note in this very state on a phone and at the kiosk;
+				// the redesign must not push it under the bar. Whether every card's last
+				// control can be scrolled clear of the bar is its own test in
+				// live-design-a11y.spec.ts.
+				expect(geometry.note, `${condition.name}: the RØDE capture-format note is rendered`).not.toBeNull();
+				expect(
+					geometry.note?.top ?? Number.NEGATIVE_INFINITY,
+					`${condition.name}: the capture-format note starts under the header`,
+				).toBeGreaterThanOrEqual(geometry.headerBottom);
+				expect(
+					geometry.note?.bottom ?? Number.POSITIVE_INFINITY,
+					`${condition.name}: the capture-format note ends under the Live bar`,
+				).toBeLessThanOrEqual(geometry.barTop);
 			},
 		);
 	});

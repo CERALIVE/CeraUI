@@ -8,6 +8,7 @@ import {
 	defaultHotspotStopDeps,
 	wifiHotspotStop,
 } from "../modules/wifi/wifi-hotspot-config.ts";
+import { ACTIVE_PATH, RUN_ID } from "./helpers/wifi-active-observation.ts";
 import {
 	autoconnectFixture,
 	MAC,
@@ -72,7 +73,9 @@ test("returning sole Stop sends Down without disarming a live port-owned profile
 	expect(await wifiHotspotStop({ device: soleDevice() })).toEqual({
 		success: true,
 	});
-	expect(down.mock.calls).toEqual([[PORT_PROFILE]]);
+	expect(down.mock.calls).toEqual([
+		[PORT_PROFILE, ACTIVE_PATH, RUN_ID, "wlan0"],
+	]);
 	expect(write.mock.calls.filter(([uuid]) => uuid === PORT_PROFILE)).toEqual(
 		[],
 	);

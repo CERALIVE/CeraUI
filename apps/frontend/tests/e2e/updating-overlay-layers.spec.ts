@@ -1,6 +1,56 @@
 import { expect, test } from "./fixtures/index.js";
 import { ensureAuthenticated, setLocale } from "./helpers/index.js";
 
+test("shows phase activity, then the percentage APT reports for each phase", async ({
+	page,
+	pageRpc,
+}) => {
+	await page.goto("/");
+	await ensureAuthenticated(page);
+	const sendProgress = (phase: "preparing" | "downloading" | "installing", percent?: number) =>
+		pageRpc.call(["dev", "emit"], {
+			type: "status",
+			payload: {
+				updating: {
+					total: phase === "preparing" ? 0 : 1,
+					downloading: phase === "downloading" ? 1 : 0,
+					unpacking: 0,
+					setting_up: phase === "installing" ? 1 : 0,
+					...(percent === undefined ? {} : { percent }),
+				},
+			},
+		});
+	const overlay = page.getByTestId("updating-overlay");
+	const phase = overlay.getByTestId("update-phase");
+	const bar = overlay.getByRole("progressbar", { name: "Progress" });
+
+	await sendProgress("preparing");
+	await expect(phase).toHaveText("Preparing or downloading packages");
+	await expect(bar).toHaveAttribute("data-state", "indeterminate");
+	await expect(bar).toHaveCSS("background-image", /repeating-linear-gradient/);
+
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	await page.locator("html").evaluate((root) => root.setAttribute("data-display", "eink"));
+	await sendProgress("downloading");
+	await expect(phase).toHaveText("Downloading");
+	await expect(bar).toHaveAttribute("data-state", "indeterminate");
+	await expect(bar).not.toHaveAttribute("aria-valuenow");
+	await expect(bar).toHaveCSS("background-image", /repeating-linear-gradient/);
+	await expect(bar).toHaveCSS("animation-name", "none");
+
+	await sendProgress("downloading", 41);
+	await expect(bar).toHaveAttribute("aria-valuenow", "41");
+	await expect(bar).toHaveCSS("background-image", "none");
+	await expect(overlay.getByText("41%", { exact: true })).toBeVisible();
+
+	await sendProgress("installing", 60);
+	await expect(phase).toHaveText("Installing");
+	await expect(bar).toHaveAttribute("aria-valuenow", "60");
+	await expect(bar).toHaveAttribute("aria-valuetext", "60%");
+	await expect(overlay.getByText(/of \d+ steps/)).toHaveCount(0);
+	await expect(overlay.getByText("100%", { exact: true })).toHaveCount(0);
+});
+
 // The update takeover once carried a decorative wash: an overflow-hidden layer
 // of blurred circles larger than the sheet, which a script could scroll. Neither
 // the sheet nor its direct children may scroll (nested content such as the

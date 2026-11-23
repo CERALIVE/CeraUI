@@ -7,6 +7,7 @@ import * as activation from "../../../src/modules/wifi/wifi-hotspot-activation.t
 import * as stop from "../../../src/modules/wifi/wifi-hotspot-config.ts";
 import { getWifiIdToMacAddress } from "../../../src/modules/wifi/wifi-interfaces.ts";
 import { MAC, PROFILE } from "../../../src/tests/helpers/wifi-autoconnect-fixture.ts";
+import { ACTIVE_PATH } from "../../../src/tests/helpers/wifi-active-observation.ts";
 import { hotspotLossFixture } from "../../../src/tests/helpers/wifi-hotspot-loss-fixture.ts";
 import * as radio from "./first-ap-radio.ts";
 import { nativeRecoveryCase } from "./first-ap-recovery.ts";
@@ -36,11 +37,11 @@ test("native qualification drives observed loss, public Stop and actual owner re
 		return original(binary, args, options);
 	});
 	spyOn(nm, "nmDeviceProp").mockImplementation(async (ifname, fields) => {
-		if (fields === "GENERAL.STATE,GENERAL.CON-UUID") {
+		if (fields.startsWith("GENERAL.STATE,GENERAL.CON-UUID")) {
 			const active = (await nm.nmDevices("device,type,state,con-uuid"))
 				?.map(nm.nmcliParseSep)
 				.find(([name]) => name === ifname)?.[3];
-			return [active ? "100" : "30", active ?? ""];
+			return [active ? "100" : "30", active ?? "", active ? ACTIVE_PATH : ""];
 		}
 		return ["Policy", "Radio", "yes", "no", "yes"];
 	});

@@ -18,6 +18,8 @@ export type WifiOperationBinding = {
 	readonly mac: string | undefined;
 	readonly devicePath?: string;
 	readonly lifetime: RadioLifetime;
+	readonly bootRestore?: "verified" | "require-port-pin";
+	readonly restoreProfile?: { readonly owner: string; readonly uuid: string };
 };
 
 export const wifiOperationChanged = {
@@ -53,9 +55,16 @@ export function bindingForRow(
 	};
 }
 
-export function soleWifiPortAlias(binding: WifiOperationBinding | undefined) {
-	return binding?.mac && binding.key === binding.mac && binding.devicePath
+/** Intent follows the verified radio, not its registry key or active profile. */
+export function verifiedWifiPortKey(binding: WifiOperationBinding | undefined) {
+	return binding?.mac && binding.devicePath
 		? `${binding.mac}@${binding.devicePath}`
+		: undefined;
+}
+
+export function soleWifiPortAlias(binding: WifiOperationBinding | undefined) {
+	return binding?.key === binding?.mac
+		? verifiedWifiPortKey(binding)
 		: undefined;
 }
 
@@ -106,7 +115,10 @@ export async function sampleWifiOperationRadio(
  * Every effect of a bound operation goes through `check`/`permit`. Once a hybrid
  * AP leg is bound, the same proof also covers that leg.
  */
-export function wifiOperationGuard(binding: WifiOperationBinding | undefined) {
+export function wifiOperationGuard(
+	binding: WifiOperationBinding | undefined,
+	requirePort = false,
+) {
 	let changed = false;
 	let legCurrent: (() => Promise<boolean | undefined>) | undefined;
 	const current = () => {
@@ -116,7 +128,11 @@ export function wifiOperationGuard(binding: WifiOperationBinding | undefined) {
 	// Unavailable proof denies effects but is not evidence authorizing rollback Down.
 	const observe = async () => {
 		if (!binding) return "match";
-		const port = wifiAdapterKeyPort(binding.key);
+		const restoring = binding.bootRestore !== undefined;
+		const port =
+			wifiAdapterKeyPort(binding.key) ??
+			(restoring || requirePort ? binding.devicePath : undefined);
+		if (requirePort && !binding.devicePath) return "unavailable";
 		const parent = await sampleWifiOperationRadio(
 			binding.ifname,
 			Boolean(port),
@@ -130,6 +146,8 @@ export function wifiOperationGuard(binding: WifiOperationBinding | undefined) {
 			(!parent.macReadFailed && parent.permanentMac !== binding.mac)
 		)
 			return "replaced";
+		if (restoring && (parent.macReadFailed || !parent.permanentMac))
+			return "unavailable";
 		return (port === undefined ||
 			(parent.devicePath === port && binding.devicePath === port)) &&
 			ownsWifiOperation(binding)

@@ -47,13 +47,13 @@ async function revokedTwin(): Promise<Record<string, string>> {
 			"connection.autoconnect": "no",
 			"connection.interface-name": row.ifname,
 			"802-11-wireless.mac-address": MAC,
-			"match.path": `usb-port${i}`,
+			"match.path": `phy${i}`,
 		});
 		f.witnesses.set(row.ifname, {
 			ifindex: 3 + 2 * i,
 			phy: `/sys/devices/policy/phy${i}`,
 			mac: MAC,
-			path: `usb-port${i}`,
+			path: `phy${i}`,
 		});
 		addWifiInterface(`limited:${3 + 2 * i}:0`, row);
 		getWifiIdToMacAddress()[i] = `limited:${3 + 2 * i}:0`;
@@ -69,10 +69,10 @@ async function revokedTwin(): Promise<Record<string, string>> {
 	expect(wifiAdapterLockKey("limited:3:0")).toBe(owner);
 	const profile = f.profiles.get(uuid);
 	if (!profile) throw new Error("Missing first twin profile");
-	profile["match.path"] = "usb-port1";
+	profile["match.path"] = "phy1";
 	await quiesceHotspotAutoconnect(wifiRadioIdentity.state.rows, new Map());
 	expect(wifiAdapterLockKey("limited:3:0")).toBe("limited:3:0");
-	profile["match.path"] = "usb-port0";
+	profile["match.path"] = "phy0";
 	profile["connection.autoconnect"] = "yes";
 	f.persistMode(owner, "station");
 	f.effects.length = 0;

@@ -1,7 +1,7 @@
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
 import type { StatusMessage } from '@ceraui/rpc/schemas';
-import { CheckCircle2, Cog, Download, Package, RotateCw, XCircle } from '@lucide/svelte';
+import { CheckCircle2, Cog, Download, RotateCw, XCircle } from '@lucide/svelte';
 import { onMount } from 'svelte';
 
 import * as Drawer from '$lib/components/ui/drawer/index.js';
@@ -12,36 +12,6 @@ const { details }: { details: Exclude<StatusMessage['updating'], boolean | null>
 
 // Enhanced state management
 let isVisible = $state(false);
-let animationPhase = $state<'downloading' | 'unpacking' | 'installing' | 'complete' | 'failed'>(
-	'downloading',
-);
-
-// Safe progress calculation with null checks and NaN prevention
-const progress: number = $derived.by(() => {
-	if (!details) return 0;
-	const downloading = Number(details.downloading) || 0;
-	const unpacking = Number(details.unpacking) || 0;
-	const setting_up = Number(details.setting_up) || 0;
-	const total = downloading + unpacking + setting_up;
-	return Number.isFinite(total) ? total : 0;
-});
-
-// Safe total calculation with minimum value and NaN prevention
-const total: number = $derived.by(() => {
-	if (!details?.total) return 1;
-	const calculatedTotal = 3 * (Number(details.total) || 0);
-	const safeTotal = Math.max(calculatedTotal, 1);
-	return Number.isFinite(safeTotal) ? safeTotal : 1;
-});
-
-// Progress percentage with enhanced NaN prevention
-const progressPercentage = $derived.by(() => {
-	if (!details || total <= 0 || !Number.isFinite(progress) || !Number.isFinite(total)) {
-		return 0;
-	}
-	const percentage = (progress / total) * 100;
-	return Number.isFinite(percentage) ? Math.min(percentage, 100) : 0;
-});
 
 // Truthful terminal-state detection. `details.result` is `0` (the device's
 // success result) or a STRING (the apt failure message the update loop
@@ -55,22 +25,17 @@ const failureReason = $derived(
 const isFailure = $derived(failureReason !== undefined);
 const isSuccess = $derived(details?.result === 0);
 
-// Determine current animation phase
-$effect(() => {
-	if (!details) return;
-
-	if (isFailure) {
-		animationPhase = 'failed';
-	} else if (isSuccess) {
-		animationPhase = 'complete';
-	} else if (details.downloading && details.downloading > 0) {
-		animationPhase = 'downloading';
-	} else if (details.unpacking && details.unpacking > 0) {
-		animationPhase = 'unpacking';
-	} else if (details.setting_up && details.setting_up > 0) {
-		animationPhase = 'installing';
-	}
+const animationPhase = $derived.by(() => {
+	if (isFailure) return 'failed';
+	if (isSuccess) return 'complete';
+	if (details.setting_up > 0 || details.unpacking > 0) return 'installing';
+	return details.downloading > 0 ? 'downloading' : 'preparing';
 });
+
+// The number is APT's own for the phase shown; only the device's success
+// result fills the bar, and a failure shows none.
+const percent = $derived(isSuccess ? 100 : isFailure ? undefined : details.percent);
+const installStarted = $derived(animationPhase === 'installing' || isSuccess);
 
 // Terminal outcomes have ONE announcer, once per outcome. In the app Layout
 // never mounts this takeover for a terminal frame: it releases the takeover and
@@ -86,7 +51,7 @@ onMount(() => {
 </script>
 
 <!-- Enhanced Modern Glassmorphism Overlay -->
-{#if Number.isFinite(progress) && Number.isFinite(total) && Number.isFinite(progressPercentage)}
+{#if details}
 	<Drawer.Root closeOnEscape={false} closeOnOutsideClick={false} open={true}>
 		<Drawer.Content
 			class="from-background/95 via-background/90 to-background/95 h-full w-full border-0 bg-gradient-to-br backdrop-blur-xl"
@@ -118,15 +83,12 @@ onMount(() => {
 						data-testid="update-phase"
 					>
 						<div class="flex items-center gap-1 sm:gap-2">
-							{#if animationPhase === 'downloading'}
+							{#if animationPhase === 'preparing' || animationPhase === 'downloading'}
 								<Download class="text-primary h-4 w-4 sm:h-5 sm:w-5" />
 								<span class="text-primary text-sm font-medium sm:text-base"
-									>{m["updatingOverlay.downloading"]()}</span
-								>
-							{:else if animationPhase === 'unpacking'}
-								<Package class="h-4 w-4 text-status-warning sm:h-5 sm:w-5" />
-								<span class="text-sm font-medium text-status-warning sm:text-base"
-									>{m["updatingOverlay.unpacking"]()}</span
+									>{animationPhase === 'preparing'
+										? m["updatingOverlay.preparingOrDownloading"]()
+										: m["updatingOverlay.downloading"]()}</span
 								>
 							{:else if animationPhase === 'installing'}
 								<Cog class="h-4 w-4 text-status-info sm:h-5 sm:w-5" />
@@ -164,12 +126,12 @@ onMount(() => {
 							{/if}
 
 							<!-- Percentage Overlay -->
-							{#if animationPhase !== 'failed'}
+							{#if percent !== undefined}
 								<div class="absolute inset-0 flex items-center justify-center">
 									<span
 										class="text-foreground bg-background/80 rounded-full px-3 py-1.5 text-xl font-bold sm:text-2xl"
 									>
-										{Number.isFinite(progressPercentage) ? progressPercentage.toFixed(0) : '0'}%
+										{percent}%
 									</span>
 								</div>
 							{/if}
@@ -205,21 +167,12 @@ onMount(() => {
 							class="bg-muted/30 border-border/50 h-2.5 overflow-hidden rounded-full border backdrop-blur-sm"
 						>
 							<Progress
-								class="h-full rounded-full"
-								max={Number.isFinite(total) ? total : 1}
-								value={Number.isFinite(progress) ? progress : 0}
+								class="package-update-progress h-full rounded-full"
+								max={100}
+								value={percent ?? null}
+								aria-valuetext={percent === undefined ? undefined : `${percent}%`}
+								aria-label={m["updatingOverlay.progress"]()}
 							/>
-						</div>
-
-						<!-- Progress Details -->
-						<div class="text-muted-foreground flex justify-between text-xs sm:text-sm">
-							<span
-								>{Number.isFinite(progress) ? progress : 0}
-								{m["updatingOverlay.of"]()}
-								{Number.isFinite(total) ? total : 1}
-								{m["updatingOverlay.steps"]()}</span
-							>
-							<span>{Number.isFinite(progressPercentage) ? progressPercentage.toFixed(1) : '0.0'}%</span>
 						</div>
 					</div>
 				</div>
@@ -229,62 +182,25 @@ onMount(() => {
 					<!-- Download Step -->
 					<div
 						class="flex flex-col items-center gap-1 transition-all duration-300 sm:gap-2"
-						class:opacity-100={details?.downloading > 0 || animationPhase === 'downloading'}
-						class:opacity-40={!(details?.downloading > 0 || animationPhase === 'downloading')}
+						class:opacity-100={!isFailure || details.downloading > 0}
+						class:opacity-40={isFailure && details.downloading <= 0}
 					>
 						<div
 							class="flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all duration-300 sm:h-12 sm:w-12"
-							class:bg-primary={details?.downloading > 0}
-							class:border-muted={!(details?.downloading > 0)}
-							class:border-primary={details?.downloading > 0}
-							class:text-muted-foreground={!(details?.downloading > 0)}
-							class:text-primary-foreground={details?.downloading > 0}
+							class:bg-primary={installStarted}
+							class:border-muted={!installStarted}
+							class:border-primary={installStarted}
+							class:text-muted-foreground={!installStarted}
+							class:text-primary-foreground={installStarted}
 						>
 							<Download class="h-3 w-3 sm:h-5 sm:w-5" />
 						</div>
 						<span
 							class="text-center text-[10px] font-medium sm:text-xs"
-							class:text-primary={details?.downloading > 0}
+							class:text-primary={installStarted}
 						>
 							{m["updatingOverlay.downloading"]()}
 						</span>
-						{#if details?.downloading > 0}
-							<span class="text-muted-foreground text-[9px] sm:text-xs"
-								>{details.downloading}/{details.total}</span
-							>
-						{/if}
-					</div>
-
-					<!-- Arrow -->
-					<div class="border-muted-foreground/30 w-3 border-t-2 border-dashed sm:w-6"></div>
-
-					<!-- Unpack Step -->
-					<div
-						class="flex flex-col items-center gap-1 transition-all duration-300 sm:gap-2"
-						class:opacity-100={details?.unpacking > 0 || animationPhase === 'unpacking'}
-						class:opacity-40={!(details?.unpacking > 0 || animationPhase === 'unpacking')}
-					>
-						<div
-							class="flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all duration-300 sm:h-12 sm:w-12"
-							class:bg-status-warning={details?.unpacking > 0}
-							class:border-status-warning={details?.unpacking > 0}
-							class:border-muted={!(details?.unpacking > 0)}
-							class:text-muted-foreground={!(details?.unpacking > 0)}
-							class:text-white={details?.unpacking > 0}
-						>
-							<Package class="h-3 w-3 sm:h-5 sm:w-5" />
-						</div>
-						<span
-							class="text-center text-[10px] font-medium sm:text-xs"
-							class:text-status-warning={details?.unpacking > 0}
-						>
-							{m["updatingOverlay.unpacking"]()}
-						</span>
-						{#if details?.unpacking > 0}
-							<span class="text-muted-foreground text-[9px] sm:text-xs"
-								>{details.unpacking}/{details.total}</span
-							>
-						{/if}
 					</div>
 
 					<!-- Arrow -->
@@ -293,43 +209,28 @@ onMount(() => {
 					<!-- Install Step -->
 					<div
 						class="flex flex-col items-center gap-1 transition-all duration-300 sm:gap-2"
-						class:opacity-100={details?.setting_up > 0 || animationPhase === 'installing'}
-						class:opacity-40={!(details?.setting_up > 0 || animationPhase === 'installing')}
+						class:opacity-100={installStarted}
+						class:opacity-40={!installStarted}
 					>
 						<div
 							class="flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all duration-300 sm:h-12 sm:w-12"
-							class:bg-status-info={details?.setting_up > 0}
-							class:border-status-info={details?.setting_up > 0}
-							class:border-muted={!(details?.setting_up > 0)}
-							class:text-muted-foreground={!(details?.setting_up > 0)}
-							class:text-white={details?.setting_up > 0}
+							class:bg-status-info={installStarted}
+							class:border-status-info={installStarted}
+							class:border-muted={!installStarted}
+							class:text-muted-foreground={!installStarted}
+							class:text-white={installStarted}
 						>
 							<Cog class="h-3 w-3 sm:h-5 sm:w-5" />
 						</div>
 						<span
 							class="text-center text-[10px] font-medium sm:text-xs"
-							class:text-status-info={details?.setting_up > 0}
+							class:text-status-info={installStarted}
 						>
 							{m["updatingOverlay.installing"]()}
 						</span>
-						{#if details?.setting_up > 0}
-							<span class="text-muted-foreground text-[9px] sm:text-xs"
-								>{details.setting_up}/{details.total}</span
-							>
-						{/if}
 					</div>
 				</div>
 			</div>
 		</Drawer.Content>
 	</Drawer.Root>
-{:else}
-	<!-- Fallback overlay without animations if values are invalid -->
-	<div class="bg-background/95 fixed inset-0 z-50 backdrop-blur-xl">
-		<div class="relative flex h-full w-full flex-col items-center justify-center p-4 sm:p-8">
-			<div class="text-center">
-				<RotateCw class="text-primary mx-auto mb-4 h-32 w-32 motion-safe:animate-spin" />
-				<div class="text-muted-foreground text-sm">Loading...</div>
-			</div>
-		</div>
-	</div>
 {/if}

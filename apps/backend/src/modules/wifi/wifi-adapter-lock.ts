@@ -128,6 +128,28 @@ export function wifiAdapterLockKeyForConnectionUuid(
 	return undefined;
 }
 
+/** Stop/Station can join a handoff without taking a lock discovery still needs. */
+export async function awaitWifiStopHandoff(
+	row: WifiInterface,
+): Promise<boolean> {
+	if (!isWifiModeTargetPending(row)) return true;
+	const expired = Promise.withResolvers<void>();
+	const timeout = setTimeout(() => expired.resolve(), 2000);
+	try {
+		await Promise.race([
+			withoutWifiRequestBinding(wifiUpdateDevices),
+			expired.promise,
+		]);
+	} catch (error: unknown) {
+		logger.warn(
+			`Wi-Fi handoff refresh failed: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	} finally {
+		clearTimeout(timeout);
+	}
+	return !isWifiModeTargetPending(row);
+}
+
 /**
  * Run `fn` while holding the canonical per-adapter lock. A thin, deliberately
  * transparent wrapper over {@link withDeviceLock} — the point is that every

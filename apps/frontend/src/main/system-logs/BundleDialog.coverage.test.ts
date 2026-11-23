@@ -17,6 +17,7 @@ it.each([false, true])(
 	async (complete) => {
 		const manifest = bundleManifest(10);
 		const sharing = new SharingFlow({
+			current: () => true,
 			logs: {
 				createExport: async () => EXPORT_TICKET,
 				createBundle: async () => BUNDLE_TICKET,

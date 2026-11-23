@@ -98,6 +98,28 @@ export function wifiModeErrorKey(reason: string | undefined): string {
 /** What changing to a mode costs the operator, when it costs anything. */
 export type WifiModeConsequence = "drops-uplink" | "drops-hotspot";
 
+export interface WifiModeConfirmation {
+	readonly kind: "inline" | "credentials";
+	readonly mode: WifiAdapterMode;
+}
+
+/** The inline confirmation and its consent slot must have the same lifetime. */
+export function actionableWifiModeConsequence(
+	view: WifiAdapterModeView,
+	mode: WifiAdapterMode,
+	context: WifiAdapterModeContext,
+	locked: boolean,
+): WifiModeConsequence | undefined {
+	if (
+		locked ||
+		view.pending ||
+		!view.options.some((option) => option.mode === mode && option.available) ||
+		(mode !== "station" && (!view.incarnation || view.degradedReason))
+	)
+		return undefined;
+	return deriveWifiModeConsequence(view.displayMode, mode, context);
+}
+
 const CONSEQUENCE_KEY: Record<
 	WifiModeConsequence,
 	{ title: string; body: string; confirm: string }

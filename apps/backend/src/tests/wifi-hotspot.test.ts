@@ -21,6 +21,7 @@ import {
 	isConcurrentHotspot,
 	isHotspot,
 } from "../modules/wifi/wifi-hotspot-types.ts";
+import { mockActiveObservation } from "./helpers/wifi-active-observation.ts";
 import {
 	makeDeps,
 	makeHotspotIface,
@@ -116,6 +117,9 @@ describe("wifiHotspotStart — AP+STA concurrent mode", () => {
 			activeConn: "hotspot-uuid",
 		};
 		const released: string[] = [];
+		mockActiveObservation((name) =>
+			name === "clap-wlan0" ? "hotspot-uuid" : undefined,
+		);
 
 		await stopHotspotForInterface(mac, iface, {
 			nmConnSetFields: async () => true,

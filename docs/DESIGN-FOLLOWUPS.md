@@ -456,6 +456,15 @@ The full table, evidence and the fixed findings are in
   Full log files. Below 1024 px the Storage tab opens with Downloads above usage, limits
   and cleanup. Captured at 375x812, 1024x600 touch and 1280x800 in both themes, in English
   and Spanish.
+- **Revised (owner feedback on v2026.11.3, 2026-11-21):** the owner found export almost
+  hidden at the end of the view and asked what a support bundle is. A logs toolbar now
+  shares the tab strip's row (above the tabs below 640 px) with Support bundle in outline
+  and Export logs as the view's one filled sharing action, so both show without scrolling
+  on every tab at 375, 768, 1024x600 touch and 1280 px and in e-ink. The Downloads rows keep
+  their order but are all outline. The bundle dialog opens on one plain sentence of what
+  the bundle holds and who it is for, above the unchanged privacy note, and the view's load
+  failure band offers Support bundle beside Try again (`SharingToolbar.svelte`,
+  `system-logs-view.md` Logs toolbar and Load failure).
 
 ### DF-25: Destructive confirmation text is under 4.5:1 (SL-5, P2)
 

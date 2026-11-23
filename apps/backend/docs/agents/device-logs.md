@@ -98,9 +98,9 @@ Maintenance runs when a ceiling is readable and a limit is set
 | Follow batch | flush delay 0 at 200 entries or 64 KiB, else 250 ms; an entry past 200 entries or 256 KiB is counted in `dropped` | `follow-batch.ts:23,34` |
 | Follow catch-up | more than 2000 records examined before the first flush restarts the follower with `gap: "catchup_exceeded"` | `follow-delivery.ts:47-50`, `follow.ts:255-287` |
 | Export | 64 MiB, 120 s; ticket 60 s, deleted on use | `export-body.ts:10-11`; `export.ts:65,90` |
-| Bundle | 32 MiB plain, 8 MiB compressed; 60 s to prepare, 60 s to download | `bundle-body.ts:12-13`; `bundle.ts:53,70,128` |
+| Bundle | 32 MiB plain, 8 MiB compressed; 60 s to prepare, 60 s to download | `bundle-body.ts:12-13`; `bundle.ts:46,102,146` |
 | Sharing slot | one lease at a time | `sharing.ts:4-15` |
-| Clear all and sharing | releases unused export and bundle tickets and aborts running downloads | `retention.ts`; `export.ts:174-180`; `bundle.ts:196-201` |
+| Clear all and sharing | releases unused export and bundle tickets and aborts running downloads | `retention.ts`; `export.ts:174-180`; `bundle.ts:260-265` |
 
 Follow reads from the running boot's retained start when either checkpoint
 format identifies a previous boot. This path does not signal log cleanup.
@@ -118,7 +118,7 @@ example origins:
 | `BOOT_UNAVAILABLE` | `query.ts:39,64`; `follow.ts:85` |
 | `FILTER_CHANGED` | `continuation.ts:72` |
 | `JOURNAL_UNAVAILABLE` | `reader.ts:92` (spawn `ENOENT`); `boots.ts:44` |
-| `BUSY` | [Paging admission](device-log-paging.md); `follow.ts:83`; `export.ts:61`; `bundle.ts:45` |
+| `BUSY` | [Paging admission](device-log-paging.md); `follow.ts:83`; `export.ts:61`; `bundle.ts:82` |
 | `RECORD_TOO_LARGE` | `reader.ts:126,168,178` |
 | `READ_FAILED` | `reader.ts:93,134,153`; `retention.ts:128,150,157` |
 | `INVALID_RETENTION` | `retention.ts:112,120` |

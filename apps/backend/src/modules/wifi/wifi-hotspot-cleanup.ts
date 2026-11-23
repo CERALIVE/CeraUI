@@ -5,8 +5,10 @@ import {
 	registerWifiAdapterTeardownLocked,
 	type WifiPendingTeardownResult,
 } from "./wifi-adapter-reconcile-retry.ts";
+import { hotspotDevicePath } from "./wifi-autoconnect-policy.ts";
 import { getWifiInterfaceByMacAddress } from "./wifi-connections.ts";
 import {
+	deleteInactiveHotspotProfile,
 	type NmActivationReceipt,
 	nmDisconnectActivation,
 	readHotspotProfileActivity,
@@ -16,7 +18,9 @@ import { syncWifiStateCache } from "./wifi-hotspot-monitor.ts";
 import { retireHotspotProfileAuthority } from "./wifi-hotspot-profile-observation.ts";
 import {
 	type HotspotProfileOperation,
+	permitsHotspotProfilePins,
 	runHotspotProfileOperation,
+	writeHotspotProfileFields,
 } from "./wifi-hotspot-profile-operation.ts";
 import {
 	canHotspot,
@@ -28,6 +32,7 @@ import {
 	type HybridLegAllocation,
 	releaseHybridLeg,
 } from "./wifi-hybrid-leg-release.ts";
+import { wifiAdapterKeyMac, wifiAdapterKeyPort } from "./wifi-permanent-mac.ts";
 import { transitionVirtualBinding } from "./wifi-virtual-binding.ts";
 
 type CreatedHotspotCleanup = {
@@ -106,7 +111,25 @@ async function cleanupCreatedProfile(
 			uuid,
 			kind: "modify",
 			fields: { "connection.autoconnect": "no" },
-			run: (fields) => deps.nmConnSetFields(uuid, fields),
+			run: (fields) =>
+				writeHotspotProfileFields(
+					deps.nmConnSetFields,
+					uuid,
+					fields,
+					async () => {
+						const mac = wifiAdapterKeyMac(owner);
+						return Boolean(
+							mac &&
+								(await permitsHotspotProfilePins(
+									uuid,
+									mac,
+									wifiAdapterKeyPort(owner) ??
+										hotspotDevicePath(mac, iface.ifname),
+									deps.readProfilePins,
+								)),
+						);
+					},
+				),
 		}));
 	const activity = async () => {
 		const observed = await readHotspotProfileActivity(uuid);
@@ -132,9 +155,14 @@ async function cleanupCreatedProfile(
 			(await act({
 				uuid,
 				kind: "delete",
-				// Delete itself tears down any users of the profile, including a successor.
-				run: async () =>
-					(await activity()) === "inactive" && deps.nmConnDelete(uuid),
+				run: (before) =>
+					deleteInactiveHotspotProfile(
+						uuid,
+						before,
+						deps.readProfileInstance,
+						() => !replaced,
+						deps.nmConnDelete,
+					),
 			}));
 	if ((deactivated || deleted) && iface.hotspot === hotspot) {
 		if (iface.conn === uuid) iface.conn = null;

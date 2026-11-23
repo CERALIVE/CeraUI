@@ -23,8 +23,11 @@ import {
 	sensorsStatusSchema,
 	sshPersistentInputSchema,
 	successResponseSchema,
+	syslogInputSchema,
 	updateCapabilitiesSchema,
 	updateDetailsSchema,
+	updateOutcomeInputSchema,
+	updateOutcomeSchema,
 	updateSettingsInputSchema,
 	updateSettingsSchema,
 } from "@ceraui/rpc/schemas";
@@ -62,6 +65,7 @@ import {
 import { getSensors } from "../../modules/system/sensors.ts";
 import {
 	aptUpdatesEnabled,
+	readSoftwareUpdateOutcome,
 	startSoftwareUpdate,
 	triggerManualUpdateCheck,
 } from "../../modules/system/software-updates.ts";
@@ -148,6 +152,7 @@ export const getLogProcedure = authedProcedure
 		const result = await getLog(
 			context.ws,
 			input?.service ?? "ceralive.service",
+			input?.request,
 		);
 		return { log: result?.contents ?? "" };
 	});
@@ -156,9 +161,10 @@ export const getLogProcedure = authedProcedure
  * Get system log procedure — the full boot journal (no unit filter).
  */
 export const getSyslogProcedure = authedProcedure
+	.input(syslogInputSchema)
 	.output(logOutputSchema)
-	.handler(async ({ context }) => {
-		const result = await getLog(context.ws);
+	.handler(async ({ input, context }) => {
+		const result = await getLog(context.ws, undefined, input?.request);
 		return { log: result?.contents ?? "" };
 	});
 
@@ -232,6 +238,12 @@ export const startUpdateProcedure = authedProcedure
 		logger.info("System: software update started");
 		return { success: true };
 	});
+
+/** Read-only: what an install a tab watched did, once CeraUI restarted under it. */
+export const updateOutcomeProcedure = authedProcedure
+	.input(updateOutcomeInputSchema)
+	.output(updateOutcomeSchema)
+	.handler(({ input }) => readSoftwareUpdateOutcome(input.targets));
 
 /**
  * Both actions bypass idle. `checkUpdatesNow` has no stream check;

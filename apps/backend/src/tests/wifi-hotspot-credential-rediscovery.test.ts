@@ -73,6 +73,12 @@ for (const unavailable of ["", "<hidden>"]) {
 					).toBe(true);
 					expect(warnings).toHaveLength(1);
 					expect(JSON.stringify(warnings)).not.toContain(f.secret);
+					expect(JSON.stringify(warnings)).not.toContain(
+						new Bun.CryptoHasher("sha256")
+							.update(f.secret)
+							.digest("hex")
+							.slice(0, 12),
+					);
 					expect(warnings[0]?.[0]).toBe(
 						"Hotspot credential readback preserved",
 					);
@@ -80,10 +86,6 @@ for (const unavailable of ["", "<hidden>"]) {
 						storedPresent: true,
 						observedPresent: unavailable !== "",
 						observedHidden: unavailable === "<hidden>",
-						credentialDigest: new Bun.CryptoHasher("sha256")
-							.update(f.secret)
-							.digest("hex")
-							.slice(0, 12),
 					});
 					const meta = warnings[0]?.[1];
 					if (!meta || typeof meta !== "object")
@@ -98,9 +100,6 @@ for (const unavailable of ["", "<hidden>"]) {
 							"ownWriteWon",
 							"sameProfile",
 							"source",
-							"storedDigest",
-							"observedDigest",
-							"credentialDigest",
 						].sort(),
 					);
 				} finally {
