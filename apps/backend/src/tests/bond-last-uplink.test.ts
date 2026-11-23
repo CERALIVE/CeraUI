@@ -11,7 +11,6 @@ import {
 	getNetworkInterfaces,
 	NETIF_ERR_DUPIPV4,
 	type NetworkInterface,
-	netIfBuildMsg,
 	resetNetifSnapshotForTest,
 } from "../modules/network/network-interfaces.ts";
 import {
@@ -60,6 +59,40 @@ function bondedNames(): string[] {
 	return genSrtlaBondEntries().map(({ iface }) => iface);
 }
 
+function expectDisableNotice(frames: readonly string[]) {
+	expect(frames.map((frame) => JSON.parse(frame))).toContainEqual({
+		notification: {
+			show: [
+				{
+					name: "netif_disable_all",
+					type: "error",
+					msg: "Can't disable all networks",
+					is_dismissable: true,
+					is_persistent: false,
+					duration: 10,
+				},
+			],
+		},
+		id: "last-uplink-test",
+	});
+}
+
+async function observeDisable(name: string, ip: string) {
+	const requester: string[] = [];
+	const observer: string[] = [];
+	const client = makeRpcContext(observer).ws;
+	addClient(client);
+	try {
+		const reply = await toggle(name, ip, false, requester);
+		const wire = await call(getNetworkInterfacesProcedure, undefined, {
+			context: makeRpcContext(),
+		});
+		return { reply, wire, requester, observer };
+	} finally {
+		removeClient(client);
+	}
+}
+
 describe("network.configure last-uplink protection", () => {
 	let directory: string;
 
@@ -106,8 +139,11 @@ describe("network.configure last-uplink protection", () => {
 		]);
 		expect(bondedNames()).toEqual(["eth0"]);
 
-		expect(await toggle("eth0", ETHERNET_IP, false)).toEqual(REFUSED);
-		expect(netIfBuildMsg().eth0?.enabled).toBe(true);
+		const result = await observeDisable("eth0", ETHERNET_IP);
+		expect(result.reply).toEqual(REFUSED);
+		expectDisableNotice(result.requester);
+		expect(result.observer).toEqual([]);
+		expect(result.wire.eth0).toMatchObject({ ip: ETHERNET_IP, enabled: true });
 		expect(bondedNames()).toEqual(["eth0"]);
 	});
 
@@ -176,6 +212,25 @@ describe("network.configure last-uplink protection", () => {
 		expect(bondedNames()).toEqual(["eth0", "wwan0"]);
 	});
 
+	test("keeps the raw guard in the native hwsim guest", async () => {
+		const priorRepo = process.env.HWSIM_REPO;
+		process.env.HWSIM_REPO = "/repo";
+		try {
+			getNetworkInterfaces().eth1 = iface(SHARED_IP);
+			persistEthernetRole("eth1", "shared-lan");
+			expect(bondedNames()).toEqual(["eth0"]);
+
+			expect(await toggle("eth0", ETHERNET_IP, false)).toEqual({
+				success: true,
+				applied: { name: "eth0", ip: ETHERNET_IP, enabled: false },
+			});
+			expect(bondedNames()).toEqual([]);
+		} finally {
+			if (priorRepo === undefined) delete process.env.HWSIM_REPO;
+			else process.env.HWSIM_REPO = priorRepo;
+		}
+	});
+
 	describe("with the mock netif overlay", () => {
 		let priorMode: string | undefined;
 		let priorOverlay: Pick<
@@ -189,8 +244,6 @@ describe("network.configure last-uplink protection", () => {
 			priorOverlay = { initialized, netifConfigs };
 			process.env.MOCK_MODE = "true";
 			updateMockState({ initialized: true, netifConfigs: new Map() });
-			getNetworkInterfaces().eth1 = iface(SHARED_IP);
-			persistEthernetRole("eth1", "shared-lan");
 		});
 
 		afterEach(() => {
@@ -199,62 +252,83 @@ describe("network.configure last-uplink protection", () => {
 			else process.env.MOCK_MODE = priorMode;
 		});
 
-		test("refuses the last effective uplink without publishing the requested mock address or toggle", async () => {
-			const requester: string[] = [];
-			const observer: string[] = [];
-			const client = makeRpcContext(observer).ws;
-			addClient(client);
-			try {
-				const result = await toggle(
-					"eth0",
-					REQUESTED_MOCK_IP,
-					false,
-					requester,
-				);
-				const wire = await call(getNetworkInterfacesProcedure, undefined, {
-					context: makeRpcContext(),
-				});
-
-				expect(requester.map((frame) => JSON.parse(frame))).toContainEqual(
-					expect.objectContaining({
-						notification: {
-							show: [
-								expect.objectContaining({
-									name: "netif_disable_all",
-									msg: "Can't disable all networks",
-								}),
-							],
-						},
-					}),
-				);
-				expect(result).toEqual(REFUSED);
-				expect(wire.eth0).toMatchObject({ ip: ETHERNET_IP, enabled: true });
-				expect(lastNetifEnabled(requester, "eth0")).toBeUndefined();
-				expect(lastNetifEnabled(observer, "eth0")).toBeUndefined();
-				expect(bondedNames()).toEqual(["eth0"]);
-			} finally {
-				removeClient(client);
-			}
+		test("broadcasts the mock overlay and reports applied/off when the sole raw link is refused", async () => {
+			const { reply, wire, requester, observer } = await observeDisable(
+				"eth0",
+				REQUESTED_MOCK_IP,
+			);
+			expect(reply).toEqual({
+				success: true,
+				applied: { name: "eth0", ip: REQUESTED_MOCK_IP, enabled: false },
+			});
+			expectDisableNotice(requester);
+			expect(lastNetifEnabled(requester, "eth0")).toBeUndefined();
+			expect(observer).toHaveLength(1);
+			expect(JSON.parse(observer[0] ?? "")).toMatchObject({
+				netif: { eth0: { ip: REQUESTED_MOCK_IP, enabled: false } },
+			});
+			expect(wire.eth0).toMatchObject({
+				ip: REQUESTED_MOCK_IP,
+				enabled: false,
+			});
+			expect(bondedNames()).toEqual(["eth0"]);
 		});
 
-		test("a follow-up disable keeps the remaining bonded link enabled in mock readback", async () => {
-			await toggle("eth0", REQUESTED_MOCK_IP, false);
+		test("keeps the mock raw guard through a shared-LAN release and follow-up toggle", async () => {
+			getNetworkInterfaces().eth1 = iface(SHARED_IP);
+			persistEthernetRole("eth1", "shared-lan");
+			const first = await observeDisable("eth0", REQUESTED_MOCK_IP);
+			expect(first.reply).toEqual({
+				success: true,
+				applied: { name: "eth0", ip: REQUESTED_MOCK_IP, enabled: false },
+			});
+			expect(lastNetifEnabled(first.requester, "eth0")).toBe(false);
+			expect(lastNetifEnabled(first.observer, "eth0")).toBe(false);
+			expect(bondedNames()).toEqual([]);
 			persistEthernetRole("eth1", "uplink");
 			await toggle("eth1", SHARED_IP, true);
 
-			const requester: string[] = [];
-			expect(await toggle("eth1", SHARED_IP, false, requester)).toEqual({
+			const follow = await observeDisable("eth1", SHARED_IP);
+			expect(follow.reply).toEqual({
 				success: true,
 				applied: { name: "eth1", ip: SHARED_IP, enabled: false },
 			});
-			expect(bondedNames()).toEqual(["eth0"]);
-			expect(lastNetifEnabled(requester, "eth1")).toBe(false);
-			expect(lastNetifEnabled(requester, "eth0")).toBe(true);
-			const wire = await call(getNetworkInterfacesProcedure, undefined, {
-				context: makeRpcContext(),
+			expectDisableNotice(follow.requester);
+			expect(lastNetifEnabled(follow.observer, "eth1")).toBe(false);
+			expect(follow.wire.eth0).toMatchObject({
+				ip: REQUESTED_MOCK_IP,
+				enabled: false,
 			});
-			expect(wire.eth0).toMatchObject({ ip: ETHERNET_IP, enabled: true });
-			expect(wire.eth1?.enabled).toBe(false);
+			expect(follow.wire.eth1?.enabled).toBe(false);
+			expect(bondedNames()).toEqual(["eth1"]);
+		});
+
+		test("retains the mock off overlay after mapped duplicates leave the bond", async () => {
+			installHuaweiIdentityResolver();
+			for (const name of ["wlan0", "wlan1"]) {
+				getNetworkInterfaces()[name] = {
+					...iface(MODEM_IP),
+					enabled: false,
+					error: NETIF_ERR_DUPIPV4,
+				};
+			}
+			expect(bondedNames()).toEqual(["eth0", "wlan0", "wlan1"]);
+			await toggle("eth0", REQUESTED_MOCK_IP, false);
+			await toggle("wlan0", MODEM_IP, false);
+			await toggle("wlan1", MODEM_IP, false);
+
+			const follow = await observeDisable("eth0", REQUESTED_MOCK_IP);
+			expect(follow.reply).toEqual({
+				success: true,
+				applied: { name: "eth0", ip: REQUESTED_MOCK_IP, enabled: false },
+			});
+			expectDisableNotice(follow.requester);
+			expect(follow.wire.eth0).toMatchObject({
+				ip: REQUESTED_MOCK_IP,
+				enabled: false,
+			});
+			expect(follow.observer).toEqual([]);
+			expect(bondedNames()).toEqual(["eth0"]);
 		});
 	});
 });

@@ -35,7 +35,11 @@ import { logger } from "../../helpers/logger.ts";
 import { run } from "../../helpers/run.ts";
 import { ACTIVE_TO } from "../../helpers/shared.ts";
 import { getms } from "../../helpers/time.ts";
-import { getMockState, shouldUseMocks } from "../../mocks/mock-service.ts";
+import {
+	getMockState,
+	isDevelopment,
+	shouldUseMocks,
+} from "../../mocks/mock-service.ts";
 import {
 	getMockIfconfigOutput,
 	getMockModemNetMarker,
@@ -1729,7 +1733,7 @@ function applyDongleProjection(m: NetworkInterfaceResponseMessage): void {
 	lastDongleMarked = marked;
 }
 
-function countRawEnabledNetif() {
+function countActiveNetif() {
 	let count = 0;
 	for (const int in netif) {
 		if (netif[int]?.enabled) count++;
@@ -1782,38 +1786,8 @@ function finishBondMutation(
 export function handleNetif(
 	conn: WebSocket,
 	msg: NetworkInterfaceMessage["netif"],
-	publishMockConfig?: () => void,
 ): NetifApplyOutcome {
 	const int = netif[msg.name];
-	const disablingLink =
-		int && int.ip === msg.ip && msg.enabled === false && !isDupIpOnly(int);
-	const lastBondCandidate =
-		disablingLink &&
-		isBondCandidate(msg.name, int) &&
-		!Object.entries(netif).some(
-			([name, entry]) => name !== msg.name && isBondCandidate(name, entry),
-		);
-
-	// This refusal must precede the mock overlay's write and first broadcast.
-	// Other mock requests retain the overlay-first compatibility behavior.
-	if (!lastBondCandidate) publishMockConfig?.();
-	if (
-		lastBondCandidate ||
-		(disablingLink && int.enabled && countRawEnabledNetif() === 1)
-	) {
-		notificationSend(
-			conn,
-			"netif_disable_all",
-			"error",
-			"Can't disable all networks",
-			10,
-		);
-		return finishBondMutation(msg, {
-			ok: false,
-			reason: "disable_all_refused",
-		});
-	}
-
 	if (!int) {
 		return finishBondMutation(msg, {
 			ok: false,
@@ -1861,6 +1835,27 @@ export function handleNetif(
 					reason: "enable_refused",
 				});
 			}
+		} else if (
+			(int.enabled && countActiveNetif() === 1) ||
+			// Dev/mock and the hwsim guest keep the raw-only guard.
+			(!isDevelopment() &&
+				process.env.HWSIM_REPO !== "/repo" &&
+				isBondCandidate(msg.name, int) &&
+				!Object.entries(netif).some(
+					([name, entry]) => name !== msg.name && isBondCandidate(name, entry),
+				))
+		) {
+			notificationSend(
+				conn,
+				"netif_disable_all",
+				"error",
+				"Can't disable all networks",
+				10,
+			);
+			return finishBondMutation(msg, {
+				ok: false,
+				reason: "disable_all_refused",
+			});
 		}
 
 		int.enabled = msg.enabled;
