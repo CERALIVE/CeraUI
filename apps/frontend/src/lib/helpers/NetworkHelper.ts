@@ -1,18 +1,23 @@
 import { m } from "@ceraui/i18n/svelte";
+import {
+	canReuseWifiStationProfile,
+	classifyWifiStationSecurity,
+} from "@ceraui/rpc";
 import type {
+	AvailableWifiNetwork,
 	HotspotSecurityId,
 	NetifMessage,
 	SimPukUnlockOutput,
 	SimUnlockOutput,
 	StatusMessage,
 	WifiBand,
+	WifiInterface,
 } from "@ceraui/rpc/schemas";
 import QRCode from "qrcode";
 
 import { formatGenerationRun } from "$lib/modem/operator-labels";
 import { rpc } from "$lib/rpc/client";
 import { getStatus } from "$lib/rpc/subscriptions.svelte";
-import type { ValueOf } from "$lib/types";
 
 // Re-export type
 export type { WifiBand };
@@ -165,16 +170,17 @@ export const unlockSimPuk = async (
 };
 
 export const getWifiUUID = (
-	wifiNetwork: NonNullable<ValueOf<StatusMessage["wifi"]>["available"]>[number],
-	saved: ValueOf<StatusMessage["wifi"]>["saved"],
+	network: Pick<AvailableWifiNetwork, "ssid" | "security">,
+	iface: WifiInterface | undefined,
 ) => {
-	const found = Object.keys(saved).find((value) => {
-		return wifiNetwork.ssid === value;
-	});
-	if (found) {
-		return saved[found];
-	}
-	return undefined;
+	const uuid = iface?.saved[network.ssid];
+	if (!uuid) return undefined;
+	return canReuseWifiStationProfile(
+		classifyWifiStationSecurity(network.security),
+		iface?.saved_key_mgmt?.[uuid],
+	)
+		? uuid
+		: undefined;
 };
 
 // The WIFI-QR format (ZXing, and the phone cameras that follow it) reads `\ ; , :`

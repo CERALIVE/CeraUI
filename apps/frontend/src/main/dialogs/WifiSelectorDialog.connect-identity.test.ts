@@ -15,7 +15,10 @@
  * never re-run and the suite would prove the opposite of what it claims.
  */
 
+import { m } from "@ceraui/i18n/svelte";
+import type { WifiInterface } from "@ceraui/rpc/schemas";
 import { fireEvent, render, screen } from "@testing-library/svelte";
+import { tick } from "svelte";
 import {
 	afterEach,
 	beforeAll,
@@ -28,6 +31,7 @@ import {
 
 import {
 	clearOperation,
+	failOperation,
 	getOperationPhase,
 } from "$lib/rpc/async-operation.svelte";
 
@@ -78,6 +82,7 @@ const SIBLING_UUID = "uuid-sibling";
  * straight away instead of revealing the inline password form.
  */
 const OPEN_SSID = "Guest";
+const OPEN_BSSID = "02:00:00:00:51:02";
 
 interface RadioOptions {
 	/** The interface's ACTIVE connection uuid (`""` = nothing connected). */
@@ -87,6 +92,7 @@ interface RadioOptions {
 	/** SSIDs currently in the air; `activeSsid` flags the connected one. */
 	ssids?: string[];
 	activeSsid?: string;
+	openBssid?: string;
 }
 
 function radio({
@@ -94,17 +100,20 @@ function radio({
 	saved = { [SHARED_SSID]: CHOSEN_UUID },
 	ssids = [SHARED_SSID],
 	activeSsid,
-}: RadioOptions = {}) {
+	openBssid = OPEN_BSSID,
+}: RadioOptions = {}): WifiInterface {
 	return {
 		ifname: "wlan0",
 		conn,
 		hw: "aa:bb:cc:dd:ee:01",
 		saved,
+		saved_key_mgmt: { [CHOSEN_UUID]: "wpa-psk" },
 		available: ssids.map((ssid) => ({
 			active: ssid === activeSsid,
 			ssid,
 			signal: 70,
 			security: ssid === OPEN_SSID ? "" : "WPA2",
+			...(ssid === OPEN_SSID ? { bssid: openBssid } : {}),
 			freq: 2437,
 		})),
 		scanGeneration: 1,
@@ -163,6 +172,156 @@ afterEach(() => {
 });
 
 describe("WifiSelectorDialog — identity-keyed connect confirmation", () => {
+	it("shows scan guidance without requesting a join when the open row has no BSSID", async () => {
+		publishWifi({
+			"0": {
+				...radio({ saved: {} }),
+				available: [
+					{ active: false, ssid: OPEN_SSID, signal: 90, security: "", freq: 1 },
+				],
+			},
+		});
+		render(WifiSelectorDialog, { props: { open: true, deviceId: "0" } });
+		await fireEvent.click(
+			screen.getByRole("button", { name: `Connect ${OPEN_SSID}` }),
+		);
+
+		expect(connectNew).not.toHaveBeenCalled();
+		expect(connect).not.toHaveBeenCalled();
+		const guidance = m["wifiSelector.error.openTargetUnverified"]();
+		expect(screen.getByText(guidance).closest('[role="alert"]')).toBe(
+			screen.getByTestId("wifi-join-failed"),
+		);
+	});
+
+	it("shows scan guidance rather than a password error for an unverified open AP", async () => {
+		publishWifi({ "0": radio({ saved: {}, ssids: [OPEN_SSID] }) });
+		render(WifiSelectorDialog, { props: { open: true, deviceId: "0" } });
+		await fireEvent.click(
+			screen.getByRole("button", { name: `Connect ${OPEN_SSID}` }),
+		);
+		expect(connectNew).toHaveBeenCalledTimes(1);
+
+		failOperation(CONNECT_KEY, "open-target-unverified");
+		await tick();
+
+		const guidance = m["wifiSelector.error.openTargetUnverified"]();
+		expect(screen.getByText(guidance).closest('[role="alert"]')).toBe(
+			screen.getByTestId("wifi-join-failed"),
+		);
+		expect(
+			screen.queryByLabelText("Please enter the network password"),
+		).toBeNull();
+	});
+
+	it("does not activate a Suite B profile for an ordinary WPA2 Enterprise row", async () => {
+		const iface = radio();
+		publishWifi({
+			"0": {
+				...iface,
+				saved_key_mgmt: { [CHOSEN_UUID]: "wpa-eap-suite-b-192" },
+				available: iface.available?.map((row) => ({
+					...row,
+					security: "WPA2 802.1X",
+				})),
+			},
+		});
+		render(WifiSelectorDialog, { props: { open: true, deviceId: "0" } });
+
+		await fireEvent.click(
+			screen.getByRole("button", { name: `Connect ${SHARED_SSID}` }),
+		);
+
+		expect(connect).not.toHaveBeenCalled();
+		expect(
+			screen.getByLabelText("Please enter the network password"),
+		).toBeTruthy();
+	});
+
+	it.each(["wpa-psk", "sae", "none", undefined])(
+		"joins an open row without a password instead of reusing saved key management %s",
+		async (keyMgmt) => {
+			const iface: WifiInterface = {
+				...radio({ saved: { [OPEN_SSID]: CHOSEN_UUID }, ssids: [OPEN_SSID] }),
+				saved_key_mgmt:
+					keyMgmt === undefined ? undefined : { [CHOSEN_UUID]: keyMgmt },
+			};
+			publishWifi({ "0": iface });
+			render(WifiSelectorDialog, { props: { open: true, deviceId: "0" } });
+
+			await fireEvent.click(
+				screen.getByRole("button", { name: `Connect ${OPEN_SSID}` }),
+			);
+
+			expect(connect).not.toHaveBeenCalled();
+			expect(connectNew).toHaveBeenCalledExactlyOnceWith({
+				device: "0",
+				ssid: OPEN_SSID,
+				password: "",
+				security: "",
+				bssid: OPEN_BSSID,
+			});
+			expect(
+				screen.queryByLabelText("Please enter the network password"),
+			).toBeNull();
+		},
+	);
+
+	it("reuses a positively identified saved open profile", async () => {
+		const iface = {
+			...radio({ saved: { [OPEN_SSID]: CHOSEN_UUID }, ssids: [OPEN_SSID] }),
+			saved_key_mgmt: { [CHOSEN_UUID]: "" },
+		};
+		publishWifi({ "0": iface });
+		render(WifiSelectorDialog, { props: { open: true, deviceId: "0" } });
+
+		await fireEvent.click(
+			screen.getByRole("button", { name: `Connect ${OPEN_SSID}` }),
+		);
+
+		expect(connect).toHaveBeenCalledExactlyOnceWith({ uuid: CHOSEN_UUID });
+		expect(connectNew).not.toHaveBeenCalled();
+	});
+
+	it("does not confirm a fresh open join when its incompatible saved sibling activates", async () => {
+		const available = {
+			saved: { [OPEN_SSID]: CHOSEN_UUID },
+			ssids: [OPEN_SSID],
+		};
+		publishWifi({ "0": radio(available) });
+		render(WifiSelectorDialog, { props: { open: true, deviceId: "0" } });
+		await fireEvent.click(
+			screen.getByRole("button", { name: `Connect ${OPEN_SSID}` }),
+		);
+		expect(connectNew).toHaveBeenCalledTimes(1);
+
+		publishWifi({
+			"0": radio({ ...available, conn: CHOSEN_UUID, activeSsid: OPEN_SSID }),
+		});
+		await settle();
+
+		expect(getOperationPhase(CONNECT_KEY)).toBe("pending");
+	});
+
+	it("asks for a password instead of activating an open profile on a WPA2 row", async () => {
+		const iface = {
+			...radio(),
+			saved_key_mgmt: { [CHOSEN_UUID]: "" },
+		};
+		publishWifi({ "0": iface });
+		render(WifiSelectorDialog, { props: { open: true, deviceId: "0" } });
+
+		await fireEvent.click(
+			screen.getByRole("button", { name: `Connect ${SHARED_SSID}` }),
+		);
+
+		expect(
+			screen.getByLabelText("Please enter the network password"),
+		).toBeTruthy();
+		expect(connect).not.toHaveBeenCalled();
+		expect(connectNew).not.toHaveBeenCalled();
+	});
+
 	it("a SIBLING profile sharing the SSID does NOT confirm the operator's connect", async () => {
 		// Given: a saved network the operator is not currently on.
 		publishWifi({ "0": radio() });
@@ -250,15 +409,27 @@ describe("WifiSelectorDialog — identity-keyed connect confirmation", () => {
 		await settle();
 		expect(getOperationPhase(CONNECT_KEY)).toBe("pending");
 
-		// Then: only the device recording — and activating — a profile for OUR ssid
-		// resolves it.
+		const guest = {
+			conn: "uuid-guest",
+			saved: { Home: "uuid-home", [OPEN_SSID]: "uuid-guest" },
+			ssids: ["Home", OPEN_SSID],
+			activeSsid: OPEN_SSID,
+		};
 		publishWifi({
-			"0": radio({
-				conn: "uuid-guest",
-				saved: { Home: "uuid-home", [OPEN_SSID]: "uuid-guest" },
-				ssids: ["Home", OPEN_SSID],
-				activeSsid: OPEN_SSID,
-			}),
+			"0": {
+				...radio({ ...guest, openBssid: "02:00:00:00:51:03" }),
+				saved_key_mgmt: { "uuid-guest": "" },
+			},
+		});
+		await settle();
+		expect(getOperationPhase(CONNECT_KEY)).toBe("pending");
+
+		// An active profile with the same SSID only resolves the join on the selected AP.
+		publishWifi({
+			"0": {
+				...radio(guest),
+				saved_key_mgmt: { "uuid-guest": "" },
+			},
 		});
 		await settle();
 		expect(getOperationPhase(CONNECT_KEY)).toBe("confirmed");

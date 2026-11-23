@@ -2478,6 +2478,7 @@
 	"wifiSelector.error.authFailedDescription": "入力したパスワードが正しくありません。確認して再試行してください。",
 	"wifiSelector.error.connectionFailed": "WiFi接続に失敗",
 	"wifiSelector.error.connectionFailedDescription": "WiFiネットワークに接続できません。パスワードを確認して再試行してください。",
+	"wifiSelector.error.openTargetUnverified": "このネットワークのオープンなアクセスポイントを確認できませんでした。再スキャンするか、別のネットワークを選んでください。",
 	"wifiSelector.hotspot.placeholderPassword": "********",
 	"wifiSelector.networks.found": "ネットワークが見つかりました",
 	"wifiSelector.scanError.description": "近くのWiFiネットワークを更新できませんでした。自動的に再試行します。",

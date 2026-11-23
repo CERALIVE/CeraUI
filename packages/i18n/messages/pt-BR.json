@@ -2702,6 +2702,7 @@
 	"wifiSelector.error.authFailedDescription": "A senha que você inseriu está incorreta. Verifique e tente novamente.",
 	"wifiSelector.error.connectionFailed": "Falha na Conexão WiFi",
 	"wifiSelector.error.connectionFailedDescription": "Não foi possível conectar à rede WiFi. Verifique a senha e tente novamente.",
+	"wifiSelector.error.openTargetUnverified": "O dispositivo não conseguiu confirmar um ponto de acesso aberto para esta rede. Busque redes novamente ou escolha outra.",
 	"wifiSelector.hotspot.placeholderPassword": "********",
 	"wifiSelector.networks.found": "redes encontradas",
 	"wifiSelector.scanError.description": "Não foi possível atualizar as redes WiFi por perto. Tentando novamente automaticamente.",

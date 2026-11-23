@@ -104,6 +104,13 @@ describe("reportUpdateCheckFailure — surfaces a broken update check", () => {
 });
 
 describe("parseWifiScanRow — surfaces a malformed scan row", () => {
+	it("does not turn a missing security column into evidence of an open network", () => {
+		const scan =
+			":AA\\:BB\\:CC\\:DD\\:EE\\:01:MyNet:Infra:72:540 Mbit/s:96:▂▄▆█";
+		expect(parseWifiScanRow(scan)?.security).toBe("unknown");
+		expect(parseWifiScanRow(`${scan}:`)?.security).toBe("");
+	});
+
 	it("returns null and warns without logging the SSID when signal/chan do not parse", () => {
 		const warnSpy = spyOn(logger, "warn").mockImplementation(noop);
 		try {

@@ -76,6 +76,12 @@ function radio({
 		conn,
 		hw: "aa:bb:cc:dd:ee:01",
 		saved,
+		saved_key_mgmt: Object.fromEntries(
+			Object.entries(saved).map(([ssid, uuid]) => [
+				uuid,
+				ssid === OPEN_SSID ? "" : ssid === SAE_ONLY_SSID ? "sae" : "wpa-psk",
+			]),
+		),
 		available: ssids.map((ssid) => ({
 			active: ssid === activeSsid,
 			ssid,

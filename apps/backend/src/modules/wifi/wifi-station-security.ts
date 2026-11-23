@@ -49,10 +49,17 @@
   is never re-read for drift, so there is nothing to compare against.
 */
 
-import { requiresSaeKeyMgmt } from "@ceraui/rpc";
+import {
+	classifyWifiStationSecurity,
+	requiresSaeKeyMgmt,
+	type WifiStationSecurityKind,
+	wifiStationAllowsBlankPassword,
+} from "@ceraui/rpc";
 
 import { argMatch, ID_RE } from "../../helpers/run.ts";
+import { nmcliParseSep, nmScanResults } from "../network/network-manager.ts";
 import type { SSID } from "./wifi-interfaces.ts";
+import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 
 /**
  * The nmcli key-mgmt/pmf pair for a WPA3-SAE station profile.
@@ -86,9 +93,80 @@ export function stationSecurityFields(
  * `nm-auto` is the unchanged `device wifi connect` path every pre-WPA3 join
  * took, byte-for-byte. `sae` is the two-step build described in the header.
  */
-export type WifiStationJoinPlan =
-	| { readonly mode: "nm-auto"; readonly connectArgs: string[] }
-	| { readonly mode: "sae"; readonly addArgs: string[] };
+type WifiStationJoinPlan =
+	| { readonly mode: "refused" }
+	| { readonly mode: "verify-open" }
+	| AdmittedWifiStationJoinPlan;
+
+export type AdmittedWifiStationJoinPlan =
+	| {
+			readonly mode: "nm-auto";
+			readonly connectArgs: string[];
+			readonly security: WifiStationSecurityKind;
+	  }
+	| { readonly mode: "sae"; readonly addArgs: string[] }
+	| {
+			readonly mode: "open";
+			readonly addArgs: string[];
+			readonly ifname: string;
+			readonly bssid: string;
+	  };
+
+/** Read the chosen radio, not the shared, SSID-deduplicated presentation list. */
+export async function planOpenWifiJoin(
+	ssid: SSID,
+	ifname: string,
+	selectedBssid: string | undefined,
+) {
+	const bssid = normalizeMacAddress(selectedBssid);
+	if (!bssid) return undefined;
+	const lines = await nmScanResults(
+		"BSSID,SSID,MODE,SECURITY,WPA-FLAGS,RSN-FLAGS",
+		ifname,
+	);
+	let verified = false;
+	for (const line of lines ?? []) {
+		const [rawBssid, name, mode, security, wpa, rsn] = nmcliParseSep(line);
+		if (normalizeMacAddress(rawBssid) !== bssid) continue;
+		// The summary label can omit AKMs (e.g. Suite B). Require both raw
+		// flag sets to be empty and refuse contradictory evidence for one AP.
+		const open =
+			name === ssid &&
+			mode === "Infra" &&
+			wifiStationAllowsBlankPassword(security) &&
+			wpa === "(none)" &&
+			rsn === "(none)";
+		if (!open) return undefined;
+		verified = true;
+	}
+	if (!verified) return undefined;
+	// Never ask NM to pick a saved profile. An explicit open profile also
+	// prevents a changed AP from making NM select a secured UUID after the read.
+	return {
+		mode: "open",
+		addArgs: [
+			"connection",
+			"add",
+			"type",
+			"wifi",
+			"ifname",
+			ifname,
+			"con-name",
+			ssid,
+			"ssid",
+			ssid,
+			"connection.autoconnect",
+			"no",
+		],
+		ifname,
+		bssid,
+	} as const satisfies {
+		mode: "open";
+		addArgs: string[];
+		ifname: string;
+		bssid: string;
+	};
+}
 
 export type WifiStationJoinRequest = {
 	readonly ssid: SSID;
@@ -152,17 +230,18 @@ export function saeActivateArgs(uuid: string): string[] {
 /**
  * Resolve how this join runs.
  *
- * The SAE branch additionally requires a PASSWORD. SAE is always
- * password-authenticated, so a passwordless SAE request is a malformed one, and
- * building a keyless `sae` profile for it would produce a connection that can
- * never activate. It degrades to `nm-auto`, where the existing failure path
- * reports honestly.
+ * Only an explicitly open target can join without a password. An internal
+ * caller that missed RPC validation must not dispatch a malformed join.
  */
 export function planWifiStationJoin(
 	request: WifiStationJoinRequest,
 ): WifiStationJoinPlan {
-	if (requiresSaeKeyMgmt(request.security) && request.password) {
+	const security = classifyWifiStationSecurity(request.security);
+	if (!request.password) {
+		return { mode: security === "open" ? "verify-open" : "refused" };
+	}
+	if (security === "sae-only" && request.password) {
 		return { mode: "sae", addArgs: saeAddArgs(request) };
 	}
-	return { mode: "nm-auto", connectArgs: nmAutoArgs(request) };
+	return { mode: "nm-auto", connectArgs: nmAutoArgs(request), security };
 }

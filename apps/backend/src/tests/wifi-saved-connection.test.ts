@@ -262,11 +262,7 @@ describe("wifiUpdateSavedConns publication ownership", () => {
 		delayed.resolve(["ap", "Cancelled AP", ADAPTER_A]);
 		await run;
 		expect(f.ap).not.toHaveBeenCalled();
-		expect(f.fields).not.toHaveBeenCalledWith(REFRESH_BOUND, [
-			"802-11-wireless.mode",
-			"802-11-wireless.ssid",
-			"802-11-wireless.mac-address",
-		]);
+		expect(f.fields.mock.calls.map(([uuid]) => uuid)).toEqual([REFRESH_NEW]);
 		expect(f.a.saved).toBe(f.previousA.saved);
 		expect(f.a.savedAll).toBe(f.previousA.savedAll);
 	});
@@ -294,11 +290,17 @@ describe("wifiUpdateSavedConns publication ownership", () => {
 			"Fresh first": [REFRESH_NEW],
 			"Fresh second": [REFRESH_BOUND],
 		});
-		expect(f.fields).toHaveBeenCalledWith(REFRESH_BOUND, [
-			"802-11-wireless.mode",
-			"802-11-wireless.ssid",
-			"802-11-wireless.mac-address",
-		]);
+		expect(f.fields).toHaveBeenCalledWith(
+			REFRESH_BOUND,
+			[
+				"802-11-wireless.mode",
+				"802-11-wireless.ssid",
+				"802-11-wireless.mac-address",
+				"802-11-wireless-security.key-mgmt",
+			],
+			undefined,
+			false,
+		);
 	});
 
 	it("withholds an older field reply after a newer refresh publishes", async () => {

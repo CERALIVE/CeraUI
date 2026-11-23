@@ -6,7 +6,7 @@
  * connect-handler logic (parent) and the list rendering (child) reference one
  * source of truth — no behaviour change.
  */
-import { wifiJoinRefusal } from "@ceraui/rpc";
+import { wifiJoinRefusal, wifiStationAllowsBlankPassword } from "@ceraui/rpc";
 import type {
 	AvailableWifiNetwork,
 	WifiAdapterCapabilities,
@@ -14,9 +14,9 @@ import type {
 
 import { getSignalCategory } from "$lib/helpers/signal";
 
-/** A secured network advertises a WPA variant. */
+/** Only explicitly open scan rows get the open label and no-password path. */
 export function isSecured(network: AvailableWifiNetwork): boolean {
-	return network.security.includes("WPA");
+	return !wifiStationAllowsBlankPassword(network.security);
 }
 
 export type WifiRowBlock = {

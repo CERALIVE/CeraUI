@@ -2688,6 +2688,7 @@
 	"wifiSelector.error.authFailedDescription": "The password you entered is incorrect. Please check and try again.",
 	"wifiSelector.error.connectionFailed": "Wi-Fi Connection Failed",
 	"wifiSelector.error.connectionFailedDescription": "Unable to connect to the Wi-Fi network. Please check the password and try again.",
+	"wifiSelector.error.openTargetUnverified": "The device couldn't verify an open access point for this network. Scan again or choose another network.",
 	"wifiSelector.hotspot.placeholderPassword": "********",
 	"wifiSelector.networks.found": "networks found",
 	"wifiSelector.scanError.description": "Couldn't refresh nearby Wi-Fi networks. Retrying automatically.",

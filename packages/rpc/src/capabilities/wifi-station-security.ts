@@ -47,7 +47,14 @@ import type { WifiSaeSupport } from '../schemas/wifi.schema';
  * to `sae` where `wpa-psk` is what will be used, and refuse a network every
  * adapter in the fleet can join.
  */
-export type WifiStationSecurityKind = 'open' | 'sae-only' | 'sae-transition' | 'other';
+export type WifiStationSecurityKind =
+	| 'open'
+	| 'psk'
+	| 'sae-only'
+	| 'sae-transition'
+	| 'wep'
+	| 'enterprise'
+	| 'other';
 
 /** Why a scanned network cannot be offered to THIS adapter. */
 export type WifiJoinRefusal = 'sae-unsupported';
@@ -64,7 +71,8 @@ const SAE_TOKEN_RE = /^(?:WPA3(?:-.*)?|SAE)$/;
  * A pre-WPA3 marker. Its presence beside a SAE marker is what makes a network
  * transition-mode rather than SAE-only.
  */
-const LEGACY_TOKEN_RE = /^(?:WPA[12]?(?:-.*)?|WEP)$/;
+const PSK_TOKEN_RE = /^WPA[12]?(?:-PERSONAL)?$/;
+const PERSONAL_TOKEN_RE = /^(?:WPA[123]?(?:-PERSONAL)?|SAE)$/;
 
 /**
  * An 802.1X marker, matched against the ALREADY-UPPERCASED token. WPA3-Enterprise
@@ -83,20 +91,54 @@ const ENTERPRISE_TOKEN_RE = /^(?:802\.1X|.*-ENTERPRISE)$/;
  * `other` rather than fail a scan.
  */
 export function classifyWifiStationSecurity(security: string | undefined): WifiStationSecurityKind {
-	const tokens = (security ?? '')
-		.split(/\s+/)
-		.map((token) => token.trim().toUpperCase())
-		.filter((token) => token.length > 0);
+	if (security === undefined) return 'other';
+	const label = security.trim().toUpperCase();
+	if (security === '' || label === 'OPEN' || label === 'NONE' || label === '--') return 'open';
+	if (label === 'WEP') return 'wep';
 
-	if (tokens.length === 0) return 'open';
-
+	const tokens = label.split(/\s+/);
+	if (tokens.some((token) => ENTERPRISE_TOKEN_RE.test(token))) {
+		// NM's 802.1X marker is the ordinary EAP AKM, not Suite B. A generic
+		// WPA3-Enterprise label does not identify an AKM.
+		return tokens.some((token) => /^(?:802\.1X|WPA[12]?-ENTERPRISE)$/.test(token))
+			? 'enterprise'
+			: 'other';
+	}
+	// The #530 rule: every token must be personal before a WPA/WPA2 leg
+	// grants authority to reuse a PSK, including on a transition network.
+	const personal = tokens.every((token) => PERSONAL_TOKEN_RE.test(token));
 	const hasSae = tokens.some((token) => SAE_TOKEN_RE.test(token));
-	if (!hasSae) return 'other';
+	if (personal && tokens.some((token) => PSK_TOKEN_RE.test(token))) {
+		return hasSae ? 'sae-transition' : 'psk';
+	}
+	if (tokens.every((token) => SAE_TOKEN_RE.test(token))) return 'sae-only';
+	return 'other';
+}
 
-	if (tokens.some((token) => ENTERPRISE_TOKEN_RE.test(token))) return 'other';
-	if (tokens.some((token) => LEGACY_TOKEN_RE.test(token))) return 'sae-transition';
+export function wifiStationAllowsBlankPassword(security: string | undefined): boolean {
+	return classifyWifiStationSecurity(security) === 'open';
+}
 
-	return 'sae-only';
+/** Missing evidence is not the empty key-mgmt of a read, genuinely open profile. */
+export function canReuseWifiStationProfile(
+	security: WifiStationSecurityKind,
+	keyMgmt: string | undefined,
+): boolean {
+	switch (security) {
+		case 'open':
+			return keyMgmt === '';
+		case 'psk':
+		case 'sae-transition':
+			return keyMgmt === 'wpa-psk';
+		case 'sae-only':
+			return keyMgmt === 'sae';
+		case 'wep':
+			return keyMgmt === 'none';
+		case 'enterprise':
+			return keyMgmt === 'wpa-eap';
+		case 'other':
+			return false;
+	}
 }
 
 /**

@@ -141,6 +141,7 @@ export type BaseWifiInterface = {
 	hw: string; // the name of the wifi adapter hardware
 	available: Map<SSID, WifiNetwork>;
 	saved: Record<SSID, ConnectionUUID>;
+	savedKeyMgmt?: Record<ConnectionUUID, string>;
 	/*
 	  EVERY profile this adapter has for an SSID, not just the one `saved` names.
 	  NetworkManager happily holds several — a CeraUI-created profile plus one an

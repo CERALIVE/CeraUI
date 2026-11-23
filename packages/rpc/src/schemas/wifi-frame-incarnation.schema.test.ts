@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { wifiMessageSchema } from './wifi.schema.ts';
 
+test('retains an unverified open AP refusal on the Wi-Fi wire', () => {
+	const frame = { new: { device: 0, error: 'open-target-unverified' } };
+	expect(wifiMessageSchema.parse(frame)).toEqual(frame);
+});
+
 const frames = [
 	{ adapter_mode: { device: 0, mode: 'hotspot', pending: true } },
 	{ adapter_mode: { device: '0', mode: 'station', success: true } },
