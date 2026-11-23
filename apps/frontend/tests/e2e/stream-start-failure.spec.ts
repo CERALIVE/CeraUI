@@ -108,6 +108,7 @@ async function startWithReply(
 	page: Page,
 	result: Frame | (() => Frame),
 	onPowerCall?: (path: string) => void,
+	dismissInstallLabel?: string,
 ): Promise<WsHandle> {
 	const ws = await attachWs(page, {
 		mutateInbound: (frame) => {
@@ -158,6 +159,9 @@ async function startWithReply(
 	const start = page.getByTestId('live-bar').getByRole('button');
 	await expect(start).toBeVisible();
 	await expect(start).toBeEnabled();
+	if (dismissInstallLabel) {
+		await page.getByRole('button', { name: dismissInstallLabel, exact: true }).click();
+	}
 	await start.click();
 	return ws;
 }
@@ -336,15 +340,12 @@ test.describe('short-phone refusal recovery', () => {
 			test(`${locale} ${width}×${height}: competing notices leave the refusal and Start usable`, async ({ page }) => {
 				await page.setViewportSize({ width, height });
 				await page.emulateMedia({ reducedMotion: 'reduce' });
-				await page.addInitScript((code) => {
-					localStorage.setItem('locale', JSON.stringify({ code }));
-					Object.defineProperty(navigator, 'standalone', { value: true });
-				}, locale);
+				await page.addInitScript((code) => localStorage.setItem('locale', JSON.stringify({ code })), locale);
 				const attemptId = `network-${locale}-${width}`;
 				const ws = await startWithReply(page, {
 					result: 'failed', success: false, attemptId,
 					failure: { attemptId, phase: 'params', class: 'mutation_blocked', retriable: false },
-				});
+				}, undefined, locale === 'de' ? 'Verstanden' : 'Got it');
 				const toast = page.locator('.start-refusal-toast');
 				const reason = toast.getByRole('region');
 				const buttons = toast.getByRole('button');
