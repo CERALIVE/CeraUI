@@ -67,6 +67,7 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getSensors: () => ({}),
 	getSources: () => undefined,
 	getStatus: () => ({ engine_bitrate: state.engineBitrate }),
+	getUpdating: () => undefined,
 	getWifi: () => undefined,
 }));
 
@@ -206,7 +207,7 @@ describe("live stats card — applied vs configured bitrate", () => {
 		expect(getByTestId("telemetry-bitrate").textContent?.trim()).toBe("—");
 	});
 
-	it("folds the APPLIED rate into the IngestStats session rollup", async () => {
+	it("does not fold the engine target into the measured session rollup", async () => {
 		state.engineBitrate = {
 			applied_kbps: APPLIED_KBPS,
 			ceiling_kbps: CONFIGURED_KBPS,
@@ -216,7 +217,7 @@ describe("live stats card — applied vs configured bitrate", () => {
 
 		expect(
 			getByTestId("ingest-stats-probe").getAttribute("data-bitrate-kbps"),
-		).toBe(String(APPLIED_KBPS));
+		).toBeNull();
 	});
 });
 

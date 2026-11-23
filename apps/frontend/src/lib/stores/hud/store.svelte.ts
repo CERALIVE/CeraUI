@@ -78,7 +78,7 @@ function readSources(): HudSources {
 		sensors: getSensors(),
 		updating: getUpdating(),
 		engineBitrate: getStatus()?.engine_bitrate ?? null,
-		linkTelemetry: getLinkTelemetry() ?? null,
+		linkTelemetry: getLinkTelemetry(true) ?? null,
 	};
 }
 

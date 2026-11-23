@@ -615,10 +615,10 @@ $effect(() => {
 							<dd
 								class={cn(
 									'font-mono font-medium tabular-nums',
-									rollup.bond.activeLinks < rollup.bond.linkCount && 'text-status-warning',
+									!rollup.bond.activity_unknown && rollup.bond.activeLinks < rollup.bond.linkCount && 'text-status-warning',
 								)}
 							>
-								{rollup.bond.activeLinks}/{rollup.bond.linkCount}
+								{rollup.bond.activity_unknown ? m["hud.healthUnknown"]() : `${rollup.bond.activeLinks}/${rollup.bond.linkCount}`}
 							</dd>
 						</div>
 					</dl>

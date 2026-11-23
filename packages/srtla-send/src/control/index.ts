@@ -232,24 +232,27 @@ export type SenderStatus = z.output<typeof senderStatusSchema>;
  * {@link telemetrySchema}, so a shape drift surfaces as "no snapshot" instead of
  * as a malformed one leaking into the UI.
  */
+function isActiveLink(link: SenderLinkStats): boolean {
+	return link.connected && !link.timed_out;
+}
+
 export function senderStatsToTelemetry(
 	stats: SenderStats,
 	lastUpdatedMs: number = Date.now(),
 ): Telemetry | null {
-	const isActive = (link: SenderLinkStats): boolean =>
-		link.connected && !link.timed_out;
-
 	const weights = stats.links.map((link) =>
-		isActive(link) ? Math.max(link.base_score, 0) * link.quality_multiplier : 0,
+		isActiveLink(link)
+			? Math.max(link.base_score, 0) * link.quality_multiplier
+			: 0,
 	);
 	const total = weights.reduce((sum, weight) => sum + weight, 0);
-	const activeCount = stats.links.filter(isActive).length;
+	const activeCount = stats.links.filter(isActiveLink).length;
 	const equalShare =
 		activeCount > 0 ? Math.min(Math.floor(100 / activeCount), 100) : 0;
 
 	const connections = stats.links.map((link, index) => {
 		const weight = weights[index] ?? 0;
-		const weightPercent = !isActive(link)
+		const weightPercent = !isActiveLink(link)
 			? 0
 			: total > 0
 				? Math.min(Math.max(Math.round((weight / total) * 100), 0), 100)
@@ -315,9 +318,11 @@ export class ControlRpcError extends Error {
  * actually makes rather than on the whole method table; {@link ControlClient}
  * remains assignable to it.
  */
+type StatsObserver = (snapshot: Telemetry | null, activeLinks?: number) => void;
+
 export interface TelemetryControlClient {
 	getCapabilities(): Promise<SenderCapabilityDocument | null>;
-	subscribeStats(onEvent: (snapshot: Telemetry | null) => void): () => void;
+	subscribeStats(onEvent: StatsObserver): () => void;
 	close(): void;
 }
 
@@ -619,7 +624,7 @@ export async function createControlClient(
 		 * consumer re-arms its file poll on that signal, so it must fire on the
 		 * failure paths too — not only on a parse error.
 		 */
-		subscribeStats(onEvent: (snapshot: Telemetry | null) => void): () => void {
+		subscribeStats(onEvent: StatsObserver): () => void {
 			let stopped = false;
 			let subscriptionId: string | null = null;
 
@@ -627,7 +632,15 @@ export async function createControlClient(
 				if (method !== topicNotificationMethod(STATS_TOPIC)) return;
 				const envelope = params as { data?: unknown } | undefined;
 				const parsed = senderStatsSchema.safeParse(envelope?.data);
-				onEvent(parsed.success ? senderStatsToTelemetry(parsed.data) : null);
+				if (!parsed.success) {
+					onEvent(null);
+					return;
+				}
+				const snapshot = senderStatsToTelemetry(parsed.data);
+				// Connection state is separate evidence, not part of the frozen stats file.
+				if (snapshot)
+					onEvent(snapshot, parsed.data.links.filter(isActiveLink).length);
+				else onEvent(null);
 			});
 			open.setDisconnectHandler(() => {
 				if (!stopped) onEvent(null);

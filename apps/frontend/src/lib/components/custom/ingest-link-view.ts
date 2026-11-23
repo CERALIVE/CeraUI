@@ -19,6 +19,53 @@
  * `hud/` pure-derivation split (see `lib/stores/hud.svelte.ts`).
  */
 
+import type { LinkTelemetryEntry } from "@ceraui/rpc/schemas";
+import { interfaceLabel, type LinkNames } from "$lib/helpers/link-names";
+import type { LinkSignal } from "$lib/types/hud";
+
+export function ingestLinkKey(link: LinkTelemetryEntry): string {
+	return link.link_id ?? `${link.iface}:${link.conn_id}`;
+}
+
+export function projectIngestLinks(
+	links: readonly LinkTelemetryEntry[],
+	hudLinks: readonly Pick<LinkSignal, "id" | "linkIndex">[] = [],
+	names?: { label: LinkNames["label"]; correlation?: LinkNames["correlation"] },
+) {
+	const identified = links.map((link) => {
+		return {
+			link,
+			key: ingestLinkKey(link),
+			hudSlot: hudLinks.find(({ id }) => id === link.iface)?.linkIndex,
+		};
+	});
+	const slots = new Map<string, number>();
+	const free = new Set([0, 1, 2, 3, 4, 5]);
+	// Reserve HUD slots first, then hand out the remainder by identity, not row order.
+	const ordered = identified.toSorted((a, b) => a.key.localeCompare(b.key));
+	for (const { key, hudSlot } of ordered) {
+		if (hudSlot !== undefined && free.delete(hudSlot)) slots.set(key, hudSlot);
+	}
+	let overflow = 0;
+	for (const { key } of ordered) {
+		if (slots.has(key)) continue;
+		const slot = free.values().next().value ?? overflow++ % 6;
+		free.delete(slot);
+		slots.set(key, slot);
+	}
+	return identified.map((row) => {
+		return {
+			link: row.link,
+			key: row.key,
+			color: `var(--link-${(slots.get(row.key) ?? 0) + 1})`,
+			label: (names?.label ?? interfaceLabel)(row.link.iface),
+			identity: names?.correlation?.(row.link.iface),
+		};
+	});
+}
+
+export type IngestLink = ReturnType<typeof projectIngestLinks>[number];
+
 // ── Fixed-size history ring (RAM-only, per-link) ──────────────────────────────
 // One bounded buffer per uplink (keyed by conn_id). When full, the oldest sample
 // is dropped — never persisted, never resized at runtime, never aggregated beyond

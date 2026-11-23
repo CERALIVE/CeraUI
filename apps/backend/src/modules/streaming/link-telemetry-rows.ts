@@ -89,7 +89,7 @@ export interface LinkTelemetryEntry {
 	 * wire bytes × 8, protocol overhead and retransmits included). The only
 	 * bitrate on the wire that is an observation rather than a setpoint.
 	 */
-	bitrate_bps: number;
+	bitrate_bps?: number;
 	/**
 	 * Cumulative wire BYTES this uplink has sent this session (srtla_send
 	 * ADR-002). Bytes, not bits — no ×8, unlike `bitrate_bps` directly above.
@@ -103,8 +103,11 @@ export interface LinkTelemetryEntry {
 
 export interface LinkTelemetryMessage {
 	links: Array<LinkTelemetryEntry>;
-	/** Sum of every link's `bitrate_bps` — the bond's measured total, bits/s. */
-	measured_bps: number;
+	stale?: true;
+	/** Count from the fresh sender control snapshot; absent for file-only or stale telemetry. */
+	active_links?: number;
+	/** Sum of every link's measured rate, bits/s; absent if any rate is unknown. */
+	measured_bps?: number;
 	/**
 	 * Cumulative wire BYTES the whole bond has sent this session — the operator's
 	 * "total transferred" figure. Forwarded VERBATIM from the sender, which keeps
@@ -299,11 +302,10 @@ function readOptionalString(source: unknown, key: string): string | undefined {
 	return typeof value === "string" && value !== "" ? value : undefined;
 }
 
-/** One unreadable link contributes 0 rather than making the whole sum `NaN`. */
-function asMeasuredBps(value: number | undefined): number {
-	return typeof value === "number" && Number.isFinite(value) && value > 0
+function asMeasuredBps(value: number | undefined): number | undefined {
+	return typeof value === "number" && Number.isFinite(value) && value >= 0
 		? value
-		: 0;
+		: undefined;
 }
 
 function resolveIdentity(
@@ -350,6 +352,7 @@ export function buildLinkRows(
 	return snapshot.connections.map((conn) => {
 		const identity = resolveIdentity(conn.conn_id, conn, mappingActive);
 		const bytesSentTotal = conn.bytes_sent_total;
+		const bitrateBps = asMeasuredBps(conn.bitrate_bps);
 		const iface =
 			identity?.iface ??
 			readOptionalString(conn, "iface") ??
@@ -369,7 +372,7 @@ export function buildLinkRows(
 			rtt_ms: conn.rtt_ms,
 			nak_count: conn.nak_count,
 			weight_percent: conn.weight_percent,
-			bitrate_bps: asMeasuredBps(conn.bitrate_bps),
+			...(bitrateBps === undefined ? {} : { bitrate_bps: bitrateBps }),
 			...(bytesSentTotal === undefined
 				? {}
 				: { bytes_sent_total: bytesSentTotal }),

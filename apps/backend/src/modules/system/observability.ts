@@ -25,7 +25,7 @@ export interface LocalObservabilitySurface {
 	process: { alive: boolean | null; uptime: number };
 	frames: { advancing: boolean | null; count: number | null };
 	srt: { reconnecting: boolean | null; reconnectCount: number };
-	bond: { linkCount: number; activeLinks: number };
+	bond: StreamHealthOutput["bond"];
 	timestamp: string;
 	/**
 	 * Boot-readiness rollup (S6): present when supplied. `degraded` flips true
@@ -57,10 +57,7 @@ export function buildLocalObservabilitySurface(
 			reconnecting: health.srt.reconnecting,
 			reconnectCount: health.srt.reconnectCount,
 		},
-		bond: {
-			linkCount: health.bond.linkCount,
-			activeLinks: health.bond.activeLinks,
-		},
+		bond: health.bond,
 		timestamp: now.toISOString(),
 		...(readiness ? { readiness } : {}),
 	};

@@ -257,8 +257,13 @@ export function reportActiveAudioSource(p: {
 export function reportAllLinksDown(p: {
 	isStreaming: boolean;
 	linkCount: number;
-	activeLinks: number;
+	activeLinks: number | null;
 }): void {
+	// Loss of observation retracts the alarm; it cannot announce recovery.
+	if (p.activeLinks === null) {
+		evaluateIndicator("all-links-down", false, false);
+		return;
+	}
 	const bad = p.linkCount > 0 && p.activeLinks === 0;
 	const action = evaluateIndicator("all-links-down", p.isStreaming, bad);
 	if (action === "lost") {

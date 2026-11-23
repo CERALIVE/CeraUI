@@ -62,7 +62,8 @@ $effect(() => {
 const open = $derived(forceOpen || wide || stored === true);
 
 function handleToggle(event: Event) {
-	const el = event.currentTarget as HTMLDetailsElement;
+	const el = event.currentTarget;
+	if (!(el instanceof HTMLDetailsElement)) return;
 	// Forced open (the post-stream summary): its toggle is hidden, and any other
 	// way of closing it (a keyboard, an extension) is undone.
 	if (forceOpen && !el.open) {
@@ -81,6 +82,7 @@ function handleToggle(event: Event) {
 	<summary
 		class="hover:bg-muted/40 flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-1 py-2 lg:hidden [&::-webkit-details-marker]:hidden"
 		class:hidden={wide || forceOpen}
+		hidden={wide || forceOpen}
 	>
 		<span class="min-w-0">
 			<span class="block text-sm font-medium">{m["live.glance.details"]()}</span>

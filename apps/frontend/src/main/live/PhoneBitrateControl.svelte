@@ -10,6 +10,8 @@
  */
 import { m } from '@ceraui/i18n/svelte';
 import { Gauge } from '@lucide/svelte';
+import XIcon from '@lucide/svelte/icons/x';
+import { tick } from 'svelte';
 
 import { Button } from '$lib/components/ui/button';
 import * as Sheet from '$lib/components/ui/sheet';
@@ -28,50 +30,88 @@ interface Props {
 	onStep: (delta: number) => void;
 	onSliderChange: (value: number) => void;
 	onSliderCommit: (value: number) => void;
+	onSliderCancel?: (() => void) | undefined;
 }
 
-const props: Props = $props();
+const { onSliderCancel, ...props }: Props = $props();
 
 let sheetOpen = $state(false);
+const query = globalThis.matchMedia?.('(min-width: 640px)');
+let wide = $state(query?.matches ?? false);
+let trigger: HTMLElement | null = $state(null);
+let inline: HTMLDivElement | undefined = $state();
 
-// The sheet is the phone's way to the slider. When the screen widens past 640 px
-// the inline slider is back, so the sheet closes rather than cover it.
+function focusLimit() {
+	(wide ? inline?.querySelector<HTMLElement>('[role="slider"]') : trigger)?.focus();
+}
+
 $effect(() => {
-	if (typeof window === 'undefined' || !window.matchMedia) return;
-	const wide = window.matchMedia('(min-width: 640px)');
-	const onChange = () => {
-		if (wide.matches) sheetOpen = false;
+	if (!query) return;
+	const onChange = async () => {
+		const wasOpen = sheetOpen;
+		const focusedLimit = trigger === document.activeElement || inline?.contains(document.activeElement);
+		wide = query.matches;
+		sheetOpen = false;
+		onSliderCancel?.();
+		// On resize with the sheet open, its close autofocus waits for the focus trap.
+		if (!wasOpen && focusedLimit) {
+			await tick();
+			focusLimit();
+		}
 	};
-	wide.addEventListener('change', onChange);
-	return () => wide.removeEventListener('change', onChange);
+	query.addEventListener('change', onChange);
+	return () => query.removeEventListener('change', onChange);
 });
 </script>
 
-<div class="shrink-0 sm:min-w-0 sm:flex-1">
-	<div class="max-sm:hidden">
-		<BitrateAdjuster {...props} />
-	</div>
-	<Button
-		aria-label={m["live.glance.changeBitrate"]({ bitrate: props.bitrateLabel })}
-		class="h-auto min-h-[44px] gap-2 self-stretch px-3 py-4 font-mono text-base sm:hidden"
-		onclick={() => (sheetOpen = true)}
-		type="button"
-		variant="outline"
-	>
-		<Gauge aria-hidden={true} class="size-4" />
-		<CompactRate value={props.bitrateLabel} />
-	</Button>
-</div>
-
 <Sheet.Root bind:open={sheetOpen}>
+	<div class="shrink-0 sm:min-w-0 sm:flex-1">
+		{#if wide}
+			<div bind:this={inline}>
+				<BitrateAdjuster {...props} />
+			</div>
+		{:else}
+			<Sheet.Trigger>
+				{#snippet child({ props: triggerProps })}
+					<Button
+						{...triggerProps}
+						bind:ref={trigger}
+						aria-label={m["live.glance.changeBitrate"]({ bitrate: props.bitrateLabel })}
+						class="h-auto gap-2 self-stretch px-3 py-4 font-mono text-base"
+						variant="outline"
+					>
+						<Gauge aria-hidden={true} class="size-4" />
+						<CompactRate kbps={props.bitrateDraft} />
+					</Button>
+				{/snippet}
+			</Sheet.Trigger>
+		{/if}
+	</div>
 	<Sheet.Content
-		class="gap-0 px-4 pt-2 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]"
+		class="gap-0 px-4 pt-2 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] motion-reduce:animate-none"
 		data-touch-region
+		onCloseAutoFocus={(event) => {
+			event.preventDefault();
+			if (!sheetOpen) {
+				onSliderCancel?.();
+				focusLimit();
+			}
+		}}
 		side="bottom"
+		showCloseButton={false}
 	>
-		<Sheet.Header class="px-0">
+		<Sheet.Header class="flex-row items-center justify-between px-0">
 			<Sheet.Title>{m["live.adjustBitrate"]()}</Sheet.Title>
+			<Sheet.Close>
+				{#snippet child({ props: closeProps })}
+					<Button {...closeProps} aria-label={m["a11y.close"]()} class="size-11 shrink-0" size="icon" variant="ghost">
+						<XIcon aria-hidden={true} />
+					</Button>
+				{/snippet}
+			</Sheet.Close>
 		</Sheet.Header>
-		<BitrateAdjuster {...props} showLabel={false} />
+		{#if !wide}
+			<BitrateAdjuster {...props} showLabel={false} />
+		{/if}
 	</Sheet.Content>
 </Sheet.Root>

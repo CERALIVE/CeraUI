@@ -50,6 +50,7 @@ import {
 	type TelemetryControlClient,
 } from "@ceraui/srtla-send/control";
 import {
+	SENDER_TELEMETRY_STALE_MS,
 	senderTelemetryPath,
 	type Telemetry,
 	type WatchTelemetryHandle,
@@ -139,6 +140,12 @@ let handle: WatchTelemetryHandle | null = null;
 // Last FRESH (non-null) snapshot, retained so a subsequent stale/absent read can
 // still surface the known links flagged `stale: true`.
 let lastSnapshot: Telemetry | null = null;
+// Stats-file snapshots don't carry the sender's connection state.
+let observedActiveLinks: number | undefined;
+// stats.update is nominally 1 Hz. After a gap, allow one missed push but
+// require two timely all-up observations before returning to Healthy.
+const HEALTHY_BOND_REACQUIRE_GAP_MS = 2_000;
+let healthyBond: { at: number | null; confirmed: boolean } | undefined;
 // Whether the most recent watch tick delivered fresh data. False => stale/absent.
 let lastTickFresh = false;
 // CeraUI-side wall-clock ms of the last successful (non-null) read; 0 until one.
@@ -190,16 +197,44 @@ export function setControlClientFactoryForTest(
  * / stale (> 5000 ms) reads to `null`, so a `null` here while watching means the
  * snapshot went stale or vanished.
  */
-function ingestTelemetry(telemetry: Telemetry | null): void {
+function ingestTelemetry(
+	telemetry: Telemetry | null,
+	activeLinks?: number,
+): void {
 	if (telemetry) {
 		lastSnapshot = telemetry;
+		observedActiveLinks = activeLinks;
 		lastTickFresh = true;
 		lastReadMs = nowFn();
+		if (activeLinks === undefined) {
+			if (healthyBond) healthyBond = { at: null, confirmed: false };
+		} else if (
+			activeLinks > 0 &&
+			activeLinks === telemetry.connections.length
+		) {
+			const gapLimit = healthyBond?.confirmed
+				? SENDER_TELEMETRY_STALE_MS
+				: HEALTHY_BOND_REACQUIRE_GAP_MS;
+			const at = Math.min(lastReadMs, telemetry.last_updated_ms);
+			if (healthyBond?.at !== at) {
+				healthyBond = {
+					at,
+					confirmed:
+						!healthyBond ||
+						(healthyBond.at !== null &&
+							at > healthyBond.at &&
+							at - healthyBond.at <= gapLimit),
+				};
+			}
+		} else {
+			healthyBond = undefined;
+		}
 		// The sender's own verdict REPLACES the writer's synthesized one, and it
 		// is the only half that can observe a degraded reload.
 		ingestSenderBindMapReport(telemetry);
 	} else {
 		lastTickFresh = false;
+		if (healthyBond) healthyBond = { at: null, confirmed: false };
 	}
 }
 
@@ -235,6 +270,8 @@ export function startLinkTelemetry(
 	resetSenderBindMapReport();
 
 	lastSnapshot = null;
+	observedActiveLinks = undefined;
+	healthyBond = undefined;
 	lastTickFresh = false;
 	lastReadMs = 0;
 
@@ -332,14 +369,14 @@ async function attemptSubscriptionCutover(
 			return;
 		}
 
-		subscriptionCleanup = client.subscribeStats((snapshot) => {
+		subscriptionCleanup = client.subscribeStats((snapshot, activeLinks) => {
 			if (snapshot === null && !handle) {
 				logger.warn(
 					"link-telemetry: subscription disconnected, falling back to file-poll",
 				);
 				startFilePollWatcher(watch, statsFile, watchOpts);
 			}
-			ingestTelemetry(snapshot);
+			ingestTelemetry(snapshot, activeLinks);
 		});
 
 		// Subscription confirmed live — retire the redundant file-poll.
@@ -371,6 +408,8 @@ export function stopLinkTelemetry(): void {
 		handle = null;
 	}
 	lastSnapshot = null;
+	observedActiveLinks = undefined;
+	healthyBond = undefined;
 	lastTickFresh = false;
 	lastReadMs = 0;
 	resetConnIdRegistry();
@@ -399,21 +438,45 @@ export function buildLinkTelemetry(): LinkTelemetryMessage | null {
 	if (!isLinkTelemetryActive()) return null;
 	if (lastSnapshot === null) return null;
 
-	const links = buildLinkRows(
-		lastSnapshot,
-		!lastTickFresh,
-		isBondMappingActive(),
-	);
+	// A silent open socket never supplies the null tick which expires a file read.
+	// Check both the delivery and the file timestamp, so rereading a file can't
+	// buy extra lifetime past the sender's freshness window.
+	const stale =
+		!lastTickFresh ||
+		nowFn() - Math.min(lastReadMs, lastSnapshot.last_updated_ms) >
+			SENDER_TELEMETRY_STALE_MS;
+	const links = buildLinkRows(lastSnapshot, stale, isBondMappingActive());
 	// Forwarded verbatim, never summed from `links`: the sender's accumulator is
 	// what stays monotonic across a reconnect or an IP-list reload.
 	const bondBytesSentTotal = lastSnapshot.bytes_sent_total;
 	return {
 		links,
-		measured_bps: links.reduce((total, link) => total + link.bitrate_bps, 0),
+		...(stale
+			? { stale: true }
+			: observedActiveLinks === undefined || healthyBond?.confirmed === false
+				? {}
+				: { active_links: observedActiveLinks }),
+		...(links.every((link) => link.bitrate_bps !== undefined)
+			? {
+					measured_bps: links.reduce(
+						(total, link) => total + (link.bitrate_bps ?? 0),
+						0,
+					),
+				}
+			: {}),
 		...(bondBytesSentTotal === undefined
 			? {}
 			: { bytes_sent_total: bondBytesSentTotal }),
 		lastReadMs,
+	};
+}
+
+/** One status projection for initial, pulled and heartbeat delivery. */
+export function linkTelemetryStatus() {
+	const linkTelemetry = buildLinkTelemetry();
+	return {
+		linkTelemetry,
+		link_telemetry_waiting: linkTelemetry === null && isLinkTelemetryActive(),
 	};
 }
 
@@ -429,15 +492,15 @@ export function resetLinkTelemetryBroadcastState(): void {
  * Folds into the existing status flow — no new endpoint.
  */
 export function broadcastLinkTelemetryIfChanged(): LinkTelemetryMessage | null {
-	const payload = buildLinkTelemetry();
+	const telemetry = linkTelemetryStatus();
 	const bondMapping = buildBondMapping();
-	const json = JSON.stringify({ payload, bondMapping });
+	const json = JSON.stringify({ ...telemetry, bondMapping });
 	if (json !== lastBroadcastJson) {
 		lastBroadcastJson = json;
 		broadcastMsg("status", {
-			linkTelemetry: payload,
+			...telemetry,
 			bond_mapping: bondMapping,
 		});
 	}
-	return payload;
+	return telemetry.linkTelemetry;
 }

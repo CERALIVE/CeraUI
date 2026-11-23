@@ -161,7 +161,10 @@ describe("LiveCockpit — capture standby band", () => {
 			LiveCockpit,
 			baseProps({
 				...twoCameras,
-				telemetry: { links: [staleLink("1"), staleLink("2")] },
+				telemetry: {
+					links: ["1", "2"].map((id) => ({ ...staleLink(id), stale: false })),
+					active_links: 0,
+				},
 				activeEncode: activeEncode(
 					"standby",
 					captureBlock({ state: "standby" }),

@@ -79,7 +79,7 @@ export function deriveBitrateReading(
 export function deriveMeasuredBitrateKbps(
 	telemetry: LinkTelemetryMessage | null | undefined,
 ): number | null {
-	if (!telemetry) return null;
+	if (!telemetry || telemetry.stale) return null;
 	const bps = telemetry.measured_bps;
 	if (typeof bps !== "number" || !Number.isFinite(bps) || bps < 0) return null;
 	if (telemetry.links.length > 0 && telemetry.links.every((l) => l.stale)) {
@@ -142,9 +142,10 @@ export function deriveHudState(
 		// Live-Data Discipline (T6): bitrate is a live streaming value, so it must
 		// not persist a stale number from the last session once the stream stops.
 		bitrateKbps: sources.isStreaming ? bitrate.effectiveKbps : null,
-		measuredBitrateKbps: sources.isStreaming
-			? deriveMeasuredBitrateKbps(sources.linkTelemetry)
-			: null,
+		measuredBitrateKbps:
+			sources.isStreaming && isConnected
+				? deriveMeasuredBitrateKbps(sources.linkTelemetry)
+				: null,
 		bitrateCeilingKbps: sources.isStreaming ? ceilingKbps : null,
 		isBitrateBelowCeiling: sources.isStreaming && bitrate.belowCeiling,
 		isBitrateStale: streamingStale,

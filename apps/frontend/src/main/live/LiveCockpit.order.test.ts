@@ -88,10 +88,19 @@ const SOURCES = {
 const CONFIG = { source: "cam-a" } as unknown as ConfigMessage;
 const ACTIVE_ENCODE = { active_input: "cam-a" } as unknown as ActiveEncode;
 
-// Every link stale while one exists: the all-links-down banner shows.
-const LINKS_DOWN = {
-	links: [{ id: "eth0", stale: true }],
-} as unknown as LinkTelemetryMessage;
+// Stale sender observations still lead the cards column.
+const LINKS_DOWN: LinkTelemetryMessage = {
+	links: [
+		{
+			conn_id: "0",
+			iface: "eth0",
+			stale: true,
+			rtt_ms: 15,
+			nak_count: 0,
+			weight_percent: 100,
+		},
+	],
+};
 
 function cockpit(capabilities?: CapabilitiesMessage) {
 	return render(LiveCockpit, { props: cockpitProps(capabilities) });
@@ -165,7 +174,7 @@ describe("LiveCockpit — live order", () => {
 		const root = byTestId(container, "live-cockpit");
 
 		const order = [
-			"all-links-down-banner",
+			"link-observation-lost-banner",
 			"program-desk",
 			"telemetry-card",
 			"live-bar",
@@ -201,11 +210,20 @@ describe("LiveCockpit — live order", () => {
 	});
 
 	it("the live bar holds the bitrate control and Stop", () => {
-		const { container } = cockpit(COMPOSING);
-		const bar = byTestId(container, "live-bar");
+		vi.stubGlobal("matchMedia", () => ({
+			matches: true,
+			addEventListener: () => {},
+			removeEventListener: () => {},
+		}));
+		try {
+			const { container } = cockpit(COMPOSING);
+			const bar = byTestId(container, "live-bar");
 
-		within(bar).getByRole("slider");
-		within(bar).getByRole("button", { name: /stop stream/i });
+			within(bar).getByRole("slider");
+			within(bar).getByRole("button", { name: /stop stream/i });
+		} finally {
+			vi.unstubAllGlobals();
+		}
 	});
 
 	it("puts the audio card after program-desk and before telemetry-card when the engine mixes audio", () => {

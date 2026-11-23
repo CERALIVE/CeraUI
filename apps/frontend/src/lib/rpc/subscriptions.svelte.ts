@@ -452,7 +452,12 @@ export function getBluetooth(): BluetoothStatus | undefined {
 	return bluetoothState;
 }
 
-export function getLinkTelemetry() {
+// Existing diagnostics can retain last-known data. A current reading must have
+// arrived over this socket, not merely survived from before it reconnected.
+let telemetryLink = $state<number>();
+
+export function getLinkTelemetry(currentOnly = false) {
+	if (currentOnly && telemetryLink !== getLinkEpoch()) return undefined;
 	return linkTelemetryState;
 }
 
@@ -683,6 +688,7 @@ function handleMessage(
 				modemsState = mergeModemList(modemsState, statusData.modems);
 			}
 			if (statusData.linkTelemetry !== undefined) {
+				telemetryLink = received.link;
 				linkTelemetryState = preserveWireIdentity(
 					linkTelemetryState,
 					statusData.linkTelemetry,
@@ -1396,6 +1402,7 @@ export function resetState(): void {
 	wifiState = undefined;
 	modemsState = undefined;
 	linkTelemetryState = undefined;
+	telemetryLink = undefined;
 	audioLevelState = undefined;
 	configChangeState = undefined;
 	sensorsState = undefined;

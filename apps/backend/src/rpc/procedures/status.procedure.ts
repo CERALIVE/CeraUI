@@ -39,6 +39,7 @@ import { getLastCapabilities } from "../../modules/streaming/capabilities.ts";
 import { getDevicesMessage } from "../../modules/streaming/devices.ts";
 import { getEngineBitrateStatus } from "../../modules/streaming/engine-bitrate-status.ts";
 import { buildBondMapping } from "../../modules/streaming/link-mapping-report.ts";
+import { linkTelemetryStatus } from "../../modules/streaming/link-telemetry.ts";
 import { AUDIO_CODECS } from "../../modules/streaming/pipeline-sources.ts";
 import { getPipelinesMessage } from "../../modules/streaming/pipelines.ts";
 import { getPreviewEncoderRealizedStatus } from "../../modules/streaming/preview-encoder-status.ts";
@@ -99,6 +100,7 @@ export const getStatusProcedure = authedProcedure
 			resolved_asrc_candidates: getResolvedAsrcCandidates(),
 			pending_audio_follow_asrc: getPendingAudioFollowAsrc(),
 			bond_mapping: buildBondMapping(),
+			...linkTelemetryStatus(),
 			network_ingest: getNetworkIngestInfo(),
 			active_encode: getActiveEncodeStatus(),
 			engine_bitrate: getEngineBitrateStatus(),

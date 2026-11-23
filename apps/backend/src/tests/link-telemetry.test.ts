@@ -6,6 +6,7 @@ import type {
 } from "@ceraui/srtla-send/control";
 import {
 	connectionTelemetrySchema,
+	SENDER_TELEMETRY_STALE_MS,
 	type Telemetry,
 	type TelemetryUpdate,
 	telemetrySchema,
@@ -17,6 +18,7 @@ import {
 	ingestTelemetryForTest,
 	ipForConnId,
 	isLinkTelemetryActive,
+	linkTelemetryStatus,
 	registerSrtlaIpList,
 	resetLinkTelemetryBroadcastState,
 	setControlClientFactoryForTest,
@@ -38,6 +40,7 @@ function snapshot(
 	bondBytesSentTotal?: number,
 ): Telemetry {
 	const snap: Telemetry = {
+		schema_version: 1,
 		last_updated_ms: Date.now(),
 		connections: connections.map((c, i) => ({
 			conn_id: String(i),
@@ -236,6 +239,30 @@ describe("watch lifecycle + null propagation", () => {
 		expect(buildLinkTelemetry()).toBeNull();
 	});
 
+	test("status distinguishes no watcher, waiting, fresh empty and stale empty", () => {
+		expect(linkTelemetryStatus()).toEqual({
+			linkTelemetry: null,
+			link_telemetry_waiting: false,
+		});
+		const w = captureWatch();
+		startLinkTelemetry("/tmp/stats.json", [], { watch: w.watch });
+		expect(linkTelemetryStatus()).toEqual({
+			linkTelemetry: null,
+			link_telemetry_waiting: true,
+		});
+		w.emit(snapshot([]));
+		expect(linkTelemetryStatus()).toMatchObject({
+			linkTelemetry: { links: [], measured_bps: 0 },
+			link_telemetry_waiting: false,
+		});
+		expect(linkTelemetryStatus().linkTelemetry?.stale).toBeUndefined();
+		w.emit(null);
+		expect(linkTelemetryStatus().linkTelemetry).toMatchObject({
+			links: [],
+			stale: true,
+		});
+	});
+
 	test("stop halts the watcher and reverts to null", () => {
 		const w = captureWatch();
 		setIfaceResolverForTest(() => undefined);
@@ -431,15 +458,16 @@ describe("measured wire bitrate (ADR-001 bitrate_bps)", () => {
 		expect(payload?.links.every((l) => l.bitrate_bps === 0)).toBe(true);
 	});
 
-	test("an unreadable link contributes 0 instead of NaN-ing the whole bond", () => {
+	test("an unreadable link leaves its rate and the complete bond rate unknown", () => {
 		liveWith([
 			{ conn_id: "0", bitrate_bps: Number.NaN },
 			{ conn_id: "1", bitrate_bps: 1_000_000 },
 		]);
 
 		const payload = buildLinkTelemetry();
-		expect(payload?.links[0]?.bitrate_bps).toBe(0);
-		expect(payload?.measured_bps).toBe(1_000_000);
+		expect(payload?.links[0]?.bitrate_bps).toBeUndefined();
+		expect(payload?.links[1]?.bitrate_bps).toBe(1_000_000);
+		expect(payload?.measured_bps).toBeUndefined();
 	});
 
 	test("an idle-but-running bond reports a zero total, not an absent one", () => {
@@ -667,6 +695,39 @@ describe("broadcastLinkTelemetryIfChanged — status flow integration", () => {
 });
 
 describe("control-socket subscription cutover + airtight file-poll fallback", () => {
+	test("a new browser's status pull sees silent sender data as stale until a new observation", async () => {
+		let now = Date.now();
+		setTelemetryClockForTest(() => now);
+		setIfaceResolverForTest(() => "usb0");
+		const w = captureWatch();
+		const fake = fakeControlClient({ methods: ["subscribe", "unsubscribe"] });
+		setControlClientFactoryForTest(async () => fake.client);
+		startLinkTelemetry("/tmp/stats.json", ["10.0.0.1"], {
+			watch: w.watch,
+			controlSocket: "/tmp/srtla-send-control-9000.sock",
+		});
+		await fake.subscribed;
+		expect(w.stopped).toBe(1);
+		const reading = (bps: number): Telemetry => ({
+			...snapshot([{ bitrate_bps: bps }]),
+			last_updated_ms: now,
+		});
+		fake.emit(reading(2_500_000));
+		// The initial status and reconnect pull both use linkTelemetryStatus.
+		expect(linkTelemetryStatus().linkTelemetry?.links[0]?.stale).toBe(false);
+		now += SENDER_TELEMETRY_STALE_MS + 1;
+		expect(linkTelemetryStatus().linkTelemetry).toMatchObject({
+			stale: true,
+			links: [{ stale: true }],
+		});
+		fake.emit(reading(1_750_000));
+		expect(linkTelemetryStatus().linkTelemetry).toMatchObject({
+			measured_bps: 1_750_000,
+			links: [{ stale: false, bitrate_bps: 1_750_000 }],
+		});
+		expect(linkTelemetryStatus().linkTelemetry?.stale).toBeUndefined();
+	});
+
 	test("subscription path broadcasts the same LinkTelemetryMessage shape as file-poll", async () => {
 		const w = captureWatch();
 		const fake = fakeControlClient({ methods: ["subscribe", "unsubscribe"] });

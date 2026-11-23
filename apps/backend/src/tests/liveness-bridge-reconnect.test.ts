@@ -20,6 +20,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { SenderStats } from "@ceraui/srtla-send/control";
+import { z } from "zod";
 
 import { getConfig } from "../modules/config.ts";
 import {
@@ -33,16 +38,22 @@ import {
 } from "../modules/streaming/active-passthrough.ts";
 import { AudioProbeTimeoutError } from "../modules/streaming/audio.ts";
 import {
+	broadcastHealthIfChanged,
 	clearStreamProcessExit,
 	collectLivenessSources,
 	deriveStreamHealth,
 	FRAMES_FRESHNESS_MS,
 	reportStreamProcessExit,
+	resetHealthBroadcastState,
 	setHealthClockForTest,
 } from "../modules/streaming/health.ts";
 import {
 	type LinkTelemetryMessage,
+	setIfaceResolverForTest,
 	setMockLinkTelemetryProvider,
+	setTelemetryClockForTest,
+	startLinkTelemetry,
+	stopLinkTelemetry,
 } from "../modules/streaming/link-telemetry.ts";
 import type { Pipeline } from "../modules/streaming/pipelines.ts";
 import { updateStatus } from "../modules/streaming/streaming.ts";
@@ -115,6 +126,7 @@ function statusFrame(activeEncode: unknown, streaming = true) {
 /** One healthy bonded link, so the bond can never be what makes health degraded. */
 function healthyBond(): LinkTelemetryMessage {
 	return {
+		active_links: 1,
 		links: [
 			{
 				conn_id: "0",
@@ -128,6 +140,187 @@ function healthyBond(): LinkTelemetryMessage {
 		lastReadMs: Date.now(),
 	};
 }
+
+const senderRequestSchema = z.object({
+	jsonrpc: z.literal("2.0"),
+	id: z.number(),
+	method: z.enum(["get_capabilities", "subscribe", "unsubscribe"]),
+});
+
+async function withSenderStats(
+	check: (sender: {
+		emit: (fullyActive: boolean) => Promise<void>;
+		setOffset: (offset: number) => void;
+	}) => Promise<void>,
+) {
+	setMockLinkTelemetryProvider(null);
+	setIfaceResolverForTest(() => undefined);
+	const epoch = Date.now() - 60_000;
+	let now = epoch;
+	setTelemetryClockForTest(() => now);
+	resetHealthBroadcastState();
+	const dir = mkdtempSync(join(tmpdir(), "link-health-"));
+	const unix = join(dir, "control.sock");
+	const subscription = Promise.withResolvers<{
+		write(data: string): unknown;
+	}>();
+	const server = Bun.listen<{ buffer: string }>({
+		unix,
+		socket: {
+			open(socket) {
+				socket.data = { buffer: "" };
+			},
+			data(socket, bytes) {
+				socket.data.buffer += bytes.toString();
+				const lines = socket.data.buffer.split("\n");
+				socket.data.buffer = lines.pop() ?? "";
+				for (const line of lines) {
+					const request: unknown = JSON.parse(line);
+					const { method, id } = senderRequestSchema.parse(request);
+					let result: Record<string, unknown>;
+					switch (method) {
+						case "get_capabilities":
+							result = {
+								schema_version: 1,
+								binary: "srtla_send",
+								version: "4.1.0",
+								methods: ["subscribe", "unsubscribe"],
+								capabilities: {
+									bind_map: true,
+									stats_file: true,
+									dry_run: true,
+									control_socket_jsonrpc: true,
+									conn_timeout_ms: true,
+									modes: ["classic"],
+								},
+							};
+							break;
+						case "subscribe":
+							result = { subscription_id: "health-test" };
+							break;
+						case "unsubscribe":
+							result = {};
+							break;
+						default:
+							throw new Error(method satisfies never);
+					}
+					socket.write(`${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`);
+					if (method === "subscribe") subscription.resolve(socket);
+				}
+			},
+		},
+	});
+	try {
+		startLinkTelemetry(join(dir, "stats.json"), ["192.0.2.1", "192.0.2.2"], {
+			controlSocket: unix,
+		});
+		const socket = await subscription.promise;
+		const emit = async (recovered: boolean) => {
+			const data: SenderStats = {
+				mode: "classic",
+				links: [0, 1].map((conn_id) => ({
+					conn_id,
+					ip: `192.0.2.${conn_id + 1}`,
+					iface: `eth${conn_id}`,
+					connected: recovered || conn_id === 0,
+					timed_out: !recovered && conn_id === 0,
+					window: 8,
+					in_flight: 0,
+					rtt_ms: 40,
+					nak_count: 0,
+					bitrate_bytes_per_sec: 0,
+					base_score: 8,
+					quality_multiplier: 1,
+				})),
+			};
+			const delivered = Promise.withResolvers<void>();
+			const timeout = setTimeout(
+				() =>
+					delivered.reject(new Error("Sender stats.update was not ingested")),
+				1000,
+			);
+			// The watcher stamps an observation only after it has ingested it.
+			setTelemetryClockForTest(() => {
+				delivered.resolve();
+				return now;
+			});
+			try {
+				socket.write(
+					`${JSON.stringify({ jsonrpc: "2.0", method: "stats.update", params: { subscription_id: "health-test", data } })}\n`,
+				);
+				await delivered.promise;
+			} finally {
+				clearTimeout(timeout);
+				setTelemetryClockForTest(() => now);
+			}
+		};
+		await check({
+			emit,
+			setOffset: (offset) => {
+				now = epoch + offset;
+			},
+		});
+	} finally {
+		stopLinkTelemetry();
+		setTelemetryClockForTest(null);
+		resetHealthBroadcastState();
+		setIfaceResolverForTest(null);
+		server.stop(true);
+		rmSync(dir, { recursive: true, force: true });
+	}
+}
+
+test("sender connection flags reach real health through the control subscription", async () => {
+	await withSenderStats(async ({ emit, setOffset }) => {
+		const health = () => deriveStreamHealth(collectLivenessSources());
+		await emit(false);
+		expect(health()).toMatchObject({
+			state: "degraded",
+			bond: { linkCount: 2, activeLinks: 0 },
+		});
+		expect(health().bond.activity_unknown).toBeUndefined();
+		setOffset(5001);
+		expect(health().state).toBe("unknown");
+		await emit(true);
+		expect(health()).toMatchObject({
+			state: "healthy",
+			bond: { linkCount: 2, activeLinks: 2 },
+		});
+	});
+});
+
+test("sparse healthy reports do not flap health after sender observations expire", async () => {
+	await withSenderStats(async ({ emit, setOffset }) => {
+		const states = [];
+		for (const { sample, delivery } of [
+			{ sample: 30000, delivery: 30000 },
+			{ sample: 35001 },
+			{ sample: 40001, delivery: 35002 },
+			{ sample: 45003, delivery: 40002 },
+			{ sample: 50003, delivery: 45004 },
+			{ sample: 50004, delivery: 50004 },
+			{ sample: 51004, delivery: 51004 },
+			{ sample: 52004, delivery: 52004 },
+		]) {
+			if (delivery !== undefined) {
+				setOffset(delivery);
+				await emit(true);
+			}
+			setOffset(sample);
+			states.push(broadcastHealthIfChanged().state);
+		}
+		expect(states).toEqual([
+			"healthy",
+			"unknown",
+			"unknown",
+			"unknown",
+			"unknown",
+			"unknown",
+			"healthy",
+			"healthy",
+		]);
+	});
+});
 
 const audioPipeline = {
 	source: "hdmi",

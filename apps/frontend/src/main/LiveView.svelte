@@ -68,6 +68,7 @@ import {
 } from '$lib/rpc/subscriptions.svelte';
 import { getEncoderLoad } from '$lib/stores/device-health-history.svelte';
 import { deriveBitrateReading, deriveMeasuredBitrateKbps } from '$lib/stores/hud/derive';
+import { getLinks } from '$lib/stores/hud.svelte';
 import { getLinkNames } from '$lib/stores/link-names.svelte';
 import { getStreamHealthRollup, isVideoSignalLost } from '$lib/stores/stream-health.svelte';
 import { isSelectedAudioLost } from '$lib/streaming/audioLost';
@@ -117,6 +118,7 @@ import { goLiveUpdateRefusal } from '$lib/updates/update-bands';
 // load on first open. This split is a bundling change, not an API change.
 import type { AudioConfigValues } from '$main/dialogs/AudioDialog.svelte';
 import type { EncoderConfig } from '$main/dialogs/EncoderDialog.svelte';
+import { formatBitrate } from '$main/live/bitrate-display';
 import CapabilityTierBanner from '$main/live/CapabilityTierBanner.svelte';
 import IdleCockpit from '$main/live/IdleCockpit.svelte';
 import LiveCockpit from '$main/live/LiveCockpit.svelte';
@@ -131,7 +133,7 @@ const isStreaming = $derived(getIsStreaming());
 const sensors = $derived(getSensors());
 // Per-link srtla ingest telemetry (RTT/NAK/weight) — already broadcast via
 // status.linkTelemetry; surfaced here as a read-only panel, no new collector.
-const linkTelemetry = $derived(getLinkTelemetry());
+const linkTelemetry = $derived(getIsConnected() ? getLinkTelemetry(true) : undefined);
 // Mid-stream audio-device-lost banner: the selected real audio device dropped
 // from the available list (backend also raises a silence-failover notification).
 const audioSourceLost = $derived(
@@ -709,16 +711,6 @@ function handleAudioSelectionApplied(asrc: string) {
 	};
 }
 
-function formatBitrate(kbps: number | undefined): string {
-	if (kbps === undefined || kbps === null) return '—';
-	if (kbps >= 1000) {
-		const mbps = kbps / 1000;
-		const value = Number.isInteger(mbps) ? String(mbps) : mbps.toFixed(1);
-		return `${value} ${m["units.mbps"]()}`;
-	}
-	return `${kbps} ${m["units.kbps"]()}`;
-}
-
 // Pick the operator-relevant sensors out of the flat string map.
 function findSensor(predicate: (name: string) => boolean): string | undefined {
 	const entries = sensors ? Object.entries(sensors) : [];
@@ -1047,7 +1039,7 @@ const configRows = $derived<ConfigRow[]>([
 ]);
 </script>
 
-<div class="mx-auto w-full max-w-3xl space-y-6 p-4 sm:p-6 lg:max-w-6xl">
+<div class="mx-auto w-full max-w-3xl space-y-6 p-4 sm:p-6 lg:max-w-6xl" class:short-live={isStreaming}>
 	<LiveHeader {isStreaming} unconfirmed={streamOutcomeUnknown} />
 
 	<!-- Capability-tier state: calm banner when the engine is offline/starting or
@@ -1147,9 +1139,16 @@ const configRows = $derived<ConfigRow[]>([
 				interacting = false;
 				commitBitrate(v);
 			}}
+			onSliderCancel={() => {
+				if (interacting) interacting = false;
+			}}
 			telemetry={linkTelemetry}
+			telemetryConnected={getIsConnected()}
+			telemetryWaiting={getStatus()?.link_telemetry_waiting === true}
 			bitrateKbps={liveBitrate.primaryKbps ?? undefined}
-			linkName={getLinkNames().label}
+			linkNames={getLinkNames()}
+			hudLinks={linkTelemetry?.links.length ? getLinks() : undefined}
+			measuredBitrateKbps={liveBitrate.measuredKbps ?? undefined}
 			{audioSourceLost}
 			{videoSignalLost}
 			{isStreaming}
@@ -1201,6 +1200,13 @@ const configRows = $derived<ConfigRow[]>([
 		/>
 	{/if}
 </div>
+
+<style>
+	@media (orientation: landscape) and (max-height: 420px) and (width < 1024px) {
+		.short-live { padding-block: 0.5rem; }
+		.short-live > :global(:not(:last-child)) { margin-block-end: 0.5rem; }
+	}
+</style>
 
 <LazyDialog dialog={ServerDialog} bind:open={serverDialogOpen} onSaved={validateSavedDestination} />
 

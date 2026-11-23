@@ -91,11 +91,14 @@ list, which already reflects this):
   wider inline-start column, and the source card is the panel beside them (grid
   placement; the DOM order is unchanged). Pure prop pass-through — no `$state`,
   no RPC.
-- **`LiveCockpit.svelte`** — streaming wrapper: the status banners →
+- **`LiveCockpit.svelte`** — streaming wrapper: the status banners → the
+  measured Stream glance below 1024 px →
   `ProgramDesk` (preview → `LiveSummaryStrip` → `LiveSourceSwitch` →
-  `layout-controls`) → `telemetry-card` (telemetry strip + `IngestStats`) → the
-  Live bar with the bitrate adjuster (the sole bitrate-hot-adjust owner while
-  live) and Stop, or Done in the post-stream summary window.
+  `layout-controls`) → Audio when supported → `telemetry-card` (telemetry
+  strip + `IngestStats`, folded under Details below 1024 px) → the fixed Live
+  bar with Stop and one bitrate-limit adjuster (in a sheet below 640 px, inline
+  otherwise), or Done in the post-stream summary window. Details opens in that
+  window without remounting `IngestStats`. See [the Live layout contract](live-screen.md).
 - **`LiveView.svelte`** switches between the two on the OPTIMISTIC streaming edge
   (`isStreaming || streamingOptimismState === 'starting'`) — never on the raw
   `is_streaming` flag alone, so Start never flickers back to idle mid-launch.

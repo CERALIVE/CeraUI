@@ -50,8 +50,8 @@ import {
 import { getEngineBitrateStatus } from "../streaming/engine-bitrate-status.ts";
 import { buildBondMapping } from "../streaming/link-mapping-report.ts";
 import {
-	buildLinkTelemetry,
 	type LinkTelemetryMessage,
+	linkTelemetryStatus,
 } from "../streaming/link-telemetry.ts";
 import { AUDIO_CODECS } from "../streaming/pipeline-sources.ts";
 import { getPipelinesMessage } from "../streaming/pipelines.ts";
@@ -95,6 +95,7 @@ export type StatusResponseMessage = {
 	set_password?: boolean;
 	remote?: true | { error: string };
 	linkTelemetry?: LinkTelemetryMessage | null;
+	link_telemetry_waiting?: boolean;
 	bond_mapping?: BondMapping | null;
 	buffering?: BufferingStatus | null;
 	network_ingest?: NetworkIngest | null;
@@ -129,7 +130,7 @@ export function sendStatus(conn: WebSocket) {
 			resolved_asrc_reason: getResolvedAsrcReason(),
 			resolved_asrc_candidates: getResolvedAsrcCandidates(),
 			pending_audio_follow_asrc: getPendingAudioFollowAsrc(),
-			linkTelemetry: buildLinkTelemetry(),
+			...linkTelemetryStatus(),
 			bond_mapping: buildBondMapping(),
 			network_ingest: getNetworkIngestInfo(),
 			active_encode: getActiveEncodeStatus(),

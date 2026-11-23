@@ -12,6 +12,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let captured: ((type: string, data: unknown, seq?: number) => void) | undefined;
+const connection = vi.hoisted(() => ({
+	listeners: new Set<(state: "connected" | "disconnected") => void>(),
+}));
 vi.mock("$lib/rpc/client", () => ({
 	rpc: {},
 	rpcClient: {
@@ -19,7 +22,12 @@ vi.mock("$lib/rpc/client", () => ({
 			captured = h;
 			return () => {};
 		},
-		onConnectionChange: () => () => {},
+		onConnectionChange: (
+			handler: (state: "connected" | "disconnected") => void,
+		) => {
+			connection.listeners.add(handler);
+			return () => connection.listeners.delete(handler);
+		},
 		connect: () => {},
 		getSocket: () => null,
 		sendLegacy: () => {},
@@ -133,6 +141,19 @@ describe("link telemetry clears on stream stop (T6 belt-and-braces)", () => {
 		pushStreaming(true, { linkTelemetry: telemetryFixture });
 		pushStreaming(true);
 		expect(getLinkTelemetry()).toEqual(telemetryFixture);
+	});
+
+	it("withholds the current reading until the replacement socket delivers telemetry", () => {
+		for (const listener of connection.listeners) listener("connected");
+		pushStreaming(true, { linkTelemetry: telemetryFixture });
+		expect(getLinkTelemetry(true)).toEqual(telemetryFixture);
+		for (const listener of connection.listeners) listener("disconnected");
+		for (const listener of connection.listeners) listener("connected");
+		pushStreaming(true);
+		expect(getLinkTelemetry()).toEqual(telemetryFixture);
+		expect(getLinkTelemetry(true)).toBeUndefined();
+		pushStreaming(true, { linkTelemetry: telemetryFixture });
+		expect(getLinkTelemetry(true)).toEqual(telemetryFixture);
 	});
 });
 
