@@ -273,6 +273,22 @@ class Backend {
 		);
 	}
 
+	swapAfterPolicy(pkg: string, apt: AptScript): Promise<void> {
+		return this.command(
+			`swap-after-policy ${JSON.stringify({ pkg, apt })}`,
+			APPLIED_MARKER,
+			"policy state swap armed",
+		);
+	}
+
+	manualPackageCheck(): Promise<void> {
+		return this.command(
+			"manual-package-check",
+			"backend:manual-check:true",
+			"manual check completion",
+		);
+	}
+
 	pausePackageCompare(): Promise<void> {
 		return this.command(
 			"pause-package-compare",
@@ -1245,9 +1261,7 @@ for (const capable of [true, false])
 // The only commands the withdrawal adds to a check, all reads.
 const proofRead = (command: string) =>
 	command === "dpkg --print-architecture" ||
-	command.startsWith("dpkg-query -W -f=") ||
-	command.startsWith("dpkg --compare-versions ") ||
-	/^\/usr\/bin\/apt-cache policy [^ ]+$/.test(command);
+	command.startsWith("dpkg-query -W -f=");
 
 async function commandLog(capable: boolean, main: boolean) {
 	await cleanTrace();
@@ -1266,7 +1280,7 @@ async function commandLog(capable: boolean, main: boolean) {
 
 for (const capable of [false, true])
 	test(
-		`scheduled package notice runs main's commands, plus only trailing dpkg and apt reads on a capable image (${capable ? "capable" : "legacy"})`,
+		`scheduled package notice runs main's commands, plus only trailing dpkg reads on a capable image (${capable ? "capable" : "legacy"})`,
 		async () => {
 			const main = await commandLog(capable, true);
 			const head = await commandLog(capable, false);
@@ -1350,6 +1364,59 @@ const narrowOffer: AptScript = {
 };
 const wideOffer: AptScript = { upgradable: [offer, debianCurl] };
 
+test(
+	"scheduled notice keeps both copies when APT candidates cross between reads",
+	async () => {
+		const main = await Backend.start({
+			capable: true,
+			canonicalScheduler: true,
+		});
+		const opened = scheduledTabs();
+		await reconnect(main, opened);
+		await scheduledStep(main, wideOffer, opened);
+		expect(scheduledNames(opened)).toEqual(opened.map(() => [combinedNotice]));
+		await main.close();
+		await Promise.all(opened.map((tab) => tab.dropped()));
+
+		const current = await Backend.start({ capable: true });
+		await reconnect(current, opened);
+		const cache = (first: string, second: string): AptScript => ({
+			installed: [
+				cerastream("3", first),
+				{ ...debianCurl, installed: "3", candidate: second },
+			],
+		});
+		await current.swapAfterPolicy("cerastream", cache("2", "3"));
+		await scheduledStep(current, cache("3", "2"), opened);
+		expect(opened.map((tab) => tab.removedNames)).toEqual([[], []]);
+		expect(scheduledNames(opened)).toEqual(opened.map(() => [combinedNotice]));
+	},
+	budget(2),
+);
+
+test(
+	"scheduled notice keeps both copies when a manual check finds a reinstall during proof",
+	async () => {
+		const backend = await Backend.start({ capable: true });
+		const opened = scheduledTabs();
+		await reconnect(backend, opened);
+		await scheduledStep(backend, device("pending"), opened);
+		expect(scheduledNames(opened)).toEqual(opened.map(() => [packageNotice]));
+
+		await backend.setApt(device("installed"));
+		await backend.startCheckPausedAtDpkgRead("after");
+		await backend.setApt(device("reinstall"));
+		await backend.manualPackageCheck();
+		await backend.resumeDpkgRead();
+		await sync(opened);
+		expect(opened.map((tab) => tab.removedNames)).toEqual([[], []]);
+		expect(scheduledNames(opened)).toEqual(opened.map(() => [packageNotice]));
+		await scheduledStep(backend, device("installed"), opened);
+		expect(scheduledNames(opened)).toEqual([[], []]);
+	},
+	budget(1),
+);
+
 for (const trajectory of ["rollback", "old-index fallback"] as const)
 	test(
 		`scheduled notice never removes a still-unmet member after same-id ${trajectory}`,
@@ -1406,7 +1473,7 @@ for (const trajectory of ["rollback", "old-index fallback"] as const)
 	);
 
 test(
-	"scheduled notice requires all dpkg lines, clean status, and candidate equality for newer targets",
+	"scheduled notice requires all dpkg lines, clean status, and exact versions",
 	async () => {
 		const backend = await Backend.start({ capable: true });
 		const opened = scheduledTabs();
@@ -1514,7 +1581,7 @@ test(
 );
 
 test(
-	"scheduled notice catches up following a missed withdrawal and Debian version skips",
+	"scheduled notice catches up following a missed exact withdrawal but keeps a skipped version",
 	async () => {
 		const initial = await Backend.start({
 			capable: true,
@@ -1534,13 +1601,13 @@ test(
 		const early = scheduledTabs();
 		await reconnect(backend, early);
 		await scheduledStep(backend, settled(versions[1]), early);
-		expect(early.map((tab) => [...tab.removedNames].sort())).toEqual(
-			early.map(() => [old, newer].sort()),
+		expect(early.map((tab) => tab.removedNames)).toEqual(
+			early.map(() => [newer]),
 		);
 		await reconnect(backend, retained);
 		expect(scheduledNames(retained)).toEqual(retained.map(() => [old, newer]));
 		await scheduledStep(backend, settled(versions[1]), [...early, ...retained]);
-		expect(scheduledNames(retained)).toEqual([[], []]);
+		expect(scheduledNames(retained)).toEqual(retained.map(() => [old]));
 	},
 	budget(2),
 );

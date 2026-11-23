@@ -1,11 +1,8 @@
 /// <reference types="bun" />
 /*
- * The scheduled package notice's withdrawal reads dpkg and apt through the same
- * runner as discovery. Each case runs the real pass over a scripted device and a
- * real notification slot: the slot survives (kept) or is gone (withdrawn).
- * `curl=2` with curl installed and configured at 3, candidate 3, needs all four
- * reads; any other answer may only keep it, unless it still holds every deciding
- * line (a cut after them is a true, shorter answer).
+ * Each case runs the real withdrawal pass over a scripted device and a real
+ * notification slot. A clean dpkg snapshot at the exact version can clear it;
+ * APT policy cannot authorize withdrawal of a skipped version.
  */
 import { afterEach, expect, test } from "bun:test";
 import type { SpawnWithTimeoutResult } from "../helpers/spawn-policy.ts";
@@ -30,7 +27,8 @@ type Device = {
 };
 
 const NAME = "update:updates-available:curl=2";
-const ROWS = "curl\tarm64\tii \t3\n";
+const ROWS = "curl\tarm64\tii \t2\n";
+const NEWER_ROWS = "curl\tarm64\tii \t3\n";
 const POLICY = "curl:\n  Installed: 3\n  Candidate: 3\n  Version table:\n";
 const ok = (stdout: string): SpawnWithTimeoutResult => ({
 	exitCode: 0,
@@ -80,7 +78,7 @@ async function withdrawn(
 	notificationSend(undefined, name, "info", "updates", 0, true);
 	setAptCommandRunnerForTest(device(scripted));
 	ran = [];
-	await retireFulfilledPackageNotices(current);
+	await retireFulfilledPackageNotices(current, () => true);
 	return notificationExists(name) === undefined;
 }
 
@@ -112,9 +110,9 @@ test("the id grammar accepts only versioned package lists, each instance once", 
 		expect([id, noticeTargets(id)]).toEqual([id, null]);
 });
 
-test("a notice is withdrawn when dpkg and apt positively answer every read", async () => {
-	expect(await withdrawn({})).toBe(true);
-	expect(ran).toEqual(["native", "dpkg", "compare", "policy"]);
+test("a newer installed version keeps the notice even when APT matches it", async () => {
+	expect(await withdrawn({ rows: NEWER_ROWS })).toBe(false);
+	expect(ran).toEqual(["native", "dpkg"]);
 });
 
 test("an exact installed version needs no comparison or policy read", async () => {
@@ -122,7 +120,7 @@ test("an exact installed version needs no comparison or policy read", async () =
 	expect(ran).toEqual(["native", "dpkg"]);
 });
 
-test("every byte prefix of every read keeps the notice unless its deciding lines survive", async () => {
+test("every proper prefix of a proof read keeps the notice; APT prefixes cannot prove a newer version", async () => {
 	const answers: Record<Exclude<Read, "compare">, string> = {
 		native: "arm64\n",
 		dpkg: ROWS,
@@ -131,15 +129,14 @@ test("every byte prefix of every read keeps the notice unless its deciding lines
 	for (const [read, full] of Object.entries(answers))
 		for (let end = 0; end < full.length; end++) {
 			const stdout = full.slice(0, end);
-			const deciding =
-				read === "policy" &&
-				stdout.endsWith("\n") &&
-				stdout.includes("  Candidate: 3\n");
 			expect([
 				read,
 				end,
-				await withdrawn({ answers: { [read]: { stdout } } }),
-			]).toEqual([read, end, deciding]);
+				await withdrawn({
+					rows: read === "policy" ? NEWER_ROWS : ROWS,
+					answers: { [read]: { stdout } },
+				}),
+			]).toEqual([read, end, false]);
 		}
 });
 
@@ -155,27 +152,34 @@ test("a failed, noisy or unanswered read keeps the notice", async () => {
 			expect([
 				read,
 				fault,
-				await withdrawn({ answers: { [read]: fault } }),
+				await withdrawn({
+					rows: read === "compare" || read === "policy" ? NEWER_ROWS : ROWS,
+					answers: { [read]: fault },
+				}),
 			]).toEqual([read, fault, false]);
-	expect(await withdrawn({ answers: { compare: { stdout: "x\n" } } })).toBe(
-		false,
-	);
+	expect(
+		await withdrawn({
+			rows: NEWER_ROWS,
+			answers: { compare: { stdout: "x\n" } },
+		}),
+	).toBe(false);
 });
 
-test("only one installed, configured, unheld instance at or past the version counts", async () => {
+test("only one installed, configured, unheld instance at the exact version counts", async () => {
 	const rows: readonly [string, boolean][] = [
-		["curl\tarm64\thi \t3\n", false],
-		["curl\tarm64\tiU \t3\n", false],
-		["curl\tarm64\tiF \t3\n", false],
-		["curl\tarm64\trc \t3\n", false],
+		["curl\tarm64\thi \t2\n", false],
+		["curl\tarm64\tiU \t2\n", false],
+		["curl\tarm64\tiF \t2\n", false],
+		["curl\tarm64\trc \t2\n", false],
 		["curl\tarm64\tun \t\n", false],
 		["curl\tarm64\tii \t1\n", false],
-		["curl\tarmhf\tii \t3\n", false],
-		["curl\tall\tii \t3\n", true],
-		["curl\tarm64\tii \t3\ncurl\tall\tii \t3\n", false],
-		["curl\tarm64\tii \t3\ncurl\tarm64\tii \t3\n", false],
-		["curl\tarm64\tii \t3\nzlib1g\tarm64\tii \t1\n", false],
-		["curl arm64 ii 3\n", false],
+		["curl\tarmhf\tii \t2\n", false],
+		["curl\tall\tii \t3\n", false],
+		["curl\tall\tii \t2\n", true],
+		["curl\tarm64\tii \t2\ncurl\tall\tii \t2\n", false],
+		["curl\tarm64\tii \t2\ncurl\tarm64\tii \t2\n", false],
+		["curl\tarm64\tii \t2\nzlib1g\tarm64\tii \t1\n", false],
+		["curl arm64 ii 2\n", false],
 	];
 	for (const [listed, expected] of rows)
 		expect([listed, await withdrawn({ rows: listed })]).toEqual([
@@ -184,7 +188,7 @@ test("only one installed, configured, unheld instance at or past the version cou
 		]);
 });
 
-test("past the named version, apt's candidate must be the installed version", async () => {
+test("a newer installed version keeps the notice regardless of APT policy", async () => {
 	const policies: readonly string[] = [
 		"curl:\n  Installed: 3\n  Candidate: 2\n",
 		"curl:\n  Installed: 2\n  Candidate: 3\n",
@@ -194,7 +198,11 @@ test("past the named version, apt's candidate must be the installed version", as
 		"  Installed: 3\n  Candidate: 3\n",
 	];
 	for (const policy of policies)
-		expect([policy, await withdrawn({ policy })]).toEqual([policy, false]);
+		expect([
+			policy,
+			await withdrawn({ rows: NEWER_ROWS, policy }),
+			ran,
+		]).toEqual([policy, false, ["native", "dpkg"]]);
 });
 
 test("a name sharing a row with the current check is not read", async () => {

@@ -327,11 +327,12 @@ partial read made absence look like proof. Owner:
 
 **The rule.** After a successful capable check, a name is withdrawn only when its
 own claim is false for every possible issuer: one clean `dpkg-query` shows each
-named instance `ii ` at the named version, or past it while `apt-cache policy`
-shows the installed version as the candidate. Candidates are this process's live
-slots plus main's own `update_updates_available` event ids; a name sharing a row
-with the current check, or shown or dismissed during the read
-(`fenceNotification`), is kept. Do not add receipts, ledgers or lineage, do not
+named instance `ii ` at the exact named version. A newer version never qualifies;
+separate APT policy reads cannot prove a coherent set of candidates. Candidates
+are this process's live slots and main's `update_updates_available` event ids.
+Keep the name if it shares a row with the check, if a new package check starts,
+or if the name is shown or dismissed during the read (`fenceNotification`).
+Do not add receipts, ledgers or lineage, do not
 conclude anything from absence, do not run it on legacy images (`=unknown` ids are
 unprovable) and never at startup or login. Full contract and limits:
 [DEVICE-UPDATES.md](../../../../docs/DEVICE-UPDATES.md#scheduled-package-notice-exists-host-tested-board-qualification-owed).

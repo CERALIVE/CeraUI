@@ -1559,7 +1559,7 @@ as an `update_updates_available` device event. Ids, dedupe, dismissal, text and
 timing are unchanged on both images.
 
 On capable images only, the same successful check then withdraws a notice once
-dpkg shows every package its name lists installed
+dpkg shows every package its name lists installed at the exact named version
 (`update-orchestrator/package-notice-retirement.ts`). Every shipped frontend
 removes this notice by name alone, and every backend that ever issued a name
 (main, this build, an older or newer one, before or after a rollback) used it for
@@ -1582,11 +1582,12 @@ A notice is withdrawn only when all of these hold:
 - No element of the name is a row of this check: those rows are what main has
   just announced as pending.
 - One `dpkg-query -W` of the name's packages shows each target's instance exactly
-  once, `ii ` (installed and configured, not held), at exactly the named version;
-  or past it (`dpkg --compare-versions <installed> gt <named>`) while `apt-cache
-  policy <package>` shows exactly one `Installed:` and one `Candidate:` line, both
-  dpkg's version, so a pending downgrade back to the named version keeps it.
-- The notice was neither shown again nor dismissed while dpkg was read.
+  once, `ii ` (installed and configured, not held), at exactly the named version.
+  A newer installed version is not evidence for withdrawal, regardless of the APT
+  candidate. The proof does not combine package facts from separate APT reads.
+- No newer package check superseded this one, and the notice was neither shown
+  again nor dismissed while dpkg was read. A newer check can report a reinstall
+  even when deduplication sends no new announcement.
 
 The withdrawal goes live, as a typed and a separate bare-name frame (both
 decoders), to the tabs connected then, and again on every later capable check
@@ -1600,15 +1601,13 @@ What the proof reads, and why no failed or partial read can remove a notice:
 |---|---|---|
 | `dpkg --print-architecture` | exit 0, empty stderr, one line | nothing else is read; every notice stays |
 | `dpkg-query -W -f=<#664's format> -- <the name's packages>` | exit 0, empty stderr, newline-terminated, every line a complete row, each instance once | kept |
-| `dpkg --compare-versions <installed> gt <named>` (only past the named version) | exit 0, no output | kept |
-| `apt-cache policy <package>` (only past the named version) | exit 0, empty stderr, newline-terminated, the package's header, exactly one `Installed:` and one `Candidate:` line, both dpkg's version | kept |
 
 Each command has 5 s and a pass 20 s (#664's bounds). Every deciding fact is the
 presence of a complete line with a specific value. A cut answer is a prefix of the
 real one: it can lose a deciding line (kept) or end inside a line (rejected), never
-create one. That is why the refresh, source inventory, hold list and plan are not
-inputs: nothing is concluded from what they omit, so a warning, a cut or a partial
-answer there cannot remove a notice. A held target at its version (`hi `) counts as
+create one. The refresh, source inventory, hold list, plan and package policy
+are not proof inputs: nothing is concluded from what they omit. A held target
+at its version (`hi `) counts as
 not installed, unlike #664's install outcome, which reads a hold as configured.
 
 Legacy images never withdraw this notice: their ids carry `unknown` versions
@@ -1619,8 +1618,8 @@ no command, frame or file differs from main.
 Limits, each a stale banner as on main, which a dismissal clears:
 
 - every legacy-image copy;
-- a held, pinned-away, kept-back or never-installed target, and any name listing a
-  package that never reaches its version;
+- a held, pinned-away, kept-back or never-installed target, or a package
+  installed at a different version, including when the named version was skipped;
 - a tab not connected at any withdrawal while the name is still a candidate (the
   32 most recent ids; Clear logs empties them): an old open tab may need one reload
   or dismissal;
@@ -1637,9 +1636,10 @@ CERALIVE_NOTICE_SHRINK=1 bun test ./apps/backend/src/tests/ceralive-update-notic
 sweeps more and shrinks a failure); the frame-for-frame differential against
 main's scheduler; the recovered install; same-id rollbacks and stale-index
 re-shows that must keep; every byte prefix and fault of the dpkg read; a hold seen
-only by dpkg; version skips and late tabs; a reinstall row and an `all` instance; a
-dismissal during the read. `tests/scheduled-notice-retirement.test.ts` holds the
-id grammar and every byte prefix and fault of each read.
+only by dpkg; a skipped version retained across restart and late login; crossed
+APT candidates; a reinstall found by an overlapping manual check; an `all`
+instance; dismissal during the read. `tests/scheduled-notice-retirement.test.ts`
+covers the id grammar and every byte prefix and fault of each proof read.
 
 ### Download hold notice [EXISTS; host-tested, board qualification owed]
 

@@ -10,12 +10,12 @@
 
 /**
  * Withdraws a scheduled "updates are available" notice once dpkg shows every
- * package its name lists installed. The name is `update:updates-available:`
+ * package its name lists installed at the exact named version. The name is `update:updates-available:`
  * plus `p1=v1,...` (main's announcement, unchanged), every frontend removes a
  * copy by that name alone, and every backend that issued the name used it for
  * the same claim: these packages can still move to these versions. So the
  * proof is about the name, not about who sent it, and it rests only on
- * complete lines dpkg and apt print: a cut, failed or noisy read can lose a
+ * complete lines dpkg prints: a cut, failed or noisy read can lose a
  * deciding line, never invent one, and so only keeps the notice. Legacy ids
  * carry `unknown` versions and are never provable. Contract:
  * docs/DEVICE-UPDATES.md, "The scheduled package notice".
@@ -105,15 +105,8 @@ function candidateIds(): Set<string> {
 	return new Set([...ids, ...announced]);
 }
 
-const onlyLine = (lines: readonly string[], key: string, value: string) => {
-	const found = lines.filter((line) => line.startsWith(`  ${key}: `));
-	return found.length === 1 && found[0] === `  ${key}: ${value}`;
-};
-
-// One dpkg read of the notice's packages shows every target installed and
-// configured (`ii `: not held, half-installed or configuring) at its version;
-// past it only while apt's candidate is the installed version, so nothing
-// would move the package back to the named one.
+// All targets must match in one dpkg snapshot. Separate APT policy reads
+// cannot prove that different candidates were ever current at the same time.
 async function installed(
 	targets: readonly Target[],
 	native: string,
@@ -138,28 +131,7 @@ async function installed(
 					: row.arch === arch),
 		);
 		const row = instances.length === 1 ? instances[0] : undefined;
-		if (row?.status !== "ii ") return false;
-		if (row.version === version) continue;
-		if (
-			(await ask([
-				"dpkg",
-				"--compare-versions",
-				row.version,
-				"gt",
-				version,
-			])) !== ""
-		)
-			return false;
-		const query = arch === null ? pkg : `${pkg}:${arch}`;
-		const policy = await ask(["/usr/bin/apt-cache", "policy", query]);
-		if (!policy?.endsWith("\n")) return false;
-		const lines = policy.slice(0, -1).split("\n");
-		if (
-			lines[0] !== `${query}:` ||
-			!onlyLine(lines, "Installed", row.version) ||
-			!onlyLine(lines, "Candidate", row.version)
-		)
-			return false;
+		if (row?.status !== "ii " || row.version !== version) return false;
 	}
 	return true;
 }
@@ -172,7 +144,9 @@ async function installed(
  */
 export async function retireFulfilledPackageNotices(
 	current: readonly string[],
+	isCurrent: () => boolean,
 ): Promise<void> {
+	if (!isCurrent()) return;
 	const pending = new Set(current);
 	const provable = [...candidateIds()].flatMap((id) => {
 		const targets = noticeTargets(id);
@@ -186,11 +160,13 @@ export async function retireFulfilledPackageNotices(
 	const arch = native?.endsWith("\n") ? native.slice(0, -1) : undefined;
 	if (arch === undefined || !ARCH.test(arch)) return;
 	for (const { id, targets } of provable) {
+		if (!isCurrent()) return;
 		const name = PREFIX + id;
 		const unchanged = fenceNotification(name);
 		const proven = await installed(targets, arch, ask);
 		// Shown again or dismissed while dpkg was read: keep it.
 		if (!unchanged() || !proven) continue;
+		if (!isCurrent()) return;
 		const live = notificationExists(name) !== undefined;
 		notificationWithdraw(name);
 		if (live)

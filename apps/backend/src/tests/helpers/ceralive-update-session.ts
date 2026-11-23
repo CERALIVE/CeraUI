@@ -23,6 +23,7 @@ import { DownloadPausedLedger } from "../../modules/system/update-orchestrator/d
 import { DownloadPausedNotices } from "../../modules/system/update-orchestrator/download-paused-notices.ts";
 import { UpdateQuarantine } from "../../modules/system/update-orchestrator/quarantine.ts";
 import {
+	checkUpdatesNow,
 	runOrchestratorTick,
 	setOrchestratorRuntimeDepsForTest,
 	setOrchestratorStateForTest,
@@ -85,6 +86,9 @@ updates.setAptReachabilityProbeForTest(async () => ({
 	detail: [],
 }));
 let apt = scriptedApt(step.apt ?? {});
+let nextPolicyState:
+	| { readonly pkg: string; readonly apt: AptScript }
+	| undefined;
 let compareGate: ReturnType<typeof Promise.withResolvers<void>> | undefined;
 let holdGate: ReturnType<typeof Promise.withResolvers<void>> | undefined;
 // The next dpkg-query this runner serves pauses before it reads, or after it answered.
@@ -107,6 +111,15 @@ const gated = async (argv: readonly string[]) => {
 		await paused.gate.promise;
 	}
 	const answer = await apt(argv);
+	if (
+		nextPolicyState &&
+		argv[0] === "/usr/bin/apt-cache" &&
+		argv[1] === "policy" &&
+		argv[2] === nextPolicyState.pkg
+	) {
+		apt = scriptedApt(nextPolicyState.apt);
+		nextPolicyState = undefined;
+	}
 	if (paused?.when === "after") {
 		process.stdout.write("backend:dpkg-read-captured\n");
 		await paused.gate.promise;
@@ -152,6 +165,9 @@ for await (const command of console) {
 	} else if (command.startsWith("apt ")) {
 		apt = scriptedApt(JSON.parse(command.slice(4)));
 		process.stdout.write(`${APPLIED_MARKER}\n`);
+	} else if (command.startsWith("swap-after-policy ")) {
+		nextPolicyState = JSON.parse(command.slice("swap-after-policy ".length));
+		process.stdout.write(`${APPLIED_MARKER}\n`);
 	} else if (command === "pause-package-compare") {
 		compareGate = Promise.withResolvers<void>();
 		process.stdout.write("backend:compare-armed\n");
@@ -184,6 +200,9 @@ for await (const command of console) {
 			() => process.stdout.write(`${CHECKED_MARKER}\n`),
 			(error) => process.stderr.write(`check failed ${String(error)}\n`),
 		);
+	} else if (command === "manual-package-check") {
+		const result = await checkUpdatesNow();
+		process.stdout.write(`backend:manual-check:${result.started}\n`);
 	} else if (command === "scheduled-package-check") {
 		// Take the real scheduler path at a due, idle check boundary without
 		// running unrelated OS observers or touching the machine's state.

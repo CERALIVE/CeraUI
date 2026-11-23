@@ -532,6 +532,7 @@ const startupReadiness = new UpdateStartupReadiness(
 );
 let osCandidate: OsChannelManifest | undefined;
 let osChannelUnpublished = false;
+let packageCheckGeneration = 0;
 let packageCheckDeferral: {
 	readonly reason: "metered_only";
 	readonly at: number;
@@ -703,6 +704,7 @@ export function resetOrchestratorRuntimeForTest(): void {
 	deps = defaultOrchestratorRuntimeDeps;
 	osCandidate = undefined;
 	osChannelUnpublished = false;
+	packageCheckGeneration++;
 	packageCheckDeferral = null;
 	activeOsStage?.controller.abort();
 	activeOsStage = undefined;
@@ -1215,6 +1217,7 @@ export async function admitAndPrepareStreamStart(): Promise<StreamStartUpdateAdm
 
 async function runPackageCheckCycle(): Promise<void> {
 	if (osSettlementPersistence.pending || !aptUpdatesEnabled()) return;
+	const generation = ++packageCheckGeneration;
 	packageCheckDeferral = null;
 	const now = deps.now();
 	dispatch({ type: "PACKAGE_CHECK_STARTED", now });
@@ -1274,6 +1277,8 @@ async function runPackageCheckCycle(): Promise<void> {
 							(item) => `${item.name}=${item.version ?? "unknown"}`,
 						)
 					: [],
+				// Even a newer check whose announcement was deduped supersedes this proof.
+				() => generation === packageCheckGeneration,
 			);
 		return;
 	}

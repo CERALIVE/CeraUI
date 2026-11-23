@@ -60,7 +60,7 @@ export function device(fact: Fact): AptScript {
 // Oracle over semantic fixtures, not the bytes in device(), or the production
 // parser. No installation verdict follows from a missing offer in an APT plan.
 export function attained(fact: Fact): boolean {
-	return fact === "installed" || fact === "newer";
+	return fact === "installed";
 }
 
 const facts = [
