@@ -763,6 +763,34 @@ describe("start refusal presentation across the socket", () => {
 		await settle();
 		expect(vi.mocked(toast.error)).toHaveBeenCalledTimes(1);
 	});
+
+	it.each(["starts and stops", "starts but fails"] as const)(
+		"never revives an old retry after another client %s",
+		async (activity) => {
+			const { container } = render(LiveView);
+			await fireEvent.click(button(container, "Start Stream"));
+			await settle();
+			refuseStart(`remote-${activity}`);
+			await settle();
+			const retry = latestRefusalAction();
+			expect(retry?.label).toBe(en.live.startFailure.action.tryAgain);
+			if (activity === "starts and stops") {
+				deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+			} else {
+				deliverStatus({ is_streaming: false, stream_lifecycle: "starting" });
+			}
+			await settle();
+			deliverStatus({ is_streaming: false, stream_lifecycle: "idle" });
+			await settle();
+			if (activity === "starts and stops") {
+				await fireEvent.click(button(container, "Done"));
+				await settle();
+			}
+			expect(button(container, "Start Stream").disabled).toBe(false);
+			expect(retry?.activate()).toBe(false);
+			expect(sentCount("streaming.start")).toBe(1);
+		},
+	);
 });
 
 describe("F11 real-socket Start timeout probe", () => {
