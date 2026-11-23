@@ -14,6 +14,7 @@ import {
 import { DESKTOP_CHROME_QUERY } from '$lib/layout';
 import { requestDialog } from '$lib/stores/dialog-request.svelte';
 import {
+	activeNotificationId,
 	clearNotifications,
 	dismiss,
 	getActive,
@@ -57,30 +58,34 @@ $effect(() => {
 	const activeNames = new Set<string>();
 
 	for (const notification of active) {
-		activeNames.add(notification.name);
-		if (renderedAt.get(notification.name) === notification.receivedAt) continue;
+		const id = activeNotificationId(notification);
+		activeNames.add(id);
+		if (renderedAt.get(id) === notification.receivedAt) continue;
 		const attemptId = notification.params?.attemptId;
 		if (notification.name === 'stream_start_failed' && typeof attemptId === 'string') {
 			if (startFailureNoticePending()) continue;
-			if (!claimStartFailurePresentation(attemptId)) continue;
+			if (!claimStartFailurePresentation(attemptId)) {
+				dismiss(id);
+				continue;
+			}
 		}
-		renderedAt.set(notification.name, notification.receivedAt);
+		renderedAt.set(id, notification.receivedAt);
 
 		const action = notification.action;
 		toast[notification.type](viewLogsMessage(notification), {
-			id: notification.name,
+			id,
 			duration: notification.durationMs,
 			dismissable: notification.isDismissable,
-			onDismiss: () => dismiss(notification.name),
-			onAutoClose: () => dismiss(notification.name),
+			onDismiss: () => dismiss(id),
+			onAutoClose: () => dismiss(id),
 			...(action?.kind === 'navigate'
 				? {
-						...viewLogsSecondary(notification, () => toast.dismiss(notification.name)),
+						...viewLogsSecondary(notification, () => toast.dismiss(id)),
 						action: {
 							label: resolveActionLabel(action.labelKey),
 							onClick: () => {
 								requestDialog(action.target);
-								toast.dismiss(notification.name);
+								toast.dismiss(id);
 							},
 						},
 					}

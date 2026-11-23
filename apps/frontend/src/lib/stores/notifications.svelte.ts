@@ -218,14 +218,24 @@ export function toActiveNotification(
 }
 
 // A replay of a revision from the same process is not a new arrival.
+export function activeNotificationId(
+	entry: Pick<ActiveNotification, "name" | "params">,
+): string {
+	const attempt = entry.params?.attemptId;
+	return entry.name === "stream_start_failed" && typeof attempt === "string"
+		? `${entry.name}:${attempt}`
+		: entry.name;
+}
+
 function fold(
 	active: ReadonlyMap<string, ActiveNotification>,
 	entry: ActiveNotification,
 ): Map<string, ActiveNotification> {
-	const prior = active.get(entry.name);
+	const id = activeNotificationId(entry);
+	const prior = active.get(id);
 	const next = new Map(active);
 	next.set(
-		entry.name,
+		id,
 		prior !== undefined &&
 			entry.revision !== undefined &&
 			prior.revision === entry.revision &&

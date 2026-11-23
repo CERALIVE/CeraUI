@@ -834,6 +834,25 @@ describe("start refusal presentation across the socket", () => {
 		expect(toast.dismiss).not.toHaveBeenCalled();
 		expect(toast.error).toHaveBeenCalledTimes(1);
 	});
+
+	it("does not lose an unrelated notice while correlating a local reply", async () => {
+		render(LayoutToastHost);
+		const { container } = render(LiveView);
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		deliverStartFailureNotice("unrelated-during-hold");
+		await settle();
+		deliverStartFailureNotice("our-notice-during-hold");
+		await settle();
+		refuseStart("our-notice-during-hold");
+		await settle();
+		expect(
+			vi.mocked(toast.error).mock.calls.map(([message]) => message),
+		).toEqual([
+			expect.stringContaining(en.live.startFailure.class.start_timeout),
+			"Background start failed: unrelated-during-hold",
+		]);
+	});
 });
 
 describe("F11 real-socket Start timeout probe", () => {
