@@ -963,6 +963,7 @@
 	"live.startFailure.next.openSetup": "स्ट्रीम सेटअप जांचें, फिर दोबारा शुरू करें।",
 	"live.startFailure.mutationBlockedNetwork": "मॉडेम का एक बदलाव वापस नहीं हो सका, इसलिए उसकी स्थिति अज्ञात है। स्ट्रीम करने से पहले नेटवर्क में उस मॉडेम को जांचें।",
 	"live.startFailure.action.tryAgain": "फिर से कोशिश करें",
+	"live.startFailure.actionUnavailable": "यह कार्रवाई अब उपलब्ध नहीं है। लाइव पेज पर स्ट्रीम की मौजूदा स्थिति देखें।",
 	"live.startFailure.action.restartBox": "बॉक्स रीस्टार्ट करें",
 	"live.startFailure.action.openSetup": "स्ट्रीम सेटअप खोलें",
 	"live.startFailure.action.openNetwork": "नेटवर्क खोलें",

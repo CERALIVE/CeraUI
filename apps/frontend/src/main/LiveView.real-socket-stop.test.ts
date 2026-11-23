@@ -610,14 +610,11 @@ function refuseStart(
 	});
 }
 
-function refusalAction(): ((event: MouseEvent) => void) | undefined {
-	return vi.mocked(toast.error).mock.lastCall?.[1]?.action instanceof Function
-		? undefined
-		: vi.mocked(toast.error).mock.lastCall?.[1]?.action?.onClick;
-}
-
-function actionTap() {
-	return new MouseEvent("click", { cancelable: true });
+function latestRefusalAction() {
+	const { componentProps } = vi.mocked(toast.error).mock.lastCall?.[1] ?? {};
+	return componentProps?.primary as
+		| { label: string; activate: () => boolean }
+		| undefined;
 }
 
 describe("start refusal presentation across the socket", () => {
@@ -686,11 +683,7 @@ describe("start refusal presentation across the socket", () => {
 		await settle();
 		refuseStart("late-timeout", "playing-wait");
 		await settle();
-		expect(vi.mocked(toast.error).mock.lastCall?.[1]?.action).not.toMatchObject(
-			{
-				label: en.live.startFailure.action.tryAgain,
-			},
-		);
+		expect(latestRefusalAction()).toBeUndefined();
 		expect(sentCount("streaming.start")).toBe(1);
 	});
 
@@ -700,15 +693,13 @@ describe("start refusal presentation across the socket", () => {
 		await settle();
 		refuseStart("stop-pending-retry");
 		await settle();
-		const retry = refusalAction();
+		const retry = latestRefusalAction()?.activate;
 		expect(retry).toBeTypeOf("function");
 		deliverStatus({ is_streaming: false, stream_lifecycle: "reconciling" });
 		await fireEvent.click(button(container, "Stop Stream"));
 		await settle();
-		const tap = actionTap();
-		retry?.(tap);
+		expect(retry?.()).toBe(false);
 		await settle();
-		expect(tap.defaultPrevented).toBe(true);
 		expect(sentCount("streaming.start")).toBe(1);
 		expect(sentCount("streaming.stop")).toBe(1);
 	});
@@ -719,20 +710,16 @@ describe("start refusal presentation across the socket", () => {
 		await settle();
 		refuseStart("double-tap-original");
 		await settle();
-		const retry = refusalAction();
+		const retry = latestRefusalAction()?.activate;
 		expect(retry).toBeTypeOf("function");
-		retry?.(actionTap());
-		const second = actionTap();
-		retry?.(second);
+		expect(retry?.()).toBe(true);
+		expect(retry?.()).toBe(false);
 		await settle();
-		expect(second.defaultPrevented).toBe(true);
 		expect(sentCount("streaming.start")).toBe(2);
 		refuseStart("double-tap-next");
 		await settle();
-		const old = actionTap();
-		retry?.(old);
+		expect(retry?.()).toBe(false);
 		await settle();
-		expect(old.defaultPrevented).toBe(true);
 		expect(sentCount("streaming.start")).toBe(2);
 	});
 
@@ -746,19 +733,17 @@ describe("start refusal presentation across the socket", () => {
 				await settle();
 				refuseStart(`clock-first-${elapsed}`);
 				await settle();
-				refusalAction()?.(actionTap());
+				expect(latestRefusalAction()?.activate()).toBe(true);
 				await settle();
 				clock.mockReturnValue(100 + elapsed);
 				refuseStart(`clock-second-${elapsed}`);
 				await settle();
-				expect(vi.mocked(toast.error).mock.lastCall?.[1]?.action).toMatchObject(
-					{
-						label:
-							elapsed < 120_000
-								? en.live.startFailure.action.restartBox
-								: en.live.startFailure.action.tryAgain,
-					},
-				);
+				expect(latestRefusalAction()).toMatchObject({
+					label:
+						elapsed < 120_000
+							? en.live.startFailure.action.restartBox
+							: en.live.startFailure.action.tryAgain,
+				});
 			} finally {
 				clock.mockRestore();
 			}
@@ -771,7 +756,7 @@ describe("start refusal presentation across the socket", () => {
 		await settle();
 		refuseStart("running-first");
 		await settle();
-		refusalAction()?.(actionTap());
+		expect(latestRefusalAction()?.activate()).toBe(true);
 		await settle();
 		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
 		refuseStart("running-late-reply");

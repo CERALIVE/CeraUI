@@ -45,7 +45,9 @@ const reboot = vi.hoisted(() => vi.fn());
 const navigate = vi.hoisted(() => vi.fn());
 const startStreaming = vi.hoisted(() => vi.fn());
 
-vi.mock("svelte-sonner", () => ({ toast: { error: toastError } }));
+vi.mock("svelte-sonner", () => ({
+	toast: { error: toastError, dismiss: vi.fn() },
+}));
 vi.mock("$lib/stores/navigation-lazy", () => ({
 	navigateToDestination: navigate,
 }));
@@ -140,6 +142,7 @@ import {
 } from "$lib/stores/dialog-request.svelte";
 
 import LiveView from "../main/LiveView.svelte";
+import StartRefusalActions from "../main/live/StartRefusalActions.svelte";
 
 const startFailed = en.live.startFailed as Readonly<Record<string, string>>;
 
@@ -152,12 +155,14 @@ const VIEW_LOGS = {
 // A refusal with a decided next step: that step is the button, View logs stays
 // beside it for a helper, and the toast stays up long enough to reach it.
 function nextStep(label: string) {
-	return {
-		action: { label, onClick: expect.any(Function) },
-		cancel: { label: en.notifications.viewLogs, onClick: expect.any(Function) },
-		class: VIEW_LOGS_TOAST_CLASS,
+	return expect.objectContaining({
+		description: StartRefusalActions,
+		componentProps: {
+			primary: { label, activate: expect.any(Function) },
+			logs: expect.any(Function),
+		},
 		duration: 12_000,
-	};
+	});
 }
 
 afterEach(() => {
@@ -266,7 +271,12 @@ describe("LiveView typed start-failure rendering (Todo 29)", () => {
 		render(LiveView);
 		await tick();
 		const after = Date.now();
-		toastError.mock.calls[0]?.[1]?.cancel.onClick();
+		const actions = render(StartRefusalActions, {
+			props: toastError.mock.calls[0]?.[1]?.componentProps,
+		});
+		await fireEvent.click(
+			actions.getByRole("button", { name: en.notifications.viewLogs }),
+		);
 
 		expect(getRequestedDialog()).toBe("logs");
 		const context = getRequestedDialogContext();
@@ -318,6 +328,8 @@ describe("LiveView typed start-failure rendering (Todo 29)", () => {
 		["negotiation_failed", false],
 		["no_signal", false],
 		["device_busy", true],
+		["composition-unsupported", false],
+		["secondary-unavailable", false],
 	] as const)(
 		"renders the per-cause capture copy for %s",
 		async (captureCause, retriable) => {
@@ -341,6 +353,21 @@ describe("LiveView typed start-failure rendering (Todo 29)", () => {
 			expect(reason).not.toBe(startFailed.generic);
 		},
 	);
+
+	it("gives camera and cable guidance when an older failure omits its capture cause", async () => {
+		state.failure = {
+			class: "capture_source_unavailable",
+			phase: "start-rpc",
+			retriable: false,
+			attemptId: "att_capture_uncategorized",
+		};
+		render(LiveView);
+		await tick();
+		expect(toastError).toHaveBeenCalledWith(
+			`${en.notifications.streamStartCaptureSourceUnavailableFailed} ${startFailure.notRetriable}`,
+			VIEW_LOGS,
+		);
+	});
 
 	// An update in progress clears by itself: "this won't recover by retrying"
 	// would tell the operator the opposite of what to do (C-m2).
@@ -421,15 +448,8 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 	});
 
 	function action(call = toastError.mock.calls.at(-1)) {
-		const callback = call?.[1]?.action?.onClick;
-		return callback
-			? {
-					action: {
-						onClick: () =>
-							callback(new MouseEvent("click", { cancelable: true })),
-					},
-				}
-			: undefined;
+		const activate = call?.[1]?.componentProps?.primary.activate;
+		return activate ? { action: { onClick: activate } } : undefined;
 	}
 
 	it("Try again sends one Start through the Live bar's gate", async () => {
@@ -701,20 +721,22 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 			retriable: false,
 			attemptId: "att_setup",
 		};
-		const card = document.createElement("div");
-		card.dataset.testid = "stream-setup-chain";
-		const button = document.createElement("button");
-		card.append(button);
-		card.scrollIntoView = vi.fn();
-		document.body.append(card);
+		const title = document.createElement("h2");
+		title.id = "live-stream-setup-title";
+		title.tabIndex = -1;
+		title.scrollIntoView = vi.fn();
+		document.body.append(title);
 		try {
 			render(LiveView);
 			await tick();
 			action()?.action.onClick();
-			expect(card.scrollIntoView).toHaveBeenCalled();
-			expect(document.activeElement).toBe(button);
+			expect(title.scrollIntoView).toHaveBeenCalledWith({
+				block: "center",
+				behavior: "instant",
+			});
+			expect(document.activeElement).toBe(title);
 		} finally {
-			card.remove();
+			title.remove();
 		}
 	});
 

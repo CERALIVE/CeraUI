@@ -987,6 +987,7 @@
 	"live.startFailure.next.openSetup": "تحقق من إعدادات البث، ثم ابدأ مرة أخرى.",
 	"live.startFailure.mutationBlockedNetwork": "تعذّر التراجع عن تغيير في المودم، لذا حالته غير معروفة. تحقق من هذا المودم في الشبكة قبل البث.",
 	"live.startFailure.action.tryAgain": "حاول مرة أخرى",
+	"live.startFailure.actionUnavailable": "لم يعد هذا الإجراء متاحًا. تحقّق من حالة البث في صفحة البث المباشر.",
 	"live.startFailure.action.restartBox": "إعادة تشغيل الجهاز",
 	"live.startFailure.action.openSetup": "فتح إعدادات البث",
 	"live.startFailure.action.openNetwork": "فتح الشبكة",

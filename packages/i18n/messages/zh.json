@@ -873,6 +873,7 @@
 	"live.startFailure.next.openSetup": "请检查直播设置，然后重新开播。",
 	"live.startFailure.mutationBlockedNetwork": "某个调制解调器的更改无法撤销，因此其状态未知。开播前请在网络中检查该调制解调器。",
 	"live.startFailure.action.tryAgain": "重试",
+	"live.startFailure.actionUnavailable": "当前无法执行此操作。请到直播页面查看推流状态。",
 	"live.startFailure.action.restartBox": "重启设备",
 	"live.startFailure.action.openSetup": "打开直播设置",
 	"live.startFailure.action.openNetwork": "打开网络",

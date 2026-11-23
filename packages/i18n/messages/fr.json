@@ -969,6 +969,7 @@
 	"live.startFailure.next.openSetup": "Vérifie la configuration de la diffusion, puis relance.",
 	"live.startFailure.mutationBlockedNetwork": "Une modification de modem n'a pas pu être annulée, son état est donc inconnu. Vérifie ce modem dans Réseau avant de diffuser.",
 	"live.startFailure.action.tryAgain": "Réessayer",
+	"live.startFailure.actionUnavailable": "Cette action n’est plus disponible. Vérifie l’état de la diffusion dans Direct.",
 	"live.startFailure.action.restartBox": "Redémarrer le boîtier",
 	"live.startFailure.action.openSetup": "Ouvrir la configuration",
 	"live.startFailure.action.openNetwork": "Ouvrir Réseau",

@@ -873,6 +873,7 @@
 	"live.startFailure.next.openSetup": "配信設定を確認してから、もう一度開始してください。",
 	"live.startFailure.mutationBlockedNetwork": "モデムの変更を元に戻せなかったため、状態が不明です。配信する前にネットワークでそのモデムを確認してください。",
 	"live.startFailure.action.tryAgain": "もう一度試す",
+	"live.startFailure.actionUnavailable": "この操作は現在実行できません。ライブ画面で配信状況を確認してください。",
 	"live.startFailure.action.restartBox": "本体を再起動",
 	"live.startFailure.action.openSetup": "配信設定を開く",
 	"live.startFailure.action.openNetwork": "ネットワークを開く",
