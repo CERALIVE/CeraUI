@@ -158,6 +158,7 @@ import { initCpu } from "./modules/system/cpu.ts";
 import {
 	detectHardwareKindFromDeviceTree,
 	isRealDevice,
+	observeRealDeviceAtBoot,
 	warnOnHardwareIdentityDrift,
 } from "./modules/system/device-detection.ts";
 import { initDeviceStats } from "./modules/system/device-stats.ts";
@@ -322,7 +323,8 @@ if (!configAvailableAtBind) {
 //     crashes and the WS server (bound above) stays reachable. ---
 
 // Recovery must finish before an update may install any new UID routing rule.
-const realDeviceAtBoot = await isRealDevice();
+const deviceAtBoot = observeRealDeviceAtBoot();
+const realDeviceAtBoot = await deviceAtBoot.ready;
 if (realDeviceAtBoot)
 	void guardNonCritical("update-route-sweep", async () => {
 		await reconcileOsStageStartup();
@@ -546,7 +548,7 @@ const networkMonitor = createMonitorManager(() => updateNetif());
 networkMonitor.on("monitor-event", handleNetifMonitorEvent);
 networkMonitor.start();
 setBondDisableGuardContext(
-	realDeviceAtBoot,
+	realDeviceAtBoot ? deviceAtBoot.isStillReal : undefined,
 	networkMonitor instanceof NmcliMonitorManager,
 );
 

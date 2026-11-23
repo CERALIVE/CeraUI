@@ -196,16 +196,20 @@ export function usableUsbSerial(raw: string | undefined): string | undefined {
 	return serial;
 }
 
-function usableSerial(observation: PhysicalObservation): string | undefined {
-	return usableUsbSerial(observation.serial);
-}
+type BondKeyObservation = {
+	readonly ifname: string;
+	readonly serial?: string | undefined;
+	readonly vid?: string | undefined;
+	readonly legacyLinkId?: string | undefined;
+	readonly idPath?: string | undefined;
+};
 
 /** The identity key and the rung it came from. */
 function resolveIdentityKey(
-	observation: PhysicalObservation,
+	observation: BondKeyObservation,
 	stableKey: string | undefined,
+	serial: string | undefined,
 ): { identityKey: string; anchor: PhysicalIdentityAnchor } {
-	const serial = usableSerial(observation);
 	if (serial !== undefined) {
 		const vid = observation.vid?.trim().toLowerCase();
 		return {
@@ -354,20 +358,25 @@ export function resolvePhysicalDevice(
 
 /** Resolve only the keys needed for bond preferences and address mapping. */
 export function describePhysicalBondKeys(
-	observation: PhysicalObservation,
+	observation: BondKeyObservation,
 ): PhysicalBondKeys {
 	return physicalBondKeys(
 		observation,
 		deriveModemStableKey(observation.idPath),
+		usableUsbSerial(observation.serial),
 	);
 }
 
 function physicalBondKeys(
-	observation: PhysicalObservation,
+	observation: BondKeyObservation,
 	stableKey: string | undefined,
+	serial: string | undefined,
 ) {
-	const { identityKey, anchor } = resolveIdentityKey(observation, stableKey);
-	const serial = usableSerial(observation);
+	const { identityKey, anchor } = resolveIdentityKey(
+		observation,
+		stableKey,
+		serial,
+	);
 	const rawSerial = observation.serial?.trim();
 	const vid = observation.vid?.trim().toLowerCase();
 	const legacyLinkId =
@@ -389,7 +398,7 @@ function describePhysicalDevice(
 	observation: PhysicalObservation,
 ): PhysicalDeviceRecord {
 	const stableKey = deriveModemStableKey(observation.idPath);
-	const serial = usableSerial(observation);
+	const serial = usableUsbSerial(observation.serial);
 	const hwdb =
 		observation.hwdbVendor !== undefined || observation.hwdbModel !== undefined
 			? {
@@ -403,7 +412,7 @@ function describePhysicalDevice(
 			: undefined;
 
 	return {
-		...physicalBondKeys(observation, stableKey),
+		...physicalBondKeys(observation, stableKey, serial),
 		ifname: observation.ifname,
 		displayName: resolveDisplayName(observation),
 		...(stableKey !== undefined ? { stableKey } : {}),

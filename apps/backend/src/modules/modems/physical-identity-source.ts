@@ -51,7 +51,14 @@ export function resolveModemPhysicalIdentity(
 }
 
 export function describeModemBondKeys(ifname: string): PhysicalBondKeys {
-	return describePhysicalBondKeys(observeModemIdentity(ifname));
+	const descriptor = getUsbPhysicalDescriptor(ifname);
+	return describePhysicalBondKeys({
+		ifname,
+		vid: descriptor?.vid,
+		legacyLinkId: descriptor?.legacyLinkId,
+		serial: descriptor?.serial,
+		idPath: descriptor?.idPath,
+	});
 }
 
 function observeModemIdentity(

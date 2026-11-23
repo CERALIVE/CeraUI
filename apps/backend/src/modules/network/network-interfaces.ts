@@ -1772,22 +1772,21 @@ function countActiveNetif() {
 	return count;
 }
 
-let realBondDisableContext = false;
+let realBondDisableContext: (() => boolean) | undefined;
 
 // Set once both boot classification and the selected provider are known.
 export function setBondDisableGuardContext(
-	realDevice: boolean,
+	isStillReal: (() => boolean) | undefined,
 	realMonitor: boolean,
 ): void {
-	realBondDisableContext = realDevice && realMonitor;
+	realBondDisableContext = realMonitor ? isStillReal : undefined;
 }
 
 function wouldRemoveLastBondCandidate(target: string): boolean {
 	if (
-		!realBondDisableContext ||
+		!realBondDisableContext?.() ||
 		isDevelopment() ||
 		shouldUseMockMonitor() ||
-		process.env.CERALIVE_DEVICE_TYPE === "emulated" ||
 		process.env.HWSIM_REPO !== undefined ||
 		!isRuntimeConfigAvailable()
 	)

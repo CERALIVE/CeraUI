@@ -13,6 +13,7 @@ import {
 import {
 	listPhysicalDevices,
 	resetPhysicalIdentityRegistry,
+	resolvePhysicalDevice,
 	setPresentPhysicalDevices,
 } from "../modules/modems/physical-identity.ts";
 import { isBondOptedOut } from "../modules/network/bond-preference.ts";
@@ -23,7 +24,6 @@ import {
 } from "../modules/network/monitor/monitor-manager.ts";
 import * as netif from "../modules/network/network-interfaces.ts";
 import {
-	invalidateUsbNetReading,
 	notePublishedNetifSnapshot,
 	refreshUsbNetMarkers,
 	resetUsbNetMarkers,
@@ -37,6 +37,7 @@ import {
 	genSrtlaBondEntries,
 	genSrtlaBondEntriesForLocalIpAddress,
 } from "../modules/streaming/srtla.ts";
+import * as deviceDetection from "../modules/system/device-detection.ts";
 import {
 	defaultDeviceDetectionDeps,
 	isRealDevice,
@@ -51,6 +52,12 @@ import {
 	configStage,
 	watchConfigWrite,
 } from "./helpers/bond-config-faults.ts";
+import {
+	markerRows,
+	oweBondMarkerRetractions,
+	primeBondMarkers,
+	resetBondMarkerReplay,
+} from "./helpers/bond-marker-replay.ts";
 import {
 	makeRpcContext,
 	physicalRecord,
@@ -80,7 +87,12 @@ const modes = [
 	"FLIP-MONITOR",
 	"FLIP-DEVICE",
 ] as const;
-type Mode = (typeof modes)[number];
+type Mode =
+	| (typeof modes)[number]
+	| "WITHDRAW-OVERRIDE"
+	| "KEEP-OVERRIDE"
+	| "HARDWARE"
+	| "HARDWARE-FORCED";
 type Topology =
 	| "twins"
 	| "fallback"
@@ -124,12 +136,26 @@ const notice = {
 // These same test bytes also run on the unpatched baseline. In production this
 // context is supplied by main.ts after classification and monitor selection.
 function setBootContext(
-	real: boolean,
+	real: (() => boolean) | undefined,
 	monitor: ReturnType<typeof createMonitorManager>,
 ) {
 	const set: unknown = Reflect.get(netif, "setBondDisableGuardContext");
 	if (typeof set === "function")
 		set(real, monitor instanceof NmcliMonitorManager);
+}
+
+function bootDevice(deps: deviceDetection.DeviceDetectionDeps) {
+	const observe: unknown = Reflect.get(
+		deviceDetection,
+		"observeRealDeviceAtBoot",
+	);
+	if (typeof observe === "function") {
+		const result: ReturnType<typeof deviceDetection.observeRealDeviceAtBoot> =
+			observe(deps);
+		return result;
+	}
+	// Keep the same adapter reproducer runnable against the former boolean latch.
+	return { ready: isRealDevice(deps), isStillReal: () => true };
 }
 
 function add(name: string, changes: Partial<netif.NetworkInterface> = {}) {
@@ -185,11 +211,8 @@ function seed(topology: Topology) {
 			10_000,
 		);
 	} else if (topology === "marker") {
-		const [first, second] = constructedTwins;
-		if (!first || !second) throw new Error("Expected two USB fixtures");
-		for (const { ifname } of [first, second]) {
-			add(ifname, { usb: true, identitySettled: true });
-			netif.setBondOptOut(ifname, true);
+		for (const { name } of markerRows) {
+			add(name, { error: netif.NETIF_ERR_SHAREDLAN });
 		}
 	} else if (topology === "twins" || topology === "fallback") {
 		for (const name of ["wwan0", "wwan1"]) {
@@ -252,22 +275,39 @@ async function replay(
 	for (const key of envKeys) delete process.env[key];
 	process.env.NODE_ENV = mode === "TEST" ? "test" : "production";
 	process.env.CERALIVE_DEVICE_TYPE = mode === "EMULATED" ? "emulated" : "real";
+	if (mode === "HARDWARE") delete process.env.CERALIVE_DEVICE_TYPE;
 	if (mode === "MOCK" || mode === "OVERLAY") process.env.MOCK_MODE = "true";
 	if (mode === "SCENARIO" || mode === "FLIP-MONITOR")
 		process.env.MOCK_SCENARIO = "multi-modem-wifi";
 	if (mode === "HWSIM") process.env.HWSIM_REPO = "/fixture";
 	updateMockState({ initialized: mode === "OVERLAY", netifConfigs: new Map() });
 	const monitor = createMonitorManager(() => undefined);
-	setBootContext(false, monitor);
+	setBootContext(undefined, monitor);
 	const pending = Promise.withResolvers<string>();
-	const boot =
-		mode === "BOOT"
-			? isRealDevice({
-					...defaultDeviceDetectionDeps,
-					getDeviceTypeOverride: () => undefined,
-					readDeviceTreeCompatible: () => pending.promise,
-				}).then((real) => setBootContext(real, monitor))
-			: undefined;
+	const noEvidence = async () => "";
+	const deps = {
+		...defaultDeviceDetectionDeps,
+		getDeviceTypeOverride: () =>
+			mode === "BOOT" ? undefined : process.env.CERALIVE_DEVICE_TYPE,
+		readDeviceTreeCompatible:
+			mode === "BOOT"
+				? () => pending.promise
+				: async () =>
+						mode === "HARDWARE" || mode === "HARDWARE-FORCED"
+							? "rockchip,rk3588"
+							: "",
+		readDeviceTreeModel: noEvidence,
+		readCeraliveRelease: noEvidence,
+		readDmiProductName: noEvidence,
+		readDmiBoardName: noEvidence,
+	};
+	const device = bootDevice(deps);
+	const arm = async () =>
+		setBootContext(
+			(await device.ready) ? device.isStillReal : undefined,
+			monitor,
+		);
+	const boot = mode === "BOOT" ? arm() : undefined;
 	const trace: { source: string; frame: string }[] = [];
 	const observer = makeRpcContext().ws;
 	observer.send = (frame) => {
@@ -291,11 +331,7 @@ async function replay(
 		netif.resetNetifSnapshotForTest();
 		resetUsbNetMarkers();
 		seed(topology);
-		if (topology === "marker")
-			await refreshUsbNetMarkers(
-				constructedTwins.map(({ ifname }) => ifname),
-				constructedTwinDeps(),
-			);
+		if (topology === "marker") await primeBondMarkers();
 		if (topology === "alias" || topology === "alias-survivor") {
 			const fixture = constructedTwins[0];
 			if (fixture === undefined) throw new Error("Missing USB fixture");
@@ -333,9 +369,21 @@ async function replay(
 		}
 		netif.triggerNetworkInterfacesChange();
 		saveConfig();
-		if (!boot) setBootContext(await isRealDevice(), monitor);
+		if (!boot) await arm();
 		if (mode === "FLIP-MONITOR") delete process.env.MOCK_SCENARIO;
 		if (mode === "FLIP-DEVICE") process.env.CERALIVE_DEVICE_TYPE = "emulated";
+		if (mode === "WITHDRAW-OVERRIDE" || mode === "HARDWARE-FORCED")
+			delete process.env.CERALIVE_DEVICE_TYPE;
+		if (
+			mode === "WITHDRAW-OVERRIDE" ||
+			mode === "FLIP-DEVICE" ||
+			mode === "KEEP-OVERRIDE" ||
+			mode === "HARDWARE" ||
+			mode === "HARDWARE-FORCED"
+		)
+			expect(await isRealDevice(deps)).toBe(
+				mode !== "WITHDRAW-OVERRIDE" && mode !== "FLIP-DEVICE",
+			);
 		const watcher = watchConfigWrite(file, fault);
 		const requestMs =
 			label === "deadline-after"
@@ -364,14 +412,8 @@ async function replay(
 			)
 				throw new Error("Missing sequence anchor");
 			const seq = anchor.seq;
-			const retractionName =
-				topology === "marker" ? constructedTwins[0]?.ifname : undefined;
-			if (retractionName) {
-				expect(anchor).toMatchObject({
-					netif: { [retractionName]: { usb_modem_net: expect.any(Object) } },
-				});
-				invalidateUsbNetReading(retractionName, 1);
-			}
+			const testingMarkers = topology === "marker";
+			if (testingMarkers) oweBondMarkerRetractions(anchor);
 			const before = snapshot(file);
 			const stopWire = onNetifChange(() =>
 				broadcastMsg("netif", netif.netIfBuildMsg()),
@@ -380,9 +422,13 @@ async function replay(
 			const stopEdges = netif.onNetworkInterfacesChange(() => {
 				edges.push(genSrtlaBondEntries().map((entry) => entry.iface));
 			});
-			if (retractionName) resetPhysicalIdentityRegistry();
+			if (testingMarkers) {
+				resetPhysicalIdentityRegistry();
+				resolvePhysicalDevice({ ifname: "fixture-gone" });
+			}
 			const beforeRegistry = listPhysicalDevices();
 			let afterRegistry = beforeRegistry;
+			let flushStart = 0;
 			try {
 				deadlineClock?.mockImplementation(
 					Object.assign(
@@ -405,7 +451,11 @@ async function replay(
 					),
 				);
 				afterRegistry = listPhysicalDevices();
-				if (retractionName) broadcastMsg("netif", netif.netIfBuildMsg());
+				if (testingMarkers) {
+					flushStart = trace.length;
+					broadcastMsg("netif", netif.netIfBuildMsg());
+					broadcastMsg("netif", netif.netIfBuildMsg());
+				}
 			} finally {
 				deadlineClock?.mockReturnValue(timeTuple(monotonic));
 				stopEdges();
@@ -444,17 +494,18 @@ async function replay(
 				frames: normalized,
 				edges,
 				steps,
-				...(retractionName === undefined
+				...(!testingMarkers
 					? {}
 					: {
 							retraction: {
-								name: retractionName,
-								observerCount: normalized.filter(
-									({ source, frame }) =>
-										source === "observer" &&
-										frame.includes('"usb_modem_net":null'),
-								).length,
-								registryChanged: afterRegistry.length !== beforeRegistry.length,
+								observerDuring: normalized
+									.slice(0, flushStart)
+									.filter(({ source }) => source === "observer"),
+								nextBroadcasts: normalized
+									.slice(flushStart)
+									.map(({ frame }): unknown => JSON.parse(frame)),
+								beforeRegistry,
+								afterRegistry,
 							},
 						}),
 			};
@@ -472,11 +523,11 @@ async function replay(
 		removeClient(observer);
 		pending.resolve("rockchip,rk3588");
 		await boot;
-		setBootContext(false, monitor);
+		setBootContext(undefined, monitor);
 		if (monitor instanceof MockMonitorEmitter) monitor.reset();
 		resetBondFixture();
 		resetUsbNetMarkers();
-		netif.resetModemNetTracking();
+		resetBondMarkerReplay();
 		updateMockState({ initialized, netifConfigs });
 		for (const [key, value] of priorEnv) {
 			if (value === undefined) delete process.env[key];
@@ -493,6 +544,26 @@ function expectVeto(row: Awaited<ReturnType<typeof replay>>) {
 	expect(row.edges).toEqual([]);
 	expect(row.steps).toEqual([]);
 	expect(row.after).toEqual(row.before);
+}
+
+for (const [mode, armed] of [
+	["WITHDRAW-OVERRIDE", false],
+	["KEEP-OVERRIDE", true],
+	["FLIP-DEVICE", false],
+	["HARDWARE", true],
+	["HARDWARE-FORCED", true],
+] as const) {
+	test(`classifier seam: ${mode} controls veto on the selected real monitor`, async () => {
+		const row = await replay("late-classifier", mode, "none", "fallback", [
+			off,
+		]);
+		if (armed) expectVeto(row);
+		else {
+			expect(row.frames.at(-1)).toEqual(changed);
+			expect(row.after.bond).toEqual([]);
+			expect(row.steps).toEqual([]);
+		}
+	});
 }
 
 for (const topology of [
@@ -637,12 +708,27 @@ test("real zero-to-zero, stale, malformed and legacy-refused inputs keep their o
 	).toEqual([notice, refused(0)]);
 });
 
-test("a veto leaves the pending modem marker retraction for the next observer broadcast", async () => {
+test("a veto leaves all three marker retractions for the next observer broadcast only", async () => {
 	const row = await replay("marker-retraction", "REAL", "none", "marker", [
 		off,
 	]);
-	expect(row.retraction?.observerCount).toBe(1);
-	expect(row.retraction?.registryChanged).toBe(false);
+	const twin = await replay("marker-no-request", "REAL", "none", "marker", []);
+	const actual = row.retraction;
+	const control = twin.retraction;
+	if (!actual || !control) throw new Error("Missing marker traces");
+	expect(actual.observerDuring).toEqual([]);
+	expect(actual.beforeRegistry).toEqual(control.beforeRegistry);
+	expect(actual.afterRegistry).toEqual(control.afterRegistry);
+	expect(actual.afterRegistry).toEqual(actual.beforeRegistry);
+	expect(actual.nextBroadcasts).toEqual(control.nextBroadcasts);
+	expect(actual.nextBroadcasts).toHaveLength(2);
+	for (const { name, key } of markerRows) {
+		expect(actual.nextBroadcasts[0]).toMatchObject({
+			netif: { [name]: { [key]: null } },
+		});
+		expect(actual.nextBroadcasts[1]).toHaveProperty(["netif", name, "ip"]);
+		expect(actual.nextBroadcasts[1]).not.toHaveProperty(["netif", name, key]);
+	}
 	expectVeto(row);
 });
 

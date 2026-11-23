@@ -26,17 +26,14 @@ export function previewBondOptOut(
 	const next =
 		identity === undefined || identity.anchor === "ifname"
 			? stored
-			: setExactOptOut(
-					migrateLegacyOptOut(
-						{ ...stored },
-						identity.legacyLinkId,
-						listPresentPhysicalDevices(),
-					),
+			: transitionExactOptOut(
+					stored,
 					{
 						exact: identity.linkId,
 						legacy: identity.legacyLinkId,
 						optOut: true,
 					},
+					listPresentPhysicalDevices(),
 				);
 	return (
 		name: string,
@@ -64,23 +61,8 @@ function hasStoredOptOut(
 	);
 }
 
-function migrateLegacyOptOut(
-	next: ExactOptOut,
-	legacy: string | undefined,
-	presentDevices: readonly PhysicalBondKeys[],
-): ExactOptOut {
-	if (legacy !== undefined && next[legacy] === true) {
-		for (const present of presentDevices) {
-			if (present.legacyLinkId === legacy && present.anchor !== "ifname") {
-				next[present.linkId] = true;
-			}
-		}
-	}
-	return next;
-}
-
-function setExactOptOut(
-	next: ExactOptOut,
+function transitionExactOptOut(
+	stored: ExactOptOut | undefined,
 	{
 		exact,
 		legacy,
@@ -90,9 +72,19 @@ function setExactOptOut(
 		readonly legacy: string | undefined;
 		readonly optOut: boolean;
 	},
+	presentDevices: readonly PhysicalBondKeys[],
 ): ExactOptOut {
+	const next = { ...stored };
+	if (legacy !== undefined && next[legacy] === true) {
+		for (const present of presentDevices) {
+			if (present.legacyLinkId === legacy && present.anchor !== "ifname") {
+				next[present.linkId] = true;
+			}
+		}
+	}
 	if (optOut) next[exact] = true;
 	else delete next[exact];
+	// Legacy deletion wins even when both identities use the same key.
 	if (legacy !== undefined) delete next[legacy];
 	return next;
 }
@@ -114,11 +106,14 @@ export function setPersistentBondOptOut(
 	const physicalId = bondPhysicalId(ifname);
 	if (physicalId === undefined) return undefined;
 
-	const next = { ...getConfig().bond_opt_out };
+	const stored = getConfig().bond_opt_out;
 	const identity = resolveBondPhysicalIdentity(ifname);
 	const legacy = identity?.legacyLinkId;
-	migrateLegacyOptOut(next, legacy, listPresentPhysicalDevices());
-	setExactOptOut(next, { exact: physicalId, legacy, optOut });
+	const next = transitionExactOptOut(
+		stored,
+		{ exact: physicalId, legacy, optOut },
+		listPresentPhysicalDevices(),
+	);
 	getConfig().bond_opt_out = Object.keys(next).length === 0 ? undefined : next;
 	saveConfig();
 	return physicalId;

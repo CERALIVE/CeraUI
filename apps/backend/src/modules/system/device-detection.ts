@@ -135,10 +135,22 @@ function hasX86MiniPcDmiMarker(dmi: string): boolean {
 export async function isRealDevice(
 	deps: DeviceDetectionDeps = defaultDeviceDetectionDeps,
 ): Promise<boolean> {
-	const override = deps.getDeviceTypeOverride();
-	if (override === "real") return true;
-	if (override === "emulated") return false;
+	const forced = forcedDeviceType(deps);
+	return forced ?? isRealDeviceWithoutOverride(deps);
+}
 
+function forcedDeviceType(deps: DeviceDetectionDeps): boolean | undefined {
+	const override = deps.getDeviceTypeOverride();
+	return override === "real"
+		? true
+		: override === "emulated"
+			? false
+			: undefined;
+}
+
+async function isRealDeviceWithoutOverride(
+	deps: DeviceDetectionDeps,
+): Promise<boolean> {
 	if (deps.isDevelopment()) return false;
 
 	// `compatible` is the reliable RK3588 marker (always carries
@@ -160,6 +172,25 @@ export async function isRealDevice(
 		await readOptional(deps.readDmiBoardName),
 	].join("\n");
 	return hasX86MiniPcDmiMarker(dmiIdentity);
+}
+
+export function observeRealDeviceAtBoot(
+	deps: DeviceDetectionDeps = defaultDeviceDetectionDeps,
+) {
+	const forced = forcedDeviceType(deps);
+	let independentlyConfirmed = false;
+	const hardware =
+		forced === false
+			? Promise.resolve(false)
+			: isRealDeviceWithoutOverride(deps).then((confirmed) => {
+					independentlyConfirmed = confirmed;
+					return confirmed;
+				});
+	return {
+		// A forced boot still proceeds without waiting for the evidence probe.
+		ready: forced === undefined ? hardware : Promise.resolve(forced),
+		isStillReal: () => forcedDeviceType(deps) ?? independentlyConfirmed,
+	};
 }
 
 /**
