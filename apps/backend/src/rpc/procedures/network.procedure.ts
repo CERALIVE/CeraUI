@@ -61,37 +61,33 @@ export const configureNetworkInterfaceProcedure = authedProcedure
 	.input(netifConfigInputSchema)
 	.output(netifConfigOutputSchema)
 	.handler(({ input, context }) => {
-		// Order is load-bearing: persist the mock overlay BEFORE handleNetif,
-		// whose synchronous netif broadcasts overlay `enabled`/`ip` from it via
-		// netIfBuildMsg. Writing first makes those broadcasts carry the new
-		// value, not the stale prior one. (undefined IP === DHCP.)
-		if (shouldUseMocks()) {
-			setMockNetifConfig(input.name, {
-				enabled: input.enabled,
-				dhcp: input.ip === undefined,
-				ip: input.ip,
-			});
-			// Publish the overlay before the raw-map mutation so bonded-link cards
-			// react immediately instead of waiting for the next 5 s poll.
-			broadcastMsg("netif", netIfBuildMsg());
-		}
-
-		const observedIp = shouldUseMocks()
+		const mocks = shouldUseMocks();
+		const observedIp = mocks
 			? getNetworkInterfaces()[input.name]?.ip
 			: input.ip;
-		const outcome = handleNetif(context.ws as unknown as import("ws").default, {
-			name: input.name,
-			ip: observedIp ?? "",
-			enabled: input.enabled,
-		});
+		let mockConfigPublished = false;
+		const outcome = handleNetif(
+			context.ws as unknown as import("ws").default,
+			{ name: input.name, ip: observedIp ?? "", enabled: input.enabled },
+			mocks
+				? () => {
+						setMockNetifConfig(input.name, {
+							enabled: input.enabled,
+							dhcp: input.ip === undefined,
+							ip: input.ip,
+						});
+						// Keep the immediate broadcast ahead of the raw mutation.
+						broadcastMsg("netif", netIfBuildMsg());
+						mockConfigPublished = true;
+					}
+				: undefined,
+		);
 
-		// Under mocks the overlay is authoritative; the raw-map mutation remains a
-		// best effort so dev/e2e reflects the same immediate applied readback.
-		if (!shouldUseMocks() && !outcome.ok) {
+		if (!mockConfigPublished && !outcome.ok) {
 			return { success: false, error: outcome.reason };
 		}
 
-		const applied = shouldUseMocks()
+		const applied = mockConfigPublished
 			? readAppliedNetifConfig(input.name)
 			: outcome.ok
 				? outcome.applied

@@ -13,12 +13,11 @@ Every one of those was a bare `return` reported as `{success:true}`. The
 toggle riding alongside the address it was checking — so the operator was told
 "Saved" over a link whose bond state had not moved.
 
-- **The mock branch still answers `success:true`, deliberately.** Under mocks the
-  mutation genuinely applied, to the overlay `setMockNetifConfig` wrote before
-  `handleNetif` ran; `handleNetif` then works the RAW map, where its IP guard
-  legitimately refuses because the mock-overlaid IP differs. Reporting THAT as a
-  failure would report a dev/e2e toggle that visibly worked as broken. Do not
-  "unify" the two branches.
+- **Mock writes retain immediate overlay readback except for a disable of the
+  last effective link.** The shared guard decides that refusal before the
+  mock overlay is written or broadcast. All other mock requests keep the
+  existing overlay-first behavior and use the observed interface address for
+  the best-effort raw mutation; a requested mock address need not match it.
 - **The five reasons are not collapsible.** `enable_refused` already carries an
   operator notification naming the blocking error; `disable_all_refused` is the
   device protecting its last link; `unknown_interface` clears when the link comes
@@ -28,5 +27,6 @@ toggle riding alongside the address it was checking — so the operator was told
   excludes it (for example, because it is opted out or serves shared LAN). The
   existing refusal for the sole raw-enabled interface still applies when a
   mapped duplicate-IP peer is bonded with raw `enabled: false`. The separate
-  duplicate-IP toggle path and the refusal message are unchanged.
+  duplicate-IP toggle path, refusal message, and mock receipt behavior for
+  legacy raw-only refusals with a surviving effective peer are unchanged.
 
