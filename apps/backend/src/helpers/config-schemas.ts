@@ -409,13 +409,15 @@ export const runtimeConfigSchema = z.object({
 	// link id. Values can only be true: absence means included. A bare ifname is
 	// never accepted as a durable identity because the Huawei twins swap names.
 	bond_opt_out: z.record(z.string().min(1), z.literal(true)).optional(),
-	// Group link id -> enabled member ids (empty keeps all members excluded).
+	// Group link id -> granted member ids. Confirmed shared-serial groups keep
+	// grants across an exact port disable; the exact exclusion takes precedence.
 	// Port link id -> pin provenance (legacy scan pins were only VID:PID).
 	bond_group_opt_out: z
 		.record(
 			z.string().min(1),
 			z.union([
 				z.array(z.string().min(1)),
+				z.strictObject({ shared: z.array(z.string().min(1)) }),
 				z.string().regex(/^[0-9a-f]{4}:[0-9a-f]{4}$/),
 				z.strictObject({
 					group: z.string().min(1),

@@ -113,14 +113,17 @@ export const enabled = (...devices: readonly { ifname: string }[]) => {
 	return devices.map(({ ifname }) => wire[ifname]?.enabled);
 };
 
-export async function publish(...devices: Device[]) {
-	attach(devices);
+async function publishDevices(
+	devices: readonly Device[],
+	builtIns?: { ifname: string }[],
+) {
+	attach(devices, undefined, builtIns);
 	const publications: ReturnType<typeof enabled>[] = [];
 	const unsubscribe = onUsbNetScanCommitted(() => {
 		publications.push(enabled(...devices));
 	});
 	try {
-		const deps = constructedTwinDeps(devices);
+		const deps = constructedTwinDeps([...devices]);
 		const productAttrs = new Map(
 			devices.map((device) => [
 				`${dirname(device.readlink)}/product`,
@@ -146,10 +149,21 @@ export async function publish(...devices: Device[]) {
 	}
 }
 
-export async function plug(...devices: Device[]) {
-	const publications = await publish(...devices);
+export function publish(...devices: Device[]) {
+	return publishDevices(devices);
+}
+
+export async function plugDevices(
+	devices: readonly Device[],
+	builtIns?: { ifname: string }[],
+) {
+	const publications = await publishDevices(devices, builtIns);
 	await saveConfigInBackground();
 	return publications;
+}
+
+export function plug(...devices: Device[]) {
+	return plugDevices(devices);
 }
 
 export async function toggle(

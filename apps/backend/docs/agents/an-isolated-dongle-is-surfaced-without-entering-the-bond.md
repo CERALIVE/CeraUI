@@ -952,9 +952,11 @@ makes a scan pin dormant even when the rejected group serial matches, without
 replacing its original evidence. Exact entries written by operator disables or
 present-member migration remain port-wide. Enabling a matching active pin at
 its port grants its recorded group even if the serial is currently unreadable.
-A durable disable removes the port from every grant; toggling a lone group
-identity ends its grant list. The bond reader still checks only exact and
-legacy keys.
+An exact disable takes precedence over any grant. A confirmed shared-serial
+grant is retained so a later include at that port works even without the group
+serial. A durable disable removes placeholder or still-unclassified grants;
+toggling a lone group identity ends its grant list. The bond reader still
+checks only exact and legacy keys.
 
 The scan publishes the in-memory decision without waiting for the config file.
 At most one background atomic save is in flight, with scan-count backoff capped
@@ -966,6 +968,7 @@ This choice is per port, not per unit. A replacement that reports the same
 available descriptors can inherit the pin, as can a replacement whose missing
 descriptors prevent a positive mismatch. The last-uplink guard can count that
 excluded replacement and accept disabling the remaining effective uplink.
+The effective-uplink guard in PR #691 is parked, so this can leave zero uplinks.
 Twins moved or enabled before the group or pin can be identified may start
 excluded; enable them at the settled port. A twin without `ID_PATH`, or one
 that returns without its group before a matching pin is saved, can still join

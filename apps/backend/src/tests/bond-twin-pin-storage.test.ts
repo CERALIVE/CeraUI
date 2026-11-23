@@ -7,6 +7,7 @@ import {
 	saveConfigInBackground,
 } from "../modules/config.ts";
 import { resolveModemPhysicalIdentity } from "../modules/modems/physical-identity-source.ts";
+import { persistEthernetRole } from "../modules/network/ethernet-role.ts";
 import {
 	B,
 	enabled,
@@ -69,6 +70,24 @@ test("a successful scan pin save does not persist a rejected include for another
 	await reload();
 	await plug(singletonA, noSerialB);
 	expect(enabled(singletonA, noSerialB)).toEqual([false, false]);
+});
+
+test("a successful scan pin save does not persist a rejected Ethernet role", async () => {
+	await seed([G]);
+	await plug(twinA);
+	await toggle(twinA, true);
+	const dir = fixture.dir();
+	chmodSync(dir, 0o500);
+	try {
+		expect(() => persistEthernetRole("eth1", "shared-lan")).toThrow(/EACCES/);
+	} finally {
+		chmodSync(dir, 0o700);
+	}
+
+	await plug(twinA, twinB);
+	await reload();
+	expect(getConfig().eth_roles?.eth1).toBeUndefined();
+	expect(await plug(twinA, noSerialB)).toEqual([[true, false]]);
 });
 
 test("R2: blocked scan pins persist once storage recovers and survive restart without a serial", async () => {
@@ -201,7 +220,7 @@ test("read-only failures back off by scan count and warn once until recovery", a
 	}
 });
 
-function pauseAfterStaging(dir: string) {
+function pauseAfterStaging(dir: string, afterRelease?: () => void) {
 	const { promise: ready, resolve: staged } = Promise.withResolvers<void>();
 	const { promise: release, resolve: unblock } = Promise.withResolvers<void>();
 	const realOpen = fs.promises.open;
@@ -218,6 +237,7 @@ function pauseAfterStaging(dir: string) {
 					await close();
 					staged();
 					await release;
+					afterRelease?.();
 				});
 			}
 			return file;
@@ -240,6 +260,41 @@ test("a synchronous config save supersedes an older staged scan snapshot", async
 		unblock();
 		await saveConfigInBackground();
 		expect(readFileSync(fixture.configPath(), "utf8")).toBe(later);
+		await reload();
+		expect(getConfig().max_br).toBe(4321);
+	} finally {
+		unblock();
+		await saveConfigInBackground();
+		restore();
+	}
+});
+
+test("a config save in the first microtask after the draft check is never overwritten", async () => {
+	await seed([G]);
+	await plug(twinA);
+	await toggle(twinA, true);
+	const saved = Promise.withResolvers<void>();
+	const { ready, unblock, restore } = pauseAfterStaging(fixture.dir(), () => {
+		// The first callback lets the writer resume from close; the second
+		// runs after its fence, even if publication incorrectly yields.
+		queueMicrotask(() =>
+			queueMicrotask(() => {
+				try {
+					getConfig().max_br = 4321;
+					saveConfig();
+					saved.resolve();
+				} catch (error) {
+					saved.reject(error);
+				}
+			}),
+		);
+	});
+	try {
+		await publish(twinA, twinB);
+		await ready;
+		unblock();
+		await saved.promise;
+		await saveConfigInBackground();
 		await reload();
 		expect(getConfig().max_br).toBe(4321);
 	} finally {

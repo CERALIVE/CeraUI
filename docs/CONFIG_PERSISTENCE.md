@@ -72,8 +72,12 @@ draft check and final rename run without yielding; a successful
 fails. Other runtime config writes keep their synchronous contract.
 
 A settled include from a dormant pin's own group releases that pin, even if
-the twin currently reports a different PID or product string. An include of an
-unrelated replacement does not release a dormant pin.
+the twin currently reports a different PID or product string. An include alone
+on an unrelated replacement does not release a dormant pin; an off/on toggle
+does replace it with the operator's port setting. It does not grant the original
+twin membership in a group it was never included in. For a confirmed shared
+serial, a previously granted port keeps that grant across toggles made without
+the serial. While the port is disabled, its exact exclusion wins.
 
 Damaged-record preservation is a separate immutable-copy writer. Its discoverable
 `<file>.damaged-<sha256>` name is unchanged. Before allocating any temp it strictly

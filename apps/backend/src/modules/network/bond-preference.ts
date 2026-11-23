@@ -32,7 +32,26 @@ export function isBondOptedOut(ifname: string): boolean {
 type GroupEntries = NonNullable<
 	ReturnType<typeof getConfig>["bond_group_opt_out"]
 >;
-type Pin = Exclude<GroupEntries[string], string | string[]>;
+type SharedGrant = { shared: string[] };
+type GroupGrant = string[] | SharedGrant;
+type Pin = Exclude<GroupEntries[string], string | GroupGrant>;
+
+function isSharedGrant(
+	entry: GroupEntries[string] | undefined,
+): entry is SharedGrant {
+	return typeof entry === "object" && "shared" in entry;
+}
+
+function isGroupGrant(
+	entry: GroupEntries[string] | undefined,
+): entry is GroupGrant {
+	return Array.isArray(entry) || isSharedGrant(entry);
+}
+
+function sharedGroup(ifname: string): string | undefined {
+	const descriptor = getUsbPhysicalDescriptor(ifname);
+	return descriptor?.rejectedSharedSerial ? descriptor.legacyLinkId : undefined;
+}
 
 function pinObservation(ifname: string) {
 	const descriptor = getUsbPhysicalDescriptor(ifname);
@@ -78,12 +97,13 @@ export function setPersistentBondOptOut(
 	const groups = { ...config.bond_group_opt_out };
 	const identity = resolveBondPhysicalIdentity(ifname);
 	const legacy = identity?.legacyLinkId;
+	const confirmedShared = sharedGroup(ifname);
 	if (legacy !== undefined && next[legacy] === true) {
 		for (const present of listPresentPhysicalDevices()) {
 			if (present.legacyLinkId === legacy && present.anchor !== "ifname") {
 				const observed = pinObservation(present.ifname);
 				const existing = groups[present.linkId];
-				if (typeof existing === "object" && !Array.isArray(existing)) {
+				if (typeof existing === "object" && !isGroupGrant(existing)) {
 					groups[present.linkId] = { ...existing, portWide: true };
 				} else if (observed !== undefined) {
 					// Keep main's port-wide migration, but remember which split
@@ -99,9 +119,14 @@ export function setPersistentBondOptOut(
 		}
 	}
 	if (optOut) {
-		// The same port may have been enabled under a different serial.
+		// Placeholder and unclassified grants cannot be recovered without seeing
+		// the group again. A shared-serial grant is masked by the exact port bit.
 		for (const [group, enabled] of Object.entries(groups)) {
-			if (Array.isArray(enabled) && enabled.includes(physicalId)) {
+			if (
+				group !== confirmedShared &&
+				Array.isArray(enabled) &&
+				enabled.includes(physicalId)
+			) {
 				groups[group] = enabled.filter((id) => id !== physicalId);
 			}
 		}
@@ -110,7 +135,7 @@ export function setPersistentBondOptOut(
 	const pinnedGroup =
 		!optOut &&
 		typeof pin === "object" &&
-		!Array.isArray(pin) &&
+		!isGroupGrant(pin) &&
 		(legacy === pin.group ||
 			(next[physicalId] === true && matchesPin(pin, pinObservation(ifname))))
 			? pin.group
@@ -118,18 +143,24 @@ export function setPersistentBondOptOut(
 	for (const group of new Set([legacy, pinnedGroup])) {
 		if (group === undefined) continue;
 		const grant = groups[group];
-		if (next[group] !== true && !Array.isArray(grant)) continue;
-		const enabled = Array.isArray(grant) ? grant : [];
-		groups[group] = optOut
+		if (next[group] !== true && !isGroupGrant(grant)) continue;
+		const shared = isSharedGrant(grant) || confirmedShared === group;
+		const enabled = isSharedGrant(grant)
+			? grant.shared
+			: Array.isArray(grant)
+				? grant
+				: [];
+		const members = optOut
 			? enabled
 			: [...new Set([...enabled, physicalId])].sort();
+		groups[group] = shared ? { shared: members } : members;
 	}
 	// The same group can reclaim a dormant pin; an unrelated replacement cannot.
 	if (
 		optOut ||
 		pinnedGroup !== undefined ||
 		next[physicalId] === true ||
-		Array.isArray(pin)
+		isGroupGrant(pin)
 	) {
 		delete groups[physicalId];
 	}
@@ -164,18 +195,29 @@ function reconcilePortPins(
 		const observed = pinObservation(ifname);
 		if (observed === undefined) continue;
 		const entry = (nextGroups ?? groups)?.[linkId];
-		const evidence = Array.isArray(entry) ? undefined : entry;
+		const evidence = isGroupGrant(entry) ? undefined : entry;
 		const exact = (next ?? config.bond_opt_out)?.[linkId] === true;
 		const enabled =
-			legacyLinkId === undefined ? undefined : groups?.[legacyLinkId];
+			legacyLinkId === undefined
+				? undefined
+				: (nextGroups ?? groups)?.[legacyLinkId];
+		// Earlier development builds stored both kinds of grant as arrays.
+		if (
+			legacyLinkId !== undefined &&
+			Array.isArray(enabled) &&
+			sharedGroup(ifname) === legacyLinkId
+		) {
+			nextGroups ??= { ...groups };
+			nextGroups[legacyLinkId] = { shared: enabled };
+		}
 		// An existing pin owns its evidence, even if a different product happens
 		// to show the same rejected group serial.
 		if (typeof evidence === "object" && evidence.portWide) continue;
 		if (exact && evidence === undefined) continue;
 		const fromGroup =
 			legacyLinkId !== undefined &&
-			Array.isArray(enabled) &&
-			!enabled.includes(linkId);
+			isGroupGrant(enabled) &&
+			!(Array.isArray(enabled) ? enabled : enabled.shared).includes(linkId);
 		if (evidence === undefined && fromGroup) {
 			nextGroups ??= { ...groups };
 			nextGroups[linkId] = { group: legacyLinkId, ...observed };

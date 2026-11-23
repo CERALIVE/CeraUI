@@ -13,6 +13,7 @@ export type UsbPhysicalDescriptor = {
 	deviceClass: UsbNetClass;
 	serial?: string;
 	legacyLinkId?: string;
+	rejectedSharedSerial?: true;
 	/** Resolved sysfs USB parent; grouping only, never a stable_key override. */
 	usbParent: string;
 	idPath?: string;

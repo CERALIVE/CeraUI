@@ -552,6 +552,8 @@ function rejectSharedSerial(
 	descriptor.legacyLinkId = mintLinkId(
 		`usb-serial:${descriptor.vid.toLowerCase()}:${serial}`,
 	);
+	if (usableUsbSerial(serial) !== undefined)
+		descriptor.rejectedSharedSerial = true;
 	delete descriptor.serial;
 }
 

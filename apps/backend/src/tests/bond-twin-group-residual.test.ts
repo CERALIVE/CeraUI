@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { getConfig, saveConfig } from "../modules/config.ts";
 import { resolveModemPhysicalIdentity } from "../modules/modems/physical-identity-source.ts";
 import { persistEthernetRole } from "../modules/network/ethernet-role.ts";
 import {
@@ -14,6 +15,7 @@ import {
 	P,
 	placeholderB,
 	plug,
+	plugDevices,
 	reload,
 	seed,
 	singletonA,
@@ -68,6 +70,90 @@ test("T4 / S18: explicitly enabling the sibling keeps both enabled after rescan 
 	await reload();
 	await plug(twinA, twinB);
 	expect(enabled(twinA, twinB)).toEqual([true, true]);
+});
+
+test.each(["serial loss", "last uplink", "replacement save"] as const)(
+	"R4-c: a granted twin stays included when its serial returns after %s",
+	async (scenario) => {
+		const noSerialA = { ...twinA, serial: "" };
+		const withoutGroup =
+			scenario === "replacement save"
+				? { ...noSerialA, idProduct: "9091" }
+				: noSerialA;
+		await seed([G]);
+		await plugDevices([twinA], [ETH]);
+		await toggle(twinA, true);
+		if (scenario === "replacement save") await plugDevices([], [ETH]);
+		await plugDevices([withoutGroup], [ETH]);
+		expect(
+			resolveModemPhysicalIdentity(withoutGroup.ifname).legacyLinkId,
+		).toBeUndefined();
+		await toggle(withoutGroup, false);
+		expect(enabled(withoutGroup)).toEqual([false]);
+		await toggle(withoutGroup, true);
+		expect(enabled(withoutGroup)).toEqual([true]);
+		if (scenario === "replacement save") await reload();
+		if (scenario === "last uplink") await toggle(ETH, false);
+
+		expect(await plugDevices([twinA, twinB], [ETH])).toEqual([[true, false]]);
+		expect(enabled(twinA, twinB, ETH)).toEqual([
+			true,
+			false,
+			scenario !== "last uplink",
+		]);
+	},
+);
+
+test("a later disable keeps a formerly granted twin excluded after restart and serial recovery", async () => {
+	const noSerialA = { ...twinA, serial: "" };
+	await seed([G]);
+	await plug(twinA);
+	await toggle(twinA, true);
+	await plug(noSerialA);
+	await toggle(noSerialA, false);
+	await toggle(noSerialA, true);
+	await toggle(noSerialA, false);
+	await reload();
+	expect(await plug(twinA, twinB)).toEqual([[false, false]]);
+});
+
+test("an earlier array grant is retained once the scan confirms the shared serial", async () => {
+	await seed([]);
+	await plug(twinA);
+	const port = resolveModemPhysicalIdentity(twinA.ifname).linkId;
+	getConfig().bond_group_opt_out = { [G]: [port] };
+	saveConfig();
+	await reload();
+	expect(await plug(twinA)).toEqual([[true]]);
+	await reload();
+	const noSerialA = { ...twinA, serial: "" };
+	await plug(noSerialA);
+	await toggle(noSerialA, false);
+	await toggle(noSerialA, true);
+	expect(await plug(twinA, twinB)).toEqual([[true, false]]);
+});
+
+test("a first-sight off/on without group evidence does not grant the absent sibling", async () => {
+	await seed([G]);
+	await plug(twinA);
+	await toggle(twinA, true);
+	await plug(twinA, noSerialB);
+	await toggle(noSerialB, false);
+	await toggle(noSerialB, true);
+	expect(await plug(twinA, twinB)).toEqual([[true, false]]);
+});
+
+test("saving an off/on toggle for a replacement does not grant a never-included twin", async () => {
+	const replacement = { ...noSerialB, idProduct: "9091" };
+	await seed([G]);
+	await plug(twinA);
+	await toggle(twinA, true);
+	await plug(twinA, twinB);
+	expect(await plug(replacement)).toEqual([[true]]);
+	await toggle(replacement, false);
+	await toggle(replacement, true);
+	await reload();
+	expect(await plug(twinA, twinB)).toEqual([[true, false]]);
 });
 
 test("S23: a durable disable under another identity revokes the old group enable at that port", async () => {
