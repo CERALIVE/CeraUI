@@ -175,7 +175,7 @@ describe("EthernetSection — a shared-LAN port is not an uplink", () => {
 		const { getByTestId, container } = renderRows([SERVING]);
 
 		const name = Array.from(container.querySelectorAll("p")).find(
-			(node) => node.textContent?.trim() === "eth1",
+			(node) => node.textContent?.trim() === "Ethernet 2",
 		);
 		expect(name).toBeTruthy();
 		expect(getByTestId("netif-eth-role").parentElement).toBe(

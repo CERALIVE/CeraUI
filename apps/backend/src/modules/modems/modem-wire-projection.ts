@@ -66,13 +66,13 @@ import type {
 } from "@ceraui/rpc/schemas";
 
 import type { ResolvedModemLock } from "./modem-lock-state.ts";
-
 // NOT the schema's same-named type. This union is wider (it also spells mmcli's
 // `current`/`forbidden`/`unknown`); `modem-network-scan.ts` normalizes those away
 // before anything is stored, so the WIRE is schema-valid either way. The reason
 // to use this one is that `getAvailableNetworksForModem` and the live builder are
 // typed with it — swapping in the schema type just relocates the cast.
 import type { AvailableNetwork, Modem } from "./modems-state.ts";
+import { portLabelFromIdPath } from "./physical-identity.ts";
 import { claimsNoSim, type SimPresence } from "./sim-presence.ts";
 
 /** Wire status block — identical shape to `modem-status.ts`'s internal type. */
@@ -269,6 +269,7 @@ export type WireModemEntry = {
 	sim_presence_evidence?: ModemSimPresenceEvidence;
 	router_admin?: RouterAdmin;
 	stable_key?: string;
+	port_label?: string;
 	capability_modules?: CapabilityModuleClaims;
 	five_g_preference?: ModemFiveGPreference;
 	lock_state?: ModemLockState;
@@ -626,6 +627,8 @@ function appendAdditive(
 
 	if (source.stableKey !== undefined) {
 		entry.stable_key = source.stableKey;
+		const portLabel = portLabelFromIdPath(source.stableKey);
+		if (portLabel !== undefined) entry.port_label = portLabel;
 	}
 
 	if (local.capabilityModules !== undefined) {

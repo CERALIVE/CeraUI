@@ -14,6 +14,7 @@ import IngestStats from "./IngestStats.svelte";
 const frame = (
 	rtt: number,
 	ifaces: readonly string[] = ["usb0"],
+	ids?: readonly string[],
 ): LinkTelemetryMessage => ({
 	links: ifaces.map((iface, i) => ({
 		conn_id: String(i),
@@ -22,6 +23,7 @@ const frame = (
 		nak_count: 0,
 		weight_percent: Math.round(100 / ifaces.length),
 		stale: false,
+		...(ids?.[i] ? { link_id: ids[i] } : {}),
 	})),
 });
 
@@ -90,7 +92,7 @@ describe("IngestStats link names", () => {
 		);
 	});
 
-	it("a renamed link's names get their own full line at every width, never clipped", async () => {
+	it("preserves the full observed name sequence and the steady link's name", async () => {
 		const { container, rerender } = render(IngestStats, {
 			props: {
 				telemetry: frame(20, ["usb0", "eth0"]),
@@ -116,23 +118,50 @@ describe("IngestStats link names", () => {
 			);
 		const renamed = row("usb0");
 		const steady = row("eth0");
-		expect(renamed?.dataset.renamed).toBe("true");
-		expect(steady?.dataset.renamed).toBe("false");
-		const cell = (r: HTMLElement | null) =>
-			r?.querySelector<HTMLElement>("[data-session-link-name-cell]")
-				?.className ?? "";
-		// The renamed name keeps the full row width above 640 px too.
-		expect(cell(renamed)).toContain("basis-full");
-		expect(cell(renamed)).not.toMatch(/sm:w-36|sm:basis-auto/);
-		expect(renamed?.className).not.toContain("sm:flex-nowrap");
-		// A link with one name keeps the narrow column beside its bar.
-		expect(cell(steady)).toContain("sm:w-36");
+		expect(
+			steady?.querySelector("[data-session-link-name]")?.textContent?.trim(),
+		).toBe("eth0");
 		const name = renamed?.querySelector<HTMLElement>(
 			"[data-session-link-name]",
 		);
 		expect(name?.textContent?.trim()).toBe(
 			"SIM 1 · Northwind → SIM 1 · Harbor Cell → SIM 1 · Summit Wireless",
 		);
-		expect(name?.className).not.toMatch(/line-clamp|truncate|overflow-hidden/);
+	});
+
+	it.each([
+		{
+			scenario: "separates different links that reuse an ifname",
+			iface: "usb0",
+			secondId: "replacement",
+			expected: ["Northwind", "Harbor Cell"],
+		},
+		{
+			scenario: "keeps one row when the same link_id changes ifname",
+			iface: "usb3",
+			secondId: "original",
+			expected: ["Northwind → Harbor Cell"],
+		},
+	])("$scenario", async ({ iface, secondId, expected }) => {
+		const { container, rerender } = render(IngestStats, {
+			props: {
+				telemetry: frame(20, ["usb0"], ["original"]),
+				isStreaming: true,
+				linkName: () => "Northwind",
+			},
+		});
+		await rerender({
+			telemetry: frame(21, [iface], [secondId]),
+			linkName: () => "Harbor Cell",
+		});
+		await rerender({
+			isStreaming: false,
+			linkName: () => "Today's unrelated roster",
+		});
+		expect(
+			[...container.querySelectorAll("[data-session-link-name]")].map((el) =>
+				el.textContent?.trim(),
+			),
+		).toEqual(expected);
 	});
 });

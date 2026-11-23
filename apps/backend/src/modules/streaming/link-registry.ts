@@ -46,6 +46,7 @@
 import type { BondLinkIdentityState } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
+import { portLabelFromIdPath } from "../modems/physical-identity.ts";
 import { resolveModemPhysicalIdentity } from "../modems/physical-identity-source.ts";
 import { type BondEntry, isUnmappableEntry } from "./bind-map.ts";
 
@@ -68,37 +69,6 @@ export interface LinkIdentity {
 	readonly portLabel?: string;
 	/** ONLY present when the device itself reports one. Never fabricated. */
 	readonly serial?: string;
-}
-
-const USB_MARKER = "-usb-";
-
-/**
- * The port an `ID_PATH` names, in the notation Linux itself uses for a USB port.
- *
- * `platform-fc880000.usb-usb-0:1.3.1:1.0` -> `USB 0-1.3.1`. The `<bus>-<chain>`
- * pair IS the physical port, which is precisely the fact that separates two
- * otherwise identical dongles, and it is stable across a replug into the same
- * socket.
- *
- * A path with no USB ancestry (a PCIe/SoC-attached modem) yields `undefined`
- * rather than the raw path: such a device has no same-model twin leasing it the
- * same address, so an unreadable bus-topology string would be noise rather than
- * disambiguation.
- */
-export function portLabelFromIdPath(
-	idPath: string | undefined,
-): string | undefined {
-	const path = idPath?.trim();
-	if (!path) return undefined;
-
-	const markerAt = path.lastIndexOf(USB_MARKER);
-	if (markerAt < 0) return undefined;
-
-	const [busnum, portChain] = path
-		.slice(markerAt + USB_MARKER.length)
-		.split(":");
-	if (!busnum || !portChain) return undefined;
-	return `USB ${busnum}-${portChain}`;
 }
 
 /** Resolves the facts only a live device can answer. Injected for tests. */

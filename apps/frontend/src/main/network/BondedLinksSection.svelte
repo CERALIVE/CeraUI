@@ -93,7 +93,7 @@ const totalStale = $derived(
 				{const entry = $derived(telemetryByIface.get(link.id))}
 				{const color = $derived(`var(--link-${link.linkIndex + 1})`)}
 				{const hasSignal = $derived(link.signal !== null)}
-				{const identity = $derived(linkDisambiguation(link, entry, ambiguousLabels))}
+				{const identity = $derived(link.identity ?? linkDisambiguation(link, entry, ambiguousLabels))}
 				<!-- A searching modem usually still reports a signal reading, so the
 				     scanning state is named on its own rather than only in place of one. -->
 				{const state = $derived(

@@ -59,9 +59,10 @@ interface Props {
 	open?: boolean;
 	/** WifiStatus key (interface device id) this dialog operates on. */
 	deviceId: string;
+	linkName?: (ifname: string) => string;
 }
 
-let { open = $bindable(false), deviceId }: Props = $props();
+let { open = $bindable(false), deviceId, linkName = networkRename }: Props = $props();
 
 // Schema-derived password floor (WIFI_PASSWORD_MIN = 8) — single source of truth.
 const PASSWORD_MIN = networkConstraints.wifi.password.min;
@@ -69,7 +70,7 @@ const PASSWORD_MIN = networkConstraints.wifi.password.min;
 // Live interface from the non-deprecated subscriptions surface.
 const wifi = $derived<WifiStatus | undefined>(getWifi());
 const iface = $derived(wifi?.[deviceId]);
-const ifaceLabel = $derived(iface ? networkRename(iface.ifname) : '');
+const ifaceLabel = $derived(iface ? linkName(iface.ifname) : '');
 
 // Interface-level transition (T3 additive wifi schema). 'activating' means a
 // connect is already in flight at the NetworkManager layer (DEVICE_BUSY guard) —

@@ -113,7 +113,9 @@ describe("the marker touches nothing else", () => {
 			["enx000011121314", { tp: 0, enabled: false }],
 		]);
 
-		expect(getByText("enx000011121314")).toBeDefined();
+		expect(getByText("Ethernet (1314)").getAttribute("title")).toBe(
+			"enx000011121314",
+		);
 		expect(queryByTestId("netif-modem-net")).toBeNull();
 	});
 });

@@ -15,7 +15,10 @@ import {
 	type WifiStatus,
 } from "@ceraui/rpc/schemas";
 import { isLoopbackIpv4 } from "$lib/helpers/ip-classification";
-import { linkName, radioName } from "$lib/helpers/link-names";
+import {
+	createLinkNameProjection,
+	type LinkNames,
+} from "$lib/helpers/link-names";
 import {
 	bitsPerSecondToKbps,
 	convertBytesToKbids,
@@ -156,6 +159,7 @@ export function buildBond(
 	fullyStale: boolean,
 	staleIds: Set<string> = new Set(),
 	isStreaming = true,
+	names: LinkNames = createLinkNameProjection()({ modems, wifi }),
 ): BondSnapshot {
 	const links: LinkSignal[] = [];
 	const netifEntries = netif ?? {};
@@ -193,8 +197,7 @@ export function buildBond(
 			type: "wifi",
 			linkIndex: 0,
 			signal: active && Number.isFinite(active.signal) ? active.signal : null,
-			// The network name beside the Wi-Fi tag; without one, the radio's own name.
-			label: active?.ssid || radioName(id),
+			label: names.label(id),
 			isConnected,
 			isStale: wifiStale || fullyStale || staleIds.has(id),
 			throughputKbps: throughputFor(id),
@@ -221,8 +224,8 @@ export function buildBond(
 			...(signal === null
 				? { signalTier: bondedSignalTier(modem, connectionState) }
 				: {}),
-			// One name per link (link-names.ts): "SIM 1 · Northwind", not model and serial.
-			label: linkName(id, { modems, wifi }),
+			label: names.label(id),
+			identity: names.correlation(id),
 			isConnected: connectionState === "connected",
 			isStale: modemsStale || fullyStale || staleIds.has(id),
 			throughputKbps: throughputFor(id),
@@ -251,7 +254,7 @@ export function buildBond(
 			type: "ethernet",
 			linkIndex: 0,
 			signal: null,
-			label: linkName(ifname, { modems, wifi }),
+			label: names.label(ifname),
 			isConnected: true,
 			isStale: fullyStale || staleIds.has(ifname),
 			throughputKbps: throughputFor(ifname),

@@ -181,6 +181,7 @@ describe("EthernetSection — isolated-dongle row", () => {
 	// Lucide 1.42.0's shared icon builder (#4409) reorders only the SVG classes.
 	// Changelog: https://github.com/lucide-icons/lucide/releases/tag/1.42.0
 	// The 1.46.0 golden retains the complete element/attribute/text comparison.
+	// Bonded-link naming changes only the port text and adds its raw-ifname title.
 	it("renders a plain wired row identically to before the dongle change", () => {
 		const { container } = renderRows([["eth0", PLAIN_ROW]]);
 		expect(shapeOf(container)).toBe(plainRowGolden.trimEnd());

@@ -10,6 +10,30 @@ const twinEntry: NetifEntry = {
 	error: "duplicate IPv4 addr",
 };
 
+it.each([
+	["eth0", "Ethernet 1"],
+	["usb0", "USB tether (usb0)"],
+	["tun0", "tun0"],
+])(
+	"labels bonded %s without admitting the backend-excluded hotspot leg",
+	(ifname, label) => {
+		const netif: NetifMessage = {
+			[ifname]: { ip: "192.0.2.1", enabled: true, tp: 0 },
+			"clap-wlan0": {
+				ip: "192.0.2.2",
+				enabled: false,
+				tp: 0,
+				error: "WiFi hotspot",
+			},
+		};
+		const bond = buildBond(undefined, undefined, netif, false, false, false);
+		expect(bond.links.map(({ id, label }) => ({ id, label }))).toEqual([
+			{ id: ifname, label },
+		]);
+		expect(bond.unbondedCount).toBe(1);
+	},
+);
+
 describe("duplicate-IP bond eligibility from the device's wire projection", () => {
 	it("admits a duplicate-IP link when the backend proves it bondable, before telemetry exists", () => {
 		// Given the backend's enabled projection includes its mappability check.

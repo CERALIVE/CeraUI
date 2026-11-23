@@ -19,6 +19,17 @@ while mode selection and capability details remain available on request. A
 station or hybrid radio retains its connection and bond actions; an exclusive
 hotspot radio does not.
 
+Wi-Fi rows, the Wi-Fi selector, Ethernet rows and Bonded Links use the same
+inventory label projection as Live/HUD. For example, a MAC-named radio with
+no active SSID reads "Wi-Fi (2f27)"; the last four hex digits are a hint, not a
+unique identity or a port number. The kernel ifname is unchanged. Radios on
+the same SSID add a radio hint, falling back to their ifnames if the hints
+collide. Cellular inventory still leads with the hardware name; identical
+bonded modem labels get a distinct port hint or fall back to the ifname.
+Both views keep the visible ifname for correlation when a twin leaves.
+The backend's eligibility, including its hotspot exclusion, is independent
+of naming.
+
 `EthernetSection.svelte` treats a `shared-lan` port as a client-zone row rather
 than an uplink: one combined role/zone pill names what the port is and whether
 the zone is serving or starting, while the bond-exclusion reason moves into the

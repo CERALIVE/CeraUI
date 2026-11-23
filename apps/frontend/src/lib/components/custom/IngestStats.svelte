@@ -38,6 +38,7 @@ import {
 	rollupToJson,
 	type SessionRollup,
 	type SessionSample,
+	sessionLinkKey,
 } from '$lib/streaming/session-rollup';
 import { cn } from '$lib/utils';
 
@@ -53,7 +54,7 @@ interface Props {
 	 */
 	bitrateKbps?: number | undefined;
 	/**
-	 * The link's name for people ("SIM 1 · Northwind", "Wi-Fi · HomeNetwork"),
+	 * The link's name for people ("Northwind · RM520N", "Wi-Fi · HomeNetwork"),
 	 * from the shared helper in `$lib/helpers/link-names`. The interface id stays
 	 * as a small second label. Absent: the interface id alone, as before.
 	 */
@@ -91,7 +92,7 @@ const transferred = $derived(
 );
 
 // Shared 4-column track so header, rows, and totals stay aligned on any width.
-// The name takes the free width (it can be "SIM 2 · operator" or a network
+// The name takes the free width (it can be a carrier and model or a network
 // name now); the three readings take what they need.
 // Fixed reading tracks, the same in the header, every row and the totals, so a
 // long value never shifts one row's columns away from the others.
@@ -150,45 +151,41 @@ const anyDegraded = $derived(linkViews.some((v) => v.degraded));
 let sessionSamples: SessionSample[] = [];
 let wasStreaming = false;
 let rollup = $state<SessionRollup | null>(null);
-// Every name a link carried during the session, in the order they were seen,
-// recorded with each sample. A SIM that registers on another operator mid-session
-// reads "SIM 1 · A → B" in the summary instead of the name at viewing time.
-// Plain data, like the samples: nothing renders from it until the session ends.
+// Keep names as observed, not as a lookup against a later roster.
 let sessionNames = createSessionLinkNames();
 let summaryNames = $state<ReadonlyMap<string, readonly string[]>>(new Map());
 
 function recordNames(links: readonly LinkTelemetryEntry[] | undefined) {
 	for (const link of links ?? []) {
-		sessionNames.record(link.iface, nameOf(link.iface));
+		if (!link.stale) sessionNames.record(sessionLinkKey(link), nameOf(link.iface));
 	}
 }
 
 /** Whether a session row's link carried more than one name. */
-function renamedInSession(iface: string): boolean {
-	return (summaryNames.get(iface)?.length ?? 0) > 1;
+function renamedInSession(key: string): boolean {
+	return (summaryNames.get(key)?.length ?? 0) > 1;
 }
 
 /** A session row's name: every name it had, in order. */
-function sessionNameOf(iface: string): string {
-	return summaryNames.get(iface)?.join(' → ') ?? nameOf(iface);
+function sessionNameOf(key: string, iface: string): string {
+	return summaryNames.get(key)?.join(' → ') ?? iface;
 }
 
 $effect(() => {
 	const streaming = isStreaming === true;
-	// Touch the live feed + bitrate so the effect re-runs on each telemetry tick.
-	const frameLinks = telemetry?.links;
-	const br = bitrateKbps;
-	const cumulativeBytes = telemetry?.bytes_sent_total;
+	const frame = telemetry;
 
 	if (streaming && !wasStreaming) {
 		sessionSamples = [];
 		sessionNames = createSessionLinkNames();
 		rollup = null;
 	}
-	if (streaming) {
-		sessionSamples.push(createSample(br, frameLinks, Date.now(), cumulativeBytes));
-		// The names are read, not tracked: a new status frame must not add a sample.
-		untrack(() => recordNames(frameLinks));
+	if (streaming && frame) {
+		// A standalone inventory or bitrate update is not a telemetry sample.
+		untrack(() => {
+			sessionSamples.push(createSample(bitrateKbps, frame.links, Date.now(), frame.bytes_sent_total));
+			recordNames(frame.links);
+		});
 	}
 	if (!streaming && wasStreaming) {
 		rollup = sessionSamples.length > 0 ? computeSessionRollup(sessionSamples) : null;
@@ -405,14 +402,15 @@ function exportCsv(): void {
 				</div>
 				<!-- biome-ignore lint/a11y/noRedundantRoles: The session-rollup contribution list needs its explicit list role for Safari when Tailwind removes list markers. -->
 				<ul role="list">
-					{#each rollup.links as link, i (link.iface)}
+					{#each rollup.links as link, i (sessionLinkKey(link))}
+						{const key = sessionLinkKey(link)}
 						<li
 							data-testid="ingest-contribution-row"
 							data-iface={link.iface}
-							data-renamed={renamedInSession(link.iface)}
+							data-renamed={renamedInSession(key)}
 							class={cn(
 								'flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2 text-xs last:border-b-0',
-								!renamedInSession(link.iface) && 'sm:flex-nowrap',
+								!renamedInSession(key) && 'sm:flex-nowrap',
 							)}
 						>
 							<!-- Below 640 px the name has its own line, and so does a link that
@@ -421,7 +419,7 @@ function exportCsv(): void {
 							<div
 								class={cn(
 									'flex min-w-0 basis-full items-start gap-2',
-									!renamedInSession(link.iface) && 'sm:w-36 sm:shrink-0 sm:basis-auto',
+									!renamedInSession(key) && 'sm:w-36 sm:shrink-0 sm:basis-auto',
 								)}
 								data-session-link-name-cell
 							>
@@ -431,7 +429,7 @@ function exportCsv(): void {
 									class="mt-1 size-2 shrink-0 rounded-full"
 									style={`background-color: var(--link-${(i % 6) + 1})`}
 								></span>
-								<span class="min-w-0 font-medium break-words" data-session-link-name title={link.iface}>{sessionNameOf(link.iface)}</span>
+								<span class="min-w-0 font-medium break-words" data-session-link-name title={link.iface}>{sessionNameOf(key, link.iface)}</span>
 							</div>
 							<div
 								aria-hidden="true"

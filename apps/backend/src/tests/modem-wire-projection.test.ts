@@ -142,7 +142,7 @@ describe("modem wire projection — legacy byte-compat (mmcli path)", () => {
 	 * live builder changed, which is exactly the regression this test exists to
 	 * catch.
 	 */
-	test("a full entry is byte-identical to the live builder once stable_key is removed", () => {
+	test("a full entry adds the physical port hint without changing legacy fields", () => {
 		setup.has_gsm_autoconfig = true;
 		const modem = buildModemFixture();
 		setModem(7, modem);
@@ -155,7 +155,9 @@ describe("modem wire projection — legacy byte-compat (mmcli path)", () => {
 
 		const entry: WireModemEntry = { ...projected.message["7"] };
 		expect(entry.stable_key).toBe(USB_DEVICE_PATH);
+		expect(modemSchema.parse(entry).port_label).toBe("USB 0-1.4.1");
 		delete entry.stable_key;
+		delete entry.port_label;
 
 		// `toEqual` proves nothing was LOST; the stringify proves nothing was
 		// ADDED and no key MOVED — a `toEqual` alone passes on a reordered object.
@@ -655,6 +657,7 @@ describe("modem wire projection — D-Bus rows", () => {
 			"esim",
 			"cell_info",
 			"stable_key",
+			"port_label",
 		]);
 	});
 
@@ -677,7 +680,8 @@ describe("modem wire projection — D-Bus rows", () => {
 			Object.keys(entry).filter(
 				(key) =>
 					!(ADDITIVE_DETAIL_KEYS as readonly string[]).includes(key) &&
-					key !== "stable_key",
+					key !== "stable_key" &&
+					key !== "port_label",
 			);
 
 		expect(legacyKeys(dbus)).toEqual(legacyKeys(mmcli));

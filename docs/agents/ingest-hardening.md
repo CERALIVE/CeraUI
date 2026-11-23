@@ -59,3 +59,15 @@ NOT module-global. Verified: fill → unmount → remount starts at 1 sample, no
 Per-`conn_id` rings bound independently: two `conn_id`s fed 99 frames each both cap
 at exactly 60.
 
+### Session link identity and names
+
+Session contribution, uptime, drops and sampled names use telemetry `link_id`.
+An observation without it uses the ifname as an explicitly weaker key and is
+never merged into an identified row. An ifname can therefore appear twice if
+it was reused, while a single identified link can survive an ifname change.
+Record labels only with fresh link telemetry, not on inventory-only updates.
+Display the observed sequence without looking up old ifnames in the current
+roster; if no fresh name was observed, show the last observed raw ifname.
+Renamed histories wrap on their own line. JSON and CSV retain raw interface
+names and the existing export format.
+
