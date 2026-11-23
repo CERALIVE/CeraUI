@@ -63,6 +63,7 @@ import {
 } from "../tests/helpers/update-device";
 
 const session = vi.hoisted(() => ({ authenticated: false }));
+const device = vi.hoisted(() => ({ engineUnavailable: false }));
 
 vi.mock("$lib/config", () => ({
 	navElements: { network: { label: "Network" } },
@@ -82,8 +83,12 @@ vi.mock("$lib/rpc/subscriptions.svelte", async (importOriginal) => {
 	const mock = await (
 		await import("../tests/fixtures/real-store-live")
 	).deviceGettersMock(real);
-	mock.getLinkTelemetry = real.getLinkTelemetry;
-	return mock;
+	return {
+		...mock,
+		getLinkTelemetry: real.getLinkTelemetry,
+		getCapabilities: () =>
+			device.engineUnavailable ? { engineUnavailable: true } : undefined,
+	};
 });
 vi.mock("$lib/stores/auth-status.svelte", async (importOriginal) => ({
 	...(await importOriginal<typeof import("$lib/stores/auth-status.svelte")>()),
@@ -159,6 +164,7 @@ import {
 	resetState,
 } from "../lib/rpc/subscriptions.svelte";
 import { clearNotifications } from "../lib/stores/notifications.svelte";
+import { sendCompositionWrite } from "../lib/streaming/compositionWrites.svelte";
 import {
 	clearStartRecoveryUnknown,
 	latestStopOwner,
@@ -219,6 +225,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+	device.engineUnavailable = false;
 	vi.useFakeTimers();
 	// The reconnect backoff's jitter is the only randomness on this path.
 	jitter = vi.spyOn(Math, "random").mockReturnValue(0.5);
@@ -791,6 +798,42 @@ describe("start refusal presentation across the socket", () => {
 			expect(sentCount("streaming.start")).toBe(1);
 		},
 	);
+
+	it("does not send a queued retry if the engine gate closes before its turn", async () => {
+		const { container } = render(LiveView);
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		refuseStart("queued-lost-link");
+		await settle();
+		const write = sendCompositionWrite(
+			{ composition_patch: { alpha: 0.5 } },
+			() => false,
+		);
+		await settle();
+		expect(latestRefusalAction()?.activate()).toBe(true);
+		expect(sentCount("streaming.start")).toBe(1);
+		device.engineUnavailable = true;
+		await settle();
+		answer("streaming.setConfig", { success: true });
+		await write;
+		await settle();
+		expect(sentCount("streaming.start")).toBe(1);
+	});
+
+	it("keeps the original refusal and does not dismiss anything on a closing socket", async () => {
+		const { container } = render(LiveView);
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		refuseStart("closing-before-send");
+		await settle();
+		vi.mocked(toast.dismiss).mockClear();
+		socket().readyState = FakeWebSocket.CLOSING;
+		latestRefusalAction()?.activate();
+		await settle();
+		expect(sentCount("streaming.start")).toBe(1);
+		expect(toast.dismiss).not.toHaveBeenCalled();
+		expect(toast.error).toHaveBeenCalledTimes(1);
+	});
 });
 
 describe("F11 real-socket Start timeout probe", () => {
