@@ -1782,6 +1782,7 @@ function finishBondMutation(
 export function handleNetif(
 	conn: WebSocket,
 	msg: NetworkInterfaceMessage["netif"],
+	realDevice: boolean,
 ): NetifApplyOutcome {
 	const int = netif[msg.name];
 	if (!int) {
@@ -1831,20 +1832,25 @@ export function handleNetif(
 					reason: "enable_refused",
 				});
 			}
-		} else {
-			if (int.enabled && countActiveNetif() === 1) {
-				notificationSend(
-					conn,
-					"netif_disable_all",
-					"error",
-					"Can't disable all networks",
-					10,
-				);
-				return finishBondMutation(msg, {
-					ok: false,
-					reason: "disable_all_refused",
-				});
-			}
+		} else if (
+			(int.enabled && countActiveNetif() === 1) ||
+			(realDevice &&
+				isBondCandidate(msg.name, int) &&
+				!Object.entries(netif).some(
+					([name, entry]) => name !== msg.name && isBondCandidate(name, entry),
+				))
+		) {
+			notificationSend(
+				conn,
+				"netif_disable_all",
+				"error",
+				"Can't disable all networks",
+				10,
+			);
+			return finishBondMutation(msg, {
+				ok: false,
+				reason: "disable_all_refused",
+			});
 		}
 
 		int.enabled = msg.enabled;

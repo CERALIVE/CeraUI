@@ -13,14 +13,19 @@ Every one of those was a bare `return` reported as `{success:true}`. The
 toggle riding alongside the address it was checking — so the operator was told
 "Saved" over a link whose bond state had not moved.
 
-- **The mock branch still answers `success:true`, deliberately.** Under mocks the
-  mutation genuinely applied, to the overlay `setMockNetifConfig` wrote before
-  `handleNetif` ran; `handleNetif` then works the RAW map, where its IP guard
-  legitimately refuses because the mock-overlaid IP differs. Reporting THAT as a
-  failure would report a dev/e2e toggle that visibly worked as broken. Do not
-  "unify" the two branches.
-- **The five reasons are not collapsible.** `enable_refused` already carries an
+- **Mock writes retain immediate overlay readback.** The RPC writes and
+  broadcasts the overlay first, then uses the observed interface address for
+  the best-effort raw mutation. A mock reply can report a link off even when the
+  raw guard refused the disable and the sender still uses it.
+- **The refusal reasons are not collapsible.** `enable_refused` already carries an
   operator notification naming the blocking error; `disable_all_refused` is the
   device protecting its last link; `unknown_interface` clears when the link comes
   back; `stale_address` means re-read and retry.
+- **On real devices, a normal disable also protects the sole effective WAN
+  bond candidate.** A raw-enabled peer does not keep the bond up if the
+  sender's `isBondCandidate` rule excludes it (for example, because it is
+  opted out or serves shared LAN). The raw guard still applies first and is
+  the only guard in emulated mode, development, mock mode, and the native
+  hwsim guest.
+  The separate duplicate-IP toggle path is unchanged.
 

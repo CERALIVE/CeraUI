@@ -16,6 +16,7 @@ import {
 import { os } from "@orpc/server";
 
 import {
+	isDevelopment,
 	setMockNetifConfig,
 	shouldUseMocks,
 } from "../../mocks/mock-service.ts";
@@ -60,7 +61,14 @@ export const getNetworkInterfacesProcedure = authedProcedure
 export const configureNetworkInterfaceProcedure = authedProcedure
 	.input(netifConfigInputSchema)
 	.output(netifConfigOutputSchema)
-	.handler(({ input, context }) => {
+	.handler(async ({ input, context }) => {
+		// Resolve the device before reading the live map so the check and write
+		// stay synchronous. Dev/mock and hwsim retain the raw-only guard.
+		const realDevice =
+			input.enabled === false &&
+			!isDevelopment() &&
+			process.env.HWSIM_REPO !== "/repo" &&
+			(await isRealDevice());
 		// Order is load-bearing: persist the mock overlay BEFORE handleNetif,
 		// whose synchronous netif broadcasts overlay `enabled`/`ip` from it via
 		// netIfBuildMsg. Writing first makes those broadcasts carry the new
@@ -79,11 +87,11 @@ export const configureNetworkInterfaceProcedure = authedProcedure
 		const observedIp = shouldUseMocks()
 			? getNetworkInterfaces()[input.name]?.ip
 			: input.ip;
-		const outcome = handleNetif(context.ws as unknown as import("ws").default, {
-			name: input.name,
-			ip: observedIp ?? "",
-			enabled: input.enabled,
-		});
+		const outcome = handleNetif(
+			context.ws as unknown as import("ws").default,
+			{ name: input.name, ip: observedIp ?? "", enabled: input.enabled },
+			realDevice,
+		);
 
 		// Under mocks the overlay is authoritative; the raw-map mutation remains a
 		// best effort so dev/e2e reflects the same immediate applied readback.
