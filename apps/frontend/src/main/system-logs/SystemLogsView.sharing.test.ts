@@ -237,6 +237,33 @@ describe("SystemLogsView: the logs toolbar", () => {
 		expect(anchorClicks).not.toHaveBeenCalled();
 	});
 
+	it("keeps focus on an enabled dialog action through a delayed export refusal", async () => {
+		viewport(false);
+		const reply = Promise.withResolvers<LogExportOutput>();
+		logs.createExport.mockReturnValue(reply.promise);
+		render(SystemLogsView);
+		const trigger = await screen.findByTestId("sharing-toolbar-export");
+		trigger.focus();
+		await fireEvent.click(trigger);
+		const dialog = await screen.findByRole("dialog", { name: sharing.export });
+		const download = within(dialog).getByRole("button", {
+			name: sharing.exportDownload,
+		});
+		const cancel = within(dialog).getByRole("button", {
+			name: en.dialogs.cancel,
+		});
+		download.focus();
+		await fireEvent.click(download);
+		expect(document.activeElement).toBe(cancel);
+
+		reply.reject(
+			new RpcError({ code: "INTERNAL_ERROR", message: "CREDENTIALS_LOADING" }),
+		);
+		await within(dialog).findByRole("alert");
+		expect(document.activeElement).toBe(cancel);
+		expect(anchorClicks).not.toHaveBeenCalled();
+	});
+
 	// Lime fills one sharing action in the whole view (DESIGN.md IH-5).
 	it("fills only Export logs among the toolbar and Downloads sharing actions", async () => {
 		viewport(true);

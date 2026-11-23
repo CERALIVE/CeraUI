@@ -38,6 +38,7 @@ async function routeLogs(
 	pageRpc: PageRpc,
 	refuse: readonly string[] = [],
 	boots: readonly unknown[] = [],
+	delayExport?: (refuseExport: () => void) => void,
 ): Promise<unknown[]> {
 	const exports: unknown[] = [];
 	const bootReads = new Set<unknown>();
@@ -48,6 +49,12 @@ async function routeLogs(
 			const frame = frameOf(message);
 			const path = Array.isArray(frame?.path) ? frame.path.join('.') : '';
 			if (path === 'logs.createExport') exports.push(frame?.input);
+			if (path === 'logs.createExport' && delayExport) {
+				delayExport(() => socket.send(JSON.stringify({
+					id: frame?.id, error: { message: 'CREDENTIALS_LOADING', code: 'INTERNAL_ERROR' },
+				})));
+				return;
+			}
 			if (path === 'logs.boots') bootReads.add(frame?.id);
 			if (refuse.includes(path)) {
 				socket.send(JSON.stringify({ id: frame?.id, error: { message: 'READ_FAILED', code: 'INTERNAL_ERROR' } }));
@@ -225,6 +232,41 @@ test.describe('System Logs toolbar', { tag: '@desktop-only' }, () => {
 		await expect(page.getByRole('group', { name: 'Downloads' })).toHaveCount(0);
 		await expect(bandBundle).toBeFocused();
 	});
+
+	for (const size of [PHONE, DESKTOP]) {
+		test(`keeps the keyboard in a refused export and restores the opener at ${size.width}px`, async ({ page, pageRpc }) => {
+			const pending = Promise.withResolvers<() => void>();
+			const exports = await routeLogs(page, pageRpc, [], [], pending.resolve);
+			const logs = new SystemLogsPage(page);
+			await logs.open({ locale: 'en', size, touch: false, scheme: 'light' });
+
+			const trigger = page.getByRole('button', { name: 'Export logs', exact: true });
+			await trigger.focus();
+			await page.keyboard.press('Enter');
+			const confirm = page.getByRole('dialog', { name: 'Export this view' });
+			const download = confirm.getByRole('button', { name: 'Download export' });
+			const cancel = confirm.getByRole('button', { name: 'Cancel' });
+			const close = confirm.getByTestId('app-dialog-close');
+			await download.focus();
+			await page.keyboard.press('Enter');
+			const refuse = await pending.promise;
+			await expect(download).toBeDisabled();
+			await expect(cancel).toBeFocused();
+			refuse();
+			await expect(confirm.getByRole('alert')).toBeVisible();
+			await expect(cancel).toBeFocused();
+			await page.keyboard.press('Tab');
+			await expect(download).toBeFocused();
+			await page.keyboard.press('Tab');
+			await expect(close).toBeFocused();
+			await page.keyboard.press('Shift+Tab');
+			await expect(download).toBeFocused();
+			await page.keyboard.press('Escape');
+			await expect(confirm).toHaveCount(0);
+			await expect(trigger).toBeFocused();
+			expect(exports).toHaveLength(1);
+		});
+	}
 
 	test('a phone returns focus to the control that had it when a pointer opened the failure band dialogs without focusing (Safari default)', async ({ page, pageRpc }) => {
 		await routeLogs(page, pageRpc, ['logs.getStorage', 'logs.previewBundle']);

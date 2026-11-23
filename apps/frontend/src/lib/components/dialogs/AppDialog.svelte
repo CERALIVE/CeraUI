@@ -132,8 +132,15 @@ let {
 // so a Dialog/Sheet swap keeps it.
 let opener: Element | null = null;
 let shown = false;
+let primaryButton = $state<HTMLButtonElement | null>(null);
+let cancelButton = $state<HTMLButtonElement | null>(null);
 $effect.pre(() => {
 	if (!open) shown = false;
+});
+$effect.pre(() => {
+	// Disabling a focused button moves browser focus to the page, outside the trap.
+	if (open && primaryLoading && document.activeElement === primaryButton)
+		cancelButton?.focus({ preventScroll: true });
 });
 function openAutoFocus(): void {
 	if (shown) return;
@@ -240,10 +247,11 @@ const fullscreenSurfaceClass = 'inset-0 max-h-none max-w-none rounded-none ring-
 			{#if actions}
 				{@render actions()}
 			{:else if onPrimary}
-				<Button class="sm:min-w-24" onclick={handleCancel} variant="outline">
+				<Button bind:ref={cancelButton} class="sm:min-w-24" onclick={handleCancel} variant="outline">
 					{secondaryLabel ?? m["dialogs.cancel"]()}
 				</Button>
 				<Button
+					bind:ref={primaryButton}
 					class="sm:min-w-24"
 					disabled={primaryDisabled || primaryLoading}
 					onclick={handlePrimary}
