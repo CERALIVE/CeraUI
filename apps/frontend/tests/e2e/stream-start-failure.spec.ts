@@ -13,7 +13,7 @@
  * recognised pipeline injected so the Start control is enabled), so the forced
  * state remains page-local and cannot persist into this worker's later tests.
  */
-import type { Page, WebSocketRoute } from '@playwright/test';
+import type { Locator, Page, WebSocketRoute } from '@playwright/test';
 
 import { expect, test } from './fixtures/index.js';
 import { ensureAuthenticated, navigateTo } from './helpers/index.js';
@@ -271,3 +271,102 @@ for (const [locale, theme] of [['en', 'light'], ['ar', 'dark']] as const) {
 		await expect(logs).toBeVisible();
 	});
 }
+
+async function expectAboveChrome(page: Page, actions: readonly Locator[]) {
+	const bar = await page.getByTestId('live-bar').boundingBox();
+	const dock = await page.getByTestId('dock-nav').boundingBox();
+	if (!bar || !dock) throw new Error('missing fixed Live chrome');
+	for (const action of actions) {
+		await expect(action).toBeInViewport({ ratio: 1 });
+		const box = await action.boundingBox();
+		if (!box) throw new Error('missing action bounds');
+		expect(box.height).toBeGreaterThanOrEqual(44);
+		const layout = await action.evaluate((node) => {
+			const ancestors = [];
+			for (let n: Element | null = node; n && ancestors.length < 5; n = n.parentElement) {
+				const s = getComputedStyle(n);
+				const r = n.getBoundingClientRect();
+				ancestors.push([n.tagName, r.top, r.bottom, s.maxHeight, s.padding, s.alignItems, s.display, s.minHeight]);
+			}
+			return JSON.stringify(ancestors);
+		});
+		expect(box.y + box.height, layout).toBeLessThanOrEqual(Math.min(bar.y, dock.y));
+		expect(await action.evaluate((node) => {
+			const r = node.getBoundingClientRect();
+			return node.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+		})).toBe(true);
+	}
+}
+
+test.describe('short-phone refusal recovery', () => {
+	test.use({ hasTouch: true });
+	for (const [width, height] of [[390, 260], [360, 240]] as const) {
+		for (const locale of ['en', 'ar'] as const) {
+			test(`both ${locale} actions are tappable at ${width}×${height}`, async ({ page }) => {
+				await page.setViewportSize({ width, height });
+				await page.emulateMedia({ reducedMotion: 'reduce' });
+				await page.addInitScript((code) => localStorage.setItem('locale', JSON.stringify({ code })), locale);
+				const attemptId = `small-${locale}-${width}`;
+				const ws = await startWithReply(page, {
+					result: 'failed', success: false, attemptId,
+					failure: { attemptId, phase: 'connect', class: 'engine_unavailable', retriable: true },
+				});
+				const retry = page.getByRole('button', { name: locale === 'ar' ? 'حاول مرة أخرى' : 'Try again', exact: true });
+				const logs = page.getByRole('button', { name: locale === 'ar' ? 'عرض السجلات' : 'View logs', exact: true });
+				await expectAboveChrome(page, [retry, logs]);
+				ws.push({ netif: { eth0: { enabled: false } } });
+				await expect(page.getByTestId('live-bar').getByRole('button')).toBeDisabled();
+				await retry.tap();
+				await expectAboveChrome(page, [retry, logs]);
+				await logs.tap();
+				await expect(page.getByRole('dialog')).toBeVisible();
+			});
+		}
+	}
+});
+
+test('German Network refusal keeps its explanation reachable at 390×390', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 390 });
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await page.addInitScript(() => localStorage.setItem('locale', JSON.stringify({ code: 'de' })));
+	const attemptId = 'german-network-refusal';
+	await startWithReply(page, {
+		result: 'failed', success: false, attemptId,
+		failure: { attemptId, phase: 'params', class: 'mutation_blocked', retriable: false },
+	});
+	const network = page.getByRole('button', { name: 'Netzwerk öffnen', exact: true });
+	const toast = page.locator('[data-sonner-toast]').filter({ has: network });
+	await expect(toast).toBeInViewport({ ratio: 1 });
+	await expectAboveChrome(page, [network, toast.getByRole('button', { name: 'Protokolle anzeigen', exact: true })]);
+	const reason = toast.getByRole('region', { name: 'Benachrichtigungen' });
+	await expect(reason).toContainText('Eine Modem-Änderung konnte nicht rückgängig gemacht werden');
+	if (await reason.evaluate((element) => element.scrollHeight > element.clientHeight)) {
+		await reason.focus();
+		await expect(reason).toBeFocused();
+		await reason.press('End');
+	}
+	await expect.poll(() => reason.evaluate((element) =>
+		element.scrollHeight - element.clientHeight - element.scrollTop,
+	)).toBeCloseTo(0, 0);
+});
+
+test('delayed keyboard entry still reaches recovery and can dismiss it', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.clock.install();
+	const attemptId = 'late-keyboard-entry';
+	await startWithReply(page, {
+		result: 'failed', success: false, attemptId,
+		failure: { attemptId, phase: 'connect', class: 'engine_unavailable', retriable: true },
+	});
+	const retry = page.getByRole('button', { name: 'Try again', exact: true });
+	await expect(retry).toBeVisible();
+	await page.clock.fastForward(14_000);
+	await retry.focus();
+	await page.keyboard.press('Tab');
+	await expect(page.getByRole('button', { name: 'View logs', exact: true })).toBeFocused();
+	await page.keyboard.press('Tab');
+	const close = page.locator('[data-sonner-toast]').getByRole('button', { name: 'Close', exact: true });
+	await expect(close).toBeFocused();
+	await close.press('Enter');
+	await expect(retry).toBeHidden();
+});

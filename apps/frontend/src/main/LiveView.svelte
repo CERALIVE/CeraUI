@@ -342,8 +342,10 @@ function startFailedMessage(code: string): string {
 // offers Restart box instead of another Try again.
 let viewMounted = true;
 let retryQueued = false;
+let refusalToastId: ReturnType<typeof toast.error> | undefined;
 $effect(() => () => {
 	viewMounted = false;
+	if (refusalToastId !== undefined) toast.dismiss(refusalToastId);
 });
 
 // Try again repeats the Start only where the idle Live bar itself offers Start
@@ -369,6 +371,7 @@ function runNextStep(step: StartFailureNextStep, attempt: string) {
 function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 	const attempt = failure.attemptId;
 	if (!claimStartFailurePresentation(attempt)) return;
+	if (refusalToastId !== undefined) toast.dismiss(refusalToastId);
 	const engine = isEngineStartFailure(failure);
 	const repeated = consumeStartRetry(getStreamingAttemptGeneration()) && engine;
 	const admitted = idleStartAdmitted && idleGate.canStart;
@@ -389,10 +392,12 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 	const activity = getStreamActivity();
 	const generation = getStreamingAttemptGeneration();
 	const id = toast.error<typeof StartRefusalActions>(message, {
-		class: 'motion-reduce:transition-none! [&>[data-content]]:min-w-0 [word-break:auto-phrase] [&:lang(ko)]:break-keep [&:lang(zh)]:break-keep',
-		duration: 12_000,
+		class: 'start-refusal-toast motion-reduce:transition-none! [word-break:auto-phrase] [&:lang(ko)]:break-keep [&:lang(zh)]:break-keep',
+		duration: Number.POSITIVE_INFINITY,
 		description: StartRefusalActions,
 		componentProps: {
+			message,
+			close: () => toast.dismiss(id),
 			primary: {
 				label: m[NEXT_STEP_ACTION[step]](),
 				activate: (onBlocked?: () => void) => {
@@ -423,6 +428,7 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 			},
 		},
 	});
+	refusalToastId = id;
 }
 
 $effect(() => {

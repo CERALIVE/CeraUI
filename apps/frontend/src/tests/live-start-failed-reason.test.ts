@@ -165,11 +165,12 @@ const VIEW_LOGS = {
 function nextStep(label: string) {
 	return expect.objectContaining({
 		description: StartRefusalActions,
-		componentProps: {
+		componentProps: expect.objectContaining({
 			primary: { label, activate: expect.any(Function) },
 			logs: expect.any(Function),
-		},
-		duration: 12_000,
+			close: expect.any(Function),
+		}),
+		duration: Number.POSITIVE_INFINITY,
 	});
 }
 
