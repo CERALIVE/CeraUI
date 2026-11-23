@@ -239,8 +239,9 @@ A Live Start refusal and its device notice share one presentation per attempt.
 If the RPC cannot present the failure, the device notice remains available.
 Other clients and the device's logs and event history are unchanged.
 
-Try again uses the Live bar's readiness projection (including an implicit sole
-camera), plus a settled idle lifecycle and the current refusal's identity. It
+LiveView computes the readiness projection (including an implicit sole camera)
+for the Live bar. Try again re-reads the same gates at the tap and at dispatch,
+and checks for a settled idle lifecycle and the current refusal's identity. It
 is not offered for post-connect timeout, unresolved Stop, or a known engine
 state conflict. If conditions change after the toast appears, a blocked tap
 keeps both the toast and View logs. Network opens the modem controls; Stream

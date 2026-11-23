@@ -8,15 +8,7 @@
  * same inputs at the moment it fires, or it could start a stream the bar
  * would refuse. This is that decision, with the same building blocks.
  */
-import type {
-	CapabilitiesMessage,
-	ConfigMessage,
-	NetifMessage,
-	NetworkIngest,
-	Pipelines,
-	RelayMessage,
-	SourcesMessage,
-} from "@ceraui/rpc/schemas";
+import type { NetworkIngest, Pipelines } from "@ceraui/rpc/schemas";
 
 import {
 	deriveEffectiveSource,
@@ -25,60 +17,37 @@ import {
 import {
 	deriveGoLiveReadiness,
 	type GoLiveReadiness,
+	type GoLiveReadinessInput,
 } from "./go-live-readiness";
 import { pipelineAvailability } from "./pipelineAvailability";
-import type { ManagedIngestAccount } from "./receiver-experience";
 
-export interface IdleStartGateInput {
-	readonly config: ConfigMessage | undefined;
-	readonly caps: CapabilitiesMessage | undefined;
-	readonly sources: SourcesMessage | undefined;
-	readonly netif: NetifMessage | undefined;
-	readonly isConnected: boolean;
+interface IdleStartGateInput
+	extends Omit<GoLiveReadinessInput, "gatewayStatus"> {
 	readonly networkIngest: NetworkIngest | null | undefined;
 	readonly pipelines: Pipelines | undefined;
-	readonly relays?: RelayMessage | undefined;
-	readonly managedSlots?: readonly ManagedIngestAccount[] | undefined;
 }
 
 export interface IdleStartGate {
-	/** Whether the Live bar would let Start through right now. */
-	readonly canStart: boolean;
-	/** The implicit sole camera to fold into the Start payload, as the bar does. */
-	readonly source: string | undefined;
 	readonly effective: EffectiveSource;
 	readonly readiness: GoLiveReadiness;
 }
 
 export function idleStartGate(input: IdleStartGateInput): IdleStartGate {
-	const effective = deriveEffectiveSource(input.config, input.sources);
+	const { config, sources, pipelines, networkIngest } = input;
+	const effective = deriveEffectiveSource(config, sources);
+	const source = effective.soleCamera?.id;
 	const entry = effective.effectiveSourceId
-		? input.sources?.sources.find(
-				(source) => source.id === effective.effectiveSourceId,
+		? sources?.sources.find(
+				(candidate) => candidate.id === effective.effectiveSourceId,
 			)
 		: undefined;
-	const gatewayStatus = pipelineAvailability(
-		entry ? input.pipelines?.[entry.pipelineId] : undefined,
-		input.networkIngest,
-	);
-	const config =
-		effective.soleCamera && input.config
-			? { ...input.config, source: effective.soleCamera.id }
-			: input.config;
 	const readiness = deriveGoLiveReadiness({
-		config,
-		caps: input.caps,
-		sources: input.sources,
-		netif: input.netif,
-		isConnected: input.isConnected,
-		gatewayStatus,
-		relays: input.relays,
-		managedSlots: input.managedSlots,
+		...input,
+		config: source !== undefined && config ? { ...config, source } : config,
+		gatewayStatus: pipelineAvailability(
+			entry && pipelines?.[entry.pipelineId],
+			networkIngest,
+		),
 	});
-	return {
-		canStart: !readiness.blocking,
-		source: effective.soleCamera?.id,
-		effective,
-		readiness,
-	};
+	return { effective, readiness };
 }

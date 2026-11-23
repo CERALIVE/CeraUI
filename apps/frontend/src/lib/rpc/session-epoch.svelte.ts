@@ -61,6 +61,7 @@ export function noteLinkState(state: string): void {
 	const up = state === "connected";
 	if (linkUp && !up) {
 		links += 1;
+		noteStreamActivity();
 		// The stream can be replaced while this page is disconnected.
 		noteStreamSessionBoundary();
 	}
@@ -90,7 +91,7 @@ let newestStreamFrame = 0;
 let newestIntent = 0;
 let streamActivity = 0;
 
-/** Accepted device transitions invalidate actions from an earlier idle session. */
+/** Accepted device transitions and link drops invalidate actions from an earlier idle session. */
 export function noteStreamActivity(): void {
 	streamActivity += 1;
 }

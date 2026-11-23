@@ -6,7 +6,7 @@ import type {
 	StreamingConfigInput,
 } from "@ceraui/rpc/schemas";
 
-import { rpc, sendGuardedStreamStart } from "$lib/rpc/client";
+import { rpc } from "$lib/rpc/client";
 import { NotSentError } from "$lib/rpc/rpc-error";
 import { createPassword } from "$lib/stores/auth-status.svelte";
 import { sendSessionTransition } from "$lib/streaming/compositionWrites.svelte";
@@ -172,9 +172,9 @@ export const startStreaming = async (
 		return await sendSessionTransition("live", () => {
 			// Preserve the RPC rejection order: reconnect hydration must not
 			// overtake the caller's lost-reply evidence mark.
-			if (!retry) return rpc.streaming.start(input);
-			if (!retry.beforeSend()) return Promise.reject(new NotSentError());
-			return sendGuardedStreamStart(input, retry.onSent);
+			if (retry && !retry.beforeSend())
+				return Promise.reject(new NotSentError());
+			return rpc.streaming.start(input, retry?.onSent);
 		});
 	} catch (error) {
 		console.error("Failed to start streaming:", error);

@@ -35,9 +35,7 @@ import type {
 	CapabilitiesMessage,
 	ConfigMessage,
 	NetifMessage,
-	NetworkIngest,
 	Pipelines,
-	RelayMessage,
 	SourcesMessage,StartFailureCaptureCause 
 } from '@ceraui/rpc/schemas';
 import { Shuffle, TriangleAlert, Volume2 } from '@lucide/svelte';
@@ -45,7 +43,7 @@ import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import SourceSection from '$lib/components/custom/SourceSection.svelte';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
 import { compositionGeometrySupported, compositionSupported } from '$lib/streaming/compositionSupport';
-import type { ManagedIngestAccount } from '$lib/streaming/receiver-experience';
+import type { IdleStartGate } from '$lib/streaming/idle-start-gate';
 import type { ResolvedAudioStatus } from '$lib/streaming/sourceSummary';
 
 import CompositionCard from './CompositionCard.svelte';
@@ -54,16 +52,11 @@ import type { ConfigRow } from './StreamSettingsCard.svelte';
 import StreamSetupChain from './StreamSetupChain.svelte';
 
 interface Props {
-	// ── StreamSetupChain: readiness inputs (threaded from LiveView getters) ─────
 	config: ConfigMessage | undefined;
-	caps: CapabilitiesMessage | undefined;
 	sources: SourcesMessage | undefined;
 	netif: NetifMessage | undefined;
-	isConnected: boolean;
-	networkIngest: NetworkIngest | null | undefined;
 	pipelines: Pipelines | undefined;
-	relays: RelayMessage | undefined;
-	managedSlots: readonly ManagedIngestAccount[] | undefined;
+	gate: IdleStartGate;
 	configRows: ConfigRow[];
 	isStreaming: boolean;
 	optimismState: StreamingOptimismState;
@@ -98,14 +91,10 @@ interface Props {
 
 const {
 	config,
-	caps,
 	sources,
 	netif,
-	isConnected,
-	networkIngest,
 	pipelines,
-	relays,
-	managedSlots,
+	gate,
 	configRows,
 	isStreaming,
 	optimismState,
@@ -221,15 +210,8 @@ const audioEmbeddedComingSoon = $derived(
 	     (StreamControlButton is mounted ONCE here, never a second time — T10). -->
 	<div class="min-w-0 lg:col-span-3 lg:col-start-1 lg:row-start-2">
 		<StreamSetupChain
-			{config}
-			{caps}
-			{sources}
 			{netif}
-			{isConnected}
-			{networkIngest}
-			{pipelines}
-			{relays}
-			{managedSlots}
+			{gate}
 			{configRows}
 			{isStreaming}
 			{optimismState}

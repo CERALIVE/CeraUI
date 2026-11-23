@@ -9,7 +9,7 @@
  * suffix tells the operator to start again then (C-m2). Nothing here retries
  * automatically; `retriable` stays the backend's verdict.
  */
-import { type MessageKey, m } from "@ceraui/i18n/svelte";
+import { m } from "@ceraui/i18n/svelte";
 import type { StartFailure } from "@ceraui/rpc/schemas";
 
 type StartFailureCopyInput = Pick<
@@ -18,16 +18,6 @@ type StartFailureCopyInput = Pick<
 >;
 
 /** The retry-state suffix's key; two of the three send the operator to System Logs. */
-export function startFailureRetryKey(
-	failure: StartFailureCopyInput,
-): MessageKey {
-	if (failure.class === "update_in_progress")
-		return "live.startFailure.waitForUpdate";
-	return failure.retriable
-		? "live.startFailure.retriedThenFailed"
-		: "live.startFailure.notRetriable";
-}
-
 /**
  * What the operator can do next, as one button on the toast. A refusal that
  * used to end in "Open Settings → System Logs" now ends in an action:
@@ -39,37 +29,28 @@ export function startFailureRetryKey(
  *
  * Every other class keeps its existing copy and View logs.
  */
-export type StartFailureNextStep =
+type StartFailureNextStep =
 	| "tryAgain"
 	| "restartBox"
 	| "openSetup"
 	| "openNetwork";
 
-/** Whether a failure belongs to the engine group that escalates to Restart box. */
-export function isEngineStartFailure(failure: StartFailureCopyInput): boolean {
-	return (
-		failure.class === "engine_internal" ||
-		failure.class === "engine_unavailable" ||
-		failure.class === "start_timeout"
-	);
-}
-
-export function startFailureNextStep(
+function startFailureNextStep(
 	failure: StartFailureCopyInput,
-	repeated = false,
-	admitted = true,
-): StartFailureNextStep | undefined {
+	repeated: boolean,
+	admitted: boolean,
+): StartFailureNextStep | "blockedEngine" | undefined {
 	switch (failure.class) {
 		case "engine_unavailable":
 		case "start_timeout":
-			if (!admitted) return undefined;
+			if (!admitted) return "blockedEngine";
 			if (repeated) return "restartBox";
 			return failure.phase === "connect" ||
 				(failure.class === "engine_unavailable" && failure.phase === "hello")
 				? "tryAgain"
-				: undefined;
+				: "blockedEngine";
 		case "engine_internal":
-			if (!admitted || failure.code === -32002) return undefined;
+			if (!admitted || failure.code === -32002) return "blockedEngine";
 			return repeated ? "restartBox" : "tryAgain";
 		case "start_invalid":
 			return "openSetup";
@@ -85,19 +66,6 @@ export function startFailureNextStep(
 			return undefined;
 	}
 }
-
-const NEXT_STEP_SUFFIX: Partial<Record<StartFailureNextStep, MessageKey>> = {
-	tryAgain: "live.startFailure.next.tryAgain",
-	restartBox: "live.startFailure.next.restartBox",
-	openSetup: "live.startFailure.next.openSetup",
-};
-
-export const NEXT_STEP_ACTION: Record<StartFailureNextStep, MessageKey> = {
-	tryAgain: "live.startFailure.action.tryAgain",
-	restartBox: "live.startFailure.action.restartBox",
-	openSetup: "live.startFailure.action.openSetup",
-	openNetwork: "live.startFailure.action.openNetwork",
-};
 
 function classReason(failure: StartFailureCopyInput): string {
 	if (
@@ -119,17 +87,28 @@ function classReason(failure: StartFailureCopyInput): string {
 
 export function startFailureMessage(
 	failure: StartFailureCopyInput,
-	repeated = false,
-	admitted = true,
+	repeated: boolean,
+	admitted: boolean,
 	blockedReason?: string,
-): string {
+) {
 	const reason = classReason(failure);
-	const step = startFailureNextStep(failure, repeated, admitted);
-	if (step !== undefined) {
-		const suffix = NEXT_STEP_SUFFIX[step];
-		return suffix === undefined ? reason : `${reason} ${m[suffix]()}`;
+	const next = startFailureNextStep(failure, repeated, admitted);
+	if (next && next !== "blockedEngine") {
+		return {
+			step: next,
+			message:
+				next === "openNetwork"
+					? reason
+					: `${reason} ${m[`live.startFailure.next.${next}`]()}`,
+		};
 	}
-	if (isEngineStartFailure(failure) && blockedReason)
-		return `${reason} ${blockedReason}`;
-	return `${reason} ${m[startFailureRetryKey(failure)]()}`;
+	const logKey = `live.startFailure.${
+		failure.class === "update_in_progress"
+			? "waitForUpdate"
+			: failure.retriable
+				? "retriedThenFailed"
+				: "notRetriable"
+	}` as const;
+	const suffix = (next === "blockedEngine" && blockedReason) || m[logKey]();
+	return { step: undefined, message: `${reason} ${suffix}`, logKey };
 }

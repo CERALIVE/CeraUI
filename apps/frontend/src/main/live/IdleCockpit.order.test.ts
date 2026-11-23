@@ -42,6 +42,7 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getConfig: () => undefined,
 }));
 
+import { idleStartGate } from "$lib/streaming/idle-start-gate";
 import IdleCockpit from "./IdleCockpit.svelte";
 
 const FOLLOWING = Node.DOCUMENT_POSITION_FOLLOWING;
@@ -73,7 +74,7 @@ const SOURCES = {
 
 function props(): ComponentProps<typeof IdleCockpit> {
 	const noop = () => {};
-	return {
+	const inputs = {
 		config: {
 			source: "cam",
 			relay_server: "fra",
@@ -87,8 +88,13 @@ function props(): ComponentProps<typeof IdleCockpit> {
 		isConnected: true,
 		networkIngest: null,
 		pipelines: undefined,
-		relays: undefined,
-		managedSlots: undefined,
+	};
+	return {
+		config: inputs.config,
+		netif: inputs.netif,
+		sources: inputs.sources,
+		pipelines: inputs.pipelines,
+		gate: idleStartGate(inputs),
 		configRows: [
 			{
 				icon: Cpu,
