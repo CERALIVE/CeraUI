@@ -91,6 +91,7 @@ const PROBLEM = {
 	primaryLoading={sharing.exportStep === 'creating'}
 	{returnFocus}
 	title={m['systemLogs.sharing.export']()}
+	touchRegion
 >
 	<div class="flex flex-col gap-4 [word-break:auto-phrase] [&:lang(ko)]:break-keep [&:lang(zh)]:break-keep wrap-break-word text-pretty [&:lang(zh)]:text-balance">
 		<p class="text-sm"><KeepWords text={sharing.exportScope?.span === 'moment' ? m['systemLogs.sharing.exportHintMoment']() : m['systemLogs.sharing.exportHint']()} /></p>

@@ -213,7 +213,7 @@ $effect(() => {
 	</section>
 {/snippet}
 
-<div bind:this={view} class="flex min-h-0 flex-1" data-testid="system-logs-view">
+<div bind:this={view} class="flex min-h-0 flex-1" data-raw-active={status === 'ready' && current === 'raw' ? '' : undefined} data-testid="system-logs-view" style:--raw-controls-max="round(down, clamp(3.5rem, 27dvh, 10rem), 1px)">
 	<div class="flex min-h-0 min-w-0 flex-1 flex-col">
 		{#if status === 'ready'}
 			<Tabs.Root class="min-h-0 flex-1 gap-0" onValueChange={selectTab} value={current}>
@@ -224,13 +224,13 @@ $effect(() => {
 					<SharingToolbar
 						bind:bundleButton={toolbarBundle}
 						bind:exportButton={toolbarExport}
-						class="ms-auto self-center py-1 max-sm:w-full max-sm:pt-3 sm:order-last"
+						class="ms-auto self-center py-1 max-sm:w-full max-sm:pt-3 max-sm:pb-1.5 sm:order-last"
 						{sharing}
 					/>
 					<Tabs.List
 						aria-label={m['systemLogs.tabs.label']()}
 						bind:ref={tabList}
-						class="w-full items-stretch gap-2 sm:w-fit"
+						class="w-full items-stretch gap-2 max-sm:group-data-horizontal/tabs:h-auto sm:w-fit"
 						variant="line"
 					>
 						{#each tabs as tab (tab)}
@@ -246,7 +246,7 @@ $effect(() => {
 				</div>
 				{#each tabs as tab (tab)}
 					<!-- Tab goes from the tabs straight to the panel's controls; the panel itself is no stop. -->
-					<Tabs.Content class="min-h-0 overflow-y-auto" data-testid="system-logs-panel-{tab}" tabindex={-1} value={tab}>
+					<Tabs.Content class={tab === 'raw' ? 'min-h-0 overflow-y-auto short-logs:min-h-[calc(5.5rem+var(--raw-controls-max))] short-logs:overflow-visible' : 'min-h-0 overflow-y-auto'} data-testid="system-logs-panel-{tab}" tabindex={-1} value={tab}>
 						{#if tab === 'events' && current === 'events'}
 							<EventsPanel onviewraw={(page) => { around = page; linkStill = bootSelection.since(); selected = 'raw'; }} />
 						{/if}

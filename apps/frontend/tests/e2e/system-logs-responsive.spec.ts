@@ -27,6 +27,7 @@ const NARROW = [
 	{ width: 320, height: 720 },
 	{ width: 375, height: 812 },
 ] as const;
+const PHONE = { width: 390, height: 844 } as const;
 
 type Box = { readonly left: number; readonly right: number } | null;
 
@@ -146,10 +147,14 @@ for (const [sizeIndex, size] of SIZES.entries()) {
 	}
 }
 
-for (const [sizeIndex, size] of NARROW.entries()) {
-	for (const [localeIndex, locale] of ALL_LOCALES.entries()) {
-		const scheme = schemeFor(sizeIndex, localeIndex);
-		test(`${locale} at ${size.width} px ${scheme}: every System Logs label is painted whole inside its control`, async ({
+for (const [localeIndex, locale] of ALL_LOCALES.entries()) {
+	for (const { size, scheme, phone } of [
+		...NARROW.map((size, index) => ({ size, scheme: schemeFor(index, localeIndex), phone: false })),
+		{ size: PHONE, scheme: 'dark', phone: true },
+		{ size: PHONE, scheme: 'light', phone: true },
+	] as const) {
+		const check = phone ? 'System Logs labels fit and touch targets reach 44 px' : 'every System Logs label is painted whole inside its control';
+		test(`${locale} at ${size.width} px ${scheme}: ${check}`, async ({
 			page,
 		}) => {
 			test.setTimeout(120_000);
@@ -157,7 +162,26 @@ for (const [sizeIndex, size] of NARROW.entries()) {
 			const audits: Audited[] = [];
 			try {
 				await logs.open({ locale, size, touch: false, scheme });
-				audits.push(...(await logs.auditViews({ locale, touch: false, tabLines: 2 })));
+				const input = { locale, touch: phone, tabLines: 2 };
+				audits.push(...(await logs.auditViews(input)));
+				if (phone) {
+					await logs.show('events');
+					await page.getByTestId('events-filter-toggle').click();
+					await logs.settle();
+					audits.push(await logs.audit('events-filters', input));
+					await logs.show('raw');
+					await page.getByTestId('raw-filters-toggle').click();
+					await page.getByTestId('raw-search').fill('log');
+					await expect(page.getByTestId('raw-search-clear')).toBeVisible();
+					await logs.settle();
+					audits.push(await logs.audit('raw-filters-and-search', input));
+					await page.getByTestId('raw-search-clear').click();
+					audits.push(await logs.auditListbox(page.getByTestId('raw-sources'), 'raw-source-options', locale));
+					audits.push(await logs.auditListbox(page.getByTestId('raw-time'), 'raw-time-options', locale));
+					await logs.show('storage');
+					audits.push(await logs.auditListbox(page.getByTestId('storage-maxAgeDays-select'), 'retention-options', locale));
+					audits.push(await logs.auditListbox(page.getByTestId('storage-maxSizeMb-select'), 'size-limit-options', locale));
+				}
 			} finally {
 				writeEvidence(`narrow-${locale}-${size.width}-${scheme}.json`, { locale, size, scheme, audits });
 			}
