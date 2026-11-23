@@ -75,23 +75,23 @@ export async function computedStyle(
 export type Destination = 'live' | 'network' | 'settings';
 
 /**
- * Navigate to a primary destination by clicking the active nav control.
- * Works in both layouts: desktop rail (`#nav-tab-*`) and mobile dock
- * (`#mobile-nav-tab-*`), clicking whichever is currently visible.
- */
-/**
  * End a live stream from the Live bar the way an operator does: Stop opens
  * "End the stream?", and End stream sends the stop. A single tap on Stop sends
  * nothing.
  */
 export async function endStream(page: Page): Promise<void> {
-	await page.getByTestId('live-bar').getByRole('button', { name: /stop stream/i }).click();
-	const question = page.getByRole('alertdialog', { name: /end the stream/i });
+	await page.getByTestId('live-bar').getByTestId('live-bar-stop').click();
+	const question = page.getByTestId('live-stop-confirm');
 	await expect(question).toBeVisible();
-	await question.getByRole('button', { name: /end stream/i }).click();
+	await question.getByTestId('live-stop-end').click();
 	await expect(question).toHaveCount(0);
 }
 
+/**
+ * Navigate to a primary destination by clicking the active nav control.
+ * Works in both layouts: desktop rail (`#nav-tab-*`) and mobile dock
+ * (`#mobile-nav-tab-*`), clicking whichever is currently visible.
+ */
 export async function navigateTo(page: Page, destination: Destination): Promise<void> {
 	const desktopTab = page.locator(`#nav-tab-${destination}`);
 	const mobileTab = page.locator(`#mobile-nav-tab-${destination}`);

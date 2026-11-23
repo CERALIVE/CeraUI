@@ -21,6 +21,11 @@ import type { StreamingOptimismState } from "$lib/rpc/streaming-optimism.svelte"
 import { en } from "../../tests/helpers/catalog";
 import StreamControlButton from "./StreamControlButton.svelte";
 
+// The real socket suite supplies and tests the connection/lifecycle witness.
+vi.mock("$lib/rpc/subscriptions.svelte", () => ({
+	getConfirmedLiveStopEpoch: () => 0,
+}));
+
 function mount(props: {
 	confirmStop?: boolean;
 	isStreaming?: boolean;
@@ -85,12 +90,14 @@ describe("StreamControlButton — Stop asks first in the Live bar", () => {
 
 	it("Keep streaming closes the question without stopping", async () => {
 		const { onStop } = mount({ confirmStop: true });
+		// Touch activation need not focus the opener before the dialog opens.
 		await fireEvent.click(stopButton());
 		await fireEvent.click(
 			await screen.findByRole("button", { name: en.live.stopConfirm.keep }),
 		);
 		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
 		expect(onStop).not.toHaveBeenCalled();
+		expect(document.activeElement).toBe(stopButton());
 	});
 
 	it("Escape closes the question without stopping", async () => {
@@ -100,6 +107,7 @@ describe("StreamControlButton — Stop asks first in the Live bar", () => {
 		await fireEvent.keyDown(dialog, { key: "Escape" });
 		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
 		expect(onStop).not.toHaveBeenCalled();
+		expect(document.activeElement).toBe(stopButton());
 	});
 
 	it("Keep streaming takes the initial focus, so Enter does not end the stream", async () => {

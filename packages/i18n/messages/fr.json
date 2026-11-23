@@ -907,7 +907,7 @@
 	"live.starting": "Démarrage...",
 	"live.stopStream": "Arrêter la diffusion",
 	"live.stopConfirm.title": "Terminer la diffusion ?",
-	"live.stopConfirm.body": "Le boîtier arrête d'envoyer la diffusion.",
+	"live.stopConfirm.body": "Le boîtier arrêtera d'envoyer la diffusion.",
 	"live.stopConfirm.keep": "Continuer la diffusion",
 	"live.stopConfirm.end": "Terminer la diffusion",
 	"live.stopStuck.message": "L'arrêt prend plus de temps que prévu",

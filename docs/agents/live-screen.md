@@ -59,7 +59,9 @@ These test ids must keep their names and meaning: `idle-cockpit`,
 `live-cockpit`, `source-section`, `source-audio`, `open-audio-dialog`,
 `stream-setup-chain`, `setup-row`, `preview-disclosure`, `composition-card`,
 `composition-stale-notice`, `live-roadmap`, `live-summary-strip` and
-`summary-done`. No region or test id may be added beyond the table above.
+`summary-done`. No region may be added beyond the table above. The Live bar
+and its portaled confirmation also expose `live-bar-stop`, `live-stop-confirm`,
+`live-stop-keep` and `live-stop-end` for locale-independent test drivers.
 
 #### The layout while live [EXISTS]
 
@@ -128,12 +130,17 @@ must contain the `source-audio` block with its ids unchanged.
 - Idle, it must show the first blocking reason from `deriveGoLiveReadiness` as
   visible text, or a ready state, and Start.
 - Live, it must show the bitrate control and Stop.
-- Stop asks before it ends the stream: a tap opens "End the stream?" with
-  Keep streaming (initial focus, the bottom button on a phone) and End stream.
-  Only End stream sends the stop; Escape, Keep streaming and a tap on the
-  backdrop send nothing, and the question closes by itself when the session
-  ends some other way. The unconfirmed band's Stop stays one tap: there the
-  risk is a stream that will not stop, not one that stops by accident.
+- At every width (phone, kiosk and desktop), the Live bar's Stop opens
+  "End the stream?" with Keep streaming (initial focus, the bottom button
+  on a phone) and End stream. End stream immediately requests Stop once,
+  only for the still-live session that opened the dialog. Stop cannot open
+  the question based on status from a previous connection. Any reported
+  lifecycle other than streaming, including stopping before the live flag
+  clears, or a connection drop invalidates the question. Keep streaming and
+  Escape close it without stopping and return focus to Stop, or to the
+  main content landmark if Stop is gone or unavailable. A backdrop tap
+  does nothing. The recovery/unconfirmed band's Stop and the stop watchdog's
+  Retry remain one tap, without confirmation.
 - While it is mounted, the document's `scroll-padding-bottom` is the bar's
   height (plus the mobile dock below desktop chrome), so a control reached with
   Tab or scrolled into view stops above the bar, never under it (WCAG 2.4.11).

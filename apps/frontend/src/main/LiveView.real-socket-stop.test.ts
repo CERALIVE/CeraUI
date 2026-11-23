@@ -13,7 +13,12 @@
  * open is a connection-ownership violation), and the async-operation sweep is
  * created AFTER the fake clock, or its 15 s valve would run on real time.
  */
-import { fireEvent, render } from "@testing-library/svelte";
+import {
+	fireEvent,
+	getByTestId,
+	queryByTestId,
+	render,
+} from "@testing-library/svelte";
 import { flushSync } from "svelte";
 import {
 	afterEach,
@@ -29,12 +34,14 @@ import {
 	band,
 	button,
 	controls,
-	endStream,
+	endLiveStream,
 	FAILED,
 	header,
 	installJsdomShims,
 	OPERATION_KEY as KEY,
 	NOT_CONFIRMED,
+	openLiveStopConfirmation,
+	stopUnconfirmedStream,
 } from "../tests/fixtures/real-cockpit-harness";
 import {
 	answer,
@@ -239,6 +246,161 @@ afterEach(() => {
 	document.body.innerHTML = "";
 });
 
+describe("Live bar Stop confirmation over the real socket", () => {
+	it.each([
+		"during the outage",
+		"after re-authentication without a live boolean",
+	] as const)(
+		"Stop pressed %s cannot end the stream confirmed by a later hydrate",
+		async (when) => {
+			const { container } = render(LiveView);
+			deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+			dropLink();
+			await settle();
+
+			async function authenticateReplacement() {
+				await restoreLink();
+				answer("auth.login", { success: true });
+				await settle();
+			}
+
+			if (when !== "during the outage") {
+				await authenticateReplacement();
+				deliverStatus({ stream_lifecycle: "streaming", ssh: true });
+			}
+			await fireEvent.click(getByTestId(container, "live-bar-stop"));
+			const staleDialog = queryByTestId(document.body, "live-stop-confirm");
+			const staleEnd = staleDialog && getByTestId(staleDialog, "live-stop-end");
+
+			if (when === "during the outage") await authenticateReplacement();
+			answer("streaming.getConfig", {});
+			const liveStatus = {
+				is_streaming: true,
+				stream_lifecycle: "streaming",
+			};
+			answer("status.getStatus", liveStatus);
+			await settle();
+			if (when !== "during the outage") {
+				// The lifecycle push superseded the first read's stream facts.
+				answer("status.getStatus", liveStatus);
+				await settle();
+			}
+			// Try the stale action if the opener incorrectly made one available.
+			staleEnd?.click();
+			await settle();
+
+			expect(sentCount("streaming.stop")).toBe(0);
+			expect(staleDialog).toBeNull();
+			expect(queryByTestId(document.body, "live-stop-confirm")).toBeNull();
+			await endLiveStream(container);
+			await settle();
+			expect(sentCount("streaming.stop")).toBe(1);
+			answer("streaming.stop", { success: true, result: "stopped" });
+			await settle();
+		},
+	);
+
+	it("a lifecycle-only external stopping frame disarms a queued End before idle", async () => {
+		const { container } = render(LiveView);
+		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+		const dialog = await openLiveStopConfirmation(container);
+		const end = getByTestId(dialog, "live-stop-end");
+
+		socket().deliver({ status: { stream_lifecycle: "stopping" } });
+		end.click();
+		flushSync();
+
+		expect(getStatus()?.is_streaming).toBe(true);
+		expect(getStatus()?.stream_lifecycle).toBe("stopping");
+		expect(sentCount("streaming.stop")).toBe(0);
+		expect(dialog.dataset.state).toBe("closed");
+	});
+
+	it("a non-live lifecycle cannot be lost when the next live frame beats render", async () => {
+		const { container } = render(LiveView);
+		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+		const dialog = await openLiveStopConfirmation(container);
+		const end = getByTestId(dialog, "live-stop-end");
+
+		socket().deliver({ status: { stream_lifecycle: "reconciling" } });
+		socket().deliver({ status: { stream_lifecycle: "streaming" } });
+		end.click();
+		flushSync();
+
+		expect(sentCount("streaming.stop")).toBe(0);
+		expect(dialog.dataset.state).toBe("closed");
+	});
+
+	it("two delivered End clicks send one Stop RPC without waiting for a reply", async () => {
+		const { container } = render(LiveView);
+		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+		const dialog = await openLiveStopConfirmation(container);
+		const end = getByTestId(dialog, "live-stop-end");
+		expect(sentCount("streaming.stop")).toBe(0);
+
+		end.click();
+		end.click();
+		await settle();
+
+		expect(sentCount("streaming.stop")).toBe(1);
+		answer("streaming.stop", { success: true, result: "stopped" });
+		await settle();
+	});
+
+	it("an external idle commit disarms End and returns focus to main content", async () => {
+		const main = document.createElement("main");
+		main.id = "main-content";
+		main.tabIndex = -1;
+		document.body.append(main);
+		const { container } = render(LiveView, {}, { baseElement: main });
+		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+		const dialog = await openLiveStopConfirmation(container);
+		const end = getByTestId(dialog, "live-stop-end");
+		expect(document.activeElement).toBe(getByTestId(dialog, "live-stop-keep"));
+
+		// The status reaches the store before the queued activation, but
+		// Svelte hasn't had a chance to remove the dialog's DOM yet.
+		socket().deliver({
+			status: { is_streaming: false, stream_lifecycle: "idle" },
+		});
+		end.click();
+		await settle();
+
+		expect(sentCount("streaming.stop")).toBe(0);
+		expect(queryByTestId(container, "live-bar-stop")).toBeNull();
+		expect(queryByTestId(document.body, "live-stop-confirm")).toBeNull();
+		expect(document.activeElement).toBe(main);
+	});
+
+	it("a live replacement cannot inherit the previous stream's confirmation", async () => {
+		const { container } = render(LiveView);
+		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+		const dialog = await openLiveStopConfirmation(container);
+		const end = getByTestId(dialog, "live-stop-end");
+
+		// Both commits arrive before a render; the last live boolean is unchanged.
+		socket().deliver({
+			status: { is_streaming: false, stream_lifecycle: "idle" },
+		});
+		socket().deliver({
+			status: { is_streaming: true, stream_lifecycle: "streaming" },
+		});
+		end.click();
+		await settle();
+
+		expect(sentCount("streaming.stop")).toBe(0);
+		// Bits UI checks for exit animations at the next rendering frame.
+		vi.advanceTimersToNextFrame();
+		await settle();
+		expect(queryByTestId(document.body, "live-stop-confirm")).toBeNull();
+		await endLiveStream(container);
+		await settle();
+		expect(sentCount("streaming.stop")).toBe(1);
+		answer("streaming.stop", { success: true, result: "stopped" });
+		await settle();
+	});
+});
+
 const F8_MIXED_FALSE = {
 	is_streaming: false,
 	active_encode: null,
@@ -398,7 +560,7 @@ describe("F11 timeout recovery lifetime seams", () => {
 		// Given an unresolved failed Stop and a new timed-out Start's pending pull.
 		const { container } = render(LiveView);
 		await exhaustStart(container, { stream_lifecycle: "starting" });
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		deliverStatus(F8_MIXED_FALSE);
 		await settle();
@@ -412,7 +574,7 @@ describe("F11 timeout recovery lifetime seams", () => {
 		await settle();
 		expect(outstanding("status.getStatus")).toHaveLength(1);
 		// When the operator's Stop acknowledges and the old pull later answers.
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		answer("streaming.stop", { success: true, result: "stopped" });
 		await settle();
@@ -438,7 +600,7 @@ describe("F11 timeout recovery lifetime seams", () => {
 		await elapse(10_000);
 		deliverStatus({ stream_lifecycle: "reconciling" });
 		await settle();
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		answer("streaming.stop", { success: true, result: "stopped" });
 		deliverStatus({ is_streaming: false, stream_lifecycle: "idle" });
@@ -502,7 +664,7 @@ describe("F11 timeout recovery lifetime seams", () => {
 		expect(startRecoveryUnknown(generation)).toBe(true);
 		expect(controls(container)).toEqual(F8_RECOVERY_CONTROLS);
 		expect(sentCount("streaming.stop")).toBe(0);
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		answer("streaming.stop", { success: true, result: "stopped" });
 		await settle();
@@ -1075,7 +1237,7 @@ describe("F10 exhaustive Stop settlement/result/exhaustion permutations", () => 
 			// Given the original two-attempt transcript and the second Start's first read.
 			const { container } = render(LiveView);
 			await exhaustStart(container, { stream_lifecycle: "starting" });
-			await endStream(container);
+			await stopUnconfirmedStream(container);
 			await settle();
 			deliverStatus(F8_MIXED_FALSE);
 			await settle();
@@ -1087,7 +1249,7 @@ describe("F10 exhaustive Stop settlement/result/exhaustion permutations", () => 
 			await settle();
 			const generation = getStreamingAttemptGeneration();
 			await elapse(90_000);
-			await endStream(container);
+			await stopUnconfirmedStream(container);
 			await settle();
 			// When S, R and E are delivered in this literal permutation.
 			await playF10Interleaving(cell);
@@ -1162,7 +1324,7 @@ describe("F11 Start-reply timeout dimension of the 36-cell Stop matrix", () => {
 			// Given the retained two-attempt transcript, but Start #2 loses its reply.
 			const { container } = render(LiveView);
 			await exhaustStart(container, { stream_lifecycle: "starting" });
-			await endStream(container);
+			await stopUnconfirmedStream(container);
 			await settle();
 			deliverStatus(F8_MIXED_FALSE);
 			await settle();
@@ -1176,7 +1338,7 @@ describe("F11 Start-reply timeout dimension of the 36-cell Stop matrix", () => {
 			expect(outstanding("streaming.start")).toHaveLength(0);
 			expect(getStreamingOptimismState()).toBe("starting");
 			await elapse(15_000);
-			await endStream(container);
+			await stopUnconfirmedStream(container);
 			await settle();
 			// When the same literal S/R/E permutation is delivered after the timeout.
 			await playF10Interleaving(cell);
@@ -1248,7 +1410,7 @@ describe("F9 Stop acknowledgement owns the captured Start lifetime", () => {
 		// Given the reviewer's first exhausted Start and an independent failed Stop claim.
 		const { container } = render(LiveView);
 		await exhaustStart(container, { stream_lifecycle: "starting" });
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		deliverStatus(F8_MIXED_FALSE);
 		await settle();
@@ -1266,7 +1428,7 @@ describe("F9 Stop acknowledgement owns the captured Start lifetime", () => {
 		await elapse(90_000);
 		expect(outstanding("status.getStatus")).toHaveLength(1);
 		// When this generation's latest Stop acknowledges before the first recovery answer.
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		expect(getOperationPhase(KEY)).toBe("pending");
 		answer("streaming.stop", { success: true, result: "stopped" });
@@ -1318,7 +1480,7 @@ describe("F9 Stop acknowledgement owns the captured Start lifetime", () => {
 			const { container } = render(LiveView);
 			deliverStatus({ stream_lifecycle: "stop_failed" });
 			await settle();
-			await endStream(container);
+			await stopUnconfirmedStream(container);
 			await settle();
 			reject("streaming.stop", "INTERNAL_ERROR");
 			await settle();
@@ -1340,7 +1502,7 @@ describe("F9 Stop acknowledgement owns the captured Start lifetime", () => {
 			await settle();
 			expect(outstanding("status.getStatus")).toHaveLength(1);
 			// When Stop acknowledges on either side of the second read's exhaustion.
-			await endStream(container);
+			await stopUnconfirmedStream(container);
 			await settle();
 			if (ack === "before") {
 				answer("streaming.stop", { success: true, result: "stopped" });
@@ -1386,7 +1548,7 @@ describe("F9 Stop acknowledgement owns the captured Start lifetime", () => {
 					// Given Start #1 exhaustion, failed Stop #1 and a naturally reachable Start #2 band.
 					const { container } = render(LiveView);
 					await exhaustStart(container, { stream_lifecycle: "starting" });
-					await endStream(container);
+					await stopUnconfirmedStream(container);
 					await settle();
 					deliverStatus(F8_MIXED_FALSE);
 					await settle();
@@ -1398,7 +1560,7 @@ describe("F9 Stop acknowledgement owns the captured Start lifetime", () => {
 					await settle();
 					const generation = getStreamingAttemptGeneration();
 					await elapse(90_000);
-					await endStream(container);
+					await stopUnconfirmedStream(container);
 					await settle();
 					const reply = async () => {
 						if (outcome === "ack")
@@ -1465,7 +1627,7 @@ describe("F9 Stop acknowledgement owns the captured Start lifetime", () => {
 		// Given an unresolved claim keeps Stop reachable for a new Start watchdog.
 		const { container } = render(LiveView);
 		await exhaustStart(container, { stream_lifecycle: "starting" });
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		deliverStatus(F8_MIXED_FALSE);
 		await settle();
@@ -1476,11 +1638,11 @@ describe("F9 Stop acknowledgement owns the captured Start lifetime", () => {
 		answer("streaming.start", { success: true });
 		await settle();
 		await elapse(90_000);
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		await elapse(16_100);
 		expect(getOperationPhase(KEY)).toBe("timed_out");
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		// When the earlier request still within its real 30 s client budget acknowledges.
 		answer("streaming.stop", { success: true, result: "stopped" }, "oldest");
@@ -1525,7 +1687,7 @@ describe("F9 Stop acknowledgement owns the captured Start lifetime", () => {
 		// Given an old Stop still awaiting its real request-id-selected reply.
 		const { container } = render(LiveView);
 		await exhaustStart(container, { stream_lifecycle: "starting" });
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		deliverStatus(F8_MIXED_FALSE);
 		await settle();
@@ -1631,7 +1793,7 @@ describe("F8 bounded Start recovery escape", () => {
 		await exhaustStart(container);
 		expect(controls(container)).toEqual(F8_RECOVERY_CONTROLS);
 		// When the operator presses the band's real Stop and its own reply acknowledges it.
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		expect(getOperationPhase(KEY)).toBe("pending");
 		expect(controls(container)).toEqual([
@@ -1822,7 +1984,7 @@ describe("F8 bounded Start recovery escape", () => {
 		const { container } = render(LiveView);
 		await exhaustStart(container);
 		const old = getStreamingAttemptGeneration();
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		answer("streaming.stop", { success: true, result: "stopped" });
 		await settle();
@@ -1852,12 +2014,12 @@ describe("F8 bounded Start recovery escape", () => {
 		// Given UNKNOWN and a Stop reply outliving the TTL plus its next periodic sweep.
 		const { container } = render(LiveView);
 		await exhaustStart(container);
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		await elapse(16_100);
 		expect(getOperationPhase(KEY)).toBe("timed_out");
 		expect(band(container)?.textContent).toContain(NOT_CONFIRMED);
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		// When the earlier request acknowledges while the latest claim is still pending.
 		answer("streaming.stop", { success: true, result: "stopped" }, "oldest");
@@ -1910,7 +2072,7 @@ describe("F8 bounded Start recovery escape", () => {
 		await elapse(90_000);
 		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
 		await settle();
-		await endStream(container);
+		await endLiveStream(container);
 		await settle();
 		answer("streaming.stop", { success: true, result: "stopped" });
 		deliverStatus({ is_streaming: false, stream_lifecycle: "idle" });
@@ -2336,7 +2498,7 @@ describe("F7 independent stream evidence and field freshness", () => {
 				stream_lifecycle: "stop_failed",
 				ssh: false,
 			});
-			await endStream(container);
+			await stopUnconfirmedStream(container);
 			await settle();
 			deliverStatus({ stream_lifecycle: "stopping" });
 			const pulled = pullStatusEvidence().then((answer) => {
@@ -2526,7 +2688,7 @@ describe("F7 independent stream evidence and field freshness", () => {
 		await settle();
 		expect(getStreamingOptimismState()).toBe("idle");
 		expect(controls(container)).toEqual(STOP_AND_START);
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		deliverStatus({ stream_lifecycle: "stopping" });
 		await reconnectAwaitingHydrate();
@@ -2570,7 +2732,7 @@ async function retryWhileTheFirstStopIsAwaited(
 	deliverStatus({ is_streaming: false, stream_lifecycle: "stop_failed" });
 	expect(controls(container)).toEqual(STOP_AND_START);
 
-	await endStream(container);
+	await stopUnconfirmedStream(container);
 	await settle();
 	deliverStatus({ stream_lifecycle: "stopping" });
 	expect(controls(container)).toEqual(STOPPING_AND_START);
@@ -2581,7 +2743,7 @@ async function retryWhileTheFirstStopIsAwaited(
 	expect(band(container)?.textContent).toContain(NOT_CONFIRMED);
 	expect(controls(container)).toEqual(STOP_AND_START);
 
-	await endStream(container);
+	await stopUnconfirmedStream(container);
 	await settle();
 	const [first, retry] = outstanding("streaming.stop");
 	expect(sentCount("streaming.stop")).toBe(2);
@@ -2712,7 +2874,7 @@ describe("F5 F4-R1: a status answer is evidence at its own receipt", () => {
 		deliverStatus({ is_streaming: false, stream_lifecycle: "stop_failed" });
 		expect(controls(container)).toEqual(STOP_AND_START);
 
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		deliverStatus({ stream_lifecycle: "stopping" });
 		answer("streaming.getConfig", {});
@@ -2768,7 +2930,7 @@ describe("F5 F4-R1: a status answer is evidence at its own receipt", () => {
 		expect(getStatus()?.stream_lifecycle).toBe("stop_failed");
 
 		const log = recordOperationPhases(KEY);
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		deliverStatus({ stream_lifecycle: "stopping" });
 		answer("status.getStatus", {
@@ -2817,7 +2979,7 @@ describe("F5 F4-R1: a status answer is evidence at its own receipt", () => {
 		await settle();
 		deliverStatus({ is_streaming: false, stream_lifecycle: "stop_failed" });
 		const log = recordOperationPhases(KEY);
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		deliverStatus({ stream_lifecycle: "stopping" });
 		answer("streaming.getConfig", {});
@@ -2841,7 +3003,7 @@ describe("F5 F4-R1: a status answer is evidence at its own receipt", () => {
 		deliverStatus({ is_streaming: false, stream_lifecycle: "stop_failed" });
 		const restored = getRestoredSessions();
 		await reconnectAwaitingHydrate();
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		reject("status.getStatus", "INTERNAL_ERROR");
 		answer("streaming.getConfig", {});
@@ -2872,7 +3034,7 @@ describe("F5 F4-R1: a pulled answer keeps the moment it was received", () => {
 			stream_lifecycle: "idle",
 		});
 		deliverStatus({ is_streaming: false, stream_lifecycle: "stop_failed" });
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		deliverStatus({ stream_lifecycle: "stopping" });
 
@@ -2891,7 +3053,7 @@ describe("F5 F4-R1: a pulled answer keeps the moment it was received", () => {
 			is_streaming: false,
 			stream_lifecycle: "idle",
 		});
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 
 		ingestPulledStatus(late.status, late.receipt);
@@ -2915,7 +3077,7 @@ describe("F5 sweep: the stop watchdog's pull keeps receipt order", () => {
 		container: HTMLElement,
 	): Promise<void> {
 		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
-		await endStream(container);
+		await endLiveStream(container);
 		await settle();
 		expect(sentCount("streaming.stop")).toBe(1);
 		await elapse(15_000);
@@ -2986,7 +3148,7 @@ describe("F6 request causality and action lifetime over the real socket", () => 
 				answer("auth.login", { success: true });
 				await settle();
 			}
-			await endStream(container);
+			await stopUnconfirmedStream(container);
 			await settle();
 			if (!preclaim) {
 				answer("auth.login", { success: true });
@@ -3042,7 +3204,7 @@ describe("F6 request causality and action lifetime over the real socket", () => 
 	it("a new Stop watchdog is not blocked or released by an older awaited cycle", async () => {
 		const { container } = render(LiveView);
 		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
-		await endStream(container);
+		await endLiveStream(container);
 		await settle();
 		await elapse(15_000);
 		expect(outstanding("status.getStatus")).toHaveLength(1);
@@ -3056,7 +3218,7 @@ describe("F6 request causality and action lifetime over the real socket", () => 
 		answer("streaming.start", { success: true });
 		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
 		await settle();
-		await endStream(container);
+		await endLiveStream(container);
 		await settle();
 		await elapse(15_000);
 		expect(outstanding("status.getStatus")).toHaveLength(2);
@@ -3081,7 +3243,7 @@ describe("F6 request causality and action lifetime over the real socket", () => 
 	it("a Stop settled during repull delay never reads or stops the next session", async () => {
 		const { container } = render(LiveView);
 		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
-		await endStream(container);
+		await endLiveStream(container);
 		await settle();
 		await elapse(15_000);
 		answer("status.getStatus", {
@@ -3160,7 +3322,7 @@ describe("F6 request causality and action lifetime over the real socket", () => 
 		deliverStatus({ is_streaming: false, stream_lifecycle: "stop_failed" });
 		await reconnectAwaitingHydrate();
 		answer("streaming.getConfig", {});
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		answer("status.getStatus", {
 			is_streaming: false,
@@ -3196,7 +3358,7 @@ describe("F6 request causality and action lifetime over the real socket", () => 
 			const [read] = outstanding("status.getStatus");
 			answer("streaming.getConfig", {});
 			await settle();
-			await endStream(container);
+			await stopUnconfirmedStream(container);
 			await settle();
 			const [stop] = outstanding("streaming.stop");
 			if (read === undefined || stop === undefined)
@@ -3231,7 +3393,7 @@ describe("F6 request causality and action lifetime over the real socket", () => 
 		deliverStatus({ is_streaming: false, stream_lifecycle: "stop_failed" });
 		await reconnectAwaitingHydrate();
 		answer("streaming.getConfig", {});
-		await endStream(container);
+		await stopUnconfirmedStream(container);
 		await settle();
 		answer("status.getStatus", {
 			is_streaming: false,
@@ -3256,7 +3418,7 @@ describe("F6 request causality and action lifetime over the real socket", () => 
 	it("a completed Stop watchdog never stops the next live session", async () => {
 		const { container } = render(LiveView);
 		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
-		await endStream(container);
+		await endLiveStream(container);
 		await settle();
 		await elapse(15_000);
 		expect(outstanding("status.getStatus")).toHaveLength(1);
@@ -3300,7 +3462,7 @@ describe("F6 request causality and action lifetime over the real socket", () => 
 		await elapse(90_000);
 		expect(outstanding("status.getStatus")).toHaveLength(1);
 		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
-		await endStream(container);
+		await endLiveStream(container);
 		await settle();
 		answer("streaming.stop", { result: "stopped", success: true });
 		deliverStatus({ is_streaming: false, stream_lifecycle: "idle" });
@@ -3327,7 +3489,7 @@ describe("F6 request causality and action lifetime over the real socket", () => 
 	it("a still-current operator Stop watchdog redispatches exactly once", async () => {
 		const { container } = render(LiveView);
 		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
-		await endStream(container);
+		await endLiveStream(container);
 		await settle();
 		await elapse(15_000);
 		answer("status.getStatus", {

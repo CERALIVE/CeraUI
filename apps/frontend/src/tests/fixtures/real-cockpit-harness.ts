@@ -9,8 +9,7 @@
  * them (label + disabled flag, in DOM order), never a value computed from the
  * predicate under test.
  */
-import { fireEvent } from "@testing-library/svelte";
-import { tick } from "svelte";
+import { fireEvent, getByTestId, within } from "@testing-library/svelte";
 
 import { streamLifecycleFixture } from "./reactive-stream-lifecycle.svelte";
 
@@ -116,20 +115,24 @@ export function button(
 	return found;
 }
 
-/**
- * Press Stop the way an operator ends a stream. The Live bar's Stop asks "End
- * the stream?" first, so when that question opens this answers End stream; a
- * Stop that acts on one tap (the unconfirmed band) needs no answer.
- */
-export async function endStream(container: HTMLElement): Promise<void> {
-	await fireEvent.click(button(container, "Stop Stream"));
-	await tick();
-	const end = [
-		...document.body.querySelectorAll<HTMLButtonElement>(
-			'[role="alertdialog"] button',
-		),
-	].find((b) => b.textContent?.trim() === "End stream");
-	if (end) await fireEvent.click(end);
+export async function openLiveStopConfirmation(
+	container: HTMLElement,
+): Promise<HTMLElement> {
+	const bar = within(getByTestId(container, "live-bar"));
+	await fireEvent.click(bar.getByTestId("live-bar-stop"));
+	return getByTestId(document.body, "live-stop-confirm");
+}
+
+export async function endLiveStream(container: HTMLElement): Promise<void> {
+	const dialog = await openLiveStopConfirmation(container);
+	await fireEvent.click(getByTestId(dialog, "live-stop-end"));
+}
+
+export async function stopUnconfirmedStream(
+	container: HTMLElement,
+): Promise<void> {
+	const recovery = within(getByTestId(container, "unconfirmed-stream-band"));
+	await fireEvent.click(recovery.getByTestId("unconfirmed-stream-stop"));
 }
 
 export function band(container: HTMLElement): HTMLElement | null {

@@ -5,6 +5,7 @@ import { Loader2, Play, Square } from '@lucide/svelte';
 import * as AlertDialog from '$lib/components/ui/alert-dialog';
 import { Button } from '$lib/components/ui/button';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
+import { getConfirmedLiveStopEpoch } from '$lib/rpc/subscriptions.svelte';
 
 interface Props {
 	isStreaming: boolean;
@@ -14,13 +15,7 @@ interface Props {
 	disabledReason?: string;
 	onStart: () => void;
 	onStop: () => void;
-	/**
-	 * Ask before stopping. The Live bar's Stop sits in the thumb zone right
-	 * above the mobile dock, where a pocket tap or a missed tap on the dock
-	 * lands, so there a tap opens "End the stream?" and only End stream calls
-	 * `onStop`. Off for the other hosts, which never show Stop for a live
-	 * session.
-	 */
+	/** Ask before the Live bar stops a confirmed stream, at every width. */
 	confirmStop?: boolean;
 }
 
@@ -34,11 +29,17 @@ const {
 	confirmStop = false,
 }: Props = $props();
 
-let confirmOpen = $state(false);
+let stopIntent = $state<number | null>(null);
+let stopButton: HTMLButtonElement | null = $state(null);
 let keepButton: HTMLButtonElement | null = $state(null);
 
 // Disable button during transient states (starting/stopping).
 const isTransient = $derived(optimismState === 'starting' || optimismState === 'stopping');
+const canStop = $derived(isStreaming && !isTransient);
+const confirmedStopEpoch = $derived(confirmStop && canStop ? getConfirmedLiveStopEpoch() : undefined);
+const confirmOpen = $derived(
+	confirmedStopEpoch !== undefined && stopIntent === confirmedStopEpoch,
+);
 
 // The label follows the transient, not just the spinner. A start legitimately
 // takes seconds (engine pipeline build + PLAYING, plus the bounded retry
@@ -52,32 +53,34 @@ const stopLabel = $derived(
 );
 
 function handleStopClick() {
+	if (!canStop) return;
 	if (confirmStop) {
-		confirmOpen = true;
+		if (stopIntent === null && confirmedStopEpoch !== undefined) stopIntent = confirmedStopEpoch;
 		return;
 	}
 	onStop();
 }
 
 function confirmEnd() {
-	confirmOpen = false;
-	onStop();
+	const shouldStop = confirmOpen;
+	stopIntent = null;
+	if (shouldStop) onStop();
 }
 
-// The question only makes sense while there is a session to end: when the
-// stream stops some other way (a helper, the device, a failure) or a stop is
-// already in flight, the open question goes away instead of offering to end a
-// stream that is no longer there.
+// Drop invalid intent so it cannot reopen when the control becomes eligible again.
 $effect(() => {
-	if (confirmOpen && (!isStreaming || isTransient)) confirmOpen = false;
+	if (stopIntent !== null && !confirmOpen) stopIntent = null;
 });
 </script>
 
 <!-- Streaming control — prominent, lime to start, neutral to stop -->
 {#if isStreaming || optimismState === 'stopping'}
 	<Button
+		bind:ref={stopButton}
 		class="bg-secondary text-secondary-foreground hover:bg-secondary/80 group min-h-[44px] w-full gap-3 py-6 text-base font-semibold"
+		aria-disabled={confirmStop && confirmedStopEpoch === undefined ? true : undefined}
 		aria-haspopup={confirmStop ? 'dialog' : undefined}
+		data-testid={confirmStop ? 'live-bar-stop' : undefined}
 		disabled={isTransient}
 		onclick={handleStopClick}
 		size="lg"
@@ -117,12 +120,25 @@ $effect(() => {
 	     streaming takes the initial focus, so Enter or Space keeps the stream,
 	     and comes first in the DOM, so it sits at the bottom of the stacked
 	     phone footer. -->
-	<AlertDialog.Root bind:open={confirmOpen}>
+	<AlertDialog.Root
+		open={confirmOpen}
+		onOpenChange={(open) => {
+			if (!open) stopIntent = null;
+		}}
+	>
 		<AlertDialog.Content
 			class="max-w-sm"
+			data-testid="live-stop-confirm"
 			onOpenAutoFocus={(event) => {
 				event.preventDefault();
 				keepButton?.focus();
+			}}
+			onCloseAutoFocus={(event) => {
+				event.preventDefault();
+				const target = confirmedStopEpoch !== undefined && stopButton?.isConnected
+					? stopButton
+					: document.getElementById('main-content');
+				target?.focus({ preventScroll: true });
 			}}
 		>
 			<AlertDialog.Header>
@@ -130,11 +146,16 @@ $effect(() => {
 				<AlertDialog.Description>{m["live.stopConfirm.body"]()}</AlertDialog.Description>
 			</AlertDialog.Header>
 			<AlertDialog.Footer>
-				<AlertDialog.Cancel bind:ref={keepButton} class="min-h-[44px]">
+				<AlertDialog.Cancel
+					bind:ref={keepButton}
+					class="min-h-[44px]"
+					data-testid="live-stop-keep"
+				>
 					{m["live.stopConfirm.keep"]()}
 				</AlertDialog.Cancel>
 				<AlertDialog.Action
 					class="min-h-[44px]"
+					data-testid="live-stop-end"
 					onclick={confirmEnd}
 					variant="destructive"
 				>
