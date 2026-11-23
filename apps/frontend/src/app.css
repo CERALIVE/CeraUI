@@ -25,6 +25,15 @@
 			overflow-y: auto;
 		}
 	}
+
+	/* Keep tall option rows inside the popup's scrollable viewport on short phones. */
+	[data-slot='select-content'][data-touch-region] {
+		@variant max-sm {
+			@variant short-logs {
+				max-height: var(--bits-select-content-available-height);
+			}
+		}
+	}
 }
 
 /*
