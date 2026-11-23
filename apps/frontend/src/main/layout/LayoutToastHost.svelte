@@ -1,5 +1,5 @@
 <script lang="ts">
-import { resolveMessageKey } from '@ceraui/i18n/svelte';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import { MediaQuery } from 'svelte/reactivity';
 import { toast } from 'svelte-sonner';
 
@@ -142,6 +142,7 @@ const toasterOffset = $derived(
 </script>
 
 <Toaster
+	containerAriaLabel={m["notifications.panel.title"]()}
 	position="bottom-right"
 	offset={toasterOffset}
 	mobileOffset={toasterOffset}

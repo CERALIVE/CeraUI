@@ -370,3 +370,16 @@ test('delayed keyboard entry still reaches recovery and can dismiss it', async (
 	await close.press('Enter');
 	await expect(retry).toBeHidden();
 });
+
+test('Spanish retry feedback names the Live tab verbatim', async ({ page }) => {
+	await page.addInitScript(() => localStorage.setItem('locale', JSON.stringify({ code: 'es' })));
+	const attemptId = 'es-retry-feedback';
+	const ws = await startWithReply(page, {
+		result: 'failed', success: false, attemptId,
+		failure: { attemptId, phase: 'connect', class: 'engine_unavailable', retriable: true },
+	});
+	ws.push({ netif: { eth0: { enabled: false } } });
+	await expect(page.getByTestId('live-bar').getByRole('button')).toBeDisabled();
+	await page.getByRole('button', { name: 'Intentar de nuevo', exact: true }).press('Enter');
+	await expect(page.getByText('Esta acción ya no está disponible. Revisa el estado de la transmisión en Live.', { exact: true })).toBeVisible();
+});
