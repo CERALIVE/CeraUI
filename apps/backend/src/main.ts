@@ -325,8 +325,7 @@ if (!configAvailableAtBind) {
 
 // Recovery must finish before an update may install any new UID routing rule.
 const deviceAtBoot = observeRealDeviceAtBoot(bondDisableSimulationSelected());
-const realDeviceAtBoot = await deviceAtBoot.ready;
-if (realDeviceAtBoot)
+if (await deviceAtBoot.ready)
 	void guardNonCritical("update-route-sweep", async () => {
 		await reconcileOsStageStartup();
 	});

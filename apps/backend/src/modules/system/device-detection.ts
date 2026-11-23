@@ -221,28 +221,47 @@ export function observeRealDeviceAtBoot(
 	deps: DeviceDetectionDeps = defaultDeviceDetectionDeps,
 ): BondGuardDeviceObserver {
 	const forced = forcedDeviceType(deps);
+	const autoProbe = forced === undefined && !deps.isDevelopment();
+	// Share the original read promises during auto boot. Neither consumer
+	// awaits the other, and retries use the original readers.
+	const once = (read: () => Promise<string>) => {
+		let reading: { promise: Promise<string> } | { error: unknown } | undefined;
+		return () => {
+			if (reading === undefined) {
+				try {
+					reading = { promise: read() };
+				} catch (error: unknown) {
+					reading = { error };
+				}
+			}
+			if ("error" in reading) throw reading.error;
+			return reading.promise;
+		};
+	};
+	const bootDeps = autoProbe
+		? {
+				...deps,
+				readDeviceTreeCompatible: once(deps.readDeviceTreeCompatible),
+				readDeviceTreeModel: once(deps.readDeviceTreeModel),
+				readCeraliveRelease: once(deps.readCeraliveRelease),
+				readDmiProductName: once(deps.readDmiProductName),
+				readDmiBoardName: once(deps.readDmiBoardName),
+			}
+		: deps;
+	// Boot must await the ordinary promise itself, never a guard probe or a
+	// derived promise: the update sweep races authenticated RPC replies.
+	const ready = isRealDevice(bootDeps);
 	let evidence: HardwareEvidence = "skipped";
-	async function launch(): Promise<ProbeResult> {
+	async function launch(probeDeps: DeviceDetectionDeps): Promise<void> {
 		evidence = "pending";
-		const result = await probeRealDeviceHardware(deps).catch(
+		evidence = await probeRealDeviceHardware(probeDeps).catch(
 			(): ProbeResult => "errored",
 		);
-		evidence = result;
-		return result;
 	}
-	const hardware =
-		forced === undefined
-			? deps.isDevelopment()
-				? undefined
-				: launch()
-			: forced && !simulationSelectedAtBoot
-				? launch()
-				: undefined;
+	if (autoProbe || (forced === true && !simulationSelectedAtBoot))
+		void launch(bootDeps);
 	return {
-		ready:
-			forced === undefined && hardware
-				? hardware.then((result) => result === "positive")
-				: Promise.resolve(forced ?? false),
+		ready,
 		// The network caller applies live simulation fences separately.
 		isStillReal: () => forcedDeviceType(deps) ?? evidence !== "negative",
 		refresh: () => {
@@ -250,7 +269,7 @@ export function observeRealDeviceAtBoot(
 				(evidence === "skipped" || evidence === "errored") &&
 				forcedDeviceType(deps) !== false
 			)
-				void launch();
+				void launch(deps);
 		},
 	};
 }

@@ -58,6 +58,7 @@ test("hardware evidence matches the consulted-read table, including ENOENT", asy
 						].includes("error");
 						const observer = observeRealDeviceAtBoot(false, deps);
 						expect(await observer.ready).toBe(positive);
+						await drain();
 						expect(observer.isStillReal()).toBe(positive || inconclusive);
 					}
 });
