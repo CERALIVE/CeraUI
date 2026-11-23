@@ -88,7 +88,9 @@ export async function loadConfig() {
 		Object.assign(config, MOCK_CONFIG_PAIRING_DEFAULTS);
 	}
 
-	logger.debug("config loaded", config);
+	// Key names only: config.json holds credentials (ssh_pass, the password and
+	// SSH hashes, remote_key), and the journal keeps whatever is logged here.
+	logger.debug("config loaded", { keys: Object.keys(config).sort() });
 
 	// Lazy import breaks the config↔audio cycle (audio.ts imports getConfig).
 	const { warnIfConfiguredAudioSourceUnavailable } = await import(

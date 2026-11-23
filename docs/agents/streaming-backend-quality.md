@@ -190,10 +190,21 @@ issue list, so callers omit the field rather than log an empty record. See
 🚀 server / ▶️ autostart & reconciler) and a final `✅ CeraUI ready on port N in Xms` line.
 
 **Secret redaction (all transports):**
-`redact()` format scrubs every record before it reaches any transport. Keys matching
-`/pin|password|token|secret|paseto|bcrp|auth/i` are replaced with `[REDACTED]`. Value-shaped
-secrets (PASETO `v4.public.*`, JWT `eyJ…`, Bearer credentials) are also scrubbed from string
-values. The `logRedact(value)` helper is exported for call sites building metadata objects.
+`redact()` format scrubs every record before it reaches any transport. A key is replaced with
+`[REDACTED]` when `isSensitiveKey()` accepts it: the substring rule
+`/pin|password|token|secret|paseto|bcrp|auth/i`, the whole-word credential rule in
+`helpers/secret-key-words.ts` (`pass`, `pwd`, `psk`, `secret`, … as a word of the key, and a final
+`key` or `hash` right after `remote`, `private`, `ssh`, `stream`, …, or alone under such a parent
+key, so `ssh_pass`, `ssh_pass_hash`, `remote_key` and `{ ssh: { hash } }` are caught while
+`video_passthrough`, `keyframe`, `keyCount`, `remoteCommitHash` and `{ video: { key } }` are not), or one of the whole-key classes (SMS, USSD, GPS, own
+number, device login). `logger-config-credentials.test.ts` pins the set of `runtimeConfigSchema`
+fields the logger redacts. Value-shaped secrets (PASETO `v4.public.*`, JWT `eyJ…`, Bearer
+credentials) are also scrubbed from string values. The `logRedact(value)` helper is exported for
+call sites building metadata objects. `loadConfig()` logs only the key names of `config.json`,
+and an unrecognised WebSocket frame logs its key names and size, never a payload. Support
+bundles also parse JSON in journal text and mask string values under keys `isSensitiveKey`
+accepts (`device-logs/credential-members.ts`, see `device-log-bundle.md` for the exact
+guarantee), so older journal lines whose values the backend no longer holds stay out of them.
 
 **Loop visibility:**
 Streaming and ingest loop modules log entry/exit and error paths via `logger.debug`/`logger.warn`

@@ -15,9 +15,11 @@ import * as routers from "../modules/network/router-cellular-scan.ts";
 import * as relays from "../modules/remote/remote-relays.ts";
 import * as stats from "../modules/system/device-stats-snapshot.ts";
 import * as hardware from "../modules/system/hardware-kind.ts";
+import * as ssh from "../modules/system/ssh.ts";
 import * as updates from "../modules/system/update-settings.ts";
 import * as versions from "../modules/system/version-context.ts";
 import * as hotspots from "../modules/wifi/hotspot-credentials.ts";
+import * as password from "../rpc/state/password.ts";
 import { bootId, queryFixture } from "./helpers/device-query.ts";
 
 let fixture: ReturnType<typeof queryFixture>;
@@ -209,12 +211,20 @@ test.each([false, true])(
 );
 
 test("every held credential class including disconnected router logins is collected solely for redaction", async () => {
+	restore(
+		spyOn(ssh, "getSshPasswordHash").mockReturnValue("$6$salt$held-ssh-hash"),
+	);
+	restore(
+		spyOn(password, "getPasswordHash").mockReturnValue("$2b$10$held-ui-hash"),
+	);
 	const result = await collectBundleData();
 	expect(() => buildRedactor(result.secrets)).not.toThrow();
 	expect(result.secrets.map((secret) => secret.value).sort()).toEqual(
 		[
 			"ui-pass",
 			"ssh-pass",
+			"$6$salt$held-ssh-hash",
+			"$2b$10$held-ui-hash",
 			"remote-key",
 			"stream-id",
 			"override-key",

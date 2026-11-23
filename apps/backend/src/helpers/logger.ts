@@ -3,6 +3,7 @@ import { Writable } from "node:stream";
 import winston from "winston";
 
 import { isDevelopment } from "../mocks/mock-config.ts";
+import { isSecretWordKey } from "./secret-key-words.ts";
 
 /**
  * Bounded on-disk log retention for non-production runs.
@@ -213,6 +214,21 @@ export function isCredentialSensitiveKey(key: string): boolean {
 	return CREDENTIAL_SENSITIVE_KEYS.has(key.toLowerCase().replace(/[_.-]/g, ""));
 }
 
+export { isSecretWordKey };
+
+/** Every key-side redaction class, so each walker applies the same rule. */
+export function isSensitiveKey(key: string, parentKey?: string): boolean {
+	return (
+		SENSITIVE_KEY_RE.test(key) ||
+		isSecretWordKey(key, parentKey) ||
+		isSmsSensitiveKey(key) ||
+		isGpsSensitiveKey(key) ||
+		isUssdSensitiveKey(key) ||
+		isOwnNumberSensitiveKey(key) ||
+		isCredentialSensitiveKey(key)
+	);
+}
+
 /**
  * Backstop for the VALUE side: a raw `mmcli -K -s <path>` record pasted into a
  * free-text log line carries the body and the originator on its face. The
@@ -284,25 +300,19 @@ function isRedactablePlainObject(
  * everything else through untouched. Non-plain objects (e.g. `Error`) are left
  * intact so structured-error logging keeps working.
  */
-function redactValue(value: unknown): unknown {
+function redactValue(value: unknown, parentKey?: string): unknown {
 	if (typeof value === "string") {
 		return looksSecret(value) ? REDACTED : value;
 	}
 	if (Array.isArray(value)) {
-		return value.map(redactValue);
+		return value.map((item) => redactValue(item, parentKey));
 	}
 	if (isRedactablePlainObject(value)) {
 		const out: Record<string, unknown> = {};
 		for (const [key, inner] of Object.entries(value)) {
-			out[key] =
-				SENSITIVE_KEY_RE.test(key) ||
-				isSmsSensitiveKey(key) ||
-				isGpsSensitiveKey(key) ||
-				isUssdSensitiveKey(key) ||
-				isOwnNumberSensitiveKey(key) ||
-				isCredentialSensitiveKey(key)
-					? REDACTED
-					: redactValue(inner);
+			out[key] = isSensitiveKey(key, parentKey)
+				? REDACTED
+				: redactValue(inner, key);
 		}
 		return out;
 	}
@@ -325,15 +335,7 @@ export function logRedact(value: unknown): unknown {
  */
 export const redact = winston.format((info) => {
 	for (const key of Object.keys(info)) {
-		info[key] =
-			SENSITIVE_KEY_RE.test(key) ||
-			isSmsSensitiveKey(key) ||
-			isGpsSensitiveKey(key) ||
-			isUssdSensitiveKey(key) ||
-			isOwnNumberSensitiveKey(key) ||
-			isCredentialSensitiveKey(key)
-				? REDACTED
-				: redactValue(info[key]);
+		info[key] = isSensitiveKey(key) ? REDACTED : redactValue(info[key], key);
 	}
 	return info;
 });

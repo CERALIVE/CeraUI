@@ -993,3 +993,62 @@ test("uncompressed output is bounded at 32 MiB and compressed output at 8 MiB", 
 		}
 	}
 }, 30_000);
+
+test("a config line from before key redaction leaves no SSH password, hash or remote key in the bundle", async () => {
+	source.secrets = [];
+	const message = JSON.stringify({
+		ts: "2026-01-01T00:00:00.000Z",
+		level: "debug",
+		msg: "config loaded",
+		meta: {
+			ssh_pass: "old-ssh-pass-5d0e",
+			ssh_pass_hash: "$6$oldsalt$oldsshhash5d0e",
+			remote_key: "old-remote-key-5d0e",
+			autostart: true,
+		},
+	});
+	const scan = spyOn(pages, "scanPage")
+		.mockResolvedValueOnce(page([{ ...record(1), message }]))
+		.mockResolvedValue(page());
+	try {
+		const { text } = await unpack(await download());
+		for (const value of [
+			"old-ssh-pass-5d0e",
+			"oldsshhash5d0e",
+			"old-remote-key-5d0e",
+		])
+			expect(text).not.toContain(value);
+		expect(text.match(/\[REDACTED:ssh\]/g)).toHaveLength(2);
+		expect(text).toContain("[REDACTED:remote_key]");
+		expect(text).toContain("config loaded");
+	} finally {
+		scan.mockRestore();
+	}
+});
+
+test("nested and array credentials in an old journal line stay out of the bundle", async () => {
+	source.secrets = [];
+	const message = JSON.stringify({
+		msg: "remote state",
+		meta: {
+			remote: { key: "nested-remote-b3" },
+			relays: [{ ingest_key: "array-object-b3" }],
+			raw: JSON.stringify({ ssh: { hash: "$6$s$inner-hash-b3" } }),
+		},
+	});
+	const scan = spyOn(pages, "scanPage")
+		.mockResolvedValueOnce(page([{ ...record(1), message }]))
+		.mockResolvedValue(page());
+	try {
+		const { text } = await unpack(await download());
+		for (const value of [
+			"nested-remote-b3",
+			"array-object-b3",
+			"inner-hash-b3",
+		])
+			expect(text).not.toContain(value);
+		expect(text).toContain("remote state");
+	} finally {
+		scan.mockRestore();
+	}
+});
