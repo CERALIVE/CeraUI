@@ -1385,10 +1385,14 @@ interface EngineDeviceProbe {
  */
 async function probeEngineDevices(
 	deps: EngineDeviceCacheDeps,
+	current: () => boolean = () => true,
 ): Promise<EngineDeviceProbe | undefined> {
 	const selectionToken = sourceSelectionToken;
 	try {
 		const result = await deps.fetchEngineDevices();
+		// A caller torn down while the probe was in flight keeps nothing, not
+		// even the identities a later failed probe would fall back to.
+		if (!current()) return undefined;
 		const devices = result.devices.map((d) => {
 			return fromEngineDevice({
 				input_id: d.input_id,
@@ -1497,12 +1501,12 @@ function withKnownEngineMetadata(
  * audio list CHANGED. Lazily imported to break the `audio.ts → sources.ts` cycle
  * (the same shape `devices.ts` uses for `onDevicesChanged`); never rejects.
  */
-type EngineAudioChangeHandler = () => void;
+type EngineAudioChangeHandler = (current: () => boolean) => void;
 
-const defaultEngineAudioChangeHandler: EngineAudioChangeHandler = () => {
+const defaultEngineAudioChangeHandler: EngineAudioChangeHandler = (current) => {
 	void import("./audio.ts")
 		.then(({ reresolveAudioForEngineChange }) =>
-			reresolveAudioForEngineChange(),
+			reresolveAudioForEngineChange(current),
 		)
 		.catch((err) =>
 			logger.debug("sources: audio re-resolve after engine change failed", {
@@ -1542,6 +1546,8 @@ function commitEngineDevices(
 	devices: readonly CaptureDevice[],
 	audio?: readonly EngineAudioDevice[],
 	viewSelectionToken: number = sourceSelectionToken,
+	// The committing caller's guard, carried into the queued audio re-resolve.
+	current: () => boolean = () => true,
 ): void {
 	engineDeviceCache = [...devices];
 	engineViewSelectionToken = viewSelectionToken;
@@ -1556,7 +1562,7 @@ function commitEngineDevices(
 	// `timing is invalid` dmesg line raises the notification while the engine's
 	// own view never varies, so a change-gated hook would never retract it.
 	clearHdmiSignalErrorOnRecovery(engineDeviceCache);
-	if (audioChanged) engineAudioChangeHandler();
+	if (audioChanged) engineAudioChangeHandler(current);
 }
 
 /**
@@ -1569,10 +1575,17 @@ function commitEngineDevices(
  */
 export async function tryRefreshEngineDeviceCache(
 	deps: EngineDeviceCacheDeps = defaultEngineDeviceCacheDeps,
+	current: () => boolean = () => true,
 ): Promise<boolean> {
-	const probe = await probeEngineDevices(deps);
-	if (probe === undefined) return false;
-	commitEngineDevices(probe.devices, probe.audio, probe.selectionToken);
+	const probe = await probeEngineDevices(deps, current);
+	// A caller torn down while the probe was in flight commits nothing.
+	if (probe === undefined || !current()) return false;
+	commitEngineDevices(
+		probe.devices,
+		probe.audio,
+		probe.selectionToken,
+		current,
+	);
 	return true;
 }
 
@@ -1584,8 +1597,9 @@ export async function tryRefreshEngineDeviceCache(
  */
 export async function refreshEngineDeviceCache(
 	deps: EngineDeviceCacheDeps = defaultEngineDeviceCacheDeps,
+	current: () => boolean = () => true,
 ): Promise<CaptureDevice[]> {
-	await tryRefreshEngineDeviceCache(deps);
+	await tryRefreshEngineDeviceCache(deps, current);
 	return engineDeviceCache;
 }
 
@@ -1794,8 +1808,10 @@ function broadcastSourcesIfChanged(): void {
  */
 export async function refreshAndBroadcastSources(
 	deps: EngineDeviceCacheDeps = defaultEngineDeviceCacheDeps,
+	current: () => boolean = () => true,
 ): Promise<void> {
-	await refreshEngineDeviceCache(deps);
+	await refreshEngineDeviceCache(deps, current);
+	if (!current()) return;
 	broadcastSources();
 }
 

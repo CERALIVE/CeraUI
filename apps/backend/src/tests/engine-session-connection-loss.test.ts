@@ -14,6 +14,10 @@ import {
 	CerastreamBackend,
 	type CerastreamBackendDeps,
 } from "../modules/streaming/cerastream-backend.ts";
+import {
+	initEngineConnection,
+	stopEngineReconnect,
+} from "../modules/streaming/engine-reconnect.ts";
 import { createStreamSessionOrchestrator } from "../modules/streaming/stream-session-orchestrator.ts";
 import type { StreamRunOptions } from "../modules/streaming/streaming-backend.ts";
 import { manualReconciliationDeadline } from "./helpers/reconciliation-deadline.ts";
@@ -463,5 +467,108 @@ describe("what is NOT proof that the connection died", () => {
 		});
 		await h.backend.settle();
 		expect(h.lostSites).toEqual([]);
+	});
+});
+
+describe("a proven loss re-arms the engine reconnect", () => {
+	function lossHarness() {
+		const events: string[] = [];
+		const clients: FakeClient[] = [];
+		const backend = new CerastreamBackend({
+			connect: async () => {
+				const next = makeFakeClient();
+				clients.push(next);
+				return next.client;
+			},
+			connectOptions: {},
+			getConfig: () => STREAM_CONFIG,
+			saveConfig: () => undefined,
+			bridge: {
+				notify: () => undefined,
+				notificationExists: () => false,
+				removeNotification: () => {},
+				broadcastStatus: () => {},
+				broadcastBuffering: () => undefined,
+			},
+			execPath: "cerastream",
+			configPath: "/tmp/cerastream-connection-loss.json",
+			logger: silentLogger,
+			onSessionConnectionLost: (site) => {
+				events.push(`lost:${site}`);
+			},
+			onEngineUnreachable: (site) => {
+				events.push(`unreachable:${site}`);
+			},
+		});
+		return { backend, events, clients };
+	}
+
+	test("a dead control connection retires the session, then re-arms, once", async () => {
+		const h = lossHarness();
+		await h.backend.start(STREAM_CONFIG, RUN_OPTS);
+		await h.backend.settle();
+		h.clients[0]?.killConnection();
+		await expect(h.backend.listDevicesIfActive()).resolves.toBeNull();
+		await expect(h.backend.listDevicesIfActive()).resolves.toBeNull();
+		expect(h.events).toEqual([
+			"lost:list-devices-poll",
+			"unreachable:list-devices-poll",
+		]);
+	});
+
+	test("without an injected hook, the loss re-arms the real reconnect loop", async () => {
+		// The production binding: no `onEngineUnreachable` in the deps.
+		const timers: Array<() => void> = [];
+		let reachable = true;
+		await initEngineConnection({
+			refreshCapabilities: async () => {},
+			isEngineReachable: () => reachable,
+			broadcastEngineState: () => {},
+			publishEngineAvailability: () => {},
+			broadcastEngineOffline: () => {},
+			reportEngineState: () => {},
+			logger: silentLogger,
+			setTimer: (fn) => {
+				timers.push(fn);
+				return timers.length as unknown as ReturnType<typeof setTimeout>;
+			},
+			clearTimer: () => {},
+		});
+		try {
+			expect(timers).toHaveLength(0);
+			const lostSites: string[] = [];
+			const fake = makeFakeClient();
+			const backend = new CerastreamBackend({
+				connect: async () => fake.client,
+				connectOptions: {},
+				getConfig: () => STREAM_CONFIG,
+				saveConfig: () => undefined,
+				bridge: {
+					notify: () => undefined,
+					notificationExists: () => false,
+					removeNotification: () => {},
+					broadcastStatus: () => {},
+					broadcastBuffering: () => undefined,
+				},
+				execPath: "cerastream",
+				configPath: "/tmp/cerastream-connection-loss.json",
+				logger: silentLogger,
+				onSessionConnectionLost: (site) => {
+					lostSites.push(site);
+				},
+			});
+			await backend.start(STREAM_CONFIG, RUN_OPTS);
+			await backend.settle();
+			reachable = false;
+			fake.killConnection();
+			await expect(backend.listDevicesIfActive()).resolves.toBeNull();
+			expect(lostSites).toEqual(["list-devices-poll"]);
+			// The binding imports the loop lazily; let it land.
+			for (let i = 0; i < 20 && timers.length === 0; i++)
+				await new Promise((resolve) => setTimeout(resolve, 5));
+			expect(timers).toHaveLength(1);
+		} finally {
+			stopEngineReconnect();
+		}
 	});
 });

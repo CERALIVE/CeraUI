@@ -160,6 +160,8 @@ export type StreamSessionOrchestratorDeps = {
 	readonly suppressionContext?: () => SuppressionContext;
 	readonly reportRetry?: (diagnostic: StartRetryDiagnostic) => void;
 	readonly reportTerminalFailure?: (diagnostic: StartRetryDiagnostic) => void;
+	/** A launch could not reach the engine (see `runStartWithRetry`). */
+	readonly onEngineUnavailable?: () => void;
 	/**
 	 * Called once a launch has cleared the engine's outcome gate — the single
 	 * moment a start is known to have really delivered, for every origin. It is
@@ -580,6 +582,9 @@ export function createStreamSessionOrchestrator(
 				: {}),
 			...(deps.reportTerminalFailure !== undefined
 				? { reportTerminalFailure: deps.reportTerminalFailure }
+				: {}),
+			...(deps.onEngineUnavailable !== undefined
+				? { onEngineUnavailable: deps.onEngineUnavailable }
 				: {}),
 		});
 		if (!currentIntent() || launchResult.result === "cancelled") {

@@ -691,8 +691,13 @@ async function resolveAudioDisplaysForTick(
 }
 
 /** Re-resolve every audio label/detail and push the `status` audio surface. */
-export async function broadcastAudioSources(): Promise<void> {
-	lastAudioDisplays = await resolveAudioDisplaysForTick(audioDevices);
+export async function broadcastAudioSources(
+	current: () => boolean = () => true,
+): Promise<void> {
+	const displays = await resolveAudioDisplaysForTick(audioDevices);
+	// A caller torn down while the displays resolved commits and sends nothing.
+	if (!current()) return;
+	lastAudioDisplays = displays;
 	lastAudioIdentities = resolveAudioIdentities(
 		audioDevices,
 		getEngineAudioDevices(),
@@ -725,10 +730,17 @@ export async function broadcastAudioSources(): Promise<void> {
  * nothing when it did not — the bridge dedupes on the gap reason and preference,
  * so an unchanged pick broadcasts no gap.
  */
-export async function reresolveAudioForEngineChange(): Promise<void> {
-	await refreshPipewireBluetoothAudioSourcesForEngineChange();
+export async function reresolveAudioForEngineChange(
+	current: () => boolean = () => true,
+): Promise<void> {
+	// `current` is the committing caller's guard (the engine-reconnect heal):
+	// once it is torn down, no step below commits a cache or publishes. The
+	// Bluetooth refresh checks it before its own commit.
+	await refreshPipewireBluetoothAudioSourcesForEngineChange(current);
+	if (!current()) return;
 	composeAudioDevices();
-	await broadcastAudioSources();
+	await broadcastAudioSources(current);
+	if (!current()) return;
 	refreshResolvedAsrcPreview();
 	syncAudioMeterPreference();
 }
