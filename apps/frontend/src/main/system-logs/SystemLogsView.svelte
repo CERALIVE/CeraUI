@@ -213,7 +213,7 @@ $effect(() => {
 	</section>
 {/snippet}
 
-<div bind:this={view} class="flex min-h-0 flex-1 short-logs:data-raw-active:overflow-y-auto" data-raw-active={status === 'ready' && current === 'raw' ? '' : undefined} data-testid="system-logs-view" style:--raw-controls-max="round(down, clamp(3.5rem, 27dvh, 10rem), 1px)">
+<div bind:this={view} class="flex min-h-0 flex-1" data-raw-active={status === 'ready' && current === 'raw' ? '' : undefined} data-testid="system-logs-view" style:--raw-controls-max="round(down, clamp(3.5rem, 27dvh, 10rem), 1px)">
 	<div class="flex min-h-0 min-w-0 flex-1 flex-col">
 		{#if status === 'ready'}
 			<Tabs.Root class="min-h-0 flex-1 gap-0" onValueChange={selectTab} value={current}>

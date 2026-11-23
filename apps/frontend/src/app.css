@@ -19,6 +19,14 @@
 	}
 }
 
+@layer utilities {
+	[data-raw-active] {
+		@variant short-logs {
+			overflow-y: auto;
+		}
+	}
+}
+
 /*
   Border compatibility for Tailwind CSS v4
   (default border-color changed to currentColor)
