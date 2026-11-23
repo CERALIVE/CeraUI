@@ -134,9 +134,13 @@ must contain the `source-audio` block with its ids unchanged.
   "End the stream?" with Keep streaming (initial focus, the bottom button
   on a phone) and End stream. End stream immediately requests Stop once,
   only for the still-live session that opened the dialog. Stop cannot open
-  the question based on status from a previous connection. Any reported
-  lifecycle other than streaming, including stopping before the live flag
-  clears, or a connection drop invalidates the question. Keep streaming and
+  the question based on status from a previous connection. A current-link
+  live boolean counts whether it came from a push, reconnect hydrate or
+  watchdog read, once the connection is up. A newer live flag can precede the
+  lifecycle update at the start edge, and live reconfiguration can still be
+  stopped. A reported lifecycle other than streaming, including stopping
+  before the live flag clears, or a connection drop invalidates an open
+  question. Keep streaming and
   Escape close it without stopping and return focus to Stop, or to the
   main content landmark if Stop is gone or unavailable. A backdrop tap
   does nothing. The recovery/unconfirmed band's Stop and the stop watchdog's

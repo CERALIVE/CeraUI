@@ -247,6 +247,76 @@ afterEach(() => {
 });
 
 describe("Live bar Stop confirmation over the real socket", () => {
+	it("enables Stop after the connection opens if its live status arrived first", async () => {
+		const { container } = render(LiveView);
+		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+		dropLink();
+		// The reconnect timer creates the replacement socket; deliver its live
+		// status before notifying the client that the socket is connected.
+		await restoreLink(() => {
+			deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+			expect(
+				getByTestId(container, "live-bar-stop").getAttribute("aria-disabled"),
+			).toBe("true");
+		});
+		await settle();
+		expect(
+			getByTestId(container, "live-bar-stop").getAttribute("aria-disabled"),
+		).toBeNull();
+		await openLiveStopConfirmation(container);
+		expect(sentCount("streaming.stop")).toBe(0);
+	});
+
+	it("uses a fresh live boolean, not the previous idle lifecycle, to offer Stop", async () => {
+		const { container } = render(LiveView);
+		deliverStatus({ is_streaming: true });
+		expect(
+			getByTestId(container, "live-bar-stop").getAttribute("aria-disabled"),
+		).toBeNull();
+		await openLiveStopConfirmation(container);
+		expect(sentCount("streaming.stop")).toBe(0);
+	});
+
+	it("enables Stop when only reconnect hydration confirms the stream is still live", async () => {
+		const { container } = render(LiveView);
+		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+		await reconnectAwaitingHydrate();
+		const stop = getByTestId(container, "live-bar-stop");
+		expect(stop.getAttribute("aria-disabled")).toBe("true");
+
+		answer("streaming.getConfig", {});
+		// A remote live reconfiguration can span the reconnect.
+		answer("status.getStatus", {
+			is_streaming: true,
+			stream_lifecycle: "reconfiguring",
+		});
+		await settle();
+		expect(stop.getAttribute("aria-disabled")).toBeNull();
+		await openLiveStopConfirmation(container);
+		expect(sentCount("streaming.stop")).toBe(0);
+	});
+
+	it("enables Stop when only the Start watchdog pull confirms the stream went live", async () => {
+		const { container } = render(LiveView);
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		answer("streaming.start", { success: true });
+		await settle();
+		await elapse(90_000);
+		expect(outstanding("status.getStatus")).toHaveLength(1);
+
+		answer("status.getStatus", {
+			is_streaming: true,
+			stream_lifecycle: "reconfiguring",
+		});
+		await settle();
+		expect(
+			getByTestId(container, "live-bar-stop").getAttribute("aria-disabled"),
+		).toBeNull();
+		await openLiveStopConfirmation(container);
+		expect(sentCount("streaming.stop")).toBe(0);
+	});
+
 	it.each([
 		"during the outage",
 		"after re-authentication without a live boolean",
