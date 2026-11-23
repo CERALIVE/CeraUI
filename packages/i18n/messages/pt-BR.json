@@ -563,6 +563,23 @@
 	"live.ingest.idleTitle": "Ainda sem links agrupados",
 	"live.ingest.link": "Link",
 	"live.ingest.links": "Links",
+	"live.ingest.linkCount": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} link",
+				"countPlural=many": "{count} links",
+				"countPlural=other": "{count} links",
+				"countPlural=*": "{count} links"
+			}
+		}
+	],
 	"live.ingest.linksReadyCount": [
 		{
 			"declarations": [
@@ -586,6 +603,23 @@
 	"live.ingest.peak": "Pico",
 	"live.ingest.rtt": "RTT",
 	"live.ingest.samples": "Amostras",
+	"live.ingest.sampleCount": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} amostra",
+				"countPlural=many": "{count} amostras",
+				"countPlural=other": "{count} amostras",
+				"countPlural=*": "{count} amostras"
+			}
+		}
+	],
 	"live.ingest.sessionEnded": "Sessão encerrada · {duration}",
 	"live.ingest.summary": "Resumo da sessão",
 	"live.ingest.title": "Estatísticas de ingestão",

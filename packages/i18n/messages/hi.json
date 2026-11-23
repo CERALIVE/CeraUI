@@ -563,6 +563,22 @@
 	"live.ingest.idleTitle": "अभी तक कोई बॉन्डेड लिंक नहीं",
 	"live.ingest.link": "लिंक",
 	"live.ingest.links": "लिंक",
+	"live.ingest.linkCount": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} लिंक",
+				"countPlural=other": "{count} लिंक",
+				"countPlural=*": "{count} लिंक"
+			}
+		}
+	],
 	"live.ingest.linksReadyCount": [
 		{
 			"declarations": [
@@ -585,6 +601,22 @@
 	"live.ingest.peak": "शिखर",
 	"live.ingest.rtt": "RTT",
 	"live.ingest.samples": "नमूने",
+	"live.ingest.sampleCount": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} नमूना",
+				"countPlural=other": "{count} नमूने",
+				"countPlural=*": "{count} नमूने"
+			}
+		}
+	],
 	"live.ingest.sessionEnded": "सत्र समाप्त · {duration}",
 	"live.ingest.summary": "सत्र सारांश",
 	"live.ingest.title": "इन्जेस्ट आँकड़े",

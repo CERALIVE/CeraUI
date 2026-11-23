@@ -500,6 +500,14 @@
 	"live.ingest.idleTitle": "Aucun lien agrégé pour l'instant",
 	"live.ingest.link": "Liaison",
 	"live.ingest.links": "Liaisons",
+	"live.ingest.linkCount": {
+		"0": "0 liaison",
+		"1": "1 liaison",
+		"2": "2 liaisons",
+		"5": "5 liaisons",
+		"11": "11 liaisons",
+		"100": "100 liaisons"
+	},
 	"live.ingest.linksReadyCount": {
 		"0": "0 lien prêt à agréger",
 		"1": "1 lien prêt à agréger",
@@ -514,6 +522,14 @@
 	"live.ingest.peak": "Pic",
 	"live.ingest.rtt": "RTT",
 	"live.ingest.samples": "Échantillons",
+	"live.ingest.sampleCount": {
+		"0": "0 échantillon",
+		"1": "1 échantillon",
+		"2": "2 échantillons",
+		"5": "5 échantillons",
+		"11": "11 échantillons",
+		"100": "100 échantillons"
+	},
 	"live.ingest.sessionEnded": "Session terminée · <duration>",
 	"live.ingest.summary": "Résumé de session",
 	"live.ingest.title": "Statistiques d'ingestion",

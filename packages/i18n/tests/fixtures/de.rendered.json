@@ -500,6 +500,14 @@
 	"live.ingest.idleTitle": "Noch keine gebündelten Links",
 	"live.ingest.link": "Verbindung",
 	"live.ingest.links": "Verbindungen",
+	"live.ingest.linkCount": {
+		"0": "0 Verbindungen",
+		"1": "1 Verbindung",
+		"2": "2 Verbindungen",
+		"5": "5 Verbindungen",
+		"11": "11 Verbindungen",
+		"100": "100 Verbindungen"
+	},
 	"live.ingest.linksReadyCount": {
 		"0": "0 Links bereit zum Bündeln",
 		"1": "1 Link bereit zum Bündeln",
@@ -514,6 +522,14 @@
 	"live.ingest.peak": "Spitze",
 	"live.ingest.rtt": "RTT",
 	"live.ingest.samples": "Messungen",
+	"live.ingest.sampleCount": {
+		"0": "0 Messungen",
+		"1": "1 Messung",
+		"2": "2 Messungen",
+		"5": "5 Messungen",
+		"11": "11 Messungen",
+		"100": "100 Messungen"
+	},
 	"live.ingest.sessionEnded": "Sitzung beendet · <duration>",
 	"live.ingest.summary": "Sitzungsübersicht",
 	"live.ingest.title": "Ingest-Statistiken",

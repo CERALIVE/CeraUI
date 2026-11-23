@@ -500,6 +500,14 @@
 	"live.ingest.idleTitle": "No bonded links yet",
 	"live.ingest.link": "Link",
 	"live.ingest.links": "Links",
+	"live.ingest.linkCount": {
+		"0": "0 links",
+		"1": "1 link",
+		"2": "2 links",
+		"5": "5 links",
+		"11": "11 links",
+		"100": "100 links"
+	},
 	"live.ingest.linksReadyCount": {
 		"0": "0 links ready to bond",
 		"1": "1 link ready to bond",
@@ -514,6 +522,14 @@
 	"live.ingest.peak": "Peak",
 	"live.ingest.rtt": "RTT",
 	"live.ingest.samples": "Samples",
+	"live.ingest.sampleCount": {
+		"0": "0 samples",
+		"1": "1 sample",
+		"2": "2 samples",
+		"5": "5 samples",
+		"11": "11 samples",
+		"100": "100 samples"
+	},
 	"live.ingest.sessionEnded": "Session ended · <duration>",
 	"live.ingest.summary": "Session Summary",
 	"live.ingest.title": "Ingest Stats",

@@ -563,6 +563,26 @@
 	"live.ingest.idleTitle": "لا توجد روابط مجمّعة بعد",
 	"live.ingest.link": "الرابط",
 	"live.ingest.links": "الروابط",
+	"live.ingest.linkCount": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=zero": "{count} رابط",
+				"countPlural=one": "{count} رابط",
+				"countPlural=two": "{count} رابطان",
+				"countPlural=few": "{count} روابط",
+				"countPlural=many": "{count} رابطًا",
+				"countPlural=other": "{count} رابط",
+				"countPlural=*": "{count} رابط"
+			}
+		}
+	],
 	"live.ingest.linksReadyCount": [
 		{
 			"declarations": [
@@ -589,6 +609,26 @@
 	"live.ingest.peak": "الذروة",
 	"live.ingest.rtt": "RTT",
 	"live.ingest.samples": "العينات",
+	"live.ingest.sampleCount": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=zero": "{count} عينة",
+				"countPlural=one": "{count} عينة",
+				"countPlural=two": "{count} عينتان",
+				"countPlural=few": "{count} عينات",
+				"countPlural=many": "{count} عينةً",
+				"countPlural=other": "{count} عينة",
+				"countPlural=*": "{count} عينة"
+			}
+		}
+	],
 	"live.ingest.sessionEnded": "انتهت الجلسة · {duration}",
 	"live.ingest.summary": "ملخص الجلسة",
 	"live.ingest.title": "إحصائيات الإدخال",
