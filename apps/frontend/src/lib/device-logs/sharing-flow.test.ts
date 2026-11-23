@@ -243,6 +243,27 @@ describe("SharingFlow: Export this view", () => {
 	});
 
 	it.each([
+		["CREDENTIAL_TOO_SHORT", "credentialTooShort"],
+		["CREDENTIALS_LOADING", "credentialsLoading"],
+		["CREDENTIAL_READ_FAILED", "credentialsUnreadable"],
+	])(
+		"keeps the export confirmation open for %s without starting the download",
+		async (message, problem) => {
+			const { flow, createExport, download } = setup();
+			createExport.mockRejectedValue(
+				new RpcError({ code: "INTERNAL_ERROR", message }),
+			);
+			flow.openExport();
+
+			await flow.confirmExport();
+
+			expect(flow.exportStep).toBe("confirm");
+			expect(flow.exportProblem).toBe(problem);
+			expect(download).not.toHaveBeenCalled();
+		},
+	);
+
+	it.each([
 		["rejects", () => Promise.reject(new Error("Request timeout"))],
 		[
 			"throws",

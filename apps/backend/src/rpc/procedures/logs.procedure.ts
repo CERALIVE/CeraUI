@@ -24,6 +24,7 @@ import {
 } from "../../modules/device-logs/bundle.ts";
 import { listBoots } from "../../modules/device-logs/classified-boots.ts";
 import { createExport } from "../../modules/device-logs/export.ts";
+import { exportCredentialPolicy } from "../../modules/device-logs/export-redaction.ts";
 import { startFollow, stopFollow } from "../../modules/device-logs/follow.ts";
 import { locateAround, queryLogs } from "../../modules/device-logs/query.ts";
 import { JOURNAL_LIMITS } from "../../modules/device-logs/reader.ts";
@@ -102,9 +103,17 @@ export const clearAllLogsProcedure = authedProcedure
 export const createLogExportProcedure = authedProcedure
 	.input(logExportInputSchema)
 	.output(logExportOutputSchema)
-	.handler(({ context, input, signal }) =>
-		createExport(context.ws, input, signal),
-	);
+	.handler(({ context, input, signal }) => {
+		const credentials = exportCredentialPolicy();
+		if (!credentials.ok) {
+			const reason =
+				credentials.error === "READ_FAILED"
+					? "CREDENTIAL_READ_FAILED"
+					: credentials.error;
+			throw new ORPCError(reason, { message: reason });
+		}
+		return createExport(context.ws, input, signal);
+	});
 
 export const previewLogBundleProcedure = authedProcedure
 	.input(z.void())

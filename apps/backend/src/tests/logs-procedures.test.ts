@@ -3,9 +3,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { call } from "@orpc/server";
+import { setCredentialStoreState } from "../helpers/credential-store-state.ts";
 import * as logging from "../helpers/logger.ts";
 import * as runner from "../helpers/run.ts";
 import * as mocks from "../mocks/mock-service.ts";
+import * as runtimeConfig from "../modules/config.ts";
 import * as identity from "../modules/device-logs/boot-id.ts";
 import { currentBootId } from "../modules/device-logs/boot-id.ts";
 import { abortLogExports } from "../modules/device-logs/export.ts";
@@ -102,6 +104,40 @@ function bootId(): string {
 	if (!id) throw new Error("test host boot identity unavailable");
 	return id;
 }
+
+test.each([
+	["pending", undefined, "CREDENTIALS_LOADING"],
+	["failed", undefined, "CREDENTIAL_READ_FAILED"],
+	["ready", "k9", "CREDENTIAL_TOO_SHORT"],
+] as const)(
+	"the export RPC refuses a %s credential inventory before issuing a ticket",
+	async (state, remoteKey, message) => {
+		const config = spyOn(runtimeConfig, "getConfig").mockReturnValue({
+			remote_key: remoteKey,
+		});
+		let response: unknown;
+		const send = spyOn(sockets.ws, "send").mockImplementation((frame) => {
+			response = JSON.parse(String(frame));
+			return 1;
+		});
+		setCredentialStoreState("hotspot", state);
+		try {
+			await handleORPCMessage(sockets.ws, {
+				id: "credential-refusal",
+				path: ["logs", "createExport"],
+				input: { filter: {} },
+			});
+			expect(response).toEqual({
+				id: "credential-refusal",
+				error: { code: "INTERNAL_ERROR", message },
+			});
+		} finally {
+			setCredentialStoreState("hotspot", "ready");
+			send.mockRestore();
+			config.mockRestore();
+		}
+	},
+);
 async function seed(): Promise<void> {
 	await new Promise<void>((resolve) =>
 		logging.logger.write(

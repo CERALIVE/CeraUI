@@ -20,6 +20,25 @@ import { RpcError } from "$lib/rpc/rpc-error";
 export { chineseWordChunks } from "./cjk-words";
 
 export type SharingProblem = "busy" | "failed";
+export type ExportProblem =
+	| SharingProblem
+	| "credentialTooShort"
+	| "credentialsLoading"
+	| "credentialsUnreadable";
+
+export function exportCredentialProblem(error: unknown): ExportProblem | null {
+	if (!(error instanceof RpcError)) return null;
+	switch (error.message) {
+		case "CREDENTIAL_TOO_SHORT":
+			return "credentialTooShort";
+		case "CREDENTIALS_LOADING":
+			return "credentialsLoading";
+		case "CREDENTIAL_READ_FAILED":
+			return "credentialsUnreadable";
+		default:
+			return null;
+	}
+}
 
 /** What "Export this view" saves: the Raw logs filters, or the ten minutes around an exact anchor. */
 export type ExportSpan = "filters" | "moment";

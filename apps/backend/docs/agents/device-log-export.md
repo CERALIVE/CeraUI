@@ -33,18 +33,26 @@ direction and limit 200. Budget pages, including an unchanged or null
 continuation, continue until physical EOF, an error or a limit. Time membership
 and anchor validation remain owned by the paging pipeline.
 
-The export replaces the credentials the backend holds, using the bundle's
-known-secret matcher (`redaction.ts`) on `collectHeldSecrets()` (`bundle-data.ts`).
-It runs on each entry's unit and message before continuation lines are indented,
-then on each formatted entry and gap record. In the header it runs on the values
-only (versions, boot ids, the filter values), so the fixed labels, the sensitive
-data warning and the JSON syntax are never altered. Each value is matched before
-it is serialized and again after: when JSON escaping turns it into a held value
-(a line break becomes a backslash and `n`), the whole value is written as
-`"[REDACTED]"`. The bundle's identifier
-and address masking stays bundle-only. When redaction cannot cover every held
-credential, apart from the short identifier values described below, the export
-sends only a footer:
+The export uses the support bundle's known-value matcher (`redaction.ts`) and
+shared inventory (`bundle-data.ts`). The export-only projection runs after Raw
+Logs filter membership is decided but sees the decoded message before its 16 KiB
+cut and the original unit before `.service` is stripped. It redacts before
+clipping, checks the unit and message together, and checks the rendered entry
+again after continuation lines are indented. If an alternative representation
+or an unsafe replacement is detected, it can withhold the entire affected value
+or entry text. The bundle's identifier and address masks stay bundle-only.
+
+Header values (versions, boot IDs, creation time and filters) are checked,
+including after JSON escaping and across elements of a serialized filter array.
+An unsafe JSON value is replaced with a safe placeholder without breaking the
+JSON. Fixed labels and the sensitive-data warning stay in place.
+
+The authenticated export RPC checks credential readiness before giving the
+browser a ticket. **Export this view** keeps the existing dialog open and shows
+localized advice to wait and retry, change or remove a short credential, or
+contact support if a read failure persists. The attachment checks independently
+when streaming starts, since credentials can change after the ticket was issued.
+A refusal then sends only a footer:
 
 - `# incomplete: CREDENTIALS_LOADING` while the hotspot or modem credential store
   has not finished loading (`helpers/credential-store-state.ts`: `pending`).
@@ -53,16 +61,19 @@ sends only a footer:
   credential cannot be read, or when the matcher refuses the held set.
 - `# incomplete: CREDENTIAL_TOO_SHORT (<kinds>)` when a held value shorter than
   four characters (`MIN_REDACTED_LENGTH`, counted in UTF-16 code units), which
-  the matcher skips, is a password, key, pairing or relay secret (including the
-  relay stream key in `relay_streamid_override`), hotspot, APN or router
-  password, or any kind not listed below. Only those kinds are named. If the
+  the matcher skips, is a password, key (including a managed ingest key),
+  pairing or relay secret, hotspot, APN or router password, or any kind not
+  listed below. The export also refuses if a nonempty value's normalized form
+  is too short to match safely. Only those kinds are named. If the
   footer with its generated kind list would match a held value, it is just
   `# incomplete: CREDENTIAL_TOO_SHORT`, which is fixed text.
 
 Short values of the kinds in `SHORT_VALUE_EXPORT_KINDS` (`bundle-data.ts`):
-`stream` (a manually set `srt_streamid`), `apn_user`, `router_user` and `serial`
-do not stop the export. They name a stream, an account or a device rather than
-unlock one, and a hand-set stream ID is often a short label. The matcher skips
+`stream` (a short `srt_streamid` with an unconfigured or literal loopback
+receiver and no managed/relay selection), `apn_user`, `router_user` and `serial`
+do not stop the export. A selected managed slot always classifies the configured
+ID as an ingest key, even with no cached slots. A non-loopback manual
+receiver may authenticate by stream ID, so ambiguous short IDs also refuse. The matcher skips
 non-empty values under four characters, so these values are not redacted
 anywhere: they can appear in entries and in header values such as the search
 text, after the usual formatting (continuation lines are indented, header
@@ -77,29 +88,33 @@ are ignored.
 
 Limits:
 
-- **Values.** Held values are a snapshot taken when the export starts. Values set
-  later, and earlier values the backend no longer holds, are not matched.
-- **Representations.** Literal, JSON string escaping, URI component encoding
-  (either hex case), base64 and unpadded base64url of the whole value. Other
-  encodings, such as `+` for spaces or padded base64url, are not matched.
-- **Normalization.** Matching runs on what `parse.ts` returns, after it strips a
-  unit's `.service` suffix and truncates messages at 16 KiB, so a value cut at
-  those boundaries is not matched.
+- **Values.** The export compares its initial snapshot before emitting the
+  header, after page reads and at delivery boundaries. An observed change stops
+  it with `# incomplete: CREDENTIALS_CHANGED`; retry the export. Already sent
+  bytes cannot be recalled. Earlier or transient values absent at every
+  comparison, and values not held by the inventory, are not covered.
+- **Representations.** Whole-value literal, JSON string escaping, URI component
+  escapes (either hex case), base64 and padded/unpadded base64url are matched.
+  Export also checks NFC, CR/LF and default-ignorable Unicode splits, one URL
+  decode pass (including form spaces), and numeric/common named HTML entities.
+  These are bounded checks, not arbitrary decoding or deobfuscation. Separate
+  journal records, nested/composite encodings, and fragments already lost
+  upstream of the device journal reader are not reconstructed.
 - **Fixed text.** Footers, the header's fixed labels and the attachment filename
   are not passed through the matcher, apart from the generated kind lists
   described above. They carry only status codes, credential kinds, counts and
   the validated boot id and time, so a held value that happens to equal such
   text can still appear there.
-- **Header boundaries.** Each header value is matched on its own. A held value
-  that only matches together with the closing quote or the syntax after a header
-  value (a comma, brace or line break) is not replaced.
+- **Header boundaries.** Individual values and array values are checked, not
+  arbitrary combinations across header lines or fixed JSON member names.
 
-The support bundle uses the same held list and matcher but none of the store
-states, the short-value refusal or the header line. The held list now collects
+The support bundle uses the same held list and exact matcher but none of the
+export-only normalization, store states, short-value refusal or header line.
+The held list includes every currently pushed managed slot key. It collects
 `relay_streamid_override` as `relay`, so the bundle marks it
 `[REDACTED:relay]` instead of `[REDACTED:stream]` (unless the same value is
-also held as the stream ID, which is listed first); otherwise the bundle is
-unchanged.
+also held as the ordinary stream ID, which is listed first). The bundle's
+structured fields remain fail-closed and its wider privacy masks are unchanged.
 
 The response has attachment, no-store and UTF-8 plain text headers, with no
 Content-Length. Backpressure retains one page; no export content is sent over
