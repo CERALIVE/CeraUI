@@ -27,7 +27,7 @@ function unwrapped(text: string): string {
 
 function decoded(text: string, formSpaces: boolean): string {
 	return text.replace(
-		/(?:%[\da-f]{2})+|\+|&(?:#(?:x[\da-f]+|\d+)|amp|lt|gt|quot|apos|nbsp);/gi,
+		/(?:%[0-7][\da-f])+|%[cd][\da-f]%[89ab][\da-f]|%e[\da-f](?:%[89ab][\da-f]){2}|%f[0-4](?:%[89ab][\da-f]){3}|\+|&(?:#(?:x[\da-f]+|\d+)|amp|lt|gt|quot|apos|nbsp);/gi,
 		(token) => {
 			if (token === "+") return formSpaces ? " " : token;
 			if (token.startsWith("%")) {
@@ -35,6 +35,7 @@ function decoded(text: string, formSpaces: boolean): string {
 					return decodeURIComponent(token);
 				} catch (error) {
 					if (!(error instanceof URIError)) throw error;
+					// An invalid scalar cannot invalidate adjacent valid escapes.
 					return token;
 				}
 			}

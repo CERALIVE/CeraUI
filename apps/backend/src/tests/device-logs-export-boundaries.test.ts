@@ -291,3 +291,42 @@ test.each([
 		expect(text).toEndWith("# complete: 2 entries\n");
 	},
 );
+
+test.each([
+	[
+		"%FF",
+		"Fx7qZ-Lm9pW2-Rt4vK8n",
+		"u=%46%78%37%71%5A%2D%4C%6D%39%70%57%32%2D%52%74%34%76%4B%38%6E%FF",
+	],
+	[
+		"%C3",
+		"Fx7qZ-Lm9pW2-Rt4vK8n",
+		"u=%46%78%37%71%5A%2D%4C%6D%39%70%57%32%2D%52%74%34%76%4B%38%6E%C3",
+	],
+	[
+		"%E9 and mixed hex",
+		"Fx7qZ-Lm9pW2",
+		"u=%46%78%37%71%5a%2d%4c%6d%39%70%57%32%E9t%E9",
+	],
+	[
+		"invalid lead before valid multibyte UTF-8",
+		"café-🌱-key",
+		"u=%FF%63%61%66%C3%A9%2D%F0%9F%8C%B1%2D%6B%65%79",
+	],
+])(
+	"redacts percent escapes next to %s",
+	async (_label, remote_key, message) => {
+		credentials.mockReturnValue({ remote_key });
+		fixture.scan.mockImplementation(
+			journal([
+				record(1, { MESSAGE: message }),
+				record(2, { MESSAGE: "unrelated log entry" }),
+			]),
+		);
+		const text = await (await openExport()).text();
+		expect(text).not.toContain(message);
+		expect(text).toContain("[REDACTED]");
+		expect(text).toContain("ceralive: unrelated log entry");
+		expect(text).toEndWith("# complete: 2 entries\n");
+	},
+);
