@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { logExportOutputSchema } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 import { setCredentialStoreState } from "../helpers/credential-store-state.ts";
 import * as logging from "../helpers/logger.ts";
@@ -10,13 +11,18 @@ import * as mocks from "../mocks/mock-service.ts";
 import * as runtimeConfig from "../modules/config.ts";
 import * as identity from "../modules/device-logs/boot-id.ts";
 import { currentBootId } from "../modules/device-logs/boot-id.ts";
-import { abortLogExports } from "../modules/device-logs/export.ts";
+import {
+	abortLogExports,
+	handleLogExportRequest,
+} from "../modules/device-logs/export.ts";
 import { stopAllFollows } from "../modules/device-logs/follow.ts";
 import { setLogSettingsDirForTest } from "../modules/device-logs/settings.ts";
 import { appendBoot } from "../modules/events/store.ts";
+import * as versions from "../modules/system/version-context.ts";
 import { handleORPCMessage } from "../rpc/adapter.ts";
 import { appRouter } from "../rpc/router.ts";
 import type { RPCContext } from "../rpc/types.ts";
+import { journal, queryFixture, record } from "./helpers/device-query.ts";
 import { logsSockets } from "./helpers/logs-rpc.ts";
 
 let sockets: Awaited<ReturnType<typeof logsSockets>>;
@@ -108,6 +114,72 @@ function bootId(): string {
 	if (!id) throw new Error("test host boot identity unavailable");
 	return id;
 }
+
+async function exportReply(
+	connection: Pick<Awaited<ReturnType<typeof logsSockets>>, "ws"> & {
+		readonly peer: WebSocket;
+	},
+): Promise<unknown> {
+	const frame = Promise.withResolvers<unknown>();
+	const receive = (event: MessageEvent) =>
+		frame.resolve(JSON.parse(String(event.data)));
+	connection.peer.addEventListener("message", receive, { once: true });
+	try {
+		await handleORPCMessage(connection.ws, {
+			id: "export-request",
+			path: ["logs", "createExport"],
+			input: { boot: "all", filter: {} },
+		});
+		return await frame.promise;
+	} finally {
+		connection.peer.removeEventListener("message", receive);
+	}
+}
+
+test("a ticket from the authenticated export RPC owns the lease until its changed-credential footer", async () => {
+	const fixture = queryFixture();
+	const config = spyOn(runtimeConfig, "getConfig").mockReturnValue({});
+	const context = spyOn(versions, "collectVersionContext").mockResolvedValue({
+		bootId: bootId(),
+		osImage: null,
+		slot: null,
+		board: null,
+		boardModel: null,
+		ceraui: "fixture",
+		engine: null,
+		senderVersion: null,
+		kernel: null,
+		bun: null,
+	});
+	const key = "fixture-credential-rotated-during-export";
+	const page = journal([record(1, { MESSAGE: key })]);
+	fixture.scan.mockImplementation(async (input) => {
+		config.mockReturnValue({ remote_key: key });
+		return page(input);
+	});
+	try {
+		const first = await exportReply({ ws: sockets.ws, peer: sockets.client });
+		if (typeof first !== "object" || first === null || !("result" in first))
+			throw new Error("authenticated export did not return a ticket");
+		const ticket = logExportOutputSchema.parse(first.result);
+		if (!ticket.ok) throw new Error(ticket.error);
+		const request = new Request(new URL(ticket.url, "http://device"));
+		const response = await handleLogExportRequest(request);
+		expect(response.status).toBe(200);
+		expect(await exportReply(await sockets.connectPeer())).toEqual({
+			id: "export-request",
+			result: { ok: false, error: "BUSY" },
+		});
+		const body = await response.text();
+		expect(body).not.toContain(key);
+		expect(body).toEndWith("# incomplete: CREDENTIALS_CHANGED\n");
+		expect((await handleLogExportRequest(request)).status).toBe(403);
+	} finally {
+		context.mockRestore();
+		config.mockRestore();
+		fixture.restore();
+	}
+});
 
 test.each([
 	["pending", undefined, "CREDENTIALS_LOADING"],
