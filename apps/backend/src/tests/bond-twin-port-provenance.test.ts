@@ -51,6 +51,39 @@ test("RA-fresh: OFF then split and enable survives serial recovery without a see
 	expect(enabled(twinA, twinB)).toEqual([true, true]);
 });
 
+const standardB = { ...twinB, product: "Constructed modem variant" };
+
+test.each([
+	["D1-pid", { ...standardB, idProduct: "81d8" }],
+	["D1-product", { ...standardB, product: "Constructed alternate mode" }],
+] as const)(
+	"%s: an include survives the original USB descriptor returning",
+	async (_name, alternateB) => {
+		await seed([G]);
+		await plug(twinA);
+		await toggle(twinA, true);
+		await plug(twinA, standardB);
+		expect(await plug(twinA, alternateB)).toEqual([[true, true]]);
+		await toggle(alternateB, true);
+		await reload();
+		expect(await plug(twinA, standardB)).toEqual([[true, true]]);
+	},
+);
+
+test("D1-strand: returning to the original USB mode does not drop the last included uplink", async () => {
+	await seed([G]);
+	await plug(twinA);
+	await toggle(twinA, true);
+	await plug(twinA, standardB);
+	const alternateB = { ...standardB, idProduct: "81d8" };
+	await plug(alternateB);
+	attach([alternateB], undefined, [ETH]);
+	await toggle(alternateB, true);
+	await toggle(ETH, false);
+	await plug(standardB);
+	expect(enabled(standardB, ETH)).toEqual([true, false]);
+});
+
 test("G1: a same-VID:PID replacement with a distinct USB product string keeps its uplink", async () => {
 	await seed([G]);
 	await plug(twinA);

@@ -64,9 +64,16 @@ any leftover from a prior crash, fail-soft, every boot.
 
 USB twin scan changes use a separate `.config.json.scan.<pid>.tmp` sibling,
 also covered by the boot sweep. Scan publication uses the updated in-memory
-config without waiting for disk. A later scan can retry a failed save; a
-synchronous `saveConfig()` supersedes an older background snapshot before
-writing its own. Other runtime config writes keep their synchronous contract.
+config without waiting for disk. A later scan can retry pin reconciliation
+against the last successfully loaded or saved config. It does not publish
+unsaved operator edits, including bond edits. After asynchronous staging, the
+draft check and final rename run without yielding; a successful
+`saveConfig()` or reload supersedes an older draft even if staged-file cleanup
+fails. Other runtime config writes keep their synchronous contract.
+
+A settled include from a dormant pin's own group releases that pin, even if
+the twin currently reports a different PID or product string. An include of an
+unrelated replacement does not release a dormant pin.
 
 Damaged-record preservation is a separate immutable-copy writer. Its discoverable
 `<file>.damaged-<sha256>` name is unchanged. Before allocating any temp it strictly

@@ -1,4 +1,5 @@
 import {
+	type BondPinConfig,
 	getConfig,
 	isRuntimeConfigAvailable,
 	saveConfig,
@@ -108,10 +109,10 @@ export function setPersistentBondOptOut(
 	const pin = groups[physicalId];
 	const pinnedGroup =
 		!optOut &&
-		next[physicalId] === true &&
 		typeof pin === "object" &&
 		!Array.isArray(pin) &&
-		matchesPin(pin, pinObservation(ifname))
+		(legacy === pin.group ||
+			(next[physicalId] === true && matchesPin(pin, pinObservation(ifname))))
 			? pin.group
 			: undefined;
 	for (const group of new Set([legacy, pinnedGroup])) {
@@ -123,9 +124,13 @@ export function setPersistentBondOptOut(
 			? enabled
 			: [...new Set([...enabled, physicalId])].sort();
 	}
-	// Enabling a replacement for which the pin is dormant does not release
-	// the original product. A real exact toggle takes ownership of the key.
-	if (optOut || next[physicalId] === true || Array.isArray(pin)) {
+	// The same group can reclaim a dormant pin; an unrelated replacement cannot.
+	if (
+		optOut ||
+		pinnedGroup !== undefined ||
+		next[physicalId] === true ||
+		Array.isArray(pin)
+	) {
 		delete groups[physicalId];
 	}
 	if (optOut) next[physicalId] = true;
@@ -141,16 +146,20 @@ export function setPersistentBondOptOut(
 /** Reconcile scan-owned exact exclusions before publishing a USB scan. */
 export function excludeResidualGroupMembers(): boolean {
 	if (!isRuntimeConfigAvailable()) return false;
-	const config = getConfig();
+	const devices = listPresentPhysicalDevices();
+	const changed = reconcilePortPins(getConfig(), devices);
+	void saveConfigInBackground((saved) => reconcilePortPins(saved, devices));
+	return changed;
+}
+
+function reconcilePortPins(
+	config: BondPinConfig,
+	devices: ReturnType<typeof listPresentPhysicalDevices>,
+): boolean {
 	const groups = config.bond_group_opt_out;
 	let next: typeof config.bond_opt_out;
 	let nextGroups: typeof groups;
-	for (const {
-		legacyLinkId,
-		anchor,
-		linkId,
-		ifname,
-	} of listPresentPhysicalDevices()) {
+	for (const { legacyLinkId, anchor, linkId, ifname } of devices) {
 		if (anchor !== "id-path") continue;
 		const observed = pinObservation(ifname);
 		if (observed === undefined) continue;
@@ -181,7 +190,6 @@ export function excludeResidualGroupMembers(): boolean {
 
 	if (next !== undefined) config.bond_opt_out = next;
 	if (nextGroups !== undefined) config.bond_group_opt_out = nextGroups;
-	saveConfigInBackground(next !== undefined || nextGroups !== undefined);
 	return next !== undefined;
 }
 

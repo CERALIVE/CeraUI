@@ -15,7 +15,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import fs, { constants, unlinkSync } from "node:fs";
+import fs, { constants } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import type { AddonConfig, AddonState } from "@ceraui/rpc/schemas";
 
@@ -62,21 +62,31 @@ export function setConfigFilePath(filePath: string): void {
 
 let config: RuntimeConfig = {};
 let authorityFailure: RuntimeConfigAuthorityError | undefined;
-let pending = false;
-let revision = 0;
+export type BondPinConfig = Pick<
+	RuntimeConfig,
+	"bond_opt_out" | "bond_group_opt_out"
+>;
+let savedConfig: object & BondPinConfig = {};
+let pending: BondPinConfig | undefined;
 let inFlight: Promise<void> | undefined;
-let publishing: string | undefined;
 let failedAttempts = 0;
 let scansUntilRetry = 0;
 
+function snapshotSavedConfig(raw: unknown, bond: BondPinConfig): void {
+	savedConfig = {
+		...(typeof raw === "object" && raw !== null ? raw : {}),
+		bond_opt_out: structuredClone(bond.bond_opt_out),
+		bond_group_opt_out: structuredClone(bond.bond_group_opt_out),
+	};
+}
+
 function clearPendingSave(): void {
-	pending = false;
+	pending = undefined;
 	failedAttempts = 0;
 	scansUntilRetry = 0;
 }
 
 export async function loadConfig() {
-	cancelBackgroundPublication();
 	clearPendingSave();
 	authorityFailure = new RuntimeConfigAuthorityError();
 	let raw: unknown;
@@ -96,6 +106,7 @@ export async function loadConfig() {
 		{ parsed: raw },
 	);
 	config = coerceLegacySource(result.data);
+	snapshotSavedConfig(structuredClone(raw), config);
 	authorityFailure = undefined;
 
 	// Apply mock pairing AFTER file load so it overrides any absent/undefined remote_key in config.json
@@ -121,38 +132,22 @@ export async function loadConfig() {
 	config.ssh_pass_hash = undefined;
 }
 
-function configContents(): string {
+export function saveConfig() {
 	if (authorityFailure) throw authorityFailure;
 	const dataToSave: RuntimeConfig = {
 		...config,
 		password_hash: getPasswordHash(),
 		ssh_pass_hash: getSshPasswordHash(),
 	};
-	return JSON.stringify(dataToSave);
-}
-
-function cancelBackgroundPublication(): void {
-	revision++;
-	if (publishing === undefined) return;
-	// If async rename wins the race, the sync save follows it. If unlink wins,
-	// the queued rename has no source. A staged snapshot cannot win afterward.
-	try {
-		unlinkSync(publishing);
-	} catch (error) {
-		if (!(error instanceof Error && "code" in error && error.code === "ENOENT"))
-			throw error;
-	}
-}
-
-export function saveConfig() {
-	const contents = configContents();
-	cancelBackgroundPublication();
+	const contents = JSON.stringify(dataToSave);
 	writeFileAtomicSync(configFile, contents);
+	snapshotSavedConfig(JSON.parse(contents), dataToSave);
 	clearPendingSave();
 }
 
 async function persistPendingConfig(): Promise<void> {
-	if (!pending) {
+	const writing = pending;
+	if (writing === undefined) {
 		inFlight = undefined;
 		return;
 	}
@@ -161,10 +156,10 @@ async function persistPendingConfig(): Promise<void> {
 		dirname(target),
 		`.${basename(target)}.scan.${process.pid}.tmp`,
 	);
-	const writing = revision;
 	let opened = false;
 	try {
-		const contents = configContents();
+		const nextSaved = { ...savedConfig, ...writing };
+		const contents = JSON.stringify(nextSaved);
 		const file = await fs.promises.open(
 			temp,
 			constants.O_WRONLY |
@@ -181,11 +176,13 @@ async function persistPendingConfig(): Promise<void> {
 		} finally {
 			await file.close();
 		}
-		if (revision !== writing || configFile !== target) return;
-		publishing = temp;
-		await fs.promises.rename(temp, target);
+		if (pending !== writing || configFile !== target) return;
+		// No yield between the fence and publication: a synchronous save or
+		// reload can supersede this draft without relying on staged-file cleanup.
+		fs.renameSync(temp, target);
 		opened = false;
-		if (revision === writing) clearPendingSave();
+		savedConfig = nextSaved;
+		clearPendingSave();
 	} catch (error) {
 		if (pending && !authorityFailure && configFile === target) {
 			if (failedAttempts === 0)
@@ -195,12 +192,16 @@ async function persistPendingConfig(): Promise<void> {
 			scansUntilRetry = failedAttempts < 3 ? 0 : 2 ** (failedAttempts - 3);
 		}
 	} finally {
-		publishing = undefined;
 		if (opened) {
 			await fs.promises.unlink(temp).catch((error: unknown) => {
-				if (pending && failedAttempts === 0 && configFile === target) {
-					failedAttempts = 1;
-					logger.warn("bond: could not persist twin port exclusions", {
+				if (
+					!(
+						error instanceof Error &&
+						"code" in error &&
+						error.code === "ENOENT"
+					)
+				) {
+					logger.warn("bond: could not remove staged twin port exclusions", {
 						error,
 					});
 				}
@@ -210,14 +211,22 @@ async function persistPendingConfig(): Promise<void> {
 	}
 }
 
-/** A scan may retry a dirty write once; overlapping scans never queue writes. */
+/** Reconcile only scan-owned edits against the last successful load/save. */
 export function saveConfigInBackground(
-	changed?: boolean,
+	reconcile?: (bond: BondPinConfig) => void,
 ): Promise<void> | undefined {
-	if (changed === undefined) return inFlight;
-	if (changed) {
-		pending = true;
-		revision++;
+	if (reconcile === undefined) return inFlight;
+	const base = pending ?? savedConfig;
+	const bond: BondPinConfig = {
+		bond_opt_out: base.bond_opt_out,
+		bond_group_opt_out: base.bond_group_opt_out,
+	};
+	reconcile(bond);
+	if (
+		bond.bond_opt_out !== base.bond_opt_out ||
+		bond.bond_group_opt_out !== base.bond_group_opt_out
+	) {
+		pending = bond;
 	}
 	if (pending && inFlight === undefined) {
 		if (scansUntilRetry > 0) {

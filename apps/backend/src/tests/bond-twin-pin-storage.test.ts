@@ -16,6 +16,7 @@ import {
 	publish,
 	reload,
 	seed,
+	singletonA,
 	toggle,
 	twinA,
 	twinB,
@@ -23,6 +24,52 @@ import {
 } from "./helpers/bond-twin-residual-fixture.ts";
 
 const fixture = useBondTwinFixture();
+
+test("F4-amp: a recovering scan cannot persist a rejected operator include", async () => {
+	await plug(twinA);
+	const port = resolveModemPhysicalIdentity(twinA.ifname).linkId;
+	await seed([G, port]);
+	await plug(twinA);
+	expect(enabled(twinA)).toEqual([false]);
+
+	const dir = fixture.dir();
+	chmodSync(dir, 0o500);
+	try {
+		await expect(toggle(twinA, true)).rejects.toMatchObject({ code: "EACCES" });
+	} finally {
+		chmodSync(dir, 0o700);
+	}
+
+	await plug(twinA, twinB);
+	await reload();
+	await plug(twinA, twinB);
+	expect(enabled(twinA)).toEqual([false]);
+});
+
+test("a successful scan pin save does not persist a rejected include for another device", async () => {
+	await seed([G]);
+	await plug(twinA);
+	await toggle(twinA, true);
+	await plug(singletonA);
+	await toggle(singletonA, false);
+	const path = fixture.configPath();
+	const before = readFileSync(path, "utf8");
+	const dir = fixture.dir();
+	chmodSync(dir, 0o500);
+	try {
+		await expect(toggle(singletonA, true)).rejects.toMatchObject({
+			code: "EACCES",
+		});
+	} finally {
+		chmodSync(dir, 0o700);
+	}
+
+	await plug(twinA, twinB);
+	expect(readFileSync(path, "utf8")).not.toBe(before);
+	await reload();
+	await plug(singletonA, noSerialB);
+	expect(enabled(singletonA, noSerialB)).toEqual([false, false]);
+});
 
 test("R2: blocked scan pins persist once storage recovers and survive restart without a serial", async () => {
 	await seed([G]);
@@ -154,23 +201,36 @@ test("read-only failures back off by scan count and warn once until recovery", a
 	}
 });
 
-test("a synchronous config save supersedes an older scan snapshot waiting to rename", async () => {
+function pauseAfterStaging(dir: string) {
+	const { promise: ready, resolve: staged } = Promise.withResolvers<void>();
+	const { promise: release, resolve: unblock } = Promise.withResolvers<void>();
+	const realOpen = fs.promises.open;
+	const open = spyOn(fs.promises, "open").mockImplementation(
+		async (path, flags, mode) => {
+			const file = await realOpen(path, flags, mode);
+			if (
+				typeof path === "string" &&
+				path.startsWith(dir) &&
+				path.endsWith(".tmp")
+			) {
+				const close = file.close.bind(file);
+				spyOn(file, "close").mockImplementation(async () => {
+					await close();
+					staged();
+					await release;
+				});
+			}
+			return file;
+		},
+	);
+	return { ready, unblock, restore: () => open.mockRestore() };
+}
+
+test("a synchronous config save supersedes an older staged scan snapshot", async () => {
 	await seed([G]);
 	await plug(twinA);
 	await toggle(twinA, true);
-	const dir = fixture.dir();
-	const { promise: ready, resolve: staged } = Promise.withResolvers<void>();
-	const { promise: release, resolve: unblock } = Promise.withResolvers<void>();
-	const realRename = fs.promises.rename;
-	const rename = spyOn(fs.promises, "rename").mockImplementation(
-		async (from, to) => {
-			if (typeof from === "string" && from.startsWith(dir)) {
-				staged();
-				await release;
-			}
-			return realRename(from, to);
-		},
-	);
+	const { ready, unblock, restore } = pauseAfterStaging(fixture.dir());
 	try {
 		expect(await publish(twinA, twinB)).toEqual([[true, false]]);
 		await ready;
@@ -185,6 +245,48 @@ test("a synchronous config save supersedes an older scan snapshot waiting to ren
 	} finally {
 		unblock();
 		await saveConfigInBackground();
-		rename.mockRestore();
+		restore();
 	}
 });
+
+test.each(["save", "load"] as const)(
+	"staged scan cleanup EIO cannot block config %s",
+	async (operation) => {
+		await seed([G]);
+		await plug(twinA);
+		await toggle(twinA, true);
+
+		const savedBitrate = getConfig().max_br;
+		const { ready, unblock, restore } = pauseAfterStaging(fixture.dir());
+		const unlink = spyOn(fs.promises, "unlink").mockRejectedValue(
+			Object.assign(new Error("injected staged cleanup failure"), {
+				code: "EIO",
+			}),
+		);
+		try {
+			await publish(twinA, twinB);
+			await ready;
+			getConfig().max_br = 4321;
+			if (operation === "save") {
+				saveConfig();
+			} else {
+				await reload();
+				expect(getConfig().max_br).toBe(savedBitrate);
+			}
+			const contents = readFileSync(fixture.configPath(), "utf8");
+			unblock();
+			await saveConfigInBackground();
+			expect(unlink).toHaveBeenCalledTimes(1);
+			expect(readFileSync(fixture.configPath(), "utf8")).toBe(contents);
+			await reload();
+			expect(getConfig().max_br).toBe(
+				operation === "save" ? 4321 : savedBitrate,
+			);
+		} finally {
+			unblock();
+			await saveConfigInBackground();
+			unlink.mockRestore();
+			restore();
+		}
+	},
+);
