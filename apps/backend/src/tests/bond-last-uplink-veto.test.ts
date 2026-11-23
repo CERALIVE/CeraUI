@@ -38,10 +38,7 @@ import {
 	genSrtlaBondEntriesForLocalIpAddress,
 } from "../modules/streaming/srtla.ts";
 import * as deviceDetection from "../modules/system/device-detection.ts";
-import {
-	defaultDeviceDetectionDeps,
-	isRealDevice,
-} from "../modules/system/device-detection.ts";
+import { isRealDevice } from "../modules/system/device-detection.ts";
 import { handleORPCMessage } from "../rpc/adapter.ts";
 import { broadcastMsg, setSocketSenderId } from "../rpc/compat.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
@@ -52,6 +49,10 @@ import {
 	configStage,
 	watchConfigWrite,
 } from "./helpers/bond-config-faults.ts";
+import {
+	bondDeviceProbe,
+	pendingProbeIp,
+} from "./helpers/bond-device-replay.ts";
 import {
 	markerRows,
 	oweBondMarkerRetractions,
@@ -92,10 +93,13 @@ type Mode =
 	| "WITHDRAW-OVERRIDE"
 	| "KEEP-OVERRIDE"
 	| "HARDWARE"
-	| "HARDWARE-FORCED";
+	| "HARDWARE-FORCED"
+	| "PENDING-HARDWARE"
+	| "PENDING-NON-DEVICE";
 type Topology =
 	| "twins"
 	| "fallback"
+	| "held-lan"
 	| "survivor"
 	| "duplicate"
 	| "shared-key"
@@ -154,7 +158,9 @@ function bootDevice(deps: deviceDetection.DeviceDetectionDeps) {
 			observe(deps);
 		return result;
 	}
-	// Keep the same adapter reproducer runnable against the former boolean latch.
+	// On main, reproduce the same held probe without installing any guard.
+	if (deps.getDeviceTypeOverride() === "real")
+		void isRealDevice({ ...deps, getDeviceTypeOverride: () => undefined });
 	return { ready: isRealDevice(deps), isStillReal: () => true };
 }
 
@@ -194,7 +200,10 @@ function seed(topology: Topology) {
 		return;
 	}
 	setBondIdentityResolverForTest(
-		topology === "fallback" || topology === "deadline" || topology === "marker"
+		topology === "fallback" ||
+			topology === "deadline" ||
+			topology === "marker" ||
+			topology === "held-lan"
 			? null
 			: (name) =>
 					physicalRecord(
@@ -214,6 +223,11 @@ function seed(topology: Topology) {
 		for (const { name } of markerRows) {
 			add(name, { error: netif.NETIF_ERR_SHAREDLAN });
 		}
+	} else if (topology === "held-lan") {
+		add("eth0", { ip: pendingProbeIp });
+		add("eth1", { enabled: false });
+		add("eth2", { error: netif.NETIF_ERR_SHAREDLAN });
+		add("eth3", { error: netif.NETIF_ERR_SHAREDLAN });
 	} else if (topology === "twins" || topology === "fallback") {
 		for (const name of ["wwan0", "wwan1"]) {
 			add(name);
@@ -283,24 +297,17 @@ async function replay(
 	updateMockState({ initialized: mode === "OVERLAY", netifConfigs: new Map() });
 	const monitor = createMonitorManager(() => undefined);
 	setBootContext(undefined, monitor);
-	const pending = Promise.withResolvers<string>();
-	const noEvidence = async () => "";
-	const deps = {
-		...defaultDeviceDetectionDeps,
-		getDeviceTypeOverride: () =>
-			mode === "BOOT" ? undefined : process.env.CERALIVE_DEVICE_TYPE,
-		readDeviceTreeCompatible:
-			mode === "BOOT"
-				? () => pending.promise
-				: async () =>
-						mode === "HARDWARE" || mode === "HARDWARE-FORCED"
-							? "rockchip,rk3588"
-							: "",
-		readDeviceTreeModel: noEvidence,
-		readCeraliveRelease: noEvidence,
-		readDmiProductName: noEvidence,
-		readDmiBoardName: noEvidence,
-	};
+	const pendingWithdrawal =
+		mode === "PENDING-HARDWARE" || mode === "PENDING-NON-DEVICE";
+	const probe = bondDeviceProbe(
+		mode === "BOOT",
+		mode === "BOOT" ||
+			mode === "HARDWARE" ||
+			mode === "HARDWARE-FORCED" ||
+			mode === "PENDING-HARDWARE",
+		mode === "BOOT" || pendingWithdrawal,
+	);
+	const { deps } = probe;
 	const device = bootDevice(deps);
 	const arm = async () =>
 		setBootContext(
@@ -372,6 +379,13 @@ async function replay(
 		if (!boot) await arm();
 		if (mode === "FLIP-MONITOR") delete process.env.MOCK_SCENARIO;
 		if (mode === "FLIP-DEVICE") process.env.CERALIVE_DEVICE_TYPE = "emulated";
+		if (pendingWithdrawal) {
+			expect(monitor).toBeInstanceOf(NmcliMonitorManager);
+			expect(probe.firstReadPending).toBe(true);
+			delete process.env.CERALIVE_DEVICE_TYPE;
+			expect(await isRealDevice(deps)).toBe(mode === "PENDING-HARDWARE");
+			expect(probe.firstReadPending).toBe(true);
+		}
 		if (mode === "WITHDRAW-OVERRIDE" || mode === "HARDWARE-FORCED")
 			delete process.env.CERALIVE_DEVICE_TYPE;
 		if (
@@ -521,7 +535,7 @@ async function replay(
 		}
 	} finally {
 		removeClient(observer);
-		pending.resolve("rockchip,rk3588");
+		probe.release();
 		await boot;
 		setBootContext(undefined, monitor);
 		if (monitor instanceof MockMonitorEmitter) monitor.reset();
@@ -544,6 +558,17 @@ function expectVeto(row: Awaited<ReturnType<typeof replay>>) {
 	expect(row.edges).toEqual([]);
 	expect(row.steps).toEqual([]);
 	expect(row.after).toEqual(row.before);
+}
+
+for (const mode of ["PENDING-HARDWARE", "PENDING-NON-DEVICE"] as const) {
+	test(`pending probe withdrawal: ${mode} retains eth0 with the real monitor`, async () => {
+		const row = await replay("pending-withdrawal", mode, "none", "held-lan", [
+			{ ...off, ip: pendingProbeIp },
+		]);
+		expect(row.before.bond.map(({ iface }) => iface)).toEqual(["eth0"]);
+		expectVeto(row);
+		expect(row.after.bond.map(({ iface }) => iface)).toEqual(["eth0"]);
+	});
 }
 
 for (const [mode, armed] of [

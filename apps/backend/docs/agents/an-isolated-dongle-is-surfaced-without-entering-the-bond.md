@@ -1316,11 +1316,12 @@ succeed. Wire and sender refreshes still use live time.
 
 The old input checks and raw-count refusal still apply. Boot before confirmation,
 overlay/mock, simulated monitor, hwsim and emulated paths retain their old
-behavior. If a boot-time `real` override was the only positive evidence,
-withdrawing it disarms the veto until hardware is independently confirmed.
-An explicit `emulated` override always disarms it. Only a new last-candidate
-refusal takes precedence over a storage
-error the skipped save might have encountered; all writes that actually run
+behavior. After the real monitor is selected, withdrawing a boot-time `real`
+override disarms the veto only if the independent hardware probe has resolved
+negative. While the probe is pending, even a non-device that booted with the
+override keeps the veto so it cannot lose its last uplink. An explicit `emulated`
+override always disarms it. Only a new last-candidate refusal takes precedence
+over a storage error the skipped save might have encountered; all writes that actually run
 keep their usual error handling. Membership is not a guarantee of link health,
 and this rule does not prevent unplugging the last uplink.
 

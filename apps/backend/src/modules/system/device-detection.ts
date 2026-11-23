@@ -178,18 +178,20 @@ export function observeRealDeviceAtBoot(
 	deps: DeviceDetectionDeps = defaultDeviceDetectionDeps,
 ) {
 	const forced = forcedDeviceType(deps);
-	let independentlyConfirmed = false;
+	let evidence: "pending" | "real" | "not-real" =
+		forced === false ? "not-real" : "pending";
 	const hardware =
 		forced === false
 			? Promise.resolve(false)
 			: isRealDeviceWithoutOverride(deps).then((confirmed) => {
-					independentlyConfirmed = confirmed;
+					evidence = confirmed ? "real" : "not-real";
 					return confirmed;
 				});
 	return {
 		// A forced boot still proceeds without waiting for the evidence probe.
 		ready: forced === undefined ? hardware : Promise.resolve(forced),
-		isStillReal: () => forcedDeviceType(deps) ?? independentlyConfirmed,
+		// After arming, keep the last-uplink veto until we have negative evidence.
+		isStillReal: () => forcedDeviceType(deps) ?? evidence !== "not-real",
 	};
 }
 
