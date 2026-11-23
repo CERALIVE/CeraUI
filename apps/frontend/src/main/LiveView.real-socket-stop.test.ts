@@ -251,8 +251,8 @@ describe("Live bar Stop confirmation over the real socket", () => {
 		const { container } = render(LiveView);
 		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
 		dropLink();
-		// The reconnect timer creates the replacement socket; deliver its live
-		// status before notifying the client that the socket is connected.
+		// A native WebSocket opens before any message; this pins the store's
+		// defensive ordering if live status is ingested before `connected`.
 		await restoreLink(() => {
 			deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
 			expect(
