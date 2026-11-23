@@ -169,9 +169,11 @@ export const startStreaming = async (
 		};
 		// In order with this tab's composition writes, so a placement made before
 		// Start is saved before Start reads it (`compositionWrites`).
-		return await sendSessionTransition("live", async () => {
+		return await sendSessionTransition("live", () => {
+			// Preserve the RPC rejection order: reconnect hydration must not
+			// overtake the caller's lost-reply evidence mark.
 			if (!retry) return rpc.streaming.start(input);
-			if (!retry.beforeSend()) throw new NotSentError();
+			if (!retry.beforeSend()) return Promise.reject(new NotSentError());
 			return sendGuardedStreamStart(input, retry.onSent);
 		});
 	} catch (error) {
