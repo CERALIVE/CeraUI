@@ -1,27 +1,3 @@
-<script module lang="ts">
-// The Try again → Restart box step. `lastAttempt` is the refusal the last toast
-// showed. `retry` is written only once Try again on an engine refusal has
-// passed validation and is dispatching its Start, and it names that Start's
-// attempt generation. Only a typed refusal of that same generation, within two
-// minutes, consumes it as "refused again". A proven non-dispatch, a manual
-// Start, a newer attempt or a running stream clear it, so an old failure never
-// turns a later Start into Restart box. Plain data, not state.
-const RETRY_WINDOW_MS = 120_000;
-const failureMemory: {
-	lastAttempt: string | undefined;
-	retry: { generation: number; at: number } | undefined;
-} = {
-	lastAttempt: undefined,
-	retry: undefined,
-};
-
-/** Tests only: forget the last refusal, as a fresh page load does. */
-export function resetStartFailureMemory(): void {
-	failureMemory.lastAttempt = undefined;
-	failureMemory.retry = undefined;
-}
-</script>
-
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import { isAudioLiveSwitchEnabled } from '@ceraui/rpc';
@@ -31,11 +7,13 @@ import {
 	BITRATE_DEFAULT_MIN,
 	BITRATE_MAX,
 	BITRATE_MIN,
+	type ConfigMessage,
 	type RelayProtocol,
 	SWITCH_AUDIO_ERRORS,
 	SWITCH_INPUT_ERRORS,
 } from '@ceraui/rpc/schemas';
 import { Cpu, Loader2, Server } from '@lucide/svelte';
+import { untrack } from 'svelte';
 import { toast } from 'svelte-sonner';
 import { LazyDialog, LazyDialogFallback, lazyDialog } from '$lib/components/dialogs';
 import { platformCapsForHardware } from '$lib/components/streaming/ValidationAdapter';
@@ -138,7 +116,10 @@ import {
 } from '$lib/streaming/start-failure-copy';
 import {
 	claimStartFailurePresentation,
+	clearStartRetry,
+	consumeStartRetry,
 	holdStartFailureNotice,
+	recordStartRetry,
 } from '$lib/streaming/start-failure-presentation.svelte';
 import { buildStartConfig } from '$lib/streaming/startStreaming';
 import { showUnconfirmedStreamStop, startOptimismSuperseded } from '$lib/streaming/unconfirmed-stream';
@@ -318,7 +299,8 @@ const summaryMode = $derived(showingSummary && !optimisticIsStreaming);
 // unresolved and no Start is in flight. Try again on a refusal toast is held to
 // the same admission.
 const idleStartAdmitted = $derived(
-	!showLiveCockpit && !streamOutcomeUnknown && streamingOptimismState === 'idle',
+	!showLiveCockpit && !streamOutcomeUnknown && streamingOptimismState === 'idle' &&
+	(streamLifecycle === undefined || streamLifecycle === 'idle'),
 );
 
 const STREAM_START_ERROR_KEYS = [
@@ -356,10 +338,6 @@ function startFailedMessage(code: string): string {
 // keeps View logs beside it for a helper; the rest keep View logs alone.
 // An engine refusal that comes back after Try again on an engine refusal
 // offers Restart box instead of another Try again.
-$effect(() => {
-	if (isStreaming) failureMemory.retry = undefined;
-});
-
 let viewMounted = true;
 $effect(() => () => {
 	viewMounted = false;
@@ -371,50 +349,44 @@ $effect(() => () => {
 // decided from the same inputs at the moment of the tap (a link may have dropped
 // since the refusal), with the implicit sole camera folded in as the bar does.
 // It does nothing when the view is gone or a newer refusal (or none) is current.
-function retryStart(attempt: string | undefined, engine: boolean) {
-	if (!viewMounted || !idleStartAdmitted) return;
+function retryStart(attempt: string) {
+	if (!viewMounted || !idleStartAdmitted) return false;
 	// The raw flag too: a stream reported this tick has not reached every
 	// derived value yet.
-	if (getIsStreaming()) return;
-	const current = getStreamingStartFailure() as { attemptId?: string } | undefined;
-	if (attempt === undefined || current?.attemptId !== attempt) return;
-	const gate = idleStartGate(idleGateInputs);
-	if (!gate.canStart) return;
-	void handleStart({ source: gate.source }, { engineRetry: engine });
+	if (getIsStreaming() || getStreamingOptimismState() !== 'idle') return false;
+	const current = getStreamingStartFailure();
+	if (current?.attemptId !== attempt) return false;
+	return handleStart({}, true);
 }
 
-// A Start from the Live bar is a fresh attempt, not a retry of a refusal.
-function handleStartFromBar(overrides: { source?: string } = {}) {
-	failureMemory.retry = undefined;
-	return handleStart(overrides);
-}
-
-function runNextStep(step: StartFailureNextStep, attempt: string | undefined, engine: boolean) {
-	if (step === 'tryAgain') retryStart(attempt, engine);
-	else if (step === 'restartBox') powerOpen = true;
-	else if (step === 'openNetwork') void handleManageLinks();
-	else handleOpenSetup();
+function runNextStep(step: StartFailureNextStep, attempt: string) {
+	if (!viewMounted || getStreamingStartFailure()?.attemptId !== attempt) return false;
+	switch (step) {
+		case 'tryAgain': return retryStart(attempt);
+		case 'restartBox':
+			if (!idleStartAdmitted || !idleStartGate(readIdleGateInputs()).canStart) return false;
+			powerOpen = true;
+			break;
+		case 'openNetwork': void handleManageLinks(); break;
+		case 'openSetup': handleOpenSetup(); break;
+	}
+	return true;
 }
 
 function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
-	const attempt = (failure as { attemptId?: string }).attemptId;
-	if (attempt !== undefined && !claimStartFailurePresentation(attempt)) return;
+	const attempt = failure.attemptId;
+	if (!claimStartFailurePresentation(attempt)) return;
 	const engine = isEngineStartFailure(failure);
-	let repeated = false;
-	if (attempt === undefined || attempt !== failureMemory.lastAttempt) {
-		failureMemory.lastAttempt = attempt;
-		const retry = failureMemory.retry;
-		// A revert lands only on the current attempt, so this refusal belongs to
-		// the current generation: it answers the retry only if that is the one.
-		repeated =
-			engine &&
-			retry !== undefined &&
-			retry.generation === getStreamingAttemptGeneration() &&
-			Date.now() - retry.at < RETRY_WINDOW_MS;
-		failureMemory.retry = undefined;
-	}
-	const step = startFailureNextStep(failure, repeated);
-	const message = startFailureMessage(failure, repeated);
+	const repeated = consumeStartRetry(getStreamingAttemptGeneration()) && engine;
+	const admitted = idleStartAdmitted && idleGate.canStart;
+	const gate = idleGate.readiness;
+	const blockedReason = streamOutcomeUnknown
+		? m["live.unconfirmedStream.body"]()
+		: gate.primaryFixGate
+			? resolveMessageKey(gate.gates[gate.primaryFixGate].reasonKey ?? '')
+			: undefined;
+	const step = startFailureNextStep(failure, repeated, admitted);
+	const message = startFailureMessage(failure, repeated, admitted, blockedReason);
 	if (step === undefined) {
 		toast.error(message, viewLogsToast(startFailureRetryKey(failure)));
 		return;
@@ -425,7 +397,9 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 		duration: 12_000,
 		action: {
 			label: m[NEXT_STEP_ACTION[step]](),
-			onClick: () => runNextStep(step, attempt, engine),
+			onClick: (event) => {
+				if (!runNextStep(step, attempt)) event.preventDefault();
+			},
 		},
 		cancel: { label: m["notifications.viewLogs"](), onClick: () => viewLogs(at) },
 	});
@@ -433,11 +407,12 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 
 $effect(() => {
 	if (streamingStartFailure) {
-		startFailureToast(streamingStartFailure);
+		const failure = streamingStartFailure;
+		untrack(() => startFailureToast(failure));
 		return;
 	}
 	if (streamingStopReason) {
-		failureMemory.retry = undefined;
+		clearStartRetry();
 		toast.error(startFailedMessage(streamingStopReason));
 	}
 });
@@ -689,17 +664,21 @@ const pipelines = $derived(pipelinesFromSources(getSources()));
 
 // The readiness inputs, built once: the idle bar renders from them and Try again
 // on a refusal decides from them, so the two can never drift apart.
-const idleGateInputs = $derived<IdleStartGateInput>({
-	config,
-	caps: getCapabilities(),
-	sources: getSources(),
-	netif,
-	isConnected: getIsConnected(),
-	networkIngest: getStatus()?.network_ingest ?? null,
-	pipelines,
-	relays,
-	managedSlots: getManagedIngestAccounts(),
-});
+function readIdleGateInputs(): IdleStartGateInput {
+	return {
+		config: getConfig(),
+		caps: getCapabilities(),
+		sources: getSources(),
+		netif: getNetif(),
+		isConnected: getIsConnected(),
+		networkIngest: getStatus()?.network_ingest ?? null,
+		pipelines,
+		relays,
+		managedSlots: getManagedIngestAccounts(),
+	};
+}
+const idleGateInputs = $derived(readIdleGateInputs());
+const idleGate = $derived(idleStartGate(idleGateInputs));
 
 // Pipeline metadata for the effective source — used to capability-gate the
 // resolution/framerate overrides when persisting the encoder draft.
@@ -1084,29 +1063,31 @@ const summaryAudio = $derived.by(() => {
 // idle UI is driven by getIsStreaming(), updated by the backend status push —
 // never set locally here. Optimistic transient: Start button shows `starting`
 // immediately on click, then reconciles to authoritative is_streaming.
-async function handleStart(overrides: { source?: string } = {}, opts: { engineRetry?: boolean } = {}) {
-	if (streamingOptimismState !== 'idle') return;
+function handleStart(overrides: { source?: string } = {}, engineRetry = false) {
+	const gate = idleStartGate(readIdleGateInputs());
+	if (getStreamingOptimismState() !== 'idle' || getIsStreaming() || !gate.canStart) return false;
 
 	// Fold the implicit sole-camera source (T10) in, then reconcile source →
 	// pipeline off the sources snapshot so the FE recognition gate and the
 	// readiness source gate cannot disagree; the backend re-resolves the routing
 	// for itself (T3 streamingStartProcedure reads `input.source ?? getConfig().source`).
-	const overridden =
-		overrides.source !== undefined
-			? ({ ...config, source: overrides.source } as typeof config)
-			: config;
+	const source = gate.source ?? overrides.source;
+	const overridden = source !== undefined && config ? { ...config, source } : config;
 	const startBase = reconcileStartSource(overridden, getSources());
 
 	const result = buildStartConfig(startBase, audioOverride, pipelines);
 	if (!result.ok) {
-		toast.error(
-			result.error === 'missingServer'
-				? m["live.cannotStartNoServer"]()
-				: m["live.cannotStartNoPipeline"](),
+		if (!engineRetry) toast.error(
+			result.error === 'missingServer' ? m["live.cannotStartNoServer"]() : m["live.cannotStartNoPipeline"](),
 		);
-		return;
+		return false;
 	}
 
+	void dispatchStart(result.config, engineRetry);
+	return true;
+}
+
+async function dispatchStart(nextConfig: ConfigMessage, engineRetry = false) {
 	try {
 		toast.dismiss();
 	} catch {
@@ -1120,11 +1101,12 @@ async function handleStart(overrides: { source?: string } = {}, opts: { engineRe
 	const attempt = getStreamingAttemptGeneration();
 	// Try again on an engine refusal is remembered against this very attempt, and
 	// only now that it passed validation and is being sent.
-	failureMemory.retry = opts.engineRetry ? { generation: attempt, at: Date.now() } : undefined;
+	if (engineRetry) recordStartRetry(attempt);
 
 	const releaseNotice = holdStartFailureNotice();
 	try {
-		const startResult = await startStreaming(result.config);
+		const startResult = await startStreaming(nextConfig);
+		if (getIsStreaming()) return;
 		if (startResult && !startResult.success) {
 			if ('failure' in startResult && startResult.failure) {
 				revertStreamingOptimismFailure(startResult.failure, attempt);
@@ -1140,7 +1122,7 @@ async function handleStart(overrides: { source?: string } = {}, opts: { engineRe
 		}
 		// The socket refused dispatch, so this attempt cannot have started, and it
 		// was no retry the device refused.
-		if (failureMemory.retry?.generation === attempt) failureMemory.retry = undefined;
+		clearStartRetry(attempt);
 		const reason =
 			error instanceof Error ? error.message : 'unknown_error';
 		revertStreamingOptimism(reason, attempt);
@@ -1335,7 +1317,7 @@ const configRows = $derived<ConfigRow[]>([
 			{isStreaming}
 			optimismState={streamingOptimismState}
 			{destinationValidated}
-			onStart={handleStartFromBar}
+			onStart={handleStart}
 			onStop={handleStop}
 			onOpenSource={handleOpenSource}
 			onGoNetwork={handleManageLinks}

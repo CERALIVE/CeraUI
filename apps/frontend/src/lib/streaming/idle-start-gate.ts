@@ -18,8 +18,14 @@ import type {
 	SourcesMessage,
 } from "@ceraui/rpc/schemas";
 
-import { deriveEffectiveSource } from "./effective-source";
-import { deriveGoLiveReadiness } from "./go-live-readiness";
+import {
+	deriveEffectiveSource,
+	type EffectiveSource,
+} from "./effective-source";
+import {
+	deriveGoLiveReadiness,
+	type GoLiveReadiness,
+} from "./go-live-readiness";
 import { pipelineAvailability } from "./pipelineAvailability";
 import type { ManagedIngestAccount } from "./receiver-experience";
 
@@ -40,6 +46,8 @@ export interface IdleStartGate {
 	readonly canStart: boolean;
 	/** The implicit sole camera to fold into the Start payload, as the bar does. */
 	readonly source: string | undefined;
+	readonly effective: EffectiveSource;
+	readonly readiness: GoLiveReadiness;
 }
 
 export function idleStartGate(input: IdleStartGateInput): IdleStartGate {
@@ -67,5 +75,10 @@ export function idleStartGate(input: IdleStartGateInput): IdleStartGate {
 		relays: input.relays,
 		managedSlots: input.managedSlots,
 	});
-	return { canStart: !readiness.blocking, source: effective.soleCamera?.id };
+	return {
+		canStart: !readiness.blocking,
+		source: effective.soleCamera?.id,
+		effective,
+		readiness,
+	};
 }
