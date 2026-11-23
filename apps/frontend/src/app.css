@@ -12,6 +12,13 @@
 @custom-variant data-checked (&[data-state='checked']);
 @custom-variant data-unchecked (&[data-state='unchecked']);
 
+/* Short System Logs view: include landscape phones, but not the wide kiosk. */
+@custom-variant short-logs {
+	@media (width < 64rem) and (height <= 30rem), (width < 40rem) and (height <= 37.5rem) {
+		@slot;
+	}
+}
+
 /*
   Border compatibility for Tailwind CSS v4
   (default border-color changed to currentColor)

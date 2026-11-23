@@ -227,7 +227,7 @@ async function readGap(action: HTMLElement, gap: { key: string; continuation: st
 {#if view.top !== null}
 	<div bind:this={top} class="border-b" data-testid="raw-top">{@render edge('top', view.top)}</div>
 {/if}
-<div class="relative flex min-h-0 flex-1 flex-col max-sm:[@media(max-height:600px)]:min-h-[calc(2*var(--touch-target-min))]">
+<div class="relative flex min-h-0 flex-1 flex-col short-logs:min-h-22">
 	{#if heldCount > 0}
 		<Button
 			class="absolute inset-x-0 top-2 z-10 mx-auto w-fit shadow-sm"
@@ -241,7 +241,7 @@ async function readGap(action: HTMLElement, gap: { key: string; continuation: st
 	{/if}
 	<div
 		bind:this={scroller}
-		class="@container focus-visible:ring-ring/50 min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none focus-visible:ring-3 focus-visible:ring-inset"
+		class="@container focus-visible:ring-ring/50 min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none focus-visible:ring-3 focus-visible:ring-inset short-logs:overscroll-y-auto"
 		data-raw-scroller
 		data-testid="raw-scroller"
 		onscroll={(event) => view.setAtTop(event.currentTarget.scrollTop < 8)}

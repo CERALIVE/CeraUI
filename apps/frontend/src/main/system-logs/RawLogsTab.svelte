@@ -112,6 +112,17 @@ const band = $derived.by(() => {
 		run: () => view.retry(),
 	};
 });
+let controlsRegion: HTMLDivElement;
+let panel: HTMLDivElement;
+
+function keepFocusedControlVisible(): void {
+	const focused = document.activeElement;
+	if (!(focused instanceof HTMLElement) || !controlsRegion.contains(focused)) return;
+	if (getComputedStyle(controlsRegion).overflowY !== 'auto') return;
+	// A keyboard can shrink the viewport without changing which control is focused.
+	panel.scrollIntoView({ block: 'end', inline: 'nearest', behavior: 'instant' });
+	focused.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+}
 </script>
 
 {#snippet controls()}
@@ -169,9 +180,10 @@ const band = $derived.by(() => {
 {/snippet}
 
 <!-- CJK chrome copy breaks by phrase in Japanese, at spaces in Korean, and never leaves one character alone. -->
-<div class="flex h-full min-h-0 flex-col text-pretty [word-break:auto-phrase] [&:lang(ko)]:break-keep" data-testid="raw-logs">
-	<!-- On short phones, keep one full target visible in the controls scroller. -->
-	<div class="contents max-sm:[@media(max-height:600px)]:block max-sm:[@media(max-height:600px)]:min-h-(--touch-target-min) max-sm:[@media(max-height:600px)]:overflow-y-auto max-sm:[@media(max-height:600px)]:overscroll-y-contain">
+<svelte:window onresize={keepFocusedControlVisible} />
+<div bind:this={panel} class="flex h-full min-h-0 flex-col text-pretty [word-break:auto-phrase] [&:lang(ko)]:break-keep" data-testid="raw-logs">
+	<!-- The fixed header stays visible; the toolbar/tabs are reachable through the view's outer scroller. -->
+	<div bind:this={controlsRegion} class="contents short-logs:block short-logs:max-h-(--raw-controls-max) short-logs:overflow-y-auto">
 		{@render controls()}
 	</div>
 	<RawLogList {view} />
