@@ -38,6 +38,7 @@ import {
 	resolveAppliedBitrate,
 } from '$lib/rpc/live-apply-reconcile';
 import { NotSentError } from '$lib/rpc/rpc-error';
+import { getLinkEpoch, getStreamActivity } from '$lib/rpc/session-epoch.svelte';
 import {
 	getStopStuckBannerVisible,
 	getStreamingAttemptGeneration,
@@ -390,6 +391,9 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 		return;
 	}
 	const at = Date.now();
+	const link = getLinkEpoch();
+	const activity = getStreamActivity();
+	const generation = getStreamingAttemptGeneration();
 	const id = toast.error<typeof StartRefusalActions>(message, {
 		class: 'motion-reduce:transition-none! [&>[data-content]]:min-w-0 [word-break:auto-phrase] [&:lang(ko)]:break-keep [&:lang(zh)]:break-keep',
 		duration: 12_000,
@@ -398,6 +402,9 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 			primary: {
 				label: m[NEXT_STEP_ACTION[step]](),
 				activate: () => {
+					if ((step === 'tryAgain' || step === 'restartBox') &&
+						(link !== getLinkEpoch() || activity !== getStreamActivity() ||
+							generation !== getStreamingAttemptGeneration())) return false;
 					if (!runNextStep(step, attempt)) return false;
 					toast.dismiss(id);
 					return true;

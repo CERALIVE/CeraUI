@@ -112,6 +112,7 @@ import {
 	noteLifecycleDelivered,
 	noteLinkState,
 	noteSessionRestored,
+	noteStreamActivity,
 	noteStreamSessionBoundary,
 	type Receipt,
 	type RequestDispatch,
@@ -639,6 +640,13 @@ function handleMessage(
 				isStreamingState,
 			);
 			if (statusData === undefined) break;
+			if (
+				(statusData.is_streaming !== undefined &&
+					statusData.is_streaming !== isStreamingState) ||
+				("stream_lifecycle" in statusData &&
+					statusData.stream_lifecycle !== statusState?.stream_lifecycle)
+			)
+				noteStreamActivity();
 
 			// Update individual states
 			if (statusData.is_streaming !== undefined) {
