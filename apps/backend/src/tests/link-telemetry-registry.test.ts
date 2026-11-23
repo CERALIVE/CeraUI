@@ -5,7 +5,7 @@ import type {
 	TelemetryUpdate,
 	watchTelemetry as WatchTelemetryFn,
 } from "@ceraui/srtla-send/telemetry";
-
+import { portLabelFromIdPath } from "../modules/modems/physical-identity.ts";
 import type { BondEntry } from "../modules/streaming/bind-map.ts";
 import {
 	clearBindMapReport,
@@ -14,10 +14,7 @@ import {
 	resetBindMapReportListeners,
 } from "../modules/streaming/bind-map-disposition.ts";
 import { buildBondMapping } from "../modules/streaming/link-mapping-report.ts";
-import {
-	portLabelFromIdPath,
-	setLinkIdentityDetailResolverForTest,
-} from "../modules/streaming/link-registry.ts";
+import { setLinkIdentityDetailResolverForTest } from "../modules/streaming/link-registry.ts";
 import {
 	buildLinkTelemetry,
 	ingestTelemetryForTest,

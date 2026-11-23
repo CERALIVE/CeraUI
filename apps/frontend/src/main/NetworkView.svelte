@@ -21,6 +21,7 @@ import {
 	getWifi,
 } from '$lib/rpc/subscriptions.svelte';
 import { getHudState } from '$lib/stores/hud.svelte';
+import { getLinkNames } from '$lib/stores/link-names.svelte';
 import type { LinkSignal } from '$lib/types/hud';
 
 import BluetoothSection from './network/BluetoothSection.svelte';
@@ -237,6 +238,7 @@ function openModemConfig(id: string) {
 		/>
 		<WifiSection
 			wifiRadios={wifiEntries}
+			linkName={getLinkNames().label}
 			{netif}
 			{isFullyStale}
 			{staleInterfaces}
@@ -245,6 +247,7 @@ function openModemConfig(id: string) {
 		/>
 		<CellularSection
 			{modemEntries}
+			linkCorrelation={getLinkNames().correlation}
 			{netif}
 			{isFullyStale}
 			{staleInterfaces}
@@ -253,6 +256,7 @@ function openModemConfig(id: string) {
 		/>
 		<EthernetSection
 			{wiredEntries}
+			linkName={getLinkNames().label}
 			{isFullyStale}
 			{staleInterfaces}
 			onConfigure={configureNetif}
@@ -276,6 +280,7 @@ function openModemConfig(id: string) {
 		dialog={WifiSelectorDialog}
 		bind:open={wifiSelectorOpen}
 		deviceId={wifiSelectorDeviceId}
+		linkName={getLinkNames().label}
 	/>
 {/if}
 

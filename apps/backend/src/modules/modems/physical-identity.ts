@@ -447,3 +447,10 @@ export function resetPhysicalIdentityRegistry(): void {
 	records.clear();
 	presentDevices = [];
 }
+/** Compact USB topology hint, shared by the inventory and telemetry wire. */
+export function portLabelFromIdPath(
+	path: string | undefined,
+): string | undefined {
+	const port = path?.trim().match(/-usb-(\d+):(\d+(?:\.\d+)*)(?::|$)/);
+	return port ? `USB ${port[1]}-${port[2]}` : undefined;
+}

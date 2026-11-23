@@ -33,6 +33,15 @@ function catalogNamespaces(code: string): Set<string> {
 }
 
 describe("federation catalog scope", () => {
+	it("does not ship the device's bonded-link naming catalog", () => {
+		const leaked = readdirSync(OUTPUT)
+			.filter((name) => name.endsWith(".js"))
+			.filter((name) =>
+				/(?:hud|networking)\.linkName\./.test(readFileSync(join(OUTPUT, name), "utf8")),
+			);
+		expect(leaked).toEqual([]);
+	});
+
 	it("registers every namespace the built bundles reference", () => {
 		const referenced = new Set<string>();
 		for (const file of readdirSync(OUTPUT).filter((name) => name.endsWith(".js"))) {

@@ -13,6 +13,7 @@
  * open is a connection-ownership violation), and the async-operation sweep is
  * created AFTER the fake clock, or its 15 s valve would run on real time.
  */
+import type { LinkTelemetryMessage, ModemList } from "@ceraui/rpc/schemas";
 import { fireEvent, render } from "@testing-library/svelte";
 import { flushSync } from "svelte";
 import {
@@ -66,11 +67,15 @@ vi.mock("svelte-sonner", () => ({
 		dismiss: vi.fn(),
 	},
 }));
-vi.mock("$lib/rpc/subscriptions.svelte", async (importOriginal) =>
-	(await import("../tests/fixtures/real-store-live")).deviceGettersMock(
-		await importOriginal<typeof import("$lib/rpc/subscriptions.svelte")>(),
-	),
-);
+vi.mock("$lib/rpc/subscriptions.svelte", async (importOriginal) => {
+	const real =
+		await importOriginal<typeof import("$lib/rpc/subscriptions.svelte")>();
+	const mock = await (
+		await import("../tests/fixtures/real-store-live")
+	).deviceGettersMock(real);
+	mock.getLinkTelemetry = real.getLinkTelemetry;
+	return mock;
+});
 vi.mock("$lib/stores/auth-status.svelte", async (importOriginal) => ({
 	...(await importOriginal<typeof import("$lib/stores/auth-status.svelte")>()),
 	authStatusStore: {
@@ -236,6 +241,59 @@ afterEach(() => {
 	vi.useRealTimers();
 	localStorage.clear();
 	document.body.innerHTML = "";
+});
+
+it("updates the live link after a standalone modems frame and records the next sample", () => {
+	const roster = (network: string): ModemList => ({
+		"31": {
+			ifname: "wwan3",
+			name: "RM520N - 58201",
+			model: "RM520N",
+			network_type: { supported: ["5G"], active: "5G" },
+			status: {
+				network,
+				network_type: "5G",
+				signal: 58,
+				roaming: false,
+				connection: "connected",
+			},
+		},
+	});
+	const sample = (rtt: number): LinkTelemetryMessage => ({
+		links: [
+			{
+				conn_id: "0",
+				link_id: "modem-31",
+				iface: "wwan3",
+				rtt_ms: rtt,
+				nak_count: 0,
+				weight_percent: 100,
+				stale: false,
+			},
+		],
+	});
+	deliverStatus({
+		modems: roster("Northwind"),
+		is_streaming: true,
+		stream_lifecycle: "streaming",
+		linkTelemetry: sample(20),
+	});
+	const { container } = render(LiveView);
+	const liveName = () =>
+		container.querySelector("[data-link-name]")?.textContent;
+	expect(liveName()).toContain("Northwind");
+	socket().deliver({ modems: roster("Harbor Cell") });
+	flushSync();
+	expect(liveName()).toContain("Harbor Cell");
+	expect(liveName()).toBe("Harbor Cell · RM520N");
+	deliverStatus({ linkTelemetry: sample(23) });
+	deliverStatus({ is_streaming: false, stream_lifecycle: "idle" });
+	expect(container.querySelector("[data-session-link-name]")?.textContent).toBe(
+		"Northwind · RM520N → Harbor Cell · RM520N",
+	);
+	expect(
+		container.querySelector('[data-testid="ingest-stats"]')?.textContent,
+	).toMatch(/2\s+samples/);
 });
 
 const F8_MIXED_FALSE = {

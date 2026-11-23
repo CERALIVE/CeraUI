@@ -29,6 +29,9 @@ Federation uses an isolated Paraglide `locale-modules` output and full output
 minification; its message imports and locale-runtime shim resolve together through
 `vite.federation-i18n.ts`. The namespaces the dialogs render, in every locale,
 remain inside the signed static graph, and the SPA's direct imports and lazy message-module output are unchanged.
+Bonded-link copy belongs to the device-only `hud` namespace. Do not put it in
+`networking`, which the hosted dialogs register. Keep device-only CSS rules
+local to their surface when the federation build does not need the utility.
 `bun scripts/ci/bundle-report.mjs` checks both built outputs. The explicitly
 measured November 2026 toast-host/audio rebaseline and bounded allowances are
 recorded in [the dependency baseline](dep-baseline-as-of-2026-11.md#federation-budgets-and-size-analysis);

@@ -59,12 +59,15 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getIsStreaming: () => state.isStreaming,
 	getLinkTelemetry: () => state.linkTelemetry,
 	getManagedIngestAccounts: () => [],
+	// Bonded-link names project the modem and Wi-Fi inventory snapshots.
+	getModems: () => undefined,
 	getNetif: () => ({}),
 	getPipelines: () => ({ pipelines: {} }),
 	getRelays: () => undefined,
 	getSensors: () => ({}),
 	getSources: () => undefined,
 	getStatus: () => ({ engine_bitrate: state.engineBitrate }),
+	getWifi: () => undefined,
 }));
 
 vi.mock("$lib/rpc/streaming-optimism.svelte", () => ({

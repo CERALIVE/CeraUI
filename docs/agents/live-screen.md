@@ -134,22 +134,25 @@ must contain the `source-audio` block with its ids unchanged.
 
 #### Link names
 
-Live, the HUD and Network's Bonded Links name a link with one helper,
-`apps/frontend/src/lib/helpers/link-names.ts`. A modem is
-"SIM n · operator" (or "SIM n"), numbered in the Network page's modem order
-(`sortModemEntries` in `$lib/modem/modem-order`: stable hardware port, then
-id), so the number survives a re-issued modem id. A joined radio is
-"Wi-Fi · network" (the HUD and Bonded Links show the network beside their own
-Wi-Fi tag); a radio without a network is its own name, "USB Wi-Fi (2f27)" for
-a MAC-named one (`radioName`). An interface named `usb<N>`
-is "USB tether"; everything else keeps its type label ("Ethernet 1"). The
-interface id is a secondary detail and no MAC address is a name. The session
-summary is bound to what was measured: a link whose name changed during the
-session lists every name it had, in order ("SIM 1 · A → SIM 1 · B"),
-recorded with each sample (`createSessionLinkNames`, keyed by a `Map`, so any
-interface name is a plain key). Such a row gives its names a full line at every
-width, wrapping, never clipped; a link with one name keeps a 9rem name column
-beside its bar above 640 px. The interface id stays the row's tooltip.
+Live, the HUD and Network's Bonded Links use one label projection from
+`getModems()` and `getWifi()`, not the aggregate `getStatus()` inventory. A
+standalone modem update must change all three. A modem reads "carrier · short
+model", or just the model when no carrier is reported. Roster order, modem id,
+and the interface suffix do not identify a SIM slot. Only an explicit device
+slot label can name a slot. An otherwise identical modem gets a distinct
+hardware-port hint where available, or its ifname when the hint is missing or
+shared. After seeing a collision, the tab keeps the shown discriminator and
+Network correlation when a sibling is unplugged. The cache retains all present
+qualified modem identity/name pairs and up to 256 recently seen absent pairs.
+Stable hardware keys are compared verbatim; when a row has only an ifname, the
+UI cannot establish continuity across a rename.
+
+A joined radio reads "Wi-Fi · network", with a radio hint for a shared SSID.
+Ethernet and MAC-named adapters use their inventory labels, `usb<N>` reads
+"USB tether (usb<N>)", and unrecognized names stay literal. Naming does not
+decide bond membership. Live shows a distinct ifname beneath a name; the
+session summary uses the observed names and identity as described in
+[Ingest hardening](ingest-hardening.md).
 
 #### Screen sizes
 

@@ -100,6 +100,7 @@ export function deriveHudState(
 	timestamps: HudTimestamps,
 	now: number,
 	staleInterfaces: Set<string> = new Set(),
+	names?: import("$lib/helpers/link-names").LinkNames,
 ): HudState {
 	const isConnected =
 		sources.isConnected && sources.connectionState === "connected";
@@ -132,6 +133,7 @@ export function deriveHudState(
 		isFullyStale,
 		staleInterfaces,
 		sources.isStreaming,
+		names,
 	);
 
 	return {

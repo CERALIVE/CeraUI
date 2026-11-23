@@ -1,110 +1,169 @@
-/**
- * One name per bonded link, shared by Live, the HUD and Network.
- *
- * The same link used to read `usb0` on Live, a model and serial number on the
- * Network modem card and "HomeNetwork" in Bonded Links. A streamer names
- * links by what they are, so the name leads with that and the interface id
- * stays available as a secondary detail:
- *
- * - a modem: "SIM 1 · Northwind" (its place in the Network page's modem order,
- *   stable across re-enumeration, and the operator it is registered on), or
- *   "SIM 1" without an operator;
- * - a Wi-Fi radio joined to a network: "Wi-Fi · HomeNetwork";
- * - a Wi-Fi radio named after its MAC (`wlx…`): "USB Wi-Fi (2f27)" while it
- *   has no network;
- * - an interface named `usb<N>` (the kernel's name for an RNDIS or CDC tethered
- *   device that was not renamed): "USB tether", which says nothing about what
- *   is on the other end; MAC-named tethers keep their type label for now;
- * - anything else: the existing type label ("Ethernet", "Ethernet 2", "Wi-Fi 1").
- *
- * Pure and rune-free: the caller passes the current modem and Wi-Fi snapshots.
- */
 import { m } from "@ceraui/i18n/svelte";
-import type { ModemList, WifiStatus } from "@ceraui/rpc/schemas";
+import type { Modem, ModemList, WifiStatus } from "@ceraui/rpc/schemas";
 
-import { sortModemEntries } from "$lib/modem/modem-order";
+const MAC_NAMED = /^(wl|en|ww)x[0-9a-f]{12}$/;
+const INDEXED = /^(wlan|eth|wwan|usb)(\d+)$/;
 
-const MAC_NAMED_WIFI = /^wlx[0-9a-f]{12}$/;
-
-// Predictable names built from the MAC address (wlx…, enx…, wwx…): their
-// trailing digits are part of the MAC, not an interface index, so two such
-// adapters are told apart by the MAC's last four hex digits instead.
-const MAC_NAMED = /^(?:wl|en|ww)x[0-9a-f]{12}$/;
-
-/** The type label for an interface id: "Wi-Fi 1", "Ethernet 2", "Wi-Fi (2f27)". */
-export const interfaceLabel = (name: string): string => {
-	let numberSuffix = "";
-	const number = MAC_NAMED.test(name) ? undefined : name.match(/\d+$/g)?.[0];
-	if (MAC_NAMED.test(name)) {
-		numberSuffix = ` (${name.slice(-4)})`;
-	} else if (number) {
-		numberSuffix = ` ${Number.parseInt(number, 10) + 1}`;
-		name = name.slice(0, -number.length).trim();
+/** Four hex digits are a display hint, not a unique adapter identifier. */
+export function interfaceLabel(ifname: string): string {
+	const mac = MAC_NAMED.exec(ifname);
+	const indexed = mac ? null : INDEXED.exec(ifname);
+	const family = mac?.[1] ?? indexed?.[1];
+	const suffix = mac
+		? ` (${ifname.slice(-4)})`
+		: indexed
+			? ` ${Number(indexed[2]) + 1}`
+			: "";
+	switch (family) {
+		case "wl":
+		case "wlan":
+			return m["networking.types.wifi"]() + suffix;
+		case "en":
+		case "eth":
+			return m["networking.types.ethernet"]() + suffix;
+		case "ww":
+		case "wwan":
+			return m["networking.types.modem"]() + suffix;
+		case "usb":
+			return m["hud.linkName.usbTether"]({ iface: ifname });
+		default:
+			return ifname;
 	}
+}
 
-	if (name.startsWith("wl")) {
-		name = m["networking.types.wifi"]();
-	} else if (name.startsWith("eth") || name.startsWith("en")) {
-		name = m["networking.types.ethernet"]();
-	} else if (name.startsWith("ww")) {
-		name = m["networking.types.modem"]();
-	} else if (name.startsWith("usb")) {
-		name = m["networking.types.usb"]();
-	}
+function modemCarrier(modem: Modem): string | undefined {
+	return (
+		modem.status?.network?.trim() || modem.sim_network?.trim() || undefined
+	);
+}
 
-	return name + numberSuffix;
-};
+function modemModel(modem: Modem): string {
+	// Legacy descriptors carry “model - serial” in name, not in a separate field.
+	const model = modem.model?.trim() || modem.name?.trim();
+	return (
+		model?.split(" - ", 1)[0]?.replace(/^(RM\d{3}[A-Z])-[A-Z]{2}$/i, "$1") ||
+		modem.slot_label?.trim() ||
+		m["networking.types.modem"]()
+	);
+}
+
+interface InventoryName {
+	readonly ifname: string;
+	readonly base: string;
+	readonly hint: string;
+	readonly modem?: { readonly key: string; readonly wasTwin: boolean };
+}
+
+export interface LinkNames {
+	readonly label: (ifname: string) => string;
+	/** Visible correlation is needed even when the primary label has a port hint. */
+	readonly correlation: (ifname: string) => string | undefined;
+}
 
 export interface LinkNameSources {
 	readonly modems?: ModemList | undefined;
 	readonly wifi?: WifiStatus | undefined;
 }
 
-/** The modems in the Network page's order (stable hardware port, then id). */
-function modemOrder(modems: ModemList | undefined): string[] {
-	return sortModemEntries(Object.entries(modems ?? {})).map(
-		([key, modem]) => modem.ifname || key,
-	);
-}
+const MAX_ABSENT_TWINS = 256;
 
-/**
- * A Wi-Fi radio's own name, without its network: "USB Wi-Fi (2f27)" for a
- * radio named after its MAC, else the type label ("Wi-Fi 2"). Never the MAC.
- */
-export function radioName(ifname: string): string {
-	return MAC_NAMED_WIFI.test(ifname)
-		? m["networking.linkName.usbWifi"]({ id: ifname.slice(-4) })
-		: interfaceLabel(ifname);
-}
+/** Keep the displayed discriminator when a modem's collision group shrinks. */
+export function createLinkNameProjection() {
+	// null remembers the ifname *fallback*, not the old ifname after a rename.
+	const knownTwins = new Map<string, string | null>();
+	return ({ modems, wifi }: LinkNameSources): LinkNames => {
+		const groups = new Map<string, InventoryName[]>();
+		function add(row: InventoryName) {
+			const group = groups.get(row.base);
+			if (group) group.push(row);
+			else groups.set(row.base, [row]);
+		}
 
-export function linkName(ifname: string, sources: LinkNameSources): string {
-	const modem = Object.entries(sources.modems ?? {}).find(
-		([key, entry]) => (entry.ifname || key) === ifname,
-	)?.[1];
-	if (modem) {
-		const n = modemOrder(sources.modems).indexOf(ifname) + 1;
-		const operator = modem.status?.network?.trim();
-		return operator
-			? m["networking.linkName.simOperator"]({ n, operator })
-			: m["networking.linkName.sim"]({ n });
-	}
+		for (const radio of Object.values(wifi ?? {})) {
+			const { ifname } = radio;
+			const ssid = radio.available?.find((network) => network.active)?.ssid;
+			const type = m["networking.types.wifi"]();
+			const idleLabel = interfaceLabel(ifname);
+			const hint = /^wlx[0-9a-f]{12}$/.test(ifname)
+				? ifname.slice(-4)
+				: /^wlan\d+$/.test(ifname)
+					? String(Number(ifname.slice(4)) + 1)
+					: ifname;
+			add({
+				ifname,
+				base: ssid
+					? m["hud.linkName.wifiNetwork"]({ network: ssid })
+					: idleLabel === ifname
+						? `${type} (${ifname})`
+						: idleLabel,
+				hint: ssid ? hint : ifname,
+			});
+		}
 
-	const radio = Object.entries(sources.wifi ?? {}).find(
-		([key, entry]) => (entry.ifname || key) === ifname,
-	)?.[1];
-	if (radio || ifname.startsWith("wl")) {
-		const ssid = radio?.available?.find((network) => network.active)?.ssid;
-		if (ssid) return m["networking.linkName.wifiNetwork"]({ network: ssid });
-		if (MAC_NAMED_WIFI.test(ifname)) return radioName(ifname);
-	}
+		for (const modem of Object.values(modems ?? {})) {
+			const { ifname } = modem;
+			if (!ifname) continue;
+			const model = modemModel(modem);
+			const carrier = modem.no_sim ? undefined : modemCarrier(modem);
+			const base = carrier ? `${carrier} · ${model}` : model;
+			const anchor = modem.stable_key;
+			const key = JSON.stringify([
+				base,
+				anchor === undefined ? "iface" : "port",
+				anchor ?? ifname,
+			]);
+			const remembered = knownTwins.get(key);
+			add({
+				ifname,
+				base,
+				hint:
+					remembered === null
+						? ifname
+						: (remembered ?? (modem.port_label?.trim() || ifname)),
+				modem: { key, wasTwin: remembered !== undefined },
+			});
+		}
 
-	if (/^usb\d+$/.test(ifname)) return m["networking.linkName.usbTether"]();
-	return interfaceLabel(ifname);
-}
-
-/** A namer bound to one snapshot, for lists. */
-export function linkNamer(
-	sources: LinkNameSources,
-): (ifname: string) => string {
-	return (ifname) => linkName(ifname, sources);
+		const labels = new Map<string, string>();
+		const correlation = new Set<string>();
+		const presentTwins = new Set<string>();
+		for (const [base, group] of groups) {
+			const hints = new Map<string, number>();
+			for (const { hint } of group) hints.set(hint, (hints.get(hint) ?? 0) + 1);
+			for (const row of group) {
+				const { modem, hint, ifname } = row;
+				const qualified = group.length > 1 || modem?.wasTwin === true;
+				const distinctHint = hints.get(hint) === 1 ? hint : ifname;
+				if (modem && qualified) {
+					// Refresh even a lone survivor, to preserve recency after it leaves.
+					knownTwins.delete(modem.key);
+					knownTwins.set(
+						modem.key,
+						distinctHint === ifname ? null : distinctHint,
+					);
+					presentTwins.add(modem.key);
+				}
+				labels.set(
+					ifname,
+					!qualified
+						? base
+						: modem
+							? `${base} · ${distinctHint}`
+							: `${base} (${distinctHint})`,
+				);
+				if (qualified) correlation.add(ifname);
+			}
+		}
+		let absentTwins = knownTwins.size - presentTwins.size;
+		for (const key of knownTwins.keys()) {
+			if (absentTwins <= MAX_ABSENT_TWINS) break;
+			if (presentTwins.has(key)) continue;
+			knownTwins.delete(key);
+			absentTwins--;
+		}
+		return {
+			label: (ifname) => labels.get(ifname) ?? interfaceLabel(ifname),
+			correlation: (ifname) => (correlation.has(ifname) ? ifname : undefined),
+		};
+	};
 }
