@@ -36,6 +36,9 @@ RTT and streaming stats still fluctuate. To move a signal, write it into
 `mockState` and call `runMockFeedbackBroadcast()`.
 The feedback tick compares the complete Wi-Fi wire payload, so hotspot and
 connection changes still reach clients when signal strength is unchanged.
+Mock Hotspot Stop publishes the station snapshot at the mode change, without
+waiting for this tick. That push updates the same dedupe cache so an
+unchanged tick does not send a second copy.
 
 **`updateMockState(partial)` — single write path:**
 All writes to `mockState` funnel through the typed `updateMockState(partial)` mutator

@@ -75,6 +75,7 @@ import {
 	getMockState,
 	mockWifiRadios,
 	mockWifiSsidForUuid,
+	publishMockWifiStatus,
 	setMockWifiConnection,
 	shouldUseMocks,
 } from "../../mocks/mock-service.ts";
@@ -422,7 +423,11 @@ export const hotspotStopProcedure = authedProcedure
 		if (shouldUseMocks()) {
 			if (!getMockWifiFaults().suppressConfirm) {
 				const device = resolveMockWifiDevice(input.device);
-				if (device) getMockState().wifiModes[device] = "station";
+				const modes = getMockState().wifiModes;
+				if (device && modes[device] !== "station") {
+					modes[device] = "station";
+					publishMockWifiStatus(wifiBuildMsg());
+				}
 			}
 			publishHotspotOutcome("stop", Number(input.device), { success: true });
 			return { success: true };
