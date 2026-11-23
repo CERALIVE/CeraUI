@@ -284,20 +284,7 @@ export async function saveJsonConfigAsync<T>(
  * (setBitrate/setAutostart) depend on the write completing before they return.
  */
 export function writeFileAtomicSync(filePath: string, contents: string): void {
-	const dir = path.dirname(filePath);
-	const tmpPath = path.join(
-		dir,
-		`.${path.basename(filePath)}.${process.pid}.tmp`,
-	);
-
-	const fd = fs.openSync(tmpPath, "w");
-	try {
-		fs.writeFileSync(fd, contents);
-		fs.fsyncSync(fd);
-	} finally {
-		fs.closeSync(fd);
-	}
-
+	const tmpPath = writeSyncedTemp(filePath, contents);
 	try {
 		fs.renameSync(tmpPath, filePath);
 	} catch (err) {
@@ -308,6 +295,33 @@ export function writeFileAtomicSync(filePath: string, contents: string): void {
 		}
 		throw err;
 	}
+}
+
+/**
+ * Run {@link writeFileAtomicSync} up to its rename, then discard the temp file:
+ * throws what that write would throw before replacing `filePath`, and never
+ * replaces it.
+ */
+export function probeFileAtomicWriteSync(
+	filePath: string,
+	contents: string,
+): void {
+	fs.unlinkSync(writeSyncedTemp(filePath, contents));
+}
+
+function writeSyncedTemp(filePath: string, contents: string): string {
+	const tmpPath = path.join(
+		path.dirname(filePath),
+		`.${path.basename(filePath)}.${process.pid}.tmp`,
+	);
+	const fd = fs.openSync(tmpPath, "w");
+	try {
+		fs.writeFileSync(fd, contents);
+		fs.fsyncSync(fd);
+	} finally {
+		fs.closeSync(fd);
+	}
+	return tmpPath;
 }
 
 /**

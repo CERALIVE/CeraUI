@@ -1,4 +1,4 @@
-import { getConfig, saveConfig } from "../config.ts";
+import { getConfig, probeSaveConfig, saveConfig } from "../config.ts";
 import { listPresentPhysicalDevices } from "../modems/physical-identity.ts";
 import { resolveBondPhysicalIdentity } from "../streaming/bond-entry.ts";
 
@@ -47,6 +47,14 @@ export function setPersistentBondOptOut(
 	getConfig().bond_opt_out = Object.keys(next).length === 0 ? undefined : next;
 	saveConfig();
 	return physicalId;
+}
+
+/**
+ * Throws what `setPersistentBondOptOut(ifname, true)` would throw, changing
+ * nothing: it only saves for a physically identified link.
+ */
+export function probePersistentBondOptOut(ifname: string): void {
+	if (bondPhysicalId(ifname) !== undefined) probeSaveConfig();
 }
 
 export function resetPersistentBondOptOutForTest(): void {
