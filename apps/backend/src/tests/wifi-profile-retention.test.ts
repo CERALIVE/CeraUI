@@ -1,21 +1,25 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 
 import { logger } from "../helpers/logger.ts";
+import * as runner from "../helpers/run.ts";
 import * as nm from "../modules/network/network-manager.ts";
 import * as websocket from "../modules/ui/websocket-server.ts";
 import {
 	handleWifi,
 	type NmcliRun,
 	setWifiJoinNmcliRunner,
+	wifiBuildMsg,
 } from "../modules/wifi/wifi.ts";
 import {
 	addWifiInterface,
 	removeWifiInterface,
+	wifiUpdateScanResult,
 } from "../modules/wifi/wifi-connections.ts";
 import {
 	getWifiIdToMacAddress,
 	type WifiInterface,
 } from "../modules/wifi/wifi-interfaces.ts";
+import { nmcliFieldOutput } from "./helpers/nmcli-field-output.ts";
 
 const MAC = "02:00:00:00:51:00";
 const SSID = "Fixture-Network";
@@ -24,6 +28,8 @@ const FRESH = "00000000-0000-4000-8000-000000000052";
 const FIRST = "00000000-0000-4000-8000-000000000053";
 const SECOND = "00000000-0000-4000-8000-000000000054";
 const PASSWORD = "fixture-correct-password";
+const SECURED_AP = "02:00:00:00:51:01";
+const OPEN_AP = "02:00:00:00:51:02";
 const OK: NmcliRun = { stdout: "", stderr: "", exitCode: 0 };
 const REFUSED: NmcliRun = {
 	stdout: "",
@@ -88,15 +94,22 @@ function useTransport(security: string) {
 	});
 }
 
-function join(ssid = SSID, security = "WPA2") {
+function join(
+	ssid = SSID,
+	security = "WPA2",
+	password = PASSWORD,
+	bssid?: string,
+) {
 	const terminal = Promise.withResolvers<{
 		success?: boolean;
 		error?: string;
 		device: number;
 	}>();
-	handleWifi(
+	void handleWifi(
 		{ send: (frame) => terminal.resolve(JSON.parse(frame).wifi.new) },
-		{ new: { device: 0, ssid, password: PASSWORD, security } },
+		{
+			new: { device: 0, ssid, password, security, ...(bssid ? { bssid } : {}) },
+		},
 	);
 	return terminal.promise;
 }
@@ -145,6 +158,278 @@ afterEach(() => {
 	restore();
 	removeWifiInterface(MAC);
 	delete getWifiIdToMacAddress()[0];
+});
+
+test.each(["missing BSSID", "conflicting BSSID", "Suite B flags"] as const)(
+	"an open join with %s never activates or binds a same-name secured profile",
+	async (evidence) => {
+		profiles.set(SAVED, { keyMgmt: "wpa-psk", psk: PASSWORD });
+		const escapeBssid = (bssid: string) => bssid.replaceAll(":", "\\:");
+		const openBssid = evidence === "missing BSSID" ? "" : OPEN_AP;
+		const securedBssid =
+			evidence === "conflicting BSSID" ? OPEN_AP : SECURED_AP;
+		const ordered = [
+			{ bssid: securedBssid, uuid: SAVED },
+			{ bssid: openBssid, uuid: FRESH },
+		];
+		const openFlags =
+			evidence === "Suite B flags" ? "wpa-eap-suite-b-192" : "(none)";
+		const scan = spyOn(nm, "nmScanResults").mockImplementation(
+			async (fields) =>
+				fields.startsWith("IN-USE")
+					? [
+							`:${escapeBssid(openBssid)}:${SSID}:Infra:1:54 Mbit/s:90:bars:`,
+							`:${escapeBssid(securedBssid)}:${SSID}:Infra:1:54 Mbit/s:40:bars:WPA2`,
+						]
+					: [
+							`${escapeBssid(openBssid)}:${SSID}:Infra::(none):${openFlags}`,
+							`${escapeBssid(securedBssid)}:${SSID}:Infra:WPA2:(none):psk`,
+						],
+		);
+		const binding = spyOn(nm, "nmConnSetWifiMacAddress").mockResolvedValue(
+			true,
+		);
+		const activations: string[] = [];
+		setWifiJoinNmcliRunner(async (args) => {
+			const target = args[args.indexOf("connect") + 1];
+			const ap = ordered.find((row) => target === SSID || target === row.bssid);
+			if (!ap) throw new Error("Unexpected join command");
+			activations.push(ap.uuid);
+			return {
+				...OK,
+				stdout: `Device 'wlan0' successfully activated with '${ap.uuid}'.`,
+			};
+		});
+		try {
+			await wifiUpdateScanResult();
+			expect(adapter.available.get(SSID)).toMatchObject({
+				security: "",
+				signal: 90,
+			});
+			const terminal = await join(SSID, "", "", OPEN_AP);
+			expect({ activations, bindings: binding.mock.calls, terminal }).toEqual({
+				activations: [],
+				bindings: [],
+				terminal: { error: "open-target-unverified", device: 0 },
+			});
+			expect(profiles.get(SAVED)).toEqual({
+				keyMgmt: "wpa-psk",
+				psk: PASSWORD,
+			});
+		} finally {
+			scan.mockRestore();
+			binding.mockRestore();
+		}
+	},
+);
+
+test.each([
+	"replaced",
+	"secured",
+	"omitted",
+	"lost after verification",
+] as const)(
+	"an open join tracks the selected AP when its identity is %s",
+	async (scenario) => {
+		const replacement = "02:00:00:00:51:03";
+		const selectedBssid = scenario === "omitted" ? undefined : OPEN_AP;
+		const observedBssid = scenario === "replaced" ? replacement : OPEN_AP;
+		const escaped = observedBssid.replaceAll(":", "\\:");
+		const security =
+			scenario === "secured" ? "WPA2:(none):psk" : ":(none):(none)";
+		const scan = spyOn(nm, "nmScanResults").mockImplementation(
+			async (fields) =>
+				fields.startsWith("IN-USE")
+					? [`:02\\:00\\:00\\:00\\:51\\:02:${SSID}:Infra:1:54 Mbit/s:90:bars:`]
+					: [`${escaped}:${SSID}:Infra:${security}`],
+		);
+		const binding = spyOn(nm, "nmConnSetWifiMacAddress").mockResolvedValue(
+			true,
+		);
+		const profileAdds: string[][] = [];
+		const activations: string[][] = [];
+		const otherMutations: string[][] = [];
+		const frames: { success?: boolean; error?: string; device: number }[] = [];
+		const terminal = Promise.withResolvers<void>();
+		setWifiJoinNmcliRunner(async (args) => {
+			if (args[0] === "connection" && args[1] === "add") {
+				profileAdds.push(args);
+				return {
+					...OK,
+					stdout: `Connection '${SSID}' (${FRESH}) successfully added.`,
+				};
+			}
+			if (args.includes("up")) {
+				activations.push(args);
+				return scenario === "lost after verification"
+					? { ...REFUSED, stderr: "Error: access point not found." }
+					: { ...OK, stdout: "Connection successfully activated" };
+			}
+			otherMutations.push(args);
+			return REFUSED;
+		});
+		try {
+			await wifiUpdateScanResult();
+			expect(adapter.available.get(SSID)).toMatchObject({
+				security: "",
+				signal: 90,
+			});
+			const request = {
+				device: 0,
+				ssid: SSID,
+				password: "",
+				security: "",
+				...(selectedBssid ? { bssid: selectedBssid } : {}),
+			};
+			await handleWifi(
+				{
+					send: (frame) => {
+						frames.push(JSON.parse(frame).wifi.new);
+						terminal.resolve();
+					},
+				},
+				{ new: request },
+			);
+			await terminal.promise;
+
+			if (scenario === "lost after verification") {
+				expect(profileAdds).toHaveLength(1);
+				const add = profileAdds[0] ?? [];
+				expect(add[add.indexOf("connection.autoconnect") + 1]).toBe("no");
+				expect(activations).toEqual([
+					["-w", "15", "conn", "up", FRESH, "ifname", "wlan0", "ap", OPEN_AP],
+				]);
+				expect(frames).toEqual([{ error: "generic", device: 0 }]);
+			} else {
+				expect({
+					profileAdds,
+					activations,
+					binding: binding.mock.calls,
+					frames,
+				}).toEqual({
+					profileAdds: [],
+					activations: [],
+					binding: [],
+					frames: [{ error: "open-target-unverified", device: 0 }],
+				});
+			}
+			expect(binding).not.toHaveBeenCalled();
+			expect(otherMutations).toEqual([]);
+			expect(frames.filter((frame) => frame.success)).toEqual([]);
+			expect(adapter.available.get(SSID)?.bssid).toBe(OPEN_AP);
+		} finally {
+			scan.mockRestore();
+			binding.mockRestore();
+		}
+	},
+);
+
+test("an open join writes no secret and pins activation to its verified AP", async () => {
+	const wpa2 = { keyMgmt: "wpa-psk", psk: "fixture-wpa2-password" };
+	const sae = { keyMgmt: "sae", psk: "fixture-sae-password" };
+	profiles.set(SAVED, { ...wpa2 });
+	profiles.set(FIRST, { ...sae });
+	const listing = spyOn(nm, "nmConnsGet").mockImplementation(async () =>
+		[...profiles.keys()].map((uuid) => `${uuid}:802-11-wireless`),
+	);
+	const reads = spyOn(runner, "run").mockImplementation(
+		async (command, args) => {
+			const profile = profiles.get(args.at(-1) ?? "");
+			if (command !== "nmcli" || !profile)
+				throw new Error("Expected a NetworkManager profile read");
+			if (args.includes("--show-secrets"))
+				throw new Error("Station discovery must not read secrets");
+			const fields: Readonly<Record<string, string>> = {
+				"802-11-wireless.mode": "infrastructure",
+				"802-11-wireless.ssid": SSID,
+				"802-11-wireless.mac-address": MAC,
+				"802-11-wireless-security.key-mgmt": profile.keyMgmt,
+			};
+			return nmcliFieldOutput(args, (field) => fields[field]);
+		},
+	);
+	const scan = spyOn(nm, "nmScanResults").mockImplementation(
+		async (fields, ifname) => {
+			if (!fields.startsWith("BSSID,")) return [""];
+			if (ifname !== adapter.ifname)
+				throw new Error("Expected the selected radio");
+			return [
+				`02\\:00\\:00\\:00\\:51\\:02:${SSID}:Infra::(none):(none)`,
+				`02\\:00\\:00\\:00\\:51\\:01:${SSID}:Infra:WPA2:(none):psk`,
+			];
+		},
+	);
+	const binding = spyOn(nm, "nmConnSetWifiMacAddress").mockResolvedValue(true);
+	const activations: { uuid: string; bssid: string }[] = [];
+	setWifiJoinNmcliRunner(async (args) => {
+		if (args.includes("connect")) {
+			activations.push({ uuid: SAVED, bssid: SECURED_AP });
+			return {
+				...OK,
+				stdout: `Device 'wlan0' successfully activated with '${SAVED}'.`,
+			};
+		}
+		if (args[0] === "connection" && args[1] === "add") {
+			expect(args).toContain("connection.autoconnect");
+			expect(args[args.indexOf("connection.autoconnect") + 1]).toBe("no");
+			expect(
+				args.some((arg) => arg.startsWith("802-11-wireless-security.")),
+			).toBe(false);
+			profiles.set(FRESH, { keyMgmt: "" });
+			return {
+				...OK,
+				stdout: `Connection '${SSID}' (${FRESH}) successfully added.`,
+			};
+		}
+		const uuid = args[args.indexOf("up") + 1];
+		const bssid = args[args.indexOf("ap") + 1];
+		if (uuid !== FRESH || bssid !== OPEN_AP || !profiles.has(FRESH))
+			return REFUSED;
+		activations.push({ uuid, bssid });
+		return { ...OK, stdout: "Connection successfully activated" };
+	});
+	try {
+		expect(await join(SSID, "", "", OPEN_AP)).toEqual({
+			success: true,
+			device: 0,
+		});
+		expect(activations).toEqual([{ uuid: FRESH, bssid: OPEN_AP }]);
+		expect(binding.mock.calls).toEqual([[FRESH, MAC, true]]);
+		expect([...profiles]).toEqual([
+			[SAVED, wpa2],
+			[FIRST, sae],
+			[FRESH, { keyMgmt: "" }],
+		]);
+		expect(wifiBuildMsg()["0"]).toMatchObject({
+			saved: { [SSID]: FRESH },
+			saved_key_mgmt: { [FRESH]: "" },
+		});
+	} finally {
+		listing.mockRestore();
+		reads.mockRestore();
+		scan.mockRestore();
+		binding.mockRestore();
+	}
+});
+
+test("the backend handler refuses blank secured credentials without touching NM", async () => {
+	const transport = spyOn(nm, "nmConnsGet");
+	const failure = { ...REFUSED, stdout: "", stderr: "" };
+	const invocations: string[][] = [];
+	setWifiJoinNmcliRunner(async (args) => {
+		invocations.push(args);
+		return failure;
+	});
+	try {
+		expect(await join(SSID, "SAE", "")).toEqual({
+			error: "generic",
+			device: 0,
+		});
+		expect(invocations).toEqual([]);
+		expect(transport).not.toHaveBeenCalled();
+	} finally {
+		transport.mockRestore();
+	}
 });
 
 test.each([

@@ -171,40 +171,61 @@ describe("wifiNewInputSchema", () => {
 		).toBe(false);
 	});
 
-	it("rejects a password shorter than 8 characters", () => {
-		expect(
-			wifiNewInputSchema.safeParse({
+	it.each(["short", "x"])(
+		"rejects a password shorter than 8 characters (%s)",
+		(password) => {
+			const result = wifiNewInputSchema.safeParse({
 				device: "wlan0",
 				ssid: "MyNetwork",
-				password: "short",
-			}).success,
-		).toBe(false);
-	});
+				password,
+			});
+			expect(result.success).toBe(false);
+			expect(result.error?.issues[0]?.path).toEqual(["password"]);
+		},
+	);
 
 	// Hotel and venue networks are mostly open; the dialog joins them with an
 	// empty password.
-	it("accepts an open network with an empty password", () => {
-		expect(
-			wifiNewInputSchema.safeParse({
+	it.each(["", "open", "none", "--"])(
+		"accepts explicit open security %p with an empty password",
+		(security) => {
+			expect(
+				wifiNewInputSchema.safeParse({
+					device: "0",
+					ssid: "Hotel Guest",
+					password: "",
+					security,
+				}).success,
+			).toBe(true);
+		},
+	);
+
+	it.each([
+		"WPA2",
+		"WPA3",
+		"SAE",
+		"WEP",
+		"OWE",
+		"OWE-TM",
+		"WPA2 802.1X",
+		"future",
+		" ",
+		undefined,
+	])(
+		"rejects an empty password when security %p is not explicitly open",
+		(security) => {
+			const result = wifiNewInputSchema.safeParse({
 				device: "0",
-				ssid: "Hotel Guest",
+				ssid: "MyNetwork",
 				password: "",
-				security: "",
-			}).success,
-		).toBe(true);
-	});
+				...(security === undefined ? {} : { security }),
+			});
+			expect(result.success).toBe(false);
+			expect(result.error?.issues[0]?.path).toEqual(["password"]);
+		},
+	);
 
-	it("still rejects a one-character password", () => {
-		const result = wifiNewInputSchema.safeParse({
-			device: "0",
-			ssid: "MyNetwork",
-			password: "x",
-		});
-		expect(result.success).toBe(false);
-		expect(result.error?.issues[0]?.path).toEqual(["password"]);
-	});
-
-	it("accepts a valid WPA connection", () => {
+	it("accepts a valid legacy password without scan security", () => {
 		expect(
 			wifiNewInputSchema.safeParse({
 				device: "wlan0",

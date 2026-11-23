@@ -31,6 +31,8 @@ import {
 	resetMockWifiFaults,
 	setMockWifiFaults,
 } from "../mocks/providers/wifi.ts";
+import { getPersistentNotifications } from "../modules/ui/notifications.ts";
+import { createContext } from "../rpc/context.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
 import {
 	wifiConnectNewProcedure,
@@ -40,6 +42,7 @@ import {
 	wifiScanProcedure,
 } from "../rpc/procedures/wifi.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
+import { statusClient } from "./helpers/status-client.ts";
 
 const SCENARIO = "multi-modem-wifi";
 const ORIGINAL_MOCK_MODE = process.env.MOCK_MODE;
@@ -65,23 +68,25 @@ function makeContext(): RPCContext {
 	};
 }
 
-/** Run `fn` while a broadcast-capturing client is attached; returns parsed `wifi` payloads. */
-async function withWifiCapture(
+async function captureBroadcasts(
 	fn: () => Promise<unknown>,
 ): Promise<Array<Record<string, unknown>>> {
-	const received: string[] = [];
-	const client = {
-		data: { isAuthenticated: true, lastActive: Date.now() },
-		send: (message: string) => received.push(message),
-	} as unknown as AppWebSocket;
+	const received: Array<Record<string, unknown>> = [];
+	const client = statusClient((text) => received.push(JSON.parse(text)));
 	addClient(client);
 	try {
 		await fn();
 	} finally {
 		removeClient(client);
 	}
-	return received
-		.map((raw) => JSON.parse(raw) as Record<string, unknown>)
+	return received;
+}
+
+/** Wi-Fi payloads for tests that also trigger unrelated broadcasts. */
+async function withWifiCapture(
+	fn: () => Promise<unknown>,
+): Promise<Array<Record<string, unknown>>> {
+	return (await captureBroadcasts(fn))
 		.filter((obj) => obj && typeof obj === "object" && "wifi" in obj)
 		.map((obj) => obj.wifi as Record<string, unknown>);
 }
@@ -218,13 +223,67 @@ describe("wifi mock-seam — connectNewAuthFails", () => {
 describe("wifi mock-seam — open networks", () => {
 	it("joins an open network the dialog sends with an empty password", async () => {
 		resetMockWifiFaults();
+		const frames: Array<Record<string, unknown>> = [];
+		const context = createContext(
+			statusClient((text) => frames.push(JSON.parse(text))),
+		);
 		const result = await call(
 			wifiConnectNewProcedure,
-			{ device: "0", ssid: "Hotel Guest", password: "", security: "" },
-			{ context: makeContext() },
+			{
+				device: "0",
+				ssid: "PublicWifi",
+				password: "",
+				security: "",
+				bssid: "aa:bb:cc:dd:ee:03",
+			},
+			{ context },
 		);
 		expect(result).toEqual({ success: true });
-		expect(activeNetwork()).toBe("Hotel Guest");
+		expect(activeNetwork()).toBe("PublicWifi");
+		expect(frames.filter((frame) => "notification" in frame)).toEqual([]);
+	});
+
+	it("tells only the old passwordless caller to refresh without joining", async () => {
+		const before = activeNetwork();
+		const persistentBefore = getPersistentNotifications(true);
+		const frames: unknown[] = [];
+		const context = createContext(
+			statusClient((text) => frames.push(JSON.parse(text))),
+		);
+		const observerFrames = await captureBroadcasts(async () => {
+			for (let attempt = 0; attempt < 2; attempt++) {
+				await call(
+					wifiConnectNewProcedure,
+					{ device: "0", ssid: "PublicWifi", password: "", security: "" },
+					{ context },
+				);
+			}
+		});
+		const delivery = [
+			{ wifi: { new: { device: "0", error: "open-target-unverified" } } },
+			{
+				notification: {
+					show: [
+						expect.objectContaining({
+							name: "wifi-open-reload",
+							key: "notifications.updateAvailableDescription",
+							is_persistent: true,
+							duration: 0,
+						}),
+						expect.objectContaining({
+							name: "wifi-open-reload-toast",
+							key: "notifications.updateAvailableDescription",
+							is_persistent: false,
+							duration: 60,
+						}),
+					],
+				},
+			},
+		];
+		expect(frames).toEqual([...delivery, ...delivery]);
+		expect(observerFrames).toEqual([]);
+		expect(getPersistentNotifications(true)).toEqual(persistentBefore);
+		expect(activeNetwork()).toBe(before);
 	});
 });
 

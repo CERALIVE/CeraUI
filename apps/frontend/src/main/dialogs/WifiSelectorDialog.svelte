@@ -80,8 +80,8 @@ const ifaceBusy = $derived(iface?.transition === 'activating');
 const sortedNetworks = $derived(
 	[...(iface?.available ?? [])].sort((a, b) => {
 		if (a.active !== b.active) return a.active ? -1 : 1;
-		const aSaved = !!getWifiUUID(a, iface?.saved ?? {});
-		const bSaved = !!getWifiUUID(b, iface?.saved ?? {});
+		const aSaved = !!getWifiUUID(a, iface);
+		const bSaved = !!getWifiUUID(b, iface);
 		if (aSaved !== bSaved) return aSaved ? -1 : 1;
 		return b.signal - a.signal;
 	}),
@@ -121,13 +121,13 @@ const scanError = $derived(getOperationPhase(scanKey) === 'failed');
 // `$lib/rpc/wifi-connect-identity`. Kept set through `timed_out` so the row can
 // render the calm "still connecting / Retry" affordance; cleared on confirm
 // (close), hard fail, or idle decay.
-let connecting = $state<PendingWifiConnect | undefined>(undefined);
+let connecting = $state<(PendingWifiConnect & { security?: string; openTarget?: { bssid: string } }) | undefined>(undefined);
 let pendingNew = $state<AvailableWifiNetwork | undefined>(undefined);
 let password = $state('');
 let showPassword = $state(false);
 let confirmForget = $state<string | undefined>(undefined);
 
-// The device's own TYPED refusal for the last join this surface dispatched.
+// The last local or device-side join refusal.
 // Latched locally rather than read off the async-op phase, which decays to
 // `idle` after ASYNC_OP_TERMINAL_LINGER_MS — the UpdatesDialog precedent. Before
 // this, an `auth` refusal resolved the op and rendered NOTHING, so a wrong
@@ -170,7 +170,7 @@ function resetInteraction() {
 // a saved row has its profile uuid, a fresh join has none and takes a minted
 // correlation id instead. `baselineConn` is captured HERE, at dispatch, so a
 // fresh join can tell "the active connection moved" from "it was already there".
-async function connectVia(pending: PendingWifiConnect, run: () => Promise<unknown>) {
+async function connectVia(pending: NonNullable<typeof connecting>, run: () => Promise<unknown>) {
 	if (ifaceBusy || isOperationPending(wifiOpKey)) return;
 	joinFailure = undefined;
 	connecting = pending;
@@ -184,9 +184,10 @@ async function connectVia(pending: PendingWifiConnect, run: () => Promise<unknow
 }
 
 /** A fresh (unsaved) join: no profile uuid exists yet, so mint a correlation id. */
-function newConnectIntent(ssid: string): PendingWifiConnect {
+function newConnectIntent(ssid: string, security: string) {
 	return {
 		ssid,
+		security,
 		correlationId: mintWifiConnectCorrelationId(),
 		baselineConn: iface?.conn,
 	};
@@ -252,28 +253,31 @@ function handleConnectNew(network: AvailableWifiNetwork) {
 		password = '';
 		showPassword = false;
 	} else {
-		const ssid = network.ssid;
-		const security = network.security;
-		void connectVia(newConnectIntent(ssid), () =>
-			rpc.wifi.connectNew({ device: deviceId, ssid, password: '', security }),
+		const { ssid, security, bssid } = network;
+		if (!bssid) {
+			joinFailure = 'open-target-unverified';
+			return;
+		}
+		void connectVia({ ...newConnectIntent(ssid, security), openTarget: { bssid } }, () =>
+			rpc.wifi.connectNew({ device: deviceId, ssid, password: '', security, bssid }),
 		);
 	}
 }
 
 function submitNew() {
 	if (!pendingNew || ifaceBusy) return;
-	if (isSecured(pendingNew) && password.length < PASSWORD_MIN) return;
+	if (password.length < PASSWORD_MIN) return;
 	const ssid = pendingNew.ssid;
 	const security = pendingNew.security;
 	const pw = password;
 	// A saved SSID's join rewrites that profile's secret and activates the same
 	// uuid on the device, so the uuid is this connect's identity.
-	const uuid = getWifiUUID(pendingNew, iface?.saved ?? {});
+	const uuid = getWifiUUID(pendingNew, iface);
 	pendingNew = undefined;
 	password = '';
 	showPassword = false;
 	void connectVia(
-		uuid ? { ssid, uuid, baselineConn: iface?.conn } : newConnectIntent(ssid),
+		uuid ? { ssid, uuid, baselineConn: iface?.conn } : newConnectIntent(ssid, security),
 		() => rpc.wifi.connectNew({ device: deviceId, ssid, password: pw, security }),
 	);
 }
@@ -320,7 +324,15 @@ $effect(() => {
 		connecting = undefined;
 		return;
 	}
-	if (phase === 'pending' && deriveWifiConnectIdentityOutcome(pending, iface) === 'confirmed') {
+	// A fresh join's status fallback must not confirm an incompatible same-name UUID.
+	const compatible = pending.security === undefined ||
+		getWifiUUID({ ssid: pending.ssid, security: pending.security }, iface) !== undefined;
+	const target = pending.openTarget;
+	const selectedApActive = !target ||
+		iface?.available?.some((row) =>
+			row.active && row.ssid === pending.ssid && row.bssid === target.bssid && !isSecured(row)
+		);
+	if (phase === 'pending' && compatible && selectedApActive && deriveWifiConnectIdentityOutcome(pending, iface) === 'confirmed') {
 		confirmOperation(wifiOpKey);
 	}
 });
@@ -459,9 +471,13 @@ $effect(() => {
 						: m["wifiSelector.error.connectionFailed"]()}
 				</p>
 				<p class="text-muted-foreground mt-0.5 text-xs">
-					{joinFailure === 'auth'
-						? m["wifiSelector.error.authFailedDescription"]()
-						: m["wifiSelector.error.connectionFailedDescription"]()}
+					{#if joinFailure === 'open-target-unverified'}
+						{m["wifiSelector.error.openTargetUnverified"]()}
+					{:else if joinFailure === 'auth'}
+						{m["wifiSelector.error.authFailedDescription"]()}
+					{:else}
+						{m["wifiSelector.error.connectionFailedDescription"]()}
+					{/if}
 				</p>
 			</div>
 		</div>

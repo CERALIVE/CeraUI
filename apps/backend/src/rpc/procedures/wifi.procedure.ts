@@ -16,10 +16,8 @@
  * WHICH LAYER TAKES THE LOCK DIFFERS BY PROCEDURE, and it has to:
  *
  *  - The STATION procedures (connect, connectNew, disconnect, forget, scan) take
- *    it here via `runGuarded`, and hold it across their DISPATCH only —
- *    `handleWifi` fires those with `void`, so they return once the work is
- *    queued. Making them awaitable under the lock is a separate change with its
- *    own RPC-latency consequences.
+ *    it here via `runGuarded`, across dispatch only except fresh open joins,
+ *    which hold it through AP verification, activation and binding.
  *  - The HOTSPOT procedures do NOT wrap their dispatch in `runGuarded`. The
  *    transaction acquires this same key itself and holds it for the full NM
  *    activation, so wrapping it here made it refuse ITSELF: the outer lock was
@@ -120,6 +118,7 @@ import {
 import { wifiHotspotStop } from "../../modules/wifi/wifi-hotspot-config.ts";
 import { publishHotspotOutcome } from "../../modules/wifi/wifi-hotspot-outcome.ts";
 import { getMacAddressForWifiInterface } from "../../modules/wifi/wifi-interfaces.ts";
+import { refuseLegacyOpenJoin } from "../../modules/wifi/wifi-join-admission.ts";
 import { withWifiModeRequestRefusal } from "../../modules/wifi/wifi-mode-request.ts";
 import { broadcast } from "../events.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
@@ -263,37 +262,53 @@ export const wifiDisconnectProcedure = authedProcedure
 export const wifiConnectNewProcedure = authedProcedure
 	.input(wifiNewInputSchema)
 	.output(wifiOperationOutputSchema)
-	.handler(async ({ input, context }): Promise<MutationResult> => {
+	.handler(async ({ input, context: { ws } }): Promise<MutationResult> => {
 		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
-		const ws = context.ws;
 		const lockKey = wifiAdapterLockKeyForDeviceId(input.device);
-		const busy = await runGuarded(lockKey, () => {
-			void handleWifi(ws, {
-				new: {
-					device: Number(input.device),
-					ssid: input.ssid,
-					password: input.password,
-					...(input.security !== undefined ? { security: input.security } : {}),
-				},
-			});
-			if (shouldUseMocks()) {
-				const faults = getMockWifiFaults();
-				if (faults.connectNewAuthFails) {
-					// Wrong-password result: route into the keyed op store as a failure on
-					// the SAME device key the dialog dispatched (calm re-enable).
-					broadcast("wifi", {
-						new: { error: "auth", device: input.device },
-					});
-				} else if (!faults.suppressConfirm) {
-					const current = getMockState().wifiConnections.get(MOCK_WIFI_DEVICE);
-					const savedNetworks = current?.savedNetworks ?? [];
-					setMockWifiConnection(MOCK_WIFI_DEVICE, {
-						activeNetwork: input.ssid,
-						savedNetworks: savedNetworks.includes(input.ssid)
-							? savedNetworks
-							: [...savedNetworks, input.ssid],
-					});
-				}
+		const busy = await runGuarded(lockKey, async () => {
+			if (refuseLegacyOpenJoin(ws, input)) return;
+			if (!shouldUseMocks())
+				return handleWifi(ws, {
+					new: {
+						device: Number(input.device),
+						ssid: input.ssid,
+						password: input.password,
+						...(input.security !== undefined
+							? { security: input.security }
+							: {}),
+						...(input.bssid !== undefined ? { bssid: input.bssid } : {}),
+					},
+				});
+			if (
+				input.password === "" &&
+				!wifiBuildMsg()[input.device]?.available?.some(
+					(row) =>
+						row.ssid === input.ssid &&
+						row.bssid !== undefined &&
+						row.bssid === input.bssid?.toLowerCase(),
+				)
+			) {
+				broadcast("wifi", {
+					new: { error: "open-target-unverified", device: input.device },
+				});
+				return;
+			}
+			const faults = getMockWifiFaults();
+			if (faults.connectNewAuthFails) {
+				// Wrong-password result: route into the keyed op store as a failure on
+				// the SAME device key the dialog dispatched (calm re-enable).
+				broadcast("wifi", {
+					new: { error: "auth", device: input.device },
+				});
+			} else if (!faults.suppressConfirm) {
+				const current = getMockState().wifiConnections.get(MOCK_WIFI_DEVICE);
+				const savedNetworks = current?.savedNetworks ?? [];
+				setMockWifiConnection(MOCK_WIFI_DEVICE, {
+					activeNetwork: input.ssid,
+					savedNetworks: savedNetworks.includes(input.ssid)
+						? savedNetworks
+						: [...savedNetworks, input.ssid],
+				});
 			}
 		});
 		if (busy) return { success: false, error: "DEVICE_BUSY" };

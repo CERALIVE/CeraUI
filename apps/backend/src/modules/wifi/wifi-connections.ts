@@ -15,6 +15,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { wifiStationAllowsBlankPassword } from "@ceraui/rpc";
 import { logger } from "../../helpers/logger.ts";
 import { pollWithBackoff } from "../../helpers/retry.ts";
 import { createMonitorManager } from "../network/monitor/monitor-manager.ts";
@@ -58,6 +59,7 @@ import {
 	isConcurrentHotspot,
 } from "./wifi-hotspot-types.ts";
 import type { WifiInterface, WifiInterfaceId } from "./wifi-interfaces.ts";
+import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 import {
 	recordWifiRadioShadowFailure,
 	wifiRadioIdentity,
@@ -418,7 +420,7 @@ export function parseWifiScanRow(raw: string): ParsedWifiScanRow | null {
 		bssid: bssid ?? "",
 		ssid,
 		signal: signalValue,
-		security: security ?? "",
+		security: security ?? "unknown",
 		chan: chanValue,
 	};
 }
@@ -457,6 +459,9 @@ export async function wifiUpdateScanResult(): Promise<boolean> {
 		const parsed = parseWifiScanRow(wifiNetwork);
 		if (!parsed) continue;
 		const { active, ssid, signal, security, chan } = parsed;
+		const bssid = wifiStationAllowsBlankPassword(security)
+			? normalizeMacAddress(parsed.bssid)
+			: undefined;
 
 		// All wifi interfaces see the same scan results. Add this network to every
 		// interface; the active flag indicates which interface is connected.
@@ -467,6 +472,7 @@ export async function wifiUpdateScanResult(): Promise<boolean> {
 			wifiInterface.available.set(ssid, {
 				active,
 				ssid,
+				...(bssid ? { bssid } : {}),
 				signal,
 				security,
 				freq: chan,

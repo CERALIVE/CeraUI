@@ -141,20 +141,20 @@ afterEach(() => {
 describe("the shared SAE rule", () => {
 	test.each([
 		["", "open"],
-		["WPA2", "other"],
-		["WPA1 WPA2", "other"],
-		["WPA2-Personal", "other"],
-		["WPA2 802.1X", "other"],
+		["WPA2", "psk"],
+		["WPA1 WPA2", "psk"],
+		["WPA2-Personal", "psk"],
+		["WPA2 802.1X", "enterprise"],
 		["WPA3", "sae-only"],
 		["SAE", "sae-only"],
 		["WPA3-Personal", "sae-only"],
 		["WPA2 WPA3", "sae-transition"],
 		["WPA1 WPA2 WPA3", "sae-transition"],
 		["WPA3-Enterprise", "other"],
-		["WPA3 802.1X", "other"],
+		["WPA3 802.1X", "enterprise"],
 		["OWE", "other"],
-	])("classifies %p as %p", (security, expected) => {
-		expect(classifyWifiStationSecurity(security)).toBe(expected as never);
+	] as const)("classifies %p as %p", (security, expected) => {
+		expect(classifyWifiStationSecurity(security)).toBe(expected);
 	});
 
 	test("only a SAE-ONLY network pins key-mgmt", () => {
@@ -231,13 +231,13 @@ describe("a SAE-only network is BUILT with key-mgmt sae", () => {
 		]);
 	});
 
-	test("a passwordless SAE request degrades rather than building a keyless profile", () => {
+	test("a passwordless SAE request is refused before any join command", () => {
 		const plan = planWifiStationJoin({
 			ssid: SSID,
 			ifname: IFNAME,
 			security: "WPA3",
 		});
-		expect(plan.mode).toBe("nm-auto");
+		expect(plan.mode).toBe("refused");
 	});
 
 	test("a failed activation reports the typed auth refusal, not a generic one", async () => {

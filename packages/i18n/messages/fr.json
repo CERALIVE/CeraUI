@@ -2563,6 +2563,7 @@
 	"wifiSelector.error.authFailedDescription": "Le mot de passe que vous avez saisi est incorrect. Veuillez vérifier et réessayer.",
 	"wifiSelector.error.connectionFailed": "Échec de la Connexion WiFi",
 	"wifiSelector.error.connectionFailedDescription": "Impossible de se connecter au réseau WiFi. Vérifiez le mot de passe et réessayez.",
+	"wifiSelector.error.openTargetUnverified": "L’appareil n’a pas pu confirmer la présence d’un point d’accès ouvert pour ce réseau. Relancez la recherche ou choisissez un autre réseau.",
 	"wifiSelector.hotspot.placeholderPassword": "********",
 	"wifiSelector.networks.found": "réseaux trouvés",
 	"wifiSelector.scanError.description": "Impossible d'actualiser les réseaux WiFi à proximité. Nouvelle tentative automatique.",

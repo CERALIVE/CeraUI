@@ -11,7 +11,7 @@
 -->
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
-import { requiresSaeKeyMgmt } from '@ceraui/rpc';
+import { canReuseWifiStationProfile, classifyWifiStationSecurity } from '@ceraui/rpc';
 import type { AvailableWifiNetwork, WifiInterface } from '@ceraui/rpc/schemas';
 import {
 	Check,
@@ -206,20 +206,23 @@ const superseded = $derived(wifiScanResultsSuperseded(scanState));
 	<!-- Network list -->
 	<div class="divide-y rounded-lg border">
 		{#each networks as network (network.ssid)}
-			{const uuid = $derived(getWifiUUID(network, iface?.saved ?? {}))}
+			{const uuid = $derived(getWifiUUID(network, iface))}
+			<!-- An already-active profile can be disconnected without scan security proof. -->
+			{const activeUuid = $derived(network.active && iface?.saved[network.ssid] === iface?.conn ? iface?.conn : undefined)}
+			{const managedUuid = $derived(activeUuid || uuid)}
 			{const opPending = $derived(isOperationPending(`wifi:${deviceId}`))}
 			{const isConnectRow = $derived(isPendingConnectRow(connecting, { ssid: network.ssid, uuid }))}
 			{const isConnecting = $derived(isConnectRow && opPending)}
 			{const isConnectTimedOut =
 				$derived(isConnectRow && getOperationPhase(`wifi:${deviceId}`) === 'timed_out')}
-			{const isDisconnecting = $derived(!!uuid && disconnecting === uuid)}
-			{const isForgetting = $derived(!!uuid && forgetting === uuid)}
+			{const isDisconnecting = $derived(!!activeUuid && disconnecting === activeUuid)}
+			{const isForgetting = $derived(!!managedUuid && forgetting === managedUuid)}
 			{const osBusy = $derived(!!connecting || !!disconnecting || !!forgetting)}
 			{const expanded = $derived(pendingNew?.ssid === network.ssid)}
 			{const confirming = $derived(confirmForget === network.ssid)}
 			<!-- The device rewrites a saved profile's secret in place only off the SAE-only
 			     path; an SAE-only join always adds a second profile. -->
-			{const correctable = $derived(isSecured(network) && !requiresSaeKeyMgmt(network.security))}
+			{const correctable = $derived(canReuseWifiStationProfile(classifyWifiStationSecurity(network.security), 'wpa-psk'))}
 			<!-- CT-2, not CT-1: the network is genuinely in the air, so the row stays
 			     visible and disabled-with-reason rather than being hidden. -->
 			{const block = $derived(wifiRowBlock(network, iface?.capabilities))}
@@ -308,26 +311,26 @@ const superseded = $derived(wifiScanResultsSuperseded(scanState));
 						{:else if isForgetting}
 							<InlineSpinner size="md" label={m["network.os.applying"]()} />
 						{:else if confirming}
-							<Button onclick={() => uuid && onForget(uuid, network)} size="sm" variant="destructive">
+							<Button onclick={() => managedUuid && onForget(managedUuid, network)} size="sm" variant="destructive">
 								{m["wifiSelector.button.forget"]()}
 							</Button>
 							<Button onclick={() => onConfirmForget(undefined)} size="sm" variant="ghost">
 								{m["wifiSelector.dialog.close"]()}
 							</Button>
-						{:else if uuid}
-							{#if network.active}
+						{:else if managedUuid}
+							{#if activeUuid}
 								<Button
 									aria-label={`${m["wifiSelector.button.disconnect"]()} ${network.ssid}`}
 									class="gap-1.5"
 									disabled={osBusy}
-									onclick={() => onDisconnect(uuid, network)}
+									onclick={() => onDisconnect(activeUuid, network)}
 									size="sm"
 									variant="outline"
 								>
 									<WifiOff class="size-4" />
 									<span class="hidden sm:inline">{m["wifiSelector.button.disconnect"]()}</span>
 								</Button>
-							{:else}
+							{:else if uuid}
 								<Button
 									aria-label={`${m["wifiSelector.button.connect"]()} ${network.ssid}`}
 									class="gap-1.5"

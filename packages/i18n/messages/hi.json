@@ -2558,6 +2558,7 @@
 	"wifiSelector.error.authFailedDescription": "आपके द्वारा दर्ज किया गया पासवर्ड गलत है। कृपया जांचें और पुनः प्रयास करें।",
 	"wifiSelector.error.connectionFailed": "वाई-फाई कनेक्शन विफल",
 	"wifiSelector.error.connectionFailedDescription": "वाई-फाई नेटवर्क से कनेक्ट नहीं हो सका। कृपया पासवर्ड जांचें और पुनः प्रयास करें।",
+	"wifiSelector.error.openTargetUnverified": "डिवाइस इस नेटवर्क के लिए किसी खुले ऐक्सेस पॉइंट की पुष्टि नहीं कर सका। फिर से स्कैन करें या कोई दूसरा नेटवर्क चुनें।",
 	"wifiSelector.hotspot.placeholderPassword": "********",
 	"wifiSelector.networks.found": "नेटवर्क मिले",
 	"wifiSelector.scanError.description": "आस-पास के WiFi नेटवर्क ताज़ा नहीं हो सके। स्वचालित रूप से पुनः प्रयास किया जा रहा है।",

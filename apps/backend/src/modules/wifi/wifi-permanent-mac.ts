@@ -42,26 +42,11 @@
   may reuse a prior address, with the same ifindex, wiphy and phy path.
 */
 
+import { normalizeMacAddress } from "@ceraui/rpc";
 import { ID_RE } from "../../helpers/run.ts";
 import type { MacAddress } from "../network/network-manager.ts";
 
-/** Canonical lowercase colon-separated MAC form. */
-const MAC_RE = /^[0-9a-f]{2}(?::[0-9a-f]{2}){5}$/;
-const ZERO_MAC = "00:00:00:00:00:00";
-
-/**
- * Normalize a raw MAC string to the canonical lowercase form, rejecting
- * anything malformed or all-zero (some drivers report `00:00:00:00:00:00` when
- * they have no permanent address to give).
- */
-export function normalizeMacAddress(
-	raw: string | undefined,
-): MacAddress | undefined {
-	if (!raw) return undefined;
-	const mac = raw.trim().toLowerCase();
-	if (!MAC_RE.test(mac) || mac === ZERO_MAC) return undefined;
-	return mac;
-}
+export { normalizeMacAddress };
 
 /** Registry/store keys may carry a literal, case-sensitive port after the MAC. */
 export function wifiAdapterKeyMac(key: string): MacAddress | undefined {

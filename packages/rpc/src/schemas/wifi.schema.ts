@@ -2,6 +2,9 @@
  * WiFi Zod schemas
  */
 import { z } from 'zod';
+import { wifiSecuritySchema } from './wifi-join.schema';
+
+export * from './wifi-join.schema';
 
 // Length-only bounds. The hotspot SSID accepts any unicode (no charset
 // restriction) and matches the backend's own min-1 check in wifi-hotspot.ts.
@@ -9,13 +12,6 @@ export const HOTSPOT_NAME_MIN = 1;
 export const HOTSPOT_NAME_MAX = 32;
 export const HOTSPOT_PASSWORD_MIN = 8;
 export const HOTSPOT_PASSWORD_MAX = 63;
-export const WIFI_PASSWORD_MIN = 8;
-
-// Raw nmcli SECURITY token list (e.g. "WPA2", "WPA1 WPA2 802.1X", "" for open).
-// The backend passes it through verbatim and the UI matches via substring, so the
-// contract is a free-form string — an enum rejected real and mock open/enterprise rows.
-export const wifiSecuritySchema = z.string();
-export type WifiSecurity = z.infer<typeof wifiSecuritySchema>;
 
 // WiFi band names enum
 export const wifiBandSchema = z.enum(['auto', 'auto_50', 'auto_24']);
@@ -377,6 +373,7 @@ export type WifiAdapterModeResult = z.infer<typeof wifiAdapterModeResultSchema>;
 export const availableWifiNetworkSchema = z.object({
 	active: z.boolean(),
 	ssid: z.string(),
+	bssid: z.string().optional(),
 	signal: z.number(),
 	security: wifiSecuritySchema,
 	freq: z.number(),
@@ -433,6 +430,9 @@ export const wifiInterfaceSchema = z.object({
 	// an interface that cannot host a hotspot — the backend omits both there.
 	available: z.array(availableWifiNetworkSchema).optional(),
 	saved: z.record(z.string(), z.string()),
+	// Observed NetworkManager key management by saved UUID. An observed open
+	// profile has ''; no entry means there is no evidence for saved reuse.
+	saved_key_mgmt: z.record(z.string(), z.string()).optional(),
 	supports_hotspot: z.boolean().optional(),
 	supports_ap_sta_concurrency: z.boolean().optional(),
 	transition: z.enum(['activating', 'deactivating']).optional(),
@@ -496,29 +496,6 @@ export const wifiDisconnectInputSchema = z.object({
 	uuid: z.string(),
 });
 export type WifiDisconnectInput = z.infer<typeof wifiDisconnectInputSchema>;
-
-// WiFi new connection input schema.
-//
-// `security` is the scanned row's own nmcli SECURITY token list, forwarded
-// verbatim so the device can decide whether the profile must pin `key-mgmt sae`
-// (see `capabilities/wifi-station-security.ts`). It reuses the free-form
-// `wifiSecuritySchema` for that schema's own stated reason — an enum rejected
-// real open/enterprise rows — and is optional, so a client that omits it gets
-// the byte-identical pre-WPA3 behaviour.
-export const wifiNewInputSchema = z.object({
-	device: z.string(),
-	ssid: z.string().min(1, 'SSID cannot be empty'),
-	// Empty means an open network: the Wi-Fi dialog joins open rows with
-	// `password: ''`, and the join then passes no password to NetworkManager.
-	password: z
-		.string()
-		.refine(
-			(password) => password === '' || password.length >= WIFI_PASSWORD_MIN,
-			'Password must be at least 8 characters',
-		),
-	security: wifiSecuritySchema.optional(),
-});
-export type WifiNewInput = z.infer<typeof wifiNewInputSchema>;
 
 // WiFi forget input schema
 export const wifiForgetInputSchema = z.object({
@@ -675,7 +652,7 @@ export const wifiMessageSchema = z.object({
 		.object({
 			// 'ambiguous': the join reported no error and named no connection, so
 			// the device cannot say whether the network was actually joined.
-			error: z.enum(['auth', 'generic', 'ambiguous']).optional(),
+			error: z.enum(['auth', 'generic', 'ambiguous', 'open-target-unverified']).optional(),
 			device: z.union([z.number(), z.string()]).optional(),
 			success: z.boolean().optional(),
 		})

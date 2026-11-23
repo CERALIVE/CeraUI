@@ -2483,6 +2483,7 @@
 	"wifiSelector.error.authFailedDescription": "您输入的密码不正确。请检查后重试。",
 	"wifiSelector.error.connectionFailed": "WiFi连接失败",
 	"wifiSelector.error.connectionFailedDescription": "无法连接到WiFi网络。请检查密码并重试。",
+	"wifiSelector.error.openTargetUnverified": "设备无法确认此网络有开放的接入点。请重新扫描或选择其他网络。",
 	"wifiSelector.hotspot.placeholderPassword": "********",
 	"wifiSelector.networks.found": "找到网络",
 	"wifiSelector.scanError.description": "无法刷新附近的 WiFi 网络。正在自动重试。",

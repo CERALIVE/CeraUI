@@ -69,7 +69,7 @@ dispatched outcome.
 
 | Procedure | Lock posture |
 |---|---|
-| station (connect/connectNew/disconnect/forget/scan) | UNCHANGED — `runGuarded` across dispatch only |
+| station (connect/connectNew/disconnect/forget/scan) | `runGuarded` across dispatch; fresh open `connectNew` holds it through AP verification, activation and binding |
 | `hotspotStart` / `hotspotStop` | NO `runGuarded`: an `adapterBusy()` admission PROBE (acquire+release), then AWAIT the transaction and return its typed outcome |
 | `hotspotConfigure` | NO `runGuarded`: same probe, then AWAIT the shared configuration transaction before returning its existing acknowledgement shape; terminal-frame handling remains attached |
 

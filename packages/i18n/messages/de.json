@@ -2558,6 +2558,7 @@
 	"wifiSelector.error.authFailedDescription": "Das eingegebene Passwort ist falsch. Bitte überprüfen Sie es und versuchen Sie es erneut.",
 	"wifiSelector.error.connectionFailed": "WLAN-Verbindung Fehlgeschlagen",
 	"wifiSelector.error.connectionFailedDescription": "Verbindung zum WLAN-Netzwerk nicht möglich. Überprüfen Sie das Passwort und versuchen Sie es erneut.",
+	"wifiSelector.error.openTargetUnverified": "Das Gerät konnte keinen offenen Zugangspunkt für dieses Netzwerk bestätigen. Suchen Sie erneut oder wählen Sie ein anderes Netzwerk.",
 	"wifiSelector.hotspot.placeholderPassword": "********",
 	"wifiSelector.networks.found": "Netzwerke gefunden",
 	"wifiSelector.scanError.description": "WLAN-Netzwerke in der Nähe konnten nicht aktualisiert werden. Automatischer erneuter Versuch.",

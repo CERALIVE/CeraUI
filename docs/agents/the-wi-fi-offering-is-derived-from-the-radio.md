@@ -140,3 +140,57 @@ with a self-managed US domain and `is6GhzLegal: true` still yields zero 6 GHz en
 This is a NetworkManager/hostapd capability limit on the AP path, **not** a legal or
 regulatory decision — see `docs/DIY-POSTURE.md` in the workspace root.
 
+**An empty station password requires explicit open scan security [EXISTS].**
+The dialog, `wifi.connectNew` schema, and backend join plan use the shared station
+security classifier. Only explicit open security admits a blank password and
+omits the NetworkManager password argument. Missing or unknown security is not
+open. OWE and OWE transition labels are not admitted as open until that join
+path is qualified; WEP and enterprise provisioning are separate. Legacy callers
+can still omit scan security when supplying a valid nonempty password.
+
+**Fresh open joins preserve the selected AP.** The scan can report an observed
+open network without a usable BSSID. Keep that row visible: the missing
+identity does not erase the observation or saved and connected state. The
+current dialog shows scan-again guidance locally and sends no fresh join
+request for that row. When the row carries a validated BSSID, the dialog
+forwards it on the blank-password request.
+Before any mutation, re-read the selected radio and require that exact BSSID,
+the same SSID, explicit open security, empty WPA and RSN flags, and no
+contradictory row. A replacement AP, even if open and named identically, is
+not a match. A supplied join BSSID must be a nonzero six-octet address at the
+RPC boundary. Missing proof returns `open-target-unverified` with scan
+guidance; the field remains optional and nonblank joins keep their legacy
+behavior.
+
+**A cached UI must refresh before retrying a blank join without a BSSID.**
+The service worker reloads an already-open client when it activates an update,
+but some tabs have no active worker or reconnect before it updates. No client
+build is sent on the wire, so the device can only recognize this legacy path
+when it receives a blank join without a BSSID. It refuses before touching
+NetworkManager and sends `notifications.updateAvailableDescription` only to
+the requesting socket as both a 60-second toast above the dialog and a
+persistent notice in the page and notification panel. Neither is retained or
+replayed by the device; the old tab keeps them across a socket reconnect while
+the toast is active. Another refusal replaces both entries rather than
+stacking them. After the toast expires, the old dialog still shows its generic
+password advice; close the dialog to read the notice band. After a device
+update, reload the page or close and reopen the app before joining Wi-Fi.
+Reopen the Wi-Fi selector, scan, and retry the open network without a password.
+
+Activate the fresh open profile by UUID on the verified BSSID. If the AP
+disappears after verification, activation can fail after the profile is added:
+retain it with autoconnect disabled, report the generic terminal error, and do
+not fall back to another AP or bind the profile. Autoconnect is enabled only
+after successful activation and adapter binding. Status-based confirmation
+for a fresh open join also requires the selected AP.
+
+**A saved SSID is not proof of profile compatibility.** The device publishes
+observed key management by saved UUID, without reading secrets for that
+projection. The dialog reuses a UUID only when its key management matches the
+scan classification. In particular, no observed key-management setting (`''`)
+means an open profile; `none` is WEP and absent evidence cannot prove either.
+New joins retain the existing WPA personal/PSK compatibility check before a
+secret can be replaced. Neither path uses Forget to resolve a collision.
+Ordinary 802.1X may reuse `wpa-eap`, never `wpa-eap-suite-b-192`. An enterprise
+label that does not identify an AKM cannot authorize saved reuse.
+

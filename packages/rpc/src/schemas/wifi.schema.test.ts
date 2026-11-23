@@ -1,6 +1,33 @@
 import { describe, expect, test } from 'bun:test';
 
-import { hotspotConfigSchema } from './wifi.schema';
+import { hotspotConfigSchema, wifiNewInputSchema } from './wifi.schema';
+
+describe('Wi-Fi join BSSID input', () => {
+	const open = { device: '0', ssid: 'Guest', password: '', security: '' };
+
+	test('accepts a valid six-octet BSSID', () => {
+		const request = { ...open, bssid: '02:00:00:00:51:AA' };
+		expect(wifiNewInputSchema.parse(request)).toEqual(request);
+	});
+
+	test.each(['02:00:00:00:51', 'not-a-bssid', '00:00:00:00:00:00', ''])(
+		'rejects invalid supplied BSSID %j at the wire boundary',
+		(bssid) => {
+			const result = wifiNewInputSchema.safeParse({ ...open, bssid });
+			expect(result.success).toBe(false);
+			expect(result.error?.issues[0]?.path).toEqual(['bssid']);
+		},
+	);
+
+	test('admits omission so the handler can return a typed refusal', () => {
+		expect(wifiNewInputSchema.parse(open)).toEqual(open);
+	});
+
+	test('keeps the legacy password-bearing request valid without BSSID', () => {
+		const legacy = { device: '0', ssid: 'Home', password: 'test-password' };
+		expect(wifiNewInputSchema.parse(legacy)).toEqual(legacy);
+	});
+});
 
 const channels = { auto: { name: 'Automatic' } };
 const wpa2 = { name: 'WPA2 (Personal)' };

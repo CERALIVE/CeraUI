@@ -2578,6 +2578,7 @@
 	"wifiSelector.error.authFailedDescription": "كلمة المرور التي أدخلتها غير صحيحة. يرجى التحقق والمحاولة مرة أخرى.",
 	"wifiSelector.error.connectionFailed": "فشل الاتصال بـ WiFi",
 	"wifiSelector.error.connectionFailedDescription": "غير قادر على الاتصال بشبكة WiFi. الرجاء التحقق من كلمة المرور والمحاولة مرة أخرى.",
+	"wifiSelector.error.openTargetUnverified": "تعذّر على الجهاز التحقق من وجود نقطة وصول مفتوحة لهذه الشبكة. أعد البحث أو اختر شبكة أخرى.",
 	"wifiSelector.hotspot.placeholderPassword": "********",
 	"wifiSelector.networks.found": "شبكات موجودة",
 	"wifiSelector.scanError.description": "تعذّر تحديث شبكات WiFi القريبة. جارٍ إعادة المحاولة تلقائيًا.",

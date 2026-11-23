@@ -256,6 +256,7 @@ export async function nmConnSetFields(
 export async function nmConnSetWifiMacAddress(
 	uuid: ConnectionUUID,
 	macAddress: MacAddress,
+	enableAutoconnect = false,
 ) {
 	if (!macAddress) return false;
 
@@ -268,6 +269,7 @@ export async function nmConnSetWifiMacAddress(
 	return nmConnSetFields(uuid, {
 		"connection.interface-name": "",
 		"802-11-wireless.mac-address": macAddress,
+		...(enableAutoconnect ? { "connection.autoconnect": "yes" } : {}),
 	});
 }
 
@@ -554,35 +556,28 @@ export async function nmRescan(device?: string) {
 	return false;
 }
 
-export async function nmScanResults(fields: string) {
+export async function nmScanResults(fields: string, ifname?: string) {
 	try {
-		// Check for mock mode
-		if (shouldMockWifi()) {
-			const mockOutput = handleNmcliCommand([
-				"--terse",
-				"--fields",
-				fields,
-				"device",
-				"wifi",
-				"list",
-				"--rescan",
-				"no",
-			]);
-			if (mockOutput !== null) {
-				return mockOutput.split("\n");
-			}
-		}
-
-		const stdout = await run("nmcli", [
+		const args = [
 			"--terse",
 			"--fields",
 			fields,
 			"device",
 			"wifi",
 			"list",
+			...(ifname ? ["ifname", argMatch(ID_RE, ifname)] : []),
 			"--rescan",
 			"no",
-		]);
+		];
+		// Check for mock mode
+		if (shouldMockWifi()) {
+			const mockOutput = handleNmcliCommand(args);
+			if (mockOutput !== null) {
+				return mockOutput.split("\n");
+			}
+		}
+
+		const stdout = await run("nmcli", args);
 		return stdout.split("\n");
 	} catch (err) {
 		logWifiCommandFailure("nmScanResults", err);
