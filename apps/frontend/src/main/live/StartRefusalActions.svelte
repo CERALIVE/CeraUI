@@ -18,7 +18,7 @@ let blocked = $state(false);
 	<p>{message}</p>
 	<p aria-live="polite" class="empty:sr-only">{blocked ? m["live.startFailure.actionUnavailable"]() : ''}</p>
 </section>
-<div class="flex shrink-0 flex-wrap gap-2" data-touch-region>
+<div class="refusal-actions flex shrink-0 flex-wrap gap-2" data-touch-region>
 	<Button class="min-h-(--touch-target-min) max-w-full whitespace-normal text-start motion-reduce:transition-none" onclick={() => { blocked = !primary.activate(() => { blocked = true; }); }}>
 		{primary.label}
 	</Button>
@@ -30,10 +30,24 @@ let blocked = $state(false);
 
 <style>
 	.refusal-copy {
-		min-height: 0;
+		min-height: 1lh;
 		overflow: auto;
 		overscroll-behavior: contain;
 		font-size: var(--text-sm);
 		line-height: 1.25;
+	}
+
+	@media (width < 40rem) and (height <= 25rem) {
+		.refusal-actions {
+			display: grid;
+			grid-template-columns: minmax(0, 3fr) minmax(0, 2fr) 44px;
+			gap: 0.25rem;
+		}
+
+		.refusal-actions :global(button) {
+			padding-inline: 0.25rem;
+			line-height: 1;
+			overflow-wrap: anywhere;
+		}
 	}
 </style>

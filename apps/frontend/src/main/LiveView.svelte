@@ -390,6 +390,8 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 	const activity = getStreamActivity();
 	const generation = getStreamingAttemptGeneration();
 	const id = toast.error<typeof StartRefusalActions>(message, {
+		// A separate corner keeps later notices from stacking this card offscreen.
+		position: 'bottom-left',
 		class: 'start-refusal-toast motion-reduce:transition-none! [word-break:auto-phrase] [&:lang(ko)]:break-keep [&:lang(zh)]:break-keep',
 		duration: Number.POSITIVE_INFINITY,
 		description: StartRefusalActions,

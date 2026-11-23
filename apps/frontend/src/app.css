@@ -764,6 +764,11 @@ html[data-theme='eink'] *::after {
 	pointer-events: none;
 }
 
+/* At phone widths both corners share the same space. Keep recovery in front. */
+[data-sonner-toaster]:has(> .start-refusal-toast) {
+	z-index: 1000000000;
+}
+
 /* sonner sets its own system font stack on `[data-sonner-toaster]` (0,1,0);
    `:root` lifts this rule above it so every toast is set in the app typeface. */
 :root [data-sonner-toaster] {
@@ -795,6 +800,7 @@ html[data-theme='eink'] *::after {
 	--refusal-padding: 1rem;
 	align-items: stretch !important;
 	max-height: var(--refusal-height);
+	touch-action: pan-y !important;
 }
 
 [data-sonner-toast].start-refusal-toast [data-icon] {
@@ -827,8 +833,11 @@ html[data-theme='eink'] *::after {
 @media (width < 40rem) and (height <= 25rem) {
 	:root { --toast-clearance: 0.25rem; }
 	[data-sonner-toast].start-refusal-toast {
-		--refusal-padding: 0.25rem;
+		--refusal-padding: 0px;
 		padding: var(--refusal-padding) 0.5rem !important;
+	}
+	[data-sonner-toast].start-refusal-toast [data-description] {
+		gap: 1px;
 	}
 }
 
