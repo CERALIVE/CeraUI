@@ -308,9 +308,13 @@ function exportCsv(): void {
 	{/if}
 
 	{#if showSummary && rollup}
-		<!-- Per-session summary: peak/avg bitrate, drops, then per-link uptime. -->
-		<div data-testid="ingest-summary">
-			<div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
+		<!-- Per-session summary: peak/avg bitrate, drops, then per-link uptime.
+		     The tiles size to the card, not the window: five columns only once the
+		     card is 28rem wide. In a 390 px phone card five columns left ~40 px per
+		     tile and every label truncated to its first letter ("P…", "A…"), so
+		     narrow cards use two columns and the fifth tile spans the row. -->
+		<div class="@container" data-testid="ingest-summary">
+			<div class="grid grid-cols-2 gap-3 @md:grid-cols-5">
 				<div class="bg-secondary/40 flex flex-col gap-1.5 rounded-lg p-3">
 					<div
 						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
@@ -372,7 +376,7 @@ function exportCsv(): void {
 						{formatDuration(rollup.durationMs)}
 					</div>
 				</div>
-				<div class="bg-secondary/40 flex flex-col gap-1.5 rounded-lg p-3">
+				<div class="bg-secondary/40 col-span-2 flex flex-col gap-1.5 rounded-lg p-3 @md:col-span-1">
 					<div
 						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
 					>
