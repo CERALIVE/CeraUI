@@ -62,6 +62,7 @@
   onSecondary?    () => void — cancel handler.
   closeOnPrimary? boolean    — close after `onPrimary` (default: true).
   contentClass?   string     — extra classes merged onto the surface.
+  touchRegion?    boolean    — opt the portaled surface into phone touch sizing.
   returnFocus?    () => HTMLElement | null — where focus goes on close when the
                                control that opened the dialog has left the page
                                (additive; without it bits-ui's restore is unchanged).
@@ -100,6 +101,7 @@ interface Props {
 	closeOnPrimary?: boolean;
 	contentClass?: string;
 	returnFocus?: () => HTMLElement | null;
+	touchRegion?: boolean;
 }
 
 let {
@@ -122,6 +124,7 @@ let {
 	closeOnPrimary = true,
 	contentClass,
 	returnFocus,
+	touchRegion = false,
 }: Props = $props();
 
 // The control focused when the dialog opened, where bits-ui returns focus on close. Read when bits-ui
@@ -270,6 +273,7 @@ const fullscreenSurfaceClass = 'inset-0 max-h-none max-w-none rounded-none ring-
 		<Dialog.Content
 			class={cn(surfaceClass, fullscreen ? fullscreenSurfaceClass : 'sm:max-w-lg', contentClass)}
 			data-app-dialog-fullscreen={fullscreen ? '' : undefined}
+			data-touch-region={touchRegion ? '' : undefined}
 			onCloseAutoFocus={closeAutoFocus}
 			onOpenAutoFocus={openAutoFocus}
 			showCloseButton={false}
@@ -282,6 +286,7 @@ const fullscreenSurfaceClass = 'inset-0 max-h-none max-w-none rounded-none ring-
 	<Sheet.Root bind:open>
 		<Sheet.Content
 			class={cn(surfaceClass, 'rounded-t-2xl', contentClass)}
+			data-touch-region={touchRegion ? '' : undefined}
 			onCloseAutoFocus={closeAutoFocus}
 			onOpenAutoFocus={openAutoFocus}
 			showCloseButton={false}

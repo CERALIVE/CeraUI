@@ -96,6 +96,7 @@ const status = $derived(
 	primaryLoading={sharing.bundleStep === 'creating'}
 	{returnFocus}
 	title={m['systemLogs.sharing.bundle']()}
+	touchRegion
 >
 	<div class="flex flex-col gap-4 [word-break:auto-phrase] [&:lang(ko)]:break-keep [&:lang(zh)]:break-keep wrap-break-word text-pretty [&:lang(zh)]:text-balance">
 		<p class="text-sm" data-testid="sharing-bundle-about"><KeepWords text={m['systemLogs.sharing.bundleHint']()} /></p>

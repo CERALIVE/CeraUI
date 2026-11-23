@@ -224,13 +224,13 @@ $effect(() => {
 					<SharingToolbar
 						bind:bundleButton={toolbarBundle}
 						bind:exportButton={toolbarExport}
-						class="ms-auto self-center py-1 max-sm:w-full max-sm:pt-3 sm:order-last"
+						class="ms-auto self-center py-1 max-sm:w-full max-sm:pt-3 max-sm:pb-1.5 sm:order-last"
 						{sharing}
 					/>
 					<Tabs.List
 						aria-label={m['systemLogs.tabs.label']()}
 						bind:ref={tabList}
-						class="w-full items-stretch gap-2 sm:w-fit"
+						class="w-full items-stretch gap-2 max-sm:group-data-horizontal/tabs:h-auto sm:w-fit"
 						variant="line"
 					>
 						{#each tabs as tab (tab)}

@@ -251,9 +251,8 @@
 		--spacing-touch-scale: 1.25;
 	}
 
-	/* A phone is thumbed even in the default layout, so below `sm` the Live
-	   screen's operator regions (Audio, layout, Live bar: `data-touch-region`)
-	   take the touch target through the rules below; spacing keeps its scale. */
+	/* A phone is thumbed even in the default layout, so below `sm` opted-in
+	   regions take the touch target through the rules below; spacing keeps its scale. */
 	@media (width < 40rem) {
 		[data-touch-region] {
 			--touch-target-min: 44px;
@@ -308,9 +307,9 @@
 	inset: min(-0.5rem, calc((100% - var(--touch-target-min)) / 2));
 }
 
-/* The same mechanism on BOTH axes, for the shell's compact icon controls that opt
-   in with `data-touch-target="hit-area"`. Each is square and small (36/32/24px),
-   so the `min-height` lift leaves the WIDTH short while stretching the paint.
+/* The same mechanism on BOTH axes, for compact controls that opt in with
+   `data-touch-target="hit-area"`. The min-height lift alone leaves narrow
+   buttons short while stretching the paint.
 
    Anchored to the control's own padding box, so `(100% - 44px) / 2` is the
    overhang each edge needs and `min(0px, …)` pins an already-large control to its
@@ -319,7 +318,7 @@
    nothing here escapes onto an ancestor.
 
    UNLAYERED for the same reason as the switch rule above. */
-[data-layout-mode='touch'] [data-touch-target='hit-area']::after {
+:is([data-layout-mode='touch'], [data-touch-region]) [data-touch-target='hit-area']::after {
 	content: '';
 	position: absolute;
 	inset-block: min(0px, calc((100% - var(--touch-target-min)) / 2));
