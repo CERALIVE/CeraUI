@@ -6,6 +6,7 @@ import type {
 } from "@ceraui/rpc/schemas";
 
 import { rpc } from "$lib/rpc/client";
+import { NotSentError } from "$lib/rpc/rpc-error";
 import {
 	type ConfigChangeReport,
 	configChangeReport,
@@ -116,9 +117,9 @@ function launchTransition<T>(to: Session, run: () => Promise<T>): Promise<T> {
 				(result as { success?: boolean } | undefined)?.success !== false;
 			transitionDone();
 		},
-		() => {
+		(error) => {
 			// A Start whose answer was lost may be running; a Stop ends it either way.
-			startedAhead = to === "live";
+			if (!(error instanceof NotSentError)) startedAhead = to === "live";
 			transitionDone();
 		},
 	);
