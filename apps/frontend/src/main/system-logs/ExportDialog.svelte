@@ -78,6 +78,9 @@ const rows = $derived.by((): [string, string][] => {
 const PROBLEM = {
 	busy: () => m['systemLogs.sharing.busy'](),
 	failed: () => m['systemLogs.sharing.failed'](),
+	credentialTooShort: () => m['systemLogs.sharing.exportCredentialTooShort'](),
+	credentialsLoading: () => m['systemLogs.sharing.exportCredentialsLoading'](),
+	credentialsUnreadable: () => m['systemLogs.sharing.exportCredentialsUnreadable'](),
 };
 </script>
 

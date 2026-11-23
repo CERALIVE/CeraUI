@@ -466,6 +466,26 @@ describe("SystemLogsView: Support bundle from the load failure", () => {
 });
 
 describe("SystemLogsView: Sharing downloads", () => {
+	it("shows actionable copy in the export dialog when credentials are still loading", async () => {
+		viewport(true);
+		logs.createExport.mockRejectedValue(
+			new RpcError({ code: "INTERNAL_ERROR", message: "CREDENTIALS_LOADING" }),
+		);
+		render(SystemLogsView);
+		await fireEvent.click(await screen.findByTestId("sharing-open-export"));
+		const dialog = await screen.findByRole("dialog", { name: sharing.export });
+		await fireEvent.click(
+			within(dialog).getByRole("button", { name: sharing.exportDownload }),
+		);
+
+		expect(
+			(
+				await within(dialog).findByTestId("sharing-export-problem")
+			).textContent?.trim(),
+		).toBe(sharing.exportCredentialsLoading);
+		expect(anchorClicks).not.toHaveBeenCalled();
+	});
+
 	it("hands an export ticket to the browser on the backend origin", async () => {
 		viewport(true);
 		logs.createExport.mockResolvedValue(EXPORT_TICKET);

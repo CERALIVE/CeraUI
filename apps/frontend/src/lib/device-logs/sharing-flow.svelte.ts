@@ -33,6 +33,7 @@ import {
 	captureExportScope,
 	type ExportScope,
 	type ExportSpan,
+	exportCredentialProblem,
 	exportInput,
 	previewFailure,
 	previewProblem,
@@ -60,17 +61,27 @@ export interface SharingDeps {
 
 export type ExportStep = "closed" | "confirm" | "creating";
 export type BundleStep = "closed" | "previewing" | "preview" | "creating";
+type ExportProblem = NonNullable<ReturnType<typeof exportCredentialProblem>>;
 
 // A call that threw or answered off its schema: a failure, but no device refusal.
 const UNANSWERED: LogExportOutput = { ok: false, error: "READ_FAILED" };
+type SharingTicket =
+	| Extract<LogExportOutput, { ok: true }>
+	| (Extract<LogExportOutput, { ok: false }> & {
+			readonly credentialProblem?: ExportProblem;
+	  });
 
 async function ticket(
 	call: () => Promise<LogExportOutput>,
 	kind: "export" | "bundle",
-): Promise<LogExportOutput> {
+): Promise<SharingTicket> {
 	try {
 		return ticketReply(await call(), kind);
 	} catch (error) {
+		const credentialProblem =
+			kind === "export" ? exportCredentialProblem(error) : null;
+		if (credentialProblem)
+			return { ok: false, error: "READ_FAILED", credentialProblem };
 		console.error("System Logs sharing failed:", error);
 		return UNANSWERED;
 	}
@@ -94,7 +105,7 @@ export class SharingFlow {
 	/** What the open Export confirmation states and its ticket request sends; null while closed. */
 	exportScope = $state.raw<ExportScope | null>(null);
 	exportStep = $state<ExportStep>("closed");
-	exportProblem = $state<SharingProblem | null>(null);
+	exportProblem = $state<ExportProblem | null>(null);
 	bundleStep = $state<BundleStep>("closed");
 	bundleProblem = $state<SharingProblem | null>(null);
 	/** The bundle problem is the device refusing to prepare it, which Export this view avoids. */
@@ -165,7 +176,9 @@ export class SharingFlow {
 			this.closeExport();
 			return;
 		}
-		this.exportProblem = reply.ok ? "failed" : refusal(reply.error);
+		this.exportProblem = reply.ok
+			? "failed"
+			: (reply.credentialProblem ?? refusal(reply.error));
 		this.exportStep = "confirm";
 	}
 
