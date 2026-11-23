@@ -84,7 +84,7 @@ The backend accepts only one message format per direction:
 }
 ```
 
-A request with a malformed `path` (a non-array, an empty array, or an array containing a non-string) gets one error that echoes the request `id` when it is a string (a non-string `id` is not echoed), code `INTERNAL_ERROR`, and message `Unknown procedure path: <invalid path>`. The server never converts malformed segments to strings. A well-formed path that does not resolve to a procedure gets the same envelope and code, with the validated segments joined by dots in place of `<invalid path>` (subject to secret redaction).
+A request with a malformed `path` (a non-array, an empty array, or an array containing a non-string) gets one error that echoes the request `id` unchanged when it is a string or a finite number (any other `id` value is not echoed), code `INTERNAL_ERROR`, and message `Unknown procedure path: <invalid path>`. The server never converts malformed segments to strings. A well-formed path that does not resolve to a procedure gets the same envelope and code, with the validated segments joined by dots in place of `<invalid path>` (subject to secret redaction).
 
 The client matches responses to pending calls by `id`. Unmatched responses are logged and discarded. Calls time out after 30 seconds by default.
 

@@ -61,7 +61,7 @@ const FRAME_PREVIEW_MAX_CHARS = 100;
  * ORPC message format
  */
 interface ORPCMessage {
-	readonly id?: string | undefined;
+	readonly id?: string | number | undefined;
 	readonly path: readonly string[] | null;
 	readonly input?: unknown;
 }
@@ -82,8 +82,11 @@ export function parseMessage(
 		if ("path" in parsed && Object.hasOwn(parsed, "path")) {
 			const { path } = parsed;
 			return {
+				// Echo a JSON string or finite number unchanged; never coerce anything else.
 				id:
-					"id" in parsed && typeof parsed.id === "string"
+					"id" in parsed &&
+					(typeof parsed.id === "string" ||
+						(typeof parsed.id === "number" && Number.isFinite(parsed.id)))
 						? parsed.id
 						: undefined,
 				path:

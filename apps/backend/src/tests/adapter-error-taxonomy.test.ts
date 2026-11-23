@@ -29,7 +29,7 @@ import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 const KNOWN_SECRET = "v4.public.shouldNeverSurface";
 
 interface ResponseEnvelope {
-	id?: string;
+	id?: string | number;
 	result?: unknown;
 	error?: { message: string; code: string; fields?: string[]; stage?: string };
 }
@@ -104,7 +104,7 @@ const namespace: { own: { echo: typeof echo }; leaf: typeof echo } =
 	});
 const nestedRouter = { probe: namespace };
 
-async function dispatchFrame(id: string, path: unknown) {
+async function dispatchFrame(id: unknown, path: unknown) {
 	const ws = fakeWs();
 	const message = parseMessage(JSON.stringify({ id, path }), ws);
 	if (message === null) throw new Error("Expected an RPC request");
@@ -113,6 +113,15 @@ async function dispatchFrame(id: string, path: unknown) {
 }
 
 describe("rpc adapter error taxonomy", () => {
+	test("a string or finite-number request id is echoed; any other id is dropped", async () => {
+		const unknown = ["probe", "doesNotExist"];
+		expect((await dispatchFrame(0.25, unknown)).id).toBe(0.25);
+		expect((await dispatchFrame("req-1", unknown)).id).toBe("req-1");
+		for (const id of [{ toString: 1 }, ["x"], true, null]) {
+			expect((await dispatchFrame(id, unknown)).id).toBeUndefined();
+		}
+	});
+
 	test("INPUT validation failure → VALIDATION_ERROR + field path", async () => {
 		const ws = fakeWs();
 		await handleORPCMessage(
