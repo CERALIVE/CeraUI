@@ -944,7 +944,9 @@ opaque `legacyLinkId` preserves an existing bond opt-out. Toggling one twin
 migrates that exclusion to the exact keys of the present twins. The optional
 `bond_group_opt_out` records enabled ports by group and pin provenance by port.
 Before listeners run, a committed scan pins an ungranted member in
-`bond_opt_out`. Scan pins remember the originating group, VID:PID, and hashes of
+`bond_opt_out`. The scan owns descriptor publication and invalidation; bond
+preferences and modem identity read the same committed descriptor cache without
+importing the scan. Scan pins remember the originating group, VID:PID, and hashes of
 available USB manufacturer/product strings. A positive descriptor mismatch
 makes a scan pin dormant even when the rejected group serial matches, without
 replacing its original evidence. Exact entries written by operator disables or

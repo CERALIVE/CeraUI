@@ -68,13 +68,23 @@ import {
 	classifyUsbNetDevice,
 	modelLabel,
 	type UsbInterfaceDescriptor,
-	type UsbNetClass,
 	type UsbNetClassification,
 	type UsbNetDevice,
 	unitDiscriminator,
 	vendorLabel,
 	vidPidOf,
 } from "./usb-net-classifier.ts";
+import {
+	deleteUsbPhysicalDescriptor,
+	getUsbPhysicalDescriptors,
+	replaceUsbPhysicalDescriptors,
+	type UsbPhysicalDescriptor,
+} from "./usb-physical-descriptors.ts";
+
+export {
+	getUsbPhysicalDescriptor,
+	type UsbPhysicalDescriptor,
+} from "./usb-physical-descriptors.ts";
 
 /**
  * Internal classification of a router-mode cellular dongle. The `netif` wire
@@ -426,34 +436,6 @@ export type UsbModemNetMarker = {
 	kind: "modem-net";
 };
 
-/**
- * The physical facts this sweep read about a USB network device, for the ONE
- * identity resolver (`modems/physical-identity.ts`).
- *
- * It is produced for EVERY classified USB net device — router-cellular AND
- * mm-managed alike — because the same physical stick answers to different
- * adapters in its two USB compositions, and an identity that only covered one of
- * them would break at exactly the moment it is needed. Nothing here reaches the
- * `netif` wire; the two marker types above are unchanged.
- */
-export type UsbPhysicalDescriptor = {
-	ifname: string;
-	vid: string;
-	pid: string;
-	vendor: string;
-	model: string;
-	deviceClass: UsbNetClass;
-	serial?: string;
-	legacyLinkId?: string;
-	/** Resolved sysfs USB parent; grouping only, never a stable_key override. */
-	usbParent: string;
-	idPath?: string;
-	hwdbVendor?: string;
-	hwdbModel?: string;
-	pinManufacturer?: string | undefined;
-	pinProduct?: string | undefined;
-};
-
 /** Everything one sysfs sweep produces, each map keyed by interface name. */
 export type UsbNetMarkerSets = {
 	routerCellular: Map<string, RouterCellularMarker>;
@@ -628,7 +610,6 @@ export async function scanRouterCellular(
 
 let markers: Map<string, RouterCellularMarker> = new Map();
 let modemNetMarkers: Map<string, UsbModemNetMarker> = new Map();
-let physicalDescriptors: Map<string, UsbPhysicalDescriptor> = new Map();
 let sharedSerialHashes = new Set<string>();
 let coveredIfnames = new Set<string>();
 const netdevRemovalEpochs = new Map<string, number>();
@@ -646,7 +627,7 @@ export function usbNetScanCovers(ifname: string): boolean {
 
 /** The present-device view is exactly the descriptors of the surviving names. */
 function presentDeviceRecords(): PhysicalDeviceRecord[] {
-	return [...physicalDescriptors.values()].map((descriptor) =>
+	return [...getUsbPhysicalDescriptors().values()].map((descriptor) =>
 		resolvePhysicalDevice(descriptor),
 	);
 }
@@ -662,7 +643,7 @@ function presentDeviceRecords(): PhysicalDeviceRecord[] {
 export function invalidateUsbNetReading(ifname: string, epoch: number): void {
 	netdevRemovalEpochs.set(ifname, epoch);
 	const coverage = coveredIfnames.delete(ifname);
-	const descriptor = physicalDescriptors.delete(ifname);
+	const descriptor = deleteUsbPhysicalDescriptor(ifname);
 	const marker = markers.delete(ifname);
 	const modemMarker = modemNetMarkers.delete(ifname);
 	identityFirstPublishedAt.delete(ifname);
@@ -724,16 +705,14 @@ export function onUsbNetScanCommitted(listener: () => void): () => void {
 	};
 }
 
-function snapshotKey(current: UsbNetMarkerSets): string {
+function snapshotKey(): string {
 	return JSON.stringify({
 		covered: [...coveredIfnames].sort(),
-		router: [...current.routerCellular.entries()].sort(([a], [b]) =>
+		router: [...markers.entries()].sort(([a], [b]) => a.localeCompare(b)),
+		modem: [...modemNetMarkers.entries()].sort(([a], [b]) =>
 			a.localeCompare(b),
 		),
-		modem: [...current.modemNet.entries()].sort(([a], [b]) =>
-			a.localeCompare(b),
-		),
-		physical: [...current.physical.entries()]
+		physical: [...getUsbPhysicalDescriptors().entries()]
 			.sort(([a], [b]) => a.localeCompare(b))
 			.map(
 				([
@@ -746,15 +725,6 @@ function snapshotKey(current: UsbNetMarkerSets): string {
 				]) => [name, descriptor],
 			),
 	});
-}
-
-function cachedSets(): UsbNetMarkerSets {
-	return {
-		routerCellular: markers,
-		modemNet: modemNetMarkers,
-		physical: physicalDescriptors,
-		duplicateSerialKeys: sharedSerialHashes,
-	};
 }
 
 /*
@@ -824,7 +794,7 @@ async function runUsbNetScan(
 		// Taken here rather than before the read: only the newest generation can
 		// reach this line, so nothing else can have committed in between — and a
 		// `resetUsbNetMarkers()` mid-flight would have fenced us out above.
-		const before = snapshotKey(cachedSets());
+		const before = snapshotKey();
 		const persisted = deps.sharedSerials?.load() ?? [];
 		const next = new Set([
 			...persisted,
@@ -844,11 +814,11 @@ async function runUsbNetScan(
 		}
 		markers = scanned.routerCellular;
 		modemNetMarkers = scanned.modemNet;
-		physicalDescriptors = scanned.physical;
+		replaceUsbPhysicalDescriptors(scanned.physical);
 		coveredIfnames = new Set(ifnames.filter((name) => !stale.has(name)));
 		setPresentPhysicalDevices(presentDeviceRecords());
 		const bondChanged = excludeResidualGroupMembers();
-		const changed = bondChanged || snapshotKey(cachedSets()) !== before;
+		const changed = bondChanged || snapshotKey() !== before;
 		if (changed) {
 			for (const listener of scanCommittedListeners) listener();
 		}
@@ -925,13 +895,6 @@ export function getModemNetMarker(
 	return modemNetMarkers.get(ifname);
 }
 
-/** The physical facts read for an interface, for the identity resolver. */
-export function getUsbPhysicalDescriptor(
-	ifname: string,
-): UsbPhysicalDescriptor | undefined {
-	return physicalDescriptors.get(ifname);
-}
-
 /** Drop every cached marker (test isolation). */
 export function resetUsbNetMarkers(): void {
 	// A sweep still in flight describes the world BEFORE this reset, so it is
@@ -940,7 +903,7 @@ export function resetUsbNetMarkers(): void {
 	inFlightUsbNetScan = undefined;
 	markers = new Map();
 	modemNetMarkers = new Map();
-	physicalDescriptors = new Map();
+	replaceUsbPhysicalDescriptors(new Map());
 	sharedSerialHashes = new Set();
 	coveredIfnames = new Set();
 	netdevRemovalEpochs.clear();

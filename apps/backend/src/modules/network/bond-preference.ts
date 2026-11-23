@@ -6,7 +6,7 @@ import {
 } from "../config.ts";
 import { listPresentPhysicalDevices } from "../modems/physical-identity.ts";
 import { resolveBondPhysicalIdentity } from "../streaming/bond-entry.ts";
-import { getUsbPhysicalDescriptor } from "./router-cellular-scan.ts";
+import { getUsbPhysicalDescriptor } from "./usb-physical-descriptors.ts";
 
 const sessionOptOut = new Set<string>();
 

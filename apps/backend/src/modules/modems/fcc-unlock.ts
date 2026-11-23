@@ -61,7 +61,7 @@ import {
 } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
-import { getUsbPhysicalDescriptor } from "../network/router-cellular-scan.ts";
+import { getUsbPhysicalDescriptor } from "../network/usb-physical-descriptors.ts";
 
 import {
 	type CapabilityMutationResult,
