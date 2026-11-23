@@ -31,7 +31,11 @@ duplicated in the component.
 `IngestStats.svelte` markup was polished without changing any data logic, thresholds,
 or `Props`:
 
-- Header: phosphor-lime icon chip + count/sample pill.
+- Header: phosphor-lime icon chip + count/sample pill. The live **Ingest Stats**
+  badge counts link rows in the current telemetry, not all enabled network links.
+  After the stream ends, the badge counts telemetry samples captured for the
+  session summary. Pass each numeric count to its whole localized message; see
+  [i18n conventions](../../packages/i18n/docs/agents/conventions-anti-patterns.md).
 - Per-link table: spectral identity dot (CSS `--link-1..6` ramp) before each iface;
   column headers aligned past the dot.
 - Sparkline strip: leading `Trend` micro-label (i18n key `live.ingest.trend`, added

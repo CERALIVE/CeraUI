@@ -644,7 +644,6 @@ describe("the diagnostics disclosure summary", () => {
 		);
 		expect(summary.tone).toBe("info");
 		expect(summary.findings).toBe(1);
-		expect(summary.labelKey).toBe("network.sharing.diagnostics.findingsOne");
 	});
 
 	it("escalates to WARNING for anything folded away that is one", () => {
@@ -695,7 +694,6 @@ describe("the diagnostics disclosure summary", () => {
 		);
 		expect(summary.findings).toBe(4);
 		expect(summary.tone).toBe("warning");
-		expect(summary.labelKey).toBe("network.sharing.diagnostics.findingsMany");
 	});
 
 	it("is wired into the whole-section view, not left to a render site", () => {

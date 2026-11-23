@@ -111,10 +111,8 @@ const CATEGORY_PROBE_PERCENT = { excellent: 80, good: 60, fair: 40, weak: 10 } a
 								>
 									{#if clients.count === 0}
 										{m["network.view.hotspotClientsNone"]()}
-									{:else if clients.count === 1}
-										{m["network.view.hotspotClientsOne"]({ count: clients.count })}
 									{:else}
-										{m["network.view.hotspotClientsMany"]({ count: clients.count })}
+										{m["network.view.hotspotClients"]({ count: clients.count })}
 									{/if}
 								</span>
 							</div>

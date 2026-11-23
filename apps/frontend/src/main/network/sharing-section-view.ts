@@ -547,9 +547,7 @@ export function deriveDiagnosticsSummary(
 		labelKey:
 			findings === 0
 				? "network.sharing.diagnostics.clear"
-				: findings === 1
-					? "network.sharing.diagnostics.findingsOne"
-					: "network.sharing.diagnostics.findingsMany",
+				: "network.sharing.diagnostics.findings",
 	};
 }
 

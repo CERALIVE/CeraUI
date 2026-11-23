@@ -380,7 +380,6 @@ function clearImages(): void {
 				class="flex-1"
 				disabled={imagesCount === 0}
 				onclick={downloadZip}
-				aria-label={`Download ${imagesCount} screenshots as ZIP`}
 			>
 				<Download class="mr-2 h-4 w-4" />
 				{m["devtools.downloadZip"]({ count: imagesCount })}

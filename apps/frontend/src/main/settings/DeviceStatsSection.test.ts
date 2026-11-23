@@ -8,6 +8,7 @@
  * derivation being right is not the same as the tile showing it — and they pin
  * the honest degradation, which is the half a percentage-only test would miss.
  */
+import { setLocale } from "@ceraui/i18n/svelte";
 import type { CpuInfo, DeviceStats, FanReading } from "@ceraui/rpc/schemas";
 import { render, screen } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -135,6 +136,20 @@ describe("CPU Load tile", () => {
 
 		expect(value().textContent?.trim()).toBe("Unavailable");
 	});
+});
+
+it.each([
+	["en", 1, "across 1 core."],
+	["ar", 2, "على 2 نواتين."],
+] as const)("inflects the %s CPU hint for %i cores", (locale, cores, hint) => {
+	setLocale(locale);
+	try {
+		subs.cpu = { cores };
+		render(DeviceStatsSection);
+		expect(value().getAttribute("title")).toContain(hint);
+	} finally {
+		setLocale("en");
+	}
 });
 
 /**

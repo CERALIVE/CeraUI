@@ -16,6 +16,7 @@
  * correctly: a -47 dBm client is STRONG, and the app-wide percent ramp would
  * have painted it as weak.
  */
+import { setLocale } from "@ceraui/i18n/svelte";
 import type { HotspotConfig, WifiInterface } from "@ceraui/rpc/schemas";
 import { render } from "@testing-library/svelte";
 import { describe, expect, it } from "vitest";
@@ -190,3 +191,25 @@ describe("HotspotSection — connected clients", () => {
 		});
 	});
 });
+
+it.each([
+	["en", 1, "1 device connected"],
+	["ar", 2, "2 جهازان متصلان"],
+] as const)(
+	"inflects the %s client roster with %i stations",
+	(locale, count, expected) => {
+		setLocale(locale);
+		try {
+			const { getByTestId } = mount(
+				iface({
+					clients: { count, stations: TWO_CLIENTS.stations.slice(0, count) },
+				}),
+			);
+			expect(getByTestId("hotspot-clients-count-0").textContent?.trim()).toBe(
+				expected,
+			);
+		} finally {
+			setLocale("en");
+		}
+	},
+);

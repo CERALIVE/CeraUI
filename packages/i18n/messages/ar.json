@@ -190,7 +190,26 @@
 	"devtools.domComplete": "اكتمال DOM",
 	"devtools.domContent": "محتوى DOM",
 	"devtools.downlink": "الرابط النازل",
-	"devtools.downloadZip": "تحميل ZIP ({count} ملفات)",
+	"devtools.downloadZip": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=zero": "تحميل ZIP ({count} ملفات)",
+				"countPlural=one": "تحميل ZIP ({count} ملف)",
+				"countPlural=two": "تحميل ZIP ({count} ملفان)",
+				"countPlural=few": "تحميل ZIP ({count} ملفات)",
+				"countPlural=many": "تحميل ZIP ({count} ملفًا)",
+				"countPlural=other": "تحميل ZIP ({count} ملف)",
+				"countPlural=*": "تحميل ZIP ({count} ملف)"
+			}
+		}
+	],
 	"devtools.downloading": "جاري التنزيل",
 	"devtools.enabled": "مفعل",
 	"devtools.enhancedTiming": "توقيت محسن: المحتوى مُصيَّر بالكامل قبل التقاط",
@@ -562,7 +581,6 @@
 	"live.ingest.idleHint": "أضف روابط خلوية أو Wi-Fi أو إيثرنت في الشبكة لبدء التجميع. تظهر قياسات الإدخال هنا بمجرد أن يصبح البث مباشرًا.",
 	"live.ingest.idleTitle": "لا توجد روابط مجمّعة بعد",
 	"live.ingest.link": "الرابط",
-	"live.ingest.links": "الروابط",
 	"live.ingest.linkCount": [
 		{
 			"declarations": [
@@ -583,32 +601,11 @@
 			}
 		}
 	],
-	"live.ingest.linksReadyCount": [
-		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
-			"match": {
-				"countPlural=zero": "{count} روابط جاهزة للتجميع",
-				"countPlural=one": "{count} رابط جاهز للتجميع",
-				"countPlural=two": "{count} رابطان جاهزان للتجميع",
-				"countPlural=few": "{count} روابط جاهزة للتجميع",
-				"countPlural=many": "{count} رابطًا جاهزًا للتجميع",
-				"countPlural=other": "{count} رابط جاهز للتجميع",
-				"countPlural=*": "{count} رابط جاهز للتجميع"
-			}
-		}
-	],
 	"live.ingest.linksReadyHint": "تظهر قياسات التجميع عندما يكون البث مباشرًا.",
 	"live.ingest.linksReadyTitle": "الروابط جاهزة",
 	"live.ingest.nak": "NAK",
 	"live.ingest.peak": "الذروة",
 	"live.ingest.rtt": "RTT",
-	"live.ingest.samples": "العينات",
 	"live.ingest.sampleCount": [
 		{
 			"declarations": [
@@ -896,11 +893,28 @@
 	"live.source.label": "المصدر",
 	"live.source.linksDownStreamingBody": "لا يمكن إرسال أي بيانات الآن. يُستأنف البث تلقائياً عند تعافي أحد الروابط.",
 	"live.source.linksDownStreamingTitle": "جميع الروابط المجمّعة معطّلة",
-	"live.source.lostBannerBodyMany": "لم تعد هذه الأجهزة متصلة: {names}. أعد توصيلها لاستخدامها كمصادر مرة أخرى — لا يتأثر أي مصدر آخر في هذه القائمة.",
-	"live.source.lostBannerBodyOne": "لم يعد {name} متصلاً. أعد توصيله لاستخدامه كمصدر مرة أخرى — لا يتأثر أي مصدر آخر في هذه القائمة.",
+	"live.source.lostBannerBody": "انقطع الاتصال: {names}. أعد التوصيل لاستخدامها كمصادر مرة أخرى. لم يتأثر أي مصدر آخر في القائمة.",
 	"live.source.lostBannerRemembered": "لا يزال مدرجاً لأنه الجهاز الذي استخدمه بثّك الأخير.",
-	"live.source.lostBannerTitleMany": "{count} أجهزة غير متصلة",
-	"live.source.lostBannerTitleOne": "{name} غير متصل",
+	"live.source.lostBannerTitle": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=zero": "{count} أجهزة غير متصلة",
+				"countPlural=one": "{count} جهاز غير متصل",
+				"countPlural=two": "{count} جهازان غير متصلين",
+				"countPlural=few": "{count} أجهزة غير متصلة",
+				"countPlural=many": "{count} جهازًا غير متصل",
+				"countPlural=other": "{count} جهاز غير متصل",
+				"countPlural=*": "{count} جهاز غير متصل"
+			}
+		}
+	],
 	"live.source.lostBody": "أعد توصيل الجهاز لاستئناف البث من هذا المصدر.",
 	"live.source.lostStreamingBody": "فُقد المصدر الذي تبثه. أعد توصيله أو بدّل إلى مصدر آخر لإبقاء البث مستمراً.",
 	"live.source.lostStreamingTitle": "انقطع اتصال المصدر المباشر",
@@ -1114,8 +1128,26 @@
 	"network.collision.policyRouteTitle": "توجيه الرابط يحتاج إلى انتباه",
 	"network.collision.sameSubnetBody": "يشترك رابطان أو أكثر في نفس الشبكة الفرعية. هذا أمر متوقع — يوجّه الجهاز كل رابط بشكل مستقل، لذا يستمر الدمج في العمل بشكل طبيعي.",
 	"network.collision.sameSubnetTitle": "شبكة فرعية مشتركة بين الروابط",
-	"network.unclaimedAdapters.titleOne": "تم اكتشاف محوّل — لا يوجد برنامج تشغيل في هذه النواة",
-	"network.unclaimedAdapters.titleMany": "تم اكتشاف {count} محوّلات — لا يوجد برنامج تشغيل في هذه النواة",
+	"network.unclaimedAdapters.title": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=zero": "تم اكتشاف {count} محوّلات — لا يوجد برنامج تشغيل في هذه النواة",
+				"countPlural=one": "تم اكتشاف {count} محوّل — لا يوجد برنامج تشغيل في هذه النواة",
+				"countPlural=two": "تم اكتشاف {count} محوّلين — لا يوجد برنامج تشغيل في هذه النواة",
+				"countPlural=few": "تم اكتشاف {count} محوّلات — لا يوجد برنامج تشغيل في هذه النواة",
+				"countPlural=many": "تم اكتشاف {count} محوّلًا — لا يوجد برنامج تشغيل في هذه النواة",
+				"countPlural=other": "تم اكتشاف {count} محوّل — لا يوجد برنامج تشغيل في هذه النواة",
+				"countPlural=*": "تم اكتشاف {count} محوّل — لا يوجد برنامج تشغيل في هذه النواة"
+			}
+		}
+	],
 	"network.unclaimedAdapters.body": "الجهاز موجود على الناقل ويُعلن هويته، لكن لم يطالب به أي برنامج تشغيل في النواة، لذا لا يمكن استخدامه بعد. عادةً ما يحتاج إلى حزمة برنامج ثابت أو نواة أحدث.",
 	"network.unclaimedAdapters.kind.wifi": "محوّل Wi-Fi",
 	"network.unclaimedAdapters.kind.bluetooth": "محوّل Bluetooth",
@@ -1399,7 +1431,26 @@
 	"network.modem.simEvidence.simSlotObjectPath": "حدّد المودم فتحة SIM مشغولة، لذا تم اكتشاف شريحة.",
 	"network.modem.simEvidence.stateFailedReason": "أبلغ المودم أنّ فتحة SIM لديه فارغة.",
 	"network.modem.simEvidence.vendorCodeUnclaimed": "رمز حالة الجهاز نفسه لا يوضّح ذلك.",
-	"network.modem.simUnlock.attemptsRemaining": "رمز PIN غير صحيح. تبقّى {count} محاولات.",
+	"network.modem.simUnlock.attemptsRemaining": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=zero": "رمز PIN غير صحيح. تبقّى {count} محاولات.",
+				"countPlural=one": "رمز PIN غير صحيح. تبقّت {count} محاولة.",
+				"countPlural=two": "رمز PIN غير صحيح. تبقّت {count} محاولتان.",
+				"countPlural=few": "رمز PIN غير صحيح. تبقّت {count} محاولات.",
+				"countPlural=many": "رمز PIN غير صحيح. تبقّت {count} محاولةً.",
+				"countPlural=other": "رمز PIN غير صحيح. تبقّت {count} محاولة.",
+				"countPlural=*": "رمز PIN غير صحيح. تبقّت {count} محاولة."
+			}
+		}
+	],
 	"network.modem.simUnlock.back": "العودة إلى إعدادات المودم",
 	"network.modem.simUnlock.description": "بطاقة SIM هذه مقفلة. أدخل رمز PIN لإلغاء قفل المودم.",
 	"network.modem.simUnlock.error": "تعذّر إلغاء قفل SIM. يُرجى المحاولة مرة أخرى.",
@@ -1407,7 +1458,26 @@
 	"network.modem.simUnlock.newPinLabel": "رمز PIN جديد لبطاقة SIM",
 	"network.modem.simUnlock.newPinPlaceholder": "اختر رمز PIN جديدًا",
 	"network.modem.simUnlock.pin2AttemptsLabel": "محاولات PIN2 المتبقية",
-	"network.modem.simUnlock.pin2AttemptsRemaining": "رمز PIN2 غير صحيح. تبقت {count} محاولات.",
+	"network.modem.simUnlock.pin2AttemptsRemaining": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=zero": "رمز PIN2 غير صحيح. تبقّت {count} محاولات.",
+				"countPlural=one": "رمز PIN2 غير صحيح. تبقّت {count} محاولة.",
+				"countPlural=two": "رمز PIN2 غير صحيح. تبقّت {count} محاولتان.",
+				"countPlural=few": "رمز PIN2 غير صحيح. تبقّت {count} محاولات.",
+				"countPlural=many": "رمز PIN2 غير صحيح. تبقّت {count} محاولةً.",
+				"countPlural=other": "رمز PIN2 غير صحيح. تبقّت {count} محاولة.",
+				"countPlural=*": "رمز PIN2 غير صحيح. تبقّت {count} محاولة."
+			}
+		}
+	],
 	"network.modem.simUnlock.pin2Description": "رمز PIN2 مختلف عن رمز PIN الخاص بشريحة SIM. وهو يحمي قائمة أرقام الاتصال الثابت (FDN) وإعدادات تكلفة المكالمات المحفوظة على هذه الشريحة.",
 	"network.modem.simUnlock.pin2Label": "رمز PIN2 للشريحة",
 	"network.modem.simUnlock.pin2Placeholder": "أدخل رمز PIN2",
@@ -1438,7 +1508,26 @@
 	"network.modem.simUnlock.wrongPin2": "رمز PIN2 غير صحيح. يرجى المحاولة مرة أخرى.",
 	"network.modem.simUnlock.wrongPuk": "رمز PUK غير صحيح. يُرجى المحاولة مرة أخرى.",
 	"network.modem.sms.capped": "يتم عرض أحدث {count} رسالة مخزَّنة على هذه الشريحة.",
-	"network.modem.sms.countLabel": "{count} رسالة مخزَّنة",
+	"network.modem.sms.countLabel": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=zero": "{count} رسائل مخزّنة",
+				"countPlural=one": "{count} رسالة مخزّنة",
+				"countPlural=two": "{count} رسالتان مخزّنتان",
+				"countPlural=few": "{count} رسائل مخزّنة",
+				"countPlural=many": "{count} رسالةً مخزّنةً",
+				"countPlural=other": "{count} رسالة مخزّنة",
+				"countPlural=*": "{count} رسالة مخزّنة"
+			}
+		}
+	],
 	"network.modem.sms.description": "مخزَّنة على هذه الشريحة. للقراءة فقط.",
 	"network.modem.sms.empty": "لا توجد رسائل مخزَّنة",
 	"network.modem.sms.emptyHint": "لا تحتفظ هذه الشريحة بأي شيء يستطيع المودم قراءته.",
@@ -1755,9 +1844,27 @@
 	"network.view.hotspotClientRate": "{rate} Mbps",
 	"network.view.hotspotClientSignal": "{dbm} dBm",
 	"network.view.hotspotClientsCapped": "عرض {shown} من {count}.",
-	"network.view.hotspotClientsMany": "{count} أجهزة متصلة",
+	"network.view.hotspotClients": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=zero": "{count} أجهزة متصلة",
+				"countPlural=one": "{count} جهاز متصل",
+				"countPlural=two": "{count} جهازان متصلان",
+				"countPlural=few": "{count} أجهزة متصلة",
+				"countPlural=many": "{count} جهازًا متصلًا",
+				"countPlural=other": "{count} جهاز متصل",
+				"countPlural=*": "{count} جهاز متصل"
+			}
+		}
+	],
 	"network.view.hotspotClientsNone": "لا توجد أجهزة متصلة",
-	"network.view.hotspotClientsOne": "جهاز واحد متصل ({count})",
 	"network.view.hotspotNoBond": "لا يمكن ضم نقطة الاتصال إلى التجميع",
 	"network.view.hotspotOff": "نقطة الاتصال متوقفة",
 	"network.view.hotspotOffHint": "شارك اتصال هذا الجهاز عبر WiFi.",
@@ -1870,7 +1977,7 @@
 	"network.netifSave.error.generic": "رفض الجهاز التغيير، فلم يُحفَظ شيء.",
 	"network.sharing.title": "مشاركة الإنترنت",
 	"network.sharing.headline.activeTitle": "المشاركة نشطة",
-	"network.sharing.headline.activeBody": "{usable} من {total} وصلة صاعدة يمكنها حمل حركة الأجهزة المتصلة.",
+	"network.sharing.headline.activeBody": "الوصلات الصاعدة المتاحة لحركة الأجهزة المتصلة: {usable} من {total}.",
 	"network.sharing.uplinksHeading": "حالة الوصلات الصاعدة",
 	"network.sharing.state.up": "تعمل",
 	"network.sharing.state.degraded": "متدهورة",
@@ -1931,11 +2038,47 @@
 	"network.sharing.diag.reason.foreignTable": "تغيّر جدول الجدار الناري الخاص بنسخة نظام الجهاز.",
 	"network.sharing.diagnostics.disclosure": "التشخيصات",
 	"network.sharing.diagnostics.clear": "لا شيء يستدعي المراجعة",
-	"network.sharing.diagnostics.findingsOne": "{count} نتيجة تستدعي المراجعة",
-	"network.sharing.diagnostics.findingsMany": "{count} نتائج تستدعي المراجعة",
+	"network.sharing.diagnostics.findings": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=zero": "{count} نتائج تستدعي المراجعة",
+				"countPlural=one": "{count} نتيجة تستدعي المراجعة",
+				"countPlural=two": "{count} نتيجتان تستدعيان المراجعة",
+				"countPlural=few": "{count} نتائج تستدعي المراجعة",
+				"countPlural=many": "{count} نتيجةً تستدعي المراجعة",
+				"countPlural=other": "{count} نتيجة تستدعي المراجعة",
+				"countPlural=*": "{count} نتيجة تستدعي المراجعة"
+			}
+		}
+	],
 	"network.sharing.dnsNote": "قيد معروف: يتبع استعلام الأسماء من الأجهزة المتصلة المسارَ الافتراضي لهذا الجهاز، لذا قد لا يمر عبر الوصلة الصاعدة التي تُرسَل حركتها عليها.",
-	"network.view.notBondedMany": "{count} روابط غير مجمَّعة — انظر أدناه للسبب",
-	"network.view.notBondedOne": "رابط واحد غير مجمَّع — انظر أدناه للسبب",
+	"network.view.notBonded": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=zero": "{count} روابط غير مجمَّعة — انظر أدناه للسبب",
+				"countPlural=one": "{count} رابط غير مجمَّع — انظر أدناه للسبب",
+				"countPlural=two": "{count} رابطان غير مجمَّعين — انظر أدناه للسبب",
+				"countPlural=few": "{count} روابط غير مجمَّعة — انظر أدناه للسبب",
+				"countPlural=many": "{count} رابطًا غير مجمَّع — انظر أدناه للسبب",
+				"countPlural=other": "{count} رابط غير مجمَّع — انظر أدناه للسبب",
+				"countPlural=*": "{count} رابط غير مجمَّع — انظر أدناه للسبب"
+			}
+		}
+	],
 	"network.view.off": "إيقاف",
 	"network.view.on": "تشغيل",
 	"network.view.refreshing": "جارٍ التحديث",
@@ -2194,7 +2337,26 @@
 	"settings.deviceStats.cpuFreqGovernorHint": "سياسة النواة التي تختار تردد هذه المجموعة. تثبّت CeraLive وضع performance لتقليل زمن الترميز.",
 	"settings.deviceStats.cpuLoad": "حمل المعالج",
 	"settings.deviceStats.cpuLoadHeavy": "مرتفع",
-	"settings.deviceStats.cpuLoadHint": "نسبة من إجمالي طاقة المعالج — متوسط الحِمل خلال دقيقة واحدة موزّعًا على {cores} نواة.",
+	"settings.deviceStats.cpuLoadHint": [
+		{
+			"declarations": [
+				"input cores",
+				"local coresPlural = cores: plural"
+			],
+			"selectors": [
+				"coresPlural"
+			],
+			"match": {
+				"coresPlural=zero": "نسبة من إجمالي طاقة المعالج — متوسط الحمل خلال دقيقة واحدة على {cores} أنوية.",
+				"coresPlural=one": "نسبة من إجمالي طاقة المعالج — متوسط الحمل خلال دقيقة واحدة على {cores} نواة.",
+				"coresPlural=two": "نسبة من إجمالي طاقة المعالج — متوسط الحمل خلال دقيقة واحدة على {cores} نواتين.",
+				"coresPlural=few": "نسبة من إجمالي طاقة المعالج — متوسط الحمل خلال دقيقة واحدة على {cores} أنوية.",
+				"coresPlural=many": "نسبة من إجمالي طاقة المعالج — متوسط الحمل خلال دقيقة واحدة على {cores} نواةً.",
+				"coresPlural=other": "نسبة من إجمالي طاقة المعالج — متوسط الحمل خلال دقيقة واحدة على {cores} نواة.",
+				"coresPlural=*": "نسبة من إجمالي طاقة المعالج — متوسط الحمل خلال دقيقة واحدة على {cores} نواة."
+			}
+		}
+	],
 	"settings.deviceStats.cpuLoadHintNoCores": "متوسط الحِمل خلال دقيقة واحدة. لم يُبلِّغ هذا الجهاز عن عدد أنويته، لذا لا يمكن عرضه كنسبة من الطاقة.",
 	"settings.deviceStats.cpuLoadLight": "منخفض",
 	"settings.deviceStats.cpuLoadModerate": "متوسط",

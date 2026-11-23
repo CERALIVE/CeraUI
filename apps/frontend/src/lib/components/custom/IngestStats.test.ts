@@ -28,7 +28,7 @@ import {
 	sparkPoints,
 } from "./ingest-link-view";
 
-const TWO_LINKS: LinkTelemetryMessage = {
+const ONE_LINK: LinkTelemetryMessage = {
 	links: [
 		{
 			conn_id: "0",
@@ -38,6 +38,12 @@ const TWO_LINKS: LinkTelemetryMessage = {
 			weight_percent: 60,
 			stale: false,
 		},
+	],
+};
+
+const TWO_LINKS: LinkTelemetryMessage = {
+	links: [
+		...ONE_LINK.links,
 		{
 			conn_id: "1",
 			iface: "wlan0",
@@ -590,13 +596,13 @@ describe("IngestStats — session summary + export (device-local)", () => {
 		// on one link read "1 Links".
 		const badge = (container: HTMLElement) =>
 			panelOf(container)
-				.querySelector('[data-testid="ingest-link-count"]')
+				.querySelector("h2 + span")
 				?.textContent?.replace(/\s+/g, " ")
 				.trim();
 
 		const one = render(IngestStats, {
 			props: {
-				telemetry: { links: [TWO_LINKS.links[0]] } as LinkTelemetryMessage,
+				telemetry: ONE_LINK,
 				isStreaming: true,
 				bitrateKbps: 4000,
 			},
@@ -625,13 +631,13 @@ describe("IngestStats — session summary + export (device-local)", () => {
 		});
 		flushSync();
 		const one = panelOf(container)
-			.querySelector('[data-testid="ingest-sample-count"]')
+			.querySelector("h2 + span")
 			?.textContent?.replace(/\s+/g, " ")
 			.trim();
 		expect(one).toBe("1 sample");
 
 		const many = runMockSession()
-			.querySelector('[data-testid="ingest-sample-count"]')
+			.querySelector("h2 + span")
 			?.textContent?.replace(/\s+/g, " ")
 			.trim();
 		expect(many).toBe("2 samples");

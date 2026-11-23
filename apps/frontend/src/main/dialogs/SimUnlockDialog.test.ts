@@ -11,6 +11,7 @@
  *   locked       → PIN field + submit present, submit gated on a valid PIN
  */
 
+import { setLocale } from "@ceraui/i18n/svelte";
 import type {
 	Modem,
 	SimPin2UnlockOutput,
@@ -537,3 +538,63 @@ describe("SimUnlockDialog — PIN2 (Fixed Dialling Number) entry", () => {
 		expect(screen.queryByTestId("sim-pin2-input")).toBeNull();
 	});
 });
+
+it.each([
+	["en", 1, "Incorrect PIN. 1 attempt remaining."],
+	["ar", 2, "رمز PIN غير صحيح. تبقّت 2 محاولتان."],
+] as const)(
+	"inflects the %s retry message for PIN with %i remaining",
+	async (locale, count, expected) => {
+		setLocale(locale);
+		try {
+			unlockSim.mockResolvedValue({
+				state: "wrong-pin",
+				remainingAttempts: count,
+			} satisfies SimUnlockOutput);
+			render(SimUnlockDialog, {
+				props: {
+					open: true,
+					deviceId: "0",
+					modem: makeModem({ required: "sim-pin" }),
+				},
+			});
+			await fireEvent.input(pinInput(), { target: { value: "0000" } });
+			await fireEvent.click(submitButton());
+			expect(
+				(await screen.findByTestId("sim-pin-error")).textContent?.trim(),
+			).toBe(expected);
+		} finally {
+			setLocale("en");
+		}
+	},
+);
+
+it.each([
+	["en", 1, "Incorrect PIN2. 1 attempt remaining."],
+	["ar", 2, "رمز PIN2 غير صحيح. تبقّت 2 محاولتان."],
+] as const)(
+	"inflects the %s retry message for PIN2 with %i remaining",
+	async (locale, count, expected) => {
+		setLocale(locale);
+		try {
+			unlockSimPin2.mockResolvedValue({
+				state: "wrong-pin2",
+				remainingAttempts: count,
+			} satisfies SimPin2UnlockOutput);
+			render(SimUnlockDialog, {
+				props: {
+					open: true,
+					deviceId: "2",
+					modem: makeModem({ required: "sim-pin2" }),
+				},
+			});
+			await fireEvent.input(pin2Input(), { target: { value: "0000" } });
+			await fireEvent.click(pin2Submit());
+			expect(
+				(await screen.findByTestId("sim-pin2-error")).textContent?.trim(),
+			).toBe(expected);
+		} finally {
+			setLocale("en");
+		}
+	},
+);

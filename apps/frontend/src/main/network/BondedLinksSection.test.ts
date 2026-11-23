@@ -10,6 +10,7 @@
  * REAL RTT value instead of "--".
  */
 
+import { setLocale } from "@ceraui/i18n/svelte";
 import type { LinkTelemetryMessage } from "@ceraui/rpc/schemas";
 import { render, within } from "@testing-library/svelte";
 import { describe, expect, it } from "vitest";
@@ -187,6 +188,25 @@ describe("BondedLinksSection — mock link-telemetry join (T5)", () => {
 			PLACEHOLDER,
 		);
 	});
+});
+
+it("uses the Arabic dual for two links outside the bond", () => {
+	setLocale("ar");
+	try {
+		const { getByTestId } = render(BondedLinksSection, {
+			props: {
+				links: [linkFor("eth0", 0)],
+				modemEntries: [],
+				linkTelemetry: null,
+				unbondedCount: 2,
+			},
+		});
+		expect(getByTestId("bonded-links-not-bonded").textContent).toContain(
+			"2 رابطان غير مجمَّعين",
+		);
+	} finally {
+		setLocale("en");
+	}
 });
 
 describe("BondedLinksSection — binary presence (todo 48)", () => {

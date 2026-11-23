@@ -274,11 +274,6 @@
 		"locales": ["pt-BR"],
 		"reason": "pt-BR live.server.singleLink reads \"Link único\", keeping the term untranslated."
 	},
-	"live.ingest.links": {
-		"value": "Links",
-		"locales": ["pt-BR"],
-		"reason": "pt-BR live.ingest.linksReadyTitle reads \"Links prontos\", keeping the term untranslated."
-	},
 	"live.ingest.nak": {
 		"value": "NAK",
 		"locales": ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"],
@@ -1037,7 +1032,7 @@
 	"settings.updates.kernel.title": {
 		"value": "Kernel",
 		"locales": ["de", "es", "pt-BR"],
-		"reason": "es network.unclaimedAdapters.titleOne reads \"Adaptador detectado: sin controlador en este kernel\". de network.unclaimedAdapters.titleOne reads \"kein Treiber in diesem Kernel\"; pt-BR settings.updates.phase.kernelStaged reads \"Kernel pronto\", keeping the term untranslated."
+		"reason": "es network.unclaimedAdapters.title uses \"adaptador detectado: sin controlador en este kernel\". de network.unclaimedAdapters.title uses \"kein Treiber in diesem Kernel\"; pt-BR settings.updates.phase.kernelStaged reads \"Kernel pronto\", keeping the term untranslated."
 	},
 	"settings.updates.slots.slot": {
 		"value": "Slot {letter}",
@@ -1117,7 +1112,7 @@
 	"systemLogs.source.kernel": {
 		"value": "Kernel",
 		"locales": ["de", "es", "pt-BR"],
-		"reason": "Linux kernel, as in settings.updates.kernel.title; es network.unclaimedAdapters.titleOne reads \"Adaptador detectado: sin controlador en este kernel\", de reads \"kein Treiber in diesem Kernel\"; pt-BR settings.updates.phase.kernelStaged reads \"Kernel pronto\", keeping the term untranslated."
+		"reason": "Linux kernel, as in settings.updates.kernel.title; es network.unclaimedAdapters.title uses \"adaptador detectado: sin controlador en este kernel\", de reads \"kein Treiber in diesem Kernel\"; pt-BR settings.updates.phase.kernelStaged reads \"Kernel pronto\", keeping the term untranslated."
 	},
 	"systemLogs.source.updates": {
 		"value": "Updates",
@@ -1137,7 +1132,7 @@
 	"systemLogs.versions.kernel": {
 		"value": "Kernel",
 		"locales": ["de", "es", "pt-BR"],
-		"reason": "Linux kernel, as in settings.updates.kernel.title; es network.unclaimedAdapters.titleOne reads \"Adaptador detectado: sin controlador en este kernel\", de reads \"kein Treiber in diesem Kernel\"; pt-BR settings.updates.phase.kernelStaged reads \"Kernel pronto\", keeping the term untranslated."
+		"reason": "Linux kernel, as in settings.updates.kernel.title; es network.unclaimedAdapters.title uses \"adaptador detectado: sin controlador en este kernel\", de reads \"kein Treiber in diesem Kernel\"; pt-BR settings.updates.phase.kernelStaged reads \"Kernel pronto\", keeping the term untranslated."
 	},
 	"systemLogs.versions.slot": {
 		"value": "Slot",

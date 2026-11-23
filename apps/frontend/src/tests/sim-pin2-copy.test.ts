@@ -11,34 +11,12 @@
  * card or the service is locked.
  */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-
 import { describe, expect, it } from "vitest";
 
-const MESSAGES_DIR = join(
-	import.meta.dirname,
-	"..",
-	"..",
-	"..",
-	"..",
-	"packages",
-	"i18n",
-	"messages",
-);
-
-const LOCALES = [
-	"en",
-	"es",
-	"de",
-	"fr",
-	"pt-BR",
-	"ja",
-	"ko",
-	"zh",
-	"hi",
-	"ar",
-] as const;
+import {
+	ALL_LOCALES,
+	readCatalog,
+} from "../../../../packages/i18n/tests/helpers/catalog";
 
 const PREFIX = "network.modem.simUnlock.";
 
@@ -58,39 +36,40 @@ const PIN2_KEYS = [
 	"pin2Puk2Required",
 ] as const;
 
-function catalog(locale: string): Record<string, string> {
-	return JSON.parse(
-		readFileSync(join(MESSAGES_DIR, `${locale}.json`), "utf-8"),
-	) as Record<string, string>;
-}
-
 describe("SIM PIN2 copy", () => {
-	it.each(LOCALES)("%s carries every PIN2 key", (locale) => {
-		const messages = catalog(locale);
+	it.each(ALL_LOCALES)("%s carries every PIN2 key", (locale) => {
+		const messages = readCatalog(locale);
 		for (const key of PIN2_KEYS) {
 			const full = PREFIX + key;
 			expect(messages[full], `${locale} is missing ${full}`).toBeTruthy();
 		}
 	});
 
-	it.each(LOCALES)(
+	it.each(ALL_LOCALES)(
 		"%s keeps the {count} placeholder on the PIN2 attempts message",
 		(locale) => {
-			const value = catalog(locale)[`${PREFIX}pin2AttemptsRemaining`] ?? "";
-			expect(value).toContain("{count}");
+			const value = readCatalog(locale)[`${PREFIX}pin2AttemptsRemaining`] ?? "";
+			const patterns =
+				typeof value === "string"
+					? [value]
+					: value.flatMap(({ match }) => Object.values(match));
+			expect(patterns.length).toBeGreaterThan(0);
+			for (const pattern of patterns) expect(pattern).toContain("{count}");
 		},
 	);
 
 	it("the English PIN2 copy names FDN and states service is unaffected", () => {
-		const messages = catalog("en");
+		const messages = readCatalog("en");
+		const description = messages[`${PREFIX}pin2Description`];
+		const service = messages[`${PREFIX}pin2ServiceUnaffected`];
 
-		expect(messages[`${PREFIX}pin2Description`]?.toLowerCase()).toContain(
-			"fixed dialling",
-		);
+		expect(
+			typeof description === "string" ? description.toLowerCase() : undefined,
+		).toContain("fixed dialling");
 		// The one sentence that has to be there: PIN2 does not stop the stream.
-		expect(messages[`${PREFIX}pin2ServiceUnaffected`]?.toLowerCase()).toContain(
-			"not affected",
-		);
+		expect(
+			typeof service === "string" ? service.toLowerCase() : undefined,
+		).toContain("not affected");
 	});
 
 	it("no PIN2 message tells the operator the SIM or service is locked", () => {
@@ -113,7 +92,9 @@ describe("SIM PIN2 copy", () => {
 		] as const;
 
 		for (const key of describing) {
-			const value = (catalog("en")[PREFIX + key] ?? "").toLowerCase();
+			const entry = readCatalog("en")[PREFIX + key];
+			expect(typeof entry).toBe("string");
+			const value = typeof entry === "string" ? entry.toLowerCase() : "";
 			for (const phrase of banned) {
 				expect(value, `${key} must not say "${phrase}"`).not.toContain(phrase);
 			}
@@ -121,7 +102,7 @@ describe("SIM PIN2 copy", () => {
 	});
 
 	it("PIN2 copy never sends the operator hunting for PUK1", () => {
-		const messages = catalog("en");
+		const messages = readCatalog("en");
 		// PUK2 is a different code from PUK1, so the PIN2 entry copy must not
 		// mention a bare "PUK" — an operator reading their carrier letter would
 		// try the wrong one.

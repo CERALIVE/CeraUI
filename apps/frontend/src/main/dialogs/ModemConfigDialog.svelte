@@ -2497,7 +2497,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 								{smsMessages.length}
 							</span>
 							<span class="sr-only">
-								{m["network.modem.sms.countLabel"]({ count: String(smsMessages.length) })}
+								{m["network.modem.sms.countLabel"]({ count: smsMessages.length })}
 							</span>
 						</span>
 					{/if}

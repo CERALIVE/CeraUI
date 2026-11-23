@@ -12,6 +12,7 @@
  *      that could disable a control would be a different, much louder thing.
  */
 
+import { setLocale } from "@ceraui/i18n/svelte";
 import type { UnclaimedAdapter } from "@ceraui/rpc/schemas";
 import { render } from "@testing-library/svelte";
 import { describe, expect, it } from "vitest";
@@ -121,3 +122,21 @@ describe("UnclaimedAdaptersBand — it NEVER gates", () => {
 		);
 	});
 });
+
+it.each([
+	["en", [MEDIATEK_PCIE_WIFI], "1 adapter detected"],
+	["ar", [MEDIATEK_PCIE_WIFI, REALTEK_USB_BT], "تم اكتشاف 2 محوّلين"],
+] as const)(
+	"inflects the detected-adapter title in %s",
+	(locale, adapters, expected) => {
+		setLocale(locale);
+		try {
+			const { getByTestId } = mount([...adapters]);
+			expect(getByTestId("unclaimed-adapters-title").textContent).toContain(
+				expected,
+			);
+		} finally {
+			setLocale("en");
+		}
+	},
+);

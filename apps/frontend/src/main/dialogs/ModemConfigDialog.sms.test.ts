@@ -20,6 +20,7 @@
  * compose box would pass a grep and fail an operator.
  */
 
+import { setLocale } from "@ceraui/i18n/svelte";
 import type { Modem, SmsMessage } from "@ceraui/rpc/schemas";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -632,3 +633,24 @@ describe("state table — a read that never answers", () => {
 		}
 	});
 });
+
+it.each([
+	["en", 1, "1 message stored"],
+	["ar", 2, "2 رسالتان مخزّنتان"],
+] as const)(
+	"names the inbox accessibly in %s with %i stored messages",
+	async (locale, count, name) => {
+		setLocale(locale);
+		try {
+			resolveWith(INBOX.slice(0, count));
+			mount();
+			await openInbox();
+			const toggle = await screen.findByRole("button", {
+				name: new RegExp(name),
+			});
+			expect(toggle).toBe(screen.getByTestId("modem-sms-toggle"));
+		} finally {
+			setLocale("en");
+		}
+	},
+);

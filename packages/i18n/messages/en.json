@@ -190,7 +190,22 @@
 	"devtools.domComplete": "DOM Complete",
 	"devtools.domContent": "DOM Content",
 	"devtools.downlink": "Downlink",
-	"devtools.downloadZip": "Download ZIP ({count} files)",
+	"devtools.downloadZip": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "Download ZIP ({count} file)",
+				"countPlural=other": "Download ZIP ({count} files)",
+				"countPlural=*": "Download ZIP ({count} files)"
+			}
+		}
+	],
 	"devtools.downloading": "Downloading",
 	"devtools.enabled": "Enabled",
 	"devtools.enhancedTiming": "Enhanced timing: content fully rendered before capture",
@@ -562,7 +577,6 @@
 	"live.ingest.idleHint": "Add cellular, Wi-Fi, or Ethernet links in Network to start bonding. Ingest telemetry appears here once the stream is live.",
 	"live.ingest.idleTitle": "No bonded links yet",
 	"live.ingest.link": "Link",
-	"live.ingest.links": "Links",
 	"live.ingest.linkCount": [
 		{
 			"declarations": [
@@ -579,28 +593,11 @@
 			}
 		}
 	],
-	"live.ingest.linksReadyCount": [
-		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
-			"match": {
-				"countPlural=one": "{count} link ready to bond",
-				"countPlural=other": "{count} links ready to bond",
-				"countPlural=*": "{count} links ready to bond"
-			}
-		}
-	],
 	"live.ingest.linksReadyHint": "Bonding telemetry appears when live.",
 	"live.ingest.linksReadyTitle": "Links ready",
 	"live.ingest.nak": "NAK",
 	"live.ingest.peak": "Peak",
 	"live.ingest.rtt": "RTT",
-	"live.ingest.samples": "Samples",
 	"live.ingest.sampleCount": [
 		{
 			"declarations": [
@@ -876,11 +873,24 @@
 	"live.source.label": "Source",
 	"live.source.linksDownStreamingBody": "No data can be sent right now. The stream resumes automatically when a link recovers.",
 	"live.source.linksDownStreamingTitle": "All bonded links down",
-	"live.source.lostBannerBodyMany": "These devices are no longer connected: {names}. Reconnect them to use them as sources again — every other source in this list is unaffected.",
-	"live.source.lostBannerBodyOne": "{name} is no longer connected. Reconnect it to use it as a source again — every other source in this list is unaffected.",
+	"live.source.lostBannerBody": "Disconnected: {names}. Reconnect to use as sources again. Every other source in this list is unaffected.",
 	"live.source.lostBannerRemembered": "It's still listed because it's the device your last stream used.",
-	"live.source.lostBannerTitleMany": "{count} devices disconnected",
-	"live.source.lostBannerTitleOne": "{name} disconnected",
+	"live.source.lostBannerTitle": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} device disconnected",
+				"countPlural=other": "{count} devices disconnected",
+				"countPlural=*": "{count} devices disconnected"
+			}
+		}
+	],
 	"live.source.lostBody": "Reconnect the device to resume streaming from this source.",
 	"live.source.lostStreamingBody": "The source you're streaming was lost. Reconnect it, or switch to another source to keep your stream alive.",
 	"live.source.lostStreamingTitle": "Live source disconnected",
@@ -1094,8 +1104,22 @@
 	"network.collision.policyRouteTitle": "Link routing needs attention",
 	"network.collision.sameSubnetBody": "Two or more links share an identical subnet. This is expected — the device routes each link independently, so bonding keeps working normally.",
 	"network.collision.sameSubnetTitle": "Shared subnet across links",
-	"network.unclaimedAdapters.titleOne": "Adapter detected — no driver on this kernel",
-	"network.unclaimedAdapters.titleMany": "{count} adapters detected — no driver on this kernel",
+	"network.unclaimedAdapters.title": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} adapter detected — no driver on this kernel",
+				"countPlural=other": "{count} adapters detected — no driver on this kernel",
+				"countPlural=*": "{count} adapters detected — no driver on this kernel"
+			}
+		}
+	],
 	"network.unclaimedAdapters.body": "The device is on the bus and reports its own identity, but no kernel driver has claimed it — so it can't be used yet. A firmware package or a newer kernel is usually what it needs.",
 	"network.unclaimedAdapters.kind.wifi": "Wi-Fi adapter",
 	"network.unclaimedAdapters.kind.bluetooth": "Bluetooth adapter",
@@ -1379,7 +1403,22 @@
 	"network.modem.simEvidence.simSlotObjectPath": "The modem named a filled SIM slot, so a card was detected.",
 	"network.modem.simEvidence.stateFailedReason": "The modem reported that its SIM slot is empty.",
 	"network.modem.simEvidence.vendorCodeUnclaimed": "The device's own status code doesn't say either way.",
-	"network.modem.simUnlock.attemptsRemaining": "Incorrect PIN. {count} attempts remaining.",
+	"network.modem.simUnlock.attemptsRemaining": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "Incorrect PIN. {count} attempt remaining.",
+				"countPlural=other": "Incorrect PIN. {count} attempts remaining.",
+				"countPlural=*": "Incorrect PIN. {count} attempts remaining."
+			}
+		}
+	],
 	"network.modem.simUnlock.back": "Back to modem settings",
 	"network.modem.simUnlock.description": "This SIM card is locked. Enter its PIN to unlock the modem.",
 	"network.modem.simUnlock.error": "Could not unlock the SIM. Please try again.",
@@ -1387,7 +1426,22 @@
 	"network.modem.simUnlock.newPinLabel": "New SIM PIN",
 	"network.modem.simUnlock.newPinPlaceholder": "Choose a new PIN",
 	"network.modem.simUnlock.pin2AttemptsLabel": "PIN2 attempts remaining",
-	"network.modem.simUnlock.pin2AttemptsRemaining": "Incorrect PIN2. {count} attempts remaining.",
+	"network.modem.simUnlock.pin2AttemptsRemaining": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "Incorrect PIN2. {count} attempt remaining.",
+				"countPlural=other": "Incorrect PIN2. {count} attempts remaining.",
+				"countPlural=*": "Incorrect PIN2. {count} attempts remaining."
+			}
+		}
+	],
 	"network.modem.simUnlock.pin2Description": "PIN2 is a separate code from your SIM PIN. It protects the Fixed Dialling Number list and call-cost settings stored on this SIM.",
 	"network.modem.simUnlock.pin2Label": "SIM PIN2",
 	"network.modem.simUnlock.pin2Placeholder": "Enter PIN2",
@@ -1418,7 +1472,22 @@
 	"network.modem.simUnlock.wrongPin2": "Incorrect PIN2. Please try again.",
 	"network.modem.simUnlock.wrongPuk": "Incorrect PUK. Please try again.",
 	"network.modem.sms.capped": "Showing the {count} most recent messages stored on this SIM.",
-	"network.modem.sms.countLabel": "{count} messages stored",
+	"network.modem.sms.countLabel": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} message stored",
+				"countPlural=other": "{count} messages stored",
+				"countPlural=*": "{count} messages stored"
+			}
+		}
+	],
 	"network.modem.sms.description": "Stored on this SIM. Read-only.",
 	"network.modem.sms.empty": "No messages stored",
 	"network.modem.sms.emptyHint": "This SIM is holding nothing the modem can read.",
@@ -1735,9 +1804,23 @@
 	"network.view.hotspotClientRate": "{rate} Mbps",
 	"network.view.hotspotClientSignal": "{dbm} dBm",
 	"network.view.hotspotClientsCapped": "Showing {shown} of {count}.",
-	"network.view.hotspotClientsMany": "{count} devices connected",
+	"network.view.hotspotClients": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} device connected",
+				"countPlural=other": "{count} devices connected",
+				"countPlural=*": "{count} devices connected"
+			}
+		}
+	],
 	"network.view.hotspotClientsNone": "No devices connected",
-	"network.view.hotspotClientsOne": "{count} device connected",
 	"network.view.hotspotNoBond": "Hotspot can't be bonded",
 	"network.view.hotspotOff": "Hotspot is off",
 	"network.view.hotspotOffHint": "Share this device's connection over Wi-Fi.",
@@ -1850,7 +1933,7 @@
 	"network.netifSave.error.generic": "The device refused the change, so nothing was saved.",
 	"network.sharing.title": "Internet Sharing",
 	"network.sharing.headline.activeTitle": "Sharing is active",
-	"network.sharing.headline.activeBody": "{usable} of {total} uplinks can carry client traffic.",
+	"network.sharing.headline.activeBody": "Uplinks available for client traffic: {usable} of {total}.",
 	"network.sharing.uplinksHeading": "Uplink health",
 	"network.sharing.state.up": "Up",
 	"network.sharing.state.degraded": "Degraded",
@@ -1911,11 +1994,39 @@
 	"network.sharing.diag.reason.foreignTable": "The device image's own firewall table has changed.",
 	"network.sharing.diagnostics.disclosure": "Diagnostics",
 	"network.sharing.diagnostics.clear": "Nothing to review",
-	"network.sharing.diagnostics.findingsOne": "{count} finding to review",
-	"network.sharing.diagnostics.findingsMany": "{count} findings to review",
+	"network.sharing.diagnostics.findings": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} finding to review",
+				"countPlural=other": "{count} findings to review",
+				"countPlural=*": "{count} findings to review"
+			}
+		}
+	],
 	"network.sharing.dnsNote": "Known limitation: name lookups from connected devices follow this device's default route, so they may not use the uplink their traffic is sent over.",
-	"network.view.notBondedMany": "{count} links aren't bonded — see below for why",
-	"network.view.notBondedOne": "1 link isn't bonded — see below for why",
+	"network.view.notBonded": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} link isn't bonded — see below for why",
+				"countPlural=other": "{count} links aren't bonded — see below for why",
+				"countPlural=*": "{count} links aren't bonded — see below for why"
+			}
+		}
+	],
 	"network.view.off": "Off",
 	"network.view.on": "On",
 	"network.view.refreshing": "Refreshing",
@@ -2174,7 +2285,22 @@
 	"settings.deviceStats.cpuFreqGovernorHint": "The kernel policy choosing this group's clock. CeraLive pins performance for encode latency.",
 	"settings.deviceStats.cpuLoad": "CPU Load",
 	"settings.deviceStats.cpuLoadHeavy": "Heavy",
-	"settings.deviceStats.cpuLoadHint": "Share of total CPU capacity — the 1-minute load average across {cores} cores.",
+	"settings.deviceStats.cpuLoadHint": [
+		{
+			"declarations": [
+				"input cores",
+				"local coresPlural = cores: plural"
+			],
+			"selectors": [
+				"coresPlural"
+			],
+			"match": {
+				"coresPlural=one": "Share of total CPU capacity — the 1-minute load average across {cores} core.",
+				"coresPlural=other": "Share of total CPU capacity — the 1-minute load average across {cores} cores.",
+				"coresPlural=*": "Share of total CPU capacity — the 1-minute load average across {cores} cores."
+			}
+		}
+	],
 	"settings.deviceStats.cpuLoadHintNoCores": "1-minute load average. This device did not report its core count, so it cannot be shown as a share of capacity.",
 	"settings.deviceStats.cpuLoadLight": "Light",
 	"settings.deviceStats.cpuLoadModerate": "Moderate",

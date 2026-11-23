@@ -190,7 +190,22 @@
 	"devtools.domComplete": "DOM vollständig",
 	"devtools.domContent": "DOM-Inhalt",
 	"devtools.downlink": "Downlink",
-	"devtools.downloadZip": "ZIP Herunterladen ({count} Dateien)",
+	"devtools.downloadZip": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "ZIP Herunterladen ({count} Datei)",
+				"countPlural=other": "ZIP Herunterladen ({count} Dateien)",
+				"countPlural=*": "ZIP Herunterladen ({count} Dateien)"
+			}
+		}
+	],
 	"devtools.downloading": "Herunterladen",
 	"devtools.enabled": "Aktiviert",
 	"devtools.enhancedTiming": "Verbessertes Timing: Inhalt vollständig gerendert vor Erfassung",
@@ -562,7 +577,6 @@
 	"live.ingest.idleHint": "Fügen Sie in Netzwerk Mobilfunk-, WLAN- oder Ethernet-Links hinzu, um die Bündelung zu starten. Ingest-Telemetrie erscheint hier, sobald der Stream läuft.",
 	"live.ingest.idleTitle": "Noch keine gebündelten Links",
 	"live.ingest.link": "Verbindung",
-	"live.ingest.links": "Verbindungen",
 	"live.ingest.linkCount": [
 		{
 			"declarations": [
@@ -579,28 +593,11 @@
 			}
 		}
 	],
-	"live.ingest.linksReadyCount": [
-		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
-			"match": {
-				"countPlural=one": "{count} Link bereit zum Bündeln",
-				"countPlural=other": "{count} Links bereit zum Bündeln",
-				"countPlural=*": "{count} Links bereit zum Bündeln"
-			}
-		}
-	],
 	"live.ingest.linksReadyHint": "Bündelungs-Telemetrie erscheint, sobald der Stream läuft.",
 	"live.ingest.linksReadyTitle": "Links bereit",
 	"live.ingest.nak": "NAK",
 	"live.ingest.peak": "Spitze",
 	"live.ingest.rtt": "RTT",
-	"live.ingest.samples": "Messungen",
 	"live.ingest.sampleCount": [
 		{
 			"declarations": [
@@ -876,11 +873,24 @@
 	"live.source.label": "Quelle",
 	"live.source.linksDownStreamingBody": "Es können gerade keine Daten gesendet werden. Der Stream wird automatisch fortgesetzt, sobald eine Verbindung zurückkehrt.",
 	"live.source.linksDownStreamingTitle": "Alle gebündelten Verbindungen ausgefallen",
-	"live.source.lostBannerBodyMany": "Diese Geräte sind nicht mehr verbunden: {names}. Schließe sie wieder an, um sie erneut als Quellen zu nutzen — jede andere Quelle in dieser Liste ist unberührt.",
-	"live.source.lostBannerBodyOne": "{name} ist nicht mehr verbunden. Schließe es wieder an, um es erneut als Quelle zu nutzen — jede andere Quelle in dieser Liste ist unberührt.",
+	"live.source.lostBannerBody": "Getrennt: {names}. Erneut anschließen, um sie wieder als Quellen zu nutzen. Alle anderen Quellen in dieser Liste sind unberührt.",
 	"live.source.lostBannerRemembered": "Es wird noch angezeigt, weil es das Gerät deines letzten Streams ist.",
-	"live.source.lostBannerTitleMany": "{count} Geräte getrennt",
-	"live.source.lostBannerTitleOne": "{name} getrennt",
+	"live.source.lostBannerTitle": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} Gerät getrennt",
+				"countPlural=other": "{count} Geräte getrennt",
+				"countPlural=*": "{count} Geräte getrennt"
+			}
+		}
+	],
 	"live.source.lostBody": "Schließen Sie das Gerät wieder an, um das Streaming von dieser Quelle fortzusetzen.",
 	"live.source.lostStreamingBody": "Die gestreamte Quelle ging verloren. Schließe sie wieder an oder wechsle die Quelle, um den Stream aufrechtzuerhalten.",
 	"live.source.lostStreamingTitle": "Live-Quelle getrennt",
@@ -1094,8 +1104,22 @@
 	"network.collision.policyRouteTitle": "Verbindungs-Routing erfordert Aufmerksamkeit",
 	"network.collision.sameSubnetBody": "Zwei oder mehr Verbindungen teilen sich ein identisches Subnetz. Das ist zu erwarten — das Gerät routet jede Verbindung unabhängig, sodass das Bonding weiterhin normal funktioniert.",
 	"network.collision.sameSubnetTitle": "Gemeinsames Subnetz über Verbindungen",
-	"network.unclaimedAdapters.titleOne": "Adapter erkannt – kein Treiber in diesem Kernel",
-	"network.unclaimedAdapters.titleMany": "{count} Adapter erkannt – kein Treiber in diesem Kernel",
+	"network.unclaimedAdapters.title": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} Adapter erkannt – kein Treiber in diesem Kernel",
+				"countPlural=other": "{count} Adapter erkannt – kein Treiber in diesem Kernel",
+				"countPlural=*": "{count} Adapter erkannt – kein Treiber in diesem Kernel"
+			}
+		}
+	],
 	"network.unclaimedAdapters.body": "Das Gerät ist am Bus und meldet seine Kennung, aber kein Kernel-Treiber hat es übernommen – nutzbar ist es damit noch nicht. Meist fehlt ein Firmware-Paket oder ein neuerer Kernel.",
 	"network.unclaimedAdapters.kind.wifi": "WLAN-Adapter",
 	"network.unclaimedAdapters.kind.bluetooth": "Bluetooth-Adapter",
@@ -1379,7 +1403,22 @@
 	"network.modem.simEvidence.simSlotObjectPath": "Das Modem hat einen belegten SIM-Steckplatz benannt, es wurde also eine Karte erkannt.",
 	"network.modem.simEvidence.stateFailedReason": "Das Modem meldet, dass sein SIM-Steckplatz leer ist.",
 	"network.modem.simEvidence.vendorCodeUnclaimed": "Der eigene Statuscode des Geräts sagt dazu nichts.",
-	"network.modem.simUnlock.attemptsRemaining": "Falsche PIN. {count} Versuche übrig.",
+	"network.modem.simUnlock.attemptsRemaining": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "Falsche PIN. {count} Versuch übrig.",
+				"countPlural=other": "Falsche PIN. {count} Versuche übrig.",
+				"countPlural=*": "Falsche PIN. {count} Versuche übrig."
+			}
+		}
+	],
 	"network.modem.simUnlock.back": "Zurück zu den Modem-Einstellungen",
 	"network.modem.simUnlock.description": "Diese SIM-Karte ist gesperrt. Geben Sie die PIN ein, um das Modem zu entsperren.",
 	"network.modem.simUnlock.error": "SIM konnte nicht entsperrt werden. Bitte erneut versuchen.",
@@ -1387,7 +1426,22 @@
 	"network.modem.simUnlock.newPinLabel": "Neue SIM-PIN",
 	"network.modem.simUnlock.newPinPlaceholder": "Neue PIN wählen",
 	"network.modem.simUnlock.pin2AttemptsLabel": "Verbleibende PIN2-Versuche",
-	"network.modem.simUnlock.pin2AttemptsRemaining": "Falsche PIN2. Noch {count} Versuche.",
+	"network.modem.simUnlock.pin2AttemptsRemaining": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "Falsche PIN2. Noch {count} Versuch.",
+				"countPlural=other": "Falsche PIN2. Noch {count} Versuche.",
+				"countPlural=*": "Falsche PIN2. Noch {count} Versuche."
+			}
+		}
+	],
 	"network.modem.simUnlock.pin2Description": "Die PIN2 ist ein anderer Code als die SIM-PIN. Sie schützt die Liste fester Rufnummern und die Gesprächskosten-Einstellungen auf dieser SIM.",
 	"network.modem.simUnlock.pin2Label": "SIM-PIN2",
 	"network.modem.simUnlock.pin2Placeholder": "PIN2 eingeben",
@@ -1418,7 +1472,22 @@
 	"network.modem.simUnlock.wrongPin2": "Falsche PIN2. Bitte erneut versuchen.",
 	"network.modem.simUnlock.wrongPuk": "Falscher PUK. Bitte erneut versuchen.",
 	"network.modem.sms.capped": "Angezeigt werden die {count} neuesten auf dieser SIM gespeicherten Nachrichten.",
-	"network.modem.sms.countLabel": "{count} Nachrichten gespeichert",
+	"network.modem.sms.countLabel": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} Nachricht gespeichert",
+				"countPlural=other": "{count} Nachrichten gespeichert",
+				"countPlural=*": "{count} Nachrichten gespeichert"
+			}
+		}
+	],
 	"network.modem.sms.description": "Auf dieser SIM gespeichert. Nur lesbar.",
 	"network.modem.sms.empty": "Keine Nachrichten gespeichert",
 	"network.modem.sms.emptyHint": "Auf dieser SIM liegt nichts, was das Modem lesen kann.",
@@ -1735,9 +1804,23 @@
 	"network.view.hotspotClientRate": "{rate} Mbit/s",
 	"network.view.hotspotClientSignal": "{dbm} dBm",
 	"network.view.hotspotClientsCapped": "{shown} von {count} werden angezeigt.",
-	"network.view.hotspotClientsMany": "{count} Geräte verbunden",
+	"network.view.hotspotClients": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} Gerät verbunden",
+				"countPlural=other": "{count} Geräte verbunden",
+				"countPlural=*": "{count} Geräte verbunden"
+			}
+		}
+	],
 	"network.view.hotspotClientsNone": "Keine Geräte verbunden",
-	"network.view.hotspotClientsOne": "{count} Gerät verbunden",
 	"network.view.hotspotNoBond": "Hotspot kann nicht gebündelt werden",
 	"network.view.hotspotOff": "Hotspot ist aus",
 	"network.view.hotspotOffHint": "Teilen Sie die Verbindung dieses Geräts über WLAN.",
@@ -1850,7 +1933,7 @@
 	"network.netifSave.error.generic": "Das Gerät hat die Änderung abgelehnt, es wurde nichts gespeichert.",
 	"network.sharing.title": "Internetfreigabe",
 	"network.sharing.headline.activeTitle": "Freigabe aktiv",
-	"network.sharing.headline.activeBody": "{usable} von {total} Uplinks können Client-Datenverkehr übernehmen.",
+	"network.sharing.headline.activeBody": "Verfügbare Uplinks für Client-Datenverkehr: {usable} von {total}.",
 	"network.sharing.uplinksHeading": "Zustand der Uplinks",
 	"network.sharing.state.up": "Aktiv",
 	"network.sharing.state.degraded": "Beeinträchtigt",
@@ -1911,11 +1994,39 @@
 	"network.sharing.diag.reason.foreignTable": "Die firmeneigene Firewall-Tabelle des Geräte-Images hat sich geändert.",
 	"network.sharing.diagnostics.disclosure": "Diagnose",
 	"network.sharing.diagnostics.clear": "Nichts zu prüfen",
-	"network.sharing.diagnostics.findingsOne": "{count} Befund zu prüfen",
-	"network.sharing.diagnostics.findingsMany": "{count} Befunde zu prüfen",
+	"network.sharing.diagnostics.findings": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} Befund zu prüfen",
+				"countPlural=other": "{count} Befunde zu prüfen",
+				"countPlural=*": "{count} Befunde zu prüfen"
+			}
+		}
+	],
 	"network.sharing.dnsNote": "Bekannte Einschränkung: Namensauflösungen verbundener Geräte folgen der Standardroute dieses Geräts und nutzen daher womöglich nicht den Uplink, über den ihr Verkehr läuft.",
-	"network.view.notBondedMany": "{count} Verbindungen sind nicht gebündelt — Grund siehe unten",
-	"network.view.notBondedOne": "1 Verbindung ist nicht gebündelt — Grund siehe unten",
+	"network.view.notBonded": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} Verbindung ist nicht gebündelt — Grund siehe unten",
+				"countPlural=other": "{count} Verbindungen sind nicht gebündelt — Grund siehe unten",
+				"countPlural=*": "{count} Verbindungen sind nicht gebündelt — Grund siehe unten"
+			}
+		}
+	],
 	"network.view.off": "Aus",
 	"network.view.on": "An",
 	"network.view.refreshing": "Aktualisierung",
@@ -2174,7 +2285,22 @@
 	"settings.deviceStats.cpuFreqGovernorHint": "Die Kernel-Policy, die den Takt dieser Gruppe wählt. CeraLive fixiert performance für die Encode-Latenz.",
 	"settings.deviceStats.cpuLoad": "CPU-Last",
 	"settings.deviceStats.cpuLoadHeavy": "Hoch",
-	"settings.deviceStats.cpuLoadHint": "Anteil der gesamten CPU-Kapazität — der 1-Minuten-Lastdurchschnitt über {cores} Kerne.",
+	"settings.deviceStats.cpuLoadHint": [
+		{
+			"declarations": [
+				"input cores",
+				"local coresPlural = cores: plural"
+			],
+			"selectors": [
+				"coresPlural"
+			],
+			"match": {
+				"coresPlural=one": "Anteil der gesamten CPU-Kapazität — der 1-Minuten-Lastdurchschnitt über {cores} Kern.",
+				"coresPlural=other": "Anteil der gesamten CPU-Kapazität — der 1-Minuten-Lastdurchschnitt über {cores} Kerne.",
+				"coresPlural=*": "Anteil der gesamten CPU-Kapazität — der 1-Minuten-Lastdurchschnitt über {cores} Kerne."
+			}
+		}
+	],
 	"settings.deviceStats.cpuLoadHintNoCores": "1-Minuten-Lastdurchschnitt. Dieses Gerät hat seine Kernanzahl nicht gemeldet, daher kann kein Kapazitätsanteil angezeigt werden.",
 	"settings.deviceStats.cpuLoadLight": "Niedrig",
 	"settings.deviceStats.cpuLoadModerate": "Mittel",

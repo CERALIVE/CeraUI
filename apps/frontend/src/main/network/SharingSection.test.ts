@@ -9,6 +9,7 @@
  * diagnostic by its own backend contract.
  */
 
+import { setLocale } from "@ceraui/i18n/svelte";
 import type {
 	NetifEntry,
 	NetifMessage,
@@ -181,6 +182,204 @@ describe("SharingSection — honest bands", () => {
 		expect(container.querySelector('[data-slot="skeleton"]')).toBeNull();
 		expect(container.querySelector('[role="progressbar"]')).toBeNull();
 	});
+});
+
+it.each([
+	["en", 1, "1 device connected"],
+	["ar", 2, "2 جهازان متصلان"],
+] as const)(
+	"inflects the %s client-zone count for %i stations",
+	(locale, count, expected) => {
+		setLocale(locale);
+		try {
+			const { getByTestId } = mount({ hotspotInterfaces: [hotspot(count)] });
+			expect(
+				getByTestId("sharing-zone-hotspot-clients").textContent?.trim(),
+			).toBe(expected);
+		} finally {
+			setLocale("en");
+		}
+	},
+);
+
+describe.each([
+	[
+		"en",
+		"Uplinks available for client traffic: 1 of 1.",
+		"Uplinks available for client traffic: 1 of 2.",
+		"Uplinks available for client traffic: 2 of 2.",
+	],
+	[
+		"de",
+		"Verfügbare Uplinks für Client-Datenverkehr: 1 von 1.",
+		"Verfügbare Uplinks für Client-Datenverkehr: 1 von 2.",
+		"Verfügbare Uplinks für Client-Datenverkehr: 2 von 2.",
+	],
+	[
+		"es",
+		"Enlaces disponibles para el tráfico de los clientes: 1 de 1.",
+		"Enlaces disponibles para el tráfico de los clientes: 1 de 2.",
+		"Enlaces disponibles para el tráfico de los clientes: 2 de 2.",
+	],
+	[
+		"fr",
+		"Liaisons disponibles pour le trafic des clients : 1 sur 1.",
+		"Liaisons disponibles pour le trafic des clients : 1 sur 2.",
+		"Liaisons disponibles pour le trafic des clients : 2 sur 2.",
+	],
+	[
+		"ar",
+		"الوصلات الصاعدة المتاحة لحركة الأجهزة المتصلة: 1 من 1.",
+		"الوصلات الصاعدة المتاحة لحركة الأجهزة المتصلة: 1 من 2.",
+		"الوصلات الصاعدة المتاحة لحركة الأجهزة المتصلة: 2 من 2.",
+	],
+	[
+		"hi",
+		"क्लाइंट ट्रैफ़िक के लिए उपलब्ध अपलिंक: 1 में से 1।",
+		"क्लाइंट ट्रैफ़िक के लिए उपलब्ध अपलिंक: 2 में से 1।",
+		"क्लाइंट ट्रैफ़िक के लिए उपलब्ध अपलिंक: 2 में से 2।",
+	],
+	[
+		"pt-BR",
+		"Enlaces disponíveis para o tráfego dos clientes: 1 de 1.",
+		"Enlaces disponíveis para o tráfego dos clientes: 1 de 2.",
+		"Enlaces disponíveis para o tráfego dos clientes: 2 de 2.",
+	],
+] as const)(
+	"SharingSection active headline in %s",
+	(locale, allOne, mixed, allTwo) => {
+		it.each([
+			["1 of 1", uplinks({ iface: "wwan0" }), allOne],
+			[
+				"1 of 2",
+				uplinks(
+					{ iface: "wwan0" },
+					{ iface: "wwan1", state: "down", weight: 0 },
+				),
+				mixed,
+			],
+			["2 of 2", uplinks({ iface: "wwan0" }, { iface: "wwan1" }), allTwo],
+		] as const)(
+			"reports %s uplinks available for client traffic",
+			(_ratio, roster, expected) => {
+				setLocale(locale);
+				try {
+					const { getByTestId } = mount({ uplinks: roster });
+					expect(
+						getByTestId("sharing-band-sharing-active").textContent,
+					).toContain(expected);
+				} finally {
+					setLocale("en");
+				}
+			},
+		);
+	},
+);
+
+describe("SharingSection diagnostics chip", () => {
+	const clean = { state: "ok" } as const;
+	const prePin = {
+		state: "degraded",
+		reason: "firewall_backend_unpinned",
+	} as const;
+	const steeringFinding = {
+		state: "degraded",
+		reason: "steering_rule_shadows_source_route",
+	} as const;
+	const degradedPriority = uplinkShaperStatusSchema.parse({
+		state: "shaper_unavailable",
+		reason: "foreign_qdisc",
+		priorityDegraded: true,
+	});
+	const backend = {
+		state: "degraded",
+		checkedAt: NOW,
+		firewallBackend: clean,
+		steeringRules: clean,
+		sharedNat: clean,
+		foreignTables: clean,
+	};
+
+	it.each([
+		{
+			scenario: "one steering finding",
+			locale: "en",
+			count: 1,
+			tone: "warning",
+			label: "1 finding to review",
+			props: {
+				diag: sharingDiagSchema.parse({
+					...backend,
+					steeringRules: steeringFinding,
+				}),
+			},
+		},
+		{
+			scenario: "degraded priority and one steering finding",
+			locale: "ar",
+			count: 2,
+			tone: "warning",
+			label: "2 نتيجتان تستدعيان المراجعة",
+			props: {
+				diag: sharingDiagSchema.parse({
+					...backend,
+					steeringRules: steeringFinding,
+				}),
+				shaper: degradedPriority,
+			},
+		},
+		{
+			scenario: "one informational pre-pin finding",
+			locale: "en",
+			count: 1,
+			tone: "info",
+			label: "1 finding to review",
+			props: {
+				diag: sharingDiagSchema.parse({ ...backend, firewallBackend: prePin }),
+			},
+		},
+		{
+			scenario:
+				"a folded steering band, degraded priority, and two backend findings",
+			locale: "en",
+			count: 4,
+			tone: "warning",
+			label: "4 findings to review",
+			props: {
+				uplinks: uplinks(
+					{ iface: "wwan0", state: "down", weight: 0 },
+					{ iface: "wwan1", state: "down", weight: 0 },
+				),
+				steering: uplinkSteeringStatusSchema.parse({
+					state: "steering_unavailable",
+					reason: "mark_collision",
+				}),
+				shaper: degradedPriority,
+				diag: sharingDiagSchema.parse({
+					...backend,
+					firewallBackend: prePin,
+					steeringRules: steeringFinding,
+				}),
+			},
+		},
+	])(
+		"shows the $locale count for $scenario",
+		({ locale, count, tone, label, props }) => {
+			setLocale(locale);
+			try {
+				const { getByTestId } = mount(props);
+				const chip = getByTestId("sharing-diagnostics-chip");
+				expect(foldedUnder(chip)).toBeUndefined();
+				expect(getByTestId("sharing-diagnostics").dataset.findings).toBe(
+					String(count),
+				);
+				expect(chip.dataset.statusBadge).toBe(tone);
+				expect(chip.textContent?.trim()).toBe(label);
+			} finally {
+				setLocale("en");
+			}
+		},
+	);
 });
 
 describe("SharingSection — per-uplink rows", () => {

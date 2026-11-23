@@ -159,7 +159,14 @@
 	"devtools.domComplete": "DOM Complete",
 	"devtools.domContent": "DOM Content",
 	"devtools.downlink": "Downlink",
-	"devtools.downloadZip": "Download ZIP (42 files)",
+	"devtools.downloadZip": {
+		"0": "Download ZIP (0 files)",
+		"1": "Download ZIP (1 file)",
+		"2": "Download ZIP (2 files)",
+		"5": "Download ZIP (5 files)",
+		"11": "Download ZIP (11 files)",
+		"100": "Download ZIP (100 files)"
+	},
 	"devtools.downloading": "Downloading",
 	"devtools.enabled": "Enabled",
 	"devtools.enhancedTiming": "Enhanced timing: content fully rendered before capture",
@@ -499,7 +506,6 @@
 	"live.ingest.idleHint": "Add cellular, Wi-Fi, or Ethernet links in Network to start bonding. Ingest telemetry appears here once the stream is live.",
 	"live.ingest.idleTitle": "No bonded links yet",
 	"live.ingest.link": "Link",
-	"live.ingest.links": "Links",
 	"live.ingest.linkCount": {
 		"0": "0 links",
 		"1": "1 link",
@@ -508,20 +514,11 @@
 		"11": "11 links",
 		"100": "100 links"
 	},
-	"live.ingest.linksReadyCount": {
-		"0": "0 links ready to bond",
-		"1": "1 link ready to bond",
-		"2": "2 links ready to bond",
-		"5": "5 links ready to bond",
-		"11": "11 links ready to bond",
-		"100": "100 links ready to bond"
-	},
 	"live.ingest.linksReadyHint": "Bonding telemetry appears when live.",
 	"live.ingest.linksReadyTitle": "Links ready",
 	"live.ingest.nak": "NAK",
 	"live.ingest.peak": "Peak",
 	"live.ingest.rtt": "RTT",
-	"live.ingest.samples": "Samples",
 	"live.ingest.sampleCount": {
 		"0": "0 samples",
 		"1": "1 sample",
@@ -735,11 +732,16 @@
 	"live.source.label": "Source",
 	"live.source.linksDownStreamingBody": "No data can be sent right now. The stream resumes automatically when a link recovers.",
 	"live.source.linksDownStreamingTitle": "All bonded links down",
-	"live.source.lostBannerBodyMany": "These devices are no longer connected: <names>. Reconnect them to use them as sources again — every other source in this list is unaffected.",
-	"live.source.lostBannerBodyOne": "<name> is no longer connected. Reconnect it to use it as a source again — every other source in this list is unaffected.",
+	"live.source.lostBannerBody": "Disconnected: <names>. Reconnect to use as sources again. Every other source in this list is unaffected.",
 	"live.source.lostBannerRemembered": "It's still listed because it's the device your last stream used.",
-	"live.source.lostBannerTitleMany": "42 devices disconnected",
-	"live.source.lostBannerTitleOne": "<name> disconnected",
+	"live.source.lostBannerTitle": {
+		"0": "0 devices disconnected",
+		"1": "1 device disconnected",
+		"2": "2 devices disconnected",
+		"5": "5 devices disconnected",
+		"11": "11 devices disconnected",
+		"100": "100 devices disconnected"
+	},
 	"live.source.lostBody": "Reconnect the device to resume streaming from this source.",
 	"live.source.lostStreamingBody": "The source you're streaming was lost. Reconnect it, or switch to another source to keep your stream alive.",
 	"live.source.lostStreamingTitle": "Live source disconnected",
@@ -885,7 +887,14 @@
 	"network.modem.scanForNetworks": "Scan for networks",
 	"network.modem.scanning": "Scanning",
 	"network.modem.scanningForNetworks": "Searching for operators…",
-	"network.modem.simUnlock.attemptsRemaining": "Incorrect PIN. 42 attempts remaining.",
+	"network.modem.simUnlock.attemptsRemaining": {
+		"0": "Incorrect PIN. 0 attempts remaining.",
+		"1": "Incorrect PIN. 1 attempt remaining.",
+		"2": "Incorrect PIN. 2 attempts remaining.",
+		"5": "Incorrect PIN. 5 attempts remaining.",
+		"11": "Incorrect PIN. 11 attempts remaining.",
+		"100": "Incorrect PIN. 100 attempts remaining."
+	},
 	"network.modem.simUnlock.description": "This SIM card is locked. Enter its PIN to unlock the modem.",
 	"network.modem.simUnlock.error": "Could not unlock the SIM. Please try again.",
 	"network.modem.simUnlock.lengthHint": "PIN must be 42 to 7 digits",
@@ -1177,7 +1186,14 @@
 	"settings.deviceStats.cpuFreqHint": "Current clock against the hardware ceiling, per cpufreq policy. A policy name is a sysfs directory, not a core cluster.",
 	"settings.deviceStats.cpuLoad": "CPU Load",
 	"settings.deviceStats.cpuLoadHeavy": "Heavy",
-	"settings.deviceStats.cpuLoadHint": "Share of total CPU capacity — the 1-minute load average across 42 cores.",
+	"settings.deviceStats.cpuLoadHint": {
+		"0": "Share of total CPU capacity — the 1-minute load average across 0 cores.",
+		"1": "Share of total CPU capacity — the 1-minute load average across 1 core.",
+		"2": "Share of total CPU capacity — the 1-minute load average across 2 cores.",
+		"5": "Share of total CPU capacity — the 1-minute load average across 5 cores.",
+		"11": "Share of total CPU capacity — the 1-minute load average across 11 cores.",
+		"100": "Share of total CPU capacity — the 1-minute load average across 100 cores."
+	},
 	"settings.deviceStats.cpuLoadHintNoCores": "1-minute load average. This device did not report its core count, so it cannot be shown as a share of capacity.",
 	"settings.deviceStats.cpuLoadLight": "Light",
 	"settings.deviceStats.cpuLoadModerate": "Moderate",
@@ -1541,5 +1557,54 @@
 	"wifiSelector.validation.passwordMinLength": "Minimum 8 characters",
 	"wifiStatus.connected": "Connected",
 	"wifiStatus.disconnected": "Disconnected",
-	"wifiStatus.hotspot": "Hotspot"
+	"wifiStatus.hotspot": "Hotspot",
+	"network.modem.simUnlock.pin2AttemptsRemaining": {
+		"0": "Incorrect PIN2. 0 attempts remaining.",
+		"1": "Incorrect PIN2. 1 attempt remaining.",
+		"2": "Incorrect PIN2. 2 attempts remaining.",
+		"5": "Incorrect PIN2. 5 attempts remaining.",
+		"11": "Incorrect PIN2. 11 attempts remaining.",
+		"100": "Incorrect PIN2. 100 attempts remaining."
+	},
+	"network.modem.sms.countLabel": {
+		"0": "0 messages stored",
+		"1": "1 message stored",
+		"2": "2 messages stored",
+		"5": "5 messages stored",
+		"11": "11 messages stored",
+		"100": "100 messages stored"
+	},
+	"network.sharing.headline.activeBody": "Uplinks available for client traffic: 1 of 2.",
+	"network.unclaimedAdapters.title": {
+		"0": "0 adapters detected — no driver on this kernel",
+		"1": "1 adapter detected — no driver on this kernel",
+		"2": "2 adapters detected — no driver on this kernel",
+		"5": "5 adapters detected — no driver on this kernel",
+		"11": "11 adapters detected — no driver on this kernel",
+		"100": "100 adapters detected — no driver on this kernel"
+	},
+	"network.view.hotspotClients": {
+		"0": "0 devices connected",
+		"1": "1 device connected",
+		"2": "2 devices connected",
+		"5": "5 devices connected",
+		"11": "11 devices connected",
+		"100": "100 devices connected"
+	},
+	"network.sharing.diagnostics.findings": {
+		"0": "0 findings to review",
+		"1": "1 finding to review",
+		"2": "2 findings to review",
+		"5": "5 findings to review",
+		"11": "11 findings to review",
+		"100": "100 findings to review"
+	},
+	"network.view.notBonded": {
+		"0": "0 links aren't bonded — see below for why",
+		"1": "1 link isn't bonded — see below for why",
+		"2": "2 links aren't bonded — see below for why",
+		"5": "5 links aren't bonded — see below for why",
+		"11": "11 links aren't bonded — see below for why",
+		"100": "100 links aren't bonded — see below for why"
+	}
 }

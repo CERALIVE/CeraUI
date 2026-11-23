@@ -48,11 +48,7 @@ const rows = $derived(adapters ?? []);
 		<Info class="text-status-info mt-0.5 size-5 shrink-0" aria-hidden="true" />
 		<div class="min-w-0 space-y-1">
 			<p class="text-sm font-semibold tracking-tight" data-testid="unclaimed-adapters-title">
-				{#if rows.length === 1}
-					{m["network.unclaimedAdapters.titleOne"]()}
-				{:else}
-					{m["network.unclaimedAdapters.titleMany"]({ count: rows.length })}
-				{/if}
+				{m["network.unclaimedAdapters.title"]({ count: rows.length })}
 			</p>
 			<p class="text-muted-foreground text-sm">
 				{m["network.unclaimedAdapters.body"]()}
