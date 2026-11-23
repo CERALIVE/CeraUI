@@ -57,13 +57,11 @@ import { ChevronRight, Lock } from '@lucide/svelte';
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
-import { deriveEffectiveSource } from '$lib/streaming/effective-source';
 import {
-	deriveGoLiveReadiness,
 	type GateStatus,
 	READINESS_SOURCE_REASON,
 } from '$lib/streaming/go-live-readiness';
-import { pipelineAvailability } from '$lib/streaming/pipelineAvailability';
+import { idleStartGate } from '$lib/streaming/idle-start-gate';
 import type { ManagedIngestAccount } from '$lib/streaming/receiver-experience';
 import { isSectionLocked } from '$lib/streaming/streamingLockPolicy';
 
@@ -121,58 +119,15 @@ const {
 	onGoNetwork,
 }: Props = $props();
 
-// ── Derivations carried over VERBATIM from GoLiveCard (readiness wiring) ──────
-
-// Sole-camera auto-select (pinned): only when config.source is unset AND there is
-// EXACTLY one capture-origin source. The row never renders once config.source is
-// set, and NO config is written here — the id is folded into the Start payload.
-// The predicate lives in the shared pure module so SourceSection's audio-visibility
-// gate (C1) can never diverge from this readiness wiring.
-const effective = $derived(deriveEffectiveSource(config, sources));
-const soleCamera = $derived(effective.soleCamera);
-// The id the readiness + Start use: the explicit config.source, else the implicit
-// sole camera.
-const effectiveSourceId = $derived(effective.effectiveSourceId);
-const effectiveSourceEntry = $derived(
-	effectiveSourceId
-		? sources?.sources.find((source) => source.id === effectiveSourceId)
-		: undefined,
+const gate = $derived(
+	idleStartGate({ config, caps, sources, netif, isConnected, networkIngest, pipelines, relays, managedSlots }),
 );
-
-// Gateway verdict for the effective source's pipeline — consumed by the readiness
-// module (never re-derived there per the single-truth rule).
-const gatewayStatus = $derived(
-	pipelineAvailability(
-		effectiveSourceEntry
-			? pipelines?.[effectiveSourceEntry.pipelineId]
-			: undefined,
-		networkIngest,
-	),
-);
-
-// Feed the readiness a config whose `source` reflects the implicit sole camera so
-// the source gate evaluates ok BEFORE the operator presses Start — without any
-// config mutation.
-const readinessConfig = $derived(
-	soleCamera && config ? { ...config, source: soleCamera.id } : config,
-);
-
-const readiness = $derived(
-	deriveGoLiveReadiness({
-		config: readinessConfig,
-		caps,
-		sources,
-		netif,
-		isConnected,
-		gatewayStatus,
-		relays,
-		managedSlots,
-	}),
-);
+const { soleCamera, effectiveSourceId } = $derived(gate.effective);
+const readiness = $derived(gate.readiness);
 
 // Start gating reads the readiness verdict directly (engine gate included — it is
 // owned by the Start disabled reason + CapabilityTierBanner, not a row).
-const canStart = $derived(!readiness.blocking && optimismState !== 'starting');
+const canStart = $derived(gate.canStart && optimismState !== 'starting');
 const startDisabledReason = $derived(
 	optimismState === 'starting'
 		? m["live.starting"]()
@@ -189,7 +144,7 @@ function handleStartClick() {
 	// sole-camera id into the payload. When config.source is already set,
 	// soleCamera is undefined so `source` is undefined and the backend keeps the
 	// persisted selection.
-	onStart({ source: soleCamera?.id });
+	onStart({ source: gate.source });
 }
 
 // The dot's tone. `unchecked` is a hollow ring, so it reads as "not known yet"

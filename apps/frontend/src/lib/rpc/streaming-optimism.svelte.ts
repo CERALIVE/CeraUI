@@ -19,6 +19,7 @@
 import type { StartFailure } from "@ceraui/rpc/schemas";
 
 import { stopStreaming as directStopStreaming } from "$lib/helpers/SystemHelper";
+import { clearStartRetry } from "$lib/streaming/start-failure-presentation.svelte";
 import {
 	clearStartRecoveryUnknown,
 	noteStartRecoveryUnknown,
@@ -336,6 +337,7 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 	// A confirmed transition (`stopping`→`idle` or `starting`→`idle`, push OR
 	// pull) ends the matching watchdog; only the stop path owns the stuck banner.
 	function applyReconcile(isStreaming: boolean): void {
+		if (isStreaming) clearStartRetry();
 		const prev = store.state;
 		store = reconcileToAuthority(store, isStreaming);
 		if (prev !== store.state) lifetime += 1;
@@ -425,6 +427,7 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 		getFailure: () => store.failure,
 		getGeneration: () => store.generation,
 		transitionToStarting: () => {
+			clearStartRetry();
 			lifetime += 1;
 			markStreamIntent();
 			clearWatchdogTimer();

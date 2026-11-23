@@ -10,12 +10,12 @@
  * automatically; `retriable` stays the backend's verdict.
  */
 import { type MessageKey, m } from "@ceraui/i18n/svelte";
+import type { StartFailure } from "@ceraui/rpc/schemas";
 
-export interface StartFailureCopyInput {
-	readonly class: string;
-	readonly retriable: boolean;
-	readonly captureCause?: string;
-}
+type StartFailureCopyInput = Pick<
+	StartFailure,
+	"class" | "retriable" | "captureCause" | "phase" | "code"
+>;
 
 /** The retry-state suffix's key; two of the three send the operator to System Logs. */
 export function startFailureRetryKey(
@@ -45,26 +45,45 @@ export type StartFailureNextStep =
 	| "openSetup"
 	| "openNetwork";
 
-const ENGINE_CLASSES: ReadonlySet<string> = new Set([
-	"engine_internal",
-	"engine_unavailable",
-	"start_timeout",
-]);
-
 /** Whether a failure belongs to the engine group that escalates to Restart box. */
 export function isEngineStartFailure(failure: StartFailureCopyInput): boolean {
-	return ENGINE_CLASSES.has(failure.class);
+	return (
+		failure.class === "engine_internal" ||
+		failure.class === "engine_unavailable" ||
+		failure.class === "start_timeout"
+	);
 }
 
 export function startFailureNextStep(
 	failure: StartFailureCopyInput,
 	repeated = false,
+	admitted = true,
 ): StartFailureNextStep | undefined {
-	if (ENGINE_CLASSES.has(failure.class))
-		return repeated ? "restartBox" : "tryAgain";
-	if (failure.class === "start_invalid") return "openSetup";
-	if (failure.class === "mutation_blocked") return "openNetwork";
-	return undefined;
+	switch (failure.class) {
+		case "engine_unavailable":
+		case "start_timeout":
+			if (!admitted) return undefined;
+			if (repeated) return "restartBox";
+			return failure.phase === "connect" ||
+				(failure.class === "engine_unavailable" && failure.phase === "hello")
+				? "tryAgain"
+				: undefined;
+		case "engine_internal":
+			if (!admitted || failure.code === -32002) return undefined;
+			return repeated ? "restartBox" : "tryAgain";
+		case "start_invalid":
+			return "openSetup";
+		case "mutation_blocked":
+			return "openNetwork";
+		case "engine_restarting":
+		case "protocol_incompatible":
+		case "audio_source_unavailable":
+		case "modem_transition_active":
+		case "recovery_pending":
+		case "capture_source_unavailable":
+		case "update_in_progress":
+			return undefined;
+	}
 }
 
 const NEXT_STEP_SUFFIX: Partial<Record<StartFailureNextStep, MessageKey>> = {
@@ -94,13 +113,16 @@ function classReason(failure: StartFailureCopyInput): string {
 export function startFailureMessage(
 	failure: StartFailureCopyInput,
 	repeated = false,
+	admitted = true,
+	blockedReason?: string,
 ): string {
 	const reason = classReason(failure);
-	const step = startFailureNextStep(failure, repeated);
+	const step = startFailureNextStep(failure, repeated, admitted);
 	if (step !== undefined) {
-		// The reason already names the fix for these two; the button carries it.
 		const suffix = NEXT_STEP_SUFFIX[step];
 		return suffix === undefined ? reason : `${reason} ${m[suffix]()}`;
 	}
+	if (isEngineStartFailure(failure) && blockedReason)
+		return `${reason} ${blockedReason}`;
 	return `${reason} ${m[startFailureRetryKey(failure)]()}`;
 }

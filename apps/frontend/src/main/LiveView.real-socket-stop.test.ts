@@ -593,6 +593,33 @@ function deliverStartFailureNotice(attemptId: string, replay = false) {
 	});
 }
 
+function refuseStart(
+	attemptId: string,
+	phase: "connect" | "playing-wait" = "connect",
+) {
+	answer("streaming.start", {
+		success: false,
+		result: "failed",
+		attemptId,
+		failure: {
+			attemptId,
+			class: "start_timeout",
+			phase,
+			retriable: phase === "connect",
+		},
+	});
+}
+
+function refusalAction(): ((event: MouseEvent) => void) | undefined {
+	return vi.mocked(toast.error).mock.lastCall?.[1]?.action instanceof Function
+		? undefined
+		: vi.mocked(toast.error).mock.lastCall?.[1]?.action?.onClick;
+}
+
+function actionTap() {
+	return new MouseEvent("click", { cancelable: true });
+}
+
 describe("start refusal presentation across the socket", () => {
 	beforeEach(() => {
 		vi.mocked(toast.error).mockClear();
@@ -651,6 +678,105 @@ describe("start refusal presentation across the socket", () => {
 			"Background start failed: unpaired",
 			expect.anything(),
 		);
+	});
+
+	it("does not offer a retry for a timeout after the engine received Start", async () => {
+		const { container } = render(LiveView);
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		refuseStart("late-timeout", "playing-wait");
+		await settle();
+		expect(vi.mocked(toast.error).mock.lastCall?.[1]?.action).not.toMatchObject(
+			{
+				label: en.live.startFailure.action.tryAgain,
+			},
+		);
+		expect(sentCount("streaming.start")).toBe(1);
+	});
+
+	it("does not dismiss the refusal when an unresolved Stop blocks its retry", async () => {
+		const { container } = render(LiveView);
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		refuseStart("stop-pending-retry");
+		await settle();
+		const retry = refusalAction();
+		expect(retry).toBeTypeOf("function");
+		deliverStatus({ is_streaming: false, stream_lifecycle: "reconciling" });
+		await fireEvent.click(button(container, "Stop Stream"));
+		await settle();
+		const tap = actionTap();
+		retry?.(tap);
+		await settle();
+		expect(tap.defaultPrevented).toBe(true);
+		expect(sentCount("streaming.start")).toBe(1);
+		expect(sentCount("streaming.stop")).toBe(1);
+	});
+
+	it("rejects duplicate taps, taps during another Start, and an old refusal after a new one", async () => {
+		const { container } = render(LiveView);
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		refuseStart("double-tap-original");
+		await settle();
+		const retry = refusalAction();
+		expect(retry).toBeTypeOf("function");
+		retry?.(actionTap());
+		const second = actionTap();
+		retry?.(second);
+		await settle();
+		expect(second.defaultPrevented).toBe(true);
+		expect(sentCount("streaming.start")).toBe(2);
+		refuseStart("double-tap-next");
+		await settle();
+		const old = actionTap();
+		retry?.(old);
+		await settle();
+		expect(old.defaultPrevented).toBe(true);
+		expect(sentCount("streaming.start")).toBe(2);
+	});
+
+	it.each([119_999, 120_000])(
+		"uses monotonic elapsed time for the same-generation repeat at %d ms",
+		async (elapsed) => {
+			const clock = vi.spyOn(performance, "now").mockReturnValue(100);
+			try {
+				const { container } = render(LiveView);
+				await fireEvent.click(button(container, "Start Stream"));
+				await settle();
+				refuseStart(`clock-first-${elapsed}`);
+				await settle();
+				refusalAction()?.(actionTap());
+				await settle();
+				clock.mockReturnValue(100 + elapsed);
+				refuseStart(`clock-second-${elapsed}`);
+				await settle();
+				expect(vi.mocked(toast.error).mock.lastCall?.[1]?.action).toMatchObject(
+					{
+						label:
+							elapsed < 120_000
+								? en.live.startFailure.action.restartBox
+								: en.live.startFailure.action.tryAgain,
+					},
+				);
+			} finally {
+				clock.mockRestore();
+			}
+		},
+	);
+
+	it("does not persist the repeat when a running push wins before the reply", async () => {
+		const { container } = render(LiveView);
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		refuseStart("running-first");
+		await settle();
+		refusalAction()?.(actionTap());
+		await settle();
+		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+		refuseStart("running-late-reply");
+		await settle();
+		expect(vi.mocked(toast.error)).toHaveBeenCalledTimes(1);
 	});
 });
 
