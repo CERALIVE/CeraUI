@@ -8,8 +8,11 @@
     (at your option) any later version.
 */
 
+import { realpathSync } from "node:fs";
+import { basename } from "node:path";
 import { argMatch, ID_RE } from "../../helpers/run.ts";
 import { runIw } from "./regdomain.ts";
+import type { HybridQualificationFailure } from "./wifi-hybrid-target-diagnostics.ts";
 
 type CapabilityRunner = (command: string, args: string[]) => Promise<string>;
 
@@ -23,10 +26,17 @@ const LIMIT_RE = /#\{\s*([^}]+)\s*\}\s*<=\s*(\d+)/g;
 const TOTAL_RE = /\btotal\s*<=\s*(\d+)/i;
 const CHANNELS_RE = /#channels\s*<=\s*(\d+)/i;
 
-function combinationAllowsApSta(combination: string): boolean {
+function combinationAllowsApSta(
+	combination: string,
+	roles: Readonly<Record<string, number>> = { managed: 1, ap: 1 },
+): boolean {
 	const total = Number(TOTAL_RE.exec(combination)?.[1]);
 	const channels = Number(CHANNELS_RE.exec(combination)?.[1]);
-	if (!Number.isInteger(total) || total < 2) return false;
+	if (
+		!Number.isInteger(total) ||
+		total < Object.values(roles).reduce((sum, count) => sum + count, 0)
+	)
+		return false;
 	if (!Number.isInteger(channels) || channels < 1) return false;
 
 	let managedMentioned = false;
@@ -44,11 +54,44 @@ function combinationAllowsApSta(combination: string): boolean {
 		const requiresAp = names.has("ap");
 		managedMentioned ||= requiresManaged;
 		apMentioned ||= requiresAp;
-		const requiredFromGroup = Number(requiresManaged) + Number(requiresAp);
+		const requiredFromGroup = [...names].reduce(
+			(sum, name) => sum + (roles[name] ?? 0),
+			0,
+		);
 		if (requiredFromGroup > limit) return false;
 	}
 
-	return managedMentioned && apMentioned;
+	return (
+		managedMentioned &&
+		apMentioned &&
+		Object.keys(roles).every((role) =>
+			[...combination.matchAll(LIMIT_RE)].some((match) =>
+				(match[1] ?? "")
+					.toLowerCase()
+					.split(",")
+					.map((name) => name.trim())
+					.includes(role),
+			),
+		)
+	);
+}
+
+/** Keep alternatives intact: a P2P-GO alternative cannot lend an AP slots. */
+export function fittingApStaCombination(
+	output: string,
+	roles: Readonly<Record<string, number>>,
+	transitionalRoles?: Readonly<Record<string, number>>,
+): string | undefined {
+	const section = output.split(/valid interface combinations:/i)[1];
+	if (!section) return undefined;
+	return section
+		.split(/^\s*\*\s+(?=#\{)/m)
+		.find(
+			(entry) =>
+				combinationAllowsApSta(entry, roles) &&
+				(transitionalRoles === undefined ||
+					combinationAllowsApSta(entry, transitionalRoles)),
+		);
 }
 
 /**
@@ -129,4 +172,29 @@ export function setApStaCapabilityRunnerForTest(
 export function resetApStaCapabilityStateForTest(): void {
 	capabilityRunner = defaultRunner;
 	cachedPhySupport.clear();
+}
+
+/** Product qualification, separate from the driver's combinations and legality. */
+export function isQualifiedNmManagedHybrid(
+	ifname: string,
+	frequency?: number,
+	onFailure?: (reason: HybridQualificationFailure) => void,
+): boolean {
+	try {
+		const driver = basename(
+			realpathSync(`/sys/class/net/${argMatch(ID_RE, ifname)}/device/driver`),
+		);
+		// Lift the frequency clause only after the corresponding band is board-qualified.
+		const qualified =
+			driver === "mt7925e" &&
+			(frequency === undefined || (frequency >= 2400 && frequency < 2500));
+		if (!qualified)
+			onFailure?.(
+				driver === "mt7925e" ? "unqualified-band" : "radio-unqualified",
+			);
+		return qualified;
+	} catch {
+		onFailure?.("unclassified");
+		return false;
+	}
 }

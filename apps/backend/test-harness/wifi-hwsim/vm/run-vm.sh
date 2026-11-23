@@ -5,12 +5,14 @@ umask 077
 
 die() { echo "run-vm.sh: $*" >&2; exit 1; }
 usage() {
-	echo "Usage: $0 [--radios N] [--repo PATH] [--no-install] [--keep] -- COMMAND [ARG...]"
+	echo "Usage: $0 [--radios N] [--repo PATH [--ref REV]] [--no-install] [--keep] -- COMMAND [ARG...]"
 	echo "Requires TMPDIR outside /tmp and Git work trees. --keep holds SSH inspection for at most 1 hour."
 }
 
 radios=2
 repo=
+repo_ref=HEAD
+ref_given=0
 keep=0
 install_deps=1
 while (($#)); do
@@ -25,6 +27,11 @@ while (($#)); do
 		(($# >= 2)) || die "--repo needs a path"
 		repo=$(realpath -e "$2")
 		shift 2 ;;
+	--ref)
+		(($# >= 2)) || die "--ref needs a revision"
+		repo_ref=$2
+		ref_given=1
+		shift 2 ;;
 	--keep) keep=1; shift ;;
 	--no-install) install_deps=0; shift ;;
 	-h | --help) usage; exit 0 ;;
@@ -33,6 +40,7 @@ while (($#)); do
 	esac
 done
 (($#)) || { usage >&2; exit 2; }
+((ref_given == 0)) || [[ -n "$repo" ]] || die "--ref requires --repo"
 [[ -n "${TMPDIR:-}" ]] || die "set TMPDIR to a disk-backed directory outside /tmp"
 tmp=$(realpath -e "$TMPDIR")
 root=$(realpath -m "$tmp/hwsim-vm")
@@ -51,16 +59,23 @@ check_state_links() {
 	fi
 }
 check_state_links
+if [[ -n "$repo" ]]; then
+	repo=$(GIT_MASTER=1 git -C "$repo" rev-parse --show-toplevel)
+	repo_sha=$(GIT_MASTER=1 git -C "$repo" rev-parse --verify --end-of-options "$repo_ref^{commit}") ||
+		die "invalid repository revision: $repo_ref (no VM started)"
+	case "$1:${2:-}" in
+	bun:*.ts | bun:*.tsx | bun:*.js | bun:*.jsx | bun:*.mjs | bun:*.cjs | bun:*.mts | bun:*.cts)
+		[[ "$(GIT_MASTER=1 git -C "$repo" cat-file -t "$repo_sha:${2#./}" 2>/dev/null)" == blob ]] ||
+			die "repository command '$2' is absent from $repo_sha; export checks and product code from one compatible revision (no VM started)"
+		;;
+	esac
+	bun_path=$(readlink -f "$(command -v bun)")
+	[[ "$("$bun_path" --version)" == 1.4.5 ]] || die "--repo requires workstation Bun 1.4.5"
+fi
 for tool in qemu-system-x86_64 qemu-img xorriso ssh ssh-keygen scp curl sha512sum python3 timeout flock tar git find; do
 	command -v "$tool" >/dev/null || die "required executable missing: $tool"
 done
 [[ -r /dev/kvm && -w /dev/kvm ]] || die "/dev/kvm must be readable and writable"
-if [[ -n "$repo" ]]; then
-	repo=$(GIT_MASTER=1 git -C "$repo" rev-parse --show-toplevel)
-	repo_sha=$(GIT_MASTER=1 git -C "$repo" rev-parse HEAD)
-	bun_path=$(readlink -f "$(command -v bun)")
-	[[ "$("$bun_path" --version)" == 1.4.4 ]] || die "--repo requires workstation Bun 1.4.4"
-fi
 python3 -c 'import os, signal; assert hasattr(os, "pidfd_open") and hasattr(signal, "pidfd_send_signal"), "Python with Linux pidfd support required"'
 
 harness=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -192,8 +207,30 @@ run_dir=$(mktemp -d "$root/runs/run.XXXXXXXX")
 honor_cancel
 echo "run-vm.sh: run_dir=$run_dir"
 
-url=https://cloud.debian.org/images/cloud/bookworm/latest
-image_name=debian-12-generic-amd64.qcow2
+# Prepare every transfer before downloads or boot; repository mode uses only the selected revision.
+if [[ -n "$repo" ]]; then
+	run 60 env GIT_MASTER=1 git -C "$repo" archive --format=tar -o "$run_dir/harness.tar" \
+		"$repo_sha:apps/backend/test-harness/wifi-hwsim"
+	run 60 env GIT_MASTER=1 git -C "$repo" archive --format=tar -o "$run_dir/repo.tar" "$repo_sha"
+	run 60 cp "$bun_path" "$run_dir/bun"
+else
+	[[ -f "$harness/integration-test.sh" && -f "$harness/check-env.sh" && -f "$harness/run.sh" ]] ||
+		die "invalid harness directory: $harness (no VM started)"
+	run 60 tar -C "$harness" -cf "$run_dir/harness.tar" .
+fi
+cat >"$run_dir/command.sh" <<'COMMAND'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ -d /repo ]]; then cd /repo; else cd /harness; fi
+export CERATEST_CLIENT_IF="$(cat /run/hwsim-client)"
+export HWSIM_REPO=/repo
+COMMAND
+printf '%q ' "$@" >>"$run_dir/command.sh"
+printf '\n' >>"$run_dir/command.sh"
+echo "run-vm.sh: preboot packaging ready"
+
+url=https://cloud.debian.org/images/cloud/trixie/latest
+image_name=debian-13-generic-amd64.qcow2
 run 60 curl -q --fail --location --proto '=https' --proto-redir '=https' \
 	--connect-timeout 15 --max-time 55 "$url/SHA512SUMS" -o "$run_dir/SHA512SUMS"
 digest=$(awk -v name="$image_name" '$2 == name {print $1}' "$run_dir/SHA512SUMS")
@@ -234,7 +271,7 @@ users:
     ssh_authorized_keys:
       - $(<"$run_dir/id_ed25519.pub")
 package_update: true
-packages: [network-manager, wpasupplicant, hostapd, iw, iproute2, rfkill, git]
+packages: [network-manager, dnsmasq-base, wpasupplicant, hostapd, iw, iproute2, rfkill, git]
 EOF
 printf 'instance-id: %s\nlocal-hostname: hwsim\n' "$(basename "$run_dir")" >"$run_dir/meta-data"
 run 30 xorriso -as mkisofs -quiet -V cidata -o "$run_dir/seed.iso" \
@@ -280,20 +317,6 @@ run 610 ssh "${ssh_opts[@]}" root@127.0.0.1 \
 	'timeout -k 5 600 cloud-init status --wait --long' ||
 	die "cloud-init did not finish successfully within 600 seconds"
 
-run 60 tar -C "$harness" -cf "$run_dir/harness.tar" .
-if [[ -n "$repo" ]]; then
-	run 60 env GIT_MASTER=1 git -C "$repo" archive --format=tar -o "$run_dir/repo.tar" "$repo_sha"
-	run 60 cp "$bun_path" "$run_dir/bun"
-fi
-cat >"$run_dir/command.sh" <<'COMMAND'
-#!/usr/bin/env bash
-set -euo pipefail
-if [[ -d /repo ]]; then cd /repo; else cd /harness; fi
-export CERATEST_CLIENT_IF="$(cat /run/hwsim-client)"
-export HWSIM_REPO=/repo
-COMMAND
-printf '%q ' "$@" >>"$run_dir/command.sh"
-printf '\n' >>"$run_dir/command.sh"
 files=("$run_dir/harness.tar" "$run_dir/command.sh")
 [[ -z "$repo" ]] || files+=("$run_dir/repo.tar" "$run_dir/bun")
 run 180 scp -P "$port" "${ssh_opts[@]:2}" "${files[@]}" root@127.0.0.1:/root/
@@ -348,9 +371,7 @@ for ((attempt=0; attempt<20; attempt++)); do
 done
 grep -q AP-ENABLED /run/hwsim-hostapd.log || { cat /run/hwsim-hostapd.log >&2; exit 1; }
 # The AP supplies association only; static test addresses avoid needing DHCP.
-nmcli connection add type wifi ifname "$client" con-name CeraTest ssid CeraTest \
-	wifi-sec.key-mgmt wpa-psk wifi-sec.psk ceratest1234 \
-	ipv4.method manual ipv4.addresses 192.0.2.2/24 ipv6.method disabled
+HWSIM_REPO=/repo bash /harness/bootstrap-client.sh "$client"
 printf '%s\n' "$client" >/run/hwsim-client
 echo "run-vm.sh: AP CeraTest ready; client=$client"
 GUEST

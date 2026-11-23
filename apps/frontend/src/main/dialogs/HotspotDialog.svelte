@@ -54,6 +54,7 @@ import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import { copyToClipboard } from '$lib/helpers/clipboard';
 import { generateWifiQr, hotspotQrSecurity } from '$lib/helpers/NetworkHelper';
+import { classifyWifiMutation, wifiFailureReason } from '$lib/helpers/wifi-mode-outcome';
 import {
 	confirmOperation,
 	getOperationPhase,
@@ -65,14 +66,18 @@ import { rpc } from '$lib/rpc/client';
 import { hotspotIsActive, hotspotToggleConfirmed } from '$lib/rpc/os-toggle-predicates';
 import { getLinkEpoch } from '$lib/rpc/session-epoch.svelte';
 import { getWifiAdapterModeEntry } from '$lib/rpc/wifi-adapter-modes.svelte';
+import { withWifiConfigReceipt, withWifiStartReceipt } from '$lib/rpc/wifi-status-receipt';
 import { cn } from '$lib/utils';
 import HotspotActivationConfirm from '$main/network/HotspotActivationConfirm.svelte';
 import WifiModeBadge from '$main/network/WifiModeBadge.svelte';
 import WifiModeSelector from '$main/network/WifiModeSelector.svelte';
 import {
+	actionableWifiModeConsequence,
 	deriveWifiAdapterModeView,
+	type WifiModeConfirmation,
 	wifiModeTarget,
 } from '$main/network/wifi-adapter-mode-view';
+import { withWifiEntryRetry } from '$main/network/wifi-entry-request';
 import { sameWifiRadio, type WifiRadioBinding, wifiRadioChanged } from '$main/network/wifi-radio-binding';
 import { wifiHotspotConfigOpKey, wifiHotspotOpKey, wifiModeOpKey } from '$main/network/wifi-station-lock';
 
@@ -102,7 +107,12 @@ const radioReason = $derived(iface?.degraded_reason);
 let ownerSession = $state(0);
 let formBinding = $state.raw<WifiRadioBinding | undefined>(undefined);
 let radioNotice = $state(false);
-let startRefused = $state(false);
+let startRefused = $state<'radio-changed' | 'deactivation-failed'>();
+let bindingUnsupported = $state(false);
+let admission: AbortController | undefined;
+let admissionOwner: WifiRadioBinding | undefined;
+let configAdmissionKey = $state<string>();
+let startAdmission = $state.raw<{ readonly key: string; readonly controller: AbortController }>();
 
 function capture(): WifiRadioBinding {
 	return { device: deviceId, incarnation: radioToken, link: getLinkEpoch(), session: ownerSession };
@@ -112,7 +122,19 @@ function current(binding: WifiRadioBinding): boolean {
 	return open && sameWifiRadio(binding, capture());
 }
 
-onDestroy(() => { ownerSession += 1; });
+onDestroy(() => { ownerSession += 1; admission?.abort(); });
+
+function beginAdmission(binding: WifiRadioBinding): AbortController {
+	admission?.abort();
+	configAdmissionKey = undefined;
+	admissionOwner = binding;
+	admission = new AbortController();
+	return admission;
+}
+
+function ownsAdmission(binding: WifiRadioBinding): boolean {
+	return open && deviceId === binding.device && getLinkEpoch() === binding.link;
+}
 
 // The shared adapter-mode derivation. `undefined` only while the dialog has no
 // interface to describe — never a fallback rendering of its own.
@@ -124,6 +146,7 @@ const modeView = $derived(
 				entry: getWifiAdapterModeEntry(deviceId),
 				phase: getOperationPhase(wifiModeOpKey(deviceId, radioToken)),
 				target: wifiModeTarget(getOperationTarget(wifiModeOpKey(deviceId, radioToken))),
+				failureReason: getOperationReason(wifiModeOpKey(deviceId, radioToken)),
 			})
 		: undefined,
 );
@@ -137,12 +160,53 @@ const configKey = $derived(wifiHotspotConfigOpKey(deviceId, radioToken));
 const toggling = $derived(getOperationPhase(toggleKey) === 'pending');
 const configuring = $derived(getOperationPhase(configKey) === 'pending');
 const configFailure = $derived(getOperationReason(configKey));
+const toggleFailure = $derived(getOperationReason(toggleKey));
+const followsStationChannel = $derived(
+	modeView?.desiredMode === 'hybrid' && iface?.capabilities?.staApCombo.sameChannelOnly === true,
+);
+
+$effect(() => {
+	if (!configAdmissionKey) return;
+	const phase = getOperationPhase(configAdmissionKey);
+	if (phase === 'idle' || phase === 'timed_out') admission?.abort();
+});
+
+$effect(() => {
+	if (!startAdmission) return;
+	if (getOperationPhase(startAdmission.key) !== 'pending') startAdmission.controller.abort();
+});
 
 // Local intent for the pending start/stop: the confirm $effect flips the op to
 // `confirmed` the moment the authoritative snapshot reports the target mode.
 let toggleTarget = $state<'hotspot' | 'station' | null>(null);
 // The credential gate is open; the start is dispatched only from its confirm.
 let confirmingStart = $state(false);
+let confirmingMode = $state<WifiModeConfirmation>();
+let modePanel = $state<HTMLDivElement>();
+let toggleButton = $state<HTMLButtonElement | null>(null);
+let focusRecoveredStart = $state(false);
+const modeContext = $derived({
+	stationLinkLive: modeView?.displayMode !== 'hotspot' && Boolean(iface?.conn),
+	hotspotLive: isActive,
+});
+const modeOwnsConsent = $derived(Boolean(modeView && confirmingMode &&
+	(confirmingMode.kind === 'credentials' ||
+		actionableWifiModeConsequence(modeView, confirmingMode.mode, modeContext, toggling))));
+
+function enableHasFocus() {
+	return !isActive && toggleButton !== null && document.activeElement === toggleButton;
+}
+
+function reopenStartGate(unsupported = false) {
+	if (confirmingStart || modeOwnsConsent || isActive) return;
+	const focused = document.activeElement;
+	focusRecoveredStart = enableHasFocus() || (focused instanceof HTMLButtonElement &&
+		modePanel?.contains(focused) === true && focused.getAttribute('role') === 'radio' &&
+		focused.dataset.mode !== 'station');
+	if (unsupported) bindingUnsupported = true;
+	ownerSession += 1;
+	confirmingStart = true;
+}
 
 // ── Form state (synced once from props; user edits are never clobbered) ──
 let name = $state('');
@@ -154,6 +218,14 @@ let showPassword = $state(false);
 // adapter's current selection alone".
 let security = $state<HotspotSecurityId | undefined>(undefined);
 
+function reloadForm() {
+	name = iface?.hotspot?.name ?? '';
+	password = iface?.hotspot?.password ?? '';
+	channel = iface?.hotspot?.channel ?? 'auto';
+	const choice = deriveHotspotSecurityChoice(iface?.hotspot);
+	security = choice?.kind === 'select' ? choice.selected : undefined;
+}
+
 // ── Capability-derived options (device truth only — see hotspot-options.ts) ──
 const securityChoice = $derived(deriveHotspotSecurityChoice(iface?.hotspot));
 const radioTruth = $derived(deriveHotspotRadioTruth(iface?.hotspot, iface?.capabilities));
@@ -163,31 +235,35 @@ let prevActive = false;
 $effect.pre(() => {
 	const opened = open;
 	const active = isActive;
+	const hasModeView = modeView !== undefined;
 	const next = { device: radioDevice, incarnation: radioToken, link: getLinkEpoch() };
 	radioReason;
 	untrack(() => {
+		if (!opened || (admissionOwner &&
+			(admissionOwner.device !== next.device || admissionOwner.link !== next.link))) {
+			admission?.abort();
+			startRefused = undefined;
+		}
 		const changed = formBinding !== undefined && (
 			formBinding.device !== next.device || formBinding.incarnation !== next.incarnation ||
 			formBinding.link !== next.link
 		);
 		if (opened !== prevOpen || changed) ownerSession += 1;
+		if (!opened || !prevOpen || !hasModeView) confirmingMode = undefined;
 		if (opened && !prevOpen) confirmingStart = false;
 		if (opened && active) confirmingStart = false;
 		if (opened && ((!prevOpen) || (active && !prevActive) || changed)) {
+			bindingUnsupported = false;
 			radioNotice = formBinding !== undefined && (changed || !prevOpen);
 			formBinding = { ...next, session: ownerSession };
-			name = iface?.hotspot?.name ?? '';
-			password = iface?.hotspot?.password ?? '';
-			channel = iface?.hotspot?.channel ?? 'auto';
-			const choice = deriveHotspotSecurityChoice(iface?.hotspot);
-			security = choice?.kind === 'select' ? choice.selected : undefined;
+			reloadForm();
 		}
 		prevOpen = opened;
 		prevActive = active;
 	});
 });
 
-const canEdit = $derived(Boolean(radioToken) && !radioReason &&
+const canEdit = $derived(Boolean(radioToken) && !radioReason && !bindingUnsupported &&
 	formBinding !== undefined && current(formBinding));
 
 const securityLabel = $derived(
@@ -269,20 +345,54 @@ $effect(() => {
 // into `hotspot-config:${deviceId}`. The one-time form sync (`initialized` guard)
 // keeps the live QR/iface re-broadcast from clobbering the in-progress edits.
 async function handleSave() {
-	const binding = formBinding;
-	if (!isFormValid || configuring || !canEdit || !binding?.incarnation) return;
+	const original = formBinding;
+	if (!isFormValid || configuring || !canEdit || !original?.incarnation) return;
+	const controller = beginAdmission(original);
 	const input = {
-		device: binding.device, incarnation: binding.incarnation, name, password, channel,
+		device: original.device, name, password, channel,
 		...(security !== undefined ? { security } : {}),
 	};
+	const key = wifiHotspotConfigOpKey(original.device, original.incarnation);
+	configAdmissionKey = key;
+	let replaced = false;
 	await osCommand({
-		key: wifiHotspotConfigOpKey(binding.device, binding.incarnation),
-		rpc: () => rpc.wifi.hotspotConfigure(input),
-		isCurrent: () => current(binding),
-		failMessage: () => m["network.os.operationFailed"](),
+		key,
+		classify: classifyWifiMutation,
+		rpc: async (handoff) => {
+			const result = await withWifiEntryRetry(original,
+				(incarnation, unobserved) => withWifiConfigReceipt(
+					{ device: original.device, incarnation },
+					() => rpc.wifi.hotspotConfigure({ ...input, incarnation }),
+					{ signal: controller.signal, unobserved },
+				),
+				{
+					signal: controller.signal,
+					current: () => ownsAdmission(original),
+					currentToken: () => radioToken,
+					canRetry: () => current(original) && handoff(key),
+					onReplacement: () => { replaced = handoff(key); },
+				},
+			);
+			if (!result && !controller.signal.aborted && ownsAdmission(original)) bindingUnsupported = true;
+			return result ?? { success: false, error: 'binding-required' };
+		},
+		isCurrent: () => admission === controller && !controller.signal.aborted &&
+			(current(original) || (replaced && ownsAdmission(original))),
+		onResult: (result) => {
+			if (wifiRadioChanged(result) && current(original)) {
+				radioNotice = true;
+				formBinding = capture();
+				reloadForm();
+			}
+		},
+		failMessage: (result) => wifiFailureReason(result ?? {}) === 'hybrid-channel-not-permitted'
+			? m['network.wifiMode.error.hybridChannelNotPermitted']()
+			: result?.error === 'radio-unverified'
+			? m['hotspotConfigurator.radioUnverified']() : m["network.os.operationFailed"](),
 		busyMessage: () => m["network.os.deviceBusy"](),
 		// NO confirmOnResolve — confirm comes from the deferred hotspot.config event.
 	});
+	controller.abort();
 }
 
 // Start/stop through the shared keyed op. Stay `pending` after dispatch; the
@@ -303,33 +413,63 @@ async function handleToggle() {
 			failMessage: () => m["network.os.operationFailed"](),
 			busyMessage: () => m["network.os.deviceBusy"](),
 		});
-	} else {
+	} else if (!modeOwnsConsent) {
+		bindingUnsupported = false;
 		ownerSession += 1;
-		startRefused = false;
+		startRefused = undefined;
+		focusRecoveredStart = false;
 		confirmingStart = true;
 	}
 }
 
 async function startConfirmed(incarnation: string) {
-	const binding = capture();
-	if (incarnation !== binding.incarnation || radioReason) return;
+	const original = capture();
+	if (incarnation !== original.incarnation || radioReason) return;
+	startRefused = undefined;
+	const controller = beginAdmission(original);
+	const key = wifiHotspotOpKey(original.device, incarnation);
+	let correlated = false;
+	let replaced = false;
+	const ownsStart = () => admission === controller && !controller.signal.aborted && ownsAdmission(original);
 	confirmingStart = false;
 	toggleTarget = 'hotspot';
 	await osCommand({
-		key: toggleKey,
+		key,
 		target: 'hotspot',
-		rpc: () => rpc.wifi.hotspotStart({ device: binding.device, incarnation }),
-		isCurrent: () => current(binding),
+		classify: classifyWifiMutation,
+		rpc: async (handoff) => {
+			startAdmission = { key, controller };
+			const result = await withWifiEntryRetry(original,
+				(token) => withWifiStartReceipt(original.device,
+					(attempt) => rpc.wifi.hotspotStart({ device: original.device, incarnation: token, attempt }),
+					controller.signal,
+				),
+				{
+					signal: controller.signal,
+					current: ownsStart,
+					currentToken: () => radioToken,
+					canRetry: () => current(original) && handoff(key),
+					onReplacement: () => { replaced = handoff(key); },
+				},
+			);
+			correlated = result?.correlated === true;
+			if (!result && ownsStart()) reopenStartGate(true);
+			return result ?? { success: false, error: 'binding-required', reason: undefined };
+		},
+		isCurrent: () => ownsStart() && (replaced || correlated || current(original)),
 		onResult: (result) => {
-			if (wifiRadioChanged(result) && current(binding) && !confirmingStart) {
-				ownerSession += 1;
-				startRefused = true;
-				confirmingStart = true;
+			if (wifiRadioChanged(result) && !confirmingStart) {
+				startRefused = result.reason === 'deactivation-failed' ? 'deactivation-failed' : 'radio-changed';
+				if (startRefused === 'radio-changed') reopenStartGate();
 			}
 		},
-		failMessage: () => m["network.os.operationFailed"](),
+		failMessage: (result) => wifiFailureReason(result ?? {}) === 'hybrid-channel-not-permitted'
+			? m['network.wifiMode.error.hybridChannelNotPermitted']()
+			: result?.error === 'radio-unverified'
+			? m['hotspotConfirm.radioUnverified']() : m["network.os.operationFailed"](),
 		busyMessage: () => m["network.os.deviceBusy"](),
 	});
+	if (startAdmission?.controller === controller) startAdmission = undefined;
 }
 
 // Confirm a pending start/stop as soon as the authoritative `wifi` snapshot
@@ -379,19 +519,27 @@ async function copyPassword() {
 				{m['hotspotConfigurator.radioChanged']()}
 			</p>
 		{/if}
-		{#if isActive && !canEdit}
+		{#if (isActive && !canEdit) || radioReason === 'permanent-mac-unresolved'}
 			<p class="text-muted-foreground text-xs" role="status" data-testid="hotspot-editor-unavailable">
 				{#if radioReason}{resolveMessageKey(`network.wifiDegraded.${radioReason}`)} {/if}
 				{radioReason ? m['hotspotConfigurator.radioUnverified']() : m['hotspotConfirm.bindingUnsupported']()}
 			</p>
 		{/if}
-		{#if configFailure === 'radio-changed' || configFailure === 'binding-required' || configFailure === 'activating'}
+		{#if configFailure === 'hybrid-channel-not-permitted' || toggleFailure === 'hybrid-channel-not-permitted'}
+			<p class="text-muted-foreground text-xs" role="status">{m['network.wifiMode.error.hybridChannelNotPermitted']()}</p>
+		{:else if configFailure === 'radio-unverified'}
+			<p class="text-muted-foreground text-xs" role="status">{m['hotspotConfigurator.radioUnverified']()}</p>
+		{:else if configFailure === 'radio-changed' || configFailure === 'binding-required' || configFailure === 'activating'}
 			<p class="text-muted-foreground text-xs" role="status">
 				{configFailure === 'activating' ? m['hotspotConfigurator.saveInterrupted']() : m['hotspotConfigurator.saveRefused']()}
 			</p>
 		{/if}
 		{#if startRefused}
-			<p class="text-muted-foreground text-xs" role="status">{m['hotspotConfirm.radioChangedNotStarted']()}</p>
+			<p class="text-muted-foreground text-xs" role="status" data-testid="hotspot-start-refused">
+				{startRefused === 'deactivation-failed'
+					? m['network.wifiMode.error.notConfirmed']()
+					: m['hotspotConfirm.radioChangedNotStarted']()}
+			</p>
 		{/if}
 		<!-- Status row -->
 		<div
@@ -434,6 +582,7 @@ async function copyPassword() {
 		{#if modeView}
 			<!-- biome-ignore lint/a11y/useSemanticElements: This named wrapper groups the existing WiFi mode widget; a fieldset introduces intrinsic sizing and form-group layout. -->
 			<div
+				bind:this={modePanel}
 				class="rounded-lg border px-3 py-2.5"
 				data-testid="hotspot-concurrency-status"
 				role="group"
@@ -441,10 +590,10 @@ async function copyPassword() {
 			>
 				<WifiModeSelector
 					view={modeView}
-					context={{
-						stationLinkLive: modeView.displayMode !== 'hotspot' && Boolean(iface?.conn),
-						hotspotLive: isActive,
-					}}
+					bind:confirmation={confirmingMode}
+					consentBlocked={confirmingStart}
+					shouldFocusRecoveredGate={enableHasFocus}
+					context={modeContext}
 					lockedReason={toggling ? m["network.wifiStationLock.hotspotPending"]() : undefined}
 				/>
 			</div>
@@ -454,13 +603,18 @@ async function copyPassword() {
 			{#if confirmingStart}
 				<HotspotActivationConfirm
 					device={deviceId}
-					incarnation={radioToken}
+					incarnation={bindingUnsupported ? undefined : radioToken}
 					degradedReason={radioReason}
 					session={ownerSession}
 					reloaded={radioNotice}
+					focusOnOpen={focusRecoveredStart}
 					keepsStation={iface?.supports_ap_sta_concurrency === true &&
 						modeView?.desiredMode !== 'hotspot'}
-					onCancel={() => { ownerSession += 1; confirmingStart = false; }}
+					onCancel={() => {
+						startAdmission?.controller.abort();
+						ownerSession += 1;
+						confirmingStart = false;
+					}}
 					onConfirm={startConfirmed}
 				/>
 			{:else}
@@ -569,7 +723,9 @@ async function copyPassword() {
 					{/each}
 				</Select.Content>
 			</Select.Root>
-			<p class="text-muted-foreground text-xs">{m["hotspotConfigurator.help.channelHelp"]()}</p>
+			<p class="text-muted-foreground text-xs" data-testid={followsStationChannel ? 'hotspot-hybrid-channel-hint' : undefined}>
+				{followsStationChannel ? m['hotspotConfigurator.help.hybridChannel']() : m["hotspotConfigurator.help.channelHelp"]()}
+			</p>
 		</div>
 
 		<!--
@@ -673,10 +829,11 @@ async function copyPassword() {
 		<!-- One action row at a time: while the credential gate is open, its own
 		     Cancel / Turn on are the only way forward, and Save exists only for a
 		     live AP (`hotspotConfigure` refuses anything else). -->
-		{#if !confirmingStart}
+		{#if !confirmingStart && (isActive || radioReason !== 'permanent-mac-unresolved')}
 		<Button
+			bind:ref={toggleButton}
 			class="sm:min-w-28"
-			disabled={toggling}
+			disabled={toggling || (!isActive && modeOwnsConsent)}
 			onclick={handleToggle}
 			title={toggleDisabledReason}
 			variant="outline"
@@ -689,7 +846,7 @@ async function copyPassword() {
 			{isActive ? m["network.status.turnOff"]() : m["network.status.enableHotspot"]()}
 		</Button>
 		{/if}
-		{#if isActive}
+		{#if isActive && radioReason !== 'permanent-mac-unresolved'}
 		<Button class="sm:min-w-24" disabled={!canEdit || !isFormValid || configuring} onclick={handleSave}>
 			{#if configuring}
 				<Loader2 class="size-4 animate-spin motion-reduce:animate-none" />

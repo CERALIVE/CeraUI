@@ -1,0 +1,21 @@
+[connection]
+id=Wired connection 1
+uuid=189ccc7a-22d8-3d1c-b81b-2649a786d598
+type=ethernet
+autoconnect-priority=-999
+interface-name=ens3
+timestamp=1794953170
+
+[ethernet]
+
+[ipv4]
+method=auto
+
+[ipv6]
+addr-gen-mode=default
+method=auto
+
+[proxy]
+
+[.nmmeta]
+nm-generated=true

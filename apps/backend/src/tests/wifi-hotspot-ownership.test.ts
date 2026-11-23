@@ -7,11 +7,14 @@ import {
 	spyOn,
 	test,
 } from "bun:test";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as runner from "../helpers/run.ts";
 import * as mockWifi from "../mocks/providers/wifi.ts";
+import * as profileFile from "../modules/network/network-manager-profile-file.ts";
+import * as profileWrite from "../modules/network/network-manager-profile-write.ts";
 import {
 	getAllHotspotCredentials,
 	getHotspotCredentials,
@@ -39,6 +42,7 @@ import {
 	wifiDeviceListStartUpdate,
 } from "../modules/wifi/wifi-device-list.ts";
 import {
+	defaultHotspotDeps,
 	prepareHotspotForInterface,
 	startHotspotForInterface,
 } from "../modules/wifi/wifi-hotspot-activation.ts";
@@ -48,6 +52,7 @@ import {
 } from "../modules/wifi/wifi-hotspot-config.ts";
 import * as discovery from "../modules/wifi/wifi-hotspot-discovery.ts";
 import { settlePending } from "../modules/wifi/wifi-hotspot-monitor.ts";
+import { readHotspotProfilePins } from "../modules/wifi/wifi-hotspot-profile-operation.ts";
 import type {
 	HotspotActivationDeps,
 	WifiInterfaceWithHotspot,
@@ -60,11 +65,19 @@ import {
 	stopWifiUpdateLoopForTest,
 	wifiUpdateDevices,
 } from "../modules/wifi/wifi-interfaces.ts";
-import {
-	resetWifiPermanentMacCache,
-	setPermanentMacReaderForTest,
-} from "../modules/wifi/wifi-permanent-mac.ts";
+import { wifiRadioIdentity } from "../modules/wifi/wifi-radio-identity.ts";
 import { wifiRadioObservation } from "../modules/wifi/wifi-radio-observation.ts";
+import {
+	nmcliFieldNames,
+	nmcliFieldOutput,
+} from "./helpers/nmcli-field-output.ts";
+import { mockSettingsDeletion } from "./helpers/wifi-active-observation.ts";
+import { firstApInstances } from "./helpers/wifi-first-ap-instances.ts";
+import {
+	decodeProfile,
+	encodeProfile,
+} from "./helpers/wifi-first-ap-keyfile-codec.ts";
+import { fakeShadowSysfs } from "./helpers/wifi-radio-equivalence-shadow.ts";
 import {
 	isolateWifiRegistry,
 	restoreWifiRegistry,
@@ -85,9 +98,21 @@ let scratch: string | undefined;
 let afterWrite: (() => void) | undefined;
 let beforeWrite: ((args: readonly string[]) => Promise<void>) | undefined;
 let unreadableSettings = false;
+let afterPruneSettings: ((isFinalRead: boolean) => void) | undefined;
+let sampledPruneActivity: boolean;
+let pruneSecretReads: number;
+let pruneSecretFlags: number;
+let afterPruneActivity: ((afterFinalSettings: boolean) => void) | undefined;
+let readFinalSettings: boolean;
+let afterSavedSettingsRead: (() => void) | undefined;
+let historicalActivity: "yes" | "no" | "unknown" = "no";
+let restoreShadow: () => Promise<void>;
+let resources: ReturnType<typeof firstApInstances>;
+let settleDiscoveryRace: (() => Promise<void>) | undefined;
 
 function profile(mac = "", ifname = "wlan0"): Record<string, string> {
 	return {
+		"802-11-wireless-security.psk-flags": "0",
 		"connection.interface-name": ifname,
 		"connection.autoconnect": "yes",
 		"connection.autoconnect-priority": "0",
@@ -131,6 +156,9 @@ function ownByA(history: boolean): void {
 
 function activationDeps(): HotspotActivationDeps {
 	return {
+		readProfileInstance: async (uuid) =>
+			profiles.has(uuid) ? undefined : null,
+		releaseConcurrentInterface: async () => true,
 		credentials: hotspotCredentialsStore,
 		findHotspotConn: discovery.findHotspotConnForAdapter,
 		nmConnSetFields: async (uuid, fields) => {
@@ -143,10 +171,12 @@ function activationDeps(): HotspotActivationDeps {
 			effects.push(["up", uuid]);
 			return true;
 		},
-		nmHotspot: async (_ifname, ssid, password) => {
+		nmApConnAdd: async (_ifname, { name: ssid, password }) => {
 			effects.push(["create", ssid, password]);
 			return "b-new-profile";
 		},
+		nmConnDelete: async () => true,
+		nmDisconnect: async () => true,
 		wifiUpdateSavedConns: async () => {},
 		broadcastState: () => {},
 		setDupIpSuppression: () => {},
@@ -154,12 +184,11 @@ function activationDeps(): HotspotActivationDeps {
 	};
 }
 
-beforeEach(() => {
+beforeEach(async () => {
 	inherited = isolateWifiRegistry();
 	resetHotspotCredentialsForTest();
 	resetWifiConnectionModeCache();
 	resetWifiInterfaceDiscoveryForTest();
-	resetWifiPermanentMacCache();
 	resetWifiCapabilitiesForTest();
 	onWifiChange(() => {});
 	setWifiState({});
@@ -170,13 +199,40 @@ beforeEach(() => {
 		"802-11-wireless.ssid": "Operator-AP",
 		"802-11-wireless-security.psk": "operator-secret",
 	});
+	resources = firstApInstances(new Set(profiles.keys()), profiles);
 	effects.length = 0;
 	unexpected.length = 0;
 	afterWrite = undefined;
 	beforeWrite = undefined;
 	unreadableSettings = false;
+	afterPruneSettings = undefined;
+	sampledPruneActivity = false;
+	pruneSecretReads = 0;
+	pruneSecretFlags = 0;
+	afterPruneActivity = undefined;
+	readFinalSettings = false;
+	afterSavedSettingsRead = undefined;
+	historicalActivity = "no";
+	settleDiscoveryRace = undefined;
 	devices = "wlan0:wifi:disconnected:";
-	setPermanentMacReaderForTest(async () => B);
+	restoreShadow = await fakeShadowSysfs(() => [
+		{
+			ifname: "wlan0",
+			operational: B,
+			permanent: B,
+			ifindex: 3,
+			phy: 0,
+			state: "disconnected",
+		},
+		{
+			ifname: "clap-wlan0",
+			operational: B,
+			permanent: B,
+			ifindex: 4,
+			phy: 0,
+			state: "connected",
+		},
+	]);
 	setWifiCapabilityDepsForTest({
 		runIw: async () => "",
 		readPhyName: async () => undefined,
@@ -185,7 +241,15 @@ beforeEach(() => {
 		now: () => 0,
 	});
 	spyOn(mockWifi, "shouldMockWifi").mockReturnValue(false);
+	mockSettingsDeletion(resources.run, (path) => {
+		resources.sync();
+		const uuid = resources.paths().find(([, target]) => target === path)?.[0];
+		if (!uuid || !profiles.delete(uuid))
+			throw new Error("Historical deletion must select a live settings path");
+	});
 	spyOn(runner, "run").mockImplementation(async (bin, args) => {
+		resources.sync();
+		if (bin === "busctl") return resources.busReply(args);
 		if (
 			bin === "iw" &&
 			(args.join(" ") === "dev wlan0 station dump" ||
@@ -193,20 +257,90 @@ beforeEach(() => {
 		)
 			return "";
 		if (bin === "nmcli") {
-			const fieldIndex = args.indexOf("--get-values");
-			if (fieldIndex !== -1) {
+			if (args[0] === "connection" && args[1] === "load") {
+				const loaded = decodeProfile(readFileSync(args[2] ?? "", "utf8"));
+				const uuid = loaded["connection.uuid"];
+				if (!uuid) throw new Error("Missing loaded ownership fixture UUID");
+				const current = profiles.get(uuid) ?? {};
+				const delta = Object.entries(loaded).filter(
+					([key, value]) =>
+						key !== "connection.uuid" &&
+						key !== "connection.type" &&
+						key !== "802-11-wireless-security.psk-flags" &&
+						current[key] !== value,
+				);
+				const effect = ["con", "modify", uuid, ...delta.flat()];
+				if (beforeWrite) await beforeWrite(effect);
+				effects.push(effect);
+				Object.assign(current, loaded);
+				resources.bumpVersion(uuid);
+				afterWrite?.();
+				return "";
+			}
+			if (args.includes("--fields")) {
+				const fields = args[args.indexOf("--fields") + 1];
+				if (fields === "uuid,type,name")
+					return [...profiles.keys()]
+						.map(
+							(id) =>
+								`${id}:802-11-wireless:${profiles.get(id)?.["connection.id"] ?? "Operator"}`,
+						)
+						.join("\n");
+				if (fields === "uuid,active" || fields === "uuid,active,dbus-path") {
+					if (fields === "uuid,active,dbus-path") sampledPruneActivity = true;
+					const inventory = [...profiles.keys()]
+						.map((id) => {
+							const active = id === FOREIGN ? historicalActivity : "no";
+							const path = resources.paths().find(([uuid]) => uuid === id)?.[1];
+							return fields === "uuid,active"
+								? `${id}:${active}`
+								: `${id}:${active}:${path}`;
+						})
+						.join("\n");
+					afterPruneActivity?.(readFinalSettings);
+					return inventory;
+				}
+				if (fields === "uuid,dbus-path" || fields === "uuid,filename")
+					return [...profiles.keys()]
+						.map(
+							(uuid) =>
+								`${uuid}:${
+									fields === "uuid,filename"
+										? resources.files.filename(uuid)
+										: resources.paths().find(([id]) => id === uuid)?.[1]
+								}`,
+						)
+						.join("\n");
+			}
+			const fieldNames = nmcliFieldNames(args);
+			if (fieldNames.length > 0) {
 				const uuid = args.at(-1) ?? "";
 				const fields = profiles.get(uuid);
 				if (
 					unreadableSettings &&
-					args[fieldIndex + 1]?.includes("connection.autoconnect-priority")
+					fieldNames.includes("connection.autoconnect-priority")
 				) {
 					throw new Error("Fixture settings unavailable");
 				}
-				return (args[fieldIndex + 1] ?? "")
-					.split(",")
-					.map((field) => fields?.[field] ?? "")
-					.join("\n");
+				const output = nmcliFieldOutput(args, (field) => fields?.[field] ?? "");
+				if (
+					uuid === FOREIGN &&
+					fieldNames.includes("connection.autoconnect-priority")
+				)
+					afterSavedSettingsRead?.();
+				if (uuid === FOREIGN) {
+					if (args.includes("--show-secrets")) pruneSecretFlags++;
+					if (fieldNames.includes("802-11-wireless-security.psk"))
+						pruneSecretReads++;
+					if (
+						fieldNames.includes("match.path") &&
+						fieldNames.includes("802-11-wireless.mode")
+					) {
+						readFinalSettings ||= sampledPruneActivity;
+						afterPruneSettings?.(sampledPruneActivity);
+					}
+				}
+				return output;
 			}
 			if (args[0] === "con" && args[1] === "modify") {
 				if (beforeWrite) await beforeWrite(args);
@@ -239,23 +373,40 @@ beforeEach(() => {
 		unexpected.push(`${bin} ${args.join(" ")}`);
 		throw new Error(`Unexpected ownership command: ${bin} ${args.join(" ")}`);
 	});
+	spyOn(runner, "runWithStdin").mockImplementation(async (bin, args, input) => {
+		if (
+			bin !== "nmcli" ||
+			args.slice(0, 3).join(" ") !== "--offline connection modify"
+		)
+			throw new Error("Unexpected ownership offline operation");
+		const fields = decodeProfile(input);
+		for (let i = 3; i < args.length; i += 2) {
+			const key = args[i],
+				value = args[i + 1];
+			if (!key || value === undefined)
+				throw new Error("Invalid offline fields");
+			fields[key] = value;
+		}
+		return encodeProfile(fields);
+	});
 });
 
 afterEach(async () => {
+	await settleDiscoveryRace?.();
 	stopWifiUpdateLoopForTest();
 	wifiCancelScanRefresh();
 	wifiRadioObservation.stop();
-	settlePending("wlan0", true);
+	await restoreShadow();
+	await settlePending("wlan0", false);
 	restoreWifiRegistry(inherited);
 	resetHotspotCredentialsForTest();
 	resetWifiConnectionModeCache();
 	resetWifiInterfaceDiscoveryForTest();
-	resetWifiPermanentMacCache();
-	setPermanentMacReaderForTest(null);
 	resetWifiCapabilitiesForTest();
 	setWifiState({});
 	jest.useRealTimers();
 	mock.restore();
+	resources.files.close();
 	if (scratch) await rm(scratch, { recursive: true });
 	scratch = undefined;
 	expect(unexpected).toEqual([]);
@@ -441,7 +592,11 @@ test("O6 checks ownership acquired while a profile lookup was pending", async ()
 test("O1 rechecks ownership after awaited profile normalization", async () => {
 	const iface = radio();
 	profiles.set(FOREIGN, profile(B));
-	afterWrite = () => ownByA(false);
+	rememberHotspotCredentials(B, { ...PAIR, conn: FOREIGN });
+	afterWrite = () => {
+		resetHotspotCredentialsForTest();
+		ownByA(false);
+	};
 
 	await discovery.handleHotspotConn(B, FOREIGN, { active: true });
 
@@ -486,28 +641,327 @@ test("O5 does not restart or remember a profile claimed during the live save", a
 	expect(iface.hotspot.transition).toBeUndefined();
 });
 
-test("O7 real saved-profile sweep leaves foreign profiles and credentials untouched", async () => {
-	ownByA(false);
+test.each([true, false])(
+	"saved-profile sweep leaves foreign profiles untouched (other owner=%p)",
+	async (recorded) => {
+		if (recorded) ownByA(false);
+		const iface = radio();
+		profiles.set(FOREIGN, profile(recorded ? B : "26:c3:93:b6:9c:a7"));
+		const before = JSON.stringify([...profiles]);
+		const realHandle = discovery.handleHotspotConn;
+		const pending: Promise<void>[] = [];
+		spyOn(discovery, "handleHotspotConn").mockImplementation((...args) => {
+			const result = realHandle(...args);
+			pending.push(result);
+			return result;
+		});
+
+		await wifiUpdateSavedConns();
+		await Promise.all(pending);
+
+		expect(pending).toHaveLength(2);
+		expect(iface.hotspot.conn).toBeUndefined();
+		expect(getHotspotCredentials(B)).toBeUndefined();
+		expect(JSON.stringify([...profiles])).toBe(before);
+		expect(effects).toEqual([]);
+	},
+);
+
+test("Prepare stores new credentials without overwriting an unrecorded saved AP", async () => {
 	const iface = radio();
 	profiles.set(FOREIGN, profile(B));
-	const before = JSON.stringify([...profiles]);
-	const realHandle = discovery.handleHotspotConn;
-	const pending: Promise<void>[] = [];
-	spyOn(discovery, "handleHotspotConn").mockImplementation((...args) => {
-		const result = realHandle(...args);
-		pending.push(result);
-		return result;
-	});
+	const before = JSON.stringify(profiles.get(FOREIGN));
 
-	await wifiUpdateSavedConns();
-	await Promise.all(pending);
+	const chosen = { name: OWN_PAIR.ssid, password: OWN_PAIR.password };
+	const result = await prepareHotspotForInterface(
+		B,
+		iface,
+		chosen,
+		activationDeps(),
+	);
 
-	expect(pending).toHaveLength(2);
+	expect(JSON.stringify(profiles.get(FOREIGN))).toBe(before);
+	expect(result).toEqual({ success: true, firstTime: true, ...chosen });
 	expect(iface.hotspot.conn).toBeUndefined();
-	expect(getHotspotCredentials(B)).toBeUndefined();
-	expect(JSON.stringify([...profiles])).toBe(before);
-	expect(effects).toEqual([]);
+	expect(getHotspotCredentials(B)).toMatchObject(OWN_PAIR);
 });
+
+test("Start creates a distinct owned AP instead of reusing an unrecorded profile", async () => {
+	const iface = radio();
+	profiles.set(FOREIGN, profile(B));
+	const before = JSON.stringify(profiles.get(FOREIGN));
+	rememberHotspotCredentials(B, OWN_PAIR);
+
+	expect(await startHotspotForInterface(B, iface, activationDeps())).toEqual({
+		success: true,
+	});
+	expect(effects.filter(([effect]) => effect === "create")).toEqual([
+		["create", OWN_PAIR.ssid, OWN_PAIR.password],
+	]);
+	expect(getHotspotCredentials(B)?.conn).toBe("b-new-profile");
+	expect(JSON.stringify(profiles.get(FOREIGN))).toBe(before);
+});
+
+test("Start cannot normalize a saved AP whose record vanishes during refresh", async () => {
+	const iface = radio();
+	iface.hotspot.conn = FOREIGN;
+	iface.hotspot.name = PAIR.ssid;
+	iface.hotspot.password = PAIR.password;
+	rememberHotspotCredentials(B, { ...PAIR, conn: FOREIGN });
+	const before = JSON.stringify(profiles.get(FOREIGN));
+	const deps = activationDeps();
+	deps.wifiUpdateSavedConns = async () => {
+		resetHotspotCredentialsForTest();
+	};
+
+	const result = await startHotspotForInterface(B, iface, deps);
+
+	expect(effects).toEqual([]);
+	expect(result).toEqual({ success: false, error: "activation-failed" });
+	expect(JSON.stringify(profiles.get(FOREIGN))).toBe(before);
+});
+
+test.each(["802-11-wireless.mac-address", "match.path"] as const)(
+	"cached Start refuses a conflicting live %s pin",
+	async (field) => {
+		const iface = radio();
+		iface.hotspot.conn = FOREIGN;
+		iface.hotspot.name = PAIR.ssid;
+		iface.hotspot.password = PAIR.password;
+		rememberHotspotCredentials(B, { ...PAIR, conn: FOREIGN });
+		const fields = {
+			...profile(B),
+			[field]: field === "match.path" ? "pci-foreign-port" : A,
+		};
+		profiles.set(FOREIGN, fields);
+		// A missing in-memory pin must not hide a live pin owned by a different radio.
+		rememberHotspotCredentials(A, OWN_PAIR);
+		const before = { ...fields };
+		const readProfilePins = defaultHotspotDeps.readProfilePins;
+		if (!readProfilePins) throw new Error("Expected production pin reader");
+		const refresh = mock(wifiUpdateSavedConns);
+		const deps = {
+			...activationDeps(),
+			readProfilePins,
+			wifiUpdateSavedConns: refresh,
+		};
+
+		const result = await startHotspotForInterface(B, iface, deps);
+
+		expect(effects).toEqual([]);
+		expect(result).toEqual({ success: false, error: "activation-failed" });
+		expect(profiles.get(FOREIGN)).toEqual(before);
+		expect(refresh).not.toHaveBeenCalled();
+	},
+);
+
+test("starting one owner cannot prune another owner's retired profile", async () => {
+	ownByA(true);
+	rememberHotspotCredentials(B, { ...OWN_PAIR, conn: UNRELATED });
+	rememberHotspotCredentials(B, { ...OWN_PAIR, conn: "b-current" });
+	profiles.set(FOREIGN, { ...profile(A, ""), "connection.id": "Hotspot" });
+	profiles.set(UNRELATED, { ...profile(B, ""), "connection.id": "Hotspot-1" });
+
+	expect(await discovery.pruneDuplicateHotspotConns(B, "b-current")).toEqual([
+		UNRELATED,
+	]);
+	expect([...profiles.keys()]).toEqual([FOREIGN]);
+});
+
+test("production prune deletes an eligible retired AP through its exact settings path", async () => {
+	ownByA(true);
+	profiles.set(FOREIGN, { ...profile(A, ""), "connection.id": "Hotspot" });
+	expect(await discovery.pruneDuplicateHotspotConns(A, "a-current")).toEqual([
+		FOREIGN,
+	]);
+	expect(profiles.has(FOREIGN)).toBe(false);
+});
+
+test.each(["discovery", "prepare"] as const)(
+	"%s cannot rewrite an owned AP pinned to a foreign port",
+	async (action) => {
+		const iface = radio();
+		rememberHotspotCredentials(B, { ...PAIR, conn: FOREIGN });
+		const fields = { ...profile(B), "match.path": "pci-foreign-port" };
+		profiles.set(FOREIGN, fields);
+		iface.hotspot.conn = FOREIGN;
+		iface.hotspot.name = PAIR.ssid;
+		iface.hotspot.password = PAIR.password;
+		const before = { ...fields };
+		if (action === "discovery") await discovery.handleHotspotConn(B, FOREIGN);
+		else {
+			expect(
+				await prepareHotspotForInterface(
+					B,
+					iface,
+					{ name: OWN_PAIR.ssid, password: OWN_PAIR.password },
+					{
+						...activationDeps(),
+						...(defaultHotspotDeps.readProfilePins
+							? { readProfilePins: defaultHotspotDeps.readProfilePins }
+							: {}),
+					},
+				),
+			).toEqual({ success: false, error: "activation-failed" });
+		}
+		expect(effects).toEqual([]);
+		expect(profiles.get(FOREIGN)).toEqual(before);
+	},
+);
+
+test.each([false, true])(
+	"cold Start leaves an owned profile pinned to another port untouched (pin changes during refresh=%p)",
+	async (duringRefresh) => {
+		const iface = radio();
+		rememberHotspotCredentials(B, { ...PAIR, conn: FOREIGN });
+		const foreignPort = "pci-foreign-port";
+		const fields = {
+			...profile(B),
+			"match.path": duringRefresh ? "" : foreignPort,
+		};
+		profiles.set(FOREIGN, fields);
+		let foreignPinObserved = !duringRefresh;
+		if (duringRefresh)
+			afterSavedSettingsRead = () => {
+				afterSavedSettingsRead = undefined;
+				// Only the independent pin read sees drift; the operation receipt
+				// must remain eligible so it cannot mask a missing refresh guard.
+				foreignPinObserved = true;
+			};
+		const readProfilePins = defaultHotspotDeps.readProfilePins;
+		if (!readProfilePins) throw new Error("Expected production pin reader");
+		const refresh = mock(wifiUpdateSavedConns);
+
+		const result = await startHotspotForInterface(B, iface, {
+			...activationDeps(),
+			readProfilePins: async (uuid) =>
+				uuid === FOREIGN && foreignPinObserved
+					? [B, foreignPort]
+					: readProfilePins(uuid),
+			wifiUpdateSavedConns: refresh,
+		});
+
+		expect(effects).toEqual([]);
+		expect(result).toEqual({ success: false, error: "activation-failed" });
+		expect(refresh).toHaveBeenCalledTimes(duringRefresh ? 1 : 0);
+		expect(foreignPinObserved).toBe(true);
+		expect(profiles.get(FOREIGN)).toEqual({
+			...profile(B),
+			"match.path": duringRefresh ? "" : foreignPort,
+		});
+	},
+);
+
+test.each(["activate", "restart"] as const)(
+	"the real prune retains a profile when NM can %s after the inactivity sample",
+	async (change) => {
+		ownByA(true);
+		profiles.set(FOREIGN, { ...profile(A, ""), "connection.id": "Hotspot" });
+		let changed = false;
+		afterPruneActivity = (afterFinalSettings) => {
+			if (change === "restart" && !afterFinalSettings) return;
+			afterPruneActivity = undefined;
+			changed = true;
+			if (change === "activate") historicalActivity = "yes";
+			else {
+				const paths = resources.paths();
+				resources.restart();
+				resources.restorePaths(paths);
+			}
+		};
+
+		expect(await discovery.pruneDuplicateHotspotConns(A, "a-current")).toEqual(
+			[],
+		);
+		expect(changed).toBe(true);
+		expect(profiles.has(FOREIGN)).toBe(true);
+	},
+);
+
+test.each(["802-11-wireless.mac-address", "match.path"] as const)(
+	"historical prune rejects an inactive candidate with a conflicting live %s pin",
+	async (pin) => {
+		ownByA(true);
+		profiles.set(FOREIGN, {
+			...profile(A, ""),
+			"connection.id": "Hotspot",
+			[pin]: pin === "match.path" ? "pci-foreign-port" : B,
+		});
+		const deleteConnection = mock(async () => false);
+		expect(
+			await discovery.pruneDuplicateHotspotConns(A, "a-current", {
+				...discovery.defaultHotspotProfileDeps,
+				deleteConnection,
+			}),
+		).toEqual([]);
+		expect(deleteConnection).not.toHaveBeenCalled();
+		expect(profiles.has(FOREIGN)).toBe(true);
+	},
+);
+
+test("historical classification never reads the keyfile secret", async () => {
+	ownByA(true);
+	profiles.set(FOREIGN, { ...profile(A, ""), "connection.id": "Hotspot" });
+	const readSecret = spyOn(profileFile, "readNmProfileFileSecret");
+	const openKeyfile = spyOn(profileWrite, "openNmProfileFile");
+	await discovery.pruneDuplicateHotspotConns(A, "a-current");
+	expect(readSecret).not.toHaveBeenCalled();
+	expect(openKeyfile).not.toHaveBeenCalled();
+	expect(pruneSecretReads).toBe(0);
+	expect(pruneSecretFlags).toBe(0);
+});
+
+test("historical pruning preserves a replacement at the same settings path during the activity read", async () => {
+	ownByA(true);
+	profiles.set(FOREIGN, { ...profile(A, ""), "connection.id": "Hotspot" });
+	afterPruneActivity = () => {
+		afterPruneActivity = undefined;
+		resources.replace(FOREIGN, "Replacement AP", false);
+	};
+
+	expect(await discovery.pruneDuplicateHotspotConns(A, "a-current")).toEqual(
+		[],
+	);
+	expect(profiles.get(FOREIGN)?.["802-11-wireless.ssid"]).toBe(
+		"Replacement AP",
+	);
+});
+
+test("historical pruning preserves a profile activated during the final settings read", async () => {
+	ownByA(true);
+	profiles.set(FOREIGN, { ...profile(A, ""), "connection.id": "Hotspot" });
+	afterPruneSettings = (isFinalRead) => {
+		if (isFinalRead) historicalActivity = "yes";
+	};
+
+	expect(await discovery.pruneDuplicateHotspotConns(A, "a-current")).toEqual(
+		[],
+	);
+	expect(historicalActivity).toBe("yes");
+	expect(profiles.has(FOREIGN)).toBe(true);
+});
+
+test.each(["inactive", "active", "replaced", "unknown"] as const)(
+	"historical pruning requires the same inactive NM profile (candidate=%s)",
+	async (candidate) => {
+		ownByA(true);
+		profiles.set(FOREIGN, { ...profile(A, ""), "connection.id": "Hotspot" });
+		afterPruneSettings = (isFinalRead) => {
+			if (candidate === "active") historicalActivity = "yes";
+			if (candidate === "unknown") historicalActivity = "unknown";
+			if (candidate === "replaced" && isFinalRead)
+				resources.replace(FOREIGN, "Replacement AP");
+		};
+
+		const removed = await discovery.pruneDuplicateHotspotConns(A, "a-current");
+
+		expect(removed).toEqual(candidate === "inactive" ? [FOREIGN] : []);
+		expect([...profiles.keys()].sort()).toEqual(
+			(candidate === "inactive" ? [UNRELATED] : [FOREIGN, UNRELATED]).sort(),
+		);
+		expect(pruneSecretReads).toBe(0);
+	},
+);
 
 for (const concurrent of [false, true]) {
 	test(`${concurrent ? "O8" : "O9"} discovery preserves active observed state without adopting a foreign UUID`, async () => {
@@ -534,7 +988,9 @@ for (const concurrent of [false, true]) {
 		expect(iface.hotspot.conn).toBeUndefined();
 		expect(iface.hotspot.password).toBeUndefined();
 		expect(getHotspotCredentials(B)).toBeUndefined();
-		expect(effects).toEqual([]);
+		expect(effects).toEqual([
+			["con", "modify", "a-profile", "connection.autoconnect", "no"],
+		]);
 	});
 }
 
@@ -569,11 +1025,13 @@ test("all persisted owners arbitrate a pre-existing two-owner contamination", as
 	expect(effects).toEqual([]);
 });
 
-test("main equivalence: evidence-based orphan migration preserves credentials and unrelated profiles", async () => {
+test("recorded legacy profile migration preserves credentials and unrelated profiles", async () => {
 	const iface = radio();
+	await wifiRadioIdentity.discover([{ ifname: iface.ifname, row: iface }]);
 	const unrelated = JSON.stringify(profiles.get(UNRELATED));
-	// An old scan-time pin, with no present or persisted owner, still migrates.
+	// A recorded profile can still repair its stale scan-time pin.
 	profiles.set(FOREIGN, profile("26:c3:93:b6:9c:a7"));
+	rememberHotspotCredentials(B, { ...PAIR, conn: FOREIGN });
 
 	await discovery.handleHotspotConn(undefined, FOREIGN, { active: true });
 
@@ -620,8 +1078,10 @@ test("main equivalence: evidence-based orphan migration preserves credentials an
 	]);
 });
 
-test("main equivalence: unreadable orphan settings retain the existing name attribution", async () => {
+test("unreadable settings retain name attribution for a recorded profile", async () => {
 	const iface = radio();
+	const own = { ...PAIR, conn: FOREIGN };
+	rememberHotspotCredentials(B, own);
 	unreadableSettings = true;
 
 	await discovery.handleHotspotConn(undefined, FOREIGN);
@@ -632,7 +1092,13 @@ test("main equivalence: unreadable orphan settings retain the existing name attr
 			pin: profiles.get(FOREIGN)?.["802-11-wireless.mac-address"],
 			credentials: getHotspotCredentials(B),
 		}),
-	).toBe(JSON.stringify({ conn: FOREIGN, pin: B }));
+	).toBe(
+		JSON.stringify({
+			conn: FOREIGN,
+			pin: B,
+			credentials: { ...own, previousConns: [] },
+		}),
+	);
 });
 
 test("the same owner's normalized UUID hint remains usable", async () => {
@@ -652,6 +1118,9 @@ test("the same owner's normalized UUID hint remains usable", async () => {
 test("pending prepare cannot repair a UUID claimed by competing discovery", async () => {
 	jest.useFakeTimers();
 	const iface = radio();
+	const candidateProfile = profile(B);
+	profiles.set(FOREIGN, candidateProfile);
+	rememberHotspotCredentials(B, { ...PAIR, conn: FOREIGN });
 	addWifiInterface(A, {
 		...iface,
 		id: 1,
@@ -660,36 +1129,41 @@ test("pending prepare cannot repair a UUID claimed by competing discovery", asyn
 	});
 	const lookupGate = Promise.withResolvers<void>();
 	const lookupEntered = Promise.withResolvers<void>();
-	const gates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
-	const entered = [
-		Promise.withResolvers<void>(),
-		Promise.withResolvers<void>(),
-	];
-	let priorityCalls = 0;
+	const priorityGate = Promise.withResolvers<void>();
+	const priorityEntered = Promise.withResolvers<void>();
 	beforeWrite = async (args) => {
 		if (args[3] !== "connection.autoconnect-priority") return;
-		const index = priorityCalls++;
-		entered[index]?.resolve();
-		await gates[index]?.promise;
+		priorityEntered.resolve();
+		await priorityGate.promise;
 	};
 	const deps = activationDeps();
 	deps.findHotspotConn = async (mac, stored) => {
+		const candidate = await discovery.findHotspotConnForAdapter(mac, stored);
 		lookupEntered.resolve();
 		await lookupGate.promise;
-		return discovery.findHotspotConnForAdapter(mac, stored);
+		return candidate;
 	};
 
 	const prepare = prepareHotspotForInterface(B, iface, {}, deps);
+	const pending: Promise<unknown>[] = [prepare];
+	settleDiscoveryRace = async () => {
+		lookupGate.resolve();
+		priorityGate.resolve();
+		await Promise.allSettled(pending);
+	};
 	await lookupEntered.promise;
+	candidateProfile["802-11-wireless.mac-address"] = "";
+	resetHotspotCredentialsForTest();
+	ownByA(false);
 	const claimA = discovery.handleHotspotConn(A, FOREIGN, { active: true });
-	await entered[0]?.promise;
+	pending.push(claimA);
+	await priorityEntered.promise;
+	priorityGate.resolve();
+	await claimA;
 	const claimB = discovery.handleHotspotConn(undefined, FOREIGN, {
 		active: true,
 	});
-	await entered[1]?.promise;
-	gates[0]?.resolve();
-	await claimA;
-	gates[1]?.resolve();
+	pending.push(claimB);
 	await claimB;
 	lookupGate.resolve();
 	const result = await prepare;
@@ -739,6 +1213,8 @@ for (const complete of [false, true]) {
 test("pending prepare still adopts a legitimate single-adapter discovery", async () => {
 	jest.useFakeTimers();
 	const iface = radio();
+	profiles.set(FOREIGN, profile(B));
+	rememberHotspotCredentials(B, { ...PAIR, conn: FOREIGN });
 	const lookupGate = Promise.withResolvers<void>();
 	const lookupEntered = Promise.withResolvers<void>();
 	const deps = activationDeps();
@@ -751,6 +1227,8 @@ test("pending prepare still adopts a legitimate single-adapter discovery", async
 	await lookupEntered.promise;
 	await discovery.handleHotspotConn(undefined, FOREIGN, { active: true });
 	lookupGate.resolve();
+	await prepare;
+	await discovery.handleHotspotConn(undefined, FOREIGN, { active: true });
 
 	expect(await prepare).toEqual({
 		success: true,
@@ -764,7 +1242,7 @@ test("pending prepare still adopts a legitimate single-adapter discovery", async
 });
 
 for (const unverified of [false, true]) {
-	test(`${unverified ? "unverified" : "verified"} single-adapter prepare and start keep the saved pair`, async () => {
+	test(`${unverified ? "unverified" : "verified"} single-adapter prepare and start preserve credential ownership`, async () => {
 		jest.useFakeTimers();
 		const iface = radio();
 		if (unverified) iface.degradedReason = "permanent-mac-unresolved";
@@ -775,24 +1253,43 @@ for (const unverified of [false, true]) {
 		const prepared = await prepareHotspotForInterface(B, iface, {}, deps);
 		const started = await startHotspotForInterface(B, iface, deps);
 
-		expect(prepared).toEqual({
-			success: true,
-			name: OWN_PAIR.ssid,
-			password: OWN_PAIR.password,
-			firstTime: true,
-		});
-		expect(started).toEqual({ success: true });
-		expect(effects.filter((effect) => effect[0] === "create")).toEqual([
-			["create", OWN_PAIR.ssid, OWN_PAIR.password],
-		]);
+		expect(prepared).toEqual(
+			unverified
+				? {
+						success: false,
+						error: "radio-unverified",
+					}
+				: {
+						success: true,
+						name: OWN_PAIR.ssid,
+						password: OWN_PAIR.password,
+						firstTime: true,
+					},
+		);
+		expect(started).toEqual(
+			unverified
+				? { success: false, error: "radio-unverified" }
+				: { success: true },
+		);
+		expect(effects.filter((effect) => effect[0] === "create")).toEqual(
+			unverified ? [] : [["create", OWN_PAIR.ssid, OWN_PAIR.password]],
+		);
 		expect(getHotspotCredentials(B)).toMatchObject({
 			...OWN_PAIR,
-			conn: "b-new-profile",
+			...(unverified ? {} : { conn: "b-new-profile" }),
 		});
+		if (unverified) expect(effects).toEqual([]);
+		if (unverified)
+			expect(getHotspotCredentials(B)).toEqual({
+				...OWN_PAIR,
+				previousConns: [],
+			});
 	});
 }
 
 test("SSID fallback rechecks a candidate claimed while another profile is read", async () => {
+	for (const conn of [FOREIGN, "missing"])
+		rememberHotspotCredentials(B, { ...PAIR, conn });
 	const gate = Promise.withResolvers<void>();
 	const entered = Promise.withResolvers<void>();
 	const deps = {
@@ -815,6 +1312,7 @@ test("SSID fallback rechecks a candidate claimed while another profile is read",
 	};
 	const lookup = discovery.findHotspotConnForAdapter(B, PAIR, deps);
 	await entered.promise;
+	resetHotspotCredentialsForTest();
 	ownByA(false);
 	gate.resolve();
 
@@ -869,16 +1367,19 @@ for (const operation of ["prepare", "save", "start"] as const) {
 test("secret repair refuses credential return when the current cache changes during its await", async () => {
 	const iface = radio();
 	iface.hotspot.conn = "b-profile";
+	profiles.set("b-profile", profile(B));
+	for (const conn of ["b-profile", "previous-current"])
+		rememberHotspotCredentials(B, { ...OWN_PAIR, conn });
 	rememberHotspotCredentials(B, OWN_PAIR);
 	const gate = Promise.withResolvers<void>();
 	const entered = Promise.withResolvers<void>();
 	const deps = activationDeps();
 	deps.findHotspotConn = async () => undefined;
+	const write = deps.nmConnSetFields;
 	deps.nmConnSetFields = async (uuid, fields) => {
-		effects.push([uuid, JSON.stringify(fields)]);
 		entered.resolve();
 		await gate.promise;
-		return true;
+		return write(uuid, fields);
 	};
 	const prepare = prepareHotspotForInterface(B, iface, {}, deps);
 	await entered.promise;
@@ -929,7 +1430,7 @@ for (const stage of [
 				((stage === "binding" || stage === "new binding") &&
 					fields["802-11-wireless.mac-address"] !== undefined) ||
 				((stage === "autoconnect" || stage === "new autoconnect") &&
-					fields["connection.autoconnect"] === "yes")
+					fields["connection.autoconnect-priority"] === "999")
 			)
 				await pause();
 			return true;
@@ -939,9 +1440,9 @@ for (const stage of [
 			if (stage === "activation" || stage === "new activation") await pause();
 			return true;
 		};
-		deps.nmHotspot = async (_ifname, ssid, password) => {
+		deps.nmApConnAdd = async (_ifname, { name: ssid, password }) => {
 			effects.push(["create", ssid, password]);
-			if (stage === "creation") await pause();
+			if (stage === "creation" || stage === "new binding") await pause();
 			return "b-new-profile";
 		};
 		deps.wifiUpdateSavedConns = async () => {
@@ -984,6 +1485,11 @@ for (const stage of [
 			channel: "auto",
 		};
 		iface.activeConn = "b-profile";
+		profiles.set("b-profile", {
+			...profile(B),
+			"802-11-wireless.ssid": OWN_PAIR.ssid,
+			"802-11-wireless-security.psk": OWN_PAIR.password,
+		});
 		rememberHotspotCredentials(B, { ...OWN_PAIR, conn: "b-profile" });
 		const gate = Promise.withResolvers<void>();
 		const entered = Promise.withResolvers<void>();
@@ -996,6 +1502,12 @@ for (const stage of [
 		const deps: HotspotConfigDeps = {
 			nmConnSetFields: async (uuid, fields) => {
 				effects.push([uuid, JSON.stringify(fields)]);
+				Object.assign(profiles.get(uuid) ?? {}, fields);
+				if (fields["802-11-wireless-security.psk"] !== undefined)
+					Object.assign(profiles.get(uuid) ?? {}, {
+						"802-11-wireless-security.psk-flags": "0",
+					});
+				resources.sync();
 				writes++;
 				if (
 					(stage === "save" && writes === 1) ||
@@ -1096,12 +1608,21 @@ test("prepare save refuses a foreign current cache after the profile write settl
 		name: OWN_PAIR.ssid,
 		password: OWN_PAIR.password,
 	};
+	profiles.set("b-profile", {
+		...profile(B),
+		"802-11-wireless.ssid": OWN_PAIR.ssid,
+		"802-11-wireless-security.psk": OWN_PAIR.password,
+	});
 	rememberHotspotCredentials(B, { ...OWN_PAIR, conn: "b-profile" });
 	const gate = Promise.withResolvers<void>();
 	const entered = Promise.withResolvers<void>();
 	const deps = activationDeps();
 	deps.nmConnSetFields = async (uuid, fields) => {
 		effects.push([uuid, JSON.stringify(fields)]);
+		Object.assign(profiles.get(uuid) ?? {}, fields, {
+			"802-11-wireless-security.psk-flags": "0",
+		});
+		resources.sync();
 		entered.resolve();
 		await gate.promise;
 		return true;
@@ -1132,6 +1653,7 @@ for (const conflict of [
 		const iface = radio();
 		const candidate = conflict === "candidate claimed" ? FOREIGN : "candidate";
 		profiles.set(candidate, profile());
+		rememberHotspotCredentials(B, { ...PAIR, conn: candidate });
 		const gate = Promise.withResolvers<void>();
 		const entered = Promise.withResolvers<void>();
 		beforeWrite = async (args) => {
@@ -1147,6 +1669,7 @@ for (const conflict of [
 			active: true,
 		});
 		await entered.promise;
+		if (conflict === "candidate claimed") resetHotspotCredentialsForTest();
 		ownByA(false);
 		iface.hotspot.conn = FOREIGN;
 		iface.hotspot.name = PAIR.ssid;
@@ -1156,7 +1679,11 @@ for (const conflict of [
 
 		expect(iface.hotspot.conn).toBeUndefined();
 		expect(iface.hotspot.password).toBeUndefined();
-		expect(getHotspotCredentials(B)).toBeUndefined();
+		expect(getHotspotCredentials(B)).toEqual(
+			conflict === "candidate claimed"
+				? undefined
+				: { ...PAIR, conn: candidate, previousConns: [] },
+		);
 		expect(
 			effects.filter(
 				(effect) => effect[3] === "connection.autoconnect-priority",
@@ -1173,6 +1700,7 @@ for (const operation of ["prepare", "start"] as const) {
 			rememberHotspotCredentials(B, {
 				ssid: PAIR.ssid,
 				password: OWN_PAIR.password,
+				conn: FOREIGN,
 			});
 			profiles.set(FOREIGN, profile(A));
 			const entered = Promise.withResolvers<void>();
@@ -1219,6 +1747,7 @@ for (const stage of ["binding", "activation", "autoconnect"] as const) {
 		rememberHotspotCredentials(B, {
 			ssid: PAIR.ssid,
 			password: OWN_PAIR.password,
+			conn: FOREIGN,
 		});
 		profiles.set(FOREIGN, profile(A));
 		const entered = Promise.withResolvers<void>();
@@ -1229,7 +1758,8 @@ for (const stage of ["binding", "activation", "autoconnect"] as const) {
 			if (
 				(stage === "binding" &&
 					fields["802-11-wireless.mac-address"] !== undefined) ||
-				(stage === "autoconnect" && fields["connection.autoconnect"] === "yes")
+				(stage === "autoconnect" &&
+					fields["connection.autoconnect-priority"] === "999")
 			) {
 				entered.resolve();
 				await gate.promise;
@@ -1264,12 +1794,18 @@ for (const stage of ["binding", "activation", "autoconnect"] as const) {
 test("completed legacy profile migration keeps its new pin when the old pin owner returns", async () => {
 	jest.useFakeTimers();
 	const iface = radio();
+	await wifiRadioIdentity.discover([{ ifname: iface.ifname, row: iface }]);
 	rememberHotspotCredentials(B, {
 		ssid: PAIR.ssid,
 		password: OWN_PAIR.password,
+		conn: FOREIGN,
 	});
 	profiles.set(FOREIGN, profile(A));
-	const deps = activationDeps();
+	const deps = {
+		...activationDeps(),
+		readProfilePins: readHotspotProfilePins,
+		wifiUpdateSavedConns,
+	};
 
 	expect(await startHotspotForInterface(B, iface, deps)).toEqual({
 		success: true,
@@ -1294,6 +1830,7 @@ test("a prepared profile retains pin evidence for a later cached start", async (
 	rememberHotspotCredentials(B, {
 		ssid: PAIR.ssid,
 		password: OWN_PAIR.password,
+		conn: FOREIGN,
 	});
 	profiles.set(FOREIGN, profile(A));
 	const deps = activationDeps();

@@ -649,27 +649,61 @@ export function resolveDeviceStatsDeps(): DeviceStatsDeps {
 	return defaultDeviceStatsDeps;
 }
 
+type DeviceStatsLoopDeps = {
+	readonly DEVICE_STATS_INTERVAL_MS: number;
+	readonly DEVICE_STATS_EVENT: typeof DEVICE_STATS_EVENT;
+	readonly ACTIVE_TO: number;
+	readonly createDiskEventObserver: typeof createDiskEventObserver;
+	readonly collectDeviceStats: typeof collectDeviceStats;
+	readonly resolveDeviceStatsDeps: typeof resolveDeviceStatsDeps;
+	readonly deviceStatsState: DeviceStatsState;
+	readonly recordDeviceStatsSnapshot: typeof recordDeviceStatsSnapshot;
+	readonly broadcastMsg: typeof broadcastMsg;
+	readonly getms: typeof getms;
+	readonly logger: Pick<typeof logger, "error">;
+	readonly setInterval: (run: () => Promise<void>, delay: number) => void;
+};
+
+const defaultDeviceStatsLoopDeps: DeviceStatsLoopDeps = {
+	DEVICE_STATS_INTERVAL_MS,
+	DEVICE_STATS_EVENT,
+	ACTIVE_TO,
+	createDiskEventObserver,
+	collectDeviceStats,
+	resolveDeviceStatsDeps,
+	deviceStatsState,
+	recordDeviceStatsSnapshot,
+	broadcastMsg,
+	getms,
+	logger,
+	setInterval: (run, delay) => setInterval(run, delay),
+};
+
 /**
  * Start the 5s `device-stats` broadcast loop. Mirrors the sensors/netif
  * pattern: an immediate first tick (after the baseline rx/tx sample lands)
  * then a fixed interval. Coalescing (5s window) lives in rpc/coalesce.ts.
  */
-export function initDeviceStats(): void {
-	const observeDisk = createDiskEventObserver();
+export function initDeviceStats(deps = defaultDeviceStatsLoopDeps): void {
+	const observeDisk = deps.createDiskEventObserver();
 	const tick = async () => {
 		try {
-			const payload = await collectDeviceStats(
-				resolveDeviceStatsDeps(),
-				deviceStatsState,
+			const payload = await deps.collectDeviceStats(
+				deps.resolveDeviceStatsDeps(),
+				deps.deviceStatsState,
 			);
-			recordDeviceStatsSnapshot(payload);
+			deps.recordDeviceStatsSnapshot(payload);
 			observeDisk(payload.disk);
-			broadcastMsg(DEVICE_STATS_EVENT, payload, getms() - ACTIVE_TO);
+			deps.broadcastMsg(
+				deps.DEVICE_STATS_EVENT,
+				payload,
+				deps.getms() - deps.ACTIVE_TO,
+			);
 		} catch (err) {
-			logger.error(`device-stats tick failed: ${err}`);
+			deps.logger.error(`device-stats tick failed: ${err}`);
 		}
 	};
 
 	void tick();
-	setInterval(tick, DEVICE_STATS_INTERVAL_MS);
+	deps.setInterval(tick, deps.DEVICE_STATS_INTERVAL_MS);
 }

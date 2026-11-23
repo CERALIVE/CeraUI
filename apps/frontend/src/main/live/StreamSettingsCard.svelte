@@ -16,6 +16,9 @@ export type ConfigRow = {
 	warn?: boolean;
 	// The encoder row's route line, the same one the Encoder dialog shows.
 	route?: { outcome: RouteOutcome; text: string };
+	// The encoder row's bitrate ceiling, formatted. Said once, after the value,
+	// and tappable: it opens the row's editor even while Edit waits for a source.
+	bitrate?: string;
 };
 </script>
 

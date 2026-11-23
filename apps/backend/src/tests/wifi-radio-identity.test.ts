@@ -152,7 +152,7 @@ describe("pair-scoped cache and shadow identities", () => {
 		files.phys.set(PHY, { index: "0" });
 		await producer.discover([{ ifname: "wlan0" }]);
 		expect(producer.state.rows.get("wlan0")).toMatchObject({
-			key: "degraded:wlan0",
+			key: "limited:9:0",
 			classification: "limited",
 			permanentMac: undefined,
 			lifetime: { ifindex: 9, wiphy: 0, phyPath: PHY },
@@ -170,7 +170,7 @@ describe("pair-scoped cache and shadow identities", () => {
 		files.netdevs.set("wlrenamed", { ifindex: "3", phy: PHY });
 		await producer.discover([{ ifname: "wlrenamed" }]);
 		expect(producer.state.rows.get("wlrenamed")).toMatchObject({
-			key: "degraded:wlrenamed",
+			key: "limited:3:0",
 			incarnation: first,
 			classification: "limited",
 		});
@@ -215,7 +215,10 @@ describe("pair-scoped cache and shadow identities", () => {
 			await producer.discover([{ ifname: "wlan0" }]);
 			const predecessor = producer.state.rows.get("wlan0");
 			files.netdevs.set("wlan0", { ifindex: "12", phy: PHY });
-			files.phys.set(PHY, { index: "0", mac });
+			files.phys.set(PHY, {
+				index: "0",
+				...(mac === undefined ? {} : { mac }),
+			});
 			await producer.discover([
 				{ ifname: "wlan0", degradedReason: "unavailable" },
 			]);
@@ -292,8 +295,8 @@ describe("two-pass duplicate classification", () => {
 		release.resolve();
 		await run;
 		expect([...paused.state.rows.values()].map((row) => row.key)).toEqual([
-			"degraded:wlan0",
-			"degraded:wlan1",
+			"limited:3:0",
+			"limited:4:1",
 		]);
 		await producer.discover([{ ifname: "wlan0" }, { ifname: "wlan1" }]);
 		const first = producer.state.rows;

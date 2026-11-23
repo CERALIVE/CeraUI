@@ -88,6 +88,9 @@ beforeEach(async () => {
 		async (path) =>
 			`/sys/devices/radio/phy${path.includes("wlan1") ? "1" : "0"}`,
 	);
+	spyOn(radioIdentityReaders, "readDevicePath").mockImplementation(
+		async (ifname) => `platform-test-${ifname}`,
+	);
 });
 
 afterEach(async () => {

@@ -130,7 +130,7 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
     or a Bun Error tagged `socketpair`, `fcntl` or `posix_spawn`, releases immediately with the original error and
     no group/unit probe or retry. A returned handle is irrevocably started, including an
     abort racing its assignment; allocated-but-unexecuted evidence stays unknown. This
-    pre-exec tag proof was audited at bun-v1.4.2..v1.4.4; classification unchanged.
+    pre-exec tag proof was audited at bun-v1.4.2..v1.4.5; classification unchanged.
     1.4.3 added kill-then-reap on `pidfd_open` failure (oven-sh/bun#40080, f86be9d).
     Exec can still precede the throw; this is not generic errno clearance.
     A minimal Bash launcher records `$$` with
@@ -143,7 +143,7 @@ tests), and the SAME crash-loop discriminator drives auto-disable.
     and descriptor-unit proof; a name census is never helper retirement authority.
     Invalid/nonempty/unreadable identity remains UNKNOWN, including a later empty read.
     Empty identity after a `pidfd_open` throw proves no helper exec under the audited
-    fixed-options reaping proof (spawn_process.rs:504-555,1018-1047 at bun-v1.4.4);
+    fixed-options reaping proof (spawn_process.rs:504-555,1018-1047 at bun-v1.4.5);
     the wait loop (posix_spawn.rs:665-699 at that tag) retries EINTR,
     and ordinary ECHILD means already gone. Untagged/future/non-Error absence gets
     cancellable 100/200/400 ms re-reads (700 ms total) before the same absence decision.

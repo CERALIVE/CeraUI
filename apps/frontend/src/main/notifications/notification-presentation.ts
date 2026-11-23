@@ -71,14 +71,25 @@ export const NOTIFICATION_BAND_ICON_CLASS: Record<NotificationType, string> = {
  *
  * The local removal is the source of truth for what is on screen; the backend
  * call is best-effort, and a server-side remove broadcast (if any) reconciles
- * idempotently through `subscriptions.svelte`.
+ * idempotently through `subscriptions.svelte`. The shown revision and publisher
+ * tell the device which release was dismissed, so it can refuse a stale one.
  */
-export async function dismissPersistentNotification(
-	name: string,
-): Promise<void> {
+export async function dismissPersistentNotification({
+	name,
+	revision,
+	publisher,
+}: {
+	readonly name: string;
+	readonly revision?: number | undefined;
+	readonly publisher?: string | undefined;
+}): Promise<void> {
 	dismiss(name);
 	try {
-		await rpc.notifications.dismiss({ name });
+		await rpc.notifications.dismiss({
+			name,
+			...(revision !== undefined ? { revision } : {}),
+			...(publisher !== undefined ? { publisher } : {}),
+		});
 	} catch {
 		/* best-effort: the optimistic local removal above already happened. */
 	}

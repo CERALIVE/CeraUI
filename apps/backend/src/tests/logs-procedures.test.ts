@@ -6,6 +6,7 @@ import { call } from "@orpc/server";
 import * as logging from "../helpers/logger.ts";
 import * as runner from "../helpers/run.ts";
 import * as mocks from "../mocks/mock-service.ts";
+import * as identity from "../modules/device-logs/boot-id.ts";
 import { currentBootId } from "../modules/device-logs/boot-id.ts";
 import { abortLogExports } from "../modules/device-logs/export.ts";
 import { stopAllFollows } from "../modules/device-logs/follow.ts";
@@ -189,18 +190,18 @@ test("query and around read the mock ring with defaults and extreme timestamps",
 });
 
 test("boots includes historical classification instead of the discovery placeholder", async () => {
+	const current = "f4".repeat(16);
+	const startedAt = 1_700_001_234_567;
 	appendBoot({
 		bootId: "123456788694489b8c3a3fb4795cab24",
 		startedAt: 1,
 		versions: null,
 	});
-	expect(
-		await call(appRouter.logs.boots, undefined, { context: sockets.context }),
-	).toEqual([
+	const expected = [
 		{
-			bootId: bootId(),
+			bootId: current,
 			index: 0,
-			firstTs: 0,
+			firstTs: startedAt,
 			lastTs: 0,
 			current: true,
 			shutdown: "current",
@@ -219,7 +220,19 @@ test("boots includes historical classification instead of the discovery placehol
 			logsAvailable: false,
 			versions: null,
 		},
-	]);
+	];
+	const identitySpy = spyOn(identity, "currentBootId").mockReturnValue(current);
+	const clock = spyOn(Date, "now").mockReturnValue(startedAt);
+	try {
+		const list = () =>
+			call(appRouter.logs.boots, undefined, { context: sockets.context });
+		expect(await list()).toEqual(expected);
+		clock.mockReturnValue(startedAt + 60_000);
+		expect(await list()).toEqual(expected);
+	} finally {
+		clock.mockRestore();
+		identitySpy.mockRestore();
+	}
 });
 
 test("storage retention cleanup and export delegates work without systemd", async () => {

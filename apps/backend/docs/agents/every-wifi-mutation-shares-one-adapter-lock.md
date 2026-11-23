@@ -18,15 +18,20 @@ against a station mutation serialized nothing. `wifiConnectNewProcedure`
 compounded it by taking no lock at all — the one mutating procedure that skipped
 `runGuarded` entirely.
 
-- **The key is the PERMANENT hardware address**, i.e. the same value
-  `wifiInterfacesByMacAddress` is keyed on (`resolveWifiPermanentMac`), so a lock
-  key and a registry lookup can never name different adapters. An ifname cannot
-  carry that guarantee: NetworkManager renames adapters (this fleet's
-  duplicate-MAC dongles rename against each other on replug), and the AP+STA
-  concurrent path activates the hotspot on a SECOND, virtual `clap-<parent>`
-  interface belonging to the same radio — an ifname key there leaves the
-  parent's station mutations unguarded for the whole activation.
-- **It is the BARE normalized MAC, no prefix.** It shares the process-wide
+- **The key is the logical owner.** A verified radio normally uses its normalized
+  permanent address. Observed profile ownership resolves limited registry
+  aliases and composite persisted owners to the same serialization authority.
+  The existing D12 sole-radio exception supplies an owner only when no observed
+  ownership resolves it. An admitted operation retains its owner while intent
+  changes, so Stop, policy retry and identity transfer cannot use different
+  keys for the same operation. Interface names never become lock authorities.
+- Profile policy rechecks current row aliases after its awaited profile read.
+  `withWifiAdapterPolicyLocks` retains those aliases through owner binding,
+  deactivation and checked writes using the existing adapter lock primitive.
+  A conflicting admitted operation defers the pass without NM effects or
+  degradation; unrelated rows remain independent. The already-held logical
+  owner is not reacquired.
+- **It is the normalized owner string, no prefix.** It shares the process-wide
   `withDeviceLock` registry, so prefixing would silently stop matching a key an
   existing caller already holds.
 - **An unresolvable adapter runs UNGUARDED, deliberately.** `runGuarded` runs
@@ -66,7 +71,7 @@ dispatched outcome.
 |---|---|
 | station (connect/connectNew/disconnect/forget/scan) | UNCHANGED — `runGuarded` across dispatch only |
 | `hotspotStart` / `hotspotStop` | NO `runGuarded`: an `adapterBusy()` admission PROBE (acquire+release), then AWAIT the transaction and return its typed outcome |
-| `hotspotConfigure` | NO `runGuarded`: same probe, then a dispatch ack — awaiting it risks 2 × `HOTSPOT_UP_TO` (60 s) against a 30 s RPC timeout |
+| `hotspotConfigure` | NO `runGuarded`: same probe, then AWAIT the shared configuration transaction before returning its existing acknowledgement shape; terminal-frame handling remains attached |
 
 **The probe is required, not decorative: two id→MAC resolutions exist and they
 disagree.** `getMacAddressForWifiInterface` reads `getWifiIdToMacAddress()`;
@@ -86,6 +91,26 @@ unexpected throw from the `.catch` arms in `handleWifi`. `wifiHotspotStart`
 deliberately does NOT publish on success — that would resolve the operator's op
 before NetworkManager has answered.
 
+Start retains the optional UUID from its dispatch and echoes it on the
+terminal frame, including deferred monitor settlement. No UUID is added for
+older callers or to Stop. When Start detects a replacement after a saved
+profile's Up, it compares the captured profile and active path before Down
+under the owner lock. A failed or unverified cleanup reports `radio-changed`
+with `deactivation-failed` so the dialog cannot claim the AP is off.
+
+Once Start has returned acceptance and released its lock, Stop treats
+activating as a teardown target even before observed AP success. It retires
+confirmation before downing the selected UUID and waits for the down result.
+NM refusal remains deactivation-failed, not Stop success. While create/up is
+still holding the lock, Stop remains DEVICE_BUSY without NM or intent effects.
+Stop captures its selected UUID before the awaited autoconnect write and passes
+it through teardown. Observer expiry and failed down may clear the UI transition,
+so inactive shortcut success requires a fresh NM uuid,active inventory proving
+the captured UUID inactive or absent. Active/activating or unknown activity takes
+normal down. A committed down with lost reply can complete its retry from that
+inactivity proof; a failed down must be attempted again. No separate obligation
+registry is involved.
+
 **A state broadcast is not a terminal outcome.** `giveUp()` already called
 `broadcastState()`, which says "still a station"; it does not say the START
 failed, so the keyed op could only expire on its TTL. Hence `not-confirmed`,
@@ -95,6 +120,38 @@ never reported the AP up, which is a different thing to tell someone.
 `accepted: true` on the reply means "a terminal frame follows", never "the access
 point is up". Wire contract: `hotspotToggleErrorSchema` (six members, none
 collapsible) + `hotspotToggleOutputSchema` in `@ceraui/rpc`.
+
+Transition ownership begins before awaited NM activation. The shared
+`beginHotspotTransition` cancels and removes previous confirmation observers
+and sets the new flag in one synchronous operation under the adapter lock.
+Registration after NM acceptance adds proof observation without reacquiring
+ownership. An older observer cannot retire a newer unregistered transition;
+an unsuperseded observer still retires its own abandoned target.
+
+Start keeps the adapter lifetime proof separately from the one-shot request
+record. Before acting on a confirmed lifetime mismatch, the observer takes
+the original owner's adapter lock and verifies that the same pending entry
+still owns the exact profile and active instance. Down names its captured
+active path (`nmcli connection down apath`), so a delayed observer cannot stop
+a successor activation of the same profile. Failed Start
+rollback merges only its own projection against the current cache.
+
+Bound credential publication parks the old keyfile and publishes with a
+no-replace link. It rechecks the staged inode and submitted bytes after the
+final radio permit and after load readback. Before load, a refusal restores
+only into a vacant pathname; on conflict the backup is retained and logged.
+Start rollback never sends UUID Down without a captured activation path.
+Deleting a first profile also requires fresh evidence of inactivity, even
+after acknowledged Down. Hybrid Start, its confirmation observer and
+Configure use the original AP leg in `wifiOperationGuard`, not a newer
+roster entry. Deferred failure calls `releaseHybridLeg` under the owner
+lock with the allocator receipt, even when Down was not acknowledged.
+Busy or unreadable legs retain a bounded reconciliation obligation. An idle,
+still-owned leg regains its prior autoconnect; a successor's selection is
+untouched. The protocol contract lists the residual windows. A Start
+attempt UUID only correlates terminal output and grants
+no authority to mutate or release a radio. It is a recorded deviation from
+plan todo 24; see the [protocol contract](../../../../docs/WIFI-INCARNATION-PROTOCOL.md).
 
 The adapter-mode wrapper places a bounded terminal watchdog around that promise.
 If the delegated publisher is lost entirely, the mode operation settles once as

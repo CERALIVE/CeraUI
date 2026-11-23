@@ -9,14 +9,41 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { RpcError } from "$lib/rpc/rpc-error";
 
 import {
+	handleLogBundleRequest,
+	createBundle as issueBundle,
+} from "../../../../backend/src/modules/device-logs/bundle";
+import {
+	abortLogExports,
+	handleLogExportRequest,
+	createExport as issueExport,
+} from "../../../../backend/src/modules/device-logs/export";
+import {
 	BUNDLE_TICKET,
+	EXPORT_TICKET,
 	bundleManifest as manifest,
 	EXPORT_TICKET as TICKET,
 } from "./__fixtures__/sharing";
+import { startBackendDownload } from "./download-gate.svelte";
 
 import { notifyHistoryChanged, onHistoryChanged } from "./history-bus";
 import { exportInput, RAW_OPENING_QUERY } from "./sharing";
 import { SharingFlow } from "./sharing-flow.svelte";
+
+// Use real ticket admission and redemption, without host journal or bundle data.
+vi.mock("../../../../backend/src/modules/device-logs/bundle-body", () => ({
+	BUNDLE_TIME_MS: 60_000,
+	buildBundle: async () => ({
+		manifest: manifest(3),
+		chunks: [],
+		filename: "support.ndjson.gz",
+	}),
+}));
+vi.mock("../../../../backend/src/modules/device-logs/export-body", () => ({
+	EXPORT_TIME_MS: 120_000,
+	exportChunks: function* () {
+		yield new TextEncoder().encode("# complete: 0 entries\n");
+	},
+}));
 
 const busyPreview = () =>
 	new RpcError({ message: "BUSY", code: "INTERNAL_ERROR" });
@@ -31,19 +58,111 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-function setup() {
+function setup(current: () => boolean = () => true) {
 	const createExport =
 		vi.fn<(input: LogExportInput) => Promise<LogExportOutput>>();
 	const previewBundle = vi.fn<() => Promise<LogBundleManifest>>();
 	const createBundle = vi.fn<() => Promise<LogExportOutput>>();
 	const download = vi.fn<(path: string) => void>();
 	const flow = new SharingFlow({
+		current,
 		logs: { createExport, previewBundle, createBundle },
 		download,
 	});
 	flows.push(flow);
 	return { flow, createExport, previewBundle, createBundle, download };
 }
+
+it.each(["export", "bundle"] as const)(
+	"starts no %s download for a ticket answered once the view's open has ended",
+	async (kind) => {
+		let open = true;
+		const { flow, createExport, previewBundle, createBundle, download } = setup(
+			() => open,
+		);
+		const held = Promise.withResolvers<LogExportOutput>();
+		createExport.mockReturnValue(held.promise);
+		createBundle.mockReturnValue(held.promise);
+		previewBundle.mockResolvedValue(manifest(3));
+		let press: Promise<void>;
+		if (kind === "export") {
+			flow.openExport();
+			press = flow.confirmExport();
+		} else {
+			await flow.openBundle();
+			press = flow.downloadBundle();
+		}
+
+		open = false;
+		held.resolve(kind === "export" ? EXPORT_TICKET : BUNDLE_TICKET);
+		await press;
+
+		expect(download).not.toHaveBeenCalled();
+	},
+);
+
+it.each(["export", "bundle"] as const)(
+	"starts a new %s download on the second press after a synchronous browser refusal",
+	async (kind) => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const conn = {};
+		const requests: Promise<Response>[] = [];
+		const issued: string[] = [];
+		const create = async (call: Promise<LogExportOutput>) => {
+			const reply = await call;
+			if (reply.ok) issued.push(reply.url);
+			return reply;
+		};
+		const handle =
+			kind === "export" ? handleLogExportRequest : handleLogBundleRequest;
+		vi.spyOn(HTMLAnchorElement.prototype, "click")
+			.mockImplementation(function (this: HTMLAnchorElement) {
+				requests.push(handle(new Request(this.href)));
+			})
+			.mockImplementationOnce(() => {
+				throw new DOMException("blocked", "SecurityError");
+			});
+		const flow = new SharingFlow({
+			current: () => true,
+			logs: {
+				createExport: (input) => create(issueExport(conn, input)),
+				previewBundle: async () => manifest(3),
+				createBundle: () => create(issueBundle(conn)),
+			},
+			download: (path) => startBackendDownload(() => true, path),
+		});
+		flows.push(flow);
+		const press =
+			kind === "export"
+				? () => flow.confirmExport()
+				: () => flow.downloadBundle();
+		try {
+			if (kind === "export") {
+				flow.view = { ...RAW_OPENING_QUERY, boot: "all" };
+				flow.openExport();
+			} else await flow.openBundle();
+
+			await press();
+			expect(kind === "export" ? flow.exportProblem : flow.bundleProblem).toBe(
+				"failed",
+			);
+			expect(issued).toHaveLength(1);
+			expect(requests).toHaveLength(0);
+
+			await press();
+			expect(kind === "export" ? flow.exportStep : flow.bundleStep).toBe(
+				"closed",
+			);
+			expect(issued).toHaveLength(2);
+			expect(issued[1]).not.toBe(issued[0]);
+			expect(requests).toHaveLength(1);
+			expect((await requests[0])?.status).toBe(200);
+		} finally {
+			for (const pending of requests) await (await pending).body?.cancel();
+			await abortLogExports();
+		}
+	},
+);
 
 // A step the flow reaches behind its own awaits: bounded in microtask turns, never timed.
 async function until(reached: () => boolean): Promise<void> {
@@ -500,6 +619,52 @@ describe("SharingFlow: support bundle", () => {
 		expect(flow.bundleRefused).toBe(false);
 	});
 
+	it("keeps the device's sanitized stage of a refused preview until the next attempt or close", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const { flow, previewBundle } = setup();
+		previewBundle
+			.mockRejectedValueOnce(
+				new RpcError({
+					message: "READ_FAILED",
+					code: "INTERNAL_ERROR",
+					stage: "collision",
+				}),
+			)
+			.mockRejectedValueOnce(busyPreview())
+			.mockRejectedValueOnce(failedPreview())
+			.mockResolvedValueOnce(manifest(2));
+
+		await flow.openBundle();
+		expect(flow.bundleProblem).toBe("failed");
+		expect(flow.bundleFailure).toBe("collision");
+		expect(flow.bundleRefused).toBe(true);
+
+		await flow.retryPreview();
+		expect(flow.bundleProblem).toBe("busy");
+		expect(flow.bundleFailure).toBeNull();
+
+		await flow.retryPreview();
+		expect(flow.bundleFailure).toBe("internal");
+		expect(flow.bundleRefused).toBe(true);
+
+		await flow.retryPreview();
+		expect(flow.manifest).toStrictEqual(manifest(2));
+		expect(flow.bundleFailure).toBeNull();
+
+		previewBundle.mockRejectedValueOnce(
+			new RpcError({
+				message: "READ_FAILED",
+				code: "INTERNAL_ERROR",
+				stage: "journal_read",
+			}),
+		);
+		flow.closeBundle();
+		await flow.openBundle();
+		expect(flow.bundleFailure).toBe("journal_read");
+		flow.closeBundle();
+		expect(flow.bundleFailure).toBeNull();
+	});
+
 	it("marks a creation the device refused as READ_FAILED as a refusal Export can replace, not a call that failed here", async () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
 		const { flow, previewBundle, createBundle } = setup();
@@ -878,5 +1043,63 @@ describe("SharingFlow: dispose", () => {
 
 		expect(previewBundle).not.toHaveBeenCalled();
 		expect(flow.bundleStep).toBe("preview");
+	});
+});
+
+describe("SharingFlow: the export scope is fixed when the confirmation opens", () => {
+	const opened = {
+		...RAW_OPENING_QUERY,
+		levels: ["error"],
+		text: "needle",
+	} as const;
+	const later = {
+		sources: ["kernel"],
+		levels: ["debug"],
+		boot: "all",
+	} as const;
+
+	it("states and sends the scope it opened with, whatever Raw publishes meanwhile", async () => {
+		const { flow, createExport } = setup();
+		createExport.mockResolvedValue({ ok: false, error: "BUSY" });
+		const raw = flow.bindView();
+		raw.publish(opened);
+
+		flow.openExport();
+		const stated = flow.exportScope;
+		raw.publish(later, "moment");
+		await flow.confirmExport();
+
+		expect(flow.exportScope).toBe(stated);
+		expect(stated).toEqual({ query: opened, span: "filters", bootStart: null });
+		expect(createExport).toHaveBeenCalledExactlyOnceWith(exportInput(opened));
+		flow.closeExport();
+		expect(flow.exportScope).toBeNull();
+	});
+
+	it("follows the picker used after Raw's last view, and Raw again once it publishes", () => {
+		const { createExport, previewBundle, createBundle, download } = setup();
+		const picker = { boot: null, intent: 0 };
+		const flow = new SharingFlow({
+			current: () => true,
+			logs: { createExport, previewBundle, createBundle },
+			download,
+			picker,
+		});
+		flows.push(flow);
+		const scopeOnOpen = () => {
+			flow.openExport();
+			const scope = flow.exportScope?.query;
+			flow.closeExport();
+			return scope;
+		};
+		const raw = flow.bindView();
+
+		expect(scopeOnOpen()).toEqual({ ...RAW_OPENING_QUERY, boot: "all" });
+		raw.publish(opened);
+		expect(scopeOnOpen()).toEqual(opened);
+		picker.intent += 1;
+		expect(scopeOnOpen()).toEqual({ ...opened, boot: "all" });
+		raw.publish(later);
+		expect(scopeOnOpen()).toEqual(later);
 	});
 });

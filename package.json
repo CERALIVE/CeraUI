@@ -1,7 +1,7 @@
 {
 	"name": "ceralive-workspace",
 	"private": true,
-	"version": "2026.11.3",
+	"version": "2026.11.5",
 	"description": "Monorepo workspace containing CeraUI frontend and CeraLive backend",
 	"type": "module",
 	"repository": {
@@ -28,7 +28,7 @@
 		"build:backend": "bun run --filter backend build:backend-only",
 		"preview": "bun run --filter frontend preview",
 		"test": "bun run --filter @ceraui/rpc test && bun run --filter @ceraui/i18n test && bun run --filter @ceraui/srtla-send test && bun run --filter frontend test && bun run --filter backend test",
-		"test:build-check-shape": "bun test ./scripts/ci/build-check-shape.test.mjs ./scripts/ci/visual-pr.test.mjs ./scripts/ci/visual-container.test.mjs ./scripts/ci/journal-conformance.test.mjs ./scripts/ci/bundle-report.test.mjs ./scripts/tailwind-variants.test.mjs",
+		"test:build-check-shape": "bun test ./scripts/ci/build-check-shape.test.mjs ./scripts/ci/publish-release-guard.test.mjs ./scripts/ci/visual-pr.test.mjs ./scripts/ci/visual-container.test.mjs ./scripts/ci/journal-conformance.test.mjs ./scripts/ci/bundle-report.test.mjs ./scripts/tailwind-variants.test.mjs",
 		"test:journal-conformance": "bash apps/backend/test-harness/journal-conformance/run.sh",
 		"test:release-package-contracts": "bash scripts/build/release-package-contracts.sh",
 		"test:service-contract": "bash scripts/ci/run-service-contract.sh",
@@ -57,7 +57,7 @@
 	"volta": {
 		"node": "26.0.0"
 	},
-	"packageManager": "bun@1.4.4",
+	"packageManager": "bun@1.4.5",
 	"workspaces": {
 		"packages": [
 			"apps/*",

@@ -34,12 +34,13 @@
 import type { HotspotToggleError } from "@ceraui/rpc/schemas";
 
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import { withoutWifiRequestBinding } from "./wifi-binding.ts";
 
 export type { HotspotToggleError };
 
 export type HotspotToggleOutcome =
 	| { success: true }
-	| { success: false; error: HotspotToggleError };
+	| { success: false; error: HotspotToggleError; reason?: string };
 
 export type HotspotOutcomeKind = "start" | "stop";
 
@@ -47,18 +48,32 @@ export type HotspotOutcomePublisher = (
 	kind: HotspotOutcomeKind,
 	device: number | string,
 	outcome: HotspotToggleOutcome,
+	attempt?: string,
 ) => void;
 
 export const publishHotspotOutcome: HotspotOutcomePublisher = (
 	kind,
 	device,
 	outcome,
-) => {
-	broadcastMsg("wifi", {
-		hotspot: {
-			[kind]: outcome.success
-				? { device, success: true }
-				: { device, error: outcome.error },
-		},
+	attempt,
+) =>
+	withoutWifiRequestBinding(() => {
+		broadcastMsg("wifi", {
+			hotspot: {
+				[kind]: outcome.success
+					? {
+							device,
+							success: true,
+							...(kind === "start" && attempt ? { attempt } : {}),
+						}
+					: {
+							device,
+							error: outcome.error,
+							...(kind === "start" && attempt ? { attempt } : {}),
+							...(outcome.reason === undefined
+								? {}
+								: { reason: outcome.reason }),
+						},
+			},
+		});
 	});
-};

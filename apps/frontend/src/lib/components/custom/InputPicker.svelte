@@ -119,10 +119,14 @@ function capsLabel(device: CaptureDevice): string {
 						{const isSwitching = $derived(device.input_id === switchingInput)}
 						{const caps = $derived(capsLabel(device))}
 						{const audioBlocked = $derived(device.kind === 'audio' && !audioLiveSwitchEnabled)}
+						<!-- A lost device dims its frame (70% of each colour's alpha) and what the
+						     row says about the device, never the Lost pill or the actions: opacity on
+						     the row would paint the red Lost word below AA, and no ink that still
+						     reads red wins it back. The actions show their own enabled state. -->
 						<li
 								class={`flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors ${
 									device.lost
-										? 'border-destructive/40 bg-destructive/5 opacity-70'
+										? 'border-destructive/28 bg-destructive/[3.5%]'
 										: isActive
 											? 'border-primary/60 bg-primary/5'
 											: 'bg-card'
@@ -133,10 +137,11 @@ function capsLabel(device: CaptureDevice): string {
 							>
 								<div class="min-w-0 flex-1">
 									<div class="flex items-center gap-2">
-										<span class="truncate text-sm font-medium">{device.display_name}</span>
+										<span class="truncate text-sm font-medium" class:opacity-70={device.lost}>{device.display_name}</span>
 										{#if isActive}
 											<span
 												class="bg-primary/15 text-primary inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+												class:opacity-70={device.lost}
 											>
 												<Check aria-hidden={true} class="size-3" />
 												{m["live.inputPicker.active"]()}
@@ -152,7 +157,7 @@ function capsLabel(device: CaptureDevice): string {
 										{/if}
 									</div>
 									{#if caps}
-										<p class="text-muted-foreground mt-0.5 truncate font-mono text-xs">{caps}</p>
+										<p class="text-muted-foreground mt-0.5 truncate font-mono text-xs" class:opacity-70={device.lost}>{caps}</p>
 									{/if}
 								</div>
 

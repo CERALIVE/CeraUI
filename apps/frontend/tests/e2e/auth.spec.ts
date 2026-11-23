@@ -56,7 +56,9 @@ test.describe('Auth gate', () => {
  *      under test is the app's own.
  *   2. The backend stops answering mid-session and is still not answering
  *      across a reload. A TRANSPORT failure is not a credential rejection: the
- *      saved credential must survive both, the reload must land on the
+ *      saved credential must survive both. A live replacement that cannot
+ *      finish sign-in returns to the password form without erasing the token.
+ *      The reload must land on the
  *      `auth-timeout` band rather than the password screen, and the credential
  *      must still be there to auto-authenticate once the backend answers again.
  *
@@ -68,15 +70,10 @@ test.describe('Auth gate', () => {
  * assert a credential that was never at risk. Dropping the live socket first is
  * what puts the credential in front of the code that used to delete it.
  *
- * ── Why the refusal ACCEPTS the socket and then says nothing ─────────────────
- * A refusal that also closes the socket leaves the app flapping between
- * connected and reconnecting, which makes both the disconnect banner and the
- * `auth-timeout` band (gated on the same reconnect grace) blink in and out. An
- * accepted-but-silent socket holds the app in `connected`, so `disconnectedSince`
- * stays null and the band is stable the moment the auth check gives up. It is
- * also not a browser-offline event, so the full-page offline takeover — which
- * would replace the band and reload the page out from under the test — never
- * arms. No sleeps, per the PLAYBOOK.
+ * ── Why the stalled backend still answers keepalive ──────────────────────────
+ * Keep the replacement socket alive while holding the auth reply. Half-open
+ * recovery would otherwise replace it before the login RPC's own deadline,
+ * proving a lost-link path instead of a still-current login timeout.
  *
  * Topology: the page is routed to this worker's own 3100-3199 backend exactly
  * the way the `page` fixture does it (local dev: `window.__ceraSocketPort`;
@@ -107,7 +104,7 @@ const REAUTH_FAILURE_LOG = 'Reconnect re-auth failed';
 type BackendMode =
 	/** Proxy through to this worker's real backend. */
 	| 'serving'
-	/** Accept the connection and answer nothing, ever. */
+	/** Keep transport alive but never answer auth. */
 	| 'refusing';
 
 let sharedContext: BrowserContext | undefined;
@@ -204,7 +201,8 @@ function handleSocket(ws: WebSocketRoute): void {
 	ws.onMessage((message) => {
 		if (typeof message !== 'string') return;
 		try {
-			const frame = JSON.parse(message) as { path?: unknown };
+			const frame = JSON.parse(message) as { path?: unknown; keepalive?: unknown };
+			if ('keepalive' in frame) ws.send(JSON.stringify({ ping: { t: Date.now() } }));
 			if (Array.isArray(frame.path) && frame.path.join('.') === 'auth.login') {
 				reauthAttempts += 1;
 			}
@@ -306,7 +304,7 @@ test.describe('Remember-me', { tag: '@functional' }, () => {
 			await readStoredCredential(page),
 			'a transport failure is not a credential rejection',
 		).not.toBeNull();
-		await expect(page.locator(PASSWORD_FIELD)).toHaveCount(0);
+		await expect(page.locator(PASSWORD_FIELD)).toBeVisible();
 
 		// (b) Reload while the backend is still refusing.
 		await page.reload();

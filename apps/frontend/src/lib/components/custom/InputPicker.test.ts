@@ -73,6 +73,33 @@ describe("InputPicker — hotplug behaviour", () => {
 		expect(within(lostRow).getByText(/lost/i)).toBeTruthy();
 	});
 
+	it("keeps a lost device's Lost pill out from under the row's dimming", () => {
+		// An opacity on the pill or any ancestor caps its contrast below AA, and
+		// no ink that still reads red wins it back.
+		const lost: CaptureDevice[] = DEVICES.map((d) =>
+			d.input_id === "video63" ? { ...d, lost: true } : d,
+		);
+		const { container } = render(InputPicker, {
+			props: { devices: lost, activeInput: "video0", isStreaming: true },
+		});
+		const lostRow = container.querySelector<HTMLElement>(
+			'[data-input-id="video63"]',
+		);
+		if (!lostRow) throw new Error("lost row not rendered");
+
+		const faded: string[] = [];
+		for (
+			let el: Element | null = within(lostRow).getByText(/lost/i);
+			el !== null && el !== lostRow.parentElement;
+			el = el.parentElement
+		) {
+			faded.push(
+				...[...el.classList].filter((name) => /^opacity-\d+$/.test(name)),
+			);
+		}
+		expect(faded).toEqual([]);
+	});
+
 	it("fires onSwitch for a healthy non-active device while streaming", async () => {
 		const onSwitch = vi.fn();
 		const { container } = render(InputPicker, {

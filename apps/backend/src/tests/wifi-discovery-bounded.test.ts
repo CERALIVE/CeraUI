@@ -31,10 +31,7 @@ import {
 	resetWifiInterfaceDiscoveryForTest,
 	wifiUpdateDevices,
 } from "../modules/wifi/wifi-interfaces.ts";
-import {
-	resetWifiPermanentMacCache,
-	setPermanentMacReaderForTest,
-} from "../modules/wifi/wifi-permanent-mac.ts";
+import { setPermanentMacReaderForTest } from "../modules/wifi/wifi-permanent-mac.ts";
 import {
 	radioIdentityReaders,
 	wifiRadioIdentity,
@@ -80,7 +77,6 @@ beforeEach(async () => {
 		listings[n] = Promise.withResolvers<string[]>();
 	resetWifiInterfaceDiscoveryForTest();
 	resetWifiConnectionModeCache();
-	resetWifiPermanentMacCache();
 	wifiCancelScanRefresh();
 	onWifiChange(() => undefined);
 	setWifiState({});
@@ -134,7 +130,6 @@ afterEach(async () => {
 	wifiCancelScanRefresh();
 	resetWifiCapabilitiesForTest();
 	setPermanentMacReaderForTest(null);
-	resetWifiPermanentMacCache();
 	onWifiChange(() => undefined);
 	setWifiState({});
 	mock.restore();
@@ -151,7 +146,6 @@ test("(1) three overlapping discoveries publish the sequential registry with at 
 	wifiRadioObservation.stop();
 	restoreWifiRegistry([]);
 	resetWifiInterfaceDiscoveryForTest();
-	resetWifiPermanentMacCache();
 	await discover();
 	expect(getWifiInterfacesByMacAddress()).toEqual(overlapping);
 	expect(Object.keys(overlapping)).toEqual([mac]);
@@ -195,6 +189,7 @@ test("(3) rejection belongs to its run and queued callers recover together", asy
 });
 
 test("(4) the production activation confirmation waits for the queued discovery", async () => {
+	spyOn(nm, "nmDeviceProp").mockResolvedValue(["100", "ap"]);
 	const iface: WifiInterfaceWithHotspot = {
 		id: 0,
 		ifname: "wlan0",

@@ -19,7 +19,7 @@ $effect(() => {
 {#if isUpdating && !updateBannerDismissed}
 	<div
 		aria-live="polite"
-		class="bg-status-warning/10 border-status-warning/30 text-foreground sticky top-0 z-40 flex items-center gap-2.5 border-b px-4 py-2.5 text-sm backdrop-blur-sm"
+		class="bg-status-warning/10 border-status-warning/30 text-foreground flex items-center gap-2.5 border-b px-4 py-2.5 text-sm backdrop-blur-sm"
 		role="status"
 	>
 		<ArrowUpToLineIcon class="text-status-warning size-4 shrink-0 motion-safe:animate-pulse" />

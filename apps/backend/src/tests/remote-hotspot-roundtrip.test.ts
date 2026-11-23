@@ -8,6 +8,7 @@ import {
 	wifiInterfaceSchema,
 } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
+import * as nm from "../modules/network/network-manager.ts";
 import {
 	PROTOCOL_VERSION,
 	StatusSchema,
@@ -19,6 +20,7 @@ import {
 } from "../modules/remote-control/status-relay.ts";
 import { wifiBuildMsg } from "../modules/wifi/wifi.ts";
 import { defaultHotspotConfigDeps } from "../modules/wifi/wifi-hotspot-config.ts";
+import { wifiRadioIdentity } from "../modules/wifi/wifi-radio-identity.ts";
 import { hotspotConfigureProcedure } from "../rpc/procedures/wifi.procedure.ts";
 import { object } from "./helpers/remote-privacy-cases.ts";
 import { wifiFrameFixture } from "./helpers/wifi-frame-fixture.ts";
@@ -46,12 +48,33 @@ test("remote status exposes the live hotspot password and a new password reaches
 		const password = "delegate-updated-password";
 		const input = hotspotConfigInputSchema.parse({
 			device: "0",
+			incarnation: fixture.before,
 			name: remote.hotspot?.name,
 			password,
 			channel: remote.hotspot?.channel,
 		});
 		const profile = join(scratch, "nm-hotspot.json");
 		const identity = join(scratch, "hotspot-identity.json");
+		const radio = wifiRadioIdentity.state.rows.get(fixture.row.ifname);
+		if (!radio?.permanentMac || !radio.devicePath)
+			throw new Error("Missing verified radio pins");
+		const readFields = nm.nmConnGetFields;
+		spyOn(nm, "nmConnGetFields").mockImplementation(
+			<Fields extends readonly string[]>(uuid: string, fields: Fields) =>
+				uuid === fixture.row.hotspot.conn &&
+				fields.includes("match.path") &&
+				fields.length === 3
+					? Promise.resolve(
+							fields.map((field) =>
+								field === "match.path"
+									? (radio.devicePath ?? "")
+									: field === "802-11-wireless.mac-address"
+										? (radio.permanentMac ?? "")
+										: "",
+							) as { [K in keyof Fields]: string },
+						)
+					: readFields(uuid, fields),
+		);
 		spyOn(defaultHotspotConfigDeps, "getCapabilities").mockReturnValue(
 			undefined,
 		);
@@ -91,5 +114,33 @@ test("remote status exposes the live hotspot password and a new password reaches
 		resetStatusRelay();
 		await fixture.restore();
 		await rm(scratch, { recursive: true, force: true });
+	}
+});
+
+test("a remote-shaped save without the local binding refuses before the config writer", async () => {
+	const fixture = await wifiFrameFixture(true, true);
+	const writer = spyOn(defaultHotspotConfigDeps, "nmConnSetFields");
+	const remember = spyOn(defaultHotspotConfigDeps, "rememberCredentials");
+	try {
+		expect(
+			await call(
+				hotspotConfigureProcedure,
+				{
+					device: "0",
+					name: "Delegate AP",
+					password: "delegate-password",
+					channel: "auto",
+				},
+				{ context: fixture.context },
+			),
+		).toEqual({ success: false, error: "binding-required" });
+		await fixture.configReceived;
+		expect(writer).not.toHaveBeenCalled();
+		expect(remember).not.toHaveBeenCalled();
+		expect(
+			JSON.parse(fixture.frames.at(-1) ?? "{}").wifi.hotspot.config.error,
+		).toBe("binding-required");
+	} finally {
+		await fixture.restore();
 	}
 });

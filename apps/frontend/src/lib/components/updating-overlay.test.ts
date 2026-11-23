@@ -16,7 +16,7 @@
  * not regressed.
  */
 import type { UpdateProgress } from "@ceraui/rpc/schemas";
-import { render, waitFor } from "@testing-library/svelte";
+import { render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import UpdatingOverlay from "./updating-overlay.svelte";
@@ -46,7 +46,95 @@ afterEach(() => {
 	document.body.innerHTML = "";
 });
 
+const downloading = { total: 1, downloading: 1, unpacking: 0, setting_up: 0 };
+const installing = { total: 1, downloading: 0, unpacking: 0, setting_up: 1 };
+
+describe("updating-overlay package progress", () => {
+	it("shows activity without inventing a number before APT reports one", async () => {
+		render(UpdatingOverlay, { props: { details: progress({ total: 0 }) } });
+
+		const bar = await screen.findByRole("progressbar", { name: "Progress" });
+		expect(bar.getAttribute("aria-valuenow")).toBeNull();
+		expect(screen.getByTestId("update-phase").textContent).toContain(
+			"Preparing or downloading packages",
+		);
+		expect(screen.queryByText(/^\d+%$|of \d+ steps/)).toBeNull();
+	});
+
+	it("shows APT's download percentage, then its install percentage", async () => {
+		const view = render(UpdatingOverlay, {
+			props: { details: progress(downloading) },
+		});
+		const bar = await screen.findByRole("progressbar", { name: "Progress" });
+		expect(screen.getByTestId("update-phase").textContent).toContain(
+			"Downloading",
+		);
+		expect(bar.getAttribute("aria-valuenow")).toBeNull();
+
+		for (const [details, phase, percent] of [
+			[progress({ ...downloading, percent: 41 }), "Downloading", 41],
+			[progress({ ...installing, percent: 0 }), "Installing", 0],
+			[progress({ ...installing, percent: 60 }), "Installing", 60],
+		] as const) {
+			await view.rerender({ details });
+			expect(screen.getByTestId("update-phase").textContent).toContain(phase);
+			expect(screen.getByText(`${percent}%`)).toBeDefined();
+			expect(bar.getAttribute("aria-valuenow")).toBe(String(percent));
+			expect(bar.getAttribute("aria-valuemax")).toBe("100");
+			expect(bar.getAttribute("aria-valuetext")).toBe(`${percent}%`);
+		}
+		expect(screen.queryByText(/of \d+ steps/)).toBeNull();
+	});
+
+	it("shows the install phase without a number when only the transcript proves it", async () => {
+		render(UpdatingOverlay, { props: { details: progress(installing) } });
+		const bar = await screen.findByRole("progressbar", { name: "Progress" });
+		expect(screen.getByTestId("update-phase").textContent).toContain(
+			"Installing",
+		);
+		expect(bar.getAttribute("aria-valuenow")).toBeNull();
+		expect(screen.queryByText(/^\d+%$/)).toBeNull();
+	});
+
+	it("reaches 100% only on the device's success result", async () => {
+		const details = progress({ ...installing, percent: 99 });
+		const view = render(UpdatingOverlay, { props: { details } });
+		const bar = await screen.findByRole("progressbar", { name: "Progress" });
+		expect(screen.getByText("99%")).toBeDefined();
+		expect(screen.queryByText("100%")).toBeNull();
+		await view.rerender({ details: { ...details, result: 0 } });
+		expect(bar.getAttribute("aria-valuenow")).toBe("100");
+		expect(screen.getByText("100%")).toBeDefined();
+	});
+});
+
 describe("updating-overlay terminal state", () => {
+	it.each([
+		["failed", "dpkg: post-installation script returned error exit status 1"],
+		["interrupted without stderr", ""],
+	])(
+		"does not show completion before or after an install is %s",
+		async (_, result) => {
+			const details = progress({ ...installing, percent: 80 });
+			const view = render(UpdatingOverlay, { props: { details } });
+			const bar = await screen.findByRole("progressbar", { name: "Progress" });
+
+			expect(screen.getByTestId("update-phase").textContent).toContain(
+				"Installing",
+			);
+			expect(bar.getAttribute("aria-valuetext")).toBe("80%");
+			expect(screen.queryByText("100%")).toBeNull();
+			expect(toastSuccess).not.toHaveBeenCalled();
+
+			await view.rerender({ details: { ...details, result } });
+			expect(screen.getByTestId("update-failed")).toBeDefined();
+			expect(screen.queryByText("80%")).toBeNull();
+			expect(screen.queryByText("100%")).toBeNull();
+			expect(bar.getAttribute("aria-valuenow")).toBeNull();
+			expect(toastSuccess).not.toHaveBeenCalled();
+		},
+	);
+
 	it("shows a FAILURE indicator + error toast (never success) when the result is an apt error string", async () => {
 		const reason = "E: Could not get lock /var/lib/dpkg/lock";
 		// vaul-svelte portals Drawer.Content to document.body, so query `document`.

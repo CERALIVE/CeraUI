@@ -1,42 +1,21 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import ts from "typescript";
+import { createLogger } from "winston";
 import { emitDeviceEvent } from "../modules/events/device-emit.ts";
 import * as emitter from "../modules/events/emit.ts";
+import {
+	type DeviceStatsPayload,
+	initDeviceStats,
+} from "../modules/system/device-stats.ts";
+import { monitorBootconfig } from "../modules/system/sensors.ts";
 
 afterEach(() => {
 	spyOn(emitter, "emitEvent").mockRestore();
 	emitter.resetEventEmitterForTest();
 });
-
-// Execute the real composition nodes with recording ports, without booting host services.
-function source(path: string) {
-	return ts.createSourceFile(
-		path,
-		readFileSync(new URL(path, import.meta.url), "utf8"),
-		ts.ScriptTarget.Latest,
-		true,
-	);
-}
-function evaluate(text: string, ports: Record<string, unknown>): unknown {
-	const output = ts.transpile(text, {
-		target: ts.ScriptTarget.ESNext,
-		module: ts.ModuleKind.None,
-	});
-	return new Function(...Object.keys(ports), output)(...Object.values(ports));
-}
-function declaration(path: string, name: string): string {
-	const file = source(path);
-	const node = file.statements.find(
-		(s) => ts.isFunctionDeclaration(s) && s.name?.text === name,
-	);
-	if (!node) throw new Error(`missing function ${name}`);
-	return node.getText(file).replace(/^export /, "");
-}
 
 test("boot observes ready modem discovery once while the guarded version record is pending", async () => {
 	const cwd = await mkdtemp(resolve(tmpdir(), "ceraui_event_boot_"));
@@ -99,20 +78,16 @@ for (const enabled of [false, true]) {
 					events.push(args);
 					if (throws) throw new Error("broken bootloader consumer");
 				});
-				const run = evaluate(
-					`${declaration("../modules/system/sensors.ts", "monitorBootconfig")}; return monitorBootconfig();`,
-					{
-						bootconfigService: "ceralive-firstboot-bootconfig",
-						isServiceEnabled: async () => enabled,
-						isServiceFailed: async () => failed,
-						notificationExists: () => false,
-						notificationRemove: (name: string) => removes.push(name),
-						notificationBroadcast: (...args: unknown[]) => notices.push(args),
-						setTimeout: (...args: unknown[]) => timers.push(args),
-						emitDeviceEvent,
-					},
-				);
-				await run;
+				await monitorBootconfig({
+					bootconfigService: "ceralive-firstboot-bootconfig",
+					isServiceEnabled: async () => enabled,
+					isServiceFailed: async () => failed,
+					notificationExists: () => undefined,
+					notificationRemove: (name) => removes.push(name),
+					notificationBroadcast: (...args) => notices.push(args),
+					setTimeout: (...args) => timers.push(args),
+					emitDeviceEvent,
+				});
 				expect(events).toEqual(
 					enabled && failed ? [["bootloader_update_failed", {}]] : [],
 				);
@@ -125,33 +100,48 @@ for (const enabled of [false, true]) {
 }
 
 test("stats tick passes each completed disk sample to its one retained observer", async () => {
-	const sample = { disk: { used: 100, total: 200, type: "SSD" } };
+	const sample: DeviceStatsPayload = {
+		disk: { used: 100, total: 200, type: "SSD" },
+		cpuLoad1: null,
+		socTemp: null,
+		ifaceRxTx: null,
+		raucSlot: "unavailable",
+	};
 	const calls: unknown[] = [];
 	let tick: (() => Promise<void>) | undefined;
 	let created = 0;
 	const observed = Promise.withResolvers<void>();
-	evaluate(
-		`${declaration("../modules/system/device-stats.ts", "initDeviceStats")}; initDeviceStats();`,
-		{
-			DEVICE_STATS_INTERVAL_MS: 5000,
-			DEVICE_STATS_EVENT: "device-stats",
-			ACTIVE_TO: 0,
-			createDiskEventObserver: () => {
-				created++;
-				return (disk: unknown) => calls.push(disk);
-			},
-			collectDeviceStats: async () => sample,
-			resolveDeviceStatsDeps: () => ({}),
-			deviceStatsState: {},
-			recordDeviceStatsSnapshot: () => {},
-			broadcastMsg: () => observed.resolve(),
-			getms: () => 0,
-			logger: { error: (error: unknown) => observed.reject(error) },
-			setInterval: (run: () => Promise<void>) => {
-				tick = run;
+	const logger = createLogger({ silent: true });
+	initDeviceStats({
+		DEVICE_STATS_INTERVAL_MS: 5000,
+		DEVICE_STATS_EVENT: "device-stats",
+		ACTIVE_TO: 0,
+		createDiskEventObserver: () => {
+			created++;
+			return (disk) => calls.push(disk);
+		},
+		collectDeviceStats: async () => sample,
+		resolveDeviceStatsDeps: () => ({
+			readText: async () => "",
+			readDir: async () => [],
+			execFile: async () => ({ stdout: "", stderr: "" }),
+			getSocTempRaw: () => undefined,
+			now: () => 0,
+		}),
+		deviceStatsState: {},
+		recordDeviceStatsSnapshot: () => {},
+		broadcastMsg: () => observed.resolve(),
+		getms: () => 0,
+		logger: {
+			error: (error: unknown) => {
+				observed.reject(error);
+				return logger;
 			},
 		},
-	);
+		setInterval: (run) => {
+			tick = run;
+		},
+	});
 	await observed.promise;
 	if (!tick) throw new Error("missing stats timer");
 	await tick();

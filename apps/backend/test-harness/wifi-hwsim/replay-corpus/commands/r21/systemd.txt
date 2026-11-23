@@ -1,0 +1,15 @@
+active
+LoadState=loaded
+ActiveState=active
+CanStop=yes
+active
+LoadState=loaded
+ActiveState=active
+CanStop=yes
+active
+LoadState=loaded
+ActiveState=active
+CanStop=yes
+s "42793593ed011844e1eb66706afce152"
+s ":1.24"
+{"__SEQNUM_ID":"9a2bc64d1c924382994f281133235a3b","__CURSOR":"s=9a2bc64d1c924382994f281133235a3b;i=602;b=405483e24ae445459547deb30195aca1;m=3a57efc;t=66081286a8821;x=c20ab9de1148b9c3","MESSAGE":"<info>  [1794957705.3817] audit: op=\"connection-add\" uuid=\"6be5e068-43da-44f5-b399-ec1642cdf41a\" name=\"CeraTest\" pid=2312 uid=0 result=\"success\"","__MONOTONIC_TIMESTAMP":"61177596","_BOOT_ID":"405483e24ae445459547deb30195aca1","__SEQNUM":"1538","__REALTIME_TIMESTAMP":"1794957705381921"}

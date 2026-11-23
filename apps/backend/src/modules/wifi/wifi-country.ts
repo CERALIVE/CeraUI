@@ -40,8 +40,12 @@ import {
 } from "./regdomain.ts";
 import { broadcastWifiState } from "./wifi.ts";
 import { getWifiInterfacesByMacAddress } from "./wifi-connections.ts";
-import { reconfigureHotspotForRegdomain } from "./wifi-hotspot-config.ts";
+import {
+	reconfigureHotspotForRegdomain,
+	stopHotspotForInterface,
+} from "./wifi-hotspot-config.ts";
 import { canHotspot, isApMode } from "./wifi-hotspot-types.ts";
+import { wifiAdapterKeyMac } from "./wifi-permanent-mac.ts";
 
 /**
  * Re-derive every AP-capable adapter's offered channels, then restart the
@@ -69,6 +73,16 @@ export async function reconcileHotspotChannels(): Promise<void> {
 			wifiInterface.hotspot.availableChannels,
 		);
 		if (action.kind === "none") continue;
+		if (
+			!wifiAdapterKeyMac(macAddress) ||
+			wifiInterface.degradedReason === "permanent-mac-unresolved"
+		) {
+			logger.warn(
+				`limited hotspot stopped for regulatory change on ${wifiInterface.ifname}`,
+			);
+			await stopHotspotForInterface(macAddress, wifiInterface);
+			continue;
+		}
 
 		const channel =
 			action.kind === "clamp-and-restart"

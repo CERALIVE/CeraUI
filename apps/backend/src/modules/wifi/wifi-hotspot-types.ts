@@ -16,6 +16,20 @@
 */
 
 import type {
+	nmApConnAdd,
+	nmConnDelete,
+	nmConnect,
+	nmDisconnect,
+} from "../network/network-manager.ts";
+import type {
+	NmProfileInstance,
+	readNmProfileInstance,
+} from "../network/network-manager-profile-instance.ts";
+import type {
+	ProfileWriteAdmission,
+	ProfileWritePermit,
+} from "../network/profile-write-permit.ts";
+import type {
 	HotspotCredentials,
 	HotspotCredentialsStore,
 } from "./hotspot-credentials.ts";
@@ -25,13 +39,22 @@ import type {
 	DerivedApChannel,
 	WifiChannel,
 } from "./wifi-channels.ts";
+import type {
+	confirmHybridActivation,
+	HYBRID_CHANNEL_REFUSAL,
+	readHybridStationChannel,
+	revalidateConcurrentApInterface,
+} from "./wifi-concurrent-interface.ts";
 import type { HotspotOutcomePublisher } from "./wifi-hotspot-outcome.ts";
 import {
 	DEFAULT_HOTSPOT_SECURITY,
 	type HotspotSecurityId,
 	hotspotSecurityFields,
 } from "./wifi-hotspot-security.ts";
+import type { HybridLegAllocation } from "./wifi-hybrid-leg-release.ts";
+import type { HybridTargetRefusal } from "./wifi-hybrid-target-diagnostics.ts";
 import type { BaseWifiInterface, WifiInterface } from "./wifi-interfaces.ts";
+import type { VirtualHotspotBinding } from "./wifi-virtual-binding.ts";
 
 export type WifiHotspotMessage = {
 	hotspot: {
@@ -91,10 +114,7 @@ export type WifiHotspot = {
 export type WifiInterfaceWithHotspot = BaseWifiInterface & {
 	hotspot: WifiHotspot;
 	supportsApStaConcurrency?: boolean;
-	concurrentHotspot?: {
-		ifname: string;
-		activeConn: string | null;
-	};
+	concurrentHotspot?: VirtualHotspotBinding;
 };
 
 /**
@@ -141,36 +161,56 @@ export type ExistingHotspotConn = {
 export function hotspotBindingFields(
 	permanentMacAddress: string,
 	security: HotspotSecurityId = DEFAULT_HOTSPOT_SECURITY,
+	devicePath?: string,
 ): Record<string, string> {
 	return {
 		"connection.interface-name": "",
 		"802-11-wireless.mac-address": permanentMacAddress,
+		"match.path": devicePath ?? "",
+		"connection.autoconnect": "no",
 		...hotspotSecurityFields(security),
 	};
 }
-
-/**
- * Applied only AFTER a confirmed activation. Arming autoconnect beforehand lets
- * NetworkManager race its own auto-activation against the explicit `con up`, and
- * would leave a profile that never came up trying again at every boot.
- */
-export const HOTSPOT_AUTOCONNECT_FIELDS: Record<string, string> = {
-	"connection.autoconnect": "yes",
-	"connection.autoconnect-priority": "999",
-};
 
 /** Result of a hotspot start request. */
 export type HotspotStartResult =
 	| { success: true }
 	| {
 			success: false;
-			error: "DEVICE_BUSY" | "no-device" | "unsupported" | "activation-failed";
+			error:
+				| "DEVICE_BUSY"
+				| "no-device"
+				| "unsupported"
+				| "activation-failed"
+				| "radio-unverified"
+				| "binding-required"
+				| "radio-changed";
+			reason?: string;
 	  };
+
+export type HotspotConfirmationTarget = {
+	readonly uuid: string;
+	readonly ifname: string;
+	readonly credentialOwner?: string;
+	readonly activation?: HotspotActivationInstance;
+};
+
+export type HotspotActivationInstance = {
+	readonly profile: NmProfileInstance | null | undefined;
+	readonly activePath: string | undefined;
+	readonly activeRunId: string | undefined;
+};
+
+export type HotspotProfilePins = readonly [
+	mac: string,
+	port: string,
+	autoconnect?: string,
+];
 
 /**
  * Injectable side-effect surface for the hotspot start flow. Production wires
- * the real NetworkManager helpers; tests pass deterministic fakes (and omit
- * `pollHotspotActive` so confirmation comes purely from a fed monitor event).
+ * the real NetworkManager helpers; tests pass deterministic fakes. Monitor
+ * events and positive poll hints still require selected-AP NM evidence.
  */
 export type HotspotActivationDeps = {
 	/** Present only for explicit user toggles; mode transitions and boot omit it. */
@@ -179,18 +219,23 @@ export type HotspotActivationDeps = {
 	readCapabilities?: (
 		ifname: string,
 	) => { staApCombo: { supported: boolean } } | undefined;
-	nmConnect: (uuid: string, timeout?: number) => Promise<unknown>;
+	nmConnect: (...args: Parameters<typeof nmConnect>) => Promise<unknown>;
+	/** Production reads NM instance evidence; injected NM implementations supply their own. */
+	readProfileInstance: typeof readNmProfileInstance;
+	readProfilePins?: (uuid: string) => Promise<HotspotProfilePins | undefined>;
 	nmConnSetFields: (
 		uuid: string,
 		fields: Record<string, string>,
+		permit?: ProfileWritePermit,
 	) => Promise<unknown>;
-	nmHotspot: (
-		device: string,
-		ssid: string,
-		password: string,
-		timeout?: number,
-	) => Promise<string | null | undefined>;
-	wifiUpdateSavedConns: () => Promise<void>;
+	nmApConnAdd: typeof nmApConnAdd;
+	nmConnDelete: typeof nmConnDelete;
+	nmDisconnect: typeof nmDisconnect;
+	wifiUpdateSavedConns: (
+		signal?: AbortSignal,
+		onCommitted?: () => void,
+		permitHotspotWrite?: (uuid: string) => Promise<ProfileWriteAdmission>,
+	) => Promise<void>;
 	broadcastState: () => void;
 	setDupIpSuppression: (ifname: string, suppressed: boolean) => void;
 	/** Durable per-adapter hotspot identity, keyed by permanent MAC address. */
@@ -208,8 +253,18 @@ export type HotspotActivationDeps = {
 	pruneHotspotConns: (macAddress: string, keepUuid: string) => Promise<void>;
 	ensureConcurrentInterface?: (
 		ifname: string,
-	) => Promise<{ ifname: string; created: boolean } | undefined>;
-	releaseConcurrentInterface?: (ifname: string) => Promise<void>;
+		admitted?: () => boolean,
+		onRefusal?: (refusal: HybridTargetRefusal) => void,
+		beforeMutation?: () => Promise<boolean>,
+	) => Promise<HybridLegAllocation | typeof HYBRID_CHANNEL_REFUSAL | undefined>;
+	readHybridChannel?: typeof readHybridStationChannel;
+	validateConcurrentInterface?: typeof revalidateConcurrentApInterface;
+	confirmHybridActivation?: typeof confirmHybridActivation;
+	releaseConcurrentInterface: (
+		ifname: string,
+		target?: HybridLegAllocation,
+	) => Promise<boolean>;
+	rollbackConcurrentInterface?: (target: HybridLegAllocation) => Promise<void>;
 	/**
 	 * Does the operator want this adapter's AP to run ALONGSIDE its station leg?
 	 *
@@ -229,11 +284,16 @@ export type HotspotActivationDeps = {
 	publishOutcome?: HotspotOutcomePublisher;
 	/**
 	 * Optional bounded confirmation poll. When provided, it is retried with
-	 * backoff until it returns `true` (confirming the hotspot is up) or attempts
-	 * are exhausted (rolling the transition back). When omitted, confirmation can
-	 * only arrive via {@link handleWifiMonitorEvent}.
+	 * backoff until it returns `true` and the pending monitor verifies the
+	 * selected AP UUID is up, or attempts are exhausted. When omitted,
+	 * confirmation can only arrive via {@link handleWifiMonitorEvent}.
 	 */
-	pollHotspotActive?: (iface: WifiInterfaceWithHotspot) => Promise<boolean>;
+	pollHotspotActive?: (
+		iface: WifiInterfaceWithHotspot,
+		uuid?: string,
+		activationIfname?: string,
+		activation?: HotspotActivationInstance,
+	) => Promise<boolean>;
 };
 
 // ─── mode predicates ─────────────────────────────────────────────────────────

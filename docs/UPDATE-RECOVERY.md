@@ -136,8 +136,8 @@ access retries loading it. Startup guards recovered-update notice publication
 independently of rollback hydration, so failure in either cannot skip the other or
 fail startup. At the shared `notificationSend` boundary, a failed dismissal read
 warns and returns `false` before publication, without throwing into any producer.
-This includes runtime update transitions and `software-updates.ts`'s keyed
-`ceralive_update` broadcast. Keyless notices do not read the store. Unreadable
+This includes runtime update transitions and the keyed `ceralive_update` notice
+(`ceralive-update-notice.ts`), which then leaves its slot unchanged. Keyless notices do not read the store. Unreadable
 dismissals defer publication, never resurrect acknowledged rollbacks or hold an
 update phase open. Repair allows a later access/startup to load acknowledgements again;
 this does not add an automatic notice-retry timer.
@@ -764,7 +764,7 @@ failure in its own pre-spawn checks/preparation/abort, or a Bun Error tagged `so
 `fcntl` or `posix_spawn`, proves no dispatch and releases immediately with the original
 error, zero retirement probes and no retry. A returned handle retains group and unit
 evidence regardless of error spelling; abort racing assignment cannot clear it.
-Audited at bun-v1.4.2..v1.4.4; classification unchanged. 1.4.3 added kill-then-reap
+Audited at bun-v1.4.2..v1.4.5; classification unchanged. 1.4.3 added kill-then-reap
 on `pidfd_open` failure (oven-sh/bun#40080, f86be9d); exec can still precede the
 throw without a handle. Before helper exec the launcher writes `$$`
 using builtin printf; write failure exits125 and cannot execute the helper. A per-step
@@ -775,7 +775,7 @@ negative-group ESRCH latch before units, without any helper-name census. Invalid
 unreadable bytes hold UNKNOWN; invalid nonempty evidence cannot later borrow absence.
 Empty identity releases a reaped pidfd failure immediately, with its original error.
 This relies on the audited fixed-options reaping proof
-(spawn_process.rs:504-555,1018-1047 and posix_spawn.rs:665-699, bun-v1.4.4); ordinary
+(spawn_process.rs:504-555,1018-1047 and posix_spawn.rs:665-699, bun-v1.4.5); ordinary
 ECHILD means already gone. Untagged/future/non-Error absence gets cancellable
 100/200/400ms re-reads (700ms total), not a death proof independent of that assumption.
 Reaudit before any runtime/option change. Valid recovered groups retain capped

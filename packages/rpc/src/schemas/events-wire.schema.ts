@@ -54,8 +54,8 @@ export const eventListInputSchema = z.strictObject({
 });
 export type EventListInput = z.input<typeof eventListInputSchema>;
 
-// The event ring's identity: kept while its records are, replaced by a clear,
-// after which seq and event ids can start again from 1.
+// The event ring's identity. A clear can replace it and restart seq and event
+// ids at 1. Repairing the epoch can replace it without deleting any events.
 export const eventRingEpochSchema = z.uuid();
 
 export const eventListOutputSchema = z.strictObject({
@@ -64,7 +64,7 @@ export const eventListOutputSchema = z.strictObject({
 	headSeq: z.number().int(),
 	retainedFromSeq: z.number().int(),
 	// When absent, refresh or validate the visible window without losing paging.
-	// A changed epoch identifies a history clear.
+	// An epoch change from a clear or repair makes the client reload its history.
 	epoch: eventRingEpochSchema.optional(),
 });
 export type EventListOutput = z.infer<typeof eventListOutputSchema>;

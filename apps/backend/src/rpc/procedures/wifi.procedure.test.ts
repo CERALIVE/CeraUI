@@ -12,6 +12,7 @@ import {
 	isolateWifiRegistry,
 	restoreWifiRegistry,
 } from "../../tests/helpers/wifi-registry.ts";
+import { wifiRequestBinding } from "../../tests/helpers/wifi-request-binding.ts";
 import type { AppWebSocket, RPCContext } from "../types.ts";
 import { hotspotConfigureProcedure } from "./wifi.procedure.ts";
 
@@ -95,9 +96,18 @@ describe("wifi.hotspotConfigure — device lock (S5)", () => {
 		seedInterface(mac);
 		expect(Object.keys(getWifiInterfacesByMacAddress())).toEqual([mac]);
 
-		const result = await call(hotspotConfigureProcedure, validConfig, {
-			context: makeContext(),
-		});
-		expect(result.success).toBe(true);
+		const row = getWifiInterfacesByMacAddress()[mac];
+		if (!row) throw new Error("missing request fixture row");
+		const binding = await wifiRequestBinding(mac, row);
+		try {
+			const result = await call(
+				hotspotConfigureProcedure,
+				{ ...validConfig, incarnation: binding.incarnation },
+				{ context: makeContext() },
+			);
+			expect(result.success).toBe(true);
+		} finally {
+			await binding.restore();
+		}
 	});
 });

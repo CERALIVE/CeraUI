@@ -31,6 +31,28 @@ export interface EventsViewDeps {
 
 type End = "first" | "older";
 
+function sameEvent(a: DeviceEvent, b: DeviceEvent): boolean {
+	return (
+		a.id === b.id &&
+		a.seq === b.seq &&
+		a.bootId === b.bootId &&
+		a.at === b.at &&
+		a.code === b.code &&
+		a.family === b.family &&
+		a.severity === b.severity &&
+		a.suppressed === b.suppressed &&
+		Object.keys(a.params).length === Object.keys(b.params).length &&
+		Object.entries(a.params).every(([key, value]) => {
+			const other = b.params[key];
+			return Array.isArray(value)
+				? Array.isArray(other) &&
+						value.length === other.length &&
+						value.every((part, index) => part === other[index])
+				: value === other;
+		})
+	);
+}
+
 export class EventsView {
 	events = $state.raw<readonly DeviceEvent[]>([]);
 	filter = $state.raw<EventFilter>({
@@ -45,9 +67,11 @@ export class EventsView {
 	rowReset = $state.raw<{ readonly keepShownFocus: boolean }>({
 		keepShownFocus: false,
 	});
+	historyRevision = $state(0);
 	stale = $state(false);
 	liveEdgeFailed = $state(false);
 	newWhileBrowsing = $state(0);
+	newCountIncomplete = $state(false);
 	get rawLink() {
 		return this.#raw.link;
 	}
@@ -62,6 +86,7 @@ export class EventsView {
 	#head = 0;
 	#retainedFrom = 0;
 	#epoch: string | undefined;
+	#historyEpoch: string | undefined;
 	#held: DeviceEvent[] = [];
 	#connected: boolean | undefined;
 	#disposed = false;
@@ -74,16 +99,23 @@ export class EventsView {
 
 	/** The first page again, from the newest event, dropping every row shown. */
 	reload(): Promise<void> {
-		// Every row shown is dropped, so once connected nothing stale remains.
+		return this.#reload();
+	}
+
+	#reload(replacement?: { readonly identityChanged: boolean }): Promise<void> {
 		if (this.#connected) this.stale = false;
 		this.liveEdgeFailed = false;
 		this.newWhileBrowsing = 0;
-		this.rowReset = { keepShownFocus: false };
+		this.newCountIncomplete = false;
 		this.#raw.reset();
-		this.events = [];
-		this.nextBeforeSeq = null;
+		// An automatic refill can keep the old DOM until it can compare records.
+		if (!replacement) {
+			this.events = [];
+			this.rowReset = { keepShownFocus: false };
+			this.nextBeforeSeq = null;
+		}
 		this.browsingHistory = false;
-		return this.#read("first");
+		return this.#read("first", "replace", replacement);
 	}
 
 	loadOlder(): Promise<void> {
@@ -128,13 +160,17 @@ export class EventsView {
 			this.liveEdgeFailed = false;
 		} else if (this.stale) {
 			if (this.browsingHistory) void this.checkLiveEdge();
-			else void this.reload();
+			else void this.#reload({ identityChanged: false });
 		}
 	}
 
 	/** Asks for the raw entries around `event`; only the newest request may open them. */
-	viewRaw(event: DeviceEvent, open: (page: AroundPage) => void): Promise<void> {
-		return this.#raw.open(event, this.#deps.around, open);
+	viewRaw(
+		event: DeviceEvent,
+		open: (page: AroundPage) => void,
+		still: () => boolean,
+	): Promise<void> {
+		return this.#raw.open(event, this.#deps.around, open, still);
 	}
 
 	dispose(): void {
@@ -153,6 +189,7 @@ export class EventsView {
 	async #read(
 		end: End,
 		mode: "replace" | "gap" | "live-edge" = "replace",
+		replacement?: { readonly identityChanged: boolean },
 	): Promise<void> {
 		const generation = end === "first" ? ++this.#generation : this.#generation;
 		// The queue belongs to one connection. A superseded read cannot drain a new queue.
@@ -170,7 +207,8 @@ export class EventsView {
 		// An older page's failure stays while it is read again, so its Retry keeps focus.
 		if (end === "first" && mode !== "live-edge") this.failed = null;
 		let newer: DeviceEvent[] = [];
-		let settleRows = mode === "gap";
+		let settleRows = mode === "gap" || replacement !== undefined;
+		let keepShownFocus = !replacement;
 		try {
 			const input = listInput(this.filter, beforeSeq);
 			const page = await readEventPage(this.#deps.list, input, window);
@@ -180,11 +218,42 @@ export class EventsView {
 				return;
 			}
 			const seen = this.#head;
-			this.#epoch = page.epoch;
+			const epochChanged =
+				page.epoch !== undefined &&
+				this.#historyEpoch !== undefined &&
+				page.epoch !== this.#historyEpoch;
 			if (shouldReloadEvents(page, window, mode === "replace" ? end : mode)) {
-				void this.reload();
+				void this.#reload({
+					identityChanged: epochChanged || page.headSeq < seen,
+				});
 				return;
 			}
+			this.#epoch = page.epoch;
+			if (end === "first" && (mode !== "live-edge" || page.headSeq < seen)) {
+				const shownBySeq = new Map(window.rows.map((row) => [row.seq, row]));
+				let sharesRecord = false;
+				const reusedSeq = page.events.some((event) => {
+					const shown = shownBySeq.get(event.seq);
+					if (shown === undefined) return false;
+					if (!sameEvent(shown, event)) return true;
+					sharesRecord = true;
+					return false;
+				});
+				const identityChanged =
+					epochChanged ||
+					page.headSeq < seen ||
+					reusedSeq ||
+					replacement?.identityChanged === true;
+				if (identityChanged) {
+					this.#historyEpoch = undefined;
+					this.historyRevision += 1;
+					this.#raw.reset();
+					settleRows = true;
+				}
+				if (replacement) keepShownFocus = sharesRecord && !identityChanged;
+			}
+			// An omitted epoch affects reload rules but does not identify a new ring.
+			this.#historyEpoch = page.epoch ?? this.#historyEpoch;
 			// A first page reports the head at its read; pushes since then are held.
 			this.#head =
 				end === "first" ? page.headSeq : Math.max(seen, page.headSeq);
@@ -196,17 +265,21 @@ export class EventsView {
 					this.events = page.events;
 					this.nextBeforeSeq = page.nextBeforeSeq;
 					this.newWhileBrowsing = 0;
-					this.#raw.reset();
+					this.newCountIncomplete = false;
 					settleRows = true;
 				} else {
 					const kept = retainedEvents(this.events, page);
-					// shortcut: counts at most one page of unseen events, so a gap or outage
-					// longer than PAGE undercounts; page toward the head if that becomes routine.
-					this.newWhileBrowsing += page.events.filter(
-						(event) => event.seq > seen,
-					).length;
-					settleRows = kept.length < this.events.length;
-					if (settleRows) this.events = kept;
+					const fresh = page.events.filter((event) => event.seq > seen).length;
+					this.newWhileBrowsing += fresh;
+					// A bounded read can reduce certainty without adding to the tally.
+					this.newCountIncomplete ||=
+						page.retainedFromSeq > seen + 1 ||
+						page.events.length >= input.limit ||
+						page.nextBeforeSeq !== null;
+					if (kept.length < this.events.length) {
+						this.events = kept;
+						settleRows = true;
+					}
 				}
 				this.stale = false;
 				this.liveEdgeFailed = false;
@@ -252,7 +325,7 @@ export class EventsView {
 		this.#receive(newer);
 		if (settleRows) {
 			this.#raw.retirePendingOutside(this.events);
-			this.rowReset = { keepShownFocus: true };
+			this.rowReset = { keepShownFocus };
 		}
 	}
 

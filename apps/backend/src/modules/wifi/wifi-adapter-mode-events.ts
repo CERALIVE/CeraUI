@@ -5,7 +5,17 @@ export interface WifiAdapterModeRestoreSource {
 }
 
 let discoveryPublished = false;
+let discoveryRevision = 0;
 const listeners = new Set<() => Promise<void>>();
+const hotspotLosses = new WeakMap<object, number>();
+
+export function observeWifiHotspotLoss(row: object): void {
+	hotspotLosses.set(row, wifiHotspotLossVersion(row) + 1);
+}
+
+export function wifiHotspotLossVersion(row: object): number {
+	return hotspotLosses.get(row) ?? 0;
+}
 
 export const wifiAdapterModeRestoreSource: WifiAdapterModeRestoreSource = {
 	hasDiscovery: () => discoveryPublished,
@@ -23,5 +33,10 @@ export async function notifyWifiAdapterModeEdge(): Promise<void> {
 
 export function notifyWifiAdapterModeDiscovery(): Promise<void> {
 	discoveryPublished = true;
+	discoveryRevision++;
 	return notifyWifiAdapterModeEdge();
+}
+
+export function getWifiAdapterModeDiscoveryRevision(): number {
+	return discoveryRevision;
 }

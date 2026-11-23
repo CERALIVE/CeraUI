@@ -33,7 +33,7 @@ function runWrapper(mutate, options = {}) {
 			YAML.stringify(fixture),
 		);
 		fs.writeFileSync(path.join(repository, '.gitignore'), 'node_modules/\ndist/\n');
-		fs.writeFileSync(path.join(repository, '.bun-version'), '1.4.4\n');
+		fs.writeFileSync(path.join(repository, '.bun-version'), '1.4.5\n');
 		fs.writeFileSync(path.join(repository, 'package.json'), '{"type":"module"}\n');
 		fs.writeFileSync(path.join(repository, 'gone.txt'), 'tracked input\n');
 		fs.writeFileSync(path.join(repository, 'dist/public/index.html'), 'fixture\n');

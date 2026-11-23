@@ -27,6 +27,7 @@
 	"advanced.download": "Download",
 	"advanced.downloadDeviceLog": "Download CeraLive Log",
 	"advanced.downloadFailed": "Couldn't download the log. Check the connection and try again.",
+	"advanced.downloadLocked": "Still waiting for the device to answer an earlier log request. Reconnect or reload the page to try again.",
 	"advanced.downloadSystemLog": "Download System Log",
 	"advanced.downloading": "Downloading…",
 	"advanced.hidePassword": "Hide password",

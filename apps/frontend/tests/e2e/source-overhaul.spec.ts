@@ -377,6 +377,43 @@ test.describe("Track-1 source overhaul (functional)", () => {
 		await expect(page.getByTestId("source-select-video0")).toBeDisabled();
 	});
 
+	// A selected lost capture carries the most badges a tile holds (kind, Lost,
+	// Selected); on the two-column grid they must wrap inside the tile, never run
+	// past its edge.
+	test("a lost, selected capture keeps every badge inside its tile at 1280 and 375 px", async ({
+		page,
+	}) => {
+		serverConfig({ source: "video0" });
+		sendDevices("video0", [HDMI, USB]);
+		sendSources([
+			{ ...CAP_HDMI, lost: true },
+			{ ...CAP_USB, lost: true },
+		]);
+		await expect(page.getByTestId("source-selected-video0")).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByTestId("source-lost-video0")).toBeVisible();
+
+		for (const viewport of [
+			{ width: 1280, height: 800 },
+			{ width: 375, height: 812 },
+		]) {
+			await page.setViewportSize(viewport);
+			await expect
+				.poll(() =>
+					page.getByTestId("source-select-video0").evaluate((tile) => {
+						const edge = tile.getBoundingClientRect();
+						return [...tile.querySelectorAll("[data-testid]")]
+							.filter((el) => {
+								const box = el.getBoundingClientRect();
+								return box.left < edge.left - 0.5 || box.right > edge.right + 0.5;
+							})
+							.map((el) => el.getAttribute("data-testid"));
+					}),
+					{ message: `badges past the tile edge at ${viewport.width} px` },
+				)
+				.toEqual([]);
+		}
+	});
+
 	// ── 6. Education popovers + calm capability-tier banners ───────────────────
 	test("the source info popover explains the field and the capability tiers render calmly", async ({
 		page,

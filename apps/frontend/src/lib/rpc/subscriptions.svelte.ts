@@ -54,14 +54,12 @@ import {
 	setEthernetRoleInputSchema,
 	uplinkFlowsResetEventSchema,
 } from "@ceraui/rpc/schemas";
-import { downloadLog } from "$lib/helpers/SystemHelper";
+import { deliverLegacyLog } from "$lib/device-logs/download-gate.svelte";
+import { wifiFailureReason } from "$lib/helpers/wifi-mode-outcome";
 import { isSameWireValue, preserveWireIdentity } from "$lib/rpc/value-identity";
 import { authStatusStore } from "$lib/stores/auth-status.svelte";
 import { ingestBuffering } from "$lib/stores/buffering.svelte";
-import {
-	markSessionExpired,
-	wasAuthenticated,
-} from "$lib/stores/connection-ux.svelte";
+import { markSessionExpired } from "$lib/stores/connection-ux.svelte";
 import {
 	dismiss as dismissNotification,
 	push as pushNotification,
@@ -90,6 +88,7 @@ import {
 	confirmOperation,
 	destroyAsyncOperations,
 	failOperation,
+	getOperationPhase,
 	getOperationTarget,
 	isOperationPending,
 	reconcileOperationsOnReconnect,
@@ -106,6 +105,8 @@ import { pullStatusEvidence } from "./pulled-status";
 import { reauthenticateAndHydrate } from "./reconnect";
 import { createSeqTracker } from "./seq-guard";
 import {
+	getLinkEpoch,
+	noteAuthenticatedLink,
 	noteLifecycleDelivered,
 	noteLinkState,
 	noteSessionRestored,
@@ -122,7 +123,13 @@ import {
 	refreshWifiAdapterModes,
 	resetWifiAdapterModes,
 } from "./wifi-adapter-modes.svelte";
+import {
+	noteWifiConfig,
+	noteWifiStart,
+	noteWifiStatus,
+} from "./wifi-status-receipt";
 
+export { getSessionReady } from "./session-epoch.svelte";
 export { mergeModemList };
 
 let eventFeedListener: ((events: DeviceEvent[]) => void) | undefined;
@@ -340,6 +347,12 @@ export function getConfig() {
 
 export function getStatus() {
 	return statusState;
+}
+
+export function clearPasswordSetup(): void {
+	if (statusState?.set_password) {
+		statusState = { ...statusState, set_password: false };
+	}
 }
 
 export function getIsStreaming() {
@@ -621,6 +634,7 @@ function handleMessage(
 			}
 			if (statusData.wifi !== undefined) {
 				wifiState = preserveWireIdentity(wifiState, statusData.wifi);
+				noteWifiStatus(statusData.wifi);
 			}
 			if (statusData.modems !== undefined) {
 				modemsState = mergeModemList(modemsState, statusData.modems);
@@ -872,28 +886,44 @@ function handleMessage(
 					failOperation(key, wifiData.new.error);
 				}
 			}
+			if (wifiData.hotspot?.start) noteWifiStart(wifiData.hotspot.start);
 			// Deferred hotspot reconfigure result. `hotspotConfigure` only acks the
 			// dispatch; the real outcome arrives here and resolves the separate
 			// `hotspot-config:${device}` key the HotspotDialog save op stays pending on.
-			if (
-				wifiData.hotspot?.config?.device !== undefined &&
-				wifiData.hotspot.config.incarnation ===
-					wifiState?.[String(wifiData.hotspot.config.device)]?.incarnation
-			) {
-				const key = wifiHotspotConfigOpKey(
-					String(wifiData.hotspot.config.device),
-					wifiData.hotspot.config.incarnation,
-				);
-				if (wifiData.hotspot.config.success) {
-					confirmOperation(key);
-				} else {
-					failOperation(key, wifiData.hotspot.config.error ?? "failed");
+			if (wifiData.hotspot?.config?.device !== undefined) {
+				const config = wifiData.hotspot.config;
+				const ownsDispatch = noteWifiConfig(config);
+				// Entry-only missing tokens settle by RPC; transient refusals stay
+				// pending while the same owner performs its one bounded retry.
+				if (
+					ownsDispatch &&
+					config.incarnation ===
+						wifiState?.[String(config.device)]?.incarnation &&
+					config.error !== "binding-required" &&
+					!(
+						config.error === "radio-changed" &&
+						config.reason === "current-unobserved"
+					)
+				) {
+					const key = wifiHotspotConfigOpKey(
+						String(config.device),
+						config.incarnation,
+					);
+					if (config.success) {
+						confirmOperation(key);
+					} else {
+						failOperation(key, wifiFailureReason(config) ?? "failed");
+					}
 				}
 			}
 			// `begin` on the pending frame is deliberate: it re-arms the TTL and
 			// makes a transition dispatched from ANOTHER client visible here too.
 			if (
 				wifiData.adapter_mode?.device !== undefined &&
+				// Legacy call-only binding replies are not broadcast terminals.
+				(seq !== undefined ||
+					(wifiData.adapter_mode.error !== "binding-required" &&
+						wifiData.adapter_mode.error !== "radio-changed")) &&
 				wifiData.adapter_mode.incarnation ===
 					wifiState?.[String(wifiData.adapter_mode.device)]?.incarnation
 			) {
@@ -904,8 +934,15 @@ function handleMessage(
 				if (wifiData.adapter_mode.pending === true) {
 					beginOperation(key, wifiData.adapter_mode.mode);
 				} else if (wifiData.adapter_mode.error !== undefined) {
-					failOperation(key, wifiData.adapter_mode.error);
+					// A reconnect can clear the latch before its terminal arrives.
+					if (getOperationPhase(key) === "idle") beginOperation(key);
+					failOperation(
+						key,
+						wifiFailureReason(wifiData.adapter_mode) ?? "failed",
+					);
 				} else if (wifiData.adapter_mode.success === true) {
+					if (getOperationPhase(key) === "idle")
+						beginOperation(key, wifiData.adapter_mode.mode);
 					confirmOperation(key);
 					void refreshWifiAdapterModes();
 				}
@@ -1098,9 +1135,11 @@ function handleMessage(
 		}
 
 		case "log":
-			// Download log file
+			// A legacy log file System Logs asked for: saved only while that open is still live.
 			if (typeof data === "object" && data !== null) {
-				downloadLog(data as { name: string; contents: string });
+				deliverLegacyLog(
+					data as { name: string; contents: string; request?: string },
+				);
 			}
 			break;
 
@@ -1160,55 +1199,57 @@ export function receivePulledStatus<T>(
 
 const AUTH_STORAGE_KEY = "auth";
 
-let reauthInFlight = false;
-
 function readStoredToken(): string | null {
 	return typeof localStorage !== "undefined"
 		? localStorage.getItem(AUTH_STORAGE_KEY)
 		: null;
 }
 
-function clearStoredToken(): void {
-	if (typeof localStorage !== "undefined") {
+function clearStoredToken(rejectedToken: string): void {
+	if (readStoredToken() === rejectedToken) {
 		localStorage.removeItem(AUTH_STORAGE_KEY);
 	}
 }
 
-function routeToLogin(): void {
-	if (authStatusStore.value) {
-		markSessionExpired();
+async function runReconnectReauth(link: number): Promise<void> {
+	const isCurrent = () => getLinkEpoch() === link && authStatusStore.value;
+	const outcome = await reauthenticateAndHydrate({
+		isCurrent,
+		getStoredToken: readStoredToken,
+		clearStoredToken,
+		login: (token) => rpc.auth.login({ token, persistent_token: true }),
+		onAuthenticated: () => {
+			noteAuthenticatedLink(link);
+			pushNotification({
+				name: "connection-recovered",
+				type: "success",
+				key: "notifications.connectionRecovered",
+				msg: "Connection restored",
+				is_dismissable: true,
+				is_persistent: false,
+				duration: 3,
+			});
+		},
+		getConfig: () => rpc.streaming.getConfig(),
+		getStatus: () => pullStatusEvidence(),
+		dispatch: (type, data) => {
+			if (type === "status") {
+				const answer = data as ReceivedStatus | undefined;
+				if (answer !== undefined)
+					ingestPulledStatus(answer.status, answer.receipt);
+			} else {
+				handleMessage(type, data);
+			}
+		},
+		routeToLogin: markSessionExpired,
+		onError: (error) => console.error("Reconnect re-auth failed:", error),
+	});
+	if (!isCurrent()) return;
+	if (outcome === "hydrated") noteSessionRestored();
+	if (outcome === "no-token") markSessionExpired();
+	if (outcome === "unreachable") {
+		// Keep the stored token; a transport failure is not a credential verdict.
 		authStatusStore.set(false);
-	}
-}
-
-async function runReconnectReauth(): Promise<void> {
-	if (reauthInFlight) return;
-	reauthInFlight = true;
-	try {
-		const outcome = await reauthenticateAndHydrate({
-			getStoredToken: readStoredToken,
-			clearStoredToken,
-			// A REVOCABLE device-issued token, so it authenticates through
-			// `input.token`; sent as `password` it is bcrypt-compared against
-			// the password hash and every reconnect fails.
-			login: (token) => rpc.auth.login({ token, persistent_token: true }),
-			getConfig: () => rpc.streaming.getConfig(),
-			getStatus: () => pullStatusEvidence(),
-			dispatch: (type, data) => {
-				if (type === "status") {
-					const answer = data as ReceivedStatus | undefined;
-					if (answer !== undefined)
-						ingestPulledStatus(answer.status, answer.receipt);
-				} else {
-					handleMessage(type, data);
-				}
-			},
-			routeToLogin,
-			onError: (error) => console.error("Reconnect re-auth failed:", error),
-		});
-		if (outcome === "hydrated") noteSessionRestored();
-	} finally {
-		reauthInFlight = false;
 	}
 }
 
@@ -1236,20 +1277,11 @@ function handleConnectionChange(state: ConnectionState): void {
 		// `previous !== "connected"` keeps steady connected ticks inert.
 		if (previous !== "connected") {
 			seqTracker.resetOnReconnect();
-		}
-		// Recovery toast: only emit when reconnecting after a prior drop (wasAuthenticated).
-		// Suppress the initial connect of a page-load — that's owned by Layout's login flow.
-		if (wasAuthenticated()) {
-			pushNotification({
-				name: "connection-recovered",
-				type: "success",
-				key: "notifications.connectionRecovered",
-				msg: "Connection restored",
-				is_dismissable: true,
-				is_persistent: false,
-				duration: 3,
-			});
-			void runReconnectReauth();
+			// Only an unconfigured device sends a setup prompt on socket open.
+			// The previous socket's prompt is not evidence about this one.
+			clearPasswordSetup();
+			// The existing shell is the replay owner; initial sign-in is Layout's.
+			if (authStatusStore.value) void runReconnectReauth(getLinkEpoch());
 		}
 	}
 }

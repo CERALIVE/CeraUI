@@ -10,6 +10,7 @@ import {
 import { call } from "@orpc/server";
 import * as mocks from "../mocks/mock-service.ts";
 import { getMockHotspotConfig } from "../mocks/providers/wifi.ts";
+import { getMockWifiIncarnation } from "../mocks/providers/wifi-incarnation.ts";
 import * as wifi from "../modules/wifi/wifi.ts";
 import * as mode from "../modules/wifi/wifi-adapter-mode-transition.ts";
 import * as activation from "../modules/wifi/wifi-hotspot-activation.ts";
@@ -21,11 +22,8 @@ import {
 	hotspotStopProcedure,
 	setWifiAdapterModeProcedure,
 } from "../rpc/procedures/wifi.procedure.ts";
+import { wifiFrameFixture } from "./helpers/wifi-frame-fixture.ts";
 import { wifiProtocolContext } from "./helpers/wifi-protocol-context.ts";
-import {
-	isolateWifiRegistry,
-	restoreWifiRegistry,
-} from "./helpers/wifi-registry.ts";
 
 const context = wifiProtocolContext();
 const options = { context };
@@ -48,8 +46,12 @@ afterEach(() => {
 
 for (const incarnation of [undefined, "stale-unrelated-token"]) {
 	const expected = incarnation === undefined ? {} : { incarnation };
-	test(`real requests ignore optional expected binding ${incarnation}`, async () => {
-		const registry = isolateWifiRegistry();
+	const refusal = {
+		success: false,
+		error: incarnation === undefined ? "binding-required" : "radio-changed",
+	} as const;
+	test(`real guarded requests refuse expected binding ${incarnation}`, async () => {
+		const fixture = await wifiFrameFixture();
 		spyOn(mocks, "shouldUseMocks").mockReturnValue(false);
 		const prepare = spyOn(activation, "wifiHotspotPrepare").mockResolvedValue({
 			success: true,
@@ -75,24 +77,24 @@ for (const incarnation of [undefined, "stale-unrelated-token"]) {
 					{ device: "0", ...expected },
 					options,
 				),
-			).toEqual({ success: true, ...chosen });
-			expect(prepare).toHaveBeenLastCalledWith({ device: 0 });
+			).toEqual(refusal);
+			expect(prepare).not.toHaveBeenCalled();
 			expect(
 				await call(
 					hotspotPrepareProcedure,
 					{ device: "0", ...chosen, ...expected },
 					options,
 				),
-			).toEqual({ success: true, ...chosen });
-			expect(prepare).toHaveBeenLastCalledWith({ device: 0, ...chosen });
+			).toEqual(refusal);
+			expect(prepare).not.toHaveBeenCalled();
 			expect(
 				await call(
 					hotspotStartProcedure,
 					{ device: "0", ...expected },
 					options,
 				),
-			).toEqual({ success: true, accepted: true });
-			expect(start).toHaveBeenCalledWith({ device: 0 });
+			).toEqual(refusal);
+			expect(start).not.toHaveBeenCalled();
 			expect(
 				await call(hotspotStopProcedure, { device: "0", ...expected }, options),
 			).toEqual({ success: true });
@@ -108,11 +110,34 @@ for (const incarnation of [undefined, "stale-unrelated-token"]) {
 					},
 					options,
 				),
-			).toEqual({ success: true });
+			).toEqual(refusal);
+			expect(dispatch).not.toHaveBeenCalled();
+			await call(
+				hotspotConfigureProcedure,
+				{
+					device: "0",
+					...chosen,
+					channel: "auto",
+					incarnation: fixture.before,
+				},
+				options,
+			);
 			expect(dispatch).toHaveBeenCalledWith(context.ws, {
 				hotspot: { config: { device: 0, ...chosen, channel: "auto" } },
 			});
 			for (const target of ["station", "hotspot", "hybrid"] as const) {
+				if (target !== "station") {
+					setMode.mockClear();
+					expect(
+						await call(
+							setWifiAdapterModeProcedure,
+							{ device: "0", mode: target, ...expected },
+							options,
+						),
+					).toEqual(refusal);
+					expect(setMode).not.toHaveBeenCalled();
+					continue;
+				}
 				expect(
 					await call(
 						setWifiAdapterModeProcedure,
@@ -127,29 +152,29 @@ for (const incarnation of [undefined, "stale-unrelated-token"]) {
 				expect(setMode).toHaveBeenLastCalledWith("0", target);
 			}
 		} finally {
-			restoreWifiRegistry(registry);
+			await fixture.restore();
 		}
 	});
 
-	test(`mock requests preserve legacy effects with expected binding ${incarnation}`, async () => {
+	test(`mock guarded requests refuse expected binding ${incarnation}`, async () => {
 		process.env.MOCK_MODE = "true";
 		mocks.initMockService("multi-modem-wifi");
 		const device = "0";
 		const before = getMockHotspotConfig("wlan0");
 		expect(
 			await call(hotspotPrepareProcedure, { device, ...expected }, options),
-		).toEqual({ success: true, name: before.name, password: before.password });
+		).toEqual(refusal);
 		expect(
 			await call(
 				hotspotPrepareProcedure,
 				{ device, ...chosen, ...expected },
 				options,
 			),
-		).toEqual({ success: true, ...chosen });
+		).toEqual(refusal);
 		expect(
 			await call(hotspotStartProcedure, { device, ...expected }, options),
-		).toEqual({ success: true, accepted: true });
-		expect(mocks.getMockState().wifiModes.wlan0).toBe("hotspot");
+		).toEqual(refusal);
+		expect(mocks.getMockState().wifiModes.wlan0).toBe("station");
 		expect(
 			await call(
 				hotspotConfigureProcedure,
@@ -161,17 +186,24 @@ for (const incarnation of [undefined, "stale-unrelated-token"]) {
 				},
 				options,
 			),
-		).toEqual({ success: true });
-		expect(getMockHotspotConfig("wlan0")).toEqual({
-			uuid: before.uuid,
-			...chosen,
-			channel: "auto",
-		});
+		).toEqual(refusal);
+		expect(getMockHotspotConfig("wlan0")).toEqual(before);
 		expect(
 			await call(hotspotStopProcedure, { device, ...expected }, options),
 		).toEqual({ success: true });
 		expect(mocks.getMockState().wifiModes.wlan0).toBe("station");
 		for (const target of ["hotspot", "station"] as const) {
+			if (target === "hotspot") {
+				expect(
+					await call(
+						setWifiAdapterModeProcedure,
+						{ device, mode: target, ...expected },
+						options,
+					),
+				).toEqual(refusal);
+				expect(mocks.getMockState().wifiModes.wlan0).toBe("station");
+				continue;
+			}
 			expect(
 				await call(
 					setWifiAdapterModeProcedure,
@@ -192,6 +224,7 @@ for (const incarnation of [undefined, "stale-unrelated-token"]) {
 					device,
 					mode: "hybrid",
 					...expected,
+					incarnation: getMockWifiIncarnation("wlan0"),
 				},
 				options,
 			),
