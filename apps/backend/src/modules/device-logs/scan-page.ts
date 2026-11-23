@@ -1,5 +1,6 @@
 import {
 	LOG_FOLLOW_BOOT_START_PREFIX,
+	type LogEntry,
 	type LogQueryOutput,
 } from "@ceraui/rpc/schemas";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
@@ -13,6 +14,7 @@ import { compileFilter } from "./filter.ts";
 import { resolveFollowPosition } from "./follow-position.ts";
 import { scanMockJournal } from "./mock-journal.ts";
 import { advancePage, type PageWindow } from "./page-window.ts";
+import type { RawJournalRecord } from "./parse.ts";
 import { JournalReadError, scanJournal } from "./reader.ts";
 
 /** Round outwards for native microseconds; membership uses floored milliseconds. */
@@ -30,6 +32,7 @@ export async function scanPage(
 		readonly epoch: number;
 		readonly signal: AbortSignal;
 		readonly acceptConcurrentCleanExit?: true;
+		readonly project?: (record: RawJournalRecord) => LogEntry;
 	},
 	realtimeHint?: readonly [since: number, until: number],
 ): Promise<LogQueryOutput> {
@@ -95,7 +98,7 @@ export async function scanPage(
 				reachedGapEnd = true;
 				return "stop";
 			}
-			window = advancePage(window, record, query);
+			window = advancePage(window, record, query, scope.project);
 			reachedGapEnd = !window.lookahead && record.cursor === gap?.through;
 			return window.invalid || window.lookahead || reachedGapEnd
 				? "stop"

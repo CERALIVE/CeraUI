@@ -59,6 +59,7 @@ export function buildRedactor(
 		secretBytes += Buffer.byteLength(value);
 		if (secretBytes > 64 * 1024) throw new BundleReadError("budget");
 		const bytes = Buffer.from(value);
+		const base64 = bytes.toString("base64");
 		let uri: string;
 		try {
 			uri = encodeURIComponent(value);
@@ -69,7 +70,8 @@ export function buildRedactor(
 			value,
 			JSON.stringify(value).slice(1, -1),
 			uri,
-			bytes.toString("base64"),
+			base64,
+			base64.replace(/\+/g, "-").replace(/\//g, "_"),
 			bytes.toString("base64url"),
 		]) {
 			const key = percentCase(form);

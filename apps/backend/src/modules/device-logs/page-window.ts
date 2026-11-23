@@ -16,6 +16,7 @@ export function advancePage(
 	state: PageWindow,
 	record: RawJournalRecord,
 	query: ParsedQuery,
+	project: (record: RawJournalRecord) => LogEntry = toLogEntry,
 ): PageWindow {
 	const next = { ...state, examined: record.cursor };
 	if (state.awaitingAnchor !== null)
@@ -26,5 +27,5 @@ export function advancePage(
 		};
 	if (!matchesResidual(record, query)) return next;
 	if (state.entries.length === query.limit) return { ...next, lookahead: true };
-	return { ...next, entries: [...state.entries, toLogEntry(record)] };
+	return { ...next, entries: [...state.entries, project(record)] };
 }
