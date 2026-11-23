@@ -139,7 +139,7 @@ import {
 	getRequestedDialogContext,
 } from "$lib/stores/dialog-request.svelte";
 
-import LiveView, { resetStartFailureMemory } from "../main/LiveView.svelte";
+import LiveView from "../main/LiveView.svelte";
 
 const startFailed = en.live.startFailed as Readonly<Record<string, string>>;
 
@@ -170,10 +170,10 @@ afterEach(() => {
 	toastError.mockReset();
 	startStreaming.mockReset();
 	clearRequestedDialog();
-	resetStartFailureMemory();
 	reboot.mockReset();
 	navigate.mockReset();
 	state.netif = { eth0: { enabled: true, ip: "192.0.2.10" } };
+	state.config.source = "cam-1";
 	state.status = {};
 	state.generation = 1;
 	vi.restoreAllMocks();
@@ -421,16 +421,25 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 	});
 
 	function action(call = toastError.mock.calls.at(-1)) {
-		return call?.[1] as { action: { onClick: () => void } } | undefined;
+		const callback = call?.[1]?.action?.onClick;
+		return callback
+			? {
+					action: {
+						onClick: () =>
+							callback(new MouseEvent("click", { cancelable: true })),
+					},
+				}
+			: undefined;
 	}
 
 	it("Try again sends one Start through the Live bar's gate", async () => {
 		state.failure = {
 			class: "start_timeout",
-			phase: "confirm",
+			phase: "connect",
 			retriable: true,
 			attemptId: "att_retry",
 		};
+		delete state.config.source;
 		render(LiveView);
 		await tick();
 		startStreaming.mockResolvedValue({ success: true });
@@ -617,7 +626,7 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 	});
 
 	it("a refusal more than two minutes after Try again offers Try again again", async () => {
-		const now = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+		const now = vi.spyOn(performance, "now").mockReturnValue(1_000_000);
 		state.failure = {
 			class: "engine_internal",
 			phase: "start-rpc",
