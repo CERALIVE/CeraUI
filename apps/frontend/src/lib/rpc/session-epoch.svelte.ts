@@ -88,6 +88,16 @@ export interface RequestDispatch {
 let clock = 0;
 let newestStreamFrame = 0;
 let newestIntent = 0;
+let streamActivity = 0;
+
+/** Accepted device transitions invalidate actions from an earlier idle session. */
+export function noteStreamActivity(): void {
+	streamActivity += 1;
+}
+
+export function getStreamActivity(): number {
+	return streamActivity;
+}
 
 export function dispatchEvidence(): RequestDispatch {
 	clock += 1;
