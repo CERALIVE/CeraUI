@@ -18,7 +18,7 @@
 
 /* Network interface list */
 import { EventEmitter } from "node:events";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { isSimlessForBond } from "@ceraui/rpc";
 import type {
 	EthernetRole,
@@ -754,8 +754,9 @@ function isNetifUpState(state: string): boolean {
 /**
  * The kernel's own netdev list, which is the only evidence that a name still
  * names an incarnation. A monitor down-state on a name found here is an NM
- * link-state flap on a plugged-in device, not a removal. Tests override this
- * OS boundary; production reads sysfs.
+ * link-state flap on a plugged-in device, not a removal, unless its ifindex
+ * no longer matches the last poll. Tests override this OS boundary;
+ * production reads sysfs.
  */
 export const netdevPresence = {
 	inSysfs(name: string): boolean {
@@ -765,7 +766,26 @@ export const netdevPresence = {
 			return false;
 		}
 	},
+	ifindex(name: string): number | undefined {
+		try {
+			const index = Number(
+				readFileSync(`/sys/class/net/${name}/ifindex`, "utf8").trim(),
+			);
+			return Number.isInteger(index) && index > 0 ? index : undefined;
+		} catch {
+			return undefined;
+		}
+	},
 };
+
+// A name the last poll recorded under another ifindex now belongs to a
+// different netdev, even if NM reports it as a plain state change.
+function monitorSawReplacement(name: string): boolean {
+	const previous = netifIdentities.get(name)?.ifindex;
+	if (previous === undefined) return false;
+	const current = netdevPresence.ifindex(name);
+	return current !== undefined && current !== previous;
+}
 
 function isNetifDownState(state: string): boolean {
 	const s = state.toLowerCase();
@@ -791,18 +811,24 @@ export function handleNetifMonitorEvent(event: MonitorEvent): void {
 	const name = event.device;
 	if (name === "lo" || name.match("^docker") || name.match("^l4tbr")) return;
 
+	const up = isNetifUpState(event.state);
+	if (!up && !isNetifDownState(event.state)) return;
+	const replaced = monitorSawReplacement(name);
+	// A poll already in flight may still hold the old incarnation's sample.
+	if (replaced) netifRefreshGeneration++;
+
 	let mutated = false;
-	if (isNetifUpState(event.state)) {
-		if (!netif[name]) {
+	if (up) {
+		if (!netif[name] || replaced) {
 			// New running interface; IP/throughput get filled in by the next poll.
 			netif[name] = { tp: 0, txb: 0, rxb: 0, enabled: true, error: 0 };
-			bumpPresence(name);
+			bumpPresence(name, replaced);
 			mutated = true;
 		}
-	} else if (isNetifDownState(event.state)) {
+	} else {
 		// A modem that loses its connection is still plugged in: its committed
 		// identity belongs to that present incarnation and must survive the flap.
-		bumpPresence(name, !netdevPresence.inSysfs(name));
+		bumpPresence(name, replaced || !netdevPresence.inSysfs(name));
 		if (netif[name]) {
 			delete netif[name];
 			mutated = true;
@@ -1185,9 +1211,15 @@ export function processIfconfigOutput(
 				advanceNetifTopologyGeneration();
 			}
 			if (
-				previous &&
-				identity &&
-				(identity.ifindex !== ifindex || identity.mac !== mac)
+				(previous &&
+					identity &&
+					(identity.ifindex !== ifindex || identity.mac !== mac)) ||
+				// A name back after a monitor down-state keeps its identity only
+				// under the same ifindex.
+				(!previous &&
+					identity?.ifindex !== undefined &&
+					ifindex !== undefined &&
+					identity.ifindex !== ifindex)
 			) {
 				bumpPresence(name, true);
 				intsChanged = true;
