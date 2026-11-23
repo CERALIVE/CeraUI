@@ -789,6 +789,49 @@ html[data-theme='eink'] *::after {
 	font-weight: 600;
 }
 
+/* The ordered action row stays outside the scrolling refusal text. */
+[data-sonner-toast].start-refusal-toast {
+	--refusal-height: calc(100dvh - var(--offset-bottom) - 0.25rem);
+	--refusal-padding: 1rem;
+	align-items: stretch !important;
+	max-height: var(--refusal-height);
+}
+
+[data-sonner-toast].start-refusal-toast [data-icon] {
+	align-self: center;
+}
+
+[data-sonner-toast].start-refusal-toast [data-content],
+[data-sonner-toast].start-refusal-toast [data-description] {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	min-width: 0;
+}
+
+[data-sonner-toast].start-refusal-toast [data-description] {
+	gap: 0.25rem;
+	max-height: calc(var(--refusal-height) - 2 * var(--refusal-padding) - 2px);
+}
+
+[data-sonner-toast].start-refusal-toast [data-title] {
+	display: none;
+}
+
+@media (width <= 600px) {
+	[data-sonner-toast].start-refusal-toast {
+		--refusal-height: calc(100dvh - var(--mobile-offset-bottom) - 0.25rem);
+	}
+}
+
+@media (width < 40rem) and (height <= 25rem) {
+	:root { --toast-clearance: 0.25rem; }
+	[data-sonner-toast].start-refusal-toast {
+		--refusal-padding: 0.25rem;
+		padding: var(--refusal-padding) 0.5rem !important;
+	}
+}
+
 [data-sonner-toast] [data-description] {
 	color: var(--popover-foreground) !important;
 	opacity: 0.9;

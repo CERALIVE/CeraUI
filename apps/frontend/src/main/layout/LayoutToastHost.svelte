@@ -136,7 +136,7 @@ const toasterOffset = $derived(
 		? { bottom: 'calc(var(--live-bar-height, 0px) + 1.5rem)' }
 		: {
 				bottom:
-					'calc(var(--mobile-dock-height) + var(--live-bar-height, 0px) + env(safe-area-inset-bottom, 0px) + 1rem)',
+					'calc(var(--mobile-dock-height) + var(--live-bar-height, 0px) + env(safe-area-inset-bottom, 0px) + var(--toast-clearance, 1rem))',
 			},
 );
 </script>

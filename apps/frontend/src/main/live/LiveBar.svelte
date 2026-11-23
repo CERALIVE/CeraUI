@@ -70,6 +70,20 @@ $effect(() => (bar ? publishHeight(bar, HEIGHT_PROPERTY) : undefined));
 		bottom: calc(var(--mobile-dock-height) + env(safe-area-inset-bottom, 0px));
 	}
 
+	/* Keep both the bar and an actionable refusal reachable on short phones. */
+	@media (width < 40rem) and (height <= 25rem) {
+		.live-bar > div {
+			flex-direction: row;
+			align-items: center;
+			justify-content: space-between;
+			padding-block: 0.25rem;
+		}
+
+		.live-bar :global(button) {
+			padding-block: 0;
+		}
+	}
+
 	/* While the bar is on screen, a control reached with Tab or scrolled into view
 	   stops above it instead of under it (WCAG 2.4.11): the document's scroll
 	   padding covers everything fixed below the content. */
