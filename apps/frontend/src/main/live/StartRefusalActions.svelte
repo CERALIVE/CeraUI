@@ -19,13 +19,13 @@ let blocked = $state(false);
 	<p aria-live="polite" class="empty:sr-only">{blocked ? m["live.startFailure.actionUnavailable"]() : ''}</p>
 </section>
 <div class="refusal-actions flex shrink-0 flex-wrap gap-2" data-touch-region>
-	<Button class="min-h-(--touch-target-min) max-w-full whitespace-normal text-start motion-reduce:transition-none" onclick={() => { blocked = !primary.activate(() => { blocked = true; }); }}>
+	<Button class="max-w-full whitespace-normal text-start motion-reduce:transition-none" onclick={() => { blocked = !primary.activate(() => { blocked = true; }); }}>
 		{primary.label}
 	</Button>
-	<Button class="min-h-(--touch-target-min) max-w-full whitespace-normal text-start motion-reduce:transition-none" onclick={logs} variant="outline">
+	<Button class="max-w-full whitespace-normal text-start motion-reduce:transition-none" onclick={logs} variant="outline">
 		{m["notifications.viewLogs"]()}
 	</Button>
-	<Button aria-label={m["a11y.close"]()} class="min-h-(--touch-target-min) min-w-(--touch-target-min)" onclick={close} size="icon" variant="ghost"><X aria-hidden="true" /></Button>
+	<Button aria-label={m["a11y.close"]()} class="min-w-[44px]" onclick={close} size="icon" variant="ghost"><X aria-hidden="true" /></Button>
 </div>
 
 <style>
@@ -35,6 +35,10 @@ let blocked = $state(false);
 		overscroll-behavior: contain;
 		font-size: var(--text-sm);
 		line-height: 1.25;
+	}
+
+	.refusal-actions :global(button) {
+		min-height: 44px;
 	}
 
 	@media (width < 40rem) and (height <= 25rem) {
