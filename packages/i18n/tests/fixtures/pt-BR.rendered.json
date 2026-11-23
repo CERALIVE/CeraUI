@@ -159,7 +159,14 @@
 	"devtools.domComplete": "DOM Completo",
 	"devtools.domContent": "Conteúdo DOM",
 	"devtools.downlink": "Downlink",
-	"devtools.downloadZip": "Baixar ZIP (<count> arquivos)",
+	"devtools.downloadZip": {
+		"0": "Baixar ZIP (0 arquivo)",
+		"1": "Baixar ZIP (1 arquivo)",
+		"2": "Baixar ZIP (2 arquivos)",
+		"5": "Baixar ZIP (5 arquivos)",
+		"11": "Baixar ZIP (11 arquivos)",
+		"100": "Baixar ZIP (100 arquivos)"
+	},
 	"devtools.downloading": "Baixando",
 	"devtools.enabled": "Habilitado",
 	"devtools.enhancedTiming": "Tempo aprimorado: conteúdo totalmente renderizado antes da captura",
@@ -499,7 +506,6 @@
 	"live.ingest.idleHint": "Adicione links de celular, Wi-Fi ou Ethernet em Rede para iniciar o agrupamento. A telemetria de ingestão aparece aqui quando a transmissão está ao vivo.",
 	"live.ingest.idleTitle": "Ainda sem links agrupados",
 	"live.ingest.link": "Link",
-	"live.ingest.links": "Links",
 	"live.ingest.linkCount": {
 		"0": "0 link",
 		"1": "1 link",
@@ -508,20 +514,11 @@
 		"11": "11 links",
 		"100": "100 links"
 	},
-	"live.ingest.linksReadyCount": {
-		"0": "0 link pronto para agrupar",
-		"1": "1 link pronto para agrupar",
-		"2": "2 links prontos para agrupar",
-		"5": "5 links prontos para agrupar",
-		"11": "11 links prontos para agrupar",
-		"100": "100 links prontos para agrupar"
-	},
 	"live.ingest.linksReadyHint": "A telemetria de agrupamento aparece quando está ao vivo.",
 	"live.ingest.linksReadyTitle": "Links prontos",
 	"live.ingest.nak": "NAK",
 	"live.ingest.peak": "Pico",
 	"live.ingest.rtt": "RTT",
-	"live.ingest.samples": "Amostras",
 	"live.ingest.sampleCount": {
 		"0": "0 amostra",
 		"1": "1 amostra",
@@ -698,8 +695,8 @@
 	"live.server.singleLink": "Link único",
 	"live.server.singleLinkHint": "Este receptor usa um único link direto. A combinação de vários links não é usada para este transporte.",
 	"live.setup.linksReady": {
-		"0": "0 link prontos",
-		"1": "1 link prontos",
+		"0": "0 link pronto",
+		"1": "1 link pronto",
 		"2": "2 links prontos",
 		"5": "5 links prontos",
 		"11": "11 links prontos",
@@ -735,11 +732,16 @@
 	"live.source.label": "Fonte",
 	"live.source.linksDownStreamingBody": "Nenhum dado pode ser enviado agora. A transmissão é retomada automaticamente quando um link se recupera.",
 	"live.source.linksDownStreamingTitle": "Todos os links agregados fora do ar",
-	"live.source.lostBannerBodyMany": "Estes dispositivos não estão mais conectados: <names>. Reconecte-os para usá-los novamente como fontes — nenhuma outra fonte desta lista é afetada.",
-	"live.source.lostBannerBodyOne": "<name> não está mais conectado. Reconecte-o para usá-lo novamente como fonte — nenhuma outra fonte desta lista é afetada.",
+	"live.source.lostBannerBody": "Sem conexão: <names>. Reconecte para voltar a usar como fonte. As outras fontes da lista não foram afetadas.",
 	"live.source.lostBannerRemembered": "Ele continua na lista porque é o dispositivo usado pela sua última transmissão.",
-	"live.source.lostBannerTitleMany": "<count> dispositivos desconectados",
-	"live.source.lostBannerTitleOne": "<name> desconectado",
+	"live.source.lostBannerTitle": {
+		"0": "0 dispositivo desconectado",
+		"1": "1 dispositivo desconectado",
+		"2": "2 dispositivos desconectados",
+		"5": "5 dispositivos desconectados",
+		"11": "11 dispositivos desconectados",
+		"100": "100 dispositivos desconectados"
+	},
 	"live.source.lostBody": "Reconecte o dispositivo para retomar a transmissão desta fonte.",
 	"live.source.lostStreamingBody": "A fonte que você está transmitindo foi perdida. Reconecte-a ou troque de fonte para manter sua transmissão ativa.",
 	"live.source.lostStreamingTitle": "Fonte ao vivo desconectada",
@@ -885,7 +887,14 @@
 	"network.modem.scanForNetworks": "Procurar redes",
 	"network.modem.scanning": "Escaneando",
 	"network.modem.scanningForNetworks": "Procurando operadoras…",
-	"network.modem.simUnlock.attemptsRemaining": "PIN incorreto. <count> tentativas restantes.",
+	"network.modem.simUnlock.attemptsRemaining": {
+		"0": "PIN incorreto. 0 tentativa restante.",
+		"1": "PIN incorreto. 1 tentativa restante.",
+		"2": "PIN incorreto. 2 tentativas restantes.",
+		"5": "PIN incorreto. 5 tentativas restantes.",
+		"11": "PIN incorreto. 11 tentativas restantes.",
+		"100": "PIN incorreto. 100 tentativas restantes."
+	},
 	"network.modem.simUnlock.description": "Este cartão SIM está bloqueado. Digite o PIN para desbloquear o modem.",
 	"network.modem.simUnlock.error": "Não foi possível desbloquear o SIM. Tente novamente.",
 	"network.modem.simUnlock.lengthHint": "O PIN deve ter de <min> a <max> dígitos",
@@ -1177,7 +1186,14 @@
 	"settings.deviceStats.cpuFreqHint": "Clock atual em relação ao teto do hardware, por política do cpufreq. O nome da política é um diretório do sysfs, não um cluster de núcleos.",
 	"settings.deviceStats.cpuLoad": "Carga da CPU",
 	"settings.deviceStats.cpuLoadHeavy": "Alta",
-	"settings.deviceStats.cpuLoadHint": "Proporção da capacidade total da CPU — a carga média de 1 minuto distribuída por <cores> núcleos.",
+	"settings.deviceStats.cpuLoadHint": {
+		"0": "Proporção da capacidade total da CPU — a carga média de 1 minuto em 0 núcleo.",
+		"1": "Proporção da capacidade total da CPU — a carga média de 1 minuto em 1 núcleo.",
+		"2": "Proporção da capacidade total da CPU — a carga média de 1 minuto distribuída por 2 núcleos.",
+		"5": "Proporção da capacidade total da CPU — a carga média de 1 minuto distribuída por 5 núcleos.",
+		"11": "Proporção da capacidade total da CPU — a carga média de 1 minuto distribuída por 11 núcleos.",
+		"100": "Proporção da capacidade total da CPU — a carga média de 1 minuto distribuída por 100 núcleos."
+	},
 	"settings.deviceStats.cpuLoadHintNoCores": "Carga média de 1 minuto. Este dispositivo não informou a contagem de núcleos, portanto não pode ser exibida como proporção da capacidade.",
 	"settings.deviceStats.cpuLoadLight": "Baixa",
 	"settings.deviceStats.cpuLoadModerate": "Moderada",
@@ -1531,5 +1547,54 @@
 	"wifiSelector.validation.passwordMinLength": "Mínimo de 8 caracteres",
 	"wifiStatus.connected": "Conectado",
 	"wifiStatus.disconnected": "Desconectado",
-	"wifiStatus.hotspot": "Ponto de acesso"
+	"wifiStatus.hotspot": "Ponto de acesso",
+	"network.modem.simUnlock.pin2AttemptsRemaining": {
+		"0": "PIN2 incorreto. Resta 0 tentativa.",
+		"1": "PIN2 incorreto. Resta 1 tentativa.",
+		"2": "PIN2 incorreto. Restam 2 tentativas.",
+		"5": "PIN2 incorreto. Restam 5 tentativas.",
+		"11": "PIN2 incorreto. Restam 11 tentativas.",
+		"100": "PIN2 incorreto. Restam 100 tentativas."
+	},
+	"network.modem.sms.countLabel": {
+		"0": "0 mensagem armazenada",
+		"1": "1 mensagem armazenada",
+		"2": "2 mensagens armazenadas",
+		"5": "5 mensagens armazenadas",
+		"11": "11 mensagens armazenadas",
+		"100": "100 mensagens armazenadas"
+	},
+	"network.sharing.headline.activeBody": "Enlaces disponíveis para o tráfego dos clientes: 1 de 2.",
+	"network.unclaimedAdapters.title": {
+		"0": "0 adaptador detectado — sem driver neste kernel",
+		"1": "1 adaptador detectado — sem driver neste kernel",
+		"2": "2 adaptadores detectados — sem driver neste kernel",
+		"5": "5 adaptadores detectados — sem driver neste kernel",
+		"11": "11 adaptadores detectados — sem driver neste kernel",
+		"100": "100 adaptadores detectados — sem driver neste kernel"
+	},
+	"network.view.hotspotClients": {
+		"0": "0 dispositivo conectado",
+		"1": "1 dispositivo conectado",
+		"2": "2 dispositivos conectados",
+		"5": "5 dispositivos conectados",
+		"11": "11 dispositivos conectados",
+		"100": "100 dispositivos conectados"
+	},
+	"network.sharing.diagnostics.findings": {
+		"0": "0 achado para revisar",
+		"1": "1 achado para revisar",
+		"2": "2 achados para revisar",
+		"5": "5 achados para revisar",
+		"11": "11 achados para revisar",
+		"100": "100 achados para revisar"
+	},
+	"network.view.notBonded": {
+		"0": "0 link não está agregado — veja abaixo o motivo",
+		"1": "1 link não está agregado — veja abaixo o motivo",
+		"2": "2 links não estão agregados — veja abaixo o motivo",
+		"5": "5 links não estão agregados — veja abaixo o motivo",
+		"11": "11 links não estão agregados — veja abaixo o motivo",
+		"100": "100 links não estão agregados — veja abaixo o motivo"
+	}
 }

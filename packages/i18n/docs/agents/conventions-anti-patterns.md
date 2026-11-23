@@ -5,6 +5,14 @@
 - New keys go into `messages/en.json` first — it is the base locale and the SOURCE
   OF TRUTH, edited by hand. Other locales follow; the parity gate fails on a
   differing key set.
+- The count governs the **whole localized phrase**, including modifiers, verbs
+  and accessible names. Pass the numeric count to one message; do not join it to
+  a fixed noun or pick English singular/Many keys in the UI. Cover every CLDR
+  category the locale selects (Arabic: `zero`, `one`, `two`, `few`, `many`,
+  `other`), plus a final fallback for selectors. Use a single classifier phrase
+  where no inflection is needed. For a ratio, label the measured quantity and
+  keep both numbers in one message without making the total govern the usable
+  subset. Keep real empty and unreported states distinct.
 - The existing translation-quality gate covers every key and non-English
   locale. Current locale-scoped exceptions and the separate shrinking debt baseline
   are documented in [the package README](../../README.md#translation-quality-ratchet).
@@ -14,7 +22,9 @@
   pre-migration oracle; the generator that captured it retired with the runtime it
   rendered through, and regenerating it from paraglide would overwrite the oracle
   with the very thing it exists to falsify. A deliberate copy change re-freezes it
-  in its own separately-reviewed PR.
+  in its own separately-reviewed PR. The #666/#668 follow-up is deliberate
+  copy work: review only the added, changed and retired count-message entries
+  and their parameters. Do not regenerate the oracle.
 - `branding.ts` holds brand names that don't get translated — import from there.
 - Svelte 5 store uses runes — don't convert to stores.
 - Don't hand-edit anything under `generated/` or `src/paraglide/`.

@@ -190,7 +190,23 @@
 	"devtools.domComplete": "DOM Complet",
 	"devtools.domContent": "Contenu DOM",
 	"devtools.downlink": "Liaison descendante",
-	"devtools.downloadZip": "Télécharger ZIP ({count} fichiers)",
+	"devtools.downloadZip": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "Télécharger ZIP ({count} fichier)",
+				"countPlural=many": "Télécharger ZIP ({count} fichiers)",
+				"countPlural=other": "Télécharger ZIP ({count} fichiers)",
+				"countPlural=*": "Télécharger ZIP ({count} fichiers)"
+			}
+		}
+	],
 	"devtools.downloading": "Téléchargement",
 	"devtools.enabled": "Activé",
 	"devtools.enhancedTiming": "Timing amélioré: contenu entièrement rendu avant capture",
@@ -562,7 +578,6 @@
 	"live.ingest.idleHint": "Ajoutez des liens cellulaire, Wi-Fi ou Ethernet dans Réseau pour démarrer l'agrégation. La télémétrie d'ingestion apparaît ici dès que le direct est actif.",
 	"live.ingest.idleTitle": "Aucun lien agrégé pour l'instant",
 	"live.ingest.link": "Liaison",
-	"live.ingest.links": "Liaisons",
 	"live.ingest.linkCount": [
 		{
 			"declarations": [
@@ -580,29 +595,11 @@
 			}
 		}
 	],
-	"live.ingest.linksReadyCount": [
-		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
-			"match": {
-				"countPlural=one": "{count} lien prêt à agréger",
-				"countPlural=many": "{count} liens prêts à agréger",
-				"countPlural=other": "{count} liens prêts à agréger",
-				"countPlural=*": "{count} liens prêts à agréger"
-			}
-		}
-	],
 	"live.ingest.linksReadyHint": "La télémétrie d'agrégation apparaît une fois le direct actif.",
 	"live.ingest.linksReadyTitle": "Liens prêts",
 	"live.ingest.nak": "NAK",
 	"live.ingest.peak": "Pic",
 	"live.ingest.rtt": "RTT",
-	"live.ingest.samples": "Échantillons",
 	"live.ingest.sampleCount": [
 		{
 			"declarations": [
@@ -806,7 +803,7 @@
 				"countPlural"
 			],
 			"match": {
-				"countPlural=one": "{count} lien prêts",
+				"countPlural=one": "{count} lien prêt",
 				"countPlural=many": "{count} liens prêts",
 				"countPlural=other": "{count} liens prêts",
 				"countPlural=*": "{count} liens prêts"
@@ -881,11 +878,25 @@
 	"live.source.label": "Source",
 	"live.source.linksDownStreamingBody": "Aucune donnée ne peut être envoyée pour le moment. Le direct reprend automatiquement dès qu'un lien est rétabli.",
 	"live.source.linksDownStreamingTitle": "Tous les liens agrégés hors service",
-	"live.source.lostBannerBodyMany": "Ces appareils ne sont plus connectés : {names}. Reconnectez-les pour les utiliser à nouveau comme sources — aucune autre source de cette liste n'est affectée.",
-	"live.source.lostBannerBodyOne": "{name} n'est plus connecté. Reconnectez-le pour l'utiliser à nouveau comme source — aucune autre source de cette liste n'est affectée.",
+	"live.source.lostBannerBody": "Déconnexion : {names}. Reconnectez les appareils pour les utiliser à nouveau comme sources. Les autres sources de cette liste ne sont pas affectées.",
 	"live.source.lostBannerRemembered": "Il reste listé parce que c'est l'appareil qu'a utilisé votre dernier direct.",
-	"live.source.lostBannerTitleMany": "{count} appareils déconnectés",
-	"live.source.lostBannerTitleOne": "{name} déconnecté",
+	"live.source.lostBannerTitle": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} appareil déconnecté",
+				"countPlural=many": "{count} appareils déconnectés",
+				"countPlural=other": "{count} appareils déconnectés",
+				"countPlural=*": "{count} appareils déconnectés"
+			}
+		}
+	],
 	"live.source.lostBody": "Reconnectez l'appareil pour reprendre la diffusion depuis cette source.",
 	"live.source.lostStreamingBody": "La source que vous diffusez a été perdue. Reconnectez-la ou changez de source pour garder votre direct actif.",
 	"live.source.lostStreamingTitle": "Source en direct déconnectée",
@@ -1103,8 +1114,23 @@
 	"network.collision.policyRouteTitle": "Le routage du lien nécessite votre attention",
 	"network.collision.sameSubnetBody": "Deux liens ou plus partagent un sous-réseau identique. C'est normal — l'appareil route chaque lien indépendamment, le bonding continue donc de fonctionner normalement.",
 	"network.collision.sameSubnetTitle": "Sous-réseau partagé entre les liens",
-	"network.unclaimedAdapters.titleOne": "Adaptateur détecté — aucun pilote sur ce noyau",
-	"network.unclaimedAdapters.titleMany": "{count} adaptateurs détectés — aucun pilote sur ce noyau",
+	"network.unclaimedAdapters.title": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} adaptateur détecté — aucun pilote sur ce noyau",
+				"countPlural=many": "{count} adaptateurs détectés — aucun pilote sur ce noyau",
+				"countPlural=other": "{count} adaptateurs détectés — aucun pilote sur ce noyau",
+				"countPlural=*": "{count} adaptateurs détectés — aucun pilote sur ce noyau"
+			}
+		}
+	],
 	"network.unclaimedAdapters.body": "L'appareil est présent sur le bus et publie son identité, mais aucun pilote du noyau ne l'a pris en charge : il n'est donc pas encore utilisable. Il lui faut généralement un paquet de firmware ou un noyau plus récent.",
 	"network.unclaimedAdapters.kind.wifi": "Adaptateur Wi-Fi",
 	"network.unclaimedAdapters.kind.bluetooth": "Adaptateur Bluetooth",
@@ -1388,7 +1414,23 @@
 	"network.modem.simEvidence.simSlotObjectPath": "Le modem a identifié un emplacement SIM occupé : une carte a donc été détectée.",
 	"network.modem.simEvidence.stateFailedReason": "Le modem indique que son emplacement SIM est vide.",
 	"network.modem.simEvidence.vendorCodeUnclaimed": "Le code d'état de l'appareil ne le précise pas.",
-	"network.modem.simUnlock.attemptsRemaining": "Code PIN incorrect. {count} tentatives restantes.",
+	"network.modem.simUnlock.attemptsRemaining": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "Code PIN incorrect. {count} tentative restante.",
+				"countPlural=many": "Code PIN incorrect. {count} tentatives restantes.",
+				"countPlural=other": "Code PIN incorrect. {count} tentatives restantes.",
+				"countPlural=*": "Code PIN incorrect. {count} tentatives restantes."
+			}
+		}
+	],
 	"network.modem.simUnlock.back": "Retour aux paramètres du modem",
 	"network.modem.simUnlock.description": "Cette carte SIM est verrouillée. Saisissez son code PIN pour déverrouiller le modem.",
 	"network.modem.simUnlock.error": "Impossible de déverrouiller la SIM. Veuillez réessayer.",
@@ -1396,7 +1438,23 @@
 	"network.modem.simUnlock.newPinLabel": "Nouveau code PIN de la SIM",
 	"network.modem.simUnlock.newPinPlaceholder": "Choisir un nouveau code PIN",
 	"network.modem.simUnlock.pin2AttemptsLabel": "Tentatives de PIN2 restantes",
-	"network.modem.simUnlock.pin2AttemptsRemaining": "PIN2 incorrect. Il reste {count} tentatives.",
+	"network.modem.simUnlock.pin2AttemptsRemaining": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "PIN2 incorrect. Il reste {count} tentative.",
+				"countPlural=many": "PIN2 incorrect. Il reste {count} tentatives.",
+				"countPlural=other": "PIN2 incorrect. Il reste {count} tentatives.",
+				"countPlural=*": "PIN2 incorrect. Il reste {count} tentatives."
+			}
+		}
+	],
 	"network.modem.simUnlock.pin2Description": "Le PIN2 est un code distinct du PIN de la SIM. Il protège la liste des numéros à composition fixe et les réglages de coût d'appel enregistrés sur cette SIM.",
 	"network.modem.simUnlock.pin2Label": "PIN2 de la SIM",
 	"network.modem.simUnlock.pin2Placeholder": "Saisir le PIN2",
@@ -1427,7 +1485,23 @@
 	"network.modem.simUnlock.wrongPin2": "PIN2 incorrect. Veuillez réessayer.",
 	"network.modem.simUnlock.wrongPuk": "Code PUK incorrect. Veuillez réessayer.",
 	"network.modem.sms.capped": "Affichage des {count} messages les plus récents stockés sur cette SIM.",
-	"network.modem.sms.countLabel": "{count} messages stockés",
+	"network.modem.sms.countLabel": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} message stocké",
+				"countPlural=many": "{count} messages stockés",
+				"countPlural=other": "{count} messages stockés",
+				"countPlural=*": "{count} messages stockés"
+			}
+		}
+	],
 	"network.modem.sms.description": "Stockés sur cette SIM. Lecture seule.",
 	"network.modem.sms.empty": "Aucun message stocké",
 	"network.modem.sms.emptyHint": "Cette SIM ne contient rien que le modem puisse lire.",
@@ -1744,9 +1818,24 @@
 	"network.view.hotspotClientRate": "{rate} Mbit/s",
 	"network.view.hotspotClientSignal": "{dbm} dBm",
 	"network.view.hotspotClientsCapped": "Affichage de {shown} sur {count}.",
-	"network.view.hotspotClientsMany": "{count} appareils connectés",
+	"network.view.hotspotClients": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} appareil connecté",
+				"countPlural=many": "{count} appareils connectés",
+				"countPlural=other": "{count} appareils connectés",
+				"countPlural=*": "{count} appareils connectés"
+			}
+		}
+	],
 	"network.view.hotspotClientsNone": "Aucun appareil connecté",
-	"network.view.hotspotClientsOne": "{count} appareil connecté",
 	"network.view.hotspotNoBond": "Le point d'accès ne peut pas être agrégé",
 	"network.view.hotspotOff": "Le hotspot est désactivé",
 	"network.view.hotspotOffHint": "Partagez la connexion de cet appareil via WiFi.",
@@ -1859,7 +1948,7 @@
 	"network.netifSave.error.generic": "L'appareil a refusé le changement, rien n'a été enregistré.",
 	"network.sharing.title": "Partage de connexion",
 	"network.sharing.headline.activeTitle": "Le partage est actif",
-	"network.sharing.headline.activeBody": "{usable} liaisons sur {total} peuvent transporter le trafic des clients.",
+	"network.sharing.headline.activeBody": "Liaisons disponibles pour le trafic des clients : {usable} sur {total}.",
 	"network.sharing.uplinksHeading": "État des liaisons",
 	"network.sharing.state.up": "Active",
 	"network.sharing.state.degraded": "Dégradée",
@@ -1920,11 +2009,41 @@
 	"network.sharing.diag.reason.foreignTable": "La table de pare-feu propre à l'image de l'appareil a changé.",
 	"network.sharing.diagnostics.disclosure": "Diagnostics",
 	"network.sharing.diagnostics.clear": "Rien à examiner",
-	"network.sharing.diagnostics.findingsOne": "{count} point à examiner",
-	"network.sharing.diagnostics.findingsMany": "{count} points à examiner",
+	"network.sharing.diagnostics.findings": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} point à examiner",
+				"countPlural=many": "{count} points à examiner",
+				"countPlural=other": "{count} points à examiner",
+				"countPlural=*": "{count} points à examiner"
+			}
+		}
+	],
 	"network.sharing.dnsNote": "Limitation connue : les résolutions de noms des appareils connectés suivent la route par défaut de cet appareil et n'empruntent donc pas forcément la liaison sur laquelle leur trafic est envoyé.",
-	"network.view.notBondedMany": "{count} liaisons ne sont pas agrégées — voir ci-dessous pourquoi",
-	"network.view.notBondedOne": "1 liaison n'est pas agrégée — voir ci-dessous pourquoi",
+	"network.view.notBonded": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} liaison n'est pas agrégée — voir ci-dessous pourquoi",
+				"countPlural=many": "{count} liaisons ne sont pas agrégées — voir ci-dessous pourquoi",
+				"countPlural=other": "{count} liaisons ne sont pas agrégées — voir ci-dessous pourquoi",
+				"countPlural=*": "{count} liaisons ne sont pas agrégées — voir ci-dessous pourquoi"
+			}
+		}
+	],
 	"network.view.off": "Désactivé",
 	"network.view.on": "Activé",
 	"network.view.refreshing": "Actualisation",
@@ -2183,7 +2302,23 @@
 	"settings.deviceStats.cpuFreqGovernorHint": "La politique noyau qui choisit la fréquence de ce groupe. CeraLive fixe performance pour la latence d'encodage.",
 	"settings.deviceStats.cpuLoad": "Charge CPU",
 	"settings.deviceStats.cpuLoadHeavy": "Élevée",
-	"settings.deviceStats.cpuLoadHint": "Part de la capacité CPU totale — la charge moyenne sur 1 minute répartie sur {cores} cœurs.",
+	"settings.deviceStats.cpuLoadHint": [
+		{
+			"declarations": [
+				"input cores",
+				"local coresPlural = cores: plural"
+			],
+			"selectors": [
+				"coresPlural"
+			],
+			"match": {
+				"coresPlural=one": "Part de la capacité CPU totale — la charge moyenne sur 1 minute sur {cores} cœur.",
+				"coresPlural=many": "Part de la capacité CPU totale — la charge moyenne sur 1 minute répartie sur {cores} cœurs.",
+				"coresPlural=other": "Part de la capacité CPU totale — la charge moyenne sur 1 minute répartie sur {cores} cœurs.",
+				"coresPlural=*": "Part de la capacité CPU totale — la charge moyenne sur 1 minute répartie sur {cores} cœurs."
+			}
+		}
+	],
 	"settings.deviceStats.cpuLoadHintNoCores": "Charge moyenne sur 1 minute. Cet appareil n'a pas indiqué son nombre de cœurs, elle ne peut donc pas être affichée en part de capacité.",
 	"settings.deviceStats.cpuLoadLight": "Faible",
 	"settings.deviceStats.cpuLoadModerate": "Modérée",

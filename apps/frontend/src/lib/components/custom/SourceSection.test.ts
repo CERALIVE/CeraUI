@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { setLocale } from "@ceraui/i18n/svelte";
 import type {
 	AudioSource,
 	CapabilitiesMessage,
@@ -2348,3 +2349,29 @@ describe("SourceSection — a source that brings its own audio has no device to 
 		expect(onAudioSelectionApplied).not.toHaveBeenCalled();
 	});
 });
+
+it.each([
+	["en", [RODE], "1 device disconnected"],
+	["ar", [RODE, DUAL_FORMAT], "2 جهازان غير متصلين"],
+] as const)(
+	"inflects the lost-source count in %s without losing device names",
+	(locale, devices, expected) => {
+		setLocale(locale);
+		try {
+			const { getByTestId } = mount({
+				sources: sourcesMsg(
+					devices.map((device) => ({ ...device, lost: true })),
+				),
+			});
+			expect(getByTestId("source-lost-banner-title").textContent?.trim()).toBe(
+				expected,
+			);
+			for (const device of devices)
+				expect(getByTestId("source-lost-banner").textContent).toContain(
+					device.displayName,
+				);
+		} finally {
+			setLocale("en");
+		}
+	},
+);

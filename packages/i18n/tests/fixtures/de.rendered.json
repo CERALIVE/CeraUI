@@ -159,7 +159,14 @@
 	"devtools.domComplete": "DOM vollständig",
 	"devtools.domContent": "DOM-Inhalt",
 	"devtools.downlink": "Downlink",
-	"devtools.downloadZip": "ZIP Herunterladen (<count> Dateien)",
+	"devtools.downloadZip": {
+		"0": "ZIP Herunterladen (0 Dateien)",
+		"1": "ZIP Herunterladen (1 Datei)",
+		"2": "ZIP Herunterladen (2 Dateien)",
+		"5": "ZIP Herunterladen (5 Dateien)",
+		"11": "ZIP Herunterladen (11 Dateien)",
+		"100": "ZIP Herunterladen (100 Dateien)"
+	},
 	"devtools.downloading": "Herunterladen",
 	"devtools.enabled": "Aktiviert",
 	"devtools.enhancedTiming": "Verbessertes Timing: Inhalt vollständig gerendert vor Erfassung",
@@ -499,7 +506,6 @@
 	"live.ingest.idleHint": "Fügen Sie in Netzwerk Mobilfunk-, WLAN- oder Ethernet-Links hinzu, um die Bündelung zu starten. Ingest-Telemetrie erscheint hier, sobald der Stream läuft.",
 	"live.ingest.idleTitle": "Noch keine gebündelten Links",
 	"live.ingest.link": "Verbindung",
-	"live.ingest.links": "Verbindungen",
 	"live.ingest.linkCount": {
 		"0": "0 Verbindungen",
 		"1": "1 Verbindung",
@@ -508,20 +514,11 @@
 		"11": "11 Verbindungen",
 		"100": "100 Verbindungen"
 	},
-	"live.ingest.linksReadyCount": {
-		"0": "0 Links bereit zum Bündeln",
-		"1": "1 Link bereit zum Bündeln",
-		"2": "2 Links bereit zum Bündeln",
-		"5": "5 Links bereit zum Bündeln",
-		"11": "11 Links bereit zum Bündeln",
-		"100": "100 Links bereit zum Bündeln"
-	},
 	"live.ingest.linksReadyHint": "Bündelungs-Telemetrie erscheint, sobald der Stream läuft.",
 	"live.ingest.linksReadyTitle": "Links bereit",
 	"live.ingest.nak": "NAK",
 	"live.ingest.peak": "Spitze",
 	"live.ingest.rtt": "RTT",
-	"live.ingest.samples": "Messungen",
 	"live.ingest.sampleCount": {
 		"0": "0 Messungen",
 		"1": "1 Messung",
@@ -735,11 +732,16 @@
 	"live.source.label": "Quelle",
 	"live.source.linksDownStreamingBody": "Es können gerade keine Daten gesendet werden. Der Stream wird automatisch fortgesetzt, sobald eine Verbindung zurückkehrt.",
 	"live.source.linksDownStreamingTitle": "Alle gebündelten Verbindungen ausgefallen",
-	"live.source.lostBannerBodyMany": "Diese Geräte sind nicht mehr verbunden: <names>. Schließe sie wieder an, um sie erneut als Quellen zu nutzen — jede andere Quelle in dieser Liste ist unberührt.",
-	"live.source.lostBannerBodyOne": "<name> ist nicht mehr verbunden. Schließe es wieder an, um es erneut als Quelle zu nutzen — jede andere Quelle in dieser Liste ist unberührt.",
+	"live.source.lostBannerBody": "Getrennt: <names>. Erneut anschließen, um sie wieder als Quellen zu nutzen. Alle anderen Quellen in dieser Liste sind unberührt.",
 	"live.source.lostBannerRemembered": "Es wird noch angezeigt, weil es das Gerät deines letzten Streams ist.",
-	"live.source.lostBannerTitleMany": "<count> Geräte getrennt",
-	"live.source.lostBannerTitleOne": "<name> getrennt",
+	"live.source.lostBannerTitle": {
+		"0": "0 Geräte getrennt",
+		"1": "1 Gerät getrennt",
+		"2": "2 Geräte getrennt",
+		"5": "5 Geräte getrennt",
+		"11": "11 Geräte getrennt",
+		"100": "100 Geräte getrennt"
+	},
 	"live.source.lostBody": "Schließen Sie das Gerät wieder an, um das Streaming von dieser Quelle fortzusetzen.",
 	"live.source.lostStreamingBody": "Die gestreamte Quelle ging verloren. Schließe sie wieder an oder wechsle die Quelle, um den Stream aufrechtzuerhalten.",
 	"live.source.lostStreamingTitle": "Live-Quelle getrennt",
@@ -885,7 +887,14 @@
 	"network.modem.scanForNetworks": "Nach Netzwerken suchen",
 	"network.modem.scanning": "Wird gescannt",
 	"network.modem.scanningForNetworks": "Suche nach Anbietern…",
-	"network.modem.simUnlock.attemptsRemaining": "Falsche PIN. <count> Versuche übrig.",
+	"network.modem.simUnlock.attemptsRemaining": {
+		"0": "Falsche PIN. 0 Versuche übrig.",
+		"1": "Falsche PIN. 1 Versuch übrig.",
+		"2": "Falsche PIN. 2 Versuche übrig.",
+		"5": "Falsche PIN. 5 Versuche übrig.",
+		"11": "Falsche PIN. 11 Versuche übrig.",
+		"100": "Falsche PIN. 100 Versuche übrig."
+	},
 	"network.modem.simUnlock.description": "Diese SIM-Karte ist gesperrt. Geben Sie die PIN ein, um das Modem zu entsperren.",
 	"network.modem.simUnlock.error": "SIM konnte nicht entsperrt werden. Bitte erneut versuchen.",
 	"network.modem.simUnlock.lengthHint": "Die PIN muss <min> bis <max> Ziffern haben",
@@ -1177,7 +1186,14 @@
 	"settings.deviceStats.cpuFreqHint": "Aktueller Takt gegen die Hardware-Obergrenze, je cpufreq-Policy. Ein Policy-Name ist ein sysfs-Verzeichnis, kein Kern-Cluster.",
 	"settings.deviceStats.cpuLoad": "CPU-Last",
 	"settings.deviceStats.cpuLoadHeavy": "Hoch",
-	"settings.deviceStats.cpuLoadHint": "Anteil der gesamten CPU-Kapazität — der 1-Minuten-Lastdurchschnitt über <cores> Kerne.",
+	"settings.deviceStats.cpuLoadHint": {
+		"0": "Anteil der gesamten CPU-Kapazität — der 1-Minuten-Lastdurchschnitt über 0 Kerne.",
+		"1": "Anteil der gesamten CPU-Kapazität — der 1-Minuten-Lastdurchschnitt über 1 Kern.",
+		"2": "Anteil der gesamten CPU-Kapazität — der 1-Minuten-Lastdurchschnitt über 2 Kerne.",
+		"5": "Anteil der gesamten CPU-Kapazität — der 1-Minuten-Lastdurchschnitt über 5 Kerne.",
+		"11": "Anteil der gesamten CPU-Kapazität — der 1-Minuten-Lastdurchschnitt über 11 Kerne.",
+		"100": "Anteil der gesamten CPU-Kapazität — der 1-Minuten-Lastdurchschnitt über 100 Kerne."
+	},
 	"settings.deviceStats.cpuLoadHintNoCores": "1-Minuten-Lastdurchschnitt. Dieses Gerät hat seine Kernanzahl nicht gemeldet, daher kann kein Kapazitätsanteil angezeigt werden.",
 	"settings.deviceStats.cpuLoadLight": "Niedrig",
 	"settings.deviceStats.cpuLoadModerate": "Mittel",
@@ -1531,5 +1547,54 @@
 	"wifiSelector.validation.passwordMinLength": "Mindestens 8 Zeichen",
 	"wifiStatus.connected": "Verbunden",
 	"wifiStatus.disconnected": "Getrennt",
-	"wifiStatus.hotspot": "Hotspot"
+	"wifiStatus.hotspot": "Hotspot",
+	"network.modem.simUnlock.pin2AttemptsRemaining": {
+		"0": "Falsche PIN2. Noch 0 Versuche.",
+		"1": "Falsche PIN2. Noch 1 Versuch.",
+		"2": "Falsche PIN2. Noch 2 Versuche.",
+		"5": "Falsche PIN2. Noch 5 Versuche.",
+		"11": "Falsche PIN2. Noch 11 Versuche.",
+		"100": "Falsche PIN2. Noch 100 Versuche."
+	},
+	"network.modem.sms.countLabel": {
+		"0": "0 Nachrichten gespeichert",
+		"1": "1 Nachricht gespeichert",
+		"2": "2 Nachrichten gespeichert",
+		"5": "5 Nachrichten gespeichert",
+		"11": "11 Nachrichten gespeichert",
+		"100": "100 Nachrichten gespeichert"
+	},
+	"network.sharing.headline.activeBody": "Verfügbare Uplinks für Client-Datenverkehr: 1 von 2.",
+	"network.unclaimedAdapters.title": {
+		"0": "0 Adapter erkannt – kein Treiber in diesem Kernel",
+		"1": "1 Adapter erkannt – kein Treiber in diesem Kernel",
+		"2": "2 Adapter erkannt – kein Treiber in diesem Kernel",
+		"5": "5 Adapter erkannt – kein Treiber in diesem Kernel",
+		"11": "11 Adapter erkannt – kein Treiber in diesem Kernel",
+		"100": "100 Adapter erkannt – kein Treiber in diesem Kernel"
+	},
+	"network.view.hotspotClients": {
+		"0": "0 Geräte verbunden",
+		"1": "1 Gerät verbunden",
+		"2": "2 Geräte verbunden",
+		"5": "5 Geräte verbunden",
+		"11": "11 Geräte verbunden",
+		"100": "100 Geräte verbunden"
+	},
+	"network.sharing.diagnostics.findings": {
+		"0": "0 Befunde zu prüfen",
+		"1": "1 Befund zu prüfen",
+		"2": "2 Befunde zu prüfen",
+		"5": "5 Befunde zu prüfen",
+		"11": "11 Befunde zu prüfen",
+		"100": "100 Befunde zu prüfen"
+	},
+	"network.view.notBonded": {
+		"0": "0 Verbindungen sind nicht gebündelt — Grund siehe unten",
+		"1": "1 Verbindung ist nicht gebündelt — Grund siehe unten",
+		"2": "2 Verbindungen sind nicht gebündelt — Grund siehe unten",
+		"5": "5 Verbindungen sind nicht gebündelt — Grund siehe unten",
+		"11": "11 Verbindungen sind nicht gebündelt — Grund siehe unten",
+		"100": "100 Verbindungen sind nicht gebündelt — Grund siehe unten"
+	}
 }

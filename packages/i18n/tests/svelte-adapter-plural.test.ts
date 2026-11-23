@@ -7,47 +7,14 @@ import type { LocaleCode } from "../src/locale-lifecycle.js";
 import {
 	ALL_LOCALES,
 	isComplex,
-	PLURAL_COUNTS,
 	readCatalog,
 	readOracleParams,
 	readRenderedOracle,
 	variantsOf,
 } from "./helpers/catalog.js";
 
-// ---------------------------------------------------------------------------
-// STORE-FACING PLURAL PARITY (plan todo 23; replaces the legacy adapter gate).
-//
-// The legacy Svelte 5 adapter rendered every string through the pure
-// `interpolate()` resolver, so this file proved that resolver byte-matched the
-// legacy node runtime. Both are deleted (plan todo 24). What SURVIVES is
-// the claim that mattered: the string an operator sees for a plural key is
-// byte-identical to what the old implementation produced.
-//
-// So the render path here is the NEW store's own — `generated/registry.js`, the
-// module `@ceraui/i18n/svelte` re-exports as `m` — and the oracle is the FROZEN
-// old-implementation capture (plan todo 19). Every assertion is an exact string,
-// including the Arabic `linksReadyCount` and `linksReady` forms, whose copy fix
-// (empty `zero`/`two` branches, adjective agreement with the masculine noun)
-// landed as its own translation change that updated the fixtures with it.
-// Reproducing the catalog byte-for-byte is the point — a copy change updates
-// the fixtures in a separately reviewed translation change.
-//
-// WHAT REPLACED THE SYNTHETIC-TEMPLATE CASES. The legacy file also drove 17
-// hand-written templates through the resolver to cover legacy grammar the
-// dictionaries did not use: the `{{s}}` suffix shorthand, keyed `{{k:a|b}}`,
-// 3-branch `zero|one|other`, and `??` value injection. Those forms have NO
-// representation in the converted catalog — not by omission, but by construction:
-// the converter REJECTED each of them by name (`assertSupportedPlural`, deleted
-// with the converter), and the todo-19 grammar inventory found zero
-// occurrences of any of them across all ten locales. There is therefore no
-// converted message to render them through, and reimplementing the resolver here
-// to keep the old assertions alive would test a deleted implementation.
-//
-// The equivalent protection post-cutover is an INVENTORY LOCK: the catalogs are
-// hand-editable JSON from todo 24 on, so each retired form is asserted ABSENT by
-// name from every locale. A hand edit that reintroduces one fails here instead of
-// silently reaching an operator as literal `{{s}}`.
-// ---------------------------------------------------------------------------
+// Plural coverage and frozen renders live in plural-parity-gate.test.ts.
+// This file protects retired syntax and non-plural adapter rendering.
 
 const GENERATED = join(
 	dirname(fileURLToPath(import.meta.url)),
@@ -62,45 +29,6 @@ const { m } = (await import(join(GENERATED, "registry.js"))) as {
 	>;
 };
 
-/**
- * The keys that carry plural syntax: the three the todo-19 grammar inventory
- * found, plus `live.ingest.sampleCount` (added with its frozen-oracle entry so
- * the session summary stops reading "1 Samples") and `live.ingest.linkCount`
- * (the same for the live header's "1 Links").
- */
-const PLURAL_KEYS = [
-	"live.server.bondedAcross",
-	"live.setup.linksReady",
-	"live.ingest.linksReadyCount",
-	"live.ingest.sampleCount",
-	"live.ingest.linkCount",
-] as const;
-
-function renderPlural(locale: LocaleCode, key: string, count: number): string {
-	const spec = readOracleParams(locale).keys[key];
-	const inputs =
-		spec?.plural === true
-			? Object.fromEntries(spec.countParams.map((name) => [name, count]))
-			: (spec?.params ?? {});
-	const render = m[key];
-	if (render === undefined) throw new Error(`registry has no message ${key}`);
-	return render(inputs, { locale });
-}
-
-/**
- * ja/ko/zh carry no plural syntax on these keys, so their frozen entry is a
- * single string rather than a per-count map — and it must render identically at
- * every count. That regression case was in the legacy gate and is kept here.
- */
-function frozenRender(
-	locale: LocaleCode,
-	key: string,
-	count: number,
-): string | undefined {
-	const entry = readRenderedOracle(locale)[key];
-	return typeof entry === "string" ? entry : entry?.[String(count)];
-}
-
 /** Every rendered pattern of a catalog, plural branches expanded. */
 function allPatterns(locale: LocaleCode): Array<{ key: string; pattern: string }> {
 	return Object.entries(readCatalog(locale)).flatMap(([key, value]) =>
@@ -109,82 +37,6 @@ function allPatterns(locale: LocaleCode): Array<{ key: string; pattern: string }
 		),
 	);
 }
-
-describe("store plural parity (m[key] === frozen old-implementation oracle)", () => {
-	for (const key of PLURAL_KEYS) {
-		for (const locale of ALL_LOCALES) {
-			for (const count of PLURAL_COUNTS) {
-				const category = new Intl.PluralRules(locale).select(count);
-				it(`${locale} · ${key} · count=${count} (${category})`, () => {
-					const expected = frozenRender(locale, key, count);
-					expect(expected).toBeString();
-					expect(renderPlural(locale, key, count)).toBe(expected as string);
-				});
-			}
-		}
-	}
-});
-
-describe("Arabic six-way selection reaches every CLDR bucket", () => {
-	const AR_SIX_WAY = {
-		"live.server.bondedAcross": {
-			zero: "مجمّع عبر 0 روابط",
-			one: "مجمّع عبر 1 رابط",
-			two: "مجمّع عبر 2 رابطين",
-			few: "مجمّع عبر 5 روابط",
-			many: "مجمّع عبر 11 رابطًا",
-			other: "مجمّع عبر 100 رابط",
-		},
-		// The adjective agrees with the masculine noun; the broken plural of
-		// 3-10 takes the feminine singular, as non-human plurals do.
-		"live.setup.linksReady": {
-			zero: "0 روابط جاهزة",
-			one: "1 رابط جاهز",
-			two: "2 رابطان جاهزان",
-			few: "5 روابط جاهزة",
-			many: "11 رابطًا جاهزًا",
-			other: "100 رابط جاهز",
-		},
-		// Every category has its own form: `zero` and `two` no longer render
-		// empty with a double space.
-		"live.ingest.linksReadyCount": {
-			zero: "0 روابط جاهزة للتجميع",
-			one: "1 رابط جاهز للتجميع",
-			two: "2 رابطان جاهزان للتجميع",
-			few: "5 روابط جاهزة للتجميع",
-			many: "11 رابطًا جاهزًا للتجميع",
-			other: "100 رابط جاهز للتجميع",
-		},
-	} as const;
-
-	const COUNT_FOR_CATEGORY = { zero: 0, one: 1, two: 2, few: 5, many: 11, other: 100 } as const;
-
-	for (const [key, byCategory] of Object.entries(AR_SIX_WAY)) {
-		for (const [category, expected] of Object.entries(byCategory)) {
-			it(`ar · ${key} · ${category}`, () => {
-				const count = COUNT_FOR_CATEGORY[category as keyof typeof COUNT_FOR_CATEGORY];
-				expect(renderPlural("ar", key, count)).toBe(expected);
-				expect(frozenRender("ar", key, count)).toBe(expected);
-			});
-		}
-	}
-});
-
-describe("English zero/one/other selection", () => {
-	const EN_EXPECTED = {
-		"live.server.bondedAcross": { 0: "Bonded across 0 links", 1: "Bonded across 1 link", 100: "Bonded across 100 links" },
-		"live.setup.linksReady": { 0: "0 links ready", 1: "1 link ready", 100: "100 links ready" },
-		"live.ingest.linksReadyCount": { 0: "0 links ready to bond", 1: "1 link ready to bond", 100: "100 links ready to bond" },
-	} as const;
-
-	for (const [key, byCount] of Object.entries(EN_EXPECTED)) {
-		for (const [count, expected] of Object.entries(byCount)) {
-			it(`en · ${key} · count=${count}`, () => {
-				expect(renderPlural("en", key, Number(count))).toBe(expected);
-			});
-		}
-	}
-});
 
 // Grammar the legacy runtime supported, the converter refuses, and the catalogs
 // have never contained. Each is asserted absent BY NAME so a hand edit that
@@ -219,18 +71,6 @@ describe("retired legacy grammar stays absent from every catalog", () => {
 		expect(hits).toEqual([]);
 	});
 
-	it("exactly the listed keys carry plural variants, in every locale that has any", () => {
-		for (const locale of ALL_LOCALES) {
-			const keys = Object.entries(readCatalog(locale))
-				.filter(([, value]) => isComplex(value))
-				.map(([key]) => key)
-				.sort();
-			const expected = ["ja", "ko", "zh"].includes(locale)
-				? []
-				: [...PLURAL_KEYS].sort();
-			expect(keys).toEqual(expected);
-		}
-	});
 });
 
 describe("regression: messages without plural syntax render unchanged", () => {

@@ -17,6 +17,7 @@
  *   • NONE of the retired collapse/gate testids exist (no ready bar — all four
  *     rows are ALWAYS fully rendered).
  */
+import { setLocale } from "@ceraui/i18n/svelte";
 import type {
 	CapabilitiesMessage,
 	ConfigMessage,
@@ -83,9 +84,9 @@ function makeSources(...captures: unknown[]): SourcesMessage {
 	return { hardware: "rk3588", sources: captures } as unknown as SourcesMessage;
 }
 
-const LIVE_NETIF = {
-	eth0: { enabled: true, ip: "10.0.0.2" },
-} as unknown as NetifMessage;
+const LIVE_NETIF: NetifMessage = {
+	eth0: { enabled: true, ip: "10.0.0.2", tp: 0 },
+};
 
 interface Handlers {
 	onStart: ReturnType<typeof vi.fn>;
@@ -677,3 +678,28 @@ describe("StreamSetupChain — sole-camera contract", () => {
 		).toBeNull();
 	});
 });
+
+it.each([
+	["es", LIVE_NETIF, "1 enlace listo"],
+	["fr", LIVE_NETIF, "1 lien prêt"],
+	["pt-BR", LIVE_NETIF, "1 link pronto"],
+	["ar", LIVE_NETIF, "1 رابط جاهز"],
+	[
+		"ar",
+		{ ...LIVE_NETIF, wlan0: { enabled: true, ip: "192.168.1.5", tp: 0 } },
+		"2 رابطان جاهزان",
+	],
+] as const)(
+	"agrees the %s Connections summary with the ready link count",
+	(locale, netif, expected) => {
+		setLocale(locale);
+		try {
+			const { getByText } = renderChain({ netif });
+			expect(
+				getByText(expected).closest('[data-row="network"]'),
+			).not.toBeNull();
+		} finally {
+			setLocale("en");
+		}
+	},
+);

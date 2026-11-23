@@ -54,7 +54,7 @@ function renderKey(locale: LocaleCode, key: string, params: LocaleParams): Rende
 	if (spec?.plural) {
 		const byCount: Record<string, string> = {};
 		for (const count of params.counts) {
-			const inputs = Object.fromEntries(spec.countParams.map((name) => [name, count]));
+			const inputs = { ...spec.params, ...Object.fromEntries(spec.countParams.map((name) => [name, count])) };
 			byCount[String(count)] = message(inputs, { locale });
 		}
 		return byCount;

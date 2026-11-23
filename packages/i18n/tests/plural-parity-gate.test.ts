@@ -126,19 +126,6 @@ function legacySyntaxHits(locale: LocaleCode): string[] {
 	return hits;
 }
 
-/** The inputs the frozen oracle used for one plural key at one count. */
-function pluralInputs(
-	locale: LocaleCode,
-	key: string,
-	count: number,
-): Record<string, number> {
-	const spec = readOracleParams(locale).keys[key];
-	if (spec?.plural !== true) {
-		throw new Error(`frozen oracle has no plural spec for ${locale}:${key}`);
-	}
-	return Object.fromEntries(spec.countParams.map((name) => [name, count]));
-}
-
 describe("plural-parity gate: walker sanity", () => {
 	it("finds >0 plural messages in the en catalog (empty extraction FAILS)", () => {
 		expect(pluralKeys("en").length).toBeGreaterThan(0);
@@ -174,28 +161,35 @@ describe("plural-parity gate: walker sanity", () => {
 	});
 });
 
+const baseKeys = pluralKeys("en");
+const invariantLocales: readonly LocaleCode[] = ["ja", "ko", "zh"];
+
+it("the frozen counts reach all six Arabic cardinal categories", () => {
+	const rules = new Intl.PluralRules("ar");
+	expect(PLURAL_COUNTS.map((count) => rules.select(count))).toEqual([
+		"zero", "one", "two", "few", "many", "other",
+	]);
+});
+
 for (const locale of ALL_LOCALES) {
 	const keys = pluralKeys(locale);
+	const oracle = readRenderedOracle(locale);
+	const params = readOracleParams(locale);
+	const invariant = invariantLocales.includes(locale);
+	const rules = new Intl.PluralRules(locale);
 
 	describe(`plural-parity gate: ${locale} (${keys.length} plural message(s))`, () => {
 		it("carries no legacy {{…}} plural syntax in any catalog entry", () => {
 			expect(legacySyntaxHits(locale)).toEqual([]);
 		});
 
-		it("the frozen oracle carries a per-count render for every plural message", () => {
-			const oracle = readRenderedOracle(locale);
-			const notFrozen = keys.filter((key) => typeof oracle[key] !== "object");
-			expect(notFrozen).toEqual([]);
+		it("matches the base plural inventory and the frozen per-count fixtures", () => {
+			expect(keys).toEqual(invariant ? [] : baseKeys);
+			const frozenKeys = Object.keys(oracle).filter((key) => typeof oracle[key] === "object");
+			expect(frozenKeys.sort()).toEqual(keys);
+			const frozenParams = Object.keys(params.keys).filter((key) => params.keys[key]?.plural);
+			expect(frozenParams.sort()).toEqual(keys);
 		});
-
-		// ja/ko/zh carry no plural syntax — they still run through the walker and
-		// pass trivially (the locale IS included in the gate).
-		if (keys.length === 0) {
-			it("has no plural syntax — trivially passes the gate", () => {
-				expect(keys).toEqual([]);
-			});
-			return;
-		}
 
 		it("every plural message covers exactly this locale's CLDR categories, catch-all last", () => {
 			const catalog = readCatalog(locale);
@@ -209,18 +203,24 @@ for (const locale of ALL_LOCALES) {
 			expect(defects).toEqual([]);
 		});
 
-		for (const key of keys) {
-			for (const count of PLURAL_COUNTS) {
-				const category = new Intl.PluralRules(locale).select(count);
-				it(`${key} · count=${count} (${category}) · m[key] === frozen oracle`, () => {
-					const frozen = readRenderedOracle(locale)[key];
-					expect(typeof frozen).toBe("object");
-					const expected = (frozen as Record<string, string>)[String(count)];
+		for (const key of baseKeys) {
+			const frozen = oracle[key];
+			const spec = params.keys[key];
+			// ja/ko/zh use invariant classifier phrases, frozen with one input set.
+			const counts = invariant ? [undefined] : PLURAL_COUNTS;
+			for (const count of counts) {
+				const sample = count === undefined ? "invariant" : `count=${count} (${rules.select(count)})`;
+				it(`${key} · ${sample} · m[key] === frozen oracle`, () => {
+					const expected = typeof frozen === "string" ? frozen : frozen?.[String(count)];
+					expect(expected).toBeString();
+					expect(spec).toBeDefined();
+					if (count !== undefined) expect(spec?.countParams.length).toBeGreaterThan(0);
+					const inputs = count === undefined ? {} : Object.fromEntries(
+						(spec?.countParams ?? []).map((name) => [name, count]),
+					);
 					const render = m[key];
 					expect(render).toBeDefined();
-					expect(render?.(pluralInputs(locale, key, count), { locale })).toBe(
-						expected,
-					);
+					expect(render?.({ ...spec?.params, ...inputs }, { locale })).toBe(expected);
 				});
 			}
 		}

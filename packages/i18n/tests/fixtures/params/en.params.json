@@ -21,10 +21,10 @@
 			"plural": false
 		},
 		"devtools.downloadZip": {
-			"params": {
-				"count": 42
-			},
-			"plural": false
+			"countParams": [
+				"count"
+			],
+			"plural": true
 		},
 		"devtools.supportedLanguagesClick": {
 			"params": {
@@ -78,13 +78,6 @@
 			"plural": false
 		},
 		"live.ingest.linkCount": {
-			"countParams": [
-				"0",
-				"count"
-			],
-			"plural": true
-		},
-		"live.ingest.linksReadyCount": {
 			"countParams": [
 				"0",
 				"count"
@@ -190,29 +183,17 @@
 			},
 			"plural": false
 		},
-		"live.source.lostBannerBodyMany": {
+		"live.source.lostBannerBody": {
 			"params": {
 				"names": "<names>"
 			},
 			"plural": false
 		},
-		"live.source.lostBannerBodyOne": {
-			"params": {
-				"name": "<name>"
-			},
-			"plural": false
-		},
-		"live.source.lostBannerTitleMany": {
-			"params": {
-				"count": 42
-			},
-			"plural": false
-		},
-		"live.source.lostBannerTitleOne": {
-			"params": {
-				"name": "<name>"
-			},
-			"plural": false
+		"live.source.lostBannerTitle": {
+			"countParams": [
+				"count"
+			],
+			"plural": true
 		},
 		"live.summary.audioFollows": {
 			"params": {
@@ -228,10 +209,10 @@
 			"plural": false
 		},
 		"network.modem.simUnlock.attemptsRemaining": {
-			"params": {
-				"count": 42
-			},
-			"plural": false
+			"countParams": [
+				"count"
+			],
+			"plural": true
 		},
 		"network.modem.simUnlock.lengthHint": {
 			"params": {
@@ -414,10 +395,10 @@
 			"plural": false
 		},
 		"settings.deviceStats.cpuLoadHint": {
-			"params": {
-				"cores": 42
-			},
-			"plural": false
+			"countParams": [
+				"cores"
+			],
+			"plural": true
 		},
 		"settings.deviceStats.cpuLoadRaw": {
 			"params": {
@@ -449,6 +430,49 @@
 				"ssid": "<ssid>"
 			},
 			"plural": false
+		},
+		"network.modem.simUnlock.pin2AttemptsRemaining": {
+			"countParams": [
+				"count"
+			],
+			"plural": true
+		},
+		"network.modem.sms.countLabel": {
+			"countParams": [
+				"count"
+			],
+			"plural": true
+		},
+		"network.sharing.headline.activeBody": {
+			"params": {
+				"total": 2,
+				"usable": 1
+			},
+			"plural": false
+		},
+		"network.unclaimedAdapters.title": {
+			"countParams": [
+				"count"
+			],
+			"plural": true
+		},
+		"network.view.hotspotClients": {
+			"countParams": [
+				"count"
+			],
+			"plural": true
+		},
+		"network.sharing.diagnostics.findings": {
+			"countParams": [
+				"count"
+			],
+			"plural": true
+		},
+		"network.view.notBonded": {
+			"countParams": [
+				"count"
+			],
+			"plural": true
 		}
 	}
 }

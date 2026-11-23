@@ -317,10 +317,8 @@ const SUMMARY =
 								{m['network.sharing.clientsNotReported']()}
 							{:else if view.zones.hotspotClients === 0}
 								{m['network.view.hotspotClientsNone']()}
-							{:else if view.zones.hotspotClients === 1}
-								{m['network.view.hotspotClientsOne']({ count: view.zones.hotspotClients })}
 							{:else}
-								{m['network.view.hotspotClientsMany']({ count: view.zones.hotspotClients })}
+								{m['network.view.hotspotClients']({ count: view.zones.hotspotClients })}
 							{/if}
 						</span>
 					</li>

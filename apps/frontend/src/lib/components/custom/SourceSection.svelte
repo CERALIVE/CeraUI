@@ -817,14 +817,10 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 				<TriangleAlert aria-hidden={true} class="text-destructive mt-0.5 size-4 shrink-0" />
 				<div class="min-w-0 space-y-0.5">
 					<p class="text-destructive text-sm font-medium" data-testid="source-lost-banner-title">
-						{lostCaptures.length === 1
-							? m["live.source.lostBannerTitleOne"]({ name: lostNames })
-							: m["live.source.lostBannerTitleMany"]({ count: lostCaptures.length })}
+						{m["live.source.lostBannerTitle"]({ count: lostCaptures.length })}
 					</p>
 					<p class="text-muted-foreground text-xs">
-						{lostCaptures.length === 1
-							? m["live.source.lostBannerBodyOne"]({ name: lostNames })
-							: m["live.source.lostBannerBodyMany"]({ names: lostNames })}
+						{m["live.source.lostBannerBody"]({ names: lostNames })}
 					</p>
 					<p
 						class="text-muted-foreground text-xs"

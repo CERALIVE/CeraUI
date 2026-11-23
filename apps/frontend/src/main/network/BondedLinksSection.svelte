@@ -223,9 +223,7 @@ const totalStale = $derived(
 			data-not-bonded-count={unbondedCount}
 			class="text-muted-foreground mt-2 text-xs"
 		>
-			{unbondedCount === 1
-				? m["network.view.notBondedOne"]()
-				: m["network.view.notBondedMany"]({ count: unbondedCount })}
+			{m["network.view.notBonded"]({ count: unbondedCount })}
 		</p>
 	{/if}
 {/snippet}

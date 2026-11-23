@@ -159,7 +159,14 @@
 	"devtools.domComplete": "DOM Complet",
 	"devtools.domContent": "Contenu DOM",
 	"devtools.downlink": "Liaison descendante",
-	"devtools.downloadZip": "Télécharger ZIP (<count> fichiers)",
+	"devtools.downloadZip": {
+		"0": "Télécharger ZIP (0 fichier)",
+		"1": "Télécharger ZIP (1 fichier)",
+		"2": "Télécharger ZIP (2 fichiers)",
+		"5": "Télécharger ZIP (5 fichiers)",
+		"11": "Télécharger ZIP (11 fichiers)",
+		"100": "Télécharger ZIP (100 fichiers)"
+	},
 	"devtools.downloading": "Téléchargement",
 	"devtools.enabled": "Activé",
 	"devtools.enhancedTiming": "Timing amélioré: contenu entièrement rendu avant capture",
@@ -499,7 +506,6 @@
 	"live.ingest.idleHint": "Ajoutez des liens cellulaire, Wi-Fi ou Ethernet dans Réseau pour démarrer l'agrégation. La télémétrie d'ingestion apparaît ici dès que le direct est actif.",
 	"live.ingest.idleTitle": "Aucun lien agrégé pour l'instant",
 	"live.ingest.link": "Liaison",
-	"live.ingest.links": "Liaisons",
 	"live.ingest.linkCount": {
 		"0": "0 liaison",
 		"1": "1 liaison",
@@ -508,20 +514,11 @@
 		"11": "11 liaisons",
 		"100": "100 liaisons"
 	},
-	"live.ingest.linksReadyCount": {
-		"0": "0 lien prêt à agréger",
-		"1": "1 lien prêt à agréger",
-		"2": "2 liens prêts à agréger",
-		"5": "5 liens prêts à agréger",
-		"11": "11 liens prêts à agréger",
-		"100": "100 liens prêts à agréger"
-	},
 	"live.ingest.linksReadyHint": "La télémétrie d'agrégation apparaît une fois le direct actif.",
 	"live.ingest.linksReadyTitle": "Liens prêts",
 	"live.ingest.nak": "NAK",
 	"live.ingest.peak": "Pic",
 	"live.ingest.rtt": "RTT",
-	"live.ingest.samples": "Échantillons",
 	"live.ingest.sampleCount": {
 		"0": "0 échantillon",
 		"1": "1 échantillon",
@@ -698,8 +695,8 @@
 	"live.server.singleLink": "Lien unique",
 	"live.server.singleLinkHint": "Ce récepteur utilise un seul lien direct. L'agrégation de plusieurs liens n'est pas utilisée pour ce transport.",
 	"live.setup.linksReady": {
-		"0": "0 lien prêts",
-		"1": "1 lien prêts",
+		"0": "0 lien prêt",
+		"1": "1 lien prêt",
 		"2": "2 liens prêts",
 		"5": "5 liens prêts",
 		"11": "11 liens prêts",
@@ -735,11 +732,16 @@
 	"live.source.label": "Source",
 	"live.source.linksDownStreamingBody": "Aucune donnée ne peut être envoyée pour le moment. Le direct reprend automatiquement dès qu'un lien est rétabli.",
 	"live.source.linksDownStreamingTitle": "Tous les liens agrégés hors service",
-	"live.source.lostBannerBodyMany": "Ces appareils ne sont plus connectés : <names>. Reconnectez-les pour les utiliser à nouveau comme sources — aucune autre source de cette liste n'est affectée.",
-	"live.source.lostBannerBodyOne": "<name> n'est plus connecté. Reconnectez-le pour l'utiliser à nouveau comme source — aucune autre source de cette liste n'est affectée.",
+	"live.source.lostBannerBody": "Déconnexion : <names>. Reconnectez les appareils pour les utiliser à nouveau comme sources. Les autres sources de cette liste ne sont pas affectées.",
 	"live.source.lostBannerRemembered": "Il reste listé parce que c'est l'appareil qu'a utilisé votre dernier direct.",
-	"live.source.lostBannerTitleMany": "<count> appareils déconnectés",
-	"live.source.lostBannerTitleOne": "<name> déconnecté",
+	"live.source.lostBannerTitle": {
+		"0": "0 appareil déconnecté",
+		"1": "1 appareil déconnecté",
+		"2": "2 appareils déconnectés",
+		"5": "5 appareils déconnectés",
+		"11": "11 appareils déconnectés",
+		"100": "100 appareils déconnectés"
+	},
 	"live.source.lostBody": "Reconnectez l'appareil pour reprendre la diffusion depuis cette source.",
 	"live.source.lostStreamingBody": "La source que vous diffusez a été perdue. Reconnectez-la ou changez de source pour garder votre direct actif.",
 	"live.source.lostStreamingTitle": "Source en direct déconnectée",
@@ -885,7 +887,14 @@
 	"network.modem.scanForNetworks": "Rechercher des réseaux",
 	"network.modem.scanning": "Scan en cours",
 	"network.modem.scanningForNetworks": "Recherche d'opérateurs…",
-	"network.modem.simUnlock.attemptsRemaining": "Code PIN incorrect. <count> tentatives restantes.",
+	"network.modem.simUnlock.attemptsRemaining": {
+		"0": "Code PIN incorrect. 0 tentative restante.",
+		"1": "Code PIN incorrect. 1 tentative restante.",
+		"2": "Code PIN incorrect. 2 tentatives restantes.",
+		"5": "Code PIN incorrect. 5 tentatives restantes.",
+		"11": "Code PIN incorrect. 11 tentatives restantes.",
+		"100": "Code PIN incorrect. 100 tentatives restantes."
+	},
 	"network.modem.simUnlock.description": "Cette carte SIM est verrouillée. Saisissez son code PIN pour déverrouiller le modem.",
 	"network.modem.simUnlock.error": "Impossible de déverrouiller la SIM. Veuillez réessayer.",
 	"network.modem.simUnlock.lengthHint": "Le code PIN doit comporter de <min> à <max> chiffres",
@@ -1177,7 +1186,14 @@
 	"settings.deviceStats.cpuFreqHint": "Fréquence actuelle face au plafond matériel, par politique cpufreq. Un nom de politique est un répertoire sysfs, pas un cluster de cœurs.",
 	"settings.deviceStats.cpuLoad": "Charge CPU",
 	"settings.deviceStats.cpuLoadHeavy": "Élevée",
-	"settings.deviceStats.cpuLoadHint": "Part de la capacité CPU totale — la charge moyenne sur 1 minute répartie sur <cores> cœurs.",
+	"settings.deviceStats.cpuLoadHint": {
+		"0": "Part de la capacité CPU totale — la charge moyenne sur 1 minute sur 0 cœur.",
+		"1": "Part de la capacité CPU totale — la charge moyenne sur 1 minute sur 1 cœur.",
+		"2": "Part de la capacité CPU totale — la charge moyenne sur 1 minute répartie sur 2 cœurs.",
+		"5": "Part de la capacité CPU totale — la charge moyenne sur 1 minute répartie sur 5 cœurs.",
+		"11": "Part de la capacité CPU totale — la charge moyenne sur 1 minute répartie sur 11 cœurs.",
+		"100": "Part de la capacité CPU totale — la charge moyenne sur 1 minute répartie sur 100 cœurs."
+	},
 	"settings.deviceStats.cpuLoadHintNoCores": "Charge moyenne sur 1 minute. Cet appareil n'a pas indiqué son nombre de cœurs, elle ne peut donc pas être affichée en part de capacité.",
 	"settings.deviceStats.cpuLoadLight": "Faible",
 	"settings.deviceStats.cpuLoadModerate": "Modérée",
@@ -1531,5 +1547,54 @@
 	"wifiSelector.validation.passwordMinLength": "Minimum 8 caractères",
 	"wifiStatus.connected": "Connecté",
 	"wifiStatus.disconnected": "Déconnecté",
-	"wifiStatus.hotspot": "Point d'accès"
+	"wifiStatus.hotspot": "Point d'accès",
+	"network.modem.simUnlock.pin2AttemptsRemaining": {
+		"0": "PIN2 incorrect. Il reste 0 tentative.",
+		"1": "PIN2 incorrect. Il reste 1 tentative.",
+		"2": "PIN2 incorrect. Il reste 2 tentatives.",
+		"5": "PIN2 incorrect. Il reste 5 tentatives.",
+		"11": "PIN2 incorrect. Il reste 11 tentatives.",
+		"100": "PIN2 incorrect. Il reste 100 tentatives."
+	},
+	"network.modem.sms.countLabel": {
+		"0": "0 message stocké",
+		"1": "1 message stocké",
+		"2": "2 messages stockés",
+		"5": "5 messages stockés",
+		"11": "11 messages stockés",
+		"100": "100 messages stockés"
+	},
+	"network.sharing.headline.activeBody": "Liaisons disponibles pour le trafic des clients : 1 sur 2.",
+	"network.unclaimedAdapters.title": {
+		"0": "0 adaptateur détecté — aucun pilote sur ce noyau",
+		"1": "1 adaptateur détecté — aucun pilote sur ce noyau",
+		"2": "2 adaptateurs détectés — aucun pilote sur ce noyau",
+		"5": "5 adaptateurs détectés — aucun pilote sur ce noyau",
+		"11": "11 adaptateurs détectés — aucun pilote sur ce noyau",
+		"100": "100 adaptateurs détectés — aucun pilote sur ce noyau"
+	},
+	"network.view.hotspotClients": {
+		"0": "0 appareil connecté",
+		"1": "1 appareil connecté",
+		"2": "2 appareils connectés",
+		"5": "5 appareils connectés",
+		"11": "11 appareils connectés",
+		"100": "100 appareils connectés"
+	},
+	"network.sharing.diagnostics.findings": {
+		"0": "0 point à examiner",
+		"1": "1 point à examiner",
+		"2": "2 points à examiner",
+		"5": "5 points à examiner",
+		"11": "11 points à examiner",
+		"100": "100 points à examiner"
+	},
+	"network.view.notBonded": {
+		"0": "0 liaison n'est pas agrégée — voir ci-dessous pourquoi",
+		"1": "1 liaison n'est pas agrégée — voir ci-dessous pourquoi",
+		"2": "2 liaisons ne sont pas agrégées — voir ci-dessous pourquoi",
+		"5": "5 liaisons ne sont pas agrégées — voir ci-dessous pourquoi",
+		"11": "11 liaisons ne sont pas agrégées — voir ci-dessous pourquoi",
+		"100": "100 liaisons ne sont pas agrégées — voir ci-dessous pourquoi"
+	}
 }

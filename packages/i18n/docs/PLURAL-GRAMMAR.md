@@ -148,8 +148,8 @@ Every OTHER category does not: `zero`, `one`, `two` return `undefined` when thei
 branch is absent, and `renderPluralPart` coalesces that to `""`
 (`plural-resolver.ts:143`).
 
-**This produces a real, currently-shipping Arabic defect that the converter MUST
-REPRODUCE BYTE-FOR-BYTE.** `ar.live.ingest.linksReadyCount` is a 2-branch plural
+**Historical migration requirement (not current copy):** the converter had to
+reproduce the pre-migration Arabic defect byte for byte. `ar.live.ingest.linksReadyCount` is a 2-branch plural
 (`{ o, r }` — no `z`, no `t`), but Arabic CLDR maps `0 → zero` and `2 → two`, so
 both select an absent branch and render as an empty string:
 
@@ -166,10 +166,10 @@ migration's mandate is byte parity; correcting the Arabic copy is a SEPARATE,
 separately-reviewed translation PR. Emit variants that reproduce the empty
 branches.
 
-**Since corrected.** That translation change has landed: `linksReadyCount` now
-has its own text for every Arabic category, `live.setup.linksReady` agrees its
-adjective with the masculine noun, and both keys' fixture entries were re-frozen
-with the copy. The inventory above stays as the migration-time record.
+**Post-migration:** PR #668 corrected Arabic agreement and re-froze the affected
+copy. Its follow-up retired unused `live.ingest.linksReadyCount` and corrected
+Spanish, French and Brazilian Portuguese singular agreement on the live
+`live.setup.linksReady` message. The inventory above is the migration-time record.
 
 ### 2e. Fixed count set
 
@@ -280,13 +280,15 @@ must parse source, apply `brandTranslation()` first.
 
 ---
 
-## 6. Converter acceptance checklist (todo 20)
+## 6. Historical converter acceptance checklist (todo 20)
+
+This checklist describes the original migration, not the current oracle.
 
 1. Key set per locale equals the TS dictionary key set, verbatim dotted keys — 1472 keys × 10.
 2. Param types sourced from `en` (§2b) and applied to every locale.
 3. All 21 plural occurrences converted to inlang variants selecting on `count` (§2a).
 4. Arabic 6-branch → six variants including a `zero` variant (§1b, §2c).
-5. Arabic 2-branch `linksReadyCount` reproduces EMPTY `zero`/`two` renders (§2d) — no CLDR "fix".
+5. Migration only: reproduce the old Arabic `linksReadyCount` empty `zero`/`two` renders (§2d). The unused key is now retired.
 6. Branch text preserved verbatim including internal spaces (§1a).
 7. Any §4 form encountered ⇒ hard failure naming key + locale.
 8. Reverse render at counts {0,1,2,5,11,100} and with `params/<locale>.params.json`

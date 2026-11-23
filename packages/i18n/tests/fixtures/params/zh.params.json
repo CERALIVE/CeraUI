@@ -22,7 +22,7 @@
 		},
 		"devtools.downloadZip": {
 			"params": {
-				"count": "<count>"
+				"count": 42
 			},
 			"plural": false
 		},
@@ -72,12 +72,6 @@
 			"plural": false
 		},
 		"live.ingest.linkCount": {
-			"params": {
-				"count": "<count>"
-			},
-			"plural": false
-		},
-		"live.ingest.linksReadyCount": {
 			"params": {
 				"count": "<count>"
 			},
@@ -179,27 +173,15 @@
 			},
 			"plural": false
 		},
-		"live.source.lostBannerBodyMany": {
+		"live.source.lostBannerBody": {
 			"params": {
 				"names": "<names>"
 			},
 			"plural": false
 		},
-		"live.source.lostBannerBodyOne": {
+		"live.source.lostBannerTitle": {
 			"params": {
-				"name": "<name>"
-			},
-			"plural": false
-		},
-		"live.source.lostBannerTitleMany": {
-			"params": {
-				"count": "<count>"
-			},
-			"plural": false
-		},
-		"live.source.lostBannerTitleOne": {
-			"params": {
-				"name": "<name>"
+				"count": 42
 			},
 			"plural": false
 		},
@@ -218,7 +200,7 @@
 		},
 		"network.modem.simUnlock.attemptsRemaining": {
 			"params": {
-				"count": "<count>"
+				"count": 42
 			},
 			"plural": false
 		},
@@ -404,7 +386,7 @@
 		},
 		"settings.deviceStats.cpuLoadHint": {
 			"params": {
-				"cores": "<cores>"
+				"cores": 42
 			},
 			"plural": false
 		},
@@ -448,6 +430,49 @@
 		"wifiSelector.dialog.connectTo": {
 			"params": {
 				"ssid": "<ssid>"
+			},
+			"plural": false
+		},
+		"network.modem.simUnlock.pin2AttemptsRemaining": {
+			"params": {
+				"count": 42
+			},
+			"plural": false
+		},
+		"network.modem.sms.countLabel": {
+			"params": {
+				"count": 42
+			},
+			"plural": false
+		},
+		"network.sharing.headline.activeBody": {
+			"params": {
+				"total": 2,
+				"usable": 1
+			},
+			"plural": false
+		},
+		"network.unclaimedAdapters.title": {
+			"params": {
+				"count": 42
+			},
+			"plural": false
+		},
+		"network.view.hotspotClients": {
+			"params": {
+				"count": 42
+			},
+			"plural": false
+		},
+		"network.sharing.diagnostics.findings": {
+			"params": {
+				"count": 42
+			},
+			"plural": false
+		},
+		"network.view.notBonded": {
+			"params": {
+				"count": 42
 			},
 			"plural": false
 		}

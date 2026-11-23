@@ -159,7 +159,14 @@
 	"devtools.domComplete": "DOM Completo",
 	"devtools.domContent": "Contenido DOM",
 	"devtools.downlink": "Enlace descendente",
-	"devtools.downloadZip": "Descargar ZIP (<count> archivos)",
+	"devtools.downloadZip": {
+		"0": "Descargar ZIP (0 archivos)",
+		"1": "Descargar ZIP (1 archivo)",
+		"2": "Descargar ZIP (2 archivos)",
+		"5": "Descargar ZIP (5 archivos)",
+		"11": "Descargar ZIP (11 archivos)",
+		"100": "Descargar ZIP (100 archivos)"
+	},
 	"devtools.downloading": "Descargando",
 	"devtools.enabled": "Habilitado",
 	"devtools.enhancedTiming": "Tiempo mejorado: contenido completamente renderizado antes de capturar",
@@ -499,7 +506,6 @@
 	"live.ingest.idleHint": "Añade enlaces de móvil, Wi-Fi o Ethernet en Red para empezar a agrupar. La telemetría de ingesta aparece aquí cuando el directo está activo.",
 	"live.ingest.idleTitle": "Aún no hay enlaces agrupados",
 	"live.ingest.link": "Enlace",
-	"live.ingest.links": "Enlaces",
 	"live.ingest.linkCount": {
 		"0": "0 enlaces",
 		"1": "1 enlace",
@@ -508,20 +514,11 @@
 		"11": "11 enlaces",
 		"100": "100 enlaces"
 	},
-	"live.ingest.linksReadyCount": {
-		"0": "0 enlaces listos para agrupar",
-		"1": "1 enlace listo para agrupar",
-		"2": "2 enlaces listos para agrupar",
-		"5": "5 enlaces listos para agrupar",
-		"11": "11 enlaces listos para agrupar",
-		"100": "100 enlaces listos para agrupar"
-	},
 	"live.ingest.linksReadyHint": "La telemetría de agrupación aparece cuando está en directo.",
 	"live.ingest.linksReadyTitle": "Enlaces listos",
 	"live.ingest.nak": "NAK",
 	"live.ingest.peak": "Pico",
 	"live.ingest.rtt": "RTT",
-	"live.ingest.samples": "Muestras",
 	"live.ingest.sampleCount": {
 		"0": "0 muestras",
 		"1": "1 muestra",
@@ -699,7 +696,7 @@
 	"live.server.singleLinkHint": "Este receptor usa un único enlace directo. La combinación de varios enlaces no se utiliza para este transporte.",
 	"live.setup.linksReady": {
 		"0": "0 enlaces listos",
-		"1": "1 enlace listos",
+		"1": "1 enlace listo",
 		"2": "2 enlaces listos",
 		"5": "5 enlaces listos",
 		"11": "11 enlaces listos",
@@ -735,11 +732,16 @@
 	"live.source.label": "Fuente",
 	"live.source.linksDownStreamingBody": "Ahora mismo no se pueden enviar datos. El directo se reanuda automáticamente cuando un enlace se recupera.",
 	"live.source.linksDownStreamingTitle": "Todos los enlaces combinados caídos",
-	"live.source.lostBannerBodyMany": "Estos dispositivos ya no están conectados: <names>. Vuelve a conectarlos para usarlos de nuevo como fuentes: ninguna otra fuente de esta lista está afectada.",
-	"live.source.lostBannerBodyOne": "<name> ya no está conectado. Vuelve a conectarlo para usarlo de nuevo como fuente: ninguna otra fuente de esta lista está afectada.",
+	"live.source.lostBannerBody": "Sin conexión: <names>. Vuelve a conectar para usar como fuente de nuevo. Las demás fuentes de esta lista no están afectadas.",
 	"live.source.lostBannerRemembered": "Sigue en la lista porque es el dispositivo que usó tu última emisión.",
-	"live.source.lostBannerTitleMany": "<count> dispositivos desconectados",
-	"live.source.lostBannerTitleOne": "<name> desconectado",
+	"live.source.lostBannerTitle": {
+		"0": "0 dispositivos desconectados",
+		"1": "1 dispositivo desconectado",
+		"2": "2 dispositivos desconectados",
+		"5": "5 dispositivos desconectados",
+		"11": "11 dispositivos desconectados",
+		"100": "100 dispositivos desconectados"
+	},
 	"live.source.lostBody": "Vuelve a conectar el dispositivo para reanudar la transmisión desde esta fuente.",
 	"live.source.lostStreamingBody": "Se perdió la fuente que estás transmitiendo. Vuelve a conectarla o cambia de fuente para mantener el directo.",
 	"live.source.lostStreamingTitle": "Fuente en directo desconectada",
@@ -885,7 +887,14 @@
 	"network.modem.scanForNetworks": "Buscar redes",
 	"network.modem.scanning": "Buscando",
 	"network.modem.scanningForNetworks": "Buscando operadores…",
-	"network.modem.simUnlock.attemptsRemaining": "PIN incorrecto. Quedan <count> intentos.",
+	"network.modem.simUnlock.attemptsRemaining": {
+		"0": "PIN incorrecto. Quedan 0 intentos.",
+		"1": "PIN incorrecto. Queda 1 intento.",
+		"2": "PIN incorrecto. Quedan 2 intentos.",
+		"5": "PIN incorrecto. Quedan 5 intentos.",
+		"11": "PIN incorrecto. Quedan 11 intentos.",
+		"100": "PIN incorrecto. Quedan 100 intentos."
+	},
 	"network.modem.simUnlock.description": "Esta tarjeta SIM está bloqueada. Introduce su PIN para desbloquear el módem.",
 	"network.modem.simUnlock.error": "No se pudo desbloquear la SIM. Inténtalo de nuevo.",
 	"network.modem.simUnlock.lengthHint": "El PIN debe tener entre <min> y <max> dígitos",
@@ -1177,7 +1186,14 @@
 	"settings.deviceStats.cpuFreqHint": "Reloj actual frente al techo del hardware, por política de cpufreq. Un nombre de política es un directorio de sysfs, no un clúster de núcleos.",
 	"settings.deviceStats.cpuLoad": "Carga de CPU",
 	"settings.deviceStats.cpuLoadHeavy": "Alta",
-	"settings.deviceStats.cpuLoadHint": "Proporción de la capacidad total de CPU — la carga media de 1 minuto repartida entre <cores> núcleos.",
+	"settings.deviceStats.cpuLoadHint": {
+		"0": "Proporción de la capacidad total de CPU — la carga media de 1 minuto repartida entre 0 núcleos.",
+		"1": "Proporción de la capacidad total de CPU — la carga media de 1 minuto en 1 núcleo.",
+		"2": "Proporción de la capacidad total de CPU — la carga media de 1 minuto repartida entre 2 núcleos.",
+		"5": "Proporción de la capacidad total de CPU — la carga media de 1 minuto repartida entre 5 núcleos.",
+		"11": "Proporción de la capacidad total de CPU — la carga media de 1 minuto repartida entre 11 núcleos.",
+		"100": "Proporción de la capacidad total de CPU — la carga media de 1 minuto repartida entre 100 núcleos."
+	},
 	"settings.deviceStats.cpuLoadHintNoCores": "Carga media de 1 minuto. Este dispositivo no informó su número de núcleos, así que no puede mostrarse como proporción de la capacidad.",
 	"settings.deviceStats.cpuLoadLight": "Baja",
 	"settings.deviceStats.cpuLoadModerate": "Moderada",
@@ -1531,5 +1547,54 @@
 	"wifiSelector.validation.passwordMinLength": "Mínimo 8 caracteres",
 	"wifiStatus.connected": "Conectado",
 	"wifiStatus.disconnected": "Desconectado",
-	"wifiStatus.hotspot": "Punto de Acceso"
+	"wifiStatus.hotspot": "Punto de Acceso",
+	"network.modem.simUnlock.pin2AttemptsRemaining": {
+		"0": "PIN2 incorrecto. Quedan 0 intentos.",
+		"1": "PIN2 incorrecto. Queda 1 intento.",
+		"2": "PIN2 incorrecto. Quedan 2 intentos.",
+		"5": "PIN2 incorrecto. Quedan 5 intentos.",
+		"11": "PIN2 incorrecto. Quedan 11 intentos.",
+		"100": "PIN2 incorrecto. Quedan 100 intentos."
+	},
+	"network.modem.sms.countLabel": {
+		"0": "0 mensajes almacenados",
+		"1": "1 mensaje almacenado",
+		"2": "2 mensajes almacenados",
+		"5": "5 mensajes almacenados",
+		"11": "11 mensajes almacenados",
+		"100": "100 mensajes almacenados"
+	},
+	"network.sharing.headline.activeBody": "Enlaces disponibles para el tráfico de los clientes: 1 de 2.",
+	"network.unclaimedAdapters.title": {
+		"0": "0 adaptadores detectados: sin controlador en este kernel",
+		"1": "1 adaptador detectado: sin controlador en este kernel",
+		"2": "2 adaptadores detectados: sin controlador en este kernel",
+		"5": "5 adaptadores detectados: sin controlador en este kernel",
+		"11": "11 adaptadores detectados: sin controlador en este kernel",
+		"100": "100 adaptadores detectados: sin controlador en este kernel"
+	},
+	"network.view.hotspotClients": {
+		"0": "0 dispositivos conectados",
+		"1": "1 dispositivo conectado",
+		"2": "2 dispositivos conectados",
+		"5": "5 dispositivos conectados",
+		"11": "11 dispositivos conectados",
+		"100": "100 dispositivos conectados"
+	},
+	"network.sharing.diagnostics.findings": {
+		"0": "0 hallazgos por revisar",
+		"1": "1 hallazgo por revisar",
+		"2": "2 hallazgos por revisar",
+		"5": "5 hallazgos por revisar",
+		"11": "11 hallazgos por revisar",
+		"100": "100 hallazgos por revisar"
+	},
+	"network.view.notBonded": {
+		"0": "0 enlaces no están agregados — consulta abajo el motivo",
+		"1": "1 enlace no está agregado — consulta abajo el motivo",
+		"2": "2 enlaces no están agregados — consulta abajo el motivo",
+		"5": "5 enlaces no están agregados — consulta abajo el motivo",
+		"11": "11 enlaces no están agregados — consulta abajo el motivo",
+		"100": "100 enlaces no están agregados — consulta abajo el motivo"
+	}
 }

@@ -190,7 +190,22 @@
 	"devtools.domComplete": "DOM पूर्ण",
 	"devtools.domContent": "DOM सामग्री",
 	"devtools.downlink": "डाउनलिंक",
-	"devtools.downloadZip": "ZIP डाउनलोड ({count} फाइलें)",
+	"devtools.downloadZip": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "ZIP डाउनलोड ({count} फ़ाइल)",
+				"countPlural=other": "ZIP डाउनलोड ({count} फाइलें)",
+				"countPlural=*": "ZIP डाउनलोड ({count} फाइलें)"
+			}
+		}
+	],
 	"devtools.downloading": "डाउनलोड हो रहा है",
 	"devtools.enabled": "सक्षम",
 	"devtools.enhancedTiming": "बेहतर टाइमिंग: कैप्चर से पहले सामग्री पूरी तरह रेंडर हो जाती है",
@@ -562,7 +577,6 @@
 	"live.ingest.idleHint": "बॉन्डिंग शुरू करने के लिए नेटवर्क में सेल्युलर, वाई-फाई या ईथरनेट लिंक जोड़ें। स्ट्रीम लाइव होने पर इंजेस्ट टेलीमेट्री यहाँ दिखाई देगी।",
 	"live.ingest.idleTitle": "अभी तक कोई बॉन्डेड लिंक नहीं",
 	"live.ingest.link": "लिंक",
-	"live.ingest.links": "लिंक",
 	"live.ingest.linkCount": [
 		{
 			"declarations": [
@@ -579,28 +593,11 @@
 			}
 		}
 	],
-	"live.ingest.linksReadyCount": [
-		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
-			"match": {
-				"countPlural=one": "बॉन्डिंग के लिए {count} लिंक तैयार",
-				"countPlural=other": "बॉन्डिंग के लिए {count} लिंक तैयार",
-				"countPlural=*": "बॉन्डिंग के लिए {count} लिंक तैयार"
-			}
-		}
-	],
 	"live.ingest.linksReadyHint": "स्ट्रीम लाइव होने पर बॉन्डिंग टेलीमेट्री दिखाई देगी।",
 	"live.ingest.linksReadyTitle": "लिंक तैयार",
 	"live.ingest.nak": "NAK",
 	"live.ingest.peak": "शिखर",
 	"live.ingest.rtt": "RTT",
-	"live.ingest.samples": "नमूने",
 	"live.ingest.sampleCount": [
 		{
 			"declarations": [
@@ -876,11 +873,24 @@
 	"live.source.label": "स्रोत",
 	"live.source.linksDownStreamingBody": "अभी कोई डेटा नहीं भेजा जा सकता। जब कोई लिंक वापस आता है तो स्ट्रीम स्वचालित रूप से फिर से शुरू हो जाती है।",
 	"live.source.linksDownStreamingTitle": "सभी बॉन्डेड लिंक बंद",
-	"live.source.lostBannerBodyMany": "ये डिवाइस अब कनेक्ट नहीं हैं: {names}। इन्हें स्रोत के रूप में फिर से उपयोग करने के लिए दोबारा कनेक्ट करें — इस सूची का कोई अन्य स्रोत प्रभावित नहीं है।",
-	"live.source.lostBannerBodyOne": "{name} अब कनेक्ट नहीं है। इसे स्रोत के रूप में फिर से उपयोग करने के लिए दोबारा कनेक्ट करें — इस सूची का कोई अन्य स्रोत प्रभावित नहीं है।",
+	"live.source.lostBannerBody": "कनेक्शन टूट गया: {names}। स्रोत के रूप में फिर से उपयोग करने के लिए दोबारा कनेक्ट करें। इस सूची के अन्य स्रोत प्रभावित नहीं हैं।",
 	"live.source.lostBannerRemembered": "यह अब भी सूची में है क्योंकि आपकी पिछली स्ट्रीम ने यही डिवाइस इस्तेमाल किया था।",
-	"live.source.lostBannerTitleMany": "{count} डिवाइस डिस्कनेक्ट हो गए",
-	"live.source.lostBannerTitleOne": "{name} डिस्कनेक्ट हो गया",
+	"live.source.lostBannerTitle": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} डिवाइस डिस्कनेक्ट हो गया",
+				"countPlural=other": "{count} डिवाइस डिस्कनेक्ट हो गए",
+				"countPlural=*": "{count} डिवाइस डिस्कनेक्ट हो गए"
+			}
+		}
+	],
 	"live.source.lostBody": "इस स्रोत से स्ट्रीमिंग फिर से शुरू करने के लिए डिवाइस को फिर से कनेक्ट करें।",
 	"live.source.lostStreamingBody": "आप जिस स्रोत को स्ट्रीम कर रहे थे वह खो गया। स्ट्रीम जारी रखने के लिए इसे फिर से कनेक्ट करें या दूसरा स्रोत चुनें।",
 	"live.source.lostStreamingTitle": "लाइव स्रोत डिस्कनेक्ट हो गया",
@@ -1098,8 +1108,22 @@
 	"network.collision.policyRouteTitle": "लिंक रूटिंग पर ध्यान देने की आवश्यकता है",
 	"network.collision.sameSubnetBody": "दो या अधिक लिंक एक ही सबनेट साझा करते हैं। यह अपेक्षित है — डिवाइस प्रत्येक लिंक को स्वतंत्र रूप से रूट करता है, इसलिए बॉन्डिंग सामान्य रूप से काम करती रहती है।",
 	"network.collision.sameSubnetTitle": "लिंक के बीच साझा सबनेट",
-	"network.unclaimedAdapters.titleOne": "अडैप्टर मिला — इस कर्नेल में कोई ड्राइवर नहीं",
-	"network.unclaimedAdapters.titleMany": "{count} अडैप्टर मिले — इस कर्नेल में कोई ड्राइवर नहीं",
+	"network.unclaimedAdapters.title": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} अडैप्टर मिला — इस कर्नेल में कोई ड्राइवर नहीं",
+				"countPlural=other": "{count} अडैप्टर मिले — इस कर्नेल में कोई ड्राइवर नहीं",
+				"countPlural=*": "{count} अडैप्टर मिले — इस कर्नेल में कोई ड्राइवर नहीं"
+			}
+		}
+	],
 	"network.unclaimedAdapters.body": "डिवाइस बस पर मौजूद है और अपनी पहचान बता रहा है, लेकिन किसी कर्नेल ड्राइवर ने इसे नहीं संभाला, इसलिए इसका अभी इस्तेमाल नहीं हो सकता। आमतौर पर इसे फ़र्मवेयर पैकेज या नए कर्नेल की ज़रूरत होती है।",
 	"network.unclaimedAdapters.kind.wifi": "वाई-फ़ाई अडैप्टर",
 	"network.unclaimedAdapters.kind.bluetooth": "ब्लूटूथ अडैप्टर",
@@ -1383,7 +1407,22 @@
 	"network.modem.simEvidence.simSlotObjectPath": "मॉडेम ने भरा हुआ SIM स्लॉट बताया, इसलिए कार्ड मिल गया।",
 	"network.modem.simEvidence.stateFailedReason": "मॉडेम ने बताया कि उसका SIM स्लॉट खाली है।",
 	"network.modem.simEvidence.vendorCodeUnclaimed": "डिवाइस का अपना स्टेटस कोड इस बारे में कुछ नहीं कहता।",
-	"network.modem.simUnlock.attemptsRemaining": "गलत PIN। {count} प्रयास शेष हैं।",
+	"network.modem.simUnlock.attemptsRemaining": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "गलत PIN। {count} प्रयास शेष है।",
+				"countPlural=other": "गलत PIN। {count} प्रयास शेष हैं।",
+				"countPlural=*": "गलत PIN। {count} प्रयास शेष हैं।"
+			}
+		}
+	],
 	"network.modem.simUnlock.back": "मॉडेम सेटिंग्स पर लौटें",
 	"network.modem.simUnlock.description": "यह SIM कार्ड लॉक है। मॉडेम अनलॉक करने के लिए इसका PIN दर्ज करें।",
 	"network.modem.simUnlock.error": "SIM अनलॉक नहीं हो सका। कृपया पुनः प्रयास करें।",
@@ -1391,7 +1430,22 @@
 	"network.modem.simUnlock.newPinLabel": "नया SIM PIN",
 	"network.modem.simUnlock.newPinPlaceholder": "नया PIN चुनें",
 	"network.modem.simUnlock.pin2AttemptsLabel": "शेष PIN2 प्रयास",
-	"network.modem.simUnlock.pin2AttemptsRemaining": "गलत PIN2। {count} प्रयास शेष हैं।",
+	"network.modem.simUnlock.pin2AttemptsRemaining": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "गलत PIN2। {count} प्रयास शेष है।",
+				"countPlural=other": "गलत PIN2। {count} प्रयास शेष हैं।",
+				"countPlural=*": "गलत PIN2। {count} प्रयास शेष हैं।"
+			}
+		}
+	],
 	"network.modem.simUnlock.pin2Description": "PIN2 आपके SIM PIN से अलग कोड है। यह इस SIM पर सहेजी गई फिक्स्ड डायलिंग नंबर (FDN) सूची और कॉल-लागत सेटिंग्स की सुरक्षा करता है।",
 	"network.modem.simUnlock.pin2Label": "SIM PIN2",
 	"network.modem.simUnlock.pin2Placeholder": "PIN2 दर्ज करें",
@@ -1422,7 +1476,22 @@
 	"network.modem.simUnlock.wrongPin2": "गलत PIN2। कृपया पुनः प्रयास करें।",
 	"network.modem.simUnlock.wrongPuk": "गलत PUK। कृपया पुनः प्रयास करें।",
 	"network.modem.sms.capped": "इस सिम पर संग्रहीत {count} सबसे नए संदेश दिखाए जा रहे हैं।",
-	"network.modem.sms.countLabel": "{count} संदेश संग्रहीत",
+	"network.modem.sms.countLabel": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} संदेश संग्रहीत",
+				"countPlural=other": "{count} संदेश संग्रहीत",
+				"countPlural=*": "{count} संदेश संग्रहीत"
+			}
+		}
+	],
 	"network.modem.sms.description": "इस सिम पर संग्रहीत। केवल पढ़ने के लिए।",
 	"network.modem.sms.empty": "कोई संदेश संग्रहीत नहीं",
 	"network.modem.sms.emptyHint": "इस सिम पर ऐसा कुछ नहीं है जिसे मॉडेम पढ़ सके।",
@@ -1739,9 +1808,23 @@
 	"network.view.hotspotClientRate": "{rate} Mbps",
 	"network.view.hotspotClientSignal": "{dbm} dBm",
 	"network.view.hotspotClientsCapped": "{count} में से {shown} दिखाए जा रहे हैं।",
-	"network.view.hotspotClientsMany": "{count} डिवाइस कनेक्ट हैं",
+	"network.view.hotspotClients": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} डिवाइस कनेक्ट है",
+				"countPlural=other": "{count} डिवाइस कनेक्ट हैं",
+				"countPlural=*": "{count} डिवाइस कनेक्ट हैं"
+			}
+		}
+	],
 	"network.view.hotspotClientsNone": "कोई डिवाइस कनेक्ट नहीं है",
-	"network.view.hotspotClientsOne": "{count} डिवाइस कनेक्ट है",
 	"network.view.hotspotNoBond": "हॉटस्पॉट बॉन्ड नहीं हो सकता",
 	"network.view.hotspotOff": "हॉटस्पॉट बंद है",
 	"network.view.hotspotOffHint": "इस डिवाइस का कनेक्शन WiFi पर साझा करें।",
@@ -1854,7 +1937,7 @@
 	"network.netifSave.error.generic": "डिवाइस ने बदलाव अस्वीकार कर दिया, इसलिए कुछ भी सेव नहीं हुआ।",
 	"network.sharing.title": "इंटरनेट साझाकरण",
 	"network.sharing.headline.activeTitle": "साझाकरण सक्रिय है",
-	"network.sharing.headline.activeBody": "{total} में से {usable} अपलिंक क्लाइंट ट्रैफ़िक ले जा सकते हैं।",
+	"network.sharing.headline.activeBody": "क्लाइंट ट्रैफ़िक के लिए उपलब्ध अपलिंक: {total} में से {usable}।",
 	"network.sharing.uplinksHeading": "अपलिंक की स्थिति",
 	"network.sharing.state.up": "चालू",
 	"network.sharing.state.degraded": "कमज़ोर",
@@ -1915,11 +1998,39 @@
 	"network.sharing.diag.reason.foreignTable": "डिवाइस इमेज की अपनी फ़ायरवॉल तालिका बदल गई है।",
 	"network.sharing.diagnostics.disclosure": "निदान",
 	"network.sharing.diagnostics.clear": "समीक्षा के लिए कुछ नहीं",
-	"network.sharing.diagnostics.findingsOne": "समीक्षा के लिए {count} निष्कर्ष",
-	"network.sharing.diagnostics.findingsMany": "समीक्षा के लिए {count} निष्कर्ष",
+	"network.sharing.diagnostics.findings": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "समीक्षा के लिए {count} निष्कर्ष",
+				"countPlural=other": "समीक्षा के लिए {count} निष्कर्ष",
+				"countPlural=*": "समीक्षा के लिए {count} निष्कर्ष"
+			}
+		}
+	],
 	"network.sharing.dnsNote": "ज्ञात सीमा: जुड़े उपकरणों की नाम खोज इस डिवाइस के डिफ़ॉल्ट रूट से होती है, इसलिए वह उस अपलिंक से अलग हो सकती है जिससे उनका ट्रैफ़िक भेजा जाता है।",
-	"network.view.notBondedMany": "{count} लिंक बॉन्ड नहीं हैं — कारण नीचे देखें",
-	"network.view.notBondedOne": "1 लिंक बॉन्ड नहीं है — कारण नीचे देखें",
+	"network.view.notBonded": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} लिंक बॉन्ड नहीं है — कारण नीचे देखें",
+				"countPlural=other": "{count} लिंक बॉन्ड नहीं हैं — कारण नीचे देखें",
+				"countPlural=*": "{count} लिंक बॉन्ड नहीं हैं — कारण नीचे देखें"
+			}
+		}
+	],
 	"network.view.off": "बंद",
 	"network.view.on": "चालू",
 	"network.view.refreshing": "रिफ्रेश हो रहा है",
@@ -2178,7 +2289,22 @@
 	"settings.deviceStats.cpuFreqGovernorHint": "कर्नेल पॉलिसी जो इस समूह की क्लॉक चुनती है। CeraLive एन्कोड विलंबता के लिए performance पर स्थिर रखता है।",
 	"settings.deviceStats.cpuLoad": "CPU लोड",
 	"settings.deviceStats.cpuLoadHeavy": "अधिक",
-	"settings.deviceStats.cpuLoadHint": "कुल CPU क्षमता का हिस्सा — {cores} कोर पर 1-मिनट का औसत लोड।",
+	"settings.deviceStats.cpuLoadHint": [
+		{
+			"declarations": [
+				"input cores",
+				"local coresPlural = cores: plural"
+			],
+			"selectors": [
+				"coresPlural"
+			],
+			"match": {
+				"coresPlural=one": "कुल CPU क्षमता का हिस्सा — {cores} कोर पर 1-मिनट का औसत लोड।",
+				"coresPlural=other": "कुल CPU क्षमता का हिस्सा — {cores} कोर पर 1-मिनट का औसत लोड।",
+				"coresPlural=*": "कुल CPU क्षमता का हिस्सा — {cores} कोर पर 1-मिनट का औसत लोड।"
+			}
+		}
+	],
 	"settings.deviceStats.cpuLoadHintNoCores": "1-मिनट का औसत लोड। इस डिवाइस ने अपनी कोर संख्या नहीं बताई, इसलिए इसे क्षमता के हिस्से के रूप में नहीं दिखाया जा सकता।",
 	"settings.deviceStats.cpuLoadLight": "कम",
 	"settings.deviceStats.cpuLoadModerate": "मध्यम",
