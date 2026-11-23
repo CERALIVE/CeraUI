@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { call } from "@orpc/server";
@@ -20,6 +20,7 @@ import { logsSockets } from "./helpers/logs-rpc.ts";
 let sockets: Awaited<ReturnType<typeof logsSockets>>;
 let dir: string;
 const originalEventsDir = process.env.CERALIVE_EVENTS_DIR;
+const originalCwd = process.cwd();
 const retention = {
 	maxAgeDays: null,
 	maxSizeMb: null,
@@ -80,6 +81,8 @@ const guestCalls = [
 
 beforeEach(async () => {
 	dir = mkdtempSync(join(tmpdir(), "logs-rpc-"));
+	// Legacy debug files live in the working directory, which parallel test files and the test logger share.
+	process.chdir(dir);
 	process.env.CERALIVE_EVENTS_DIR = dir;
 	setLogSettingsDirForTest(dir);
 	spyOn(mocks, "shouldUseMocks").mockReturnValue(true);
@@ -93,6 +96,7 @@ afterEach(async () => {
 	spyOn(mocks, "shouldUseMocks").mockRestore();
 	setLogSettingsDirForTest(null);
 	logging.clearRecentLogLines();
+	process.chdir(originalCwd);
 	rmSync(dir, { recursive: true, force: true });
 	if (originalEventsDir === undefined) delete process.env.CERALIVE_EVENTS_DIR;
 	else process.env.CERALIVE_EVENTS_DIR = originalEventsDir;
@@ -237,6 +241,8 @@ test("boots includes historical classification instead of the discovery placehol
 
 test("storage retention cleanup and export delegates work without systemd", async () => {
 	await seed();
+	writeFileSync(join(dir, "debug.log"), "legacy");
+	writeFileSync(join(dir, "debug3.log"), "older");
 	const run = spyOn(runner, "run");
 	const spawn = spyOn(Bun, "spawn");
 	try {
@@ -246,6 +252,7 @@ test("storage retention cleanup and export delegates work without systemd", asyn
 		expect(storage).toMatchObject({
 			ceiling: { maxSizeMb: 256, maxAgeDays: 30 },
 			recentSample: 1,
+			legacyDebugBytes: 11,
 		});
 		expect(
 			await call(appRouter.logs.setRetention, retention, {
@@ -257,6 +264,8 @@ test("storage retention cleanup and export delegates work without systemd", asyn
 				context: sockets.context,
 			}),
 		).toMatchObject({ ok: true, storage: { legacyDebugBytes: 0 } });
+		expect(existsSync(join(dir, "debug.log"))).toBe(false);
+		expect(existsSync(join(dir, "debug3.log"))).toBe(false);
 		const ticket = await call(
 			appRouter.logs.createExport,
 			{ filter: { text: "rpc-marker" }, boot: "current" },
