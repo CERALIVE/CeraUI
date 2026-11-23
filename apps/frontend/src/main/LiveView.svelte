@@ -67,6 +67,7 @@ import {
 	getRelays,
 	getSensors,
 	getSources,
+	getStartConfigGeneration,
 	getStatus,
 } from '$lib/rpc/subscriptions.svelte';
 import { getEncoderLoad } from '$lib/stores/device-health-history.svelte';
@@ -406,9 +407,13 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 						link === getLinkEpoch() && activity === getStreamActivity() &&
 						generation === getStreamingAttemptGeneration();
 					if (step === 'tryAgain') {
+						const configGeneration = getStartConfigGeneration();
+						const audio = audioOverride;
+						const source = idleStartGate(readIdleGateInputs()).source;
 						const beforeSend = () => current() && idleStartAdmitted &&
+							configGeneration === getStartConfigGeneration() && audio === audioOverride &&
 							!getIsStreaming() && getStreamingOptimismState() === 'idle' &&
-							idleStartGate(readIdleGateInputs()).canStart;
+							checkRetryGate(source);
 						if (retryQueued || !beforeSend()) return false;
 						return handleStart({}, {
 							beforeSend,
@@ -429,6 +434,11 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 		},
 	});
 	refusalToastId = id;
+}
+
+function checkRetryGate(source: string | undefined) {
+	const gate = idleStartGate(readIdleGateInputs());
+	return gate.canStart && gate.source === source;
 }
 
 $effect(() => {

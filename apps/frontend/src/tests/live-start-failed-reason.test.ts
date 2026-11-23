@@ -75,6 +75,7 @@ vi.mock("$lib/config", () => ({
 }));
 
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
+	getStartConfigGeneration: () => 0,
 	getConfig: () => state.config,
 	getIsStreaming: () => false,
 	getSensors: () => ({}),
