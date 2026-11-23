@@ -506,6 +506,13 @@ or when no current coherent observation exists, the field is absent. Discovery
 invalidates prior evidence before publishing or mutating rows, including reused
 row objects. Detached samples carry their captured row and generation; a late,
 failed, timed-out or incoherent observation cannot authorize an older token.
+An observation older than the latest committed sample cannot publish. A rowless
+sample can carry the previous exact row and its original stamp for an unchanged
+identity at the same ifname. This preserves ownership for an already-bound
+operation only while its registry row and live proof still match. It does not
+make that stamp current: after invalidation, status stays tokenless and new
+requests cannot use the carried association until coherent evidence matches
+the current row marker. Request admission also requires its own live recheck.
 After a detached publication, the producer compares each current row's projected
 wire token with its value before publication. A changed token sends exactly one
 Wi-Fi status frame to authenticated local clients through `broadcastMsgLocal`;
