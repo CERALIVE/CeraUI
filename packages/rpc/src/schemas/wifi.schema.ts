@@ -323,10 +323,14 @@ export type SetWifiAdapterModeInput = z.infer<typeof setWifiAdapterModeInputSche
   Why a mode change did not complete. The first five are `hotspotToggleError`'s
   own members, deliberately reused rather than re-spelled — a mode change IS a
   hotspot start/stop underneath, so a refusal must read identically whichever
-  control produced it. `capability-unproven` is the one addition: `hybrid` was
-  asked for on a radio whose AP+STA combination has not been proven.
+  control produced it. `capability-unproven` means hybrid capability is not
+  proven. Entry admission adds binding-required, radio-changed and
+  radio-unverified for missing, stale and unresolved adapter identity.
 */
 export const wifiAdapterModeErrorSchema = z.enum([
+	'binding-required',
+	'radio-changed',
+	'radio-unverified',
 	'DEVICE_BUSY',
 	'no-device',
 	'unsupported',
@@ -351,6 +355,7 @@ export const setWifiAdapterModeOutputSchema = z.object({
 	// transition must not echo the value back as though it had been recorded.
 	applied: wifiAdapterModeSchema.optional(),
 	error: wifiAdapterModeErrorSchema.optional(),
+	reason: z.string().optional(),
 });
 export type SetWifiAdapterModeOutput = z.infer<typeof setWifiAdapterModeOutputSchema>;
 
@@ -364,6 +369,7 @@ export const wifiAdapterModeResultSchema = z.object({
 	success: z.boolean().optional(),
 	error: wifiAdapterModeErrorSchema.optional(),
 	incarnation: wifiIncarnationSchema.optional(),
+	reason: z.string().optional(),
 });
 export type WifiAdapterModeResult = z.infer<typeof wifiAdapterModeResultSchema>;
 
@@ -532,6 +538,11 @@ export const hotspotToggleInputSchema = z.object({
 	incarnation: wifiIncarnationSchema.optional(),
 });
 export type HotspotToggleInput = z.infer<typeof hotspotToggleInputSchema>;
+const hotspotStartAttemptSchema = z.string().uuid();
+export const hotspotStartInputSchema = hotspotToggleInputSchema.extend({
+	attempt: hotspotStartAttemptSchema.optional(),
+});
+export type HotspotStartInput = z.infer<typeof hotspotStartInputSchema>;
 
 /*
   Why a hotspot start/stop did not complete. Every member names a DIFFERENT
@@ -544,8 +555,12 @@ export type HotspotToggleInput = z.infer<typeof hotspotToggleInputSchema>;
     activation-failed    NetworkManager refused; the adapter was rolled back
     not-confirmed        activation was issued and NM never confirmed the AP
     deactivation-failed  NetworkManager did not take the hotspot down
+    radio-unverified     the adapter's permanent identity is unresolved
 */
 export const hotspotToggleErrorSchema = z.enum([
+	'binding-required',
+	'radio-changed',
+	'radio-unverified',
 	'DEVICE_BUSY',
 	'no-device',
 	'unsupported',
@@ -570,6 +585,7 @@ export const hotspotToggleOutputSchema = z.object({
 	success: z.boolean(),
 	accepted: z.literal(true).optional(),
 	error: hotspotToggleErrorSchema.optional(),
+	reason: z.string().optional(),
 });
 export type HotspotToggleOutput = z.infer<typeof hotspotToggleOutputSchema>;
 
@@ -599,6 +615,7 @@ export const hotspotPrepareOutputSchema = z.object({
 	// The adapter has never hosted an AP: the pair is a suggestion, not a saved setup.
 	firstTime: z.literal(true).optional(),
 	error: hotspotToggleErrorSchema.optional(),
+	reason: z.string().optional(),
 });
 export type HotspotPrepareOutput = z.infer<typeof hotspotPrepareOutputSchema>;
 
@@ -622,6 +639,13 @@ export const hotspotConfigInputSchema = z.object({
 });
 export type HotspotConfigInput = z.infer<typeof hotspotConfigInputSchema>;
 
+export const hotspotConfigOutputSchema = z.object({
+	success: z.boolean(),
+	error: z.string().optional(),
+	reason: z.string().optional(),
+});
+export type HotspotConfigOutput = z.infer<typeof hotspotConfigOutputSchema>;
+
 // WiFi operation output schema
 export const wifiOperationOutputSchema = z.object({
 	success: z.boolean(),
@@ -635,8 +659,12 @@ export const hotspotToggleResultSchema = z.object({
 	device: z.union([z.number(), z.string()]),
 	success: z.boolean().optional(),
 	error: hotspotToggleErrorSchema.optional(),
+	reason: z.string().optional(),
 });
 export type HotspotToggleResult = z.infer<typeof hotspotToggleResultSchema>;
+const hotspotStartResultSchema = hotspotToggleResultSchema.extend({
+	attempt: hotspotStartAttemptSchema.optional(),
+});
 
 // WiFi message schema (response from WiFi operations)
 export const wifiMessageSchema = z.object({
@@ -655,7 +683,7 @@ export const wifiMessageSchema = z.object({
 	adapter_mode: wifiAdapterModeResultSchema.optional(),
 	hotspot: z
 		.object({
-			start: hotspotToggleResultSchema.optional(),
+			start: hotspotStartResultSchema.optional(),
 			stop: hotspotToggleResultSchema.optional(),
 			config: z
 				.object({
@@ -663,6 +691,7 @@ export const wifiMessageSchema = z.object({
 					success: z.boolean().optional(),
 					error: z.string().optional(),
 					incarnation: wifiIncarnationSchema.optional(),
+					reason: z.string().optional(),
 				})
 				.optional(),
 		})

@@ -5,9 +5,12 @@ import { oc } from '@orpc/contract';
 
 import {
 	hotspotConfigInputSchema,
+	hotspotConfigOutputSchema,
 	hotspotPrepareInputSchema,
 	hotspotPrepareOutputSchema,
+	hotspotStartInputSchema,
 	hotspotToggleInputSchema,
+	hotspotToggleOutputSchema,
 	setWifiAdapterModeInputSchema,
 	setWifiAdapterModeOutputSchema,
 	setWifiCountryInputSchema,
@@ -57,7 +60,7 @@ export const wifiContract = oc.router({
 	/**
 	 * Start hotspot mode
 	 */
-	hotspotStart: oc.input(hotspotToggleInputSchema).output(successResponseSchema),
+	hotspotStart: oc.input(hotspotStartInputSchema).output(hotspotToggleOutputSchema),
 
 	/**
 	 * Stop hotspot mode
@@ -73,7 +76,7 @@ export const wifiContract = oc.router({
 	/**
 	 * Configure hotspot settings
 	 */
-	hotspotConfigure: oc.input(hotspotConfigInputSchema).output(successResponseSchema),
+	hotspotConfigure: oc.input(hotspotConfigInputSchema).output(hotspotConfigOutputSchema),
 
 	/**
 	 * Set the device regulatory country. Applies `iw reg set` and re-derives the

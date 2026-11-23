@@ -245,8 +245,11 @@ function dismissAllToasts() {
 			<div class="text-sm font-medium">{m["devtools.toastTypes"]()}</div>
 			<div class="grid grid-cols-2 gap-2 md:grid-cols-3">
 				{#each toastTypes as toastType (toastType.type)}
+				<!-- No hover fade: it took the red Error label to 4.1:1. The outline
+				     variant's own hover tint is the feedback. -->
 				<Button
-					class={`${toastType.bgColor} ${toastType.borderColor} transition-all duration-200 hover:opacity-80`}
+					class={`${toastType.bgColor} ${toastType.borderColor} transition-all duration-200`}
+					data-testid={`toast-type-${toastType.type}`}
 					onclick={toastType.action}
 					variant="outline"
 				>

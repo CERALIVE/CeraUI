@@ -1298,6 +1298,35 @@ a bit the error path overwrites. A link that cannot be DESCRIBED
 (`isMappableEntry`: valid iface name, valid `link_id`, non-empty ip) is not made
 eligible by wishing.
 
+**Disabling the last effective WAN candidate.** After selection of the native
+network monitor, `network.configure` can refuse an off request that would take
+the sender's candidate set from nonempty to empty.
+The decision uses the actual preference change, including mapped duplicates,
+legacy exclusions and all rows sharing an exact physical identity. A held or
+otherwise ineligible target can still exclude its eligible sibling; the veto
+applies only if no candidate would remain. It does not veto an already empty
+bond. The decision runs synchronously before changing state, publishing, or
+attempting a config save. The refusal itself does not consume pending markers.
+The existing notice tells the operator to include another uplink first.
+
+Both candidate views use one monotonic instant at the request decision. A USB
+identity becomes eligible for fallback at its first publication plus 15 s,
+inclusive. A peer can reach that deadline after a refusal; retrying then can
+succeed. Wire and sender refreshes still use live time.
+
+The old input checks and raw-count refusal still apply. Before monitor selection,
+with a simulated provider, in live dev/mock/test/scenario/hwsim or explicit
+emulated modes, and without config authority, the new veto does not apply.
+Otherwise a live `real` override arms it; in auto mode only a definitive
+negative hardware probe disarms it. A skipped, pending, or failed probe can
+therefore cause even an unmarked non-device to refuse a last-uplink disable
+until evidence settles. Selection and the existing interface poll retry
+inconclusive probes, one at a time, never from a request. Only a new
+last-candidate refusal takes precedence over a storage error the skipped
+save might have encountered; all writes that actually run
+keep their usual error handling. Membership is not a guarantee of link health,
+and this rule does not prevent unplugging the last uplink.
+
 **…AND THE NOTICE THE OPERATOR SEES IS A SEPARATE, RE-EVALUATED DECISION.**
 The flag above answers a policy question; `netif_dup_ip` answers an honesty one,
 and it is decided by `decideDupIpNotice(groups, deps)`

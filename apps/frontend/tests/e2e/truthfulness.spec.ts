@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import type { Page, WebSocketRoute } from "@playwright/test";
-import { modemSchema } from "@ceraui/rpc/schemas";
+import { modemSchema, type WifiStatus } from "@ceraui/rpc/schemas";
 import capturedRouter from "../../../backend/src/tests/fixtures/modems/zte-mf79u/installed-summary.json" with { type: "json" };
 
 import { expect, test } from "./fixtures/index.js";
@@ -2444,11 +2444,12 @@ test.describe("Capability truthfulness (functional)", () => {
 
 	test("a destructive mode transition confirms before it dispatches, and the control never moves on the click alone", {
 		annotation: WIFI_ROSTER_ANNOTATION,
-	}, async ({ page }) => {
+	}, async ({ page, backendRpc }) => {
+		const token = (await backendRpc.call<WifiStatus>(["wifi", "getStatus"]))["0"]?.incarnation;
 		serverConfig();
 		sendFullCaps();
 		fakeAdapterModes = adapterModes("station", { available: true });
-		sendWifi({ 0: { ...wifiRadio(ROCK_RTL8852BE), incarnation: "truth-radio-A" } });
+		sendWifi({ 0: { ...wifiRadio(ROCK_RTL8852BE), incarnation: token } });
 
 		await navigateTo(page, "network");
 		await openWifiMode(page);
@@ -2484,13 +2485,13 @@ test.describe("Capability truthfulness (functional)", () => {
 		await expect
 			.poll(() => setAdapterModeCalls.length, { timeout: 10_000 })
 			.toBe(1);
-		expect(setAdapterModeCalls[0]).toEqual({ device: "0", mode: "hotspot", incarnation: "truth-radio-A" });
+		expect(setAdapterModeCalls[0]).toEqual({ device: "0", mode: "hotspot", incarnation: token });
 		await expect(page.getByTestId("wifi-mode-pending-0")).toBeVisible();
 		await expect(selector).toHaveAttribute("data-mode", "station");
 
 		// A TERMINAL FAILURE leaves the prior mode on screen with the device's own
 		// typed reason rendered INLINE — never toast-only, never an optimistic flip.
-		send({ wifi: { adapter_mode: { device: 0, incarnation: "truth-radio-A", error: "capability-unproven" } } });
+		send({ wifi: { adapter_mode: { device: 0, incarnation: token, error: "capability-unproven" } }, seq: 1 });
 		const failure = page.getByTestId("wifi-mode-error-0");
 		await expect(failure).toBeVisible();
 		await expect(failure).toHaveAttribute("data-error", "capability-unproven");

@@ -22,7 +22,8 @@ Every candidate, including the in-memory UUID, is subject to the
 [profile ownership rule](wifi-adapter-identity-is-the-permanent-mac.md#hotspot-profile-ownership-exists-host-tested-only).
 Another adapter's current or previous UUID, or a known conflicting MAC pin,
 cannot supply this adapter's credentials. Absent adapters retain ownership.
-Legacy unowned profiles still migrate when the existing evidence supports it.
+An unrecorded saved profile is foreign, even when its MAC or SSID matches.
+Only recorded legacy profiles may be reused or repaired.
 
 **The identity is resolved BEFORE any start can drop the link (#413).**
 `wifi.hotspotPrepare` runs the SAME resolution (`resolveHotspotIdentity`, shared
@@ -58,18 +59,98 @@ adoption (`handleHotspotConn`), and on operator rename
 generated pair). Writes are inert until `initHotspotCredentials()` runs, so a
 unit test that never opts in cannot litter the working directory.
 
-**Duplicate consolidation requires POSITIVE ownership evidence, and ABSENCE is
-never evidence.** `pruneDuplicateHotspotConns()` runs best-effort after a
-successful start (never blocking or failing it) and deletes a profile only when
-ALL of the following hold: its uuid is one the credential store positively
-claims, no adapter is currently using it, and it is still an AP-mode profile
-carrying the nmcli-generated id (`Hotspot`, `Hotspot-N`).
+The version-2 ownership entry also carries an optional private `pendingCreation`
+UUID. Only the first-profile pre-add hook writes it, synchronously and before
+dispatch; persistence failure prevents the add. After add and before activation,
+the same entry gains `pendingCreationInstance`, the checked NM settings object
+path, NM run identity, resource fingerprint and keyfile identity
+(`nmcli connection show` FILENAME, stat device/inode/ctime). Failed binding persistence prevents activation.
+Ordinary adoption cannot create
+this evidence and cannot erase an existing record. Confirmation and completed
+cleanup clear the matching record; a confirmed-absent UUID is retired on startup.
+No new file or store version is introduced.
 
-The claim is computed by `collectSupersededHotspotConns()` — the union of every
-adapter's current `conn` and its `previousConns` history, MINUS every adapter's
-current `conn`. So a profile that is some adapter's live identity is protected
-even when that adapter also appears in another's history, and a uuid the store
-has never seen is simply unknown and always survives.
+Startup uses that bound record with positive owned-AP evidence, rather than the mutable
+NM profile name, to stop and disarm a failed first Start with no saved on-intent.
+The instance is checked again before every safe-state mutation. A mismatching
+or unbound record is retired without acting on the profile; unreadable evidence
+retries. Its resource fingerprint excludes cosmetic profile names and includes
+binding, credential, AP and IP settings. Renaming the profile preserves its obligation; adopting an operator-created AP
+does not manufacture one. Pending creation UUIDs stay protected from duplicate
+pruning. Generated profile IDs remain `Hotspot`, covered by the legacy narrowing
+pattern below; the SSID and password are unchanged.
+
+An NM run is the system bus UUID (`org.freedesktop.DBus.GetId`) paired with
+NetworkManager's unique connection name (`GetNameOwner`). Every NM start opens
+a new connection; the bus UUID prevents name reuse after a bus restart or reboot.
+The settings readback is bracketed by this identity. Passive and pre-action reads
+always require matching fingerprint and keyfile identity; within one run the
+settings path must match too. Checked add readback establishes the initial
+receipt. Modify refreshes it only after a successful reply, same-run object
+continuity, unchanged held-inode bytes and an exact NM byte prediction match.
+A failed or lost modify reply with unchanged resource, metadata and bytes
+retains the old receipt without rebinding; all other failed outcomes retire
+authority and preserve the profile. Up/down use strict file equality;
+delete confirms absence or unchanged evidence and never refreshes a file.
+Every checked mutation uses the shared profile-operation helper before
+the next action. A changed or unreadable
+file identity retires authority and marks hotspot health degraded. If NM restarts
+after a committed write but before readback, the changed file fails safe: no
+cross-run rebinding or cleanup is authorized. No parallel store is introduced.
+Legacy bindings without durable file evidence grant no automatic cleanup authority.
+
+Candidate lookup passwords are untrusted until the shared Prepare/Start
+resolver verifies the persistent keyfile with `readVerifiedNmWifiSecret`.
+This includes an existing profile found without a stored UUID hint. Normal
+and limited rediscovery use that same verifier. Submitted add credentials and
+the resource fingerprint obtain their secret from the same guarded keyfile
+observation, never nmcli's visibility-dependent PSK display. A hidden or empty
+display neither authorizes a password nor invalidates an otherwise exact
+persistent add/readback receipt.
+
+Mixed-setting observations use labelled multiline nmcli output and the shared
+`network-manager-output.ts` parser. Missing optional settings retain empty slots
+under their requested names; they cannot shift another setting into a credential,
+binding or security field. An empty or malformed whole reply is unreadable.
+Scalar/single-setting and fixed inventory queries keep their existing argv,
+including modem reads. Protected client password updates use this same instance
+observation without requiring hotspot ownership. A rejected write logs its
+whitelisted check reason, never a credential, raw reply or command.
+
+Saved-profile Start reads pins and evaluates its selectors before the final
+live-radio, AP-leg, and station-channel checks. Ownership and any inventory
+proof are checked again at dispatch without another I/O step. Post-Up policy
+checks the bound leg's lifetime rather than requiring the active leg to be idle.
+
+Known limits are explicit: **LOW-1**, no-op prediction can miss temporary live
+autoconnect drift (A -> B -> A), and **LOW-2**, option B proves resulting bytes
+rather than the identity of the last writer. A foreign byte-identical
+post-write replacement can be adopted; an atomic replacement before NM's rename
+can be overwritten. See the [named limits](wifi-adapter-identity-is-the-permanent-mac.md#known-limits).
+This round documents them without changing option B behavior.
+
+**Duplicate consolidation requires POSITIVE ownership evidence, and ABSENCE is
+never evidence.** `pruneDuplicateHotspotConns()` runs in the background after
+Start selects or creates a profile, before the activation attempt completes.
+It can therefore run even when activation later fails. A candidate must be
+exclusively in the requesting owner's history, unused by any adapter, still
+in AP mode with a generated ID (`Hotspot`, `Hotspot-N`), and free of conflicting
+live MAC and port pins. The deletion receipt compares the settings path, daemon
+identity, and keyfile metadata without opening the keyfile or reading its PSK.
+
+Historical pruning and failed-Start rollback share the same delete guard.
+The guard checks inactivity at the exact settings path, re-reads the classified
+instance, checks inactivity again, and verifies the daemon and keyfile.
+It sends D-Bus `Delete` to the checked settings path and original unique
+daemon on the verified bus. A mismatch or unreadable result retains the
+profile; the guard never falls back to deleting by UUID. The daemon can
+still activate the profile between the last activity check and the delete;
+NetworkManager does not provide an atomic inactive-only delete. Explicit
+Forget has a separate, user-selected contract.
+
+The claim comes from the requesting owner's `previousConns`, not the union of
+all recorded histories. A current, jointly claimed, pending, or unknown UUID
+always survives.
 
 The retired rule also deleted a generated-name AP profile "bound to an address
 no present adapter has". That reads absence as abandonment, and a temporarily

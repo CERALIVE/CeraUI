@@ -530,6 +530,15 @@ for (const state of [
 	});
 }
 
+test("readiness accepts a terminated state record only when it is the sole record", async () => {
+	nmState = "30 (disconnected)\n\n";
+	await runModemStatusPoll();
+	expect(activations()).toEqual([]);
+	nmState = "30 (disconnected)\n";
+	await runModemStatusPoll();
+	expect(activations()).toHaveLength(1);
+});
+
 test("lease recheck refuses a changed config UUID", async () => {
 	let reads = 0;
 	onStateRead = async () => {

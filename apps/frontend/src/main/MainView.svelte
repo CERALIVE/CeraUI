@@ -51,7 +51,7 @@ const isWideDesktop = new MediaQuery(WIDE_DESKTOP_QUERY);
 			{m["a11y.skipToContent"]()}
 		</a>
 		<HudRegion affordance />
-		<header class="bg-background sticky top-0 z-40 w-full border-b">
+		<header class="bg-background sticky top-[calc(var(--offline-bar-height)+var(--top-bands-height))] z-40 w-full border-b">
 			<div class="container flex h-14 max-w-7xl items-center gap-4">
 				<button
 					type="button"

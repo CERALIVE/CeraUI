@@ -17,6 +17,8 @@
  */
 import type { Snippet } from 'svelte';
 
+import { publishHeight } from '$lib/layout';
+
 interface Props {
 	/** The idle readiness line: a blocking reason, or the ready text. */
 	status?: string;
@@ -31,21 +33,8 @@ const HEIGHT_PROPERTY = '--live-bar-height';
 
 let bar: HTMLDivElement | undefined = $state();
 
-// Absent ResizeObserver (jsdom) leaves the property unset, which every consumer
-// reads as 0px.
-$effect(() => {
-	const el = bar;
-	if (!el || typeof ResizeObserver === 'undefined') return;
-	const root = document.documentElement;
-	const observer = new ResizeObserver(() => {
-		root.style.setProperty(HEIGHT_PROPERTY, `${el.offsetHeight}px`);
-	});
-	observer.observe(el);
-	return () => {
-		observer.disconnect();
-		root.style.removeProperty(HEIGHT_PROPERTY);
-	};
-});
+// Every consumer reads an unpublished height as 0px.
+$effect(() => (bar ? publishHeight(bar, HEIGHT_PROPERTY) : undefined));
 </script>
 
 <div

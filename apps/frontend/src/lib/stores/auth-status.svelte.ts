@@ -8,9 +8,23 @@ import type {
 
 import { rpc, rpcClient } from "$lib/rpc/client";
 import { NotSentError, RpcError } from "$lib/rpc/rpc-error";
+import {
+	clearAuthenticatedLink,
+	getLinkEpoch,
+	noteAuthenticatedLink,
+} from "$lib/rpc/session-epoch.svelte";
 
 let authStatus = $state(false);
+let sessionExpired = $state(false);
 let interaction = new AbortController();
+
+export function getSessionExpired(): boolean {
+	return sessionExpired;
+}
+
+export function setSessionExpired(expired: boolean): void {
+	sessionExpired = expired;
+}
 
 export type AuthAttempt =
 	| { kind: "ok" }
@@ -41,6 +55,7 @@ export function getAuthStatus(): boolean {
 }
 
 export function setAuthStatus(status: boolean): void {
+	if (!status) clearAuthenticatedLink();
 	clearAuthInteraction();
 	authStatus = status;
 	notifySubscribers();
@@ -145,6 +160,7 @@ async function authenticateInput(
 			return { kind: "unreachable", cause: "socket-not-ready" };
 		}
 		let result: LoginOutput;
+		const link = getLinkEpoch();
 		try {
 			const reply = rpc.auth.login(input);
 			// The client serializes synchronously; the pending reply needs no plaintext.
@@ -162,6 +178,9 @@ async function authenticateInput(
 			};
 		}
 		if (signal.aborted) return { kind: "cancelled" };
+		if (link !== getLinkEpoch() || !rpcClient.isConnected()) {
+			return { kind: "unreachable", cause: "rpc-error" };
+		}
 		if (!result.success) {
 			ingestAuth(result);
 			return { kind: "rejected" };
@@ -170,6 +189,8 @@ async function authenticateInput(
 		// case retain the existing token, just as on an unreachable attempt.
 		persistCredential(result, persistent);
 		ingestAuth(result);
+		setSessionExpired(false);
+		noteAuthenticatedLink(link);
 		setAuthStatus(true);
 		return { kind: "ok" };
 	} finally {

@@ -65,6 +65,12 @@ const NOT_I18N_KEYS = new Set<string>([
 	// prove a duplicate was never used before it may be pruned (todo 63). Same
 	// `connection.*` collision as its sibling above.
 	"connection.timestamp",
+	// nmcli connection properties, `modules/network/network-manager.ts` —
+	// `nmApConnAdd` creates and verifies a hotspot profile using these fields.
+	// Their names collide with the `connection.*` namespace.
+	"connection.id",
+	"connection.type",
+	"connection.uuid",
 	// oRPC procedure path, `rpc/adapter.ts` post-login branch — collides with
 	// the `auth.*` namespace.
 	"auth.login",

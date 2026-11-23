@@ -13,6 +13,7 @@ export interface RawAnnouncement {
 		| "resumed"
 		| "paused"
 		| "stopped"
+		| "restarted"
 		| "gap"
 		| "disconnected"
 		| "newEntries";

@@ -1,5 +1,7 @@
 import type { LogBundleManifest, LogExportOutput } from "@ceraui/rpc/schemas";
+import { logger } from "../../helpers/logger.ts";
 import { BUNDLE_TIME_MS, buildBundle } from "./bundle-body.ts";
+import { JournalReadError } from "./reader.ts";
 import { BundleReadError } from "./redaction.ts";
 import { getLogState } from "./settings.ts";
 import { reserveLogSharing } from "./sharing.ts";
@@ -18,23 +20,22 @@ const active = new Map<AbortController, Promise<void>>();
 
 type PreparationFailure = {
 	readonly ok: false;
-	readonly error: "BUSY" | "READ_FAILED";
+	readonly refusal: BundleReadError;
 };
-type PreviewResult =
-	| { readonly ok: true; readonly manifest: LogBundleManifest }
-	| PreparationFailure;
+type Issued = Extract<LogExportOutput, { ok: true }>;
+type Previewed = { readonly ok: true; readonly manifest: LogBundleManifest };
 async function prepare(
-	keep: true,
+	conn: object,
 	signal?: AbortSignal,
-): Promise<LogExportOutput>;
+): Promise<Issued | PreparationFailure>;
 async function prepare(
-	keep: false,
+	conn: null,
 	signal?: AbortSignal,
-): Promise<PreviewResult>;
+): Promise<Previewed | PreparationFailure>;
 async function prepare(
-	keep: boolean,
+	conn: object | null,
 	signal?: AbortSignal,
-): Promise<LogExportOutput | PreviewResult> {
+): Promise<Issued | Previewed | PreparationFailure> {
 	const now = Date.now();
 	const controller = new AbortController();
 	const combined = AbortSignal.any(
@@ -44,45 +45,54 @@ async function prepare(
 		() => controller.abort("time_limit"),
 		BUNDLE_TIME_MS,
 	);
+	let refusal: BundleReadError;
 	try {
-		return (
-			(await withHistoryAdmission(combined, (epoch) =>
-				collectAndIssue(keep, { signal: combined, now, epoch }, controller),
-			)) ?? { ok: false, error: "READ_FAILED" }
+		const admitted = await withHistoryAdmission(combined, (epoch) =>
+			collectAndIssue(conn, { signal: combined, now, epoch }, controller),
 		);
-	} catch {
+		if (admitted) return admitted;
+		refusal = new BundleReadError(
+			combined.reason === "time_limit" ? "deadline" : "abort",
+		);
+	} catch (error) {
 		// This boundary never propagates exceptions, causes, or abort reasons.
-		return { ok: false, error: "READ_FAILED" };
+		refusal =
+			error instanceof BundleReadError
+				? error
+				: new BundleReadError(
+						error instanceof JournalReadError ? "journal_read" : "internal",
+					);
 	} finally {
 		clearTimeout(timer);
 	}
+	logger.warn("Support bundle preparation refused", {
+		module: "device-logs",
+		operation: conn === null ? "preview" : "create",
+		stage: refusal.reason,
+	});
+	return { ok: false, refusal };
 }
 
 async function collectAndIssue(
-	keep: boolean,
+	conn: object | null,
 	{ signal, now, epoch }: BundleWindow,
 	controller: AbortController,
-): Promise<LogExportOutput | PreviewResult> {
-	const admittedAt = Date.now();
-	for (const [key, ticket] of tickets) {
-		if (ticket.expiresAt <= admittedAt) {
-			tickets.delete(key);
-			ticket.lease.release();
-		}
-	}
-	const lease = reserveLogSharing(admittedAt);
-	if (!lease) return { ok: false, error: "BUSY" } as const;
-	lease.start();
+): Promise<Issued | Previewed> {
+	const lease = reserveLogSharing(conn);
+	if (!lease) throw new BundleReadError("busy");
 	const done = Promise.withResolvers<void>();
 	active.set(controller, done.promise);
 	try {
-		const body = await buildBundle({ signal, createdAt: now, epoch }, keep);
+		const body = await buildBundle(
+			{ signal, createdAt: now, epoch },
+			conn !== null,
+		);
 		if (
 			(signal.aborted && signal.reason !== "time_limit") ||
 			getLogState().historyEpoch !== epoch
 		)
-			throw new BundleReadError();
-		if (!keep) {
+			throw new BundleReadError("abort");
+		if (conn === null) {
 			lease.release();
 			return { ok: true, manifest: body.manifest };
 		}
@@ -90,12 +100,12 @@ async function collectAndIssue(
 			crypto.getRandomValues(new Uint8Array(32)),
 		).toString("hex");
 		const expiresAt = Date.now() + 60_000;
-		lease.start(expiresAt);
 		tickets.set(key, { body, lease, expiresAt, epoch });
+		lease.issue(expiresAt, () => tickets.delete(key));
 		return { ok: true, url: `/api/logs/bundle?ticket=${key}`, expiresAt };
-	} catch {
+	} catch (error) {
 		lease.release();
-		throw new BundleReadError();
+		throw error;
 	} finally {
 		active.delete(controller);
 		done.resolve();
@@ -111,16 +121,17 @@ type BundleWindow = {
 export async function previewBundle(
 	signal?: AbortSignal,
 ): Promise<LogBundleManifest> {
-	const result = await prepare(false, signal);
-	if (!result.ok) throw new BundleReadError(result.error);
+	const result = await prepare(null, signal);
+	if (!result.ok) throw result.refusal;
 	return result.manifest;
 }
 
 export async function createBundle(
-	_conn: object,
+	conn: object,
 	signal?: AbortSignal,
 ): Promise<LogExportOutput> {
-	return prepare(true, signal);
+	const result = await prepare(conn, signal);
+	return result.ok ? result : { ok: false, error: result.refusal.code };
 }
 
 export async function handleLogBundleRequest(
@@ -176,7 +187,7 @@ function streamTicket(
 		readonly timeout: ReturnType<typeof setTimeout>;
 	},
 ): Response {
-	ticket.lease.start();
+	ticket.lease.stream();
 	const done = Promise.withResolvers<void>();
 	active.set(controller, done.promise);
 	let sink: ReadableStreamDefaultController<Uint8Array>;

@@ -32,11 +32,11 @@
   injected, so a test run can never read or move the host's own radios.
 */
 
-import { beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-
 import { wifiInterfaceSchema } from "@ceraui/rpc/schemas";
+import { logger } from "../helpers/logger.ts";
 import { wifiBuildMsg } from "../modules/wifi/wifi.ts";
 import {
 	getWifiCapabilitiesForInterface,
@@ -683,6 +683,7 @@ describe("live station link telemetry", () => {
 		expect(parsed.ok).toBe(false);
 		if (parsed.ok) return;
 		expect(parsed.parser).toBe("parseIwLinkTelemetry");
+		expect(parsed.raw).not.toContain("CERALIVE");
 	});
 
 	test("a rate that has not negotiated is DRIFT, never a published zero", () => {
@@ -719,6 +720,29 @@ describe("wifi.getStatus — live link telemetry on the wire", () => {
 			{ wlan0: "phy0" },
 		);
 	}
+
+	test("malformed live link telemetry warns without logging the network name", async () => {
+		const ssid = "private-link-ssid-sentinel";
+		addWifiInterface(
+			"aa:bb:cc:dd:ee:ff",
+			connectedStationInterface(0, "wlan0"),
+		);
+		installLinkDeps(
+			`Connected to 34:ce:94:12:34:56 (on wlan0)\n\tSSID: ${ssid}\n`,
+		);
+		const warn = spyOn(logger, "warn").mockImplementation(() => logger);
+		try {
+			await refreshWifiLinkTelemetry(["wlan0"]);
+			expect(
+				warn.mock.calls.some(([line]) =>
+					String(line).includes("parseIwLinkTelemetry"),
+				),
+			).toBe(true);
+			expect(JSON.stringify(warn.mock.calls)).not.toContain(ssid);
+		} finally {
+			warn.mockRestore();
+		}
+	});
 
 	test("a connected station's row carries the link and validates against the schema", async () => {
 		addWifiInterface(

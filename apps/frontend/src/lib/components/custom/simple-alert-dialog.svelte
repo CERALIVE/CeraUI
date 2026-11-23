@@ -122,9 +122,6 @@ const triggerClasses = $derived(
 	),
 );
 
-const overlayClasses =
-	'fixed inset-0 z-50 bg-foreground/40 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 duration-200';
-
 const contentClasses = $derived(
 	cn(
 		'fixed left-1/2 top-1/2 z-[100] w-full max-w-lg -translate-x-1/2 -translate-y-1/2',
@@ -179,7 +176,7 @@ const confirmButtonClasses = $derived(
 	</AlertDialog.Trigger>
 
 	<AlertDialog.Portal>
-		<AlertDialog.Overlay class={overlayClasses} />
+		<!-- Content draws the shared overlay, the backdrop every dialog uses (DF-32); a second one here lightened dark screens. -->
 		<AlertDialog.Content {...contentProps} class={contentClasses}>
 			<AlertDialog.Header class={headerClasses}>
 				{#if dialogTitle}

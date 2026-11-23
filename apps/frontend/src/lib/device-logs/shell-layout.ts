@@ -1,6 +1,7 @@
 /**
  * Where the System Logs regions go: at >= 1024 px a side column holds Boots,
- * Storage and Downloads; below it Storage becomes a third tab. Downloads never
+ * Storage and Downloads; below it Storage becomes a third tab that Downloads
+ * leads, so the support bundle is the first thing on it. Downloads never
  * waits for the tabs, so it stays in the main column until they render. On an
  * older backend Downloads sits below the not-available notice, whose copy says so.
  */

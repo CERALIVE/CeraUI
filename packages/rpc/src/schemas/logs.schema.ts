@@ -169,7 +169,7 @@ export type LogRetention = z.input<typeof logRetentionSchema>;
 export const logStorageSchema = z.strictObject({
 	journalBytes: z.number().nonnegative().nullable(),
 	journalDirBytes: z.number().nonnegative().nullable(),
-	legacyDebugBytes: z.number().nonnegative(),
+	legacyDebugBytes: z.number().nonnegative().nullable(),
 	ceiling: z
 		.strictObject({
 			maxSizeMb: z.number().int().positive(),

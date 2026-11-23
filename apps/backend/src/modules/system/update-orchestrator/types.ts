@@ -134,7 +134,7 @@ export type OrchestratorEvent =
 	| {
 			readonly type: "DOWNLOAD_PROGRESS";
 			readonly now: number;
-			readonly progress: OrchestratorProgress;
+			readonly progress: OrchestratorProgress | null;
 	  }
 	| {
 			readonly type: "DOWNLOAD_FAILED";
@@ -152,7 +152,7 @@ export type OrchestratorEvent =
 	| {
 			readonly type: "COMMIT_PROGRESS";
 			readonly now: number;
-			readonly progress: OrchestratorProgress;
+			readonly progress: OrchestratorProgress | null;
 	  }
 	| { readonly type: "COMMIT_SUCCEEDED"; readonly now: number }
 	| { readonly type: "COMMIT_RESUME_SETTLED_CONSISTENT"; readonly now: number }

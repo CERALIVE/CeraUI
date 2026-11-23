@@ -69,6 +69,19 @@ describe("stableUplinkMark", () => {
 });
 
 describe("buildShareRuleset", () => {
+	test.each(["clap-wlan0", "clap-a1b2c3d4"])(
+		"retained virtual name %s remains client ingress and never masquerade egress",
+		(name) => {
+			const ruleset = buildShareRuleset({
+				clientZones: [{ ifname: name, ipv4Cidr: "10.42.0.0/24" }],
+				uplinks: [steeringUplink("physical-station", "wlan0", 100)],
+			});
+			expect(ruleset).toContain(`iifname "${name}"`);
+			expect(ruleset).not.toContain(`oifname "${name}"`);
+			expect(ruleset).toContain('oifname "wlan0" masquerade');
+		},
+	);
+
 	test("apportions a fixed modulus exactly for every supported weight mix", () => {
 		for (const weights of [
 			[100],

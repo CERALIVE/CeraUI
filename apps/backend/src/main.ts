@@ -86,7 +86,10 @@ import {
 	stopGatewayRoutes,
 } from "./modules/network/gateway-route-lifecycle.ts";
 import { UPDATE_GW_INT, updateGwWrapper } from "./modules/network/gateways.ts";
-import { createMonitorManager } from "./modules/network/monitor/monitor-manager.ts";
+import {
+	createMonitorManager,
+	NmcliMonitorManager,
+} from "./modules/network/monitor/monitor-manager.ts";
 import {
 	buildGatewayProbe,
 	refreshAndBroadcastNetworkIngest,
@@ -94,8 +97,10 @@ import {
 } from "./modules/network/network-ingest.ts";
 import { reconcileIngestDesiredState } from "./modules/network/network-ingest-control.ts";
 import {
+	bondDisableSimulationSelected,
 	handleNetifMonitorEvent,
 	initNetworkInterfaceMonitoring,
+	setBondDisableGuardContext,
 	updateNetif,
 } from "./modules/network/network-interfaces.ts";
 import { initSharingDiag } from "./modules/network/sharing-diag/runtime.ts";
@@ -149,10 +154,12 @@ import {
 	checkAutoStartStream,
 	srtlaSendExec,
 } from "./modules/streaming/streamloop.ts";
+import { initCeraliveUpdateNotice } from "./modules/system/ceralive-update-notice.ts";
 import { initCpu } from "./modules/system/cpu.ts";
 import {
 	detectHardwareKindFromDeviceTree,
 	isRealDevice,
+	observeRealDeviceAtBoot,
 	warnOnHardwareIdentityDrift,
 } from "./modules/system/device-detection.ts";
 import { initDeviceStats } from "./modules/system/device-stats.ts";
@@ -317,7 +324,8 @@ if (!configAvailableAtBind) {
 //     crashes and the WS server (bound above) stays reachable. ---
 
 // Recovery must finish before an update may install any new UID routing rule.
-if (await isRealDevice())
+const deviceAtBoot = observeRealDeviceAtBoot(bondDisableSimulationSelected());
+if (await deviceAtBoot.ready)
 	void guardNonCritical("update-route-sweep", async () => {
 		await reconcileOsStageStartup();
 	});
@@ -496,6 +504,9 @@ await guardNonCritical("apt-channel-reconcile", async () => {
 	const mode = (await readUpdateCapabilities()).mode;
 	if (mode === "capable") await reconcileAptChannel(mode);
 });
+// Loads the stored CeraLive offer before recovery takes an update against it; only this
+// process's own conclusive check announces or withdraws the notice.
+initCeraliveUpdateNotice();
 // Todo 36: the packages+OS+slot-sync orchestrator. Its own resume path (G17)
 // is the ONLY thing that reattaches to a persisted `committing` phase's
 // detached apt unit on this boot — running it BEFORE the general standalone
@@ -536,6 +547,10 @@ await guardNonCritical("sharing-diag", initSharingDiag);
 const networkMonitor = createMonitorManager(() => updateNetif());
 networkMonitor.on("monitor-event", handleNetifMonitorEvent);
 networkMonitor.start();
+setBondDisableGuardContext(
+	deviceAtBoot,
+	networkMonitor instanceof NmcliMonitorManager,
+);
 
 // Event-driven wifi: same monitor drives connection up/down + diff broadcast
 wifiStateInit(networkMonitor);

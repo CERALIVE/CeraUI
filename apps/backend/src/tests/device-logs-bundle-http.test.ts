@@ -233,7 +233,11 @@ test("a frozen-schema collision gives only READ_FAILED over RPC and no download 
 	});
 	await expect(
 		call(appRouter.logs.previewBundle, undefined, { context: sockets.context }),
-	).rejects.toMatchObject({ code: "READ_FAILED", message: "READ_FAILED" });
+	).rejects.toMatchObject({
+		code: "READ_FAILED",
+		message: "READ_FAILED",
+		data: { stage: "collision" },
+	});
 	expect(
 		await call(appRouter.logs.createBundle, undefined, {
 			context: sockets.context,
@@ -303,6 +307,87 @@ test.each(["collection", "procedure"] as const)(
 		}
 	},
 );
+
+test("the WS envelope keeps the legacy BUSY message and adds no stage", async () => {
+	expect(
+		(
+			await call(appRouter.logs.createBundle, undefined, {
+				context: sockets.context,
+			})
+		).ok,
+	).toBe(true);
+	let reply: unknown;
+	const send = spyOn(sockets.ws, "send").mockImplementation((frame) => {
+		reply = JSON.parse(String(frame));
+		return 1;
+	});
+	try {
+		const { handleORPCMessage } = await import("../rpc/adapter.ts");
+		await handleORPCMessage(sockets.ws, {
+			id: "bundle-busy",
+			path: ["logs", "previewBundle"],
+			input: undefined,
+		});
+		expect(reply).toEqual({
+			id: "bundle-busy",
+			error: { code: "INTERNAL_ERROR", message: "BUSY" },
+		});
+	} finally {
+		send.mockRestore();
+	}
+});
+
+test("the WS envelope keeps the legacy READ_FAILED message and adds the sanitized stage, never its cause", async () => {
+	const original = await collect();
+	collect.mockResolvedValue({
+		...original,
+		secrets: [{ kind: "stream", value: "live" }],
+	});
+	const errorLog = spyOn(logging.logger, "error").mockImplementation(
+		() => logging.logger,
+	);
+	const warnLog = spyOn(logging.logger, "warn").mockImplementation(
+		() => logging.logger,
+	);
+	let reply: unknown;
+	const send = spyOn(sockets.ws, "send").mockImplementation((frame) => {
+		reply = JSON.parse(String(frame));
+		return 1;
+	});
+	try {
+		const { handleORPCMessage } = await import("../rpc/adapter.ts");
+		await handleORPCMessage(sockets.ws, {
+			id: "bundle-collision",
+			path: ["logs", "previewBundle"],
+			input: undefined,
+		});
+		expect(reply).toEqual({
+			id: "bundle-collision",
+			error: {
+				code: "INTERNAL_ERROR",
+				message: "READ_FAILED",
+				stage: "collision",
+			},
+		});
+		expect(errorLog).toHaveBeenCalledTimes(1);
+		expect(
+			warnLog.mock.calls
+				.map((call): unknown[] => [...call])
+				.filter(
+					([message]) => message === "Support bundle preparation refused",
+				),
+		).toEqual([
+			[
+				"Support bundle preparation refused",
+				{ module: "device-logs", operation: "preview", stage: "collision" },
+			],
+		]);
+	} finally {
+		errorLog.mockRestore();
+		warnLog.mockRestore();
+		send.mockRestore();
+	}
+});
 
 test.each(["previewBundle", "createBundle"] as const)(
 	"%s retains the frozen output schema at the RPC boundary",

@@ -21,6 +21,10 @@
 		"./events": {
 			"types": "./src/schemas/events.schema.ts",
 			"import": "./src/schemas/events.schema.ts"
+		},
+		"./package-progress": {
+			"types": "./src/package-progress.ts",
+			"import": "./src/package-progress.ts"
 		}
 	},
 	"scripts": {
@@ -35,7 +39,7 @@
 		"zod": "catalog:"
 	},
 	"devDependencies": {
-		"@types/bun": "1.4.4",
+		"@types/bun": "1.4.5",
 		"typescript": "catalog:"
 	},
 	"keywords": [

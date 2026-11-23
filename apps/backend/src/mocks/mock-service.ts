@@ -308,7 +308,8 @@ export function initMockService(scenarioName?: string): void {
 			mockState.interfaceThroughput[radio.ifname] = mbpsToBytesPerSec(
 				8 + index * 6,
 			);
-			mockState.wifiModes[radio.device] = "station";
+			mockState.wifiModes[radio.device] =
+				config.limitedWifi && radio.device === "wlan0" ? "hotspot" : "station";
 		});
 	}
 

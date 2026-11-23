@@ -71,11 +71,13 @@ vi.mock("$lib/rpc/subscriptions.svelte", async (importOriginal) =>
 		await importOriginal<typeof import("$lib/rpc/subscriptions.svelte")>(),
 	),
 );
-vi.mock("$lib/stores/connection-ux.svelte", async (importOriginal) => ({
-	...(await importOriginal<
-		typeof import("$lib/stores/connection-ux.svelte")
-	>()),
-	wasAuthenticated: () => session.authenticated,
+vi.mock("$lib/stores/auth-status.svelte", async (importOriginal) => ({
+	...(await importOriginal<typeof import("$lib/stores/auth-status.svelte")>()),
+	authStatusStore: {
+		get value() {
+			return session.authenticated;
+		},
+	},
 }));
 vi.mock("$lib/helpers/NetworkHelper", () => ({
 	generateDeviceAccessQr: vi.fn(async () => ""),

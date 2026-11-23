@@ -3,7 +3,8 @@
   state notices, and the list that owns the scroll. Each mount builds its own
   view and runs a fresh first query (or opens on a `logs.around` result), and
   unmounting stops any follow, so a hidden tab never reads logs. A message whose
-  moment is not known opens on the newest entries with one line saying so. One polite
+  moment is not known opens on the newest entries with one line saying so, until
+  Follow starts or the filter first leaves the default. One polite
   status region, mounted before anything can follow, announces follow states;
   failures are inline alert bands with their recovery.
 -->
@@ -16,10 +17,11 @@ import { onDestroy, untrack } from 'svelte';
 import { Button } from '$lib/components/ui/button';
 import { bootSelection } from '$lib/device-logs/boot-selection.svelte';
 import { onHistoryChanged } from '$lib/device-logs/history-bus';
+import { isDefaultFilter } from '$lib/device-logs/raw-filter';
 import { type AroundPage, type RawAnnouncement, RawView, resetRawView } from '$lib/device-logs/raw-view.svelte';
 import type { ExportSpan } from '$lib/device-logs/sharing';
 import { rpc } from '$lib/rpc/client';
-import { getConnectionState, setLogFollowListener } from '$lib/rpc/subscriptions.svelte';
+import { getSessionReady, setLogFollowListener } from '$lib/rpc/subscriptions.svelte';
 
 import KeepWords from './KeepWords.svelte';
 import RawLogList from './RawLogList.svelte';
@@ -32,6 +34,7 @@ const ANNOUNCE: Record<RawAnnouncement['kind'], (count: number) => string> = {
 	resumed: () => m['systemLogs.announce.resumed'](),
 	paused: () => m['systemLogs.announce.paused'](),
 	stopped: () => m['systemLogs.announce.stopped'](),
+	restarted: () => m['systemLogs.follow.bootChangedIdle'](),
 	gap: () => m['systemLogs.announce.gap'](),
 	disconnected: () => m['systemLogs.announce.disconnected'](),
 	newEntries: (count) => m['systemLogs.announce.newEntries']({ count }),
@@ -50,10 +53,12 @@ const view = new RawView({
 	now: () => Date.now(),
 	onQuery: (query, span) => onquery?.(query, span),
 });
-const initial = untrack(() => ({ around, boot: bootSelection.boot }));
-void (initial.around !== undefined || initial.boot === null
+// A link opens on its moment; otherwise the picker's choice once it was used in this view (All boots
+// included), else This boot.
+const initial = untrack(() => ({ around, boot: bootSelection.boot, picked: bootSelection.picked }));
+void (initial.around !== undefined || !initial.picked
 	? view.start(initial.around)
-	: view.chooseBoot(initial.boot.bootId, initial.boot.current ? initial.boot.bootId : undefined));
+	: view.chooseBoot(initial.boot?.bootId ?? null, initial.boot?.current ? initial.boot.bootId : undefined));
 const stopBoot = bootSelection.onChoose((bootId) =>
 	void view.chooseBoot(bootId, bootSelection.boot?.current ? bootSelection.boot.bootId : undefined),
 );
@@ -68,14 +73,21 @@ onDestroy(() => {
 $effect(() => {
 	const anchorBoot = view.anchor === null ? undefined : view.bottom?.query.boot;
 	bootSelection.rawScope = {
+		anchored: view.anchor !== null,
 		time: view.filter.time,
 		bootId: anchorBoot === undefined || anchorBoot === 'all' || anchorBoot === 'current' ? view.filter.bootId : anchorBoot,
 	};
 });
 
 $effect(() => {
-	const state = getConnectionState();
-	untrack(() => view.connectionChanged(state));
+	const ready = getSessionReady();
+	untrack(() => view.connectionChanged(ready ? 'connected' : 'disconnected'));
+});
+
+// The unknown moment speaks for the opening view only; restoring the default filter does not bring it back.
+let momentDismissed = $state(false);
+$effect(() => {
+	if (view.follow !== 'idle' || !isDefaultFilter(view.filter)) momentDismissed = true;
 });
 
 const band = $derived.by(() => {
@@ -100,10 +112,20 @@ const band = $derived.by(() => {
 		run: () => view.retry(),
 	};
 });
+let controlsRegion: HTMLDivElement;
+let panel: HTMLDivElement;
+
+function keepFocusedControlVisible(): void {
+	const focused = document.activeElement;
+	if (!(focused instanceof HTMLElement) || !controlsRegion.contains(focused)) return;
+	if (getComputedStyle(controlsRegion).overflowY !== 'auto') return;
+	// A keyboard can shrink the viewport without changing which control is focused.
+	panel.scrollIntoView({ block: 'end', inline: 'nearest', behavior: 'instant' });
+	focused.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+}
 </script>
 
-<!-- CJK chrome copy breaks by phrase in Japanese, at spaces in Korean, and never leaves one character alone. -->
-<div class="flex h-full min-h-0 flex-col text-pretty [word-break:auto-phrase] [&:lang(ko)]:break-keep" data-testid="raw-logs">
+{#snippet controls()}
 	<RawLogsFilterBar {view} />
 	{#if view.stale}
 		<div class="text-muted-foreground flex items-start gap-2 border-b px-4 py-2 text-sm" data-testid="raw-disconnected">
@@ -111,10 +133,11 @@ const band = $derived.by(() => {
 			<p>{m['systemLogs.follow.disconnectedBody']()}</p>
 		</div>
 	{/if}
-	{#if view.follow === 'stopped' && view.ended !== null}
-		<p class="text-muted-foreground border-b px-4 py-2 text-xs" data-testid="raw-follow-ended">{ENDED[view.ended]()}</p>
+	{#if view.ended !== null && (view.follow === 'stopped' || view.follow === 'idle')}
+		<!-- An idle view only learns that the device restarted: nothing was following, so nothing stopped. -->
+		<p class="text-muted-foreground border-b px-4 py-2 text-xs" data-testid="raw-follow-ended">{view.follow === 'idle' ? m['systemLogs.follow.bootChangedIdle']() : ENDED[view.ended]()}</p>
 	{/if}
-	{#if momentUnknown}
+	{#if momentUnknown && !momentDismissed}
 		<p class="text-muted-foreground border-b px-4 py-2 text-xs [&:lang(zh)]:break-keep" data-testid="raw-moment-unknown">
 			<KeepWords text={m['systemLogs.anchor.unknown']()} />
 		</p>
@@ -154,6 +177,15 @@ const band = $derived.by(() => {
 	{#if view.gapLimitReached}
 		<p class="text-muted-foreground border-b px-4 py-2 text-xs">{m['systemLogs.marker.recoveryLimit']()}</p>
 	{/if}
+{/snippet}
+
+<!-- CJK chrome copy breaks by phrase in Japanese, at spaces in Korean, and never leaves one character alone. -->
+<svelte:window onresize={keepFocusedControlVisible} />
+<div bind:this={panel} class="flex h-full min-h-0 flex-col text-pretty [word-break:auto-phrase] [&:lang(ko)]:break-keep" data-testid="raw-logs">
+	<!-- The fixed header stays visible; the toolbar/tabs are reachable through the view's outer scroller. -->
+	<div bind:this={controlsRegion} class="contents short-logs:block short-logs:max-h-(--raw-controls-max) short-logs:overflow-y-auto">
+		{@render controls()}
+	</div>
 	<RawLogList {view} />
 	<div aria-live="polite" class="sr-only" data-testid="raw-status" role="status">
 		{#key view.announcement?.serial}{view.announcement === null

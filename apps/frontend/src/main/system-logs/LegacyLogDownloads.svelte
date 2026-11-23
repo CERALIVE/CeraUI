@@ -1,6 +1,7 @@
 <!--
   LegacyLogDownloads.svelte: the two shipped log downloads, moved from LogsDialog
-  into the System Logs Downloads region. Their state is a LogDownloads owned by
+  into the System Logs Downloads region, where they are the secondary Full log
+  files group with outline buttons. Their state is a LogDownloads owned by
   SystemLogsView, so it outlives this component; long titles and descriptions
   wrap (Japanese at phrases, Korean at spaces, Chinese between words), and a
   narrow row puts its button on a line of its own.
@@ -13,6 +14,7 @@ import { m } from '@ceraui/i18n/svelte';
 import { AlertTriangle, Download, FileText, Loader2, RefreshCw, Terminal } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
+import { legacyLocked } from '$lib/device-logs/download-gate.svelte';
 import { LINE_BREAKS } from '$lib/device-logs/storage-readout';
 
 import KeepWords from './KeepWords.svelte';
@@ -49,9 +51,11 @@ const logs = $derived([
 				<p class="text-muted-foreground text-xs"><KeepWords text={log.desc} /></p>
 			</div>
 			<Button
+				aria-describedby={legacyLocked(log.id) ? 'log-download-locked' : undefined}
 				class="ms-auto shrink-0 gap-1.5"
 				data-testid={`log-download-${log.id}`}
-				disabled={downloads.downloading !== null}
+				data-variant="outline"
+				disabled={downloads.downloading !== null || legacyLocked(log.id)}
 				onclick={() => downloads.download(log.id)}
 				size="sm"
 				variant="outline"
@@ -67,6 +71,14 @@ const logs = $derived([
 		</div>
 	{/each}
 
+	<!-- A device that echoes no request id may still answer a timed-out request on this socket: only that
+	     answer or a new socket frees the downloads, so say how to get them back. -->
+	{#if legacyLocked('device') || legacyLocked('system')}
+		<p class="text-muted-foreground text-xs" data-testid="log-download-locked" id="log-download-locked" role="status">
+			<KeepWords text={m["advanced.downloadLocked"]()} />
+		</p>
+	{/if}
+
 	{#if downloads.failed}
 		<!-- Calm amber recovery band: the failed download stays actionable. -->
 		<div
@@ -78,8 +90,9 @@ const logs = $derived([
 			<p class="text-status-warning min-w-0 flex-1 text-xs"><KeepWords text={m["advanced.downloadFailed"]()} /></p>
 			<Button
 				class="shrink-0 gap-1.5"
+				aria-describedby={downloads.failed && legacyLocked(downloads.failed) ? 'log-download-locked' : undefined}
 				data-testid="log-download-retry"
-				disabled={downloads.downloading !== null}
+				disabled={downloads.downloading !== null || (downloads.failed !== null && legacyLocked(downloads.failed))}
 				onclick={() => downloads.failed && downloads.download(downloads.failed)}
 				size="sm"
 				variant="outline"

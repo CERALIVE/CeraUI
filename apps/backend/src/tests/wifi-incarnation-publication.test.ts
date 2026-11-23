@@ -18,10 +18,7 @@ import {
 	wifiUpdateDevices,
 } from "../modules/wifi/wifi-interfaces.ts";
 import { wifiRadioIdentity } from "../modules/wifi/wifi-radio-identity.ts";
-import {
-	RADIO_SHADOW_TIMEOUT_MS,
-	wifiRadioObservation,
-} from "../modules/wifi/wifi-radio-observation.ts";
+import { RADIO_SHADOW_TIMEOUT_MS } from "../modules/wifi/wifi-radio-observation.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
 import {
 	buildInitialStatus,
@@ -29,6 +26,7 @@ import {
 } from "../rpc/procedures/status.procedure.ts";
 import { getWifiStatusProcedure } from "../rpc/procedures/wifi.procedure.ts";
 import { radioEquivalenceCases } from "./fixtures/wifi/radio-equivalence-cases.ts";
+import golden from "./fixtures/wifi/radio-equivalence-main.json";
 import { wifiProtocolContext } from "./helpers/wifi-protocol-context.ts";
 import { radioEquivalenceTranscript } from "./helpers/wifi-radio-equivalence.ts";
 import { fakeShadowSysfs } from "./helpers/wifi-radio-equivalence-shadow.ts";
@@ -52,9 +50,12 @@ for (const sameMac of [false, true]) {
 			const entered = Promise.withResolvers<void>();
 			const release = Promise.withResolvers<void>();
 			const frames: WifiStatus[] = [];
+			const observations: WifiStatus[] = [];
 			const settled: WifiStatus[] = [];
 			let pending = true;
 			let frameIndex = 0;
+			let discoveryIndex = 0;
+			let predecessor: BaseWifiInterface | undefined;
 			const replacement = {
 				...original,
 				permanent: replacementMac,
@@ -62,12 +63,7 @@ for (const sameMac of [false, true]) {
 				phy: 2,
 			};
 			const context = wifiProtocolContext((raw) => {
-				if (
-					!pending ||
-					settled.length !== 1 ||
-					!getWifiInterfacesByMacAddress()[replacementMac]
-				)
-					return;
+				if (!pending || settled.length !== 1) return;
 				const decoded: unknown = JSON.parse(raw);
 				if (
 					typeof decoded !== "object" ||
@@ -76,7 +72,11 @@ for (const sameMac of [false, true]) {
 				)
 					return;
 				const wifi = statusResponseSchema.parse(decoded.status).wifi;
-				if (wifi) frames.push(wifi);
+				if (wifi) {
+					observations.push(wifi);
+					if (getWifiInterfacesByMacAddress()[replacementMac])
+						frames.push(wifi);
+				}
 			});
 			const statusSurfaces = async () => {
 				const wifiRpc = await call(getWifiStatusProcedure, undefined, {
@@ -93,9 +93,10 @@ for (const sameMac of [false, true]) {
 				];
 			};
 			const expectUnproven = (rows: WifiStatus | undefined) => {
-				expect(Object.keys(rows ?? {})).toEqual([sameMac ? "0" : "1"]);
+				expect(Object.keys(rows ?? {})).toEqual(["0"]);
 				for (const row of Object.values(rows ?? {})) {
 					expect(row).not.toHaveProperty("incarnation");
+					expect(row.incarnation).not.toBe(settled[0]?.[0]?.incarnation);
 				}
 			};
 			const sshProbe = spyOn(ssh, "getSshStatus").mockResolvedValue(undefined);
@@ -119,39 +120,93 @@ for (const sameMac of [false, true]) {
 							],
 							[replacement],
 						],
+						duringDiscovery: async (discovery) => {
+							if (++discoveryIndex !== 2) return;
+							predecessor = Object.values(getWifiInterfacesByMacAddress())[0];
+							await entered.promise;
+							expect(observations).toEqual([]);
+							expect(frames).toEqual([]);
+							for (const rows of await statusSurfaces()) expectUnproven(rows);
+							if (outcome === "timeout") {
+								jest.advanceTimersByTime(RADIO_SHADOW_TIMEOUT_MS);
+								await discovery;
+								release.resolve();
+							} else {
+								if (outcome === "rejection")
+									release.reject(new Error("sysfs read failed"));
+								else release.resolve();
+								await discovery;
+							}
+						},
 						publication: async () => {
 							if (++frameIndex !== 2) return;
-							// Actual discovery/activation broadcasts occur before detached sampling.
-							if (!sameMac) expect(frames).toHaveLength(7);
-							for (const rows of [...frames, ...(await statusSurfaces())]) {
-								expectUnproven(rows);
-							}
-							jest.advanceTimersByTime(1);
-							await entered.promise;
-							for (const rows of await statusSurfaces()) {
-								expectUnproven(rows);
-							}
-							if (outcome === "timeout") {
-								jest.advanceTimersByTime(RADIO_SHADOW_TIMEOUT_MS + 1);
-							}
-							if (outcome === "rejection")
-								release.reject(new Error("sysfs read failed"));
-							else release.resolve();
-							await wifiRadioObservation.settled;
 							pending = false;
-							for (const rows of await statusSurfaces()) {
-								expect(Object.keys(rows ?? {})).toEqual([sameMac ? "0" : "1"]);
-								for (const row of Object.values(rows ?? {})) {
-									if (outcome === "success") {
-										expect(row.incarnation).toEqual(expect.any(String));
-										expect(row.incarnation).not.toBe(
-											settled[0]?.[0]?.incarnation,
-										);
-									} else {
-										expect(row).not.toHaveProperty("incarnation");
-									}
-								}
+							const id = outcome === "success" && sameMac ? "0" : "1";
+							let expected: WifiStatus;
+							if (outcome === "success") {
+								const token =
+									wifiRadioIdentity.state.rows.get("wlan0")?.incarnation;
+								expect(token).toEqual(expect.any(String));
+								expect(token).not.toBe(settled[0]?.[0]?.incarnation);
+								const baseline = sameMac
+									? golden.broadcasts["sysfs fail ifname cache hit"].filter(
+											({ at }) => at === 1,
+										)
+									: golden.broadcasts["verified fresh"];
+								const expectedFrames = baseline.map(({ payload }) => {
+									const row = payload.wifi["0"];
+									return (
+										statusResponseSchema.parse({
+											wifi: {
+												[id]: {
+													...row,
+													...("hotspot" in row
+														? {
+																hotspot: {
+																	...row.hotspot,
+																	name: `fixture-${replacementMac.replaceAll(":", "")}`,
+																},
+															}
+														: {}),
+													incarnation: token,
+												},
+											},
+										}).wifi ?? {}
+									);
+								});
+								expect(observations).toEqual(expectedFrames);
+								expect(frames).toEqual(expectedFrames);
+								expected =
+									statusResponseSchema.parse({
+										wifi: expectedFrames.at(-1),
+									}).wifi ?? {};
+							} else {
+								const registry = getWifiInterfacesByMacAddress();
+								expect(Object.keys(registry)).toEqual(["degraded:wlan0"]);
+								expect(registry["degraded:wlan0"]).not.toBe(predecessor);
+								expect(registry["degraded:wlan0"]?.id).toBe(1);
+								expect(frames).toEqual([]);
+								expected = {
+									[id]: {
+										ifname: "wlan0",
+										conn: "",
+										hw: "Fixture Radio",
+										saved: {},
+										available: [],
+										supports_hotspot: true,
+										mode: "station",
+										degraded_reason: "permanent-mac-unresolved",
+									},
+								};
+								expect(observations).toEqual([expected, expected]);
 							}
+							for (const rows of await statusSurfaces())
+								expect(rows).toEqual(expected);
+							for (const rows of [...observations, ...(await statusSurfaces())])
+								for (const row of Object.values(rows ?? {}))
+									expect(row.incarnation).not.toBe(
+										settled[0]?.[0]?.incarnation,
+									);
 						},
 					},
 					false,

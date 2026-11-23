@@ -17,6 +17,7 @@ import {
 	beforeEach,
 	describe,
 	expect,
+	spyOn,
 	test,
 } from "bun:test";
 
@@ -27,6 +28,7 @@ import {
 	getConfigFilePath,
 	setConfigFilePath,
 } from "../modules/config.ts";
+import * as nm from "../modules/network/network-manager.ts";
 import {
 	getWifiState,
 	onWifiChange,
@@ -53,6 +55,7 @@ import type {
 	WifiInterfaceWithHotspot,
 } from "../modules/wifi/wifi-hotspot-types.ts";
 import type { WifiInterface } from "../modules/wifi/wifi-interfaces.ts";
+import { mockQualifiedHybridDriver } from "./helpers/wifi-hybrid-qualification.ts";
 
 const MAC = "dc:a6:32:aa:bb:c0";
 const SECOND_MAC = "dc:a6:32:aa:bb:c1";
@@ -72,7 +75,7 @@ function makeIface(
 		id: over.id ?? 0,
 		ifname: over.ifname ?? "wlan0",
 		conn: over.conn ?? null,
-		hw: "Realtek RTL8852BE",
+		hw: "MT7925 fixture radio",
 		available: new Map(),
 		saved: {},
 		savedAll: {},
@@ -157,7 +160,9 @@ const terminalFrames = (recorder: Recorder) =>
 
 let previousConfigFile = "";
 
+let driver: ReturnType<typeof mockQualifiedHybridDriver> | undefined;
 beforeEach(() => {
+	driver = mockQualifiedHybridDriver();
 	previousConfigFile = getConfigFilePath();
 	setConfigFilePath(
 		`${process.env.TMPDIR ?? "/tmp"}/ceraui-wifi-mode-${process.pid}.json`,
@@ -168,6 +173,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+	driver?.mockRestore();
 	getConfig().wifi_modes = undefined;
 	setConfigFilePath(previousConfigFile);
 });
@@ -384,15 +390,23 @@ describe("the six transitions", () => {
 	test("asking for the mode the radio is already in settles without touching it", async () => {
 		const iface = makeIface();
 		const { deps, recorder } = makeDeps({ [MAC]: iface });
+		const roster = spyOn(nm, "nmDevices").mockResolvedValue([
+			`${iface.ifname}:wifi:disconnected:`,
+		]);
 
-		const result = await setWifiAdapterMode(0, "station", deps);
+		try {
+			const result = await setWifiAdapterMode(0, "station", deps);
 
-		expect(result).toEqual({ success: true, applied: "station" });
-		expect(recorder.calls).toEqual([]);
-		// Nothing was dispatched, so no confirmation will ever settle and this
-		// branch owes the terminal frame itself.
-		expect(terminalFrames(recorder)).toHaveLength(1);
-		expect(getPersistedWifiAdapterMode(MAC)).toBe("station");
+			expect(result).toEqual({ success: true, applied: "station" });
+			expect(roster).toHaveBeenCalledWith("device,type,state,con-uuid");
+			expect(recorder.calls).toEqual([]);
+			// Nothing was dispatched, so no confirmation will ever settle and this
+			// branch owes the terminal frame itself.
+			expect(terminalFrames(recorder)).toHaveLength(1);
+			expect(getPersistedWifiAdapterMode(MAC)).toBe("station");
+		} finally {
+			roster.mockRestore();
+		}
 	});
 
 	test("an accepted transition whose confirmation publisher is lost reaches a typed timeout terminal", async () => {
@@ -666,7 +680,9 @@ describe("exclusive vs concurrent is the OPERATOR's choice, not the radio's", ()
 		return {
 			nmConnect: async () => true,
 			nmConnSetFields: async () => true,
-			nmHotspot: async () => "hotspot-uuid",
+			nmApConnAdd: async () => "hotspot-uuid",
+			nmConnDelete: async () => true,
+			nmDisconnect: async () => true,
 			wifiUpdateSavedConns: async () => {},
 			broadcastState: () => {},
 			setDupIpSuppression: () => {},
@@ -692,7 +708,7 @@ describe("exclusive vs concurrent is the OPERATOR's choice, not the radio's", ()
 				ensured++;
 				return { ifname: "clap-wlan0", created: true };
 			},
-			nmHotspot: async (device) => {
+			nmApConnAdd: async (device) => {
 				hotspotDevices.push(device);
 				return "hotspot-uuid";
 			},
@@ -723,7 +739,7 @@ describe("exclusive vs concurrent is the OPERATOR's choice, not the radio's", ()
 				ifname: "clap-wlan0",
 				created: true,
 			}),
-			nmHotspot: async (device) => {
+			nmApConnAdd: async (device) => {
 				hotspotDevices.push(device);
 				return "hotspot-uuid";
 			},
@@ -750,7 +766,7 @@ describe("exclusive vs concurrent is the OPERATOR's choice, not the radio's", ()
 				ifname: "clap-wlan0",
 				created: true,
 			}),
-			nmHotspot: async (device) => {
+			nmApConnAdd: async (device) => {
 				hotspotDevices.push(device);
 				return "hotspot-uuid";
 			},

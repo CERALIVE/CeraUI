@@ -118,10 +118,10 @@ subscription; the cadence/backoff parameters are identical in both modes by desi
 
 ### Current state
 
-`reconnect.ts:21-24` documents the current credential model: the "token" stored
-under localStorage `auth` is the raw device password. On reconnect, the frontend
-re-authenticates by passing it as `input.password` to `auth.login`. This works for
-same-device deployments where the password never leaves the LAN.
+The credential saved in `localStorage.auth` is a device-issued, device-scoped
+token, not the password. A reconnect passes it as `input.token` to `auth.login`
+once on the replacement socket; it must be accepted before protected recovery
+reads. See [connection patterns](FRONTEND_CONNECTION_PATTERNS.md#reconnect-re-auth-and-safety-hydrate).
 
 ### Future remote model
 

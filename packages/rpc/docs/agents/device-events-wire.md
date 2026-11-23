@@ -59,6 +59,8 @@ is still a strict object, so a reader built before the field rejects a reply
 that carries it. The field and its readers were added before the event wire
 reached any release tag.
 
+The optional `epoch` field was accepted by the product owner on 2026-11-19.
+
 ## Tests
 
 `src/schemas/events.schema.test.ts` (registry params, text ceilings, enums,

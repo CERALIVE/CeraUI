@@ -1,4 +1,5 @@
 import type { UpdatePackage } from "@ceraui/rpc";
+import type { UpdateTarget } from "@ceraui/rpc/schemas";
 import {
 	type AptAllDiagnosticStep,
 	prepareAptDiagnostic,
@@ -45,6 +46,15 @@ export class AptAllRefusalError extends Error {
 
 const FIRST_PARTY =
 	/^(?:ceralive-|cerastream$|srtla$|libsrt1\.5-ceralive$|gstreamer1\.0-(?:libuvcsrc|rockchip-ceralive)$|librga2-ceralive$|lib(?:mm-glib0|mbim-(?:glib4|proxy|utils)|qmi-(?:glib5|proxy|utils)|qrtr-glib0)$|modemmanager$)/;
+
+/**
+ * A CeraLive (first-party) package on a capable image: the names this path
+ * refuses to see held. It contains main's capable announcement rule
+ * (`ceralive-*`, `cerastream`) and the legacy roster (`package-layer.ts`).
+ */
+export function isFirstPartyPackage(name: string): boolean {
+	return FIRST_PARTY.test(name);
+}
 
 export function parseAptSimulation(
 	text: string,
@@ -142,7 +152,7 @@ export async function discoverAptAllPackages(
 	readonly actionable: PinnedAptPackage[];
 }> {
 	const held = new Set(holds.trim().split(/\s+/).filter(Boolean));
-	if ([...held].some((name) => FIRST_PARTY.test(name)))
+	if ([...held].some(isFirstPartyPackage))
 		throw new AptAllRefusalError("first_party_held_back", "held-packages", {
 			detail: "first-party package held",
 		});
@@ -230,6 +240,23 @@ export function buildAptAllInstallArgs(
 		"install",
 		...pairs.map(({ name, version }) => `${name}=${version}`),
 	];
+}
+
+/**
+ * What each pin of a checked pinned simulation installs: the exact instance
+ * (name as apt prints it, the candidate's own architecture) and the version
+ * installed before it. null when any row does not say its architecture.
+ */
+export function admittedTargets(text: string): UpdateTarget[] | null {
+	const targets: UpdateTarget[] = [];
+	for (const line of text.split("\n")) {
+		if (!line.startsWith("Inst ")) continue;
+		const row = parseAptSimulationRow(line);
+		if (row?.kind !== "Inst" || !row.version || !row.arch) return null;
+		const { name, version, arch, from } = row;
+		targets.push({ name, version, arch, ...(from ? { from } : {}) });
+	}
+	return targets.sort((a, b) => compareAptPackageNames(a.name, b.name));
 }
 
 export function assertPinnedInstallSimulation(

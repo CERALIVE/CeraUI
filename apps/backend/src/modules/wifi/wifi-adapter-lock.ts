@@ -41,33 +41,55 @@
   the ifname there would leave the parent's station mutations completely
   unguarded.
 
-  It is deliberately the BARE normalized MAC and carries no prefix: it shares the
-  process-wide `withDeviceLock` registry, and prefixing would silently stop
-  matching a key an existing caller (or test) already holds.
+  The sole radio keeps the bare normalized MAC. Proven twins use MAC@port.
+  Limited rows can retain an observed profile owner for a safe Stop.
+  These keys share the process-wide `withDeviceLock` registry without a prefix.
 */
 
+import { AsyncLocalStorage } from "node:async_hooks";
+import { logger } from "../../helpers/logger.ts";
 import type { MacAddress } from "../network/network-manager.ts";
 import {
 	type DeviceLockResult,
 	withDeviceLock,
 } from "../network/state/device-lock.ts";
+import {
+	resolveWifiAdapterOwner,
+	retainWifiAdapterOwners,
+} from "./wifi-adapter-owner.ts";
+import { withoutWifiRequestBinding } from "./wifi-binding.ts";
 import { getWifiInterfacesByMacAddress } from "./wifi-connections.ts";
-import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
+import {
+	isWifiModeTargetPending,
+	type WifiInterface,
+	wifiUpdateDevices,
+} from "./wifi-interfaces.ts";
 
 /** Opaque-by-convention lock key. Never build one by hand. */
 export type WifiAdapterLockKey = string;
+type WifiLockOwner = {
+	readonly key: string;
+	live: boolean;
+	readonly parent: WifiLockOwner | undefined;
+};
+const lockOwner = new AsyncLocalStorage<WifiLockOwner>();
+
+/** Awaited normalization may run inline only for the transaction holding this key. */
+export function ownsWifiAdapterLock(key: WifiAdapterLockKey): boolean {
+	for (let owner = lockOwner.getStore(); owner; owner = owner.parent)
+		if (owner.live && owner.key === key) return true;
+	return false;
+}
 
 /**
- * Derive the canonical lock key for an adapter from its permanent hardware
- * address — the registry key produced by {@link resolveWifiPermanentMac}.
- *
- * A well-formed address normalizes to the canonical lowercase colon form; a
- * caller holding something else keeps its own string (lowercased) rather than
- * silently resolving to `undefined`, because refusing to produce a key would
- * turn a serialized mutation into an unguarded one.
+ * Resolve the registry key to its lock owner, including limited Stop aliases.
+ * Port suffixes keep their case.
  */
 export function wifiAdapterLockKey(macAddress: MacAddress): WifiAdapterLockKey {
-	return normalizeMacAddress(macAddress) ?? macAddress.trim().toLowerCase();
+	return resolveWifiAdapterOwner(
+		macAddress,
+		getWifiInterfacesByMacAddress()[macAddress],
+	);
 }
 
 /**
@@ -106,6 +128,28 @@ export function wifiAdapterLockKeyForConnectionUuid(
 	return undefined;
 }
 
+/** Stop/Station can join a handoff without taking a lock discovery still needs. */
+export async function awaitWifiStopHandoff(
+	row: WifiInterface,
+): Promise<boolean> {
+	if (!isWifiModeTargetPending(row)) return true;
+	const expired = Promise.withResolvers<void>();
+	const timeout = setTimeout(() => expired.resolve(), 2000);
+	try {
+		await Promise.race([
+			withoutWifiRequestBinding(wifiUpdateDevices),
+			expired.promise,
+		]);
+	} catch (error: unknown) {
+		logger.warn(
+			`Wi-Fi handoff refresh failed: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	} finally {
+		clearTimeout(timeout);
+	}
+	return !isWifiModeTargetPending(row);
+}
+
 /**
  * Run `fn` while holding the canonical per-adapter lock. A thin, deliberately
  * transparent wrapper over {@link withDeviceLock} — the point is that every
@@ -113,8 +157,74 @@ export function wifiAdapterLockKeyForConnectionUuid(
  * adds behaviour.
  */
 export function withWifiAdapterLock<T>(
-	key: WifiAdapterLockKey,
+	target:
+		| WifiAdapterLockKey
+		| { registryKey: MacAddress; modeTarget: WifiInterface },
 	fn: () => Promise<T>,
 ): Promise<DeviceLockResult<T>> {
-	return withDeviceLock(key, fn);
+	if (
+		typeof target !== "string" &&
+		isWifiModeTargetPending(target.modeTarget)
+	) {
+		// One fresh pass (or a coalesced trailing pass) per busy mode request.
+		void withoutWifiRequestBinding(wifiUpdateDevices).catch(
+			(error: unknown) => {
+				logger.warn(
+					`Wi-Fi handoff refresh failed: ${error instanceof Error ? error.message : String(error)}`,
+				);
+			},
+		);
+		return Promise.resolve({ success: false, error: "DEVICE_BUSY" });
+	}
+	const key =
+		typeof target === "string"
+			? target
+			: wifiAdapterLockKey(target.registryKey);
+	return withDeviceLock(key, async () => {
+		const owner: WifiLockOwner = {
+			key,
+			live: true,
+			parent: lockOwner.getStore(),
+		};
+		const release = retainWifiAdapterOwners(
+			key,
+			getWifiInterfacesByMacAddress(),
+		);
+		try {
+			return await lockOwner.run(owner, fn);
+		} finally {
+			owner.live = false;
+			release();
+		}
+	});
+}
+
+/** The owner is held; retain current row aliases through binding and NM actions. */
+export function withWifiAdapterPolicyLocks<T>(
+	heldKey: WifiAdapterLockKey,
+	targets: ReadonlySet<WifiInterface>,
+	fn: () => Promise<T>,
+): Promise<DeviceLockResult<T>> {
+	const aliases = Object.entries(getWifiInterfacesByMacAddress())
+		.filter(([, row]) => targets.has(row))
+		.map(([key]) => wifiAdapterLockKey(key))
+		.filter((key) => key !== heldKey);
+	return withWifiAdapterLocks(aliases, fn);
+}
+
+/** Take the entire set before a discovery transfer can change either row. */
+export function withWifiAdapterLocks<T>(
+	keys: Iterable<WifiAdapterLockKey>,
+	fn: () => Promise<T>,
+): Promise<DeviceLockResult<T>> {
+	const aliases = [...new Set(keys)]
+		.filter((key) => !ownsWifiAdapterLock(key))
+		.sort();
+	const acquire = async (index: number): Promise<DeviceLockResult<T>> => {
+		const key = aliases[index];
+		if (key === undefined) return { success: true, result: await fn() };
+		const locked = await withWifiAdapterLock(key, () => acquire(index + 1));
+		return locked.success ? locked.result : locked;
+	};
+	return acquire(0);
 }

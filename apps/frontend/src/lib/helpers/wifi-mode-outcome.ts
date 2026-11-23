@@ -14,7 +14,32 @@
  * and an absent target (no switch in flight for this radio) is always `"pending"`.
  */
 
-import type { WifiInterface } from "@ceraui/rpc/schemas";
+import type { HotspotConfigOutput, WifiInterface } from "@ceraui/rpc/schemas";
+
+type WifiMutationResult = Readonly<
+	Pick<HotspotConfigOutput, "success" | "error" | "reason">
+>;
+
+/** Only recognized reasons become UI tokens; arbitrary backend text stays opaque. */
+export function wifiFailureReason(
+	result: Pick<WifiMutationResult, "error" | "reason">,
+): string | undefined {
+	return result.reason === "hybrid-channel-not-permitted"
+		? result.reason
+		: result.error;
+}
+
+export function classifyWifiMutation(result: WifiMutationResult): {
+	readonly ok: boolean;
+	readonly busy: boolean;
+	readonly reason: string | undefined;
+} {
+	return {
+		ok: result.success,
+		busy: result.error === "DEVICE_BUSY",
+		reason: wifiFailureReason(result),
+	};
+}
 
 /**
  * Whether a radio is operating as an access point rather than a client station.

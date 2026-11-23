@@ -1,0 +1,11 @@
+HWSIM-PREFLIGHT: guest-boundary exit=0
+HWSIM-PREFLIGHT: os exit=0
+HWSIM-PREFLIGHT: tools exit=0
+HWSIM-PREFLIGHT: versions exit=1
+HWSIM-PREFLIGHT: environment exit=0
+HWSIM-PREFLIGHT: permissions exit=0
+HWSIM-PREFLIGHT: systemd exit=0
+HWSIM-PREFLIGHT: audit-json exit=0
+HWSIM-PREFLIGHT: radios exit=0
+HWSIM-PREFLIGHT: bootstrap exit=0
+HWSIM-PREFLIGHT: native-runners exit=126

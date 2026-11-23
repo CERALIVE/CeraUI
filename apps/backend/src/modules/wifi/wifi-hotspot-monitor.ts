@@ -1,3 +1,4 @@
+// allow: SIZE_OK - one pending-activation state machine keeps cancellation, instance proof and terminal publication together.
 /*
     CeraUI - web UI for the CeraLive project
     Copyright (C) 2024-2025 CeraLive project
@@ -15,18 +16,49 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { logger } from "../../helpers/logger.ts";
 import { retryWithBackoff } from "../../helpers/retry.ts";
+import {
+	nmcliParseSep,
+	nmDevices,
+	readNmDeviceActivation,
+} from "../network/network-manager.ts";
+import {
+	type NmProfileInstance,
+	sameNmProfileActivation,
+	sameNmProfileInstance,
+} from "../network/network-manager-profile-instance.ts";
 import type { MonitorEvent, WifiState } from "../network/state-types.ts";
 import {
 	getModeForInterface,
 	getWifiState,
 	setWifiState,
 } from "./state/wifi-state.ts";
+import {
+	ownsWifiAdapterLock,
+	wifiAdapterLockKey,
+	withWifiAdapterLock,
+} from "./wifi-adapter-lock.ts";
+import { registerWifiAdapterLegRelease } from "./wifi-adapter-reconcile-retry.ts";
+import { getWifiInterfaceByMacAddress } from "./wifi-connections.ts";
+import { nmDisconnectActivation } from "./wifi-hotspot-activity.ts";
 import type {
 	HotspotActivationDeps,
+	HotspotActivationInstance,
+	HotspotConfirmationTarget,
 	WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
+import {
+	type HybridLegAllocation,
+	releaseHybridLeg,
+} from "./wifi-hybrid-leg-release.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
+import {
+	type WifiOperationBinding,
+	wifiOperationGuard,
+} from "./wifi-operation-binding.ts";
+import { sameRadioLifetime, wifiRadioIdentity } from "./wifi-radio-identity.ts";
+import { transitionVirtualBinding } from "./wifi-virtual-binding.ts";
 
 // Bounded confirmation poll: a production backstop for the NM monitor event.
 // Re-polls authoritative NM state until the hotspot connection is reported
@@ -55,133 +87,392 @@ export function syncWifiStateCache(
 // ─── pending NM-confirmation registry ────────────────────────────────────────
 
 type PendingHotspot = {
-	ifname: string;
-	connName: string;
-	settled: boolean;
-	confirm: () => void;
-	giveUp: () => void;
+	readonly uuid: string;
+	activation: HotspotActivationInstance | undefined;
+	readonly ifname: string;
+	readonly apIfname: string;
+	readonly connName: string;
+	readonly row: WifiInterfaceWithHotspot;
+	readonly controller: AbortController;
+	readonly matches: () => boolean;
+	readonly probe: () => Promise<boolean>;
+	readonly confirm: () => void;
+	readonly giveUp: (
+		changed?: { readonly stopped: boolean },
+		cancelled?: boolean,
+	) => void | Promise<void>;
 };
 
-/** In-flight hotspot activations awaiting NM confirmation, keyed by ifname. */
 const pendingHotspots = new Map<string, PendingHotspot>();
+const pendingByRow = new WeakMap<WifiInterfaceWithHotspot, PendingHotspot>();
 
-export function settlePending(ifname: string, confirmed: boolean): void {
-	const pending = pendingHotspots.get(ifname);
-	if (!pending || pending.settled) return;
-	pending.settled = true;
-	pendingHotspots.delete(ifname);
-	if (confirmed) {
-		pending.confirm();
-	} else {
-		pending.giveUp();
+function current(pending: PendingHotspot): boolean {
+	return (
+		!pending.controller.signal.aborted &&
+		pendingHotspots.get(pending.ifname) === pending &&
+		pendingByRow.get(pending.row) === pending
+	);
+}
+
+/** Existing pending snapshots are the only in-process confirmation evidence. */
+export function getPendingHotspotProfile(
+	uuid: string,
+): NmProfileInstance | undefined {
+	for (const pending of pendingHotspots.values())
+		if (
+			pending.uuid === uuid &&
+			current(pending) &&
+			pending.matches() &&
+			pending.activation?.profile?.file
+		)
+			return pending.activation.profile;
+	return undefined;
+}
+
+/** Only the shared keyfile-write readback calls this; explicit new intents cancel their old frame. */
+export function recordPendingHotspotModify(
+	uuid: string,
+	before: NmProfileInstance | null | undefined,
+	after: NmProfileInstance,
+): void {
+	for (const pending of pendingHotspots.values()) {
+		if (
+			pending.uuid !== uuid ||
+			!current(pending) ||
+			!pending.matches() ||
+			!sameNmProfileActivation(pending.activation?.profile, before) ||
+			!sameNmProfileInstance(before, after)
+		)
+			continue;
+		pending.activation = {
+			profile: after,
+			activePath: pending.activation?.activePath,
+			activeRunId: pending.activation?.activeRunId,
+		};
 	}
 }
 
-/**
- * React to a NetworkManager monitor event. A `connection-state` `activated`
- * event whose connection name matches a pending hotspot — or a `device-state`
- * `connected` event for the pending device — confirms the switch and flips the
- * interface to `mode: 'hotspot'`. This replaces the old force-timer hack: the
- * mode only changes when NM actually reports the hotspot up.
- */
-export function handleWifiMonitorEvent(event: MonitorEvent): void {
-	if (event.type === "connection-state" && event.state === "activated") {
-		for (const [ifname, pending] of pendingHotspots) {
-			if (pending.connName === event.connection) {
-				settlePending(ifname, true);
-				return;
-			}
-		}
-		return;
-	}
+export async function matchesHotspotActivation(
+	uuid: string,
+	ifname: string,
+	activation: HotspotActivationInstance,
+	deps: Pick<HotspotActivationDeps, "readProfileInstance">,
+): Promise<boolean> {
+	if (
+		!activation.activePath ||
+		!activation.activeRunId ||
+		activation.activeRunId !== activation.profile?.runId ||
+		!sameNmProfileActivation(
+			activation.profile,
+			await deps.readProfileInstance(uuid),
+		)
+	)
+		return false;
+	const state = await readNmDeviceActivation(ifname);
+	return (
+		state?.connected === true &&
+		state.uuid === uuid &&
+		state.path === activation.activePath
+	);
+}
 
-	if (event.type === "device-state" && event.state === "connected") {
-		if (pendingHotspots.has(event.device)) {
-			settlePending(event.device, true);
+function settleCaptured(
+	pending: PendingHotspot,
+	confirmed: boolean,
+	changed?: { readonly stopped: boolean },
+	cancelled?: boolean,
+): void | Promise<void> {
+	if (!current(pending)) return;
+	const exact = !confirmed || pending.matches();
+	pending.controller.abort();
+	pendingHotspots.delete(pending.ifname);
+	pendingByRow.delete(pending.row);
+	if (confirmed && exact) pending.confirm();
+	else return pending.giveUp(changed, cancelled);
+}
+
+/** Trusted settlement/cancellation of the current pending operation. */
+export function settlePending(ifname: string, confirmed: true): void;
+export function settlePending(ifname: string, confirmed: false): Promise<void>;
+export function settlePending(
+	ifname: string,
+	confirmed: boolean,
+): void | Promise<void> {
+	const pending = pendingHotspots.get(ifname);
+	if (!confirmed)
+		return Promise.resolve(
+			pending && settleCaptured(pending, false, undefined, true),
+		);
+	if (pending) void settleCaptured(pending, true, undefined, true);
+}
+
+/** Supersede older observers before another transaction owns the transition. */
+export function beginHotspotTransition(
+	wifiInterface: WifiInterfaceWithHotspot,
+	transition: NonNullable<WifiInterfaceWithHotspot["hotspot"]["transition"]>,
+): void {
+	for (const previous of [
+		pendingByRow.get(wifiInterface),
+		pendingHotspots.get(wifiInterface.ifname),
+	]) {
+		if (!previous) continue;
+		previous.controller.abort();
+		if (pendingHotspots.get(previous.ifname) === previous)
+			pendingHotspots.delete(previous.ifname);
+		if (pendingByRow.get(previous.row) === previous)
+			pendingByRow.delete(previous.row);
+	}
+	wifiInterface.hotspot.transition = transition;
+}
+
+/** Events trigger selected-AP observation; names or parent connectivity are not proof. */
+export async function handleWifiMonitorEvent(
+	event: MonitorEvent,
+): Promise<void> {
+	for (const pending of pendingHotspots.values()) {
+		const relevant =
+			(event.type === "connection-state" &&
+				event.state === "activated" &&
+				event.connection === pending.connName) ||
+			(event.type === "device-state" &&
+				event.state === "connected" &&
+				event.device === pending.apIfname);
+		if (!relevant || !current(pending)) continue;
+		try {
+			if (await pending.probe()) await settleCaptured(pending, true);
+		} catch (error: unknown) {
+			logger.warn("Wi-Fi AP confirmation observation failed", {
+				error: error instanceof Error ? error.name : "unknown",
+			});
 		}
 	}
 }
 
 export function registerPendingConfirmation(
-	macAddress: string,
+	target: HotspotConfirmationTarget & {
+		readonly macAddress: string;
+		readonly binding?: WifiOperationBinding | undefined;
+		readonly radioProof?: ReturnType<typeof wifiOperationGuard>["observe"];
+		readonly allocation?: HybridLegAllocation;
+	},
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotActivationDeps,
 ): void {
+	transitionVirtualBinding(wifiInterface, { kind: "associate" });
 	const ifname = wifiInterface.ifname;
-	const connName = wifiInterface.hotspot.name ?? ifname;
-
+	const hotspot = wifiInterface.hotspot;
 	const device = wifiInterface.id;
-
-	const confirm = () => {
-		if (
-			wifiInterface.hotspot.conn &&
-			wifiInterface.supportsApStaConcurrency === true &&
-			wifiInterface.concurrentHotspot
-		) {
-			wifiInterface.concurrentHotspot.activeConn = wifiInterface.hotspot.conn;
-		} else if (wifiInterface.hotspot.conn) {
-			// Reflect the NM-confirmed active connection so isHotspot() is true.
-			wifiInterface.conn = wifiInterface.hotspot.conn;
-		}
-		delete wifiInterface.hotspot.transition;
-		// Keyed on the VIRTUAL interface, not on the capability: a capable radio
-		// asked for an EXCLUSIVE hotspot has no `clap-` netdev, so its parent did
-		// take the dup-IP suppression on the way in and owes the release here.
-		if (!wifiInterface.concurrentHotspot) {
-			deps.setDupIpSuppression(ifname, false);
-		}
+	const owner = target.credentialOwner ?? target.macAddress;
+	const controller = new AbortController();
+	const virtual = target.ifname !== ifname;
+	const lifetime = wifiRadioIdentity.state.rows.get(ifname)?.lifetime;
+	const apLifetime = wifiRadioIdentity.state.rows.get(target.ifname)?.lifetime;
+	const binding = target.binding;
+	const radioProof = target.radioProof ?? wifiOperationGuard(binding).observe;
+	const ownsCache = (): boolean =>
+		wifiInterface.hotspot === hotspot && hotspot.conn === target.uuid;
+	const matches = (): boolean =>
+		ownsCache() &&
+		wifiInterface.ifname === ifname &&
+		(!virtual || wifiInterface.concurrentHotspot?.ifname === target.ifname) &&
+		(lifetime === undefined ||
+			sameRadioLifetime(
+				lifetime,
+				wifiRadioIdentity.state.rows.get(ifname)?.lifetime,
+			)) &&
+		(apLifetime === undefined ||
+			sameRadioLifetime(
+				apLifetime,
+				wifiRadioIdentity.state.rows.get(target.ifname)?.lifetime,
+			));
+	const confirm = (): void => {
+		deps.credentials.clearCreation?.(owner, target.uuid);
+		if (virtual)
+			transitionVirtualBinding(wifiInterface, {
+				kind: "set",
+				ifname: target.ifname,
+				activeConn: target.uuid,
+			});
+		else wifiInterface.conn = target.uuid;
+		delete hotspot.transition;
+		if (!virtual) deps.setDupIpSuppression(ifname, false);
 		deps.broadcastState();
-		syncWifiStateCache(macAddress, wifiInterface); // now mode: 'hotspot'
+		syncWifiStateCache(target.macAddress, wifiInterface);
 		deps.publishOutcome?.("start", device, { success: true });
 	};
-
-	const giveUp = () => {
-		// Confirmation never arrived — clear the transition (soft rollback). The
-		// next NM poll will reconcile if the hotspot did in fact come up.
-		delete wifiInterface.hotspot.transition;
-		if (!wifiInterface.concurrentHotspot) {
-			deps.setDupIpSuppression(ifname, false);
+	const reportFailure = (
+		changed: { readonly stopped: boolean } | undefined,
+		releasePending = false,
+	) => {
+		if (
+			wifiInterface.hotspot === hotspot &&
+			(!binding || getWifiInterfaceByMacAddress(binding.key) === wifiInterface)
+		) {
+			delete hotspot.transition;
+			if (ownsCache()) {
+				const binding = wifiInterface.concurrentHotspot;
+				if (
+					!releasePending &&
+					(!changed || changed.stopped) &&
+					virtual &&
+					binding?.ifname === target.ifname &&
+					(binding.activeConn === null || binding.activeConn === target.uuid)
+				)
+					transitionVirtualBinding(wifiInterface, { kind: "clear" });
+				if (!virtual) deps.setDupIpSuppression(ifname, false);
+			}
+			deps.broadcastState();
+			syncWifiStateCache(target.macAddress, wifiInterface);
 		}
-		deps.broadcastState();
-		syncWifiStateCache(macAddress, wifiInterface);
-		/*
-		  The state broadcast above says the radio is still a station; it does not
-		  say the START failed, so on its own it leaves the operator's keyed op to
-		  expire on its TTL. `not-confirmed` is deliberately not `activation-failed`:
-		  NetworkManager accepted the activation and simply never reported the AP up,
-		  which is a different thing to tell someone than a refusal.
-		*/
 		deps.publishOutcome?.("start", device, {
 			success: false,
-			error: "not-confirmed",
+			error: changed ? "radio-changed" : "not-confirmed",
+			...(releasePending || (changed && !changed.stopped)
+				? { reason: "deactivation-failed" }
+				: {}),
 		});
 	};
-
+	const giveUp: PendingHotspot["giveUp"] = (changed, cancelled) => {
+		const allocation = target.allocation;
+		if (!allocation) return reportFailure(changed);
+		const key = wifiAdapterLockKey(owner);
+		const release = () =>
+			releaseHybridLeg(allocation, deps, {
+				receipt: true,
+				deleteCreated: false,
+			});
+		const reconcile = async () => {
+			const released = await release();
+			if (!released) registerWifiAdapterLegRelease(owner, release);
+			return released;
+		};
+		if (ownsWifiAdapterLock(key))
+			return reconcile().then((released) => reportFailure(changed, !released));
+		// Explicit cancellation does not start a new locked operation.
+		if (cancelled) return reportFailure(changed);
+		return withWifiAdapterLock(key, reconcile).then((lock) => {
+			if (!lock.success) registerWifiAdapterLegRelease(owner, release);
+			reportFailure(changed, !lock.success || !lock.result);
+		});
+	};
+	const exactActivation = (activation: HotspotActivationInstance) =>
+		matchesHotspotActivation(target.uuid, target.ifname, activation, deps);
+	let flight: Promise<boolean> | undefined;
+	const probe = (): Promise<boolean> => {
+		if (!current(pending) || !(binding ? ownsCache() : matches()))
+			return Promise.resolve(false);
+		flight ??= Promise.resolve()
+			.then(async () => {
+				if (
+					deps.pollHotspotActive &&
+					!(await deps.pollHotspotActive(
+						wifiInterface,
+						target.uuid,
+						target.ifname,
+						pending.activation,
+					))
+				)
+					return false;
+				if (!current(pending) || !(binding ? ownsCache() : matches()))
+					return false;
+				const rows = await nmDevices("device,type,state,con-uuid");
+				const up =
+					rows?.some((raw) => {
+						const [apIfname, type, state, uuid] = nmcliParseSep(raw);
+						return (
+							apIfname === target.ifname &&
+							type === "wifi" &&
+							(state === "connected" || state === "connected (externally)") &&
+							uuid === target.uuid
+						);
+					}) ?? false;
+				if (!up || !current(pending) || !(binding ? ownsCache() : matches()))
+					return false;
+				const activation = pending.activation;
+				const exact = activation?.profile || activation?.activePath;
+				if (exact && !(await exactActivation(activation))) return false;
+				if (!binding || !current(pending)) return current(pending) && matches();
+				const proof = await radioProof();
+				if (
+					!current(pending) ||
+					!ownsCache() ||
+					pending.activation !== activation
+				)
+					return false;
+				if (proof === "match") {
+					await settleCaptured(pending, true);
+					return true;
+				}
+				if (proof !== "replaced" || !exact || !activation) return false;
+				const lock = await withWifiAdapterLock(
+					wifiAdapterLockKey(owner),
+					async () => {
+						if (
+							!current(pending) ||
+							!ownsCache() ||
+							pending.activation !== activation ||
+							!(await exactActivation(activation)) ||
+							!current(pending) ||
+							!ownsCache() ||
+							pending.activation !== activation
+						)
+							return false;
+						const stopped = await nmDisconnectActivation(
+							target.uuid,
+							activation.activePath && activation.activeRunId
+								? {
+										path: activation.activePath,
+										runId: activation.activeRunId,
+										ifname: target.ifname,
+									}
+								: undefined,
+							deps,
+						);
+						await settleCaptured(pending, false, { stopped });
+						return true;
+					},
+				);
+				return lock.success && lock.result;
+			})
+			.finally(() => {
+				flight = undefined;
+			});
+		return flight;
+	};
 	const pending: PendingHotspot = {
+		uuid: target.uuid,
+		activation: target.activation,
 		ifname,
-		connName,
-		settled: false,
+		apIfname: target.ifname,
+		connName: hotspot.name ?? ifname,
+		row: wifiInterface,
+		controller,
+		matches,
+		probe,
 		confirm,
 		giveUp,
 	};
 	pendingHotspots.set(ifname, pending);
-
-	// Production backstop: bounded confirmation poll racing the monitor event.
-	const poll = deps.pollHotspotActive;
-	if (poll) {
+	pendingByRow.set(wifiInterface, pending);
+	if (deps.pollHotspotActive) {
 		retryWithBackoff(
 			async () => {
-				if (await poll(wifiInterface)) return true;
+				if (!current(pending)) return true;
+				if (await probe()) {
+					await settleCaptured(pending, true);
+					return true;
+				}
 				throw new Error("hotspot not yet confirmed");
 			},
 			{
 				maxAttempts: HOTSPOT_CONFIRM_ATTEMPTS,
 				baseDelayMs: HOTSPOT_CONFIRM_BASE_MS,
 				maxDelayMs: HOTSPOT_CONFIRM_MAX_MS,
-				shouldRetry: () => !pending.settled,
+				shouldRetry: () => current(pending) && matches(),
+				signal: controller.signal,
 			},
 		)
-			.then(() => settlePending(ifname, true))
-			.catch(() => settlePending(ifname, false));
+			.then(() => settleCaptured(pending, true))
+			.catch(() => settleCaptured(pending, false));
 	}
 }

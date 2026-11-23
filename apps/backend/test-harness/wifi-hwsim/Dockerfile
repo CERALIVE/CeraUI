@@ -8,12 +8,13 @@
 # Image mirrors the on-device userspace: nmcli (NetworkManager) is the client,
 # hostapd serves the virtual AP, wpa_supplicant backs WPA2-PSK association,
 # and iw / wireless-tools provide phy<->wlan inspection.
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Core wireless userspace:
 #   network-manager  -> nmcli (the client the CeraUI backend itself drives)
+#   dnsmasq-base     -> shared IPv4 for NetworkManager hotspot profiles
 #   wpasupplicant    -> WPA2-PSK supplicant backend for NM
 #   hostapd          -> serves the virtual AP (SSID=CeraTest)
 #   iw               -> modern nl80211 phy/interface tooling
@@ -24,6 +25,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends \
 		network-manager \
+		dnsmasq-base \
 		wpasupplicant \
 		hostapd \
 		iw \

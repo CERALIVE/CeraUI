@@ -33,13 +33,18 @@ export type ReauthOutcome =
 	| "hydrated"
 	/** Stored credential rejected — cleared and routed to the login screen. */
 	| "expired"
-	| "unreachable";
+	| "unreachable"
+	| "superseded";
 
 export interface ReauthDeps {
 	/** Read the stored credential (localStorage `auth`); null when absent. */
 	getStoredToken: () => string | null;
 	/** Remove the stored credential after a rejection (natural loop break). */
-	clearStoredToken: () => void;
+	clearStoredToken: (rejectedToken: string) => void;
+	/** Whether this is still the socket and session that started the attempt. */
+	isCurrent: () => boolean;
+	/** Publish admission before starting the independent safety pulls. */
+	onAuthenticated: () => void;
 	/** Re-authenticate with the stored credential. */
 	login: (token: string) => Promise<{ success: boolean }>;
 	/** Safety-hydrate source: current streaming config (authed procedure). */
@@ -73,9 +78,11 @@ export async function reauthenticateAndHydrate(
 	try {
 		result = await deps.login(token);
 	} catch (error) {
+		if (!deps.isCurrent()) return "superseded";
 		deps.onError?.(error);
 		return "unreachable";
 	}
+	if (!deps.isCurrent()) return "superseded";
 
 	// Feed the auth result through the canonical handleMessage path.
 	deps.dispatch("auth", result);
@@ -83,10 +90,11 @@ export async function reauthenticateAndHydrate(
 	if (!result.success) {
 		// Stored credential expired/invalid: clear it so the next reconnect finds
 		// no token (loop break) and route to the login screen.
-		deps.clearStoredToken();
+		deps.clearStoredToken(token);
 		deps.routeToLogin();
 		return "expired";
 	}
+	deps.onAuthenticated();
 
 	// Safety hydrate: pull config + status and route both through handleMessage so
 	// the HUD and destination views repopulate after the socket swap. This is
@@ -101,6 +109,7 @@ export async function reauthenticateAndHydrate(
 		consume(deps, "config", deps.getConfig),
 		consume(deps, "status", deps.getStatus),
 	]);
+	if (!deps.isCurrent()) return "superseded";
 	for (const answer of answers) {
 		if (answer.status === "rejected") deps.onError?.(answer.reason);
 	}
@@ -113,5 +122,6 @@ async function consume(
 	type: "config" | "status",
 	read: () => Promise<unknown>,
 ): Promise<void> {
-	deps.dispatch(type, await read());
+	const answer = await read();
+	if (deps.isCurrent()) deps.dispatch(type, answer);
 }

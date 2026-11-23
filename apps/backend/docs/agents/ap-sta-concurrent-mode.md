@@ -7,18 +7,19 @@
 `managed` interface and an `AP` interface together; grouped limits and `total`
 are enforced, and every absent/malformed/probe-error path resolves false.
 
-`wifi-concurrent-interface.ts` creates the deterministic `clap-<parent>` cfg80211
-`managed` interface and waits for NetworkManager to observe it. An existing
-interface is reused only after its reported type is confirmed as `managed`; stale
-or wrongly typed instances are deleted before recreation. Hotspot profiles on
-proven radios bind to that virtual interface, so the physical interface retains
-its station connection and bond state. Confirmation, polling, saved-profile
-adoption, reconfiguration, and stop track the virtual AP separately. Radios that
-do not prove support use the pre-existing exclusive path unchanged.
+`wifi-concurrent-interface.ts` retains the existing import surface. The one
+selector in `wifi-hybrid-target-selector.ts` adopts the qualified NM-managed
+leg only at admitted Start or saved-intent restore, after same-boot discovery,
+parent/target lifetime, NM ownership and occupancy checks. Missing, foreign or
+unreadable evidence refuses hybrid without creation or exclusive fallback.
+Adoption grants reuse only. Exact nl80211 receipts alone grant creation cleanup;
+an unrecorded or wrongly typed survivor is never deleted.
 
 The optional wire flag is `supports_ap_sta_concurrency`; it is emitted only after
-both the `iw phy` parser and runtime virtual-interface creation succeed. Full
-contract and the outstanding RTL8852BE/MT7925 board drill:
+the driver data and the separate card qualification check admit the mechanism.
+Discovery never creates a leg to advertise capability. Creation receipts, target
+records, NM runtime policy and station channel checks live in separate modules,
+with one authority store and one selector. Full contract and physical proof limits:
 [`docs/AP-STA-CONCURRENT-MODE.md`](../../../../docs/AP-STA-CONCURRENT-MODE.md).
 
 Coverage: `tests/wifi-ap-sta-capability.test.ts`,

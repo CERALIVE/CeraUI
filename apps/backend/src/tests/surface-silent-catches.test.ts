@@ -104,7 +104,7 @@ describe("reportUpdateCheckFailure — surfaces a broken update check", () => {
 });
 
 describe("parseWifiScanRow — surfaces a malformed scan row", () => {
-	it("returns null and logs the raw row when signal/chan do not parse", () => {
+	it("returns null and warns without logging the SSID when signal/chan do not parse", () => {
 		const warnSpy = spyOn(logger, "warn").mockImplementation(noop);
 		try {
 			expect(
@@ -113,6 +113,7 @@ describe("parseWifiScanRow — surfaces a malformed scan row", () => {
 				),
 			).toBeNull();
 			expect(warnSpy).toHaveBeenCalled();
+			expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("MyNet");
 		} finally {
 			warnSpy.mockRestore();
 		}

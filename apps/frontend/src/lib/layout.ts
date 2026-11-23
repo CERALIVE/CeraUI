@@ -58,3 +58,25 @@ export const WIDE_DESKTOP_QUERY = "(min-width: 1024px)";
  * the 99px overflow.
  */
 export const HEALTH_COMPACT_QUERY = "(max-width: 1024px), (max-height: 700px)";
+
+/**
+ * While `element` is mounted, publish its rendered height on the document root
+ * as `property`, so the page can keep clear of a fixed bar. Returns the cleanup
+ * for an `$effect`, which removes the property again. Absent ResizeObserver
+ * (jsdom) publishes nothing, which every consumer reads as its fallback.
+ */
+export function publishHeight(
+	element: HTMLElement,
+	property: string,
+): (() => void) | undefined {
+	if (typeof ResizeObserver === "undefined") return undefined;
+	const root = document.documentElement;
+	const observer = new ResizeObserver(() => {
+		root.style.setProperty(property, `${element.offsetHeight}px`);
+	});
+	observer.observe(element);
+	return () => {
+		observer.disconnect();
+		root.style.removeProperty(property);
+	};
+}

@@ -15,14 +15,90 @@ physical Wi-Fi hardware**.
 
 ---
 
+## Offline native-shim preflight
+
+The first-AP shim installs an exclusive `/usr/local/bin/nmcli` link to its
+private executable in the exported repository and removes its owned link on
+close, uncaught process exit, SIGINT and SIGTERM. `/run` may remain `noexec`.
+That launcher directory is already
+on the guest's startup PATH. Bun 1.4.5's env-less product execution path retains
+the startup PATH, while the stdin runner receives the current environment;
+prepending a private directory after startup alone does not intercept both.
+An existing `/usr/local/bin/nmcli` is never overwritten.
+
+Run the exact two-runner preflight without a VM:
+
+```bash
+taskset -c 0-3 bun \
+  apps/backend/test-harness/wifi-hwsim/checks/first-ap-nmcli-shim.selftest.ts
+```
+
+This requires Linux with unprivileged user and mount namespaces enabled.
+The test mounts temporary `/run` (deliberately `noexec`) and `/usr/local/bin`
+filesystems only inside its private user/mount/PID namespace, preserves the real Bun executable with a private bind
+mount, and invokes the real installer and product runners against the real
+`nmcli --version`. It verifies two receipts and launcher cleanup. It is an
+explicit selftest outside normal backend test discovery. No host root,
+NetworkManager daemon, VM or shared lock is used. This proves instrumentation,
+not native Wi-Fi behavior.
+
+Before the four-radio native cases, run the aggregate guest preflight once:
+
+```bash
+export NODE_ENV=production MOCK_MODE=false LC_ALL=C
+bash apps/backend/test-harness/wifi-hwsim/guest-preflight.sh
+```
+
+Run it after installing any outer nmcli capture observer. It attempts every
+independent probe, prints every failure, and returns nonzero if any failed.
+It checks tools/versions, guest boundaries, writable and executable paths,
+backend imports, WebSocket loopback, both real product runners' shim receipts,
+four distinct hwsim radios and channel 6, managed-device readiness, virtual
+interface creation/deletion, shared-IPv4 AP activation on control radio B,
+NM framing/offline stdin, persisted file and D-Bus
+properties, an actual NM restart, and readiness after restart. Its two NM
+fixtures (a short-lived control AP and an inactive dummy profile) have generated
+UUIDs and are deleted only by those UUIDs. The control uses the public harness
+passphrase. It never calls a CeraUI hotspot entrypoint or runs a native scenario.
+Logs and fsynced results live in the printed `/var/tmp/ceraui-preflight.*`
+directory; copy or emit them before guest teardown. The check imports backend
+modules in a disposable process and exits explicitly to retire their pollers.
+
+Execute **each** native case through its own mount namespace:
+
+```bash
+bash apps/backend/test-harness/wifi-hwsim/native-exec.sh \
+  bun apps/backend/test-harness/wifi-hwsim/checks/first-ap.ts
+bash apps/backend/test-harness/wifi-hwsim/native-exec.sh \
+  bun apps/backend/test-harness/wifi-hwsim/checks/hybrid-upgrade.ts
+```
+
+The wrapper keeps the real Bun executable through an open descriptor, then
+mounts a private `/usr/local/bin`. Even an uncatchable process death cannot
+leave its launcher in the next case's namespace. It preserves the guest PID
+namespace, so NetworkManager audit PIDs remain comparable. A hard kill can
+leave private state files in the disposable repository; they are never reused.
+Do not use a PID namespace for native cases that compare NM audit PIDs.
+
+Offline lifecycle, aggregate-failure and type checks:
+
+```bash
+taskset -c 0-3 bun apps/backend/test-harness/wifi-hwsim/checks/native-exec.selftest.ts
+cd apps/backend/test-harness/wifi-hwsim
+taskset -c 0-3 bun ../../../../scripts/tsc.mjs -p tsconfig.json
+```
+
 ## Local VM without host root
 
-`vm/run-vm.sh` runs the same harness in a disposable Debian 12 **generic**
+`vm/run-vm.sh` runs the same harness in a disposable Debian 13 trixie **generic**
 amd64 guest with its full kernel, NetworkManager, wpa_supplicant and hostapd.
+The generic flavour includes `mac80211_hwsim`; genericcloud does not.
+Both VM and container provisioning include `dnsmasq-base` for NetworkManager's
+shared-IPv4 hotspot profiles; the container uses `debian:trixie-slim`.
 It requires Linux with readable/writable `/dev/kvm`, QEMU (`qemu-system-x86_64`
 and `qemu-img`), xorriso, OpenSSH, curl, coreutils, find, flock, tar, Git and Python
 with `os.pidfd_open`/`signal.pidfd_send_signal` support (Linux, Python 3.9+).
-`--repo` additionally requires the workstation's Bun 1.4.4 binary.
+`--repo` additionally requires the workstation's Bun 1.4.5 binary.
 No host module, Docker or administrator password is needed. This remains
 local-only infrastructure, outside shared CI.
 
@@ -60,7 +136,8 @@ Flags:
 | Flag | Effect |
 |---|---|
 | `--radios N` | Create 2 to 100 radios, default 2. |
-| `--repo PATH` | Normalize PATH to its Git work-tree root, export committed `HEAD` to `/repo`, copy workstation Bun 1.4.4, and run `bun install --frozen-lockfile --linker=hoisted` in the guest. Hoisting makes workspace dependencies available to root-level gate imports. Commands start in `/repo`; `HWSIM_REPO=/repo` is available. Uncommitted files, workstation dependencies and submodules are excluded. |
+| `--repo PATH` | Normalize PATH to its Git work-tree root, export one committed revision (default `HEAD`) to `/repo`, copy workstation Bun 1.4.5, and run `bun install --frozen-lockfile --linker=hoisted` in the guest. Hoisting makes workspace dependencies available to root-level gate imports. Commands start in `/repo`; `HWSIM_REPO=/repo` is available. Uncommitted files, workstation dependencies and submodules are excluded. |
+| `--ref REV` | With `--repo`, select a commit from that repository's object store without checking it out or changing any worktree. The resolved commit supplies both checks and product code. |
 | `--no-install` | Skip the guest dependency install for self-contained repository commands. Without `--repo`, commands start in `/harness`. |
 | `--keep` | After a successful command, print the SSH command and hold the VM up for inspection until the runner is interrupted or one hour elapses. Keep the runner alive in its terminal; it still owns cleanup. |
 
@@ -71,10 +148,24 @@ bash apps/backend/test-harness/wifi-hwsim/vm/run-vm.sh --radios 2 --repo "$PWD" 
   bun -e "import 'zod'; import 'winston'; console.log('deps-ok')"
 ```
 
-Later plan commands such as
-`bun apps/backend/test-harness/wifi-hwsim/checks/first-ap.ts` likewise run from
-`/repo` when `--repo` is used; those gate files are supplied by their later plan
-steps. The guest initializes local Git metadata solely so the archived
+For a reviewed gate that is not on the current branch, select its revision:
+
+```bash
+bash apps/backend/test-harness/wifi-hwsim/vm/run-vm.sh --radios 4 \
+  --repo "$PWD" --ref "$REVIEWED_COMMIT" -- \
+  bun apps/backend/test-harness/wifi-hwsim/checks/first-ap.ts
+```
+
+The selected commit must contain the harness, gate and its product imports together;
+do not overlay checks from another revision. Before any download, VM state
+creation or boot, the runner rejects an invalid revision or a direct
+`bun path.ts` / `bun path.js` command whose script is absent from that commit.
+The same check covers JSX/TSX and CommonJS/ESM script extensions.
+It does not inspect imports embedded in `bun -e` or shell commands.
+All transfer archives and the command file are prepared before downloads or
+boot. With `--repo`, the harness archive comes from that same immutable commit,
+independent of the runner script's location. A misplaced standalone runner
+without a valid harness directory fails before QEMU. The guest initializes local Git metadata solely so the archived
 repository's install hooks can configure hooks; it does not invent a commit.
 The exported application SHA is printed separately. An install failure is an
 infrastructure failure, before the requested command runs.
@@ -143,8 +234,8 @@ The Debian image cache is the only persistent VM artifact. A completed run
 prints its QEMU PID and removed run directory as cleanup receipts. Do not
 commit images, overlays or seed ISOs.
 
-Parity verified on November 12, 2026 with the generic image's
-`6.1.0-54-amd64` kernel: the unchanged `integration-test.sh` exited 0 with
+Historical association parity was verified on November 12, 2026 with the
+previous image's `6.1.0-54-amd64` kernel: the unchanged `integration-test.sh` exited 0 with
 `GENERAL.STATE:100 (connected)`. The host's hwsim module count was 0 before
 and after, and the owned QEMU process and run directory were removed.
 The VM path is available for simulated-radio checks; no owner-run fallback
@@ -155,13 +246,14 @@ NetworkManager, iw and wpa_supplicant versions, and the exported application SHA
 with `--repo`. These receipts identify the actual environment: `latest` and
 guest package updates can change it between runs.
 
-The device receipt is kernel `7.2.0-ceralive-rk3588` and NetworkManager `1.52.1`;
-this Debian 12 simulator uses kernel `6.1` and NetworkManager `1.42.4`.
+The device receipt is kernel `7.2.0-ceralive-rk3588` and NetworkManager `1.52.1`.
+The simulator now uses Debian 13 trixie to match the device OS and its
+NetworkManager `1.52.x` series; its generic amd64 kernel remains different.
 Device qualification remains separate. hwsim does not model physical driver,
 firmware, RF, USB/PCI topology or physical interface limits, so a passing VM gate
-does not prove slot-limit behavior. Duplicate-address behavior is unqualified
-here: its later gate must record the actual Debian result with a working
-distinct-address control, rather than infer it from an upstream error string.
+does not prove slot-limit behavior. See [Equal permanent MAC and guest port
+identity](#equal-permanent-mac-and-guest-port-identity) for the current
+duplicate-address simulator procedure and its distinct-address control.
 
 The unchanged `integration-test.sh` accepts any state output containing
 `connected`, including `disconnected`. Its PASS marker alone is insufficient:
@@ -177,17 +269,162 @@ bash apps/backend/test-harness/wifi-hwsim/vm/selftest.sh
 
 This compact local regression test uses a whitelist PATH and verifies executable
 VM/network stubs before each case. It checks foreign-parent PID rejection,
-cleanup-entry TERM/INT and redirected state rejection. It never boots a VM or
+cleanup-entry TERM/INT, incompatible-revision rejection before VM creation,
+selected-revision bootstrap and redirected state rejection. It never boots a VM or
 loads a host module and remains outside shared CI.
 
 ### Later gates
 
-`replacement.ts`, `hybrid-target.ts` and `first-ap.ts` do not exist yet and must
-be committed before their reviewed gate head is qualified. Duplicate-address
-testing needs a working distinct-address creation control first. Require state
-100 **and the intended active profile/SSID** for association; the integration
-script's `connected` substring alone accepts `disconnected`. Establish positive
-controls before treating application refusal as a passing negative control.
+Run `replacement.ts` on four radios to check that Start refuses after the
+physical names are swapped during saved-profile refresh before Up. The
+duplicate-address gate has its own [current procedure](#equal-permanent-mac-and-guest-port-identity).
+
+### Equal permanent MAC and guest port identity
+
+Validate both rule layouts offline, then run the check from a committed CeraUI
+checkout with a disk-backed `TMPDIR` outside the worktree:
+
+```bash
+harness=apps/backend/test-harness/wifi-hwsim
+bash "$harness/vm/duplicate-address-ports.sh" --verify-rules
+bash "$harness/vm/run-vm.sh" --radios 4 --repo "$PWD" --ref HEAD -- \
+  bun "$harness/checks/duplicate-address.ts"
+```
+
+Offline verification uses `udevadm verify` without loading host rules. The
+check requires the native VM and its runner marker before touching NetworkManager.
+After the distinct-address AP control, it creates a second radio with the same
+permanent MAC. The guest assigns `ID_PATH` by hwsim parent and reads it back
+from udev and NetworkManager before each layout. Guest-only metadata lets
+CeraUI enroll both radios using normal discovery; the check waits for settled
+identity publication.
+
+The same-path layout must refuse both radios with exactly `radio-unverified`.
+With distinct paths, both APs must still be active after the second starts,
+each on its own device with the expected UUID, SSID and AP mode.
+
+Historically, unconfigured hwsim radios reported no NetworkManager port paths,
+so that setup exercised the fail-closed path only. The explicit paths now let
+the VM exercise both layouts. This is simulator evidence, not physical
+same-address hardware qualification.
+
+### #603 secret boundary
+
+Run the following from the committed CeraUI checkout, with `TMPDIR` set to
+a disk-backed directory outside Git work trees and `/tmp`.
+
+```bash
+bash apps/backend/test-harness/wifi-hwsim/vm/run-vm.sh \
+  --radios 4 --repo "$PWD" --ref HEAD -- \
+  bun apps/backend/test-harness/wifi-hwsim/checks/secret-boundary.ts
+```
+
+`B8-603` receipts distinguish stored, agent-owned, not-saved and missing PSKs.
+The check records flags, persistent presence, verified equality, and activation
+outcomes across separate `nmcli` processes. It repeats the legacy nonsecret
+rewrite before running the candidate's saved-profile Start and active Save.
+If a fixture cannot Start without a usable secret, the check first records
+that refusal and then installs a stored control secret for Save and rollback.
+A forced forward activation failure tests rollback on the original UUID.
+Only generated fixture secrets are used, and the receipts omit their values.
+A pass ends with `B8-603 complete`. It cannot identify the flags on the
+removed incident profile.
+
+### First AP add-then-up gate
+
+`checks/first-ap.ts` is a local-only guest check. It calls the real
+`nmApConnAdd` and `nmConnect`, verifies the inactive profile's autoconnect,
+AP mode, permanent MAC and shared IPv4 fields, then checks AP mode/channel
+and client association with the exact profile and SSID. A working AP on
+distinct-address radio B is the positive control for B's later MAC-incompatible
+refusal of A's profile. It then restarts NetworkManager inside the guest and
+checks that the bus-scoped NM run identity changes while the settings fingerprint
+and persisted creation authority survive. Owned add/modify writes refresh the bound
+keyfile receipt within the same NM run; up/down/delete keep strict equality.
+Restart must preserve filename/device/inode/ctime.
+The same script then calls the backend's production `wifiHotspotStart` and
+`wifiHotspotStop` entry points for the saved UUID. A resolved-adapter test row
+uses real NM activity and sysfs data; the production radio-identity sampler
+must verify its lifetime and permanent MAC. Vendor/product remain unknown:
+neither product discovery nor identity logic is patched. This avoids assuming
+hwsim has physical manufacturer metadata.
+The fixture feeds the radio's observed operational MAC/IP through the existing
+device-list cache API. Real discovery publishes and retains its numeric ID;
+the harness does not register an ID mapping itself.
+
+The case first confirms activity after the NM restart, then Stops and Starts
+the same saved UUID. It requires the real terminal broadcast and connected NM
+state, and verifies the credential UUID remains bound; the transient creation
+marker retires on confirmation. Each confirmation has a 60-second deadline.
+The existing transaction, adapter lock, NM operations and bounded confirmation
+code all run with production defaults. RPC transport/admission is covered by
+the related RPC/roundtrip/context unit suites, not claimed by this native case.
+No second runner or product identity bypass is introduced.
+The check removes only its recorded
+profile UUIDs.
+
+The guest provisioning includes `dnsmasq-base` for NetworkManager's shared
+IPv4 mode. Select one reviewed revision for the check and its product code:
+
+```bash
+bash apps/backend/test-harness/wifi-hwsim/vm/run-vm.sh --radios 4 \
+  --repo "$PWD" --ref "$REVIEWED_COMMIT" -- \
+  bun apps/backend/test-harness/wifi-hwsim/checks/first-ap.ts
+```
+
+The four radios must belong to `mac80211_hwsim`. Root and the VM runner's
+`HWSIM_REPO=/repo` environment are required. The script never prints a PSK or
+a secret-bearing command exception. A source/type check does not qualify
+NetworkManager behavior; the VM run remains a separate gate.
+
+Failure receipts include a fixed phase and check id. Assertions report only
+expected/actual kinds and array lengths; values, exception messages/stacks and
+command argv are never serialized. Phase markers cover A's add, returned UUID,
+instance binding, settings read, provenance, binding tuple and inactive-state
+checks. `wifi-first-ap-diagnostics.test.ts` exercises that CLI boundary with
+credential-bearing command and assertion errors.
+Start admission, terminal Start confirmation and Stop outcomes retain only
+success and the canonical error enum in phase receipts, never a free-form reason.
+The adjacent `checks/first-ap-radio.test.ts` reproduces empty-cache `no-device`
+and verifies that observed MAC/IP keeps the ID through real discovery.
+
+The pending expanded case installs a guest-only nmcli shim which checks that
+the synthetic PSK never appears in child argv or environment. The AP and a
+separate station activation must associate using that persisted secret.
+The client setup also uses the protected secret boundary. Phase receipts
+never print the PSK, raw keyfile data or arbitrary command failures.
+
+The same saved-profile case starts the existing R1 restore composition,
+observes an externally downed owned AP and requires recovery on that exact
+owner. Public Stop must keep station intent without restart. Scheduled
+activation refusals must exhaust three attempts and degrade only that owner.
+The adjacent recovery test drives that orchestration against the existing
+R1 fake-NM fixture and fake clock; it does not qualify native behavior.
+
+Additional native cases compare real writes to the offline prediction for
+arm/disarm, binding, band/channel and credential deltas. The shim schedules
+in-place/atomic restores after the real reply, an in-place edit before the
+real write, and an actual activation between modify and readback. That
+activation must preserve authority when the predicted bytes match; VersionId
+is a diagnostic measurement, never equality evidence. On NM 1.42.4 the same
+activation control runs without that unsupported property.
+Foreign results must be preserved with no later product mutation and visible
+authority degradation. After the refused deletes and activation control,
+first-AP disables device autoconnect on A and loads the two exact keyfiles
+restored after NM's reply. It checks that NM reports autoconnect `yes` for
+both UUIDs and that their foreign bytes survive. A separate hybrid invocation
+in the same guest can then compare every unrelated profile through its NM
+restart. Hybrid also runs independently in a fresh guest.
+
+The NM 1.52.1 guest passed the serializer and foreign-edit controls in R26.
+The exact-file handoff still needs a combined native run.
+
+Retiring product readbacks now emit a sanitized WARN with changed field names,
+two-read stat witnesses, path/run flags and optional VersionId. The console
+therefore retains these receipts without requiring INFO logging. Secret
+rediscovery separately reports presence flags and short digests; empty or
+hidden display reads preserve the same owned profile's known credential.
+These diagnostics do not prove the cause of earlier uncaptured failures.
 
 ---
 
@@ -354,6 +591,84 @@ to assert on from a wrapper.
   and unloads the module (unless `--keep-module`).
 
 ---
+
+## Hybrid upgrade readiness
+
+`checks/hybrid-upgrade.ts` gates every explicit profile activation, including
+the uplink activation after NetworkManager restart, on fresh
+`DEVICE,TYPE,STATE` observations. The selected device must be Wi-Fi and in a
+managed state other than unavailable. There is no readiness sleep or activation
+retry. A 30-second abort deadline bounds the state reads; timeout fails with an
+`UPGRADE-WIFI-READINESS` receipt containing the device inventory, rfkill list,
+hwsim interface state and NetworkManager general status. Each diagnostic command
+has a separate two-second bound, and credential values are redacted.
+
+Run `bun apps/backend/test-harness/wifi-hwsim/checks/hybrid-upgrade.ts --selftest`
+without a VM to cover immediate readiness, several non-ready state changes and
+a never-ready device failing with the bounded diagnostic receipt. The existing
+native upgrade, unrelated-profile and Stop assertions remain unchanged.
+
+The native row helper derives channel 6 through the normal exact-phy channel
+initialization and records the observed NM band offering. It retains indexed
+IPv4 values through the real named-field boundary. Hybrid AP observations use
+the verified current row and the matching profile interface pin.
+
+Cold NM/netdev loss is a negative qualification control: mac80211_hwsim remains
+outside the MT7925 gate, so the AP must stay inactive, hybrid intent pending and
+the station uplink unchanged, with `hybrid-channel-not-permitted`. Stop runs
+while the adopted AP is still live, before this cold control; the saved hybrid
+configuration is then restored as cold-test setup. Offline isolated MT7925
+fixtures prove positive missing-leg restore. A simulated radio does not qualify
+physical MT7925 restore; that remains in the board gate.
+
+## Guest execution and version proof
+
+The offline namespace checks install Bun as a regular mode-0755 file at
+`/usr/local/bin/bun`, use the guest's exact PATH and umask 077, and keep `/run`
+noexec. A host Bun path outside the private bin mount does not exercise the
+guest layout. The lifecycle proof compares the executable's device, inode,
+size, mode and owner before/after the wrapper; it also checks CWD, root UID,
+the unchanged PID namespace and closure of the saved descriptor.
+
+The wrapper opens descriptor 9 after entering its mount namespace, then binds
+it with `mount --no-canonicalize`. A descriptor opened before `unshare` still
+references the previous mount tree and cannot be cloned by the new mount API.
+Without disabling canonicalization,
+libmount resolves `/proc/self/fd/9` back to `/usr/local/bin/bun` after that
+directory is covered, binding the new empty placeholder instead of Bun.
+Adding execute permission to the placeholder would not repair that inode error.
+
+`guest-versions.sh` prints every command's exit status and verdict. A valid
+hostapd version banner may accompany exit 1 on Debian 13's hostapd 2.10;
+that property applies only to this version probe. Other tool failures still
+fail the group, and the live guest requires Bun 1.4.5 and NetworkManager 1.52.1.
+The R21 replay passes its exact historical Bun 1.4.4 pin to the same checker;
+live preflight does not pass an override.
+
+```bash
+taskset -c 0-3 bash apps/backend/test-harness/wifi-hwsim/guest-versions.selftest.sh
+```
+
+## Recorded guest replay
+
+`replay-corpus/README.md` lists the real R19/R20/R21 captures, consumer coverage
+and explicit missing samples. The replay suite drives shared native decoders,
+the frozen literal matchers and actual bootstrap/version scripts. It never
+executes receipt contents or invokes host NetworkManager mutations.
+
+The guest setup now explicitly activates its reserved CeraTest station profile
+with one bounded NM activation before declaring the fixture ready. Profile
+creation and a running hostapd AP do not establish client association.
+Bootstrap diagnostics report every prerequisite and the selected device's
+actual state/profile.
+
+Capability replies are decoded as numeric MHz fields before the unchanged
+channel assertions, so both `2437` and `2437.0` represent the same frequency.
+Disabled flags and exact AP mode remain meaningful. All radio roles are
+collected before capability validation, and full safe iw replies are saved
+in the preflight receipt directory before assertions can truncate them.
+The tracked `framing.sh` is the unchanged B7 framing/od case for future
+same-revision controllers.
 
 ## Troubleshooting
 

@@ -280,9 +280,9 @@ export class NmcliMonitorManager implements IMonitorEmitter {
 		let event: MonitorEvent | null = null;
 		try {
 			event = parseMonitorLine(line);
-		} catch (err) {
+		} catch {
 			// Defensive: a malformed line must never crash the stream.
-			logger.debug(`nmcli monitor parse error for "${line}": ${String(err)}`);
+			logger.debug("nmcli monitor parse error");
 			return;
 		}
 
@@ -293,7 +293,7 @@ export class NmcliMonitorManager implements IMonitorEmitter {
 
 		const trimmed = line.trim();
 		if (trimmed.length > 0) {
-			logger.debug(`nmcli monitor (skipped): ${trimmed}`);
+			logger.debug("nmcli monitor (skipped)");
 		}
 	}
 }

@@ -1,0 +1,162 @@
+HWSIM-PREFLIGHT: guest-boundary exit=0
+OS=debian VERSION=13
+HWSIM-PREFLIGHT: os exit=0
+/usr/local/bin/bun
+/usr/bin/nmcli
+/usr/sbin/NetworkManager
+/usr/sbin/iw
+/usr/sbin/hostapd
+/usr/sbin/wpa_supplicant
+/usr/sbin/dnsmasq
+/usr/bin/systemctl
+/usr/bin/busctl
+/usr/bin/journalctl
+/usr/bin/udevadm
+/usr/sbin/rfkill
+/usr/sbin/ip
+/usr/bin/ps
+/usr/bin/stat
+/usr/bin/python3
+/usr/bin/od
+/usr/bin/flock
+/usr/bin/unshare
+/usr/bin/mount
+/usr/bin/touch
+/usr/bin/readlink
+/usr/bin/timeout
+/usr/bin/findmnt
+/usr/bin/bash
+/usr/bin/id
+/usr/bin/cat
+/usr/bin/tee
+/usr/bin/grep
+/usr/bin/head
+/usr/bin/find
+/usr/bin/sort
+/usr/bin/git
+/usr/bin/tar
+/usr/bin/base64
+/usr/bin/mktemp
+/usr/bin/rm
+HWSIM-PREFLIGHT: tools exit=0
+nmcli tool, version 1.52.1
+iw version 6.9
+hostapd v2.10
+User space daemon for IEEE 802.11 AP management,
+IEEE 802.1X/WPA/WPA2/EAP/RADIUS Authenticator
+Copyright (c) 2002-2022, Jouni Malinen <j@w1.fi> and contributors
+wpa_supplicant v2.10
+Copyright (c) 2003-2022, Jouni Malinen <j@w1.fi> and contributors
+HWSIM-PREFLIGHT: versions exit=1
+NODE_ENV=production MOCK_MODE=false LC_ALL=C PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+HWSIM-PREFLIGHT: environment exit=0
+/repo mode=755 uid=0 gid=0
+TARGET FSTYPE OPTIONS
+/      ext4   rw,relatime,discard,errors=remount-ro
+/run mode=755 uid=0 gid=0
+TARGET FSTYPE OPTIONS
+/run   tmpfs  rw,nosuid,nodev,noexec,relatime,size=202096k,mode=755,inode64
+/usr/local/bin mode=755 uid=0 gid=0
+TARGET FSTYPE OPTIONS
+/      ext4   rw,relatime,discard,errors=remount-ro
+/etc/NetworkManager/system-connections mode=755 uid=0 gid=0
+TARGET FSTYPE OPTIONS
+/      ext4   rw,relatime,discard,errors=remount-ro
+HWSIM-PREFLIGHT: permissions exit=0
+active
+LoadState=loaded
+ActiveState=active
+CanStop=yes
+active
+LoadState=loaded
+ActiveState=active
+CanStop=yes
+active
+LoadState=loaded
+ActiveState=active
+CanStop=yes
+s "84f4c47d7184293b247e33016afccf89"
+s ":1.24"
+{"__SEQNUM":"1608","__SEQNUM_ID":"6fc530ba2e5a4b9daaa71be7e7fc4014","__REALTIME_TIMESTAMP":"1794953180202246","MESSAGE":"<info>  [1794953180.2022] device (wlan1): Activation: successful, device activated.","__CURSOR":"s=6fc530ba2e5a4b9daaa71be7e7fc4014;i=648;b=9cdb6fc4eb0648efb3520670015ed5f1;m=53eba74;t=660801ab1c506;x=5d7865ab5f9f833","__MONOTONIC_TIMESTAMP":"87997044","_BOOT_ID":"9cdb6fc4eb0648efb3520670015ed5f1"}
+HWSIM-PREFLIGHT: systemd exit=0
+HWSIM-AUDIT-JSON: timestamp/message/PID present
+HWSIM-PREFLIGHT: audit-json exit=0
+RADIO=/sys/class/net/wlan0 MAC=02:00:00:00:00:00
+RADIO=/sys/class/net/wlan1 MAC=02:00:00:00:01:00
+RADIO=/sys/class/net/wlan2 MAC=02:00:00:00:02:00
+RADIO=/sys/class/net/wlan3 MAC=02:00:00:00:03:00
+phy#3
+	Interface wlan3
+		ifindex 6
+		wdev 0x300000001
+		addr 1a:c8:76:8e:a1:b2
+		type managed
+		txpower 20.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
+phy#2
+	Interface wlan2
+		ifindex 5
+		wdev 0x200000001
+		addr d6:b2:79:80:cc:da
+		type managed
+		txpower 20.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
+phy#1
+	Unnamed/non-netdev interface
+		wdev 0x100000003
+		addr 02:00:00:00:01:00
+		type P2P-device
+		txpower 20.00 dBm
+	Interface wlan1
+		ifindex 4
+		wdev 0x100000001
+		addr 02:00:00:00:01:00
+		type managed
+		channel 6 (2437 MHz), width: 20 MHz (no HT), center1: 2437 MHz
+		txpower 20.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
+phy#0
+	Interface wlan0
+		ifindex 3
+		wdev 0x1
+		addr 02:00:00:00:00:00
+		ssid CeraTest
+		type AP
+		channel 6 (2437 MHz), width: 20 MHz (no HT), center1: 2437 MHz
+		txpower 20.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	10	0	0	0	0	721		10
+0: phy0: Wireless LAN
+	Soft blocked: no
+	Hard blocked: no
+1: phy1: Wireless LAN
+	Soft blocked: no
+	Hard blocked: no
+2: phy2: Wireless LAN
+	Soft blocked: no
+	Hard blocked: no
+3: phy3: Wireless LAN
+	Soft blocked: no
+	Hard blocked: no
+ens3:ethernet:connected
+wlan1:wifi:connected
+lo:loopback:connected (externally)
+wlan2:wifi:disconnected
+wlan3:wifi:disconnected
+p2p-dev-wlan1:wifi-p2p:disconnected
+p2p-dev-wlan2:wifi-p2p:disconnected
+p2p-dev-wlan3:wifi-p2p:disconnected
+hwsim0:unknown:unmanaged
+wlan0:wifi:unmanaged
+HWSIM-PREFLIGHT: radios exit=0
+HWSIM-PREFLIGHT: bootstrap exit=0
+/repo/apps/backend/test-harness/wifi-hwsim/native-exec.sh: line 17: /usr/local/bin/bun: Permission denied
+HWSIM-PREFLIGHT: native-runners exit=126
+HWSIM-PREFLIGHT: failures=2 receipts=/var/tmp/ceraui-preflight.uu6Hvefz

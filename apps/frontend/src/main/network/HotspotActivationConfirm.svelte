@@ -17,7 +17,7 @@
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { WifiInterface } from '@ceraui/rpc/schemas';
 import { Copy, Dices, Loader2, TriangleAlert } from '@lucide/svelte';
-import { untrack } from 'svelte';
+import { onDestroy, tick, untrack } from 'svelte';
 import { toast } from 'svelte-sonner';
 
 import { networkConstraints } from '$lib/components/streaming';
@@ -28,6 +28,7 @@ import { Label } from '$lib/components/ui/label';
 import { copyToClipboard } from '$lib/helpers/clipboard';
 import { rpc } from '$lib/rpc/client';
 import { getLinkEpoch } from '$lib/rpc/session-epoch.svelte';
+import { waitForWifiStatus } from '$lib/rpc/wifi-status-receipt';
 
 import { generateHotspotPassword, hotspotPasswordIsPrintable } from './hotspot-password';
 import { sameWifiRadio, type WifiRadioBinding, wifiRadioChanged } from './wifi-radio-binding';
@@ -39,6 +40,7 @@ interface Props {
 	degradedReason?: WifiInterface['degraded_reason'];
 	session?: number;
 	reloaded?: boolean;
+	focusOnOpen?: boolean;
 	/** The radio's station leg survives (hybrid), so no disconnect is threatened. */
 	keepsStation?: boolean;
 	/** Action label; defaults to "Turn on hotspot". */
@@ -49,8 +51,15 @@ interface Props {
 	onCancel: () => void;
 }
 
-const { device, incarnation, degradedReason, session = 0, reloaded = false, keepsStation = false, confirmLabel, detail, onConfirm, onCancel }: Props =
+const { device, incarnation, degradedReason, session = 0, reloaded = false, focusOnOpen = false, keepsStation = false, confirmLabel, detail, onConfirm, onCancel }: Props =
 	$props();
+const uid = $props.id();
+let panel: HTMLDivElement;
+let cancelButton = $state<HTMLButtonElement | null>(null);
+
+$effect(() => {
+	if (focusOnOpen) cancelButton?.focus();
+});
 
 const bounds = networkConstraints.hotspot;
 
@@ -60,6 +69,8 @@ let invalidated = $state(false);
 let refused = $state(false);
 let binding: WifiRadioBinding | undefined;
 let attempt = 0;
+let awaitingStatus = false;
+let observation: AbortController | undefined;
 const radioDevice = $derived(device);
 const radioToken = $derived(incarnation);
 const radioReason = $derived(degradedReason);
@@ -77,7 +88,56 @@ function current(seq: number, captured: WifiRadioBinding): boolean {
 	}) && degradedReason === undefined;
 }
 
-async function load() {
+onDestroy(() => { attempt += 1; observation?.abort(); });
+
+async function prepare(captured: WifiRadioBinding, seq: number, chosen?: { name: string; password: string }, recover = true) {
+	const { incarnation: token } = captured;
+	if (!token) return;
+	const invoke = () => rpc.wifi.hotspotPrepare({
+		device: captured.device, incarnation: token, ...chosen,
+	});
+	let retried = false;
+	let result = await invoke();
+	if (recover && result.reason === 'current-unobserved' && current(seq, captured)) {
+		const controller = new AbortController();
+		observation = controller;
+		awaitingStatus = true;
+		const next = await waitForWifiStatus(captured.device, controller.signal);
+		await tick();
+		if (observation === controller) { observation = undefined; awaitingStatus = false; }
+		if (seq !== attempt || captured.device !== device || captured.link !== getLinkEpoch()) return;
+		if (!next?.incarnation) {
+			focusBeforeReload();
+			phase = 'unsupported';
+			acknowledged = false;
+			return;
+		}
+		if (next.incarnation !== token || !current(seq, captured)) {
+			invalidated = true;
+			acknowledged = false;
+			// A fresh load has no draft and does not inherit this recovery.
+			if (incarnation && incarnation !== token) void load(false);
+			else {
+				focusBeforeReload();
+				phase = 'load-failed';
+			}
+			return;
+		}
+		retried = true;
+		result = await invoke();
+	}
+	return { result, retried };
+}
+
+function focusBeforeReload() {
+	if (panel?.contains(document.activeElement)) cancelButton?.focus();
+}
+
+async function load(recover = true): Promise<void> {
+	focusBeforeReload();
+	observation?.abort();
+	observation = undefined;
+	awaitingStatus = false;
 	const captured = { device, incarnation, link: getLinkEpoch(), session };
 	const seq = ++attempt;
 	binding = captured;
@@ -97,11 +157,15 @@ async function load() {
 	}
 	phase = 'loading';
 	try {
-		const result = await rpc.wifi.hotspotPrepare({
-			device: captured.device, incarnation: captured.incarnation,
-		});
-		if (!current(seq, captured)) return;
+		const response = await prepare(captured, seq, undefined, recover);
+		if (!response || !current(seq, captured)) return;
+		const { result } = response;
+		if (result.error === 'radio-unverified') {
+			phase = 'unverified';
+			return;
+		}
 		if (wifiRadioChanged(result)) {
+			if (response.retried) invalidated = true;
 			refused = true;
 			phase = 'load-failed';
 			return;
@@ -124,9 +188,10 @@ $effect.pre(() => {
 	radioReason;
 	untrack(() => {
 		invalidated = binding !== undefined && !sameWifiRadio(binding, next);
+		if (awaitingStatus && binding && binding.device === next.device &&
+			binding.link === next.link && binding.incarnation !== next.incarnation) return;
 		void load();
 	});
-	return () => { attempt += 1; };
 });
 
 const nameError = $derived(
@@ -181,11 +246,17 @@ async function confirm() {
 	if (name !== loaded.name || password !== loaded.password) {
 		phase = 'saving';
 		try {
-			const result = await rpc.wifi.hotspotPrepare({
-				device: captured.device, incarnation: captured.incarnation, ...chosen,
-			});
-			if (!current(seq, captured)) return;
+			const response = await prepare(captured, seq, chosen);
+			if (!response || !current(seq, captured)) return;
+			const { result } = response;
+			if (result.error === 'radio-unverified') {
+				focusBeforeReload();
+				phase = 'unverified';
+				acknowledged = false;
+				return;
+			}
 			if (wifiRadioChanged(result)) {
+				if (response.retried) invalidated = true;
 				refused = true;
 				acknowledged = false;
 				phase = 'ready';
@@ -209,17 +280,18 @@ async function confirm() {
 
 <!-- biome-ignore lint/a11y/useSemanticElements: This warning and confirmation panel is a named action group; a fieldset introduces form-group sizing and an anonymous content box. -->
 <div
+	bind:this={panel}
 	class="border-status-warning/30 bg-status-warning/10 space-y-3 rounded-lg border p-3"
 	data-device={device}
 	data-phase={phase}
 	data-testid="hotspot-activation-confirm"
 	role="group"
-	aria-labelledby="hotspot-confirm-title-{device}"
+	aria-labelledby="hotspot-confirm-title-{uid}"
 >
 	<div class="flex items-start gap-2">
 		<TriangleAlert aria-hidden="true" class="text-status-warning mt-0.5 size-4 shrink-0" />
 		<div class="space-y-1">
-			<p id="hotspot-confirm-title-{device}" class="text-sm font-semibold">
+			<p id="hotspot-confirm-title-{uid}" class="text-sm font-semibold">
 				{firstTime ? m['hotspotConfirm.firstTimeTitle']() : m['hotspotConfirm.title']()}
 			</p>
 			{#if firstTime}
@@ -257,18 +329,18 @@ async function confirm() {
 	{:else if phase === 'load-failed'}
 		<div class="space-y-2" role="alert" data-testid="hotspot-confirm-load-failed">
 			<p class="text-destructive text-xs">{m['hotspotConfirm.loadFailed']()}</p>
-			<Button class="h-8 min-h-[var(--touch-target-min)]" onclick={load} size="sm" variant="secondary">
+			<Button class="h-8 min-h-[var(--touch-target-min)]" onclick={() => load()} size="sm" variant="secondary">
 				{m['hotspotConfirm.retry']()}
 			</Button>
 		</div>
 	{:else}
 		<div class="space-y-1.5">
-			<Label class="text-xs font-medium" for="hotspot-confirm-name-{device}">
+			<Label class="text-xs font-medium" for="hotspot-confirm-name-{uid}">
 				{m['network.hotspot.name']()}
 			</Label>
 			<div class="relative">
 				<Input
-					id="hotspot-confirm-name-{device}"
+					id="hotspot-confirm-name-{uid}"
 					class="bg-background pe-10 font-mono"
 					autocapitalize="none"
 					autocomplete="off"
@@ -298,13 +370,13 @@ async function confirm() {
 		</div>
 
 		<div class="space-y-1.5">
-			<Label class="text-xs font-medium" for="hotspot-confirm-password-{device}">
+			<Label class="text-xs font-medium" for="hotspot-confirm-password-{uid}">
 				{m['network.hotspot.password']()}
 			</Label>
 			<div class="relative">
 				<!-- Visible by default: the whole point is that it gets written down. -->
 				<Input
-					id="hotspot-confirm-password-{device}"
+					id="hotspot-confirm-password-{uid}"
 					class="bg-background pe-10 font-mono"
 					autocapitalize="none"
 					autocomplete="off"
@@ -345,9 +417,9 @@ async function confirm() {
 			</Button>
 		</div>
 
-		<label class="flex cursor-pointer items-start gap-2.5 text-xs" for="hotspot-confirm-ack-{device}">
+		<label class="flex cursor-pointer items-start gap-2.5 text-xs" for="hotspot-confirm-ack-{uid}">
 			<Checkbox
-				id="hotspot-confirm-ack-{device}"
+				id="hotspot-confirm-ack-{uid}"
 				class="mt-0.5 size-5"
 				data-testid="hotspot-confirm-ack"
 				bind:checked={acknowledged}
@@ -364,6 +436,7 @@ async function confirm() {
 
 	<div class="flex flex-wrap justify-end gap-2">
 		<Button
+			bind:ref={cancelButton}
 			class="h-9 min-h-[var(--touch-target-min)]"
 			data-testid="hotspot-confirm-cancel"
 			onclick={onCancel}

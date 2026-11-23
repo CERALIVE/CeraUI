@@ -25,7 +25,7 @@ import {
  */
 
 const DESTRUCTIVE =
-	":is([data-slot='button'], [data-slot='alert-dialog-action'])[class~='bg-destructive/10']";
+	":is([data-slot='button'], [data-slot='alert-dialog-action'], [class~='group/button'])[class~='bg-destructive/10']";
 const NAMES = ["--card", "--foreground", "--destructive"];
 const PALETTES = [
 	["light", "", tokenMap(balancedBlock(tokensCss, ".light {"), NAMES)],

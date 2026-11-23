@@ -1,4 +1,13 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	mock,
+	spyOn,
+	test,
+} from "bun:test";
+import * as nm from "../modules/network/network-manager.ts";
 
 import {
 	getWifiState,
@@ -9,11 +18,14 @@ import { startHotspotForInterface } from "../modules/wifi/wifi-hotspot-activatio
 import { stopHotspotForInterface } from "../modules/wifi/wifi-hotspot-config.ts";
 import { handleWifiMonitorEvent } from "../modules/wifi/wifi-hotspot-monitor.ts";
 import {
-	type HotspotActivationDeps,
 	isConcurrentHotspot,
 	isHotspot,
-	type WifiInterfaceWithHotspot,
 } from "../modules/wifi/wifi-hotspot-types.ts";
+import { mockActiveObservation } from "./helpers/wifi-active-observation.ts";
+import {
+	makeDeps,
+	makeHotspotIface,
+} from "./helpers/wifi-hotspot-test-setup.ts";
 
 /** Resolve-later promise + resolver, for holding fn pending in concurrency tests. */
 function deferred<T>() {
@@ -24,51 +36,12 @@ function deferred<T>() {
 	return { promise, resolve };
 }
 
-function makeHotspotIface(opts: {
-	ifname: string;
-	conn?: string | null;
-	hotspotConn?: string;
-	supportsApStaConcurrency?: boolean;
-}): WifiInterfaceWithHotspot {
-	return {
-		id: 0,
-		ifname: opts.ifname,
-		conn: opts.conn ?? null,
-		hw: "Realtek RTL8812AU",
-		available: new Map(),
-		saved: {},
-		savedAll: {},
-		...(opts.supportsApStaConcurrency
-			? { supportsApStaConcurrency: true }
-			: {}),
-		hotspot: {
-			...(opts.hotspotConn ? { conn: opts.hotspotConn } : {}),
-			availableChannels: ["auto"],
-			warnings: {},
-		},
-	};
-}
-
-function makeDeps(over: Partial<HotspotActivationDeps>): HotspotActivationDeps {
-	return {
-		nmConnect: async () => true,
-		nmConnSetFields: async () => true,
-		nmHotspot: async () => "hotspot-uuid",
-		wifiUpdateSavedConns: async () => {},
-		broadcastState: () => {},
-		setDupIpSuppression: () => {},
-		credentials: { get: () => undefined, remember: () => {} },
-		findHotspotConn: async () => undefined,
-		pruneHotspotConns: async () => {},
-		...over,
-	};
-}
-
 beforeEach(() => {
 	// Reset the shared wifiState cache + neutralize the change callback.
 	setWifiState({});
 	onWifiChange(() => {});
 });
+afterEach(() => mock.restore());
 
 describe("wifiHotspotStart — AP+STA concurrent mode", () => {
 	test("starts the AP on a virtual interface and keeps the station connection", async () => {
@@ -81,20 +54,19 @@ describe("wifiHotspotStart — AP+STA concurrent mode", () => {
 		setWifiState({ [mac]: { ...iface, mode: "station" } });
 
 		const hotspotDevices: string[] = [];
-		const fieldWrites: Array<Record<string, string>> = [];
+		const addBindingFields: Array<Readonly<Record<string, string>>> = [];
 		const dupCalls: Array<[string, boolean]> = [];
+		let observedAp = false;
 		const deps = makeDeps({
+			pollHotspotActive: async () => observedAp,
 			ensureConcurrentInterface: async () => ({
 				ifname: "clap-wlan0",
 				created: true,
 			}),
-			nmHotspot: async (device) => {
+			nmApConnAdd: async (device, _identity, fields) => {
 				hotspotDevices.push(device);
+				addBindingFields.push(fields);
 				return "hotspot-uuid";
-			},
-			nmConnSetFields: async (_uuid, fields) => {
-				fieldWrites.push(fields);
-				return true;
 			},
 			wifiUpdateSavedConns: async () => {
 				iface.hotspot.conn = "hotspot-uuid";
@@ -106,15 +78,23 @@ describe("wifiHotspotStart — AP+STA concurrent mode", () => {
 			success: true,
 		});
 		expect(hotspotDevices).toEqual(["clap-wlan0"]);
-		expect(fieldWrites).toContainEqual({
+		expect(addBindingFields).toContainEqual({
 			"connection.interface-name": "clap-wlan0",
 			"802-11-wireless.mac-address": "",
 			"802-11-wireless-security.pmf": "disable",
+			"match.path": "",
+			"connection.autoconnect": "no",
+			"connection.autoconnect-priority": "999",
+			"802-11-wireless-security.key-mgmt": "wpa-psk",
 		});
 		expect(iface.conn).toBe("station-uuid");
 		expect(dupCalls).toEqual([]);
 
-		handleWifiMonitorEvent({
+		spyOn(nm, "nmDevices").mockResolvedValue([
+			"clap-wlan0:wifi:connected:hotspot-uuid",
+		]);
+		observedAp = true;
+		await handleWifiMonitorEvent({
 			type: "connection-state",
 			connection: iface.hotspot.name ?? "",
 			state: "activated",
@@ -137,16 +117,22 @@ describe("wifiHotspotStart — AP+STA concurrent mode", () => {
 			activeConn: "hotspot-uuid",
 		};
 		const released: string[] = [];
+		mockActiveObservation((name) =>
+			name === "clap-wlan0" ? "hotspot-uuid" : undefined,
+		);
 
 		await stopHotspotForInterface(mac, iface, {
 			nmConnSetFields: async () => true,
 			nmDisconnect: async () => true,
-			releaseConcurrentInterface: async (ifname) => released.push(ifname),
+			releaseConcurrentInterface: async (ifname) => {
+				released.push(ifname);
+				return true;
+			},
 			broadcastState: () => {},
 			setDupIpSuppression: () => {
 				throw new Error("station suppression must stay untouched");
 			},
-			rescan: async () => true,
+			rescan: async () => {},
 		});
 
 		expect(iface.conn).toBe("station-uuid");
@@ -158,7 +144,7 @@ describe("wifiHotspotStart — AP+STA concurrent mode", () => {
 // ─── 1. failed start rolls back to station ───────────────────────────────────
 
 describe("wifiHotspotStart — rollback on failure", () => {
-	test("failed nmHotspot rolls back: returns failure and cache stays station", async () => {
+	test("failed nmApConnAdd rolls back: returns failure and cache stays station", async () => {
 		const mac = "dc:a6:32:00:00:01";
 		const iface = makeHotspotIface({ ifname: "wlan0" });
 
@@ -167,7 +153,7 @@ describe("wifiHotspotStart — rollback on failure", () => {
 
 		const dupCalls: Array<[string, boolean]> = [];
 		const deps = makeDeps({
-			nmHotspot: async () => undefined, // activation fails
+			nmApConnAdd: async () => undefined, // creation fails
 			setDupIpSuppression: (ifname, on) => dupCalls.push([ifname, on]),
 		});
 
@@ -199,7 +185,7 @@ describe("wifiHotspotStart — NM-confirmed mode flip", () => {
 
 		let broadcasts = 0;
 		const deps = makeDeps({
-			nmHotspot: async () => "hotspot-uuid",
+			nmApConnAdd: async () => "hotspot-uuid",
 			// Simulate handleHotspotConn binding the created connection.
 			wifiUpdateSavedConns: async () => {
 				iface.hotspot.conn = "hotspot-uuid";
@@ -221,7 +207,12 @@ describe("wifiHotspotStart — NM-confirmed mode flip", () => {
 
 		// Feed the NM monitor confirmation event for the hotspot connection.
 		const connName = iface.hotspot.name ?? "";
-		handleWifiMonitorEvent({
+		spyOn(nm, "nmDevices").mockResolvedValue([
+			"wlan1:wifi:connected:hotspot-uuid",
+		]);
+		iface.activeConn = iface.hotspot.conn ?? null;
+		iface.activeMode = "ap";
+		await handleWifiMonitorEvent({
 			type: "connection-state",
 			connection: connName,
 			state: "activated",
@@ -242,13 +233,15 @@ describe("wifiHotspotStart — NM-confirmed mode flip", () => {
 		// instantly — this stands in for "advance time 12s".
 		const realSetTimeout = globalThis.setTimeout;
 		globalThis.setTimeout = ((fn: () => void) => {
+			const timer = realSetTimeout(() => {}, 0);
+			clearTimeout(timer);
 			fn();
-			return 0 as unknown as ReturnType<typeof setTimeout>;
+			return timer;
 		}) as typeof globalThis.setTimeout;
 
 		try {
 			const deps = makeDeps({
-				nmHotspot: async () => "hotspot-uuid",
+				nmApConnAdd: async () => "hotspot-uuid",
 				wifiUpdateSavedConns: async () => {
 					iface.hotspot.conn = "hotspot-uuid";
 				},
@@ -282,10 +275,10 @@ describe("wifiHotspotStart — device lock", () => {
 		const mac = "dc:a6:32:77:88:99";
 		const iface = makeHotspotIface({ ifname: "wlan3" });
 
-		// First op holds the lock while nmHotspot stays pending.
+		// First op holds the lock while nmApConnAdd stays pending.
 		const gate = deferred<string | undefined>();
 		const firstDeps = makeDeps({
-			nmHotspot: () => gate.promise,
+			nmApConnAdd: () => gate.promise,
 		});
 		const first = startHotspotForInterface(mac, iface, firstDeps);
 

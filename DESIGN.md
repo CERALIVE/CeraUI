@@ -95,6 +95,12 @@ Rules:
   and signal are always visible; hardware tags may collapse behind a disclosure.
 - **IH-4** — staleness beats freshness theatre: a stale reading renders as stale
   (dimmed/marked), never as a fresh-looking number (`.impeccable.md` Principle 4).
+- **IH-5** — Fill with lime (the primary color) only the single primary action of a
+  surface; other actions on that surface use outline or ghost. This holds on every
+  surface, not only modem rows; a destructive confirmation keeps its `destructive`
+  button. In System Logs, Storage Save and the logs toolbar's Export logs are
+  filled and every other action, Support bundle included, is outline or ghost;
+  Follow stays outline, because a filled lime button reads as going live (DF-32).
 
 ---
 
@@ -454,7 +460,8 @@ state; the `success`/`warning`/`error`/`neutral` pill tint and a Lucide shield
 glyph (check, alert, x, question) in that tone only reinforce it, and "unknown"
 is neutral, never an alarm. The badge word itself uses `text-foreground`: the
 shared status-pill text tones measured below WCAG AA 4.5:1 for `error` (light
-and dark) and `neutral` (dark), and axe fails them on this surface; the glyph
+and dark, until `app.css` mixed that tone toward the foreground) and `neutral`
+(dark), and axe fails them on this surface; the glyph
 needs only the 3:1 non-text ratio. Other Badge call sites are unchanged. The
 remaining-days phrase is the only foreground text in the detail line. The row
 is a labelled `role="group"`, wraps instead of overflowing in every locale,
