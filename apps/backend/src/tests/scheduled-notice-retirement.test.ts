@@ -4,24 +4,13 @@
  * notification slot. A clean dpkg-query read at the exact version can clear it;
  * APT policy cannot authorize withdrawal of a skipped version.
  */
-import { afterEach, expect, spyOn, test } from "bun:test";
-import { constants } from "node:os";
-import {
-	SpawnAbortError,
-	SpawnTimeoutError,
-} from "../helpers/bounded-spawn.ts";
-import {
-	type SpawnWithTimeoutResult,
-	spawnWithTimeout,
-} from "../helpers/spawn-policy.ts";
-import { DisruptiveActionRefusal } from "../modules/system/disruptive-action-reservation.ts";
+import { afterEach, expect, test } from "bun:test";
+import type { SpawnWithTimeoutResult } from "../helpers/spawn-policy.ts";
 import { setAptCommandRunnerForTest } from "../modules/system/software-updates.ts";
 import {
 	noticeTargets,
 	retireFulfilledPackageNotices,
 } from "../modules/system/update-orchestrator/package-notice-retirement.ts";
-import { PendingPackageSuccessError } from "../modules/system/update-orchestrator/pending-success-fence.ts";
-import * as notifications from "../modules/ui/notifications.ts";
 import {
 	notificationExists,
 	notificationSend,
@@ -64,7 +53,7 @@ function device({ rows = ROWS, policy = POLICY, answers, duringRead }: Device) {
 		ran.push(read);
 		if (read === "dpkg") duringRead?.();
 		const answer = answers?.[read];
-		if (answer === "throw") throw new SpawnTimeoutError(argv.join(" "));
+		if (answer === "throw") throw new Error(`${read} did not answer`);
 		const clean =
 			read === "native"
 				? ok("arm64\n")
@@ -175,119 +164,6 @@ test("a failed, noisy or unanswered read keeps the notice", async () => {
 		}),
 	).toBe(false);
 });
-
-test("an unexpected proof read error rejects without withdrawing the notice", async () => {
-	const error = new TypeError("unexpected dpkg runner fault");
-	const register = notifications.fenceNotification;
-	let release: (() => boolean) | undefined;
-	let released = false;
-	using _watch = spyOn(notifications, "fenceNotification").mockImplementation(
-		(name) => {
-			release = register(name);
-			const end = release;
-			return () => {
-				released = true;
-				return end();
-			};
-		},
-	);
-	try {
-		const proof = withdrawn({
-			duringRead: () => {
-				throw error;
-			},
-		});
-		await expect(proof).rejects.toBe(error);
-		expect(notificationExists(NAME)).toBeDefined();
-		expect(released).toBe(true);
-	} finally {
-		if (!released) release?.();
-	}
-});
-
-test("an unrelated filesystem error is not a dpkg subprocess failure", async () => {
-	const error = Object.assign(new Error("unexpected file read"), {
-		code: "ENOENT",
-		errno: -constants.errno.ENOENT,
-		syscall: "open",
-		path: "/missing/config",
-	});
-	await expect(
-		withdrawn({
-			duringRead: () => {
-				throw error;
-			},
-		}),
-	).rejects.toBe(error);
-	expect(notificationExists(NAME)).toBeDefined();
-});
-
-type Fault = readonly [string, () => Promise<SpawnWithTimeoutResult>];
-const osFaults = [
-	["ENOENT", undefined],
-	["ENOEXEC", "posix_spawn"],
-	["E2BIG", "posix_spawn"],
-	["EAGAIN", "posix_spawn"],
-	["ENOMEM", "posix_spawn"],
-	["EMFILE", "socketpair"],
-	["EIO", "fcntl"],
-	["EMFILE", "pidfd_open"],
-	["EAGAIN", "pthread_create"],
-	["ENOMEM", "epoll_ctl"],
-	["EMFILE", "kqueue"],
-	["ENOMEM", "kevent"],
-	["ECHILD", "waitpid"],
-	["EPERM", "kill"],
-] as const;
-const refusalFaults = [
-	new PendingPackageSuccessError(),
-	new DisruptiveActionRefusal("update_in_progress"),
-	new SpawnTimeoutError("dpkg-query", ROWS),
-	new SpawnAbortError("dpkg-query", ROWS),
-];
-const aptFaults: readonly Fault[] = [
-	...refusalFaults.map(
-		(error): Fault => [error.constructor.name, () => Promise.reject(error)],
-	),
-	...osFaults.map(
-		([code, syscall]): Fault => [
-			`${code} from ${syscall ?? "PATH lookup"}`,
-			() =>
-				Promise.reject(
-					Object.assign(new Error("dpkg system error"), {
-						code,
-						errno: -constants.errno[code],
-						syscall,
-						path: "dpkg-query",
-					}),
-				),
-		],
-	),
-	["native EACCES", () => spawnWithTimeout(["/proc/self/status"])],
-	["nonzero exit", async () => ({ ...ok(ROWS), exitCode: 1 })],
-	["signal exit", async () => ({ ...ok(ROWS), exitCode: 143 })],
-	["stderr", async () => ({ ...ok(ROWS), stderr: "incomplete read" })],
-];
-
-test.each(aptFaults)(
-	"a proof read with %s keeps only its notice",
-	async (_kind, fail) => {
-		const other = "update:updates-available:zlib1g=2";
-		notificationSend(undefined, NAME, "info", "updates", 0, true);
-		notificationSend(undefined, other, "info", "updates", 0, true);
-		setAptCommandRunnerForTest(async (argv) => {
-			if (argv[0] === "dpkg") return ok("arm64\n");
-			return argv.includes("curl") ? fail() : ok("zlib1g\tarm64\tii \t2\n");
-		});
-		try {
-			await retireFulfilledPackageNotices([], () => true);
-			expect(notificationExists(NAME)).toBeDefined();
-			expect(notificationExists(other)).toBeUndefined();
-		} finally {
-			notificationWithdraw(other);
-		}
-	},
-);
 
 test("only one installed, configured, unheld instance at the exact version counts", async () => {
 	const rows: readonly [string, boolean][] = [

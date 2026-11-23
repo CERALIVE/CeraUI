@@ -1279,12 +1279,6 @@ async function runPackageCheckCycle(): Promise<void> {
 					: [],
 				// Even a newer check whose announcement was deduped supersedes this proof.
 				() => generation === packageCheckGeneration,
-			).catch((error: unknown) =>
-				reportNoticeSafely(() =>
-					logger.warn("update-orchestrator: notice retirement failed", {
-						error,
-					}),
-				),
 			);
 		return;
 	}

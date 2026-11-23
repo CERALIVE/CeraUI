@@ -93,7 +93,6 @@ import {
 } from "./apt-transport.ts";
 import {
 	installFamily,
-	isAptSubprocessFailure,
 	normalizeAptCommandFailure,
 } from "./apt-transport-result.ts";
 import {
@@ -275,7 +274,6 @@ export async function runAptCommand(
 	argv: string[],
 	timeoutMs: number,
 	signal?: AbortSignal,
-	failureMode: "normalize" | "throw-unexpected" = "normalize",
 ): Promise<SpawnWithTimeoutResult> {
 	assertDisruptiveActionFree();
 	pendingPackageSuccess.assertEffectsAllowed();
@@ -290,8 +288,7 @@ export async function runAptCommand(
 	} catch (error) {
 		if (
 			error instanceof PendingPackageSuccessError ||
-			error instanceof DisruptiveActionRefusal ||
-			(failureMode === "throw-unexpected" && !isAptSubprocessFailure(error))
+			error instanceof DisruptiveActionRefusal
 		)
 			throw error;
 		return normalizeAptCommandFailure(error);

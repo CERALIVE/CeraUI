@@ -328,16 +328,14 @@ partial read made absence look like proof. Owner:
 **The rule.** After a successful capable check, a name is withdrawn only if one
 clean `dpkg-query` shows each named instance `ii ` at the exact named version.
 That is one read, not an atomic snapshot. An outside `dpkg` or `apt` run during
-or after the read can cause a false withdrawal only for names whose package
-moved away from its named version; the next check re-announces pending updates
-under main's own name. A newer version never qualifies; separate APT policy
-reads cannot prove a coherent set of candidates. Candidates
-are this process's live slots and main's `update_updates_available` event ids.
+or after the read can invalidate a qualifying row even at the same version,
+for example by putting the package on hold. A later successful package check
+that finds actionable updates announces them under its normal name, which need
+not match the withdrawn name. A newer version never qualifies; separate APT
+policy reads cannot prove a coherent set of candidates. Candidates are this
+process's live slots and main's `update_updates_available` event ids.
 Keep the name if it shares a row with the check, if a new package check starts,
 or if the name is shown or dismissed during the read (`fenceNotification`).
-The proof releases its watch even if the read throws. Expected command faults
-keep the name and let the pass continue. Unexpected faults end the proof pass
-and are logged without failing the package check.
 Do not add receipts, ledgers or lineage, do not
 conclude anything from absence, do not run it on legacy images (`=unknown` ids are
 unprovable) and never at startup or login. Full contract and limits:

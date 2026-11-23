@@ -1623,12 +1623,14 @@ Limits, each a stale banner as on main, which a dismissal clears:
 - a tab not connected at any withdrawal while the name is still a candidate (the
   32 most recent ids; Clear logs empties them): an old open tab may need one reload
   or dismissal;
-- the time until the next successful capable check after the install;
+- the time until the next successful capable check after the install.
 
 One `dpkg-query` is one read, not an atomic snapshot. A `dpkg` or `apt` run
-outside CeraUI during or after the read can cause a wrong withdrawal, but only
-for names containing a package that moved away from its named version in that
-run. The next check re-announces any pending updates under main's own name.
+outside CeraUI during or after the read can invalidate a qualifying row and
+cause a wrong withdrawal even without a version change, for example by putting
+the package on hold or leaving a same-version reinstall unconfigured. A later
+successful package check that finds actionable updates announces them under
+its normal name, which need not be the name that was withdrawn.
 
 Coverage: `tests/ceralive-update-notice-restart.test.ts` (real backend processes,
 authenticated WebSocket tabs of both decoders, the real scheduler tick): a seeded

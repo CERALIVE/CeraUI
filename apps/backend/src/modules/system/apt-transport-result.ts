@@ -24,43 +24,6 @@ export function installFamily(
 }
 const failures = new WeakMap<SpawnWithTimeoutResult, SpawnTimeoutError>();
 
-// Bun's fixed argv/stdio runner reports OS failures separately from JS errors.
-const subprocessSyscalls = new Set([
-	"socketpair",
-	"fcntl",
-	"posix_spawn",
-	"pidfd_open",
-	"pthread_create",
-	"epoll_ctl",
-	"kqueue",
-	"kevent",
-	"waitpid",
-	"kill",
-]);
-
-export function isAptSubprocessFailure(error: unknown): boolean {
-	if (error instanceof SpawnTimeoutError) return true;
-	if (
-		!(error instanceof Error) ||
-		!("errno" in error) ||
-		typeof error.errno !== "number" ||
-		!Number.isInteger(error.errno) ||
-		error.errno === 0 ||
-		!("code" in error) ||
-		typeof error.code !== "string"
-	)
-		return false;
-	const syscall = "syscall" in error ? error.syscall : undefined;
-	if (typeof syscall === "string") return subprocessSyscalls.has(syscall);
-	// Bare argv[0] not found on PATH has a path but no syscall.
-	return (
-		syscall === undefined &&
-		error.code === "ENOENT" &&
-		"path" in error &&
-		typeof error.path === "string"
-	);
-}
-
 export function normalizeAptCommandFailure(
 	error: unknown,
 ): SpawnWithTimeoutResult {

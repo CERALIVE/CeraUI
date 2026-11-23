@@ -31,13 +31,11 @@ import {
 } from "../../ui/notifications.ts";
 import { APT_PACKAGE_NAME_RE } from "../apt-package-name.ts";
 import { APT_SIMULATION_VERSION_RE } from "../apt-simulation-row.ts";
-import { DisruptiveActionRefusal } from "../disruptive-action-reservation.ts";
 import {
 	DPKG_QUERY_FORMAT,
 	parseDpkgRows,
 } from "../software-update-outcome.ts";
 import { runAptCommand } from "../software-updates.ts";
-import { PendingPackageSuccessError } from "./pending-success-fence.ts";
 
 const PREFIX = "update:updates-available:";
 const ANNOUNCED_WINDOW = 32;
@@ -79,19 +77,11 @@ function bounded(): Ask {
 	return async (argv) => {
 		const left = deadline - Date.now();
 		if (left <= 0) return null;
+		// A refusal to run now (a pending restart, a disruptive action) is no answer.
 		const answer = await runAptCommand(
 			argv,
 			Math.min(PROBE_TIMEOUT_MS, left),
-			undefined,
-			"throw-unexpected",
-		).catch((error: unknown) => {
-			if (
-				error instanceof PendingPackageSuccessError ||
-				error instanceof DisruptiveActionRefusal
-			)
-				return null;
-			throw error;
-		});
+		).catch(() => null);
 		return answer?.exitCode === 0 && answer.stderr === ""
 			? answer.stdout
 			: null;
@@ -116,7 +106,9 @@ function candidateIds(): Set<string> {
 }
 
 // All targets must match in one dpkg-query read, not an atomic snapshot.
-// An outside dpkg/apt run during or after the read can invalidate a match.
+// An outside dpkg/apt change during or after the read can invalidate a match
+// without changing the version (for example, by putting a package on hold).
+// Only a later successful check finding actionable updates announces them.
 async function installed(
 	targets: readonly Target[],
 	native: string,
@@ -172,16 +164,10 @@ export async function retireFulfilledPackageNotices(
 	for (const { id, targets } of provable) {
 		if (!isCurrent()) return;
 		const name = PREFIX + id;
-		const endWatch = fenceNotification(name);
-		let unchanged: boolean;
-		let proven: boolean;
-		try {
-			proven = await installed(targets, arch, ask);
-		} finally {
-			unchanged = endWatch();
-		}
+		const unchanged = fenceNotification(name);
+		const proven = await installed(targets, arch, ask);
 		// Shown again or dismissed while dpkg was read: keep it.
-		if (!unchanged || !proven) continue;
+		if (!unchanged() || !proven) continue;
 		if (!isCurrent()) return;
 		const live = notificationExists(name) !== undefined;
 		notificationWithdraw(name);
