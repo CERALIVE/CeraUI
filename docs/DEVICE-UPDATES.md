@@ -1624,8 +1624,11 @@ Limits, each a stale banner as on main, which a dismissal clears:
   32 most recent ids; Clear logs empties them): an old open tab may need one reload
   or dismissal;
 - the time until the next successful capable check after the install;
-- a manual dpkg change between the read and the withdrawal (at most one pass); the
-  next check raises the notice again if its claim became true again.
+
+One `dpkg-query` is one read, not an atomic snapshot. A `dpkg` or `apt` run
+outside CeraUI during or after the read can cause a wrong withdrawal, but only
+for names containing a package that moved away from its named version in that
+run. The next check re-announces any pending updates under main's own name.
 
 Coverage: `tests/ceralive-update-notice-restart.test.ts` (real backend processes,
 authenticated WebSocket tabs of both decoders, the real scheduler tick): a seeded

@@ -274,6 +274,7 @@ export async function runAptCommand(
 	argv: string[],
 	timeoutMs: number,
 	signal?: AbortSignal,
+	failureMode: "normalize" | "throw" = "normalize",
 ): Promise<SpawnWithTimeoutResult> {
 	assertDisruptiveActionFree();
 	pendingPackageSuccess.assertEffectsAllowed();
@@ -287,6 +288,7 @@ export async function runAptCommand(
 		return result;
 	} catch (error) {
 		if (
+			failureMode === "throw" ||
 			error instanceof PendingPackageSuccessError ||
 			error instanceof DisruptiveActionRefusal
 		)

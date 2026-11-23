@@ -325,10 +325,13 @@ neither shipped decoder carries anything about the issuance on removal, and any
 partial read made absence look like proof. Owner:
 `modules/system/update-orchestrator/package-notice-retirement.ts`.
 
-**The rule.** After a successful capable check, a name is withdrawn only when its
-own claim is false for every possible issuer: one clean `dpkg-query` shows each
-named instance `ii ` at the exact named version. A newer version never qualifies;
-separate APT policy reads cannot prove a coherent set of candidates. Candidates
+**The rule.** After a successful capable check, a name is withdrawn only if one
+clean `dpkg-query` shows each named instance `ii ` at the exact named version.
+That is one read, not an atomic snapshot. An outside `dpkg` or `apt` run during
+or after the read can cause a false withdrawal only for names whose package
+moved away from its named version; the next check re-announces pending updates
+under main's own name. A newer version never qualifies; separate APT policy
+reads cannot prove a coherent set of candidates. Candidates
 are this process's live slots and main's `update_updates_available` event ids.
 Keep the name if it shares a row with the check, if a new package check starts,
 or if the name is shown or dismissed during the read (`fenceNotification`).

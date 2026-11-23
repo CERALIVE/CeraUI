@@ -1,10 +1,11 @@
 /// <reference types="bun" />
 /*
  * Each case runs the real withdrawal pass over a scripted device and a real
- * notification slot. A clean dpkg snapshot at the exact version can clear it;
+ * notification slot. A clean dpkg-query read at the exact version can clear it;
  * APT policy cannot authorize withdrawal of a skipped version.
  */
 import { afterEach, expect, test } from "bun:test";
+import { SpawnTimeoutError } from "../helpers/bounded-spawn.ts";
 import type { SpawnWithTimeoutResult } from "../helpers/spawn-policy.ts";
 import { setAptCommandRunnerForTest } from "../modules/system/software-updates.ts";
 import {
@@ -53,7 +54,7 @@ function device({ rows = ROWS, policy = POLICY, answers, duringRead }: Device) {
 		ran.push(read);
 		if (read === "dpkg") duringRead?.();
 		const answer = answers?.[read];
-		if (answer === "throw") throw new Error(`${read} did not answer`);
+		if (answer === "throw") throw new SpawnTimeoutError(argv.join(" "));
 		const clean =
 			read === "native"
 				? ok("arm64\n")
@@ -163,6 +164,17 @@ test("a failed, noisy or unanswered read keeps the notice", async () => {
 			answers: { compare: { stdout: "x\n" } },
 		}),
 	).toBe(false);
+});
+
+test("an unexpected proof read error rejects without withdrawing the notice", async () => {
+	const error = new TypeError("unexpected dpkg runner fault");
+	const proof = withdrawn({
+		duringRead: () => {
+			throw error;
+		},
+	});
+	await expect(proof).rejects.toBe(error);
+	expect(notificationExists(NAME)).toBeDefined();
 });
 
 test("only one installed, configured, unheld instance at the exact version counts", async () => {
