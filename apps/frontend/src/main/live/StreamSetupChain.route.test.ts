@@ -5,6 +5,7 @@ import { render } from "@testing-library/svelte";
 import { describe, expect, it, vi } from "vitest";
 
 import type { StreamingOptimismState } from "$lib/rpc/streaming-optimism.svelte";
+import { idleStartGate } from "$lib/streaming/idle-start-gate";
 import type { ConfigRow } from "./StreamSettingsCard.svelte";
 import StreamSetupChain from "./StreamSetupChain.svelte";
 
@@ -58,15 +59,16 @@ function rows(route?: ConfigRow["route"]): ConfigRow[] {
 function renderChain(configRows: ConfigRow[]) {
 	return render(StreamSetupChain, {
 		props: {
-			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
-			caps: undefined,
-			sources: SOURCES,
+			gate: idleStartGate({
+				config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
+				caps: undefined,
+				sources: SOURCES,
+				netif: undefined,
+				isConnected: true,
+				networkIngest: null,
+				pipelines: undefined,
+			}),
 			netif: undefined,
-			isConnected: true,
-			networkIngest: null,
-			pipelines: undefined,
-			relays: undefined,
-			managedSlots: undefined,
 			configRows,
 			isStreaming: false,
 			optimismState: "idle" as StreamingOptimismState,

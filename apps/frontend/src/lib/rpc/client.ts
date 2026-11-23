@@ -657,11 +657,13 @@ function createRPCProxy<T extends object>(
 	const handler: ProxyHandler<(...args: unknown[]) => Promise<unknown>> = {
 		// Handle function calls: rpc.auth.login(input)
 		apply(_target, _thisArg, args) {
-			const input = args[0];
-			const timeout = PROCEDURE_TIMEOUT_MS[path.join(".")];
-			return timeout !== undefined
-				? client.call(path, input, timeout)
-				: client.call(path, input);
+			const [input, onSent] = args;
+			return client.call(
+				path,
+				input,
+				PROCEDURE_TIMEOUT_MS[path.join(".")],
+				typeof onSent === "function" ? () => onSent() : undefined,
+			);
 		},
 
 		// Handle property access: rpc.auth or rpc.auth.login
@@ -731,6 +733,7 @@ export interface TypedRPC {
 	streaming: {
 		start: (
 			input: StreamingConfigInput,
+			onSent?: () => void,
 		) => Promise<StreamingStartOutputExtended>;
 		stop: () => Promise<StreamingStopOutput>;
 		setBitrate: (input: BitrateInput) => Promise<BitrateOutput>;
@@ -1055,18 +1058,6 @@ export interface TypedRPC {
  * Usage: await rpc.auth.login({ password: "xxx" })
  */
 export const rpc: TypedRPC = createRPCProxy<TypedRPC>(rpcClient);
-
-export function sendGuardedStreamStart(
-	input: Parameters<TypedRPC["streaming"]["start"]>[0],
-	onSent: () => void,
-): ReturnType<TypedRPC["streaming"]["start"]> {
-	return rpcClient.call(
-		["streaming", "start"],
-		input,
-		PROCEDURE_TIMEOUT_MS["streaming.start"],
-		onSent,
-	);
-}
 
 /**
  * Initialize the RPC client

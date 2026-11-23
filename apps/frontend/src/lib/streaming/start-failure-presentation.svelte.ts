@@ -24,12 +24,13 @@ export function consumeStartRetry(generation: number): boolean {
 
 // The engine sends its notice before the RPC can return the same attempt ID.
 // Keep the notice as a fallback if the RPC fails or Live no longer owns it.
-export function holdStartFailureNotice(): () => Promise<void> {
+export function holdStartFailureNotice(): void {
 	awaitingReply += 1;
-	return async () => {
-		await tick();
-		awaitingReply -= 1;
-	};
+}
+
+export async function releaseStartFailureNotice(): Promise<void> {
+	await tick();
+	awaitingReply -= 1;
 }
 
 export function startFailureNoticePending(): boolean {

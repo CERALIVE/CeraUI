@@ -38,7 +38,7 @@ import {
 	resolveAppliedBitrate,
 } from '$lib/rpc/live-apply-reconcile';
 import { NotSentError } from '$lib/rpc/rpc-error';
-import { getLinkEpoch, getStreamActivity } from '$lib/rpc/session-epoch.svelte';
+import { getStreamActivity } from '$lib/rpc/session-epoch.svelte';
 import {
 	getStopStuckBannerVisible,
 	getStreamingAttemptGeneration,
@@ -88,7 +88,7 @@ import {
 import { reconcileStartSource } from '$lib/streaming/effective-source';
 import { buildEncoderSetConfig } from '$lib/streaming/encoderConfig';
 import { encoderSaveErrorMessage } from '$lib/streaming/encoderSaveError';
-import { type IdleStartGateInput, idleStartGate } from '$lib/streaming/idle-start-gate';
+import { idleStartGate } from '$lib/streaming/idle-start-gate';
 import { canLiveSwitchInput, isAudioInputId } from '$lib/streaming/liveAudioSwitch';
 import { expectedOutputCodec, resolveRoute, routeCopy } from '$lib/streaming/outputFormat';
 import {
@@ -108,20 +108,14 @@ import {
 	resolvedAudioLabel,
 } from '$lib/streaming/sourceSummary';
 import { pipelinesFromSources } from '$lib/streaming/sources-view-model';
-import {
-	isEngineStartFailure,
-	NEXT_STEP_ACTION,
-	type StartFailureNextStep,
-	startFailureMessage,
-	startFailureNextStep,
-	startFailureRetryKey,
-} from '$lib/streaming/start-failure-copy';
+import { startFailureMessage } from '$lib/streaming/start-failure-copy';
 import {
 	claimStartFailurePresentation,
 	clearStartRetry,
 	consumeStartRetry,
 	holdStartFailureNotice,
 	recordStartRetry,
+	releaseStartFailureNotice,
 } from '$lib/streaming/start-failure-presentation.svelte';
 import { buildStartConfig } from '$lib/streaming/startStreaming';
 import { showUnconfirmedStreamStop, startOptimismSuperseded } from '$lib/streaming/unconfirmed-stream';
@@ -350,50 +344,31 @@ $effect(() => () => {
 	if (refusalToastId !== undefined) toast.dismiss(refusalToastId);
 });
 
-// Try again repeats the Start only where the idle Live bar itself offers Start
-// (`idleStartAdmitted`: no live or summary cockpit, no unresolved stream
-// outcome, no Start in flight), through the bar's own readiness gate
-// decided from the same inputs at the moment of the tap (a link may have dropped
-// since the refusal), with the implicit sole camera folded in as the bar does.
-// It does nothing when the view is gone or a newer refusal (or none) is current.
-function runNextStep(step: StartFailureNextStep, attempt: string) {
-	if (!viewMounted || getStreamingStartFailure()?.attemptId !== attempt) return false;
-	switch (step) {
-		case 'tryAgain': return false; // dispatched with a send receipt below
-		case 'restartBox':
-			if (!idleStartAdmitted || !idleStartGate(readIdleGateInputs()).canStart) return false;
-			powerOpen = true;
-			break;
-		case 'openNetwork': void handleManageLinks(); break;
-		case 'openSetup': return handleOpenSetup();
-	}
-	return true;
-}
-
 function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 	const attempt = failure.attemptId;
 	if (!claimStartFailurePresentation(attempt)) return;
 	if (refusalToastId !== undefined) toast.dismiss(refusalToastId);
-	const engine = isEngineStartFailure(failure);
-	const repeated = consumeStartRetry(getStreamingAttemptGeneration()) && engine;
-	const admitted = idleStartAdmitted && idleGate.canStart;
+	const generation = getStreamingAttemptGeneration();
+	const repeated = consumeStartRetry(generation);
 	const gate = idleGate.readiness;
+	const admitted = idleStartAdmitted && !gate.blocking;
 	const blockedReason = streamOutcomeUnknown
 		? m["live.unconfirmedStream.body"]()
 		: gate.primaryFixGate
 			? resolveMessageKey(gate.gates[gate.primaryFixGate].reasonKey ?? '')
 			: undefined;
-	const step = startFailureNextStep(failure, repeated, admitted);
-	const message = startFailureMessage(failure, repeated, admitted, blockedReason);
+	const { step, message, logKey } = startFailureMessage(failure, repeated, admitted, blockedReason);
 	if (step === undefined) {
-		toast.error(message, viewLogsToast(startFailureRetryKey(failure)));
+		toast.error(message, viewLogsToast(logKey));
 		return;
 	}
 	const at = Date.now();
-	const link = getLinkEpoch();
 	const activity = getStreamActivity();
-	const generation = getStreamingAttemptGeneration();
 	const intent = refusedStart?.id === attempt ? refusedStart.intent : undefined;
+	const close = () => toast.dismiss(id);
+	const isCurrent = () => viewMounted && getStreamingStartFailure()?.attemptId === attempt;
+	const canActInSession = () => isCurrent() && activity === getStreamActivity() &&
+		generation === getStreamingAttemptGeneration() && idleStartAdmitted;
 	const id = toast.error<typeof StartRefusalActions>(message, {
 		// A separate corner keeps later notices from stacking this card offscreen.
 		position: 'bottom-left',
@@ -402,48 +377,52 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 		description: StartRefusalActions,
 		componentProps: {
 			message,
-			close: () => toast.dismiss(id),
+			close,
 			primary: {
-				label: m[NEXT_STEP_ACTION[step]](),
+				label: m[`live.startFailure.action.${step}`](),
 				activate: (onBlocked?: () => void) => {
-					const current = () =>
-						viewMounted && getStreamingStartFailure()?.attemptId === attempt &&
-						link === getLinkEpoch() && activity === getStreamActivity() &&
-						generation === getStreamingAttemptGeneration();
 					if (step === 'tryAgain') {
 						if (!intent || retryQueued) return false;
-						const beforeSend = () => current() && idleStartAdmitted &&
+						// A queued retry must still pass the bar's gate at actual dispatch.
+						const beforeSend = () => canActInSession() &&
 							intent.configGeneration === getStartConfigGeneration() &&
 							intent.audio === audioOverride &&
 							intent.destination === currentDestinationFingerprint() &&
-							!getIsStreaming() && getStreamingOptimismState() === 'idle' &&
-							checkRetryGate(intent.implicitSource);
+							!streamBusy() && retryReady(intent);
 						if (!beforeSend()) return false;
 						void dispatchStart(intent, {
 							beforeSend,
-							onSent: () => toast.dismiss(id),
+							onSent: close,
 							onBlocked,
 						});
 						return true;
 					}
-					if (step === 'restartBox' && !current()) return false;
-					if (!runNextStep(step, attempt)) return false;
-					toast.dismiss(id);
+					if (step === 'restartBox') {
+						if (!canActInSession() || !retryReady()) return false;
+						powerOpen = true;
+					} else if (!isCurrent()) {
+						return false;
+					} else if (step === 'openNetwork') {
+						void handleManageLinks();
+					} else if (!handleOpenSetup()) {
+						return false;
+					}
+					close();
 					return true;
 				},
 			},
 			logs: () => {
 				viewLogs(at);
-				toast.dismiss(id);
+				close();
 			},
 		},
 	});
 	refusalToastId = id;
 }
 
-function checkRetryGate(source: string | undefined) {
-	const gate = idleStartGate(readIdleGateInputs());
-	return gate.canStart && gate.source === source;
+function retryReady(intent?: StartIntent) {
+	const gate = readIdleGate();
+	return !gate.readiness.blocking && (!intent || gate.effective.soleCamera?.id === intent.implicitSource);
 }
 
 $effect(() => {
@@ -701,8 +680,8 @@ const pipelines = $derived(pipelinesFromSources(getSources()));
 
 // The readiness inputs, built once: the idle bar renders from them and Try again
 // on a refusal decides from them, so the two can never drift apart.
-function readIdleGateInputs(): IdleStartGateInput {
-	return {
+function readIdleGate() {
+	return idleStartGate({
 		config: getConfig(),
 		caps: getCapabilities(),
 		sources: getSources(),
@@ -712,10 +691,9 @@ function readIdleGateInputs(): IdleStartGateInput {
 		pipelines,
 		relays,
 		managedSlots: getManagedIngestAccounts(),
-	};
+	});
 }
-const idleGateInputs = $derived(readIdleGateInputs());
-const idleGate = $derived(idleStartGate(idleGateInputs));
+const idleGate = $derived(readIdleGate());
 
 // Pipeline metadata for the effective source — used to capability-gate the
 // resolution/framerate overrides when persisting the encoder draft.
@@ -1116,15 +1094,20 @@ function currentDestinationFingerprint() {
 	return fingerprintForValidation(getConfig(), getRelays(), getManagedIngestAccounts());
 }
 
+function streamBusy() {
+	return getStreamingOptimismState() !== 'idle' || getIsStreaming();
+}
+
 function handleStart(overrides: { source?: string } = {}) {
-	const gate = idleStartGate(readIdleGateInputs());
-	if (getStreamingOptimismState() !== 'idle' || getIsStreaming() || !gate.canStart) return false;
+	const gate = readIdleGate();
+	if (streamBusy() || gate.readiness.blocking) return false;
 
 	// Fold the implicit sole-camera source (T10) in, then reconcile source →
 	// pipeline off the sources snapshot so the FE recognition gate and the
 	// readiness source gate cannot disagree; the backend re-resolves the routing
 	// for itself (T3 streamingStartProcedure reads `input.source ?? getConfig().source`).
-	const source = gate.source ?? overrides.source;
+	const implicitSource = gate.effective.soleCamera?.id;
+	const source = implicitSource ?? overrides.source;
 	const overridden = source !== undefined && config ? { ...config, source } : config;
 	const startBase = reconcileStartSource(overridden, getSources());
 
@@ -1140,7 +1123,7 @@ function handleStart(overrides: { source?: string } = {}) {
 		config: result.config,
 		configGeneration: getStartConfigGeneration(),
 		audio: audioOverride,
-		implicitSource: gate.source,
+		implicitSource,
 		destination: currentDestinationFingerprint(),
 	});
 	return true;
@@ -1148,12 +1131,12 @@ function handleStart(overrides: { source?: string } = {}) {
 
 async function dispatchStart(intent: StartIntent, retry?: RetryDispatch) {
 	let attempt: number | undefined;
-	let releaseNotice: (() => Promise<void>) | undefined;
 	const begin = () => {
 		refusedStart = undefined;
 		startStreamingOptimism();
 		attempt = getStreamingAttemptGeneration();
-		releaseNotice = holdStartFailureNotice();
+		holdStartFailureNotice();
+		return attempt;
 	};
 	if (retry) retryQueued = true;
 	else {
@@ -1164,8 +1147,7 @@ async function dispatchStart(intent: StartIntent, retry?: RetryDispatch) {
 		const startResult = await startStreaming(intent.config, retry && {
 			beforeSend: retry.beforeSend,
 			onSent: () => {
-				begin();
-				recordStartRetry(getStreamingAttemptGeneration());
+				recordStartRetry(begin());
 				retry.onSent();
 			},
 		});
@@ -1193,12 +1175,10 @@ async function dispatchStart(intent: StartIntent, retry?: RetryDispatch) {
 		// The socket refused dispatch, so this attempt cannot have started, and it
 		// was no retry the device refused.
 		clearStartRetry(attempt);
-		const reason =
-			error instanceof Error ? error.message : 'unknown_error';
-		revertStreamingOptimism(reason, attempt);
+		revertStreamingOptimism(error.message, attempt);
 	} finally {
 		if (retry) retryQueued = false;
-		void releaseNotice?.();
+		if (attempt !== undefined) void releaseStartFailureNotice();
 	}
 }
 
@@ -1375,15 +1355,11 @@ const configRows = $derived<ConfigRow[]>([
 			<UpdateRefusalBand refusal={updateRefusal} />
 		{/if}
 		<IdleCockpit
-			config={idleGateInputs.config}
-			caps={idleGateInputs.caps}
-			sources={idleGateInputs.sources}
-			netif={idleGateInputs.netif}
-			isConnected={idleGateInputs.isConnected}
-			networkIngest={idleGateInputs.networkIngest}
-			pipelines={idleGateInputs.pipelines}
-			relays={idleGateInputs.relays}
-			managedSlots={idleGateInputs.managedSlots}
+			{config}
+			sources={getSources()}
+			netif={getNetif()}
+			{pipelines}
+			gate={idleGate}
 			{configRows}
 			{isStreaming}
 			optimismState={streamingOptimismState}

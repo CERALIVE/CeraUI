@@ -43,15 +43,7 @@
  * payload only, never persisted before the operator acts.
  */
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
-import type {
-	CapabilitiesMessage,
-	ConfigMessage,
-	NetifMessage,
-	NetworkIngest,
-	Pipelines,
-	RelayMessage,
-	SourcesMessage,
-} from '@ceraui/rpc/schemas';
+import type { NetifMessage } from '@ceraui/rpc/schemas';
 import { ChevronRight, Lock } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
@@ -61,8 +53,7 @@ import {
 	type GateStatus,
 	READINESS_SOURCE_REASON,
 } from '$lib/streaming/go-live-readiness';
-import { idleStartGate } from '$lib/streaming/idle-start-gate';
-import type { ManagedIngestAccount } from '$lib/streaming/receiver-experience';
+import type { IdleStartGate } from '$lib/streaming/idle-start-gate';
 import { isSectionLocked } from '$lib/streaming/streamingLockPolicy';
 
 import LiveBar from './LiveBar.svelte';
@@ -70,19 +61,8 @@ import StreamControlButton from './StreamControlButton.svelte';
 import type { ConfigRow } from './StreamSettingsCard.svelte';
 
 interface Props {
-	// ── Readiness inputs (threaded from LiveView getters) ──────────────────────
-	config: ConfigMessage | undefined;
-	caps: CapabilitiesMessage | undefined;
-	sources: SourcesMessage | undefined;
+	gate: IdleStartGate;
 	netif: NetifMessage | undefined;
-	isConnected: boolean;
-	networkIngest: NetworkIngest | null | undefined;
-	pipelines: Pipelines | undefined;
-	// ── Destination-catalog validation (C7) — loaded snapshots or undefined-while-
-	//    loading; the destination gate warns on a stale relay id + blocks a revoked
-	//    slot only once these are loaded. ──────────────────────────────────────────
-	relays: RelayMessage | undefined;
-	managedSlots: readonly ManagedIngestAccount[] | undefined;
 	// ── Config rows (migrated from StreamSettingsCard — same testids + locks) ───
 	configRows: ConfigRow[];
 	isStreaming: boolean;
@@ -100,15 +80,8 @@ interface Props {
 }
 
 const {
-	config,
-	caps,
-	sources,
+	gate,
 	netif,
-	isConnected,
-	networkIngest,
-	pipelines,
-	relays,
-	managedSlots,
 	configRows,
 	isStreaming,
 	optimismState,
@@ -119,15 +92,12 @@ const {
 	onGoNetwork,
 }: Props = $props();
 
-const gate = $derived(
-	idleStartGate({ config, caps, sources, netif, isConnected, networkIngest, pipelines, relays, managedSlots }),
-);
 const { soleCamera, effectiveSourceId } = $derived(gate.effective);
 const readiness = $derived(gate.readiness);
 
 // Start gating reads the readiness verdict directly (engine gate included — it is
 // owned by the Start disabled reason + CapabilityTierBanner, not a row).
-const canStart = $derived(gate.canStart && optimismState !== 'starting');
+const canStart = $derived(!readiness.blocking && optimismState !== 'starting');
 const startDisabledReason = $derived(
 	optimismState === 'starting'
 		? m["live.starting"]()
@@ -144,7 +114,7 @@ function handleStartClick() {
 	// sole-camera id into the payload. When config.source is already set,
 	// soleCamera is undefined so `source` is undefined and the backend keeps the
 	// persisted selection.
-	onStart({ source: gate.source });
+	onStart({ source: soleCamera?.id });
 }
 
 // The dot's tone. `unchecked` is a hollow ring, so it reads as "not known yet"

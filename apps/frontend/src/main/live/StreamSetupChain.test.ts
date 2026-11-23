@@ -32,6 +32,7 @@ import { fireEvent, render, within } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { StreamingOptimismState } from "$lib/rpc/streaming-optimism.svelte";
+import { idleStartGate } from "$lib/streaming/idle-start-gate";
 import type { ManagedIngestAccount } from "$lib/streaming/receiver-experience";
 import type { ConfigRow } from "./StreamSettingsCard.svelte";
 import StreamSetupChain from "./StreamSetupChain.svelte";
@@ -163,7 +164,7 @@ interface Overrides {
 
 function renderChain(over: Overrides = {}) {
 	const h = handlers();
-	const props = {
+	const inputs = {
 		config: over.config ?? ({ relay_server: "fra" } as ConfigMessage),
 		caps: over.caps,
 		sources: over.sources ?? makeSources(capture("cam-1", "HDMI Capture")),
@@ -173,6 +174,10 @@ function renderChain(over: Overrides = {}) {
 		pipelines: over.pipelines,
 		relays: over.relays,
 		managedSlots: over.managedSlots,
+	};
+	const props = {
+		gate: idleStartGate(inputs),
+		netif: inputs.netif,
 		configRows: configRows(h, over.rowOptions),
 		isStreaming: over.isStreaming ?? false,
 		optimismState: over.optimismState ?? ("idle" as StreamingOptimismState),
