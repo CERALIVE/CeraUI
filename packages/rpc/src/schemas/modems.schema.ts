@@ -1792,6 +1792,8 @@ export const modemSchema = z.object({
 	availability_reason: z.string().optional(),
 	// Display label for the active SIM slot on a multi-slot board.
 	slot_label: z.string().optional(),
+	// Short USB port label for display; not unique across controllers.
+	port_label: z.string().optional(),
 	recovery_state: modemRecoveryStateSchema.optional(),
 	usb_mode: usbCompositionModeSchema.optional(),
 	recommended_usb_mode: usbCompositionModeSchema.optional(),

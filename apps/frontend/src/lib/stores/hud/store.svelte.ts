@@ -24,6 +24,7 @@ import {
 	getWifi,
 } from "$lib/rpc/subscriptions.svelte";
 import { onDisplayRefresh } from "$lib/stores/display-refresh.svelte";
+import { getLinkNames } from "$lib/stores/link-names.svelte";
 import type {
 	HudConnectionState,
 	HudSources,
@@ -223,6 +224,7 @@ function createHudStore(): HudStore {
 			timestamps,
 			nowTick,
 			staleInterfaceIds(freshness, nowTick),
+			getLinkNames(),
 		);
 
 	return {

@@ -688,7 +688,7 @@ $effect(() => {
 								{:else}
 									<RadioTowerIcon class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
 								{/if}
-								<span class="truncate font-medium">{link.label}</span>
+								<span class="min-w-0 font-medium" style:overflow-wrap="anywhere">{link.label}</span>
 							</span>
 							<span class="flex shrink-0 items-center gap-3">
 								<Badge variant="speed" kbps={link.throughputKbps} stale={link.isStale} />

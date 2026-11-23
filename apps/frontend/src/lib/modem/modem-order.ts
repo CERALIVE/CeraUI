@@ -1,6 +1,5 @@
 /**
- * The order the Network page lists modems in, shared with the link names so
- * "SIM 2" is the second modem there too. Pure, type imports only.
+ * Hardware-first display order for the Network modem inventory.
  */
 import type { Modem } from "@ceraui/rpc/schemas";
 

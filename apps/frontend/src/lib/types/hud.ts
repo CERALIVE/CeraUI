@@ -60,8 +60,10 @@ export interface LinkSignal {
 	 * every link that reports nothing at all.
 	 */
 	signalTier?: ModemSignalTier;
-	/** Operator name, SSID, or a generic fallback label. */
+	/** Shared operator-facing link label. */
 	label: string;
+	/** Ifname for correlation with a twin's hardware row. */
+	identity?: string | undefined;
 	isConnected: boolean;
 	isStale: boolean;
 	/**

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import type { LinkTelemetryMessage, ModemList, NetifMessage } from "@ceraui/rpc/schemas";
 import type { WebSocketRoute } from "@playwright/test";
 
 import { expect, test } from "./fixtures/index.js";
@@ -193,4 +194,90 @@ test.describe("Task 21 — ingest stats panel", () => {
 			"Result: PASS — stale link dimmed + badged, fresh link unaffected.",
 		]);
 	});
+});
+
+test("a standalone modems frame updates the bonded name on Live, HUD and Network", async ({ page }) => {
+	const roster = (network: string): ModemList => ({
+		"31": {
+			ifname: "wwan3", name: "RM520N - 58201", model: "RM520N",
+			network_type: { supported: ["5G"], active: "5G" },
+			status: { network, network_type: "5G", signal: 58, roaming: false, connection: "connected" },
+		},
+	});
+	const netif: NetifMessage = { wwan3: { ip: "192.0.2.2", enabled: true, tp: 0 } };
+	let socket: WebSocketRoute | undefined;
+	let initialized = false;
+	await page.routeWebSocket(/\/ws(?:\?|$)/, (ws) => {
+		socket = ws;
+		const server = ws.connectToServer();
+		server.onMessage((message) => {
+			if (typeof message !== "string") { ws.send(message); return; }
+			const frame = JSON.parse(message);
+			if (frame.modems) delete frame.modems;
+			if (frame.netif) frame.netif = netif;
+			if (frame.status) {
+				delete frame.status.linkTelemetry;
+				delete frame.status.is_streaming;
+				if (!initialized) {
+					frame.status.modems = roster("Northwind");
+					frame.netif = netif;
+					initialized = true;
+				} else {
+					delete frame.status.modems;
+				}
+			}
+			ws.send(JSON.stringify(frame));
+		});
+	});
+	await page.goto("/");
+	await ensureAuthenticated(page);
+	await navigateTo(page, "live");
+	if (!socket) throw new Error("App socket did not connect");
+	const sample = (rtt: number): LinkTelemetryMessage => ({
+		links: [{ conn_id: "0", link_id: "modem-31", iface: "wwan3", rtt_ms: rtt, nak_count: 0, weight_percent: 100, stale: false }],
+	});
+	socket.send(JSON.stringify({ status: { is_streaming: true, linkTelemetry: sample(20) } }));
+	const row = page.locator('[data-testid="ingest-row"][data-iface="wwan3"]');
+	const name = row.locator("[data-link-name]");
+	await expect(name).toContainText("Northwind");
+
+	const carrier = "Harbor Cell with an exceptionally long operator name for narrow screens";
+	socket.send(JSON.stringify({ modems: roster(carrier) }));
+	await page.locator("[data-hud-region]").click();
+	const details = page.getByRole("dialog");
+	const hudName = details.getByText(carrier, { exact: false });
+	await expect(hudName).toBeVisible();
+	await details.getByRole("button", { name: "Close", exact: true }).click();
+	await expect(details).toBeHidden();
+	// No new aggregate status or telemetry frame yet: only Live used to lag.
+	await expect(name).toContainText(carrier);
+	await expect(name).toHaveText(`${carrier} · RM520N`);
+
+	socket.send(JSON.stringify({ status: { linkTelemetry: sample(23) } }));
+	await expect(row.getByTestId("ingest-rtt")).toHaveText("23 ms");
+	socket.send(JSON.stringify({ status: { is_streaming: false } }));
+	const summary = page.getByTestId("ingest-stats");
+	const history = summary.locator("[data-session-link-name]");
+	await expect(history).toHaveText(`Northwind · RM520N → ${carrier} · RM520N`);
+	await expect(summary.getByText("2 samples", { exact: true })).toBeVisible();
+	const nameCell = summary.locator("[data-session-link-name-cell]");
+	const contribution = summary.getByTestId("ingest-contribution-row");
+	const [nameBounds, cellBounds, rowBounds] = await Promise.all([
+		history.boundingBox(), nameCell.boundingBox(), contribution.boundingBox(),
+	]);
+	if (!nameBounds || !cellBounds || !rowBounds) throw new Error("Summary row did not lay out");
+	expect(cellBounds.width).toBeGreaterThanOrEqual(rowBounds.width - 1);
+	expect(nameBounds.x + nameBounds.width).toBeLessThanOrEqual(rowBounds.x + rowBounds.width + 1);
+	expect(await history.evaluate((el) => {
+		const text = new Range();
+		text.selectNodeContents(el);
+		const textBounds = text.getBoundingClientRect();
+		const cellBounds = el.parentElement?.getBoundingClientRect();
+		return cellBounds !== undefined && textBounds.bottom <= cellBounds.bottom + 1 &&
+			textBounds.right <= cellBounds.right + 1;
+	})).toBe(true);
+
+	await navigateTo(page, "network");
+	const card = page.locator('[data-testid="bonded-link-card"][data-link-id="wwan3"]');
+	await expect(card.getByText(`${carrier} · RM520N`, { exact: true })).toBeVisible();
 });

@@ -139,9 +139,16 @@ describe("networkRename", () => {
 		expect(networkRename("eth1")).toBe("Ethernet 2");
 	});
 	// A USB radio named after its MAC used to read as "Wi-Fi 28".
-	it("names interfaces named after their MAC address by the MAC's tail", () => {
-		expect(networkRename("wlx020000002f27")).toBe("Wi-Fi (2f27)");
-		expect(networkRename("wlx02000000b83e")).toBe("Wi-Fi (b83e)");
-		expect(networkRename("enx00e04c680001")).toBe("Ethernet (0001)");
-	});
+	it.each([
+		["wlx020000002f27", "Wi-Fi (2f27)"],
+		["wlx02000000b83e", "Wi-Fi (b83e)"],
+		["enx00e04c680001", "Ethernet (0001)"],
+		["wwx00e04c680001", "Modem (0001)"],
+		["wlx020000002g27", "wlx020000002g27"],
+	])(
+		"labels %s without interpreting a MAC tail as an index",
+		(iface, label) => {
+			expect(networkRename(iface)).toBe(label);
+		},
+	);
 });

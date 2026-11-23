@@ -19,6 +19,7 @@ import type { LinkTelemetryEntry } from "@ceraui/rpc/schemas";
 /** One sampled link inside a {@link SessionSample}. */
 export interface SessionSampleLink {
 	iface: string;
+	link_id?: string | undefined;
 	/** A stale link counts as down for uptime/drop purposes. */
 	stale: boolean;
 	/** Round-trip time at sample time, ms. */
@@ -52,6 +53,7 @@ export interface SessionSample {
 /** Per-link rollup entry: the share of the session the link was carrying. */
 export interface SessionLinkRollup {
 	iface: string;
+	link_id?: string | undefined;
 	/** Percent of samples the link was present and fresh (0–100, integer). */
 	uptimePercent: number;
 	/** Mean bond weight share while the link was present (0–100, integer). */
@@ -104,8 +106,7 @@ function asCumulativeBytes(value: unknown): number | undefined {
 
 /**
  * Build a {@link SessionSample} from the applied bitrate and a telemetry frame's
- * links. `undefined`/invalid bitrate collapses to 0; only `iface` + `stale` are
- * retained (RTT/NAK/weight are live-only and not part of the session summary).
+ * links. `undefined`/invalid bitrate collapses to 0.
  *
  * `bytesSentTotal` is the ONE field that must not collapse to 0 on absence: a
  * zero would be reported to the operator as "you transferred nothing".
@@ -116,7 +117,12 @@ export function createSample(
 		| ReadonlyArray<
 				Pick<
 					LinkTelemetryEntry,
-					"iface" | "stale" | "rtt_ms" | "nak_count" | "weight_percent"
+					| "iface"
+					| "link_id"
+					| "stale"
+					| "rtt_ms"
+					| "nak_count"
+					| "weight_percent"
 				>
 		  >
 		| undefined,
@@ -130,6 +136,7 @@ export function createSample(
 		...(cumulative === undefined ? {} : { bytesSentTotal: cumulative }),
 		links: (links ?? []).map((l) => ({
 			iface: l.iface,
+			...(l.link_id ? { link_id: l.link_id } : {}),
 			stale: l.stale === true,
 			rtt: asCount(l.rtt_ms),
 			nak: asCount(l.nak_count),
@@ -138,10 +145,11 @@ export function createSample(
 	};
 }
 
-/** A link is "up" in a sample when it is present and not stale. */
-function isUp(sample: SessionSample, iface: string): boolean {
-	const link = sample.links.find((l) => l.iface === iface);
-	return link !== undefined && !link.stale;
+/** Legacy observations must never alias an identified link, even on the same ifname. */
+export function sessionLinkKey(
+	link: Pick<LinkTelemetryEntry, "iface" | "link_id">,
+): string {
+	return link.link_id ? `id:${link.link_id}` : `iface:${link.iface}`;
 }
 
 /**
@@ -185,20 +193,16 @@ export function computeSessionRollup(
 			? Math.max(0, last.capturedAt - first.capturedAt)
 			: 0;
 
-	// Interfaces in first-seen order across the whole session.
-	const order: string[] = [];
-	const seen = new Set<string>();
+	// First-seen identity order, with the most recent observed ifname for support.
+	const observed = new Map<string, SessionSampleLink>();
 	for (const s of samples) {
 		for (const l of s.links) {
-			if (!seen.has(l.iface)) {
-				seen.add(l.iface);
-				order.push(l.iface);
-			}
+			observed.set(sessionLinkKey(l), l);
 		}
 	}
 
 	let dropCount = 0;
-	const links: SessionLinkRollup[] = order.map((iface) => {
+	const links: SessionLinkRollup[] = Array.from(observed, ([key, latest]) => {
 		let upSamples = 0;
 		let wasUp = false;
 		let presentSamples = 0;
@@ -208,13 +212,13 @@ export function computeSessionRollup(
 		for (let i = 0; i < samples.length; i++) {
 			const sample = samples[i];
 			if (sample === undefined) continue;
-			const up = isUp(sample, iface);
+			const link = sample.links.find((l) => sessionLinkKey(l) === key);
+			const up = link !== undefined && !link.stale;
 			if (up) upSamples++;
 			// Count a drop only on a real up→down edge (not the initial sample).
 			if (i > 0 && wasUp && !up) dropCount++;
 			wasUp = up;
 
-			const link = sample.links.find((l) => l.iface === iface);
 			if (link !== undefined) {
 				presentSamples++;
 				weightSum += asCount(link.weight);
@@ -223,7 +227,8 @@ export function computeSessionRollup(
 			}
 		}
 		return {
-			iface,
+			iface: latest.iface,
+			...(latest.link_id ? { link_id: latest.link_id } : {}),
 			uptimePercent: Math.round((upSamples / sampleCount) * 100),
 			contribution:
 				presentSamples > 0 ? Math.round(weightSum / presentSamples) : 0,
@@ -245,7 +250,11 @@ export function computeSessionRollup(
 
 /** Serialise a rollup to a stable, pretty-printed JSON string (device-local). */
 export function rollupToJson(rollup: SessionRollup): string {
-	return JSON.stringify(rollup, null, 2);
+	return JSON.stringify(
+		{ ...rollup, links: rollup.links.map(({ link_id: _id, ...link }) => link) },
+		null,
+		2,
+	);
 }
 
 /** Escape a CSV field per RFC 4180 (quote + double inner quotes when needed). */

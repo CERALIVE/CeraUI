@@ -47,6 +47,7 @@ import {
 interface Props {
 	/** Every WiFi radio (record key → interface) — both station and hotspot mode. */
 	wifiRadios: [string, WifiInterface][];
+	linkName?: (ifname: string) => string;
 	/** Per-interface telemetry: bond membership (`enabled`), static `ip`. */
 	netif: NetifMessage | undefined;
 	/** Whole-app staleness latch: the WS has been down past the global threshold. */
@@ -62,7 +63,7 @@ interface Props {
 	onOpenCountry: () => void;
 }
 
-const { wifiRadios, netif, isFullyStale, staleInterfaces, onConnect, onOpenCountry }: Props =
+const { wifiRadios, linkName, netif, isFullyStale, staleInterfaces, onConnect, onOpenCountry }: Props =
 	$props();
 
 function activeWifiNetwork(iface: WifiInterface) {
@@ -189,7 +190,7 @@ $effect(() => {
 								{#if isHotspot}
 									{iface.hotspot?.name || iface.ifname}
 								{:else}
-									{iface.ifname}
+									{linkName?.(iface.ifname) ?? iface.ifname}
 								{/if}
 							</p>
 							<WifiModeBadge device={id} mode={modeView.displayMode} />
@@ -205,7 +206,7 @@ $effect(() => {
 							{:else if isHotspot}
 								{m["network.view.hotspot"]()} · {iface.ifname}
 							{:else if connected && net}
-								{m["network.view.connected"]()} · {net.ssid}
+								{m["network.view.connected"]()}{#if !linkName}{' · '}{net.ssid}{/if}
 							{:else}
 								{m["network.view.disconnected"]()}
 							{/if}

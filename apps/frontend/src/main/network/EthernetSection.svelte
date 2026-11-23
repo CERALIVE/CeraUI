@@ -23,6 +23,7 @@ import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 import * as AlertDialog from '$lib/components/ui/alert-dialog';
 import { Button } from '$lib/components/ui/button';
 import { isLinkLocalIpv4 } from '$lib/helpers/ip-classification';
+import { interfaceLabel } from '$lib/helpers/link-names';
 import { cn } from '$lib/utils';
 
 import { deriveSharedLanRow, type EthernetClientZoneState } from './ethernet-role-view';
@@ -30,6 +31,7 @@ import { deriveSharedLanRow, type EthernetClientZoneState } from './ethernet-rol
 interface Props {
 	/** NetworkView applies the marker + modem-claim handover in section-assignment.ts. */
 	wiredEntries: [string, NetifEntry][];
+	linkName?: (ifname: string) => string;
 	/** Whole-app staleness latch: the WS has been down past the global threshold. */
 	isFullyStale: boolean;
 	/** ifnames whose own telemetry aged out while siblings stayed fresh (Task 22). */
@@ -37,7 +39,7 @@ interface Props {
 	onConfigure: (name: string) => void;
 }
 
-const { wiredEntries, isFullyStale, staleInterfaces, onConfigure }: Props = $props();
+const { wiredEntries, linkName = interfaceLabel, isFullyStale, staleInterfaces, onConfigure }: Props = $props();
 
 // Bandwidth footgun guard: the wired link is usually the fattest member of the
 // bond, so excluding it can gut an in-flight stream's throughput — hence the
@@ -177,7 +179,7 @@ const ZONE_ICON = {
      dongle/router-cellular/modem-net locks compare a plain row element-for-element
      against a checked-in golden. -->
 {#snippet portName(name: string)}
-	<p class="truncate text-sm font-medium">{name}</p>
+	<p class="truncate text-sm font-medium" title={name}>{linkName(name)}</p>
 {/snippet}
 
 <!-- ───────────── Ethernet / interfaces ───────────── -->

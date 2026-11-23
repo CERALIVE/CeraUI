@@ -140,6 +140,7 @@ import {
 
 interface Props {
 	modemEntries: [string, Modem][];
+	linkCorrelation?: (ifname: string) => string | undefined;
 	/** Live per-interface telemetry; supplies bond state (`enabled`/`ip`). */
 	netif: NetifMessage | undefined;
 	/** Whole-app staleness latch: the WS has been down past the global threshold. */
@@ -163,6 +164,7 @@ interface Props {
 
 const {
 	modemEntries,
+	linkCorrelation,
 	netif,
 	isFullyStale,
 	staleInterfaces,
@@ -530,6 +532,9 @@ async function openAdminUi(rowId: string): Promise<void> {
 						>
 							{primary}
 						</p>
+						{#if linkCorrelation?.(modem.ifname)}
+							<p class="text-muted-foreground break-all font-mono text-xs">{modem.ifname}</p>
+						{/if}
 						<!-- Where it is in its lifecycle, who it is registered with, and only
 						     THEN which slot it is in. The CLASS band moved into the disclosure
 						     at todo 64: it says the same word on nearly every row, an operator
