@@ -16,7 +16,7 @@
  */
 
 import { m } from "@ceraui/i18n/svelte";
-import type { Modem } from "@ceraui/rpc/schemas";
+import type { ConnectionStatus, Modem } from "@ceraui/rpc/schemas";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -44,7 +44,7 @@ vi.mock("svelte-sonner", () => ({
 }));
 
 function modem(
-	connection: string,
+	connection: ConnectionStatus,
 	config: Partial<NonNullable<Modem["config"]>> = {},
 ): Modem {
 	return {
@@ -66,7 +66,7 @@ function modem(
 			autoconfig: false,
 			...config,
 		},
-	} as Modem;
+	};
 }
 
 function mount(value: Modem) {
@@ -85,6 +85,10 @@ function roamingSwitch(): HTMLElement {
 
 function autoApnSwitch(): HTMLElement {
 	return screen.getByRole("switch", { name: /Automatic APN/i });
+}
+
+function saveButton(): HTMLElement {
+	return screen.getByRole("button", { name: m["network.modem.save"]() });
 }
 
 beforeAll(() => {
@@ -119,8 +123,40 @@ describe("the reconnect notice", () => {
 		configure.mockResolvedValue({ success: true });
 	});
 
-	it("says nothing about a form nobody has edited", async () => {
+	it("says nothing about a form nobody has edited", () => {
 		mount(modem("connected"));
+		expect(notice()).toBeNull();
+	});
+
+	it("says nothing when a connected modem with a SIM already uses Automatic APN", () => {
+		mount({
+			...modem("connected", { apn: "", autoconfig: true }),
+			sim_presence: "present",
+		});
+
+		expect(saveButton().hasAttribute("disabled")).toBe(false);
+		expect(notice()).toBeNull();
+	});
+
+	it("proposes Automatic APN without predicting a write when no profile was reported", () => {
+		mount({
+			...modem("connected"),
+			config: undefined,
+			sim_presence: "present",
+		});
+
+		expect(autoApnSwitch().getAttribute("aria-checked")).toBe("true");
+		expect(notice()).toBeNull();
+	});
+
+	it("hides the notice when clearing a required manual APN disables Save", async () => {
+		mount(modem("connected"));
+
+		await fireEvent.input(screen.getByRole("textbox", { name: /^APN$/ }), {
+			target: { value: "" },
+		});
+
+		expect(saveButton().hasAttribute("disabled")).toBe(true);
 		expect(notice()).toBeNull();
 	});
 
@@ -154,19 +190,38 @@ describe("the reconnect notice", () => {
 		await waitFor(() => expect(notice()).toBeNull());
 	});
 
-	it("stays away on a modem that is only SEARCHING", async () => {
-		// The board's real state: no bearer is up, so there is nothing to
-		// interrupt and nothing to warn about.
-		mount(modem("searching"));
+	it.each<ConnectionStatus>(["searching", "registered"])(
+		"stays away when the modem is %s rather than connected",
+		async (status) => {
+			// No bearer is up, so there is nothing to interrupt or warn about.
+			mount(modem(status));
 
+			await fireEvent.click(roamingSwitch());
+
+			// The scan affordance only exists while roaming is on, so its arrival is
+			// proof the toggle really took — without it this would pass on a dead click.
+			await waitFor(() =>
+				expect(screen.queryByTestId("modem-scan-button")).not.toBeNull(),
+			);
+			expect(notice()).toBeNull();
+		},
+	);
+
+	it("hides the notice while the save is in flight", async () => {
+		const reply = Promise.withResolvers<{ success: boolean }>();
+		configure.mockReturnValueOnce(reply.promise);
+		mount(modem("connected"));
 		await fireEvent.click(roamingSwitch());
+		expect(notice()).not.toBeNull();
 
-		// The scan affordance only exists while roaming is on, so its arrival is
-		// proof the toggle really took — without it this would pass on a dead click.
-		await waitFor(() =>
-			expect(screen.queryByTestId("modem-scan-button")).not.toBeNull(),
-		);
-		expect(notice()).toBeNull();
+		try {
+			await fireEvent.click(saveButton());
+			expect(saveButton().hasAttribute("disabled")).toBe(true);
+			expect(notice()).toBeNull();
+		} finally {
+			reply.resolve({ success: false });
+		}
+		await screen.findByTestId("modem-save-refused");
 	});
 
 	it("stays away while the dialog says the modem has no SIM", () => {
@@ -179,17 +234,11 @@ describe("the reconnect notice", () => {
 		const simless: Modem = {
 			...modem("connected", { apn: "", autoconfig: undefined }),
 			no_sim: true,
-		} as Modem;
+		};
 		mount(simless);
 
 		expect(screen.queryByTestId("modem-no-sim-banner")).not.toBeNull();
-		expect(
-			(
-				screen.getByRole("button", {
-					name: m["network.modem.save"](),
-				}) as HTMLButtonElement
-			).disabled,
-		).toBe(true);
+		expect(saveButton().hasAttribute("disabled")).toBe(true);
 		expect(notice()).toBeNull();
 	});
 });

@@ -109,6 +109,16 @@ unconfigured. The recommendation itself is a `Badge` pill
 (`modem-autoapn-recommended`), not a parenthetical in the switch's label — which
 keeps the control's accessible name and its visible text identical.
 
+**The reconnect notice predicts an available Save, not just a different draft.**
+Use the same disabled and loading gates as the Save button. The notice requires
+a connected modem, a reported profile, and a change to the normalized
+connect-time fields, compared with the same RPC helper the backend uses.
+An untouched or reverted draft, a missing SIM, invalid APN or usage threshold,
+and a save already in flight cannot show it. The current backend always
+reports an explicit Auto APN flag in a config block. If the whole block is
+absent, the Automatic proposal still appears, but does not imply a writable
+profile or a reconnect. Coverage: `ModemConfigDialog.reconnect.test.ts`.
+
 ## …AND AN ABSENT MEASUREMENT STATES ITS OWN REASON [EXISTS]
 
 `lib/modem/signal-detail.ts` (pure, rune-free) renders the three normalized

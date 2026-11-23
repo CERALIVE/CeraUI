@@ -37,6 +37,9 @@ already disabled them). Three outcomes, one condition.
   dongle verdicts, and a comment-stripped source gate gives the "no second copy"
   claim a mechanism instead of a promise. Rule-E proof: restoring the retired
   copy reddens 11 of its 15 tests.
+  The no-SIM state also disables Save, so it cannot appear alongside the
+  reconnect notice, even if the last reported connection was `connected`.
+  The notice uses Save's existing eligibility gate, not a second SIM check.
 - **The device is authoritative, and the UI agrees with it rather than substituting
   for it.** The backend lowers `enabled` and stamps `NETIF_ERR_NOSIM`, so the link
   leaves `genSrtlaIpList()` AND leaves `BondedLinksSection` on the next state read
