@@ -190,6 +190,7 @@ export async function confirmHybridActivation(
 	targetIfname: string,
 	uuid: string,
 	channel: HybridStationChannel,
+	receipt?: import("./wifi-hotspot-activity.ts").NmActivationReceipt,
 ): Promise<boolean> {
 	if (!(await revalidateHybridStationChannel(parentIfname, channel)))
 		return false;
@@ -200,12 +201,16 @@ export async function confirmHybridActivation(
 	]).catch(() => "");
 	const props = await nmDeviceProp(
 		targetIfname,
-		"GENERAL.STATE,GENERAL.NM-MANAGED,GENERAL.CON-UUID",
+		receipt
+			? "GENERAL.STATE,GENERAL.NM-MANAGED,GENERAL.CON-UUID,GENERAL.CON-PATH"
+			: "GENERAL.STATE,GENERAL.NM-MANAGED,GENERAL.CON-UUID",
 	);
 	return (
 		props?.[0] === "100 (connected)" &&
 		props[1] === "yes" &&
 		props[2] === uuid &&
+		(!receipt ||
+			(receipt.ifname === targetIfname && props[3] === receipt.path)) &&
 		/^\s*type\s+AP\s*$/m.test(info) &&
 		(!channel.sameChannelOnly ||
 			Number(/^\s*channel\s+\d+\s+\((\d+(?:\.\d+)?) MHz\)/m.exec(info)?.[1]) ===

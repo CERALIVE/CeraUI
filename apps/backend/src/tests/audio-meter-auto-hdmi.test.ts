@@ -19,12 +19,16 @@ import type {
 	Subscription,
 } from "@ceralive/cerastream";
 import { SCHEMA_VERSION } from "@ceralive/cerastream";
-import type { AudioLevelMessage, CaptureDevice } from "@ceraui/rpc/schemas";
+import type { AudioLevelMessage } from "@ceraui/rpc/schemas";
 import { AUDIO_SOURCE_AUTO } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 
 import { initMockService, stopMockService } from "../mocks/mock-service.ts";
-import { getConfig } from "../modules/config.ts";
+import {
+	getConfig,
+	getConfigFilePath,
+	setConfigFilePath,
+} from "../modules/config.ts";
 import {
 	getAudioDevices,
 	isMeterPreferenceDevicePresent,
@@ -41,7 +45,13 @@ import {
 	settleAudioMeterBridge,
 	stopAudioMeterBridge,
 } from "../modules/streaming/audio-meter-bridge.ts";
-import type { AutoAsrcResolution } from "../modules/streaming/auto-audio.ts";
+import {
+	type AutoAsrcResolution,
+	getResolvedAsrc,
+	resetAutoAudioState,
+	resolveAutoAsrcFromLiveState,
+	setResolvedAsrcFromStart,
+} from "../modules/streaming/auto-audio.ts";
 import { clearCapabilitiesCache } from "../modules/streaming/capabilities.ts";
 import {
 	initPipelines,
@@ -49,10 +59,18 @@ import {
 } from "../modules/streaming/pipelines.ts";
 import {
 	applyObservedEngineDevices,
+	refreshEngineDeviceCache,
 	resetEngineDeviceCache,
 } from "../modules/streaming/sources.ts";
+import {
+	getStreamLifecycleState,
+	seedStreamLifecycleState,
+} from "../modules/streaming/stream-lifecycle-status.ts";
 import { updateStatus } from "../modules/streaming/streaming.ts";
-import { setConfigProcedure } from "../rpc/procedures/streaming.procedure.ts";
+import {
+	applySwitchInputFollow,
+	setConfigProcedure,
+} from "../rpc/procedures/streaming.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 
 /*
@@ -272,37 +290,46 @@ describe("resolveMeterPreference — 'Auto' names the SAME card the start path w
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 
-function bridgeHarness(meterPreference: () => string | null) {
+function bridgeHarness(
+	meterPreference?: () => string | null,
+	schemaVersion = "0.21.0",
+) {
 	let handler: EventHandler | undefined;
 	const broadcasts: AudioLevelMessage[] = [];
 	const reloads: unknown[] = [];
 
 	const subscription: Subscription = {
-		result: { topics: ["audio-level"] },
+		result: { subscribed: ["audio-level"] },
 		close: () => {},
 	};
-	const client: CerastreamClient = {
+	const client = {
 		subscribeEvents: async (_params, h) => {
 			handler = h;
 			return subscription;
 		},
 		close: async () => {},
-		hello: { schema_version: "0.9.0" },
+		hello: {
+			protocol: "cerastream-ipc/1",
+			schema_version: schemaVersion,
+			engine_version: "2026.9.8",
+		},
 		rawRequest: async (_method: string, params?: unknown) => {
 			reloads.push(params);
 			return {};
 		},
-		// biome-ignore lint/suspicious/noExplicitAny: the bridge uses only these five members.
-	} as any;
+	} satisfies Pick<CerastreamClient, "subscribeEvents" | "close" | "hello"> & {
+		rawRequest: (method: string, params?: unknown) => Promise<unknown>;
+	};
 
-	const deps: AudioMeterBridgeDeps = {
-		connect: async () => client,
+	const deps: Partial<AudioMeterBridgeDeps> = {
+		// Only the subscription, handshake and raw reload are exercised.
+		connect: async () => client as unknown as CerastreamClient,
 		connectOptions: {},
 		broadcast: (payload) => broadcasts.push(payload),
-		// Production wiring, with the Auto resolution injected.
-		meterPreference,
-		meterPreferencePresent: () => false,
-		meterSilenced: () => false,
+		// Otherwise exercise the live selection and inventory with the real defaults.
+		...(meterPreference === undefined
+			? {}
+			: { meterPreference, meterPreferencePresent: () => false }),
 		logger: silent,
 		random: () => 0.5,
 		now: () => 1_000,
@@ -322,15 +349,31 @@ function bridgeHarness(meterPreference: () => string | null) {
 }
 
 /** The RØDE's real, moving level — ~49 % fill on both channels. */
-const foreignUsbLevel: Extract<EventParams, { type: "audio-level" }> = {
-	type: "audio-level",
-	seq: 7,
+const foreignUsbPayload = {
 	source: { identity: `card:${USB_CARD_ID}`, owner: "sidecar" },
 	channels: 2,
 	rms_db: [-30, -30.5],
 	peak_db: [-24, -24.5],
 	floor_db: -1e6,
-};
+} satisfies AudioLevelMessage;
+const foreignUsbLevel = {
+	type: "audio-level",
+	seq: 7,
+	...foreignUsbPayload,
+} satisfies EventParams;
+const hdmiProgramPayload = {
+	...foreignUsbPayload,
+	source: { identity: `card:${HDMI_CARD_ID}`, owner: "streaming" },
+} satisfies AudioLevelMessage;
+const hdmiProgramLevel = {
+	type: "audio-level",
+	seq: 8,
+	...hdmiProgramPayload,
+} satisfies EventParams;
+const usbProgramPayload = {
+	...foreignUsbPayload,
+	source: { identity: `card:${USB_CARD_ID}`, owner: "streaming" },
+} satisfies AudioLevelMessage;
 
 describe("audio-meter bridge — HDMI+Auto never draws another card's bars", () => {
 	let root: string | undefined;
@@ -482,12 +525,12 @@ function provide() {
 	};
 }
 
-function videoDevice(inputId: string, kind: string): CaptureDevice {
+function videoDevice(inputId: string, kind: "hdmi" | "uvc_h264") {
 	return {
 		input_id: inputId,
 		device_path: `/dev/${inputId}`,
 		display_name: inputId,
-		media_class: "video",
+		media_class: "video" as const,
 		kind,
 		caps: [
 			{
@@ -497,8 +540,7 @@ function videoDevice(inputId: string, kind: string): CaptureDevice {
 				media_type: "video/x-h264",
 			},
 		],
-		// biome-ignore lint/suspicious/noExplicitAny: only the fields buildSources reads.
-	} as any;
+	};
 }
 
 /*
@@ -508,13 +550,17 @@ function videoDevice(inputId: string, kind: string): CaptureDevice {
  * nothing — the meter kept reporting the previous device indefinitely, since
  * `set_preferred_device` early-returns on an unchanged value.
  */
-describe("streaming.setConfig — a VIDEO source change re-points the idle meter under Auto", () => {
+describe("HDMI Auto meter — live source and audio inventory", () => {
 	const savedMockMode = process.env.MOCK_MODE;
 	const savedNodeEnv = process.env.NODE_ENV;
 	let root: string | undefined;
 	let priorSource: string | undefined;
 	let priorAsrc: string | undefined;
 	let priorPipeline: string | undefined;
+	let priorVideoInput: string | undefined;
+	let priorSourceAnchor: string | undefined;
+	let priorConfigFile: string;
+	let priorLifecycle: ReturnType<typeof getStreamLifecycleState>;
 
 	beforeAll(async () => {
 		process.env.MOCK_MODE = "true";
@@ -525,10 +571,16 @@ describe("streaming.setConfig — a VIDEO source change re-points the idle meter
 	});
 	beforeEach(async () => {
 		root = await scanBoardCards();
+		priorLifecycle = getStreamLifecycleState();
+		seedStreamLifecycleState("idle");
 		const config = getConfig();
 		priorSource = config.source;
 		priorAsrc = config.asrc;
 		priorPipeline = config.pipeline;
+		priorVideoInput = config.selected_video_input;
+		priorSourceAnchor = config.source_stable_id;
+		priorConfigFile = getConfigFilePath();
+		setConfigFilePath(join(root, "config.json"));
 		resetEngineDeviceCache();
 		config.asrc = AUDIO_SOURCE_AUTO;
 		config.source = undefined;
@@ -540,8 +592,13 @@ describe("streaming.setConfig — a VIDEO source change re-points the idle meter
 		config.source = priorSource;
 		config.asrc = priorAsrc;
 		config.pipeline = priorPipeline;
+		config.selected_video_input = priorVideoInput;
+		config.source_stable_id = priorSourceAnchor;
+		setConfigFilePath(priorConfigFile);
+		resetAutoAudioState();
 		resetEngineDeviceCache();
 		updateStatus(false);
+		seedStreamLifecycleState(priorLifecycle);
 		if (root !== undefined) await rm(root, { recursive: true, force: true });
 		root = undefined;
 	});
@@ -556,8 +613,95 @@ describe("streaming.setConfig — a VIDEO source change re-points the idle meter
 		else process.env.NODE_ENV = savedNodeEnv;
 	});
 
-	test("a source-only save re-pushes the newly-resolved meter device", async () => {
+	test("HDMI Auto without a capture PCM reports mode_none at the edge and on every idle frame", async () => {
+		if (root === undefined) throw new Error("missing ALSA fixture");
 		applyObservedEngineDevices([videoDevice("video0", "hdmi")]);
+		getConfig().source = "video0";
+		const pcm = join(root, "card3", "pcmC3D0c");
+		await mkdir(pcm);
+		await updateAudioDevices(root);
+		const h = bridgeHarness();
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+
+		h.emit(foreignUsbLevel);
+		await rm(pcm, { recursive: true });
+		await updateAudioDevices(root);
+		h.emit(foreignUsbLevel);
+		await updateAudioDevices(root);
+		h.emit(foreignUsbLevel);
+
+		// An owner-tagged frame may arrive before control state catches up.
+		h.emit(hdmiProgramLevel);
+		h.emit(foreignUsbLevel);
+
+		const hdmiFloor = {
+			...foreignUsbPayload,
+			source: { identity: `card:${HDMI_CARD_ID}`, owner: "sidecar" },
+			rms_db: [-1e6, -1e6],
+			peak_db: [-1e6, -1e6],
+		} satisfies AudioLevelMessage;
+		await mkdir(pcm);
+		await updateAudioDevices(root);
+		h.emit({ type: "audio-level", seq: 9, ...hdmiFloor });
+
+		// An unlisted HDMI card is a different Auto verdict: pipeline default.
+		await rm(join(root, "card3"), { recursive: true });
+		await updateAudioDevices(root);
+		h.emit(foreignUsbLevel);
+
+		expect(h.broadcasts).toEqual([
+			{ unavailable: true, reason: "not_selected_device" },
+			{ unavailable: true, reason: "mode_none" }, // capture PCM removed
+			{ unavailable: true, reason: "mode_none" }, // unrelated level suppressed
+			{ unavailable: true, reason: "mode_none" }, // no extra edge for unchanged scan
+			hdmiProgramPayload,
+			{ unavailable: true, reason: "mode_none" }, // program ownership is per frame
+			{ unavailable: true, reason: "handoff" }, // capture PCM restored
+			hdmiFloor,
+			{ unavailable: true, reason: "handoff" }, // HDMI card unlisted
+			foreignUsbPayload,
+		]);
+	});
+
+	test.each([
+		["starting", false, "0.21.0"],
+		["starting", false, SCHEMA_VERSION],
+		["streaming", true, "0.21.0"],
+		["stopping", false, "0.21.0"],
+		["reconciling", false, "0.21.0"],
+	] as const)(
+		"an HDMI program keeps its level during %s (published live: %s, schema: %s)",
+		async (lifecycle, publishedLive, schemaVersion) => {
+			if (root === undefined) throw new Error("missing ALSA fixture");
+			applyObservedEngineDevices([videoDevice("video0", "hdmi")]);
+			getConfig().source = "video0";
+			const pcm = join(root, "card3", "pcmC3D0c");
+			await mkdir(pcm);
+			await updateAudioDevices(root);
+			const h = bridgeHarness(undefined, schemaVersion);
+			initAudioMeterBridge(h.deps);
+			await settleAudioMeterBridge();
+			seedStreamLifecycleState(lifecycle);
+			updateStatus(publishedLive);
+
+			await rm(pcm, { recursive: true });
+			await updateAudioDevices(root);
+			h.emit(hdmiProgramLevel);
+
+			expect(h.broadcasts).toEqual([
+				{ unavailable: true, reason: "handoff" },
+				hdmiProgramPayload,
+			]);
+		},
+	);
+
+	test("a source-only save re-pushes the newly-resolved meter device", async () => {
+		if (root === undefined) throw new Error("missing ALSA fixture");
+		applyObservedEngineDevices([videoDevice("video0", "hdmi")]);
+		// The injected HDMI resolution names a card that can capture.
+		await mkdir(join(root, "card3", "pcmC3D0c"));
+		await updateAudioDevices(root);
 
 		// The engine's idle meter starts out following the USB card (the operator's
 		// previous camera resolved there); the HDMI source is what they pick next.
@@ -585,4 +729,105 @@ describe("streaming.setConfig — a VIDEO source change re-points the idle meter
 		]);
 		expect(h.broadcasts).toEqual([{ unavailable: true, reason: "handoff" }]);
 	});
+
+	test.each(["0.21.0", SCHEMA_VERSION])(
+		"keeps the USB program level after a live switch and HDMI PCM restoration (schema %s)",
+		async (schemaVersion) => {
+			if (root === undefined) throw new Error("missing ALSA fixture");
+			const physical_group_id = "usb:1-1";
+			await refreshEngineDeviceCache({
+				fetchEngineDevices: async () => ({
+					devices: [
+						videoDevice("video0", "hdmi"),
+						{ ...videoDevice("video1", "uvc_h264"), physical_group_id },
+						{
+							input_id: "usb-audio-1",
+							device_path: "",
+							display_name: "USB audio",
+							media_class: "audio",
+							kind: "audio",
+							alsa_card_id: USB_CARD_ID,
+							physical_group_id,
+						},
+					],
+				}),
+			});
+			getConfig().source = "video1";
+			const usbPick = pickerKeyFor(USB_CARD_ID);
+			const start = resolveAutoAsrcFromLiveState();
+			expect(start.asrcKey).toBe(usbPick);
+			setResolvedAsrcFromStart(start.asrcKey, start.reason);
+			seedStreamLifecycleState("streaming");
+			updateStatus(true);
+
+			const h = bridgeHarness(undefined, schemaVersion);
+			initAudioMeterBridge(h.deps);
+			await settleAudioMeterBridge();
+			h.emit({ type: "audio-level", seq: 1, ...usbProgramPayload });
+			const switched = applySwitchInputFollow("video0", {
+				success: true,
+				active_input: "video0",
+				gap_ms: 8,
+			});
+			expect(switched.audio_follow_pending).toBe(true);
+			expect(getConfig().source).toBe("video0");
+
+			await updateAudioDevices(root);
+			h.emit({ type: "audio-level", seq: 2, ...usbProgramPayload });
+			expect(h.reloads.at(-1)).toEqual({ audio: { meter_device: null } });
+			expect(h.broadcasts).toEqual([
+				usbProgramPayload,
+				{ unavailable: true, reason: "handoff" },
+				usbProgramPayload,
+			]);
+			const afterSwitch = h.broadcasts.length - 1;
+
+			await mkdir(join(root, "card3", "pcmC3D0c"));
+			await updateAudioDevices(root);
+			h.emit({ type: "audio-level", seq: 3, ...usbProgramPayload });
+
+			expect(getResolvedAsrc()).toBe(usbPick);
+			expect(h.reloads.at(-1)).toEqual({
+				audio: { meter_device: `hw:CARD=${HDMI_CARD_ID}` },
+			});
+			expect(h.broadcasts.slice(afterSwitch)).toEqual([
+				usbProgramPayload,
+				{ unavailable: true, reason: "handoff" },
+				usbProgramPayload,
+			]);
+		},
+	);
+
+	test.each(["starting", "stopping", "idle"] as const)(
+		"uses each frame's owner across a handoff while control reports %s",
+		async (lifecycle) => {
+			if (root === undefined) throw new Error("missing ALSA fixture");
+			applyObservedEngineDevices([videoDevice("video0", "hdmi")]);
+			getConfig().source = "video0";
+			seedStreamLifecycleState(lifecycle);
+			const h = bridgeHarness();
+			initAudioMeterBridge(h.deps);
+			await settleAudioMeterBridge();
+
+			await mkdir(join(root, "card3", "pcmC3D0c"));
+			await updateAudioDevices(root);
+			h.emit({ type: "audio-level", seq: 1, ...usbProgramPayload });
+			h.emit({
+				type: "audio-level",
+				seq: 2,
+				unavailable: true,
+				reason: "handoff",
+			});
+			h.emit({ type: "audio-level", seq: 3, ...usbProgramPayload });
+			h.emit({ ...foreignUsbLevel, seq: 4 });
+
+			expect(h.broadcasts).toEqual([
+				{ unavailable: true, reason: "handoff" },
+				usbProgramPayload,
+				{ unavailable: true, reason: "handoff" },
+				usbProgramPayload,
+				{ unavailable: true, reason: "not_selected_device" },
+			]);
+		},
+	);
 });

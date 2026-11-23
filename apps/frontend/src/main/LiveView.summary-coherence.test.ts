@@ -143,8 +143,9 @@ describe("LiveView — summary coherence (Task 12)", () => {
 			'[data-testid="setup-row"][data-section="encoder"]',
 		);
 		expect(encoderRow, "encoder setup-row renders").not.toBeNull();
-		// The summary <p> is the second paragraph in the row's label column.
-		const value = encoderRow?.querySelector("p.font-mono");
+		// The row's text column: its title, then the summary paragraph.
+		const [title, value] = encoderRow?.querySelectorAll("p") ?? [];
+		expect(title?.textContent?.trim()).toBe("Encoder Settings");
 		expect(value?.textContent?.trim()).toBe(
 			"RØDE HDMI to USB-C: RØDE HDMI · 5 Mbps",
 		);
@@ -158,9 +159,12 @@ describe("LiveView — summary coherence (Task 12)", () => {
 			'[data-testid="active-config-value"]',
 		);
 		expect(activeConfig, "active-config line renders").not.toBeNull();
-		expect(activeConfig?.textContent).toContain(
-			"RØDE HDMI to USB-C: RØDE HDMI",
-		);
+		// The line sits in the selected option, whose title names the device.
+		expect(
+			activeConfig
+				?.closest('[data-testid^="source-row-"]')
+				?.querySelector('[data-testid^="source-row-name-"]')?.textContent,
+		).toContain("RØDE HDMI to USB-C: RØDE HDMI");
 		expect(activeConfig?.textContent).not.toContain("SRTLA");
 	});
 

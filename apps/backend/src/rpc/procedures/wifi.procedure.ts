@@ -85,7 +85,11 @@ import {
 } from "../../mocks/providers/wifi.ts";
 import { resolveMockWifiDevice } from "../../mocks/providers/wifi-incarnation.ts";
 import { isRealDevice } from "../../modules/system/device-detection.ts";
-import { handleWifi, wifiBuildMsg } from "../../modules/wifi/wifi.ts";
+import {
+	handleWifi,
+	wifiBuildMsg,
+	wifiDisconnect,
+} from "../../modules/wifi/wifi.ts";
 import {
 	type WifiAdapterLockKey,
 	wifiAdapterLockKeyForConnectionUuid,
@@ -114,6 +118,7 @@ import {
 } from "../../modules/wifi/wifi-hotspot-activation.ts";
 import { wifiHotspotStop } from "../../modules/wifi/wifi-hotspot-config.ts";
 import { publishHotspotOutcome } from "../../modules/wifi/wifi-hotspot-outcome.ts";
+import { getMacAddressForWifiInterface } from "../../modules/wifi/wifi-interfaces.ts";
 import { withWifiModeRequestRefusal } from "../../modules/wifi/wifi-mode-request.ts";
 import { broadcast } from "../events.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
@@ -243,17 +248,11 @@ export const wifiConnectProcedure = authedProcedure
 export const wifiDisconnectProcedure = authedProcedure
 	.input(wifiDisconnectInputSchema)
 	.output(wifiOperationOutputSchema)
-	.handler(async ({ input, context }): Promise<MutationResult> => {
+	.handler(async ({ input }): Promise<MutationResult> => {
 		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
-		const ws = context.ws;
-		const lockKey = wifiAdapterLockKeyForConnectionUuid(input.uuid);
-		const busy = await runGuarded(lockKey, () => {
-			void handleWifi(ws, { disconnect: input.uuid });
-			if (shouldUseMocks() && !getMockWifiFaults().suppressConfirm) {
-				setMockWifiConnection(MOCK_WIFI_DEVICE, { activeNetwork: undefined });
-			}
-		});
-		if (busy) return { success: false, error: "DEVICE_BUSY" };
+		if (!shouldUseMocks()) return wifiDisconnect(input.uuid);
+		if (!getMockWifiFaults().suppressConfirm)
+			setMockWifiConnection(MOCK_WIFI_DEVICE, { activeNetwork: undefined });
 		return { success: true };
 	});
 
@@ -412,8 +411,12 @@ export const hotspotStopProcedure = authedProcedure
 	.output(hotspotToggleOutputSchema)
 	.handler(async ({ input }): Promise<HotspotToggleOutput> => {
 		if (mockWifiBusy()) return refuseHotspot("stop", input.device);
-		// Admission probe, on `hotspotStart`'s terms.
-		if (await adapterBusy(wifiAdapterLockKeyForDeviceId(input.device))) {
+		// For a published row Stop owns the handoff wait and lock. Only probe
+		// here if the id map cannot resolve the row but the registry still can.
+		if (
+			!getMacAddressForWifiInterface(Number(input.device)) &&
+			(await adapterBusy(wifiAdapterLockKeyForDeviceId(input.device)))
+		) {
 			return refuseHotspot("stop", input.device);
 		}
 		if (shouldUseMocks()) {

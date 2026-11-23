@@ -4,11 +4,11 @@
  */
 
 import {
+	notificationDismissInputSchema,
 	notificationsMessageSchema,
 	successResponseSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
-import { z } from "zod";
 
 import {
 	getPersistentNotifications,
@@ -41,15 +41,15 @@ export const getPersistentNotificationsProcedure = authedProcedure
  * Dismiss a notification procedure
  */
 export const dismissNotificationProcedure = authedProcedure
-	.input(z.object({ name: z.string() }))
+	.input(notificationDismissInputSchema)
 	.output(successResponseSchema)
-	.handler(({ input }) => {
-		const { name } = input;
+	.handler(({ input, context }) => {
+		const { name, revision, publisher } = input;
 
 		// Check if notification exists before removing
 		const exists = notificationExists(name);
 		if (exists) {
-			notificationDismiss(name);
+			notificationDismiss(name, { revision, publisher }, context.ws);
 		}
 
 		return { success: true };

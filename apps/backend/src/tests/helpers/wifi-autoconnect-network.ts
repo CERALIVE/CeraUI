@@ -3,10 +3,12 @@ import { readFileSync } from "node:fs";
 import * as runner from "../../helpers/run.ts";
 import { getConfig } from "../../modules/config.ts";
 import * as nm from "../../modules/network/network-manager.ts";
+import * as regdomain from "../../modules/wifi/regdomain.ts";
 import * as devices from "../../modules/wifi/wifi-device-list.ts";
 import { radioIdentityReaders } from "../../modules/wifi/wifi-radio-identity.ts";
 import * as compat from "../../rpc/compat.ts";
 import { nmcliFieldNames, nmcliFieldOutput } from "./nmcli-field-output.ts";
+import { mockSettingsDeletion } from "./wifi-active-observation.ts";
 import { firstApInstances } from "./wifi-first-ap-instances.ts";
 import { decodeProfile, encodeProfile } from "./wifi-first-ap-keyfile-codec.ts";
 
@@ -31,6 +33,7 @@ export function autoconnectNetworkFixture() {
 	const publications: string[] = [];
 	const reads: string[] = [];
 	const activations: string[] = [];
+	const deletions: string[] = [];
 	const resources = new Set<string>();
 	const serialized = new Map<string, string>();
 	let instances: ReturnType<typeof firstApInstances> | undefined;
@@ -62,10 +65,34 @@ export function autoconnectNetworkFixture() {
 		publications.length = 0;
 		reads.length = 0;
 		activations.length = 0;
+		deletions.length = 0;
 		pinAccepted = true;
 		listing = [];
 	}
 	function install(): void {
+		mockSettingsDeletion(
+			() => model().run(),
+			(path) => {
+				const uuid = model()
+					.paths()
+					.find(([, target]) => target === path)?.[0];
+				if (!uuid || !profiles.delete(uuid))
+					throw new Error("Fixture settings path not found");
+				deletions.push(uuid);
+			},
+		);
+		const runIw = regdomain.runIw;
+		spyOn(regdomain, "runIw").mockImplementation(async (args) =>
+			args.length === 1 && args[0] === "phy"
+				? [
+						...new Set(
+							[...witnesses.values()].map(({ phy }) => phy.split("/").at(-1)),
+						),
+					]
+						.map((phy) => `Wiphy ${phy}`)
+						.join("\n")
+				: runIw(args),
+		);
 		spyOn(radioIdentityReaders, "readText").mockImplementation(async (path) => {
 			reads.push(path);
 			for (const [ifname, w] of witnesses) {
@@ -105,7 +132,7 @@ export function autoconnectNetworkFixture() {
 			}
 			return ["Policy", "Radio", "yes", "no", "yes"];
 		});
-		spyOn(nm, "nmConnsGet").mockImplementation(async (fields) => {
+		const inventory = (fields: string) => {
 			const current = model();
 			return [...profiles.keys()].map((uuid) =>
 				fields
@@ -129,13 +156,24 @@ export function autoconnectNetworkFixture() {
 					)
 					.join(":"),
 			);
-		});
+		};
+		spyOn(nm, "nmConnsGet").mockImplementation(async (fields) =>
+			inventory(fields),
+		);
 		spyOn(nm, "nmScanResults").mockResolvedValue([]);
 		spyOn(devices, "wifiDeviceListGetMacAddress").mockReturnValue(MAC);
 		spyOn(devices, "wifiDeviceListGetInetAddress").mockReturnValue(null);
 		spyOn(runner, "run").mockImplementation(async (binary, args = []) => {
 			if (binary === "busctl") return model().busReply(args);
 			if (binary !== "nmcli") throw new Error("Unexpected binary");
+			if (
+				args[0] === "--terse" &&
+				args[1] === "--fields" &&
+				args[3] === "connection" &&
+				args[4] === "show" &&
+				args.length === 5
+			)
+				return inventory(args[2] ?? "").join("\n");
 			if (args[0] === "connection" && args[1] === "load") {
 				const fields = decodeProfile(readFileSync(args[2] ?? "", "utf8"));
 				const uuid = fields["connection.uuid"];
@@ -173,6 +211,7 @@ export function autoconnectNetworkFixture() {
 			}
 			if (nmcliFieldNames(args).length > 0 && args.includes("connection")) {
 				const profile = profiles.get(args.at(-1) ?? "");
+				if (!profile) throw new Error("Fixture profile not found");
 				return nmcliFieldOutput(
 					args,
 					(field) =>
@@ -215,6 +254,7 @@ export function autoconnectNetworkFixture() {
 		publications,
 		reads,
 		activations,
+		deletions,
 		reset,
 		close: () => instances?.files.close(),
 		install,

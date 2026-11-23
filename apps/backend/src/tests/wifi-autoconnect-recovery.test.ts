@@ -16,6 +16,11 @@ import { getWifiInterfacesByMacAddress } from "../modules/wifi/wifi-connections.
 import { canHotspot } from "../modules/wifi/wifi-hotspot-types.ts";
 import { wifiRadioIdentity } from "../modules/wifi/wifi-radio-identity.ts";
 import {
+	ACTIVE_PATH,
+	mockActivationBus,
+	RUN_ID,
+} from "./helpers/wifi-active-observation.ts";
+import {
 	autoconnectFixture,
 	MAC,
 	PORT,
@@ -31,6 +36,38 @@ const profile = () => {
 	if (!value) throw new Error("Missing fixture profile");
 	return value;
 };
+
+function stopFixture(active: boolean) {
+	const ifname = "wlan0";
+	const up = `${ifname}:wifi:connected:${PROFILE}`;
+	const down = `${ifname}:wifi:disconnected:`;
+	let activation = active
+		? { uuid: PROFILE, ifname, path: ACTIVE_PATH }
+		: undefined;
+	f.list([active ? up : down]);
+	mockActivationBus(
+		() => RUN_ID.split("/")[0] ?? "",
+		() => {
+			f.list([down]);
+		},
+		() => activation,
+	);
+	return jest.fn(
+		async (uuid: string, path?: string, runId?: string, device?: string) => {
+			expect([uuid, path, runId, device]).toEqual([
+				PROFILE,
+				ACTIVE_PATH,
+				RUN_ID,
+				ifname,
+			]);
+			if (!path || !runId || !device) return false;
+			const result = await nm.nmDisconnect(uuid, path, runId, device);
+			if (result) activation = undefined;
+			return result;
+		},
+	);
+}
+
 afterEach(() => {
 	resetBootReadiness();
 	jest.useRealTimers();
@@ -76,7 +113,7 @@ test.each([false, true])(
 			f.row().activeConn = PROFILE;
 			f.row().activeMode = "ap";
 		}
-		const disconnect = jest.fn(async () => true);
+		const disconnect = stopFixture(active);
 
 		expect(await stop(disconnect)).toEqual({ success: true });
 		expect(profile()["connection.autoconnect"]).toBe("no");
@@ -98,7 +135,7 @@ test.each([false, true])(
 			f.row().activeMode = "ap";
 		}
 		spyOn(nm, "nmConnSetFields").mockResolvedValue(false);
-		const disconnect = jest.fn(async () => true);
+		const disconnect = stopFixture(active);
 
 		expect(await stop(disconnect)).toEqual({ success: true });
 		expect(disconnect).toHaveBeenCalledTimes(active ? 1 : 0);
@@ -131,7 +168,7 @@ test.each([false, true])(
 			row.activeConn = PROFILE;
 			row.activeMode = "ap";
 		}
-		const disconnect = jest.fn(async () => true);
+		const disconnect = stopFixture(active);
 
 		expect(await stop(disconnect)).toEqual({ success: true });
 		expect(profile()["connection.autoconnect"]).toBe("no");
@@ -148,7 +185,7 @@ test.each(["quiesce", "station", "Stop"] as const)(
 		f.persistMode(MAC, "hotspot");
 		await f.discover();
 		spyOn(nm, "nmConnGetFields").mockResolvedValue(undefined);
-		const disconnect = jest.fn(async () => true);
+		const disconnect = stopFixture(action === "Stop");
 		if (action === "Stop") {
 			f.row().conn = PROFILE;
 			f.row().activeConn = PROFILE;
@@ -163,6 +200,9 @@ test.each(["quiesce", "station", "Stop"] as const)(
 				),
 			).toBe(false);
 		} else {
+			expect(getBootReadiness().degradedSubsystems).not.toContain(
+				`wifi-hotspot-autoconnect:${MAC}`,
+			);
 			const result =
 				action === "Stop"
 					? await stop(disconnect)
@@ -170,6 +210,9 @@ test.each(["quiesce", "station", "Stop"] as const)(
 							...defaultAdapterModeDeps,
 							publishOutcome: () => undefined,
 						});
+			expect(getBootReadiness().degradedSubsystems).toContain(
+				`wifi-hotspot-autoconnect:${MAC}`,
+			);
 			expect(result).toEqual(
 				action === "Stop"
 					? { success: true }

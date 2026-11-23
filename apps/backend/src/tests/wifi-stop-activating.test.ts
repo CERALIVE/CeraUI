@@ -18,6 +18,7 @@ import type {
 } from "../modules/wifi/wifi-hotspot-outcome.ts";
 import type { HotspotActivationDeps } from "../modules/wifi/wifi-hotspot-types.ts";
 import { getWifiIdToMacAddress } from "../modules/wifi/wifi-interfaces.ts";
+import { ACTIVE_PATH } from "./helpers/wifi-active-observation.ts";
 import {
 	autoconnectFixture,
 	MAC,
@@ -37,6 +38,7 @@ async function setup(mode: "hotspot" | "hybrid", acceptsDown = true) {
 	}> = [];
 	const downs: string[] = [];
 	let state: "down" | "activating" | "connected" = "down";
+	const target = mode === "hybrid" ? "clap-wlan0" : "wlan0";
 	const publish = (
 		kind: HotspotOutcomeKind,
 		_device: number | string,
@@ -49,6 +51,7 @@ async function setup(mode: "hotspot" | "hybrid", acceptsDown = true) {
 		readCapabilities: () => ({ staApCombo: { supported: mode === "hybrid" } }),
 		nmConnect: async () => {
 			state = "activating";
+			f.list([`${target}:wifi:connecting:${PROFILE}`]);
 			return true;
 		},
 		publishOutcome: publish,
@@ -56,7 +59,8 @@ async function setup(mode: "hotspot" | "hybrid", acceptsDown = true) {
 	const stop: HotspotStopDeps = {
 		recordIntent: wifiAdapterModeRecorder,
 		nmConnSetFields: (uuid, fields) => nm.nmConnSetFields(uuid, fields),
-		nmDisconnect: async (uuid) => {
+		nmDisconnect: async (uuid, path) => {
+			if (path !== ACTIVE_PATH) throw new Error("Missing activation path");
 			downs.push(uuid);
 			if (acceptsDown) state = "down";
 			return acceptsDown;
@@ -76,7 +80,6 @@ async function setup(mode: "hotspot" | "hybrid", acceptsDown = true) {
 		state: () => state,
 		async lateConnected() {
 			if (state !== "down") state = "connected";
-			const target = mode === "hybrid" ? "clap-wlan0" : "wlan0";
 			f.list(
 				mode === "hybrid"
 					? [

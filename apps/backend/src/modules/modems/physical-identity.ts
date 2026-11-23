@@ -144,6 +144,11 @@ export interface PhysicalDeviceRecord {
 	readonly displayName: string;
 }
 
+export type PhysicalBondKeys = Pick<
+	PhysicalDeviceRecord,
+	"anchor" | "linkId" | "legacyLinkId"
+>;
+
 const LINK_ID_PREFIX = "lnk_";
 const LINK_ID_DIGEST_CHARS = 16;
 
@@ -191,16 +196,20 @@ export function usableUsbSerial(raw: string | undefined): string | undefined {
 	return serial;
 }
 
-function usableSerial(observation: PhysicalObservation): string | undefined {
-	return usableUsbSerial(observation.serial);
-}
+type BondKeyObservation = {
+	readonly ifname: string;
+	readonly serial?: string | undefined;
+	readonly vid?: string | undefined;
+	readonly legacyLinkId?: string | undefined;
+	readonly idPath?: string | undefined;
+};
 
 /** The identity key and the rung it came from. */
 function resolveIdentityKey(
-	observation: PhysicalObservation,
+	observation: BondKeyObservation,
 	stableKey: string | undefined,
+	serial: string | undefined,
 ): { identityKey: string; anchor: PhysicalIdentityAnchor } {
-	const serial = usableSerial(observation);
 	if (serial !== undefined) {
 		const vid = observation.vid?.trim().toLowerCase();
 		return {
@@ -342,9 +351,32 @@ export function listPresentPhysicalDevices(): readonly PhysicalDeviceRecord[] {
 export function resolvePhysicalDevice(
 	observation: PhysicalObservation,
 ): PhysicalDeviceRecord {
-	const stableKey = deriveModemStableKey(observation.idPath);
-	const { identityKey, anchor } = resolveIdentityKey(observation, stableKey);
-	const serial = usableSerial(observation);
+	const record = describePhysicalDevice(observation);
+	records.set(record.identityKey, record);
+	return record;
+}
+
+/** Resolve only the keys needed for bond preferences and address mapping. */
+export function describePhysicalBondKeys(
+	observation: BondKeyObservation,
+): PhysicalBondKeys {
+	return physicalBondKeys(
+		observation,
+		deriveModemStableKey(observation.idPath),
+		usableUsbSerial(observation.serial),
+	);
+}
+
+function physicalBondKeys(
+	observation: BondKeyObservation,
+	stableKey: string | undefined,
+	serial: string | undefined,
+) {
+	const { identityKey, anchor } = resolveIdentityKey(
+		observation,
+		stableKey,
+		serial,
+	);
 	const rawSerial = observation.serial?.trim();
 	const vid = observation.vid?.trim().toLowerCase();
 	const legacyLinkId =
@@ -354,6 +386,19 @@ export function resolvePhysicalDevice(
 					vid ? `usb-serial:${vid}:${rawSerial}` : `usb-serial:${rawSerial}`,
 				)
 			: undefined);
+	return {
+		identityKey,
+		anchor,
+		linkId: mintLinkId(identityKey),
+		...(legacyLinkId !== undefined ? { legacyLinkId } : {}),
+	};
+}
+
+function describePhysicalDevice(
+	observation: PhysicalObservation,
+): PhysicalDeviceRecord {
+	const stableKey = deriveModemStableKey(observation.idPath);
+	const serial = usableUsbSerial(observation.serial);
 	const hwdb =
 		observation.hwdbVendor !== undefined || observation.hwdbModel !== undefined
 			? {
@@ -366,11 +411,8 @@ export function resolvePhysicalDevice(
 				}
 			: undefined;
 
-	const record: PhysicalDeviceRecord = {
-		identityKey,
-		anchor,
-		linkId: mintLinkId(identityKey),
-		...(legacyLinkId !== undefined ? { legacyLinkId } : {}),
+	return {
+		...physicalBondKeys(observation, stableKey, serial),
 		ifname: observation.ifname,
 		displayName: resolveDisplayName(observation),
 		...(stableKey !== undefined ? { stableKey } : {}),
@@ -383,9 +425,6 @@ export function resolvePhysicalDevice(
 			? { routerAdmin: observation.routerAdmin }
 			: {}),
 	};
-
-	records.set(identityKey, record);
-	return record;
 }
 
 /** The record behind a minted `link_id`, for the consumers of todos 11 and 12. */

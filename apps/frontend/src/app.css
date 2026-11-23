@@ -12,6 +12,30 @@
 @custom-variant data-checked (&[data-state='checked']);
 @custom-variant data-unchecked (&[data-state='unchecked']);
 
+/* Short System Logs view: include landscape phones, but not the wide kiosk. */
+@custom-variant short-logs {
+	@media (width < 64rem) and (height <= 30rem), (width < 40rem) and (height <= 37.5rem) {
+		@slot;
+	}
+}
+
+@layer utilities {
+	[data-raw-active] {
+		@variant short-logs {
+			overflow-y: auto;
+		}
+	}
+
+	/* Keep tall option rows inside the popup's scrollable viewport on short phones. */
+	[data-slot='select-content'][data-touch-region] {
+		@variant max-sm {
+			@variant short-logs {
+				max-height: var(--bits-select-content-available-height);
+			}
+		}
+	}
+}
+
 /*
   Border compatibility for Tailwind CSS v4
   (default border-color changed to currentColor)
@@ -251,9 +275,8 @@
 		--spacing-touch-scale: 1.25;
 	}
 
-	/* A phone is thumbed even in the default layout, so below `sm` the Live
-	   screen's operator regions (Audio, layout, Live bar: `data-touch-region`)
-	   take the touch target through the rules below; spacing keeps its scale. */
+	/* A phone is thumbed even in the default layout, so below `sm` opted-in
+	   regions take the touch target through the rules below; spacing keeps its scale. */
 	@media (width < 40rem) {
 		[data-touch-region] {
 			--touch-target-min: 44px;
@@ -308,9 +331,9 @@
 	inset: min(-0.5rem, calc((100% - var(--touch-target-min)) / 2));
 }
 
-/* The same mechanism on BOTH axes, for the shell's compact icon controls that opt
-   in with `data-touch-target="hit-area"`. Each is square and small (36/32/24px),
-   so the `min-height` lift leaves the WIDTH short while stretching the paint.
+/* The same mechanism on BOTH axes, for compact controls that opt in with
+   `data-touch-target="hit-area"`. The min-height lift alone leaves narrow
+   buttons short while stretching the paint.
 
    Anchored to the control's own padding box, so `(100% - 44px) / 2` is the
    overhang each edge needs and `min(0px, …)` pins an already-large control to its
@@ -319,7 +342,7 @@
    nothing here escapes onto an ancestor.
 
    UNLAYERED for the same reason as the switch rule above. */
-[data-layout-mode='touch'] [data-touch-target='hit-area']::after {
+:is([data-layout-mode='touch'], [data-touch-region]) [data-touch-target='hit-area']::after {
 	content: '';
 	position: absolute;
 	inset-block: min(0px, calc((100% - var(--touch-target-min)) / 2));
@@ -696,6 +719,15 @@
 		background: none;
 		animation: none;
 	}
+}
+
+/* A full track of static stripes signals activity, not a measured fraction. */
+.package-update-progress[data-state='indeterminate'] {
+	background-image: repeating-linear-gradient(
+		135deg,
+		var(--primary) 0 0.2rem,
+		transparent 0.2rem 0.45rem
+	);
 }
 
 /* ── E-ink: kill all motion ──────────────────────

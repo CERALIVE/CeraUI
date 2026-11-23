@@ -132,11 +132,15 @@ export class NotificationDismissalStore {
 		return this.entries.has(key);
 	}
 
+	// Durable first: a failed write throws and leaves the remembered set untouched,
+	// so no later reader can treat an unwritten dismissal as acknowledged.
 	recordDismissal(key: string): void {
-		this.entries.delete(key);
-		this.entries.set(key, this.deps.now());
-		this.evictOverflow();
-		this.persist();
+		const next = new Map(this.entries);
+		next.delete(key);
+		next.set(key, this.deps.now());
+		this.evictOverflow(next);
+		this.persist(next);
+		this.entries = next;
 	}
 
 	size(): number {
@@ -151,23 +155,23 @@ export class NotificationDismissalStore {
 		this.entries = new Map();
 	}
 
-	private evictOverflow(): void {
+	private evictOverflow(entries: Map<string, number> = this.entries): void {
 		// Rollback history is durable and unbounded; its acknowledgement must
 		// outlive ordinary notice churn or startup would resurrect old failures.
-		const ordinary = [...this.entries.keys()].filter(
+		const ordinary = [...entries.keys()].filter(
 			(key) => !key.startsWith("update:os-rollback:"),
 		);
 		for (const key of ordinary.slice(
 			0,
 			Math.max(0, ordinary.length - this.maxEntries),
 		))
-			this.entries.delete(key);
+			entries.delete(key);
 	}
 
-	private persist(): void {
+	private persist(entries: Map<string, number>): void {
 		const file = {
 			version: DISMISSAL_STORE_VERSION,
-			entries: [...this.entries].map(([key, dismissedAt]) => ({
+			entries: [...entries].map(([key, dismissedAt]) => ({
 				key,
 				dismissedAt,
 			})),

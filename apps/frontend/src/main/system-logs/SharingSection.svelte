@@ -1,12 +1,12 @@
 <!--
   SharingSection.svelte: the first group of the System Logs Downloads region:
-  Support bundle, the region's one filled primary action (DESIGN.md IH-5), then
-  Export this view in outline, in the shipped rows' anatomy, with the line saying
-  the browser saves the files. Each row opens a
-  nested dialog that states what the file holds and that it may contain
-  sensitive data before anything downloads. The flows' state is a SharingFlow
-  owned by SystemLogsView, so it outlives this group remounting. Long labels wrap
-  inside their buttons.
+  Support bundle, then Export this view, both in outline (the view's one filled
+  sharing action is the logs toolbar's Export logs, DESIGN.md IH-5), in the
+  shipped rows' anatomy, with the line saying the browser saves the files. Each
+  row opens a nested dialog that states what the file holds and that it may
+  contain sensitive data before anything downloads. The flows' state and their
+  dialogs belong to SystemLogsView, so they outlive this group remounting. Long
+  labels wrap inside their buttons.
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
@@ -15,8 +15,6 @@ import { FileOutput, LifeBuoy } from '@lucide/svelte';
 import { Button } from '$lib/components/ui/button';
 import type { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';
 
-import BundleDialog from './BundleDialog.svelte';
-import ExportDialog from './ExportDialog.svelte';
 import KeepWords from './KeepWords.svelte';
 
 let { sharing }: { sharing: SharingFlow } = $props();
@@ -27,7 +25,7 @@ const rows = $derived([
 		icon: LifeBuoy,
 		title: m['systemLogs.sharing.bundle'](),
 		hint: m['systemLogs.sharing.bundleHint'](),
-		variant: 'default' as const,
+		variant: 'outline' as const,
 		open: (): void => void sharing.openBundle(),
 	},
 	{
@@ -65,6 +63,3 @@ const rows = $derived([
 	{/each}
 	<p class="text-muted-foreground text-xs"><KeepWords text={m['systemLogs.sharing.browserSaves']()} /></p>
 </div>
-
-<ExportDialog {sharing} />
-<BundleDialog {sharing} />

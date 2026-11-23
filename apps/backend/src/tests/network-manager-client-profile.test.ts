@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import * as exec from "../helpers/exec.ts";
 import { run } from "../helpers/run.ts";
 import {
@@ -37,6 +38,47 @@ async function addClient(): Promise<string> {
 	]);
 	return uuid;
 }
+
+test.each(["modify", "publish", "load"] as const)(
+	"NetworkManager refuses an expired async permit at %s",
+	async (boundary) => {
+		const f = await firstAp();
+		try {
+			const uuid = await addClient();
+			const settings = { ...f.settings.get(uuid) };
+			const filename = f.nm.files.filename(uuid);
+			const before = readFileSync(filename);
+			let calls = 0;
+			let current = true;
+			const permit = Object.assign(
+				async () => {
+					if (++calls === (boundary === "load" ? 2 : 1))
+						queueMicrotask(() => {
+							current = false;
+						});
+					return true;
+				},
+				{ current: () => current },
+			);
+
+			const result = await nmConnSetFields(
+				uuid,
+				boundary === "modify"
+					? { "connection.autoconnect": "yes" }
+					: { "802-11-wireless-security.psk": "test-new-secret" },
+				permit,
+			);
+
+			expect(result).toBe(false);
+			expect(current).toBe(false);
+			expect(f.settings.get(uuid)).toEqual(settings);
+			expect(readFileSync(filename)).toEqual(before);
+			expect(calls).toBe(boundary === "load" ? 2 : 1);
+		} finally {
+			await f.restore();
+		}
+	},
+);
 
 for (const missingMatch of [false, true]) {
 	for (const existingSecret of [false, true]) {
@@ -155,6 +197,27 @@ for (const operation of [
 		}
 	});
 }
+
+test("an explicit activation target reaches NetworkManager as an ifname selector", async () => {
+	const f = await firstAp();
+	try {
+		const uuid = await addClient();
+		expect(await nmConnect(uuid, 30, undefined, undefined, "wlan0")).toBe(true);
+		expect(f.active()).toBe(uuid);
+		expect(f.commands).toContainEqual([
+			"-w",
+			"30",
+			"conn",
+			"up",
+			"uuid",
+			uuid,
+			"ifname",
+			"wlan0",
+		]);
+	} finally {
+		await f.restore();
+	}
+});
 
 for (const failure of [
 	"serialization",

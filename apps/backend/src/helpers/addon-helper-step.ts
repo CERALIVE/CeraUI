@@ -168,7 +168,7 @@ export function createAddonHelperStep(
 					throw error;
 				}
 			} catch (error) {
-				// Audited at bun-v1.4.2..v1.4.4; classification unchanged.
+				// Audited at bun-v1.4.2..v1.4.5; classification unchanged.
 				// 1.4.3 added kill-then-reap on pidfd_open failure (oven-sh/bun#40080, f86be9d).
 				// Exec can precede the throw; only these pre-exec tags or our preparation prove none.
 				if (

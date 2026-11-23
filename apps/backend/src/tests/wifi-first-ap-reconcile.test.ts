@@ -230,7 +230,7 @@ test("startup disarms failed first-start provenance while preserving legacy miss
 				active: legacy ? uuid : null,
 				autoconnect: legacy,
 				preserved: true,
-				owned: true,
+				owned: !legacy,
 				intent: null,
 				deleted: false,
 			});

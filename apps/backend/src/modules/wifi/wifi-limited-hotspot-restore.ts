@@ -1,11 +1,6 @@
 import { logger } from "../../helpers/logger.ts";
-import {
-	nmConnect,
-	nmConnGetFields,
-	nmConnSetFields,
-	nmDeviceProp,
-	nmDisconnect,
-} from "../network/network-manager.ts";
+import { nmConnect, nmConnGetFields } from "../network/network-manager.ts";
+import { nmRunId } from "../network/network-manager-profile-instance.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
 import {
 	canUseHotspotConnection,
@@ -25,6 +20,7 @@ import {
 	concurrentApIfname,
 	confirmHybridActivation,
 	HYBRID_CHANNEL_REFUSAL,
+	type HybridStationChannel,
 	readHybridStationChannel,
 	readHybridTargetIdentity,
 	releaseConcurrentApInterface,
@@ -32,6 +28,10 @@ import {
 	revalidateConcurrentApInterface,
 	selectConcurrentApInterface,
 } from "./wifi-concurrent-interface.ts";
+import {
+	type NmActivationReceipt,
+	nmDisconnectActivation,
+} from "./wifi-hotspot-activity.ts";
 import { runHotspotProfileOperation } from "./wifi-hotspot-profile-operation.ts";
 import {
 	canHotspot,
@@ -46,6 +46,9 @@ import {
 	logHybridChannelRefusal,
 	logHybridTargetRefusal,
 } from "./wifi-hybrid-target-diagnostics.ts";
+import { sampleWifiOperationRadio } from "./wifi-operation-binding.ts";
+import { wifiAdapterKeyMac, wifiAdapterKeyPort } from "./wifi-permanent-mac.ts";
+import { sameRadioLifetime, wifiRadioIdentity } from "./wifi-radio-identity.ts";
 
 /** Boot-only D12 path. Requests never receive this activation authority. */
 export async function restoreLimitedHotspot(
@@ -88,12 +91,20 @@ export async function restoreLimitedHotspot(
 	const stored = getHotspotCredentials(key);
 	if (!stored?.conn || !canUseHotspotConnection(key, stored.conn))
 		return pending("owned profile missing");
-	const fields = await nmConnGetFields(stored.conn, [
-		"802-11-wireless.mode",
-		"802-11-wireless.band",
-		"802-11-wireless.channel",
-		"connection.interface-name",
-	] as const);
+	const restoreUuid = stored.conn;
+	const ownerMac = wifiAdapterKeyMac(key);
+	const ownerPort = wifiAdapterKeyPort(key);
+	const { ifname } = row;
+	const selected = wifiRadioIdentity.state.rows.get(ifname);
+	const readProfile = () =>
+		nmConnGetFields(restoreUuid, [
+			"802-11-wireless.mode",
+			"802-11-wireless.band",
+			"802-11-wireless.channel",
+			"connection.interface-name",
+			"match.path",
+		] as const);
+	const fields = await readProfile();
 	if (stopped()) return undefined;
 	if (fields === undefined) {
 		refuse("owned AP profile missing");
@@ -101,11 +112,48 @@ export async function restoreLimitedHotspot(
 	}
 	if (fields[0] !== "ap") return pending("owned AP profile missing");
 	const channel = channelFromNM(fields[1], fields[2]);
+	if (desired === "hotspot" && fields[3] && fields[3] !== ifname)
+		return pending("owned AP profile pins another interface");
+	const portCompatible = (port: string | undefined) =>
+		(!ownerPort || ownerPort === port) &&
+		(!fields[4] || fields[4] === port) &&
+		(Boolean(ownerPort || fields[4]) ||
+			!ownerMac ||
+			!wifiRadioIdentity.hasSeenSameAddressCollision(ownerMac));
+	const radioStillCurrent = async () => {
+		const live = await sampleWifiOperationRadio(ifname, true);
+		const current = wifiRadioIdentity.state.rows.get(ifname);
+		if (
+			!live ||
+			!selected ||
+			(selected.row !== undefined && selected.row !== row) ||
+			current?.incarnation !== selected.incarnation ||
+			!sameRadioLifetime(selected.lifetime, live.lifetime) ||
+			(live.permanentMac && live.permanentMac !== ownerMac) ||
+			(selected.devicePath && selected.devicePath !== live.devicePath)
+		)
+			return refuse("physical radio changed or could not be rechecked");
+		return (
+			portCompatible(live.devicePath) ||
+			refuse("available port does not prove the saved owner")
+		);
+	};
+	const profileCurrent = async (ifname: string): Promise<boolean> => {
+		const observed = await readProfile();
+		return (
+			(observed?.[0] === "ap" &&
+				observed[1] === fields[1] &&
+				observed[2] === fields[2] &&
+				observed[3] === ifname &&
+				observed[4] === fields[4]) ||
+			refuse("owned AP profile changed")
+		);
+	};
 	let hybridUnavailable = false;
 	const admitted = (reject = refuse): boolean => {
 		if (stopped()) return false;
 		const current = Object.values(deps.resolveInterfaces()).filter(canHotspot);
-		if (current.length !== 1 || current[0] !== row)
+		if (current.length !== 1 || current[0] !== row || row.ifname !== ifname)
 			return reject("requires exactly one hotspot-capable adapter");
 		if (
 			row.degradedReason !== "permanent-mac-unresolved" ||
@@ -119,13 +167,17 @@ export async function restoreLimitedHotspot(
 			latest[key] !== desired
 		)
 			return reject("logical intent changed");
-		refreshHotspotChannels(row.hotspot, getDerivedApChannels());
 		if (
-			desired !== "hybrid" &&
-			channel !== "auto" &&
-			!row.hotspot.availableChannels.includes(channel)
+			getHotspotCredentials(key)?.conn !== restoreUuid ||
+			!canUseHotspotConnection(key, restoreUuid)
 		)
-			return reject("stored channel is no longer permitted");
+			return reject("profile ownership changed");
+		if (selected?.devicePath && !portCompatible(selected.devicePath))
+			return reject("available port does not prove the saved owner");
+		if (selected?.permanentMac && selected.permanentMac !== ownerMac)
+			return reject(
+				"available permanent address does not match the saved owner",
+			);
 		const concurrency = wifiAdapterModeCapability(
 			row,
 			deps.readCapabilities,
@@ -136,6 +188,9 @@ export async function restoreLimitedHotspot(
 		}
 		if (desired === "hybrid" && fields[3] !== concurrentApIfname(row.ifname))
 			return reject("owned profile does not target the hybrid interface");
+		refreshHotspotChannels(row.hotspot, getDerivedApChannels());
+		if (channel !== "auto" && !row.hotspot.availableChannels.includes(channel))
+			return reject("stored channel is no longer permitted");
 		if (desired === "hotspot" && row.conn && getIsStreaming())
 			return reject("streaming keeps the station link");
 		return true;
@@ -147,25 +202,21 @@ export async function restoreLimitedHotspot(
 	let target: ConcurrentApInterface | undefined;
 	let targetIdentity: string | undefined;
 	let accepted = false;
-	const restoreUuid = stored.conn;
+	let activation: NmActivationReceipt | undefined;
+	let keepLeg = false;
 	const disconnectSelected = async () => {
-		if (!target || !targetIdentity) return;
-		await runHotspotProfileOperation({
+		if (!target || !targetIdentity) return false;
+		const result = await runHotspotProfileOperation({
 			uuid: restoreUuid,
 			kind: "down",
-			run: async () => {
-				if (
-					!target ||
-					!canUseHotspotConnection(key, restoreUuid) ||
-					(await readHybridTargetIdentity(row.ifname, target.ifname)) !==
-						targetIdentity ||
-					(await nmDeviceProp(target.ifname, "GENERAL.CON-UUID"))?.[0] !==
-						restoreUuid
-				)
-					return false;
-				return nmDisconnect(restoreUuid);
-			},
+			run: () => nmDisconnectActivation(restoreUuid, activation),
 		});
+		keepLeg = !result.success;
+		if (keepLeg)
+			logger.warn(
+				"Limited hotspot restore could not verify exact deactivation",
+			);
+		return result.success;
 	};
 	let channelRefusal: HybridChannelRefusal | undefined;
 	const readChannel = () => {
@@ -191,6 +242,11 @@ export async function restoreLimitedHotspot(
 		}
 		return false;
 	};
+	const compatibleStation = (station: HybridStationChannel) =>
+		!station.sameChannelOnly ||
+		((!fields[1] || fields[1] === station.fields["802-11-wireless.band"]) &&
+			(!channel.startsWith("ch_") ||
+				fields[2] === station.fields["802-11-wireless.channel"]));
 	try {
 		const hybridChannel =
 			desired === "hybrid" ? await readChannel() : undefined;
@@ -198,6 +254,21 @@ export async function restoreLimitedHotspot(
 			logChannel("hybrid-channel-not-permitted");
 			return refuseHybrid("hybrid-channel-not-permitted");
 		}
+		if (hybridChannel && !compatibleStation(hybridChannel))
+			return refuseHybrid("stored profile channel conflicts with the station");
+		const stationStillCurrent = async () => {
+			const observed = await readChannel();
+			return (
+				(observed !== undefined &&
+					observed.identity === hybridChannel?.identity &&
+					compatibleStation(observed)) ||
+				logChannel("hybrid-channel-not-permitted", {
+					subReason: "station-channel-changed",
+					initialFrequency: hybridChannel?.frequency,
+					observedFrequency: observed?.frequency,
+				})
+			);
+		};
 		if (desired === "hybrid") {
 			let targetRefusal: HybridTargetRefusal | undefined;
 			target = await selectConcurrentApInterface(
@@ -206,6 +277,13 @@ export async function restoreLimitedHotspot(
 				true,
 				(refusal) => {
 					targetRefusal = refusal;
+				},
+				{
+					preserveDevicePolicy: true,
+					beforeCreate: async () =>
+						(await stationStillCurrent()) &&
+						(await profileCurrent(fields[3])) &&
+						(await radioStillCurrent()),
 				},
 			);
 			if (!admitted()) return undefined;
@@ -223,26 +301,16 @@ export async function restoreLimitedHotspot(
 				}
 				return refuseHybrid("hybrid interface is unavailable");
 			}
-			const selectedIfname = target.ifname;
-			if (
-				!(
-					await runHotspotProfileOperation({
-						uuid: restoreUuid,
-						kind: "modify",
-						fields: {
-							"connection.interface-name": selectedIfname,
-							"802-11-wireless.mac-address": "",
-							"match.path": "",
-							"connection.autoconnect": "no",
-							"connection.autoconnect-priority": "999",
-							...hybridChannel?.fields,
-						},
-						run: (fields) => nmConnSetFields(restoreUuid, fields),
-					})
-				).success
-			)
-				return pending("hybrid profile binding failed");
+			if (target.ifname !== fields[3])
+				return pending("owned profile does not target the selected interface");
 			const initialFrequency = hybridChannel?.frequency;
+			if (!(await revalidateConcurrentApInterface(target))) {
+				logChannel("hybrid-channel-not-permitted", {
+					subReason: "target-no-longer-valid",
+					initialFrequency,
+				});
+				return refuseHybrid("hybrid-channel-not-permitted");
+			}
 			if (
 				!admitted((reason: string) =>
 					logChannel(reason, { subReason: "admission-lost", initialFrequency }),
@@ -254,25 +322,9 @@ export async function restoreLimitedHotspot(
 				});
 				return refuseHybrid("hybrid-channel-not-permitted");
 			}
-			if (!(await revalidateConcurrentApInterface(target))) {
-				logChannel("hybrid-channel-not-permitted", {
-					subReason: "target-no-longer-valid",
-					initialFrequency,
-				});
+			if (!(await stationStillCurrent()))
 				return refuseHybrid("hybrid-channel-not-permitted");
-			}
-			const observed = await readChannel();
-			if (observed?.identity !== hybridChannel?.identity) {
-				logChannel("hybrid-channel-not-permitted", {
-					subReason: "station-channel-changed",
-					initialFrequency,
-					observedFrequency: observed?.frequency,
-				});
-				return refuseHybrid("hybrid-channel-not-permitted");
-			}
 		}
-		if (!canUseHotspotConnection(key, stored.conn))
-			return pending("profile ownership changed");
 		if (target) {
 			targetIdentity = await readHybridTargetIdentity(
 				row.ifname,
@@ -289,43 +341,66 @@ export async function restoreLimitedHotspot(
 					if (
 						target &&
 						(!admitted() ||
-							(await readHybridTargetIdentity(row.ifname, target.ifname)) !==
-								targetIdentity ||
-							(await readHybridStationChannel(row.ifname))?.identity !==
-								hybridChannel?.identity ||
-							!(await revalidateConcurrentApInterface(target)))
+							!(await revalidateConcurrentApInterface(target)) ||
+							!(await stationStillCurrent()))
 					)
 						return false;
-					return nmConnect(restoreUuid, HOTSPOT_UP_TO);
+					const runId = target ? await nmRunId() : undefined;
+					if (!(await profileCurrent(target?.ifname ?? fields[3])))
+						return false;
+					return (
+						(await radioStillCurrent()) &&
+						(!target ||
+							((await readHybridTargetIdentity(ifname, target.ifname)) ===
+								targetIdentity &&
+								(await stationStillCurrent()))) &&
+						admitted() &&
+						nmConnect(
+							restoreUuid,
+							HOTSPOT_UP_TO,
+							(path) => {
+								if (runId && target)
+									activation = { path, runId, ifname: target.ifname };
+							},
+							undefined,
+							target?.ifname ?? ifname,
+						)
+					);
 				},
 			})
 		).success;
 		if (stopped()) {
-			if (activated) await disconnectSelected();
+			if (target && (activated || activation)) await disconnectSelected();
 			return undefined;
 		}
 		if (!activated) {
+			if (target && activation) await disconnectSelected();
 			refuse("activation failed");
 			return { success: false, error: "activation-failed" };
 		}
 		if (
 			target &&
 			hybridChannel &&
-			!(await confirmHybridActivation(
-				row.ifname,
-				target.ifname,
-				stored.conn,
-				hybridChannel,
-			))
+			(!activation ||
+				!(await confirmHybridActivation(
+					row.ifname,
+					target.ifname,
+					stored.conn,
+					hybridChannel,
+					activation,
+				)))
 		) {
-			await disconnectSelected();
-			return pending("hybrid activation was not confirmed");
+			return pending(
+				(await disconnectSelected())
+					? "hybrid activation was not confirmed"
+					: "hybrid activation teardown was not confirmed",
+			);
 		}
 		accepted = true;
 		logger.warn("hotspot restored on an adapter that could not be identified");
 		return { success: true };
 	} finally {
-		if (!accepted && target) {
+		if (!accepted && !keepLeg && target) {
 			await releaseConcurrentApInterface(target.ifname);
 			if (target.created) await releaseCreatedHybridTarget(target);
 		}

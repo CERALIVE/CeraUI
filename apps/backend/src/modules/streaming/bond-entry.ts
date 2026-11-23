@@ -1,6 +1,12 @@
 import { logger } from "../../helpers/logger.ts";
-import type { PhysicalDeviceRecord } from "../modems/physical-identity.ts";
-import { resolveModemPhysicalIdentity } from "../modems/physical-identity-source.ts";
+import type {
+	PhysicalBondKeys,
+	PhysicalDeviceRecord,
+} from "../modems/physical-identity.ts";
+import {
+	describeModemBondKeys,
+	resolveModemPhysicalIdentity,
+} from "../modems/physical-identity-source.ts";
 import {
 	type BondEntry,
 	isMappableEntry,
@@ -22,6 +28,16 @@ export function resolveBondPhysicalIdentity(
 ): PhysicalDeviceRecord | undefined {
 	try {
 		return identityResolver(ifname);
+	} catch {
+		return undefined;
+	}
+}
+
+export function peekBondKeys(ifname: string): PhysicalBondKeys | undefined {
+	try {
+		return identityResolver === resolveModemPhysicalIdentity
+			? describeModemBondKeys(ifname)
+			: identityResolver(ifname);
 	} catch {
 		return undefined;
 	}

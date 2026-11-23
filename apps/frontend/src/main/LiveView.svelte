@@ -820,10 +820,11 @@ function stepBitrate(delta: number) {
 }
 
 // Config-row summaries — distilled from the saved config, never gray placeholders.
+// The bitrate ceiling the encoder row shows: the unsaved dialog draft, else the saved one.
+const encoderBitrateKbps = $derived(encoderConfig.bitrate ?? config?.max_br);
 const encoderSummary = $derived.by(() => {
 	const parts: string[] = [];
 	const pipeline = encoderConfig.source ?? config?.pipeline;
-	const bitrate = encoderConfig.bitrate ?? config?.max_br;
 	// Name the source by the SAME display name the source list (`getSources()`)
 	// shows: when `config.source` resolves to a capture source, use its REAL
 	// hardware `displayName`; else fall back to the pipeline display name /
@@ -841,12 +842,14 @@ const encoderSummary = $derived.by(() => {
 				: m["live.reconfigureRequired"](),
 		);
 	}
-	if (bitrate) parts.push(formatBitrate(bitrate));
-	if (parts.length === 0) return m["general.notConfigured"]();
+	// The bitrate is NOT a part: the encoder row says it once, after this value,
+	// as its own tappable figure (`encoderBitrate`).
+	if (parts.length === 0 && !encoderBitrateKbps) return m["general.notConfigured"]();
 	// Todo 12: transport token dropped here — the Destination/server row
 	// (`serverSummary`) is the ONE idle surface that names the transport.
 	return parts.join(' · ');
 });
+const encoderBitrate = $derived(encoderBitrateKbps ? formatBitrate(encoderBitrateKbps) : undefined);
 // The encoder row's route line: the same resolveRoute the Encoder dialog shows,
 // from the saved settings and the configured source (the Output card is idle-only).
 const encoderRoute = $derived.by(() => {
@@ -1030,6 +1033,7 @@ const configRows = $derived<ConfigRow[]>([
 		testId: 'open-encoder-dialog',
 		warn: pipelineNeedsReconfigure,
 		...(encoderRoute ? { route: encoderRoute } : {}),
+		...(encoderBitrate ? { bitrate: encoderBitrate } : {}),
 	},
 	{
 		icon: Server,
@@ -1174,12 +1178,10 @@ const configRows = $derived<ConfigRow[]>([
 			{isStreaming}
 			optimismState={streamingOptimismState}
 			{destinationValidated}
-			maxBitrate={config?.max_br}
 			onStart={handleStart}
 			onStop={handleStop}
 			onOpenSource={handleOpenSource}
 			onGoNetwork={handleManageLinks}
-			onOpenEncoder={() => (encoderOpen = true)}
 			{activeInput}
 			{switchingInput}
 			onSwitch={handleSwitchInput}

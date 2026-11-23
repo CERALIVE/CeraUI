@@ -67,6 +67,10 @@ export async function selectConcurrentApInterface(
 	admitted: () => boolean = () => true,
 	createMissing = false,
 	onRefusal?: (refusal: HybridTargetRefusal) => void,
+	creation?: Omit<
+		NonNullable<Parameters<typeof ensureConcurrentApInterface>[4]>,
+		"phy"
+	>,
 ): Promise<ConcurrentApInterface | undefined> {
 	const ifname = concurrentApIfname(parentIfname);
 	const facts: HybridTargetFacts = {
@@ -184,7 +188,7 @@ export async function selectConcurrentApInterface(
 		  }
 		| undefined;
 	let p2p = 0;
-	let parentSeen = false;
+	let parentWireless: string | undefined;
 	let targetSeen = false;
 	for (const line of dump.split("\n")) {
 		const header = /^\s*phy#(\d+)\s*$/.exec(line);
@@ -216,7 +220,7 @@ export async function selectConcurrentApInterface(
 		if (!name) return refuse("unnamed-phy-interface");
 		if (name === parentIfname) {
 			if (type !== "managed") return refuse("parent-role-mismatch");
-			parentSeen = true;
+			if (index === String(parent.lifetime.ifindex)) parentWireless = wdev;
 			continue;
 		}
 		if (name === ifname) {
@@ -236,7 +240,7 @@ export async function selectConcurrentApInterface(
 	}
 	const phyDump = await interfaceRunner("iw", ["phy", phy, "info"]);
 	// Bind the admitted object here; later samples must be this same live leg.
-	if (!parentSeen) return refuse("parent-not-in-iw");
+	if (!parentWireless) return refuse("parent-not-in-iw");
 	if (
 		existing &&
 		(!targetSeen ||
@@ -347,6 +351,33 @@ export async function selectConcurrentApInterface(
 		(reason) => {
 			allocationFailure = reason;
 		},
+		{
+			phy: parent.lifetime.wiphy,
+			preserveDevicePolicy: creation?.preserveDevicePolicy === true,
+			beforePolicy: creation?.beforePolicy,
+			beforeCreate: async () => {
+				if (creation && !(await creation.beforeCreate())) return false;
+				const info = await interfaceRunner("iw", [
+					"dev",
+					parentIfname,
+					"info",
+				]).catch(() => "");
+				const live = await sampleRadio(
+					parentIfname,
+					radioIdentityReaders,
+					undefined,
+				);
+				return Boolean(
+					live &&
+						sameLifetime(parent.lifetime, live.lifetime) &&
+						parent.permanentMac === live.permanentMac &&
+						parent.devicePath === live.devicePath &&
+						wifiRadioIdentity.state.rows.get(parentIfname)?.incarnation ===
+							parentIdentity.incarnation &&
+						interfaceIdentity(info)?.wdev === parentWireless,
+				);
+			},
+		},
 	);
 	// A leg appearing after absence was admitted is foreign, never a borrowed target.
 	if (!target)
@@ -412,8 +443,9 @@ export async function selectConcurrentApInterface(
 						? hybridIwLegIdentity(info, sampled.lifetime)
 						: { ...createdObservation, phyPath: sampled.lifetime.phyPath },
 			});
-		const priorAutoconnect =
-			previous?.priorAutoconnect ?? (policy === "no" ? undefined : policy);
+		const priorAutoconnect = creation?.preserveDevicePolicy
+			? undefined
+			: (previous?.priorAutoconnect ?? (policy === "no" ? undefined : policy));
 		const record: TargetRecord = {
 			boot,
 			parent: parent.lifetime,
@@ -434,10 +466,13 @@ export async function selectConcurrentApInterface(
 			first: stored?.first ?? sampled.lifetime,
 			record,
 		});
-		if (policy !== "no") {
+		if (!creation?.preserveDevicePolicy && policy !== "no") {
 			if (
-				!(await setConcurrentAutoconnect(ifname, "no", () =>
-					currentTarget(ifname, record),
+				!(await setConcurrentAutoconnect(
+					ifname,
+					"no",
+					() => currentTarget(ifname, record),
+					creation?.beforePolicy,
 				))
 			)
 				return refuse("target-autoconnect-refused");

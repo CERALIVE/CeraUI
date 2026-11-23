@@ -16,6 +16,7 @@ import {
 	defaultHotspotStopDeps,
 	wifiHotspotStop,
 } from "../modules/wifi/wifi-hotspot-config.ts";
+import { ACTIVE_PATH, RUN_ID } from "./helpers/wifi-active-observation.ts";
 import {
 	autoconnectFixture,
 	MAC,
@@ -127,7 +128,7 @@ test.each(cases)(
 		spyOn(
 			defaultHotspotStopDeps,
 			"releaseConcurrentInterface",
-		).mockResolvedValue(undefined);
+		).mockResolvedValue(true);
 		const start = spyOn(defaultAdapterModeDeps, "startHotspot");
 		const persist = spyOn(defaultAdapterModeDeps, "persistMode");
 		const discovery = f.discover();
@@ -156,12 +157,19 @@ test.each(cases)(
 				success: true,
 				applied: "station",
 			});
-			expect(down.mock.calls).toEqual([[virtual ? LEG : LIVE]]);
+			expect(down.mock.calls).toEqual([
+				[
+					virtual ? LEG : LIVE,
+					ACTIVE_PATH,
+					RUN_ID,
+					virtual ? "clap-wlan0" : "wlan0",
+				],
+			]);
 		}
 	},
 );
 
-test("a skipped discovery and unreadable hybrid leg keep mode busy until a requested refresh resolves it", async () => {
+test("a skipped discovery defers Stop, then Station waits for the refreshed hybrid leg", async () => {
 	const device = await startHandoff(false, true);
 	f.list(["wlan0:wifi:disconnected:", `clap-wlan0:wifi:connected:${LEG}`]);
 	const getFields = nm.nmConnGetFields;
@@ -186,7 +194,7 @@ test("a skipped discovery and unreadable hybrid leg keep mode busy until a reque
 		true,
 	);
 	spyOn(defaultHotspotStopDeps, "releaseConcurrentInterface").mockResolvedValue(
-		undefined,
+		true,
 	);
 	expect(await wifiHotspotStop({ device })).toEqual({
 		success: false,
@@ -194,6 +202,7 @@ test("a skipped discovery and unreadable hybrid leg keep mode busy until a reque
 	});
 	await skipped.promise;
 	expect(list).toHaveBeenCalledWith("device,type,state,con-uuid");
+	expect(down).not.toHaveBeenCalled();
 	read.mockRestore();
 	const refreshed = Promise.withResolvers<void>();
 	const unsubscribe = wifiAdapterModeRestoreSource.subscribe(async () => {
@@ -205,15 +214,15 @@ test("a skipped discovery and unreadable hybrid leg keep mode busy until a reque
 	});
 	try {
 		expect(await setWifiAdapterMode(device, "station")).toEqual({
-			success: false,
-			error: "DEVICE_BUSY",
+			success: true,
+			applied: "station",
 		});
-		expect(down).not.toHaveBeenCalled();
+		expect(down.mock.calls).toEqual([[LEG, ACTIVE_PATH, RUN_ID, "clap-wlan0"]]);
 		await recovered.promise;
 		await refreshed.promise;
 	} finally {
 		unsubscribe();
 	}
 	expect(await wifiHotspotStop({ device })).toEqual({ success: true });
-	expect(down.mock.calls).toEqual([[LEG]]);
+	expect(down.mock.calls).toEqual([[LEG, ACTIVE_PATH, RUN_ID, "clap-wlan0"]]);
 });

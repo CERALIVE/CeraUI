@@ -1,5 +1,6 @@
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
+import type { UpdateProgress } from '@ceraui/rpc/schemas';
 import { Play, Square } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
@@ -10,14 +11,10 @@ import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
 let isDemo = $state(false);
 let demoPhase = $state(0);
 
-// Simulated update details
-let demoDetails = $state({
-	downloading: 0,
-	unpacking: 0,
-	setting_up: 0,
-	total: 10,
-	result: undefined as number | undefined,
-});
+// Simulated update details: phase markers plus the percentage APT reports.
+const idle: UpdateProgress = { downloading: 0, unpacking: 0, setting_up: 0, total: 0 };
+const DEMO_STEPS = 10;
+let demoDetails = $state<UpdateProgress>(idle);
 
 // Demo simulation control
 let demoInterval: ReturnType<typeof setInterval> | null = null;
@@ -25,40 +22,22 @@ let demoInterval: ReturnType<typeof setInterval> | null = null;
 function startDemo() {
 	isDemo = true;
 	demoPhase = 0;
+	demoDetails = idle;
 
-	// Reset all values
-	demoDetails = {
-		downloading: 0,
-		unpacking: 0,
-		setting_up: 0,
-		total: 10,
-		result: undefined,
-	};
-
-	// Start the simulation
 	demoInterval = setInterval(() => {
-		const total = 10;
-		if (demoPhase < total) {
-			// Phase 1: Downloading (0-33%)
-			if (demoPhase < Math.floor(total / 3)) {
-				demoDetails.downloading = demoPhase + 1;
-			}
-			// Phase 2: Unpacking (33-66%)
-			else if (demoPhase < Math.floor((total * 2) / 3)) {
-				demoDetails.downloading = Math.floor(total / 3);
-				demoDetails.unpacking = demoPhase - Math.floor(total / 3) + 1;
-			}
-			// Phase 3: Installing (66-100%)
-			else {
-				demoDetails.downloading = Math.floor(total / 3);
-				demoDetails.unpacking = Math.floor(total / 3);
-				demoDetails.setting_up = demoPhase - Math.floor((total * 2) / 3) + 1;
-			}
-
+		if (demoPhase < DEMO_STEPS) {
+			const downloading = demoPhase < DEMO_STEPS / 2;
+			demoDetails = {
+				total: 1,
+				downloading: downloading ? 1 : 0,
+				unpacking: 0,
+				setting_up: downloading ? 0 : 1,
+				percent: Math.min(99, ((demoPhase % (DEMO_STEPS / 2)) + 1) * 20),
+			};
 			demoPhase++;
 		} else {
 			// Complete the demo
-			demoDetails.result = 0; // Success
+			demoDetails = { ...demoDetails, result: 0 }; // Success
 			setTimeout(() => {
 				stopDemo();
 			}, 3000); // Show success for 3 seconds
@@ -73,13 +52,7 @@ function stopDemo() {
 		demoInterval = null;
 	}
 	demoPhase = 0;
-	demoDetails = {
-		downloading: 0,
-		unpacking: 0,
-		setting_up: 0,
-		total: 10,
-		result: undefined,
-	};
+	demoDetails = idle;
 }
 
 // Cleanup using effect

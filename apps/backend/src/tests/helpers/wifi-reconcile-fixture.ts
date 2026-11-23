@@ -7,7 +7,7 @@ import {
 	wifiHotspotStop,
 } from "../../modules/wifi/wifi-hotspot-config.ts";
 
-export const policyStop = (disconnect: () => Promise<boolean>) =>
+export const policyStop = (disconnect: typeof nm.nmDisconnect) =>
 	wifiHotspotStop(
 		{ device: 0 },
 		{
