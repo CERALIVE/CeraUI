@@ -8,6 +8,7 @@ import {
 	spyOn,
 	test,
 } from "bun:test";
+import { call } from "@orpc/server";
 
 import { MOCK_FEEDBACK_BROADCAST_INTERVAL_MS } from "../mocks/mock-constants.ts";
 import {
@@ -30,7 +31,9 @@ import type {
 	MonitorEvent,
 } from "../modules/network/state-types.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
+import { hotspotStopProcedure } from "../rpc/procedures/wifi.procedure.ts";
 import type { AppWebSocket } from "../rpc/types.ts";
+import { wifiProtocolContext } from "./helpers/wifi-protocol-context.ts";
 
 const SCENARIO = "multi-modem-wifi";
 
@@ -213,6 +216,44 @@ describe("mock feedback broadcast — signal fluctuations reach clients on a 5s 
 					"0": expect.not.objectContaining({ hotspot: expect.anything() }),
 				}),
 			]);
+		} finally {
+			removeClient(client);
+		}
+	});
+
+	test("mock hotspot Stop publishes station before the next feedback tick", async () => {
+		const sink: Array<Record<string, unknown>> = [];
+		const client = makeRecordingClient(sink);
+		addClient(client);
+		try {
+			getMockState().wifiModes.wlan0 = "hotspot";
+			await runMockFeedbackBroadcast();
+			expect(wifiStatuses(sink).at(-1)?.wifi).toMatchObject({
+				"0": { ifname: "wlan0", hotspot: expect.any(Object) },
+			});
+			sink.length = 0;
+
+			expect(
+				await call(
+					hotspotStopProcedure,
+					{ device: "0" },
+					{ context: wifiProtocolContext() },
+				),
+			).toEqual({ success: true });
+			const beforeTick = wifiStatuses(sink).map((status) => status.wifi);
+			await runMockFeedbackBroadcast();
+			const afterTick = wifiStatuses(sink).map((status) => status.wifi);
+			expect(afterTick).toEqual([
+				expect.objectContaining({
+					"0": expect.objectContaining({
+						ifname: "wlan0",
+						available: expect.any(Array),
+					}),
+				}),
+			]);
+			expect(afterTick[0]).not.toHaveProperty("0.hotspot");
+			expect(beforeTick).toHaveLength(1);
+			expect(beforeTick).toEqual(afterTick);
 		} finally {
 			removeClient(client);
 		}
