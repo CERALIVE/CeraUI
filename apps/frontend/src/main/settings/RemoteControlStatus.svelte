@@ -57,6 +57,6 @@ const dotColor = $derived(
 			<span class="size-2 shrink-0 rounded-full" style:background-color={dotColor}></span>
 			<span class="block truncate text-sm font-semibold">{label}</span>
 		</span>
-		<span class="text-muted-foreground block truncate text-xs">{hint}</span>
+		<span class="text-muted-foreground block text-xs">{hint}</span>
 	</span>
 </div>
