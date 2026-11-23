@@ -826,6 +826,56 @@ describe("start refusal presentation across the socket", () => {
 		expect(sentCount("streaming.start")).toBe(1);
 	});
 
+	it.each(["before", "after"] as const)(
+		"requires a fresh Start when the receiver changes %s the refusal",
+		async (order) => {
+			device.usePushedConfig = true;
+			socket().deliver({
+				config: {
+					source: "cam-1",
+					pipeline: "cam-1-pipe",
+					srtla_addr: "192.0.2.1",
+					max_br: 6000,
+				},
+			});
+			const { container } = render(LiveView);
+			await fireEvent.click(button(container, "Start Stream"));
+			await settle();
+			expect(outstanding("streaming.start")[0]?.input).toMatchObject({
+				srtla_addr: "192.0.2.1",
+			});
+			const changeReceiver = async () => {
+				socket().deliver({ config: { srtla_addr: "192.0.2.2" } });
+				await settle();
+			};
+			if (order === "before") await changeReceiver();
+			refuseStart(`changed-target-${order}`);
+			await settle();
+			if (order === "after") await changeReceiver();
+
+			const start = button(container, "Start Stream");
+			expect(start.disabled).toBe(false);
+			const retry = latestRefusalAction();
+			expect(retry?.label).toBe(en.live.startFailure.action.tryAgain);
+			vi.mocked(toast.dismiss).mockClear();
+			const admitted = retry?.activate();
+			await settle();
+			expect(sentCount("streaming.start")).toBe(1);
+			expect(admitted).toBe(false);
+			expect(toast.dismiss).not.toHaveBeenCalled();
+			expect(
+				vi.mocked(toast.error).mock.lastCall?.[1]?.componentProps?.logs,
+			).toBeTypeOf("function");
+
+			await fireEvent.click(start);
+			await settle();
+			expect(sentCount("streaming.start")).toBe(2);
+			expect(outstanding("streaming.start")[0]?.input).toMatchObject({
+				srtla_addr: "192.0.2.2",
+			});
+		},
+	);
+
 	it.each([{ srtla_addr: "192.0.2.2" }, { max_br: 8000 }])(
 		"keeps the refusal and blocks a queued retry after config changes: %j",
 		async (change) => {

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/svelte";
 import { tick } from "svelte";
+import { fromStore, writable } from "svelte/store";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { VIEW_LOGS_TOAST_CLASS } from "../lib/device-logs/view-logs";
 import { ConnectionResetError } from "../lib/rpc/client";
@@ -44,6 +45,8 @@ const toastError = vi.hoisted(() => vi.fn());
 const reboot = vi.hoisted(() => vi.fn());
 const navigate = vi.hoisted(() => vi.fn());
 const startStreaming = vi.hoisted(() => vi.fn());
+const deliveredFailure = writable<typeof state.failure>(undefined);
+const failureReceipt = fromStore(deliveredFailure);
 
 vi.mock("svelte-sonner", () => ({
 	toast: { error: toastError, dismiss: vi.fn() },
@@ -108,16 +111,20 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 vi.mock("$lib/rpc/streaming-optimism.svelte", () => ({
 	getStreamingOptimismState: () => state.optimismState,
 	getStreamingStopReason: () => state.stopReason,
-	getStreamingStartFailure: () => state.failure,
+	getStreamingStartFailure: () => failureReceipt.current ?? state.failure,
 	getStreamingAttemptGeneration: () => state.generation,
 	getStopStuckBannerVisible: () => false,
 	startStreamingOptimism: state.startOptimism,
 	stopStreamingOptimism: vi.fn(),
 	reconcileStreamingOptimism: vi.fn(),
 	revertStreamingOptimism: state.revertOptimism,
-	revertStreamingOptimismFailure: vi.fn(),
+	revertStreamingOptimismFailure: deliveredFailureSet,
 	retryStopStreaming: vi.fn(),
 }));
+
+function deliveredFailureSet(failure: typeof state.failure) {
+	deliveredFailure.set(failure);
+}
 
 vi.mock("$main/live/IdleCockpit.svelte", async () => ({
 	default: (await import("./fixtures/IdleCockpitStartStub.svelte")).default,
@@ -182,6 +189,7 @@ afterEach(() => {
 	state.revertOptimism.mockReset();
 	state.stopReason = undefined;
 	state.failure = undefined;
+	deliveredFailure.set(undefined);
 	toastError.mockReset();
 	startStreaming.mockReset();
 	clearRequestedDialog();
@@ -462,16 +470,36 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 		return activate ? { action: { onClick: activate } } : undefined;
 	}
 
+	async function startWithRefusal(
+		attemptId: string,
+		incrementGeneration = false,
+	) {
+		if (incrementGeneration) {
+			state.startOptimism.mockImplementation(() => {
+				state.generation += 1;
+			});
+		}
+		startStreaming.mockResolvedValueOnce({
+			success: false,
+			failure: {
+				class: "engine_internal",
+				phase: "start-rpc",
+				retriable: false,
+				attemptId,
+			},
+		});
+		const view = render(LiveView);
+		await fireEvent.click(view.getByTestId("start-stream"));
+		await waitFor(() => expect(action()).toBeDefined());
+		state.failure = failureReceipt.current;
+		deliveredFailure.set(undefined);
+		startStreaming.mockClear();
+		state.startOptimism.mockClear();
+	}
+
 	it("Try again sends one Start through the Live bar's gate", async () => {
-		state.failure = {
-			class: "start_timeout",
-			phase: "connect",
-			retriable: true,
-			attemptId: "att_retry",
-		};
 		delete state.config.source;
-		render(LiveView);
-		await tick();
+		await startWithRefusal("att_retry");
 		startStreaming.mockResolvedValue({ success: true });
 		action()?.action.onClick();
 		await waitFor(() => expect(startStreaming).toHaveBeenCalledTimes(1));
@@ -481,14 +509,7 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 	});
 
 	it("Try again sends nothing when a gate has blocked since the refusal", async () => {
-		state.failure = {
-			class: "engine_internal",
-			phase: "start-rpc",
-			retriable: false,
-			attemptId: "att_blocked",
-		};
-		render(LiveView);
-		await tick();
+		await startWithRefusal("att_blocked");
 		// The only link dropped after the refusal: the Live bar would refuse Start now.
 		state.netif = {};
 		action()?.action.onClick();
@@ -498,14 +519,7 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 	});
 
 	it("Try again from a refusal that is no longer current sends nothing", async () => {
-		state.failure = {
-			class: "engine_internal",
-			phase: "start-rpc",
-			retriable: false,
-			attemptId: "att_old",
-		};
-		render(LiveView);
-		await tick();
+		await startWithRefusal("att_old");
 		const old = action();
 		state.failure = {
 			class: "engine_internal",
@@ -539,9 +553,7 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 	});
 
 	it("a Try again that passes the gate but is never sent does not lead to Restart box", async () => {
-		engineRefusal("att_unsent");
-		render(LiveView);
-		await tick();
+		await startWithRefusal("att_unsent");
 		startStreaming.mockRejectedValue(new NotSentError());
 		action()?.action.onClick();
 		await waitFor(() => expect(startStreaming).toHaveBeenCalledTimes(1));
@@ -561,12 +573,7 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 	});
 
 	it("a refusal of a newer attempt than the retried one offers Try again, not Restart box", async () => {
-		state.startOptimism.mockImplementation(() => {
-			state.generation += 1;
-		});
-		engineRefusal("att_g1");
-		render(LiveView);
-		await tick();
+		await startWithRefusal("att_g1", true);
 		startStreaming.mockResolvedValue({ success: true });
 		action()?.action.onClick();
 		await waitFor(() => expect(startStreaming).toHaveBeenCalledTimes(1));
@@ -584,16 +591,11 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 	});
 
 	it("the refusal of the retried attempt itself offers Restart box", async () => {
-		state.startOptimism.mockImplementation(() => {
-			state.generation += 1;
-		});
-		engineRefusal("att_r1");
-		render(LiveView);
-		await tick();
+		await startWithRefusal("att_r1", true);
 		startStreaming.mockResolvedValue({ success: true });
 		action()?.action.onClick();
 		await waitFor(() => expect(startStreaming).toHaveBeenCalledTimes(1));
-		expect(state.generation).toBe(2);
+		expect(state.generation).toBe(3);
 		cleanup();
 		toastError.mockReset();
 		engineRefusal("att_r2");
@@ -606,14 +608,7 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 	});
 
 	it("Restart box follows only an engine refusal that came back after Try again", async () => {
-		state.failure = {
-			class: "engine_internal",
-			phase: "start-rpc",
-			retriable: false,
-			attemptId: "att_first",
-		};
-		render(LiveView);
-		await tick();
+		await startWithRefusal("att_first");
 		startStreaming.mockResolvedValue({ success: true });
 		action()?.action.onClick();
 		await waitFor(() => expect(startStreaming).toHaveBeenCalledTimes(1));
@@ -660,14 +655,7 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 
 	it("a refusal more than two minutes after Try again offers Try again again", async () => {
 		const now = vi.spyOn(performance, "now").mockReturnValue(1_000_000);
-		state.failure = {
-			class: "engine_internal",
-			phase: "start-rpc",
-			retriable: false,
-			attemptId: "att_t1",
-		};
-		render(LiveView);
-		await tick();
+		await startWithRefusal("att_t1");
 		startStreaming.mockResolvedValue({ success: true });
 		action()?.action.onClick();
 		await waitFor(() => expect(startStreaming).toHaveBeenCalledTimes(1));
@@ -689,14 +677,7 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 	});
 
 	it("Restart box opens the guarded reboot sheet and reboots nothing by itself", async () => {
-		state.failure = {
-			class: "engine_internal",
-			phase: "start-rpc",
-			retriable: false,
-			attemptId: "att_reboot_first",
-		};
-		render(LiveView);
-		await tick();
+		await startWithRefusal("att_reboot_first");
 		startStreaming.mockResolvedValue({ success: true });
 		action()?.action.onClick();
 		await waitFor(() => expect(startStreaming).toHaveBeenCalledTimes(1));
