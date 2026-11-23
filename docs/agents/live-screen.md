@@ -244,7 +244,14 @@ camera), plus a settled idle lifecycle and the current refusal's identity. It
 is not offered for post-connect timeout, unresolved Stop, or a known engine
 state conflict. If conditions change after the toast appears, a blocked tap
 keeps both the toast and View logs. Network opens the modem controls; Stream
-setup focuses the card heading. The update refusal retains its wait message.
+setup focuses the card heading. A retry waiting behind a composition write
+rechecks readiness and the accepted config generation before dispatch;
+changed settings leave the refusal available. The update refusal retains its
+wait message.
+
+Layout: the actionable refusal has its own toast stack above the Live bar and
+dock. On short phones the reason scrolls independently, with a line visible
+above the single row of actions. Later device notices cannot push it away.
 
 A repeat belongs only to the retry's generation and must arrive less than two
 minutes from dispatch on the monotonic clock. A fresh Start, observed running

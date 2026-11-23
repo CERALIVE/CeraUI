@@ -298,6 +298,13 @@ async function expectAboveChrome(page: Page, actions: readonly Locator[]) {
 	}
 }
 
+async function centerHits(control: Locator): Promise<boolean> {
+	return control.evaluate((element) => {
+		const { x, y, width, height } = element.getBoundingClientRect();
+		return element.contains(document.elementFromPoint(x + width / 2, y + height / 2));
+	});
+}
+
 test.describe('short-phone refusal recovery', () => {
 	test.use({ hasTouch: true });
 	for (const [width, height] of [[390, 260], [360, 240]] as const) {
@@ -320,6 +327,49 @@ test.describe('short-phone refusal recovery', () => {
 				await expectAboveChrome(page, [retry, logs]);
 				await logs.tap();
 				await expect(page.getByRole('dialog')).toBeVisible();
+			});
+		}
+	}
+
+	for (const [width, height] of [[390, 260], [360, 240]] as const) {
+		for (const locale of ['de', 'en'] as const) {
+			test(`${locale} ${width}×${height}: competing notices leave the refusal and Start usable`, async ({ page }) => {
+				await page.setViewportSize({ width, height });
+				await page.emulateMedia({ reducedMotion: 'reduce' });
+				await page.addInitScript((code) => {
+					localStorage.setItem('locale', JSON.stringify({ code }));
+					Object.defineProperty(navigator, 'standalone', { value: true });
+				}, locale);
+				const attemptId = `network-${locale}-${width}`;
+				const ws = await startWithReply(page, {
+					result: 'failed', success: false, attemptId,
+					failure: { attemptId, phase: 'params', class: 'mutation_blocked', retriable: false },
+				});
+				const toast = page.locator('.start-refusal-toast');
+				const reason = toast.getByRole('region');
+				const buttons = toast.getByRole('button');
+				await expect(buttons).toHaveCount(3);
+				const actions = await buttons.all();
+				const start = page.getByTestId('live-bar').getByRole('button', {
+					name: locale === 'de' ? 'Stream starten' : 'Start Stream', exact: true,
+				});
+				const assertUsable = async () => {
+					await expect(start).toBeEnabled();
+					await expect.poll(() => centerHits(start)).toBe(true);
+					await expectAboveChrome(page, actions);
+					await expect(reason).toBeInViewport({ ratio: 1 });
+					expect(await reason.evaluate((node) => node.clientHeight >= Math.floor(
+						Number.parseFloat(getComputedStyle(node).lineHeight),
+					))).toBe(true);
+				};
+				await assertUsable();
+				ws.push({ notification: { show: Array.from({ length: 3 }, (_, i) => ({
+					name: 'stream_start_failed', type: 'error', msg: `Independent start failed ${i}`,
+					params: { attemptId: `background-${i}` },
+					is_dismissable: true, is_persistent: false, duration: 120,
+				})) } });
+				await expect(page.getByText('Independent start failed 2')).toBeVisible();
+				await assertUsable();
 			});
 		}
 	}
