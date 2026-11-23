@@ -953,7 +953,7 @@
 	"live.startFailure.next.openSetup": "Revisa la configuración de la transmisión y vuelve a iniciar.",
 	"live.startFailure.mutationBlockedNetwork": "No se pudo deshacer un cambio en un módem, así que su estado es desconocido. Revisa ese módem en Red antes de transmitir.",
 	"live.startFailure.action.tryAgain": "Intentar de nuevo",
-	"live.startFailure.actionUnavailable": "Esta acción ya no está disponible. Revisa el estado de la transmisión en En vivo.",
+	"live.startFailure.actionUnavailable": "Esta acción ya no está disponible. Revisa el estado de la transmisión en Live.",
 	"live.startFailure.action.restartBox": "Reiniciar equipo",
 	"live.startFailure.action.openSetup": "Abrir Preparar transmisión",
 	"live.startFailure.action.openNetwork": "Abrir Red",
