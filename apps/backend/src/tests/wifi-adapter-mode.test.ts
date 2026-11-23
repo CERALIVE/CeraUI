@@ -17,6 +17,7 @@ import {
 	beforeEach,
 	describe,
 	expect,
+	spyOn,
 	test,
 } from "bun:test";
 
@@ -27,6 +28,7 @@ import {
 	getConfigFilePath,
 	setConfigFilePath,
 } from "../modules/config.ts";
+import * as nm from "../modules/network/network-manager.ts";
 import {
 	getWifiState,
 	onWifiChange,
@@ -388,15 +390,23 @@ describe("the six transitions", () => {
 	test("asking for the mode the radio is already in settles without touching it", async () => {
 		const iface = makeIface();
 		const { deps, recorder } = makeDeps({ [MAC]: iface });
+		const roster = spyOn(nm, "nmDevices").mockResolvedValue([
+			`${iface.ifname}:wifi:disconnected:`,
+		]);
 
-		const result = await setWifiAdapterMode(0, "station", deps);
+		try {
+			const result = await setWifiAdapterMode(0, "station", deps);
 
-		expect(result).toEqual({ success: true, applied: "station" });
-		expect(recorder.calls).toEqual([]);
-		// Nothing was dispatched, so no confirmation will ever settle and this
-		// branch owes the terminal frame itself.
-		expect(terminalFrames(recorder)).toHaveLength(1);
-		expect(getPersistedWifiAdapterMode(MAC)).toBe("station");
+			expect(result).toEqual({ success: true, applied: "station" });
+			expect(roster).toHaveBeenCalledWith("device,type,state,con-uuid");
+			expect(recorder.calls).toEqual([]);
+			// Nothing was dispatched, so no confirmation will ever settle and this
+			// branch owes the terminal frame itself.
+			expect(terminalFrames(recorder)).toHaveLength(1);
+			expect(getPersistedWifiAdapterMode(MAC)).toBe("station");
+		} finally {
+			roster.mockRestore();
+		}
 	});
 
 	test("an accepted transition whose confirmation publisher is lost reaches a typed timeout terminal", async () => {

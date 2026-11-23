@@ -56,6 +56,7 @@ import {
 	nmcliFieldNames,
 	nmcliFieldOutput,
 } from "./helpers/nmcli-field-output.ts";
+import { mockRosterActivation } from "./helpers/wifi-active-observation.ts";
 import type { RadioFixture } from "./helpers/wifi-radio-equivalence.ts";
 import { fakeShadowSysfs } from "./helpers/wifi-radio-equivalence-shadow.ts";
 
@@ -189,6 +190,7 @@ beforeEach(async () => {
 	spyOn(nmSecrets, "readVerifiedNmWifiSecret").mockImplementation(
 		async () => profilePassword,
 	);
+	mockRosterActivation();
 });
 
 afterEach(async () => {
@@ -569,6 +571,7 @@ test("round two: exclusive details recover and survive a failed same UUID refres
 		password: "fixture-password",
 	});
 	const { state, deps } = stopFixture("active-ap");
+	spyOn(nm, "nmDevices").mockResolvedValue(["wlan0:wifi:connected:active-ap"]);
 	expect(await wifiHotspotStop({ device: 0 }, deps)).toEqual({ success: true });
 	expect(state).toEqual({
 		active: new Set(),

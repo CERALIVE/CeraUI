@@ -6,6 +6,7 @@ import {
 } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 import * as nm from "../modules/network/network-manager.ts";
+import * as profileInstances from "../modules/network/network-manager-profile-instance.ts";
 import { defaultHotspotDeps } from "../modules/wifi/wifi-hotspot-activation.ts";
 import {
 	handleWifiMonitorEvent,
@@ -14,6 +15,7 @@ import {
 import * as profiles from "../modules/wifi/wifi-hotspot-profile-operation.ts";
 import { radioIdentityReaders } from "../modules/wifi/wifi-radio-identity.ts";
 import { hotspotStartProcedure } from "../rpc/procedures/wifi.procedure.ts";
+import { RUN_ID } from "./helpers/wifi-active-observation.ts";
 import { wifiFrameFixture } from "./helpers/wifi-frame-fixture.ts";
 
 test("only Start accepts an optional UUID as its attempt identifier", () => {
@@ -70,10 +72,11 @@ test("a deferred replacement refusal echoes the Start UUID after its accepted re
 	const instance = {
 		path: "/org/freedesktop/NetworkManager/Settings/1",
 		fingerprint: "test-ap",
-		runId: "test",
+		runId: RUN_ID,
 		file: { filename: "test", device: "1", inode: "2", ctime: "3" },
 	};
 	const activePath = "/org/freedesktop/NetworkManager/ActiveConnection/6";
+	spyOn(profileInstances, "nmRunId").mockResolvedValue(RUN_ID);
 	// Model an acknowledged Up whose exact activation remains visible after the swap.
 	spyOn(profiles, "runHotspotProfileOperation").mockImplementation(
 		async (operation) => ({
@@ -88,6 +91,7 @@ test("a deferred replacement refusal echoes the Start UUID after its accepted re
 	);
 	spyOn(defaultHotspotDeps, "readCapabilities").mockReturnValue(undefined);
 	spyOn(defaultHotspotDeps, "readProfileInstance").mockResolvedValue(instance);
+	spyOn(defaultHotspotDeps, "readProfilePins").mockResolvedValue(["", ""]);
 	spyOn(defaultHotspotDeps, "pollHotspotActive").mockResolvedValue(false);
 	spyOn(defaultHotspotDeps, "wifiUpdateSavedConns").mockResolvedValue();
 	spyOn(defaultHotspotDeps, "nmConnSetFields").mockResolvedValue(true);
@@ -101,7 +105,11 @@ test("a deferred replacement refusal echoes the Start UUID after its accepted re
 	spyOn(defaultHotspotDeps, "pruneHotspotConns").mockResolvedValue();
 	spyOn(defaultHotspotDeps, "broadcastState").mockImplementation(() => {});
 	spyOn(defaultHotspotDeps, "setDupIpSuppression").mockImplementation(() => {});
-	spyOn(defaultHotspotDeps.credentials, "get").mockReturnValue(undefined);
+	spyOn(defaultHotspotDeps.credentials, "get").mockReturnValue({
+		conn: "test-ap",
+		ssid: "Original AP",
+		password: "original-password",
+	});
 	const attempt = crypto.randomUUID();
 	const outcomes = () =>
 		f.frames.flatMap((raw) => {

@@ -46,6 +46,7 @@ vi.mock("$lib/rpc/subscriptions.svelte", async () => ({
 	getNotifications: (await import("./__fixtures__/auth-feed.svelte"))
 		.getNotificationsFeed,
 	getUpdating: () => null,
+	getUpdateState: () => undefined,
 }));
 vi.mock("$lib/stores/offline-state.svelte", async () => ({
 	getShouldShowOfflinePage: (await import("./__fixtures__/auth-feed.svelte"))

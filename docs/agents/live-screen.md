@@ -50,7 +50,7 @@ tokens, motion, copy tone and states.
 | `program-desk` | The preview (`preview-disclosure`) and, after it, `layout-controls`. While live, also `LiveSummaryStrip` and `LiveSourceSwitch`. | In both cockpits. |
 | `layout-controls` | The controls of `CompositionCard`. | When the engine advertises the `composition` feature. |
 | `audio-card` | Idle: the `source-audio` block. Live: the mixer strips. | Idle: when the `source-audio` block renders. Live: when the engine advertises `audio_mix`. |
-| `output-card` | The encoder row and the destination row of the stream setup, with the bitrate-ceiling chip and the destination traffic light. | Idle, when those rows render. |
+| `output-card` | The encoder row and the destination row of the stream setup, with the bitrate-ceiling chip (the bitrate in the encoder summary, tappable) and the destination traffic light. | Idle, when those rows render. |
 | `connections-card` | The network row. | Idle. |
 | `telemetry-card` | `StreamTelemetryStrip` and `IngestStats`. | Live, and in the post-stream summary window. |
 | `live-bar` | Idle: the first blocking reason or a ready state, and Start. Live: `BitrateAdjuster` and Stop. Summary window: Done. | In both cockpits. |
@@ -88,8 +88,8 @@ These test ids must keep their names and meaning: `idle-cockpit`,
 #### Idle order, inside the `idle-cockpit` root
 
 1. `program-desk`: the preview (`preview-disclosure`), then `layout-controls`.
-2. `source-section`, its source rows shown as tiles, and inside it, after the
-   rows, `audio-card`.
+2. `source-section`, its source rows shown as framed options, and inside it,
+   after the rows, `audio-card`.
 3. `stream-setup-chain`, holding `output-card` (the encoder row and the
    destination row), `connections-card` (the network row) and, last,
    `live-bar`.
@@ -134,8 +134,12 @@ must contain the `source-audio` block with its ids unchanged.
 
 #### Screen sizes
 
-- At 1024 px and wider the screen must have two columns: `program-desk` on the
-  left, everything else on the right, and `live-bar` across the bottom.
+- At 1024 px and wider the screen must have two columns: `program-desk`, then
+  `stream-setup-chain` and `live-roadmap`, on the left; `source-section` (with
+  its audio) on the right; and `live-bar` across the bottom. Grid placement
+  moves them, so the DOM, reading and Tab order stay the idle order above.
+  The first version put everything but the desk on the right, which left about
+  two thirds of the left column empty under the preview on a desktop.
 - Below 1024 px the screen must be one column, in the order above.
 - At 1024x600 nothing may overflow horizontally, and Start must be visible
   without scrolling.
@@ -402,13 +406,131 @@ no control's effect; it set these rules, each pinned by
   tint and icon.
 - At phone width the Output card's Edit buttons keep their words for screen
   readers, and the destination check shows its words, not only its dot. Setup
-  values and reasons wrap instead of being cut: a row's text keeps at least
-  12rem, and when its actions do not fit beside that they wrap under it at the
-  inline end. A source tile's name wraps to two lines.
+  values and reasons wrap instead of being cut. A source tile's name wraps to
+  two lines.
 - Under `prefers-reduced-motion: reduce` nothing on the screen keeps animating;
   the live dot in the summary stays lit and still.
 
 Deliberately left, with reasons, in `docs/DESIGN-FOLLOWUPS.md` section 5.
+
+#### The Source and Stream setup pass [EXISTS]
+
+The owner read both cards on a phone as unorganized and the desktop as two
+thirds empty. This pass changed no readiness, selection, capability gate,
+disabled state, audio meter rule or dialog, and added no string or test id. It
+set these rules:
+
+- **One option pattern.** Every source option is a framed tile in one column:
+  the kind icon, the name, one subtitle line (the capture kind, unless the
+  name already says it, so "HDMI Input" shows no "HDMI" under it; or the ingest
+  service state; then the chips: Selected first, then Lost, Degraded, No
+  signal, Not connected or Includes audio, each wrapping on its own when the
+  line is full) and, when it has one, its help at the inline end, inside the
+  frame. Every chip is the same pill; only its tone changes. Anything more (the
+  summary, capture formats, warnings, reasons and How to publish) sits under
+  them, inside the same frame. The selected option is outlined (its
+  border plus a one-pixel ring in the primary colour), never tinted: muted text
+  inside a lime-tinted frame measured 4.23:1 in dark, below AA.
+  Every "?" inside an option (its help, the capture-format help and the
+  summary's help) is a real 44 px box at every width, kept 8 px from every other
+  control in the option (`DESIGN.md` TT-2), so its hit area is its box: the
+  touch layout's `::after` overlay on the old 24 px icon reached 10 px into the
+  select button at 1024x600, so a tap meant for Select opened Help. The
+  capture-format "?" follows its heading's words: that line is the help's
+  44 px, 8 px from the select button above and the choices below, so on a
+  390x844 phone's first screen the heading and the "?" are above the Live bar
+  (the owner asked for that). Against main, on the first screen at 320, 375 and
+  390 px, nothing selected and with HDMI selected, in en, de and ar, the "?"'s
+  whole 44 px target sits nearer the top here in every case; main shows it
+  whole only at 390 px in ar with nothing selected, and so does this layout
+  (in en and de its target ends 1 px under the bar, where main's ended 12 px
+  under). The summary's "?" sits at the inline end of its
+  Source max line, reaching only into the space above it where nothing can be
+  tapped. The 8 px rule is for a help beside another control; the
+  capture-format choices keep their 6 px gap. An option with no help or switch beside its select renders no
+  slot and no gap there, so the select keeps the header's whole width (a longer
+  title still wraps, up to two lines).
+- **The summary belongs to the selected option.** `source-active-config` sits
+  inside the selected option and names its settings ("Automatic", the Encoder
+  dialog's word, while no format is saved) and the hardware ceiling, never the
+  source again: the old panel above the list repeated the option
+  ("srt", a raw id) and said "Audio source" for what the option already called
+  "Includes audio". It stands alone above the list only while no option on
+  screen is the selection.
+- **Vertical rhythm, measured against main.** Matched captures of main and
+  this layout, in en, de and ar at 320x640, 375x812, 390x844, 768x1024,
+  1280x800 and 1024x600 touch, on the first screen (nothing selected) and with
+  the first enabled source selected; a help counts as shown when its icon is
+  painted above the Live bar. At 375 and 390 px the Source card is between
+  51 px shorter and 14 px taller than main, and nothing main's first screen
+  showed falls under the bar, in any locale, the capture-format heading and its
+  "?" included. With a source selected and the cockpit in view, the RØDE
+  camera's format note ends 44 px above the bar at 375 px in en and de and
+  60 px in ar (main: 27, 1 and 17), and 86 to 102 px above it at the kiosk
+  (main: 57 to 95). At 320 px the card is 46 px taller on the first screen and
+  7 px taller with a source selected, where the Source max line, now inside
+  the selected option, falls under the bar. From 768 px the options sit one per
+  line where main tiled them two across (the owner chose one per line), so the
+  card is up to 144 px taller and a wide first screen shows fewer options: at
+  1280x800 SRT Ingest (and, on the first screen in en and ar, the Test Pattern
+  title), at 768x1024 with a source selected the Audio heading and the Test
+  Pattern title, and at the kiosk with the cockpit in view SRT Ingest's title
+  (in ar also its state and help). Each is reached by scrolling: every idle
+  region's last control scrolls whole above the bar and takes a tap at
+  390x844, 1024x600 touch and 1280x800. The growth that remains is intended:
+  the selected option holds the summary the removed panel above the list held,
+  a framed option adds its border and 12 px of bottom padding, and the kind is a
+  subtitle line under the name.
+- **One audio box.** The Audio heading carries the help and "Codec & delay";
+  the picker and its level meter share one box under it; notices about the
+  pick follow the box.
+- **One setup row pattern.** Every Stream setup row is a status dot, the title,
+  one summary line and one trailing action at the same inline end (the words
+  and a chevron, the chevron alone below 640 px). The encoder row says the
+  bitrate once, at the end of its summary, and that figure is the
+  bitrate-ceiling chip (`bitrate-ceiling-chip`): it was a separate pill that
+  repeated the summary. It still opens the Encoder dialog while Edit waits for
+  a source, so the bitrate stays editable before a pick. Its text is one line
+  tall, so an `::after` overlay 12 px past each edge makes the target 44 px at
+  every width, and the summary line pads 12 px and gives it back as a negative
+  margin so the overlay stays inside the line's own box. The destination check is a
+  chip beside the title, and the dot follows it: a destination that passes the
+  gate but was never checked shows a hollow dot (`data-tone="unchecked"`),
+  because green claimed a check that never happened.
+- **One type scale.** Card titles `text-base` semibold (Preview, Source,
+  Stream setup), group headings (Output, Connections, Audio) `text-sm`
+  semibold in the foreground colour, row titles `text-sm` medium, summaries in
+  the UI face. Nothing on these rows is monospace; the meter's status lines
+  use the UI face too.
+- **Two balanced columns** from 1024 px, as "Screen sizes" states.
+
+Pinned by `StreamSetupChain.test.ts` ("one row pattern" and "keeps the
+bitrate editable while Edit waits for a source"), `SourceSection.test.ts` ("one
+option pattern"), the column and fold checks in
+`apps/frontend/tests/e2e/visual/live.visual.spec.ts` (at 375 px and 1024x600
+touch the capture-format note sits whole between the header and the Live bar),
+its Live page baselines (the first screen at 1280x800 and 390x844, as on main,
+and beside it the whole page, which keeps every option the first screen leaves
+below the bar), the idle snapshot in
+`apps/frontend/tests/e2e/visual/audio-mixer.visual.spec.ts` (the whole Audio
+card between the sticky header and the Live bar, failing first if anything
+covers the heading, its help or Codec & delay), and
+`apps/frontend/tests/e2e/live-design-a11y.spec.ts`, whose 44 px gates now
+measure the Output card too and which scrolls each idle region (Preview, the
+source options, Audio, Output, Connections, Roadmap) to its end at 390x844,
+1024x600 touch and 1280x800 and requires its last control named, enabled, whole
+above the bar and under a tap at its centre, and
+`apps/frontend/tests/e2e/source-option-targets.spec.ts` (in en, ar and de, in the
+default layout at 320, 375, 768 and 1280 and in touch at those and 1024x600, with
+the selected option's How to publish open: no help hit area overlaps or comes
+within 8 px of another control, every help and select is at least 44 px, the
+RTMP and SRT options carry a help and the test pattern none; a tap beside the
+help selects and a tap on it opens it, by touch at 1024x600 and 375 in touch
+and by mouse at 375; and on a 390x844 phone's first screen, in en, de and ar,
+the capture-format heading and its help's icon end above the Live bar and a tap
+at the help's centre reaches it; in ar, where main shows the help's whole
+target, the whole 44 px target ends above the bar, with nothing selected and
+with HDMI selected).
 
 ### 1. Job and audience
 
@@ -520,11 +642,11 @@ The screen must handle each of these states:
 - **Two columns.** The desk column must be the wider one, because the preview
   is 16:9. "Left" means the inline-start side. Inside `live-cockpit` the
   banners must lead the cards column.
-- **Source tiles.** Each source must be a compact tile with its name, its kind
-  badge and its state, keeping the row's test ids and selection semantics.
-  Tiles must wrap in a grid and stay readable on two lines, so a phone shows
-  one or two per row. A tile's detail must open below it across the card's full
-  width, so the tiles keep one height.
+- **Source tiles.** Each source must be a framed tile with its name, its kind
+  and its state, keeping the row's test ids and selection semantics. Tiles
+  stand in one column at every width, so every frame has one width and every
+  slot sits in the same place; a tile's detail opens inside its own frame (see
+  "The Source and Stream setup pass").
 - **Live bar content.** The reason or ready line must be words, not color
   alone, must wrap to at most two lines, and must not change the bar's height.
 - **Focus order.** In the DOM the bar must sit where the order lists it, so
@@ -547,7 +669,8 @@ The screen must handle each of these states:
   must not alter the text of a key it did not add, and nothing may write
   `packages/i18n/tests/fixtures/*.rendered.json`.
 - **Decided in the final design pass.** Both columns scroll with the page and
-  the split stays three fifths for the desk, two for the cards. Pinning the desk
+  the split stays three fifths for the desk (now with the stream setup under
+  it), two for the source card. Pinning the desk
   was rejected: live at 1024x600 the desk (preview, now-streaming summary, source
   switch, layout controls) is taller than the space between the header and the
   Live bar, so a pinned desk would hold its own lower controls out of reach
@@ -574,5 +697,5 @@ readings fill gaps in it and can be corrected in a later change:
 7. On a short landscape kiosk narrower than 1024 px (for example 800x480) the
    screen must be one column and the Live bar must sit at the viewport bottom,
    because `DESKTOP_CHROME_QUERY` (see "Screen sizes") matches that size.
-8. Source tiles and the full-width detail below the selected tile are this
-   brief's reading of "rows shown as tiles".
+8. Framed tiles in one column, each holding its own detail, are this brief's
+   reading of "rows shown as tiles".

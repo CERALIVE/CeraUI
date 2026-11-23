@@ -62,6 +62,10 @@
   onSecondary?    () => void — cancel handler.
   closeOnPrimary? boolean    — close after `onPrimary` (default: true).
   contentClass?   string     — extra classes merged onto the surface.
+  touchRegion?    boolean    — opt the portaled surface into phone touch sizing.
+  returnFocus?    () => HTMLElement | null — where focus goes on close when the
+                               control that opened the dialog has left the page
+                               (additive; without it bits-ui's restore is unchanged).
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
@@ -96,6 +100,8 @@ interface Props {
 	onSecondary?: () => void;
 	closeOnPrimary?: boolean;
 	contentClass?: string;
+	returnFocus?: () => HTMLElement | null;
+	touchRegion?: boolean;
 }
 
 let {
@@ -117,7 +123,32 @@ let {
 	onSecondary,
 	closeOnPrimary = true,
 	contentClass,
+	returnFocus,
+	touchRegion = false,
 }: Props = $props();
+
+// The control focused when the dialog opened, where bits-ui returns focus on close. Read when bits-ui
+// moves focus in, so a dialog closing in the same step has already restored its own; once per open,
+// so a Dialog/Sheet swap keeps it.
+let opener: Element | null = null;
+let shown = false;
+$effect.pre(() => {
+	if (!open) shown = false;
+});
+function openAutoFocus(): void {
+	if (shown) return;
+	shown = true;
+	opener = document.activeElement;
+}
+
+// A real close (not a Dialog/Sheet swap) whose opener left the page goes to returnFocus, never <body>.
+function closeAutoFocus(event: Event): void {
+	if (open || !returnFocus || (opener?.isConnected && opener !== document.body)) return;
+	const target = returnFocus();
+	if (!target) return;
+	event.preventDefault();
+	target.focus();
+}
 
 // Desktop chrome => centered Dialog; mobile (narrow/tall) => bottom Sheet.
 // Short landscape kiosk panels (≥768px ∧ ≤600px tall) count as desktop chrome
@@ -242,6 +273,9 @@ const fullscreenSurfaceClass = 'inset-0 max-h-none max-w-none rounded-none ring-
 		<Dialog.Content
 			class={cn(surfaceClass, fullscreen ? fullscreenSurfaceClass : 'sm:max-w-lg', contentClass)}
 			data-app-dialog-fullscreen={fullscreen ? '' : undefined}
+			data-touch-region={touchRegion ? '' : undefined}
+			onCloseAutoFocus={closeAutoFocus}
+			onOpenAutoFocus={openAutoFocus}
 			showCloseButton={false}
 			style={fullscreen ? 'translate: none' : undefined}
 		>
@@ -252,6 +286,9 @@ const fullscreenSurfaceClass = 'inset-0 max-h-none max-w-none rounded-none ring-
 	<Sheet.Root bind:open>
 		<Sheet.Content
 			class={cn(surfaceClass, 'rounded-t-2xl', contentClass)}
+			data-touch-region={touchRegion ? '' : undefined}
+			onCloseAutoFocus={closeAutoFocus}
+			onOpenAutoFocus={openAutoFocus}
 			showCloseButton={false}
 			side="bottom"
 		>

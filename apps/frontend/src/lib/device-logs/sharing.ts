@@ -3,6 +3,7 @@
  * saves, how a refusal reads, and how a ticketed file reaches the browser.
  */
 import type {
+	LogBootInfo,
 	LogBundleFailureReason,
 	LogBundleManifest,
 	LogErrorCode,
@@ -15,7 +16,6 @@ import {
 	logExportOutputSchema,
 } from "@ceraui/rpc/schemas";
 
-import { getBackendHttpUrl } from "$lib/env";
 import { RpcError } from "$lib/rpc/rpc-error";
 
 export { chineseWordChunks } from "./cjk-words";
@@ -31,6 +31,46 @@ export const RAW_OPENING_QUERY: LogQueryInput = {
 	levels: ["error", "warning", "info"],
 	boot: "current",
 };
+
+/** What one Export saves: fixed when its confirmation opens, stated there and sent as is. */
+export interface ExportScope {
+	readonly query: LogQueryInput;
+	readonly span: ExportSpan;
+	/** When the saved boot started, if it is the picker's boot; otherwise unknown. */
+	readonly bootStart: number | null;
+}
+
+/**
+ * The operator's latest action decides what Export saves: Raw's view as it last
+ * published it (an exact moment included), unless the boot picker was used after
+ * it or Raw never published; then Raw's level, source and search filters with the
+ * picker's boots, which replace Raw's time window as they do in Raw.
+ */
+export function captureExportScope(
+	view: LogQueryInput,
+	span: ExportSpan,
+	boot: LogBootInfo | null,
+	pickerLeads: boolean,
+): ExportScope {
+	if (!pickerLeads)
+		return Object.freeze({
+			query: Object.freeze({ ...view }),
+			span,
+			bootStart:
+				boot !== null && boot.bootId === view.boot ? boot.firstTs : null,
+		});
+	const { sources, levels, text } = view;
+	return Object.freeze({
+		query: Object.freeze({
+			sources,
+			levels,
+			text,
+			boot: boot === null ? "all" : boot.current ? "current" : boot.bootId,
+		}),
+		span: "filters",
+		bootStart: boot?.firstTs ?? null,
+	});
+}
 
 export function exportInput(query: LogQueryInput): LogExportInput {
 	const { sources, levels, text, boot, since, until } = query;
@@ -103,17 +143,4 @@ export function previewProblem(error: unknown): SharingProblem {
 	return error instanceof RpcError && error.message === "BUSY"
 		? "busy"
 		: "failed";
-}
-
-/** The browser streams the file to disk; the page never holds its bytes. */
-export function startBackendDownload(path: string): void {
-	const anchor = document.createElement("a");
-	anchor.href = getBackendHttpUrl(path);
-	anchor.download = "";
-	document.body.append(anchor);
-	try {
-		anchor.click();
-	} finally {
-		anchor.remove();
-	}
 }

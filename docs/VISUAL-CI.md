@@ -41,7 +41,7 @@ spec across all configured projects against its host-recorded baselines.
 It proves only the host-owned portion. The raw frontend `test:e2e` command
 does not apply this environment split.
 
-Run from the repository root on Linux amd64 with Docker, Bun 1.4.4 and Node 26.
+Run from the repository root on Linux amd64 with Docker, Bun 1.4.5 and Node 26.
 The Docker bind mount must be writable as the invoking UID/GID. Ordinary Linux
 Engine without user-namespace remapping and Docker Desktop support this setup;
 a remapped/rootless daemon must provide equivalent bind-mount permissions.
@@ -110,7 +110,7 @@ This is the immutable Linux amd64 manifest, rather than a moving tag. MCR's
 `sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe`;
 its amd64 child is the pinned digest above. Playwright's package comes from
 `bun.lock` (1.65.0); its browsers and font/system libraries come from the image.
-Node 26 runs Playwright; Bun 1.4.4 runs installation and repository tooling.
+Node 26 runs Playwright; Bun 1.4.5 runs installation and repository tooling.
 CI and recording use headless Chromium, Linux amd64, `--ipc=host --init`,
 `CI=true`, `TZ=UTC`, `LANG=C.UTF-8` and `LC_ALL=C.UTF-8`.
 The job logs Node, Bun, Playwright, Chromium, glibc and the sorted font-list hash.
@@ -143,7 +143,7 @@ so it added no wall time to that run.
 ## Recording and image bumps
 
 Use a disposable checkout and the exact image above, on Linux amd64 with the same
-container options and environment. Install Bun 1.4.4 and Node 26, then:
+container options and environment. Install Bun 1.4.5 and Node 26, then:
 
 ```bash
 bun install --frozen-lockfile

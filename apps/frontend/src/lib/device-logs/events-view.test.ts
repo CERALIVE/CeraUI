@@ -83,6 +83,9 @@ it("keeps only the newest 300 rows as live events pass the display cap", async (
 	expect(ids(view)).toEqual(Array.from({ length: 300 }, (_, i) => 304 - i));
 });
 
+// No boot pick in these tests: every View raw logs stays current.
+const current = () => true;
+
 describe("EventsView: the first page", () => {
 	it("reads the newest page with only a limit when nothing is filtered", async () => {
 		const { view, list } = setup();
@@ -649,7 +652,7 @@ describe("EventsView: connection", () => {
 		const shown = view.events;
 		const reset = view.rowReset;
 		around.mockReturnValueOnce(new Promise(() => {}));
-		void view.viewRaw(e(150), vi.fn());
+		void view.viewRaw(e(150), vi.fn(), current);
 		const reply = Promise.withResolvers<EventListOutput>();
 		list.mockReturnValueOnce(reply.promise);
 
@@ -676,7 +679,7 @@ describe("EventsView: connection", () => {
 			const raw = Promise.withResolvers<LogAroundOutput>();
 			around.mockReturnValueOnce(raw.promise);
 			const open = vi.fn();
-			const opening = view.viewRaw(e(pending), open);
+			const opening = view.viewRaw(e(pending), open, current);
 			list.mockResolvedValueOnce(
 				eventPage([e(501)], { headSeq: 501, retainedFromSeq: 201 }),
 			);
@@ -717,7 +720,7 @@ describe("EventsView: connection", () => {
 			const raw = Promise.withResolvers<LogAroundOutput>();
 			around.mockReturnValueOnce(raw.promise);
 			const open = vi.fn();
-			const opening = view.viewRaw(e(200), open);
+			const opening = view.viewRaw(e(200), open, current);
 			push(e(501));
 			expect(view.newWhileBrowsing).toBe(1);
 			list.mockResolvedValueOnce(page);
@@ -746,7 +749,7 @@ describe("EventsView: connection", () => {
 		const raw = Promise.withResolvers<LogAroundOutput>();
 		around.mockReturnValueOnce(raw.promise);
 		const open = vi.fn();
-		const opening = view.viewRaw(e(200), open);
+		const opening = view.viewRaw(e(200), open, current);
 		// A clear and a restart refilled the ring to 210, reusing seq 200 and its id.
 		const page = eventPage(
 			Array.from({ length: 100 }, (_, i) => refill(210 - i)),
@@ -781,7 +784,7 @@ describe("EventsView: connection", () => {
 			const raw = Promise.withResolvers<LogAroundOutput>();
 			around.mockReturnValueOnce(raw.promise);
 			const open = vi.fn();
-			const opening = view.viewRaw(e(200), open);
+			const opening = view.viewRaw(e(200), open, current);
 			const ring = { headSeq: head, retainedFromSeq: 1, epoch: NEW_RING };
 			const newest = eventPage(
 				Array.from({ length: 100 }, (_, i) => refill(head - i)),
@@ -820,7 +823,7 @@ describe("EventsView: connection", () => {
 		const raw = Promise.withResolvers<LogAroundOutput>();
 		around.mockReturnValueOnce(raw.promise);
 		const open = vi.fn();
-		const opening = view.viewRaw(e(250), open);
+		const opening = view.viewRaw(e(250), open, current);
 		const page = eventPage([e(501)], {
 			headSeq: 501,
 			retainedFromSeq: 201,
@@ -876,7 +879,7 @@ describe("EventsView: connection", () => {
 			const raw = Promise.withResolvers<LogAroundOutput>();
 			around.mockReturnValueOnce(raw.promise);
 			const open = vi.fn();
-			const opening = view.viewRaw(e(250), open);
+			const opening = view.viewRaw(e(250), open, current);
 			const newest = eventPage([refill(head), refill(head - 1)], {
 				retainedFromSeq: 1,
 				epoch: undefined,
@@ -986,7 +989,7 @@ describe("EventsView: connection", () => {
 		const raw = Promise.withResolvers<LogAroundOutput>();
 		around.mockReturnValueOnce(raw.promise);
 		const open = vi.fn();
-		const opening = view.viewRaw(e(150), open);
+		const opening = view.viewRaw(e(150), open, current);
 		list.mockResolvedValueOnce(
 			eventPage([], { headSeq: 500, retainedFromSeq: 1 }),
 		);
@@ -1010,7 +1013,7 @@ describe("EventsView: connection", () => {
 		const raw = Promise.withResolvers<LogAroundOutput>();
 		around.mockReturnValueOnce(raw.promise);
 		const open = vi.fn();
-		const opening = view.viewRaw(e(150), open);
+		const opening = view.viewRaw(e(150), open, current);
 		const late = Promise.withResolvers<EventListOutput>();
 		list.mockReturnValueOnce(late.promise);
 		reconnect(view);
@@ -1046,7 +1049,7 @@ describe("EventsView: connection", () => {
 		const raw = Promise.withResolvers<LogAroundOutput>();
 		around.mockReturnValueOnce(raw.promise);
 		const open = vi.fn();
-		const opening = view.viewRaw(e(150), open);
+		const opening = view.viewRaw(e(150), open, current);
 		list.mockRejectedValueOnce(new Error("down"));
 
 		reconnect(view);
@@ -1206,7 +1209,7 @@ describe("EventsView: View raw logs", () => {
 		const open = vi.fn();
 		const target = e(4, { bootId: BOOT_IDS.clean, at: EVENT_AT + 7 });
 
-		const opening = view.viewRaw(target, open);
+		const opening = view.viewRaw(target, open, current);
 		expect(view.rawLink).toEqual({ id: target.id, state: "pending" });
 		reply.resolve(page);
 		await opening;
@@ -1230,7 +1233,7 @@ describe("EventsView: View raw logs", () => {
 		around.mockResolvedValue({ ok: false, error });
 		const open = vi.fn();
 
-		await view.viewRaw(e(2), open);
+		await view.viewRaw(e(2), open, current);
 
 		expect(view.rawLink).toEqual({ id: e(2).id, state });
 		expect(open).not.toHaveBeenCalled();
@@ -1242,7 +1245,7 @@ describe("EventsView: View raw logs", () => {
 		const failure = new Error("Request timeout: logs.around");
 		around.mockRejectedValue(failure);
 
-		await view.viewRaw(e(2), vi.fn());
+		await view.viewRaw(e(2), vi.fn(), current);
 
 		expect(view.rawLink).toEqual({ id: e(2).id, state: "failed" });
 		expect(errors).toHaveBeenCalledOnce();
@@ -1254,9 +1257,13 @@ describe("EventsView: View raw logs", () => {
 		const errors = quietErrors();
 		around.mockResolvedValue(aroundPage());
 
-		await view.viewRaw(e(2), () => {
-			throw new Error("tab switch failed");
-		});
+		await view.viewRaw(
+			e(2),
+			() => {
+				throw new Error("tab switch failed");
+			},
+			current,
+		);
 
 		expect(view.rawLink).toEqual({ id: e(2).id, state: "failed" });
 		expect(errors).toHaveBeenCalledOnce();
@@ -1272,8 +1279,8 @@ describe("EventsView: View raw logs", () => {
 			.mockReturnValueOnce(second.promise);
 		const open = vi.fn();
 
-		const a = view.viewRaw(e(1), open);
-		const b = view.viewRaw(e(2), open);
+		const a = view.viewRaw(e(1), open, current);
+		const b = view.viewRaw(e(2), open, current);
 		second.resolve({ ok: false, error: "BOOT_UNAVAILABLE" });
 		await b;
 		first.resolve(aroundPage());
@@ -1286,8 +1293,8 @@ describe("EventsView: View raw logs", () => {
 		around
 			.mockReturnValueOnce(late.promise)
 			.mockResolvedValueOnce(aroundPage());
-		const c = view.viewRaw(e(3), open);
-		await view.viewRaw(e(4), open);
+		const c = view.viewRaw(e(3), open, current);
+		await view.viewRaw(e(4), open, current);
 		late.reject(new Error("late"));
 		await c;
 		expect(open).toHaveBeenCalledOnce();
@@ -1329,7 +1336,7 @@ describe("EventsView: lifetime", () => {
 		const open = vi.fn();
 		const reads = [view.reload(), view.reload()];
 		push(e(9));
-		const opening = view.viewRaw(e(1), open);
+		const opening = view.viewRaw(e(1), open, current);
 
 		view.dispose();
 		first.resolve(eventPage([e(1)]));

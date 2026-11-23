@@ -1,4 +1,5 @@
 import { logger } from "../../helpers/logger.ts";
+import { getNetifTopologyGeneration } from "../network/netif-topology-generation.ts";
 import { getWifiInterfacesByMacAddress } from "./wifi-connections.ts";
 import {
 	type RadioObservation,
@@ -25,6 +26,7 @@ type RadioPublication = () => void | boolean | Promise<void> | Promise<boolean>;
 type PendingObservation = {
 	readonly devices: readonly RadioObservation[];
 	readonly sequence: number;
+	readonly topologyGeneration: number;
 	readonly onPublication: RadioPublication | undefined;
 };
 
@@ -53,6 +55,7 @@ export class WifiRadioObservation {
 		devices: readonly RadioObservation[],
 		sequence: number,
 		onPublication?: RadioPublication,
+		topologyGeneration = getNetifTopologyGeneration(),
 	): void {
 		if (this.terminated) return;
 		this.stopped = false;
@@ -68,6 +71,7 @@ export class WifiRadioObservation {
 			this.queued = {
 				devices: [...complete.values()],
 				sequence,
+				topologyGeneration,
 				onPublication,
 			};
 		}
@@ -80,6 +84,7 @@ export class WifiRadioObservation {
 		devices: readonly RadioObservation[],
 		sequence: number,
 		onPublication: RadioPublication,
+		topologyGeneration: number,
 	): Promise<boolean> {
 		await this.active?.promise;
 		if (this.terminated) return false;
@@ -88,7 +93,7 @@ export class WifiRadioObservation {
 			ifname,
 			...(degradedReason ? { degradedReason } : {}),
 		}));
-		this.enqueue(devices, sequence, onPublication);
+		this.enqueue(devices, sequence, onPublication, topologyGeneration);
 		if (this.timer !== undefined) clearTimeout(this.timer);
 		this.timer = undefined;
 		this.start(false);
@@ -158,7 +163,12 @@ export class WifiRadioObservation {
 		}, RADIO_SHADOW_TIMEOUT_MS).unref();
 		const sample = Promise.resolve()
 			.then(() =>
-				this.producer.discover(next.devices, next.sequence, controller.signal),
+				this.producer.discover(
+					next.devices,
+					next.sequence,
+					controller.signal,
+					next.topologyGeneration,
+				),
 			)
 			.then(() =>
 				this.producer.publishedObservation === next.sequence
@@ -259,9 +269,9 @@ export class WifiRadioObservation {
 						};
 					});
 					this.queued = {
+						...next,
 						devices,
 						sequence,
-						onPublication: next.onPublication,
 					};
 					this.start();
 				}, delay).unref();

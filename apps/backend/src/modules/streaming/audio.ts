@@ -70,6 +70,8 @@ import {
 import { AUDIO_PROBE_TIMEOUT_MS } from "./constants.ts";
 import { reportActiveAudioSource } from "./lifecycle-indicators.ts";
 import { getEngineAudioDevices } from "./sources.ts";
+import { getStreamLifecycleState } from "./stream-lifecycle-status.ts";
+import { getIsStreaming } from "./streaming.ts";
 import { getStreamingProcesses } from "./streamloop/process-runner.ts";
 
 const deviceDir = setup.sound_device_dir ?? CANONICAL_SOUND_CLASS_DIR;
@@ -188,24 +190,29 @@ export function resolveMeterPreference(
 }
 
 /**
- * Did the operator ask for NO audio at all?
- *
- * `resolveMeterPreference` answers `null` for BOTH "Auto" and "No audio", but the
- * two mean opposite things. "Auto" hands selection to the engine, so whatever
- * card it picks IS the operator's meter. "No audio" is `audio.mode=none` — an
- * explicit video-only stream — and the engine has no wire value for "meter
- * nothing", so a `null` preference makes it auto-pick and deliver a real, moving
- * level for a card the operator just said they did not want. Found live during
- * Wave H QA: with "No audio" selected the meter drew active green bars for
- * several seconds (until the frozen-content watchdog happened to age them out).
- *
- * The distinction is therefore made HERE, on the picker value, and enforced by
- * the audio-meter bridge — the engine side stays unchanged.
+ * Does the pick mean video-only? A null engine preference alone cannot express
+ * silence: it lets the engine pick another card. Auto's current capture verdict
+ * applies only while idle, not to the program already running.
  */
 export function isMeterSilencedByPick(
 	asrc: string | undefined = getConfig().asrc,
+	programOwned = false,
 ): boolean {
-	return asrc === NO_AUDIO_ID;
+	if (asrc === NO_AUDIO_ID) return true;
+	// The meter socket can report program audio before the control socket confirms live.
+	if (
+		asrc !== AUDIO_SOURCE_AUTO ||
+		programOwned ||
+		getStreamLifecycleState() !== "idle" ||
+		getIsStreaming()
+	)
+		return false;
+	try {
+		return resolveAutoAsrcFromLiveState().reason === "no-capture-audio";
+	} catch {
+		// As with the preference, an unresolvable Auto leaves the engine's pick alone.
+		return false;
+	}
 }
 
 /**
@@ -715,7 +722,7 @@ export async function broadcastAudioSources(): Promise<void> {
  * The meter preference IS one of those: "Auto" rule 5 joins the camera to its
  * same-`physical_group_id` audio card out of this very engine list, so a changed
  * list can move the resolved card without any sysfs change. Re-pushing costs
- * nothing when it did not — the bridge dedupes on the (silenced, preference) pair,
+ * nothing when it did not — the bridge dedupes on the gap reason and preference,
  * so an unchanged pick broadcasts no gap.
  */
 export async function reresolveAudioForEngineChange(): Promise<void> {

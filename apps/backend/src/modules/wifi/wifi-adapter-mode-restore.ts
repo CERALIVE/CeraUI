@@ -1,8 +1,13 @@
 import { logger } from "../../helpers/logger.ts";
+import { nmConnGetFields } from "../network/network-manager.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
 import {
+	getHotspotCredentials,
+	isHotspotPortCredentialCopy,
+} from "./hotspot-credentials.ts";
+import {
 	wifiAdapterLockKey,
-	withWifiAdapterLock,
+	withWifiAdapterLocks,
 } from "./wifi-adapter-lock.ts";
 import {
 	getPersistedWifiAdapterModes,
@@ -20,11 +25,13 @@ import {
 	defaultAdapterModeDeps,
 } from "./wifi-adapter-mode-transition.ts";
 import { resolveWifiAdapterOwner } from "./wifi-adapter-owner.ts";
+import { hasDeferredWifiStationIntent } from "./wifi-adapter-reconcile-retry.ts";
 import {
 	reconcileWifiAdapterRestoreLocked,
 	retryWifiAdapterReconcile,
 	type WifiRestoreCycle,
 } from "./wifi-adapter-reconciler.ts";
+import { observedUniqueHotspotAddress } from "./wifi-autoconnect-policy.ts";
 import { admitWifiRequest, withoutWifiRequestBinding } from "./wifi-binding.ts";
 import {
 	getWifiCapabilitiesForInterface,
@@ -33,7 +40,13 @@ import {
 import { HYBRID_CHANNEL_REFUSAL } from "./wifi-concurrent-interface.ts";
 import { canHotspot } from "./wifi-hotspot-types.ts";
 import { restoreLimitedHotspot } from "./wifi-limited-hotspot-restore.ts";
+import {
+	bindingForRow,
+	soleWifiPortAlias,
+	verifiedWifiPortKey,
+} from "./wifi-operation-binding.ts";
 import { wifiAdapterKeyMac } from "./wifi-permanent-mac.ts";
+import { wifiRadioIdentity } from "./wifi-radio-identity.ts";
 
 type Preferences = typeof getPersistedWifiAdapterModes;
 
@@ -66,13 +79,50 @@ async function applyWifiAdapterModes(
 						Object.values(deps.resolveInterfaces()).filter(canHotspot).length,
 					);
 			const owner = key ?? observedOwner;
-			const lock = await withWifiAdapterLock(
-				wifiAdapterLockKey(owner),
+			const binding = verified ? bindingForRow(registryKey, row) : undefined;
+			const solePort = soleWifiPortAlias(binding);
+			const lock = await withWifiAdapterLocks(
+				[owner, ...(solePort ? [solePort] : [])].map(wifiAdapterLockKey),
 				async () => {
 					if (cycle?.stopped() || deps.resolveInterfaces()[registryKey] !== row)
 						return;
-					const desired =
-						key === undefined ? undefined : readPreferences()[key];
+					const desiredMode = () => {
+						const modes = readPreferences();
+						const alias = verifiedWifiPortKey(bindingForRow(registryKey, row));
+						// A positive Station choice for this physical port cannot fall
+						// through to another AP profile just because its twin is gone.
+						if (
+							alias &&
+							getHotspotCredentials(alias)?.conn &&
+							(modes[alias] === "station" ||
+								hasDeferredWifiStationIntent(alias))
+						)
+							return "station";
+						return key === undefined ? undefined : modes[key];
+					};
+					const desired = desiredMode();
+					// A matching port intent can identify the profile without changing
+					// which intent controls the sole adapter.
+					const portProfile =
+						solePort &&
+						desired &&
+						desired !== "station" &&
+						readPreferences()[solePort] === desired &&
+						!isHotspotPortCredentialCopy(solePort)
+							? getHotspotCredentials(solePort)?.conn
+							: undefined;
+					const plainProfile =
+						portProfile && getHotspotCredentials(owner)?.conn;
+					const plainPin = plainProfile
+						? (
+								await nmConnGetFields(plainProfile, ["match.path"] as const)
+							)?.[0]
+						: undefined;
+					const restoreProfile =
+						plainPin && plainPin !== binding?.devicePath
+							? portProfile
+							: undefined;
+					if (desiredMode() !== desired) return;
 					if (!verified) limitedVisited = true;
 					const readCapabilities =
 						deps.readCapabilities ?? getWifiCapabilitiesForInterface;
@@ -84,6 +134,7 @@ async function applyWifiAdapterModes(
 					const signature = JSON.stringify([
 						key,
 						desired,
+						restoreProfile,
 						row.ifname,
 						row.conn,
 						capability.staApComboSupported,
@@ -98,8 +149,7 @@ async function applyWifiAdapterModes(
 						...(cycle ? { cycle } : {}),
 						isCurrent: () =>
 							deps.resolveInterfaces()[registryKey] === row &&
-							(key === undefined ? undefined : readPreferences()[key]) ===
-								desired,
+							desiredMode() === desired,
 						activate: (settle, attempt) =>
 							admitWifiRequest(
 								row,
@@ -145,6 +195,13 @@ async function applyWifiAdapterModes(
 										);
 										return undefined;
 									}
+									const plainNeedsPortPin =
+										binding?.mac === owner &&
+										(wifiRadioIdentity.hasSeenSameAddressCollision(owner) ||
+											!observedUniqueHotspotAddress(
+												owner,
+												wifiRadioIdentity.state.rows,
+											));
 									return deps.startHotspot(
 										row.id,
 										(...args) => {
@@ -153,6 +210,21 @@ async function applyWifiAdapterModes(
 												settle(args[2].success);
 										},
 										attempt,
+										binding && {
+											...binding,
+											bootRestore:
+												plainNeedsPortPin || restoreProfile
+													? "require-port-pin"
+													: "verified",
+											...(solePort && restoreProfile
+												? {
+														restoreProfile: {
+															owner: solePort,
+															uuid: restoreProfile,
+														},
+													}
+												: {}),
+										},
 									);
 								},
 								(refusal) => refusal,

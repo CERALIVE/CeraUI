@@ -20,8 +20,8 @@ import { logger } from "../../helpers/logger.ts";
 import { retryWithBackoff } from "../../helpers/retry.ts";
 import {
 	nmcliParseSep,
-	nmDeviceProp,
 	nmDevices,
+	readNmDeviceActivation,
 } from "../network/network-manager.ts";
 import {
 	type NmProfileInstance,
@@ -168,14 +168,11 @@ export async function matchesHotspotActivation(
 		)
 	)
 		return false;
-	const state = await nmDeviceProp(
-		ifname,
-		"GENERAL.STATE,GENERAL.CON-UUID,GENERAL.CON-PATH",
-	);
+	const state = await readNmDeviceActivation(ifname);
 	return (
-		Number.parseInt(state?.[0] ?? "", 10) === 100 &&
-		state?.[1] === uuid &&
-		state?.[2] === activation.activePath
+		state?.connected === true &&
+		state.uuid === uuid &&
+		state.path === activation.activePath
 	);
 }
 
@@ -423,7 +420,11 @@ export function registerPendingConfirmation(
 						const stopped = await nmDisconnectActivation(
 							target.uuid,
 							activation.activePath && activation.activeRunId
-								? { path: activation.activePath, runId: activation.activeRunId }
+								? {
+										path: activation.activePath,
+										runId: activation.activeRunId,
+										ifname: target.ifname,
+									}
 								: undefined,
 							deps,
 						);

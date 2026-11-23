@@ -129,9 +129,11 @@ export function firstApInstances(
 								? uuid
 								: fields === "uuid,active"
 									? `${uuid}:${observation.active === uuid ? "yes" : "no"}`
-									: fields === "uuid,filename"
-										? `${uuid}:${files.filename(uuid)}`
-										: `${uuid}:802-11-wireless`,
+									: fields === "uuid,active,dbus-path"
+										? `${uuid}:${observation.active === uuid ? "yes" : "no"}:${paths.get(uuid) ?? "/org/freedesktop/NetworkManager/Settings/999"}`
+										: fields === "uuid,filename"
+											? `${uuid}:${files.filename(uuid)}`
+											: `${uuid}:802-11-wireless`,
 					)
 					.join("\n");
 			}

@@ -60,9 +60,12 @@ test.each(["write", "read", "busy"] as const)(
 				? withWifiAdapterLock(wifiAdapterLockKey(MAC), () => release.promise)
 				: undefined;
 		const notifications: string[] = [];
+		const restores: Promise<void>[] = [];
 		const unsubscribe = wifiAdapterModeRestoreSource.subscribe(async () => {
 			notifications.push(profile()["connection.autoconnect"] ?? "");
-			await f.restore();
+			const restore = f.restore();
+			restores.push(restore);
+			await restore;
 		});
 		try {
 			await f.discover();
@@ -75,6 +78,7 @@ test.each(["write", "read", "busy"] as const)(
 			await held;
 
 			await advance(3000);
+			await Promise.all(restores);
 
 			expect(notifications).toEqual(["no"]);
 			expect(f.activations).toEqual([PROFILE]);

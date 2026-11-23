@@ -559,7 +559,7 @@ const headingId = `${uid}-heading`;
 						{#if isPrimary}
 							<LiveAudioMeter />
 						{:else}
-							<p class="text-muted-foreground font-mono text-[11px] tracking-wide">
+							<p class="text-muted-foreground text-xs">
 								{m['live.audioMixer.meterWhenLive']()}
 							</p>
 						{/if}

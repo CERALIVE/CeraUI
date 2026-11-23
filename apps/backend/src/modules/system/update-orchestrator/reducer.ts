@@ -308,7 +308,7 @@ function reduceAwaitingIdle(
 		case "INSTALL_UNIT_STARTED":
 			return enter(state, event.now, {
 				phase: "downloading",
-				progress: { percent: 0, etaSeconds: 0 },
+				progress: null,
 				packageAttempt: event.packageAttempt,
 			});
 		default:

@@ -78,6 +78,27 @@ describe("atomic write", () => {
 		expect(recovered.isDismissed("update:1.0.0")).toBe(true);
 		expect(recovered.isDismissed("update:2.0.0")).toBe(false);
 	});
+
+	it("a failed write leaves the live store exactly as it was", () => {
+		let failing = false;
+		const store = new NotificationDismissalStore({
+			path: storePath,
+			maxEntries: 1,
+			deps: {
+				writeAtomic: (target, contents) => {
+					if (failing) throw new Error("state directory is read-only");
+					fs.writeFileSync(target, contents);
+				},
+			},
+		});
+		store.load();
+		store.recordDismissal("update:1.0.0");
+		failing = true;
+		// Neither the new key nor the eviction it would cause is applied in memory.
+		expect(() => store.recordDismissal("update:2.0.0")).toThrow();
+		expect(store.isDismissed("update:2.0.0")).toBe(false);
+		expect(store.keys()).toEqual(["update:1.0.0"]);
+	});
 });
 
 describe("corruption quarantine", () => {

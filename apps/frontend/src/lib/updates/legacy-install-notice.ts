@@ -12,7 +12,11 @@
  * field changes, so the same outcome would be announced again (early oracle R3).
  */
 import { m } from "@ceraui/i18n/svelte";
-import type { StatusMessage } from "@ceraui/rpc/schemas";
+import type {
+	StatusMessage,
+	UpdateOutcome,
+	UpdateState,
+} from "@ceraui/rpc/schemas";
 import { toast } from "svelte-sonner";
 
 import { viewLogsToast } from "$lib/device-logs/view-logs";
@@ -52,4 +56,36 @@ export function announceLegacyInstallOutcome(
 	toast.success(m["updatingOverlay.successMessage"](), {
 		description: m["updatingOverlay.installedDescription"](),
 	});
+}
+
+const ENDED = { total: 0, downloading: 0, unpacking: 0, setting_up: 0 };
+
+/** An install this tab showed ended without its result reaching the tab, but the device reported it. */
+export function announceMissedInstallOutcome(state: UpdateState): void {
+	if (state.kind === "success")
+		announceLegacyInstallOutcome({ ...ENDED, result: 0 });
+	else if (state.kind === "failed")
+		announceLegacyInstallOutcome({ ...ENDED, result: state.reason ?? "" });
+}
+
+/**
+ * What the device read back for an install whose result never reached the
+ * tab: `success` means the install's own versions are there, not that the tab
+ * saw it finish, so it is never the observed exit's "Successfully Updated".
+ * Anything else is not confirmed; the fixed-name unit's exit is only a hint,
+ * since it may be another run's.
+ */
+export function announceReadOutcome(outcome: UpdateOutcome | undefined): void {
+	if (outcome?.kind === "success") {
+		toast.success(m["settings.updates.phase.settled"](), {
+			description: m["updatingOverlay.versionsInstalledDescription"](),
+		});
+		return;
+	}
+	const title = m["settings.updates.unconfirmed.title"]();
+	if (outcome?.kind === "unknown" && outcome.exit !== undefined)
+		toast.warning(title, {
+			description: m["updatingOverlay.unitExitHint"]({ code: outcome.exit }),
+		});
+	else toast.warning(title);
 }

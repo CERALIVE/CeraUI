@@ -146,10 +146,12 @@ for (const trace of [
 						trace === "up-timeout" ? 1 : 2,
 					);
 					expect(f.profiles.has(OTHER_UUID)).toBe(true);
+					const path = f.nm.paths().find(([id]) => id === uuid)?.[1];
+					if (!path) throw new Error("Missing created settings path");
 					expect(
 						f.commands
 							.filter((args) => args[1] === "del")
-							.every((args) => args[2] === uuid),
+							.every((args) => args[2] === "path" && args[3] === path),
 					).toBe(true);
 				}
 			} finally {

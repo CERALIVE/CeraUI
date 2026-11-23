@@ -959,7 +959,7 @@ pre-effect exception: the runner's own pre-spawn checks/preparation/abort, or a 
 tagged `socketpair`, `fcntl` or `posix_spawn`, proves no dispatch and releases immediately
 with the original error, no group/unit probes
 and no wakeup. Once a handle exists, even abort racing assignment is started; unknown
-dispatch retains evidence. Audited at bun-v1.4.2..v1.4.4; classification unchanged.
+dispatch retains evidence. Audited at bun-v1.4.2..v1.4.5; classification unchanged.
 1.4.3 added kill-then-reap on `pidfd_open` failure (oven-sh/bun#40080, f86be9d).
 Exec can still precede that throw without a handle. The launcher writes `$$` with builtin printf BEFORE
 exec and exits125 on write failure, so the helper cannot run without recorded identity.
@@ -969,7 +969,7 @@ its bounded bytes; whole integer2..2147483647 feeds the same negative-group pred
 and latch before descriptor units. Early unlink cannot erase the retained inode.
 Invalid/unreadable identity stays UNKNOWN; invalid nonempty bytes never become absence
 clearance. Empty pidfd identity proves no helper exec under the audited fixed-options
-reaping proof (spawn_process.rs:504-555,1018-1047 at bun-v1.4.4;
+reaping proof (spawn_process.rs:504-555,1018-1047 at bun-v1.4.5;
 posix_spawn.rs:665-699 retries EINTR; ordinary ECHILD means already gone). Untagged/future/non-Error
 absence gets cancellable100/200/400ms re-reads (700ms total), still relying on that
 assumption, never on elapsed-time death. Reaudit before changing options/runtime.

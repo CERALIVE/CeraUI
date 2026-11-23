@@ -1,6 +1,7 @@
 <!--
-  BundleDialog.svelte: the support bundle's preview. It opens on the device's
-  manifest: each section with its entries and removed values, the boots covered
+  BundleDialog.svelte: the support bundle's preview. It opens on the same plain
+  line as its Downloads row (what the bundle holds and who it is for), then the
+  device's manifest: each section with its entries and removed values, the boots covered
   and the versions running now, and the statement that the file is reduced, not
   free of personal data. The downloaded file carries no such warning of its own,
   so this is where it is said, before Download bundle can be pressed. A refused
@@ -23,7 +24,7 @@ import type { SharingFlow } from '$lib/device-logs/sharing-flow.svelte';
 
 import KeepWords from './KeepWords.svelte';
 
-let { sharing }: { sharing: SharingFlow } = $props();
+let { sharing, returnFocus }: { sharing: SharingFlow; returnFocus?: () => HTMLElement | null } = $props();
 const uid = $props.id();
 
 type SectionId = LogBundleManifest['sections'][number]['id'];
@@ -93,9 +94,12 @@ const status = $derived(
 	primaryDisabled={sharing.manifest === null}
 	primaryLabel={m['systemLogs.sharing.bundleDownload']()}
 	primaryLoading={sharing.bundleStep === 'creating'}
+	{returnFocus}
 	title={m['systemLogs.sharing.bundle']()}
+	touchRegion
 >
 	<div class="flex flex-col gap-4 [word-break:auto-phrase] [&:lang(ko)]:break-keep [&:lang(zh)]:break-keep wrap-break-word text-pretty [&:lang(zh)]:text-balance">
+		<p class="text-sm" data-testid="sharing-bundle-about"><KeepWords text={m['systemLogs.sharing.bundleHint']()} /></p>
 		<div class="flex items-start gap-3 rounded-lg border p-3">
 			<ShieldAlert aria-hidden="true" class="text-muted-foreground mt-0.5 size-4 shrink-0" />
 			<p class="text-sm" data-testid="sharing-bundle-sensitive"><KeepWords text={m['systemLogs.sharing.bundleSensitive']()} /></p>

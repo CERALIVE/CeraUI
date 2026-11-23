@@ -4,6 +4,8 @@ import * as runner from "../../helpers/run.ts";
 import * as mocks from "../../mocks/mock-service.ts";
 import { getConfig } from "../../modules/config.ts";
 import * as nm from "../../modules/network/network-manager.ts";
+import * as profileInstances from "../../modules/network/network-manager-profile-instance.ts";
+import * as nmSecrets from "../../modules/network/network-manager-secret.ts";
 import * as streaming from "../../modules/streaming/streaming.ts";
 import * as credentials from "../../modules/wifi/hotspot-credentials.ts";
 import {
@@ -28,6 +30,7 @@ import { canHotspot } from "../../modules/wifi/wifi-hotspot-types.ts";
 import * as interfaces from "../../modules/wifi/wifi-interfaces.ts";
 import { wifiRadioObservation } from "../../modules/wifi/wifi-radio-observation.ts";
 import { nmcliFieldNames, nmcliFieldOutput } from "./nmcli-field-output.ts";
+import { RUN_ID } from "./wifi-active-observation.ts";
 import {
 	mockQualifiedHybridDriver,
 	qualifiedHybridEvidence,
@@ -103,6 +106,16 @@ export async function virtualBindingFixture() {
 	interfaces.resetWifiInterfaceDiscoveryForTest();
 	interfaces.resetWifiConnectionModeCache();
 	credentials.resetHotspotCredentialsForTest();
+	for (const conn of ["previous-parent", "old-ap"])
+		credentials.rememberHotspotCredentials(BINDING_MAC, {
+			conn,
+			ssid: conn,
+			password: "synthetic-binding-password",
+		});
+	spyOn(nmSecrets, "readVerifiedNmWifiSecret").mockImplementation(
+		async (uuid) =>
+			uuid === "station" ? undefined : "synthetic-binding-password",
+	);
 	setWifiState({});
 	onWifiChange(() => undefined);
 	for (const level of ["debug", "info", "warn", "error"] as const)
@@ -117,13 +130,23 @@ export async function virtualBindingFixture() {
 		const rows = radios.map((r) => `${r.ifname}:wifi:${r.state}:${r.active}`);
 		return listing === "partial" ? [...rows.slice(0, 1), "incomplete"] : rows;
 	});
-	spyOn(nm, "nmDeviceProp").mockResolvedValue([
-		"Fixture",
-		"Radio",
-		"yes",
-		"no",
-		"yes",
-	]);
+	const activePath = (ifname: string) => {
+		const index = radios.findIndex((radio) => radio.ifname === ifname);
+		return `/org/freedesktop/NetworkManager/ActiveConnection/${index + 1}`;
+	};
+	spyOn(profileInstances, "nmRunId").mockResolvedValue(RUN_ID);
+	spyOn(nm, "nmDeviceProp").mockImplementation(async (ifname, fields) => {
+		if (fields === "GENERAL.STATE,GENERAL.CON-UUID,GENERAL.CON-PATH") {
+			const current = radios.find((radio) => radio.ifname === ifname);
+			if (
+				current?.active &&
+				(active.has(current.active) || current.active === "station")
+			)
+				return ["100", current.active, activePath(ifname)];
+			return ["30", "", ""];
+		}
+		return ["Fixture", "Radio", "yes", "no", "yes"];
+	});
 	spyOn(nm, "nmConnsGet").mockResolvedValue([]);
 	spyOn(nm, "nmConnSetFields").mockImplementation(async (uuid) => {
 		modified.add(uuid);
@@ -151,9 +174,24 @@ export async function virtualBindingFixture() {
 		return current;
 	};
 	const stopDeps: HotspotStopDeps = {
-		nmDisconnect: async (uuid) => {
+		nmDisconnect: async (uuid, path, runId) => {
+			if (
+				runId !== RUN_ID ||
+				!radios.some(
+					(radio) =>
+						radio.active === uuid &&
+						active.has(uuid) &&
+						activePath(radio.ifname) === path,
+				)
+			)
+				throw new Error("Down did not target the current device activation");
 			down.push(uuid);
 			active.delete(uuid);
+			radios = radios.map((radio) =>
+				activePath(radio.ifname) === path
+					? { ...radio, active: "", state: "disconnected" }
+					: radio,
+			);
 			return true;
 		},
 		nmConnSetFields: async (uuid) => {
@@ -213,7 +251,7 @@ export async function virtualBindingFixture() {
 					created: false,
 				}),
 				readCapabilities: () => ({ staApCombo: { supported: true } }),
-				credentials: { get: () => undefined, remember: () => undefined },
+				credentials: credentials.hotspotCredentialsStore,
 				findHotspotConn: async () => undefined,
 				preferConcurrentAp: () => true,
 				nmApConnAdd: async () => (fail ? undefined : "old-ap"),
@@ -231,6 +269,7 @@ export async function virtualBindingFixture() {
 		},
 		async confirm() {
 			const target = row().concurrentHotspot?.ifname ?? row().ifname;
+			active.add("old-ap");
 			radios = radios.map((radio) =>
 				radio.ifname === target
 					? { ...radio, active: "old-ap", state: "connected" }

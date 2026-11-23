@@ -72,10 +72,15 @@ export async function setConcurrentAutoconnect(
 	ifname: string,
 	value: string,
 	matchesIdentity: () => Promise<boolean>,
+	beforeWrite?: () => Promise<boolean>,
 ): Promise<boolean> {
 	const name = argMatch(ID_RE, ifname);
 	const previous = (await nmDeviceProp(name, "GENERAL.AUTOCONNECT"))?.[0];
-	if ((previous !== "yes" && previous !== "no") || !(await matchesIdentity()))
+	if (
+		(previous !== "yes" && previous !== "no") ||
+		(beforeWrite && !(await beforeWrite())) ||
+		!(await matchesIdentity())
+	)
 		return false;
 	let matches = false;
 	try {

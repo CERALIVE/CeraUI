@@ -135,31 +135,143 @@ function hasX86MiniPcDmiMarker(dmi: string): boolean {
 export async function isRealDevice(
 	deps: DeviceDetectionDeps = defaultDeviceDetectionDeps,
 ): Promise<boolean> {
-	const override = deps.getDeviceTypeOverride();
-	if (override === "real") return true;
-	if (override === "emulated") return false;
-
+	const forced = forcedDeviceType(deps);
+	if (forced !== undefined) return forced;
 	if (deps.isDevelopment()) return false;
 
-	// `compatible` is the reliable RK3588 marker (always carries
-	// "rockchip,rk3588"); `model` is a fallback for boards whose model string
-	// itself names the SoC (e.g. Orange Pi 5+). Either match is a real device.
+	// Keep the ordinary classifier's await boundaries: its callers share the RPC queue.
 	if (hasRk3588Marker(await readOptional(deps.readDeviceTreeCompatible))) {
 		return true;
 	}
 	if (hasRk3588Marker(await readOptional(deps.readDeviceTreeModel))) {
 		return true;
 	}
-
 	if (!hasCeraliveImageIdentity(await readOptional(deps.readCeraliveRelease))) {
 		return false;
 	}
-
 	const dmiIdentity = [
 		await readOptional(deps.readDmiProductName),
 		await readOptional(deps.readDmiBoardName),
 	].join("\n");
 	return hasX86MiniPcDmiMarker(dmiIdentity);
+}
+
+function forcedDeviceType(deps: DeviceDetectionDeps): boolean | undefined {
+	const override = deps.getDeviceTypeOverride();
+	return override === "real"
+		? true
+		: override === "emulated"
+			? false
+			: undefined;
+}
+
+type ProbeResult = "positive" | "negative" | "errored";
+type HardwareEvidence = ProbeResult | "skipped" | "pending";
+
+async function probeRealDeviceHardware(
+	deps: DeviceDetectionDeps,
+): Promise<ProbeResult> {
+	let incomplete = false;
+	async function readEvidence(probe: () => Promise<string>): Promise<string> {
+		try {
+			return await probe();
+		} catch (error: unknown) {
+			if (
+				!(
+					typeof error === "object" &&
+					error !== null &&
+					"code" in error &&
+					error.code === "ENOENT"
+				)
+			) {
+				incomplete = true;
+			}
+			return "";
+		}
+	}
+
+	// `compatible` is the reliable RK3588 marker (always carries
+	// "rockchip,rk3588"); `model` is a fallback for boards whose model string
+	// itself names the SoC (e.g. Orange Pi 5+). Either match is a real device.
+	if (hasRk3588Marker(await readEvidence(deps.readDeviceTreeCompatible))) {
+		return "positive";
+	}
+	if (hasRk3588Marker(await readEvidence(deps.readDeviceTreeModel))) {
+		return "positive";
+	}
+
+	if (hasCeraliveImageIdentity(await readEvidence(deps.readCeraliveRelease))) {
+		const dmiIdentity = [
+			await readEvidence(deps.readDmiProductName),
+			await readEvidence(deps.readDmiBoardName),
+		].join("\n");
+		if (hasX86MiniPcDmiMarker(dmiIdentity)) return "positive";
+	}
+	return incomplete ? "errored" : "negative";
+}
+
+export type BondGuardDeviceObserver = {
+	readonly ready: Promise<boolean>;
+	readonly isStillReal: () => boolean;
+	readonly refresh: () => void;
+};
+
+export function observeRealDeviceAtBoot(
+	simulationSelectedAtBoot: boolean,
+	deps: DeviceDetectionDeps = defaultDeviceDetectionDeps,
+): BondGuardDeviceObserver {
+	const forced = forcedDeviceType(deps);
+	const autoProbe = forced === undefined && !deps.isDevelopment();
+	// Share the original read promises during auto boot. Neither consumer
+	// awaits the other, and retries use the original readers.
+	const once = (read: () => Promise<string>) => {
+		let reading: { promise: Promise<string> } | { error: unknown } | undefined;
+		return () => {
+			if (reading === undefined) {
+				try {
+					reading = { promise: read() };
+				} catch (error: unknown) {
+					reading = { error };
+				}
+			}
+			if ("error" in reading) throw reading.error;
+			return reading.promise;
+		};
+	};
+	const bootDeps = autoProbe
+		? {
+				...deps,
+				readDeviceTreeCompatible: once(deps.readDeviceTreeCompatible),
+				readDeviceTreeModel: once(deps.readDeviceTreeModel),
+				readCeraliveRelease: once(deps.readCeraliveRelease),
+				readDmiProductName: once(deps.readDmiProductName),
+				readDmiBoardName: once(deps.readDmiBoardName),
+			}
+		: deps;
+	// Boot must await the ordinary promise itself, never a guard probe or a
+	// derived promise: the update sweep races authenticated RPC replies.
+	const ready = isRealDevice(bootDeps);
+	let evidence: HardwareEvidence = "skipped";
+	async function launch(probeDeps: DeviceDetectionDeps): Promise<void> {
+		evidence = "pending";
+		evidence = await probeRealDeviceHardware(probeDeps).catch(
+			(): ProbeResult => "errored",
+		);
+	}
+	if (autoProbe || (forced === true && !simulationSelectedAtBoot))
+		void launch(bootDeps);
+	return {
+		ready,
+		// The network caller applies live simulation fences separately.
+		isStillReal: () => forcedDeviceType(deps) ?? evidence !== "negative",
+		refresh: () => {
+			if (
+				(evidence === "skipped" || evidence === "errored") &&
+				forcedDeviceType(deps) !== false
+			)
+				void launch(deps);
+		},
+	};
 }
 
 /**
