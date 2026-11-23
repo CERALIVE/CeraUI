@@ -136,7 +136,24 @@ export async function isRealDevice(
 	deps: DeviceDetectionDeps = defaultDeviceDetectionDeps,
 ): Promise<boolean> {
 	const forced = forcedDeviceType(deps);
-	return forced ?? isRealDeviceWithoutOverride(deps);
+	if (forced !== undefined) return forced;
+	if (deps.isDevelopment()) return false;
+
+	// Keep the ordinary classifier's await boundaries: its callers share the RPC queue.
+	if (hasRk3588Marker(await readOptional(deps.readDeviceTreeCompatible))) {
+		return true;
+	}
+	if (hasRk3588Marker(await readOptional(deps.readDeviceTreeModel))) {
+		return true;
+	}
+	if (!hasCeraliveImageIdentity(await readOptional(deps.readCeraliveRelease))) {
+		return false;
+	}
+	const dmiIdentity = [
+		await readOptional(deps.readDmiProductName),
+		await readOptional(deps.readDmiBoardName),
+	].join("\n");
+	return hasX86MiniPcDmiMarker(dmiIdentity);
 }
 
 function forcedDeviceType(deps: DeviceDetectionDeps): boolean | undefined {
@@ -148,50 +165,93 @@ function forcedDeviceType(deps: DeviceDetectionDeps): boolean | undefined {
 			: undefined;
 }
 
-async function isRealDeviceWithoutOverride(
+type ProbeResult = "positive" | "negative" | "errored";
+type HardwareEvidence = ProbeResult | "skipped" | "pending";
+
+async function probeRealDeviceHardware(
 	deps: DeviceDetectionDeps,
-): Promise<boolean> {
-	if (deps.isDevelopment()) return false;
+): Promise<ProbeResult> {
+	let incomplete = false;
+	async function readEvidence(probe: () => Promise<string>): Promise<string> {
+		try {
+			return await probe();
+		} catch (error: unknown) {
+			if (
+				!(
+					typeof error === "object" &&
+					error !== null &&
+					"code" in error &&
+					error.code === "ENOENT"
+				)
+			) {
+				incomplete = true;
+			}
+			return "";
+		}
+	}
 
 	// `compatible` is the reliable RK3588 marker (always carries
 	// "rockchip,rk3588"); `model` is a fallback for boards whose model string
 	// itself names the SoC (e.g. Orange Pi 5+). Either match is a real device.
-	if (hasRk3588Marker(await readOptional(deps.readDeviceTreeCompatible))) {
-		return true;
+	if (hasRk3588Marker(await readEvidence(deps.readDeviceTreeCompatible))) {
+		return "positive";
 	}
-	if (hasRk3588Marker(await readOptional(deps.readDeviceTreeModel))) {
-		return true;
-	}
-
-	if (!hasCeraliveImageIdentity(await readOptional(deps.readCeraliveRelease))) {
-		return false;
+	if (hasRk3588Marker(await readEvidence(deps.readDeviceTreeModel))) {
+		return "positive";
 	}
 
-	const dmiIdentity = [
-		await readOptional(deps.readDmiProductName),
-		await readOptional(deps.readDmiBoardName),
-	].join("\n");
-	return hasX86MiniPcDmiMarker(dmiIdentity);
+	if (hasCeraliveImageIdentity(await readEvidence(deps.readCeraliveRelease))) {
+		const dmiIdentity = [
+			await readEvidence(deps.readDmiProductName),
+			await readEvidence(deps.readDmiBoardName),
+		].join("\n");
+		if (hasX86MiniPcDmiMarker(dmiIdentity)) return "positive";
+	}
+	return incomplete ? "errored" : "negative";
 }
 
+export type BondGuardDeviceObserver = {
+	readonly ready: Promise<boolean>;
+	readonly isStillReal: () => boolean;
+	readonly refresh: () => void;
+};
+
 export function observeRealDeviceAtBoot(
+	simulationSelectedAtBoot: boolean,
 	deps: DeviceDetectionDeps = defaultDeviceDetectionDeps,
-) {
+): BondGuardDeviceObserver {
 	const forced = forcedDeviceType(deps);
-	let evidence: "pending" | "real" | "not-real" =
-		forced === false ? "not-real" : "pending";
+	let evidence: HardwareEvidence = "skipped";
+	async function launch(): Promise<ProbeResult> {
+		evidence = "pending";
+		const result = await probeRealDeviceHardware(deps).catch(
+			(): ProbeResult => "errored",
+		);
+		evidence = result;
+		return result;
+	}
 	const hardware =
-		forced === false
-			? Promise.resolve(false)
-			: isRealDeviceWithoutOverride(deps).then((confirmed) => {
-					evidence = confirmed ? "real" : "not-real";
-					return confirmed;
-				});
+		forced === undefined
+			? deps.isDevelopment()
+				? undefined
+				: launch()
+			: forced && !simulationSelectedAtBoot
+				? launch()
+				: undefined;
 	return {
-		// A forced boot still proceeds without waiting for the evidence probe.
-		ready: forced === undefined ? hardware : Promise.resolve(forced),
-		// After arming, keep the last-uplink veto until we have negative evidence.
-		isStillReal: () => forcedDeviceType(deps) ?? evidence !== "not-real",
+		ready:
+			forced === undefined && hardware
+				? hardware.then((result) => result === "positive")
+				: Promise.resolve(forced ?? false),
+		// The network caller applies live simulation fences separately.
+		isStillReal: () => forcedDeviceType(deps) ?? evidence !== "negative",
+		refresh: () => {
+			if (
+				(evidence === "skipped" || evidence === "errored") &&
+				forcedDeviceType(deps) !== false
+			)
+				void launch();
+		},
 	};
 }
 

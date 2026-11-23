@@ -97,6 +97,7 @@ import {
 } from "./modules/network/network-ingest.ts";
 import { reconcileIngestDesiredState } from "./modules/network/network-ingest-control.ts";
 import {
+	bondDisableSimulationSelected,
 	handleNetifMonitorEvent,
 	initNetworkInterfaceMonitoring,
 	setBondDisableGuardContext,
@@ -323,7 +324,7 @@ if (!configAvailableAtBind) {
 //     crashes and the WS server (bound above) stays reachable. ---
 
 // Recovery must finish before an update may install any new UID routing rule.
-const deviceAtBoot = observeRealDeviceAtBoot();
+const deviceAtBoot = observeRealDeviceAtBoot(bondDisableSimulationSelected());
 const realDeviceAtBoot = await deviceAtBoot.ready;
 if (realDeviceAtBoot)
 	void guardNonCritical("update-route-sweep", async () => {
@@ -548,7 +549,7 @@ const networkMonitor = createMonitorManager(() => updateNetif());
 networkMonitor.on("monitor-event", handleNetifMonitorEvent);
 networkMonitor.start();
 setBondDisableGuardContext(
-	realDeviceAtBoot ? deviceAtBoot.isStillReal : undefined,
+	deviceAtBoot,
 	networkMonitor instanceof NmcliMonitorManager,
 );
 

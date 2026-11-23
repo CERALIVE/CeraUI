@@ -37,8 +37,10 @@ import {
 	genSrtlaBondEntries,
 	genSrtlaBondEntriesForLocalIpAddress,
 } from "../modules/streaming/srtla.ts";
-import * as deviceDetection from "../modules/system/device-detection.ts";
-import { isRealDevice } from "../modules/system/device-detection.ts";
+import {
+	defaultDeviceDetectionDeps,
+	isRealDevice,
+} from "../modules/system/device-detection.ts";
 import { handleORPCMessage } from "../rpc/adapter.ts";
 import { broadcastMsg, setSocketSenderId } from "../rpc/compat.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
@@ -53,6 +55,7 @@ import {
 	bondDeviceProbe,
 	pendingProbeIp,
 } from "./helpers/bond-device-replay.ts";
+import { bootDevice, installDevice } from "./helpers/bond-guard-install.ts";
 import {
 	markerRows,
 	oweBondMarkerRetractions,
@@ -95,7 +98,15 @@ type Mode =
 	| "HARDWARE"
 	| "HARDWARE-FORCED"
 	| "PENDING-HARDWARE"
-	| "PENDING-NON-DEVICE";
+	| "PENDING-NON-DEVICE"
+	| "SKIPPED-PROBE"
+	| "ERRORED-PROBE"
+	| "EMULATED-TO-REAL"
+	| "SCRIPTED-TO-REAL"
+	| "SKIPPED-AUTO-PROBE"
+	| "ERRORED-AUTO-PROBE"
+	| "RETRY-POSITIVE"
+	| "RETRY-NEGATIVE";
 type Topology =
 	| "twins"
 	| "fallback"
@@ -136,33 +147,6 @@ const notice = {
 	},
 	id: "fixture-sender",
 };
-
-// These same test bytes also run on the unpatched baseline. In production this
-// context is supplied by main.ts after classification and monitor selection.
-function setBootContext(
-	real: (() => boolean) | undefined,
-	monitor: ReturnType<typeof createMonitorManager>,
-) {
-	const set: unknown = Reflect.get(netif, "setBondDisableGuardContext");
-	if (typeof set === "function")
-		set(real, monitor instanceof NmcliMonitorManager);
-}
-
-function bootDevice(deps: deviceDetection.DeviceDetectionDeps) {
-	const observe: unknown = Reflect.get(
-		deviceDetection,
-		"observeRealDeviceAtBoot",
-	);
-	if (typeof observe === "function") {
-		const result: ReturnType<typeof deviceDetection.observeRealDeviceAtBoot> =
-			observe(deps);
-		return result;
-	}
-	// On main, reproduce the same held probe without installing any guard.
-	if (deps.getDeviceTypeOverride() === "real")
-		void isRealDevice({ ...deps, getDeviceTypeOverride: () => undefined });
-	return { ready: isRealDevice(deps), isStillReal: () => true };
-}
 
 function add(name: string, changes: Partial<netif.NetworkInterface> = {}) {
 	netif.getNetworkInterfaces()[name] = {
@@ -271,6 +255,10 @@ const backupOn = { name: "eth1", enabled: true, ip: "192.0.2.21" };
 const backupOff = { ...backupOn, enabled: false };
 let time = 1_000_000;
 
+async function waitMicrotasks(count: number) {
+	while (count-- > 0) await Promise.resolve();
+}
+
 async function replay(
 	label: string,
 	mode: Mode,
@@ -288,15 +276,54 @@ async function replay(
 	clock.mockImplementation(() => (time += 10_000));
 	for (const key of envKeys) delete process.env[key];
 	process.env.NODE_ENV = mode === "TEST" ? "test" : "production";
-	process.env.CERALIVE_DEVICE_TYPE = mode === "EMULATED" ? "emulated" : "real";
-	if (mode === "HARDWARE") delete process.env.CERALIVE_DEVICE_TYPE;
-	if (mode === "MOCK" || mode === "OVERLAY") process.env.MOCK_MODE = "true";
-	if (mode === "SCENARIO" || mode === "FLIP-MONITOR")
+	if (label === "fuzz-seed-31-seq-926") process.env.NODE_ENV = "development";
+	process.env.CERALIVE_DEVICE_TYPE =
+		mode === "EMULATED" ||
+		mode === "EMULATED-TO-REAL" ||
+		mode === "SCRIPTED-TO-REAL"
+			? "emulated"
+			: "real";
+	if (
+		mode === "HARDWARE" ||
+		mode === "SKIPPED-AUTO-PROBE" ||
+		mode === "ERRORED-AUTO-PROBE"
+	)
+		delete process.env.CERALIVE_DEVICE_TYPE;
+	const skippedProbe =
+		mode === "SKIPPED-PROBE" || mode === "SKIPPED-AUTO-PROBE";
+	const retryProbe = mode === "RETRY-POSITIVE" || mode === "RETRY-NEGATIVE";
+	const erroredProbe =
+		mode === "ERRORED-PROBE" || mode === "ERRORED-AUTO-PROBE" || retryProbe;
+	if (mode === "MOCK" || mode === "OVERLAY" || skippedProbe)
+		process.env.MOCK_MODE = "true";
+	if (
+		mode === "SCENARIO" ||
+		mode === "FLIP-MONITOR" ||
+		mode === "SCRIPTED-TO-REAL"
+	)
 		process.env.MOCK_SCENARIO = "multi-modem-wifi";
 	if (mode === "HWSIM") process.env.HWSIM_REPO = "/fixture";
+	const roleOverlap = label.startsWith("fuzz-seed-11-seq-189");
+	if (roleOverlap) delete process.env.CERALIVE_DEVICE_TYPE;
+	const roleHardware = roleOverlap
+		? [
+				spyOn(
+					defaultDeviceDetectionDeps,
+					"readDeviceTreeCompatible",
+				).mockResolvedValue(""),
+				spyOn(
+					defaultDeviceDetectionDeps,
+					"readDeviceTreeModel",
+				).mockResolvedValue(""),
+				spyOn(
+					defaultDeviceDetectionDeps,
+					"readCeraliveRelease",
+				).mockResolvedValue(""),
+			]
+		: [];
 	updateMockState({ initialized: mode === "OVERLAY", netifConfigs: new Map() });
 	const monitor = createMonitorManager(() => undefined);
-	setBootContext(undefined, monitor);
+	installDevice(undefined, monitor);
 	const pendingWithdrawal =
 		mode === "PENDING-HARDWARE" || mode === "PENDING-NON-DEVICE";
 	const probe = bondDeviceProbe(
@@ -304,16 +331,30 @@ async function replay(
 		mode === "BOOT" ||
 			mode === "HARDWARE" ||
 			mode === "HARDWARE-FORCED" ||
-			mode === "PENDING-HARDWARE",
+			mode === "PENDING-HARDWARE" ||
+			skippedProbe ||
+			erroredProbe,
 		mode === "BOOT" || pendingWithdrawal,
 	);
-	const { deps } = probe;
+	let compatibleReads = 0;
+	const retry = Promise.withResolvers<string>();
+	const deps = {
+		...probe.deps,
+		readDeviceTreeCompatible: async () => {
+			++compatibleReads;
+			if (compatibleReads === 1 && erroredProbe)
+				throw Object.assign(new Error("Transient compatible read"), {
+					code: "EIO",
+				});
+			if (compatibleReads === 2 && retryProbe) return retry.promise;
+			return probe.deps.readDeviceTreeCompatible();
+		},
+	};
 	const device = bootDevice(deps);
-	const arm = async () =>
-		setBootContext(
-			(await device.ready) ? device.isStillReal : undefined,
-			monitor,
-		);
+	const arm = async () => {
+		await device.ready;
+		installDevice(device, monitor);
+	};
 	const boot = mode === "BOOT" ? arm() : undefined;
 	const trace: { source: string; frame: string }[] = [];
 	const observer = makeRpcContext().ws;
@@ -379,6 +420,37 @@ async function replay(
 		if (!boot) await arm();
 		if (mode === "FLIP-MONITOR") delete process.env.MOCK_SCENARIO;
 		if (mode === "FLIP-DEVICE") process.env.CERALIVE_DEVICE_TYPE = "emulated";
+		if (
+			skippedProbe ||
+			(erroredProbe && !retryProbe) ||
+			mode === "EMULATED-TO-REAL"
+		) {
+			expect(monitor).toBeInstanceOf(NmcliMonitorManager);
+			if (skippedProbe) {
+				expect(compatibleReads).toBe(0);
+				delete process.env.MOCK_MODE;
+				if (label === "fuzz-seed-31-seq-926")
+					process.env.NODE_ENV = "production";
+			}
+			if (mode === "EMULATED-TO-REAL")
+				process.env.CERALIVE_DEVICE_TYPE = "real";
+			else delete process.env.CERALIVE_DEVICE_TYPE;
+			expect(await isRealDevice(deps)).toBe(true);
+		}
+		if (retryProbe) {
+			delete process.env.CERALIVE_DEVICE_TYPE;
+			device.refresh();
+			device.refresh();
+			retry.resolve(mode === "RETRY-POSITIVE" ? "rockchip,rk3588" : "");
+			await new Promise<void>((resolve) => setImmediate(resolve));
+			device.refresh();
+		}
+		if (mode === "SCRIPTED-TO-REAL") {
+			delete process.env.MOCK_SCENARIO;
+			process.env.CERALIVE_DEVICE_TYPE = "real";
+			expect(monitor).toBeInstanceOf(MockMonitorEmitter);
+			expect(compatibleReads).toBe(0);
+		}
 		if (pendingWithdrawal) {
 			expect(monitor).toBeInstanceOf(NmcliMonitorManager);
 			expect(probe.firstReadPending).toBe(true);
@@ -455,15 +527,35 @@ async function replay(
 					),
 				);
 				const socket = requester("requester");
-				await Promise.all(
-					requests.map((input, i) =>
-						handleORPCMessage(split ? requester(`requester-${i}`) : socket, {
-							id: `request-${i}`,
-							path: ["network", "configure"],
-							input,
-						}),
-					),
-				);
+				if (roleOverlap) {
+					await Promise.all([
+						(async () => {
+							await waitMicrotasks(2);
+							await handleORPCMessage(requester("requester-role"), {
+								id: "role",
+								path: ["network", "setEthernetRole"],
+								input: { name: "eth1", role: "shared-lan" },
+							});
+						})(),
+						(async () => {
+							await waitMicrotasks(mode === "MOCK" ? 5 : 11);
+							await handleORPCMessage(requester("requester-configure"), {
+								id: "configure",
+								path: ["network", "configure"],
+								input: backupOn,
+							});
+						})(),
+					]);
+				} else
+					await Promise.all(
+						requests.map((input, i) =>
+							handleORPCMessage(split ? requester(`requester-${i}`) : socket, {
+								id: `request-${i}`,
+								path: ["network", "configure"],
+								input,
+							}),
+						),
+					);
 				afterRegistry = listPhysicalDevices();
 				if (testingMarkers) {
 					flushStart = trace.length;
@@ -535,9 +627,11 @@ async function replay(
 		}
 	} finally {
 		removeClient(observer);
+		for (const reader of roleHardware) reader.mockRestore();
 		probe.release();
 		await boot;
-		setBootContext(undefined, monitor);
+		retry.resolve("");
+		installDevice(undefined, monitor);
 		if (monitor instanceof MockMonitorEmitter) monitor.reset();
 		resetBondFixture();
 		resetUsbNetMarkers();
@@ -553,11 +647,76 @@ async function replay(
 	}
 }
 
+for (const mode of [
+	"SKIPPED-PROBE",
+	"ERRORED-PROBE",
+	"EMULATED-TO-REAL",
+	"SKIPPED-AUTO-PROBE",
+	"ERRORED-AUTO-PROBE",
+	"RETRY-POSITIVE",
+	"RETRY-NEGATIVE",
+	"SCRIPTED-TO-REAL",
+] as const) {
+	test(`native evidence recovery: ${mode}`, async () => {
+		const row = await replay("native-recovery", mode, "none", "held-lan", [
+			{ ...off, ip: pendingProbeIp },
+		]);
+		expect(row.before.bond.map(({ iface }) => iface)).toEqual(["eth0"]);
+		if (mode === "RETRY-NEGATIVE" || mode === "SCRIPTED-TO-REAL") {
+			expect(row.frames.at(-1)).toEqual({
+				...changed,
+				result: {
+					...changed.result,
+					applied: { ...changed.result.applied, ip: pendingProbeIp },
+				},
+			});
+			expect(row.after.bond).toEqual([]);
+			expect(row.steps).toEqual([]);
+		} else expectVeto(row);
+	});
+}
+
 function expectVeto(row: Awaited<ReturnType<typeof replay>>) {
 	expect(row.frames).toEqual([notice, refused(0)]);
 	expect(row.edges).toEqual([]);
 	expect(row.steps).toEqual([]);
 	expect(row.after).toEqual(row.before);
+}
+
+test("fuzz seed 31, sequence 926: dev boot then dev and override withdrawal", async () => {
+	expectVeto(
+		await replay("fuzz-seed-31-seq-926", "SKIPPED-PROBE", "none", "held-lan", [
+			{ ...off, ip: pendingProbeIp },
+		]),
+	);
+});
+
+for (const mode of ["MOCK", "REAL"] as const) {
+	test(`fuzz seed 11, sequence 189: ${mode} reply order matches main`, async () => {
+		const row = await replay(
+			`fuzz-seed-11-seq-189-${mode}`,
+			mode,
+			"none",
+			"survivor",
+			[backupOn],
+			true,
+		);
+		expect(
+			row.frames.filter(
+				(frame) =>
+					typeof frame === "object" &&
+					frame !== null &&
+					"id" in frame &&
+					"result" in frame,
+			),
+		).toEqual([
+			{
+				id: "role",
+				result: { success: false, error: "unavailable_in_emulated_mode" },
+			},
+			{ id: "configure", result: { success: true, applied: backupOn } },
+		]);
+	});
 }
 
 for (const mode of ["PENDING-HARDWARE", "PENDING-NON-DEVICE"] as const) {

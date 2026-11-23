@@ -848,7 +848,10 @@ async function refreshDongleState(): Promise<void> {
 export function initNetworkInterfaceMonitoring() {
 	onNetifChange(broadcastNetif);
 	void updateNetif();
-	setInterval(updateNetif, NETIF_POLL_INTERVAL_MS);
+	setInterval(() => {
+		refreshBondDisableEvidence();
+		void updateNetif();
+	}, NETIF_POLL_INTERVAL_MS);
 	void import("./gateways.ts")
 		.then((m) => setQueueUpdateGwHook(() => m.queueUpdateGw()))
 		.catch((err: unknown) => {
@@ -1772,23 +1775,39 @@ function countActiveNetif() {
 	return count;
 }
 
-let realBondDisableContext: (() => boolean) | undefined;
+type BondDisableContext = Pick<
+	import("../system/device-detection.ts").BondGuardDeviceObserver,
+	"isStillReal" | "refresh"
+>;
+let realBondDisableContext: BondDisableContext | undefined;
 
-// Set once both boot classification and the selected provider are known.
+export function bondDisableSimulationSelected(): boolean {
+	return (
+		isDevelopment() ||
+		shouldUseMockMonitor() ||
+		process.env.HWSIM_REPO !== undefined
+	);
+}
+
+function refreshBondDisableEvidence(): void {
+	if (!bondDisableSimulationSelected() && isRuntimeConfigAvailable())
+		realBondDisableContext?.refresh();
+}
+
 export function setBondDisableGuardContext(
-	isStillReal: (() => boolean) | undefined,
+	observer: BondDisableContext | undefined,
 	realMonitor: boolean,
 ): void {
-	realBondDisableContext = realMonitor ? isStillReal : undefined;
+	realBondDisableContext = realMonitor ? observer : undefined;
+	refreshBondDisableEvidence();
 }
 
 function wouldRemoveLastBondCandidate(target: string): boolean {
 	if (
-		!realBondDisableContext?.() ||
-		isDevelopment() ||
-		shouldUseMockMonitor() ||
-		process.env.HWSIM_REPO !== undefined ||
-		!isRuntimeConfigAvailable()
+		!realBondDisableContext ||
+		bondDisableSimulationSelected() ||
+		!isRuntimeConfigAvailable() ||
+		!realBondDisableContext.isStillReal()
 	)
 		return false;
 

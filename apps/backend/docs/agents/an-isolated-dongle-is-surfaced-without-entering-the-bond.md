@@ -1298,9 +1298,9 @@ a bit the error path overwrites. A link that cannot be DESCRIBED
 (`isMappableEntry`: valid iface name, valid `link_id`, non-empty ip) is not made
 eligible by wishing.
 
-**Disabling the last effective WAN candidate.** After boot confirms a real
-device and installs the real network monitor, `network.configure` refuses an
-off request that would take the sender's candidate set from nonempty to empty.
+**Disabling the last effective WAN candidate.** After selection of the native
+network monitor, `network.configure` can refuse an off request that would take
+the sender's candidate set from nonempty to empty.
 The decision uses the actual preference change, including mapped duplicates,
 legacy exclusions and all rows sharing an exact physical identity. A held or
 otherwise ineligible target can still exclude its eligible sibling; the veto
@@ -1314,14 +1314,16 @@ identity becomes eligible for fallback at its first publication plus 15 s,
 inclusive. A peer can reach that deadline after a refusal; retrying then can
 succeed. Wire and sender refreshes still use live time.
 
-The old input checks and raw-count refusal still apply. Boot before confirmation,
-overlay/mock, simulated monitor, hwsim and emulated paths retain their old
-behavior. After the real monitor is selected, withdrawing a boot-time `real`
-override disarms the veto only if the independent hardware probe has resolved
-negative. While the probe is pending, even a non-device that booted with the
-override keeps the veto so it cannot lose its last uplink. An explicit `emulated`
-override always disarms it. Only a new last-candidate refusal takes precedence
-over a storage error the skipped save might have encountered; all writes that actually run
+The old input checks and raw-count refusal still apply. Before monitor selection,
+with a simulated provider, in live dev/mock/test/scenario/hwsim or explicit
+emulated modes, and without config authority, the new veto does not apply.
+Otherwise a live `real` override arms it; in auto mode only a definitive
+negative hardware probe disarms it. A skipped, pending, or failed probe can
+therefore cause even an unmarked non-device to refuse a last-uplink disable
+until evidence settles. Selection and the existing interface poll retry
+inconclusive probes, one at a time, never from a request. Only a new
+last-candidate refusal takes precedence over a storage error the skipped
+save might have encountered; all writes that actually run
 keep their usual error handling. Membership is not a guarantee of link health,
 and this rule does not prevent unplugging the last uplink.
 
