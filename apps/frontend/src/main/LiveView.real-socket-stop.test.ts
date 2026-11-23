@@ -63,7 +63,10 @@ import {
 } from "../tests/helpers/update-device";
 
 const session = vi.hoisted(() => ({ authenticated: false }));
-const device = vi.hoisted(() => ({ engineUnavailable: false }));
+const device = vi.hoisted(() => ({
+	engineUnavailable: false,
+	usePushedConfig: false,
+}));
 
 vi.mock("$lib/config", () => ({
 	navElements: { network: { label: "Network" } },
@@ -78,14 +81,16 @@ vi.mock("svelte-sonner", () => ({
 	},
 }));
 vi.mock("$lib/rpc/subscriptions.svelte", async (importOriginal) => {
-	const real =
+	const original =
 		await importOriginal<typeof import("$lib/rpc/subscriptions.svelte")>();
-	const mock = await (
+	const getters = await (
 		await import("../tests/fixtures/real-store-live")
-	).deviceGettersMock(real);
+	).deviceGettersMock(original);
 	return {
-		...mock,
-		getLinkTelemetry: real.getLinkTelemetry,
+		...getters,
+		getLinkTelemetry: original.getLinkTelemetry,
+		getConfig: () =>
+			device.usePushedConfig ? original.getConfig() : getters.getConfig(),
 		getCapabilities: () =>
 			device.engineUnavailable ? { engineUnavailable: true } : undefined,
 	};
@@ -226,6 +231,7 @@ beforeAll(() => {
 
 beforeEach(() => {
 	device.engineUnavailable = false;
+	device.usePushedConfig = false;
 	vi.useFakeTimers();
 	// The reconnect backoff's jitter is the only randomness on this path.
 	jitter = vi.spyOn(Math, "random").mockReturnValue(0.5);
@@ -819,6 +825,42 @@ describe("start refusal presentation across the socket", () => {
 		await settle();
 		expect(sentCount("streaming.start")).toBe(1);
 	});
+
+	it.each([{ srtla_addr: "192.0.2.2" }, { max_br: 8000 }])(
+		"keeps the refusal and blocks a queued retry after config changes: %j",
+		async (change) => {
+			device.usePushedConfig = true;
+			socket().deliver({
+				config: {
+					source: "cam-1",
+					pipeline: "cam-1-pipe",
+					srtla_addr: "192.0.2.1",
+					max_br: 6000,
+				},
+			});
+			const { container } = render(LiveView);
+			await fireEvent.click(button(container, "Start Stream"));
+			await settle();
+			expect(sentCount("streaming.start")).toBe(1);
+			refuseStart(`queued-old-config-${Object.keys(change)[0]}`);
+			await settle();
+			const write = sendCompositionWrite(
+				{ composition_patch: { alpha: 0.5 } },
+				() => false,
+			);
+			await settle();
+			vi.mocked(toast.dismiss).mockClear();
+			expect(latestRefusalAction()?.activate()).toBe(true);
+			socket().deliver({ config: change });
+			await settle();
+			expect(button(container, "Start Stream").disabled).toBe(false);
+			answer("streaming.setConfig", { success: true });
+			await write;
+			await settle();
+			expect(sentCount("streaming.start")).toBe(1);
+			expect(toast.dismiss).not.toHaveBeenCalled();
+		},
+	);
 
 	it("keeps the original refusal and does not dismiss anything on a closing socket", async () => {
 		const { container } = render(LiveView);

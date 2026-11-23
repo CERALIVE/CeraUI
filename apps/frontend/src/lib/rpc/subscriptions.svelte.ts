@@ -163,6 +163,7 @@ let authState = $state.raw<
 
 // Config state
 let configState = $state.raw<ConfigMessage | undefined>(undefined);
+let startConfigGeneration = 0;
 
 // Status state (aggregated)
 let statusState = $state.raw<
@@ -348,6 +349,11 @@ export function getAuth() {
 
 export function getConfig() {
 	return configState;
+}
+
+/** Changes accepted by this tab, not identical echoes of its saved settings. */
+export function getStartConfigGeneration(): number {
+	return startConfigGeneration;
 }
 
 export function getStatus() {
@@ -622,12 +628,15 @@ function handleMessage(
 			// lock (release once its RPC resolved and the server echoed the field).
 			const incoming = data as ConfigMessage;
 			const merged: ConfigMessage = { ...configState };
+			let changed = false;
 			for (const [field, value] of Object.entries(incoming)) {
 				if (value === undefined) continue;
 				if (shouldIgnoreEchoReactive(field, value)) continue;
+				if (!Object.is(Reflect.get(merged, field), value)) changed = true;
 				(merged as Record<string, unknown>)[field] = value;
 				reconcileReactive(field, value);
 			}
+			if (changed) startConfigGeneration += 1;
 			configState = merged;
 			break;
 		}
@@ -1181,6 +1190,8 @@ function handleMessage(
 		case "bitrate":
 			// Bitrate updates during streaming
 			if (configState && (data as { max_br?: number }).max_br) {
+				if ((data as { max_br: number }).max_br !== configState.max_br)
+					startConfigGeneration += 1;
 				configState = {
 					...configState,
 					max_br: (data as { max_br: number }).max_br,
@@ -1393,6 +1404,7 @@ export function resetState(): void {
 	logFollowListener = undefined;
 	authState = undefined;
 	configState = undefined;
+	startConfigGeneration += 1;
 	statusState = undefined;
 	if (isStreamingState) noteStreamSessionBoundary();
 	isStreamingState = false;
