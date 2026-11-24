@@ -4,8 +4,11 @@ import {
 	type PhysicalBondKeys,
 } from "../modems/physical-identity.ts";
 import { resolveBondPhysicalIdentity } from "../streaming/bond-entry.ts";
+import { onNetdevRetired } from "./netdev-lifetime.ts";
 
 const sessionOptOut = new Set<string>();
+
+onNetdevRetired((ifname) => sessionOptOut.delete(ifname));
 
 export function bondPhysicalId(ifname: string): string | undefined {
 	const identity = resolveBondPhysicalIdentity(ifname);

@@ -113,6 +113,10 @@ export class UplinkHealthEngine {
 		return this.#records.get(iface)?.record;
 	}
 
+	forget(iface: string): void {
+		this.#records.delete(iface);
+	}
+
 	restartRecovery(iface: string, now: number): void {
 		const entry = this.#records.get(iface);
 		if (entry?.record.state !== "down") return;

@@ -1,7 +1,10 @@
+import { onNetdevRetired } from "../netdev-lifetime.ts";
 import { UplinkHealthEngine, type UplinkHealthRecord } from "./model.ts";
 
 let engine = new UplinkHealthEngine();
 const listeners = new Set<(records: readonly UplinkHealthRecord[]) => void>();
+
+onNetdevRetired((iface) => engine.forget(iface));
 
 export function getUplinkHealthEngine(): UplinkHealthEngine {
 	return engine;

@@ -18,7 +18,6 @@
 
 /* Network interface list */
 import { EventEmitter } from "node:events";
-import { existsSync, readFileSync } from "node:fs";
 import { isSimlessForBond } from "@ceraui/rpc";
 import type {
 	EthernetRole,
@@ -83,6 +82,21 @@ import {
 } from "./dongle-metadata.ts";
 import { ethernetRoleForWire, isSharedLanPort } from "./ethernet-role.ts";
 import { shouldUseMockMonitor } from "./monitor/mock-monitor.ts";
+import {
+	hasNetdevWitness,
+	type NetdevWitness,
+	netdevChanged,
+	netdevLifetime,
+	netdevMatches,
+	netdevPresence,
+	netdevRunning,
+	netdevWitness,
+	noteNetdevWitness,
+	onNetdevRetired,
+	readNetdevWitness,
+	resetNetdevLifetimesForTest,
+	retireNetdev,
+} from "./netdev-lifetime.ts";
 import { advanceNetifTopologyGeneration } from "./netif-topology-generation.ts";
 import {
 	getRouterCellularAdmin,
@@ -95,7 +109,6 @@ import {
 	getRouterCellularMarker,
 	getRouterCellularMarkers,
 	identityDeadlineExpired,
-	invalidateUsbNetReading,
 	type NetdevBus,
 	notePublishedNetifSnapshot,
 	onUsbNetReadingInvalidated,
@@ -105,6 +118,9 @@ import {
 	type UsbModemNetMarker,
 	usbNetScanCovers,
 } from "./router-cellular-scan.ts";
+
+export { netdevPresence } from "./netdev-lifetime.ts";
+
 import { onNetifChange, setNetifState } from "./state/netif-state.ts";
 import type { MonitorEvent, NetifState } from "./state-types.ts";
 import {
@@ -185,10 +201,8 @@ export const NETIF_ERR_SHAREDLAN = 0x08;
 
 let netif: Record<string, NetworkInterface> = {};
 const presenceEpoch = new Map<string, number>();
-const netifIdentities = new Map<
-	string,
-	{ readonly ifindex: number | undefined; readonly mac: string | undefined }
->();
+const polledNames = new Set<string>();
+const flappingNames = new Set<string>();
 type NetdevBusEvidence = {
 	readonly result: NetdevBus;
 	readonly seen: number;
@@ -205,7 +219,7 @@ export function hasNetifSnapshot(): boolean {
 export function getNetworkInterfaceIncarnation(
 	name: string,
 ): number | undefined {
-	return netif[name] && netifIdentities.has(name)
+	return netif[name] && polledNames.has(name)
 		? presenceEpoch.get(name)
 		: undefined;
 }
@@ -219,20 +233,32 @@ export function resetNetifSnapshotForTest(): void {
 	advanceNetifTopologyGeneration();
 	scanPublicationWarnings.clear();
 	presenceEpoch.clear();
-	netifIdentities.clear();
+	polledNames.clear();
+	flappingNames.clear();
+	resetNetdevLifetimesForTest();
 }
 
-function bumpPresence(name: string, removed = false): void {
-	const epoch = advanceNetifTopologyGeneration();
-	presenceEpoch.set(name, epoch);
-	if (removed) {
-		netifIdentities.delete(name);
-		invalidateUsbNetReading(name, epoch);
-	}
+function bumpPresence(name: string): void {
+	presenceEpoch.set(name, advanceNetifTopologyGeneration());
 }
 
 function installScanSettlement(): void {
 	if (stopScanSettlement) return;
+	const stopNetdevRetired = onNetdevRetired((name, epoch, fencePoll) => {
+		if (fencePoll) netifRefreshGeneration++;
+		presenceEpoch.set(name, epoch);
+		polledNames.delete(name);
+		flappingNames.delete(name);
+		scanPublicationWarnings.delete(name);
+		if (netif[name]) {
+			delete netif[name];
+			// A scan can retire a row outside the monitor or poll's commit.
+			queueMicrotask(() => {
+				triggerNetworkInterfacesChange();
+				notifyTopologyChange();
+			});
+		}
+	});
 	const stopScanCommitted = onUsbNetScanCommitted(() => {
 		let released = false;
 		for (const [name, int] of Object.entries(netif)) {
@@ -261,6 +287,7 @@ function installScanSettlement(): void {
 		});
 	});
 	stopScanSettlement = () => {
+		stopNetdevRetired();
 		stopScanCommitted();
 		stopReadingInvalidated();
 	};
@@ -751,42 +778,6 @@ function isNetifUpState(state: string): boolean {
 	return s === "up" || s.startsWith("connected");
 }
 
-/**
- * The kernel's own netdev list, which is the only evidence that a name still
- * names an incarnation. A monitor down-state on a name found here is an NM
- * link-state flap on a plugged-in device, not a removal, unless its ifindex
- * no longer matches the last poll. Tests override this OS boundary;
- * production reads sysfs.
- */
-export const netdevPresence = {
-	inSysfs(name: string): boolean {
-		try {
-			return existsSync(`/sys/class/net/${name}`);
-		} catch {
-			return false;
-		}
-	},
-	ifindex(name: string): number | undefined {
-		try {
-			const index = Number(
-				readFileSync(`/sys/class/net/${name}/ifindex`, "utf8").trim(),
-			);
-			return Number.isInteger(index) && index > 0 ? index : undefined;
-		} catch {
-			return undefined;
-		}
-	},
-};
-
-// A name the last poll recorded under another ifindex now belongs to a
-// different netdev, even if NM reports it as a plain state change.
-function monitorSawReplacement(name: string): boolean {
-	const previous = netifIdentities.get(name)?.ifindex;
-	if (previous === undefined) return false;
-	const current = netdevPresence.ifindex(name);
-	return current !== undefined && current !== previous;
-}
-
 function isNetifDownState(state: string): boolean {
 	const s = state.toLowerCase();
 	return (
@@ -813,32 +804,49 @@ export function handleNetifMonitorEvent(event: MonitorEvent): void {
 
 	const up = isNetifUpState(event.state);
 	if (!up && !isNetifDownState(event.state)) return;
-	const replaced = monitorSawReplacement(name);
-	// A poll already in flight may still hold the old incarnation's sample.
-	if (replaced) netifRefreshGeneration++;
-
-	let mutated = false;
+	installScanSettlement();
+	const current = readNetdevWitness(name);
+	const previous = netdevWitness(name);
+	const matches = netdevMatches(previous, current);
+	const replaced = netdevChanged(previous, current);
+	const wasPresent = netif[name] !== undefined;
 	if (up) {
-		if (!netif[name] || replaced) {
-			// New running interface; IP/throughput get filled in by the next poll.
-			netif[name] = { tp: 0, txb: 0, rxb: 0, enabled: true, error: 0 };
-			bumpPresence(name, replaced);
-			mutated = true;
-		}
+		if (
+			replaced ||
+			(flappingNames.has(name) && !matches) ||
+			(usbNetScanCovers(name) &&
+				!hasNetdevWitness(previous) &&
+				hasNetdevWitness(current))
+		)
+			retireNetdev(name);
+		if (netif[name]) return;
+		flappingNames.delete(name);
+		noteNetdevWitness(name, current);
+		netif[name] = { tp: 0, txb: 0, rxb: 0, enabled: true, error: 0 };
+		bumpPresence(name);
 	} else {
-		// A modem that loses its connection is still plugged in: its committed
-		// identity belongs to that present incarnation and must survive the flap.
-		bumpPresence(name, replaced || !netdevPresence.inSysfs(name));
-		if (netif[name]) {
+		if (replaced || netdevPresence.inSysfs(name) === false) {
+			// An unclassified placeholder may have no stale sample to discard.
+			// Its new presence epoch still forces a fresh bus read before admission.
+			retireNetdev(name, hasNetdevWitness(previous) || usbNetScanCovers(name));
+		} else {
+			// NM events carry no incarnation. Do not let an old down remove the
+			// addressed successor while the kernel still reports it operational.
+			if (
+				matches &&
+				netdevLifetime(name) !== undefined &&
+				netif[name]?.ip &&
+				netdevRunning(name)
+			)
+				return;
+			flappingNames.add(name);
+			bumpPresence(name);
 			delete netif[name];
-			mutated = true;
 		}
+		if (!wasPresent) return;
 	}
-
-	if (mutated) {
-		triggerNetworkInterfacesChange();
-		notifyTopologyChange();
-	}
+	triggerNetworkInterfacesChange();
+	notifyTopologyChange();
 }
 
 export function onNetworkInterfacesChange(callback: () => void) {
@@ -1018,21 +1026,18 @@ async function resolveIpAddrOverrides(
 }
 
 async function refreshNetifFromOs(): Promise<void> {
-	const generation = ++netifRefreshGeneration;
-	const ifindices = new Map<string, number>();
+	installScanSettlement();
+	let generation = ++netifRefreshGeneration;
 	try {
-		const [ifconfigOut, ipOverrides] = await Promise.all([
-			run("ifconfig", []),
-			resolveIpAddrOverrides(ifindices),
-		]);
-		if (generation !== netifRefreshGeneration) return;
-		const ifnames = ifconfigOut
-			.split("\n\n")
-			.map((entry) => entry.split(":")[0]?.trim() ?? "")
-			.filter(
-				(name) =>
-					name !== "" && name !== "lo" && !/^(?:docker|l4tbr)/.test(name),
-			);
+		const sample = (await readNetifSample()) ?? (await readNetifSample());
+		if (!sample || generation !== netifRefreshGeneration) return;
+		const { entries, ipOverrides, ifnames, witnesses } = sample;
+		const replaced = new Set<string>();
+		for (const [name, witness] of witnesses) {
+			if (observePollWitness(name, witness)) replaced.add(name);
+		}
+		// The retirements above belong to this sample, not a competing observer.
+		generation = netifRefreshGeneration;
 		const buses = new Map<string, NetdevBusEvidence>();
 		const reads = new Map<string, { seen: number; promise: Promise<void> }>();
 		const issue = (name: string): void => {
@@ -1056,7 +1061,10 @@ async function refreshNetifFromOs(): Promise<void> {
 		for (const name of ifnames) {
 			if (!netif[name]?.identitySettled && !netif[name]?.usb) issue(name);
 		}
-		if (ifnames.some((name) => !usbNetScanCovers(name))) {
+		if (
+			replaced.size === 0 &&
+			ifnames.some((name) => !usbNetScanCovers(name))
+		) {
 			let timer: ReturnType<typeof setTimeout> | undefined;
 			let expired = false;
 			const deadline = new Promise<void>((resolve) => {
@@ -1129,17 +1137,97 @@ async function refreshNetifFromOs(): Promise<void> {
 			}
 		}
 		if (generation !== netifRefreshGeneration) return;
-		processIfconfigOutput(
-			ifconfigOut,
+		// A name whose netdev was confirmed gone or replaced during the waits is
+		// withdrawn alone; the rest of the sample is still current. The recorded
+		// witness supplies the last confirmed presence an unreadable sample lacks.
+		const withdrawn = new Set<string>();
+		for (const [name, witness] of witnesses) {
+			const live = readNetdevWitness(name);
+			if (
+				netdevChanged(witness, live) ||
+				netdevChanged(netdevWitness(name), live) ||
+				netdevChanged(netdevWitness(name), witness)
+			) {
+				retireNetdev(name);
+				withdrawn.add(name);
+			}
+		}
+		publishIfconfigEntries(
+			entries.filter((entry) => !withdrawn.has(entry.name)),
 			ipOverrides,
 			undefined,
 			buses,
-			ifindices,
+			undefined,
+			replaced,
 		);
 	} catch (error: unknown) {
 		const message = error instanceof Error ? error.message : String(error);
 		logger.error(`Error getting ifconfig: ${message}`);
 	}
+}
+
+async function readNetifSample() {
+	const before = new Map(
+		[...polledNames].map((name) => [name, readNetdevWitness(name)]),
+	);
+	const ifindices = new Map<string, number>();
+	const ipOverrides = await resolveIpAddrOverrides(ifindices);
+	for (const name of ifindices.keys()) {
+		if (!before.has(name)) before.set(name, readNetdevWitness(name));
+	}
+	const entries = parseIfconfigEntries(await run("ifconfig", []));
+	const ifnames: string[] = [];
+	const witnesses = new Map<string, NetdevWitness>();
+	const indexedNames = new Map(
+		[...ifindices].map(([name, index]) => [index, name]),
+	);
+	for (const { name, block } of entries) {
+		if (!name || name === "lo" || /^(?:docker|l4tbr)/.test(name)) continue;
+		ifnames.push(name);
+		if (!/\bRUNNING\b/.test(block.split("\n")[0] ?? "")) continue;
+		const current = readNetdevWitness(name);
+		const earlier = before.get(name);
+		const ifindex = ifindices.get(name);
+		const knownIndex = current.ifindex ?? netdevWitness(name)?.ifindex;
+		if (
+			netdevChanged(earlier, current) ||
+			(earlier !== undefined &&
+				hasNetdevWitness(earlier) !== hasNetdevWitness(current)) ||
+			(ifindex !== undefined &&
+				current.ifindex !== undefined &&
+				ifindex !== current.ifindex) ||
+			(ifindex === undefined &&
+				knownIndex !== undefined &&
+				indexedNames.has(knownIndex))
+		)
+			return undefined;
+		witnesses.set(name, {
+			...current,
+			ifindex: ifindex ?? current.ifindex,
+			mac: block.match(/ether ([0-9a-f:]+)/)?.[1],
+		});
+	}
+	return { entries, ipOverrides, ifnames, witnesses };
+}
+
+function observePollWitness(name: string, witness: NetdevWitness): boolean {
+	const previous = netdevWitness(name);
+	const replaced =
+		netdevChanged(previous, witness) ||
+		(flappingNames.has(name) && !netdevMatches(previous, witness));
+	if (replaced) retireNetdev(name);
+	flappingNames.delete(name);
+	noteNetdevWitness(name, witness);
+	return replaced;
+}
+
+type IfconfigEntry = { readonly name: string; readonly block: string };
+
+function parseIfconfigEntries(stdout: string): readonly IfconfigEntry[] {
+	return stdout.split("\n\n").map((block) => ({
+		name: block.split(":")[0]?.trim() ?? "",
+		block,
+	}));
 }
 
 export function processIfconfigOutput(
@@ -1148,6 +1236,25 @@ export function processIfconfigOutput(
 	now: number = getms(),
 	buses?: ReadonlyMap<string, NetdevBusEvidence>,
 	ifindices?: ReadonlyMap<string, number>,
+	pollReplacements?: ReadonlySet<string>,
+) {
+	publishIfconfigEntries(
+		parseIfconfigEntries(stdout),
+		ipOverrides,
+		now,
+		buses,
+		ifindices,
+		pollReplacements,
+	);
+}
+
+function publishIfconfigEntries(
+	entries: readonly IfconfigEntry[],
+	ipOverrides?: Map<string, IpAddrSelection>,
+	now: number = getms(),
+	buses?: ReadonlyMap<string, NetdevBusEvidence>,
+	ifindices?: ReadonlyMap<string, number>,
+	pollReplacements?: ReadonlySet<string>,
 ) {
 	installScanSettlement();
 	const previousNetif = netif;
@@ -1159,12 +1266,8 @@ export function processIfconfigOutput(
 
 	wifiDeviceListStartUpdate();
 
-	const interfaces = stdout.split("\n\n");
-
-	for (const int of interfaces) {
+	for (const { name, block: int } of entries) {
 		try {
-			const name = int.split(":")[0] ?? "";
-
 			if (name === "lo" || name.match("^docker") || name.match("^l4tbr"))
 				continue;
 
@@ -1203,29 +1306,20 @@ export function processIfconfigOutput(
 				10,
 			);
 
+			const hadRow = netif[name] !== undefined;
+			const replaced =
+				pollReplacements?.has(name) ??
+				observePollWitness(name, { ifindex: ifindices?.get(name), mac });
 			const previous = netif[name];
-			const ifindex = ifindices?.get(name);
-			const identity = netifIdentities.get(name);
-			if (previous && !identity) {
+			if (previous && !polledNames.has(name)) {
 				// Adopt the monitor's lifetime without invalidating its covering bus read.
 				advanceNetifTopologyGeneration();
 			}
-			if (
-				(previous &&
-					identity &&
-					(identity.ifindex !== ifindex || identity.mac !== mac)) ||
-				// A name back after a monitor down-state keeps its identity only
-				// under the same ifindex.
-				(!previous &&
-					identity?.ifindex !== undefined &&
-					ifindex !== undefined &&
-					identity.ifindex !== ifindex)
-			) {
-				bumpPresence(name, true);
+			if (replaced) {
 				intsChanged = true;
 				if (isSupportedWifiIfname(name)) wifiIncarnationChanged = true;
 			}
-			netifIdentities.set(name, { ifindex, mac });
+			polledNames.add(name);
 			let tp = 0;
 			if (previous) {
 				tp = txBytes - previous.txb;
@@ -1251,7 +1345,8 @@ export function processIfconfigOutput(
 				!previous?.identitySettled &&
 				(evidence !== undefined
 					? !fresh || evidence.result.kind === "unreadable"
-					: previous?.busUnreadable === true);
+					: previous?.busUnreadable === true ||
+						((!hadRow || replaced) && netdevLifetime(name) !== undefined));
 			newInterfaces[name] = {
 				...(inetAddr !== undefined ? { ip: inetAddr } : {}),
 				...(netmask !== undefined ? { netmask } : {}),
@@ -1338,8 +1433,12 @@ export function processIfconfigOutput(
 
 	netif = newInterfaces;
 	for (const name of new Set([...previousIfnames, ...Object.keys(netif)])) {
-		if (previousIfnames.has(name) !== (netif[name] !== undefined))
-			bumpPresence(name, previousIfnames.has(name));
+		if (!netif[name]) retireNetdev(name);
+		else if (!previousIfnames.has(name)) bumpPresence(name);
+	}
+	for (const name of flappingNames) {
+		if (!netif[name] && netdevPresence.inSysfs(name) === false)
+			retireNetdev(name);
 	}
 	netifSnapshotReady = true;
 	notePublishedNetifSnapshot(Object.keys(netif));
