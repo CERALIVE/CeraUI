@@ -35,6 +35,7 @@ import {
 	getStreamingBackend,
 	resolveStreamingBackend,
 } from "../modules/streaming/streaming-engine.ts";
+import { manualReconciliationDeadline } from "./helpers/reconciliation-deadline.ts";
 
 // StreamingBackend contract suite for the cerastream engine (the only engine):
 // structural conformance of the production singleton against the seam, plus the
@@ -644,7 +645,10 @@ describe("CerastreamBackend behavioural contract", () => {
 	});
 
 	test("reconciliation reports contradictory engine status as unknown", async () => {
-		const { backend, fake } = makeBackend();
+		const deadline = manualReconciliationDeadline();
+		const { backend, fake } = makeBackend({
+			scheduleTimeout: deadline.scheduleTimeout,
+		});
 		let streaming = false;
 		const orchestrator = createStreamSessionOrchestrator({
 			createAttemptId: () => "attempt-disagreement",
@@ -662,8 +666,11 @@ describe("CerastreamBackend behavioural contract", () => {
 
 		expect(await reconciliation).toBe("reconciling");
 		expect(streaming).toBe(false);
+		// Start re-probes the engine; only this second subscription stays silent.
 		expect(
-			await orchestrator.start({ origin: "ui", launch: async () => undefined }),
+			await deadline.expireDuring(() =>
+				orchestrator.start({ origin: "ui", launch: async () => undefined }),
+			),
 		).toMatchObject({ result: "busy" });
 	});
 

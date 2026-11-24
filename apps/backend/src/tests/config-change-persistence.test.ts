@@ -168,6 +168,7 @@ describe("apply-now staged persistence", () => {
 		clearStagedConfigChange(memoryDeps());
 	});
 
+	// Keep real durable writes; a 5.2 s marker fsync stall exceeded Bun's default.
 	test("applied is the ONLY outcome that writes config.json", async () => {
 		// Given a live stream and an apply-now change to 2160p.
 		setApplyNowGateForTest(gate(APPLIED));
@@ -185,7 +186,7 @@ describe("apply-now staged persistence", () => {
 		expect(getConfig().resolution).toBe("2160p");
 		expect(result.applied?.resolution).toBe("2160p");
 		expect(getStagedConfigChange()).toBeUndefined();
-	});
+	}, 12_000);
 
 	test("reverted leaves the persisted values UNTOUCHED", async () => {
 		// Given a live stream at 1080p.

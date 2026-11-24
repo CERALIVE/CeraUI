@@ -14,11 +14,13 @@ import {
 import { locateAround, queryLogs } from "../modules/device-logs/query.ts";
 import { clearAll } from "../modules/device-logs/retention.ts";
 import { bootId } from "./helpers/device-query.ts";
-import { bounded, historyFixture, turn } from "./helpers/history-clear.ts";
+import { historyFixture, turn } from "./helpers/history-clear.ts";
 
-let h: ReturnType<typeof historyFixture>;
+let fixtureToDispose: ReturnType<typeof historyFixture> | undefined;
 afterEach(async () => {
-	await h?.dispose();
+	const fixture = fixtureToDispose;
+	fixtureToDispose = undefined;
+	await fixture?.dispose();
 });
 const boundaries = [
 	"follow",
@@ -36,8 +38,11 @@ for (const mock of [false, true]) {
 		(name) => !mock || (name !== "rotate" && name !== "vacuum"),
 	)) {
 		for (const kind of kinds) {
-			test(`${kind} waits through ${mock ? "mock" : "native"} clear ${boundary} and reads the new history`, async () => {
-				h = historyFixture(mock);
+			const nativeRotateExport =
+				!mock && boundary === "rotate" && kind === "export";
+			// A 1.5 s CI stall tripped the watchdog; the latch still drives ordering.
+			const eventTimeoutMs = nativeRotateExport ? 6_000 : undefined;
+			const verify = async (h: ReturnType<typeof historyFixture>) => {
 				const messages: LogFollowMessage[] = [];
 				const conn = h.socket(messages);
 				let settled = false;
@@ -92,14 +97,14 @@ for (const mock of [false, true]) {
 				}
 				const clearing = h.own(clearAll());
 				try {
-					await bounded(entered);
+					await h.wait(entered, `enter ${boundary}`);
 					if (boundary !== "persist") admit();
-					await turn();
+					await turn(eventTimeoutMs);
 					expect(settled).toBe(false);
 					gate.release();
-					expect((await bounded(clearing)).ok).toBe(true);
+					expect((await h.wait(clearing, "clear completion")).ok).toBe(true);
 					if (!attempt) throw new Error("admission was not attempted");
-					const result = await bounded(attempt);
+					const result = await h.wait(attempt, `${kind} admission`);
 					if (kind === "export") {
 						const ticket = logExportOutputSchema.parse(result);
 						expect(ticket.ok).toBe(true);
@@ -107,7 +112,7 @@ for (const mock of [false, true]) {
 						const response = await handleLogExportRequest(
 							new Request(`http://device${ticket.url}`),
 						);
-						const text = await bounded(response.text());
+						const text = await h.wait(response.text(), "export body");
 						expect(text).not.toContain("before-clear");
 						expect(text).toContain("device logs cleared");
 						expect(text).toEndWith("# complete: 1 entries\n");
@@ -144,11 +149,31 @@ for (const mock of [false, true]) {
 					}
 				} finally {
 					gate.release();
-					await bounded(
+					await h.wait(
 						Promise.allSettled([clearing, ...(attempt ? [attempt] : [])]),
+						"clear and admission settlement",
 					);
 				}
-			});
+			};
+			test(
+				`${kind} waits through ${mock ? "mock" : "native"} clear ${boundary} and reads the new history`,
+				async () => {
+					const fixture = historyFixture(mock, eventTimeoutMs);
+					if (!nativeRotateExport) {
+						fixtureToDispose = fixture;
+						await verify(fixture);
+						return;
+					}
+					// Bun's separate hook timeout would preempt this row's watchdog.
+					try {
+						await verify(fixture);
+					} finally {
+						await fixture.dispose();
+					}
+				},
+				// Leave room for a phase watchdog and bounded settlement before Bun fails.
+				nativeRotateExport ? 15_000 : undefined,
+			);
 		}
 	}
 }
