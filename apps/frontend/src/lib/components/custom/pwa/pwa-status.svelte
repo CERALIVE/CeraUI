@@ -9,12 +9,11 @@
 	}
 }
 
-@keyframes slide-in-from-bottom {
+/* The install banner fades in: a slide would carry it across the dock or the
+   Live bar it rests on. */
+@keyframes fade-in {
 	from {
-		transform: translateY(100%);
-	}
-	to {
-		transform: translateY(0);
+		opacity: 0;
 	}
 }
 
@@ -27,9 +26,60 @@
 	animation-name: slide-in-from-top;
 }
 
-.slide-in-from-bottom {
-	animation-name: slide-in-from-bottom;
+.fade-in {
+	animation-name: fade-in;
 }
+
+	/* Where the install banner rests: on the top edge of MainView's dock as
+	   measured (`--mobile-dock-offset`, safe area included), or of the Live bar
+	   where one is mounted (that bar sits on the `--mobile-dock-height` token, so
+	   its top is that plus its own height; with no Live bar the -100vh fallback
+	   drops the term out of the max), above the Live bar's open Start checklist
+	   (`--live-checklist-height`, as the toast stack does), or with no dock
+	   (sign-in, setup) on the screen edge. KEEP IN SYNC with DESKTOP_CHROME_QUERY ($lib/layout), as
+	   LiveBar does: under desktop chrome there is no dock and the Live bar sits on
+	   the edge. */
+	:global(:root) {
+		--install-banner-bottom: max(
+			var(--mobile-dock-offset, 0px),
+			calc(
+				var(--mobile-dock-height) + env(safe-area-inset-bottom, 0px) + var(--live-bar-height, -100vh) +
+					var(--live-checklist-height, 0px)
+			)
+		);
+	}
+
+	@media (min-width: 1024px), (min-width: 768px) and (max-height: 600px) {
+		:global(:root) {
+			--install-banner-bottom: calc(var(--live-bar-height, 0px) + var(--live-checklist-height, 0px));
+		}
+	}
+
+	/* The most it could take is the room up to the header; the fit check reads
+	   that max-height to decide whether it shows at all. */
+	.install-banner {
+		bottom: var(--install-banner-bottom);
+		max-height: calc(
+			100dvh - var(--install-banner-bottom) - var(--offline-bar-height) - var(--top-bands-height) -
+				var(--app-header-height, 0px)
+		);
+	}
+
+	.install-banner:not([data-shown]) {
+		visibility: hidden;
+	}
+
+	/* While it shows, the page ends its height later, so the last content can
+	   scroll clear of it; a full-height screen that centres its content centres
+	   it in the room the banner leaves (`min-h-room` reads the reserve); and a
+	   control reached with Tab or scrolled into view
+	   stops above it and all the chrome below it (WCAG 2.4.11), as the Live
+	   bar's does; this rule outranks the Live bar's while both show. */
+	:global(html:has(.install-banner[data-shown])) {
+		--install-banner-reserve: var(--install-banner-height, 0px);
+		padding-bottom: var(--install-banner-reserve);
+		scroll-padding-bottom: calc(var(--install-banner-bottom) + var(--install-banner-height, 0px));
+	}
 </style>
 
 <script lang="ts">
@@ -66,6 +116,37 @@ const browserOffline = $derived(getConnectionLossCause() === 'browser-offline');
 // height it publishes is what app.css moves the page and its sticky bands by.
 let offlineBar: HTMLDivElement | undefined = $state();
 $effect(() => (offlineBar ? publishHeight(offlineBar, '--offline-bar-height') : undefined));
+
+// The install banner rests on the bottom chrome instead of over it (where, is
+// in the <style> block). It never takes more of the screen than it leaves to the
+// page: where its whole height is over half the room between the top chrome and
+// that edge (a short or landscape phone, an open Start checklist) it steps
+// aside, and it returns when the room grows. The room is the banner's own
+// max-height, which the browser resolves to px; it changes with the layout
+// viewport and with every height the chrome publishes on the root. A soft
+// keyboard that resizes only the visual viewport (the default without an
+// interactive-widget viewport hint) leaves this room unchanged. Its own height is published too, so the page
+// can end that much later while it shows.
+let banner: HTMLDivElement | undefined = $state();
+let bannerFits = $state(true);
+$effect(() => (banner ? publishHeight(banner, '--install-banner-height') : undefined));
+$effect(() => {
+	// Absent ResizeObserver (jsdom) no height is published, so it measures nothing
+	// and stays shown. Its own size changes reach it through its published height.
+	if (!banner || typeof ResizeObserver === 'undefined') return;
+	const el = banner;
+	const measure = () => {
+		bannerFits = el.scrollHeight * 2 <= Number.parseFloat(getComputedStyle(el).maxHeight);
+	};
+	measure();
+	const chrome = new MutationObserver(measure);
+	chrome.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+	window.addEventListener('resize', measure);
+	return () => {
+		chrome.disconnect();
+		window.removeEventListener('resize', measure);
+	};
+});
 
 // Reactive derived values for PWA state
 const canInstallApp = $derived(getCanInstall());
@@ -197,13 +278,12 @@ async function handleMobileInstall() {
 	</div>
 {/if}
 
-<!-- Mobile Install App Banner - All mobile devices, fixed to bottom -->
+<!-- Mobile install banner: fixed on the bottom chrome. It fades in rather than
+     sliding, so even its entrance never crosses the dock or the Live bar. -->
 {#if showIOSBanner && isMobile}
 	<div
-		style:bottom="0px"
-		style="
-      bottom: env(safe-area-inset-bottom, 0px);
-    "
+		bind:this={banner}
+		data-shown={bannerFits || undefined}
 		style:overflow-x="hidden"
 		style:box-sizing="border-box"
 		style:width="100%"
@@ -211,16 +291,20 @@ async function handleMobileInstall() {
 		style:transform="translateZ(0)"
 		style:-webkit-transform="translateZ(0)"
 		style:padding-bottom="calc(1rem + env(safe-area-inset-bottom, 0px))"
-		class="animate-in slide-in-from-bottom bg-primary text-primary-foreground fixed right-0 left-0 z-50 p-4"
+		class="install-banner animate-in fade-in bg-primary text-primary-foreground fixed right-0 left-0 z-50 p-4 [--touch-target-min:44px]"
+		data-testid="pwa-install-banner"
+		data-touch-region
 	>
-		<div class="mx-auto flex w-full max-w-sm items-center justify-between gap-3 px-2">
-			<div class="flex min-w-0 flex-1 items-center gap-3">
+		<!-- Only touch browsers get this banner, so its compact buttons answer to a
+		     44px hit area at every width, through app.css's hit-area overlay. -->
+		<div class="mx-auto flex w-full max-w-sm flex-wrap items-center justify-between gap-3 px-2">
+			<div class="text-slot flex items-center gap-3">
 				<Download class="h-5 w-5 flex-shrink-0" />
 				<div class="min-w-0 flex-1">
 					<p class="truncate text-sm font-medium">{m["pwa.installTitle"]()}</p>
-					<p class="truncate text-xs opacity-80">
+					<p class="text-xs opacity-80">
 						{#if isIOS}
-							Tap
+							{m["pwa.installIosBeforeShare"]()}
 							<Share class="mx-1 inline h-3 w-3" />
 							{m["pwa.installIosDescription"]()}
 						{:else if isAndroid && canInstallApp}
@@ -233,10 +317,11 @@ async function handleMobileInstall() {
 					</p>
 				</div>
 			</div>
-			<div class="flex flex-shrink-0 gap-2">
+			<div class="ms-auto flex flex-shrink-0 gap-2">
 				{#if isAndroid && canInstallApp}
 					<Button
-						class="bg-primary-foreground text-primary hover:bg-primary-foreground/90"
+						class="bg-primary-foreground text-primary hover:bg-primary-foreground/90 relative"
+						data-touch-target="hit-area"
 						onclick={handleMobileInstall}
 						size="sm"
 						variant="secondary"
@@ -245,7 +330,8 @@ async function handleMobileInstall() {
 					</Button>
 				{/if}
 				<Button
-					class="text-primary-foreground hover:bg-primary-foreground/20"
+					class="text-primary-foreground hover:bg-primary-foreground/20 relative"
+					data-touch-target="hit-area"
 					onclick={dismissIOSBanner}
 					size="sm"
 					variant="ghost"

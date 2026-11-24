@@ -2031,6 +2031,7 @@
 	"pwa.installAndroidMenuDescription": "브라우저 메뉴에서 \"홈 화면에 추가\" 사용",
 	"pwa.installButton": "설치",
 	"pwa.installDescription": "더 나은 경험을 위해 홈 화면에 추가",
+	"pwa.installIosBeforeShare": "공유 버튼을 탭하세요",
 	"pwa.installIosDescription": "그런 다음 \"홈 화면에 추가\"",
 	"pwa.installIosGotIt": "알겠습니다",
 	"pwa.installLater": "나중에",

@@ -2031,6 +2031,7 @@
 	"pwa.installAndroidMenuDescription": "使用浏览器菜单\"添加到主屏幕\"",
 	"pwa.installButton": "安装",
 	"pwa.installDescription": "添加到主屏幕以获得更好的体验",
+	"pwa.installIosBeforeShare": "点击",
 	"pwa.installIosDescription": "然后\"添加到主屏幕\"",
 	"pwa.installIosGotIt": "知道了",
 	"pwa.installLater": "稍后",

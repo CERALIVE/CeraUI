@@ -242,3 +242,37 @@ for (const viewport of viewports) {
 		}
 	}
 }
+
+/**
+ * pwa-status's install banner shares the Live screen with an open Start
+ * checklist. While both show, the banner rests above the checklist and never
+ * covers it; where both cannot fit, the banner steps aside. 430×932 must show
+ * the banner, so the check is never vacuous.
+ */
+for (const viewport of [
+	{ width: 430, height: 932 },
+	{ width: 390, height: 844 },
+	{ width: 320, height: 568 },
+] as const) {
+	test.describe(`${viewport.width}×${viewport.height} the install banner beside an open checklist @mobile-only`, () => {
+		test.use({ viewport, hasTouch: true, reducedMotion: "reduce" });
+
+		test("stays clear of the checklist panel", async ({ page }) => {
+			await arrangeLive(page, "blocked");
+			const bar = page.getByTestId("live-bar");
+			await bar.getByRole("button", { name: catalogs.en["live.bar.showAll"], exact: true }).press("Enter");
+			const panel = bar.getByRole("region", { name: catalogs.en["live.bar.beforeLive"] });
+			await expect(panel.getByRole("listitem")).toHaveCount(4);
+			const layout = async () =>
+				page.evaluate(() => {
+					const banner = document.querySelector<HTMLElement>('[data-testid="pwa-install-banner"]');
+					const shown = !!banner && getComputedStyle(banner).visibility !== "hidden";
+					const region = document.querySelector(".preflight-panel")!.getBoundingClientRect();
+					const bannerBottom = banner?.getBoundingClientRect().bottom ?? 0;
+					return { shown, clear: !shown || bannerBottom <= region.top, bannerBottom, panelTop: region.top };
+				});
+			await expect.poll(async () => (await layout()).clear, { message: JSON.stringify(await layout()) }).toBe(true);
+			if (viewport.height === 932) expect((await layout()).shown, JSON.stringify(await layout())).toBe(true);
+		});
+	});
+}
