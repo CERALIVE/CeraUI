@@ -10,6 +10,7 @@ import { VitePWA } from "vite-plugin-pwa";
 import { BUILD_BRAND } from "./brand.config.ts";
 import { generateUniqueVersion, pwaConfig } from "./pwa.config.ts";
 import {
+	compactPlainMessages,
 	devOnlyI18nNamespacePlugin,
 	i18nManualChunk,
 	PARAGLIDE_OUTDIR,
@@ -89,6 +90,7 @@ export default defineConfig(({ mode }) => {
 				strategy: [...PARAGLIDE_STRATEGY],
 			}),
 			devOnlyI18nNamespacePlugin(mode === "production"),
+			...(mode === "production" ? [compactPlainMessages()] : []),
 			persistPlugin(),
 			tailwindcss(),
 			svelte({

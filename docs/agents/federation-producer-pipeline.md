@@ -25,6 +25,9 @@ that omits it gets the base locale exactly as before. Each entry also calls
 `registerFederationMessages()` (`lib/federation/messages.ts`) at module scope —
 the SPA resolves its message catalog from lazily-imported per-namespace chunks,
 whereas federation registers the catalog statically via `@ceraui/i18n/eager`.
+`vite.i18n.ts` shares argument-free literal dispatch by rewriting only the
+production SPA bundle. Paraglide's generated source and catalog import graph
+stay unchanged.
 Federation uses an isolated Paraglide `locale-modules` output and full output
 minification; its message imports and locale-runtime shim resolve together through
 `vite.federation-i18n.ts`. The namespaces the dialogs render, in every locale,
