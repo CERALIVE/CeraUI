@@ -532,16 +532,21 @@ test.each(["available", "unavailable", "throwing"] as const)(
 		profiles.set(SAVED, { keyMgmt: "wpa-psk", psk: "fixture-staged" });
 		const listing = spyOn(nm, "nmConnsGet").mockImplementation(
 			async (fields) => {
-				if (fields !== "uuid,type" && fields !== "uuid,type,timestamp")
+				const names = fields.split(",");
+				const fieldSet = names.toSorted().join(",");
+				if (fieldSet !== "type,uuid" && fieldSet !== "timestamp,type,uuid")
 					throw new Error("Unexpected profile listing fields");
 				if (availability === "throwing")
 					throw new Error("Fixture list transport unavailable");
 				return availability === "available"
-					? [...profiles.keys()].map((uuid) =>
-							fields === "uuid,type,timestamp"
-								? `${uuid}:802-11-wireless:0`
-								: `${uuid}:802-11-wireless`,
-						)
+					? [...profiles.keys()].map((uuid) => {
+							const values: Readonly<Record<string, string>> = {
+								uuid,
+								type: "802-11-wireless",
+								timestamp: "0",
+							};
+							return names.map((name) => values[name]).join(":");
+						})
 					: undefined;
 			},
 		);
@@ -578,14 +583,19 @@ test.each(["available", "unavailable", "throwing"] as const)(
 			secondReply.resolve(REFUSED);
 			expect(await second).toEqual({ error: "auth", device: 0 });
 			await secondRefresh.promise;
+			// Refresh signals before its promise settles. Observe queued
+			// continuations too, including cleanup chained after refresh.
+			await new Promise<void>((resolve) => setImmediate(resolve));
 			expect(whileSecondPending).toEqual([SAVED, FIRST, SECOND]);
 			expect([...profiles.keys()]).toEqual([SAVED, FIRST, SECOND]);
 			expect(await firstEvent).toBe("join reply");
 			// Reconciliation may list profiles; failure is not authority to
 			// inspect activation timestamps for cleanup or request deletion.
-			expect(listing.mock.calls.map(([fields]) => fields)).not.toContain(
-				"uuid,type,timestamp",
-			);
+			expect(
+				listing.mock.calls.flatMap(([fields]) =>
+					fields.split(",").map((field) => field.trim().toLowerCase()),
+				),
+			).not.toContain("timestamp");
 			expect(deletion).not.toHaveBeenCalled();
 			if (availability !== "available") {
 				expect(wifiBuildMsg()["0"]?.saved).toEqual({ [SSID]: SAVED });
