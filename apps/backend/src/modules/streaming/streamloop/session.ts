@@ -208,14 +208,27 @@ export async function start(
 	return result;
 }
 
-export function stopGeneration(
+export async function retireGenerationResources(
 	generation: number,
-	confirmUnknown = false,
 ): Promise<void> {
 	// A deferred auto-audio follow (T7) only applies at the NEXT start; a stop
 	// cancels it so the picker never keeps a stale "follows on restart" hint.
 	setPendingAudioFollowAsrc(null);
+	if (sessionResources?.generation === generation) {
+		sessionResources.removeNetworkInterfacesChangeListener();
+		sessionResources = undefined;
+	}
+	await Promise.all(getStreamingProcesses().map(stopProcessAndWait));
+	stopLinkTelemetry();
+	clearBindMapReport();
+	announceBindMapReport();
+}
 
+export function stopGeneration(
+	generation: number,
+	confirmUnknown = false,
+): Promise<void> {
+	setPendingAudioFollowAsrc(null);
 	return new Promise((resolve, reject) => {
 		let finishPromise: Promise<void> | undefined;
 		const finish = (
@@ -223,20 +236,7 @@ export function stopGeneration(
 		) => {
 			if (finishPromise !== undefined) return finishPromise;
 			finishPromise = (async () => {
-				if (sessionResources?.generation === generation) {
-					sessionResources.removeNetworkInterfacesChangeListener();
-					sessionResources = undefined;
-				}
-				await Promise.all(
-					[...getStreamingProcesses()].map((process) =>
-						stopProcessAndWait(process),
-					),
-				);
-				stopLinkTelemetry();
-				// A stopped session makes no claim about a bond, so the degradation
-				// band is retracted rather than left standing over nothing.
-				clearBindMapReport();
-				announceBindMapReport();
+				await retireGenerationResources(generation);
 				if (!outcome.ok) throw outcome.error;
 				updateStatus(false);
 			})();

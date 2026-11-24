@@ -2,15 +2,15 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CerastreamConnectionError } from "@ceralive/cerastream";
 import { getConfigFilePath, setConfigFilePath } from "../modules/config.ts";
 import { cerastreamBackend } from "../modules/streaming/cerastream-backend.ts";
 import { runStreamRestoration } from "../modules/streaming/stream-restoration.ts";
 import {
 	getStreamSessionSnapshot,
 	reconcileStreamSession,
+	retireLostStreamSession,
 	startStreamSession,
-	stopStreamSession,
+	streamLiveness,
 } from "../modules/streaming/stream-session-orchestrator.ts";
 import { getIsStreaming } from "../modules/streaming/streaming.ts";
 import {
@@ -28,22 +28,12 @@ afterEach(async () => {
 	query.mockRestore();
 });
 
-test("engine loss settles a failed stop and reconciles idle before the one restoration launch", async () => {
+test("engine loss stays unknown until fresh idle permits the one restoration launch", async () => {
 	// Given the real lifecycle with a live session and an armed same-boot marker.
 	const dir = await mkdtemp(join(tmpdir(), "engine-loss-lifecycle-"));
 	const previousPath = getConfigFilePath();
 	setConfigFilePath(join(dir, "config.json"));
-	const failure = new CerastreamConnectionError(
-		"engine exited",
-		undefined,
-		"closed",
-	);
-	const stop = spyOn(cerastreamBackend, "stop").mockImplementation(
-		(_done, failed) => {
-			failed?.(failure);
-			return true;
-		},
-	);
+	const stop = spyOn(cerastreamBackend, "stop").mockReturnValue(false);
 	const query = spyOn(
 		cerastreamBackend,
 		"reconcileRuntimeState",
@@ -67,10 +57,10 @@ test("engine loss settles a failed stop and reconciles idle before the one resto
 		);
 		expect(notificationExists("stream_recovery_failed")).toBeDefined();
 
-		// When the stop dial fails before systemd has restarted the engine.
-		const stopped = await stopStreamSession("engine_loss");
-		expect(stopped).toEqual({ result: "stop_failed", reason: failure.message });
-		expect(getStreamSessionSnapshot().state).toBe("stop_failed");
+		await retireLostStreamSession();
+		expect(stop).not.toHaveBeenCalled();
+		expect(getStreamSessionSnapshot().state).toBe("reconciling");
+		expect(streamLiveness()).toBe("unknown");
 		expect(getIsStreaming()).toBe(true);
 		const result = await runStreamRestoration({
 			marker: {

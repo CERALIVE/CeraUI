@@ -109,6 +109,51 @@ async function startLive() {
 	return restart;
 }
 
+test("local retirement detaches only the network refresh owned by its generation", async () => {
+	const eth9 = firstSightIfconfig("eth9", "192.0.2.2");
+	firstSightScan(eth9);
+	await refreshUsbNetMarkers(["eth9"]);
+	processIfconfigOutput(eth9);
+	await startLive();
+	const refreshed = Promise.withResolvers<void>();
+	const realPrepare = preparation.prepareSrtlaIpAddresses;
+	const prepare = spyOn(
+		preparation,
+		"prepareSrtlaIpAddresses",
+	).mockImplementation((address) => {
+		const publication = realPrepare(address);
+		void publication.then(() => refreshed.resolve(), refreshed.reject);
+		return publication;
+	});
+	const backendStop = spyOn(getStreamingBackend(), "stop").mockImplementation(
+		(complete) => {
+			complete();
+			return true;
+		},
+	);
+	const retirement: {
+		retireGenerationResources?: (generation: number) => Promise<void>;
+		stopGeneration: (generation: number) => Promise<void>;
+	} = session;
+	// Pinned main can release this listener only through remote Stop.
+	const retire =
+		retirement.retireGenerationResources ?? retirement.stopGeneration;
+
+	await retire(GENERATION + 1);
+	triggerNetworkInterfacesChange();
+	await new Promise<void>((resolve) => setImmediate(resolve));
+	expect(prepare).toHaveBeenCalledTimes(1);
+	await refreshed.promise;
+
+	await retire(GENERATION);
+	triggerNetworkInterfacesChange();
+	// Once the earlier refresh has settled, the event's queued callback can run
+	// before the next event-loop turn.
+	await new Promise<void>((resolve) => setImmediate(resolve));
+	expect(prepare).toHaveBeenCalledTimes(1);
+	expect(backendStop).not.toHaveBeenCalled();
+});
+
 for (const mode of ["normal", "thrown", "ips_write_failed"] as const) {
 	test(`A1 overlapping refreshes restart once after ${mode} preparation`, async () => {
 		const eth9 = firstSightIfconfig("eth9", "192.0.2.2");

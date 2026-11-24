@@ -125,6 +125,7 @@ export type StreamSessionOrchestratorDeps = {
 		generation: number,
 		confirmUnknown?: boolean,
 	) => Promise<void>;
+	readonly retireRuntime?: (generation: number) => Promise<void>;
 	readonly queryRuntime: () => Promise<EngineRuntimeState>;
 	readonly seedLifecycleState?: (state: LifecycleState) => void;
 	readonly setLifecycleState?: (state: LifecycleState) => void;
@@ -176,8 +177,7 @@ export type StreamSessionOrchestratorDeps = {
 	readonly onStreamArmed?: (current: () => boolean) => void;
 	/**
 	 * Called with the operator-or-machine CAUSE of every stop, before the stop
-	 * itself runs. The engine-loss path and an operator Stop reach the identical
-	 * `stop()`, so without an explicit cause the marker cannot tell "the operator
+	 * itself runs. Without an explicit cause the marker cannot tell "the operator
 	 * is done" from "the engine died" — and would either forget every crash or
 	 * restart a stream the operator deliberately ended.
 	 */
@@ -255,6 +255,7 @@ export type StreamSessionOrchestrator = {
 	readonly streamLiveness: () => "streaming" | "idle" | "unknown";
 	readonly start: (request: StreamStartRequest) => Promise<StartResult>;
 	readonly stop: (cause: StreamStopCause) => Promise<StopResult>;
+	readonly retireLostSession: () => Promise<void>;
 	readonly reconcile: () => Promise<LifecycleState>;
 	readonly snapshot: () => StreamSessionSnapshot;
 	readonly changeConfig: (
@@ -290,6 +291,7 @@ export function createStreamSessionOrchestrator(
 		| undefined;
 	let engineQueuedStop: QueuedStop | undefined;
 	let stopFlight: Promise<StopResult> | undefined;
+	let lossRetirement: Promise<void> | undefined;
 	const stopDeadlineMs = deps.stopDeadlineMs ?? STOP_DEADLINE_MS;
 	const reconfigureDeadlineMs =
 		deps.reconfigureDeadlineMs ?? RECONFIGURE_DEADLINE_MS;
@@ -758,6 +760,25 @@ export function createStreamSessionOrchestrator(
 		};
 	};
 
+	const retireLostSession = async (): Promise<void> => {
+		if (lossRetirement !== undefined) return lossRetirement;
+		if (stopFlight !== undefined || cleanup.pending || ownership.launchPending)
+			return;
+		const owner = ownership.invalidate();
+		if (!ownership.commit(owner, "reconciling", "unknown")) return;
+		deps.onStreamStopped?.("engine_loss");
+		const retirement = deps.retireRuntime?.(owner.generation);
+		lossRetirement = retirement;
+		try {
+			await retirement;
+		} finally {
+			lossRetirement = undefined;
+			// A parked explicit Stop still belongs to the operator, not to recovery.
+			clearEngineTransition();
+			releaseQueuedStop();
+		}
+	};
+
 	const stop = (cause: StreamStopCause): Promise<StopResult> => {
 		if (cause === "operator") noteOperatorStopIntent();
 		deps.onStreamStopped?.(cause);
@@ -786,6 +807,14 @@ export function createStreamSessionOrchestrator(
 		return reserved.promise;
 	};
 	const runStop = async (cause: StreamStopCause): Promise<StopResult> => {
+		if (lossRetirement !== undefined) {
+			try {
+				await lossRetirement;
+			} catch (error) {
+				if (!(error instanceof Error)) throw error;
+				logger.warn("local retirement failed before explicit Stop", { error });
+			}
+		}
 		const intentOwner = ownership.capture();
 		void import("./capture-resilience.ts").then(({ noteCaptureStatus }) => {
 			if (ownership.owns(intentOwner)) noteCaptureStatus(undefined, false);
@@ -887,6 +916,7 @@ export function createStreamSessionOrchestrator(
 			!currentIntent() ||
 			currentObservation?.() === true ||
 			stopFlight !== undefined ||
+			lossRetirement !== undefined ||
 			cleanup.pending ||
 			ownership.launchPending
 		)
@@ -925,6 +955,7 @@ export function createStreamSessionOrchestrator(
 			epoch !== reconciliationEpoch ||
 			!current() ||
 			cleanup.pending ||
+			lossRetirement !== undefined ||
 			stopFlight !== undefined
 		)
 			return ownership.state;
@@ -1075,6 +1106,7 @@ export function createStreamSessionOrchestrator(
 		streamLiveness: ownership.streamLiveness,
 		start,
 		stop,
+		retireLostSession,
 		reconcile,
 		snapshot: () => ({
 			state: ownership.state,
@@ -1099,6 +1131,10 @@ export function startStreamSession(
 
 export function stopStreamSession(cause: StreamStopCause): Promise<StopResult> {
 	return productionOrchestrator.stop(cause);
+}
+
+export function retireLostStreamSession(): Promise<void> {
+	return productionOrchestrator.retireLostSession();
 }
 
 export function reconcileStreamSession(): Promise<LifecycleState> {

@@ -2,6 +2,17 @@
 
 ## SESSION CONTROL CONNECTION — A DROP *IS* A SESSION BOUNDARY [EXISTS]
 
+**Current contract:** transport loss ends CeraUI's ownership of its control
+client, subscription, runtime evidence, telemetry and sender resources. It
+does not prove process exit or remote Idle. The engine may keep streaming
+after a socket closes, and its hello and session ID do not identify a process
+instance. The loss path sends no Stop; it fences Start and OTA until fresh
+runtime evidence settles liveness. The existing marker may restore a stream
+only after affirmative Idle. Explicit operator Stop is unchanged. Ambiguous
+in-flight Start cleanup remains a separate attempt-scoped cancellation problem.
+
+### Historical diagnosis (before local-only retirement)
+
 The exact inverse of the rule above, for a different connection. Read both
 together: the same event (a socket closing) carries opposite authority depending
 on what the socket is FOR.
