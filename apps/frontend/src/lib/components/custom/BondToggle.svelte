@@ -14,6 +14,7 @@ import {
 import { shouldReconcileOnReconnect } from '$lib/rpc/reconcile-inflight';
 import { getConnectionState } from '$lib/rpc/subscriptions.svelte';
 import { cn } from '$lib/utils';
+import { RTL_SWITCH_THUMB } from './rtl-switch';
 
 type Props = {
 	/** Network interface name (e.g. `wlan0`, `ww0`, `eth0`). */
@@ -165,6 +166,7 @@ $effect(() => {
 						{...props}
 						aria-busy={pending}
 						aria-label={tooltipText}
+						class={RTL_SWITCH_THUMB}
 						bind:checked={() => displayed, (next) => void toggle(next)}
 						data-testid={`bond-toggle-${name}`}
 						disabled={isDisabled}

@@ -239,3 +239,29 @@ describe("one name per link", () => {
 		expect(linkName("tun0", {})).toBe("tun0");
 	});
 });
+
+describe("an isolated (netns) router dongle", () => {
+	function isolated(slot: number, model?: string) {
+		return modemSchema.parse({
+			ifname: `dg${slot}h`,
+			name: `dongle${slot}`,
+			slot_label: `dongle${slot}`,
+			device_class: "router-ethernet",
+			availability_reason: "router_managed",
+			network_type: { supported: [], active: null },
+			...(model ? { model } : {}),
+		});
+	}
+
+	it("is named by its class and slot number, never by the raw slot token", () => {
+		const modems = { "1000": isolated(0), "1001": isolated(1) };
+		expect(linkName("dg0h", { modems })).toBe("Router dongle 1");
+		expect(linkName("dg1h", { modems })).toBe("Router dongle 2");
+	});
+
+	it("keeps the model when the dongle reports one", () => {
+		expect(linkName("dg0h", { modems: { "1000": isolated(0, "E3372") } })).toBe(
+			"E3372",
+		);
+	});
+});

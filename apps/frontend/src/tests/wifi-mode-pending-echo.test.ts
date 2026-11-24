@@ -106,6 +106,17 @@ it("an observed pending mode without a local command remains foreign", () => {
 	expect(getOperationTarget(key)).toBe("hotspot");
 });
 
+it("this client's own pending echo keeps the prior mode its request recorded", () => {
+	const request = { mode: "hybrid", from: "station" } as const;
+	beginOperation(key, request);
+	emit({ device: 0, incarnation: "radio-A", pending: true, mode: "hybrid" });
+	expect(getOperationPhase(key)).toBe("pending");
+	expect(getOperationTarget(key)).toEqual(request);
+	// A different mode is another transition, so it carries no prior of ours.
+	emit({ device: 0, incarnation: "radio-A", pending: true, mode: "hotspot" });
+	expect(getOperationTarget(key)).toBe("hotspot");
+});
+
 it("a pending mode after a terminal cannot be settled by the retired RPC", async () => {
 	const reply = Promise.withResolvers<SetWifiAdapterModeOutput>();
 	const command = osCommand({

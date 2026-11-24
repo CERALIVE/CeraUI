@@ -24,9 +24,9 @@ import * as AlertDialog from '$lib/components/ui/alert-dialog';
 import { Button } from '$lib/components/ui/button';
 import { isLinkLocalIpv4 } from '$lib/helpers/ip-classification';
 import { interfaceLabel } from '$lib/helpers/link-names';
-import { cn } from '$lib/utils';
 
 import { deriveSharedLanRow, type EthernetClientZoneState } from './ethernet-role-view';
+import NetworkRow from './NetworkRow.svelte';
 
 interface Props {
 	/** NetworkView applies the marker + modem-claim handover in section-assignment.ts. */
@@ -174,14 +174,6 @@ const ZONE_ICON = {
 } satisfies Record<EthernetClientZoneState, unknown>;
 </script>
 
-<!-- Shared by both name paths. A `shared-lan` row sets it beside the identity
-     pill; every other row emits it bare — NOT inside a wrapper — because the
-     dongle/router-cellular/modem-net locks compare a plain row element-for-element
-     against a checked-in golden. -->
-{#snippet portName(name: string)}
-	<p class="truncate text-sm font-medium" title={name}>{linkName(name)}</p>
-{/snippet}
-
 <!-- ───────────── Ethernet / interfaces ───────────── -->
 <section class="bg-card rounded-xl border">
 	<div class="flex items-center gap-2 border-b px-4 py-2">
@@ -212,170 +204,152 @@ const ZONE_ICON = {
 				{const sharedLanReason = $derived(sharedLan
 					? resolveMessageKey(sharedLan.bondExclusionReasonKey)
 					: undefined)}
-				<!-- Single-line row: identity (dot · name · status) left; bond + configure right. -->
-				<div class="flex flex-wrap items-center gap-3 px-4 py-2">
-					<!-- `self-start` because a classified row is several lines tall: a
-					     vertically-centred dot floats away from the name it reports on.
-					     Same rule, same reason, as CellularSection's row dot. -->
-					<span
-						class={cn(
-							'mt-1.5 size-2 shrink-0 self-start rounded-full',
-							iface.enabled ? 'bg-primary' : 'bg-muted-foreground/40',
-						)}
-						aria-hidden="true"
-					></span>
-					<!-- `basis-72` is what makes the row RESPONSIVE rather than merely
-					     wrapping: with `flex-1` alone the control cluster never wraps, it
-					     just shrinks this column, and below ~500px the prose collapses to
-					     one word per line while the IP runs under the toggle. A basis wider
-					     than the remaining space forces the cluster onto its own line
-					     instead. Desktop is unchanged — `flex-1` still grows past it. -->
-					<div class="min-w-0 flex-1 basis-72">
+				<NetworkRow
+					data-testid="netif-row"
+					data-ifname={name}
+					dotClass={iface.enabled ? 'bg-primary' : 'bg-muted-foreground/40'}
+				>
+					{#snippet heading()}{linkName(name)}{/snippet}
+					<!-- A `shared-lan` port's ONE pill — what the port IS · what its zone is
+					     doing — rides the name's line; the "?" beside it carries the concept
+					     AND the bond-exclusion reason. -->
+					{#snippet identity()}
 						{#if sharedLan}
 							{const ZoneIcon = $derived(ZONE_ICON[sharedLan.zone])}
-							<!-- ONE pill: what the port IS · what its zone is doing, each still a
-							     WORD with its own glyph so colour stays reinforcement. It rides the
-							     name's line, and the "?" beside it carries the concept AND the
-							     bond-exclusion reason that used to stand as a paragraph below. -->
-							<div class="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
-								{@render portName(name)}
-								<Badge
-									variant={ZONE_VARIANT[sharedLan.zone]}
-									size="micro"
-									class={MICRO_TEXT}
-									data-testid="netif-eth-role"
-									data-eth-role="shared-lan"
-									title={m["network.ethRole.badgeHint"]()}
+							<Badge
+								variant={ZONE_VARIANT[sharedLan.zone]}
+								size="micro"
+								class={MICRO_TEXT}
+								data-testid="netif-eth-role"
+								data-eth-role="shared-lan"
+								title={m["network.ethRole.badgeHint"]()}
+							>
+								<Share2 class="size-3" aria-hidden="true" />
+								{m["network.ethRole.sharedLan"]()}
+								<span aria-hidden="true">·</span>
+								<span
+									class="inline-flex items-center gap-1"
+									data-testid="netif-eth-role-zone"
+									data-zone={sharedLan.zone}
 								>
-									<Share2 class="size-3" aria-hidden="true" />
-									{m["network.ethRole.sharedLan"]()}
-									<span aria-hidden="true">·</span>
-									<span
-										class="inline-flex items-center gap-1"
-										data-testid="netif-eth-role-zone"
-										data-zone={sharedLan.zone}
-									>
-										<ZoneIcon class="size-3" aria-hidden="true" />
-										{resolveMessageKey(sharedLan.zoneLabelKey)}
-									</span>
-								</Badge>
-								<InfoPopover
-									ariaLabel={m["network.ethRole.open"]()}
-									body={m["network.ethRole.badgeHint"]()}
-									reason={sharedLanReason}
-									reasonTestId="netif-eth-role-excluded-hint"
-									testId="netif-eth-role-info"
-									title={m["network.ethRole.sharedLan"]()}
-								/>
-							</div>
-						{:else}
-							{@render portName(name)}
+									<ZoneIcon class="size-3" aria-hidden="true" />
+									{resolveMessageKey(sharedLan.zoneLabelKey)}
+								</span>
+							</Badge>
+							<InfoPopover
+								ariaLabel={m["network.ethRole.open"]()}
+								body={m["network.ethRole.badgeHint"]()}
+								reason={sharedLanReason}
+								reasonTestId="netif-eth-role-excluded-hint"
+								testId="netif-eth-role-info"
+								title={m["network.ethRole.sharedLan"]()}
+							/>
+						{/if}
+					{/snippet}
+					<!-- THE ADDRESS, AND NOTHING ABOUT THE BOND: the toggle states membership
+					     once. Then the class of an unclaimed cellular device, in words. -->
+					{#snippet status()}
+						{#if iface.ip}
+							<code class="font-mono">{iface.ip}</code>
+							{#if linkLocal}
+								<!-- Calm, informational: 169.254/16 is an automatic OS address, not a
+								     stuck static config. It rides the address's own line — a wrapped
+								     clause reads as part of the reading it explains, a stacked
+								     paragraph reads as a second finding. -->
+								<Badge variant="info" size="micro" data-testid="netif-link-local" label={m["network.view.linkLocal"]()} />
+								<span data-testid="netif-link-local-hint">
+									{m["network.view.linkLocalHint"]()}
+								</span>
+							{/if}
 						{/if}
 						{#if dongle}
 							{const StateIcon = $derived(DONGLE_STATE_ICON[dongle.state])}
-							<!-- What it IS, then where it is in its lifecycle — both in words. -->
-							<div class="mt-0.5 flex flex-wrap items-center gap-1.5">
-								<Badge
-									variant="info"
-									size="micro"
-									class={MICRO_TEXT}
-									data-testid="netif-dongle"
-									data-dongle-slot={dongle.slot}
-									label={m["network.dongle.badge"]()}
-									title={m["network.dongle.isolationHint"]()}
-								/>
-								<Badge
-									variant={DONGLE_STATE_VARIANT[dongle.state]}
-									size="micro"
-									class={MICRO_TEXT}
-									data-testid="netif-dongle-state"
-									data-dongle-state={dongle.state}
-								>
-									<StateIcon class="size-3" aria-hidden="true" />
-									{dongleStateLabel(dongle.state)}
-								</Badge>
-							</div>
+							<Badge
+								variant="info"
+								size="micro"
+								class={MICRO_TEXT}
+								data-testid="netif-dongle"
+								data-dongle-slot={dongle.slot}
+								label={m["network.dongle.badge"]()}
+								title={m["network.dongle.isolationHint"]()}
+							/>
+							<Badge
+								variant={DONGLE_STATE_VARIANT[dongle.state]}
+								size="micro"
+								class={MICRO_TEXT}
+								data-testid="netif-dongle-state"
+								data-dongle-state={dongle.state}
+							>
+								<StateIcon class="size-3" aria-hidden="true" />
+								{dongleStateLabel(dongle.state)}
+							</Badge>
 						{/if}
 						{#if modemNet}
-							<div class="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1">
-								<Badge
-									variant="info"
-									size="micro"
-									class={MICRO_TEXT}
-									data-testid="netif-modem-net"
-									data-vid-pid={modemNet.vid_pid}
-									title={m["network.modemNet.hint"]()}
-								>
-									<RadioTower class="size-3" aria-hidden="true" />
-									{m["network.modemNet.badge"]()}
-								</Badge>
-								<span
-									class="text-muted-foreground font-mono text-(length:--text-micro)"
-									data-testid="netif-modem-net-identity"
-								>
-									{modemNetName(modemNet)} · {modemNet.vid_pid}
-								</span>
-							</div>
+						<Badge
+								variant="info"
+								size="micro"
+								class={MICRO_TEXT}
+								data-testid="netif-modem-net"
+								data-vid-pid={modemNet.vid_pid}
+								title={m["network.modemNet.hint"]()}
+							>
+								<RadioTower class="size-3" aria-hidden="true" />
+								{m["network.modemNet.badge"]()}
+							</Badge>
 						{/if}
 						{#if routerCellular}
-							<!-- Identity rides the SAME line as the badge: the badge says what
-							     class of thing it is, the mono text says which unit — one glance,
-							     one line, no extra row height per dongle on the kiosk viewport. -->
-							<div class="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1">
-								<Badge
-									variant="info"
-									size="micro"
-									class={MICRO_TEXT}
-									data-testid="netif-router-cellular"
-									data-vid-pid={routerCellular.vid_pid}
-									title={m["network.routerCellular.hint"]()}
-								>
-									<RadioTower class="size-3" aria-hidden="true" />
-									{m["network.routerCellular.badge"]()}
-								</Badge>
-								<span
-									class="text-muted-foreground font-mono text-(length:--text-micro)"
-									data-testid="netif-router-cellular-identity"
-								>
-									{routerCellularName(routerCellular)} · {routerCellular.vid_pid}
-								</span>
-							</div>
+						<Badge
+								variant="info"
+								size="micro"
+								class={MICRO_TEXT}
+								data-testid="netif-router-cellular"
+								data-vid-pid={routerCellular.vid_pid}
+								title={m["network.routerCellular.hint"]()}
+							>
+								<RadioTower class="size-3" aria-hidden="true" />
+								{m["network.routerCellular.badge"]()}
+							</Badge>
 						{/if}
-						<!-- THE ADDRESS, AND NOTHING ABOUT THE BOND.
-						     This line used to end in `Connected` / `Off`, which is `enabled` —
-						     i.e. BOND MEMBERSHIP, as the retired comment here said in as many
-						     words — and the BondToggle two columns to the right was already
-						     stating that exact fact as `In Bond` / `Excluded`. One condition,
-						     twice, in two different vocabularies: an operator reading a row
-						     with a live toggle and the word "Off" beside the address has to
-						     work out that those are the same thing before they can act.
-						     The toggle keeps the state word (it renders one in every state,
-						     and reserves the slot for the wider of the two), so nothing about
-						     bond membership stopped being on screen — it is stated ONCE.
-						     A row with no address now renders no line at all rather than a
-						     line whose only content was the duplicate. -->
-						{#if iface.ip}
-							<p class="text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs">
-								<code class="font-mono">{iface.ip}</code>
-								{#if linkLocal}
-									<!-- Calm, informational: 169.254/16 is an automatic OS address, not a
-									     stuck static config. It rides the address's own line — a wrapped
-									     clause reads as part of the reading it explains, a stacked
-									     paragraph reads as a second finding. -->
-									<Badge variant="info" size="micro" data-testid="netif-link-local" label={m["network.view.linkLocal"]()} />
-									<span class="text-muted-foreground/80" data-testid="netif-link-local-hint">
-										{m["network.view.linkLocalHint"]()}
-									</span>
-								{/if}
+						{#if showStale}
+							<Badge variant="stale" data-stale-interface={name} />
+						{/if}
+					{/snippet}
+					{#snippet bond()}
+						<BondToggle
+							name={name}
+							enabled={iface.enabled}
+							ip={iface.ip}
+							disabledReason={dongleBlocked ?? sharedLanReason}
+							onBeforeDisable={() => confirmDisable(name)}
+						/>
+					{/snippet}
+					<!-- Which unit: the descriptor identity, demoted by size, never by contrast. -->
+					{#snippet meta()}
+						{#if modemNet}
+							<p
+								class="text-muted-foreground font-mono text-(length:--text-micro) wrap-anywhere"
+								data-testid="netif-modem-net-identity"
+							>
+								{modemNetName(modemNet)} · {modemNet.vid_pid}
 							</p>
 						{/if}
+						{#if routerCellular}
+							<p
+								class="text-muted-foreground font-mono text-(length:--text-micro) wrap-anywhere"
+								data-testid="netif-router-cellular-identity"
+							>
+								{routerCellularName(routerCellular)} · {routerCellular.vid_pid}
+							</p>
+						{/if}
+					{/snippet}
+					{#snippet reasons()}
 						{#if routerCellular}
 							<!-- ALWAYS present, because the address is the thing an operator
 							     will otherwise try to change and cannot: it is leased by the
 							     dongle's own DHCP server. A tooltip alone is unreachable on the
 							     kiosk touchscreen this device ships with. -->
 							<p
-								class="text-muted-foreground/80 mt-0.5 text-xs"
+								class="text-muted-foreground text-xs"
 								data-testid="netif-router-cellular-address-note"
 							>
 								{m["network.routerCellular.addressNote"]()}
@@ -406,29 +380,19 @@ const ZONE_ICON = {
 							<!-- On screen, never only in the badge's `title`: the kiosk
 							     touchscreen cannot hover, and "this is one device, not two" is
 							     the whole reason this row stopped being a mystery. -->
-							<p class="text-muted-foreground/80 mt-0.5 text-xs" data-testid="netif-modem-net-note">
+							<p class="text-muted-foreground text-xs" data-testid="netif-modem-net-note">
 								{m["network.modemNet.note"]({ model: modemNetName(modemNet) })}
 							</p>
 						{/if}
 						{#if dongleBlocked}
 							<!-- The disabled toggle's reason, ON SCREEN — a tooltip alone is
 							     unreachable on the kiosk touchscreen this device ships with. -->
-							<p class="text-muted-foreground/80 mt-0.5 text-xs" data-testid="netif-dongle-blocked-hint">
+							<p class="text-muted-foreground text-xs" data-testid="netif-dongle-blocked-hint">
 								{dongleBlocked}
 							</p>
 						{/if}
-					</div>
-					<div class="ms-auto flex shrink-0 items-center gap-2">
-						{#if showStale}
-							<Badge variant="stale" data-stale-interface={name} />
-						{/if}
-						<BondToggle
-							name={name}
-							enabled={iface.enabled}
-							ip={iface.ip}
-							disabledReason={dongleBlocked ?? sharedLanReason}
-							onBeforeDisable={() => confirmDisable(name)}
-						/>
+					{/snippet}
+					{#snippet actions()}
 						<Button
 							class="h-8 min-h-[var(--touch-target-min)] gap-1 px-2.5"
 							data-testid="open-netif-dialog"
@@ -439,8 +403,8 @@ const ZONE_ICON = {
 							{m["network.view.configure"]()}
 							<ChevronRight class="size-3.5 rtl:rotate-180" />
 						</Button>
-					</div>
-				</div>
+					{/snippet}
+				</NetworkRow>
 			{/each}
 		{/if}
 	</div>

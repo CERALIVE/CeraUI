@@ -15,6 +15,7 @@ import {
 	deriveWifiModeConsequence,
 	WIFI_ADAPTER_MODES,
 	wifiModeErrorKey,
+	wifiModeFrom,
 	wifiModeTarget,
 } from "./wifi-adapter-mode-view";
 
@@ -231,12 +232,37 @@ describe("the interface fallback — before getAdapterModes answers", () => {
 		expect(v.displayMode).toBe("hotspot");
 	});
 
-	it("the device's answer OUTRANKS the interface fallback", () => {
+	it("the device's answer names hybrid or hotspot while both agree an AP is up", () => {
+		const v = view({
+			iface: iface({
+				mode: "station",
+				supports_hotspot: true,
+				hotspot: { name: "AP", password: "pw", available_channels: {} },
+			}),
+			entry: entry({ mode: "hybrid" }),
+		});
+		expect(v.displayMode).toBe("hybrid");
+	});
+});
+
+describe("an AP the radio's own snapshot shows up outranks a stale `station` answer", () => {
+	it("an AP-mode radio reads hotspot even when the cached answer still says station", () => {
 		const v = view({
 			iface: iface({ mode: "hotspot" }),
 			entry: entry({ mode: "station" }),
 		});
-		expect(v.displayMode).toBe("station");
+		expect(v.displayMode).toBe("hotspot");
+	});
+
+	it("a station radio broadcasting an AP reads hybrid against a stale station answer", () => {
+		const v = view({
+			iface: iface({
+				mode: "station",
+				hotspot: { name: "AP", password: "pw", available_channels: {} },
+			}),
+			entry: entry({ mode: "station" }),
+		});
+		expect(v.displayMode).toBe("hybrid");
 	});
 });
 
@@ -263,6 +289,61 @@ describe("a pending transition holds the PRIOR mode", () => {
 		});
 		expect(v.displayMode).toBe("station");
 	});
+
+	it.each(["hotspot", "hybrid"] as const)(
+		"keeps station selected when the %s status lands before the terminal",
+		(target) => {
+			const live =
+				target === "hotspot"
+					? iface({ mode: "hotspot", conn: "" })
+					: iface({
+							mode: "station",
+							hotspot: { name: "AP", available_channels: {} },
+						});
+			const cached = entry({ mode: "station" });
+			const pending = view({
+				iface: live,
+				entry: cached,
+				phase: "pending",
+				target,
+			});
+			expect(pending.displayMode).toBe("station");
+			expect(optionFor(pending, "station").selected).toBe(true);
+			expect(optionFor(pending, target).pending).toBe(true);
+			expect(
+				view({ iface: live, entry: cached, phase: "confirmed", target })
+					.displayMode,
+			).toBe(target);
+		},
+	);
+
+	it.each(["hotspot", "hybrid"] as const)(
+		"keeps the recorded prior mode for %s with no device answer until the terminal",
+		(target) => {
+			const live =
+				target === "hotspot"
+					? iface({ mode: "hotspot", conn: "" })
+					: iface({
+							mode: "station",
+							supports_ap_sta_concurrency: true,
+							hotspot: { name: "AP", available_channels: {} },
+						});
+			const pending = view({
+				iface: live,
+				phase: "pending",
+				target,
+				from: "station",
+			});
+			expect(pending.deviceAnswered).toBe(false);
+			expect(pending.observedMode).toBe(target);
+			expect(pending.displayMode).toBe("station");
+			expect(optionFor(pending, target).pending).toBe(true);
+			expect(
+				view({ iface: live, phase: "confirmed", target, from: "station" })
+					.displayMode,
+			).toBe(target);
+		},
+	);
 
 	it("only the targeted rung shows pending", () => {
 		const v = view({ phase: "pending", target: "hybrid" });
@@ -375,9 +456,35 @@ describe("wifiModeTarget narrows the opaque async-op target", () => {
 		expect(wifiModeTarget("hybrid")).toBe("hybrid");
 	});
 
+	it("reads the mode out of a recorded request", () => {
+		expect(wifiModeTarget({ mode: "hybrid", from: "station" })).toBe("hybrid");
+		expect(
+			wifiModeTarget({ mode: "station2", from: "station" }),
+		).toBeUndefined();
+	});
+
 	it("treats anything else as no target", () => {
 		for (const value of [undefined, null, "", "station2", 7, {}]) {
 			expect(wifiModeTarget(value)).toBeUndefined();
+		}
+	});
+});
+
+describe("wifiModeFrom reads the prior mode a request recorded", () => {
+	it("returns the mode on screen when the request began", () => {
+		expect(wifiModeFrom({ mode: "hybrid", from: "station" })).toBe("station");
+	});
+
+	it("a bare mode or a malformed request records none", () => {
+		for (const value of [
+			"hybrid",
+			undefined,
+			null,
+			{},
+			{ mode: "hybrid" },
+			{ mode: "hybrid", from: "station2" },
+		]) {
+			expect(wifiModeFrom(value)).toBeUndefined();
 		}
 	});
 });

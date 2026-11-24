@@ -183,22 +183,22 @@ const SUMMARY =
 							<span class="flex min-w-0 flex-[1_1_7rem] flex-col leading-tight">
 								{#if row.displayName}
 									<span
-										class="truncate text-xs font-medium"
+										class="text-xs font-medium wrap-anywhere"
 										data-testid="sharing-uplink-name-{row.iface}"
 									>
 										{row.displayName}
 									</span>
 									<span
-										class="text-muted-foreground truncate font-mono text-[10px]"
+										class="text-muted-foreground font-mono text-[10px] break-all"
 										dir="ltr"
 										data-testid="sharing-uplink-iface-{row.iface}"
 									>
 										{row.iface}
 									</span>
 								{:else}
-									<span class="truncate font-mono text-xs font-medium" dir="ltr">{row.iface}</span>
+									<span class="font-mono text-xs font-medium break-all" dir="ltr">{row.iface}</span>
 								{/if}
-								<span class="text-muted-foreground truncate text-[10px] tracking-wide uppercase">
+								<span class="text-muted-foreground text-[10px] tracking-wide uppercase wrap-anywhere">
 									{resolveMessageKey(row.kindLabelKey)}
 								</span>
 							</span>

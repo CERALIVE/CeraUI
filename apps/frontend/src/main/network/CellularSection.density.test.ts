@@ -204,9 +204,14 @@ describe("the secondary disclosure holds everything that moved, and loses nothin
 		}
 	});
 
-	it("files the hardware/technology detail line", () => {
+	// The network type is a status fact ("✓ Connected · 4G"), so it moved OUT of
+	// the disclosure onto the status line, beside the state it qualifies.
+	it("states the network type on the status line, not in the disclosure", () => {
 		const { container } = renderRows([["0", refusedRadio()]]);
-		expect(insideDetails(container, "modem-detail")).toBe(true);
+		const detail = container.querySelector('[data-testid="modem-detail"]');
+		expect(detail).not.toBeNull();
+		expect(insideDetails(container, "modem-detail")).toBe(false);
+		expect(detail?.closest("[data-net-row-status]")).not.toBeNull();
 	});
 
 	it("still reports every dongle reading the probe returned", () => {

@@ -1048,7 +1048,18 @@ function handleMessage(
 					wifiData.adapter_mode.incarnation,
 				);
 				if (wifiData.adapter_mode.pending === true) {
-					beginOperation(key, wifiData.adapter_mode.mode);
+					// This client's own echo keeps its request, so the prior mode it
+					// recorded holds until the terminal. Read inline, like the eth_role
+					// key, rather than importing the Network view into `lib/rpc/`.
+					const held = getOperationTarget(key) as
+						| { mode?: unknown }
+						| undefined;
+					beginOperation(
+						key,
+						isOperationPending(key) && held?.mode === wifiData.adapter_mode.mode
+							? held
+							: wifiData.adapter_mode.mode,
+					);
 				} else if (wifiData.adapter_mode.error !== undefined) {
 					// A reconnect can clear the latch before its terminal arrives.
 					if (getOperationPhase(key) === "idle") beginOperation(key);

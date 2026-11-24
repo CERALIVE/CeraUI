@@ -382,8 +382,14 @@ classified dongle (`collectRouterCellularSources`), reusing the todo-43 marker c
 as the SOLE classification signal — there is no second opinion about what a device is.
 
 **The two router adapters are NOT interchangeable, and unifying them re-breaks the
-row.** `fromRouterView` describes a netns-CLAIMED dongle, which hides behind a `dg<N>h`
-veth that owns the bond toggle, so its modem row must refuse one (`router_managed`).
+row.** `fromRouterView` describes a netns-CLAIMED dongle, which reaches the host through a
+`dg<N>h` veth; the modem row is named after that veth and carries `router_managed`.
+**Frontend half (2026-11-23, owner decision D2):** the veth's `dongle` marker plus
+that claim takes it off the Ethernet list (`section-assignment.ts`), so the device is
+listed ONLY under Cellular and its Cellular switch is the live bond control for the
+veth; the token is unchanged and the UI no longer refuses the switch on it alone.
+What still separates the two adapters is evidence: this path publishes no
+`router_admin`, so its note claims nothing about where settings live.
 `fromRouterCellularView` describes a CLASSIFIED dongle on an image with no isolation
 layer — which is every shipped image — so its own `enx…` interface IS the bonded link,
 and after the relocation it is the only row that device gets. Its availability token is

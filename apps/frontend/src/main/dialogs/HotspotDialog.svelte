@@ -75,6 +75,7 @@ import {
 	actionableWifiModeConsequence,
 	deriveWifiAdapterModeView,
 	type WifiModeConfirmation,
+	wifiModeFrom,
 	wifiModeTarget,
 } from '$main/network/wifi-adapter-mode-view';
 import { withWifiEntryRetry } from '$main/network/wifi-entry-request';
@@ -146,6 +147,7 @@ const modeView = $derived(
 				entry: getWifiAdapterModeEntry(deviceId),
 				phase: getOperationPhase(wifiModeOpKey(deviceId, radioToken)),
 				target: wifiModeTarget(getOperationTarget(wifiModeOpKey(deviceId, radioToken))),
+				from: wifiModeFrom(getOperationTarget(wifiModeOpKey(deviceId, radioToken))),
 				failureReason: getOperationReason(wifiModeOpKey(deviceId, radioToken)),
 			})
 		: undefined,

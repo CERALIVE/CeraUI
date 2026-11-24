@@ -13,7 +13,11 @@
 import type { NetifEntry } from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
 
-import { isWiredSectionEntry, modemClaimedIfnames } from "./section-assignment";
+import {
+	isWiredSectionEntry,
+	modemClaimedIfnames,
+	modemRowEntry,
+} from "./section-assignment";
 
 const HILINK_MARKER = {
 	vendor: "Huawei",
@@ -155,5 +159,51 @@ describe("an MM-managed modem's own data function is not a second device", () =>
 	// naming an ordinary NIC could take the board's management link off the list.
 	it("still refuses to move an unmarked interface a modem row names", () => {
 		expect(wiredNames(new Set(["eth0", "enx000011121314"]))).toContain("eth0");
+	});
+});
+
+/*
+ * An isolated (netns) router dongle reaches the host through a `dg<N>h` veth,
+ * and its modem row is named after that veth. The backend marks the veth with
+ * `dongle`, the third cellular-device marker, so the claim moves it exactly like
+ * the other two: one listing, under Cellular, whose switch acts on the veth.
+ */
+describe("an isolated dongle's host veth is listed once, under Cellular", () => {
+	const DG1H: NetifEntry = {
+		tp: 0,
+		enabled: false,
+		dongle: { slot: 1, state: "acquiring" },
+	};
+
+	it("leaves Ethernet once the dongle's modem row claims the veth", () => {
+		const claimed = modemClaimedIfnames([["1001", { ifname: "dg1h" }]]);
+		expect(isWiredSectionEntry("dg1h", DG1H, claimed)).toBe(false);
+	});
+
+	it("stays in Ethernet while no modem row names it", () => {
+		expect(isWiredSectionEntry("dg1h", DG1H, new Set<string>())).toBe(true);
+	});
+});
+
+describe("a modem row reads only the interface Ethernet gives up", () => {
+	const UP: NetifEntry = {
+		tp: 0,
+		enabled: true,
+		ip: "192.0.2.5",
+		dongle: { slot: 0, state: "up" },
+	};
+
+	it("reads its marked veth", () => {
+		expect(modemRowEntry("dg0h", { dg0h: UP })).toBe(UP);
+	});
+
+	it("reads nothing from an unmarked interface that answers to the same name", () => {
+		const replacement: NetifEntry = { tp: 0, enabled: true, ip: "192.0.2.6" };
+		expect(modemRowEntry("dg0h", { dg0h: replacement })).toBeUndefined();
+	});
+
+	it("reads a wwan interface, which Ethernet never lists", () => {
+		const wwan: NetifEntry = { tp: 0, enabled: true, ip: "10.0.0.2" };
+		expect(modemRowEntry("wwan0", { wwan0: wwan })).toBe(wwan);
 	});
 });

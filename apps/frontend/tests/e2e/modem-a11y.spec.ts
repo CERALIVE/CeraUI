@@ -401,23 +401,15 @@ test.describe("modem UX a11y gate (modem-stack Phase B)", () => {
 		// app-wide debt elsewhere on the page can neither mask a regression here nor
 		// manufacture one.
 		//
-		// The pinned set is `color-contrast`, and it is NOT this effort's debt: the
-		// `Badge` status palette composites `text-status-<tone>` on a 10%-alpha
-		// `bg-status-<tone>` tint of the SAME hue, so every semantic pill in the app
-		// trips the rule — `netif-link-local`, the SourceSection pills and
-		// `AudioDialogContent` all predate wave 5 and use the identical pair, and
-		// `a11y-baseline.json` already allowlists the rule on all three destinations.
-		// The cellular redesign added MORE instances of an already-baselined token
-		// defect; it did not introduce a rule. Repairing it means re-toning
-		// `--status-*` app-wide, which is a design-system change with its own QA
-		// pass — the same call todo 19 made for the `Badge size="micro"` defect. It
-		// is NOT the call made for the 44px touch targets, which leg 4 below now
-		// holds at zero: that fix is a hit area, and it changes no colour.
+		// The pinned set is EMPTY. It held `color-contrast` while each row drew its
+		// state as a `Badge` pill (`text-status-<tone>` on a 10%-alpha tint of the same
+		// hue, a token defect `a11y-baseline.json` still allowlists elsewhere). The
+		// shared Network row states it as a word on the card surface, so the cellular
+		// surface now carries no critical/serious rule at all.
 		//
-		// Pinning as an exact SET is what keeps that honest: a NEW rule (an unlabelled
-		// control, a focus trap escape) grows the set and reddens, and re-toning the
-		// palette empties it and reddens too, so neither can pass unnoticed.
-		const PINNED_SURFACE_RULES: readonly string[] = ["color-contrast"];
+		// Pinning as an exact SET keeps that honest: any NEW rule (a pill coming back,
+		// an unlabelled control, a focus trap escape) grows the set and reddens.
+		const PINNED_SURFACE_RULES: readonly string[] = [];
 
 		const cellularScoped = await runAxe(page, {
 			include: ['section:has([data-testid="modem-row"])'],
