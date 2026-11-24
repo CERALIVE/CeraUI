@@ -169,15 +169,26 @@ kernel observation or a failed journal write keeps the original steering path.
 When such a fault meets a same-mark contender, the mark's current owner keeps
 its route and flows, the contender waits and status reports
 `steering_unavailable` (`mark_collision`), as the original code reports the
-collision. Start-up status stays `available` until a real failure, as before.
+collision; the backend checks the marks again after 5, 15 and 60 seconds
+without waiting for a network event. Without a collision the share ruleset is
+the original code's record of which interface carries each mark. A journal
+entry it contradicts, such as a departure or a replacement the journal missed,
+is ignored, and an address or device change the journal missed does not reset
+the owner when a same-mark link arrives later.
+Start-up status stays `available` until a real failure, as before. If the
+first kernel read after network readiness fails while the journal is missing
+or unreadable, steering keeps the original path but reports
+`steering_unavailable` (`ruleset_reload_failed`) until a later check reads the
+kernel.
 A device with a journaled collision or an unreadable journal reports
 `steering_unavailable` from start-up and while a collision intent is in progress, until an apply commits it
 against the kernel. One transient journal read error under the guard is
 recovered on the next reconcile once the journal reads again. Shaping uses the live desired state;
 only collision-affected marks are held until their assignment is committed.
 
-Non-colliding uplinks retain the original no-flush rebind behavior. Only marks
-affected by a collision use the journal's flow-retirement rule on a change of
+Non-colliding uplinks retain the original no-flush rebind behavior, and so does
+an owner at the first collision on its mark. Only marks affected by a
+journaled collision use the journal's flow-retirement rule on a change of
 binding or ownership. Renaming the same netdev, changing gateway or metric, and
 reweighting do not reset those flows.
 
@@ -280,8 +291,8 @@ instead of passive sender metrics. They rejoin only after the existing five-succ
 and 15-second hold-down requirements are met. Other streaming paths continue to use
 passive telemetry without active probes.
 
-Model and steering-selection regressions live in
-`apps/backend/src/tests/uplink-steering-state.test.ts`; all three recovery paths
+Model and steering-selection regressions live in the
+`apps/backend/src/tests/uplink-steering-state*.test.ts` files; all three recovery paths
 are covered in `apps/backend/src/tests/uplink-health-recovery.test.ts`.
 
 ## Asynchronous health observations

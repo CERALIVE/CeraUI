@@ -115,19 +115,30 @@ const coordinator = new UplinkSteeringCoordinator({
 		}),
 	apply: (previous, next) => marks.apply(previous, next),
 	hasPendingApply: () => marks.pending,
+	needsRecheck: () => marks.blocked || marks.unverified,
 	retryCleanup: async () => {
 		if (!marks.guarded) await applier.retryPendingCleanup();
 	},
-	// A waiting contender reports what main reports for the collision.
+	// A waiting contender reports what main reports for the collision, and
+	// unverified marks report what a failed kernel read reports.
 	publishAvailability: (status) =>
 		publishUplinkSteeringAvailability(
-			status.available && marks.blocked
-				? {
-						available: false,
-						reason: "mark_collision",
-						detail: "a same-mark link waits for verified steering marks",
-					}
-				: status,
+			!status.available
+				? status
+				: marks.blocked
+					? {
+							available: false,
+							reason: "mark_collision",
+							detail: "a same-mark link waits for verified steering marks",
+						}
+					: marks.unverified
+						? {
+								available: false,
+								reason: "ruleset_reload_failed",
+								detail:
+									"steering marks are unverified until the kernel is read",
+							}
+						: status,
 		),
 });
 

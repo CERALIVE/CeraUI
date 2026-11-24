@@ -4,46 +4,8 @@ import type { PreparedSteeringState, UplinkRoutePlan } from "./applier.ts";
 import { SteeringUnavailableError, type SteeringUplink } from "./contracts.ts";
 import type { MarkAdmission } from "./mark-admission.ts";
 import type { MarkClaim, MarkImage, MarkJournal } from "./mark-journal.ts";
+import { provenByKernel, sameBinding } from "./mark-ownership.ts";
 import { buildShareRuleset } from "./ruleset.ts";
-
-export function matchesLegacy(
-	legacy: string,
-	claims: readonly Pick<MarkClaim, "ifname" | "mark">[],
-): boolean {
-	return (
-		claims.length > 0 &&
-		claims.every(({ ifname, mark }) =>
-			legacy
-				.split("\n")
-				.some(
-					(line) =>
-						line.includes(`0x${mark.toString(16)} `) &&
-						line.includes(`oifname "${ifname}" masquerade`),
-				),
-		)
-	);
-}
-
-/** The kernel ruleset proves an owner where the journal records none. */
-export function provenByKernel(
-	legacy: string,
-	claims: readonly Pick<MarkClaim, "mark">[],
-	link: Pick<MarkClaim, "ifname" | "mark">,
-): boolean {
-	return (
-		!claims.some(({ mark }) => mark === link.mark) &&
-		matchesLegacy(legacy, [link])
-	);
-}
-
-export function sameBinding(a: MarkClaim, b: MarkClaim | undefined): boolean {
-	return (
-		b !== undefined &&
-		a.identity === b.identity &&
-		a.ifindex === b.ifindex &&
-		a.sourceAddress === b.sourceAddress
-	);
-}
 
 export function affectedMarks(
 	record: MarkJournal,
@@ -102,7 +64,7 @@ export async function planMarkIntent(
 			epoch: 0,
 		};
 		const legacyAdoption = provenByKernel(legacy, base.claims, claim);
-		claim.epoch = sameBinding(claim, old)
+		claim.epoch = sameBinding(base, claim, old)
 			? (old?.epoch ?? 0)
 			: affected.has(route.mark) && !legacyAdoption
 				? seq
@@ -136,7 +98,7 @@ export async function planMarkIntent(
 	if (intent && target.seq !== intent.seq) {
 		for (const claim of intent.claims) {
 			const old = base.claims.find((item) => item.mark === claim.mark);
-			if (!sameBinding(claim, old) || claim.epoch !== old?.epoch)
+			if (!sameBinding(base, claim, old) || claim.epoch !== old?.epoch)
 				unsettled.set(claim.mark, claim);
 		}
 		for (const old of base.claims) {
@@ -183,7 +145,9 @@ export async function applyMarkTransition(
 	const retain = (claim: MarkClaim) => {
 		const old = prior.get(claim.mark);
 		return (
-			old !== undefined && sameBinding(claim, old) && old.epoch === claim.epoch
+			old !== undefined &&
+			sameBinding(base, claim, old) &&
+			old.epoch === claim.epoch
 		);
 	};
 	const retire = new Set<number>();

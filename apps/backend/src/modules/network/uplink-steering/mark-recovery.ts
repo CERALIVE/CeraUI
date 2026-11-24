@@ -3,7 +3,7 @@ import { SteeringUnavailableError, type SteeringUplink } from "./contracts.ts";
 import { type MarkAdmission, receiptName } from "./mark-admission.ts";
 import type { MarkJournal, MarkJournalStore } from "./mark-journal.ts";
 import type { MarkObservation } from "./mark-observation.ts";
-import { matchesLegacy, provenByKernel } from "./mark-transition.ts";
+import { matchesLegacy, provenByKernel } from "./mark-ownership.ts";
 
 export const emptyMarkJournal: MarkJournal = {
 	version: 1,

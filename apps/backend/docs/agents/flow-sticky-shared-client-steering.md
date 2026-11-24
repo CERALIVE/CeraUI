@@ -60,9 +60,15 @@ behavior when the journal or kernel observation is unreadable. Without that
 evidence a same-mark contender never moves, re-points or flushes the mark's
 proven owner (its journal claim, or a kernel ruleset entry the journal does not
 contradict): the owner keeps steering, the contender waits and status reports
-`mark_collision`; with no proven owner nothing changes, as on main. The kernel
-ruleset also re-adopts an owner the journal missed after a skipped write or a
-same-boot downgrade. A failed save of a non-colliding recovery is advisory.
+`mark_collision`; with no proven owner nothing changes, as on main. The
+coordinator rechecks a waiting contender after 5, 15 and 60 seconds without
+waiting for a network event. Without collision state the share ruleset is
+main's record of which interface carries each mark: it re-adopts an owner the
+journal missed after a skipped write or a same-boot downgrade, a claim it
+contradicts (a departure or replacement the journal missed) is ignored, and a
+binding the journal recorded beside main's applier is advisory, so an owner
+whose rebind the journal missed keeps its route and flows when a twin arrives.
+A failed save of a non-colliding recovery is advisory.
 Quarantine keeps links outside the affected set admitted: nft lists a live
 `meta oif` by device name, resolved back to its index and confirmed by a second
 listing; a deleted device is listed by its old index, which no packet can use.
@@ -74,14 +80,19 @@ collision, start-up status and shaping follow main: status starts available, and
 the shaper reads the live desired state. A journaled collision or an
 unreadable journal reports unavailable from start-up (start-up runs no kernel
 command before netif readiness, so a missing journal under a surviving guard
-stays available until the first reconcile reports `mark_collision`), and again from the moment a collision intent is
+stays available until the first reconcile after readiness). If that
+reconcile's kernel read fails, a missing or unreadable journal keeps main's
+path but reports `ruleset_reload_failed` until a recheck reads the kernel,
+which then reports `mark_collision` under a surviving guard. Status is again
+unavailable from the moment a collision intent is
 saved, until an apply commits against the kernel. Only collision-affected marks
 wait for a committed assignment in the shaper.
 Reboot before downgrading after a collision has been journaled in the current boot.
 
-Non-colliding rebinds retain main's no-flush behavior. For collision-affected
-marks, retirement or a real source/device binding change retires the old
-connections before admission on the new binding. A rename on the same
+Non-colliding rebinds retain main's no-flush behavior, and so does an owner at
+the first collision on its mark. Once the journal records a collision, a
+collision-affected mark's retirement or real source/device binding change
+retires the old connections before admission on the new binding. A rename on the same
 netdev, gateway/metric change, or weight change does not retire them.
 
 Wi-Fi marks use the coherently sampled permanent address bound to the current
