@@ -124,11 +124,10 @@ import {
 	notificationExists,
 	notificationRemove,
 } from "../ui/notifications.ts";
-import { resolveAudioMode } from "./audio.ts";
 import {
 	audioInputEngineId,
 	effectiveAudioInputs,
-	engineAudioInputs,
+	launchAudioPlan,
 } from "./audio-inputs.ts";
 import {
 	beginCapabilitiesEpoch,
@@ -1881,16 +1880,13 @@ export class CerastreamBackend implements StreamingBackend {
 		const inputId = config.selected_video_input ?? this.deps.getActiveInput();
 		// The operator's audio pick maps onto the engine's `audio.mode`
 		// discriminator (never a pseudo-source string leaked into `audio.device`):
-		// "No audio" ⇒ none, "Pipeline default" / a network-embedded source ⇒
-		// default, a real device ⇒ device + its ALSA id. An absent `asrc` omits the
-		// section entirely (the engine's legacy inference, compat-preserved).
-		const selection =
-			config.asrc !== undefined
-				? resolveAudioMode(
-						config.asrc,
-						this.deps.isEmbeddedAudioActive(pipelineId),
-					)
-				: undefined;
+		// "No audio" ⇒ none with no inputs whatever mix is saved, a saved mix ⇒
+		// default + its inputs, "Pipeline default" / a network-embedded source ⇒
+		// default, a real device ⇒ device + its ALSA id. An absent `asrc` with no
+		// mix omits the section entirely (the engine's legacy inference).
+		const plan = launchAudioPlan(config, {
+			embeddedAudioActive: this.deps.isEmbeddedAudioActive(pipelineId),
+		});
 		const audio = {
 			// Absent means the operator stated no backend, so NO key is serialized
 			// and the engine's own persisted default governs. Substituting a value
@@ -1899,16 +1895,12 @@ export class CerastreamBackend implements StreamingBackend {
 			...(config.audio_backend !== undefined
 				? { backend: config.audio_backend }
 				: {}),
-			...(selection !== undefined ? { mode: selection.mode } : {}),
-			...(selection?.device !== undefined ? { device: selection.device } : {}),
+			...(plan !== undefined ? { mode: plan.mode } : {}),
+			...(plan?.device !== undefined ? { device: plan.device } : {}),
 			...(config.acodec !== undefined ? { codec: config.acodec } : {}),
 			...(config.delay !== undefined ? { delay_ms: config.delay } : {}),
 		};
-		const inputs = engineAudioInputs(config);
-		if (inputs !== undefined) {
-			delete audio.device;
-			audio.mode = "default";
-		}
+		const inputs = plan?.inputs;
 		return {
 			...(inputId !== undefined ? { input_id: inputId } : {}),
 			...(config.video_codec !== undefined

@@ -7,9 +7,11 @@ import {
 } from "@ceraui/rpc/schemas";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import {
+	type AudioModeSelection,
 	deriveAudioSources,
 	getAudioCaptureCardIds,
 	getAudioDevices,
+	NO_AUDIO_ID,
 	resolveAudioMode,
 } from "./audio.ts";
 import { resolveAutoAsrc } from "./auto-audio.ts";
@@ -235,6 +237,8 @@ export function changedAudioInputs(
 export function engineAudioInputs(
 	config: RuntimeConfig,
 ): AudioInputConfig[] | undefined {
+	// "No audio" sends nothing whatever mix is saved; the mix stays for the next pick.
+	if (config.asrc === NO_AUDIO_ID) return undefined;
 	const inputs = effectiveAudioInputs(config);
 	if (!getLastCapabilities()?.audio_mix || !inputs?.length) return undefined;
 	const primary = primaryAudioInputId(config);
@@ -246,4 +250,30 @@ export function engineAudioInputs(
 		input_id: audioInputEngineId(id, config),
 		...input,
 	}));
+}
+
+export interface LaunchAudioPlan extends AudioModeSelection {
+	inputs?: AudioInputConfig[];
+}
+
+/**
+ * The audio a launch sends, decided once for the engine start, the persisted
+ * engine config and the mock engine: nothing, the saved mix, the engine's
+ * default or one device. `audioOff` starts this stream without audio and saves
+ * nothing. Undefined when no `asrc` is set and no mix is saved, so the start
+ * keeps the engine's legacy inference.
+ */
+export function launchAudioPlan(
+	config: RuntimeConfig,
+	{
+		audioOff = false,
+		embeddedAudioActive = isEmbeddedAudioPipeline(config.pipeline),
+	}: { audioOff?: boolean; embeddedAudioActive?: boolean } = {},
+): LaunchAudioPlan | undefined {
+	if (audioOff) return { mode: "none" };
+	const inputs = engineAudioInputs(config);
+	if (inputs !== undefined) return { mode: "default", inputs };
+	return config.asrc === undefined
+		? undefined
+		: resolveAudioMode(config.asrc, embeddedAudioActive);
 }

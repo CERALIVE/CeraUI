@@ -71,7 +71,7 @@ import {
 	isAudioBackendSupported,
 } from "../../modules/streaming/audio-backend.ts";
 import {
-	engineAudioInputs,
+	launchAudioPlan,
 	pickedAudioInputs,
 	storedAudioInputs,
 	validateAudioInputs,
@@ -385,7 +385,7 @@ export const streamingStartProcedure = authedProcedure
 						composition: applied.composition ?? getConfig().composition,
 						video_codec: applied.video_codec ?? getConfig().video_codec,
 					};
-					const inputs = engineAudioInputs(config);
+					const audio = launchAudioPlan(config);
 					// What the engine adapter hands over at a real start, after
 					// `validateConfig` drops a composition the engine does not advertise.
 					const composition =
@@ -405,7 +405,7 @@ export const streamingStartProcedure = authedProcedure
 							max_bitrate: config.max_br ?? 5000,
 							balancer: config.balancer ?? "adaptive",
 						},
-						...(inputs === undefined ? {} : { audio: { inputs } }),
+						...(audio === undefined ? {} : { audio }),
 						...(composition === undefined ? {} : { composition }),
 					});
 					broadcastMsg("status", {

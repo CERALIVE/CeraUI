@@ -115,7 +115,12 @@ Idle edits from the Live strips arrive as per-input deltas on
 `changedAudioInputs` composes on the current saved mix (refusing to turn the
 main input out with `audio_input_primary`) and saves for the next start. For a network source, its source id (`rtmp` or `srt`) denotes
 the embedded input and becomes engine `embedded`. Without saved inputs or the
-capability, start serialization stays on the existing path. The compatibility
+capability, start serialization stays on the existing path. The engine start,
+the persisted engine config and the mock start read one decision,
+`launchAudioPlan(config, { audioOff })`: `asrc: "No audio"` (or `audioOff`, a
+stream started without audio) sends `audio.mode: "none"` with no `inputs` and
+no `device` whatever mix is saved, and the saved mix stays on disk for the
+next pick; `Pipeline default` with a saved mix still sends that mix. The compatibility
 start-schema export aliases the published producer schema, preserving its
 additive audio fields.
 

@@ -78,7 +78,7 @@ const deviceDir = setup.sound_device_dir ?? CANONICAL_SOUND_CLASS_DIR;
 const PROC_ASOUND_CARDS = "/proc/asound/cards";
 const PROC_ASOUND_PCM = "/proc/asound/pcm";
 
-const NO_AUDIO_ID = "No audio";
+export const NO_AUDIO_ID = "No audio";
 export const DEFAULT_AUDIO_ID = "Pipeline default";
 
 // "No audio" / "Pipeline default" are pipeline pseudo-sources, not real capture

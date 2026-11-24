@@ -1617,6 +1617,50 @@ describe("SourceSection — embedded network-ingest audio (Task 13)", () => {
 		).toBeNull();
 	});
 
+	// "No audio" means nothing is sent, so it outranks the ingest's own sound: the
+	// card says so and keeps the picker to change it back, whatever a leftover Auto
+	// broadcast still reports.
+	it.each(["rtmp", "srt"])(
+		"says No audio and keeps the picker when No audio is chosen on a %s ingest",
+		(id) => {
+			const { container } = mount({
+				audioSources: ["USB audio", "No audio", "Pipeline default"],
+				selectedAudioSource: "No audio",
+				config: { source: id, asrc: "No audio" },
+				sources: sourcesMsg([{ ...netRtmp(true), id, pipelineId: id }]),
+				capabilities: CAPS_EMBEDDED_ON,
+				audioStatus: { resolved_asrc: null, resolved_asrc_reason: "embedded" },
+			});
+			expect(
+				container.querySelector('[data-testid="audio-source-embedded"]'),
+			).toBeNull();
+			expect(
+				container
+					.querySelector('[data-testid="audio-source-select"]')
+					?.textContent?.trim(),
+			).toBe("No audio");
+		},
+	);
+
+	it("says No audio, not Embedded audio, while streaming an ingest with No audio chosen", () => {
+		const { container } = mount({
+			audioSources: ["USB audio", "No audio", "Pipeline default"],
+			selectedAudioSource: "No audio",
+			config: { source: "rtmp", asrc: "No audio" },
+			sources: sourcesMsg([netRtmp(true)]),
+			capabilities: CAPS_EMBEDDED_ON,
+			isStreaming: true,
+		});
+		expect(
+			container.querySelector('[data-testid="audio-source-embedded"]'),
+		).toBeNull();
+		expect(
+			container
+				.querySelector('[data-testid="audio-source-readonly"]')
+				?.textContent?.trim(),
+		).toBe("No audio");
+	});
+
 	it("does not treat a selectable source as embedded even with the capability on", () => {
 		const { container } = mount({
 			audioSources: ["USB audio", "Pipeline default"],

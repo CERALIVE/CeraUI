@@ -443,6 +443,12 @@ must keep that ABI.
   no other strip can be turned on. At `max_inputs` inputs in the mix (a saved
   input with no strip, gone or unavailable, still counts), the others cannot be
   turned on and say the mix is full.
+- "No audio" sends no audio: Start sends `audio.mode: "none"` and no inputs
+  whatever mix is saved, and the saved mix comes back with the next pick. On an
+  RTMP or SRT ingest the Source card keeps `audio-source-select` (live,
+  `audio-source-readonly`) reading "No audio" instead of
+  `audio-source-embedded`, and the Audio dialog and the live summary say "No
+  audio" too.
 - The main input is always in the mix Start sends, decided where it is used,
   never by a follow-up save: the backend's `effectiveAudioInputs` adds a main
   input outside the saved mix first at its defaults on Track 1 (the old main

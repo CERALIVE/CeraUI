@@ -602,4 +602,53 @@ test.describe("audio mixer — caps-full", () => {
 		});
 		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
 	});
+
+	test("No audio picked over a saved two-input mix: Start sends no audio, the summary says so, and the next microphone pick brings the mix back", async ({
+		page,
+		backendRpc,
+		workerBackend,
+	}) => {
+		await page.getByTestId(`audio-strip-enable-${SECOND}`).click();
+		await expect(page.getByTestId(`audio-strip-enable-${SECOND}`)).toHaveAttribute("aria-checked", "true");
+		await page.getByTestId(`audio-strip-track-${SECOND}-2`).click();
+		await expect(page.getByTestId(`audio-strip-track-${SECOND}-2`)).toHaveAttribute("aria-pressed", "true");
+		await page.getByTestId(`audio-strip-track-${SECOND}-1`).click();
+		await expect(page.getByTestId(`audio-strip-track-${SECOND}-1`)).toHaveAttribute("aria-pressed", "false");
+
+		// Start pressed straight after the pick, before its save is answered.
+		await page.getByTestId("audio-source-select").click();
+		await page.getByRole("option", { name: "No audio", exact: true }).click();
+		await startButton(page).click();
+		const cockpit = page.getByTestId("live-cockpit");
+		await expect(cockpit).toBeVisible({ timeout: 15_000 });
+		expect((await workerBackend.mockEngine()).lastStartParams?.audio).toEqual({ mode: "none" });
+		await expect(cockpit.locator('[data-live-value="audio"]')).toHaveText("No audio");
+		expect(await backendRpc.call(["streaming", "getConfig"])).toMatchObject({
+			asrc: "No audio",
+			audio_inputs: savedTwo,
+		});
+		await endStream(page);
+		await expect(page.getByTestId("idle-cockpit").or(page.getByTestId("summary-done"))).toBeVisible({
+			timeout: 15_000,
+		});
+
+		await openLive(page);
+		await page.getByTestId("audio-source-select").click();
+		await page.getByRole("option", { name: new RegExp(MAIN) }).click();
+		await expect
+			.poll(() => backendRpc.call<{ asrc?: string }>(["streaming", "getConfig"]))
+			.toMatchObject({ asrc: MAIN, audio_inputs: savedTwo });
+		await startButton(page).click();
+		await expect(page.getByTestId("live-cockpit")).toBeVisible({ timeout: 15_000 });
+		const audio = (await workerBackend.mockEngine()).lastStartParams?.audio as
+			| { mode?: string; inputs?: Array<{ tracks: number[] }> }
+			| undefined;
+		expect(audio?.mode).toBe("default");
+		expect(audio?.inputs?.map((input) => input.tracks)).toEqual([[1], [2]]);
+		await endStream(page);
+		await expect(page.getByTestId("idle-cockpit").or(page.getByTestId("summary-done"))).toBeVisible({
+			timeout: 15_000,
+		});
+		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
+	});
 });

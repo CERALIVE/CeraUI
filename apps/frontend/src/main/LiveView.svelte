@@ -97,6 +97,7 @@ import {
 	resolveReceiverKind,
 } from '$lib/streaming/receiver-experience';
 import {
+	AUDIO_SOURCE_NO_AUDIO,
 	audioSelectionWireId,
 	audioSourceLabel,
 	deriveActiveSummary,
@@ -1103,7 +1104,10 @@ const summaryAudio = $derived.by(() => {
 	return {
 		current,
 		pending: resolved.pending,
-		embedded: resolved.embedded || embeddedActive,
+		// An explicit "No audio" sends nothing, so it outranks the source's own sound.
+		embedded:
+			effectiveAudioSource !== AUDIO_SOURCE_NO_AUDIO &&
+			(resolved.embedded || embeddedActive),
 	};
 });
 

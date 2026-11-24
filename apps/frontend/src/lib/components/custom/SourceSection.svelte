@@ -93,6 +93,7 @@ import { hasEffectiveSource } from '$lib/streaming/effective-source';
 import { planAudioSelectionForSource } from '$lib/streaming/embedded-audio-selection';
 import { captureModeCodecs } from '$lib/streaming/passthrough';
 import {
+	AUDIO_SOURCE_NO_AUDIO,
 	audioSourceLabel,
 	deriveActiveSummary,
 	deriveCapabilitySummary,
@@ -713,7 +714,11 @@ const audioReadOnly = $derived(audioMode === 'single' || isStreaming || audioMix
 const audioEmbeddedActive = $derived(activeSource?.audioKind === 'embedded');
 // Embedded state renders when the active source routes embedded audio OR the T5
 // resolver reported the embedded reason (distinguishes the two null cases, R9-1).
-const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
+// An explicit "No audio" sends nothing, so it outranks both and keeps the picker.
+const showEmbedded = $derived(
+	selectedAudioSource !== AUDIO_SOURCE_NO_AUDIO &&
+		(audioEmbeddedActive || resolvedAudio.embedded),
+);
 </script>
 
 {#snippet activeConfigPanel(hosted: boolean)}
