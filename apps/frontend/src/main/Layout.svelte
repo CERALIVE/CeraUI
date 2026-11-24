@@ -346,7 +346,7 @@ $effect(() => {
 	{:else if connectionSurfaces.showAuthTimeout}
 		<!-- Auth check stalled (offline device / dropped socket): a calm retry
 		     surface instead of a blank screen, mirroring DisconnectedBanner. -->
-		<main class="flex min-h-screen items-center justify-center p-4">
+		<main class="flex min-h-room items-center justify-center p-4">
 			<div
 				class="bg-status-warning/10 border-status-warning/30 text-foreground flex max-w-sm flex-col items-center gap-3 rounded-lg border px-6 py-5 text-center text-sm backdrop-blur-sm"
 				data-testid="auth-timeout"
@@ -377,7 +377,7 @@ $effect(() => {
 		</main>
 	{:else if isCheckingAuthStatus}
 		<!-- Loading state while checking auth - show a basic loading indicator -->
-		<main class="flex min-h-screen items-center justify-center">
+		<main class="flex min-h-room items-center justify-center">
 			<div class="text-center">
 				<div
 					class="border-primary mx-auto mb-4 h-8 w-8 rounded-full border-4 border-t-transparent motion-safe:animate-spin"
