@@ -17,9 +17,9 @@ import type {
 	SourcesMessage,
 } from "@ceraui/rpc/schemas";
 import { COMPOSITION_FEATURE } from "@ceraui/rpc/schemas";
-import { cleanup, render, within } from "@testing-library/svelte";
+import { cleanup, render, waitFor, within } from "@testing-library/svelte";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-
+import { WIDE_DESKTOP_QUERY } from "$lib/layout";
 import type { StreamingOptimismState } from "$lib/rpc/streaming-optimism.svelte";
 import type { ActiveSummary } from "$lib/streaming/sourceSummary";
 
@@ -169,6 +169,32 @@ const MIXING = {
 } as unknown as CapabilitiesMessage;
 
 describe("LiveCockpit — live order", () => {
+	it("mounts the stream glance only below desktop width", async () => {
+		const viewport = Object.assign(new EventTarget(), {
+			matches: true,
+		});
+		vi.stubGlobal("matchMedia", (query: string) =>
+			query === WIDE_DESKTOP_QUERY
+				? viewport
+				: Object.assign(new EventTarget(), { matches: false }),
+		);
+		try {
+			const { container } = cockpit(COMPOSING);
+			const glance = () => container.querySelector("[data-live-glance]");
+			expect(glance()).toBeNull();
+
+			viewport.matches = false;
+			viewport.dispatchEvent(new Event("change"));
+			await waitFor(() => expect(glance()).not.toBeNull());
+
+			viewport.matches = true;
+			viewport.dispatchEvent(new Event("change"));
+			await waitFor(() => expect(glance()).toBeNull());
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
 	it("orders banners, program-desk, telemetry-card, live-bar", () => {
 		const { container } = cockpit(COMPOSING);
 		const root = byTestId(container, "live-cockpit");

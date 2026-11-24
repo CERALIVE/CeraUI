@@ -131,6 +131,9 @@ phones, 768 px tablets and the 800×480 kiosk; the kiosk still uses its rail
 chrome and bottom-aligned bar. Alerts and Stop must fit at all these sizes.
 Below 1024 px on landscape screens 420 px tall or shorter, the live glance
 uses two columns and tighter spacing to clear the fixed bar.
+The glance chunk is requested only for confirmed Live below 1024 px. The
+bitrate sheet body loads on first open through the dialog registry; the inline
+adjuster and the phone's trigger stay in the fixed bar.
 
 The Stream glance and IngestStats share rows named by `getLinkNames()`, the
 same projection the HUD and Network use. Row identity uses the published
