@@ -1,10 +1,13 @@
 import { run } from "../../../helpers/run.ts";
 import { parseDefaultRouteInterface } from "../connectivity-candidates.ts";
 import type { RouteProvisioning, UplinkRoutePlan } from "./applier.ts";
-import { markForSlot, slotForManagedTable } from "./mark-layout.ts";
-import { asRouteError } from "./route-errors.ts";
 import {
 	isManagedUplinkTable,
+	markForSlot,
+	slotForManagedTable,
+} from "./mark-layout.ts";
+import { asRouteError } from "./route-errors.ts";
+import {
 	readRouteTable,
 	type UplinkRouteManagerDeps,
 } from "./route-planner.ts";
@@ -17,6 +20,7 @@ import {
 	parseOwnedFwmarkRules,
 	parseSteeringSourceRules,
 	sourceRuleArgv,
+	withoutMarkFence,
 } from "./route-policy.ts";
 import {
 	ensureManagedTableRoute,
@@ -25,6 +29,11 @@ import {
 	type TableChanges,
 } from "./route-table-ownership.ts";
 
+export {
+	discoverMarkInventory,
+	ensureMarkFence,
+	retireMarkSupport,
+} from "./mark-route-effects.ts";
 export type {
 	UplinkRouteCandidate,
 	UplinkRouteManagerDeps,
@@ -107,7 +116,10 @@ async function ensureUplinkRouteInner(
 	deps: UplinkRouteManagerDeps,
 ): Promise<RouteProvisioning> {
 	const rules = await deps.run("ip", ["rule", "show"]);
-	assertFwmarkPriorityAvailable(rules, plan.ifname);
+	assertFwmarkPriorityAvailable(
+		deps.journaled ? withoutMarkFence(rules) : rules,
+		plan.ifname,
+	);
 	let tableChanges: TableChanges = { createdTableRoute: false };
 	let createdSourceRule = false;
 	let createdFwmarkRule = false;

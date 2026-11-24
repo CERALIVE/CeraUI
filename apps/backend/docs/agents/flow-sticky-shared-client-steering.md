@@ -42,6 +42,59 @@ The fixed 10000-bucket verdict map uses largest-remainder apportionment. Reorder
 add/remove, and reweight never change a surviving mark, so established flows keep
 their original route while only new flows see the new weights.
 
+Distinct identities with the same natural mark keep sharing. Published
+incumbents retain their saved slots; free natural slots are reserved first and
+new contenders probe upward in identity order (65535 wraps to 1, never 0).
+The same journal produces the same assignment after reorder and restart;
+different arrival histories can assign the same pair differently.
+
+The boot-scoped assignment journal is written and synced before changing a
+collision-affected route. A kernel receipt distinguishes published ownership
+from provisional routes, including tables that never got a policy rule.
+The IPv4 egress fence drops client packets that do not match an admitted mark,
+connection generation, and egress device. The backend reconciles forward
+after an interruption; it does not restore a pre-transition classifier over
+changed routes. Invalid journal authority fails closed only for marks that a
+collision or the kernel guard affects; a device with no guard keeps main's
+behavior when the journal or kernel observation is unreadable. Without that
+evidence a same-mark contender never moves, re-points or flushes the mark's
+proven owner (its journal claim, or a kernel ruleset entry the journal does not
+contradict): the owner keeps steering, the contender waits and status reports
+`mark_collision`; with no proven owner nothing changes, as on main. The
+coordinator rechecks a waiting contender after 5, 15 and 60 seconds without
+waiting for a network event. Without collision state the share ruleset is
+main's record of which interface carries each mark: it re-adopts an owner the
+journal missed after a skipped write or a same-boot downgrade, a claim it
+contradicts (a departure or replacement the journal missed) is ignored, and a
+binding the journal recorded beside main's applier is advisory, so an owner
+whose rebind the journal missed keeps its route and flows when a twin arrives.
+A failed save of a non-colliding recovery is advisory.
+Quarantine keeps links outside the affected set admitted: nft lists a live
+`meta oif` by device name, resolved back to its index and confirmed by a second
+listing; a deleted device is listed by its old index, which no packet can use.
+Once the journal reads back, the quarantine guard yields to it and the next
+apply re-publishes the journal's receipt; a restart recovers the same way. Legacy-path recovery commits an
+interrupted intent only if no saved owner departed, so a departed owner's mark
+is flushed before a same-mark joiner takes it. Without a journaled
+collision, start-up status and shaping follow main: status starts available, and
+the shaper reads the live desired state. A journaled collision or an
+unreadable journal reports unavailable from start-up (start-up runs no kernel
+command before netif readiness, so a missing journal under a surviving guard
+stays available until the first reconcile after readiness). If that
+reconcile's kernel read fails, a missing or unreadable journal keeps main's
+path but reports `ruleset_reload_failed` until a recheck reads the kernel,
+which then reports `mark_collision` under a surviving guard. Status is again
+unavailable from the moment a collision intent is
+saved, until an apply commits against the kernel. Only collision-affected marks
+wait for a committed assignment in the shaper.
+Reboot before downgrading after a collision has been journaled in the current boot.
+
+Non-colliding rebinds retain main's no-flush behavior, and so does an owner at
+the first collision on its mark. Once the journal records a collision, a
+collision-affected mark's retirement or real source/device binding change
+retires the old connections before admission on the new binding. A rename on the same
+netdev, gateway/metric change, or weight change does not retire them.
+
 Wi-Fi marks use the coherently sampled permanent address bound to the current
 registry object, independently of its verified/limited classification key.
 An unrelated unreadable witness therefore cannot turn a surviving station's
@@ -129,7 +182,7 @@ priority-100 managed-table source rules, including source-only crash remnants.
 It publishes the latest model first, then flushes and removes stale support.
 `uplink-steering/applier.ts` protects desired support by mark/table and retains
 cleanup work separately for each source address and priority. Any overlap, mark
-collision, foreign priority owner, missing route, nft failure, or rollback failure is fail-soft and surfaces
+invariant violation, foreign priority owner, missing route, nft failure, or rollback failure is fail-soft and surfaces
 `steering_unavailable`; it never blocks the already-bound WS server.
 
 Keep committed steering through stale-route cleanup failures: sharing, provisioned

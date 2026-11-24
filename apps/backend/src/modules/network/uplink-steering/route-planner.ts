@@ -1,17 +1,25 @@
 import { isFibTableAbsent } from "../../../helpers/iproute2-absent.ts";
 import { argMatch, ID_RE, run } from "../../../helpers/run.ts";
 import { parseDefaultRouteInterface } from "../connectivity-candidates.ts";
-import { parseDefaultRouteLine } from "../gateways.ts";
 import type { UplinkRoutePlan } from "./applier.ts";
 import { SOURCE_ROUTE_RULE_PRIORITY } from "./contracts.ts";
-import { isManagedUplinkTable, MANAGED_TABLE_BASE } from "./mark-layout.ts";
+import { isManagedUplinkTable } from "./mark-layout.ts";
 import { asRouteError, routeUnavailable } from "./route-errors.ts";
+import {
+	managedPlanFromRoute,
+	managedTable,
+	planManagedRoute,
+	planTwinRoute,
+} from "./route-managed-plan.ts";
 import {
 	isEthernetUplinkIface,
 	parseHasDefaultRoute,
 	parseIpRules,
 } from "./route-parsers.ts";
-import { assertFwmarkPriorityAvailable } from "./route-policy.ts";
+import {
+	assertFwmarkPriorityAvailable,
+	withoutMarkFence,
+} from "./route-policy.ts";
 
 export { isManagedUplinkTable } from "./mark-layout.ts";
 
@@ -28,6 +36,7 @@ export interface UplinkRouteCandidate {
 
 export interface UplinkRouteManagerDeps {
 	run: typeof run;
+	readonly journaled?: boolean;
 }
 
 const defaultDeps: UplinkRouteManagerDeps = { run };
@@ -61,7 +70,10 @@ async function planUplinkRouteInner(
 ): Promise<UplinkRoutePlan> {
 	assertCandidate(candidate);
 	const ruleOutput = await deps.run("ip", ["rule", "show"]);
-	assertFwmarkPriorityAvailable(ruleOutput, candidate.ifname);
+	assertFwmarkPriorityAvailable(
+		deps.journaled ? withoutMarkFence(ruleOutput) : ruleOutput,
+		candidate.ifname,
+	);
 	if (!candidate.sourceAddressUnique)
 		return await planTwinRoute(candidate, deps);
 	const rules = parseIpRules(ruleOutput);
@@ -145,130 +157,6 @@ async function planWithoutSourceRule(
 	return await planManagedRoute(candidate, deps, SOURCE_ROUTE_RULE_PRIORITY);
 }
 
-/*
-  A DUPLICATE-IP TWIN IS STEERED BY ITS MARK, NEVER BY ITS ADDRESS.
-
-  The duplicate-MAC HiLink pair both lease `192.168.8.100`, so on this path the
-  source address names a PAIR and every question asked of it is a coin flip: a
-  `from <ip>` rule matches whichever twin the kernel likes, and two dispatcher
-  rules for one address made the whole steering state refuse with "source address
-  selects several tables". The source-rule dimension therefore carries no
-  information about THIS device and is skipped outright rather than consulted and
-  then second-guessed.
-
-  What CAN name the device is the mark: `stableUplinkMark` keys on the twin's own
-  port-anchored physical identity, so each twin gets a distinct mark, a distinct
-  managed table, and a default route carrying its own `dev <ifname>` — the same
-  fwmark machinery `route-policy.ts` already installs for every other uplink, and
-  the routing twin of the `curl --interface` binding the health probe uses.
-
-  Image PR #115 retired dispatcher source rules for every interface class.
-  Unlike unique-address uplinks, twins must never create a source rule because
-  the address cannot name one device. Each interface must own a default route.
-*/
-async function planTwinRoute(
-	candidate: UplinkRouteCandidate,
-	deps: UplinkRouteManagerDeps,
-): Promise<UplinkRoutePlan> {
-	const routeOutput = await deps.run("ip", [
-		"-4",
-		"route",
-		"show",
-		"default",
-		"dev",
-		argMatch(ID_RE, candidate.ifname),
-	]);
-	if (!parseHasDefaultRoute(routeOutput)) {
-		throw routeUnavailable(
-			candidate.ifname,
-			`shares source address ${candidate.sourceAddress} with another interface and has no default route of its own, so no per-interface rule can steer it`,
-		);
-	}
-	return managedPlanFromRoute(
-		candidate,
-		managedTable(candidate.mark),
-		routeOutput,
-		undefined,
-		true,
-	);
-}
-
-async function planManagedRoute(
-	candidate: UplinkRouteCandidate,
-	deps: UplinkRouteManagerDeps,
-	sourceRulePriority: number | undefined,
-): Promise<UplinkRoutePlan> {
-	const routeOutput = await deps.run("ip", [
-		"-4",
-		"route",
-		"show",
-		"default",
-		"dev",
-		argMatch(ID_RE, candidate.ifname),
-	]);
-	return managedPlanFromRoute(
-		candidate,
-		managedTable(candidate.mark),
-		routeOutput,
-		sourceRulePriority,
-		true,
-	);
-}
-
-function managedPlanFromRoute(
-	candidate: UplinkRouteCandidate,
-	table: string,
-	defaultRoute: string,
-	sourceRulePriority: number | undefined,
-	devFiltered: boolean,
-): UplinkRoutePlan {
-	let defaultLine = defaultRoute
-		.split("\n")
-		.map((line) => line.trim())
-		.find((line) => line.startsWith("default"));
-	if (defaultLine === undefined) {
-		throw routeUnavailable(
-			candidate.ifname,
-			"interface has no discoverable default route",
-		);
-	}
-	if (devFiltered) {
-		const tokens = defaultLine.split(/\s+/);
-		const devIndex = tokens.indexOf("dev");
-		if (devIndex !== -1 && tokens[devIndex + 1] !== candidate.ifname) {
-			throw routeUnavailable(
-				candidate.ifname,
-				"interface default route was unusable",
-			);
-		}
-		// iproute2 omits the device clause when the query already filters by it.
-		if (devIndex === -1) defaultLine += ` dev ${candidate.ifname}`;
-	}
-	const parsed = parseDefaultRouteLine(defaultLine);
-	if (
-		!parsed.ok ||
-		parseDefaultRouteInterface(defaultLine) !== candidate.ifname
-	) {
-		throw routeUnavailable(
-			candidate.ifname,
-			"interface default route was unusable",
-		);
-	}
-	return {
-		...candidate,
-		table,
-		managed: true,
-		...(sourceRulePriority === undefined ? {} : { sourceRulePriority }),
-		defaultRouteArgv: [
-			"route",
-			"replace",
-			"table",
-			table,
-			...parsed.value.slice(2),
-		],
-	};
-}
-
 function assertCandidate(candidate: UplinkRouteCandidate): void {
 	argMatch(ID_RE, candidate.ifname);
 	if (!IPV4_RE.test(candidate.sourceAddress)) {
@@ -286,10 +174,6 @@ function assertTable(table: string): void {
 	if (!SAFE_TABLE_RE.test(table)) {
 		throw routeUnavailable(table, "routing table token was unsafe");
 	}
-}
-
-function managedTable(mark: number): string {
-	return String(MANAGED_TABLE_BASE + ((mark >>> 8) & 0xffff));
 }
 
 export function isModuleProvisionedUplink(ifname: string): boolean {

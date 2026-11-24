@@ -3,6 +3,9 @@
 	"include": [
 		"src/tests/helpers/**/*.ts",
 		"src/tests/uplink-steering-state.test.ts",
+		"src/tests/uplink-steering-state-refusals.test.ts",
+		"src/tests/uplink-steering-state-marks.test.ts",
+		"src/tests/uplink-steering-state-rejoin.test.ts",
 		"src/tests/wifi-hotspot-terminal-outcomes.test.ts",
 		"src/tests/wifi-hotspot.test.ts",
 		"src/tests/wifi-radio-identity.test.ts",
@@ -25,6 +28,16 @@
 		"src/tests/uplink-steering-table-key-kernel.test.ts",
 		"src/tests/uplink-steering-source-kernel.test.ts",
 		"src/tests/uplink-steering-mark-layout.test.ts",
+		"src/tests/uplink-steering-collision-lifecycle.test.ts",
+		"src/tests/uplink-steering-runtime-compat.test.ts",
+		"src/tests/uplink-steering-legacy-recovery.test.ts",
+		"src/tests/uplink-steering-mark-observation.test.ts",
+		"src/tests/uplink-steering-collision-status.test.ts",
+		"src/tests/uplink-steering-fault-incumbent.test.ts",
+		"src/tests/uplink-steering-guard-recovery.test.ts",
+		"src/tests/uplink-steering-stale-journal.test.ts",
+		"src/tests/uplink-steering-unverified-start.test.ts",
+		"src/tests/uplink-steering-collision-kernel.test.ts",
 		"src/tests/uplink-steering-rename-kernel.test.ts"
 	],
 	"exclude": []

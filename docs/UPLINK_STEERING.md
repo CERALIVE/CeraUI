@@ -41,6 +41,11 @@ The mark layout is `0xca | stable 16-bit uplink slot | preserved low byte`:
 
 The stable slot is derived from physical uplink identity, never array position, so
 adding, removing, reordering, or reweighting links does not move established flows.
+When natural slots collide, current owners keep their saved slots. Initially
+unclaimed natural slots go to the first identity in sort order, and the other
+links take the next free slot, wrapping to 1 rather than 0. Both links can carry
+new shared-client flows. Given the same boot journal, input order and restart
+do not change assignments. A different arrival history can yield different slots.
 Only a new conntrack flow entering a positive client-zone `iifname` match runs the
 weighted verdict map. Established client-direction packets restore their route mark
 from conntrack. Reply packets entering from a WAN interface do not, preventing WAN
@@ -127,8 +132,8 @@ rendered fixtures remain unchanged. The steering refusal reason
 
 An occupied foreign rule at priority 110, a route table with no usable default,
 overlapping client/uplink prefixes, a client zone that remains a bond candidate,
-or a stable-mark collision produces a typed `steering_unavailable` state rather
-than a guessed route. Preparation still succeeds or fails as a whole.
+or inconsistent saved mark ownership produces a typed `steering_unavailable`
+state rather than a guessed route. Preparation still succeeds or fails as a whole.
 
 On backend restart, the module inventories its namespaced priority-110 rules. It
 publishes the latest ruleset first, then flushes conntrack and removes stale rules
@@ -145,6 +150,47 @@ An in-place interface rename retains the continuing identity's table and fwmark
 rule without flushing its flows, including when final ruleset publication fails.
 Route retention matches identity, table, and mark; the interface name is mutable.
 A departing identity still follows the hard-down drain below.
+
+### Collision recovery
+
+The backend keeps the mark assignment in `/run/ceralive/uplink-steering-marks.json`.
+It syncs the intent before provisioning, fences affected traffic, and commits
+after an atomic nft publication carrying the assignment receipt. A backend
+restart recovers in the same boot, reclaims abandoned provisional tables even
+when their fwmark rule was never installed, and finishes interrupted
+publication. The separate `inet ceralive_share_guard` table checks forwarded
+IPv4 traffic from client zones against the admitted mark and egress device.
+The priority-110 fence prevents an older steering backend from taking over a
+live journaled assignment. Reboot before downgrading; the journal and kernel
+state are boot-scoped.
+
+Without a collision the journal is advisory: an unreadable journal, a failed
+kernel observation or a failed journal write keeps the original steering path.
+When such a fault meets a same-mark contender, the mark's current owner keeps
+its route and flows, the contender waits and status reports
+`steering_unavailable` (`mark_collision`), as the original code reports the
+collision; the backend checks the marks again after 5, 15 and 60 seconds
+without waiting for a network event. Without a collision the share ruleset is
+the original code's record of which interface carries each mark. A journal
+entry it contradicts, such as a departure or a replacement the journal missed,
+is ignored, and an address or device change the journal missed does not reset
+the owner when a same-mark link arrives later.
+Start-up status stays `available` until a real failure, as before. If the
+first kernel read after network readiness fails while the journal is missing
+or unreadable, steering keeps the original path but reports
+`steering_unavailable` (`ruleset_reload_failed`) until a later check reads the
+kernel.
+A device with a journaled collision or an unreadable journal reports
+`steering_unavailable` from start-up and while a collision intent is in progress, until an apply commits it
+against the kernel. One transient journal read error under the guard is
+recovered on the next reconcile once the journal reads again. Shaping uses the live desired state;
+only collision-affected marks are held until their assignment is committed.
+
+Non-colliding uplinks retain the original no-flush rebind behavior, and so does
+an owner at the first collision on its mark. Only marks affected by a
+journaled collision use the journal's flow-retirement rule on a change of
+binding or ownership. Renaming the same netdev, changing gateway or metric, and
+reweighting do not reset those flows.
 
 Once the latest ruleset is committed, a stale-route cleanup failure keeps the live
 ruleset and newly provisioned routes intact, completes the forwarding step, and
@@ -245,8 +291,8 @@ instead of passive sender metrics. They rejoin only after the existing five-succ
 and 15-second hold-down requirements are met. Other streaming paths continue to use
 passive telemetry without active probes.
 
-Model and steering-selection regressions live in
-`apps/backend/src/tests/uplink-steering-state.test.ts`; all three recovery paths
+Model and steering-selection regressions live in the
+`apps/backend/src/tests/uplink-steering-state*.test.ts` files; all three recovery paths
 are covered in `apps/backend/src/tests/uplink-health-recovery.test.ts`.
 
 ## Asynchronous health observations

@@ -13,6 +13,9 @@ import type {
 } from "./state-builder.ts";
 
 export const UPLINK_STEERING_RETRY_DELAYS_MS = [100, 500] as const;
+export const UPLINK_STEERING_RECHECK_DELAYS_MS = [
+	5_000, 15_000, 60_000,
+] as const;
 
 export interface UplinkSteeringCoordinatorDeps {
 	readDesiredState(
@@ -25,6 +28,9 @@ export interface UplinkSteeringCoordinatorDeps {
 	publishAvailability(status: SteeringAvailability): void;
 	waitBeforeRetry?(delayMs: number): Promise<void>;
 	retryCleanup?(): Promise<void>;
+	hasPendingApply?(): boolean;
+	/** The applied state rests on unverified marks and is worth reading again. */
+	needsRecheck?(): boolean;
 	now?(): number;
 	schedule?(callback: () => Promise<void>, delayMs: number): () => void;
 }
@@ -38,6 +44,8 @@ export class UplinkSteeringCoordinator {
 	#readinessDeadlineArmed = false;
 	#cancelReadinessDeadline: (() => void) | undefined;
 	#zonesReadyBypass = false;
+	#rechecks = 0;
+	#cancelRecheck: (() => void) | undefined;
 	#lastFailure:
 		| {
 				stateKey: string;
@@ -67,6 +75,22 @@ export class UplinkSteeringCoordinator {
 	stop(): void {
 		this.#cancelReadinessDeadline?.();
 		this.#cancelReadinessDeadline = undefined;
+		this.#cancelRecheck?.();
+		this.#cancelRecheck = undefined;
+	}
+
+	#armRecheck(): void {
+		if (!this.#deps.needsRecheck?.()) {
+			this.#rechecks = 0;
+			return;
+		}
+		const delay = UPLINK_STEERING_RECHECK_DELAYS_MS[this.#rechecks];
+		if (this.#cancelRecheck !== undefined || delay === undefined) return;
+		this.#rechecks++;
+		this.#cancelRecheck = (this.#deps.schedule ?? defaultSchedule)(async () => {
+			this.#cancelRecheck = undefined;
+			await this.requestReconcile();
+		}, delay);
 	}
 
 	#awaitReadiness(pending: PendingSteeringState): void {
@@ -112,13 +136,17 @@ export class UplinkSteeringCoordinator {
 					this.#lastFailure === undefined ||
 					(this.#deps.now ?? Date.now)() >= this.#lastFailure.nextAttemptAt
 				) {
-					if (stateKey(this.#applied) !== desiredKey) {
+					if (
+						stateKey(this.#applied) !== desiredKey ||
+						this.#deps.hasPendingApply?.()
+					) {
 						await this.#deps.apply(this.#applied, desired);
 					}
 					this.#applied = desired;
 					this.#lastFailure = undefined;
 					this.#deps.publishAvailability({ available: true });
 					retryIndex = 0;
+					this.#armRecheck();
 				}
 				try {
 					await this.#deps.retryCleanup?.();

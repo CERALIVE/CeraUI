@@ -28,9 +28,15 @@ import {
 	SteeringUnavailableError,
 	type SteeringUplink,
 } from "./contracts.ts";
+import { assignSteeringMarks } from "./mark-allocation.ts";
 import { planUplinkRoute, type UplinkRouteCandidate } from "./route-manager.ts";
 import { stableUplinkMark } from "./ruleset.ts";
-import { cidrsOverlap, subnetCidr } from "./subnet.ts";
+import {
+	assertClientZonesDisjoint,
+	assertDistinctMarks,
+	assertNoOverlap,
+} from "./state-invariants.ts";
+import { subnetCidr } from "./subnet.ts";
 
 type NetworkSnapshot = Record<string, NetworkInterface | undefined>;
 
@@ -77,6 +83,10 @@ const defaultDeps: SteeringStateBuilderDeps = {
 export interface SteeringReadinessContext {
 	readonly hasAppliedState?: boolean;
 	readonly zonesReadyBypass?: boolean;
+	readonly resolveMarks?: (
+		candidates: readonly SteeringUplink[],
+	) => Promise<ReadonlyMap<string, number>>;
+	readonly planRoute?: SteeringStateBuilderDeps["planRoute"];
 }
 
 export interface PendingSteeringState {
@@ -106,11 +116,21 @@ export async function readDesiredSteeringState(
 	if (!context.hasAppliedState && identityPending)
 		return { pending: true, netifReady: true, reason: "identity" };
 	assertNoOverlap(zones, candidates);
-	assertDistinctMarks(candidates);
+	const uplinks = candidates.map(({ uplink }) => uplink);
+	const assigned = context.resolveMarks
+		? await context.resolveMarks(uplinks)
+		: assignSteeringMarks(uplinks, new Map());
+	const marked = candidates.flatMap((candidate) => {
+		const mark = assigned.get(candidate.uplink.identity);
+		return mark === undefined
+			? []
+			: [{ ...candidate, uplink: { ...candidate.uplink, mark } }];
+	});
+	assertDistinctMarks(marked);
 	const routes: UplinkRoutePlan[] = [];
-	for (const candidate of candidates) {
+	for (const candidate of marked) {
 		routes.push(
-			await deps.planRoute({
+			await (context.planRoute ?? deps.planRoute)({
 				identity: candidate.uplink.identity,
 				ifname: candidate.uplink.ifname,
 				sourceAddress: candidate.sourceAddress,
@@ -121,7 +141,7 @@ export async function readDesiredSteeringState(
 	}
 	return {
 		clientZones: zones,
-		uplinks: candidates.map((candidate) => candidate.uplink),
+		uplinks: marked.map((candidate) => candidate.uplink),
 		routes,
 	};
 }
@@ -210,47 +230,6 @@ function collectUplinkCandidates(
 		),
 		identityPending,
 	};
-}
-
-function assertNoOverlap(
-	zones: readonly ClientZone[],
-	uplinks: readonly UplinkCandidate[],
-): void {
-	for (const zone of zones) {
-		for (const uplink of uplinks) {
-			if (!cidrsOverlap(zone.ipv4Cidr, uplink.subnet)) continue;
-			throw new SteeringUnavailableError(
-				"overlapping_subnet",
-				`${zone.ifname} ${zone.ipv4Cidr} overlaps ${uplink.uplink.ifname} ${uplink.subnet}`,
-			);
-		}
-	}
-}
-
-function assertClientZonesDisjoint(zones: readonly ClientZone[]): void {
-	for (const [index, zone] of zones.entries()) {
-		for (const other of zones.slice(index + 1)) {
-			if (!cidrsOverlap(zone.ipv4Cidr, other.ipv4Cidr)) continue;
-			throw new SteeringUnavailableError(
-				"overlapping_subnet",
-				`${zone.ifname} ${zone.ipv4Cidr} overlaps ${other.ifname} ${other.ipv4Cidr}`,
-			);
-		}
-	}
-}
-
-function assertDistinctMarks(candidates: readonly UplinkCandidate[]): void {
-	const owners = new Map<number, string>();
-	for (const candidate of candidates) {
-		const prior = owners.get(candidate.uplink.mark);
-		if (prior !== undefined) {
-			throw new SteeringUnavailableError(
-				"mark_collision",
-				`${prior} and ${candidate.uplink.ifname} resolve to one steering mark`,
-			);
-		}
-		owners.set(candidate.uplink.mark, candidate.uplink.ifname);
-	}
 }
 
 function wifiIdentity(ifname: string): string | null | undefined {
