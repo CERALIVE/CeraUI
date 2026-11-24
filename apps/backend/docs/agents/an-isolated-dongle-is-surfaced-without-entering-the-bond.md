@@ -952,6 +952,61 @@ the existing credential dialog. Coverage:
 owner retention) and `tests/modem-physical-identity.test.ts` (singleton refusal).
 Remove any sysfs serial bind mount before upgrading.
 
+### A twin's bond choice belongs to its port [EXISTS]
+
+An operator ON for a twin whose serial is unreadable used to be reversed
+silently once the serial returned and the scan showed the excluded pair key.
+The choice is now kept beside `bond_opt_out`, and only an operator toggle writes
+any of the three fields. Scans, reconciliation, restarts and reloads never
+write them. `modules/network/bond-preference.ts` owns the writer and the one
+reader used by `isBondOptedOut` and both phases of the last-uplink preview.
+
+| Field | Key | Meaning |
+|---|---|---|
+| `bond_opt_out` | exact or pair link id | Written by main's unchanged transition, so v2026.11.4 reads the bytes it would have written itself for the same successful saves |
+| `bond_group_out` | pair link id | A pair default that transition deleted; it still excludes an untouched twin. Under config authority, like `bond_opt_out` |
+| `bond_opt_in` | id-path link id | `{ vid, pin? }`: the operator's ON for a port-anchored USB modem. `pin` marks an exact bit main's transition derived for that port while it held the ON |
+
+The reader answers, first match wins:
+
+1. A session OFF excludes; an `ifname`-anchored row is included.
+2. An exact `bond_opt_out` bit excludes, unless it is a `pin` and the port's ON
+   applies.
+3. The port's ON applies when the row is port-anchored, its USB vendor id
+   equals the record's, and its pair key is twin evidence or absent. Twin
+   evidence is a confirmed shared serial, or another present port of the same
+   vendor showing the same placeholder (such as `0000`).
+4. Otherwise the pair key excludes when it is in `bond_opt_out`, or in
+   `bond_group_out` with twin evidence. A lone placeholder reads exactly as on
+   main.
+
+An OFF deletes the port's record. An OFF on a readable unique serial also
+deletes the record at that modem's port, and a serial ON deletes its own key
+from `bond_group_out`. The #697 guard code is unchanged: its preview runs this
+transition and reader.
+
+Signed trade-offs:
+
+- A same-brand modem later plugged into that port inherits the port's choice.
+  PID and pair do not block it; a different vendor id does.
+- A path change, such as a re-cabled hub, loses the ON. The twin falls back to
+  its pair default, which can leave a box with no other uplink without a link.
+- Rollback is byte parity of `bond_opt_out` for the same successful saves, not
+  membership parity. v2026.11.4 can admit an extra sibling, and can drop an ON
+  made while the serial was unreadable. Its clean save strips the new fields.
+- A readable unique-serial OFF beats a port ON and clears that port's record.
+- Modems reporting the same placeholder, including unrelated ones, are treated
+  as possible twins, and their choice sticks to the port.
+- An OFF on a held alias whose twins are not present still drops the pair
+  default, as before (`unseen-legacy` in `tests/bond-last-uplink-veto.test.ts`).
+- A non-twin's `bond_opt_out` bytes, membership, guard verdicts and answers are
+  main's. An ON for a port-anchored modem still adds a `bond_opt_in` record,
+  because at that moment it cannot be told apart from a twin whose serial is
+  unreadable.
+
+Coverage: `tests/bond-twin-port-record.test.ts`, through the real scan, the
+configure RPC and the sender candidates.
+
 **`stable_key` is NOT `identityKey`, and this todo did not re-key it.** The wire's
 `stable_key` keeps its exact meaning — the ID_PATH-derived key from the ONE shared
 `deriveModemStableKey` rule — because todo 17's consumers correlate on it, the

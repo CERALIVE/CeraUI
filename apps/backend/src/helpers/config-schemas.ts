@@ -409,6 +409,21 @@ export const runtimeConfigSchema = z.object({
 	// link id. Values can only be true: absence means included. A bare ifname is
 	// never accepted as a durable identity because the Huawei twins swap names.
 	bond_opt_out: z.record(z.string().min(1), z.literal(true)).optional(),
+	// Twin-pair exclusions a toggle deleted from `bond_opt_out` (exactly as
+	// v2026.11.4 deletes them) that still hold an untouched twin out. Keyed by
+	// the pair's legacy link id. Read only by this release; an old release's
+	// clean save drops it, which leaves its own `bond_opt_out` semantics.
+	bond_group_out: z.record(z.string().min(1), z.literal(true)).optional(),
+	// The operator's ON for a port-anchored USB modem, keyed by the id-path link
+	// id and scoped to the USB vendor id: a same-brand modem later at that port
+	// inherits it. `pin` marks an exact `bond_opt_out` bit main's writer derived
+	// for this port, which the ON outranks on this release only.
+	bond_opt_in: z
+		.record(
+			z.string().min(1),
+			z.object({ vid: z.string(), pin: z.literal(true).optional() }),
+		)
+		.optional(),
 	// SHA-256 of vendor:serial pairs observed on distinct USB parents.
 	usb_serial_shared: z
 		.array(z.string().regex(/^[0-9a-f]{64}$/))

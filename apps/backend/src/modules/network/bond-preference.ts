@@ -2,6 +2,7 @@ import { getConfig, saveConfig } from "../config.ts";
 import {
 	listPresentPhysicalDevices,
 	type PhysicalBondKeys,
+	portLinkId,
 } from "../modems/physical-identity.ts";
 import { resolveBondPhysicalIdentity } from "../streaming/bond-entry.ts";
 
@@ -22,19 +23,12 @@ export function previewBondOptOut(
 	target: string,
 	identity: PhysicalBondKeys | undefined,
 ) {
-	const stored = getConfig().bond_opt_out;
+	const stored = readPreferences();
+	const present = listPresentPhysicalDevices();
 	const next =
 		identity === undefined || identity.anchor === "ifname"
 			? stored
-			: transitionExactOptOut(
-					stored,
-					{
-						exact: identity.linkId,
-						legacy: identity.legacyLinkId,
-						optOut: true,
-					},
-					listPresentPhysicalDevices(),
-				);
+			: transition(stored, identity, true, present);
 	return (
 		name: string,
 		peer: PhysicalBondKeys | undefined,
@@ -42,22 +36,73 @@ export function previewBondOptOut(
 	) => {
 		if (sessionOptOut.has(name) || (phase === "after" && name === target))
 			return true;
-		return hasStoredOptOut(peer, phase === "after" ? next : stored);
+		return hasStoredOptOut(peer, phase === "after" ? next : stored, present);
 	};
 }
 
-type ExactOptOut = NonNullable<ReturnType<typeof getConfig>["bond_opt_out"]>;
+type RuntimeConfig = ReturnType<typeof getConfig>;
+type ExactOptOut = NonNullable<RuntimeConfig["bond_opt_out"]>;
+type PortOptIn = NonNullable<RuntimeConfig["bond_opt_in"]>;
+type BondPreferences = {
+	readonly out: ExactOptOut | undefined;
+	readonly groupOut: ExactOptOut | undefined;
+	readonly optIn: PortOptIn | undefined;
+};
+
+function readPreferences(): BondPreferences {
+	const config = getConfig();
+	return {
+		out: config.bond_opt_out,
+		groupOut: config.bond_group_out,
+		optIn: config.bond_opt_in,
+	};
+}
+
+const vendorOf = (keys: PhysicalBondKeys) =>
+	keys.vid?.trim().toLowerCase() ?? "";
+
+function portChoice(preferences: BondPreferences, keys: PhysicalBondKeys) {
+	const choice =
+		keys.anchor === "id-path" ? preferences.optIn?.[keys.linkId] : undefined;
+	return choice?.vid === vendorOf(keys) ? choice : undefined;
+}
+
+/**
+ * A pair key is twin evidence when the scan confirmed a shared serial, or when
+ * another present port of the same brand reports the same placeholder. A lone
+ * placeholder reads exactly as main does.
+ */
+function hasTwinEvidence(
+	keys: PhysicalBondKeys,
+	present: readonly PhysicalBondKeys[],
+): boolean {
+	return (
+		keys.sharedSerial === true ||
+		present.some(
+			(peer) =>
+				peer.linkId !== keys.linkId &&
+				peer.legacyLinkId === keys.legacyLinkId &&
+				vendorOf(peer) === vendorOf(keys),
+		)
+	);
+}
 
 function hasStoredOptOut(
 	identity: PhysicalBondKeys | undefined,
-	stored: ExactOptOut | undefined,
+	preferences: BondPreferences,
+	present: readonly PhysicalBondKeys[],
 ): boolean {
+	if (identity === undefined || identity.anchor === "ifname") return false;
+	const choice = portChoice(preferences, identity);
+	if (preferences.out?.[identity.linkId] === true && choice?.pin !== true)
+		return true;
+	const legacy = identity.legacyLinkId;
+	if (legacy === undefined) return false;
+	const twin = hasTwinEvidence(identity, present);
+	if (twin && choice !== undefined) return false;
 	return (
-		identity !== undefined &&
-		identity.anchor !== "ifname" &&
-		(stored?.[identity.linkId] === true ||
-			(identity.legacyLinkId !== undefined &&
-				stored?.[identity.legacyLinkId] === true))
+		preferences.out?.[legacy] === true ||
+		(twin && preferences.groupOut?.[legacy] === true)
 	);
 }
 
@@ -89,13 +134,65 @@ function transitionExactOptOut(
 	return next;
 }
 
+/**
+ * `bond_opt_out` is exactly main's transition, so v2026.11.4 reads the bytes it
+ * would have written itself. The pair default that transition deletes is kept
+ * in `bond_group_out`, and a port-anchored ON is recorded in `bond_opt_in`.
+ */
+function transition(
+	stored: BondPreferences,
+	target: PhysicalBondKeys,
+	optOut: boolean,
+	present: readonly PhysicalBondKeys[],
+): BondPreferences {
+	const legacy = target.legacyLinkId;
+	const out = transitionExactOptOut(
+		stored.out,
+		{ exact: target.linkId, legacy, optOut },
+		present,
+	);
+	const groupOut = { ...stored.groupOut };
+	const optIn = { ...stored.optIn };
+	if (legacy !== undefined && stored.out?.[legacy] === true) {
+		groupOut[legacy] = true;
+		for (const peer of present) {
+			const choice = portChoice(stored, peer);
+			// A pin main derived for a port that holds an ON yields to that ON here.
+			if (
+				peer.legacyLinkId === legacy &&
+				choice !== undefined &&
+				stored.out?.[peer.linkId] !== true &&
+				out[peer.linkId] === true
+			)
+				optIn[peer.linkId] = { vid: choice.vid, pin: true };
+		}
+	}
+	if (optOut) {
+		delete optIn[target.linkId];
+		const port =
+			target.anchor === "usb-serial" ? portLinkId(target.idPath) : undefined;
+		if (port !== undefined) delete optIn[port];
+	} else if (target.anchor === "id-path") {
+		optIn[target.linkId] = { vid: vendorOf(target) };
+	} else {
+		delete groupOut[target.linkId];
+	}
+	return { out, groupOut, optIn };
+}
+
 export function isBondOptedOut(ifname: string): boolean {
 	if (sessionOptOut.has(ifname)) return true;
 	const identity = resolveBondPhysicalIdentity(ifname);
 	if (identity === undefined || identity.anchor === "ifname") return false;
-	const stored = getConfig().bond_opt_out;
-	return hasStoredOptOut(identity, stored);
+	return hasStoredOptOut(
+		identity,
+		readPreferences(),
+		listPresentPhysicalDevices(),
+	);
 }
+
+const presentOrUndefined = <T extends object>(value: T | undefined) =>
+	value !== undefined && Object.keys(value).length > 0 ? value : undefined;
 
 export function setPersistentBondOptOut(
 	ifname: string,
@@ -103,25 +200,29 @@ export function setPersistentBondOptOut(
 ): string | undefined {
 	if (optOut) sessionOptOut.add(ifname);
 	else sessionOptOut.delete(ifname);
-	const physicalId = bondPhysicalId(ifname);
-	if (physicalId === undefined) return undefined;
-
-	const stored = getConfig().bond_opt_out;
 	const identity = resolveBondPhysicalIdentity(ifname);
-	const legacy = identity?.legacyLinkId;
-	const next = transitionExactOptOut(
-		stored,
-		{ exact: physicalId, legacy, optOut },
+	if (identity === undefined || identity.anchor === "ifname") return undefined;
+
+	const next = transition(
+		readPreferences(),
+		identity,
+		optOut,
 		listPresentPhysicalDevices(),
 	);
-	getConfig().bond_opt_out = Object.keys(next).length === 0 ? undefined : next;
+	const config = getConfig();
+	config.bond_opt_out = presentOrUndefined(next.out);
+	config.bond_group_out = presentOrUndefined(next.groupOut);
+	config.bond_opt_in = presentOrUndefined(next.optIn);
 	saveConfig();
-	return physicalId;
+	return identity.linkId;
 }
 
 export function resetPersistentBondOptOutForTest(): void {
 	sessionOptOut.clear();
-	getConfig().bond_opt_out = undefined;
+	const config = getConfig();
+	config.bond_opt_out = undefined;
+	config.bond_group_out = undefined;
+	config.bond_opt_in = undefined;
 }
 
 export function resetSessionBondOptOutForTest(): void {
