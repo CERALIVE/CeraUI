@@ -29,6 +29,7 @@ import {
 	NAMESPACES,
 	type Namespace,
 } from "@ceraui/i18n/svelte";
+import { recoverBootNamespace } from "./boot-namespace-recovery";
 
 /**
  * Keyed by the `navElements` destination key: the namespaces ONLY that destination
@@ -76,8 +77,13 @@ export const BOOT_NAMESPACES: readonly Namespace[] = NAMESPACES.filter(
 );
 
 /** Resolve the shell set. `main.ts` awaits exactly this before it mounts. */
-export function ensureBootNamespaces(): Promise<void> {
-	return ensureNamespaces(BOOT_NAMESPACES);
+export async function ensureBootNamespaces(): Promise<void> {
+	try {
+		await ensureNamespaces(BOOT_NAMESPACES);
+	} catch (error) {
+		recoverBootNamespace(error);
+		throw error;
+	}
 }
 
 /**
