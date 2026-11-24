@@ -123,18 +123,19 @@ const armedStreamConfigSchema = z.object({
 });
 export type ArmedStreamConfig = z.infer<typeof armedStreamConfigSchema>;
 
-let launchedAsrc: string | undefined;
+let launchedAsrc: string | null | undefined;
 
 /**
  * The audio pick the latest launch was bound to, when that launch does not follow
- * the saved one: a "No audio" Start stays without audio if it is restored, even
- * when another pick was saved while it was being prepared.
+ * the saved one (`null` when it does): a "No audio" Start stays without audio if it
+ * is restored, even when another pick was saved while it was being prepared.
+ * `undefined` when no launch of this process can be the running stream.
  */
-export function pinLaunchedAsrc(asrc: string | undefined): void {
+export function pinLaunchedAsrc(asrc: string | null | undefined): void {
 	launchedAsrc = asrc;
 }
 
-export function pinnedLaunchedAsrc(): string | undefined {
+export function pinnedLaunchedAsrc(): string | null | undefined {
 	return launchedAsrc;
 }
 
@@ -277,6 +278,7 @@ export function noteStreamStopped(
 	deps: ArmedStreamMarkerDeps = defaultArmedStreamMarkerDeps,
 ): void {
 	if (cause !== "operator") return;
+	pinLaunchedAsrc(undefined);
 	clearArmedStreamMarker(deps);
 }
 

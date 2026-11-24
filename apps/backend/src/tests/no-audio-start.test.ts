@@ -21,10 +21,14 @@ import {
 	setConfigFilePath,
 } from "../modules/config.ts";
 import { setup } from "../modules/setup.ts";
+import { noteStreamStopped } from "../modules/streaming/armed-stream-marker.ts";
 import * as audio from "../modules/streaming/audio.ts";
 import * as autoAudio from "../modules/streaming/auto-audio.ts";
 import { clearCapabilitiesCache } from "../modules/streaming/capabilities.ts";
-import { initPipelines } from "../modules/streaming/pipelines.ts";
+import {
+	initPipelines,
+	type Pipeline,
+} from "../modules/streaming/pipelines.ts";
 import { setPreviewEncodeReplayTransport } from "../modules/streaming/preview-encode-replay.ts";
 import * as srtla from "../modules/streaming/srtla.ts";
 import { captureArmedStreamConfig } from "../modules/streaming/stream-restoration.ts";
@@ -38,6 +42,13 @@ import {
 	setStartStreamDepsForTest,
 	startStream,
 } from "../modules/streaming/streamloop/start-stream.ts";
+import { sendStatus } from "../modules/ui/status.ts";
+import * as websocketServer from "../modules/ui/websocket-server.ts";
+import { setAudioMixProcedure } from "../rpc/procedures/audio-mix.procedure.ts";
+import {
+	buildInitialStatus,
+	getStatusProcedure,
+} from "../rpc/procedures/status.procedure.ts";
 import {
 	setConfigProcedure,
 	streamingStartProcedure,
@@ -86,6 +97,17 @@ const mixOnTheWire = [
 	{ ...entry("", [1]), input_id: "hw:CARD=primary" },
 	{ ...entry("", [2]), input_id: "hw:CARD=second" },
 ].map(({ id: _id, ...input }) => input);
+
+const TEST_PIPELINE = {
+	source: "test",
+	name: "Test",
+	hardware: "rk3588",
+	description: "test",
+	supportsAudio: true,
+	supportsResolutionOverride: true,
+	supportsFramerateOverride: true,
+	audio_kind: "selectable",
+} satisfies Pipeline;
 
 let directory: string;
 let previousPath: string;
@@ -284,6 +306,274 @@ test.each(Object.keys(GATES))(
 	},
 );
 
+// The Live screen's Start carries every saved stream field, `asrc` included.
+const uiStart = (asrc: string, extra = {}) =>
+	start({
+		pipeline: "test",
+		delay: 0,
+		max_br: 8000,
+		srt_latency: 2000,
+		bitrate_overlay: false,
+		relay_protocol: "srtla",
+		srtla_addr: "127.0.0.1",
+		srtla_port: 5000,
+		srt_streamid: "no-audio",
+		asrc,
+		...extra,
+	});
+// The last of each is a save that repeats the pick that was already saved.
+const ORDERINGS = Object.keys(GATES).flatMap((stage) =>
+	(["Second", "Primary", "No audio"] as const).map(
+		(saved) => [stage, saved] as const,
+	),
+);
+
+test.each(ORDERINGS)(
+	"No audio saved during %s (%s saved before) beats the microphone in an older Start payload and stays saved",
+	async (stage, saved) => {
+		getConfig().asrc = saved;
+		saveConfig();
+		GATES[stage]?.();
+		const started = uiStart("Primary");
+		await reached.promise;
+		expect(await pick("No audio")).toMatchObject({ success: true });
+		gate.resolve();
+		const result = await started;
+		expect(result).toMatchObject({ success: true });
+		expect(launchedAudio()).toEqual([{ mode: "none", delay_ms: 0 }]);
+		expect(await disk()).toMatchObject({
+			asrc: "No audio",
+			audio_inputs: savedMix,
+		});
+
+		await stop();
+		expect(await start()).toMatchObject({ success: true });
+		expect(launchedAudio()[1]).toEqual({ mode: "none", delay_ms: 0 });
+		expect(result.applied?.asrc).not.toBe("Primary");
+	},
+);
+
+test.each(ORDERINGS)(
+	"a microphone saved during %s (%s saved before) survives an older No audio Start payload, which stays silent",
+	async (stage, saved) => {
+		getConfig().asrc = saved;
+		saveConfig();
+		GATES[stage]?.();
+		const started = uiStart("No audio");
+		await reached.promise;
+		expect(await pick("Primary")).toMatchObject({ success: true });
+		gate.resolve();
+		const result = await started;
+		expect(result).toMatchObject({ success: true });
+		expect(launchedAudio()).toEqual([{ mode: "none", delay_ms: 0 }]);
+		expect(await disk()).toMatchObject({ asrc: "Primary" });
+
+		await stop();
+		expect(await start()).toMatchObject({ success: true });
+		expect(launchedAudio()[1]).toEqual({
+			mode: "default",
+			inputs: mixOnTheWire,
+			delay_ms: 0,
+		});
+		expect(result.applied?.asrc).not.toBe("No audio");
+	},
+);
+
+test("without a newer save the Start payload's own pick is still saved and launched", async () => {
+	getConfig().asrc = "Second";
+	saveConfig();
+	expect(await uiStart("No audio")).toMatchObject({
+		success: true,
+		applied: { asrc: "No audio" },
+	});
+	expect(launchedAudio()).toEqual([{ mode: "none", delay_ms: 0 }]);
+	expect(await disk()).toMatchObject({ asrc: "No audio" });
+});
+
+test("an older payload's microphone that was unplugged meanwhile does not fail the Start No audio replaced it in", async () => {
+	getConfig().asrc = "Second";
+	saveConfig();
+	GATES["update admission"]?.();
+	const started = uiStart("Primary");
+	await reached.promise;
+	await pick("No audio");
+	audio.setMockAudioDevicesProvider(() => ({ Second: "hw:CARD=second" }));
+	gate.resolve();
+	expect(await started).toMatchObject({ success: true });
+	expect(launchedAudio()).toEqual([{ mode: "none", delay_ms: 0 }]);
+});
+
+const newerMix = [entry("Primary", [1]), entry("Second", [1])];
+const context = () => ({ context: makeRpcContext() });
+test.each([
+	[
+		"a saved mix",
+		() => call(setConfigProcedure, { audio_inputs: newerMix }, context()),
+		newerMix,
+	],
+	[
+		"the mix cleared again",
+		() => call(setConfigProcedure, { audio_inputs: null }, context()),
+		undefined,
+	],
+	[
+		"a membership edit",
+		() => call(setAudioMixProcedure, { id: "Third", include: true }, context()),
+		[...savedMix, entry("Third", [1])],
+	],
+	[
+		"a level edit",
+		() => call(setAudioMixProcedure, { id: "Second", gain_db: -6 }, context()),
+		[savedMix[0], { ...entry("Second", [2]), gain_db: -6 }],
+	],
+] as const)(
+	"%s saved during update admission survives an older mix in the Start payload",
+	async (name, save, expected) => {
+		getConfig().asrc = "Primary";
+		if (name === "the mix cleared again") getConfig().audio_inputs = undefined;
+		saveConfig();
+		GATES["update admission"]?.();
+		const started = uiStart("Primary", {
+			audio_inputs: [entry("Primary", [1]), entry("Third", [2])],
+		});
+		await reached.promise;
+		expect(await save()).toMatchObject({ success: true });
+		gate.resolve();
+		expect(await started).toMatchObject({ success: true });
+		expect((await disk()).audio_inputs).toEqual(expected);
+	},
+);
+
+test("a pick saved during update admission replaces the Start's pick and not its mix", async () => {
+	getConfig().asrc = "Primary";
+	saveConfig();
+	GATES["update admission"]?.();
+	const own = [entry("Primary", [1]), entry("Third", [2])];
+	const started = uiStart("Primary", { audio_inputs: own });
+	await reached.promise;
+	await pick("No audio");
+	gate.resolve();
+	expect(await started).toMatchObject({ success: true });
+	expect(await disk()).toMatchObject({ asrc: "No audio", audio_inputs: own });
+});
+
+test("a card that re-enumerated during update admission keeps its migrated pick", async () => {
+	getConfig().asrc = "Second";
+	saveConfig();
+	GATES["update admission"]?.();
+	const started = uiStart("Second");
+	await reached.promise;
+	expect(
+		audio.reconcileConfiguredAudioIdentity(
+			new Map([["Primary", { stable_id: "mic" }]]) as never,
+			{ Primary: "hw:CARD=primary" },
+			new Map([["Second", "mic"]]),
+		),
+	).toBe(true);
+	gate.resolve();
+	expect(await started).toMatchObject({ success: true });
+	expect(await disk()).toMatchObject({ asrc: "Primary" });
+});
+
+test("a card that re-enumerated during update admission does not undo the payload's own No audio", async () => {
+	getConfig().asrc = "Second";
+	saveConfig();
+	GATES["update admission"]?.();
+	const started = uiStart("No audio");
+	await reached.promise;
+	audio.reconcileConfiguredAudioIdentity(
+		new Map([["Primary", { stable_id: "mic" }]]) as never,
+		{ Primary: "hw:CARD=primary" },
+		new Map([["Second", "mic"]]),
+	);
+	gate.resolve();
+	expect(await started).toMatchObject({ success: true });
+	expect(launchedAudio()).toEqual([{ mode: "none", delay_ms: 0 }]);
+	expect(await disk()).toMatchObject({ asrc: "No audio" });
+});
+
+const offActive = async () => ({
+	snapshot: buildInitialStatus().status.audio_off_active,
+	pulled: (await call(getStatusProcedure, undefined, context()))
+		.audio_off_active,
+});
+const offOnConnect = () => {
+	const send = jest.fn((_frame: string) => {});
+	sendStatus({ send } as never);
+	return send.mock.calls
+		.map(([frame]) => JSON.parse(frame).status)
+		.find((status) => status?.is_streaming !== undefined)?.audio_off_active;
+};
+
+test("the running stream says it is silent whatever is saved, and Stop withdraws it", async () => {
+	const frames = spyOn(websocketServer, "broadcastMsg");
+	const sent = () =>
+		frames.mock.calls
+			.filter(([type]) => type === "status")
+			.map(([, body]) => body as Record<string, unknown>)
+			.filter((body) => "audio_off_active" in body)
+			.map(({ is_streaming, audio_off_active }) => [
+				is_streaming,
+				audio_off_active,
+			]);
+	expect(await offActive()).toEqual({ snapshot: false, pulled: false });
+	GATES["preview replay"]?.();
+	const started = start();
+	await reached.promise;
+	await pick("Primary");
+	gate.resolve();
+	expect(await started).toMatchObject({ success: true });
+	expect(getConfig().asrc).toBe("Primary");
+	expect(await offActive()).toEqual({ snapshot: true, pulled: true });
+	expect(offOnConnect()).toBe(true);
+	expect(sent().at(-1)).toEqual([true, true]);
+
+	await stop();
+	expect(await offActive()).toEqual({ snapshot: false, pulled: false });
+	expect(sent().at(-1)).toEqual([false, false]);
+
+	expect(await start()).toMatchObject({ success: true });
+	expect(await offActive()).toEqual({ snapshot: false, pulled: false });
+	await pick("No audio");
+	expect(await offActive()).toEqual({ snapshot: false, pulled: false });
+});
+
+test("a silent stream restored after an engine loss is still silent and says so", async () => {
+	GATES["preview replay"]?.();
+	const started = start();
+	await reached.promise;
+	await pick("Primary");
+	gate.resolve();
+	await started;
+	const armed = captureArmedStreamConfig();
+	noteStreamStopped("engine_loss");
+	updateStatus(false);
+	expect((await offActive()).snapshot).toBe(false);
+
+	expect(
+		await startStream(
+			TEST_PIPELINE,
+			"192.0.2.10",
+			5000,
+			"restored",
+			{},
+			"restored",
+			armed,
+		),
+	).toEqual({ success: true });
+	updateStatus(true);
+	expect(launchedAudio().at(-1)).toEqual({ mode: "none", delay_ms: 0 });
+	expect(await offActive()).toEqual({ snapshot: true, pulled: true });
+});
+
+test("a stream adopted after Stop carries no claim left over from the stream before it", async () => {
+	expect(await start()).toMatchObject({ success: true });
+	expect((await offActive()).snapshot).toBe(true);
+	await stop();
+	updateStatus(true);
+	expect(await offActive()).toEqual({ snapshot: undefined, pulled: undefined });
+});
+
 test("autostart keeps the No audio it was accepted with", async () => {
 	spyOn(srtla, "genSrtlaIpList").mockReturnValue(["192.0.2.2"]);
 	GATES["relay address lookup"]?.();
@@ -383,23 +673,9 @@ async function launchAutoOnDeadHdmi() {
 	});
 	spyOn(autoAudio, "resolveAutoAsrcFromLiveState").mockReturnValue(resolution);
 	getConfig().asrc = "Auto";
-	expect(
-		await startStream(
-			{
-				source: "test",
-				name: "Test",
-				hardware: "rk3588",
-				description: "test",
-				supportsAudio: true,
-				supportsResolutionOverride: true,
-				supportsFramerateOverride: true,
-				audio_kind: "selectable",
-			},
-			"192.0.2.10",
-			5000,
-			"auto",
-		),
-	).toEqual({ success: true });
+	expect(await startStream(TEST_PIPELINE, "192.0.2.10", 5000, "auto")).toEqual({
+		success: true,
+	});
 	return launchedAudio()[0];
 }
 
@@ -434,4 +710,6 @@ test("No audio picked while Auto's card is being checked also sends no audio", a
 test("Auto on a card that cannot capture without a saved mix still starts without audio", async () => {
 	getConfig().audio_inputs = undefined;
 	expect(await launchAutoOnDeadHdmi()).toEqual({ mode: "none", delay_ms: 0 });
+	updateStatus(true);
+	expect(await offActive()).toEqual({ snapshot: false, pulled: false });
 });

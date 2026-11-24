@@ -28,9 +28,9 @@ import { isUpdating } from "../../system/software-updates.ts";
 import { sendStatus } from "../../ui/status.ts";
 import { getSocketSenderId } from "../../ui/websocket-server.ts";
 import {
+	acceptStartAudio,
 	clearAsrcProbeReject,
 	isAsrcProbeRejectResolved,
-	isNoAudioPick,
 } from "../audio.ts";
 import { setPendingAudioFollowAsrc } from "../auto-audio.ts";
 import { clearBindMapReport } from "../bind-map-disposition.ts";
@@ -77,7 +77,7 @@ export async function start(
 	params: ConfigParameters,
 	generation = 0,
 	attemptId = "legacy-start",
-	audioOff = isNoAudioPick(params.asrc),
+	startAudio = acceptStartAudio(params.asrc),
 ): Promise<StartStreamResult> {
 	assertStreamLaunchOwnership();
 	const ownsLaunch = currentStreamLaunchOwner();
@@ -110,7 +110,7 @@ export async function start(
 		streamid: string;
 	};
 	try {
-		c = await updateConfig(params);
+		c = await updateConfig(params, startAudio);
 		assertStreamLaunchOwnership();
 	} catch (err) {
 		if (typeof err === "string") {
@@ -186,7 +186,7 @@ export async function start(
 			{},
 			attemptId,
 			undefined,
-			audioOff,
+			startAudio.off,
 		);
 	} catch (err) {
 		if (sessionResources?.generation === generation) {

@@ -49,8 +49,8 @@ import {
 	setSocketSenderId,
 } from "../ui/websocket-server.ts";
 import { notifyWifiAdapterModeEdge } from "../wifi/wifi-adapter-mode-events.ts";
-import { getAudioDevices } from "./audio.ts";
-import { getAudioMixActive } from "./audio-mix-status.ts";
+import { acceptStartAudio, getAudioDevices, type StartAudio } from "./audio.ts";
+import { getAudioMixActive, getAudioOffActive } from "./audio-mix-status.ts";
 import { getLastCapabilities, getSupportedTransports } from "./capabilities.ts";
 import { isCompositionSupported } from "./composition.ts";
 import { validateBitrate } from "./encoder.ts";
@@ -107,6 +107,7 @@ export function updateStatus(status: boolean) {
 		broadcastMsg("status", {
 			is_streaming: isStreaming,
 			audio_mix_active: getAudioMixActive(),
+			audio_off_active: getAudioOffActive(),
 		});
 
 		return true;
@@ -267,7 +268,10 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 	return { pipeline, srtlaAddr, srtlaPort, streamid };
 }
 
-export async function updateConfig(requestedParams: ConfigParameters) {
+export async function updateConfig(
+	requestedParams: ConfigParameters,
+	startAudio: StartAudio = acceptStartAudio(),
+) {
 	// Every start is a partial update over the persisted stream config. Keep the
 	// merge at this shared seam: UI starts arrive through session.start, while a
 	// set-profile reconnect calls it directly with {}. Parsing through the wire
@@ -275,9 +279,8 @@ export async function updateConfig(requestedParams: ConfigParameters) {
 	// never ride the applied start object.
 	const params: ConfigParameters = mergePersistedStartConfig(
 		getConfig(),
-		requestedParams,
+		startAudio.fresh(requestedParams),
 	);
-	const { asrc: asrcAtStart, audio_inputs: inputsAtStart } = getConfig();
 
 	const {
 		pipeline,
@@ -312,15 +315,12 @@ export async function updateConfig(requestedParams: ConfigParameters) {
 		// concrete codec here; narrow to the config's codec enum.
 		config.acodec = params.acodec as typeof config.acodec;
 	}
-	// Audio saved while this Start was being checked is newer than the Start's copy.
-	if (pipeline.supportsAudio && params.asrc && config.asrc === asrcAtStart) {
-		config.asrc = params.asrc;
+	const audio = startAudio.fresh(params);
+	if (pipeline.supportsAudio && audio.asrc) {
+		config.asrc = audio.asrc;
 	}
-	if (
-		params.audio_inputs !== undefined &&
-		config.audio_inputs === inputsAtStart
-	)
-		config.audio_inputs = params.audio_inputs ?? undefined;
+	if (audio.audio_inputs !== undefined)
+		config.audio_inputs = audio.audio_inputs ?? undefined;
 
 	if (params.relay_server) {
 		config.relay_server = params.relay_server;

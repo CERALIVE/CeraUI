@@ -8,6 +8,7 @@ import { os } from "@orpc/server";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { setMockAudioMix } from "../../mocks/providers/streaming.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
+import { noteAudioSaved } from "../../modules/streaming/audio.ts";
 import {
 	changedAudioInputs,
 	effectiveAudioInputs,
@@ -37,6 +38,7 @@ export const setAudioMixProcedure = os
 			const changed = changedAudioInputs(config, id, { include, track });
 			if ("error" in changed) return { success: false, error: changed.error };
 			config.audio_inputs = storedAudioInputs(changed.inputs, config);
+			noteAudioSaved("audio_inputs");
 			saveConfig();
 			broadcastMsg("config", config);
 			const entry = changed.inputs.find((input) => input.id === id);
@@ -123,6 +125,7 @@ export const setAudioMixProcedure = os
 		// A pending membership/track edit stays pending; a live write changes values only.
 		if (!live || config.audio_inputs !== undefined) {
 			config.audio_inputs = storedAudioInputs(next, config);
+			noteAudioSaved("audio_inputs");
 			saveConfig();
 			broadcastMsg("config", config);
 		}

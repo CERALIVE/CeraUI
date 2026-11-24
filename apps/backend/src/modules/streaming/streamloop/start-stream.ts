@@ -312,7 +312,7 @@ export async function startStream(
 		const noAudio =
 			(!autoAudio && launchConfig.asrc === NO_AUDIO_ID) ||
 			(configOverride === undefined && isNoAudioPick());
-		pinLaunchedAsrc(noAudio ? NO_AUDIO_ID : undefined);
+		pinLaunchedAsrc(noAudio ? NO_AUDIO_ID : null);
 		await startStreamDeps.getStreamingBackend().start(
 			launchConfig,
 			{

@@ -66,7 +66,8 @@ import {
 import { getConfig, saveConfig } from "../../modules/config.ts";
 import { reportActiveProfile } from "../../modules/remote-control/active-profile-reporter.ts";
 import {
-	isNoAudioPick,
+	acceptStartAudio,
+	noteAudioSaved,
 	refreshBluetoothAudioDevices,
 } from "../../modules/streaming/audio.ts";
 import {
@@ -257,7 +258,7 @@ export const streamingStartProcedure = authedProcedure
 	.handler(async ({ input, context }) => {
 		let appliedResponse: StreamingConfigInput | undefined;
 		let legacyError: string | undefined;
-		const audioOff = isNoAudioPick(input.asrc);
+		const startAudio = acceptStartAudio(input.asrc);
 		const lifecycleResult = await startStreamSession({
 			origin:
 				context.ws.remoteAddress === "control-channel"
@@ -382,14 +383,18 @@ export const streamingStartProcedure = authedProcedure
 						framerate: applied.framerate,
 						max_br: applied.max_br,
 					});
+					const fresh = startAudio.fresh(applied);
 					const config = {
 						...getConfig(),
-						...applied,
-						audio_inputs: applied.audio_inputs ?? getConfig().audio_inputs,
+						...fresh,
+						audio_inputs: fresh.audio_inputs ?? getConfig().audio_inputs,
 						composition: applied.composition ?? getConfig().composition,
 						video_codec: applied.video_codec ?? getConfig().video_codec,
 					};
-					const audio = launchAudioPlan(config, audioOff ? { audioOff } : {});
+					const audio = launchAudioPlan(
+						config,
+						startAudio.off ? { audioOff: true } : {},
+					);
 					// What the engine adapter hands over at a real start, after
 					// `validateConfig` drops a composition the engine does not advertise.
 					const composition =
@@ -416,7 +421,7 @@ export const streamingStartProcedure = authedProcedure
 						is_streaming: true,
 						audio_mix_active: getAudioMixActive(),
 					});
-					appliedResponse = applied;
+					appliedResponse = fresh;
 					return;
 				}
 				// The existing start function handles validation and config saving.
@@ -427,7 +432,7 @@ export const streamingStartProcedure = authedProcedure
 					applied,
 					generation,
 					attemptId,
-					audioOff,
+					startAudio,
 				);
 				if (!startResult.success) {
 					legacyError = startResult.error;
@@ -447,7 +452,7 @@ export const streamingStartProcedure = authedProcedure
 						attemptId,
 					);
 				}
-				appliedResponse = applied;
+				appliedResponse = startAudio.fresh(applied);
 			},
 		});
 		return startResponse(lifecycleResult, appliedResponse, legacyError);
@@ -951,9 +956,14 @@ export const setConfigProcedure = authedProcedure
 		if (input.delay !== undefined) config.delay = input.delay;
 		if (input.pipeline !== undefined) config.pipeline = input.pipeline;
 		if (input.acodec !== undefined) config.acodec = input.acodec;
-		if (input.asrc !== undefined) config.asrc = input.asrc;
-		if (audioInputs !== undefined)
+		if (input.asrc !== undefined) {
+			config.asrc = input.asrc;
+			noteAudioSaved("asrc");
+		}
+		if (audioInputs !== undefined) {
 			config.audio_inputs = storedAudioInputs(audioInputs, audioConfig);
+			noteAudioSaved("audio_inputs");
+		}
 		// Never staged behind `apply_now`: the engine fixes its audio backend when
 		// it builds the graph and answers a live reload with `applies:
 		// "next-session"`, so this can only ever take effect at the next start.

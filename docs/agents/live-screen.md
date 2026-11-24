@@ -448,7 +448,9 @@ must keep that ABI.
   RTMP or SRT ingest the Source card keeps `audio-source-select` (live,
   `audio-source-readonly`) reading "No audio" instead of
   `audio-source-embedded`, and the Audio dialog and the live summary say "No
-  audio" too.
+  audio" too. While a stream runs, the summary says it from the session's own
+  `audio_off_active`, not from the pick saved for the next Start; a session that
+  does not report it is read by the saved pick.
 - The main input is always in the mix Start sends, decided where it is used,
   never by a follow-up save: the backend's `effectiveAudioInputs` adds a main
   input outside the saved mix first at its defaults on Track 1 (the old main

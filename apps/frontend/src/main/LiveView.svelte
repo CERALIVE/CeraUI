@@ -1089,6 +1089,12 @@ const summaryAudio = $derived.by(() => {
 		entries,
 		t,
 	);
+	// A running stream says itself whether it is silent; the saved pick is the next
+	// Start's. One that does not say (older device, adopted stream) is read by the pick.
+	const runningOff = isStreaming ? getStatus()?.audio_off_active : undefined;
+	const pickedOff = effectiveAudioSource === AUDIO_SOURCE_NO_AUDIO;
+	if (runningOff ?? pickedOff)
+		return { current: t('audio.sources.noAudio'), pending: resolved.pending, embedded: false };
 	const activeSrc = config?.source
 		? getSources()?.sources.find((s) => s.id === config.source)
 		: undefined;
@@ -1097,17 +1103,14 @@ const summaryAudio = $derived.by(() => {
 	let current: string | undefined;
 	if (resolved.current) {
 		current = resolved.current;
-	} else if (effectiveAudioSource) {
+	} else if (effectiveAudioSource && !pickedOff) {
 		const entry = entries.find((e) => e.id === effectiveAudioSource);
 		current = entry ? audioSourceLabel(entry, t) : effectiveAudioSource;
 	}
 	return {
 		current,
 		pending: resolved.pending,
-		// An explicit "No audio" sends nothing, so it outranks the source's own sound.
-		embedded:
-			effectiveAudioSource !== AUDIO_SOURCE_NO_AUDIO &&
-			(resolved.embedded || embeddedActive),
+		embedded: resolved.embedded || embeddedActive,
 	};
 });
 

@@ -123,11 +123,16 @@ no `device` whatever mix is saved, and the saved mix stays on disk for the
 next pick; `Pipeline default` with a saved mix still sends that mix.
 Only the operator's own pick counts: Auto's launch copy can also read
 "No audio" (`no-capture-audio`), so `startStream` passes `audioOff: false` there
-and a saved mix is still sent. A "No audio" Start is bound where it is accepted
-(`isNoAudioPick` in the Start RPC, autostart and `session.start`): a pick saved
-while it is being prepared counts for the next Start, `updateConfig` does not
-overwrite it, and the armed marker restores the stream without audio. "No audio"
-saved before the engine request is built also wins over an accepted device or Auto
+and a saved mix is still sent. A Start's audio is bound where it is accepted,
+before update admission (`acceptStartAudio` in the Start RPC, autostart and
+`session.start`). A "No audio" Start stays without audio whatever is saved
+meanwhile, and the armed marker restores it that way. An audio choice saved after
+acceptance is newer than the Start's own explicit `asrc` / `audio_inputs`, even
+when it repeats the saved value: `StartAudio.fresh` drops the older field before
+validation, before the save and from the reply, so the newer choice stays for the
+next Start. Every writer of those two fields calls `noteAudioSaved`; a migrated
+card id counts only against a payload that restates the old id. "No audio" saved
+before the engine request is built also wins over an accepted device or Auto
 pick. The compatibility
 start-schema export aliases the published producer schema, preserving its
 additive audio fields.
@@ -137,6 +142,10 @@ next-start saves. Status snapshots, updates and initial hydration carry it;
 Stop, engine idle or connection loss withdraw it. Only an active mix refuses
 `switchAudio` with `audio_mix_active`. A legacy session retains live source
 switching even after a mix is saved.
+
+`audio_off_active` says on the same surfaces whether the running session was
+launched without audio by the operator's choice, whatever pick is saved now. It is
+omitted for a stream this process adopted instead of launching.
 
 `streaming.setAudioMix({ id, gain_db?, mute?, delay_ms? })` uses that session's
 admitted input identity. A live mix sends one producer `setAudioMix` request,

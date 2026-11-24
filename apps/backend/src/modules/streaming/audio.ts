@@ -92,11 +92,54 @@ export function isPseudoAudioSource(asrc: string): boolean {
 	return PSEUDO_AUDIO_SOURCES.has(asrc);
 }
 
-/** Did the operator choose "No audio"? A Start reads this once, when it is accepted. */
+/** Did the operator choose "No audio"? */
 export function isNoAudioPick(
 	asrc: string | undefined = getConfig().asrc,
 ): boolean {
 	return asrc === NO_AUDIO_ID;
+}
+
+const audioSaves = { asrc: 0, audio_inputs: 0 };
+
+/** An audio choice was saved; a save that repeats the saved value counts too. */
+export function noteAudioSaved(field: keyof typeof audioSaves): void {
+	audioSaves[field] += 1;
+}
+
+export interface StartAudio {
+	/** The Start was accepted with the operator's "No audio". */
+	readonly off: boolean;
+	/** `payload` without the audio choices that something saved since has replaced. */
+	readonly fresh: <
+		T extends { asrc?: string | undefined; audio_inputs?: unknown },
+	>(
+		payload: T,
+	) => T;
+}
+
+/**
+ * A Start's audio, read where the Start is accepted and before anything it waits
+ * for. A choice saved after that is newer than the Start's own payload, whatever
+ * its value; a payload that only restates the saved pick also yields to its
+ * migrated id.
+ */
+export function acceptStartAudio(requested?: string): StartAudio {
+	const accepted = { ...audioSaves };
+	const saved = getConfig().asrc;
+	return {
+		off: isNoAudioPick(requested),
+		fresh: (payload) => {
+			const fresh = { ...payload };
+			if (
+				audioSaves.asrc !== accepted.asrc ||
+				(payload.asrc === saved && getConfig().asrc !== saved)
+			)
+				delete fresh.asrc;
+			if (audioSaves.audio_inputs !== accepted.audio_inputs)
+				delete fresh.audio_inputs;
+			return fresh;
+		},
+	};
 }
 
 export function isSelectedAudioLost(

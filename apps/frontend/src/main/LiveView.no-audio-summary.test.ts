@@ -8,62 +8,74 @@
  * says "No audio", while Auto on the same ingest still says "Embedded audio".
  */
 import { render } from "@testing-library/svelte";
-import { describe, expect, it, vi } from "vitest";
+import { flushSync } from "svelte";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const view = vi.hoisted(() => ({ asrc: "No audio" }));
+import { streamingFlag } from "../tests/fixtures/reactive-streaming.svelte";
+
+const view = vi.hoisted(() => ({
+	asrc: "No audio",
+	offActive: undefined as boolean | undefined,
+}));
 
 vi.mock("$lib/config", () => ({
 	navElements: { network: { label: "Network" } },
 }));
 
-vi.mock("$lib/rpc/subscriptions.svelte", () => ({
-	getConfig: () => ({
-		relay_server: "fra",
-		max_br: 6000,
-		pipeline: "rtmp",
-		source: "rtmp",
-		asrc: view.asrc,
-	}),
-	getIsStreaming: () => true,
-	getSensors: () => ({}),
-	getLinkTelemetry: () => null,
-	getAudioLevel: () => undefined,
-	getDevices: () => [],
-	getActiveInput: () => undefined,
-	getConnectionState: () => "connected",
-	getIsConnected: () => true,
-	getCapabilities: () => ({ network_embedded_audio: true }),
-	getConfigChange: () => undefined,
-	getNetif: () => ({}),
-	getRelays: () => undefined,
-	getManagedIngestAccounts: () => [],
-	// A leftover Auto broadcast still names the ingest's embedded audio.
-	getStatus: () => ({
-		asrcs: ["USB audio", "No audio", "Pipeline default"],
-		resolved_asrc: null,
-		resolved_asrc_reason: "embedded",
-	}),
-	getPipelines: () => ({ pipelines: {} }),
-	getSources: () => ({
-		hardware: "rk3588",
-		sources: [
-			{
-				origin: "network",
-				id: "rtmp",
-				pipelineId: "rtmp",
-				labelKey: "settings.sources.rtmp",
-				requiresGateway: "rtmp",
-				url: "rtmp://192.168.1.100:1935/publish/live",
-				modes: [],
-				supportsAudio: true,
-				supportsResolutionOverride: false,
-				supportsFramerateOverride: false,
-				audioKind: "embedded",
-				available: true,
-			},
-		],
-	}),
-}));
+vi.mock("$lib/rpc/subscriptions.svelte", async () => {
+	const { streamingFlag } = await import(
+		"../tests/fixtures/reactive-streaming.svelte"
+	);
+	return {
+		getConfig: () => ({
+			relay_server: "fra",
+			max_br: 6000,
+			pipeline: "rtmp",
+			source: "rtmp",
+			asrc: view.asrc,
+		}),
+		getIsStreaming: () => streamingFlag.value,
+		getSensors: () => ({}),
+		getLinkTelemetry: () => null,
+		getAudioLevel: () => undefined,
+		getDevices: () => [],
+		getActiveInput: () => undefined,
+		getConnectionState: () => "connected",
+		getIsConnected: () => true,
+		getCapabilities: () => ({ network_embedded_audio: true }),
+		getConfigChange: () => undefined,
+		getNetif: () => ({}),
+		getRelays: () => undefined,
+		getManagedIngestAccounts: () => [],
+		// A leftover Auto broadcast still names the ingest's embedded audio.
+		getStatus: () => ({
+			asrcs: ["USB audio", "No audio", "Pipeline default"],
+			resolved_asrc: null,
+			resolved_asrc_reason: "embedded",
+			audio_off_active: view.offActive,
+		}),
+		getPipelines: () => ({ pipelines: {} }),
+		getSources: () => ({
+			hardware: "rk3588",
+			sources: [
+				{
+					origin: "network",
+					id: "rtmp",
+					pipelineId: "rtmp",
+					labelKey: "settings.sources.rtmp",
+					requiresGateway: "rtmp",
+					url: "rtmp://192.168.1.100:1935/publish/live",
+					modes: [],
+					supportsAudio: true,
+					supportsResolutionOverride: false,
+					supportsFramerateOverride: false,
+					audioKind: "embedded",
+					available: true,
+				},
+			],
+		}),
+	};
+});
 
 vi.mock("$lib/rpc/streaming-optimism.svelte", () => ({
 	getStreamingOptimismState: () => "idle",
@@ -106,6 +118,25 @@ vi.mock("$lib/components/custom/ComingSoon.svelte", async () => ({
 
 import LiveView from "./LiveView.svelte";
 
+beforeEach(() => {
+	streamingFlag.value = true;
+	view.asrc = "No audio";
+	view.offActive = undefined;
+});
+afterEach(() => {
+	streamingFlag.reset();
+});
+
+const audioOf = (container: HTMLElement) => {
+	const cockpit = container.querySelector<HTMLElement>(
+		'[data-testid="live-cockpit"]',
+	);
+	return {
+		current: cockpit?.dataset.audioCurrent,
+		embedded: cockpit?.dataset.audioEmbedded,
+	};
+};
+
 describe("LiveView: live summary audio line on an ingest", () => {
 	it.each([
 		["No audio", "false", "No audio"],
@@ -119,5 +150,39 @@ describe("LiveView: live summary audio line on an ingest", () => {
 		expect(cockpit?.dataset.audioEmbedded).toBe(embedded);
 		if (current !== undefined)
 			expect(cockpit?.dataset.audioCurrent).toBe(current);
+	});
+
+	it.each(["USB audio", "Auto", "Pipeline default"])(
+		"a silent stream says No audio while %s is saved for the next Start, and Stop shows the saved pick again",
+		(asrc) => {
+			view.asrc = asrc;
+			view.offActive = true;
+			const { container } = render(LiveView);
+			expect(audioOf(container)).toEqual({
+				current: "No audio",
+				embedded: "false",
+			});
+
+			streamingFlag.value = false;
+			flushSync();
+			expect(audioOf(container).current).not.toBe("No audio");
+			expect(audioOf(container).embedded).toBe("true");
+		},
+	);
+
+	it("No audio saved for the next Start is not claimed for an ingest whose own sound is on air", () => {
+		view.offActive = false;
+		const { container } = render(LiveView);
+		expect(audioOf(container)).toEqual({
+			current: undefined,
+			embedded: "true",
+		});
+	});
+
+	it("a stream that is not silent keeps naming its pick when No audio is not running", () => {
+		view.asrc = "USB audio";
+		view.offActive = false;
+		const { container } = render(LiveView);
+		expect(audioOf(container).current).toBe("USB audio");
 	});
 });

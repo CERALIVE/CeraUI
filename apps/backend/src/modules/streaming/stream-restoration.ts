@@ -98,7 +98,7 @@ export function captureArmedStreamConfig(): ArmedStreamConfig {
 	copy("acodec");
 	copy("asrc");
 	const launchedAsrc = pinnedLaunchedAsrc();
-	if (launchedAsrc !== undefined) snapshot.asrc = launchedAsrc;
+	if (launchedAsrc) snapshot.asrc = launchedAsrc;
 	copy("relay_server");
 	copy("relay_account");
 	copy("relay_streamid_override");
