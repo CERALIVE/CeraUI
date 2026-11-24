@@ -654,7 +654,8 @@ Each row is a rule in `apps/frontend/src/app.css`, which overrides the utility o
 | Red text, `.text-destructive` | `color-mix(in oklab, var(--destructive) 74%, var(--foreground))` |
 | Red status text, `.text-status-error` | `color-mix(in oklab, var(--status-error) 84%, var(--foreground))` |
 | Red status inside a tooltip | `color-mix(in oklab, var(--status-error) 44%, var(--background))` |
-| Destructive button label | `color-mix(in oklab, var(--destructive) 60%, var(--foreground))` |
+| Enabled `destructive` button label | `color-mix(in oklab, var(--destructive) 60%, var(--foreground))`; line 978 |
+| Disabled `destructive` button | label `color-mix(in oklab, var(--destructive) 75%, var(--foreground))`, background `color-mix(in oklab, var(--destructive) 4%, var(--card))`, `opacity: 1` so no fade; lines 981 to 985 |
 | E-ink and mono, `html[data-theme='eink']` | a chroma 0 set that redefines the tokens, defined in that block |
 | High contrast, `@media (prefers-contrast: more)` | `--border: var(--foreground)`, `--muted-foreground: var(--foreground)` |
 
@@ -706,10 +707,10 @@ missing weight is never faked.
 ### Observed use
 
 - Dialog title: `text-base leading-tight font-semibold`; its description: `text-muted-foreground text-sm leading-relaxed`. Source: `apps/frontend/src/lib/components/dialogs/AppDialog.svelte`
-- Card title: `text-base leading-snug font-medium`. Source: `apps/frontend/src/lib/components/ui/card/card-title.svelte`
+- Card title: `text-base leading-snug font-medium`, or `text-sm` in a `sm` card. Source: `apps/frontend/src/lib/components/ui/card/card-title.svelte`
 - Field label: `text-sm leading-none font-medium`. Source: `apps/frontend/src/lib/components/ui/label/label.svelte`
 - Throughput value: `font-mono text-xs font-bold tabular-nums`. Source: `apps/frontend/src/lib/components/custom/Badge.svelte`
-- Network row name: `text-sm font-medium`; its status line: `text-muted-foreground` and `text-xs`. Source: `apps/frontend/src/main/network/NetworkRow.svelte`
+- Network row name: `text-sm font-medium`, plus `text-muted-foreground` when dimmed; its status line: `text-muted-foreground` and `text-xs`. Source: `apps/frontend/src/main/network/NetworkRow.svelte`
 - **Not defined in code:** a named role scale (display, headline, title, body, label). Pick the utility the nearest existing component uses.
 
 ## 18. Components
@@ -727,20 +728,21 @@ destructive confirmation keeps its `destructive` button.
 
 | Component | Binds to | Source |
 |---|---|---|
-| Button, shape and focus | `rounded-lg` `text-sm` `font-medium`; focus `focus-visible:border-ring` `focus-visible:ring-ring` at 50% `focus-visible:ring-3`; disabled `disabled:opacity-50` | `apps/frontend/src/lib/components/ui/button/button.svelte` |
+| Button, base recipe | `rounded-lg` `text-sm` `font-medium`; focus `focus-visible:border-ring` `focus-visible:ring-ring` at 50% `focus-visible:ring-3`; disabled `disabled:opacity-50` (line 8). A variant or size below overrides these: `destructive` has its own focus and disabled state, and sizes `xs`, `sm`, `icon-xs` and `icon-sm` their own corners | `apps/frontend/src/lib/components/ui/button/button.svelte` |
 | Button `default` | `bg-primary` `text-primary-foreground` | `apps/frontend/src/lib/components/ui/button/button.svelte` |
-| Button `outline` | `border-border` `bg-background` `hover:bg-muted` `dark:bg-input` at 30% | `apps/frontend/src/lib/components/ui/button/button.svelte` |
+| Button `outline` | `border-border` `bg-background` `hover:bg-muted`; dark `dark:bg-input` at 30% `dark:border-input` `dark:hover:bg-input` at 50% | `apps/frontend/src/lib/components/ui/button/button.svelte` |
 | Button `secondary` | `bg-secondary` `text-secondary-foreground` `hover:bg-secondary` at 80% | `apps/frontend/src/lib/components/ui/button/button.svelte` |
-| Button `ghost` | `hover:bg-muted` `hover:text-foreground` | `apps/frontend/src/lib/components/ui/button/button.svelte` |
-| Button `destructive` | `bg-destructive` at 10% `hover:bg-destructive` at 20% `dark:bg-destructive` at 20%, with the label override in section 16 | `apps/frontend/src/lib/components/ui/button/button.svelte` |
+| Button `ghost` | `hover:bg-muted` `hover:text-foreground`; dark `dark:hover:bg-muted` at 50% | `apps/frontend/src/lib/components/ui/button/button.svelte` |
+| Button `destructive`, enabled | `bg-destructive` at 10% `hover:bg-destructive` at 20%; dark `dark:bg-destructive` at 20% `dark:hover:bg-destructive` at 30%; focus `focus-visible:border-destructive` at 40% `focus-visible:ring-destructive` at 20%, dark `dark:focus-visible:ring-destructive` at 40% (line 19). The label is the 60% mix in section 16 | `apps/frontend/src/lib/components/ui/button/button.svelte` |
+| Button `destructive`, disabled | overrides the base fade: `opacity: 1`, the 75% label mix and the 4% tint in section 16 (lines 981 to 985) | `apps/frontend/src/app.css` |
 | Button `link` | `text-primary` `underline-offset-4` `hover:underline` | `apps/frontend/src/lib/components/ui/button/button.svelte` |
-| Button sizes | `xs` `h-6`, `sm` `h-7`, `default` `h-8`, `lg` `h-9`, `icon` `size-8`; touch targets follow section 6 | `apps/frontend/src/lib/components/ui/button/button.svelte` |
-| Card | `bg-card` `text-card-foreground` `ring-foreground` at 10% `ring-1` `rounded-xl` `py-4` `gap-4` | `apps/frontend/src/lib/components/ui/card/card.svelte` |
-| Card content | `px-4` | `apps/frontend/src/lib/components/ui/card/card-content.svelte` |
-| Card footer | `bg-muted` at 50% `border-t` `p-4` | `apps/frontend/src/lib/components/ui/card/card-footer.svelte` |
-| Input | `border-input` `bg-transparent` `dark:bg-input` at 30% `rounded-lg` `h-8` `px-2.5` `text-base` `md:text-sm`; placeholder `placeholder:text-muted-foreground`; error `aria-invalid:border-destructive` | `apps/frontend/src/lib/components/ui/input/input.svelte` |
+| Button sizes | `xs` `h-6`, `sm` `h-7`, `default` `h-8`, `lg` `h-9`, `icon` `size-8`; `xs` also sets `text-xs` and `sm` sets `text-[0.8rem]`; touch targets follow section 6 | `apps/frontend/src/lib/components/ui/button/button.svelte` |
+| Card | `bg-card` `text-card-foreground` `ring-foreground` at 10% `ring-1` `rounded-xl` `py-4` `gap-4`; size `sm` uses `data-[size=sm]:py-3` `data-[size=sm]:gap-3` | `apps/frontend/src/lib/components/ui/card/card.svelte` |
+| Card content | `px-4`; size `sm` uses `px-3` | `apps/frontend/src/lib/components/ui/card/card-content.svelte` |
+| Card footer | `bg-muted` at 50% `border-t` `p-4`; size `sm` uses `p-3` | `apps/frontend/src/lib/components/ui/card/card-footer.svelte` |
+| Input | `border-input` `bg-transparent` `dark:bg-input` at 30% `rounded-lg` `h-8` `px-2.5` `text-base` `md:text-sm`; placeholder `placeholder:text-muted-foreground`; error `aria-invalid:border-destructive`, dark `dark:aria-invalid:border-destructive` at 50% | `apps/frontend/src/lib/components/ui/input/input.svelte` |
 | Textarea | `border-input` `rounded-lg` `min-h-16` `px-2.5` `py-2` | `apps/frontend/src/lib/components/ui/textarea/textarea.svelte` |
-| Select trigger | `border-input` `bg-transparent` `rounded-lg` `text-sm` `data-[size=default]:h-8` | `apps/frontend/src/lib/components/ui/select/select-trigger.svelte` |
+| Select trigger | `border-input` `bg-transparent` `rounded-lg` `text-sm` `data-[size=default]:h-8`; dark `dark:bg-input` at 30%; size `sm` uses `data-[size=sm]:h-7` and its own corner | `apps/frontend/src/lib/components/ui/select/select-trigger.svelte` |
 | Select popup | `bg-popover` `text-popover-foreground` `ring-foreground` at 10% `rounded-lg` `shadow-md` | `apps/frontend/src/lib/components/ui/select/select-content.svelte` |
 | Select option | `data-highlighted:bg-accent` `data-highlighted:text-accent-foreground` `rounded-md` `text-sm` | `apps/frontend/src/lib/components/ui/select/select-item.svelte` |
 | Switch, off | `background-color: var(--switch-off)`; thumb `background-color: var(--switch-off-foreground)` | `apps/frontend/src/app.css` |
@@ -749,13 +751,15 @@ destructive confirmation keeps its `destructive` button.
 | Toggle, pressed | `background-color: var(--foreground)` `color: var(--background)` | `apps/frontend/src/app.css` |
 | Labeled slider | track `bg-muted`, range `bg-primary`, thumb `border-ring` `bg-white` `size-3` | `apps/frontend/src/lib/components/custom/LabeledSlider.svelte` |
 | Progress | track `bg-muted` `h-1`, fill `bg-primary` | `apps/frontend/src/lib/components/ui/progress/progress.svelte` |
-| Dialog surface | `bg-popover` `text-popover-foreground` `ring-foreground` at 10% `rounded-xl` `ring-1` | `apps/frontend/src/lib/components/ui/dialog/dialog-content.svelte` |
-| AppDialog | header `bg-card` `px-5` `py-4`, footer `bg-muted` at 40%, desktop `sm:max-w-lg`, phone sheet `rounded-t-2xl`, height `max-h-[85svh]` | `apps/frontend/src/lib/components/dialogs/AppDialog.svelte` |
+| Dialog surface | `bg-popover` `text-popover-foreground` `ring-foreground` at 10% `rounded-xl` `ring-1`; square when AppDialog is fullscreen or the viewport is 500px tall or less | `apps/frontend/src/lib/components/ui/dialog/dialog-content.svelte` |
+| AppDialog | header `bg-card` `px-5` `py-4`, footer `bg-muted` at 40%, desktop `sm:max-w-lg`, phone sheet `rounded-t-2xl`, height `max-h-[85svh]`; fullscreen overrides with `max-h-none` `sm:max-w-none` `rounded-none` | `apps/frontend/src/lib/components/dialogs/AppDialog.svelte` |
 | Popover | `bg-popover` `ring-foreground` at 10% `w-72` `rounded-lg` `p-2.5` `shadow-md` | `apps/frontend/src/lib/components/ui/popover/popover-content.svelte` |
 | Tooltip | `bg-foreground` `text-background` `rounded-md` `px-3` `py-1.5` `text-xs` | `apps/frontend/src/lib/components/ui/tooltip/tooltip-content.svelte` |
-| Tabs | list `bg-muted` `rounded-lg` `p-[3px]` | `apps/frontend/src/lib/components/ui/tabs/tabs-list.svelte` |
-| Status badge | `rounded-md` `px-2` `py-0.5` `text-xs` with `bg-status-success` at 10% `text-status-success`, and the same pair for `warning`, `error`, `info` and `neutral` | `apps/frontend/src/lib/components/custom/Badge.svelte` |
+| Tabs list | `default` `bg-muted` `rounded-lg` `p-[3px]`; `line` overrides with `bg-transparent` `data-[variant=line]:rounded-none` | `apps/frontend/src/lib/components/ui/tabs/tabs-list.svelte` |
+| Status badge | `rounded-md` `px-2` `py-0.5` `text-xs` with `bg-status-success` at 10% `text-status-success`, and the same pair for `warning`, `error`, `info` and `neutral`; size `micro` uses `text-micro` `px-1.5`; the `error` text takes the 84% mix in section 16 | `apps/frontend/src/lib/components/custom/Badge.svelte` |
 | Skeleton | `bg-muted` `animate-pulse` `rounded-md` | `apps/frontend/src/lib/components/ui/skeleton/skeleton.svelte` |
-| Toast | `background: var(--popover)` `border-color: var(--border)` `box-shadow: var(--shadow-lg)` `border-radius: 0.625rem` | `apps/frontend/src/app.css` |
+| Toast, base and neutral types | `background: var(--popover)` `border-color: var(--border)` `box-shadow: var(--shadow-lg)` `border-radius: 0.625rem` | `apps/frontend/src/app.css` |
+| Toast, `success` and `warning` | their status color at 12% in `--popover`, border 42% in `--border` (lines 861 to 874) | `apps/frontend/src/app.css` |
+| Toast, `error` | `--status-error` at 14% in `--popover`, border 45% in `--border` (lines 881 to 884) | `apps/frontend/src/app.css` |
 | Link badge | `var(--link-${link.linkIndex + 1})`; row ordinal `text-xs font-bold tabular-nums` | `apps/frontend/src/lib/components/custom/LinkBadge.svelte` |
 | Network row | `px-4` `py-2`; IH-6 governs its order | `apps/frontend/src/main/network/NetworkRow.svelte` |
