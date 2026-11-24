@@ -7,9 +7,9 @@ import { resolveBondPhysicalIdentity } from "../streaming/bond-entry.ts";
 import {
 	type BondPreferences,
 	type BondPreferenceView,
-	exactOptOut,
 	hasStoredOptOut,
 	presentOrUndefined,
+	projectBondPreferences,
 	rollbackOptOut,
 	transition,
 } from "./bond-preference-state.ts";
@@ -30,17 +30,16 @@ export function previewBondOptOut(
 	identity: PhysicalBondKeys | undefined,
 	view: BondPreferenceView = "effective",
 ) {
-	const stored = readPreferences(view);
+	const source = readPreferences();
+	const stored = projectBondPreferences(source, view);
 	const present = listPresentPhysicalDevices();
 	const next =
 		identity === undefined || identity.anchor === "ifname"
 			? stored
-			: view === "effective"
-				? transition(stored, identity, { optOut: true, present, view })
-				: {
-						...stored,
-						out: exactOptOut(stored, identity, { optOut: true, present }),
-					};
+			: projectBondPreferences(
+					transition(source, identity, { optOut: true, present, view }),
+					view,
+				);
 	return (
 		name: string,
 		peer: PhysicalBondKeys | undefined,
@@ -52,15 +51,13 @@ export function previewBondOptOut(
 	};
 }
 
-function readPreferences(
-	view: BondPreferenceView = "effective",
-): BondPreferences {
+function readPreferences(): BondPreferences {
 	const config = getConfig();
 	return {
 		out: config.bond_opt_out,
-		groupOut: view === "effective" ? config.bond_group_out : undefined,
-		optIn: view === "effective" ? config.bond_opt_in : undefined,
-		portOut: view === "effective" ? config.bond_port_out : undefined,
+		groupOut: config.bond_group_out,
+		optIn: config.bond_opt_in,
+		portOut: config.bond_port_out,
 	};
 }
 
@@ -73,7 +70,7 @@ export function isBondOptedOut(
 	if (identity === undefined || identity.anchor === "ifname") return false;
 	return hasStoredOptOut(
 		identity,
-		readPreferences(view),
+		projectBondPreferences(readPreferences(), view),
 		listPresentPhysicalDevices(),
 	);
 }

@@ -113,6 +113,17 @@ async function toggle(enabled: boolean) {
 
 const senders = () => genSrtlaBondEntries().map(({ iface }) => iface);
 
+test("a simulated OFF is not masked by another vendor's pinned ON at the port", async () => {
+	await boot(dell, "real");
+	await toggle(false);
+	await boot({ ...dell, serial: "PIN-UNIQUE-DELL" }, "real");
+	await toggle(true);
+	await boot(huawei, "emulated");
+	await toggle(false);
+	await boot(huawei, "real");
+	expect(senders()).toEqual(["eth0"]);
+});
+
 test.each([false, true])(
 	"M1: another vendor's emulated OFF survives a real restart (prior ON: %j)",
 	async (enableFirst) => {

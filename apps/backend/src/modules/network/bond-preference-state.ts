@@ -10,32 +10,51 @@ type PortOptOut = NonNullable<RuntimeConfig["bond_port_out"]>;
 
 export type BondPreferenceView = "effective" | "legacy";
 
-const fieldWrites = {
-	effective: {
-		groupOut: "retain-deleted-default",
-		optIn: "record-port-choice",
-		portOut: "record-scoped-off",
-	},
-	legacy: {
-		groupOut: "keep-existing-default",
-		optIn: "override-existing-default",
-		portOut: "keep-unscoped-off",
-	},
-} as const satisfies Record<
-	BondPreferenceView,
-	{
-		readonly groupOut: "retain-deleted-default" | "keep-existing-default";
-		readonly optIn: "record-port-choice" | "override-existing-default";
-		readonly portOut: "record-scoped-off" | "keep-unscoped-off";
-	}
->;
-
 export type BondPreferences = {
 	readonly out: ExactOptOut | undefined;
 	readonly groupOut: ExactOptOut | undefined;
 	readonly optIn: PortOptIn | undefined;
 	readonly portOut: PortOptOut | undefined;
 };
+
+const fieldWrites = {
+	effective: {
+		read: (state) => state,
+		retainPairDefault: true,
+		recordPortOn: () => true,
+		pinSerialOn: true,
+		scopePortOff: true,
+	},
+	legacy: {
+		read: ({ out }) => ({
+			out,
+			groupOut: undefined,
+			optIn: undefined,
+			portOut: undefined,
+		}),
+		retainPairDefault: false,
+		// The old pair key may not be observable at the moment of the ON.
+		recordPortOn: (defaults) => Object.keys(defaults).length !== 0,
+		pinSerialOn: false,
+		scopePortOff: false,
+	},
+} satisfies Record<
+	BondPreferenceView,
+	{
+		readonly read: (state: BondPreferences) => BondPreferences;
+		readonly retainPairDefault: boolean;
+		readonly recordPortOn: (defaults: ExactOptOut) => boolean;
+		readonly pinSerialOn: boolean;
+		readonly scopePortOff: boolean;
+	}
+>;
+
+export function projectBondPreferences(
+	state: BondPreferences,
+	view: BondPreferenceView,
+): BondPreferences {
+	return fieldWrites[view].read(state);
+}
 
 const portOf = (keys: PhysicalBondKeys) =>
 	keys.anchor === "id-path" ? keys.linkId : portLinkId(keys.idPath);
@@ -100,7 +119,7 @@ export function hasStoredOptOut(
 }
 
 /** Main's unchanged projection, before any rollback-only path additions. */
-export function exactOptOut(
+function exactOptOut(
 	stored: BondPreferences,
 	target: PhysicalBondKeys,
 	change: {
@@ -144,7 +163,7 @@ export function transition(
 	const optIn = { ...stored.optIn };
 	const portOut = { ...stored.portOut };
 	if (
-		writes.groupOut === "retain-deleted-default" &&
+		writes.retainPairDefault &&
 		legacy !== undefined &&
 		stored.out?.[legacy] === true
 	) {
@@ -167,15 +186,14 @@ export function transition(
 	const port = portOf(target);
 	const vid = target.vid ?? "";
 	if (!optOut && target.anchor !== "id-path") delete groupOut[target.linkId];
-	const unscopedOff =
-		writes.portOut === "keep-unscoped-off" && optOut && port === target.linkId;
+	const unscopedOff = !writes.scopePortOff && optOut && port === target.linkId;
 	if (port !== undefined) {
 		const on = { ...optIn[port] };
 		const off = { ...portOut[port] };
 		const previous = off[vid];
 		if (optOut) {
 			delete on[vid];
-			if (writes.portOut === "record-scoped-off" && vid) {
+			if (writes.scopePortOff && vid) {
 				off[vid] = {
 					// A new OFF cannot establish who owned a pre-upgrade bit.
 					...(out[port] === true &&
@@ -190,16 +208,9 @@ export function transition(
 			delete off[vid];
 			// Retire the pair default for the toggled twin only. An absent,
 			// untouched sibling may still need it when it comes back.
-			const overridesPair = legacy !== undefined && groupOut[legacy] === true;
-			if (
-				target.anchor === "id-path" &&
-				(writes.optIn === "record-port-choice" || overridesPair)
-			)
+			if (target.anchor === "id-path" && writes.recordPortOn(groupOut))
 				on[vid] = {};
-			else if (
-				writes.optIn === "record-port-choice" &&
-				previous?.exact === true
-			)
+			else if (writes.pinSerialOn && previous?.exact === true)
 				on[vid] = { pin: true };
 		}
 		// A legacy path OFF is unscoped even if a real boot previously owned
