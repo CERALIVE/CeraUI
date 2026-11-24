@@ -61,20 +61,25 @@ $effect(() => {
 
 const open = $derived(forceOpen || wide || stored === true);
 
+function chooseDetails(event: MouseEvent) {
+	event.preventDefault();
+	if (wide || forceOpen) return;
+	const summary = event.currentTarget;
+	const disclosure = summary instanceof HTMLElement && summary.parentElement;
+	if (!(disclosure instanceof HTMLDetailsElement)) return;
+
+	// Use the visible state: a browser reveal can change it without saving.
+	const nextOpen = !disclosure.open;
+	// Apply even when nextOpen equals the preference and Svelte won't rerender.
+	disclosure.open = nextOpen;
+	stored = nextOpen;
+	store(nextOpen);
+}
+
 function handleToggle(event: Event) {
 	const el = event.currentTarget;
-	if (!(el instanceof HTMLDetailsElement)) return;
-	// Forced open (the post-stream summary): its toggle is hidden, and any other
-	// way of closing it (a keyboard, an extension) is undone.
-	if (forceOpen && !el.open) {
-		el.open = true;
-		return;
-	}
-	// Only a change the streamer made is remembered; the toggle that follows
-	// our own `open` update reports the value we just set.
-	if (el.open === open || wide || forceOpen) return;
-	stored = el.open;
-	store(el.open);
+	// Undo external closes during the post-stream summary without saving them.
+	if (forceOpen && el instanceof HTMLDetailsElement && !el.open) el.open = true;
 }
 </script>
 
@@ -83,6 +88,10 @@ function handleToggle(event: Event) {
 		class="hover:bg-muted/40 flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-1 py-2 lg:hidden [&::-webkit-details-marker]:hidden"
 		class:hidden={wide || forceOpen}
 		hidden={wide || forceOpen}
+		{@attach (summary) => {
+			summary.addEventListener('click', chooseDetails);
+			return () => summary.removeEventListener('click', chooseDetails);
+		}}
 	>
 		<span class="min-w-0">
 			<span class="block text-sm font-medium">{m["live.glance.details"]()}</span>
