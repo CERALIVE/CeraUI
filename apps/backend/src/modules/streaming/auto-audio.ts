@@ -438,10 +438,11 @@ export function buildAutoLaunchConfig(
  * routing are untouched, and a sustained absence still resolves honestly.
  * Contract: `capture-presence.ts`.
  */
-export function resolveAutoAsrcFromLiveState(): AutoAsrcResolution {
-	const config = getConfig();
+export function resolveAutoAsrcFromLiveState(
+	sourceId = getConfig().source,
+): AutoAsrcResolution {
 	const sources = getSourcesMessage().sources;
-	const source = resolveSelectedSourceWithGrace(config.source, sources);
+	const source = resolveSelectedSourceWithGrace(sourceId, sources);
 	return resolveAutoAsrc({
 		source,
 		audioDevices: getAudioDevices(),

@@ -8,7 +8,6 @@ import { os } from "@orpc/server";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { setMockAudioMix } from "../../mocks/providers/streaming.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
-import { noteAudioSaved } from "../../modules/streaming/audio.ts";
 import {
 	changedAudioInputs,
 	effectiveAudioInputs,
@@ -22,6 +21,7 @@ import {
 	getAudioMixInputs,
 } from "../../modules/streaming/audio-mix-status.ts";
 import { cerastreamBackend } from "../../modules/streaming/cerastream-backend.ts";
+import { noteAudioSaved } from "../../modules/streaming/start-audio.ts";
 import { broadcastMsg } from "../../modules/ui/websocket-server.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";

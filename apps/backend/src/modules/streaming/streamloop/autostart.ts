@@ -28,10 +28,10 @@ import { emitEvent } from "../../events/emit.ts";
 import { isUpdating } from "../../system/software-updates.ts";
 import { notificationBroadcast } from "../../ui/notifications.ts";
 import { broadcastMsg } from "../../ui/websocket-server.ts";
-import { acceptStartAudio } from "../audio.ts";
 import type { Pipeline } from "../pipelines.ts";
 import { awaitRecoveryBarrier } from "../recovery-barrier.ts";
 import { genSrtlaIpList, resolveSrtla } from "../srtla.ts";
+import { acceptStartAudio } from "../start-audio.ts";
 import {
 	classifyStartFailure,
 	StreamStartFailure,
@@ -150,7 +150,7 @@ export async function autoStartStream(linkAttempt = 1): Promise<void> {
 		return;
 	}
 
-	const result = await startStreamSession({
+	const starting = startStreamSession({
 		origin: "autostart",
 		launch: async ({ attemptId }) => {
 			const srtlaAddr: string = await resolveSrtla(c.srtlaAddr);
@@ -162,7 +162,7 @@ export async function autoStartStream(linkAttempt = 1): Promise<void> {
 				{},
 				attemptId,
 				undefined,
-				startAudio.off,
+				startAudio,
 			);
 			if (!launched.success) {
 				throw new StreamStartFailure(
@@ -178,6 +178,7 @@ export async function autoStartStream(linkAttempt = 1): Promise<void> {
 			}
 		},
 	});
+	const result = await startAudio.whileInFlight(starting);
 	if (result.result === "failed") {
 		logger.error("autostart failed", {
 			attemptId: result.attemptId,

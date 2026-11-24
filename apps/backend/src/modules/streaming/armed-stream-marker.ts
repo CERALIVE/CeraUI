@@ -64,7 +64,9 @@ import {
 	type StreamStopCause,
 } from "@ceraui/rpc/events";
 import {
+	audioBackendSchema,
 	audioCodecSchema,
+	audioInputSettingSchema,
 	inputModeSchema,
 	type LifecycleState,
 } from "@ceraui/rpc/schemas";
@@ -79,6 +81,7 @@ import {
 	videoPassthroughSchema,
 } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
+import type { StartAudio } from "./start-audio.ts";
 import type { EngineRuntimeState } from "./streaming-backend.ts";
 
 export const ARMED_STREAM_MARKER_FILE = "stream.armed.json";
@@ -103,6 +106,9 @@ const armedStreamConfigSchema = z.object({
 	pipeline: z.string().optional(),
 	acodec: audioCodecSchema.optional(),
 	asrc: z.string().optional(),
+	/** `null` says the stream runs without a mix; absent, nothing was recorded. */
+	audio_inputs: z.array(audioInputSettingSchema).nullable().optional(),
+	audio_backend: audioBackendSchema.optional(),
 	relay_server: z.string().optional(),
 	relay_account: z.string().optional(),
 	relay_streamid_override: z.string().optional(),
@@ -123,20 +129,20 @@ const armedStreamConfigSchema = z.object({
 });
 export type ArmedStreamConfig = z.infer<typeof armedStreamConfigSchema>;
 
-let launchedAsrc: string | null | undefined;
+type LaunchedAudio = StartAudio["config"];
+let launchedAudio: LaunchedAudio | undefined;
 
 /**
- * The audio pick the latest launch was bound to, when that launch does not follow
- * the saved one (`null` when it does): a "No audio" Start stays without audio if it
- * is restored, even when another pick was saved while it was being prepared.
- * `undefined` when no launch of this process can be the running stream.
+ * The audio choice the latest launch was pressed with, which a restoration brings
+ * back whatever was saved meanwhile. Undefined when no launch of this process can
+ * be the running stream.
  */
-export function pinLaunchedAsrc(asrc: string | null | undefined): void {
-	launchedAsrc = asrc;
+export function pinLaunchedAudio(audio: LaunchedAudio | undefined): void {
+	launchedAudio = audio;
 }
 
-export function pinnedLaunchedAsrc(): string | null | undefined {
-	return launchedAsrc;
+export function pinnedLaunchedAudio(): LaunchedAudio | undefined {
+	return launchedAudio;
 }
 
 export {
@@ -278,7 +284,7 @@ export function noteStreamStopped(
 	deps: ArmedStreamMarkerDeps = defaultArmedStreamMarkerDeps,
 ): void {
 	if (cause !== "operator") return;
-	pinLaunchedAsrc(undefined);
+	pinLaunchedAudio(undefined);
 	clearArmedStreamMarker(deps);
 }
 

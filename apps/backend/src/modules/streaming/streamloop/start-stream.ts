@@ -20,7 +20,7 @@
 // wires srtla per-uplink telemetry, then starts the engine session over the
 // StreamingBackend seam.
 
-import { AUDIO_SOURCE_AUTO, type StartFailureClass } from "@ceraui/rpc/schemas";
+import type { StartFailureClass } from "@ceraui/rpc/schemas";
 import {
 	buildSrtlaSendArgs,
 	controlSocketPath,
@@ -34,13 +34,8 @@ import {
 	resetActiveEncodeLiveness,
 	resetActivePassthrough,
 } from "../active-passthrough.ts";
-import { pinLaunchedAsrc } from "../armed-stream-marker.ts";
-import {
-	asrcProbe,
-	isNoAudioPick,
-	isPseudoAudioSource,
-	NO_AUDIO_ID,
-} from "../audio.ts";
+import { pinLaunchedAudio } from "../armed-stream-marker.ts";
+import { asrcProbe, isPseudoAudioSource, NO_AUDIO_ID } from "../audio.ts";
 import {
 	defaultBindMapSpawnDeps,
 	resolveBindMapArgs,
@@ -58,6 +53,7 @@ import {
 import type { Pipeline } from "../pipelines.ts";
 import { replayPreviewEncodeMode } from "../preview-encode-replay.ts";
 import { getLastPublishedBond } from "../srtla.ts";
+import { acceptStartAudio } from "../start-audio.ts";
 import { assertStreamLaunchOwnership } from "../stream-launch-ownership.ts";
 import { getStreamingBackend } from "../streaming-engine.ts";
 import { srtlaSendExec } from "./exec-paths.ts";
@@ -160,8 +156,8 @@ export async function maybeProbeAudioSource(
  * would apply an edit the operator deferred to their next start. Absent (every
  * other caller), the live config is read exactly as before.
  *
- * `audioOff` is the accepted Start's own "No audio": the launch keeps it whatever
- * is saved while the Start is being prepared, and the save counts for the next one.
+ * `startAudio` is the audio configuration the Start was pressed with. Nothing here
+ * reads the saved one: a save made meanwhile counts for the next Start.
  */
 export async function startStream(
 	pipeline: Pipeline,
@@ -171,7 +167,7 @@ export async function startStream(
 	audioDeps: AudioProbeDeps = {},
 	attemptId = "legacy-start",
 	configOverride?: Partial<RuntimeConfig>,
-	audioOff = false,
+	startAudio = acceptStartAudio(),
 ): Promise<StartStreamResult> {
 	assertStreamLaunchOwnership();
 	// The preview-encoder fence, and the reason it lives HERE. The engine fixes
@@ -201,16 +197,12 @@ export async function startStream(
 		};
 	}
 
-	const saved =
-		configOverride === undefined
-			? getConfig()
-			: ({
-					...getConfig(),
-					...configOverride,
-					composition: configOverride.composition,
-				} as RuntimeConfig);
-	const config = audioOff ? { ...saved, asrc: NO_AUDIO_ID } : saved;
-	const autoAudio = config.asrc === AUDIO_SOURCE_AUTO;
+	const saved = getConfig();
+	const config: RuntimeConfig = { ...saved, ...startAudio.config };
+	if (configOverride !== undefined)
+		Object.assign(config, configOverride, {
+			composition: configOverride.composition,
+		});
 	const launchConfig = resolveLaunchConfig(config);
 	startStreamDeps.getStreamingBackend().setBitrate(launchConfig);
 
@@ -308,19 +300,25 @@ export async function startStream(
 		});
 		transaction.register(() => startStreamDeps.stopLinkTelemetry());
 
-		// Auto's launch copy can read "No audio" without the operator having picked it.
-		const noAudio =
-			(!autoAudio && launchConfig.asrc === NO_AUDIO_ID) ||
-			(configOverride === undefined && isNoAudioPick());
-		pinLaunchedAsrc(noAudio ? NO_AUDIO_ID : null);
+		pinLaunchedAudio({
+			asrc: config.asrc,
+			audio_inputs: config.audio_inputs,
+			acodec: config.acodec,
+			delay: config.delay,
+			audio_backend: config.audio_backend,
+		});
 		await startStreamDeps.getStreamingBackend().start(
-			launchConfig,
+			// The bitrate is live: a change made while starting still applies.
+			configOverride === undefined
+				? { ...launchConfig, max_br: saved.max_br }
+				: launchConfig,
 			{
 				pipeline: pipeline.source,
 				host: "127.0.0.1",
 				port: SRTLA_LISTEN_PORT,
 				streamid,
-				audioOff: noAudio,
+				// Auto's launch copy can read "No audio" without the operator picking it.
+				audioOff: config.asrc === NO_AUDIO_ID,
 			},
 			transaction,
 		);

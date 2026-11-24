@@ -65,11 +65,7 @@ import {
 } from "../../mocks/providers/streaming.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
 import { reportActiveProfile } from "../../modules/remote-control/active-profile-reporter.ts";
-import {
-	acceptStartAudio,
-	noteAudioSaved,
-	refreshBluetoothAudioDevices,
-} from "../../modules/streaming/audio.ts";
+import { refreshBluetoothAudioDevices } from "../../modules/streaming/audio.ts";
 import {
 	AUDIO_BACKEND_UNSUPPORTED_ERROR,
 	isAudioBackendSupported,
@@ -139,6 +135,10 @@ import {
 	resolveSourceIdentity,
 	resolveSourceRouting,
 } from "../../modules/streaming/sources.ts";
+import {
+	acceptStartAudio,
+	noteAudioSaved,
+} from "../../modules/streaming/start-audio.ts";
 import {
 	classifyStartFailure,
 	StreamStartFailure,
@@ -258,8 +258,8 @@ export const streamingStartProcedure = authedProcedure
 	.handler(async ({ input, context }) => {
 		let appliedResponse: StreamingConfigInput | undefined;
 		let legacyError: string | undefined;
-		const startAudio = acceptStartAudio(input.asrc);
-		const lifecycleResult = await startStreamSession({
+		const startAudio = acceptStartAudio(input);
+		const starting = startStreamSession({
 			origin:
 				context.ws.remoteAddress === "control-channel"
 					? "remote-control"
@@ -341,7 +341,7 @@ export const streamingStartProcedure = authedProcedure
 				// an MPEG-TS carrier, so only AAC-in-TS is proven end-to-end; refuse an
 				// effective codec the effective transport can't carry at START — config
 				// SAVES stay permitted (mirrors the pipeline_not_in_offered_set gate).
-				const effectiveAcodec = applied.acodec ?? getConfig().acodec;
+				const effectiveAcodec = startAudio.config.acodec;
 				if (effectiveAcodec !== undefined) {
 					const effectiveTransport =
 						applied.relay_protocol ?? getConfig().relay_protocol ?? "srtla";
@@ -383,18 +383,14 @@ export const streamingStartProcedure = authedProcedure
 						framerate: applied.framerate,
 						max_br: applied.max_br,
 					});
-					const fresh = startAudio.fresh(applied);
 					const config = {
 						...getConfig(),
-						...fresh,
-						audio_inputs: fresh.audio_inputs ?? getConfig().audio_inputs,
+						...applied,
+						...startAudio.config,
 						composition: applied.composition ?? getConfig().composition,
 						video_codec: applied.video_codec ?? getConfig().video_codec,
 					};
-					const audio = launchAudioPlan(
-						config,
-						startAudio.off ? { audioOff: true } : {},
-					);
+					const audio = launchAudioPlan(config);
 					// What the engine adapter hands over at a real start, after
 					// `validateConfig` drops a composition the engine does not advertise.
 					const composition =
@@ -421,7 +417,7 @@ export const streamingStartProcedure = authedProcedure
 						is_streaming: true,
 						audio_mix_active: getAudioMixActive(),
 					});
-					appliedResponse = fresh;
+					appliedResponse = applied;
 					return;
 				}
 				// The existing start function handles validation and config saving.
@@ -452,9 +448,10 @@ export const streamingStartProcedure = authedProcedure
 						attemptId,
 					);
 				}
-				appliedResponse = startAudio.fresh(applied);
+				appliedResponse = applied;
 			},
 		});
+		const lifecycleResult = await startAudio.whileInFlight(starting);
 		return startResponse(lifecycleResult, appliedResponse, legacyError);
 	});
 
@@ -953,9 +950,15 @@ export const setConfigProcedure = authedProcedure
 		if (input.fec_enabled !== undefined) config.fec_enabled = input.fec_enabled;
 		if (input.recovery_mode !== undefined)
 			config.recovery_mode = input.recovery_mode;
-		if (input.delay !== undefined) config.delay = input.delay;
+		if (input.delay !== undefined) {
+			config.delay = input.delay;
+			noteAudioSaved("delay");
+		}
 		if (input.pipeline !== undefined) config.pipeline = input.pipeline;
-		if (input.acodec !== undefined) config.acodec = input.acodec;
+		if (input.acodec !== undefined) {
+			config.acodec = input.acodec;
+			noteAudioSaved("acodec");
+		}
 		if (input.asrc !== undefined) {
 			config.asrc = input.asrc;
 			noteAudioSaved("asrc");

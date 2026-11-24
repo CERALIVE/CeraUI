@@ -92,56 +92,6 @@ export function isPseudoAudioSource(asrc: string): boolean {
 	return PSEUDO_AUDIO_SOURCES.has(asrc);
 }
 
-/** Did the operator choose "No audio"? */
-export function isNoAudioPick(
-	asrc: string | undefined = getConfig().asrc,
-): boolean {
-	return asrc === NO_AUDIO_ID;
-}
-
-const audioSaves = { asrc: 0, audio_inputs: 0 };
-
-/** An audio choice was saved; a save that repeats the saved value counts too. */
-export function noteAudioSaved(field: keyof typeof audioSaves): void {
-	audioSaves[field] += 1;
-}
-
-export interface StartAudio {
-	/** The Start was accepted with the operator's "No audio". */
-	readonly off: boolean;
-	/** `payload` without the audio choices that something saved since has replaced. */
-	readonly fresh: <
-		T extends { asrc?: string | undefined; audio_inputs?: unknown },
-	>(
-		payload: T,
-	) => T;
-}
-
-/**
- * A Start's audio, read where the Start is accepted and before anything it waits
- * for. A choice saved after that is newer than the Start's own payload, whatever
- * its value; a payload that only restates the saved pick also yields to its
- * migrated id.
- */
-export function acceptStartAudio(requested?: string): StartAudio {
-	const accepted = { ...audioSaves };
-	const saved = getConfig().asrc;
-	return {
-		off: isNoAudioPick(requested),
-		fresh: (payload) => {
-			const fresh = { ...payload };
-			if (
-				audioSaves.asrc !== accepted.asrc ||
-				(payload.asrc === saved && getConfig().asrc !== saved)
-			)
-				delete fresh.asrc;
-			if (audioSaves.audio_inputs !== accepted.audio_inputs)
-				delete fresh.audio_inputs;
-			return fresh;
-		},
-	};
-}
-
 export function isSelectedAudioLost(
 	asrc: string | undefined,
 	available: readonly string[],
@@ -521,7 +471,7 @@ export async function refreshBluetoothAudioDevices(): Promise<void> {
 	await broadcastAudioSources();
 	refreshResolvedAsrcPreview();
 	syncAudioMeterPreference();
-	asrcProbeWake?.();
+	pendingProbe?.wake?.();
 }
 
 // Dev/e2e seam merged into the list WITHOUT touching the real /sys/class/sound
@@ -585,6 +535,24 @@ export function resetRememberedAudioIdentities(): void {
 	rememberedAudioIdentities.clear();
 }
 
+/** The live id of a card that re-enumerated under a new ALSA id. */
+export function audioIdentitySuccessor(
+	asrc: string,
+	identities: ReadonlyMap<string, AudioDeviceIdentity> = lastAudioIdentities,
+	devices: Record<string, string> = audioDevices,
+	remembered: ReadonlyMap<string, string> = rememberedAudioIdentities,
+): string | undefined {
+	if (asrc === AUDIO_SOURCE_AUTO || isPseudoAudioSource(asrc)) return undefined;
+	if (asrc in devices) return undefined;
+
+	const stableId = remembered.get(asrc);
+	if (stableId === undefined) return undefined;
+	for (const [id, identity] of identities) {
+		if (identity.stable_id === stableId && id in devices) return id;
+	}
+	return undefined;
+}
+
 /**
  * Migrate a persisted `config.asrc` onto the live successor of a card that
  * re-enumerated under a new ALSA id, and PERSIST the migration.
@@ -605,22 +573,13 @@ export function reconcileConfiguredAudioIdentity(
 	const config = getConfig();
 	const configured = config.asrc;
 	if (configured === undefined) return false;
-	if (configured === AUDIO_SOURCE_AUTO || isPseudoAudioSource(configured)) {
-		return false;
-	}
-	if (configured in devices) return false;
-
-	const stableId = remembered.get(configured);
-	if (stableId === undefined) return false;
-
-	let successor: string | undefined;
-	for (const [asrc, identity] of identities) {
-		if (identity.stable_id !== stableId) continue;
-		if (!(asrc in devices)) continue;
-		successor = asrc;
-		break;
-	}
-	if (successor === undefined || successor === configured) return false;
+	const successor = audioIdentitySuccessor(
+		configured,
+		identities,
+		devices,
+		remembered,
+	);
+	if (successor === undefined) return false;
 
 	config.asrc = successor;
 	saveConfig();
@@ -902,15 +861,18 @@ export async function updateAudioDevices(dir?: string) {
 	// A hotplug re-enumeration may have brought in the device a stream start is
 	// waiting on — wake the pending probe so it re-checks now instead of after
 	// the next poll tick, beating the QW-J timeout (QW-E ↔ QW-J interaction).
-	asrcProbeWake?.();
+	pendingProbe?.wake?.();
 }
 
-let asrcProbeReject: (() => void) | undefined;
-let asrcProbeWake: (() => void) | undefined;
-let asrcProbeDeadlineAt: number | undefined;
+interface PendingProbe {
+	readonly reject: () => void;
+	readonly deadlineAt: number;
+	wake?: () => void;
+}
+let pendingProbe: PendingProbe | undefined;
 
 export function isAsrcProbeRejectResolved() {
-	return asrcProbeReject !== undefined;
+	return pendingProbe !== undefined;
 }
 
 /**
@@ -921,20 +883,15 @@ export function isAsrcProbeRejectResolved() {
  * Bounded by construction — never exceeds AUDIO_PROBE_TIMEOUT_MS.
  */
 export function asrcProbeRemainingMs(now: number = Date.now()): number {
-	if (asrcProbeReject === undefined || asrcProbeDeadlineAt === undefined) {
-		return 0;
-	}
+	if (pendingProbe === undefined) return 0;
 	return Math.min(
 		AUDIO_PROBE_TIMEOUT_MS,
-		Math.max(0, asrcProbeDeadlineAt - now),
+		Math.max(0, pendingProbe.deadlineAt - now),
 	);
 }
 
 export function clearAsrcProbeReject() {
-	asrcProbeReject?.();
-	asrcProbeReject = undefined;
-	asrcProbeWake = undefined;
-	asrcProbeDeadlineAt = undefined;
+	pendingProbe?.reject();
 }
 
 /**
@@ -974,22 +931,26 @@ export async function asrcProbe(asrc: string): Promise<string> {
 	return new Promise((res: (id: string) => void, rej: (err: Error) => void) => {
 		// Cancel any prior pending probe before starting a new one
 		clearAsrcProbeReject();
-		asrcProbeReject = () => {
-			rej(new AudioProbeTimeoutError(asrc));
+		// Each probe owns its timers: a settled one never settles the next.
+		const settle = () => {
+			clearTimeout(timeoutHandle);
+			if (pendingProbe === probe) pendingProbe = undefined;
+			probe.wake?.();
 		};
-		asrcProbeDeadlineAt = Date.now() + AUDIO_PROBE_TIMEOUT_MS;
+		const probe: PendingProbe = {
+			reject: () => {
+				settle();
+				rej(new AudioProbeTimeoutError(asrc));
+			},
+			deadlineAt: Date.now() + AUDIO_PROBE_TIMEOUT_MS,
+		};
+		pendingProbe = probe;
 
 		// Set timeout for audio device probe (QW-J)
-		const timeoutHandle = setTimeout(() => {
-			if (asrcProbeReject) {
-				asrcProbeReject();
-				asrcProbeReject = undefined;
-				asrcProbeDeadlineAt = undefined;
-			}
-		}, AUDIO_PROBE_TIMEOUT_MS);
+		const timeoutHandle = setTimeout(probe.reject, AUDIO_PROBE_TIMEOUT_MS);
 
 		const poll = async () => {
-			while (asrcProbeReject) {
+			while (pendingProbe === probe) {
 				// A BlueALSA PCM appears on D-Bus, not in `/sys/class/sound`, so no
 				// udev hotplug can reveal it — the probe has to ask. Bounded by the
 				// same grace window as every other selection.
@@ -998,31 +959,24 @@ export async function asrcProbe(asrc: string): Promise<string> {
 				}
 				audioSrcId = audioDevices[asrc];
 				if (audioSrcId) {
-					clearTimeout(timeoutHandle);
-					asrcProbeReject = undefined;
-					asrcProbeDeadlineAt = undefined;
+					settle();
 					res(audioSrcId);
 					return;
 				}
-				const config = getConfig();
-				const msg = `Selected audio input '${config.asrc}' is unavailable. Waiting for it before starting the stream...`;
+				const msg = `Selected audio input '${asrc}' is unavailable. Waiting for it before starting the stream...`;
 				notificationBroadcast("asrc_not_found", "error", msg, 2, true, false);
 
 				// Sleep one poll interval, but wake early if a hotplug re-enumeration
-				// signals a device-list change (asrcProbeWake from updateAudioDevices).
+				// signals a device-list change (from updateAudioDevices).
 				await new Promise<void>((r) => {
 					const sleepHandle = setTimeout(r, AUDIO_SOURCE_POLL_DELAY);
-					asrcProbeWake = () => {
+					probe.wake = () => {
 						clearTimeout(sleepHandle);
-						asrcProbeWake = undefined;
+						delete probe.wake;
 						r();
 					};
 				});
 			}
-			// If the loop exited, then rej() was already called externally. Nothing left to do
-			asrcProbeWake = undefined;
-			asrcProbeDeadlineAt = undefined;
-			clearTimeout(timeoutHandle);
 		};
 
 		void poll();

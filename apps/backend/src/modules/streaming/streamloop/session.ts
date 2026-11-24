@@ -27,17 +27,14 @@ import { onUsbNetScanCommitted } from "../../network/router-cellular-scan.ts";
 import { isUpdating } from "../../system/software-updates.ts";
 import { sendStatus } from "../../ui/status.ts";
 import { getSocketSenderId } from "../../ui/websocket-server.ts";
-import {
-	acceptStartAudio,
-	clearAsrcProbeReject,
-	isAsrcProbeRejectResolved,
-} from "../audio.ts";
+import { clearAsrcProbeReject, isAsrcProbeRejectResolved } from "../audio.ts";
 import { setPendingAudioFollowAsrc } from "../auto-audio.ts";
 import { clearBindMapReport } from "../bind-map-disposition.ts";
 import { announceBindMapReport } from "../bind-map-notification.ts";
 import { stopLinkTelemetry } from "../link-telemetry.ts";
 import type { Pipeline } from "../pipelines.ts";
 import { restartSrtla } from "../srtla.ts";
+import { acceptStartAudio } from "../start-audio.ts";
 import {
 	classifyStartFailure,
 	StreamStartFailure,
@@ -77,7 +74,7 @@ export async function start(
 	params: ConfigParameters,
 	generation = 0,
 	attemptId = "legacy-start",
-	startAudio = acceptStartAudio(params.asrc),
+	startAudio = acceptStartAudio(params),
 ): Promise<StartStreamResult> {
 	assertStreamLaunchOwnership();
 	const ownsLaunch = currentStreamLaunchOwner();
@@ -186,7 +183,7 @@ export async function start(
 			{},
 			attemptId,
 			undefined,
-			startAudio.off,
+			startAudio,
 		);
 	} catch (err) {
 		if (sessionResources?.generation === generation) {

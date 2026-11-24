@@ -63,10 +63,10 @@ import {
 	type BluetoothAudioProvider,
 	detectBluetoothAudioProvider,
 } from "../bluetooth/bluetooth-audio-provider.ts";
-import { getConfig } from "../config.ts";
 import type { EngineAudioDevice } from "./audio-naming.ts";
 import { getLastCapabilities } from "./capabilities.ts";
 import { getEngineAudioDevices } from "./sources.ts";
+import { audioBackendInUse } from "./start-audio.ts";
 
 export const BLUEALSA_SERVICE = "org.bluealsa";
 export const BLUEALSA_ROOT_PATH = "/org/bluealsa";
@@ -429,10 +429,6 @@ async function defaultReadAudioProvider(): Promise<BluetoothAudioProvider> {
 	return detectBluetoothAudioProvider();
 }
 
-function defaultReadAudioBackend(): AudioBackend | undefined {
-	return getConfig().audio_backend;
-}
-
 export type BluetoothAudioOracle = "bluealsa" | "pipewire" | "disabled";
 
 export function selectBluetoothAudioOracle(input: {
@@ -478,7 +474,7 @@ function activeDeps(): BluetoothAudioDeps {
 			engineSupportsPipewireCapture: defaultEngineSupportsPipewireCapture,
 			readEngineAudioDevices: getEngineAudioDevices,
 			readAudioProvider: defaultReadAudioProvider,
-			readAudioBackend: defaultReadAudioBackend,
+			readAudioBackend: audioBackendInUse,
 		}
 	);
 }
@@ -515,7 +511,7 @@ export async function refreshBluetoothAudioSources(
 		defaultReadAudioProvider());
 	const backend = active.readAudioBackend
 		? active.readAudioBackend()
-		: defaultReadAudioBackend();
+		: audioBackendInUse();
 	const oracle = selectBluetoothAudioOracle({
 		provider,
 		backend,

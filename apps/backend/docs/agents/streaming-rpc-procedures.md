@@ -123,18 +123,22 @@ no `device` whatever mix is saved, and the saved mix stays on disk for the
 next pick; `Pipeline default` with a saved mix still sends that mix.
 Only the operator's own pick counts: Auto's launch copy can also read
 "No audio" (`no-capture-audio`), so `startStream` passes `audioOff: false` there
-and a saved mix is still sent. A Start's audio is bound where it is accepted,
-before update admission (`acceptStartAudio` in the Start RPC, autostart and
-`session.start`). A "No audio" Start stays without audio whatever is saved
-meanwhile, and the armed marker restores it that way. An audio choice saved after
-acceptance is newer than the Start's own explicit `asrc` / `audio_inputs`, even
-when it repeats the saved value: `StartAudio.fresh` drops the older field before
-validation, before the save and from the reply, so the newer choice stays for the
-next Start. Every operator save of those two fields (`setConfig`, `setAudioMix`)
-calls `noteAudioSaved`; the Start's own write does not, and a migrated card id wins
-only over a payload that restates the old id. "No audio" saved
-before the engine request is built also wins over an accepted device or Auto
-pick. The compatibility
+and a saved mix is still sent. A Start uses the audio configuration carried by the
+Start request; saves made while it is in flight apply to the next Start only.
+`acceptStartAudio` (`start-audio.ts`) freezes it once where the Start is requested,
+before anything it waits for: the Start RPC, autostart, the set-profile restart.
+Validation, the codec gate, the probe, the engine request, every retry and the armed
+marker read that snapshot (`asrc`, `audio_inputs`, `acodec`, `delay` and
+`audio_backend`), never the saved config; a restoration brings back the marker's.
+So a "No audio" Start stays without audio, and a Start pressed with a microphone
+is judged on that microphone: if it does not answer, the Start is refused with
+`audio_source_probe_failed` even when "No audio" was saved meanwhile. Two reads stay
+live on purpose: a card that re-enumerated is addressed by its new id, and Auto is
+resolved against the launched source at launch. The Start's own write
+(`takeUnsaved`, once per Start) leaves out every field saved since the press, even
+when that save repeats the saved value: `setConfig` and `setAudioMix` call
+`noteAudioSaved`, the Start's own write does not. Until a Start is done the
+Bluetooth microphones stay listed for its backend. The compatibility
 start-schema export aliases the published producer schema, preserving its
 additive audio fields.
 
