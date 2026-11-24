@@ -306,10 +306,11 @@ $effect(() => {
 			class="border-border/60 bg-muted/40 ms-auto inline-flex min-w-0 shrink items-baseline gap-1.5 rounded-full border px-2 py-0.5"
 			data-testid="device-health-engine-revision"
 		>
-			<span class="text-muted-foreground/70 shrink-0 text-[0.625rem] font-medium tracking-wide">
+			<span class="text-muted-foreground/70 shrink-0 text-xs font-medium tracking-wide">
 				{m["settings.deviceHealth.cores.engineLabel"]()}
 			</span>
-			<span class="text-muted-foreground min-w-0 truncate font-mono text-[11px] tabular-nums">
+			<!-- A build ID is the one thing here that may shorten; title carries it whole. -->
+			<span class="text-muted-foreground min-w-0 truncate font-mono text-xs tabular-nums" title={engineRevision}>
 				{engineRevision}
 			</span>
 		</span>
@@ -328,7 +329,7 @@ $effect(() => {
 	<div class="min-w-0 space-y-1" data-testid={testId} data-state={status.state}>
 		<span class="text-muted-foreground flex items-center gap-1.5 text-xs">
 			<Icon aria-hidden={true} class="size-3.5 shrink-0" />
-			<span class="truncate">{label}</span>
+			<span class="min-w-0 break-words">{label}</span>
 		</span>
 		{#if status.state === 'waiting'}
 			<Skeleton class="h-5 w-24" data-testid="{testId}-skeleton" />
@@ -355,12 +356,12 @@ $effect(() => {
 					<Clock aria-hidden={true} class="size-3.5 shrink-0" />
 				{/if}
 				{#if isCompact.current && secondary !== null}
-					<span class="text-muted-foreground/80 truncate text-[11px]">· {secondary}</span>
+					<span class="text-muted-foreground/80 min-w-0 text-xs">· {secondary}</span>
 				{/if}
 			</span>
 		{/if}
 		{#if secondary !== null && !isCompact.current}
-			<span class="text-muted-foreground/80 block truncate font-mono text-[11px] tabular-nums">
+			<span class="text-muted-foreground/80 block font-mono text-xs tabular-nums">
 				{secondary}
 			</span>
 		{/if}
@@ -394,7 +395,7 @@ $effect(() => {
 		</span>
 		{#if detail !== null}
 			<span
-				class="text-muted-foreground/70 min-w-0 truncate font-mono text-[11px] tabular-nums"
+				class="text-muted-foreground/70 min-w-0 font-mono text-xs tabular-nums"
 				data-testid="{testId}-detail"
 			>
 				{detail}
@@ -407,7 +408,10 @@ $effect(() => {
 	<!-- Band 1 — the now strip. Always mounted: "no strip" must never be
 	     confusable with "no data". It is also the accessible primary, so a
 	     screen-reader user gets the same facts without the trace. -->
-	<div class="grid grid-cols-2 gap-4 sm:grid-cols-3" data-testid="device-health-now">
+	<!-- Three columns follow the panel, not the window: from a 32rem panel each
+	     column holds its icon and the widest caption word (Lastdurchschnitt). -->
+	<div class="@container">
+	<div class="grid grid-cols-2 gap-4 @lg:grid-cols-3" data-testid="device-health-now">
 		{@render fact(
 			m["settings.deviceHealth.nowStrip.temperature"](),
 			Thermometer,
@@ -424,7 +428,7 @@ $effect(() => {
 			loadStats === null ? null : m["settings.deviceHealth.peak"]({ value: formatLoad(loadStats.max) }),
 			'health-fact-load',
 		)}
-		<div class="col-span-2 min-w-0 space-y-1 sm:col-span-1" data-testid="health-fact-encoder">
+		<div class="col-span-2 min-w-0 space-y-1 @lg:col-span-1" data-testid="health-fact-encoder">
 			<span class="text-muted-foreground flex items-center gap-1.5 text-xs">
 				<Activity aria-hidden={true} class="size-3.5 shrink-0" />
 				<span class="truncate">{m["settings.deviceHealth.nowStrip.encoder"]()}</span>
@@ -432,13 +436,14 @@ $effect(() => {
 			<span class="text-foreground block text-sm" data-testid="health-fact-encoder-value">
 				{encoderCondition}
 				{#if isCompact.current}
-					<span class="text-muted-foreground/80 text-[11px]">· {framesVerdict}</span>
+					<span class="text-muted-foreground/80 text-xs">· {framesVerdict}</span>
 				{/if}
 			</span>
 			{#if !isCompact.current}
-				<span class="text-muted-foreground/80 block truncate text-[11px]">{framesVerdict}</span>
+				<span class="text-muted-foreground/80 block text-xs break-words">{framesVerdict}</span>
 			{/if}
 		</div>
+	</div>
 	</div>
 
 	<!-- Band 2 — the strip recorder. -->

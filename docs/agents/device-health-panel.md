@@ -69,3 +69,15 @@ three-state renderer remains in use. `?health-mock=island` is the illustrative
 dev fixture. Desktop/mobile browser QA is separate from the still-outstanding
 Rock 5B+ and Orange Pi 5+ visual checks; no new board validation is claimed.
 
+**The now strip and the per-core media figures follow their own width, not the
+window.** Both grids sit in a query container and take three columns only from
+32rem (`@lg`), where each column still holds its icon and the widest caption
+word (Lastdurchschnitt); narrower, they use two. Every fact in the now strip, the
+GPU/DDR load line and the engine build chip is at least 12 px (`text-xs`), and
+the secondary facts (Δ over 5 min, peak, the frames line, the load frequencies)
+wrap instead of truncating. The engine build is the one string that may shorten,
+a monospace ID with its full value in `title`. On the 1024x600 kiosk the dialog
+body is 632 px, so the strip keeps three columns and the panel does not scroll.
+`telemetry-grid-fit.spec.ts` sweeps both, the kiosk and the modem detail card,
+in six locales, at a 12 px floor.
+

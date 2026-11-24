@@ -75,6 +75,10 @@ drops each card independently and then all three at once.
   are discriminated by magnitude) and says so honestly when the modem reported no
   stamp. **The wire carries `cell_id`, NOT a `pci` field** — the card renders
   `cell_id`; do not invent a PCI row. Firmware and the eSIM badge follow.
+  The serving-cell grid and the signal strip follow the card, not the window:
+  three and four columns only from a 24rem card (`@sm`), where each column
+  holds the widest unbroken reading (`0x1A2B3C4D`). Values wrap and never
+  truncate, so `Banda 78 de 5G` stays whole on a 320 px phone.
 - **eSIM badge is READ-ONLY, permanently.** `sim_type` + `esim_status` only. No
   button, no link, no input, no click handler, no positive tabindex — asserted
   against the real DOM, not by reading markup. The EID is a redaction class and

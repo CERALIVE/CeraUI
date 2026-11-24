@@ -152,7 +152,26 @@ observation warning, not an outage; only fresh sender connection state can
 raise All bonded links down. The headline stays Sending for a fresh aggregate
 (including zero), otherwise Target or a dash. Session Summary peak and average
 use fresh measured samples only, never Target. With no measurement both
-display a dash. Below 640 px the summary uses two columns with wrapping labels.
+display a dash. The summary tiles follow the card's width, not the window's:
+five in a row only from a 48rem card (`@3xl`), where every tile still fits its
+padding, icon and the widest one-word caption or value (TRANSFERRED is 85 px
+at `text-xs`, 999.9 Mbps 80 px; five need about 43rem). A narrower card uses
+two columns and Transferred spans the row. Captions wrap only between words,
+values stay on one line, and a value with a Latin unit is an LTR isolate, so
+Arabic reads 999.9 Mbps as the Live glance does. The contribution header and
+the live per-link table use `text-xs` as well, so no text in the card is 10 px.
+Link names are never clipped. Each line of the live table wraps on its own
+content, not on a breakpoint: the link cell never shrinks below its longest
+unbreakable word (a 15-character interface name such as `enx0c5b8f279a64` is
+108 px), and RTT, NAK and Allocation keep fixed tracks at the line's end. When
+both no longer fit side by side, that line's readings drop below its name and
+stay in the header's columns. Long carrier names wrap rather than clamp. Below
+the session tiles, the per-link header and its rows share one card rule: from a
+24rem card (`@sm`) the name sits in a 9rem column beside Share, NAK and RTT;
+a narrower card gives every name, the header's included, its own line, so Share
+keeps the 88 px CONTRIBUIÇÃO needs. `ingest-stats.spec.ts` sweeps 320-1280 px
+and narrow cards in a wide window after a real Start, during Live, and after
+Stop, holding every line to its row and card and every reading to its column.
 
 The health HUD shows Unknown when bond activity is unknown and no other
 observation establishes a fault. Bond detail clears even if another fault keeps

@@ -2153,6 +2153,8 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 		     than collapsing into one em-dash. `data-metric-*` carries the machine
 		     verdict so a test names a reason class, never a translated string. -->
 		{#snippet metricStrip(rows: ModemMetricRow<string>[], prefix: string, cols: string)}
+			<!-- @container: the signal strip passes `@sm:grid-cols-4`, so it follows the card. -->
+			<div class="@container">
 			<dl class={cn('grid grid-cols-2 gap-x-3 gap-y-2.5', cols)} data-testid={`${prefix}-strip`}>
 				{#each rows as row (row.id)}
 					<div class="min-w-0">
@@ -2174,6 +2176,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 					</div>
 				{/each}
 			</dl>
+			</div>
 		{/snippet}
 
 		<!-- ── Serving-cell detail, firmware, and the SIM identity group ────────
@@ -2189,12 +2192,15 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 			title={m["network.modem.detail.title"]()}
 			description={m["network.modem.detail.description"]()}>
 				{#if cellRows.length > 0}
-					<dl class="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3" data-testid="modem-cell-info">
+					<!-- Three columns from a 24rem card, where each holds the widest
+					     unbroken reading (0x1A2B3C4D); values wrap rather than truncate. -->
+					<div class="@container">
+					<dl class="grid grid-cols-2 gap-x-3 gap-y-2 @sm:grid-cols-3" data-testid="modem-cell-info">
 						{#each cellRows as row (row.key)}
 							<div class="min-w-0">
 								<dt class="text-muted-foreground text-xs">{t(row.labelKey)}</dt>
 								<dd
-									class="truncate font-mono text-sm tabular-nums"
+									class="font-mono text-sm break-words tabular-nums"
 									data-testid={`modem-cell-${row.key}`}
 									data-raw={row.format ? row.value : undefined}
 								>
@@ -2205,6 +2211,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 							</div>
 						{/each}
 					</dl>
+					</div>
 
 					<p class="text-muted-foreground/80 text-xs" data-testid="modem-cell-observed">
 						{observedAt === undefined
@@ -2218,7 +2225,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 				{#if signalRows.length > 0}
 					<div class="space-y-2" data-testid="modem-signal-detail">
 						<p class="text-sm font-medium">{m["network.modem.detail.signalTitle"]()}</p>
-						{@render metricStrip(signalRows, 'modem-signal', 'sm:grid-cols-4')}
+						{@render metricStrip(signalRows, 'modem-signal', '@sm:grid-cols-4')}
 
 						<!-- WHEN THE MODEM LAST MEASURED, which is a different question
 						     from when WE last read — envelope staleness already answers
