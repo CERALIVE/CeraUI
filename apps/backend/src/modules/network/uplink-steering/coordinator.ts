@@ -25,6 +25,7 @@ export interface UplinkSteeringCoordinatorDeps {
 	publishAvailability(status: SteeringAvailability): void;
 	waitBeforeRetry?(delayMs: number): Promise<void>;
 	retryCleanup?(): Promise<void>;
+	hasPendingApply?(): boolean;
 	now?(): number;
 	schedule?(callback: () => Promise<void>, delayMs: number): () => void;
 }
@@ -112,7 +113,10 @@ export class UplinkSteeringCoordinator {
 					this.#lastFailure === undefined ||
 					(this.#deps.now ?? Date.now)() >= this.#lastFailure.nextAttemptAt
 				) {
-					if (stateKey(this.#applied) !== desiredKey) {
+					if (
+						stateKey(this.#applied) !== desiredKey ||
+						this.#deps.hasPendingApply?.()
+					) {
 						await this.#deps.apply(this.#applied, desired);
 					}
 					this.#applied = desired;

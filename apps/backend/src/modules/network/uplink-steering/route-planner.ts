@@ -11,7 +11,10 @@ import {
 	parseHasDefaultRoute,
 	parseIpRules,
 } from "./route-parsers.ts";
-import { assertFwmarkPriorityAvailable } from "./route-policy.ts";
+import {
+	assertFwmarkPriorityAvailable,
+	withoutMarkFence,
+} from "./route-policy.ts";
 
 export { isManagedUplinkTable } from "./mark-layout.ts";
 
@@ -28,6 +31,7 @@ export interface UplinkRouteCandidate {
 
 export interface UplinkRouteManagerDeps {
 	run: typeof run;
+	readonly journaled?: boolean;
 }
 
 const defaultDeps: UplinkRouteManagerDeps = { run };
@@ -61,7 +65,10 @@ async function planUplinkRouteInner(
 ): Promise<UplinkRoutePlan> {
 	assertCandidate(candidate);
 	const ruleOutput = await deps.run("ip", ["rule", "show"]);
-	assertFwmarkPriorityAvailable(ruleOutput, candidate.ifname);
+	assertFwmarkPriorityAvailable(
+		deps.journaled ? withoutMarkFence(ruleOutput) : ruleOutput,
+		candidate.ifname,
+	);
 	if (!candidate.sourceAddressUnique)
 		return await planTwinRoute(candidate, deps);
 	const rules = parseIpRules(ruleOutput);

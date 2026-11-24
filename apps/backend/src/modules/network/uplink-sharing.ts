@@ -79,6 +79,7 @@ export async function applyNftablesRules(
 	ruleset: string,
 	deps: UplinkSharingDeps = defaultDeps,
 	action: SharingServiceAction = "reload",
+	forwardOnly = false,
 ): Promise<void> {
 	if (action === "deactivate") {
 		await deps.run("systemctl", ["stop", SHARE_SERVICE]);
@@ -92,6 +93,12 @@ export async function applyNftablesRules(
 		}
 		await deps.run("systemctl", ["reload", SHARE_SERVICE]);
 	} catch (error) {
+		if (forwardOnly) {
+			throw new SteeringUnavailableError(
+				"ruleset_reload_failed",
+				error instanceof Error ? error.message : String(error),
+			);
+		}
 		try {
 			if (previous === undefined) {
 				await deps.removeFile(SHARE_RULESET_PATH);

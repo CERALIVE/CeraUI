@@ -1,4 +1,7 @@
 {
+	"uplink-steering-collision-kernel.test.ts": [
+		"collision WAL replaces an orphan table before a different owner can route"
+	],
 	"uplink-steering-route-kernel.test.ts": [
 		"#433 provisions and retires never-created steering tables",
 		"#534 rename rollback restores a cross-device default with metric 100",

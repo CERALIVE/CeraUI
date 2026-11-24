@@ -11,6 +11,11 @@ import {
 	UPLINK_MARK_MASK,
 	WEIGHT_BUCKET_MODULUS,
 } from "./contracts.ts";
+import {
+	buildMarkGuard,
+	epochBits,
+	type MarkAdmission,
+} from "./mark-admission.ts";
 import { markForSlot } from "./mark-layout.ts";
 
 const IPV4_CIDR_RE =
@@ -29,7 +34,10 @@ export function stableUplinkMark(identity: string): number {
 	return markForSlot(((hash >>> 16) ^ hash) & 0xffff);
 }
 
-export function buildShareRuleset(state: ShareRulesetState): string {
+export function buildShareRuleset(
+	state: ShareRulesetState,
+	admission?: MarkAdmission,
+): string {
 	const zones = [...state.clientZones].sort((a, b) =>
 		a.ifname.localeCompare(b.ifname),
 	);
@@ -58,10 +66,14 @@ export function buildShareRuleset(state: ShareRulesetState): string {
 			"",
 		);
 		for (const [index, uplink] of selectable.entries()) {
+			const epoch =
+				admission?.claims.find((claim) => claim.mark === uplink.mark)?.epoch ??
+				0;
 			lines.push(
 				`\tchain select_${index} {`,
 				`\t\tmeta mark set (meta mark & ${hexMark(UNOWNED_MARK_MASK)}) | ${hexMark(uplink.mark)}`,
 				`\t\tct mark set (ct mark & ${hexMark(UNOWNED_MARK_MASK)}) | ${hexMark(uplink.mark)}`,
+				...(epoch === 0 ? [] : [`\t\tct label set ${epochBits(epoch)}`]),
 				"\t\treturn",
 				"\t}",
 				"",
@@ -75,7 +87,7 @@ export function buildShareRuleset(state: ShareRulesetState): string {
 	);
 	for (const zone of zones) {
 		for (const uplink of uplinks) {
-			lines.push(renderRestoreRule(zone, uplink));
+			lines.push(renderRestoreRule(zone, uplink, admission !== undefined));
 		}
 		if (selectable.length > 0) {
 			lines.push(renderSelectionRule(zone));
@@ -88,7 +100,7 @@ export function buildShareRuleset(state: ShareRulesetState): string {
 			lines.push(renderMasqueradeRule(zone, uplink));
 	}
 	lines.push("\t}", "}", "");
-	return lines.join("\n");
+	return lines.join("\n") + (admission ? buildMarkGuard(admission) : "");
 }
 
 function renderWeightedElements(uplinks: readonly SteeringUplink[]): string {
@@ -129,8 +141,12 @@ export function apportionWeightBuckets(
 	return shares.map((share) => share.buckets);
 }
 
-function renderRestoreRule(zone: ClientZone, uplink: SteeringUplink): string {
-	return `\t\tiifname "${zone.ifname}" ip saddr ${zone.ipv4Cidr} ct state established,related ct mark & ${hexMark(UPLINK_MARK_MASK)} == ${hexMark(uplink.mark)} meta mark set meta mark & ${hexMark(UNOWNED_MARK_MASK)} | ${hexMark(uplink.mark)} comment "restore client flow"`;
+function renderRestoreRule(
+	zone: ClientZone,
+	uplink: SteeringUplink,
+	guarded: boolean,
+): string {
+	return `\t\tiifname "${zone.ifname}" ip saddr ${zone.ipv4Cidr} ct state ${guarded ? "new,established,related" : "established,related"} ct mark & ${hexMark(UPLINK_MARK_MASK)} == ${hexMark(uplink.mark)} meta mark set meta mark & ${hexMark(UNOWNED_MARK_MASK)} | ${hexMark(uplink.mark)} comment "restore client flow"`;
 }
 
 function renderSelectionRule(zone: ClientZone): string {

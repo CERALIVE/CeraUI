@@ -41,6 +41,11 @@ The mark layout is `0xca | stable 16-bit uplink slot | preserved low byte`:
 
 The stable slot is derived from physical uplink identity, never array position, so
 adding, removing, reordering, or reweighting links does not move established flows.
+When natural slots collide, current owners keep their saved slots. Initially
+unclaimed natural slots go to the first identity in sort order, and the other
+links take the next free slot, wrapping to 1 rather than 0. Both links can carry
+new shared-client flows. Given the same boot journal, input order and restart
+do not change assignments. A different arrival history can yield different slots.
 Only a new conntrack flow entering a positive client-zone `iifname` match runs the
 weighted verdict map. Established client-direction packets restore their route mark
 from conntrack. Reply packets entering from a WAN interface do not, preventing WAN
@@ -127,8 +132,8 @@ rendered fixtures remain unchanged. The steering refusal reason
 
 An occupied foreign rule at priority 110, a route table with no usable default,
 overlapping client/uplink prefixes, a client zone that remains a bond candidate,
-or a stable-mark collision produces a typed `steering_unavailable` state rather
-than a guessed route. Preparation still succeeds or fails as a whole.
+or inconsistent saved mark ownership produces a typed `steering_unavailable`
+state rather than a guessed route. Preparation still succeeds or fails as a whole.
 
 On backend restart, the module inventories its namespaced priority-110 rules. It
 publishes the latest ruleset first, then flushes conntrack and removes stale rules
@@ -145,6 +150,24 @@ An in-place interface rename retains the continuing identity's table and fwmark
 rule without flushing its flows, including when final ruleset publication fails.
 Route retention matches identity, table, and mark; the interface name is mutable.
 A departing identity still follows the hard-down drain below.
+
+### Collision recovery
+
+The backend keeps the mark assignment in `/run/ceralive/uplink-steering-marks.json`.
+It syncs the intent before provisioning, fences affected traffic, and commits
+after an atomic nft publication carrying the assignment receipt. A backend
+restart recovers in the same boot, reclaims abandoned provisional tables even
+when their fwmark rule was never installed, and finishes interrupted
+publication. The separate `inet ceralive_share_guard` table checks forwarded
+IPv4 traffic from client zones against the admitted mark and egress device.
+The priority-110 fence prevents an older steering backend from taking over a
+live journaled assignment. Reboot before downgrading; the journal and kernel
+state are boot-scoped.
+
+Non-colliding uplinks retain the original no-flush rebind behavior. Only marks
+affected by a collision use the journal's flow-retirement rule on a change of
+binding or ownership. Renaming the same netdev, changing gateway or metric, and
+reweighting do not reset those flows.
 
 Once the latest ruleset is committed, a stale-route cleanup failure keeps the live
 ruleset and newly provisioned routes intact, completes the forwarding step, and

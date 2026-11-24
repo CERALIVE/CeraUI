@@ -42,6 +42,26 @@ The fixed 10000-bucket verdict map uses largest-remainder apportionment. Reorder
 add/remove, and reweight never change a surviving mark, so established flows keep
 their original route while only new flows see the new weights.
 
+Distinct identities with the same natural mark keep sharing. Published
+incumbents retain their saved slots; free natural slots are reserved first and
+new contenders probe upward in identity order (65535 wraps to 1, never 0).
+The same journal produces the same assignment after reorder and restart;
+different arrival histories can assign the same pair differently.
+
+The boot-scoped assignment journal is written and synced before changing a
+collision-affected route. A kernel receipt distinguishes published ownership
+from provisional routes, including tables that never got a policy rule.
+The IPv4 egress fence drops client packets that do not match an admitted mark,
+connection generation, and egress device. The backend reconciles forward
+after an interruption; it does not restore a pre-transition classifier over
+changed routes. Invalid journal authority fails closed. Reboot before downgrading
+after a collision has been journaled in the current boot.
+
+Non-colliding rebinds retain main's no-flush behavior. For collision-affected
+marks, retirement or a real source/device binding change retires the old
+connections before admission on the new binding. A rename on the same
+netdev, gateway/metric change, or weight change does not retire them.
+
 Wi-Fi marks use the coherently sampled permanent address bound to the current
 registry object, independently of its verified/limited classification key.
 An unrelated unreadable witness therefore cannot turn a surviving station's
@@ -129,7 +149,7 @@ priority-100 managed-table source rules, including source-only crash remnants.
 It publishes the latest model first, then flushes and removes stale support.
 `uplink-steering/applier.ts` protects desired support by mark/table and retains
 cleanup work separately for each source address and priority. Any overlap, mark
-collision, foreign priority owner, missing route, nft failure, or rollback failure is fail-soft and surfaces
+invariant violation, foreign priority owner, missing route, nft failure, or rollback failure is fail-soft and surfaces
 `steering_unavailable`; it never blocks the already-bound WS server.
 
 Keep committed steering through stale-route cleanup failures: sharing, provisioned

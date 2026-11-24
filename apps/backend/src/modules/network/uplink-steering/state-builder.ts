@@ -28,6 +28,7 @@ import {
 	SteeringUnavailableError,
 	type SteeringUplink,
 } from "./contracts.ts";
+import { assignSteeringMarks } from "./mark-allocation.ts";
 import { planUplinkRoute, type UplinkRouteCandidate } from "./route-manager.ts";
 import { stableUplinkMark } from "./ruleset.ts";
 import { cidrsOverlap, subnetCidr } from "./subnet.ts";
@@ -77,6 +78,11 @@ const defaultDeps: SteeringStateBuilderDeps = {
 export interface SteeringReadinessContext {
 	readonly hasAppliedState?: boolean;
 	readonly zonesReadyBypass?: boolean;
+	readonly incumbentMarks?: ReadonlyMap<string, number>;
+	readonly resolveMarks?: (
+		candidates: readonly SteeringUplink[],
+	) => Promise<ReadonlyMap<string, number>>;
+	readonly planRoute?: SteeringStateBuilderDeps["planRoute"];
 }
 
 export interface PendingSteeringState {
@@ -106,11 +112,22 @@ export async function readDesiredSteeringState(
 	if (!context.hasAppliedState && identityPending)
 		return { pending: true, netifReady: true, reason: "identity" };
 	assertNoOverlap(zones, candidates);
-	assertDistinctMarks(candidates);
+	const uplinks = candidates.map(({ uplink }) => uplink);
+	const assigned = context.resolveMarks
+		? await context.resolveMarks(uplinks)
+		: assignSteeringMarks(uplinks, context.incumbentMarks ?? new Map());
+	const marked = candidates.map((candidate) => ({
+		...candidate,
+		uplink: {
+			...candidate.uplink,
+			mark: assigned.get(candidate.uplink.identity) ?? candidate.uplink.mark,
+		},
+	}));
+	assertDistinctMarks(marked);
 	const routes: UplinkRoutePlan[] = [];
-	for (const candidate of candidates) {
+	for (const candidate of marked) {
 		routes.push(
-			await deps.planRoute({
+			await (context.planRoute ?? deps.planRoute)({
 				identity: candidate.uplink.identity,
 				ifname: candidate.uplink.ifname,
 				sourceAddress: candidate.sourceAddress,
@@ -121,7 +138,7 @@ export async function readDesiredSteeringState(
 	}
 	return {
 		clientZones: zones,
-		uplinks: candidates.map((candidate) => candidate.uplink),
+		uplinks: marked.map((candidate) => candidate.uplink),
 		routes,
 	};
 }

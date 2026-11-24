@@ -4,7 +4,7 @@ import { buildLinkTelemetry } from "../../streaming/link-telemetry.ts";
 import { getStreamLifecycleState } from "../../streaming/stream-lifecycle-status.ts";
 import { isRealDevice } from "../../system/device-detection.ts";
 import { applyTrafficControl } from "../uplink-sharing.ts";
-import { readDesiredSteeringState } from "../uplink-steering/state-builder.ts";
+import { committedUplinkSteeringState } from "../uplink-steering/runtime.ts";
 import { type RootQdisc, UplinkShaperApplier } from "./applier.ts";
 import { SHAPER_OWNERSHIP_PATH } from "./contracts.ts";
 import { UplinkShaperCoordinator } from "./coordinator.ts";
@@ -42,8 +42,8 @@ export async function initUplinkShaper(): Promise<void> {
 export async function tickUplinkShaper(): Promise<void> {
 	if (!enabled) return;
 	try {
-		const steering = await readDesiredSteeringState();
-		if ("pending" in steering) return;
+		const steering = committedUplinkSteeringState();
+		if (steering === undefined) return;
 		const telemetry = buildLinkTelemetry()?.links ?? [];
 		await coordinator.update({
 			streaming: getStreamLifecycleState() === "streaming",

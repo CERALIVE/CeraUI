@@ -21,7 +21,10 @@ import {
 	planUplinkRoute,
 	type UplinkRouteCandidate,
 } from "../modules/network/uplink-steering/route-manager.ts";
-import { stableUplinkMark } from "../modules/network/uplink-steering/ruleset.ts";
+import {
+	buildShareRuleset,
+	stableUplinkMark,
+} from "../modules/network/uplink-steering/ruleset.ts";
 import {
 	readDesiredSteeringState,
 	type SteeringStateBuilderDeps,
@@ -370,13 +373,123 @@ describe("readDesiredSteeringState", () => {
 		});
 	});
 
-	test("refuses two active identities that collide in the mark namespace", async () => {
+	test("plans both active identities that collide in the mark namespace", async () => {
 		const h = harness({ markForIdentity: () => 0xca001100 });
 
-		await expect(readDesiredSteeringState(h)).rejects.toMatchObject({
-			reason: "mark_collision",
+		const state = await readReadySteeringState(h);
+		expect(
+			state.uplinks.map(({ ifname, mark, selectable }) => [
+				ifname,
+				mark,
+				selectable,
+			]),
+		).toEqual([
+			["wlan0", 0xca001200, true],
+			["wwan0", 0xca001100, true],
+		]);
+		expect(h.planned.map(({ ifname, mark }) => [ifname, mark])).toEqual([
+			["wlan0", 0xca001200],
+			["wwan0", 0xca001100],
+		]);
+	});
+
+	test.each([2, 3, 4])(
+		"assigns the same %i colliders in reverse input order, skipping zero and reserved homes",
+		async (count) => {
+			const entries = [
+				["eth9", netif("10.43.0.1")],
+				["wwan9", netif("100.64.9.2")],
+				...Array.from(
+					{ length: count },
+					(_, i) =>
+						[
+							`wwan${i}`,
+							netif("100.64.1.2", "255.255.255.0", NETIF_ERR_DUPIPV4),
+						] as const,
+				),
+			] as const;
+			const expected = [
+				...Array.from({ length: count }, (_, i) => [
+					`wwan${i}`,
+					i === 0 ? 0xcaffff00 : 0xca000000 + ((i + 1) << 8),
+				]),
+				["wwan9", 0xca000100],
+			];
+			for (const order of [entries, [...entries].reverse()]) {
+				const h = harness({
+					interfaces: () => Object.fromEntries(order),
+					health: () => [],
+					markForIdentity: (identity) =>
+						identity === "id-path:wwan9" ? 0xca000100 : 0xcaffff00,
+				});
+				const state = await readReadySteeringState(h);
+				expect(state.routes.map(({ ifname, mark }) => [ifname, mark])).toEqual(
+					expected,
+				);
+				expect(
+					h.planned
+						.filter(({ ifname }) => ifname !== "wwan9")
+						.map(({ sourceAddressUnique }) => sourceAddressUnique),
+				).toEqual(Array.from({ length: count }, () => false));
+			}
+		},
+	);
+
+	test("keeps the saved incumbent on join and the saved prober on leave", async () => {
+		const links = [
+			["eth9", netif("10.43.0.1")],
+			["wwan0", netif("100.64.1.2")],
+			["wwan1", netif("100.64.1.2")],
+		] as const;
+		const fixtures = harness({
+			interfaces: () => Object.fromEntries(links),
+			health: () => [],
+			physicalIdentity: (ifname) =>
+				ifname === "wwan0" ? "constructed-twin-322" : "constructed-twin-386",
 		});
-		expect(h.planned).toEqual([]);
+		const incumbent = {
+			hasAppliedState: true,
+			incumbentMarks: new Map([["constructed-twin-386", 0xca671800]]),
+		};
+		const expected = [
+			["wwan0", 0xca671900],
+			["wwan1", 0xca671800],
+		];
+		for (const order of [links, [...links].reverse()]) {
+			const ready = await readReadySteeringState(
+				{
+					...fixtures,
+					interfaces: () => Object.fromEntries(order),
+				},
+				incumbent,
+			);
+			expect(ready.routes.map(({ ifname, mark }) => [ifname, mark])).toEqual(
+				expected,
+			);
+		}
+		const surviving = {
+			hasAppliedState: true,
+			incumbentMarks: new Map([
+				["constructed-twin-322", 0xca671900],
+				["constructed-twin-386", 0xca671800],
+			]),
+		};
+		const ready = await readReadySteeringState(
+			{
+				...fixtures,
+				interfaces: () => Object.fromEntries(links.slice(0, 2)),
+			},
+			surviving,
+		);
+		expect(ready.routes.map(({ ifname, mark }) => [ifname, mark])).toEqual([
+			["wwan0", 0xca671900],
+		]);
+	});
+
+	test("keeps the non-colliding state and ruleset bytes from main", async () => {
+		const state = await readReadySteeringState(harness());
+		expect(JSON.stringify(state)).toMatchSnapshot();
+		expect(buildShareRuleset(state)).toMatchSnapshot();
 	});
 });
 

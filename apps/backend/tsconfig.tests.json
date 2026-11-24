@@ -25,6 +25,8 @@
 		"src/tests/uplink-steering-table-key-kernel.test.ts",
 		"src/tests/uplink-steering-source-kernel.test.ts",
 		"src/tests/uplink-steering-mark-layout.test.ts",
+		"src/tests/uplink-steering-collision-lifecycle.test.ts",
+		"src/tests/uplink-steering-collision-kernel.test.ts",
 		"src/tests/uplink-steering-rename-kernel.test.ts"
 	],
 	"exclude": []

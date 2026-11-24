@@ -7,6 +7,13 @@ import {
 import { isManagedUplinkTable } from "./mark-layout.ts";
 import { routeUnavailable } from "./route-errors.ts";
 
+export const MARK_FENCE_RULE =
+	/^110:\s+from all fwmark 0xca000000\/0xff000000 lookup 30000\s*$/m;
+
+export function withoutMarkFence(output: string): string {
+	return output.replace(MARK_FENCE_RULE, "");
+}
+
 export interface OwnedFwmarkRule {
 	readonly mark: number;
 	readonly table: string;
@@ -113,7 +120,7 @@ export function hasSourceRule(output: string, plan: UplinkRoutePlan): boolean {
 
 export function fwmarkRuleArgv(
 	action: "add" | "del",
-	plan: UplinkRoutePlan,
+	plan: Pick<UplinkRoutePlan, "mark" | "table">,
 ): string[] {
 	return [
 		"rule",
@@ -129,7 +136,10 @@ export function fwmarkRuleArgv(
 
 export function sourceRuleArgv(
 	action: "add" | "del",
-	plan: UplinkRoutePlan,
+	plan: Pick<
+		UplinkRoutePlan,
+		"sourceRulePriority" | "ifname" | "sourceAddress" | "table"
+	>,
 ): string[] {
 	if (plan.sourceRulePriority === undefined) {
 		throw routeUnavailable(plan.ifname, "managed source rule has no priority");
