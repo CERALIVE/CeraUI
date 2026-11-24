@@ -964,7 +964,7 @@ config, not from a potentially stale in-memory preference snapshot.
 |---|---|---|
 | `bond_opt_out` | exact or pair link id | Written by main's unchanged transition, so v2026.11.4 reads the bytes it would have written itself for the same successful saves |
 | `bond_group_out` | pair link id | A pair default that transition deleted; it still excludes an untouched twin. Under config authority, like `bond_opt_out` |
-| `bond_opt_in` | id-path link id | `{ vid, pin? }`: the operator's ON for a port-anchored USB modem. `pin` marks an exact bit main's transition derived for that port while it held the ON |
+| `bond_opt_in` | id-path link id and USB vendor id | `{ vid, pin? }`: the operator's ON for a port-anchored USB modem. Another vendor's ON cannot overwrite it. `pin` marks an exact bit main's transition derived for that port while it held the ON |
 | `bond_port_out` | id-path link id | `{ vid, exact? }`: an explicit OFF follows the same vendor at this port when the serial is unreadable. `exact` identifies the retained legacy bit as owned by that choice. |
 
 The reader answers, first match wins:

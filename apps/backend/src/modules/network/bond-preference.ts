@@ -77,10 +77,15 @@ export function hasBondPreferenceOverlay(): boolean {
 const vendorOf = (keys: PhysicalBondKeys) =>
 	keys.vid?.trim().toLowerCase() ?? "";
 
+const portVendorKey = (port: string, vid: string) => `${port}:${vid}`;
+
 function portChoice(preferences: BondPreferences, keys: PhysicalBondKeys) {
+	if (keys.anchor !== "id-path") return undefined;
+	const vid = vendorOf(keys);
 	const choice =
-		keys.anchor === "id-path" ? preferences.optIn?.[keys.linkId] : undefined;
-	return choice?.vid === vendorOf(keys) ? choice : undefined;
+		preferences.optIn?.[portVendorKey(keys.linkId, vid)] ??
+		preferences.optIn?.[keys.linkId];
+	return choice?.vid === vid ? choice : undefined;
 }
 
 /**
@@ -205,16 +210,24 @@ function transition(
 				stored.out?.[peer.linkId] !== true &&
 				out[peer.linkId] === true
 			)
-				optIn[peer.linkId] = { vid: choice.vid, pin: true };
+				optIn[portVendorKey(peer.linkId, choice.vid)] = {
+					vid: choice.vid,
+					pin: true,
+				};
 		}
 	}
 	const port =
 		target.anchor === "id-path" ? target.linkId : portLinkId(target.idPath);
 	const vid = vendorOf(target);
+	if (
+		port !== undefined &&
+		(optOut || target.anchor === "id-path") &&
+		optIn[port]?.vid === vid
+	)
+		delete optIn[port];
 	if (optOut) {
-		delete optIn[target.linkId];
 		if (port !== undefined) {
-			delete optIn[port];
+			delete optIn[portVendorKey(port, vid)];
 			if (vid) {
 				portOut[port] =
 					target.anchor === "id-path" || portOut[port]?.exact === true
@@ -223,12 +236,13 @@ function transition(
 			}
 		}
 	} else if (target.anchor === "id-path") {
-		delete portOut[target.linkId];
-		optIn[target.linkId] = { vid };
+		if (portOut[target.linkId]?.vid === vid) delete portOut[target.linkId];
+		optIn[portVendorKey(target.linkId, vid)] = { vid };
 	} else {
 		delete groupOut[target.linkId];
 		if (port !== undefined && portOut[port]?.vid === vid) {
-			if (portOut[port]?.exact === true) optIn[port] = { vid, pin: true };
+			if (portOut[port]?.exact === true)
+				optIn[portVendorKey(port, vid)] = { vid, pin: true };
 			delete portOut[port];
 		}
 	}

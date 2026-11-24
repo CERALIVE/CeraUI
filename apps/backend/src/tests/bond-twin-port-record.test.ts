@@ -302,6 +302,30 @@ test("a port ON does not transfer to a different brand's excluded pair", async (
 	expect(included(first, second)).toEqual([false, false]);
 });
 
+test("an ON from another vendor at an aliased path keeps the attached twin ON", async () => {
+	const alias = {
+		...at(b, ""),
+		idVendor: "1e0e",
+		udevadm: { ...b.udevadm, ID_PATH: a.udevadm.ID_PATH },
+	};
+	await scan(at(a, g1), alias);
+	setPersistentBondOptOut(first, false);
+	expect(included(first)).toEqual([true]);
+	setPersistentBondOptOut(second, false);
+	expect(included(first, second)).toEqual([true, true]);
+});
+
+test("an ON from a different vendor does not erase the previous vendor's port ON", async () => {
+	await scan(at(a, g1), at(b, g1));
+	setPersistentBondOptOut(first, false);
+	expect(included(first, second)).toEqual([true, false]);
+	await scan({ ...at(a, ""), idVendor: "1e0e" }, at(b, g1));
+	setPersistentBondOptOut(first, false);
+	await reload();
+	await readOnlyScan(at(a, g1), at(b, g1));
+	expect(included(first, second)).toEqual([true, false]);
+});
+
 test.each([
 	["its own unique serial", "PORT-RECORD-HUAWEI-UNIQUE", true],
 	["no serial", "", true],

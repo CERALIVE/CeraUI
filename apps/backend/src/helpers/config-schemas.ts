@@ -414,8 +414,8 @@ export const runtimeConfigSchema = z.object({
 	// the pair's legacy link id. Read only by this release; an old release's
 	// clean save drops it, which leaves its own `bond_opt_out` semantics.
 	bond_group_out: z.record(z.string().min(1), z.literal(true)).optional(),
-	// The operator's ON for a port-anchored USB modem, keyed by the id-path link
-	// id and scoped to the USB vendor id: a same-brand modem later at that port
+	// The operator's ON for a port-anchored USB modem, keyed by id-path link
+	// id and USB vendor id: a same-brand modem later at that port
 	// inherits it. `pin` marks an exact `bond_opt_out` bit main's writer derived
 	// for this port, which the ON outranks on this release only.
 	bond_opt_in: z
