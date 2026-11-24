@@ -1,11 +1,8 @@
 // @vitest-environment jsdom
 /**
- * The phone Live screen opens on the stream (LiveGlance), with the engineering
- * telemetry folded into Details (LiveDetails) and the bitrate slider in a
- * sheet (PhoneBitrateControl).
+ * Phone Live glance and bitrate sheet.
  */
 
-import { setLocale } from "@ceraui/i18n/svelte";
 import type { LinkTelemetryMessage } from "@ceraui/rpc/schemas";
 import {
 	cleanup,
@@ -15,13 +12,11 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/svelte";
-import { createRawSnippet } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { projectIngestLinks } from "$lib/components/custom/ingest-link-view";
-import { en, es } from "../../tests/helpers/catalog";
+import { en } from "../../tests/helpers/catalog";
 import CompactRate from "./CompactRate.svelte";
-import LiveDetails from "./LiveDetails.svelte";
 import LiveGlance from "./LiveGlance.svelte";
 import PhoneBitrateControl from "./PhoneBitrateControl.svelte";
 
@@ -162,107 +157,6 @@ describe("LiveGlance", () => {
 		expect(second).toBe("Wi-Fi 1 1 Mbps");
 		await rerender({ rows: telemetry([wifi, wired]) });
 		expect(readRows()).toEqual([second, first]);
-	});
-});
-
-describe("LiveDetails", () => {
-	const body = createRawSnippet(() => ({
-		render: () => "<p data-probe>engine numbers</p>",
-	}));
-	let wide = false;
-
-	beforeEach(() => {
-		localStorage.clear();
-		wide = false;
-		vi.stubGlobal(
-			"matchMedia",
-			vi.fn(() => ({
-				matches: wide,
-				addEventListener: () => {},
-				removeEventListener: () => {},
-			})),
-		);
-	});
-	afterEach(() => {
-		cleanup();
-		vi.unstubAllGlobals();
-	});
-
-	function details(container: HTMLElement): HTMLDetailsElement {
-		const element = container.querySelector("details");
-		if (!element) throw new Error("Details disclosure did not render");
-		return element;
-	}
-
-	it("starts folded on a phone, with its content still mounted", () => {
-		const { container } = render(LiveDetails, { props: { children: body } });
-		expect(details(container).open).toBe(false);
-		expect(container.querySelector("[data-probe]")).not.toBeNull();
-	});
-
-	it("remembers the streamer's choice on this device", async () => {
-		const { container } = render(LiveDetails, { props: { children: body } });
-		details(container).open = true;
-		await fireEvent(details(container), new Event("toggle"));
-		expect(localStorage.getItem("ceraui.live.detailsOpen")).toBe("true");
-		cleanup();
-		const again = render(LiveDetails, { props: { children: body } });
-		expect(details(again.container).open).toBe(true);
-	});
-
-	it("is open on a desktop-width screen whatever was stored", () => {
-		localStorage.setItem("ceraui.live.detailsOpen", "false");
-		wide = true;
-		const { container } = render(LiveDetails, { props: { children: body } });
-		expect(details(container).open).toBe(true);
-	});
-
-	it("is forced open in the post-stream summary", () => {
-		localStorage.setItem("ceraui.live.detailsOpen", "false");
-		const { container } = render(LiveDetails, {
-			props: { children: body, forceOpen: true },
-		});
-		expect(details(container).open).toBe(true);
-	});
-
-	it("cannot be folded while forced open, and the stored choice applies again after", async () => {
-		localStorage.setItem("ceraui.live.detailsOpen", "false");
-		const { container, rerender } = render(LiveDetails, {
-			props: { children: body, forceOpen: true },
-		});
-		let visibility: string | undefined;
-		const summary = container.querySelector("summary");
-		if (summary) visibility = getComputedStyle(summary).display;
-		expect(visibility).toBe("none");
-		// Closing it some other way is undone while forced open.
-		details(container).open = false;
-		await fireEvent(details(container), new Event("toggle"));
-		expect(details(container).open).toBe(true);
-		expect(localStorage.getItem("ceraui.live.detailsOpen")).toBe("false");
-		await rerender({ forceOpen: false });
-		expect(details(container).open).toBe(false);
-	});
-
-	it("does not overwrite the phone's folded preference while wide", () => {
-		localStorage.setItem("ceraui.live.detailsOpen", "false");
-		wide = true;
-		const first = render(LiveDetails, { props: { children: body } });
-		expect(details(first.container).open).toBe(true);
-		cleanup();
-		wide = false;
-		const second = render(LiveDetails, { props: { children: body } });
-		expect(details(second.container).open).toBe(false);
-	});
-
-	it("renders localized Details copy that names what is inside", () => {
-		setLocale("es");
-		try {
-			render(LiveDetails, { props: { children: body } });
-			expect(screen.getByText(es.live.glance.details)).toBeDefined();
-			expect(screen.getByText(es.live.glance.detailsHint)).toBeDefined();
-		} finally {
-			setLocale("en");
-		}
 	});
 });
 

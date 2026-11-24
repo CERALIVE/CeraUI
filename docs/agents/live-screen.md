@@ -190,8 +190,11 @@ the stats-file fallback or the sender wire format.
 Details while live. It starts folded below 1024 px and remembers the choice in
 `ceraui.live.detailsOpen`. At 1024 px and wider and in the post-stop summary,
 Details opens without a toggle, without overwriting that choice or remounting
-the session sampler. Below 640 px **while confirmed live only**, the header
-title and subtitle are visually hidden, not removed from the heading outline.
+the session sampler. Activating the summary toggles the visible disclosure
+and saves that choice even if the viewport immediately crosses 1024 px.
+Browser Find and direct changes to the disclosure do not save a choice.
+Below 640 px **while confirmed live only**, the header title and subtitle
+are visually hidden, not removed from the heading outline.
 Idle and unconfirmed headers retain both. Below 640 px the bitrate-limit
 button opens one adjuster in a bottom sheet. At 640 px and wider it is inline
 beside Stop; resizing an open sheet closes it and focuses the inline slider
