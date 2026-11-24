@@ -44,20 +44,36 @@ export async function observeKernelMarks(
 			: [],
 	);
 	const unaffected = new Map<number, number>();
+	const named = new Map<number, string>();
 	if (affected.length > 0) {
-		// nft lists the installed `meta oif <index>` as the current device name.
-		for (const [, hex, name, index] of guard.matchAll(
+		// nft lists a live `meta oif <index>` by device name; a deleted device
+		// keeps its former index, which no packet can leave through.
+		for (const [line, hex, name, index] of guard.matchAll(
 			/^\s*iifname "[A-Za-z0-9_.-]+" ip saddr \S+ meta mark & 0xffffff00 (?:== )?0x(ca[0-9a-f]{4}00) oif (?:"([A-Za-z0-9_.-]+)"|(\d+)) accept\s*$/gm,
 		)) {
 			const mark = Number.parseInt(hex ?? "", 16);
 			if (affected.includes(mark)) continue;
-			// A device that can no longer be resolved keeps no admission.
+			// A listed name that no longer resolves keeps no admission.
 			const ifindex =
 				name === undefined
 					? Number(index)
 					: await readLinkIndex(command, name).catch(() => undefined);
-			if (ifindex !== undefined) unaffected.set(mark, ifindex);
+			if (ifindex === undefined) continue;
+			unaffected.set(mark, ifindex);
+			if (name !== undefined) named.set(mark, line.trim());
 		}
+	}
+	// A resolved name still names the listed device only if a second listing
+	// shows the rule unchanged; a re-created device makes nft print its old index.
+	if (named.size > 0) {
+		const relisted = (
+			tableBody(await command("nft", ["-nn", "list", "ruleset"]), MARK_GUARD) ??
+			""
+		)
+			.split("\n")
+			.map((line) => line.trim());
+		for (const [mark, line] of named)
+			if (!relisted.includes(line)) unaffected.delete(mark);
 	}
 	return {
 		guard: receipts.length === 1 ? (receipts[0]?.[1] ?? "invalid") : "invalid",

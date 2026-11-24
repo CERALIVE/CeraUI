@@ -30,6 +30,8 @@
 		"src/tests/uplink-steering-legacy-recovery.test.ts",
 		"src/tests/uplink-steering-mark-observation.test.ts",
 		"src/tests/uplink-steering-collision-status.test.ts",
+		"src/tests/uplink-steering-fault-incumbent.test.ts",
+		"src/tests/uplink-steering-guard-recovery.test.ts",
 		"src/tests/uplink-steering-collision-kernel.test.ts",
 		"src/tests/uplink-steering-rename-kernel.test.ts"
 	],

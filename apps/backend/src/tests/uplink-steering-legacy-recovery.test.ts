@@ -34,6 +34,7 @@ function kernel(path: string) {
 	let flows: number[] = [];
 	let share = "";
 	let crashOn: string | undefined;
+	let saveFault: Error | undefined;
 	const ensure = async (route: UplinkRoutePlan) => {
 		tables.set(route.table, route.ifname);
 		rules.set(route.mark, route.table);
@@ -71,12 +72,21 @@ function kernel(path: string) {
 			setIpForwarding: async () => {},
 			publishFlowsReset: () => {},
 		});
+		const journal = fileMarkJournal(path, (effect) => {
+			if (effect !== crashOn) return;
+			crashOn = undefined;
+			throw killed;
+		});
 		return new SteeringMarkLifecycle({
-			journal: fileMarkJournal(path, (effect) => {
-				if (effect !== crashOn) return;
-				crashOn = undefined;
-				throw killed;
-			}),
+			journal: {
+				load: () => journal.load(),
+				save: async (record) => {
+					const fault = saveFault;
+					saveFault = undefined;
+					if (fault) throw fault;
+					await journal.save(record);
+				},
+			},
 			observe: async () => ({ guard: "", legacy: share, fence: false }),
 			linkIndex: async (ifname) => 80 + Number(ifname.slice(4)),
 			armFence: async () => {},
@@ -96,6 +106,11 @@ function kernel(path: string) {
 		addFlow: (mark: number) => flows.push(mark),
 		crashAt: (effect: string) => {
 			crashOn = effect;
+		},
+		failNextSave: () => {
+			saveFault = Object.assign(new Error("ENOSPC: no space"), {
+				code: "ENOSPC",
+			});
 		},
 		image: () => ({ route: tables.get(table(shared)), flushed, flows }),
 	};
@@ -150,3 +165,57 @@ test.each([false, true])(
 		}
 	},
 );
+
+test.each([
+	["after it", link("id-y", "wwan2", shared)],
+	["before it", departing],
+])(
+	"a link the journal missed keeps its mark and flows when a twin sorting %s arrives",
+	async (_order, twin) => {
+		const dir = await mkdtemp(join(tmpdir(), "steering-unrecorded-"));
+		try {
+			const h = kernel(join(dir, "marks.json"));
+			const incumbent = link("id-x", "wwan1", shared);
+			const marks = h.lifecycle();
+			const first = await step(marks, undefined, [survivor]);
+			h.failNextSave();
+			const before = await step(marks, first, [incumbent, survivor]);
+			h.addFlow(shared);
+			const during = await step(marks, before, [incumbent, survivor, twin]);
+			expect(
+				during.uplinks.find((uplink) => uplink.identity === incumbent.identity)
+					?.mark,
+			).toBe(shared);
+			expect(h.image()).toMatchObject({ route: "wwan1", flows: [shared] });
+			expect(h.image().flushed).not.toContain(shared);
+		} finally {
+			await rm(dir, { recursive: true });
+		}
+	},
+);
+
+test("a non-colliding recovery that cannot save its commit keeps main's marks", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "steering-recovery-save-"));
+	try {
+		const h = kernel(join(dir, "marks.json"));
+		let marks = h.lifecycle();
+		const before = await step(marks, undefined, [departing, survivor]);
+		h.crashAt("rename");
+		await step(marks, before, [{ ...departing, weight: 50 }, survivor]).catch(
+			(error: unknown) => {
+				if (error !== killed) throw error;
+			},
+		);
+		marks = h.lifecycle();
+		h.failNextSave();
+		expect([
+			...(await marks.marks([{ ...departing, weight: 50 }, survivor])),
+		]).toEqual([
+			[departing.identity, shared],
+			[survivor.identity, other],
+		]);
+		expect(marks.affects(shared) || marks.affects(other)).toBe(false);
+	} finally {
+		await rm(dir, { recursive: true });
+	}
+});

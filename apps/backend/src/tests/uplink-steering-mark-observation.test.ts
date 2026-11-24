@@ -71,6 +71,26 @@ test("quarantine retains an unaffected admission from a real named oif listing",
 	]);
 });
 
+test("a device re-created between the listing and the name lookup keeps no admission", async () => {
+	const listings = [
+		capturedGuard,
+		capturedGuard.replace('oif "wwan1"', "oif 4"),
+	];
+	const observed = await observeKernelMarks(async (bin, args) => {
+		switch (`${bin} ${args.join(" ")}`) {
+			case "nft -nn list ruleset":
+				return listings.shift() ?? "";
+			case "ip rule show":
+				return "";
+			case "ip -o link show dev wwan1":
+				return "13: wwan1: <BROADCAST,NOARP> mtu 1500 state DOWN\n";
+			default:
+				throw new Error(`unexpected command ${bin} ${args.join(" ")}`);
+		}
+	});
+	expect(observed.unaffected).toEqual([]);
+});
+
 test("reads only the owned inet steering tables, receipt, protected zones and unaffected admission", async () => {
 	const ruleset = `table ip ceralive_share_guard {
 	chain assignment_99 {

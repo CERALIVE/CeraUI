@@ -2,6 +2,7 @@ import { afterEach, expect, jest, spyOn, test } from "bun:test";
 import * as fsp from "node:fs/promises";
 import * as runner from "../helpers/run.ts";
 import * as netif from "../modules/network/network-interfaces.ts";
+import { UplinkSteeringApplier } from "../modules/network/uplink-steering/applier.ts";
 import type { SteeringUplink } from "../modules/network/uplink-steering/contracts.ts";
 import {
 	initUplinkSteering,
@@ -44,6 +45,42 @@ const unverified = {
 } as const;
 const readFile = fsp.readFile;
 const open = fsp.open;
+
+const guardListing =
+	"table inet ceralive_share_guard {\n\tchain assignment_4 {\n\t}\n}\n";
+const fenceRule = "110:\tfrom all fwmark 0xca000000/0xff000000 lookup 30000\n";
+const mustCollide = {
+	state: "steering_unavailable",
+	reason: "mark_collision",
+} as const;
+
+function stubApplier(): void {
+	spyOn(UplinkSteeringApplier.prototype, "apply").mockResolvedValue();
+	spyOn(
+		UplinkSteeringApplier.prototype,
+		"retryPendingCleanup",
+	).mockResolvedValue();
+}
+
+function kernel(ready: () => boolean, nft: string, rules: string) {
+	return spyOn(runner, "run").mockImplementation(async (bin) => {
+		if (!ready()) throw new Error("no kernel command before netif readiness");
+		return bin === "nft" ? nft : rules;
+	});
+}
+
+function readyLinks(ready: () => boolean): void {
+	spyOn(builder, "readDesiredSteeringState").mockImplementation(
+		async (_deps, context) => {
+			if (!ready())
+				return { pending: true, netifReady: false, reason: "netif" };
+			const uplink = link("solo", "wwan0", solo);
+			const mark = (await context?.resolveMarks?.([uplink]))?.get("solo");
+			const uplinks = mark === undefined ? [] : [{ ...uplink, mark }];
+			return { clientZones: [zone], uplinks, routes: [] };
+		},
+	);
+}
 
 afterEach(() => {
 	stopUplinkSteeringForTest();
@@ -113,6 +150,46 @@ test.each([
 		expect(commands).not.toHaveBeenCalled();
 	},
 );
+
+test.each([
+	["a kernel guard", guardListing, mustCollide],
+	["no guard or fence", "", { state: "available" }],
+] as const)(
+	"an unreadable journal with %s starts unavailable without a command and settles at the first reconcile",
+	async (_name, ruleset, settled) => {
+		let ready = false;
+		spyOn(device, "isRealDevice").mockResolvedValue(true);
+		savedJournal("torn");
+		stubApplier();
+		const commands = kernel(() => ready, ruleset, "");
+		readyLinks(() => ready);
+
+		await initUplinkSteering();
+		expect(getUplinkSteeringStatus()).toEqual(unverified);
+		expect(commands).not.toHaveBeenCalled();
+
+		ready = true;
+		await requestUplinkSteeringReconcile();
+		expect(getUplinkSteeringStatus()).toMatchObject(settled);
+	},
+);
+
+test("a missing journal under a surviving kernel guard is unavailable by the first reconcile after netif readiness", async () => {
+	let ready = false;
+	spyOn(device, "isRealDevice").mockResolvedValue(true);
+	savedJournal(undefined);
+	stubApplier();
+	const commands = kernel(() => ready, guardListing, fenceRule);
+	readyLinks(() => ready);
+
+	await initUplinkSteering();
+	expect(getUplinkSteeringStatus()).toEqual({ state: "available" });
+	expect(commands).not.toHaveBeenCalled();
+
+	ready = true;
+	await requestUplinkSteeringReconcile();
+	expect(getUplinkSteeringStatus()).toMatchObject(mustCollide);
+});
 
 test.each([
 	[

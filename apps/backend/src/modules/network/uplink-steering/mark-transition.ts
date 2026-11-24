@@ -24,6 +24,18 @@ export function matchesLegacy(
 	);
 }
 
+/** The kernel ruleset proves an owner where the journal records none. */
+export function provenByKernel(
+	legacy: string,
+	claims: readonly Pick<MarkClaim, "mark">[],
+	link: Pick<MarkClaim, "ifname" | "mark">,
+): boolean {
+	return (
+		!claims.some(({ mark }) => mark === link.mark) &&
+		matchesLegacy(legacy, [link])
+	);
+}
+
 export function sameBinding(a: MarkClaim, b: MarkClaim | undefined): boolean {
 	return (
 		b !== undefined &&
@@ -89,7 +101,7 @@ export async function planMarkIntent(
 			mark: route.mark,
 			epoch: 0,
 		};
-		const legacyAdoption = base.seq === 0 && matchesLegacy(legacy, [claim]);
+		const legacyAdoption = provenByKernel(legacy, base.claims, claim);
 		claim.epoch = sameBinding(claim, old)
 			? (old?.epoch ?? 0)
 			: affected.has(route.mark) && !legacyAdoption

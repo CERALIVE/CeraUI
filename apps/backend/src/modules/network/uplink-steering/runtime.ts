@@ -118,7 +118,17 @@ const coordinator = new UplinkSteeringCoordinator({
 	retryCleanup: async () => {
 		if (!marks.guarded) await applier.retryPendingCleanup();
 	},
-	publishAvailability: publishUplinkSteeringAvailability,
+	// A waiting contender reports what main reports for the collision.
+	publishAvailability: (status) =>
+		publishUplinkSteeringAvailability(
+			status.available && marks.blocked
+				? {
+						available: false,
+						reason: "mark_collision",
+						detail: "a same-mark link waits for verified steering marks",
+					}
+				: status,
+		),
 });
 
 export const shaperSteeringContext: SteeringReadinessContext = {

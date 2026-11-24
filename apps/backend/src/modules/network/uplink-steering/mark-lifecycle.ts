@@ -15,8 +15,11 @@ import type { MarkObservation } from "./mark-observation.ts";
 import {
 	emptyMarkJournal,
 	hasGuardedJournal,
+	keepProvenOwners,
 	loadIfReadable,
+	markPending,
 	optionalJournalFault,
+	ownedMarks,
 	quarantineAdmission,
 	recoverMarkJournal,
 } from "./mark-recovery.ts";
@@ -24,7 +27,6 @@ import {
 	affectedMarks,
 	applyMarkTransition,
 	type MarkTransitionEffects,
-	matchesLegacy,
 	planMarkIntent,
 	steeringDigest,
 } from "./mark-transition.ts";
@@ -50,6 +52,7 @@ export class SteeringMarkLifecycle {
 	#indices = new Map<string, number>();
 	#affected: ReadonlySet<number> = new Set();
 	#quarantined = false;
+	#blocked = false;
 
 	constructor(deps: MarkLifecycleDeps) {
 		this.#deps = deps;
@@ -64,16 +67,13 @@ export class SteeringMarkLifecycle {
 		);
 	}
 
+	/** A contender waits for verified marks while its proven owner steers. */
+	get blocked(): boolean {
+		return this.#blocked;
+	}
+
 	get pending(): boolean {
-		const { base, intent } = this.#record;
-		return (
-			intent !== undefined ||
-			(base.affected.length > 0 &&
-				(!this.#observed.fence ||
-					base.claims.some(
-						(claim) => this.#indices.get(claim.ifname) !== claim.ifindex,
-					)))
-		);
+		return markPending(this.#record, this.#observed, this.#indices);
 	}
 
 	affects(mark: number): boolean {
@@ -135,6 +135,7 @@ export class SteeringMarkLifecycle {
 	async marks(
 		candidates: readonly SteeringUplink[],
 	): Promise<ReadonlyMap<string, number>> {
+		this.#blocked = false;
 		const collision = hasNaturalMarkCollision(candidates);
 		const reuse = candidates.some(({ identity, mark }) =>
 			this.#record.base.claims.some(
@@ -148,26 +149,20 @@ export class SteeringMarkLifecycle {
 			} catch (error) {
 				if (this.guarded || (!collision && !reuse) || !(error instanceof Error))
 					throw error;
-				const blocked = new Set(
-					candidates
-						.filter(
-							({ identity, mark }) =>
-								candidates.filter((link) => link.mark === mark).length > 1 ||
-								this.#record.base.claims.some(
-									(claim) => claim.mark === mark && claim.identity !== identity,
-								),
-						)
-						.map(({ mark }) => mark),
+				const { blocked, kept } = keepProvenOwners(
+					candidates,
+					this.#record.base.claims,
+					this.#observed.legacy,
 				);
-				const unaffected = candidates.filter(({ mark }) => !blocked.has(mark));
 				this.#affected = blocked;
-				if (unaffected.length === 0) throw error;
-				// No guard owns these natural marks. Leave collision claims untouched
-				// and let main's applier keep the independent links available.
+				// Unverified marks never move or evict a proven owner.
+				if (kept === undefined)
+					throw new SteeringUnavailableError("mark_collision", error.message);
 				this.#unrecorded = true;
 				this.#legacyOnly = false;
 				this.#quarantined = false;
-				return assignSteeringMarks(unaffected, new Map());
+				this.#blocked = true;
+				return assignSteeringMarks(kept, new Map());
 			}
 			this.#legacyOnly = !this.guarded && !this.#unrecorded;
 		}
@@ -177,15 +172,11 @@ export class SteeringMarkLifecycle {
 			for (const { ifname } of candidates)
 				this.#indices.set(ifname, await this.#deps.linkIndex(ifname));
 		}
-		const incumbents = new Map(
-			base.claims.map(({ identity, mark }) => [identity, mark]),
+		const incumbents = ownedMarks(
+			base.claims,
+			candidates,
+			this.#observed.legacy,
 		);
-		if (base.seq === 0) {
-			for (const uplink of candidates) {
-				if (matchesLegacy(this.#observed.legacy, [uplink]))
-					incumbents.set(uplink.identity, uplink.mark);
-			}
-		}
 		const assigned = assignSteeringMarks(candidates, incumbents);
 		this.#affected = affectedMarks(this.#record, candidates, assigned);
 		return assigned;
@@ -244,7 +235,16 @@ export class SteeringMarkLifecycle {
 			return;
 		}
 		if (affected.size === 0) await this.#deps.applyLegacy(previous, next);
-		else await applyMarkTransition(this.#deps, base, intent, former, next);
+		else {
+			await applyMarkTransition(this.#deps, base, intent, former, next);
+			// The transition just published this receipt, fence and binding.
+			this.#observed = {
+				...this.#observed,
+				guard: receiptName(intent.seq),
+				fence: true,
+			};
+			this.#indices = new Map(intent.claims.map((c) => [c.ifname, c.ifindex]));
+		}
 		const committed: MarkJournal = {
 			version: 1,
 			base: intent,

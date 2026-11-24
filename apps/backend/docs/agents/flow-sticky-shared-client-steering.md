@@ -56,14 +56,25 @@ connection generation, and egress device. The backend reconciles forward
 after an interruption; it does not restore a pre-transition classifier over
 changed routes. Invalid journal authority fails closed only for marks that a
 collision or the kernel guard affects; a device with no guard keeps main's
-behavior when the journal or kernel observation is unreadable. Quarantine keeps
-links outside the affected set admitted: nft lists each admitted `meta oif` by
-device name, which is resolved back to its live index. Legacy-path recovery commits an
+behavior when the journal or kernel observation is unreadable. Without that
+evidence a same-mark contender never moves, re-points or flushes the mark's
+proven owner (its journal claim, or a kernel ruleset entry the journal does not
+contradict): the owner keeps steering, the contender waits and status reports
+`mark_collision`; with no proven owner nothing changes, as on main. The kernel
+ruleset also re-adopts an owner the journal missed after a skipped write or a
+same-boot downgrade. A failed save of a non-colliding recovery is advisory.
+Quarantine keeps links outside the affected set admitted: nft lists a live
+`meta oif` by device name, resolved back to its index and confirmed by a second
+listing; a deleted device is listed by its old index, which no packet can use.
+Once the journal reads back, the quarantine guard yields to it and the next
+apply re-publishes the journal's receipt; a restart recovers the same way. Legacy-path recovery commits an
 interrupted intent only if no saved owner departed, so a departed owner's mark
 is flushed before a same-mark joiner takes it. Without a journaled
 collision, start-up status and shaping follow main: status starts available, and
-the shaper reads the live desired state. A journaled collision reports
-unavailable from start-up, and again from the moment a collision intent is
+the shaper reads the live desired state. A journaled collision or an
+unreadable journal reports unavailable from start-up (start-up runs no kernel
+command before netif readiness, so a missing journal under a surviving guard
+stays available until the first reconcile reports `mark_collision`), and again from the moment a collision intent is
 saved, until an apply commits against the kernel. Only collision-affected marks
 wait for a committed assignment in the shaper.
 Reboot before downgrading after a collision has been journaled in the current boot.

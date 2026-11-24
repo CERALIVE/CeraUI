@@ -164,11 +164,16 @@ The priority-110 fence prevents an older steering backend from taking over a
 live journaled assignment. Reboot before downgrading; the journal and kernel
 state are boot-scoped.
 
-Without a collision the journal is advisory: an unreadable journal or failed
-kernel observation keeps the original steering path. Start-up status stays
-`available` until a real failure, as before. A device with a journaled
-collision reports `steering_unavailable` from start-up and while a collision
-intent is in progress, until an apply commits it against the kernel. Shaping uses the live desired state;
+Without a collision the journal is advisory: an unreadable journal, a failed
+kernel observation or a failed journal write keeps the original steering path.
+When such a fault meets a same-mark contender, the mark's current owner keeps
+its route and flows, the contender waits and status reports
+`steering_unavailable` (`mark_collision`), as the original code reports the
+collision. Start-up status stays `available` until a real failure, as before.
+A device with a journaled collision or an unreadable journal reports
+`steering_unavailable` from start-up and while a collision intent is in progress, until an apply commits it
+against the kernel. One transient journal read error under the guard is
+recovered on the next reconcile once the journal reads again. Shaping uses the live desired state;
 only collision-affected marks are held until their assignment is committed.
 
 Non-colliding uplinks retain the original no-flush rebind behavior. Only marks
