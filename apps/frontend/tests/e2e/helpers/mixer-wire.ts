@@ -1,0 +1,178 @@
+import type { Page } from "@playwright/test";
+
+import { type EngineAudioToken, engineAudioMixRefusal } from "../../../../backend/src/mocks/engine-audio-tokens.js";
+
+/**
+ * The Audio mixer's page-socket interceptor. The socket is proxied, never
+ * rewritten, so every save and every live change reaches the real mock backend
+ * and its mock engine. The proxy records the RPC frames, injects the bridged
+ * `audio-level` frames the mock does not publish on the main socket, forces a
+ * backend or engine refusal where a scenario needs it, and holds the device's
+ * answer to a live change until the test releases it.
+ */
+
+export interface RpcCall {
+	path: string;
+	input: Record<string, unknown>;
+	result?: Record<string, unknown>;
+}
+
+export interface HeldReply {
+	/** Resolves once the device has answered the call; the page has not seen that answer yet. */
+	readonly held: Promise<RpcCall>;
+	/** Deliver the held answer to the page. */
+	release(): void;
+}
+
+export interface MixerWire {
+	calls(path: string): RpcCall[];
+	inject(frame: Record<string, unknown>): void;
+	/** Answer the next audio_inputs saves with this backend token instead. */
+	refuseAudioInputs(token: string | null): void;
+	/** Hold every device frame this long before the page sees it, in order; 0 stops. */
+	delayServer(ms: number): void;
+	/** Hold the device's answer to the next `streaming.setAudioMix`; the call itself reaches the device. */
+	holdAudioMix(): HeldReply;
+	/** Answer `streaming.setAudioMix` as the backend does when the engine refuses with this token; null stops. */
+	refuseAudioMixWithEngineToken(token: EngineAudioToken | null): void;
+}
+
+interface Hold {
+	released: boolean;
+	deliver?: () => void;
+	settle(call: RpcCall): void;
+}
+
+export async function installMixerWire(
+	page: Page,
+	pageRpc: {
+		bindConnectionLifecycle(browser: unknown, server: unknown): void;
+		acceptServerMessage(message: string | Buffer): void;
+	},
+): Promise<MixerWire> {
+	const byId = new Map<unknown, RpcCall>();
+	const all: RpcCall[] = [];
+	let refusal: string | null = null;
+	let engineRefusal: EngineAudioToken | null = null;
+	let route: { send: (data: string) => void } | null = null;
+	let delayMs = 0;
+	let held = 0;
+	let tail: Promise<void> = Promise.resolve();
+	const nextHolds: Hold[] = [];
+	const holdsById = new Map<unknown, Hold>();
+
+	await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
+		route = ws;
+		const server = ws.connectToServer();
+		pageRpc.bindConnectionLifecycle(ws, server);
+
+		ws.onMessage((message) => {
+			const text = typeof message === "string" ? message : message.toString();
+			try {
+				const frame = JSON.parse(text) as {
+					id?: unknown;
+					path?: unknown;
+					input?: Record<string, unknown>;
+				};
+				if (Array.isArray(frame.path) && frame.id !== undefined) {
+					const call: RpcCall = { path: frame.path.join("."), input: frame.input ?? {} };
+					all.push(call);
+					byId.set(frame.id, call);
+					const mixSave =
+						call.path === "streaming.setConfig" &&
+						("audio_inputs" in call.input || call.input.audio_pick === true);
+					if (refusal !== null && (mixSave || call.path === "streaming.setAudioMix")) {
+						call.result = mixSave
+							? { success: false, error: refusal, applied: {} }
+							: { success: false, error: refusal };
+						ws.send(JSON.stringify({ id: frame.id, result: call.result }));
+						return;
+					}
+					if (call.path === "streaming.setAudioMix" && engineRefusal !== null) {
+						// The backend's answer when the engine refuses: nothing reaches the device.
+						const refused = engineAudioMixRefusal(engineRefusal);
+						call.result = {
+							success: false,
+							error: refused.dataCode,
+							engine_error: { code: refused.code, message: refused.message, data: { code: refused.dataCode } },
+						};
+						ws.send(JSON.stringify({ id: frame.id, result: call.result }));
+						return;
+					}
+					const hold = call.path === "streaming.setAudioMix" ? nextHolds.shift() : undefined;
+					if (hold) holdsById.set(frame.id, hold);
+				}
+			} catch {
+				/* non-RPC frame */
+			}
+			server.send(message);
+		});
+
+		server.onMessage((message) => {
+			pageRpc.acceptServerMessage(message);
+			const text = typeof message === "string" ? message : message.toString();
+			let answered: { call: RpcCall; hold: Hold } | undefined;
+			try {
+				const frame = JSON.parse(text) as { id?: unknown; result?: Record<string, unknown> };
+				const call = frame.id === undefined ? undefined : byId.get(frame.id);
+				if (call) call.result = frame.result;
+				const hold = frame.id === undefined ? undefined : holdsById.get(frame.id);
+				if (call && hold) {
+					holdsById.delete(frame.id);
+					answered = { call, hold };
+				}
+			} catch {
+				/* non-JSON / binary frame */
+			}
+			if (answered) {
+				const { call, hold } = answered;
+				hold.deliver = () => ws.send(message);
+				if (hold.released) hold.deliver();
+				hold.settle(call);
+				return;
+			}
+			if (delayMs === 0 && held === 0) {
+				ws.send(message);
+				return;
+			}
+			const due = Date.now() + delayMs;
+			held += 1;
+			tail = tail.then(async () => {
+				const wait = due - Date.now();
+				if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+				ws.send(message);
+				held -= 1;
+			});
+		});
+	});
+
+	return {
+		calls: (path) => all.filter((call) => call.path === path),
+		inject: (frame) => route?.send(JSON.stringify(frame)),
+		refuseAudioInputs: (token) => {
+			refusal = token;
+		},
+		delayServer: (ms) => {
+			delayMs = ms;
+		},
+		holdAudioMix: () => {
+			let settle!: (call: RpcCall) => void;
+			const answer = new Promise<RpcCall>((resolve) => {
+				settle = resolve;
+			});
+			const hold: Hold = { released: false, settle };
+			nextHolds.push(hold);
+			return {
+				held: answer,
+				release: () => {
+					if (hold.released) return;
+					hold.released = true;
+					hold.deliver?.();
+				},
+			};
+		},
+		refuseAudioMixWithEngineToken: (token) => {
+			engineRefusal = token;
+		},
+	};
+}

@@ -3,6 +3,7 @@ import type { Locator, Page } from "@playwright/test";
 import { type BackendRpc, expect, test } from "./fixtures/index.js";
 import { runAxe } from "./helpers/axe.js";
 import { endStream, ensureAuthenticated, navigateTo } from "./helpers/index.js";
+import { installMixerWire, type MixerWire } from "./helpers/mixer-wire.js";
 
 /**
  * The Audio card's mixer, against the mock engine.
@@ -12,112 +13,12 @@ import { endStream, ensureAuthenticated, navigateTo } from "./helpers/index.js";
  * it runs on, so strips are counted against its own list. (`audio-mixer-absent.spec.ts` covers `multi-modem-wifi`,
  * which advertises no mix; a scenario is per worker, so per file). The page's
  * socket is proxied, never rewritten, so every save and every live change
- * reaches the real mock backend and its mock engine. The proxy only records
- * the RPC frames, injects the bridged `audio-level` frames the mock does not
- * publish on the main socket (its meter bridge is skipped under mocks), and
- * forces one backend refusal where a scenario needs it.
+ * reaches the real mock backend and its mock engine. The proxy
+ * (`helpers/mixer-wire.ts`) records the RPC frames, injects the bridged
+ * `audio-level` frames the mock does not publish on the main socket (its meter
+ * bridge is skipped under mocks), forces a backend or engine refusal where a
+ * scenario needs it, and holds a live answer until the test releases it.
  */
-
-interface RpcCall {
-	path: string;
-	input: Record<string, unknown>;
-	result?: Record<string, unknown>;
-}
-
-interface MixerWire {
-	calls(path: string): RpcCall[];
-	inject(frame: Record<string, unknown>): void;
-	/** Answer the next audio_inputs saves with this backend token instead. */
-	refuseAudioInputs(token: string | null): void;
-	/** Hold every device frame this long before the page sees it, in order; 0 stops. */
-	delayServer(ms: number): void;
-}
-
-async function installMixerWire(
-	page: Page,
-	pageRpc: {
-		bindConnectionLifecycle(browser: unknown, server: unknown): void;
-		acceptServerMessage(message: string | Buffer): void;
-	},
-): Promise<MixerWire> {
-	const byId = new Map<unknown, RpcCall>();
-	const all: RpcCall[] = [];
-	let refusal: string | null = null;
-	let route: { send: (data: string) => void } | null = null;
-	let delayMs = 0;
-	let held = 0;
-	let tail: Promise<void> = Promise.resolve();
-
-	await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
-		route = ws;
-		const server = ws.connectToServer();
-		pageRpc.bindConnectionLifecycle(ws, server);
-
-		ws.onMessage((message) => {
-			const text = typeof message === "string" ? message : message.toString();
-			try {
-				const frame = JSON.parse(text) as {
-					id?: unknown;
-					path?: unknown;
-					input?: Record<string, unknown>;
-				};
-				if (Array.isArray(frame.path) && frame.id !== undefined) {
-					const call: RpcCall = { path: frame.path.join("."), input: frame.input ?? {} };
-					all.push(call);
-					byId.set(frame.id, call);
-					const mixSave =
-						call.path === "streaming.setConfig" &&
-						("audio_inputs" in call.input || call.input.audio_pick === true);
-					if (refusal !== null && (mixSave || call.path === "streaming.setAudioMix")) {
-						call.result = mixSave
-							? { success: false, error: refusal, applied: {} }
-							: { success: false, error: refusal };
-						ws.send(JSON.stringify({ id: frame.id, result: call.result }));
-						return;
-					}
-				}
-			} catch {
-				/* non-RPC frame */
-			}
-			server.send(message);
-		});
-
-		server.onMessage((message) => {
-			pageRpc.acceptServerMessage(message);
-			const text = typeof message === "string" ? message : message.toString();
-			try {
-				const frame = JSON.parse(text) as { id?: unknown; result?: Record<string, unknown> };
-				const call = frame.id === undefined ? undefined : byId.get(frame.id);
-				if (call) call.result = frame.result;
-			} catch {
-				/* non-JSON / binary frame */
-			}
-			if (delayMs === 0 && held === 0) {
-				ws.send(message);
-				return;
-			}
-			const due = Date.now() + delayMs;
-			held += 1;
-			tail = tail.then(async () => {
-				const wait = due - Date.now();
-				if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
-				ws.send(message);
-				held -= 1;
-			});
-		});
-	});
-
-	return {
-		calls: (path) => all.filter((call) => call.path === path),
-		inject: (frame) => route?.send(JSON.stringify(frame)),
-		refuseAudioInputs: (token) => {
-			refusal = token;
-		},
-		delayServer: (ms) => {
-			delayMs = ms;
-		},
-	};
-}
 
 const MAIN = "RØDE AI-Micro";
 const SECOND = "Elgato Wave:3";
@@ -591,6 +492,91 @@ test.describe("audio mixer — caps-full", () => {
 			.toMatchObject({ asrc: SECOND, audio_inputs: [mixEntry(SECOND), mixEntry(MAIN, [1], -3)] });
 		release();
 		await other.close();
+		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
+	});
+
+	test("a live mute whose answer is held shows the device's echo while held, and settles once released", async ({
+		page,
+		backendRpc,
+	}) => {
+		await backendRpc.call(["streaming", "setConfig"], { audio_inputs: savedTwo });
+		await expect(page.getByTestId(`audio-strip-enable-${SECOND}`)).toHaveAttribute("aria-checked", "true");
+		await startButton(page).click();
+		const card = page.getByTestId("live-cockpit").getByTestId("audio-card");
+		await expect(card).toBeVisible({ timeout: 15_000 });
+		const mute = card.getByTestId(`audio-strip-mute-${SECOND}`);
+		await expect(mute).toHaveAttribute("aria-pressed", "false");
+		const savedMute = async () =>
+			(
+				await backendRpc.call<{ audio_inputs?: Array<{ id: string; mute: boolean }> }>(["streaming", "getConfig"])
+			).audio_inputs?.find((input) => input.id === SECOND)?.mute;
+
+		const reply = wire.holdAudioMix();
+		await mute.click();
+		const held = await reply.held;
+		// The device applied the change on arrival and answered; the page has not seen that answer.
+		expect(held.input).toEqual({ id: SECOND, mute: true });
+		expect(held.result).toMatchObject({ success: true, applies_next_start: false, applied: { id: SECOND, mute: true } });
+		expect(await savedMute()).toBe(true);
+		// While the answer is held, the strip shows the device's saved echo and nothing is refused.
+		await expect(mute).toHaveAttribute("aria-pressed", "true");
+		await expect(card.getByTestId(`audio-strip-error-${SECOND}`)).toBeEmpty();
+
+		reply.release();
+		// Settled: the next press starts from the muted state and its answer arrives unheld.
+		await mute.click();
+		await expect(mute).toHaveAttribute("aria-pressed", "false");
+		await expect(card.getByTestId(`audio-strip-error-${SECOND}`)).toBeEmpty();
+		expect(wire.calls("streaming.setAudioMix").map((call) => call.input)).toEqual([
+			{ id: SECOND, mute: true },
+			{ id: SECOND, mute: false },
+		]);
+		expect(await savedMute()).toBe(false);
+
+		await endStream(page);
+		await expect(page.getByTestId("idle-cockpit").or(page.getByTestId("summary-done"))).toBeVisible({
+			timeout: 15_000,
+		});
+		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
+	});
+
+	test("a live mute the engine refuses with its own token shows the plain refusal and changes nothing", async ({
+		page,
+		backendRpc,
+	}) => {
+		await backendRpc.call(["streaming", "setConfig"], { audio_inputs: savedTwo });
+		await expect(page.getByTestId(`audio-strip-enable-${SECOND}`)).toHaveAttribute("aria-checked", "true");
+		await startButton(page).click();
+		const card = page.getByTestId("live-cockpit").getByTestId("audio-card");
+		await expect(card).toBeVisible({ timeout: 15_000 });
+		const mute = card.getByTestId(`audio-strip-mute-${SECOND}`);
+		await expect(mute).toHaveAttribute("aria-pressed", "false");
+
+		wire.refuseAudioMixWithEngineToken("audio-mix-inactive");
+		await mute.click();
+		const error = card.getByTestId(`audio-strip-error-${SECOND}`);
+		await expect(error).toContainText("The device refused this change, so nothing changed.");
+		await expect(error).not.toContainText("audio-mix-inactive");
+		await expect(mute).toHaveAttribute("aria-pressed", "false");
+		expect(wire.calls("streaming.setAudioMix").at(-1)?.result).toMatchObject({
+			success: false,
+			error: "cerastream.params.invalid",
+			engine_error: {
+				code: -32602,
+				message: "invalid params: audio-mix-inactive: invalid audio mix configuration",
+			},
+		});
+		const saved = await backendRpc.call<{ audio_inputs?: Array<{ id: string; mute: boolean }> }>([
+			"streaming",
+			"getConfig",
+		]);
+		expect(saved.audio_inputs?.find((input) => input.id === SECOND)?.mute).toBe(false);
+
+		wire.refuseAudioMixWithEngineToken(null);
+		await endStream(page);
+		await expect(page.getByTestId("idle-cockpit").or(page.getByTestId("summary-done"))).toBeVisible({
+			timeout: 15_000,
+		});
 		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
 	});
 });

@@ -19,6 +19,10 @@ import {
 	setAudioMixResultSchema,
 } from "@ceralive/cerastream";
 import {
+	ENGINE_AUDIO_TOKENS,
+	type EngineAudioToken,
+} from "../mocks/engine-audio-tokens.ts";
+import {
 	getMockState,
 	initMockService,
 	resetMockState,
@@ -44,7 +48,7 @@ import type { AppWebSocket } from "../rpc/types.ts";
 // crates/cerastream/src/engine/audio_mix.rs (validate, start),
 // crates/cerastream/src/engine/audio_mix/live.rs (set-audio-mix) and
 // crates/cerastream/src/engine.rs (switch-audio while mixing).
-const REFUSALS: Array<[string, engine.EngineAudioToken, () => unknown]> = [
+const REFUSALS: Array<[string, EngineAudioToken, () => unknown]> = [
 	["an empty mix", "audio-mix-empty", () => start({ inputs: [] })],
 	[
 		"five inputs",
@@ -212,11 +216,11 @@ describe("each refusal carries the exact token cerastream returns for its rule",
 	});
 
 	test("a test can inject exactly these tokens, and an invented one is refused", () => {
-		expect(new Set(engine.ENGINE_AUDIO_TOKENS)).toEqual(
+		expect(new Set(ENGINE_AUDIO_TOKENS)).toEqual(
 			new Set(REFUSALS.map(([, token]) => token)),
 		);
 		expect(() =>
-			engine.refuseMockAudioMix("audio-tracks-hole" as engine.EngineAudioToken),
+			engine.refuseMockAudioMix("audio-tracks-hole" as EngineAudioToken),
 		).toThrow("not a cerastream audio refusal token: audio-tracks-hole");
 		expect(getMockState().audioMixRefusal).toBeNull();
 	});

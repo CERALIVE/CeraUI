@@ -231,10 +231,10 @@ stream is idle; the override is cleared by `resetMockState()`.
 
 **Mock-engine audio controls:** backend tests hold, release or refuse the mock
 engine's `set-audio-mix` replies (with cerastream's own tokens only), read its last
-start request, unplug an audio card and turn on idle per-input meters. E2E uses the
-page-socket interceptor for replies, the private worker-backend channel for the
-last start request and `streaming.setMockDeviceAttached` for the unplug; no
-production route is added. Contract:
+start request, unplug an audio card and turn on idle per-input meters. E2E holds and refuses live replies through the
+page-socket interceptor (`apps/frontend/tests/e2e/helpers/mixer-wire.ts`), reads
+the last start request over the private worker-backend channel and unplugs
+through `streaming.setMockDeviceAttached`; no production route is added. Contract:
 [dev mock seams](../../apps/backend/docs/agents/dev-mock-seams.md#mock-engine-audio-controls-exists).
 
 **Scenarios:**

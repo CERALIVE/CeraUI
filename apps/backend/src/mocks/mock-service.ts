@@ -31,6 +31,7 @@ import {
 } from "../modules/remote/remote-relays.ts";
 import { resetAudioNamingDiagnostics } from "../modules/streaming/audio-naming.ts";
 import { broadcastMsg } from "../modules/ui/websocket-server.ts";
+import type { EngineAudioToken } from "./engine-audio-tokens.ts";
 import { buildMockSimState } from "./fixture-factory.ts";
 import {
 	getActiveScenario,
@@ -75,10 +76,7 @@ import { MockAddonDescriptor, MockAddonState } from "./providers/addons.ts";
 import { resetMockBluetoothState } from "./providers/bluetooth.ts";
 import { resetMockKioskState } from "./providers/kiosk.ts";
 import { getMockRelaysCache } from "./providers/relays.ts";
-import {
-	type EngineAudioToken,
-	releaseHeldMockAudioMixReplies,
-} from "./providers/streaming.ts";
+import { releaseHeldMockAudioMixReplies } from "./providers/streaming.ts";
 import { resetMockWifiFaults } from "./providers/wifi.ts";
 import { resetMockWifiIncarnations } from "./providers/wifi-incarnation.ts";
 

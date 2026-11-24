@@ -62,6 +62,11 @@ import {
 } from "../../modules/streaming/sources.ts";
 import { broadcastMsg } from "../../modules/ui/websocket-server.ts";
 import {
+	ENGINE_AUDIO_TOKENS,
+	type EngineAudioToken,
+	engineAudioMixRefusal,
+} from "../engine-audio-tokens.ts";
+import {
 	buildMockAudioDevices,
 	buildMockCapsFullDeviceModes,
 	buildMockDeviceModes,
@@ -822,34 +827,14 @@ function admitMockStart(params?: StartParams): void {
 	setStreamingState(true);
 }
 
-// Every audio refusal token cerastream returns, at origin/main 2ad2349e:
-// crates/cerastream/src/engine/audio_mix.rs (validate, start),
-// crates/cerastream/src/engine/audio_mix/live.rs (set-audio-mix) and
-// crates/cerastream/src/engine.rs (switch-audio while mixing).
-export const ENGINE_AUDIO_TOKENS = [
-	"audio-mix-empty",
-	"audio-mix-too-many-inputs",
-	"audio-mix-with-device",
-	"audio-mix-with-mode-none",
-	"audio-mix-duplicate-input",
-	"audio-mix-embedded-without-network-source",
-	"audio-tracks-invalid",
-	"audio-gain-range",
-	"audio-delay-range",
-	"audio-tracks-gap",
-	"audio-mix-unsupported",
-	"audio-mix-inactive",
-	"audio-mix-active",
-] as const;
-export type EngineAudioToken = (typeof ENGINE_AUDIO_TOKENS)[number];
-
 function mockAudioMixInvalid(token: EngineAudioToken): CerastreamRpcError {
+	const refusal = engineAudioMixRefusal(token);
 	return new CerastreamRpcError(
-		-32602,
-		`invalid params: ${token}: invalid audio mix configuration`,
-		"cerastream.params.invalid",
+		refusal.code,
+		refusal.message,
+		refusal.dataCode,
 		null,
-		{ code: "cerastream.params.invalid" },
+		{ code: refusal.dataCode },
 	);
 }
 

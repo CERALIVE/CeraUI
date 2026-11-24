@@ -226,9 +226,13 @@ production route, contract or procedure changes:
   `audio-idle-input-meters`; otherwise they carry no `inputs`, as the engine
   omits its empty list.
 
-E2E holds and refuses replies with the page-socket interceptor
-`tests/e2e/audio-mixer.spec.ts` already uses, reads the last start request over
-the worker backend's private child channel (`workerBackend.mockEngine()`
+E2E uses the page-socket interceptor the audio mixer spec already relied on for
+refusals, now `apps/frontend/tests/e2e/helpers/mixer-wire.ts`: `holdAudioMix()`
+lets the call reach the device and holds its answer (await `held`, then
+`release()`), and `refuseAudioMixWithEngineToken(token)` answers as the backend
+does when the engine refuses with one of `ENGINE_AUDIO_TOKENS`
+(`mocks/engine-audio-tokens.ts`). It reads the last start request over the
+worker backend's private child channel (`workerBackend.mockEngine()`
 `.lastStartParams`, `tests/e2e/fixtures/backend-entry.ts`) and unplugs through
 the existing `streaming.setMockDeviceAttached`.
 `tests/mock-engine-fidelity.test.ts` parses every mock `set-audio-mix` result and
