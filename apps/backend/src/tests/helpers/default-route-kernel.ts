@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import type { run } from "../../helpers/run.ts";
 import { runTestCommand } from "./run-test-command.ts";
 
@@ -8,18 +9,11 @@ export const kernelRouteRunner: typeof run = async (bin, args) => {
 	return result.stdout;
 };
 
-export async function waitForKernelLinkdown(
-	readRoutes: () => Promise<string>,
-): Promise<string> {
-	const deadline = performance.now() + 2_000;
-	let routes = await readRoutes();
-	while (!/proto 242.*linkdown/.test(routes)) {
-		const remaining = deadline - performance.now();
-		if (remaining <= 0) break;
-		await Bun.sleep(Math.min(50, remaining));
-		routes = await readRoutes();
-	}
-	return routes;
+export async function dropKernelRouteCarrier(): Promise<void> {
+	const fixture = fileURLToPath(
+		new URL("../fixtures/default-route-carrier-loss.py", import.meta.url),
+	);
+	await kernelRouteRunner("python3", [fixture]);
 }
 
 export async function setupKernelRoutes(): Promise<void> {

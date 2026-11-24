@@ -3,7 +3,10 @@ import { expect } from "bun:test";
 import type { run } from "../../helpers/run.ts";
 import { setDefaultRoute } from "../../modules/network/default-route.ts";
 import { GatewayRoutePreference } from "../../modules/network/gateway-route-lifecycle.ts";
-import { kernelRouteRunner as runner } from "./default-route-kernel.ts";
+import {
+	dropKernelRouteCarrier,
+	kernelRouteRunner as runner,
+} from "./default-route-kernel.ts";
 
 const ip = (command: string) => runner("ip", command.split(" "));
 const defaults = (family: 4 | 6) =>
@@ -26,7 +29,7 @@ export const cleanupKernelScenarios: Readonly<
 				const controller = new GatewayRoutePreference(runner);
 				await controller.start();
 				await controller.apply("routeb", 6);
-				await ip("link set peerb down");
+				await dropKernelRouteCarrier();
 				expect(await defaults(6)).toMatch(/proto 242.*linkdown/);
 				const foreign = (await defaults(6))
 					.split("\n")

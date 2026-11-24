@@ -18,7 +18,7 @@ import {
 import { injectMockStreamError } from "../mocks/providers/streaming.ts";
 import { getConfig } from "../modules/config.ts";
 import { mapCerastreamError } from "../modules/streaming/cerastream-error-mapping.ts";
-import { updateStatus } from "../modules/streaming/streaming.ts";
+import { reconcileStreamSession } from "../modules/streaming/stream-session-orchestrator.ts";
 import { streamingStartProcedure } from "../rpc/procedures/streaming.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 
@@ -55,13 +55,12 @@ describe("streaming.start — structured failure error code (Task 16)", () => {
 		priorPipeline = getConfig().pipeline;
 		getConfig().pipeline = undefined;
 	});
-	afterEach(() => {
+	afterEach(async () => {
 		getConfig().pipeline = priorPipeline;
-		// The success-path start flips the streaming module's global on; clear it
-		// so getIsStreaming() does not leak `true` into later files' prod tests.
-		updateStatus(false);
 		resetMockState();
 		setStreamingState(false);
+		// Reconcile while the mock can still supply authoritative idle evidence.
+		expect(await reconcileStreamSession()).toBe("idle");
 	});
 	afterAll(() => {
 		stopMockService();
