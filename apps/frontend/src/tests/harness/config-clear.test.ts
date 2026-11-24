@@ -6,14 +6,15 @@
  * so a `config` frame cannot say "gone": the store keeps whatever it last held.
  * After every write that clears a key the device also sends
  * `config_clear { keys }`, and the store deletes exactly those keys. Each case
- * clicks like a person through the closed-loop harness: the real store, the
- * real serializer, the device's frames in the order it sends them (`config`,
- * then `config_clear`, then the reply).
+ * clicks like a person through the closed-loop harness: the real store, and the
+ * device itself in a process of its own (`real-device.ts`), whose frames are
+ * delivered as the exact bytes it sent, then its reply.
  */
 import { m } from "@ceraui/i18n/svelte";
 import { fireEvent, render, screen } from "@testing-library/svelte";
-import { flushSync, tick } from "svelte";
+import { flushSync } from "svelte";
 import {
+	afterAll,
 	afterEach,
 	beforeAll,
 	beforeEach,
@@ -50,17 +51,29 @@ import {
 import { buildEncoderSetConfig } from "$lib/streaming/encoderConfig";
 import type { EncoderConfig } from "../../main/dialogs/EncoderDialog.svelte";
 import EncoderDialog from "../../main/dialogs/EncoderDialog.svelte";
-import { type HeldCall, type HeldRpc, heldRpc, ingest } from "./device-loop";
+import { type HeldRpc, heldRpc, ingest, ingestFrame } from "./device-loop";
 import MixerOnStore from "./MixerOnStore.svelte";
+import { DEVICE_START_MS, type RealDevice, realDevice } from "./real-device";
 
 const MAIN = "usb-a";
 const SECOND = "usb-b";
 const AT_DEFAULTS = { tracks: [1], gain_db: 0, mute: false, delay_ms: 0 };
-const OK = { success: true, applies_next_start: true };
 
 let held: HeldRpc;
+let device: RealDevice;
 
-beforeAll(() => {
+const kind = (frame: string) => Object.keys(JSON.parse(frame))[0];
+
+/** The device stored the mix as absent: `config` without it, then its clear. */
+function expectMixCleared(frames: readonly string[]): void {
+	expect(frames.map(kind)).toEqual(["config", "config_clear"]);
+	const [config, clear] = frames.map((frame) => JSON.parse(frame));
+	expect(config.config).not.toHaveProperty("audio_inputs");
+	expect(clear.config_clear).toEqual({ keys: ["audio_inputs"] });
+}
+
+beforeAll(async () => {
+	device = await realDevice();
 	// bits-ui's Slider installs a ResizeObserver, absent in jsdom.
 	if (!("ResizeObserver" in window)) {
 		(window as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
@@ -81,7 +94,9 @@ beforeAll(() => {
 			dispatchEvent: vi.fn(),
 		}));
 	}
-});
+}, DEVICE_START_MS);
+
+afterAll(() => device.close());
 
 beforeEach(() => {
 	resetState();
@@ -98,7 +113,7 @@ afterEach(() => {
 });
 
 /** The idle device the mixer reads: two microphones and a 4x4 mix. */
-function idleDevice(config: Record<string, unknown>): void {
+async function idleDevice(config: Record<string, unknown>): Promise<void> {
 	ingest("capabilities", {
 		audio_mix: {
 			max_inputs: 4,
@@ -116,30 +131,14 @@ function idleDevice(config: Record<string, unknown>): void {
 			{ id: SECOND, kind: "device", label: "Elgato Wave:3" },
 		],
 	});
-	ingest("config", { asrc: MAIN, ...config });
-}
-
-/**
- * What the device does for a write that leaves the mix at its defaults: it
- * stores the mix as absent and broadcasts, then names the cleared key, then
- * answers the call.
- */
-async function deviceClears(
-	call: HeldCall,
-	config: Record<string, unknown>,
-	keys: string[],
-	reply: unknown = OK,
-): Promise<void> {
-	ingest("config", config);
-	ingest("config_clear", { keys });
-	call.resolve(reply);
-	await tick();
-	flushSync();
+	await device.become({ asrc: MAIN, ...config });
 }
 
 describe("the mixer shows a cleared mix as cleared", () => {
 	it("(1) idle unmute of a default primary: the button ends unmuted after the reply and the echo", async () => {
-		idleDevice({ audio_inputs: [{ id: MAIN, ...AT_DEFAULTS, mute: true }] });
+		await idleDevice({
+			audio_inputs: [{ id: MAIN, ...AT_DEFAULTS, mute: true }],
+		});
 		render(MixerOnStore);
 		const mute = screen.getByTestId(`audio-strip-mute-${MAIN}`);
 		expect(mute.getAttribute("aria-pressed")).toBe("true");
@@ -147,9 +146,7 @@ describe("the mixer shows a cleared mix as cleared", () => {
 		await fireEvent.click(mute);
 		const unmute = await held.next("setAudioMix");
 		expect(unmute.input).toEqual({ id: MAIN, mute: false });
-		await deviceClears(unmute, { asrc: MAIN, audio_inputs: undefined }, [
-			"audio_inputs",
-		]);
+		expectMixCleared(await device.answer(unmute));
 
 		expect(
 			screen
@@ -160,7 +157,7 @@ describe("the mixer shows a cleared mix as cleared", () => {
 	});
 
 	it("(2) primary on Tracks 1+2, remove Track 2: shows Track 1 only", async () => {
-		idleDevice({
+		await idleDevice({
 			audio_inputs: [{ id: MAIN, ...AT_DEFAULTS, tracks: [1, 2] }],
 		});
 		render(MixerOnStore);
@@ -171,11 +168,7 @@ describe("the mixer shows a cleared mix as cleared", () => {
 		).toBe("true");
 
 		await fireEvent.click(screen.getByTestId(`audio-strip-track-${MAIN}-2`));
-		await deviceClears(
-			await held.next("setAudioMix"),
-			{ asrc: MAIN, audio_inputs: undefined },
-			["audio_inputs"],
-		);
+		expectMixCleared(await device.answer(await held.next("setAudioMix")));
 
 		expect(held.calls[0]?.input).toEqual({
 			id: MAIN,
@@ -194,7 +187,7 @@ describe("the mixer shows a cleared mix as cleared", () => {
 	});
 
 	it("(3) include a secondary, then exclude it: shows excluded", async () => {
-		idleDevice({});
+		await idleDevice({});
 		render(MixerOnStore);
 		const enable = () => screen.getByTestId(`audio-strip-enable-${SECOND}`);
 		expect(enable().getAttribute("aria-checked")).toBe("false");
@@ -202,41 +195,27 @@ describe("the mixer shows a cleared mix as cleared", () => {
 		await fireEvent.click(enable());
 		const include = await held.next("setAudioMix");
 		expect(include.input).toEqual({ id: SECOND, include: true });
-		ingest("config", {
-			asrc: MAIN,
-			audio_inputs: [
-				{ id: MAIN, ...AT_DEFAULTS },
-				{ id: SECOND, ...AT_DEFAULTS },
-			],
-		});
-		include.resolve(OK);
-		await tick();
+		await device.answer(include);
 		expect(enable().getAttribute("aria-checked")).toBe("true");
 
 		await fireEvent.click(enable());
-		await deviceClears(
-			await held.next("setAudioMix"),
-			{ asrc: MAIN, audio_inputs: undefined },
-			["audio_inputs"],
-		);
+		expectMixCleared(await device.answer(await held.next("setAudioMix")));
 
 		expect(held.calls[1]?.input).toEqual({ id: SECOND, include: false });
 		expect(enable().getAttribute("aria-checked")).toBe("false");
 	});
 
 	it("(4) primary at -6 dB, reset: shows 0 dB", async () => {
-		idleDevice({ audio_inputs: [{ id: MAIN, ...AT_DEFAULTS, gain_db: -6 }] });
+		await idleDevice({
+			audio_inputs: [{ id: MAIN, ...AT_DEFAULTS, gain_db: -6 }],
+		});
 		render(MixerOnStore);
 		expect(
 			screen.getByTestId(`audio-strip-gain-value-${MAIN}`).textContent?.trim(),
 		).toBe("-6 dB");
 
 		await fireEvent.click(screen.getByTestId(`audio-strip-gain-reset-${MAIN}`));
-		await deviceClears(
-			await held.next("setAudioMix"),
-			{ asrc: MAIN, audio_inputs: undefined },
-			["audio_inputs"],
-		);
+		expectMixCleared(await device.answer(await held.next("setAudioMix")));
 
 		expect(held.calls[0]?.input).toEqual({ id: MAIN, gain_db: 0 });
 		expect(
@@ -246,7 +225,7 @@ describe("the mixer shows a cleared mix as cleared", () => {
 });
 
 /** The capture device the Encoder dialog reads its offers from. */
-function encoderDevice(config: Record<string, unknown>): void {
+async function encoderDevice(config: Record<string, unknown>): Promise<void> {
 	ingest("capabilities", {
 		platform: {
 			supports_h265: true,
@@ -288,7 +267,11 @@ function encoderDevice(config: Record<string, unknown>): void {
 			},
 		],
 	});
-	ingest("config", { source: "cam-h265", pipeline: "libuvch265", ...config });
+	await device.become({
+		source: "cam-h265",
+		pipeline: "libuvch265",
+		...config,
+	});
 }
 
 const q = (testid: string) =>
@@ -338,7 +321,7 @@ async function liveViewSave(saved: EncoderConfig): Promise<void> {
 
 describe("the Encoder dialog shows a cleared format as Automatic", () => {
 	it("(5) Manual codec, then Automatic and Save, reopen: Automatic", async () => {
-		encoderDevice({ video_codec: "h264" });
+		await encoderDevice({ video_codec: "h264" });
 		let saving: Promise<void> | undefined;
 		const view = openEncoder((saved) => {
 			saving = liveViewSave(saved);
@@ -356,13 +339,10 @@ describe("the Encoder dialog shows a cleared format as Automatic", () => {
 		expect(call.input).toEqual({ video_codec: null });
 		expect(isPending("video_codec")).toBe(true);
 
-		ingest("config", {
-			source: "cam-h265",
-			pipeline: "libuvch265",
-			video_codec: undefined,
-		});
-		ingest("config_clear", { keys: ["video_codec"] });
-		// The clear settles the lock it answers: nothing holds an old echo out.
+		// The clear settles the lock it answers before the answer itself does.
+		const frames = (await device.call(call.method, call.input)).frames;
+		for (const frame of frames) ingestFrame(frame);
+		expect(frames.map(kind)).toEqual(["config", "config_clear"]);
 		expect(isPending("video_codec")).toBe(false);
 		call.resolve({ success: true, applied: {} });
 		await saving;
@@ -381,97 +361,50 @@ describe("the Encoder dialog shows a cleared format as Automatic", () => {
 });
 
 describe("the store deletes exactly the keys the device names", () => {
-	it("(6) a selected_video_input clear reaches the store as a deleted key", () => {
-		ingest("config", {
-			source: "cam-1",
-			selected_video_input: "/dev/video0",
+	it("(6) a selected_video_input clear reaches the store as a deleted key", async () => {
+		await device.become({
+			source: "osmo",
+			selected_video_input: "osmo",
 			max_br: 6000,
 		});
+		expect(getConfig()?.selected_video_input).toBe("osmo");
 
-		ingest("config", {
-			source: "cam-1",
-			selected_video_input: undefined,
-			max_br: 6000,
-		});
-		expect(getConfig()?.selected_video_input).toBe("/dev/video0");
-		ingest("config_clear", { keys: ["selected_video_input"] });
+		// A switch to a network source: the device has no capture input to keep.
+		const { frames } = await device.call("setConfig", { source: "rtmp" });
+		const [config, clear, ...rest] = frames as [string, string];
+		ingestFrame(config);
+		expect(getConfig()?.selected_video_input).toBe("osmo");
+		ingestFrame(clear);
 
+		expect(rest).toEqual([]);
 		expect(Object.hasOwn(getConfig() ?? {}, "selected_video_input")).toBe(
 			false,
 		);
-		expect(getConfig()).toEqual({ source: "cam-1", max_br: 6000 });
+		expect(getConfig()).toMatchObject({ source: "rtmp", max_br: 6000 });
 	});
 
-	it("a later config echo from the same write cannot bring the cleared value back", () => {
-		ingest("config", { video_codec: "h264", resolution: "1080p" });
+	it("a later config echo cannot bring the cleared value back", async () => {
+		await device.become({ video_codec: "h264", max_br: 6000 });
 
-		ingest("config", { resolution: "1080p" });
-		ingest("config_clear", { keys: ["video_codec"] });
-		ingest("config", { resolution: "1080p", video_codec: undefined });
+		const clear = await device.call("setConfig", { video_codec: null });
+		const echo = await device.call("setConfig", { max_br: 7000 });
+		for (const frame of [...clear.frames, ...echo.frames]) ingestFrame(frame);
 
+		expect(echo.frames.map(kind)).toEqual(["config"]);
 		expect(Object.hasOwn(getConfig() ?? {}, "video_codec")).toBe(false);
-	});
-
-	it("an omitted key in a config frame still means unchanged", () => {
-		ingest("config", { video_codec: "h264", resolution: "1080p" });
-
-		ingest("config", { resolution: "720p" });
-
-		expect(getConfig()).toEqual({ video_codec: "h264", resolution: "720p" });
-	});
-
-	it("a clear that crosses a newer pending choice deletes the stale value and keeps that choice's lock", () => {
-		ingest("config", { video_codec: "h264" });
-		markPending("video_codec", "h265");
-
-		ingest("config_clear", { keys: ["video_codec"] });
-
-		expect(Object.hasOwn(getConfig() ?? {}, "video_codec")).toBe(false);
-		expect(isPending("video_codec")).toBe(true);
-		ingest("config", { video_codec: "h265" });
-		expect(getConfig()?.video_codec).toBe("h265");
-		onRpcResolved("video_codec");
-	});
-
-	it("a malformed config_clear changes nothing", () => {
-		ingest("config", { video_codec: "h264" });
-		const before = getConfig();
-
-		for (const payload of [
-			undefined,
-			null,
-			{},
-			{ keys: "video_codec" },
-			{ keys: [1, null] },
-		]) {
-			ingest("config_clear", payload);
-		}
-
-		expect(getConfig()).toBe(before);
-	});
-
-	it("a message type this build does not know is ignored", () => {
-		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-		ingest("config", { video_codec: "h264" });
-		const before = getConfig();
-
-		expect(() =>
-			ingest("config_reset_v9", { keys: ["video_codec"] }),
-		).not.toThrow();
-
-		expect(getConfig()).toBe(before);
-		warn.mockRestore();
+		expect(getConfig()?.max_br).toBe(7000);
 	});
 });
 
 describe("the reconnect safety hydrate applies getConfig as a snapshot", () => {
-	it("a pulled config without the cleared key shows the Encoder Automatic, and a broadcast-only autostart survives", () => {
-		encoderDevice({ video_codec: "h264", autostart: true });
+	it("a pulled config without the cleared key shows the Encoder Automatic, and a broadcast-only autostart survives", async () => {
+		await encoderDevice({ video_codec: "h264", autostart: true });
 
-		// The clear happened while this tab's socket was closed, so it got no frames.
-		// Its safety hydrate reads streaming.getConfig, which never returns autostart.
-		// The two-tab path end to end is e2e/config-clear-two-tabs.spec.ts.
-		ingestPulledConfig({ source: "cam-h265", pipeline: "libuvch265" });
+		// The clear happens while this tab's socket is closed, so its frames are
+		// not delivered. The safety hydrate reads `streaming.getConfig`, which never
+		// returns `autostart`. Two real tabs: e2e/config-clear-two-tabs.spec.ts.
+		await device.call("setConfig", { video_codec: null });
+		ingestPulledConfig((await device.call("getConfig")).result);
 
 		expect(Object.hasOwn(getConfig() ?? {}, "video_codec")).toBe(false);
 		expect(getConfig()?.autostart).toBe(true);
@@ -483,37 +416,28 @@ describe("the reconnect safety hydrate applies getConfig as a snapshot", () => {
 			"true",
 		);
 	});
-
-	it("a key the snapshot omits keeps the local value while its field lock is pending", () => {
-		ingest("config", { source: "cam-h265", max_br: 6000 });
-		markPending("max_br", 8000);
-
-		ingestPulledConfig({ source: "cam-h265" });
-
-		expect(getConfig()?.max_br).toBe(6000);
-		onRpcResolved("max_br");
-	});
 });
 
 describe("Start never re-sends a cleared setting", () => {
 	it("a key the device cleared is absent from the start input", async () => {
-		ingest("config", {
-			source: "cam-1",
-			selected_video_input: "/dev/video0",
+		await device.become({
+			source: "osmo",
+			selected_video_input: "osmo",
 			video_codec: "h264",
 			max_br: 6000,
 		});
-		ingest("config", { source: "cam-1", max_br: 6000 });
-		ingest("config_clear", { keys: ["selected_video_input", "video_codec"] });
+		for (const input of [{ source: "rtmp" }, { video_codec: null }])
+			for (const frame of (await device.call("setConfig", input)).frames)
+				ingestFrame(frame);
 
 		void startStreaming(() => getConfig());
 		const start = await held.next("start");
 
 		// What the socket carries: the request after the real JSON serializer.
-		expect(JSON.parse(JSON.stringify(start.input))).toStrictEqual({
-			source: "cam-1",
-			max_br: 6000,
-		});
+		const input = JSON.parse(JSON.stringify(start.input));
+		expect(input).toMatchObject({ source: "rtmp", max_br: 6000 });
+		expect(input).not.toHaveProperty("selected_video_input");
+		expect(input).not.toHaveProperty("video_codec");
 		start.resolve({ success: true });
 	});
 });

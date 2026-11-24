@@ -112,6 +112,13 @@ for (const losesConfigPushes of [false, true]) {
 		await encoderA.getByTestId("encoder-format-manual").click();
 		await saveEncoder(encoderA);
 		await expect.poll(savedCodec).toBeUndefined();
+		// A's own store heard the clear: its dialog reopens on Automatic.
+		await openEncoder(page);
+		await expect(
+			encoderA.getByTestId("encoder-format-manual"),
+		).toHaveAttribute("aria-checked", "false");
+		await page.keyboard.press("Escape");
+		await expect(encoderA).toBeHidden();
 
 		await restore({ losesConfigPushes });
 

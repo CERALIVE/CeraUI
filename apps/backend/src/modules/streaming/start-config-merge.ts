@@ -18,6 +18,9 @@ export function mergePersistedStartConfig(
 		streamingConfigInputSchema.parse(requestedConfig),
 	);
 	const effective: StreamingConfigInput = { ...persisted, ...requested };
+	// A source brings its own capture input: one that has none clears the saved.
+	if (requested.source !== undefined)
+		effective.selected_video_input = requested.selected_video_input;
 
 	const requestsManualEndpoint =
 		requested.srtla_addr !== undefined || requested.srtla_port !== undefined;

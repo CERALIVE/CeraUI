@@ -28,6 +28,8 @@ export function noteSessionRestored(): void {
 let links = $state(0);
 let linkUp = false;
 let authenticatedLink = $state<number>();
+// How many times the device admitted this page; a sign-in on the same link counts.
+let admissions = 0;
 
 /** The current socket has been admitted, independently of post-login hydration. */
 export function getSessionReady(): boolean {
@@ -36,6 +38,11 @@ export function getSessionReady(): boolean {
 
 export function noteAuthenticatedLink(link: number): void {
 	authenticatedLink = link;
+	admissions += 1;
+}
+
+export function getAdmissionEpoch(): number {
+	return admissions;
 }
 
 export function clearAuthenticatedLink(): void {

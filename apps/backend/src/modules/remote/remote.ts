@@ -554,6 +554,7 @@ export async function setRemoteConfig(params: SetRemoteConfigParams) {
 	}
 
 	saveConfig();
+	broadcastConfig(config);
 
 	if (remoteWs) {
 		remoteStatusHandled = true;
@@ -565,8 +566,6 @@ export async function setRemoteConfig(params: SetRemoteConfigParams) {
 	if (await updateCachedRelays(undefined)) {
 		broadcastMsg("relays", buildRelaysMsg());
 	}
-
-	broadcastConfig(config);
 }
 
 /**

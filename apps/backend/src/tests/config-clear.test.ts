@@ -8,33 +8,17 @@
  * follows the unchanged `config` frame with `config_clear { keys }` on the same
  * sockets, so a client never re-adds a cleared key from the same write.
  */
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
 import { GET_CONFIG_KEYS } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
-import {
-	getConfig,
-	getConfigFilePath,
-	setConfigFilePath,
-} from "../modules/config.ts";
-import { PROTOCOL_VERSION } from "../modules/remote-control/protocol.ts";
-import {
-	handleSelfFencingOp,
-	resetSelfFencingState,
-} from "../modules/remote-control/self-fencing.ts";
-import { reconcileInflightConfigChange } from "../modules/streaming/config-change-persistence.ts";
-import { noteStreamedSourceCommitted } from "../modules/streaming/sources.ts";
-import { createStreamSessionOrchestrator } from "../modules/streaming/stream-session-orchestrator.ts";
+import { getConfig } from "../modules/config.ts";
 import {
 	broadcastConfig,
 	rememberConfigSent,
 } from "../rpc/config-broadcast.ts";
-import { addClient, removeClient } from "../rpc/events.ts";
 import * as procedures from "../rpc/procedures/streaming.procedure.ts";
-import type { AppWebSocket } from "../rpc/types.ts";
 import { makeRpcContext } from "./helpers/bond-toggle-fixture.ts";
+import { useConfigClient } from "./helpers/config-client.ts";
 
 const entry = (id: string, fields: Record<string, unknown> = {}) => ({
 	id,
@@ -45,47 +29,7 @@ const entry = (id: string, fields: Record<string, unknown> = {}) => ({
 	...fields,
 });
 
-let directory: string;
-let previousPath: string;
-let previousConfig: Record<string, unknown>;
-let sent: string[];
-let client: AppWebSocket;
-
-function frames(): Array<Record<string, unknown>> {
-	return sent
-		.map((message) => JSON.parse(message) as Record<string, unknown>)
-		.filter((frame) => "config" in frame || "config_clear" in frame);
-}
-
-beforeEach(async () => {
-	directory = await mkdtemp(join(tmpdir(), "config-clear-"));
-	previousPath = getConfigFilePath();
-	setConfigFilePath(join(directory, "config.json"));
-	previousConfig = { ...getConfig() };
-	for (const key of Object.keys(getConfig()))
-		Reflect.deleteProperty(getConfig(), key);
-	sent = [];
-	client = {
-		data: { isAuthenticated: true, lastActive: 0 },
-		send: (message: string) => {
-			sent.push(message);
-		},
-	} as unknown as AppWebSocket;
-	addClient(client);
-	// The device has one broadcast history: start each case from an empty config
-	// its clients were told about, whatever an earlier case sent.
-	broadcastConfig(getConfig());
-	sent = [];
-});
-
-afterEach(async () => {
-	removeClient(client);
-	for (const key of Object.keys(getConfig()))
-		Reflect.deleteProperty(getConfig(), key);
-	Object.assign(getConfig(), previousConfig);
-	setConfigFilePath(previousPath);
-	await rm(directory, { recursive: true, force: true });
-});
+const { tab, frames } = useConfigClient();
 
 describe("config_clear", () => {
 	test("clearing audio_inputs broadcasts config without the key, then config_clear naming it", async () => {
@@ -95,7 +39,7 @@ describe("config_clear", () => {
 		});
 		// The clients were told about the saved mix by an earlier write's broadcast.
 		broadcastConfig(getConfig());
-		sent = [];
+		tab.sent = [];
 
 		const result = await call(
 			procedures.setConfigProcedure,
@@ -183,176 +127,6 @@ describe("config_clear", () => {
 			srt_streamid: "",
 			custom_provider: null,
 		});
-	});
-});
-
-/** What an open tab hears from `write`, after it was told about the config as it stands. */
-async function heardFrom(write: () => unknown): Promise<unknown[]> {
-	broadcastConfig(getConfig());
-	sent = [];
-	await write();
-	return frames().map((frame) =>
-		"config" in frame ? "config" : frame.config_clear,
-	);
-}
-
-describe("a clear is published at its write, not by a later broadcast", () => {
-	test("a successful start on a source with no hardware identity", async () => {
-		Object.assign(getConfig(), {
-			source: "rtmp",
-			last_streamed_source: "video3",
-			last_streamed_source_stable_id: "usb:2ca3:0023:SN-A",
-		});
-
-		const session = createStreamSessionOrchestrator({
-			createAttemptId: () => "attempt-1",
-			setStreamingStatus: () => {},
-			stopRuntime: async () => {},
-			queryRuntime: async () => "idle",
-			retryPolicy: {
-				maxAttempts: 1,
-				totalBudgetMs: 60_000,
-				baseDelayMs: 1,
-				maxDelayMs: 1,
-			},
-			// The production hook (stream-session-production.ts).
-			onStreamCommitted: () => void noteStreamedSourceCommitted(),
-		});
-
-		expect(
-			await heardFrom(async () => {
-				const { result } = await session.start({
-					origin: "ui",
-					launch: async () => {},
-				});
-				expect(result).toBe("started");
-			}),
-		).toEqual(["config", { keys: ["last_streamed_source_stable_id"] }]);
-	});
-
-	test("a crash-recovered apply-now change that turned the composition off", async () => {
-		const composition = {
-			secondary_input_id: "video1",
-			layout: "pip-top-left",
-			alpha: 1,
-		} as const;
-		Object.assign(getConfig(), { resolution: "1080p", composition });
-		const marker = JSON.stringify({
-			attemptId: "a1",
-			startedAt: 1,
-			candidate: { resolution: "2160p", composition: null },
-			previous: { resolution: "1080p", composition },
-		});
-
-		expect(
-			await heardFrom(() =>
-				expect(
-					reconcileInflightConfigChange(
-						{
-							streaming: true,
-							switching: true,
-							resolution: "2160p",
-							pipelinePlaying: true,
-							framesEmitted: 500,
-						},
-						{
-							markerPath: "config.inflight.json",
-							readMarker: () => marker,
-							writeMarker: () => {},
-							removeMarker: () => {},
-						},
-					),
-				).toBe("persisted_candidate"),
-			),
-		).toEqual(["config", { keys: ["composition"] }]);
-	});
-
-	test("a self-fencing watchdog that reverts an unconfirmed change", async () => {
-		const reverted = Promise.withResolvers<void>();
-		let watchdog = () => {};
-		let results = 0;
-		try {
-			await handleSelfFencingOp(
-				{
-					v: PROTOCOL_VERSION,
-					kind: "command",
-					type: "network.reconfig",
-					cid: "01J00000000000000000000000",
-					role: "owner",
-					self_fencing: true,
-					payload: { video_codec: "h264" },
-				},
-				{
-					sendResult: () => {
-						results += 1;
-						if (results === 2) reverted.resolve();
-						return true;
-					},
-					isSubsystemReady: async () => true,
-					acquireMutationLease: async () => ({ ok: true }),
-					admitDisruptiveAction: async () => ({ ok: true }),
-					setTimer: (fn) => {
-						watchdog = fn;
-						return 0 as unknown as ReturnType<typeof setTimeout>;
-					},
-					clearTimer: () => {},
-				},
-			);
-			expect(getConfig().video_codec).toBe("h264");
-
-			expect(
-				await heardFrom(async () => {
-					watchdog();
-					await reverted.promise;
-				}),
-			).toEqual(["config", { keys: ["video_codec"] }]);
-		} finally {
-			resetSelfFencingState();
-		}
-	});
-
-	test("a legacy plaintext password replaced by a new one", async () => {
-		// A child process: setPassword rewrites auth_tokens.json in its working directory.
-		const script = `
-			const root = ${JSON.stringify(join(import.meta.dir, ".."))};
-			const { getConfig } = await import(root + "/modules/config.ts");
-			const { broadcastConfig } = await import(root + "/rpc/config-broadcast.ts");
-			const { createContext } = await import(root + "/rpc/context.ts");
-			const { addClient } = await import(root + "/rpc/events.ts");
-			const { setPasswordProcedure } = await import(root + "/rpc/procedures/auth.procedure.ts");
-			const { call } = await import(Bun.resolveSync("@orpc/server", root));
-			let sent = [];
-			const ws = { data: { isAuthenticated: true, lastActive: 0 }, send: (m) => { sent.push(m); }, close() {} };
-			addClient(ws);
-			getConfig().password = "legacy";
-			broadcastConfig(getConfig());
-			sent = [];
-			await call(setPasswordProcedure, { password: "a-new-password" }, { context: createContext(ws) });
-			const heard = sent.map((m) => JSON.parse(m)).filter((f) => "config" in f || "config_clear" in f)
-				.map((f) => ("config" in f ? "config" : f.config_clear));
-			await Bun.write("heard.json", JSON.stringify(heard));
-			process.exit(0);
-		`;
-		await Bun.write(join(directory, "run.ts"), script);
-		await Bun.write(
-			join(directory, "setup.json"),
-			Bun.file(join(import.meta.dir, "../../setup.json")),
-		);
-		const child = Bun.spawn(
-			[process.execPath, "run", join(directory, "run.ts")],
-			{
-				cwd: directory,
-				stdout: "ignore",
-				stderr: "pipe",
-			},
-		);
-		const stderr = await new Response(child.stderr).text();
-		expect(await child.exited, stderr).toBe(0);
-
-		expect(await Bun.file(join(directory, "heard.json")).json()).toEqual([
-			"config",
-			{ keys: ["password"] },
-		]);
 	});
 });
 

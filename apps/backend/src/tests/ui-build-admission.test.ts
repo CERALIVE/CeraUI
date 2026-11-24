@@ -32,6 +32,7 @@ import {
 import { setAudioMixProcedure } from "../rpc/procedures/audio-mix.procedure.ts";
 import {
 	getConfigProcedure,
+	reloadAudioDelayProcedure,
 	setConfigProcedure,
 	streamingStartProcedure,
 	switchAudioProcedure,
@@ -137,18 +138,20 @@ describe("a page from another build, or one that names none", () => {
 			const context = uiSocket(announced, sent);
 			const before = JSON.stringify(getConfig());
 
-			for (const [procedure, input] of [
-				[setConfigProcedure, { max_br: 5000 }],
-				[setConfigProcedure, { video_codec: null }],
-				[streamingStartProcedure, {}],
-				[setAudioMixProcedure, { id: "usb-a", mute: true }],
-				[switchInputProcedure, { input_id: "/dev/video0" }],
-				[switchAudioProcedure, { asrc: "usb-a" }],
-			] as const) {
-				await expect(
-					// biome-ignore lint/suspicious/noExplicitAny: one loop drives several procedure types.
-					call(procedure as any, input, { context }),
-				).rejects.toMatchObject({ message: UI_OUT_OF_DATE_MESSAGE });
+			for (const write of [
+				() => call(setConfigProcedure, { max_br: 5000 }, { context }),
+				() => call(setConfigProcedure, { video_codec: null }, { context }),
+				() => call(streamingStartProcedure, {}, { context }),
+				() =>
+					call(setAudioMixProcedure, { id: "usb-a", mute: true }, { context }),
+				() =>
+					call(switchInputProcedure, { input_id: "/dev/video0" }, { context }),
+				() => call(switchAudioProcedure, { asrc: "usb-a" }, { context }),
+				() => call(reloadAudioDelayProcedure, { delay_ms: 100 }, { context }),
+			]) {
+				await expect(write()).rejects.toMatchObject({
+					message: UI_OUT_OF_DATE_MESSAGE,
+				});
 			}
 
 			expect(JSON.stringify(getConfig())).toBe(before);

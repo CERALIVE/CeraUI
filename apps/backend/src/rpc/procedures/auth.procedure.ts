@@ -253,7 +253,6 @@ export const setPasswordProcedure = baseProcedure
 				cost: BCRYPT_ROUNDS,
 			});
 			setPasswordHash(newHash);
-			const hadLegacyPassword = config.password !== undefined;
 			config.password = undefined;
 			saveConfig();
 
@@ -265,11 +264,6 @@ export const setPasswordProcedure = baseProcedure
 			const revoked = invalidateAllTokens(context.ws);
 			const replacement = genAuthToken(false);
 			context.authenticate(replacement);
-			if (hadLegacyPassword) {
-				// After the revocation, so only sessions that stay signed in hear it.
-				const { broadcastConfig } = await import("../config-broadcast.ts");
-				broadcastConfig(config);
-			}
 			logger.info(
 				`Auth: password updated; revoked ${revoked} outstanding credential(s)`,
 			);

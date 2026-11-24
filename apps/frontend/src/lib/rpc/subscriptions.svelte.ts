@@ -111,6 +111,7 @@ import { pullStatusEvidence } from "./pulled-status";
 import { reauthenticateAndHydrate } from "./reconnect";
 import { createSeqTracker } from "./seq-guard";
 import {
+	getAdmissionEpoch,
 	getLifecycleDelivery,
 	getLinkEpoch,
 	getStreamSessionEpoch,
@@ -169,6 +170,20 @@ let authState = $state.raw<
 
 // Config state
 let configState = $state.raw<ConfigMessage | undefined>(undefined);
+
+// Who last spoke for the config since this link was admitted: a pull speaks for
+// `GET_CONFIG_KEYS`, the first push (the login snapshot) for every key.
+let configHeard:
+	| {
+			readonly link: number;
+			readonly admission: number;
+			readonly by: "pull" | "push";
+	  }
+	| undefined;
+
+// What the device last said about a key its field lock kept out of the store
+// (`undefined`: absent). Nothing repeats it, so it is applied when the lock lets go.
+let deferredConfig: Record<string, unknown> = {};
 let startConfigGeneration = 0;
 
 // Status state (aggregated)
@@ -664,31 +679,7 @@ function handleMessage(
 			// field the server echoes: skip it if a stale optimistic lock guards
 			// it (shouldIgnoreEchoReactive), otherwise apply it and reconcile the
 			// lock (release once its RPC resolved and the server echoed the field).
-			const incoming = data as ConfigMessage;
-			// Do not carry an omitted source or server from the previous socket
-			// into the first configuration snapshot on this one, only what a
-			// pending field lock guards: a value whose write is still in flight, or
-			// one whose differing echo the lock ignores below.
-			const merged: ConfigMessage = currentStartEvidence("config")
-				? { ...configState }
-				: Object.fromEntries(
-						Object.entries(configState ?? {}).filter(
-							([key]) =>
-								holdsValueReactive(key) ||
-								(isPending(key) && Object.hasOwn(incoming, key)),
-						),
-					);
-			let changed = false;
-			for (const [field, value] of Object.entries(incoming)) {
-				if (value === undefined) continue;
-				if (shouldIgnoreEchoReactive(field, value)) continue;
-				if (!Object.is(Reflect.get(merged, field), value)) changed = true;
-				(merged as Record<string, unknown>)[field] = value;
-				reconcileReactive(field, value);
-			}
-			if (changed) startConfigGeneration += 1;
-			configState = merged;
-			startEvidenceLink.config = getLinkEpoch();
+			mergeConfig(data as ConfigMessage, "push");
 			break;
 		}
 
@@ -1269,6 +1260,7 @@ function handleMessage(
 			if (configState && (data as { max_br?: number }).max_br) {
 				if ((data as { max_br: number }).max_br !== configState.max_br)
 					startConfigGeneration += 1;
+				delete deferredConfig.max_br;
 				configState = {
 					...configState,
 					max_br: (data as { max_br: number }).max_br,
@@ -1320,11 +1312,81 @@ function handleMessage(
 export const handleMessageForTest = handleMessage;
 
 /**
+ * Merge one config frame. The first one since this link was admitted starts
+ * from nothing (do not carry an omitted source or server from the previous
+ * socket into it), except what a pending field lock guards: a value whose write
+ * is still in flight, or one whose differing echo the lock ignores here. The
+ * pull also keeps the keys it never speaks for. Any later frame is partial.
+ */
+function mergeConfig(incoming: ConfigMessage, by: "pull" | "push"): void {
+	const link = getLinkEpoch();
+	const admission = getAdmissionEpoch();
+	const heard =
+		configHeard?.link === link && configHeard.admission === admission
+			? configHeard.by
+			: undefined;
+	const partial = heard === "push" || heard === by;
+	const spokenFor = (key: string) =>
+		!partial &&
+		(by === "push" || GET_CONFIG_KEYS.some((listed) => listed === key));
+	for (const key of Object.keys(deferredConfig))
+		if (spokenFor(key)) delete deferredConfig[key];
+	const merged: Record<string, unknown> = {};
+	for (const [key, value] of Object.entries(configState ?? {})) {
+		const listed = Object.hasOwn(incoming, key);
+		if (!spokenFor(key)) merged[key] = value;
+		else if (listed ? isPending(key) : holdsValueReactive(key)) {
+			merged[key] = value;
+			if (!listed) deferredConfig[key] = undefined;
+		}
+	}
+	let changed = Object.keys(configState ?? {}).some(
+		(key) => !Object.hasOwn(merged, key),
+	);
+	for (const [field, value] of Object.entries(incoming)) {
+		if (value === undefined) continue;
+		if (shouldIgnoreEchoReactive(field, value)) {
+			deferredConfig[field] = value;
+			continue;
+		}
+		delete deferredConfig[field];
+		if (!Object.is(merged[field], value)) changed = true;
+		merged[field] = value;
+		reconcileReactive(field, value);
+	}
+	if (changed) startConfigGeneration += 1;
+	configState = merged as ConfigMessage;
+	startEvidenceLink.config = link;
+	configHeard = { link, admission, by: heard === "push" ? heard : by };
+}
+
+/**
+ * Apply the device's last word on every key whose field lock has let go. A
+ * clear needs no more than a lock that guards nothing; a value waits for the
+ * lock itself, which is what keeps a stale echo out.
+ */
+function settleDeferredConfig(): void {
+	for (const [key, value] of Object.entries(deferredConfig)) {
+		if (value === undefined ? holdsValueReactive(key) : isPending(key))
+			continue;
+		delete deferredConfig[key];
+		if (value === undefined) clearConfigKeys([key]);
+		else if (!Object.is(Reflect.get(configState ?? {}, key), value)) {
+			configState = { ...configState, [key]: value };
+			startConfigGeneration += 1;
+		}
+	}
+}
+
+/**
  * Delete `keys` from the config store, releasing each one's field lock unless
  * a newer write for a value still holds it (see `reconcileClear`).
  */
 function clearConfigKeys(keys: readonly string[]): void {
-	for (const key of keys) reconcileClearReactive(key);
+	for (const key of keys) {
+		delete deferredConfig[key];
+		reconcileClearReactive(key);
+	}
 	const current = configState;
 	if (current === undefined || !keys.some((key) => Object.hasOwn(current, key)))
 		return;
@@ -1339,29 +1401,20 @@ function clearConfigKeys(keys: readonly string[]): void {
  * as a snapshot of the keys that procedure returns. The keys it carries merge
  * like a pushed `config`. A listed key it omits is absent on the device now, a
  * clear this tab may have missed while offline, so it is cleared unless a
- * pending field lock guards this tab's newer value. A key the procedure never
- * returns, such as `autostart`, is left as it is.
+ * pending field lock guards this tab's newer value, which then yields when that
+ * lock lets go. A key the procedure never returns, such as `autostart`, is left
+ * as it is.
  */
 export function ingestPulledConfig(config: unknown): void {
 	if (typeof config !== "object" || config === null) return;
-	const held = configState;
-	handleMessage("config", config);
-	// The first config on a new link keeps only what a pending lock guards: give
-	// back the keys this pull never speaks for.
-	const listed: ReadonlySet<string> = new Set(GET_CONFIG_KEYS);
-	configState = {
-		...Object.fromEntries(
-			Object.entries(held ?? {}).filter(([key]) => !listed.has(key)),
-		),
-		...configState,
-	};
-	clearConfigKeys(
-		GET_CONFIG_KEYS.filter(
-			(key) =>
-				(config as Record<string, unknown>)[key] === undefined &&
-				!holdsValueReactive(key),
-		),
+	connectionReadyState = true;
+	mergeConfig(config as ConfigMessage, "pull");
+	const omitted = GET_CONFIG_KEYS.filter(
+		(key) => (config as Record<string, unknown>)[key] === undefined,
 	);
+	for (const key of omitted)
+		if (holdsValueReactive(key)) deferredConfig[key] = undefined;
+	clearConfigKeys(omitted.filter((key) => !holdsValueReactive(key)));
 }
 
 /**
@@ -1496,7 +1549,7 @@ function handleConnectionChange(state: ConnectionState): void {
 
 let isInitialized = false;
 
-const LOCK_EXPIRY_TICK_MS = 5_000;
+const LOCK_EXPIRY_TICK_MS = 1_000;
 let lockExpiryTick: ReturnType<typeof setInterval> | undefined;
 
 /**
@@ -1517,6 +1570,7 @@ export function initSubscriptions(): void {
 	// never echoed back by the server.
 	lockExpiryTick ??= setInterval(() => {
 		expireReactive();
+		settleDeferredConfig();
 	}, LOCK_EXPIRY_TICK_MS);
 
 	// Connect to server
@@ -1531,6 +1585,8 @@ export function resetState(): void {
 	logFollowListener = undefined;
 	authState = undefined;
 	configState = undefined;
+	configHeard = undefined;
+	deferredConfig = {};
 	startConfigGeneration += 1;
 	statusState = undefined;
 	if (isStreamingState) noteStreamSessionBoundary();

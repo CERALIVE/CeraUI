@@ -10,7 +10,6 @@
  */
 import { execFileSync } from "node:child_process";
 import {
-	copyFileSync,
 	mkdirSync,
 	mkdtempSync,
 	readdirSync,
@@ -18,7 +17,6 @@ import {
 	rmSync,
 	writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
 	afterAll,
@@ -30,51 +28,15 @@ import {
 	vi,
 } from "vitest";
 
+import { realDevice } from "./real-device";
+
 /** main just before the live-audio plan: the last handler with no `config_clear`. */
 const OLD_TAB = "17dda165792862a009823440cb4b78e2812914d0";
 const FRONTEND = resolve(".");
-const BACKEND = resolve("../backend");
 
 let oldSource: string;
 /** [config with the manual codec], [config without it, then the clear]. */
 let frames: string[];
-
-/** What a client's socket is sent while Encoder goes from H.264 to Automatic. */
-function broadcastBytes(): string[] {
-	const cwd = mkdtempSync(join(tmpdir(), "old-tab-backend-"));
-	try {
-		copyFileSync(join(BACKEND, "setup.json"), join(cwd, "setup.json"));
-		execFileSync(
-			"bun",
-			[
-				"-e",
-				`
-				const src = ${JSON.stringify(join(BACKEND, "src"))};
-				const { getConfig, setConfigFilePath } = await import(src + "/modules/config.ts");
-				const { broadcastConfig } = await import(src + "/rpc/config-broadcast.ts");
-				const { createContext } = await import(src + "/rpc/context.ts");
-				const { addClient } = await import(src + "/rpc/events.ts");
-				const { setConfigProcedure } = await import(src + "/rpc/procedures/streaming.procedure.ts");
-				const { call } = await import(Bun.resolveSync("@orpc/server", src));
-				setConfigFilePath(process.cwd() + "/config.json");
-				Object.assign(getConfig(), { max_br: 6000, balancer: "adaptive", video_codec: "h264" });
-				const sent = [];
-				const ws = { data: { isAuthenticated: true, lastActive: 0 }, send: (m) => { sent.push(m); }, close() {} };
-				addClient(ws);
-				broadcastConfig(getConfig());
-				await call(setConfigProcedure, { video_codec: null, balancer: "fixed" }, { context: createContext(ws) });
-				const kinds = ["config", "config_clear"];
-				await Bun.write("frames.json", JSON.stringify(sent.filter((m) => kinds.includes(Object.keys(JSON.parse(m))[0]))));
-				process.exit(0);
-				`,
-			],
-			{ cwd, stdio: ["ignore", "ignore", "pipe"] },
-		);
-		return JSON.parse(readFileSync(join(cwd, "frames.json"), "utf8"));
-	} finally {
-		rmSync(cwd, { recursive: true, force: true });
-	}
-}
 
 /** The old frontend's `src/lib` and `src/main`, importing each other, not today's. */
 function checkOutOldTab(): string {
@@ -134,10 +96,21 @@ async function openTab(lib: string) {
 	};
 }
 
-beforeAll(() => {
-	frames = broadcastBytes();
+beforeAll(async () => {
+	const device = await realDevice();
+	// Encoder goes from H.264 to Automatic.
+	const config = { max_br: 6000, balancer: "adaptive", video_codec: "h264" };
+	const write = { video_codec: null, balancer: "fixed" };
+	frames = [
+		...(await device.call("become", config)).frames,
+		...(await device.call("setConfig", write)).frames,
+	];
+	device.close();
 	oldSource = checkOutOldTab();
-}, 60_000);
+	// Compiled here, not out of a test's time budget.
+	for (const lib of [`${oldSource}/lib`, resolve("src/lib")])
+		await import(/* @vite-ignore */ `${lib}/rpc/subscriptions.svelte.ts`);
+}, 180_000);
 
 afterAll(() => {
 	if (oldSource) rmSync(oldSource, { recursive: true, force: true });
