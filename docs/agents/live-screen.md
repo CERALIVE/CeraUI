@@ -348,11 +348,17 @@ existing Power sheet only; reboot still needs its own confirmation.
 
 **Today** `DESKTOP_CHROME_QUERY` is
 `(min-width: 1024px), (min-width: 768px) and (max-height: 600px)`
-(`apps/frontend/src/lib/layout.ts:29-30`). **Today** `app.css` sets
-`--mobile-dock-height` to 7rem and documents it as the height of the fixed
-mobile dock (`apps/frontend/src/app.css:230-235`). The Live bar must sit above
-the mobile dock, offset by `--mobile-dock-height`, and the toast stack must sit
-above the Live bar.
+(`apps/frontend/src/lib/layout.ts:29-30`). **Today** `--mobile-dock-height`
+is 7rem (`apps/frontend/src/app.css:269-271`), and it is what the Live bar
+offsets itself by. The Live bar must sit above the mobile dock, offset by
+`--mobile-dock-height`, and the toast stack must sit above the Live bar,
+clearing `--mobile-dock-height`, `--live-bar-height`,
+`--live-checklist-height`, the safe area and `--toast-clearance`. On Live,
+`<main>` always pads by that 7rem token. On a non-Live destination with a
+dock, `MainView.svelte` uses the measured border-box height (including the
+safe area) plus two spacing units for page bottom padding and document
+scroll padding, which is the token only until the dock is measured. The
+visible PWA install banner's own scroll padding outranks that while it shows.
 
 #### The preview's open state
 
