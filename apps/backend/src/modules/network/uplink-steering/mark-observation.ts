@@ -1,5 +1,9 @@
 import type { run } from "../../../helpers/run.ts";
-import { type ClientZone, SHARE_TABLE } from "./contracts.ts";
+import {
+	type ClientZone,
+	SHARE_TABLE,
+	SteeringUnavailableError,
+} from "./contracts.ts";
 import { MARK_GUARD } from "./mark-admission.ts";
 import { MARK_FENCE_RULE } from "./route-policy.ts";
 
@@ -41,11 +45,18 @@ export async function observeKernelMarks(
 	);
 	const unaffected = new Map<number, number>();
 	if (affected.length > 0) {
-		for (const [, hex, index] of guard.matchAll(
-			/^\s*iifname "[A-Za-z0-9_.-]+" ip saddr \S+ meta mark & 0xffffff00 (?:== )?0x(ca[0-9a-f]{4}00) oif (\d+) accept\s*$/gm,
+		// nft lists the installed `meta oif <index>` as the current device name.
+		for (const [, hex, name, index] of guard.matchAll(
+			/^\s*iifname "[A-Za-z0-9_.-]+" ip saddr \S+ meta mark & 0xffffff00 (?:== )?0x(ca[0-9a-f]{4}00) oif (?:"([A-Za-z0-9_.-]+)"|(\d+)) accept\s*$/gm,
 		)) {
 			const mark = Number.parseInt(hex ?? "", 16);
-			if (!affected.includes(mark)) unaffected.set(mark, Number(index));
+			if (affected.includes(mark)) continue;
+			// A device that can no longer be resolved keeps no admission.
+			const ifindex =
+				name === undefined
+					? Number(index)
+					: await readLinkIndex(command, name).catch(() => undefined);
+			if (ifindex !== undefined) unaffected.set(mark, ifindex);
 		}
 	}
 	return {
@@ -56,6 +67,20 @@ export async function observeKernelMarks(
 		affected,
 		unaffected: [...unaffected].map(([mark, ifindex]) => ({ mark, ifindex })),
 	};
+}
+
+export async function readLinkIndex(
+	command: typeof run,
+	ifname: string,
+): Promise<number> {
+	const output = await command("ip", ["-o", "link", "show", "dev", ifname]);
+	const index = /^(\d+):/.exec(output)?.[1];
+	if (index === undefined || Number(index) === 0)
+		throw new SteeringUnavailableError(
+			"policy_route_missing",
+			`${ifname}: no live device index`,
+		);
+	return Number(index);
 }
 
 function tableBody(ruleset: string, name: string): string | undefined {

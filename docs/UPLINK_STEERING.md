@@ -166,7 +166,9 @@ state are boot-scoped.
 
 Without a collision the journal is advisory: an unreadable journal or failed
 kernel observation keeps the original steering path. Start-up status stays
-`available` until a real failure, as before. Shaping uses the live desired state;
+`available` until a real failure, as before. A device with a journaled
+collision reports `steering_unavailable` from start-up and while a collision
+intent is in progress, until an apply commits it against the kernel. Shaping uses the live desired state;
 only collision-affected marks are held until their assignment is committed.
 
 Non-colliding uplinks retain the original no-flush rebind behavior. Only marks

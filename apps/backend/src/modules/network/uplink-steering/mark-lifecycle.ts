@@ -16,6 +16,7 @@ import {
 	emptyMarkJournal,
 	hasGuardedJournal,
 	loadIfReadable,
+	optionalJournalFault,
 	quarantineAdmission,
 	recoverMarkJournal,
 } from "./mark-recovery.ts";
@@ -259,11 +260,4 @@ export class SteeringMarkLifecycle {
 		}
 		this.#record = committed;
 	}
-}
-
-function optionalJournalFault(error: unknown): boolean {
-	return (
-		error instanceof SteeringUnavailableError ||
-		(error instanceof Error && "code" in error)
-	);
 }

@@ -29,6 +29,27 @@ export async function loadIfReadable(
 	}
 }
 
+/** A saved collision stays unverified until an apply re-checks the kernel. */
+export async function hasJournaledCollision(
+	journal: MarkJournalStore,
+): Promise<boolean> {
+	return hasGuardedJournal(await loadIfReadable(journal));
+}
+
+/** Reports the device unverified before a collision intent reaches disk. */
+export function announceCollisionIntents(
+	journal: MarkJournalStore,
+	unverified: () => void,
+): MarkJournalStore {
+	return {
+		load: () => journal.load(),
+		save: async (record) => {
+			if (record.intent?.affected.length) unverified();
+			await journal.save(record);
+		},
+	};
+}
+
 export async function recoverMarkJournal(
 	journal: MarkJournalStore,
 	record: MarkJournal | undefined,
@@ -102,5 +123,13 @@ export function quarantine(): never {
 	throw new SteeringUnavailableError(
 		"mark_collision",
 		"saved steering marks disagree with the kernel; reboot to recover",
+	);
+}
+
+/** A journal write fault that a device without collision state may ignore. */
+export function optionalJournalFault(error: unknown): boolean {
+	return (
+		error instanceof SteeringUnavailableError ||
+		(error instanceof Error && "code" in error)
 	);
 }

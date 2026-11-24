@@ -31,7 +31,12 @@ import {
 import { assignSteeringMarks } from "./mark-allocation.ts";
 import { planUplinkRoute, type UplinkRouteCandidate } from "./route-manager.ts";
 import { stableUplinkMark } from "./ruleset.ts";
-import { cidrsOverlap, subnetCidr } from "./subnet.ts";
+import {
+	assertClientZonesDisjoint,
+	assertDistinctMarks,
+	assertNoOverlap,
+} from "./state-invariants.ts";
+import { subnetCidr } from "./subnet.ts";
 
 type NetworkSnapshot = Record<string, NetworkInterface | undefined>;
 
@@ -225,47 +230,6 @@ function collectUplinkCandidates(
 		),
 		identityPending,
 	};
-}
-
-function assertNoOverlap(
-	zones: readonly ClientZone[],
-	uplinks: readonly UplinkCandidate[],
-): void {
-	for (const zone of zones) {
-		for (const uplink of uplinks) {
-			if (!cidrsOverlap(zone.ipv4Cidr, uplink.subnet)) continue;
-			throw new SteeringUnavailableError(
-				"overlapping_subnet",
-				`${zone.ifname} ${zone.ipv4Cidr} overlaps ${uplink.uplink.ifname} ${uplink.subnet}`,
-			);
-		}
-	}
-}
-
-function assertClientZonesDisjoint(zones: readonly ClientZone[]): void {
-	for (const [index, zone] of zones.entries()) {
-		for (const other of zones.slice(index + 1)) {
-			if (!cidrsOverlap(zone.ipv4Cidr, other.ipv4Cidr)) continue;
-			throw new SteeringUnavailableError(
-				"overlapping_subnet",
-				`${zone.ifname} ${zone.ipv4Cidr} overlaps ${other.ifname} ${other.ipv4Cidr}`,
-			);
-		}
-	}
-}
-
-function assertDistinctMarks(candidates: readonly UplinkCandidate[]): void {
-	const owners = new Map<number, string>();
-	for (const candidate of candidates) {
-		const prior = owners.get(candidate.uplink.mark);
-		if (prior !== undefined) {
-			throw new SteeringUnavailableError(
-				"mark_collision",
-				`${prior} and ${candidate.uplink.ifname} resolve to one steering mark`,
-			);
-		}
-		owners.set(candidate.uplink.mark, candidate.uplink.ifname);
-	}
 }
 
 function wifiIdentity(ifname: string): string | null | undefined {

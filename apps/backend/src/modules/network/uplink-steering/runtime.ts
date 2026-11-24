@@ -14,12 +14,15 @@ import {
 	setIpForwarding,
 } from "../uplink-sharing.ts";
 import { UplinkSteeringApplier } from "./applier.ts";
-import { SteeringUnavailableError } from "./contracts.ts";
 import { UplinkSteeringCoordinator } from "./coordinator.ts";
 import { buildMarkGuard } from "./mark-admission.ts";
 import { fileMarkJournal } from "./mark-journal.ts";
 import { SteeringMarkLifecycle } from "./mark-lifecycle.ts";
-import { observeKernelMarks } from "./mark-observation.ts";
+import { observeKernelMarks, readLinkIndex } from "./mark-observation.ts";
+import {
+	announceCollisionIntents,
+	hasJournaledCollision,
+} from "./mark-recovery.ts";
 import {
 	discoverMarkInventory,
 	discoverOwnedUplinkRoutes,
@@ -56,21 +59,25 @@ const applier = new UplinkSteeringApplier({
 		),
 });
 
+// Only collision paths journal an affected intent or install a guard, so a
+// non-colliding device keeps main's status timeline.
+const unverified = () =>
+	publishUplinkSteeringAvailability({
+		available: false,
+		reason: "ruleset_reload_failed",
+	});
+const journal = announceCollisionIntents(
+	fileMarkJournal("/run/ceralive/uplink-steering-marks.json"),
+	unverified,
+);
+
 const marks = new SteeringMarkLifecycle({
-	journal: fileMarkJournal("/run/ceralive/uplink-steering-marks.json"),
+	journal,
 	observe: () => observeKernelMarks(run),
-	linkIndex: async (ifname) => {
-		const output = await run("ip", ["-o", "link", "show", "dev", ifname]);
-		const index = /^(\d+):/.exec(output)?.[1];
-		if (index === undefined || Number(index) === 0)
-			throw new SteeringUnavailableError(
-				"policy_route_missing",
-				`${ifname}: no live device index`,
-			);
-		return Number(index);
-	},
+	linkIndex: (ifname) => readLinkIndex(run, ifname),
 	armFence: ensureMarkFence,
 	guard: async (admission) => {
+		unverified();
 		await runWithStdin("nft", ["-f", "-"], buildMarkGuard(admission));
 	},
 	retire: retireMarkSupport,
@@ -145,6 +152,7 @@ let unsubscribeScan: (() => void) | undefined;
 
 export async function initUplinkSteering(): Promise<void> {
 	if (unsubscribeNetif !== undefined || !(await isRealDevice())) return;
+	if (await hasJournaledCollision(journal)) unverified();
 	const reconcile = () => {
 		void coordinator.requestReconcile().catch((error: unknown) => {
 			logger.warn("uplink steering reconcile failed", { err: error });

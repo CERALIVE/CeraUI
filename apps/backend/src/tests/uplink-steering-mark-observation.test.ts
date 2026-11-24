@@ -19,6 +19,58 @@ const independent = {
 	selectable: true,
 };
 
+// Unedited `nft -nn list ruleset` output, nftables 1.1.7 in a netns.
+// buildMarkGuard installed numeric oif 3 (wwan0) and oif 4 (wwan1).
+const capturedGuard = `table inet ceralive_share_guard {
+	chain assignment_7 {
+	}
+
+	chain affected_ca671800 {
+	}
+
+	chain egress {
+		type filter hook postrouting priority -150; policy accept;
+		iifname "eth9" ip saddr 10.90.0.0/24 meta mark & 0xffffff00 == 0xca671800 oif "wwan0" accept
+		iifname "eth9" ip saddr 10.90.0.0/24 meta mark & 0xffffff00 == 0xca010000 oif "wwan1" accept
+		iifname "eth9" ip saddr 10.90.0.0/24 drop
+	}
+}
+`;
+
+test("quarantine retains an unaffected admission from a real named oif listing", async () => {
+	const admitted: MarkAdmission[] = [];
+	const marks = faultFixture({
+		observe: () =>
+			observeKernelMarks(async (bin, args) => {
+				switch (`${bin} ${args.join(" ")}`) {
+					case "nft -nn list ruleset":
+						return capturedGuard;
+					case "ip rule show":
+						return "110:\tfrom all fwmark 0xca000000/0xff000000 lookup 30000\n";
+					case "ip -o link show dev wwan1":
+						return "4: wwan1: <BROADCAST,NOARP> mtu 1500 state DOWN\n";
+					default:
+						throw new Error(`unexpected command ${bin} ${args.join(" ")}`);
+				}
+			}),
+		guard: async (admission) => {
+			admitted.push(admission);
+		},
+	});
+	await expect(marks.marks([independent])).rejects.toMatchObject({
+		reason: "mark_collision",
+	});
+	expect(admitted).toEqual([
+		{
+			seq: 0,
+			phase: "fenced",
+			zones: [{ ifname: "eth9", ipv4Cidr: "10.90.0.0/24" }],
+			affected: [0xca671800],
+			claims: [{ mark: independent.mark, ifindex: 4, epoch: 0 }],
+		},
+	]);
+});
+
 test("reads only the owned inet steering tables, receipt, protected zones and unaffected admission", async () => {
 	const ruleset = `table ip ceralive_share_guard {
 	chain assignment_99 {

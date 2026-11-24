@@ -29,6 +29,7 @@
 		"src/tests/uplink-steering-runtime-compat.test.ts",
 		"src/tests/uplink-steering-legacy-recovery.test.ts",
 		"src/tests/uplink-steering-mark-observation.test.ts",
+		"src/tests/uplink-steering-collision-status.test.ts",
 		"src/tests/uplink-steering-collision-kernel.test.ts",
 		"src/tests/uplink-steering-rename-kernel.test.ts"
 	],
