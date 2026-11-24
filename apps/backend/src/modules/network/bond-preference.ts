@@ -69,15 +69,26 @@ function readPreferences(
 	};
 }
 
-export function hasBondPreferenceOverlay(): boolean {
-	const { optIn, groupOut, portOut } = readPreferences();
-	return optIn !== undefined || groupOut !== undefined || portOut !== undefined;
-}
-
 const vendorOf = (keys: PhysicalBondKeys) =>
 	keys.vid?.trim().toLowerCase() ?? "";
 
 const portVendorKey = (port: string, vid: string) => `${port}:${vid}`;
+
+const portOf = (keys: PhysicalBondKeys) =>
+	keys.anchor === "id-path" ? keys.linkId : portLinkId(keys.idPath);
+
+const portInRecord = (key: string) => key.split(":", 1)[0] ?? key;
+
+function portExclusion(
+	records: PortOptOut | undefined,
+	port: string,
+	vid: string,
+) {
+	return (
+		records?.[portVendorKey(port, vid)] ??
+		(records?.[port]?.vid === vid ? records[port] : undefined)
+	);
+}
 
 function portChoice(preferences: BondPreferences, keys: PhysicalBondKeys) {
 	if (keys.anchor !== "id-path") return undefined;
@@ -115,15 +126,26 @@ function hasStoredOptOut(
 ): boolean {
 	if (identity === undefined || identity.anchor === "ifname") return false;
 	const choice = portChoice(preferences, identity);
-	const portOff =
-		identity.anchor === "id-path"
-			? preferences.portOut?.[identity.linkId]
-			: undefined;
-	if (portOff?.vid === vendorOf(identity)) return true;
+	const port = portOf(identity);
+	if (
+		port !== undefined &&
+		portExclusion(preferences.portOut, port, vendorOf(identity))
+	)
+		return true;
 	if (
 		preferences.out?.[identity.linkId] === true &&
 		choice?.pin !== true &&
-		portOff?.exact !== true
+		!(
+			identity.anchor === "id-path" &&
+			(Object.entries(preferences.portOut ?? {}).some(
+				([key, record]) =>
+					record.exact === true && portInRecord(key) === identity.linkId,
+			) ||
+				Object.entries(preferences.optIn ?? {}).some(
+					([key, record]) =>
+						record.pin === true && portInRecord(key) === identity.linkId,
+				))
+		)
 	)
 		return true;
 	if (choice !== undefined) return false;
@@ -184,9 +206,8 @@ function transitionExactOptOut(
 }
 
 /**
- * `bond_opt_out` is exactly main's transition, so v2026.11.4 reads the bytes it
- * would have written itself. The pair default that transition deletes is kept
- * in `bond_group_out`, and a port-anchored ON is recorded in `bond_opt_in`.
+ * Run main's transition without rollback-only bits. The effective reader
+ * uses vendor records; the saver appends the bits needed by the old reader.
  */
 function transition(
 	stored: BondPreferences,
@@ -216,8 +237,7 @@ function transition(
 				};
 		}
 	}
-	const port =
-		target.anchor === "id-path" ? target.linkId : portLinkId(target.idPath);
+	const port = portOf(target);
 	const vid = vendorOf(target);
 	if (
 		port !== undefined &&
@@ -227,23 +247,34 @@ function transition(
 		delete optIn[port];
 	if (optOut) {
 		if (port !== undefined) {
-			delete optIn[portVendorKey(port, vid)];
+			const key = portVendorKey(port, vid);
+			delete optIn[key];
 			if (vid) {
-				portOut[port] =
-					target.anchor === "id-path" || portOut[port]?.exact === true
-						? { vid, exact: true }
-						: { vid };
+				const previous = portExclusion(portOut, port, vid);
+				if (portOut[port]?.vid === vid) delete portOut[port];
+				portOut[key] = {
+					vid,
+					...(out[port] === true && { exact: true }),
+					...((target.anchor === "usb-serial" ||
+						previous?.rollback === true) && { rollback: true }),
+				};
 			}
 		}
-	} else if (target.anchor === "id-path") {
-		if (portOut[target.linkId]?.vid === vid) delete portOut[target.linkId];
-		optIn[portVendorKey(target.linkId, vid)] = { vid };
 	} else {
-		delete groupOut[target.linkId];
-		if (port !== undefined && portOut[port]?.vid === vid) {
-			if (portOut[port]?.exact === true)
-				optIn[portVendorKey(port, vid)] = { vid, pin: true };
-			delete portOut[port];
+		if (target.anchor !== "id-path") delete groupOut[target.linkId];
+		if (port !== undefined) {
+			const key = portVendorKey(port, vid);
+			const previous = portExclusion(portOut, port, vid);
+			if (portOut[port]?.vid === vid) delete portOut[port];
+			delete portOut[key];
+			if (target.anchor === "id-path") optIn[key] = { vid };
+			else if (previous?.exact === true) optIn[key] = { vid, pin: true };
+		}
+	}
+	for (const [key, record] of Object.entries(portOut)) {
+		if (record.exact === true && out[portInRecord(key)] !== true) {
+			const { exact: _exact, ...choice } = record;
+			portOut[key] = choice;
 		}
 	}
 	return { out, groupOut, optIn, portOut };
@@ -282,7 +313,13 @@ export function setPersistentBondOptOut(
 		);
 	} else {
 		const next = transition(stored, identity, optOut, present);
+		const rollback: ExactOptOut = {};
+		for (const [key, record] of Object.entries(next.portOut ?? {})) {
+			const port = portInRecord(key);
+			if (record.rollback && next.out?.[port] !== true) rollback[port] = true;
+		}
 		config.bond_opt_out = presentOrUndefined(next.out);
+		config.bond_rollback_out = presentOrUndefined(rollback);
 		config.bond_group_out = presentOrUndefined(next.groupOut);
 		config.bond_opt_in = presentOrUndefined(next.optIn);
 		config.bond_port_out = presentOrUndefined(next.portOut);
@@ -298,6 +335,7 @@ export function resetPersistentBondOptOutForTest(): void {
 	config.bond_group_out = undefined;
 	config.bond_opt_in = undefined;
 	config.bond_port_out = undefined;
+	config.bond_rollback_out = undefined;
 }
 
 export function resetSessionBondOptOutForTest(): void {

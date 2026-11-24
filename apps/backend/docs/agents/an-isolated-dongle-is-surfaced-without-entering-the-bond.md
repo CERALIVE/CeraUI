@@ -962,29 +962,32 @@ config, not from a potentially stale in-memory preference snapshot.
 
 | Field | Key | Meaning |
 |---|---|---|
-| `bond_opt_out` | exact or pair link id | Written by main's unchanged transition, so v2026.11.4 reads the bytes it would have written itself for the same successful saves |
+| `bond_opt_out` | exact or pair link id | Main's ordered transition, followed only by missing path bits for acknowledged serial-keyed USB OFFs with a known path |
 | `bond_group_out` | pair link id | A pair default that transition deleted; it still excludes an untouched twin. Under config authority, like `bond_opt_out` |
 | `bond_opt_in` | id-path link id and USB vendor id | `{ vid, pin? }`: the operator's ON for a port-anchored USB modem. Another vendor's ON cannot overwrite it. `pin` marks an exact bit main's transition derived for that port while it held the ON |
-| `bond_port_out` | id-path link id | `{ vid, exact? }`: an explicit OFF follows the same vendor at this port when the serial is unreadable. `exact` identifies the retained legacy bit as owned by that choice. |
+| `bond_port_out` | id-path link id and USB vendor id | `{ vid, exact?, rollback? }`: an explicit OFF follows the same vendor at this port regardless of serial readability. `exact` identifies a vendor-owned legacy bit; `rollback` requests an additional path bit while the serial-keyed OFF is held |
+| `bond_rollback_out` | id-path link id | Marks bits that were actually appended. They are excluded from the current reader and main's transition and guard projection |
 
 The reader answers, first match wins:
 
 1. A session OFF excludes; an `ifname`-anchored row is included.
-2. For a port-anchored row, a matching vendor's explicit port OFF excludes.
-   A legacy exact bit also excludes unless a matching ON supersedes that bit
-   or the bit belongs to another vendor's recorded port OFF.
+2. A matching vendor's explicit port OFF excludes even if a unique serial is
+   now readable. A legacy exact bit also excludes unless a matching ON
+   supersedes it or a recorded port OFF identifies it as another vendor's.
+   A vendor-unknown legacy bit still excludes; scans do not infer its owner.
 3. A matching vendor's port ON takes precedence over pair exclusions, even
    when a lone replacement reports `0000`.
 4. Otherwise the pair key excludes when it is in `bond_opt_out`, or in
    `bond_group_out` with corroboration: a confirmed shared serial, or another
    port of the same vendor reporting the same placeholder.
 
-A readable unique-serial OFF keeps the legacy exact bit and replaces its
-same-port ON with a vendor-scoped OFF. The #697 last-uplink rule still vetoes an
-OFF that removes the last effective sender. When saved port or pair choices
-are present, it also preserves a veto from the legacy view, so corrected
-membership cannot authorize an OFF that main would refuse. Simulated configure calls
-write the legacy projection only.
+A readable unique-serial OFF keeps the legacy serial bit, replaces its
+same-vendor port ON with a vendor-scoped OFF, and appends the path bit if main
+did not already write it. An ON clears only that vendor's choice and any
+unneeded extra bit, not a bit main would retain. The #697 last-uplink rule
+vetoes an OFF that removes the last sender in either view, including the first
+OFF at a cross-vendor aliased path. Simulated configure calls, including
+auto-detected emulation, run only the legacy transition.
 
 Signed trade-offs:
 
@@ -992,9 +995,12 @@ Signed trade-offs:
   PID and pair do not block it; a different vendor id does.
 - A path change, such as a re-cabled hub, loses the ON. The twin falls back to
   its pair default, which can leave a box with no other uplink without a link.
-- Rollback is byte parity of `bond_opt_out` for the same successful saves, not
-  membership parity. v2026.11.4 can admit an extra sibling, and can drop an ON
-  made while the serial was unreadable. Its clean save strips the new fields.
+- Rollback preserves the exact ordered main bytes for the same successful saves,
+  apart from the appended path bits above. v2026.11.4 can exclude more at a
+  reused path because it cannot see vendor provenance. With no path the old
+  reader has no durable fallback. The other signed rollback limits remain:
+  an extra sibling can join, or an ON saved while the serial was unreadable
+  can drop. An old clean save strips the new fields, not the legacy bits.
 - R-c: with pairs G and H excluded, turn B ON while G's shared serial is
   readable, then replace G with same-vendor H on the same paths. The current
   release keeps B IN; v2026.11.4 puts B OUT.

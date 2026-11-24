@@ -86,6 +86,11 @@ export async function loadConfig() {
 		{ parsed: raw },
 	);
 	config = coerceLegacySource(result.data);
+	if (config.bond_opt_out && config.bond_rollback_out) {
+		const out = { ...config.bond_opt_out };
+		for (const key of Object.keys(config.bond_rollback_out)) delete out[key];
+		config.bond_opt_out = Object.keys(out).length ? out : undefined;
+	}
 	authorityFailure = undefined;
 
 	// Apply mock pairing AFTER file load so it overrides any absent/undefined remote_key in config.json
@@ -115,6 +120,10 @@ export function saveConfig() {
 	if (authorityFailure) throw authorityFailure;
 	const dataToSave: RuntimeConfig = {
 		...config,
+		// The live guard sees main's map; only the released reader needs extras.
+		bond_opt_out: config.bond_rollback_out
+			? { ...config.bond_opt_out, ...config.bond_rollback_out }
+			: config.bond_opt_out,
 		password_hash: getPasswordHash(),
 		ssh_pass_hash: getSshPasswordHash(),
 	};

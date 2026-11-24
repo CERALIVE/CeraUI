@@ -9,6 +9,7 @@ const safetySchema = runtimeConfigSchema.pick({
 	bond_opt_out: true,
 	bond_group_out: true,
 	bond_port_out: true,
+	bond_rollback_out: true,
 	eth_roles: true,
 	wifi_modes: true,
 	network_ingest: true,

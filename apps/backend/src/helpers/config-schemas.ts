@@ -424,14 +424,21 @@ export const runtimeConfigSchema = z.object({
 			z.object({ vid: z.string(), pin: z.literal(true).optional() }),
 		)
 		.optional(),
-	// Explicit USB OFF by port and vendor. The legacy exact bit stays on disk;
-	// `exact` says this choice owns that bit, even when another vendor arrives.
+	// Explicit USB OFF keyed by path link id and vendor. `exact` identifies a
+	// vendor-owned main-format port bit; `rollback` keeps a path bit for a
+	// serial-keyed OFF after the serial stops being readable.
 	bond_port_out: z
 		.record(
 			z.string().min(1),
-			z.object({ vid: z.string().min(1), exact: z.literal(true).optional() }),
+			z.object({
+				vid: z.string().min(1),
+				exact: z.literal(true).optional(),
+				rollback: z.literal(true).optional(),
+			}),
 		)
 		.optional(),
+	// Only the appended rollback bits, not keys main's writer also produced.
+	bond_rollback_out: z.record(z.string().min(1), z.literal(true)).optional(),
 	// SHA-256 of vendor:serial pairs observed on distinct USB parents.
 	usb_serial_shared: z
 		.array(z.string().regex(/^[0-9a-f]{64}$/))

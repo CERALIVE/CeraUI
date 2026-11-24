@@ -69,7 +69,6 @@ import {
 import { scheduleWifiUpdate } from "../wifi/wifi-interfaces.ts";
 import {
 	bondPhysicalId,
-	hasBondPreferenceOverlay,
 	isBondOptedOut,
 	previewBondOptOut,
 	resetPersistentBondOptOutForTest,
@@ -317,7 +316,8 @@ export function resetBondOptOutSession(): void {
 export function setBondOptOut(ifname: string, optOut: boolean): void {
 	const simulated =
 		bondDisableSimulationSelected() ||
-		process.env.CERALIVE_DEVICE_TYPE === "emulated";
+		process.env.CERALIVE_DEVICE_TYPE === "emulated" ||
+		realBondDisableContext?.isStillReal() === false;
 	setPersistentBondOptOut(ifname, optOut, simulated ? "legacy" : "effective");
 }
 
@@ -1827,9 +1827,7 @@ function wouldRemoveLastBondCandidate(target: string): boolean {
 	};
 	const targetKeys = keys(target);
 	const effective = previewBondOptOut(target, targetKeys);
-	const legacy = hasBondPreferenceOverlay()
-		? previewBondOptOut(target, targetKeys, "legacy")
-		: undefined;
+	const legacy = previewBondOptOut(target, targetKeys, "legacy");
 	const projection = {
 		deadlineElapsed: () => true,
 		mappable: (iface: string, ip: string) => {
@@ -1857,10 +1855,8 @@ function wouldRemoveLastBondCandidate(target: string): boolean {
 	};
 	const before = earliest(effective, "before");
 	const after = earliest(effective, "after");
-	const legacyBefore =
-		legacy === undefined ? Infinity : earliest(legacy, "before");
-	const legacyAfter =
-		legacy === undefined ? Infinity : earliest(legacy, "after");
+	const legacyBefore = earliest(legacy, "before");
+	const legacyAfter = earliest(legacy, "after");
 	// Judge both views at one request-time instant, after preparing their
 	// readiness thresholds. A later sender refresh can see a peer become ready.
 	const now = getms();
