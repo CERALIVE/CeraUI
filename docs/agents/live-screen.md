@@ -193,9 +193,14 @@ Details opens without a toggle, without overwriting that choice or remounting
 the session sampler. Activating the summary toggles the visible disclosure
 and saves that choice even if the viewport immediately crosses 1024 px.
 Browser Find and direct changes to the disclosure do not save a choice.
-Below 640 px **while confirmed live only**, the header title and subtitle
-are visually hidden, not removed from the heading outline.
-Idle and unconfirmed headers retain both. Below 640 px the bitrate-limit
+The header's state chip keeps its whole label on one line. Below 640 px a shown
+chip visually hides the subtitle, and confirmed live also hides the title until
+it has focus; both stay in the accessibility tree and the title in the heading
+outline. With no chip (unconfirmed and not streaming) both stay visible. The
+preview's title row wraps, and below 640 px the toggle's own box is 44 px tall,
+so it takes no taps from the disclosure summary above. Its height must not
+animate across 640 px: that moves a page already scrolled past the row
+(`live-phone-fit.spec.ts`). Below 640 px the bitrate-limit
 button opens one adjuster in a bottom sheet. At 640 px and wider it is inline
 beside Stop; resizing an open sheet closes it and focuses the inline slider
 because the trigger is no longer present. Ordinary dismissal restores the
