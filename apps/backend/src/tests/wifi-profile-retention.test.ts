@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 
-import { logger } from "../helpers/logger.ts";
+import * as retry from "../helpers/retry.ts";
 import * as runner from "../helpers/run.ts";
 import * as nm from "../modules/network/network-manager.ts";
 import * as websocket from "../modules/ui/websocket-server.ts";
@@ -501,6 +501,24 @@ test.each(["WPA1 WPA2", "WPA2", "WPA2-Personal", "WPA2 WPA3"])(
 	},
 );
 
+const nextImmediate = setImmediate;
+const nextTimer = setTimeout;
+
+async function drainJoinWork(callCount: () => number) {
+	let previous = callCount();
+	let quietTurns = 0;
+	for (let turn = 0; turn < 20; turn++) {
+		await Promise.resolve();
+		await new Promise<void>((resolve) => nextImmediate(resolve));
+		await new Promise<void>((resolve) => nextTimer(resolve, 0));
+		const current = callCount();
+		quietTurns = current === previous ? quietTurns + 1 : 0;
+		if (quietTurns === 4) return;
+		previous = current;
+	}
+	throw new Error("Wi-Fi join activity did not settle");
+}
+
 test.each(["available", "unavailable", "throwing"] as const)(
 	"overlapping failed joins retain staged and pending profiles with %s listing",
 	async (availability) => {
@@ -510,18 +528,32 @@ test.each(["available", "unavailable", "throwing"] as const)(
 		const secondReply = Promise.withResolvers<NmcliRun>();
 		const firstRefresh = Promise.withResolvers<void>();
 		const secondRefresh = Promise.withResolvers<void>();
+		const events: (
+			| { readonly reply: string; readonly value: unknown }
+			| { readonly refresh: "published" | "exhausted" }
+		)[] = [];
 		let refreshes = 0;
-		const finishRefresh = () => {
+		const finishRefresh = (result: "published" | "exhausted") => {
+			events.push({ refresh: result });
 			(refreshes++ === 0 ? firstRefresh : secondRefresh).resolve();
 		};
-		const broadcast = spyOn(websocket, "broadcastMsg").mockImplementation(
-			finishRefresh,
+		const broadcast = spyOn(websocket, "broadcastMsg").mockImplementation(() =>
+			finishRefresh("published"),
 		);
-		const debug = spyOn(logger, "debug").mockImplementation((message) => {
-			if (String(message).startsWith("wifiUpdateSavedConns: list failed"))
-				finishRefresh();
-			return logger;
-		});
+		const poll = retry.pollWithBackoff;
+		const inventory = spyOn(retry, "pollWithBackoff").mockImplementation(
+			<T>(
+				read: () => Promise<T | null | undefined>,
+				options: Parameters<typeof poll<T>>[1],
+			) =>
+				poll(read, {
+					...options,
+					onExhausted: (error) => {
+						options.onExhausted?.(error);
+						finishRefresh("exhausted");
+					},
+				}),
+		);
 		const deletion = spyOn(nm, "nmConnDelete").mockImplementation(
 			async (uuid) => {
 				if (availability === "throwing")
@@ -567,49 +599,98 @@ test.each(["available", "unavailable", "throwing"] as const)(
 			secondStarted.resolve();
 			return secondReply.promise;
 		});
+		const startJoin = (ssid: string) => {
+			const terminal = Promise.withResolvers<void>();
+			// A secured join dispatches without returning its promise. Await
+			// its terminal and refresh receipts as well as any returned promise.
+			const handler = handleWifi(
+				{
+					send: (frame) => {
+						events.push({ reply: ssid, value: JSON.parse(frame).wifi.new });
+						terminal.resolve();
+					},
+				},
+				{ new: { device: 0, ssid, password: PASSWORD, security: "WPA2" } },
+			);
+			return { handler, terminal: terminal.promise };
+		};
+		// A continuation can schedule more work without issuing an NM command
+		// yet. Count those schedules too, but not the drain's own checkpoints.
+		const immediate = spyOn(globalThis, "setImmediate");
+		const timer = spyOn(globalThis, "setTimeout");
+		const microtask = spyOn(globalThis, "queueMicrotask");
 		try {
-			const first = join("Fixture-First");
+			const first = startJoin("Fixture-First");
 			await firstStarted.promise;
-			const second = join("Fixture-Second");
+			const second = startJoin("Fixture-Second");
 			await secondStarted.promise;
-			const firstEvent = Promise.race([
-				first.then(() => "join reply"),
-				firstRefresh.promise.then(() => "list settled"),
-			]);
 			firstReply.resolve(REFUSED);
-			expect(await first).toEqual({ error: "auth", device: 0 });
-			await firstRefresh.promise;
+			await Promise.all([first.terminal, firstRefresh.promise]);
 			const whileSecondPending = [...profiles.keys()];
 			secondReply.resolve(REFUSED);
-			expect(await second).toEqual({ error: "auth", device: 0 });
-			await secondRefresh.promise;
-			// Refresh signals before its promise settles. Observe queued
-			// continuations too, including cleanup chained after refresh.
-			await new Promise<void>((resolve) => setImmediate(resolve));
+			await Promise.all([
+				first.handler,
+				second.handler,
+				second.terminal,
+				secondRefresh.promise,
+			]);
+			await Promise.all(inventory.mock.results.map((result) => result.value));
+			await drainJoinWork(
+				() =>
+					events.length +
+					inventory.mock.calls.length +
+					listing.mock.calls.length +
+					fields.mock.calls.length +
+					deletion.mock.calls.length +
+					immediate.mock.calls.length +
+					timer.mock.calls.length +
+					microtask.mock.calls.length,
+			);
+
 			expect(whileSecondPending).toEqual([SAVED, FIRST, SECOND]);
 			expect([...profiles.keys()]).toEqual([SAVED, FIRST, SECOND]);
-			expect(await firstEvent).toBe("join reply");
 			// Reconciliation may list profiles; failure is not authority to
 			// inspect activation timestamps for cleanup or request deletion.
-			expect(
-				listing.mock.calls.flatMap(([fields]) =>
-					fields.split(",").map((field) => field.trim().toLowerCase()),
-				),
-			).not.toContain("timestamp");
+			const cleanupQueries = listing.mock.calls
+				.map(([fields]) => fields)
+				.filter((fields) =>
+					fields
+						.split(",")
+						.some((field) => field.trim().toLowerCase() === "timestamp"),
+				);
+			expect(cleanupQueries).toEqual([]);
 			expect(deletion).not.toHaveBeenCalled();
-			if (availability !== "available") {
-				expect(wifiBuildMsg()["0"]?.saved).toEqual({ [SSID]: SAVED });
-				expect(adapter.savedAll).toEqual({ [SSID]: [SAVED] });
-				expect(broadcast).not.toHaveBeenCalled();
-			}
+			const available = availability === "available";
+			const auth = { error: "auth", device: 0 };
+			const refresh = {
+				refresh: available ? "published" : "exhausted",
+			} as const;
+			expect(events).toEqual([
+				{ reply: "Fixture-First", value: auth },
+				refresh,
+				{ reply: "Fixture-Second", value: auth },
+				refresh,
+			]);
+			expect(inventory).toHaveBeenCalledTimes(2);
+			expect(listing).toHaveBeenCalledTimes(available ? 2 : 6);
+			expect(broadcast).toHaveBeenCalledTimes(available ? 2 : 0);
+			expect(wifiBuildMsg()["0"]?.saved).toEqual({
+				[SSID]: available ? SECOND : SAVED,
+			});
+			expect(adapter.savedAll).toEqual({
+				[SSID]: available ? [SAVED, FIRST, SECOND] : [SAVED],
+			});
 		} finally {
 			firstReply.resolve(REFUSED);
 			secondReply.resolve(REFUSED);
+			microtask.mockRestore();
+			timer.mockRestore();
+			immediate.mockRestore();
 			deletion.mockRestore();
 			listing.mockRestore();
 			fields.mockRestore();
 			broadcast.mockRestore();
-			debug.mockRestore();
+			inventory.mockRestore();
 		}
 	},
 );
