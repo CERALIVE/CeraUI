@@ -31,11 +31,14 @@ beforeEach(() => {
 			this.#callback = callback;
 		}
 		observe(target: Element): void {
-			Object.defineProperty(target, "offsetHeight", {
-				configurable: true,
-				value: 72,
-			});
-			this.#callback([], this as unknown as ResizeObserver);
+			const entry = {
+				target,
+				borderBoxSize: [{ blockSize: 72, inlineSize: 0 }],
+			};
+			this.#callback(
+				[entry as unknown as ResizeObserverEntry],
+				this as unknown as ResizeObserver,
+			);
 		}
 		unobserve(): void {}
 		disconnect(): void {}

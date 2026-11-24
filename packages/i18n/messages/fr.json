@@ -2250,6 +2250,7 @@
 	"pwa.installAndroidMenuDescription": "Utilisez le menu du navigateur pour \"Ajouter à l'écran d'accueil\"",
 	"pwa.installButton": "Installer",
 	"pwa.installDescription": "Ajouter à l'écran d'accueil pour une meilleure expérience",
+	"pwa.installIosBeforeShare": "Appuyez sur",
 	"pwa.installIosDescription": "puis \"Ajouter à l'écran d'accueil\"",
 	"pwa.installIosGotIt": "Compris",
 	"pwa.installLater": "Plus tard",

@@ -64,6 +64,10 @@ export const HEALTH_COMPACT_QUERY = "(max-width: 1024px), (max-height: 700px)";
  * as `property`, so the page can keep clear of a fixed bar. Returns the cleanup
  * for an `$effect`, which removes the property again. Absent ResizeObserver
  * (jsdom) publishes nothing, which every consumer reads as its fallback.
+ *
+ * Every consumer keeps clear of the element by this height, so it is the border
+ * box rounded UP: a fractional bar published short (as `offsetHeight` rounds)
+ * would let a neighbour resting on its edge overlap it by part of a pixel.
  */
 export function publishHeight(
 	element: HTMLElement,
@@ -71,10 +75,13 @@ export function publishHeight(
 ): (() => void) | undefined {
 	if (typeof ResizeObserver === "undefined") return undefined;
 	const root = document.documentElement;
-	const observer = new ResizeObserver(() => {
-		root.style.setProperty(property, `${element.offsetHeight}px`);
+	const observer = new ResizeObserver(([entry]) => {
+		const height =
+			entry?.borderBoxSize?.[0]?.blockSize ??
+			element.getBoundingClientRect().height;
+		root.style.setProperty(property, `${Math.ceil(height)}px`);
 	});
-	observer.observe(element);
+	observer.observe(element, { box: "border-box" });
 	return () => {
 		observer.disconnect();
 		root.style.removeProperty(property);

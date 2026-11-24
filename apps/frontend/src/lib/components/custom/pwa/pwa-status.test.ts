@@ -13,11 +13,12 @@
  *   · the offline band follows the ONE shared reconnect-grace verdict, and
  *     says "offline" only for the browser, naming the device otherwise.
  *
- * Green on the pre-change tree — refactor lock, not a bug fix. Copy is compared
+ * Green on the pre-change tree — refactor lock, not a bug fix — except the
+ * per-locale iOS case, which caught the hard-coded English "Tap". Copy is compared
  * against the catalog rather than hardcoded, so a translation change cannot
  * silently pass and this file can never become the copy's source of truth.
  */
-import { m } from "@ceraui/i18n/svelte";
+import { LOCALES, m, setLocale } from "@ceraui/i18n/svelte";
 import { fireEvent, render, screen } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -88,6 +89,7 @@ beforeEach(() => {
 
 afterEach(() => {
 	vi.clearAllMocks();
+	setLocale("en");
 });
 
 describe("pwa-status — the install banner", () => {
@@ -132,6 +134,22 @@ describe("pwa-status — the install banner", () => {
 			screen.queryByText(m["pwa.installIosDescription"](), { exact: false }),
 		).not.toBeNull();
 	});
+
+	it.each(LOCALES.map((locale) => locale.code).filter((code) => code !== "en"))(
+		"names the Share step in %s, not in English, on an iOS user agent",
+		(code) => {
+			setLocale(code);
+			setUserAgent(IPHONE_UA);
+			render(PwaStatus);
+			const instruction = screen.getByText(m["pwa.installIosDescription"](), {
+				exact: false,
+			});
+			expect(instruction.textContent).not.toMatch(/\bTap\b/);
+			expect(instruction.textContent).toContain(
+				m["pwa.installIosBeforeShare"](),
+			);
+		},
+	);
 });
 
 describe("pwa-status — the offline band", () => {

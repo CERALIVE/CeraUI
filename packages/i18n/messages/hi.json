@@ -2236,6 +2236,7 @@
 	"pwa.installAndroidMenuDescription": "\"होम स्क्रीन पर जोड़ें\" के लिए ब्राउज़र मेनू का उपयोग करें",
 	"pwa.installButton": "इंस्टॉल",
 	"pwa.installDescription": "बेहतर अनुभव के लिए होम स्क्रीन पर जोड़ें",
+	"pwa.installIosBeforeShare": "शेयर बटन पर टैप करें",
 	"pwa.installIosDescription": "फिर \"होम स्क्रीन पर जोड़ें\"",
 	"pwa.installIosGotIt": "समझ गया",
 	"pwa.installLater": "बाद में",

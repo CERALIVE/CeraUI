@@ -34,8 +34,15 @@
  * `backendScenario` is a worker-scoped option and a file hosts exactly one
  * scenario (PLAYBOOK).
  */
+import type { WifiStatus } from '@ceraui/rpc/schemas';
+
+import ar from '../../../../packages/i18n/messages/ar.json' with { type: 'json' };
+import de from '../../../../packages/i18n/messages/de.json' with { type: 'json' };
 import { expect, type Page, test } from './fixtures/index.js';
-import { navigateTo } from './helpers/index.js';
+import { isBackendSocket } from './helpers/backend-socket.js';
+import { ensureAuthenticated, navigateTo, setLocale } from './helpers/index.js';
+import { settleDestination } from './helpers/modem-containment.js';
+import { expectTextFits, probeTextFit } from './helpers/text-fit.js';
 
 // The deterministic multi-modem-wifi fixture seeds exactly two station radios
 // (apps/backend/src/mocks/mock-config.ts `mockWifiRadios`). The DOM `data-device`
@@ -166,3 +173,63 @@ test.describe('Per-interface WiFi connect', () => {
 		expect(new Set(testIds).size).toBe(testIds.length);
 	});
 });
+
+// A radio the device cannot use says why in one sentence, and on the narrowest
+// phone every painted copy of it must read whole beside what the row still
+// offers. The reason is patched onto the device's own roster at the socket, so
+// a later broadcast cannot take it away mid-measurement.
+const DEGRADED_REASONS = ['operational-mac-missing', 'permanent-mac-unresolved'] as const;
+
+for (const { code, messages } of [
+	{ code: 'de', messages: de },
+	{ code: 'ar', messages: ar },
+] as const) {
+	test.describe(`A degraded radio on a 320 px phone in ${code}`, { tag: '@mobile-only' }, () => {
+		test.use({ viewport: { width: 320, height: 720 } });
+
+		for (const reason of DEGRADED_REASONS) {
+			test(`states its ${reason} reason whole`, async ({ authedPage: page }) => {
+				await page.routeWebSocket(
+					(url) => isBackendSocket(url) && url.pathname === '/ws',
+					(socket) => {
+						const server = socket.connectToServer();
+						server.onMessage((message) => {
+							if (typeof message !== 'string') {
+								socket.send(message);
+								return;
+							}
+							const frame = JSON.parse(message) as { status?: { wifi?: WifiStatus } };
+							for (const radio of Object.values(frame.status?.wifi ?? {})) radio.degraded_reason = reason;
+							socket.send(JSON.stringify(frame));
+						});
+					},
+				);
+				await setLocale(page, code);
+				await page.goto('/');
+				await ensureAuthenticated(page);
+				await expect(page.locator('html')).toHaveAttribute('dir', code === 'ar' ? 'rtl' : 'ltr');
+				await navigateTo(page, 'network');
+				await settleDestination(page);
+				await page.evaluate(() => document.fonts.ready);
+
+				const rows = page.getByTestId('wifi-row');
+				await expect(rows).toHaveCount(STATION_RADIO_COUNT);
+				for (let i = 0; i < STATION_RADIO_COUNT; i++) {
+					const row = rows.nth(i);
+					await row.scrollIntoViewIfNeeded();
+					await expect(row.getByTestId('wifi-adapter-degraded')).toHaveAttribute('data-reason', reason);
+					// One sentence, one place: the band states the reason and nothing
+					// repeats it, readable or not.
+					const warning = row.getByText(messages[`network.wifiDegraded.${reason}`], { exact: true });
+					await expect(warning).toHaveCount(1);
+					expectTextFits(await probeTextFit(warning, row), `${code} ${reason} row ${i}`);
+					// Its connection state is not known while it is degraded, so its status
+					// line claims none.
+					for (const state of ['network.view.connected', 'network.view.disconnected'] as const) {
+						await expect(row.getByText(messages[state], { exact: true })).toHaveCount(0);
+					}
+				}
+			});
+		}
+	});
+}

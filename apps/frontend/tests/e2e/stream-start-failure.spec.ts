@@ -108,7 +108,7 @@ async function startWithReply(
 	page: Page,
 	result: Frame | (() => Frame),
 	onPowerCall?: (path: string) => void,
-	dismissInstallLabel?: string,
+	installBannerYields?: boolean,
 	projectInbound?: (frame: Frame) => void,
 ): Promise<WsHandle> {
 	const ws = await attachWs(page, {
@@ -161,8 +161,11 @@ async function startWithReply(
 	const start = page.getByTestId('live-bar').getByRole('button');
 	await expect(start).toBeVisible();
 	await expect(start).toBeEnabled();
-	if (dismissInstallLabel) {
-		await page.getByRole('button', { name: dismissInstallLabel, exact: true }).click();
+	if (installBannerYields) {
+		// On a phone this short the install banner steps aside on its own, so Start
+		// is reached without dismissing it first.
+		await expect(page.getByTestId('pwa-install-banner')).toBeAttached();
+		await expect(page.getByTestId('pwa-install-banner')).toBeHidden();
 	}
 	await start.click();
 	return ws;
@@ -414,7 +417,7 @@ test.describe('short-phone refusal recovery', () => {
 				const ws = await startWithReply(page, {
 					result: 'failed', success: false, attemptId,
 					failure: { attemptId, phase: 'params', class: 'mutation_blocked', retriable: false },
-				}, undefined, locale === 'de' ? 'Verstanden' : 'Got it');
+				}, undefined, true);
 				const toast = page.locator('.start-refusal-toast');
 				const reason = toast.getByRole('region');
 				const buttons = toast.getByRole('button');

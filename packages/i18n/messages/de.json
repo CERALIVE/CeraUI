@@ -2236,6 +2236,7 @@
 	"pwa.installAndroidMenuDescription": "Verwenden Sie das Browser-Menü für \"Zum Startbildschirm hinzufügen\"",
 	"pwa.installButton": "Installieren",
 	"pwa.installDescription": "Zum Startbildschirm hinzufügen für eine bessere Erfahrung",
+	"pwa.installIosBeforeShare": "Tippen Sie auf",
 	"pwa.installIosDescription": "dann \"Zum Home-Bildschirm hinzufügen\"",
 	"pwa.installIosGotIt": "Verstanden",
 	"pwa.installLater": "Später",
