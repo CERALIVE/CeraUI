@@ -3,10 +3,9 @@ import { mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-test.each(["controlled tick", "real 2-second cadence"])(
-	"a replaced singleton path refuses a contender and terminates its original backend (%s)",
-	async (mode) => {
-		// Given a real backend and the unmodified shipped observer, with a controlled tick.
+for (const mode of ["controlled tick", "real 2-second cadence"]) {
+	const verify = async () => {
+		// Given a real backend and the shipped observer on the selected clock.
 		const root = await mkdtemp(
 			join(tmpdir(), "backend-singleton-replacement-"),
 		);
@@ -52,7 +51,7 @@ setInterval(() => {}, 60000);`;
 			expect(await contender.exited).not.toBe(0);
 			expect(first.exitCode).toBeNull();
 			if (mode === "controlled tick") first.stdin.write("tick\n");
-			// The injected 2-second tick detects replacement through the real helper fd.
+			// The observer tick detects replacement through the real helper fd.
 			expect(await first.exited).toBe(1);
 			const logs = first.stdout.getReader();
 			let output = "";
@@ -76,5 +75,11 @@ setInterval(() => {}, 60000);`;
 			}
 			await rm(root, { recursive: true });
 		}
-	},
-);
+	};
+	test(
+		`a replaced singleton path refuses a contender and terminates its original backend (${mode})`,
+		verify,
+		// Keep the real 2 s cadence and allow for subprocess and cleanup overhead.
+		mode === "real 2-second cadence" ? 30_000 : undefined,
+	);
+}

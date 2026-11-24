@@ -20,15 +20,26 @@ const realScan = reader.scanJournal;
 const realMockFollow = mockJournal.followMockJournal;
 const realDelete = files.deleteLegacyDebugFiles;
 const realWrite = atomic.writeFileAtomicSync;
-export async function bounded<T>(event: Promise<T>): Promise<T> {
+export async function bounded<T>(
+	event: Promise<T>,
+	timeoutMs = 1_000,
+	phase?: string,
+): Promise<T> {
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	try {
 		return await Promise.race([
 			event,
 			new Promise<never>((_resolve, reject) => {
 				timer = setTimeout(
-					() => reject(new Error("history-clear event deadline")),
-					1000,
+					() =>
+						reject(
+							new Error(
+								phase
+									? `history-clear event deadline: ${phase}`
+									: "history-clear event deadline",
+							),
+						),
+					timeoutMs,
 				);
 			}),
 		]);
@@ -36,8 +47,12 @@ export async function bounded<T>(event: Promise<T>): Promise<T> {
 		if (timer !== undefined) clearTimeout(timer);
 	}
 }
-export const turn = () =>
-	bounded(new Promise<void>((resolve) => setImmediate(resolve)));
+export const turn = (timeoutMs?: number) =>
+	bounded(
+		new Promise<void>((resolve) => setImmediate(resolve)),
+		timeoutMs,
+		"event loop turn",
+	);
 export function latch() {
 	const entered = Promise.withResolvers<void>();
 	const released = Promise.withResolvers<void>();
@@ -51,9 +66,11 @@ export function latch() {
 	};
 }
 
-export function historyFixture(mock: boolean) {
+export function historyFixture(mock: boolean, timeoutMs?: number) {
 	const inputs = historyInputs(mock);
 	const { time, scan, context, watches, socket, start } = inputs;
+	const wait = <T>(event: Promise<T>, phase: string) =>
+		bounded(event, timeoutMs, phase);
 	const disposers: Array<() => void> = [];
 	const releases: Array<() => void> = [];
 	const tasks: Promise<unknown>[] = [];
@@ -184,6 +201,7 @@ export function historyFixture(mock: boolean) {
 	return {
 		...inputs,
 		own,
+		wait,
 		holdQuery,
 		holdFollow,
 		holdExport,
@@ -228,20 +246,22 @@ export function historyFixture(mock: boolean) {
 		async dispose() {
 			for (const release of releases) release();
 			for (const watch of watches) watch.finish();
-			await bounded(
+			await wait(
 				Promise.all([
 					follow.stopAllFollows("cleared"),
 					abortLogExports(),
 					abortLogQueries(),
 				]),
+				"dispose active readers",
 			);
-			await bounded(Promise.allSettled(tasks));
-			await bounded(
+			await wait(Promise.allSettled(tasks), "dispose owned tasks");
+			await wait(
 				Promise.all([
 					follow.stopAllFollows("cleared"),
 					abortLogExports(),
 					abortLogQueries(),
 				]),
+				"dispose remaining readers",
 			);
 			for (const dispose of disposers.reverse()) dispose();
 			await inputs.dispose();

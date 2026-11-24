@@ -16,6 +16,7 @@ import {
 } from "../modules/streaming/cerastream-backend.ts";
 import { createStreamSessionOrchestrator } from "../modules/streaming/stream-session-orchestrator.ts";
 import type { StreamRunOptions } from "../modules/streaming/streaming-backend.ts";
+import { manualReconciliationDeadline } from "./helpers/reconciliation-deadline.ts";
 
 // Wave H, live device: `cerastream.service` restarted WHILE CeraUI believed a
 // session was active. The published client is dialled with autoReconnect off and
@@ -167,7 +168,9 @@ interface Harness {
 	broadcasts: () => number;
 }
 
-function makeHarness(): Harness {
+function makeHarness(
+	scheduleTimeout?: CerastreamBackendDeps["scheduleTimeout"],
+): Harness {
 	const clients: FakeClient[] = [];
 	const lostSites: string[] = [];
 	let connects = 0;
@@ -194,6 +197,7 @@ function makeHarness(): Harness {
 		execPath: "cerastream",
 		configPath: "/tmp/cerastream-connection-loss.json",
 		logger: silentLogger,
+		...(scheduleTimeout ? { scheduleTimeout } : {}),
 		onSessionConnectionLost: (site) => {
 			lostSites.push(site);
 		},
@@ -280,7 +284,8 @@ describe("engine restart mid-session — the session control connection is the s
 	});
 
 	test("reconciliation stops re-affirming a phantom session from stale telemetry", async () => {
-		const h = makeHarness();
+		const deadline = manualReconciliationDeadline();
+		const h = makeHarness(deadline.scheduleTimeout);
 		await h.backend.start(STREAM_CONFIG, RUN_OPTS);
 		await h.backend.settle();
 		const session = liveSession(h);
@@ -299,7 +304,9 @@ describe("engine restart mid-session — the session control connection is the s
 		session.killConnection();
 		await expect(h.backend.listDevicesIfActive()).resolves.toBeNull();
 
-		const reconciled = await h.backend.reconcileRuntimeState();
+		const reconciled = await deadline.expireDuring(() =>
+			h.backend.reconcileRuntimeState(),
+		);
 		expect(reconciled).not.toBe("streaming");
 		expect(h.connectCount()).toBe(2);
 	});
