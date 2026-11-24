@@ -284,15 +284,12 @@ describe("PhoneBitrateControl", () => {
 	});
 
 	it("closes the sheet when the screen widens past 640 px", async () => {
-		let listener: (() => void) | undefined;
-		const query = {
-			matches: false,
-			addEventListener: (_: string, fn: () => void) => (listener = fn),
-			removeEventListener: () => {},
-		};
-		vi.stubGlobal(
-			"matchMedia",
-			vi.fn(() => query),
+		const viewport = Object.assign(new EventTarget(), { matches: false });
+		// The loading dialog subscribes to a different breakpoint.
+		vi.stubGlobal("matchMedia", (query: string) =>
+			query === "(min-width: 640px)"
+				? viewport
+				: Object.assign(new EventTarget(), { matches: false }),
 		);
 		render(PhoneBitrateControl, {
 			props: {
@@ -311,9 +308,9 @@ describe("PhoneBitrateControl", () => {
 		await fireEvent.click(
 			screen.getByRole("button", { name: "Change bitrate limit, now 5 Mbps" }),
 		);
-		await screen.findByRole("dialog");
-		query.matches = true;
-		listener?.();
+		await screen.findByRole("dialog", { name: en.live.adjustBitrate });
+		viewport.matches = true;
+		viewport.dispatchEvent(new Event("change"));
 		await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 	});
 
