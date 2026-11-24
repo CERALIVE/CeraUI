@@ -11,8 +11,8 @@
  *
  *   1. A dongle this stack reaches DIRECTLY owns a working bond toggle. It has
  *      no netns veth to defer to, and the ZTE on the bench is carrying bonded
- *      traffic right now — telling the operator "bonding is managed on its
- *      network interface row" would point at a row that no longer exists.
+ *      traffic right now, so telling the operator "its bond switch is on its
+ *      row under Ethernet" would point at a row that no longer exists.
  *   2. The configuration surface is exactly what the device really offers. The
  *      backend reads the dongle's OWN admin API, so every value here came off
  *      the device; nothing that could not be verified is rendered as a control.

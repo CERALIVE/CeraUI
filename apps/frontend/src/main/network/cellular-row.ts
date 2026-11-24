@@ -578,7 +578,7 @@ export function bondDisabledReasonKey(
 		if (state === "router-down") return "network.dongle.blockedDown";
 		// A dongle this stack reaches DIRECTLY has no veth row to defer to — its
 		// own `enx…` interface is the bonded link and this is the only row it
-		// gets. Claiming "bonding is managed on its network interface row" would
+		// gets. Saying "its bond switch is on its row under Ethernet" would
 		// point at a row that no longer exists, about a dongle that may be
 		// carrying bonded traffic at that moment.
 		if (!DIRECT_ROUTER_REASONS.has(modem.availability_reason ?? "")) {
