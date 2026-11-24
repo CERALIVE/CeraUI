@@ -2,6 +2,7 @@
  * RPC Event System
  * Manages subscriptions and broadcasts for real-time data
  */
+import { projectConfigWire } from "../helpers/config-wire.ts";
 import { logger } from "../helpers/logger.ts";
 import { isDevelopment } from "../mocks/mock-config.ts";
 import {
@@ -234,17 +235,18 @@ export function broadcast(
 	} = {},
 ): void {
 	const { except, only, authedOnly = true, minLastActive = 0 } = options;
+	const payload = type === "config" ? projectConfigWire(data) : data;
 
 	const now = Date.now();
 	if (
-		shouldCoalesce(coalesceState, type, data, now, getCoalesceWindowMs(type))
+		shouldCoalesce(coalesceState, type, payload, now, getCoalesceWindowMs(type))
 	) {
 		return;
 	}
-	updateCoalesceState(coalesceState, type, data, now);
+	updateCoalesceState(coalesceState, type, payload, now);
 
 	const seq = advanceSeq(seqCounters, type);
-	const message = JSON.stringify({ [type]: data, seq });
+	const message = JSON.stringify({ [type]: payload, seq });
 
 	// Per-client failure isolation. `send` is fired synchronously per client in
 	// iteration order (so a given socket keeps receiving in seq order — the
@@ -306,7 +308,7 @@ export function sendToClient(
 	data: unknown,
 ): void {
 	try {
-		ws.send(JSON.stringify({ [type]: data }));
+		ws.send(buildMessage(type, data));
 	} catch (error) {
 		logger.error("Send error", { err: error });
 	}
@@ -320,7 +322,9 @@ export function buildMessage(
 	data: unknown,
 	id?: string | null,
 ): string {
-	const obj: Record<string, unknown> = { [type]: data };
+	const obj: Record<string, unknown> = {
+		[type]: type === "config" ? projectConfigWire(data) : data,
+	};
 	if (id !== undefined) {
 		obj.id = id;
 	}

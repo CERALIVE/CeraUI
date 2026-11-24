@@ -1,3 +1,5 @@
+import { projectConfigWire } from "../../helpers/config-wire.ts";
+
 function omitIncarnation(value: unknown): unknown {
 	if (
 		typeof value !== "object" ||
@@ -37,8 +39,9 @@ export function projectRemoteWifiFrame(payload: unknown): unknown {
 	return projected;
 }
 
-/** Only the internal pairing seed is withheld from authenticated remote config. */
+/** The local config projection also applies before filtering the remote-only seed. */
 export function projectRemoteConfig(payload: unknown): unknown {
+	payload = projectConfigWire(payload);
 	if (typeof payload !== "object" || payload === null) return payload;
 	if (!("pairing_secret" in payload)) return payload;
 	const config = { ...payload };

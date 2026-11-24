@@ -421,7 +421,7 @@ export const runtimeConfigSchema = z.object({
 	bond_opt_in: z
 		.record(
 			z.string().min(1),
-			z.object({ vid: z.string(), pin: z.literal(true).optional() }),
+			z.record(z.string(), z.object({ pin: z.literal(true).optional() })),
 		)
 		.optional(),
 	// Explicit USB OFF keyed by path link id and vendor. `exact` identifies a
@@ -430,11 +430,13 @@ export const runtimeConfigSchema = z.object({
 	bond_port_out: z
 		.record(
 			z.string().min(1),
-			z.object({
-				vid: z.string().min(1),
-				exact: z.literal(true).optional(),
-				rollback: z.literal(true).optional(),
-			}),
+			z.record(
+				z.string().min(1),
+				z.object({
+					exact: z.literal(true).optional(),
+					rollback: z.literal(true).optional(),
+				}),
+			),
 		)
 		.optional(),
 	// Only the appended rollback bits, not keys main's writer also produced.

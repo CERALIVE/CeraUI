@@ -135,6 +135,8 @@ export function saveConfig() {
 
 export function saveUsbSharedSerialHistory(hashes: string[]): void {
 	if (authorityFailure) throw authorityFailure;
+	// As on main, the next scan must see this history even if saving fails.
+	config.usb_serial_shared = hashes;
 	const stored = readStoredStateFileSync(
 		configFile,
 		STORED_STATE_LIMITS.packages,
@@ -149,7 +151,6 @@ export function saveUsbSharedSerialHistory(hashes: string[]): void {
 		configFile,
 		JSON.stringify({ ...raw, usb_serial_shared: hashes }),
 	);
-	config.usb_serial_shared = hashes;
 }
 
 /** False until a strict load has succeeded; the boot owner retries until it does. */

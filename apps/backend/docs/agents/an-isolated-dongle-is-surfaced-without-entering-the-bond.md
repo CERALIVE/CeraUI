@@ -964,8 +964,8 @@ config, not from a potentially stale in-memory preference snapshot.
 |---|---|---|
 | `bond_opt_out` | exact or pair link id | Main's ordered transition, followed only by missing path bits for acknowledged serial-keyed USB OFFs with a known path |
 | `bond_group_out` | pair link id | A pair default that transition deleted; it still excludes an untouched twin. Under config authority, like `bond_opt_out` |
-| `bond_opt_in` | id-path link id and USB vendor id | `{ vid, pin? }`: the operator's ON for a port-anchored USB modem. Another vendor's ON cannot overwrite it. `pin` marks an exact bit main's transition derived for that port while it held the ON |
-| `bond_port_out` | id-path link id and USB vendor id | `{ vid, exact?, rollback? }`: an explicit OFF follows the same vendor at this port regardless of serial readability. `exact` identifies a vendor-owned legacy bit; `rollback` requests an additional path bit while the serial-keyed OFF is held |
+| `bond_opt_in` | id-path link id → USB vendor id | `{ pin? }`: the operator's ON for a port-anchored USB modem. Another vendor's ON cannot overwrite it. `pin` marks an exact bit main's transition derived for that port while it held the ON |
+| `bond_port_out` | id-path link id → USB vendor id | `{ exact?, rollback? }`: an explicit OFF follows the same vendor at this port regardless of serial readability. `exact` identifies a vendor-owned legacy bit; `rollback` requests an additional path bit while the serial-keyed OFF is held |
 | `bond_rollback_out` | id-path link id | Marks bits that were actually appended. They are excluded from the current reader and main's transition and guard projection |
 
 The reader answers, first match wins:
@@ -988,6 +988,11 @@ unneeded extra bit, not a bit main would retain. The #697 last-uplink rule
 vetoes an OFF that removes the last sender in either view, including the first
 OFF at a cross-vendor aliased path. Simulated configure calls, including
 auto-detected emulation, run only the legacy transition.
+
+The WebSocket config frames omit the new persistence fields. Shared-serial
+discovery updates memory before attempting to save only the history to disk.
+If that save fails, the next scan can publish the twin without retrying the
+same write, as on main.
 
 Signed trade-offs:
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { call } from "@orpc/server";
@@ -23,11 +23,13 @@ import {
 } from "../modules/network/network-interfaces.ts";
 import {
 	defaultRouterCellularScanDeps,
+	getUsbPhysicalDescriptor,
 	refreshUsbNetMarkers,
 	resetUsbNetMarkers,
 } from "../modules/network/router-cellular-scan.ts";
 import { genSrtlaBondEntries } from "../modules/streaming/srtla.ts";
 import { observeRealDeviceAtBoot } from "../modules/system/device-detection.ts";
+import { buildMsg } from "../rpc/compat.ts";
 import { configureNetworkInterfaceProcedure } from "../rpc/procedures/network.procedure.ts";
 import {
 	clearBondNetworkFixture,
@@ -89,12 +91,7 @@ async function scan(...devices: Device[]) {
 		devices.map(({ ifname }) => ifname),
 		{
 			...constructedTwinDeps(devices),
-			sharedSerials: {
-				load: () => getConfig().usb_serial_shared ?? [],
-				save: (hashes) => {
-					getConfig().usb_serial_shared = hashes;
-				},
-			},
+			sharedSerials: defaultRouterCellularScanDeps.sharedSerials,
 		},
 	);
 }
@@ -597,6 +594,41 @@ test("persisting newly seen shared serial history does not restore stale bond pr
 		usb_serial_shared: [digest("413c", "PORT-RECORD-NEW")],
 	});
 });
+
+test("a newly attached twin publishes on retry after a history write fails", async () => {
+	await start({});
+	await scan(at(a, g1));
+	expect(getUsbPhysicalDescriptor(first)).toBeDefined();
+	// Block the real atomic writer's temporary file, even when running as root.
+	await mkdir(join(directory, `.config.json.${process.pid}.tmp`));
+	await scan(at(a, g1), at(b, g1));
+	expect(getUsbPhysicalDescriptor(second)).toBeUndefined();
+	await scan(at(a, g1), at(b, g1));
+	expect(getUsbPhysicalDescriptor(second)).toBeDefined();
+	expect(await Bun.file(file).text()).toBe("{}");
+});
+
+test.each(["", "PORT-WIRE-UNIQUE"])(
+	"real USB OFF with serial %j leaves the config frame in main's format",
+	async (serial) => {
+		await onRealDevice(async () => {
+			await start({});
+			await scan(at(b, serial));
+			addUplinks();
+			const expected = {
+				...getConfig(),
+				bond_opt_out: { [portId(b)]: true },
+			};
+			expect(await configure(second, "198.51.100.2", false)).toMatchObject({
+				success: true,
+				applied: { enabled: false },
+			});
+			expect(buildMsg("config", getConfig())).toBe(
+				JSON.stringify({ config: expected }),
+			);
+		});
+	},
+);
 
 test.each([
 	["mock", "production", "true", undefined, undefined, "real", false],
