@@ -86,7 +86,7 @@ const PASSWORD = process.env.E2E_PASSWORD ?? '12345678';
 const MAIN_CONTENT = '#main-content';
 const PASSWORD_FIELD = '#password';
 
-/** The RPC socket is `<origin>/ws?ui_build=<build>`, matched by its path — see `getRpcSocketUrl()`. */
+/** The RPC socket is `<origin>/ws?ui_build=<build>`, matched by its path (see `getRpcSocketUrl()`). */
 const RPC_SOCKET_URL = (url: URL) => url.pathname === '/ws';
 
 /** Mirrors the routing cookie the `page` fixture installs under CI preview. */

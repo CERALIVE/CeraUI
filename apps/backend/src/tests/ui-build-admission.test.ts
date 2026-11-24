@@ -63,13 +63,18 @@ function uiSocket(announced: string | null, sent: string[] = []): RPCContext {
 	return context;
 }
 
-function reloadNotices(sent: readonly string[]): string[] {
+function reloadNotices(
+	sent: readonly string[],
+): Array<{ msg: string; key?: string }> {
 	return sent
 		.map((message) => JSON.parse(message) as { notification?: unknown })
 		.flatMap((frame) => {
-			const show = (frame.notification as { show?: Array<{ msg: string }> })
-				?.show;
-			return show?.map((notification) => notification.msg) ?? [];
+			const show = (
+				frame.notification as {
+					show?: Array<{ msg: string; key?: string }>;
+				}
+			)?.show;
+			return show?.map(({ msg, key }) => ({ msg, key })) ?? [];
 		});
 }
 
@@ -148,7 +153,11 @@ describe("a page from another build, or one that names none", () => {
 
 			expect(JSON.stringify(getConfig())).toBe(before);
 			expect(getMockState().engineStart).toBeNull();
-			expect(reloadNotices(sent)).toContain(UI_OUT_OF_DATE_MESSAGE);
+			// `msg` for a bundle from before the key existed, `key` for a localized one.
+			expect(reloadNotices(sent)).toContainEqual({
+				msg: UI_OUT_OF_DATE_MESSAGE,
+				key: "notifications.uiOutOfDate",
+			});
 			expect(UI_OUT_OF_DATE_MESSAGE).toBe(
 				"This page is out of date. Reload to continue.",
 			);

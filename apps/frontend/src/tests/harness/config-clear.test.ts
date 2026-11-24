@@ -450,7 +450,7 @@ describe("the store deletes exactly the keys the device names", () => {
 		expect(getConfig()).toBe(before);
 	});
 
-	it("a message type this build does not know is ignored, as an old tab ignores config_clear", () => {
+	it("a message type this build does not know is ignored", () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		ingest("config", { video_codec: "h264" });
 		const before = getConfig();
@@ -465,11 +465,12 @@ describe("the store deletes exactly the keys the device names", () => {
 });
 
 describe("the reconnect safety hydrate applies getConfig as a snapshot", () => {
-	it("tab B, offline while tab A switched the Encoder to Automatic, shows Automatic after it reconnects, and a broadcast-only autostart survives", () => {
+	it("a pulled config without the cleared key shows the Encoder Automatic, and a broadcast-only autostart survives", () => {
 		encoderDevice({ video_codec: "h264", autostart: true });
 
-		// Tab A's clear happened while B's socket was closed: B never got its frames.
-		// B's safety hydrate reads streaming.getConfig, which never returns autostart.
+		// The clear happened while this tab's socket was closed, so it got no frames.
+		// Its safety hydrate reads streaming.getConfig, which never returns autostart.
+		// The two-tab path end to end is e2e/config-clear-two-tabs.spec.ts.
 		ingestPulledConfig({ source: "cam-h265", pipeline: "libuvch265" });
 
 		expect(Object.hasOwn(getConfig() ?? {}, "video_codec")).toBe(false);

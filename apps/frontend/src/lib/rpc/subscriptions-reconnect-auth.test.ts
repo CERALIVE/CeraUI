@@ -188,24 +188,107 @@ it.each(["after", "before", "without"] as const)(
 	},
 );
 
-it("a pending edit keeps its local value when the reconnect pull omits its key", async () => {
-	const { first, replace, signIn, subscriptions } = await start();
-	const { markPending } = await import("./dirty-registry.svelte");
-	await signIn();
-	first.push({
-		config: { source: "cam-1", max_br: 6000, video_codec: "h264" },
-		seq: 1,
-	});
-	markPending("max_br", 8000);
+// Where the login snapshot lands against the reconnect pull's answer.
+const ORDERS = ["before", "after", "without"] as const;
 
-	const second = replace(first);
+async function reconnected(
+	order: (typeof ORDERS)[number],
+	device: Record<string, unknown>,
+	beforeDrop: (harness: Awaited<ReturnType<typeof start>>) => Promise<void>,
+) {
+	const harness = await start();
+	await harness.signIn();
+	await beforeDrop(harness);
+	const second = harness.replace(harness.first);
 	second.reply("auth.login", { success: true });
+	if (order === "before") second.push({ config: device });
 	await flushReplies();
-	second.reply("streaming.getConfig", { source: "cam-1" });
+	second.reply("streaming.getConfig", device);
 	await flushReplies();
+	if (order === "after") second.push({ config: device });
+	return { ...harness, second };
+}
 
-	expect(subscriptions.getConfig()).toEqual({ source: "cam-1", max_br: 6000 });
-});
+it.each(ORDERS)(
+	"a value a pending edit holds survives the reconnect, login snapshot %s the pull, when the device omits its key",
+	async (order) => {
+		const { subscriptions } = await reconnected(
+			order,
+			{ source: "cam-1" },
+			async ({ first }) => {
+				const { markPending } = await import("./dirty-registry.svelte");
+				first.push({ config: { source: "cam-1", max_br: 6000 }, seq: 1 });
+				markPending("max_br", 8000);
+			},
+		);
+
+		expect(subscriptions.getConfig()).toEqual({
+			source: "cam-1",
+			max_br: 6000,
+		});
+	},
+);
+
+it.each(ORDERS)(
+	"a value a pending edit holds survives the reconnect, login snapshot %s the pull, when the device still has the older one",
+	async (order) => {
+		const { subscriptions } = await reconnected(
+			order,
+			{ source: "cam-1", max_br: 6000 },
+			async ({ first }) => {
+				const { markPending } = await import("./dirty-registry.svelte");
+				first.push({ config: { source: "cam-1", max_br: 6000 }, seq: 1 });
+				markPending("max_br", 8000);
+			},
+		);
+
+		expect(subscriptions.getConfig()).toEqual({
+			source: "cam-1",
+			max_br: 6000,
+		});
+	},
+);
+
+it.each(ORDERS)(
+	"a pending clear whose answer was lost ends cleared, login snapshot %s the pull",
+	async (order) => {
+		const { subscriptions } = await reconnected(
+			order,
+			{ source: "cam-1" },
+			async ({ first }) => {
+				const { markPending } = await import("./dirty-registry.svelte");
+				first.push({
+					config: { source: "cam-1", video_codec: "h264" },
+					seq: 1,
+				});
+				// Encoder Automatic: applied on the device, then the link dropped.
+				markPending("video_codec", null);
+			},
+		);
+
+		expect(subscriptions.getConfig()).toEqual({ source: "cam-1" });
+	},
+);
+
+it.each(ORDERS)(
+	"an answered write guards nothing once the device reports its key absent, login snapshot %s the pull",
+	async (order) => {
+		const { subscriptions } = await reconnected(
+			order,
+			{ source: "cam-1" },
+			async ({ first }) => {
+				const { markPending, onRpcResolved } = await import(
+					"./dirty-registry.svelte"
+				);
+				first.push({ config: { source: "cam-1", max_br: 6000 }, seq: 1 });
+				markPending("max_br", 8000);
+				onRpcResolved("max_br");
+			},
+		);
+
+		expect(subscriptions.getConfig()).toEqual({ source: "cam-1" });
+	},
+);
 
 it("signs out on rejection, without sending protected reads or replaying again", async () => {
 	const { first, replace, signIn, auth } = await start();

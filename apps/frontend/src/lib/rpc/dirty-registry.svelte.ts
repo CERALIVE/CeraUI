@@ -231,6 +231,16 @@ export function onRpcApplied(
 }
 
 /**
+ * Whether `field`'s lock guards a value whose write is still in flight. A lock
+ * whose write asked for a clear (a nullish intent), or was already answered,
+ * guards nothing against a device that reports the field absent.
+ */
+function holdsValue(registry: DirtyRegistry, field: string): boolean {
+	const lock = registry.locks[field];
+	return lock !== undefined && lock.intendedValue != null && !lock.rpcResolved;
+}
+
+/**
  * Reconcile a field the device reported CLEARED (`config_clear`); the caller
  * deletes it from view state whatever this returns. The lock is released when
  * its write asked for that clear (a nullish intent) or has been answered; a
@@ -239,8 +249,7 @@ export function onRpcApplied(
  * it released the lock.
  */
 function reconcileClear(registry: DirtyRegistry, field: string): boolean {
-	const lock = registry.locks[field];
-	if (!lock || (lock.intendedValue != null && !lock.rpcResolved)) return false;
+	if (!isLocked(registry, field) || holdsValue(registry, field)) return false;
 	delete registry.locks[field];
 	return true;
 }
@@ -278,6 +287,7 @@ export const registryCore = {
 	markResolved,
 	shouldIgnoreEcho,
 	reconcile,
+	holdsValue,
 	reconcileClear,
 	onRpcApplied,
 	expire,
@@ -307,6 +317,7 @@ interface DirtyStore {
 		appliedValue: unknown,
 		now?: number,
 	) => ReconcileResult;
+	holdsValue: (field: string) => boolean;
 	reconcileClear: (field: string) => boolean;
 	expire: (now?: number) => string[];
 	getRegistry: () => DirtyRegistry;
@@ -353,6 +364,7 @@ function createDirtyStore(): DirtyStore {
 			),
 		onRpcApplied: (field, appliedValue, now = Date.now()) =>
 			onRpcApplied(registry, field, appliedValue, now),
+		holdsValue: (field) => holdsValue(registry, field),
 		reconcileClear: (field) => reconcileClear(registry, field),
 		expire: (now = Date.now()) =>
 			expire(registry, now, resolveFieldLockTtlMs()),
@@ -429,6 +441,11 @@ export function onRpcAppliedReactive(
 	now?: number,
 ): ReconcileResult {
 	return store().onRpcApplied(field, appliedValue, now);
+}
+
+/** Whether `field`'s lock guards an in-flight value. See {@link holdsValue}. */
+export function holdsValueReactive(field: string): boolean {
+	return store().holdsValue(field);
 }
 
 /** Reconcile a field the device reported cleared. See {@link reconcileClear}. */

@@ -2208,6 +2208,7 @@
 	"notifications.streamStartUpdateInProgressFailed": "Couldn't start: a software update is being installed and can't be interrupted. Try again once it finishes.",
 	"notifications.updateAvailable": "Update Available",
 	"notifications.updateAvailableDescription": "A new version is available. Refresh to update.",
+	"notifications.uiOutOfDate": "This page is out of date. Reload to continue.",
 	"notifications.updateInProgress": "Update in progress",
 	"notifications.uplinkFlowsReset": "Client connections on {iface} were reset so they can move to a healthy uplink.",
 	"notifications.validationFailed": "Please check these fields: {fields}",

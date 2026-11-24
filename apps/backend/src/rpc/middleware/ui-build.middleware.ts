@@ -9,7 +9,7 @@
  * gated procedure throws before its handler runs, so nothing changes and no
  * engine is called, and the socket is told to reload, in shapes the pre-upgrade
  * bundle already renders (a failure toast, the notification's free-text
- * `msg`). A context with no `uiBuild` at all is not a page (the cloud
+ * `msg`), with a key a newer bundle localizes. A context with no `uiBuild` at all is not a page (the cloud
  * dashboard's device-control channel) and is never gated; neither is anything
  * on a backend with no identity of its own (a dev checkout without
  * `CERAUI_BUILD_ID`).
@@ -64,6 +64,8 @@ export function sendOutOfDateNotice(ws: AppWebSocket): void {
 			{
 				name: "ui-out-of-date",
 				type: "error",
+				// `msg` is what a bundle without the key shows.
+				key: "notifications.uiOutOfDate",
 				msg: UI_OUT_OF_DATE_MESSAGE,
 				is_dismissable: true,
 				// Shown in place, not as a toast that times out, until the page reloads.

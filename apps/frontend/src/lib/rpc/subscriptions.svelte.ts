@@ -100,6 +100,7 @@ import type { ConnectionState } from "./client";
 import { rpc, rpcClient } from "./client";
 import {
 	expireReactive,
+	holdsValueReactive,
 	isPending,
 	reconcileClearReactive,
 	reconcileReactive,
@@ -665,10 +666,18 @@ function handleMessage(
 			// lock (release once its RPC resolved and the server echoed the field).
 			const incoming = data as ConfigMessage;
 			// Do not carry an omitted source or server from the previous socket
-			// into the first configuration snapshot on this one.
+			// into the first configuration snapshot on this one, only what a
+			// pending field lock guards: a value whose write is still in flight, or
+			// one whose differing echo the lock ignores below.
 			const merged: ConfigMessage = currentStartEvidence("config")
 				? { ...configState }
-				: {};
+				: Object.fromEntries(
+						Object.entries(configState ?? {}).filter(
+							([key]) =>
+								holdsValueReactive(key) ||
+								(isPending(key) && Object.hasOwn(incoming, key)),
+						),
+					);
 			let changed = false;
 			for (const [field, value] of Object.entries(incoming)) {
 				if (value === undefined) continue;
@@ -1330,21 +1339,19 @@ function clearConfigKeys(keys: readonly string[]): void {
  * as a snapshot of the keys that procedure returns. The keys it carries merge
  * like a pushed `config`. A listed key it omits is absent on the device now, a
  * clear this tab may have missed while offline, so it is cleared unless a
- * pending field lock holds this tab's newer value. A key the procedure never
+ * pending field lock guards this tab's newer value. A key the procedure never
  * returns, such as `autostart`, is left as it is.
  */
 export function ingestPulledConfig(config: unknown): void {
 	if (typeof config !== "object" || config === null) return;
 	const held = configState;
 	handleMessage("config", config);
-	// The first config on a new link starts empty: give back what this pull does
-	// not speak for, a key it never returns or one a pending lock holds.
+	// The first config on a new link keeps only what a pending lock guards: give
+	// back the keys this pull never speaks for.
 	const listed: ReadonlySet<string> = new Set(GET_CONFIG_KEYS);
 	configState = {
 		...Object.fromEntries(
-			Object.entries(held ?? {}).filter(
-				([key]) => !listed.has(key) || isPending(key),
-			),
+			Object.entries(held ?? {}).filter(([key]) => !listed.has(key)),
 		),
 		...configState,
 	};
@@ -1352,7 +1359,7 @@ export function ingestPulledConfig(config: unknown): void {
 		GET_CONFIG_KEYS.filter(
 			(key) =>
 				(config as Record<string, unknown>)[key] === undefined &&
-				!isPending(key),
+				!holdsValueReactive(key),
 		),
 	);
 }

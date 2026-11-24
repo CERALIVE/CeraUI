@@ -117,6 +117,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           path: CeraUI
+          fetch-depth: 0 # old-tab-config-clear.test.ts runs a historical commit's handler.
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2

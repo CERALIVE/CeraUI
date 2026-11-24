@@ -2222,6 +2222,7 @@
 	"notifications.streamStartUpdateInProgressFailed": "Démarrage impossible : une mise à jour logicielle est en cours d'installation et ne peut pas être interrompue. Réessayez une fois celle-ci terminée.",
 	"notifications.updateAvailable": "Mise à jour disponible",
 	"notifications.updateAvailableDescription": "Une nouvelle version est disponible. Actualisez pour mettre à jour.",
+	"notifications.uiOutOfDate": "Cette page n'est plus à jour. Rechargez-la pour continuer.",
 	"notifications.updateInProgress": "Mise à jour en cours",
 	"notifications.uplinkFlowsReset": "Les connexions clientes sur {iface} ont été réinitialisées afin de basculer vers une liaison opérationnelle.",
 	"notifications.validationFailed": "Veuillez vérifier ces champs : {fields}",

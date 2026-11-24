@@ -228,6 +228,8 @@ function configSnapshotOp(): RevertibleOp {
 			}
 			Object.assign(config, snapshot as Record<string, unknown>);
 			saveConfig();
+			const { broadcastConfig } = await import("../../rpc/config-broadcast.ts");
+			broadcastConfig(config);
 		},
 	};
 }

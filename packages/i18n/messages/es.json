@@ -2222,6 +2222,7 @@
 	"notifications.streamStartUpdateInProgressFailed": "No se pudo iniciar: se está instalando una actualización de software que no se puede interrumpir. Vuelve a intentarlo cuando termine.",
 	"notifications.updateAvailable": "Actualización disponible",
 	"notifications.updateAvailableDescription": "Hay una nueva versión disponible. Recarga para actualizar.",
+	"notifications.uiOutOfDate": "Esta página está desactualizada. Recárgala para continuar.",
 	"notifications.updateInProgress": "Actualización en curso",
 	"notifications.uplinkFlowsReset": "Se reiniciaron las conexiones de clientes en {iface} para que puedan pasar a un enlace en buen estado.",
 	"notifications.validationFailed": "Revisa estos campos: {fields}",

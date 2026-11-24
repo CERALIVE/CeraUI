@@ -1,4 +1,5 @@
 import { logger } from "../../helpers/logger.ts";
+import { broadcastConfig } from "../../rpc/config-broadcast.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import {
 	clearStagedConfigChange,
@@ -100,6 +101,7 @@ export function reconcileInflightConfigChange(
 	// completed (or deliberately not) on the operator's behalf.
 	if (verdict.action === "persist_candidate") {
 		writeFields(marker.candidate);
+		broadcastConfig(getConfig());
 		logger.warn("config-change marker resolved — candidate persisted", {
 			module: "streaming",
 			attemptId: marker.attemptId,

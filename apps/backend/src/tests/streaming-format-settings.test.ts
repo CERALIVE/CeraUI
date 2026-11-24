@@ -26,6 +26,7 @@ import {
 	getIsStreaming,
 	updateStatus,
 } from "../modules/streaming/streaming.ts";
+import { broadcastConfig } from "../rpc/config-broadcast.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
 import {
 	getConfigProcedure,
@@ -209,6 +210,8 @@ test("forced video passthrough remains stored and forwarded", async () => {
 test("config broadcast and getConfig carry the saved balancer", async () => {
 	const broadcasts: string[] = [];
 	const context = makeRpcContext(broadcasts);
+	// Baseline: what clients were sent before this test names no cleared key.
+	broadcastConfig(getConfig());
 	addClient(context.ws);
 	try {
 		await call(
@@ -217,24 +220,11 @@ test("config broadcast and getConfig carry the saved balancer", async () => {
 			{ context: makeRpcContext() },
 		);
 
-		const frames = broadcasts.map(
-			(frame) => JSON.parse(frame) as Record<string, unknown>,
-		);
 		expect(
-			frames
-				.filter((frame) => "config" in frame)
-				.map((frame) => configMessageSchema.parse(frame.config).balancer),
+			broadcasts.map(
+				(frame) => configMessageSchema.parse(JSON.parse(frame).config).balancer,
+			),
 		).toEqual(["fixed"]);
-		// The only other frame a config write may add names keys an earlier case
-		// left the device without (`config_clear`); it never names the balancer.
-		for (const frame of frames.filter((frame) => !("config" in frame))) {
-			expect(Object.keys(frame).filter((key) => key !== "seq")).toEqual([
-				"config_clear",
-			]);
-			expect((frame.config_clear as { keys: string[] }).keys).not.toContain(
-				"balancer",
-			);
-		}
 		expect(
 			await call(getConfigProcedure, undefined, { context: makeRpcContext() }),
 		).toHaveProperty("balancer", "fixed");

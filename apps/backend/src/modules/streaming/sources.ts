@@ -1123,6 +1123,9 @@ export function noteStreamedSourceCommitted(): boolean {
 		config.last_streamed_source_stable_id = stableId;
 	}
 	saveConfig();
+	// The start's own answer carries no config, so the cleared identity is
+	// published here or open tabs keep it until some later write.
+	broadcastConfig(config);
 	logger.info("sources: last-streamed source committed", {
 		source: sourceId,
 		stableId,
