@@ -17,24 +17,28 @@ const { isStreaming, unconfirmed = false }: Props = $props();
 
 <!-- Header: stream status + title only (T12 demotion). The server destination now
      lives in the GoLiveCard traffic-light row (T10), so the header no longer hosts
-     a server-edit chip — it is title + live-state chip only. -->
+     a server-edit chip. It shows the title and live-state chip.
+     The chip never wraps or shrinks: at 390 px a two-line "NOT / STREAMING" pill
+     reads as two labels, and it is the state a streamer glances at. Below `sm`
+     the subtitle is screen-reader only, so the chip and the title share one row
+     in every locale (Hindi's chip alone is ~260 px wide). -->
 <header class="flex items-center gap-3" class:short-live={isStreaming && !unconfirmed}>
 	{#if isStreaming}
 		<span
-			class="flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold tracking-wide uppercase"
+			class="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold tracking-wide uppercase"
 			style="color: var(--status-live); border-color: color-mix(in oklab, var(--status-live) 40%, transparent); background-color: color-mix(in oklab, var(--status-live) 12%, transparent);"
 		>
 			<span
-				class="h-2 w-2 rounded-full motion-safe:animate-pulse"
+				class="h-2 w-2 shrink-0 rounded-full motion-safe:animate-pulse"
 				style="background-color: var(--status-live);"
 			></span>
 			{m["live.streamingActive"]()}
 		</span>
 	{:else if !unconfirmed}
 		<span
-			class="text-muted-foreground flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold tracking-wide uppercase"
+			class="text-muted-foreground flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold tracking-wide uppercase"
 		>
-			<span class="bg-muted-foreground/50 h-2 w-2 rounded-full"></span>
+			<span class="bg-muted-foreground/50 h-2 w-2 shrink-0 rounded-full"></span>
 			{m["live.notStreaming"]()}
 		</span>
 	{/if}
@@ -43,7 +47,7 @@ const { isStreaming, unconfirmed = false }: Props = $props();
 	     in the page for screen readers and the heading outline. -->
 	<div class="min-w-0">
 		<h1 tabindex="-1" class={['text-2xl font-bold tracking-tight', isStreaming && !unconfirmed && 'max-sm:not-focus:sr-only']}>{m["live.title"]()}</h1>
-		<p class={['text-muted-foreground text-sm', isStreaming && !unconfirmed && 'max-sm:sr-only']}>{m["live.description"]()}</p>
+		<p class="text-muted-foreground sr-only text-sm sm:not-sr-only">{m["live.description"]()}</p>
 	</div>
 </header>
 
