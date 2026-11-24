@@ -31,9 +31,9 @@
 		"generate:i18n": "bun scripts/compile-messages.ts && bun scripts/generate-registry.ts"
 	},
 	"devDependencies": {
-		"@inlang/paraglide-js": "3.2.1",
+		"@inlang/paraglide-js": "3.2.2",
 		"@types/bun": "^1.4.5",
-		"svelte": "5.57.0",
+		"svelte": "5.59.1",
 		"typescript": "catalog:"
 	},
 	"keywords": [
