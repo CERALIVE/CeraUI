@@ -522,6 +522,11 @@ version pinned in `bun.lock`), file `tokens.css`, which
 `text-muted-foreground`). Use the token, never a copied value. A palette swap
 redefines the variable, so a literal would not follow it.
 
+The Light and Dark columns in this section are defaults. E-ink and mono redefine
+every token listed here (app.css:179-256). High contrast redefines `--border`,
+`--input`, `--ring`, `--sidebar-border`, `--muted-foreground`, the three
+`--shadow-*` tokens and the five `--gradient-*` endpoints (app.css:685-702).
+
 ### Surfaces and text
 
 `secondary`, `muted` and `accent` are neutral graphite steps, not brand colors.
@@ -651,13 +656,13 @@ Each row is a rule in `apps/frontend/src/app.css`, which overrides the utility o
 
 | Case | Value |
 |---|---|
-| Red text, `.text-destructive` | `color-mix(in oklab, var(--destructive) 74%, var(--foreground))` |
-| Red status text, `.text-status-error` | `color-mix(in oklab, var(--status-error) 84%, var(--foreground))` |
+| Red text, `.text-destructive`, except on a `destructive` button (rows below) | `color-mix(in oklab, var(--destructive) 74%, var(--foreground))` (app.css:1029) |
+| Red status text, `.text-status-error`, outside a tooltip | `color-mix(in oklab, var(--status-error) 84%, var(--foreground))` |
 | Red status inside a tooltip | `color-mix(in oklab, var(--status-error) 44%, var(--background))` |
-| Enabled `destructive` button label | `color-mix(in oklab, var(--destructive) 60%, var(--foreground))`; line 978 |
-| Disabled `destructive` button | label `color-mix(in oklab, var(--destructive) 75%, var(--foreground))`, background `color-mix(in oklab, var(--destructive) 4%, var(--card))`, `opacity: 1` so no fade; lines 981 to 985 |
+| Enabled `destructive` button label | `color-mix(in oklab, var(--destructive) 60%, var(--foreground))` (app.css:995) |
+| Disabled `destructive` button | label `color-mix(in oklab, var(--destructive) 75%, var(--foreground))`, background `color-mix(in oklab, var(--destructive) 4%, var(--card))`, `opacity: 1` so no fade (app.css:998-1002) |
 | E-ink and mono, `html[data-theme='eink']` | a chroma 0 set that redefines the tokens, defined in that block |
-| High contrast, `@media (prefers-contrast: more)` | `--border: var(--foreground)`, `--muted-foreground: var(--foreground)` |
+| High contrast, `@media (prefers-contrast: more)` | `--border: var(--foreground)`, `--muted-foreground: var(--foreground)` and the rest of the list above |
 
 - **Not defined in code:** a secondary brand hue, and any Svelte call site for the
   `gradient-primary`, `gradient-success`, `gradient-info`,
@@ -708,8 +713,8 @@ missing weight is never faked.
 
 - Dialog title: `text-base leading-tight font-semibold`; its description: `text-muted-foreground text-sm leading-relaxed`. Source: `apps/frontend/src/lib/components/dialogs/AppDialog.svelte`
 - Card title: `text-base leading-snug font-medium`, or `text-sm` in a `sm` card. Source: `apps/frontend/src/lib/components/ui/card/card-title.svelte`
-- Field label: `text-sm leading-none font-medium`. Source: `apps/frontend/src/lib/components/ui/label/label.svelte`
-- Throughput value: `font-mono text-xs font-bold tabular-nums`. Source: `apps/frontend/src/lib/components/custom/Badge.svelte`
+- Field label: `text-sm leading-none font-medium`, at 50% opacity while its group or peer is disabled (label.svelte:11). Source: `apps/frontend/src/lib/components/ui/label/label.svelte`
+- Throughput value: `font-mono text-xs font-bold tabular-nums`, at 50% opacity when stale (Badge.svelte:102). Source: `apps/frontend/src/lib/components/custom/Badge.svelte`
 - Network row name: `text-sm font-medium`, plus `text-muted-foreground` when dimmed; its status line: `text-muted-foreground` and `text-xs`. Source: `apps/frontend/src/main/network/NetworkRow.svelte`
 - **Not defined in code:** a named role scale (display, headline, title, body, label). Pick the utility the nearest existing component uses.
 
@@ -726,40 +731,50 @@ The `default` Button variant is the filled lime one. IH-5 governs it: one per
 surface, for its single primary action. Other actions are outline or ghost, and a
 destructive confirmation keeps its `destructive` button.
 
+Each row gives the enabled default, then the states that override it. A caller's
+own class can still override either. Four global rules apply to every row below:
+
+- Touch mode, and a phone-width touch region, raise Button and Select trigger heights to the touch minimum, unless the control opts into the hit-area overlay (app.css:314-323).
+- High contrast widens a `border` or `border-t` edge to 2px and swaps the tokens listed in section 16 (app.css:685-733).
+- Reduced motion shortens every animation and transition (app.css:668-677), and e-ink removes both (app.css:757-766).
+- E-ink and mono swap every color token (app.css:179-256).
+
 | Component | Binds to | Source |
 |---|---|---|
-| Button, base recipe | `rounded-lg` `text-sm` `font-medium`; focus `focus-visible:border-ring` `focus-visible:ring-ring` at 50% `focus-visible:ring-3`; disabled `disabled:opacity-50` (line 8). A variant or size below overrides these: `destructive` has its own focus and disabled state, and sizes `xs`, `sm`, `icon-xs` and `icon-sm` their own corners | `apps/frontend/src/lib/components/ui/button/button.svelte` |
-| Button `default` | `bg-primary` `text-primary-foreground` | `apps/frontend/src/lib/components/ui/button/button.svelte` |
-| Button `outline` | `border-border` `bg-background` `hover:bg-muted`; dark `dark:bg-input` at 30% `dark:border-input` `dark:hover:bg-input` at 50% | `apps/frontend/src/lib/components/ui/button/button.svelte` |
-| Button `secondary` | `bg-secondary` `text-secondary-foreground` `hover:bg-secondary` at 80% | `apps/frontend/src/lib/components/ui/button/button.svelte` |
-| Button `ghost` | `hover:bg-muted` `hover:text-foreground`; dark `dark:hover:bg-muted` at 50% | `apps/frontend/src/lib/components/ui/button/button.svelte` |
-| Button `destructive`, enabled | `bg-destructive` at 10% `hover:bg-destructive` at 20%; dark `dark:bg-destructive` at 20% `dark:hover:bg-destructive` at 30%; focus `focus-visible:border-destructive` at 40% `focus-visible:ring-destructive` at 20%, dark `dark:focus-visible:ring-destructive` at 40% (line 19). The label is the 60% mix in section 16 | `apps/frontend/src/lib/components/ui/button/button.svelte` |
-| Button `destructive`, disabled | overrides the base fade: `opacity: 1`, the 75% label mix and the 4% tint in section 16 (lines 981 to 985) | `apps/frontend/src/app.css` |
+| Button, base recipe | `rounded-lg` `text-sm` `font-medium`; focus `focus-visible:border-ring` `focus-visible:ring-ring` at 50% `focus-visible:ring-3`; error `aria-invalid:border-destructive`, dark `dark:aria-invalid:border-destructive` at 50%, with `aria-invalid:ring-3` and `aria-invalid:ring-destructive` at 20%, dark `dark:aria-invalid:ring-destructive` at 40%; disabled `disabled:opacity-50` (button.svelte:8), which a link button lacks because it carries only `aria-disabled` (button.svelte:70). A variant or size below overrides these: `destructive` has its own focus and disabled state, and sizes `xs`, `sm`, `icon-xs` and `icon-sm` their own corners, back to `rounded-lg` inside a button group (button.svelte:25-32) | `apps/frontend/src/lib/components/ui/button/button.svelte` |
+| Button `default` | `bg-primary` `text-primary-foreground`; as a link, hover is `bg-primary` at 80% (button.svelte:11) | `apps/frontend/src/lib/components/ui/button/button.svelte` |
+| Button `outline` | `border-border` `bg-background` `hover:bg-muted`; dark `dark:bg-input` at 30% `dark:border-input` `dark:hover:bg-input` at 50%; expanded `aria-expanded:bg-muted` `aria-expanded:text-foreground` (button.svelte:13) | `apps/frontend/src/lib/components/ui/button/button.svelte` |
+| Button `secondary` | `bg-secondary` `text-secondary-foreground` `hover:bg-secondary` at 80%; expanded `aria-expanded:bg-secondary` (button.svelte:15) | `apps/frontend/src/lib/components/ui/button/button.svelte` |
+| Button `ghost` | `hover:bg-muted` `hover:text-foreground`; dark `dark:hover:bg-muted` at 50%; expanded `aria-expanded:bg-muted` `aria-expanded:text-foreground` (button.svelte:17) | `apps/frontend/src/lib/components/ui/button/button.svelte` |
+| Button `destructive`, enabled | `bg-destructive` at 10% `hover:bg-destructive` at 20%; dark `dark:bg-destructive` at 20% `dark:hover:bg-destructive` at 30%; focus `focus-visible:border-destructive` at 40% `focus-visible:ring-destructive` at 20%, dark `dark:focus-visible:ring-destructive` at 40% (button.svelte:19). The label is the 60% mix in section 16 | `apps/frontend/src/lib/components/ui/button/button.svelte` |
+| Button `destructive`, disabled | overrides the base fade: `opacity: 1`, the 75% label mix and the 4% tint in section 16 (app.css:998-1002) | `apps/frontend/src/app.css` |
 | Button `link` | `text-primary` `underline-offset-4` `hover:underline` | `apps/frontend/src/lib/components/ui/button/button.svelte` |
 | Button sizes | `xs` `h-6`, `sm` `h-7`, `default` `h-8`, `lg` `h-9`, `icon` `size-8`; `xs` also sets `text-xs` and `sm` sets `text-[0.8rem]`; touch targets follow section 6 | `apps/frontend/src/lib/components/ui/button/button.svelte` |
-| Card | `bg-card` `text-card-foreground` `ring-foreground` at 10% `ring-1` `rounded-xl` `py-4` `gap-4`; size `sm` uses `data-[size=sm]:py-3` `data-[size=sm]:gap-3` | `apps/frontend/src/lib/components/ui/card/card.svelte` |
+| Card | `bg-card` `text-card-foreground` `ring-foreground` at 10% `ring-1` `rounded-xl` `py-4` `gap-4`; size `sm` uses `data-[size=sm]:py-3` `data-[size=sm]:gap-3`; no bottom padding with a footer, no top padding under a leading image (card.svelte:18) | `apps/frontend/src/lib/components/ui/card/card.svelte` |
 | Card content | `px-4`; size `sm` uses `px-3` | `apps/frontend/src/lib/components/ui/card/card-content.svelte` |
 | Card footer | `bg-muted` at 50% `border-t` `p-4`; size `sm` uses `p-3` | `apps/frontend/src/lib/components/ui/card/card-footer.svelte` |
-| Input | `border-input` `bg-transparent` `dark:bg-input` at 30% `rounded-lg` `h-8` `px-2.5` `text-base` `md:text-sm`; placeholder `placeholder:text-muted-foreground`; error `aria-invalid:border-destructive`, dark `dark:aria-invalid:border-destructive` at 50% | `apps/frontend/src/lib/components/ui/input/input.svelte` |
-| Textarea | `border-input` `rounded-lg` `min-h-16` `px-2.5` `py-2` | `apps/frontend/src/lib/components/ui/textarea/textarea.svelte` |
-| Select trigger | `border-input` `bg-transparent` `rounded-lg` `text-sm` `data-[size=default]:h-8`; dark `dark:bg-input` at 30%; size `sm` uses `data-[size=sm]:h-7` and its own corner | `apps/frontend/src/lib/components/ui/select/select-trigger.svelte` |
+| Input | enabled default `bg-transparent`, dark `dark:bg-input` at 30%; disabled fill `disabled:bg-input` at 50%, dark `dark:disabled:bg-input` at 80%, plus `disabled:opacity-50` (input.svelte:28, 41). `border-input` `rounded-lg` `h-8` `px-2.5` `text-base`, `md:text-sm` from `md`; placeholder `placeholder:text-muted-foreground`; focus `focus-visible:border-ring` `focus-visible:ring-ring` at 50% `focus-visible:ring-3`; error `aria-invalid:border-destructive`, dark `dark:aria-invalid:border-destructive` at 50%, with `aria-invalid:ring-destructive` at 20%, dark `dark:aria-invalid:ring-destructive` at 40% (input.svelte:28, 41) | `apps/frontend/src/lib/components/ui/input/input.svelte` |
+| Textarea | `border-input` `rounded-lg` `min-h-16` `px-2.5` `py-2`; background, focus, error, disabled and text sizes are the Input values (textarea.svelte:18) | `apps/frontend/src/lib/components/ui/textarea/textarea.svelte` |
+| Select trigger | resting `bg-transparent`, dark resting `dark:bg-input` at 30%, dark hover `dark:hover:bg-input` at 50% (select-trigger.svelte:20); `border-input` `rounded-lg` `text-sm` `data-[size=default]:h-8`; size `sm` uses `data-[size=sm]:h-7` and its own corner; placeholder `data-placeholder:text-muted-foreground`; focus and error are the Input values; disabled `disabled:opacity-50` with no fill change (select-trigger.svelte:20) | `apps/frontend/src/lib/components/ui/select/select-trigger.svelte` |
 | Select popup | `bg-popover` `text-popover-foreground` `ring-foreground` at 10% `rounded-lg` `shadow-md` | `apps/frontend/src/lib/components/ui/select/select-content.svelte` |
-| Select option | `data-highlighted:bg-accent` `data-highlighted:text-accent-foreground` `rounded-md` `text-sm` | `apps/frontend/src/lib/components/ui/select/select-item.svelte` |
-| Switch, off | `background-color: var(--switch-off)`; thumb `background-color: var(--switch-off-foreground)` | `apps/frontend/src/app.css` |
-| Switch, on | `background-color: var(--primary)`; thumb `background-color: var(--primary-foreground)` | `apps/frontend/src/app.css` |
-| Checkbox, checked | `background-color: var(--primary)` `color: var(--primary-foreground)` | `apps/frontend/src/app.css` |
-| Toggle, pressed | `background-color: var(--foreground)` `color: var(--background)` | `apps/frontend/src/app.css` |
-| Labeled slider | track `bg-muted`, range `bg-primary`, thumb `border-ring` `bg-white` `size-3` | `apps/frontend/src/lib/components/custom/LabeledSlider.svelte` |
-| Progress | track `bg-muted` `h-1`, fill `bg-primary` | `apps/frontend/src/lib/components/ui/progress/progress.svelte` |
-| Dialog surface | `bg-popover` `text-popover-foreground` `ring-foreground` at 10% `rounded-xl` `ring-1`; square when AppDialog is fullscreen or the viewport is 500px tall or less | `apps/frontend/src/lib/components/ui/dialog/dialog-content.svelte` |
-| AppDialog | header `bg-card` `px-5` `py-4`, footer `bg-muted` at 40%, desktop `sm:max-w-lg`, phone sheet `rounded-t-2xl`, height `max-h-[85svh]`; fullscreen overrides with `max-h-none` `sm:max-w-none` `rounded-none` | `apps/frontend/src/lib/components/dialogs/AppDialog.svelte` |
+| Select option | `data-highlighted:bg-accent` `data-highlighted:text-accent-foreground` `rounded-md` `text-sm`; focus uses the same accent pair; disabled `data-[disabled]:opacity-50` (select-item.svelte:19) | `apps/frontend/src/lib/components/ui/select/select-item.svelte` |
+| Switch, off | `background-color: var(--switch-off)`; thumb `background-color: var(--switch-off-foreground)` (app.css:929-953); disabled halves opacity (switch.svelte:19) | `apps/frontend/src/app.css` |
+| Switch, on | `background-color: var(--primary)`; thumb `background-color: var(--primary-foreground)` (app.css:946-957); disabled halves opacity (switch.svelte:19) | `apps/frontend/src/app.css` |
+| Checkbox, checked or indeterminate | `background-color: var(--primary)` `color: var(--primary-foreground)` (app.css:964-969); unchecked has its own tint (app.css:959-962); disabled halves opacity (checkbox.svelte:19) | `apps/frontend/src/app.css` |
+| Toggle, pressed | `background-color: var(--foreground)` `color: var(--background)` in hover too (app.css:979-983); unpressed is transparent (app.css:971-974); disabled halves opacity (toggle.svelte:5) | `apps/frontend/src/app.css` |
+| Labeled slider | track `bg-muted`, range `bg-primary`, thumb `border-ring` `bg-white` `size-3`; hover, focus and active add `ring-3`; disabled halves opacity on the root and again on the thumb (LabeledSlider.svelte:61, 84) | `apps/frontend/src/lib/components/custom/LabeledSlider.svelte` |
+| Progress | track `bg-muted` `h-1`, fill `bg-primary`; the package update bar shows `--primary` stripes while indeterminate (app.css:742-748) | `apps/frontend/src/lib/components/ui/progress/progress.svelte` |
+| Dialog surface | `bg-popover` `text-popover-foreground` `ring-foreground` at 10% `rounded-xl` `ring-1` by default (dialog-content.svelte:30). Fullscreen AppDialog sets `rounded-none` and `ring-0` (AppDialog.svelte:184). At 500px tall or less the corner is 0 and the dialog spans the viewport height with no height cap (app.css:1114-1130) | `apps/frontend/src/lib/components/ui/dialog/dialog-content.svelte` |
+| AppDialog, default | header `bg-card` `px-5` `py-4` with `pe-14` for the close button (AppDialog.svelte:199), footer `bg-muted` at 40% with `px-5` `py-4` and an inline bottom inset (AppDialog.svelte:244-245), body `px-5` `py-4` (AppDialog.svelte:237), desktop `sm:max-w-lg` (AppDialog.svelte:283), phone sheet `rounded-t-2xl` (AppDialog.svelte:297), height `max-h-[85svh]` (AppDialog.svelte:180) | `apps/frontend/src/lib/components/dialogs/AppDialog.svelte` |
+| AppDialog, fullscreen | `inset-0` `max-h-none` `max-w-none` `sm:max-w-none` `rounded-none` `ring-0` (AppDialog.svelte:184), and the body drops its padding (AppDialog.svelte:237) | `apps/frontend/src/lib/components/dialogs/AppDialog.svelte` |
+| AppDialog, viewport 500px tall or less | dialog `max-height: none` and `border-radius: 0`, pinned top and bottom (app.css:1121-1130); sheet `max-height: 100svh` and `border-radius: 0` (app.css:1133-1136); header `padding-top: 0.625rem` `padding-bottom: 0.625rem` (app.css:1138-1141); footer `padding-top: 0.625rem` (app.css:1145-1147) | `apps/frontend/src/app.css` |
 | Popover | `bg-popover` `ring-foreground` at 10% `w-72` `rounded-lg` `p-2.5` `shadow-md` | `apps/frontend/src/lib/components/ui/popover/popover-content.svelte` |
 | Tooltip | `bg-foreground` `text-background` `rounded-md` `px-3` `py-1.5` `text-xs` | `apps/frontend/src/lib/components/ui/tooltip/tooltip-content.svelte` |
 | Tabs list | `default` `bg-muted` `rounded-lg` `p-[3px]`; `line` overrides with `bg-transparent` `data-[variant=line]:rounded-none` | `apps/frontend/src/lib/components/ui/tabs/tabs-list.svelte` |
-| Status badge | `rounded-md` `px-2` `py-0.5` `text-xs` with `bg-status-success` at 10% `text-status-success`, and the same pair for `warning`, `error`, `info` and `neutral`; size `micro` uses `text-micro` `px-1.5`; the `error` text takes the 84% mix in section 16 | `apps/frontend/src/lib/components/custom/Badge.svelte` |
-| Skeleton | `bg-muted` `animate-pulse` `rounded-md` | `apps/frontend/src/lib/components/ui/skeleton/skeleton.svelte` |
+| Status badge | `rounded-md` `px-2` `py-0.5` `text-xs` with `bg-status-success` at 10% `text-status-success`, and the same pair for `warning`, `error`, `info` and `neutral`; size `micro` uses `text-micro` `px-1.5`; the `error` text takes the 84% mix in section 16, or the 44% mix in a tooltip | `apps/frontend/src/lib/components/custom/Badge.svelte` |
+| Skeleton | `bg-muted` `animate-pulse` `rounded-md`; the pulse stops under reduced motion and e-ink (global rules above) | `apps/frontend/src/lib/components/ui/skeleton/skeleton.svelte` |
 | Toast, base and neutral types | `background: var(--popover)` `border-color: var(--border)` `box-shadow: var(--shadow-lg)` `border-radius: 0.625rem` | `apps/frontend/src/app.css` |
-| Toast, `success` and `warning` | their status color at 12% in `--popover`, border 42% in `--border` (lines 861 to 874) | `apps/frontend/src/app.css` |
-| Toast, `error` | `--status-error` at 14% in `--popover`, border 45% in `--border` (lines 881 to 884) | `apps/frontend/src/app.css` |
-| Link badge | `var(--link-${link.linkIndex + 1})`; row ordinal `text-xs font-bold tabular-nums` | `apps/frontend/src/lib/components/custom/LinkBadge.svelte` |
+| Toast, `success` and `warning` | their status color at 12% in `--popover`, border 42% in `--border` (app.css:878-891) | `apps/frontend/src/app.css` |
+| Toast, `error` | `--status-error` at 14% in `--popover`, border 45% in `--border` (app.css:898-901) | `apps/frontend/src/app.css` |
+| Link badge | `var(--link-${link.linkIndex + 1})`; row ordinal `text-xs font-bold tabular-nums`, compact ordinal `font-mono text-[0.7rem] leading-none` (LinkBadge.svelte:60-62) | `apps/frontend/src/lib/components/custom/LinkBadge.svelte` |
 | Network row | `px-4` `py-2`; IH-6 governs its order | `apps/frontend/src/main/network/NetworkRow.svelte` |
