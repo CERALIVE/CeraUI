@@ -19,6 +19,23 @@ describe("LiveHeader — demoted to title + live-state chip (T12)", () => {
 		).toBeNull();
 	});
 
+	it("keeps the subtitle for screen readers while phones show only chip + title", () => {
+		const { getByText } = render(LiveHeader, { props: { isStreaming: false } });
+		const subtitle = getByText(m["live.description"]());
+		expect(subtitle.classList.contains("sr-only")).toBe(true);
+		expect(subtitle.classList.contains("sm:not-sr-only")).toBe(true);
+	});
+
+	it("never lets the state chip wrap or shrink", () => {
+		for (const props of [{ isStreaming: false }, { isStreaming: true }]) {
+			const { container, unmount } = render(LiveHeader, { props });
+			const chip = container.querySelector("header > span");
+			expect(chip?.classList.contains("whitespace-nowrap")).toBe(true);
+			expect(chip?.classList.contains("shrink-0")).toBe(true);
+			unmount();
+		}
+	});
+
 	it("renders the active streaming chip when live", () => {
 		const { getByText } = render(LiveHeader, { props: { isStreaming: true } });
 		expect(getByText(m["live.streamingActive"]())).toBeTruthy();
