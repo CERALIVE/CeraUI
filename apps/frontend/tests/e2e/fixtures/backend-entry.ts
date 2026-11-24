@@ -36,6 +36,7 @@ process.on('message', (message: unknown) => {
 		id: message.id,
 		streaming: state.streaming.isActive,
 		composition: state.engineStart?.composition ?? null,
+		lastStartParams: state.lastStartParams,
 	});
 });
 const { getServer } = await import('../../../../backend/src/rpc/server.js');

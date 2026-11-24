@@ -203,15 +203,18 @@ that need a specific capability combination without switching the full scenario.
 ### Mock-engine audio controls [EXISTS]
 
 The mock engine answers `set-audio-mix` and `start` the way cerastream does, and
-tests can script it (`mocks/providers/streaming.ts`):
+backend tests script it in-process through `mocks/providers/streaming.ts`; no
+production route, contract or procedure changes:
 
-- `replyMockAudioMix(params)` is what a live `streaming.setAudioMix` reaches under
-  mocks. With a token armed by `refuseMockAudioMix(token)` it refuses with the
-  engine's params-invalid envelope before anything applies; otherwise it applies
-  on arrival (`setMockAudioMix`). While `holdMockAudioMixReplies(true)` holds
-  replies, each one waits until `releaseMockAudioMixReply(index)` (0 = oldest)
-  delivers it. Turning the hold off, `resetMockState()` and `initMockService()`
-  deliver every held reply in arrival order, so no call hangs.
+- `replyMockAudioMix(params)` answers like the engine's async reply. With a
+  token armed by `refuseMockAudioMix(token)` it refuses with the engine's
+  params-invalid envelope before anything applies; otherwise it applies on
+  arrival (`setMockAudioMix`). `refuseMockAudioMix` accepts only
+  `ENGINE_AUDIO_TOKENS`, the refusal tokens cerastream itself returns. While
+  `holdMockAudioMixReplies(true)` holds replies, each one waits until
+  `releaseMockAudioMixReply(index)` (0 = oldest) delivers it. Turning the hold
+  off, `resetMockState()` and `initMockService()` deliver every held reply in
+  arrival order, so no call hangs.
 - `getMockLastStartParams()` returns the params of the last `start` request the
   engine received, admitted or refused. A composition rebuild is not a start.
 - `setMockDeviceAttached("audio_<card>", attached)` unplugs or replugs an audio
@@ -223,13 +226,14 @@ tests can script it (`mocks/providers/streaming.ts`):
   `audio-idle-input-meters`; otherwise they carry no `inputs`, as the engine
   omits its empty list.
 
-E2E reaches the reply and start controls through the dev-only
-`streaming.mockEngineControl` RPC (`hold_audio_mix`, `release_audio_mix`,
-`refuse_audio_mix`, `last_start_params`) and the unplug through
-`streaming.setMockDeviceAttached`; both refuse outside mock mode.
+E2E holds and refuses replies with the page-socket interceptor
+`tests/e2e/audio-mixer.spec.ts` already uses, reads the last start request over
+the worker backend's private child channel (`workerBackend.mockEngine()`
+`.lastStartParams`, `tests/e2e/fixtures/backend-entry.ts`) and unplugs through
+the existing `streaming.setMockDeviceAttached`.
 `tests/mock-engine-fidelity.test.ts` parses every mock `set-audio-mix` result and
-`audio-level` frame with the installed producer schemas and checks every audio
-refusal token against cerastream's own list.
+`audio-level` frame with the installed producer schemas and asserts the exact
+cerastream token each audio refusal rule returns.
 
 ### Bluetooth dev seam (`mocks/providers/bluetooth.ts`)
 

@@ -1,10 +1,10 @@
 /*
  * The mock engine answers the way cerastream does. Every `set-audio-mix` result
  * and `audio-level` frame it produces parses with the producer schemas of the
- * installed `@ceralive/cerastream`, every audio-mix refusal carries one of the
- * engine's own tokens, and its test controls (held and refused replies, the last
- * start request, an audio device unplug and replug, idle per-input meters) keep
- * that contract.
+ * installed `@ceralive/cerastream`, every audio refusal carries the exact token
+ * cerastream returns for that rule, and its test controls (held and refused
+ * replies, the last start request, an audio device unplug and replug, idle
+ * per-input meters) keep that contract.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -18,8 +18,6 @@ import {
 	type StartParams,
 	setAudioMixResultSchema,
 } from "@ceralive/cerastream";
-import type { MockEngineControlInput } from "@ceraui/rpc/schemas";
-import { call } from "@orpc/server";
 import {
 	getMockState,
 	initMockService,
@@ -39,40 +37,92 @@ import {
 	getAudioDevices,
 	setMockAudioDevicesProvider,
 } from "../modules/streaming/audio.ts";
-import { audioInputEngineId } from "../modules/streaming/audio-inputs.ts";
-import {
-	clearCapabilitiesCache,
-	getCapabilities,
-} from "../modules/streaming/capabilities.ts";
-import {
-	refreshEngineDeviceCache,
-	resetEngineDeviceCache,
-} from "../modules/streaming/sources.ts";
-import { updateStatus } from "../modules/streaming/streaming.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
-import { setAudioMixProcedure } from "../rpc/procedures/audio-mix.procedure.ts";
-import { mockEngineControlProcedure } from "../rpc/procedures/streaming.procedure.ts";
 import type { AppWebSocket } from "../rpc/types.ts";
-import { makeRpcContext } from "./helpers/bond-toggle-fixture.ts";
 
-// Every audio token cerastream returns, at origin/main 2ad2349e:
+// The exact token cerastream returns for each rule, at origin/main 2ad2349e:
 // crates/cerastream/src/engine/audio_mix.rs (validate, start),
 // crates/cerastream/src/engine/audio_mix/live.rs (set-audio-mix) and
 // crates/cerastream/src/engine.rs (switch-audio while mixing).
-const ENGINE_AUDIO_TOKENS = [
-	"audio-mix-empty",
-	"audio-mix-too-many-inputs",
-	"audio-mix-with-device",
-	"audio-mix-with-mode-none",
-	"audio-mix-duplicate-input",
-	"audio-mix-embedded-without-network-source",
-	"audio-tracks-invalid",
-	"audio-gain-range",
-	"audio-delay-range",
-	"audio-tracks-gap",
-	"audio-mix-unsupported",
-	"audio-mix-inactive",
-	"audio-mix-active",
+const REFUSALS: Array<[string, engine.EngineAudioToken, () => unknown]> = [
+	["an empty mix", "audio-mix-empty", () => start({ inputs: [] })],
+	[
+		"five inputs",
+		"audio-mix-too-many-inputs",
+		() => start({ inputs: Array.from({ length: 5 }, (_, i) => input(`${i}`)) }),
+	],
+	[
+		"a mix beside a device",
+		"audio-mix-with-device",
+		() => start({ device: FIRST, inputs: [input()] }),
+	],
+	[
+		"a mix with mode none",
+		"audio-mix-with-mode-none",
+		() => start({ mode: "none", inputs: [input()] }),
+	],
+	[
+		"a duplicate input",
+		"audio-mix-duplicate-input",
+		() => start({ inputs: [input(), input()] }),
+	],
+	[
+		"embedded audio without a network source",
+		"audio-mix-embedded-without-network-source",
+		() => start({ inputs: [input("embedded")] }),
+	],
+	[
+		"an input without a track",
+		"audio-tracks-invalid",
+		() => start({ inputs: [input(FIRST, [])] }),
+	],
+	[
+		"a gain over the range",
+		"audio-gain-range",
+		() => start({ inputs: [{ ...input(), gain_db: 13 }] }),
+	],
+	[
+		"a delay over the range",
+		"audio-delay-range",
+		() => start({ inputs: [{ ...input(), delay_ms: 2001 }] }),
+	],
+	[
+		"a gap in the tracks",
+		"audio-tracks-gap",
+		() => start({ inputs: [input(), input(SECOND, [3])] }),
+	],
+	[
+		"a live change with no mix running",
+		"audio-mix-inactive",
+		() => {
+			engine.startMockStreaming(BASE);
+			engine.setMockAudioMix({ inputs: [] });
+		},
+	],
+	[
+		"a live gain under the range",
+		"audio-gain-range",
+		() => {
+			start({ inputs: [input()] });
+			engine.setMockAudioMix({ inputs: [{ input_id: FIRST, gain_db: -61 }] });
+		},
+	],
+	[
+		"switch-audio while mixing",
+		"audio-mix-active",
+		() => {
+			start({ inputs: [input()] });
+			engine.switchMockAudio(SECOND);
+		},
+	],
+	[
+		"a mix on an engine without audio_mix",
+		"audio-mix-unsupported",
+		() => {
+			initMockService("multi-modem-wifi");
+			start({ inputs: [input()] });
+		},
+	],
 ];
 const IDLE_INPUT_METERS = "audio-idle-input-meters";
 
@@ -156,67 +206,19 @@ afterEach(async () => {
 	else process.env.MOCK_MODE = savedMode;
 });
 
-describe("refusals carry the engine's own tokens", () => {
-	test.each([
-		["an empty mix", () => start({ inputs: [] })],
-		[
-			"five inputs",
-			() =>
-				start({ inputs: Array.from({ length: 5 }, (_, i) => input(`${i}`)) }),
-		],
-		[
-			"a mix beside a device",
-			() => start({ device: FIRST, inputs: [input()] }),
-		],
-		["a mix with mode none", () => start({ mode: "none", inputs: [input()] })],
-		["a duplicate input", () => start({ inputs: [input(), input()] })],
-		[
-			"embedded audio without a network source",
-			() => start({ inputs: [input("embedded")] }),
-		],
-		["an input without a track", () => start({ inputs: [input(FIRST, [])] })],
-		[
-			"a gain over the range",
-			() => start({ inputs: [{ ...input(), gain_db: 13 }] }),
-		],
-		[
-			"a delay over the range",
-			() => start({ inputs: [{ ...input(), delay_ms: 2001 }] }),
-		],
-		[
-			"a gap in the tracks",
-			() => start({ inputs: [input(), input(SECOND, [3])] }),
-		],
-		[
-			"a live change with no mix running",
-			() => {
-				engine.startMockStreaming(BASE);
-				engine.setMockAudioMix({ inputs: [] });
-			},
-		],
-		[
-			"a live gain under the range",
-			() => {
-				start({ inputs: [input()] });
-				engine.setMockAudioMix({ inputs: [{ input_id: FIRST, gain_db: -61 }] });
-			},
-		],
-		[
-			"switch-audio while mixing",
-			() => {
-				start({ inputs: [input()] });
-				engine.switchMockAudio(SECOND);
-			},
-		],
-		[
-			"a mix on an engine without audio_mix",
-			() => {
-				initMockService("multi-modem-wifi");
-				start({ inputs: [input()] });
-			},
-		],
-	] satisfies [string, () => unknown][])("%s", (_name, action) => {
-		expect(ENGINE_AUDIO_TOKENS).toContain(refusalToken(action));
+describe("each refusal carries the exact token cerastream returns for its rule", () => {
+	test.each(REFUSALS)("%s: %s", (_name, token, action) => {
+		expect(refusalToken(action)).toBe(token);
+	});
+
+	test("a test can inject exactly these tokens, and an invented one is refused", () => {
+		expect(new Set(engine.ENGINE_AUDIO_TOKENS)).toEqual(
+			new Set(REFUSALS.map(([, token]) => token)),
+		);
+		expect(() =>
+			engine.refuseMockAudioMix("audio-tracks-hole" as engine.EngineAudioToken),
+		).toThrow("not a cerastream audio refusal token: audio-tracks-hole");
+		expect(getMockState().audioMixRefusal).toBeNull();
 	});
 });
 
@@ -452,94 +454,5 @@ describe("the last start request", () => {
 
 		resetMockState();
 		expect(engine.getMockLastStartParams()).toBeNull();
-	});
-});
-
-describe("the e2e channel", () => {
-	const control = (input: MockEngineControlInput) =>
-		call(mockEngineControlProcedure, input, { context: makeRpcContext() });
-
-	test("streaming.mockEngineControl holds, releases and refuses replies and reads the last start", async () => {
-		start({ inputs: [input()] });
-		expect(await control({ op: "last_start_params" })).toEqual({
-			success: true,
-			start_params: { ...BASE, audio: { inputs: [input()] } },
-		});
-
-		expect(await control({ op: "hold_audio_mix", hold: true })).toEqual({
-			success: true,
-		});
-		const reply = engine.replyMockAudioMix({
-			inputs: [{ input_id: FIRST, mute: true }],
-		});
-		expect(await control({ op: "release_audio_mix" })).toEqual({
-			success: true,
-		});
-		expect((await reply).inputs[0]?.mute).toBe(true);
-		expect(await control({ op: "release_audio_mix", index: 0 })).toEqual({
-			success: false,
-			error: "no held set-audio-mix reply",
-		});
-
-		await control({ op: "hold_audio_mix", hold: false });
-		expect(
-			await control({ op: "refuse_audio_mix", token: "audio-delay-range" }),
-		).toEqual({ success: true });
-		expect(
-			await replyRefusalToken(
-				engine.replyMockAudioMix({
-					inputs: [{ input_id: FIRST, mute: false }],
-				}),
-			),
-		).toBe("audio-delay-range");
-	});
-
-	test("streaming.mockEngineControl refuses outside mock mode", async () => {
-		stopMockService();
-		expect(await control({ op: "last_start_params" })).toEqual({
-			success: false,
-			error: "Mock engine controls only available in development mode",
-		});
-	});
-
-	test("a live streaming.setAudioMix reaches the engine through those controls", async () => {
-		try {
-			setMockAudioDevicesProvider(engine.getMockAudioDevices);
-			// Boot seeds both caches: the value bounds read the capabilities and the
-			// card-to-engine-id join reads the devices.
-			await getCapabilities({
-				fetchEngineCapabilities: async () => engine.getMockEngineCapabilities(),
-				fetchEngineDevices: async () => engine.getMockEngineDevices(),
-			});
-			await refreshEngineDeviceCache({
-				fetchEngineDevices: async () => engine.getMockEngineDevices(),
-			});
-			Object.assign(getConfig(), { asrc: "RØDE AI-Micro", pipeline: "test" });
-			start({
-				inputs: [input(audioInputEngineId("RØDE AI-Micro", getConfig()))],
-			});
-			updateStatus(true);
-			engine.refuseMockAudioMix("audio-gain-range");
-
-			const result = await call(
-				setAudioMixProcedure,
-				{ id: "RØDE AI-Micro", mute: true },
-				{ context: makeRpcContext() },
-			);
-
-			expect(result).toMatchObject({
-				success: false,
-				error: "cerastream.params.invalid",
-				engine_error: {
-					code: -32602,
-					message:
-						"invalid params: audio-gain-range: invalid audio mix configuration",
-				},
-			});
-		} finally {
-			resetEngineDeviceCache();
-			clearCapabilitiesCache();
-			updateStatus(false);
-		}
 	});
 });

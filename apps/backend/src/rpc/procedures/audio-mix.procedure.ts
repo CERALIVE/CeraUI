@@ -6,7 +6,7 @@ import {
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
-import { replyMockAudioMix } from "../../mocks/providers/streaming.ts";
+import { setMockAudioMix } from "../../mocks/providers/streaming.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
 import {
 	changedAudioInputs,
@@ -85,7 +85,7 @@ export const setAudioMixProcedure = os
 			const params = { inputs: [{ input_id: running.input_id, ...update }] };
 			try {
 				const result = shouldUseMocks()
-					? await replyMockAudioMix(params)
+					? setMockAudioMix(params)
 					: await cerastreamBackend.setAudioMix(params);
 				const state = result.inputs.find(
 					(input) => input.input_id === running.input_id,

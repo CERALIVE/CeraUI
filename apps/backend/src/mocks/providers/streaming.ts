@@ -497,7 +497,7 @@ function scenarioAudioDevices(): MockAudioDevices {
  * uses — no second list-devices fetch). A detached id is filtered out of
  * getMockEngineDevices(), so a device the session already observed surfaces as a
  * `lost` row (todo 11) and the shared start/setConfig gate refuses it with
- * `source_lost` (todo 12 parity) — NO mock-specific gate. An audio card's id
+ * `source_lost` (todo 12 parity), with NO mock-specific gate. An audio card's id
  * (`audio_<card>`) also drops it from getMockAudioDevices(), so it leaves the
  * audio sources and the engine registry together. Cleared by
  * resetMockState() (detachedSources resets with the scenario). No-op unless the
@@ -822,7 +822,28 @@ function admitMockStart(params?: StartParams): void {
 	setStreamingState(true);
 }
 
-function mockAudioMixInvalid(token: string): CerastreamRpcError {
+// Every audio refusal token cerastream returns, at origin/main 2ad2349e:
+// crates/cerastream/src/engine/audio_mix.rs (validate, start),
+// crates/cerastream/src/engine/audio_mix/live.rs (set-audio-mix) and
+// crates/cerastream/src/engine.rs (switch-audio while mixing).
+export const ENGINE_AUDIO_TOKENS = [
+	"audio-mix-empty",
+	"audio-mix-too-many-inputs",
+	"audio-mix-with-device",
+	"audio-mix-with-mode-none",
+	"audio-mix-duplicate-input",
+	"audio-mix-embedded-without-network-source",
+	"audio-tracks-invalid",
+	"audio-gain-range",
+	"audio-delay-range",
+	"audio-tracks-gap",
+	"audio-mix-unsupported",
+	"audio-mix-inactive",
+	"audio-mix-active",
+] as const;
+export type EngineAudioToken = (typeof ENGINE_AUDIO_TOKENS)[number];
+
+function mockAudioMixInvalid(token: EngineAudioToken): CerastreamRpcError {
 	return new CerastreamRpcError(
 		-32602,
 		`invalid params: ${token}: invalid audio mix configuration`,
@@ -933,7 +954,7 @@ const heldAudioMixReplies: Array<() => void> = [];
 /**
  * `set-audio-mix` as the engine answers it: refused with the armed token before
  * anything applies, or applied on arrival, with the reply held while a test
- * holds replies. Reached only under mocks (audio-mix.procedure.ts).
+ * holds replies. Backend tests call it in-process; no production path does.
  */
 export async function replyMockAudioMix(
 	params: SetAudioMixParams,
@@ -972,7 +993,9 @@ export function releaseHeldMockAudioMixReplies(): void {
 }
 
 /** Test control: refuse every `set-audio-mix` with this engine token until cleared with null. */
-export function refuseMockAudioMix(token: string | null): void {
+export function refuseMockAudioMix(token: EngineAudioToken | null): void {
+	if (token !== null && !ENGINE_AUDIO_TOKENS.includes(token))
+		throw new Error(`not a cerastream audio refusal token: ${token}`);
 	updateMockState({ audioMixRefusal: token });
 }
 

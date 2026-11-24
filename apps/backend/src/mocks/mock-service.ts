@@ -75,7 +75,10 @@ import { MockAddonDescriptor, MockAddonState } from "./providers/addons.ts";
 import { resetMockBluetoothState } from "./providers/bluetooth.ts";
 import { resetMockKioskState } from "./providers/kiosk.ts";
 import { getMockRelaysCache } from "./providers/relays.ts";
-import { releaseHeldMockAudioMixReplies } from "./providers/streaming.ts";
+import {
+	type EngineAudioToken,
+	releaseHeldMockAudioMixReplies,
+} from "./providers/streaming.ts";
 import { resetMockWifiFaults } from "./providers/wifi.ts";
 import { resetMockWifiIncarnations } from "./providers/wifi-incarnation.ts";
 
@@ -164,7 +167,7 @@ export interface MockState {
 	// Test controls for `set-audio-mix`: hold every reply until released, and
 	// refuse it with this engine token. Reset with the scenario.
 	audioMixHold: boolean;
-	audioMixRefusal: string | null;
+	audioMixRefusal: EngineAudioToken | null;
 }
 
 const mockState: MockState = {

@@ -79,6 +79,8 @@ const STATE_ROOT = path.resolve(
 export interface MockEngineState {
 	readonly streaming: boolean;
 	readonly composition: Record<string, unknown> | null;
+	/** The params of the last `start` request the mock engine received, admitted or refused. */
+	readonly lastStartParams: Record<string, unknown> | null;
 }
 
 export interface WorkerBackend {
