@@ -424,6 +424,14 @@ export const runtimeConfigSchema = z.object({
 			z.object({ vid: z.string(), pin: z.literal(true).optional() }),
 		)
 		.optional(),
+	// Explicit USB OFF by port and vendor. The legacy exact bit stays on disk;
+	// `exact` says this choice owns that bit, even when another vendor arrives.
+	bond_port_out: z
+		.record(
+			z.string().min(1),
+			z.object({ vid: z.string().min(1), exact: z.literal(true).optional() }),
+		)
+		.optional(),
 	// SHA-256 of vendor:serial pairs observed on distinct USB parents.
 	usb_serial_shared: z
 		.array(z.string().regex(/^[0-9a-f]{64}$/))

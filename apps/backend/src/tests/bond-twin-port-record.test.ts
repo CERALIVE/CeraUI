@@ -3,7 +3,13 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { call } from "@orpc/server";
-import { getConfig, loadConfig, setConfigFilePath } from "../modules/config.ts";
+import { updateMockState } from "../mocks/mock-service.ts";
+import {
+	getConfig,
+	loadConfig,
+	saveConfig,
+	setConfigFilePath,
+} from "../modules/config.ts";
 import { mintLinkId } from "../modules/modems/physical-identity.ts";
 import { describeModemBondKeys } from "../modules/modems/physical-identity-source.ts";
 import {
@@ -16,6 +22,7 @@ import {
 	setBondDisableGuardContext,
 } from "../modules/network/network-interfaces.ts";
 import {
+	defaultRouterCellularScanDeps,
 	refreshUsbNetMarkers,
 	resetUsbNetMarkers,
 } from "../modules/network/router-cellular-scan.ts";
@@ -107,10 +114,11 @@ const included = (...names: string[]) =>
 	names.map((name) => !isBondOptedOut(name));
 const portId = (device: Device) => describeModemBondKeys(device.ifname).linkId;
 
-function addUplinks() {
+function addUplinks(other?: string) {
 	for (const [name, ip] of [
 		["eth0", "192.0.2.1"],
 		[second, "198.51.100.2"],
+		...(other === undefined ? [] : ([[other, "198.51.100.3"]] as const)),
 	] as const) {
 		getNetworkInterfaces()[name] = {
 			ip,
@@ -120,7 +128,7 @@ function addUplinks() {
 			tp: 0,
 			txb: 0,
 			rxb: 0,
-			...(name === second ? { usb: true, identitySettled: true } : {}),
+			...(name !== "eth0" ? { usb: true, identitySettled: true } : {}),
 		};
 	}
 }
@@ -203,7 +211,13 @@ test("R5b-S: a group-less ON follows the same-brand port into another pair", asy
 
 test("a same-brand replacement at an ON port inherits it, even from a confirmed pair", async () => {
 	await scan(at(a, g1), at(b, g1));
-	setPersistentBondOptOut(second, false);
+	addUplinks();
+	expect(
+		await onRealDevice(() => configure(second, "198.51.100.2", true)),
+	).toEqual({
+		success: true,
+		applied: { name: second, ip: "198.51.100.2", enabled: true },
+	});
 	await reload();
 	await readOnlyScan(at(a, g2), at(b, g2));
 	expect(included(first, second)).toEqual([false, true]);
@@ -290,13 +304,20 @@ test("a port ON does not transfer to a different brand's excluded pair", async (
 
 test.each([
 	["its own unique serial", "PORT-RECORD-HUAWEI-UNIQUE", true],
-	["no serial", "", false],
+	["no serial", "", true],
 ] as const)(
-	"a port OFF treats another brand with %s exactly as main does",
+	"a port OFF leaves another brand with %s IN",
 	async (_name, serial, expected) => {
 		await start({});
 		await scan(at(b, ""));
-		setPersistentBondOptOut(second, true);
+		addUplinks();
+		expect(
+			await onRealDevice(() => configure(second, "198.51.100.2", false)),
+		).toMatchObject({
+			success: true,
+			applied: { enabled: false },
+		});
+		const previousPort = portId(b);
 		await reload();
 		await readOnlyScan({
 			...at(b, serial),
@@ -304,9 +325,166 @@ test.each([
 			idProduct: "1506",
 		});
 		expect(included(second)).toEqual([expected]);
-		expect(
-			Object.keys(getConfig()).filter((key) => key.startsWith("bond_")),
-		).toEqual(["bond_opt_out"]);
+		expect(getConfig().bond_opt_out).toEqual({ [previousPort]: true });
+		await readOnlyScan(at(b, ""));
+		expect(included(second)).toEqual([false]);
+	},
+);
+
+test("an acknowledged ON carries over to a lone same-brand 0000 replacement", async () => {
+	await start(pairs(G1, PLACEHOLDER));
+	await scan(at(b, g1));
+	addUplinks();
+	expect(
+		await onRealDevice(() => configure(second, "198.51.100.2", true)),
+	).toMatchObject({
+		success: true,
+		applied: { enabled: true },
+	});
+	await reload();
+	await readOnlyScan(at(b, "0000"));
+	expect(included(second)).toEqual([true]);
+	expect(senders()).toContain(second);
+});
+
+test("an acknowledged unique-serial OFF survives restart with an unreadable serial", async () => {
+	await onRealDevice(async () => {
+		await start({});
+		await scan(at(b, "PORT-RECORD-UNIQUE"));
+		addUplinks();
+		expect(await configure(second, "198.51.100.2", false)).toMatchObject({
+			success: true,
+			applied: { enabled: false },
+		});
+		const serialKey = portId(b);
+		await reload();
+		clearBondNetworkFixture();
+		addUplinks();
+		await readOnlyScan(at(b, ""));
+		expect(included(second)).toEqual([false]);
+		expect(senders()).toEqual(["eth0"]);
+		expect(getConfig().bond_opt_out).toEqual({ [serialKey]: true });
+	});
+});
+
+test("persisting newly seen shared serial history does not restore stale bond preferences", async () => {
+	await start({ bond_opt_out: { [G1]: true } });
+	const newTwins = [at(a, "PORT-RECORD-NEW"), at(b, "PORT-RECORD-NEW")];
+	const replacement = { bond_opt_out: { [G2]: true }, max_br: 4321 };
+	await writeFile(file, JSON.stringify(replacement));
+	await refreshUsbNetMarkers([first, second], {
+		...defaultRouterCellularScanDeps,
+		...constructedTwinDeps(newTwins),
+	});
+	expect(await Bun.file(file).json()).toEqual({
+		...replacement,
+		usb_serial_shared: [digest("413c", "PORT-RECORD-NEW")],
+	});
+});
+
+test.each([
+	["mock", "production", "true", undefined, undefined, "real", false],
+	["overlay", "production", "true", undefined, undefined, "real", true],
+	["hwsim", "production", undefined, undefined, "/fixture", "real", false],
+	[
+		"emulated",
+		"production",
+		undefined,
+		undefined,
+		undefined,
+		"emulated",
+		false,
+	],
+	[
+		"scenario",
+		"production",
+		undefined,
+		"multi-modem-wifi",
+		undefined,
+		"real",
+		false,
+	],
+	["test", "test", undefined, undefined, undefined, "real", false],
+] as const)(
+	"serial-less non-twin OFF/ON restores the exact saved bytes in %s",
+	async (_mode, node, mock, scenario, hwsim, device, overlay) => {
+		const env = {
+			NODE_ENV: node,
+			MOCK_MODE: mock,
+			MOCK_SCENARIO: scenario,
+			HWSIM_REPO: hwsim,
+			CERALIVE_DEVICE_TYPE: device,
+		};
+		const before = Object.keys(env).map(
+			(key) => [key, process.env[key]] as const,
+		);
+		try {
+			for (const [key, value] of Object.entries(env)) {
+				if (value === undefined) delete process.env[key];
+				else process.env[key] = value;
+			}
+			updateMockState({ initialized: overlay, netifConfigs: new Map() });
+			await start({});
+			saveConfig();
+			const initial = await Bun.file(file).text();
+			await scan(at(b, ""));
+			addUplinks();
+			expect(await configure(second, "198.51.100.2", false)).toMatchObject({
+				success: true,
+				applied: { enabled: false },
+			});
+			expect(await configure(second, "198.51.100.2", true)).toMatchObject({
+				success: true,
+				applied: { enabled: true },
+			});
+			expect(await Bun.file(file).text()).toBe(initial);
+		} finally {
+			updateMockState({ initialized: false, netifConfigs: new Map() });
+			for (const [key, value] of before) {
+				if (value === undefined) delete process.env[key];
+				else process.env[key] = value;
+			}
+		}
+	},
+);
+
+test.each(["restored ON", "untouched exclusion"] as const)(
+	"the guard refuses to disable the Huawei alongside a twin with %s",
+	async (scenario) => {
+		const x = onPci(
+			{ ...b, ifname: "wwx0", idVendor: "12d1", idProduct: "1506" },
+			"4",
+			"PORT-RECORD-HUAWEI-UNIQUE",
+		);
+		await onRealDevice(async () => {
+			if (scenario === "restored ON") {
+				await scan(at(b, ""), x);
+				addUplinks(x.ifname);
+				expect(await configure(second, "198.51.100.2", true)).toMatchObject({
+					success: true,
+				});
+				await scan(at(b, g1), x);
+			} else {
+				await scan(at(b, g1));
+				addUplinks();
+				expect(await configure(second, "198.51.100.2", false)).toMatchObject({
+					success: true,
+				});
+				await reload();
+				clearBondNetworkFixture();
+				await scan(at(a, g1), x);
+				addUplinks(x.ifname);
+				delete getNetworkInterfaces()[second];
+			}
+			expect(await configure("eth0", "192.0.2.1", false)).toMatchObject({
+				success: true,
+			});
+			expect(await configure(x.ifname, "198.51.100.3", false)).toEqual({
+				success: false,
+				error: "disable_all_refused",
+			});
+			expect(senders()).toContain(x.ifname);
+		});
 	},
 );
 
@@ -333,7 +511,9 @@ test.each([
 		const twins = [onPci(a, "3", g1), onPci(b, "4", g1)] as const;
 		await scan(...(both ? twins : [twins[1]]));
 		addUplinks();
-		expect(await configure(second, "198.51.100.2", true)).toEqual({
+		expect(
+			await onRealDevice(() => configure(second, "198.51.100.2", true)),
+		).toEqual({
 			success: true,
 			applied: { name: second, ip: "198.51.100.2", enabled: true },
 		});

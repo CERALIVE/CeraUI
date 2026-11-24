@@ -29,6 +29,7 @@ import {
 } from "../helpers/config-schemas.ts";
 import { logger } from "../helpers/logger.ts";
 import {
+	parseRuntimeConfigAuthority,
 	RuntimeConfigAuthorityError,
 	readRuntimeConfigAuthority,
 } from "../helpers/runtime-config-authority.ts";
@@ -36,6 +37,11 @@ import { MOCK_CONFIG_PAIRING_DEFAULTS } from "../mocks/mock-config.ts";
 import { shouldUseMocks } from "../mocks/mock-service.ts";
 import { getPasswordHash, setPasswordHash } from "../rpc/state/password.ts";
 import { getSshPasswordHash, setSshPasswordHash } from "./system/ssh.ts";
+import {
+	readStoredStateFileSync,
+	STORED_STATE_LIMITS,
+} from "./system/update-orchestrator/stored-state-file.ts";
+import { parseAuthorityJson } from "./system/update-orchestrator/strict-authority-json.ts";
 
 /**
  * Where the runtime config persists.
@@ -116,6 +122,25 @@ export function saveConfig() {
 	// finishing before return. Atomic (temp+fsync+rename) so a crash mid-write
 	// can't corrupt config.json — add-on state lives here too (E3).
 	writeFileAtomicSync(configFile, JSON.stringify(dataToSave));
+}
+
+export function saveUsbSharedSerialHistory(hashes: string[]): void {
+	if (authorityFailure) throw authorityFailure;
+	const stored = readStoredStateFileSync(
+		configFile,
+		STORED_STATE_LIMITS.packages,
+	);
+	const raw = parseRuntimeConfigAuthority(
+		stored === null ? {} : parseAuthorityJson(stored),
+	);
+	if (raw === null || typeof raw !== "object" || Array.isArray(raw))
+		throw new RuntimeConfigAuthorityError();
+	// Discovery owns only its history. Never write the loaded preference snapshot.
+	writeFileAtomicSync(
+		configFile,
+		JSON.stringify({ ...raw, usb_serial_shared: hashes }),
+	);
+	config.usb_serial_shared = hashes;
 }
 
 /** False until a strict load has succeeded; the boot owner retries until it does. */

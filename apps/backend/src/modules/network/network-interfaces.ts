@@ -69,6 +69,7 @@ import {
 import { scheduleWifiUpdate } from "../wifi/wifi-interfaces.ts";
 import {
 	bondPhysicalId,
+	hasBondPreferenceOverlay,
 	isBondOptedOut,
 	previewBondOptOut,
 	resetPersistentBondOptOutForTest,
@@ -314,7 +315,10 @@ export function resetBondOptOutSession(): void {
 }
 
 export function setBondOptOut(ifname: string, optOut: boolean): void {
-	setPersistentBondOptOut(ifname, optOut);
+	const simulated =
+		bondDisableSimulationSelected() ||
+		process.env.CERALIVE_DEVICE_TYPE === "emulated";
+	setPersistentBondOptOut(ifname, optOut, simulated ? "legacy" : "effective");
 }
 
 export function isDupIpOnly(int: NetworkInterface): boolean {
@@ -1821,9 +1825,11 @@ function wouldRemoveLastBondCandidate(target: string): boolean {
 		if (!identities.has(name)) identities.set(name, peekBondKeys(name));
 		return identities.get(name);
 	};
-	const optedOut = previewBondOptOut(target, keys(target));
-	let earliestBefore = Infinity;
-	let earliestAfter = Infinity;
+	const targetKeys = keys(target);
+	const effective = previewBondOptOut(target, targetKeys);
+	const legacy = hasBondPreferenceOverlay()
+		? previewBondOptOut(target, targetKeys, "legacy")
+		: undefined;
 	const projection = {
 		deadlineElapsed: () => true,
 		mappable: (iface: string, ip: string) => {
@@ -1831,27 +1837,36 @@ function wouldRemoveLastBondCandidate(target: string): boolean {
 			return linkId !== undefined && isMappableEntry({ iface, ip, linkId });
 		},
 	};
-	const before = {
-		...projection,
-		optedOut: (name: string) => optedOut(name, keys(name), "before"),
-	};
-	const after = {
-		...projection,
-		optedOut: (name: string) => optedOut(name, keys(name), "after"),
-	};
-	for (const [name, int] of Object.entries(netif)) {
-		const readyAt = bondIdentityPending(name, int, () => false)
+	const readiness = Object.entries(netif).map(([name, int]) => ({
+		name,
+		int,
+		readyAt: bondIdentityPending(name, int, () => false)
 			? (getIdentityDeadlineAt(name) ?? Infinity)
-			: -Infinity;
-		if (readyAt < earliestAfter && admitsBondLink(name, int, after))
-			earliestAfter = readyAt;
-		if (readyAt < earliestBefore && admitsBondLink(name, int, before))
-			earliestBefore = readyAt;
-	}
+			: -Infinity,
+	}));
+	const earliest = (optedOut: typeof effective, phase: "before" | "after") => {
+		const view = {
+			...projection,
+			optedOut: (name: string) => optedOut(name, keys(name), phase),
+		};
+		let at = Infinity;
+		for (const { name, int, readyAt } of readiness) {
+			if (readyAt < at && admitsBondLink(name, int, view)) at = readyAt;
+		}
+		return at;
+	};
+	const before = earliest(effective, "before");
+	const after = earliest(effective, "after");
+	const legacyBefore =
+		legacy === undefined ? Infinity : earliest(legacy, "before");
+	const legacyAfter =
+		legacy === undefined ? Infinity : earliest(legacy, "after");
 	// Judge both views at one request-time instant, after preparing their
 	// readiness thresholds. A later sender refresh can see a peer become ready.
 	const now = getms();
-	return earliestBefore <= now && now < earliestAfter;
+	return (
+		(before <= now && now < after) || (legacyBefore <= now && now < legacyAfter)
+	);
 }
 
 /**

@@ -956,34 +956,35 @@ Remove any sysfs serial bind mount before upgrading.
 
 An operator ON for a twin whose serial is unreadable used to be reversed
 silently once the serial returned and the scan showed the excluded pair key.
-The choice is now kept beside `bond_opt_out`, and only an operator toggle writes
-any of the three fields. Scans, reconciliation, restarts and reloads never
-write them. `modules/network/bond-preference.ts` owns the writer and the one
-reader used by `isBondOptedOut` and both phases of the last-uplink preview.
+The choice is now kept beside `bond_opt_out`. Only an operator toggle changes
+bond preferences. Discovery saves shared-serial history from the current disk
+config, not from a potentially stale in-memory preference snapshot.
 
 | Field | Key | Meaning |
 |---|---|---|
 | `bond_opt_out` | exact or pair link id | Written by main's unchanged transition, so v2026.11.4 reads the bytes it would have written itself for the same successful saves |
 | `bond_group_out` | pair link id | A pair default that transition deleted; it still excludes an untouched twin. Under config authority, like `bond_opt_out` |
 | `bond_opt_in` | id-path link id | `{ vid, pin? }`: the operator's ON for a port-anchored USB modem. `pin` marks an exact bit main's transition derived for that port while it held the ON |
+| `bond_port_out` | id-path link id | `{ vid, exact? }`: an explicit OFF follows the same vendor at this port when the serial is unreadable. `exact` identifies the retained legacy bit as owned by that choice. |
 
 The reader answers, first match wins:
 
 1. A session OFF excludes; an `ifname`-anchored row is included.
-2. An exact `bond_opt_out` bit excludes, unless it is a `pin` and the port's ON
-   applies.
-3. The port's ON applies when the row is port-anchored, its USB vendor id
-   equals the record's, and its pair key is twin evidence or absent. Twin
-   evidence is a confirmed shared serial, or another present port of the same
-   vendor showing the same placeholder (such as `0000`).
+2. For a port-anchored row, a matching vendor's explicit port OFF excludes.
+   A legacy exact bit also excludes unless a matching ON supersedes that bit
+   or the bit belongs to another vendor's recorded port OFF.
+3. A matching vendor's port ON takes precedence over pair exclusions, even
+   when a lone replacement reports `0000`.
 4. Otherwise the pair key excludes when it is in `bond_opt_out`, or in
-   `bond_group_out` with twin evidence. A lone placeholder reads exactly as on
-   main.
+   `bond_group_out` with corroboration: a confirmed shared serial, or another
+   port of the same vendor reporting the same placeholder.
 
-An OFF deletes the port's record. An OFF on a readable unique serial also
-deletes the record at that modem's port, and a serial ON deletes its own key
-from `bond_group_out`. The #697 guard code is unchanged: its preview runs this
-transition and reader.
+A readable unique-serial OFF keeps the legacy exact bit and replaces its
+same-port ON with a vendor-scoped OFF. The #697 last-uplink rule still vetoes an
+OFF that removes the last effective sender. When saved port or pair choices
+are present, it also preserves a veto from the legacy view, so corrected
+membership cannot authorize an OFF that main would refuse. Simulated configure calls
+write the legacy projection only.
 
 Signed trade-offs:
 
@@ -994,15 +995,17 @@ Signed trade-offs:
 - Rollback is byte parity of `bond_opt_out` for the same successful saves, not
   membership parity. v2026.11.4 can admit an extra sibling, and can drop an ON
   made while the serial was unreadable. Its clean save strips the new fields.
+- R-c: with pairs G and H excluded, turn B ON while G's shared serial is
+  readable, then replace G with same-vendor H on the same paths. The current
+  release keeps B IN; v2026.11.4 puts B OUT.
+- R-d: after turning lone B OFF and restarting with untouched twin A and a
+  Huawei, disabling Ethernet leaves only the Huawei eligible. #697 refuses
+  the Huawei OFF; main accepts because it counts A.
 - A readable unique-serial OFF beats a port ON and clears that port's record.
 - Modems reporting the same placeholder, including unrelated ones, are treated
   as possible twins, and their choice sticks to the port.
 - An OFF on a held alias whose twins are not present still drops the pair
   default, as before (`unseen-legacy` in `tests/bond-last-uplink-veto.test.ts`).
-- A non-twin's `bond_opt_out` bytes, membership, guard verdicts and answers are
-  main's. An ON for a port-anchored modem still adds a `bond_opt_in` record,
-  because at that moment it cannot be told apart from a twin whose serial is
-  unreadable.
 
 Coverage: `tests/bond-twin-port-record.test.ts`, through the real scan, the
 configure RPC and the sender candidates.
