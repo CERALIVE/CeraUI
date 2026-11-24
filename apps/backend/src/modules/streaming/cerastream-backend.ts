@@ -67,6 +67,7 @@
 import { existsSync } from "node:fs";
 import {
 	type AudioInputConfig,
+	type CancelStart,
 	CERASTREAM_BIN,
 	type CerastreamClient,
 	CerastreamConnectionError,
@@ -143,6 +144,12 @@ import {
 } from "./capture-degraded.ts";
 import type { ResolvedCerastreamError } from "./cerastream-error-mapping.ts";
 import { resolveCerastreamError } from "./cerastream-error-mapping.ts";
+import {
+	cancelScopedStart,
+	scopedStartRefused,
+	startRefusedBeforeAdmission,
+	supportsScopedStart,
+} from "./cerastream-start-attempt.ts";
 import { SRTLA_LISTEN_PORT } from "./constants.ts";
 import { deviceRegistry } from "./devices.ts";
 import { isEmbeddedAudioPipeline } from "./embedded-audio.ts";
@@ -168,6 +175,7 @@ import {
 import {
 	assertStreamLaunchOwnership,
 	currentStreamLaunchOwner,
+	registerLaunchRollback,
 } from "./stream-launch-ownership.ts";
 import type {
 	BackendErrorListener,
@@ -665,18 +673,6 @@ function isZodLikeError(err: unknown): boolean {
 	);
 }
 
-/**
- * The engine refused a Start because a session is already running. The
- * refusal opened nothing, and the running session may belong to another
- * client, so nothing about it is ours to roll back.
- */
-export function startRefusedAsAlreadyStreaming(error: unknown): boolean {
-	if (!(error instanceof CerastreamRpcError)) return false;
-	return error.dataCode === undefined
-		? error.code === -32002
-		: error.dataCode === "cerastream.state.already_streaming";
-}
-
 export function classifyConnectHandshakePhase(
 	error: unknown,
 ): "connect" | "hello" {
@@ -802,7 +798,11 @@ export class CerastreamBackend implements StreamingBackend {
 		this.clearRecoveredEngineError();
 		const ownsLaunch = currentStreamLaunchOwner();
 		let dispatched = false;
-		let refusedAsAlreadyStreaming = false;
+		let refusedBeforeAdmission = false;
+		let scoped = false;
+		let negotiatingCapabilities = false;
+		let attempt: CancelStart | undefined;
+		let startConfirmed = false;
 		let confirmedIdle = false;
 		let acquiredClient: CerastreamClient | undefined;
 		let acquiredSubscription: Subscription | undefined;
@@ -826,7 +826,11 @@ export class CerastreamBackend implements StreamingBackend {
 				beginCapabilitiesEpoch();
 				const client = await launchTransaction.acquirePhase(
 					"connect",
-					() => this.deps.connect(this.deps.connectOptions),
+					() =>
+						this.deps.connect({
+							...this.deps.connectOptions,
+							autoReconnect: false,
+						}),
 					(client) => client.close(),
 					classifyConnectHandshakePhase,
 				);
@@ -838,6 +842,13 @@ export class CerastreamBackend implements StreamingBackend {
 				this.runtimeEvidence = undefined;
 				this.telemetry = {};
 				this.lastPolicyReloadRequested = undefined;
+				// A negotiation failure gives us no evidence about device liveness.
+				negotiatingCapabilities = true;
+				scoped = await launchTransaction.runPhase("start-rpc", () =>
+					supportsScopedStart(client),
+				);
+				negotiatingCapabilities = false;
+				assertStreamLaunchOwnership();
 				const subscription = await launchTransaction.acquirePhase(
 					"subscribe",
 					() =>
@@ -845,7 +856,12 @@ export class CerastreamBackend implements StreamingBackend {
 							if (
 								this.client !== client ||
 								this.clientEpoch !== clientEpoch ||
-								!ownsLaunch()
+								!ownsLaunch() ||
+								(scoped &&
+									!startConfirmed &&
+									event.type === "status" &&
+									(attempt === undefined ||
+										event.attempt_id !== attempt.attempt_id))
 							)
 								return;
 							this.handleEvent(
@@ -869,9 +885,21 @@ export class CerastreamBackend implements StreamingBackend {
 				assertStreamLaunchOwnership();
 				this.subscription = subscription;
 				launchTransaction.register(async () => {
-					// A refused Start opened nothing; a Stop here would end the
-					// session that caused the refusal, which may not be ours.
-					if (!dispatched || refusedAsAlreadyStreaming) return;
+					if (refusedBeforeAdmission) return;
+					if (scoped) {
+						if (attempt !== undefined)
+							await cancelScopedStart(
+								() =>
+									this.deps.connect({
+										...this.deps.connectOptions,
+										autoReconnect: false,
+										requestTimeoutMs: ENGINE_STATE_RECONCILE_TIMEOUT,
+									}),
+								attempt,
+							);
+						return;
+					}
+					if (!dispatched) return;
 					try {
 						const reply = await client.stop();
 						confirmedIdle = reply.state === "idle";
@@ -884,19 +912,43 @@ export class CerastreamBackend implements StreamingBackend {
 						);
 					}
 				});
-				const result = await launchTransaction.runPhase("start-rpc", () => {
-					assertStreamLaunchOwnership();
-					dispatched = true;
-					return this.dispatchStart(client, params).catch((error: unknown) => {
-						if (startRefusedAsAlreadyStreaming(error))
-							refusedAsAlreadyStreaming = true;
-						throw error;
-					});
-				});
+				const result = await launchTransaction.runPhase(
+					"start-rpc",
+					async () => {
+						assertStreamLaunchOwnership();
+						if (scoped) {
+							attempt = await client.prepareStart();
+							assertStreamLaunchOwnership();
+							dispatched = true;
+							return client.start({
+								...params,
+								attempt_id: attempt.attempt_id,
+							});
+						}
+						dispatched = true;
+						registerLaunchRollback({ kind: "legacy-dispatched" });
+						return this.dispatchStart(client, params);
+					},
+					(error) => {
+						// runPhase only classifies the error that wins the phase deadline.
+						refusedBeforeAdmission =
+							startRefusedBeforeAdmission(
+								error,
+								params,
+								client.hello.schema_version,
+							) ||
+							(scoped && scopedStartRefused(error));
+						return "start-rpc";
+					},
+				);
 				await launchTransaction.runPhase("playing-wait", async () => {
 					const parsed = startResultSchema.parse(result);
 					if (parsed.state !== "streaming") await streamingStatus;
 				});
+				if (scoped) {
+					assertStreamLaunchOwnership();
+					startConfirmed = true;
+				}
 				// Subscription replay predates this Start acknowledgement.
 				if (this.client === client && this.clientEpoch === clientEpoch) {
 					this.audioMixInputs = audioMixInputs;
@@ -921,7 +973,10 @@ export class CerastreamBackend implements StreamingBackend {
 						);
 			throw new StreamStartFailure(
 				failure,
-				!dispatched || confirmedIdle ? "idle" : "unknown",
+				negotiatingCapabilities || scoped || (dispatched && !confirmedIdle)
+					? "unknown"
+					: "idle",
+				negotiatingCapabilities || scoped || refusedBeforeAdmission,
 			);
 		}
 	}
@@ -1156,79 +1211,69 @@ export class CerastreamBackend implements StreamingBackend {
 		const observationOwner = currentRuntimeObservationOwner();
 		const uncertainStatus = currentRuntimeObservationUncertainty();
 		const ownsQuery = () =>
-			observationOwner() && this.probeEpoch === probeEpoch;
+			observationOwner() &&
+			this.probeEpoch === probeEpoch &&
+			this.clientEpoch === clientEpoch;
 		try {
 			client = await this.deps.connect({
 				...this.deps.connectOptions,
 				autoReconnect: false,
 				requestTimeoutMs: ENGINE_STATE_RECONCILE_TIMEOUT,
 			});
-			if (!ownsQuery() || this.clientEpoch !== clientEpoch) {
+			if (!ownsQuery()) {
 				await client.close();
 				return "unknown";
 			}
-			let resolveRuntimeState:
-				| ((runtimeState: EngineRuntimeState) => void)
-				| undefined;
-			const runtimeStateEvent = new Promise<EngineRuntimeState>((resolve) => {
-				resolveRuntimeState = resolve;
-			});
+			let latestStatus: Extract<EventParams, { type: "status" }> | undefined;
+			const observed = Promise.withResolvers<void>();
 			subscription = await client.subscribeEvents(
 				{ topics: ["status"] },
 				(event) => {
-					if (
-						adopted
-							? !ownsSession()
-							: !acceptingEvents ||
-								!ownsQuery() ||
-								this.clientEpoch !== clientEpoch
-					)
+					if (adopted) {
+						if (ownsSession()) this.handleEvent(event, ownsSession);
 						return;
-					this.handleEvent(event, () =>
-						adopted
-							? ownsSession()
-							: acceptingEvents &&
-								ownsQuery() &&
-								this.clientEpoch === clientEpoch,
-					);
-					if (event.type === "status") {
-						if (
-							classifyRuntimeState(event.state, event.streaming) === "unknown"
-						)
-							uncertainStatus();
-						resolveRuntimeState?.(
-							classifyRuntimeState(event.state, event.streaming),
-						);
 					}
+					if (!acceptingEvents || !ownsQuery() || event.type !== "status")
+						return;
+					// A socket read can deliver several frames before the waiter resumes.
+					// The temporary subscription observes; only settlement can publish.
+					latestStatus = event;
+					observed.resolve();
 				},
 			);
-			if (!ownsQuery() || this.clientEpoch !== clientEpoch) {
+			if (!ownsQuery()) {
 				subscription.close();
 				await client.close();
 				return "unknown";
 			}
-			timer = this.deps.scheduleTimeout(
-				() => resolveRuntimeState?.("unknown"),
-				ENGINE_STATE_RECONCILE_TIMEOUT,
-			);
-			const runtimeState = await runtimeStateEvent;
+			timer = this.deps.scheduleTimeout(() => {
+				acceptingEvents = false;
+				observed.resolve();
+			}, ENGINE_STATE_RECONCILE_TIMEOUT);
+			await observed.promise;
 			acceptingEvents = false;
-			if (
-				ownsQuery() &&
-				this.clientEpoch === clientEpoch &&
-				runtimeState === "streaming"
-			) {
+			const status = latestStatus;
+			const runtimeState =
+				status === undefined
+					? "unknown"
+					: classifyRuntimeState(status.state, status.streaming);
+			if (ownsQuery() && status !== undefined && runtimeState === "unknown")
+				uncertainStatus();
+			if (ownsQuery() && status !== undefined && runtimeState === "streaming") {
 				beginCapabilitiesEpoch();
 				this.client = client;
 				adoptedEpoch = ++this.clientEpoch;
 				this.subscription = subscription;
 				this.active = true;
 				adopted = true;
+				this.handleEvent(status, ownsSession);
 				return runtimeState;
 			}
 			subscription?.close();
 			await client.close();
-			return ownsQuery() ? runtimeState : "unknown";
+			if (!ownsQuery()) return "unknown";
+			if (runtimeState === "idle") this.clearSessionScopedTelemetry();
+			return runtimeState;
 		} catch (error) {
 			acceptingEvents = false;
 			subscription?.close();

@@ -86,6 +86,11 @@ describe("eventCopy: a detail sentence for every code", () => {
 		],
 		[
 			"stream_start_failed",
+			{ class: "attempt_capacity", ...ATTEMPT },
+			en.notifications.streamStartAttemptCapacity,
+		],
+		[
+			"stream_start_failed",
 			{
 				class: "capture_source_unavailable",
 				...ATTEMPT,

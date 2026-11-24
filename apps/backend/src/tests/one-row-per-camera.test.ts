@@ -580,6 +580,7 @@ const silentLogger: CerastreamBackendDeps["logger"] = {
 function makeFakeClient() {
 	return {
 		hello: { schema_version: SCHEMA_VERSION },
+		getCapabilities: async () => CAPS,
 		start: async () => ({ session_id: "s1", state: "streaming" }),
 		stop: async () => ({ state: "idle" }),
 		subscribeEvents: async () => ({

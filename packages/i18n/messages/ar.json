@@ -990,6 +990,7 @@
 	"live.startFailure.class.capture_source_unavailable.negotiation_failed": "تنسيق إشارة مدخل الفيديو ليس من التنسيقات التي يمكن لهذا الجهاز التقاطها. اضبط خرج HDMI في الكاميرا على تنسيق مدعوم ثم ابدأ من جديد.",
 	"live.startFailure.class.capture_source_unavailable.no_signal": "لا توجد إشارة على مدخل الفيديو. تأكد من تشغيل الكاميرا وتوصيل الكابل ثم ابدأ من جديد.",
 	"live.startFailure.class.engine_internal": "واجه محرك البث خطأً داخليًا.",
+	"notifications.streamStartAttemptCapacity": "محاولات كثيرة معلّقة لبدء البث.",
 	"live.startFailure.class.engine_restarting": "يُعاد تشغيل محرك البث.",
 	"live.startFailure.class.engine_unavailable": "محرك البث غير متاح.",
 	"live.startFailure.class.modem_transition_active": "يقوم أحد المودمات بتبديل وضع USB، لذا سيتغيّر اتصاله بعد قليل. انتظر انتهاء التبديل ثم ابدأ من جديد.",

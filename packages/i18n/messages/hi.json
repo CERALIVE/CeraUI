@@ -962,6 +962,7 @@
 	"live.startFailure.class.capture_source_unavailable.negotiation_failed": "वीडियो इनपुट का सिग्नल फ़ॉर्मैट ऐसा है जिसे यह डिवाइस कैप्चर नहीं कर सकता। कैमरे के HDMI आउटपुट को समर्थित फ़ॉर्मैट पर सेट करें और फिर से शुरू करें।",
 	"live.startFailure.class.capture_source_unavailable.no_signal": "वीडियो इनपुट पर कोई सिग्नल नहीं है। जाँचें कि कैमरा चालू है और केबल जुड़ा है, फिर से शुरू करें।",
 	"live.startFailure.class.engine_internal": "स्ट्रीमिंग इंजन में आंतरिक त्रुटि हुई।",
+	"notifications.streamStartAttemptCapacity": "स्ट्रीम शुरू करने के बहुत से अनुरोध लंबित हैं।",
 	"live.startFailure.class.engine_restarting": "स्ट्रीमिंग इंजन पुनः आरंभ हो रहा है।",
 	"live.startFailure.class.engine_unavailable": "स्ट्रीमिंग इंजन उपलब्ध नहीं है।",
 	"live.startFailure.class.modem_transition_active": "एक मॉडेम USB मोड बदल रहा है, इसलिए उसका लिंक बदलने वाला है। स्विच पूरा होने तक रुकें, फिर दोबारा शुरू करें।",

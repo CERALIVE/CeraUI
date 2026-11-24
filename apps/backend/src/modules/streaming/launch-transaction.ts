@@ -7,6 +7,7 @@ import {
 	START_PHASE_DEADLINES_MS,
 	type StartDeadlinePhase,
 } from "./start-lifecycle-timing.ts";
+import { registerLaunchRollback } from "./stream-launch-ownership.ts";
 
 type LaunchTimer = ReturnType<typeof globalThis.setTimeout> | number;
 
@@ -99,7 +100,7 @@ export function createLaunchTransaction(
 		}
 	};
 
-	return {
+	const transaction: LaunchTransaction = {
 		register,
 		acquirePhase: (phase, operation, cleanup, errorPhase) =>
 			runPhase(
@@ -122,4 +123,6 @@ export function createLaunchTransaction(
 			return rollbackPromise;
 		},
 	};
+	registerLaunchRollback({ kind: "transaction", run: transaction.rollback });
+	return transaction;
 }

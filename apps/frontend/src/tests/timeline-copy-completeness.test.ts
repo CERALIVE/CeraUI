@@ -101,7 +101,11 @@ function variantKeys(): string[] {
 	const keys: string[] = [];
 	for (const [code, param] of Object.entries(ENUM_VARIANT_PARAMS)) {
 		for (const value of enumValues(code as keyof typeof EVENT_REGISTRY, param))
-			keys.push(`timeline.${code}.detail.${value}`);
+			keys.push(
+				code === "stream_start_failed" && value === "attempt_capacity"
+					? "notifications.streamStartAttemptCapacity"
+					: `timeline.${code}.detail.${value}`,
+			);
 	}
 	for (const [code, variants] of Object.entries(FIXED_VARIANTS)) {
 		for (const value of variants) keys.push(`timeline.${code}.detail.${value}`);

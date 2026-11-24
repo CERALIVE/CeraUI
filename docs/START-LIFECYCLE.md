@@ -204,8 +204,15 @@ An explicit operator Stop may additionally send a fresh Stop to confirm an unown
 engine; automatic reconciliation cannot use that effectful path. A positive idle
 event may settle an otherwise unowned running
 session, but never runs through outstanding launch/cleanup ownership.
-No new producer or wire field is needed. Launch config and resource-invariant
-reporting have small, separately routed streamloop modules.
+Only an advertised `attempt-scoped-start` on the launch socket enables
+`prepare-start` and `start.attempt_id`. The outer launch deadline and phase
+rollback share one transaction. If its scoped Start might have taken effect,
+rollback sends `cancel-start` for that ID on a separate handshaked socket.
+Neither the cancellation receipt nor an ownership refusal replaces a fresh
+liveness observation. A known pre-scoped schema or a successful capability
+reply without the token retains unscoped Start. Failed negotiation refuses
+Start. Before dispatch, deadline cleanup is launch-local; only dispatched
+unscoped Start can authorize legacy deadline Stop.
 
 Stop reserves one flight **synchronously, before any await**. Duplicate Stops join
 its answer; a configuration/capture-parked Stop joins the existing parked answer.
@@ -237,16 +244,29 @@ Start whose rollback Stop is not acknowledged stays UNKNOWN; retries and replace
 Starts are refused. Acquisition continuations recheck ownership after connect and
 subscribe, before assigning resources and immediately before dispatching Start.
 
-One refusal is exempt from the rollback Stop. A Start the engine refuses as
-`cerastream.state.already_streaming` (or `-32002` without a `data.code`) opened
-nothing, and the engine's Stop takes no session, so a rollback Stop would end
-whichever session caused the refusal, possibly another client's. That refusal
-sends no rollback Stop and keeps unknown liveness, so the lifecycle reconciles
-and the operator's Stop decides. The trade-off: a leftover session of our own
-also stays up until that Stop instead of being cleared by the rollback. Every
-other failure after Start dispatch still rolls back as above.
-Temporary probe and adopted-session event authority are separate. Every deferred
-status-routing continuation checks its current client predicate before publication.
+Only a timely refusal proven to precede `Starting` skips the rollback Stop:
+`already_streaming`, `audio.device_not_found`, or `params.invalid` when the
+submitted request itself proves dispatch rejection (out-of-range wire bitrate)
+or pre-occupancy rejection (a custom layout missing a rectangle, or a preset
+layout with a rectangle, on the audited engine schema). Numeric geometry
+bounds are not proof because the producer can round differently. The typed binding
+code takes precedence; the binding's numeric mapping is used only if `data.code`
+is absent. `params.invalid` alone proves nothing about admission: it is also
+returned after `Starting`, as is the generic video `device.not_found`.
+Attempt-owned rollback still releases the launch resources and preserves the
+original refusal. The lifecycle starts one bounded read-only reconciliation on
+a fresh connection. It adopts current concordant live, settles on current
+concordant idle, and retains UNKNOWN and protection on silence or unconfirmed
+evidence. A superseding Stop invalidates the probe before it can adopt or settle.
+
+Ambiguous outcomes, including a late refusal, timeout or lost reply, retain the
+existing global rollback Stop. That Stop cannot target the Start's own session
+and may end a different one. Replacing it requires a published producer contract
+for attempt-scoped cancellation.
+Temporary probe and adopted-session event authority are separate. Temporary
+status frames are evidence only. The first frame wakes the probe, but settlement
+uses the newest accepted frame, including later frames from the same socket read.
+Only adoption hands subsequent status routing to that session's client fence.
 
 `streamLiveness()` is the consumer admission accessor: `streaming | idle | unknown`.
 Its leaf module is `apps/backend/src/modules/streaming/stream-liveness.ts`; the

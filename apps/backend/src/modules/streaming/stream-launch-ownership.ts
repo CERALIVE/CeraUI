@@ -22,6 +22,14 @@ export function currentStreamLaunchOwner(): () => boolean {
 	return () => context === undefined || !context.cancelled();
 }
 
+export type LaunchRollback =
+	| { readonly kind: "transaction"; readonly run: () => Promise<void> }
+	| { readonly kind: "legacy-dispatched" };
+
+export function registerLaunchRollback(rollback: LaunchRollback): void {
+	launches.getStore()?.registerRollback?.(rollback);
+}
+
 export function assertStreamLaunchOwnership(): void {
 	const context = launches.getStore();
 	if (context?.cancelled())

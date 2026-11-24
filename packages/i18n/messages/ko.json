@@ -862,6 +862,7 @@
 	"live.startFailure.class.capture_source_unavailable.negotiation_failed": "영상 입력의 신호 형식은 이 장치가 캡처할 수 없는 형식입니다. 카메라의 HDMI 출력을 지원되는 형식으로 변경한 뒤 다시 시작하세요.",
 	"live.startFailure.class.capture_source_unavailable.no_signal": "영상 입력에 신호가 없습니다. 카메라 전원과 케이블 연결을 확인한 뒤 다시 시작하세요.",
 	"live.startFailure.class.engine_internal": "스트리밍 엔진에 내부 오류가 발생했습니다.",
+	"notifications.streamStartAttemptCapacity": "대기 중인 방송 시작 요청이 너무 많습니다.",
 	"live.startFailure.class.engine_restarting": "스트리밍 엔진이 다시 시작 중입니다.",
 	"live.startFailure.class.engine_unavailable": "스트리밍 엔진을 사용할 수 없습니다.",
 	"live.startFailure.class.modem_transition_active": "모뎀이 USB 모드를 전환 중이라 링크가 곧 바뀝니다. 전환이 끝난 뒤 다시 시작하세요.",

@@ -70,6 +70,7 @@ type SchemaManifest = Readonly<Record<string, readonly string[]>>;
 
 /** `@ceralive/cerastream` — the streaming engine's IPC wire. */
 const CERASTREAM_FIELDS: SchemaManifest = {
+	prepareStartResultSchema: ["attempt_id"],
 	listSwitchTargetsResultSchema: [
 		"switch_targets.input_id",
 		"switch_targets.kind",
@@ -155,6 +156,7 @@ const CERASTREAM_FIELDS: SchemaManifest = {
 	],
 	listDevicesResultSchema: ["devices"],
 	statusEventSchema: [
+		"attempt_id",
 		"type",
 		"state",
 		"streaming",

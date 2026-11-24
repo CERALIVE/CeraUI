@@ -4,7 +4,6 @@ import type {
 	StartFailureClass,
 	StartFailurePhase,
 } from "@ceraui/rpc/schemas";
-
 import {
 	DEFAULT_START_RETRY_POLICY,
 	nextBackoffDelayMs,
@@ -14,6 +13,7 @@ import {
 	shouldRetryStart,
 	shouldSuppressTransientFailure,
 } from "./start-failure-taxonomy.ts";
+import type { LaunchRollback } from "./stream-launch-ownership.ts";
 
 type RetryTimer = ReturnType<typeof globalThis.setTimeout> | number;
 
@@ -48,6 +48,7 @@ export type StartRetryRunResult =
 			readonly result: "failed";
 			readonly failure: StartFailure;
 			readonly liveness: "idle" | "unknown";
+			readonly observeRuntime?: true;
 	  };
 
 export type StartRetryRunDeps = {
@@ -55,7 +56,11 @@ export type StartRetryRunDeps = {
 	readonly launch: (attempt: number) => Promise<void>;
 	readonly classifyUnknown: (error: unknown) => StartFailure;
 	readonly cancelled: () => boolean;
-	readonly onLaunchTimeout: (attempt: number) => Promise<void>;
+	readonly onLaunchTimeout: (
+		attempt: number,
+		rollback?: LaunchRollback,
+	) => Promise<void>;
+	readonly launchRollback?: () => LaunchRollback | undefined;
 	readonly setCancelWait: (cancel: (() => void) | undefined) => void;
 	readonly schedule: (callback: () => void, delayMs: number) => RetryTimer;
 	readonly cancelTimer: (timer: RetryTimer) => void;
@@ -93,8 +98,10 @@ const GATE_DEFERRAL_SLACK_MS = 500;
 type LaunchOutcome =
 	| { readonly result: "started" }
 	| { readonly result: "failed"; readonly error: unknown }
-	| { readonly result: "timed_out" }
-	| { readonly result: "cleanup_failed" }
+	| {
+			readonly result: "timed_out" | "cleanup_failed";
+			readonly observeRuntime: boolean;
+	  }
 	| { readonly result: "cancelled" };
 
 function runLaunchWithinDeadline(
@@ -134,7 +141,9 @@ function runLaunchWithinDeadline(
 			}
 			deadlineExpired = true;
 			deps.setCancelWait(undefined);
-			const cleanup = deps.onLaunchTimeout(attempt).then(
+			const rollback = deps.launchRollback?.();
+			const observeRuntime = rollback?.kind !== "legacy-dispatched";
+			const cleanup = deps.onLaunchTimeout(attempt, rollback).then(
 				async () => {
 					await launch;
 					return true;
@@ -151,8 +160,13 @@ function runLaunchWithinDeadline(
 				(cleaned) =>
 					finish({
 						result: cleaned ? "timed_out" : "cleanup_failed",
+						observeRuntime,
 					}),
-				() => finish({ result: "cleanup_failed" }),
+				() =>
+					finish({
+						result: "cleanup_failed",
+						observeRuntime,
+					}),
 			);
 		};
 		timer = deps.scheduleDeadline(onDeadline, deadlineMs);
@@ -237,9 +251,14 @@ export async function runStartWithRetry(
 		}
 		if (launch.result === "started") return { result: "started" };
 		{
-			const error =
+			const deadline =
 				launch.result === "timed_out" || launch.result === "cleanup_failed"
-					? new StreamStartFailure({
+					? launch
+					: undefined;
+			const error =
+				launch.result === "failed"
+					? launch.error
+					: new StreamStartFailure({
 							attemptId: deps.attemptId,
 							phase: "connect",
 							class: "start_timeout",
@@ -247,18 +266,18 @@ export async function runStartWithRetry(
 								launch.result === "timed_out"
 									? "start_attempt_deadline"
 									: "start_cleanup_timeout",
-							retriable: launch.result === "timed_out",
-						})
-					: launch.error;
+							retriable:
+								launch.result === "timed_out" && !launch.observeRuntime,
+						});
 			if (deps.cancelled()) return { result: "cancelled", liveness: "unknown" };
 			const classified =
 				error instanceof StreamStartFailure
 					? error.failure
 					: deps.classifyUnknown(error);
 			const liveness =
-				launch.result === "timed_out"
+				launch.result === "timed_out" && !launch.observeRuntime
 					? "idle"
-					: launch.result === "cleanup_failed"
+					: deadline !== undefined
 						? "unknown"
 						: error instanceof StreamStartFailure
 							? error.liveness
@@ -302,7 +321,15 @@ export async function runStartWithRetry(
 					suppressed: false,
 				}),
 			);
-			return { result: "failed", failure, liveness };
+			return {
+				result: "failed",
+				failure,
+				liveness,
+				...(deadline?.observeRuntime ||
+				(error instanceof StreamStartFailure && error.observeRuntime)
+					? { observeRuntime: true }
+					: {}),
+			};
 		}
 	}
 }

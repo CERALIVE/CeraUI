@@ -53,13 +53,32 @@ transition still broadcasts, including a same-state reconciliation.
 
 The launch transaction owns rollback and phase deadlines. Rollback completion is
 not idle proof: internal failure liveness is confirmed only before Start dispatch
-or after the matching rollback Stop acknowledges idle. A Start refused as
-`already_streaming` sends no rollback Stop (the unscoped Stop would end the
-session that caused the refusal, which may be another client's) and stays
-unknown; a leftover session of our own then also waits for the operator's Stop.
-The original failure
-class/code is preserved when cleanup is unknown; no retry or replacement Start
-is admitted. Connect/subscribe acquisitions and Start submission recheck launch
+or after the matching rollback Stop acknowledges idle. A timely Start refusal
+known to precede `Starting` releases attempt-owned resources without sending
+Stop: `already_streaming`, `audio.device_not_found`, and `params.invalid` only
+when the request proves a dispatch rejection or a layout/rectangle shape
+rejection on the audited engine schema. Typed
+codes take precedence over the numeric fallback; neither bare `params.invalid`
+nor video `device.not_found` proves the engine never claimed the request.
+The original failure class/code is preserved. The owner invokes the same
+bounded read-only reconciliation as at engine reconnect, with a fresh
+subscription after launch rollback. Current concordant live is adopted and
+current concordant idle clears protection. Silence, stale evidence and
+inconsistent status cannot clear it or admit a replacement Start. An operator
+Stop supersedes the observer. With `attempt-scoped-start` advertised on the
+non-reconnecting launch socket, the transaction prepares one ID and submits it
+on that same socket. The phase and outer launch deadlines share that
+transaction's rollback. Ambiguous outcomes use `cancel-start` on a separate
+handshaked socket, never global Stop. A Cancel receipt, `not_owner`, and
+`start_cancelled` do not establish device-wide Idle; settle from the same
+fenced read-only observation. Capacity refusal is typed and not retried.
+An older schema known to predate scoped Start, or a successful capabilities
+reply without the token, uses legacy Start. A failed or malformed reply
+refuses Start rather than guessing. Before Start dispatch, the deadline can
+only roll back launch-local resources; it cannot send device-wide Stop.
+Boot recovery cannot displace a current runtime observer. Once that observer
+loses its owner or operator-intent fence, a newer observation may proceed.
+Connect/subscribe acquisitions and Start submission recheck launch
 ownership. The retry runner starts the next connect attempt only after confirmed
 rollback, caps attempts and elapsed
 time, and exposes a cancellable timer to the same generation. Reporting suppresses
@@ -87,7 +106,10 @@ Stop's acknowledgement/cause. A settled pre-dispatch/acknowledged-rollback launc
 plus acknowledged cancellation needs no blind second Stop. Uncertain settlement
 retains protection; only an explicit operator cause permits unknown-engine Stop.
 Read-only probes have a separate token and advance client epoch only on adoption,
-so an unused probe cannot make a launched session deaf to later idle status.
+so an unused probe cannot make a launched session deaf to later idle status. The
+temporary subscription does not route lifecycle status: settlement uses the
+newest accepted frame, not the first frame that wakes the probe. Confirmed
+Idle retires ended-stream telemetry without routing a temporary status event.
 Cached runtime evidence has the producing subscription's client/epoch predicate;
 it is separate from display telemetry and invalidated at new Start, acquisition
 and Start acknowledgement. Old-session idle and pre-Start replay cannot release

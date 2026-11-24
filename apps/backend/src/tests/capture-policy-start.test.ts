@@ -40,6 +40,7 @@ async function setup(features: string[]) {
 	const calls: Array<{ method: string; params: unknown }> = [];
 	const client = {
 		hello: { schema_version: SCHEMA_VERSION },
+		getCapabilities: async () => ({ ...caps, features }),
 		subscribeEvents: async () => ({ result: { topics: [] }, close: () => {} }),
 		rawRequest: async (method: string, params: unknown) => {
 			calls.push({ method, params });

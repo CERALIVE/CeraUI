@@ -226,7 +226,8 @@ describe("stream session orchestrator", () => {
 		});
 		const firstStart = orchestrator.start({
 			origin: "ui",
-			launch: async ({ cancelled }) => {
+			launch: async ({ cancelled, registerRollback }) => {
+				registerRollback?.({ kind: "legacy-dispatched" });
 				await launchBarrier.promise;
 				events.push(`launch-settled-cancelled-${cancelled()}`);
 			},

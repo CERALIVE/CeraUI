@@ -180,7 +180,7 @@ beforeEach(async () => {
 						case "hello":
 							result = {
 								protocol: PROTOCOL_VERSION,
-								schema_version: SCHEMA_VERSION,
+								schema_version: "0.24.0",
 								engine_version: "test",
 							};
 							break;

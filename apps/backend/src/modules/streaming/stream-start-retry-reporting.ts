@@ -54,6 +54,7 @@ const TERMINAL_NOTIFICATION_KEYS: Readonly<Record<StartFailureClass, string>> =
 		start_invalid: "notifications.streamStartInvalidFailed",
 		protocol_incompatible: "notifications.streamStartProtocolFailed",
 		engine_internal: "notifications.streamStartInternalFailed",
+		attempt_capacity: "notifications.streamStartAttemptCapacity",
 		audio_source_unavailable:
 			"notifications.streamStartAudioSourceUnavailableFailed",
 		modem_transition_active:

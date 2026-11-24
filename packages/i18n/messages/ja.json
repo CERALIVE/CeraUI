@@ -862,6 +862,7 @@
 	"live.startFailure.class.capture_source_unavailable.negotiation_failed": "映像入力の信号フォーマットは、このデバイスがキャプチャできる形式ではありません。カメラの HDMI 出力を対応フォーマットに変更してから、もう一度開始してください。",
 	"live.startFailure.class.capture_source_unavailable.no_signal": "映像入力に信号がありません。カメラの電源とケーブルの接続を確認してから、もう一度開始してください。",
 	"live.startFailure.class.engine_internal": "ストリーミングエンジンで内部エラーが発生しました。",
+	"notifications.streamStartAttemptCapacity": "配信開始の保留が多すぎます。",
 	"live.startFailure.class.engine_restarting": "ストリーミングエンジンが再起動中です。",
 	"live.startFailure.class.engine_unavailable": "ストリーミングエンジンを利用できません。",
 	"live.startFailure.class.modem_transition_active": "モデムが USB モードを切り替えているため、回線がまもなく変わります。切り替えの完了を待ってから開始し直してください。",
