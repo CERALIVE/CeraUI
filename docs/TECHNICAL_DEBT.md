@@ -227,6 +227,16 @@ the SPA splits the catalog into lazy namespace chunks where the federation bundl
 so the SPA pays the ten-locale tax per namespace rather than all at once. It is recorded
 separately because the remedies and the exit measurements differ.
 
+**2026-11-24: Start-refusal actions (#662), approved cap increase.** Hosted
+main `2475ec5e` measured **1,284,506 B total SPA gzip / 1,484,302 B precache**;
+`efbdcee5` measured **1,287,597 B / 1,487,396 B**, adding **3,091 B / 3,094 B**.
+The checkout-path-dependent Svelte `<svelte:head>` IDs and resulting chunk
+hashes account for the observed **233 B** gap between local and hosted output
+for this build. Both absolute allowances increase by exactly **2 KiB** without
+changing the baselines or ratios: **1,287,429 → 1,289,477 B** total SPA and
+**1,487,222 → 1,489,270 B** precache. That leaves **1,880 B / 1,874 B** against
+the observed hosted totals. All other limits stay fixed; the debt remains open.
+
 **2026-11-22: Hotspot consent handling crosses both aggregate ceilings
 (accepted footprint, debt still open).** With Bun 1.4.4 and the same
 build/report commands, main `a5ad2281` measures **1,269,613 B total SPA gzip /
