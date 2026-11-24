@@ -76,10 +76,13 @@ export const DETAILS: { readonly [C in EventCode]: Detail<C> | null } = {
 			attempt: number(params.attempt, locale),
 			maxAttempts: number(params.maxAttempts, locale),
 		}),
-	stream_start_failed: (params) =>
-		params.captureCause === undefined
+	stream_start_failed: (params) => {
+		if (params.class === "attempt_capacity")
+			return { key: "notifications.streamStartAttemptCapacity" };
+		return params.captureCause === undefined
 			? variant("stream_start_failed", params.class)
-			: { key: `timeline.stream_start_failed.capture.${params.captureCause}` },
+			: { key: `timeline.stream_start_failed.capture.${params.captureCause}` };
+	},
 	stream_reconfigured: (params) =>
 		variant("stream_reconfigured", params.outcome),
 	stream_restored: () => plain("stream_restored"),

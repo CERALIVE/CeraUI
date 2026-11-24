@@ -57,6 +57,7 @@ function startFailureNextStep(
 		case "mutation_blocked":
 			return "openNetwork";
 		case "engine_restarting":
+		case "attempt_capacity":
 		case "protocol_incompatible":
 		case "audio_source_unavailable":
 		case "modem_transition_active":
@@ -91,6 +92,11 @@ export function startFailureMessage(
 	admitted: boolean,
 	blockedReason?: string,
 ) {
+	if (failure.class === "attempt_capacity")
+		return {
+			step: undefined,
+			message: m["notifications.streamStartAttemptCapacity"](),
+		};
 	const reason = classReason(failure);
 	const next = startFailureNextStep(failure, repeated, admitted);
 	if (next && next !== "blockedEngine") {

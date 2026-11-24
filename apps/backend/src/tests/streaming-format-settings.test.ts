@@ -6,7 +6,6 @@ import {
 	connect,
 	PROTOCOL_VERSION,
 	rpcRequestSchema,
-	SCHEMA_VERSION,
 	startParamsSchema,
 } from "@ceralive/cerastream";
 import { configMessageSchema } from "@ceraui/rpc/schemas";
@@ -76,7 +75,7 @@ beforeEach(async () => {
 						case "hello":
 							result = {
 								protocol: PROTOCOL_VERSION,
-								schema_version: SCHEMA_VERSION,
+								schema_version: "0.24.0",
 								engine_version: "test",
 							};
 							break;

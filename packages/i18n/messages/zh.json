@@ -862,6 +862,7 @@
 	"live.startFailure.class.capture_source_unavailable.negotiation_failed": "视频输入的信号格式不是本设备可以采集的格式。请将相机的 HDMI 输出改为受支持的格式，然后重新开始。",
 	"live.startFailure.class.capture_source_unavailable.no_signal": "视频输入没有信号。请检查相机是否已开机、线缆是否已连接，然后重新开始。",
 	"live.startFailure.class.engine_internal": "推流引擎发生内部错误。",
+	"notifications.streamStartAttemptCapacity": "待处理的开播请求过多。",
 	"live.startFailure.class.engine_restarting": "推流引擎正在重启。",
 	"live.startFailure.class.engine_unavailable": "推流引擎不可用。",
 	"live.startFailure.class.modem_transition_active": "某个调制解调器正在切换 USB 模式，其链路即将变化。请等切换完成后再重新开始。",

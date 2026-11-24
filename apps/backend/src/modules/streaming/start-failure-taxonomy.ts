@@ -41,6 +41,8 @@ import {
 	CerastreamConnectionError,
 	CerastreamRpcError,
 	CerastreamTimeoutError,
+	RPC_ERROR_NUMERIC,
+	rpcErrorCodeSchema,
 } from "@ceralive/cerastream";
 import {
 	isRetriableStartFailure,
@@ -66,6 +68,7 @@ export class StreamStartFailure extends Error {
 		failure.phase === "subscribe"
 			? "idle"
 			: "unknown",
+		readonly observeRuntime = false,
 	) {
 		super(`${failure.phase}:${failure.class}`);
 	}
@@ -242,6 +245,19 @@ function classifyClass(
 	// identity the taxonomy enumerates: -32000/-32602/-32002/-32003/-32603); the
 	// human-readable string dataCode stays available on the raw error for logs.
 	if (error instanceof CerastreamRpcError) {
+		const capacity =
+			rpcErrorCodeSchema.enum["cerastream.state.attempt_capacity"];
+		if (
+			error.dataCode === capacity ||
+			(error.dataCode === undefined &&
+				error.code === RPC_ERROR_NUMERIC[capacity])
+		) {
+			return {
+				cls: "attempt_capacity",
+				code: error.code,
+				message: error.message,
+			};
+		}
 		const captureCause = captureCauseOf(error);
 		if (captureCause !== undefined) {
 			return {

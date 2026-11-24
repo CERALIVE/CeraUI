@@ -7,7 +7,6 @@ import {
 	connect,
 	listDevicesResultSchema,
 	rpcRequestSchema,
-	SCHEMA_VERSION,
 } from "@ceralive/cerastream";
 import { getConfig } from "../../modules/config.ts";
 import {
@@ -72,7 +71,7 @@ export async function captureEngineLifecycle(
 					schema_version: current.features?.includes(
 						CAPTURE_SELECTION_CLEAR_FEATURE,
 					)
-						? SCHEMA_VERSION
+						? "0.24.0"
 						: "0.23.0",
 					engine_version: "lifecycle-fixture",
 				};

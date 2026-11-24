@@ -962,6 +962,7 @@
 	"live.startFailure.class.capture_source_unavailable.negotiation_failed": "The video input's signal format isn't one this device can capture. Change the camera's HDMI output to a supported format, then start again.",
 	"live.startFailure.class.capture_source_unavailable.no_signal": "The video input isn't carrying a signal. Check the camera is switched on and the cable is connected, then start again.",
 	"live.startFailure.class.engine_internal": "The streaming engine hit an internal error.",
+	"notifications.streamStartAttemptCapacity": "Too many pending stream starts.",
 	"live.startFailure.class.engine_restarting": "The streaming engine is restarting.",
 	"live.startFailure.class.engine_unavailable": "The streaming engine is unavailable.",
 	"live.startFailure.class.modem_transition_active": "A modem is switching USB mode, so its link is about to change. Wait for the switch to finish, then start again.",

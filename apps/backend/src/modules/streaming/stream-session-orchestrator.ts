@@ -39,7 +39,10 @@ import {
 	RECONFIGURE_DEADLINE_MS,
 	STOP_DEADLINE_MS,
 } from "./start-lifecycle-timing.ts";
-import { withStreamLaunchOwnership } from "./stream-launch-ownership.ts";
+import {
+	type LaunchRollback,
+	withStreamLaunchOwnership,
+} from "./stream-launch-ownership.ts";
 import { bindStreamLiveness } from "./stream-liveness.ts";
 import { createSessionCleanup } from "./stream-session-cleanup.ts";
 import { createSessionOwnership } from "./stream-session-ownership.ts";
@@ -67,6 +70,7 @@ export type StreamLaunchContext = {
 	readonly generation: number;
 	readonly origin: StreamLaunchOrigin;
 	readonly cancelled: () => boolean;
+	readonly registerRollback?: (rollback: LaunchRollback) => void;
 };
 
 export type StreamStartRequest = {
@@ -276,6 +280,7 @@ export function createStreamSessionOrchestrator(
 	let active: ActiveAttempt | undefined;
 	let reconciliationEpoch = 0;
 	let runtimeObservations = 0;
+	let currentObservation: (() => boolean) | undefined;
 	let activeChange: ActiveConfigChange | undefined;
 	let queuedStop: QueuedStop | undefined;
 	let engineTransitionLatched = false;
@@ -496,10 +501,12 @@ export function createStreamSessionOrchestrator(
 		}
 		ownership.protect();
 		const deadlineCancelledLaunches = new Set<number>();
+		let launchRollback: LaunchRollback | undefined;
 
 		const launchResult = await runStartWithRetry({
 			attemptId,
 			launch: (launchNumber) => {
+				launchRollback = undefined;
 				const context: StreamLaunchContext = {
 					attemptId,
 					generation: attempt.generation,
@@ -508,6 +515,10 @@ export function createStreamSessionOrchestrator(
 						attempt.cancelled ||
 						active !== attempt ||
 						deadlineCancelledLaunches.has(launchNumber),
+					registerRollback: (rollback) => {
+						if (!deadlineCancelledLaunches.has(launchNumber))
+							launchRollback = rollback;
+					},
 				};
 				return ownership.trackLaunch(
 					withStreamLaunchOwnership(context, () => request.launch(context)),
@@ -518,11 +529,21 @@ export function createStreamSessionOrchestrator(
 					warn: (message, meta) => logger.warn(message, meta),
 				}),
 			cancelled: () => attempt.cancelled || active !== attempt,
-			onLaunchTimeout: async (launchNumber) => {
+			launchRollback: () => launchRollback,
+			onLaunchTimeout: async (launchNumber, rollback) => {
 				deadlineCancelledLaunches.add(launchNumber);
 				if (active !== attempt) return;
 				try {
-					await stopWithinDeadline(attempt.generation);
+					switch (rollback?.kind) {
+						case "legacy-dispatched":
+							await stopWithinDeadline(attempt.generation);
+							break;
+						case "transaction":
+							await rollback.run();
+							break;
+						case undefined:
+							break;
+					}
 				} catch (error) {
 					logger.error("Timed-out stream launch cleanup failed", {
 						attemptId,
@@ -569,7 +590,11 @@ export function createStreamSessionOrchestrator(
 			if (active !== attempt || !ownership.owns(owner))
 				return { result: "cancelled", attemptId };
 			if (launchResult.liveness === "unknown") {
-				ownership.commit(owner, "reconciling", "unknown");
+				if (
+					ownership.commit(owner, "reconciling", "unknown") &&
+					launchResult.observeRuntime
+				)
+					void reconcile(currentIntent);
 			} else if (ownership.commit(owner, "idle", "idle")) active = undefined;
 			return {
 				result: "failed",
@@ -855,8 +880,16 @@ export function createStreamSessionOrchestrator(
 		}
 	};
 
-	const reconcile = async (): Promise<LifecycleState> => {
-		if (stopFlight !== undefined || cleanup.pending || ownership.launchPending)
+	const reconcile = async (
+		currentIntent = captureOperatorStopIntent(),
+	): Promise<LifecycleState> => {
+		if (
+			!currentIntent() ||
+			currentObservation?.() === true ||
+			stopFlight !== undefined ||
+			cleanup.pending ||
+			ownership.launchPending
+		)
 			return ownership.state;
 		// `stop_failed` is included deliberately: a stop we could not confirm
 		// leaves the engine's real state UNKNOWN to us, and adopting its truth is
@@ -872,21 +905,25 @@ export function createStreamSessionOrchestrator(
 		const owner = ownership.invalidate();
 		if (!ownership.commit(owner, "reconciling", "unknown"))
 			return ownership.state;
+		// Operator intent changes even when its Stop parks behind a capture transition.
+		const current = () => currentIntent() && ownership.owns(owner);
+		currentObservation = current;
 		const epoch = ++reconciliationEpoch;
 		runtimeObservations++;
 		let runtimeState: EngineRuntimeState;
 		try {
 			runtimeState = await withRuntimeObservationOwner(
-				() => ownership.owns(owner),
+				current,
 				deps.queryRuntime,
 				ownership.protect,
 			).catch(() => "unknown" as const);
 		} finally {
 			runtimeObservations--;
+			if (currentObservation === current) currentObservation = undefined;
 		}
 		if (
 			epoch !== reconciliationEpoch ||
-			!ownership.owns(owner) ||
+			!current() ||
 			cleanup.pending ||
 			stopFlight !== undefined
 		)

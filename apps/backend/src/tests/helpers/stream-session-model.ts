@@ -101,7 +101,8 @@ export function modelHarness(marker?: {
 	const start = () => {
 		const call = session.start({
 			origin: "ui",
-			launch: () => {
+			launch: ({ registerRollback }) => {
+				registerRollback?.({ kind: "legacy-dispatched" });
 				overlap ||= stopOutstanding > 0;
 				launches++;
 				outstandingLaunches++;

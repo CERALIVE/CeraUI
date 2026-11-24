@@ -64,6 +64,7 @@ export const START_FAILURE_CLASSES = [
 	'start_invalid',
 	'engine_internal',
 	'start_timeout',
+	'attempt_capacity',
 	'audio_source_unavailable',
 	'modem_transition_active',
 	// The device is still REPLAYING its durable modem-mutation journal, so it
@@ -262,6 +263,10 @@ export const START_FAILURE_RETRIABILITY: Record<
 	start_timeout: {
 		retriablePhases: ['connect'],
 		why: 'A connect-phase timeout is a slow-boot race and retries cleanly; a timeout AFTER connect means a half-applied start on a wedged engine, so a retry would stack a duplicate start — escalate instead.',
+	},
+	attempt_capacity: {
+		retriablePhases: [],
+		why: 'The engine cannot reserve another Start attempt. Wait for existing attempts to settle rather than competing with them automatically.',
 	},
 	protocol_incompatible: {
 		retriablePhases: [],

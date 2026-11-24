@@ -4,6 +4,90 @@ import {
 	flushEvidence,
 } from "./helpers/stream-engine-evidence.ts";
 
+test.each(["streaming", "starting"] as const)(
+	"reconnect reconciliation cannot publish earlier idle when the socket batch ends in %s",
+	async (latest) => {
+		const h = evidenceHarness(true);
+		if (latest === "streaming")
+			h.setStatusSink((event, current) => {
+				void import("../modules/streaming/stream-session-orchestrator.ts").then(
+					() => {
+						if (current()) h.session.noteEngineStatus(event);
+					},
+				);
+			});
+		try {
+			const observation = h.session.reconcile();
+			await h.probeSubscribed;
+			const probe = h.clients[0];
+			if (probe === undefined) throw new Error("missing reconnect probe");
+
+			probe.emit({ type: "status", seq: 1, state: "idle", streaming: false });
+			probe.emit({
+				type: "status",
+				seq: 2,
+				state: "starting",
+				streaming: false,
+			});
+			if (latest === "streaming") {
+				h.startExternal(6_000);
+				probe.emit({
+					type: "status",
+					seq: 3,
+					state: "streaming",
+					streaming: true,
+				});
+			}
+			const settled = await observation;
+			if (latest === "streaming") {
+				const retry = await h.start();
+				expect({
+					result: retry.result,
+					starts: h.startRequests.length,
+				}).toEqual({
+					result: "busy",
+					starts: 0,
+				});
+				expect(h.backend.getTelemetry()).toMatchObject({
+					state: "streaming",
+					streaming: true,
+				});
+			}
+
+			expect(settled).toBe(
+				latest === "streaming" ? "streaming" : "reconciling",
+			);
+			expect(h.lifecycle).not.toContain("idle");
+			expect(h.view().marked).toBe(true);
+			expect(probe.calls).not.toContain("stop");
+		} finally {
+			h.dispose();
+		}
+	},
+);
+
+test("reconnect ignores a status delivered after expiry before settlement resumes", async () => {
+	const h = evidenceHarness(true);
+	h.startExternal(6_000);
+	try {
+		const observation = h.session.reconcile();
+		const expire = await h.probeDeadline;
+		const probe = h.clients[0];
+		if (probe === undefined) throw new Error("missing reconnect probe");
+
+		expire();
+		probe.emit({ type: "status", seq: 1, state: "streaming", streaming: true });
+
+		expect(await observation).toBe("reconciling");
+		expect(h.session.streamLiveness()).toBe("unknown");
+		expect(h.view()).toMatchObject({ engine: "streaming", marked: true });
+		expect(probe.calls).toContain("close");
+		expect(probe.calls).not.toContain("stop");
+	} finally {
+		h.dispose();
+	}
+});
+
 for (const engine of ["idle", "streaming"] as const) {
 	for (const delivery of ["idle", "streaming", "silence"] as const) {
 		test(`independent probe matrix engine=${engine} delivery=${delivery}`, async () => {

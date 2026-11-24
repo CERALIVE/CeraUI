@@ -215,7 +215,7 @@ function makeStartParamsSpy(): {
 	const client = {
 		hello: {
 			protocol: "cerastream-ipc/1",
-			schema_version: "test",
+			schema_version: "0.1.0",
 			engine_version: "test",
 		},
 		subscribeEvents: async () => ({

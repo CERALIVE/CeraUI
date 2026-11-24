@@ -1,9 +1,15 @@
-import type { CerastreamClient, EventParams } from "@ceralive/cerastream";
+import type {
+	CerastreamClient,
+	EventParams,
+	StartParams,
+} from "@ceralive/cerastream";
 import {
 	CerastreamRpcError,
 	CerastreamTimeoutError,
 } from "@ceralive/cerastream";
+import type { LifecycleState } from "@ceraui/rpc/schemas";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
+import { ENGINE_STATE_RECONCILE_TIMEOUT } from "../../helpers/timing-constants.ts";
 import { CerastreamBackend } from "../../modules/streaming/cerastream-backend.ts";
 import { createLaunchTransaction } from "../../modules/streaming/launch-transaction.ts";
 import { createStreamSessionOrchestrator } from "../../modules/streaming/stream-session-orchestrator.ts";
@@ -35,7 +41,8 @@ export function evidenceHarness(
 	let id = 0;
 	let connection = 0;
 	let failedStart = false;
-	let startRefusal: CerastreamRpcError | undefined;
+	let startRefusal: Error | undefined;
+	let lostStartReply: Error | undefined;
 	let failedStop = false;
 	let connectGate: Promise<void> | undefined;
 	let startGate: Promise<void> | undefined;
@@ -44,23 +51,42 @@ export function evidenceHarness(
 	let beforeDispatch: (() => void) | undefined;
 	let failNextConnect = false;
 	let statusSink:
-		| ((event: Extract<EventParams, { type: "status" }>) => void)
+		| ((
+				event: Extract<EventParams, { type: "status" }>,
+				current: () => boolean,
+		  ) => void)
 		| undefined;
 	const connected = Promise.withResolvers<void>();
 	const clients: Array<{
 		client: CerastreamClient;
 		emit: (event: EventParams) => void;
 		calls: string[];
+		closed: Promise<void>;
 	}> = [];
+	const startRequests: StartParams[] = [];
+	const lifecycle: LifecycleState[] = [];
+	const adopted = Promise.withResolvers<void>();
+	const settledIdle = Promise.withResolvers<void>();
+	const probeSubscribed = Promise.withResolvers<void>();
+	const probeDeadline = Promise.withResolvers<() => void>();
+	const startDispatched = Promise.withResolvers<void>();
+	const startSettled = Promise.withResolvers<void>();
+	let externalMaxBitrate: number | undefined;
 	const timers = new Map<ReturnType<typeof setTimeout>, () => void>();
-	const schedule = (callback: () => void) => {
+	const deadlines = new Map<ReturnType<typeof setTimeout>, number>();
+	const schedule = (callback: () => void, ms: number) => {
 		const timer = setTimeout(() => undefined, 60_000);
 		timer.unref();
 		timers.set(timer, callback);
+		deadlines.set(timer, ms);
+		if (ms === ENGINE_STATE_RECONCILE_TIMEOUT) probeDeadline.resolve(callback);
 		return timer;
 	};
 	const cancel = (timer: ReturnType<typeof setTimeout> | number) => {
-		if (typeof timer !== "number") timers.delete(timer);
+		if (typeof timer !== "number") {
+			timers.delete(timer);
+			deadlines.delete(timer);
+		}
 		clearTimeout(timer);
 	};
 	const connect = async () => {
@@ -71,15 +97,26 @@ export function evidenceHarness(
 		const index = connection++;
 		let listener: ((event: EventParams) => void) | undefined;
 		const calls: string[] = [];
-		const start = async () => {
-			calls.push("start");
-			// A refusal changes nothing in the engine.
-			if (startRefusal !== undefined) throw startRefusal;
-			engine = "streaming";
-			started.resolve();
-			if (index === 0) await startGate;
-			if (failedStart) throw new CerastreamTimeoutError("start", 10_000);
-			return { state: "streaming" as const, session_id: `session-${index}` };
+		const closed = Promise.withResolvers<void>();
+		const start = async (params: StartParams) => {
+			try {
+				calls.push("start");
+				startRequests.push(params);
+				startDispatched.resolve();
+				// A refusal changes nothing in the engine.
+				if (startRefusal !== undefined) {
+					if (index === 0) await startGate;
+					throw startRefusal;
+				}
+				engine = "streaming";
+				started.resolve();
+				if (index === 0) await startGate;
+				if (lostStartReply !== undefined) throw lostStartReply;
+				if (failedStart) throw new CerastreamTimeoutError("start", 10_000);
+				return { state: "streaming" as const, session_id: `session-${index}` };
+			} finally {
+				startSettled.resolve();
+			}
 		};
 		const client: CerastreamClient = {
 			hello: {
@@ -88,14 +125,16 @@ export function evidenceHarness(
 				engine_version: "fake",
 			},
 			start,
+			prepareStart: unused,
+			cancelStart: unused,
 			// Newer schemas send Start through the raw request path.
 			...(schemaVersion === "0.1.0"
 				? {}
 				: {
-						rawRequest: async (method: string) => {
+						rawRequest: async (method: string, params: StartParams) => {
 							calls.push(`raw:${method}`);
 							if (method !== "start") return unused();
-							return start();
+							return start(params);
 						},
 					}),
 			stop: async () => {
@@ -104,10 +143,11 @@ export function evidenceHarness(
 				engine = "idle";
 				return { state: "idle" };
 			},
-			subscribeEvents: async (_params, callback) => {
+			subscribeEvents: async (params, callback) => {
 				calls.push("subscribe");
 				listener = callback;
 				if (index === 0) await subscribeGate;
+				if (params?.topics?.includes("status")) probeSubscribed.resolve();
 				return {
 					result: { subscribed: ["status"] },
 					close: () => {
@@ -117,6 +157,7 @@ export function evidenceHarness(
 			},
 			close: async () => {
 				calls.push("close");
+				closed.resolve();
 			},
 			reloadConfig: unused,
 			setBitrate: unused,
@@ -126,11 +167,27 @@ export function evidenceHarness(
 			listSwitchTargets: unused,
 			switchInput: unused,
 			listDevices: unused,
-			getCapabilities: unused,
+			getCapabilities: async () => ({
+				platform: {
+					supports_h265: false,
+					hardware_accelerated: true,
+					max_resolution: "1920x1080",
+				},
+				encoder: {
+					codecs: ["h264"],
+					bitrate_range: { min: 1, max: 8000, unit: "kbps" },
+				},
+				sources: [],
+			}),
 			changeConfig: unused,
 			previewSession: unused,
 		};
-		clients.push({ client, calls, emit: (event) => listener?.(event) });
+		clients.push({
+			client,
+			calls,
+			closed: closed.promise,
+			emit: (event) => listener?.(event),
+		});
 		connected.resolve();
 		if (index === 0) await connectGate;
 		return client;
@@ -153,10 +210,13 @@ export function evidenceHarness(
 			broadcastStatus: () => undefined,
 			broadcastBuffering: () => undefined,
 		},
-		onEngineStatus: (event: Extract<EventParams, { type: "status" }>) =>
+		onEngineStatus: (
+			event: Extract<EventParams, { type: "status" }>,
+			current: () => boolean,
+		) =>
 			statusSink === undefined
 				? session.noteEngineStatus(event)
-				: statusSink(event),
+				: statusSink(event, current),
 		scheduleTimeout: schedule,
 		cancelTimeout: cancel,
 	};
@@ -173,6 +233,10 @@ export function evidenceHarness(
 		createAttemptId: () => `evidence-${++id}`,
 		setStreamingStatus: (value) => {
 			live = value;
+			if (value) adopted.resolve();
+		},
+		setLifecycleState: (state) => {
+			lifecycle.push(state);
 		},
 		getStreamingStatus: () => live,
 		markStreamingForOta: () => {
@@ -180,6 +244,7 @@ export function evidenceHarness(
 		},
 		unmarkStreamingForOta: () => {
 			marked = false;
+			settledIdle.resolve();
 		},
 		queryRuntime: () => backend.reconcileRuntimeState(),
 		stopRuntime,
@@ -199,17 +264,30 @@ export function evidenceHarness(
 		backend,
 		connected: connected.promise,
 		started: started.promise,
+		startDispatched: startDispatched.promise,
+		startSettled: startSettled.promise,
+		adopted: adopted.promise,
+		settledIdle: settledIdle.promise,
+		probeSubscribed: probeSubscribed.promise,
+		probeDeadline: probeDeadline.promise,
 		session,
 		clients,
+		startRequests,
+		lifecycle,
 		timers,
-		start: () => {
+		deadline: (ms: number) => {
+			for (const [timer, delay] of deadlines)
+				if (delay === ms) return timers.get(timer);
+			return undefined;
+		},
+		start: (override: Partial<RuntimeConfig> = {}) => {
 			const transaction = createLaunchTransaction("evidence", {
 				timers: { schedule, cancel },
 			});
 			return session.start({
 				origin: "ui",
 				launch: () =>
-					backend.start(config, options, {
+					backend.start({ ...config, ...override }, options, {
 						...transaction,
 						runPhase: (phase, operation, errorPhase) => {
 							if (phase === "start-rpc") beforeDispatch?.();
@@ -231,11 +309,20 @@ export function evidenceHarness(
 			engine = value;
 			if (value === "streaming") marked = true;
 		},
+		startExternal: (maxBitrate: number) => {
+			engine = "streaming";
+			externalMaxBitrate = maxBitrate;
+		},
+		externalMaxBitrate: () =>
+			engine === "streaming" ? externalMaxBitrate : undefined,
 		failStart: () => {
 			failedStart = true;
 		},
 		refuseStart: (code: number, dataCode?: string) => {
 			startRefusal = new CerastreamRpcError(code, "refused", dataCode, 1);
+		},
+		loseStartReply: (error: Error) => {
+			lostStartReply = error;
 		},
 		failStop: () => {
 			failedStop = true;

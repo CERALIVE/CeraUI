@@ -969,6 +969,7 @@
 	"live.startFailure.class.capture_source_unavailable.negotiation_failed": "El formato de señal de la entrada de vídeo no es uno que este dispositivo pueda capturar. Cambia la salida HDMI de la cámara a un formato compatible y vuelve a iniciar.",
 	"live.startFailure.class.capture_source_unavailable.no_signal": "La entrada de vídeo no recibe señal. Comprueba que la cámara esté encendida y el cable conectado, y vuelve a iniciar.",
 	"live.startFailure.class.engine_internal": "El motor de streaming encontró un error interno.",
+	"notifications.streamStartAttemptCapacity": "Hay demasiados inicios de transmisión pendientes.",
 	"live.startFailure.class.engine_restarting": "El motor de streaming se está reiniciando.",
 	"live.startFailure.class.engine_unavailable": "El motor de streaming no está disponible.",
 	"live.startFailure.class.modem_transition_active": "Un módem está cambiando de modo USB, así que su enlace está a punto de cambiar. Espera a que termine y vuelve a iniciar.",

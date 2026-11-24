@@ -319,6 +319,24 @@ describe("LiveView typed start-failure rendering (Todo 29)", () => {
 		);
 	});
 
+	it("a full engine attempt pool names the refusal without offering Retry", async () => {
+		state.failure = {
+			class: "attempt_capacity",
+			phase: "start-rpc",
+			retriable: false,
+			attemptId: "att_capacity",
+		};
+
+		render(LiveView);
+		await tick();
+
+		expect(toastError).toHaveBeenCalledTimes(1);
+		expect(toastError).toHaveBeenCalledWith(
+			en.notifications.streamStartAttemptCapacity,
+			expect.not.objectContaining({ componentProps: expect.anything() }),
+		);
+	});
+
 	it("prefers the typed failure over a legacy stopReason (single toast)", async () => {
 		state.failure = {
 			class: "engine_internal",
