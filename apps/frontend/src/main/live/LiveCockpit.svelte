@@ -42,11 +42,14 @@ import type {
 	SourcesMessage,
 } from '@ceraui/rpc/schemas';
 import { Gauge, Layers, MonitorOff, Repeat, TriangleAlert } from '@lucide/svelte';
+import { MediaQuery } from 'svelte/reactivity';
 
 import IngestStats from '$lib/components/custom/IngestStats.svelte';
 import { projectIngestLinks } from '$lib/components/custom/ingest-link-view';
+import { lazyDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
 import type { LinkNames } from '$lib/helpers/link-names';
+import { WIDE_DESKTOP_QUERY } from '$lib/layout';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
 import { deriveCaptureBands, type MatchAction } from '$lib/streaming/capture-failover';
 import { compositionGeometrySupported, compositionSupported } from '$lib/streaming/compositionSupport';
@@ -59,7 +62,6 @@ import AudioMixer from './AudioMixer.svelte';
 import CompositionCard from './CompositionCard.svelte';
 import LiveBar from './LiveBar.svelte';
 import LiveDetails from './LiveDetails.svelte';
-import LiveGlance from './LiveGlance.svelte';
 import LiveSourceSwitch from './LiveSourceSwitch.svelte';
 import LiveSummaryStrip from './LiveSummaryStrip.svelte';
 import PhoneBitrateControl from './PhoneBitrateControl.svelte';
@@ -195,6 +197,14 @@ const {
 	summaryMode = false,
 	onCloseSummary = undefined,
 }: Props = $props();
+
+const wide = typeof globalThis.matchMedia === 'function' ? new MediaQuery(WIDE_DESKTOP_QUERY) : undefined;
+const glance = lazyDialog(() => import('./LiveGlance.svelte'));
+const showGlance = $derived(isStreaming && !summaryMode && !wide?.current);
+const LiveGlance = $derived(glance.current);
+$effect(() => {
+	if (showGlance) glance.request();
+});
 
 const rows = $derived(projectIngestLinks(telemetry?.links ?? [], hudLinks, linkNames));
 const feed = $derived(
@@ -399,7 +409,7 @@ const BAND_ICON_CLASS = 'text-status-warning mt-0.5 size-4 shrink-0';
 	{#if !summaryMode}
 		<!-- Phones (below 1024 px) open on the stream itself: bitrate, one verdict,
 		     a bar per link. The engineering numbers stay in Details below. -->
-		{#if isStreaming}
+		{#if showGlance && LiveGlance}
 			<LiveGlance {bitrateKbps} {bitrateMeasured} {rows} {feed} />
 		{/if}
 

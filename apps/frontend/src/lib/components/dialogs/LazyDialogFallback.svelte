@@ -24,14 +24,16 @@ interface Props {
 	/** The chunk could not be fetched — state it rather than spin forever. */
 	failed?: boolean;
 	onRetry?: () => void;
+	returnFocus?: () => HTMLElement | null;
 }
 
-let { open = $bindable(false), failed = false, onRetry }: Props = $props();
+let { open = $bindable(false), failed = false, onRetry, returnFocus }: Props = $props();
 </script>
 
 <AppDialog
 	bind:open
 	hideFooter={!failed}
+	{returnFocus}
 	title={failed ? m["errorBoundary.title"]() : m["common.loading"]()}
 >
 	{#if failed}

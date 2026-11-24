@@ -2,6 +2,11 @@
 
 ## IMPORT PATHS
 
+RPC package modules are side-effect-free: they export schemas, contracts and
+helpers, but must not register handlers or mutate shared state at import time.
+This lets the SPA drop unused procedure contracts and validators without
+changing the wire schema or the package's import paths.
+
 `status.schema.ts` imports `sessionSwitchTargetSchema` and re-exports
 `SessionSwitchTarget` from the producer's browser-safe `dist/session-switch.js`.
 The additive optional `active_encode.switch_targets` is session state, not discovery.

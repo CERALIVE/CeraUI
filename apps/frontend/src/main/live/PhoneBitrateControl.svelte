@@ -10,14 +10,17 @@
  */
 import { m } from '@ceraui/i18n/svelte';
 import { Gauge } from '@lucide/svelte';
-import XIcon from '@lucide/svelte/icons/x';
 import { tick } from 'svelte';
 
+import { LazyDialogFallback, lazyDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
 import * as Sheet from '$lib/components/ui/sheet';
 
 import BitrateAdjuster from './BitrateAdjuster.svelte';
 import CompactRate from './CompactRate.svelte';
+
+const limitSheet = lazyDialog(() => import('./BitrateLimitSheet.svelte'));
+const LimitSheet = $derived(limitSheet.current);
 
 interface Props {
 	bitrateDraft: number;
@@ -41,22 +44,26 @@ let wide = $state(query?.matches ?? false);
 let trigger: HTMLElement | null = $state(null);
 let inline: HTMLDivElement | undefined = $state();
 
-function focusLimit() {
-	(wide ? inline?.querySelector<HTMLElement>('[role="slider"]') : trigger)?.focus();
+function limitTarget() {
+	return (wide ? inline?.querySelector<HTMLElement>('[role="slider"]') : trigger) ?? null;
 }
+
+$effect(() => {
+	if (sheetOpen) limitSheet.request();
+});
 
 $effect(() => {
 	if (!query) return;
 	const onChange = async () => {
-		const wasOpen = sheetOpen;
+		const hadFocusTrap = sheetOpen && (LimitSheet || limitSheet.pending);
 		const focusedLimit = trigger === document.activeElement || inline?.contains(document.activeElement);
 		wide = query.matches;
 		sheetOpen = false;
 		onSliderCancel?.();
 		// On resize with the sheet open, its close autofocus waits for the focus trap.
-		if (!wasOpen && focusedLimit) {
+		if (!hadFocusTrap && focusedLimit) {
 			await tick();
-			focusLimit();
+			limitTarget()?.focus();
 		}
 	};
 	query.addEventListener('change', onChange);
@@ -87,31 +94,26 @@ $effect(() => {
 			</Sheet.Trigger>
 		{/if}
 	</div>
-	<Sheet.Content
-		class="gap-0 px-4 pt-2 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] motion-reduce:animate-none"
-		data-touch-region
-		onCloseAutoFocus={(event) => {
-			event.preventDefault();
-			if (!sheetOpen) {
-				onSliderCancel?.();
-				focusLimit();
-			}
-		}}
-		side="bottom"
-		showCloseButton={false}
-	>
-		<Sheet.Header class="flex-row items-center justify-between px-0">
-			<Sheet.Title>{m["live.adjustBitrate"]()}</Sheet.Title>
-			<Sheet.Close>
-				{#snippet child({ props: closeProps })}
-					<Button {...closeProps} aria-label={m["a11y.close"]()} class="size-11 shrink-0" size="icon" variant="ghost">
-						<XIcon aria-hidden={true} />
-					</Button>
-				{/snippet}
-			</Sheet.Close>
-		</Sheet.Header>
-		{#if !wide}
-			<BitrateAdjuster {...props} showLabel={false} />
-		{/if}
-	</Sheet.Content>
+	{#if LimitSheet}
+		<LimitSheet
+			onCloseAutoFocus={(event: Event) => {
+				event.preventDefault();
+				if (!sheetOpen) {
+					onSliderCancel?.();
+					limitTarget()?.focus();
+				}
+			}}
+		>
+			{#if !wide}
+				<BitrateAdjuster {...props} showLabel={false} />
+			{/if}
+		</LimitSheet>
+	{:else if limitSheet.pending}
+		<LazyDialogFallback
+			bind:open={sheetOpen}
+			failed={limitSheet.failed}
+			onRetry={limitSheet.retry}
+			returnFocus={limitTarget}
+		/>
+	{/if}
 </Sheet.Root>
