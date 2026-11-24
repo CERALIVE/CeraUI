@@ -119,6 +119,55 @@ export function isDevOnlyNamespaceBarrel(id: string): boolean {
 
 const EMPTY_BARREL = "export const messages = {};\n";
 
+const PLAIN_MESSAGE_RUNTIME = "\0ceraui:plain-message";
+const PLAIN_LOCALES = ["ar", "de", "es", "fr", "hi", "ja", "ko", "pt-BR", "zh"];
+const LOCALIZED_LITERAL = String.raw`\/\*\* @type \{LocalizedString\} \*\/ \(`;
+const STRING_LITERAL = String.raw`"(?:[^"\\]|\\.)*"`;
+const PLAIN_COMMENT = String.raw`\/\*(?:[^*]|\*(?!\/))*\*\/\s*`;
+// The dispatcher must close over Paraglide's runtime bindings, not local names.
+const PLAIN_PREAMBLE = new RegExp(
+	String.raw`^(?:${PLAIN_COMMENT}|import \* as __paraglideRegistry from '\.\.\/registry\.js';?\s*)*import \{ getLocale, experimentalStaticLocale \} from '\.\.\/runtime\.js';\s*(?:${PLAIN_COMMENT})*(?:export )?const [A-Za-z_$][\w$]* = (?:${PLAIN_COMMENT})?$`,
+);
+const PLAIN_LOOKUP = new RegExp(
+	String.raw`\(\(inputs = \{\}, options = \{\}\) => \{\n\tvoid inputs;\n\tconst locale = experimentalStaticLocale \?\? options\.locale \?\? getLocale\(\)\n((?:\tif \(locale === "[\w-]+"\) return ${LOCALIZED_LITERAL}${STRING_LITERAL}\)\n)*)\treturn ${LOCALIZED_LITERAL}(${STRING_LITERAL})\)\n\}\);`,
+);
+const PLAIN_BRANCH = new RegExp(
+	String.raw`if \(locale === "([\w-]+)"\) return ${LOCALIZED_LITERAL}(${STRING_LITERAL})\)`,
+	"g",
+);
+
+/** Share locale dispatch for argument-free Paraglide literals in the SPA. */
+export function compactPlainMessages() {
+	return {
+		name: "ceraui:compact-plain-messages",
+		resolveId(id: string) {
+			return id === PLAIN_MESSAGE_RUNTIME ? id : null;
+		},
+		load(id: string) {
+			if (id === PLAIN_MESSAGE_RUNTIME) {
+				return `import { experimentalStaticLocale, getLocale } from ${JSON.stringify(path.join(PARAGLIDE_OUTDIR, "runtime.js"))};
+const locales = ${JSON.stringify(PLAIN_LOCALES)};
+export const plainMessage = (base, messages) => (_inputs, options = {}) =>
+	messages[locales.indexOf(experimentalStaticLocale ?? options.locale ?? getLocale())] ?? base;`;
+			}
+			if (!PER_MESSAGE_MODULE.test(id)) return null;
+			const source = readFileSync(id, "utf8");
+			const match = PLAIN_LOOKUP.exec(source);
+			if (!match?.[1] || !match[2] || !PLAIN_PREAMBLE.test(source.slice(0, match.index)))
+				return null;
+			const translations = new Map<string, string>();
+			for (const [, locale, message] of match[1].matchAll(PLAIN_BRANCH)) {
+				if (!locale || message === undefined || !PLAIN_LOCALES.includes(locale) || translations.has(locale))
+					return null;
+				translations.set(locale, message);
+			}
+			const table = PLAIN_LOCALES.map((locale) => translations.get(locale) ?? "null").join(",");
+			const replacement = `plainMessage(${match[2]},[${table}]);`;
+			return `import { plainMessage } from ${JSON.stringify(PLAIN_MESSAGE_RUNTIME)};\n${source.replace(match[0], () => replacement)}`;
+		},
+	};
+}
+
 /**
  * Replaces a dev-only namespace barrel with an empty one in production builds.
  *
