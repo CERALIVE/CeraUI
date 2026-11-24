@@ -413,6 +413,9 @@ export const runtimeConfigSchema = z.object({
 	bond_pair_vid: z
 		.record(z.string().min(1), z.string().regex(/^[0-9a-f]{4}$/))
 		.optional(),
+	bond_pair_connector: z
+		.record(z.string().min(1), z.string().min(1))
+		.optional(),
 	bond_connector_choice: z
 		.record(
 			z.string().min(1),

@@ -74,6 +74,7 @@ import {
 	previewBondOptOut,
 	resetPersistentBondOptOutForTest,
 	resetSessionBondOptOutForTest,
+	setLegacyBondOptOut,
 	setPersistentBondOptOut,
 } from "./bond-preference.ts";
 import {
@@ -310,6 +311,10 @@ export function resetBondOptOutSession(): void {
 }
 
 export function setBondOptOut(ifname: string, optOut: boolean): void {
+	if (bondWriteUsesLegacyMode()) {
+		setLegacyBondOptOut(ifname, optOut);
+		return;
+	}
 	setPersistentBondOptOut(ifname, optOut, Object.keys(netif));
 }
 
@@ -1781,6 +1786,17 @@ type BondDisableContext = Pick<
 	"isStillReal" | "refresh"
 >;
 let realBondDisableContext: BondDisableContext | undefined;
+let bondMonitorInstalled = false;
+
+function bondWriteUsesLegacyMode(): boolean {
+	return (
+		isDevelopment() ||
+		process.env.HWSIM_REPO !== undefined ||
+		process.env.CERALIVE_DEVICE_TYPE === "emulated" ||
+		(bondMonitorInstalled &&
+			(shouldUseMockMonitor() || !realBondDisableContext?.isStillReal()))
+	);
+}
 
 export function bondDisableSimulationSelected(): boolean {
 	return (
@@ -1799,6 +1815,7 @@ export function setBondDisableGuardContext(
 	observer: BondDisableContext | undefined,
 	realMonitor: boolean,
 ): void {
+	bondMonitorInstalled = observer !== undefined;
 	realBondDisableContext = realMonitor ? observer : undefined;
 	refreshBondDisableEvidence();
 }

@@ -3,7 +3,13 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { call } from "@orpc/server";
-import { getConfig, loadConfig, setConfigFilePath } from "../modules/config.ts";
+import { getMockState, updateMockState } from "../mocks/mock-service.ts";
+import {
+	getConfig,
+	loadConfig,
+	saveConfig,
+	setConfigFilePath,
+} from "../modules/config.ts";
 import {
 	listPhysicalDevices,
 	mintLinkId,
@@ -15,6 +21,7 @@ import {
 	resetSessionBondOptOutForTest,
 	setPersistentBondOptOut,
 } from "../modules/network/bond-preference.ts";
+import { createMonitorManager } from "../modules/network/monitor/monitor-manager.ts";
 import {
 	getNetworkInterfaces,
 	setBondDisableGuardContext,
@@ -26,6 +33,7 @@ import {
 import { genSrtlaBondEntries } from "../modules/streaming/srtla.ts";
 import { configureNetworkInterfaceProcedure } from "../rpc/procedures/network.procedure.ts";
 import rollbackCleanSave from "./fixtures/real-device/bond-connector-v2026.11.4-clean-save.json";
+import { bootDevice, installDevice } from "./helpers/bond-guard-install.ts";
 import {
 	clearBondNetworkFixture,
 	makeRpcContext,
@@ -125,6 +133,81 @@ const turnEthernetOff = () =>
 		{ context: makeRpcContext() },
 	);
 
+test.each([
+	"mock",
+	"overlay",
+	"hwsim",
+	"emulated",
+	"scenario",
+	"test",
+] as const)(
+	"%s persists only the historical bond config bytes",
+	async (mode) => {
+		const keys = [
+			"NODE_ENV",
+			"MOCK_MODE",
+			"MOCK_SCENARIO",
+			"HWSIM_REPO",
+			"CERALIVE_DEVICE_TYPE",
+		] as const;
+		const saved = keys.map((key) => [key, process.env[key]] as const);
+		const { initialized, netifConfigs } = getMockState();
+		try {
+			for (const key of keys) delete process.env[key];
+			process.env.NODE_ENV = mode === "test" ? "test" : "production";
+			process.env.CERALIVE_DEVICE_TYPE =
+				mode === "emulated" ? "emulated" : "real";
+			if (mode === "mock" || mode === "overlay") process.env.MOCK_MODE = "true";
+			if (mode === "scenario") process.env.MOCK_SCENARIO = "multi-modem-wifi";
+			if (mode === "hwsim") process.env.HWSIM_REPO = "/fixture";
+			updateMockState({
+				initialized: mode === "overlay",
+				netifConfigs: new Map(),
+			});
+			await writeFile(file, "{}");
+			await reload();
+			const absent = async () => "";
+			const observer = bootDevice({
+				getDeviceTypeOverride: () => process.env.CERALIVE_DEVICE_TYPE,
+				isDevelopment: () => false,
+				readDeviceTreeCompatible: absent,
+				readDeviceTreeModel: absent,
+				readCeraliveRelease: absent,
+				readDmiProductName: absent,
+				readDmiBoardName: absent,
+			});
+			await observer.ready;
+			installDevice(
+				observer,
+				createMonitorManager(() => undefined),
+			);
+			await scan({ ...b, serial: "" });
+			addUplinks();
+			getConfig().bond_opt_out = {
+				[describeModemBondKeys(second).linkId]: true,
+			};
+			saveConfig();
+			const mainBytes = await Bun.file(file).text();
+			getConfig().bond_opt_out = undefined;
+			saveConfig();
+			expect(
+				await call(
+					configureNetworkInterfaceProcedure,
+					{ name: second, ip: "198.51.100.2", enabled: false },
+					{ context: makeRpcContext() },
+				),
+			).toMatchObject({ success: true, applied: { enabled: false } });
+			expect(await Bun.file(file).text()).toBe(mainBytes);
+		} finally {
+			updateMockState({ initialized, netifConfigs });
+			for (const [key, value] of saved) {
+				if (value === undefined) delete process.env[key];
+				else process.env[key] = value;
+			}
+		}
+	},
+);
+
 function onPci(device: Device, port: string, serial: string): Device {
 	return {
 		...device,
@@ -138,6 +221,54 @@ function onPci(device: Device, port: string, serial: string): Device {
 		},
 	};
 }
+
+test("ON does not erase an OFF projected by another connector at the reused label", async () => {
+	const original = { ...b, serial: "" };
+	const relabeledA = { ...a, serial: "", udevadm: b.udevadm };
+	const relabeledB = { ...original, udevadm: a.udevadm };
+	await scan(original);
+	const legacy = describeModemBondKeys(second).linkId;
+	setPersistentBondOptOut(second, true);
+	await scan(relabeledA, relabeledB);
+	setPersistentBondOptOut(first, true);
+	setPersistentBondOptOut(second, false);
+	await reload();
+	await scan(relabeledA, relabeledB);
+	expect(included(first, second)).toEqual([false, true]);
+	expect(getConfig().bond_opt_out?.[legacy]).toBe(true);
+});
+
+test("an unrelated Dell serial history and exact OFF do not veto a Huawei fallback", async () => {
+	await writeFile(file, "{}");
+	await reload();
+	await scan({ ...a, serial: "CONSTRUCTED-DELL-EXACT" });
+	setPersistentBondOptOut(first, true);
+	getConfig().usb_serial_shared = [
+		new Bun.CryptoHasher("sha256").update(`413c:${group1}`).digest("hex"),
+	];
+	await scan({ ...b, idVendor: "12d1", idProduct: "1506", serial: "" });
+	addUplinks();
+	expect(await realDevice(turnEthernetOff)).toMatchObject({ success: true });
+	expect(genSrtlaBondEntries().map(({ iface }) => iface)).toEqual([second]);
+});
+
+test("a confirmed ON transfers to the same-brand replacement from a different pair", async () => {
+	await scan({ ...a, serial: group1 }, { ...b, serial: group1 });
+	setPersistentBondOptOut(second, false);
+	await reload();
+	await scan({ ...a, serial: group2 }, { ...b, serial: group2 });
+	expect(included(first, second)).toEqual([false, true]);
+});
+
+test("a PCI ON preserves the pair default for a sibling unseen at the write", async () => {
+	const twinA = onPci(a, "3", group1);
+	const twinB = onPci(b, "4", group1);
+	await scan(twinB);
+	setPersistentBondOptOut(second, false);
+	await reload();
+	await scan(twinA, twinB);
+	expect(included(first, second)).toEqual([false, true]);
+});
 
 test("an excluded PCI twin can be turned on through the RPC and stays in after restart", async () => {
 	const twins = [onPci(a, "3", group1), onPci(b, "4", group1)];
@@ -318,7 +449,17 @@ test("a sole selected twin survives reassigned udev paths at the same connectors
 	expect(included(first, second)).toEqual([false, true]);
 });
 
-test("a default-IN unreadable twin cannot justify disabling the only known uplink", async () => {
+test("an unreadable port without pair proof keeps the main fallback behavior", async () => {
+	await scan({ ...b, serial: "" });
+	addUplinks();
+	expect(await realDevice(turnEthernetOff)).toMatchObject({ success: true });
+	expect(genSrtlaBondEntries().map(({ iface }) => iface)).toEqual([second]);
+});
+
+test("an unreadable port with a proved pair default cannot justify disabling the only known uplink", async () => {
+	await scan({ ...a, serial: group1 }, { ...b, serial: group1 });
+	setPersistentBondOptOut(first, true);
+	await reload();
 	await scan({ ...b, serial: "" });
 	addUplinks();
 	expect(await realDevice(turnEthernetOff)).toEqual({
