@@ -229,6 +229,15 @@ immediately re-broadcasts the resolved `capabilities` event. Gated by
 capability combination without switching the full scenario. Call only while the
 stream is idle; the override is cleared by `resetMockState()`.
 
+**Mock-engine audio controls:** backend tests hold, release or refuse the mock
+engine's `set-audio-mix` replies (with cerastream's own tokens only), read its last
+start request, unplug an audio card and turn on idle per-input meters. E2E holds and refuses live replies through the
+page-socket interceptor (`apps/frontend/tests/e2e/helpers/mixer-wire.ts`),
+checking each by the RPC id the page's own socket received, reads
+the last start request over the private worker-backend channel and unplugs
+through `streaming.setMockDeviceAttached`; no production route is added. Contract:
+[dev mock seams](../../apps/backend/docs/agents/dev-mock-seams.md#mock-engine-audio-controls-exists).
+
 **Scenarios:**
 
 | `MOCK_SCENARIO` | Description |

@@ -200,6 +200,47 @@ Three `MOCK_SCENARIO` values seed the engine-capability state:
 re-broadcasts the `capabilities` event. Gated by `shouldUseMocks()`. Use in tests
 that need a specific capability combination without switching the full scenario.
 
+### Mock-engine audio controls [EXISTS]
+
+The mock engine answers `set-audio-mix` and `start` the way cerastream does, and
+backend tests script it in-process through `mocks/providers/streaming.ts`; no
+production route, contract or procedure changes:
+
+- `replyMockAudioMix(params)` answers like the engine's async reply. With a
+  token armed by `refuseMockAudioMix(token)` it refuses with the engine's
+  params-invalid envelope before anything applies; otherwise it applies on
+  arrival (`setMockAudioMix`). `refuseMockAudioMix` accepts only
+  `ENGINE_AUDIO_TOKENS`, the refusal tokens cerastream itself returns. While
+  `holdMockAudioMixReplies(true)` holds replies, each one waits until
+  `releaseMockAudioMixReply(index)` (0 = oldest) delivers it. Turning the hold
+  off, `resetMockState()` and `initMockService()` deliver every held reply in
+  arrival order, so no call hangs.
+- `getMockLastStartParams()` returns the params of the last `start` request the
+  engine received, admitted or refused. A composition rebuild is not a start.
+- `setMockDeviceAttached("audio_<card>", attached)` unplugs or replugs an audio
+  card: it leaves `getMockAudioDevices()`, so the audio sources and the engine
+  registry drop it together, and clients hear it on `status` (`asrcs`,
+  `audio_sources`).
+- While idle, preview `audio-level` frames carry one unity reading per attached
+  audio input only when the scenario's `capabilities.features` lists
+  `audio-idle-input-meters`; otherwise they carry no `inputs`, as the engine
+  omits its empty list.
+
+E2E uses the page-socket interceptor the audio mixer spec already relied on for
+refusals, now `apps/frontend/tests/e2e/helpers/mixer-wire.ts`: `holdAudioMix()`
+lets the call reach the device and holds its answer (await `held`, then
+`release()`), and `refuseAudioMixWithEngineToken(token)` answers as the backend
+does when the engine refuses with one of `ENGINE_AUDIO_TOKENS`
+(`mocks/engine-audio-tokens.ts`). `pageHasReply(id)` and `pageReply(id)` read,
+by RPC id, the answers the page's own socket received, so a test proves a held
+answer had not arrived and then did. It reads the last start request over the
+worker backend's private child channel (`workerBackend.mockEngine()`
+`.lastStartParams`, `tests/e2e/fixtures/backend-entry.ts`) and unplugs through
+the existing `streaming.setMockDeviceAttached`.
+`tests/mock-engine-fidelity.test.ts` parses every mock `set-audio-mix` result and
+`audio-level` frame with the installed producer schemas and asserts the exact
+cerastream token each audio refusal rule returns.
+
 ### Bluetooth dev seam (`mocks/providers/bluetooth.ts`)
 
 An in-memory BlueZ stand-in — adapter, discoverable roster, pair/trust state

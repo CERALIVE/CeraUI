@@ -45,6 +45,10 @@ import { inputModeSchema } from "@ceraui/rpc/schemas";
 import { getConfig } from "../../modules/config.ts";
 import { readIngestDesired } from "../../modules/network/network-ingest-control.ts";
 import {
+	deriveAudioSources,
+	getAudioDevices,
+} from "../../modules/streaming/audio.ts";
+import {
 	type EngineCapabilitiesSnapshot,
 	getCapabilities,
 	getLastCapabilities,
@@ -57,6 +61,11 @@ import {
 	getSourcesMessage,
 } from "../../modules/streaming/sources.ts";
 import { broadcastMsg } from "../../modules/ui/websocket-server.ts";
+import {
+	ENGINE_AUDIO_TOKENS,
+	type EngineAudioToken,
+	engineAudioMixRefusal,
+} from "../engine-audio-tokens.ts";
 import {
 	buildMockAudioDevices,
 	buildMockCapsFullDeviceModes,
@@ -329,6 +338,9 @@ function buildCaptureModeFamilies(
 	return [...families.values()];
 }
 
+// The engine registry id the mock gives each ALSA card.
+const mockAudioInputId = (cardId: string) => `audio_${cardId}`;
+
 function expandDeviceModes(
 	modes: MockDeviceModes,
 	displayNames: Record<string, string> = {},
@@ -367,7 +379,7 @@ function expandDeviceModes(
 	// auto-follow paths end-to-end in mock mode.
 	const audioEntries = Object.entries(audioDevices).map(
 		([displayName, cardId]) => ({
-			input_id: `audio_${cardId}`,
+			input_id: mockAudioInputId(cardId),
 			device_path: `/dev/snd/pcmC${cardId}D0c`,
 			display_name: displayName,
 			media_class: "audio" as const,
@@ -454,12 +466,22 @@ export function getMockEngineDevices(): ListDevicesResult {
  *
  * multi-modem-wifi, caps-full, and streaming-active all seed the same two USB audio
  * cards to exercise T4's engine-join tier (alsa_card_id match + human-name heuristic)
- * and dedupe/auto-follow paths end-to-end in mock mode.
+ * and dedupe/auto-follow paths end-to-end in mock mode. A card unplugged through
+ * setMockDeviceAttached is left out until it is plugged back.
  */
 export function getMockAudioDevices(): MockAudioDevices {
 	if (!shouldUseMocks()) {
 		return {};
 	}
+	const detached = getMockState().detachedSources;
+	return Object.fromEntries(
+		Object.entries(scenarioAudioDevices()).filter(
+			([, cardId]) => detached[mockAudioInputId(cardId)] !== true,
+		),
+	);
+}
+
+function scenarioAudioDevices(): MockAudioDevices {
 	switch (getActiveScenario()) {
 		case "caps-full":
 			return buildMockDualUsbAudioDevices({ "HDMI Input": "rockchiphdmiin" });
@@ -480,7 +502,9 @@ export function getMockAudioDevices(): MockAudioDevices {
  * uses — no second list-devices fetch). A detached id is filtered out of
  * getMockEngineDevices(), so a device the session already observed surfaces as a
  * `lost` row (todo 11) and the shared start/setConfig gate refuses it with
- * `source_lost` (todo 12 parity) — NO mock-specific gate. Cleared by
+ * `source_lost` (todo 12 parity), with NO mock-specific gate. An audio card's id
+ * (`audio_<card>`) also drops it from getMockAudioDevices(), so it leaves the
+ * audio sources and the engine registry together. Cleared by
  * resetMockState() (detachedSources resets with the scenario). No-op unless the
  * mock service is active (shouldUseMocks()), so production never invokes it.
  */
@@ -509,6 +533,16 @@ export function setMockDeviceAttached(
 		}),
 	);
 	applyObservedDevicesAndBroadcast(observed);
+	// Clients hear an audio card leave or return on `status`, as on an ALSA hotplug.
+	if (
+		Object.values(scenarioAudioDevices()).some(
+			(cardId) => mockAudioInputId(cardId) === inputId,
+		)
+	)
+		broadcastMsg("status", {
+			asrcs: Object.keys(getAudioDevices()),
+			audio_sources: deriveAudioSources(),
+		});
 }
 
 /**
@@ -722,12 +756,21 @@ export function getMockBcrpStatus() {
 }
 
 /**
- * Start mock streaming (for testing)
+ * Start mock streaming (for testing). The request is recorded first, so a
+ * refused start is readable too (getMockLastStartParams).
  */
 export function startMockStreaming(params?: StartParams): void {
 	if (!shouldUseMocks()) {
 		return;
 	}
+	updateMockState({
+		lastStartParams: params === undefined ? null : structuredClone(params),
+	});
+	admitMockStart(params);
+}
+
+/** The engine's admission of a start; a composition rebuild re-enters it without being a start request. */
+function admitMockStart(params?: StartParams): void {
 	if (params !== undefined) {
 		validateMockAudioMix(
 			params.audio,
@@ -784,13 +827,14 @@ export function startMockStreaming(params?: StartParams): void {
 	setStreamingState(true);
 }
 
-function mockAudioMixInvalid(token: string): CerastreamRpcError {
+function mockAudioMixInvalid(token: EngineAudioToken): CerastreamRpcError {
+	const refusal = engineAudioMixRefusal(token);
 	return new CerastreamRpcError(
-		-32602,
-		`invalid params: ${token}: invalid audio mix configuration`,
-		"cerastream.params.invalid",
+		refusal.code,
+		refusal.message,
+		refusal.dataCode,
 		null,
-		{ code: "cerastream.params.invalid" },
+		{ code: refusal.dataCode },
 	);
 }
 
@@ -888,6 +932,63 @@ export function setMockAudioMix(params: SetAudioMixParams): SetAudioMixResult {
 	return { inputs: applied };
 }
 
+// Held `set-audio-mix` replies, oldest first. Functions cannot ride in the
+// cloned mock state, so the resets release them instead (no call hangs).
+const heldAudioMixReplies: Array<() => void> = [];
+
+/**
+ * `set-audio-mix` as the engine answers it: refused with the armed token before
+ * anything applies, or applied on arrival, with the reply held while a test
+ * holds replies. Backend tests call it in-process; no production path does.
+ */
+export async function replyMockAudioMix(
+	params: SetAudioMixParams,
+): Promise<SetAudioMixResult> {
+	const refusal = getMockState().audioMixRefusal;
+	let reply: () => SetAudioMixResult;
+	try {
+		if (refusal !== null) throw mockAudioMixInvalid(refusal);
+		const result = setMockAudioMix(params);
+		reply = () => result;
+	} catch (error) {
+		reply = () => {
+			throw error;
+		};
+	}
+	if (getMockState().audioMixHold)
+		await new Promise<void>((release) => heldAudioMixReplies.push(release));
+	return reply();
+}
+
+/** Test control: hold every reply; releasing the hold delivers the held ones in arrival order. */
+export function holdMockAudioMixReplies(hold: boolean): void {
+	updateMockState({ audioMixHold: hold });
+	if (!hold) releaseHeldMockAudioMixReplies();
+}
+
+/** Test control: deliver the held reply at `index` (0 = oldest); false when there is none. */
+export function releaseMockAudioMixReply(index = 0): boolean {
+	const release = heldAudioMixReplies.splice(index, 1)[0];
+	release?.();
+	return release !== undefined;
+}
+
+export function releaseHeldMockAudioMixReplies(): void {
+	for (const release of heldAudioMixReplies.splice(0)) release();
+}
+
+/** Test control: refuse every `set-audio-mix` with this engine token until cleared with null. */
+export function refuseMockAudioMix(token: EngineAudioToken | null): void {
+	if (token !== null && !ENGINE_AUDIO_TOKENS.includes(token))
+		throw new Error(`not a cerastream audio refusal token: ${token}`);
+	updateMockState({ audioMixRefusal: token });
+}
+
+/** The params of the last `start` request the mock engine received, admitted or refused. */
+export function getMockLastStartParams(): StartParams | null {
+	return getMockState().lastStartParams;
+}
+
 export function switchMockAudio(inputId: string): {
 	active_audio_input: string;
 } {
@@ -961,7 +1062,7 @@ export function changeMockComposition(
 	const good = state.engineKnownGood;
 	setStreamingState(false);
 	try {
-		startMockStreaming(next);
+		admitMockStart(next);
 		updateMockState({
 			engineKnownGood: structuredClone(next),
 			engineKnownGoodCandidate: null,
@@ -979,7 +1080,7 @@ export function changeMockComposition(
 			};
 		}
 		try {
-			startMockStreaming(good);
+			admitMockStart(good);
 		} catch (rollbackError) {
 			if (!(rollbackError instanceof CerastreamRpcError)) throw rollbackError;
 			return {
@@ -999,12 +1100,36 @@ export function changeMockComposition(
 	}
 }
 
-/** Synthetic readings follow the real post-gain/post-mute meter placement. */
+// shortcut: the pinned @ceralive/cerastream does not export this feature token
+// yet; import it from the bindings once a pinned release does.
+const AUDIO_IDLE_INPUT_METERS_FEATURE = "audio-idle-input-meters";
+
+/**
+ * Synthetic readings follow the real post-gain/post-mute meter placement. Idle,
+ * every attached audio input reads at unity, but only when the scenario
+ * advertises idle input meters; otherwise none, as today's engine reports.
+ */
 export function getMockAudioInputLevels(
 	rms: number[],
 	peak: number[],
 ): AudioInputLevel[] {
-	if (!shouldUseMocks() || !getStreamingStats().isActive) return [];
+	if (!shouldUseMocks()) return [];
+	if (!getStreamingStats().isActive) {
+		if (
+			!resolveScenarioCapabilities().features?.includes(
+				AUDIO_IDLE_INPUT_METERS_FEATURE,
+			)
+		)
+			return [];
+		return getMockEngineDevices()
+			.devices.filter((device) => device.media_class === "audio")
+			.map((device) => ({
+				input_id: device.input_id,
+				channels: rms.length,
+				rms_db: [...rms],
+				peak_db: [...peak],
+			}));
+	}
 	return (getMockState().engineStart?.audio?.inputs ?? []).map((input) => {
 		const level = (db: number) =>
 			input.mute ? -1_000_000 : db + (input.gain_db ?? 0);
