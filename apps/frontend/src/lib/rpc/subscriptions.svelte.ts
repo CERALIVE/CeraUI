@@ -1294,6 +1294,9 @@ function handleMessage(
 	}
 }
 
+/** Test seam: the device-loop harness hands decoded socket frames to this handler. */
+export const handleMessageForTest = handleMessage;
+
 /**
  * Apply a PULLED status snapshot (`rpc.status.getStatus()`) seq-less, so it
  * bypasses the per-type drop-stale guard. INVARIANT: a pull is authoritative and

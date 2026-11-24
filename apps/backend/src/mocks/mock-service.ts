@@ -75,6 +75,7 @@ import { MockAddonDescriptor, MockAddonState } from "./providers/addons.ts";
 import { resetMockBluetoothState } from "./providers/bluetooth.ts";
 import { resetMockKioskState } from "./providers/kiosk.ts";
 import { getMockRelaysCache } from "./providers/relays.ts";
+import { releaseHeldMockAudioMixReplies } from "./providers/streaming.ts";
 import { resetMockWifiFaults } from "./providers/wifi.ts";
 import { resetMockWifiIncarnations } from "./providers/wifi-incarnation.ts";
 
@@ -157,6 +158,13 @@ export interface MockState {
 	// input_id present with `true` is DETACHED and filtered out of
 	// getMockEngineDevices(), so it surfaces as a `lost` row. Resets with the scenario.
 	detachedSources: Record<string, boolean>;
+	// The params of the last `start` request the mock engine received, admitted
+	// or refused; null before the first. Resets with the scenario.
+	lastStartParams: StartParams | null;
+	// Test controls for `set-audio-mix`: hold every reply until released, and
+	// refuse it with this engine token. Reset with the scenario.
+	audioMixHold: boolean;
+	audioMixRefusal: string | null;
 }
 
 const mockState: MockState = {
@@ -199,6 +207,9 @@ const mockState: MockState = {
 	networkIngestActive: { rtmp: true, srt: true },
 	networkIngestMediamtxSrt: false,
 	detachedSources: {},
+	lastStartParams: null,
+	audioMixHold: false,
+	audioMixRefusal: null,
 };
 
 // Deep snapshot of `mockState` captured at the end of initMockService — the
@@ -274,6 +285,10 @@ export function initMockService(scenarioName?: string): void {
 	mockState.networkIngestActive = { rtmp: true, srt: true };
 	mockState.networkIngestMediamtxSrt = false;
 	mockState.detachedSources = {};
+	mockState.lastStartParams = null;
+	mockState.audioMixHold = false;
+	mockState.audioMixRefusal = null;
+	releaseHeldMockAudioMixReplies();
 	mockState.interfaceThroughput = {};
 	mockState.wifiModes = {};
 	lastEmittedModemFingerprint = null;
@@ -735,6 +750,7 @@ export function resetMockState(): void {
 	resetMockWifiFaults();
 	resetMockWifiIncarnations();
 	resetMockBluetoothState();
+	releaseHeldMockAudioMixReplies();
 	resetAudioNamingDiagnostics();
 	lastEmittedModemFingerprint = null;
 	lastEmittedWifiFingerprint = null;

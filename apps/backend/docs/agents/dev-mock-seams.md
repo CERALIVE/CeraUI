@@ -200,6 +200,37 @@ Three `MOCK_SCENARIO` values seed the engine-capability state:
 re-broadcasts the `capabilities` event. Gated by `shouldUseMocks()`. Use in tests
 that need a specific capability combination without switching the full scenario.
 
+### Mock-engine audio controls [EXISTS]
+
+The mock engine answers `set-audio-mix` and `start` the way cerastream does, and
+tests can script it (`mocks/providers/streaming.ts`):
+
+- `replyMockAudioMix(params)` is what a live `streaming.setAudioMix` reaches under
+  mocks. With a token armed by `refuseMockAudioMix(token)` it refuses with the
+  engine's params-invalid envelope before anything applies; otherwise it applies
+  on arrival (`setMockAudioMix`). While `holdMockAudioMixReplies(true)` holds
+  replies, each one waits until `releaseMockAudioMixReply(index)` (0 = oldest)
+  delivers it. Turning the hold off, `resetMockState()` and `initMockService()`
+  deliver every held reply in arrival order, so no call hangs.
+- `getMockLastStartParams()` returns the params of the last `start` request the
+  engine received, admitted or refused. A composition rebuild is not a start.
+- `setMockDeviceAttached("audio_<card>", attached)` unplugs or replugs an audio
+  card: it leaves `getMockAudioDevices()`, so the audio sources and the engine
+  registry drop it together, and clients hear it on `status` (`asrcs`,
+  `audio_sources`).
+- While idle, preview `audio-level` frames carry one unity reading per attached
+  audio input only when the scenario's `capabilities.features` lists
+  `audio-idle-input-meters`; otherwise they carry no `inputs`, as the engine
+  omits its empty list.
+
+E2E reaches the reply and start controls through the dev-only
+`streaming.mockEngineControl` RPC (`hold_audio_mix`, `release_audio_mix`,
+`refuse_audio_mix`, `last_start_params`) and the unplug through
+`streaming.setMockDeviceAttached`; both refuse outside mock mode.
+`tests/mock-engine-fidelity.test.ts` parses every mock `set-audio-mix` result and
+`audio-level` frame with the installed producer schemas and checks every audio
+refusal token against cerastream's own list.
+
 ### Bluetooth dev seam (`mocks/providers/bluetooth.ts`)
 
 An in-memory BlueZ stand-in — adapter, discoverable roster, pair/trust state

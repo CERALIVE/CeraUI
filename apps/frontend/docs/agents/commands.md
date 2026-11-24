@@ -81,6 +81,17 @@ instance after success, never by a process-global flag. Full catalog coverage,
 Storage isolation, the 50 ms teardown wait and both project policies stay intact.
 See `docs/FRONTEND-SETUP-COST.md` at repo root for the measured alternatives.
 
+### Closed-loop device harness [EXISTS]
+
+`src/tests/harness/device-loop.ts` lets a component test click like a person.
+`ingest(type, payload)` delivers a broadcast the way the socket does: through the
+real JSON serializer (an `undefined` field never arrives), stamped with the next
+`seq`, into the real handler of `lib/rpc/subscriptions.svelte.ts` (its test-only
+`handleMessageForTest` export). `heldRpc()` returns a stand-in for
+`rpc.streaming` whose calls stay pending until the test resolves or rejects each
+one, in any order; `next(method)` awaits a method's next call without polling.
+Swap it into a hoisted `$lib/rpc` mock (`device-loop.test.ts` shows the pattern).
+
 ### DEP BASELINE — measured 2026-09-08 [EXISTS]
 
 **Hosted reliability correction:** the following timings are the original

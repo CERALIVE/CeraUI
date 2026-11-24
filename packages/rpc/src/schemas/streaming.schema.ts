@@ -1445,8 +1445,9 @@ export const getMockHardwareOutputSchema = z.object({
 export type GetMockHardwareOutput = z.infer<typeof getMockHardwareOutputSchema>;
 
 // Dev-only single-device unplug/replug seam (C7): detach/reattach ONE mock
-// capture device by its list-devices input_id so e2e can drive the `lost` grace
-// row (todo 11) + the `source_lost` start rejection (todo 12). No-op in prod.
+// capture or audio device by its list-devices input_id so e2e can drive the
+// `lost` grace row (todo 11), the `source_lost` start rejection (todo 12) and an
+// unplugged audio input. No-op in prod.
 export const setMockDeviceAttachedInputSchema = z.object({
 	input_id: z.string().min(1),
 	attached: z.boolean(),
@@ -1458,3 +1459,22 @@ export const setMockDeviceAttachedOutputSchema = z.object({
 	error: z.string().optional(),
 });
 export type SetMockDeviceAttachedOutput = z.infer<typeof setMockDeviceAttachedOutputSchema>;
+
+// Dev-only mock-engine controls for e2e: hold, release or refuse its
+// `set-audio-mix` replies, and read the params of its last start request.
+// Refused outside mock mode.
+export const mockEngineControlInputSchema = z.discriminatedUnion('op', [
+	z.object({ op: z.literal('hold_audio_mix'), hold: z.boolean() }),
+	z.object({ op: z.literal('release_audio_mix'), index: z.number().int().min(0).optional() }),
+	z.object({ op: z.literal('refuse_audio_mix'), token: z.string().min(1).nullable() }),
+	z.object({ op: z.literal('last_start_params') }),
+]);
+export type MockEngineControlInput = z.infer<typeof mockEngineControlInputSchema>;
+
+export const mockEngineControlOutputSchema = z.object({
+	success: z.boolean(),
+	error: z.string().optional(),
+	// The producer's start params exactly as the engine received them.
+	start_params: z.unknown().optional(),
+});
+export type MockEngineControlOutput = z.infer<typeof mockEngineControlOutputSchema>;

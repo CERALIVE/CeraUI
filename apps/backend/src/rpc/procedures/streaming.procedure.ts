@@ -18,6 +18,8 @@ import {
 	getMockHardwareOutputSchema,
 	type InputMode,
 	listDevicesOutputSchema,
+	mockEngineControlInputSchema,
+	mockEngineControlOutputSchema,
 	pipelinesMessageSchema,
 	reloadAudioDelayInputSchema,
 	reloadAudioDelayOutputSchema,
@@ -59,7 +61,11 @@ import {
 import {
 	clearMockStreamError,
 	getInjectedMockStreamError,
+	getMockLastStartParams,
+	holdMockAudioMixReplies,
 	isMockGatewayActive,
+	refuseMockAudioMix,
+	releaseMockAudioMixReply,
 	setMockDeviceAttached,
 	startMockStreaming,
 } from "../../mocks/providers/streaming.ts";
@@ -1288,6 +1294,36 @@ export const setMockDeviceAttachedProcedure = authedProcedure
 		}
 		setMockDeviceAttached(input.input_id, input.attached);
 		return { success: true };
+	});
+
+/**
+ * Script the mock engine from e2e (dev-only): hold, release or refuse its
+ * set-audio-mix replies, and read the params of its last start request.
+ */
+export const mockEngineControlProcedure = authedProcedure
+	.input(mockEngineControlInputSchema)
+	.output(mockEngineControlOutputSchema)
+	.handler(({ input }) => {
+		if (!shouldUseMocks()) {
+			return {
+				success: false,
+				error: "Mock engine controls only available in development mode",
+			};
+		}
+		switch (input.op) {
+			case "hold_audio_mix":
+				holdMockAudioMixReplies(input.hold);
+				return { success: true };
+			case "release_audio_mix":
+				return releaseMockAudioMixReply(input.index)
+					? { success: true }
+					: { success: false, error: "no held set-audio-mix reply" };
+			case "refuse_audio_mix":
+				refuseMockAudioMix(input.token);
+				return { success: true };
+			case "last_start_params":
+				return { success: true, start_params: getMockLastStartParams() };
+		}
 	});
 
 /**

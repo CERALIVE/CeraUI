@@ -118,6 +118,7 @@ import {
 	getMockHardwareProcedure,
 	getPipelinesProcedure,
 	listDevicesProcedure,
+	mockEngineControlProcedure,
 	reloadAudioDelayProcedure,
 	setBitrateProcedure,
 	setConfigProcedure,
@@ -234,6 +235,8 @@ const stableRoutes = {
 		getMockHardware: getMockHardwareProcedure,
 		// Dev-only single-device unplug/replug seam (C7)
 		setMockDeviceAttached: setMockDeviceAttachedProcedure,
+		// Dev-only mock-engine script controls for e2e
+		mockEngineControl: mockEngineControlProcedure,
 	}),
 
 	modems: base.router({

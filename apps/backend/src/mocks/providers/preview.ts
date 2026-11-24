@@ -123,27 +123,29 @@ function sendNextFrame(ws: ServerWebSocket<PreviewConn>): void {
 	conn.frameIdx = (conn.frameIdx + 1) % DECODED_FRAMES.length;
 }
 
-function sendAudioLevel(ws: ServerWebSocket<PreviewConn>): void {
-	const conn = ws.data;
+/** One preview-channel `audio-level` frame, exported so tests parse exactly what is sent. */
+export function mockAudioLevelFrame(seq: number, ptsUs: number) {
 	// Two-channel synthetic levels: a gentle oscillation in the [-48, -6] dBFS
 	// band so the AudioLevelMeter renders active, moving bars.
-	const phase = conn.audioSeq;
 	const wobble = (offset: number) =>
-		Math.round((-24 + 12 * Math.sin((phase + offset) / 3)) * 10) / 10;
+		Math.round((-24 + 12 * Math.sin((seq + offset) / 3)) * 10) / 10;
 	const inputs = getMockAudioInputLevels(
 		[wobble(0), wobble(1)],
 		[wobble(0) + 3, wobble(1) + 3],
 	);
-	ws.send(
-		JSON.stringify({
-			type: "audio-level",
-			seq: conn.audioSeq,
-			pts_us: conn.ptsUs,
-			rms_db: [wobble(0), wobble(1)],
-			peak_db: [wobble(0) + 3, wobble(1) + 3],
-			...(inputs.length > 0 ? { inputs } : {}),
-		}),
-	);
+	return {
+		type: "audio-level",
+		seq,
+		pts_us: ptsUs,
+		rms_db: [wobble(0), wobble(1)],
+		peak_db: [wobble(0) + 3, wobble(1) + 3],
+		...(inputs.length > 0 ? { inputs } : {}),
+	};
+}
+
+function sendAudioLevel(ws: ServerWebSocket<PreviewConn>): void {
+	const conn = ws.data;
+	ws.send(JSON.stringify(mockAudioLevelFrame(conn.audioSeq, conn.ptsUs)));
 	conn.audioSeq += 1;
 }
 

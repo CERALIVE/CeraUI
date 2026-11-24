@@ -28,6 +28,7 @@ import { updateStatus } from "../../modules/streaming/streaming.ts";
 import { appRouter } from "../router.ts";
 import type { AppWebSocket, RPCContext } from "../types.ts";
 import {
+	mockEngineControlProcedure,
 	reloadAudioDelayProcedure,
 	setAudioMixProcedure,
 	setBitrateProcedure,
@@ -127,6 +128,11 @@ const MUTATIONS: ReadonlyArray<{
 		name: "setMockDeviceAttached",
 		procedure: setMockDeviceAttachedProcedure,
 		args: { input_id: "video0", attached: true },
+	},
+	{
+		name: "mockEngineControl",
+		procedure: mockEngineControlProcedure,
+		args: { op: "hold_audio_mix", hold: false },
 	},
 ];
 

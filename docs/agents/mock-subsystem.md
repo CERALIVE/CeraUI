@@ -229,6 +229,12 @@ immediately re-broadcasts the resolved `capabilities` event. Gated by
 capability combination without switching the full scenario. Call only while the
 stream is idle; the override is cleared by `resetMockState()`.
 
+**Mock-engine audio controls:** tests hold, release or refuse the mock engine's
+`set-audio-mix` replies, read its last start request, unplug an audio card and
+turn on idle per-input meters; e2e reaches them through the dev-only
+`streaming.mockEngineControl` and `streaming.setMockDeviceAttached` RPCs. Contract:
+[dev mock seams](../../apps/backend/docs/agents/dev-mock-seams.md#mock-engine-audio-controls-exists).
+
 **Scenarios:**
 
 | `MOCK_SCENARIO` | Description |
