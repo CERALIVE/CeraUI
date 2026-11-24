@@ -1869,6 +1869,7 @@ export class CerastreamBackend implements StreamingBackend {
 	private encodeInputAudioFields(
 		config: RuntimeConfig,
 		pipelineId: string | undefined,
+		audioOff?: boolean,
 	): {
 		input_id?: string;
 		codec?: "h264" | "h265";
@@ -1885,6 +1886,7 @@ export class CerastreamBackend implements StreamingBackend {
 		// default, a real device ⇒ device + its ALSA id. An absent `asrc` with no
 		// mix omits the section entirely (the engine's legacy inference).
 		const plan = launchAudioPlan(config, {
+			audioOff,
 			embeddedAudioActive: this.deps.isEmbeddedAudioActive(pipelineId),
 		});
 		const audio = {
@@ -1960,7 +1962,11 @@ export class CerastreamBackend implements StreamingBackend {
 				max_bitrate: config.max_br ?? DEFAULT_MAX_BITRATE,
 				balancer: config.balancer ?? DEFAULT_BALANCER,
 			},
-			...this.encodeInputAudioFields(config, config.pipeline ?? opts.pipeline),
+			...this.encodeInputAudioFields(
+				config,
+				config.pipeline ?? opts.pipeline,
+				opts.audioOff,
+			),
 		});
 	}
 

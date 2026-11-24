@@ -92,6 +92,13 @@ export function isPseudoAudioSource(asrc: string): boolean {
 	return PSEUDO_AUDIO_SOURCES.has(asrc);
 }
 
+/** Did the operator choose "No audio"? A Start reads this once, when it is accepted. */
+export function isNoAudioPick(
+	asrc: string | undefined = getConfig().asrc,
+): boolean {
+	return asrc === NO_AUDIO_ID;
+}
+
 export function isSelectedAudioLost(
 	asrc: string | undefined,
 	available: readonly string[],

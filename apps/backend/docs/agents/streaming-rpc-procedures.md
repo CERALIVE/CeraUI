@@ -117,10 +117,18 @@ main input out with `audio_input_primary`) and saves for the next start. For a n
 the embedded input and becomes engine `embedded`. Without saved inputs or the
 capability, start serialization stays on the existing path. The engine start,
 the persisted engine config and the mock start read one decision,
-`launchAudioPlan(config, { audioOff })`: `asrc: "No audio"` (or `audioOff`, a
-stream started without audio) sends `audio.mode: "none"` with no `inputs` and
+`launchAudioPlan(config, { audioOff })`: `asrc: "No audio"` (or `audioOff: true`,
+a stream started without audio) sends `audio.mode: "none"` with no `inputs` and
 no `device` whatever mix is saved, and the saved mix stays on disk for the
-next pick; `Pipeline default` with a saved mix still sends that mix. The compatibility
+next pick; `Pipeline default` with a saved mix still sends that mix.
+Only the operator's own pick counts: Auto's launch copy can also read
+"No audio" (`no-capture-audio`), so `startStream` passes `audioOff: false` there
+and a saved mix is still sent. A "No audio" Start is bound where it is accepted
+(`isNoAudioPick` in the Start RPC, autostart and `session.start`): a pick saved
+while it is being prepared counts for the next Start, `updateConfig` does not
+overwrite it, and the armed marker restores the stream without audio. "No audio"
+saved before the engine request is built also wins over an accepted device or Auto
+pick. The compatibility
 start-schema export aliases the published producer schema, preserving its
 additive audio fields.
 

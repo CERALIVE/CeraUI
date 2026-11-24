@@ -48,6 +48,8 @@ export interface StreamRunOptions {
 	host: string;
 	port: number;
 	streamid: string;
+	/** The launch's own audio decision; see `launchAudioPlan`. */
+	audioOff?: boolean;
 }
 
 /**

@@ -60,6 +60,7 @@ import {
 	clearArmedStreamMarker,
 	decideStreamRestoration,
 	defaultArmedStreamMarkerDeps,
+	pinnedLaunchedAsrc,
 	RESTORATION_BOUND_MS,
 	RESTORATION_POLL_MS,
 	RESTORATION_UNKNOWN_DEADLINE_MS,
@@ -96,6 +97,8 @@ export function captureArmedStreamConfig(): ArmedStreamConfig {
 	copy("pipeline");
 	copy("acodec");
 	copy("asrc");
+	const launchedAsrc = pinnedLaunchedAsrc();
+	if (launchedAsrc !== undefined) snapshot.asrc = launchedAsrc;
 	copy("relay_server");
 	copy("relay_account");
 	copy("relay_streamid_override");

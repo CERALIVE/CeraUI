@@ -65,7 +65,10 @@ import {
 } from "../../mocks/providers/streaming.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
 import { reportActiveProfile } from "../../modules/remote-control/active-profile-reporter.ts";
-import { refreshBluetoothAudioDevices } from "../../modules/streaming/audio.ts";
+import {
+	isNoAudioPick,
+	refreshBluetoothAudioDevices,
+} from "../../modules/streaming/audio.ts";
 import {
 	AUDIO_BACKEND_UNSUPPORTED_ERROR,
 	isAudioBackendSupported,
@@ -254,6 +257,7 @@ export const streamingStartProcedure = authedProcedure
 	.handler(async ({ input, context }) => {
 		let appliedResponse: StreamingConfigInput | undefined;
 		let legacyError: string | undefined;
+		const audioOff = isNoAudioPick(input.asrc);
 		const lifecycleResult = await startStreamSession({
 			origin:
 				context.ws.remoteAddress === "control-channel"
@@ -385,7 +389,7 @@ export const streamingStartProcedure = authedProcedure
 						composition: applied.composition ?? getConfig().composition,
 						video_codec: applied.video_codec ?? getConfig().video_codec,
 					};
-					const audio = launchAudioPlan(config);
+					const audio = launchAudioPlan(config, audioOff ? { audioOff } : {});
 					// What the engine adapter hands over at a real start, after
 					// `validateConfig` drops a composition the engine does not advertise.
 					const composition =
@@ -423,6 +427,7 @@ export const streamingStartProcedure = authedProcedure
 					applied,
 					generation,
 					attemptId,
+					audioOff,
 				);
 				if (!startResult.success) {
 					legacyError = startResult.error;

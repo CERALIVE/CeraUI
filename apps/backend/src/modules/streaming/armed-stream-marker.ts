@@ -123,6 +123,21 @@ const armedStreamConfigSchema = z.object({
 });
 export type ArmedStreamConfig = z.infer<typeof armedStreamConfigSchema>;
 
+let launchedAsrc: string | undefined;
+
+/**
+ * The audio pick the latest launch was bound to, when that launch does not follow
+ * the saved one: a "No audio" Start stays without audio if it is restored, even
+ * when another pick was saved while it was being prepared.
+ */
+export function pinLaunchedAsrc(asrc: string | undefined): void {
+	launchedAsrc = asrc;
+}
+
+export function pinnedLaunchedAsrc(): string | undefined {
+	return launchedAsrc;
+}
+
 export {
 	RECOVERY_FAILURE_REASONS,
 	type RecoveryFailureReason,

@@ -28,6 +28,7 @@ import { emitEvent } from "../../events/emit.ts";
 import { isUpdating } from "../../system/software-updates.ts";
 import { notificationBroadcast } from "../../ui/notifications.ts";
 import { broadcastMsg } from "../../ui/websocket-server.ts";
+import { isNoAudioPick } from "../audio.ts";
 import type { Pipeline } from "../pipelines.ts";
 import { awaitRecoveryBarrier } from "../recovery-barrier.ts";
 import { genSrtlaIpList, resolveSrtla } from "../srtla.ts";
@@ -115,6 +116,7 @@ export async function autoStartStream(linkAttempt = 1): Promise<void> {
 
 	// If the config is invalid, then we won't ever be able to start, so don't retry
 	const config = getConfig();
+	const audioOff = isNoAudioPick();
 	let c: {
 		pipeline: Pipeline;
 		srtlaAddr: string;
@@ -159,6 +161,8 @@ export async function autoStartStream(linkAttempt = 1): Promise<void> {
 				c.streamid,
 				{},
 				attemptId,
+				undefined,
+				audioOff,
 			);
 			if (!launched.success) {
 				throw new StreamStartFailure(

@@ -277,6 +277,7 @@ export async function updateConfig(requestedParams: ConfigParameters) {
 		getConfig(),
 		requestedParams,
 	);
+	const { asrc: asrcAtStart, audio_inputs: inputsAtStart } = getConfig();
 
 	const {
 		pipeline,
@@ -311,10 +312,14 @@ export async function updateConfig(requestedParams: ConfigParameters) {
 		// concrete codec here; narrow to the config's codec enum.
 		config.acodec = params.acodec as typeof config.acodec;
 	}
-	if (pipeline.supportsAudio && params.asrc) {
+	// Audio saved while this Start was being checked is newer than the Start's copy.
+	if (pipeline.supportsAudio && params.asrc && config.asrc === asrcAtStart) {
 		config.asrc = params.asrc;
 	}
-	if (params.audio_inputs !== undefined)
+	if (
+		params.audio_inputs !== undefined &&
+		config.audio_inputs === inputsAtStart
+	)
 		config.audio_inputs = params.audio_inputs ?? undefined;
 
 	if (params.relay_server) {

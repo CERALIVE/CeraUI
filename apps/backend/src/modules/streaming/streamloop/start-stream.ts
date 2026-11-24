@@ -20,7 +20,7 @@
 // wires srtla per-uplink telemetry, then starts the engine session over the
 // StreamingBackend seam.
 
-import type { StartFailureClass } from "@ceraui/rpc/schemas";
+import { AUDIO_SOURCE_AUTO, type StartFailureClass } from "@ceraui/rpc/schemas";
 import {
 	buildSrtlaSendArgs,
 	controlSocketPath,
@@ -34,7 +34,13 @@ import {
 	resetActiveEncodeLiveness,
 	resetActivePassthrough,
 } from "../active-passthrough.ts";
-import { asrcProbe, isPseudoAudioSource } from "../audio.ts";
+import { pinLaunchedAsrc } from "../armed-stream-marker.ts";
+import {
+	asrcProbe,
+	isNoAudioPick,
+	isPseudoAudioSource,
+	NO_AUDIO_ID,
+} from "../audio.ts";
 import {
 	defaultBindMapSpawnDeps,
 	resolveBindMapArgs,
@@ -153,6 +159,9 @@ export async function maybeProbeAudioSource(
  * while the live session keeps encoding the previous one, so restoring from disk
  * would apply an edit the operator deferred to their next start. Absent (every
  * other caller), the live config is read exactly as before.
+ *
+ * `audioOff` is the accepted Start's own "No audio": the launch keeps it whatever
+ * is saved while the Start is being prepared, and the save counts for the next one.
  */
 export async function startStream(
 	pipeline: Pipeline,
@@ -162,6 +171,7 @@ export async function startStream(
 	audioDeps: AudioProbeDeps = {},
 	attemptId = "legacy-start",
 	configOverride?: Partial<RuntimeConfig>,
+	audioOff = false,
 ): Promise<StartStreamResult> {
 	assertStreamLaunchOwnership();
 	// The preview-encoder fence, and the reason it lives HERE. The engine fixes
@@ -191,7 +201,7 @@ export async function startStream(
 		};
 	}
 
-	const config =
+	const saved =
 		configOverride === undefined
 			? getConfig()
 			: ({
@@ -199,6 +209,8 @@ export async function startStream(
 					...configOverride,
 					composition: configOverride.composition,
 				} as RuntimeConfig);
+	const config = audioOff ? { ...saved, asrc: NO_AUDIO_ID } : saved;
+	const autoAudio = config.asrc === AUDIO_SOURCE_AUTO;
 	const launchConfig = resolveLaunchConfig(config);
 	startStreamDeps.getStreamingBackend().setBitrate(launchConfig);
 
@@ -296,6 +308,11 @@ export async function startStream(
 		});
 		transaction.register(() => startStreamDeps.stopLinkTelemetry());
 
+		// Auto's launch copy can read "No audio" without the operator having picked it.
+		const noAudio =
+			(!autoAudio && launchConfig.asrc === NO_AUDIO_ID) ||
+			(configOverride === undefined && isNoAudioPick());
+		pinLaunchedAsrc(noAudio ? NO_AUDIO_ID : undefined);
 		await startStreamDeps.getStreamingBackend().start(
 			launchConfig,
 			{
@@ -303,6 +320,7 @@ export async function startStream(
 				host: "127.0.0.1",
 				port: SRTLA_LISTEN_PORT,
 				streamid,
+				audioOff: noAudio,
 			},
 			transaction,
 		);

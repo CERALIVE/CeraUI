@@ -27,7 +27,11 @@ import { onUsbNetScanCommitted } from "../../network/router-cellular-scan.ts";
 import { isUpdating } from "../../system/software-updates.ts";
 import { sendStatus } from "../../ui/status.ts";
 import { getSocketSenderId } from "../../ui/websocket-server.ts";
-import { clearAsrcProbeReject, isAsrcProbeRejectResolved } from "../audio.ts";
+import {
+	clearAsrcProbeReject,
+	isAsrcProbeRejectResolved,
+	isNoAudioPick,
+} from "../audio.ts";
 import { setPendingAudioFollowAsrc } from "../auto-audio.ts";
 import { clearBindMapReport } from "../bind-map-disposition.ts";
 import { announceBindMapReport } from "../bind-map-notification.ts";
@@ -73,6 +77,7 @@ export async function start(
 	params: ConfigParameters,
 	generation = 0,
 	attemptId = "legacy-start",
+	audioOff = isNoAudioPick(params.asrc),
 ): Promise<StartStreamResult> {
 	assertStreamLaunchOwnership();
 	const ownsLaunch = currentStreamLaunchOwner();
@@ -180,6 +185,8 @@ export async function start(
 			c.streamid,
 			{},
 			attemptId,
+			undefined,
+			audioOff,
 		);
 	} catch (err) {
 		if (sessionResources?.generation === generation) {
