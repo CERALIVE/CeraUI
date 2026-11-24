@@ -974,7 +974,8 @@ The reader answers, first match wins:
 2. A matching vendor's explicit port OFF excludes even if a unique serial is
    now readable. A legacy exact bit also excludes unless a matching ON
    supersedes it or a recorded port OFF identifies it as another vendor's.
-   A vendor-unknown legacy bit still excludes; scans do not infer its owner.
+   A vendor-unknown legacy bit still excludes. Neither discovery nor a later
+   OFF on that port can identify the owner of the existing bit.
 3. A matching vendor's port ON takes precedence over pair exclusions, even
    when a lone replacement reports `0000`.
 4. Otherwise the pair key excludes when it is in `bond_opt_out`, or in
@@ -986,8 +987,10 @@ same-vendor port ON with a vendor-scoped OFF, and appends the path bit if main
 did not already write it. An ON clears only that vendor's choice and any
 unneeded extra bit, not a bit main would retain. The #697 last-uplink rule
 vetoes an OFF that removes the last sender in either view, including the first
-OFF at a cross-vendor aliased path. Simulated configure calls, including
-auto-detected emulation, run only the legacy transition.
+OFF at a cross-vendor aliased path. Simulated devices, including auto-detected
+emulation, use the legacy map for reads and writes. A simulated toggle also
+retires an opposing saved choice for that vendor, so it cannot undo the toggle
+if the device later boots in real mode.
 
 The WebSocket config frames omit the new persistence fields. Shared-serial
 discovery updates memory before attempting to save only the history to disk.

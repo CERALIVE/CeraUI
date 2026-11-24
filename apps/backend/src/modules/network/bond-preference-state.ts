@@ -45,13 +45,15 @@ function hasExactOut(identity: PhysicalBondKeys, preferences: BondPreferences) {
 	if (preferences.out?.[linkId] !== true) return false;
 	if (identity.anchor !== "id-path") return true;
 	// A vendor-owned bit must not exclude another vendor at an aliased path.
+	return !hasScopedExact(preferences, linkId);
+}
+
+function hasScopedExact(preferences: BondPreferences, port: string) {
 	return (
-		!Object.values(preferences.portOut?.[linkId] ?? {}).some(
+		Object.values(preferences.portOut?.[port] ?? {}).some(
 			(record) => record.exact,
-		) &&
-		!Object.values(preferences.optIn?.[linkId] ?? {}).some(
-			(record) => record.pin,
-		)
+		) ||
+		Object.values(preferences.optIn?.[port] ?? {}).some((record) => record.pin)
 	);
 }
 
@@ -142,7 +144,11 @@ export function transition(
 			delete on[vid];
 			if (vid) {
 				off[vid] = {
-					...(out[port] === true && { exact: true }),
+					// A new OFF cannot establish who owned a pre-upgrade bit.
+					...(out[port] === true &&
+						(stored.out?.[port] !== true || hasScopedExact(stored, port)) && {
+							exact: true,
+						}),
 					...((target.anchor === "usb-serial" ||
 						previous?.rollback === true) && { rollback: true }),
 				};
@@ -167,6 +173,31 @@ export function transition(
 		}
 	}
 	return { out, groupOut, optIn, portOut };
+}
+
+export function retireLegacyChoice(
+	stored: BondPreferences,
+	target: PhysicalBondKeys,
+	out: ExactOptOut,
+	optOut: boolean,
+): BondPreferences {
+	const port = portOf(target);
+	if (port === undefined) return { ...stored, out };
+	const vid = target.vid ?? "";
+	const optIn = { ...stored.optIn };
+	const portOut = { ...stored.portOut };
+	if (optOut && optIn[port]?.[vid]) {
+		const choices = { ...optIn[port] };
+		delete choices[vid];
+		if (presentOrUndefined(choices)) optIn[port] = choices;
+		else delete optIn[port];
+	} else if (!optOut && portOut[port]?.[vid]) {
+		const choices = { ...portOut[port] };
+		delete choices[vid];
+		if (presentOrUndefined(choices)) portOut[port] = choices;
+		else delete portOut[port];
+	}
+	return { ...stored, out, optIn, portOut };
 }
 
 export function rollbackOptOut(next: BondPreferences) {

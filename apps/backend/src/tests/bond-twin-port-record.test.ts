@@ -186,15 +186,17 @@ test.each([
 );
 
 test("R5b-A strand: an ON twin stays the sole sender when its serial returns", async () => {
-	await scan(at(b, ""));
-	addUplinks();
-	setPersistentBondOptOut(second, true);
-	setPersistentBondOptOut(second, false);
-	expect(
-		await onRealDevice(() => configure("eth0", "192.0.2.1", false)),
-	).toMatchObject({ success: true });
-	await readOnlyScan(at(b, g1));
-	expect(senders()).toEqual([second]);
+	await onRealDevice(async () => {
+		await scan(at(b, ""));
+		addUplinks();
+		setPersistentBondOptOut(second, true);
+		setPersistentBondOptOut(second, false);
+		expect(await configure("eth0", "192.0.2.1", false)).toMatchObject({
+			success: true,
+		});
+		await readOnlyScan(at(b, g1));
+		expect(senders()).toEqual([second]);
+	});
 });
 
 test("R5b-S: a group-less ON follows the same-brand port into another pair", async () => {
@@ -354,19 +356,19 @@ test.each([
 );
 
 test("an acknowledged ON carries over to a lone same-brand 0000 replacement", async () => {
-	await start(pairs(G1, PLACEHOLDER));
-	await scan(at(b, g1));
-	addUplinks();
-	expect(
-		await onRealDevice(() => configure(second, "198.51.100.2", true)),
-	).toMatchObject({
-		success: true,
-		applied: { enabled: true },
+	await onRealDevice(async () => {
+		await start(pairs(G1, PLACEHOLDER));
+		await scan(at(b, g1));
+		addUplinks();
+		expect(await configure(second, "198.51.100.2", true)).toMatchObject({
+			success: true,
+			applied: { enabled: true },
+		});
+		await reload();
+		await readOnlyScan(at(b, "0000"));
+		expect(included(second)).toEqual([true]);
+		expect(senders()).toContain(second);
 	});
-	await reload();
-	await readOnlyScan(at(b, "0000"));
-	expect(included(second)).toEqual([true]);
-	expect(senders()).toContain(second);
 });
 
 test("an acknowledged unique-serial OFF survives restart with an unreadable serial", async () => {
@@ -485,27 +487,31 @@ test("a vendor-unknown legacy port OFF still applies to an unreadable replacemen
 	expect(included(second)).toEqual([false]);
 });
 
-test("an operator OFF gives an existing vendor-unknown port exclusion its vendor", async () => {
-	await onRealDevice(async () => {
-		await scan(at(b, ""));
-		const port = portId(b);
-		await start({ bond_opt_out: { [port]: true } });
-		addUplinks();
-		await readOnlyScan(huaweiAt(b));
-		expect(included(second)).toEqual([false]);
-		await readOnlyScan(at(b, ""));
-		expect(await configure(second, "198.51.100.2", false)).toMatchObject({
-			success: true,
-			applied: { enabled: false },
+test.each(["", "UNIQUE-REPLACEMENT"])(
+	"another vendor's OFF with serial %j does not take ownership of an unknown legacy exclusion",
+	async (serial) => {
+		await onRealDevice(async () => {
+			await scan(at(b, ""));
+			const port = portId(b);
+			await start({ bond_opt_out: { [port]: true } });
+			addUplinks();
+			const replacement = { ...at(b, serial), idVendor: "1e0e" };
+			await readOnlyScan(replacement);
+			expect(included(second)).toEqual([serial !== ""]);
+			expect(await configure(second, "198.51.100.2", false)).toMatchObject({
+				success: true,
+				applied: { enabled: false },
+			});
+			await reload();
+			await readOnlyScan(at(b, ""));
+			expect(included(second)).toEqual([false]);
+			expect(senders()).toEqual(["eth0"]);
+			await readOnlyScan(huaweiAt(b));
+			expect(included(second)).toEqual([false]);
+			expect(getConfig().bond_opt_out?.[port]).toBe(true);
 		});
-		await reload();
-		await readOnlyScan(huaweiAt(b));
-		expect(included(second)).toEqual([true]);
-		await readOnlyScan(at(b, ""));
-		expect(included(second)).toEqual([false]);
-		expect(getConfig().bond_opt_out).toEqual({ [port]: true });
-	});
-});
+	},
+);
 
 test("a serial OFF appends a rollback bit without disturbing legacy order, and ON clears only its own extra bit", async () => {
 	await onRealDevice(async () => {
@@ -579,6 +585,87 @@ test("auto-detected emulation saves only the exact legacy OFF bytes", async () =
 		}
 	});
 });
+
+test("auto-emulation honors ON after an OFF made while boot evidence was pending", async () => {
+	await onRealDevice(async () => {
+		const forced = process.env.CERALIVE_DEVICE_TYPE;
+		delete process.env.CERALIVE_DEVICE_TYPE;
+		const evidence = Promise.withResolvers<string>();
+		try {
+			await start({});
+			await scan(at(b, ""));
+			addUplinks();
+			const absent = async () => "";
+			const observer = observeRealDeviceAtBoot(false, {
+				isDevelopment: () => false,
+				getDeviceTypeOverride: () => undefined,
+				readDeviceTreeCompatible: () => evidence.promise,
+				readDeviceTreeModel: absent,
+				readCeraliveRelease: absent,
+				readDmiProductName: absent,
+				readDmiBoardName: absent,
+			});
+			setBondDisableGuardContext(observer, true);
+			expect(observer.isStillReal()).toBe(true);
+			expect(await configure(second, "198.51.100.2", false)).toMatchObject({
+				success: true,
+				applied: { enabled: false },
+			});
+			evidence.resolve("");
+			expect(await observer.ready).toBe(false);
+			await new Promise<void>((resolve) => setImmediate(resolve));
+			expect(observer.isStillReal()).toBe(false);
+			expect(await configure(second, "198.51.100.2", true)).toMatchObject({
+				success: true,
+				applied: { enabled: true },
+			});
+			expect(senders()).toEqual(["eth0", second]);
+			await reload();
+			await readOnlyScan(at(b, ""));
+			expect(senders()).toEqual(["eth0", second]);
+		} finally {
+			evidence.resolve("");
+			if (forced !== undefined) process.env.CERALIVE_DEVICE_TYPE = forced;
+		}
+	});
+});
+
+test.each(["", "UNIQUE-BEFORE-EMULATION"])(
+	"an emulated boot can undo a prior real OFF with serial %j",
+	async (serial) => {
+		await onRealDevice(async () => {
+			const forced = process.env.CERALIVE_DEVICE_TYPE;
+			delete process.env.CERALIVE_DEVICE_TYPE;
+			try {
+				await start({});
+				await scan(at(b, serial));
+				addUplinks();
+				expect(await configure(second, "198.51.100.2", false)).toMatchObject({
+					success: true,
+					applied: { enabled: false },
+				});
+				process.env.CERALIVE_DEVICE_TYPE = "emulated";
+				await reload();
+				await readOnlyScan(at(b, serial));
+				expect(await configure(second, "198.51.100.2", true)).toMatchObject({
+					success: true,
+					applied: { enabled: true },
+				});
+				expect(senders()).toEqual(["eth0", second]);
+				await reload();
+				await readOnlyScan(at(b, serial));
+				expect(senders()).toEqual(["eth0", second]);
+				delete process.env.CERALIVE_DEVICE_TYPE;
+				await reload();
+				await readOnlyScan(at(b, serial));
+				expect(senders()).toEqual(["eth0", second]);
+			} finally {
+				if (forced === undefined) delete process.env.CERALIVE_DEVICE_TYPE;
+				else process.env.CERALIVE_DEVICE_TYPE = forced;
+			}
+		});
+	},
+);
 
 test("persisting newly seen shared serial history does not restore stale bond preferences", async () => {
 	await start({ bond_opt_out: { [G1]: true } });

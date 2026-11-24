@@ -68,8 +68,8 @@ import {
 import { scheduleWifiUpdate } from "../wifi/wifi-interfaces.ts";
 import {
 	bondPhysicalId,
-	isBondOptedOut,
 	previewBondOptOut,
+	isBondOptedOut as readBondOptOut,
 	resetPersistentBondOptOutForTest,
 	resetSessionBondOptOutForTest,
 	setPersistentBondOptOut,
@@ -340,12 +340,20 @@ export function resetBondOptOutSession(): void {
 	resetSessionBondOptOutForTest();
 }
 
-export function setBondOptOut(ifname: string, optOut: boolean): void {
-	const simulated =
-		bondDisableSimulationSelected() ||
+function bondPreferenceView(): "legacy" | "effective" {
+	return bondDisableSimulationSelected() ||
 		process.env.CERALIVE_DEVICE_TYPE === "emulated" ||
-		realBondDisableContext?.isStillReal() === false;
-	setPersistentBondOptOut(ifname, optOut, simulated ? "legacy" : "effective");
+		realBondDisableContext?.isStillReal() === false
+		? "legacy"
+		: "effective";
+}
+
+function isBondOptedOut(ifname: string): boolean {
+	return readBondOptOut(ifname, bondPreferenceView());
+}
+
+export function setBondOptOut(ifname: string, optOut: boolean): void {
+	setPersistentBondOptOut(ifname, optOut, bondPreferenceView());
 }
 
 export function isDupIpOnly(int: NetworkInterface): boolean {
