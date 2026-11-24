@@ -117,14 +117,15 @@ const SPA_BASELINE = {
 // from the measured ~500 B gzip that one operator-facing message key costs
 // across 10 locales: roughly 32 further keys, comfortably clear of the 43 B of
 // build nondeterminism observed between this measurement and CI's own, and far
-// too small to absorb another feature-scale surface.
-const SPA_TOTAL_ABSOLUTE_HEADROOM = 16 * KIB;
+// too small to absorb another feature-scale surface. #662 adds an approved
+// 2 KiB to both absolute ceilings (TD-spa-i18n-catalog-size).
+const SPA_TOTAL_ABSOLUTE_HEADROOM = 18 * KIB;
 
 // The precache aggregate's binding constraint, added 2026-09-04 for exactly the
 // reason the total has one: re-deriving it under the 1.12 ratio alone would
 // release ~135 KiB of unearned headroom, 20x the growth that forced the
-// re-derivation. Same sizing as the total — roughly 32 further message keys.
-const SPA_PRECACHE_ABSOLUTE_HEADROOM = 16 * KIB;
+// re-derivation. Same allowance as the total.
+const SPA_PRECACHE_ABSOLUTE_HEADROOM = 18 * KIB;
 
 // The baselines a tracked, accepted regression displaced, newest last. Kept so a
 // budget above can never read as "the size it has always been", and re-stated on
