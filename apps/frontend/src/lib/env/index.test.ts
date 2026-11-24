@@ -13,6 +13,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+	getRpcSocketUrl,
+	getSocketUrl,
 	NON_BROWSER_SOCKET_URL,
 	RPC_WS_PATH,
 	resolveBackendHttpUrl,
@@ -31,6 +33,10 @@ function loc(href: string): SocketLocation {
 describe("resolveSocketUrl — production (origin-derived)", () => {
 	it("uses a dedicated same-origin RPC path that the preview proxy can forward", () => {
 		expect(RPC_WS_PATH).toBe("/ws");
+	});
+
+	it("names the build this page was served from on the RPC socket URL", () => {
+		expect(getRpcSocketUrl()).toBe(`${getSocketUrl()}/ws?ui_build=0.0.0-test`);
 	});
 
 	it("derives ws://host with no port suffix on a default HTTP port", () => {

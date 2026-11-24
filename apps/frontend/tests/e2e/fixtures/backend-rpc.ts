@@ -39,6 +39,14 @@ interface BackendRpcConnectOptions {
 	readonly createSocket?: BackendRpcSocketFactory;
 }
 
+/** The stack's UI build, named like a page from it does, so Live writes are admitted. */
+function backendSocketUrl(port: number): string {
+	const build = process.env.CERAUI_BUILD_ID;
+	return build
+		? `ws://127.0.0.1:${port}/ws?ui_build=${encodeURIComponent(build)}`
+		: `ws://127.0.0.1:${port}/ws`;
+}
+
 function createBackendRpcSocket(
 	url: string,
 	headers: Readonly<Record<string, string>>,
@@ -81,7 +89,7 @@ export class BackendRpc {
 				? {}
 				: { [E2E_WORKER_SECRET_HEADER]: options.proxySecret };
 		const socket = (options.createSocket ?? createBackendRpcSocket)(
-			`ws://127.0.0.1:${port}/ws`,
+			backendSocketUrl(port),
 			headers,
 		);
 		try {

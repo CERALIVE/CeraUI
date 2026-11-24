@@ -91,6 +91,10 @@ Five rules are load-bearing. **Only ordinary connection-loss treatments are debo
 
 After any RPC setter resolves, the frontend reads `result.applied` (not the client's intended value) and releases field locks to that value. This ensures the UI reflects what the backend actually wrote after clamping and validation, not what the user typed.
 
+### Cleared settings, the reconnect snapshot and the page's build [EXISTS; host-tested]
+
+`config` is partial, so a key it omits keeps its value. A setting the device cleared arrives as `config_clear { keys }` right after the `config` frame of that write; the store deletes exactly those keys and releases each one's field lock, unless a newer write for a value is still in flight (`reconcileClear`). The reconnect safety hydrate applies `streaming.getConfig` as a snapshot (`ingestPulledConfig`): the keys it returns merge as usual, a `GET_CONFIG_KEYS` key it omits is cleared unless a pending lock holds it, and a key it never returns (`autostart`) is left alone. The page names its build on the RPC socket URL (`/ws?ui_build=<__APP_VERSION__>`); the backend refuses Start and Live source, format, audio and mixer writes from a page of another build and tells it to reload. Coverage: `src/tests/harness/config-clear.test.ts`, `src/lib/env/index.test.ts`.
+
 ### Per-modem state merge
 
 Every modem frame carries the authoritative roster key set, but each entry has one

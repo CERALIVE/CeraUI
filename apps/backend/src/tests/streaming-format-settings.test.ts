@@ -217,11 +217,24 @@ test("config broadcast and getConfig carry the saved balancer", async () => {
 			{ context: makeRpcContext() },
 		);
 
+		const frames = broadcasts.map(
+			(frame) => JSON.parse(frame) as Record<string, unknown>,
+		);
 		expect(
-			broadcasts.map(
-				(frame) => configMessageSchema.parse(JSON.parse(frame).config).balancer,
-			),
+			frames
+				.filter((frame) => "config" in frame)
+				.map((frame) => configMessageSchema.parse(frame.config).balancer),
 		).toEqual(["fixed"]);
+		// The only other frame a config write may add names keys an earlier case
+		// left the device without (`config_clear`); it never names the balancer.
+		for (const frame of frames.filter((frame) => !("config" in frame))) {
+			expect(Object.keys(frame).filter((key) => key !== "seq")).toEqual([
+				"config_clear",
+			]);
+			expect((frame.config_clear as { keys: string[] }).keys).not.toContain(
+				"balancer",
+			);
+		}
 		expect(
 			await call(getConfigProcedure, undefined, { context: makeRpcContext() }),
 		).toHaveProperty("balancer", "fixed");

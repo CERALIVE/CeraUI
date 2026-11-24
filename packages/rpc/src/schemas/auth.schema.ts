@@ -3,6 +3,11 @@
  */
 import { z } from 'zod';
 
+// The query parameter a UI page puts on its RPC socket URL to name the build it
+// was served from (`CERAUI_BUILD_ID`). A UI socket without it is a page from
+// before this parameter existed, so the backend treats it as out of date.
+export const UI_BUILD_PARAM = 'ui_build';
+
 // Login input schema
 export const loginInputSchema = z.object({
 	password: z.string().optional(),

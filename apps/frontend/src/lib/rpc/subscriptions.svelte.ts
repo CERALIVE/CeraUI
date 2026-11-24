@@ -42,10 +42,13 @@ import type {
 } from "@ceraui/rpc/schemas";
 import {
 	CONFIG_CHANGE_EVENT,
+	CONFIG_CLEAR_EVENT,
 	configChangeStateSchema,
+	configClearMessageSchema,
 	deviceEventSchema,
 	EVENT_PUSH,
 	ethernetRoleMessageSchema,
+	GET_CONFIG_KEYS,
 	hardwareTypeSchema,
 	LOG_FOLLOW_EVENT,
 	logFollowMessageSchema,
@@ -97,6 +100,8 @@ import type { ConnectionState } from "./client";
 import { rpc, rpcClient } from "./client";
 import {
 	expireReactive,
+	isPending,
+	reconcileClearReactive,
 	reconcileReactive,
 	shouldIgnoreEchoReactive,
 } from "./dirty-registry.svelte";
@@ -675,6 +680,14 @@ function handleMessage(
 			if (changed) startConfigGeneration += 1;
 			configState = merged;
 			startEvidenceLink.config = getLinkEpoch();
+			break;
+		}
+
+		case CONFIG_CLEAR_EVENT: {
+			// The keys the device's last `config` write cleared. JSON dropped them
+			// from that frame, so the merge above kept their old values.
+			const parsed = configClearMessageSchema.safeParse(data);
+			if (parsed.success) clearConfigKeys(parsed.data.keys);
 			break;
 		}
 
@@ -1298,6 +1311,41 @@ function handleMessage(
 export const handleMessageForTest = handleMessage;
 
 /**
+ * Delete `keys` from the config store, releasing each one's field lock unless
+ * a newer write for a value still holds it (see `reconcileClear`).
+ */
+function clearConfigKeys(keys: readonly string[]): void {
+	for (const key of keys) reconcileClearReactive(key);
+	const current = configState;
+	if (current === undefined || !keys.some((key) => Object.hasOwn(current, key)))
+		return;
+	const next = { ...current };
+	for (const key of keys) Reflect.deleteProperty(next, key);
+	configState = next;
+	startConfigGeneration += 1;
+}
+
+/**
+ * Apply a PULLED config (`streaming.getConfig`, the reconnect safety hydrate)
+ * as a snapshot of the keys that procedure returns. The keys it carries merge
+ * like a pushed `config`. A listed key it omits is absent on the device now, a
+ * clear this tab may have missed while offline, so it is cleared unless a
+ * pending field lock holds this tab's newer value. A key the procedure never
+ * returns, such as `autostart`, is left as it is.
+ */
+export function ingestPulledConfig(config: unknown): void {
+	if (typeof config !== "object" || config === null) return;
+	handleMessage("config", config);
+	clearConfigKeys(
+		GET_CONFIG_KEYS.filter(
+			(key) =>
+				(config as Record<string, unknown>)[key] === undefined &&
+				!isPending(key),
+		),
+	);
+}
+
+/**
  * Apply a PULLED status snapshot (`rpc.status.getStatus()`) seq-less, so it
  * bypasses the per-type drop-stale guard. INVARIANT: a pull is authoritative and
  * must never be gated by push seq bookkeeping. Recovery seam for the stopping
@@ -1372,6 +1420,8 @@ async function runReconnectReauth(link: number): Promise<void> {
 				const answer = data as ReceivedStatus | undefined;
 				if (answer !== undefined)
 					ingestPulledStatus(answer.status, answer.receipt);
+			} else if (type === "config") {
+				ingestPulledConfig(data);
 			} else {
 				handleMessage(type, data);
 			}

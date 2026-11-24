@@ -67,6 +67,7 @@ import { framerateSchema, resolutionSchema } from "@ceraui/rpc/schemas";
 import type { LastSeenDevice } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
 import { broadcastMsg } from "../../rpc/compat.ts";
+import { broadcastConfig } from "../../rpc/config-broadcast.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { getNetworkIngestInfo } from "../network/network-ingest.ts";
 import { clearHdmiSignalErrorOnRecovery } from "../system/hdmi-signal-notification.ts";
@@ -1724,7 +1725,7 @@ export function reconcileConfiguredSourceIdentity(
 		config.selected_video_input = successor;
 	}
 	saveConfig();
-	broadcastMsg("config", getConfig());
+	broadcastConfig(getConfig());
 	logger.info(
 		"sources: configured source re-enumerated under a new node path — migrated by stable identity",
 		{ from: configured, to: successor },
@@ -1763,7 +1764,7 @@ export function broadcastSources(): void {
  */
 function clampPersistedModeAndEcho(sources: readonly StreamSource[]): void {
 	if (reconcilePersistedDeviceMode(sources)) {
-		broadcastMsg("config", getConfig());
+		broadcastConfig(getConfig());
 	}
 }
 

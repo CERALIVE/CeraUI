@@ -128,6 +128,8 @@ function probe(argv: string[]): string | undefined {
  */
 const VERSION_STAMP_FILE = "version";
 const BUILD_STAMP_FILE = "revision";
+/** `/opt/ceralive/build-id`: the `CERAUI_BUILD_ID` its frontend bundle was built with. */
+const BUILD_ID_STAMP_FILE = "build-id";
 
 /** The Debian package `ceralive-device` is CeraUI's own (`PACKAGE_NAME` in `scripts/build/build-debian-package.sh`). */
 const CERAUI_PACKAGE_NAME = "ceralive-device";
@@ -139,6 +141,18 @@ async function readStamp(path: string): Promise<string | undefined> {
 	} catch (_err) {
 		return undefined;
 	}
+}
+
+/**
+ * This backend's build identity: the stamp an install wrote, else the
+ * `CERAUI_BUILD_ID` a dev or e2e stack passes to both processes; undefined
+ * when neither names one.
+ */
+export async function readBuildIdentity(): Promise<string | undefined> {
+	return (
+		(await readStamp(BUILD_ID_STAMP_FILE)) ??
+		(process.env.CERAUI_BUILD_ID || undefined)
+	);
 }
 
 /**

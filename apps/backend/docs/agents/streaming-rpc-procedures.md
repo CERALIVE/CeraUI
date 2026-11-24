@@ -46,6 +46,10 @@ The `streaming` router exposes these procedures:
 
 `setConfig` writes the provided fields onto the running config (same relay/manual mutual-exclusion logic as `updateConfig`, minus DNS/pipeline validation), then calls `saveConfig` and broadcasts a `config` message. Use this for all config-only dialogs that must not start the stream.
 
+### Cleared settings and out-of-date pages [EXISTS]
+
+Every `config` broadcast goes through `broadcastConfig` (`rpc/config-broadcast.ts`), never `broadcastMsg("config", ...)`: after a write that cleared keys clients were sent, it follows the unchanged `config` frame with `config_clear { keys }` (the login snapshot counts as sent). `GET_CONFIG_KEYS` (`@ceraui/rpc`) equals the keys `getConfig` returns; the frontend's reconnect hydrate depends on it (`tests/config-clear.test.ts`). `start`, `setConfig`, `setAudioMix`, `switchInput`, `switchAudio` and `reloadAudioDelay` run `uiBuildMiddleware`: a UI socket whose page named another build than `/opt/ceralive/build-id` (or none) is refused before any change or engine call and sent the free-text notice "This page is out of date. Reload to continue." The device-control channel and reads are never gated, nor is anything on a backend with no identity (`tests/ui-build-admission.test.ts`).
+
 ### Composition placement [EXISTS]
 
 `setConfig({ composition_rect })` places the second input: the backend writes

@@ -202,7 +202,7 @@ function startServer(): void {
 					}
 
 					const success = server.upgrade(req, {
-						data: initSocketData(),
+						data: initSocketData(requestUrl),
 					});
 					if (success) {
 						// Bun automatically returns a 101 Switching Protocols response

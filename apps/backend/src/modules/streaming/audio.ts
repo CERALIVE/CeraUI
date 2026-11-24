@@ -21,7 +21,7 @@ import { AUDIO_SOURCE_AUTO } from "@ceraui/rpc/schemas";
 import { logger } from "../../helpers/logger.ts";
 import { readTextFile } from "../../helpers/text-files.ts";
 import { AUDIO_SOURCE_POLL_DELAY } from "../../helpers/timing-constants.ts";
-
+import { broadcastConfig } from "../../rpc/config-broadcast.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { setup } from "../setup.ts";
 import { isRealDevice } from "../system/device-detection.ts";
@@ -574,7 +574,7 @@ export function reconcileConfiguredAudioIdentity(
 
 	config.asrc = successor;
 	saveConfig();
-	broadcastMsg("config", getConfig());
+	broadcastConfig(getConfig());
 	logger.info(
 		"audio: configured card re-enumerated under a new ALSA id — migrated by stable identity",
 		{ from: configured, to: successor },

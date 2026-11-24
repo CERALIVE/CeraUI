@@ -350,8 +350,8 @@ function defaultClearSelectedVideoInput(): void {
 	if (config.selected_video_input === undefined) return;
 	config.selected_video_input = undefined;
 	saveConfig();
-	void import("../ui/websocket-server.ts").then(({ broadcastMsg }) =>
-		broadcastMsg("config", getConfig()),
+	void import("../../rpc/config-broadcast.ts").then(({ broadcastConfig }) =>
+		broadcastConfig(getConfig()),
 	);
 }
 

@@ -27,6 +27,7 @@ import {
 	createPreviewWebSocketHandler,
 	isPreviewSocket,
 } from "../modules/ui/preview-proxy.ts";
+import { rememberConfigSent } from "./config-broadcast.ts";
 import {
 	closeSocketSession,
 	createContext,
@@ -39,6 +40,10 @@ import {
 	removeClient,
 	sendToClient,
 } from "./events.ts";
+import {
+	isOutOfDateUi,
+	sendOutOfDateNotice,
+} from "./middleware/ui-build.middleware.ts";
 import { sendAddonSnapshot } from "./procedures/addons.procedure.ts";
 import {
 	buildInitialNotifications,
@@ -226,6 +231,7 @@ function sendInitialStatusToClient(ws: AppWebSocket): void {
 	const initialStatus = buildInitialStatus();
 
 	sendToClient(ws, "config", initialStatus.config);
+	rememberConfigSent(initialStatus.config);
 	void sendAddonSnapshot((snapshot) =>
 		sendToClient(ws, "addons", snapshot),
 	).catch((error) =>
@@ -265,6 +271,10 @@ function sendInitialStatusToClient(ws: AppWebSocket): void {
 	// re-raised by its own loop — and the boot-time encoder-mode clamp is exactly
 	// that. The legacy relay path has always replayed these.
 	sendToClient(ws, "notification", buildInitialNotifications());
+	// A page from another build learns to reload before it tries a Live write.
+	void isOutOfDateUi(ws).then((outOfDate) => {
+		if (outOfDate) sendOutOfDateNotice(ws);
+	});
 }
 
 /**

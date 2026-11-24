@@ -15,6 +15,12 @@ export interface SocketData {
 	lastActive: number;
 	/** Sender ID for remote relay identification */
 	senderId?: string;
+	/**
+	 * The build a UI page named on its socket URL (`ui_build`), `null` when it
+	 * named none. Absent on a context that is not a page, such as the
+	 * device-control channel's (see `ui-build.middleware.ts`).
+	 */
+	uiBuild?: string | null;
 }
 
 /**

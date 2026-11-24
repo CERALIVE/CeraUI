@@ -535,6 +535,9 @@ jobs:
 
       - name: Build frontend once
         working-directory: CeraUI
+        # The e2e jobs pass the same identity to their backends (see their env).
+        env:
+          CERAUI_BUILD_ID: ci-e2e
         run: bun run build:frontend
 
       - name: Bundle size report (initial-route JS gzip budget)
@@ -580,6 +583,8 @@ jobs:
             total: 1
     env:
       TOTAL_SHARDS: ${{ matrix.total }}
+      # The UI build identity the frontend artifact was built with (setup-e2e).
+      CERAUI_BUILD_ID: ci-e2e
     steps:
       - name: Checkout CeraUI
         uses: actions/checkout@v7
@@ -794,6 +799,8 @@ jobs:
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
       E2E_PASSWORD: "12345678"
       MOCK_SCENARIO: multi-modem-wifi
+      # The UI build identity the frontend artifact was built with (setup-e2e).
+      CERAUI_BUILD_ID: ci-e2e
       CHANGED_SNAPSHOTS: ${{ needs.changes.outputs.snapshots }}
       PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/visual-pr.json
       PLAYWRIGHT_BLOB_OUTPUT_DIR: test-results/blob-report-visual-pr

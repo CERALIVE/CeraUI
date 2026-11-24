@@ -1,6 +1,8 @@
 /**
  * RPC Context - Creates context for each WebSocket message
  */
+import { UI_BUILD_PARAM } from "@ceraui/rpc/schemas";
+
 import type { AppWebSocket, RPCContext } from "./types.ts";
 
 const closedSockets = new WeakSet<AppWebSocket>();
@@ -86,11 +88,15 @@ export function createContext(ws: AppWebSocket): RPCContext {
 }
 
 /**
- * Initialize socket data for a new connection
+ * Initialize socket data for a new connection. The upgrade passes its request
+ * URL, so the socket records the build its page named.
  */
-export function initSocketData(): import("./types.ts").SocketData {
+export function initSocketData(url?: URL): import("./types.ts").SocketData {
 	return {
 		isAuthenticated: false,
 		lastActive: Date.now(),
+		...(url === undefined
+			? {}
+			: { uiBuild: url.searchParams.get(UI_BUILD_PARAM) }),
 	};
 }

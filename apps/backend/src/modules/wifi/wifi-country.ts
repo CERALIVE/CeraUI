@@ -28,7 +28,7 @@ import type { SetWifiCountryOutput } from "@ceraui/rpc/schemas";
 import { WORLD_REGULATORY_DOMAIN } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
-import { broadcastMsg } from "../../rpc/compat.ts";
+import { broadcastConfig } from "../../rpc/config-broadcast.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import {
 	applyRegulatoryDomain,
@@ -107,7 +107,7 @@ export function persistWifiCountry(
 	const config = getConfig();
 	config.country = country;
 	saveConfig();
-	broadcastMsg("config", config);
+	broadcastConfig(config);
 
 	return {
 		success: true,

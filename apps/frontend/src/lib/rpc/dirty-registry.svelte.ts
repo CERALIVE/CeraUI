@@ -231,6 +231,21 @@ export function onRpcApplied(
 }
 
 /**
+ * Reconcile a field the device reported CLEARED (`config_clear`); the caller
+ * deletes it from view state whatever this returns. The lock is released when
+ * its write asked for that clear (a nullish intent) or has been answered; a
+ * newer write still in flight for a value keeps its lock, so a stale echo of the
+ * old value stays ignored until that write's own echo arrives. Returns whether
+ * it released the lock.
+ */
+function reconcileClear(registry: DirtyRegistry, field: string): boolean {
+	const lock = registry.locks[field];
+	if (!lock || (lock.intendedValue != null && !lock.rpcResolved)) return false;
+	delete registry.locks[field];
+	return true;
+}
+
+/**
  * Release every lock older than {@link FIELD_LOCK_TTL_MS}. Returns the names of
  * the fields that were released (empty when nothing expired). This is the safety
  * valve guaranteeing a field can never stay locked forever.
@@ -263,6 +278,7 @@ export const registryCore = {
 	markResolved,
 	shouldIgnoreEcho,
 	reconcile,
+	reconcileClear,
 	onRpcApplied,
 	expire,
 } as const;
@@ -291,6 +307,7 @@ interface DirtyStore {
 		appliedValue: unknown,
 		now?: number,
 	) => ReconcileResult;
+	reconcileClear: (field: string) => boolean;
 	expire: (now?: number) => string[];
 	getRegistry: () => DirtyRegistry;
 	destroy: () => void;
@@ -336,6 +353,7 @@ function createDirtyStore(): DirtyStore {
 			),
 		onRpcApplied: (field, appliedValue, now = Date.now()) =>
 			onRpcApplied(registry, field, appliedValue, now),
+		reconcileClear: (field) => reconcileClear(registry, field),
 		expire: (now = Date.now()) =>
 			expire(registry, now, resolveFieldLockTtlMs()),
 		getRegistry: () => registry,
@@ -411,6 +429,11 @@ export function onRpcAppliedReactive(
 	now?: number,
 ): ReconcileResult {
 	return store().onRpcApplied(field, appliedValue, now);
+}
+
+/** Reconcile a field the device reported cleared. See {@link reconcileClear}. */
+export function reconcileClearReactive(field: string): boolean {
+	return store().reconcileClear(field);
 }
 
 /**
