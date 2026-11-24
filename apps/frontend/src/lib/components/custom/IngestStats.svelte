@@ -94,7 +94,14 @@ const transferred = $derived(
 // name now); the three readings take what they need.
 // Fixed reading tracks, the same in the header, every row and the totals, so a
 // long value never shifts one row's columns away from the others.
-const COLS = 'grid grid-cols-[minmax(0,1fr)_4.5rem_3rem_3.5rem] gap-x-3';
+// Each live-table line wraps on its own content, not a breakpoint: the link
+// cell keeps its flex minimum, its longest unbreakable word (a 15-character
+// interface name is 108 px at text-xs), so when it and the three fixed reading
+// tracks no longer fit side by side, the readings drop below the name and stay
+// in their columns at the line's end. Allocation is 5rem for ALLOCATION (74 px).
+const LIVE_LINE = 'flex flex-wrap items-center gap-x-3 gap-y-1';
+const LINK_CELL = 'flex-1';
+const READINGS = 'ms-auto grid shrink-0 grid-cols-[3.5rem_3rem_5rem] gap-x-3 text-end';
 
 // Per-link RTT-trend derivation — constants, math, and the memoizing cache — lives
 // in `ingest-link-view.ts` (pure + unit-testable). RING_CAPACITY bounds the ring
@@ -308,47 +315,48 @@ function exportCsv(): void {
 	{/if}
 
 	{#if showSummary && rollup}
-		<!-- Per-session summary: peak/avg bitrate, drops, then per-link uptime.
-		     The tiles size to the card, not the window: five columns only once the
-		     card is 28rem wide. In a 390 px phone card five columns left ~40 px per
-		     tile and every label truncated to its first letter ("P…", "A…"), so
-		     narrow cards use two columns and the fifth tile spans the row. -->
+		<!-- Per-session summary tiles, then per-link contribution. The tiles follow
+		     the card, not the window. Five in a row need each tile to hold its
+		     padding, icon and the widest one-word caption (TRANSFERRED, 85 px at
+		     text-xs) or value (999.9 Mbps, 80 px): a card of about 43rem. @3xl
+		     (48rem) leaves room for other scripts and fallback fonts; a narrower
+		     card uses two columns and Transferred spans the row. -->
 		<div class="@container" data-testid="ingest-summary">
-			<div class="grid grid-cols-2 gap-3 @md:grid-cols-5">
+			<div class="grid grid-cols-2 gap-3 @3xl:grid-cols-5">
 				<div class="bg-secondary/40 flex flex-col gap-1.5 rounded-lg p-3">
 					<div
-						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
+						class="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide"
 					>
 						<TrendingUp aria-hidden="true" class="size-3 shrink-0" />
-						<span>{m["live.ingest.peak"]()}</span>
+						<span class="min-w-0 break-words">{m["live.ingest.peak"]()}</span>
 					</div>
 					<div
 						data-testid="ingest-summary-peak"
 						class="text-foreground font-mono text-sm font-semibold tabular-nums"
 					>
-						{formatBitrate(rollup.peakBitrateKbps)}
+						<bdi dir="ltr">{formatBitrate(rollup.peakBitrateKbps)}</bdi>
 					</div>
 				</div>
 				<div class="bg-secondary/40 flex flex-col gap-1.5 rounded-lg p-3">
 					<div
-						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
+						class="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide"
 					>
 						<Activity aria-hidden="true" class="size-3 shrink-0" />
-						<span>{m["live.ingest.avg"]()}</span>
+						<span class="min-w-0 break-words">{m["live.ingest.avg"]()}</span>
 					</div>
 					<div
 						data-testid="ingest-summary-avg"
 						class="text-foreground font-mono text-sm font-semibold tabular-nums"
 					>
-						{formatBitrate(rollup.avgBitrateKbps)}
+						<bdi dir="ltr">{formatBitrate(rollup.avgBitrateKbps)}</bdi>
 					</div>
 				</div>
 				<div class="bg-secondary/40 flex flex-col gap-1.5 rounded-lg p-3">
 					<div
-						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
+						class="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide"
 					>
 						<AlertTriangle aria-hidden="true" class="size-3 shrink-0" />
-						<span>{m["live.ingest.drops"]()}</span>
+						<span class="min-w-0 break-words">{m["live.ingest.drops"]()}</span>
 					</div>
 					<!-- Informational, not actionable: a passive drop tally uses the
 					     info token; amber is reserved for the actionable alert. -->
@@ -364,10 +372,10 @@ function exportCsv(): void {
 				</div>
 				<div class="bg-secondary/40 flex flex-col gap-1.5 rounded-lg p-3">
 					<div
-						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
+						class="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide"
 					>
 						<Clock aria-hidden="true" class="size-3 shrink-0" />
-						<span>{m["live.ingest.duration"]()}</span>
+						<span class="min-w-0 break-words">{m["live.ingest.duration"]()}</span>
 					</div>
 					<div
 						data-testid="ingest-summary-duration"
@@ -376,33 +384,39 @@ function exportCsv(): void {
 						{formatDuration(rollup.durationMs)}
 					</div>
 				</div>
-				<div class="bg-secondary/40 col-span-2 flex flex-col gap-1.5 rounded-lg p-3 @md:col-span-1">
+				<div class="bg-secondary/40 col-span-2 flex flex-col gap-1.5 rounded-lg p-3 @3xl:col-span-1">
 					<div
-						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
+						class="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide"
 					>
 						<Upload aria-hidden="true" class="size-3 shrink-0" />
-						<span>{m["live.ingest.transferred"]()}</span>
+						<span class="min-w-0 break-words">{m["live.ingest.transferred"]()}</span>
 					</div>
 					<div
 						data-testid="ingest-summary-transferred"
 						class="text-foreground font-mono text-sm font-semibold tabular-nums"
 					>
-						{summaryTransferred}
+						<bdi dir="ltr">{summaryTransferred}</bdi>
 					</div>
 				</div>
 			</div>
 
 			{#if rollup.links.length > 0}
+				<!-- The header and its rows share one card-based rule (the summary's
+				     container): from a 24rem card the name has a 9rem column beside
+				     Share, NAK and RTT (Share's widest word, CONTRIBUIÇÃO, is 88 px); a
+				     narrower card puts each name on its own line, header included, so
+				     Share keeps the room it needs. -->
 				<div
 					class={cn(
-						'text-muted-foreground mt-4 mb-1.5 flex items-center gap-3 border-b pb-1.5',
-						'text-[10px] font-medium uppercase tracking-wide',
+						'text-muted-foreground mt-4 mb-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-b pb-1.5 @sm:flex-nowrap',
+						'text-xs font-medium uppercase tracking-wide',
 					)}
+					data-testid="ingest-contribution-header"
 				>
-					<span class="w-24 shrink-0 ps-4 sm:w-36">{m["live.ingest.link"]()}</span>
-					<span class="flex-1">{m["live.ingest.contribution"]()}</span>
-					<span class="w-12 text-end">{m["live.ingest.nak"]()}</span>
-					<span class="w-14 text-end">{m["live.ingest.rtt"]()}</span>
+					<span class="basis-full ps-4 @sm:w-36 @sm:shrink-0 @sm:basis-auto">{m["live.ingest.link"]()}</span>
+					<span class="min-w-0 flex-1 break-words">{m["live.ingest.contribution"]()}</span>
+					<span class="w-12 shrink-0 text-end">{m["live.ingest.nak"]()}</span>
+					<span class="w-14 shrink-0 text-end">{m["live.ingest.rtt"]()}</span>
 				</div>
 				<!-- biome-ignore lint/a11y/noRedundantRoles: The session-rollup contribution list needs its explicit list role for Safari when Tailwind removes list markers. -->
 				<ul role="list">
@@ -414,16 +428,16 @@ function exportCsv(): void {
 							data-renamed={renamedInSession(key)}
 							class={cn(
 								'flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2 text-xs last:border-b-0',
-								!renamedInSession(key) && 'sm:flex-nowrap',
+								!renamedInSession(key) && '@sm:flex-nowrap',
 							)}
 						>
-							<!-- Below 640 px the name has its own line, and so does a link that
-							     was renamed during the session at every width: every name it had
-							     stays readable, wrapping, never clipped in the narrow name column. -->
+							<!-- Below a 24rem card the name has its own line, and so does a link
+							     that was renamed during the session at every width: every name it
+							     had stays readable, wrapping, never clipped in the name column. -->
 							<div
 								class={cn(
 									'flex min-w-0 basis-full items-start gap-2',
-									!renamedInSession(key) && 'sm:w-36 sm:shrink-0 sm:basis-auto',
+									!renamedInSession(key) && '@sm:w-36 @sm:shrink-0 @sm:basis-auto',
 								)}
 								data-session-link-name-cell
 							>
@@ -508,14 +522,17 @@ function exportCsv(): void {
 		<!-- column header (ps-4 aligns "Link" past the per-link signal dot) -->
 		<div
 			class={cn(
-				COLS,
-				'text-muted-foreground border-b pb-1.5 text-[10px] font-medium uppercase tracking-wide',
+				LIVE_LINE,
+				'text-muted-foreground border-b pb-1.5 text-xs font-medium uppercase tracking-wide',
 			)}
+			data-testid="ingest-live-header"
 		>
-			<span class="ps-4">{m["live.ingest.link"]()}</span>
-			<span class="text-end">{m["live.ingest.rtt"]()}</span>
-			<span class="text-end">{m["live.ingest.nak"]()}</span>
-			<span class="text-end">{m["live.ingest.allocation"]()}</span>
+			<span class={cn('ps-4', LINK_CELL)}>{m["live.ingest.link"]()}</span>
+			<span class={READINGS}>
+				<span>{m["live.ingest.rtt"]()}</span>
+				<span>{m["live.ingest.nak"]()}</span>
+				<span>{m["live.ingest.allocation"]()}</span>
+			</span>
 		</div>
 
 		<!-- per-link rows -->
@@ -533,8 +550,8 @@ function exportCsv(): void {
 						link.stale && 'opacity-50',
 					)}
 				>
-					<div class={cn(COLS, 'items-center text-xs')}>
-						<div class="flex min-w-0 items-center gap-2">
+					<div class={cn(LIVE_LINE, 'text-xs')}>
+						<div class={cn('flex items-center gap-2', LINK_CELL)}>
 							<!-- Spectral per-link identity dot (--link-1..6 ramp). -->
 							<span
 								aria-hidden="true"
@@ -544,28 +561,30 @@ function exportCsv(): void {
 							<span class="min-w-0">
 								<span class="line-clamp-2 block font-medium break-words" data-link-name>{view.label}</span>
 								{#if view.label !== link.iface}
-									<span class="text-muted-foreground block truncate font-mono text-[10px]">{link.iface}</span>
+									<span class="text-muted-foreground block truncate font-mono text-xs">{link.iface}</span>
 								{/if}
 							</span>
 							{#if link.stale}
 								<Badge variant="stale" data-stale-interface={link.iface} />
 							{/if}
 						</div>
-						<span data-testid="ingest-rtt" class="text-foreground truncate text-end font-mono tabular-nums">
-							{`${link.rtt_ms} ${m["units.ms"]()}`}
-						</span>
-						<span data-testid="ingest-nak" class="text-foreground truncate text-end font-mono tabular-nums">
-							{link.nak_count}
-						</span>
-						<span data-testid="ingest-weight" class="text-foreground truncate text-end font-mono tabular-nums">
-							{link.weight_percent}%
+						<span class={READINGS}>
+							<span data-testid="ingest-rtt" class="text-foreground truncate font-mono tabular-nums">
+								{`${link.rtt_ms} ${m["units.ms"]()}`}
+							</span>
+							<span data-testid="ingest-nak" class="text-foreground truncate font-mono tabular-nums">
+								{link.nak_count}
+							</span>
+							<span data-testid="ingest-weight" class="text-foreground truncate font-mono tabular-nums">
+								{link.weight_percent}%
+							</span>
 						</span>
 					</div>
 
 					<!-- recent-trend strip: labelled RTT sparkline + per-link health pill -->
 					<div class="mt-2 flex items-center gap-2">
 						<span
-							class="text-muted-foreground shrink-0 text-[10px] font-medium uppercase tracking-wide"
+							class="text-muted-foreground shrink-0 text-xs font-medium uppercase tracking-wide"
 						>
 							{m["live.ingest.trend"]()}
 						</span>
@@ -613,7 +632,7 @@ function exportCsv(): void {
 							data-score={view.score}
 							class={cn(
 								'inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5',
-								'font-mono text-[10px] uppercase tracking-wide tabular-nums',
+								'font-mono text-xs uppercase tracking-wide tabular-nums',
 								view.degraded
 									? 'bg-status-warning/10 text-status-warning'
 									: 'bg-secondary/60 text-muted-foreground',
@@ -634,22 +653,18 @@ function exportCsv(): void {
 		</ul>
 
 		<!-- bond totals -->
-		<div class={cn(COLS, 'items-center pt-3 text-xs')}>
-			<span class="text-muted-foreground ps-4 uppercase tracking-wide"
+		<div class={cn(LIVE_LINE, 'pt-3 text-xs')} data-testid="ingest-totals">
+			<span class={cn('text-muted-foreground ps-4 uppercase tracking-wide', LINK_CELL)}
 				>{m["live.ingest.total"]()}</span
 			>
-			<span aria-hidden="true" class="text-end">&nbsp;</span>
-			<span
-				data-testid="ingest-total-nak"
-				class="text-foreground text-end font-mono font-bold tabular-nums"
-			>
-				{totalNak}
-			</span>
-			<span
-				data-testid="ingest-total-weight"
-				class="text-foreground text-end font-mono font-bold tabular-nums"
-			>
-				{totalWeight}%
+			<span class={READINGS}>
+				<span aria-hidden="true">&nbsp;</span>
+				<span data-testid="ingest-total-nak" class="text-foreground font-mono font-bold tabular-nums">
+					{totalNak}
+				</span>
+				<span data-testid="ingest-total-weight" class="text-foreground font-mono font-bold tabular-nums">
+					{totalWeight}%
+				</span>
 			</span>
 		</div>
 

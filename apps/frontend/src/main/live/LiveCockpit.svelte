@@ -511,7 +511,7 @@ const BAND_ICON_CLASS = 'text-status-warning mt-0.5 size-4 shrink-0';
 			<Button
 				type="button"
 				variant="secondary"
-				class="w-full sm:ms-auto sm:w-56"
+				class="min-h-11 w-full sm:ms-auto sm:w-56"
 				data-testid="summary-done"
 				onclick={() => onCloseSummary?.()}
 			>

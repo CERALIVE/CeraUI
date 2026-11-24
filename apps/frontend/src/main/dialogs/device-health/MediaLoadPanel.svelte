@@ -47,9 +47,10 @@ const legacyEncoder = $derived(!groups.some((group) => group.block === 'rkvenc')
 			<p class="font-mono text-xs text-muted-foreground" dir="ltr">{group.block} · {group.source}</p>
 			<ul class="divide-border divide-y border-y">
 				{#each group.cores as core (core.core)}
-					<li class="space-y-3 py-3" data-testid="media-detail-core" data-core={core.core}>
+					<!-- @container: the three columns follow the dialog body, not the window. -->
+					<li class="@container space-y-3 py-3" data-testid="media-detail-core" data-core={core.core}>
 						<p class="break-all font-mono text-xs" dir="ltr">{core.core}</p>
-						<dl class="grid grid-cols-2 gap-x-5 gap-y-3 text-xs sm:grid-cols-[1fr_1fr_2fr]">
+						<dl class="grid grid-cols-2 gap-x-5 gap-y-3 text-xs @lg:grid-cols-[1fr_1fr_2fr]">
 							<div class="min-w-0 space-y-1">
 								<dt class="truncate text-muted-foreground">{m['settings.mediaLoad.load']()}</dt>
 								<dd class={cn(core.load !== null && 'font-mono text-base tabular-nums whitespace-nowrap', stale && 'text-muted-foreground')} data-metric="load">
@@ -62,7 +63,7 @@ const legacyEncoder = $derived(!groups.some((group) => group.block === 'rkvenc')
 									{group.source === 'rkrga' ? m['settings.mediaLoad.notPublished']() : core.utilization === null ? m['settings.mediaLoad.unknown']() : `${core.utilization.toFixed(2)}%`}
 								</dd>
 							</div>
-							<div class="col-span-2 space-y-1 sm:col-span-1">
+							<div class="col-span-2 space-y-1 @lg:col-span-1">
 								<dt class="text-muted-foreground">{m['settings.mediaLoad.sessions']()}</dt>
 								<dd data-testid="media-core-sessions">
 									{#if group.source === 'rkrga'}{m['settings.mediaLoad.notPublished']()}
