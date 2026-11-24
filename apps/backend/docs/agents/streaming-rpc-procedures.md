@@ -130,8 +130,9 @@ meanwhile, and the armed marker restores it that way. An audio choice saved afte
 acceptance is newer than the Start's own explicit `asrc` / `audio_inputs`, even
 when it repeats the saved value: `StartAudio.fresh` drops the older field before
 validation, before the save and from the reply, so the newer choice stays for the
-next Start. Every writer of those two fields calls `noteAudioSaved`; a migrated
-card id counts only against a payload that restates the old id. "No audio" saved
+next Start. Every operator save of those two fields (`setConfig`, `setAudioMix`)
+calls `noteAudioSaved`; the Start's own write does not, and a migrated card id wins
+only over a payload that restates the old id. "No audio" saved
 before the engine request is built also wins over an accepted device or Auto
 pick. The compatibility
 start-schema export aliases the published producer schema, preserving its
@@ -143,9 +144,11 @@ Stop, engine idle or connection loss withdraw it. Only an active mix refuses
 `switchAudio` with `audio_mix_active`. A legacy session retains live source
 switching even after a mix is saved.
 
-`audio_off_active` says on the same surfaces whether the running session was
-launched without audio by the operator's choice, whatever pick is saved now. It is
-omitted for a stream this process adopted instead of launching.
+Status snapshots, the start and stop updates and initial hydration also carry
+`audio_off_active`: whether the running session was launched without audio by the
+operator's choice, whatever pick is saved now. Other status frames leave it out and
+a client keeps the last value. It is omitted for a stream this process adopted
+instead of launching.
 
 `streaming.setAudioMix({ id, gain_db?, mute?, delay_ms? })` uses that session's
 admitted input identity. A live mix sends one producer `setAudioMix` request,
