@@ -9,7 +9,6 @@ import {
 	exactOptOut,
 	hasStoredOptOut,
 	presentOrUndefined,
-	retireLegacyChoice,
 	rollbackOptOut,
 	transition,
 } from "./bond-preference-state.ts";
@@ -91,15 +90,7 @@ export function setPersistentBondOptOut(
 	const stored = readPreferences();
 	const present = listPresentPhysicalDevices();
 	const config = getConfig();
-	const next =
-		mode === "legacy"
-			? retireLegacyChoice(
-					stored,
-					identity,
-					exactOptOut(stored, identity, { optOut, present }),
-					optOut,
-				)
-			: transition(stored, identity, optOut, present);
+	const next = transition(stored, identity, optOut, present, mode);
 	config.bond_opt_out = presentOrUndefined(next.out);
 	config.bond_rollback_out = rollbackOptOut(next);
 	config.bond_group_out = presentOrUndefined(next.groupOut);

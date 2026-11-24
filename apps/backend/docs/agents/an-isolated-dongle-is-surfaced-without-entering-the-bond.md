@@ -989,8 +989,8 @@ unneeded extra bit, not a bit main would retain. The #697 last-uplink rule
 vetoes an OFF that removes the last sender in either view, including the first
 OFF at a cross-vendor aliased path. Simulated devices, including auto-detected
 emulation, use the legacy map for reads and writes. A simulated toggle also
-retires an opposing saved choice for that vendor, so it cannot undo the toggle
-if the device later boots in real mode.
+retires an opposing saved choice for that vendor. A simulated path OFF makes
+the legacy bit unscoped; stale ownership cannot mask it after a real boot.
 
 The WebSocket config frames omit the new persistence fields. Shared-serial
 discovery updates memory before attempting to save only the history to disk.

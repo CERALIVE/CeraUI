@@ -110,13 +110,18 @@ export function transition(
 	target: PhysicalBondKeys,
 	optOut: boolean,
 	present: readonly PhysicalBondKeys[],
+	mode: "effective" | "legacy" = "effective",
 ): BondPreferences {
 	const legacy = target.legacyLinkId;
 	const out = exactOptOut(stored, target, { optOut, present });
 	const groupOut = { ...stored.groupOut };
 	const optIn = { ...stored.optIn };
 	const portOut = { ...stored.portOut };
-	if (legacy !== undefined && stored.out?.[legacy] === true) {
+	if (
+		mode === "effective" &&
+		legacy !== undefined &&
+		stored.out?.[legacy] === true
+	) {
 		groupOut[legacy] = true;
 		for (const peer of present) {
 			// An exact bit derived for a port with an explicit ON does not win.
@@ -135,14 +140,15 @@ export function transition(
 	}
 	const port = portOf(target);
 	const vid = target.vid ?? "";
-	if (!optOut && target.anchor !== "id-path") delete groupOut[target.linkId];
+	if (mode === "effective" && !optOut && target.anchor !== "id-path")
+		delete groupOut[target.linkId];
 	if (port !== undefined) {
 		const on = { ...optIn[port] };
 		const off = { ...portOut[port] };
 		const previous = off[vid];
 		if (optOut) {
 			delete on[vid];
-			if (vid) {
+			if (mode === "effective" && vid) {
 				off[vid] = {
 					// A new OFF cannot establish who owned a pre-upgrade bit.
 					...(out[port] === true &&
@@ -155,8 +161,17 @@ export function transition(
 			}
 		} else {
 			delete off[vid];
-			if (target.anchor === "id-path") on[vid] = {};
-			else if (previous?.exact === true) on[vid] = { pin: true };
+			if (mode === "effective") {
+				if (target.anchor === "id-path") on[vid] = {};
+				else if (previous?.exact === true) on[vid] = { pin: true };
+			}
+		}
+		// A legacy path OFF is unscoped even if a real boot previously owned
+		// that bit. Neither a pinned ON nor an exact OFF may mask the new bit.
+		if (mode === "legacy" && optOut && port === target.linkId) {
+			for (const [vendor, record] of Object.entries(on)) {
+				if (record.pin) on[vendor] = {};
+			}
 		}
 		if (presentOrUndefined(on)) optIn[port] = on;
 		else delete optIn[port];
@@ -164,7 +179,8 @@ export function transition(
 		else delete portOut[port];
 	}
 	for (const [path, records] of Object.entries(portOut)) {
-		if (out[path] === true) continue;
+		const legacyOff = mode === "legacy" && optOut && path === target.linkId;
+		if (out[path] === true && !legacyOff) continue;
 		for (const [vendor, record] of Object.entries(records)) {
 			if (record.exact === true) {
 				const { exact: _exact, ...choice } = record;
@@ -173,31 +189,6 @@ export function transition(
 		}
 	}
 	return { out, groupOut, optIn, portOut };
-}
-
-export function retireLegacyChoice(
-	stored: BondPreferences,
-	target: PhysicalBondKeys,
-	out: ExactOptOut,
-	optOut: boolean,
-): BondPreferences {
-	const port = portOf(target);
-	if (port === undefined) return { ...stored, out };
-	const vid = target.vid ?? "";
-	const optIn = { ...stored.optIn };
-	const portOut = { ...stored.portOut };
-	if (optOut && optIn[port]?.[vid]) {
-		const choices = { ...optIn[port] };
-		delete choices[vid];
-		if (presentOrUndefined(choices)) optIn[port] = choices;
-		else delete optIn[port];
-	} else if (!optOut && portOut[port]?.[vid]) {
-		const choices = { ...portOut[port] };
-		delete choices[vid];
-		if (presentOrUndefined(choices)) portOut[port] = choices;
-		else delete portOut[port];
-	}
-	return { ...stored, out, optIn, portOut };
 }
 
 export function rollbackOptOut(next: BondPreferences) {

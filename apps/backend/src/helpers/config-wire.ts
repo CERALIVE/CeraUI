@@ -1,9 +1,6 @@
-const persistenceFields = [
-	"bond_group_out",
-	"bond_opt_in",
-	"bond_port_out",
-	"bond_rollback_out",
-] as const;
+import { bondPersistenceFields } from "./bond-persistence-fields.ts";
+
+const persistenceFields = Object.keys(bondPersistenceFields);
 
 /** Keep bond persistence metadata out of the legacy config payload. */
 export function projectConfigWire(config: unknown): unknown {
