@@ -87,6 +87,37 @@ notification obligation or cross-process exactly-once guarantee.
 
 ### Durable device config
 
+USB modem bond choices use `bond_connector_choice`: an explicit choice is
+keyed by the fixed platform controller and the kernel's downstream port
+chain, independently of udev labels or USB mode. ON and OFF apply only to
+the same USB vendor, including replacements from a different pair. A readable unique-serial OFF still
+wins over an ON saved while the modem was in an unconfirmed USB mode.
+Scans do not save bond preferences.
+
+An explicit OFF is also written to `bond_opt_out` using the exact key
+v2026.11.4 understands, when that key exists. Each connector OFF carries
+the path key it projected, so it does not exclude a different vendor in
+the new reader. An ON cannot clear a path bit still owned by another
+connector's OFF. The old reader cannot scope a path bit to a vendor or
+follow a connector across path reassignment. Other exact and unclassified
+legacy bits are preserved. During an operator write, `bond_pair_vid`
+records the vendor of any excluded pair proved by the current USB view.
+When a connector ON could override one of those pairs, its pair bit moves
+to `bond_legacy_out`, where it remains a default in the new reader. An
+untouched member can then join after rollback, even without a relabel.
+An opaque legacy bit that proves to be a pair only after the ON is not
+removed by a scan; it can still exclude a selected modem on rollback.
+A clean old-release save drops the new fields.
+
+On a controller without a trusted connector, an ON for a recognized
+pair member is saved under the pair plus its exact path key. The default
+stays effective for unseen siblings in the new reader, including when it
+moves to `bond_legacy_out` for the same rollback trade-off. The pre-existing alias-only
+OFF can still admit a sibling not known to the physical registry.
+The last-uplink guard discounts an unreadable fallback only if an operator
+write has recorded a matching excluded pair at its connector. Unclassified
+history does not affect the guard. Simulated modes use the legacy writer.
+
 The optional `ssh_persistent` boolean in `config.json` stores the operator's
 SSH-at-boot choice across OS slots. `setSshPersistent` saves it after the unit
 confirms the change. Boot adopts the unit's enabled/disabled state when the

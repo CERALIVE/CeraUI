@@ -69,10 +69,12 @@ import {
 import { scheduleWifiUpdate } from "../wifi/wifi-interfaces.ts";
 import {
 	bondPhysicalId,
+	hasLegacyBondAlias,
 	isBondOptedOut,
 	previewBondOptOut,
 	resetPersistentBondOptOutForTest,
 	resetSessionBondOptOutForTest,
+	setLegacyBondOptOut,
 	setPersistentBondOptOut,
 } from "./bond-preference.ts";
 import {
@@ -309,7 +311,11 @@ export function resetBondOptOutSession(): void {
 }
 
 export function setBondOptOut(ifname: string, optOut: boolean): void {
-	setPersistentBondOptOut(ifname, optOut);
+	if (bondWriteUsesLegacyMode()) {
+		setLegacyBondOptOut(ifname, optOut);
+		return;
+	}
+	setPersistentBondOptOut(ifname, optOut, Object.keys(netif));
 }
 
 export function isDupIpOnly(int: NetworkInterface): boolean {
@@ -1780,6 +1786,17 @@ type BondDisableContext = Pick<
 	"isStillReal" | "refresh"
 >;
 let realBondDisableContext: BondDisableContext | undefined;
+let bondMonitorInstalled = false;
+
+function bondWriteUsesLegacyMode(): boolean {
+	return (
+		isDevelopment() ||
+		process.env.HWSIM_REPO !== undefined ||
+		process.env.CERALIVE_DEVICE_TYPE === "emulated" ||
+		(bondMonitorInstalled &&
+			(shouldUseMockMonitor() || !realBondDisableContext?.isStillReal()))
+	);
+}
 
 export function bondDisableSimulationSelected(): boolean {
 	return (
@@ -1798,6 +1815,7 @@ export function setBondDisableGuardContext(
 	observer: BondDisableContext | undefined,
 	realMonitor: boolean,
 ): void {
+	bondMonitorInstalled = observer !== undefined;
 	realBondDisableContext = realMonitor ? observer : undefined;
 	refreshBondDisableEvidence();
 }
@@ -1816,7 +1834,12 @@ function wouldRemoveLastBondCandidate(target: string): boolean {
 		if (!identities.has(name)) identities.set(name, peekBondKeys(name));
 		return identities.get(name);
 	};
-	const optedOut = previewBondOptOut(target, keys(target));
+	const identity = keys(target);
+	const optedOut = previewBondOptOut(
+		target,
+		identity,
+		hasLegacyBondAlias(target, identity, Object.keys(netif), keys),
+	);
 	let earliestBefore = Infinity;
 	let earliestAfter = Infinity;
 	const projection = {

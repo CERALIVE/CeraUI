@@ -56,6 +56,8 @@ export function describeModemBondKeys(ifname: string): PhysicalBondKeys {
 		ifname,
 		vid: descriptor?.vid,
 		legacyLinkId: descriptor?.legacyLinkId,
+		connectorLinkId: descriptor?.connectorLinkId,
+		sharedSerial: descriptor?.sharedSerial,
 		serial: descriptor?.serial,
 		idPath: descriptor?.idPath,
 	});
@@ -72,6 +74,10 @@ function observeModemIdentity(
 			? {
 					vid: descriptor.vid,
 					pid: descriptor.pid,
+					...(descriptor.connectorLinkId !== undefined
+						? { connectorLinkId: descriptor.connectorLinkId }
+						: {}),
+					...(descriptor.sharedSerial === true ? { sharedSerial: true } : {}),
 					descriptorVendor: descriptor.vendor,
 					descriptorModel: descriptor.model,
 					...(descriptor.legacyLinkId !== undefined

@@ -1,0 +1,24 @@
+{
+	"asrc": "Auto",
+	"srt_latency": 2000,
+	"max_br": 5000,
+	"delay": 0,
+	"balancer": "adaptive",
+	"video_passthrough": "auto",
+	"failover_rate_policy": "retime",
+	"bitrate_overlay": false,
+	"autostart": false,
+	"kiosk_enabled": false,
+	"kiosk_last_state": "disabled",
+	"kiosk_display": "lcd",
+	"kiosk_touch": true,
+	"kiosk_motion": true,
+	"kiosk_performance": "balanced",
+	"addons": {},
+	"last_seen_devices": [],
+	"relay_protocol": "srtla",
+	"usb_serial_shared": [
+		"6897971bf7a292aac1aac00806247b7da3c26821d85c843caf76c42c7f557b02",
+		"c667721f2ae432a167dd53bc7d8b2c28f8e8d9fbabb412d936d6554a3b82f1aa"
+	]
+}

@@ -87,7 +87,7 @@ describe("operator bond opt-out — config.json restart persistence", () => {
 		const twinId = resolveModemPhysicalIdentity("wwu1c2").linkId;
 		resetBondOptOutSession();
 		await loadConfig();
-		expect(getConfig().bond_opt_out?.[twinId]).toBe(true);
+		expect(getConfig().bond_opt_out?.[twinId]).toBeUndefined();
 		expect(isBondOptedOut("wwu1c2")).toBe(true);
 	});
 
