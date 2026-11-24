@@ -1078,11 +1078,14 @@ const tierLabel = $derived.by(() => {
 	data-compact={compact ? 'true' : 'false'}
 	class={cn(compact ? undefined : 'bg-card rounded-xl border p-4 sm:p-5', className)}
 >
-	<div class="mb-3 flex items-center gap-2">
+	<!-- Wraps on a narrow phone, so a long localized toggle never widens the page;
+	     there the touch region makes the toggle's own box 44 px tall, at once: a
+	     height still animating would move the page under a scroll position. -->
+	<div class="mb-3 flex flex-wrap items-center gap-2" data-touch-region>
 		<Eye aria-hidden="true" class="text-primary size-4 shrink-0" />
 		<h2 class="text-sm font-semibold tracking-tight">{m["live.preview.title"]()}</h2>
 		<Button
-			class="ms-auto gap-1.5"
+			class="ms-auto gap-1.5 transition"
 			data-testid="preview-toggle"
 			aria-pressed={enabled}
 			title={m["live.preview.toggleAria"]()}

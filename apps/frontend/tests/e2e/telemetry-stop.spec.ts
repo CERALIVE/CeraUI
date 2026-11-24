@@ -222,10 +222,24 @@ test.describe("Telemetry lifecycle (clears on stop)", () => {
 	test("Live entry retains the title on idle and unconfirmed phones @mobile-only", async ({ page }) => {
 		const title = page.getByRole("heading", { level: 1, name: "Live" });
 		await expect.poll(async () => (await title.boundingBox())?.height ?? 0).toBeGreaterThan(1);
-		await expect(page.getByText("Stream control and live metrics")).toBeInViewport();
+		// On a phone the idle chip takes the header row: the subtitle is spoken, not painted.
+		const subtitle = page.getByText("Stream control and live metrics");
+		const subtitleHeight = async () => (await subtitle.boundingBox())?.height ?? 0;
+		const phone = page.viewportSize() ?? { width: 390, height: 844 };
+		await expect(page.locator("header", { has: title })).toMatchAriaSnapshot("- paragraph: Stream control and live metrics");
+		await expect(subtitle).not.toBeInViewport();
+		await expect.poll(subtitleHeight).toBeLessThanOrEqual(1);
+		for (const width of [640, 1280]) {
+			await page.setViewportSize({ width, height: 800 });
+			await expect(subtitle).toBeInViewport();
+			await expect.poll(subtitleHeight).toBeGreaterThan(1);
+		}
+		await page.setViewportSize(phone);
 		pushStatus({ is_streaming: false, stream_lifecycle: "reconciling" });
 		await expect(page.getByTestId("unconfirmed-stream-band")).toBeVisible();
 		await expect.poll(async () => (await title.boundingBox())?.height ?? 0).toBeGreaterThan(1);
+		await expect(subtitle).toBeInViewport();
+		await expect.poll(subtitleHeight).toBeGreaterThan(1);
 		await expect(page.getByText("Not streaming", { exact: true })).toHaveCount(0);
 	});
 

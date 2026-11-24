@@ -20,8 +20,8 @@ const { isStreaming, unconfirmed = false }: Props = $props();
      a server-edit chip. It shows the title and live-state chip.
      The chip never wraps or shrinks: at 390 px a two-line "NOT / STREAMING" pill
      reads as two labels, and it is the state a streamer glances at. Below `sm`
-     the subtitle is screen-reader only, so the chip and the title share one row
-     in every locale (Hindi's chip alone is ~260 px wide). -->
+     a shown chip makes the subtitle screen-reader only and the title yields, so
+     the chip keeps its whole label in every locale. -->
 <header class="flex items-center gap-3" class:short-live={isStreaming && !unconfirmed}>
 	{#if isStreaming}
 		<span
@@ -44,10 +44,11 @@ const { isStreaming, unconfirmed = false }: Props = $props();
 	{/if}
 	<!-- On a phone the bottom nav already says Live and the subtitle carries no
 	     state, so below 640 px the header is the state chip alone; the title stays
-	     in the page for screen readers and the heading outline. -->
+	     in the page for screen readers and the heading outline. With no chip nothing
+	     competes for the row, so the subtitle stays visible. -->
 	<div class="min-w-0">
 		<h1 tabindex="-1" class={['text-2xl font-bold tracking-tight', isStreaming && !unconfirmed && 'max-sm:not-focus:sr-only']}>{m["live.title"]()}</h1>
-		<p class="text-muted-foreground sr-only text-sm sm:not-sr-only">{m["live.description"]()}</p>
+		<p class={['text-muted-foreground text-sm', (isStreaming || !unconfirmed) && 'sr-only sm:not-sr-only']}>{m["live.description"]()}</p>
 	</div>
 </header>
 
