@@ -160,6 +160,53 @@ it("replays the token issued to a fresh remembered password login", async () => 
 	expect(session.getRestoredSessions()).toBe(1);
 });
 
+it.each(["after", "before", "without"] as const)(
+	"a clear missed while offline is applied by the reconnect pull, %s the login snapshot, and autostart survives",
+	async (order) => {
+		const { first, replace, signIn, subscriptions } = await start();
+		await signIn();
+		first.push({
+			config: { source: "cam-1", video_codec: "h264", autostart: true },
+			seq: 1,
+		});
+
+		// Offline, another tab cleared video_codec: no frame reached this tab.
+		const second = replace(first);
+		second.reply("auth.login", { success: true });
+		const snapshot = () =>
+			second.push({ config: { source: "cam-1", autostart: true } });
+		if (order === "after") snapshot();
+		await flushReplies();
+		second.reply("streaming.getConfig", { source: "cam-1" });
+		await flushReplies();
+		if (order === "before") snapshot();
+
+		expect(subscriptions.getConfig()).toEqual({
+			source: "cam-1",
+			autostart: true,
+		});
+	},
+);
+
+it("a pending edit keeps its local value when the reconnect pull omits its key", async () => {
+	const { first, replace, signIn, subscriptions } = await start();
+	const { markPending } = await import("./dirty-registry.svelte");
+	await signIn();
+	first.push({
+		config: { source: "cam-1", max_br: 6000, video_codec: "h264" },
+		seq: 1,
+	});
+	markPending("max_br", 8000);
+
+	const second = replace(first);
+	second.reply("auth.login", { success: true });
+	await flushReplies();
+	second.reply("streaming.getConfig", { source: "cam-1" });
+	await flushReplies();
+
+	expect(subscriptions.getConfig()).toEqual({ source: "cam-1", max_br: 6000 });
+});
+
 it("signs out on rejection, without sending protected reads or replaying again", async () => {
 	const { first, replace, signIn, auth } = await start();
 	await signIn();

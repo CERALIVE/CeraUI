@@ -1335,7 +1335,19 @@ function clearConfigKeys(keys: readonly string[]): void {
  */
 export function ingestPulledConfig(config: unknown): void {
 	if (typeof config !== "object" || config === null) return;
+	const held = configState;
 	handleMessage("config", config);
+	// The first config on a new link starts empty: give back what this pull does
+	// not speak for, a key it never returns or one a pending lock holds.
+	const listed: ReadonlySet<string> = new Set(GET_CONFIG_KEYS);
+	configState = {
+		...Object.fromEntries(
+			Object.entries(held ?? {}).filter(
+				([key]) => !listed.has(key) || isPending(key),
+			),
+		),
+		...configState,
+	};
 	clearConfigKeys(
 		GET_CONFIG_KEYS.filter(
 			(key) =>
