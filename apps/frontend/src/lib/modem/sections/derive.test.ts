@@ -430,7 +430,23 @@ describe("unavailability is the row's own authority, re-shaped", () => {
 		expect(keys).not.toContain(
 			"network.cellular.reason.routerControlsUnverified",
 		);
-		expect(keys).toContain("network.cellular.reason.routerManaged");
+		expect(keys).toContain("network.cellular.routerSettings.unknown");
+	});
+
+	// The dialog states the SAME evidence-keyed note as the row: an admin API that
+	// answered points at the dongle's web interface, never at an unknown.
+	it("keys the router settings note on what the dongle proved, like the row", () => {
+		const set = deriveModemSections({
+			modem: modem({
+				device_class: "router-ethernet",
+				availability_reason: "router_direct",
+				router_admin: { admin_url: "http://192.168.8.1", reachable: true },
+			} as Partial<Modem>),
+		});
+
+		expect(set.unavailability.map((n) => n.reasonKey)).toContain(
+			"network.cellular.routerSettings.webUi",
+		);
 	});
 
 	it("names WHERE each surviving reason came from", () => {

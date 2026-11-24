@@ -3,8 +3,11 @@ import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { NetifMessage, WifiInterface } from '@ceraui/rpc/schemas';
 import {
 	Ban,
+	Check,
 	ChevronRight,
+	CircleOff,
 	Globe,
+	Router,
 	Settings2,
 	SlidersHorizontal,
 	TriangleAlert,
@@ -28,10 +31,11 @@ import {
 } from '$lib/rpc/wifi-adapter-modes.svelte';
 import { cn } from '$lib/utils';
 
+import NetworkRow from './NetworkRow.svelte';
 import WifiModeBadge from './WifiModeBadge.svelte';
 import WifiModeErrorBand from './WifiModeErrorBand.svelte';
 import WifiModeSelector from './WifiModeSelector.svelte';
-import { deriveWifiAdapterModeView, wifiModeTarget } from './wifi-adapter-mode-view';
+import { deriveWifiAdapterModeView, wifiModeFrom, wifiModeTarget } from './wifi-adapter-mode-view';
 import {
 	blockIsOperatorActionable,
 	deriveWifiCapabilityView,
@@ -127,6 +131,7 @@ $effect(() => {
 					entry: getWifiAdapterModeEntry(id),
 					phase: getOperationPhase(wifiModeOpKey(id, iface.incarnation)),
 					target: wifiModeTarget(getOperationTarget(wifiModeOpKey(id, iface.incarnation))),
+					from: wifiModeFrom(getOperationTarget(wifiModeOpKey(id, iface.incarnation))),
 					failureReason: getOperationReason(wifiModeOpKey(id, iface.incarnation)),
 				}))}
 				{const isHotspot = $derived(modeView.displayMode === 'hotspot')}
@@ -163,101 +168,174 @@ $effect(() => {
 					: undefined)}
 				{const blocked = $derived(cap?.blockedBands[0])}
 				{const wpa3Key = $derived(cap ? wpa3ChipKey(cap.wpa3Sae) : undefined)}
-				<!-- Single-line row: identity (dot · name · status) left; bond + actions right.
-				     The handle exists because the action group below wraps too, so a probe
-				     climbing to the nearest `.flex-wrap` would stop there, not here. -->
-				<div
-					class="flex flex-wrap items-center gap-3 px-4 py-2"
+				<NetworkRow
 					data-testid="wifi-row"
 					data-device={id}
+					data-ifname={iface.ifname}
+					dotClass={isHotspot ? 'bg-status-info' : connected ? 'bg-primary' : 'bg-muted-foreground/40'}
 				>
-					<span
-						class={cn(
-							'size-2 shrink-0 rounded-full',
-							isHotspot ? 'bg-status-info' : connected ? 'bg-primary' : 'bg-muted-foreground/40',
-						)}
-						aria-hidden="true"
-					></span>
-					<!-- IDENTITY, THEN ONE STATUS LINE. The mode is a property of the
-					     RADIO, so the badge belongs beside the radio's name — and putting it
-					     there is what lets the mode fact render exactly ONCE per row: the
-					     three-rung selector that used to restate it below now lives behind
-					     the "Mode" affordance in the action cluster. Everything under the
-					     name is then a single sentence about what the radio is doing. -->
-					<div class="min-w-0 flex-1">
-						<div class="flex min-w-0 items-center gap-1.5">
-							<p class="truncate text-sm font-medium">
-								{#if isHotspot}
-									{iface.hotspot?.name || iface.ifname}
-								{:else}
-									{linkName?.(iface.ifname) ?? iface.ifname}
-								{/if}
-							</p>
-							<WifiModeBadge device={id} mode={modeView.displayMode} />
-						</div>
-						<p
+					{#snippet heading()}
+						{#if isHotspot}
+							{iface.hotspot?.name || iface.ifname}
+						{:else}
+							{linkName?.(iface.ifname) ?? iface.ifname}
+						{/if}
+					{/snippet}
+					<!-- The mode is a property of the RADIO, so its badge rides the radio's
+					     name and the mode fact renders exactly once per row. -->
+					{#snippet identity()}<WifiModeBadge device={id} mode={modeView.displayMode} />{/snippet}
+					{#snippet status()}
+						<span
 							class={cn(
-								'text-muted-foreground truncate text-xs transition-opacity',
+								'inline-flex min-w-0 flex-wrap items-center gap-x-1 wrap-anywhere transition-opacity',
 								!isHotspot && ifaceStale && 'opacity-50',
 							)}
 						>
 							{#if degradedReasonKey}
 								{resolveMessageKey(degradedReasonKey)}
 							{:else if isHotspot}
-								{m["network.view.hotspot"]()} · {iface.ifname}
+								<Router class="text-status-info size-3.5 shrink-0" aria-hidden="true" />
+								<span class="text-foreground font-medium">{m["network.view.hotspot"]()}</span>{' · '}{iface.ifname}
 							{:else if connected && net}
-								{m["network.view.connected"]()}{#if !linkName}{' · '}{net.ssid}{/if}
+								<Check class="text-status-success size-3.5 shrink-0" aria-hidden="true" />
+								<span class="text-foreground font-medium">{m["network.view.connected"]()}</span>{#if !linkName}{' · '}{net.ssid}{/if}
 							{:else}
+								<CircleOff class="size-3.5 shrink-0" aria-hidden="true" />
 								{m["network.view.disconnected"]()}
 							{/if}
-						</p>
-					</div>
-					<!-- The controls travel as ONE wrapping group, and the group SHRINKS.
-					     A hybrid radio carries four of them — bond, Connect, Setup, Mode —
-					     which measure 373px inside a 278px row at 375px, so `shrink-0`
-					     could only push Mode 39px past the viewport edge. Wrapping keeps
-					     every control at full width and full tap target; `justify-end`
-					     keeps the wrapped line on the row's trailing edge, and the group
-					     wraps whole so no control strands away from its siblings. Same
-					     shape as BondedLinksSection's trailing instrument group. -->
-					<div class="ms-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
+						</span>
+						{#if !degradedReasonKey && showStale}
+							<Badge variant="stale" data-stale-interface={iface.ifname} />
+						{/if}
+					{/snippet}
+					{#snippet bond()}
 						{#if !degradedReasonKey}
-							{#if showStale}
-								<Badge variant="stale" data-stale-interface={iface.ifname} />
-							{/if}
 							{#if isHotspot}
-							<!-- Exclusive AP: the radio carries no station leg, so it cannot bond. -->
-							<BondToggle
-								name={iface.ifname}
-								enabled={false}
-								disabledReason={m["network.view.hotspotNoBond"]()}
-							/>
-							{:else}
-							<!-- Station and hybrid both keep a station leg, so both keep the bond
-							     toggle and Connect. Connect renders regardless of `hasIp` so a
-							     disconnected radio can still open its own selector. -->
-							{#if hasIp}
+								<!-- Exclusive AP: the radio carries no station leg, so it cannot bond. -->
 								<BondToggle
 									name={iface.ifname}
-									enabled={Boolean(entry?.enabled)}
-									ip={entry?.ip}
-									disabledReason={stationLock.locked ? stationLockReason : undefined}
+									enabled={false}
+									disabledReason={m["network.view.hotspotNoBond"]()}
 								/>
+							{:else if hasIp}
+									<BondToggle
+										name={iface.ifname}
+										enabled={Boolean(entry?.enabled)}
+										ip={entry?.ip}
+										disabledReason={stationLock.locked ? stationLockReason : undefined}
+									/>
 							{/if}
-							<Button
-								class="h-8 min-h-[var(--touch-target-min)] gap-1 px-2.5"
-								data-testid="open-wifi-selector-dialog"
+						{/if}
+					{/snippet}
+					<!-- THE BODY WRAPPER IS UNCONDITIONAL, and that is load-bearing: `wifi-link-telemetry` and `wifi-capabilities` are pinned
+					     by byte-identity locks that delete the node and compare the row against
+					     a legacy render, so no wrapper may exist only when one of them does. -->
+					{#snippet meta()}
+						<!-- WHAT IT NEGOTIATED, BESIDE WHAT IT CAN DO. This line reports the
+						     CONNECTION and the strip below reports the RADIO, so the two
+						     legitimately differ — a Wi-Fi 7 adapter on an 802.11ac access point
+						     really is running VHT — and that difference is the reading. It used
+						     to be the identity column's third line, two blocks away from the
+						     ceiling it should be read against. -->
+						{#if !isHotspot && link}
+							<p
+								class={cn(
+									'text-muted-foreground text-xs wrap-anywhere transition-opacity',
+									ifaceStale && 'opacity-50',
+								)}
+								data-testid="wifi-link-telemetry"
 								data-device={id}
-								data-locked={stationLock.locked ? 'true' : undefined}
-								disabled={stationLock.locked}
-								size="sm"
-								title={stationLockReason}
-								variant="ghost"
-								onclick={() => onConnect(id)}
+								data-generation={link.generation}
+								data-width-mhz={link.channelWidthMhz}
 							>
-								{m["network.view.connect"]()}
-								<ChevronRight class="size-3.5 rtl:rotate-180" />
-							</Button>
+								<span class="opacity-70">{m["network.wifiCapability.linkLabel"]()}</span>
+								<span class="font-mono" dir="ltr">
+									{resolveMessageKey(link.generationLabelKey)}
+									{#if link.channelWidthMhz !== undefined}
+										&middot; {m["network.wifiCapability.width"]({ mhz: link.channelWidthMhz })}
+									{/if}
+									&middot; {m["network.wifiCapability.linkRate"]({ mbps: link.bitrateMbps })}
+								</span>
+							</p>
+						{/if}
+
+					{/snippet}
+					{#snippet reasons()}
+							{#if degradedReasonKey}
+								<div
+									class="border-status-warning/30 bg-status-warning/10 flex items-start gap-2 rounded-lg border px-2.5 py-1.5"
+									data-reason={iface.degraded_reason}
+									data-testid="wifi-adapter-degraded"
+									role="status"
+								>
+									<TriangleAlert aria-hidden="true" class="text-status-warning mt-0.5 size-3.5 shrink-0" />
+									<p class="text-muted-foreground text-xs">{resolveMessageKey(degradedReasonKey)}</p>
+								</div>
+							{/if}
+						{#if stationLock.locked && stationLockReason && !isHotspot}
+							<p
+								class="text-status-warning text-xs"
+								data-device={id}
+								data-lock-kind={stationLock.kind}
+								data-testid="wifi-station-locked"
+								role="status"
+							>
+								{stationLockReason}
+							</p>
+						{:else if stationLock.failureKind === 'hotspot' && stationLock.failureTitleKey && stationLock.failureBodyKey}
+							<!-- The lock ALWAYS lifts: every phase behind it is terminal, either
+							     from the device's own frame or from the store's TTL valve. So the
+							     row's job at that point is to say which one happened — a refusal
+							     and a result that never arrived are different facts.
+
+							     A MODE failure is deliberately NOT rendered here: the band below
+							     states the same terminal with the device's own typed reason, and
+							     one fact announced twice reads as two failures. -->
+							<div
+								class="border-status-warning/30 bg-status-warning/10 flex items-start gap-2 rounded-lg border px-2.5 py-1.5"
+								data-device={id}
+								data-failure-kind={stationLock.failureKind}
+								data-testid="wifi-station-lock-failed"
+								role="status"
+							>
+								<TriangleAlert aria-hidden="true" class="text-status-warning mt-0.5 size-3.5 shrink-0" />
+								<div class="min-w-0">
+									<p class="text-status-warning text-xs font-semibold">
+										{resolveMessageKey(stationLock.failureTitleKey)}
+									</p>
+									<p class="text-muted-foreground mt-0.5 text-xs">
+										{resolveMessageKey(stationLock.failureBodyKey)}
+									</p>
+								</div>
+							</div>
+						{/if}
+
+						<!-- The mode selector lives in a popover the operator can dismiss, so
+						     the row keeps its terminal failure instead: an outcome nobody can
+						     see is an outcome that did not happen. `WifiModeSelector` withholds
+						     its own copy (`errorPlacement="host"`) so this fact renders once. -->
+						{#if modeView.errorKey}
+							<WifiModeErrorBand device={id} error={modeView.error} errorKey={modeView.errorKey} />
+						{/if}
+
+					{/snippet}
+					{#snippet actions()}
+						{#if !degradedReasonKey}
+							{#if !isHotspot}
+								<Button
+									class="h-8 min-h-[var(--touch-target-min)] gap-1 px-2.5"
+									data-testid="open-wifi-selector-dialog"
+									data-device={id}
+									data-locked={stationLock.locked ? 'true' : undefined}
+									disabled={stationLock.locked}
+									size="sm"
+									title={stationLockReason}
+									variant="ghost"
+									onclick={() => onConnect(id)}
+								>
+									{m["network.view.connect"]()}
+									<ChevronRight class="size-3.5 rtl:rotate-180" />
+								</Button>
 							{/if}
 							{#if modeView.displayMode !== 'station'}
 							<Button
@@ -323,110 +401,8 @@ $effect(() => {
 							{/if}
 							<WifiModeSelector view={modeView} context={{ stationLinkLive: connected, hotspotLive: hotspotIsActive(iface) }} />
 						{/if}
-					</div>
-
-				<!-- ONE SECONDARY REGION, not four stacked siblings.
-				     The mode control, the lock reason, the negotiated link and the radio's
-				     capability strip each used to be a `basis-full ps-5` sibling of the
-				     identity line, so the parent's `gap-3` spaced them exactly as far apart
-				     as it spaced them from the row header — four registers reading as four
-				     unrelated facts. Grouped under one container with a tighter
-				     `space-y-1.5`, proximity does the work: one gap separates the row's
-				     header from its detail, and the detail reads as a block.
-
-				     It is UNCONDITIONAL, and that is load-bearing. `wifi-link-telemetry`
-				     and `wifi-capabilities` are both absent on an older backend, and both
-				     are pinned by byte-identity locks that delete the node and compare the
-				     section against a legacy render. A wrapper that existed only when one
-				     of them did would survive that deletion as an empty div and break both
-				     locks. Every row renders this container, so both locks still hold now
-				     that the mode selector has moved into the header's popover. -->
-					<div class="basis-full space-y-1.5 ps-5">
-						{#if degradedReasonKey}
-							<div
-								class="border-status-warning/30 bg-status-warning/10 flex items-start gap-2 rounded-lg border px-2.5 py-1.5"
-								data-reason={iface.degraded_reason}
-								data-testid="wifi-adapter-degraded"
-								role="status"
-							>
-								<TriangleAlert aria-hidden="true" class="text-status-warning mt-0.5 size-3.5 shrink-0" />
-								<p class="text-muted-foreground text-xs">{resolveMessageKey(degradedReasonKey)}</p>
-							</div>
-						{/if}
-					{#if stationLock.locked && stationLockReason && !isHotspot}
-						<p
-							class="text-status-warning text-xs"
-							data-device={id}
-							data-lock-kind={stationLock.kind}
-							data-testid="wifi-station-locked"
-							role="status"
-						>
-							{stationLockReason}
-						</p>
-					{:else if stationLock.failureKind === 'hotspot' && stationLock.failureTitleKey && stationLock.failureBodyKey}
-						<!-- The lock ALWAYS lifts: every phase behind it is terminal, either
-						     from the device's own frame or from the store's TTL valve. So the
-						     row's job at that point is to say which one happened — a refusal
-						     and a result that never arrived are different facts.
-
-						     A MODE failure is deliberately NOT rendered here: the band below
-						     states the same terminal with the device's own typed reason, and
-						     one fact announced twice reads as two failures. -->
-						<div
-							class="border-status-warning/30 bg-status-warning/10 flex items-start gap-2 rounded-lg border px-2.5 py-1.5"
-							data-device={id}
-							data-failure-kind={stationLock.failureKind}
-							data-testid="wifi-station-lock-failed"
-							role="status"
-						>
-							<TriangleAlert aria-hidden="true" class="text-status-warning mt-0.5 size-3.5 shrink-0" />
-							<div class="min-w-0">
-								<p class="text-status-warning text-xs font-semibold">
-									{resolveMessageKey(stationLock.failureTitleKey)}
-								</p>
-								<p class="text-muted-foreground mt-0.5 text-xs">
-									{resolveMessageKey(stationLock.failureBodyKey)}
-								</p>
-							</div>
-						</div>
-					{/if}
-
-					<!-- The mode selector lives in a popover the operator can dismiss, so
-					     the row keeps its terminal failure instead: an outcome nobody can
-					     see is an outcome that did not happen. `WifiModeSelector` withholds
-					     its own copy (`errorPlacement="host"`) so this fact renders once. -->
-					{#if modeView.errorKey}
-						<WifiModeErrorBand device={id} error={modeView.error} errorKey={modeView.errorKey} />
-					{/if}
-
-					<!-- WHAT IT NEGOTIATED, BESIDE WHAT IT CAN DO. This line reports the
-					     CONNECTION and the strip below reports the RADIO, so the two
-					     legitimately differ — a Wi-Fi 7 adapter on an 802.11ac access point
-					     really is running VHT — and that difference is the reading. It used
-					     to be the identity column's third line, two blocks away from the
-					     ceiling it should be read against. -->
-					{#if !isHotspot && link}
-						<p
-							class={cn(
-								'text-muted-foreground truncate text-xs transition-opacity',
-								ifaceStale && 'opacity-50',
-							)}
-							data-testid="wifi-link-telemetry"
-							data-device={id}
-							data-generation={link.generation}
-							data-width-mhz={link.channelWidthMhz}
-						>
-							<span class="opacity-70">{m["network.wifiCapability.linkLabel"]()}</span>
-							<span class="font-mono" dir="ltr">
-								{resolveMessageKey(link.generationLabelKey)}
-								{#if link.channelWidthMhz !== undefined}
-									&middot; {m["network.wifiCapability.width"]({ mhz: link.channelWidthMhz })}
-								{/if}
-								&middot; {m["network.wifiCapability.linkRate"]({ mbps: link.bitrateMbps })}
-							</span>
-						</p>
-					{/if}
-
+					{/snippet}
+					{#snippet details()}
 					<!-- WHAT THE RADIO CAN DO, ON REQUEST. Every chip here is a §2 tier-5
 					     hardware tag — a ceiling that changes only when the hardware or the
 					     regulatory domain does — so at rest it is noise stacked under a row
@@ -439,7 +415,7 @@ $effect(() => {
 					     against a report-less render still removes the whole disclosure. -->
 					{#if cap}
 						<details
-							class="group"
+							class="group ps-5"
 							data-testid="wifi-capabilities"
 							data-device={id}
 							data-generation={cap.generation}
@@ -567,8 +543,8 @@ $effect(() => {
 							</div>
 						</details>
 					{/if}
-					</div>
-				</div>
+					{/snippet}
+				</NetworkRow>
 			{/each}
 		{/if}
 	</div>

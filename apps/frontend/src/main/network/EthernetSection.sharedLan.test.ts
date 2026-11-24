@@ -187,9 +187,13 @@ describe("EthernetSection — a shared-LAN port is not an uplink", () => {
 		const { container } = renderRows([SERVING]);
 
 		// identity line + address line. The zone badge and the exclusion paragraph
-		// used to be two more, on a row whose whole state is four words.
-		const column = container.querySelector(".divide-y > div > div.basis-72");
-		expect(column?.children.length).toBe(2);
+		// used to be two more, on a row whose whole state is four words: the row's
+		// meta/reason block stays empty, and the address rides the status line.
+		const row = container.querySelector("[data-net-row]");
+		expect(row?.querySelector("[data-net-row-body]")?.children.length).toBe(0);
+		expect(row?.querySelector("[data-net-row-status] code")?.textContent).toBe(
+			SERVING[1].ip,
+		);
 	});
 
 	it("reaches the explanation through a real, named button", async () => {

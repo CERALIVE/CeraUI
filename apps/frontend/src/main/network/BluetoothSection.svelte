@@ -22,6 +22,7 @@ import type { AudioBackend, BluetoothDevice, BluetoothStatus } from '@ceraui/rpc
 import { Bluetooth, ChevronRight, LoaderCircle, Mic, Radar } from '@lucide/svelte';
 
 import Badge from '$lib/components/custom/Badge.svelte';
+import { RTL_SWITCH_THUMB } from '$lib/components/custom/rtl-switch';
 import { Button } from '$lib/components/ui/button';
 import { Switch } from '$lib/components/ui/switch';
 import {
@@ -44,6 +45,7 @@ import {
 	showsBluetoothMicBackendRefusal,
 	showsPairingAgentGap,
 } from './bluetooth-view';
+import NetworkRow from './NetworkRow.svelte';
 
 interface Props {
 	status: BluetoothStatus | undefined;
@@ -238,6 +240,7 @@ async function openLiveSources(): Promise<void> {
 			{/if}
 			<Switch
 				aria-label={m["network.bluetooth.enableLabel"]()}
+				class={RTL_SWITCH_THUMB}
 				bind:checked={() => enabled, (next) => void toggleEnabled(next)}
 				data-testid="bluetooth-enable"
 				disabled={enableBusy}
@@ -295,7 +298,7 @@ async function openLiveSources(): Promise<void> {
 					></span>
 					<span role="status">{resolveMessageKey(adapterStateKey(adapter))}</span>
 					{#if adapter.name}
-						<span class="text-muted-foreground/70 truncate font-mono" dir="ltr">{adapter.name}</span>
+						<span class="text-muted-foreground font-mono break-all" dir="ltr">{adapter.name}</span>
 					{/if}
 				</div>
 			{/if}
@@ -335,69 +338,63 @@ async function openLiveSources(): Promise<void> {
 					{#each devices as device (device.path)}
 						{const busy = $derived(deviceBusy(device.path))}
 						{const refusal = $derived(deviceRefusals[device.path])}
-						<li class="px-3 py-3" data-address={device.address} data-testid="bluetooth-device">
-							<div class="flex items-start gap-3">
+						<li data-address={device.address} data-testid="bluetooth-device">
+							<NetworkRow class="px-3 py-3">
+								{#snippet lead()}
 								{#if device.deviceClass === 'audio-input'}
 									<Mic
 										aria-hidden="true"
-										class="text-primary mt-0.5 size-4 shrink-0"
+										class="text-primary size-4 shrink-0"
 										data-testid="bluetooth-device-icon-audio-input"
 									/>
 								{:else}
 									<Bluetooth
 										aria-hidden="true"
-										class="text-muted-foreground mt-0.5 size-4 shrink-0"
+										class="text-muted-foreground size-4 shrink-0"
 										data-testid="bluetooth-device-icon-unknown"
 									/>
 								{/if}
 
-								<div class="min-w-0 flex-1">
-									<p class="truncate text-sm font-medium" data-testid="bluetooth-device-name">
-										{deviceName(device)}
-									</p>
-									<p class="text-muted-foreground mt-0.5 truncate text-xs">
-										{resolveMessageKey(deviceClassKey(device))}
-									</p>
-
-									<div class="mt-1.5 flex flex-wrap items-center gap-1.5">
-										{#if device.paired}
-											<Badge
-												data-testid="bluetooth-chip-paired"
-												label={m["network.bluetooth.paired"]()}
-												size="micro"
-												variant="neutral"
-											/>
-										{/if}
-										{#if device.trusted}
-											<Badge
-												data-testid="bluetooth-chip-trusted"
-												label={m["network.bluetooth.trusted"]()}
-												size="micro"
-												variant="info"
-											/>
-										{/if}
-										{#if device.connected}
-											<Badge
-												data-testid="bluetooth-chip-connected"
-												label={m["network.bluetooth.connected"]()}
-												size="micro"
-												variant="success"
-											/>
-										{/if}
-										<!-- ABSENT means the device exposes no battery service; a
-										     rendered 0 % would be a level nothing measured. -->
-										{#if device.battery !== undefined}
-											<Badge
-												data-testid="bluetooth-chip-battery"
-												label={m["network.bluetooth.battery"]({ percent: device.battery })}
-												size="micro"
-												variant="neutral"
-											/>
-										{/if}
-									</div>
-								</div>
-
-								<span class="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+								{/snippet}
+								{#snippet heading()}<span data-testid="bluetooth-device-name">{deviceName(device)}</span>{/snippet}
+								{#snippet status()}
+									<span class="wrap-anywhere">{resolveMessageKey(deviceClassKey(device))}</span>
+									{#if device.paired}
+										<Badge
+											data-testid="bluetooth-chip-paired"
+											label={m["network.bluetooth.paired"]()}
+											size="micro"
+											variant="neutral"
+										/>
+									{/if}
+									{#if device.trusted}
+										<Badge
+											data-testid="bluetooth-chip-trusted"
+											label={m["network.bluetooth.trusted"]()}
+											size="micro"
+											variant="info"
+										/>
+									{/if}
+									{#if device.connected}
+										<Badge
+											data-testid="bluetooth-chip-connected"
+											label={m["network.bluetooth.connected"]()}
+											size="micro"
+											variant="success"
+										/>
+									{/if}
+									<!-- ABSENT means the device exposes no battery service; a
+									     rendered 0 % would be a level nothing measured. -->
+									{#if device.battery !== undefined}
+										<Badge
+											data-testid="bluetooth-chip-battery"
+											label={m["network.bluetooth.battery"]({ percent: device.battery })}
+											size="micro"
+											variant="neutral"
+										/>
+									{/if}
+								{/snippet}
+								{#snippet actions()}
 									{#if busy}
 										<LoaderCircle
 											aria-hidden="true"
@@ -418,47 +415,49 @@ async function openLiveSources(): Promise<void> {
 											{resolveMessageKey(ACTION_LABEL_KEYS[action])}
 										</Button>
 									{/each}
-								</span>
-							</div>
+								{/snippet}
+								{#snippet details()}
 
-							{#if refusal}
-								<p
-									class="border-status-warning/30 bg-status-warning/10 mt-2 rounded-lg border px-3 py-2 text-xs"
-									data-testid="bluetooth-device-refused"
-									role="status"
-								>
-									{resolveMessageKey(refusal)}
-								</p>
-							{/if}
+									{#if refusal}
+										<p
+											class="border-status-warning/30 bg-status-warning/10 mt-2 rounded-lg border px-3 py-2 text-xs"
+											data-testid="bluetooth-device-refused"
+											role="status"
+										>
+											{resolveMessageKey(refusal)}
+										</p>
+									{/if}
 
-							{#if showsBluetoothMicBackendRefusal(device, audioBackend)}
-								<p
-									class="border-status-warning/30 bg-status-warning/10 mt-2 rounded-lg border px-3 py-2 text-xs"
-									data-testid="bluetooth-audio-backend-refused"
-									role="status"
-								>
-									{m["network.bluetooth.audioRequiresPipewire"]()}
-								</p>
-							{:else if showsAudioSourceHint(device, audioBackend)}
-								<div
-									class="border-primary/30 bg-primary/5 mt-2 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2"
-									data-testid="bluetooth-audio-source-hint"
-								>
-									<p class="text-muted-foreground min-w-0 flex-1 text-xs">
-										{m["network.bluetooth.audioHint"]()}
-									</p>
-									<Button
-										class={`h-8 gap-1 px-2.5 ${TOUCH_TARGET}`}
-										data-testid="bluetooth-audio-source-link"
-										onclick={() => void openLiveSources()}
-										size="sm"
-										variant="ghost"
-									>
-										{m["network.bluetooth.audioHintAction"]()}
-										<ChevronRight aria-hidden="true" class="size-3.5 rtl:rotate-180" />
-									</Button>
-								</div>
-							{/if}
+									{#if showsBluetoothMicBackendRefusal(device, audioBackend)}
+										<p
+											class="border-status-warning/30 bg-status-warning/10 mt-2 rounded-lg border px-3 py-2 text-xs"
+											data-testid="bluetooth-audio-backend-refused"
+											role="status"
+										>
+											{m["network.bluetooth.audioRequiresPipewire"]()}
+										</p>
+									{:else if showsAudioSourceHint(device, audioBackend)}
+										<div
+											class="border-primary/30 bg-primary/5 mt-2 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2"
+											data-testid="bluetooth-audio-source-hint"
+										>
+											<p class="text-muted-foreground min-w-0 flex-1 text-xs">
+												{m["network.bluetooth.audioHint"]()}
+											</p>
+											<Button
+												class={`h-8 gap-1 px-2.5 ${TOUCH_TARGET}`}
+												data-testid="bluetooth-audio-source-link"
+												onclick={() => void openLiveSources()}
+												size="sm"
+												variant="ghost"
+											>
+												{m["network.bluetooth.audioHintAction"]()}
+												<ChevronRight aria-hidden="true" class="size-3.5 rtl:rotate-180" />
+											</Button>
+										</div>
+									{/if}
+								{/snippet}
+							</NetworkRow>
 						</li>
 					{/each}
 				</ul>

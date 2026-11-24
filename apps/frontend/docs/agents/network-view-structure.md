@@ -17,18 +17,59 @@ uses it for the row badge, status line, hotspot setup, and mode popover; the
 station/hotspot/hybrid identity is therefore stated once beside the radio name,
 while mode selection and capability details remain available on request. A
 station or hybrid radio retains its connection and bond actions; an exclusive
-hotspot radio does not.
+hotspot radio does not. The device's `getAdapterModes` answer is a pull, re-read
+only when the radio set changes or the mode control confirms, so an AP that the
+pushed interface snapshot shows up outranks a stale `station` answer
+(`wifi-adapter-mode-view.ts`): a hotspot started from its own dialog reads
+Hotspot (or Hybrid beside a station link) at once. That correction is for an idle
+radio only: while a mode change is pending, the selector keeps the prior mode
+until the matching terminal arrives. The control records that mode in its
+request (`WifiModeRequest.from`) as it begins, and the device's own pending echo
+keeps it, so it holds even when the device never answered `getAdapterModes`. A
+change begun on another client carries no record and falls back to the device's
+preference, then its cached answer.
 
 Wi-Fi rows, the Wi-Fi selector, Ethernet rows and Bonded Links use the same
 inventory label projection as Live/HUD. For example, a MAC-named radio with
 no active SSID reads "Wi-Fi (2f27)"; the last four hex digits are a hint, not a
 unique identity or a port number. The kernel ifname is unchanged. Radios on
 the same SSID add a radio hint, falling back to their ifnames if the hints
-collide. Cellular inventory still leads with the hardware name; identical
-bonded modem labels get a distinct port hint or fall back to the ifname.
+collide. Cellular inventory still leads with the hardware name (owner decision
+2026-11-23, D1: it keeps the title, and the carrier rides the status line). An
+isolated dongle has no hardware name, only its `dongle<N>` slot token, so every
+surface names it "Router dongle N" (`isolatedDongleLabel`, `link-names.ts`).
+Identical bonded modem labels get a distinct port hint or fall back to the ifname.
 Both views keep the visible ifname for correlation when a twin leaves.
 The backend's eligibility, including its hotspot exclusion, is independent
 of naming.
+
+**ONE ROW ANATOMY [EXISTS].** Wi-Fi, Cellular and Ethernet rows, an active hotspot
+and each Bluetooth device render through `main/network/NetworkRow.svelte`; the
+sections pass content into named slots (`heading`, `identity`, `indicator`,
+`status`, `bond`, `meta`, `reasons`, `actions`, `details`) and the row owns the
+layout (`DESIGN.md` IH-6, TT-6). Five rules carry it, each removing a measured
+defect: the dot is anchored to the title's first line (`0.5lh`), so it cannot
+strand (Ethernet at ≤ 390 px); the title wraps and the identity pill drops below
+it, so it never collapses or truncates (Wi-Fi was 0 px wide at 412 px in English);
+the bond switch trails the status line and drops below it, still trailing, when
+both do not fit, so all switches share one x; the actions own the last line, and
+from 36rem of row width they MOVE in the DOM to the title line, so Tab follows the
+reading order at every width (the row's container query decides, and a
+zero-height sentinel reports it to the row; a focused action keeps focus across
+the move, and focus elsewhere is never pulled in); and the row is a
+`data-touch-region`. Every device is listed once with one switch: a modem-claimed
+interface leaves Ethernet when it carries `router_cellular`, `usb_modem_net` or
+`dongle` (`section-assignment.ts`), and a Cellular row reads and toggles its
+interface only through `modemRowEntry`, the same rule, so a stale modem frame
+cannot arm a second switch on an unmarked interface that reuses a retired veth's
+name. Names wrap across the whole destination, Bonded Links' `LinkBadge` row
+included, and a Network switch adds `RTL_SWITCH_THUMB`
+(`lib/components/custom/rtl-switch.ts`) so its checked thumb stays inside the
+track in Arabic; the switch primitive itself is CLI-managed and never edited.
+The row hooks `data-net-row`, `data-net-row-title`, `data-net-row-dot`,
+`data-net-row-status`, `data-net-row-bond`, `data-net-row-body`,
+`data-net-row-actions` and `data-net-row-wide` are what
+`tests/e2e/network-row-anatomy.spec.ts` measures.
 
 `EthernetSection.svelte` treats a `shared-lan` port as a client-zone row rather
 than an uplink: one combined role/zone pill names what the port is and whether

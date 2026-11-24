@@ -13,7 +13,8 @@
 
   2. THE DEVICE MOVES THE CONTROL, NOT THE CLICK. `setAdapterMode` only promises
      a terminal frame follows, so the op stays `pending` after the RPC resolves
-     (no `confirmOnResolve`) and the displayed mode is held on the PRIOR one. A
+     (no `confirmOnResolve`) and the displayed mode is held on the PRIOR one,
+     which the request records as it begins (`WifiModeRequest.from`). A
      failure therefore leaves the prior mode selected with the device's own typed
      reason rendered inline — `silent: true`, so it is never toast-only.
 
@@ -55,6 +56,7 @@ import {
 	type WifiAdapterModeContext,
 	type WifiAdapterModeView,
 	type WifiModeConfirmation,
+	type WifiModeRequest,
 	wifiModeConsequenceKeys,
 	wifiModeDescriptionKey,
 	wifiModeLabelKey,
@@ -188,7 +190,7 @@ async function apply(mode: WifiAdapterMode, incarnation = view.incarnation) {
 	await osCommand({
 		key: wifiModeOpKey(original.device, incarnation),
 		classify: classifyWifiMutation,
-		target: mode,
+		target: { mode, from: view.displayMode } satisfies WifiModeRequest,
 		rpc: async (handoff) => {
 			const invoke = (token?: string) => rpc.wifi.setAdapterMode({
 				device: original.device, mode, ...(token !== undefined ? { incarnation: token } : {}),

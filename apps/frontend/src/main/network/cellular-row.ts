@@ -169,13 +169,10 @@ export type ModemRowAction = "configure" | "unlock";
  */
 const AVAILABILITY_REASON_KEYS: Readonly<Record<string, string>> = {
 	himi_ufi_router: "network.cellular.reason.himiUfiRouter",
-	router_managed: "network.cellular.reason.routerManaged",
-	// A CLASSIFIED dongle — one this stack reaches directly, with no netns layer
-	// between — resolves to the SAME sentence as a netns-claimed one, because the
-	// fact is identical: the dongle owns its own configuration. Sharing the key
-	// is also what lets {@link rowNoteKeys} collapse it against the Configure
-	// reason, so the row states it once instead of twice.
-	router_direct: "network.cellular.reason.routerManaged",
+	// Without the row's admin evidence only the no-claim settings note is true;
+	// {@link rowAvailabilityKey} refines it from what the dongle proved.
+	router_managed: "network.cellular.routerSettings.unknown",
+	router_direct: "network.cellular.routerSettings.unknown",
 	dongle_acquiring: "network.dongle.blockedAcquiring",
 	dongle_down: "network.dongle.blockedDown",
 	// The OPTIMISTIC row: udev announced a cellular-class USB device and no
@@ -197,15 +194,42 @@ const AVAILABILITY_REASON_KEYS: Readonly<Record<string, string>> = {
 const PROVISIONAL_REASON = "modem_initializing";
 const UNDRIVEABLE_REASON = "undriveable";
 
-/**
- * Availability tokens for a dongle whose OWN interface carries the bonded
- * traffic. A netns-claimed dongle is the opposite case: its veth owns the
- * toggle, so its modem row must refuse one.
- */
-const DIRECT_ROUTER_REASONS: ReadonlySet<string> = new Set([
+/** A router dongle's lifecycle tokens; its settings note explains each of them. */
+const ROUTER_LIFECYCLE_REASONS: ReadonlySet<string> = new Set([
+	"router_managed",
 	"router_direct",
 	"dongle_acquiring",
+	"dongle_down",
 ]);
+
+/**
+ * Where a router dongle's settings live, stated only as far as the device has
+ * proven it: CeraLive when a write was verified by read-back, the dongle's own
+ * web interface when its admin API answered, and otherwise no claim at all.
+ */
+export function routerSettingsNoteKey(modem: Modem): string {
+	const admin = modem.router_admin;
+	if (admin?.controls) return "network.cellular.routerSettings.writable";
+	if (admin?.reachable) return "network.cellular.routerSettings.webUi";
+	return "network.cellular.routerSettings.unknown";
+}
+
+/**
+ * The row's availability line. A router dongle states who owns its connection
+ * and where its settings live in every lifecycle state (a row with no token
+ * states nothing, like every other family); the lifecycle's own
+ * consequence (acquiring, down) is the bond switch's reason line.
+ */
+export function rowAvailabilityKey(
+	modem: Modem,
+	band: ModemClassBand,
+): string | undefined {
+	const reason = modem.availability_reason;
+	return band === "router-ethernet" &&
+		ROUTER_LIFECYCLE_REASONS.has(reason ?? "")
+		? routerSettingsNoteKey(modem)
+		: availabilityReasonKey(reason);
+}
 
 /**
  * ModemManager `MMNetworkError` token → operator copy.
@@ -558,9 +582,9 @@ export function registrationRejectionKey(modem: Modem): string | undefined {
  * as an on-screen line, because the device ships with a kiosk touchscreen that
  * cannot hover to reveal a tooltip.
  *
- * A `router-ethernet` row is never live here even when it is `up`: the veth
- * that carries its traffic already owns a live toggle on its own interface row,
- * and two live controls for one link is how they disagree.
+ * A `router-ethernet` row is a device's only listing, so an addressed one is
+ * live: an isolated dongle's `ifname` IS its `dg<N>h` veth, which no longer
+ * renders a second row under Ethernet (`section-assignment.ts`).
  */
 export function bondDisabledReasonKey(
 	modem: Modem,
@@ -576,14 +600,6 @@ export function bondDisabledReasonKey(
 	if (band === "router-ethernet") {
 		if (state === "router-acquiring") return "network.dongle.blockedAcquiring";
 		if (state === "router-down") return "network.dongle.blockedDown";
-		// A dongle this stack reaches DIRECTLY has no veth row to defer to — its
-		// own `enx…` interface is the bonded link and this is the only row it
-		// gets. Saying "its bond switch is on its row under Ethernet" would
-		// point at a row that no longer exists, about a dongle that may be
-		// carrying bonded traffic at that moment.
-		if (!DIRECT_ROUTER_REASONS.has(modem.availability_reason ?? "")) {
-			return "network.cellular.bond.routerManagedLink";
-		}
 	}
 
 	if (!hasAddress) return "network.cellular.bond.noAddress";
@@ -629,7 +645,7 @@ export function configureDisabledReasonKey(
  */
 const SUPERSEDED_NOTE_KEYS: Readonly<Record<string, string>> = {
 	"network.cellular.reason.routerControlsUnverified":
-		"network.cellular.reason.routerManaged",
+		"network.cellular.routerSettings.webUi",
 };
 
 /**

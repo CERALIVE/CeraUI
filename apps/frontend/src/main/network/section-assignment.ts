@@ -23,7 +23,7 @@
  * section is a device that silently vanished, and one appearing in BOTH is a
  * device with two bond toggles that can disagree. Exactly one section owns each.
  */
-import type { NetifEntry } from "@ceraui/rpc/schemas";
+import type { NetifEntry, NetifMessage } from "@ceraui/rpc/schemas";
 
 /** Prefixes the modem and WiFi rosters own; loopback is nobody's. */
 const MODEM_IFNAME_PREFIX = "ww";
@@ -32,25 +32,22 @@ const WIFI_IFNAME_PREFIX = "wl";
 /**
  * Is this interface the Ethernet section's to render?
  *
- * A CLAIM by a modem row is the whole rule: `netif` and `modems` are independent
- * broadcasts on different cadences, so dropping a row the moment some classifier
- * marker appears would hide the device in the window before its modem row
- * exists — a duplicated row traded for a disappeared one. The claim is the
- * handover signal, and it is the ONLY thing that moves a row.
+ * Ethernet gives an interface up only when a modem row claims its name AND the
+ * interface carries a cellular marker. The claim alone would let a modem row
+ * that names an ordinary NIC take the board's management link off this list;
+ * the marker alone would hide a device in the window before its modem row exists
+ * (`netif` and `modems` arrive on different cadences), trading a duplicated row
+ * for a vanished one.
  *
- * The claim alone is NOT enough — the row must ALSO carry a classifier marker
- * proving the interface belongs to a cellular device, so a modem row naming an
- * ordinary NIC can never take the board's management link off this list.
+ * Each marker says "this interface is a cellular device's", from a different side:
+ *  - `router_cellular`: a control-port-less router dongle's own netdev;
+ *  - `usb_modem_net`: an MM-managed modem's data function, which ModemManager
+ *    names itself, so the bench FM350-GL's RNDIS port is an `enx…` that no
+ *    prefix can reach (`wwan*` is excluded by prefix above);
+ *  - `dongle`: the host side (`dg<N>h`) of an isolated router dongle's veth.
  *
- * There are TWO such markers, and the second is why this rule changed.
- * `router_cellular` covers a control-port-less dongle. `usb_modem_net` covers an
- * MM-MANAGED modem's own data function: ModemManager names its net port itself
- * (`mmcli -m 4` → `ports: enx000011121314 (net), ttyUSB12 (at)`), so the bench
- * Fibocom FM350-GL — whose data path is RNDIS — hands the registration an `enx…`
- * name and gets a full Cellular row. Without the second marker that same
- * physical device also rendered a bare, unexplained Ethernet row. `wwan*`
- * modems never needed this because the prefix test above already excludes them;
- * an RNDIS interface is named after its MAC and no prefix can reach it.
+ * `modemRowEntry` asks the same question from the Cellular side, so an interface
+ * has one listing and one bond switch.
  */
 export function isWiredSectionEntry(
 	name: string,
@@ -60,8 +57,25 @@ export function isWiredSectionEntry(
 	if (name === "lo") return false;
 	if (name.startsWith(MODEM_IFNAME_PREFIX)) return false;
 	if (name.startsWith(WIFI_IFNAME_PREFIX)) return false;
-	const cellularDevice = Boolean(iface.router_cellular || iface.usb_modem_net);
+	const cellularDevice = Boolean(
+		iface.router_cellular || iface.usb_modem_net || iface.dongle,
+	);
 	return !(cellularDevice && claimedByModem.has(name));
+}
+
+/**
+ * The interface a modem row may read and toggle: its own, only while Ethernet
+ * does not list it. An unmarked interface that takes a retired veth's name is
+ * Ethernet's, even while a stale modem frame still names it.
+ */
+export function modemRowEntry(
+	name: string,
+	netif: NetifMessage | undefined,
+): NetifEntry | undefined {
+	const iface = netif?.[name];
+	return iface && !isWiredSectionEntry(name, iface, new Set([name]))
+		? iface
+		: undefined;
 }
 
 /** Interface names the modem roster currently claims, for the rule above. */

@@ -55,7 +55,6 @@ import {
 } from "$main/network/capability-modules";
 import {
 	activeSimLock,
-	availabilityReasonKey,
 	bondDisabledReasonKey,
 	carrierLabel,
 	classHintKey,
@@ -69,6 +68,7 @@ import {
 	registrationRejectionKey,
 	resolveClassBand,
 	resolveRowState,
+	rowAvailabilityKey,
 	rowNoteKeys,
 	signalLabelKey,
 	slotBadgeLabel,
@@ -405,7 +405,7 @@ export function deriveUnavailability(input: {
 	const { modem, band, state, signal, connection, hasAddress } = input;
 
 	const rejection = registrationRejectionKey(modem);
-	const availability = availabilityReasonKey(modem.availability_reason);
+	const availability = rowAvailabilityKey(modem, band);
 	const bond =
 		hasAddress === undefined
 			? undefined

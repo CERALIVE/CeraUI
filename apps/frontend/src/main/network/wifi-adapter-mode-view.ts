@@ -70,10 +70,36 @@ export function wifiModeLabelKey(mode: WifiAdapterMode): string {
 	return MODE_LABEL_KEY[mode];
 }
 
-/** Narrow the async-op store's opaque `target`; anything else is no target. */
+/**
+ * What the mode control begins a transition with: the mode it drives toward and
+ * the mode on screen when it began. That prior is recorded because nothing else
+ * is sure to name it: the device may never have answered, and the radio's own
+ * snapshot can reach the target before the terminal does.
+ */
+export interface WifiModeRequest {
+	mode: WifiAdapterMode;
+	from: WifiAdapterMode;
+}
+
+/**
+ * Narrow the async-op store's opaque `target`: a bare mode (a transition this
+ * client learned of from the device) or a {@link WifiModeRequest}. Anything else
+ * is no target.
+ */
 export function wifiModeTarget(value: unknown): WifiAdapterMode | undefined {
-	return WIFI_ADAPTER_MODES.includes(value as WifiAdapterMode)
-		? (value as WifiAdapterMode)
+	const mode =
+		typeof value === "object" && value !== null
+			? (value as { mode?: unknown }).mode
+			: value;
+	return WIFI_ADAPTER_MODES.includes(mode as WifiAdapterMode)
+		? (mode as WifiAdapterMode)
+		: undefined;
+}
+
+/** The prior mode a {@link WifiModeRequest} recorded; a bare mode records none. */
+export function wifiModeFrom(value: unknown): WifiAdapterMode | undefined {
+	return typeof value === "object" && value !== null
+		? wifiModeTarget((value as { from?: unknown }).from)
 		: undefined;
 }
 
@@ -262,6 +288,23 @@ function fallbackMode(iface: WifiInterface): WifiAdapterMode {
 	return "station";
 }
 
+/**
+ * The mode the radio is in. The device's answer is a PULL, re-read only when the
+ * radio set changes or the mode control confirms, so a hotspot started from its
+ * own dialog leaves it saying `station`. The snapshot is pushed with every Wi-Fi
+ * frame, so an AP it shows up outranks that stale `station`; otherwise the answer
+ * stands, and it alone tells hybrid from hotspot.
+ */
+function observedModeOf(
+	entry: WifiAdapterModeEntry | undefined,
+	iface: WifiInterface,
+): WifiAdapterMode {
+	if (entry === undefined) return fallbackMode(iface);
+	if (entry.mode !== "station") return entry.mode;
+	if (isApRadio(iface)) return "hotspot";
+	return hotspotIsActive(iface) ? "hybrid" : "station";
+}
+
 /** The inputs a surface hands the derivation. */
 export interface WifiAdapterModeInput {
 	device: string;
@@ -272,6 +315,8 @@ export interface WifiAdapterModeInput {
 	phase: AsyncOpPhase;
 	/** The mode the in-flight transition is driving toward. */
 	target?: WifiAdapterMode;
+	/** The mode on screen when this client began that transition. */
+	from?: WifiAdapterMode;
 	/** The failure reason recorded on a terminal `failed` phase. */
 	failureReason?: string;
 }
@@ -280,7 +325,7 @@ export function deriveWifiAdapterModeView(
 	input: WifiAdapterModeInput,
 ): WifiAdapterModeView {
 	const deviceAnswered = input.entry !== undefined;
-	const observedMode = input.entry?.mode ?? fallbackMode(input.iface);
+	const observedMode = observedModeOf(input.entry, input.iface);
 	const wireOptions = input.entry?.options ?? fallbackOptions(input.iface);
 	const pending = input.phase === "pending";
 
@@ -349,13 +394,20 @@ export function deriveWifiAdapterModeView(
  *
  * The observed mode can legitimately have already moved to the target (the AP is
  * up, the confirming frame has not landed), so falling through to it would flip
- * the control early. Anything that already equals the target resolves to the
- * device's persisted preference, and only then to the observation.
+ * the control early. The prior mode this client recorded when it began the
+ * transition holds until the terminal, whatever the radio reports meanwhile.
+ * Without one (a transition begun elsewhere), anything that already equals the
+ * target resolves to the device's persisted preference, then to its cached
+ * answer (pulled before the request and re-read only on its terminal), and only
+ * then to the observation.
  */
 function previousMode(
 	input: WifiAdapterModeInput,
 	observedMode: WifiAdapterMode,
 ): WifiAdapterMode {
+	if (input.from !== undefined && input.from !== input.target) {
+		return input.from;
+	}
 	if (input.target === undefined || observedMode !== input.target) {
 		return observedMode;
 	}
@@ -364,6 +416,9 @@ function previousMode(
 		input.entry.desired !== input.target
 	) {
 		return input.entry.desired;
+	}
+	if (input.entry !== undefined && input.entry.mode !== input.target) {
+		return input.entry.mode;
 	}
 	return observedMode;
 }

@@ -37,7 +37,26 @@ function modemCarrier(modem: Modem): string | undefined {
 	);
 }
 
+const DONGLE_SLOT = /^dongle(\d+)$/;
+
+/**
+ * An isolated (netns) router dongle reports no model; its only name is the
+ * backend's `dongle<N>` slot token, a machine token. It is named by its class
+ * and slot number instead, on every surface that names it.
+ */
+export function isolatedDongleLabel(modem: Modem): string | undefined {
+	if (modem.device_class !== "router-ethernet" || modem.model?.trim()) {
+		return undefined;
+	}
+	const slot = DONGLE_SLOT.exec(modem.slot_label?.trim() ?? "");
+	return slot
+		? `${m["network.cellular.class.routerEthernet"]()} ${Number(slot[1]) + 1}`
+		: undefined;
+}
+
 function modemModel(modem: Modem): string {
+	const isolated = isolatedDongleLabel(modem);
+	if (isolated) return isolated;
 	// Legacy descriptors carry “model - serial” in name, not in a separate field.
 	const model = modem.model?.trim() || modem.name?.trim();
 	return (

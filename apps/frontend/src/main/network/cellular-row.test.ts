@@ -29,6 +29,8 @@ import {
 	resolveRowAction,
 	resolveRowState,
 	resolveSignalTier,
+	routerSettingsNoteKey,
+	rowAvailabilityKey,
 	rowNoteKeys,
 	signalLabelKey,
 	slotBadgeLabel,
@@ -351,9 +353,72 @@ describe("class presentation", () => {
 	});
 });
 
+describe("routerSettingsNoteKey", () => {
+	const admin = { admin_url: "http://192.168.8.1" };
+
+	it.each([
+		[
+			"a verified write",
+			{ ...admin, reachable: true, controls: { mobile_data: true } },
+			"network.cellular.routerSettings.writable",
+		],
+		[
+			"an answering admin API with no verified write",
+			{ ...admin, reachable: true },
+			"network.cellular.routerSettings.webUi",
+		],
+		[
+			"an admin API that did not answer",
+			{ ...admin, reachable: false },
+			"network.cellular.routerSettings.unknown",
+		],
+		[
+			"no admin reading at all",
+			undefined,
+			"network.cellular.routerSettings.unknown",
+		],
+	] as const)("%s -> %s", (_case, routerAdmin, key) => {
+		expect(
+			routerSettingsNoteKey(
+				modem({
+					device_class: "router-ethernet",
+					router_admin: routerAdmin,
+				} as Partial<Modem>),
+			),
+		).toBe(key);
+	});
+
+	it("a router row states it in every lifecycle state; other rows keep their token's sentence", () => {
+		for (const reason of [
+			"router_managed",
+			"router_direct",
+			"dongle_acquiring",
+			"dongle_down",
+		]) {
+			expect(
+				rowAvailabilityKey(
+					modem({
+						device_class: "router-ethernet",
+						availability_reason: reason,
+					}),
+					"router-ethernet",
+				),
+				reason,
+			).toBe("network.cellular.routerSettings.unknown");
+		}
+		expect(
+			rowAvailabilityKey(
+				modem({ availability_reason: "undriveable" }),
+				"mm-managed",
+			),
+		).toBe("network.cellular.reason.undriveable");
+	});
+});
+
 describe("availabilityReasonKey", () => {
 	it.each([
-		["router_managed", "network.cellular.reason.routerManaged"],
+		["router_managed", "network.cellular.routerSettings.unknown"],
+		["router_direct", "network.cellular.routerSettings.unknown"],
 		["dongle_acquiring", "network.dongle.blockedAcquiring"],
 		["dongle_down", "network.dongle.blockedDown"],
 	])("%s -> %s", (token, key) => {
@@ -425,9 +490,8 @@ describe("bondDisabledReasonKey", () => {
 	it.each([
 		["router-acquiring", "network.dongle.blockedAcquiring"],
 		["router-down", "network.dongle.blockedDown"],
-		["router-up", "network.cellular.bond.routerManagedLink"],
 	] as const)(
-		"a router row is never live here (%s) — its veth owns the live toggle",
+		"a router row without a link is disabled with its lifecycle reason (%s)",
 		(state, key) => {
 			expect(
 				bondDisabledReasonKey(
@@ -437,6 +501,24 @@ describe("bondDisabledReasonKey", () => {
 					true,
 				),
 			).toBe(key);
+		},
+	);
+
+	// The row is the device's only listing, so its switch is the one live control
+	// for the host link. An isolated dongle's `ifname` IS its `dg<N>h` veth.
+	it.each(["router_managed", "router_direct"])(
+		"an up router row (%s) owns a live toggle once it has an address",
+		(reason) => {
+			const row = modem({
+				device_class: "router-ethernet",
+				availability_reason: reason,
+			});
+			expect(
+				bondDisabledReasonKey(row, "router-ethernet", "router-up", true),
+			).toBeUndefined();
+			expect(
+				bondDisabledReasonKey(row, "router-ethernet", "router-up", false),
+			).toBe("network.cellular.bond.noAddress");
 		},
 	);
 
@@ -582,7 +664,7 @@ describe("rowNoteKeys", () => {
 	it("drops a generic line the specific one already covers", () => {
 		expect(
 			rowNoteKeys({
-				availability: "network.cellular.reason.routerManaged",
+				availability: "network.cellular.routerSettings.webUi",
 				configure: "network.cellular.reason.routerControlsUnverified",
 			}),
 		).toEqual(["network.cellular.reason.routerControlsUnverified"]);
@@ -590,19 +672,19 @@ describe("rowNoteKeys", () => {
 
 	it("keeps the generic line when nothing supersedes it", () => {
 		expect(
-			rowNoteKeys({ availability: "network.cellular.reason.routerManaged" }),
-		).toEqual(["network.cellular.reason.routerManaged"]);
+			rowNoteKeys({ availability: "network.cellular.routerSettings.webUi" }),
+		).toEqual(["network.cellular.routerSettings.webUi"]);
 	});
 
 	it("supersedes only the named key, never a neighbouring reason", () => {
 		expect(
 			rowNoteKeys({
-				availability: "network.cellular.reason.routerManaged",
-				bond: "network.cellular.bond.routerManagedLink",
+				availability: "network.cellular.routerSettings.webUi",
+				bond: "network.cellular.bond.noAddress",
 				configure: "network.cellular.reason.routerControlsUnverified",
 			}),
 		).toEqual([
-			"network.cellular.bond.routerManagedLink",
+			"network.cellular.bond.noAddress",
 			"network.cellular.reason.routerControlsUnverified",
 		]);
 	});
@@ -613,14 +695,12 @@ describe("rowNoteKeys", () => {
 			"dongle_acquiring",
 			"dongle_down",
 		]) {
-			const availability = availabilityReasonKey(reason);
-			const state = resolveRowState(
-				modem({
-					device_class: "router-ethernet",
-					availability_reason: reason,
-				}),
-				"router-ethernet",
-			);
+			const row = modem({
+				device_class: "router-ethernet",
+				availability_reason: reason,
+			});
+			const availability = rowAvailabilityKey(row, "router-ethernet");
+			const state = resolveRowState(row, "router-ethernet");
 			const notes = rowNoteKeys({
 				availability,
 				bond: bondDisabledReasonKey(

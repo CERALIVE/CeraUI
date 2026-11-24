@@ -176,15 +176,16 @@ const totalStale = $derived(
 		<!-- total bonded bandwidth (Task 18) — dims with its links when stale -->
 		<div
 			class={cn(
-				'mt-2 flex items-center justify-between gap-3 border-t pt-2 text-xs transition-opacity',
+				'mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t pt-2 text-xs transition-opacity',
 				totalStale && 'opacity-50',
 			)}
 		>
 			<span class="text-muted-foreground uppercase tracking-wide"
 				>{m["network.view.totalBandwidth"]()}</span
 			>
-			<!-- The readings never wrap; on a phone the label takes the second line. -->
-			<span class="flex shrink-0 items-baseline gap-2.5">
+			<!-- The readings never break apart; when label and readings do not fit one
+			     line (German at 320px), the readings drop below it, still trailing. -->
+			<span class="ms-auto flex shrink-0 items-baseline gap-2.5">
 				<span
 					data-live-value
 					data-testid="total-bandwidth-up"

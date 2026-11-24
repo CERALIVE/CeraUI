@@ -71,8 +71,10 @@ const sameSubnetGroups = $derived([
 			</p>
 			<div class="flex flex-wrap gap-1.5 pt-0.5">
 				{#each sameSubnetGroups as group (group)}
+					<!-- Foreground text: a status tone on its own tint, nested in the band's, falls
+					     near 4.1:1 in light mode. The tint keeps the tone; the text keeps 4.5:1. -->
 					<code
-						class="bg-status-info/10 text-status-info rounded-md px-1.5 py-0.5 font-mono text-xs"
+						class="bg-status-info/10 text-foreground rounded-md px-1.5 py-0.5 font-mono text-xs"
 						>{group}</code
 					>
 				{/each}
@@ -112,7 +114,7 @@ const sameSubnetGroups = $derived([
 							class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5"
 						>
 							<code
-								class="bg-status-warning/10 text-status-warning rounded-md px-1.5 py-0.5 font-mono text-xs"
+								class="bg-status-warning/10 text-foreground rounded-md px-1.5 py-0.5 font-mono text-xs"
 								>{group.ip}</code
 							>
 							<span class="text-muted-foreground text-xs">

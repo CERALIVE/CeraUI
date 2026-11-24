@@ -182,6 +182,23 @@ describe("EthernetSection — isolated-dongle row", () => {
 	// Changelog: https://github.com/lucide-icons/lucide/releases/tag/1.42.0
 	// The 1.46.0 golden retains the complete element/attribute/text comparison.
 	// Bonded-link naming changes only the port text and adds its raw-ifname title.
+	//
+	// RE-CAPTURED A FOURTH TIME, for the shared `NetworkRow` anatomy: the row is
+	// the one grid every Network section uses (dot anchored to the title's first
+	// line, the switch trailing the status line, Configure on its own line, a
+	// `data-touch-region`), which replaces `basis-72`, the `self-start` dot and the
+	// `shrink-0` cluster that stranded the dot and pushed Configure off a 320px
+	// card. The switch, the bond word, the Configure button, the address and the
+	// name with its raw-ifname title are byte-identical.
+	//
+	// RE-CAPTURED A FIFTH TIME, for reading order, the anatomy's no-tooltip rule
+	// and Arabic. The actions now MOVE in the DOM at the row's 36rem container
+	// query (a zero-height `data-net-row-wide` sentinel reports it), so the grid's
+	// column class is set from that instead of a container variant, and the actions
+	// line (`data-net-row-actions`) lost its variants. The name lost its raw-ifname
+	// `title`, a hover-only fact a kiosk cannot reach. The switch gained ONE class,
+	// `RTL_SWITCH_THUMB`. The bond word, the Configure button, the address and the
+	// name text are byte-identical.
 	it("renders a plain wired row identically to before the dongle change", () => {
 		const { container } = renderRows([["eth0", PLAIN_ROW]]);
 		expect(shapeOf(container)).toBe(plainRowGolden.trimEnd());

@@ -35,6 +35,7 @@ import { tick } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	clearOperation,
+	confirmOperation,
 	destroyAsyncOperations,
 	initAsyncOperations,
 } from "$lib/rpc/async-operation.svelte";
@@ -45,6 +46,7 @@ import {
 } from "$lib/rpc/wifi-adapter-modes.svelte";
 
 import WifiSection from "./WifiSection.svelte";
+import { wifiModeOpKey } from "./wifi-station-lock";
 
 vi.mock("$lib/rpc/client", () => ({
 	rpc: {
@@ -223,6 +225,94 @@ describe("WifiSection — the adapter mode control", () => {
 			getByTestId("wifi-mode-option-wifi0-hybrid").querySelector("svg"),
 		).not.toBeNull();
 		expect(getByTestId("wifi-mode-pending-wifi0")).toBeTruthy();
+	});
+
+	it("(d2) keeps Station selected when the AP status lands before the terminal", async () => {
+		// The device's cached answer: station, with no recorded preference.
+		const answer = vi.mocked(rpc.wifi.getAdapterModes);
+		answer.mockResolvedValue(ALL_MODES_OFFERED);
+		try {
+			const radio = {
+				mode: "station" as const,
+				supports_ap_sta_concurrency: true,
+			};
+			const { getByRole, getByTestId, rerender } = renderSection(radio);
+			await vi.waitFor(() => expect(answer).toHaveBeenCalled());
+			await openModeControl();
+			await fireEvent.click(getByRole("radio", { name: HYBRID_RUNG }));
+			await tick();
+			await acknowledgeCredentials();
+			await tick();
+			expect(getByTestId("wifi-mode-pending-wifi0")).toBeTruthy();
+
+			// The radio reports its AP before the mode terminal arrives.
+			await rerender({
+				wifiRadios: [
+					[
+						"wifi0",
+						wifiIface({
+							...radio,
+							hotspot: { name: "AP", available_channels: {} },
+						}),
+					],
+				],
+			});
+			await tick();
+
+			expect(
+				getByRole("radio", { name: "Station" }).getAttribute("aria-checked"),
+			).toBe("true");
+			expect(
+				getByRole("radio", { name: HYBRID_RUNG }).getAttribute("aria-checked"),
+			).toBe("false");
+			expect(getByTestId("wifi-mode-pending-wifi0")).toBeTruthy();
+		} finally {
+			answer.mockImplementation(async () => ({}));
+		}
+	});
+
+	it("(d3) keeps Station selected with no device answer until the matching terminal", async () => {
+		const radio = {
+			mode: "station" as const,
+			supports_ap_sta_concurrency: true,
+		};
+		const { getByRole, getByTestId, rerender } = renderSection(radio);
+		await vi.waitFor(() => expect(rpc.wifi.getAdapterModes).toHaveBeenCalled());
+		await openModeControl();
+		// The device never answered, so no cached answer names the prior mode.
+		expect(getByTestId("wifi-mode-selector").dataset.deviceAnswered).toBe(
+			"false",
+		);
+		await fireEvent.click(getByRole("radio", { name: HYBRID_RUNG }));
+		await tick();
+		await acknowledgeCredentials();
+		await tick();
+		expect(getByTestId("wifi-mode-pending-wifi0")).toBeTruthy();
+
+		// The radio reports its AP before the mode terminal arrives.
+		await rerender({
+			wifiRadios: [
+				[
+					"wifi0",
+					wifiIface({
+						...radio,
+						hotspot: { name: "AP", available_channels: {} },
+					}),
+				],
+			],
+		});
+		await tick();
+		const checked = (name: string) =>
+			getByRole("radio", { name }).getAttribute("aria-checked");
+		expect(checked("Station")).toBe("true");
+		expect(checked(HYBRID_RUNG)).toBe("false");
+		expect(getByTestId("wifi-mode-pending-wifi0")).toBeTruthy();
+
+		// The subscription settles the op on the device's terminal.
+		confirmOperation(wifiModeOpKey("wifi0", "radio-A"));
+		await tick();
+		expect(checked(HYBRID_RUNG)).toBe("true");
+		expect(checked("Station")).toBe("false");
 	});
 });
 

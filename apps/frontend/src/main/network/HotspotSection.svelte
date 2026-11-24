@@ -30,8 +30,9 @@ import { signalTextClass } from '$lib/helpers/signal';
 import { getOperationPhase, getOperationTarget } from '$lib/rpc/async-operation.svelte';
 import { getWifiAdapterModeEntry } from '$lib/rpc/wifi-adapter-modes.svelte';
 import { deriveHotspotClientsView, formatClientRatePair } from './hotspot-clients-view';
+import NetworkRow from './NetworkRow.svelte';
 import WifiModeBadge from './WifiModeBadge.svelte';
-import { deriveWifiAdapterModeView, wifiModeTarget } from './wifi-adapter-mode-view';
+import { deriveWifiAdapterModeView, wifiModeFrom, wifiModeTarget } from './wifi-adapter-mode-view';
 import { wifiModeOpKey } from './wifi-station-lock';
 
 interface Props {
@@ -86,19 +87,15 @@ const CATEGORY_PROBE_PERCENT = { excellent: 80, good: 60, fair: 40, weak: 10 } a
 					entry: getWifiAdapterModeEntry(id),
 					phase: getOperationPhase(wifiModeOpKey(id, iface.incarnation)),
 					target: wifiModeTarget(getOperationTarget(wifiModeOpKey(id, iface.incarnation))),
+					from: wifiModeFrom(getOperationTarget(wifiModeOpKey(id, iface.incarnation))),
 				}))}
-				<div class="px-4 py-3">
-					<div class="flex items-center gap-3">
-						<span class="bg-status-info size-2 shrink-0 rounded-full" aria-hidden="true"></span>
-						<div class="min-w-0 flex-1">
-							<p class="truncate text-sm font-medium">{iface.hotspot?.name || iface.ifname}</p>
-							<p class="text-muted-foreground truncate text-xs">
-								{m["network.view.active"]()} · {iface.ifname}
-							</p>
-						</div>
-						<WifiModeBadge device={id} mode={modeView.displayMode} />
-					</div>
-
+				<NetworkRow data-testid="hotspot-row" data-device={id} dotClass="bg-status-info">
+					{#snippet heading()}{iface.hotspot?.name || iface.ifname}{/snippet}
+					{#snippet identity()}<WifiModeBadge device={id} mode={modeView.displayMode} />{/snippet}
+					{#snippet status()}
+						<span class="wrap-anywhere">{m["network.view.active"]()} · {iface.ifname}</span>
+					{/snippet}
+					{#snippet details()}
 					{#if clients}
 						<div class="mt-3 border-t pt-3" data-testid="hotspot-clients-{id}">
 							<div class="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">
@@ -130,7 +127,7 @@ const CATEGORY_PROBE_PERCENT = { excellent: 80, good: 60, fair: 40, weak: 10 } a
 												muted, never the phosphor-lime accent) and forced LTR so an
 												RTL locale cannot reorder the hex pairs.
 											-->
-											<span class="text-muted-foreground min-w-0 flex-1 truncate font-mono" dir="ltr">
+											<span class="text-muted-foreground min-w-0 flex-1 font-mono break-all" dir="ltr">
 												{row.mac}
 											</span>
 											{#if row.signalDbm !== undefined && row.signalCategory !== undefined}
@@ -166,7 +163,8 @@ const CATEGORY_PROBE_PERCENT = { excellent: 80, good: 60, fair: 40, weak: 10 } a
 							{/if}
 						</div>
 					{/if}
-				</div>
+					{/snippet}
+				</NetworkRow>
 			{/each}
 		{/if}
 	</div>

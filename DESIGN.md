@@ -101,6 +101,18 @@ Rules:
   button. In System Logs, Storage Save and the logs toolbar's Export logs are
   filled and every other action, Support bundle included, is outline or ghost;
   Follow stays outline, because a filled lime button reads as going live (DF-32).
+- **IH-6** — every link row on the Network destination (Wi-Fi, Cellular, Ethernet,
+  an active hotspot, a Bluetooth device) is ONE component,
+  `apps/frontend/src/main/network/NetworkRow.svelte`, so its order is the rule
+  above made structural: title line (dot or device glyph · name · identity pill ·
+  signal), status line (glyph + state word · facts, then the bond switch at its
+  trailing edge, so every section's switches form one column), hardware tags,
+  reason lines, actions. The dot is anchored to the title's first line, and from
+  36rem of row width the actions move to the title line, in the DOM as well, so
+  the focus order is the reading order at every width. Pills remain only for an
+  exception that must stand out (No SIM, roaming, stale, Shared LAN, an unclaimed
+  cellular device's class); reason lines and hardware tags use full
+  `text-muted-foreground` (≥ 4.5:1), never a fainter alpha.
 
 ---
 
@@ -152,7 +164,10 @@ Three mandatory verification widths:
 - **BP-2** — no state, signal, or action element is clipped or `text-overflow`-
   truncated to unreadability at any of the three widths. Hardware tags MAY
   truncate (they are the demoted tier, §2) provided the full value stays
-  available in diagnostics (§3 OL-3).
+  available in diagnostics (§3 OL-3). On the Network destination (IH-6 rows and
+  Bonded Links alike), names and identity facts WRAP and never truncate; only a
+  mono machine identifier that repeats a value shown in full may keep one line,
+  with its full value in the row's accessible name.
 - **BP-3** — the 1024×600 kiosk viewport is verified as an additional case
   because `.impeccable.md` names it a real target; it does not replace any of the
   three above.
@@ -184,7 +199,7 @@ CeraUI ships **10 locales** — the catalogs in
 - **LO-3** — **RTL (`ar`)**: layout mirrors correctly — no hardcoded `left`/
   `right` where `start`/`end` is meant, no icons that imply direction rendering
   unmirrored, no numeric/unit pair (e.g. signal %, Mbps) that reorders into
-  nonsense. Verify at 375 and 1280.
+  nonsense, and no checked switch thumb outside its track. Verify at 375 and 1280.
 - **LO-4** — **CJK (`ja`/`ko`/`zh`)**: no clipped glyphs, no forced mid-word
   breaks that split a token, adequate line-height. `.impeccable.md` states Space
   Grotesk lacks CJK glyphs and system fallbacks are used — verify the fallback
@@ -218,6 +233,9 @@ minimum) and the existing `[data-layout-mode='touch']` token layer in
   block clears.
 - **TT-5** — verified at the 1024×600 kiosk viewport in touch mode, not only in
   default mode.
+- **TT-6** — every Network row (IH-6) is a `data-touch-region`, so on a phone
+  (below 40rem) the same token layer lifts its buttons to 44 px and grows its
+  switch's hit area, in the default layout mode as well as in touch mode.
 
 ---
 

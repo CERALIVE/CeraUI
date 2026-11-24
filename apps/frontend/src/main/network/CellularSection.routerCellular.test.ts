@@ -64,9 +64,32 @@ function dongle(overrides: Partial<Modem> = {}): Modem {
 	} as Modem;
 }
 
+// The classifier marks a router dongle's netdev; without the marker Ethernet would list it.
 const BENCH_NETIF: NetifMessage = {
-	enx0c5b8f279a64: { tp: 0, enabled: false, ip: "192.168.8.100" },
-	enx344b50000000: { tp: 12, enabled: true, ip: "192.168.0.169" },
+	enx0c5b8f279a64: {
+		tp: 0,
+		enabled: false,
+		ip: "192.168.8.100",
+		router_cellular: {
+			vendor: "Huawei",
+			model: "E3372 LTE/UMTS/GSM HiLink Modem/Networkcard",
+			vid_pid: "12d1:14dc",
+			kind: "router-cellular",
+			duplicate_model: true,
+		},
+	},
+	enx344b50000000: {
+		tp: 12,
+		enabled: true,
+		ip: "192.168.0.169",
+		router_cellular: {
+			vendor: "ZTE",
+			model: "ZTE Mobile Boardband",
+			vid_pid: "19d2:1405",
+			kind: "router-cellular",
+			duplicate_model: false,
+		},
+	},
 };
 
 function renderRow(modem: Modem, netif: NetifMessage = BENCH_NETIF) {
@@ -133,7 +156,9 @@ describe("bond ownership — a directly-reached dongle owns its toggle", () => {
 		).toBeUndefined();
 	});
 
-	it("still defers to the veth row for a NETNS-claimed dongle", () => {
+	// The veth is no longer listed under Ethernet, so this row is the device's
+	// only listing and its switch is the live control for `dg0h` itself.
+	it("owns the live toggle for a NETNS-claimed dongle too", () => {
 		const netns = bondableDongle({
 			ifname: "dg0h",
 			availability_reason: "router_managed",
@@ -145,7 +170,7 @@ describe("bond ownership — a directly-reached dongle owns its toggle", () => {
 				resolveRowState(netns, "router-ethernet"),
 				true,
 			),
-		).toBe("network.cellular.bond.routerManagedLink");
+		).toBeUndefined();
 	});
 
 	it("reports the real reason when the dongle has no address yet", () => {
@@ -377,10 +402,78 @@ describe("configuration surface — exactly what the device reported", () => {
 		// generic sentence beneath it would restate half of what it already says.
 		const owningKeys = notes.filter(
 			(k) =>
-				k === "network.cellular.reason.routerManaged" ||
+				k?.startsWith("network.cellular.routerSettings.") ||
 				k === "network.cellular.reason.routerControlsUnverified",
 		);
-		expect(owningKeys).toEqual(["network.cellular.reason.routerManaged"]);
+		expect(owningKeys).toEqual(["network.cellular.routerSettings.webUi"]);
+	});
+
+	/*
+	  The note says only what the device proved: a verified write, an admin API
+	  that answered, or nothing at all. It never points at a switch on another
+	  row, because the row's own switch is the device's one bond control.
+	*/
+	it.each([
+		[
+			"a verified write",
+			{
+				admin_url: "http://192.168.8.1",
+				reachable: true,
+				controls: { mobile_data: true },
+			},
+			"network.cellular.routerSettings.writable",
+		],
+		[
+			"an answering admin API",
+			{ admin_url: "http://192.168.8.1", reachable: true },
+			"network.cellular.routerSettings.webUi",
+		],
+		[
+			"an admin API that did not answer",
+			{ admin_url: "http://192.168.8.1", reachable: false },
+			"network.cellular.routerSettings.unknown",
+		],
+		[
+			"no admin reading (an isolated dongle)",
+			undefined,
+			"network.cellular.routerSettings.unknown",
+		],
+	] as const)(
+		"keys the settings note on evidence: %s",
+		(_case, routerAdmin, key) => {
+			const { container } = renderRow(
+				bondableDongle({ router_admin: routerAdmin } as Partial<Modem>),
+			);
+			const notes = [
+				...container.querySelectorAll('[data-testid="modem-note"]'),
+			].map((n) => n.getAttribute("data-note-key"));
+
+			expect(notes).toContain(key);
+			expect(
+				notes.filter((k) => k?.startsWith("network.cellular.routerSettings.")),
+			).toEqual([key]);
+		},
+	);
+
+	it("names an isolated dongle like Bonded Links does, never by its slot token", () => {
+		const { container } = renderRow(
+			dongle({
+				ifname: "dg0h",
+				name: "dongle0",
+				model: undefined,
+				slot_label: "dongle0",
+				availability_reason: "router_managed",
+				router_admin: undefined,
+			}),
+			{},
+		);
+
+		expect(
+			container
+				.querySelector('[data-testid="modem-name"]')
+				?.textContent?.trim(),
+		).toBe("Router dongle 1");
+		expect(container.textContent).not.toContain("dongle0");
 	});
 
 	/**

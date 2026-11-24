@@ -17,7 +17,7 @@
  * differences is a documented product decision rather than drift:
  *
  *  - `row` — the Network panel's row: ordinal, glyph, name, and the kind /
- *    disambiguation line beneath it;
+ *    disambiguation line beneath it; the name wraps rather than truncates;
  *  - `compact` — the persistent HUD strip: ordinal and glyph only. The strip's
  *    four-fact scope is deliberate (`docs/agents/device-first-source-model-go-live-card.md` → HUD 4-fact scope), so this
  *    variant must NOT grow a name or a kind label.
@@ -83,7 +83,7 @@ const color = $derived(`var(--link-${link.linkIndex + 1})`);
 	     purpose: `flex-1 basis-32` sets `flex-basis` twice and which one wins is
 	     decided by Tailwind's stylesheet order, not by the class attribute. -->
 	<div class="flex min-w-0 flex-[1_1_8rem] flex-col leading-tight">
-		<span class="truncate text-xs font-medium" data-testid="link-badge-label"
+		<span class="text-xs font-medium wrap-anywhere" data-testid="link-badge-label"
 			>{link.label}</span
 		>
 		<span class="text-muted-foreground truncate text-[10px] uppercase tracking-wide">
