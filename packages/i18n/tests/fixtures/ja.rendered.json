@@ -666,6 +666,7 @@
 	"live.server.manageLinks": "リンクを管理",
 	"live.server.singleLink": "シングルリンク",
 	"live.server.singleLinkHint": "この受信先は単一の直接リンクを使用します。このトランスポートでは複数リンクのボンディングは使用されません。",
+	"live.bar.blockerCount": "要対応：<count>件",
 	"live.setup.linksReady": "<count> 本のリンクが準備完了",
 	"live.setup.noLinks": "リンクなし",
 	"live.setup.title": "配信のセットアップ",

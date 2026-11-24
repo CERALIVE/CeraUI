@@ -855,8 +855,22 @@
 	"live.audioMixer.error.audio_mix_active": "यह स्ट्रीम इनपुट मिक्स कर रही है। मुख्य इनपुट बदलने के लिए इसे रोकें।",
 	"live.audioMixer.error.refused": "डिवाइस ने यह बदलाव अस्वीकार कर दिया, इसलिए कुछ नहीं बदला।",
 	"live.telemetryCard.title": "टेलीमेट्री",
-	"live.bar.ready": "लाइव जाने के लिए तैयार",
-	"live.bar.blockedSeveral": "लाइव होने से पहले ये ठीक करें",
+	"live.bar.beforeLive": "लाइव होने से पहले",
+	"live.bar.checking": "तैयारी की जाँच हो रही है…",
+	"live.bar.showAll": "सभी देखें",
+	"live.bar.scrollForAll": "सभी आइटम देखने के लिए स्क्रोल करें",
+	"live.goLive.fix.chooseAnotherSource": "दूसरा स्रोत चुनें",
+	"live.bar.blockerCount": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} समस्या ठीक करें",
+				"countPlural=other": "{count} समस्याएँ ठीक करें",
+				"countPlural=*": "{count} समस्याएँ ठीक करें"
+			}
+		}
+	],
 	"live.source.activeConfigured": "कॉन्फ़िगर किया गया",
 	"live.source.activeLive": "लाइव",
 	"live.source.audioAmbiguousBody": "यह कैमरा अपने एक से अधिक ऑडियो डिवाइस बताता है, इसलिए हम अनुमान नहीं लगाएंगे कि आपको कौन सा चाहिए। नीचे सही डिवाइस चुनें।",

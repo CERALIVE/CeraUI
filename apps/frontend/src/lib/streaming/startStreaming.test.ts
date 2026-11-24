@@ -147,7 +147,7 @@ describe("buildStartConfig — mandatory pipeline recognition gate (Task 28)", (
 			makePipelines(),
 		);
 		expect(result).toEqual({ ok: false, error: "unknownPipeline" });
-		if (result.ok) await startStreaming(result.config);
+		if (result.ok) await startStreaming(() => result.config);
 		expect(startMock).not.toHaveBeenCalled();
 	});
 
@@ -295,7 +295,7 @@ describe("start/stop dispatch (mocked rpc client)", () => {
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 
-		await startStreaming(result.config);
+		await startStreaming(() => result.config);
 
 		expect(startMock).toHaveBeenCalledTimes(1);
 		const input = startMock.mock.calls[0][0] as Record<string, unknown>;

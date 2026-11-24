@@ -855,8 +855,22 @@
 	"live.audioMixer.error.audio_mix_active": "Dieser Stream mischt Eingänge. Beende ihn, um den Haupteingang zu ändern.",
 	"live.audioMixer.error.refused": "Das Gerät hat diese Änderung abgelehnt, es wurde nichts geändert.",
 	"live.telemetryCard.title": "Telemetrie",
-	"live.bar.ready": "Bereit für den Live-Start",
-	"live.bar.blockedSeveral": "Vor dem Livegang noch erledigen",
+	"live.bar.beforeLive": "Vor dem Livegang",
+	"live.bar.checking": "Startbereitschaft wird geprüft…",
+	"live.bar.showAll": "Alle anzeigen",
+	"live.bar.scrollForAll": "Scrollen, um alles zu sehen",
+	"live.goLive.fix.chooseAnotherSource": "Andere Quelle wählen",
+	"live.bar.blockerCount": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} Problem beheben",
+				"countPlural=other": "{count} Probleme beheben",
+				"countPlural=*": "{count} Probleme beheben"
+			}
+		}
+	],
 	"live.source.activeConfigured": "Konfiguriert",
 	"live.source.activeLive": "Live",
 	"live.source.audioAmbiguousBody": "Diese Kamera meldet mehr als ein eigenes Audiogerät, deshalb raten wir nicht, welches du möchtest. Wähle unten das richtige aus.",

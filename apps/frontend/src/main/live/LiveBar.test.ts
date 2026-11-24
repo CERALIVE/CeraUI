@@ -16,6 +16,10 @@ import LiveBar from "./LiveBar.svelte";
 const action = createRawSnippet(() => ({
 	render: () => '<button type="button">Start Stream</button>',
 }));
+const blockedContent = createRawSnippet(() => ({
+	render: () =>
+		'<div><p>Select a source</p><button type="button">Start Stream</button></div>',
+}));
 
 const realResizeObserver = window.ResizeObserver;
 
@@ -47,7 +51,7 @@ afterEach(() => {
 describe("LiveBar", () => {
 	it("shows the status line beside the action it hosts", () => {
 		const { getByTestId } = render(LiveBar, {
-			props: { status: "Select a source", blocked: true, children: action },
+			props: { blocked: true, children: blockedContent },
 		});
 		const bar = getByTestId("live-bar");
 		expect(bar.textContent).toContain("Select a source");

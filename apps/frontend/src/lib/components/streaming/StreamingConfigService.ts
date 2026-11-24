@@ -8,10 +8,7 @@ import type {
 } from "@ceraui/rpc/schemas";
 import { toast } from "svelte-sonner";
 
-import {
-	startStreaming as systemStartStreaming,
-	stopStreaming as systemStopStreaming,
-} from "$lib/helpers/SystemHelper";
+import { stopStreaming as systemStopStreaming } from "$lib/helpers/SystemHelper";
 import { pipelineAvailability } from "$lib/streaming/pipelineAvailability";
 
 type Properties = {
@@ -120,27 +117,6 @@ export function buildStreamingConfig(
 	config.bitrate_overlay = properties.bitrateOverlay ?? false;
 
 	return config;
-}
-
-export function startStreamingWithConfig(config: Partial<ConfigMessage>): void {
-	try {
-		toast.dismiss();
-	} catch (error) {
-		console.warn("Could not dismiss toasts:", error);
-	}
-
-	if (
-		typeof window !== "undefined" &&
-		window.startStreamingWithNotificationClear
-	) {
-		window.startStreamingWithNotificationClear(config);
-	} else {
-		void systemStartStreaming(
-			config as Parameters<typeof systemStartStreaming>[0],
-		).catch((error) => {
-			console.error("Failed to load SystemHelper for streaming:", error);
-		});
-	}
 }
 
 export function stopStreaming(): void {

@@ -7,7 +7,7 @@ import ModeToggle from '$lib/components/custom/mode-toggle.svelte';
 import { PullToRefresh } from '$lib/components/custom/pwa';
 import Logo from '$lib/components/icons/Logo.svelte';
 import { liveNavElement, siteName } from '$lib/config';
-import { DESKTOP_CHROME_QUERY, WIDE_DESKTOP_QUERY } from '$lib/layout';
+import { DESKTOP_CHROME_QUERY, publishHeight, WIDE_DESKTOP_QUERY } from '$lib/layout';
 import { navigateTo } from '$lib/stores/navigation.svelte';
 
 import HudRegion from './HudRegion.svelte';
@@ -39,6 +39,8 @@ const isDesktop = new MediaQuery(DESKTOP_CHROME_QUERY);
 // hidden and those controls live in the Settings Appearance group (SettingsView
 // already renders it below 1024px, so the two stay in agreement). See $lib/layout.
 const isWideDesktop = new MediaQuery(WIDE_DESKTOP_QUERY);
+let header: HTMLElement | undefined = $state();
+$effect(() => (header ? publishHeight(header, '--app-header-height') : undefined));
 </script>
 
 <PullToRefresh onRefresh={handleRefresh}>
@@ -51,7 +53,7 @@ const isWideDesktop = new MediaQuery(WIDE_DESKTOP_QUERY);
 			{m["a11y.skipToContent"]()}
 		</a>
 		<HudRegion affordance />
-		<header class="bg-background sticky top-[calc(var(--offline-bar-height)+var(--top-bands-height))] z-40 w-full border-b">
+		<header bind:this={header} class="bg-background sticky top-[calc(var(--offline-bar-height)+var(--top-bands-height))] z-40 w-full border-b">
 			<div class="container flex h-14 max-w-7xl items-center gap-4">
 				<button
 					type="button"

@@ -666,6 +666,7 @@
 	"live.server.manageLinks": "管理链路",
 	"live.server.singleLink": "单链路",
 	"live.server.singleLinkHint": "此接收端使用单条直连链路。该传输方式不使用多链路绑定。",
+	"live.bar.blockerCount": "有 <count> 项待处理",
 	"live.setup.linksReady": "<count> 条链路就绪",
 	"live.setup.noLinks": "无链路",
 	"live.setup.title": "直播设置",

@@ -127,7 +127,7 @@ describe("hasEffectiveSource", () => {
 describe("reconcileStartSource", () => {
 	it("stamps the pipeline from the resolved source row, overwriting a stale persisted one", () => {
 		const snapshot = sources([capture("cam0")]);
-		const result = reconcileStartSource(
+		const { config: result } = reconcileStartSource(
 			cfg({ source: "cam0", pipeline: "legacy-unknown-pipeline" }),
 			snapshot,
 		);
@@ -136,13 +136,16 @@ describe("reconcileStartSource", () => {
 	});
 
 	it("stamps both fields from the implicit sole camera when config.source is unset", () => {
-		const result = reconcileStartSource(cfg(), sources([capture("cam0")]));
+		const { config: result } = reconcileStartSource(
+			cfg(),
+			sources([capture("cam0")]),
+		);
 		expect(result?.source).toBe("cam0");
 		expect(result?.pipeline).toBe("cam0");
 	});
 
 	it("DROPS the pipeline when the selected source resolves to no row", () => {
-		const result = reconcileStartSource(
+		const { config: result } = reconcileStartSource(
 			cfg({ source: "gone", pipeline: "cam0" }),
 			sources([capture("cam0")]),
 		);
@@ -152,7 +155,7 @@ describe("reconcileStartSource", () => {
 
 	it("FAIL-OPEN: returns the config untouched when sources is undefined", () => {
 		const input = cfg({ source: "cam0", pipeline: "legacy" });
-		expect(reconcileStartSource(input, undefined)).toBe(input);
+		expect(reconcileStartSource(input, undefined).config).toBe(input);
 	});
 });
 
@@ -171,7 +174,7 @@ describe("start-gate coherence — readiness and buildStartConfig agree", () => 
 			gatewayStatus: { available: true },
 		});
 		const start = buildStartConfig(
-			reconcileStartSource(config, snapshot),
+			reconcileStartSource(config, snapshot).config,
 			null,
 			pipelinesFromSources(snapshot),
 		);

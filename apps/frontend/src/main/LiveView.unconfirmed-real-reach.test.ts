@@ -144,7 +144,7 @@ describe("an unconfirmed backend state always has a reachable Stop (N4)", () => 
 		expect(getStreamingOptimismState()).toBe("idle");
 		expect(controls(container)).toEqual([
 			{ label: "Stop Stream", disabled: false },
-			{ label: "Start Stream", disabled: false },
+			{ label: "Start Stream", disabled: true },
 		]);
 		// Nothing stops on its own (D207).
 		expect(stop).toHaveBeenCalledTimes(0);
@@ -173,7 +173,7 @@ describe("an unconfirmed backend state always has a reachable Stop (N4)", () => 
 		flushSync();
 		expect(controls(container)).toEqual([
 			{ label: "Stop Stream", disabled: false },
-			{ label: "Start Stream", disabled: false },
+			{ label: "Start Stream", disabled: true },
 		]);
 
 		startReply.resolve({ success: false, error: "start_in_progress" });
@@ -181,7 +181,7 @@ describe("an unconfirmed backend state always has a reachable Stop (N4)", () => 
 		flushSync();
 		expect(controls(container)).toEqual([
 			{ label: "Stop Stream", disabled: false },
-			{ label: "Start Stream", disabled: false },
+			{ label: "Start Stream", disabled: true },
 		]);
 		expect(stop).toHaveBeenCalledTimes(0);
 	});
@@ -231,8 +231,10 @@ describe("an unconfirmed backend state always has a reachable Stop (N4)", () => 
 	});
 
 	it("lifecycle absent (older backend): lost reply + restore keeps today's watchdog-bounded Starting...", async () => {
+		fx.lifecycle = "idle";
 		const { container } = render(LiveView);
 		await pressStartAndLoseReply(container);
+		fx.lifecycle = undefined;
 		noteSessionRestored();
 		flushSync();
 		expect(getStreamingOptimismState()).toBe("starting");

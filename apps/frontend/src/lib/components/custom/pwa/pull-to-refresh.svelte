@@ -1,6 +1,5 @@
 <script lang="ts">
-import { rtlLanguages } from '@ceraui/i18n';
-import { getLocale, m } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import { RefreshCw } from '@lucide/svelte';
 import { onMount } from 'svelte';
 
@@ -13,21 +12,33 @@ interface Props {
 
 const { onRefresh, threshold = 80, distance = 150, children }: Props = $props();
 
-// RTL support (for future enhancements)
-const _isRTL = $derived(rtlLanguages.includes(getLocale()));
-
-let containerElement: HTMLElement;
 let refreshElement: HTMLElement;
 let isRefreshing = $state(false);
 let pullDistance = $state(0);
-let isPulling = $state(false);
 let canRefresh = $state(false);
 
-let startY = 0;
-let currentY = 0;
+let pull: { id: number; y: number } | undefined;
+
+function resetPull() {
+	pull = undefined;
+	canRefresh = false;
+	pullDistance = 0;
+	if (refreshElement) {
+		refreshElement.style.transform = 'translateY(-48px)';
+		refreshElement.style.opacity = '0';
+		refreshElement.style.pointerEvents = 'none';
+		refreshElement.style.cursor = 'default';
+	}
+}
 
 const handleTouchStart = (e: TouchEvent) => {
-	if (window.scrollY > 0) return; // Only allow at top of page
+	// A second contact cancels ownership, even if it starts outside the marked
+	// list. Its remaining finger cannot arm a refresh until a new gesture.
+	if (e.touches.length !== 1) {
+		if (pull) resetPull();
+		return;
+	}
+	if (isRefreshing || window.scrollY > 0) return;
 	// Let marked regions own the entire gesture, even at their scroll boundaries.
 	if (e.composedPath().some(
 		(node) => node instanceof Element && node.hasAttribute('data-no-pull-to-refresh'),
@@ -35,21 +46,20 @@ const handleTouchStart = (e: TouchEvent) => {
 		return;
 	}
 
-	const clientY = e.touches[0]?.clientY;
-	if (clientY === undefined || !Number.isFinite(clientY)) return; // Prevent NaN coordinates
-
-	startY = clientY;
-	isPulling = true;
+	const touch = e.touches[0];
+	if (!touch || !Number.isFinite(touch.clientY)) return;
+	pull = { id: touch.identifier, y: touch.clientY };
 };
 
 const handleTouchMove = (e: TouchEvent) => {
-	if (!isPulling || window.scrollY > 0) return;
-
-	const clientY = e.touches[0]?.clientY;
-	if (clientY === undefined || !Number.isFinite(clientY) || !Number.isFinite(startY)) return; // Prevent NaN coordinates
-
-	currentY = clientY;
-	const rawPullDistance = currentY - startY;
+	if (!pull) return;
+	const touch = e.touches[0];
+	if (e.touches.length !== 1 || touch?.identifier !== pull.id || window.scrollY > 0) {
+		resetPull();
+		return;
+	}
+	if (!Number.isFinite(touch.clientY)) return;
+	const rawPullDistance = touch.clientY - pull.y;
 	pullDistance = Number.isFinite(rawPullDistance) ? Math.max(0, rawPullDistance) : 0;
 
 	canRefresh = pullDistance > threshold;
@@ -82,54 +92,20 @@ const handleTouchMove = (e: TouchEvent) => {
 	}
 };
 
-const handleTouchEnd = async () => {
-	if (!isPulling) return;
-
-	isPulling = false;
-
-	if (canRefresh && !isRefreshing) {
-		isRefreshing = true;
-
-		// Make clickeable during refresh for cancellation
-		if (refreshElement) {
-			refreshElement.style.pointerEvents = 'auto';
-			refreshElement.style.cursor = 'pointer';
-		}
-
-		try {
-			await onRefresh();
-		} catch (error) {
-			console.error('Refresh error:', error);
-		} finally {
-			isRefreshing = false;
-			canRefresh = false;
-			pullDistance = 0;
-
-			// Reset transform (hide above header)
-			if (refreshElement) {
-				refreshElement.style.transform = 'translateY(-48px)';
-				refreshElement.style.opacity = '0';
-				refreshElement.style.pointerEvents = 'none';
-				refreshElement.style.cursor = 'default';
-			}
-		}
-	} else {
-		// Reset without refreshing
-		canRefresh = false;
-		pullDistance = 0;
-
-		if (refreshElement) {
-			refreshElement.style.transform = 'translateY(-48px)';
-			refreshElement.style.opacity = '0';
-			refreshElement.style.pointerEvents = 'none';
-			refreshElement.style.cursor = 'default';
-		}
+const handleTouchEnd = async (e: TouchEvent) => {
+	const owner = pull;
+	if (!owner || !Array.from(e.changedTouches).some((touch) => touch.identifier === owner.id)) return;
+	pull = undefined;
+	if (e.touches.length !== 0 || !canRefresh || isRefreshing) return resetPull();
+	isRefreshing = true;
+	try {
+		await onRefresh();
+	} catch (error) {
+		console.error('Refresh error:', error);
+	} finally {
+		isRefreshing = false;
+		resetPull();
 	}
-};
-
-const handleTouchCancel = () => {
-	canRefresh = false;
-	void handleTouchEnd();
 };
 
 onMount(() => {
@@ -148,13 +124,13 @@ onMount(() => {
 		document.addEventListener('touchstart', handleTouchStart, { passive: true });
 		document.addEventListener('touchmove', handleTouchMove, { passive: false });
 		document.addEventListener('touchend', handleTouchEnd, { passive: true });
-		document.addEventListener('touchcancel', handleTouchCancel, { passive: true });
+		document.addEventListener('touchcancel', resetPull, { passive: true });
 
 		return () => {
 			document.removeEventListener('touchstart', handleTouchStart);
 			document.removeEventListener('touchmove', handleTouchMove);
 			document.removeEventListener('touchend', handleTouchEnd);
-			document.removeEventListener('touchcancel', handleTouchCancel);
+			document.removeEventListener('touchcancel', resetPull);
 		};
 	}
 });
@@ -171,16 +147,8 @@ onMount(() => {
 	class="bg-background/95 supports-backdrop-filter:bg-background/80 pointer-events-none fixed top-0 right-0 left-0 z-[60] flex h-12 transform items-center justify-center border-b opacity-0 shadow-sm backdrop-blur-sm transition-all duration-300"
 	onclick={() => {
 		if (isRefreshing) {
-			// Allow canceling refresh by clicking
 			isRefreshing = false;
-			canRefresh = false;
-			pullDistance = 0;
-			if (refreshElement) {
-				refreshElement.style.transform = 'translateY(-48px)';
-				refreshElement.style.opacity = '0';
-				refreshElement.style.pointerEvents = 'none';
-				refreshElement.style.cursor = 'default';
-			}
+			resetPull();
 		}
 	}}
 >
@@ -201,6 +169,6 @@ onMount(() => {
 </button>
 
 <!-- Container for the main content -->
-<div bind:this={containerElement}>
+<div>
 	{@render children()}
 </div>

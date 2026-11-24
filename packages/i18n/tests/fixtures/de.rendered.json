@@ -694,6 +694,14 @@
 	"live.server.manageLinks": "Verbindungen verwalten",
 	"live.server.singleLink": "Einzelne Verbindung",
 	"live.server.singleLinkHint": "Dieser Empfänger verwendet eine einzelne direkte Verbindung. Bündelung mehrerer Verbindungen wird für diesen Transport nicht genutzt.",
+	"live.bar.blockerCount": {
+		"0": "0 Probleme beheben",
+		"1": "1 Problem beheben",
+		"2": "2 Probleme beheben",
+		"5": "5 Probleme beheben",
+		"11": "11 Probleme beheben",
+		"100": "100 Probleme beheben"
+	},
 	"live.setup.linksReady": {
 		"0": "0 Verbindungen bereit",
 		"1": "1 Verbindung bereit",

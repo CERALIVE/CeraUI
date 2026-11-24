@@ -195,7 +195,7 @@ function handleStartClick() {
 }
 
 function runFix(fix: GateFix | undefined) {
-	if (fix === 'openSource') onOpenSource();
+	if (fix === 'openSource' || fix === 'chooseAnotherSource') onOpenSource();
 	else if (fix === 'goNetwork') onGoNetwork();
 	else if (fix === 'openServer') onOpenServer();
 }
@@ -203,6 +203,7 @@ function runFix(fix: GateFix | undefined) {
 function stateColor(state: GateStatus): string {
 	if (state === 'ok') return 'var(--status-success)';
 	if (state === 'warn') return 'var(--status-warning)';
+	if (state === 'unknown') return 'var(--muted-foreground)';
 	return 'var(--destructive)';
 }
 
@@ -210,6 +211,8 @@ function gateLabel(key: GoLiveGateKey): string {
 	switch (key) {
 		case 'source':
 			return m["live.goLive.gate.source"]();
+		case 'audio':
+			return m["live.source.audioEdit"]();
 		case 'network':
 			return m["live.goLive.gate.network"]();
 		case 'destination':
@@ -223,10 +226,14 @@ function fixLabel(fix: GateFix): string {
 	switch (fix) {
 		case 'openSource':
 			return m["live.goLive.fix.openSource"]();
+		case 'chooseAnotherSource':
+			return m["live.goLive.fix.chooseAnotherSource"]();
 		case 'goNetwork':
 			return m["live.goLive.fix.goNetwork"]();
 		case 'openServer':
 			return m["live.goLive.fix.openServer"]();
+		case 'openAudio':
+		case 'chooseAudioSource':
 		case 'none':
 			return '';
 	}

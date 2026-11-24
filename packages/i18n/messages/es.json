@@ -860,8 +860,23 @@
 	"live.audioMixer.error.audio_mix_active": "Esta transmisión mezcla varias entradas. Detén la transmisión para cambiar la entrada principal.",
 	"live.audioMixer.error.refused": "El dispositivo rechazó este cambio, así que no cambió nada.",
 	"live.telemetryCard.title": "Telemetría",
-	"live.bar.ready": "Listo para transmitir en vivo",
-	"live.bar.blockedSeveral": "Resuelve esto antes de transmitir en vivo",
+	"live.bar.beforeLive": "Antes de transmitir en vivo",
+	"live.bar.checking": "Comprobando si todo está listo…",
+	"live.bar.showAll": "Ver todo",
+	"live.bar.scrollForAll": "Desplázate para ver todo",
+	"live.goLive.fix.chooseAnotherSource": "Elegir otra fuente",
+	"live.bar.blockerCount": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} cosa por resolver",
+				"countPlural=many": "{count} cosas por resolver",
+				"countPlural=other": "{count} cosas por resolver",
+				"countPlural=*": "{count} cosas por resolver"
+			}
+		}
+	],
 	"live.source.activeConfigured": "Configurado",
 	"live.source.activeLive": "En vivo",
 	"live.source.audioAmbiguousBody": "Esta cámara informa de más de un dispositivo de audio propio, así que no vamos a adivinar cuál quieres. Elige el correcto abajo.",

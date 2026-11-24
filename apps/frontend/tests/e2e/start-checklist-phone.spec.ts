@@ -8,8 +8,7 @@ type Frame = Record<string, unknown>;
 /**
  * With no usable source and no server, the Live bar used to name only the
  * source problem, with no button, and Start did nothing. Now both blockers
- * show at once with a button each, and a tap on the blocked Start leads to
- * them. Runs against the real frontend and the worker's mock backend; the
+ * show together in a named disclosure; a blocked Start never acts. Runs against the real frontend and the worker's mock backend; the
  * config frames are rewritten so both gates are blocked whatever the worker
  * was seeded with.
  */
@@ -44,32 +43,30 @@ async function blockSourceAndServer(page: Page, blockNetworkAndEngine = false) {
 }
 
 test.describe("A blocked Start lists what to fix", () => {
-	test.beforeEach(({ browserName }) => {
-		test.skip(browserName !== "chromium", "single-browser layout check");
-	});
-
-	test("both blockers show with a button each, and Start leads to them", async ({ page }) => {
+	test("both blockers have named fixes and Destination opens its dialog", async ({ page }) => {
 		await blockSourceAndServer(page);
 		await page.goto("/");
 		await ensureAuthenticated(page);
 		await navigateTo(page, "live");
 
 		const bar = page.getByTestId("live-bar");
-		await expect(bar).toContainText("Fix these before you go live");
-		const fixes = bar.locator("button[data-fix]");
+		const show = bar.getByRole("button", { name: "Show all" });
+		await expect(show).toHaveAccessibleDescription("2 things to fix");
+		await show.click();
+		const fixes = bar.getByRole("list", { name: "Before you go live" }).getByRole("button");
 		await expect(fixes).toHaveText(["Choose source", "Choose destination"]);
 		for (const fix of await fixes.all()) {
 			const box = await fix.boundingBox();
 			expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+			expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
 		}
 
 		const start = bar.getByRole("button", { name: /start stream/i });
 		await expect(start).toBeDisabled();
-		// aria-disabled, not disabled: a real tap still reaches it, but Playwright's
-		// actionability check would wait for it to be enabled.
-		await start.click({ force: true });
-		await expect(fixes.first()).toBeFocused();
+		await expect(start).toHaveJSProperty("disabled", true);
+		await expect(start).toHaveAccessibleDescription("Select a video source before starting the stream");
 
+		await expect(fixes.nth(1)).toHaveAccessibleDescription("Configure a server before starting the stream");
 		await fixes.nth(1).click();
 		await expect(page.getByRole("dialog")).toBeVisible();
 	});
@@ -80,14 +77,15 @@ test.describe("A blocked Start lists what to fix", () => {
 		await ensureAuthenticated(page);
 		await navigateTo(page, "live");
 		const bar = page.getByTestId("live-bar");
-		await expect(bar.locator("button[data-fix]")).toHaveCount(2);
+		await expect(bar.getByRole("button", { name: "Show all" })).toHaveAccessibleDescription("2 things to fix");
 		const box = await bar.boundingBox();
 		expect(box?.x ?? -1).toBeGreaterThanOrEqual(0);
 		expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(390);
 		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 	});
 
-	test("@mobile-only the blocker list scrolls both ways without refreshing Live", async ({ page }) => {
+	test("@mobile-only the blocker list scrolls both ways without refreshing Live", async ({ page, browserName }) => {
+		test.skip(browserName !== "chromium", "sends touch input over Chromium CDP");
 		await page.setViewportSize({ width: 390, height: 500 });
 		// The mobile project sets a narrow viewport but uses a desktop profile.
 		// Enable touch before mounting so the app installs its refresh listeners.
@@ -99,19 +97,22 @@ test.describe("A blocked Start lists what to fix", () => {
 		await navigateTo(page, "live");
 		expect(await page.evaluate(() => navigator.maxTouchPoints)).toBeGreaterThan(0);
 
-		const list = page.getByTestId("live-bar").getByRole("list", {
-			name: "Fix these before you go live",
+		const bar = page.getByTestId("live-bar");
+		await bar.getByRole("button", { name: "Show all" }).click();
+		const list = bar.getByRole("list", {
+			name: "Before you go live",
 		});
 		await expect(list.getByRole("listitem")).toHaveCount(4);
-		const box = await list.boundingBox();
+		const scrollArea = bar.locator("[data-no-pull-to-refresh]");
+		const box = await scrollArea.boundingBox();
 		if (!box) throw new Error("Blocker list has no bounding box");
-		const maxScroll = await list.evaluate((el) => el.scrollHeight - el.clientHeight);
+		const maxScroll = await scrollArea.evaluate((el) => el.scrollHeight - el.clientHeight);
 		expect(maxScroll).toBeGreaterThan(0);
 		const documentStart = await page.evaluate(() => {
 			window.scrollTo(0, 0);
 			return performance.timeOrigin;
 		});
-		const scrollTop = () => list.evaluate((el) => el.scrollTop);
+		const scrollTop = () => scrollArea.evaluate((el) => el.scrollTop);
 		const pageScroll = () => page.evaluate(() => window.scrollY);
 		await expect.poll(scrollTop).toBe(0);
 		await expect.poll(pageScroll).toBe(0);
@@ -144,20 +145,37 @@ test.describe("A blocked Start lists what to fix", () => {
 	for (const size of [
 		{ width: 390, height: 500 },
 		{ width: 844, height: 390 },
+		{ width: 1024, height: 600 },
 	]) {
 		test(`on a ${size.width}x${size.height} screen every reason stays visible and Start stays in view`, async ({ page }) => {
 			await page.setViewportSize(size);
-			await blockSourceAndServer(page);
+			await blockSourceAndServer(page, true);
 			await page.goto("/");
 			await ensureAuthenticated(page);
 			await navigateTo(page, "live");
 			const bar = page.getByTestId("live-bar");
-			await expect(bar.locator("button[data-fix]")).toHaveCount(2);
-			const reasons = bar.locator("li[data-blocker] [data-blocker-reason]");
-			await expect(reasons).toHaveCount(2);
+			const show = bar.getByRole("button", { name: "Show all" });
+			await expect(show).toHaveAccessibleDescription("4 things to fix");
+			const before = await bar.boundingBox();
+			await show.click();
+			const heading = bar.getByRole("heading", { name: "Before you go live" });
+			await expect(heading).toBeFocused();
+			const hitTest = (el: Element) => {
+				const r = el.getBoundingClientRect();
+				return el.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
+			};
+			await expect.poll(() => heading.evaluate(hitTest)).toBe(true);
+			const reasons = bar.getByRole("list", { name: "Before you go live" }).getByRole("paragraph");
+			await expect(reasons).toHaveText([
+				"Select a video source before starting the stream",
+				"No active links yet",
+				"Configure a server before starting the stream",
+				"Streaming engine offline",
+			]);
+			expect(await bar.boundingBox()).toEqual(before);
 			for (const reason of await reasons.all()) {
 				await reason.scrollIntoViewIfNeeded();
-				await expect(reason).toBeVisible();
+				await expect.poll(() => reason.evaluate(hitTest)).toBe(true);
 				const box = await reason.boundingBox();
 				// Real text, not a 1 px screen-reader-only box.
 				expect(box?.width ?? 0).toBeGreaterThan(40);
@@ -166,6 +184,9 @@ test.describe("A blocked Start lists what to fix", () => {
 			const start = bar.getByRole("button", { name: /start stream/i });
 			const startBox = await start.boundingBox();
 			expect((startBox?.y ?? size.height) + (startBox?.height ?? 0)).toBeLessThanOrEqual(size.height);
+			await expect(start).toHaveJSProperty("disabled", true);
+			await heading.press("Escape");
+			await expect(show).toBeFocused();
 		});
 	}
 });

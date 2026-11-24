@@ -855,8 +855,22 @@
 	"live.audioMixer.error.audio_mix_active": "This stream is mixing inputs. Stop it to change the main input.",
 	"live.audioMixer.error.refused": "The device refused this change, so nothing changed.",
 	"live.telemetryCard.title": "Telemetry",
-	"live.bar.ready": "Ready to go live",
-	"live.bar.blockedSeveral": "Fix these before you go live",
+	"live.bar.beforeLive": "Before you go live",
+	"live.bar.checking": "Checking readiness…",
+	"live.bar.showAll": "Show all",
+	"live.bar.scrollForAll": "Scroll for all items",
+	"live.goLive.fix.chooseAnotherSource": "Choose another source",
+	"live.bar.blockerCount": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} thing to fix",
+				"countPlural=other": "{count} things to fix",
+				"countPlural=*": "{count} things to fix"
+			}
+		}
+	],
 	"live.source.activeConfigured": "Configured",
 	"live.source.activeLive": "Live",
 	"live.source.audioAmbiguousBody": "This camera reports more than one audio device of its own, so we won't guess which one you want. Pick the right one below.",

@@ -1,4 +1,5 @@
 import type { StatusResponse } from "@ceraui/rpc/schemas";
+import { SvelteMap } from "svelte/reactivity";
 import {
 	admitStatusFrame,
 	getLinkEpoch,
@@ -42,16 +43,20 @@ function isStreamFact(field: string): boolean {
 
 interface FieldDelivery {
 	readonly link: number;
-	readonly at: number;
-	readonly pushedAt: number;
-	readonly dispatchedAt: number;
+	at: number;
+	pushedAt: number;
+	dispatchedAt: number;
 }
 
 /** The window event that announces a delivered `updating` or `update_state`. */
 const PROGRESS_DELIVERED = "ceralive:progress-delivered";
 
 // Page-clock ordering survives resetState; a new link ignores old-link marks.
-const deliveries = new Map<string, FieldDelivery>();
+const deliveries = new SvelteMap<string, FieldDelivery>();
+
+export function statusFieldIsCurrent(field: keyof StatusResponse): boolean {
+	return deliveries.get(field)?.link === getLinkEpoch();
+}
 
 /** Select admissible fields independently; stream facts share one horizon. */
 export function selectStatusFields(
@@ -99,19 +104,15 @@ export function selectStatusFields(
 				new CustomEvent(PROGRESS_DELIVERED, { detail: field }),
 			);
 		const previous = deliveries.get(field);
-		const sameLink = previous?.link === receipt.link;
-		deliveries.set(field, {
-			link: receipt.link,
-			at: receipt.at,
-			pushedAt:
-				receipt.dispatch === undefined
-					? receipt.at
-					: sameLink
-						? previous.pushedAt
-						: 0,
-			dispatchedAt:
-				receipt.dispatch?.at ?? (sameLink ? previous.dispatchedAt : 0),
-		});
+		// Readers observe the link transition, not every tick of its ordering clock.
+		const current =
+			previous?.link === receipt.link
+				? previous
+				: { link: receipt.link, at: 0, pushedAt: 0, dispatchedAt: 0 };
+		current.at = receipt.at;
+		if (receipt.dispatch === undefined) current.pushedAt = receipt.at;
+		else current.dispatchedAt = receipt.dispatch.at;
+		if (current !== previous) deliveries.set(field, current);
 	}
 	return Object.fromEntries(fields);
 }

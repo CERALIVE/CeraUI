@@ -37,7 +37,7 @@ const state = vi.hoisted(() => ({
 		string,
 		unknown
 	>,
-	status: {} as Record<string, unknown>,
+	status: { stream_lifecycle: "idle" } as Record<string, unknown>,
 	// The optimism store's attempt generation (each Start dispatch takes a new one).
 	generation: 1,
 }));
@@ -56,13 +56,11 @@ vi.mock("$lib/stores/navigation-lazy", () => ({
 }));
 
 vi.mock("$lib/helpers/SystemHelper", () => ({
-	startStreaming: async (
-		config: unknown,
-		retry?: { beforeSend(): boolean; onSent(): void },
-	) => {
-		if (retry && !retry.beforeSend()) throw new NotSentError();
+	startStreaming: async (readmit: () => unknown, onSent?: () => void) => {
+		const config = readmit();
+		if (config === undefined) return undefined;
 		const result = await startStreaming(config);
-		retry?.onSent();
+		onSent?.();
 		return result;
 	},
 	stopStreaming: vi.fn(),
@@ -88,7 +86,7 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getActiveInput: () => undefined,
 	getConnectionState: () => "connected",
 	getIsConnected: () => true,
-	getCapabilities: () => undefined,
+	getCapabilities: () => ({ encoder: {} }),
 	getConfigChange: () => undefined,
 	getNetif: () => state.netif,
 	getRelays: () => undefined,
@@ -123,6 +121,7 @@ vi.mock("$lib/rpc/streaming-optimism.svelte", () => ({
 }));
 
 function deliveredFailureSet(failure: typeof state.failure) {
+	state.optimismState = "idle";
 	deliveredFailure.set(failure);
 }
 
@@ -197,7 +196,7 @@ afterEach(() => {
 	navigate.mockReset();
 	state.netif = { eth0: { enabled: true, ip: "192.0.2.10" } };
 	state.config.source = "cam-1";
-	state.status = {};
+	state.status = { stream_lifecycle: "idle" };
 	state.generation = 1;
 	vi.restoreAllMocks();
 });
@@ -474,11 +473,10 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 		attemptId: string,
 		incrementGeneration = false,
 	) {
-		if (incrementGeneration) {
-			state.startOptimism.mockImplementation(() => {
-				state.generation += 1;
-			});
-		}
+		state.startOptimism.mockImplementation(() => {
+			state.optimismState = "starting";
+			if (incrementGeneration) state.generation += 1;
+		});
 		startStreaming.mockResolvedValueOnce({
 			success: false,
 			failure: {
@@ -533,6 +531,7 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 	});
 
 	function engineRefusal(attemptId: string) {
+		state.optimismState = "idle";
 		state.failure = {
 			class: "engine_internal",
 			phase: "start-rpc",
@@ -620,6 +619,7 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 			retriable: true,
 			attemptId: "att_second",
 		};
+		state.optimismState = "idle";
 		render(LiveView);
 		await tick();
 		expect(toastError).toHaveBeenLastCalledWith(
@@ -668,6 +668,7 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 			retriable: false,
 			attemptId: "att_t2",
 		};
+		state.optimismState = "idle";
 		render(LiveView);
 		await tick();
 		expect(toastError).toHaveBeenLastCalledWith(
@@ -688,6 +689,7 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 			retriable: false,
 			attemptId: "att_reboot_second",
 		};
+		state.optimismState = "idle";
 		const { findByTestId } = render(LiveView);
 		await tick();
 		action()?.action.onClick();

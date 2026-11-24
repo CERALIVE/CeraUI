@@ -6,9 +6,8 @@
   packages or restarting services (D8, `update_in_progress`), because neither
   can be interrupted safely. This band says so BEFORE the operator presses Start,
   with the phase and whatever progress and time estimate the device published,
-  and it goes away on its own the moment the phase moves on — the live push is
-  authoritative (`goLiveUpdateRefusal`). A backend that publishes no push still
-  gets the band from the typed refusal its last start returned.
+  and it goes away as soon as current evidence moves on. When no current
+  observation exists, the last typed refusal is historical guidance only.
 
   Presentational: LiveView derives the refusal and passes it in. Amber, never
   destructive — nothing is broken, the device is busy with work that finishes
@@ -43,8 +42,12 @@ const locale = $derived(getLocale());
 	<div class="flex items-start gap-2.5">
 		<ArrowUpToLine aria-hidden="true" class="text-status-warning mt-0.5 size-4 shrink-0" />
 		<div class="min-w-0 space-y-0.5">
-			<p class="text-sm font-medium">{m['live.updateInProgress.title']()}</p>
-			<p class="text-muted-foreground text-sm">{m['live.updateInProgress.body']()}</p>
+			{#if refusal.source === 'live'}
+				<p class="text-sm font-medium">{m['live.updateInProgress.title']()}</p>
+				<p class="text-muted-foreground text-sm">{m['live.updateInProgress.body']()}</p>
+			{:else}
+				<p class="text-sm font-medium">{m['timeline.stream_start_failed.detail.update_in_progress']()}</p>
+			{/if}
 		</div>
 	</div>
 	{#if refusal.phase || refusal.percent !== undefined}
@@ -59,7 +62,7 @@ const locale = $derived(getLocale());
 					{#if refusal.percent !== undefined}
 						<span data-testid="update-refusal-percent">{formatPercent(locale)(refusal.percent)}</span>
 					{/if}
-					{#if refusal.etaMinutes !== undefined}
+					{#if refusal.source === 'live' && refusal.etaMinutes !== undefined}
 						<span data-testid="update-refusal-eta">
 							{m['settings.updates.eta']({ minutes: refusal.etaMinutes })}
 						</span>

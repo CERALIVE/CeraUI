@@ -875,8 +875,26 @@
 	"live.audioMixer.error.audio_mix_active": "هذا البث يمزج عدة مدخلات. أوقفه لتغيير المدخل الرئيسي.",
 	"live.audioMixer.error.refused": "رفض الجهاز هذا التغيير، ولم يتغير شيء.",
 	"live.telemetryCard.title": "القياس عن بُعد",
-	"live.bar.ready": "جاهز للبث المباشر",
-	"live.bar.blockedSeveral": "أصلح هذه الأمور قبل بدء البث",
+	"live.bar.beforeLive": "قبل بدء البث",
+	"live.bar.checking": "جارٍ التحقق من الجاهزية…",
+	"live.bar.showAll": "عرض الكل",
+	"live.bar.scrollForAll": "مرّر لعرض كل العناصر",
+	"live.goLive.fix.chooseAnotherSource": "اختر مصدرًا آخر",
+	"live.bar.blockerCount": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=zero": "لا توجد أمور للإصلاح",
+				"countPlural=one": "أمر واحد يحتاج إلى إصلاح",
+				"countPlural=two": "أمران يحتاجان إلى إصلاح",
+				"countPlural=few": "{count} أمور تحتاج إلى إصلاح",
+				"countPlural=many": "{count} أمرًا يحتاج إلى إصلاح",
+				"countPlural=other": "{count} أمر يحتاج إلى إصلاح",
+				"countPlural=*": "{count} أمر يحتاج إلى إصلاح"
+			}
+		}
+	],
 	"live.source.activeConfigured": "مُهيأ",
 	"live.source.activeLive": "مباشر",
 	"live.source.audioAmbiguousBody": "تُبلّغ هذه الكاميرا عن أكثر من جهاز صوت خاص بها، لذلك لن نخمّن أيها تريد. اختر الجهاز الصحيح أدناه.",

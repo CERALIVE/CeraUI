@@ -36,14 +36,14 @@ import type {
 	ConfigMessage,
 	NetifMessage,
 	Pipelines,
-	SourcesMessage,StartFailureCaptureCause 
+	SourcesMessage,
+	StartFailureCaptureCause,
 } from '@ceraui/rpc/schemas';
 import { Shuffle, TriangleAlert, Volume2 } from '@lucide/svelte';
 import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import SourceSection from '$lib/components/custom/SourceSection.svelte';
-import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
+import type { StartAssessment } from '$lib/streaming/assess-start';
 import { compositionGeometrySupported, compositionSupported } from '$lib/streaming/compositionSupport';
-import type { IdleStartGate } from '$lib/streaming/idle-start-gate';
 import type { ResolvedAudioStatus } from '$lib/streaming/sourceSummary';
 
 import CompositionCard from './CompositionCard.svelte';
@@ -52,18 +52,17 @@ import type { ConfigRow } from './StreamSettingsCard.svelte';
 import StreamSetupChain from './StreamSetupChain.svelte';
 
 interface Props {
+	// ── StreamSetupChain: current assessment from the dispatch owner ──────────
 	config: ConfigMessage | undefined;
 	sources: SourcesMessage | undefined;
 	netif: NetifMessage | undefined;
+	assessment: StartAssessment;
 	pipelines: Pipelines | undefined;
-	gate: IdleStartGate;
 	configRows: ConfigRow[];
 	isStreaming: boolean;
-	optimismState: StreamingOptimismState;
 	destinationValidated?: boolean;
 	// ── StreamSetupChain: actions (callbacks owned by LiveView) ────────────────
-	onStart: (overrides: { source?: string }) => void;
-	onStop: () => void;
+	onStart: () => void;
 	/** Source-gate fix + sole-camera "Change" — LiveView scrolls/focuses the list. */
 	onOpenSource: () => void;
 	onGoNetwork: () => void;
@@ -81,6 +80,7 @@ interface Props {
 	audioStatus: ResolvedAudioStatus | undefined;
 	/** Open the AudioDialog from the Source card's "Codec & delay" affordance. */
 	onOpenAudioDialog: () => void;
+	onOpenAudioSource: () => void;
 	// `selectedPipeline` still drives the roadmap's embedded-audio pill below.
 	selectedPipeline: string | undefined;
 	capabilities: CapabilitiesMessage | undefined;
@@ -93,14 +93,12 @@ const {
 	config,
 	sources,
 	netif,
+	assessment,
 	pipelines,
-	gate,
 	configRows,
 	isStreaming,
-	optimismState,
 	destinationValidated,
 	onStart,
-	onStop,
 	onOpenSource,
 	onGoNetwork,
 	activeInput,
@@ -113,11 +111,18 @@ const {
 	onAudioSelectionApplied,
 	audioStatus,
 	onOpenAudioDialog,
+	onOpenAudioSource,
 	selectedPipeline,
 	capabilities,
 	activeEncode,
 	startFailureCaptureCause,
 }: Props = $props();
+
+let setup: StreamSetupChain | undefined = $state();
+
+export function focusStartOrPreflight(): boolean {
+	return setup?.focusStartOrPreflight() ?? false;
+}
 
 const canCompose = $derived(compositionSupported(capabilities));
 const canPlace = $derived(compositionGeometrySupported(capabilities));
@@ -210,16 +215,17 @@ const audioEmbeddedComingSoon = $derived(
 	     (StreamControlButton is mounted ONCE here, never a second time — T10). -->
 	<div class="min-w-0 lg:col-span-3 lg:col-start-1 lg:row-start-2">
 		<StreamSetupChain
+			bind:this={setup}
 			{netif}
-			{gate}
+			{assessment}
 			{configRows}
 			{isStreaming}
-			{optimismState}
 			{destinationValidated}
 			{onStart}
-			{onStop}
 			{onOpenSource}
 			{onGoNetwork}
+			onOpenAudio={onOpenAudioDialog}
+			{onOpenAudioSource}
 		/>
 	</div>
 

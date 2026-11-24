@@ -115,7 +115,7 @@ const NETIF_UP: NetifMessage = {
 function greenInput(): GoLiveReadinessInput {
 	return {
 		config: cfg({ source: "cam0", relay_server: "srv-1" }),
-		caps: undefined,
+		caps: caps({}),
 		sources: sources([source("cam0")]),
 		netif: NETIF_UP,
 		isConnected: true,
@@ -206,7 +206,7 @@ describe("source gate", () => {
 		});
 		expect(gates.source.state).toBe("blocked");
 		expect(gates.source.reasonKey).toBe(GATEWAY_INACTIVE_REASON);
-		expect(gates.source.fix).toBe("openSource");
+		expect(gates.source.fix).toBe("chooseAnotherSource");
 	});
 
 	it("blocked — operator-disabled network source surfaces the disabledInSettings reason, distinct from the generic no-source reason (Task 7)", () => {
@@ -225,7 +225,7 @@ describe("source gate", () => {
 		expect(gates.source.reasonKey).toBe(DISABLED_IN_SETTINGS_REASON);
 		expect(gates.source.reasonKey).not.toBe(READINESS_SOURCE_REASON);
 		expect(gates.source.reasonKey).not.toBe(GATEWAY_INACTIVE_REASON);
-		expect(gates.source.fix).toBe("openSource");
+		expect(gates.source.fix).toBe("chooseAnotherSource");
 	});
 
 	it("blocked — a non-gateway unavailable device surfaces its own reason", () => {
@@ -268,12 +268,12 @@ describe("network gate", () => {
 		});
 	});
 
-	it("blocked — netif snapshot absent", () => {
+	it("unknown — netif snapshot absent", () => {
 		const { gates } = deriveGoLiveReadiness({
 			...greenInput(),
 			netif: undefined,
 		});
-		expect(gates.network.state).toBe("blocked");
+		expect(gates.network.state).toBe("unknown");
 	});
 
 	it("blocked — an enabled interface with no IP does not count", () => {
@@ -292,12 +292,12 @@ describe("network gate", () => {
 		expect(gates.network.state).toBe("blocked");
 	});
 
-	it("blocked — control channel down (netif snapshot untrusted)", () => {
+	it("unknown — control channel down (netif snapshot untrusted)", () => {
 		const { gates } = deriveGoLiveReadiness({
 			...greenInput(),
 			isConnected: false,
 		});
-		expect(gates.network.state).toBe("blocked");
+		expect(gates.network.state).toBe("unknown");
 	});
 });
 
@@ -311,12 +311,12 @@ describe("destination gate", () => {
 		expect(gates.destination.state).toBe("ok");
 	});
 
-	it("ok — a selected managed ingest endpoint", () => {
+	it("blocked — slot selection without an assembled server target", () => {
 		const { gates } = deriveGoLiveReadiness({
 			...greenInput(),
 			config: cfg({ source: "cam0", selected_ingest_endpoint: "slot-7" }),
 		});
-		expect(gates.destination.state).toBe("ok");
+		expect(gates.destination.state).toBe("blocked");
 	});
 
 	it("ok — a manual SRTLA address", () => {
@@ -357,19 +357,27 @@ describe("destination gate — revoked managed ingest slot (C7)", () => {
 		expect(readiness.primaryFixGate).toBe("destination");
 	});
 
-	it("ok — selected slot present in the loaded slot list", () => {
+	it("ok — dispatchable selected slot present in the loaded slot list", () => {
 		const { gates } = deriveGoLiveReadiness({
 			...greenInput(),
-			config: cfg({ source: "cam0", selected_ingest_endpoint: "slot-7" }),
+			config: cfg({
+				source: "cam0",
+				selected_ingest_endpoint: "slot-7",
+				srtla_addr: "198.51.100.9",
+			}),
 			managedSlots: [slot("slot-7")],
 		});
 		expect(gates.destination.state).toBe("ok");
 	});
 
-	it("ok — selected slot but slot list undefined (loading/federation, fail-open)", () => {
+	it("ok — dispatchable selected slot but slot list undefined (loading/federation, fail-open)", () => {
 		const { gates } = deriveGoLiveReadiness({
 			...greenInput(),
-			config: cfg({ source: "cam0", selected_ingest_endpoint: "slot-7" }),
+			config: cfg({
+				source: "cam0",
+				selected_ingest_endpoint: "slot-7",
+				srtla_addr: "198.51.100.9",
+			}),
 			managedSlots: undefined,
 		});
 		expect(gates.destination.state).toBe("ok");
@@ -483,13 +491,12 @@ describe("engine gate", () => {
 		});
 	});
 
-	it("blocked — control channel down (engine unreachable)", () => {
+	it("unknown — control channel down (engine unreachable)", () => {
 		const { gates } = deriveGoLiveReadiness({
 			...greenInput(),
 			isConnected: false,
 		});
-		expect(gates.engine.state).toBe("blocked");
-		expect(gates.engine.reasonKey).toBe(READINESS_ENGINE_UNAVAILABLE_REASON);
+		expect(gates.engine.state).toBe("unknown");
 	});
 });
 
@@ -530,11 +537,12 @@ describe("primaryFixGate", () => {
 		expect(readiness.primaryFixGate).toBeUndefined();
 	});
 
-	it("prefers network over destination when both block (disconnect)", () => {
+	it("prefers observed empty network over missing destination", () => {
 		// A down channel blocks BOTH network and engine; network precedes engine.
 		const readiness = deriveGoLiveReadiness({
 			...greenInput(),
-			isConnected: false,
+			netif: {},
+			caps: caps({ engineUnavailable: true }),
 			config: cfg({ source: "cam0" }), // also destination-blocked
 		});
 		expect(readiness.gates.network.state).toBe("blocked");
@@ -560,7 +568,7 @@ describe("blocking === (any gate blocked) — full truth table", () => {
 				...(flags.sourceOk ? { source: "cam0" } : {}),
 				...(flags.destinationOk ? { relay_server: "srv-1" } : {}),
 			}),
-			caps: flags.engineOk ? undefined : caps({ engineUnavailable: true }),
+			caps: flags.engineOk ? caps({}) : caps({ engineUnavailable: true }),
 			sources: sources([source("cam0")]),
 			netif: flags.networkOk ? NETIF_UP : {},
 			isConnected: true,

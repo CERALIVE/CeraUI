@@ -134,47 +134,44 @@ export const stopStreaming = async () => {
 };
 
 export const startStreaming = async (
-	config: ConfigMessage,
-	retry?: { readonly beforeSend: () => boolean; readonly onSent: () => void },
+	readmit: () => ConfigMessage | undefined,
+	onSent?: () => void,
 ) => {
 	try {
-		// Forward EVERY field present in both ConfigMessage and
-		// StreamingConfigInput: an incomplete allowlist silently drops persisted
-		// state at Start (dropping `source` is what stopped the implicit
-		// sole-camera source from ever persisting via the backend start path).
-		const input: StreamingConfigInput = {
-			pipeline: config.pipeline,
-			acodec: config.acodec,
-			delay: config.delay,
-			max_br: config.max_br,
-			srt_latency: config.srt_latency,
-			bitrate_overlay: config.bitrate_overlay,
-			srtla_addr: config.srtla_addr,
-			srtla_port: config.srtla_port,
-			srt_streamid: config.srt_streamid,
-			asrc: config.asrc,
-			relay_server: config.relay_server,
-			relay_account: config.relay_account,
-			relay_streamid_override: config.relay_streamid_override,
-			relay_protocol: config.relay_protocol,
-			source: config.source,
-			selected_video_input: config.selected_video_input,
-			video_codec: config.video_codec,
-			resolution: config.resolution,
-			framerate: config.framerate,
-			fec_enabled: config.fec_enabled,
-			recovery_mode: config.recovery_mode,
-			selected_ingest_endpoint: config.selected_ingest_endpoint,
-			autostart: config.autostart,
-		};
-		// In order with this tab's composition writes, so a placement made before
-		// Start is saved before Start reads it (`compositionWrites`).
+		// Rebuild from current evidence at the wire boundary, after any earlier
+		// composition write is saved. No payload means no transition.
 		return await sendSessionTransition("live", () => {
-			// Preserve the RPC rejection order: reconnect hydration must not
-			// overtake the caller's lost-reply evidence mark.
-			if (retry && !retry.beforeSend())
-				return Promise.reject(new NotSentError());
-			return rpc.streaming.start(input, retry?.onSent);
+			const config = readmit();
+			if (config === undefined) return undefined;
+			// Forward EVERY field present in both ConfigMessage and
+			// StreamingConfigInput: an incomplete allowlist silently drops persisted
+			// state at Start (dropping `source` lost the implicit sole-camera source).
+			const input: StreamingConfigInput = {
+				pipeline: config.pipeline,
+				acodec: config.acodec,
+				delay: config.delay,
+				max_br: config.max_br,
+				srt_latency: config.srt_latency,
+				bitrate_overlay: config.bitrate_overlay,
+				srtla_addr: config.srtla_addr,
+				srtla_port: config.srtla_port,
+				srt_streamid: config.srt_streamid,
+				asrc: config.asrc,
+				relay_server: config.relay_server,
+				relay_account: config.relay_account,
+				relay_streamid_override: config.relay_streamid_override,
+				relay_protocol: config.relay_protocol,
+				source: config.source,
+				selected_video_input: config.selected_video_input,
+				video_codec: config.video_codec,
+				resolution: config.resolution,
+				framerate: config.framerate,
+				fec_enabled: config.fec_enabled,
+				recovery_mode: config.recovery_mode,
+				selected_ingest_endpoint: config.selected_ingest_endpoint,
+				autostart: config.autostart,
+			};
+			return rpc.streaming.start(input, onSent);
 		});
 	} catch (error) {
 		console.error("Failed to start streaming:", error);

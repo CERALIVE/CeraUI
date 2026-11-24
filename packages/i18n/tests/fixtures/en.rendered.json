@@ -694,6 +694,14 @@
 	"live.server.manageLinks": "Manage links",
 	"live.server.singleLink": "Single link",
 	"live.server.singleLinkHint": "This receiver uses a single direct link. Bonding across multiple links isn't used for this transport.",
+	"live.bar.blockerCount": {
+		"0": "0 things to fix",
+		"1": "1 thing to fix",
+		"2": "2 things to fix",
+		"5": "5 things to fix",
+		"11": "11 things to fix",
+		"100": "100 things to fix"
+	},
 	"live.setup.linksReady": {
 		"0": "0 links ready",
 		"1": "1 link ready",

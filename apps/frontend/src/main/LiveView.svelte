@@ -13,13 +13,13 @@ import {
 	SWITCH_INPUT_ERRORS,
 } from '@ceraui/rpc/schemas';
 import { Cpu, Loader2, Server } from '@lucide/svelte';
-import { untrack } from 'svelte';
+import { tick, untrack } from 'svelte';
 import { toast } from 'svelte-sonner';
 import { LazyDialog, LazyDialogFallback, lazyDialog } from '$lib/components/dialogs';
 import { platformCapsForHardware } from '$lib/components/streaming/ValidationAdapter';
 import { viewLogs, viewLogsToast } from '$lib/device-logs/view-logs';
 import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
-import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
+import { stopStreaming } from '$lib/helpers/SystemHelper';
 import { rpc } from '$lib/rpc';
 import { osCommand } from '$lib/rpc/async-operation.svelte';
 import {
@@ -37,8 +37,8 @@ import {
 	reconcileSwitchingInput,
 	resolveAppliedBitrate,
 } from '$lib/rpc/live-apply-reconcile';
-import { NotSentError } from '$lib/rpc/rpc-error';
 import { getStreamActivity } from '$lib/rpc/session-epoch.svelte';
+import { statusFieldIsCurrent } from '$lib/rpc/status-field-order';
 import {
 	getStopStuckBannerVisible,
 	getStreamingAttemptGeneration,
@@ -47,9 +47,6 @@ import {
 	getStreamingStopReason,
 	reconcileStreamingOptimism,
 	retryStopStreaming,
-	revertStreamingOptimism,
-	revertStreamingOptimismFailure,
-	startStreamingOptimism,
 	stopStreamingOptimism,
 	supersedeStartingOptimism,
 } from '$lib/rpc/streaming-optimism.svelte';
@@ -75,6 +72,7 @@ import { deriveBitrateReading, deriveMeasuredBitrateKbps } from '$lib/stores/hud
 import { getLinks } from '$lib/stores/hud.svelte';
 import { getLinkNames } from '$lib/stores/link-names.svelte';
 import { getStreamHealthRollup, isVideoSignalLost } from '$lib/stores/stream-health.svelte';
+import { assessStart } from '$lib/streaming/assess-start';
 import { isSelectedAudioLost } from '$lib/streaming/audioLost';
 import type { MatchAction } from '$lib/streaming/capture-failover';
 import { configChangeReport } from '$lib/streaming/configChangeCopy';
@@ -85,10 +83,9 @@ import {
 	recordValidation,
 	resolveValidationEndpoint,
 } from '$lib/streaming/destination-validation.svelte';
-import { reconcileStartSource } from '$lib/streaming/effective-source';
+import { dispatchStart } from '$lib/streaming/dispatch-start';
 import { buildEncoderSetConfig } from '$lib/streaming/encoderConfig';
 import { encoderSaveErrorMessage } from '$lib/streaming/encoderSaveError';
-import { idleStartGate } from '$lib/streaming/idle-start-gate';
 import { canLiveSwitchInput, isAudioInputId } from '$lib/streaming/liveAudioSwitch';
 import { expectedOutputCodec, resolveRoute, routeCopy } from '$lib/streaming/outputFormat';
 import {
@@ -113,15 +110,10 @@ import {
 	claimStartFailurePresentation,
 	clearStartRetry,
 	consumeStartRetry,
-	holdStartFailureNotice,
-	recordStartRetry,
-	releaseStartFailureNotice,
 } from '$lib/streaming/start-failure-presentation.svelte';
-import { buildStartConfig } from '$lib/streaming/startStreaming';
 import { showUnconfirmedStreamStop, startOptimismSuperseded } from '$lib/streaming/unconfirmed-stream';
 import {
 	lifecycleSinceLostStartReply,
-	noteLostStartReply,
 	operatorStopUnresolved,
 	startRecoveryUnknown,
 } from '$lib/streaming/unresolved-stream-actions.svelte';
@@ -143,6 +135,7 @@ import StartRefusalActions from './live/StartRefusalActions.svelte';
 
 // Reactive state — non-deprecated subscriptions getters only.
 const config = $derived(getConfig());
+const netif = $derived(getNetif());
 const isStreaming = $derived(getIsStreaming());
 const sensors = $derived(getSensors());
 // Per-link srtla ingest telemetry (RTT/NAK/weight) — already broadcast via
@@ -167,11 +160,13 @@ const streamingStopReason = $derived(getStreamingStopReason());
 // carried one. Rendered class-first with retry state; the legacy string reason
 // is the fallback for code-only reverts.
 const streamingStartFailure = $derived(getStreamingStartFailure());
-// Todo 41: an update committing packages or restarting services refuses a
-// start (D8). Read off the same merged `status` every other Live fact comes
-// from, so the band retracts on the push that moves the phase on.
+// Only a current orchestrator receipt can veto Start. A typed refusal from
+// an earlier attempt is advisory; the backend still owns D8 admission.
 const updateRefusal = $derived(
-	goLiveUpdateRefusal(getStatus()?.update_orchestrator, streamingStartFailure),
+	goLiveUpdateRefusal(
+		getIsConnected() && statusFieldIsCurrent('update_orchestrator') ? getStatus()?.update_orchestrator : undefined,
+		streamingStartFailure,
+	),
 );
 // Truthful stop-stuck banner (T0): shown only while the authoritative flag still
 // says streaming after the bounded stopping watchdog pulled + re-dispatched.
@@ -291,15 +286,22 @@ function closeSummary() {
 // post-stream summary window; `summaryMode` collapses it to summary-only chrome
 // once the stream has actually stopped (never during the optimistic start edge).
 const showLiveCockpit = $derived(optimisticIsStreaming || showingSummary);
-const summaryMode = $derived(showingSummary && !optimisticIsStreaming);
-// Where the idle Live bar offers Start: the idle cockpit is up, no Stop is left
-// unresolved and no Start is in flight. Try again on a refusal toast is held to
-// the same admission.
-const idleStartAdmitted = $derived(
-	!showLiveCockpit && !streamOutcomeUnknown && streamingOptimismState === 'idle' &&
-	(streamLifecycle === undefined || streamLifecycle === 'idle'),
-);
+let liveRoot: HTMLDivElement | undefined = $state();
 
+// The idle bar unmounts on a local Start or an incoming live fact.
+$effect.pre(() => {
+	if (!showLiveCockpit) return;
+	const root = liveRoot;
+	const bar = document.activeElement?.closest('[data-testid="live-bar"]');
+	if (!bar || !root?.contains(bar)) return;
+	void tick().then(() => {
+		if (root.isConnected && showLiveCockpit && !bar.isConnected &&
+			document.activeElement === document.body) {
+			focusLiveHeading(root);
+		}
+	});
+});
+const summaryMode = $derived(showingSummary && !optimisticIsStreaming);
 const STREAM_START_ERROR_KEYS = [
 	'srt_connect_failed',
 	'srt_connection_lost',
@@ -350,12 +352,12 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 	if (refusalToastId !== undefined) toast.dismiss(refusalToastId);
 	const generation = getStreamingAttemptGeneration();
 	const repeated = consumeStartRetry(generation);
-	const gate = idleGate.readiness;
-	const admitted = idleStartAdmitted && !gate.blocking;
+	const decision = startAssessment.decision;
+	const admitted = !showLiveCockpit && decision.state === 'ready';
 	const blockedReason = streamOutcomeUnknown
 		? m["live.unconfirmedStream.body"]()
-		: gate.primaryFixGate
-			? resolveMessageKey(gate.gates[gate.primaryFixGate].reasonKey ?? '')
+		: decision.state === 'blocked'
+			? resolveMessageKey(decision.blockers[0]?.reasonKey ?? '')
 			: undefined;
 	const { step, message, logKey } = startFailureMessage(failure, repeated, admitted, blockedReason);
 	if (step === undefined) {
@@ -366,9 +368,12 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 	const activity = getStreamActivity();
 	const intent = refusedStart?.id === attempt ? refusedStart.intent : undefined;
 	const close = () => toast.dismiss(id);
+	const recover = () => {
+		if (isCurrent()) focusStartRecovery();
+	};
 	const isCurrent = () => viewMounted && getStreamingStartFailure()?.attemptId === attempt;
 	const canActInSession = () => isCurrent() && activity === getStreamActivity() &&
-		generation === getStreamingAttemptGeneration() && idleStartAdmitted;
+		generation === getStreamingAttemptGeneration() && !showLiveCockpit;
 	const id = toast.error<typeof StartRefusalActions>(message, {
 		// A separate corner keeps later notices from stacking this card offscreen.
 		position: 'bottom-left',
@@ -377,28 +382,32 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 		description: StartRefusalActions,
 		componentProps: {
 			message,
-			close,
+			close: () => { recover(); close(); },
 			primary: {
 				label: m[`live.startFailure.action.${step}`](),
 				activate: (onBlocked?: () => void) => {
 					if (step === 'tryAgain') {
 						if (!intent || retryQueued) return false;
-						// A queued retry must still pass the bar's gate at actual dispatch.
-						const beforeSend = () => canActInSession() &&
-							intent.configGeneration === getStartConfigGeneration() &&
-							intent.audio === audioOverride &&
-							intent.destination === currentDestinationFingerprint() &&
-							!streamBusy() && retryReady(intent);
-						if (!beforeSend()) return false;
-						void dispatchStart(intent, {
-							beforeSend,
-							onSent: close,
-							onBlocked,
-						});
+						const readmit = () => {
+							const { decision: current, soleCamera } = assessStart(readStartInputs());
+							return canActInSession() && current.state === 'ready' &&
+								intent.configGeneration === getStartConfigGeneration() &&
+								intent.audio === audioOverride &&
+								intent.destination === currentDestinationFingerprint() &&
+								intent.implicitSource === soleCamera?.id
+								? current.config : undefined;
+						};
+						if (!readmit()) { recover(); return false; }
+						retryQueued = true;
+						void dispatchStart(readmit, {
+							onRefused: rememberRefusedStart,
+							beforeSend: rememberStartIntent,
+							retry: { onSent: close, onBlocked: () => { recover(); onBlocked?.(); } },
+						}).finally(() => { retryQueued = false; });
 						return true;
 					}
 					if (step === 'restartBox') {
-						if (!canActInSession() || !retryReady()) return false;
+						if (!canActInSession() || startAssessment.decision.state !== 'ready') return false;
 						powerOpen = true;
 					} else if (!isCurrent()) {
 						return false;
@@ -418,11 +427,6 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 		},
 	});
 	refusalToastId = id;
-}
-
-function retryReady(intent?: StartIntent) {
-	const gate = readIdleGate();
-	return !gate.readiness.blocking && (!intent || gate.effective.soleCamera?.id === intent.implicitSource);
 }
 
 $effect(() => {
@@ -635,6 +639,13 @@ function handleOpenSetup() {
 	return true;
 }
 
+function handleOpenAudioSource() {
+	const picker = document.querySelector<HTMLElement>('[data-testid="audio-source-select"]');
+	if (!picker) return handleOpenSource();
+	picker.scrollIntoView({ block: 'nearest' });
+	picker.focus({ preventScroll: true });
+}
+
 // ── Dialog open state ──────────────────────────────────────────────────────
 let powerOpen = $state(false);
 let serverDialogOpen = $state(false);
@@ -677,23 +688,48 @@ const effectivePipeline = $derived(encoderConfig.source ?? config?.pipeline);
 // The pipeline registry, projected from the unified sources snapshot — the
 // single ingestion point for every pipeline-keyed read on this view.
 const pipelines = $derived(pipelinesFromSources(getSources()));
-
-// The readiness inputs, built once: the idle bar renders from them and Try again
-// on a refusal decides from them, so the two can never drift apart.
-function readIdleGate() {
-	return idleStartGate({
-		config: getConfig(),
-		caps: getCapabilities(),
-		sources: getSources(),
-		netif: getNetif(),
-		isConnected: getIsConnected(),
-		networkIngest: getStatus()?.network_ingest ?? null,
-		pipelines,
-		relays,
-		managedSlots: getManagedIngestAccounts(),
-	});
+function readStartInputs() {
+	const connected = getIsConnected();
+	const status = connected ? getStatus() : undefined;
+	return {
+		isConnected: connected,
+		config: connected ? getConfig(true) : undefined,
+		caps: connected ? getCapabilities(true) : undefined,
+		sources: connected ? getSources(true) : undefined,
+		netif: connected ? getNetif(true) : undefined,
+		relays: getRelays(),
+		managedSlots: connected ? getManagedIngestAccounts(true) : undefined,
+		networkIngest: statusFieldIsCurrent('network_ingest') ? status?.network_ingest : undefined,
+		audioOverride,
+		audioSources: statusFieldIsCurrent('audio_sources') ? status?.audio_sources : undefined,
+		audioIds: statusFieldIsCurrent('asrcs') ? status?.asrcs : undefined,
+		updateRefused: updateRefusal?.source === 'live',
+		lifecycle: connected ? getStatus(true)?.stream_lifecycle : undefined,
+		optimism: streamingOptimismState,
+		streaming: isStreaming,
+		outcomeUnknown: streamOutcomeUnknown,
+	};
 }
-const idleGate = $derived(readIdleGate());
+const startAssessment = $derived(assessStart(readStartInputs()));
+let idleCockpit: IdleCockpit | undefined = $state();
+
+/** Focus the current idle Start surface without activating. */
+export function focusStartOrPreflight(): boolean {
+	return idleCockpit?.focusStartOrPreflight() ?? false;
+}
+
+function focusStartRecovery() {
+	const root = liveRoot;
+	if (!root?.isConnected) return;
+	if (!streamOutcomeUnknown && !showLiveCockpit && focusStartOrPreflight()) return;
+	focusLiveHeading(root);
+}
+
+function focusLiveHeading(root: HTMLElement) {
+	const heading = root.querySelector<HTMLElement>('h1');
+	heading?.focus({ preventScroll: true });
+	heading?.scrollIntoView?.({ block: 'nearest', behavior: 'instant' });
+}
 
 // Pipeline metadata for the effective source — used to capability-gate the
 // resolution/framerate overrides when persisting the encoder draft.
@@ -1071,19 +1107,7 @@ const summaryAudio = $derived.by(() => {
 	};
 });
 
-// Start: assemble the full ConfigMessage from the SAVED backend config (the
-// encoder/server dialogs persist via setConfig), fold in the unpersisted audio
-// override + the implicit sole-camera source (T10/T11), validate pipeline +
-// server, then dispatch via SystemHelper → rpc.streaming.start. The streaming/
-// idle UI is driven by getIsStreaming(), updated by the backend status push —
-// never set locally here. Optimistic transient: Start button shows `starting`
-// immediately on click, then reconciles to authoritative is_streaming.
-type RetryDispatch = NonNullable<Parameters<typeof startStreaming>[1]> & {
-	readonly onBlocked?: (() => void) | undefined;
-};
-
 type StartIntent = {
-	readonly config: ConfigMessage;
 	readonly configGeneration: number;
 	readonly audio: AudioConfigValues | null;
 	readonly implicitSource: string | undefined;
@@ -1094,92 +1118,28 @@ function currentDestinationFingerprint() {
 	return fingerprintForValidation(getConfig(), getRelays(), getManagedIngestAccounts());
 }
 
-function streamBusy() {
-	return getStreamingOptimismState() !== 'idle' || getIsStreaming();
-}
-
-function handleStart(overrides: { source?: string } = {}) {
-	const gate = readIdleGate();
-	if (streamBusy() || gate.readiness.blocking) return false;
-
-	// Fold the implicit sole-camera source (T10) in, then reconcile source →
-	// pipeline off the sources snapshot so the FE recognition gate and the
-	// readiness source gate cannot disagree; the backend re-resolves the routing
-	// for itself (T3 streamingStartProcedure reads `input.source ?? getConfig().source`).
-	const implicitSource = gate.effective.soleCamera?.id;
-	const source = implicitSource ?? overrides.source;
-	const overridden = source !== undefined && config ? { ...config, source } : config;
-	const startBase = reconcileStartSource(overridden, getSources());
-
-	const result = buildStartConfig(startBase, audioOverride, pipelines);
-	if (!result.ok) {
-		toast.error(
-			result.error === 'missingServer' ? m["live.cannotStartNoServer"]() : m["live.cannotStartNoPipeline"](),
-		);
-		return false;
-	}
-
-	void dispatchStart({
-		config: result.config,
+let sentStart: StartIntent | undefined;
+function rememberStartIntent() {
+	sentStart = {
 		configGeneration: getStartConfigGeneration(),
 		audio: audioOverride,
-		implicitSource,
+		implicitSource: startAssessment.soleCamera?.id,
 		destination: currentDestinationFingerprint(),
-	});
-	return true;
+	};
 }
 
-async function dispatchStart(intent: StartIntent, retry?: RetryDispatch) {
-	let attempt: number | undefined;
-	const begin = () => {
-		refusedStart = undefined;
-		startStreamingOptimism();
-		attempt = getStreamingAttemptGeneration();
-		holdStartFailureNotice();
-		return attempt;
-	};
-	if (retry) retryQueued = true;
-	else {
-		toast.dismiss();
-		begin();
-	}
-	try {
-		const startResult = await startStreaming(intent.config, retry && {
-			beforeSend: retry.beforeSend,
-			onSent: () => {
-				recordStartRetry(begin());
-				retry.onSent();
-			},
-		});
-		if (attempt === undefined || getIsStreaming()) return;
-		if (startResult && !startResult.success) {
-			if ('failure' in startResult && startResult.failure) {
-				if (attempt === getStreamingAttemptGeneration()) {
-					refusedStart = { id: startResult.failure.attemptId, intent };
-				}
-				revertStreamingOptimismFailure(startResult.failure, attempt);
-			} else {
-				revertStreamingOptimism(startResult.error ?? 'unknown_error', attempt);
-			}
-		}
-	} catch (error) {
-		if (attempt === undefined) {
-			retry?.onBlocked?.();
-			return;
-		}
-		// Only proven non-dispatch permits a retry; losing a reply proves no idle.
-		if (!(error instanceof NotSentError)) {
-			noteLostStartReply(attempt);
-			return;
-		}
-		// The socket refused dispatch, so this attempt cannot have started, and it
-		// was no retry the device refused.
-		clearStartRetry(attempt);
-		revertStreamingOptimism(error.message, attempt);
-	} finally {
-		if (retry) retryQueued = false;
-		if (attempt !== undefined) void releaseStartFailureNotice();
-	}
+function rememberRefusedStart(id: string) {
+	if (sentStart) refusedStart = { id, intent: sentStart };
+}
+
+function handleStart() {
+	if (showLiveCockpit || startAssessment.decision.state !== 'ready') return;
+	toast.dismiss();
+	void dispatchStart(() => {
+		// This attempt owns the local Starting state, not a device Starting receipt.
+		const current = assessStart({ ...readStartInputs(), optimism: 'idle' }).decision;
+		return viewMounted && current.state === 'ready' ? current.config : undefined;
+	}, { beforeSend: rememberStartIntent, onRefused: rememberRefusedStart });
 }
 
 function handleStop() {
@@ -1228,7 +1188,7 @@ const configRows = $derived<ConfigRow[]>([
 ]);
 </script>
 
-<div class="mx-auto w-full max-w-3xl space-y-6 p-4 sm:p-6 lg:max-w-6xl" class:short-live={isStreaming}>
+<div bind:this={liveRoot} class="mx-auto w-full max-w-3xl space-y-6 p-4 sm:p-6 lg:max-w-6xl" class:short-live={isStreaming}>
 	<LiveHeader {isStreaming} unconfirmed={streamOutcomeUnknown} />
 
 	<!-- Capability-tier state: calm banner when the engine is offline/starting or
@@ -1355,17 +1315,16 @@ const configRows = $derived<ConfigRow[]>([
 			<UpdateRefusalBand refusal={updateRefusal} />
 		{/if}
 		<IdleCockpit
+			bind:this={idleCockpit}
 			{config}
 			sources={getSources()}
-			netif={getNetif()}
+			{netif}
+			assessment={startAssessment}
 			{pipelines}
-			gate={idleGate}
 			{configRows}
 			{isStreaming}
-			optimismState={streamingOptimismState}
 			{destinationValidated}
 			onStart={handleStart}
-			onStop={handleStop}
 			onOpenSource={handleOpenSource}
 			onGoNetwork={handleManageLinks}
 			{activeInput}
@@ -1378,6 +1337,7 @@ const configRows = $derived<ConfigRow[]>([
 			onSelectAudioSource={handleSelectAudioSource}
 			onAudioSelectionApplied={handleAudioSelectionApplied}
 			onOpenAudioDialog={() => (audioDialogOpen = true)}
+			onOpenAudioSource={handleOpenAudioSource}
 			selectedPipeline={config?.pipeline}
 			capabilities={getCapabilities()}
 			activeEncode={getStatus()?.active_encode ?? null}

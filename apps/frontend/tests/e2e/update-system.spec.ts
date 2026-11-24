@@ -47,7 +47,7 @@ test.describe('device update surfaces (Todo 41)', { tag: '@functional' }, () => 
 		test.skip(testInfo.project.name !== 'desktop', 'desktop layout drives the settings dialog');
 	});
 
-	test('the Go-Live band follows the live orchestrator phase and never disables Start', async ({
+	test('the Go-Live band and Start agree on current update refusals', async ({
 		page,
 	}) => {
 		const wire = await installUpdateWire(page, {
@@ -66,18 +66,21 @@ test.describe('device update surfaces (Todo 41)', { tag: '@functional' }, () => 
 		await expect(band.getByTestId('update-refusal-eta')).toHaveText('About 3 min left');
 		await expect(band.getByRole('progressbar')).toBeVisible();
 
-		// The backend stays the authority on admission: the band warns, it does
-		// not take the control away.
-		await expect(page.getByRole('button', { name: 'Start Stream' })).toBeEnabled();
+		const start = page.getByRole('button', { name: 'Start Stream' });
+		await expect(start).toBeDisabled();
+		await start.evaluate((button: HTMLButtonElement) => button.click());
+		expect(wire.calls('streaming.start')).toHaveLength(0);
 
 		// Restarting services refuses a start too, and says so by name.
 		wire.setOrchestrator(orchestratorState('restarting-services'));
 		await expect(band.getByTestId('update-refusal-phase')).toHaveText('Restarting services');
 		await expect(band.getByTestId('update-refusal-percent')).toHaveCount(0);
+		await expect(start).toBeDisabled();
 
 		// The moment the phase moves on, the band goes away by itself.
 		wire.setOrchestrator(orchestratorState('settled'));
 		await expect(page.getByTestId('update-refusal-band')).toHaveCount(0);
+		await expect(start).toBeEnabled();
 	});
 
 	test('a typed update_in_progress refusal renders the band when the backend publishes no state', async ({
@@ -117,10 +120,14 @@ test.describe('device update surfaces (Todo 41)', { tag: '@functional' }, () => 
 		const band = page.getByTestId('update-refusal-band');
 		await expect(band).toBeVisible();
 		await expect(band).toHaveAttribute('data-source', 'refusal');
+		await expect(band).toContainText('An update was being installed.');
 		await expect(band.getByTestId('update-refusal-phase')).toHaveText('Installing packages');
 		await expect(band.getByTestId('update-refusal-percent')).toHaveText('42%');
-		await expect(band.getByTestId('update-refusal-eta')).toHaveText('About 2 min left');
+		await expect(band.getByTestId('update-refusal-eta')).toHaveCount(0);
 		expect(wire.calls('streaming.start')).toHaveLength(1);
+		await expect(start).toBeEnabled();
+		await start.click();
+		await expect.poll(() => wire.calls('streaming.start').length).toBe(2);
 	});
 
 	test('the global badge shows a busy phase anywhere, opens the dialog, and retracts', async ({

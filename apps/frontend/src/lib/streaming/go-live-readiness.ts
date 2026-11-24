@@ -1,12 +1,14 @@
 /**
  * Go-Live readiness derivation — SINGLE SOURCE OF TRUTH (Task 9).
  *
- * Folds the four independent preconditions a stream start depends on into ONE
+ * Folds the five independent setup checks into one
  * readable, testable verdict so every surface (the GoLiveCard in Task 10, the
  * bitrate one-owner in Task 12) makes the SAME decision:
  *
  *   • source      — `config.source` resolves to an AVAILABLE sources entry. A
  *                   lost device or an inactive rtmp/srt gateway blocks it.
+ *   • audio       — the selected audio and codec are usable with the pipeline
+ *                   and transport, based on the current evidence supplied.
  *   • network     — at least one enabled interface that has an IP (mirrors
  *                   LiveView's `hasNetwork`), and a live control channel.
  *   • destination — a usable server target (relay_server / selected ingest
@@ -32,35 +34,56 @@ import type {
 	NetifMessage,
 	RelayMessage,
 	SourcesMessage,
+	StreamSource,
 } from "@ceraui/rpc/schemas";
 
 import { capabilityTier } from "$lib/components/streaming/capability-tier";
 
 import type { PipelineAvailability } from "./pipelineAvailability";
 import type { ManagedIngestAccount } from "./receiver-experience";
+import { hasServerTarget } from "./startStreaming";
 
 /** How the operator resolves a blocked/warned gate. `none` = nothing to do (wait). */
-export type GateFix = "openSource" | "goNetwork" | "openServer" | "none";
+export type GateFix =
+	| "openSource"
+	| "chooseAnotherSource"
+	| "goNetwork"
+	| "openServer"
+	| "openAudio"
+	| "chooseAudioSource"
+	| "none";
 
 /** A gate's severity. `ok` clears it; `warn` is advisory; `blocked` stops the start. */
-export type GateStatus = "ok" | "warn" | "blocked";
+export type GateStatus = "ok" | "warn" | "blocked" | "unknown";
 
 /**
  * The resolved state of a single readiness gate. `reasonKey` is an i18n dot-path
  * key (never rendered text) the caller passes to `LL`; `fix` names the affordance
  * that resolves it. Both are absent on an `ok` gate.
  */
-export interface GateState {
-	readonly state: GateStatus;
-	readonly reasonKey?: string;
-	readonly fix?: GateFix;
-}
+export type GateState =
+	| {
+			readonly state: "ok" | "unknown";
+			readonly reasonKey?: never;
+			readonly fix?: never;
+	  }
+	| {
+			readonly state: "warn" | "blocked";
+			readonly reasonKey: string;
+			readonly fix: GateFix;
+	  };
 
-/** The four gates, in operator-fix priority order. */
-export type GoLiveGateKey = "source" | "network" | "destination" | "engine";
+/** The setup gates, in operator-fix priority order. */
+export type GoLiveGateKey =
+	| "source"
+	| "audio"
+	| "network"
+	| "destination"
+	| "engine";
 
 export interface GoLiveGates {
 	readonly source: GateState;
+	readonly audio: GateState;
 	readonly network: GateState;
 	readonly destination: GateState;
 	readonly engine: GateState;
@@ -93,8 +116,10 @@ export interface GoLiveReadinessInput {
 	 * The {@link pipelineAvailability} verdict for the CURRENTLY-SELECTED source's
 	 * pipeline — accepted as input so the gateway rule is never re-derived here.
 	 * For a source with no gateway dependency this is `{ available: true }`.
+	 * `undefined` means the selected gateway has no current-link observation.
 	 */
-	readonly gatewayStatus: PipelineAvailability;
+	readonly gatewayStatus: PipelineAvailability | undefined;
+	readonly audio?: GateState;
 	/**
 	 * The relays CATALOG snapshot (`getRelays()`) — `undefined` WHILE LOADING (and
 	 * in a federated bundle that never pulls it). When LOADED, the destination gate
@@ -117,7 +142,7 @@ export interface GoLiveReadinessInput {
  */
 /** No source chosen / a stale-unresolvable id — the legacy `cannotStartNoPipeline` block. */
 export const READINESS_SOURCE_REASON = "live.cannotStartNoPipeline" as const;
-/** No enabled interface with an IP, or the control channel is down. */
+/** An observed interface map has no enabled interface with an IP. */
 export const READINESS_NETWORK_REASON = "network.view.noLinks" as const;
 /** No usable server target — the legacy `cannotStartNoServer` block. */
 export const READINESS_DESTINATION_REASON = "live.cannotStartNoServer" as const;
@@ -134,7 +159,7 @@ export const READINESS_DESTINATION_SLOT_REVOKED_REASON =
  */
 export const READINESS_DESTINATION_SERVER_STALE_REASON =
 	"live.destinationServerStale" as const;
-/** Engine offline / control channel down — the `engineUnavailable` calm-blocked tone. */
+/** Current capabilities say the engine is unavailable. */
 export const READINESS_ENGINE_UNAVAILABLE_REASON =
 	"live.education.tier.engineUnavailable.title" as const;
 /** Engine still booting — advisory, never blocks. */
@@ -147,12 +172,14 @@ export const READINESS_ENGINE_SCHEMA_REASON =
 /** The order `primaryFixGate` scans for the first blocked gate. */
 export const GATE_FIX_ORDER: readonly GoLiveGateKey[] = [
 	"source",
+	"audio",
 	"network",
 	"destination",
 	"engine",
 ] as const;
 
 const OK: GateState = { state: "ok" };
+const UNKNOWN: GateState = { state: "unknown" };
 
 function blocked(reasonKey: string, fix: GateFix): GateState {
 	return { state: "blocked", reasonKey, fix };
@@ -172,14 +199,12 @@ function warn(reasonKey: string, fix: GateFix): GateState {
  *   4. any other unavailability the sources builder already resolved → blocked.
  */
 function deriveSourceGate(
-	config: ConfigMessage | undefined,
-	sources: SourcesMessage | undefined,
-	gatewayStatus: PipelineAvailability,
+	observed: boolean,
+	entry: StreamSource | undefined,
+	gatewayStatus: PipelineAvailability | undefined,
+	rejectedPipeline: boolean,
 ): GateState {
-	const sourceId = config?.source;
-	if (!sourceId) return blocked(READINESS_SOURCE_REASON, "openSource");
-
-	const entry = sources?.sources.find((source) => source.id === sourceId);
+	if (!observed) return UNKNOWN;
 	if (!entry) return blocked(READINESS_SOURCE_REASON, "openSource");
 
 	if (entry.lost === true) {
@@ -191,8 +216,8 @@ function deriveSourceGate(
 
 	// The gateway verdict is CONSUMED from pipelineAvailability so the
 	// requires_gateway rule lives in exactly one module.
-	if (!gatewayStatus.available) {
-		return blocked(gatewayStatus.reason, "openSource");
+	if (gatewayStatus?.available === false) {
+		return blocked(gatewayStatus.reason, "chooseAnotherSource");
 	}
 
 	if (entry.available === false) {
@@ -202,31 +227,28 @@ function deriveSourceGate(
 		);
 	}
 
-	return OK;
+	if (gatewayStatus === undefined) return UNKNOWN;
+	return rejectedPipeline ? blocked(READINESS_SOURCE_REASON, "openSource") : OK;
 }
 
 /**
- * Network gate — at least one enabled interface that has an IP. Mirrors
- * LiveView's `hasNetwork` exactly. A down control channel (`isConnected === false`)
- * also blocks it: the netif snapshot cannot be trusted and no start can be
- * dispatched while the socket is dead.
+ * An observed network needs an enabled interface with an IP. Missing or
+ * disconnected evidence cannot prove that the device has no links.
  */
 function deriveNetworkGate(
 	netif: NetifMessage | undefined,
 	isConnected: boolean,
 ): GateState {
-	if (!isConnected) return blocked(READINESS_NETWORK_REASON, "goNetwork");
+	if (!isConnected || !netif) return UNKNOWN;
 
-	const hasNetwork = Object.values(netif ?? {}).some(
+	const hasNetwork = Object.values(netif).some(
 		(entry) => Boolean(entry?.enabled) && Boolean(entry?.ip),
 	);
 	return hasNetwork ? OK : blocked(READINESS_NETWORK_REASON, "goNetwork");
 }
 
 /**
- * Destination gate — a usable server target. Mirrors the plan's `hasServer`
- * (relay_server | selected_ingest_endpoint | srtla_addr), a superset of
- * LiveView's `serverTarget` that also honours a selected managed ingest slot.
+ * A selected managed ingest slot is not itself an assembled server target.
  *
  * Beyond presence it validates the target against the two catalogs the platform
  * pushes, each only ONCE they are LOADED (`!== undefined` — the T18 loaded-guard
@@ -243,10 +265,9 @@ function deriveDestinationGate(
 	relays: RelayMessage | undefined,
 	managedSlots: readonly ManagedIngestAccount[] | undefined,
 ): GateState {
-	const selectedSlot = config?.selected_ingest_endpoint;
-	const relayServer = config?.relay_server;
-	const hasServer = Boolean(relayServer || selectedSlot || config?.srtla_addr);
-	if (!hasServer) return blocked(READINESS_DESTINATION_REASON, "openServer");
+	if (!config) return UNKNOWN;
+	const { selected_ingest_endpoint: selectedSlot, relay_server: relayServer } =
+		config;
 
 	if (
 		selectedSlot &&
@@ -255,6 +276,9 @@ function deriveDestinationGate(
 	) {
 		return blocked(READINESS_DESTINATION_SLOT_REVOKED_REASON, "openServer");
 	}
+
+	if (!hasServerTarget(config))
+		return blocked(READINESS_DESTINATION_REASON, "openServer");
 
 	if (
 		relayServer &&
@@ -270,7 +294,8 @@ function deriveDestinationGate(
 /**
  * Engine gate — the capability tier the engine advertises, mapped to the same
  * calm treatment the `CapabilityTierBanner` renders:
- *   • control channel down / engineUnavailable → blocked (offered set untrusted).
+ *   • disconnected or no current capabilities → unknown.
+ *   • observed engineUnavailable → blocked.
  *   • engineStarting → warn (booting; expected, not a failure).
  *   • schemaVersionMismatch → warn (advisory; options approximate).
  *   • normal → ok.
@@ -280,9 +305,7 @@ function deriveEngineGate(
 	caps: CapabilitiesMessage | undefined,
 	isConnected: boolean,
 ): GateState {
-	if (!isConnected) {
-		return blocked(READINESS_ENGINE_UNAVAILABLE_REASON, "none");
-	}
+	if (!isConnected || !caps) return UNKNOWN;
 
 	switch (capabilityTier(caps)) {
 		case "engineUnavailable":
@@ -300,22 +323,13 @@ function deriveEngineGate(
  * Derive the full Go-Live readiness from a snapshot of plain inputs.
  *
  * `blocking` is provably `any gate blocked`; `primaryFixGate` is the first
- * blocked gate in {@link GATE_FIX_ORDER} (source → network → destination →
- * engine), or absent when nothing blocks.
+ * blocked gate in {@link GATE_FIX_ORDER} (source → audio → network →
+ * destination → engine), or absent when nothing blocks.
  */
 export function deriveGoLiveReadiness(
 	input: GoLiveReadinessInput,
 ): GoLiveReadiness {
-	const gates: GoLiveGates = {
-		source: deriveSourceGate(input.config, input.sources, input.gatewayStatus),
-		network: deriveNetworkGate(input.netif, input.isConnected),
-		destination: deriveDestinationGate(
-			input.config,
-			input.relays,
-			input.managedSlots,
-		),
-		engine: deriveEngineGate(input.caps, input.isConnected),
-	};
+	const gates = deriveGoLiveGates(input);
 
 	const primaryFixGate = GATE_FIX_ORDER.find(
 		(key) => gates[key].state === "blocked",
@@ -325,4 +339,29 @@ export function deriveGoLiveReadiness(
 	return primaryFixGate !== undefined
 		? { gates, blocking, primaryFixGate }
 		: { gates, blocking };
+}
+
+export function deriveGoLiveGates(
+	input: GoLiveReadinessInput,
+	source = {
+		entry: input.sources?.sources.find(({ id }) => id === input.config?.source),
+		rejectedPipeline: false,
+	},
+): GoLiveGates {
+	return {
+		source: deriveSourceGate(
+			input.config !== undefined && input.sources !== undefined,
+			source.entry,
+			input.gatewayStatus,
+			source.rejectedPipeline,
+		),
+		audio: input.audio ?? OK,
+		network: deriveNetworkGate(input.netif, input.isConnected),
+		destination: deriveDestinationGate(
+			input.config,
+			input.relays,
+			input.managedSlots,
+		),
+		engine: deriveEngineGate(input.caps, input.isConnected),
+	};
 }

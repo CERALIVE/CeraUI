@@ -21,7 +21,7 @@
  * Conventions (PLAYBOOK.md): role/test-id/ARIA assertions only — never
  * screenshots, never fixed-delay waits, never raw tab-id selectors. A page-local
  * `routeWebSocket` proxy forces the first-run state (no server + no network) by
- * stripping the seeded server fields and dropping every `netif` frame, so the
+ * stripping the seeded server fields and replacing `netif` with `{}`, so the
  * scenario remains page-local and cannot persist into this worker's later tests.
  */
 import type { Page, WebSocketRoute } from '@playwright/test';
@@ -64,7 +64,7 @@ async function attachWs(page: Page, hooks: WsHooks): Promise<void> {
 	});
 }
 
-/** Strip the seeded server target and drop every netif frame → true first run. */
+/** Strip the seeded target and report a current, empty link inventory. */
 function firstRunMutator(frame: Frame): boolean {
 	const config = frame.config as Frame | undefined;
 	if (config) {
@@ -73,8 +73,9 @@ function firstRunMutator(frame: Frame): boolean {
 	}
 	const status = frame.status as Frame | undefined;
 	if (status) status.is_streaming = false;
-	// Drop the bonded-interface list so getNetif() stays empty (no network step).
-	return !('netif' in frame);
+	// No receipt means Checking, not a device known to have no usable links.
+	if ('netif' in frame) frame.netif = {};
+	return true;
 }
 
 test.describe('first-run onboarding (Live) — GoLiveCard readiness gates', () => {

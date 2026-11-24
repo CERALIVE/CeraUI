@@ -53,7 +53,7 @@ export function subscriptionsMock<T extends object>(
 		getActiveInput: () => undefined,
 		getConnectionState: () => "connected",
 		getIsConnected: () => true,
-		getCapabilities: () => undefined,
+		getCapabilities: () => ({ encoder: {} }),
 		getConfigChange: () => undefined,
 		getNetif: () => ({ eth0: { enabled: true, ip: "10.0.0.2" } }),
 		getRelays: () => undefined,
