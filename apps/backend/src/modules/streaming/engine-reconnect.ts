@@ -72,14 +72,17 @@
 // `boot-guard.ts`) so the loop is unit-testable without real timers or a socket.
 
 import { logger as defaultLogger } from "../../helpers/logger.ts";
+import { bindEngineRecoveryShutdown } from "../../helpers/shutdown.ts";
 import { emitEvent } from "../events/emit.ts";
 import { getHardwareKind } from "../system/hardware-kind.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import {
 	type CapabilitiesServiceDeps,
 	getLastCapabilities,
+	invalidateCapabilities,
 } from "./capabilities.ts";
 import { runInflightConfigChangeReconciliation } from "./config-change-reconcile-wiring.ts";
+import { bindEngineControlLoss } from "./engine-control-loss.ts";
 import {
 	reportEngineRecovery,
 	reportEngineState,
@@ -90,8 +93,12 @@ import {
 	refreshAndBroadcastSources,
 } from "./sources.ts";
 import { runStreamRestoration } from "./stream-restoration.ts";
-import { reconcileStreamSession } from "./stream-session-orchestrator.ts";
+import {
+	reconcileLostStreamSession,
+	reconcileStreamSession,
+} from "./stream-session-orchestrator.ts";
 import { getIsStreaming } from "./streaming.ts";
+import { getStreamingBackend } from "./streaming-engine.ts";
 
 /**
  * Reconnect backoff bounds. Mirrors `modules/remote-control/channel.ts`: an
@@ -107,6 +114,7 @@ export const ENGINE_RECONNECT_MAX_MS = 30_000;
  * probed at the fastest cadence after every crash.
  */
 export const ENGINE_RECONNECT_FLAP_WINDOW_MS = 60_000;
+const ENGINE_CONTROL_LIVENESS_MS = 15_000;
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 
@@ -126,7 +134,7 @@ export interface EngineReconnectDeps {
 	 * NOT throw (the capability ladder never does) — the loop treats a resolve as
 	 * "attempt made" and reads reachability separately.
 	 */
-	refreshCapabilities: () => Promise<void>;
+	refreshCapabilities: (current: () => boolean) => Promise<void>;
 	/**
 	 * Whether the last refresh produced a LIVE snapshot (engine reachable). A
 	 * cached/minimal fallback (`engineUnavailable`) reads as unreachable.
@@ -168,6 +176,8 @@ export interface EngineReconnectDeps {
 	maxDelayMs: number;
 	/** See {@link ENGINE_RECONNECT_FLAP_WINDOW_MS}; overridable for tests. */
 	flapWindowMs: number;
+	monitorControl?: () => Promise<boolean>;
+	reconcileLoss?: (current: () => boolean) => Promise<void>;
 }
 
 /**
@@ -195,7 +205,7 @@ export interface EngineConnectionOverrides {
  */
 /** The publishing steps of a heal; each is overridable on its own (tests). */
 export interface PublishEngineAvailabilitySteps {
-	resolveHardware: () => Promise<unknown>;
+	resolveHardware: (current: () => boolean) => Promise<unknown>;
 	broadcastCapabilities: () => void;
 	broadcastPipelines: () => void;
 	refreshSources: (
@@ -205,7 +215,7 @@ export interface PublishEngineAvailabilitySteps {
 }
 
 const DEFAULT_PUBLISH_STEPS: PublishEngineAvailabilitySteps = {
-	resolveHardware: getHardwareKind,
+	resolveHardware: (current) => getHardwareKind({}, current),
 	broadcastCapabilities: () =>
 		broadcastMsg("capabilities", getLastCapabilities()),
 	broadcastPipelines: () => broadcastMsg("pipelines", getPipelinesMessage()),
@@ -224,7 +234,7 @@ export function buildDefaultPublishEngineAvailability(
 		// pipelines/sources broadcasts, which read the freshly-cached kind live via
 		// getEffectiveHardware(). The engine is reachable again, so its
 		// platform.hardware_kind now supersedes any boot-time fallback.
-		await steps.resolveHardware();
+		await steps.resolveHardware(alive);
 		if (!alive()) return;
 		steps.broadcastCapabilities();
 		steps.broadcastPipelines();
@@ -240,7 +250,7 @@ function buildDefaultBroadcastEngineState(
 		await publish(alive);
 		if (!alive()) return;
 		if (sourcesOverride === undefined) {
-			await reconcileStreamSession();
+			await reconcileStreamSession(alive);
 			if (!alive()) return;
 			// The engine just became reachable, which is exactly the moment a
 			// marker that DEFERRED at boot (no decisive engine answer yet) can be
@@ -273,7 +283,7 @@ function defaultDeps(
 		onRecovered: (streaming) => {
 			if (!streaming) reportEngineRecovery(streaming);
 		},
-		refreshCapabilities: () => initPipelines(capsOverride),
+		refreshCapabilities: (current) => initPipelines(capsOverride, current),
 		isEngineReachable: () => getLastCapabilities()?.engineUnavailable === false,
 		broadcastEngineState: buildDefaultBroadcastEngineState(fetchers.sources),
 		publishEngineAvailability: buildDefaultPublishEngineAvailability(
@@ -287,10 +297,18 @@ function defaultDeps(
 		random: Math.random,
 		setTimer: (fn, ms) => setTimeout(fn, ms),
 		clearTimer: (timer) => clearTimeout(timer),
-		now: Date.now,
+		now: () => performance.now(),
 		baseDelayMs: ENGINE_RECONNECT_BASE_MS,
 		maxDelayMs: ENGINE_RECONNECT_MAX_MS,
 		flapWindowMs: ENGINE_RECONNECT_FLAP_WINDOW_MS,
+		...(fetchers.sources === undefined
+			? {
+					monitorControl: async () =>
+						(await getStreamingBackend().probeEngine(true)).status !==
+						"unreachable",
+					reconcileLoss: reconcileLostStreamSession,
+				}
+			: {}),
 	};
 }
 
@@ -311,6 +329,7 @@ interface ReconnectState {
 	 * read the engine before it went away, so it must not settle on that answer.
 	 */
 	lossDuringAttempt: boolean;
+	attemptId: symbol;
 	/** The offline snapshot went out for the current outage. */
 	offlineAnnounced: boolean;
 	/** The running loop was started by a re-arm (heal publishes only). */
@@ -353,15 +372,19 @@ function errMessage(err: unknown): string {
  * already-connected clients on the offline banner until a manual reload, violating
  * this module's "clients are updated before the loop settles" invariant.
  */
-async function runAttempt(broadcastOnHeal: boolean): Promise<boolean> {
-	const owner = state;
-	if (!owner) return false;
+async function runAttempt(
+	owner: ReconnectState,
+	broadcastOnHeal: boolean,
+): Promise<boolean> {
 	// False once this loop is torn down (or replaced): nothing after that point
 	// may touch clients, the session or the indicators.
 	const alive = () => state === owner;
 	const { deps } = owner;
+	const attemptId = Symbol();
+	owner.attemptId = attemptId;
+	const current = () => alive() && owner.attemptId === attemptId;
 	try {
-		await deps.refreshCapabilities();
+		await deps.refreshCapabilities(current);
 	} catch (err) {
 		// The capability ladder never throws; defend anyway so a future change
 		// can't silently kill the recovery loop.
@@ -380,16 +403,17 @@ async function runAttempt(broadcastOnHeal: boolean): Promise<boolean> {
 		return false;
 	}
 	const reachable = deps.isEngineReachable();
+	if (reachable) owner.offlineAnnounced = false;
 	const streaming = getIsStreaming();
 	if (!reachable || !broadcastOnHeal) {
 		deps.reportEngineState(reachable, streaming);
 		return reachable;
 	}
-	const current = () => alive() && !owner.lossDuringAttempt;
 	try {
 		await (owner.rearmed
 			? deps.publishEngineAvailability(current)
 			: deps.broadcastEngineState(current));
+		if (owner.rearmed && current()) await deps.reconcileLoss?.(current);
 		if (!alive()) return false;
 		// Lost again while publishing: the steps after the loss were skipped,
 		// and the caller reschedules instead of settling.
@@ -414,13 +438,14 @@ async function runAttempt(broadcastOnHeal: boolean): Promise<boolean> {
  * stale available snapshot, see `runAttempt`).
  */
 function announceOffline(): void {
-	if (!state || state.offlineAnnounced) return;
-	if (state.deps.isEngineReachable()) return;
-	state.offlineAnnounced = true;
+	const owner = state;
+	if (!owner || owner.offlineAnnounced || owner.deps.isEngineReachable())
+		return;
 	try {
-		state.deps.broadcastEngineOffline();
+		owner.deps.broadcastEngineOffline();
+		owner.offlineAnnounced = true;
 	} catch (err) {
-		state.deps.logger.warn(
+		owner.deps.logger.warn(
 			`engine reconnect: offline broadcast failed: ${errMessage(err)}`,
 		);
 	}
@@ -432,7 +457,8 @@ function announceOffline(): void {
  */
 function scheduleRecheck(): void {
 	if (!state || state.stopped || state.timer !== undefined) return;
-	const { deps } = state;
+	const owner = state;
+	const { deps } = owner;
 	const delay = backoffDelay(
 		state.attempt,
 		deps.baseDelayMs,
@@ -454,10 +480,42 @@ function scheduleRecheck(): void {
 		);
 	else deps.logger.debug?.(message);
 	state.timer = deps.setTimer(() => {
-		if (!state) return;
-		state.timer = undefined;
-		state.inflight = tickRecheck();
+		if (state !== owner) return;
+		owner.timer = undefined;
+		owner.inflight = tickRecheck();
 	}, delay);
+}
+
+function monitorSettledEngine(owner: ReconnectState): void {
+	const { deps } = owner;
+	const probe = deps.monitorControl;
+	if (
+		probe === undefined ||
+		state !== owner ||
+		!owner.stopped ||
+		owner.timer !== undefined
+	)
+		return;
+	const attemptId = owner.attemptId;
+	const current = () => state === owner && owner.attemptId === attemptId;
+	owner.timer = deps.setTimer(() => {
+		if (!current()) return;
+		owner.timer = undefined;
+		owner.inflight = (async () => {
+			const responding = await probe();
+			if (!current()) return;
+			if (responding) await deps.reconcileLoss?.(current);
+			else noteEngineControlLoss("control-liveness");
+			if (current()) monitorSettledEngine(owner);
+		})().catch((error: unknown) => {
+			if (!(error instanceof Error)) throw error;
+			deps.logger.warn(
+				`engine reconnect: control observation failed: ${error.message}`,
+			);
+			if (current()) monitorSettledEngine(owner);
+		});
+	}, ENGINE_CONTROL_LIVENESS_MS);
+	owner.timer.unref?.();
 }
 
 /**
@@ -471,7 +529,7 @@ async function tickRecheck(): Promise<void> {
 	const owner = state;
 	if (!owner || owner.stopped) return;
 	owner.lossDuringAttempt = false;
-	const healed = await runAttempt(true);
+	const healed = await runAttempt(owner, true);
 	if (state !== owner || owner.stopped) return;
 	if (healed && !state.lossDuringAttempt) {
 		// Healed and clients are updated; settle until the next proven loss.
@@ -486,6 +544,7 @@ async function tickRecheck(): Promise<void> {
 		state.lostAt = undefined;
 		state.healedAt = now;
 		state.offlineAnnounced = false;
+		monitorSettledEngine(owner);
 		return;
 	}
 	if (healed) {
@@ -522,9 +581,20 @@ export async function initEngineConnection(
 		...defaultDeps(fetchers),
 		...depOverrides,
 	};
+	if (
+		(depOverrides.refreshCapabilities !== undefined ||
+			depOverrides.broadcastEngineState !== undefined) &&
+		depOverrides.monitorControl === undefined
+	)
+		delete deps.monitorControl;
+	if (
+		depOverrides.publishEngineAvailability !== undefined &&
+		depOverrides.reconcileLoss === undefined
+	)
+		delete deps.reconcileLoss;
 
 	stopEngineReconnect();
-	state = {
+	const owner: ReconnectState = {
 		deps,
 		attempt: 0,
 		timer: undefined,
@@ -533,19 +603,27 @@ export async function initEngineConnection(
 		lostAt: undefined,
 		healedAt: undefined,
 		lossDuringAttempt: false,
+		attemptId: Symbol(),
 		offlineAnnounced: false,
 		rearmed: false,
 	};
+	state = owner;
+	bindEngineRecoveryShutdown(stopEngineReconnect);
+	bindEngineControlLoss((site, proven) => {
+		if (proven) noteEngineControlLoss(site);
+		else rearmEngineReconnect(site);
+	});
 
 	// First attempt is awaited (no heal broadcast — there are no clients yet at
 	// boot, and boot's own snapshot/sources steps run right after).
-	await runAttempt(false);
+	await runAttempt(owner, false);
 
-	if (!state) return;
+	if (state !== owner) return;
 	if (deps.isEngineReachable() && !state.lossDuringAttempt) {
 		deps.logger.info("engine reconnect: engine reachable at boot");
 		state.stopped = true;
 		state.healedAt = deps.now();
+		monitorSettledEngine(owner);
 		return;
 	}
 
@@ -573,6 +651,7 @@ export async function initEngineConnection(
 export function rearmEngineReconnect(site: string): void {
 	if (!state) return;
 	const { deps } = state;
+	state.attemptId = Symbol();
 	if (!state.stopped) {
 		state.lossDuringAttempt = true;
 		return;
@@ -585,6 +664,8 @@ export function rearmEngineReconnect(site: string): void {
 		state.healedAt !== undefined &&
 		now - state.healedAt < deps.flapWindowMs;
 	if (!flapping) state.attempt = 0;
+	if (state.timer !== undefined) deps.clearTimer(state.timer);
+	state.timer = undefined;
 	state.stopped = false;
 	state.rearmed = true;
 	state.lostAt = now;
@@ -595,6 +676,18 @@ export function rearmEngineReconnect(site: string): void {
 	);
 	announceOffline();
 	scheduleRecheck();
+}
+
+export function noteEngineControlLoss(site: string): void {
+	if (state === undefined) return;
+	if (
+		!state.stopped &&
+		!state.deps.isEngineReachable() &&
+		(site === "get-capabilities" || site === "list-devices")
+	)
+		return;
+	invalidateCapabilities();
+	rearmEngineReconnect(site);
 }
 
 /**
@@ -611,6 +704,8 @@ export function settleEngineReconnect(): Promise<void> {
  * and test cases.
  */
 export function stopEngineReconnect(): void {
+	bindEngineRecoveryShutdown();
+	bindEngineControlLoss();
 	if (!state) return;
 	if (state.timer !== undefined) {
 		state.deps.clearTimer(state.timer);

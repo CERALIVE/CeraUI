@@ -112,8 +112,8 @@ racing a competing timer against it would report a healthy-but-slow start as a
 failure.
 
 **THREE TRIGGERS, ONE SELF-SERIALISING RUN**: the engine-loss retirement
-(`cerastream-backend.ts` — the seam that sees a SIGKILLed engine come back; the
-engine-reconnect loop it re-arms only republishes availability and does not run
+(`cerastream-backend.ts`, after revoking and retiring the local session; the
+post-loss availability loop can observe unresolved lifecycle but does not run
 restoration), backend boot (`main.ts`, immediately AFTER `reconcileStreamSession()`
 so adoption has already happened), and the engine-reconnect BOOT heal. A second
 caller JOINS the in-flight run.

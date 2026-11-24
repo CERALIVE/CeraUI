@@ -78,23 +78,22 @@ describe("a start that cannot reach the engine re-arms the engine reconnect", ()
 		const orchestrator = orchestratorWith(() => {
 			reported += 1;
 		});
-		let fail!: () => void;
-		const pending = new Promise<void>((resolve) => {
-			fail = resolve;
-		});
+		const entered = Promise.withResolvers<void>();
+		const pending = Promise.withResolvers<void>();
 		const start = orchestrator.start({
 			origin: "ui",
 			launch: async ({ attemptId }) => {
-				await pending;
+				entered.resolve();
+				await pending.promise;
 				// Our own Stop closed the start's connection under it.
 				throw new StreamStartFailure(
 					typedStartFailure(attemptId, "connect", "engine_unavailable"),
 				);
 			},
 		});
-		for (let i = 0; i < 5; i++) await Promise.resolve();
+		await entered.promise;
 		const stop = orchestrator.stop("operator");
-		fail();
+		pending.resolve();
 		const result = await start;
 		await stop;
 		expect(result.result).toBe("cancelled");

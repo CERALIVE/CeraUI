@@ -68,7 +68,12 @@ export function startRefusedBeforeAdmission(
 	if (!hasStartRpcCode(error, codes["cerastream.params.invalid"])) return false;
 	// Wire decode and the two audited geometry shapes precede admission.
 	if (params.bitrate.max_bitrate > 0xffff_ffff) return true;
-	if (schemaVersion !== "0.24.0" && schemaVersion !== "0.25.0") return false;
+	if (
+		schemaVersion !== "0.24.0" &&
+		schemaVersion !== "0.25.0" &&
+		schemaVersion !== "0.26.0"
+	)
+		return false;
 	const composition = params.composition;
 	return (
 		composition !== undefined &&

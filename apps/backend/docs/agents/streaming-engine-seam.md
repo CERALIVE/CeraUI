@@ -36,9 +36,11 @@ Host regression coverage does not qualify image activation on either board.
 At boot and after an engine reconnect, `reconcileRuntimeState()` subscribes to the
 engine's actual status and adopts an engine-held session. Only concordant
 `streaming` or `idle` status is authoritative. A successful subscription that sees
-no event for 2.5 seconds remains UNKNOWN: the published 2026.11.1 client has no
-current-status snapshot and the engine heartbeat is streaming-only. Query failure,
-transitional state and contradictory fields also remain `reconciling`. An explicit
+no event for 2.5 seconds remains UNKNOWN. The recovery socket requests a
+snapshot only when its own capability read advertises `status-snapshot`.
+Without it, an idle engine may remain silent. Query failure (including status
+mode conflict), transitional state and contradictory fields also remain
+`reconciling`. An explicit
 operator Stop uses a fresh connection even without a locally owned session; only
 its acknowledged idle reply clears protection. Reconciliation never Stops an
 unknown engine automatically. Late events from a completed probe are fenced;
@@ -76,6 +78,11 @@ An older schema known to predate scoped Start, or a successful capabilities
 reply without the token, uses legacy Start. A failed or malformed reply
 refuses Start rather than guessing. Before Start dispatch, the deadline can
 only roll back launch-local resources; it cannot send device-wide Stop.
+After a legacy Start has actually been dispatched, an ambiguous reply or
+deadline retains the legacy global Stop fallback. Scoped Start instead
+cancels only its attempt, including on the outer deadline; `not_owner` does
+not authorize another cleanup. Neither fallback is used to retire a lost
+session control connection.
 Boot recovery cannot displace a current runtime observer. Once that observer
 loses its owner or operator-intent fence, a newer observation may proceed.
 Connect/subscribe acquisitions and Start submission recheck launch
@@ -127,13 +134,13 @@ typed refusal and rendered Stop availability are owner/integration decisions, no
 closed by this core correction. Production-path host tests cover these transitions;
 cross-connection Stop versus in-flight Start and real media remain unqualified.
 
-### Follow-up: engine status snapshot [GREENFIELD; cross-repo, not done]
+### Engine status snapshot [EXISTS]
 
-The minimal producer addition is current status hydration on subscribe or a
-read-only `get_status` method with a producer-exported result and published binding.
-It must report idle honestly while Start/retirement is outstanding. Publish/tag the
-binding before consumer fields or methods are referenced (root publish-before-consume
-rule). Engine release/delivery is owner-gated and outside this consumer-only lane.
+Cerastream bindings `2026.11.4` (schema `0.26.0`) expose opt-in hydration.
+The first status subscription fixes the socket mode, so reconciliation uses
+a fresh socket and handles the latest delivered status, including a live
+transition following the snapshot in the same read. Legacy producers use the
+same observer without an opt-in flag. No status still means unknown.
 
 The `StreamingBackend` interface (`modules/streaming/streaming-backend.ts`) has
 **one** implementation behind the seam (the legacy ceracoder engine is fully

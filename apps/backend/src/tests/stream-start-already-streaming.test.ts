@@ -317,12 +317,14 @@ test("boot recovery cannot displace the current refusal observer", async () => {
 	const refusal = h.clients[1];
 	if (refusal === undefined) throw new Error("Expected refusal observer");
 
-	const boot = h.session.reconcile();
+	const boot = h.session.reconcile(() => true);
+	// Boot must share the pending observation, not dial a third socket.
+	expect(h.clients).toHaveLength(2);
 	refusal.emit({ type: "status", seq: 1, state: "streaming", streaming: true });
 
-	expect(h.clients).toHaveLength(2);
 	await boot;
 	await h.adopted;
+	expect(h.clients).toHaveLength(2);
 	expect(h.view()).toMatchObject({ engine: "streaming", state: "streaming" });
 	expect(engineCalls(h, "start")).toHaveLength(1);
 	expect(engineCalls(h, "stop")).toHaveLength(0);

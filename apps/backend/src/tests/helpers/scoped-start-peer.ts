@@ -34,6 +34,8 @@ const capabilities = {
 export type Scenario =
 	| "lost"
 	| "deadline"
+	| "foreign-deadline"
+	| "foreign-ambiguous"
 	| "negotiation-deadline"
 	| "malformed"
 	| "foreign"
@@ -60,6 +62,8 @@ export async function scopedStartPeer(scenario: Scenario) {
 	let physical: "idle" | "ours" | "foreign" =
 		scenario === "foreign" ||
 		scenario === "not-owner" ||
+		scenario === "foreign-deadline" ||
+		scenario === "foreign-ambiguous" ||
 		scenario === "negotiation-deadline" ||
 		scenario === "unknown" ||
 		scenario === "malformed"
@@ -115,9 +119,9 @@ export async function scopedStartPeer(scenario: Scenario) {
 								socket.data.index === 1
 							)
 								break;
-							if (scenario === "malformed") {
+							if (scenario === "malformed" && socket.data.index === 1) {
 								reply({ ...capabilities, features: "attempt-scoped-start" });
-							} else if (scenario === "unknown") {
+							} else if (scenario === "unknown" && socket.data.index === 1) {
 								send({
 									id: request.id,
 									error: { code: -32601, message: "method not found" },
@@ -167,6 +171,10 @@ export async function scopedStartPeer(scenario: Scenario) {
 							else if (scenario === "cancelled") refuse(cancelled);
 							else if (scenario === "capacity") refuse(capacity);
 							else if (scenario === "not-owner") socket.end();
+							else if (scenario === "foreign-ambiguous")
+								refuse("cerastream.internal");
+							else if (scenario === "foreign-deadline")
+								releaseLegacyStart = () => refuse(cancelled);
 							else {
 								physical = "ours";
 								if (scenario === "lost") socket.end();
@@ -228,9 +236,7 @@ export async function scopedStartPeer(scenario: Scenario) {
 		sendLaunchStatus: sendLaunchStatus.promise,
 		replyStart: replyStart.promise,
 		capabilityReads: () =>
-			requests.filter(
-				({ method, peer }) => method === "get-capabilities" && peer === 1,
-			),
+			requests.filter(({ method }) => method === "get-capabilities"),
 		starts: () => requests.filter(({ method }) => method === "start"),
 		prepares: () => requests.filter(({ method }) => method === "prepare-start"),
 		cancels: () => requests.filter(({ method }) => method === "cancel-start"),

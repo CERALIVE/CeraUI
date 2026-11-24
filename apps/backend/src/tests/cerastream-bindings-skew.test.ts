@@ -141,11 +141,8 @@ describe("cerastream bindings version-skew guard", () => {
 		},
 	);
 
-	test("SCHEMA_VERSION matches the attempt-scoped Start 0.25.0 contract", () => {
-		// Package CalVer is independent of the hello schema version. The previous
-		// 2026.9.4 package still declared 0.16.0 and rejected the new HDMI causes.
-		// 2026.11.3 adds attempt-scoped Start on schema 0.25.0.
-		expect(SCHEMA_VERSION).toBe("0.25.0");
+	test("SCHEMA_VERSION matches the status snapshot 0.26.0 contract", () => {
+		expect(SCHEMA_VERSION).toBe("0.26.0");
 	});
 
 	test("a rejected start carries the engine's typed capture causes", () => {

@@ -57,8 +57,11 @@ test.each(["malformed", "unknown"] as const)(
 				retriable: false,
 			},
 		});
-		expect(h.capabilityReads()).toHaveLength(1);
 		expect(await h.observed).toBe("streaming");
+		expect(h.capabilityReads()).toEqual([
+			{ method: "get-capabilities", peer: 1 },
+			{ method: "get-capabilities", peer: 2 },
+		]);
 	},
 );
 
@@ -103,12 +106,18 @@ test("a successful scoped Start filters foreign status only until its acknowledg
 	expect(h.stops()).toEqual([]);
 });
 
-test.each(["lost", "deadline", "not-owner"] as const)(
+test.each([
+	"lost",
+	"deadline",
+	"not-owner",
+	"foreign-ambiguous",
+	"foreign-deadline",
+] as const)(
 	"an ambiguous scoped Start (%s) cancels just its attempt before observing the device",
 	async (scenario) => {
 		const h = await launchHarness(scenario);
 		const starting = h.start();
-		if (scenario === "deadline") {
+		if (scenario === "deadline" || scenario === "foreign-deadline") {
 			await h.entered;
 			(await h.deadline)();
 		}
@@ -120,11 +129,10 @@ test.each(["lost", "deadline", "not-owner"] as const)(
 		expect(h.starts()).toEqual([
 			{ method: "start", peer: 1, attemptId: attempt },
 		]);
-		expect(await h.observed).toBe(
-			scenario === "not-owner" ? "streaming" : "idle",
-		);
+		const foreign = scenario === "not-owner" || scenario.startsWith("foreign-");
+		expect(await h.observed).toBe(foreign ? "streaming" : "idle");
 		expect(h.view()).toEqual(
-			scenario === "not-owner"
+			foreign
 				? { physical: "foreign", state: "streaming", marked: true }
 				: { physical: "idle", state: "idle", marked: false },
 		);

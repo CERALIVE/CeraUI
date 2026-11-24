@@ -3,6 +3,15 @@
 	"include": [
 		"src/tests/helpers/**/*.ts",
 		"src/tests/engine-loss-unix.test.ts",
+		"src/tests/engine-recovery-control-consumers.test.ts",
+		"src/tests/engine-recovery-ownership.test.ts",
+		"src/tests/engine-recovery-snapshot.test.ts",
+		"src/tests/engine-session-connection-loss.test.ts",
+		"src/tests/engine-reconnect-audio-teardown.test.ts",
+		"src/tests/engine-reconnect-rearm.test.ts",
+		"src/tests/engine-reconnect-start.test.ts",
+		"src/tests/engine-recovery-boot-cache.test.ts",
+		"src/tests/engine-recovery-evidence.test.ts",
 		"src/tests/uplink-steering-state.test.ts",
 		"src/tests/wifi-hotspot-terminal-outcomes.test.ts",
 		"src/tests/wifi-hotspot.test.ts",
@@ -26,7 +35,8 @@
 		"src/tests/uplink-steering-table-key-kernel.test.ts",
 		"src/tests/uplink-steering-source-kernel.test.ts",
 		"src/tests/uplink-steering-mark-layout.test.ts",
-		"src/tests/uplink-steering-rename-kernel.test.ts"
+		"src/tests/uplink-steering-rename-kernel.test.ts",
+		"test-harness/live-engine-restart.ts"
 	],
 	"exclude": []
 }

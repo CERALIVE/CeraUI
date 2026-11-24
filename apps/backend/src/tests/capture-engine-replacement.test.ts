@@ -28,6 +28,8 @@ for (const features of [undefined, [], ["input-mode"]]) {
 		expect((await f.start()).result).toBe("started");
 		await f.replace(features);
 		expect((await f.start()).result).toBe("started");
+		// Recovery has read capabilities; it cannot authorize this write.
+		expect(f.current().capabilityReads).toBe(1);
 		const bytes = await f.bytes();
 		const tokens = getSourceSelectionTokens();
 
@@ -46,7 +48,7 @@ for (const features of [undefined, [], ["input-mode"]]) {
 			false,
 		);
 		expect(f.current().wire).toEqual([]);
-		expect(f.current().capabilityReads).toBe(1);
+		expect(f.current().capabilityReads).toBe(2);
 		expect(getSourceSelectionTokens()).toEqual(tokens);
 	});
 }
@@ -68,11 +70,12 @@ test("a capable replacement is authorized after its own capabilities are read", 
 	await f.start();
 	await f.replace([CAPTURE_SELECTION_CLEAR_FEATURE]);
 	expect((await f.start()).result).toBe("started");
+	expect(f.current().capabilityReads).toBe(1);
 
 	const result = await f.write({ source: "video2", apply_now: true });
 
 	expect(result.configChange?.result).toBe("applied");
-	expect(f.current().capabilityReads).toBe(1);
+	expect(f.current().capabilityReads).toBe(2);
 	expect(f.current().wire).toEqual([
 		{ input_id: "video2", pipeline: "libuvch264", input_mode: null },
 	]);

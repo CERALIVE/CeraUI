@@ -14,56 +14,39 @@ banner never cleared until an operator restarted `ceralive.service`.
 `modules/streaming/engine-reconnect.ts` (`initEngineConnection`) closes that gap.
 It is the boot `pipelines` init now (main.ts) and owns ONE self-rescheduling loop:
 
-- **Bounded boot retry** — the first attempt is awaited (so the pipeline registry is
-  populated before `reconcilePersistedPipeline` / the boot sources step read it —
-  boot ordering unchanged). If the engine is reachable → return, no loop. Else the
-  first backoff steps (~2s, 4s, 8s, 16s → ceiling) are the short exponential backoff
-  that resolves a normal engine-not-ready-yet race with no operator action.
-- **Periodic background recheck** — once backoff caps at `ENGINE_RECONNECT_MAX_MS`
-  (30 s) it is a slow periodic health-recheck that keeps running so a device
-  self-heals minutes/hours later. BOUNDED (30 s ceiling, never a tight loop): a
-  masked/disabled cerastream just gets a cheap 30 s poll, never hammering.
-- **Heal broadcast** — on the unavailable→reachable transition it re-broadcasts
-  `capabilities` + `pipelines` + `sources` to already-connected clients (the SAME
-  trio the `setMockHardware` RPC uses), so the offline banner clears LIVE with no
-  page reload, then SETTLES (stops polling) until the next proven loss. Settling is
-  gated on the broadcast actually completing: a reachable engine whose heal broadcast
-  throws (a transient broadcast-collaborator error) does NOT settle — it reschedules
-  under the same backoff — so clients are never stranded on the offline banner while
-  the loop silently gives up. The BOOT heal also settles the boot race (session
-  reconcile, in-flight config change, restoration).
-- **Re-arm after a later loss**: `rearmEngineReconnect(site)` starts the same loop
-  again whenever the engine connection is PROVEN lost after boot: a session whose
-  control connection closed or failed (`cerastream-backend.ts`
-  `noteConnectionLoss` → `deps.onEngineUnreachable`, the re-arm by default), or a
-  start classified
-  `engine_unavailable` (`stream-start-retry.ts`, the one place every start origin's
-  failure is classified; a cancelled attempt returns before it, so an operator Stop
-  closing a pending start never counts). Without it a watchdog restart of cerastream
-  left "Streaming engine offline" and a disabled Start until `ceralive.service`
-  restarted. The loop pushes the unavailable snapshot to connected clients once per
-  outage, and once more when a loss during an attempt left a stale available
-  snapshot (a Start loss does not invalidate it, since that classification also
-  covers failures other than a gone engine). Until the next recheck corrects it, a
-  page that connects in that window reads the engine as available and can offer a
-  Start that fails. Its heal only PUBLISHES availability (`publishEngineAvailability`:
-  capabilities, pipelines, sources): session reconcile, owned-session cleanup and
-  restoration keep their own triggers, and a second reconcile here would supersede
-  their pending observations. A loss within `ENGINE_RECONNECT_FLAP_WINDOW_MS` (60 s)
-  of a heal that followed rechecks keeps the backoff, so a flapping engine is not
-  probed every second; a loss during an attempt stops that attempt's heal (the
-  steps not yet run, and the recovery report) and it cannot settle on that
-  answer. Rechecks log at info until the backoff caps, once more at the cap, then at
-  debug. `stopEngineReconnect()` runs first on SIGTERM/SIGINT (`helpers/shutdown.ts`
-  `stopEngineReconnect` dep) and makes an in-flight heal skip its remaining steps;
-  the guard reaches `refreshAndBroadcastSources`, so nothing is committed or
-  broadcast after teardown. A hung engine is not detected here: its watchdog kills
-  it within 90 s, which closes the socket. The heal does not clear a session left in
-  `stop_failed` (the engine-loss Stop could not reach the engine). Restoration's
-  reconcile clears it when the restarted engine answers idle within
-  `RESTORATION_UNKNOWN_DEADLINE_MS` (10 s). Known gap: an engine that takes longer
-  leaves the session unconfirmed, so Start stays refused and the Live view's
-  unconfirmed-stream band offers the operator's Stop.
+- **Boot and outage cadence.** The first capability attempt is awaited.
+  Unavailable retries use equal jitter: 1-2 s, 2-4 s, 4-8 s, 8-16 s, then
+  15-30 s, plus probe duration. Loss within 60 s of a retried heal preserves
+  the backoff. A reachable engine gets one bounded control handshake every 15 s
+  plus probe duration, including when no stream is active. This is not a
+  process supervisor and cannot undo systemd start-rate limiting. A loss
+  invalidates the scheduled monitor even if its timer callback was dequeued
+  before cancellation.
+- **Loss evidence.** `engine-control-loss.ts` routes proven control transport
+  failures from session operations, capability and source reads, runtime
+  observations and the audio meter. An RPC refusal, timeout alone, intentional
+  close or preview WebSocket failure is not proof. A failed Start classified
+  `engine_unavailable` can request a check without invalidating availability.
+  A replaced audio-meter bridge cannot schedule a retry, publish levels or
+  reload the preference for its successor.
+- **Publication.** Heal publishes `capabilities`, `pipelines`, then `sources`
+  to open pages. A thrown publication retries; a live snapshot reopens offline
+  delivery and a thrown offline send does not consume it. Replaced init,
+  loss and SIGTERM/SIGINT revoke the current work identity. Late capability,
+  pipeline, hardware and source commits and deferred audio work check it.
+- **Lifecycle is separate.** A post-loss heal observes unresolved lifecycle
+  state read-only. Later control checks can retry the observation, but never
+  re-run one-shot restoration. Fresh Idle enables Start if the other gates allow
+  it; fresh Streaming adopts without mutation. Silence or transition remains
+  unknown, and operator Stop supersedes the observer. Boot heal can still run
+  the separate boot reconciliation and recovery duties. On a fresh probe
+  socket, the observer checks `get-capabilities` before its first status
+  subscription and opts in only when the engine advertises `status-snapshot`.
+  The latest delivered status is authoritative only if it proves Idle or
+  Streaming. A subscription acknowledgement is not status. A mode conflict
+  discards the probe without reporting engine loss or triggering an immediate
+  retry. A silent legacy engine can still recover availability without
+  releasing an unresolved Start fence.
 
 Reachability = `getLastCapabilities()?.engineUnavailable === false` (a live snapshot).
 It feeds INTO the existing `engine-unavailable`/`engine-starting` capability tier — it

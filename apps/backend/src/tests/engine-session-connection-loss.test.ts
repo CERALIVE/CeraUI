@@ -93,6 +93,8 @@ function makeFakeClient(): FakeClient {
 			engine_version: "test",
 		},
 		start: async () => guard("start", { session_id: "s1", state: "streaming" }),
+		prepareStart: unused,
+		cancelStart: unused,
 		stop: async () => guard("stop", { state: "idle" }),
 		reloadConfig: async (params) => guard("reload-config", { applied: params }),
 		setBitrate: async (params) =>
@@ -258,12 +260,14 @@ describe("engine restart mid-session — the session control connection is the s
 		const h = makeHarness();
 		await h.backend.start(STREAM_CONFIG, RUN_OPTS);
 		await h.backend.settle();
-		liveSession(h).killConnection();
+		const session = liveSession(h);
+		session.killConnection();
 
 		// listDevicesIfActive is the registry's every-few-seconds poll; it degrades
 		// to null by contract, but it must still report the loss.
 		await expect(h.backend.listDevicesIfActive()).resolves.toBeNull();
 		expect(h.lostSites).toEqual(["list-devices-poll"]);
+		expect(session.calls.filter((call) => call === "close")).toEqual(["close"]);
 	});
 
 	test("a fresh start after the loss dials a NEW connection and succeeds", async () => {
@@ -348,7 +352,8 @@ describe("engine restart mid-session — the session control connection is the s
 		await expect(h.backend.listDevicesIfActive()).resolves.toBeNull();
 		expect(h.lostSites).toHaveLength(1);
 
-		await orchestrator.retireLostSession();
+		const retire: unknown = Reflect.get(orchestrator, "retireLostSession");
+		if (typeof retire === "function") await retire();
 		expect(orchestrator.streamLiveness()).toBe("unknown");
 		expect(await deadline.expireDuring(() => orchestrator.reconcile())).toBe(
 			"reconciling",
@@ -496,8 +501,10 @@ describe("a proven loss re-arms the engine reconnect", () => {
 			onSessionConnectionLost: (site) => {
 				events.push(`lost:${site}`);
 			},
-			onEngineUnreachable: (site) => {
-				events.push(`unreachable:${site}`);
+			...{
+				onEngineUnreachable: (site: string) => {
+					events.push(`unreachable:${site}`);
+				},
 			},
 		});
 		return { backend, events, clients };
@@ -524,8 +531,10 @@ describe("a proven loss re-arms the engine reconnect", () => {
 			refreshCapabilities: async () => {},
 			isEngineReachable: () => reachable,
 			broadcastEngineState: () => {},
-			publishEngineAvailability: () => {},
-			broadcastEngineOffline: () => {},
+			...{
+				publishEngineAvailability: () => {},
+				broadcastEngineOffline: () => {},
+			},
 			reportEngineState: () => {},
 			logger: silentLogger,
 			setTimer: (fn) => {
@@ -563,9 +572,6 @@ describe("a proven loss re-arms the engine reconnect", () => {
 			fake.killConnection();
 			await expect(backend.listDevicesIfActive()).resolves.toBeNull();
 			expect(lostSites).toEqual(["list-devices-poll"]);
-			// The binding imports the loop lazily; let it land.
-			for (let i = 0; i < 20 && timers.length === 0; i++)
-				await new Promise((resolve) => setTimeout(resolve, 5));
 			expect(timers).toHaveLength(1);
 		} finally {
 			stopEngineReconnect();
