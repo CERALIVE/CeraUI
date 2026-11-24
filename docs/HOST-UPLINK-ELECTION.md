@@ -520,7 +520,11 @@ The injected runner executes plain `ip` commands inside that namespace; the real
 `setDefaultRoute` and lifecycle code run over dummy/veth links. Tests prove the
 metric-zero FIB winner, unchanged re-election, equal-metric foreign reorder,
 failback/re-acquisition/release, and carrier-loss cleanup at all three lifecycle
-boundaries. Source-specific and real multiline multipath IPv6 dumps do not block
+boundaries. The Linux carrier fixture uses Python 3's standard library to
+subscribe to the veth link's netlink notification before lowering its peer.
+It waits for carrier loss on the route device, not just the `ip link set`
+acknowledgement, before checking the IPv4 or IPv6 route. Source-specific and
+real multiline multipath IPv6 dumps do not block
 startup/release. Two additional regressions reject a third-uplink election behind a
 more-specific verification route with the full ordered `ip -4 route show table all`
 dump and unrelated `ip route get 8.8.8.8 fibmatch` byte-identical, and refuse a

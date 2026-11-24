@@ -195,6 +195,7 @@ type NetdevBusEvidence = {
 };
 let netifSnapshotReady = false;
 let netifRefreshGeneration = 0;
+let stopScanSettlement: (() => void) | undefined;
 const scanPublicationWarnings = new Set<string>();
 
 export function hasNetifSnapshot(): boolean {
@@ -210,6 +211,8 @@ export function getNetworkInterfaceIncarnation(
 }
 
 export function resetNetifSnapshotForTest(): void {
+	stopScanSettlement?.();
+	stopScanSettlement = undefined;
 	netif = {};
 	netifSnapshotReady = false;
 	netifRefreshGeneration++;
@@ -228,11 +231,9 @@ function bumpPresence(name: string, removed = false): void {
 	}
 }
 
-let scanSettlementInstalled = false;
 function installScanSettlement(): void {
-	if (scanSettlementInstalled) return;
-	scanSettlementInstalled = true;
-	onUsbNetScanCommitted(() => {
+	if (stopScanSettlement) return;
+	const stopScanCommitted = onUsbNetScanCommitted(() => {
 		let released = false;
 		for (const [name, int] of Object.entries(netif)) {
 			if (
@@ -249,7 +250,7 @@ function installScanSettlement(): void {
 			broadcastNetif();
 		}
 	});
-	onUsbNetReadingInvalidated(() => {
+	const stopReadingInvalidated = onUsbNetReadingInvalidated(() => {
 		// The deferred publication keeps the monitor path honest: it invalidates
 		// before dropping the netif entry, so publishing inline would repeat the
 		// removed name. These are the frames the scan's own commit edge used to
@@ -259,6 +260,10 @@ function installScanSettlement(): void {
 			void broadcastModemRoster();
 		});
 	});
+	stopScanSettlement = () => {
+		stopScanCommitted();
+		stopReadingInvalidated();
+	};
 }
 
 // Interfaces excluded from dup-IPv4 detection during a station<->hotspot

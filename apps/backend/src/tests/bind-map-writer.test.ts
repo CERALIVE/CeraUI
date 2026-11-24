@@ -6,7 +6,7 @@
  * pair was flagged and dropped from the bond entirely; the operator saw one link
  * where two were plugged in, with no explanation anywhere.
  */
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,6 +20,7 @@ import {
 	netIfBuildMsg,
 	processIfconfigOutput,
 	resetBondOptOut,
+	resetNetifSnapshotForTest,
 	setBondOptOut,
 	setNetifDupIpSuppression,
 	setQueueUpdateGwHook,
@@ -85,9 +86,8 @@ const entry = (ip: string, ifname: string, linkId: string): BondEntry => ({
 	linkId,
 });
 
-beforeEach(() => {
-	const netif = getNetworkInterfaces();
-	for (const name of Object.keys(netif)) delete netif[name];
+function resetFixtures(): void {
+	resetNetifSnapshotForTest();
 	setNetifState({});
 	for (const name of ["enx0c5b8f279a64", "eth1", "eth0"]) {
 		setNetifDupIpSuppression(name, false);
@@ -95,7 +95,10 @@ beforeEach(() => {
 	resetBondOptOut();
 	resetBindMapWriter();
 	setQueueUpdateGwHook(null);
-});
+}
+
+beforeEach(resetFixtures);
+afterEach(resetFixtures);
 
 describe("duplicate-IP policy split", () => {
 	test("the twins stay FLAGGED and stay invalid for a source-IP probe", () => {
