@@ -1,4 +1,8 @@
-import { type ClientZone, UPLINK_MARK_MASK } from "./contracts.ts";
+import {
+	type ClientZone,
+	SteeringUnavailableError,
+	UPLINK_MARK_MASK,
+} from "./contracts.ts";
 import type { MarkClaim } from "./mark-journal.ts";
 
 export const MARK_GUARD = "ceralive_share_guard";
@@ -11,7 +15,8 @@ export interface MarkAdmission {
 	readonly seq: number;
 	readonly phase: "committed" | "fenced";
 	readonly zones: readonly ClientZone[];
-	readonly claims: readonly MarkClaim[];
+	readonly claims: readonly Pick<MarkClaim, "mark" | "ifindex" | "epoch">[];
+	readonly affected?: readonly number[];
 }
 
 export function epochBits(epoch: number): string {
@@ -26,7 +31,10 @@ function assertZone(zone: ClientZone): void {
 		!/^[A-Za-z0-9_.][A-Za-z0-9_.-]{0,14}$/.test(zone.ifname) ||
 		!/^(\d{1,3}\.){3}\d{1,3}\/(\d|[12]\d|3[0-2])$/.test(zone.ipv4Cidr)
 	) {
-		throw new Error("invalid steering guard zone");
+		throw new SteeringUnavailableError(
+			"mark_collision",
+			"invalid steering guard zone",
+		);
 	}
 }
 
@@ -39,6 +47,9 @@ export function buildMarkGuard(admission: MarkAdmission): string {
 		`delete table inet ${MARK_GUARD}`,
 		`table inet ${MARK_GUARD} {`,
 		`\tchain ${admission.phase === "committed" ? receiptName(admission.seq) : `fenced_${admission.seq}`} { }`,
+		...(admission.affected ?? []).map(
+			(mark) => `\tchain affected_${mark.toString(16)} { }`,
+		),
 		"\tchain egress {",
 		"\t\ttype filter hook postrouting priority mangle; policy accept;",
 	];

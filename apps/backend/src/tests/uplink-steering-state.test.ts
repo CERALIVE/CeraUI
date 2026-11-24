@@ -17,6 +17,7 @@ import {
 	type UplinkHealthOutcome,
 	type UplinkHealthRecord,
 } from "../modules/network/uplink-health/model.ts";
+import { assignSteeringMarks } from "../modules/network/uplink-steering/mark-allocation.ts";
 import {
 	planUplinkRoute,
 	type UplinkRouteCandidate,
@@ -447,10 +448,7 @@ describe("readDesiredSteeringState", () => {
 			physicalIdentity: (ifname) =>
 				ifname === "wwan0" ? "constructed-twin-322" : "constructed-twin-386",
 		});
-		const incumbent = {
-			hasAppliedState: true,
-			incumbentMarks: new Map([["constructed-twin-386", 0xca671800]]),
-		};
+		const incumbent = new Map([["constructed-twin-386", 0xca671800]]);
 		const expected = [
 			["wwan0", 0xca671900],
 			["wwan1", 0xca671800],
@@ -461,25 +459,30 @@ describe("readDesiredSteeringState", () => {
 					...fixtures,
 					interfaces: () => Object.fromEntries(order),
 				},
-				incumbent,
+				{
+					hasAppliedState: true,
+					resolveMarks: async (candidates) =>
+						assignSteeringMarks(candidates, incumbent),
+				},
 			);
 			expect(ready.routes.map(({ ifname, mark }) => [ifname, mark])).toEqual(
 				expected,
 			);
 		}
-		const surviving = {
-			hasAppliedState: true,
-			incumbentMarks: new Map([
-				["constructed-twin-322", 0xca671900],
-				["constructed-twin-386", 0xca671800],
-			]),
-		};
+		const surviving = new Map([
+			["constructed-twin-322", 0xca671900],
+			["constructed-twin-386", 0xca671800],
+		]);
 		const ready = await readReadySteeringState(
 			{
 				...fixtures,
 				interfaces: () => Object.fromEntries(links.slice(0, 2)),
 			},
-			surviving,
+			{
+				hasAppliedState: true,
+				resolveMarks: async (candidates) =>
+					assignSteeringMarks(candidates, surviving),
+			},
 		);
 		expect(ready.routes.map(({ ifname, mark }) => [ifname, mark])).toEqual([
 			["wwan0", 0xca671900],

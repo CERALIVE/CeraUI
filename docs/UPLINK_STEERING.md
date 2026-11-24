@@ -164,6 +164,11 @@ The priority-110 fence prevents an older steering backend from taking over a
 live journaled assignment. Reboot before downgrading; the journal and kernel
 state are boot-scoped.
 
+Without a collision the journal is advisory: an unreadable journal or failed
+kernel observation keeps the original steering path. Start-up status stays
+`available` until a real failure, as before. Shaping uses the live desired state;
+only collision-affected marks are held until their assignment is committed.
+
 Non-colliding uplinks retain the original no-flush rebind behavior. Only marks
 affected by a collision use the journal's flow-retirement rule on a change of
 binding or ownership. Renaming the same netdev, changing gateway or metric, and

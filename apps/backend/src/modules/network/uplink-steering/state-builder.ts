@@ -78,7 +78,6 @@ const defaultDeps: SteeringStateBuilderDeps = {
 export interface SteeringReadinessContext {
 	readonly hasAppliedState?: boolean;
 	readonly zonesReadyBypass?: boolean;
-	readonly incumbentMarks?: ReadonlyMap<string, number>;
 	readonly resolveMarks?: (
 		candidates: readonly SteeringUplink[],
 	) => Promise<ReadonlyMap<string, number>>;
@@ -115,14 +114,13 @@ export async function readDesiredSteeringState(
 	const uplinks = candidates.map(({ uplink }) => uplink);
 	const assigned = context.resolveMarks
 		? await context.resolveMarks(uplinks)
-		: assignSteeringMarks(uplinks, context.incumbentMarks ?? new Map());
-	const marked = candidates.map((candidate) => ({
-		...candidate,
-		uplink: {
-			...candidate.uplink,
-			mark: assigned.get(candidate.uplink.identity) ?? candidate.uplink.mark,
-		},
-	}));
+		: assignSteeringMarks(uplinks, new Map());
+	const marked = candidates.flatMap((candidate) => {
+		const mark = assigned.get(candidate.uplink.identity);
+		return mark === undefined
+			? []
+			: [{ ...candidate, uplink: { ...candidate.uplink, mark } }];
+	});
 	assertDistinctMarks(marked);
 	const routes: UplinkRoutePlan[] = [];
 	for (const candidate of marked) {

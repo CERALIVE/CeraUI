@@ -54,8 +54,15 @@ from provisional routes, including tables that never got a policy rule.
 The IPv4 egress fence drops client packets that do not match an admitted mark,
 connection generation, and egress device. The backend reconciles forward
 after an interruption; it does not restore a pre-transition classifier over
-changed routes. Invalid journal authority fails closed. Reboot before downgrading
-after a collision has been journaled in the current boot.
+changed routes. Invalid journal authority fails closed only for marks that a
+collision or the kernel guard affects; a device with no guard keeps main's
+behavior when the journal or kernel observation is unreadable, and links outside
+the affected set keep their admission. Legacy-path recovery commits an
+interrupted intent only if no saved owner departed, so a departed owner's mark
+is flushed before a same-mark joiner takes it. Start-up status and shaping
+follow main: status starts available, and the shaper reads the live desired
+state; only collision-affected marks wait for a committed assignment.
+Reboot before downgrading after a collision has been journaled in the current boot.
 
 Non-colliding rebinds retain main's no-flush behavior. For collision-affected
 marks, retirement or a real source/device binding change retires the old

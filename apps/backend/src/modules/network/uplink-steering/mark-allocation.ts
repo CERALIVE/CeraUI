@@ -1,6 +1,12 @@
 import { SteeringUnavailableError } from "./contracts.ts";
 import { markForSlot } from "./mark-layout.ts";
 
+export function hasNaturalMarkCollision(
+	candidates: readonly { readonly mark: number }[],
+): boolean {
+	return new Set(candidates.map(({ mark }) => mark)).size !== candidates.length;
+}
+
 export function assignSteeringMarks(
 	candidates: readonly { readonly identity: string; readonly mark: number }[],
 	incumbents: ReadonlyMap<string, number>,

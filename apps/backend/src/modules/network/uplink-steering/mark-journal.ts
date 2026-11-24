@@ -53,12 +53,7 @@ export interface MarkJournalStore {
 	save(record: MarkJournal): Promise<void>;
 }
 
-export const JOURNAL_EFFECTS = [
-	"temp",
-	"file-sync",
-	"rename",
-	"dir-sync",
-] as const;
+const JOURNAL_EFFECTS = ["temp", "file-sync", "rename", "dir-sync"] as const;
 type JournalEffect = (typeof JOURNAL_EFFECTS)[number];
 
 export function fileMarkJournal(

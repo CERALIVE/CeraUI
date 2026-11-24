@@ -16,9 +16,10 @@ import {
 import { UplinkSteeringApplier } from "./applier.ts";
 import { SteeringUnavailableError } from "./contracts.ts";
 import { UplinkSteeringCoordinator } from "./coordinator.ts";
-import { buildMarkGuard, MARK_GUARD } from "./mark-admission.ts";
+import { buildMarkGuard } from "./mark-admission.ts";
 import { fileMarkJournal } from "./mark-journal.ts";
 import { SteeringMarkLifecycle } from "./mark-lifecycle.ts";
+import { observeKernelMarks } from "./mark-observation.ts";
 import {
 	discoverMarkInventory,
 	discoverOwnedUplinkRoutes,
@@ -29,8 +30,10 @@ import {
 	retireMarkSupport,
 	rollbackUplinkRoute,
 } from "./route-manager.ts";
-import { MARK_FENCE_RULE } from "./route-policy.ts";
-import { readDesiredSteeringState } from "./state-builder.ts";
+import {
+	readDesiredSteeringState,
+	type SteeringReadinessContext,
+} from "./state-builder.ts";
 import {
 	getUplinkSteeringStatus,
 	publishUplinkSteeringAvailability,
@@ -55,31 +58,7 @@ const applier = new UplinkSteeringApplier({
 
 const marks = new SteeringMarkLifecycle({
 	journal: fileMarkJournal("/run/ceralive/uplink-steering-marks.json"),
-	observe: async () => {
-		const nft = await run("nft", ["-nn", "list", "ruleset"]);
-		const guard = nft.split(`table inet ${MARK_GUARD} {`)[1]?.split("\n}")[0];
-		const legacy =
-			nft.split("table inet ceralive_share {")[1]?.split("\n}")[0] ?? "";
-		const rules = await run("ip", ["rule", "show"]);
-		return {
-			guard:
-				guard === undefined
-					? ""
-					: (/\bchain ((?:assignment|fenced)_\d+) \{/.exec(guard)?.[1] ??
-						"invalid"),
-			legacy,
-			fence: MARK_FENCE_RULE.test(rules),
-			protectedZones: Array.from(
-				(guard ?? "").matchAll(
-					/iifname "([A-Za-z0-9_.-]+)" ip saddr (\d+(?:\.\d+){3}\/\d+) drop/g,
-				),
-				([, ifname, ipv4Cidr]) => ({
-					ifname: ifname ?? "",
-					ipv4Cidr: ipv4Cidr ?? "",
-				}),
-			),
-		};
-	},
+	observe: () => observeKernelMarks(run),
 	linkIndex: async (ifname) => {
 		const output = await run("ip", ["-o", "link", "show", "dev", ifname]);
 		const index = /^(\d+):/.exec(output)?.[1];
@@ -92,10 +71,6 @@ const marks = new SteeringMarkLifecycle({
 	},
 	armFence: ensureMarkFence,
 	guard: async (admission) => {
-		publishUplinkSteeringAvailability({
-			available: false,
-			reason: "ruleset_reload_failed",
-		});
 		await runWithStdin("nft", ["-f", "-"], buildMarkGuard(admission));
 	},
 	retire: retireMarkSupport,
@@ -117,13 +92,19 @@ const marks = new SteeringMarkLifecycle({
 		),
 });
 
+const planRoute: NonNullable<SteeringReadinessContext["planRoute"]> = (
+	candidate,
+) =>
+	marks.guarded
+		? planUplinkRoute(candidate, { run, journaled: true })
+		: planUplinkRoute(candidate);
+
 const coordinator = new UplinkSteeringCoordinator({
 	readDesiredState: (context) =>
 		readDesiredSteeringState(undefined, {
 			...context,
 			resolveMarks: (candidates) => marks.marks(candidates),
-			planRoute: (candidate) =>
-				planUplinkRoute(candidate, { run, journaled: true }),
+			planRoute,
 		}),
 	apply: (previous, next) => marks.apply(previous, next),
 	hasPendingApply: () => marks.pending,
@@ -133,11 +114,30 @@ const coordinator = new UplinkSteeringCoordinator({
 	publishAvailability: publishUplinkSteeringAvailability,
 });
 
-export function committedUplinkSteeringState() {
-	return getUplinkSteeringStatus().state === "available"
-		? coordinator.appliedState()
-		: undefined;
-}
+export const shaperSteeringContext: SteeringReadinessContext = {
+	resolveMarks: async (candidates) => {
+		const committed =
+			getUplinkSteeringStatus().state === "available" && !marks.pending
+				? coordinator.appliedState()
+				: undefined;
+		const assignments = new Map<string, number>();
+		for (const { identity, ifname, mark } of candidates) {
+			const affected =
+				marks.affects(mark) ||
+				candidates.filter((link) => link.mark === mark).length > 1;
+			if (!affected) {
+				assignments.set(identity, mark);
+				continue;
+			}
+			const owner = committed?.uplinks.find(
+				(link) => link.identity === identity && link.ifname === ifname,
+			);
+			if (owner !== undefined) assignments.set(identity, owner.mark);
+		}
+		return assignments;
+	},
+	planRoute,
+};
 
 let unsubscribeNetif: (() => void) | undefined;
 let unsubscribeHealth: (() => void) | undefined;
@@ -145,10 +145,6 @@ let unsubscribeScan: (() => void) | undefined;
 
 export async function initUplinkSteering(): Promise<void> {
 	if (unsubscribeNetif !== undefined || !(await isRealDevice())) return;
-	publishUplinkSteeringAvailability({
-		available: false,
-		reason: "ruleset_reload_failed",
-	});
 	const reconcile = () => {
 		void coordinator.requestReconcile().catch((error: unknown) => {
 			logger.warn("uplink steering reconcile failed", { err: error });
