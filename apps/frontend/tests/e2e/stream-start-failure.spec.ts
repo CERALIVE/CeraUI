@@ -494,14 +494,27 @@ test('delayed keyboard entry still reaches recovery and can dismiss it', async (
 test('Spanish retry feedback names the Live tab verbatim', async ({ page }) => {
 	await page.addInitScript(() => localStorage.setItem('locale', JSON.stringify({ code: 'es' })));
 	const attemptId = 'es-retry-feedback';
+	// Each netif frame lists every link, and the mock republishes its enabled ones every few
+	// seconds, so each of its ticks is held to the one disabled link this test pushes.
+	const noLink = { eth0: { enabled: false } };
+	let held = false;
+	let heldTicks = 0;
 	const ws = await startWithReply(page, {
 		result: 'failed', success: false, attemptId,
 		failure: { attemptId, phase: 'connect', class: 'engine_unavailable', retriable: true },
+	}, undefined, undefined, (frame) => {
+		if (held && frame.netif) {
+			frame.netif = noLink;
+			heldTicks++;
+		}
 	});
-	ws.push({ netif: { eth0: { enabled: false } } });
+	held = true;
+	ws.push({ netif: noLink });
 	await expect(page.getByTestId('live-bar').getByRole('button', {
 		name: 'Iniciar transmisión', exact: true,
 	})).toBeDisabled();
+	// Retry only after one such tick has arrived, so the hold is what keeps Start blocked.
+	await expect.poll(() => heldTicks, { timeout: 12_000 }).toBeGreaterThan(0);
 	await page.getByRole('button', { name: 'Intentar de nuevo', exact: true }).press('Enter');
 	await expect(page.getByText('Esta acción ya no está disponible. Revisa el estado de la transmisión en Live.', { exact: true })).toBeVisible();
 });
