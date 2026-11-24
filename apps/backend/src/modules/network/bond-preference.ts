@@ -6,6 +6,7 @@ import {
 import { resolveBondPhysicalIdentity } from "../streaming/bond-entry.ts";
 import {
 	type BondPreferences,
+	type BondPreferenceView,
 	exactOptOut,
 	hasStoredOptOut,
 	presentOrUndefined,
@@ -27,7 +28,7 @@ export function bondPhysicalId(ifname: string): string | undefined {
 export function previewBondOptOut(
 	target: string,
 	identity: PhysicalBondKeys | undefined,
-	view: "effective" | "legacy" = "effective",
+	view: BondPreferenceView = "effective",
 ) {
 	const stored = readPreferences(view);
 	const present = listPresentPhysicalDevices();
@@ -35,7 +36,7 @@ export function previewBondOptOut(
 		identity === undefined || identity.anchor === "ifname"
 			? stored
 			: view === "effective"
-				? transition(stored, identity, true, present)
+				? transition(stored, identity, { optOut: true, present, view })
 				: {
 						...stored,
 						out: exactOptOut(stored, identity, { optOut: true, present }),
@@ -52,7 +53,7 @@ export function previewBondOptOut(
 }
 
 function readPreferences(
-	view: "effective" | "legacy" = "effective",
+	view: BondPreferenceView = "effective",
 ): BondPreferences {
 	const config = getConfig();
 	return {
@@ -65,7 +66,7 @@ function readPreferences(
 
 export function isBondOptedOut(
 	ifname: string,
-	view: "effective" | "legacy" = "effective",
+	view: BondPreferenceView = "effective",
 ): boolean {
 	if (sessionOptOut.has(ifname)) return true;
 	const identity = resolveBondPhysicalIdentity(ifname);
@@ -80,7 +81,7 @@ export function isBondOptedOut(
 export function setPersistentBondOptOut(
 	ifname: string,
 	optOut: boolean,
-	mode: "effective" | "legacy" = "effective",
+	view: BondPreferenceView = "effective",
 ): string | undefined {
 	if (optOut) sessionOptOut.add(ifname);
 	else sessionOptOut.delete(ifname);
@@ -90,7 +91,7 @@ export function setPersistentBondOptOut(
 	const stored = readPreferences();
 	const present = listPresentPhysicalDevices();
 	const config = getConfig();
-	const next = transition(stored, identity, optOut, present, mode);
+	const next = transition(stored, identity, { optOut, present, view });
 	config.bond_opt_out = presentOrUndefined(next.out);
 	config.bond_rollback_out = rollbackOptOut(next);
 	config.bond_group_out = presentOrUndefined(next.groupOut);

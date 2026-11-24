@@ -991,6 +991,8 @@ OFF at a cross-vendor aliased path. Simulated devices, including auto-detected
 emulation, use the legacy map for reads and writes. A simulated toggle also
 retires an opposing saved choice for that vendor. A simulated path OFF makes
 the legacy bit unscoped; stale ownership cannot mask it after a real boot.
+If a pending probe left a pair default, a later simulated ON overrides it at
+that vendor's port without clearing the default for an untouched sibling.
 
 The WebSocket config frames omit the new persistence fields. Shared-serial
 discovery updates memory before attempting to save only the history to disk.

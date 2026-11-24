@@ -8,6 +8,28 @@ type ExactOptOut = NonNullable<RuntimeConfig["bond_opt_out"]>;
 type PortOptIn = NonNullable<RuntimeConfig["bond_opt_in"]>;
 type PortOptOut = NonNullable<RuntimeConfig["bond_port_out"]>;
 
+export type BondPreferenceView = "effective" | "legacy";
+
+const fieldWrites = {
+	effective: {
+		groupOut: "retain-deleted-default",
+		optIn: "record-port-choice",
+		portOut: "record-scoped-off",
+	},
+	legacy: {
+		groupOut: "keep-existing-default",
+		optIn: "override-existing-default",
+		portOut: "keep-unscoped-off",
+	},
+} as const satisfies Record<
+	BondPreferenceView,
+	{
+		readonly groupOut: "retain-deleted-default" | "keep-existing-default";
+		readonly optIn: "record-port-choice" | "override-existing-default";
+		readonly portOut: "record-scoped-off" | "keep-unscoped-off";
+	}
+>;
+
 export type BondPreferences = {
 	readonly out: ExactOptOut | undefined;
 	readonly groupOut: ExactOptOut | undefined;
@@ -108,17 +130,21 @@ export const presentOrUndefined = <T extends object>(value: T | undefined) =>
 export function transition(
 	stored: BondPreferences,
 	target: PhysicalBondKeys,
-	optOut: boolean,
-	present: readonly PhysicalBondKeys[],
-	mode: "effective" | "legacy" = "effective",
+	change: {
+		readonly optOut: boolean;
+		readonly present: readonly PhysicalBondKeys[];
+		readonly view: BondPreferenceView;
+	},
 ): BondPreferences {
+	const writes = fieldWrites[change.view];
+	const { optOut, present } = change;
 	const legacy = target.legacyLinkId;
-	const out = exactOptOut(stored, target, { optOut, present });
+	const out = exactOptOut(stored, target, change);
 	const groupOut = { ...stored.groupOut };
 	const optIn = { ...stored.optIn };
 	const portOut = { ...stored.portOut };
 	if (
-		mode === "effective" &&
+		writes.groupOut === "retain-deleted-default" &&
 		legacy !== undefined &&
 		stored.out?.[legacy] === true
 	) {
@@ -140,15 +166,16 @@ export function transition(
 	}
 	const port = portOf(target);
 	const vid = target.vid ?? "";
-	if (mode === "effective" && !optOut && target.anchor !== "id-path")
-		delete groupOut[target.linkId];
+	if (!optOut && target.anchor !== "id-path") delete groupOut[target.linkId];
+	const unscopedOff =
+		writes.portOut === "keep-unscoped-off" && optOut && port === target.linkId;
 	if (port !== undefined) {
 		const on = { ...optIn[port] };
 		const off = { ...portOut[port] };
 		const previous = off[vid];
 		if (optOut) {
 			delete on[vid];
-			if (mode === "effective" && vid) {
+			if (writes.portOut === "record-scoped-off" && vid) {
 				off[vid] = {
 					// A new OFF cannot establish who owned a pre-upgrade bit.
 					...(out[port] === true &&
@@ -161,14 +188,23 @@ export function transition(
 			}
 		} else {
 			delete off[vid];
-			if (mode === "effective") {
-				if (target.anchor === "id-path") on[vid] = {};
-				else if (previous?.exact === true) on[vid] = { pin: true };
-			}
+			// Retire the pair default for the toggled twin only. An absent,
+			// untouched sibling may still need it when it comes back.
+			const overridesPair = legacy !== undefined && groupOut[legacy] === true;
+			if (
+				target.anchor === "id-path" &&
+				(writes.optIn === "record-port-choice" || overridesPair)
+			)
+				on[vid] = {};
+			else if (
+				writes.optIn === "record-port-choice" &&
+				previous?.exact === true
+			)
+				on[vid] = { pin: true };
 		}
 		// A legacy path OFF is unscoped even if a real boot previously owned
 		// that bit. Neither a pinned ON nor an exact OFF may mask the new bit.
-		if (mode === "legacy" && optOut && port === target.linkId) {
+		if (unscopedOff) {
 			for (const [vendor, record] of Object.entries(on)) {
 				if (record.pin) on[vendor] = {};
 			}
@@ -179,8 +215,7 @@ export function transition(
 		else delete portOut[port];
 	}
 	for (const [path, records] of Object.entries(portOut)) {
-		const legacyOff = mode === "legacy" && optOut && path === target.linkId;
-		if (out[path] === true && !legacyOff) continue;
+		if (out[path] === true && !(unscopedOff && path === port)) continue;
 		for (const [vendor, record] of Object.entries(records)) {
 			if (record.exact === true) {
 				const { exact: _exact, ...choice } = record;

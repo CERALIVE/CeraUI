@@ -144,8 +144,6 @@ export function saveUsbSharedSerialHistory(hashes: string[]): void {
 	const raw = parseRuntimeConfigAuthority(
 		stored === null ? {} : parseAuthorityJson(stored),
 	);
-	if (raw === null || typeof raw !== "object" || Array.isArray(raw))
-		throw new RuntimeConfigAuthorityError();
 	// Discovery owns only its history. Never write the loaded preference snapshot.
 	writeFileAtomicSync(
 		configFile,
