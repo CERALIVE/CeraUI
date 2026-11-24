@@ -12,8 +12,11 @@ import {
 	rollbackOptOut,
 	transition,
 } from "./bond-preference-state.ts";
+import { onNetdevRetired } from "./netdev-lifetime.ts";
 
 const sessionOptOut = new Set<string>();
+
+onNetdevRetired((ifname) => sessionOptOut.delete(ifname));
 
 export function bondPhysicalId(ifname: string): string | undefined {
 	const identity = resolveBondPhysicalIdentity(ifname);

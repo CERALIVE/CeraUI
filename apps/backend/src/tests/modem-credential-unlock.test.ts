@@ -325,6 +325,9 @@ function verifyDeps(
 		loginPort: rec.port,
 		transport: rec.transport,
 		now: () => 1_700_000_000_000,
+		// The kernel lifetime fence has its own owner suite
+		// (usb-net-router-removal); this target models one unchanged netdev.
+		lifetimeFence: () => () => true,
 	};
 }
 

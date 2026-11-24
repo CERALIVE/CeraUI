@@ -64,6 +64,16 @@ import {
 	usableUsbSerial,
 } from "../modems/physical-identity.ts";
 import {
+	hasNetdevWitness,
+	type NetdevWitness,
+	netdevChanged,
+	netdevWitness,
+	noteNetdevWitness,
+	onNetdevRetired,
+	readNetdevWitness,
+	retireNetdev,
+} from "./netdev-lifetime.ts";
+import {
 	classifyUsbNetDevice,
 	modelLabel,
 	type UsbInterfaceDescriptor,
@@ -471,7 +481,7 @@ export type UsbNetMarkerSets = {
 export async function scanUsbNetMarkers(
 	ifnames: readonly string[],
 	deps: RouterCellularScanDeps = defaultRouterCellularScanDeps,
-	readEpochs?: Map<string, number>,
+	reads?: Map<string, { epoch: number; witness: NetdevWitness }>,
 ): Promise<UsbNetMarkerSets> {
 	const found: Array<{ ifname: string; device: UsbNetDevice }> = [];
 	const modemNet = new Map<string, UsbModemNetMarker>();
@@ -479,7 +489,10 @@ export async function scanUsbNetMarkers(
 
 	for (const ifname of ifnames) {
 		try {
-			readEpochs?.set(ifname, netdevRemovalEpochs.get(ifname) ?? 0);
+			reads?.set(ifname, {
+				epoch: netdevRemovalEpochs.get(ifname) ?? 0,
+				witness: readNetdevWitness(ifname),
+			});
 			const device = await readUsbNetDevice(ifname, deps);
 			if (device === undefined) continue;
 			const verdict = classifyUsbNetDevice(device);
@@ -524,6 +537,15 @@ export async function scanUsbNetMarkers(
 			...(serial !== undefined ? { serial } : {}),
 		});
 	}
+	const duplicateSerialKeys = reads
+		? new Set<string>()
+		: resolveSharedSerials(physical);
+	return { routerCellular, modemNet, physical, duplicateSerialKeys };
+}
+
+function resolveSharedSerials(
+	physical: ReadonlyMap<string, UsbPhysicalDescriptor>,
+): Set<string> {
 	const parentsBySerial = new Map<string, Set<string>>();
 	for (const descriptor of physical.values()) {
 		const serial = usableUsbSerial(descriptor.serial);
@@ -544,7 +566,7 @@ export async function scanUsbNetMarkers(
 	for (const descriptor of physical.values()) {
 		rejectSharedSerial(descriptor, duplicateSerialKeys);
 	}
-	return { routerCellular, modemNet, physical, duplicateSerialKeys };
+	return duplicateSerialKeys;
 }
 
 function serialDigest(key: string): string {
@@ -655,6 +677,8 @@ export function invalidateUsbNetReading(ifname: string, epoch: number): void {
 	setPresentPhysicalDevices(presentDeviceRecords());
 	for (const listener of readingInvalidatedListeners) listener();
 }
+
+onNetdevRetired(invalidateUsbNetReading);
 
 /** Fired once per removal that actually discarded committed USB state. */
 export function onUsbNetReadingInvalidated(listener: () => void): () => void {
@@ -774,10 +798,11 @@ async function runUsbNetScan(
 	ifnames: readonly string[],
 	deps: RouterCellularScanDeps,
 	generation: number,
+	resample: boolean,
 ): Promise<boolean> {
 	try {
-		const readEpochs = new Map<string, number>();
-		const scanned = await scanUsbNetMarkers(ifnames, deps, readEpochs);
+		const reads = new Map<string, { epoch: number; witness: NetdevWitness }>();
+		const scanned = await scanUsbNetMarkers(ifnames, deps, reads);
 		if (generation !== usbNetScanGeneration) {
 			// A newer sweep (or a reset) started while this one was reading, so
 			// this result describes a world that has already been superseded.
@@ -789,31 +814,44 @@ async function runUsbNetScan(
 			});
 			return false;
 		}
-		const stale = new Set(
-			ifnames.filter(
-				(name) => readEpochs.get(name) !== (netdevRemovalEpochs.get(name) ?? 0),
-			),
-		);
+		const stale = new Set<string>();
+		for (const name of ifnames) {
+			const read = reads.get(name);
+			if (!read || read.epoch !== (netdevRemovalEpochs.get(name) ?? 0)) {
+				stale.add(name);
+				continue;
+			}
+			const current = readNetdevWitness(name);
+			const previous = netdevWitness(name);
+			if (
+				netdevChanged(previous, current) ||
+				netdevChanged(read.witness, current)
+			) {
+				retireNetdev(name);
+				stale.add(name);
+			} else if (
+				netdevChanged(previous, read.witness) ||
+				hasNetdevWitness(read.witness) !== hasNetdevWitness(current)
+			) {
+				stale.add(name);
+			} else {
+				noteNetdevWitness(name, current);
+			}
+		}
 		for (const name of stale) {
 			scanned.routerCellular.delete(name);
 			scanned.modemNet.delete(name);
 			scanned.physical.delete(name);
 		}
+		const duplicates = resolveSharedSerials(scanned.physical);
 		// Taken here rather than before the read: only the newest generation can
 		// reach this line, so nothing else can have committed in between — and a
 		// `resetUsbNetMarkers()` mid-flight would have fenced us out above.
 		const before = snapshotKey(cachedSets());
 		const persisted = deps.sharedSerials?.load() ?? [];
-		const next = new Set([
-			...persisted,
-			...sharedSerialHashes,
-			...scanned.duplicateSerialKeys,
-		]);
+		const next = new Set([...persisted, ...sharedSerialHashes, ...duplicates]);
 		const newest = [...next].slice(-64);
-		if (
-			scanned.duplicateSerialKeys.size > 0 &&
-			newest.join(",") !== persisted.join(",")
-		) {
+		if (duplicates.size > 0 && newest.join(",") !== persisted.join(",")) {
 			deps.sharedSerials?.save(newest);
 		}
 		sharedSerialHashes = new Set(newest);
@@ -829,10 +867,10 @@ async function runUsbNetScan(
 		if (changed) {
 			for (const listener of scanCommittedListeners) listener();
 		}
-		if (stale.size > 0) {
+		if (stale.size > 0 && resample) {
 			queueMicrotask(() => {
 				if (generation === usbNetScanGeneration)
-					void refreshUsbNetMarkers(ifnames, deps);
+					void refreshUsbNetMarkers(ifnames, deps, { resample: false });
 			});
 		}
 		return changed;
@@ -861,7 +899,10 @@ async function runUsbNetScan(
 export function refreshUsbNetMarkers(
 	ifnames: readonly string[],
 	deps: RouterCellularScanDeps = defaultRouterCellularScanDeps,
-	options: { readonly joinInFlight?: boolean } = {},
+	options: {
+		readonly joinInFlight?: boolean;
+		readonly resample?: boolean;
+	} = {},
 ): Promise<boolean> {
 	const key = scanRequestKey(ifnames);
 	const pending = inFlightUsbNetScan;
@@ -875,7 +916,12 @@ export function refreshUsbNetMarkers(
 		return pending.result;
 	}
 	const generation = ++usbNetScanGeneration;
-	const result = runUsbNetScan(ifnames, deps, generation);
+	const result = runUsbNetScan(
+		ifnames,
+		deps,
+		generation,
+		options.resample ?? true,
+	);
 	inFlightUsbNetScan = { generation, key, deps, result };
 	return result;
 }

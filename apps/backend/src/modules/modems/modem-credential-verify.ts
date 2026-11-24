@@ -56,6 +56,7 @@ import {
 	openHilinkSession,
 	XML_HEADER,
 } from "../network/hilink-session.ts";
+import { netdevLifetimeFence } from "../network/netdev-lifetime.ts";
 import type { RouterAdminDialect } from "../network/router-cellular-admin.ts";
 import {
 	defaultRouterAdminProbeDeps,
@@ -265,6 +266,8 @@ export interface CredentialVerifyDeps {
 	loginPort: RouterLoginPort;
 	transport: CredentialTransport;
 	now: () => number;
+	/** Binds one attempt to the netdev lifetime its target named at issue. */
+	lifetimeFence: (ifname: string) => () => boolean;
 }
 
 export const defaultCredentialVerifyDeps: CredentialVerifyDeps = {
@@ -274,6 +277,7 @@ export const defaultCredentialVerifyDeps: CredentialVerifyDeps = {
 	loginPort: defaultRouterLoginPort,
 	transport: defaultCredentialTransport,
 	now: () => Date.now(),
+	lifetimeFence: netdevLifetimeFence,
 };
 
 export interface VerifyOutcome {
@@ -320,6 +324,18 @@ export async function verifyModemCredential(
 		return { success: false, error: "identity_unresolved", target };
 	}
 	const attempt = { cancelled: false };
+	const lifetime = deps.lifetimeFence(target.ifname);
+	const isCurrent = () => !attempt.cancelled && lifetime();
+	const transport: CredentialTransport = {
+		fetchViaInterface: (...args) =>
+			isCurrent()
+				? deps.transport.fetchViaInterface(...args)
+				: Promise.resolve([]),
+		postViaInterface: (...args) =>
+			isCurrent()
+				? deps.transport.postViaInterface(...args)
+				: Promise.resolve(""),
+	};
 	const pending =
 		pendingVerifications.get(target.device.identityKey) ?? new Set();
 	pending.add(attempt);
@@ -336,9 +352,11 @@ export async function verifyModemCredential(
 
 		let evidence: "open" | "locked" | undefined;
 		try {
-			evidence = await deps.loginPort.detectOpen(target, deps.transport);
+			if (!isCurrent())
+				return { success: false, error: "no_credential", target };
+			evidence = await deps.loginPort.detectOpen(target, transport);
 		} catch {
-			noteLockOpenEvidence(target.ifname, undefined);
+			if (isCurrent()) noteLockOpenEvidence(target.ifname, undefined);
 			return {
 				success: false,
 				error: "unreachable",
@@ -346,6 +364,7 @@ export async function verifyModemCredential(
 				target,
 			};
 		}
+		if (!isCurrent()) return { success: false, error: "no_credential", target };
 		noteLockOpenEvidence(target.ifname, evidence);
 		if (evidence === "open") {
 			return { success: false, error: "device_open", target };
@@ -360,10 +379,9 @@ export async function verifyModemCredential(
 		}
 
 		let detail: AuthAttemptDetail;
-		if (attempt.cancelled)
-			return { success: false, error: "no_credential", target };
+		if (!isCurrent()) return { success: false, error: "no_credential", target };
 		try {
-			detail = await deps.loginPort.attempt(target, credential, deps.transport);
+			detail = await deps.loginPort.attempt(target, credential, transport);
 		} catch {
 			return {
 				success: false,
@@ -372,8 +390,7 @@ export async function verifyModemCredential(
 				target,
 			};
 		}
-		if (attempt.cancelled)
-			return { success: false, error: "no_credential", target };
+		if (!isCurrent()) return { success: false, error: "no_credential", target };
 		const classification = classifyAuthAttempt(detail);
 		noteLockOutcome(target.device.identityKey, classification, now);
 		if (classification.state === "unlocked") {

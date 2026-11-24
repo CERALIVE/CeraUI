@@ -96,7 +96,14 @@ beforeEach(async () => {
 		verify.defaultRouterLoginPort,
 		"detectOpen",
 	).mockResolvedValue("locked");
+	// The kernel lifetime fence has its own owner suite (usb-net-router-removal);
+	// the captured target models one unchanged netdev.
+	const fence = spyOn(
+		verify.defaultCredentialVerifyDeps,
+		"lifetimeFence",
+	).mockReturnValue(() => true);
 	restores.push(
+		() => fence.mockRestore(),
 		() => resolver.mockRestore(),
 		() => depResolver.mockRestore(),
 		() => real.mockRestore(),

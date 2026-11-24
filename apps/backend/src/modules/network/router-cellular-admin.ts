@@ -121,6 +121,7 @@ import {
 	hilinkHeaders,
 	openHilinkSession,
 } from "./hilink-session.ts";
+import { netdevLifetime, onNetdevRetired } from "./netdev-lifetime.ts";
 import {
 	parseHilinkCapabilities,
 	type RouterAdminCapabilities,
@@ -724,6 +725,7 @@ export const defaultRouterAdminProbeDeps: RouterAdminProbeDeps = {
 };
 
 type DialectProbe = {
+	readonly isCurrent: () => boolean;
 	readonly ifname: string;
 	readonly adminUrl: string;
 	readonly deps: RouterAdminProbeDeps;
@@ -763,14 +765,16 @@ async function probeUfi(
 	let responses: readonly string[] | undefined;
 
 	for (let attempt = 0; attempt < AUTH_ATTEMPTS_PER_CYCLE; attempt += 1) {
+		if (!probe.isCurrent()) return undefined;
 		const session = await openUfiSession(probe);
-		if (session === undefined) return undefined;
+		if (session === undefined || !probe.isCurrent()) return undefined;
 		if (shell === undefined) {
 			[shell] = await probe.deps.fetchViaInterface(probe.ifname, [
 				`${probe.adminUrl}/`,
 			]);
 			if (shell === undefined || shell === "") return undefined;
 		}
+		if (!probe.isCurrent()) return undefined;
 		responses = await Promise.all(
 			UFI_READ_COMMANDS.map((cmdid) =>
 				probe.deps.postViaInterface(
@@ -842,12 +846,13 @@ async function probeHilink(
 	];
 	let bodies: readonly (string | undefined)[] | undefined;
 	for (let attempt = 0; attempt < AUTH_ATTEMPTS_PER_CYCLE; attempt += 1) {
+		if (!probe.isCurrent()) return undefined;
 		const session = await openHilinkSession(
 			probe.ifname,
 			probe.adminUrl,
 			probe.deps,
 		);
-		if (session === undefined) return undefined;
+		if (session === undefined || !probe.isCurrent()) return undefined;
 		bodies = await probe.deps.fetchViaInterface(
 			probe.ifname,
 			urls,
@@ -870,6 +875,7 @@ async function probeHilink(
 		netMode,
 		userState,
 	] = bodies ?? [];
+	if (!probe.isCurrent()) return undefined;
 	noteLockOpenEvidence(
 		probe.ifname,
 		userState === undefined ? undefined : classifyHilinkLoginState(userState),
@@ -928,6 +934,9 @@ export async function probeRouterCellularAdmin(
 	deps: RouterAdminProbeDeps = defaultRouterAdminProbeDeps,
 ): Promise<ReadonlyMap<string, RouterAdminReading>> {
 	const readings = new Map<string, RouterAdminReading>();
+	const lifetimes = new Map(
+		[...targets.keys()].map((name) => [name, netdevLifetime(name)]),
+	);
 	if (targets.size === 0) return readings;
 	if (!(await deps.isRealDevice())) return readings;
 
@@ -940,6 +949,8 @@ export async function probeRouterCellularAdmin(
 	}
 
 	for (const [ifname, vidPid] of targets) {
+		const isCurrent = () => lifetimes.get(ifname) === netdevLifetime(ifname);
+		if (!isCurrent()) continue;
 		const gateway = gateways.get(ifname);
 		if (gateway === undefined) continue;
 		const adminUrl = `http://${gateway}`;
@@ -948,26 +959,46 @@ export async function probeRouterCellularAdmin(
 			const reading =
 				dialect === undefined
 					? undefined
-					: await probeDialect({ ifname, adminUrl, deps }, dialect);
-			readings.set(ifname, reading ?? unreadableReading(adminUrl, dialect));
+					: await probeDialect({ ifname, adminUrl, deps, isCurrent }, dialect);
+			if (isCurrent())
+				readings.set(ifname, reading ?? unreadableReading(adminUrl, dialect));
 		} catch (error) {
 			logger.debug("router-cellular admin probe failed", { ifname, error });
-			readings.set(ifname, unreadableReading(adminUrl, dialect));
+			if (isCurrent())
+				readings.set(ifname, unreadableReading(adminUrl, dialect));
 		}
 	}
 	return readings;
 }
 
 let cachedReadings: ReadonlyMap<string, RouterAdminReading> = new Map();
+let adminGeneration = 0;
+
+onNetdevRetired((ifname) => {
+	const retained = new Map(cachedReadings);
+	retained.delete(ifname);
+	cachedReadings = retained;
+	noteLockOpenEvidence(ifname, undefined);
+});
 
 export async function refreshRouterCellularAdmin(
 	targets: ReadonlyMap<string, string>,
 	deps: RouterAdminProbeDeps = defaultRouterAdminProbeDeps,
 ): Promise<boolean> {
+	const generation = ++adminGeneration;
+	const lifetimes = new Map(
+		[...targets.keys()].map((name) => [name, netdevLifetime(name)]),
+	);
+	const fresh = await probeRouterCellularAdmin(targets, deps);
+	if (generation !== adminGeneration) return false;
 	const before = signatureOf(cachedReadings);
 	cachedReadings = carryForwardStaleSignals(
 		cachedReadings,
-		await probeRouterCellularAdmin(targets, deps),
+		new Map(
+			[...fresh].filter(
+				([name]) => lifetimes.get(name) === netdevLifetime(name),
+			),
+		),
 	);
 	return signatureOf(cachedReadings) !== before;
 }
@@ -988,5 +1019,6 @@ export function getRouterCellularAdmin(
 }
 
 export function resetRouterCellularAdmin(): void {
+	adminGeneration++;
 	cachedReadings = new Map();
 }
