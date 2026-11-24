@@ -484,7 +484,7 @@ needs only the 3:1 non-text ratio. Other Badge call sites are unchanged. The
 remaining-days phrase is the only foreground text in the detail line. The row
 is a labelled `role="group"`, wraps instead of overflowing in every locale,
 and is absent rather than empty for an older backend. Acceptance: 390/1280 px,
-light and dark, plus Arabic RTL, in `visual/update-system.visual.spec.ts`; a
+light and dark, plus Arabic RTL, in `apps/frontend/tests/e2e/visual/update-system.visual.spec.ts`; a
 real device certificate is not part of that evidence.
 
 ## 15. Kernel update section
@@ -506,6 +506,6 @@ The primary action installs the offered kernel; Check is secondary. No kernel
 capability means no section. Unknown state remains unknown, active/staged work
 disables conflicting actions, and rollback shows its reason beside the versions.
 Acceptance is the 1280x800/390x844, light/dark, English/es-419 state matrix in
-`visual/kernel-updates.visual.spec.ts`, with actions and the entire section
+`apps/frontend/tests/e2e/visual/kernel-updates.visual.spec.ts`, with actions and the entire section
 required to be in frame for staged and rolled-back captures. Device producer
 integration and hardware rollback are separate qualification.
