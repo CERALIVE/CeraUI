@@ -521,8 +521,18 @@ test.describe("audio mixer — caps-full", () => {
 		// While the answer is held, the strip shows the device's saved echo and nothing is refused.
 		await expect(mute).toHaveAttribute("aria-pressed", "true");
 		await expect(card.getByTestId(`audio-strip-error-${SECOND}`)).toBeEmpty();
+		// The strip drops a successful answer its config echo overtook, so the page's own
+		// socket is the witness: it has not received this call's answer.
+		expect(await wire.pageHasReply(held.id)).toBe(false);
 
 		reply.release();
+		const delivered = await test.step(
+			"the page's socket receives the released answer",
+			() => wire.pageReply(held.id),
+			{ timeout: 10_000 },
+		);
+		expect(delivered.id).toBe(held.id);
+		expect(delivered.result).toEqual(held.result);
 		// Settled: the next press starts from the muted state and its answer arrives unheld.
 		await mute.click();
 		await expect(mute).toHaveAttribute("aria-pressed", "false");
@@ -558,12 +568,25 @@ test.describe("audio mixer — caps-full", () => {
 		await expect(error).toContainText("The device refused this change, so nothing changed.");
 		await expect(error).not.toContainText("audio-mix-inactive");
 		await expect(mute).toHaveAttribute("aria-pressed", "false");
-		expect(wire.calls("streaming.setAudioMix").at(-1)?.result).toMatchObject({
-			success: false,
-			error: "cerastream.params.invalid",
-			engine_error: {
-				code: -32602,
-				message: "invalid params: audio-mix-inactive: invalid audio mix configuration",
+		const calls = wire.calls("streaming.setAudioMix");
+		expect(calls.map((call) => call.input)).toEqual([{ id: SECOND, mute: true }]);
+		const id = calls[0]?.id;
+		// The engine's refusal is the very frame the page's own socket received for that call.
+		const received = await test.step(
+			"the page's socket receives the refusal for that call",
+			() => wire.pageReply(id),
+			{ timeout: 10_000 },
+		);
+		expect(received).toEqual({
+			id,
+			result: {
+				success: false,
+				error: "cerastream.params.invalid",
+				engine_error: {
+					code: -32602,
+					message: "invalid params: audio-mix-inactive: invalid audio mix configuration",
+					data: { code: "cerastream.params.invalid" },
+				},
 			},
 		});
 		const saved = await backendRpc.call<{ audio_inputs?: Array<{ id: string; mute: boolean }> }>([

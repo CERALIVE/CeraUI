@@ -231,7 +231,9 @@ refusals, now `apps/frontend/tests/e2e/helpers/mixer-wire.ts`: `holdAudioMix()`
 lets the call reach the device and holds its answer (await `held`, then
 `release()`), and `refuseAudioMixWithEngineToken(token)` answers as the backend
 does when the engine refuses with one of `ENGINE_AUDIO_TOKENS`
-(`mocks/engine-audio-tokens.ts`). It reads the last start request over the
+(`mocks/engine-audio-tokens.ts`). `pageHasReply(id)` and `pageReply(id)` read,
+by RPC id, the answers the page's own socket received, so a test proves a held
+answer had not arrived and then did. It reads the last start request over the
 worker backend's private child channel (`workerBackend.mockEngine()`
 `.lastStartParams`, `tests/e2e/fixtures/backend-entry.ts`) and unplugs through
 the existing `streaming.setMockDeviceAttached`.

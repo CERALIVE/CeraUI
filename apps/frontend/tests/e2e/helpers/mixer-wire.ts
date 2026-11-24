@@ -8,17 +8,19 @@ import { type EngineAudioToken, engineAudioMixRefusal } from "../../../../backen
  * and its mock engine. The proxy records the RPC frames, injects the bridged
  * `audio-level` frames the mock does not publish on the main socket, forces a
  * backend or engine refusal where a scenario needs it, and holds the device's
- * answer to a live change until the test releases it.
+ * answer to a live change until the test releases it. A page script reports,
+ * by RPC id, which answers the page's own socket has received.
  */
 
 export interface RpcCall {
+	id: unknown;
 	path: string;
 	input: Record<string, unknown>;
 	result?: Record<string, unknown>;
 }
 
 export interface HeldReply {
-	/** Resolves once the device has answered the call; the page has not seen that answer yet. */
+	/** Resolves with the call once the device has answered it; the page has not received that answer yet. */
 	readonly held: Promise<RpcCall>;
 	/** Deliver the held answer to the page. */
 	release(): void;
@@ -35,7 +37,18 @@ export interface MixerWire {
 	holdAudioMix(): HeldReply;
 	/** Answer `streaming.setAudioMix` as the backend does when the engine refuses with this token; null stops. */
 	refuseAudioMixWithEngineToken(token: EngineAudioToken | null): void;
+	/** Whether the page's own socket has received the answer to the call with this RPC id. */
+	pageHasReply(id: unknown): Promise<boolean>;
+	/** The answer to the call with this RPC id, once the page's own socket has received it. */
+	pageReply(id: unknown): Promise<Record<string, unknown>>;
 }
+
+interface PageReplies {
+	has(id: unknown): boolean;
+	next(id: unknown): Promise<Record<string, unknown>>;
+}
+
+type WithPageReplies = typeof globalThis & { __mixerWireReplies: PageReplies };
 
 interface Hold {
 	released: boolean;
@@ -75,7 +88,7 @@ export async function installMixerWire(
 					input?: Record<string, unknown>;
 				};
 				if (Array.isArray(frame.path) && frame.id !== undefined) {
-					const call: RpcCall = { path: frame.path.join("."), input: frame.input ?? {} };
+					const call: RpcCall = { id: frame.id, path: frame.path.join("."), input: frame.input ?? {} };
 					all.push(call);
 					byId.set(frame.id, call);
 					const mixSave =
@@ -146,6 +159,39 @@ export async function installMixerWire(
 		});
 	});
 
+	// Registered after the route, so it wraps Playwright's page-side socket mock and
+	// records each answer as the page's own socket dispatches it.
+	await page.addInitScript(() => {
+		const replies = new Map<unknown, Record<string, unknown>>();
+		const waiting = new Map<unknown, (frame: Record<string, unknown>) => void>();
+		const Base = globalThis.WebSocket;
+		globalThis.WebSocket = class WebSocket extends Base {
+			constructor(url: string | URL, protocols?: string | string[]) {
+				super(url, protocols);
+				this.addEventListener("message", (event) => {
+					if (typeof event.data !== "string") return;
+					let frame: unknown;
+					try {
+						frame = JSON.parse(event.data);
+					} catch {
+						return;
+					}
+					if (typeof frame !== "object" || frame === null || !("id" in frame)) return;
+					const answer = frame as Record<string, unknown>;
+					replies.set(answer.id, answer);
+					waiting.get(answer.id)?.(answer);
+				});
+			}
+		};
+		(globalThis as WithPageReplies).__mixerWireReplies = {
+			has: (id) => replies.has(id),
+			next: (id) => {
+				const answer = replies.get(id);
+				return answer ? Promise.resolve(answer) : new Promise((resolve) => waiting.set(id, resolve));
+			},
+		};
+	});
+
 	return {
 		calls: (path) => all.filter((call) => call.path === path),
 		inject: (frame) => route?.send(JSON.stringify(frame)),
@@ -174,5 +220,7 @@ export async function installMixerWire(
 		refuseAudioMixWithEngineToken: (token) => {
 			engineRefusal = token;
 		},
+		pageHasReply: (id) => page.evaluate((replyId) => (globalThis as WithPageReplies).__mixerWireReplies.has(replyId), id),
+		pageReply: (id) => page.evaluate((replyId) => (globalThis as WithPageReplies).__mixerWireReplies.next(replyId), id),
 	};
 }
