@@ -34,6 +34,7 @@ type PeerConnection = {
 	readonly end: () => void;
 	readonly closed: Promise<void>;
 	readonly noteClosed: () => void;
+	readonly reportIdle: () => void;
 };
 
 /** Real SDK/UDS, backend lifecycle, procedure, bridge, admission and file writer.
@@ -48,6 +49,7 @@ export async function captureEngineLifecycle(
 	const clients: Awaited<ReturnType<typeof connect>>[] = [];
 	const connections = new Set<PeerConnection>();
 	const failures: unknown[] = [];
+	let latestPeer: PeerConnection | undefined;
 	const makeEngine = (features: readonly string[] | undefined): Engine => ({
 		features,
 		wire: [],
@@ -117,7 +119,22 @@ export async function captureEngineLifecycle(
 					end: () => socket.end(),
 					closed: closed.promise,
 					noteClosed: () => closed.resolve(),
+					reportIdle: () => {
+						socket.write(
+							`${JSON.stringify({
+								jsonrpc: "2.0",
+								method: "event",
+								params: {
+									type: "status",
+									seq: 1,
+									state: "idle",
+									streaming: false,
+								},
+							})}\n`,
+						);
+					},
 				};
+				latestPeer = socket.data;
 				connections.add(socket.data);
 			},
 			data(socket, bytes) {
@@ -159,7 +176,17 @@ export async function captureEngineLifecycle(
 	};
 	let retired = Promise.resolve();
 	const backend = new CerastreamBackend({
-		connect: dial,
+		connect: async (options) => {
+			const client = await dial(options);
+			const peer = latestPeer;
+			const subscribe = client.subscribeEvents.bind(client);
+			client.subscribeEvents = async (params, handler) => {
+				const subscription = await subscribe(params, handler);
+				if (params.topics?.includes("status")) peer?.reportIdle();
+				return subscription;
+			};
+			return client;
+		},
 		getConfig,
 		getActiveInput: () => getConfig().selected_video_input,
 		bridge: {
@@ -170,7 +197,7 @@ export async function captureEngineLifecycle(
 			broadcastBuffering: () => undefined,
 		},
 		onSessionConnectionLost: () => {
-			retired = session.stop("engine_loss").then(() => undefined);
+			retired = session.retireLostSession();
 		},
 	});
 	let attempt = 0;
@@ -239,6 +266,7 @@ export async function captureEngineLifecycle(
 			await Promise.all(previous.map((connection) => connection.closed));
 			expect(await backend.listDevicesIfActive()).toBeNull();
 			await retired;
+			expect(await session.reconcile()).toBe("idle");
 			expect(session.snapshot().state).toBe("idle");
 		},
 		holdNextChange: () => {

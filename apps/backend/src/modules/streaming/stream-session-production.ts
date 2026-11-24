@@ -32,7 +32,10 @@ import {
 	reportStartTerminalFailure,
 } from "./stream-start-retry-reporting.ts";
 import { getIsStreaming, updateStatus } from "./streaming.ts";
-import { stopGeneration } from "./streamloop/session.ts";
+import {
+	retireGenerationResources,
+	stopGeneration,
+} from "./streamloop/session.ts";
 
 function recordEvent(publish: () => void): void {
 	try {
@@ -50,6 +53,7 @@ export const streamSessionProductionDeps: StreamSessionOrchestratorDeps = {
 	setStreamingStatus: updateStatus,
 	getStreamingStatus: getIsStreaming,
 	stopRuntime: stopGeneration,
+	retireRuntime: retireGenerationResources,
 	queryRuntime: queryEngineRuntimeStreaming,
 	seedLifecycleState: (state) => {
 		streamStartedAt = undefined;

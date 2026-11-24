@@ -78,6 +78,9 @@ function makeFakeClient(): FakeClient {
 		if (dead) return Promise.reject(DEAD_CONNECTION());
 		return Promise.resolve(result);
 	};
+	const unused = async (): Promise<never> => {
+		throw new Error("Unexpected RPC in connection-loss fixture");
+	};
 
 	const client: CerastreamClient = {
 		hello: {
@@ -90,6 +93,10 @@ function makeFakeClient(): FakeClient {
 		reloadConfig: async (params) => guard("reload-config", { applied: params }),
 		setBitrate: async (params) =>
 			guard("set-bitrate", { applied: { max_bitrate: params.max_bitrate } }),
+		requestKeyframe: unused,
+		setAudioMix: unused,
+		setEdidProfile: unused,
+		listSwitchTargets: unused,
 		switchInput: async (params) =>
 			guard<SwitchInputResult>("switch-input", {
 				active_input: params.input_id,
@@ -264,9 +271,7 @@ describe("engine restart mid-session — the session control connection is the s
 
 		// The operator's recovery path: stop on an independent connection, then
 		// start on another. Neither may reuse the retired session client.
-		await new Promise<void>((resolve) => {
-			h.backend.stop(resolve);
-		});
+		await h.backend.confirmStop();
 		await h.backend.settle();
 
 		await h.backend.start(STREAM_CONFIG, RUN_OPTS);
@@ -312,7 +317,8 @@ describe("engine restart mid-session — the session control connection is the s
 	});
 
 	test("the retired session leaves the orchestrator able to admit a new start", async () => {
-		const h = makeHarness();
+		const deadline = manualReconciliationDeadline();
+		const h = makeHarness(deadline.scheduleTimeout);
 		let streaming = false;
 		const orchestrator = createStreamSessionOrchestrator({
 			createAttemptId: () => "att_reconnect",
@@ -320,12 +326,8 @@ describe("engine restart mid-session — the session control connection is the s
 				streaming = next;
 			},
 			getStreamingStatus: () => streaming,
-			stopRuntime: async () => {
-				await new Promise<void>((resolve) => {
-					h.backend.stop(resolve);
-				});
-			},
 			queryRuntime: () => h.backend.reconcileRuntimeState(),
+			stopRuntime: () => h.backend.confirmStop(),
 		});
 
 		const first = await orchestrator.start({
@@ -342,9 +344,13 @@ describe("engine restart mid-session — the session control connection is the s
 		await expect(h.backend.listDevicesIfActive()).resolves.toBeNull();
 		expect(h.lostSites).toHaveLength(1);
 
-		// The production hook routes into exactly this stop; drive it here so the
-		// assertion is on the orchestrator's own recovery, not on the wiring.
-		await orchestrator.stop("engine_loss");
+		await orchestrator.retireLostSession();
+		expect(orchestrator.streamLiveness()).toBe("unknown");
+		expect(await deadline.expireDuring(() => orchestrator.reconcile())).toBe(
+			"reconciling",
+		);
+		expect(streaming).toBe(true);
+		expect(await orchestrator.stop("operator")).toEqual({ result: "stopped" });
 		expect(streaming).toBe(false);
 		expect(orchestrator.snapshot().state).toBe("idle");
 
@@ -358,6 +364,63 @@ describe("engine restart mid-session — the session control connection is the s
 		expect(second.result).toBe("started");
 	});
 });
+
+test.each(["operator Stop", "runtime observation"] as const)(
+	"%s waits for local control-loss retirement",
+	async (contender) => {
+		const cleanup = Promise.withResolvers<void>();
+		const dispatched: string[] = [];
+		let streaming = false;
+		const retirement = { retireRuntime: () => cleanup.promise };
+		const session = createStreamSessionOrchestrator({
+			createAttemptId: () => "att_retirement_overlap",
+			setStreamingStatus: (value) => {
+				streaming = value;
+			},
+			getStreamingStatus: () => streaming,
+			...retirement,
+			stopRuntime: async () => {
+				dispatched.push("stop");
+			},
+			queryRuntime: async () => {
+				dispatched.push("read");
+				return "idle";
+			},
+		});
+		expect(
+			(await session.start({ origin: "ui", launch: async () => {} })).result,
+		).toBe("started");
+		dispatched.length = 0;
+
+		// Pinned main drives loss through the old automatic Stop.
+		const retiring =
+			"retireLostSession" in session &&
+			typeof session.retireLostSession === "function"
+				? session.retireLostSession()
+				: session.stop("engine_loss");
+		let stopping: ReturnType<typeof session.stop> | undefined;
+		try {
+			if (contender === "operator Stop") stopping = session.stop("operator");
+			else {
+				expect(await session.reconcile()).toBe("reconciling");
+				expect(session.streamLiveness()).toBe("unknown");
+			}
+			expect(dispatched).toEqual([]);
+		} finally {
+			cleanup.resolve();
+			await retiring;
+			await stopping;
+		}
+
+		if (stopping !== undefined)
+			expect(await stopping).toEqual({ result: "stopped" });
+		else expect(await session.reconcile()).toBe("idle");
+		expect(dispatched).toEqual([
+			contender === "operator Stop" ? "stop" : "read",
+		]);
+		expect(session.streamLiveness()).toBe("idle");
+	},
+);
 
 describe("what is NOT proof that the connection died", () => {
 	test("an engine RPC error leaves the session and its client intact", async () => {

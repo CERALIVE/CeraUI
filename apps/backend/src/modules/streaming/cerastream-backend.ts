@@ -45,11 +45,10 @@
 // That is the OPPOSITE of the rule the raw `active_encode` bridge follows
 // (`active-passthrough.ts`): there the socket is a READER, so losing it says
 // nothing about the session and its caches must age out instead of being wiped.
-// Here the socket is the ONLY handle CeraUI has on the engine-side pipeline, and
-// cerastream is systemd-owned — a dropped control connection means the process we
-// were driving went away, and a restarted engine has no memory of the session.
-// So a proven-dead control connection IS a session boundary and must retire the
-// session. Confirmed live during Wave H: cerastream restarted mid-session, three
+// Here the socket is the only handle CeraUI has on the engine-side pipeline.
+// Losing it retires local ownership, not the remote stream: transport loss alone
+// proves neither process death nor engine Idle. Confirmed live during Wave H:
+// cerastream restarted mid-session, three
 // `switchInput` calls rejected with `control connection is not open`, and nothing
 // ever noticed — `is_streaming` stayed true, `reconcileRuntimeState()` kept
 // re-affirming "streaming" from stale telemetry (it trusts `this.client !==
@@ -59,8 +58,7 @@
 // `noteConnectionLoss()` is the one seam that acts on it: it drops the dead
 // client + subscription + telemetry and hands off to `onSessionConnectionLost`,
 // whose production wiring raises the existing `engine-crashed` indicator and
-// retires the session through the orchestrator — so the device lands in a real
-// `idle` and the NEXT `streaming.start` dials a fresh connection and succeeds.
+// retires local session resources. Only fresh runtime evidence can settle state.
 // It is proven ONLY by a `CerastreamConnectionError` from the CURRENT session's
 // client (never a guess, never an engine RPC error, never a timeout).
 
@@ -574,23 +572,27 @@ function defaultOnConfigChangePhase(event: {
 		});
 }
 
-function defaultOnSessionConnectionLost(site: string): void {
+function defaultOnSessionConnectionLost(
+	site: string,
+	current: () => boolean,
+): void {
 	void (async () => {
 		try {
-			const [{ stopStreamSession }, { reportEngineState }, { getIsStreaming }] =
-				await Promise.all([
-					import("./stream-session-orchestrator.ts"),
-					import("./lifecycle-indicators.ts"),
-					import("./streaming.ts"),
-				]);
+			const [
+				{ retireLostStreamSession },
+				{ reportEngineState },
+				{ getIsStreaming },
+			] = await Promise.all([
+				import("./stream-session-orchestrator.ts"),
+				import("./lifecycle-indicators.ts"),
+				import("./streaming.ts"),
+			]);
+			if (!current()) return;
 			reportEngineState({ isStreaming: getIsStreaming(), reachable: false });
-			// `engine_loss` is what keeps this path distinguishable from an operator
-			// Stop, which reaches the very same `stopStreamSession`. The cause is
-			// the ONLY thing that tells the armed-stream marker to survive.
-			const stopped = await stopStreamSession("engine_loss");
+			await retireLostStreamSession();
 			defaultLogger.warn(
 				"cerastream: engine session retired after a control-connection loss",
-				{ site, stop: stopped.result },
+				{ site },
 			);
 			// The engine-loss retirement IS the reconnect event for a SIGKILLed
 			// engine: the reconnect loop settled at boot and never re-arms, so
@@ -598,7 +600,7 @@ function defaultOnSessionConnectionLost(site: string): void {
 			// for an authoritative runtime state and is self-serialising, so a
 			// second loss cannot start a second one.
 			const { runStreamRestoration } = await import("./stream-restoration.ts");
-			void runStreamRestoration();
+			if (current()) void runStreamRestoration();
 		} catch (err) {
 			defaultLogger.error(
 				"cerastream: could not retire the session after a control-connection loss",
@@ -608,7 +610,9 @@ function defaultOnSessionConnectionLost(site: string): void {
 	})();
 }
 
-function defaultCerastreamBackendDeps(): CerastreamBackendDeps {
+function defaultCerastreamBackendDeps(
+	onSessionConnectionLost: CerastreamBackendDeps["onSessionConnectionLost"],
+): CerastreamBackendDeps {
 	return {
 		connect,
 		connectOptions: setup.cerastream_socket
@@ -624,7 +628,7 @@ function defaultCerastreamBackendDeps(): CerastreamBackendDeps {
 		isEmbeddedAudioActive: isEmbeddedAudioPipeline,
 		scheduleTimeout: (callback, delayMs) => setTimeout(callback, delayMs),
 		cancelTimeout: (timer) => clearTimeout(timer),
-		onSessionConnectionLost: defaultOnSessionConnectionLost,
+		onSessionConnectionLost,
 		onConfigChangePhase: defaultOnConfigChangePhase,
 		onEngineStatus: (event, current) => {
 			void import("./stream-session-orchestrator.ts")
@@ -748,7 +752,16 @@ export class CerastreamBackend implements StreamingBackend {
 	private lastPolicyReloadRequested: string | undefined;
 
 	constructor(deps: Partial<CerastreamBackendDeps> = {}) {
-		this.deps = { ...defaultCerastreamBackendDeps(), ...deps };
+		this.deps = {
+			...defaultCerastreamBackendDeps((site) => {
+				const lostEpoch = this.clientEpoch;
+				defaultOnSessionConnectionLost(
+					site,
+					() => lostEpoch === this.clientEpoch,
+				);
+			}),
+			...deps,
+		};
 	}
 
 	get execPath(): string {
@@ -1773,8 +1786,7 @@ export class CerastreamBackend implements StreamingBackend {
 	 * real probe, and makes every later session call fail fast and loudly instead
 	 * of re-dispatching onto a socket that will never answer.
 	 *
-	 * `active` is deliberately LEFT SET so `stop()` still recognises the session
-	 * it has to tear down (srtla_send is still running and still sending nothing).
+	 * No fresh connection has proved it controls the lost engine session.
 	 */
 	private noteConnectionLoss(
 		client: CerastreamClient | undefined,
@@ -1791,13 +1803,15 @@ export class CerastreamBackend implements StreamingBackend {
 			{ site, code: error.code, message: error.message },
 		);
 
-		try {
-			this.subscription?.close();
-		} catch {
-			// The subscription rides the same dead socket; closing it is best-effort.
-		}
+		const subscription = this.subscription;
+		this.active = false;
 		this.subscription = undefined;
 		this.client = undefined;
+		this.clientEpoch++;
+		this.audioMixInputs = undefined;
+		subscription?.close();
+		this.clearRecoveredEngineError();
+		void this.closeWithinDeadline(client);
 		this.runtimeEvidence = undefined;
 		this.telemetry = null;
 		this.deps.bridge.broadcastStatus();
