@@ -34,10 +34,10 @@ export interface StartAudio {
 	/** The saved pick at the press: it needs no device to be present yet. */
 	readonly savedAsrc: string | undefined;
 	/**
-	 * What the request itself asks to save, once: nothing that has been saved since
-	 * the press, and no pick that only restates the saved one.
+	 * What the request itself asks to save: nothing that has been saved since the
+	 * press, and no pick that only restates the saved one.
 	 */
-	readonly takeUnsaved: () => Partial<StartAudioConfig>;
+	readonly unsaved: () => Partial<StartAudioConfig>;
 	/** Keeps the pressed backend's microphones listed until `start` is done. */
 	readonly whileInFlight: <T>(start: Promise<T>) => Promise<T>;
 }
@@ -67,7 +67,6 @@ export function acceptStartAudio(request: StartAudioRequest = {}): StartAudio {
 		delay: request.delay ?? saved.delay,
 		audio_backend: saved.audio_backend,
 	});
-	let taken = false;
 	const startAudio: StartAudio = {
 		get config() {
 			const { asrc } = pressed;
@@ -77,17 +76,15 @@ export function acceptStartAudio(request: StartAudioRequest = {}): StartAudio {
 			};
 		},
 		savedAsrc,
-		takeUnsaved: () => {
-			if (taken) return {};
-			taken = true;
+		unsaved: () => {
 			const { asrc, audio_inputs, acodec, delay } = startAudio.config;
-			const unsaved = (field: SavedAudioField) =>
+			const stillNewest = (field: SavedAudioField) =>
 				request[field] != null && audioSaves[field] === saves[field];
 			return {
-				...(unsaved("asrc") && pressed.asrc !== savedAsrc ? { asrc } : {}),
-				...(unsaved("audio_inputs") ? { audio_inputs } : {}),
-				...(unsaved("acodec") ? { acodec } : {}),
-				...(unsaved("delay") ? { delay } : {}),
+				...(stillNewest("asrc") && pressed.asrc !== savedAsrc ? { asrc } : {}),
+				...(stillNewest("audio_inputs") ? { audio_inputs } : {}),
+				...(stillNewest("acodec") ? { acodec } : {}),
+				...(stillNewest("delay") ? { delay } : {}),
 			};
 		},
 		whileInFlight: async (start) => {

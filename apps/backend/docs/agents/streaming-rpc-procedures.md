@@ -135,8 +135,8 @@ is judged on that microphone: if it does not answer, the Start is refused with
 `audio_source_probe_failed` even when "No audio" was saved meanwhile. Two reads stay
 live on purpose: a card that re-enumerated is addressed by its new id, and Auto is
 resolved against the launched source at launch. The Start's own write
-(`takeUnsaved`, once per Start) leaves out every field saved since the press, even
-when that save repeats the saved value: `setConfig` and `setAudioMix` call
+(`StartAudio.unsaved`) leaves out every field saved since the press, even when that
+save repeats the saved value: `setConfig` and `setAudioMix` call
 `noteAudioSaved`, the Start's own write does not. Until a Start is done the
 Bluetooth microphones stay listed for its backend. The compatibility
 start-schema export aliases the published producer schema, preserving its

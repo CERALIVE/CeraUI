@@ -144,7 +144,9 @@ export function startError(conn: WebSocket, msg: string, id?: string) {
 
 export async function validateConfig(
 	params: Partial<ConfigParameters>,
-	savedAsrc = getConfig().asrc,
+	{ savedAsrc }: Pick<StartAudio, "savedAsrc"> = {
+		savedAsrc: getConfig().asrc,
+	},
 ) {
 	if (typeof params !== "object") throw new Error("Invalid config");
 
@@ -291,7 +293,7 @@ export async function updateConfig(
 		srtlaAddr: initialAddr,
 		srtlaPort,
 		streamid,
-	} = await validateConfig(params, startAudio.savedAsrc);
+	} = await validateConfig(params, startAudio);
 
 	const srtlaAddr = await resolveSrtla(initialAddr);
 	const config = getConfig();
@@ -314,7 +316,7 @@ export async function updateConfig(
 	}
 
 	// Anything saved since the press is the next Start's and stays.
-	const { asrc, acodec, ...audio } = startAudio.takeUnsaved();
+	const { asrc, acodec, ...audio } = startAudio.unsaved();
 	Object.assign(config, audio);
 	if (pipeline.supportsAudio && acodec) config.acodec = acodec;
 	if (pipeline.supportsAudio && asrc) config.asrc = asrc;

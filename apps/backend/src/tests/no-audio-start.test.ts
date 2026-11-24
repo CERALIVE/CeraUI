@@ -448,6 +448,22 @@ test("a Start pressed with no pick saved is refused although a microphone is sav
 	expect(await disk()).toMatchObject({ asrc: "Primary" });
 });
 
+test("a missing microphone pressed with no pick saved is refused although it is saved meanwhile", async () => {
+	delete getConfig().asrc;
+	saveConfig();
+	GATES["update admission"]?.();
+	const started = uiStart("Gone");
+	await reached.promise;
+	expect(await pick("Gone")).toMatchObject({ success: true });
+	gate.resolve();
+	expect(await started).toMatchObject({
+		success: false,
+		failure: { class: "start_invalid", phase: "params" },
+	});
+	expect(launchedAudio()).toEqual([]);
+	expect(await disk()).toMatchObject({ asrc: "Gone" });
+});
+
 test("a saved microphone that is missing at the press is still waited for after another pick is saved", async () => {
 	getConfig().asrc = "Gone";
 	getConfig().audio_inputs = undefined;
@@ -1246,6 +1262,17 @@ test("an audio backend saved during update admission is the next Start's", async
 	gate.resolve();
 	expect(await started).toMatchObject({ success: true });
 	expect(launchedAudio()).toEqual([PRESSED.Primary.single]);
+});
+
+test("the pressed mix shares nothing with the saved one", async () => {
+	savePressed("Primary", "mix");
+	GATES["update admission"]?.();
+	const started = start();
+	await reached.promise;
+	for (const input of getConfig().audio_inputs ?? []) input.gain_db = -6;
+	gate.resolve();
+	expect(await started).toMatchObject({ success: true });
+	expect(launchedAudio()).toEqual([PRESSED.Primary.mix]);
 });
 
 test("a bitrate changed while the microphone is checked still reaches the engine", async () => {
