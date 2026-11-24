@@ -61,12 +61,13 @@ list, which already reflects this):
   collapse state; every row is rendered at all times. Encoder + Destination form
   the titled Output group (`output-card`), Network the Connections group
   (`connections-card`), and Start sits in the `LiveBar` (`live-bar`, fixed to the
-  viewport bottom above the mobile dock) beside the first blocking reason or the
-  ready text — see [live-screen.md](live-screen.md). It is a
-  presentation-only remap of the pure `deriveGoLiveReadiness()`
-  (`apps/frontend/src/lib/streaming/go-live-readiness.ts`, four gates:
-  source/network/destination/engine) — the verdict is consumed byte-unchanged and
-  never re-derived here. Each row fuses a readiness-state dot with the migrated
+  viewport bottom above the mobile dock) beside a compact readiness status and
+  fixes. “Show all” discloses every simultaneous issue without growing the
+  closed bar; see [live-screen.md](live-screen.md). `LiveView` owns `assessStart()`
+  and feeds the same verdict into the setup presentation and Start dispatch.
+  It checks the effective source, network, destination, capabilities, applicable
+  audio and the assembled payload against current-link evidence; unknown is
+  not Ready and busy lifecycle has priority. Each row fuses a readiness-state dot with the migrated
   config-row summary/edit affordance (same testids/lock semantics as the retired
   `StreamSettingsCard`) in one pattern: dot, title, one summary line, one
   trailing action. The Destination row also carries the traffic-light chip (fed
@@ -75,9 +76,10 @@ list, which already reflects this):
   which is itself the tap-to-edit bitrate-ceiling chip. Audio is deliberately NOT a row (live-correctness-pass
   Todo #11 — see "LIVE-CORRECTNESS-PASS FIXES" below); the ENGINE gate is also not
   a row (owned by the `CapabilityTierBanner` + the Start button's disabled
-  reason). It detects a sole-camera device with no `config.source` set and folds
-  the implicit id into the Start payload WITHOUT writing config — the row only
-  shows a "Change" affordance. It owns NO RPC and writes NO config itself; every
+  reason). The assessment folds the implicit sole-camera id into the Start payload
+  WITHOUT writing config. The row only shows a "Change" affordance. A managed
+  slot is not a usable destination until the saved address or relay can be
+  assembled into the Start payload. The chain owns NO RPC and writes NO config itself; every
   action is a callback prop from `LiveView`.
 - **`IdleCockpit.svelte`** — pre-stream wrapper, in the Live screen contract's
   order ([live-screen.md](live-screen.md)): `ProgramDesk` (`program-desk`: the

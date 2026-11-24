@@ -1,10 +1,7 @@
-import type { ConfigMessage } from "@ceraui/rpc/schemas";
+export {};
 
 declare global {
 	interface Window {
-		startStreamingWithNotificationClear?: (
-			config: Partial<ConfigMessage>,
-		) => void;
 		stopStreamingWithNotificationClear?: () => void;
 		__ceraAppMounted?: boolean;
 		__ceraDisplayRefreshCount?: number;

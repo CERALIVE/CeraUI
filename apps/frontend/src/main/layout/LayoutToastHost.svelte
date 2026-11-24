@@ -7,10 +7,7 @@ import { Toaster } from '$lib/components/ui/sonner';
 import { notificationLogKey } from '$lib/device-logs/log-pointer-keys';
 import { viewLogsToast } from '$lib/device-logs/view-logs';
 import { viewLogsMessage, viewLogsSecondary } from '$lib/device-logs/view-logs-secondary';
-import {
-	startStreaming as startStreamingFn,
-	stopStreaming as stopStreamingFn,
-} from '$lib/helpers/SystemHelper';
+import { stopStreaming as stopStreamingFn } from '$lib/helpers/SystemHelper';
 import { DESKTOP_CHROME_QUERY } from '$lib/layout';
 import { requestDialog } from '$lib/stores/dialog-request.svelte';
 import {
@@ -102,16 +99,7 @@ $effect(() => {
 	}
 });
 
-// Stream start/stop clears every active notification and dismisses any visible
-// toasts. Exposed on `window` for the streaming call sites (LiveView,
-// StreamingConfigService) that fire these before swapping the stream config.
-const startStreaming = (config: Parameters<typeof startStreamingFn>[0]) => {
-	toast.dismiss();
-	clearNotifications();
-	renderedAt.clear();
-	void startStreamingFn(config);
-};
-
+// Preserve the notification reset on the existing Stop path.
 const stopStreaming = () => {
 	toast.dismiss();
 	clearNotifications();
@@ -119,7 +107,6 @@ const stopStreaming = () => {
 	void stopStreamingFn();
 };
 
-window.startStreamingWithNotificationClear = startStreaming;
 window.stopStreamingWithNotificationClear = stopStreaming;
 
 // The mobile layout parks a FIXED dock on the bottom edge and the toast stack
@@ -128,15 +115,15 @@ window.stopStreamingWithNotificationClear = stopStreaming;
 // the second is why this is keyed on MainView's own dock query rather than on
 // sonner's 600px breakpoint, which does not fire at 768. The Live screen's fixed
 // Live bar sits on that same edge (above the dock on mobile) and publishes its
-// height as `--live-bar-height` while mounted, so the stack clears it too; with
-// no bar the variable is unset and the desktop offset is sonner's own 24px.
+// height while mounted. The open checklist publishes its own height because
+// the absolute panel is outside the box measured by the bar.
 const isDesktop = new MediaQuery(DESKTOP_CHROME_QUERY);
 const toasterOffset = $derived(
 	isDesktop.current
-		? { bottom: 'calc(var(--live-bar-height, 0px) + 1.5rem)' }
+		? { bottom: 'calc(var(--live-bar-height, 0px) + var(--live-checklist-height, 0px) + 1.5rem)' }
 		: {
 				bottom:
-					'calc(var(--mobile-dock-height) + var(--live-bar-height, 0px) + env(safe-area-inset-bottom, 0px) + var(--toast-clearance, 1rem))',
+					'calc(var(--mobile-dock-height) + var(--live-bar-height, 0px) + var(--live-checklist-height, 0px) + env(safe-area-inset-bottom, 0px) + var(--toast-clearance, 1rem))',
 			},
 );
 </script>

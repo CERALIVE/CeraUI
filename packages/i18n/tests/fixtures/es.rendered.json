@@ -694,6 +694,14 @@
 	"live.server.manageLinks": "Gestionar enlaces",
 	"live.server.singleLink": "Enlace único",
 	"live.server.singleLinkHint": "Este receptor usa un único enlace directo. La combinación de varios enlaces no se utiliza para este transporte.",
+	"live.bar.blockerCount": {
+		"0": "0 cosas por resolver",
+		"1": "1 cosa por resolver",
+		"2": "2 cosas por resolver",
+		"5": "5 cosas por resolver",
+		"11": "11 cosas por resolver",
+		"100": "100 cosas por resolver"
+	},
 	"live.setup.linksReady": {
 		"0": "0 enlaces listos",
 		"1": "1 enlace listo",

@@ -85,19 +85,26 @@ export function buildStartConfig(
 		return { ok: false, error: "unknownPipeline" };
 	}
 
+	return {
+		ok: true,
+		config: withStartAudio({ ...config, pipeline }, audioOverride),
+	};
+}
+
+export function withStartAudio(
+	config: ConfigMessage,
+	audioOverride: AudioOverride,
+): ConfigMessage {
 	const asrc = audioOverride?.asrc ?? config.asrc;
 	const acodec = audioOverride?.acodec ?? config.acodec;
 	const delay = audioOverride?.delay ?? config.delay;
 
-	const assembled: ConfigMessage = {
+	return {
 		...config,
-		pipeline,
 		...(asrc !== undefined ? { asrc } : {}),
 		...(acodec !== undefined ? { acodec } : {}),
 		...(delay !== undefined ? { delay } : {}),
 	};
-
-	return { ok: true, config: assembled };
 }
 
 /** Inputs to the Start-button enablement predicate. */

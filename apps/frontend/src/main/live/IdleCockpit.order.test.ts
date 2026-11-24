@@ -10,15 +10,12 @@
  * part of the asserted order; PreviewCanvas / PreviewEncodeControl / ComingSoon
  * are Noop, and the RPC client, QR helper and subscription feed are stubbed.
  */
-import type {
-	ConfigMessage,
-	NetifMessage,
-	SourcesMessage,
-} from "@ceraui/rpc/schemas";
+import type { SourcesMessage } from "@ceraui/rpc/schemas";
 import { Cpu, Server } from "@lucide/svelte";
 import { cleanup, render } from "@testing-library/svelte";
 import type { ComponentProps } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { assessStart } from "$lib/streaming/assess-start";
 
 vi.mock("$lib/components/preview/PreviewCanvas.svelte", async () => ({
 	default: (await import("../../tests/fixtures/Noop.svelte")).default,
@@ -42,7 +39,6 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getConfig: () => undefined,
 }));
 
-import { idleStartGate } from "$lib/streaming/idle-start-gate";
 import IdleCockpit from "./IdleCockpit.svelte";
 
 const FOLLOWING = Node.DOCUMENT_POSITION_FOLLOWING;
@@ -74,27 +70,28 @@ const SOURCES = {
 
 function props(): ComponentProps<typeof IdleCockpit> {
 	const noop = () => {};
-	const inputs = {
-		config: {
-			source: "cam",
-			relay_server: "fra",
-			max_br: 6000,
-		} as unknown as ConfigMessage,
-		caps: undefined,
-		sources: SOURCES,
-		netif: {
-			eth0: { enabled: true, ip: "10.0.0.2" },
-		} as unknown as NetifMessage,
-		isConnected: true,
-		networkIngest: null,
-		pipelines: undefined,
-	};
+	const config = { source: "cam", relay_server: "fra", max_br: 6000 };
+	const netif = { eth0: { tp: 0, enabled: true, ip: "10.0.0.2" } };
 	return {
-		config: inputs.config,
-		netif: inputs.netif,
-		sources: inputs.sources,
-		pipelines: inputs.pipelines,
-		gate: idleStartGate(inputs),
+		config,
+		sources: SOURCES,
+		netif,
+		assessment: assessStart({
+			config,
+			netif,
+			sources: SOURCES,
+			isConnected: true,
+			caps: undefined,
+			networkIngest: undefined,
+			lifecycle: "idle",
+			optimism: "idle",
+			streaming: false,
+			outcomeUnknown: false,
+			audioOverride: null,
+			audioSources: undefined,
+			audioIds: undefined,
+		}),
+		pipelines: undefined,
 		configRows: [
 			{
 				icon: Cpu,
@@ -114,9 +111,7 @@ function props(): ComponentProps<typeof IdleCockpit> {
 			},
 		],
 		isStreaming: false,
-		optimismState: "idle",
 		onStart: noop,
-		onStop: noop,
 		onOpenSource: noop,
 		onGoNetwork: noop,
 		activeInput: undefined,
@@ -129,6 +124,7 @@ function props(): ComponentProps<typeof IdleCockpit> {
 		onAudioSelectionApplied: noop,
 		audioStatus: undefined,
 		onOpenAudioDialog: noop,
+		onOpenAudioSource: noop,
 		selectedPipeline: undefined,
 		capabilities: undefined,
 		activeEncode: null,

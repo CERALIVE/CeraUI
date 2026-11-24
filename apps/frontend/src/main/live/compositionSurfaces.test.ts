@@ -270,7 +270,7 @@ describe("Start and Stop wait in the same lane", () => {
 		const device = renderBoth(false);
 		await drag(-256, 0, 1);
 		await drag(0, 144, 2);
-		const started = startStreaming(START_CONFIG);
+		const started = startStreaming(() => START_CONFIG);
 		expect(device.log()).toEqual([["setConfig", { composition_rect: FIRST }]]);
 
 		device.answer(SAVED);
@@ -288,7 +288,7 @@ describe("Start and Stop wait in the same lane", () => {
 
 	it("a drag made while Start is unanswered waits for it and changes the running stream, even before the device's status says live", async () => {
 		const device = renderBoth(false);
-		const started = startStreaming(START_CONFIG);
+		const started = startStreaming(() => START_CONFIG);
 		await drag(-256, 0, 1);
 		expect(device.log()).toEqual([["start", expect.anything()]]);
 
@@ -304,7 +304,7 @@ describe("Start and Stop wait in the same lane", () => {
 
 	it("after a refused Start the next write only saves", async () => {
 		const device = renderBoth(false);
-		const started = startStreaming(START_CONFIG);
+		const started = startStreaming(() => START_CONFIG);
 		device.answer({ success: false, error: "START_IN_PROGRESS" });
 		await started;
 		await drag(-256, 0, 1);
@@ -345,7 +345,7 @@ describe("Start and Stop wait in the same lane", () => {
 		await fireEvent.click(
 			screen.getByTestId("composition-layout-pip-top-left"),
 		);
-		const started = startStreaming(START_CONFIG);
+		const started = startStreaming(() => START_CONFIG);
 		device.answer(SAVED);
 		await waitFor(() => expect(device.log()).toHaveLength(2));
 		device.answer(STARTED);

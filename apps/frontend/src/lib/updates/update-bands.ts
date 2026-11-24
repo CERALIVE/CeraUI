@@ -18,7 +18,7 @@ import {
 export interface GoLiveUpdateRefusal {
 	readonly phase: UpdateOrchestratorPhase | undefined;
 	readonly percent: number | undefined;
-	readonly etaMinutes: number | undefined;
+	readonly etaMinutes?: number | undefined;
 	/** `live` = the pushed orchestrator state; `refusal` = the last start's answer. */
 	readonly source: "live" | "refusal";
 }
@@ -29,8 +29,9 @@ function wholePercent(percent: number | undefined): number | undefined {
 }
 
 /**
- * Prefer pushed state so an old refusal does not leave a stale band. This is
- * display precedence, not proof a start is admissible (root AGENTS.md D8 Known gaps).
+ * Prefer current-link orchestrator evidence over the last attempt's refusal.
+ * Only `source: "live"` projects a Start veto. Absence proves no permission:
+ * backend D8 decides actual admission.
  */
 export function goLiveUpdateRefusal(
 	wire: UpdateOrchestratorWireState | undefined | null,
@@ -49,7 +50,6 @@ export function goLiveUpdateRefusal(
 	return {
 		phase: failure.updatePhase,
 		percent: wholePercent(failure.updatePercent),
-		etaMinutes: etaMinutes(failure.updateEtaSeconds),
 		source: "refusal",
 	};
 }

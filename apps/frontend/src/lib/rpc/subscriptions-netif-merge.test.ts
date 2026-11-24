@@ -21,7 +21,9 @@ vi.mock("$lib/rpc/client", () => ({
 
 import type { NetifMessage } from "@ceraui/rpc/schemas";
 
+import { noteLinkState } from "./session-epoch.svelte";
 import {
+	getConfig,
 	getNetif,
 	initSubscriptions,
 	resetState,
@@ -41,6 +43,24 @@ beforeEach(() => {
 });
 
 describe("netif merge preserves same-subnet data and ignores legacy diagnostics", () => {
+	it("cannot give the next socket the old server or IP", () => {
+		noteLinkState("connected");
+		captured?.("config", { srtla_addr: "192.0.2.1" });
+		pushNetif({ eth0: { tp: 0, enabled: true, ip: "192.0.2.2" } });
+		expect(getConfig(true)?.srtla_addr).toBe("192.0.2.1");
+		expect(getNetif(true)?.eth0?.ip).toBe("192.0.2.2");
+
+		noteLinkState("disconnected");
+		noteLinkState("connected");
+		expect(getConfig(true)).toBeUndefined();
+		expect(getNetif(true)).toBeUndefined();
+		captured?.("config", { max_br: 4000 });
+		pushNetif({ eth0: { tp: 0, enabled: true } });
+		expect(getConfig(true)).toEqual({ max_br: 4000 });
+		expect(getNetif(true)).toEqual({ eth0: { tp: 0, enabled: true } });
+		noteLinkState("disconnected");
+	});
+
 	it("retains same-subnet data while stripping a legacy diagnostic", () => {
 		pushNetif({
 			usb0: {

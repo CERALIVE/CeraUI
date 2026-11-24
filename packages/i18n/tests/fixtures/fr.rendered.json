@@ -694,6 +694,14 @@
 	"live.server.manageLinks": "Gérer les liens",
 	"live.server.singleLink": "Lien unique",
 	"live.server.singleLinkHint": "Ce récepteur utilise un seul lien direct. L'agrégation de plusieurs liens n'est pas utilisée pour ce transport.",
+	"live.bar.blockerCount": {
+		"0": "0 problème à régler",
+		"1": "1 problème à régler",
+		"2": "2 problèmes à régler",
+		"5": "5 problèmes à régler",
+		"11": "11 problèmes à régler",
+		"100": "100 problèmes à régler"
+	},
 	"live.setup.linksReady": {
 		"0": "0 lien prêt",
 		"1": "1 lien prêt",

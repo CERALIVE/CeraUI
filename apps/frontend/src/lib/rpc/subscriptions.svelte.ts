@@ -314,6 +314,18 @@ let relaysState = $state.raw<RelayMessage | undefined>(undefined);
 // operator's selection is persisted as `config.selected_ingest_endpoint`.
 let managedIngestState = $state.raw<ManagedIngestAccount[]>([]);
 
+type StartEvidenceKind =
+	| "config"
+	| "netif"
+	| "sources"
+	| "capabilities"
+	| "ingest.slots";
+let startEvidenceLink = $state<Partial<Record<StartEvidenceKind, number>>>({});
+
+function currentStartEvidence(kind: StartEvidenceKind): boolean {
+	return startEvidenceLink[kind] === getLinkEpoch();
+}
+
 // Notifications state
 let notificationsState = $state.raw<NotificationsMessage | undefined>(
 	undefined,
@@ -347,8 +359,10 @@ export function getAuth() {
 	return authState;
 }
 
-export function getConfig() {
-	return configState;
+export function getConfig(currentLinkOnly = false) {
+	return !currentLinkOnly || currentStartEvidence("config")
+		? configState
+		: undefined;
 }
 
 /** Changes accepted by this tab, not identical echoes of its saved settings. */
@@ -356,8 +370,10 @@ export function getStartConfigGeneration(): number {
 	return startConfigGeneration;
 }
 
-export function getStatus() {
-	return statusState;
+export function getStatus(currentLifecycleOnly = false) {
+	return !currentLifecycleOnly || getLifecycleDelivery().link === getLinkEpoch()
+		? statusState
+		: undefined;
 }
 
 export function clearPasswordSetup(): void {
@@ -427,8 +443,10 @@ export function getUpdateOrchestratorState():
 	return updateOrchestratorState;
 }
 
-export function getNetif() {
-	return netifState;
+export function getNetif(currentLinkOnly = false) {
+	return !currentLinkOnly || currentStartEvidence("netif")
+		? netifState
+		: undefined;
 }
 
 export function getUplinks(): UplinksMessage | undefined {
@@ -508,12 +526,18 @@ export function getPipelines() {
 	return pipelinesState;
 }
 
-export function getCapabilities() {
-	return capabilitiesState;
+export function getCapabilities(currentLinkOnly = false) {
+	return !currentLinkOnly || currentStartEvidence("capabilities")
+		? capabilitiesState
+		: undefined;
 }
 
-export function getSources(): SourcesMessage | undefined {
-	return sourcesState;
+export function getSources(
+	currentLinkOnly = false,
+): SourcesMessage | undefined {
+	return !currentLinkOnly || currentStartEvidence("sources")
+		? sourcesState
+		: undefined;
 }
 
 export function getAudioCodecs() {
@@ -532,8 +556,16 @@ export function getRelays() {
 	return relaysState;
 }
 
-export function getManagedIngestAccounts(): readonly ManagedIngestAccount[] {
-	return managedIngestState;
+export function getManagedIngestAccounts(): readonly ManagedIngestAccount[];
+export function getManagedIngestAccounts(
+	currentLinkOnly: true,
+): readonly ManagedIngestAccount[] | undefined;
+export function getManagedIngestAccounts(
+	currentLinkOnly = false,
+): readonly ManagedIngestAccount[] | undefined {
+	return !currentLinkOnly || currentStartEvidence("ingest.slots")
+		? managedIngestState
+		: undefined;
 }
 
 export function getSelectedIngestEndpoint(): string | undefined {
@@ -627,7 +659,11 @@ function handleMessage(
 			// it (shouldIgnoreEchoReactive), otherwise apply it and reconcile the
 			// lock (release once its RPC resolved and the server echoed the field).
 			const incoming = data as ConfigMessage;
-			const merged: ConfigMessage = { ...configState };
+			// Do not carry an omitted source or server from the previous socket
+			// into the first configuration snapshot on this one.
+			const merged: ConfigMessage = currentStartEvidence("config")
+				? { ...configState }
+				: {};
 			let changed = false;
 			for (const [field, value] of Object.entries(incoming)) {
 				if (value === undefined) continue;
@@ -638,6 +674,7 @@ function handleMessage(
 			}
 			if (changed) startConfigGeneration += 1;
 			configState = merged;
+			startEvidenceLink.config = getLinkEpoch();
 			break;
 		}
 
@@ -743,6 +780,10 @@ function handleMessage(
 		}
 
 		case "netif": {
+			const previousLinkNetif = currentStartEvidence("netif")
+				? netifState
+				: undefined;
+			startEvidenceLink.netif = getLinkEpoch();
 			// Lock-aware ingestion for the `enabled` field only.
 			// BondToggle registers per-interface locks as `enabled_${name}` via
 			// markPending/onRpcResolved. Guard only `enabled` — all other fields
@@ -775,7 +816,7 @@ function handleMessage(
 				// and it is the row's final frame — so the row goes NOW rather than
 				// surviving until the interface itself stops being reported.
 				if (entry.dongle === null) continue;
-				const existing = netifState?.[ifname] ?? ({} as NetifEntry);
+				const existing = previousLinkNetif?.[ifname] ?? ({} as NetifEntry);
 				// Each optional field is spread ONLY when present so a tick that omits
 				// it keeps the prior value via `...existing` (same as ip/error/mac).
 				// same_subnet_group MUST be here or CollisionBands
@@ -823,7 +864,7 @@ function handleMessage(
 				};
 				if (retractRouterCellular) delete next.router_cellular;
 				if (retractModemNet) delete next.usb_modem_net;
-				const previous = netifState?.[ifname];
+				const previous = previousLinkNetif?.[ifname];
 				const kept = preserveWireIdentity(previous, next);
 				if (kept !== previous) netifChanged = true;
 				merged[ifname] = kept;
@@ -832,9 +873,9 @@ function handleMessage(
 			// dropped is a change even when every survivor is byte-identical.
 			netifState =
 				!netifChanged &&
-				netifState !== undefined &&
-				Object.keys(merged).length === Object.keys(netifState).length
-					? netifState
+				previousLinkNetif !== undefined &&
+				Object.keys(merged).length === Object.keys(previousLinkNetif).length
+					? previousLinkNetif
 					: merged;
 			break;
 		}
@@ -1083,12 +1124,14 @@ function handleMessage(
 		case "capabilities":
 			if (data && typeof data === "object") {
 				capabilitiesState = data as CapabilitiesMessage;
+				startEvidenceLink.capabilities = getLinkEpoch();
 			}
 			break;
 
 		case "sources":
 			if (data && typeof data === "object") {
 				sourcesState = data as SourcesMessage;
+				startEvidenceLink.sources = getLinkEpoch();
 			}
 			break;
 
@@ -1122,6 +1165,7 @@ function handleMessage(
 			const rawSlots = (data as { slots?: unknown })?.slots ?? data;
 			if (Array.isArray(rawSlots)) {
 				managedIngestState = parseIngestSlots(data);
+				startEvidenceLink["ingest.slots"] = getLinkEpoch();
 			}
 			break;
 		}
@@ -1437,6 +1481,7 @@ export function resetState(): void {
 	audioCodecsState = undefined;
 	relaysState = undefined;
 	managedIngestState = [];
+	startEvidenceLink = {};
 	notificationsState = undefined;
 	kioskState = undefined;
 	addonsState = {};

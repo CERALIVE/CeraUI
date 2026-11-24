@@ -6,7 +6,7 @@
  * Idle it carries the readiness line (the first blocking reason from
  * `deriveGoLiveReadiness`, or the ready text) and Start; live, the bitrate
  * control and Stop; in the post-stream summary window, Done. The host passes the
- * action in as children and the line as `status` — this bar derives nothing.
+ * action and its readiness line as children. This bar derives nothing.
  *
  * It stays where the order puts it in the DOM (focus and reading order follow
  * the contract) and is lifted out of the flow with `position: fixed`: at the
@@ -20,21 +20,14 @@ import type { Snippet } from 'svelte';
 import { publishHeight } from '$lib/layout';
 
 interface Props {
-	/** The idle readiness line: a blocking reason, or the ready text. */
-	status?: string;
-	/** ID of the readiness text when it describes a fix button. */
-	statusId?: string;
-	/** Whether `status` is a blocking reason. */
 	blocked?: boolean;
-	/**
-	 * While blocked, one button per thing to fix, under the line. The host owns
-	 * the items and their actions; the bar only places them.
-	 */
-	checklist?: Snippet;
+	pending?: boolean;
+	/** Idle-only disclosure above, not part of the fixed bar's measured height. */
+	disclosure?: Snippet;
 	children: Snippet;
 }
 
-const { status, statusId, blocked = false, checklist, children }: Props = $props();
+const { blocked = false, pending = false, disclosure, children }: Props = $props();
 
 const HEIGHT_PROPERTY = '--live-bar-height';
 
@@ -47,31 +40,16 @@ $effect(() => (bar ? publishHeight(bar, HEIGHT_PROPERTY) : undefined));
 <div
 	bind:this={bar}
 	class="live-bar bg-background fixed inset-x-0 z-30 border-t"
-	data-state={status === undefined ? undefined : blocked ? 'blocked' : 'ready'}
+	data-state={pending ? 'pending' : blocked ? 'blocked' : disclosure ? 'ready' : undefined}
+	class:idle={disclosure !== undefined}
 	data-testid="live-bar" data-touch-region
 >
+	{@render disclosure?.()}
 	<!-- Below 640 px the line takes the full width above the action: a blocking
 	     reason runs to 84 characters (fr), more than two lines beside the button. -->
 	<div
-		class="mx-auto flex w-full max-w-3xl flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 lg:max-w-6xl"
+		class="bar-content mx-auto flex w-full max-w-3xl flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 lg:max-w-6xl"
 	>
-		{#if status !== undefined}
-			<div class="flex min-w-0 flex-col gap-2 sm:flex-1">
-				<!-- Two lines are reserved, so a reason that wraps never moves the bar;
-				     on a short screen one line is enough. -->
-				<p class="flex min-h-10 min-w-0 items-start gap-2 text-sm [@media(max-height:640px)]:min-h-0" aria-live="polite">
-					<span
-						class="mt-1.5 size-2 shrink-0 rounded-full"
-						style="background: {blocked ? 'var(--destructive)' : 'var(--status-success)'};"
-						aria-hidden={true}
-					></span>
-					<span id={statusId} class="line-clamp-2 min-w-0">{status}</span>
-				</p>
-				{#if blocked && checklist}
-					{@render checklist()}
-				{/if}
-			</div>
-		{/if}
 		{@render children()}
 	</div>
 </div>
@@ -80,7 +58,8 @@ $effect(() => (bar ? publishHeight(bar, HEIGHT_PROPERTY) : undefined));
 	/* KEEP IN SYNC with DESKTOP_CHROME_QUERY ($lib/layout): below it MainView
 	   mounts the fixed mobile dock, whose height `--mobile-dock-height` carries. */
 	.live-bar {
-		bottom: calc(var(--mobile-dock-height) + env(safe-area-inset-bottom, 0px));
+		--live-bar-offset: calc(var(--mobile-dock-height) + env(safe-area-inset-bottom, 0px));
+		bottom: var(--live-bar-offset);
 	}
 
 	/* Keep both the bar and an actionable refusal reachable on short phones. */
@@ -108,6 +87,7 @@ $effect(() => (bar ? publishHeight(bar, HEIGHT_PROPERTY) : undefined));
 
 	@media (min-width: 1024px), (min-width: 768px) and (max-height: 600px) {
 		.live-bar {
+			--live-bar-offset: 0px;
 			bottom: 0;
 			padding-bottom: env(safe-area-inset-bottom, 0px);
 		}
@@ -115,5 +95,9 @@ $effect(() => (bar ? publishHeight(bar, HEIGHT_PROPERTY) : undefined));
 		:global(html:has(.live-bar)) {
 			scroll-padding-bottom: var(--live-bar-height, 0px);
 		}
+	}
+
+	@media (width < 40rem) and (height > 25rem) {
+		.idle > .bar-content { padding-block: 0.625rem; }
 	}
 </style>

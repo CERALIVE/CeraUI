@@ -19,6 +19,7 @@ import {
 	getByTestId,
 	queryByTestId,
 	render,
+	within,
 } from "@testing-library/svelte";
 import { flushSync } from "svelte";
 import { toast } from "svelte-sonner";
@@ -62,7 +63,10 @@ import {
 	socket,
 } from "../tests/helpers/update-device";
 
-const session = vi.hoisted(() => ({ authenticated: false }));
+const session = vi.hoisted(() => ({
+	authenticated: false,
+	realStartInputs: false,
+}));
 const device = vi.hoisted(() => ({
 	engineUnavailable: false,
 	usePushedConfig: false,
@@ -83,16 +87,29 @@ vi.mock("svelte-sonner", () => ({
 vi.mock("$lib/rpc/subscriptions.svelte", async (importOriginal) => {
 	const original =
 		await importOriginal<typeof import("$lib/rpc/subscriptions.svelte")>();
-	const getters = await (
+	const fixture = await (
 		await import("../tests/fixtures/real-store-live")
 	).deviceGettersMock(original);
 	return {
-		...getters,
+		...fixture,
 		getLinkTelemetry: original.getLinkTelemetry,
-		getConfig: () =>
-			device.usePushedConfig ? original.getConfig() : getters.getConfig(),
-		getCapabilities: () =>
-			device.engineUnavailable ? { engineUnavailable: true } : undefined,
+		getConfig: (current?: boolean) =>
+			(session.realStartInputs || device.usePushedConfig
+				? original
+				: fixture
+			).getConfig(current),
+		getCapabilities: (current?: boolean) =>
+			device.engineUnavailable
+				? { engineUnavailable: true }
+				: (session.realStartInputs ? original : fixture).getCapabilities(
+						current,
+					),
+		getNetif: (current?: boolean) =>
+			(session.realStartInputs ? original : fixture).getNetif(current),
+		getSources: (current?: boolean) =>
+			(session.realStartInputs ? original : fixture).getSources(current),
+		getIsConnected: () =>
+			(session.realStartInputs ? original : fixture).getIsConnected(),
 	};
 });
 vi.mock("$lib/stores/auth-status.svelte", async (importOriginal) => ({
@@ -170,6 +187,7 @@ import {
 } from "../lib/rpc/subscriptions.svelte";
 import { clearNotifications } from "../lib/stores/notifications.svelte";
 import { sendCompositionWrite } from "../lib/streaming/compositionWrites.svelte";
+import { dispatchStart } from "../lib/streaming/dispatch-start";
 import {
 	clearStartRecoveryUnknown,
 	latestStopOwner,
@@ -191,7 +209,7 @@ import NavigationRenderer from "./navigation/NavigationRenderer.svelte";
 
 const STOP_AND_START = [
 	{ label: "Stop Stream", disabled: false },
-	{ label: "Start Stream", disabled: false },
+	{ label: "Start Stream", disabled: true },
 ];
 
 const F7_WIFI = {
@@ -206,7 +224,7 @@ const F7_MODEMS = {
 };
 const STOPPING_AND_START = [
 	{ label: "Stopping...", disabled: true },
-	{ label: "Start Stream", disabled: false },
+	{ label: "Start Stream", disabled: true },
 ];
 
 // biome-ignore lint/complexity/useLiteralKeys: test-only private transport seam
@@ -218,6 +236,16 @@ let jitter: { mockRestore(): void } | undefined;
 function deliverStatus(frame: Record<string, unknown>): void {
 	socket().deliver({ status: frame });
 	flushSync();
+}
+
+// Historical watchdog/Stop races still exist below UI admission. Start the
+// second generation at the production dispatch boundary, not a disabled button.
+function dispatchOverlappingStart(): void {
+	void dispatchStart(() => ({
+		source: "cam-1",
+		pipeline: "cam-1-pipe",
+		relay_server: "fra",
+	}));
 }
 
 async function settle(): Promise<void> {
@@ -233,6 +261,7 @@ beforeEach(() => {
 	device.engineUnavailable = false;
 	device.usePushedConfig = false;
 	vi.useFakeTimers();
+	session.realStartInputs = false;
 	// The reconnect backoff's jitter is the only randomness on this path.
 	jitter = vi.spyOn(Math, "random").mockReturnValue(0.5);
 	FakeWebSocket.current = undefined;
@@ -272,6 +301,38 @@ afterEach(() => {
 });
 
 describe("Live bar Stop confirmation over the real socket", () => {
+	it("cannot Stop from a lifecycle-only receipt and confirms once the live boolean arrives", async () => {
+		const { container, getByText } = render(LiveView);
+		deliverStatus({ stream_lifecycle: "streaming" });
+		await settle();
+		const idle = getByTestId(container, "idle-cockpit");
+		const stop = within(idle).queryByRole("button", { name: "Stop Stream" });
+		if (stop) await fireEvent.click(stop);
+		expect(sentCount("streaming.stop")).toBe(0);
+		expect(stop).toBeNull();
+		expect(button(idle, "Start Stream").disabled).toBe(true);
+
+		deliverStatus({ is_streaming: true });
+		const dialog = await openLiveStopConfirmation(container);
+		expect(sentCount("streaming.stop")).toBe(0);
+
+		await fireEvent.click(getByTestId(dialog, "live-stop-keep"));
+		await settle();
+		expect(dialog.dataset.state).toBe("closed");
+		expect(sentCount("streaming.stop")).toBe(0);
+
+		await endLiveStream(container);
+		await settle();
+		expect(sentCount("streaming.stop")).toBe(1);
+		answer("streaming.stop", { success: true, result: "stopped" });
+		deliverStatus({ is_streaming: false, stream_lifecycle: "idle" });
+		await settle();
+		await fireEvent.click(getByTestId(container, "summary-done"));
+		expect(getByText("Ready to go live", { selector: "p" })).toBeDefined();
+		expect(button(container, "Start Stream").disabled).toBe(false);
+		expect(sentCount("streaming.stop")).toBe(1);
+	});
+
 	it("enables Stop after the connection opens if its live status arrived first", async () => {
 		const { container } = render(LiveView);
 		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
@@ -826,6 +887,17 @@ describe("start refusal presentation across the socket", () => {
 		expect(sentCount("streaming.start")).toBe(1);
 	});
 
+	it("returns focus from a dismissed refusal to Start without sending a second RPC", async () => {
+		const { container } = render(LiveView);
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		refuseStart("recovery-ready");
+		await settle();
+		vi.mocked(toast.error).mock.lastCall?.[1]?.componentProps?.close();
+		expect(document.activeElement).toBe(button(container, "Start Stream"));
+		expect(sentCount("streaming.start")).toBe(1);
+	});
+
 	it.each(["before", "after"] as const)(
 		"requires a fresh Start when the receiver changes %s the refusal",
 		async (order) => {
@@ -944,6 +1016,277 @@ describe("start refusal presentation across the socket", () => {
 			expect.stringContaining(en.live.startFailure.class.start_timeout),
 			"Background start failed: unrelated-during-hold",
 		]);
+	});
+});
+
+describe("Live Start admission over reconnect and update pushes", () => {
+	const microphone = { id: "USB mic", kind: "device" };
+	const video = {
+		modes: [],
+		supportsAudio: true,
+		supportsResolutionOverride: false,
+		supportsFramerateOverride: false,
+		audioKind: "device",
+		available: true,
+	};
+	const camera = {
+		...video,
+		id: "usb-cam",
+		pipelineId: "usb-pipeline",
+		origin: "capture",
+		kind: "hdmi",
+		displayName: "USB capture",
+		devicePath: "/dev/video1",
+	};
+	const gateway = {
+		rtmp: { service_active: true, url: "rtmp://192.0.2.1/live" },
+		srt: null,
+	};
+	const update = (phase: string) => ({
+		schema: 1,
+		phase,
+		progress: null,
+		failure_reason: null,
+		cellular_override_id: null,
+	});
+
+	function deliverStartInputs(source: Record<string, unknown>, config = {}) {
+		socket().deliver({
+			config: {
+				pipeline: "stale-pipeline",
+				relay_server: "fra",
+				asrc: microphone.id,
+				...config,
+			},
+			sources: { hardware: "rk3588", sources: [source] },
+			capabilities: { encoder: {} },
+			netif: { eth0: { tp: 0, ip: "192.0.2.2", enabled: true } },
+		});
+		flushSync();
+	}
+
+	it.each(["inline", "expanded", "unconfirmed"] as const)(
+		"focuses the %s recovery target and never sends a blocked Retry",
+		async (kind) => {
+			session.realStartInputs = true;
+			deliverStartInputs(camera);
+			const { container } = render(LiveView);
+			await fireEvent.click(button(container, "Start Stream"));
+			await settle();
+			refuseStart(`recovery-${kind}`);
+			await settle();
+			const retry = latestRefusalAction();
+			expect(retry?.label).toBe(en.live.startFailure.action.tryAgain);
+			if (kind === "unconfirmed") {
+				deliverStatus({ stream_lifecycle: "reconciling" });
+			} else {
+				socket().deliver({
+					netif: {},
+					...(kind === "expanded" && { config: { relay_server: "" } }),
+				});
+			}
+			await settle();
+			if (kind === "expanded") {
+				await fireEvent.click(button(container, "Show all"));
+				await settle();
+			}
+			expect(retry?.activate()).toBe(false);
+			const target =
+				kind === "unconfirmed"
+					? container.querySelector("h1")
+					: within(
+							kind === "expanded"
+								? within(container).getByRole("region", {
+										name: "Before you go live",
+									})
+								: getByTestId(container, "live-bar"),
+						).getByRole("button", { name: en.live.goLive.fix.goNetwork });
+			expect(target).toBeInstanceOf(HTMLElement);
+			expect(document.activeElement).toBe(target);
+			expect(sentCount("streaming.start")).toBe(1);
+		},
+	);
+
+	it("rechecks a queued Retry when a current update starts", async () => {
+		session.realStartInputs = true;
+		deliverStartInputs(camera);
+		const { container } = render(LiveView);
+		await fireEvent.click(button(container, "Start Stream"));
+		await settle();
+		refuseStart("retry-update");
+		await settle();
+		const write = sendCompositionWrite(
+			{ composition_patch: { alpha: 0.5 } },
+			() => false,
+		);
+		await settle();
+		expect(latestRefusalAction()?.activate()).toBe(true);
+		expect(sentCount("streaming.start")).toBe(1);
+		socket().deliver({ status: { update_orchestrator: update("committing") } });
+		answer("streaming.setConfig", { success: true });
+		await write;
+		await settle();
+		expect(sentCount("streaming.start")).toBe(1);
+		expect(button(container, "Start Stream").disabled).toBe(true);
+	});
+
+	it.each([false, true])(
+		"rechecks a Start behind a held composition write (update starts: %s)",
+		async (blocked) => {
+			session.realStartInputs = true;
+			deliverStartInputs(camera);
+			const { container } = render(LiveView);
+			const write = sendCompositionWrite(
+				{ composition_rect: { x: 0.1, y: 0.1, width: 0.3, height: 0.3 } },
+				() => false,
+			);
+			await settle();
+			expect(sentCount("streaming.setConfig")).toBe(1);
+			const start = button(container, "Start Stream");
+			expect(start.disabled).toBe(false);
+			await fireEvent.click(start);
+			await settle();
+			expect(sentCount("streaming.start")).toBe(0);
+			expect(button(container, "Starting...").disabled).toBe(true);
+
+			socket().deliver({
+				status: blocked
+					? { update_orchestrator: update("committing") }
+					: { is_streaming: false, stream_lifecycle: "idle" },
+			});
+			answer("streaming.setConfig", { success: true });
+			await write;
+			await settle();
+			expect(sentCount("streaming.start")).toBe(blocked ? 0 : 1);
+			if (blocked) {
+				expect(button(container, "Start Stream").disabled).toBe(true);
+			} else {
+				answer("streaming.start", { success: true });
+				await settle();
+			}
+		},
+	);
+
+	it("does not reuse a usable gateway when reconnect delivers only idle", async () => {
+		session.realStartInputs = true;
+		const networkSource = {
+			...video,
+			id: "rtmp-feed",
+			pipelineId: "rtmp-pipeline",
+			origin: "network",
+			kind: "rtmp",
+			requiresGateway: "rtmp",
+		};
+		deliverStartInputs(networkSource, { source: networkSource.id });
+		deliverStatus({ network_ingest: gateway });
+		const { container, getByText } = render(LiveView);
+		expect(controls(container)).toEqual(F10_IDLE);
+
+		await reconnectAwaitingHydrate();
+		deliverStartInputs(networkSource, { source: networkSource.id });
+		deliverStatus({ stream_lifecycle: "idle" });
+		button(container, "Start Stream").click();
+		expect(sentCount("streaming.start")).toBe(0);
+		expect(getByText("Checking readiness…", { selector: "p" })).toBeDefined();
+
+		// Even a byte-equal push is new evidence on this link.
+		deliverStatus({ network_ingest: gateway });
+		expect(controls(container)).toEqual(F10_IDLE);
+	});
+
+	it.each([
+		{
+			audio_sources: [
+				{ ...microphone, unavailable_reason: "engine_update_required" },
+			],
+		},
+		{ asrcs: ["Other microphone"] },
+	])(
+		"does not reuse an unavailable microphone on a new link: %o",
+		async (staleAudio) => {
+			session.realStartInputs = true;
+			deliverStartInputs(camera);
+			deliverStatus(staleAudio);
+			const { container } = render(LiveView);
+			expect(button(container, "Start Stream").disabled).toBe(true);
+
+			await reconnectAwaitingHydrate();
+			deliverStartInputs(camera);
+			deliverStatus({ stream_lifecycle: "idle" });
+			expect(controls(container)).toEqual(F10_IDLE);
+			// A current unavailable receipt can still block before the mic returns.
+			deliverStatus(staleAudio);
+			expect(button(container, "Start Stream").disabled).toBe(true);
+			deliverStatus({ audio_sources: [microphone], asrcs: [microphone.id] });
+			expect(controls(container)).toEqual(F10_IDLE);
+		},
+	);
+
+	it("sends the sole camera ID and resolved pipeline without saving a config", async () => {
+		session.realStartInputs = true;
+		deliverStartInputs(camera);
+		const { container } = render(LiveView);
+		button(container, "Start Stream").click();
+		await settle();
+		expect(outstanding("streaming.start")).toEqual([
+			expect.objectContaining({
+				input: expect.objectContaining({
+					source: "usb-cam",
+					pipeline: "usb-pipeline",
+				}),
+			}),
+		]);
+		expect(sentCount("streaming.setConfig")).toBe(0);
+		answer("streaming.start", { success: true });
+		await settle();
+	});
+
+	it.each(["committing", "restarting-services"])(
+		"vetoes Start while the current update band reports %s",
+		async (phase) => {
+			const { container, getByTestId, queryByTestId } = render(LiveView);
+			deliverStatus({ update_orchestrator: update(phase) });
+			expect(
+				getByTestId("update-refusal-band").getAttribute("data-phase"),
+			).toBe(phase);
+			const start = button(container, "Start Stream");
+			start.click();
+			expect(sentCount("streaming.start")).toBe(0);
+			expect(start.disabled).toBe(true);
+
+			for (const admitting of ["downloading", "awaiting-idle"]) {
+				deliverStatus({ update_orchestrator: update(admitting) });
+				expect(queryByTestId("update-refusal-band")).toBeNull();
+				expect(controls(container)).toEqual(F10_IDLE);
+			}
+			start.click();
+			await settle();
+			expect(sentCount("streaming.start")).toBe(1);
+			answer("streaming.start", { success: true });
+			await settle();
+		},
+	);
+
+	it("withdraws a busy update on disconnect and does not carry it to the new link", async () => {
+		session.realStartInputs = true;
+		deliverStartInputs(camera);
+		deliverStatus({ update_orchestrator: update("committing") });
+		const { container, getByTestId, queryByTestId } = render(LiveView);
+		expect(getByTestId("update-refusal-band").getAttribute("data-source")).toBe(
+			"live",
+		);
+		await reconnectAwaitingHydrate();
+		expect(queryByTestId("update-refusal-band")).toBeNull();
+		deliverStartInputs(camera);
+		deliverStatus({ stream_lifecycle: "idle" });
+		expect(controls(container)).toEqual(F10_IDLE);
+		expect(queryByTestId("update-refusal-band")).toBeNull();
+		// The pending full read is older than this push for the update field.
+		deliverStatus({ update_orchestrator: update("downloading") });
+		answer("status.getStatus", { update_orchestrator: update("committing") });
+		await settle();
+		expect(controls(container)).toEqual(F10_IDLE);
+		expect(queryByTestId("update-refusal-band")).toBeNull();
 	});
 });
 
@@ -1074,7 +1417,7 @@ describe("F11 timeout recovery lifetime seams", () => {
 		await settle();
 		reject("streaming.stop", "INTERNAL_ERROR");
 		await settle();
-		await fireEvent.click(button(container, "Start Stream"));
+		dispatchOverlappingStart();
 		await elapse(75_000);
 		await settle();
 		const generation = getStreamingAttemptGeneration();
@@ -1353,7 +1696,7 @@ const F10_MATRIX = [
 		false,
 		"idle",
 		"starting",
-		F10_IDLE,
+		F10_STARTING,
 		false,
 		3,
 		true,
@@ -1366,7 +1709,7 @@ const F10_MATRIX = [
 		false,
 		"idle",
 		"starting",
-		F10_IDLE,
+		F10_STARTING,
 		false,
 		4,
 		true,
@@ -1379,7 +1722,7 @@ const F10_MATRIX = [
 		false,
 		"idle",
 		"starting",
-		F10_IDLE,
+		F10_STARTING,
 		false,
 		3,
 		true,
@@ -1392,7 +1735,7 @@ const F10_MATRIX = [
 		false,
 		"idle",
 		"starting",
-		F10_IDLE,
+		F10_STARTING,
 		false,
 		3,
 		true,
@@ -1405,7 +1748,7 @@ const F10_MATRIX = [
 		false,
 		"idle",
 		"starting",
-		F10_IDLE,
+		F10_STARTING,
 		false,
 		4,
 		true,
@@ -1418,7 +1761,7 @@ const F10_MATRIX = [
 		false,
 		"idle",
 		"starting",
-		F10_IDLE,
+		F10_STARTING,
 		false,
 		4,
 		true,
@@ -1751,7 +2094,7 @@ describe("F10 exhaustive Stop settlement/result/exhaustion permutations", () => 
 			await settle();
 			reject("streaming.stop", "INTERNAL_ERROR");
 			await settle();
-			await fireEvent.click(button(container, "Start Stream"));
+			dispatchOverlappingStart();
 			await settle();
 			answer("streaming.start", { success: true });
 			await settle();
@@ -1788,7 +2131,7 @@ describe("F10 exhaustive Stop settlement/result/exhaustion permutations", () => 
 			expect(outstanding("status.getStatus")).toHaveLength(0);
 			expect(FakeWebSocket.log).toHaveLength(cell[8] + 4);
 			if (cell[9]) {
-				await fireEvent.click(button(container, "Start Stream"));
+				dispatchOverlappingStart();
 				await settle();
 				answer("streaming.start", { success: true });
 				await settle();
@@ -1838,7 +2181,7 @@ describe("F11 Start-reply timeout dimension of the 36-cell Stop matrix", () => {
 			await settle();
 			reject("streaming.stop", "INTERNAL_ERROR");
 			await settle();
-			await fireEvent.click(button(container, "Start Stream"));
+			dispatchOverlappingStart();
 			await settle();
 			const generation = getStreamingAttemptGeneration();
 			await elapse(75_000);
@@ -1869,7 +2212,7 @@ describe("F11 Start-reply timeout dimension of the 36-cell Stop matrix", () => {
 					: {
 							unknown: false,
 							optimism: "idle",
-							controls: F10_IDLE,
+							controls: cell[5] === "starting" ? F10_STARTING : F10_IDLE,
 							band: false,
 							reads: lostIdle[3],
 							next: true,
@@ -1899,7 +2242,7 @@ describe("F11 Start-reply timeout dimension of the 36-cell Stop matrix", () => {
 			});
 			expect(outstanding("status.getStatus")).toHaveLength(0);
 			if (expected.next) {
-				await fireEvent.click(button(container, "Start Stream"));
+				dispatchOverlappingStart();
 				await settle();
 				answer("streaming.start", { success: true });
 				await settle();
@@ -1928,7 +2271,7 @@ describe("F9 Stop acknowledgement owns the captured Start lifetime", () => {
 		await settle();
 		expect(getOperationPhase(KEY)).toBe("failed");
 		expect(controls(container)).toEqual(STOP_AND_START);
-		await fireEvent.click(button(container, "Start Stream"));
+		dispatchOverlappingStart();
 		await settle();
 		answer("streaming.start", { success: true });
 		await settle();
@@ -1968,7 +2311,7 @@ describe("F9 Stop acknowledgement owns the captured Start lifetime", () => {
 		expect(getOperationPhase(KEY)).toBe("idle");
 		expect(band(container)).toBeNull();
 		expect(controls(container)).toEqual([
-			{ label: "Start Stream", disabled: false },
+			{ label: "Starting...", disabled: true },
 		]);
 		expect(FakeWebSocket.log.map((r) => r.path)).toEqual([
 			"streaming.start",
@@ -1994,7 +2337,7 @@ describe("F9 Stop acknowledgement owns the captured Start lifetime", () => {
 			await settle();
 			deliverStatus({ stream_lifecycle: "starting" });
 			await settle();
-			await fireEvent.click(button(container, "Start Stream"));
+			dispatchOverlappingStart();
 			await settle();
 			answer("streaming.start", { success: true });
 			await settle();
@@ -2039,7 +2382,7 @@ describe("F9 Stop acknowledgement owns the captured Start lifetime", () => {
 			expect(startRecoveryUnknown(generation)).toBe(false);
 			expect(band(container)).toBeNull();
 			expect(controls(container)).toEqual([
-				{ label: "Start Stream", disabled: false },
+				{ label: "Starting...", disabled: true },
 			]);
 			await elapse(180_000);
 			expect(getOperationPhase(KEY)).toBe("idle");
@@ -2062,7 +2405,7 @@ describe("F9 Stop acknowledgement owns the captured Start lifetime", () => {
 					await settle();
 					reject("streaming.stop", "INTERNAL_ERROR");
 					await settle();
-					await fireEvent.click(button(container, "Start Stream"));
+					dispatchOverlappingStart();
 					await settle();
 					answer("streaming.start", { success: true });
 					await settle();
@@ -2101,7 +2444,7 @@ describe("F9 Stop acknowledgement owns the captured Start lifetime", () => {
 					expect(getStatus()?.stream_lifecycle).toBe("starting");
 					expect(controls(container)).toEqual(
 						outcome === "ack"
-							? [{ label: "Start Stream", disabled: false }]
+							? [{ label: "Starting...", disabled: true }]
 							: F8_RECOVERY_CONTROLS,
 					);
 					if (outcome === "error")
@@ -2115,7 +2458,7 @@ describe("F9 Stop acknowledgement owns the captured Start lifetime", () => {
 							deliverStatus(F8_MIXED_FALSE);
 							await settle();
 						}
-						await fireEvent.click(button(container, "Start Stream"));
+						dispatchOverlappingStart();
 						await settle();
 						answer("streaming.start", { success: true });
 						await settle();
@@ -2141,7 +2484,7 @@ describe("F9 Stop acknowledgement owns the captured Start lifetime", () => {
 		await settle();
 		reject("streaming.stop", "INTERNAL_ERROR");
 		await settle();
-		await fireEvent.click(button(container, "Start Stream"));
+		dispatchOverlappingStart();
 		await settle();
 		answer("streaming.start", { success: true });
 		await settle();
@@ -2185,7 +2528,7 @@ describe("F9 Stop acknowledgement owns the captured Start lifetime", () => {
 		expect(getOperationPhase(KEY)).toBe("pending");
 		expect(band(container)).toBeNull();
 		expect(controls(container)).toEqual([
-			{ label: "Start Stream", disabled: false },
+			{ label: "Starting...", disabled: true },
 		]);
 		expect(sentCount("status.getStatus")).toBe(4);
 		expect(sentCount("streaming.stop")).toBe(3);
@@ -2200,7 +2543,7 @@ describe("F9 Stop acknowledgement owns the captured Start lifetime", () => {
 		deliverStatus(F8_MIXED_FALSE);
 		await settle();
 		const oldGeneration = getStreamingAttemptGeneration();
-		await fireEvent.click(button(container, "Start Stream"));
+		dispatchOverlappingStart();
 		await settle();
 		answer("streaming.start", { success: true });
 		await settle();
@@ -3343,7 +3686,7 @@ describe("F4 C4-2: every Stop reply settles only its own claim", () => {
 		expect(getOperationPhase(KEY)).toBe("timed_out");
 		expect(band(container)).toBeNull();
 		expect(controls(container)).toEqual([
-			{ label: "Start Stream", disabled: false },
+			{ label: "Start Stream", disabled: true },
 		]);
 		expect(sentCount("streaming.stop")).toBe(2);
 	});

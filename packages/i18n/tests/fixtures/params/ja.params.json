@@ -149,6 +149,10 @@
 			},
 			"plural": false
 		},
+		"live.bar.blockerCount": {
+			"params": { "count": "<count>" },
+			"plural": false
+		},
 		"live.setup.linksReady": {
 			"params": {
 				"count": "<count>"

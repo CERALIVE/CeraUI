@@ -81,24 +81,9 @@ export function hasEffectiveSource(
 	return deriveEffectiveSource(config, sources).effectiveSourceId !== undefined;
 }
 
-function resolveEffectiveSourceEntry(
-	config: ConfigMessage | undefined,
-	sources: SourcesMessage,
-): StreamSource | undefined {
-	const { effectiveSourceId } = deriveEffectiveSource(config, sources);
-	if (effectiveSourceId === undefined) return undefined;
-	return sources.sources.find((source) => source.id === effectiveSourceId);
-}
-
 /**
- * Stamp the start-config base onto the EFFECTIVE SOURCE so the TWO Start gates
- * cannot disagree.
- *
- * The readiness source gate resolves `config.source` against the sources snapshot
- * and enables Start; `buildStartConfig`'s recognition gate reads the persisted,
- * DERIVED `config.pipeline` and refuses with `unknownPipeline`. When those two
- * drift the Start button renders enabled and then toasts a refusal on click — a
- * control that lies about being actionable.
+ * Project selection, the resolved row and Start config together so the
+ * readiness source gate cannot disagree with payload assembly.
  *
  * Resolving ⇒ `source` + `pipeline` come from THAT row (a stale pipeline can never
  * reach the payload). Not resolving ⇒ `pipeline` is DROPPED, so the start refuses
@@ -112,14 +97,25 @@ function resolveEffectiveSourceEntry(
 export function reconcileStartSource(
 	config: ConfigMessage | undefined,
 	sources: SourcesMessage | undefined,
-): ConfigMessage | undefined {
-	if (config === undefined || sources === undefined) return config;
-
-	const entry = resolveEffectiveSourceEntry(config, sources);
+): {
+	effective: EffectiveSource;
+	entry: StreamSource | undefined;
+	config: ConfigMessage | undefined;
+} {
+	const effective = deriveEffectiveSource(config, sources);
+	const entry = sources?.sources.find(
+		({ id }) => id === effective.effectiveSourceId,
+	);
+	if (config === undefined || sources === undefined)
+		return { effective, entry, config };
 	if (entry === undefined) {
 		const { pipeline: _unresolvable, ...rest } = config;
-		return rest as ConfigMessage;
+		return { effective, entry, config: rest };
 	}
 
-	return { ...config, source: entry.id, pipeline: entry.pipelineId };
+	return {
+		effective,
+		entry,
+		config: { ...config, source: entry.id, pipeline: entry.pipelineId },
+	};
 }

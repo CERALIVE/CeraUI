@@ -109,6 +109,7 @@ async function startWithReply(
 	result: Frame | (() => Frame),
 	onPowerCall?: (path: string) => void,
 	dismissInstallLabel?: string,
+	projectInbound?: (frame: Frame) => void,
 ): Promise<WsHandle> {
 	const ws = await attachWs(page, {
 		mutateInbound: (frame) => {
@@ -120,6 +121,7 @@ async function startWithReply(
 				config.source = KNOWN_SOURCE;
 				if (!config.srtla_addr && !config.relay_server) config.srtla_addr = '127.0.0.1';
 			}
+			projectInbound?.(frame);
 			// Drop the real pipelines + sources registries; we push authoritative ones.
 			return !('pipelines' in frame) && !('sources' in frame);
 		},
@@ -200,6 +202,69 @@ test('Open stream setup focuses the shipped card heading', async ({ page }) => {
 	await expect(heading).toBeFocused();
 });
 
+for (const viewport of [{ width: 800, height: 480 }, { width: 844, height: 390 }]) {
+	for (const locale of ['en', 'ar'] as const) {
+		test(`refusal and open checklist are reachable together at ${viewport.width}×${viewport.height} (${locale})`, async ({ page }) => {
+			await page.setViewportSize(viewport);
+			await page.emulateMedia({ reducedMotion: 'reduce' });
+			await page.addInitScript((code) => localStorage.setItem('locale', JSON.stringify({ code })), locale);
+			const attemptId = `checklist-refusal-${viewport.width}-${locale}`;
+			const noDestination = { srtla_addr: '', relay_server: '', selected_ingest_endpoint: '' };
+			let blocked = false;
+			const ws = await startWithReply(page, {
+				result: 'failed', success: false, attemptId,
+				failure: { attemptId, phase: 'connect', class: 'engine_unavailable', retriable: true },
+			}, undefined, undefined, (frame) => {
+				// Keep the simulated device observations true across periodic pushes.
+				if (!blocked) return;
+				if ('netif' in frame) frame.netif = {};
+				if (frame.config) Object.assign(frame.config, noDestination);
+			});
+			const arabic = locale === 'ar';
+			await expect(page.locator('html')).toHaveAttribute('dir', arabic ? 'rtl' : 'ltr');
+			const toast = page.locator('.start-refusal-toast');
+			const retry = toast.getByRole('button', { name: arabic ? 'حاول مرة أخرى' : 'Try again', exact: true });
+			const logs = toast.getByRole('button', { name: arabic ? 'عرض السجلات' : 'View logs', exact: true });
+			const close = toast.getByRole('button', { name: arabic ? 'إغلاق' : 'Close', exact: true });
+			await expect(retry).toBeVisible();
+			blocked = true;
+			ws.push({ config: noDestination, netif: {} });
+			const bar = page.getByTestId('live-bar');
+			const show = bar.getByRole('button', { name: arabic ? 'عرض الكل' : 'Show all', exact: true });
+			await show.press('Enter');
+			const panel = bar.getByRole('region', { name: arabic ? 'قبل بدء البث' : 'Before you go live', exact: true });
+			const heading = panel.getByRole('heading');
+			const networkName = arabic ? 'إعداد الشبكة' : 'Set up network';
+			const network = panel.getByRole('button', { name: networkName, exact: true });
+			const destination = panel.getByRole('button', { name: arabic ? 'اختر وجهة' : 'Choose destination', exact: true });
+			const assertReachable = async (action: Locator) => {
+				await expect.poll(() => centerHits(action)).toBe(true);
+				await expect(action).toBeInViewport({ ratio: 1 });
+			};
+			await expect(panel.getByRole('button')).toHaveCount(2);
+			await expect(heading).toBeFocused();
+			await page.keyboard.press('Tab');
+			await expect(network).toBeFocused();
+			await assertReachable(network);
+			await page.keyboard.press('Tab');
+			await expect(destination).toBeFocused();
+			await assertReachable(destination);
+			for (const action of [retry, logs, close, bar.getByRole('button', { name: arabic ? 'إغلاق' : 'Close', exact: true })]) {
+				await assertReachable(action);
+			}
+			await retry.focus();
+			await page.keyboard.press('Tab');
+			await expect(logs).toBeFocused();
+			await page.keyboard.press('Tab');
+			await expect(close).toBeFocused();
+			// The toast must also clear the checklist copy, not just its buttons.
+			const [toastBox, panelBox] = await Promise.all([toast.boundingBox(), panel.boundingBox()]);
+			if (!toastBox || !panelBox) throw new Error('Expected both recovery surfaces');
+			expect(toastBox.y + toastBox.height).toBeLessThanOrEqual(panelBox.y);
+		});
+	}
+}
+
 test.describe('stream-start failure reason in the toast (T16)', () => {
 	test.beforeEach(({ browserName }, testInfo) => {
 		test.skip(browserName !== 'chromium', 'single-browser toast-copy lock');
@@ -270,7 +335,9 @@ for (const [locale, theme] of [['en', 'light'], ['ar', 'dark']] as const) {
 		await page.keyboard.press('Tab');
 		await expect(logs).toBeFocused();
 		ws.push({ netif: { eth0: { enabled: false } } });
-		await expect(page.getByTestId('live-bar').getByRole('button')).toBeDisabled();
+		await expect(page.getByTestId('live-bar').getByRole('button', {
+			name: locale === 'ar' ? 'بدء البث' : 'Start Stream', exact: true,
+		})).toBeDisabled();
 		await primary.press('Enter');
 		await expect(logs).toBeVisible();
 	});
@@ -326,7 +393,9 @@ test.describe('short-phone refusal recovery', () => {
 				const logs = page.getByRole('button', { name: locale === 'ar' ? 'عرض السجلات' : 'View logs', exact: true });
 				await expectAboveChrome(page, [retry, logs]);
 				ws.push({ netif: { eth0: { enabled: false } } });
-				await expect(page.getByTestId('live-bar').getByRole('button')).toBeDisabled();
+				await expect(page.getByTestId('live-bar').getByRole('button', {
+					name: locale === 'ar' ? 'بدء البث' : 'Start Stream', exact: true,
+				})).toBeDisabled();
 				await retry.tap();
 				await expectAboveChrome(page, [retry, logs]);
 				await logs.tap();
@@ -430,7 +499,9 @@ test('Spanish retry feedback names the Live tab verbatim', async ({ page }) => {
 		failure: { attemptId, phase: 'connect', class: 'engine_unavailable', retriable: true },
 	});
 	ws.push({ netif: { eth0: { enabled: false } } });
-	await expect(page.getByTestId('live-bar').getByRole('button')).toBeDisabled();
+	await expect(page.getByTestId('live-bar').getByRole('button', {
+		name: 'Iniciar transmisión', exact: true,
+	})).toBeDisabled();
 	await page.getByRole('button', { name: 'Intentar de nuevo', exact: true }).press('Enter');
 	await expect(page.getByText('Esta acción ya no está disponible. Revisa el estado de la transmisión en Live.', { exact: true })).toBeVisible();
 });

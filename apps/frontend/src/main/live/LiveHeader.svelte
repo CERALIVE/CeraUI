@@ -42,14 +42,14 @@ const { isStreaming, unconfirmed = false }: Props = $props();
 	     state, so below 640 px the header is the state chip alone; the title stays
 	     in the page for screen readers and the heading outline. -->
 	<div class="min-w-0">
-		<h1 class={['text-2xl font-bold tracking-tight', isStreaming && !unconfirmed && 'max-sm:sr-only']}>{m["live.title"]()}</h1>
+		<h1 tabindex="-1" class={['text-2xl font-bold tracking-tight', isStreaming && !unconfirmed && 'max-sm:not-focus:sr-only']}>{m["live.title"]()}</h1>
 		<p class={['text-muted-foreground text-sm', isStreaming && !unconfirmed && 'max-sm:sr-only']}>{m["live.description"]()}</p>
 	</div>
 </header>
 
 <style>
 	@media (orientation: landscape) and (max-height: 420px) and (width < 1024px) {
-		.short-live > div {
+		.short-live > div:not(:focus-within) {
 			position: absolute;
 			width: 1px;
 			height: 1px;
@@ -57,5 +57,9 @@ const { isStreaming, unconfirmed = false }: Props = $props();
 			clip-path: inset(50%);
 			white-space: nowrap;
 		}
+	}
+
+	h1 {
+		scroll-margin-block-start: calc(var(--app-header-height, 57px) + var(--offline-bar-height) + var(--top-bands-height) + 0.5rem);
 	}
 </style>

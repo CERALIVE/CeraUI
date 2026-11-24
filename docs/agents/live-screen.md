@@ -53,7 +53,7 @@ tokens, motion, copy tone and states.
 | `output-card` | The encoder row and the destination row of the stream setup, with the bitrate-ceiling chip (the bitrate in the encoder summary, tappable) and the destination traffic light. | Idle, when those rows render. |
 | `connections-card` | The network row. | Idle. |
 | `telemetry-card` | `StreamTelemetryStrip` and `IngestStats`. | Live, and in the post-stream summary window. |
-| `live-bar` | Idle: the first blocking reason or a ready state, and Start. Live: `BitrateAdjuster` and Stop. Summary window: Done. | In both cockpits. |
+| `live-bar` | Idle: compact readiness, actionable disclosure when needed, and Start. Live: `BitrateAdjuster` and Stop. Summary window: Done. | In both cockpits. |
 
 These test ids must keep their names and meaning: `idle-cockpit`,
 `live-cockpit`, `source-section`, `source-audio`, `open-audio-dialog`,
@@ -189,24 +189,42 @@ rollup visible after Stop even if Details was never opened.
 
 - `live-bar` must stay fixed to the bottom of the viewport on every screen
   size, directly above the mobile dock when the dock is shown.
-- Idle, it shows readiness from `deriveGoLiveReadiness` beside Start.
-- While Start is blocked, the bar lists every blocked gate at once, in
-  `GATE_FIX_ORDER`. One blocker reads as its reason, with its fix button when
-  it has one. Two or more read "Fix these before you go live" (no count, so no
-  new plural message), then one row per gate: its reason as visible text and a
-  button to the existing setting where a fix exists (Choose source, Choose
-  destination, Set up network). The engine gate has no fix and shows its reason
-  alone. While a fix exists, a blocked Start stays dimmed and `aria-disabled`
-  and a tap moves focus to the first fix; it never starts. With no fix (only
-  the engine blocks) and while a start is in flight, Start is natively disabled.
-- The blocker list takes at most a quarter of the viewport height and scrolls
-  inside past that, so Start stays in view. At 640 px of viewport height or
-  less (landscape, split view) the rows stay rows with every reason as visible
-  text; they only tighten, and Start and the status line take less height. A
-  row cut off at the bottom of the list shows that more scrolls into view.
-  Touch drags that start inside the list scroll it without triggering page
-  pull-to-refresh. Each fix button is described by its reason
-  (`aria-describedby`), including when the status line carries the sole reason.
+- `LiveView` uses one `assessStart()` decision for the bar and Start activation.
+  Ready means the current local checks and payload assembly passed, not that
+  the device or receiver will accept the stream. Lifecycle, gateway, audio
+  inventory (typed and legacy), and update evidence each require their own
+  admitted receipt on this connection. A lifecycle-only reconnect push cannot
+  renew other fields from the retained snapshot. Disconnect withdraws those
+  facts; required unknown evidence yields “Checking readiness…” unless another
+  blocker is known. Starting, stopping, live and unconfirmed states take
+  precedence over idle remedies. The idle preflight has no Stop route, even
+  when a live lifecycle receipt arrives ahead of the live boolean.
+- A current `committing` or `restarting-services` refusal shown in the update
+  band also disables Start. A previous typed refusal is historical guidance, not
+  a new veto. Neither `downloading` nor `awaiting-idle` disables Start on its
+  own. The backend still owns D8 and can refuse an otherwise Ready start.
+- Live is the only Start entry; there is no window callback. A Start queued
+  behind a composition write rechecks the same admission when the write
+  settles. Only its own local Starting state is ignored. A changed socket,
+  superseded attempt, or failed admission cancels it before any Start request.
+  A fresh idle receipt alone does not cancel it. A cancelled attempt clears
+  without reporting a device failure.
+- One blocker shows its reason and fix side by side. Several show a localized
+  count, the first available fix and “Show all”. The disclosure above the bar
+  lists every known reason (Source, Audio, Network, Destination, Engine, then
+  an update refusal) and provides an action when there is one. An offline
+  engine and a refusing update have no fix. Start is natively disabled and neutral
+  when unavailable, described by the first fix's reason or current status.
+- “Before you go live” stays below the sticky chrome with one bounded scroll
+  region and a visible scroll cue. Only touches that start inside the list
+  are excluded from page pull-to-refresh. Opening focuses the heading;
+  Tab visits the panel fixes before returning to the bar controls, and Escape
+  returns to the disclosure. Keep surviving focus. On removal or disablement,
+  recover only if the bar owned focus. If the idle bar is replaced, focus the
+  Live heading, not Stop. Source/Network
+  navigation closes the disclosure; the Destination dialog owns its own
+  focus. `LiveView.focusStartOrPreflight()` serves Start recovery without
+  clicking Start or guessing a selector.
 - Live, it must show the bitrate control and Stop.
 - At every width (phone, kiosk and desktop), the Live bar's Stop opens
   "End the stream?" with Keep streaming (initial focus, the bottom button
@@ -260,17 +278,29 @@ for the Live bar. Try again re-reads the same gates at the tap and at dispatch,
 and checks for a settled idle lifecycle and the current refusal's identity. It
 is not offered for post-connect timeout, unresolved Stop, or a known engine
 state conflict. If conditions change after the toast appears, a blocked tap
-keeps both the toast and View logs. Network opens the modem controls; Stream
-setup focuses the card heading. Retry uses the refused Start's original
-payload. At the tap and before dispatch it checks the accepted config
-generation and resolved destination against that Start, even if settings
-changed before the refusal arrived. A changed destination requires a fresh
-Start from the bar; the refusal and View logs stay available. The update
-refusal retains its wait message.
+keeps both the toast and View logs and focuses the current preflight, or the
+Live heading when the stream outcome is unresolved. Dismissing a current
+refusal uses that same focus path without sending a request. Network opens
+the modem controls; Stream setup focuses the card heading. Retry rebuilds
+the payload from the current assessment and checks the accepted config
+generation and resolved destination against the refused Start, even if
+settings changed before the refusal arrived. A changed destination requires
+a fresh Start from the bar. The update refusal retains its wait message.
 
 Layout: the actionable refusal has its own toast stack above the Live bar and
-dock. On short phones the reason scrolls independently, with a line visible
-above the single row of actions. Later device notices cannot push it away.
+dock. An open preflight checklist publishes its own height so the toast also
+clears it. The fixed checklist budgets for the measured header, top bands and
+update badge so its heading can receive visible focus. On short phones with
+multiple blockers, the document scrolls the Start bar, checklist, and same
+refusal card in flow. The sticky header and fixed dock have scroll clearance;
+one surface cannot push the other above the viewport. Later device notices
+cannot push the refusal away.
+When a live receipt replaces the focused idle bar, the Live heading stays
+visible while it owns focus, including in the compact portrait and landscape
+header layouts. Focus never lands on Stop.
+On narrow phones, the auto-selected camera sentence wraps even an unbroken
+device name without hiding Change. The Start preflight paints the full
+blocking reason rather than clamping it.
 
 A repeat belongs only to the retry's generation and must arrive less than two
 minutes from dispatch on the monotonic clock. A fresh Start, observed running

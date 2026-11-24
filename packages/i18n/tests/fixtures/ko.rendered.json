@@ -666,6 +666,7 @@
 	"live.server.manageLinks": "링크 관리",
 	"live.server.singleLink": "단일 링크",
 	"live.server.singleLinkHint": "이 수신기는 단일 직접 링크를 사용합니다. 이 전송 방식에서는 여러 링크 본딩이 사용되지 않습니다.",
+	"live.bar.blockerCount": "해결할 문제 <count>개",
 	"live.setup.linksReady": "<count>개 링크 준비됨",
 	"live.setup.noLinks": "링크 없음",
 	"live.setup.title": "스트림 설정",

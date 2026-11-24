@@ -155,7 +155,7 @@ afterEach(() => {
 
 const STOP_AND_START = [
 	{ label: "Stop Stream", disabled: false },
-	{ label: "Start Stream", disabled: false },
+	{ label: "Start Stream", disabled: true },
 ];
 
 /**
@@ -178,7 +178,7 @@ async function loseTheStopReplyAfterStopping(
 	push(transport, { stream_lifecycle: "stopping" });
 	expect(controls(container)).toEqual([
 		{ label: "Stopping...", disabled: true },
-		{ label: "Start Stream", disabled: false },
+		{ label: "Start Stream", disabled: true },
 	]);
 	lose(new ConnectionResetError(["streaming", "stop"]));
 	dropLink(transport);
@@ -243,14 +243,14 @@ describe("R2: a lost Stop reply keeps the unresolved Stop reachable", () => {
 		expect(getOperationPhase(KEY)).toBe("timed_out");
 		expect(band(container)).toBeNull();
 		expect(controls(container)).toEqual([
-			{ label: "Start Stream", disabled: false },
+			{ label: "Start Stream", disabled: true },
 		]);
 	});
 });
 
 const STOPPING_AND_START = [
 	{ label: "Stopping...", disabled: true },
-	{ label: "Start Stream", disabled: false },
+	{ label: "Start Stream", disabled: true },
 ];
 
 /**
@@ -422,7 +422,7 @@ describe("R4: a full snapshot replaces the lifecycle, a partial push merges it",
 		expect(getStatus()?.stream_lifecycle).toBeUndefined();
 		expect(band(container)).toBeNull();
 		expect(controls(container)).toEqual([
-			{ label: "Start Stream", disabled: false },
+			{ label: "Start Stream", disabled: true },
 		]);
 	});
 

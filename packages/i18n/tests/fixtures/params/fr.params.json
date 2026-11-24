@@ -152,6 +152,10 @@
 			],
 			"plural": true
 		},
+		"live.bar.blockerCount": {
+			"plural": true,
+			"countParams": ["count"]
+		},
 		"live.setup.linksReady": {
 			"countParams": [
 				"0",

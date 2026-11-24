@@ -21,6 +21,7 @@ import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 import ClockIcon from '@lucide/svelte/icons/clock';
 import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 
+import { publishHeight } from '$lib/layout';
 import { getUpdateOrchestratorState } from '$lib/rpc/subscriptions.svelte';
 import { requestDialog } from '$lib/stores/dialog-request.svelte';
 import { isUpdateWaiting } from '$lib/updates/update-dialog-view';
@@ -36,10 +37,13 @@ const busy = $derived(isUpdateBusy(wire));
 const percent = $derived(progressPercent(wire));
 const eta = $derived(etaMinutes(wire?.progress?.etaSeconds));
 const locale = $derived(getLocale());
+let badge: HTMLDivElement | undefined = $state();
+$effect(() => (badge ? publishHeight(badge, '--update-badge-height') : undefined));
 </script>
 
 {#if busy && wire}
 	<div
+		bind:this={badge}
 		class="bg-status-info/10 border-status-info/30 flex justify-center border-b px-4 py-1.5"
 		data-phase={wire.phase}
 		data-testid="update-orchestrator-badge"

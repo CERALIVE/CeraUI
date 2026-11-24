@@ -17,7 +17,13 @@
  *   • NONE of the retired collapse/gate testids exist (no ready bar — all four
  *     rows are ALWAYS fully rendered).
  */
-import { setLocale } from "@ceraui/i18n/svelte";
+
+import {
+	getLocale,
+	LOCALES,
+	type LocaleCode,
+	setLocale,
+} from "@ceraui/i18n/svelte";
 import type {
 	CapabilitiesMessage,
 	ConfigMessage,
@@ -29,11 +35,12 @@ import type {
 } from "@ceraui/rpc/schemas";
 import { Cpu, Server, Volume2 } from "@lucide/svelte";
 import { fireEvent, render, within } from "@testing-library/svelte";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
+import { tick } from "svelte";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StreamingOptimismState } from "$lib/rpc/streaming-optimism.svelte";
-import { idleStartGate } from "$lib/streaming/idle-start-gate";
+import { assessStart } from "$lib/streaming/assess-start";
 import type { ManagedIngestAccount } from "$lib/streaming/receiver-experience";
+import { installJsdomShims } from "../../tests/fixtures/real-cockpit-harness";
 import type { ConfigRow } from "./StreamSettingsCard.svelte";
 import StreamSetupChain from "./StreamSetupChain.svelte";
 
@@ -91,7 +98,6 @@ const LIVE_NETIF: NetifMessage = {
 
 interface Handlers {
 	onStart: ReturnType<typeof vi.fn>;
-	onStop: ReturnType<typeof vi.fn>;
 	onOpenSource: ReturnType<typeof vi.fn>;
 	onGoNetwork: ReturnType<typeof vi.fn>;
 	onOpenServer: ReturnType<typeof vi.fn>;
@@ -101,7 +107,6 @@ interface Handlers {
 function handlers(): Handlers {
 	return {
 		onStart: vi.fn(),
-		onStop: vi.fn(),
 		onOpenSource: vi.fn(),
 		onGoNetwork: vi.fn(),
 		onOpenServer: vi.fn(),
@@ -176,15 +181,32 @@ function renderChain(over: Overrides = {}) {
 		managedSlots: over.managedSlots,
 	};
 	const props = {
-		gate: idleStartGate(inputs),
-		netif: inputs.netif,
+		...inputs,
 		configRows: configRows(h, over.rowOptions),
 		isStreaming: over.isStreaming ?? false,
 		optimismState: over.optimismState ?? ("idle" as StreamingOptimismState),
 		destinationValidated: over.destinationValidated,
 		...h,
 	};
-	const view = render(StreamSetupChain, { props });
+	const assessment = assessStart({
+		...props,
+		caps: "caps" in over ? props.caps : {},
+		lifecycle: "idle",
+		optimism: props.optimismState,
+		streaming: props.isStreaming,
+		outcomeUnknown: false,
+		audioOverride: null,
+		audioSources: undefined,
+		audioIds: undefined,
+	});
+	const view = render(StreamSetupChain, {
+		props: {
+			...props,
+			assessment,
+			onOpenAudio: vi.fn(),
+			onOpenAudioSource: vi.fn(),
+		},
+	});
 	return { ...view, ...h };
 }
 
@@ -199,6 +221,10 @@ function rowFor(container: HTMLElement, key: string): HTMLElement | null {
 		`[data-testid="setup-row"][data-row="${key}"]`,
 	);
 }
+
+beforeAll(() => {
+	installJsdomShims(vi.fn());
+});
 
 beforeEach(() => {
 	setConfig.mockReset();
@@ -260,8 +286,8 @@ describe("StreamSetupChain — encoder row (source gate)", () => {
 		const start = within(container).getByRole("button", {
 			name: /start stream/i,
 		});
-		// Blocked Start is aria-disabled (a tap points at the fixes) and never starts.
-		expect(start.getAttribute("aria-disabled")).toBe("true");
+		expect(start).toHaveProperty("disabled", true);
+		expect(start.getAttribute("aria-disabled")).toBeNull();
 		await fireEvent.click(start);
 		expect(onStart).not.toHaveBeenCalled();
 		expect(start.getAttribute("title")).toBe(
@@ -492,7 +518,8 @@ describe("StreamSetupChain — destination row", () => {
 		const start = within(container).getByRole("button", {
 			name: /start stream/i,
 		});
-		expect(start.getAttribute("aria-disabled")).toBe("true");
+		expect(start).toHaveProperty("disabled", true);
+		expect(start.getAttribute("aria-disabled")).toBeNull();
 		await fireEvent.click(start);
 		expect(onStart).not.toHaveBeenCalled();
 	});
@@ -540,7 +567,7 @@ describe("StreamSetupChain — one row pattern", () => {
 	it("gives the encoder and network rows a dot that follows their gate", () => {
 		const { container } = renderChain({
 			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
-			netif: undefined,
+			netif: {},
 			rowOptions: { encoderWarn: true },
 		});
 		expect(dotTone(container, "encoder")).toBe("warn");
@@ -580,7 +607,7 @@ describe("StreamSetupChain — network row", () => {
 	it("blocked network gate → network row blocked + a goNetwork fix that navigates", async () => {
 		const { container, onGoNetwork } = renderChain({
 			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
-			netif: undefined, // no enabled+IP interface → network gate blocked
+			netif: {}, // observed no enabled+IP interface
 		});
 		const network = rowFor(container, "network");
 		expect(network?.getAttribute("data-state")).toBe("blocked");
@@ -619,10 +646,13 @@ describe("StreamSetupChain — streaming lock", () => {
 		expect(locks.length).toBeGreaterThan(0);
 		// All three rows are still rendered while streaming (no collapse).
 		expect(rowKeys(container)).toHaveLength(3);
-		// Stop control is offered.
-		expect(
-			within(container).getByRole("button", { name: /stop stream/i }),
-		).toBeTruthy();
+		// This idle surface can report live, but only the owning cockpit can Stop.
+		const bar = within(within(container).getByTestId("live-bar"));
+		expect(bar.queryByRole("button", { name: "Stop Stream" })).toBeNull();
+		expect(bar.getByRole("button", { name: "Start Stream" })).toHaveProperty(
+			"disabled",
+			true,
+		);
 	});
 });
 
@@ -654,7 +684,7 @@ describe("StreamSetupChain — sole-camera contract", () => {
 		expect(onOpenSource).toHaveBeenCalledTimes(1);
 	});
 
-	it("folds the implicit source id into the Start payload, still no setConfig", async () => {
+	it("activates Start with the implicit camera without saving config", async () => {
 		const { container, onStart } = renderChain({
 			config: { relay_server: "fra" } as ConfigMessage,
 			sources: makeSources(capture("cam-1", "HDMI")),
@@ -664,7 +694,7 @@ describe("StreamSetupChain — sole-camera contract", () => {
 		});
 		expect((start as HTMLButtonElement).disabled).toBe(false);
 		await fireEvent.click(start);
-		expect(onStart).toHaveBeenCalledWith({ source: "cam-1" });
+		expect(onStart).toHaveBeenCalledTimes(1);
 		expect(setConfig).not.toHaveBeenCalled();
 	});
 
@@ -714,214 +744,236 @@ it.each([
 	},
 );
 
-describe("StreamSetupChain — the Live bar lists every blocker with its fix", () => {
-	function bar(container: HTMLElement): HTMLElement {
-		const el = container.querySelector<HTMLElement>('[data-testid="live-bar"]');
-		if (!el) throw new Error("no live bar");
-		return el;
-	}
-	function fixButtons(container: HTMLElement): HTMLButtonElement[] {
-		return [
-			...bar(container).querySelectorAll<HTMLButtonElement>("button[data-fix]"),
-		];
+describe("StreamSetupChain — Start preflight", () => {
+	function bar(container: HTMLElement) {
+		return within(within(container).getByTestId("live-bar"));
 	}
 
-	it("no source and no server: both show at once, one button each", async () => {
+	it.each([
+		[{}, undefined, "Configure a server before starting the stream"],
+		[
+			{ selected_ingest_endpoint: "slot-gone" },
+			[slot("slot-1")],
+			"This ingest slot is no longer available — choose another destination",
+		],
+	] satisfies [ConfigMessage, ManagedIngestAccount[] | undefined, string][])(
+		"describes the Destination fix with the actual reason: %s",
+		async (config, managedSlots, reason) => {
+			const { container } = renderChain({
+				config,
+				managedSlots,
+				sources: makeSources(),
+			});
+			const ui = bar(container);
+			await fireEvent.click(ui.getByRole("button", { name: "Show all" }));
+			const list = within(ui.getByRole("list", { name: "Before you go live" }));
+			expect(list.getByText(reason)).toBeDefined();
+			expect(
+				list.getByRole("button", {
+					name: "Choose destination",
+					description: reason,
+				}),
+			).toBeDefined();
+		},
+	);
+
+	it("shows the count and exposes both named fixes together", async () => {
 		const { container, onOpenSource, onOpenServer } = renderChain({
-			config: {} as ConfigMessage,
+			config: {},
 			sources: makeSources(),
 		});
-		expect(bar(container).textContent).toContain(
-			"Fix these before you go live",
+		const ui = bar(container);
+		const review = ui.getByRole("button", {
+			name: "Show all",
+			description: "2 things to fix",
+		});
+		await fireEvent.click(review);
+		const panel = within(ui.getByRole("list", { name: "Before you go live" }));
+		expect(
+			panel.getAllByRole("button").map((fix) => fix.textContent?.trim()),
+		).toEqual(["Choose source", "Choose destination"]);
+		await fireEvent.click(
+			panel.getByRole("button", { name: "Choose destination" }),
 		);
-		const fixes = fixButtons(container);
-		expect(fixes.map((b) => b.textContent?.trim())).toEqual([
-			"Choose source",
-			"Choose destination",
-		]);
-		await fireEvent.click(fixes[0] as HTMLButtonElement);
-		expect(onOpenSource).toHaveBeenCalledTimes(1);
-		await fireEvent.click(fixes[1] as HTMLButtonElement);
 		expect(onOpenServer).toHaveBeenCalledTimes(1);
+		await fireEvent.click(panel.getByRole("button", { name: "Choose source" }));
+		expect(onOpenSource).toHaveBeenCalledTimes(1);
 	});
 
-	it("one blocker reads as its own reason, with its one button", () => {
+	it("keeps every checklist reason visible and associated with its fix, including short screens", async () => {
+		const { container, component } = renderChain({
+			config: { selected_ingest_endpoint: "slot-gone" },
+			sources: makeSources(),
+			managedSlots: [slot("slot-1")],
+			caps: { engineUnavailable: true },
+			netif: {},
+		});
+		const ui = bar(container);
+		await fireEvent.click(ui.getByRole("button", { name: "Show all" }));
+		const list = within(ui.getByRole("list", { name: "Before you go live" }));
+		const reasons = [
+			"Select a video source before starting the stream",
+			"No active links yet",
+			"This ingest slot is no longer available — choose another destination",
+			"Streaming engine offline",
+		];
+		const rows = list.getAllByRole("listitem");
+		expect(rows).toHaveLength(reasons.length);
+		for (const [index, reason] of reasons.entries()) {
+			const row = rows[index];
+			if (!row) throw new Error(`Missing checklist row for ${reason}`);
+			const text = within(row).getByText(reason);
+			expect(text.hidden).toBe(false);
+			expect(text.closest("[hidden], [aria-hidden='true']")).toBeNull();
+		}
+		const fix = list.getByRole("button", {
+			name: "Choose source",
+			description: reasons[0],
+		});
+		const scrollIntoView = vi.fn();
+		Object.defineProperty(fix, "scrollIntoView", { value: scrollIntoView });
+		expect(component.focusStartOrPreflight()).toBe(true);
+		expect(document.activeElement).toBe(fix);
+		expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+	});
+
+	it("renders the several-blockers count in every shipped locale", async () => {
+		const counts: Record<LocaleCode, string> = {
+			ar: "أمران يحتاجان إلى إصلاح",
+			de: "2 Probleme beheben",
+			en: "2 things to fix",
+			es: "2 cosas por resolver",
+			fr: "2 problèmes à régler",
+			hi: "2 समस्याएँ ठीक करें",
+			ja: "要対応：2件",
+			ko: "해결할 문제 2개",
+			"pt-BR": "2 problemas para resolver",
+			zh: "有 2 项待处理",
+		};
+		const original = getLocale();
+		const { container } = renderChain({ config: {}, sources: makeSources() });
+		const disclosure = container.querySelector(
+			"[aria-expanded='false'][data-preflight-review]",
+		);
+		const descriptionId = disclosure?.getAttribute("aria-describedby");
+		try {
+			for (const { code } of LOCALES) {
+				setLocale(code);
+				await tick();
+				expect(
+					descriptionId &&
+						document.getElementById(descriptionId)?.textContent?.trim(),
+				).toBe(counts[code]);
+			}
+		} finally {
+			setLocale(original);
+		}
+	});
+
+	it("shows one blocker inline, with its accessible reason and no disclosure", () => {
 		const { container } = renderChain({
-			config: { relay_server: "fra" } as ConfigMessage,
+			config: { relay_server: "fra" },
 			sources: makeSources(),
 		});
-		expect(bar(container).textContent).toContain(
-			"Select a video source before starting the stream",
-		);
-		expect(bar(container).textContent).not.toContain("Fix these");
-		expect(fixButtons(container).map((b) => b.dataset.fix)).toEqual([
-			"openSource",
-		]);
+		const ui = bar(container);
+		const description = "Select a video source before starting the stream";
 		expect(
-			within(bar(container)).getByRole("button", {
-				name: "Choose source",
-				description: "Select a video source before starting the stream",
-			}),
-		).toBe(fixButtons(container)[0]);
+			ui.getByRole("button", { name: "Choose source", description }),
+		).toBeDefined();
+		expect(
+			ui.getByRole("button", { name: "Start Stream", description }),
+		).toHaveProperty("disabled", true);
+		expect(ui.queryByRole("button", { name: "Show all" })).toBeNull();
 	});
 
 	it("no usable link offers the way to Network", async () => {
 		const { container, onGoNetwork } = renderChain({
-			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
+			config: { source: "cam-1", relay_server: "fra" },
 			netif: {},
 		});
-		const fixes = fixButtons(container);
-		expect(fixes.map((b) => b.dataset.fix)).toEqual(["goNetwork"]);
-		await fireEvent.click(fixes[0] as HTMLButtonElement);
+		await fireEvent.click(
+			bar(container).getByRole("button", {
+				name: "Set up network",
+				description: "No active links yet",
+			}),
+		);
 		expect(onGoNetwork).toHaveBeenCalledTimes(1);
 	});
 
-	it("disconnected: network and engine both show, each with its reason, and only network has a button", () => {
+	it("disconnected: does not invent an engine failure or empty uplinks", () => {
 		const { container } = renderChain({
-			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
+			config: { source: "cam-1", relay_server: "fra" },
 			isConnected: false,
 		});
-		const items = [
-			...bar(container).querySelectorAll<HTMLElement>("li[data-blocker]"),
-		];
-		expect(items.map((li) => li.dataset.blocker)).toEqual([
-			"network",
-			"engine",
-		]);
-		const reasons = items.map((li) =>
-			li.querySelector("[data-blocker-reason]")?.textContent?.trim(),
+		const ui = bar(container);
+		expect(ui.getByRole("status").textContent?.trim()).toBe(
+			"Checking readiness…",
 		);
-		expect(reasons[0]?.length).toBeGreaterThan(0);
-		expect(reasons[1]).toBe("Streaming engine offline");
-		expect(
-			items[0]?.querySelector("button[data-fix]")?.getAttribute("data-fix"),
-		).toBe("goNetwork");
-		expect(items[1]?.querySelector("button")).toBeNull();
-	});
-
-	it("a missing and a revoked destination share a button label and read apart by their visible reasons", () => {
-		// Each setup also lacks a source, so the bar shows the checklist rows.
-		function destinationRow(
-			config: ConfigMessage,
-			managedSlots?: ManagedIngestAccount[],
-		) {
-			const { container, unmount } = renderChain({
-				config,
-				sources: makeSources(),
-				...(managedSlots ? { managedSlots } : {}),
-			});
-			const row = bar(container).querySelector<HTMLElement>(
-				'li[data-blocker="destination"]',
-			);
-			const reason = row?.querySelector<HTMLElement>("[data-blocker-reason]");
-			const button = row?.querySelector<HTMLButtonElement>("button[data-fix]");
-			const out = {
-				reason: reason?.textContent?.trim() ?? "",
-				reasonHidden: /sr-only/.test(reason?.className ?? "sr-only"),
-				label: button?.textContent?.trim() ?? "",
-				describedBy:
-					button?.getAttribute("aria-describedby") === reason?.id &&
-					Boolean(reason?.id),
-			};
-			unmount();
-			return out;
-		}
-		const missing = destinationRow({} as ConfigMessage);
-		const revoked = destinationRow(
-			{ selected_ingest_endpoint: "slot-gone" } as ConfigMessage,
-			[slot("slot-1")],
+		expect(ui.queryByRole("button", { name: "Set up network" })).toBeNull();
+		expect(ui.getByRole("button", { name: "Start Stream" })).toHaveProperty(
+			"disabled",
+			true,
 		);
-		expect(missing.label).toBe("Choose destination");
-		expect(revoked.label).toBe(missing.label);
-		expect(missing.reason.length).toBeGreaterThan(0);
-		expect(revoked.reason.length).toBeGreaterThan(0);
-		expect(revoked.reason).not.toBe(missing.reason);
-		// Visible on every screen height: no screen-reader-only variant on the reason.
-		for (const row of [missing, revoked]) {
-			expect(row.reasonHidden).toBe(false);
-			expect(row.describedBy).toBe(true);
-		}
 	});
 
-	it("no reason in the checklist has a hidden or folded variant on short screens", () => {
-		const { container } = renderChain({
-			config: { selected_ingest_endpoint: "slot-gone" } as ConfigMessage,
-			sources: makeSources(),
-			managedSlots: [slot("slot-1")],
-		});
-		const classes = [
-			...bar(container).querySelectorAll<HTMLElement>(
-				"li[data-blocker], [data-blocker-reason]",
-			),
-		].map((el) => el.className);
-		expect(classes.length).toBeGreaterThanOrEqual(4);
-		for (const cls of classes) {
-			expect(cls).not.toMatch(/sr-only|:contents|:hidden/);
-		}
-	});
-
-	it("engine only: no checklist button, and Start stays natively disabled", async () => {
+	it("engine only: no fix, and Start stays natively disabled", async () => {
 		const { container, onStart } = renderChain({
-			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
-			caps: { engineUnavailable: true } as unknown as CapabilitiesMessage,
+			config: { source: "cam-1", relay_server: "fra" },
+			caps: { engineUnavailable: true },
 		});
-		expect(fixButtons(container)).toHaveLength(0);
-		const start = within(container).getByRole("button", {
-			name: /start stream/i,
-		}) as HTMLButtonElement;
-		expect(start.disabled).toBe(true);
+		const ui = bar(container);
+		expect(ui.getAllByRole("button")).toHaveLength(1);
+		const start = ui.getByRole("button", {
+			name: "Start Stream",
+			description: "Streaming engine offline",
+		});
+		expect(start).toHaveProperty("disabled", true);
 		expect(start.getAttribute("aria-disabled")).toBeNull();
-		expect(bar(container).textContent).toContain("Streaming engine offline");
 		await fireEvent.click(start);
 		expect(onStart).not.toHaveBeenCalled();
 	});
 
-	it("a tap on the blocked Start moves focus to the first fix and never starts", async () => {
+	it("a blocked Start cannot act or take focus", async () => {
 		const { container, onStart } = renderChain({
-			config: {} as ConfigMessage,
+			config: {},
 			sources: makeSources(),
 		});
-		const start = within(container).getByRole("button", {
-			name: /start stream/i,
-		});
+		const ui = bar(container);
+		const start = ui.getByRole("button", { name: "Start Stream" });
+		const disclosure = ui.getByRole("button", { name: "Show all" });
+		disclosure.focus();
 		await fireEvent.click(start);
 		expect(onStart).not.toHaveBeenCalled();
-		expect(document.activeElement).toBe(fixButtons(container)[0]);
+		expect(document.activeElement).toBe(disclosure);
 	});
 
 	it("ready: no checklist, the ready line, and a plain enabled Start", async () => {
 		const { container, onStart } = renderChain({
-			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
+			config: { source: "cam-1", relay_server: "fra" },
 		});
-		expect(fixButtons(container)).toHaveLength(0);
-		expect(bar(container).textContent).toContain("Ready to go live");
-		const start = within(container).getByRole("button", {
-			name: /start stream/i,
-		}) as HTMLButtonElement;
-		expect(start.disabled).toBe(false);
+		const ui = bar(container);
+		expect(ui.getAllByRole("button")).toHaveLength(1);
+		expect(ui.getByRole("status").textContent?.trim()).toBe("Ready to go live");
+		const start = ui.getByRole("button", { name: "Start Stream" });
+		expect(start).toHaveProperty("disabled", false);
 		expect(start.getAttribute("aria-disabled")).toBeNull();
 		await fireEvent.click(start);
 		expect(onStart).toHaveBeenCalledTimes(1);
 	});
 
-	it("while a start is in flight there is no checklist and Start is disabled outright", () => {
+	it("a local Start suppresses known source, network and destination fixes", () => {
 		const { container } = renderChain({
-			config: { source: "cam-1", relay_server: "fra" } as ConfigMessage,
+			config: {},
+			sources: makeSources(),
+			netif: {},
 			optimismState: "starting",
 		});
-		expect(fixButtons(container)).toHaveLength(0);
-		const start = within(container).getByRole("button", {
-			name: /starting/i,
-		}) as HTMLButtonElement;
-		expect(start.disabled).toBe(true);
-	});
-
-	it("the several-blockers line is translated in every locale", async () => {
-		const { ar, de, en, es, fr, hi, ja, ko, ptBR, zh } = await import(
-			"../../tests/helpers/catalog"
+		const ui = bar(container);
+		expect(ui.getAllByRole("button")).toHaveLength(1);
+		expect(ui.getByRole("button", { name: "Starting..." })).toHaveProperty(
+			"disabled",
+			true,
 		);
-		for (const dict of [en, ar, de, es, fr, hi, ja, ko, ptBR, zh]) {
-			expect(dict.live.bar.blockedSeveral.length).toBeGreaterThan(0);
-		}
+		expect(ui.getByRole("status").textContent?.trim()).toBe("Starting...");
 	});
 });

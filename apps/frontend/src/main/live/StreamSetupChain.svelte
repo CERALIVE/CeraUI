@@ -51,133 +51,52 @@ import { ChevronRight, Lock } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
-import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
+import type { StartAssessment } from '$lib/streaming/assess-start';
 import {
-	GATE_FIX_ORDER,
-	type GateFix,
 	type GateStatus,
-	type GoLiveGateKey,
 	READINESS_SOURCE_REASON,
 } from '$lib/streaming/go-live-readiness';
-import type { IdleStartGate } from '$lib/streaming/idle-start-gate';
 import { isSectionLocked } from '$lib/streaming/streamingLockPolicy';
 
-import LiveBar from './LiveBar.svelte';
-import StreamControlButton from './StreamControlButton.svelte';
+import StartPreflight from './StartPreflight.svelte';
 import type { ConfigRow } from './StreamSettingsCard.svelte';
 
 interface Props {
-	gate: IdleStartGate;
+	assessment: StartAssessment;
 	netif: NetifMessage | undefined;
 	// ── Config rows (migrated from StreamSettingsCard — same testids + locks) ───
 	configRows: ConfigRow[];
 	isStreaming: boolean;
-	optimismState: StreamingOptimismState;
 	// ── Destination traffic-light: green when the last relay.validate passed ────
 	destinationValidated?: boolean;
 	// ── Actions ─────────────────────────────────────────────────────────────────
-	/** Start the stream. `overrides.source` carries the implicit sole-camera id. */
-	onStart: (overrides: { source?: string }) => void;
-	onStop: () => void;
+	onStart: () => void;
 	/** Source-gate fix + the sole-camera "Change" affordance. */
 	onOpenSource: () => void;
 	/** Network-row action — navigate to the Network destination. */
 	onGoNetwork: () => void;
+	onOpenAudio: () => void;
+	onOpenAudioSource: () => void;
 }
 
 const {
-	gate,
+	assessment,
 	netif,
 	configRows,
 	isStreaming,
-	optimismState,
 	destinationValidated,
 	onStart,
-	onStop,
 	onOpenSource,
 	onGoNetwork,
+	onOpenAudio,
+	onOpenAudioSource,
 }: Props = $props();
 
-const { soleCamera, effectiveSourceId } = $derived(gate.effective);
-const readiness = $derived(gate.readiness);
+const { gates, soleCamera, effectiveSourceId } = $derived(assessment);
+let preflight: StartPreflight | undefined = $state();
 
-// Start gating reads the readiness verdict directly (engine gate included — it is
-// owned by the Start disabled reason + CapabilityTierBanner, not a row).
-const canStart = $derived(!readiness.blocking && optimismState !== 'starting');
-const startDisabledReason = $derived(
-	optimismState === 'starting'
-		? m["live.starting"]()
-		: readiness.blocking && readiness.primaryFixGate
-			? resolveReason(
-					readiness.gates[readiness.primaryFixGate].reasonKey ??
-						READINESS_SOURCE_REASON,
-				)
-			: undefined,
-);
-
-// ── The Live bar's checklist while Start is blocked ───────────────────────────
-// Every blocked gate, in fix order, so a second blocker (no server under no
-// source) is visible at once instead of after the first is fixed. Each item
-// with a fix gets a button to the existing setting; the engine has none.
-interface Blocker {
-	key: GoLiveGateKey;
-	reasonKey: string;
-	fix: GateFix;
-}
-const blockers = $derived<Blocker[]>(
-	optimismState === 'starting'
-		? []
-		: GATE_FIX_ORDER.flatMap((key) => {
-				const gate = readiness.gates[key];
-				return gate.state === 'blocked'
-					? [{ key, reasonKey: gate.reasonKey ?? READINESS_SOURCE_REASON, fix: gate.fix ?? 'none' }]
-					: [];
-			}),
-);
-const fixable = $derived(blockers.filter((blocker) => blocker.fix !== 'none'));
-const singleBlockerReasonId = $props.id();
-// One blocker reads as its own reason; two or more as one line above the buttons.
-const barStatus = $derived(
-	blockers.length >= 2
-		? m["live.bar.blockedSeveral"]()
-		: (startDisabledReason ?? m["live.bar.ready"]()),
-);
-
-function fixLabel(fix: GateFix): string {
-	if (fix === 'openSource') return m["live.goLive.fix.openSource"]();
-	if (fix === 'openServer') return m["live.goLive.fix.openServer"]();
-	return m["live.goLive.fix.goNetwork"]();
-}
-
-function runFix(fix: GateFix) {
-	if (fix === 'openSource') onOpenSource();
-	else if (fix === 'openServer') serverRow?.onEdit();
-	else if (fix === 'goNetwork') onGoNetwork();
-}
-
-let checklistEl: HTMLElement | undefined = $state();
-let checklistAttention = $state(false);
-let attentionTimer: ReturnType<typeof setTimeout> | undefined;
-
-// A tap on the blocked Start points at the checklist: focus moves to the first
-// fix and the list is outlined for a moment. With nothing to tap (only the
-// engine blocks) Start is not given this handler, so it stays natively disabled
-// and the line above says why.
-function handleBlockedStart() {
-	checklistEl?.querySelector<HTMLButtonElement>('button')?.focus();
-	checklistAttention = true;
-	clearTimeout(attentionTimer);
-	attentionTimer = setTimeout(() => (checklistAttention = false), 1600);
-}
-
-$effect(() => () => clearTimeout(attentionTimer));
-
-function handleStartClick() {
-	// The config write happens at START time (never before): fold the implicit
-	// sole-camera id into the payload. When config.source is already set,
-	// soleCamera is undefined so `source` is undefined and the backend keeps the
-	// persisted selection.
-	onStart({ source: soleCamera?.id });
+export function focusStartOrPreflight(): boolean {
+	return preflight?.focusStartOrPreflight() ?? false;
 }
 
 // The dot's tone. `unchecked` is a hollow ring, so it reads as "not known yet"
@@ -188,6 +107,7 @@ const TONE_DOT: Record<Tone, string> = {
 	warn: 'bg-status-warning',
 	blocked: 'bg-destructive',
 	unchecked: 'border-muted-foreground border',
+	unknown: 'border-muted-foreground border',
 };
 
 // i18n dot-path resolver (mirrors LiveView) — the readiness reasonKeys point at
@@ -213,32 +133,33 @@ function rowState(
 	gateState: GateStatus | undefined,
 	warn: boolean | undefined,
 ): GateStatus {
-	if (gateState === 'blocked') return 'blocked';
+	if (gateState === 'blocked' || gateState === 'unknown') return gateState;
 	if (warn) return 'warn';
 	return gateState === 'warn' ? 'warn' : 'ok';
 }
 
 const encoderState = $derived(
-	rowState(readiness.gates.source.state, encoderRow?.warn),
+	rowState(gates.source.state, encoderRow?.warn),
 );
 const destinationState = $derived(
-	rowState(readiness.gates.destination.state, serverRow?.warn),
+	rowState(gates.destination.state, serverRow?.warn),
 );
-const networkState = $derived(readiness.gates.network.state);
+const networkState = $derived(gates.network.state);
 
 // The gate reason a row surfaces beneath its summary while not ok (audio has no
 // gate, so it never shows a gate reason).
 const encoderReason = $derived(
-	encoderState === 'blocked' ? readiness.gates.source.reasonKey : undefined,
+	encoderState === 'blocked' ? gates.source.reasonKey : undefined,
 );
 const destinationReason = $derived(
 	destinationState !== 'ok'
-		? readiness.gates.destination.reasonKey
+		? gates.destination.reasonKey
 		: undefined,
 );
 const networkReason = $derived(
-	networkState !== 'ok' ? readiness.gates.network.reasonKey : undefined,
+	gates.network.reasonKey,
 );
+const alternativeSource = $derived(gates.source.state === 'blocked' && gates.source.fix === 'chooseAnotherSource');
 
 // Network row summary — the enabled-link count from netif (an enabled interface
 // that has an IP, mirroring the network gate's own predicate).
@@ -248,7 +169,9 @@ const enabledLinkCount = $derived(
 	).length,
 );
 const networkSummary = $derived(
-	enabledLinkCount > 0
+	networkState === 'unknown'
+		? m["live.bar.checking"]()
+		: enabledLinkCount > 0
 		? m["live.setup.linksReady"]({ count: enabledLinkCount })
 		: m["live.setup.noLinks"](),
 );
@@ -376,7 +299,7 @@ const networkView = $derived<SetupRowView>({
 						onclick={onOpenSource}
 						type="button"
 					>
-						{m["live.goLive.fix.openSource"]()}
+						{alternativeSource ? m["live.goLive.fix.chooseAnotherSource"]() : m["live.goLive.fix.openSource"]()}
 						<ChevronRight aria-hidden={true} class="size-3.5 rtl:-scale-x-100" />
 					</button>
 				{/if}
@@ -446,7 +369,7 @@ const networkView = $derived<SetupRowView>({
 				data-testid="sole-camera-auto"
 				data-source-id={soleCamera.id}
 			>
-				<p class="min-w-0 truncate text-sm">
+				<p class="min-w-0 text-sm [overflow-wrap:anywhere]">
 					{m["live.goLive.autoSelected"]({ name: soleCamera.displayName })}
 				</p>
 				<Button
@@ -487,92 +410,15 @@ const networkView = $derived<SetupRowView>({
 			{@render setupRow(networkView)}
 		</section>
 
-		<LiveBar
-			blocked={startDisabledReason !== undefined}
-			status={barStatus}
-			statusId={blockers.length === 1 && fixable.length === 1 ? singleBlockerReasonId : undefined}
-		>
-			{#snippet checklist()}
-				{#if blockers.length >= 2}
-					<!-- Every blocked gate in fix order, each with its reason as visible
-					     text (two causes can share one button label, such as a missing
-					     destination and a revoked slot) and a button where a fix exists.
-					     The engine has none: it reads as its reason alone. -->
-					<!-- At most a quarter of the viewport, scrolling inside past that, so Start
-					     stays in view. On a short screen (640 px of height or less: landscape,
-					     split view) the rows only tighten: every reason stays visible text,
-					     and a cut-off last row shows there is more to scroll. -->
-					<ul
-						bind:this={checklistEl}
-						class="-m-1 max-h-[25dvh] space-y-1.5 overflow-y-auto overscroll-contain rounded-lg p-1 transition-shadow motion-reduce:transition-none [@media(max-height:640px)]:space-y-1 {checklistAttention
-							? 'ring-destructive/60 ring-2'
-							: ''}"
-						data-blockers={blockers.length}
-						data-no-pull-to-refresh
-						aria-label={barStatus}
-					>
-						{#each blockers as blocker (blocker.key)}
-							<li class="flex items-center justify-between gap-3" data-blocker={blocker.key}>
-								<span
-									class="text-muted-foreground min-w-0 text-xs [@media(max-height:640px)]:leading-tight"
-									data-blocker-reason
-									id="live-blocker-reason-{blocker.key}"
-								>
-									{resolveReason(blocker.reasonKey)}
-								</span>
-								{#if blocker.fix !== 'none'}
-									<Button
-										aria-describedby="live-blocker-reason-{blocker.key}"
-										class="min-h-[44px] shrink-0 gap-1.5"
-										data-fix={blocker.fix}
-										onclick={() => runFix(blocker.fix)}
-										size="sm"
-										variant="outline"
-									>
-										{fixLabel(blocker.fix)}
-										<ChevronRight aria-hidden={true} class="h-4 w-4 rtl:-scale-x-100" />
-									</Button>
-								{/if}
-							</li>
-						{/each}
-					</ul>
-				{:else if fixable.length === 1}
-					<!-- One blocker: the line above is its reason; the button fixes it. -->
-					<div
-						bind:this={checklistEl}
-						class="-m-1 flex rounded-lg p-1 transition-shadow {checklistAttention
-							? 'ring-destructive/60 ring-2'
-							: ''}"
-						data-blockers={blockers.length}
-					>
-						{#each fixable as blocker (blocker.key)}
-							<Button
-								aria-describedby={singleBlockerReasonId}
-								class="min-h-[44px] gap-1.5"
-								data-blocker={blocker.key}
-								data-fix={blocker.fix}
-								onclick={() => runFix(blocker.fix)}
-								size="sm"
-								variant="outline"
-							>
-								{fixLabel(blocker.fix)}
-								<ChevronRight aria-hidden={true} class="h-4 w-4 rtl:-scale-x-100" />
-							</Button>
-						{/each}
-					</div>
-				{/if}
-			{/snippet}
-			<div class="shrink-0 sm:min-w-56">
-				<StreamControlButton
-					{canStart}
-					disabledReason={startDisabledReason}
-					{isStreaming}
-					{optimismState}
-					onBlockedStart={fixable.length > 0 ? handleBlockedStart : undefined}
-					onStart={handleStartClick}
-					{onStop}
-				/>
-			</div>
-		</LiveBar>
+		<StartPreflight
+			bind:this={preflight}
+			decision={assessment.decision}
+			{onStart}
+			{onOpenSource}
+			{onGoNetwork}
+			{onOpenAudio}
+			{onOpenAudioSource}
+			onOpenServer={serverRow?.onEdit}
+		/>
 	</Card.Content>
 </Card.Root>

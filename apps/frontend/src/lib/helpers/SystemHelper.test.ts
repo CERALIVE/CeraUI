@@ -28,7 +28,7 @@ describe("startStreaming — relay field forwarding (Task 19)", () => {
 			relay_protocol: "srtla",
 		} as unknown as ConfigMessage;
 
-		await startStreaming(config);
+		await startStreaming(() => config);
 
 		expect(start).toHaveBeenCalledTimes(1);
 		const input = start.mock.calls[0]?.[0] as Record<string, unknown>;
@@ -47,7 +47,7 @@ describe("startStreaming — device-first source forwarding", () => {
 			source: "video0",
 		} as unknown as ConfigMessage;
 
-		await startStreaming(config);
+		await startStreaming(() => config);
 
 		const input = start.mock.calls[0]?.[0] as Record<string, unknown>;
 		expect(input.source).toBe("video0");
@@ -69,7 +69,7 @@ describe("startStreaming — device-first source forwarding", () => {
 			autostart: true,
 		} as unknown as ConfigMessage;
 
-		await startStreaming(config);
+		await startStreaming(() => config);
 
 		const input = start.mock.calls[0]?.[0] as Record<string, unknown>;
 		expect(input.source).toBe("video0");

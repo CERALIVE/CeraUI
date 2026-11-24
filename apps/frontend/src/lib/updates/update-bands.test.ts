@@ -97,7 +97,7 @@ describe("goLiveUpdateRefusal — the live orchestrator state wins", () => {
 });
 
 describe("goLiveUpdateRefusal — an older backend without the pushed state", () => {
-	it("falls back to the refusal the last start carried", () => {
+	it("keeps historical progress but drops its remaining time", () => {
 		expect(
 			goLiveUpdateRefusal(
 				undefined,
@@ -107,10 +107,9 @@ describe("goLiveUpdateRefusal — an older backend without the pushed state", ()
 					updateEtaSeconds: 59,
 				}),
 			),
-		).toEqual({
+		).toStrictEqual({
 			phase: "committing",
 			percent: 100,
-			etaMinutes: 1,
 			source: "refusal",
 		});
 	});
@@ -126,7 +125,6 @@ describe("goLiveUpdateRefusal — an older backend without the pushed state", ()
 		expect(goLiveUpdateRefusal(null, refusal())).toEqual({
 			phase: undefined,
 			percent: undefined,
-			etaMinutes: undefined,
 			source: "refusal",
 		});
 	});

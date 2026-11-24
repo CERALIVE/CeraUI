@@ -91,10 +91,19 @@ export function sendCompositionWrite(
 export function sendSessionTransition<T>(
 	to: Session,
 	run: () => Promise<T>,
-): Promise<T> {
+): Promise<T>;
+/** Returning undefined from dispatch cancels the intent without a device transition. */
+export function sendSessionTransition<T>(
+	to: "live",
+	run: () => Promise<T> | undefined,
+): Promise<T | undefined>;
+export function sendSessionTransition<T>(
+	to: Session,
+	run: () => Promise<T> | undefined,
+): Promise<T | undefined> {
 	// Nothing ahead of it: the device's own answer, untouched.
 	if (writing === undefined) return launchTransition(to, run);
-	return new Promise<T>((resolve, reject) => {
+	return new Promise<T | undefined>((resolve, reject) => {
 		waiting = [
 			...waiting,
 			{
@@ -107,9 +116,13 @@ export function sendSessionTransition<T>(
 	});
 }
 
-function launchTransition<T>(to: Session, run: () => Promise<T>): Promise<T> {
-	transitions += 1;
+function launchTransition<T>(
+	to: Session,
+	run: () => Promise<T> | undefined,
+): Promise<T | undefined> {
 	const answer = run();
+	if (answer === undefined) return Promise.resolve(undefined);
+	transitions += 1;
 	answer.then(
 		(result) => {
 			startedAhead =

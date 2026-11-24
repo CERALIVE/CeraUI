@@ -142,7 +142,7 @@ describe("Stop confirmation is device evidence, never the band disappearing (N3)
 		expect(band(container)).not.toBeNull();
 		expect(controls(container)).toEqual([
 			{ label: "Stopping...", disabled: true },
-			{ label: "Start Stream", disabled: false },
+			{ label: "Start Stream", disabled: true },
 		]);
 
 		// The engine never answered: the backend commits stop_failed and replies so.
@@ -161,7 +161,7 @@ describe("Stop confirmation is device evidence, never the band disappearing (N3)
 		).toBe(FAILED);
 		expect(controls(container)).toEqual([
 			{ label: "Stop Stream", disabled: false },
-			{ label: "Start Stream", disabled: false },
+			{ label: "Start Stream", disabled: true },
 		]);
 		expect(log.phases).toEqual(["idle", "pending", "failed"]);
 
@@ -219,7 +219,7 @@ describe("Stop confirmation is device evidence, never the band disappearing (N3)
 		expect(band(container)).not.toBeNull();
 		expect(controls(container)).toEqual([
 			{ label: "Stopping...", disabled: true },
-			{ label: "Start Stream", disabled: false },
+			{ label: "Start Stream", disabled: true },
 		]);
 
 		fx.lifecycle = "stop_failed";
@@ -249,7 +249,7 @@ describe("an unacknowledged Stop keeps UNKNOWN on screen and offers a retry (g)"
 		expect(band(container)?.textContent).toContain(FAILED);
 		expect(controls(container)).toEqual([
 			{ label: "Stop Stream", disabled: false },
-			{ label: "Start Stream", disabled: false },
+			{ label: "Start Stream", disabled: true },
 		]);
 		expect(header(container)).not.toContain("Not streaming");
 	});
@@ -270,7 +270,7 @@ describe("an unacknowledged Stop keeps UNKNOWN on screen and offers a retry (g)"
 		expect(band(container)?.textContent).toContain(NOT_CONFIRMED);
 		expect(controls(container)).toEqual([
 			{ label: "Stop Stream", disabled: false },
-			{ label: "Start Stream", disabled: false },
+			{ label: "Start Stream", disabled: true },
 		]);
 	});
 
