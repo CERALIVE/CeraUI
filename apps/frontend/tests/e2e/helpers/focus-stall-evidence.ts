@@ -82,10 +82,13 @@ export async function captureFocusStall(page: Page) {
 		const session = pageSession.status === 'ok' ? pageSession.value : undefined;
 		const host = browserSession.status === 'ok' ? browserSession.value : undefined;
 		const target = session === undefined ? pageSession : await read(() => session.send('Target.getTargetInfo'));
-		let rendererPid: number | null = null;
+		// Both commands and trace delivery spend the same matcher budget.
+		const matchDeadline = Math.min(deadline, performance.now() + 600);
+		const matchRemaining = () => Math.max(1, Math.ceil(matchDeadline - performance.now()));
 		const rendererMatch = await read(async () => {
 			if (session === undefined || target.status !== 'ok' || !('targetInfo' in target.value)) throw new Error('Page target unavailable');
 			const frameId = target.value.targetInfo.targetId;
+			let rendererPid: number | null = null;
 			// Browser-owned trace metadata maps the exact page frame to its OS PID,
 			// unlike choosing an arbitrary renderer from getProcessInfo.
 			session.on('Tracing.dataCollected', ({ value }) => {
@@ -107,12 +110,14 @@ export async function captureFocusStall(page: Page) {
 			});
 			await session.send('Tracing.start', {
 				traceConfig: { includedCategories: ['disabled-by-default-devtools.timeline'], excludedCategories: ['*'] },
-			}, { timeout: 250 });
+			}, { timeout: matchRemaining() });
 			const complete = new Promise<void>((resolve) => session.once('Tracing.tracingComplete', () => resolve()));
-			await session.send('Tracing.end', {}, { timeout: 250 });
+			await session.send('Tracing.end', {}, { timeout: matchRemaining() });
 			await complete;
+			if (performance.now() >= matchDeadline) throw new DOMException('Diagnostic deadline exceeded', 'TimeoutError');
 			return { frameId, rendererPid };
-		}, 600);
+		}, matchRemaining());
+		const rendererPid = rendererMatch.status === 'ok' ? rendererMatch.value.rendererPid : null;
 		const sample = () => read(async () => {
 			if (host === undefined) throw new Error('Browser session unavailable');
 			const { processInfo } = await host.send('SystemInfo.getProcessInfo', {}, { timeout: 250 });

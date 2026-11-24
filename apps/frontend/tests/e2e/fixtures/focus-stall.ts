@@ -1,4 +1,6 @@
 import { performance } from 'node:perf_hooks';
+import { setTimeout as delay } from 'node:timers/promises';
+import { errors } from '@playwright/test';
 import type { Browser, CDPSession, Dialog, Page, TestInfo } from '@playwright/test';
 
 export const focusStallModes = [
@@ -90,6 +92,17 @@ export async function createFocusStallFixture(
 			const requestedAt = performance.now();
 			if (method === 'Debugger.enable' || method === 'Debugger.pause') {
 				debuggerRequests.push({ at: requestedAt, method });
+			}
+			if (standIn === 'event' && method === 'Tracing.start') {
+				// Deliver the real reply after the old 250 ms cap but within the matcher.
+				const reply = Promise.all([send(method, params, { timeout: 1_000 }), delay(350)])
+					.then(([value]) => value);
+				const deadline = new AbortController();
+				return Promise.race([
+					reply,
+					delay(options?.timeout ?? 1_000, undefined, { signal: deadline.signal })
+						.then(() => { throw new errors.TimeoutError('Tracing.start reply held past its deadline'); }),
+				]).finally(() => deadline.abort());
 			}
 			return send(method, params, options).then((value) => {
 				if (method === 'SystemInfo.getProcessInfo') {
