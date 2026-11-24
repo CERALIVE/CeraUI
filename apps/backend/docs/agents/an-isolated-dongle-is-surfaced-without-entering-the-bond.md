@@ -1039,26 +1039,74 @@ Settled entries are never re-read. The settlement listener
 is installed once on the first publication, avoiding import-time calls through
 the network/scan/registry dependency cycle.
 
-Each USB descriptor reading records the name's last observed removal epoch from
-the producer's presence counter. A monitor removal — a down state for a name the
-kernel no longer lists in `/sys/class/net` — including one before first
-publication, or a poll that drops an existing entry invalidates its pending
-reading and immediately removes its committed descriptor, markers and coverage.
-A monitor down state on a name still present in sysfs is a link flap on a
-plugged-in device and keeps that incarnation's committed identity. An unplug
-whose sysfs node lingers past the monitor event is therefore not invalidated by
-the next poll: the monitor already dropped the netif entry, so the poll no
-longer reports a removal. Its committed coverage and descriptor survive until
-the next periodic USB scan (at most 5 s), and a flapping modem keeps its
-identity only until that scan. Removal republishes `netif` and the modem roster
-itself, the edge the following scan used to report, so a removed router
-dongle's row is retracted on the same tick rather than a later sweep. The
-present-device view used to carry a legacy shared-serial bond opt-out to every
-present twin is rebuilt from the surviving descriptors, and the removed name's
-readiness clock and warning are cleared. At commit, a reading with a changed epoch loses its descriptor, markers and
-coverage for that name and a fresh scan is requested; other names can still
-commit. A replacement reusing the name must obtain its own covering read or
-reach its own readiness deadline before identity-dependent admission.
+An interface name locates a kernel netdev; it does not identify its lifetime.
+The lifetime witness is the netdev's ifindex (the `ip -4 addr` header or
+`/sys/class/net/<if>/ifindex`) and its sysfs node (device and inode of
+`/sys/class/net/<if>`), plus the MAC from ifconfig. When both the node and the
+index are known and equal, the netdev is the same one and a different MAC is
+configuration: a down/up flap keeps its admission and link ID. Otherwise any
+known index, node or MAC that differs is a replacement, so the same index and
+MAC on a new node is still a new netdev. Sysfs answers in three ways: listed,
+confirmed absent (`ENOENT`), or unreadable (any other OS error). An unreadable
+or ifconfig-only sample keeps the last known witness, including the last
+confirmed presence, and neither confirms nor retires anything; an exception
+that is not an OS error propagates.
+
+The USB scan reads the witness on both sides of its descriptor read and checks
+the retirement epoch and the poll's witness before committing. The poll reads
+it around its split `ip`/ifconfig sample and resamples once on a contradiction.
+After the classification waits it reads the witness again and compares it with
+both the sample and the recorded witness, so a name that was listed earlier,
+unreadable in the sample and confirmed absent at commit is still withdrawn. A
+name whose netdev was confirmed absent or replaced is retired and left out of
+that publication, and every other name in the sample is published. A down event
+whose node is still listed is a flap. A flap whose reappearance matches neither
+the node nor the index is treated as new. NM events carry no lifetime token, so
+once a name has been retired, a late down does not remove an addressed successor
+the kernel reports operational. A netdev that disappears while no observer runs
+is retired by the next poll or scan.
+
+When the first publication has no kernel witness (no `ip` header and an
+unreadable sysfs), the row is admitted under the first-sight rules above. Its
+witness is established by the next poll that reads an index or node, or by a
+covering USB scan, which records the witness it read. The first monitor up that
+establishes a witness for a covered name, with none recorded, retires and
+reclassifies it: it cannot be told apart from a connected-only replacement.
+The hold lasts until its own scan covers it or its own readiness deadline.
+
+Retirement fences pending polls and scans, removes descriptor, markers,
+coverage and the readiness clock, and publishes the netif and modem roster
+withdrawal. It clears inherited admission, counters, router admin, SIM,
+signal and open-login evidence, the name's session-only bond opt-out and
+uplink-health evidence. An admin, credential or health result still in flight
+when the retirement is recorded is discarded instead of repopulating those
+fields for the successor.
+
+A credential attempt proceeds only on positive continuity. At issue, the live
+witness must share a matching ifindex or node with the recorded witness and no
+known field may contradict it; every request and the receipt re-check the live
+witness against the issuing one the same way. Missing, unreadable or
+non-overlapping evidence, a confirmed absence, or a changed retirement epoch
+refuses. These checks run in the backend. The transport is
+`curl --interface <name>`, which binds its socket with `SO_BINDTODEVICE` by name
+inside the child process, then connects and writes the request with no further
+check. A netdev that takes the name between the backend's last check and that
+bind receives the request. Only the HiLink dialect sends a saved credential. Its
+login `Password` field follows the `password_type` from the state read just
+before the POST: type 4 sends
+`base64(sha256hex(username + base64(sha256hex(password)) + token))`, salted with
+the session's single-use token; type 3 sends `base64(password)`, which the
+receiver can decode to the password. Both send the username as entered. Neither curl nor Bun's TCP API can bind to, or
+re-check, an ifindex; `bun:ffi` could, but Bun documents it as not for
+production use. Once bound, the socket stays on the issuing netdev, so a
+removal after the bind fails the request instead of redirecting it. Admin
+reads are fenced by the retirement epoch only; their results are cleared at
+retirement.
+Durable preferences and credentials retain their exact keys; a serial-less
+device's key is its USB port, so another serial-less dongle in that port shares
+them. The new USB or unknown-bus row is independently held out of the bond and
+bind map until its own scan covers it or its own readiness deadline expires;
+unaffected names can still commit.
 First publication and monitor creation adopt the covering reading without
 invalidating it. `tests/usb-net-incarnation.test.ts` exercises these paths with
 parked reads and both USB and non-USB replacements.

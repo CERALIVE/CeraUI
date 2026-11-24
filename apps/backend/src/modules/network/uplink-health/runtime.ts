@@ -9,6 +9,7 @@ import {
 	type ProbeCandidate,
 } from "../connectivity-candidates.ts";
 import { probeConnectivityViaDevice } from "../device-bound-probe.ts";
+import { netdevLifetime, onNetdevRetired } from "../netdev-lifetime.ts";
 import {
 	getNetworkInterfaces,
 	type NetworkInterface,
@@ -97,12 +98,14 @@ export class UplinkHealthRuntime {
 	#completedRound = 0;
 	#generation = 0;
 	#unsubscribe: (() => void) | undefined;
+	#unsubscribeRetirement: (() => void) | undefined;
 	readonly #samples = new Map<
 		string,
 		{
 			readonly present: boolean;
 			readonly ip: string | undefined;
 			readonly eligible: boolean;
+			readonly lifetime: number | undefined;
 			readonly generation: number;
 			round: number;
 		}
@@ -118,6 +121,10 @@ export class UplinkHealthRuntime {
 		this.#unsubscribe ??= this.#deps.onInterfacesChange?.(() =>
 			this.#sampleInterfaces(this.#deps.interfaces(), this.#deps.now()),
 		);
+		this.#unsubscribeRetirement ??= onNetdevRetired((iface) => {
+			this.#publishedStates.delete(iface);
+			queueMicrotask(() => this.#publishIfChanged());
+		});
 		const round = ++this.#round;
 		const now = this.#deps.now();
 		const interfaces = this.#deps.interfaces();
@@ -161,6 +168,8 @@ export class UplinkHealthRuntime {
 				round >= (this.#samples.get(candidate.name)?.round ?? 0) &&
 				generations.get(candidate.name) ===
 					this.#samples.get(candidate.name)?.generation &&
+				this.#samples.get(candidate.name)?.lifetime ===
+					netdevLifetime(candidate.name) &&
 				entry?.ip === candidate.ip &&
 				deviceBoundProbeExclusionReason(entry) === undefined
 			);
@@ -218,6 +227,8 @@ export class UplinkHealthRuntime {
 	dispose(): void {
 		this.#unsubscribe?.();
 		this.#unsubscribe = undefined;
+		this.#unsubscribeRetirement?.();
+		this.#unsubscribeRetirement = undefined;
 	}
 
 	#sampleInterfaces(
@@ -232,12 +243,14 @@ export class UplinkHealthRuntime {
 			const present = entry !== undefined;
 			const ip = entry?.ip;
 			const eligible = deviceBoundProbeExclusionReason(entry) === undefined;
+			const lifetime = netdevLifetime(iface);
 			const previous = this.#samples.get(iface);
 			if (
 				!previous ||
 				previous.present !== present ||
 				previous.ip !== ip ||
-				previous.eligible !== eligible
+				previous.eligible !== eligible ||
+				previous.lifetime !== lifetime
 			) {
 				// Events record even A -> B -> A changes entirely between ticks.
 				// Never reuse a generation after removed samples are retired.
@@ -245,6 +258,7 @@ export class UplinkHealthRuntime {
 					present,
 					ip,
 					eligible,
+					lifetime,
 					generation: ++this.#generation,
 					round: this.#round,
 				});
