@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { call } from "@orpc/server";
 import { getConfig, loadConfig, setConfigFilePath } from "../modules/config.ts";
-import { mintLinkId } from "../modules/modems/physical-identity.ts";
+import {
+	listPhysicalDevices,
+	mintLinkId,
+	resetPhysicalIdentityRegistry,
+} from "../modules/modems/physical-identity.ts";
+import { describeModemBondKeys } from "../modules/modems/physical-identity-source.ts";
 import {
 	isBondOptedOut,
 	resetSessionBondOptOutForTest,
@@ -119,6 +124,110 @@ const turnEthernetOff = () =>
 		{ name: "eth0", ip: "192.0.2.1", enabled: false },
 		{ context: makeRpcContext() },
 	);
+
+function onPci(device: Device, port: string, serial: string): Device {
+	return {
+		...device,
+		serial,
+		busnum: "1",
+		devpath: port,
+		readlink: `/sys/devices/pci0000:00/0000:00:14.0/usb1/1-${port}/1-${port}:1.0`,
+		udevadm: {
+			...device.udevadm,
+			ID_PATH: `pci-0000:00:14.0-usb-0:${port}:1.0`,
+		},
+	};
+}
+
+test("an excluded PCI twin can be turned on through the RPC and stays in after restart", async () => {
+	const twins = [onPci(a, "3", group1), onPci(b, "4", group1)];
+	await scan(...twins);
+	addUplinks();
+	expect(included(first, second)).toEqual([false, false]);
+	expect(
+		await call(
+			configureNetworkInterfaceProcedure,
+			{ name: second, ip: "198.51.100.2", enabled: true },
+			{ context: makeRpcContext() },
+		),
+	).toEqual({
+		success: true,
+		applied: { name: second, ip: "198.51.100.2", enabled: true },
+	});
+	await reload();
+	await scan(...twins);
+	expect(included(first, second)).toEqual([false, true]);
+});
+
+test("an empty config still allows a serial-less PCI USB modem as the sole fallback", async () => {
+	await writeFile(file, "{}");
+	await reload();
+	await scan(onPci(b, "4", ""));
+	addUplinks();
+	expect(await realDevice(turnEthernetOff)).toMatchObject({ success: true });
+	expect(genSrtlaBondEntries().map(({ iface }) => iface)).toEqual([second]);
+});
+
+test("an unreadable-mode ON does not erase a known unique-serial OFF", async () => {
+	const unique = { ...b, serial: "CONSTRUCTED-UNIQUE-SERIAL" };
+	await scan(unique);
+	setPersistentBondOptOut(second, true);
+	await scan({ ...unique, serial: "", idProduct: "81d8" });
+	setPersistentBondOptOut(second, false);
+	await reload();
+	await scan(unique);
+	expect(included(second)).toEqual([false]);
+});
+
+test("bond reads still register the resolved physical link", async () => {
+	await scan({ ...b, serial: "CONSTRUCTED-REGISTRY-SERIAL" });
+	const expected = describeModemBondKeys(second).linkId;
+	resetPhysicalIdentityRegistry();
+	isBondOptedOut(second);
+	expect(listPhysicalDevices().map(({ linkId }) => linkId)).toEqual([expected]);
+});
+
+test.each(["", "CONSTRUCTED-HUAWEI-UNIQUE"])(
+	"a connector OFF is legacy-readable but does not apply to another vendor with serial %j",
+	async (serial) => {
+		await writeFile(file, "{}");
+		await reload();
+		await scan({ ...b, serial: "" });
+		const exact = describeModemBondKeys(second).linkId;
+		setPersistentBondOptOut(second, true);
+		expect(included(second)).toEqual([false]);
+		await reload();
+		await scan({ ...b, idVendor: "12d1", idProduct: "1506", serial });
+		expect(included(second)).toEqual([true]);
+		await scan({ ...b, serial: "" });
+		expect(included(second)).toEqual([false]);
+		expect(getConfig().bond_opt_out?.[exact]).toBe(true);
+	},
+);
+
+test("an unrelated exact OFF does not make a serial-less modem an uncertain fallback", async () => {
+	await writeFile(file, "{}");
+	await reload();
+	await scan({ ...a, serial: "CONSTRUCTED-EXACT-ONLY" });
+	setPersistentBondOptOut(first, true);
+	await scan({ ...b, serial: "" });
+	addUplinks();
+	expect(await realDevice(turnEthernetOff)).toMatchObject({ success: true });
+	expect(genSrtlaBondEntries().map(({ iface }) => iface)).toEqual([second]);
+});
+
+test("turning on a connector keeps an absent modem's unrelated legacy exact OFF", async () => {
+	const unique = { ...a, serial: "CONSTRUCTED-UNRELATED-OFF" };
+	await scan(unique);
+	const exact = describeModemBondKeys(first).linkId;
+	setPersistentBondOptOut(first, true);
+	await scan({ ...b, serial: "" });
+	setPersistentBondOptOut(second, false);
+	await reload();
+	await scan(unique, { ...b, serial: "" });
+	expect(included(first, second)).toEqual([false, true]);
+	expect(getConfig().bond_opt_out?.[exact]).toBe(true);
+});
 
 async function scan(...devices: Device[]) {
 	await refreshUsbNetMarkers(

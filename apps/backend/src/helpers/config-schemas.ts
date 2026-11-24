@@ -410,11 +410,18 @@ export const runtimeConfigSchema = z.object({
 	// never accepted as a durable identity because the Huawei twins swap names.
 	bond_opt_out: z.record(z.string().min(1), z.literal(true)).optional(),
 	bond_legacy_out: z.record(z.string().min(1), z.literal(true)).optional(),
+	bond_pair_vid: z
+		.record(z.string().min(1), z.string().regex(/^[0-9a-f]{4}$/))
+		.optional(),
 	bond_connector_choice: z
 		.record(
 			z.string().min(1),
 			z.discriminatedUnion("enabled", [
-				z.object({ enabled: z.literal(false) }),
+				z.object({
+					enabled: z.literal(false),
+					vid: z.string().regex(/^[0-9a-f]{4}$/),
+					legacyExact: z.string().min(1).optional(),
+				}),
 				z.object({
 					enabled: z.literal(true),
 					vid: z.string().regex(/^[0-9a-f]{4}$/),

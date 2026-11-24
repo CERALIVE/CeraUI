@@ -89,23 +89,32 @@ notification obligation or cross-process exactly-once guarantee.
 
 USB modem bond choices use `bond_connector_choice`: an explicit choice is
 keyed by the fixed platform controller and the kernel's downstream port
-chain, independently of the udev label or USB mode. An ON follows a same-VID
-replacement on that connector. An ON made with a confirmed shared serial
-does not override a different confirmed pair; an ON made without one can.
-Scans only observe this state; they never save bond preferences.
+chain, independently of udev labels or USB mode. ON and OFF apply only to
+the same USB vendor. A confirmed-pair ON does not override a different
+confirmed pair; a group-less ON can. A readable unique-serial OFF still
+wins over an ON saved while the modem was in an unconfirmed USB mode.
+Scans do not save bond preferences.
 
-On the first connector choice, `bond_legacy_out` preserves existing opaque
-exclusions for the current reader, including pair defaults. The legacy
-`bond_opt_out` projection omits them once connector choices exist: the old
-reader has no positive override, and an exact path pin can hit an included
-modem after a relabel. Rolling back to v2026.11.4 can therefore add links
-that were excluded. A clean save on that release drops the new fields.
-Both new fields are optional and validated with config authority.
+An explicit OFF is also written to `bond_opt_out` using the exact key
+v2026.11.4 understands, when that key exists. Each connector OFF carries
+the path key it projected, so it does not exclude a different vendor in
+the new reader. The old reader cannot scope a path bit to a vendor or
+follow a connector across path reassignment. Other exact and unclassified
+legacy bits are preserved. During an operator write, `bond_pair_vid`
+records the vendor of any excluded pair proved by the current USB view.
+When a connector ON could override one of those pairs, its pair bit moves
+to `bond_legacy_out`, where it remains a default in the new reader. An
+untouched member can then join after rollback, even without a relabel.
+An opaque legacy bit that proves to be a pair only after the ON is not
+removed by a scan; it can still exclude a selected modem on rollback.
+A clean old-release save drops the new fields.
 
-One legacy alias-only OFF retains the old migration: a peer covered by an
-old pair exclusion but absent from the physical registry may join. The
-last-uplink guard evaluates the actual write and still refuses a disable
-that would leave no effective candidate.
+On a controller without a trusted connector, an ON uses the old exact-key
+pair migration, as does the pre-existing legacy alias-only OFF. Either
+can admit a pair member not yet known to the physical registry. The
+last-uplink guard previews the actual write and still refuses a disable
+that would leave no effective candidate. With no stored pair evidence,
+default-IN fallback candidates keep the existing guard behavior.
 
 The optional `ssh_persistent` boolean in `config.json` stores the operator's
 SSH-at-boot choice across OS slots. `setSshPersistent` saves it after the unit

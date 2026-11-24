@@ -3,17 +3,20 @@ import {
 	listPresentPhysicalDevices,
 	type PhysicalBondKeys,
 } from "../modems/physical-identity.ts";
-import { peekBondKeys } from "../streaming/bond-entry.ts";
+import {
+	peekBondKeys,
+	resolveBondPhysicalIdentity,
+} from "../streaming/bond-entry.ts";
 
 type Preferences = Pick<
 	ReturnType<typeof getConfig>,
-	"bond_opt_out" | "bond_legacy_out" | "bond_connector_choice"
+	"bond_opt_out" | "bond_legacy_out" | "bond_pair_vid" | "bond_connector_choice"
 >;
 type Bits = NonNullable<Preferences["bond_opt_out"]>;
 const sessionOptOut = new Set<string>();
 
 export function bondPhysicalId(ifname: string): string | undefined {
-	const identity = peekBondKeys(ifname);
+	const identity = resolveBondPhysicalIdentity(ifname);
 	if (identity === undefined || identity.anchor === "ifname") return undefined;
 	return identity.linkId;
 }
@@ -24,12 +27,12 @@ function choiceFor(keys: PhysicalBondKeys, stored: Preferences) {
 		connector === undefined
 			? undefined
 			: stored.bond_connector_choice?.[connector];
-	if (choice?.enabled !== true) return choice;
+	if (choice === undefined || keys.vid !== choice.vid) return undefined;
+	if (!choice.enabled) return choice;
 	const group = keys.sharedSerial ? keys.legacyLinkId : undefined;
-	return keys.vid === choice.vid &&
-		(choice.group === undefined ||
-			group === undefined ||
-			choice.group === group)
+	return choice.group === undefined ||
+		group === undefined ||
+		choice.group === group
 		? choice
 		: undefined;
 }
@@ -39,14 +42,27 @@ function storedOut(
 	prefs: Preferences,
 ): boolean {
 	if (keys === undefined) return false;
+	const exactOut =
+		prefs.bond_opt_out?.[keys.linkId] === true ||
+		prefs.bond_legacy_out?.[keys.linkId] === true;
+	if (keys.anchor === "usb-serial" && exactOut) return true;
 	const choice = choiceFor(keys, prefs);
 	if (choice !== undefined) return !choice.enabled;
 	if (keys.anchor === "ifname") return false;
-	const excluded = (key: string) =>
-		prefs.bond_opt_out?.[key] === true || prefs.bond_legacy_out?.[key] === true;
+	// A legacy path bit projected from a connector OFF has no authority
+	// over a different brand or the connector that inherits its old label.
+	const projectedOff =
+		exactOut &&
+		keys.anchor === "id-path" &&
+		Object.values(prefs.bond_connector_choice ?? {}).some(
+			(record) => !record.enabled && record.legacyExact === keys.linkId,
+		);
+	const group = keys.legacyLinkId;
 	return (
-		excluded(keys.linkId) ||
-		(keys.legacyLinkId !== undefined && excluded(keys.legacyLinkId))
+		(exactOut && !projectedOff) ||
+		(group !== undefined &&
+			(prefs.bond_opt_out?.[group] === true ||
+				prefs.bond_legacy_out?.[group] === true))
 	);
 }
 
@@ -57,28 +73,81 @@ function nonEmpty<T extends object>(value: T): T | undefined {
 function transition(
 	prefs: Preferences,
 	keys: PhysicalBondKeys | undefined,
-	off: boolean,
-	hasLegacyAlias: boolean,
+	{
+		off,
+		hasLegacyAlias,
+	}: { readonly off: boolean; readonly hasLegacyAlias: boolean },
 ): Preferences | undefined {
 	if (keys === undefined) return undefined;
 	const connector = keys.connectorLinkId;
 	const vid = keys.vid;
+	const exact = keys.linkId;
+	const pair = keys.legacyLinkId;
+	const previous =
+		connector === undefined
+			? undefined
+			: prefs.bond_connector_choice?.[connector];
+	const out: Bits = { ...prefs.bond_opt_out };
+	const defaults: Bits = { ...prefs.bond_legacy_out };
+	const pairVids = { ...prefs.bond_pair_vid };
+	const present = listPresentPhysicalDevices();
+	for (const peer of [keys, ...present]) {
+		if (
+			peer.legacyLinkId !== undefined &&
+			peer.vid !== undefined &&
+			(out[peer.legacyLinkId] || defaults[peer.legacyLinkId])
+		)
+			pairVids[peer.legacyLinkId] = peer.vid;
+	}
 	if (
 		connector !== undefined &&
 		vid !== undefined &&
-		(keys.anchor !== "usb-serial" ||
-			prefs.bond_connector_choice?.[connector] !== undefined)
+		keys.anchor !== "usb-serial"
 	) {
 		const group = keys.sharedSerial ? keys.legacyLinkId : undefined;
-		const legacy = { ...prefs.bond_legacy_out, ...prefs.bond_opt_out };
-		// Opaque old keys can hit a later occupant or relabel; keep them only in the new reader.
+		const legacyExact = keys.anchor === "ifname" ? undefined : exact;
+		if (
+			previous?.enabled === false &&
+			previous.vid === vid &&
+			previous.legacyExact !== undefined
+		)
+			delete out[previous.legacyExact];
+		if (off) {
+			if (legacyExact !== undefined) out[legacyExact] = true;
+		} else {
+			if (
+				legacyExact !== undefined &&
+				!(
+					previous?.enabled === false &&
+					previous.vid !== vid &&
+					previous.legacyExact === legacyExact
+				)
+			)
+				delete out[legacyExact];
+			// Only proven pair bits may move; an opaque bit may be an unrelated exact OFF.
+			for (const [candidate, owner] of Object.entries(pairVids)) {
+				if (
+					owner === vid &&
+					(group === undefined || candidate === group || candidate === pair) &&
+					out[candidate]
+				) {
+					defaults[candidate] = true;
+					delete out[candidate];
+				}
+			}
+		}
 		return {
-			bond_opt_out: undefined,
-			bond_legacy_out: nonEmpty(legacy),
+			bond_opt_out: nonEmpty(out),
+			bond_legacy_out: nonEmpty(defaults),
+			bond_pair_vid: nonEmpty(pairVids),
 			bond_connector_choice: {
 				...prefs.bond_connector_choice,
 				[connector]: off
-					? { enabled: false }
+					? {
+							enabled: false,
+							vid,
+							...(legacyExact !== undefined ? { legacyExact } : {}),
+						}
 					: {
 							enabled: true,
 							vid,
@@ -88,30 +157,46 @@ function transition(
 		};
 	}
 	if (keys.anchor === "ifname") return undefined;
-	const protectRollback = prefs.bond_connector_choice !== undefined;
-	const out: Bits = protectRollback
-		? { ...prefs.bond_legacy_out, ...prefs.bond_opt_out }
-		: { ...prefs.bond_opt_out };
-	const pair = keys.legacyLinkId;
 	if (
-		off &&
-		hasLegacyAlias &&
 		pair !== undefined &&
-		prefs.bond_opt_out?.[pair] &&
-		prefs.bond_legacy_out?.[pair] !== true
+		((!off && (out[pair] || defaults[pair])) ||
+			(off && hasLegacyAlias && out[pair] && !defaults[pair]))
 	) {
-		// Only the legacy alias OFF keeps main's observed-member migration.
-		for (const peer of listPresentPhysicalDevices()) {
-			if (peer.legacyLinkId === pair && peer.anchor !== "ifname")
+		// A controller without connector identity keeps main's pair migration.
+		for (const peer of present) {
+			if (
+				peer.legacyLinkId === pair &&
+				peer.anchor !== "ifname" &&
+				choiceFor(peer, prefs)?.enabled !== true
+			)
 				out[peer.linkId] = true;
 		}
 		delete out[pair];
+		delete defaults[pair];
+		delete pairVids[pair];
 	}
-	if (off) out[keys.linkId] = true;
-	else delete out[keys.linkId];
-	return protectRollback
-		? { bond_opt_out: undefined, bond_legacy_out: nonEmpty(out) }
-		: { bond_opt_out: nonEmpty(out) };
+	if (off) out[exact] = true;
+	else {
+		delete out[exact];
+		delete defaults[exact];
+		delete pairVids[exact];
+	}
+	const choices = { ...prefs.bond_connector_choice };
+	if (
+		!off &&
+		connector !== undefined &&
+		previous?.enabled === false &&
+		previous.vid === vid
+	) {
+		delete choices[connector];
+		if (previous.legacyExact !== undefined) delete out[previous.legacyExact];
+	}
+	return {
+		bond_opt_out: nonEmpty(out),
+		bond_legacy_out: nonEmpty(defaults),
+		bond_pair_vid: nonEmpty(pairVids),
+		bond_connector_choice: nonEmpty(choices),
+	};
 }
 
 export function hasLegacyBondAlias(
@@ -139,13 +224,18 @@ export function previewBondOptOut(
 	const stored = getConfig();
 	const next = {
 		...stored,
-		...transition(stored, identity, true, hasLegacyAlias),
+		...transition(stored, identity, { off: true, hasLegacyAlias }),
 	};
-	const hasExclusion =
-		Object.keys(stored.bond_opt_out ?? {}).length > 0 ||
-		Object.keys(stored.bond_legacy_out ?? {}).length > 0 ||
-		Object.values(stored.bond_connector_choice ?? {}).some(
-			({ enabled }) => !enabled,
+	const knownPairs = Object.entries(stored.bond_pair_vid ?? {}).filter(
+		([key]) =>
+			stored.bond_opt_out?.[key] === true ||
+			stored.bond_legacy_out?.[key] === true,
+	);
+	const knownPairVids = new Set(knownPairs.map(([, vid]) => vid));
+	const possiblyUnclassifiedPair =
+		(stored.usb_serial_shared?.length ?? 0) > knownPairs.length &&
+		Object.keys(stored.bond_opt_out ?? {}).some(
+			(key) => stored.bond_pair_vid?.[key] === undefined,
 		);
 	return (
 		name: string,
@@ -164,16 +254,16 @@ export function previewBondOptOut(
 		if (!after || peer?.vid === undefined || peer.anchor === "usb-serial")
 			return false;
 		return (
-			peer.connectorLinkId === undefined ||
-			(hasExclusion &&
-				peer.sharedSerial !== true &&
-				choiceFor(peer, next)?.enabled !== true)
+			(knownPairVids.has(peer.vid) ||
+				(peer.connectorLinkId !== undefined && possiblyUnclassifiedPair)) &&
+			peer.sharedSerial !== true &&
+			choiceFor(peer, next)?.enabled !== true
 		);
 	};
 }
 
 export function isBondOptedOut(ifname: string): boolean {
-	const keys = peekBondKeys(ifname);
+	const keys = resolveBondPhysicalIdentity(ifname);
 	if (
 		keys === undefined ||
 		(keys.anchor === "ifname" && keys.connectorLinkId === undefined)
@@ -191,7 +281,7 @@ export function setPersistentBondOptOut(
 	off: boolean,
 	names: Iterable<string> = [],
 ): string | undefined {
-	const keys = peekBondKeys(ifname);
+	const keys = resolveBondPhysicalIdentity(ifname);
 	if (
 		keys === undefined ||
 		(keys.anchor === "ifname" && keys.connectorLinkId === undefined)
@@ -201,16 +291,15 @@ export function setPersistentBondOptOut(
 		return undefined;
 	}
 	const config = getConfig();
-	const next = transition(
-		config,
-		keys,
+	const next = transition(config, keys, {
 		off,
-		off && hasLegacyBondAlias(ifname, keys, names),
-	);
+		hasLegacyAlias: off && hasLegacyBondAlias(ifname, keys, names),
+	});
 	if (next !== undefined) {
 		const previous: Preferences = {
 			bond_opt_out: config.bond_opt_out,
 			bond_legacy_out: config.bond_legacy_out,
+			bond_pair_vid: config.bond_pair_vid,
 			bond_connector_choice: config.bond_connector_choice,
 		};
 		Object.assign(config, next);
@@ -223,8 +312,7 @@ export function setPersistentBondOptOut(
 	}
 	if (
 		off &&
-		(keys?.connectorLinkId === undefined ||
-			next?.bond_connector_choice === undefined)
+		(keys.connectorLinkId === undefined || keys.anchor === "usb-serial")
 	)
 		sessionOptOut.add(ifname);
 	else sessionOptOut.delete(ifname);
@@ -236,6 +324,7 @@ export function resetPersistentBondOptOutForTest(): void {
 	const config = getConfig();
 	config.bond_opt_out = undefined;
 	config.bond_legacy_out = undefined;
+	config.bond_pair_vid = undefined;
 	config.bond_connector_choice = undefined;
 }
 
