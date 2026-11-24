@@ -65,6 +65,10 @@ import {
 } from "./audio-card-vocabulary.ts";
 import { audioMixSourceId, getAudioMixActive } from "./audio-mix-status.ts";
 import { supportsMeterDevicePreference } from "./cerastream-backend.ts";
+import {
+	closeEngineControl,
+	reportEngineControlLoss,
+} from "./engine-control-loss.ts";
 import { asRawRequestClient } from "./raw-request.ts";
 import { getStreamLifecycleState } from "./stream-lifecycle-status.ts";
 
@@ -405,11 +409,11 @@ function clearForeignCardRun(): void {
  */
 function armFrameAbsenceWatchdog(deps: AudioMeterBridgeDeps): void {
 	if (!state || state.stopped) return;
-	if (state.absenceTimer !== undefined) deps.clearTimer(state.absenceTimer);
-	state.absenceTimer = deps.setTimer(
-		noteFrameAbsence,
-		AUDIO_METER_FRAME_ABSENCE_MS,
-	);
+	const owner = state;
+	if (owner.absenceTimer !== undefined) deps.clearTimer(owner.absenceTimer);
+	owner.absenceTimer = deps.setTimer(() => {
+		if (state === owner) noteFrameAbsence();
+	}, AUDIO_METER_FRAME_ABSENCE_MS);
 }
 
 function noteFrameAbsence(): void {
@@ -565,6 +569,11 @@ async function pushPreference(client: CerastreamClient): Promise<void> {
 			`audio-meter bridge: idle-meter preference set to ${meter_device ?? "auto"}`,
 		);
 	} catch (err) {
+		reportEngineControlLoss(err, {
+			site: "meter-preference",
+			client,
+			current: () => state?.client === client,
+		});
 		deps.logger.warn(
 			`audio-meter bridge: could not set the idle-meter preference: ${errMessage(err)}`,
 		);
@@ -601,6 +610,11 @@ async function reassertPreference(cause: string): Promise<void> {
 			`audio-meter bridge: re-asserted the idle-meter preference ${meter_device} after ${cause}`,
 		);
 	} catch (err) {
+		reportEngineControlLoss(err, {
+			site: "meter-reassert",
+			client,
+			current: () => state?.client === client,
+		});
 		deps.logger.warn(
 			`audio-meter bridge: could not re-assert the idle-meter preference: ${errMessage(err)}`,
 		);
@@ -626,26 +640,29 @@ export function syncAudioMeterPreference(): void {
  * One connect + subscribe attempt. Resolves `true` when the subscription is live
  * (the binding's autoReconnect then owns resilience), `false` to reschedule.
  */
-async function runAttempt(): Promise<boolean> {
-	if (!state || state.stopped) return false;
-	const { deps } = state;
+async function runAttempt(owner: BridgeState): Promise<boolean> {
+	const current = () => state === owner && !owner.stopped;
+	const { deps } = owner;
+	let client: CerastreamClient | undefined;
 	try {
-		const client = await deps.connect(deps.connectOptions);
-		if (!state || state.stopped) {
-			await client.close().catch(() => undefined);
+		client = await deps.connect(deps.connectOptions);
+		if (!current()) {
+			await closeEngineControl(client).catch(() => undefined);
 			return false;
 		}
 		const subscription = await client.subscribeEvents(
 			{ topics: ["audio-level"] },
-			handleEvent,
+			(event) => {
+				if (current()) handleEvent(event);
+			},
 		);
-		if (!state || state.stopped) {
+		if (!current()) {
 			subscription.close();
-			await client.close().catch(() => undefined);
+			await closeEngineControl(client).catch(() => undefined);
 			return false;
 		}
-		state.client = client;
-		state.subscription = subscription;
+		owner.client = client;
+		owner.subscription = subscription;
 		deps.logger.info(
 			"audio-meter bridge: subscribed to the engine audio-level topic",
 		);
@@ -654,6 +671,9 @@ async function runAttempt(): Promise<boolean> {
 		await pushPreference(client);
 		return true;
 	} catch (err) {
+		reportEngineControlLoss(err, { site: "meter-subscribe", current });
+		if (client !== undefined)
+			await closeEngineControl(client).catch(() => undefined);
 		deps.logger.debug(
 			`audio-meter bridge: connect/subscribe failed, will retry: ${errMessage(err)}`,
 		);
@@ -661,28 +681,26 @@ async function runAttempt(): Promise<boolean> {
 	}
 }
 
-function scheduleRetry(): void {
-	if (!state || state.stopped || state.timer !== undefined) return;
-	const { deps } = state;
+function scheduleRetry(owner: BridgeState): void {
+	if (owner.timer !== undefined) return;
+	const { deps } = owner;
 	const delay = backoffDelay(
-		state.attempt,
+		owner.attempt,
 		deps.baseDelayMs,
 		deps.maxDelayMs,
 		deps.random,
 	);
-	state.attempt += 1;
-	state.timer = deps.setTimer(() => {
-		if (!state) return;
-		state.timer = undefined;
-		state.inflight = tick();
+	owner.attempt += 1;
+	owner.timer = deps.setTimer(() => {
+		if (state !== owner || owner.stopped) return;
+		owner.timer = undefined;
+		owner.inflight = tick(owner);
 	}, delay);
 }
 
-async function tick(): Promise<void> {
-	if (!state || state.stopped) return;
-	const connected = await runAttempt();
-	if (!state || state.stopped) return;
-	if (!connected) scheduleRetry();
+async function tick(owner: BridgeState): Promise<void> {
+	const connected = await runAttempt(owner);
+	if (state === owner && !owner.stopped && !connected) scheduleRetry(owner);
 }
 
 /**
@@ -708,7 +726,7 @@ export function initAudioMeterBridge(
 		absenceTimer: undefined,
 		lastSelection: undefined,
 	};
-	state.inflight = tick();
+	state.inflight = tick(state);
 }
 
 /** Test seam: resolve once the in-flight connect attempt has settled. */
@@ -724,6 +742,7 @@ export function stopAudioMeterBridge(): void {
 	if (s.timer !== undefined) s.deps.clearTimer(s.timer);
 	clearFrameAbsenceWatchdog(s);
 	s.subscription?.close();
-	void s.client?.close().catch(() => undefined);
+	if (s.client !== undefined)
+		void closeEngineControl(s.client).catch(() => undefined);
 	state = undefined;
 }

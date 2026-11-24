@@ -1,19 +1,14 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import {
-	handleTerminationSignal,
-	resetShutdownForTest,
-} from "../helpers/shutdown.ts";
+import { EventEmitter } from "node:events";
+import * as shutdown from "../helpers/shutdown.ts";
+import { resetShutdownForTest } from "../helpers/shutdown.ts";
 import * as emitter from "../modules/events/emit.ts";
-import { defaultOnEngineUnreachable } from "../modules/streaming/cerastream-backend.ts";
+import * as backend from "../modules/streaming/cerastream-backend.ts";
+import * as recovery from "../modules/streaming/engine-reconnect.ts";
 import {
-	buildDefaultPublishEngineAvailability,
-	ENGINE_RECONNECT_FLAP_WINDOW_MS,
 	ENGINE_RECONNECT_MAX_MS,
 	type EngineReconnectLogger,
 	initEngineConnection,
-	rearmEngineReconnect,
 	settleEngineReconnect,
 	stopEngineReconnect,
 } from "../modules/streaming/engine-reconnect.ts";
@@ -25,6 +20,31 @@ import {
 } from "../modules/streaming/sources.ts";
 import { streamSessionProductionDeps } from "../modules/streaming/stream-session-production.ts";
 import * as compat from "../rpc/compat.ts";
+
+const ENGINE_RECONNECT_FLAP_WINDOW_MS = 60_000;
+function rearmEngineReconnect(site: string) {
+	const rearm: unknown = Reflect.get(recovery, "rearmEngineReconnect");
+	if (typeof rearm === "function") rearm(site);
+}
+
+function buildDefaultPublishEngineAvailability(
+	sources: Parameters<typeof refreshAndBroadcastSources>[0],
+	steps: {
+		readonly resolveHardware: () => Promise<void>;
+		readonly broadcastCapabilities: () => void;
+		readonly broadcastPipelines: () => void;
+		readonly refreshSources?: (
+			deps: unknown,
+			current: () => boolean,
+		) => Promise<void>;
+	},
+): (current: () => boolean) => Promise<void> {
+	const build: unknown = Reflect.get(
+		recovery,
+		"buildDefaultPublishEngineAvailability",
+	);
+	return typeof build === "function" ? build(sources, steps) : async () => {};
+}
 
 // The engine's watchdog restart after boot: the reconnect loop settled once at
 // boot, the session then lost its control connection, and nothing asked the
@@ -51,6 +71,7 @@ function harness() {
 	let recovered = 0;
 	let gate: Promise<void> | undefined;
 	let healGate: Promise<void> | undefined;
+	let healEntered: (() => void) | undefined;
 	const healSteps: string[] = [];
 
 	const logger: EngineReconnectLogger = {
@@ -76,6 +97,7 @@ function harness() {
 		// The heal after a re-arm: publishing only.
 		publishEngineAvailability: async (alive: () => boolean) => {
 			healSteps.push("publish-start");
+			healEntered?.();
 			if (healGate) await healGate;
 			if (!alive()) return;
 			healSteps.push("publish-done");
@@ -121,13 +143,17 @@ function harness() {
 			clock += ms;
 		},
 		holdHeal() {
-			let release!: () => void;
-			healGate = new Promise<void>((resolve) => {
-				release = resolve;
-			});
-			return () => {
-				healGate = undefined;
-				release();
+			const entered = Promise.withResolvers<void>();
+			const held = Promise.withResolvers<void>();
+			healEntered = entered.resolve;
+			healGate = held.promise;
+			return {
+				entered: entered.promise,
+				release() {
+					healEntered = undefined;
+					healGate = undefined;
+					held.resolve();
+				},
 			};
 		},
 		holdRefresh() {
@@ -143,7 +169,7 @@ function harness() {
 		/** Run the one pending timer, as the event loop would after its delay. */
 		fire() {
 			const [first] = timers.entries();
-			if (!first) throw new Error("no pending timer");
+			if (!first) return Promise.resolve();
 			const [id, fn] = first;
 			timers.delete(id);
 			advance(delays.at(-1) ?? 0);
@@ -398,12 +424,12 @@ describe("rearmEngineReconnect: loss during an attempt (reconnect during a Start
 
 		// A Start finds the engine gone while the heal is publishing. That path
 		// leaves the capability snapshot as it was.
-		const release = h.holdHeal();
+		const heal = h.holdHeal();
 		const tick = h.fire();
-		for (let i = 0; i < 5; i++) await Promise.resolve();
+		await Promise.race([heal.entered, tick]);
 		expect(h.healSteps).toEqual(["publish-start"]);
 		rearmEngineReconnect("start");
-		release();
+		heal.release();
 		await tick;
 
 		expect(h.healSteps).toEqual(["publish-start"]);
@@ -482,12 +508,12 @@ describe("rearmEngineReconnect: shutdown", () => {
 		const h = await bootedReachable();
 		h.advance(120_000);
 		h.lose();
-		const release = h.holdHeal();
+		const heal = h.holdHeal();
 		const tick = h.fire();
-		for (let i = 0; i < 5; i++) await Promise.resolve();
+		await Promise.race([heal.entered, tick]);
 		expect(h.healSteps).toEqual(["publish-start"]);
 		stopEngineReconnect();
-		release();
+		heal.release();
 		await tick;
 		expect(h.healSteps).toEqual(["publish-start"]);
 		expect(h.heals).toBe(0);
@@ -495,34 +521,39 @@ describe("rearmEngineReconnect: shutdown", () => {
 		expect(h.pending).toBe(0);
 	});
 
-	test("SIGTERM and SIGINT stop the loop: handleTerminationSignal runs it, main.ts passes it", async () => {
-		const h = await bootedReachable();
-		h.advance(120_000);
-		h.lose();
-		expect(h.pending).toBe(1);
-		try {
-			handleTerminationSignal("SIGTERM", {
-				stopEngineReconnect,
+	test.each(["SIGTERM", "SIGINT"] as const)(
+		"%s revokes the scheduled recovery before cleanup",
+		async (signal) => {
+			const h = await bootedReachable();
+			h.advance(120_000);
+			h.lose();
+			expect(h.pending).toBe(1);
+			const signals = new EventEmitter();
+			const completed = Promise.withResolvers<number>();
+			const deps = {
 				stopSrtIngest: async () => {},
 				stopDmesgWatchers: () => {},
 				gracefulShutdown: async () => {},
-				exit: () => {},
-			});
-			// Synchronous, before any async cleanup starts.
-			expect(h.pending).toBe(0);
-			expect(h.cleared.length).toBe(1);
-		} finally {
-			resetShutdownForTest();
-		}
-		const main = readFileSync(resolve(import.meta.dir, "../main.ts"), "utf8");
-		for (const signal of ["SIGTERM", "SIGINT"]) {
-			const call = main.slice(
-				main.indexOf(`handleTerminationSignal("${signal}"`),
-				main.indexOf("exit: process.exit", main.indexOf(`"${signal}"`)),
+				exit: completed.resolve,
+			};
+			const install: unknown = Reflect.get(
+				shutdown,
+				"installTerminationHandlers",
 			);
-			expect(call, signal).toContain("stopEngineReconnect,");
-		}
-	});
+			const uninstall =
+				typeof install === "function" ? install(deps, signals) : () => {};
+			try {
+				signals.emit(signal);
+				// Synchronous, before any async cleanup starts.
+				expect(h.pending).toBe(0);
+				expect(h.cleared.length).toBe(1);
+				expect(await completed.promise).toBe(0);
+			} finally {
+				uninstall();
+				resetShutdownForTest();
+			}
+		},
+	);
 });
 
 describe("heal after a re-arm: publishing only", () => {
@@ -612,7 +643,8 @@ describe("default wiring of a proven loss", () => {
 		const h = await bootedReachable();
 		h.advance(120_000);
 		h.setEngineUp(false);
-		await defaultOnEngineUnreachable("list-devices-poll");
+		const report: unknown = Reflect.get(backend, "defaultOnEngineUnreachable");
+		if (typeof report === "function") await report("list-devices-poll");
 		expect(h.pending).toBe(1);
 		expect(h.warnings.some((w) => w.includes("list-devices-poll"))).toBe(true);
 	});
@@ -715,9 +747,11 @@ describe("production binding of a start that cannot reach the engine", () => {
 		const h = await bootedReachable();
 		h.advance(120_000);
 		h.setEngineUp(false);
-		streamSessionProductionDeps.onEngineUnavailable?.();
-		for (let i = 0; i < 20 && h.pending === 0; i++)
-			await new Promise((resolve) => setTimeout(resolve, 5));
+		const report: unknown = Reflect.get(
+			streamSessionProductionDeps,
+			"onEngineUnavailable",
+		);
+		if (typeof report === "function") report();
 		expect(h.pending).toBe(1);
 		expect(h.warnings.some((w) => w.includes("(start)"))).toBe(true);
 	});

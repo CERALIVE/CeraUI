@@ -2,6 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import type { ListDevicesResult } from "@ceralive/cerastream";
 import { AUDIO_SOURCE_AUTO } from "@ceraui/rpc/schemas";
 import { getConfig } from "../modules/config.ts";
+import * as audio from "../modules/streaming/audio.ts";
 import {
 	broadcastAudioSources,
 	getAudioDevices,
@@ -36,7 +37,9 @@ const audioCard = (card: string) =>
 		alsa_card_id: card,
 	}) as ListDevicesResult["devices"][number];
 
-function audioStatusSends(spy: ReturnType<typeof spyOn>): number {
+function audioStatusSends(
+	spy: ReturnType<typeof spyOn<typeof websocket, "broadcastMsg">>,
+): number {
 	return spy.mock.calls.filter(
 		([type, data]) =>
 			type === "status" &&
@@ -53,22 +56,41 @@ afterEach(() => {
 });
 
 describe("audio re-resolve after a heal is torn down", () => {
-	test("the commit hands the heal's guard to the audio re-resolve", async () => {
-		resetEngineDeviceCache();
-		const received: Array<() => boolean> = [];
-		setEngineAudioChangeHandler((current) => {
-			received.push(current);
+	test("the default lazy audio worker does not publish after its heal is revoked", async () => {
+		const called = Promise.withResolvers<void>();
+		const resume = Promise.withResolvers<void>();
+		const done = Promise.withResolvers<void>();
+		const realResolve = audio.reresolveAudioForEngineChange;
+		const worker = spyOn(
+			audio,
+			"reresolveAudioForEngineChange",
+		).mockImplementation(async (current) => {
+			called.resolve();
+			await resume.promise;
+			await realResolve(current);
+			done.resolve();
 		});
-		const alive = () => true;
-		await refreshAndBroadcastSources(
-			{
-				fetchEngineDevices: async () => ({
-					devices: [audioCard("usbaudio")],
-				}),
-			},
-			alive,
-		);
-		expect(received).toEqual([alive]);
+		const sent = spyOn(websocket, "broadcastMsg");
+		let alive = true;
+		try {
+			await refreshAndBroadcastSources(
+				{
+					fetchEngineDevices: async () => ({
+						devices: [audioCard("usbaudio")],
+					}),
+				},
+				() => alive,
+			);
+			await called.promise;
+			alive = false;
+			resume.resolve();
+			await done.promise;
+			expect(audioStatusSends(sent)).toBe(0);
+		} finally {
+			resume.resolve();
+			worker.mockRestore();
+			sent.mockRestore();
+		}
 	});
 
 	test("held across teardown, the queued re-resolve publishes nothing", async () => {

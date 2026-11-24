@@ -8,6 +8,7 @@ import {
 	broadcastConfigChangePhase,
 	changeEngineRuntimeConfig,
 } from "./config-change-bridge.ts";
+import { requestEngineReachabilityCheck } from "./engine-control-loss.ts";
 import { queryEngineRuntimeStreaming } from "./engine-runtime-state.ts";
 import {
 	streamingBlockingMutation,
@@ -55,17 +56,7 @@ export const streamSessionProductionDeps: StreamSessionOrchestratorDeps = {
 	stopRuntime: stopGeneration,
 	retireRuntime: retireGenerationResources,
 	queryRuntime: queryEngineRuntimeStreaming,
-	// The engine-reconnect loop imports this module's orchestrator, so it is
-	// reached lazily, like every other engine-side collaborator here.
-	onEngineUnavailable: () => {
-		void import("./engine-reconnect.ts")
-			.then(({ rearmEngineReconnect }) => rearmEngineReconnect("start"))
-			.catch((err) => {
-				logger.error("could not re-arm the engine reconnect after a start", {
-					err,
-				});
-			});
-	},
+	onEngineUnavailable: () => requestEngineReachabilityCheck("start"),
 	seedLifecycleState: (state) => {
 		streamStartedAt = undefined;
 		seedStreamLifecycleState(state);

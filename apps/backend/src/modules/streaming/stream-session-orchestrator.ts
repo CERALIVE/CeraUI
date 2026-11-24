@@ -258,7 +258,8 @@ export type StreamSessionOrchestrator = {
 	readonly start: (request: StreamStartRequest) => Promise<StartResult>;
 	readonly stop: (cause: StreamStopCause) => Promise<StopResult>;
 	readonly retireLostSession: () => Promise<void>;
-	readonly reconcile: () => Promise<LifecycleState>;
+	readonly reconcileLostSession: (current: () => boolean) => Promise<void>;
+	readonly reconcile: (current?: () => boolean) => Promise<LifecycleState>;
 	readonly snapshot: () => StreamSessionSnapshot;
 	readonly changeConfig: (
 		delta: StreamConfigChangeDelta,
@@ -294,6 +295,7 @@ export function createStreamSessionOrchestrator(
 	let engineQueuedStop: QueuedStop | undefined;
 	let stopFlight: Promise<StopResult> | undefined;
 	let lossRetirement: Promise<void> | undefined;
+	let currentLoss: (() => boolean) | undefined;
 	const stopDeadlineMs = deps.stopDeadlineMs ?? STOP_DEADLINE_MS;
 	const reconfigureDeadlineMs =
 		deps.reconfigureDeadlineMs ?? RECONFIGURE_DEADLINE_MS;
@@ -771,6 +773,7 @@ export function createStreamSessionOrchestrator(
 			return;
 		const owner = ownership.invalidate();
 		if (!ownership.commit(owner, "reconciling", "unknown")) return;
+		currentLoss = captureOperatorStopIntent();
 		deps.onStreamStopped?.("engine_loss");
 		const retirement = deps.retireRuntime?.(owner.generation);
 		lossRetirement = retirement;
@@ -915,10 +918,10 @@ export function createStreamSessionOrchestrator(
 	};
 
 	const reconcile = async (
-		currentIntent = captureOperatorStopIntent(),
+		current: () => boolean = () => true,
 	): Promise<LifecycleState> => {
 		if (
-			!currentIntent() ||
+			!current() ||
 			currentObservation?.() === true ||
 			stopFlight !== undefined ||
 			lossRetirement !== undefined ||
@@ -940,25 +943,27 @@ export function createStreamSessionOrchestrator(
 		const owner = ownership.invalidate();
 		if (!ownership.commit(owner, "reconciling", "unknown"))
 			return ownership.state;
-		// Operator intent changes even when its Stop parks behind a capture transition.
-		const current = () => currentIntent() && ownership.owns(owner);
-		currentObservation = current;
 		const epoch = ++reconciliationEpoch;
+		const currentIntent = captureOperatorStopIntent();
+		const ownsObservation = () =>
+			current() && currentIntent() && ownership.owns(owner);
+		currentObservation = ownsObservation;
 		runtimeObservations++;
 		let runtimeState: EngineRuntimeState;
 		try {
 			runtimeState = await withRuntimeObservationOwner(
-				current,
+				ownsObservation,
 				deps.queryRuntime,
 				ownership.protect,
 			).catch(() => "unknown" as const);
 		} finally {
 			runtimeObservations--;
-			if (currentObservation === current) currentObservation = undefined;
+			if (currentObservation === ownsObservation)
+				currentObservation = undefined;
 		}
 		if (
 			epoch !== reconciliationEpoch ||
-			!current() ||
+			!ownsObservation() ||
 			cleanup.pending ||
 			lossRetirement !== undefined ||
 			stopFlight !== undefined
@@ -982,6 +987,25 @@ export function createStreamSessionOrchestrator(
 		pending.cancelDeadline();
 		pending.release(stop(pending.cause));
 		return true;
+	};
+
+	const reconcileLostSession = async (
+		current: () => boolean,
+	): Promise<void> => {
+		const loss = currentLoss;
+		if (loss === undefined || !loss() || runtimeObservations > 0) return;
+		await lossRetirement;
+		if (
+			!current() ||
+			!loss() ||
+			currentLoss !== loss ||
+			runtimeObservations > 0
+		)
+			return;
+		if (ownership.state === "reconciling" || ownership.state === "stop_failed")
+			await reconcile(() => current() && loss() && currentLoss === loss);
+		if (currentLoss === loss && ownership.streamLiveness() !== "unknown")
+			currentLoss = undefined;
 	};
 
 	const noteConfigChangePhase = (event: ConfigChangePhaseEvent): void => {
@@ -1112,6 +1136,7 @@ export function createStreamSessionOrchestrator(
 		start,
 		stop,
 		retireLostSession,
+		reconcileLostSession,
 		reconcile,
 		snapshot: () => ({
 			state: ownership.state,
@@ -1142,8 +1167,16 @@ export function retireLostStreamSession(): Promise<void> {
 	return productionOrchestrator.retireLostSession();
 }
 
-export function reconcileStreamSession(): Promise<LifecycleState> {
-	return productionOrchestrator.reconcile();
+export function reconcileLostStreamSession(
+	current: () => boolean,
+): Promise<void> {
+	return productionOrchestrator.reconcileLostSession(current);
+}
+
+export function reconcileStreamSession(
+	current?: () => boolean,
+): Promise<LifecycleState> {
+	return productionOrchestrator.reconcile(current);
 }
 
 export function getStreamSessionSnapshot(): StreamSessionSnapshot {

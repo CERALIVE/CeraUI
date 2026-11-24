@@ -204,11 +204,11 @@ function buildPipelineRegistry(
 
 export async function initPipelines(
 	overrides: Partial<CapabilitiesServiceDeps> = {},
+	current: () => boolean = () => true,
 ): Promise<void> {
 	const hardware = getEffectiveHardware();
-	const capabilities = await getCapabilities({
-		...overrides,
-	});
+	const capabilities = await getCapabilities(overrides, current);
+	if (!current()) return;
 	pipelines = buildPipelineRegistry(capabilities.sources, hardware);
 	logger.info(
 		`Initialized ${Object.keys(pipelines).length} pipeline sources for ${hardware}`,

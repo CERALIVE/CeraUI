@@ -45,7 +45,7 @@ The `backend` app consumes the streaming engine binding as a pinned public npm
 package:
 
 ```
-"@ceralive/cerastream": "2026.11.3"   (public npm, @ceralive scope)
+"@ceralive/cerastream": "2026.11.4"   (public npm, @ceralive scope)
 ```
 
 No sibling checkout or vendored tarball is required for CeraUI to install or

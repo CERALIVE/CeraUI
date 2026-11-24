@@ -57,6 +57,7 @@ export function evidenceHarness(
 		  ) => void)
 		| undefined;
 	const connected = Promise.withResolvers<void>();
+	const firstSubscription = Promise.withResolvers<void>();
 	const clients: Array<{
 		client: CerastreamClient;
 		emit: (event: EventParams) => void;
@@ -146,6 +147,7 @@ export function evidenceHarness(
 			subscribeEvents: async (params, callback) => {
 				calls.push("subscribe");
 				listener = callback;
+				if (index === 0) firstSubscription.resolve();
 				if (index === 0) await subscribeGate;
 				if (params?.topics?.includes("status")) probeSubscribed.resolve();
 				return {
@@ -336,6 +338,7 @@ export function evidenceHarness(
 		holdSubscribe: (gate: Promise<void>) => {
 			subscribeGate = gate;
 		},
+		firstSubscription: firstSubscription.promise,
 		status: (index: number, streaming: boolean) =>
 			clients[index]?.emit({
 				type: "status",
