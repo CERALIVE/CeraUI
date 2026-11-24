@@ -501,7 +501,7 @@ test.each(["WPA1 WPA2", "WPA2", "WPA2-Personal", "WPA2 WPA3"])(
 	},
 );
 
-test.each(["available", "unavailable"] as const)(
+test.each(["available", "unavailable", "throwing"] as const)(
 	"overlapping failed joins retain staged and pending profiles with %s listing",
 	async (availability) => {
 		const firstStarted = Promise.withResolvers<void>();
@@ -522,11 +522,20 @@ test.each(["available", "unavailable"] as const)(
 				finishRefresh();
 			return logger;
 		});
+		const deletion = spyOn(nm, "nmConnDelete").mockImplementation(
+			async (uuid) => {
+				if (availability === "throwing")
+					throw new Error("Fixture delete transport unavailable");
+				return profiles.delete(uuid);
+			},
+		);
 		profiles.set(SAVED, { keyMgmt: "wpa-psk", psk: "fixture-staged" });
 		const listing = spyOn(nm, "nmConnsGet").mockImplementation(
 			async (fields) => {
 				if (fields !== "uuid,type" && fields !== "uuid,type,timestamp")
 					throw new Error("Unexpected profile listing fields");
+				if (availability === "throwing")
+					throw new Error("Fixture list transport unavailable");
 				return availability === "available"
 					? [...profiles.keys()].map((uuid) =>
 							fields === "uuid,type,timestamp"
@@ -558,6 +567,10 @@ test.each(["available", "unavailable"] as const)(
 			await firstStarted.promise;
 			const second = join("Fixture-Second");
 			await secondStarted.promise;
+			const firstEvent = Promise.race([
+				first.then(() => "join reply"),
+				firstRefresh.promise.then(() => "list settled"),
+			]);
 			firstReply.resolve(REFUSED);
 			expect(await first).toEqual({ error: "auth", device: 0 });
 			await firstRefresh.promise;
@@ -567,9 +580,22 @@ test.each(["available", "unavailable"] as const)(
 			await secondRefresh.promise;
 			expect(whileSecondPending).toEqual([SAVED, FIRST, SECOND]);
 			expect([...profiles.keys()]).toEqual([SAVED, FIRST, SECOND]);
+			expect(await firstEvent).toBe("join reply");
+			// Reconciliation may list profiles; failure is not authority to
+			// inspect activation timestamps for cleanup or request deletion.
+			expect(listing.mock.calls.map(([fields]) => fields)).not.toContain(
+				"uuid,type,timestamp",
+			);
+			expect(deletion).not.toHaveBeenCalled();
+			if (availability !== "available") {
+				expect(wifiBuildMsg()["0"]?.saved).toEqual({ [SSID]: SAVED });
+				expect(adapter.savedAll).toEqual({ [SSID]: [SAVED] });
+				expect(broadcast).not.toHaveBeenCalled();
+			}
 		} finally {
 			firstReply.resolve(REFUSED);
 			secondReply.resolve(REFUSED);
+			deletion.mockRestore();
 			listing.mockRestore();
 			fields.mockRestore();
 			broadcast.mockRestore();
