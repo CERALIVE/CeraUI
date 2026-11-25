@@ -5,7 +5,13 @@
  * is `operator`.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import {
+	closeSync,
+	mkdtempSync,
+	openSync,
+	readFileSync,
+	rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -25,6 +31,8 @@ export async function serveDevice(
 ): Promise<ServedDevice> {
 	const cwd = mkdtempSync(join(tmpdir(), "served-device-"));
 	const { CERAUI_BUILD_ID: _inherited, ...inherited } = process.env;
+	const log = join(cwd, "device.log");
+	const output = openSync(log, "w");
 	const child: ChildProcess = spawn("bun", [CHILD], {
 		cwd,
 		env: {
@@ -33,16 +41,18 @@ export async function serveDevice(
 			TEST_CONFIG: JSON.stringify(config),
 			...(build === undefined ? {} : { TEST_BUILD_STAMP: build }),
 		},
-		stdio: ["ignore", "ignore", "ignore", "ipc"],
+		stdio: ["ignore", output, output, "ipc"],
 	});
+	closeSync(output);
 	const exited = new Promise<void>((done) => child.once("exit", () => done()));
 	const port = await new Promise<number>((ready, fail) => {
 		child.once("message", (message) =>
 			ready((message as { port: number }).port),
 		);
-		child.once("exit", (code) =>
-			fail(new Error(`device exited ${code} before it was ready`)),
-		);
+		child.once("exit", (code) => {
+			const said = readFileSync(log, "utf8").slice(-2000);
+			fail(new Error(`device exited ${code} before it was ready: ${said}`));
+		});
 	});
 	return {
 		port,

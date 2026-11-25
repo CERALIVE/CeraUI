@@ -23,6 +23,8 @@ writeFileSync(
 		...JSON.parse(TEST_CONFIG ?? "{}"),
 	}),
 );
+// Mock boot checks that the sender is readable but never runs it.
+writeFileSync("srtla_send", "");
 writeFileSync(
 	"setup.json",
 	JSON.stringify({
@@ -30,6 +32,7 @@ writeFileSync(
 			readFileSync(new URL("../../../setup.json", import.meta.url), "utf8"),
 		),
 		ips_file: resolve("srtla_ips"),
+		srtla_path: resolve("srtla_send"),
 		cerastream_socket: resolve("engine.sock"),
 	}),
 );

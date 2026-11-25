@@ -13,7 +13,13 @@ import {
 	setDefaultTimeout,
 	test,
 } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import {
+	closeSync,
+	mkdtempSync,
+	openSync,
+	readFileSync,
+	rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,6 +40,8 @@ async function bootDevice(
 	const cwd = mkdtempSync(join(tmpdir(), "ui-build-wiring-"));
 	const { CERAUI_BUILD_ID: _inherited, ...inherited } = process.env;
 	const ready = Promise.withResolvers<number>();
+	const log = join(cwd, "device.log");
+	const output = openSync(log, "w");
 	const child = Bun.spawn(
 		[
 			process.execPath,
@@ -49,14 +57,18 @@ async function bootDevice(
 				...(env === undefined ? {} : { CERAUI_BUILD_ID: env }),
 			},
 			stdin: "ignore",
-			stdout: "ignore",
-			stderr: "ignore",
+			stdout: output,
+			stderr: output,
 			ipc: (message: { port: number }) => ready.resolve(message.port),
 		},
 	);
-	void child.exited.then((code) =>
-		ready.reject(new Error(`device exited ${code} before it was ready`)),
-	);
+	closeSync(output);
+	void child.exited.then((code) => {
+		const said = readFileSync(log, "utf8").slice(-2000);
+		ready.reject(
+			new Error(`device exited ${code} before it was ready: ${said}`),
+		);
+	});
 	return {
 		port: await ready.promise,
 		stop: async () => {
