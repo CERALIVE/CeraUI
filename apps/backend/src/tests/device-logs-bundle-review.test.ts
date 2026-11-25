@@ -144,7 +144,7 @@ test("a known boot ID with a long digit run survives preview and download", asyn
 		`"event":{"id":"event","seq":1,"bootId":"${numericBootId}"`,
 	);
 	expect(text).toContain("modem identifier [ID]");
-	expect(text).toContain("boot text abeefc[ID]b432da848fa");
+	expect(text).toContain("boot text [BOOT_ID]");
 	expect(text).not.toContain("490154203237518");
 	expect(text.trimEnd().split("\n").at(-1)).toBe(
 		'{"section":"end","complete":true}',
@@ -155,6 +155,10 @@ test.each([
 	[
 		"an unknown boot shaped value",
 		{ exported: { bootId, ceraui: numericBootId }, secrets: [] },
+	],
+	[
+		"a known boot ID in version text",
+		{ exported: { bootId, ceraui: `version=${bootId}` }, secrets: [] },
 	],
 	[
 		"a held secret inside a known boot ID",
@@ -193,6 +197,10 @@ const collisions: ReadonlyArray<
 	["version text", { version: `build/${retainedBootId}` }],
 	["an event parameter", { serial: `modem/${retainedBootId}` }],
 	["a nonboot cursor component", { cursor: `s=${retainedBootId};b=${bootId}` }],
+	[
+		"a nonboot component of a native cursor",
+		{ cursor: `s=${retainedBootId};i=1;b=${bootId};m=2;t=3;x=4` },
+	],
 	["a different boot in the cursor", { cursor: `b=${retainedBootId}` }],
 	[
 		"an IMEI next to the boot component",

@@ -28,6 +28,8 @@ function isLocalIPv4(a: number, b: number): boolean {
 /** Held values shorter than this are not matched: too many false hits. */
 export const MIN_REDACTED_LENGTH = 4;
 
+type TextSpan = readonly [start: number, end: number];
+
 interface Redactor {
 	/**
 	 * Kinds (sorted, unique) of held values that are NOT matched because they
@@ -40,12 +42,13 @@ interface Redactor {
 	known(value: string): { readonly text: string; readonly redactions: number };
 	text(
 		value: string,
-		bootSpan?: readonly [start: number, end: number],
+		exempt?: { readonly boot: TextSpan; readonly numeric?: TextSpan },
 	): { readonly text: string; readonly redactions: number };
 }
 
 export function buildRedactor(
 	secrets: readonly { readonly kind: string; readonly value: string }[],
+	bootIds?: ReadonlySet<string>,
 ): Redactor {
 	const literals = new Map<string, string>();
 	const unredacted = new Set<string>();
@@ -109,7 +112,7 @@ export function buildRedactor(
 			});
 			return { text, redactions };
 		},
-		text(value: string, bootSpan) {
+		text(value: string, exempt) {
 			const spans: Array<{
 				start: number;
 				end: number;
@@ -174,7 +177,7 @@ export function buildRedactor(
 					address?: (typeof addresses)[number],
 				) => string,
 				addressContext = false,
-				ignore?: typeof bootSpan,
+				ignore?: TextSpan,
 			) => {
 				let addressIndex = 0;
 				for (const match of value.matchAll(pattern)) {
@@ -198,8 +201,19 @@ export function buildRedactor(
 						});
 				}
 			};
-			mask(/(?<!\d)89\d{17,18}(?!\d)/g, () => "[ICCID]", false, bootSpan);
-			mask(/(?<!\d)\d{15}(?!\d)/g, () => "[ID]", false, bootSpan);
+			if (bootIds?.size)
+				mask(
+					/(?<![0-9a-f])(?:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|[0-9a-f]{32})(?![0-9a-f])/gi,
+					(match) =>
+						bootIds.has(match.replaceAll("-", "").toLowerCase())
+							? "[BOOT_ID]"
+							: match,
+					false,
+					exempt?.boot,
+				);
+			const numericSpan = exempt?.numeric ?? exempt?.boot;
+			mask(/(?<!\d)89\d{17,18}(?!\d)/g, () => "[ICCID]", false, numericSpan);
+			mask(/(?<!\d)\d{15}(?!\d)/g, () => "[ID]", false, numericSpan);
 			mask(
 				/\b[0-9a-f]{2}([:-])[0-9a-f]{2}\1[0-9a-f]{2}\1[0-9a-f]{2}\1[0-9a-f]{2}\1[0-9a-f]{2}\b/gi,
 				(match, address) => {

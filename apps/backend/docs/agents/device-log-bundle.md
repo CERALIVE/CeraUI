@@ -91,7 +91,11 @@ Other masks cannot match in that lowercase-hex alphabet. Any other cursor
 for its single `b=` component when that component and the entry's boot ID both
 equal the scanned boot. Version text, other event parameters and journal
 messages keep all pattern checks. Known secrets still match inside every boot ID
-and every cursor. A final check of each serialized record prevents JSON
+and every cursor. An exact known boot ID outside the designated boot fields and
+cursor `b=` span also triggers a pattern check, regardless of case or UUID
+hyphenation. Journal messages replace it with `[BOOT_ID]`; other structured
+values refuse rather than change.
+A final check of each serialized record prevents JSON
 framing or replacement markers from reintroducing a known secret. The manifest
 is checked independently, including on deadline paths. No exception or abort
 reason is copied into output or logs; only the closed stage is (Failure stages).
