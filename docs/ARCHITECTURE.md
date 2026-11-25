@@ -153,7 +153,7 @@ The server emits `{ ping: { t: number } }` every 5 s. The frontend resets a watc
 
 ### Post-login initial-state push
 
-Immediately after a client authenticates, the backend pushes a full snapshot of every event type so the frontend can render without waiting for the first periodic tick.
+Immediately after a client authenticates, the backend pushes the stream state alone, then a full snapshot of every event type so the frontend can render without waiting for the first periodic tick.
 
 ### Applied-state returns
 
