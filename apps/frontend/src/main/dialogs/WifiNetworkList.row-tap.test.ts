@@ -140,14 +140,14 @@ describe("a tap on the row joins", () => {
 
 	it("describes the row's security and saved status", () => {
 		setup([SAVED, NEW_OPEN]);
-		const describe = (name: string) =>
+		const descriptionOf = (name: string) =>
 			(button(name).getAttribute("aria-describedby") ?? "")
 				.split(" ")
 				.map((id) => document.getElementById(id)?.textContent ?? "")
 				.join(" ");
-		expect(describe(`Connect ${SAVED.ssid}`)).toContain("Secured network");
-		expect(describe(`Connect ${SAVED.ssid}`)).toContain("Saved");
-		expect(describe(`Connect ${NEW_OPEN.ssid}`)).toContain("Open network");
+		expect(descriptionOf(`Connect ${SAVED.ssid}`)).toContain("Secured network");
+		expect(descriptionOf(`Connect ${SAVED.ssid}`)).toContain("Saved");
+		expect(descriptionOf(`Connect ${NEW_OPEN.ssid}`)).toContain("Open network");
 	});
 
 	it("disables the row while the adapter is busy", () => {
