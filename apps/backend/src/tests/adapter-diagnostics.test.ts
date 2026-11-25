@@ -13,13 +13,14 @@
  * rather than hand-mocked shapes, so the suite tracks the library, not a guess.
  *
  * Security invariant: no secret-shaped value ever survives into a log record —
- * the frame `preview` and every issue `message` pass through `logRedact`.
+ * an unrecognised frame logs no payload at all, and every issue `message`
+ * passes through `logRedact`.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { os } from "@orpc/server";
 import { z } from "zod";
 
-import { logger, REDACTED } from "../helpers/logger.ts";
+import { logger } from "../helpers/logger.ts";
 import {
 	createWebSocketHandler,
 	handleORPCMessage,
@@ -178,9 +179,22 @@ describe("adapter diagnostics", () => {
 		expect(warnLog?.meta?.keys).toEqual(["foo", "id", "token"]);
 		expect(warnLog?.meta?.bytes).toBe(frame.length);
 		expect(warnLog?.meta?.hasId).toBe(true);
-		// Raw secret-bearing value must not be dumped; preview is redacted.
-		expect(warnLog?.meta?.preview).toBe(REDACTED);
+		// Raw secret-bearing value must not be dumped: no payload preview at all.
+		expect(warnLog?.meta).not.toHaveProperty("preview");
 		expect(JSON.stringify(warnLog)).not.toContain(KNOWN_SECRET);
+	});
+
+	test("(3b) a non-oRPC frame carrying plain credentials logs none of them", () => {
+		const values = ["plain-remote-key-3b", "plain-ssh-pass-3b", "plain-psk-3b"];
+		const frame = JSON.stringify({
+			config: { remote_key: values[0], ssh_pass: values[1] },
+			wifi: { psk: values[2] },
+		});
+		expect(parseMessage(frame, fakeWs())).toBeNull();
+		const warnLog = cap.logs.find((l) => l.level === "warn");
+		expect(warnLog?.meta?.keys).toEqual(["config", "wifi"]);
+		for (const value of values)
+			expect(JSON.stringify(warnLog)).not.toContain(value);
 	});
 
 	test("(4) heartbeat pong frame is allow-listed silently, never warned", () => {

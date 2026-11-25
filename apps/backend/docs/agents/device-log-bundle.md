@@ -28,8 +28,8 @@ null. No config dump, password hash, authentication-token file, Wi-Fi PSK or
 NetworkManager profile is included. `readUpdateChannel()` reuses the update
 owner's validated readers without migrating or writing settings.
 
-Held config, relay, hotspot, APN and router credentials are inputs to redaction
-only. `getStoredModemCredentials()` returns copies of the username/password
+Held config, relay, hotspot, APN and router credentials, and the held UI and
+SSH password hashes, are inputs to redaction only. `getStoredModemCredentials()` returns copies of the username/password
 pairs, including disconnected devices, without identity or verification
 metadata. They never become bundle records. The backend has no SRT passphrase
 field to read; an absent credential is not invented or probed from the engine.
@@ -49,8 +49,26 @@ masking when no whole-address mask applies.
 Bracketed endpoints keep their port, as in `[IP]:9000`. Link-local IPv6
 (`fe80::/10`), unique local IPv6 (`fc00::/7`), and `::1` remain visible.
 The first three MAC octets and private IPv4 remain useful diagnostics.
-Arbitrary personal text and historical credentials no longer held by the
-backend are not guaranteed to be recognized.
+`credential-members.ts` also masks credential values by the key they sit
+under, so journal lines written before the logger redacted a key stay out even
+when the backend no longer holds the value. When the text, or its first `{` to
+last `}`, parses as a JSON object or array, it is walked with the logger's
+`isSensitiveKey` rule, parent keys included, following JSON strings that hold
+JSON up to four levels: every string under a sensitive key (directly, in an
+array or in a nested object) is masked as `[REDACTED:<kind>]` wherever it
+occurs as a JSON string token at its encoding depth in that text. Numbers and
+booleans are not masked. Text that does not parse gets a `"key": "value"`
+member scan, plain or escaped, using the word rule on the member's own key.
+Only a complete marker counts as already masked, and replacements keep the
+value's quotes. Each distinct value is searched once per line, so repeated
+values stay linear. Known limits of the parse: text whose JSON does not parse
+(a brace before the object, a message cut at its size limit, two separate
+objects), a root JSON string, nesting deeper than four levels, the first of
+two duplicate keys and `\/`-escaped values. There, only keys whose own name
+is a credential word are caught by the member scan; parent-qualified values
+such as `{ "remote": { "key": … } }` are not. Credentials outside such JSON, under keys the rules do not
+name, or no longer held by the backend in plain text, and arbitrary personal
+text, are not guaranteed to be recognized.
 Literal matching is case-sensitive and does not normalize Unicode; case-folded
 or differently normalized spellings are outside the exact-occurrence contract.
 

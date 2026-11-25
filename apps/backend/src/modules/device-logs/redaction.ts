@@ -1,5 +1,6 @@
 import { isIPv6 } from "node:net";
 import type { LogBundleFailureReason } from "@ceraui/rpc/schemas";
+import { credentialSpans } from "./credential-members.ts";
 
 export class BundleReadError extends Error {
 	readonly code: "READ_FAILED" | "BUSY";
@@ -249,6 +250,8 @@ export function buildRedactor(
 				/eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+/g,
 				() => "[REDACTED:token]",
 			);
+			for (const member of credentialSpans(value))
+				spans.push({ ...member, known: false });
 			spans.sort((a, b) => a.start - b.start);
 			const merged: typeof spans = [];
 			for (const span of spans) {

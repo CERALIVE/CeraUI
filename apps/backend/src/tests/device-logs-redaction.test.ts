@@ -372,3 +372,179 @@ test.each([
 		});
 	},
 );
+
+// A "config loaded" line as the logger wrote it before ssh_pass, its hash and
+// remote_key were redacted by key. None of these values is held any more.
+const oldConfigLine = JSON.stringify({
+	ts: "2026-01-01T00:00:00.000Z",
+	level: "debug",
+	msg: "config loaded",
+	meta: {
+		password: "[REDACTED]",
+		ssh_pass: "old-ssh-pass-91c2",
+		ssh_pass_hash: "$6$oldsalt$oldsshhash91c2",
+		remote_key: "old-remote-key-91c2",
+		pairing_secret: "[REDACTED]",
+		ssh_persistent: false,
+		video_passthrough: "auto",
+	},
+});
+const oldConfigValues = [
+	"old-ssh-pass-91c2",
+	"oldsshhash91c2",
+	"old-remote-key-91c2",
+];
+
+test.each([oldConfigLine, JSON.stringify({ message: oldConfigLine })])(
+	"config credential fields are masked by name when their value is no longer held: %s",
+	(line) => {
+		const { text, redactions } = buildRedactor([]).text(line);
+		for (const value of oldConfigValues) expect(text).not.toContain(value);
+		expect(redactions).toBe(3);
+		expect(text.match(/\[REDACTED:ssh\]/g)).toHaveLength(2);
+		expect(text).toContain("[REDACTED:remote_key]");
+		expect(text).toContain("video_passthrough");
+		expect(text).toContain("auto");
+	},
+);
+
+test("credential masking leaves ordinary fields and complete markers alone", () => {
+	const line = JSON.stringify({
+		video_passthrough: "auto",
+		keyframe: "2",
+		bypass: "on",
+		ssh_persistent: "yes",
+		stableKey: "keep",
+		ssh_pass: "[REDACTED]",
+		remote_key: "[REDACTED:remote_key]",
+		password: "",
+	});
+	expect(buildRedactor([]).text(line)).toEqual({ text: line, redactions: 0 });
+});
+
+test("a value that only starts with a redaction marker is still masked", () => {
+	const plain = JSON.stringify({
+		remote_key: "[REDACTED]tail-of-old-remote-key",
+		ssh_pass: "[REDACTED:ssh]x-old-pass",
+	});
+	for (const line of [plain, JSON.stringify({ message: plain })]) {
+		const { text, redactions } = buildRedactor([]).text(line);
+		expect(text).not.toContain("tail-of-old-remote-key");
+		expect(text).not.toContain("x-old-pass");
+		expect(redactions).toBe(2);
+	}
+});
+
+test("password_hash, pairing_secret, camelCase and dotted credential keys are masked", () => {
+	const fields = {
+		password_hash: "$2b$10$old-ui-hash-77",
+		pairing_secret: "old-pairing-77",
+		sshPassHash: "$6$s$old-camel-hash-77",
+		remoteKey: "old-camel-remote-77",
+		"remote.key": "old-dotted-remote-77",
+		"ssh.pass": "old-dotted-ssh-77",
+	};
+	const plain = JSON.stringify(fields);
+	for (const line of [plain, JSON.stringify({ message: plain })]) {
+		const { text, redactions } = buildRedactor([]).text(line);
+		for (const value of Object.values(fields))
+			expect(text).not.toContain(value);
+		expect(redactions).toBe(6);
+		expect(text).toContain("[REDACTED:password]");
+		expect(text).toContain("[REDACTED:pairing]");
+		expect(text.match(/\[REDACTED:ssh\]/g)).toHaveLength(2);
+		expect(text.match(/\[REDACTED:remote_key\]/g)).toHaveLength(2);
+	}
+});
+
+// Round-2 shapes: the walk follows parent keys, arrays and JSON inside JSON.
+const nestedFields = {
+	remote: { key: "nested-remote-r3" },
+	ssh: { hash: "$6$s$nested-ssh-hash-r3", port: 22 },
+	remote_keys: ["array-key-one-r3", "array-key-two-r3"],
+	accounts: [{ ingest_key: "array-object-r3", name: "keep-name-r3" }],
+	video: { key: "keep-video-key-r3" },
+	remoteInfo: { commitHash: "keep-commit-r3" },
+	stream: { keyCount: "keep-count-r3" },
+};
+const nestedValues = [
+	"nested-remote-r3",
+	"nested-ssh-hash-r3",
+	"array-key-one-r3",
+	"array-key-two-r3",
+	"array-object-r3",
+];
+const keptValues = [
+	"keep-name-r3",
+	"keep-video-key-r3",
+	"keep-commit-r3",
+	"keep-count-r3",
+];
+const journalLine = JSON.stringify({ msg: "x", meta: nestedFields });
+
+test.each([
+	["text", "a journal line", journalLine],
+	[
+		"text",
+		"twice-encoded JSON",
+		JSON.stringify({ msg: "x", meta: { raw: journalLine } }),
+	],
+	["text", "a prefixed line", `backend said ${journalLine}`],
+	["text", "pretty JSON", JSON.stringify({ meta: nestedFields }, null, 2)],
+] as const)(
+	"%s masks nested, array and qualified credentials in %s",
+	(_method, _shape, line) => {
+		const { text, redactions } = buildRedactor([]).text(line);
+		for (const value of nestedValues) expect(text).not.toContain(value);
+		for (const value of keptValues) expect(text).toContain(value);
+		expect(redactions).toBe(nestedValues.length);
+	},
+);
+
+test("an escaped member with an encoded newline before its value is masked when the text does not parse", () => {
+	const line =
+		'unit wrote {\\"ssh_pass\\":\\n \\"encoded-gap-r3\\"} and stopped';
+	const { text, redactions } = buildRedactor([]).text(line);
+	expect(text).not.toContain("encoded-gap-r3");
+	expect(text).toContain('\\"[REDACTED:ssh]\\"');
+	expect(redactions).toBe(1);
+});
+
+test("numbers, booleans and a value equal to a key name keep their place", () => {
+	const line = JSON.stringify({
+		meta: { pin: 1234, ssh_pass: "ssh_persistent", ssh_persistent: true },
+	});
+	const { text } = buildRedactor([]).text(line);
+	expect(text).toContain('"pin":1234');
+	expect(text).toContain('"ssh_persistent":true');
+	expect(text).toContain('"ssh_pass":"[REDACTED:ssh]"');
+});
+
+test("a held literal inside a credential member keeps the member's quotes", () => {
+	const line = JSON.stringify({
+		meta: { remote_key: "prefix-held-literal-r3-suffix" },
+	});
+	{
+		const redact = buildRedactor([{ kind: "key", value: "held-literal-r3" }]);
+		const { text } = redact.text(line);
+		expect(text).not.toContain("held-literal-r3");
+		expect(text).not.toContain("suffix");
+		expect(JSON.parse(text)).toHaveProperty("meta.remote_key");
+		expect(text).toMatch(/"remote_key":"\[REDACTED(?::[a-z_]+)?\]"/);
+	}
+});
+
+test("a line repeating one credential value thousands of times is masked in linear time", () => {
+	const line = JSON.stringify({
+		msg: "x",
+		meta: { ssh_pass: Array.from({ length: 4000 }, () => "a") },
+	});
+	expect(line.length).toBeGreaterThan(16_000);
+	const started = performance.now();
+	const { text, redactions } = buildRedactor([]).text(line);
+	const elapsed = performance.now() - started;
+	expect(redactions).toBe(4000);
+	expect(text).not.toContain('"a"');
+	// Was several seconds per line when each copy rescanned the whole text.
+	expect(elapsed).toBeLessThan(500);
+});
