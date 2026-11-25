@@ -90,7 +90,6 @@ function sendOutOfDateNotice(ws: AppWebSocket): void {
  * notice, any other has the one an earlier backend left on it withdrawn.
  */
 export async function syncOutOfDateNotice(ws: AppWebSocket): Promise<void> {
-	if (ws.data.uiBuild === undefined) return;
 	if (await isOutOfDateUi(ws)) sendOutOfDateNotice(ws);
 	else
 		sendToClient(ws, "notification", {
