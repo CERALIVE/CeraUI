@@ -20,7 +20,7 @@
 // wires srtla per-uplink telemetry, then starts the engine session over the
 // StreamingBackend seam.
 
-import type { StartFailureClass } from "@ceraui/rpc/schemas";
+import { AUDIO_SOURCE_AUTO, type StartFailureClass } from "@ceraui/rpc/schemas";
 import {
 	buildSrtlaSendArgs,
 	controlSocketPath,
@@ -37,6 +37,7 @@ import {
 import { pinLaunchedAudio } from "../armed-stream-marker.ts";
 import {
 	asrcProbe,
+	audioIdentitySuccessor,
 	isPseudoAudioSource,
 	NO_AUDIO_ID,
 	refreshBluetoothAudioDevices,
@@ -314,13 +315,6 @@ export async function startStream(
 		});
 		transaction.register(() => startStreamDeps.stopLinkTelemetry());
 
-		pinLaunchedAudio({
-			asrc: config.asrc,
-			audio_inputs: config.audio_inputs,
-			acodec: config.acodec,
-			delay: config.delay,
-			audio_backend: config.audio_backend,
-		});
 		await startStreamDeps.getStreamingBackend().start(
 			// The bitrate is live: a change made while starting still applies.
 			configOverride === undefined
@@ -333,6 +327,20 @@ export async function startStream(
 				streamid,
 				// Auto's launch copy can read "No audio" without the operator picking it.
 				audioOff: config.asrc === NO_AUDIO_ID,
+				audioAtDispatch: () => {
+					const audio = startAudio.config;
+					pinLaunchedAudio(audio);
+					// Auto already chose a device for this launch. Follow its identity,
+					// not a new Auto decision after the operator's request was admitted.
+					const chosen = launchConfig.asrc;
+					return {
+						asrc:
+							audio.asrc === AUDIO_SOURCE_AUTO
+								? chosen && (audioIdentitySuccessor(chosen) ?? chosen)
+								: audio.asrc,
+						audio_inputs: audio.audio_inputs,
+					};
+				},
 			},
 			transaction,
 		);

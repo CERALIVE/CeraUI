@@ -8,7 +8,7 @@
  * adapter over a fake client) and save another audio choice meanwhile.
  */
 import { afterEach, beforeEach, expect, jest, spyOn, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -62,6 +62,10 @@ import {
 	type Pipeline,
 } from "../modules/streaming/pipelines.ts";
 import { setPreviewEncodeReplayTransport } from "../modules/streaming/preview-encode-replay.ts";
+import {
+	refreshEngineDeviceCache,
+	setEngineAudioChangeHandler,
+} from "../modules/streaming/sources.ts";
 import * as srtla from "../modules/streaming/srtla.ts";
 import { acceptStartAudio } from "../modules/streaming/start-audio.ts";
 import {
@@ -82,6 +86,7 @@ import {
 	setStartStreamDepsForTest,
 	startStream,
 } from "../modules/streaming/streamloop/start-stream.ts";
+import * as notifications from "../modules/ui/notifications.ts";
 import { sendStatus } from "../modules/ui/status.ts";
 import * as websocketServer from "../modules/ui/websocket-server.ts";
 import { setAudioMixProcedure } from "../rpc/procedures/audio-mix.procedure.ts";
@@ -807,6 +812,18 @@ const wrapClient = (extra: (client: CerastreamClient) => object) => {
 		return Object.assign(client, extra(client));
 	});
 };
+const holdStreamSubscription = () =>
+	wrapClient((client) => {
+		const subscribe = client.subscribeEvents;
+		return {
+			subscribeEvents: async (
+				...args: Parameters<CerastreamClient["subscribeEvents"]>
+			) => {
+				if (args[0]?.topics === undefined) await hold();
+				return subscribe(...args);
+			},
+		};
+	});
 /** An engine that prepares a scoped attempt before its Start request. */
 const scopedEngine = (held: "getCapabilities" | "prepareStart") => {
 	engine.dispose();
@@ -933,16 +950,16 @@ const wire = (id: string, tracks: number[]) => {
 	return { ...input, input_id: `hw:CARD=${id.toLowerCase()}` };
 };
 const mixed = (...inputs: ReturnType<typeof wire>[]) => ({
-	mode: "default",
+	mode: "default" as const,
 	inputs,
 	delay_ms: 0,
 });
 const device = (id: string) => ({
-	mode: "device",
+	mode: "device" as const,
 	device: `hw:CARD=${id}`,
 	delay_ms: 0,
 });
-const silent = { mode: "none", delay_ms: 0 };
+const silent = { mode: "none" as const, delay_ms: 0 };
 const otherMix = [entry("Primary", [1]), entry("Second", [1])];
 
 const SHAPES = ["mix", "single"] as const;
@@ -1181,7 +1198,7 @@ async function listBluetoothMic() {
 			},
 		],
 		readRegistryDevices: () => [
-			{ address, alias: "Mic", connected: true, scoCapable: true },
+			{ address, name: "Mic", alias: "Mic", connected: true, scoCapable: true },
 		],
 		engineSupportsPcmSpec: () => true,
 		engineSupportsPipewireCapture: () => false,
@@ -1915,7 +1932,7 @@ const BLUETOOTH = "bluealsa:DEV=AA:BB:CC:11:22:33,PROFILE=sco";
 const BLUETOOTH_SHAPES = ["the main input", "another mix input"] as const;
 const bluetoothOnTheWire = (as: (typeof BLUETOOTH_SHAPES)[number]) =>
 	as === "the main input"
-		? { mode: "device", device: BLUETOOTH, delay_ms: 0 }
+		? { mode: "device" as const, device: BLUETOOTH, delay_ms: 0 }
 		: mixed(wire("Primary", [1]), {
 				...wire("", [2]),
 				input_id: BLUETOOTH,
@@ -2110,11 +2127,162 @@ test("a microphone muted live that re-enumerated is still muted after an engine 
 	);
 });
 
+test.each([
+	"waiting for the microphone",
+	"subscribing the engine client",
+	"preparing a scoped engine Start",
+] as const)(
+	"restoration sends the known physical microphone's new id exactly once after rekeying while %s",
+	async (stage) => {
+		const card = join(directory, "card0");
+		const listCard = async (id?: string) => {
+			if (id === undefined) {
+				await rm(card, { recursive: true, force: true });
+			} else {
+				await mkdir(join(card, "pcmC0D0c"), { recursive: true });
+				await Bun.write(join(card, "id"), `${id}\n`);
+			}
+			await refreshEngineDeviceCache({
+				fetchEngineDevices: async () => ({
+					devices:
+						id === undefined
+							? []
+							: [
+									{
+										alsa_card_id: id,
+										input_id: `hw:CARD=${id}`,
+										device_path: `hw:CARD=${id}`,
+										media_class: "audio",
+										display_name: "Recovery microphone",
+										stable_id: "usb:restoration:rekey-mic",
+									},
+								],
+				}),
+			});
+			await audio.updateAudioDevices(directory);
+		};
+		// Drive the same ALSA scan and inventory join in one controlled hotplug tick.
+		setEngineAudioChangeHandler(() => {});
+		try {
+			if (stage === "preparing a scoped engine Start") {
+				engine.dispose();
+				engine = evidenceHarness(false, { schemaVersion: "0.25.0" });
+			}
+			await listCard("micOld");
+			keepMarker();
+			liveEngine();
+			getConfig().asrc = "micOld";
+			getConfig().audio_inputs = [entry("micOld", [1]), entry("Second", [2])];
+			getConfig().audio_backend = "alsa";
+			saveConfig();
+			expect(await start()).toMatchObject({ success: true });
+			await liveEdit("micOld", { mute: true, gain_db: -9, delay_ms: 120 });
+			expect(await pick("Third")).toMatchObject({ success: true });
+			getConfig().audio_backend = "pipewire";
+			saveConfig();
+			const saved = await disk();
+			await loseEngine();
+			const launches = engine.startRequests.length;
+			spyOn(audio, "asrcProbe").mockRestore();
+
+			if (stage === "waiting for the microphone") {
+				await listCard();
+				const notify = notifications.notificationBroadcast;
+				spyOn(notifications, "notificationBroadcast").mockImplementation(
+					(...args) => {
+						if (args[0] === "asrc_not_found") reached.resolve();
+						return notify(...args);
+					},
+				);
+			} else if (stage === "subscribing the engine client") {
+				spyOn(engine.backend["deps"], "connect").mockRestore();
+				holdStreamSubscription();
+			} else {
+				spyOn(engine.backend["deps"], "connect").mockRestore();
+				wrapClient(() => ({
+					getCapabilities: async () => ({
+						...CAPS,
+						features: [ATTEMPT_SCOPED_START_FEATURE],
+					}),
+					prepareStart: async () => {
+						await hold();
+						return { attempt_id: "rekey-attempt", expires_in_ms: 10_000 };
+					},
+					cancelStart: async (attempt: unknown) => attempt,
+				}));
+			}
+			const restoring = restore();
+			try {
+				expect(
+					await Promise.race([
+						reached.promise.then(() => "rekey boundary"),
+						restoring.then(({ result }) => result),
+					]),
+				).toBe("rekey boundary");
+				expect(engine.startRequests.slice(launches)).toEqual([]);
+				await listCard("micNew");
+			} finally {
+				gate.resolve();
+			}
+
+			expect((await restoring).result).toBe("recovered");
+			expect(launchedAudio().slice(launches)).toEqual([
+				{
+					...mixed(
+						{
+							input_id: "hw:CARD=micNew",
+							tracks: [1],
+							mute: true,
+							gain_db: -9,
+							delay_ms: 120,
+						},
+						wire("Second", [2]),
+					),
+					backend: "alsa",
+				},
+			]);
+			if (stage === "preparing a scoped engine Start")
+				expect(engine.startRequests.at(-1)).toHaveProperty(
+					"attempt_id",
+					"rekey-attempt",
+				);
+			expect(await disk()).toEqual(saved);
+		} finally {
+			audio.clearAsrcProbeReject();
+			await listCard();
+			audio.resetRememberedAudioIdentities();
+			setEngineAudioChangeHandler(undefined);
+		}
+	},
+	20_000,
+);
+
 test("a re-enumerated mix input whose new id is already in the mix is not sent twice", async () => {
 	await running("Primary", "mix");
 	getConfig().audio_inputs = [entry("Second", [1]), entry("Third", [2])];
 	getConfig().asrc = "Third";
-	reenumerate("Second", "Third");
+	await stop();
+	const launches = engine.startRequests.length;
+	holdStreamSubscription();
+	const starting = start();
+	try {
+		expect(
+			await Promise.race([
+				reached.promise.then(() => "subscription"),
+				starting.then(() => "Start finished"),
+			]),
+		).toBe("subscription");
+		reenumerate("Second", "Third");
+	} finally {
+		gate.resolve();
+	}
+	expect(await starting).toMatchObject({ success: true });
+	expect(launchedAudio().slice(launches)).toEqual([
+		mixed(wire("Third", [2]), {
+			...wire("Second", [1]),
+			input_id: "hw:CARD=Second",
+		}),
+	]);
 	expect(acceptStartAudio().config.audio_inputs?.map(({ id }) => id)).toEqual([
 		"Second",
 		"Third",

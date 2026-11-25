@@ -6,12 +6,20 @@
 
 Reconnect consumes config/status independently, while restoration still waits
 for both paths. After a successful sign-in reply, the first hydration frame
-carries only `is_streaming` and `stream_lifecycle`. The device sends this partial
+carries `is_streaming`, `stream_lifecycle`, and `audio_off_active` when the
+running session's audio choice is known. The device sends this partial
 status to the socket that signed in, before building the full snapshot. A
-snapshot failure therefore does not hide the stream. A status pull carries
+snapshot failure therefore does not hide the stream or its known audio choice.
+An omitted audio fact on a same-stream partial push does not clear it. A link
+drop, an observed stream boundary, or an admissible full pull without the fact
+does clear it. An adopted stream does not assert a known choice.
+An in-place `reconfiguring` frame keeps the stream's Stop confirmation epoch;
+an actual stop, replacement, or uncertain liveness still invalidates it.
+A status pull carries
 request-dispatch and browser-receipt marks on the evidence clock; a newer
 intent/STREAM-FACT observation supersedes stream
-evidence. Only `is_streaming`, `stream_lifecycle` and unclassified field names
+evidence. `is_streaming`, `stream_lifecycle`, `audio_off_active` and other
+unclassified field names
 advance that atomic horizon (unknown fails closed). Explicitly unrelated pushes
 never advance it. Superseded stream fields are withheld, but unrelated supplied
 fields merge unless a push carrying that field arrived after dispatch or a newer

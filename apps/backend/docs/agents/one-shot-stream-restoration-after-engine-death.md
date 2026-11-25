@@ -44,8 +44,12 @@ config snapshot plus the current `boot_id`, and nothing else that matters.
   snapshot from the marker, `validateConfig` and `startStream` take it, and the launch
   runs inside `whileInFlight`: an absent microphone is waited for, a re-enumerated one
   is addressed by its new id, and the Bluetooth microphones are listed for the
-  recorded backend. A marker from before the mix was recorded leaves the mix and the
-  backend to the saved ones.
+  recorded backend. The real probe looks for a known stable-identity successor on
+  each wake; the engine adapter reads the selected IDs again after subscription
+  and any scoped Start preparation, immediately before sending Start. The snapshot
+  still owns backend, codec, delay and applied mix values; discovery never
+  substitutes an unrelated saved pick. A marker from before the mix was recorded
+  leaves the mix and the backend to the saved ones.
 - **Video and network fields are not followed.** A live bitrate, source or encoder
   change leaves the marker's value from arming, as before. The audio part is covered
   by `tests/no-audio-start.test.ts` through the real marker, runner and launch.

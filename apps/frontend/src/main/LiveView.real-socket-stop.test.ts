@@ -487,6 +487,30 @@ describe("Live bar Stop confirmation over the real socket", () => {
 		expect(dialog.dataset.state).toBe("closed");
 	});
 
+	it("the live layout apply frames do not close an open Stop confirmation", async () => {
+		const { container } = render(LiveView);
+		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+		const dialog = await openLiveStopConfirmation(container);
+		expect(sentCount("streaming.stop")).toBe(0);
+
+		// The last placement in the hosted trace reached the page after Stop opened.
+		socket().deliver({
+			status: { stream_lifecycle: "reconfiguring" },
+			seq: 21,
+		});
+		socket().deliver({ status: { stream_lifecycle: "streaming" }, seq: 22 });
+		await settle();
+		expect(dialog.dataset.state).toBe("open");
+		expect(sentCount("streaming.stop")).toBe(0);
+
+		await fireEvent.click(getByTestId(dialog, "live-stop-end"));
+		await settle();
+		expect(dialog.dataset.state).toBe("closed");
+		expect(sentCount("streaming.stop")).toBe(1);
+		answer("streaming.stop", { success: true, result: "stopped" });
+		await settle();
+	});
+
 	it("two delivered End clicks send one Stop RPC without waiting for a reply", async () => {
 		const { container } = render(LiveView);
 		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
@@ -554,6 +578,98 @@ describe("Live bar Stop confirmation over the real socket", () => {
 		expect(sentCount("streaming.stop")).toBe(1);
 		answer("streaming.stop", { success: true, result: "stopped" });
 		await settle();
+	});
+});
+
+describe("the running audio label during sign-in hydration", () => {
+	const audioLine = (container: HTMLElement) =>
+		container
+			.querySelector('[data-testid="live-cockpit"] [data-live-value="audio"]')
+			?.textContent?.trim();
+
+	it.each([
+		["audible replacement", false],
+		["adopted replacement", undefined],
+	] as const)(
+		"does not borrow the silent predecessor's audio fact for an %s",
+		async (_, audioOff) => {
+			device.usePushedConfig = true;
+			socket().deliver({ config: { pipeline: "hdmi", asrc: "USB audio" } });
+			const { container } = render(LiveView);
+			deliverStatus({
+				is_streaming: true,
+				stream_lifecycle: "streaming",
+				audio_off_active: true,
+			});
+			await settle();
+			expect(audioLine(container)).toBe("No audio");
+			dropLink();
+			await restoreLink();
+			expect(getStatus()?.audio_off_active).toBeUndefined();
+			answer("auth.login", { success: true });
+			// The early push can arrive before the auth continuation starts the pulls.
+			deliverStatus({
+				is_streaming: true,
+				stream_lifecycle: "streaming",
+				...(audioOff === undefined ? {} : { audio_off_active: audioOff }),
+			});
+			await settle();
+			answer("streaming.getConfig", { pipeline: "hdmi", asrc: "USB audio" });
+			reject("status.getStatus", "INTERNAL_ERROR");
+			await settle();
+
+			expect(audioLine(container)).toBe("USB audio");
+			expect(getStatus()?.audio_off_active).toBe(audioOff);
+		},
+	);
+
+	it("shows known silence on the first authenticated status even when inventory hydration never follows", async () => {
+		device.usePushedConfig = true;
+		const { container } = render(LiveView);
+
+		deliverStatus({
+			is_streaming: true,
+			stream_lifecycle: "streaming",
+			audio_off_active: true,
+		});
+		await settle();
+		expect(audioLine(container)).toBe("No audio");
+
+		deliverStatus({ is_streaming: true, audio_mix_active: false });
+		await settle();
+		expect(audioLine(container)).toBe("No audio");
+	});
+
+	it("keeps the newer audio push across a superseded status pull, but not an admissible full snapshot", async () => {
+		device.usePushedConfig = true;
+		socket().deliver({ config: { pipeline: "hdmi", asrc: "USB audio" } });
+		const { container } = render(LiveView);
+		const pulling = pullStatusEvidence();
+		deliverStatus({
+			is_streaming: true,
+			stream_lifecycle: "streaming",
+			audio_off_active: true,
+		});
+
+		answer("status.getStatus", {
+			is_streaming: true,
+			stream_lifecycle: "streaming",
+			audio_off_active: false,
+		});
+		await settle();
+		expect(audioLine(container)).toBe("No audio");
+
+		answer("status.getStatus", {
+			is_streaming: true,
+			stream_lifecycle: "streaming",
+		});
+		const current = await pulling;
+		if (current === undefined)
+			throw new Error("expected the fresh status reply");
+		ingestPulledStatus(current.status, current.receipt);
+		await settle();
+		expect(audioLine(container)).toBe("USB audio");
+		expect(getStatus()?.audio_off_active).toBeUndefined();
 	});
 });
 

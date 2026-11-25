@@ -151,11 +151,12 @@ Stop, engine idle or connection loss withdraw it. Only an active mix refuses
 `switchAudio` with `audio_mix_active`. A legacy session retains live source
 switching even after a mix is saved.
 
-Status snapshots, the start and stop updates and initial hydration also carry
+Status snapshots, the start and stop updates and the first post-sign-in status also carry
 `audio_off_active`: whether the running session was launched without audio by the
-operator's choice, whatever pick is saved now. Other status frames leave it out and
-a client keeps the last value. It is omitted for a stream this process adopted
-instead of launching.
+operator's choice, whatever pick is saved now. The early frame does not depend
+on modem inventory. Other partial frames leave it out; the client retains the
+fact only while it still describes the current stream on the current socket.
+It is omitted for a stream this process adopted instead of launching.
 
 `streaming.setAudioMix({ id, gain_db?, mute?, delay_ms? })` uses that session's
 admitted input identity. A live mix sends one producer `setAudioMix` request,

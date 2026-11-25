@@ -752,6 +752,7 @@ export async function reresolveAudioForEngineChange(
 	if (!current()) return;
 	refreshResolvedAsrcPreview();
 	syncAudioMeterPreference();
+	pendingProbe?.wake?.();
 }
 
 /**
@@ -924,9 +925,10 @@ export class AudioProbeTimeoutError extends Error {
 }
 
 export async function asrcProbe(asrc: string): Promise<string> {
+	const present = () => audioDevices[audioIdentitySuccessor(asrc) ?? asrc];
 	if (isBluetoothAudioSourceId(asrc)) await refreshBluetoothAudioDevices();
-	let audioSrcId: string | undefined = audioDevices[asrc];
-	if (audioSrcId) return audioSrcId;
+	const available = present();
+	if (available) return available;
 
 	return new Promise((res: (id: string) => void, rej: (err: Error) => void) => {
 		// Cancel any prior pending probe before starting a new one
@@ -957,7 +959,8 @@ export async function asrcProbe(asrc: string): Promise<string> {
 				if (isBluetoothAudioSourceId(asrc)) {
 					await refreshBluetoothAudioDevices();
 				}
-				audioSrcId = audioDevices[asrc];
+				if (pendingProbe !== probe) return;
+				const audioSrcId = present();
 				if (audioSrcId) {
 					settle();
 					res(audioSrcId);

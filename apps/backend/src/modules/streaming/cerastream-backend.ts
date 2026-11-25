@@ -857,14 +857,8 @@ export class CerastreamBackend implements StreamingBackend {
 		const launchTransaction =
 			transaction ?? createLaunchTransaction("backend-start");
 		try {
-			const params = this.buildStartParams(config, opts);
-			const audioMixInputs = params.audio?.inputs?.map((input) => ({
-				...structuredClone(input),
-				id:
-					effectiveAudioInputs(config)?.find(
-						(saved) => audioInputEngineId(saved.id, config) === input.input_id,
-					)?.id ?? input.input_id,
-			}));
+			let params = this.buildStartParams(config, opts);
+			let audioMixInputs: CerastreamBackend["audioMixInputs"];
 			await this.enqueue(async () => {
 				assertStreamLaunchOwnership();
 				let confirmStreaming: (() => void) | undefined;
@@ -967,6 +961,36 @@ export class CerastreamBackend implements StreamingBackend {
 						if (scoped) {
 							attempt = await client.prepareStart();
 							assertStreamLaunchOwnership();
+						}
+						const launchConfig =
+							opts.audioAtDispatch === undefined
+								? config
+								: { ...config, ...opts.audioAtDispatch() };
+						if (launchConfig !== config) {
+							const audio = startParamsWithAudioModeSchema.shape.audio.parse(
+								this.encodeStartAudio(
+									launchConfig,
+									config.pipeline ?? opts.pipeline,
+									opts.audioOff,
+								),
+							);
+							const { audio: _previous, ...rest } = params;
+							params = audio === undefined ? rest : { ...rest, audio };
+						}
+						const effective =
+							params.audio?.inputs === undefined
+								? undefined
+								: effectiveAudioInputs(launchConfig);
+						audioMixInputs = params.audio?.inputs?.map((input) => ({
+							...structuredClone(input),
+							id:
+								effective?.find(
+									(saved) =>
+										audioInputEngineId(saved.id, launchConfig) ===
+										input.input_id,
+								)?.id ?? input.input_id,
+						}));
+						if (attempt !== undefined) {
 							dispatched = true;
 							return client.start({
 								...params,
@@ -1923,30 +1947,7 @@ export class CerastreamBackend implements StreamingBackend {
 		audio?: StartParams["audio"];
 	} {
 		const inputId = config.selected_video_input ?? this.deps.getActiveInput();
-		// The operator's audio pick maps onto the engine's `audio.mode`
-		// discriminator (never a pseudo-source string leaked into `audio.device`):
-		// "No audio" ⇒ none with no inputs whatever mix is saved, a saved mix ⇒
-		// default + its inputs, "Pipeline default" / a network-embedded source ⇒
-		// default, a real device ⇒ device + its ALSA id. An absent `asrc` with no
-		// mix omits the section entirely (the engine's legacy inference).
-		const plan = launchAudioPlan(config, {
-			audioOff,
-			embeddedAudioActive: this.deps.isEmbeddedAudioActive(pipelineId),
-		});
-		const audio = {
-			// Absent means the operator stated no backend, so NO key is serialized
-			// and the engine's own persisted default governs. Substituting a value
-			// here would silently move every unconfigured device onto whichever arm
-			// this file names.
-			...(config.audio_backend !== undefined
-				? { backend: config.audio_backend }
-				: {}),
-			...(plan !== undefined ? { mode: plan.mode } : {}),
-			...(plan?.device !== undefined ? { device: plan.device } : {}),
-			...(config.acodec !== undefined ? { codec: config.acodec } : {}),
-			...(config.delay !== undefined ? { delay_ms: config.delay } : {}),
-		};
-		const inputs = plan?.inputs;
+		const audio = this.encodeStartAudio(config, pipelineId, audioOff);
 		return {
 			...(inputId !== undefined ? { input_id: inputId } : {}),
 			...(config.video_codec !== undefined
@@ -1972,10 +1973,42 @@ export class CerastreamBackend implements StreamingBackend {
 			...(config.composition !== undefined
 				? { composition: config.composition }
 				: {}),
-			...(Object.keys(audio).length > 0 || inputs !== undefined
-				? { audio: { ...audio, ...(inputs === undefined ? {} : { inputs }) } }
-				: {}),
+			...(audio !== undefined ? { audio } : {}),
 		};
+	}
+
+	private encodeStartAudio(
+		config: RuntimeConfig,
+		pipelineId: string | undefined,
+		audioOff?: boolean,
+	): StartParams["audio"] {
+		// The operator's audio pick maps onto the engine's `audio.mode`
+		// discriminator (never a pseudo-source string leaked into `audio.device`):
+		// "No audio" ⇒ none with no inputs whatever mix is saved, a saved mix ⇒
+		// default + its inputs, "Pipeline default" / a network-embedded source ⇒
+		// default, a real device ⇒ device + its ALSA id. An absent `asrc` with no
+		// mix omits the section entirely (the engine's legacy inference).
+		const plan = launchAudioPlan(config, {
+			audioOff,
+			embeddedAudioActive: this.deps.isEmbeddedAudioActive(pipelineId),
+		});
+		const audio = {
+			// Absent means the operator stated no backend, so NO key is serialized
+			// and the engine's own persisted default governs. Substituting a value
+			// here would silently move every unconfigured device onto whichever arm
+			// this file names.
+			...(config.audio_backend !== undefined
+				? { backend: config.audio_backend }
+				: {}),
+			...(plan !== undefined ? { mode: plan.mode } : {}),
+			...(plan?.device !== undefined ? { device: plan.device } : {}),
+			...(config.acodec !== undefined ? { codec: config.acodec } : {}),
+			...(config.delay !== undefined ? { delay_ms: config.delay } : {}),
+		};
+		const inputs = plan?.inputs;
+		return Object.keys(audio).length > 0 || inputs !== undefined
+			? { ...audio, ...(inputs === undefined ? {} : { inputs }) }
+			: undefined;
 	}
 
 	private buildStartParams(
