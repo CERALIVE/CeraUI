@@ -197,6 +197,23 @@ export function deriveWifiModeConsequence(
 	return undefined;
 }
 
+/**
+ * Whether moving to `mode` would start an access point from a client radio.
+ *
+ * Either witness is enough, because each can be behind the radio: the mode on
+ * screen comes from a pulled answer and can outlive the AP it names, and the row
+ * can lag an AP that is up. Asking once more costs a tap; not asking starts an AP
+ * whose name and password nobody has seen.
+ */
+export function startsApFromStation(
+	view: WifiAdapterModeView,
+	mode: WifiAdapterMode,
+): boolean {
+	return (
+		mode !== "station" && (view.displayMode === "station" || view.stationRow)
+	);
+}
+
 /** One rendered rung of the segmented control. */
 export interface WifiAdapterModeOptionView {
 	mode: WifiAdapterMode;
@@ -225,6 +242,11 @@ export interface WifiAdapterModeView {
 	displayMode: WifiAdapterMode;
 	/** The mode the device reports right now, unheld. */
 	observedMode: WifiAdapterMode;
+	/**
+	 * The radio's own row STATES a client radio with no AP up, whatever the label
+	 * says. A row from a device that does not state `mode` is never a witness.
+	 */
+	stationRow: boolean;
 	/** The persisted operator preference, when the device reported one. */
 	desiredMode?: WifiAdapterMode;
 	/** All three modes, always, in {@link WIFI_ADAPTER_MODES} order. */
@@ -366,6 +388,7 @@ export function deriveWifiAdapterModeView(
 			: {}),
 		displayMode,
 		observedMode,
+		stationRow: input.iface.mode === "station" && !hotspotIsActive(input.iface),
 		deviceAnswered,
 		options,
 		pending,

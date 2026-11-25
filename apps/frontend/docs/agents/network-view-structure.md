@@ -29,6 +29,18 @@ keeps it, so it holds even when the device never answered `getAdapterModes`. A
 change begun on another client carries no record and falls back to the device's
 preference, then its cached answer.
 
+**THE CREDENTIAL QUESTION HAS TWO WITNESSES [EXISTS].** The label can outlive the
+access point it names, so it does not decide alone whether the name and password
+are shown before one starts. Choosing Hotspot or Hybrid asks whenever the label
+OR the radio's own row says it would start from a station (`startsApFromStation`).
+The row says so when it states `mode: "station"` and carries no `hotspot`; a row
+that states no `mode` (an older device) is not a witness. The check runs wherever a
+start leaves the control: the rung, the inline uplink confirmation, and the one
+automatic retry of a change that was sent without the question. The label itself is
+unchanged. The cost is one extra question on a working hotspot whose row reads
+Station, for example after a backend restart until the connection is read, or after
+a failed first mode read.
+
 Wi-Fi rows, the Wi-Fi selector, Ethernet rows and Bonded Links use the same
 inventory label projection as Live/HUD. For example, a MAC-named radio with
 no active SSID reads "Wi-Fi (2f27)"; the last four hex digits are a hint, not a
