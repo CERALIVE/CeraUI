@@ -569,10 +569,10 @@ const stopWifiAdapterModeRestore = startWifiAdapterModeRestore();
 void guardNonCritical("ethernet-roles", reconcileEthernetRoles);
 
 // MUST precede initModemUpdateLoop: the loop's first discovery + `modems`
-// broadcast fire immediately, and every modem RPC gates on the readiness
-// snapshot this commits — so a loop that wins the race publishes a snapshot
-// from the default backend rather than the configured one, and refuses every
-// modem procedure with CELLULAR_STACK_INITIALIZING until the stack lands. A
+// broadcast fire immediately, and cellular-dependent modem RPCs gate on the
+// readiness snapshot this commits — so a loop that wins the race publishes a
+// snapshot from the default backend rather than the configured one, and refuses
+// every such procedure with CELLULAR_STACK_INITIALIZING until the stack lands. A
 // dbus failure falls back to mmcli INSIDE the stack, so reaching this guard
 // means the whole cellular subsystem is down and the device keeps its UI.
 await guardNonCritical("cellular-stack", initCellularStack);

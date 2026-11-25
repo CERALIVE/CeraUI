@@ -159,6 +159,12 @@ storage; no operator clear API is added. FCC
 opt-in also uses strict reads and enables no model on ambiguity, preserving bytes.
 These are host boundary proofs, not board recovery qualification.
 
+The four recovery RPCs (`listMutationBlocks`, `acknowledgeMutation`,
+`decommissionMutation`, `rebaselineMutation`) require sign-in but not cellular
+readiness. They use the journal and USB evidence, not ModemManager. Their
+confirmation, identity and lease checks are unchanged, and all previously
+gated non-recovery modem calls still require cellular readiness.
+
 **On a dev host there is no `/data`.** `resolveJournalDir()` reads
 `CERALIVE_MODEM_MUTATION_DIR` (the `CERALIVE_RUN_DIR` precedent) and otherwise
 falls back to a cwd-relative directory in development/mock mode. A real device

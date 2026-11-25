@@ -21,9 +21,9 @@
  * They live beside `modems.procedure.ts` rather than in it because that file is
  * already several times over this repo's 250-pure-LOC ceiling — a defect todo 25
  * recorded and carried — and todo 22 Stage B would have added a third of its size
- * again. They build from the SAME exported `modemProcedure`, so the cellular
- * readiness gate stays uniform: a router write during the init window must refuse
- * for exactly the reason every other modem procedure does.
+ * again. They build from the SAME exported `modemProcedure`, so they stay
+ * behind the cellular readiness gate: a router write during the init window must
+ * refuse for exactly the reason every other cellular-dependent procedure does.
  *
  * All three route through todo 25's mutation interlock and NONE of them owns a
  * mutation-safety mechanism of its own. The split between them is exactly whether

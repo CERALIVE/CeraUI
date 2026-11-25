@@ -132,13 +132,12 @@ import { configureModem } from "./modems-configure.ts";
 const baseProcedure = os.$context<RPCContext>();
 
 // Authenticated procedure. Exported because the credential/lock surface must
-// build from it directly — see `modems-credentials.procedure.ts` for why those
-// three deliberately skip the cellular readiness gate below.
+// build from it directly: `modems-credentials.procedure.ts` says why those three
+// skip the cellular readiness gate below. The capability and recovery procedures
+// in this file skip it too.
 export const authedProcedure = baseProcedure.use(authMiddleware);
 
-// EVERY modem procedure builds from this, never from `authedProcedure` directly:
-// the readiness gate has to be uniform, because a single ungated procedure is one
-// that reads a half-initialised dbus backend during the init window.
+// Procedures that use the cellular stack must not read it mid-initialization.
 export const modemProcedure = authedProcedure.use(cellularReadyMiddleware);
 
 /**
@@ -381,7 +380,7 @@ export const unlockSimPin2Procedure = modemProcedure
 /**
  * Read a modem's stored SMS inbox, newest first and capped.
  *
- * `modemProcedure`-gated like every modem procedure, and READ-ONLY for good.
+ * `modemProcedure`-gated like every cellular-dependent procedure, and READ-ONLY for good.
  * `sms-backend.ts` selects the package D-Bus observation port or the retained
  * mmcli rollback reader from the composition root's committed backend. Neither
  * path adds a provisioning gate, streaming interlock, or confirmation because
@@ -603,8 +602,10 @@ export const setFiveGPreferenceProcedure = modemProcedure
  *
  * `replayComplete` rides the same read as the blocks because a UI cannot honestly
  * render "nothing is wrong" while replay is still deciding.
+ * The four recovery procedures use the journal and USB evidence, not the
+ * cellular stack. They retain authentication and their existing action checks.
  */
-export const listMutationBlocksProcedure = modemProcedure
+export const listMutationBlocksProcedure = authedProcedure
 	.output(modemMutationListOutputSchema)
 	.handler(() => ({
 		replayComplete: !isRecoveryPending(),
@@ -616,21 +617,21 @@ export const listMutationBlocksProcedure = modemProcedure
  * `modules/modems/mutation-acknowledge.ts` for why a bare alert-dismiss must
  * never unblock a device whose true state is unknown.
  */
-export const acknowledgeMutationProcedure = modemProcedure
+export const acknowledgeMutationProcedure = authedProcedure
 	.input(modemMutationAckInputSchema)
 	.output(modemMutationAckOutputSchema)
 	.handler(({ input, signal }) =>
 		acknowledgeMutation(input.stableKey, input.mode, signal),
 	);
 
-export const decommissionMutationProcedure = modemProcedure
+export const decommissionMutationProcedure = authedProcedure
 	.input(modemMutationDecommissionInputSchema)
 	.output(modemMutationAckOutputSchema)
 	.handler(({ input, signal }) =>
 		decommissionMutation(input.stableKey, signal),
 	);
 
-export const rebaselineMutationProcedure = modemProcedure
+export const rebaselineMutationProcedure = authedProcedure
 	.input(modemMutationRebaselineInputSchema)
 	.output(modemMutationAckOutputSchema)
 	.handler(({ input, signal }) => rebaselineMutation(input.stableKey, signal));

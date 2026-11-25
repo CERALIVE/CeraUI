@@ -3,8 +3,8 @@
  *
  * The `dbus` cellular backend has an init window (the composition root commits it
  * only on its first authoritative snapshot). A modem procedure that ran inside
- * that window would read a half-initialised source, so every one of them is gated
- * here instead: while the stack is not ready the call answers the typed
+ * that window could read a half-initialised source, so cellular-dependent
+ * procedures are gated here: while the stack is not ready the call answers the typed
  * `CELLULAR_STACK_INITIALIZING` error rather than hanging or returning a
  * fabricated empty modem list.
  *

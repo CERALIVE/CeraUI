@@ -85,8 +85,8 @@ export type SelfFencingOps = Record<SelfFencingType, SelfFencingOp>;
 
 /**
  * Result `error` for a self_fencing op whose target subsystem is still initializing.
- * Mirrors the `CELLULAR_STACK_INITIALIZING` refusal every modem RPC procedure already
- * returns, in the control plane's snake_case error vocabulary.
+ * Mirrors the `CELLULAR_STACK_INITIALIZING` refusal every cellular-dependent modem RPC
+ * procedure already returns, in the control plane's snake_case error vocabulary.
  */
 export const SELF_FENCING_NOT_READY_ERROR = "cellular_stack_initializing";
 

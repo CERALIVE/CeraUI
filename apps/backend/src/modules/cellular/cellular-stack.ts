@@ -29,9 +29,8 @@
  *    byte-identically to every pre-cutover device.
  * 2. COMMIT ON THE FIRST AUTHORITATIVE SNAPSHOT. A `dbus` selection is NOT
  *    committed when `start()` is dispatched, only when it resolves an
- *    authoritative list. Until then the stack is not ready and every modem
- *    procedure answers the typed {@link CELLULAR_STACK_INITIALIZING} — never a
- *    hang, never a throw the operator sees as a crash.
+ *    authoritative list. Until then cellular-dependent modem procedures
+ *    answer the typed {@link CELLULAR_STACK_INITIALIZING} error.
  * 3. FAILURE FALLS BACK, VISIBLY. A rejection, a non-authoritative snapshot, or
  *    a start that outlives {@link DEFAULT_INIT_TIMEOUT_MS} stops the backend,
  *    flags `cellular-stack` on the boot-readiness surface, and commits mmcli in

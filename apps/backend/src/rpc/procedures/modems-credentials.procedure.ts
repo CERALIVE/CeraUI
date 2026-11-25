@@ -18,12 +18,12 @@
 /*
   THE THREE CREDENTIAL PROCEDURES, AND WHY THEY ARE NOT `modemProcedure`.
 
-  Every other modem procedure builds from `modemProcedure`, which adds the
+  Cellular-dependent procedures build from `modemProcedure`, which adds the
   cellular readiness gate. These three build from `authedProcedure` DIRECTLY, and
   that is the whole point rather than an oversight: a router-mode dongle is
   architecturally invisible to ModemManager, and the operator most needs to fix a
   credential exactly while the cellular stack is still initializing — which is
-  when `cellularReadyMiddleware` refuses everything. Gating them would make the
+  when `cellularReadyMiddleware` refuses what it gates. Gating them would make the
   fix unreachable in the state it exists for. They join
   `modems.getCapabilities`/`setCapabilities` as the non-entries in the
   mutation-entrypoint inventory: none takes a lease, none touches a radio.

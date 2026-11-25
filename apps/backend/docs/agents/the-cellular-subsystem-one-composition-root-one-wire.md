@@ -35,10 +35,12 @@ void initModemUpdateLoop({ monitor: networkMonitor });
 ```
 
 - **The stack MUST precede the loop.** `initModemUpdateLoop` runs its first
-  discovery and `modems` broadcast immediately, and every modem RPC gates on the
-  readiness snapshot the stack commits. A loop that wins that race publishes a
+  discovery and `modems` broadcast immediately, and every cellular-dependent modem
+  RPC gates on the readiness snapshot the stack commits. A loop that wins that race publishes a
   snapshot built by whichever backend happened to be default and refuses every
-  modem procedure with `CELLULAR_STACK_INITIALIZING` until the stack lands.
+  cellular-dependent modem procedure with `CELLULAR_STACK_INITIALIZING` until the
+  stack lands. The four journal recovery RPCs are not cellular-dependent: they need
+  sign-in only (the modem mutation safety contract).
   That refusal window is REAL and not hypothetical: `initCellularStack` publishes
   `{ready:false}` synchronously and only commits after an awaited backend start.
 - **The stack MUST precede shadow.** Shadow snapshots the mmcli side through
