@@ -109,6 +109,8 @@ const armedStreamConfigSchema = z.object({
 	/** `null` says the stream runs without a mix; absent, nothing was recorded. */
 	audio_inputs: z.array(audioInputSettingSchema).nullable().optional(),
 	audio_backend: audioBackendSchema.optional(),
+	/** The engine acknowledged a live switch to its silence leg. */
+	audio_silenced: z.boolean().optional(),
 	relay_server: z.string().optional(),
 	relay_account: z.string().optional(),
 	relay_streamid_override: z.string().optional(),
@@ -129,7 +131,9 @@ const armedStreamConfigSchema = z.object({
 });
 export type ArmedStreamConfig = z.infer<typeof armedStreamConfigSchema>;
 
-type LaunchedAudio = StartAudio["config"];
+type LaunchedAudio = StartAudio["config"] & {
+	readonly audio_silenced?: boolean;
+};
 let launchedAudio: LaunchedAudio | undefined;
 
 /**
@@ -266,6 +270,28 @@ export function writeArmedStreamMarker(
 		// death ends the session and nothing restores it.
 		logger.warn("could not write the armed-stream marker", { err });
 	}
+}
+
+/**
+ * A live change the engine acknowledged is part of the running stream, so a
+ * restoration brings it back: the pin carries it into a marker still to be armed,
+ * the marker carries it past a backend restart, after which the adopted stream has
+ * no pin and only the marker follows.
+ */
+export function followLiveAudio(
+	change: Partial<
+		Pick<LaunchedAudio, "audio_inputs" | "delay" | "audio_silenced">
+	>,
+	deps: ArmedStreamMarkerDeps = defaultArmedStreamMarkerDeps,
+): void {
+	if (launchedAudio !== undefined)
+		launchedAudio = { ...launchedAudio, ...change };
+	const marker = readArmedStreamMarker(deps);
+	if (marker === undefined) return;
+	writeArmedStreamMarker(
+		{ ...marker, config: { ...marker.config, ...change } },
+		deps,
+	);
 }
 
 export function clearArmedStreamMarker(

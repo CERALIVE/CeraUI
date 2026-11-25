@@ -11,10 +11,16 @@ import { afterEach, beforeEach, expect, jest, spyOn, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { GetCapabilitiesResult } from "@ceralive/cerastream";
+import type {
+	GetCapabilitiesResult,
+	ReloadConfigParams,
+	SetAudioMixParams,
+} from "@ceralive/cerastream";
 import {
 	ATTEMPT_SCOPED_START_FEATURE,
 	type CerastreamClient,
+	CerastreamConnectionError,
+	CerastreamRpcError,
 	SCHEMA_VERSION,
 } from "@ceralive/cerastream";
 import type { CaptureStreamSource } from "@ceraui/rpc/schemas";
@@ -32,8 +38,8 @@ import {
 import { wireSetProfile } from "../modules/remote-control/set-profile-wiring.ts";
 import { setup } from "../modules/setup.ts";
 import {
-	type ArmedStreamConfig,
-	noteStreamStopped,
+	defaultArmedStreamMarkerDeps,
+	pinLaunchedAudio,
 } from "../modules/streaming/armed-stream-marker.ts";
 import * as audio from "../modules/streaming/audio.ts";
 import * as autoAudio from "../modules/streaming/auto-audio.ts";
@@ -45,16 +51,27 @@ import {
 } from "../modules/streaming/bluetooth-audio.ts";
 import { clearCapabilitiesCache } from "../modules/streaming/capabilities.ts";
 import {
+	CerastreamBackend,
+	cerastreamBackend,
+} from "../modules/streaming/cerastream-backend.ts";
+import { commitStagedConfigChange } from "../modules/streaming/config-change-persistence.ts";
+import { stageConfigChange } from "../modules/streaming/config-change-staging.ts";
+import {
 	initPipelines,
 	type Pipeline,
 } from "../modules/streaming/pipelines.ts";
 import { setPreviewEncodeReplayTransport } from "../modules/streaming/preview-encode-replay.ts";
 import * as srtla from "../modules/streaming/srtla.ts";
+import { acceptStartAudio } from "../modules/streaming/start-audio.ts";
 import {
+	armStreamRestoration,
 	captureArmedStreamConfig,
-	restorationLaunchConfig,
+	runStreamRestoration,
 } from "../modules/streaming/stream-restoration.ts";
-import { noteStreamSessionEngineStatus } from "../modules/streaming/stream-session-orchestrator.ts";
+import {
+	noteStreamSessionEngineStatus,
+	retireLostStreamSession,
+} from "../modules/streaming/stream-session-orchestrator.ts";
 import { streamSessionProductionDeps } from "../modules/streaming/stream-session-production.ts";
 import { updateStatus } from "../modules/streaming/streaming.ts";
 import { autoStartStream } from "../modules/streaming/streamloop/autostart.ts";
@@ -72,9 +89,13 @@ import {
 	getStatusProcedure,
 } from "../rpc/procedures/status.procedure.ts";
 import {
+	applySwitchInputFollow,
+	reloadAudioDelayProcedure,
 	setConfigProcedure,
+	setStreamingProcedureDepsForTest,
 	streamingStartProcedure,
 	streamingStopProcedure,
+	switchAudioProcedure,
 } from "../rpc/procedures/streaming.procedure.ts";
 import { makeRpcContext } from "./helpers/bond-toggle-fixture.ts";
 import { evidenceHarness } from "./helpers/stream-engine-evidence.ts";
@@ -613,72 +634,6 @@ test("the running stream says it is silent whatever is saved, and Stop withdraws
 	expect(await offActive()).toEqual({ snapshot: false, pulled: false });
 });
 
-const restore = (marker: ArmedStreamConfig) =>
-	startStream(
-		TEST_PIPELINE,
-		"192.0.2.10",
-		5000,
-		"restored",
-		{},
-		"restored",
-		restorationLaunchConfig(marker),
-	);
-
-test("a silent stream restored after an engine loss is still silent and says so", async () => {
-	GATES["preview replay"]?.();
-	const started = start();
-	await reached.promise;
-	await pick("Primary");
-	gate.resolve();
-	await started;
-	const armed = captureArmedStreamConfig();
-	noteStreamStopped("engine_loss");
-	updateStatus(false);
-	expect((await offActive()).snapshot).toBe(false);
-
-	expect(await restore(armed)).toEqual({ success: true });
-	updateStatus(true);
-	expect(launchedAudio().at(-1)).toEqual({ mode: "none", delay_ms: 0 });
-	expect(await offActive()).toEqual({ snapshot: true, pulled: true });
-});
-
-test.each([
-	["single", savedMix, { mode: "device", device: "hw:CARD=Primary" }],
-	["mix", null, { mode: "default", inputs: mixOnTheWire }],
-] as const)(
-	"a stream pressed with a saved %s is restored with it, whatever mix is saved meanwhile",
-	async (shape, saved, sent) => {
-		savePressed("Primary", shape);
-		GATES["update admission"]?.();
-		const started = start();
-		await reached.promise;
-		expect(
-			await call(setConfigProcedure, { audio_inputs: saved }, context()),
-		).toMatchObject({ success: true });
-		getConfig().audio_backend = "pipewire";
-		getConfig().acodec = "opus";
-		saveConfig();
-		gate.resolve();
-		expect(await started).toMatchObject({ success: true });
-		const armed = captureArmedStreamConfig();
-		noteStreamStopped("engine_loss");
-
-		expect(await restore(armed)).toEqual({ success: true });
-		expect(launchedAudio()).toEqual([
-			{ ...sent, delay_ms: 0 },
-			{ ...sent, delay_ms: 0 },
-		]);
-	},
-);
-
-test("a marker from before the mix was recorded restores the saved mix", async () => {
-	savePressed("Primary", "mix");
-	expect(await restore({ asrc: "Primary" })).toEqual({ success: true });
-	expect(launchedAudio()).toEqual([
-		{ mode: "default", inputs: mixOnTheWire, delay_ms: 0 },
-	]);
-});
-
 test("a stream adopted after Stop carries no claim left over from the stream before it", async () => {
 	expect(await start()).toMatchObject({ success: true });
 	expect((await offActive()).snapshot).toBe(true);
@@ -788,9 +743,18 @@ async function launchAutoOnDeadHdmi() {
 	});
 	spyOn(autoAudio, "resolveAutoAsrcFromLiveState").mockReturnValue(resolution);
 	getConfig().asrc = "Auto";
-	expect(await startStream(TEST_PIPELINE, "192.0.2.10", 5000, "auto")).toEqual({
-		success: true,
-	});
+	expect(
+		await startStream(
+			TEST_PIPELINE,
+			"192.0.2.10",
+			5000,
+			"auto",
+			{},
+			"auto",
+			undefined,
+			acceptStartAudio(),
+		),
+	).toEqual({ success: true });
 	return launchedAudio()[0];
 }
 
@@ -981,6 +945,12 @@ const PRESSED = {
 	"No audio": { mix: silent, single: silent },
 } satisfies Record<string, Record<Shape, object>>;
 type Pressed = keyof typeof PRESSED;
+/** The microphone each press checks; none without audio. */
+const PROBED: Record<Pressed, unknown[] | undefined> = {
+	Primary: ["Primary"],
+	Auto: ["Third"],
+	"No audio": undefined,
+};
 
 interface LaterSave {
 	save: () => Promise<unknown>;
@@ -1074,6 +1044,7 @@ test.each(EVERY_AWAIT)(
 		const result = await started;
 		expect(result).toMatchObject({ success: true });
 		expect(launchedAudio()).toEqual([PRESSED[asrc][shape]]);
+		expect(probe.mock.calls.at(-1)).toEqual(PROBED[asrc]);
 		expect((await offActive()).snapshot).toBe(asrc === "No audio");
 		expect(captureArmedStreamConfig()).toMatchObject({ asrc, delay: 0 });
 		if (shape === "mix") expect(result.applied?.asrc).toBe(asrc);
@@ -1303,7 +1274,8 @@ test("Auto follows the camera this Start launches, not one chosen for later", as
 			"restored",
 			{},
 			"restored",
-			{ asrc: "Auto", source: "camera-a" },
+			{ source: "camera-a" },
+			acceptStartAudio(),
 		),
 	).toEqual({ success: true });
 	expect(launchedAudio()).toEqual([device("Second")]);
@@ -1389,3 +1361,723 @@ test.each(["its stop", "update admission"])(
 		}
 	},
 );
+
+// ─── Engine restarts ─────────────────────────────────────────────────────────
+// The production marker, its hooks, the restoration runner and its own launch.
+
+let armed: string | undefined;
+function keepMarker() {
+	armed = undefined;
+	const marker = defaultArmedStreamMarkerDeps;
+	spyOn(marker, "readBootId").mockReturnValue("boot");
+	spyOn(marker, "readMarker").mockImplementation(() => armed);
+	spyOn(marker, "writeMarker").mockImplementation((_path, contents) => {
+		armed = contents;
+	});
+	spyOn(marker, "removeMarker").mockImplementation(() => {
+		armed = undefined;
+	});
+	spyOn(streamSessionProductionDeps, "onStreamArmed").mockImplementation(() => {
+		armStreamRestoration();
+	});
+}
+/** The control link drops; the engine itself may still run. */
+function loseLink() {
+	Object.assign(engine.backend["deps"], {
+		onSessionConnectionLost: () => {},
+		onEngineUnreachable: () => {},
+	});
+	engine.backend["noteConnectionLoss"](
+		engine.backend["client"],
+		new CerastreamConnectionError("the engine died"),
+		"test",
+	);
+}
+async function loseEngine() {
+	loseLink();
+	await retireLostStreamSession();
+}
+const restore = () => runStreamRestoration({ publish: () => {} });
+async function restart() {
+	await loseEngine();
+	expect((await restore()).result).toBe("recovered");
+	return launchedAudio().at(-1);
+}
+/** This backend finds the stream the engine still runs. */
+async function adopt() {
+	const adopting = engine.backend.reconcileRuntimeState();
+	await engine.probeSubscribed;
+	engine.clients
+		.at(-1)
+		?.emit({ type: "status", seq: 1, state: "streaming", streaming: true });
+	expect(await adopting).toBe("streaming");
+}
+/** A new backend process: it has no pin and adopts the stream the engine still runs. */
+async function restartBackend() {
+	pinLaunchedAudio(undefined);
+	engine.backend = new CerastreamBackend(engine.backend["deps"]);
+	await adopt();
+}
+/** The same process adopts its own stream again, with no marker written for it. */
+async function relinkUnarmed() {
+	armed = undefined;
+	loseLink();
+	await adopt();
+}
+
+type MixUpdate = SetAudioMixParams["inputs"][number];
+/** Routes the live RPCs to this stream's engine, which answers with what it applied. */
+function liveEngine(
+	answer: <T>(asked: T) => T | Promise<T> = (asked) => asked,
+	applied: (update: MixUpdate) => MixUpdate = (update) => update,
+) {
+	const reloads: ReloadConfigParams[] = [];
+	wrapClient((client) => {
+		const raw = Reflect.get(client, "rawRequest");
+		return {
+			setAudioMix: async ({ inputs }: SetAudioMixParams) => ({
+				inputs: await Promise.all(
+					inputs.map(async (update) => {
+						const running = engine.backend
+							.getAudioMixInputs()
+							?.find(({ input_id }) => input_id === update.input_id);
+						return {
+							gain_db: running?.gain_db ?? 0,
+							mute: running?.mute ?? false,
+							delay_ms: running?.delay_ms ?? 0,
+							...applied(await answer(update)),
+						};
+					}),
+				),
+			}),
+			reloadConfig: async (params: ReloadConfigParams) => {
+				reloads.push(params);
+				return { applied: await answer(params) };
+			},
+			setBitrate: async (params: object) => params,
+			rawRequest: async (method: string, params: { audio_input_id: string }) =>
+				method === "switch-audio"
+					? {
+							active_audio_input: (await answer(params)).audio_input_id,
+							mode: "manual",
+						}
+					: raw(method, params),
+		};
+	});
+	const live = () => engine.backend;
+	spyOn(cerastreamBackend, "getAudioMixInputs").mockImplementation(() =>
+		live().getAudioMixInputs(),
+	);
+	spyOn(cerastreamBackend, "setAudioMix").mockImplementation((params) =>
+		live().setAudioMix(params),
+	);
+	spyOn(cerastreamBackend, "reloadAudioDelay").mockImplementation((delay) =>
+		live().reloadAudioDelay(delay),
+	);
+	spyOn(cerastreamBackend, "switchAudio").mockImplementation((params) =>
+		live().switchAudio(params),
+	);
+	return reloads;
+}
+const editMix = (id: string, edit: object) =>
+	call(setAudioMixProcedure, { id, ...edit }, context());
+const liveEdit = async (id: string, edit: object) =>
+	expect(await editMix(id, edit)).toMatchObject({
+		success: true,
+		applies_next_start: false,
+	});
+const delayLive = (delay_ms: number) =>
+	call(reloadAudioDelayProcedure, { delay_ms }, context());
+const switchLive = (audio_input_id: string) =>
+	call(switchAudioProcedure, { audio_input_id }, context());
+async function running(asrc: string, shape: Shape) {
+	keepMarker();
+	savePressed(asrc, shape);
+	expect(await start()).toMatchObject({ success: true });
+}
+
+const mutedSecond = mixed(wire("Primary", [1]), {
+	...wire("Second", [2]),
+	mute: true,
+});
+
+test.each([
+	["mute", { mute: true }],
+	["gain", { gain_db: -12 }],
+	["delay", { delay_ms: 300 }],
+])(
+	"a live %s the engine acknowledged is still on after an engine restart",
+	async (_name, edit) => {
+		liveEngine();
+		await running("Primary", "mix");
+		await liveEdit("Second", edit);
+		expect(await restart()).toEqual(
+			mixed(wire("Primary", [1]), { ...wire("Second", [2]), ...edit }),
+		);
+	},
+);
+
+test("an engine restart restores the level the engine applied, not the one asked for", async () => {
+	liveEngine(undefined, (update) => ({ ...update, gain_db: -11 }));
+	await running("Primary", "mix");
+	await liveEdit("Second", { gain_db: -20 });
+	expect(await restart()).toEqual(
+		mixed(wire("Primary", [1]), { ...wire("Second", [2]), gain_db: -11 }),
+	);
+});
+
+test("a live mute the engine refused is not restored", async () => {
+	liveEngine(() => {
+		throw new CerastreamRpcError(-32602, "refused", "cerastream.refused", 1);
+	});
+	await running("Primary", "mix");
+	expect(await editMix("Second", { mute: true })).toMatchObject({
+		success: false,
+	});
+	expect(await restart()).toEqual(PRESSED.Primary.mix);
+});
+
+test.each(["Third", "Auto"])(
+	"a live mute of %s, the main input outside the pressed mix, is still on after an engine restart",
+	async (asrc) => {
+		liveEngine();
+		await running(asrc, "mix");
+		await liveEdit("Third", { mute: true });
+		expect(await restart()).toEqual(
+			mixed(
+				{ ...wire("Third", [1]), mute: true },
+				wire("Primary", [1]),
+				wire("Second", [2]),
+			),
+		);
+	},
+);
+
+test("a live mute is still on after an engine restart although the mix was cleared for the next Start", async () => {
+	liveEngine();
+	await running("Primary", "mix");
+	await call(setConfigProcedure, { audio_inputs: null }, context());
+	await liveEdit("Second", { mute: true });
+	expect(await disk()).not.toHaveProperty("audio_inputs");
+	expect(await restart()).toEqual(mutedSecond);
+});
+
+test("a live mute is still on after an engine restart, and a mix edited for the next Start waits for it", async () => {
+	liveEngine();
+	await running("Primary", "mix");
+	for (const [id, include] of [
+		["Third", true],
+		["Second", false],
+	] as const)
+		expect(await editMix(id, { include })).toMatchObject({
+			success: true,
+			applies_next_start: true,
+		});
+	await liveEdit("Second", { mute: true });
+	expect(await restart()).toEqual(mutedSecond);
+	expect(await disk()).toMatchObject({
+		audio_inputs: [entry("Primary", [1]), entry("Third", [1])],
+	});
+});
+
+test("a live mute is still on after a second engine restart", async () => {
+	liveEngine();
+	await running("Primary", "mix");
+	await liveEdit("Second", { mute: true });
+	await restart();
+	expect(await restart()).toEqual(mutedSecond);
+});
+
+test("a live mute acknowledged before the stream is armed is still on after an engine restart", async () => {
+	liveEngine();
+	keepMarker();
+	spyOn(streamSessionProductionDeps, "onStreamArmed").mockImplementation(
+		() => {},
+	);
+	savePressed("Primary", "mix");
+	expect(await start()).toMatchObject({ success: true });
+	await liveEdit("Second", { mute: true });
+	armStreamRestoration();
+	expect(await restart()).toEqual(mutedSecond);
+});
+
+test("a live mute is still on when the backend and then the engine restart", async () => {
+	liveEngine();
+	await running("Primary", "mix");
+	await liveEdit("Second", { mute: true });
+	await restartBackend();
+	expect(await restart()).toEqual(mutedSecond);
+});
+
+// Each answered by the engine only after Stop and a new Start.
+test.each([
+	["mix edit", "mix", () => editMix("Second", { mute: true })],
+	["delay", "mix", () => delayLive(150)],
+	["switch to silence", "single", () => switchLive("silence")],
+] as const)(
+	"a %s of the stream before is not restored into this one",
+	async (_name, shape, change) => {
+		let held = true;
+		liveEngine(async (asked) => {
+			if (held) {
+				held = false;
+				await hold();
+			}
+			return asked;
+		});
+		await running("Primary", shape);
+		const changing = change();
+		await reached.promise;
+		await stop();
+		expect(await start()).toMatchObject({ success: true });
+		gate.resolve();
+		await changing;
+		expect(await restart()).toEqual(PRESSED.Primary[shape]);
+	},
+);
+
+test("a live delay reload the engine acknowledged is still on after an engine restart", async () => {
+	liveEngine();
+	await running("Primary", "mix");
+	expect(await delayLive(150)).toEqual({ success: true, delay_ms: 150 });
+	expect(await restart()).toEqual({ ...PRESSED.Primary.mix, delay_ms: 150 });
+});
+
+test("a live reload restates the running delay, not the one saved for the next Start", async () => {
+	const reloads = liveEngine();
+	await running("Primary", "mix");
+	spyOn(engine.backend["deps"], "getConfig").mockImplementation(getConfig);
+	const reload = async () => {
+		engine.backend.reloadConfig();
+		await engine.backend.settle();
+		return reloads.at(-1)?.audio;
+	};
+	await call(setConfigProcedure, { delay: 120 }, context());
+	expect(await reload()).toEqual({ delay_ms_signed: 0 });
+	await delayLive(150);
+	expect(await reload()).toEqual({ delay_ms_signed: 150 });
+	expect(await disk()).toMatchObject({ delay: 120 });
+});
+
+test.each([
+	["after a backend restart", restartBackend],
+	["again before it was armed", relinkUnarmed],
+])(
+	"a live reload of a stream adopted %s restates its running delay",
+	async (_when, adopted) => {
+		const reloads = liveEngine();
+		await running("Primary", "mix");
+		spyOn(engine.backend["deps"], "getConfig").mockImplementation(getConfig);
+		await delayLive(150);
+		await call(setConfigProcedure, { delay: 120 }, context());
+		await adopted();
+		engine.backend.reloadConfig();
+		await engine.backend.settle();
+		expect(reloads.at(-1)?.audio).toEqual({ delay_ms_signed: 150 });
+	},
+);
+
+test.each([
+	[
+		"delay",
+		"mix",
+		() => delayLive(150),
+		{ ...PRESSED.Primary.mix, delay_ms: 150 },
+	],
+	["switch to silence", "single", () => switchLive("silence"), silent],
+] as const)(
+	"a live %s made after a backend restart is still on after an engine restart",
+	async (_name, shape, change, restored) => {
+		liveEngine();
+		await running("Primary", shape);
+		await restartBackend();
+		expect(await change()).toMatchObject({ success: true });
+		expect(await restart()).toEqual(restored);
+	},
+);
+
+test.each(["armed", "not armed yet"])(
+	"a microphone switched to silence live (%s) stays off the air after an engine restart",
+	async (when) => {
+		liveEngine();
+		keepMarker();
+		if (when !== "armed")
+			spyOn(streamSessionProductionDeps, "onStreamArmed").mockImplementation(
+				() => {},
+			);
+		savePressed("Primary", "single");
+		expect(await start()).toMatchObject({ success: true });
+		expect(await switchLive("silence")).toMatchObject({ success: true });
+		// This stream was still launched with its microphone.
+		expect((await offActive()).snapshot).toBe(false);
+		if (when !== "armed") armStreamRestoration();
+		expect(await restart()).toEqual(silent);
+		expect((await offActive()).snapshot).toBe(true);
+	},
+);
+
+test("a microphone switched back on live is on the air after an engine restart", async () => {
+	liveEngine();
+	await running("Primary", "single");
+	await switchLive("silence");
+	await switchLive("hw:CARD=Primary");
+	expect(await restart()).toEqual(PRESSED.Primary.single);
+});
+
+const LATER_AUDIO: typeof LATER = {
+	...LATER,
+	"a different codec": {
+		save: () => call(setConfigProcedure, { acodec: "opus" }, context()),
+		saved: { acodec: "opus" },
+	},
+	"a different audio backend": {
+		save: async () => {
+			getConfig().audio_backend = "pipewire";
+			saveConfig();
+			return { success: true };
+		},
+		saved: { audio_backend: "pipewire" },
+	},
+};
+test.each(
+	(Object.keys(PRESSED) as Pressed[]).flatMap((asrc) =>
+		Object.keys(LATER_AUDIO)
+			.filter((name) => name !== asrc)
+			.flatMap((name) => SHAPES.map((shape) => [asrc, name, shape] as const)),
+	),
+)(
+	"an engine restart restores the stream pressed with %s, not %s saved while it ran (%s saved)",
+	async (asrc, name, shape) => {
+		const choice = LATER_AUDIO[name];
+		if (choice === undefined) throw new Error(name);
+		await running(asrc, shape);
+		expect(await choice.save()).toMatchObject({ success: true });
+		expect(await restart()).toEqual(PRESSED[asrc][shape]);
+		expect(probe.mock.calls.at(-1)).toEqual(PROBED[asrc]);
+		expect(await disk()).toMatchObject(choice.saved);
+		expect((await offActive()).snapshot).toBe(asrc === "No audio");
+	},
+);
+
+// Live changes of the stream that are not its audio, with another pick saved.
+const OTHER_LIVE_CHANGES: Record<string, () => Promise<void> | void> = {
+	"the bitrate": async () => {
+		spyOn(engine.backend["deps"], "getConfig").mockImplementation(getConfig);
+		expect(engine.backend.setBitrate({ max_br: 4000 })).toBe(4000);
+		await engine.backend.settle();
+	},
+	"the video source": () => {
+		setStreamingProcedureDepsForTest({
+			getSourcesMessage: () => ({ sources: [HDMI] }) as never,
+		});
+		try {
+			applySwitchInputFollow("hdmi-rx", { success: true });
+		} finally {
+			setStreamingProcedureDepsForTest(null);
+		}
+		expect(getConfig().source).toBe("hdmi-rx");
+	},
+	"an encoder setting": () => {
+		stageConfigChange(
+			{
+				attemptId: "change",
+				startedAt: 1,
+				candidate: { resolution: "720p" },
+				previous: {},
+			},
+			{
+				markerPath: "unused",
+				readMarker: () => undefined,
+				writeMarker: () => {},
+				removeMarker: () => {},
+			},
+		);
+		expect(commitStagedConfigChange("change")).toEqual({ resolution: "720p" });
+	},
+	"the stream profile": async () => {
+		await setProfile();
+	},
+};
+async function setProfile() {
+	wireSetProfile();
+	try {
+		await handleSetProfile({
+			commandId: "11111111-1111-4111-8111-111111111113",
+			config: {
+				presetId: "balanced",
+				latencyMs: 2000,
+				fecEnabled: false,
+				recoveryMode: "standard",
+			},
+		});
+	} finally {
+		resetSetProfile();
+	}
+}
+test.each(Object.keys(OTHER_LIVE_CHANGES))(
+	"changing %s live leaves a live mute on after an engine restart, and No audio saved later waits for the next Start",
+	async (name) => {
+		liveEngine();
+		await running("Primary", "mix");
+		await liveEdit("Second", { mute: true });
+		await OTHER_LIVE_CHANGES[name]?.();
+		await pick("No audio");
+		expect(await restart()).toEqual(mutedSecond);
+		expect(await disk()).toMatchObject({ asrc: "No audio" });
+	},
+);
+
+const RESTORE_AWAITS: typeof AWAITS = {
+	...AWAITS,
+	"runtime reconcile": () => {
+		spyOn(streamSessionProductionDeps, "queryRuntime").mockImplementation(
+			async () => {
+				await hold();
+				return "idle";
+			},
+		);
+	},
+};
+test.each(
+	Object.keys(RESTORE_AWAITS).flatMap((point) =>
+		Object.keys(LATER)
+			.filter((name) => name !== "Auto")
+			.map((name) => [name, point] as const),
+	),
+)(
+	"%s saved during %s of a restoration counts for the next Start",
+	async (name, point) => {
+		const choice = later(name);
+		await running("Primary", "mix");
+		await loseEngine();
+		await RESTORE_AWAITS[point]?.();
+		const restoring = restore();
+		await reached.promise;
+		expect(await choice.save()).toMatchObject({ success: true });
+		gate.resolve();
+		expect((await restoring).result).toBe("recovered");
+		expect(launchedAudio().at(-1)).toEqual(PRESSED.Primary.mix);
+		expect(probe.mock.calls.at(-1)).toEqual(PROBED.Primary);
+		await expectSaved("Primary", "mix", choice);
+	},
+);
+
+test("a silent stream is still silent after an engine restart and says so", async () => {
+	await running("No audio", "mix");
+	await pick("Primary");
+	await loseEngine();
+	updateStatus(false);
+	expect((await offActive()).snapshot).toBe(false);
+	expect((await restore()).result).toBe("recovered");
+	expect(launchedAudio().at(-1)).toEqual(silent);
+	expect(await offActive()).toEqual({ snapshot: true, pulled: true });
+});
+
+test("a marker from before the mix was recorded restores its pick with the saved mix and backend", async () => {
+	await running("Primary", "mix");
+	const marker = JSON.parse(armed ?? "");
+	delete marker.config.audio_inputs;
+	armed = JSON.stringify(marker);
+	getConfig().asrc = "Second";
+	getConfig().audio_inputs = structuredClone(otherMix);
+	getConfig().audio_backend = "pipewire";
+	expect(await restart()).toEqual({
+		...mixed(wire("Primary", [1]), wire("Second", [1])),
+		backend: "pipewire",
+	});
+});
+
+/** The first look of the real check, without its wait. */
+const lookForMicrophone = () =>
+	spyOn(audio, "asrcProbe").mockImplementation(async (asrc) => {
+		await audio.refreshBluetoothAudioDevices();
+		if (!(asrc in audio.getAudioDevices()))
+			throw new audio.AudioProbeTimeoutError(asrc);
+		return asrc;
+	});
+const BLUETOOTH = "bluealsa:DEV=AA:BB:CC:11:22:33,PROFILE=sco";
+const BLUETOOTH_SHAPES = ["the main input", "another mix input"] as const;
+const bluetoothOnTheWire = (as: (typeof BLUETOOTH_SHAPES)[number]) =>
+	as === "the main input"
+		? { mode: "device", device: BLUETOOTH, delay_ms: 0 }
+		: mixed(wire("Primary", [1]), {
+				...wire("", [2]),
+				input_id: BLUETOOTH,
+			});
+/** A saved Bluetooth microphone, listed, and the save that takes it off the list. */
+async function savedBluetooth(as: (typeof BLUETOOTH_SHAPES)[number]) {
+	const id = await listBluetoothMic();
+	lookForMicrophone();
+	getConfig().asrc = as === "the main input" ? id : "Primary";
+	getConfig().audio_inputs =
+		as === "the main input"
+			? undefined
+			: [entry("Primary", [1]), entry(id, [2])];
+	saveConfig();
+	return async () => {
+		getConfig().audio_backend = "pipewire";
+		saveConfig();
+		await audio.refreshBluetoothAudioDevices();
+	};
+}
+
+const ENTRIES: Record<
+	string,
+	(saveBackend: () => Promise<void>) => Promise<unknown>
+> = {
+	"the Start button": async (saveBackend) => {
+		GATES["update admission"]?.();
+		const started = start();
+		await reached.promise;
+		await saveBackend();
+		gate.resolve();
+		return started;
+	},
+	"a retried Start": async (saveBackend) => {
+		await AWAITS["start retry wait"]?.();
+		const started = start();
+		await reached.promise;
+		await saveBackend();
+		gate.resolve();
+		return started;
+	},
+	"an automatic start": async (saveBackend) => {
+		spyOn(srtla, "genSrtlaIpList").mockReturnValue(["192.0.2.2"]);
+		GATES["relay address lookup"]?.();
+		const started = autoStartStream();
+		await reached.promise;
+		await saveBackend();
+		gate.resolve();
+		return started;
+	},
+	"a restart for a new stream profile": async (saveBackend) => {
+		expect(await start()).toMatchObject({ success: true });
+		spyOn(streamSessionProductionDeps, "stopRuntime").mockImplementation(
+			async () => {
+				await hold();
+				return engine.backend.confirmStop();
+			},
+		);
+		const configured = setProfile();
+		await reached.promise;
+		await saveBackend();
+		gate.resolve();
+		return configured;
+	},
+	"an engine restart": async (saveBackend) => {
+		keepMarker();
+		expect(await start()).toMatchObject({ success: true });
+		await saveBackend();
+		return restart();
+	},
+	"a retried engine restart": async (saveBackend) => {
+		keepMarker();
+		expect(await start()).toMatchObject({ success: true });
+		await loseEngine();
+		await AWAITS["start retry wait"]?.();
+		const restoring = restore();
+		await reached.promise;
+		await saveBackend();
+		gate.resolve();
+		return restoring;
+	},
+};
+test.each(
+	Object.keys(ENTRIES).flatMap((name) =>
+		BLUETOOTH_SHAPES.map((as) => [name, as] as const),
+	),
+)(
+	"%s launches its Bluetooth microphone as %s although another audio backend is saved meanwhile",
+	async (name, as) => {
+		try {
+			const saveBackend = await savedBluetooth(as);
+			await ENTRIES[name]?.(saveBackend);
+			expect(launchedAudio().at(-1)).toEqual(bluetoothOnTheWire(as));
+			// The list is the saved backend's again once the launch is done.
+			expect(Object.values(audio.getAudioDevices())).not.toContain(BLUETOOTH);
+			expect(await disk()).toMatchObject({ audio_backend: "pipewire" });
+		} finally {
+			await unlistBluetoothMic();
+		}
+	},
+);
+
+test("a Bluetooth microphone that dropped is waited for after an engine restart", async () => {
+	try {
+		await savedBluetooth("the main input");
+		keepMarker();
+		expect(await start()).toMatchObject({ success: true });
+		await pick("Primary");
+		await unlistBluetoothMic();
+		spyOn(audio, "asrcProbe").mockImplementation(async (asrc) => {
+			await hold();
+			return asrc;
+		});
+		await loseEngine();
+		const restoring = restore();
+		await Promise.race([reached.promise, restoring]);
+		await listBluetoothMic();
+		gate.resolve();
+		expect((await restoring).result).toBe("recovered");
+		expect(launchedAudio().at(-1)).toEqual(
+			bluetoothOnTheWire("the main input"),
+		);
+	} finally {
+		await unlistBluetoothMic();
+	}
+});
+
+test("an unplugged microphone is waited for after an engine restart although another one is saved", async () => {
+	await running("Second", "single");
+	await pick("Primary");
+	audio.setMockAudioDevicesProvider(() => ({ Primary: "hw:CARD=primary" }));
+	expect(await restart()).toEqual(device("Second"));
+	expect(probe.mock.calls.at(-1)).toEqual(["Second"]);
+});
+
+function reenumerate(from: string, to: string) {
+	const devices = {
+		Primary: "hw:CARD=primary",
+		Second: "hw:CARD=second",
+		Third: "hw:CARD=third",
+	};
+	Reflect.deleteProperty(devices, from);
+	const successor = audio.audioIdentitySuccessor;
+	audio.setMockAudioDevicesProvider(() => ({ ...devices }));
+	spyOn(audio, "audioIdentitySuccessor").mockImplementation((asrc) =>
+		successor(
+			asrc,
+			new Map([[to, { stable_id: "mic" }]]) as never,
+			devices,
+			new Map([[from, "mic"]]),
+		),
+	);
+}
+
+test("a microphone that re-enumerated is restored under its new id", async () => {
+	await running("Second", "single");
+	await pick("Primary");
+	reenumerate("Second", "Third");
+	expect(await restart()).toEqual(device("Third"));
+});
+
+test("a microphone muted live that re-enumerated is still muted after an engine restart", async () => {
+	liveEngine();
+	await running("Primary", "mix");
+	await liveEdit("Primary", { mute: true });
+	reenumerate("Primary", "Third");
+	expect(await restart()).toEqual(
+		mixed({ ...wire("Third", [1]), mute: true }, wire("Second", [2])),
+	);
+});
+
+test("a re-enumerated mix input whose new id is already in the mix is not sent twice", async () => {
+	await running("Primary", "mix");
+	getConfig().audio_inputs = [entry("Second", [1]), entry("Third", [2])];
+	getConfig().asrc = "Third";
+	reenumerate("Second", "Third");
+	expect(acceptStartAudio().config.audio_inputs?.map(({ id }) => id)).toEqual([
+		"Second",
+		"Third",
+	]);
+});

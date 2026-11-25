@@ -1,7 +1,9 @@
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import { getConfig } from "../config.ts";
+import type { ArmedStreamConfig } from "./armed-stream-marker.ts";
 import {
 	audioIdentitySuccessor,
+	NO_AUDIO_ID,
 	refreshBluetoothAudioDevices,
 } from "./audio.ts";
 
@@ -55,8 +57,10 @@ export function audioBackendInUse(): RuntimeConfig["audio_backend"] {
  * for. A Start uses the audio configuration carried by the Start request; saves
  * made while it is in flight apply to the next Start only.
  */
-export function acceptStartAudio(request: StartAudioRequest = {}): StartAudio {
-	const saved = getConfig();
+export function acceptStartAudio(
+	request: StartAudioRequest = {},
+	saved: Pick<RuntimeConfig, StartAudioField> = getConfig(),
+): StartAudio {
 	const savedAsrc = saved.asrc;
 	const saves = { ...audioSaves };
 	const pressed: StartAudioConfig = structuredClone({
@@ -69,10 +73,16 @@ export function acceptStartAudio(request: StartAudioRequest = {}): StartAudio {
 	});
 	const startAudio: StartAudio = {
 		get config() {
-			const { asrc } = pressed;
+			const { asrc, audio_inputs } = pressed;
 			return {
 				...pressed,
 				asrc: (asrc && audioIdentitySuccessor(asrc)) || asrc,
+				audio_inputs: audio_inputs?.map((input) => {
+					const id = audioIdentitySuccessor(input.id);
+					return id === undefined || audio_inputs.some((own) => own.id === id)
+						? input
+						: { ...input, id };
+				}),
 			};
 		},
 		savedAsrc,
@@ -99,4 +109,26 @@ export function acceptStartAudio(request: StartAudioRequest = {}): StartAudio {
 		},
 	};
 	return startAudio;
+}
+
+/**
+ * What a restoration starts with: the audio its marker recorded, whatever is saved
+ * now. A marker that records the mix records the whole choice, so what it omits was
+ * unset; an older one leaves the mix and the backend to the saved ones.
+ */
+export function restoredStartAudio({
+	audio_inputs,
+	audio_silenced,
+	...recorded
+}: ArmedStreamConfig): StartAudio {
+	return acceptStartAudio(
+		{},
+		{
+			...(audio_inputs === undefined
+				? getConfig()
+				: { audio_inputs: audio_inputs ?? undefined }),
+			...recorded,
+			...(audio_silenced ? { asrc: NO_AUDIO_ID } : {}),
+		},
+	);
 }

@@ -5,6 +5,7 @@ import { getConfig } from "../../modules/config.ts";
 import { setup } from "../../modules/setup.ts";
 import * as runtime from "../../modules/streaming/engine-runtime-state.ts";
 import { setPreviewEncodeReplayTransport } from "../../modules/streaming/preview-encode-replay.ts";
+import { acceptStartAudio } from "../../modules/streaming/start-audio.ts";
 import {
 	classifyStartFailure,
 	StreamStartFailure,
@@ -107,6 +108,7 @@ export function idleProductionHarness(
 						balancer: "adaptive",
 						srt_latency: 2000,
 					},
+					acceptStartAudio(),
 				);
 				if (!result.success)
 					throw new StreamStartFailure(

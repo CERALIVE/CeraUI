@@ -126,19 +126,22 @@ Only the operator's own pick counts: Auto's launch copy can also read
 and a saved mix is still sent. A Start uses the audio configuration carried by the
 Start request; saves made while it is in flight apply to the next Start only.
 `acceptStartAudio` (`start-audio.ts`) freezes it once where the Start is requested,
-before anything it waits for: the Start RPC, autostart, the set-profile restart.
+before anything it waits for: the Start RPC, autostart, the set-profile restart. A
+restoration takes it from the armed marker (`restoredStartAudio`). `startStream` has
+no default for it, so no caller launches without one.
 Validation, the codec gate, the probe, the engine request, every retry and the armed
 marker read that snapshot (`asrc`, `audio_inputs`, `acodec`, `delay` and
-`audio_backend`), never the saved config; a restoration brings back the marker's.
+`audio_backend`), never the saved config.
 So a "No audio" Start stays without audio, and a Start pressed with a microphone
 is judged on that microphone: if it does not answer, the Start is refused with
 `audio_source_probe_failed` even when "No audio" was saved meanwhile. Two reads stay
-live on purpose: a card that re-enumerated is addressed by its new id, and Auto is
-resolved against the launched source at launch. The Start's own write
+live on purpose: a card that re-enumerated, as the main input or in the mix, is
+addressed by its new id, and Auto is resolved against the launched source at launch. The Start's own write
 (`StartAudio.unsaved`) leaves out every field saved since the press, even when that
 save repeats the saved value: `setConfig` and `setAudioMix` call
 `noteAudioSaved`, the Start's own write does not. Until a Start is done the
-Bluetooth microphones stay listed for its backend. The compatibility
+Bluetooth microphones stay listed for its backend, and `startStream` lists them again
+when another backend was saved before the launch. The compatibility
 start-schema export aliases the published producer schema, preserving its
 additive audio fields.
 
@@ -159,7 +162,10 @@ admitted input identity. A live mix sends one producer `setAudioMix` request,
 returns the applied state and saves its values.
 The reply is authoritative even when its gain differs from the request; partial
 live updates retain the admitted gain, mute and delay unless the engine changes
-them. Reloading saved settings and the next Start retain those applied values.
+them. Reloading saved settings and the next Start retain those applied values, and
+an engine restart brings the running mix back with them (`followLiveAudio`, also
+after a pending clear of the mix; see
+[the restoration contract](one-shot-stream-restoration-after-engine-death.md)).
 Pending membership and track
 edits remain pending; updating an input removed from next-start settings does
 not re-enable it. Idle or on a legacy session, the procedure only saves an

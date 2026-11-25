@@ -125,6 +125,11 @@ import {
 	notificationRemove,
 } from "../ui/notifications.ts";
 import {
+	followLiveAudio,
+	pinnedLaunchedAudio,
+	readArmedStreamMarker,
+} from "./armed-stream-marker.ts";
+import {
 	audioInputEngineId,
 	effectiveAudioInputs,
 	launchAudioPlan,
@@ -191,6 +196,8 @@ import type {
 import { PROCESS_ERROR_CODES } from "./streamloop/process-error-patterns.ts";
 
 const CERASTREAM_PIPELINE_PATH = "/tmp/cerastream-pipeline.txt";
+/** The engine's wire id for the silent leg of a live audio switch. */
+const AUDIO_SILENCE_LEG_ID = "silence";
 
 function engineAdvertises(feature: string): boolean {
 	const capabilities = getLastCapabilities();
@@ -749,6 +756,8 @@ export class CerastreamBackend implements StreamingBackend {
 	private subscription: Subscription | undefined;
 	private active = false;
 	private audioMixInputs: Array<AudioInputConfig & { id: string }> | undefined;
+	/** The delay the session runs with: one saved since is the next Start's. */
+	private runningDelay: number | undefined;
 	private clientEpoch = 0;
 	private probeEpoch = 0;
 	private telemetry: EngineTelemetry | null = null;
@@ -832,6 +841,7 @@ export class CerastreamBackend implements StreamingBackend {
 	): Promise<void> {
 		this.runtimeEvidence = undefined;
 		this.audioMixInputs = undefined;
+		this.runningDelay = config.delay;
 		this.active = true;
 		this.clearRecoveredEngineError();
 		const ownsLaunch = currentStreamLaunchOwner();
@@ -1180,7 +1190,7 @@ export class CerastreamBackend implements StreamingBackend {
 		const client = this.client;
 		if (!client) return;
 		const params = this.toReloadParams(
-			this.deps.getConfig(),
+			{ ...this.deps.getConfig(), delay: this.runningDelay },
 			client.hello.schema_version,
 		);
 		void this.enqueue(
@@ -1310,6 +1320,11 @@ export class CerastreamBackend implements StreamingBackend {
 				adoptedEpoch = ++this.clientEpoch;
 				this.subscription = subscription;
 				this.active = true;
+				this.runningDelay = (
+					pinnedLaunchedAudio() ??
+					readArmedStreamMarker()?.config ??
+					this.deps.getConfig()
+				).delay;
 				adopted = true;
 				this.handleEvent(status, ownsSession);
 				return runtimeState;
@@ -1462,13 +1477,19 @@ export class CerastreamBackend implements StreamingBackend {
 	// ends with the bindings' exported schemas so the call stays contract-safe.
 	async switchAudio(params: SwitchAudioParams): Promise<SwitchAudioResult> {
 		const parsed = switchAudioParamsSchema.parse(params);
+		const client = this.client;
 		const raw = await this.withSessionClient("switch-audio", (client) =>
 			asRawRequestClient(client, "switch-audio").rawRequest(
 				"switch-audio",
 				parsed,
 			),
 		);
-		return switchAudioResultSchema.parse(raw);
+		const result = switchAudioResultSchema.parse(raw);
+		if (this.client === client)
+			followLiveAudio({
+				audio_silenced: result.active_audio_input === AUDIO_SILENCE_LEG_ID,
+			});
+		return result;
 	}
 
 	getAudioMixInputs():
@@ -1484,18 +1505,41 @@ export class CerastreamBackend implements StreamingBackend {
 		const result = await this.withSessionClient("set-audio-mix", (client) =>
 			client.setAudioMix(params),
 		);
-		if (this.audioMixInputs === inputs) {
+		if (inputs !== undefined && this.audioMixInputs === inputs) {
 			for (const applied of result.inputs) {
-				const input = inputs?.find(
+				const input = inputs.find(
 					(input) => input.input_id === applied.input_id,
 				);
 				if (input) Object.assign(input, applied);
 			}
+			followLiveAudio({
+				audio_inputs: inputs.map(
+					({ id, tracks, gain_db = 0, mute = false, delay_ms = 0 }) => ({
+						id,
+						tracks,
+						gain_db,
+						mute,
+						delay_ms,
+					}),
+				),
+			});
 		}
 		return result;
 	}
 
 	async reloadAudioDelay(delayMs: number): Promise<ReloadConfigResult> {
+		const client = this.client;
+		const result = await this.sendAudioDelay(delayMs);
+		const { audio } = result.applied;
+		const delay = audio?.delay_ms_signed ?? audio?.delay_ms;
+		if (delay !== undefined && this.client === client) {
+			this.runningDelay = delay;
+			followLiveAudio({ delay });
+		}
+		return result;
+	}
+
+	private async sendAudioDelay(delayMs: number): Promise<ReloadConfigResult> {
 		return this.withSessionClient("reload-audio-delay", (client) => {
 			if (supportsSignedReloadDelay(client.hello.schema_version)) {
 				return client.reloadConfig({ audio: { delay_ms_signed: delayMs } });

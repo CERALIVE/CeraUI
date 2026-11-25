@@ -4,6 +4,7 @@ import type { RuntimeConfig } from "../helpers/config-schemas.ts";
 import { getConfig } from "../modules/config.ts";
 import { AudioProbeTimeoutError } from "../modules/streaming/audio.ts";
 import type { Pipeline } from "../modules/streaming/pipelines.ts";
+import { acceptStartAudio } from "../modules/streaming/start-audio.ts";
 import {
 	getIsStreaming,
 	updateStatus,
@@ -52,9 +53,16 @@ describe("startStream — audio-source probe failure surfaces a structured reaso
 		updateStatus(true);
 		expect(getIsStreaming()).toBe(true);
 
-		const result = await startStream(audioPipeline, "192.0.2.10", 5000, "sid", {
-			probe: failingProbe,
-		});
+		const result = await startStream(
+			audioPipeline,
+			"192.0.2.10",
+			5000,
+			"sid",
+			{ probe: failingProbe },
+			undefined,
+			undefined,
+			acceptStartAudio(),
+		);
 
 		expect(result).toEqual({
 			success: false,
@@ -69,9 +77,16 @@ describe("startStream — audio-source probe failure surfaces a structured reaso
 	test("the probe-fail path leaves is_streaming false and spawns no srtla process", async () => {
 		updateStatus(false);
 
-		const result = await startStream(audioPipeline, "192.0.2.10", 5000, "sid", {
-			probe: failingProbe,
-		});
+		const result = await startStream(
+			audioPipeline,
+			"192.0.2.10",
+			5000,
+			"sid",
+			{ probe: failingProbe },
+			undefined,
+			undefined,
+			acceptStartAudio(),
+		);
 
 		expect(result.success).toBe(false);
 		expect(getIsStreaming()).toBe(false);

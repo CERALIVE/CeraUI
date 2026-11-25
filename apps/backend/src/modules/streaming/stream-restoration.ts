@@ -45,7 +45,6 @@
 
 import type { LifecycleState } from "@ceraui/rpc/schemas";
 
-import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import { logger as defaultLogger } from "../../helpers/logger.ts";
 import { getConfig } from "../config.ts";
 import { emitEvent } from "../events/emit.ts";
@@ -93,11 +92,13 @@ export function captureArmedStreamConfig(): ArmedStreamConfig {
 		const value = (config as unknown as Record<string, unknown>)[key];
 		if (value !== undefined) snapshot[key] = value;
 	};
-	const audio = pinnedLaunchedAudio() ?? config;
+	const launched = pinnedLaunchedAudio();
+	const audio = launched ?? config;
 	for (const key of ["delay", "acodec", "asrc", "audio_backend"] as const) {
 		if (audio[key] !== undefined) snapshot[key] = audio[key];
 	}
 	snapshot.audio_inputs = audio.audio_inputs ?? null;
+	if (launched?.audio_silenced) snapshot.audio_silenced = true;
 	copy("srt_latency");
 	copy("pipeline");
 	copy("relay_server");
@@ -118,25 +119,6 @@ export function captureArmedStreamConfig(): ArmedStreamConfig {
 	copy("selected_video_input");
 	copy("input_mode");
 	return snapshot as ArmedStreamConfig;
-}
-
-/**
- * What a restoration launches. A marker that records the mix records the whole audio
- * choice, so what it omits was unset; an older one leaves the mix to the saved one.
- */
-export function restorationLaunchConfig({
-	audio_inputs,
-	...config
-}: ArmedStreamConfig): Partial<RuntimeConfig> {
-	if (audio_inputs === undefined) return config;
-	return {
-		delay: undefined,
-		acodec: undefined,
-		asrc: undefined,
-		audio_backend: undefined,
-		...config,
-		audio_inputs: audio_inputs ?? undefined,
-	};
 }
 
 export type ArmRestorationOptions = {
@@ -241,6 +223,7 @@ async function defaultLaunch(
 		{ resolveSrtla },
 		{ prepareSrtlaIpAddresses },
 		{ startStream },
+		{ restoredStartAudio },
 		{ startStreamSession },
 		{ StreamStartFailure, classifyStartFailure, typedStartFailure },
 	] = await Promise.all([
@@ -248,15 +231,17 @@ async function defaultLaunch(
 		import("./srtla.ts"),
 		import("./streamloop/session.ts"),
 		import("./streamloop/start-stream.ts"),
+		import("./start-audio.ts"),
 		import("./stream-session-orchestrator.ts"),
 		import("./start-failure-taxonomy.ts"),
 	]);
 
 	if (!current()) return { ok: false, reason: "start_cancelled" };
-	const launchConfig = restorationLaunchConfig(config);
+	const startAudio = restoredStartAudio(config);
+	const launchConfig = { ...config, ...startAudio.config };
 	let resolved: Awaited<ReturnType<typeof validateConfig>>;
 	try {
-		resolved = await validateConfig(launchConfig);
+		resolved = await validateConfig(launchConfig, startAudio);
 		if (!current()) return { ok: false, reason: "start_cancelled" };
 		await prepareSrtlaIpAddresses(resolved.srtlaAddr);
 	} catch (error) {
@@ -267,7 +252,7 @@ async function defaultLaunch(
 	}
 
 	if (!current()) return { ok: false, reason: "start_cancelled" };
-	const result = await startStreamSession({
+	const starting = startStreamSession({
 		origin: "restoration",
 		launch: async ({ attemptId }) => {
 			const srtlaAddr = await resolveSrtla(resolved.srtlaAddr);
@@ -279,6 +264,7 @@ async function defaultLaunch(
 				{},
 				attemptId,
 				launchConfig,
+				startAudio,
 			);
 			if (!launched.success) {
 				throw new StreamStartFailure(
@@ -295,6 +281,7 @@ async function defaultLaunch(
 		},
 	});
 
+	const result = await startAudio.whileInFlight(starting);
 	if (result.result === "started") return { ok: true };
 	if (result.result === "busy") return { ok: false, reason: "start_busy" };
 	if (result.result === "cancelled")

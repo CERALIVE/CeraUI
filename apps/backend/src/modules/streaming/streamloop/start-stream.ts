@@ -35,7 +35,12 @@ import {
 	resetActivePassthrough,
 } from "../active-passthrough.ts";
 import { pinLaunchedAudio } from "../armed-stream-marker.ts";
-import { asrcProbe, isPseudoAudioSource, NO_AUDIO_ID } from "../audio.ts";
+import {
+	asrcProbe,
+	isPseudoAudioSource,
+	NO_AUDIO_ID,
+	refreshBluetoothAudioDevices,
+} from "../audio.ts";
 import {
 	defaultBindMapSpawnDeps,
 	resolveBindMapArgs,
@@ -53,7 +58,7 @@ import {
 import type { Pipeline } from "../pipelines.ts";
 import { replayPreviewEncodeMode } from "../preview-encode-replay.ts";
 import { getLastPublishedBond } from "../srtla.ts";
-import { acceptStartAudio } from "../start-audio.ts";
+import type { StartAudio } from "../start-audio.ts";
 import { assertStreamLaunchOwnership } from "../stream-launch-ownership.ts";
 import { getStreamingBackend } from "../streaming-engine.ts";
 import { srtlaSendExec } from "./exec-paths.ts";
@@ -157,7 +162,8 @@ export async function maybeProbeAudioSource(
  * other caller), the live config is read exactly as before.
  *
  * `startAudio` is the audio configuration the Start was pressed with. Nothing here
- * reads the saved one: a save made meanwhile counts for the next Start.
+ * reads the saved one: a save made meanwhile counts for the next Start. It has no
+ * default, so no caller can launch without taking one.
  */
 export async function startStream(
 	pipeline: Pipeline,
@@ -166,8 +172,8 @@ export async function startStream(
 	streamid: string,
 	audioDeps: AudioProbeDeps = {},
 	attemptId = "legacy-start",
-	configOverride?: Partial<RuntimeConfig>,
-	startAudio = acceptStartAudio(),
+	configOverride: Partial<RuntimeConfig> | undefined,
+	startAudio: StartAudio,
 ): Promise<StartStreamResult> {
 	assertStreamLaunchOwnership();
 	// The preview-encoder fence, and the reason it lives HERE. The engine fixes
@@ -198,11 +204,19 @@ export async function startStream(
 	}
 
 	const saved = getConfig();
-	const config: RuntimeConfig = { ...saved, ...startAudio.config };
-	if (configOverride !== undefined)
-		Object.assign(config, configOverride, {
+	if (saved.audio_backend !== startAudio.config.audio_backend) {
+		// The Bluetooth microphones may be listed for the backend saved since.
+		await refreshBluetoothAudioDevices();
+		assertStreamLaunchOwnership();
+	}
+	const config: RuntimeConfig = {
+		...saved,
+		...(configOverride && {
+			...configOverride,
 			composition: configOverride.composition,
-		});
+		}),
+		...startAudio.config,
+	};
 	const launchConfig = resolveLaunchConfig(config);
 	startStreamDeps.getStreamingBackend().setBitrate(launchConfig);
 
