@@ -1,6 +1,7 @@
 import "@fontsource-variable/space-grotesk";
 import "@fontsource-variable/jetbrains-mono";
 import "./app.css";
+import "./color-scheme.css";
 
 import { registerSW } from "virtual:pwa-register";
 import { mount } from "svelte";

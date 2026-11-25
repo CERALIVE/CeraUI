@@ -1,0 +1,20 @@
+/* The colour scheme of the theme actually painted, for native controls,
+   scrollbars and browser auto dark modes. mode-watcher writes a plain inline
+   `light` or `dark`; these win over it so the light themes say `only light`,
+   which stops Chromium's auto dark mode from inverting them. E-ink is white
+   paper in either mode.
+
+   Only the device app loads this file (main.ts). The hosted dialog bundles
+   import app.css into someone else's page, whose root scheme is not ours to
+   set, so these rules stay out of app.css. */
+:root {
+	color-scheme: only light !important;
+}
+
+:root.dark {
+	color-scheme: dark !important;
+}
+
+:root.dark:is([data-display='eink'], [data-theme='eink']) {
+	color-scheme: only light !important;
+}
