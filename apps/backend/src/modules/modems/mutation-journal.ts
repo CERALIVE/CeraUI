@@ -268,22 +268,30 @@ export async function readMutationEntry(
 	return parseEntry(raw, slotFile(stableKey));
 }
 
-/** Every readable entry on disk, for startup replay. */
+/**
+ * Every readable entry on disk. `onUnreadable` names each damaged slot and keeps
+ * reading; without it a read fault still throws.
+ */
 export async function listMutationEntries(
 	deps: MutationJournalDeps = activeDeps,
 	requireComplete = false,
+	onUnreadable?: (slot: string) => void,
 ): Promise<readonly ModemMutationEntry[]> {
 	const names = await deps.fs.listDir(deps.dir);
 	const entries: ModemMutationEntry[] = [];
 	for (const name of names) {
 		if (!name.endsWith(".json")) continue;
-		const raw = await deps.fs.readText(join(deps.dir, name));
-		if (raw === undefined) continue;
-		const entry = parseEntry(raw, name);
-		if (entry === undefined && requireComplete) {
-			throw new MutationJournalInventoryError(name);
+		let entry: ModemMutationEntry | undefined;
+		try {
+			const raw = await deps.fs.readText(join(deps.dir, name));
+			if (raw === undefined) continue;
+			entry = parseEntry(raw, name);
+		} catch (error) {
+			if (onUnreadable === undefined) throw error;
 		}
 		if (entry !== undefined) entries.push(entry);
+		else if (onUnreadable !== undefined) onUnreadable(name);
+		else if (requireComplete) throw new MutationJournalInventoryError(name);
 	}
 	return entries;
 }
@@ -299,14 +307,8 @@ export class MutationJournalInventoryError extends Error {
 export async function listUnreadableSlots(
 	deps: MutationJournalDeps = activeDeps,
 ): Promise<readonly string[]> {
-	const names = await deps.fs.listDir(deps.dir);
 	const bad: string[] = [];
-	for (const name of names) {
-		if (!name.endsWith(".json")) continue;
-		const raw = await deps.fs.readText(join(deps.dir, name));
-		if (raw === undefined) continue;
-		if (parseEntry(raw, name) === undefined) bad.push(name);
-	}
+	await listMutationEntries(deps, false, (slot) => bad.push(slot));
 	return bad;
 }
 

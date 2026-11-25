@@ -118,9 +118,12 @@ Journal reads are bounded, anchored, no-follow/nonblocking and duplicate-strict.
 A present unreadable slot or directory inspection fault raises/retains the existing
 recovery barrier; replay lowers it only with zero unreadable authority. Invalid
 records are not pruned, and direct failed reads cannot become admission permission.
-Strict block publication vetoes malformed/schema-invalid slots; an ENOENT after
-listing is a concurrent deletion and is skipped in both inventory passes, not
-raised as a recovery barrier. Read errors still throw and retain the barrier.
+Block publication uses the readable rows beside malformed, schema-invalid or
+unreadable slots and keeps the row such a slot last published. Replay counts damage
+met by either inventory or by publication as an incomplete pass, so a row that was
+not replayed keeps the barrier and the REPLAY retry. An ENOENT after listing is a
+concurrent deletion and is skipped in both inventory passes, not raised as a
+recovery barrier. A direct slot read still throws and retains the barrier.
 Directory enumeration after a successful open is inside that same error boundary.
 After completed startup, any non-absence fault schedules the registered read-only
 verification owner (1 s doubling to a 60 s ceiling). It also settles previously
@@ -133,7 +136,9 @@ Every reconciliation belongs to the process-local journal revision it read.
 Cooperating commits and removals invalidate before/after their awaited lifetime;
 read faults invalidate too. A writer in flight cannot prove settled authority.
 Both empty and nonempty block publication recheck immediately before replacing
-the projection. A revision change during inventory acquisition permits one fresh
+the projection. Every damaged read moves the revision once, whoever reads; a
+publication adds the faults its own census met to the revision it began with and
+publishes only if nothing else moved it. A revision change during inventory acquisition permits one fresh
 inventory read, not an unbounded loop or a damage classification for deletion.
 Acknowledgement/decommission/rebaseline recheck the global revision after their
 entry read or hardware capture. An unrelated modem's commit or a read fault during
@@ -141,7 +146,7 @@ that await can return existing `not_blocked` while the requested entry is still
 blocked, not just after its own authority was superseded. Replay rereads each slot and fences its
 presence/rollback awaits before old authority can advance or retire that slot.
 The owner rechecks after awaited verification, before completing
-the barrier; startup uses the final strict publication's revision because replay
+the barrier; startup uses the revision of the last publication, which may keep readable rows beside damaged ones, because replay
 can itself change disk. Acknowledgement can overlap verification, but an older
 presence census cannot republish its removed slot. A raise while pending is
 remembered and vetoes that pass's completion. Invalidation retains the existing
@@ -207,8 +212,8 @@ source of "is this device blocked" is how a fail-closed guard drifts open.
 | `recommission-pending` | remain awaiting the rebaseline |
 
 `mutation-replay.ts` is the table's executor. Replay lowers the barrier only after
-complete readable authority and strict block publication; unknown/damaged journal
-authority keeps it raised behind the cancellable retry owner. Failed rollback's
+complete readable authority and block publication that met no damaged slot;
+unknown/damaged journal authority keeps it raised behind the cancellable retry owner. Failed rollback's
 readable per-identity block is separate from an unreadable global inventory.
 A lost replay fence or another thrown entry failure counts as incomplete in the
 existing `unreadable` summary, never as an entry verdict. Even if final block
