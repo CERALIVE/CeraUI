@@ -329,6 +329,7 @@ test.describe("layout designer — caps-full", { tag: "@desktop-only" }, () => {
 		await page.getByTestId("live-bar").getByRole("button", { name: "Start stream" }).click();
 		const cockpit = page.getByTestId("live-cockpit");
 		await expect(cockpit).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByTestId("live-bar-stop")).toBeEnabled({ timeout: 15_000 });
 		const inset = cockpit.getByTestId("program-desk").getByTestId("layout-inset");
 		await expect(inset).toBeVisible();
 
@@ -421,6 +422,9 @@ test.describe("layout designer — caps-full", { tag: "@desktop-only" }, () => {
 
 		const cockpit = page.getByTestId("live-cockpit");
 		await expect(cockpit).toBeVisible({ timeout: 15_000 });
+		// The cockpit mounts optimistically, before the matching Start reply.
+		await expect(page.getByTestId("live-bar-stop")).toBeEnabled({ timeout: 15_000 });
+		await expect.poll(() => wire.calls("streaming.start")[0]?.delivered ?? 0).toBeGreaterThan(0);
 		const [first, second] = wire.calls("streaming.setConfig").slice(before);
 		const [start] = wire.calls("streaming.start");
 		expect(Object.keys(first?.input ?? {})).toEqual(["composition_rect"]);
@@ -467,6 +471,7 @@ test.describe("layout designer — caps-full", { tag: "@desktop-only" }, () => {
 		await page.getByTestId("live-bar").getByRole("button", { name: "Start stream" }).click();
 		const cockpit = page.getByTestId("live-cockpit");
 		await expect(cockpit).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByTestId("live-bar-stop")).toBeEnabled({ timeout: 15_000 });
 		const live = cockpit.getByTestId("program-desk").getByTestId("layout-inset");
 		await expect.poll(async () => shownRect(live)).toEqual({ x: 0.45, y: 0.05, width: 0.5, height: 0.5 });
 		const before = wire.calls("streaming.setConfig").length;
@@ -517,6 +522,7 @@ test.describe("layout designer — caps-full", { tag: "@desktop-only" }, () => {
 		await page.getByTestId("live-bar").getByRole("button", { name: "Start stream" }).click();
 		const again = page.getByTestId("live-cockpit");
 		await expect(again).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByTestId("live-bar-stop")).toBeEnabled({ timeout: 15_000 });
 		const restarted = await workerBackend.mockEngine();
 		expect(restarted.streaming).toBe(true);
 		expect(restarted.composition).toEqual(await savedComposition(backendRpc));
