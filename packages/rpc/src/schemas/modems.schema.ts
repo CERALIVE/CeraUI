@@ -2,12 +2,12 @@
  * Modem Zod schemas
  */
 import { z } from 'zod';
-
 import {
 	CAPABILITY_MODULE_MUTATION_KINDS,
 	CAPABILITY_MODULE_MUTATION_REFUSALS,
 	capabilityModuleClaimsSchema,
 } from './capability-modules.schema';
+import { radioHealthSchema } from './radio-health.schema';
 
 // Modem network type enum
 export const modemNetworkTypeSchema = z.enum(['3g', '4g', '4g3g', '5g', '5g4g', '5g3g', '5g4g3g']);
@@ -1822,6 +1822,7 @@ export const modemSchema = z.object({
 	iccid: z.string().min(1).optional(),
 	esim: modemEsimSchema.optional(),
 	cell_info: modemCellInfoSchema.optional(),
+	radio_health: radioHealthSchema.optional(),
 	// Why the radio is not registered, when the network said so. Absent means
 	// "the network stated no rejection", never "there is no problem".
 	registration_rejection: modemRegistrationRejectionSchema.optional(),

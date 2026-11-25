@@ -1251,3 +1251,65 @@ export async function mmNetworkScan(
 		};
 	}
 }
+
+/**
+ * Fixed read-only QMI radio queries; no setup, scan, inhibition or mode
+ * operation. The QENG serving-cell read is not here: it goes through the
+ * read-only AT lease on the released port (`free-at-port.ts`), because stock
+ * ModemManager refuses `mmcli --command` outside debug mode.
+ */
+export async function readRadioNas(id: number): Promise<{
+	signal: string;
+	band: string;
+	tx?: string;
+	/** The listed RM520N-GL firmware: its serving cell may be read on the released AT port. */
+	listed?: boolean;
+}> {
+	if (shouldMockModems()) return { signal: "", band: "" };
+	let ports: ModemInfo | undefined;
+	try {
+		const parsed = parseModemInfo(
+			mmcliParseSep(
+				await run(mmcliBinary, ["-K", "-m", String(id)], {
+					timeout: 1500,
+					maxBuffer: 32768,
+				}),
+			),
+		);
+		if (parsed.ok) ports = parsed.value;
+	} catch {
+		/* No retry or state change for optional diagnostics. */
+	}
+	if (
+		!ports ||
+		ports["modem.generic.model"] !== "RM520N-GL" ||
+		!ports["modem.generic.revision"]?.endsWith("A08M4G")
+	)
+		return { signal: "", band: "" };
+	const port = ports["modem.generic.ports"]
+		.map((p) => p.match(/^(cdc-wdm\d+)\s+\(qmi\)$/)?.[1])
+		.find(Boolean);
+	if (!port) return { signal: "", band: "" };
+	const read = async (
+		query:
+			| "--nas-get-signal-info"
+			| "--nas-get-rf-band-info"
+			| "--nas-get-tx-rx-info=lte",
+	) => {
+		try {
+			return await run(
+				"qmicli",
+				["--device", `/dev/${port}`, "--device-open-proxy", query],
+				{ timeout: 1500, maxBuffer: 16384 },
+			);
+		} catch {
+			return "";
+		}
+	};
+	return {
+		signal: await read("--nas-get-signal-info"),
+		band: await read("--nas-get-rf-band-info"),
+		tx: await read("--nas-get-tx-rx-info=lte"),
+		listed: true,
+	};
+}

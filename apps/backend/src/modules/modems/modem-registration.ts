@@ -73,8 +73,13 @@ import {
 import { modemStableKeyForId } from "./mutation-identity.ts";
 import { withJournaledModemMutation } from "./mutation-lease.ts";
 import { deriveSimPresence } from "./sim-presence.ts";
+import {
+	getRadioRegistrationObservation,
+	recordRadioRegistration,
+} from "./state/radio-registration.ts";
 
 export type { ModemId } from "./mmcli.ts";
+export { getRadioRegistrationObservation };
 
 /** Keep raw modem transport reads in the registration owner. */
 export async function readModemRegistrationState(
@@ -424,6 +429,7 @@ export async function resolveLateModemConfig(
 		config,
 		iccid: sim.simInfo["sim.properties.iccid"],
 		sim_network: sim.simInfo["sim.properties.operator-name"] || "Unknown",
+		home_network: sim.simInfo["sim.properties.operator-code"],
 	});
 	return "resolved";
 }
@@ -625,6 +631,7 @@ async function registerModem(id: number) {
 
 	// Get all the required info for the modem
 	const modemInfo = await mmGetModemWithRetry(id);
+	const registrationCapturedAt = Date.now();
 	if (!modemInfo) {
 		logger.error(`Failed to get modem info for modem ${id}`);
 		return;
@@ -705,6 +712,7 @@ async function registerModem(id: number) {
 		ifname: ifname,
 		name: hwName,
 		sim_network: simNetwork,
+		home_network: simInfo?.["sim.properties.operator-code"],
 		...(model !== undefined ? { model } : {}),
 		...(manufacturer !== undefined ? { manufacturer } : {}),
 		network_type: networkType,
@@ -719,6 +727,10 @@ async function registerModem(id: number) {
 	const simLock = buildSimLock(modemInfo);
 	if (simLock.state === "present") modem.sim_lock = simLock.lock;
 
+	recordRadioRegistration(modem, {
+		value: modemInfo["modem.3gpp.registration-state"],
+		capturedAt: registrationCapturedAt,
+	});
 	setModem(id, modem);
 }
 
@@ -749,6 +761,7 @@ export async function refreshModemStatus(id: ModemId): Promise<void> {
 	}
 
 	const modemInfo = await mmGetModemWithRetry(id);
+	const registrationCapturedAt = Date.now();
 	// Late SIM resolution can update configuration while this read is in flight.
 	const modem = getModem(id);
 	if (!modemInfo || !modem) {
@@ -756,5 +769,11 @@ export async function refreshModemStatus(id: ModemId): Promise<void> {
 	}
 
 	const updated = mergeRefreshedModem(modem, modemInfo);
+	recordRadioRegistration(updated, {
+		value: modemInfo["modem.3gpp.registration-state"],
+		capturedAt: registrationCapturedAt,
+	});
 	setModem(id, updated);
 }
+
+export { readRadioNas } from "./mmcli.ts";

@@ -609,6 +609,26 @@
 		"locales": ["fr"],
 		"reason": "\"Messages\" is the French plural; fr network.modem.sms.capped reads \"Affichage des {count} messages les plus récents stockés sur cette SIM.\"."
 	},
+	"network.radio.band": {
+		"value": "Band",
+		"locales": ["de"],
+		"reason": "de network.modem.detail.band is the same reviewed exception; de network.modem.bands.any reads \"Beliebiges Band\"."
+	},
+	"network.radio.neighbour": {
+		"value": "Modem {id}",
+		"locales": ["de", "fr", "pt-BR"],
+		"reason": "\"Modem\" is the German, French and Portuguese word with the modem number interpolated; de live.startFailure.class.modem_transition_active reads \"Ein Modem wechselt gerade den USB-Modus\", fr timeline.modem_added.title reads \"Modem ajouté\", pt-BR network.cellular.reason.initializing reads \"Modem detectado\"."
+	},
+	"network.radio.reg.roaming": {
+		"value": "Roaming",
+		"locales": ["de", "pt-BR"],
+		"reason": "de network.cellular.roaming.badge is the same reviewed exception; pt-BR network.cellular.rejection.roamingNotAllowed reads \"Roaming não é permitido aqui para este SIM.\""
+	},
+	"network.radio.signal": {
+		"value": "Signal",
+		"locales": ["de", "fr"],
+		"reason": "\"Signal\" is the German and French word; de hud.noSignal reads \"Kein Signal\", fr network.cellular.signal.high reads \"Signal fort\"."
+	},
 	"network.routerCellular.apnLabel": {
 		"value": "APN",
 		"locales": ["de", "es", "fr", "hi", "ja", "ko", "pt-BR"],

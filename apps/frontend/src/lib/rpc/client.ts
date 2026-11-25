@@ -770,6 +770,9 @@ export interface TypedRPC {
 	};
 	modems: {
 		getAll: () => Promise<unknown>;
+		getRadioHealth: () => Promise<
+			Record<string, import("@ceraui/rpc/schemas").RadioHealth>
+		>;
 		configure: (input: ModemConfigInput) => Promise<ModemConfigOutput>;
 		scan: (input: ModemScanInput) => Promise<ModemScanOutput>;
 		unlockSim: (input: SimUnlockInput) => Promise<SimUnlockOutput>;

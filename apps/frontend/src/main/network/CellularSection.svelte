@@ -95,7 +95,7 @@ import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import NoSimBadge from '$lib/components/custom/NoSimBadge.svelte';
 import { Button } from '$lib/components/ui/button';
 import { isolatedDongleLabel } from '$lib/helpers/link-names';
-import { DiagnosticsBlock } from '$lib/modem/sections';
+import { DiagnosticsBlock, deriveSim } from '$lib/modem/sections';
 import { cn } from '$lib/utils';
 import {
 	detailFields,
@@ -130,6 +130,7 @@ import {
 	stateTone,
 } from './cellular-row';
 import NetworkRow from './NetworkRow.svelte';
+import RadioHealthPanel from './RadioHealthPanel.svelte';
 import { openRouterAdminUi, routerAdminOpenReasonKey } from './router-admin-open';
 import type { RouterSignalReadout } from './router-signal';
 import {
@@ -400,6 +401,11 @@ function buildAdminSegments(modem: Modem): AdminSegment[] {
 let openDetails = $state<Record<string, boolean>>({});
 
 const orderedEntries = $derived(sortModemEntries(modemEntries));
+// Radio health names another modem the way that modem's own row is titled.
+const radioModemName = (other: string): string => {
+	const row = modemEntries.find(([rowId]) => rowId === other)?.[1];
+	return (row ? primaryLabel(row, '') : '') || m['network.radio.neighbour']({ id: other });
+};
 
 function toggleDetails(rowId: string): void {
 	openDetails = { ...openDetails, [rowId]: !openDetails[rowId] };
@@ -484,7 +490,16 @@ async function openAdminUi(rowId: string): Promise<void> {
 				<!-- An isolated dongle's name and slot are its raw `dongle<N>` token: the
 				     title names it like Bonded Links does, and the token stays out of view. -->
 				{const title = $derived(isolatedDongleLabel(modem) ?? primary)}
-				{const detail = $derived(detailLine(modem, primary))}
+				<!-- Radio health says "No SIM" only for a slot read as empty. The row's
+				     `no_sim` fold also covers an unreadable slot, which is not checked. -->
+				{const radioNoSim = $derived(deriveSim(modem).presence === 'absent')}
+				{const radioNamesNetwork = $derived(
+					openDetails[id] === true &&
+						modem.radio_health !== undefined &&
+						!radioNoSim &&
+						modem.radio_health.layer.value !== null,
+				)}
+				{const detail = $derived(detailLine(modem, primary, { omitNetworkType: radioNamesNetwork }))}
 				{const slot = $derived(slotBadgeLabel(modem, primary))}
 				{const instrument = $derived(resolveSignalInstrument(modem))}
 				{const signal = $derived(instrument.kind === 'device-stack' ? instrument.tier : undefined)}
@@ -789,6 +804,16 @@ async function openAdminUi(rowId: string): Promise<void> {
 									<p class="text-muted-foreground break-words font-mono text-xs" data-testid="modem-net-interface">
 										{modem.ifname}{#if entry.ip}{' · '}{entry.ip}{/if}
 									</p>
+								{/if}
+								{#if modem.radio_health}
+									<RadioHealthPanel
+										radio={modem.radio_health}
+										id={String(id)}
+										network={carrier || undefined}
+										noSim={radioNoSim}
+										connected={state === 'connected'}
+										modemName={radioModemName}
+									/>
 								{/if}
 								<!-- ── ORDERED BY §2, NOT BY THE ORDER THE TODOS LANDED ─────────
 								     Signal (tier 2) → the row's one ACTION (tier 3) → identity and

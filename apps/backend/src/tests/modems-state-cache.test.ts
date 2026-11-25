@@ -8,6 +8,11 @@ import {
 	reconcileModems,
 	setModemsState,
 } from "../modules/modems/state/modems-state-cache.ts";
+import {
+	carryRadioRegistration,
+	getRadioRegistrationObservation,
+	recordRadioRegistration,
+} from "../modules/modems/state/radio-registration.ts";
 import type { ModemsState, StateDiff } from "../modules/network/state-types.ts";
 import { loadFixture } from "./helpers/load-fixture.ts";
 
@@ -168,5 +173,57 @@ describe("modems-state-cache", () => {
 
 		expect(calls).toBe(0);
 		expect(getModemsState()).toEqual({});
+	});
+	test("a same-ID SIM or interface change with an unchanged status is a change", () => {
+		const prev = { 0: makeModem({}, { iccid: "8900000000000000001" }) };
+		for (const next of [
+			makeModem({}, { iccid: "8900000000000000002" }),
+			makeModem({}, { iccid: "8900000000000000001", ifname: "wwan1" }),
+			makeModem({}, {}),
+		]) {
+			const diff = reconcileModems({ 0: next }, prev);
+			expect(ids(diff.changed)).toEqual([0]);
+		}
+		expect(
+			reconcileModems(
+				{ 0: makeModem({}, { iccid: "8900000000000000001" }) },
+				prev,
+			).changed,
+		).toEqual([]);
+	});
+	test("a registration change commits; a renewed read of the same value does not", () => {
+		const prev = makeModem();
+		recordRadioRegistration(prev, { value: "home", capturedAt: 1000 });
+		const renewed = makeModem();
+		recordRadioRegistration(renewed, { value: "home", capturedAt: 31000 });
+		expect(reconcileModems({ 0: renewed }, { 0: prev }).changed).toEqual([]);
+		const moved = makeModem();
+		recordRadioRegistration(moved, { value: "searching", capturedAt: 31000 });
+		expect(ids(reconcileModems({ 0: moved }, { 0: prev }).changed)).toEqual([
+			0,
+		]);
+	});
+
+	test("a replaced modem object keeps its owner read only for the same interface and SIM", () => {
+		const read = { value: "home", capturedAt: 1000 };
+		const before = makeModem();
+		recordRadioRegistration(before, read);
+		// A late SIM read on the same interface keeps the read and its time.
+		const late = makeModem({}, { iccid: "8900000000000000001" });
+		carryRadioRegistration(before, late);
+		expect(getRadioRegistrationObservation(late)).toEqual(read);
+		// A different SIM or interface starts without one.
+		for (const other of [
+			makeModem({}, { iccid: "8900000000000000002" }),
+			makeModem({}, { iccid: "8900000000000000001", ifname: "wwan1" }),
+		]) {
+			carryRadioRegistration(late, other);
+			expect(getRadioRegistrationObservation(other)).toBeUndefined();
+		}
+		// A newer owner read on the replacement is never overwritten.
+		const fresh = makeModem({}, { iccid: "8900000000000000001" });
+		recordRadioRegistration(fresh, { value: "roaming", capturedAt: 2000 });
+		carryRadioRegistration(late, fresh);
+		expect(getRadioRegistrationObservation(fresh)?.value).toBe("roaming");
 	});
 });

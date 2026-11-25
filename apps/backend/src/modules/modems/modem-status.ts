@@ -1,3 +1,9 @@
+import type { RadioHealth } from "@ceraui/rpc/schemas";
+import {
+	commitRadioRoster,
+	radioForModem,
+	radioNeedsReset,
+} from "./radio-health-runtime.ts";
 /*
     CeraUI - web UI for the CeraLive project
     Copyright (C) 2024-2025 CeraLive project
@@ -44,6 +50,7 @@ type ModemsResponseModemStatus = {
 };
 
 export type ModemsResponseModemBase = {
+	radio_health?: RadioHealth | undefined;
 	status?: ModemsResponseModemStatus;
 };
 
@@ -180,13 +187,36 @@ export function buildModemsMessage(
 export function buildModemsWireMessage(
 	modemsFullState: Record<number, true> | undefined = undefined,
 ) {
+	const { message, projected } = buildModemsWireRows(modemsFullState);
+	if (projected) attachRadioHealth(message, modemsFullState);
+	return message;
+}
+
+/** The wire rows without radio enrichment, and whether the projection served them. */
+function buildModemsWireRows(
+	modemsFullState: Record<number, true> | undefined,
+): { message: ModemsResponseMessage; projected: boolean } {
 	try {
-		return buildProjectedModemsMessage(modemsFullState);
+		return {
+			message: buildProjectedModemsMessage(modemsFullState),
+			projected: true,
+		};
 	} catch (error) {
 		logger.warn("modem wire projection failed; serving the legacy message", {
 			error,
 		});
-		return buildModemsMessage(modemsFullState);
+		return { message: buildModemsMessage(modemsFullState), projected: false };
+	}
+}
+
+/** Each full row gets the cached radio record of its committed identity. */
+function attachRadioHealth(
+	message: ModemsResponseMessage,
+	modemsFullState: Record<number, true> | undefined,
+): void {
+	for (const [id, row] of Object.entries(message)) {
+		if (modemsFullState === undefined || modemsFullState[Number(id)] === true)
+			row.radio_health = radioForModem(id, row as never);
 	}
 }
 
@@ -198,23 +228,80 @@ export function getCommittedModemsWireMessage(): ModemsResponseMessage {
 export function broadcastModems(
 	modemsFullState: Record<number, true> | undefined = undefined,
 ) {
-	const complete = buildModemsWireMessage();
+	const { message: complete, projected } = buildModemsWireRows(undefined);
 	committedModemsWireMessage = complete;
+	// The radio sampler's only source: identity, registration and baselines
+	// follow this commit, never live state that has not been committed. Radio
+	// records are attached only after it, so no row carries a reading of a
+	// neighbour this commit replaced or removed.
+	const change = commitRadioRoster(complete);
+	if (projected) attachRadioHealth(complete, undefined);
+	// A modem whose device or SIM changed goes out as a full descriptor: a
+	// status-only row would leave subscribers on the previous ICCID.
+	let fullState = modemsFullState;
+	if (fullState !== undefined && change.identity.length > 0) {
+		fullState = { ...fullState };
+		for (const id of change.identity) fullState[Number(id)] = true;
+	}
 	const modems =
-		modemsFullState === undefined
-			? complete
-			: buildModemsWireMessage(modemsFullState);
+		fullState === undefined ? complete : buildModemsWireMessage(fullState);
+	// A partial (status-only) frame still carries the radio reset when the
+	// committed modem or SIM is no longer the one the cached record belongs to,
+	// a modem's record when its committed registration changed, and every row's
+	// record when a commit changed the roster, since each names the others.
+	for (const [id, row] of Object.entries(modems)) {
+		const committed = complete[id];
+		if (
+			committed &&
+			!("radio_health" in row) &&
+			(change.roster ||
+				change.registration.includes(id) ||
+				radioNeedsReset(id, committed))
+		)
+			(row as { radio_health?: RadioHealth }).radio_health = radioForModem(
+				id,
+				committed as never,
+			);
+	}
 	broadcastMsg("status", { modems });
 
 	// The roaming advisory reconciles AFTER the payload is on the wire, and is
 	// fenced: it is informational, so a failure in it must cost an operator a
-	// badge — never the modem list itself. Reconciling against the message that
-	// actually went out (rather than against the state cache) is what makes
-	// absence from the broadcast the retraction evidence for a device that
-	// disappeared; see `roaming-advisory.ts`.
+	// badge — never the modem list itself. It reads the complete message this
+	// broadcast committed, which carries every row the frame does: absence from
+	// it is the retraction evidence for a device that disappeared, and its rows
+	// keep the stable key and name a status-only row omits, so a partial frame
+	// never moves a standing advisory to another slot. See `roaming-advisory.ts`.
 	try {
-		evaluateRoamingAdvisoriesForWire(modems);
+		evaluateRoamingAdvisoriesForWire(complete);
 	} catch (error) {
 		logger.warn("roaming advisory evaluation failed", { error });
 	}
+}
+
+/**
+ * Publish radio enrichment for the committed roster only. Diagnostic sampling
+ * runs outside the modem update lock, so live state may hold a staged change or
+ * removal; this never reads it. Each committed row gets its cached radio record
+ * beside the status it was committed with, so no staged status or control
+ * field can be replayed.
+ */
+export function broadcastRadioHealth(): void {
+	const modems: Record<
+		string,
+		Pick<ModemsResponseModemBase, "status"> & {
+			radio_health: RadioHealth;
+		}
+	> = {};
+	for (const [id, committed] of Object.entries(committedModemsWireMessage)) {
+		if (!("ifname" in committed) || typeof committed.ifname !== "string")
+			continue;
+		const radio_health = radioForModem(id, committed);
+		committedModemsWireMessage[id] = { ...committed, radio_health };
+		modems[id] =
+			committed.status === undefined
+				? { radio_health }
+				: { status: committed.status, radio_health };
+	}
+	broadcastMsg("status", { modems });
 }
