@@ -35,7 +35,7 @@
 		"lint:fix": "echo 'RPC fixing handled by root Biome'"
 	},
 	"dependencies": {
-		"@ceralive/cerastream": "2026.11.3",
+		"@ceralive/cerastream": "2026.11.4",
 		"@orpc/contract": "2.0.0-beta.49",
 		"zod": "catalog:"
 	},

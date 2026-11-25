@@ -184,26 +184,28 @@ $effect(() => {
 					<!-- The mode is a property of the RADIO, so its badge rides the radio's
 					     name and the mode fact renders exactly once per row. -->
 					{#snippet identity()}<WifiModeBadge device={id} mode={modeView.displayMode} />{/snippet}
+					<!-- A degraded radio's reason is stated once, whole, in its warning band
+					     below; the status line does not repeat it. -->
 					{#snippet status()}
-						<span
-							class={cn(
-								'inline-flex min-w-0 flex-wrap items-center gap-x-1 wrap-anywhere transition-opacity',
-								!isHotspot && ifaceStale && 'opacity-50',
-							)}
-						>
-							{#if degradedReasonKey}
-								{resolveMessageKey(degradedReasonKey)}
-							{:else if isHotspot}
-								<Router class="text-status-info size-3.5 shrink-0" aria-hidden="true" />
-								<span class="text-foreground font-medium">{m["network.view.hotspot"]()}</span>{' · '}{iface.ifname}
-							{:else if connected && net}
-								<Check class="text-status-success size-3.5 shrink-0" aria-hidden="true" />
-								<span class="text-foreground font-medium">{m["network.view.connected"]()}</span>{#if !linkName}{' · '}{net.ssid}{/if}
-							{:else}
-								<CircleOff class="size-3.5 shrink-0" aria-hidden="true" />
-								{m["network.view.disconnected"]()}
-							{/if}
-						</span>
+						{#if !degradedReasonKey}
+							<span
+								class={cn(
+									'inline-flex min-w-0 flex-wrap items-center gap-x-1 wrap-anywhere transition-opacity',
+									!isHotspot && ifaceStale && 'opacity-50',
+								)}
+							>
+								{#if isHotspot}
+									<Router class="text-status-info size-3.5 shrink-0" aria-hidden="true" />
+									<span class="text-foreground font-medium">{m["network.view.hotspot"]()}</span>{' · '}{iface.ifname}
+								{:else if connected && net}
+									<Check class="text-status-success size-3.5 shrink-0" aria-hidden="true" />
+									<span class="text-foreground font-medium">{m["network.view.connected"]()}</span>{#if !linkName}{' · '}{net.ssid}{/if}
+								{:else}
+									<CircleOff class="size-3.5 shrink-0" aria-hidden="true" />
+									{m["network.view.disconnected"]()}
+								{/if}
+							</span>
+						{/if}
 						{#if !degradedReasonKey && showStale}
 							<Badge variant="stale" data-stale-interface={iface.ifname} />
 						{/if}

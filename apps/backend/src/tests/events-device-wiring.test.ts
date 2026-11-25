@@ -17,54 +17,86 @@ afterEach(() => {
 	emitter.resetEventEmitterForTest();
 });
 
-test("boot observes ready modem discovery once while the guarded version record is pending", async () => {
-	const cwd = await mkdtemp(resolve(tmpdir(), "ceraui_event_boot_"));
-	try {
-		// Mock boot checks that the sender is readable but never runs it.
-		const senderPath = join(cwd, "srtla_send");
-		await Bun.write(senderPath, "");
-		await Bun.write(
-			join(cwd, "setup.json"),
-			JSON.stringify({ hw: "n100", srtla_path: senderPath }),
-		);
-		const boot = Bun.spawn(
-			[
-				process.execPath,
-				fileURLToPath(
-					new URL("./helpers/events-boot-probe.ts", import.meta.url),
-				),
-			],
-			{
-				cwd,
-				env: {
-					...process.env,
-					NODE_ENV: "development",
-					MOCK_SCENARIO: "single-modem",
-					CERALIVE_DEVICE_TYPE: "emulated",
-					CERALIVE_EVENTS_DIR: join(cwd, "events"),
-					CERALIVE_STREAMING_MARKER: join(cwd, "streaming"),
-					NOTIFY_SOCKET: "",
+test.each([
+	{
+		name: "boot observes ready modem discovery once while the guarded version record is pending",
+		signal: undefined,
+	},
+	{
+		name: "the shipped SIGTERM handler revokes a held engine recovery probe",
+		signal: "SIGTERM",
+	},
+	{
+		name: "the shipped SIGINT handler revokes a held engine recovery probe",
+		signal: "SIGINT",
+	},
+])(
+	"$name",
+	async ({ signal }) => {
+		const cwd = await mkdtemp(resolve(tmpdir(), "ceraui_event_boot_"));
+		try {
+			// Mock boot checks that the sender is readable but never runs it.
+			const senderPath = join(cwd, "srtla_send");
+			await Bun.write(senderPath, "");
+			await Bun.write(
+				join(cwd, "setup.json"),
+				JSON.stringify({
+					hw: "n100",
+					srtla_path: senderPath,
+					cerastream_socket: join(cwd, "engine.sock"),
+				}),
+			);
+			const boot = Bun.spawn(
+				[
+					"nice",
+					"-n",
+					"19",
+					process.execPath,
+					fileURLToPath(
+						new URL("./helpers/events-boot-probe.ts", import.meta.url),
+					),
+					...(signal === undefined ? [] : [signal]),
+				],
+				{
+					cwd,
+					env: {
+						...process.env,
+						NODE_ENV: "development",
+						MOCK_SCENARIO: "single-modem",
+						CERALIVE_DEVICE_TYPE: "emulated",
+						CERALIVE_EVENTS_DIR: join(cwd, "events"),
+						CERALIVE_STREAMING_MARKER: join(cwd, "streaming"),
+						NOTIFY_SOCKET: "",
+					},
+					stdin: "ignore",
+					stdout: "pipe",
+					stderr: "pipe",
+					timeout: 8_000,
+					killSignal: "SIGKILL",
 				},
-				stdin: "ignore",
-				stdout: "pipe",
-				stderr: "pipe",
-				timeout: 8_000,
-				killSignal: "SIGKILL",
-			},
-		);
-		const [exitCode, stdout, stderr] = await Promise.all([
-			boot.exited,
-			new Response(boot.stdout).text(),
-			new Response(boot.stderr).text(),
-		]);
-		const diagnostic = [boot.signalCode, stderr, stdout]
-			.filter(Boolean)
-			.join("\n");
-		expect(exitCode, diagnostic || "mock boot did not finish").toBe(0);
-	} finally {
-		await rm(cwd, { recursive: true, force: true });
-	}
-}, 12_000);
+			);
+			const [exitCode, stdout, stderr] = await Promise.all([
+				boot.exited,
+				new Response(boot.stdout).text(),
+				new Response(boot.stderr).text(),
+			]);
+			const diagnostic = [boot.signalCode, stderr, stdout]
+				.filter(Boolean)
+				.join("\n");
+			expect(exitCode, diagnostic || "mock boot did not finish").toBe(0);
+			if (signal !== undefined) {
+				expect(
+					stdout
+						.split("\n")
+						.filter((line) => line.startsWith("ENGINE_RECOVERY_SHUTDOWN ")),
+				).toEqual([`ENGINE_RECOVERY_SHUTDOWN ${signal} false`]);
+			}
+		} finally {
+			await rm(cwd, { recursive: true, force: true });
+		}
+	},
+	12_000,
+);
 
 for (const enabled of [false, true]) {
 	for (const failed of [false, true]) {

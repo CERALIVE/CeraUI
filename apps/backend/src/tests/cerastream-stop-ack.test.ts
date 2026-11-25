@@ -57,6 +57,8 @@ interface FakeClientOptions {
 	readonly trace: string[];
 	readonly stopGate?: Promise<{ state: "idle" }>;
 	readonly listGate?: Promise<ListDevicesResult>;
+	readonly onList?: () => void;
+	readonly closeError?: Error;
 }
 
 function makeClient(options: FakeClientOptions): CerastreamClient {
@@ -84,6 +86,9 @@ function makeClient(options: FakeClientOptions): CerastreamClient {
 		setBitrate: async (params) => ({
 			applied: { max_bitrate: params.max_bitrate },
 		}),
+		setAudioMix: async () => {
+			throw new Error("unexpected set-audio-mix");
+		},
 		requestKeyframe: async () => {
 			throw new Error("unexpected request-keyframe");
 		},
@@ -99,6 +104,7 @@ function makeClient(options: FakeClientOptions): CerastreamClient {
 		}),
 		listDevices: async () => {
 			record("list-devices");
+			options.onList?.();
 			if (options.listGate === undefined) {
 				return { devices: [CAPTURE_DEVICE] };
 			}
@@ -138,7 +144,7 @@ function makeClient(options: FakeClientOptions): CerastreamClient {
 		}),
 		close: async () => {
 			record("close");
-			closed.reject(new Error(`${options.name}_closed`));
+			closed.reject(options.closeError ?? new Error(`${options.name}_closed`));
 		},
 	};
 }
@@ -261,6 +267,45 @@ test("a failed fresh stop connection completes with its error, never a false idl
 	expect(failures).toEqual([failure]);
 	expect(acknowledged).toBe(false);
 	expect(trace).toContain("session:close");
+});
+
+test("a device read cancelled by explicit Stop confirmation does not report engine loss", async () => {
+	const trace: string[] = [];
+	const listEntered = Promise.withResolvers<void>();
+	const pendingList = Promise.withResolvers<ListDevicesResult>();
+	const acknowledgement = Promise.withResolvers<{ state: "idle" }>();
+	const session = makeClient({
+		name: "session",
+		trace,
+		listGate: pendingList.promise,
+		onList: listEntered.resolve,
+		closeError: new CerastreamConnectionError("control connection closed"),
+	});
+	const stop = makeClient({
+		name: "stop",
+		trace,
+		stopGate: acknowledgement.promise,
+	});
+	const losses: string[] = [];
+	let connections = 0;
+	const backend = new CerastreamBackend({
+		connect: async () => (++connections === 1 ? session : stop),
+		onSessionConnectionLost: (site) => losses.push(site),
+	});
+	await backend.start(STREAM_CONFIG, RUN_OPTIONS);
+	const listing = backend.listDevicesIfActive();
+	await listEntered.promise;
+	const stopping = backend.confirmStop();
+	try {
+		expect(await listing).toBeNull();
+		expect(losses).toEqual([]);
+	} finally {
+		acknowledgement.resolve({ state: "idle" });
+		await stopping;
+	}
+	expect(trace.filter((operation) => operation.endsWith(":stop"))).toEqual([
+		"stop:stop",
+	]);
 });
 
 test("composition clear reaches raw IPC as null rather than disappearing in the pinned schema", async () => {

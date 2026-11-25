@@ -484,7 +484,7 @@ needs only the 3:1 non-text ratio. Other Badge call sites are unchanged. The
 remaining-days phrase is the only foreground text in the detail line. The row
 is a labelled `role="group"`, wraps instead of overflowing in every locale,
 and is absent rather than empty for an older backend. Acceptance: 390/1280 px,
-light and dark, plus Arabic RTL, in `visual/update-system.visual.spec.ts`; a
+light and dark, plus Arabic RTL, in `apps/frontend/tests/e2e/visual/update-system.visual.spec.ts`; a
 real device certificate is not part of that evidence.
 
 ## 15. Kernel update section
@@ -506,6 +506,275 @@ The primary action installs the offered kernel; Check is secondary. No kernel
 capability means no section. Unknown state remains unknown, active/staged work
 disables conflicting actions, and rollback shows its reason beside the versions.
 Acceptance is the 1280x800/390x844, light/dark, English/es-419 state matrix in
-`visual/kernel-updates.visual.spec.ts`, with actions and the entire section
+`apps/frontend/tests/e2e/visual/kernel-updates.visual.spec.ts`, with actions and the entire section
 required to be in frame for staged and rolled-back captures. Device producer
 integration and hardware rollback are separate qualification.
+
+## 16. Colors
+
+A record of the shipped code for agents building new screens, not a second
+authority: `.impeccable.md` still owns the look, sections 1 to 15 still own the
+rules, and a value that differs here is stale. Dark is the hero, light is
+first-class. Values are copied from @ceralive/design-tokens 2026.6.1 (the
+version pinned in `bun.lock`), file `tokens.css`, which
+`apps/frontend/src/app.css` imports into its base layer.
+`apps/frontend/tailwind.config.ts` exposes them as utilities (`bg-card`,
+`text-muted-foreground`). Use the token, never a copied value. A palette swap
+redefines the variable, so a literal would not follow it.
+
+The Light and Dark columns in this section are defaults. E-ink and mono redefine
+every token listed here (app.css:179-256). High contrast redefines `--border`,
+`--input`, `--ring`, `--sidebar-border`, `--muted-foreground`, the three
+`--shadow-*` tokens and the five `--gradient-*` endpoints (app.css:685-702).
+
+### Surfaces and text
+
+`secondary`, `muted` and `accent` are neutral graphite steps, not brand colors.
+
+Source: `tokens.css` in the package above.
+
+| Token | Light | Dark |
+|---|---|---|
+| `--background` | `oklch(0.98 0.004 150)` | `oklch(0.15 0.012 150)` |
+| `--foreground` | `oklch(0.15 0.015 150)` | `oklch(0.95 0.008 150)` |
+| `--card` | `oklch(0.96 0.004 150)` | `oklch(0.18 0.01 150)` |
+| `--card-foreground` | `oklch(0.15 0.015 150)` | `oklch(0.95 0.008 150)` |
+| `--popover` | `oklch(0.98 0.003 150)` | `oklch(0.2 0.01 150)` |
+| `--popover-foreground` | `oklch(0.15 0.015 150)` | `oklch(0.95 0.008 150)` |
+| `--secondary` | `oklch(0.93 0.005 150)` | `oklch(0.24 0.012 150)` |
+| `--secondary-foreground` | `oklch(0.22 0.014 150)` | `oklch(0.9 0.008 150)` |
+| `--muted` | `oklch(0.92 0.005 150)` | `oklch(0.22 0.01 150)` |
+| `--muted-foreground` | `oklch(0.42 0.018 150)` | `oklch(0.62 0.015 150)` |
+| `--accent` | `oklch(0.9 0.006 150)` | `oklch(0.26 0.012 150)` |
+| `--accent-foreground` | `oklch(0.18 0.016 150)` | `oklch(0.92 0.008 150)` |
+
+### Primary and destructive
+
+Lime is `primary`; IH-5 decides which button may be filled with it, and IH-2 keeps it off hardware tags.
+
+Source: `tokens.css` in the package above.
+
+| Token | Light | Dark |
+|---|---|---|
+| `--primary` | `oklch(0.4 0.18 128)` | `oklch(0.86 0.2 128)` |
+| `--primary-foreground` | `oklch(0.98 0.003 0)` | `oklch(0.1 0.02 150)` |
+| `--ring` | `oklch(0.4 0.18 128)` | `oklch(0.86 0.2 128)` |
+| `--destructive` | `oklch(0.55 0.22 25)` | `oklch(0.56 0.22 25)` |
+| `--destructive-foreground` | `oklch(0.98 0.004 0)` | `oklch(0.98 0.004 0)` |
+
+### Borders and control state
+
+Source: `tokens.css` in the package above.
+
+| Token | Light | Dark |
+|---|---|---|
+| `--border` | `oklch(0.88 0.006 150)` | `oklch(0.28 0.012 150)` |
+| `--input` | `oklch(0.9 0.005 150)` | `oklch(0.24 0.01 150)` |
+| `--switch-off` | `oklch(0.66 0.022 150)` | `oklch(0.52 0.028 150)` |
+| `--switch-off-foreground` | `oklch(0.99 0.004 150)` | `oklch(0.96 0.008 150)` |
+
+### Status
+
+Source: `tokens.css` in the package above.
+
+| Token | Light | Dark |
+|---|---|---|
+| `--status-success` | `oklch(0.5 0.15 150)` | `oklch(0.8 0.18 145)` |
+| `--status-success-foreground` | `oklch(0.99 0.003 0)` | `oklch(0.15 0.02 150)` |
+| `--status-info` | `oklch(0.5 0.16 245)` | `oklch(0.74 0.13 230)` |
+| `--status-info-foreground` | `oklch(0.99 0.003 0)` | `oklch(0.15 0.02 230)` |
+| `--status-warning` | `oklch(0.52 0.13 65)` | `oklch(0.8 0.16 75)` |
+| `--status-warning-foreground` | `oklch(0.99 0.003 0)` | `oklch(0.2 0.04 75)` |
+| `--status-error` | `oklch(0.55 0.22 25)` | `oklch(0.64 0.2 25)` |
+| `--status-error-foreground` | `oklch(0.99 0.004 0)` | `oklch(0.99 0.004 25)` |
+| `--status-neutral` | `oklch(0.45 0.018 150)` | `oklch(0.62 0.015 150)` |
+| `--status-neutral-foreground` | `oklch(0.99 0.003 0)` | `oklch(0.12 0.02 150)` |
+| `--status-live` | `oklch(0.45 0.16 128)` | `oklch(0.86 0.2 128)` |
+| `--status-standby` | `oklch(0.55 0.14 70)` | `oklch(0.8 0.16 75)` |
+| `--status-idle` | `oklch(0.55 0.01 150)` | `oklch(0.45 0.01 150)` |
+
+### Signal quality
+
+Source: `tokens.css` in the package above.
+
+| Token | Light | Dark |
+|---|---|---|
+| `--signal-excellent` | `oklch(0.5 0.16 145)` | `oklch(0.82 0.2 128)` |
+| `--signal-good` | `oklch(0.52 0.15 110)` | `oklch(0.78 0.18 100)` |
+| `--signal-fair` | `oklch(0.55 0.14 75)` | `oklch(0.76 0.16 75)` |
+| `--signal-weak` | `oklch(0.52 0.18 30)` | `oklch(0.6 0.16 35)` |
+
+### Link identity
+
+These are read as CSS variables; `apps/frontend/tailwind.config.ts` maps no utility for them.
+
+Source: `tokens.css` in the package above.
+
+| Token | Light | Dark |
+|---|---|---|
+| `--link-1` | `oklch(0.55 0.17 128)` | `oklch(0.84 0.2 128)` |
+| `--link-2` | `oklch(0.55 0.15 200)` | `oklch(0.76 0.18 188)` |
+| `--link-3` | `oklch(0.52 0.16 252)` | `oklch(0.72 0.16 252)` |
+| `--link-4` | `oklch(0.5 0.18 292)` | `oklch(0.74 0.18 292)` |
+| `--link-5` | `oklch(0.58 0.16 65)` | `oklch(0.78 0.18 65)` |
+| `--link-6` | `oklch(0.55 0.2 20)` | `oklch(0.7 0.18 15)` |
+| `--link-bar-empty` | `color-mix(in oklab, var(--muted-foreground) 55%, transparent)` | `color-mix(in oklab, var(--muted-foreground) 55%, transparent)` |
+
+### Sidebar
+
+Source: `tokens.css` in the package above.
+
+| Token | Light | Dark |
+|---|---|---|
+| `--sidebar-background` | `oklch(0.94 0.005 150)` | `oklch(0.13 0.01 150)` |
+| `--sidebar-foreground` | `oklch(0.22 0.014 150)` | `oklch(0.88 0.008 150)` |
+| `--sidebar-primary` | `oklch(0.4 0.18 128)` | `oklch(0.86 0.2 128)` |
+| `--sidebar-primary-foreground` | `oklch(0.98 0.003 0)` | `oklch(0.1 0.02 150)` |
+| `--sidebar-accent` | `oklch(0.9 0.006 150)` | `oklch(0.22 0.01 150)` |
+| `--sidebar-accent-foreground` | `oklch(0.22 0.014 150)` | `oklch(0.88 0.008 150)` |
+| `--sidebar-border` | `oklch(0.86 0.006 150)` | `oklch(0.26 0.01 150)` |
+| `--sidebar-ring` | `oklch(0.4 0.18 128)` | `oklch(0.86 0.2 128)` |
+
+### Elevation and gradient endpoints
+
+Source: `tokens.css` in the package above.
+
+| Token | Light | Dark |
+|---|---|---|
+| `--shadow-sm` | `0 1px 2px 0 oklch(0.15 0.015 150 / 0.08)` | `0 1px 2px 0 oklch(0 0 0 / 0.4)` |
+| `--shadow-md` | `0 4px 12px -2px oklch(0.15 0.015 150 / 0.1)` | `0 4px 8px -2px oklch(0 0 0 / 0.45)` |
+| `--shadow-lg` | `0 12px 28px -6px oklch(0.15 0.015 150 / 0.14)` | `0 12px 28px -6px oklch(0 0 0 / 0.55)` |
+| `--gradient-primary-to` | `oklch(0.45 0.15 150)` | `oklch(0.72 0.16 150)` |
+| `--gradient-success-to` | `oklch(0.45 0.14 165)` | `oklch(0.68 0.15 165)` |
+| `--gradient-info-to` | `oklch(0.45 0.16 255)` | `oklch(0.6 0.15 255)` |
+| `--gradient-destructive-to` | `oklch(0.48 0.2 15)` | `oklch(0.5 0.18 15)` |
+| `--gradient-warning-to` | `oklch(0.5 0.13 60)` | `oklch(0.7 0.15 55)` |
+
+### App-level color overrides
+
+Each row is a rule in `apps/frontend/src/app.css`, which overrides the utility or token it names.
+
+| Case | Value |
+|---|---|
+| Red text, `.text-destructive`, except on a `destructive` button (rows below) | `color-mix(in oklab, var(--destructive) 74%, var(--foreground))` (app.css:1029) |
+| Red status text, `.text-status-error`, outside a tooltip | `color-mix(in oklab, var(--status-error) 84%, var(--foreground))` |
+| Red status inside a tooltip | `color-mix(in oklab, var(--status-error) 44%, var(--background))` |
+| Enabled `destructive` button label | `color-mix(in oklab, var(--destructive) 60%, var(--foreground))` (app.css:995) |
+| Disabled `destructive` button | label `color-mix(in oklab, var(--destructive) 75%, var(--foreground))`, background `color-mix(in oklab, var(--destructive) 4%, var(--card))`, `opacity: 1` so no fade (app.css:998-1002) |
+| E-ink and mono, `html[data-theme='eink']` | a chroma 0 set that redefines the tokens, defined in that block |
+| High contrast, `@media (prefers-contrast: more)` | `--border: var(--foreground)`, `--muted-foreground: var(--foreground)` and the rest of the list above |
+
+- **Not defined in code:** a secondary brand hue, and any Svelte call site for the
+  `gradient-primary`, `gradient-success`, `gradient-info`,
+  `gradient-destructive` and `gradient-warning` utilities in
+  `apps/frontend/src/app.css`. Don't read the endpoints as an invitation to add one.
+
+## 17. Typography
+
+Families come from `apps/frontend/tailwind.config.ts`; `apps/frontend/src/main.ts`
+imports both font packages, so they're served locally. Sizes, line heights and
+weights are Tailwind CSS 4.3.5 defaults (the version pinned in `bun.lock`, file
+`theme.css`), which CeraUI doesn't override.
+
+### Families
+
+| Role | Stack | Source |
+|---|---|---|
+| Sans, the page default | `Space Grotesk Variable`, `Space Grotesk`, then `Noto Sans CJK SC`, `Microsoft YaHei`, `Hiragino Sans`, `Noto Sans JP`, `Noto Sans KR`, `Noto Sans Arabic`, `Tahoma`, `system-ui`, `sans-serif` | `apps/frontend/tailwind.config.ts` |
+| Mono, telemetry and machine values | `JetBrains Mono Variable`, then the Tailwind mono stack (`...fontFamily.mono`) | `apps/frontend/tailwind.config.ts` |
+
+`apps/frontend/src/app.css` sets `font-synthesis-weight: none` on the body, so a
+missing weight is never faked.
+
+### Sizes
+
+| Utility | Size | Line height | Source |
+|---|---|---|---|
+| `text-micro` | `calc(var(--text-xs, 0.75rem) - 0.125rem)` | `1rem` | `apps/frontend/src/app.css` |
+| `text-xs` | `0.75rem` | `calc(1 / 0.75)` | `theme.css` |
+| `text-sm` | `0.875rem` | `calc(1.25 / 0.875)` | `theme.css` |
+| `text-base` | `1rem` | `calc(1.5 / 1)` | `theme.css` |
+| `text-lg` | `1.125rem` | `calc(1.75 / 1.125)` | `theme.css` |
+| `text-xl` | `1.25rem` | `calc(1.75 / 1.25)` | `theme.css` |
+| `text-2xl` | `1.5rem` | `calc(2 / 1.5)` | `theme.css` |
+| `text-3xl` | `1.875rem` | `calc(2.25 / 1.875)` | `theme.css` |
+| `text-4xl` | `2.25rem` | `calc(2.5 / 2.25)` | `theme.css` |
+
+### Weights
+
+| Utility | Weight | Source |
+|---|---|---|
+| `font-normal` | `400` | `theme.css` |
+| `font-medium` | `500` | `theme.css` |
+| `font-semibold` | `600` | `theme.css` |
+| `font-bold` | `700` | `theme.css` |
+
+### Observed use
+
+- Dialog title: `text-base leading-tight font-semibold`; its description: `text-muted-foreground text-sm leading-relaxed`. Source: `apps/frontend/src/lib/components/dialogs/AppDialog.svelte`
+- Card title: `text-base leading-snug font-medium`, or `text-sm` in a `sm` card. Source: `apps/frontend/src/lib/components/ui/card/card-title.svelte`
+- Field label: `text-sm leading-none font-medium`, at 50% opacity while its group or peer is disabled (label.svelte:11). Source: `apps/frontend/src/lib/components/ui/label/label.svelte`
+- Throughput value: `font-mono text-xs font-bold tabular-nums`, at 50% opacity when stale (Badge.svelte:102). Source: `apps/frontend/src/lib/components/custom/Badge.svelte`
+- Network row name: `text-sm font-medium`, plus `text-muted-foreground` when dimmed; its status line: `text-muted-foreground` and `text-xs`. Source: `apps/frontend/src/main/network/NetworkRow.svelte`
+- **Not defined in code:** a named role scale (display, headline, title, body, label). Pick the utility the nearest existing component uses.
+
+## 18. Components
+
+Shared primitives live in `apps/frontend/src/lib/components/ui/`, composed ones in
+`apps/frontend/src/lib/components/custom/` and
+`apps/frontend/src/lib/components/dialogs/`. Reuse them before adding one. Corner
+steps derive from `--radius` (`0.5rem` in `tokens.css`): `rounded-lg` is
+`var(--radius)`, `rounded-md` is `calc(var(--radius) - 2px)` and `rounded-xl` is
+`calc(var(--radius) + 4px)`, set in `apps/frontend/tailwind.config.ts`.
+
+The `default` Button variant is the filled lime one. IH-5 governs it: one per
+surface, for its single primary action. Other actions are outline or ghost, and a
+destructive confirmation keeps its `destructive` button.
+
+Each row gives the enabled default, then the states that override it. A caller's
+own class can still override either. Four global rules apply to every row below:
+
+- Touch mode, and a phone-width touch region, raise Button and Select trigger heights to the touch minimum, unless the control opts into the hit-area overlay (app.css:314-323).
+- High contrast widens a `border` or `border-t` edge to 2px and swaps the tokens listed in section 16 (app.css:685-733).
+- Reduced motion shortens every animation and transition (app.css:668-677), and e-ink removes both (app.css:757-766).
+- E-ink and mono swap every color token (app.css:179-256).
+
+| Component | Binds to | Source |
+|---|---|---|
+| Button, base recipe | `rounded-lg` `text-sm` `font-medium`; focus `focus-visible:border-ring` `focus-visible:ring-ring` at 50% `focus-visible:ring-3`; error `aria-invalid:border-destructive`, dark `dark:aria-invalid:border-destructive` at 50%, with `aria-invalid:ring-3` and `aria-invalid:ring-destructive` at 20%, dark `dark:aria-invalid:ring-destructive` at 40%; disabled `disabled:opacity-50` (button.svelte:8), which a link button lacks because it carries only `aria-disabled` (button.svelte:70). A variant or size below overrides these: `destructive` has its own focus and disabled state, and sizes `xs`, `sm`, `icon-xs` and `icon-sm` their own corners, back to `rounded-lg` inside a button group (button.svelte:25-32) | `apps/frontend/src/lib/components/ui/button/button.svelte` |
+| Button `default` | `bg-primary` `text-primary-foreground`; as a link, hover is `bg-primary` at 80% (button.svelte:11) | `apps/frontend/src/lib/components/ui/button/button.svelte` |
+| Button `outline` | `border-border` `bg-background` `hover:bg-muted`; dark `dark:bg-input` at 30% `dark:border-input` `dark:hover:bg-input` at 50%; expanded `aria-expanded:bg-muted` `aria-expanded:text-foreground` (button.svelte:13) | `apps/frontend/src/lib/components/ui/button/button.svelte` |
+| Button `secondary` | `bg-secondary` `text-secondary-foreground` `hover:bg-secondary` at 80%; expanded `aria-expanded:bg-secondary` (button.svelte:15) | `apps/frontend/src/lib/components/ui/button/button.svelte` |
+| Button `ghost` | `hover:bg-muted` `hover:text-foreground`; dark `dark:hover:bg-muted` at 50%; expanded `aria-expanded:bg-muted` `aria-expanded:text-foreground` (button.svelte:17) | `apps/frontend/src/lib/components/ui/button/button.svelte` |
+| Button `destructive`, enabled | `bg-destructive` at 10% `hover:bg-destructive` at 20%; dark `dark:bg-destructive` at 20% `dark:hover:bg-destructive` at 30%; focus `focus-visible:border-destructive` at 40% `focus-visible:ring-destructive` at 20%, dark `dark:focus-visible:ring-destructive` at 40% (button.svelte:19). The label is the 60% mix in section 16 | `apps/frontend/src/lib/components/ui/button/button.svelte` |
+| Button `destructive`, disabled | overrides the base fade: `opacity: 1`, the 75% label mix and the 4% tint in section 16 (app.css:998-1002) | `apps/frontend/src/app.css` |
+| Button `link` | `text-primary` `underline-offset-4` `hover:underline` | `apps/frontend/src/lib/components/ui/button/button.svelte` |
+| Button sizes | `xs` `h-6`, `sm` `h-7`, `default` `h-8`, `lg` `h-9`, `icon` `size-8`; `xs` also sets `text-xs` and `sm` sets `text-[0.8rem]`; touch targets follow section 6 | `apps/frontend/src/lib/components/ui/button/button.svelte` |
+| Card | `bg-card` `text-card-foreground` `ring-foreground` at 10% `ring-1` `rounded-xl` `py-4` `gap-4`; size `sm` uses `data-[size=sm]:py-3` `data-[size=sm]:gap-3`; no bottom padding with a footer, no top padding under a leading image (card.svelte:18) | `apps/frontend/src/lib/components/ui/card/card.svelte` |
+| Card content | `px-4`; size `sm` uses `px-3` | `apps/frontend/src/lib/components/ui/card/card-content.svelte` |
+| Card footer | `bg-muted` at 50% `border-t` `p-4`; size `sm` uses `p-3` | `apps/frontend/src/lib/components/ui/card/card-footer.svelte` |
+| Input | enabled default `bg-transparent`, dark `dark:bg-input` at 30%; disabled fill `disabled:bg-input` at 50%, dark `dark:disabled:bg-input` at 80%, plus `disabled:opacity-50` (input.svelte:28, 41). `border-input` `rounded-lg` `h-8` `px-2.5` `text-base`, `md:text-sm` from `md`; placeholder `placeholder:text-muted-foreground`; focus `focus-visible:border-ring` `focus-visible:ring-ring` at 50% `focus-visible:ring-3`; error `aria-invalid:border-destructive`, dark `dark:aria-invalid:border-destructive` at 50%, with `aria-invalid:ring-destructive` at 20%, dark `dark:aria-invalid:ring-destructive` at 40% (input.svelte:28, 41) | `apps/frontend/src/lib/components/ui/input/input.svelte` |
+| Textarea | `border-input` `rounded-lg` `min-h-16` `px-2.5` `py-2`; background, focus, error, disabled and text sizes are the Input values (textarea.svelte:18) | `apps/frontend/src/lib/components/ui/textarea/textarea.svelte` |
+| Select trigger | resting `bg-transparent`, dark resting `dark:bg-input` at 30%, dark hover `dark:hover:bg-input` at 50% (select-trigger.svelte:20); `border-input` `rounded-lg` `text-sm` `data-[size=default]:h-8`; size `sm` uses `data-[size=sm]:h-7` and its own corner; placeholder `data-placeholder:text-muted-foreground`; focus and error are the Input values; disabled `disabled:opacity-50` with no fill change (select-trigger.svelte:20) | `apps/frontend/src/lib/components/ui/select/select-trigger.svelte` |
+| Select popup | `bg-popover` `text-popover-foreground` `ring-foreground` at 10% `rounded-lg` `shadow-md` | `apps/frontend/src/lib/components/ui/select/select-content.svelte` |
+| Select option | `data-highlighted:bg-accent` `data-highlighted:text-accent-foreground` `rounded-md` `text-sm`; focus uses the same accent pair; disabled `data-[disabled]:opacity-50` (select-item.svelte:19) | `apps/frontend/src/lib/components/ui/select/select-item.svelte` |
+| Switch, off | `background-color: var(--switch-off)`; thumb `background-color: var(--switch-off-foreground)` (app.css:929-953); disabled halves opacity (switch.svelte:19) | `apps/frontend/src/app.css` |
+| Switch, on | `background-color: var(--primary)`; thumb `background-color: var(--primary-foreground)` (app.css:946-957); disabled halves opacity (switch.svelte:19) | `apps/frontend/src/app.css` |
+| Checkbox, checked or indeterminate | `background-color: var(--primary)` `color: var(--primary-foreground)` (app.css:964-969); unchecked has its own tint (app.css:959-962); disabled halves opacity (checkbox.svelte:19) | `apps/frontend/src/app.css` |
+| Toggle, pressed | `background-color: var(--foreground)` `color: var(--background)` in hover too (app.css:979-983); unpressed is transparent (app.css:971-974); disabled halves opacity (toggle.svelte:5) | `apps/frontend/src/app.css` |
+| Labeled slider | track `bg-muted`, range `bg-primary`, thumb `border-ring` `bg-white` `size-3`; hover, focus and active add `ring-3` (LabeledSlider.svelte:84); disabled halves opacity on the root (LabeledSlider.svelte:61) | `apps/frontend/src/lib/components/custom/LabeledSlider.svelte` |
+| Progress | track `bg-muted` `h-1`, fill `bg-primary`; the package update bar shows `--primary` stripes while indeterminate (app.css:742-748) | `apps/frontend/src/lib/components/ui/progress/progress.svelte` |
+| Dialog surface | `bg-popover` `text-popover-foreground` `ring-foreground` at 10% `rounded-xl` `ring-1` by default (dialog-content.svelte:30). Fullscreen AppDialog sets `rounded-none` and `ring-0` (AppDialog.svelte:184). At 500px tall or less the corner is 0 and the dialog spans the viewport height with no height cap (app.css:1114-1130) | `apps/frontend/src/lib/components/ui/dialog/dialog-content.svelte` |
+| AppDialog, default | header `bg-card` `px-5` `py-4` with `pe-14` for the close button (AppDialog.svelte:199), footer `bg-muted` at 40% with `px-5` `py-4` and an inline bottom inset (AppDialog.svelte:244-245), body `px-5` `py-4` (AppDialog.svelte:237), desktop `sm:max-w-lg` (AppDialog.svelte:283), phone sheet `rounded-t-2xl` (AppDialog.svelte:297), height `max-h-[85svh]` (AppDialog.svelte:180) | `apps/frontend/src/lib/components/dialogs/AppDialog.svelte` |
+| AppDialog, fullscreen | `inset-0` `max-h-none` `max-w-none` `sm:max-w-none` `rounded-none` `ring-0` (AppDialog.svelte:184), and the body drops its padding (AppDialog.svelte:237) | `apps/frontend/src/lib/components/dialogs/AppDialog.svelte` |
+| AppDialog, viewport 500px tall or less | dialog `max-height: none` and `border-radius: 0`, pinned top and bottom (app.css:1121-1130); sheet `max-height: 100svh` and `border-radius: 0` (app.css:1133-1136); header `padding-top: 0.625rem` `padding-bottom: 0.625rem` (app.css:1138-1141); footer `padding-top: 0.625rem` (app.css:1145-1147) | `apps/frontend/src/app.css` |
+| Popover | `bg-popover` `ring-foreground` at 10% `w-72` `rounded-lg` `p-2.5` `shadow-md` | `apps/frontend/src/lib/components/ui/popover/popover-content.svelte` |
+| Tooltip | `bg-foreground` `text-background` `rounded-md` `px-3` `py-1.5` `text-xs` | `apps/frontend/src/lib/components/ui/tooltip/tooltip-content.svelte` |
+| Tabs list | `default` `bg-muted` `rounded-lg` `p-[3px]`; `line` overrides with `bg-transparent` `data-[variant=line]:rounded-none` | `apps/frontend/src/lib/components/ui/tabs/tabs-list.svelte` |
+| Status badge | `rounded-md` `px-2` `py-0.5` `text-xs` with `bg-status-success` at 10% `text-status-success`, and the same pair for `warning`, `error`, `info` and `neutral`; size `micro` uses `text-micro` `px-1.5`; the `error` text takes the 84% mix in section 16, or the 44% mix in a tooltip | `apps/frontend/src/lib/components/custom/Badge.svelte` |
+| Skeleton | `bg-muted` `animate-pulse` `rounded-md`; the pulse stops under reduced motion and e-ink (global rules above) | `apps/frontend/src/lib/components/ui/skeleton/skeleton.svelte` |
+| Toast, base and neutral types | `background: var(--popover)` `border-color: var(--border)` `box-shadow: var(--shadow-lg)` `border-radius: 0.625rem` | `apps/frontend/src/app.css` |
+| Toast, `success` and `warning` | their status color at 12% in `--popover`, border 42% in `--border` (app.css:878-891) | `apps/frontend/src/app.css` |
+| Toast, `error` | `--status-error` at 14% in `--popover`, border 45% in `--border` (app.css:898-901) | `apps/frontend/src/app.css` |
+| Link badge | `var(--link-${link.linkIndex + 1})`; row ordinal `text-xs font-bold tabular-nums`, compact ordinal `font-mono text-[0.7rem] leading-none` (LinkBadge.svelte:60-62) | `apps/frontend/src/lib/components/custom/LinkBadge.svelte` |
+| Network row | `px-4` `py-2`; IH-6 governs its order | `apps/frontend/src/main/network/NetworkRow.svelte` |

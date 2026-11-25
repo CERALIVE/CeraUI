@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import {
+	CerastreamConnectionError,
 	type GetCapabilitiesResult,
 	type ListDevicesResult,
 	SCHEMA_VERSION,
@@ -219,6 +220,22 @@ describe("getCapabilities — device_modes fold", () => {
 });
 
 describe("getCapabilities — list-devices tolerance", () => {
+	test("transport loss during list-devices does not publish the partial snapshot as available", async () => {
+		const result = await getCapabilities({
+			fetchEngineCapabilities: async () => ({
+				caps: makeCaps(),
+				schemaVersion: SCHEMA_VERSION,
+			}),
+			fetchEngineDevices: async () => {
+				throw new CerastreamConnectionError("control connection lost");
+			},
+			logger: silent,
+		});
+
+		expect(result.engineUnavailable).toBe(true);
+		expect(result.device_modes).toBeUndefined();
+	});
+
 	test("a throwing list-devices still emits the capabilities snapshot without device_modes", async () => {
 		const result = await getCapabilities({
 			fetchEngineCapabilities: async () => ({

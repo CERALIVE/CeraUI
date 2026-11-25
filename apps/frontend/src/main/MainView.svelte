@@ -32,6 +32,8 @@ const goHome = () => navigateTo({ live: liveNavElement });
 // (not just hidden) to avoid mounting them twice; on mobile they live in the
 // Settings destination's Appearance group instead. Mirrors AppDialog's query.
 const isDesktop = new MediaQuery(DESKTOP_CHROME_QUERY);
+let dock = $state<HTMLElement>();
+$effect(() => (dock ? publishHeight(dock, '--mobile-dock-offset') : undefined));
 
 // The header toolbar (locale + theme) needs the FULL desktop width, not just
 // desktop chrome: a short landscape panel (e.g. 800x480) can't fit the rail nav
@@ -107,6 +109,7 @@ $effect(() => (header ? publishHeight(header, '--app-header-height') : undefined
 		<!-- Mobile dock: 3-destination tab bar sitting ABOVE the persistent HUD region -->
 		{#if !isDesktop.current}
 			<div
+				bind:this={dock}
 				class="bg-background fixed inset-x-0 bottom-0 z-40"
 				style="padding-bottom: env(safe-area-inset-bottom);"
 			>

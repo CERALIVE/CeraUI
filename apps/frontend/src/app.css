@@ -149,6 +149,21 @@
 	padding: var(--space-sm);
 }
 
+/* A row's text column keeps room for a title word; on a flex-wrap row the
+   control then wraps below it instead of squeezing the description. */
+@utility text-slot {
+	min-width: 0;
+	flex: 1 1 7rem;
+}
+
+/* A full-height screen that centres its content (sign-in, first-run setup, the
+   auth check) centres it in the room pwa-status's install banner leaves while
+   it shows: `--install-banner-reserve` is the banner's published height then,
+   and unset otherwise. */
+@utility min-h-room {
+	min-height: calc(100dvh - var(--install-banner-reserve, 0px));
+}
+
 @layer base {
 	/* ── E-ink / Mono ───────────────────────────────
 	   Pure grayscale token set for reflective e-paper and 1-bit/mono
@@ -255,7 +270,9 @@
 		   on a 375x812 board capture. It is the ONE source for two things that
 		   must agree: the padding `<main>` reserves so content is not hidden
 		   under the dock, and the bottom offset the toast stack is pushed above
-		   so a toast can never own the dock's hit-test point. */
+		   so a toast can never own the dock's hit-test point. MainView also publishes
+		   the dock's measured height as `--mobile-dock-offset`, which pwa-status's
+		   install banner rests on, so the banner never owns a tab's either. */
 		--mobile-dock-height: 7rem;
 
 		/* Height of pwa-status's fixed not-connected / offline bar, which it

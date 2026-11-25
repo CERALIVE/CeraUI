@@ -443,6 +443,8 @@ test('names stay whole across the destination at 320 and 390 px', async ({ authe
 });
 
 test('Tab follows the reading order of every row, wide and on a phone', async ({ authedPage: page }) => {
+	// Its three Tab walks took 22.4 to 29.9 s of the default 30 s on eight hosted runs, and a ninth timed out twice.
+	test.setTimeout(60_000);
 	const violations: string[] = [];
 	let steps = 0;
 	for (const [locale, width, height] of [

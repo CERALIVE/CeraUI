@@ -5,6 +5,8 @@ import { logger } from "./logger.ts";
 export interface BackendShutdownDeps {
 	/** Cancels background retry owners so none starts work during teardown. */
 	readonly stopRecoveryRetries?: () => void;
+	/** Stops the engine reconnect loop, including a heal in flight. */
+	readonly stopEngineReconnect?: () => void;
 	readonly terminateWifiObservation?: () => void;
 	readonly terminateWifiDiscovery?: () => void;
 	readonly gracefulShutdown: () => Promise<void>;
@@ -16,6 +18,11 @@ export interface BackendShutdownDeps {
 }
 
 let shuttingDown = false;
+let shutdownEngineRecovery: (() => void) | undefined;
+
+export function bindEngineRecoveryShutdown(stop?: () => void): void {
+	shutdownEngineRecovery = stop;
+}
 
 async function settleCleanup(
 	name: string,
@@ -41,6 +48,7 @@ export function handleTerminationSignal(
 	if (signal === "SIGTERM" || signal === "SIGINT")
 		emitDeviceEvent("service_stopping", { signal });
 	cancelDisruptiveRetries();
+	(deps.stopEngineReconnect ?? shutdownEngineRecovery)?.();
 	deps.terminateWifiObservation?.();
 	deps.terminateWifiDiscovery?.();
 	logger.info(`received ${signal}; shutting down streaming processes`);
@@ -56,4 +64,24 @@ export function handleTerminationSignal(
 		await settleCleanup("streaming processes", deps.gracefulShutdown);
 		deps.exit(0);
 	})();
+}
+
+export function installTerminationHandlers(
+	deps: BackendShutdownDeps,
+	signals: Pick<NodeJS.Process, "on" | "off"> = process,
+): () => void {
+	const { sigterm, sigint } = terminationHandlers(deps);
+	signals.on("SIGTERM", sigterm);
+	signals.on("SIGINT", sigint);
+	return () => {
+		signals.off("SIGTERM", sigterm);
+		signals.off("SIGINT", sigint);
+	};
+}
+
+export function terminationHandlers(deps: BackendShutdownDeps) {
+	return {
+		sigterm: () => handleTerminationSignal("SIGTERM", deps),
+		sigint: () => handleTerminationSignal("SIGINT", deps),
+	};
 }

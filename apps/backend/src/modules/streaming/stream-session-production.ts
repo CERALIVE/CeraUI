@@ -8,6 +8,7 @@ import {
 	broadcastConfigChangePhase,
 	changeEngineRuntimeConfig,
 } from "./config-change-bridge.ts";
+import { requestEngineReachabilityCheck } from "./engine-control-loss.ts";
 import { queryEngineRuntimeStreaming } from "./engine-runtime-state.ts";
 import {
 	streamingBlockingMutation,
@@ -55,6 +56,7 @@ export const streamSessionProductionDeps: StreamSessionOrchestratorDeps = {
 	stopRuntime: stopGeneration,
 	retireRuntime: retireGenerationResources,
 	queryRuntime: queryEngineRuntimeStreaming,
+	onEngineUnavailable: () => requestEngineReachabilityCheck("start"),
 	seedLifecycleState: (state) => {
 		streamStartedAt = undefined;
 		seedStreamLifecycleState(state);

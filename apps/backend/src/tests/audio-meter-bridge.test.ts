@@ -74,12 +74,15 @@ function harness(connectOutcomes: boolean[], schemaVersion = "0.9.0") {
 	]);
 
 	const subscription: Subscription = {
-		result: { topics: ["audio-level"] },
+		result: { subscribed: ["audio-level"] },
 		close: () => {
 			subscriptionClosed = true;
 		},
 	};
-	const client: CerastreamClient = {
+	const unused = async (): Promise<never> => {
+		throw new Error("Unexpected RPC in audio-meter fixture");
+	};
+	const client = {
 		subscribeEvents: async (params, h) => {
 			subscribedTopics = params.topics;
 			handler = h;
@@ -88,14 +91,32 @@ function harness(connectOutcomes: boolean[], schemaVersion = "0.9.0") {
 		close: async () => {
 			clientClosed = true;
 		},
-		hello: { schema_version: schemaVersion },
+		hello: {
+			protocol: "cerastream-ipc/1",
+			engine_version: "fixture",
+			schema_version: schemaVersion,
+		},
 		rawRequest: async (_method: string, params?: unknown) => {
 			if (reloadRejects) throw new Error("reload refused (test)");
 			reloads.push(params);
 			return {};
 		},
-		// biome-ignore lint/suspicious/noExplicitAny: the bridge uses connect/subscribeEvents/close/hello/rawRequest.
-	} as any;
+		start: unused,
+		stop: unused,
+		reloadConfig: unused,
+		setBitrate: unused,
+		setAudioMix: unused,
+		requestKeyframe: unused,
+		setEdidProfile: unused,
+		listSwitchTargets: unused,
+		switchInput: unused,
+		listDevices: unused,
+		getCapabilities: unused,
+		changeConfig: unused,
+		previewSession: unused,
+	} satisfies CerastreamClient & {
+		rawRequest(method: string, params?: unknown): Promise<unknown>;
+	};
 
 	const deps: AudioMeterBridgeDeps = {
 		connect: async () => {
@@ -268,6 +289,101 @@ describe("audio-meter bridge — forwards engine audio-level over the main WS", 
 
 		h.emit(levelEvent);
 		expect(h.broadcasts).toHaveLength(0);
+	});
+
+	test("a replaced bridge closes its late connection without arming a successor retry", async () => {
+		const previous = harness([true]);
+		const successor = harness([true]);
+		const released = Promise.withResolvers<void>();
+		initAudioMeterBridge({
+			...previous.deps,
+			connect: async (options) => {
+				await released.promise;
+				return previous.deps.connect(options);
+			},
+		});
+		const obsoleteAttempt = settleAudioMeterBridge();
+		initAudioMeterBridge(successor.deps);
+		await settleAudioMeterBridge();
+
+		released.resolve();
+		await obsoleteAttempt;
+
+		expect({
+			obsoleteClientClosed: previous.state().clientClosed,
+			obsoleteSubscription: previous.state().subscribedTopics,
+			successorRetries: successor.pendingTimers(),
+		}).toEqual({
+			obsoleteClientClosed: true,
+			obsoleteSubscription: undefined,
+			successorRetries: 0,
+		});
+	});
+
+	test("a dequeued retry cannot reconnect a replacement bridge", async () => {
+		const previous = harness([false]);
+		const successor = harness([true]);
+		const retry = Promise.withResolvers<() => void>();
+		const successorDials: number[] = [];
+		initAudioMeterBridge({
+			...previous.deps,
+			setTimer: (callback, delay) => {
+				retry.resolve(callback);
+				return previous.deps.setTimer(callback, delay);
+			},
+		});
+		await settleAudioMeterBridge();
+		const dequeued = await retry.promise;
+		initAudioMeterBridge({
+			...successor.deps,
+			connect: (options) => {
+				successorDials.push(1);
+				return successor.deps.connect(options);
+			},
+		});
+		await settleAudioMeterBridge();
+
+		dequeued();
+		await settleAudioMeterBridge();
+
+		expect(successorDials).toHaveLength(1);
+	});
+
+	test("a queued level from the closed bridge cannot publish through its replacement", async () => {
+		const previous = harness([true]);
+		const successor = harness([true]);
+		initAudioMeterBridge(previous.deps);
+		await settleAudioMeterBridge();
+		initAudioMeterBridge(successor.deps);
+		await settleAudioMeterBridge();
+
+		previous.emit(levelEvent);
+
+		expect(successor.broadcasts).toEqual([]);
+	});
+
+	test("a dequeued frame watchdog cannot reload the successor's meter preference", async () => {
+		const previous = harness([true]);
+		const successor = harness([true]);
+		const expiry = Promise.withResolvers<() => void>();
+		initAudioMeterBridge({
+			...previous.deps,
+			setTimer: (callback, delay) => {
+				if (delay === AUDIO_METER_FRAME_ABSENCE_MS) expiry.resolve(callback);
+				return previous.deps.setTimer(callback, delay);
+			},
+		});
+		await settleAudioMeterBridge();
+		previous.emit(levelEvent);
+		const dequeued = await expiry.promise;
+		initAudioMeterBridge(successor.deps);
+		await settleAudioMeterBridge();
+
+		dequeued();
+
+		expect(successor.reloads).toEqual([
+			{ audio: { meter_device: "hw:CARD=usbaudio" } },
+		]);
 	});
 });
 

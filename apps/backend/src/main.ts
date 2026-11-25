@@ -37,7 +37,7 @@ import { checkExecPath } from "./helpers/exec.ts";
 import killall from "./helpers/killall.ts";
 import { logger } from "./helpers/logger.ts";
 // allow: SIZE_OK — Sequential boot composition root; ordering and signal wiring are pinned by boot contract tests.
-import { handleTerminationSignal } from "./helpers/shutdown.ts";
+import { terminationHandlers } from "./helpers/shutdown.ts";
 import { notifyServiceReady } from "./helpers/systemd-ready.ts";
 import { isDevelopment } from "./mocks/mock-config.ts";
 import {
@@ -725,38 +725,22 @@ function stopRecoveryRetries(): void {
 	stopMutationRecovery();
 	stopLegacyTokenMigration();
 }
-process.on("SIGTERM", () =>
-	handleTerminationSignal("SIGTERM", {
-		stopRecoveryRetries,
-		terminateWifiObservation: () => {
-			stopWifiAdapterModeRestore();
-			wifiRadioObservation.terminate();
-		},
-		terminateWifiDiscovery,
-		gracefulShutdown,
-		stopSrtIngest: stopSRTIngest,
-		stopDmesgWatchers,
-		stopUplinkShaper,
-		stopGatewayRoutes,
-		exit: process.exit,
-	}),
-);
-process.on("SIGINT", () =>
-	handleTerminationSignal("SIGINT", {
-		stopRecoveryRetries,
-		terminateWifiObservation: () => {
-			stopWifiAdapterModeRestore();
-			wifiRadioObservation.terminate();
-		},
-		terminateWifiDiscovery,
-		gracefulShutdown,
-		stopSrtIngest: stopSRTIngest,
-		stopDmesgWatchers,
-		stopUplinkShaper,
-		stopGatewayRoutes,
-		exit: process.exit,
-	}),
-);
+const termination = terminationHandlers({
+	stopRecoveryRetries,
+	terminateWifiObservation: () => {
+		stopWifiAdapterModeRestore();
+		wifiRadioObservation.terminate();
+	},
+	terminateWifiDiscovery,
+	gracefulShutdown,
+	stopSrtIngest: stopSRTIngest,
+	stopDmesgWatchers,
+	stopUplinkShaper,
+	stopGatewayRoutes,
+	exit: process.exit,
+});
+process.on("SIGTERM", termination.sigterm);
+process.on("SIGINT", termination.sigint);
 
 logger.info(bootTimer.phase("▶️", "autostart & reconciler"));
 

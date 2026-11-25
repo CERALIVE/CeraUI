@@ -2251,6 +2251,7 @@
 	"pwa.installAndroidMenuDescription": "Usa el menú del navegador para \"Agregar a pantalla de inicio\"",
 	"pwa.installButton": "Instalar",
 	"pwa.installDescription": "Agregar a la pantalla de inicio para una mejor experiencia",
+	"pwa.installIosBeforeShare": "Toca",
 	"pwa.installIosDescription": "luego \"Agregar a pantalla de inicio\"",
 	"pwa.installIosGotIt": "Entendido",
 	"pwa.installLater": "Más tarde",

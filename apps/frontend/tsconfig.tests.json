@@ -1,0 +1,11 @@
+{
+	"extends": "./tsconfig.app.json",
+	"compilerOptions": {
+		"composite": false,
+		"noEmit": true,
+		// Resolve Vitest's transitive types through Bun's real package paths.
+		"preserveSymlinks": false
+	},
+	"files": ["src/main/LiveView.engine-restart.test.ts"],
+	"include": ["src/**/*.d.ts"]
+}

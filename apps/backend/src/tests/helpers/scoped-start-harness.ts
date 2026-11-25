@@ -69,6 +69,7 @@ export async function launchHarness(scenario: Scenario) {
 		retryPolicy: {
 			maxAttempts:
 				scenario === "deadline" ||
+				scenario === "foreign-deadline" ||
 				scenario === "negotiation-deadline" ||
 				scenario === "legacy-deadline"
 					? 1

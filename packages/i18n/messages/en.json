@@ -2237,6 +2237,7 @@
 	"pwa.installAndroidMenuDescription": "Use browser menu to \"Add to Home Screen\"",
 	"pwa.installButton": "Install",
 	"pwa.installDescription": "Add to home screen for better experience",
+	"pwa.installIosBeforeShare": "Tap",
 	"pwa.installIosDescription": "then \"Add to Home Screen\"",
 	"pwa.installIosGotIt": "Got it",
 	"pwa.installLater": "Later",

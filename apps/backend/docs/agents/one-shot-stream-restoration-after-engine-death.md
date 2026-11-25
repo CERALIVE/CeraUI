@@ -112,10 +112,11 @@ racing a competing timer against it would report a healthy-but-slow start as a
 failure.
 
 **THREE TRIGGERS, ONE SELF-SERIALISING RUN**: the engine-loss retirement
-(`cerastream-backend.ts` — the only seam that sees a SIGKILLed engine come back,
-because `engine-reconnect.ts` settles at boot and never re-arms), backend boot
-(`main.ts`, immediately AFTER `reconcileStreamSession()` so adoption has already
-happened), and the engine-reconnect heal. A second caller JOINS the in-flight run.
+(`cerastream-backend.ts`, after revoking and retiring the local session; the
+post-loss availability loop can observe unresolved lifecycle but does not run
+restoration), backend boot (`main.ts`, immediately AFTER `reconcileStreamSession()`
+so adoption has already happened), and the engine-reconnect BOOT heal. A second
+caller JOINS the in-flight run.
 
 **It does NOT move todo 22's `last_streamed_source` slot.** Restoration re-runs
 the configuration that was already live, and `noteStreamedSourceCommitted` is

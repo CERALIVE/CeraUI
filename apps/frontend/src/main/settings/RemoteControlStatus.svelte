@@ -52,11 +52,11 @@ const dotColor = $derived(
 	<span class="bg-secondary text-foreground grid size-9 shrink-0 place-items-center rounded-lg">
 		<Icon class="size-[18px]" />
 	</span>
-	<span class="min-w-0 flex-1">
+	<span class="text-slot">
 		<span class="flex items-center gap-2">
 			<span class="size-2 shrink-0 rounded-full" style:background-color={dotColor}></span>
-			<span class="block truncate text-sm font-semibold">{label}</span>
+			<span class="block text-sm font-semibold">{label}</span>
 		</span>
-		<span class="text-muted-foreground block truncate text-xs">{hint}</span>
+		<span class="text-muted-foreground block text-xs">{hint}</span>
 	</span>
 </div>

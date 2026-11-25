@@ -447,9 +447,11 @@ const tiers = $derived(partitionSignals(signals));
 				data-policy-count={row.policyIds.length}
 				data-testid={`cpufreq-policy-${row.key}`}
 			>
-				<span class="flex items-baseline justify-between gap-2 text-xs">
+				<!-- Wraps the reading below the name on a narrow card: the name is the
+				     only place this cluster is identified, so it never truncates. -->
+				<span class="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5 text-xs">
 					<span class="flex min-w-0 items-baseline gap-1.5">
-						<span class="text-muted-foreground truncate">
+						<span class="text-muted-foreground">
 							{row.name}{#if row.named && row.cpuCount !== undefined}&nbsp;&times;{row.cpuCount}{/if}
 						</span>
 						{#if row.governor}
@@ -461,7 +463,7 @@ const tiers = $derived(partitionSignals(signals));
 						{/if}
 					</span>
 					<span
-						class="text-foreground shrink-0 font-mono tabular-nums"
+						class="text-foreground ms-auto shrink-0 font-mono tabular-nums"
 						data-testid={`cpufreq-policy-value-${row.key}`}
 					>{cpuFreqReading(row)}</span>
 				</span>
@@ -518,7 +520,9 @@ const tiers = $derived(partitionSignals(signals));
 				>
 					<span class="text-muted-foreground flex items-center gap-1.5 text-xs">
 						<TileIcon aria-hidden={true} class="size-3.5 shrink-0" />
-						<span class="truncate">{signal.label}</span>
+						<!-- A half-width tile on a narrow phone is narrower than some single
+						     words ("Arbeitsspeicher"): hyphenate, and break as a last resort. -->
+						<span class="min-w-0 hyphens-auto wrap-break-word">{signal.label}</span>
 					</span>
 					{#if signal.body}
 						{@render signal.body()}
@@ -564,8 +568,10 @@ const tiers = $derived(partitionSignals(signals));
 			<div class="divide-border divide-y border-t" data-testid="device-stats-secondary">
 				{#each tiers.secondary as signal (signal.key)}
 					{const RowIcon = $derived(signal.icon)}
+					<!-- Wraps so a reading wider than the row moves below its label instead
+					     of running past the card's clipped edge with its interface. -->
 					<div
-						class="flex w-full items-baseline gap-2 px-4 py-2"
+						class="flex w-full flex-wrap items-baseline gap-x-2 gap-y-0.5 px-4 py-2"
 						data-testid={`device-stat-${signal.key}`}
 						data-tier="secondary"
 						{...signal.attrs ?? {}}

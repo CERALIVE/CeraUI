@@ -2,17 +2,6 @@
 
 ## SESSION CONTROL CONNECTION — A DROP *IS* A SESSION BOUNDARY [EXISTS]
 
-**Current contract:** transport loss ends CeraUI's ownership of its control
-client, subscription, runtime evidence, telemetry and sender resources. It
-does not prove process exit or remote Idle. The engine may keep streaming
-after a socket closes, and its hello and session ID do not identify a process
-instance. The loss path sends no Stop; it fences Start and OTA until fresh
-runtime evidence settles liveness. The existing marker may restore a stream
-only after affirmative Idle. Explicit operator Stop is unchanged. Ambiguous
-in-flight Start cleanup remains a separate attempt-scoped cancellation problem.
-
-### Historical diagnosis (before local-only retirement)
-
 The exact inverse of the rule above, for a different connection. Read both
 together: the same event (a socket closing) carries opposite authority depending
 on what the socket is FOR.
@@ -42,31 +31,35 @@ minutes.
    a fresh `streaming.start` was inadmissible; forced through, an engine with no
    memory of the session answered an RPC error classified `engine_internal`.
 
-`engine-reconnect.ts` does NOT cover this: it SETTLES (`state.stopped = true`)
-once the engine is reachable at boot and never re-arms, and it heals the
-capability probe — a short-lived connection — not a session's dedicated one.
+`engine-reconnect.ts` heals availability, not the lost socket. A proven session
+loss re-arms it through the shared engine-control loss seam.
 
-**The rule.** cerastream is systemd-owned (ADR-0005), so a dropped control
-connection means the process CeraUI was driving went away; a restarted engine has
-no memory of the session, and the client cannot re-establish one. The socket is
-the ONLY handle on the engine-side pipeline, so losing it retires the session.
+**The rule.** A dropped control connection retires the local session handle.
+It does not prove process exit: cerastream can keep streaming after a client
+disconnects. Actual process exit ends its in-process session. The binding's
+hello reports build and protocol versions, not a process-instance identity;
+neither a successful dial nor a matching `cs-N` proves ownership.
 
 `noteConnectionLoss(client, error, site)` is the single seam. It acts only on
 PROOF — a `CerastreamConnectionError` from the client we are STILL holding, for a
 session we still believe is `active`. An engine RPC error, a request timeout, a
 rejection from an already-superseded client, and our own `stop()`'s close (which
-clears `active` first) are all deliberately NOT proof.
+clears `active` first) are all deliberately NOT proof. The packaged 90 s
+systemd watchdog applies when engine watchdog notifications cease. It is not a
+promise that every unresponsive socket leads to process exit.
 
 | Concern | Rule |
 |---------|------|
-| Detection (proactive) | `listDevicesIfActive()` — the device registry re-polls it every couple of seconds for the whole session, so it is the first call to touch a dead socket. **No watchdog timer**, so nothing can mis-fire on a missed heartbeat. |
+| Detection (proactive) | The device registry checks the active client with `listDevicesIfActive()`. The availability owner also checks the control plane when idle; neither infers session state from a missed heartbeat. |
 | Detection (on demand) | `withSessionClient(site, op)` wraps every session-scoped RPC; the caller still receives its ORIGINAL error, this only adds the missing state change. `handleOpFailure` covers the queued ops. |
-| Order | The dead client is dropped FIRST (see cause 2 above), with the subscription and telemetry, then `bridge.broadcastStatus()`. |
-| `active` | Deliberately LEFT SET, so `stop()` still recognises the session it must tear down — clearing it makes `stop()` return `false` and trips `reportSessionInvariant`. |
-| Reaction | `deps.onSessionConnectionLost(site)`. Production wiring raises the EXISTING `engine-crashed` lifecycle indicator (before the stop, since the reporter is gated on `isStreaming`), then retires the session via `stopStreamSession()` — its single owner. Fire-and-forget: it runs inside a rejected RPC's catch and must never replace the caller's error. |
+| Order | Revoke local client ownership, retire its subscription, evidence and telemetry, close the client, and publish the change. |
+| Reaction | `deps.onSessionConnectionLost` raises the existing loss indicator and retires the generation's local sender, listeners and telemetry. No Stop is sent. The launch and OTA fence stays in place until fresh lifecycle evidence settles it. |
 
-Net effect: the board lands in a real `idle` and the next `streaming.start` dials
-a fresh connection and succeeds — no `ceralive.service` restart.
+One-shot restoration still requires its armed marker and affirmative fresh Idle.
+A fresh Streaming report adopts the running stream without restarting it. Silence
+does not allow a new Start or remove the OTA fence.
+After availability heals, separate read-only reconciliation keeps checking an
+unresolved loss until it sees authoritative state or operator intent takes over.
 
 **STOP uses a second connection, and success means engine Idle.** The IPC server
 dispatches at most one request per connection. Reusing the session client for
@@ -90,10 +83,9 @@ the eventual truth. Coverage:
 the independent stop acknowledgement; `tests/cerastream-stop-deadline.test.ts`
 drives both late-connect and unacknowledged-RPC expiry.
 
-**Scoped OUT, deliberately:** there is no transparent mid-session reconnect that
-resumes the running stream. It is not achievable against this engine — a
-restarted cerastream has no session to resume — and would need engine-side
-session recovery first. The stream ends; the operator restarts it.
+**Scoped OUT, deliberately:** ambiguous in-flight Start rollback and its outer
+deadline need attempt-scoped cancellation. A process restart does not resume
+an old engine graph; observation or marker-authorized restoration is separate.
 
 Coverage: `tests/engine-session-connection-loss.test.ts` (dead-connection
 `switchInput` retires once and only once, the registry poll detects it with no

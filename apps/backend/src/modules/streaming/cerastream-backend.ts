@@ -93,6 +93,7 @@ import {
 	SCHEMA_VERSION,
 	type SetAudioMixParams,
 	type SetAudioMixResult,
+	STATUS_SNAPSHOT_FEATURE,
 	type StartParams,
 	type Subscription,
 	type SwitchAudioParams,
@@ -152,6 +153,11 @@ import { SRTLA_LISTEN_PORT } from "./constants.ts";
 import { deviceRegistry } from "./devices.ts";
 import { isEmbeddedAudioPipeline } from "./embedded-audio.ts";
 import { validateBitrate } from "./encoder.ts";
+import {
+	closeEngineControl,
+	isEngineControlLoss,
+	reportEngineControlLoss,
+} from "./engine-control-loss.ts";
 import {
 	classifyRuntimeState,
 	currentRuntimeObservationOwner,
@@ -255,6 +261,10 @@ export interface CerastreamBackendDeps {
 	// Called at most ONCE per session, when the session's control connection is
 	// PROVEN dead (see the module header). `site` names the call that found it.
 	onSessionConnectionLost: (site: string) => void;
+	// Called once per proven loss of the session's control connection, after
+	// `onSessionConnectionLost`, so the reconnect loop keeps asking the engine
+	// until it answers again. Defaults to re-arming the engine reconnect loop.
+	onEngineUnreachable?: (site: string) => void;
 	onConfigChangePhase?: (event: {
 		attemptId: string;
 		phase: ConfigChangePhase;
@@ -594,11 +604,11 @@ function defaultOnSessionConnectionLost(
 				"cerastream: engine session retired after a control-connection loss",
 				{ site },
 			);
-			// The engine-loss retirement IS the reconnect event for a SIGKILLed
-			// engine: the reconnect loop settled at boot and never re-arms, so
-			// nothing else notices systemd bringing cerastream back. The run polls
-			// for an authoritative runtime state and is self-serialising, so a
-			// second loss cannot start a second one.
+			// The engine-loss retirement is the restoration trigger for a SIGKILLed
+			// engine: the reconnect loop this loss re-arms only republishes engine
+			// availability and never restores. The run polls for an authoritative
+			// runtime state and is self-serialising, so a second loss cannot start
+			// a second one.
 			const { runStreamRestoration } = await import("./stream-restoration.ts");
 			if (current()) void runStreamRestoration();
 		} catch (err) {
@@ -608,6 +618,22 @@ function defaultOnSessionConnectionLost(
 			);
 		}
 	})();
+}
+
+/**
+ * Keep asking the engine after a proven loss, so the capability snapshot the
+ * loss invalidated is refreshed (and broadcast) once systemd brings it back.
+ * Resolves once the reconnect loop has been told (test seam).
+ */
+export function defaultOnEngineUnreachable(site: string): Promise<void> {
+	return import("./engine-reconnect.ts")
+		.then(({ rearmEngineReconnect }) => rearmEngineReconnect(site))
+		.catch((err) => {
+			defaultLogger.error("cerastream: could not re-arm the engine reconnect", {
+				site,
+				err,
+			});
+		});
 }
 
 function defaultCerastreamBackendDeps(
@@ -1029,7 +1055,7 @@ export class CerastreamBackend implements StreamingBackend {
 		try {
 			await Promise.race([
 				Promise.resolve()
-					.then(() => client.close())
+					.then(() => closeEngineControl(client))
 					.catch((error: unknown) => {
 						this.deps.logger.debug(
 							"cerastream: control socket already closing",
@@ -1223,7 +1249,7 @@ export class CerastreamBackend implements StreamingBackend {
 			this.clientEpoch === adoptedEpoch;
 		const observationOwner = currentRuntimeObservationOwner();
 		const uncertainStatus = currentRuntimeObservationUncertainty();
-		const ownsQuery = () =>
+		const ownsProbe = () =>
 			observationOwner() &&
 			this.probeEpoch === probeEpoch &&
 			this.clientEpoch === clientEpoch;
@@ -1233,20 +1259,27 @@ export class CerastreamBackend implements StreamingBackend {
 				autoReconnect: false,
 				requestTimeoutMs: ENGINE_STATE_RECONCILE_TIMEOUT,
 			});
-			if (!ownsQuery()) {
+			if (!ownsProbe()) {
 				await client.close();
 				return "unknown";
 			}
+			const capabilities = await client.getCapabilities();
+			if (!ownsProbe()) {
+				await client.close();
+				return "unknown";
+			}
+			// The first status subscription fixes this socket's mode.
+			const snapshot = capabilities.features?.includes(STATUS_SNAPSHOT_FEATURE);
 			let latestStatus: Extract<EventParams, { type: "status" }> | undefined;
 			const observed = Promise.withResolvers<void>();
 			subscription = await client.subscribeEvents(
-				{ topics: ["status"] },
+				{ topics: ["status"], ...(snapshot ? { snapshot: true } : {}) },
 				(event) => {
 					if (adopted) {
 						if (ownsSession()) this.handleEvent(event, ownsSession);
 						return;
 					}
-					if (!acceptingEvents || !ownsQuery() || event.type !== "status")
+					if (!acceptingEvents || !ownsProbe() || event.type !== "status")
 						return;
 					// A socket read can deliver several frames before the waiter resumes.
 					// The temporary subscription observes; only settlement can publish.
@@ -1254,7 +1287,7 @@ export class CerastreamBackend implements StreamingBackend {
 					observed.resolve();
 				},
 			);
-			if (!ownsQuery()) {
+			if (!ownsProbe()) {
 				subscription.close();
 				await client.close();
 				return "unknown";
@@ -1270,9 +1303,9 @@ export class CerastreamBackend implements StreamingBackend {
 				status === undefined
 					? "unknown"
 					: classifyRuntimeState(status.state, status.streaming);
-			if (ownsQuery() && status !== undefined && runtimeState === "unknown")
+			if (ownsProbe() && status !== undefined && runtimeState === "unknown")
 				uncertainStatus();
-			if (ownsQuery() && status !== undefined && runtimeState === "streaming") {
+			if (ownsProbe() && status !== undefined && runtimeState === "streaming") {
 				beginCapabilitiesEpoch();
 				this.client = client;
 				adoptedEpoch = ++this.clientEpoch;
@@ -1284,11 +1317,15 @@ export class CerastreamBackend implements StreamingBackend {
 			}
 			subscription?.close();
 			await client.close();
-			if (!ownsQuery()) return "unknown";
+			if (!ownsProbe()) return "unknown";
 			if (runtimeState === "idle") this.clearSessionScopedTelemetry();
 			return runtimeState;
 		} catch (error) {
 			acceptingEvents = false;
+			reportEngineControlLoss(error, {
+				site: "runtime-state",
+				current: ownsProbe,
+			});
 			subscription?.close();
 			await client?.close();
 			this.deps.logger.debug("cerastream: runtime-state query unresolved", {
@@ -1307,7 +1344,7 @@ export class CerastreamBackend implements StreamingBackend {
 	 * spawns or stops the engine. A protocol-major mismatch surfaces here as
 	 * `protocol_incompatible` instead of waiting for the first stream to fail.
 	 */
-	async probeEngine(): Promise<EngineProbe> {
+	async probeEngine(transportOnly = false): Promise<EngineProbe> {
 		let client: CerastreamClient | undefined;
 		try {
 			client = await this.deps.connect(this.deps.connectOptions);
@@ -1325,6 +1362,8 @@ export class CerastreamBackend implements StreamingBackend {
 				schemaVersion: hello.schema_version,
 			};
 		} catch (err) {
+			if (transportOnly && !isEngineControlLoss(err))
+				return { status: "error", detail: probeErrorMessage(err) };
 			return classifyEngineProbeError(err);
 		} finally {
 			try {
@@ -1793,7 +1832,7 @@ export class CerastreamBackend implements StreamingBackend {
 		error: unknown,
 		site: string,
 	): void {
-		if (!(error instanceof CerastreamConnectionError)) return;
+		if (!isEngineControlLoss(error, client)) return;
 		if (client === undefined || client !== this.client) return;
 		if (!this.active) return;
 		invalidateCapabilities();
@@ -1809,13 +1848,16 @@ export class CerastreamBackend implements StreamingBackend {
 		this.client = undefined;
 		this.clientEpoch++;
 		this.audioMixInputs = undefined;
+		this.runtimeEvidence = undefined;
+		this.telemetry = null;
 		subscription?.close();
 		this.clearRecoveredEngineError();
 		void this.closeWithinDeadline(client);
-		this.runtimeEvidence = undefined;
-		this.telemetry = null;
 		this.deps.bridge.broadcastStatus();
 		this.deps.onSessionConnectionLost(site);
+		if (this.deps.onEngineUnreachable !== undefined)
+			this.deps.onEngineUnreachable(site);
+		else reportEngineControlLoss(error, { site });
 	}
 
 	/**

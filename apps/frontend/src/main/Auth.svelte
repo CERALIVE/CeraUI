@@ -206,7 +206,7 @@ async function onSubmit(event: SubmitEvent) {
 </script>
 
 <!-- clip, not hidden: a hidden box is still a scroll container that a script can slide sideways -->
-<div class="bg-background relative grid min-h-dvh place-items-center overflow-clip px-4 py-12">
+<div class="bg-background relative grid min-h-room place-items-center overflow-clip px-4 py-12">
 	<!-- Instrument ambiance: a single faint phosphor glow, not glassmorphism -->
 	<div aria-hidden="true" class="pointer-events-none absolute inset-0">
 		<div

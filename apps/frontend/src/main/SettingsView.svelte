@@ -325,19 +325,19 @@ $effect(() => {
 				<section class="space-y-2.5" data-testid="settings-appearance">
 					<h2 class="text-muted-foreground px-1 text-sm font-medium">{m["settings.appearance.title"]()}</h2>
 					<div class="divide-border bg-card divide-y overflow-hidden rounded-xl border">
-						<div class="flex w-full items-center gap-4 px-4 py-3.5">
+						<div class="flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5">
 							<span
 								class="bg-secondary text-foreground grid size-9 shrink-0 place-items-center rounded-lg"
 							>
 								<Languages class="size-[18px]" />
 							</span>
-							<span class="min-w-0 flex-1">
-								<span class="block truncate text-sm font-semibold">{m["settings.appearance.language"]()}</span>
-								<span class="text-muted-foreground block truncate text-xs"
+							<span class="text-slot">
+								<span class="block text-sm font-semibold">{m["settings.appearance.language"]()}</span>
+								<span class="text-muted-foreground block text-xs"
 									>{m["settings.appearance.languageDesc"]()}</span
 								>
 							</span>
-							<span class="shrink-0" data-testid="settings-locale-selector">
+							<span class="ms-auto shrink-0" data-testid="settings-locale-selector">
 								<LocaleSelector />
 							</span>
 						</div>
@@ -347,9 +347,9 @@ $effect(() => {
 							>
 								<Palette class="size-[18px]" />
 							</span>
-							<span class="min-w-0 flex-1">
-								<span class="block truncate text-sm font-semibold">{m["settings.appearance.theme"]()}</span>
-								<span class="text-muted-foreground block truncate text-xs"
+							<span class="text-slot">
+								<span class="block text-sm font-semibold">{m["settings.appearance.theme"]()}</span>
+								<span class="text-muted-foreground block text-xs"
 									>{m["settings.appearance.themeDesc"]()}</span
 								>
 							</span>
@@ -371,9 +371,9 @@ $effect(() => {
 								<span class="bg-secondary text-foreground grid size-9 shrink-0 place-items-center rounded-lg">
 									<Rocket class="size-[18px]" />
 								</span>
-								<span class="min-w-0 flex-1">
-									<span class="block truncate text-sm font-semibold">{m["settings.index.autostart"]()}</span>
-									<span class="text-muted-foreground block truncate text-xs">{m["settings.index.autostartDesc"]()}</span>
+								<span class="text-slot">
+									<span class="block text-sm font-semibold">{m["settings.index.autostart"]()}</span>
+									<span class="text-muted-foreground block text-xs">{m["settings.index.autostartDesc"]()}</span>
 								</span>
 								<span class="shrink-0">
 									<AsyncSwitch
@@ -385,6 +385,9 @@ $effect(() => {
 								</span>
 							</div>
 						{/if}
+						<!-- Row titles and descriptions wrap instead of truncating: at 390 px a
+						     one-line description cut most of them mid-sentence ("Set the password
+						     used to access this d…"), and at 320 px titles lost their last word. -->
 						{#each group.entries as entry (entry.key)}
 							{const EntryIcon = $derived(entry.icon)}
 							<button
@@ -406,9 +409,9 @@ $effect(() => {
 								>
 									<EntryIcon class="size-[18px]" />
 								</span>
-								<span class="min-w-0 flex-1">
-									<span class="block truncate text-sm font-semibold">{entry.title}</span>
-									<span class="text-muted-foreground block truncate text-xs">{entry.desc}</span>
+								<span class="text-slot">
+									<span class="block text-sm font-semibold">{entry.title}</span>
+									<span class="text-muted-foreground block text-xs">{entry.desc}</span>
 								</span>
 								{#if entry.destructive}
 									<span

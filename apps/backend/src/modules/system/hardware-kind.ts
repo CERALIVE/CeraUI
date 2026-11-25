@@ -313,10 +313,12 @@ export function getHardwareKindTier(): HardwareKindTier | undefined {
  */
 export async function getHardwareKind(
 	overrides: Partial<HardwareKindResolveDeps> = {},
+	current: () => boolean = () => true,
 ): Promise<HardwareKind> {
 	const deps: HardwareKindResolveDeps = { ...defaultDeps(), ...overrides };
 
 	const resolved = await resolveHardwareKind(deps);
+	if (!current()) return resolved.kind;
 
 	const previous = cached;
 	if (

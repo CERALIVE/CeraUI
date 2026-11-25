@@ -50,8 +50,12 @@ import {
 	normalizeBitrateRangeToKbps,
 	normalizeFramerateToRung,
 } from "@ceraui/rpc/schemas";
-
 import { logger as defaultLogger } from "../../helpers/logger.ts";
+import {
+	closeEngineControl,
+	isEngineControlLoss,
+	reportEngineControlLoss,
+} from "./engine-control-loss.ts";
 
 /**
  * The capability snapshot the UI consumes. It is the engine's
@@ -214,6 +218,7 @@ async function defaultFetchEngineCapabilities(
 		: {};
 
 	let client: CerastreamClient | undefined = sessionClient;
+	const epoch = capabilityEpoch;
 	try {
 		client ??= await connect(connectOptions);
 		const schemaVersion = client.hello.schema_version;
@@ -237,10 +242,17 @@ async function defaultFetchEngineCapabilities(
 				? { network_embedded_audio }
 				: {}),
 		};
+	} catch (error) {
+		if (sessionClient === undefined)
+			reportEngineControlLoss(error, {
+				site: "get-capabilities",
+				current: () => epoch === capabilityEpoch,
+			});
+		throw error;
 	} finally {
 		if (sessionClient === undefined) {
 			try {
-				await client?.close();
+				if (client !== undefined) await closeEngineControl(client);
 			} catch {
 				// Best-effort disconnect of a probe connection; never respawns the engine.
 			}
@@ -273,12 +285,19 @@ export async function defaultFetchEngineDevices(): Promise<ListDevicesResult> {
 		: {};
 
 	let client: CerastreamClient | undefined;
+	const epoch = capabilityEpoch;
 	try {
 		client = await connect(connectOptions);
 		return await client.listDevices();
+	} catch (error) {
+		reportEngineControlLoss(error, {
+			site: "list-devices",
+			current: () => epoch === capabilityEpoch,
+		});
+		throw error;
 	} finally {
 		try {
-			await client?.close();
+			if (client !== undefined) await closeEngineControl(client);
 		} catch {
 			// Best-effort disconnect of a probe connection; never respawns the engine.
 		}
@@ -361,6 +380,7 @@ async function resolveDeviceModes(
 		const devices = await deps.fetchEngineDevices();
 		return devices === undefined ? undefined : foldDeviceModes(devices);
 	} catch (err) {
+		if (isEngineControlLoss(err)) throw err;
 		deps.logger.warn(
 			"capabilities: list-devices failed; broadcasting capabilities without device_modes",
 			{ err },
@@ -425,6 +445,7 @@ export async function refreshCapabilitiesFromClient(
  */
 export async function getCapabilities(
 	overrides: Partial<CapabilitiesServiceDeps> = {},
+	current: () => boolean = () => true,
 ): Promise<CapabilitiesResult> {
 	const deps: CapabilitiesServiceDeps = { ...defaultDeps(), ...overrides };
 	const epoch = capabilityEpoch;
@@ -458,7 +479,7 @@ export async function getCapabilities(
 			},
 		};
 		const deviceModes = await resolveDeviceModes(deps);
-		if (epoch !== capabilityEpoch) return retainedCapabilities();
+		if (!current() || epoch !== capabilityEpoch) return retainedCapabilities();
 		lastKnownGood = caps;
 		lastTransports = deriveTransports(transports);
 		lastNetworkEmbeddedAudio = networkEmbeddedAudio;
@@ -475,7 +496,7 @@ export async function getCapabilities(
 		acceptedCapabilityEpoch = epoch;
 		return lastCapabilities;
 	} catch (err) {
-		if (epoch !== capabilityEpoch) return retainedCapabilities();
+		if (!current() || epoch !== capabilityEpoch) return retainedCapabilities();
 		if (lastKnownGood) {
 			deps.logger.warn(
 				"capabilities: engine unavailable; serving last-known-good snapshot",

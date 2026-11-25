@@ -2293,6 +2293,7 @@
 	"pwa.installAndroidMenuDescription": "استخدم قائمة المتصفح لـ \"إضافة إلى الشاشة الرئيسية\"",
 	"pwa.installButton": "تثبيت",
 	"pwa.installDescription": "إضافة إلى الشاشة الرئيسية لتجربة أفضل",
+	"pwa.installIosBeforeShare": "اضغط على",
 	"pwa.installIosDescription": "ثم \"إضافة إلى الشاشة الرئيسية\"",
 	"pwa.installIosGotIt": "فهمت",
 	"pwa.installLater": "لاحقاً",
