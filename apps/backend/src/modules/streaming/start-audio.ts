@@ -1,11 +1,16 @@
+import { audioMixWithPrimary } from "@ceraui/rpc/schemas";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import { getConfig } from "../config.ts";
 import type { ArmedStreamConfig } from "./armed-stream-marker.ts";
 import {
+	audioAddressForIdentity,
 	audioIdentitySuccessor,
+	livePhysicalAudioIds,
 	NO_AUDIO_ID,
 	refreshBluetoothAudioDevices,
 } from "./audio.ts";
+import { audioInputEngineId, effectiveAudioInputs } from "./audio-inputs.ts";
+import { getLastCapabilities } from "./capabilities.ts";
 
 // The audio fields a Start request may save.
 const audioSaves = { asrc: 0, audio_inputs: 0, acodec: 0, delay: 0 };
@@ -30,9 +35,10 @@ interface StartAudioRequest {
 export interface StartAudio {
 	/**
 	 * The audio configuration the Start was pressed with, for every launch of it. A
-	 * microphone that re-enumerated since is named by the id it has now.
+	 * known microphone keeps its accepted key until the launch resolves its identity.
 	 */
 	readonly config: StartAudioConfig;
+	readonly physicalIds: ReadonlyMap<string, string>;
 	/** The saved pick at the press: it needs no device to be present yet. */
 	readonly savedAsrc: string | undefined;
 	/**
@@ -60,6 +66,7 @@ export function audioBackendInUse(): RuntimeConfig["audio_backend"] {
 export function acceptStartAudio(
 	request: StartAudioRequest = {},
 	saved: Pick<RuntimeConfig, StartAudioField> = getConfig(),
+	recordedIds?: ReadonlyMap<string, string>,
 ): StartAudio {
 	const savedAsrc = saved.asrc;
 	const saves = { ...audioSaves };
@@ -71,14 +78,27 @@ export function acceptStartAudio(
 		delay: request.delay ?? saved.delay,
 		audio_backend: saved.audio_backend,
 	});
+	const physicalIds = new Map<string, string>();
+	const roster = recordedIds ?? livePhysicalAudioIds();
+	for (const id of [
+		pressed.asrc,
+		...(pressed.audio_inputs?.map(({ id }) => id) ?? []),
+	]) {
+		if (id === undefined) continue;
+		const stableId = roster.get(id);
+		if (stableId !== undefined) physicalIds.set(id, stableId);
+	}
+	const legacySuccessor = (id: string) =>
+		physicalIds.has(id) ? undefined : audioIdentitySuccessor(id);
 	const startAudio: StartAudio = {
+		physicalIds,
 		get config() {
 			const { asrc, audio_inputs } = pressed;
 			return {
 				...pressed,
-				asrc: (asrc && audioIdentitySuccessor(asrc)) || asrc,
+				asrc: (asrc && legacySuccessor(asrc)) || asrc,
 				audio_inputs: audio_inputs?.map((input) => {
-					const id = audioIdentitySuccessor(input.id);
+					const id = legacySuccessor(input.id);
 					return id === undefined || audio_inputs.some((own) => own.id === id)
 						? input
 						: { ...input, id };
@@ -118,6 +138,7 @@ export function acceptStartAudio(
  */
 export function restoredStartAudio({
 	audio_inputs,
+	audio_physical_ids,
 	audio_silenced,
 	...recorded
 }: ArmedStreamConfig): StartAudio {
@@ -130,5 +151,71 @@ export function restoredStartAudio({
 			...recorded,
 			...(audio_silenced ? { asrc: NO_AUDIO_ID } : {}),
 		},
+		// An older marker cannot attest to whoever now occupies its address.
+		new Map(Object.entries(audio_physical_ids ?? {})),
 	);
+}
+
+/** Resolve the admitted inputs once more at the engine request, never by old address. */
+export function resolvePinnedLaunchAudio(
+	config: RuntimeConfig,
+	physicalIds: ReadonlyMap<string, string>,
+	{
+		audioOff,
+		embedded,
+	}: { readonly audioOff: boolean; readonly embedded: boolean },
+) {
+	const { asrc, audio_inputs } = config;
+	if (audioOff || physicalIds.size === 0)
+		return {
+			ok: true,
+			asrc,
+			audio_inputs,
+			audio_physical_ids: undefined,
+		} as const;
+
+	const roster = livePhysicalAudioIds();
+	const mix = audio_inputs?.length
+		? getLastCapabilities()?.audio_mix
+		: undefined;
+	const pinned = new Map<string, string>();
+	const resolve = (id: string) => {
+		const stableId = physicalIds.get(id);
+		if (stableId === undefined) return id;
+		const address = audioAddressForIdentity(stableId, roster);
+		if (address !== undefined) pinned.set(address, stableId);
+		return address;
+	};
+	let primary = asrc;
+	if (asrc !== undefined && (!embedded || mix !== undefined)) {
+		primary = resolve(asrc);
+		if (primary === undefined) return { ok: false } as const;
+	}
+
+	let inputs = audio_inputs;
+	if (mix !== undefined) {
+		// Decide membership before changing any keys: a successor must not
+		// absorb a different leg, including an implicitly inserted primary.
+		const effective =
+			asrc !== undefined && physicalIds.has(asrc)
+				? audioMixWithPrimary(audio_inputs, asrc, mix.max_inputs)
+				: effectiveAudioInputs(config);
+		const projected = { ...config, asrc: primary };
+		const engineIds = new Set<string>();
+		inputs = [];
+		for (const input of effective ?? []) {
+			const id = resolve(input.id);
+			if (id === undefined) return { ok: false } as const;
+			const engineId = audioInputEngineId(id, projected);
+			if (engineIds.has(engineId)) return { ok: false } as const;
+			engineIds.add(engineId);
+			inputs.push({ ...input, id });
+		}
+	}
+	return {
+		ok: true,
+		asrc: primary,
+		audio_inputs: inputs,
+		audio_physical_ids: pinned.size ? Object.fromEntries(pinned) : undefined,
+	} as const;
 }

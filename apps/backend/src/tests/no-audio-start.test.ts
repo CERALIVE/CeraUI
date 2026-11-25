@@ -40,6 +40,7 @@ import { setup } from "../modules/setup.ts";
 import {
 	defaultArmedStreamMarkerDeps,
 	pinLaunchedAudio,
+	readArmedStreamMarker,
 } from "../modules/streaming/armed-stream-marker.ts";
 import * as audio from "../modules/streaming/audio.ts";
 import * as autoAudio from "../modules/streaming/auto-audio.ts";
@@ -2127,40 +2128,51 @@ test("a microphone muted live that re-enumerated is still muted after an engine 
 	);
 });
 
+const ORIGINAL_MIC = "usb:1a2b:3c4d:rekey-mic";
+const UNRELATED_MIC = "usb:1a2b:3c4d:unrelated-mic";
+
+async function listPhysicalMics(
+	...cards: ReadonlyArray<readonly [id: string, stableId: string]>
+) {
+	const sound = join(directory, "identity-cards");
+	await rm(sound, { recursive: true, force: true });
+	await mkdir(sound);
+	for (const [index, [id]] of cards.entries()) {
+		const card = join(sound, `card${index}`);
+		await mkdir(join(card, `pcmC${index}D0c`), { recursive: true });
+		await Bun.write(join(card, "id"), `${id}\n`);
+	}
+	await refreshEngineDeviceCache({
+		fetchEngineDevices: async () => ({
+			devices: cards.map(([id, stable_id]) => ({
+				alsa_card_id: id,
+				input_id: `hw:CARD=${id}`,
+				device_path: `hw:CARD=${id}`,
+				media_class: "audio",
+				display_name: "Recovery microphone",
+				stable_id,
+			})),
+		}),
+	});
+	await audio.updateAudioDevices(sound);
+}
+
+async function awaitLaunchBoundary(finishing: Promise<unknown>) {
+	expect(
+		await Promise.race([
+			reached.promise.then(() => "audio boundary"),
+			finishing.then(() => "completed before audio boundary"),
+		]),
+	).toBe("audio boundary");
+}
+
 test.each([
 	"waiting for the microphone",
 	"subscribing the engine client",
 	"preparing a scoped engine Start",
 ] as const)(
-	"restoration sends the known physical microphone's new id exactly once after rekeying while %s",
+	"restoration sends the known physical microphone's new id exactly once after its address is recycled while %s",
 	async (stage) => {
-		const card = join(directory, "card0");
-		const listCard = async (id?: string) => {
-			if (id === undefined) {
-				await rm(card, { recursive: true, force: true });
-			} else {
-				await mkdir(join(card, "pcmC0D0c"), { recursive: true });
-				await Bun.write(join(card, "id"), `${id}\n`);
-			}
-			await refreshEngineDeviceCache({
-				fetchEngineDevices: async () => ({
-					devices:
-						id === undefined
-							? []
-							: [
-									{
-										alsa_card_id: id,
-										input_id: `hw:CARD=${id}`,
-										device_path: `hw:CARD=${id}`,
-										media_class: "audio",
-										display_name: "Recovery microphone",
-										stable_id: "usb:restoration:rekey-mic",
-									},
-								],
-				}),
-			});
-			await audio.updateAudioDevices(directory);
-		};
 		// Drive the same ALSA scan and inventory join in one controlled hotplug tick.
 		setEngineAudioChangeHandler(() => {});
 		try {
@@ -2168,7 +2180,7 @@ test.each([
 				engine.dispose();
 				engine = evidenceHarness(false, { schemaVersion: "0.25.0" });
 			}
-			await listCard("micOld");
+			await listPhysicalMics(["micOld", ORIGINAL_MIC]);
 			keepMarker();
 			liveEngine();
 			getConfig().asrc = "micOld";
@@ -2186,7 +2198,7 @@ test.each([
 			spyOn(audio, "asrcProbe").mockRestore();
 
 			if (stage === "waiting for the microphone") {
-				await listCard();
+				await listPhysicalMics();
 				const notify = notifications.notificationBroadcast;
 				spyOn(notifications, "notificationBroadcast").mockImplementation(
 					(...args) => {
@@ -2220,7 +2232,19 @@ test.each([
 					]),
 				).toBe("rekey boundary");
 				expect(engine.startRequests.slice(launches)).toEqual([]);
-				await listCard("micNew");
+				await listPhysicalMics(
+					["micNew", ORIGINAL_MIC],
+					["micOld", UNRELATED_MIC],
+				);
+				expect(
+					audio
+						.deriveAudioSources()
+						.filter(({ id }) => id === "micNew" || id === "micOld")
+						.map(({ id, stable_id }) => [id, stable_id]),
+				).toEqual([
+					["micNew", ORIGINAL_MIC],
+					["micOld", UNRELATED_MIC],
+				]);
 			} finally {
 				gate.resolve();
 			}
@@ -2249,13 +2273,261 @@ test.each([
 			expect(await disk()).toEqual(saved);
 		} finally {
 			audio.clearAsrcProbeReject();
-			await listCard();
+			await listPhysicalMics();
 			audio.resetRememberedAudioIdentities();
 			setEngineAudioChangeHandler(undefined);
 		}
 	},
 	20_000,
 );
+
+test.each(["missing at the real probe", "ambiguous at late dispatch"] as const)(
+	"restoration never opens the unrelated occupant when the pinned mic is %s",
+	async (when) => {
+		setEngineAudioChangeHandler(() => {});
+		try {
+			await listPhysicalMics(["micOld", ORIGINAL_MIC]);
+			await running("micOld", "single");
+			expect(await pick("Third")).toMatchObject({ success: true });
+			const failures = spyOn(
+				streamSessionProductionDeps,
+				"reportTerminalFailure",
+			);
+			await loseEngine();
+			const launches = engine.startRequests.length;
+			spyOn(audio, "asrcProbe").mockRestore();
+			if (when === "missing at the real probe") {
+				await listPhysicalMics(["micOld", UNRELATED_MIC]);
+				const notify = notifications.notificationBroadcast;
+				spyOn(notifications, "notificationBroadcast").mockImplementation(
+					(...args) => {
+						if (args[0] === "asrc_not_found") reached.resolve();
+						return notify(...args);
+					},
+				);
+			} else holdStreamSubscription();
+
+			const restoring = restore();
+			try {
+				await awaitLaunchBoundary(restoring);
+				if (when === "ambiguous at late dispatch")
+					await listPhysicalMics(
+						["micOld", UNRELATED_MIC],
+						["micNew", ORIGINAL_MIC],
+						["micAlso", ORIGINAL_MIC],
+					);
+			} finally {
+				audio.clearAsrcProbeReject();
+				gate.resolve();
+			}
+			expect(await restoring).toMatchObject({
+				result: "failed",
+				reason: "start_failed",
+			});
+			expect(launchedAudio().slice(launches)).toEqual([]);
+			expect(failures.mock.calls.map(([failure]) => failure.class)).toEqual([
+				"audio_source_unavailable",
+			]);
+			expect(await disk()).toMatchObject({ asrc: "Third" });
+		} finally {
+			await listPhysicalMics();
+			audio.resetRememberedAudioIdentities();
+			setEngineAudioChangeHandler(undefined);
+		}
+	},
+);
+
+test("a single admitted microphone survives recycled addresses, cold adoption, and repeated engine loss", async () => {
+	setEngineAudioChangeHandler(() => {});
+	try {
+		await listPhysicalMics(["micOld", ORIGINAL_MIC]);
+		keepMarker();
+		getConfig().audio_inputs = undefined;
+		getConfig().audio_backend = "alsa";
+		saveConfig();
+		GATES["update admission"]?.();
+		const starting = start({ asrc: "micOld" });
+		try {
+			await awaitLaunchBoundary(starting);
+			await listPhysicalMics(["micNew", ORIGINAL_MIC]);
+		} finally {
+			gate.resolve();
+		}
+		expect(await starting).toMatchObject({ success: true });
+		expect(launchedAudio()).toEqual([{ ...device("micNew"), backend: "alsa" }]);
+		expect(await pick("Third")).toMatchObject({ success: true });
+		getConfig().audio_backend = "pipewire";
+		saveConfig();
+		const saved = await disk();
+
+		await restartBackend();
+		expect(await offActive()).toEqual({
+			snapshot: undefined,
+			pulled: undefined,
+		});
+		for (const [previous, next] of [
+			["micNew", "micNext"],
+			["micNext", "micFinal"],
+		] as const) {
+			await loseEngine();
+			pinLaunchedAudio(undefined);
+			audio.resetRememberedAudioIdentities();
+			await listPhysicalMics([next, ORIGINAL_MIC], [previous, UNRELATED_MIC]);
+			const launches = engine.startRequests.length;
+			expect((await restore()).result).toBe("recovered");
+			expect(launchedAudio().slice(launches)).toEqual([
+				{ ...device(next), backend: "alsa" },
+			]);
+		}
+		expect(await disk()).toEqual(saved);
+	} finally {
+		await listPhysicalMics();
+		audio.resetRememberedAudioIdentities();
+		setEngineAudioChangeHandler(undefined);
+	}
+});
+
+test("two known mix legs that swap addresses keep distinct devices, tracks and applied settings", async () => {
+	setEngineAudioChangeHandler(() => {});
+	try {
+		await listPhysicalMics(
+			["micLeft", ORIGINAL_MIC],
+			["micRight", UNRELATED_MIC],
+		);
+		keepMarker();
+		liveEngine();
+		getConfig().asrc = "micLeft";
+		getConfig().audio_inputs = [entry("micLeft", [1]), entry("micRight", [2])];
+		saveConfig();
+		expect(await start()).toMatchObject({ success: true });
+		await liveEdit("micRight", { gain_db: -9, delay_ms: 120 });
+		expect(await pick("Third")).toMatchObject({ success: true });
+		await loseEngine();
+		await listPhysicalMics(
+			["micLeft", UNRELATED_MIC],
+			["micRight", ORIGINAL_MIC],
+		);
+		const launches = engine.startRequests.length;
+		expect((await restore()).result).toBe("recovered");
+		expect(launchedAudio().slice(launches)).toEqual([
+			mixed(
+				{ ...wire("", [1]), input_id: "hw:CARD=micRight" },
+				{
+					...wire("", [2]),
+					input_id: "hw:CARD=micLeft",
+					gain_db: -9,
+					delay_ms: 120,
+				},
+			),
+		]);
+	} finally {
+		await listPhysicalMics();
+		audio.resetRememberedAudioIdentities();
+		setEngineAudioChangeHandler(undefined);
+	}
+});
+
+test("restoration refuses a known mix leg that would collapse onto a separate address-only leg", async () => {
+	setEngineAudioChangeHandler(() => {});
+	try {
+		await listPhysicalMics(
+			["micOld", ORIGINAL_MIC],
+			["micNew", "card:micNew"],
+			["micModel", "usb:1a2b:3c4d"],
+		);
+		keepMarker();
+		getConfig().asrc = "Pipeline default";
+		getConfig().audio_inputs = [
+			entry("micOld", [1]),
+			entry("micNew", [2]),
+			entry("micModel", [3]),
+		];
+		saveConfig();
+		expect(await start()).toMatchObject({ success: true });
+		expect(launchedAudio()).toEqual([
+			mixed(
+				{ ...wire("", [1]), input_id: "hw:CARD=micOld" },
+				{ ...wire("", [2]), input_id: "hw:CARD=micNew" },
+				{ ...wire("", [3]), input_id: "hw:CARD=micModel" },
+			),
+		]);
+		expect(readArmedStreamMarker()?.config.audio_physical_ids).toEqual({
+			micOld: ORIGINAL_MIC,
+		});
+		const failures = spyOn(
+			streamSessionProductionDeps,
+			"reportTerminalFailure",
+		);
+		await loseEngine();
+		await listPhysicalMics(
+			["micOld", UNRELATED_MIC],
+			["micNew", ORIGINAL_MIC],
+			["micModel", "usb:1a2b:3c4d"],
+		);
+		expect(await restore()).toMatchObject({
+			result: "failed",
+			reason: "start_failed",
+		});
+		expect(launchedAudio().slice(1)).toEqual([]);
+		expect(failures.mock.calls.map(([failure]) => failure.class)).toEqual([
+			"audio_source_unavailable",
+		]);
+	} finally {
+		await listPhysicalMics();
+		audio.resetRememberedAudioIdentities();
+		setEngineAudioChangeHandler(undefined);
+	}
+});
+
+test("legacy address-only markers do not gain an identity from the current occupant", async () => {
+	setEngineAudioChangeHandler(() => {});
+	try {
+		await listPhysicalMics(["micOld", ORIGINAL_MIC]);
+		await running("micOld", "single");
+		const marker = JSON.parse(armed ?? "");
+		delete marker.config.audio_physical_ids;
+		armed = JSON.stringify(marker);
+		await loseEngine();
+		pinLaunchedAudio(undefined);
+		audio.resetRememberedAudioIdentities();
+		await listPhysicalMics(["micOld", UNRELATED_MIC]);
+		expect((await restore()).result).toBe("recovered");
+		expect(launchedAudio().slice(1)).toEqual([device("micOld")]);
+		expect(readArmedStreamMarker()?.config).not.toHaveProperty(
+			"audio_physical_ids",
+		);
+	} finally {
+		await listPhysicalMics();
+		audio.resetRememberedAudioIdentities();
+		setEngineAudioChangeHandler(undefined);
+	}
+});
+
+test("restoration follows the physical microphone Auto actually launched without rewriting Auto", async () => {
+	setEngineAudioChangeHandler(() => {});
+	try {
+		await listPhysicalMics(["micOld", ORIGINAL_MIC]);
+		keepMarker();
+		savePressed("Auto", "single");
+		spyOn(autoAudio, "resolveAutoAsrcFromLiveState").mockReturnValue({
+			asrcKey: "micOld",
+			cardId: "micOld",
+			reason: "usb-same-device",
+		});
+		expect(await start()).toMatchObject({ success: true });
+		expect(launchedAudio()).toEqual([device("micOld")]);
+		await loseEngine();
+		// Auto's live resolver still says micOld, which now names another device.
+		await listPhysicalMics(["micNew", ORIGINAL_MIC], ["micOld", UNRELATED_MIC]);
+		expect((await restore()).result).toBe("recovered");
+		expect(launchedAudio().slice(1)).toEqual([device("micNew")]);
+		expect(await disk()).toMatchObject({ asrc: "Auto" });
+	} finally {
+		await listPhysicalMics();
+		audio.resetRememberedAudioIdentities();
+		setEngineAudioChangeHandler(undefined);
+	}
+});
 
 test("a re-enumerated mix input whose new id is already in the mix is not sent twice", async () => {
 	await running("Primary", "mix");

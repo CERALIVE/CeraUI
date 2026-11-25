@@ -123,6 +123,17 @@ rather than re-deriving a class from the opaque `error` string. The legacy
 `error: "audio_source_probe_failed"` wire value is unchanged, so the existing
 `live.startFailed.audio_source_probe_failed` copy still resolves.
 
+**An ALSA picker key is an address, not a physical identity.** A Start captures
+known engine identities for its selected microphone and mix inputs at admission.
+The engine's card-name and USB vendor/product-only fallbacks do not identify a
+microphone. Auto captures a known microphone when it chooses a concrete route. A
+known identity must match exactly one current roster entry at the source probe
+and again immediately before dispatch. The armed marker records those identities
+under the keys actually used, alongside the last acknowledged mix. A cold
+adoption does not invent new evidence, and an older marker without identities
+retains address-based behavior without a same-device guarantee. None of this
+changes the separately saved next-Start pick or backend.
+
 ### timing-constants.ts
 
 `apps/backend/src/modules/streaming/timing-constants.ts` centralizes all hardcoded

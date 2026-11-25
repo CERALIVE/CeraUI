@@ -535,6 +535,39 @@ export function resetRememberedAudioIdentities(): void {
 	rememberedAudioIdentities.clear();
 }
 
+/** The current roster, not the last device that used a picker key. */
+export function livePhysicalAudioIds(): ReadonlyMap<string, string> {
+	const ids = new Map<string, string>();
+	for (const [id, { stable_id }] of resolveAudioIdentities(
+		audioDevices,
+		getEngineAudioDevices(),
+		cardAliases,
+	)) {
+		// The engine also uses card names and bare USB vendor/product as
+		// fallbacks; neither identifies a microphone.
+		if (
+			stable_id &&
+			!stable_id.startsWith("card:") &&
+			!/^usb:[^:@]+:[^:@]+$/.test(stable_id)
+		)
+			ids.set(id, stable_id);
+	}
+	return ids;
+}
+
+export function audioAddressForIdentity(
+	stableId: string,
+	roster: ReadonlyMap<string, string> = livePhysicalAudioIds(),
+): string | undefined {
+	let match: string | undefined;
+	for (const [id, identity] of roster) {
+		if (identity !== stableId) continue;
+		if (match !== undefined) return undefined;
+		match = id;
+	}
+	return match;
+}
+
 /** The live id of a card that re-enumerated under a new ALSA id. */
 export function audioIdentitySuccessor(
 	asrc: string,
@@ -924,8 +957,17 @@ export class AudioProbeTimeoutError extends Error {
 	}
 }
 
-export async function asrcProbe(asrc: string): Promise<string> {
-	const present = () => audioDevices[audioIdentitySuccessor(asrc) ?? asrc];
+export async function asrcProbe(
+	asrc: string,
+	stableId?: string,
+): Promise<string> {
+	const present = () => {
+		const id =
+			stableId === undefined
+				? (audioIdentitySuccessor(asrc) ?? asrc)
+				: audioAddressForIdentity(stableId);
+		return id === undefined ? undefined : audioDevices[id];
+	};
 	if (isBluetoothAudioSourceId(asrc)) await refreshBluetoothAudioDevices();
 	const available = present();
 	if (available) return available;

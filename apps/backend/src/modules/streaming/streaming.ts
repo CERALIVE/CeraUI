@@ -144,9 +144,7 @@ export function startError(conn: WebSocket, msg: string, id?: string) {
 
 export async function validateConfig(
 	params: Partial<ConfigParameters>,
-	{ savedAsrc }: Pick<StartAudio, "savedAsrc"> = {
-		savedAsrc: getConfig().asrc,
-	},
+	startAudio?: Pick<StartAudio, "savedAsrc" | "physicalIds">,
 ) {
 	if (typeof params !== "object") throw new Error("Invalid config");
 
@@ -218,6 +216,8 @@ export async function validateConfig(
 
 	// audio source
 	const config = getConfig();
+	const savedAsrc =
+		startAudio === undefined ? config.asrc : startAudio.savedAsrc;
 	const audioDevicesMap = getAudioDevices();
 	if (pipeline.supportsAudio) {
 		if (typeof validated.asrc !== "string")
@@ -227,6 +227,7 @@ export async function validateConfig(
 		if (
 			validated.asrc !== AUDIO_SOURCE_AUTO &&
 			validated.asrc !== savedAsrc &&
+			!startAudio?.physicalIds.has(validated.asrc) &&
 			!audioDevicesMap[validated.asrc]
 		)
 			throw new Error("Selected audio source not found");

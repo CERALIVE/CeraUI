@@ -109,6 +109,8 @@ const armedStreamConfigSchema = z.object({
 	/** `null` says the stream runs without a mix; absent, nothing was recorded. */
 	audio_inputs: z.array(audioInputSettingSchema).nullable().optional(),
 	audio_backend: audioBackendSchema.optional(),
+	/** Picker keys at the recorded launch, with engine-proven physical identities. */
+	audio_physical_ids: z.record(z.string().min(1), z.string().min(1)).optional(),
 	/** The engine acknowledged a live switch to its silence leg. */
 	audio_silenced: z.boolean().optional(),
 	relay_server: z.string().optional(),
@@ -132,6 +134,7 @@ const armedStreamConfigSchema = z.object({
 export type ArmedStreamConfig = z.infer<typeof armedStreamConfigSchema>;
 
 type LaunchedAudio = StartAudio["config"] & {
+	readonly audio_physical_ids?: ArmedStreamConfig["audio_physical_ids"];
 	readonly audio_silenced?: boolean;
 };
 let launchedAudio: LaunchedAudio | undefined;
