@@ -266,13 +266,8 @@
 		--touch-target-min: 0px;
 		--spacing-touch-scale: 1;
 
-		/* Height of the fixed mobile dock (MobileNav + HudRegion), measured 105px
-		   on a 375x812 board capture. It is the ONE source for two things that
-		   must agree: the padding `<main>` reserves so content is not hidden
-		   under the dock, and the bottom offset the toast stack is pushed above
-		   so a toast can never own the dock's hit-test point. MainView also publishes
-		   the dock's measured height as `--mobile-dock-offset`, which pwa-status's
-		   install banner rests on, so the banner never owns a tab's either. */
+		/* Legacy clearance for Live and toasts, and the non-Live fallback before
+		   MainView publishes the actual dock border-box height. */
 		--mobile-dock-height: 7rem;
 
 		/* Height of pwa-status's fixed not-connected / offline bar, which it
