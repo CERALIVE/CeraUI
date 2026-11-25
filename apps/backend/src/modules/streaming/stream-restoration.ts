@@ -100,6 +100,8 @@ export function captureArmedStreamConfig(): ArmedStreamConfig {
 	snapshot.audio_inputs = audio.audio_inputs ?? null;
 	if (launched?.audio_physical_ids !== undefined)
 		snapshot.audio_physical_ids = launched.audio_physical_ids;
+	if (launched?.audio_unverified_ids !== undefined)
+		snapshot.audio_unverified_ids = launched.audio_unverified_ids;
 	if (launched?.audio_silenced) snapshot.audio_silenced = true;
 	copy("srt_latency");
 	copy("pipeline");

@@ -36,10 +36,11 @@ import {
 } from "../active-passthrough.ts";
 import { pinLaunchedAudio } from "../armed-stream-marker.ts";
 import {
+	type AudioIdentityEvidence,
 	asrcProbe,
 	audioIdentitySuccessor,
 	isPseudoAudioSource,
-	livePhysicalAudioIds,
+	liveAudioIdentityEvidence,
 	NO_AUDIO_ID,
 	refreshBluetoothAudioDevices,
 } from "../audio.ts";
@@ -142,7 +143,7 @@ export async function maybeProbeAudioSource(
 	pipeline: Pipeline,
 	config: RuntimeConfig,
 	deps: AudioProbeDeps = {},
-	stableId?: string,
+	evidence?: AudioIdentityEvidence,
 ): Promise<boolean> {
 	if (!pipeline.supportsAudio || !config.asrc) return true;
 	// A pipeline pseudo-source is not a device — never probe (nor probe-fail) it.
@@ -154,8 +155,8 @@ export async function maybeProbeAudioSource(
 	}
 	try {
 		if (deps.probe !== undefined) await deps.probe(config.asrc);
-		else if (stableId === undefined) await asrcProbe(config.asrc);
-		else await asrcProbe(config.asrc, stableId);
+		else if (evidence === undefined) await asrcProbe(config.asrc);
+		else await asrcProbe(config.asrc, evidence);
 		return true;
 	} catch (_err) {
 		// asrcProbe rejects when the operator stops the stream before the audio
@@ -231,14 +232,14 @@ export async function startStream(
 	const launchConfig = resolveLaunchConfig(config);
 	const chosen = launchConfig.asrc;
 	const wasAuto = config.asrc === AUDIO_SOURCE_AUTO;
-	const autoIdentity =
+	const autoEvidence =
 		wasAuto && chosen !== undefined && configOverride === undefined
-			? livePhysicalAudioIds().get(chosen)
+			? liveAudioIdentityEvidence().get(chosen)
 			: undefined;
-	const identities =
-		autoIdentity !== undefined && chosen !== undefined
-			? new Map(startAudio.physicalIds).set(chosen, autoIdentity)
-			: startAudio.physicalIds;
+	const audioEvidence =
+		autoEvidence !== undefined && chosen !== undefined
+			? new Map(startAudio.audioEvidence).set(chosen, autoEvidence)
+			: startAudio.audioEvidence;
 	const audioOff = config.asrc === NO_AUDIO_ID;
 	startStreamDeps.getStreamingBackend().setBitrate(launchConfig);
 
@@ -256,7 +257,7 @@ export async function startStream(
 		pipeline,
 		launchConfig,
 		audioDeps,
-		chosen === undefined ? undefined : identities.get(chosen),
+		chosen === undefined ? undefined : audioEvidence.get(chosen),
 	);
 	assertStreamLaunchOwnership();
 	if (!audioReady) {
@@ -353,13 +354,13 @@ export async function startStream(
 					const audio = startAudio.config;
 					const asrc = wasAuto
 						? chosen &&
-							(identities.has(chosen)
+							(audioEvidence.has(chosen)
 								? chosen
 								: (audioIdentitySuccessor(chosen) ?? chosen))
 						: audio.asrc;
 					const resolved = resolvePinnedLaunchAudio(
 						{ ...launchConfig, ...audio, asrc },
-						identities,
+						audioEvidence,
 						{
 							audioOff,
 							embedded: isEmbeddedAudioPipeline(
@@ -379,11 +380,12 @@ export async function startStream(
 					pinLaunchedAudio({
 						...audio,
 						asrc:
-							wasAuto && autoIdentity === undefined
+							wasAuto && autoEvidence === undefined
 								? audio.asrc
 								: resolved.asrc,
 						audio_inputs: resolved.audio_inputs,
 						audio_physical_ids: resolved.audio_physical_ids,
+						audio_unverified_ids: resolved.audio_unverified_ids,
 					});
 					return { asrc: resolved.asrc, audio_inputs: resolved.audio_inputs };
 				},

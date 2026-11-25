@@ -188,8 +188,17 @@ export function engineAudioDeviceForCard(
 	engineAudio: readonly EngineAudioDevice[],
 	aliases: CardAliases,
 ): EngineAudioDevice | undefined {
+	return engineAudioDevicesForCard(cardId, engineAudio, aliases)[0];
+}
+
+/** All matching rows; a first match is enough for display, not for identity. */
+export function engineAudioDevicesForCard(
+	cardId: string,
+	engineAudio: readonly EngineAudioDevice[],
+	aliases: CardAliases,
+): EngineAudioDevice[] {
 	const owners = buildCardAliasOwners(aliases);
-	return engineAudio.find((device) => {
+	return engineAudio.filter((device) => {
 		const key = device.alsa_card_id;
 		if (key === undefined) return false;
 		// A card's own kernel id identifies it with no vocabulary at all, which is

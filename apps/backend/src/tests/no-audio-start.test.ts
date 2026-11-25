@@ -2131,17 +2131,23 @@ test("a microphone muted live that re-enumerated is still muted after an engine 
 const ORIGINAL_MIC = "usb:1a2b:3c4d:rekey-mic";
 const UNRELATED_MIC = "usb:1a2b:3c4d:unrelated-mic";
 
-async function listPhysicalMics(
-	...cards: ReadonlyArray<readonly [id: string, stableId: string]>
-) {
+async function physicalMicScan(ids: readonly string[]) {
 	const sound = join(directory, "identity-cards");
 	await rm(sound, { recursive: true, force: true });
 	await mkdir(sound);
-	for (const [index, [id]] of cards.entries()) {
+	for (const [index, id] of ids.entries()) {
 		const card = join(sound, `card${index}`);
 		await mkdir(join(card, `pcmC${index}D0c`), { recursive: true });
 		await Bun.write(join(card, "id"), `${id}\n`);
 	}
+	return sound;
+}
+
+async function listPhysicalMics(
+	...cards: ReadonlyArray<readonly [id: string, stableId: string]>
+) {
+	const sound = await physicalMicScan(cards.map(([id]) => id));
+	await audio.updateAudioDevices(sound);
 	await refreshEngineDeviceCache({
 		fetchEngineDevices: async () => ({
 			devices: cards.map(([id, stable_id]) => ({
@@ -2154,7 +2160,7 @@ async function listPhysicalMics(
 			})),
 		}),
 	});
-	await audio.updateAudioDevices(sound);
+	await audio.broadcastAudioSources();
 }
 
 async function awaitLaunchBoundary(finishing: Promise<unknown>) {
@@ -2281,7 +2287,11 @@ test.each([
 	20_000,
 );
 
-test.each(["missing at the real probe", "ambiguous at late dispatch"] as const)(
+test.each([
+	"missing at the real probe",
+	"ambiguous at late dispatch",
+	"only in a stale engine roster at dispatch",
+] as const)(
 	"restoration never opens the unrelated occupant when the pinned mic is %s",
 	async (when) => {
 		setEngineAudioChangeHandler(() => {});
@@ -2310,25 +2320,76 @@ test.each(["missing at the real probe", "ambiguous at late dispatch"] as const)(
 			const restoring = restore();
 			try {
 				await awaitLaunchBoundary(restoring);
+				expect(engine.startRequests.slice(launches)).toEqual([]);
 				if (when === "ambiguous at late dispatch")
 					await listPhysicalMics(
 						["micOld", UNRELATED_MIC],
 						["micNew", ORIGINAL_MIC],
 						["micAlso", ORIGINAL_MIC],
 					);
+				if (when === "only in a stale engine roster at dispatch") {
+					const sound = await physicalMicScan(["micNew", "micOld"]);
+					await refreshEngineDeviceCache({
+						fetchEngineDevices: async () => {
+							throw new Error("list-devices unreachable during hotplug");
+						},
+					});
+					await audio.updateAudioDevices(sound);
+				}
 			} finally {
 				audio.clearAsrcProbeReject();
 				gate.resolve();
 			}
-			expect(await restoring).toMatchObject({
+			const result = await restoring;
+			expect(launchedAudio().slice(launches)).toEqual([]);
+			expect(result).toMatchObject({
 				result: "failed",
 				reason: "start_failed",
 			});
-			expect(launchedAudio().slice(launches)).toEqual([]);
 			expect(failures.mock.calls.map(([failure]) => failure.class)).toEqual([
 				"audio_source_unavailable",
 			]);
 			expect(await disk()).toMatchObject({ asrc: "Third" });
+		} finally {
+			await listPhysicalMics();
+			audio.resetRememberedAudioIdentities();
+			setEngineAudioChangeHandler(undefined);
+		}
+	},
+);
+
+test.each([
+	["a duplicate stable ID", ORIGINAL_MIC, ORIGINAL_MIC],
+	["a model-only USB ID", "usb:1a2b:3c4d", undefined],
+] as const)(
+	"a Start pressed with %s does not open the other unit that remains",
+	async (_description, stableId, alreadyPresent) => {
+		setEngineAudioChangeHandler(() => {});
+		try {
+			await listPhysicalMics(
+				["micOld", stableId],
+				...(alreadyPresent === undefined
+					? []
+					: ([["micOther", alreadyPresent]] as const)),
+			);
+			getConfig().audio_inputs = undefined;
+			getConfig().audio_backend = "alsa";
+			saveConfig();
+			GATES["update admission"]?.();
+			const starting = start({ asrc: "micOld" });
+			try {
+				await awaitLaunchBoundary(starting);
+				expect(engine.startRequests).toEqual([]);
+				await listPhysicalMics(["micOther", stableId]);
+			} finally {
+				gate.resolve();
+			}
+			const result = await starting;
+			expect(launchedAudio()).toEqual([]);
+			expect(result).toMatchObject({
+				success: false,
+				failure: { class: "audio_source_unavailable" },
+			});
 		} finally {
 			await listPhysicalMics();
 			audio.resetRememberedAudioIdentities();
@@ -2430,25 +2491,16 @@ test("two known mix legs that swap addresses keep distinct devices, tracks and a
 test("restoration refuses a known mix leg that would collapse onto a separate address-only leg", async () => {
 	setEngineAudioChangeHandler(() => {});
 	try {
-		await listPhysicalMics(
-			["micOld", ORIGINAL_MIC],
-			["micNew", "card:micNew"],
-			["micModel", "usb:1a2b:3c4d"],
-		);
+		await listPhysicalMics(["micOld", ORIGINAL_MIC], ["micNew", "card:micNew"]);
 		keepMarker();
 		getConfig().asrc = "Pipeline default";
-		getConfig().audio_inputs = [
-			entry("micOld", [1]),
-			entry("micNew", [2]),
-			entry("micModel", [3]),
-		];
+		getConfig().audio_inputs = [entry("micOld", [1]), entry("micNew", [2])];
 		saveConfig();
 		expect(await start()).toMatchObject({ success: true });
 		expect(launchedAudio()).toEqual([
 			mixed(
 				{ ...wire("", [1]), input_id: "hw:CARD=micOld" },
 				{ ...wire("", [2]), input_id: "hw:CARD=micNew" },
-				{ ...wire("", [3]), input_id: "hw:CARD=micModel" },
 			),
 		]);
 		expect(readArmedStreamMarker()?.config.audio_physical_ids).toEqual({
@@ -2459,11 +2511,42 @@ test("restoration refuses a known mix leg that would collapse onto a separate ad
 			"reportTerminalFailure",
 		);
 		await loseEngine();
-		await listPhysicalMics(
-			["micOld", UNRELATED_MIC],
-			["micNew", ORIGINAL_MIC],
-			["micModel", "usb:1a2b:3c4d"],
+		await listPhysicalMics(["micOld", UNRELATED_MIC], ["micNew", ORIGINAL_MIC]);
+		expect(await restore()).toMatchObject({
+			result: "failed",
+			reason: "start_failed",
+		});
+		expect(launchedAudio().slice(1)).toEqual([]);
+		expect(failures.mock.calls.map(([failure]) => failure.class)).toEqual([
+			"audio_source_unavailable",
+		]);
+	} finally {
+		await listPhysicalMics();
+		audio.resetRememberedAudioIdentities();
+		setEngineAudioChangeHandler(undefined);
+	}
+});
+
+test("a model-only mix leg opens at its unchanged address but cannot be restored", async () => {
+	setEngineAudioChangeHandler(() => {});
+	try {
+		await listPhysicalMics(["micModel", "usb:1a2b:3c4d"]);
+		keepMarker();
+		getConfig().asrc = "Pipeline default";
+		getConfig().audio_inputs = [entry("micModel", [1])];
+		saveConfig();
+		expect(await start()).toMatchObject({ success: true });
+		expect(launchedAudio()).toEqual([
+			mixed({ ...wire("", [1]), input_id: "hw:CARD=micModel" }),
+		]);
+		expect(readArmedStreamMarker()?.config).not.toHaveProperty(
+			"audio_physical_ids",
 		);
+		const failures = spyOn(
+			streamSessionProductionDeps,
+			"reportTerminalFailure",
+		);
+		await loseEngine();
 		expect(await restore()).toMatchObject({
 			result: "failed",
 			reason: "start_failed",

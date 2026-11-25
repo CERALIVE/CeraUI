@@ -2,6 +2,16 @@
 
 ## AUDIO-DEVICE NAMING [EXISTS]
 
+Stream launch and restoration do not treat the display cache as device proof.
+An ALSA scan invalidates the previous engine observation, including a row
+whose address still exists. Launch only follows a physical token that was
+unique when captured and is unique in an engine roster observed after the
+current scan. Duplicate or stale evidence is not a legacy address fallback.
+A model or port token can open an unchanged address on a fresh Start, but the
+armed marker records that it cannot identify that input after engine loss.
+Older markers remain readable without inferring a physical identity from
+whoever now occupies an old address.
+
 **Production v7.2 also reports `HDMIIN` / `RK3588 HDMI-IN`.** Rock's
 2026-09-18 raw ALSA inventory uses that third spelling, not `hdmirx`.
 The onboard display table accepts the card ID and longname; Auto's ordered

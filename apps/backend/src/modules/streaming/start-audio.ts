@@ -3,9 +3,10 @@ import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import { getConfig } from "../config.ts";
 import type { ArmedStreamConfig } from "./armed-stream-marker.ts";
 import {
-	audioAddressForIdentity,
+	type AudioIdentityEvidence,
+	audioAddressForEvidence,
 	audioIdentitySuccessor,
-	livePhysicalAudioIds,
+	liveAudioIdentityEvidence,
 	NO_AUDIO_ID,
 	refreshBluetoothAudioDevices,
 } from "./audio.ts";
@@ -38,7 +39,7 @@ export interface StartAudio {
 	 * known microphone keeps its accepted key until the launch resolves its identity.
 	 */
 	readonly config: StartAudioConfig;
-	readonly physicalIds: ReadonlyMap<string, string>;
+	readonly audioEvidence: ReadonlyMap<string, AudioIdentityEvidence>;
 	/** The saved pick at the press: it needs no device to be present yet. */
 	readonly savedAsrc: string | undefined;
 	/**
@@ -66,7 +67,7 @@ export function audioBackendInUse(): RuntimeConfig["audio_backend"] {
 export function acceptStartAudio(
 	request: StartAudioRequest = {},
 	saved: Pick<RuntimeConfig, StartAudioField> = getConfig(),
-	recordedIds?: ReadonlyMap<string, string>,
+	recordedEvidence?: ReadonlyMap<string, AudioIdentityEvidence>,
 ): StartAudio {
 	const savedAsrc = saved.asrc;
 	const saves = { ...audioSaves };
@@ -78,20 +79,20 @@ export function acceptStartAudio(
 		delay: request.delay ?? saved.delay,
 		audio_backend: saved.audio_backend,
 	});
-	const physicalIds = new Map<string, string>();
-	const roster = recordedIds ?? livePhysicalAudioIds();
+	const audioEvidence = new Map<string, AudioIdentityEvidence>();
+	const roster = recordedEvidence ?? liveAudioIdentityEvidence();
 	for (const id of [
 		pressed.asrc,
 		...(pressed.audio_inputs?.map(({ id }) => id) ?? []),
 	]) {
 		if (id === undefined) continue;
-		const stableId = roster.get(id);
-		if (stableId !== undefined) physicalIds.set(id, stableId);
+		const evidence = roster.get(id);
+		if (evidence !== undefined) audioEvidence.set(id, evidence);
 	}
 	const legacySuccessor = (id: string) =>
-		physicalIds.has(id) ? undefined : audioIdentitySuccessor(id);
+		audioEvidence.has(id) ? undefined : audioIdentitySuccessor(id);
 	const startAudio: StartAudio = {
-		physicalIds,
+		audioEvidence,
 		get config() {
 			const { asrc, audio_inputs } = pressed;
 			return {
@@ -139,6 +140,7 @@ export function acceptStartAudio(
 export function restoredStartAudio({
 	audio_inputs,
 	audio_physical_ids,
+	audio_unverified_ids,
 	audio_silenced,
 	...recorded
 }: ArmedStreamConfig): StartAudio {
@@ -152,38 +154,50 @@ export function restoredStartAudio({
 			...(audio_silenced ? { asrc: NO_AUDIO_ID } : {}),
 		},
 		// An older marker cannot attest to whoever now occupies its address.
-		new Map(Object.entries(audio_physical_ids ?? {})),
+		new Map<string, AudioIdentityEvidence>([
+			...Object.entries(audio_physical_ids ?? {}).map(
+				([id, stableId]) => [id, { kind: "physical", stableId }] as const,
+			),
+			...(audio_unverified_ids ?? []).map(
+				(id) => [id, { kind: "unavailable" }] as const,
+			),
+		]),
 	);
 }
 
 /** Resolve the admitted inputs once more at the engine request, never by old address. */
 export function resolvePinnedLaunchAudio(
 	config: RuntimeConfig,
-	physicalIds: ReadonlyMap<string, string>,
+	audioEvidence: ReadonlyMap<string, AudioIdentityEvidence>,
 	{
 		audioOff,
 		embedded,
 	}: { readonly audioOff: boolean; readonly embedded: boolean },
 ) {
 	const { asrc, audio_inputs } = config;
-	if (audioOff || physicalIds.size === 0)
+	if (audioOff || audioEvidence.size === 0)
 		return {
 			ok: true,
 			asrc,
 			audio_inputs,
 			audio_physical_ids: undefined,
+			audio_unverified_ids: undefined,
 		} as const;
 
-	const roster = livePhysicalAudioIds();
+	const roster = liveAudioIdentityEvidence();
 	const mix = audio_inputs?.length
 		? getLastCapabilities()?.audio_mix
 		: undefined;
 	const pinned = new Map<string, string>();
+	const unverified = new Set<string>();
 	const resolve = (id: string) => {
-		const stableId = physicalIds.get(id);
-		if (stableId === undefined) return id;
-		const address = audioAddressForIdentity(stableId, roster);
-		if (address !== undefined) pinned.set(address, stableId);
+		const evidence = audioEvidence.get(id);
+		if (evidence === undefined) return id;
+		const address = audioAddressForEvidence(id, evidence, roster);
+		if (address !== undefined) {
+			if (evidence.kind === "physical") pinned.set(address, evidence.stableId);
+			else unverified.add(address);
+		}
 		return address;
 	};
 	let primary = asrc;
@@ -197,7 +211,7 @@ export function resolvePinnedLaunchAudio(
 		// Decide membership before changing any keys: a successor must not
 		// absorb a different leg, including an implicitly inserted primary.
 		const effective =
-			asrc !== undefined && physicalIds.has(asrc)
+			asrc !== undefined && audioEvidence.has(asrc)
 				? audioMixWithPrimary(audio_inputs, asrc, mix.max_inputs)
 				: effectiveAudioInputs(config);
 		const projected = { ...config, asrc: primary };
@@ -217,5 +231,6 @@ export function resolvePinnedLaunchAudio(
 		asrc: primary,
 		audio_inputs: inputs,
 		audio_physical_ids: pinned.size ? Object.fromEntries(pinned) : undefined,
+		audio_unverified_ids: unverified.size ? [...unverified] : undefined,
 	} as const;
 }

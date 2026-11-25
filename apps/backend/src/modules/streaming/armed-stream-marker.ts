@@ -111,6 +111,8 @@ const armedStreamConfigSchema = z.object({
 	audio_backend: audioBackendSchema.optional(),
 	/** Picker keys at the recorded launch, with engine-proven physical identities. */
 	audio_physical_ids: z.record(z.string().min(1), z.string().min(1)).optional(),
+	/** Address-bound inputs may start unchanged but cannot be identified on restore. */
+	audio_unverified_ids: z.array(z.string().min(1)).optional(),
 	/** The engine acknowledged a live switch to its silence leg. */
 	audio_silenced: z.boolean().optional(),
 	relay_server: z.string().optional(),
@@ -135,6 +137,7 @@ export type ArmedStreamConfig = z.infer<typeof armedStreamConfigSchema>;
 
 type LaunchedAudio = StartAudio["config"] & {
 	readonly audio_physical_ids?: ArmedStreamConfig["audio_physical_ids"];
+	readonly audio_unverified_ids?: ArmedStreamConfig["audio_unverified_ids"];
 	readonly audio_silenced?: boolean;
 };
 let launchedAudio: LaunchedAudio | undefined;

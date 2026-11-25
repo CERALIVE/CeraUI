@@ -144,7 +144,7 @@ export function startError(conn: WebSocket, msg: string, id?: string) {
 
 export async function validateConfig(
 	params: Partial<ConfigParameters>,
-	startAudio?: Pick<StartAudio, "savedAsrc" | "physicalIds">,
+	startAudio?: Pick<StartAudio, "savedAsrc" | "audioEvidence">,
 ) {
 	if (typeof params !== "object") throw new Error("Invalid config");
 
@@ -227,7 +227,7 @@ export async function validateConfig(
 		if (
 			validated.asrc !== AUDIO_SOURCE_AUTO &&
 			validated.asrc !== savedAsrc &&
-			!startAudio?.physicalIds.has(validated.asrc) &&
+			!startAudio?.audioEvidence.has(validated.asrc) &&
 			!audioDevicesMap[validated.asrc]
 		)
 			throw new Error("Selected audio source not found");
