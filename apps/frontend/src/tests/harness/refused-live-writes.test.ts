@@ -323,8 +323,8 @@ describe.each([
 
 	afterEach(() => {
 		cleanup();
-		// A Start's failure outlives its LiveView: the next one would say it again.
-		page.optimism.destroyStreamingOptimism();
+		// The old page says a Start's failure again on its next visit to Live.
+		if (dials === "/ws") page.optimism.destroyStreamingOptimism();
 		document.body.innerHTML = "";
 	});
 
@@ -360,6 +360,28 @@ describe.each([
 		expect((named("Start Stream") as HTMLButtonElement).disabled).toBe(false);
 		expect(document.body.textContent).not.toContain("Starting...");
 	});
+
+	// The old page repeats it: its code is what it is.
+	if (dials !== "/ws")
+		it("says a refused Start once: coming back to Live does not repeat it", async () => {
+			const visit = render(page.live.default);
+			await opened(() => testId("source-select-usb"));
+			await click(named("Start Stream"));
+			await waitFor(() => expect(says()).toEqual(["Failed to start stream"]));
+
+			visit.unmount();
+			render(page.live.default);
+			await opened(() => testId("source-select-usb"));
+			expect(says()).toEqual(["Failed to start stream"]);
+
+			await click(named("Start Stream"));
+			await waitFor(() =>
+				expect(says()).toEqual([
+					"Failed to start stream",
+					"Failed to start stream",
+				]),
+			);
+		});
 
 	it("hides the test pattern: streaming.setSourceVisibility is refused", async () => {
 		const write: Write = {

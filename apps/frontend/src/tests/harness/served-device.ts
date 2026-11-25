@@ -71,7 +71,9 @@ export async function operator(
 	);
 	const waiting = new Map<string, (result: unknown) => void>();
 	socket.onmessage = ({ data }) => {
-		const { id, result } = JSON.parse(String(data));
+		const { id, result, ping } = JSON.parse(String(data));
+		// Like a page's client: the device drops a socket that stays silent.
+		if (ping) socket.send(JSON.stringify({ pong: true }));
 		waiting.get(id)?.(result);
 	};
 	await new Promise<void>((open, fail) => {
@@ -79,7 +81,10 @@ export async function operator(
 		socket.onerror = () => fail(new Error("operator socket refused"));
 	});
 	const call = (path: string, input?: unknown) =>
-		new Promise<unknown>((answer) => {
+		new Promise<unknown>((answer, fail) => {
+			const dropped = () => fail(new Error(`${path}: operator socket closed`));
+			if (socket.readyState !== socket.OPEN) return dropped();
+			socket.addEventListener("close", dropped);
 			const id = `${path}-${waiting.size}`;
 			waiting.set(id, answer);
 			socket.send(JSON.stringify({ id, path: path.split("."), input }));
