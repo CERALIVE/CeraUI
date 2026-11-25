@@ -377,6 +377,10 @@ survivable, and it is unchanged in behaviour:
    degraded on `/api/health`, and commits mmcli;
 3. boot is never blocked, and the degradation is readable rather than inferred.
 
+During startup fallback the wait for D-Bus stop is capped at 2 s. Timing out
+does not cancel the close; the backend has already aborted its generation, and
+boot commits degraded mmcli before advertising readiness or starting recovery.
+
 ### Startup cancellation / generation contract
 
 `withDeadline(backend.start())` **cannot cancel the underlying start** — the race
@@ -422,6 +426,7 @@ the fallback has been taken and proving the cache never moved
 | `EPOCH_SETTLE_MS` | 25 000 ms | `dbus-modem-cache.ts` | above the measured ~20 s post-restart roster refill (todo 16 §4b) |
 | `STATUS_POLL_INTERVAL_MS` | 30 000 ms | `modem-update-loop.ts` | mmcli reconciliation backstop rate (unchanged) |
 | `DEFAULT_INIT_TIMEOUT_MS` | 15 000 ms | `cellular-stack.ts` | boot fallback deadline (unchanged) |
+| `FALLBACK_STOP_TIMEOUT_MS` | 2 000 ms | `cellular-stack.ts` | boot fallback wait for the D-Bus close |
 
 ---
 
