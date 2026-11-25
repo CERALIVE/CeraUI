@@ -46,6 +46,7 @@ import * as autoAudio from "../modules/streaming/auto-audio.ts";
 import * as bindMapSpawn from "../modules/streaming/bind-map-spawn.ts";
 import {
 	bluetoothAudioSourceId,
+	isBluetoothAudioSourceId,
 	resetBluetoothAudioForTest,
 	setBluetoothAudioDepsForTest,
 } from "../modules/streaming/bluetooth-audio.ts";
@@ -842,6 +843,20 @@ const AWAITS: Record<string, () => void | Promise<void>> = {
 		);
 	},
 	...GATES,
+	"microphone list refresh": () => {
+		spyOn(preparation, "prepareSrtlaIpAddresses").mockImplementationOnce(
+			async () => {
+				getConfig().audio_backend = "pipewire";
+				return published();
+			},
+		);
+		spyOn(audio, "refreshBluetoothAudioDevices").mockImplementationOnce(
+			async () => {
+				getConfig().audio_backend = undefined;
+				await hold();
+			},
+		);
+	},
 	"audio probe": () => {
 		holdProbe((asrc) => asrc);
 	},
@@ -1852,7 +1867,7 @@ test.each(
 		await loseEngine();
 		await RESTORE_AWAITS[point]?.();
 		const restoring = restore();
-		await reached.promise;
+		await Promise.race([reached.promise, restoring]);
 		expect(await choice.save()).toMatchObject({ success: true });
 		gate.resolve();
 		expect((await restoring).result).toBe("recovered");
@@ -1890,7 +1905,8 @@ test("a marker from before the mix was recorded restores its pick with the saved
 /** The first look of the real check, without its wait. */
 const lookForMicrophone = () =>
 	spyOn(audio, "asrcProbe").mockImplementation(async (asrc) => {
-		await audio.refreshBluetoothAudioDevices();
+		if (isBluetoothAudioSourceId(asrc))
+			await audio.refreshBluetoothAudioDevices();
 		if (!(asrc in audio.getAudioDevices()))
 			throw new audio.AudioProbeTimeoutError(asrc);
 		return asrc;
@@ -1991,8 +2007,12 @@ test.each(
 	async (name, as) => {
 		try {
 			const saveBackend = await savedBluetooth(as);
-			await ENTRIES[name]?.(saveBackend);
-			expect(launchedAudio().at(-1)).toEqual(bluetoothOnTheWire(as));
+			let launches = 0;
+			await ENTRIES[name]?.(async () => {
+				launches = launchedAudio().length;
+				await saveBackend();
+			});
+			expect(launchedAudio().slice(launches)).toEqual([bluetoothOnTheWire(as)]);
 			// The list is the saved backend's again once the launch is done.
 			expect(Object.values(audio.getAudioDevices())).not.toContain(BLUETOOTH);
 			expect(await disk()).toMatchObject({ audio_backend: "pipewire" });
@@ -2060,6 +2080,25 @@ test("a microphone that re-enumerated is restored under its new id", async () =>
 	reenumerate("Second", "Third");
 	expect(await restart()).toEqual(device("Third"));
 });
+
+test.each(SHAPES)(
+	"a microphone that re-enumerates while the stream is restored is launched under its new id (%s)",
+	async (shape) => {
+		await running("Primary", shape);
+		await loseEngine();
+		GATES["bond preparation"]?.();
+		const restoring = restore();
+		await reached.promise;
+		reenumerate("Primary", "Third");
+		gate.resolve();
+		expect((await restoring).result).toBe("recovered");
+		expect(launchedAudio().at(-1)).toEqual(
+			shape === "mix"
+				? mixed(wire("Third", [1]), wire("Second", [2]))
+				: device("Third"),
+		);
+	},
+);
 
 test("a microphone muted live that re-enumerated is still muted after an engine restart", async () => {
 	liveEngine();
