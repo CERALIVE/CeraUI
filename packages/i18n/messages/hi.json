@@ -2713,6 +2713,7 @@
 	"wifiSelector.button.changePassword": "पासवर्ड बदलें",
 	"wifiSelector.button.disconnect": "डिस्कनेक्ट करें",
 	"wifiSelector.button.forget": "भूल जाएं",
+	"wifiSelector.button.manage": "प्रबंधित करें",
 	"wifiSelector.button.scan": "स्कैन करें",
 	"wifiSelector.button.scanning": "स्कैन हो रहा है",
 	"wifiSelector.dialog.availableNetworks": "{network} के लिए उपलब्ध नेटवर्क",

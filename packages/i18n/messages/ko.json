@@ -2493,6 +2493,7 @@
 	"wifiSelector.button.changePassword": "비밀번호 변경",
 	"wifiSelector.button.disconnect": "연결 해제",
 	"wifiSelector.button.forget": "삭제",
+	"wifiSelector.button.manage": "관리",
 	"wifiSelector.button.scan": "스캔",
 	"wifiSelector.button.scanning": "스캔 중",
 	"wifiSelector.dialog.availableNetworks": "{network}에 사용 가능한 네트워크",

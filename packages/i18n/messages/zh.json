@@ -2493,6 +2493,7 @@
 	"wifiSelector.button.changePassword": "更改密码",
 	"wifiSelector.button.disconnect": "断开连接",
 	"wifiSelector.button.forget": "忘记",
+	"wifiSelector.button.manage": "管理",
 	"wifiSelector.button.scan": "扫描",
 	"wifiSelector.button.scanning": "扫描中",
 	"wifiSelector.dialog.availableNetworks": "{network} 可用网络",

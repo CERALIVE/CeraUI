@@ -99,11 +99,11 @@ test.describe('Per-interface WiFi connect', () => {
 		const dialog = page.getByRole('dialog', { name: 'Available Networks' });
 
 		// (b) Each radio's own Connect opens the selector; a scanned network row
-		// (`<p title={ssid}>`) proves the device-scoped list renders.
+		// (`wifi-network-row`) proves the device-scoped list renders.
 		for (let i = 0; i < STATION_RADIO_COUNT; i++) {
 			await connectButtons.nth(i).click();
 			await expect(dialog).toBeVisible();
-			await expect(dialog.locator('p[title]').first()).toBeVisible({ timeout: 15_000 });
+			await expect(dialog.getByTestId('wifi-network-row').first()).toBeVisible({ timeout: 15_000 });
 
 			// Close before opening the next radio's selector.
 			await page.keyboard.press('Escape');

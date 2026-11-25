@@ -2493,6 +2493,7 @@
 	"wifiSelector.button.changePassword": "パスワードを変更",
 	"wifiSelector.button.disconnect": "切断",
 	"wifiSelector.button.forget": "削除",
+	"wifiSelector.button.manage": "管理",
 	"wifiSelector.button.scan": "スキャン",
 	"wifiSelector.button.scanning": "スキャン中",
 	"wifiSelector.dialog.availableNetworks": "{network}で利用可能なネットワーク",

@@ -195,6 +195,10 @@ describe("WifiSelectorDialog — correcting a password after a failed join", () 
 		await settle();
 		expect(passwordInput()).toBeNull();
 
+		// Change password lives in the saved network's details.
+		await fireEvent.click(
+			screen.getByRole("button", { name: `Manage ${SSID}` }),
+		);
 		const change = screen.getByRole("button", {
 			name: `Change password ${SSID}`,
 		});
@@ -247,14 +251,30 @@ describe("WifiSelectorDialog — correcting a password after a failed join", () 
 		render(WifiSelectorDialog, { props: { open: true, deviceId: "0" } });
 		await settle();
 
+		// Each saved network's details in turn (one is open at a time): the active
+		// one, the open one and the SAE-only one. None offers a password change.
+		for (const ssid of [SSID, OPEN_SSID, SAE_ONLY_SSID]) {
+			await fireEvent.click(
+				screen.getByRole("button", { name: `Manage ${ssid}` }),
+			);
+			await settle();
+			expect(screen.getByTestId("wifi-network-details").dataset.ssid).toBe(
+				ssid,
+			);
+			expect(
+				screen.queryByRole("button", { name: /^Change password / }),
+			).toBeNull();
+		}
+
+		await fireEvent.click(
+			screen.getByRole("button", { name: `Manage ${OPEN_SSID}` }),
+		);
+		await settle();
 		expect(
 			screen.getByRole("button", { name: `Forget ${OPEN_SSID}` }),
 		).toBeTruthy();
 		expect(
 			screen.getByRole("button", { name: `Connect ${SAE_ONLY_SSID}` }),
 		).toBeTruthy();
-		expect(
-			screen.queryByRole("button", { name: /^Change password / }),
-		).toBeNull();
 	});
 });
