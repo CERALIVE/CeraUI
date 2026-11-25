@@ -125,7 +125,7 @@ export function persistentNotificationNames(prefix: string): string[] {
 // Revisions start over when the backend restarts; this namespaces them.
 const publisher: string = crypto.randomUUID();
 let revisionCounter = 0;
-function nextRevision(): number {
+export function nextRevision(): number {
 	return ++revisionCounter;
 }
 

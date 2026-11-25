@@ -12,7 +12,8 @@ import {
 	type GetCapabilitiesResult,
 	SCHEMA_VERSION,
 } from "@ceralive/cerastream";
-import { call } from "@orpc/server";
+import { streamingStartOutputSchemaExtended } from "@ceraui/rpc/schemas";
+import { call, type Procedure } from "@orpc/server";
 import {
 	getMockState,
 	initMockService,
@@ -24,20 +25,19 @@ import { getConfig } from "../modules/config.ts";
 import { clearCapabilitiesCache } from "../modules/streaming/capabilities.ts";
 import { initPipelines } from "../modules/streaming/pipelines.ts";
 import { updateStatus } from "../modules/streaming/streaming.ts";
+import { handleORPCMessage } from "../rpc/adapter.ts";
 import { initSocketData } from "../rpc/context.ts";
 import {
 	initUiBuildIdentity,
-	UI_OUT_OF_DATE_MESSAGE,
+	uiBuildMiddleware,
+	uiBuildStartMiddleware,
 } from "../rpc/middleware/ui-build.middleware.ts";
-import { setAudioMixProcedure } from "../rpc/procedures/audio-mix.procedure.ts";
 import {
 	getConfigProcedure,
-	reloadAudioDelayProcedure,
 	setConfigProcedure,
 	streamingStartProcedure,
-	switchAudioProcedure,
-	switchInputProcedure,
 } from "../rpc/procedures/streaming.procedure.ts";
+import { appRouter } from "../rpc/router.ts";
 import type { RPCContext } from "../rpc/types.ts";
 import { makeRpcContext } from "./helpers/bond-toggle-fixture.ts";
 
@@ -131,39 +131,136 @@ describe("a page from this build", () => {
 	});
 });
 
+/** Every call the gate refuses, with an input its handler would act on. */
+const GATED: ReadonlyArray<readonly [path: string, input: unknown]> = [
+	["streaming.start", {}],
+	["streaming.setConfig", { max_br: 5000 }],
+	["streaming.setConfig", { video_codec: null }],
+	["streaming.setSourceVisibility", { hide_test_pattern: true }],
+	["streaming.setAudioMix", { id: "usb-a", mute: true }],
+	["streaming.switchInput", { input_id: "/dev/video0" }],
+	["streaming.switchAudio", { audio_input_id: "audio:usb-a" }],
+	["streaming.reloadAudioDelay", { delay_ms: 100 }],
+];
+const UNGATED = [
+	"getAudioCodecs",
+	"getConfig",
+	"getEngine",
+	"getMockHardware",
+	"getPipelines",
+	"listDevices",
+	"setBitrate",
+	"setMockDeviceAttached",
+	"setMockHardware",
+	"stop",
+	"streamHealth",
+];
+
+/** What the socket is sent for a call: the adapter's own reply, as its page gets it. */
+async function replyTo(
+	context: RPCContext,
+	sent: string[],
+	path: string,
+	input: unknown,
+): Promise<Record<string, unknown>> {
+	await handleORPCMessage(context.ws, {
+		id: path,
+		path: path.split("."),
+		input,
+	});
+	return sent
+		.map((message) => JSON.parse(message) as Record<string, unknown>)
+		.findLast((frame) => frame.id === path) as Record<string, unknown>;
+}
+
+describe("which calls are gated", () => {
+	test("every streaming procedure is in exactly one of the two lists", () => {
+		expect(
+			[
+				...new Set(GATED.map(([path]) => path.split(".")[1])),
+				...UNGATED,
+			].sort(),
+		).toEqual(Object.keys(appRouter.streaming).sort());
+	});
+
+	for (const name of UNGATED) {
+		test(`${name} carries no gate`, () => {
+			const procedure = Reflect.get(appRouter.streaming, name) as Procedure<
+				never,
+				never,
+				never,
+				never,
+				never
+			>;
+
+			for (const { middleware } of procedure["~orpc"].orderedMiddlewares)
+				expect([uiBuildMiddleware, uiBuildStartMiddleware]).not.toContain(
+					middleware as never,
+				);
+		});
+	}
+});
+
 describe("a page from another build, or one that names none", () => {
 	for (const announced of ["build-old", null]) {
-		test(`(${announced ?? "none"}) is refused Start and every Live write before any change or engine call, and told to reload`, async () => {
+		for (const [path, input] of GATED) {
+			test(`(${announced ?? "none"}) ${path} ${JSON.stringify(input)} is refused before any change or engine call, and the page is told to reload`, async () => {
+				const sent: string[] = [];
+				const before = JSON.stringify(getConfig());
+
+				const reply = await replyTo(
+					uiSocket(announced, sent),
+					sent,
+					path,
+					input,
+				);
+
+				// Start resolves: a page reads a thrown Start as a lost reply, and shows nothing.
+				expect(reply).toEqual(
+					path === "streaming.start"
+						? {
+								id: path,
+								result: {
+									success: false,
+									is_streaming: false,
+									error: "UI_OUT_OF_DATE",
+								},
+							}
+						: {
+								id: path,
+								error: {
+									message: "This page is out of date. Reload to continue.",
+									code: "INTERNAL_ERROR",
+								},
+							},
+				);
+				expect(JSON.stringify(getConfig())).toBe(before);
+				expect(getMockState().engineStart).toBeNull();
+				// `msg` for a bundle from before the key existed, `key` for a localized one.
+				expect(reloadNotices(sent)).toEqual([
+					{
+						msg: "This page is out of date. Reload to continue.",
+						key: "notifications.uiOutOfDate",
+					},
+				]);
+			});
+		}
+
+		test(`(${announced ?? "none"}) is refused the same way when its input is one this build no longer takes`, async () => {
 			const sent: string[] = [];
 			const context = uiSocket(announced, sent);
-			const before = JSON.stringify(getConfig());
 
-			for (const write of [
-				() => call(setConfigProcedure, { max_br: 5000 }, { context }),
-				() => call(setConfigProcedure, { video_codec: null }, { context }),
-				() => call(streamingStartProcedure, {}, { context }),
-				() =>
-					call(setAudioMixProcedure, { id: "usb-a", mute: true }, { context }),
-				() =>
-					call(switchInputProcedure, { input_id: "/dev/video0" }, { context }),
-				() => call(switchAudioProcedure, { asrc: "usb-a" }, { context }),
-				() => call(reloadAudioDelayProcedure, { delay_ms: 100 }, { context }),
-			]) {
-				await expect(write()).rejects.toMatchObject({
-					message: UI_OUT_OF_DATE_MESSAGE,
-				});
-			}
-
-			expect(JSON.stringify(getConfig())).toBe(before);
-			expect(getMockState().engineStart).toBeNull();
-			// `msg` for a bundle from before the key existed, `key` for a localized one.
-			expect(reloadNotices(sent)).toContainEqual({
-				msg: UI_OUT_OF_DATE_MESSAGE,
-				key: "notifications.uiOutOfDate",
+			const start = await replyTo(context, sent, "streaming.start", {
+				max_br: "fast",
 			});
-			expect(UI_OUT_OF_DATE_MESSAGE).toBe(
-				"This page is out of date. Reload to continue.",
-			);
+			expect(
+				streamingStartOutputSchemaExtended.parse(start.result),
+			).toMatchObject({ success: false, error: "UI_OUT_OF_DATE" });
+			expect(
+				await replyTo(context, sent, "streaming.setConfig", { max_br: "fast" }),
+			).toMatchObject({
+				error: { message: "This page is out of date. Reload to continue." },
+			});
 		});
 	}
 

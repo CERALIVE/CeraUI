@@ -99,6 +99,7 @@ import {
 import type { ConnectionState } from "./client";
 import { rpc, rpcClient } from "./client";
 import {
+	clearIsShownReactive,
 	expireReactive,
 	holdsValueReactive,
 	isPending,
@@ -1345,7 +1346,10 @@ function mergeConfig(incoming: ConfigMessage, by: "pull" | "push"): void {
 	);
 	for (const [field, value] of Object.entries(incoming)) {
 		if (value === undefined) continue;
-		if (shouldIgnoreEchoReactive(field, value)) {
+		if (
+			shouldIgnoreEchoReactive(field, value) &&
+			!clearIsShownReactive(field, merged[field])
+		) {
 			deferredConfig[field] = value;
 			continue;
 		}

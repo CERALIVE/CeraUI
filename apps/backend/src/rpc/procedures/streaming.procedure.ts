@@ -153,7 +153,10 @@ import { start as startStream } from "../../modules/streaming/streamloop.ts";
 import { broadcastMsg } from "../../modules/ui/websocket-server.ts";
 import { broadcastConfig } from "../config-broadcast.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
-import { uiBuildMiddleware } from "../middleware/ui-build.middleware.ts";
+import {
+	uiBuildMiddleware,
+	uiBuildStartMiddleware,
+} from "../middleware/ui-build.middleware.ts";
 import type { RPCContext } from "../types.ts";
 
 export { setAudioMixProcedure } from "./audio-mix.procedure.ts";
@@ -253,7 +256,8 @@ function startResponse(
 /**
  * Start streaming procedure
  */
-export const streamingStartProcedure = liveWriteProcedure
+export const streamingStartProcedure = authedProcedure
+	.use(uiBuildStartMiddleware)
 	.input(streamingConfigInputSchema)
 	.output(streamingStartOutputSchemaExtended)
 	.handler(async ({ input, context }) => {
@@ -1227,7 +1231,7 @@ export const setConfigProcedure = liveWriteProcedure
  * the Live source list re-renders the marked-but-never-dropped row) and the
  * `config` echo (so the Sources dialog reflects the saved toggle).
  */
-export const setSourceVisibilityProcedure = authedProcedure
+export const setSourceVisibilityProcedure = liveWriteProcedure
 	.input(setSourceVisibilityInputSchema)
 	.output(setSourceVisibilityOutputSchema)
 	.handler(({ input }) => {

@@ -64,8 +64,11 @@ git-tracked frontend inputs, before any generation step, and both packages and
 the system archive stamp it beside the bundle (the build fails when the bundle
 does not carry it). `readBuildIdentity` reads it, else `CERAUI_BUILD_ID` from the
 environment (dev, e2e), and the UI-build gate compares it with the build a page
-names on its socket. Coverage: `scripts/build/build-identity.test.sh`,
-`tests/ui-build-admission.test.ts`.
+names on its socket. Coverage: `scripts/build/build-identity.test.sh` for the
+stamp each artifact installs, `tests/ui-build-wiring.test.ts` for
+`readBuildIdentity` and every link from it to a refused call (the shipped
+entrypoint, with a stamp, with only the environment and with neither, over real
+sockets), `tests/ui-build-admission.test.ts` for what each refused call answers.
 
 **`resolveCeraUiRevision` is the ladder, and its three rungs answer three
 different questions:**

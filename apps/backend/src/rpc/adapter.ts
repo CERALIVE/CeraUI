@@ -40,10 +40,7 @@ import {
 	removeClient,
 	sendToClient,
 } from "./events.ts";
-import {
-	isOutOfDateUi,
-	sendOutOfDateNotice,
-} from "./middleware/ui-build.middleware.ts";
+import { syncOutOfDateNotice } from "./middleware/ui-build.middleware.ts";
 import { sendAddonSnapshot } from "./procedures/addons.procedure.ts";
 import {
 	buildInitialNotifications,
@@ -272,9 +269,7 @@ function sendInitialStatusToClient(ws: AppWebSocket): void {
 	// that. The legacy relay path has always replayed these.
 	sendToClient(ws, "notification", buildInitialNotifications());
 	// A page from another build learns to reload before it tries a Live write.
-	void isOutOfDateUi(ws).then((outOfDate) => {
-		if (outOfDate) sendOutOfDateNotice(ws);
-	});
+	void syncOutOfDateNotice(ws);
 }
 
 /**

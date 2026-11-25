@@ -142,6 +142,24 @@ export function shouldIgnoreEcho(
 }
 
 /**
+ * Whether `field`'s lock asked for a clear and `shown`, what view state holds
+ * for it, is already cleared. Such a lock guards nothing: there is no pre-edit
+ * value an echo could bring back, so a value the device lists is newer. The
+ * device names no key that was absent all along, so nothing but the TTL would
+ * ever release it.
+ */
+function clearIsShown(
+	registry: DirtyRegistry,
+	field: string,
+	shown: unknown,
+): boolean {
+	const lock = registry.locks[field];
+	return (
+		lock !== undefined && isCleared(lock.intendedValue) && isCleared(shown)
+	);
+}
+
+/**
  * Reconcile one incoming field value (present in a `config`/`status` message)
  * against the registry. Callers iterate only over fields the message actually
  * carries — so a message that omits a locked field can never release it.
@@ -231,19 +249,31 @@ export function onRpcApplied(
 }
 
 /**
+ * Whether `value` is no value at all: a write that intends it asks for a clear.
+ * The empty text is one too, since the server dialog clears the selected slot
+ * with it and the device stores that as absent. `0`, `false` and an empty list
+ * are values.
+ */
+export function isCleared(value: unknown): boolean {
+	return value === undefined || value === null || value === "";
+}
+
+/**
  * Whether `field`'s lock guards a value whose write is still in flight. A lock
- * whose write asked for a clear (a nullish intent), or was already answered,
+ * whose write asked for a clear ({@link isCleared}), or was already answered,
  * guards nothing against a device that reports the field absent.
  */
 function holdsValue(registry: DirtyRegistry, field: string): boolean {
 	const lock = registry.locks[field];
-	return lock !== undefined && lock.intendedValue != null && !lock.rpcResolved;
+	return (
+		lock !== undefined && !isCleared(lock.intendedValue) && !lock.rpcResolved
+	);
 }
 
 /**
  * Reconcile a field the device reported CLEARED (`config_clear`); the caller
  * deletes it from view state whatever this returns. The lock is released when
- * its write asked for that clear (a nullish intent) or has been answered; a
+ * its write asked for that clear ({@link isCleared}) or has been answered; a
  * newer write still in flight for a value keeps its lock, so a stale echo of the
  * old value stays ignored until that write's own echo arrives. Returns whether
  * it released the lock.
@@ -286,6 +316,7 @@ export const registryCore = {
 	markPending: markPendingField,
 	markResolved,
 	shouldIgnoreEcho,
+	clearIsShown,
 	reconcile,
 	holdsValue,
 	reconcileClear,
@@ -306,6 +337,7 @@ interface DirtyStore {
 	markPending: (field: string, intendedValue: unknown, now?: number) => void;
 	markResolved: (field: string) => void;
 	shouldIgnoreEcho: (field: string, incomingValue: unknown) => boolean;
+	clearIsShown: (field: string, shown: unknown) => boolean;
 	reconcile: (
 		field: string,
 		incomingValue: unknown,
@@ -353,6 +385,7 @@ function createDirtyStore(): DirtyStore {
 		},
 		shouldIgnoreEcho: (field, incomingValue) =>
 			shouldIgnoreEcho(registry, field, incomingValue),
+		clearIsShown: (field, shown) => clearIsShown(registry, field, shown),
 		reconcile: (field, incomingValue, now = Date.now(), options?) =>
 			reconcile(
 				registry,
@@ -417,6 +450,11 @@ export function shouldIgnoreEchoReactive(
 	incomingValue: unknown,
 ): boolean {
 	return store().shouldIgnoreEcho(field, incomingValue);
+}
+
+/** Whether `field`'s lock is a clear that already shows. See {@link clearIsShown}. */
+export function clearIsShownReactive(field: string, shown: unknown): boolean {
+	return store().clearIsShown(field, shown);
 }
 
 /** Reconcile an incoming field value against the live registry. */
