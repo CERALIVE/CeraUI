@@ -5,8 +5,12 @@
 ### Stream-read ordering and watchdog ownership [EXISTS; host-tested]
 
 Reconnect consumes config/status independently, while restoration still waits
-for both paths. A status pull carries request-dispatch and browser-receipt marks
-on the evidence clock; a newer intent/STREAM-FACT observation supersedes stream
+for both paths. After a successful sign-in reply, the first hydration frame
+carries only `is_streaming` and `stream_lifecycle`. The device sends this partial
+status to the socket that signed in, before building the full snapshot. A
+snapshot failure therefore does not hide the stream. A status pull carries
+request-dispatch and browser-receipt marks on the evidence clock; a newer
+intent/STREAM-FACT observation supersedes stream
 evidence. Only `is_streaming`, `stream_lifecycle` and unclassified field names
 advance that atomic horizon (unknown fails closed). Explicitly unrelated pushes
 never advance it. Superseded stream fields are withheld, but unrelated supplied

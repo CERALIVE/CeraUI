@@ -21,12 +21,15 @@ import {
 	getStreamHealth,
 	HEALTH_EVENT_TYPE,
 } from "../modules/streaming/health.ts";
+import { getStreamLifecycleState } from "../modules/streaming/stream-lifecycle-status.ts";
+import { getIsStreaming } from "../modules/streaming/streaming.ts";
 import { CPU_EVENT } from "../modules/system/cpu.ts";
 import { getDeviceStatsSnapshot } from "../modules/system/device-stats-snapshot.ts";
 import {
 	createPreviewWebSocketHandler,
 	isPreviewSocket,
 } from "../modules/ui/preview-proxy.ts";
+import type { StatusResponseMessage } from "../modules/ui/status.ts";
 import {
 	closeSocketSession,
 	createContext,
@@ -223,6 +226,11 @@ export async function handleORPCMessage(
  * Send initial status to a newly authenticated client
  */
 function sendInitialStatusToClient(ws: AppWebSocket): void {
+	// Apart from the snapshot, which one unreadable inventory row can make throw.
+	sendToClient(ws, "status", {
+		is_streaming: getIsStreaming(),
+		stream_lifecycle: getStreamLifecycleState(),
+	} satisfies StatusResponseMessage);
 	const initialStatus = buildInitialStatus();
 
 	sendToClient(ws, "config", initialStatus.config);
