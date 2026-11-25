@@ -173,8 +173,12 @@ for (const [layout, bytes] of Object.entries(damage)) {
 		const before = sha256(damaged);
 		// When A is acknowledged against matching hardware.
 		const answer = acknowledgeMutation("usb:a", "verified-rollback");
-		// Then A's slot retires, and the strict block publication refuses the damaged inventory.
-		await expect(answer).rejects.toBeInstanceOf(MutationJournalInventoryError);
+		// Then A's retirement is reported honestly while the unrelated damage holds recovery.
+		await expect(answer).resolves.toEqual({
+			success: true,
+			state: "acknowledged",
+		});
+		expect(isRecoveryPending()).toBe(true);
 		expect(existsSync(slotPath("usb:a"))).toBe(false);
 		expect(sha256(damaged)).toBe(before);
 	});

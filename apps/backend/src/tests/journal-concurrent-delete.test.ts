@@ -98,15 +98,14 @@ test("a concurrent deletion is not an unreadable slot in the verification pass",
 	expect(isRecoveryPending()).toBe(false);
 });
 
-test("a genuinely malformed journal entry still vetoes strict publication", async () => {
+test("a genuinely malformed journal entry allows readable rows but still holds recovery", async () => {
 	// Given valid slots, then damage in b rather than absence.
 	const target = await fixture();
 	setMutationJournalDeps({ dir: root });
 	writeFileSync(target, "{");
 	// When publication parses the malformed entry.
-	await expect(refreshMutationBlocks()).rejects.toThrow(
-		"unreadable mutation journal inventory",
-	);
+	const blocks = await refreshMutationBlocks();
+	expect(blocks.map((block) => block.stableKey)).toEqual(["usb:a"]);
 	// Then retained damage keeps the recovery barrier closed.
 	expect(readFileSync(target, "utf8")).toBe("{");
 	expect(isRecoveryPending()).toBe(true);
