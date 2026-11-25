@@ -187,7 +187,7 @@ test.describe('fixed dock edge cases (#737)', { tag: '@mobile-only' }, () => {
 		await expect(dialog).toBeHidden();
 		await page.setViewportSize({ width: 800, height: 480 });
 		await expect(dock).toHaveCount(0);
-		await expect(page.locator('#nav-tab-settings')).toBeVisible();
+		await expect(page.getByTestId('rail-nav')).toBeVisible();
 		await expect(page.locator('main')).toHaveCSS('padding-bottom', '0px');
 		await expect(page.locator('html')).toHaveCSS('scroll-padding-bottom', 'auto');
 	});
