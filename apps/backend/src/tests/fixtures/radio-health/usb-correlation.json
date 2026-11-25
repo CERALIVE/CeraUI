@@ -1,0 +1,16 @@
+{
+	"durationMs": 100000,
+	"events": [
+		{ "at": 20000, "kind": "reset" },
+		{ "at": 50000, "kind": "reset" },
+		{ "at": 80000, "kind": "reset" }
+	],
+	"transmitWindows": [
+		{ "start": 10000, "end": 30000, "source": "payload-counter" },
+		{ "start": 40000, "end": 60000, "source": "reviewed-control-activity" }
+	],
+	"quietWindows": [
+		{ "start": 0, "end": 5000 },
+		{ "start": 70000, "end": 90000 }
+	]
+}

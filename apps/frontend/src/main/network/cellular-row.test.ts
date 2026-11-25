@@ -772,6 +772,10 @@ describe("labels", () => {
 			},
 		});
 		expect(detailLine(m, primaryLabel(m))).toBe("4G");
+		// The radio health card names the network type itself.
+		expect(
+			detailLine(m, primaryLabel(m), { omitNetworkType: true }),
+		).toBeUndefined();
 		expect(detailLine(modem({ name: "dongle0" }), "dongle0")).toBeUndefined();
 	});
 

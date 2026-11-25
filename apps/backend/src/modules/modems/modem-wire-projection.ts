@@ -1,3 +1,4 @@
+import type { RadioHealth } from "@ceraui/rpc/schemas";
 /*
     CeraUI - web UI for the CeraLive project
     Copyright (C) 2024-2025 CeraLive project
@@ -236,6 +237,7 @@ export interface WireModemConfig {
 
 /** One projected wire entry — same field set + key ORDER as `buildModemMessage`. */
 export type WireModemEntry = {
+	radio_health?: RadioHealth | undefined;
 	status?: WireModemStatus;
 	ifname?: string;
 	name?: string;

@@ -52,6 +52,10 @@ const TRANSPORT_KEEP_ALLOWLIST = new Set([
 	"modules/modems/fcc-unlock.ts",
 	"modules/modems/five-g-apply.ts",
 	"modules/modems/five-g-preference.ts",
+	// KEEP, not MIGRATE: the read-only AT lease owns a serial transport on the
+	// port ModemManager released (the package ships `AtCommandSender` only as an
+	// interface) and reads ModemManager's port list to prove that release.
+	"modules/modems/free-at-port.ts",
 	"modules/modems/gps.ts",
 	"modules/modems/mmcli-location.ts",
 	"modules/modems/mmcli-sms.ts",

@@ -276,6 +276,11 @@ export const OPERATION_PARITY: ParityRecord = {
  * a procedure the backend no longer dispatches.
  */
 export const BACKEND_RPC_PARITY: ParityRecord = {
+	"modems.getRadioHealth": {
+		disposition: "wired",
+		reason:
+			"RadioHealthPanel renders the cached observations through the modem broadcast; this procedure is its read-only pull equivalent.",
+	},
 	"modems.getAll": {
 		disposition: "wired",
 		reason:

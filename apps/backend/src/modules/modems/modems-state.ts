@@ -24,6 +24,7 @@ import type {
 } from "./mmcli.ts";
 import type { ModemStatus } from "./modem-registration.ts";
 import type { SimPresence } from "./sim-presence.ts";
+import { carryRadioRegistration } from "./state/radio-registration.ts";
 
 export type SimLock = {
 	required: SimLockRequired;
@@ -49,6 +50,7 @@ export type Modem = {
 	ifname: string; // e.g. wwan0
 	name: string; // e.g. "QUECTEL Broadband Module - 00000"
 	sim_network: string;
+	home_network?: string | undefined;
 	model?: string; // raw mmcli model, e.g. "RM520N-GL" — undefined if mmcli has no data
 	manufacturer?: string; // raw mmcli manufacturer, e.g. "Quectel" — undefined if absent
 	network_type: {
@@ -118,6 +120,7 @@ export function getModem(id: ModemId) {
 }
 
 export function setModem(id: ModemId, modem: Modem) {
+	carryRadioRegistration(modemsState[id], modem);
 	modemsState[id] = modem;
 }
 

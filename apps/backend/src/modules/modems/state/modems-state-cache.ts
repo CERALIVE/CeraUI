@@ -39,6 +39,7 @@ import type {
 	StateDiff,
 } from "../../../modules/network/state-types.ts";
 import type { Modem } from "../modems-state.ts";
+import { getRadioRegistrationObservation } from "./radio-registration.ts";
 
 /** Diff payload element: the modem ID plus its (next, or for removals prev) data. */
 export type ModemDiffEntry = { id: number; data: Modem };
@@ -79,6 +80,24 @@ function statusSignature(modem: Modem): string {
 	});
 }
 
+/**
+ * The device and SIM a modem ID currently names. A same-ID SIM or interface
+ * change with an unchanged status must still commit: consumers fenced by the
+ * committed identity (radio diagnostics) otherwise stay on the old SIM.
+ */
+function identitySignature(modem: Modem): string {
+	return JSON.stringify([modem.ifname, modem.iccid ?? null]);
+}
+
+/**
+ * The 3GPP registration state the last owner read saw. Radio diagnostics
+ * serve the value committed with the status, so a change in it must commit
+ * even when no status field moved. Its read time alone is not a change.
+ */
+function registrationSignature(modem: Modem): string {
+	return getRadioRegistrationObservation(modem)?.value ?? "";
+}
+
 /** Current modems snapshot. */
 export function getModemsState(): ModemsState {
 	return currentState;
@@ -88,7 +107,8 @@ export function getModemsState(): ModemsState {
  * Pure reconcile: classify every modem ID across two snapshots.
  *  - added:   present in `next`, absent from `prev`
  *  - removed: present in `prev`, absent from `next`
- *  - changed: present in both, status (signal/connection/registration/…) differs
+ *  - changed: present in both, status (signal/connection/registration/…),
+ *             identity (interface, SIM) or registration observation differs
  * Identical snapshots yield an empty diff.
  */
 export function reconcileModems(
@@ -114,7 +134,9 @@ export function reconcileModems(
 		const prevModem = prev[id];
 		if (
 			prevModem !== undefined &&
-			statusSignature(prevModem) !== statusSignature(nextModem)
+			(statusSignature(prevModem) !== statusSignature(nextModem) ||
+				identitySignature(prevModem) !== identitySignature(nextModem) ||
+				registrationSignature(prevModem) !== registrationSignature(nextModem))
 		) {
 			changed.push({ id, data: nextModem });
 		}

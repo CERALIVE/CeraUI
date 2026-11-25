@@ -742,11 +742,18 @@ export function carrierLabel(modem: Modem): string | undefined {
  * Omitting it here is a RELOCATION, not a deletion: `deriveDiagnostics` carries
  * the value into the marked diagnostics block, verbatim (OL-3).
  */
-export function detailLine(modem: Modem, primary: string): string | undefined {
+export function detailLine(
+	modem: Modem,
+	primary: string,
+	{ omitNetworkType = false }: { omitNetworkType?: boolean } = {},
+): string | undefined {
 	const parts: string[] = [];
 	const name = modem.name?.trim() ?? "";
 	if (name !== "" && name !== primary) parts.push(name);
-	const networkType = accessTechnologyDisplay(modem.status?.network_type);
+	// Omitted when the radio health card already names the network type and band.
+	const networkType = omitNetworkType
+		? undefined
+		: accessTechnologyDisplay(modem.status?.network_type);
 	if (networkType !== undefined) parts.push(networkType);
 	return parts.length > 0 ? parts.join(" · ") : undefined;
 }
