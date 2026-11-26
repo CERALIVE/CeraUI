@@ -30,6 +30,8 @@ import {
 } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { getConfig, resetState } from "$lib/rpc/subscriptions.svelte";
+import { heldRpc, ingest } from "../../tests/harness/device-loop";
 
 const setConfig = vi.hoisted(() =>
 	vi.fn<
@@ -39,17 +41,27 @@ const setConfig = vi.hoisted(() =>
 const setAudioMix = vi.hoisted(() =>
 	vi.fn<(input: Record<string, unknown>) => Promise<SetAudioMixOutput>>(),
 );
-vi.mock("$lib/rpc", () => ({
+vi.mock("$lib/rpc", async (original) => ({
+	...(await original<Record<string, unknown>>()),
 	rpc: { streaming: { setConfig, setAudioMix } },
-	rpcClient: {},
 }));
 
 // The socket-fed getters, set per test before rendering; reactive, so a test can
 // also change the device roster mid-session.
-vi.mock(
-	"$lib/rpc/subscriptions.svelte",
-	async () => await import("./__fixtures__/mixer-feed.svelte"),
-);
+vi.mock("$lib/rpc/subscriptions.svelte", async (original) => {
+	const subscriptions =
+		await original<typeof import("$lib/rpc/subscriptions.svelte")>();
+	const { getAudioLevel, getIsConnected, getSources, getStatus } = await import(
+		"./__fixtures__/mixer-feed.svelte"
+	);
+	return {
+		...subscriptions,
+		getAudioLevel,
+		getIsConnected,
+		getSources,
+		getStatus,
+	};
+});
 
 import { feed } from "./__fixtures__/mixer-feed.svelte";
 import AudioMixer from "./AudioMixer.svelte";
@@ -551,6 +563,150 @@ describe("AudioMixer — which input is the main one", () => {
 		await fireEvent.click(enable("usb-b"));
 		expect(setConfig).not.toHaveBeenCalled();
 		expect(setAudioMix).not.toHaveBeenCalled();
+	});
+});
+
+describe("AudioMixer — latest intent", () => {
+	const saved = {
+		asrc: "usb-a",
+		audio_inputs: [input("usb-a"), input("usb-b", { tracks: [2] })],
+	};
+	const on = (mute: boolean) => ({
+		success: true,
+		applied: { ...DEFAULTS, id: "usb-b", mute },
+	});
+
+	function heldMixer(isStreaming: boolean) {
+		const rpc = heldRpc();
+		setAudioMix.mockImplementation(
+			(update) =>
+				rpc.streaming.setAudioMix(update) as Promise<SetAudioMixOutput>,
+		);
+		ingest("status", { is_streaming: isStreaming });
+		ingest("config", saved);
+		const view = mixer({
+			config: getConfig(),
+			isStreaming,
+			mixActive: isStreaming,
+		});
+		return { rpc, view };
+	}
+
+	async function pressMute() {
+		await fireEvent.click(mute("usb-b"));
+	}
+
+	afterEach(resetState);
+
+	it.each([
+		["live", [0, 1]],
+		["live", [1, 0]],
+		["idle", [0, 1]],
+		["idle", [1, 0]],
+	] as const)(
+		"double-click sends unmute in %s with reply order %j",
+		async (mode, order) => {
+			const { rpc, view } = heldMixer(mode === "live");
+			await pressMute();
+			await pressMute();
+			expect(rpc.calls.map(({ input }) => input)).toEqual([
+				{ id: "usb-b", mute: true },
+				{ id: "usb-b", mute: false },
+			]);
+
+			for (const index of order) {
+				rpc.calls[index]?.resolve(on(index === 0));
+				await setAudioMix.mock.results[index]?.value;
+				await tick();
+				expect(mute("usb-b").getAttribute("aria-pressed")).toBe("false");
+			}
+			ingest("config", saved);
+			await view.rerender({ config: getConfig() });
+			expect(mute("usb-b").getAttribute("aria-pressed")).toBe("false");
+		},
+	);
+
+	it("five rapid clicks settle on the fifth choice", async () => {
+		const { rpc } = heldMixer(true);
+		for (let i = 0; i < 5; i++) await pressMute();
+		const choices = [true, false, true, false, true];
+		expect(rpc.calls.map(({ input }) => input)).toEqual(
+			choices.map((mute) => ({ id: "usb-b", mute })),
+		);
+
+		for (const index of [4, 0, 1, 2, 3]) {
+			rpc.calls[index]?.resolve(on(choices[index] === true));
+			await setAudioMix.mock.results[index]?.value;
+			await tick();
+		}
+		expect(mute("usb-b").getAttribute("aria-pressed")).toBe("true");
+	});
+
+	it("an old refusal after a newer success does not show an error", async () => {
+		const { rpc } = heldMixer(true);
+		await pressMute();
+		await pressMute();
+		rpc.calls[1]?.resolve(on(false));
+		await setAudioMix.mock.results[1]?.value;
+		rpc.calls[0]?.resolve({ success: false, error: "audio_input_unknown" });
+		await setAudioMix.mock.results[0]?.value;
+		await tick();
+		expect(errorOf("usb-b").textContent?.trim()).toBe("");
+		expect(mute("usb-b").getAttribute("aria-pressed")).toBe("false");
+	});
+
+	it("Stop discards a pending live edit and its late rejection", async () => {
+		const { rpc, view } = heldMixer(true);
+		await pressMute();
+		ingest("status", { is_streaming: false, stream_lifecycle: "idle" });
+		await view.rerender({ isStreaming: false });
+		rpc.calls[0]?.reject(new Error("late failure"));
+		await expect(setAudioMix.mock.results[0]?.value).rejects.toThrow(
+			"late failure",
+		);
+		await tick();
+		expect(errorOf("usb-b").textContent?.trim()).toBe("");
+		expect(mute("usb-b").getAttribute("aria-pressed")).toBe("false");
+	});
+
+	it("a replacement session ignores the old success even while the mixer remains live", async () => {
+		const { rpc } = heldMixer(true);
+		await pressMute();
+		ingest("status", { is_streaming: false, stream_lifecycle: "idle" });
+		ingest("status", { is_streaming: true, stream_lifecycle: "streaming" });
+		rpc.calls[0]?.resolve(on(true));
+		await setAudioMix.mock.results[0]?.value;
+		await tick();
+		expect(mute("usb-b").getAttribute("aria-pressed")).toBe("false");
+		expect(errorOf("usb-b").textContent?.trim()).toBe("");
+	});
+
+	it("an idle applied delay settles without overwriting a pending mute", async () => {
+		const { rpc } = heldMixer(false);
+		await fireEvent.change(delay("usb-b"), { target: { value: "250" } });
+		await pressMute();
+		rpc.calls[0]?.resolve({
+			success: true,
+			applied: { ...DEFAULTS, id: "usb-b", delay_ms: 240 },
+		});
+		await setAudioMix.mock.results[0]?.value;
+		await tick();
+		expect(delay("usb-b").value).toBe("240");
+		expect(mute("usb-b").getAttribute("aria-pressed")).toBe("true");
+
+		rpc.calls[1]?.resolve({ success: false, error: "audio_input_unknown" });
+		await setAudioMix.mock.results[1]?.value;
+		await tick();
+		expect(delay("usb-b").value).toBe("240");
+		expect(mute("usb-b").getAttribute("aria-pressed")).toBe("false");
+		const reason = errorOf("usb-b").querySelector("p");
+		expect(reason?.textContent?.trim()).toBeTruthy();
+		expect(
+			mute("usb-b").getAttribute("aria-describedby")?.split(" "),
+		).toContain(reason?.id);
+		expect(
+			delay("usb-b").getAttribute("aria-describedby")?.split(" ") ?? [],
+		).not.toContain(reason?.id);
 	});
 });
 

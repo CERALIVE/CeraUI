@@ -538,6 +538,48 @@ test.describe("audio mixer — caps-full", () => {
 		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
 	});
 
+	test("five rapid live Mute clicks settle on the last choice with replies held", async ({
+		page,
+		backendRpc,
+		workerBackend,
+	}) => {
+		await backendRpc.call(["streaming", "setConfig"], { audio_inputs: savedTwo });
+		await expect(page.getByTestId(`audio-strip-enable-${SECOND}`)).toHaveAttribute("aria-checked", "true");
+		await startButton(page).click();
+		const card = await liveMixCard(page, SECOND);
+		const mute = card.getByTestId(`audio-strip-mute-${SECOND}`);
+		await expect(mute).toHaveAttribute("aria-pressed", "false");
+		const before = (await workerBackend.mockEngine()).audioInputs;
+		const holds = Array.from({ length: 5 }, () => wire.holdAudioMix());
+
+		// No socket frame (reply or echo) can interleave with this burst of clicks.
+		await mute.evaluate((button: HTMLButtonElement) => {
+			for (let i = 0; i < 5; i++) button.click();
+		});
+		try {
+			const calls = await test.step("the mock answers all five writes", () =>
+				Promise.all(holds.map(({ held }) => held)), { timeout: 10_000 });
+			expect(calls.map(({ input }) => input)).toEqual(
+				[true, false, true, false, true].map((mute) => ({ id: SECOND, mute })),
+			);
+			expect(before).toHaveLength(2);
+			expect((await workerBackend.mockEngine()).audioInputs).toEqual(
+				before.map((input, index) => index === 1 ? { ...input, mute: true } : input),
+			);
+			for (const [index, hold] of holds.entries()) {
+				const delivered = wire.pageReply(calls[index]?.id);
+				hold.release();
+				await delivered;
+			}
+			await expect(mute).toHaveAttribute("aria-pressed", "true");
+			await expect(card.getByTestId(`audio-strip-error-${SECOND}`)).toBeEmpty();
+		} finally {
+			for (const hold of holds) hold.release();
+		}
+		await endStream(page);
+		await backendRpc.call(["streaming", "setConfig"], { audio_inputs: null });
+	});
+
 	test("a live mute whose answer is held shows the device's echo while held, and settles once released", async ({
 		page,
 		backendRpc,

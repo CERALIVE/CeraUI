@@ -75,10 +75,15 @@ const STATE_ROOT = path.resolve(
 	"../../../test-results/worker-backends",
 );
 
+type MockStart = NonNullable<
+	ReturnType<typeof import("../../../../backend/src/mocks/mock-service.js").getMockState>["engineStart"]
+>;
+
 /** What the mock engine runs, read over the private child channel. */
 export interface MockEngineState {
 	readonly streaming: boolean;
 	readonly composition: Record<string, unknown> | null;
+	readonly audioInputs: NonNullable<NonNullable<MockStart["audio"]>["inputs"]>;
 	/** The params of the last `start` request the mock engine received, admitted or refused. */
 	readonly lastStartParams: Record<string, unknown> | null;
 }

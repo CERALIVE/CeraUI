@@ -1638,6 +1638,36 @@ test("an engine restart restores the level the engine applied, not the one asked
 	);
 });
 
+test("a live mute answered after Stop and Start does not save into the new session", async () => {
+	const received = Promise.withResolvers<void>();
+	const release = Promise.withResolvers<void>();
+	liveEngine(async (update) => {
+		received.resolve();
+		await release.promise;
+		return update;
+	});
+	await running("Primary", "mix");
+	const before = structuredClone(getConfig().audio_inputs);
+	const writing = editMix("Second", { mute: true });
+	try {
+		await received.promise;
+		expect(
+			await call(streamingStopProcedure, undefined, context()),
+		).toMatchObject({ success: true, result: "stopped" });
+		expect(await start()).toMatchObject({ success: true });
+		expect(launchedAudio().at(-1)).toEqual(PRESSED.Primary.mix);
+	} finally {
+		release.resolve();
+		await writing;
+	}
+	expect(getConfig().audio_inputs).toEqual(before);
+	expect((await disk()).audio_inputs).toEqual(before);
+	expect(await writing).toEqual({
+		success: false,
+		error: "stream_ended_before_audio_saved",
+	});
+});
+
 test("a live mute the engine refused is not restored", async () => {
 	liveEngine(() => {
 		throw new CerastreamRpcError(-32602, "refused", "cerastream.refused", 1);
