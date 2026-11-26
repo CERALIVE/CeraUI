@@ -123,12 +123,14 @@ export function captureArmedStreamConfig(): ArmedStreamConfig {
 	copy("composition");
 	copy("source");
 	copy("source_stable_id");
-	copy("selected_video_input");
 	copy("input_mode");
 	if (launched?.streamConfig !== undefined) {
+		snapshot.selected_video_input = config.selected_video_input ?? null;
 		snapshot.balancer = config.balancer ?? null;
 		snapshot.failover_rate_policy = config.failover_rate_policy ?? null;
 		snapshot.previewEncode = config.previewEncode ?? null;
+	} else {
+		copy("selected_video_input");
 	}
 	return snapshot as ArmedStreamConfig;
 }
@@ -256,7 +258,13 @@ async function defaultLaunch(
 	const startAudio = restoredStartAudio(config, saved);
 	// Legacy markers never recorded these settings. Keep their existing
 	// fallback, but take it once before validating or waiting for the engine.
-	const { balancer, failover_rate_policy, previewEncode, ...recorded } = config;
+	const {
+		balancer,
+		failover_rate_policy,
+		previewEncode,
+		selected_video_input,
+		...recorded
+	} = config;
 	const launchConfig = {
 		relay_protocol: saved.relay_protocol,
 		...recorded,
@@ -271,7 +279,9 @@ async function defaultLaunch(
 				: (previewEncode ?? undefined),
 		...startAudio.config,
 		selected_video_input:
-			recorded.selected_video_input ?? deviceRegistry.getActiveInput(),
+			selected_video_input === undefined
+				? deviceRegistry.getActiveInput()
+				: (selected_video_input ?? undefined),
 	};
 	let resolved: Awaited<ReturnType<typeof validateConfig>>;
 	try {

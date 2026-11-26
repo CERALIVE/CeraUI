@@ -201,6 +201,7 @@ export function restoredStartAudio(
 		balancer: _balancer,
 		failover_rate_policy: _failoverRatePolicy,
 		previewEncode: _previewEncode,
+		selected_video_input: _selectedVideoInput,
 		...recorded
 	}: ArmedStreamConfig,
 	saved: RuntimeConfig,

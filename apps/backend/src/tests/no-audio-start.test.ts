@@ -2825,6 +2825,53 @@ test.each(
 );
 
 test.each([
+	["fresh marker", undefined],
+	["legacy marker", "fixture-input-at-restore"],
+] as const)(
+	"%s restores an omitted capture input using only the marker's semantics",
+	async (format, restoredInput) => {
+		const peer = await embeddedStartPeer();
+		keepMarker();
+		const activeInput = spyOn(deviceRegistry, "getActiveInput").mockReturnValue(
+			undefined,
+		);
+		expect(await start({ source: "rtmp" })).toMatchObject({ success: true });
+		expect(peer.launchParams).toHaveLength(1);
+		expect(peer.launchParams[0]).not.toHaveProperty("input_id");
+		const marker = readArmedStreamMarker();
+		if (marker === undefined) throw new Error("Start did not arm restoration");
+		if (format === "legacy marker") {
+			const { selected_video_input: _input, ...legacyConfig } = marker.config;
+			armed = JSON.stringify({ ...marker, config: legacyConfig });
+		}
+
+		await loseEngine();
+		activeInput.mockClear();
+		activeInput.mockReturnValue("fixture-input-at-restore");
+		GATES["relay address lookup"]?.();
+		const restoring = restore();
+		await reached.promise;
+		activeInput.mockReturnValue("fixture-input-after-relay-lookup");
+		gate.resolve();
+		expect((await restoring).result).toBe("recovered");
+		expect(
+			peer.launchParams.map(({ pipeline, input_id }) => [pipeline, input_id]),
+		).toEqual([
+			["rtmp", undefined],
+			["rtmp", restoredInput],
+		]);
+		if (format === "fresh marker") {
+			expect(peer.launchParams[1]).not.toHaveProperty("input_id");
+			expect(marker.config.selected_video_input).toBeNull();
+		}
+		expect(activeInput).toHaveBeenCalledTimes(
+			format === "legacy marker" ? 1 : 0,
+		);
+		expect(peer.checks).toEqual([]);
+	},
+);
+
+test.each([
 	{ name: "the coherent original", instance: "original" },
 	{ name: "an indistinguishable same-report replacement", instance: "other" },
 	{

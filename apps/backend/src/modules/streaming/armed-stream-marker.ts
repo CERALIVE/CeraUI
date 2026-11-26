@@ -142,7 +142,8 @@ const armedStreamConfigSchema = z.object({
 	composition: compositionConfigSchema.optional(),
 	source: z.string().optional(),
 	source_stable_id: z.string().optional(),
-	selected_video_input: z.string().optional(),
+	// Null records an omitted input_id; a missing field is legacy.
+	selected_video_input: z.string().nullable().optional(),
 	input_mode: inputModeSchema.optional(),
 });
 export type ArmedStreamConfig = z.infer<typeof armedStreamConfigSchema>;

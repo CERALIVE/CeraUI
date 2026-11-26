@@ -30,7 +30,10 @@ config snapshot plus the current `boot_id`, and nothing else that matters.
   encoding the previous one, so restoring from disk would apply an edit the
   operator explicitly deferred to their next start. `startStream` therefore takes
   an optional `configOverride` (absent for every other caller — byte-identical
-  behaviour) and restoration passes the snapshot.
+  behaviour) and restoration passes the snapshot. A new marker records `null`
+  for `selected_video_input` when Start omitted `input_id`. Restoration omits it
+  again. A legacy marker without the field instead captures the active input
+  once before validation and reuses that choice on retries.
 - **Its audio is the running audio.** The marker is written once, so a live audio
   change the engine acknowledged is written into it and into the launch pin that a
   later arming reads (`followLiveAudio`): gain, mute and delay of the mix
