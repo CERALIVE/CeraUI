@@ -148,6 +148,9 @@ Start request; saves made while it is in flight apply to the next Start only.
 before anything it waits for: the Start RPC, autostart, the set-profile restart. A
 restoration takes it from the armed marker (`restoredStartAudio`). `startStream` has
 no default for it, so no caller launches without one.
+The Start RPC resolves the requested or saved source before freezing audio. The
+same routed pipeline reaches the launch; an embedded-only RTMP or SRT request
+does not check a microphone, even if the saved pipeline was local.
 Validation, the codec gate, the probe, the engine request, every retry and the armed
 marker read that snapshot (`asrc`, `audio_inputs`, `acodec`, `delay` and
 `audio_backend`), never the saved config.

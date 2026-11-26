@@ -40,6 +40,7 @@ import {
 	saveConfig,
 	setConfigFilePath,
 } from "../modules/config.ts";
+import * as networkIngest from "../modules/network/network-ingest.ts";
 import {
 	handleSetProfile,
 	resetSetProfile,
@@ -2530,9 +2531,15 @@ function useRoutePeer(
 	);
 }
 
-test.each(["rtmp", "srt"] as const)(
-	"%s embedded Start neither saves an unused microphone nor authorizes its replacement",
-	async (pipeline) => {
+test.each(
+	(["rtmp", "srt"] as const).flatMap((pipeline) =>
+		(["pipeline", "source"] as const).map(
+			(selector) => [pipeline, selector] as const,
+		),
+	),
+)(
+	"%s embedded Start by %s does not check or save an unused mic or authorize its replacement",
+	async (pipeline, selector) => {
 		clearCapabilitiesCache();
 		await initPipelines({
 			fetchEngineCapabilities: async () => ({
@@ -2541,7 +2548,14 @@ test.each(["rtmp", "srt"] as const)(
 					network_embedded_audio: true,
 					sources: [
 						...(CAPS.sources ?? []),
-						{ id: pipeline, supports_audio: true },
+						{
+							id: pipeline,
+							supports_audio: true,
+							supports_resolution_override: false,
+							supports_framerate_override: false,
+							default_resolution: "1080p",
+							default_framerate: 30,
+						},
 					],
 				},
 				schemaVersion: SCHEMA_VERSION,
@@ -2549,16 +2563,23 @@ test.each(["rtmp", "srt"] as const)(
 			fetchEngineDevices: async () => ({ devices: [] }),
 		});
 		spyOn(gateway, "isGatewayActive").mockReturnValue(true);
+		spyOn(networkIngest, "getNetworkIngestInfo").mockReturnValue({
+			rtmp: { service_active: true, url: null },
+			srt: { service_active: true, url: null },
+		});
 		const peer = await scopedStartPeer("legacy-success", testMicRoutes);
 		useRoutePeer(peer);
 		getConfig().audio_inputs = undefined;
 		saveConfig();
 		try {
 			await listPhysicalMics(["micOld", ORIGINAL_MIC]);
-			expect(await start({ pipeline, asrc: "micOld" })).toMatchObject({
-				success: true,
-			});
+			expect((await disk()).pipeline).toBe("test");
+			const embedded = await start({ [selector]: pipeline, asrc: "micOld" });
+			expect(embedded).toMatchObject({ success: true });
 			expect(peer.starts().map(({ method }) => method)).toEqual(["start"]);
+			expect(peer.launchParams.map((launch) => launch.pipeline)).toEqual([
+				pipeline,
+			]);
 			expect(peer.startAudio).toEqual([{ mode: "default", delay_ms: 0 }]);
 			expect(peer.checks).toEqual([]);
 			expect(getConfig().asrc).toBe("No audio");
@@ -2566,7 +2587,8 @@ test.each(["rtmp", "srt"] as const)(
 			await stop();
 
 			await listPhysicalMics(["micOld", UNRELATED_MIC]);
-			expect(await start({ pipeline: "test", asrc: "micOld" })).toMatchObject({
+			const local = await start({ [selector]: "test", asrc: "micOld" });
+			expect(local).toMatchObject({
 				success: false,
 				failure: { code: "audio_source_probe_failed" },
 			});

@@ -274,15 +274,46 @@ export const streamingStartProcedure = authedProcedure
 	.handler(async ({ input, context }) => {
 		let appliedResponse: StreamingConfigInput | undefined;
 		let legacyError: string | undefined;
-		const startAudio = acceptStartAudio(input);
+		// Admission can observe the engine immediately. Route the effective source
+		// first, so both the audio snapshot and dispatch use the same pipeline.
+		const saved = getConfig();
+		const effectiveSource = input.source ?? saved.source;
+		const routed =
+			effectiveSource === undefined
+				? undefined
+				: resolveSourceRouting(
+						effectiveSource,
+						streamingProcedureDeps.getSourcesMessage().sources,
+						saved.last_seen_devices,
+						input.source === undefined
+							? configuredSelectionAnchor(effectiveSource)
+							: undefined,
+					);
+		const routedInput = routed?.ok
+			? {
+					...input,
+					pipeline: routed.pipeline,
+					selected_video_input: routed.selected_video_input,
+					source: effectiveSource,
+				}
+			: input;
+		const accepted =
+			routed?.ok === false
+				? routed
+				: { ok: true as const, audio: acceptStartAudio(routedInput) };
 		const starting = startStreamSession({
 			origin:
 				context.ws.remoteAddress === "control-channel"
 					? "remote-control"
 					: "ui",
 			launch: async ({ attemptId, generation }) => {
+				if (!accepted.ok) {
+					legacyError = accepted.error;
+					throwStartFailure("params", new Error(accepted.error), attemptId);
+				}
+				const startAudio = accepted.audio;
 				const applied: StreamingConfigInput = {
-					...input,
+					...routedInput,
 					...(input.max_br !== undefined
 						? { max_br: clampBitrate(input.max_br) }
 						: {}),
@@ -290,32 +321,6 @@ export const streamingStartProcedure = authedProcedure
 						? { srt_latency: Math.max(input.srt_latency, SRTLA_MIN_LATENCY_MS) }
 						: {}),
 				};
-
-				// Device-first source pre-validation (T3). Resolve the EFFECTIVE source
-				// (this start's input, else the persisted post-coercion config.source)
-				// HERE, before delegating: an unknown source rejects WITHOUT calling
-				// session.start (session.ts swallows updateConfig errors, so the reject
-				// must happen at this layer). A known source folds its derived pipeline +
-				// recomputed selected_video_input into `applied` so the launch dispatches
-				// the resolved pipeline through the existing offered-set gate below.
-				const effectiveSource = input.source ?? getConfig().source;
-				if (effectiveSource !== undefined) {
-					const routed = resolveSourceRouting(
-						effectiveSource,
-						streamingProcedureDeps.getSourcesMessage().sources,
-						getConfig().last_seen_devices,
-						input.source === undefined
-							? configuredSelectionAnchor(effectiveSource)
-							: undefined,
-					);
-					if (!routed.ok) {
-						legacyError = routed.error;
-						throwStartFailure("params", new Error(routed.error), attemptId);
-					}
-					applied.pipeline = routed.pipeline;
-					applied.selected_video_input = routed.selected_video_input;
-					applied.source = effectiveSource;
-				}
 
 				// Block start when the effective pipeline is not in the offered set — a
 				// persisted pipeline the current hardware no longer offers. No silent
@@ -483,7 +488,9 @@ export const streamingStartProcedure = authedProcedure
 				appliedResponse = applied;
 			},
 		});
-		const lifecycleResult = await startAudio.whileInFlight(starting);
+		const lifecycleResult = await (accepted.ok
+			? accepted.audio.whileInFlight(starting)
+			: starting);
 		return startResponse(lifecycleResult, appliedResponse, legacyError);
 	});
 
