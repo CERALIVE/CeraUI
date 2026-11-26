@@ -132,6 +132,9 @@ it correctly.
 maps, so the pull-based `status` snapshots (`modules/ui/status.ts`,
 `rpc/procedures/status.procedure.ts`) serve the same labels as the push
 broadcast instead of falling back to the bare asrc key.
+Both paths publish the effective roster from `getAudioDevices()`. In mock mode,
+a scan after one fixture device detaches must not remove the remaining fixture
+inputs from the picker.
 
 Coverage: `tests/audio-device-naming-cleanup.test.ts`, `tests/audio-naming.test.ts`.
 

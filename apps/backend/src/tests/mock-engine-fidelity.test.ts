@@ -37,6 +37,7 @@ import {
 	setConfigFilePath,
 } from "../modules/config.ts";
 import {
+	broadcastAudioSources,
 	deriveAudioSources,
 	getAudioDevices,
 	setMockAudioDevicesProvider,
@@ -297,7 +298,7 @@ describe("results and frames parse with the producer schemas", () => {
 });
 
 describe("an audio device unplug and replug", () => {
-	test("leaves and rejoins the audio sources, the engine registry and the idle meters, and clients hear both", () => {
+	test("leaves and rejoins the audio sources, the engine registry and the idle meters, and clients hear both", async () => {
 		setMockAudioDevicesProvider(engine.getMockAudioDevices);
 		advertiseIdleInputMeters();
 		const frames: Array<Record<string, unknown>> = [];
@@ -305,12 +306,10 @@ describe("an audio device unplug and replug", () => {
 			data: { isAuthenticated: true, lastActive: Date.now() },
 			send: (message: string) => frames.push(JSON.parse(message)),
 		} as unknown as AppWebSocket;
-		const heardAsrcs = () =>
-			(
-				frames.findLast((frame) => "status" in frame)?.status as {
-					asrcs?: string[];
-				}
-			)?.asrcs;
+		const heardAudio = () =>
+			frames.findLast((frame) => "status" in frame)?.status as
+				| { asrcs?: string[]; audio_sources?: { id: string }[] }
+				| undefined;
 		addClient(client);
 		try {
 			engine.setMockDeviceAttached(SECOND, false);
@@ -325,9 +324,19 @@ describe("an audio device unplug and replug", () => {
 			expect(frameOnWire(5).inputs?.map((reading) => reading.input_id)).toEqual(
 				[FIRST, HDMI],
 			);
-			expect(heardAsrcs()).not.toContain("Elgato Wave:3");
+			expect(heardAudio()?.asrcs).not.toContain("Elgato Wave:3");
 			expect(() => start({ inputs: [input(SECOND)] })).toThrow(
 				"audio device not found",
+			);
+			// A later shared refresh must not replace the hotplug roster with
+			// the workstation's ALSA-only list.
+			await broadcastAudioSources();
+			expect(heardAudio()?.asrcs).toEqual(Object.keys(getAudioDevices()));
+			expect(heardAudio()?.audio_sources?.map(({ id }) => id)).toEqual(
+				expect.arrayContaining(["RØDE AI-Micro", "HDMI Input"]),
+			);
+			expect(heardAudio()?.audio_sources?.map(({ id }) => id)).not.toContain(
+				"Elgato Wave:3",
 			);
 
 			engine.setMockDeviceAttached(SECOND, true);
@@ -339,8 +348,13 @@ describe("an audio device unplug and replug", () => {
 			expect(frameOnWire(6).inputs?.map((reading) => reading.input_id)).toEqual(
 				[FIRST, SECOND, HDMI],
 			);
-			expect(heardAsrcs()).toContain("Elgato Wave:3");
+			expect(heardAudio()?.asrcs).toContain("Elgato Wave:3");
 			start({ inputs: [input(SECOND)] });
+			await broadcastAudioSources();
+			expect(heardAudio()?.asrcs).toEqual(Object.keys(getAudioDevices()));
+			expect(heardAudio()?.audio_sources?.map(({ id }) => id)).toContain(
+				"Elgato Wave:3",
+			);
 		} finally {
 			removeClient(client);
 		}

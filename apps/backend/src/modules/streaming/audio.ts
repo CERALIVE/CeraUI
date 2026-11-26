@@ -838,11 +838,7 @@ export async function broadcastAudioSources(
 		cardAliases,
 	);
 	if (getObservedEngineAudioDevices() !== undefined) rememberAudioIdentities();
-	const audio_sources = deriveAudioSources(
-		devices,
-		lastAudioDisplays,
-		lastAudioIdentities,
-	);
+	const audio_sources = deriveAudioSources(devices);
 	broadcastMsg("status", {
 		asrcs: Object.keys(devices),
 		audio_sources,
