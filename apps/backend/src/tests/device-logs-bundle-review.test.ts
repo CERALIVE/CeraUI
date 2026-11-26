@@ -155,10 +155,17 @@ test.each([
 	[
 		"an unknown boot shaped value",
 		{ exported: { bootId, ceraui: numericBootId }, secrets: [] },
+		"pattern",
 	],
 	[
 		"a known boot ID in version text",
 		{ exported: { bootId, ceraui: `version=${bootId}` }, secrets: [] },
+		"pattern",
+	],
+	[
+		"a known boot ID adjacent to hex characters in version text",
+		{ exported: { bootId, ceraui: `version=f${bootId}e` }, secrets: [] },
+		"pattern",
 	],
 	[
 		"a held secret inside a known boot ID",
@@ -166,17 +173,21 @@ test.each([
 			exported: { bootId: numericBootId, ceraui: "ui" },
 			secrets: [{ kind: "key", value: "820722459888558" }],
 		},
+		"collision",
 	],
 ] as const)(
 	"refuses %s in structured values",
-	async (_scenario, { exported, secrets }) => {
+	async (_scenario, { exported, secrets }, reason) => {
 		source = {
 			...source,
 			exportedBy: { ...source.exportedBy, ...exported },
 			journalBoots: [exported.bootId],
 			secrets,
 		};
-		await expect(previewBundle()).rejects.toThrow("READ_FAILED");
+		await expect(previewBundle()).rejects.toMatchObject({
+			code: "READ_FAILED",
+			reason,
+		});
 		expect(await createBundle({})).toEqual({ ok: false, error: "READ_FAILED" });
 	},
 );
@@ -257,6 +268,7 @@ test.each(collisions)(
 		}
 		await expect(previewBundle()).rejects.toMatchObject({
 			code: "READ_FAILED",
+			reason: "pattern",
 		});
 		expect(await createBundle({})).toEqual({ ok: false, error: "READ_FAILED" });
 	},

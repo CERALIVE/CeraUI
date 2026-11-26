@@ -96,6 +96,15 @@ export function buildRedactor(
 	const exact = alternatives.length
 		? new RegExp(alternatives.join("|"), "g")
 		: null;
+	const bootForms = [...(bootIds ?? [])]
+		.filter((id) => /^[0-9a-f]{32}$/i.test(id))
+		.flatMap((id) => [
+			id,
+			id.replace(/^(.{8})(.{4})(.{4})(.{4})/, "$1-$2-$3-$4-"),
+		]);
+	const exactBoot = bootForms.length
+		? new RegExp(bootForms.join("|"), "gi")
+		: null;
 	return {
 		unredacted: [...unredacted].sort(),
 		structured(value: string | number | boolean | null) {
@@ -201,16 +210,7 @@ export function buildRedactor(
 						});
 				}
 			};
-			if (bootIds?.size)
-				mask(
-					/(?<![0-9a-f])(?:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|[0-9a-f]{32})(?![0-9a-f])/gi,
-					(match) =>
-						bootIds.has(match.replaceAll("-", "").toLowerCase())
-							? "[BOOT_ID]"
-							: match,
-					false,
-					exempt?.boot,
-				);
+			if (exactBoot) mask(exactBoot, () => "[BOOT_ID]", false, exempt?.boot);
 			const numericSpan = exempt?.numeric ?? exempt?.boot;
 			mask(/(?<!\d)89\d{17,18}(?!\d)/g, () => "[ICCID]", false, numericSpan);
 			mask(/(?<!\d)\d{15}(?!\d)/g, () => "[ID]", false, numericSpan);

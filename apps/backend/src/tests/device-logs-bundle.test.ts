@@ -150,7 +150,7 @@ test("bundle masks covered boot IDs in journal messages but preserves boot metad
 							{
 								...record(1),
 								cursor,
-								message: `current=${bootId} previous=${dashedPrevious} unrelated=${unrelated}`,
+								message: `current=${bootId} previous=${dashedPrevious} embedded=f${bootId}e dashed=f${dashedPrevious}e unrelated=${unrelated}`,
 							},
 						]
 					: [],
@@ -162,7 +162,7 @@ test("bundle masks covered boot IDs in journal messages but preserves boot metad
 			entry: {
 				bootId,
 				cursor,
-				message: `current=[BOOT_ID] previous=[BOOT_ID] unrelated=${unrelated}`,
+				message: `current=[BOOT_ID] previous=[BOOT_ID] embedded=f[BOOT_ID]e dashed=f[BOOT_ID]e unrelated=${unrelated}`,
 			},
 		});
 	} finally {
