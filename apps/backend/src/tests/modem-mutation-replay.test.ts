@@ -8,18 +8,20 @@
  * autostart raced the recovery it depends on, and a barrier without the action
  * means a device that never recovers.
  */
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import * as modemControl from "@ceralive/modem-control";
 import {
 	MODEM_MUTATION_JOURNAL_VERSION,
 	type ModemMutationEntry,
 	type ModemMutationState,
 } from "@ceraui/rpc/schemas";
 
+import * as spawnPolicy from "../helpers/spawn-policy.ts";
 import {
 	PRESENCE_UNKNOWN,
 	refreshMutationBlocks,
@@ -42,6 +44,10 @@ import {
 	setMutationCaptureDeps,
 } from "../modules/modems/mutation-rollback.ts";
 import {
+	modemPciSysfs,
+	routerUsbSysfs,
+} from "../modules/modems/router-subnet-recovery-device.ts";
+import {
 	getMutationBlocks,
 	resetLifecycleInterlock,
 	streamingBlockingMutation,
@@ -56,6 +62,8 @@ import {
 } from "../modules/streaming/recovery-barrier.ts";
 
 const KEY = "platform-xhci-hcd.0.auto-usb-0:1.4.1";
+const CONTROLLER = "/devices/platform/xhci-hcd.0.auto/usb1";
+const USB_ROOT = `P: ${CONTROLLER}\nE: DEVTYPE=usb_device\n`;
 const PRE_STATE = {
 	vidPid: "2c7c:0801",
 	model: "RM520N-GL",
@@ -241,7 +249,20 @@ describe("crash-point replay — one test per journal state", () => {
 	test("armed + the device is ABSENT ⇒ quarantined, entry retained", async () => {
 		await commitMutationEntry(seed("armed"));
 		useDevice(undefined);
-		const summary = await initMutationRecovery();
+		const readDb = spyOn(spawnPolicy, "spawnWithTimeout").mockResolvedValue({
+			exitCode: 0,
+			stdout: USB_ROOT,
+			stderr: "",
+		});
+		const names = spyOn(routerUsbSysfs, "names").mockReturnValue(["usb1"]);
+		const root = spyOn(routerUsbSysfs, "rootPath").mockReturnValue(
+			`/sys${CONTROLLER}`,
+		);
+		const summary = await initMutationRecovery().finally(() => {
+			readDb.mockRestore();
+			names.mockRestore();
+			root.mockRestore();
+		});
 		expect(summary.quarantined).toBe(1);
 		expect((await readMutationEntry(KEY))?.state).toBe(
 			"device-absent-quarantine",
@@ -350,6 +371,138 @@ describe("the replay barrier", () => {
 });
 
 describe("presence that could not be READ is not presence that is ABSENT", () => {
+	for (const pci of ["empty", "occupied", "unreadable"] as const) {
+		test(`replay only quarantines a PCI modem with a confirmed empty address (${pci})`, async () => {
+			const address = "0000:01:00.0";
+			const entry = { ...seed("armed"), stableKey: `pci-${address}` };
+			await commitMutationEntry(entry);
+			useDevice(undefined);
+			const reader = spyOn(spawnPolicy, "spawnWithTimeout").mockResolvedValue({
+				exitCode: 0,
+				stdout: USB_ROOT,
+				stderr: "",
+			});
+			const inventory = spyOn(modemPciSysfs, "addresses").mockImplementation(
+				() => {
+					if (pci === "unreadable")
+						throw Object.assign(new Error("PCI inventory missing"), {
+							code: "ENOENT",
+						});
+					return pci === "occupied" ? [address] : [];
+				},
+			);
+			try {
+				const summary = await initMutationRecovery();
+				const empty = pci === "empty";
+				expect(summary.quarantined).toBe(empty ? 1 : 0);
+				expect(summary.unreadable).toBe(empty ? 0 : 1);
+				expect((await readMutationEntry(entry.stableKey))?.state).toBe(
+					empty ? "device-absent-quarantine" : "armed",
+				);
+				expect(isRecoveryPending()).toBe(!empty);
+			} finally {
+				reader.mockRestore();
+				inventory.mockRestore();
+			}
+		});
+	}
+
+	for (const fault of [
+		"incomplete target record",
+		"truncated export",
+		"controller not visible",
+		"unrelated controller with the same suffix",
+		"timeout with partial output",
+	] as const) {
+		test(`${fault} cannot end an owed modem rollback`, async () => {
+			const entry =
+				fault === "unrelated controller with the same suffix"
+					? {
+							...seed("executing"),
+							stableKey: KEY.replace("platform-", "platform-aux-"),
+						}
+					: seed("executing");
+			await commitMutationEntry(entry);
+			setMutationBlockDeps({
+				presentStableKeys: async () => PRESENCE_UNKNOWN,
+			});
+			spyOn(modemControl, "createUsbEnumerator").mockRestore();
+			const runner = spyOn(spawnPolicy, "spawnWithTimeout");
+			if (fault === "timeout with partial output") {
+				runner.mockRejectedValue(
+					new spawnPolicy.SpawnTimeoutError("udevadm", USB_ROOT),
+				);
+			} else {
+				runner.mockResolvedValue({
+					exitCode: 0,
+					stdout:
+						fault === "incomplete target record"
+							? `${USB_ROOT}\nP: ${CONTROLLER}/1-1/1-1.4/1-1.4.1\nE: DEVTYPE=usb_device\nE: ID_PATH=${KEY}\n`
+							: USB_ROOT,
+					stderr: "",
+				});
+			}
+			const names = spyOn(routerUsbSysfs, "names").mockReturnValue(
+				fault === "controller not visible"
+					? []
+					: fault === "truncated export"
+						? ["usb1", "1-1.4.1"]
+						: ["usb1"],
+			);
+			const root = spyOn(routerUsbSysfs, "rootPath").mockReturnValue(
+				`/sys${CONTROLLER}`,
+			);
+			try {
+				const summary = await initMutationRecovery();
+				expect(summary.unreadable).toBe(1);
+				expect(summary.quarantined).toBe(0);
+				expect(await readMutationEntry(entry.stableKey)).toEqual(entry);
+				expect(isRecoveryPending()).toBe(true);
+			} finally {
+				runner.mockRestore();
+				names.mockRestore();
+				root.mockRestore();
+			}
+		});
+	}
+
+	for (const state of [
+		"device-absent-quarantine",
+		"decommissioned",
+		"armed",
+	] as const) {
+		test(`unavailable USB inventory keeps ${state} without treating it as absent`, async () => {
+			const entry = seed(state);
+			await commitMutationEntry(entry);
+			setMutationCaptureDeps({
+				enumerate: async () => {
+					throw new Error("USB inventory unavailable");
+				},
+			});
+			setMutationBlockDeps({
+				presentStableKeys: async () => PRESENCE_UNKNOWN,
+			});
+
+			const summary = await initMutationRecovery();
+
+			const owesRollback = state === "armed";
+			expect(summary.unreadable).toBe(owesRollback ? 1 : 0);
+			expect(isRecoveryPending()).toBe(owesRollback);
+			expect(await readMutationEntry(KEY)).toEqual(entry);
+			expect(tryAcquireModemMutation(KEY)).toEqual({
+				admitted: false,
+				refusal: owesRollback
+					? "recovery_pending"
+					: state === "decommissioned"
+						? "device_decommissioned"
+						: "mutation_blocked",
+			});
+			expect(streamingBlockingMutation()?.stableKey).toBe(
+				state === "decommissioned" ? undefined : KEY,
+			);
+		});
+	}
+
 	test("an unreadable bus reports the device present rather than quarantining it", async () => {
 		await commitMutationEntry(seed("failed"));
 		setMutationBlockDeps({

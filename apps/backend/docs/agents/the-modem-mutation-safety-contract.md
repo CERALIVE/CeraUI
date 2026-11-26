@@ -124,6 +124,13 @@ met by either inventory or by publication as an incomplete pass, so a row that w
 not replayed keeps the barrier and the REPLAY retry. An ENOENT after listing is a
 concurrent deletion and is skipped in both inventory passes, not raised as a
 recovery barrier. A direct slot read still throws and retains the barrier.
+The four operator recovery RPCs (list blocks, acknowledge, decommission and
+rebaseline) require authentication but not cellular-stack readiness. They read
+the journal and independent device evidence; none uses the initializing D-Bus
+snapshot or bypasses the journal revision, action-specific proof or key lease.
+Before boot replay has published any rows, the list performs a fenced read-only
+journal census, followed by its one shared bounded udev read for device proof.
+It does not run rollback or lower the recovery barrier.
 Directory enumeration after a successful open is inside that same error boundary.
 After completed startup, any non-absence fault schedules the registered read-only
 verification owner (1 s doubling to a 60 s ceiling). It also settles previously
@@ -207,14 +214,25 @@ source of "is this device blocked" is how a fail-closed guard drifts open.
 | `completed` | prune |
 | `failed` | remain blocked awaiting acknowledgement |
 | `acknowledged` | resume the archive + unblock |
-| `device-absent-quarantine` | re-check presence (present ⇒ `failed`; absent ⇒ remain) |
-| `decommissioned` | re-check presence (present ⇒ `recommission-pending`; absent ⇒ no action) |
+| `device-absent-quarantine` | re-check presence (present ⇒ `failed`; absent or unknown ⇒ remain) |
+| `decommissioned` | re-check presence (present ⇒ `recommission-pending`; absent or unknown ⇒ remain) |
 | `recommission-pending` | remain awaiting the rebaseline |
 
 `mutation-replay.ts` is the table's executor. Replay lowers the barrier only after
 complete readable authority and block publication that met no damaged slot;
 unknown/damaged journal authority keeps it raised behind the cancellable retry owner. Failed rollback's
 readable per-identity block is separate from an unreadable global inventory.
+Replay and block publication use the bounded, ten-second udev reader. A failed
+export or one with no USB device records is unknown presence, not an empty bus.
+Unknown presence preserves a settled quarantine or decommission record and its
+refusal without preventing replay completion. An armed or executing record
+whose rollback still needs that evidence keeps the recovery barrier raised.
+When capture finds no match for an owed rollback, replay requires a fresh udev
+read with no matching identity and a confirmed empty kernel USB port or PCI
+address before quarantining it. USB absence requires an exact, unambiguous
+controller identity, never a suffix match. An incomplete record, unresolved
+identity, or unreadable kernel inventory leaves recovery pending; this evidence
+does not authorize rollback I/O or change the operator's verification rules.
 The `router-subnet` kind consults the journal's boot and kernel witness before
 generic USB capture. Same-boot rollback keeps one proof across reads, writes,
 renewal and the final receipt. Same-boot absence, loss of proof or missing or

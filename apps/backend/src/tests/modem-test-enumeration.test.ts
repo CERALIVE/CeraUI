@@ -1,5 +1,6 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
-import { createUsbEnumerator } from "@ceralive/modem-control";
+import * as modemControl from "@ceralive/modem-control";
+import * as spawnPolicy from "../helpers/spawn-policy.ts";
 import {
 	refreshModemUsbModes,
 	resetModemUsbModes,
@@ -8,6 +9,7 @@ import {
 	defaultMutationBlockDeps,
 	PRESENCE_UNKNOWN,
 } from "../modules/modems/mutation-blocks.ts";
+import { captureModemState } from "../modules/modems/mutation-rollback.ts";
 
 afterEach(() => {
 	resetModemUsbModes();
@@ -24,8 +26,10 @@ test("default modem enumeration never reads host devices, including after reader
 	// When: both implicit CeraUI readers and the package factory enumerate.
 	await refreshModemUsbModes();
 	const present = await defaultMutationBlockDeps.presentStableKeys();
-	const devices = await createUsbEnumerator().enumerate();
-	const explicitDefaults = await createUsbEnumerator({}).enumerate();
+	const devices = await modemControl.createUsbEnumerator().enumerate();
+	const explicitDefaults = await modemControl
+		.createUsbEnumerator({})
+		.enumerate();
 
 	// Then: an empty fixture, not host identity or an unreadable-bus sentinel.
 	expect(present).toEqual(new Set());
@@ -49,9 +53,11 @@ test("an explicit USB database reader retains the real enumerator parser", async
 	const spawn = spyOn(Bun, "spawn");
 
 	// When: the caller opts into fixture-owned input through the published seam.
-	const devices = await createUsbEnumerator({
-		readUdevDatabase: reader,
-	}).enumerate();
+	const devices = await modemControl
+		.createUsbEnumerator({
+			readUdevDatabase: reader,
+		})
+		.enumerate();
 
 	// Then: the parser keeps the supplied identity, rather than substituting [].
 	expect(devices).toHaveLength(1);
@@ -59,4 +65,32 @@ test("an explicit USB database reader retains the real enumerator parser", async
 	expect(devices[0]?.vendorId).toBe("2c7c");
 	expect(reader).toHaveBeenCalledTimes(1);
 	expect(spawn).not.toHaveBeenCalled();
+});
+
+test("journal capture and block publication distinguish a missing USB inventory from an absent modem", async () => {
+	spyOn(modemControl, "createUsbEnumerator").mockRestore();
+	spyOn(Bun, "spawn").mockImplementation(() => {
+		throw new Error("unexpected unbounded host enumeration");
+	});
+	const reader = spyOn(spawnPolicy, "spawnWithTimeout").mockResolvedValue({
+		exitCode: 0,
+		stdout: "",
+		stderr: "",
+	});
+	await expect(captureModemState("usb:missing")).rejects.toThrow(
+		"udev export has no USB device records",
+	);
+	expect(await defaultMutationBlockDeps.presentStableKeys()).toBe(
+		PRESENCE_UNKNOWN,
+	);
+
+	reader.mockResolvedValue({
+		exitCode: 0,
+		stdout: "P: /devices/usb1\nE: DEVTYPE=usb_device\n",
+		stderr: "",
+	});
+	expect(await captureModemState("usb:missing")).toBeUndefined();
+	expect(await defaultMutationBlockDeps.presentStableKeys()).not.toBe(
+		PRESENCE_UNKNOWN,
+	);
 });

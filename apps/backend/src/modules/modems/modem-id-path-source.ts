@@ -115,6 +115,16 @@ export async function readUdevExportDb(): Promise<string> {
 	return result.stdout;
 }
 
+/** An empty or unusable census is not proof that a journaled modem is absent. */
+export async function readMutationUdevExportDb(): Promise<string> {
+	const database = await readUdevExportDb();
+	for (const { path, env } of udevPropertyRecords(database)) {
+		if (path?.startsWith("/devices/") && env.get("DEVTYPE") === "usb_device")
+			return database;
+	}
+	throw new Error("udev export has no USB device records");
+}
+
 /**
  * The production reader: ONE `udevadm` pass, parsed for net records.
  *

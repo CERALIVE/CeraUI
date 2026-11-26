@@ -45,6 +45,7 @@ import {
 	deriveModemStableKey,
 	type ModemMutationKind,
 } from "@ceraui/rpc/schemas";
+import { readMutationUdevExportDb } from "./modem-id-path-source.ts";
 import {
 	assertMutationJournalRevision,
 	mutationJournalRevision,
@@ -85,10 +86,8 @@ export interface MutationCaptureDeps {
 }
 
 export const defaultMutationCaptureDeps: MutationCaptureDeps = {
-	enumerate: (readUdevDatabase) =>
-		createUsbEnumerator(
-			readUdevDatabase ? { readUdevDatabase } : {},
-		).enumerate(),
+	enumerate: (readUdevDatabase = readMutationUdevExportDb) =>
+		createUsbEnumerator({ readUdevDatabase }).enumerate(),
 };
 
 let activeDeps: MutationCaptureDeps = defaultMutationCaptureDeps;
