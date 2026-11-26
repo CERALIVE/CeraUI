@@ -64,7 +64,9 @@ import {
 	type StreamStopCause,
 } from "@ceraui/rpc/events";
 import {
+	audioBackendSchema,
 	audioCodecSchema,
+	audioInputSettingSchema,
 	inputModeSchema,
 	type LifecycleState,
 } from "@ceraui/rpc/schemas";
@@ -79,6 +81,7 @@ import {
 	videoPassthroughSchema,
 } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
+import type { StartAudio } from "./start-audio.ts";
 import type { EngineRuntimeState } from "./streaming-backend.ts";
 
 export const ARMED_STREAM_MARKER_FILE = "stream.armed.json";
@@ -103,6 +106,15 @@ const armedStreamConfigSchema = z.object({
 	pipeline: z.string().optional(),
 	acodec: audioCodecSchema.optional(),
 	asrc: z.string().optional(),
+	/** `null` says the stream runs without a mix; absent, nothing was recorded. */
+	audio_inputs: z.array(audioInputSettingSchema).nullable().optional(),
+	audio_backend: audioBackendSchema.optional(),
+	/** Picker keys at the recorded launch, with engine-proven physical identities. */
+	audio_physical_ids: z.record(z.string().min(1), z.string().min(1)).optional(),
+	/** Address-bound inputs may start unchanged but cannot be identified on restore. */
+	audio_unverified_ids: z.array(z.string().min(1)).optional(),
+	/** The engine acknowledged a live switch to its silence leg. */
+	audio_silenced: z.boolean().optional(),
 	relay_server: z.string().optional(),
 	relay_account: z.string().optional(),
 	relay_streamid_override: z.string().optional(),
@@ -122,6 +134,26 @@ const armedStreamConfigSchema = z.object({
 	input_mode: inputModeSchema.optional(),
 });
 export type ArmedStreamConfig = z.infer<typeof armedStreamConfigSchema>;
+
+type LaunchedAudio = StartAudio["config"] & {
+	readonly audio_physical_ids?: ArmedStreamConfig["audio_physical_ids"];
+	readonly audio_unverified_ids?: ArmedStreamConfig["audio_unverified_ids"];
+	readonly audio_silenced?: boolean;
+};
+let launchedAudio: LaunchedAudio | undefined;
+
+/**
+ * The audio choice the latest launch was pressed with, which a restoration brings
+ * back whatever was saved meanwhile. Undefined when no launch of this process can
+ * be the running stream.
+ */
+export function pinLaunchedAudio(audio: LaunchedAudio | undefined): void {
+	launchedAudio = audio;
+}
+
+export function pinnedLaunchedAudio(): LaunchedAudio | undefined {
+	return launchedAudio;
+}
 
 export {
 	RECOVERY_FAILURE_REASONS,
@@ -246,6 +278,28 @@ export function writeArmedStreamMarker(
 	}
 }
 
+/**
+ * A live change the engine acknowledged is part of the running stream, so a
+ * restoration brings it back: the pin carries it into a marker still to be armed,
+ * the marker carries it past a backend restart, after which the adopted stream has
+ * no pin and only the marker follows.
+ */
+export function followLiveAudio(
+	change: Partial<
+		Pick<LaunchedAudio, "audio_inputs" | "delay" | "audio_silenced">
+	>,
+	deps: ArmedStreamMarkerDeps = defaultArmedStreamMarkerDeps,
+): void {
+	if (launchedAudio !== undefined)
+		launchedAudio = { ...launchedAudio, ...change };
+	const marker = readArmedStreamMarker(deps);
+	if (marker === undefined) return;
+	writeArmedStreamMarker(
+		{ ...marker, config: { ...marker.config, ...change } },
+		deps,
+	);
+}
+
 export function clearArmedStreamMarker(
 	deps: ArmedStreamMarkerDeps = defaultArmedStreamMarkerDeps,
 ): void {
@@ -262,6 +316,7 @@ export function noteStreamStopped(
 	deps: ArmedStreamMarkerDeps = defaultArmedStreamMarkerDeps,
 ): void {
 	if (cause !== "operator") return;
+	pinLaunchedAudio(undefined);
 	clearArmedStreamMarker(deps);
 }
 

@@ -37,6 +37,7 @@ import {
 	buildCardAliases,
 	type CardAliases,
 	engineAudioDeviceString,
+	engineAudioDevicesForCard,
 	parseProcAsoundPcm,
 } from "./audio-card-vocabulary.ts";
 import { syncAudioMeterPreference } from "./audio-meter-bridge.ts";
@@ -69,7 +70,12 @@ import {
 } from "./bluetooth-audio.ts";
 import { AUDIO_PROBE_TIMEOUT_MS } from "./constants.ts";
 import { reportActiveAudioSource } from "./lifecycle-indicators.ts";
-import { getEngineAudioDevices } from "./sources.ts";
+import {
+	beginAudioCardScan,
+	getEngineAudioDevices,
+	getObservedEngineAudioDevices,
+	refreshEngineAudioDevices,
+} from "./sources.ts";
 import { getStreamLifecycleState } from "./stream-lifecycle-status.ts";
 import { getIsStreaming } from "./streaming.ts";
 import { getStreamingProcesses } from "./streamloop/process-runner.ts";
@@ -78,7 +84,7 @@ const deviceDir = setup.sound_device_dir ?? CANONICAL_SOUND_CLASS_DIR;
 const PROC_ASOUND_CARDS = "/proc/asound/cards";
 const PROC_ASOUND_PCM = "/proc/asound/pcm";
 
-const NO_AUDIO_ID = "No audio";
+export const NO_AUDIO_ID = "No audio";
 export const DEFAULT_AUDIO_ID = "Pipeline default";
 
 // "No audio" / "Pipeline default" are pipeline pseudo-sources, not real capture
@@ -401,6 +407,7 @@ function getAudioSrcReverseAliases(): Record<string, string> {
 // follows for the engine join).
 let scannedAudioCards: Record<string, string> = {};
 let scannedCaptureCardIds: ReadonlySet<string> = new Set();
+let scannedUsbModels: ReadonlyMap<string, string> = new Map();
 
 let audioDevices: Record<string, string> = {};
 addAudioCardById(audioDevices, NO_AUDIO_ID);
@@ -471,7 +478,7 @@ export async function refreshBluetoothAudioDevices(): Promise<void> {
 	await broadcastAudioSources();
 	refreshResolvedAsrcPreview();
 	syncAudioMeterPreference();
-	asrcProbeWake?.();
+	pendingProbe?.wake?.();
 }
 
 // Dev/e2e seam merged into the list WITHOUT touching the real /sys/class/sound
@@ -520,19 +527,133 @@ let lastAudioIdentities = new Map<string, AudioDeviceIdentity>();
 // because the case this exists for is a card that left and came back.
 const rememberedAudioIdentities = new Map<string, string>();
 
-function rememberAudioIdentities(
-	identities: ReadonlyMap<string, AudioDeviceIdentity>,
-): void {
-	for (const [asrc, identity] of identities) {
-		const stableId = identity.stable_id;
-		if (stableId === undefined || stableId === "") continue;
-		rememberedAudioIdentities.set(asrc, stableId);
+function rememberAudioIdentities(): void {
+	const roster = liveAudioIdentityEvidence();
+	for (const asrc of Object.keys(scannedAudioCards)) {
+		const evidence = roster.get(asrc);
+		if (evidence?.kind === "physical")
+			rememberedAudioIdentities.set(asrc, evidence.stableId);
+		else rememberedAudioIdentities.delete(asrc);
 	}
 }
 
 /** Drop the remembered audio identities (test isolation). */
 export function resetRememberedAudioIdentities(): void {
 	rememberedAudioIdentities.clear();
+}
+
+export type AudioIdentityEvidence =
+	| { readonly kind: "physical"; readonly stableId: string }
+	| {
+			readonly kind: "address-only";
+			readonly stableId: string;
+			readonly scan: object;
+	  }
+	| { readonly kind: "unavailable" };
+
+function isModelOrPortIdentity(stableId: string): boolean {
+	return (
+		stableId.startsWith("port:") || /^usb:[^:@]+:[^:@]+(?:@.*)?$/.test(stableId)
+	);
+}
+
+/** Unavailable is known uncertainty, not permission to use a legacy address. */
+export function liveAudioIdentityEvidence(): ReadonlyMap<
+	string,
+	AudioIdentityEvidence
+> {
+	const roster = new Map<string, AudioIdentityEvidence>();
+	const rows = getObservedEngineAudioDevices();
+	for (const [id, card] of Object.entries(scannedAudioCards)) {
+		if (rows === undefined) {
+			roster.set(id, { kind: "unavailable" });
+			continue;
+		}
+		const matches = engineAudioDevicesForCard(card, rows, cardAliases);
+		const match = matches[0];
+		const stableId = match?.stable_id;
+		const scannedModel = scannedUsbModels.get(card);
+		const reportedModel = /^usb:([\da-f]{4}:[\da-f]{4})(?:[:@]|$)/.exec(
+			stableId ?? "",
+		)?.[1];
+		// Model disagreement can veto a row; a port move is not an identity change.
+		const modelMismatch =
+			scannedModel !== undefined &&
+			reportedModel !== undefined &&
+			scannedModel !== reportedModel;
+		if (
+			match === undefined ||
+			matches.length > 1 ||
+			modelMismatch ||
+			rows.some(
+				(row) =>
+					row !== match &&
+					((stableId && row.stable_id === stableId) ||
+						row.input_id === match.input_id),
+			)
+		) {
+			roster.set(id, { kind: "unavailable" });
+		} else if (stableId && !stableId.startsWith("card:")) {
+			roster.set(
+				id,
+				isModelOrPortIdentity(stableId)
+					? { kind: "address-only", stableId, scan: scannedAudioCards }
+					: { kind: "physical", stableId },
+			);
+		}
+	}
+	return roster;
+}
+
+export function audioAddressForEvidence(
+	id: string,
+	evidence: AudioIdentityEvidence,
+	roster = liveAudioIdentityEvidence(),
+): string | undefined {
+	switch (evidence.kind) {
+		case "unavailable":
+			return undefined;
+		case "address-only": {
+			const present = roster.get(id);
+			return present?.kind === "address-only" &&
+				present.scan === evidence.scan &&
+				present.stableId === evidence.stableId
+				? id
+				: undefined;
+		}
+		case "physical":
+			for (const [address, present] of roster)
+				if (
+					present.kind === "physical" &&
+					present.stableId === evidence.stableId
+				)
+					return address;
+			return undefined;
+	}
+}
+
+/** The live id of a card that re-enumerated under a new ALSA id. */
+export function audioIdentitySuccessor(
+	asrc: string,
+	identities?: ReadonlyMap<string, AudioDeviceIdentity>,
+	devices: Record<string, string> = audioDevices,
+	remembered: ReadonlyMap<string, string> = rememberedAudioIdentities,
+): string | undefined {
+	if (asrc === AUDIO_SOURCE_AUTO || isPseudoAudioSource(asrc)) return undefined;
+	if (asrc in devices) return undefined;
+
+	const stableId = remembered.get(asrc);
+	if (stableId === undefined || isModelOrPortIdentity(stableId))
+		return undefined;
+	if (identities === undefined)
+		return audioAddressForEvidence(asrc, { kind: "physical", stableId });
+	let successor: string | undefined;
+	for (const [id, identity] of identities) {
+		if (identity.stable_id !== stableId || !(id in devices)) continue;
+		if (successor !== undefined) return undefined;
+		successor = id;
+	}
+	return successor;
 }
 
 /**
@@ -548,29 +669,20 @@ export function resetRememberedAudioIdentities(): void {
  * a genuinely absent device is never swapped for whatever else is plugged in.
  */
 export function reconcileConfiguredAudioIdentity(
-	identities: ReadonlyMap<string, AudioDeviceIdentity> = lastAudioIdentities,
+	identities?: ReadonlyMap<string, AudioDeviceIdentity>,
 	devices: Record<string, string> = audioDevices,
 	remembered: ReadonlyMap<string, string> = rememberedAudioIdentities,
 ): boolean {
 	const config = getConfig();
 	const configured = config.asrc;
 	if (configured === undefined) return false;
-	if (configured === AUDIO_SOURCE_AUTO || isPseudoAudioSource(configured)) {
-		return false;
-	}
-	if (configured in devices) return false;
-
-	const stableId = remembered.get(configured);
-	if (stableId === undefined) return false;
-
-	let successor: string | undefined;
-	for (const [asrc, identity] of identities) {
-		if (identity.stable_id !== stableId) continue;
-		if (!(asrc in devices)) continue;
-		successor = asrc;
-		break;
-	}
-	if (successor === undefined || successor === configured) return false;
+	const successor = audioIdentitySuccessor(
+		configured,
+		identities,
+		devices,
+		remembered,
+	);
+	if (successor === undefined) return false;
 
 	config.asrc = successor;
 	saveConfig();
@@ -703,7 +815,7 @@ export async function broadcastAudioSources(
 		getEngineAudioDevices(),
 		cardAliases,
 	);
-	rememberAudioIdentities(lastAudioIdentities);
+	if (getObservedEngineAudioDevices() !== undefined) rememberAudioIdentities();
 	broadcastMsg("status", {
 		asrcs: Object.keys(audioDevices),
 		audio_sources: deriveAudioSources(
@@ -743,6 +855,7 @@ export async function reresolveAudioForEngineChange(
 	if (!current()) return;
 	refreshResolvedAsrcPreview();
 	syncAudioMeterPreference();
+	pendingProbe?.wake?.();
 }
 
 /**
@@ -756,6 +869,7 @@ export async function reresolveAudioForEngineChange(
  * sound cards instead.
  */
 export async function updateAudioDevices(dir?: string) {
+	const completeScan = beginAudioCardScan();
 	// Ignore the onboard audio cards
 	const exclude = [
 		"tegrahda",
@@ -787,6 +901,7 @@ export async function updateAudioDevices(dir?: string) {
 
 	const list: Record<string, true> = {};
 	const captureCards = new Set<string>();
+	const usbModels = new Map<string, string>();
 
 	for (const card of cards) {
 		// Skip over the IDs known not to be valid audio inputs, and over any card
@@ -796,6 +911,7 @@ export async function updateAudioDevices(dir?: string) {
 
 		list[card.id] = true;
 		if (hasCapturePcmNode(card.entries)) captureCards.add(card.id);
+		if (card.usbModel !== undefined) usbModels.set(card.id, card.usbModel);
 	}
 	// First add any priority cards found
 	const sortedList = {};
@@ -812,21 +928,24 @@ export async function updateAudioDevices(dir?: string) {
 	// Read alongside the card scan so the two vocabularies are always one pass
 	// apart. Unreadable degrades to card-id-only aliases, i.e. the pre-existing
 	// single-name behaviour — never a lost card.
-	cardAliases = buildCardAliases(
+	const aliases = buildCardAliases(
 		cards,
 		parseProcAsoundPcm(await readTextFile(PROC_ASOUND_PCM)),
 	);
+	if (!completeScan()) return;
+	cardAliases = aliases;
 
 	scannedAudioCards = sortedList;
 	scannedCaptureCardIds = captureCards;
+	scannedUsbModels = usbModels;
 	composeAudioDevices();
+	if (dir === undefined) await refreshEngineAudioDevices();
+	if (!completeScan()) return;
 	logger.debug("audio devices:", audioDevices);
 
 	// Migrate BEFORE the lost verdict below: a card that only changed ALSA id is
 	// not lost, and reporting it lost raises a persistent alert nothing can clear.
-	reconcileConfiguredAudioIdentity(
-		resolveAudioIdentities(audioDevices, getEngineAudioDevices(), cardAliases),
-	);
+	reconcileConfiguredAudioIdentity();
 
 	// Lifecycle indicator: the selected audio device vanishing mid-stream keeps
 	// the stream running in SILENCE (Todo 17 failover — never a test tone); raise
@@ -852,15 +971,18 @@ export async function updateAudioDevices(dir?: string) {
 	// A hotplug re-enumeration may have brought in the device a stream start is
 	// waiting on — wake the pending probe so it re-checks now instead of after
 	// the next poll tick, beating the QW-J timeout (QW-E ↔ QW-J interaction).
-	asrcProbeWake?.();
+	pendingProbe?.wake?.();
 }
 
-let asrcProbeReject: (() => void) | undefined;
-let asrcProbeWake: (() => void) | undefined;
-let asrcProbeDeadlineAt: number | undefined;
+interface PendingProbe {
+	readonly reject: () => void;
+	readonly deadlineAt: number;
+	wake?: () => void;
+}
+let pendingProbe: PendingProbe | undefined;
 
 export function isAsrcProbeRejectResolved() {
-	return asrcProbeReject !== undefined;
+	return pendingProbe !== undefined;
 }
 
 /**
@@ -871,20 +993,15 @@ export function isAsrcProbeRejectResolved() {
  * Bounded by construction — never exceeds AUDIO_PROBE_TIMEOUT_MS.
  */
 export function asrcProbeRemainingMs(now: number = Date.now()): number {
-	if (asrcProbeReject === undefined || asrcProbeDeadlineAt === undefined) {
-		return 0;
-	}
+	if (pendingProbe === undefined) return 0;
 	return Math.min(
 		AUDIO_PROBE_TIMEOUT_MS,
-		Math.max(0, asrcProbeDeadlineAt - now),
+		Math.max(0, pendingProbe.deadlineAt - now),
 	);
 }
 
 export function clearAsrcProbeReject() {
-	asrcProbeReject?.();
-	asrcProbeReject = undefined;
-	asrcProbeWake = undefined;
-	asrcProbeDeadlineAt = undefined;
+	pendingProbe?.reject();
 }
 
 /**
@@ -916,63 +1033,73 @@ export class AudioProbeTimeoutError extends Error {
 	}
 }
 
-export async function asrcProbe(asrc: string): Promise<string> {
+export async function asrcProbe(
+	asrc: string,
+	evidence?: AudioIdentityEvidence,
+): Promise<string> {
+	if (evidence?.kind === "unavailable") throw new AudioProbeTimeoutError(asrc);
+	const present = () => {
+		const id =
+			evidence === undefined
+				? (audioIdentitySuccessor(asrc) ?? asrc)
+				: audioAddressForEvidence(asrc, evidence);
+		return id === undefined ? undefined : audioDevices[id];
+	};
 	if (isBluetoothAudioSourceId(asrc)) await refreshBluetoothAudioDevices();
-	let audioSrcId: string | undefined = audioDevices[asrc];
-	if (audioSrcId) return audioSrcId;
+	const available = present();
+	if (available) return available;
+	if (evidence?.kind === "address-only") throw new AudioProbeTimeoutError(asrc);
 
 	return new Promise((res: (id: string) => void, rej: (err: Error) => void) => {
 		// Cancel any prior pending probe before starting a new one
 		clearAsrcProbeReject();
-		asrcProbeReject = () => {
-			rej(new AudioProbeTimeoutError(asrc));
+		// Each probe owns its timers: a settled one never settles the next.
+		const settle = () => {
+			clearTimeout(timeoutHandle);
+			if (pendingProbe === probe) pendingProbe = undefined;
+			probe.wake?.();
 		};
-		asrcProbeDeadlineAt = Date.now() + AUDIO_PROBE_TIMEOUT_MS;
+		const probe: PendingProbe = {
+			reject: () => {
+				settle();
+				rej(new AudioProbeTimeoutError(asrc));
+			},
+			deadlineAt: Date.now() + AUDIO_PROBE_TIMEOUT_MS,
+		};
+		pendingProbe = probe;
 
 		// Set timeout for audio device probe (QW-J)
-		const timeoutHandle = setTimeout(() => {
-			if (asrcProbeReject) {
-				asrcProbeReject();
-				asrcProbeReject = undefined;
-				asrcProbeDeadlineAt = undefined;
-			}
-		}, AUDIO_PROBE_TIMEOUT_MS);
+		const timeoutHandle = setTimeout(probe.reject, AUDIO_PROBE_TIMEOUT_MS);
 
 		const poll = async () => {
-			while (asrcProbeReject) {
+			while (pendingProbe === probe) {
 				// A BlueALSA PCM appears on D-Bus, not in `/sys/class/sound`, so no
 				// udev hotplug can reveal it — the probe has to ask. Bounded by the
 				// same grace window as every other selection.
 				if (isBluetoothAudioSourceId(asrc)) {
 					await refreshBluetoothAudioDevices();
 				}
-				audioSrcId = audioDevices[asrc];
+				if (pendingProbe !== probe) return;
+				const audioSrcId = present();
 				if (audioSrcId) {
-					clearTimeout(timeoutHandle);
-					asrcProbeReject = undefined;
-					asrcProbeDeadlineAt = undefined;
+					settle();
 					res(audioSrcId);
 					return;
 				}
-				const config = getConfig();
-				const msg = `Selected audio input '${config.asrc}' is unavailable. Waiting for it before starting the stream...`;
+				const msg = `Selected audio input '${asrc}' is unavailable. Waiting for it before starting the stream...`;
 				notificationBroadcast("asrc_not_found", "error", msg, 2, true, false);
 
 				// Sleep one poll interval, but wake early if a hotplug re-enumeration
-				// signals a device-list change (asrcProbeWake from updateAudioDevices).
+				// signals a device-list change (from updateAudioDevices).
 				await new Promise<void>((r) => {
 					const sleepHandle = setTimeout(r, AUDIO_SOURCE_POLL_DELAY);
-					asrcProbeWake = () => {
+					probe.wake = () => {
 						clearTimeout(sleepHandle);
-						asrcProbeWake = undefined;
+						delete probe.wake;
 						r();
 					};
 				});
 			}
-			// If the loop exited, then rej() was already called externally. Nothing left to do
-			asrcProbeWake = undefined;
-			asrcProbeDeadlineAt = undefined;
-			clearTimeout(timeoutHandle);
 		};
 
 		void poll();

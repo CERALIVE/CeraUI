@@ -611,4 +611,99 @@ test.describe("audio mixer — caps-full", () => {
 		});
 		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
 	});
+
+	const chooseAudio = async (page: Page, name: string | RegExp) => {
+		await page.getByTestId("audio-source-select").click();
+		await page.getByRole("option", typeof name === "string" ? { name, exact: true } : { name }).click();
+	};
+	const receiveReply = (id: unknown) =>
+		test.step("the page's socket receives the answer to that save", () => wire.pageReply(id), { timeout: 10_000 });
+
+	async function pressStart(page: Page): Promise<void> {
+		const answer = wire.nextAnswer("streaming.start");
+		await startButton(page).click();
+		expect((await answer).result).toMatchObject({ success: true });
+	}
+
+	async function endAndWait(page: Page): Promise<void> {
+		await endStream(page);
+		await expect(page.getByTestId("idle-cockpit").or(page.getByTestId("summary-done"))).toBeVisible({
+			timeout: 15_000,
+		});
+	}
+
+	test("No audio picked over a saved two-input mix: Start sends no audio, the summary says so, and the next microphone pick brings the mix back", async ({
+		page,
+		backendRpc,
+		workerBackend,
+	}) => {
+		await page.getByTestId(`audio-strip-enable-${SECOND}`).click();
+		await expect(page.getByTestId(`audio-strip-enable-${SECOND}`)).toHaveAttribute("aria-checked", "true");
+		await page.getByTestId(`audio-strip-track-${SECOND}-2`).click();
+		await expect(page.getByTestId(`audio-strip-track-${SECOND}-2`)).toHaveAttribute("aria-pressed", "true");
+		await page.getByTestId(`audio-strip-track-${SECOND}-1`).click();
+		await expect(page.getByTestId(`audio-strip-track-${SECOND}-1`)).toHaveAttribute("aria-pressed", "false");
+
+		await chooseAudio(page, "No audio");
+		await pressStart(page);
+		expect((await workerBackend.mockEngine()).lastStartParams?.audio).toEqual({ mode: "none" });
+		const cockpit = page.getByTestId("live-cockpit");
+		await expect(cockpit).toBeVisible({ timeout: 15_000 });
+		await expect(cockpit.locator('[data-live-value="audio"]')).toHaveText("No audio");
+		expect(await backendRpc.call(["streaming", "getConfig"])).toMatchObject({
+			asrc: "No audio",
+			audio_inputs: savedTwo,
+		});
+		await endAndWait(page);
+
+		await openLive(page);
+		const save = wire.holdAudioPick(MAIN);
+		await chooseAudio(page, new RegExp(MAIN));
+		const saved = await save.held;
+		save.release();
+		expect((await receiveReply(saved.id)).result).toMatchObject({ success: true });
+		expect(await backendRpc.call(["streaming", "getConfig"])).toMatchObject({ asrc: MAIN, audio_inputs: savedTwo });
+		await pressStart(page);
+		const audio = (await workerBackend.mockEngine()).lastStartParams?.audio as
+			| { mode?: string; inputs?: Array<{ tracks: number[] }> }
+			| undefined;
+		expect(audio?.mode).toBe("default");
+		expect(audio?.inputs?.map((input) => input.tracks)).toEqual([[1], [2]]);
+		await expect(cockpit).toBeVisible({ timeout: 15_000 });
+		await endAndWait(page);
+		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
+	});
+
+	test("Start pressed while the answer to a No audio pick is held sends no audio, and the released answer settles the pick", async ({
+		page,
+		backendRpc,
+		workerBackend,
+	}) => {
+		await backendRpc.call(["streaming", "setConfig"], { audio_inputs: savedTwo });
+		await expect(page.getByTestId(`audio-strip-enable-${SECOND}`)).toHaveAttribute("aria-checked", "true");
+
+		const save = wire.holdAudioPick("No audio");
+		await chooseAudio(page, "No audio");
+		const held = await save.held;
+		try {
+			expect(held.input).toEqual({ asrc: "No audio", audio_pick: true });
+			expect(held.result).toMatchObject({ success: true, applied: { asrc: "No audio" } });
+			await pressStart(page);
+			expect((await workerBackend.mockEngine()).lastStartParams?.audio).toEqual({ mode: "none" });
+			// Start was answered while the page's own socket still had no answer to the pick.
+			expect(await wire.pageHasReply(held.id)).toBe(false);
+		} finally {
+			save.release();
+		}
+		expect((await receiveReply(held.id)).result).toEqual(held.result);
+		const cockpit = page.getByTestId("live-cockpit");
+		await expect(cockpit).toBeVisible({ timeout: 15_000 });
+		await expect(cockpit.locator('[data-live-value="audio"]')).toHaveText("No audio");
+		expect(await backendRpc.call(["streaming", "getConfig"])).toMatchObject({
+			asrc: "No audio",
+			audio_inputs: savedTwo,
+		});
+		await endAndWait(page);
+		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
+	});
 });

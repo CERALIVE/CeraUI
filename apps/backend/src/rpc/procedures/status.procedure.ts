@@ -28,7 +28,10 @@ import {
 	deriveAudioSources,
 	getAudioDevices,
 } from "../../modules/streaming/audio.ts";
-import { getAudioMixActive } from "../../modules/streaming/audio-mix-status.ts";
+import {
+	getAudioMixActive,
+	getAudioOffActive,
+} from "../../modules/streaming/audio-mix-status.ts";
 import {
 	getPendingAudioFollowAsrc,
 	getResolvedAsrc,
@@ -85,6 +88,7 @@ export const getStatusProcedure = authedProcedure
 		return {
 			is_streaming: getIsStreaming(),
 			audio_mix_active: getAudioMixActive(),
+			audio_off_active: getAudioOffActive(),
 			stream_lifecycle: getStreamLifecycleState(),
 			available_updates: getAvailableUpdates(),
 			updating: getSoftUpdateStatus(),
@@ -136,6 +140,7 @@ export function buildInitialStatus() {
 		status: {
 			is_streaming: getIsStreaming(),
 			audio_mix_active: getAudioMixActive(),
+			audio_off_active: getAudioOffActive(),
 			stream_lifecycle: getStreamLifecycleState(),
 			available_updates: getAvailableUpdates(),
 			updating: getSoftUpdateStatus(),

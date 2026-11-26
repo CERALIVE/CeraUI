@@ -124,11 +124,15 @@ import {
 	notificationExists,
 	notificationRemove,
 } from "../ui/notifications.ts";
-import { resolveAudioMode } from "./audio.ts";
+import {
+	followLiveAudio,
+	pinnedLaunchedAudio,
+	readArmedStreamMarker,
+} from "./armed-stream-marker.ts";
 import {
 	audioInputEngineId,
 	effectiveAudioInputs,
-	engineAudioInputs,
+	launchAudioPlan,
 } from "./audio-inputs.ts";
 import {
 	beginCapabilitiesEpoch,
@@ -192,6 +196,8 @@ import type {
 import { PROCESS_ERROR_CODES } from "./streamloop/process-error-patterns.ts";
 
 const CERASTREAM_PIPELINE_PATH = "/tmp/cerastream-pipeline.txt";
+/** The engine's wire id for the silent leg of a live audio switch. */
+const AUDIO_SILENCE_LEG_ID = "silence";
 
 function engineAdvertises(feature: string): boolean {
 	const capabilities = getLastCapabilities();
@@ -750,6 +756,8 @@ export class CerastreamBackend implements StreamingBackend {
 	private subscription: Subscription | undefined;
 	private active = false;
 	private audioMixInputs: Array<AudioInputConfig & { id: string }> | undefined;
+	/** The delay the session runs with: one saved since is the next Start's. */
+	private runningDelay: number | undefined;
 	private clientEpoch = 0;
 	private probeEpoch = 0;
 	private telemetry: EngineTelemetry | null = null;
@@ -833,6 +841,7 @@ export class CerastreamBackend implements StreamingBackend {
 	): Promise<void> {
 		this.runtimeEvidence = undefined;
 		this.audioMixInputs = undefined;
+		this.runningDelay = config.delay;
 		this.active = true;
 		this.clearRecoveredEngineError();
 		const ownsLaunch = currentStreamLaunchOwner();
@@ -848,14 +857,8 @@ export class CerastreamBackend implements StreamingBackend {
 		const launchTransaction =
 			transaction ?? createLaunchTransaction("backend-start");
 		try {
-			const params = this.buildStartParams(config, opts);
-			const audioMixInputs = params.audio?.inputs?.map((input) => ({
-				...structuredClone(input),
-				id:
-					effectiveAudioInputs(config)?.find(
-						(saved) => audioInputEngineId(saved.id, config) === input.input_id,
-					)?.id ?? input.input_id,
-			}));
+			let params = this.buildStartParams(config, opts);
+			let audioMixInputs: CerastreamBackend["audioMixInputs"];
 			await this.enqueue(async () => {
 				assertStreamLaunchOwnership();
 				let confirmStreaming: (() => void) | undefined;
@@ -958,6 +961,36 @@ export class CerastreamBackend implements StreamingBackend {
 						if (scoped) {
 							attempt = await client.prepareStart();
 							assertStreamLaunchOwnership();
+						}
+						const launchConfig =
+							opts.audioAtDispatch === undefined
+								? config
+								: { ...config, ...opts.audioAtDispatch() };
+						if (launchConfig !== config) {
+							const audio = startParamsWithAudioModeSchema.shape.audio.parse(
+								this.encodeStartAudio(
+									launchConfig,
+									config.pipeline ?? opts.pipeline,
+									opts.audioOff,
+								),
+							);
+							const { audio: _previous, ...rest } = params;
+							params = audio === undefined ? rest : { ...rest, audio };
+						}
+						const effective =
+							params.audio?.inputs === undefined
+								? undefined
+								: effectiveAudioInputs(launchConfig);
+						audioMixInputs = params.audio?.inputs?.map((input) => ({
+							...structuredClone(input),
+							id:
+								effective?.find(
+									(saved) =>
+										audioInputEngineId(saved.id, launchConfig) ===
+										input.input_id,
+								)?.id ?? input.input_id,
+						}));
+						if (attempt !== undefined) {
 							dispatched = true;
 							return client.start({
 								...params,
@@ -1181,7 +1214,7 @@ export class CerastreamBackend implements StreamingBackend {
 		const client = this.client;
 		if (!client) return;
 		const params = this.toReloadParams(
-			this.deps.getConfig(),
+			{ ...this.deps.getConfig(), delay: this.runningDelay },
 			client.hello.schema_version,
 		);
 		void this.enqueue(
@@ -1311,6 +1344,11 @@ export class CerastreamBackend implements StreamingBackend {
 				adoptedEpoch = ++this.clientEpoch;
 				this.subscription = subscription;
 				this.active = true;
+				this.runningDelay = (
+					pinnedLaunchedAudio() ??
+					readArmedStreamMarker()?.config ??
+					this.deps.getConfig()
+				).delay;
 				adopted = true;
 				this.handleEvent(status, ownsSession);
 				return runtimeState;
@@ -1463,13 +1501,19 @@ export class CerastreamBackend implements StreamingBackend {
 	// ends with the bindings' exported schemas so the call stays contract-safe.
 	async switchAudio(params: SwitchAudioParams): Promise<SwitchAudioResult> {
 		const parsed = switchAudioParamsSchema.parse(params);
+		const client = this.client;
 		const raw = await this.withSessionClient("switch-audio", (client) =>
 			asRawRequestClient(client, "switch-audio").rawRequest(
 				"switch-audio",
 				parsed,
 			),
 		);
-		return switchAudioResultSchema.parse(raw);
+		const result = switchAudioResultSchema.parse(raw);
+		if (this.client === client)
+			followLiveAudio({
+				audio_silenced: result.active_audio_input === AUDIO_SILENCE_LEG_ID,
+			});
+		return result;
 	}
 
 	getAudioMixInputs():
@@ -1485,18 +1529,41 @@ export class CerastreamBackend implements StreamingBackend {
 		const result = await this.withSessionClient("set-audio-mix", (client) =>
 			client.setAudioMix(params),
 		);
-		if (this.audioMixInputs === inputs) {
+		if (inputs !== undefined && this.audioMixInputs === inputs) {
 			for (const applied of result.inputs) {
-				const input = inputs?.find(
+				const input = inputs.find(
 					(input) => input.input_id === applied.input_id,
 				);
 				if (input) Object.assign(input, applied);
 			}
+			followLiveAudio({
+				audio_inputs: inputs.map(
+					({ id, tracks, gain_db = 0, mute = false, delay_ms = 0 }) => ({
+						id,
+						tracks,
+						gain_db,
+						mute,
+						delay_ms,
+					}),
+				),
+			});
 		}
 		return result;
 	}
 
 	async reloadAudioDelay(delayMs: number): Promise<ReloadConfigResult> {
+		const client = this.client;
+		const result = await this.sendAudioDelay(delayMs);
+		const { audio } = result.applied;
+		const delay = audio?.delay_ms_signed ?? audio?.delay_ms;
+		if (delay !== undefined && this.client === client) {
+			this.runningDelay = delay;
+			followLiveAudio({ delay });
+		}
+		return result;
+	}
+
+	private async sendAudioDelay(delayMs: number): Promise<ReloadConfigResult> {
 		return this.withSessionClient("reload-audio-delay", (client) => {
 			if (supportsSignedReloadDelay(client.hello.schema_version)) {
 				return client.reloadConfig({ audio: { delay_ms_signed: delayMs } });
@@ -1870,6 +1937,7 @@ export class CerastreamBackend implements StreamingBackend {
 	private encodeInputAudioFields(
 		config: RuntimeConfig,
 		pipelineId: string | undefined,
+		audioOff?: boolean,
 	): {
 		input_id?: string;
 		codec?: "h264" | "h265";
@@ -1879,36 +1947,7 @@ export class CerastreamBackend implements StreamingBackend {
 		audio?: StartParams["audio"];
 	} {
 		const inputId = config.selected_video_input ?? this.deps.getActiveInput();
-		// The operator's audio pick maps onto the engine's `audio.mode`
-		// discriminator (never a pseudo-source string leaked into `audio.device`):
-		// "No audio" ⇒ none, "Pipeline default" / a network-embedded source ⇒
-		// default, a real device ⇒ device + its ALSA id. An absent `asrc` omits the
-		// section entirely (the engine's legacy inference, compat-preserved).
-		const selection =
-			config.asrc !== undefined
-				? resolveAudioMode(
-						config.asrc,
-						this.deps.isEmbeddedAudioActive(pipelineId),
-					)
-				: undefined;
-		const audio = {
-			// Absent means the operator stated no backend, so NO key is serialized
-			// and the engine's own persisted default governs. Substituting a value
-			// here would silently move every unconfigured device onto whichever arm
-			// this file names.
-			...(config.audio_backend !== undefined
-				? { backend: config.audio_backend }
-				: {}),
-			...(selection !== undefined ? { mode: selection.mode } : {}),
-			...(selection?.device !== undefined ? { device: selection.device } : {}),
-			...(config.acodec !== undefined ? { codec: config.acodec } : {}),
-			...(config.delay !== undefined ? { delay_ms: config.delay } : {}),
-		};
-		const inputs = engineAudioInputs(config);
-		if (inputs !== undefined) {
-			delete audio.device;
-			audio.mode = "default";
-		}
+		const audio = this.encodeStartAudio(config, pipelineId, audioOff);
 		return {
 			...(inputId !== undefined ? { input_id: inputId } : {}),
 			...(config.video_codec !== undefined
@@ -1934,10 +1973,42 @@ export class CerastreamBackend implements StreamingBackend {
 			...(config.composition !== undefined
 				? { composition: config.composition }
 				: {}),
-			...(Object.keys(audio).length > 0 || inputs !== undefined
-				? { audio: { ...audio, ...(inputs === undefined ? {} : { inputs }) } }
-				: {}),
+			...(audio !== undefined ? { audio } : {}),
 		};
+	}
+
+	private encodeStartAudio(
+		config: RuntimeConfig,
+		pipelineId: string | undefined,
+		audioOff?: boolean,
+	): StartParams["audio"] {
+		// The operator's audio pick maps onto the engine's `audio.mode`
+		// discriminator (never a pseudo-source string leaked into `audio.device`):
+		// "No audio" ⇒ none with no inputs whatever mix is saved, a saved mix ⇒
+		// default + its inputs, "Pipeline default" / a network-embedded source ⇒
+		// default, a real device ⇒ device + its ALSA id. An absent `asrc` with no
+		// mix omits the section entirely (the engine's legacy inference).
+		const plan = launchAudioPlan(config, {
+			audioOff,
+			embeddedAudioActive: this.deps.isEmbeddedAudioActive(pipelineId),
+		});
+		const audio = {
+			// Absent means the operator stated no backend, so NO key is serialized
+			// and the engine's own persisted default governs. Substituting a value
+			// here would silently move every unconfigured device onto whichever arm
+			// this file names.
+			...(config.audio_backend !== undefined
+				? { backend: config.audio_backend }
+				: {}),
+			...(plan !== undefined ? { mode: plan.mode } : {}),
+			...(plan?.device !== undefined ? { device: plan.device } : {}),
+			...(config.acodec !== undefined ? { codec: config.acodec } : {}),
+			...(config.delay !== undefined ? { delay_ms: config.delay } : {}),
+		};
+		const inputs = plan?.inputs;
+		return Object.keys(audio).length > 0 || inputs !== undefined
+			? { ...audio, ...(inputs === undefined ? {} : { inputs }) }
+			: undefined;
 	}
 
 	private buildStartParams(
@@ -1968,7 +2039,11 @@ export class CerastreamBackend implements StreamingBackend {
 				max_bitrate: config.max_br ?? DEFAULT_MAX_BITRATE,
 				balancer: config.balancer ?? DEFAULT_BALANCER,
 			},
-			...this.encodeInputAudioFields(config, config.pipeline ?? opts.pipeline),
+			...this.encodeInputAudioFields(
+				config,
+				config.pipeline ?? opts.pipeline,
+				opts.audioOff,
+			),
 		});
 	}
 

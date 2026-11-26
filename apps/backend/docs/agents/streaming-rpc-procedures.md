@@ -115,7 +115,33 @@ Idle edits from the Live strips arrive as per-input deltas on
 `changedAudioInputs` composes on the current saved mix (refusing to turn the
 main input out with `audio_input_primary`) and saves for the next start. For a network source, its source id (`rtmp` or `srt`) denotes
 the embedded input and becomes engine `embedded`. Without saved inputs or the
-capability, start serialization stays on the existing path. The compatibility
+capability, start serialization stays on the existing path. The engine start,
+the persisted engine config and the mock start read one decision,
+`launchAudioPlan(config, { audioOff })`: `asrc: "No audio"` (or `audioOff: true`,
+a stream started without audio) sends `audio.mode: "none"` with no `inputs` and
+no `device` whatever mix is saved, and the saved mix stays on disk for the
+next pick; `Pipeline default` with a saved mix still sends that mix.
+Only the operator's own pick counts: Auto's launch copy can also read
+"No audio" (`no-capture-audio`), so `startStream` passes `audioOff: false` there
+and a saved mix is still sent. A Start uses the audio configuration carried by the
+Start request; saves made while it is in flight apply to the next Start only.
+`acceptStartAudio` (`start-audio.ts`) freezes it once where the Start is requested,
+before anything it waits for: the Start RPC, autostart, the set-profile restart. A
+restoration takes it from the armed marker (`restoredStartAudio`). `startStream` has
+no default for it, so no caller launches without one.
+Validation, the codec gate, the probe, the engine request, every retry and the armed
+marker read that snapshot (`asrc`, `audio_inputs`, `acodec`, `delay` and
+`audio_backend`), never the saved config.
+So a "No audio" Start stays without audio, and a Start pressed with a microphone
+is judged on that microphone: if it does not answer, the Start is refused with
+`audio_source_probe_failed` even when "No audio" was saved meanwhile. Two reads stay
+live on purpose: a card that re-enumerated, as the main input or in the mix, is
+addressed by its new id, and Auto is resolved against the launched source at launch. The Start's own write
+(`StartAudio.unsaved`) leaves out every field saved since the press, even when that
+save repeats the saved value: `setConfig` and `setAudioMix` call
+`noteAudioSaved`, the Start's own write does not. Until a Start is done the
+Bluetooth microphones stay listed for its backend, and `startStream` lists them again
+when another backend was saved before the launch. The compatibility
 start-schema export aliases the published producer schema, preserving its
 additive audio fields.
 
@@ -125,12 +151,22 @@ Stop, engine idle or connection loss withdraw it. Only an active mix refuses
 `switchAudio` with `audio_mix_active`. A legacy session retains live source
 switching even after a mix is saved.
 
+Status snapshots, the start and stop updates and the first post-sign-in status also carry
+`audio_off_active`: whether the running session was launched without audio by the
+operator's choice, whatever pick is saved now. The early frame does not depend
+on modem inventory. Other partial frames leave it out; the client retains the
+fact only while it still describes the current stream on the current socket.
+It is omitted for a stream this process adopted instead of launching.
+
 `streaming.setAudioMix({ id, gain_db?, mute?, delay_ms? })` uses that session's
 admitted input identity. A live mix sends one producer `setAudioMix` request,
 returns the applied state and saves its values.
 The reply is authoritative even when its gain differs from the request; partial
 live updates retain the admitted gain, mute and delay unless the engine changes
-them. Reloading saved settings and the next Start retain those applied values.
+them. Reloading saved settings and the next Start retain those applied values, and
+an engine restart brings the running mix back with them (`followLiveAudio`, also
+after a pending clear of the mix; see
+[the restoration contract](one-shot-stream-restoration-after-engine-death.md)).
 Pending membership and track
 edits remain pending; updating an input removed from next-start settings does
 not re-enable it. Idle or on a legacy session, the procedure only saves an

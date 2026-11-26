@@ -48,6 +48,10 @@ export interface StreamRunOptions {
 	host: string;
 	port: number;
 	streamid: string;
+	/** The launch's own audio decision; see `launchAudioPlan`. */
+	audioOff?: boolean;
+	/** Refresh only the accepted audio selection at the engine request boundary. */
+	readonly audioAtDispatch?: () => Pick<RuntimeConfig, "asrc" | "audio_inputs">;
 }
 
 /**

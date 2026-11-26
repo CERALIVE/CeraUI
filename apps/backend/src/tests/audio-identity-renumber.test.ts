@@ -20,7 +20,7 @@ import {
 } from "../modules/streaming/audio.ts";
 import type { AudioDeviceIdentity } from "../modules/streaming/audio-naming.ts";
 
-const RODE_STABLE_ID = "usb:19f7:0037";
+const RODE_STABLE_ID = "usb:19f7:0037:rode-fixture-serial";
 
 function identity(stableId: string): AudioDeviceIdentity {
 	return { stable_id: stableId };
@@ -51,6 +51,20 @@ describe("reconcileConfiguredAudioIdentity", () => {
 			),
 		).toBe(true);
 		expect(getConfig().asrc).toBe("usbaudio_1");
+	});
+
+	it("keeps the saved key when the successor matches only the USB model", () => {
+		getConfig().asrc = "usbaudio";
+		const model = "usb:19f7:0037";
+
+		expect(
+			reconcileConfiguredAudioIdentity(
+				new Map([["usbaudio_1", identity(model)]]),
+				AFTER_REPLUG.devices,
+				new Map([["usbaudio", model]]),
+			),
+		).toBe(false);
+		expect(getConfig().asrc).toBe("usbaudio");
 	});
 
 	it("is a no-op while the configured card is still listed", () => {

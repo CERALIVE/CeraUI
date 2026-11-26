@@ -20,7 +20,7 @@
 // wires srtla per-uplink telemetry, then starts the engine session over the
 // StreamingBackend seam.
 
-import type { StartFailureClass } from "@ceraui/rpc/schemas";
+import { AUDIO_SOURCE_AUTO, type StartFailureClass } from "@ceraui/rpc/schemas";
 import {
 	buildSrtlaSendArgs,
 	controlSocketPath,
@@ -34,14 +34,26 @@ import {
 	resetActiveEncodeLiveness,
 	resetActivePassthrough,
 } from "../active-passthrough.ts";
-import { asrcProbe, isPseudoAudioSource } from "../audio.ts";
+import { pinLaunchedAudio } from "../armed-stream-marker.ts";
+import {
+	type AudioIdentityEvidence,
+	asrcProbe,
+	audioIdentitySuccessor,
+	isPseudoAudioSource,
+	liveAudioIdentityEvidence,
+	NO_AUDIO_ID,
+	refreshBluetoothAudioDevices,
+} from "../audio.ts";
 import {
 	defaultBindMapSpawnDeps,
 	resolveBindMapArgs,
 } from "../bind-map-spawn.ts";
 import { getLastCapabilities } from "../capabilities.ts";
 import { SRTLA_LISTEN_PORT } from "../constants.ts";
-import { embeddedAudioActive } from "../embedded-audio.ts";
+import {
+	embeddedAudioActive,
+	isEmbeddedAudioPipeline,
+} from "../embedded-audio.ts";
 import { clearStreamProcessExit } from "../health.ts";
 import { createLaunchTransaction } from "../launch-transaction.ts";
 import {
@@ -52,6 +64,11 @@ import {
 import type { Pipeline } from "../pipelines.ts";
 import { replayPreviewEncodeMode } from "../preview-encode-replay.ts";
 import { getLastPublishedBond } from "../srtla.ts";
+import { resolvePinnedLaunchAudio, type StartAudio } from "../start-audio.ts";
+import {
+	StreamStartFailure,
+	typedStartFailure,
+} from "../start-failure-taxonomy.ts";
 import { assertStreamLaunchOwnership } from "../stream-launch-ownership.ts";
 import { getStreamingBackend } from "../streaming-engine.ts";
 import { srtlaSendExec } from "./exec-paths.ts";
@@ -126,6 +143,7 @@ export async function maybeProbeAudioSource(
 	pipeline: Pipeline,
 	config: RuntimeConfig,
 	deps: AudioProbeDeps = {},
+	evidence?: AudioIdentityEvidence,
 ): Promise<boolean> {
 	if (!pipeline.supportsAudio || !config.asrc) return true;
 	// A pipeline pseudo-source is not a device — never probe (nor probe-fail) it.
@@ -135,9 +153,10 @@ export async function maybeProbeAudioSource(
 	if (embeddedAudioActive(pipeline.audio_kind, networkEmbeddedAudio)) {
 		return true;
 	}
-	const probe = deps.probe ?? asrcProbe;
 	try {
-		await probe(config.asrc);
+		if (deps.probe !== undefined) await deps.probe(config.asrc);
+		else if (evidence === undefined) await asrcProbe(config.asrc);
+		else await asrcProbe(config.asrc, evidence);
 		return true;
 	} catch (_err) {
 		// asrcProbe rejects when the operator stops the stream before the audio
@@ -153,6 +172,10 @@ export async function maybeProbeAudioSource(
  * while the live session keeps encoding the previous one, so restoring from disk
  * would apply an edit the operator deferred to their next start. Absent (every
  * other caller), the live config is read exactly as before.
+ *
+ * `startAudio` is the audio configuration the Start was pressed with. Nothing here
+ * reads the saved one: a save made meanwhile counts for the next Start. It has no
+ * default, so no caller can launch without taking one.
  */
 export async function startStream(
 	pipeline: Pipeline,
@@ -161,7 +184,8 @@ export async function startStream(
 	streamid: string,
 	audioDeps: AudioProbeDeps = {},
 	attemptId = "legacy-start",
-	configOverride?: Partial<RuntimeConfig>,
+	configOverride: Partial<RuntimeConfig> | undefined,
+	startAudio: StartAudio,
 ): Promise<StartStreamResult> {
 	assertStreamLaunchOwnership();
 	// The preview-encoder fence, and the reason it lives HERE. The engine fixes
@@ -191,15 +215,35 @@ export async function startStream(
 		};
 	}
 
-	const config =
-		configOverride === undefined
-			? getConfig()
-			: ({
-					...getConfig(),
-					...configOverride,
-					composition: configOverride.composition,
-				} as RuntimeConfig);
+	const saved = getConfig();
+	if (saved.audio_backend !== startAudio.config.audio_backend) {
+		// The Bluetooth microphones may be listed for the backend saved since.
+		await refreshBluetoothAudioDevices();
+		assertStreamLaunchOwnership();
+	}
+	const config: RuntimeConfig = {
+		...saved,
+		...(configOverride && {
+			...configOverride,
+			composition: configOverride.composition,
+		}),
+		...startAudio.config,
+	};
 	const launchConfig = resolveLaunchConfig(config);
+	const chosen = launchConfig.asrc;
+	const wasAuto = config.asrc === AUDIO_SOURCE_AUTO;
+	const autoEvidence =
+		wasAuto && chosen !== undefined && configOverride === undefined
+			? liveAudioIdentityEvidence().get(chosen)
+			: undefined;
+	const audioEvidence =
+		// Auto's later lookup cannot clear uncertainty frozen for a saved mix leg.
+		autoEvidence !== undefined &&
+		chosen !== undefined &&
+		startAudio.audioEvidence.get(chosen)?.kind !== "unavailable"
+			? new Map(startAudio.audioEvidence).set(chosen, autoEvidence)
+			: startAudio.audioEvidence;
+	const audioOff = config.asrc === NO_AUDIO_ID;
 	startStreamDeps.getStreamingBackend().setBitrate(launchConfig);
 
 	// A fresh stream start clears any prior unexpected-exit health flag so the
@@ -216,6 +260,7 @@ export async function startStream(
 		pipeline,
 		launchConfig,
 		audioDeps,
+		chosen === undefined ? undefined : audioEvidence.get(chosen),
 	);
 	assertStreamLaunchOwnership();
 	if (!audioReady) {
@@ -297,12 +342,56 @@ export async function startStream(
 		transaction.register(() => startStreamDeps.stopLinkTelemetry());
 
 		await startStreamDeps.getStreamingBackend().start(
-			launchConfig,
+			// The bitrate is live: a change made while starting still applies.
+			configOverride === undefined
+				? { ...launchConfig, max_br: saved.max_br }
+				: launchConfig,
 			{
 				pipeline: pipeline.source,
 				host: "127.0.0.1",
 				port: SRTLA_LISTEN_PORT,
 				streamid,
+				// Auto's launch copy can read "No audio" without the operator picking it.
+				audioOff,
+				audioAtDispatch: () => {
+					const audio = startAudio.config;
+					const asrc = wasAuto
+						? chosen &&
+							(audioEvidence.has(chosen)
+								? chosen
+								: (audioIdentitySuccessor(chosen) ?? chosen))
+						: audio.asrc;
+					const resolved = resolvePinnedLaunchAudio(
+						{ ...launchConfig, ...audio, asrc },
+						audioEvidence,
+						{
+							audioOff,
+							embedded: isEmbeddedAudioPipeline(
+								launchConfig.pipeline ?? pipeline.source,
+							),
+						},
+					);
+					if (!resolved.ok)
+						throw new StreamStartFailure(
+							typedStartFailure(
+								attemptId,
+								"params",
+								"audio_source_unavailable",
+								AUDIO_SOURCE_PROBE_FAILED,
+							),
+						);
+					pinLaunchedAudio({
+						...audio,
+						asrc:
+							wasAuto && autoEvidence === undefined
+								? audio.asrc
+								: resolved.asrc,
+						audio_inputs: resolved.audio_inputs,
+						audio_physical_ids: resolved.audio_physical_ids,
+						audio_unverified_ids: resolved.audio_unverified_ids,
+					});
+					return { asrc: resolved.asrc, audio_inputs: resolved.audio_inputs };
+				},
 			},
 			transaction,
 		);

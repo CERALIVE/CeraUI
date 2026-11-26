@@ -7,9 +7,11 @@ import {
 } from "@ceraui/rpc/schemas";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import {
+	type AudioModeSelection,
 	deriveAudioSources,
 	getAudioCaptureCardIds,
 	getAudioDevices,
+	NO_AUDIO_ID,
 	resolveAudioMode,
 } from "./audio.ts";
 import { resolveAutoAsrc } from "./auto-audio.ts";
@@ -234,7 +236,10 @@ export function changedAudioInputs(
 
 export function engineAudioInputs(
 	config: RuntimeConfig,
+	audioOff = config.asrc === NO_AUDIO_ID,
 ): AudioInputConfig[] | undefined {
+	// "No audio" sends nothing whatever mix is saved; the mix stays for the next pick.
+	if (audioOff) return undefined;
 	const inputs = effectiveAudioInputs(config);
 	if (!getLastCapabilities()?.audio_mix || !inputs?.length) return undefined;
 	const primary = primaryAudioInputId(config);
@@ -246,4 +251,32 @@ export function engineAudioInputs(
 		input_id: audioInputEngineId(id, config),
 		...input,
 	}));
+}
+
+export interface LaunchAudioPlan extends AudioModeSelection {
+	inputs?: AudioInputConfig[];
+}
+
+/**
+ * The audio a launch sends, decided once for the engine start, the persisted
+ * engine config and the mock engine: nothing, the saved mix, the engine's
+ * default or one device. `audioOff: true` starts this stream without audio and
+ * saves nothing; `false` says a "No audio" in `config` is only what Auto resolved
+ * to, so a saved mix is still sent; absent, the pick in `config` decides.
+ * Undefined when no `asrc` is set and no mix is saved, so the start keeps the
+ * engine's legacy inference.
+ */
+export function launchAudioPlan(
+	config: RuntimeConfig,
+	{
+		audioOff = config.asrc === NO_AUDIO_ID,
+		embeddedAudioActive = isEmbeddedAudioPipeline(config.pipeline),
+	}: { audioOff?: boolean | undefined; embeddedAudioActive?: boolean } = {},
+): LaunchAudioPlan | undefined {
+	if (audioOff) return { mode: "none" };
+	const inputs = engineAudioInputs(config, audioOff);
+	if (inputs !== undefined) return { mode: "default", inputs };
+	return config.asrc === undefined
+		? undefined
+		: resolveAudioMode(config.asrc, embeddedAudioActive);
 }

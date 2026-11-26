@@ -20,6 +20,8 @@ import type { Server } from "bun";
 
 import * as modemStatus from "../modules/modems/modem-status.ts";
 import { setup } from "../modules/setup.ts";
+import { pinLaunchedAudio } from "../modules/streaming/armed-stream-marker.ts";
+import { acceptStartAudio } from "../modules/streaming/start-audio.ts";
 import { seedStreamLifecycleState } from "../modules/streaming/stream-lifecycle-status.ts";
 import { updateStatus } from "../modules/streaming/streaming.ts";
 import { getDeviceStatsSnapshot } from "../modules/system/device-stats-snapshot.ts";
@@ -61,6 +63,7 @@ async function connect() {
 	return {
 		frames,
 		call,
+		close: () => client.close(),
 		/** Ends when the server answers a later request: every push is in. */
 		drain: () => call("drain", ["no", "such", "procedure"]),
 	};
@@ -108,6 +111,7 @@ afterEach(() => {
 	open.clear();
 	updateStatus(false);
 	seedStreamLifecycleState("idle");
+	pinLaunchedAudio(undefined);
 });
 
 describe("the first frame after a sign-in", () => {
@@ -143,6 +147,82 @@ describe("the first frame after a sign-in", () => {
 				expect(streamFacts(page.frames)).toHaveLength(1);
 			} finally {
 				modems.mockRestore();
+			}
+		},
+	);
+
+	test.each([
+		{
+			name: "returning tab borrows no silence from the previous session",
+			asrc: "Pipeline default",
+			audioOff: false,
+			returning: true,
+		},
+		{
+			name: "fresh tab learns the current stream is silent",
+			asrc: "No audio",
+			audioOff: true,
+			returning: false,
+		},
+		{
+			name: "an adopted stream does not claim known audio",
+			asrc: undefined,
+			audioOff: undefined,
+			returning: true,
+		},
+	])(
+		"$name before a failed inventory-dependent status pull",
+		async ({ asrc, audioOff, returning }) => {
+			const credentials = {
+				token: issueKioskSessionToken(),
+				persistent_token: true,
+			};
+			if (returning) {
+				updateStatus(true);
+				seedStreamLifecycleState("streaming");
+				pinLaunchedAudio(acceptStartAudio({ asrc: "No audio" }).config);
+				const previous = await connect();
+				await previous.call("login", ["auth", "login"], credentials);
+				await previous.drain();
+				expect(streamFacts(previous.frames).at(-1)?.status).toMatchObject({
+					audio_off_active: true,
+				});
+				previous.close();
+				updateStatus(false);
+				seedStreamLifecycleState("idle");
+			}
+			pinLaunchedAudio(
+				asrc === undefined ? undefined : acceptStartAudio({ asrc }).config,
+			);
+			updateStatus(true);
+			seedStreamLifecycleState("streaming");
+			const inventory = spyOn(
+				modemStatus,
+				"buildModemsWireMessage",
+			).mockImplementation(() => {
+				throw new Error("unreadable modem row");
+			});
+			try {
+				const page = await connect();
+				await page.call("login", ["auth", "login"], credentials);
+				await page.call("pull", ["status", "getStatus"]);
+				expect(page.frames[0]).toMatchObject({
+					id: "login",
+					result: { success: true },
+				});
+				expect(page.frames[1]).toEqual({
+					status: {
+						is_streaming: true,
+						stream_lifecycle: "streaming",
+						...(audioOff === undefined ? {} : { audio_off_active: audioOff }),
+					},
+				});
+				expect(page.frames.find(({ id }) => id === "pull")).toMatchObject({
+					error: { code: "INTERNAL_ERROR" },
+				});
+				expect(streamFacts(page.frames)).toHaveLength(1);
+			} finally {
+				inventory.mockRestore();
 			}
 		},
 	);

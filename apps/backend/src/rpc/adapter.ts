@@ -17,6 +17,7 @@ import { logger, logRedact } from "../helpers/logger.ts";
 import { isRuntimeConfigAvailable } from "../modules/config.ts";
 import { stopFollow } from "../modules/device-logs/follow.ts";
 import { SHARING_DIAG_EVENT } from "../modules/network/sharing-diag/status.ts";
+import { getAudioOffActive } from "../modules/streaming/audio-mix-status.ts";
 import {
 	getStreamHealth,
 	HEALTH_EVENT_TYPE,
@@ -227,9 +228,11 @@ export async function handleORPCMessage(
  */
 function sendInitialStatusToClient(ws: AppWebSocket): void {
 	// Apart from the snapshot, which one unreadable inventory row can make throw.
+	const streaming = getIsStreaming();
 	sendToClient(ws, "status", {
-		is_streaming: getIsStreaming(),
+		is_streaming: streaming,
 		stream_lifecycle: getStreamLifecycleState(),
+		audio_off_active: streaming ? getAudioOffActive() : undefined,
 	} satisfies StatusResponseMessage);
 	const initialStatus = buildInitialStatus();
 

@@ -50,7 +50,7 @@ import {
 } from "../ui/websocket-server.ts";
 import { notifyWifiAdapterModeEdge } from "../wifi/wifi-adapter-mode-events.ts";
 import { getAudioDevices } from "./audio.ts";
-import { getAudioMixActive } from "./audio-mix-status.ts";
+import { getAudioMixActive, getAudioOffActive } from "./audio-mix-status.ts";
 import { getLastCapabilities, getSupportedTransports } from "./capabilities.ts";
 import { isCompositionSupported } from "./composition.ts";
 import { validateBitrate } from "./encoder.ts";
@@ -58,6 +58,7 @@ import { AUDIO_CODECS } from "./pipeline-sources.ts";
 import { searchPipelines } from "./pipelines.ts";
 import { noteSourceSelectionWrite } from "./sources.ts";
 import { resolveSrtla } from "./srtla.ts";
+import { acceptStartAudio, type StartAudio } from "./start-audio.ts";
 import { mergePersistedStartConfig } from "./start-config-merge.ts";
 import { resolveStreamEndpoint } from "./transport/resolve-endpoint.ts";
 
@@ -107,6 +108,7 @@ export function updateStatus(status: boolean) {
 		broadcastMsg("status", {
 			is_streaming: isStreaming,
 			audio_mix_active: getAudioMixActive(),
+			audio_off_active: getAudioOffActive(),
 		});
 
 		return true;
@@ -140,7 +142,10 @@ export function startError(conn: WebSocket, msg: string, id?: string) {
 	return false;
 }
 
-export async function validateConfig(params: Partial<ConfigParameters>) {
+export async function validateConfig(
+	params: Partial<ConfigParameters>,
+	startAudio?: Pick<StartAudio, "savedAsrc" | "audioEvidence">,
+) {
 	if (typeof params !== "object") throw new Error("Invalid config");
 
 	// `null` is setConfig's explicit CLEAR, never a start value, and the runtime
@@ -211,6 +216,8 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 
 	// audio source
 	const config = getConfig();
+	const savedAsrc =
+		startAudio === undefined ? config.asrc : startAudio.savedAsrc;
 	const audioDevicesMap = getAudioDevices();
 	if (pipeline.supportsAudio) {
 		if (typeof validated.asrc !== "string")
@@ -219,7 +226,8 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 		// launch (auto-audio.ts), so it is NOT required to be in getAudioDevices().
 		if (
 			validated.asrc !== AUDIO_SOURCE_AUTO &&
-			validated.asrc !== config.asrc &&
+			validated.asrc !== savedAsrc &&
+			!startAudio?.audioEvidence.has(validated.asrc) &&
 			!audioDevicesMap[validated.asrc]
 		)
 			throw new Error("Selected audio source not found");
@@ -267,28 +275,30 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 	return { pipeline, srtlaAddr, srtlaPort, streamid };
 }
 
-export async function updateConfig(requestedParams: ConfigParameters) {
+export async function updateConfig(
+	requestedParams: ConfigParameters,
+	startAudio: StartAudio = acceptStartAudio(requestedParams),
+) {
 	// Every start is a partial update over the persisted stream config. Keep the
 	// merge at this shared seam: UI starts arrive through session.start, while a
 	// set-profile reconnect calls it directly with {}. Parsing through the wire
 	// schema projects only stream fields, so credentials in runtime config can
 	// never ride the applied start object.
-	const params: ConfigParameters = mergePersistedStartConfig(
-		getConfig(),
-		requestedParams,
-	);
+	const params: ConfigParameters = {
+		...mergePersistedStartConfig(getConfig(), requestedParams),
+		...startAudio.config,
+	};
 
 	const {
 		pipeline,
 		srtlaAddr: initialAddr,
 		srtlaPort,
 		streamid,
-	} = await validateConfig(params);
+	} = await validateConfig(params, startAudio);
 
 	const srtlaAddr = await resolveSrtla(initialAddr);
 	const config = getConfig();
 	// Save the updated config
-	config.delay = params.delay;
 	config.pipeline = params.pipeline;
 	config.max_br = params.max_br;
 	config.srt_latency = params.srt_latency;
@@ -306,16 +316,11 @@ export async function updateConfig(requestedParams: ConfigParameters) {
 		noteSourceSelectionWrite(params.source);
 	}
 
-	if (pipeline.supportsAudio && params.acodec) {
-		// Validated against AUDIO_CODECS above, so the wider `string` param is a
-		// concrete codec here; narrow to the config's codec enum.
-		config.acodec = params.acodec as typeof config.acodec;
-	}
-	if (pipeline.supportsAudio && params.asrc) {
-		config.asrc = params.asrc;
-	}
-	if (params.audio_inputs !== undefined)
-		config.audio_inputs = params.audio_inputs ?? undefined;
+	// Anything saved since the press is the next Start's and stays.
+	const { asrc, acodec, ...audio } = startAudio.unsaved();
+	Object.assign(config, audio);
+	if (pipeline.supportsAudio && acodec) config.acodec = acodec;
+	if (pipeline.supportsAudio && asrc) config.asrc = asrc;
 
 	if (params.relay_server) {
 		config.relay_server = params.relay_server;

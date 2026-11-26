@@ -693,13 +693,15 @@ function handleMessage(
 				isStreamingState,
 			);
 			if (statusData === undefined) break;
+			const streamingChanged =
+				statusData.is_streaming !== undefined &&
+				statusData.is_streaming !== isStreamingState;
 			const lifecycle = statusData.stream_lifecycle;
 			const repeatedUncertainPhase =
 				(lifecycle === "reconciling" || lifecycle === "stop_failed") &&
 				lifecycle === getStatus(true)?.stream_lifecycle;
 			if (
-				(statusData.is_streaming !== undefined &&
-					statusData.is_streaming !== isStreamingState) ||
+				streamingChanged ||
 				("stream_lifecycle" in statusData &&
 					lifecycle !== statusState?.stream_lifecycle)
 			)
@@ -707,8 +709,7 @@ function handleMessage(
 
 			// Update individual states
 			if (statusData.is_streaming !== undefined) {
-				if (statusData.is_streaming !== isStreamingState)
-					noteStreamSessionBoundary();
+				if (streamingChanged) noteStreamSessionBoundary();
 				isStreamingState = statusData.is_streaming;
 				// Admission proves provenance; connectivity is checked when Stop is used.
 				streamingStatusReceipt = received;
@@ -762,6 +763,7 @@ function handleMessage(
 			// Update aggregated status
 			const nextStatus = {
 				...statusState,
+				...(streamingChanged ? { audio_off_active: undefined } : {}),
 				...statusData,
 				is_streaming: isStreamingState,
 				wifi: wifiState ?? {},
@@ -771,7 +773,8 @@ function handleMessage(
 			if ("stream_lifecycle" in statusData) {
 				noteLifecycleDelivered(received);
 				// Invalidate even if a replacement live frame arrives before render
-				// or the device has not published is_streaming=false yet.
+				// or the device has not published is_streaming=false yet. A live
+				// apply-now edit, by contrast, keeps the same stream and Stop intent.
 				if (
 					lifecycle !== undefined &&
 					lifecycle !== "streaming" &&
@@ -1321,9 +1324,8 @@ export const handleMessageForTest = handleMessage;
  * must never be gated by push seq bookkeeping. Recovery seam for the stopping
  * watchdog and the reconnect hydrate.
  *
- * A pull is a FULL snapshot, so an optional lifecycle it omits is absent now
- * (an older backend), not unchanged: it replaces the held value instead of
- * merging like a partial push (early oracle R4).
+ * A pull is a FULL snapshot, so omitted lifecycle and active audio evidence
+ * are unknown now, not unchanged. Partial pushes keep their omitted fields.
  *
  * Real RPC producers carry dispatch and receipt through `pullStatusEvidence`.
  * Omitting provenance is only the synchronous snapshot/test ingestion seam;
@@ -1332,7 +1334,7 @@ export const handleMessageForTest = handleMessage;
 export function ingestPulledStatus(status: unknown, receipt?: Receipt): void {
 	const snapshot =
 		typeof status === "object" && status !== null
-			? { stream_lifecycle: undefined, ...status }
+			? { stream_lifecycle: undefined, audio_off_active: undefined, ...status }
 			: status;
 	handleMessage("status", snapshot, undefined, receipt);
 }
@@ -1422,7 +1424,12 @@ function handleConnectionChange(state: ConnectionState): void {
 	// authoritative. Steady connected→connected ticks reconcile nothing.
 	const link = getLinkEpoch();
 	noteLinkState(state);
-	if (getLinkEpoch() !== link) invalidateConfirmedStop();
+	if (getLinkEpoch() !== link) {
+		invalidateConfirmedStop();
+		// An unseen replacement must not inherit the previous link's audio fact.
+		if (statusState?.audio_off_active !== undefined)
+			statusState = { ...statusState, audio_off_active: undefined };
+	}
 	reconcileOperationsOnReconnect(previous, state);
 
 	if (state === "connected") {

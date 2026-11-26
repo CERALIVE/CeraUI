@@ -71,7 +71,7 @@ import {
 	isAudioBackendSupported,
 } from "../../modules/streaming/audio-backend.ts";
 import {
-	engineAudioInputs,
+	launchAudioPlan,
 	pickedAudioInputs,
 	storedAudioInputs,
 	validateAudioInputs,
@@ -135,6 +135,10 @@ import {
 	resolveSourceIdentity,
 	resolveSourceRouting,
 } from "../../modules/streaming/sources.ts";
+import {
+	acceptStartAudio,
+	noteAudioSaved,
+} from "../../modules/streaming/start-audio.ts";
 import {
 	classifyStartFailure,
 	StreamStartFailure,
@@ -254,7 +258,8 @@ export const streamingStartProcedure = authedProcedure
 	.handler(async ({ input, context }) => {
 		let appliedResponse: StreamingConfigInput | undefined;
 		let legacyError: string | undefined;
-		const lifecycleResult = await startStreamSession({
+		const startAudio = acceptStartAudio(input);
+		const starting = startStreamSession({
 			origin:
 				context.ws.remoteAddress === "control-channel"
 					? "remote-control"
@@ -336,7 +341,7 @@ export const streamingStartProcedure = authedProcedure
 				// an MPEG-TS carrier, so only AAC-in-TS is proven end-to-end; refuse an
 				// effective codec the effective transport can't carry at START — config
 				// SAVES stay permitted (mirrors the pipeline_not_in_offered_set gate).
-				const effectiveAcodec = applied.acodec ?? getConfig().acodec;
+				const effectiveAcodec = startAudio.config.acodec;
 				if (effectiveAcodec !== undefined) {
 					const effectiveTransport =
 						applied.relay_protocol ?? getConfig().relay_protocol ?? "srtla";
@@ -381,11 +386,11 @@ export const streamingStartProcedure = authedProcedure
 					const config = {
 						...getConfig(),
 						...applied,
-						audio_inputs: applied.audio_inputs ?? getConfig().audio_inputs,
+						...startAudio.config,
 						composition: applied.composition ?? getConfig().composition,
 						video_codec: applied.video_codec ?? getConfig().video_codec,
 					};
-					const inputs = engineAudioInputs(config);
+					const audio = launchAudioPlan(config);
 					// What the engine adapter hands over at a real start, after
 					// `validateConfig` drops a composition the engine does not advertise.
 					const composition =
@@ -405,7 +410,7 @@ export const streamingStartProcedure = authedProcedure
 							max_bitrate: config.max_br ?? 5000,
 							balancer: config.balancer ?? "adaptive",
 						},
-						...(inputs === undefined ? {} : { audio: { inputs } }),
+						...(audio === undefined ? {} : { audio }),
 						...(composition === undefined ? {} : { composition }),
 					});
 					broadcastMsg("status", {
@@ -423,6 +428,7 @@ export const streamingStartProcedure = authedProcedure
 					applied,
 					generation,
 					attemptId,
+					startAudio,
 				);
 				if (!startResult.success) {
 					legacyError = startResult.error;
@@ -445,6 +451,7 @@ export const streamingStartProcedure = authedProcedure
 				appliedResponse = applied;
 			},
 		});
+		const lifecycleResult = await startAudio.whileInFlight(starting);
 		return startResponse(lifecycleResult, appliedResponse, legacyError);
 	});
 
@@ -943,12 +950,23 @@ export const setConfigProcedure = authedProcedure
 		if (input.fec_enabled !== undefined) config.fec_enabled = input.fec_enabled;
 		if (input.recovery_mode !== undefined)
 			config.recovery_mode = input.recovery_mode;
-		if (input.delay !== undefined) config.delay = input.delay;
+		if (input.delay !== undefined) {
+			config.delay = input.delay;
+			noteAudioSaved("delay");
+		}
 		if (input.pipeline !== undefined) config.pipeline = input.pipeline;
-		if (input.acodec !== undefined) config.acodec = input.acodec;
-		if (input.asrc !== undefined) config.asrc = input.asrc;
-		if (audioInputs !== undefined)
+		if (input.acodec !== undefined) {
+			config.acodec = input.acodec;
+			noteAudioSaved("acodec");
+		}
+		if (input.asrc !== undefined) {
+			config.asrc = input.asrc;
+			noteAudioSaved("asrc");
+		}
+		if (audioInputs !== undefined) {
 			config.audio_inputs = storedAudioInputs(audioInputs, audioConfig);
+			noteAudioSaved("audio_inputs");
+		}
 		// Never staged behind `apply_now`: the engine fixes its audio backend when
 		// it builds the graph and answers a live reload with `applies:
 		// "next-session"`, so this can only ever take effect at the next start.

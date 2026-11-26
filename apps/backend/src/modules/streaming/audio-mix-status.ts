@@ -1,5 +1,6 @@
 import { getMockState, shouldUseMocks } from "../../mocks/mock-service.ts";
-import { deriveAudioSources } from "./audio.ts";
+import { pinnedLaunchedAudio } from "./armed-stream-marker.ts";
+import { deriveAudioSources, NO_AUDIO_ID } from "./audio.ts";
 import { audioInputEngineId } from "./audio-inputs.ts";
 import { cerastreamBackend } from "./cerastream-backend.ts";
 import { getIsStreaming } from "./streaming.ts";
@@ -24,6 +25,18 @@ export function getAudioMixInputs() {
 
 export function getAudioMixActive(): boolean {
 	return getIsStreaming() && getAudioMixInputs() !== undefined;
+}
+
+/**
+ * Was the running stream started without audio by choice, whatever is saved now?
+ * Unknown for a stream this process adopted instead of launching.
+ */
+export function getAudioOffActive(): boolean | undefined {
+	if (!getIsStreaming()) return false;
+	if (shouldUseMocks())
+		return getMockState().engineStart?.audio?.mode === "none";
+	const launched = pinnedLaunchedAudio();
+	return launched === undefined ? undefined : launched.asrc === NO_AUDIO_ID;
 }
 
 export function audioMixSourceId(inputId: string): string {

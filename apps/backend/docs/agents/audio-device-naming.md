@@ -2,6 +2,36 @@
 
 ## AUDIO-DEVICE NAMING [EXISTS]
 
+Stream launch and restoration do not treat the display cache as device proof.
+A new ALSA scan invalidates the previous roster for launch, including rows
+whose addresses still exist. Launch checks that a physical token was unique
+when captured and is unique in a roster requested after the current scan.
+This fence orders RPCs, not producer observations: a successful reply can
+still contain a stale producer snapshot. If an answered roster omits a scanned
+input, a fresh Start records it as unavailable, not as a legacy address-only
+selection. Auto resolving to that same key later cannot clear a mix input's
+unavailable state recorded at admission.
+
+The scan reads kernel-reported vendor/product for each USB-backed ALSA card.
+A conflicting USB model makes the roster row unavailable. This protects a
+fresh Start that uses the local input, including a saved mix leg, and a restore
+that must resolve a recorded physical identity. A matching identity remains
+eligible when it moves USB ports, even if the roster still names the old port.
+A refusal does not update the saved pick or mix, and diagnostic serials are not
+used to identify the current occupant.
+
+Agreement is not verification. The original receiver and a replacement can
+present the same scan and stale roster evidence and both take the ordinary
+restore path. Checking the actual open after a port move or when a stale report
+still looks plausible requires cerastream's verified route check and a receiver
+qualified for that route. This change enables neither.
+
+A model or port token can open an unchanged address on a fresh Start, but the
+armed marker records that it cannot identify that input after engine loss.
+Legacy address-only markers stay on their existing address-based restore path:
+they do not apply the identity veto or acquire a physical identity from whoever
+now occupies the address.
+
 **Production v7.2 also reports `HDMIIN` / `RK3588 HDMI-IN`.** Rock's
 2026-09-18 raw ALSA inventory uses that third spelling, not `hdmirx`.
 The onboard display table accepts the card ID and longname; Auto's ordered

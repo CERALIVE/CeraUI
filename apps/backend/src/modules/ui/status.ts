@@ -40,7 +40,10 @@ import { getUnclaimedAdapters } from "../network/unclaimed-adapters.ts";
 import { buildRelaysMsg, getRelays } from "../remote/remote-relays.ts";
 import { getActiveEncodeStatus } from "../streaming/active-encode-status.ts";
 import { deriveAudioSources, getAudioDevices } from "../streaming/audio.ts";
-import { getAudioMixActive } from "../streaming/audio-mix-status.ts";
+import {
+	getAudioMixActive,
+	getAudioOffActive,
+} from "../streaming/audio-mix-status.ts";
 import {
 	getPendingAudioFollowAsrc,
 	getResolvedAsrc,
@@ -78,6 +81,7 @@ import { buildMsg } from "./websocket-server.ts";
 export type StatusResponseMessage = {
 	is_streaming?: ReturnType<typeof getIsStreaming>;
 	audio_mix_active?: boolean;
+	audio_off_active?: boolean | undefined;
 	stream_lifecycle?: ReturnType<typeof getStreamLifecycleState>;
 	available_updates?: ReturnType<typeof getAvailableUpdates>;
 	updating?: ReturnType<typeof getSoftUpdateStatus>;
@@ -116,6 +120,7 @@ export function sendStatus(conn: WebSocket) {
 		buildMsg("status", {
 			is_streaming: getIsStreaming(),
 			audio_mix_active: getAudioMixActive(),
+			audio_off_active: getAudioOffActive(),
 			stream_lifecycle: getStreamLifecycleState(),
 			available_updates: getAvailableUpdates(),
 			updating: getSoftUpdateStatus(),
