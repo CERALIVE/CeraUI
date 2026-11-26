@@ -22,6 +22,10 @@ used to identify the current occupant.
 
 Agreement is not verification. The picker, concrete Auto choice and used saved
 mix legs retain opaque producer admission proofs, independently of the roster.
+Picker and mix inclusion replies wait for that observation. A kernel card
+attachment that disappeared or changed around the observation cannot enroll
+its replacement's proof. An unproved save returns `audio_source_probe_failed`;
+the preference is not itself evidence and cannot launch in that process.
 The roster may propose a replacement address. Before using it, Start checks the
 exact ordered audio plan on its own non-reconnecting engine connection and sends
 only `start-verified` with the prepared attempt and the accepted proofs. A sole

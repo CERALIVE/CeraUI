@@ -903,14 +903,6 @@ export class CerastreamBackend implements StreamingBackend {
 			);
 		try {
 			let params = this.buildStartParams(config, opts);
-			if (
-				micRouteKeys(params.audio).length &&
-				opts.micRoute?.legacyAddressOnly !== true
-			)
-				registerLaunchRollback({
-					kind: "mic-preflight",
-					run: launchTransaction.rollback,
-				});
 			let audioMixInputs: CerastreamBackend["audioMixInputs"];
 			let appliedProofs: string[] | undefined;
 			await this.enqueue(async () => {
@@ -1156,12 +1148,12 @@ export class CerastreamBackend implements StreamingBackend {
 										"prepare-start",
 										attempt.expires_in_ms,
 									);
-								registerLaunchRollback({
-									kind: "transaction",
-									run: launchTransaction.rollback,
-								});
 								checkingMicRoutes = false;
 							}
+							registerLaunchRollback({
+								kind: "transaction",
+								run: launchTransaction.rollback,
+							});
 							dispatched = true;
 							const started = await client.start({
 								...params,

@@ -558,7 +558,7 @@ export function createStreamSessionOrchestrator(
 							await stopWithinDeadline(attempt.generation);
 							break;
 						case "transaction":
-						case "mic-preflight":
+						case "pre-dispatch":
 							await rollback.run();
 							break;
 						case undefined:
@@ -902,20 +902,23 @@ export function createStreamSessionOrchestrator(
 		const owner = ownership.invalidate();
 
 		try {
-			const stopping =
-				rollback?.kind === "mic-preflight"
-					? rollback.run().then(async () => {
-							if ((await deps.queryRuntime?.()) !== "idle")
-								throw new Error("stop_not_confirmed");
-						})
-					: stopWithinDeadline(stoppedGeneration, cause === "operator");
+			const preDispatch =
+				cancellingStart &&
+				(rollback === undefined || rollback.kind === "pre-dispatch");
+			const cleanupBeforeDispatch =
+				rollback?.kind === "pre-dispatch" ? rollback.run : undefined;
+			const stopping = preDispatch
+				? Promise.resolve(cleanupBeforeDispatch?.()).then(async () => {
+						if ((await deps.queryRuntime?.()) !== "idle")
+							throw new Error("stop_not_confirmed");
+					})
+				: stopWithinDeadline(stoppedGeneration, cause === "operator");
 			if (cancellingStart && active !== undefined) {
 				active.cancelStop = stopping.then(
 					() => true,
 					() => false,
 				);
-				if (rollback?.kind === "mic-preflight")
-					active.preflightStop = active.cancelStop;
+				if (preDispatch) active.preflightStop = active.cancelStop;
 			}
 			await stopping;
 			if (!cancellingStart && ownership.commit(owner, "idle", "idle"))

@@ -7,7 +7,11 @@ import { AUDIO_SOURCE_AUTO } from "@ceraui/rpc/schemas";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { getConfigFilePath } from "../config.ts";
-import { isPseudoAudioSource, resolveAudioMode } from "./audio.ts";
+import {
+	captureMicPickerAttachment,
+	isPseudoAudioSource,
+	resolveAudioMode,
+} from "./audio.ts";
 import {
 	audioInputEngineId,
 	effectiveAudioInputs,
@@ -53,28 +57,62 @@ const savedChoices = new WeakMap<
 	{ readonly path: string; readonly proofs: Map<string, Admission> }
 >();
 
-/** Freeze a newly saved picker or mix choice, never an unchanged leg of a mix. */
-export function noteMicChoice(config: RuntimeConfig, id: string): void {
-	if (id === AUDIO_SOURCE_AUTO || isPseudoAudioSource(id)) return;
-	const device = config.audio_inputs?.some((input) => input.id === id)
-		? audioInputEngineId(id, config)
-		: resolveAudioMode(id, false).device;
-	if (
-		device === undefined ||
-		device === "embedded" ||
-		device === AUDIO_SILENCE_INPUT_ID
-	)
-		return;
+export function captureMicChoices(ids: readonly string[]) {
+	return [...new Set(ids)]
+		.filter((id) => id !== AUDIO_SOURCE_AUTO && !isPseudoAudioSource(id))
+		.map((id) => ({ id, current: captureMicPickerAttachment(id) }));
+}
+
+/** The proof is usable only if the listed attachment spans engine observation. */
+export function noteMicChoices(
+	config: RuntimeConfig,
+	selected: ReturnType<typeof captureMicChoices>,
+): Promise<boolean> | undefined {
+	if (shouldUseMocks()) return undefined;
+	const choicesToObserve = selected.flatMap(({ id, current }) => {
+		const device = config.audio_inputs?.some((input) => input.id === id)
+			? audioInputEngineId(id, config)
+			: resolveAudioMode(id, false).device;
+		return device === undefined ||
+			device === "embedded" ||
+			device === AUDIO_SILENCE_INPUT_ID
+			? []
+			: [{ id, device, current }];
+	});
+	const [first, second] = choicesToObserve;
+	if (first === undefined) return undefined;
 	const path = getConfigFilePath();
 	let choices = savedChoices.get(config);
 	if (choices?.path !== path) {
 		choices = { path, proofs: new Map() };
 		savedChoices.set(config, choices);
 	}
-	const proof = observe(config, { mode: "device", device }).then(
-		(proofs) => proofs?.[0],
-	);
-	choices.proofs.set(id, proof);
+	const observed = (async () => {
+		if (!choicesToObserve.every(({ current }) => current())) return undefined;
+		const proofs = await observe(
+			config,
+			second === undefined
+				? { mode: "device", device: first.device }
+				: {
+						mode: "default",
+						inputs: choicesToObserve.map(({ device }) => ({
+							input_id: device,
+							tracks: [1],
+						})),
+					},
+		);
+		return proofs !== undefined &&
+			hasOrderedMicProofs(proofs, choicesToObserve.length) &&
+			choicesToObserve.every(({ current }) => current())
+			? proofs
+			: undefined;
+	})();
+	for (const [index, { id }] of choicesToObserve.entries())
+		choices.proofs.set(
+			id,
+			observed.then((proofs) => proofs?.[index]),
+		);
+	return observed.then((proofs) => proofs !== undefined);
 }
 
 /** Freeze the used legs at Start acceptance (or the concrete Auto decision). */

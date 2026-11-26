@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { StreamStartFailure } from "../modules/streaming/start-failure-taxonomy.ts";
+import { registerLaunchRollback } from "../modules/streaming/stream-launch-ownership.ts";
 import {
 	createStreamSessionOrchestrator,
 	STREAM_LAUNCH_ORIGINS,
@@ -536,6 +537,7 @@ describe("stream session orchestrator", () => {
 		const start = orchestrator.start({
 			origin: "ui",
 			launch: async () => {
+				registerLaunchRollback({ kind: "legacy-dispatched" });
 				await engineConfirmed.promise;
 				engineStreaming = true;
 			},

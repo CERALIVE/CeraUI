@@ -113,7 +113,10 @@ import { deviceRegistry } from "../../modules/streaming/devices.ts";
 import { clampBitrate } from "../../modules/streaming/encoder.ts";
 import { isGatewayActive } from "../../modules/streaming/gateway-availability.ts";
 import { getStreamHealth } from "../../modules/streaming/health.ts";
-import { noteMicChoice } from "../../modules/streaming/mic-route-admission.ts";
+import {
+	captureMicChoices,
+	noteMicChoices,
+} from "../../modules/streaming/mic-route-admission.ts";
 import { AUDIO_CODECS } from "../../modules/streaming/pipeline-sources.ts";
 import {
 	getEffectiveHardware,
@@ -951,6 +954,20 @@ export const setConfigProcedure = liveWriteProcedure
 			);
 			if (error !== undefined) return { success: false, error, applied: {} };
 		}
+		const storedMix =
+			audioInputs === undefined
+				? undefined
+				: storedAudioInputs(audioInputs, audioConfig);
+		const micChoices = captureMicChoices([
+			...(input.asrc !== undefined && input.audio_pick === true
+				? [input.asrc]
+				: []),
+			...(storedMix ?? [])
+				.filter(
+					({ id }) => !config.audio_inputs?.some((input) => input.id === id),
+				)
+				.map(({ id }) => id),
+		]);
 
 		// Apply-now splits the save in two: the restart-requiring fields are held
 		// back (staged, never written) so `config.json` keeps describing what the
@@ -1004,9 +1021,8 @@ export const setConfigProcedure = liveWriteProcedure
 			config.asrc = input.asrc;
 			noteAudioSaved("asrc");
 		}
-		const previousAudioInputs = config.audio_inputs;
 		if (audioInputs !== undefined) {
-			config.audio_inputs = storedAudioInputs(audioInputs, audioConfig);
+			config.audio_inputs = storedMix;
 			noteAudioSaved("audio_inputs");
 		}
 		// Never staged behind `apply_now`: the engine fixes its audio backend when
@@ -1182,15 +1198,7 @@ export const setConfigProcedure = liveWriteProcedure
 		}
 
 		saveConfig();
-		if (input.asrc !== undefined && input.audio_pick === true)
-			noteMicChoice(config, input.asrc);
-		for (const { id } of config.audio_inputs ?? []) {
-			if (
-				!previousAudioInputs?.some((input) => input.id === id) &&
-				id !== input.asrc
-			)
-				noteMicChoice(config, id);
-		}
+		const observedMicChoices = noteMicChoices(config, micChoices);
 		broadcastConfig(config);
 		reportActiveProfile();
 		if (input.audio_backend !== undefined) {
@@ -1214,6 +1222,8 @@ export const setConfigProcedure = liveWriteProcedure
 			syncAudioMeterPreference();
 		}
 
+		if (observedMicChoices !== undefined && !(await observedMicChoices))
+			return { success: false, error: "audio_source_probe_failed", applied };
 		if (marker === undefined) return { success: true, applied };
 
 		// Staged in the same synchronous stretch as the orchestrator's admission,

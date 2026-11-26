@@ -328,6 +328,11 @@ beforeEach(async () => {
 		},
 		logger: { debug() {}, info() {}, warn() {}, error() {} },
 	});
+	liveSpies.push(
+		spyOn(cerastreamBackend, "admitMicRoutes").mockImplementation((request) =>
+			backend.admitMicRoutes(request),
+		),
+	);
 });
 
 afterEach(async () => {

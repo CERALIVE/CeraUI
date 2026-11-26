@@ -128,6 +128,6 @@ export function createLaunchTransaction(
 			return rollbackPromise;
 		},
 	};
-	registerLaunchRollback({ kind: "transaction", run: transaction.rollback });
+	registerLaunchRollback({ kind: "pre-dispatch", run: transaction.rollback });
 	return transaction;
 }

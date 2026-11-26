@@ -16,7 +16,7 @@ import {
 	spyOn,
 	test,
 } from "bun:test";
-import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -530,27 +530,37 @@ test("a Start pressed with no pick saved is refused although a microphone is sav
 	expect(await disk()).toMatchObject({ asrc: "Primary" });
 });
 
-test("a missing microphone pressed with no pick saved is refused although it is saved meanwhile", async () => {
-	delete getConfig().asrc;
-	saveConfig();
-	GATES["update admission"]?.();
-	const started = uiStart("Gone");
-	await reached.promise;
-	expect(
-		await call(
-			setConfigProcedure,
-			{ asrc: "Gone" },
-			{ context: makeRpcContext() },
-		),
-	).toMatchObject({ success: true });
-	gate.resolve();
-	expect(await started).toMatchObject({
-		success: false,
-		failure: { class: "start_invalid", phase: "params" },
-	});
-	expect(launchedAudio()).toEqual([]);
-	expect(await disk()).toMatchObject({ asrc: "Gone" });
-});
+test.each(["plain save", "picker save"] as const)(
+	"a missing microphone pressed with no pick saved is refused despite an intervening %s",
+	async (saveKind) => {
+		delete getConfig().asrc;
+		saveConfig();
+		GATES["update admission"]?.();
+		const started = uiStart("Gone");
+		await reached.promise;
+		if (saveKind === "plain save") {
+			expect(
+				await call(
+					setConfigProcedure,
+					{ asrc: "Gone" },
+					{ context: makeRpcContext() },
+				),
+			).toMatchObject({ success: true });
+		} else {
+			expect(await pick("Gone")).toMatchObject({
+				success: false,
+				error: "audio_source_probe_failed",
+			});
+		}
+		gate.resolve();
+		expect(await started).toMatchObject({
+			success: false,
+			failure: { class: "start_invalid", phase: "params" },
+		});
+		expect(launchedAudio()).toEqual([]);
+		expect(await disk()).toMatchObject({ asrc: "Gone" });
+	},
+);
 
 test("a saved microphone that is missing at the press is still waited for after another pick is saved", async () => {
 	getConfig().asrc = "Gone";
@@ -2691,6 +2701,7 @@ test.each([
 	"unsupported",
 	"non-proof",
 	"stale report",
+	"ambiguous",
 	"wrong proof",
 	"refused admission",
 ] as const)(
@@ -2710,12 +2721,17 @@ test.each([
 				return { status: "checked", proofs: [original] };
 			if (scenario === "non-proof") return { status: "not_required" };
 			if (scenario === "stale report") return { status: "mismatch" };
+			if (scenario === "ambiguous") return { status: "ambiguous" };
 			return { status: "checked", proofs: [other] };
 		});
 		useRoutePeer(peer);
 		getConfig().audio_inputs = undefined;
 		getConfig().audio_backend = "pipewire";
-		expect(await pick("Primary")).toMatchObject({ success: true });
+		expect(await pick("Primary")).toMatchObject(
+			scenario === "refused admission"
+				? { success: false, error: "audio_source_probe_failed" }
+				: { success: true },
+		);
 		await admitted.promise;
 		if (scenario === "unsupported") peer.disableMicRoutes();
 		const saved = await Bun.file(getConfigFilePath()).text();
@@ -2805,7 +2821,10 @@ test.each(["settings", "mixer"] as const)(
 			const result = testMicRoutes(params);
 			if (
 				params.operation.kind === "admit" &&
-				params.audio.device?.toLowerCase() === "hw:card=second"
+				[
+					params.audio.device,
+					...(params.audio.inputs ?? []).map(({ input_id }) => input_id),
+				].some((selector) => selector?.toLowerCase() === "hw:card=second")
 			)
 				admitted.resolve();
 			return result;
@@ -2857,6 +2876,73 @@ test("a verified Start rejection cannot fall back or apply its proof to the mark
 	expect(peer.stops()).toEqual([]);
 	expect(readArmedStreamMarker()).toBeUndefined();
 	expect(await Bun.file(getConfigFilePath()).text()).toBe(saved);
+});
+
+test("a picker save cannot acknowledge a replacement observed at the same address", async () => {
+	const observing = Promise.withResolvers<void>();
+	const readRoute = Promise.withResolvers<void>();
+	const peer = await scopedStartPeer("legacy-success", async (request) => {
+		if (request.operation.kind === "admit") {
+			observing.resolve();
+			await readRoute.promise;
+		}
+		return testMicRoutes(request);
+	});
+	useRoutePeer(peer);
+	getConfig().audio_inputs = undefined;
+	await listPhysicalMics(["micOld", ORIGINAL_MIC]);
+	try {
+		const saved = pick("micOld");
+		await observing.promise;
+		micReports.set("hw:card=micold", UNRELATED_MIC);
+		// Replace the kernel card at the same path without refreshing the picker.
+		const card = join(directory, "identity-cards", "card0");
+		await rename(card, `${card}-removed`);
+		await mkdir(card);
+		await Bun.write(join(card, "id"), "micOld\n");
+		readRoute.resolve();
+
+		expect(await saved).toMatchObject({
+			success: false,
+			error: "audio_source_probe_failed",
+		});
+		expect(await start()).toMatchObject({
+			success: false,
+			failure: { class: "audio_source_unavailable" },
+		});
+		expect(peer.starts()).toEqual([]);
+	} finally {
+		readRoute.resolve();
+		await listPhysicalMics();
+		audio.resetRememberedAudioIdentities();
+	}
+});
+
+test("Stop before backend preflight never stops an unrelated engine stream", async () => {
+	const peer = await scopedStartPeer("foreign", testMicRoutes);
+	useRoutePeer(peer);
+	const query = spyOn(streamSessionProductionDeps, "queryRuntime");
+	query.mockResolvedValue("streaming");
+	GATES["bond preparation"]?.();
+	const started = start();
+	try {
+		await reached.promise;
+		expect(await stopStreamSession("operator")).toEqual({
+			result: "stop_failed",
+			reason: "stop_not_confirmed",
+		});
+		gate.resolve();
+		expect(await started).toMatchObject({ success: false });
+		expect(peer.prepares()).toEqual([]);
+		expect(peer.starts()).toEqual([]);
+		expect(peer.cancels()).toEqual([]);
+		expect(peer.stops()).toEqual([]);
+		expect(peer.physical()).toBe("foreign");
+	} finally {
+		query.mockResolvedValue("idle");
+		gate.resolve();
+		await started;
+	}
 });
 
 test("No audio skips proof traffic even with local legs saved on an older runtime", async () => {
@@ -2913,6 +2999,16 @@ test.each(["Stop", "socket retirement", "request deadline"] as const)(
 		await engine.backend.settle();
 		expect(peer.starts()).toEqual([]);
 		expect(peer.stops()).toEqual([]);
+		if (boundary === "Stop") {
+			expect(peer.cancels()).toEqual([
+				{
+					method: "cancel-start",
+					peer: peer.cancels()[0]?.peer,
+					attemptId: rekeyAttempt,
+				},
+			]);
+			expect(peer.cancels()[0]?.peer).not.toBe(peer.prepares()[0]?.peer);
+		}
 		expect(readArmedStreamMarker()).toBeUndefined();
 		expect(await Bun.file(getConfigFilePath()).text()).toBe(saved);
 	},
