@@ -136,9 +136,7 @@ const baseProcedure = os.$context<RPCContext>();
 // three deliberately skip the cellular readiness gate below.
 export const authedProcedure = baseProcedure.use(authMiddleware);
 
-// EVERY modem procedure builds from this, never from `authedProcedure` directly:
-// the readiness gate has to be uniform, because a single ungated procedure is one
-// that reads a half-initialised dbus backend during the init window.
+// Procedures that read the live cellular backend must pass this readiness gate.
 export const modemProcedure = authedProcedure.use(cellularReadyMiddleware);
 
 /**
@@ -603,8 +601,10 @@ export const setFiveGPreferenceProcedure = modemProcedure
  *
  * `replayComplete` rides the same read as the blocks because a UI cannot honestly
  * render "nothing is wrong" while replay is still deciding.
+ * The journal routes still require authentication, but depend on the journal
+ * and independent device evidence, not the initializing cellular backend.
  */
-export const listMutationBlocksProcedure = modemProcedure
+export const listMutationBlocksProcedure = authedProcedure
 	.output(modemMutationListOutputSchema)
 	.handler(async () => {
 		const blocks = await operatorMutationBlocks();
@@ -616,21 +616,21 @@ export const listMutationBlocksProcedure = modemProcedure
  * `modules/modems/mutation-acknowledge.ts` for why a bare alert-dismiss must
  * never unblock a device whose true state is unknown.
  */
-export const acknowledgeMutationProcedure = modemProcedure
+export const acknowledgeMutationProcedure = authedProcedure
 	.input(modemMutationAckInputSchema)
 	.output(modemMutationAckOutputSchema)
 	.handler(({ input, signal }) =>
 		acknowledgeMutation(input.stableKey, input.mode, signal),
 	);
 
-export const decommissionMutationProcedure = modemProcedure
+export const decommissionMutationProcedure = authedProcedure
 	.input(modemMutationDecommissionInputSchema)
 	.output(modemMutationAckOutputSchema)
 	.handler(({ input, signal }) =>
 		decommissionMutation(input.stableKey, signal),
 	);
 
-export const rebaselineMutationProcedure = modemProcedure
+export const rebaselineMutationProcedure = authedProcedure
 	.input(modemMutationRebaselineInputSchema)
 	.output(modemMutationAckOutputSchema)
 	.handler(({ input, signal }) => rebaselineMutation(input.stableKey, signal));

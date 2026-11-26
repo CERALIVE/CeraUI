@@ -1208,7 +1208,7 @@ for (const fault of [
 	});
 }
 
-test("persistent udev failure after replay leaves quarantine and Start blocked", async () => {
+test("persistent udev failure settles replay but leaves quarantine and Start blocked", async () => {
 	const unit = await recovery({ witness: "legacy" });
 	unit.absent();
 	expect(await acknowledge("force-rebaseline")).toMatchObject({
@@ -1218,7 +1218,7 @@ test("persistent udev failure after replay leaves quarantine and Start blocked",
 		new Error("udevadm still unavailable after restart"),
 	);
 	const replay = await initMutationRecovery();
-	expect(replay.unreadable).toBeGreaterThan(0);
+	expect(replay.unreadable).toBe(0);
 	expect(await decommission()).toEqual({
 		success: false,
 		error: "read_failed",
@@ -1232,7 +1232,7 @@ test("persistent udev failure after replay leaves quarantine and Start blocked",
 	);
 	expect(await unit.start()).toMatchObject({
 		result: "failed",
-		failure: { class: "recovery_pending" },
+		failure: { class: "mutation_blocked" },
 	});
 	expect(unit.launches()).toBe(0);
 });

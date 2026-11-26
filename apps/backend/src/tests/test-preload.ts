@@ -10,6 +10,7 @@ import {
 	setupConfigSchema,
 } from "../helpers/config-schemas.ts";
 import { setCredentialStoreState } from "../helpers/credential-store-state.ts";
+import { readMutationUdevExportDb } from "../modules/modems/modem-id-path-source.ts";
 import { setStreamReconciliationCompletedForTest } from "../modules/system/stream-reconciliation-latch.ts";
 
 // Isolated globals still share /run; seed ownership only from this file's sentinel.
@@ -35,14 +36,18 @@ setCredentialStoreState("modem", "ready");
 
 const createUsbEnumerator = modemControl.createUsbEnumerator;
 function isolateModemEnumeration(): void {
-	spyOn(modemControl, "createUsbEnumerator").mockImplementation((deps) =>
-		createUsbEnumerator({
+	spyOn(modemControl, "createUsbEnumerator").mockImplementation((deps) => {
+		const reader = deps?.readUdevDatabase;
+		return createUsbEnumerator({
 			...deps,
-			readUdevDatabase: deps?.readUdevDatabase ?? (async () => ""),
-		}),
-	);
+			readUdevDatabase:
+				reader === undefined || reader === readMutationUdevExportDb
+					? async () => "P: /devices/test-usb/usb1\nE: DEVTYPE=usb_device\n"
+					: reader,
+		});
+	});
 }
-// Isolate both implicit USB readers without replacing parsing or journal persistence.
+// Isolate default USB readers without replacing parsing or journal persistence.
 isolateModemEnumeration();
 beforeEach(isolateModemEnumeration);
 

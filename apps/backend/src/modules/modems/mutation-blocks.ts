@@ -43,6 +43,7 @@ import {
 	setMutationBlocks,
 } from "../streaming/lifecycle-admission.ts";
 
+import { readMutationUdevExportDb } from "./modem-id-path-source.ts";
 import { listMutationEntries, mutationSlotName } from "./mutation-journal.ts";
 import {
 	assertMutationJournalRevision,
@@ -78,7 +79,10 @@ export const PRESENCE_UNKNOWN: ReadonlySet<string> = new Set<string>();
 async function enumeratePresentKeys(): Promise<ReadonlySet<string>> {
 	const present = new Set<string>();
 	try {
-		for (const device of await createUsbEnumerator().enumerate()) {
+		const devices = await createUsbEnumerator({
+			readUdevDatabase: readMutationUdevExportDb,
+		}).enumerate();
+		for (const device of devices) {
 			const key = deriveModemStableKey(device.physicalUid);
 			if (key !== undefined) present.add(key);
 		}
@@ -160,6 +164,14 @@ export async function refreshMutationBlocks(
 	deps: MutationBlockDeps = activeDeps,
 ): Promise<readonly ModemMutationBlock[]> {
 	return (await reconcileMutationBlocks(deps)).blocks;
+}
+
+/** The cold list obtains device presence in its own single, bounded read. */
+export async function publishBootMutationBlocks(): Promise<void> {
+	await refreshMutationBlocks({
+		...activeDeps,
+		presentStableKeys: async () => PRESENCE_UNKNOWN,
+	});
 }
 
 /** The same publication, naming the damaged slots its view could not include. */

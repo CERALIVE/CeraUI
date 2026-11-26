@@ -55,6 +55,7 @@ function usbPortIsOccupied(
 	port: NonNullable<ReturnType<typeof modemRecoveryPort>>,
 	paths: readonly string[],
 	hubPaths: ReadonlySet<string>,
+	requireKernelProof: boolean,
 ): boolean {
 	// udev export can omit a newly enumerated device (or still be partial on
 	// success). Check the kernel inventory on every potentially matching bus.
@@ -72,23 +73,34 @@ function usbPortIsOccupied(
 				: [];
 		}),
 	);
-	let located = false;
+	let located: string | undefined;
 	for (const bus of buses) {
 		const name = `usb${bus}`;
-		let controller: string | undefined;
+		let controllerPath: string | undefined;
 		try {
 			const target = routerUsbSysfs.rootPath(name);
 			if (target.startsWith("/sys/devices/") && target.endsWith(`/${name}`)) {
-				controller = target.split("/").at(-2);
+				controllerPath = target.slice(0, -(name.length + 1));
 			}
 		} catch {
 			// A bus with no device at that chain cannot account for occupancy.
 		}
-		if (controller === undefined) {
+		const controller = controllerPath?.split("/").at(-1);
+		if (controller === undefined || controllerPath === undefined) {
 			if (occupied.has(bus)) return true;
 		} else if (port.hasController(controller)) {
+			if (requireKernelProof) {
+				// Compatibility suffix matches may veto absence, but cannot establish it.
+				const pci = /^[0-9a-f]{4,}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]$/.test(
+					controller,
+				);
+				const transport = pci ? "pci" : "platform";
+				const key = `${transport}-${controller}-usb-0:${port.portChain}`;
+				if (port.stableKey !== key) continue;
+				if (located !== undefined && located !== controllerPath) return true;
+			}
 			if (occupied.has(bus)) return true;
-			located = true;
+			located = controllerPath;
 		}
 	}
 	if (
@@ -96,7 +108,8 @@ function usbPortIsOccupied(
 		[...occupied].some((bus) => !buses.has(bus))
 	)
 		return true;
-	if (located) return false;
+	if (located !== undefined) return false;
+	if (requireKernelProof) return true;
 	// An unrelated hub can sit at this chain permanently. Ignore only devices
 	// positively identified as hubs, and only in the cross-controller fallback.
 	return (
@@ -110,7 +123,7 @@ function usbPortIsOccupied(
 	);
 }
 
-/** The same presence evidence for all operator decisions, never for replay or router writes. */
+/** Presence evidence for operator decisions, never permission for router writes. */
 export async function resolveMutationDevice(
 	entry: ModemMutationEntry,
 	readDatabase: () => Promise<string> = readUdevExportDb,
@@ -122,9 +135,23 @@ export async function resolveMutationDevice(
 	}
 }
 
+/** A parser miss cannot retire a rollback obligation without corroboration. */
+export async function replayDeviceAbsenceProven(
+	entry: ModemMutationEntry,
+): Promise<boolean> {
+	try {
+		const device = await observeMutationDevice(entry, readUdevExportDb, true);
+		return device.status === "absent";
+	} catch {
+		// A missing reader, unresolved controller, or failed scan is not absence.
+		return false;
+	}
+}
+
 async function observeMutationDevice(
 	entry: ModemMutationEntry,
 	readDatabase: () => Promise<string>,
+	requireKernelProof = false,
 ): Promise<MutationDevicePresence> {
 	let database: Promise<string> | undefined;
 	const readOnce = () => (database ??= readDatabase());
@@ -185,7 +212,7 @@ async function observeMutationDevice(
 					: [],
 			),
 		);
-		if (keyed || usbPortIsOccupied(port, paths, hubPaths))
+		if (keyed || usbPortIsOccupied(port, paths, hubPaths, requireKernelProof))
 			return { status: "unknown" };
 	} else {
 		if (keyed) {
@@ -202,10 +229,13 @@ async function observeMutationDevice(
 			/(?:^|-)pci-([0-9a-f]{4,}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7])$/.exec(
 				entry.stableKey,
 			)?.[1];
-		if (
-			address &&
-			(paths.some((path) => path.split("/").includes(address)) ||
-				pciFunctionIsPresent(address))
+		if (address === undefined) {
+			if (requireKernelProof) return { status: "unknown" };
+		} else if (
+			paths.some((path) => path.split("/").includes(address)) ||
+			(requireKernelProof
+				? modemPciSysfs.addresses().includes(address)
+				: pciFunctionIsPresent(address))
 		) {
 			return { status: "unknown" };
 		}

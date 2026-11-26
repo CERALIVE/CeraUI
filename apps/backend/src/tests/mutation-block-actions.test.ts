@@ -9,18 +9,29 @@ import {
 } from "node:fs";
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
-import { call } from "@orpc/server";
+import { call, ORPCError } from "@orpc/server";
+import {
+	CELLULAR_STACK_INITIALIZING,
+	type CellularStartResult,
+	getCellularStack,
+	initCellularStack,
+	resetCellularStack,
+} from "../modules/cellular/cellular-stack.ts";
 import { refreshMutationBlocks } from "../modules/modems/mutation-blocks.ts";
 import { mutationSlotName } from "../modules/modems/mutation-journal.ts";
 import { initMutationRecovery } from "../modules/modems/mutation-replay.ts";
 import { streamingBlockingMutation } from "../modules/streaming/lifecycle-admission.ts";
 import {
 	awaitRecoveryBarrier,
+	beginRecoveryBarrier,
 	isRecoveryPending,
 } from "../modules/streaming/recovery-barrier.ts";
 import {
 	acknowledgeMutationProcedure,
+	decommissionMutationProcedure,
+	getAllModemsProcedure,
 	listMutationBlocksProcedure,
+	rebaselineMutationProcedure,
 } from "../rpc/procedures/modems.procedure.ts";
 import { makeRpcContext } from "./helpers/bond-toggle-fixture.ts";
 import {
@@ -54,6 +65,75 @@ const checkAgain = (stableKey: string) =>
 
 const slot = (key: string) =>
 	join(harness.root(), `${mutationSlotName(key)}.json`);
+
+test("journal recovery remains available to signed-in operators during cellular boot", async () => {
+	// The control socket binds and cellular initialization starts before replay.
+	await refreshMutationBlocks();
+	await seedFailedMutation();
+	beginRecoveryBarrier();
+	const snapshot = Promise.withResolvers<CellularStartResult>();
+	const booting = initCellularStack({
+		backend: "dbus",
+		createDbusBackend: () => ({
+			start: () => snapshot.promise,
+			stop: async () => {},
+		}),
+	});
+	try {
+		expect(getCellularStack().ready).toBe(false);
+		const context = makeRpcContext();
+		await expect(
+			call(getAllModemsProcedure, undefined, { context }),
+		).rejects.toMatchObject({ code: CELLULAR_STACK_INITIALIZING });
+
+		const entry = { stableKey: "usb:missing", confirm: true as const };
+		const unauthenticated = { ...context, isAuthenticated: () => false };
+		const calls = (rpcContext: typeof context) =>
+			[
+				call(listMutationBlocksProcedure, undefined, { context: rpcContext }),
+				call(
+					acknowledgeMutationProcedure,
+					{ ...entry, mode: "verified-rollback" },
+					{ context: rpcContext },
+				),
+				call(decommissionMutationProcedure, entry, { context: rpcContext }),
+				call(rebaselineMutationProcedure, entry, { context: rpcContext }),
+			] as const;
+		const withoutAuth = await Promise.allSettled(calls(unauthenticated));
+		expect(
+			withoutAuth.map((result) =>
+				result.status === "rejected" && result.reason instanceof ORPCError
+					? result.reason.code
+					: result.status,
+			),
+		).toEqual(["UNAUTHORIZED", "UNAUTHORIZED", "UNAUTHORIZED", "UNAUTHORIZED"]);
+		const presence = harness.pausePresence();
+		const requested = Promise.all(calls(context));
+		const first = await Promise.race([
+			requested.then(() => "returned the list"),
+			presence.entered.then(() => "started a separate presence scan"),
+		]).finally(presence.release);
+		const [listing, acknowledgement, decommission, rebaseline] =
+			await requested;
+		expect(first).toBe("returned the list");
+		expect(listing).toMatchObject({
+			replayComplete: false,
+			blocks: [{ stableKey: "usb:a", checkable: true }],
+		});
+		for (const missing of [acknowledgement, decommission, rebaseline])
+			expect(missing).toEqual({ success: false, error: "no_entry" });
+		expect(await checkAgain("usb:a")).toEqual({
+			success: true,
+			state: "acknowledged",
+		});
+		expect(existsSync(slot("usb:a"))).toBe(false);
+		expect(isRecoveryPending()).toBe(true);
+	} finally {
+		snapshot.resolve({ ok: true });
+		await booting;
+		resetCellularStack();
+	}
+});
 
 test("a failed directory census hides Check again until recovery republishes", async () => {
 	await seedFailedMutation();

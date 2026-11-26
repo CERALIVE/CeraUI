@@ -74,6 +74,7 @@ import {
 	stopMutationRecovery,
 } from "./mutation-recovery-owner.ts";
 import { captureModemState, rollbackMutation } from "./mutation-rollback.ts";
+import { replayDeviceAbsenceProven } from "./router-subnet-recovery-device.ts";
 // Side-effect imports: register each kind's rollback handler. Replay must not be
 // the first caller to discover a kind has no way back — that would report an
 // `unavailable` rollback for a mutation that is perfectly restorable.
@@ -133,9 +134,23 @@ async function replayEntry(
 	}
 
 	if (action === "recheck-presence") {
-		const present = (await captureModemState(entry.stableKey)) !== undefined;
+		let present: boolean | undefined;
+		try {
+			present = (await captureModemState(entry.stableKey)) !== undefined;
+		} catch (err) {
+			// A settled row owes no rollback. Keep its existing refusal when
+			// presence is unknown, without making the global replay incomplete.
+			logger.warn("could not recheck modem presence during replay", {
+				module: "modems",
+				stableKey: entry.stableKey,
+				err,
+			});
+		}
 		assertMutationJournalRevision(revision);
-		const target = presenceRecheckTarget(entry.state, present);
+		const target =
+			present === undefined
+				? undefined
+				: presenceRecheckTarget(entry.state, present);
 		if (target === undefined) {
 			tally.blocked += 1;
 			return;
@@ -159,6 +174,9 @@ async function replayEntry(
 		return;
 	}
 	if (outcome === "absent") {
+		if (!(await replayDeviceAbsenceProven(entry))) {
+			throw new ReplayPresenceUnknownError();
+		}
 		await fenced(entry, revision, () =>
 			advance(
 				entry,
@@ -179,6 +197,13 @@ async function replayEntry(
 		),
 	);
 	tally.blocked += 1;
+}
+
+class ReplayPresenceUnknownError extends Error {
+	override readonly name = "ReplayPresenceUnknownError";
+	constructor() {
+		super("modem absence could not be confirmed for replay");
+	}
 }
 
 export async function runMutationReplay(): Promise<ReplaySummary> {

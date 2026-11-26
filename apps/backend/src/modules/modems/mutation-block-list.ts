@@ -1,9 +1,11 @@
 import type { ModemMutationBlock } from "@ceraui/rpc/schemas";
 import { routerSubnetCheckProof } from "../network/router-subnet-verify.ts";
+import { isRecoveryPending } from "../streaming/recovery-barrier.ts";
 import { readUdevExportDb } from "./modem-id-path-source.ts";
 import {
 	currentMutationBlockPublication,
 	currentMutationBlocks,
+	publishBootMutationBlocks,
 } from "./mutation-blocks.ts";
 import { readMutationEntry } from "./mutation-journal.ts";
 import { isMutationJournalRevisionCurrent } from "./mutation-journal-revision.ts";
@@ -14,15 +16,21 @@ import { resolveMutationDevice } from "./router-subnet-recovery-device.ts";
 export async function operatorMutationBlocks(): Promise<
 	readonly ModemMutationBlock[]
 > {
-	const { blocks, readableKeys, revision } = currentMutationBlockPublication();
 	const withoutCheck = (block: ModemMutationBlock): ModemMutationBlock => ({
 		...block,
 		devicePresent: true,
 		checkable: false,
 	});
 	const hidden = () => currentMutationBlocks().map(withoutCheck);
-	if (!isMutationJournalRevisionCurrent(revision)) return hidden();
 	try {
+		// The control socket is up before boot replay; publish any saved rows
+		// without running rollback or releasing the recovery barrier.
+		if (isRecoveryPending() && currentMutationBlocks().length === 0) {
+			await publishBootMutationBlocks();
+		}
+		const { blocks, readableKeys, revision } =
+			currentMutationBlockPublication();
+		if (!isMutationJournalRevisionCurrent(revision)) return hidden();
 		let database: Promise<string> | undefined;
 		const readOnce = () => (database ??= readUdevExportDb());
 		const scoped: ModemMutationBlock[] = [];
