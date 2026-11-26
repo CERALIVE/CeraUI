@@ -1704,10 +1704,14 @@ test("picking another primary keeps a saved unplugged input in order with its or
 	expect(await save(saved)).toMatchObject({ success: true });
 	const { Fourth: _unplugged, ...rest } = devices;
 	setMockAudioDevicesProvider(() => rest);
-	expect((await pick("Third")).success).toBe(true);
+	const expectedMix = [entry("Third"), ...saved];
+	expect(await pick("Third")).toMatchObject({
+		success: true,
+		applied: { asrc: "Third", audio_inputs: expectedMix },
+	});
 	const stored = await disk();
 	expect(stored.asrc).toBe("Third");
-	expect(stored.audio_inputs).toEqual([entry("Third"), ...saved]);
+	expect(stored.audio_inputs).toEqual(expectedMix);
 });
 
 test("an asrc save without the pick marker changes no membership", async () => {

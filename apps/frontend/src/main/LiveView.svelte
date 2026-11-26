@@ -892,7 +892,7 @@ function handleSelectAudioSource(selection: string) {
 async function saveAudioPick(asrc: string): Promise<boolean> {
 	markPending('asrc', asrc);
 	try {
-		// The backend adds the pick to the saved mix against its own current state.
+		// The device validates the mix and checks the selected route in one request.
 		const result = await rpc.streaming.setConfig({ asrc, audio_pick: true });
 		if (result.success) return true;
 		if (result.error === 'audio_source_unavailable' || result.error === 'audio_inputs_too_many') {
@@ -901,8 +901,6 @@ async function saveAudioPick(asrc: string): Promise<boolean> {
 				: m['live.startFailure.class.audio_source_unavailable']());
 			return false;
 		}
-		// A mix refusal is separate from admission of the selected input.
-		if ((await rpc.streaming.setConfig({ asrc })).success) return true;
 	} catch {
 		toast.error(m["notifications.saveFailed"]());
 		return false;

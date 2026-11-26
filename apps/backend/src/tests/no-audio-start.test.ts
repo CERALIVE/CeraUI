@@ -2878,45 +2878,68 @@ test("a verified Start rejection cannot fall back or apply its proof to the mark
 	expect(await Bun.file(getConfigFilePath()).text()).toBe(saved);
 });
 
-test("a picker save cannot acknowledge a replacement observed at the same address", async () => {
-	const observing = Promise.withResolvers<void>();
-	const readRoute = Promise.withResolvers<void>();
-	const peer = await scopedStartPeer("legacy-success", async (request) => {
-		if (request.operation.kind === "admit") {
-			observing.resolve();
-			await readRoute.promise;
-		}
-		return testMicRoutes(request);
-	});
-	useRoutePeer(peer);
-	getConfig().audio_inputs = undefined;
-	await listPhysicalMics(["micOld", ORIGINAL_MIC]);
-	try {
-		const saved = pick("micOld");
-		await observing.promise;
-		micReports.set("hw:card=micold", UNRELATED_MIC);
-		// Replace the kernel card at the same path without refreshing the picker.
-		const card = join(directory, "identity-cards", "card0");
-		await rename(card, `${card}-removed`);
-		await mkdir(card);
-		await Bun.write(join(card, "id"), "micOld\n");
-		readRoute.resolve();
+test.each(["no saved mix", "an invalid saved mix"] as const)(
+	"a picker save with %s cannot acknowledge a replacement observed at the same address",
+	async (caseName) => {
+		const observing = Promise.withResolvers<void>();
+		const readRoute = Promise.withResolvers<void>();
+		const peer = await scopedStartPeer("legacy-success", async (request) => {
+			if (request.operation.kind === "admit") {
+				observing.resolve();
+				await readRoute.promise;
+			}
+			return testMicRoutes(request);
+		});
+		useRoutePeer(peer);
+		const savedMix =
+			caseName === "an invalid saved mix"
+				? [entry("Primary", [1]), entry("Gone", [2])]
+				: undefined;
+		getConfig().audio_inputs = savedMix;
+		await listPhysicalMics(["micOld", ORIGINAL_MIC]);
+		try {
+			const saved = pick("micOld");
+			expect(
+				await Promise.race([
+					observing.promise.then(() => "observing the picker"),
+					saved,
+				]),
+			).toBe("observing the picker");
+			micReports.set("hw:card=micold", UNRELATED_MIC);
+			// Replace the kernel card at the same path without refreshing the picker.
+			const card = join(directory, "identity-cards", "card0");
+			await rename(card, `${card}-removed`);
+			await mkdir(card);
+			await Bun.write(join(card, "id"), "micOld\n");
+			readRoute.resolve();
 
-		expect(await saved).toMatchObject({
-			success: false,
-			error: "audio_source_probe_failed",
-		});
-		expect(await start()).toMatchObject({
-			success: false,
-			failure: { class: "audio_source_unavailable" },
-		});
-		expect(peer.starts()).toEqual([]);
-	} finally {
-		readRoute.resolve();
-		await listPhysicalMics();
-		audio.resetRememberedAudioIdentities();
-	}
-});
+			expect(await saved).toMatchObject({
+				success: false,
+				error: "audio_source_probe_failed",
+			});
+			expect((await disk()).asrc).toBe("micOld");
+			expect((await disk()).audio_inputs).toEqual(savedMix);
+			if (savedMix !== undefined) {
+				// Clearing the invalid mix must not let Start enroll the replacement.
+				expect(
+					await call(setConfigProcedure, { audio_inputs: null }, context()),
+				).toMatchObject({ success: true });
+			}
+			expect(await start()).toMatchObject({
+				success: false,
+				failure: { class: "audio_source_unavailable" },
+			});
+			expect(peer.checks.map(({ params }) => params.operation.kind)).toEqual([
+				"admit",
+			]);
+			expect(peer.starts()).toEqual([]);
+		} finally {
+			readRoute.resolve();
+			await listPhysicalMics();
+			audio.resetRememberedAudioIdentities();
+		}
+	},
+);
 
 test("Stop before backend preflight never stops an unrelated engine stream", async () => {
 	const peer = await scopedStartPeer("foreign", testMicRoutes);

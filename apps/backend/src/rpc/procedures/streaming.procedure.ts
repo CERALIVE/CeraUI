@@ -925,11 +925,12 @@ export const setConfigProcedure = liveWriteProcedure
 		delete input.composition_patch;
 
 		// Read and written in this synchronous stretch, so picks serialize.
+		const pickerAsrc = input.audio_pick === true ? input.asrc : undefined;
 		const audioInputs =
 			input.audio_inputs !== undefined
 				? input.audio_inputs
-				: input.audio_pick === true && input.asrc !== undefined
-					? pickedAudioInputs(input.asrc, config)
+				: pickerAsrc !== undefined
+					? pickedAudioInputs(pickerAsrc, config)
 					: undefined;
 		const audioConfig = {
 			...config,
@@ -939,17 +940,16 @@ export const setConfigProcedure = liveWriteProcedure
 			video_codec: config.video_codec,
 		};
 		if (
-			input.audio_pick === true &&
-			input.asrc !== undefined &&
-			!canPickAudioInput(audioConfig, input.asrc)
+			pickerAsrc !== undefined &&
+			!canPickAudioInput(audioConfig, pickerAsrc)
 		)
 			return { success: false, error: "audio_source_unavailable", applied: {} };
 		if (audioInputs != null) {
 			const error = validateAudioInputs(
 				audioInputs,
 				audioConfig,
-				input.audio_inputs === undefined && input.asrc !== undefined
-					? { id: input.asrc }
+				input.audio_inputs === undefined && pickerAsrc !== undefined
+					? { id: pickerAsrc }
 					: undefined,
 			);
 			if (error !== undefined) return { success: false, error, applied: {} };
@@ -959,9 +959,7 @@ export const setConfigProcedure = liveWriteProcedure
 				? undefined
 				: storedAudioInputs(audioInputs, audioConfig);
 		const micChoices = captureMicChoices([
-			...(input.asrc !== undefined && input.audio_pick === true
-				? [input.asrc]
-				: []),
+			...(pickerAsrc === undefined ? [] : [pickerAsrc]),
 			...(storedMix ?? [])
 				.filter(
 					({ id }) => !config.audio_inputs?.some((input) => input.id === id),

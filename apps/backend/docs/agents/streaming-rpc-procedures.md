@@ -95,7 +95,7 @@ fills that value in memory without rewriting the file; an explicit true at
 otherwise default primary settings remains an explicit muted mix.
 Membership and track changes apply at the next start, including with `apply_now`.
 
-The save gate runs before any mutation against `audio_mix` and the selectable
+An explicit mix save is validated before any mutation against `audio_mix` and the selectable
 audio source list. Its errors are `audio_mix_unsupported`, `audio_input_unknown`,
 `audio_inputs_empty`, `audio_input_duplicate`, `audio_inputs_too_many`,
 `audio_tracks_invalid`, `audio_tracks_gap`, `audio_gain_range` and
@@ -120,7 +120,10 @@ available mix is full, the pick replaces the previous main or, if that input
 is not in the available mix, the first available entry. Accepted picks
 preserve the relative order of all surviving inputs and save the selection
 and mix in one synchronous write. A pick that would exceed the saved slot
-limit is refused; without `audio_pick` an `asrc` save changes no membership.
+limit is refused. The same request observes the selected route. A missing
+proof returns `audio_source_probe_failed`, not
+permission to retry with a bare `asrc` or to enroll the current occupant on
+Start. Without `audio_pick` an `asrc` save changes no membership.
 Idle edits from the Live strips arrive as per-input deltas on
 `setAudioMix`: values, or `include` / `track` for membership and tracks, which
 `changedAudioInputs` composes on the current saved mix (refusing to turn the
