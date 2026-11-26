@@ -19,19 +19,24 @@ type Section = LogBundleManifest["sections"][number]["id"];
 const NATIVE_CURSOR =
 	/^s=[0-9a-f]{32};i=(?:0|[1-9a-f][0-9a-f]{0,15});b=([0-9a-f]{32});m=(?:0|[1-9a-f][0-9a-f]{0,15});t=(?:0|[1-9a-f][0-9a-f]{0,15});x=(?:0|[1-9a-f][0-9a-f]{0,15})$/;
 
-function bootSpan(
+function bootSpans(
 	value: unknown,
 	expected: string | undefined,
 	inCursor: boolean,
-): readonly [number, number] | undefined {
+) {
 	if (!expected || !/^[0-9a-f]{32}$/.test(expected)) return;
-	if (!inCursor) return value === expected ? [0, expected.length] : undefined;
+	if (!inCursor)
+		return value === expected
+			? { boot: [0, expected.length] as const }
+			: undefined;
 	if (typeof value !== "string") return;
-	if (NATIVE_CURSOR.exec(value)?.[1] === expected) return [0, value.length];
 	const [boot, duplicate] = value.matchAll(/(?:^|;)b=([^;]*)/g);
 	if (!boot || duplicate || boot[1] !== expected) return;
 	const end = boot.index + boot[0].length;
-	return [end - expected.length, end];
+	const span = [end - expected.length, end] as const;
+	return NATIVE_CURSOR.test(value)
+		? { boot: span, numeric: [0, value.length] as const }
+		: { boot: span };
 }
 
 export async function buildBundle(
@@ -51,7 +56,6 @@ export async function buildBundle(
 	readonly filename: string;
 }> {
 	const snapshot = await collectBundleData();
-	const redactor = buildRedactor(snapshot.secrets);
 	// Register the objects that own boot identity fields, never arbitrary values.
 	const bootFields = new WeakMap<object, string>();
 	const current = snapshot.journalBoots[0];
@@ -69,6 +73,7 @@ export async function buildBundle(
 		...snapshot.journalBoots,
 		...snapshot.bootRecords.map((boot) => boot.bootId),
 	]);
+	const redactor = buildRedactor(snapshot.secrets, knownBoots);
 	for (const event of snapshot.events) {
 		if (knownBoots.has(event.bootId)) bootFields.set(event, event.bootId);
 		// The two producers whose params name the boot before theirs.
@@ -125,12 +130,12 @@ export async function buildBundle(
 		function visit(
 			value: unknown,
 			message = false,
-			span?: ReturnType<typeof bootSpan>,
+			spans?: ReturnType<typeof bootSpans>,
 		): unknown {
 			if (typeof value === "string") {
 				// A held secret refuses first, so any remaining mask is a pattern.
 				if (!message) redactor.structured(value);
-				const masked = redactor.text(value, span);
+				const masked = redactor.text(value, spans);
 				if (!message && masked.redactions !== 0)
 					throw new BundleReadError("pattern");
 				redactions += masked.redactions;
@@ -153,13 +158,13 @@ export async function buildBundle(
 					if (redactor.text(key).redactions !== 0)
 						throw new BundleReadError("pattern");
 					const cursor = value === entry && key === "cursor";
-					const span =
+					const spans =
 						key === "bootId" || key === "previousBootId" || cursor
-							? bootSpan(inner, bootFields.get(value), cursor)
+							? bootSpans(inner, bootFields.get(value), cursor)
 							: undefined;
 					return [
 						key,
-						visit(inner, value === entry && key === "message", span),
+						visit(inner, value === entry && key === "message", spans),
 					];
 				}),
 			);
