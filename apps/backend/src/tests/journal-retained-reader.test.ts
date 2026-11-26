@@ -117,6 +117,67 @@ for (const kind of ["pending", "missing", "alias"] as const) {
 	});
 }
 
+test("a clean verified set-aside admits an operator Start on the previous slot", async () => {
+	const { writer } = await seedRetained("complete");
+	await writer.close();
+	expect((await initialize()).unreadable).toBe(0);
+	const session = createStreamSessionOrchestrator({
+		initialLiveness: () => "idle",
+		createAttemptId: () => "retained-clean",
+		setStreamingStatus: () => {},
+		stopRuntime: async () => {},
+		queryRuntime: async () => "idle",
+		recoveryPending: streamSessionProductionDeps.recoveryPending,
+	});
+	let launches = 0;
+	await session.start({
+		origin: "ui",
+		launch: async () => {
+			launches++;
+		},
+	});
+	expect(launches).toBe(1);
+	expect(isRecoveryPending()).toBe(false);
+});
+
+test("an internal boot origin rechecks drift after the barrier it awaited", async () => {
+	const { writer } = await seedRetained("complete");
+	try {
+		expect((await initialize()).unreadable).toBe(0);
+		await writer.writeFile("out-of-band repair");
+		await writer.sync();
+		const session = createStreamSessionOrchestrator({
+			initialLiveness: () => "idle",
+			createAttemptId: () => "retained-autostart",
+			setStreamingStatus: () => {},
+			stopRuntime: async () => {},
+			queryRuntime: async () => "idle",
+			recoveryPending: streamSessionProductionDeps.recoveryPending,
+			awaitRecovery: streamSessionProductionDeps.awaitRecovery,
+		});
+		let launches = 0;
+		const started = session.start({
+			origin: "autostart",
+			launch: async () => {
+				launches++;
+			},
+		});
+		// Awaiting raised the new unsettled promise; the owner cannot lower it
+		// while the evidence is still drifted, so the launch never proceeds.
+		expect(isRecoveryPending()).toBe(true);
+		const outcome = await Promise.race([
+			started,
+			new Promise((resolve) => setTimeout(() => resolve("still-waiting"), 50)),
+		]);
+		expect(outcome).toBe("still-waiting");
+		expect(launches).toBe(0);
+		resetRecoveryBarrier();
+		await started;
+	} finally {
+		await writer.close();
+	}
+});
+
 for (const entry of ["Start", "modem mutation", "Cellular list"] as const) {
 	test(`late retained-record drift after startup blocks ${entry}`, async () => {
 		const { writer } = await seedRetained("complete");
