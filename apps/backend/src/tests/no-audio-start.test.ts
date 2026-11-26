@@ -68,6 +68,7 @@ import {
 } from "../modules/streaming/cerastream-backend.ts";
 import { commitStagedConfigChange } from "../modules/streaming/config-change-persistence.ts";
 import { stageConfigChange } from "../modules/streaming/config-change-staging.ts";
+import { deviceRegistry } from "../modules/streaming/devices.ts";
 import * as gateway from "../modules/streaming/gateway-availability.ts";
 import {
 	initPipelines,
@@ -547,11 +548,14 @@ test.each(["plain save", "picker save"] as const)(
 					{ asrc: "Gone" },
 					{ context: makeRpcContext() },
 				),
-			).toMatchObject({ success: true });
+			).toMatchObject({
+				success: false,
+				error: "audio_source_probe_failed",
+			});
 		} else {
 			expect(await pick("Gone")).toMatchObject({
 				success: false,
-				error: "audio_source_probe_failed",
+				error: "audio_source_unavailable",
 			});
 		}
 		gate.resolve();
@@ -560,7 +564,9 @@ test.each(["plain save", "picker save"] as const)(
 			failure: { class: "start_invalid", phase: "params" },
 		});
 		expect(launchedAudio()).toEqual([]);
-		expect(await disk()).toMatchObject({ asrc: "Gone" });
+		expect((await disk()).asrc).toBe(
+			saveKind === "plain save" ? "Gone" : undefined,
+		);
 	},
 );
 
@@ -1460,15 +1466,21 @@ test("the pressed mix shares nothing with the saved one", async () => {
 	expect(launchedAudio()).toEqual([PRESSED.Primary.mix]);
 });
 
-test("a bitrate changed while the microphone is checked still reaches the engine", async () => {
+test("a bitrate saved while the microphone is checked is for the next Start", async () => {
 	savePressed("Primary", "single");
 	holdProbe((asrc) => asrc);
 	const started = start();
 	await reached.promise;
-	getConfig().max_br = 4000;
-	gate.resolve();
+	try {
+		expect(
+			await call(setConfigProcedure, { max_br: 4000 }, context()),
+		).toMatchObject({ success: true });
+	} finally {
+		gate.resolve();
+	}
 	expect(await started).toMatchObject({ success: true });
-	expect(engine.startRequests[0]?.bitrate.max_bitrate).toBe(4000);
+	expect(engine.startRequests[0]?.bitrate.max_bitrate).toBe(8000);
+	expect((await disk()).max_br).toBe(4000);
 });
 
 test("Auto follows the camera this Start launches, not one chosen for later", async () => {
@@ -2317,6 +2329,8 @@ const ENTRIES: Record<
 	},
 	"a retried engine restart": async (saveBackend) => {
 		keepMarker();
+		getConfig().previewEncode = "software";
+		setPreviewEncodeReplayTransport(async () => {});
 		expect(await start()).toMatchObject({ success: true });
 		await loseEngine();
 		await AWAITS["start retry wait"]?.();
@@ -2660,7 +2674,7 @@ test.each([
 		expect(peer.launchParams[0]).toMatchObject({
 			srt: { latency_ms: 2300 },
 			codec: "h264",
-			bitrate: { balancer: "fixed", max_bitrate: 4700 },
+			bitrate: { balancer: "fixed", max_bitrate: 8000 },
 		});
 		expect(peer.startAudio).toEqual([{ mode: "default", delay_ms: 0 }]);
 		expect(peer.checks).toEqual([]);
@@ -2670,7 +2684,9 @@ test.each([
 			source,
 			srt_latency: 2300,
 			video_codec: "h264",
-			max_br: 4700,
+			max_br: 8000,
+			balancer: "fixed",
+			previewEncode: "software",
 		});
 		expect(await disk()).toMatchObject({
 			pipeline: nextSource,
@@ -2682,6 +2698,129 @@ test.each([
 			previewEncode: "hardware",
 			asrc: "No audio",
 		});
+	},
+);
+
+test.each(
+	(["relay lookup", "preview reconnect"] as const).flatMap((heldAt) => [
+		[heldAt, "rtmp", "srt"] as const,
+		[heldAt, "srt", "rtmp"] as const,
+	]),
+)(
+	"%s: %s Start and its retries keep the accepted settings without undoing a save of %s",
+	async (heldAt, source, nextSource) => {
+		const peer = await embeddedStartPeer();
+		keepMarker();
+		const pressedInput =
+			source === "rtmp" ? "fixture-input-at-press" : undefined;
+		const activeInput = spyOn(deviceRegistry, "getActiveInput").mockReturnValue(
+			pressedInput,
+		);
+		const pressed = {
+			srt_latency: 2300,
+			video_codec: "h264",
+			max_br: 6100,
+			balancer: "fixed",
+			previewEncode: "software",
+		} as const;
+		const next = {
+			source: nextSource,
+			srt_latency: 3100,
+			video_codec: "h265",
+			max_br: 4700,
+			balancer: "aimd",
+			previewEncode: "hardware",
+		} as const;
+		Object.assign(getConfig(), pressed);
+		saveConfig();
+
+		const preview: string[] = [];
+		if (heldAt === "relay lookup") GATES["relay address lookup"]?.();
+		setPreviewEncodeReplayTransport(async (mode) => {
+			preview.push(mode);
+			if (heldAt === "preview reconnect" && preview.length === 1) {
+				await hold();
+				// No socket is listening there: fail the same connect boundary
+				// that the actual preview replay uses.
+				await connect({ socketPath: join(directory, "absent-preview.sock") });
+				return;
+			}
+			const client = await connect({
+				socketPath: peer.path,
+				autoReconnect: false,
+			});
+			try {
+				await client.reloadConfig({ preview_encode: mode });
+			} finally {
+				await client.close();
+			}
+		});
+		const launching = start({ source, asrc: "Primary" });
+		await reached.promise;
+		try {
+			expect(peer.starts()).toEqual([]);
+			expect(await call(setConfigProcedure, next, context())).toMatchObject({
+				success: true,
+			});
+			expect(await disk()).toMatchObject({ ...next, pipeline: nextSource });
+			activeInput.mockReturnValue("fixture-input-next-time");
+		} finally {
+			gate.resolve();
+		}
+
+		expect(await launching).toMatchObject({ success: true });
+		const wire = (
+			pipeline: string,
+			settings: typeof pressed | typeof next,
+		) => ({
+			pipeline,
+			codec: settings.video_codec,
+			srt: { latency_ms: settings.srt_latency },
+			bitrate: { max_bitrate: settings.max_br, balancer: settings.balancer },
+		});
+		expect({
+			launches: peer.launchParams,
+			preview,
+			saved: await disk(),
+		}).toMatchObject({
+			launches: [wire(source, pressed)],
+			preview:
+				heldAt === "preview reconnect"
+					? ["software", "software"]
+					: ["software"],
+			saved: { ...next, pipeline: nextSource, asrc: "No audio" },
+		});
+		expect(readArmedStreamMarker()?.config).toMatchObject({
+			...pressed,
+			source,
+			pipeline: source,
+		});
+		await stop();
+		expect(await start()).toMatchObject({ success: true });
+		expect(peer.launchParams).toMatchObject([
+			wire(source, pressed),
+			wire(nextSource, next),
+		]);
+		expect(peer.launchParams.map(({ input_id }) => input_id)).toEqual([
+			pressedInput,
+			"fixture-input-next-time",
+		]);
+		expect(preview).toEqual(
+			heldAt === "preview reconnect"
+				? ["software", "software", "hardware"]
+				: ["software", "hardware"],
+		);
+		expect(peer.startAudio).toEqual([
+			{ mode: "default", delay_ms: 0 },
+			{ mode: "none", delay_ms: 0 },
+		]);
+		expect(peer.checks).toEqual([]);
+		expect(probe.mock.calls).toEqual([]);
+		expect(peer.reloads).toEqual([
+			{ preview_encode: "software" },
+			{ preview_encode: "hardware" },
+		]);
+		expect(await disk()).toMatchObject({ ...next, pipeline: nextSource });
 	},
 );
 
@@ -3036,7 +3175,7 @@ test("a verified Start rejection cannot fall back or apply its proof to the mark
 
 test.each([
 	"no saved mix",
-	"an invalid saved mix",
+	"an unplugged saved mix leg",
 	"an untagged asrc",
 ] as const)(
 	"a microphone save with %s cannot acknowledge a replacement observed at the same address",
@@ -3056,7 +3195,10 @@ test.each([
 				? undefined
 				: [
 						entry("Primary", [1]),
-						entry(caseName === "an invalid saved mix" ? "Gone" : "Second", [2]),
+						entry(
+							caseName === "an unplugged saved mix leg" ? "Gone" : "Second",
+							[2],
+						),
 					];
 		getConfig().audio_inputs = savedMix;
 		await listPhysicalMics(["micOld", ORIGINAL_MIC]);
@@ -3084,7 +3226,11 @@ test.each([
 				error: "audio_source_probe_failed",
 			});
 			expect((await disk()).asrc).toBe("micOld");
-			expect((await disk()).audio_inputs).toEqual(savedMix);
+			expect((await disk()).audio_inputs).toEqual(
+				caseName === "an unplugged saved mix leg" && savedMix !== undefined
+					? [entry("micOld", [1]), ...savedMix]
+					: savedMix,
+			);
 			if (savedMix !== undefined) {
 				// Clearing the saved mix must not let Start enroll the replacement.
 				expect(

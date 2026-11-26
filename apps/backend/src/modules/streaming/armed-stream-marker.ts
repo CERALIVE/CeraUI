@@ -68,8 +68,12 @@ import {
 	audioBackendSchema,
 	audioCodecSchema,
 	audioInputSettingSchema,
+	balancerAlgorithmSchema,
+	compositionConfigSchema,
+	failoverRatePolicyInputSchema,
 	inputModeSchema,
 	type LifecycleState,
+	previewEncodeModeSchema,
 } from "@ceraui/rpc/schemas";
 import { z } from "zod";
 
@@ -131,6 +135,11 @@ const armedStreamConfigSchema = z.object({
 	framerate: framerateSchema.optional(),
 	video_codec: videoCodecSchema.optional(),
 	video_passthrough: videoPassthroughSchema.optional(),
+	// Null means the launch used the engine default. Old markers omit these keys.
+	balancer: balancerAlgorithmSchema.nullable().optional(),
+	failover_rate_policy: failoverRatePolicyInputSchema.nullable().optional(),
+	previewEncode: previewEncodeModeSchema.nullable().optional(),
+	composition: compositionConfigSchema.optional(),
 	source: z.string().optional(),
 	source_stable_id: z.string().optional(),
 	selected_video_input: z.string().optional(),

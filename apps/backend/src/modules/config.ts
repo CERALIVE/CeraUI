@@ -60,6 +60,7 @@ export function setConfigFilePath(filePath: string): void {
 }
 
 let config: RuntimeConfig = {};
+let configSaveRevision = 0;
 let authorityFailure: RuntimeConfigAuthorityError | undefined;
 
 export async function loadConfig() {
@@ -81,6 +82,7 @@ export async function loadConfig() {
 		{ parsed: raw },
 	);
 	config = coerceLegacySource(result.data);
+	configSaveRevision += 1;
 	authorityFailure = undefined;
 
 	// Apply mock pairing AFTER file load so it overrides any absent/undefined remote_key in config.json
@@ -108,6 +110,7 @@ export async function loadConfig() {
 
 export function saveConfig() {
 	if (authorityFailure) throw authorityFailure;
+	configSaveRevision += 1;
 	// Before the write: a save that fails leaves the device on the new values too.
 	announceConfigSave(config);
 	const dataToSave: RuntimeConfig = {
@@ -119,6 +122,11 @@ export function saveConfig() {
 	// finishing before return. Atomic (temp+fsync+rename) so a crash mid-write
 	// can't corrupt config.json — add-on state lives here too (E3).
 	writeFileAtomicSync(configFile, JSON.stringify(dataToSave));
+}
+
+/** Orders delayed writes against newer saves, even saves of the same value. */
+export function getConfigSaveRevision(): number {
+	return configSaveRevision;
 }
 
 /** False until a strict load has succeeded; the boot owner retries until it does. */

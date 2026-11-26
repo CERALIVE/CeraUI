@@ -141,10 +141,7 @@ import {
 	resolveSourceIdentity,
 	resolveSourceRouting,
 } from "../../modules/streaming/sources.ts";
-import {
-	acceptStartAudio,
-	noteAudioSaved,
-} from "../../modules/streaming/start-audio.ts";
+import { noteAudioSaved } from "../../modules/streaming/start-audio.ts";
 import {
 	classifyStartFailure,
 	StreamStartFailure,
@@ -154,7 +151,10 @@ import {
 	startStreamSession,
 	stopStreamSession,
 } from "../../modules/streaming/stream-session-orchestrator.ts";
-import { getIsStreaming } from "../../modules/streaming/streaming.ts";
+import {
+	acceptStartConfig,
+	getIsStreaming,
+} from "../../modules/streaming/streaming.ts";
 import {
 	getConfiguredEngine,
 	getStreamingBackend,
@@ -278,12 +278,16 @@ export const streamingStartProcedure = authedProcedure
 		// first, so both the audio snapshot and dispatch use the same pipeline.
 		const saved = getConfig();
 		const effectiveSource = input.source ?? saved.source;
+		const sources =
+			effectiveSource === undefined
+				? []
+				: streamingProcedureDeps.getSourcesMessage().sources;
 		const routed =
 			effectiveSource === undefined
 				? undefined
 				: resolveSourceRouting(
 						effectiveSource,
-						streamingProcedureDeps.getSourcesMessage().sources,
+						sources,
 						saved.last_seen_devices,
 						input.source === undefined
 							? configuredSelectionAnchor(effectiveSource)
@@ -297,10 +301,30 @@ export const streamingStartProcedure = authedProcedure
 					source: effectiveSource,
 				}
 			: input;
+		const applied: StreamingConfigInput = {
+			...routedInput,
+			...(input.max_br !== undefined
+				? { max_br: clampBitrate(input.max_br) }
+				: {}),
+			...(input.srt_latency !== undefined
+				? { srt_latency: Math.max(input.srt_latency, SRTLA_MIN_LATENCY_MS) }
+				: {}),
+		};
 		const accepted =
 			routed?.ok === false
 				? routed
-				: { ok: true as const, audio: acceptStartAudio(routedInput) };
+				: {
+						ok: true as const,
+						snapshot: acceptStartConfig(applied, saved, {
+							stableId:
+								input.source === undefined
+									? (saved.source_stable_id ??
+										(effectiveSource === undefined
+											? undefined
+											: resolveSelectionAnchor(effectiveSource, sources)))
+									: resolveSelectionAnchor(input.source, sources),
+						}),
+					};
 		const starting = startStreamSession({
 			origin:
 				context.ws.remoteAddress === "control-channel"
@@ -311,21 +335,12 @@ export const streamingStartProcedure = authedProcedure
 					legacyError = accepted.error;
 					throwStartFailure("params", new Error(accepted.error), attemptId);
 				}
-				const startAudio = accepted.audio;
-				const applied: StreamingConfigInput = {
-					...routedInput,
-					...(input.max_br !== undefined
-						? { max_br: clampBitrate(input.max_br) }
-						: {}),
-					...(input.srt_latency !== undefined
-						? { srt_latency: Math.max(input.srt_latency, SRTLA_MIN_LATENCY_MS) }
-						: {}),
-				};
+				const { audio: startAudio, params } = accepted.snapshot;
 
 				// Block start when the effective pipeline is not in the offered set — a
 				// persisted pipeline the current hardware no longer offers. No silent
 				// reset; the client surfaces the structured code so the operator re-picks.
-				const effectivePipeline = applied.pipeline ?? getConfig().pipeline;
+				const effectivePipeline = params.pipeline;
 				if (effectivePipeline !== undefined) {
 					const check = streamingProcedureDeps.validatePersistedPipeline(
 						effectivePipeline,
@@ -364,8 +379,7 @@ export const streamingStartProcedure = authedProcedure
 				// SAVES stay permitted (mirrors the pipeline_not_in_offered_set gate).
 				const effectiveAcodec = startAudio.config.acodec;
 				if (effectiveAcodec !== undefined) {
-					const effectiveTransport =
-						applied.relay_protocol ?? getConfig().relay_protocol ?? "srtla";
+					const effectiveTransport = params.relay_protocol ?? "srtla";
 					if (
 						!audioCodecAllowedForTransport(effectiveAcodec, effectiveTransport)
 					) {
@@ -398,18 +412,17 @@ export const streamingStartProcedure = authedProcedure
 					// is_streaming on then immediately errors and flips it off. Simulate
 					// a sustained stream so getIsStreaming() drives the UI as on device.
 					setMockEncoderConfig({
-						pipeline: applied.pipeline,
-						bitrate_overlay: applied.bitrate_overlay,
-						resolution: applied.resolution,
-						framerate: applied.framerate,
-						max_br: applied.max_br,
+						pipeline: params.pipeline,
+						bitrate_overlay: params.bitrate_overlay,
+						resolution: params.resolution,
+						framerate: params.framerate,
+						max_br: params.max_br,
 					});
 					const config = {
-						...getConfig(),
-						...applied,
+						...params,
 						...startAudio.config,
-						composition: applied.composition ?? getConfig().composition,
-						video_codec: applied.video_codec ?? getConfig().video_codec,
+						composition: params.composition ?? undefined,
+						video_codec: params.video_codec ?? undefined,
 					};
 					const audio = launchAudioPlan(config, { attemptId });
 					// What the engine adapter hands over at a real start, after
@@ -419,7 +432,7 @@ export const streamingStartProcedure = authedProcedure
 						isCompositionSupported(getLastCapabilities())
 							? config.composition
 							: undefined;
-					const params: StartParams = {
+					const mockStartParams: StartParams = {
 						pipeline: config.pipeline ?? "test",
 						srt: {
 							host: "127.0.0.1",
@@ -435,7 +448,7 @@ export const streamingStartProcedure = authedProcedure
 						...(composition === undefined ? {} : { composition }),
 					};
 					try {
-						startMockStreaming(params);
+						startMockStreaming(mockStartParams);
 					} catch (error) {
 						if (!hasStartRpcCode(error, "cerastream.audio.device_not_found"))
 							throw error;
@@ -462,10 +475,9 @@ export const streamingStartProcedure = authedProcedure
 				// state we report back.
 				const startResult = await streamingProcedureDeps.startStream(
 					context.ws as unknown as import("ws").default,
-					applied,
+					accepted.snapshot,
 					generation,
 					attemptId,
-					startAudio,
 				);
 				if (!startResult.success) {
 					legacyError = startResult.error;
@@ -489,7 +501,7 @@ export const streamingStartProcedure = authedProcedure
 			},
 		});
 		const lifecycleResult = await (accepted.ok
-			? accepted.audio.whileInFlight(starting)
+			? accepted.snapshot.audio.whileInFlight(starting)
 			: starting);
 		return startResponse(lifecycleResult, appliedResponse, legacyError);
 	});
@@ -946,10 +958,7 @@ export const setConfigProcedure = liveWriteProcedure
 			composition: config.composition,
 			video_codec: config.video_codec,
 		};
-		if (
-			pickerAsrc !== undefined &&
-			!canPickAudioInput(audioConfig, pickerAsrc)
-		)
+		if (pickerAsrc !== undefined && !canPickAudioInput(audioConfig, pickerAsrc))
 			return { success: false, error: "audio_source_unavailable", applied: {} };
 		if (audioInputs != null) {
 			const error = validateAudioInputs(

@@ -28,6 +28,7 @@ import { getConfig, saveConfig } from "../../config.ts";
 import { emitEvent } from "../../events/emit.ts";
 import { isUpdating } from "../../system/software-updates.ts";
 import { notificationBroadcast } from "../../ui/notifications.ts";
+import { deviceRegistry } from "../devices.ts";
 import { awaitRecoveryBarrier } from "../recovery-barrier.ts";
 import { genSrtlaIpList, resolveSrtla } from "../srtla.ts";
 import { acceptStartAudio } from "../start-audio.ts";
@@ -116,14 +117,18 @@ export async function autoStartStream(linkAttempt = 1): Promise<void> {
 
 	// If the config is invalid, then we won't ever be able to start, so don't retry
 	const config = getConfig();
-	const startAudio = acceptStartAudio();
+	const sourceStableId = config.source_stable_id;
+	const selectedVideoInput =
+		config.selected_video_input ?? deviceRegistry.getActiveInput();
+	const startAudio = acceptStartAudio({}, config);
 	let c: Awaited<ReturnType<typeof validateConfig>>;
 	try {
 		c = await validateConfig(
 			{ ...mergePersistedStartConfig(config, {}), ...startAudio.config },
 			startAudio,
 		);
-		c.config.source_stable_id = config.source_stable_id;
+		c.config.source_stable_id = sourceStableId;
+		c.config.selected_video_input = selectedVideoInput;
 	} catch (err) {
 		logger.error("autostart failed", { err });
 		try {
@@ -149,13 +154,14 @@ export async function autoStartStream(linkAttempt = 1): Promise<void> {
 		return;
 	}
 
+	let relayAddress: string | undefined;
 	const starting = startStreamSession({
 		origin: "autostart",
 		launch: async ({ attemptId }) => {
-			const srtlaAddr: string = await resolveSrtla(c.srtlaAddr);
+			relayAddress ??= await resolveSrtla(c.srtlaAddr);
 			const launched = await startStream(
 				c.pipeline,
-				srtlaAddr,
+				relayAddress,
 				c.srtlaPort,
 				c.streamid,
 				{},

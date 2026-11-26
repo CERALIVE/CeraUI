@@ -133,9 +133,16 @@ export function noteMicChoices(
 }
 
 /** Freeze the used legs at Start acceptance (or the concrete Auto decision). */
+export function captureSavedMicProofs(config: RuntimeConfig) {
+	const choices = savedChoices.get(config);
+	return choices?.path === getConfigFilePath()
+		? new Map(choices.proofs)
+		: new Map<string, Admission>();
+}
+
 export function freezeMicChoices(
 	config: RuntimeConfig,
-	saved: RuntimeConfig,
+	saved: ReadonlyMap<string, Admission>,
 	prior: ReadonlyMap<string, Admission> = new Map(),
 	audioOff?: boolean,
 ): ReadonlyMap<string, Admission> {
@@ -152,14 +159,10 @@ export function freezeMicChoices(
 							({ id }) => audioInputEngineId(id, config) === key,
 						)?.id,
 				);
-	const choices = savedChoices.get(saved);
 	let pending: ReturnType<typeof observe> | undefined;
 	for (const [index, id] of ids.entries()) {
 		if (id === undefined || accepted.has(id)) continue;
-		const choice =
-			choices?.path === getConfigFilePath()
-				? choices.proofs.get(id)
-				: undefined;
+		const choice = saved.get(id);
 		if (choice !== undefined) {
 			accepted.set(id, choice);
 		} else {

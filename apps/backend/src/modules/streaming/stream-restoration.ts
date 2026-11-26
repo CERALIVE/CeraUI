@@ -120,10 +120,16 @@ export function captureArmedStreamConfig(): ArmedStreamConfig {
 	copy("framerate");
 	copy("video_codec");
 	copy("video_passthrough");
+	copy("composition");
 	copy("source");
 	copy("source_stable_id");
 	copy("selected_video_input");
 	copy("input_mode");
+	if (launched?.streamConfig !== undefined) {
+		snapshot.balancer = config.balancer ?? null;
+		snapshot.failover_rate_policy = config.failover_rate_policy ?? null;
+		snapshot.previewEncode = config.previewEncode ?? null;
+	}
 	return snapshot as ArmedStreamConfig;
 }
 
@@ -226,6 +232,7 @@ async function defaultLaunch(
 	current: () => boolean,
 ): Promise<RestorationLaunchOutcome> {
 	const [
+		{ deviceRegistry },
 		{ validateConfig },
 		{ resolveSrtla },
 		{ prepareSrtlaIpAddresses },
@@ -234,6 +241,7 @@ async function defaultLaunch(
 		{ startStreamSession },
 		{ StreamStartFailure, classifyStartFailure, typedStartFailure },
 	] = await Promise.all([
+		import("./devices.ts"),
 		import("./streaming.ts"),
 		import("./srtla.ts"),
 		import("./streamloop/session.ts"),
@@ -244,16 +252,26 @@ async function defaultLaunch(
 	]);
 
 	if (!current()) return { ok: false, reason: "start_cancelled" };
-	const startAudio = restoredStartAudio(config);
+	const saved = getConfig();
+	const startAudio = restoredStartAudio(config, saved);
 	// Legacy markers never recorded these settings. Keep their existing
 	// fallback, but take it once before validating or waiting for the engine.
-	const { balancer, failover_rate_policy, previewEncode } = getConfig();
+	const { balancer, failover_rate_policy, previewEncode, ...recorded } = config;
 	const launchConfig = {
-		balancer,
-		failover_rate_policy,
-		previewEncode,
-		...config,
+		relay_protocol: saved.relay_protocol,
+		...recorded,
+		balancer: balancer === undefined ? saved.balancer : (balancer ?? undefined),
+		failover_rate_policy:
+			failover_rate_policy === undefined
+				? saved.failover_rate_policy
+				: (failover_rate_policy ?? undefined),
+		previewEncode:
+			previewEncode === undefined
+				? saved.previewEncode
+				: (previewEncode ?? undefined),
 		...startAudio.config,
+		selected_video_input:
+			recorded.selected_video_input ?? deviceRegistry.getActiveInput(),
 	};
 	let resolved: Awaited<ReturnType<typeof validateConfig>>;
 	try {
@@ -268,13 +286,14 @@ async function defaultLaunch(
 	}
 
 	if (!current()) return { ok: false, reason: "start_cancelled" };
+	let relayAddress: string | undefined;
 	const starting = startStreamSession({
 		origin: "restoration",
 		launch: async ({ attemptId }) => {
-			const srtlaAddr = await resolveSrtla(resolved.srtlaAddr);
+			relayAddress ??= await resolveSrtla(resolved.srtlaAddr);
 			const launched = await startStream(
 				resolved.pipeline,
-				srtlaAddr,
+				relayAddress,
 				resolved.srtlaPort,
 				resolved.streamid,
 				{},

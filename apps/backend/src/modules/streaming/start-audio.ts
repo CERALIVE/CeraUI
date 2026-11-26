@@ -16,7 +16,10 @@ import {
 	projectLaunchAudioInputs,
 } from "./audio-inputs.ts";
 import { getLastCapabilities } from "./capabilities.ts";
-import { freezeMicChoices } from "./mic-route-admission.ts";
+import {
+	captureSavedMicProofs,
+	freezeMicChoices,
+} from "./mic-route-admission.ts";
 
 // The audio fields a Start request may save.
 const audioSaves = { asrc: 0, audio_inputs: 0, acodec: 0, delay: 0 };
@@ -48,6 +51,10 @@ export interface StartAudio {
 	readonly config: StartAudioConfig;
 	readonly audioEvidence: ReadonlyMap<string, AudioIdentityEvidence>;
 	readonly micChoices: ReturnType<typeof freezeMicChoices>;
+	readonly autoMicChoices: (
+		config: RuntimeConfig,
+		audioOff: boolean,
+	) => ReturnType<typeof freezeMicChoices>;
 	/** Proofs accepted by the engine for this launch, not just observed at press. */
 	readonly verifiedMicChoices: Map<string, string>;
 	readonly originalMicChoice: (id: string) => string;
@@ -81,12 +88,13 @@ export function audioBackendInUse(): RuntimeConfig["audio_backend"] {
  */
 export function acceptStartAudio(
 	request: StartAudioRequest = {},
-	saved: Pick<RuntimeConfig, StartAudioField> = getConfig(),
+	saved: RuntimeConfig = getConfig(),
 	recordedEvidence?: ReadonlyMap<string, AudioIdentityEvidence>,
 	restoration?: StartAudio["restoration"],
 ): StartAudio {
 	const savedAsrc = saved.asrc;
 	const saves = { ...audioSaves };
+	const savedProofs = captureSavedMicProofs(saved);
 	const pressed: StartAudioConfig = structuredClone({
 		asrc: request.asrc ?? savedAsrc,
 		audio_inputs:
@@ -120,19 +128,21 @@ export function acceptStartAudio(
 						(key) => legacySuccessor(key) === id,
 					) ?? id),
 		...(restoration === undefined ? {} : { restoration }),
+		autoMicChoices: (config, audioOff) =>
+			freezeMicChoices(config, savedProofs, startAudio.micChoices, audioOff),
 		micChoices:
 			restoration === undefined
 				? freezeMicChoices(
 						{
-							...getConfig(),
+							...saved,
 							...request,
 							...pressed,
-							pipeline: request.pipeline ?? getConfig().pipeline,
-							source: request.source ?? getConfig().source,
+							pipeline: request.pipeline ?? saved.pipeline,
+							source: request.source ?? saved.source,
 							asrc:
 								pressed.asrc === AUDIO_SOURCE_AUTO ? undefined : pressed.asrc,
 						},
-						getConfig(),
+						savedProofs,
 					)
 				: new Map(),
 		get config() {
@@ -150,7 +160,9 @@ export function acceptStartAudio(
 		},
 		savedAsrc,
 		unsaved: () => {
+			if (saved !== getConfig()) return {};
 			const { asrc, audio_inputs, acodec, delay } = startAudio.config;
+			// Hardware address migration is not a new operator save.
 			const stillNewest = (field: SavedAudioField) =>
 				request[field] !== undefined && audioSaves[field] === saves[field];
 			return {
@@ -179,19 +191,25 @@ export function acceptStartAudio(
  * now. A marker that records the mix records the whole choice, so what it omits was
  * unset; an older one leaves the mix and the backend to the saved ones.
  */
-export function restoredStartAudio({
-	audio_inputs,
-	audio_physical_ids,
-	audio_unverified_ids,
-	audio_silenced,
-	mic_route_proofs,
-	...recorded
-}: ArmedStreamConfig): StartAudio {
+export function restoredStartAudio(
+	{
+		audio_inputs,
+		audio_physical_ids,
+		audio_unverified_ids,
+		audio_silenced,
+		mic_route_proofs,
+		balancer: _balancer,
+		failover_rate_policy: _failoverRatePolicy,
+		previewEncode: _previewEncode,
+		...recorded
+	}: ArmedStreamConfig,
+	saved: RuntimeConfig,
+): StartAudio {
 	return acceptStartAudio(
 		{},
 		{
 			...(audio_inputs === undefined
-				? getConfig()
+				? saved
 				: { audio_inputs: audio_inputs ?? undefined }),
 			...recorded,
 			...(audio_silenced ? { asrc: NO_AUDIO_ID } : {}),

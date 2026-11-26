@@ -33,7 +33,6 @@ import { clearBindMapReport } from "../bind-map-disposition.ts";
 import { announceBindMapReport } from "../bind-map-notification.ts";
 import { stopLinkTelemetry } from "../link-telemetry.ts";
 import { restartSrtla } from "../srtla.ts";
-import { acceptStartAudio } from "../start-audio.ts";
 import {
 	classifyStartFailure,
 	StreamStartFailure,
@@ -43,11 +42,10 @@ import {
 	currentStreamLaunchOwner,
 } from "../stream-launch-ownership.ts";
 import {
-	type ConfigParameters,
+	type AcceptedStartConfig,
 	getIsStreaming,
 	saveAppliedStartAudio,
 	startError,
-	updateConfig,
 	updateStatus,
 } from "../streaming.ts";
 import { getStreamingBackend } from "../streaming-engine.ts";
@@ -71,10 +69,9 @@ let sessionResources: SessionResources | undefined;
 
 export async function start(
 	conn: WebSocket,
-	params: ConfigParameters,
+	accepted: AcceptedStartConfig,
 	generation = 0,
 	attemptId = "legacy-start",
-	startAudio = acceptStartAudio(params),
 ): Promise<StartStreamResult> {
 	assertStreamLaunchOwnership();
 	const ownsLaunch = currentStreamLaunchOwner();
@@ -100,9 +97,9 @@ export async function start(
 
 	const senderId = getSocketSenderId(conn);
 
-	let c: Awaited<ReturnType<typeof updateConfig>>;
+	let c: Awaited<ReturnType<AcceptedStartConfig["prepare"]>>;
 	try {
-		c = await updateConfig(params, startAudio);
+		c = await accepted.prepare();
 		assertStreamLaunchOwnership();
 	} catch (err) {
 		if (typeof err === "string") {
@@ -178,10 +175,10 @@ export async function start(
 			{},
 			attemptId,
 			c.config,
-			startAudio,
+			accepted.audio,
 		);
 		assertStreamLaunchOwnership();
-		if (result.success) saveAppliedStartAudio(startAudio, c);
+		if (result.success) saveAppliedStartAudio(accepted.audio, c);
 	} catch (err) {
 		if (sessionResources?.generation === generation) {
 			sessionResources.removeNetworkInterfacesChangeListener();

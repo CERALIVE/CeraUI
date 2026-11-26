@@ -45,6 +45,8 @@ export type BitrateParams = { max_br?: number | undefined };
  * config.
  */
 export interface StreamRunOptions {
+	/** The caller already resolved a capture input or intentionally omitted one. */
+	readonly inputResolved?: boolean;
 	pipeline: string;
 	host: string;
 	port: number;

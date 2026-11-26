@@ -11,8 +11,10 @@ import {
 	type EventParams,
 	type GetCapabilitiesResult,
 	MIC_ROUTE_CHECK_FEATURE,
+	type ReloadConfigParams,
 	RPC_ERROR_NUMERIC,
 	type RpcErrorCode,
+	reloadConfigParamsSchema,
 	rpcRequestSchema,
 	SCHEMA_VERSION,
 	type StartParams,
@@ -66,6 +68,7 @@ export async function scopedStartPeer(
 	const path = join(dir, "engine.sock");
 	const requests: { method: string; peer: number; attemptId?: string }[] = [];
 	const startAudio: StartParams["audio"][] = [];
+	const reloads: ReloadConfigParams[] = [];
 	const launchParams: StartParams[] = [];
 	const checks: { peer: number; params: CheckMicRoutesParams }[] = [];
 	let offerMicRoutes = micRoutes !== undefined;
@@ -194,6 +197,12 @@ export async function scopedStartPeer(
 						case "set-bitrate":
 							reply({ applied: setBitrateParamsSchema.parse(request.params) });
 							break;
+						case "reload-config": {
+							const params = reloadConfigParamsSchema.parse(request.params);
+							reloads.push(params);
+							reply({ applied: params });
+							break;
+						}
 						case "start":
 						case "start-verified": {
 							const params = startParamsSchema.parse(request.params);
@@ -288,6 +297,7 @@ export async function scopedStartPeer(
 				({ method }) => method === "start" || method === "start-verified",
 			),
 		startAudio,
+		reloads,
 		launchParams,
 		checks,
 		disableMicRoutes: () => {

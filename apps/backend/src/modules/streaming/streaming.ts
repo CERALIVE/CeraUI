@@ -34,7 +34,7 @@ import {
 } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
 import { broadcastConfig } from "../../rpc/config-broadcast.ts";
-import { getConfig, saveConfig } from "../config.ts";
+import { getConfig, getConfigSaveRevision, saveConfig } from "../config.ts";
 import {
 	convertManualToRemoteRelay,
 	getRelays,
@@ -55,14 +55,20 @@ import { audioInputEngineId } from "./audio-inputs.ts";
 import { getAudioMixActive, getAudioOffActive } from "./audio-mix-status.ts";
 import { getLastCapabilities, getSupportedTransports } from "./capabilities.ts";
 import { isCompositionSupported } from "./composition.ts";
+import { deviceRegistry } from "./devices.ts";
 import { validateBitrate } from "./encoder.ts";
 import { noteStartedMicChoice } from "./mic-route-admission.ts";
 import { AUDIO_CODECS } from "./pipeline-sources.ts";
 import { searchPipelines } from "./pipelines.ts";
-import { noteSourceSelectionWrite } from "./sources.ts";
+import {
+	getSourcesMessage,
+	noteSourceSelectionWrite,
+	resolveSelectionAnchor,
+} from "./sources.ts";
 import { resolveSrtla } from "./srtla.ts";
 import { acceptStartAudio, type StartAudio } from "./start-audio.ts";
 import { mergePersistedStartConfig } from "./start-config-merge.ts";
+import { assertStreamLaunchOwnership } from "./stream-launch-ownership.ts";
 import { resolveStreamEndpoint } from "./transport/resolve-endpoint.ts";
 
 export type StartMessage = { start: ConfigParameters };
@@ -149,6 +155,7 @@ export function startError(conn: WebSocket, msg: string, id?: string) {
 export async function validateConfig(
 	params: Partial<ConfigParameters>,
 	startAudio?: Pick<StartAudio, "savedAsrc" | "audioEvidence">,
+	relays = { snapshot: getRelays() },
 ) {
 	if (typeof params !== "object") throw new Error("Invalid config");
 
@@ -218,9 +225,8 @@ export async function validateConfig(
 	}
 
 	// audio source
-	const config = getConfig();
 	const savedAsrc =
-		startAudio === undefined ? config.asrc : startAudio.savedAsrc;
+		startAudio === undefined ? getConfig().asrc : startAudio.savedAsrc;
 	const audioDevicesMap = getAudioDevices();
 	if (pipeline.supportsAudio) {
 		if (typeof validated.asrc !== "string")
@@ -244,7 +250,10 @@ export async function validateConfig(
 	// minimum here so a sub-2s persisted/pushed value never reaches the engine).
 	if (validated.srt_latency === undefined)
 		throw new Error("Invalid SRT latency");
-	params.srt_latency = Math.max(validated.srt_latency, SRTLA_MIN_LATENCY_MS);
+	validated.srt_latency = params.srt_latency = Math.max(
+		validated.srt_latency,
+		SRTLA_MIN_LATENCY_MS,
+	);
 
 	const { srtlaAddr, srtlaPort, streamid } = resolveStreamEndpoint(
 		{
@@ -270,39 +279,72 @@ export async function validateConfig(
 				? { relay_protocol: params.relay_protocol }
 				: {}),
 		},
-		getRelays(),
-		config.relay_protocol,
+		relays.snapshot,
+		startAudio === undefined ? getConfig().relay_protocol : undefined,
 		{ ristAvailable: getSupportedTransports().includes(RIST_TRANSPORT) },
 	);
 
 	return { pipeline, config: validated, srtlaAddr, srtlaPort, streamid };
 }
 
+export function acceptStartConfig(
+	request: ConfigParameters,
+	saved = getConfig(),
+	source = {
+		stableId:
+			request.source === undefined
+				? saved.source_stable_id
+				: resolveSelectionAnchor(request.source, getSourcesMessage().sources),
+	},
+	startAudio?: StartAudio,
+) {
+	const saveRevision = getConfigSaveRevision();
+	const relays = { snapshot: getRelays() };
+	const params = mergePersistedStartConfig(saved, request);
+	const selectedVideoInput =
+		params.selected_video_input ?? deviceRegistry.getActiveInput();
+	const audio = startAudio ?? acceptStartAudio(request, saved);
+	let prepared: Awaited<ReturnType<typeof validateConfig>> | undefined;
+	return {
+		params,
+		audio,
+		prepare: async () => {
+			if (prepared !== undefined) return prepared;
+			const effective = { ...params, ...audio.config };
+			const launch = await validateConfig(effective, audio, relays);
+			launch.config.source_stable_id = source.stableId;
+			launch.config.selected_video_input = selectedVideoInput;
+			const srtlaAddr = await resolveSrtla(launch.srtlaAddr);
+			assertStreamLaunchOwnership();
+			// DNS may yield to an operator save, including a save of the same
+			// values. The launch can still proceed, but it no longer owns disk.
+			if (getConfigSaveRevision() === saveRevision)
+				persistStartConfig(effective, source.stableId);
+			prepared = { ...launch, srtlaAddr };
+			return prepared;
+		},
+	} as const;
+}
+
+export type AcceptedStartConfig = ReturnType<typeof acceptStartConfig>;
+
 export async function updateConfig(
 	requestedParams: ConfigParameters,
-	startAudio: StartAudio = acceptStartAudio(requestedParams),
+	startAudio?: StartAudio,
 ) {
-	// Every start is a partial update over the persisted stream config. Keep the
-	// merge at this shared seam: UI starts arrive through session.start, while a
-	// set-profile reconnect calls it directly with {}. Parsing through the wire
-	// schema projects only stream fields, so credentials in runtime config can
-	// never ride the applied start object.
-	const params: ConfigParameters = {
-		...mergePersistedStartConfig(getConfig(), requestedParams),
-		...startAudio.config,
-	};
+	return acceptStartConfig(
+		requestedParams,
+		getConfig(),
+		undefined,
+		startAudio,
+	).prepare();
+}
 
-	const {
-		pipeline,
-		config: accepted,
-		srtlaAddr: initialAddr,
-		srtlaPort,
-		streamid,
-	} = await validateConfig(params, startAudio);
-
-	const srtlaAddr = await resolveSrtla(initialAddr);
+function persistStartConfig(
+	params: ConfigParameters,
+	sourceStableId: string | undefined,
+) {
 	const config = getConfig();
-	// Save the updated config
 	config.pipeline = params.pipeline;
 	config.max_br = params.max_br;
 	config.srt_latency = params.srt_latency;
@@ -317,8 +359,9 @@ export async function updateConfig(
 	if (params.source !== undefined) {
 		config.source = params.source;
 		config.selected_video_input = params.selected_video_input;
-		noteSourceSelectionWrite(params.source);
-		accepted.source_stable_id = config.source_stable_id;
+		noteSourceSelectionWrite(params.source, {
+			stableId: sourceStableId ?? null,
+		});
 	}
 
 	if (params.relay_server) {
@@ -349,8 +392,6 @@ export async function updateConfig(
 
 	saveConfig();
 	broadcastConfig(config);
-
-	return { pipeline, config: accepted, srtlaAddr, srtlaPort, streamid };
 }
 
 /** A rejected Start must not save its proposed audio over the next-start choice. */

@@ -65,7 +65,7 @@ import {
 	startLinkTelemetry,
 	stopLinkTelemetry,
 } from "../link-telemetry.ts";
-import { freezeMicChoices, micRouteKeys } from "../mic-route-admission.ts";
+import { micRouteKeys } from "../mic-route-admission.ts";
 import type { Pipeline } from "../pipelines.ts";
 import { replayPreviewEncodeMode } from "../preview-encode-replay.ts";
 import { getLastPublishedBond } from "../srtla.ts";
@@ -82,7 +82,6 @@ import { resolveProcessError } from "./process-error-patterns.ts";
 import { spawnStreamingLoop, stopProcessAndWait } from "./process-runner.ts";
 
 interface StartStreamBackend {
-	setBitrate: ReturnType<typeof getStreamingBackend>["setBitrate"];
 	start: ReturnType<typeof getStreamingBackend>["start"];
 }
 
@@ -175,6 +174,39 @@ export async function maybeProbeAudioSource(
  * later read of saved settings. Only live bitrate and the audio roster can
  * change while starting.
  */
+const autoLaunches = new WeakMap<StartAudio, ReturnType<typeof launchAudio>>();
+
+function launchAudio(config: RuntimeConfig, startAudio: StartAudio) {
+	const launchConfig = resolveLaunchConfig(config);
+	const chosen = launchConfig.asrc;
+	const wasAuto = config.asrc === AUDIO_SOURCE_AUTO;
+	const autoEvidence =
+		wasAuto && chosen !== undefined && startAudio.restoration === undefined
+			? liveAudioIdentityEvidence().get(chosen)
+			: undefined;
+	const audioEvidence =
+		// Auto's lookup cannot clear uncertainty frozen for a saved mix leg.
+		autoEvidence !== undefined &&
+		chosen !== undefined &&
+		startAudio.audioEvidence.get(chosen)?.kind !== "unavailable"
+			? new Map(startAudio.audioEvidence).set(chosen, autoEvidence)
+			: startAudio.audioEvidence;
+	const audioOff = config.asrc === NO_AUDIO_ID;
+	const micChoices =
+		wasAuto && startAudio.restoration === undefined
+			? startAudio.autoMicChoices(launchConfig, audioOff)
+			: startAudio.micChoices;
+	return {
+		launchConfig,
+		chosen,
+		wasAuto,
+		autoEvidence,
+		audioEvidence,
+		audioOff,
+		micChoices,
+	};
+}
+
 export async function startStream(
 	pipeline: Pipeline,
 	srtlaAddr: string,
@@ -187,8 +219,6 @@ export async function startStream(
 ): Promise<StartStreamResult> {
 	assertStreamLaunchOwnership();
 	startAudio.verifiedMicChoices.clear();
-	const saved = getConfig();
-	const restoring = startAudio.restoration !== undefined;
 	// The preview-encoder fence, and the reason it lives HERE. The engine fixes
 	// the preview encoder when it builds the main graph, so the operator's mode
 	// has to be in the engine's config BEFORE the `start` below — not racing it.
@@ -218,7 +248,7 @@ export async function startStream(
 		};
 	}
 
-	if (saved.audio_backend !== startAudio.config.audio_backend) {
+	if (getConfig().audio_backend !== startAudio.config.audio_backend) {
 		// The Bluetooth microphones may be listed for the backend saved since.
 		await refreshBluetoothAudioDevices();
 		assertStreamLaunchOwnership();
@@ -228,26 +258,19 @@ export async function startStream(
 		pipeline: pipeline.source,
 		...startAudio.config,
 	};
-	const launchConfig = resolveLaunchConfig(config);
-	const chosen = launchConfig.asrc;
-	const wasAuto = config.asrc === AUDIO_SOURCE_AUTO;
-	const autoEvidence =
-		wasAuto && chosen !== undefined && !restoring
-			? liveAudioIdentityEvidence().get(chosen)
-			: undefined;
-	const audioEvidence =
-		// Auto's later lookup cannot clear uncertainty frozen for a saved mix leg.
-		autoEvidence !== undefined &&
-		chosen !== undefined &&
-		startAudio.audioEvidence.get(chosen)?.kind !== "unavailable"
-			? new Map(startAudio.audioEvidence).set(chosen, autoEvidence)
-			: startAudio.audioEvidence;
-	const audioOff = config.asrc === NO_AUDIO_ID;
-	const micChoices =
-		wasAuto && startAudio.restoration === undefined
-			? freezeMicChoices(launchConfig, saved, startAudio.micChoices, audioOff)
-			: startAudio.micChoices;
-	startStreamDeps.getStreamingBackend().setBitrate({ max_br: saved.max_br });
+	// Auto can first resolve from the live roster, but retries cannot choose a
+	// new microphone. Dispatch still rechecks the accepted physical identity.
+	const audio = autoLaunches.get(startAudio) ?? launchAudio(config, startAudio);
+	if (audio.wasAuto) autoLaunches.set(startAudio, audio);
+	const {
+		launchConfig,
+		chosen,
+		wasAuto,
+		autoEvidence,
+		audioEvidence,
+		audioOff,
+		micChoices,
+	} = audio;
 
 	// A fresh stream start clears any prior unexpected-exit health flag so the
 	// health rollup tracks this new session (ADR-0005 observe-and-notify). The
@@ -348,17 +371,15 @@ export async function startStream(
 		let launchedAsrc: RuntimeConfig["asrc"];
 		let originalKeys: ReadonlyMap<string, string>;
 		let checkedIds: readonly (string | undefined)[] = [];
-		const engineConfig = restoring
-			? launchConfig
-			: { ...launchConfig, max_br: saved.max_br };
+		const engineConfig = launchConfig;
 		await startStreamDeps.getStreamingBackend().start(
-			// The bitrate is live: a change made while starting still applies.
 			engineConfig,
 			{
 				pipeline: pipeline.source,
 				host: "127.0.0.1",
 				port: SRTLA_LISTEN_PORT,
 				streamid,
+				inputResolved: true,
 				// Auto's launch copy can read "No audio" without the operator picking it.
 				audioOff,
 				audioAtDispatch: () => {

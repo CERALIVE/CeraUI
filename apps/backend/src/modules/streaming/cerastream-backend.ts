@@ -990,6 +990,7 @@ export class CerastreamBackend implements StreamingBackend {
 									this.client === client &&
 									this.clientEpoch === clientEpoch &&
 									ownsLaunch(),
+								startConfirmed,
 							);
 							if (
 								event.type === "status" &&
@@ -1197,10 +1198,8 @@ export class CerastreamBackend implements StreamingBackend {
 					if (parsed.state !== "streaming") await streamingStatus;
 					current();
 				});
-				if (scoped) {
-					assertLaunchSocket();
-					startConfirmed = true;
-				}
+				if (scoped) assertLaunchSocket();
+				startConfirmed = true;
 				// Subscription replay predates this Start acknowledgement.
 				if (this.client === client && this.clientEpoch === clientEpoch) {
 					this.audioMixInputs = audioMixInputs;
@@ -1770,7 +1769,11 @@ export class CerastreamBackend implements StreamingBackend {
 	}
 
 	/** Bridge one engine event onto notifications / telemetry / status. */
-	handleEvent(event: EventParams, current: () => boolean = () => true): void {
+	handleEvent(
+		event: EventParams,
+		current: () => boolean = () => true,
+		allowLivePolicyReload = true,
+	): void {
 		switch (event.type) {
 			case "error":
 				this.handleErrorEvent(event);
@@ -1807,9 +1810,10 @@ export class CerastreamBackend implements StreamingBackend {
 						},
 					);
 				}
-				// setConfig persists the policy without a transaction. The next engine
-				// heartbeat is the read-side commit point for a live, feature-gated reload.
+				// A live policy edit may apply after Start is confirmed. It must not
+				// resend unrelated next-start settings from disk.
 				if (
+					allowLivePolicyReload &&
 					event.streaming &&
 					engineAdvertises("failover-rate-policy") &&
 					capture !== undefined
@@ -1819,10 +1823,19 @@ export class CerastreamBackend implements StreamingBackend {
 						this.lastPolicyReloadRequested = undefined;
 					else if (
 						selected !== undefined &&
-						selected !== this.lastPolicyReloadRequested
+						selected !== this.lastPolicyReloadRequested &&
+						this.client !== undefined
 					) {
 						this.lastPolicyReloadRequested = selected;
-						this.reloadConfig();
+						const client = this.client;
+						void this.enqueue(
+							() =>
+								client
+									.reloadConfig({ failover_rate_policy: selected })
+									.then(() => undefined),
+							"reload-config",
+							client,
+						);
 					}
 				}
 				if (
@@ -2121,6 +2134,7 @@ export class CerastreamBackend implements StreamingBackend {
 		config: RuntimeConfig,
 		pipelineId: string | undefined,
 		audioOff?: boolean,
+		inputResolved = false,
 		deferAudio = false,
 	): {
 		input_id?: string;
@@ -2130,7 +2144,9 @@ export class CerastreamBackend implements StreamingBackend {
 		video_passthrough?: "auto" | "force" | "off";
 		audio?: StartParams["audio"];
 	} {
-		const inputId = config.selected_video_input ?? this.deps.getActiveInput();
+		const inputId = inputResolved
+			? config.selected_video_input
+			: (config.selected_video_input ?? this.deps.getActiveInput());
 		const audio = deferAudio
 			? undefined
 			: this.encodeStartAudio(config, pipelineId, audioOff);
@@ -2229,6 +2245,7 @@ export class CerastreamBackend implements StreamingBackend {
 				config,
 				config.pipeline ?? opts.pipeline,
 				opts.audioOff,
+				opts.inputResolved,
 				opts.audioAtDispatch !== undefined,
 			),
 		});
