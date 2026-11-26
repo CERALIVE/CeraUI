@@ -42,11 +42,11 @@ via `bun run build:federation` from the CeraUI root (delegates to the frontend
 - **Isolation**: this build NEVER touches the SPA `dist/public` output, runs no
   PWA/service-worker plugin, and emits no `index.html`. The SPA and federation
   Vite configs share the added exact `tailwind-variants` alias; their output
-  directories and PWA behavior remain separate. `federation.css` excludes
-  device-only layout, Live, Settings and System Logs source directories from
-  Tailwind's federation scan. Hosted dialogs and their shared dependencies
-  remain scanned. The federation build rejects imports from excluded directories
-  so a new component cannot silently lose its utility styles.
+  directories and PWA behavior remain separate. The federation Vite config
+  excludes device-only layout, Live, Settings and System Logs directories from
+  Tailwind's scan of `federation.css`. Hosted dialogs and their shared
+  dependencies remain scanned. The same exclusion list rejects imports from
+  those directories so a new component cannot silently lose its utility styles.
 - **CI ordering caveat**: the backend `build` script does `rm -rf ../../dist/`, so
   `build:federation` MUST run AFTER `bun run build` (the full SPA/backend build) — never before,
   or its output is wiped.

@@ -61,9 +61,9 @@ describe('federation asset contract', () => {
 		}
 	});
 
-	it('ships hosted dialog utilities without the device Live bar layout', () => {
+	it('ships the Encoder dialog utility without the device Live bar layout', () => {
 		const css = readFileSync(join(OUTPUT, 'frontend.css'), 'utf8');
-		expect(css).toContain(String.raw`.min-h-\[44px\]`);
+		expect(css).toContain(String.raw`.bg-card\/60`);
 		expect(css).not.toContain(String.raw`.pb-\(--live-bar-height\)`);
 	});
 
