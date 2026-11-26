@@ -425,9 +425,13 @@ must keep that ABI.
 - A saved input that is unplugged or belongs to another network source stays in
   the mixer with a reason and a Remove button. It does not take an available
   input's slot or block edits to other inputs. Remove changes the saved mix for
-  the next start, not the running stream. A launch can leave the input out only
-  if the primary input and all assigned tracks still have a route. Neither
-  changing a source nor starting a stream removes or renumbers saved tracks.
+  the next start, not the running stream. Start omits a redundant unavailable
+  input only if the primary and all assigned tracks still have a route. The
+  picker still shows a missing input, and the existing Start readiness and
+  attempted-Start checks are unchanged. Reworking the readiness block and
+  adding session-only recovery actions belong to row 9 of the Live audio
+  plan. Neither changing a source nor starting a stream removes or renumbers
+  saved tracks.
 
 - `AudioMixer` (`audio-mixer`) renders only when the capabilities carry
   `audio_mix`; without it the idle `audio-card` is today's picker and meter and

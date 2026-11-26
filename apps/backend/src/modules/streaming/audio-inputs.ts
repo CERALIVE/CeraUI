@@ -338,7 +338,7 @@ export function changedAudioInputs(
 	return error === undefined ? { inputs: next } : { error };
 }
 
-/** Project available legs only when the primary and every populated track survive. */
+/** Omit redundant legs; otherwise preserve the routing for the attempted Start. */
 export function projectLaunchAudioInputs(
 	config: RuntimeConfig,
 	inputs: readonly AudioInputSetting[],
@@ -346,20 +346,24 @@ export function projectLaunchAudioInputs(
 ): AudioInputSetting[] | undefined {
 	const available = availableAudioInputIds(config);
 	const primary = primaryAudioInputId(config);
-	let primaryRouted = !requiresAudioInput(primary);
+	const resolved: AudioInputSetting[] = [];
 	const projected: AudioInputSetting[] = [];
+	let canOmit = true;
 	for (const input of inputs) {
 		const id = resolveId(input.id);
-		if (id !== undefined && available.has(id)) {
-			projected.push({ ...input, id });
-			if (input.id === primary) primaryRouted = true;
-		}
+		const entry = id === undefined ? undefined : { ...input, id };
+		if (entry !== undefined) resolved.push(entry);
+		if (entry !== undefined && available.has(entry.id)) projected.push(entry);
+		else if (input.id === primary) canOmit = false;
 	}
-	if (!primaryRouted) return undefined;
 	const tracks = new Set(projected.flatMap(({ tracks }) => tracks));
-	if (inputs.some((input) => input.tracks.some((track) => !tracks.has(track))))
-		return undefined;
-	return projected;
+	if (
+		canOmit &&
+		inputs.every((input) => input.tracks.every((track) => tracks.has(track)))
+	)
+		return projected;
+	// A key whose physical identity is no longer proven must not be sent.
+	return resolved.length === inputs.length ? resolved : undefined;
 }
 
 function engineAudioInputs(
@@ -372,7 +376,16 @@ function engineAudioInputs(
 	const effective = effectiveAudioInputs(config);
 	if (!getLastCapabilities()?.audio_mix || !effective?.length) return undefined;
 	const inputs = projectLaunchAudioInputs(config, effective);
-	if (inputs === undefined)
+	const primary = primaryAudioInputId(config);
+	const ordered = inputs && [
+		...inputs.filter((input) => input.id === primary),
+		...inputs.filter((input) => input.id !== primary),
+	];
+	const mapped = ordered?.flatMap(({ id, ...input }) => {
+		const input_id = audioInputEngineId(id, config);
+		return input_id === undefined ? [] : [{ input_id, ...input }];
+	});
+	if (mapped === undefined || mapped.length !== ordered?.length)
 		throw new StreamStartFailure(
 			typedStartFailure(
 				attemptId,
@@ -381,15 +394,7 @@ function engineAudioInputs(
 				"audio_source_probe_failed",
 			),
 		);
-	const primary = primaryAudioInputId(config);
-	const ordered = [
-		...inputs.filter((input) => input.id === primary),
-		...inputs.filter((input) => input.id !== primary),
-	];
-	return ordered.flatMap(({ id, ...input }) => {
-		const input_id = audioInputEngineId(id, config);
-		return input_id === undefined ? [] : [{ input_id, ...input }];
-	});
+	return mapped;
 }
 
 export interface LaunchAudioPlan extends AudioModeSelection {
