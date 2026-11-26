@@ -10,6 +10,7 @@ import {
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import {
 	type AudioModeSelection,
+	DEFAULT_AUDIO_ID,
 	deriveAudioSources,
 	getAudioCaptureCardIds,
 	getAudioDevices,
@@ -25,6 +26,19 @@ import {
 	StreamStartFailure,
 	typedStartFailure,
 } from "./start-failure-taxonomy.ts";
+
+function requiresAudioInput(id: string | undefined): boolean {
+	return (
+		id !== undefined &&
+		id !== NO_AUDIO_ID &&
+		id !== DEFAULT_AUDIO_ID &&
+		id !== AUDIO_SOURCE_AUTO
+	);
+}
+
+export function canPickAudioInput(config: RuntimeConfig, id: string): boolean {
+	return !requiresAudioInput(id) || availableAudioInputIds(config).has(id);
+}
 
 export function primaryAudioInputId(config: RuntimeConfig): string | undefined {
 	if (
@@ -332,12 +346,16 @@ export function projectLaunchAudioInputs(
 ): AudioInputSetting[] | undefined {
 	const available = availableAudioInputIds(config);
 	const primary = primaryAudioInputId(config);
+	let primaryRouted = !requiresAudioInput(primary);
 	const projected: AudioInputSetting[] = [];
 	for (const input of inputs) {
 		const id = resolveId(input.id);
-		if (id !== undefined && available.has(id)) projected.push({ ...input, id });
-		else if (input.id === primary) return undefined;
+		if (id !== undefined && available.has(id)) {
+			projected.push({ ...input, id });
+			if (input.id === primary) primaryRouted = true;
+		}
 	}
+	if (!primaryRouted) return undefined;
 	const tracks = new Set(projected.flatMap(({ tracks }) => tracks));
 	if (inputs.some((input) => input.tracks.some((track) => !tracks.has(track))))
 		return undefined;

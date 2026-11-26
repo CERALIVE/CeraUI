@@ -19,6 +19,7 @@ const unrelatedFields: ReadonlySet<string> = new Set([
 	"modems",
 	"asrcs",
 	"audio_sources",
+	"audio_mix_excluded",
 	"resolved_asrc",
 	"resolved_asrc_reason",
 	"resolved_asrc_candidates",

@@ -398,6 +398,18 @@ test.describe("audio mixer — caps-full", () => {
 		await thirdGainIsAdmittedLive(page);
 		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
 	});
+
+	test("an unavailable pick is not retried as an unvalidated save", async ({ page, backendRpc }) => {
+		wire.refuseAudioInputs("audio_source_unavailable");
+		await pickThird(page);
+		await expect(page.getByText("The selected audio input is not available.", { exact: true })).toBeVisible();
+		await expect(page.getByTestId("audio-source-select")).toContainText(MAIN);
+		expect(wire.calls("streaming.setConfig").map((call) => call.input)).toEqual([
+			{ asrc: THIRD, audio_pick: true },
+		]);
+		expect(await backendRpc.call(["streaming", "getConfig"])).toMatchObject({ asrc: MAIN });
+	});
+
 	const mixEntry = (id: string, tracks = [1], gain_db = 0) => ({ id, tracks, gain_db, mute: false, delay_ms: 0 });
 	const savedConfig = (backendRpc: BackendRpc) =>
 		backendRpc.call<{ asrc?: string; audio_inputs?: unknown[] }>(["streaming", "getConfig"]);

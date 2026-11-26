@@ -873,18 +873,26 @@ async function handleSelectAudioSource(selection: string) {
 	// id before persisting — the engine ALSA path is keyed on the asrc id, and the
 	// field-lock/echo must key on the same wire value the `config` broadcast echoes.
 	const asrc = audioSelectionWireId(selection, audioEntries);
+	const previous = audioOverride;
 	audioOverride = {
 		asrc,
 		acodec: effectiveAudioCodec ?? 'aac',
 		delay: effectiveAudioDelay,
 	};
+	const picked = audioOverride;
 	markPending('asrc', asrc);
 	try {
 		// The backend adds the pick to the saved mix against its own current state.
 		const result = await rpc.streaming.setConfig({ asrc, audio_pick: true });
-		// A refused mix (a saved input since unplugged) must not lose the pick;
-		// Start still sends the new main input first.
-		if (!result.success) await rpc.streaming.setConfig({ asrc });
+		if (!result.success) {
+			if (result.error === 'audio_source_unavailable') {
+				if (audioOverride === picked) audioOverride = previous;
+				toast.error(m['live.startFailure.class.audio_source_unavailable']());
+			} else {
+				// A mix refusal is separate from admission of the selected input.
+				await rpc.streaming.setConfig({ asrc });
+			}
+		}
 	} catch {
 		toast.error(m["notifications.saveFailed"]());
 	} finally {

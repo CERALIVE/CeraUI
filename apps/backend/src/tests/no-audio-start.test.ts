@@ -495,7 +495,13 @@ test("a missing microphone pressed with no pick saved is refused although it is 
 	GATES["update admission"]?.();
 	const started = uiStart("Gone");
 	await reached.promise;
-	expect(await pick("Gone")).toMatchObject({ success: true });
+	expect(
+		await call(
+			setConfigProcedure,
+			{ asrc: "Gone" },
+			{ context: makeRpcContext() },
+		),
+	).toMatchObject({ success: true });
 	gate.resolve();
 	expect(await started).toMatchObject({
 		success: false,

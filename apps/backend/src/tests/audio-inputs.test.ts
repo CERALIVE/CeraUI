@@ -1376,27 +1376,35 @@ test("in a full saved mix Start gives a main input outside it the first entry's 
 	]);
 });
 
-test("a main input the device cannot open is not added to the mix Start sends", async () => {
+test("removing an unplugged primary does not let the picker or Start substitute another input", async () => {
+	expect((await save([entry("Primary"), entry("Second")])).success).toBe(true);
+	setMockAudioDevicesProvider(() => ({ Second: "hw:CARD=second" }));
+	expect((await change({ id: "Primary", include: false })).success).toBe(true);
+	const selection = await pick("Primary");
+	const attempt = await start().then(
+		(params) => params,
+		(error: unknown) => error,
+	);
+	expect(selection).toMatchObject({
+		success: false,
+		error: "audio_source_unavailable",
+	});
+	expect(attempt).toMatchObject({
+		failure: { class: "audio_source_unavailable" },
+	});
+	expect(requests.filter(({ method }) => method === "start")).toEqual([]);
+	expect((await disk()).audio_inputs).toEqual([entry("Second")]);
+});
+
+test("Start refuses a stale unavailable main input even when it is not in the mix", async () => {
 	expect(await save([entry("Primary"), entry("Second", [2])])).toMatchObject({
 		success: true,
 	});
 	getConfig().asrc = "Ghost";
-	expect((await start()).audio?.inputs).toEqual([
-		{
-			input_id: "hw:CARD=primary",
-			tracks: [1],
-			gain_db: 0,
-			mute: false,
-			delay_ms: 0,
-		},
-		{
-			input_id: "hw:CARD=second",
-			tracks: [2],
-			gain_db: 0,
-			mute: false,
-			delay_ms: 0,
-		},
-	]);
+	await expect(start()).rejects.toMatchObject({
+		failure: { class: "audio_source_unavailable" },
+	});
+	expect(requests.filter(({ method }) => method === "start")).toEqual([]);
 });
 
 test("idle, a level change on a main input outside the saved mix saves the mix Start sends", async () => {

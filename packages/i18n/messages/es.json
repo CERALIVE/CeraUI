@@ -850,7 +850,6 @@
 	"live.audioMixer.unplugged": "Desconectada",
 	"live.audioMixer.otherSource": "Solo se usa con {source}",
 	"live.audioMixer.remove": "Quitar",
-	"live.audioMixer.removeFor": "Quitar {name}",
 	"live.audioMixer.error.audio_mix_unsupported": "Este dispositivo no puede mezclar entradas de audio.",
 	"live.audioMixer.error.audio_input_unknown": "Esta entrada ya no está disponible. Reconéctala o desactívala.",
 	"live.audioMixer.error.audio_input_primary": "La entrada principal siempre se queda en la mezcla. Para desactivarla, elige otra fuente de audio.",

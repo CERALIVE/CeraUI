@@ -845,7 +845,6 @@
 	"live.audioMixer.unplugged": "Unplugged",
 	"live.audioMixer.otherSource": "Used only with {source}",
 	"live.audioMixer.remove": "Remove",
-	"live.audioMixer.removeFor": "Remove {name}",
 	"live.audioMixer.error.audio_mix_unsupported": "This device can't mix audio inputs.",
 	"live.audioMixer.error.audio_input_unknown": "This input isn't available any more. Reconnect it or turn it off.",
 	"live.audioMixer.error.audio_input_primary": "The main input always stays in the mix. To turn it off, choose another audio source.",

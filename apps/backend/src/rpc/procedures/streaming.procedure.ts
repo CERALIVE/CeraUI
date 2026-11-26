@@ -71,6 +71,7 @@ import {
 	isAudioBackendSupported,
 } from "../../modules/streaming/audio-backend.ts";
 import {
+	canPickAudioInput,
 	launchAudioPlan,
 	pickedAudioInputs,
 	storedAudioInputs,
@@ -915,6 +916,12 @@ export const setConfigProcedure = liveWriteProcedure
 			composition: config.composition,
 			video_codec: config.video_codec,
 		};
+		if (
+			input.audio_pick === true &&
+			input.asrc !== undefined &&
+			!canPickAudioInput(audioConfig, input.asrc)
+		)
+			return { success: false, error: "audio_source_unavailable", applied: {} };
 		if (audioInputs != null) {
 			const error = validateAudioInputs(
 				audioInputs,

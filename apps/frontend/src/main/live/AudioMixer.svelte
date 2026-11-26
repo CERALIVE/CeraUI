@@ -499,7 +499,8 @@ const headingId = `${uid}-heading`;
 		{/if}
 
 		<ul aria-labelledby={headingId} class="divide-y border-y">
-			{#each strips as strip, index (strip.id)}
+			{#each [...strips, ...excluded] as strip, index (strip.id)}
+				{const unavailable = $derived('reason' in strip ? strip.reason : undefined)}
 				{const isPrimary = $derived(strip.id === primaryId)}
 				{const enabled = $derived(isEnabled(strip.id))}
 				{const values = $derived(shown(strip.id))}
@@ -508,17 +509,14 @@ const headingId = `${uid}-heading`;
 				{const delay = $derived(pendingDelta(strip.id, 'delay_ms')?.delay_ms ?? values.delay_ms)}
 				{const reading = $derived(levelOf(strip.id))}
 				{const reasonId = `${uid}-reason-${index}`}
-				{const reason = $derived(
-					isPrimary
-						? m['live.audioMixer.primary']()
-						: enabled || isStreaming
-							? undefined
-							: !hasPrimary
-								? m['live.audioMixer.needsPrimary']()
-								: full
-									? errorCopy('audio_inputs_too_many')
-									: undefined,
-				)}
+				{const reason = $derived.by(() => {
+					if (unavailable === 'unplugged') return m['live.audioMixer.unplugged']();
+					if (unavailable === 'other_source') return m['live.audioMixer.otherSource']({ source: strip.label });
+					if (isPrimary) return m['live.audioMixer.primary']();
+					if (enabled || isStreaming) return undefined;
+					if (!hasPrimary) return m['live.audioMixer.needsPrimary']();
+					return full ? errorCopy('audio_inputs_too_many') : undefined;
+				})}
 				{const describedBy = $derived(
 					[reason === undefined ? undefined : reasonId, isStreaming ? nextStartId : undefined]
 						.filter(Boolean)
@@ -534,6 +532,7 @@ const headingId = `${uid}-heading`;
 						<div class="min-w-0 flex-1 space-y-0.5">
 							<p
 								class="truncate text-sm font-medium {enabled ? '' : 'text-muted-foreground'}"
+								id={`${reasonId}-name`}
 								title={strip.label}
 							>
 								{strip.label}
@@ -548,17 +547,32 @@ const headingId = `${uid}-heading`;
 								</p>
 							{/if}
 						</div>
-						<Switch
-							aria-describedby={fieldDescription(strip.id, 'include', describedBy)}
-							aria-label={m['live.audioMixer.enable']({ name: strip.label })}
-							checked={enabled}
-							data-testid={`audio-strip-enable-${strip.id}`}
-							disabled={isPrimary || isStreaming || (!enabled && (!hasPrimary || full))}
-							onCheckedChange={(on) => toggleInput(strip.id, on)}
-						/>
+						{#if unavailable}
+							<Button
+								aria-describedby={fieldDescription(strip.id, 'include', describedBy)}
+								aria-labelledby={`${reasonId}-remove ${reasonId}-name`}
+								class="min-h-(--touch-target-min) min-w-(--touch-target-min)"
+								disabled={pendingDelta(strip.id, 'include') !== undefined}
+								id={`${reasonId}-remove`}
+								onclick={() => void edit(strip.id, 'include', { include: false })}
+								size="sm"
+								variant="outline"
+							>
+								{m['live.audioMixer.remove']()}
+							</Button>
+						{:else}
+							<Switch
+								aria-describedby={fieldDescription(strip.id, 'include', describedBy)}
+								aria-label={m['live.audioMixer.enable']({ name: strip.label })}
+								checked={enabled}
+								data-testid={`audio-strip-enable-${strip.id}`}
+								disabled={isPrimary || isStreaming || (!enabled && (!hasPrimary || full))}
+								onCheckedChange={(on) => toggleInput(strip.id, on)}
+							/>
+						{/if}
 					</div>
 
-					{#if !isStreaming}
+					{#if !unavailable && !isStreaming}
 						{#if isPrimary}
 							<LiveAudioMeter />
 						{:else}
@@ -566,7 +580,7 @@ const headingId = `${uid}-heading`;
 								{m['live.audioMixer.meterWhenLive']()}
 							</p>
 						{/if}
-					{:else if mixLive && enabled}
+					{:else if !unavailable && mixLive && enabled}
 						<AudioLevelMeter
 							peakDb={reading?.peak_db ?? []}
 							rmsDb={reading?.rms_db ?? []}
@@ -574,7 +588,7 @@ const headingId = `${uid}-heading`;
 						/>
 					{/if}
 
-					{#if enabled}
+					{#if !unavailable && enabled}
 						<div class="flex items-center gap-3">
 							<span class="text-muted-foreground w-10 shrink-0 text-xs font-medium">
 								{m['live.audioMixer.gain']()}
@@ -700,38 +714,6 @@ const headingId = `${uid}-heading`;
 								</p>
 							</div>
 						{/each}
-					</div>
-				</li>
-			{/each}
-			{#each excluded as row (row.id)}
-				{const reasonId = $derived(`${uid}-excluded-${encodeURIComponent(row.id)}`)}
-				{const error = $derived(errors.get(fieldKey(row.id, 'include')))}
-				<li class="space-y-2 py-3" data-audio-strip={row.id} data-testid={`audio-strip-${row.id}`}>
-					<div class="flex items-center gap-3">
-						<div class="min-w-0 flex-1 space-y-0.5">
-							<p class="truncate text-sm font-medium" title={row.label}>{row.label}</p>
-							<p class="text-muted-foreground text-xs" id={reasonId}>
-								{row.reason === 'unplugged'
-									? m['live.audioMixer.unplugged']()
-									: m['live.audioMixer.otherSource']({ source: row.label })}
-							</p>
-						</div>
-						<Button
-							aria-describedby={fieldDescription(row.id, 'include', reasonId)}
-							aria-label={m['live.audioMixer.removeFor']({ name: row.label })}
-							class="min-h-(--touch-target-min) min-w-(--touch-target-min)"
-							disabled={pendingDelta(row.id, 'include') !== undefined}
-							onclick={() => void edit(row.id, 'include', { include: false })}
-							size="sm"
-							variant="outline"
-						>
-							{m['live.audioMixer.remove']()}
-						</Button>
-					</div>
-					<div aria-live="assertive" role="alert">
-						{#if error && error.epoch === liveEpoch}
-							<p class="text-status-warning text-xs" id={fieldErrorId(row.id, 'include')}>{errorCopy(error.token)}</p>
-						{/if}
 					</div>
 				</li>
 			{/each}

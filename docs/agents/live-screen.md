@@ -473,7 +473,8 @@ must keep that ABI.
   a device outside the mix joins it, and in a full mix it replaces the main
   input it actually replaces and takes its tracks. Quick successive picks and a
   stale second tab therefore compose. A refused mix retries with `asrc` alone,
-  so the pick is never lost; a pick already in the mix changes only `asrc`.
+  but an unavailable source is refused and never retried. A pick already in
+  the mix changes only `asrc`.
 - The rule itself is `audioMixWithPrimary` in `@ceraui/rpc/schemas`, shared by
   the backend and the strips.
 - Meters: before going live, the main strip carries today's meter (the
