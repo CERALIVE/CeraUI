@@ -7,7 +7,6 @@ import {
 	BITRATE_DEFAULT_MIN,
 	BITRATE_MAX,
 	BITRATE_MIN,
-	type ConfigMessage,
 	type RelayProtocol,
 	SWITCH_AUDIO_ERRORS,
 	SWITCH_INPUT_ERRORS,
@@ -1179,15 +1178,19 @@ function rememberRefusedStart(id: string) {
 
 async function handleStart() {
 	if (showLiveCockpit || startAssessment.decision.state !== 'ready') return;
-	const pick = pendingAudioPick;
+	let pick = pendingAudioPick;
 	if (pick) {
 		const link = getLinkEpoch();
 		const attempt = getStreamingAttemptGeneration();
 		// Wait locally: there is no device Start attempt to reconcile yet.
 		startWaitingForAudioPick = true;
-		const { accepted } = await pick.result;
+		let accepted: boolean;
+		do {
+			({ accepted } = await pick.result);
+			pick = pendingAudioPick;
+		} while (accepted && pick);
 		startWaitingForAudioPick = false;
-		if (!accepted || pendingAudioPick || !viewMounted || getLinkEpoch() !== link ||
+		if (!accepted || !viewMounted || getLinkEpoch() !== link ||
 			getStreamingAttemptGeneration() !== attempt || showLiveCockpit ||
 			startAssessment.decision.state !== 'ready') return;
 	}

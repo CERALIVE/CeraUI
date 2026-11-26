@@ -915,6 +915,45 @@ test.describe("audio mixer — caps-full", () => {
 		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
 	});
 
+	test("queued Start stays pending through a second pick and sends only the settled selection", async ({
+		page,
+		backendRpc,
+	}) => {
+		const first = wire.holdAudioPick(SECOND);
+		await pickDevice(page, /Elgato Wave:3/);
+		const firstReply = await first.held;
+		const start = wire.nextAnswer("streaming.start");
+		const bar = page.getByTestId("live-bar");
+		await startButton(page).click();
+		await expect(bar).toHaveAttribute("data-state", "pending");
+
+		const second = wire.holdAudioPick(THIRD);
+		await pickThird(page);
+		const secondReply = await second.held;
+		expect(firstReply.result).toMatchObject({ success: true, applied: { asrc: SECOND } });
+		expect(secondReply.result).toMatchObject({ success: true, applied: { asrc: THIRD } });
+		expect(await wire.pageHasReply(firstReply.id)).toBe(false);
+		expect(wire.calls("streaming.start")).toEqual([]);
+
+		first.release();
+		expect((await receiveReply(firstReply.id)).result).toEqual(firstReply.result);
+		expect(await wire.pageHasReply(secondReply.id)).toBe(false);
+		expect(wire.calls("streaming.start")).toEqual([]);
+		await expect.soft(bar, "Start must not go back to Ready while the second pick is held").toHaveAttribute(
+			"data-state",
+			"pending",
+		);
+
+		second.release();
+		expect((await receiveReply(secondReply.id)).result).toEqual(secondReply.result);
+		await expect(page.getByTestId("live-cockpit")).toBeVisible({ timeout: 10_000 });
+		expect(await start).toMatchObject({ input: { asrc: THIRD }, result: { success: true } });
+		expect(wire.calls("streaming.start").map(({ input }) => input.asrc)).toEqual([THIRD]);
+
+		await endAndWait(page);
+		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
+	});
+
 	test("Start pressed during a No audio pick waits for its answer, then sends no audio", async ({
 		page,
 		backendRpc,
