@@ -35,7 +35,8 @@ via `bun run build:federation` from the CeraUI root (delegates to the frontend
   `bun scripts/ci/bundle-report.mjs` from the root. The November 2026
   [dependency baseline](../../../../docs/agents/dep-baseline-as-of-2026-11.md#federation-budgets-and-size-analysis)
   records the measured toast-host/audio budgets and displaced ceilings.
-  Publication enforces them with `--federation-only` before signing or upload;
+  Before signing or upload, publication tests the built federation assets and
+  enforces the gzip budgets with `--federation-only`;
   `sources-view-model` is the existing Audio/Encoder shared projection,
   now explicitly baselined. The federation harness also renders every locale
   module against the frozen catalog fixtures (`federation-catalog.test.ts`).
