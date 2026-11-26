@@ -1638,6 +1638,96 @@ test("an engine restart restores the level the engine applied, not the one asked
 	);
 });
 
+test("a live mute answered after Stop and Start does not save into the new session", async () => {
+	const received = Promise.withResolvers<void>();
+	const release = Promise.withResolvers<void>();
+	liveEngine(async (update) => {
+		received.resolve();
+		await release.promise;
+		return update;
+	});
+	await running("Primary", "mix");
+	const before = structuredClone(getConfig().audio_inputs);
+	const writing = editMix("Second", { mute: true });
+	try {
+		await received.promise;
+		expect(
+			await call(streamingStopProcedure, undefined, context()),
+		).toMatchObject({ success: true, result: "stopped" });
+		expect(await start()).toMatchObject({ success: true });
+		expect(launchedAudio().at(-1)).toEqual(PRESSED.Primary.mix);
+	} finally {
+		release.resolve();
+		await writing;
+	}
+	expect(getConfig().audio_inputs).toEqual(before);
+	expect((await disk()).audio_inputs).toEqual(before);
+	expect(await writing).toEqual({
+		success: false,
+		error: "stream_ended_before_audio_saved",
+	});
+});
+
+test.each(["during Stop", "after Stop"] as const)(
+	"a live mute answered %s before the next Start does not write or broadcast settings",
+	async (when) => {
+		const received = Promise.withResolvers<void>();
+		const release = Promise.withResolvers<void>();
+		const stopping = Promise.withResolvers<void>();
+		const finishStop = Promise.withResolvers<void>();
+		liveEngine(async (update) => {
+			received.resolve();
+			await release.promise;
+			return update;
+		});
+		await running("Primary", "mix");
+		spyOn(streamSessionProductionDeps, "stopRuntime").mockImplementation(
+			async () => {
+				stopping.resolve();
+				await finishStop.promise;
+				await engine.backend.confirmStop();
+			},
+		);
+		const before = structuredClone(getConfig().audio_inputs);
+		const bytes = await Bun.file(getConfigFilePath()).text();
+		const sent: string[] = [];
+		const { ws: tab } = makeRpcContext(sent);
+		addClient(tab);
+		const writing = editMix("Second", { mute: true });
+		await received.promise;
+		const stopReply = call(streamingStopProcedure, undefined, context());
+		try {
+			await stopping.promise;
+			if (when === "after Stop") {
+				finishStop.resolve();
+				expect(await stopReply).toMatchObject({
+					success: true,
+					result: "stopped",
+				});
+			}
+			sent.length = 0;
+			release.resolve();
+			const reply = await writing;
+			expect(getConfig().audio_inputs).toEqual(before);
+			expect(await Bun.file(getConfigFilePath()).text()).toBe(bytes);
+			expect(
+				sent
+					.map((frame) => JSON.parse(frame))
+					.filter((frame) => "config" in frame || "config_clear" in frame),
+			).toEqual([]);
+			expect(reply).toEqual({
+				success: false,
+				error: "stream_ended_before_audio_saved",
+			});
+		} finally {
+			removeClient(tab);
+			release.resolve();
+			finishStop.resolve();
+			await Promise.all([writing, stopReply]);
+		}
+	},
+);
+
 test("a live mute the engine refused is not restored", async () => {
 	liveEngine(() => {
 		throw new CerastreamRpcError(-32602, "refused", "cerastream.refused", 1);

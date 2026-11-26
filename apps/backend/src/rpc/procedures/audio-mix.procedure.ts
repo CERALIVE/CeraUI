@@ -22,6 +22,7 @@ import {
 } from "../../modules/streaming/audio-mix-status.ts";
 import { cerastreamBackend } from "../../modules/streaming/cerastream-backend.ts";
 import { noteAudioSaved } from "../../modules/streaming/start-audio.ts";
+import { captureLiveWriteFence } from "../../modules/streaming/stream-session-orchestrator.ts";
 import { broadcastConfig } from "../config-broadcast.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import { uiBuildMiddleware } from "../middleware/ui-build.middleware.ts";
@@ -86,11 +87,15 @@ export const setAudioMixProcedure = os
 		const error = validateAudioInputValues(applied);
 		if (error !== undefined) return { success: false, error };
 		if (live && running) {
+			const ownsWrite = captureLiveWriteFence();
 			const params = { inputs: [{ input_id: running.input_id, ...update }] };
 			try {
 				const result = shouldUseMocks()
 					? setMockAudioMix(params)
 					: await cerastreamBackend.setAudioMix(params);
+				// The engine answered for the old stream, not the current settings.
+				if (!ownsWrite())
+					return { success: false, error: "stream_ended_before_audio_saved" };
 				const state = result.inputs.find(
 					(input) => input.input_id === running.input_id,
 				);

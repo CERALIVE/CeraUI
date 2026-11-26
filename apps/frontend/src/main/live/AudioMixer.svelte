@@ -15,7 +15,8 @@
   Idle, each change sends only that input's delta to `streaming.setAudioMix`: a
   level, mute or delay value, one track on or off, or the input in or out. The
   device composes it on its own saved mix, so an edit never carries a stale copy
-  of the other inputs; its config echo is what the strips then show.
+  of the other inputs. Each control shows its own pending choice, then the
+  applied value or the device's saved config.
   Live on a mix session (`status.audio_mix_active`), level, mute and delay go to
   `streaming.setAudioMix` and the device's applied values win until a config
   broadcast changes that input after the change was sent (another tab's write,
@@ -41,6 +42,7 @@ import {
 } from '@ceraui/rpc/schemas';
 import { Activity, RotateCcw, Volume2, VolumeX } from '@lucide/svelte';
 import { untrack } from 'svelte';
+import { SvelteMap } from 'svelte/reactivity';
 
 import LabeledSlider from '$lib/components/custom/LabeledSlider.svelte';
 import AudioLevelMeter from '$lib/components/preview/AudioLevelMeter.svelte';
@@ -49,6 +51,7 @@ import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import { Switch } from '$lib/components/ui/switch';
 import { rpc } from '$lib/rpc';
+import { getStreamSessionEpoch } from '$lib/rpc/session-epoch.svelte';
 import {
 	getAudioLevel,
 	getIsConnected,
@@ -76,10 +79,15 @@ const uid = $props.id();
 const t = resolveMessageKey;
 
 type Values = Pick<AudioInputSetting, 'gain_db' | 'mute' | 'delay_ms'>;
+const VALUE_FIELDS = ['gain_db', 'mute', 'delay_ms'] as const;
+type ValueField = (typeof VALUE_FIELDS)[number];
+type Field = ValueField | 'include' | number;
+type Delta = Omit<SetAudioMixInput, 'id'>;
 
 const mix = $derived(capabilities?.audio_mix);
 const status = $derived(getStatus());
 const mixLive = $derived(isStreaming && status?.audio_mix_active === true);
+const liveEpoch = $derived(mixLive ? getStreamSessionEpoch() : undefined);
 // Live without a mix, level, mute and delay wait for the next start too.
 const valuesLocked = $derived(isStreaming && !mixLive);
 
@@ -117,16 +125,43 @@ const strips = $derived.by(() => {
 });
 const hasPrimary = $derived(strips.some((strip) => strip.id === primaryId));
 
-// An idle edit not answered yet shows as the choice.
-let pending = $state<AudioInputSetting[] | undefined>(undefined);
-let saveSeq = 0;
+interface Intent {
+	readonly id: string;
+	readonly delta: Delta;
+	readonly generation: number;
+	readonly epoch: number | undefined;
+}
+
+const fieldKey = (id: string, field: Field) => JSON.stringify([id, field]);
+const intents = new SvelteMap<string, Intent>();
+const appliedValues = new SvelteMap<string, { values: Partial<Values>; epoch: number | undefined }>();
+const errors = new SvelteMap<
+	string,
+	{ id: string; field: Field; token: string; epoch: number | undefined }
+>();
+let generation = 0;
+
+function withTrack(entry: AudioInputSetting, number: number, on: boolean): AudioInputSetting {
+	const tracks = entry.tracks.filter((track) => track !== number);
+	if (on) tracks.push(number);
+	return { ...entry, tracks: tracks.sort((a, b) => a - b) };
+}
 
 const inputs = $derived.by(() => {
-	const source = pending !== undefined ? pending : config?.audio_inputs;
-	return (
-		audioMixWithPrimary(source, hasPrimary ? primaryId : undefined, mix?.max_inputs ?? 0) ??
+	let entries =
+		audioMixWithPrimary(config?.audio_inputs, hasPrimary ? primaryId : undefined, mix?.max_inputs ?? 0) ??
 		(hasPrimary && primaryId !== undefined ? [defaults(primaryId)] : [])
-	);
+	if (isStreaming) return entries;
+	// Rebase only outstanding membership and track changes on the newest saved mix.
+	for (const { id, delta } of [...intents.values()].sort((a, b) => a.generation - b.generation)) {
+		if (delta.include === false) entries = entries.filter((entry) => entry.id !== id);
+		if (delta.include === true && !entries.some((entry) => entry.id === id))
+			entries = [...entries, defaults(id)];
+		const track = delta.track;
+		if (track !== undefined)
+			entries = entries.map((entry) => entry.id === id ? withTrack(entry, track.number, track.on) : entry);
+	}
+	return entries;
 });
 
 function isEnabled(id: string): boolean {
@@ -139,49 +174,43 @@ function entryFor(id: string): AudioInputSetting {
 
 const full = $derived(mix !== undefined && inputs.length >= mix.max_inputs);
 
-const valuesKey = ({ gain_db, mute, delay_ms }: Values): string => `${gain_db}|${mute}|${delay_ms}`;
-// An input the saved mix does not list is at its defaults.
-const AT_DEFAULTS = valuesKey(defaults(''));
-
 // The level the device was last sent or answered, per input; asking for that same
 // level again sends nothing. A broadcast that changes the input replaces it with
 // the saved level, which is what the device now holds.
 const gainSent: Record<string, number> = {};
 
-// How many config broadcasts changed each input's saved level, mute or delay,
-// read from the saved mix itself, so an input with no strip (gone or
-// unavailable) still counts. Counted, not compared, so a value changed and
-// changed back still counts.
-let broadcasts = $state<Record<string, number>>({});
-let lastSaved: Record<string, string> = {};
+// Count changes per field: another field's echo cannot supersede this answer.
+const broadcasts = new SvelteMap<string, number>();
+let lastSaved = new Map<string, AudioInputSetting>();
+const defaultValues = defaults('');
 $effect.pre(() => {
-	const saved: Record<string, string> = {};
-	const savedGain: Record<string, number> = {};
-	for (const input of config?.audio_inputs ?? []) {
-		saved[input.id] = valuesKey(input);
-		savedGain[input.id] = input.gain_db;
-	}
+	const saved = new Map(config?.audio_inputs?.map((input) => [input.id, input]));
 	untrack(() => {
-		const changed = Object.keys({ ...lastSaved, ...saved }).filter(
-			(id) => (lastSaved[id] ?? AT_DEFAULTS) !== (saved[id] ?? AT_DEFAULTS),
-		);
-		lastSaved = saved;
-		if (changed.length === 0) return;
-		const next = { ...broadcasts };
-		for (const id of changed) {
-			next[id] = (next[id] ?? 0) + 1;
-			gainSent[id] = savedGain[id] ?? defaults(id).gain_db;
+		for (const id of new Set([...lastSaved.keys(), ...saved.keys()])) {
+			const before = lastSaved.get(id) ?? defaultValues;
+			const after = saved.get(id) ?? defaultValues;
+			for (const field of VALUE_FIELDS) {
+				if (before[field] === after[field]) continue;
+				const key = fieldKey(id, field);
+				broadcasts.set(key, (broadcasts.get(key) ?? 0) + 1);
+				appliedValues.delete(key);
+				if (field === 'gain_db') gainSent[id] = after.gain_db;
+			}
 		}
-		broadcasts = next;
+		lastSaved = saved;
 	});
 });
 
-// The device's answer to this tab's latest live change, per input. It wins until
-// the session ends, unless a broadcast changed that input after the change was
-// sent: then the broadcast is newer (another tab's write, or our own echo).
-let liveApplied = $state<Record<string, { values: Values; sentAt: number }>>({});
-$effect(() => {
-	if (!mixLive) liveApplied = {};
+$effect.pre(() => {
+	const epoch = liveEpoch;
+	untrack(() => {
+		for (const [key, state] of intents)
+			if (state.epoch !== epoch) intents.delete(key);
+		for (const [key, state] of appliedValues)
+			if (state.epoch !== epoch) appliedValues.delete(key);
+		for (const [key, state] of errors)
+			if (state.epoch !== epoch) errors.delete(key);
+	});
 	// A queued live intent ends with its session or this component.
 	return () => {
 		for (const id of Object.keys(gainTimer)) {
@@ -190,28 +219,37 @@ $effect(() => {
 			dragging[id] = false;
 			dropDraft(id);
 		}
+		for (const id of Object.keys(gainSent)) delete gainSent[id];
+		for (const id of Object.keys(gainSentAt)) delete gainSentAt[id];
 	};
 });
 
 function shown(id: string): AudioInputSetting {
-	const entry = entryFor(id);
-	const applied = mixLive ? liveApplied[id] : undefined;
-	return applied === undefined || applied.sentAt !== (broadcasts[id] ?? 0)
-		? entry
-		: { ...entry, ...applied.values };
+	const entry = { ...entryFor(id) };
+	for (const field of VALUE_FIELDS) {
+		const applied = appliedValues.get(fieldKey(id, field));
+		if (applied !== undefined && applied.epoch === liveEpoch) Object.assign(entry, applied.values);
+	}
+	return entry;
 }
 
-let errors = $state<Record<string, string>>({});
-
-function setError(id: string, token: string | undefined): void {
-	errors = { ...errors, [id]: token ?? 'refused' };
+function pendingDelta(id: string, field: ValueField): Delta | undefined {
+	const intent = intents.get(fieldKey(id, field));
+	return intent !== undefined && intent.epoch === liveEpoch ? intent.delta : undefined;
 }
 
-function clearError(id: string): void {
-	if (!(id in errors)) return;
-	const { [id]: _cleared, ...rest } = errors;
-	errors = rest;
+function setError(id: string, field: Field, token: string | undefined): void {
+	errors.set(fieldKey(id, field), { id, field, token: token ?? 'refused', epoch: liveEpoch });
 }
+
+function fieldDescription(id: string, field: Field, fallback?: string): string | undefined {
+	const error = errors.get(fieldKey(id, field));
+	if (error === undefined || error.epoch !== liveEpoch) return fallback;
+	const errorId = fieldErrorId(id, field);
+	return fallback === undefined ? errorId : `${fallback} ${errorId}`;
+}
+
+const fieldErrorId = (id: string, field: Field) => `${uid}-error-${encodeURIComponent(id)}-${field}`;
 
 const ERROR_COPY: Record<string, () => string> = {
 	audio_mix_unsupported: () => m['live.audioMixer.error.audio_mix_unsupported'](),
@@ -259,108 +297,60 @@ function tracksError(next: readonly AudioInputSetting[]): string | undefined {
 	return undefined;
 }
 
-/** The full mix after `change`, including inputs absent from the current roster. */
-function nextInputs(
-	change: (entries: AudioInputSetting[]) => AudioInputSetting[],
-): AudioInputSetting[] {
-	return change(inputs);
-}
-
-// One input's delta; `preview` only shows the change until the device's config
-// echo arrives with the mix it composed.
-async function edit(
-	id: string,
-	delta: Omit<SetAudioMixInput, 'id'>,
-	preview: AudioInputSetting[],
-): Promise<void> {
-	const seq = ++saveSeq;
-	pending = preview;
-	clearError(id);
+async function edit(id: string, field: Field, delta: Delta): Promise<void> {
+	const key = fieldKey(id, field);
+	const seq = ++generation;
+	const epoch = liveEpoch;
+	const sentAt = broadcasts.get(key);
+	const current = () => intents.get(key)?.generation === seq && epoch === liveEpoch;
+	intents.set(key, { id, delta, generation: seq, epoch });
+	if (epoch !== undefined && delta.gain_db !== undefined) gainSent[id] = delta.gain_db;
+	errors.delete(key);
 	try {
 		const result = await rpc.streaming.setAudioMix({ id, ...delta });
-		if (!result.success) setError(id, result.error);
+		if (!current()) return;
+		if (!result.success) {
+			setError(id, field, result.error);
+			if (field === 'gain_db') delete gainSent[id];
+		} else if (
+			field !== 'include' &&
+			typeof field !== 'number' &&
+			result.applied !== undefined &&
+			sentAt === broadcasts.get(key)
+		) {
+			// A broadcast that changed this field, including a clear, wins over its late reply.
+			appliedValues.set(key, { values: { [field]: result.applied[field] }, epoch });
+			if (field === 'gain_db' && epoch !== undefined) gainSent[id] = result.applied.gain_db;
+		}
 	} catch {
-		setError(id, SAVE_FAILED);
+		if (current()) {
+			setError(id, field, SAVE_FAILED);
+			if (field === 'gain_db') delete gainSent[id];
+		}
 	} finally {
-		if (seq === saveSeq) pending = undefined;
+		if (current()) {
+			intents.delete(key);
+			if (field === 'gain_db' && !dragging[id]) dropDraft(id);
+		}
 	}
-}
-
-function saveEntry(id: string, fields: Pick<SetAudioMixInput, 'gain_db' | 'mute' | 'delay_ms'>): void {
-	void edit(
-		id,
-		fields,
-		nextInputs((entries) =>
-			entries.map((entry) => (entry.id === id ? { ...entry, ...fields } : entry)),
-		),
-	);
 }
 
 function toggleInput(id: string, on: boolean): void {
 	if (isStreaming || id === primaryId) return;
 	if (on && (!hasPrimary || full)) return;
-	void edit(
-		id,
-		{ include: on },
-		nextInputs((entries) =>
-			on ? [...entries, defaults(id)] : entries.filter((entry) => entry.id !== id),
-		),
-	);
+	void edit(id, 'include', { include: on });
 }
 
 function toggleTrack(id: string, track: number): void {
 	if (isStreaming) return;
-	const next = nextInputs((entries) =>
-		entries.map((entry) =>
-			entry.id !== id
-				? entry
-				: {
-						...entry,
-						tracks: entry.tracks.includes(track)
-							? entry.tracks.filter((existing) => existing !== track)
-							: [...entry.tracks, track].sort((a, b) => a - b),
-					},
-		),
-	);
+	const on = !entryFor(id).tracks.includes(track);
+	const next = inputs.map((entry) => entry.id === id ? withTrack(entry, track, on) : entry);
 	const refusal = tracksError(next);
 	if (refusal !== undefined) {
-		setError(id, refusal);
+		setError(id, track, refusal);
 		return;
 	}
-	void edit(id, { track: { number: track, on: !entryFor(id).tracks.includes(track) } }, next);
-}
-
-// Live writes: the latest answer per input wins; an older one is dropped.
-const liveSeq: Record<string, number> = {};
-const inflight: Record<string, number> = {};
-
-async function sendLive(id: string, update: Omit<SetAudioMixInput, 'id'>): Promise<void> {
-	const seq = (liveSeq[id] ?? 0) + 1;
-	liveSeq[id] = seq;
-	inflight[id] = (inflight[id] ?? 0) + 1;
-	const sentAt = broadcasts[id] ?? 0;
-	clearError(id);
-	try {
-		const result = await rpc.streaming.setAudioMix({ id, ...update });
-		if (seq !== liveSeq[id]) return;
-		if (!result.success) {
-			setError(id, result.error);
-			delete gainSent[id];
-		} else if (result.applied !== undefined && sentAt === (broadcasts[id] ?? 0)) {
-			// An answer a broadcast overtook is older than what that broadcast set.
-			const { gain_db, mute, delay_ms } = result.applied;
-			liveApplied = { ...liveApplied, [id]: { values: { gain_db, mute, delay_ms }, sentAt } };
-			gainSent[id] = gain_db;
-		}
-	} catch {
-		if (seq === liveSeq[id]) {
-			setError(id, SAVE_FAILED);
-			delete gainSent[id];
-		}
-	} finally {
-		inflight[id] = (inflight[id] ?? 1) - 1;
-		if (seq === liveSeq[id] && !dragging[id]) dropDraft(id);
-	}
+	void edit(id, track, { track: { number: track, on } });
 }
 
 // The level previews while it moves. Live, it is sent at most every
@@ -397,13 +387,16 @@ $effect(() => {
 	});
 });
 
+function latestSentGain(id: string): number | undefined {
+	return pendingDelta(id, 'gain_db')?.gain_db ?? gainSent[id];
+}
+
 function sendGain(id: string): void {
 	const value = gainDraft[id];
 	// A queued level is sent only while its session is still live.
-	if (!mixLive || value === undefined || value === gainSent[id]) return;
+	if (!mixLive || value === undefined || value === latestSentGain(id)) return;
 	gainSentAt[id] = Date.now();
-	gainSent[id] = value;
-	void sendLive(id, { gain_db: value });
+	void edit(id, 'gain_db', { gain_db: value });
 }
 
 function moveGain(id: string, value: number): void {
@@ -416,9 +409,10 @@ function moveGain(id: string, value: number): void {
 		sendGain(id);
 		return;
 	}
+	const epoch = liveEpoch;
 	gainTimer[id] = setTimeout(() => {
 		gainTimer[id] = undefined;
-		sendGain(id);
+		if (epoch === liveEpoch) sendGain(id);
 	}, wait);
 }
 
@@ -429,25 +423,24 @@ function commitGain(id: string, value: number): void {
 	gainTimer[id] = undefined;
 	if (mixLive) {
 		gainDraft = { ...gainDraft, [id]: value };
-		if (value !== gainSent[id]) sendGain(id);
-		else if (!inflight[id]) dropDraft(id);
+		if (value !== latestSentGain(id)) sendGain(id);
+		else if (pendingDelta(id, 'gain_db') === undefined) dropDraft(id);
 		return;
 	}
 	dropDraft(id);
-	if (value !== entryFor(id).gain_db) saveEntry(id, { gain_db: value });
+	if (value !== (pendingDelta(id, 'gain_db')?.gain_db ?? shown(id).gain_db))
+		void edit(id, 'gain_db', { gain_db: value });
 }
 
 function resetGain(id: string): void {
 	if (valuesLocked) return;
-	if (mixLive) void sendLive(id, { gain_db: 0 });
-	else saveEntry(id, { gain_db: 0 });
+	void edit(id, 'gain_db', { gain_db: 0 });
 }
 
 function toggleMute(id: string): void {
 	if (valuesLocked) return;
-	const mute = !shown(id).mute;
-	if (mixLive) void sendLive(id, { mute });
-	else saveEntry(id, { mute });
+	const mute = !(pendingDelta(id, 'mute')?.mute ?? shown(id).mute);
+	void edit(id, 'mute', { mute });
 }
 
 function changeDelay(id: string, field: HTMLInputElement): void {
@@ -456,12 +449,11 @@ function changeDelay(id: string, field: HTMLInputElement): void {
 	const value = Number(raw);
 	const max = mix?.delay_ms_max ?? 0;
 	if (raw === '' || !Number.isInteger(value) || value < 0 || value > max) {
-		setError(id, 'audio_delay_range');
-		field.value = String(shown(id).delay_ms);
+		setError(id, 'delay_ms', 'audio_delay_range');
+		field.value = String(pendingDelta(id, 'delay_ms')?.delay_ms ?? shown(id).delay_ms);
 		return;
 	}
-	if (mixLive) void sendLive(id, { delay_ms: value });
-	else saveEntry(id, { delay_ms: value });
+	void edit(id, 'delay_ms', { delay_ms: value });
 }
 
 function formatDb(value: number): string {
@@ -502,7 +494,9 @@ const headingId = `${uid}-heading`;
 				{const isPrimary = $derived(strip.id === primaryId)}
 				{const enabled = $derived(isEnabled(strip.id))}
 				{const values = $derived(shown(strip.id))}
-				{const gain = $derived(gainDraft[strip.id] ?? values.gain_db)}
+				{const gain = $derived(gainDraft[strip.id] ?? pendingDelta(strip.id, 'gain_db')?.gain_db ?? values.gain_db)}
+				{const muted = $derived(pendingDelta(strip.id, 'mute')?.mute ?? values.mute)}
+				{const delay = $derived(pendingDelta(strip.id, 'delay_ms')?.delay_ms ?? values.delay_ms)}
 				{const reading = $derived(levelOf(strip.id))}
 				{const reasonId = `${uid}-reason-${index}`}
 				{const reason = $derived(
@@ -546,7 +540,7 @@ const headingId = `${uid}-heading`;
 							{/if}
 						</div>
 						<Switch
-							aria-describedby={describedBy}
+							aria-describedby={fieldDescription(strip.id, 'include', describedBy)}
 							aria-label={m['live.audioMixer.enable']({ name: strip.label })}
 							checked={enabled}
 							data-testid={`audio-strip-enable-${strip.id}`}
@@ -578,7 +572,7 @@ const headingId = `${uid}-heading`;
 							</span>
 							<LabeledSlider
 								data-testid={`audio-strip-gain-${strip.id}`}
-								{describedBy}
+								describedBy={fieldDescription(strip.id, 'gain_db', describedBy)}
 								disabled={valuesLocked}
 								label={m['live.audioMixer.gainFor']({ name: strip.label })}
 								max={mix.gain_db_max}
@@ -598,7 +592,7 @@ const headingId = `${uid}-heading`;
 								{formatDb(gain)}
 							</span>
 							<Button
-								aria-describedby={describedBy}
+								aria-describedby={fieldDescription(strip.id, 'gain_db', describedBy)}
 								aria-label={m['live.audioMixer.gainReset']({ name: strip.label })}
 								class="min-w-(--touch-target-min)"
 								data-testid={`audio-strip-gain-reset-${strip.id}`}
@@ -613,10 +607,10 @@ const headingId = `${uid}-heading`;
 
 						<div class="flex flex-wrap items-center gap-x-4 gap-y-2">
 							<Button
-								aria-describedby={describedBy}
+								aria-describedby={fieldDescription(strip.id, 'mute', describedBy)}
 								aria-label={m['live.audioMixer.muteFor']({ name: strip.label })}
-								aria-pressed={values.mute}
-								class={values.mute
+								aria-pressed={muted}
+								class={muted
 									? 'border-status-warning/60 bg-status-warning/15 hover:bg-status-warning/20'
 									: ''}
 								data-testid={`audio-strip-mute-${strip.id}`}
@@ -625,7 +619,7 @@ const headingId = `${uid}-heading`;
 								size="sm"
 								variant="outline"
 							>
-								{#if values.mute}
+								{#if muted}
 									<!-- The tint and the icon carry the warning; the word stays foreground (AA). -->
 									<VolumeX aria-hidden={true} class="text-status-warning" />
 								{:else}
@@ -639,7 +633,7 @@ const headingId = `${uid}-heading`;
 									{m['live.audioMixer.delay']()}
 								</span>
 								<Input
-									aria-describedby={describedBy}
+									aria-describedby={fieldDescription(strip.id, 'delay_ms', describedBy)}
 									aria-label={m['live.audioMixer.delayFor']({ name: strip.label })}
 									class="min-h-(--touch-target-min) w-20 font-mono tabular-nums"
 									data-testid={`audio-strip-delay-${strip.id}`}
@@ -650,7 +644,7 @@ const headingId = `${uid}-heading`;
 									onchange={(event) => changeDelay(strip.id, event.currentTarget)}
 									step={DELAY_STEP_MS}
 									type="number"
-									value={values.delay_ms}
+									value={delay}
 								/>
 								<span class="text-muted-foreground font-mono text-xs" aria-hidden="true">ms</span>
 							</div>
@@ -665,7 +659,7 @@ const headingId = `${uid}-heading`;
 								{#each Array.from({ length: mix.max_tracks }, (_, i) => i + 1) as track (track)}
 									{const on = $derived(values.tracks.includes(track))}
 									<Button
-										aria-describedby={isStreaming ? nextStartId : undefined}
+										aria-describedby={fieldDescription(strip.id, track, isStreaming ? nextStartId : undefined)}
 										aria-label={m['live.audioMixer.track']({ n: track })}
 										aria-pressed={on}
 										class="min-w-(--touch-target-min) font-mono {on
@@ -685,16 +679,18 @@ const headingId = `${uid}-heading`;
 					{/if}
 
 					<!-- Mounted for the strip's whole life, so a refusal is announced the
-					     moment it lands, below the controls it concerns. -->
+					     moment it lands, and described only by the control it concerns. -->
 					<div aria-live="assertive" data-testid={`audio-strip-error-${strip.id}`} role="alert">
-						{#if errors[strip.id] !== undefined}
+						{#each [...errors.values()].filter((error) => error.id === strip.id && error.epoch === liveEpoch) as error (error.field)}
 							<div
 								class="border-status-warning/50 bg-status-warning/10 flex items-start gap-2 rounded-lg border p-2.5"
 							>
 								<Activity aria-hidden={true} class="text-status-warning mt-0.5 size-4 shrink-0" />
-								<p class="text-foreground min-w-0 text-xs">{errorCopy(errors[strip.id] as string)}</p>
+								<p class="text-foreground min-w-0 text-xs" id={fieldErrorId(strip.id, error.field)}>
+									{errorCopy(error.token)}
+								</p>
 							</div>
-						{/if}
+						{/each}
 					</div>
 				</li>
 			{/each}
