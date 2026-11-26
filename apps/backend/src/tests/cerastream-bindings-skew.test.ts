@@ -141,8 +141,8 @@ describe("cerastream bindings version-skew guard", () => {
 		},
 	);
 
-	test("SCHEMA_VERSION matches the status snapshot 0.26.0 contract", () => {
-		expect(SCHEMA_VERSION).toBe("0.26.0");
+	test("SCHEMA_VERSION matches the pinned bindings schema 0.27.0", () => {
+		expect(SCHEMA_VERSION).toBe("0.27.0");
 	});
 
 	test("a rejected start carries the engine's typed capture causes", () => {
