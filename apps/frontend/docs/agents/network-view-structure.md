@@ -17,12 +17,13 @@ uses it for the row badge, status line, hotspot setup, and mode popover; the
 station/hotspot/hybrid identity is therefore stated once beside the radio name,
 while mode selection and capability details remain available on request. A
 station or hybrid radio retains its connection and bond actions; an exclusive
-hotspot radio does not. The device's `getAdapterModes` answer is a pull, re-read
-only when the radio set changes or the mode control confirms, so an AP that the
-pushed interface snapshot shows up outranks a stale `station` answer
-(`wifi-adapter-mode-view.ts`): a hotspot started from its own dialog reads
-Hotspot (or Hybrid beside a station link) at once. That correction is for an idle
-radio only: while a mode change is pending, the selector keeps the prior mode
+hotspot radio does not. The pushed Wi-Fi row's `observed_mode` takes precedence
+over cached `getAdapterModes` mode in either direction. It does not change the
+pull's offered choices or the physical `mode` used for bonding. An explicit
+`null` withholds the mode badge and selector choice until the device can verify
+the mode; an omitted field preserves older-device behavior, where a visible AP
+outranks a cached Station. While a mode change is pending, the selector keeps
+the prior mode
 until the matching terminal arrives. The control records that mode in its
 request (`WifiModeRequest.from`) as it begins, and the device's own pending echo
 keeps it, so it holds even when the device never answered `getAdapterModes`. A
@@ -36,8 +37,8 @@ OR the radio's own row says it would start from a station (`startsApFromStation`
 The row says so when it states `mode: "station"` and carries no `hotspot`; a row
 that states no `mode` (an older device) is not a witness. The check runs wherever a
 start leaves the control: the rung, the inline uplink confirmation, and the one
-automatic retry of a change that was sent without the question. The label itself is
-unchanged. The cost is one extra question on a working hotspot whose row reads
+automatic retry of a change that was sent without the question. The cost is one
+extra question on a working hotspot whose legacy row reads
 Station, for example after a backend restart until the connection is read, or after
 a failed first mode read.
 

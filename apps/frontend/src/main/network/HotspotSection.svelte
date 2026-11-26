@@ -91,7 +91,7 @@ const CATEGORY_PROBE_PERCENT = { excellent: 80, good: 60, fair: 40, weak: 10 } a
 				}))}
 				<NetworkRow data-testid="hotspot-row" data-device={id} dotClass="bg-status-info">
 					{#snippet heading()}{iface.hotspot?.name || iface.ifname}{/snippet}
-					{#snippet identity()}<WifiModeBadge device={id} mode={modeView.displayMode} />{/snippet}
+					{#snippet identity()}<WifiModeBadge device={id} mode={modeView.modeKnown ? modeView.displayMode : undefined} />{/snippet}
 					{#snippet status()}
 						<span class="wrap-anywhere">{m["network.view.active"]()} · {iface.ifname}</span>
 					{/snippet}

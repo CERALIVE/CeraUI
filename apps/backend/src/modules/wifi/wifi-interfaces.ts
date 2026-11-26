@@ -138,6 +138,7 @@ export type BaseWifiInterface = {
 	*/
 	activeConn?: ConnectionUUID | null;
 	activeMode?: WifiActiveMode;
+	virtualModeUnresolved?: boolean;
 	hw: string; // the name of the wifi adapter hardware
 	available: Map<SSID, WifiNetwork>;
 	saved: Record<SSID, ConnectionUUID>;
@@ -1173,6 +1174,10 @@ async function discoverWifiDevices() {
 		}
 		if (signal.aborted) return;
 		if (getWifiInterfaceByMacAddress(registryKey) !== wifiInterface) continue;
+		if ((wifiInterface.virtualModeUnresolved === true) !== unresolvedVirtual) {
+			wifiInterface.virtualModeUnresolved = unresolvedVirtual;
+			statusChange = true;
+		}
 		const stopTargetKnown =
 			(wifiInterface.activeConn === null ||
 				wifiInterface.activeMode === "ap" ||

@@ -850,6 +850,15 @@ details and safe controls and refuses direct guarded RPC requests.
 
 ### Chosen mode and boot restore [EXISTS; host and mock-browser tested]
 
+The pushed Wi-Fi row's `observed_mode` reports the three-way operator display
+separately from the physical `mode`; Hybrid still has physical mode Station.
+An unreadable active profile or plausible unresolved virtual AP leg is not
+proof of Station. Publish `null` if neither an AP binding nor a settled Station
+can be verified. A confirmed disconnect clears the active connection to `null`
+and publishes before rescanning. `getAdapterModes` still supplies the offered
+modes and persisted preference; the pushed observation does not authorize an
+operation or change the credential checks.
+
 Explicit Start and Stop remember the chosen mode through an optional recorder in
 the existing transaction dependencies. RPC and legacy dispatch keep their call
 shapes. The real recorder uses the same `wifi_modes` store functions as explicit

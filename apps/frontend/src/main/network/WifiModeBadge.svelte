@@ -27,7 +27,7 @@ import { wifiModeLabelKey } from './wifi-adapter-mode-view';
 
 interface Props {
 	device: string;
-	mode: WifiAdapterMode;
+	mode: WifiAdapterMode | undefined;
 	class?: string;
 }
 
@@ -48,9 +48,10 @@ const GLYPH: Record<WifiAdapterMode, typeof Wifi> = {
 	hybrid: Waypoints,
 };
 
-const Glyph = $derived(GLYPH[mode]);
+const Glyph = $derived(mode === undefined ? undefined : GLYPH[mode]);
 </script>
 
+{#if mode && Glyph}
 <span
 	class={cn(
 		'inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium',
@@ -64,3 +65,4 @@ const Glyph = $derived(GLYPH[mode]);
 	<Glyph aria-hidden="true" class="size-3 shrink-0" />
 	{resolveMessageKey(wifiModeLabelKey(mode))}
 </span>
+{/if}

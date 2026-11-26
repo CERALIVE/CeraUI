@@ -264,7 +264,7 @@ function request(mode: WifiAdapterMode) {
 <div
 	class="space-y-1.5"
 	data-device={view.device}
-	data-mode={view.displayMode}
+	data-mode={view.modeKnown ? view.displayMode : undefined}
 	data-device-answered={view.deviceAnswered}
 	data-testid="wifi-mode-selector"
 >
@@ -313,7 +313,7 @@ function request(mode: WifiAdapterMode) {
 		{/each}
 	</div>
 
-	{#if !compact}
+	{#if !compact && view.modeKnown}
 		<p class="text-muted-foreground text-xs" data-testid="wifi-mode-hint-{view.device}">
 			{resolveMessageKey(wifiModeDescriptionKey(view.displayMode))}
 		</p>
