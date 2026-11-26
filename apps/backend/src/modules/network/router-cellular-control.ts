@@ -61,8 +61,10 @@ import {
 	HILINK_NET_MODE_PATH,
 	hilinkHeaders,
 	openHilinkSession,
+	routerWriteTransport,
 	XML_HEADER,
 } from "./hilink-session.ts";
+import { netdevLifetimeFence } from "./netdev-lifetime.ts";
 import {
 	parseHilinkCapabilities,
 	type RouterAdminCapabilities,
@@ -143,19 +145,21 @@ export async function applyRouterCellularControl(
 	vidPid: string,
 	control: RouterAdminControlId,
 	value: boolean,
-	deps: RouterAdminProbeDeps = defaultRouterAdminProbeDeps,
+	probe: RouterAdminProbeDeps = defaultRouterAdminProbeDeps,
+	isCurrent: () => boolean = netdevLifetimeFence(ifname),
 ): Promise<RouterAdminWriteResult> {
 	if (dialectForVidPid(vidPid) !== "hilink") {
 		return { status: "refused", reason: "unsupported" };
 	}
-	if (!(await deps.isRealDevice())) {
+	if (!(await probe.isRealDevice())) {
 		return { status: "refused", reason: "unsupported" };
 	}
 
-	const adminUrl = await resolveAdminUrl(ifname, deps);
+	const adminUrl = await resolveAdminUrl(ifname, probe);
 	if (adminUrl === undefined)
 		return { status: "refused", reason: "unreachable" };
 
+	const deps = routerWriteTransport(probe, isCurrent);
 	try {
 		const session = await openHilinkSession(ifname, adminUrl, deps);
 		if (session === undefined) {
@@ -256,19 +260,21 @@ export async function applyRouterNetMode(
 	ifname: string,
 	vidPid: string,
 	modeId: string,
-	deps: RouterAdminProbeDeps = defaultRouterAdminProbeDeps,
+	probe: RouterAdminProbeDeps = defaultRouterAdminProbeDeps,
+	isCurrent: () => boolean = netdevLifetimeFence(ifname),
 ): Promise<RouterNetModeWriteResult> {
 	if (dialectForVidPid(vidPid) !== "hilink") {
 		return { status: "refused", reason: "unsupported" };
 	}
-	if (!(await deps.isRealDevice())) {
+	if (!(await probe.isRealDevice())) {
 		return { status: "refused", reason: "unsupported" };
 	}
 
-	const adminUrl = await resolveAdminUrl(ifname, deps);
+	const adminUrl = await resolveAdminUrl(ifname, probe);
 	if (adminUrl === undefined)
 		return { status: "refused", reason: "unreachable" };
 
+	const deps = routerWriteTransport(probe, isCurrent);
 	try {
 		const session = await openHilinkSession(ifname, adminUrl, deps);
 		if (session === undefined) {

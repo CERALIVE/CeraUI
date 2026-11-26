@@ -714,10 +714,11 @@ test("a journaled preflight with DHCP defaults cannot become checkable on the sa
 	});
 	if ("isCurrent" in prepared.plan) {
 		// Replay needs this witness; it does not certify DHCP defaults.
-		expect(preState.netdev).toMatchObject({
+		const { dev, ino } = fs.statSync(import.meta.dir, { bigint: true });
+		expect(preState.netdev).toEqual({
 			bootId: readSystemBootId(),
 			ifindex: 7,
-			node: expect.any(String),
+			node: `${dev}:${ino}`,
 		});
 	} else {
 		expect(preState).not.toHaveProperty("netdev");

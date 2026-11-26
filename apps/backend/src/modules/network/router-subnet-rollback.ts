@@ -30,12 +30,25 @@
  * the correct posture for a dongle whose address we can no longer derive.
  */
 
-import { registerMutationRollback } from "../modems/mutation-rollback.ts";
+import { readdirSync } from "node:fs";
+import { z } from "zod";
 import {
+	type MutationRollbackHandler,
+	registerMutationRollback,
+} from "../modems/mutation-rollback.ts";
+import { readSystemBootId } from "../streaming/armed-stream-marker.ts";
+import { type NetdevWitness, netdevLifetimeFence } from "./netdev-lifetime.ts";
+import {
+	type LiveSubnetRewritePlan,
 	restoreSubnet,
 	type SubnetRewritePlan,
 } from "./router-subnet-hygiene.ts";
 import type { HilinkDhcpRecord } from "./router-subnet-plan.ts";
+import {
+	journaledRouterSubnetWitness,
+	subnetNetdev,
+} from "./router-subnet-witness.ts";
+import { isSafeIfname } from "./safe-ifname.ts";
 
 const RECORD_FIELDS = [
 	"address",
@@ -79,18 +92,61 @@ export function planFromPreState(
 
 /** The pre-state a rewrite journals. Shaped so replay can rebuild the plan. */
 export function preStateFor(
-	plan: SubnetRewritePlan,
+	plan: SubnetRewritePlan | LiveSubnetRewritePlan,
 ): Readonly<Record<string, unknown>> {
 	return {
 		ifname: plan.ifname,
 		adminUrl: plan.adminUrl,
 		current: { ...plan.current },
 		target: { ...plan.target },
-		...(plan.netdev === undefined ? {} : { netdev: plan.netdev }),
 		...(plan.originalDhcpComplete === false
 			? { originalDhcpComplete: false }
 			: {}),
+		...("isCurrent" in plan && {
+			netdev: {
+				bootId: plan.bootId,
+				ifindex: plan.isCurrent.issued.ifindex ?? null,
+				node: plan.isCurrent.issued.node ?? null,
+			},
+		}),
 	};
+}
+
+async function restoreSameBoot(
+	preState: Readonly<Record<string, unknown>>,
+	witness: NetdevWitness,
+): Promise<"restored" | "failed"> {
+	const plan = planFromPreState(preState);
+	if (plan === undefined || !isSafeIfname(plan.ifname)) return "failed";
+
+	// A rename is not a new lifetime. Search the kernel's current names only
+	// when the journaled locator no longer denotes the issuing netdev.
+	let ifname = plan.ifname;
+	let isCurrent = netdevLifetimeFence(ifname, witness);
+	if (!isCurrent()) {
+		const candidates = readdirSync("/sys/class/net")
+			.filter((name) => name !== ifname && isSafeIfname(name))
+			.map((name) => ({ name, proof: netdevLifetimeFence(name, witness) }))
+			.filter(({ proof }) => proof());
+		const [candidate] = candidates;
+		if (candidates.length !== 1 || candidate === undefined) return "failed";
+		ifname = candidate.name;
+		isCurrent = candidate.proof;
+	}
+	return (await restoreSubnet({ ...plan, ifname }, undefined, isCurrent)) &&
+		isCurrent()
+		? "restored"
+		: "failed";
+}
+
+function rollbackIfAuthoritative(
+	preState: Readonly<Record<string, unknown>>,
+): Promise<"restored" | "failed"> | undefined {
+	const parsed = journaledRouterSubnetWitness.safeParse(preState.netdev);
+	const bootId = z.uuid().safeParse(readSystemBootId());
+	if (!parsed.success || !bootId.success) return Promise.resolve("failed");
+	if (parsed.data.bootId !== bootId.data) return undefined;
+	return restoreSameBoot(preState, subnetNetdev(parsed.data));
 }
 
 export async function restoreRouterSubnet(
@@ -102,4 +158,8 @@ export async function restoreRouterSubnet(
 	return (await restoreSubnet(plan)) ? "restored" : "failed";
 }
 
-registerMutationRollback("router-subnet", { rollback: restoreRouterSubnet });
+export const routerSubnetRollback: MutationRollbackHandler = {
+	rollbackIfAuthoritative,
+	rollback: restoreRouterSubnet,
+};
+registerMutationRollback("router-subnet", routerSubnetRollback);

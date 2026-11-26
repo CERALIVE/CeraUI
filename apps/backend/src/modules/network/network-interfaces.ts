@@ -86,6 +86,7 @@ import {
 	hasNetdevWitness,
 	type NetdevWitness,
 	netdevChanged,
+	netdevContinues,
 	netdevLifetime,
 	netdevMatches,
 	netdevPresence,
@@ -1263,6 +1264,7 @@ function publishIfconfigEntries(
 	let intsChanged = false;
 	let wifiIncarnationChanged = false;
 	const newInterfaces: Record<string, NetworkInterface> = {};
+	const nonRunningMacs = new Map<string, string>();
 
 	wifiDeviceListStartUpdate();
 
@@ -1293,7 +1295,10 @@ function publishIfconfigEntries(
 				}
 			}
 
-			if (!isRunning) continue;
+			if (!isRunning) {
+				if (mac !== undefined) nonRunningMacs.set(name, mac);
+				continue;
+			}
 
 			const txBytesMatch = int.match(/TX packets \d+ {2}bytes \d+/);
 			const txBytes = Number.parseInt(
@@ -1432,13 +1437,20 @@ function publishIfconfigEntries(
 	}
 
 	netif = newInterfaces;
-	for (const name of new Set([...previousIfnames, ...Object.keys(netif)])) {
-		if (!netif[name]) retireNetdev(name);
-		else if (!previousIfnames.has(name)) bumpPresence(name);
+	for (const name of Object.keys(netif)) {
+		if (!previousIfnames.has(name)) bumpPresence(name);
 	}
-	for (const name of flappingNames) {
-		if (!netif[name] && netdevPresence.inSysfs(name) === false)
+	for (const name of new Set([...previousIfnames, ...flappingNames])) {
+		if (netif[name]) continue;
+		// Publication needs carrier; lifetime does not. Check even an already
+		// withdrawn name so a replacement cannot inherit evidence while down.
+		const live = { ...readNetdevWitness(name), mac: nonRunningMacs.get(name) };
+		if (!netdevContinues(netdevWitness(name), live)) {
 			retireNetdev(name);
+		} else if (!flappingNames.has(name)) {
+			flappingNames.add(name);
+			bumpPresence(name);
+		}
 	}
 	netifSnapshotReady = true;
 	notePublishedNetifSnapshot(Object.keys(netif));
