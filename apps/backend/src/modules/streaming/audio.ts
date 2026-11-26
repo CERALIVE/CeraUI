@@ -38,7 +38,6 @@ import {
 	type CardAliases,
 	engineAudioDeviceString,
 	engineAudioDevicesForCard,
-	isAliasOfCard,
 	parseProcAsoundPcm,
 } from "./audio-card-vocabulary.ts";
 import { syncAudioMeterPreference } from "./audio-meter-bridge.ts";
@@ -573,20 +572,14 @@ export function liveAudioIdentityEvidence(): ReadonlyMap<
 		const match = matches[0];
 		const stableId = match?.stable_id;
 		if (
+			match === undefined ||
 			matches.length > 1 ||
-			(match === undefined &&
-				rows.some(
-					({ alsa_card_id }) =>
-						alsa_card_id !== undefined &&
-						isAliasOfCard(card, alsa_card_id, cardAliases),
-				)) ||
-			(match !== undefined &&
-				rows.some(
-					(row) =>
-						row !== match &&
-						((stableId && row.stable_id === stableId) ||
-							row.input_id === match.input_id),
-				))
+			rows.some(
+				(row) =>
+					row !== match &&
+					((stableId && row.stable_id === stableId) ||
+						row.input_id === match.input_id),
+			)
 		) {
 			roster.set(id, { kind: "unavailable" });
 		} else if (stableId && !stableId.startsWith("card:")) {

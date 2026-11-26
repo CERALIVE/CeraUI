@@ -237,7 +237,10 @@ export async function startStream(
 			? liveAudioIdentityEvidence().get(chosen)
 			: undefined;
 	const audioEvidence =
-		autoEvidence !== undefined && chosen !== undefined
+		// Auto's later lookup cannot clear uncertainty frozen for a saved mix leg.
+		autoEvidence !== undefined &&
+		chosen !== undefined &&
+		startAudio.audioEvidence.get(chosen)?.kind !== "unavailable"
 			? new Map(startAudio.audioEvidence).set(chosen, autoEvidence)
 			: startAudio.audioEvidence;
 	const audioOff = config.asrc === NO_AUDIO_ID;

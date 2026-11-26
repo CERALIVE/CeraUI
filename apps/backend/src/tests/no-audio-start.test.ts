@@ -2148,6 +2148,13 @@ async function listPhysicalMics(
 ) {
 	const sound = await physicalMicScan(cards.map(([id]) => id));
 	await audio.updateAudioDevices(sound);
+	await answerPhysicalMics(...cards);
+	await audio.broadcastAudioSources();
+}
+
+async function answerPhysicalMics(
+	...cards: ReadonlyArray<readonly [id: string, stableId: string]>
+) {
 	await refreshEngineDeviceCache({
 		fetchEngineDevices: async () => ({
 			devices: cards.map(([id, stable_id]) => ({
@@ -2160,7 +2167,6 @@ async function listPhysicalMics(
 			})),
 		}),
 	});
-	await audio.broadcastAudioSources();
 }
 
 async function awaitLaunchBoundary(finishing: Promise<unknown>) {
@@ -2350,6 +2356,77 @@ test.each([
 				"audio_source_unavailable",
 			]);
 			expect(await disk()).toMatchObject({ asrc: "Third" });
+		} finally {
+			await listPhysicalMics();
+			audio.resetRememberedAudioIdentities();
+			setEngineAudioChangeHandler(undefined);
+		}
+	},
+);
+
+test.each([
+	["picker", "micOld", "micOld"],
+	["Auto", "hdmirx", "Auto"],
+	["used mix input", "micOld", "Pipeline default"],
+	["mix input also chosen by Auto", "hdmirx", "Auto"],
+] as const)(
+	"a fresh Start refuses a scanned %s choice missing from an answered roster",
+	async (choice, card, asrc) => {
+		setEngineAudioChangeHandler(() => {});
+		try {
+			await listPhysicalMics([card, ORIGINAL_MIC], ["micOther", UNRELATED_MIC]);
+			await answerPhysicalMics(["micOther", UNRELATED_MIC]);
+			getConfig().asrc = asrc;
+			getConfig().audio_inputs =
+				choice === "used mix input" ||
+				choice === "mix input also chosen by Auto"
+					? [entry(card, [1])]
+					: undefined;
+			getConfig().audio_backend = "alsa";
+			saveConfig();
+			const saved = await Bun.file(getConfigFilePath()).text();
+			spyOn(audio, "asrcProbe").mockRestore();
+
+			if (asrc === "Auto") {
+				const resolution = autoAudio.resolveAutoAsrc({
+					source: HDMI,
+					audioDevices: audio.getAudioDevices(),
+					engineAudio: [],
+					networkEmbeddedAudio: undefined,
+					captureCapableCardIds: audio.getAudioCaptureCardIds(),
+				});
+				expect(resolution).toEqual({
+					asrcKey: card,
+					cardId: card,
+					reason: "hdmi",
+				});
+				spyOn(autoAudio, "resolveAutoAsrcFromLiveState").mockReturnValue(
+					resolution,
+				);
+			}
+			if (choice === "Auto") holdStreamSubscription();
+			else GATES["update admission"]?.();
+			const starting = start({ asrc });
+			try {
+				if (choice === "Auto") {
+					// Auto admits a concrete input at launch; its real probe may
+					// refuse before the adapter reaches the subscription boundary.
+					await Promise.race([reached.promise, starting]);
+				} else {
+					await awaitLaunchBoundary(starting);
+				}
+				expect(engine.startRequests).toEqual([]);
+				await listPhysicalMics(["micNew", ORIGINAL_MIC], [card, UNRELATED_MIC]);
+			} finally {
+				gate.resolve();
+			}
+			const result = await starting;
+			expect(launchedAudio()).toEqual([]);
+			expect(result).toMatchObject({
+				success: false,
+				failure: { class: "audio_source_unavailable" },
+			});
+			expect(await Bun.file(getConfigFilePath()).text()).toEqual(saved);
 		} finally {
 			await listPhysicalMics();
 			audio.resetRememberedAudioIdentities();

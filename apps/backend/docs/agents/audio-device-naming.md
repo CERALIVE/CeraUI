@@ -3,10 +3,14 @@
 ## AUDIO-DEVICE NAMING [EXISTS]
 
 Stream launch and restoration do not treat the display cache as device proof.
-An ALSA scan invalidates the previous engine observation, including a row
-whose address still exists. Launch only follows a physical token that was
-unique when captured and is unique in an engine roster observed after the
-current scan. Duplicate or stale evidence is not a legacy address fallback.
+A new ALSA scan invalidates the previous roster for launch, including rows
+whose addresses still exist. Launch checks that a physical token was unique
+when captured and is unique in a roster requested after the current scan.
+This fence orders RPCs, not producer observations: a successful reply can
+still contain a stale producer snapshot. If an answered roster omits a scanned
+input, a fresh Start records it as unavailable, not as a legacy address-only
+selection. Auto resolving to that same key later cannot clear a mix input's
+unavailable state recorded at admission.
 A model or port token can open an unchanged address on a fresh Start, but the
 armed marker records that it cannot identify that input after engine loss.
 Older markers remain readable without inferring a physical identity from
