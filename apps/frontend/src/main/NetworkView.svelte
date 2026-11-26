@@ -2,9 +2,11 @@
 import { m } from '@ceraui/i18n/svelte';
 import type { Modem, NetifEntry, NetifMessage, WifiInterface, WifiStatus } from '@ceraui/rpc/schemas';
 import { Network as NetworkIcon } from '@lucide/svelte';
+import { untrack } from 'svelte';
 import { LazyDialog, lazyDialog } from '$lib/components/dialogs';
 import { Skeleton } from '$lib/components/ui/skeleton';
 import { hotspotIsActive } from '$lib/rpc/os-toggle-predicates';
+import { getRestoredSessions } from '$lib/rpc/session-epoch.svelte';
 import {
 	getBluetooth,
 	getCapabilities,
@@ -31,6 +33,7 @@ import CollisionBands from './network/CollisionBands.svelte';
 import { activeSimLock, isBlockingSimLock } from './network/cellular-row';
 import EthernetSection from './network/EthernetSection.svelte';
 import HotspotSection from './network/HotspotSection.svelte';
+import { MutationRecovery } from './network/mutation-recovery.svelte';
 import SharingSection from './network/SharingSection.svelte';
 import { isWiredSectionEntry, modemClaimedIfnames } from './network/section-assignment';
 import UnclaimedAdaptersBand from './network/UnclaimedAdaptersBand.svelte';
@@ -148,6 +151,20 @@ let simUnlockOpen = $state(false);
 let unlockModemId = $state<string | null>(null);
 const unlockModem = $derived(modemEntries.find(([id]) => id === unlockModemId)?.[1]);
 
+// The device never pushes its unconfirmed modem changes, so the list is re-read
+// whenever something it reports, or an operator's dialog here, may have moved one.
+const recovery = new MutationRecovery();
+const modemPorts = $derived(
+	modemEntries.map(([id, modem]) => modem.stable_key ?? id).sort().join('\n'),
+);
+const isStreaming = $derived(getStatus()?.is_streaming === true);
+const modemDialogShown = $derived(modemDialogOpen || dongleDialogOpen || simUnlockOpen);
+$effect(() => {
+	void [getRestoredSessions(), cellularInitializing, modemPorts, isStreaming, modemDialogShown];
+	if (recovery.replaying) void netif;
+	if (isConnected) untrack(() => void recovery.refresh());
+});
+
 function openSimUnlock(id: string) {
 	unlockModemId = id;
 	simUnlockOpen = true;
@@ -197,6 +214,12 @@ function openModemConfig(id: string) {
 	modemDialogOpen = true;
 }
 </script>
+
+<svelte:document
+	onvisibilitychange={() => {
+		if (document.visibilityState === 'visible' && isConnected) void recovery.refresh();
+	}}
+/>
 
 <!--
 	`space-y-3`, not `space-y-5`. Every child below is a FRAMED card that already
@@ -252,6 +275,8 @@ function openModemConfig(id: string) {
 			{isFullyStale}
 			{staleInterfaces}
 			{cellularInitializing}
+			{recovery}
+			{isConnected}
 			onConfigure={openModemConfig}
 		/>
 		<EthernetSection

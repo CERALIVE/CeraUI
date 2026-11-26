@@ -62,9 +62,10 @@ here that can cost the path to the device receiving it, so:
   shape a call site can construct, because `setRouterSubnetInputSchema` is
   `.strict()` with a `z.literal(true)` there — the write's TOCTOU boundary rather
   than a formality.
-- **`blocked` maps onto the outcome band's `unknown` kind.** The device answered
-  at NEITHER address, so nothing about the write can be asserted in either
-  direction: `refused` would claim the old settings are intact and `applied`
+- **`blocked` maps onto the outcome band's `unknown` kind.** The device's `detail`
+  is free text and is not shown. The write could not be confirmed (no answer at either
+  address, or no proof it was the same dongle), so nothing about it can be asserted
+  in either direction: `refused` would claim the old settings are intact and `applied`
   would claim the new ones are.
 - **The seven shared mutation-safety refusals share ONE sentence here**, a
   recorded narrowing rather than an oversight — the pre-existing router write

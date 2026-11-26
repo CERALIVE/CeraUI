@@ -8,6 +8,7 @@ import { ConnectionResetError } from "../lib/rpc/client";
 import { NotSentError } from "../lib/rpc/rpc-error";
 import { runStartWatchdog } from "../lib/rpc/streaming-start-watchdog";
 
+import { takeMutationBlockReveal } from "../lib/stores/mutation-block-reveal";
 import { en } from "./helpers/catalog";
 
 const state = vi.hoisted(() => ({
@@ -474,7 +475,7 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 		render(LiveView);
 		await tick();
 		expect(toastError).toHaveBeenCalledWith(
-			startFailure.mutationBlockedNetwork,
+			startFailure.class.mutation_blocked,
 			nextStep(startFailure.action.openNetwork),
 		);
 		const [message] = toastError.mock.calls[0] ?? [];
@@ -728,6 +729,81 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 		await waitFor(() => expect(navigate).toHaveBeenCalledWith("network"));
 	});
 
+	it("Open Network asks Network to show the modem change, once and only for it", async () => {
+		takeMutationBlockReveal();
+		state.failure = {
+			class: "mutation_blocked",
+			phase: "params",
+			retriable: false,
+			attemptId: "att_reveal",
+		};
+		render(LiveView);
+		await tick();
+		expect(takeMutationBlockReveal()).toBe(false);
+		action()?.action.onClick();
+		expect(takeMutationBlockReveal()).toBe(true);
+		expect(takeMutationBlockReveal()).toBe(false);
+	});
+
+	it("a device still recovering is not told that trying again cannot help", async () => {
+		state.failure = {
+			class: "recovery_pending",
+			phase: "params",
+			retriable: false,
+			attemptId: "att_recovering",
+		};
+		render(LiveView);
+		await tick();
+		expect(toastError).toHaveBeenCalledWith(
+			startFailure.class.recovery_pending,
+			VIEW_LOGS,
+		);
+	});
+
+	it("does not send the operator to Network before the cellular service is up", async () => {
+		const ready = state.status;
+		state.status = { ...ready, cellular_initializing: true };
+		state.failure = {
+			class: "mutation_blocked",
+			phase: "params",
+			retriable: false,
+			attemptId: "att_not_ready",
+		};
+		try {
+			render(LiveView);
+			await tick();
+			expect(toastError).toHaveBeenCalledTimes(1);
+			expect(toastError).toHaveBeenCalledWith(
+				startFailure.class.recovery_pending,
+				VIEW_LOGS,
+			);
+		} finally {
+			state.status = ready;
+		}
+	});
+
+	it("keeps the words of a refusal that is not about a modem change before the cellular service is up", async () => {
+		const ready = state.status;
+		state.status = { ...ready, cellular_initializing: true };
+		state.failure = {
+			class: "start_invalid",
+			phase: "params",
+			retriable: false,
+			attemptId: "att_not_ready_setup",
+		};
+		try {
+			render(LiveView);
+			await tick();
+			expect(toastError).toHaveBeenCalledTimes(1);
+			expect(toastError).toHaveBeenCalledWith(
+				`${startFailure.class.start_invalid} ${startFailure.next.openSetup}`,
+				nextStep(startFailure.action.openSetup),
+			);
+		} finally {
+			state.status = ready;
+		}
+	});
+
 	it("Open stream setup brings the setup card into view and focuses it", async () => {
 		state.failure = {
 			class: "start_invalid",
@@ -764,7 +840,7 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 				f.next.tryAgain,
 				f.next.restartBox,
 				f.next.openSetup,
-				f.mutationBlockedNetwork,
+				f.class.mutation_blocked,
 				f.action.tryAgain,
 				f.action.restartBox,
 				f.action.openSetup,
@@ -778,7 +854,7 @@ describe("LiveView start refusals end in a next step (phone UX)", () => {
 			f.next.tryAgain,
 			f.next.restartBox,
 			f.next.openSetup,
-			f.mutationBlockedNetwork,
+			f.class.mutation_blocked,
 			f.action.tryAgain,
 			f.action.restartBox,
 			f.action.openSetup,

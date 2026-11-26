@@ -1366,10 +1366,11 @@ export type ModemSimPresenceEvidence = z.infer<typeof modemSimPresenceEvidenceSc
 //   3. no ID_PATH at all                             → `undefined`; the optional
 //      `stable_key` field is then OMITTED rather than faked
 //
-// The key is OPAQUE BY CONTRACT, not by encoding: equality is the only sanctioned
-// operation. It is emitted verbatim (no prefix, no hash) precisely so that three
-// independent adapters cannot disagree about a formatting step; a bus-topology
-// path carries no secret (it is not a serial, IMEI, ICCID or EID).
+// For modem matching, treat the key as opaque and compare the complete value
+// for exact equality. `portLabelFromIdPath` may read its topology for display;
+// neither the label nor its components are matching keys. The key is emitted
+// verbatim (no prefix, no hash) so adapters cannot disagree about formatting.
+// A bus-topology path is not a serial, IMEI, ICCID or EID.
 //
 // ── ONE PORT, TWO ENCODINGS — the normalization below, and why it is here ────
 // "Every adapter runs one rule" was true of the REDUCTION and false of the INPUT.
@@ -1382,10 +1383,10 @@ export type ModemSimPresenceEvidence = z.infer<typeof modemSimPresenceEvidenceSc
 //   udev-sourced rows  platform-xhci-hcd.0.auto-usb-0:1.4.1
 //   ModemManager row   /sys/devices/platform/fc400000.usb/xhci-hcd.0.auto/usb1/1-1/1-1.4/1-1.4.1
 //
-// `stable_key` equality is the ONLY sanctioned operation, so two encodings of one
-// port means no consumer can correlate them: the authoritative row could never
-// retire the optimistic udev row, and the wire carried two rows for one stick on
-// 10 of 10 power cycles. `sysfsDevpathToIdPath` closes that at the DERIVATION —
+// Exact `stable_key` equality means consumers could not correlate two encodings
+// of one port. The authoritative row could never retire the optimistic udev
+// row, and the wire carried two rows for one stick on 10 of 10 power cycles.
+// `sysfsDevpathToIdPath` closes that at the DERIVATION —
 // it is not a fuzzy compare-time match, it is udev's own `path_id` USB rule
 // (systemd `src/udev/udev-builtin-path_id.c`) applied to the sysfs path so both
 // encodings MINT the same canonical key. A path it cannot confidently convert is
@@ -1513,6 +1514,22 @@ export function deriveModemStableKey(idPath: string | undefined | null): string 
 	if (fields.length < 2 || !busnum || !portChain) return path;
 
 	return `${prefix}${busnum}:${portChain}`;
+}
+
+/** Display-only USB topology hint, shared by inventory, telemetry and recovery. */
+export function portLabelFromIdPath(
+	idPath: string | undefined,
+	format: 'port' | 'port-and-controller' = 'port',
+): string | undefined {
+	const path = idPath?.trim();
+	if (!path) return undefined;
+	const markerAt = path.lastIndexOf(USB_MARKER);
+	if (markerAt < 0) return undefined;
+
+	const port = /^(\d+):(\d+(?:\.\d+)*)(?::|$)/.exec(path.slice(markerAt + USB_MARKER.length));
+	if (!port) return undefined;
+	const label = `USB ${port[1]}-${port[2]}`;
+	return format === 'port-and-controller' ? `${label} (${path.slice(0, markerAt)})` : label;
 }
 
 /** Recovery-only view of a udev USB port. Never mint a persisted key here. */
