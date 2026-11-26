@@ -324,6 +324,20 @@ test('every publisher waits for validated notes before uploading or dispatching'
 	}
 });
 
+test('release tests built federation assets before signing', () => {
+	const federation = workflow.jobs['publish-federation'].steps;
+	const build = federation.findIndex((step) => step.run === 'bun run build:federation');
+	const assets = federation.findIndex(
+		(step) => step.run === 'bun test ./scripts/federation-assets.test.mjs',
+	);
+	const sign = federation.findIndex((step) => step.run === 'bun run sign:federation');
+	expect(build).toBeGreaterThanOrEqual(0);
+	expect(assets).toBeGreaterThan(build);
+	expect(sign).toBeGreaterThan(assets);
+	expect(federation[assets].if).toBeUndefined();
+	expect(federation[assets]['continue-on-error']).toBeUndefined();
+});
+
 const releaseTestSteps = workflow.jobs['release-package-contracts'].steps;
 const backendUnitIndex = releaseTestSteps.findIndex((step) =>
 	step.run?.split('\n').includes('bun run --filter backend test'),

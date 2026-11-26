@@ -35,14 +35,19 @@ via `bun run build:federation` from the CeraUI root (delegates to the frontend
   `bun scripts/ci/bundle-report.mjs` from the root. The November 2026
   [dependency baseline](../../../../docs/agents/dep-baseline-as-of-2026-11.md#federation-budgets-and-size-analysis)
   records the measured toast-host/audio budgets and displaced ceilings.
-  Publication enforces them with `--federation-only` before signing or upload;
+  Before signing or upload, publication tests the built federation assets and
+  enforces the gzip budgets with `--federation-only`;
   `sources-view-model` is the existing Audio/Encoder shared projection,
   now explicitly baselined. The federation harness also renders every locale
   module against the frozen catalog fixtures (`federation-catalog.test.ts`).
 - **Isolation**: this build NEVER touches the SPA `dist/public` output, runs no
   PWA/service-worker plugin, and emits no `index.html`. The SPA and federation
   Vite configs share the added exact `tailwind-variants` alias; their output
-  directories and PWA behavior remain separate.
+  directories and PWA behavior remain separate. The federation Vite config
+  excludes device-only layout, Live, Settings and System Logs directories from
+  Tailwind's scan of `federation.css`. Hosted dialogs and their shared
+  dependencies remain scanned. The same exclusion list rejects imports from
+  those directories so a new component cannot silently lose its utility styles.
 - **CI ordering caveat**: the backend `build` script does `rm -rf ../../dist/`, so
   `build:federation` MUST run AFTER `bun run build` (the full SPA/backend build) — never before,
   or its output is wiped.

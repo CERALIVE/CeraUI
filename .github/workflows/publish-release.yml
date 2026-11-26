@@ -605,6 +605,10 @@ jobs:
         working-directory: CeraUI
         run: bun run build:federation
 
+      - name: Test built federation assets
+        working-directory: CeraUI
+        run: bun test ./scripts/federation-assets.test.mjs
+
       - name: Enforce federation gzip budgets
         working-directory: CeraUI
         run: bun scripts/ci/bundle-report.mjs --federation-only
