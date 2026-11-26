@@ -693,8 +693,8 @@ let encoderConfig = $state<EncoderConfig>({
 // Audio dialog: working override layered over the saved config until the next
 // stream (re)start folds it into the full config sent to rpc.streaming.start.
 let audioOverride = $state<AudioConfigValues | null>(null);
-type SettledAudioPick = { readonly accepted: boolean; readonly override: AudioConfigValues | null };
-let pendingAudioPick: { readonly draft: AudioConfigValues; readonly result: Promise<SettledAudioPick> } | undefined;
+let pendingAudioPick: { readonly draft: AudioConfigValues; readonly result: Promise<AudioConfigValues | null> } | undefined;
+let audioPickRefusalCount = 0;
 let startWaitingForAudioPick = $state(false);
 
 // Drives the AudioDialog gate: the drafted encoder source wins, the saved
@@ -883,11 +883,14 @@ function handleSelectAudioSource(selection: string) {
 	const picked = audioOverride;
 	// Send picks immediately, but settle rollback in pick order: an earlier
 	// refused draft must not become the next pick's rollback value.
-	const result = Promise.all([earlier?.result, saveAudioPick(asrc)]).then(([prior, accepted]) => {
-		const rollback = prior && earlier?.draft === previous ? prior.override : previous;
-		if (!accepted && audioOverride === picked) audioOverride = rollback;
+	const result = Promise.all([earlier?.result ?? previous, saveAudioPick(asrc)]).then(([prior, accepted]) => {
+		const rollback = earlier?.draft === previous ? prior : previous;
+		if (!accepted) {
+			audioPickRefusalCount += 1;
+			if (audioOverride === picked) audioOverride = rollback;
+		}
 		if (pendingAudioPick?.draft === picked) pendingAudioPick = undefined;
-		return { accepted, override: accepted ? picked : rollback };
+		return accepted ? picked : rollback;
 	});
 	pendingAudioPick = { draft: picked, result };
 }
@@ -1182,15 +1185,16 @@ async function handleStart() {
 	if (pick) {
 		const link = getLinkEpoch();
 		const attempt = getStreamingAttemptGeneration();
+		// A newer pending pick can hide an intermediate settlement, but not its refusal.
+		const refusalsAtStart = audioPickRefusalCount;
 		// Wait locally: there is no device Start attempt to reconcile yet.
 		startWaitingForAudioPick = true;
-		let accepted: boolean;
 		do {
-			({ accepted } = await pick.result);
+			await pick.result;
 			pick = pendingAudioPick;
-		} while (accepted && pick);
+		} while (pick && audioPickRefusalCount === refusalsAtStart);
 		startWaitingForAudioPick = false;
-		if (!accepted || !viewMounted || getLinkEpoch() !== link ||
+		if (audioPickRefusalCount !== refusalsAtStart || !viewMounted || getLinkEpoch() !== link ||
 			getStreamingAttemptGeneration() !== attempt || showLiveCockpit ||
 			startAssessment.decision.state !== 'ready') return;
 	}

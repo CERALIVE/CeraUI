@@ -493,6 +493,54 @@ test.describe("audio mixer — caps-full", () => {
 				audio_inputs: [{ ...saved[0], mute: true }, saved[1]],
 			});
 		});
+
+		test(`queued Start honors an intermediate ${refusal} even when the third pick saves`, async ({
+			page,
+			backendRpc,
+		}) => {
+			const main = mixEntry(MAIN, [1], -3);
+			await backendRpc.call(["streaming", "setConfig"], { audio_inputs: [main] });
+
+			const first = wire.holdAudioPick(SECOND);
+			await pickDevice(page, /Elgato Wave:3/);
+			const firstReply = await first.held;
+			expect(firstReply.result).toMatchObject({ success: true });
+			await startButton(page).click();
+			await expect(page.getByTestId("live-bar")).toHaveAttribute("data-state", "pending");
+
+			wire.refuseAudioInputs(refusal);
+			const middle = wire.holdAudioPick(THIRD);
+			await pickThird(page);
+			const middleReply = await middle.held;
+			wire.refuseAudioInputs(null);
+
+			const last = wire.holdAudioPick(MAIN);
+			await pickDevice(page, /RØDE AI-Micro/);
+			const lastReply = await last.held;
+			expect(lastReply.result).toMatchObject({ success: true, applied: { asrc: MAIN } });
+			expect(await wire.pageHasReply(firstReply.id)).toBe(false);
+
+			middle.release();
+			await receiveReply(middleReply.id);
+			await expect(page.getByText(message, { exact: true })).toBeVisible();
+			last.release();
+			await receiveReply(lastReply.id);
+			first.release();
+			await receiveReply(firstReply.id);
+
+			await expect.soft(startButton(page)).toBeEnabled();
+			expect(wire.calls("streaming.start").map(({ input }) => input.asrc)).toEqual([]);
+			expect(wire.calls("streaming.setConfig").map(({ input }) => input)).toEqual([
+				{ asrc: SECOND, audio_pick: true },
+				{ asrc: THIRD, audio_pick: true },
+				{ asrc: MAIN, audio_pick: true },
+			]);
+			expect(await savedConfig(backendRpc)).toMatchObject({
+				asrc: MAIN,
+				audio_inputs: [mixEntry(SECOND), main],
+			});
+			await expect(page.getByTestId("audio-source-select")).toContainText(MAIN);
+		});
 	}
 
 	async function pickDevice(page: Page, name: RegExp): Promise<void> {
