@@ -101,6 +101,9 @@ function makeFakeClient(): FakeClient {
 			guard("set-bitrate", { applied: { max_bitrate: params.max_bitrate } }),
 		requestKeyframe: unused,
 		setAudioMix: unused,
+		getAudioMix: unused,
+		setMeterTargets: unused,
+		switchAudio: unused,
 		setEdidProfile: unused,
 		listSwitchTargets: unused,
 		switchInput: async (params) =>
