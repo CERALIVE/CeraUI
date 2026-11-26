@@ -55,6 +55,10 @@ export type CapturedState = Readonly<Record<string, unknown>>;
 export type RollbackResult = "restored" | "failed" | "unavailable" | "absent";
 
 export interface MutationRollbackHandler {
+	/** A kind-specific durable witness can supersede generic USB capture. */
+	rollbackIfAuthoritative?(
+		preState: CapturedState,
+	): Promise<"restored" | "failed"> | undefined;
 	rollback(
 		stableKey: string,
 		preState: CapturedState,
@@ -75,11 +79,16 @@ export function clearMutationRollbacks(): void {
 }
 
 export interface MutationCaptureDeps {
-	enumerate(): Promise<readonly UsbDeviceSnapshot[]>;
+	enumerate(
+		readUdevDatabase?: () => Promise<string>,
+	): Promise<readonly UsbDeviceSnapshot[]>;
 }
 
 export const defaultMutationCaptureDeps: MutationCaptureDeps = {
-	enumerate: () => createUsbEnumerator().enumerate(),
+	enumerate: (readUdevDatabase) =>
+		createUsbEnumerator(
+			readUdevDatabase ? { readUdevDatabase } : {},
+		).enumerate(),
 };
 
 let activeDeps: MutationCaptureDeps = defaultMutationCaptureDeps;
@@ -94,13 +103,16 @@ export function resetMutationCaptureDeps(): void {
 	activeDeps = defaultMutationCaptureDeps;
 }
 
-function snapshotOf(device: UsbDeviceSnapshot): CapturedState {
+export function enumerateMutationUsb(readUdevDatabase: () => Promise<string>) {
+	return activeDeps.enumerate(readUdevDatabase);
+}
+
+export function captureUsbDescriptor(device: UsbDeviceSnapshot) {
 	return {
 		vidPid: `${device.vendorId.toLowerCase()}:${device.productId.toLowerCase()}`,
 		model: device.model ?? "",
 		firmwareRevision: device.firmwareRevision ?? "",
 		mode: detectUsbMode(device) ?? "unknown",
-		ifname: device.ifname ?? "",
 	};
 }
 
@@ -113,7 +125,9 @@ export async function captureModemState(
 	const device = devices.find(
 		(candidate) => deriveModemStableKey(candidate.physicalUid) === stableKey,
 	);
-	return device === undefined ? undefined : snapshotOf(device);
+	return device === undefined
+		? undefined
+		: { ...captureUsbDescriptor(device), ifname: device.ifname ?? "" };
 }
 
 /**
@@ -149,6 +163,15 @@ export async function rollbackMutation(
 	preState: CapturedState,
 ): Promise<RollbackResult> {
 	const revision = mutationJournalRevision();
+	const authoritativeRollback = handlers.get(kind)?.rollbackIfAuthoritative;
+	if (authoritativeRollback) {
+		try {
+			const authoritative = authoritativeRollback(preState);
+			if (authoritative !== undefined) return await authoritative;
+		} catch {
+			return "failed";
+		}
+	}
 	const current = await captureModemState(stableKey);
 	assertMutationJournalRevision(revision);
 	if (current === undefined) return "absent";

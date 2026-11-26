@@ -229,7 +229,9 @@ production route, contract or procedure changes:
 E2E uses the page-socket interceptor the audio mixer spec already relied on for
 refusals, now `apps/frontend/tests/e2e/helpers/mixer-wire.ts`: `holdAudioMix()`
 lets the call reach the device and holds its answer (await `held`, then
-`release()`), and `refuseAudioMixWithEngineToken(token)` answers as the backend
+`release()`), `holdAudioPick(asrc)` does the same for the save of that audio
+pick, `nextAnswer(path)` resolves with the device's answer to the next call to a
+path without holding it, and `refuseAudioMixWithEngineToken(token)` answers as the backend
 does when the engine refuses with one of `ENGINE_AUDIO_TOKENS`
 (`mocks/engine-audio-tokens.ts`). `pageHasReply(id)` and `pageReply(id)` read,
 by RPC id, the answers the page's own socket received, so a test proves a held

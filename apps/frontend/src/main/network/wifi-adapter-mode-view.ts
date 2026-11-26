@@ -197,6 +197,23 @@ export function deriveWifiModeConsequence(
 	return undefined;
 }
 
+/**
+ * Whether moving to `mode` would start an access point from a client radio.
+ *
+ * Either witness is enough, because each can be behind the radio: the mode on
+ * screen comes from a pulled answer and can outlive the AP it names, and the row
+ * can lag an AP that is up. Asking once more costs a tap; not asking starts an AP
+ * whose name and password nobody has seen.
+ */
+export function startsApFromStation(
+	view: WifiAdapterModeView,
+	mode: WifiAdapterMode,
+): boolean {
+	return (
+		mode !== "station" && (view.displayMode === "station" || view.stationRow)
+	);
+}
+
 /** One rendered rung of the segmented control. */
 export interface WifiAdapterModeOptionView {
 	mode: WifiAdapterMode;
@@ -223,8 +240,15 @@ export interface WifiAdapterModeView {
 	 * confirmed — and so a failed transition leaves the prior mode on screen.
 	 */
 	displayMode: WifiAdapterMode;
-	/** The mode the device reports right now, unheld. */
+	/** False when the device reports no trustworthy current mode. */
+	modeKnown: boolean;
+	/** The current mode, or the legacy fallback when not verified. */
 	observedMode: WifiAdapterMode;
+	/**
+	 * The radio's own row STATES a client radio with no AP up, whatever the label
+	 * says. A row from a device that does not state `mode` is never a witness.
+	 */
+	stationRow: boolean;
 	/** The persisted operator preference, when the device reported one. */
 	desiredMode?: WifiAdapterMode;
 	/** All three modes, always, in {@link WIFI_ADAPTER_MODES} order. */
@@ -289,16 +313,15 @@ function fallbackMode(iface: WifiInterface): WifiAdapterMode {
 }
 
 /**
- * The mode the radio is in. The device's answer is a PULL, re-read only when the
- * radio set changes or the mode control confirms, so a hotspot started from its
- * own dialog leaves it saying `station`. The snapshot is pushed with every Wi-Fi
- * frame, so an AP it shows up outranks that stale `station`; otherwise the answer
- * stands, and it alone tells hybrid from hotspot.
+ * A confirmed snapshot outranks a cached offering. Older devices only report
+ * the physical mode, so keep their existing AP-vs-pull precedence.
  */
 function observedModeOf(
 	entry: WifiAdapterModeEntry | undefined,
 	iface: WifiInterface,
 ): WifiAdapterMode {
+	if (iface.observed_mode !== null && iface.observed_mode !== undefined)
+		return iface.observed_mode;
 	if (entry === undefined) return fallbackMode(iface);
 	if (entry.mode !== "station") return entry.mode;
 	if (isApRadio(iface)) return "hotspot";
@@ -328,6 +351,7 @@ export function deriveWifiAdapterModeView(
 	const observedMode = observedModeOf(input.entry, input.iface);
 	const wireOptions = input.entry?.options ?? fallbackOptions(input.iface);
 	const pending = input.phase === "pending";
+	const modeKnown = pending || input.iface.observed_mode !== null;
 
 	// A pending transition holds the PRIOR mode, and so does a failed one: the
 	// device kept its previous mode, so showing the requested one would report an
@@ -347,7 +371,7 @@ export function deriveWifiAdapterModeView(
 		return {
 			mode,
 			available,
-			selected: mode === displayMode,
+			selected: modeKnown && mode === displayMode,
 			labelKey: MODE_LABEL_KEY[mode],
 			pending: pending && input.target === mode,
 			...(available ? {} : { reasonKey: reasonKeyFor(reason) }),
@@ -365,7 +389,9 @@ export function deriveWifiAdapterModeView(
 			? { degradedReason: input.iface.degraded_reason }
 			: {}),
 		displayMode,
+		modeKnown,
 		observedMode,
+		stationRow: input.iface.mode === "station" && !hotspotIsActive(input.iface),
 		deviceAnswered,
 		options,
 		pending,

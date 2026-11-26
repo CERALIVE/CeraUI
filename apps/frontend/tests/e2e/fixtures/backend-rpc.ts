@@ -1,7 +1,10 @@
+import { pingSchema } from "@ceraui/rpc/schemas";
+
 interface RpcResponse {
 	id: string;
 	result?: unknown;
 	error?: { message?: string };
+	ping?: unknown;
 }
 
 interface PendingCall {
@@ -62,6 +65,11 @@ export class BackendRpc {
 		socket.addEventListener("message", (event) => {
 			if (!(event instanceof MessageEvent) || typeof event.data !== "string") return;
 			const response = JSON.parse(event.data) as RpcResponse;
+			// Stay connected across browser actions, even while no RPC is in flight.
+			if ("ping" in response && pingSchema.safeParse(response.ping).success) {
+				socket.send('{"pong":true}');
+				return;
+			}
 			const pending = this.pending.get(response.id);
 			if (!pending) return;
 			clearTimeout(pending.timeout);

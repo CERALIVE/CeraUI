@@ -18,7 +18,15 @@
  * capture exists in which a mode catalog is populated. Nothing here is labelled a
  * capture that is not one.
  */
-import { describe, expect, test } from "bun:test";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	jest,
+	spyOn,
+	test,
+} from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -26,6 +34,11 @@ import {
 	hilinkConnectionBody,
 	hilinkNetModeBody,
 } from "../modules/network/hilink-documents.ts";
+import {
+	netdevPresence,
+	noteNetdevWitness,
+	resetNetdevLifetimesForTest,
+} from "../modules/network/netdev-lifetime.ts";
 import type { RouterAdminProbeDeps } from "../modules/network/router-cellular-admin.ts";
 import { applyRouterNetMode } from "../modules/network/router-cellular-control.ts";
 
@@ -34,6 +47,15 @@ const BACKEND_SRC = join(import.meta.dir, "..");
 const HILINK = "12d1:14dc";
 const IFNAME = "enx0c5b8f279a64";
 const ROUTES = `default via 192.168.8.1 dev ${IFNAME} proto dhcp metric 100\n`;
+
+beforeEach(() => {
+	noteNetdevWitness(IFNAME, { ifindex: 7 });
+	spyOn(netdevPresence, "ifindex").mockReturnValue(7);
+});
+afterEach(() => {
+	jest.restoreAllMocks();
+	resetNetdevLifetimesForTest();
+});
 
 const SESSION = `<?xml version="1.0" encoding="UTF-8"?>
 <response><SesInfo>SessionID=abc</SesInfo><TokInfo>token-1</TokInfo></response>`;

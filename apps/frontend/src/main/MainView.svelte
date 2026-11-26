@@ -8,7 +8,7 @@ import { PullToRefresh } from '$lib/components/custom/pwa';
 import Logo from '$lib/components/icons/Logo.svelte';
 import { liveNavElement, siteName } from '$lib/config';
 import { DESKTOP_CHROME_QUERY, publishHeight, WIDE_DESKTOP_QUERY } from '$lib/layout';
-import { navigateTo } from '$lib/stores/navigation.svelte';
+import { getCurrentNavigation, navigateTo } from '$lib/stores/navigation.svelte';
 
 import HudRegion from './HudRegion.svelte';
 import MainNav from './navigation/MainNav.svelte';
@@ -32,6 +32,7 @@ const goHome = () => navigateTo({ live: liveNavElement });
 // (not just hidden) to avoid mounting them twice; on mobile they live in the
 // Settings destination's Appearance group instead. Mirrors AppDialog's query.
 const isDesktop = new MediaQuery(DESKTOP_CHROME_QUERY);
+const reserveDock = $derived(!isDesktop.current && !getCurrentNavigation().live);
 let dock = $state<HTMLElement>();
 $effect(() => (dock ? publishHeight(dock, '--mobile-dock-offset') : undefined));
 
@@ -99,9 +100,10 @@ $effect(() => (header ? publishHeight(header, '--app-header-height') : undefined
 		<main
 			id="main-content"
 			tabindex="-1"
+			data-reserve-dock={reserveDock || undefined}
 			class="flex-1 focus:outline-none {isDesktop.current
 				? ''
-				: 'pb-(--mobile-dock-height)'}"
+				: 'pb-[var(--page-dock-clearance,var(--mobile-dock-height))]'}"
 		>
 			<NavigationRenderer></NavigationRenderer>
 		</main>
@@ -119,3 +121,12 @@ $effect(() => (header ? publishHeight(header, '--app-header-height') : undefined
 		{/if}
 	</div>
 </PullToRefresh>
+
+<style>
+	/* Like LiveBar, match from the document because it owns scrolling. Keep
+	   this default below the Live bar and install banner in the cascade. */
+	:global(html:where(:has([data-reserve-dock]))) {
+		--page-dock-clearance: calc(var(--mobile-dock-offset, var(--mobile-dock-height)) + var(--spacing) * 2);
+		scroll-padding-bottom: var(--page-dock-clearance);
+	}
+</style>

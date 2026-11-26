@@ -65,6 +65,7 @@ import {
 	resolveAudioPipelineKey,
 } from '$lib/streaming/audioGate';
 import {
+	AUDIO_SOURCE_NO_AUDIO,
 	audioSourceLabel,
 	isExternalAudioSource,
 	resolveAudioSourceList,
@@ -321,7 +322,12 @@ const resolvedAudio = $derived(
 // backend), the resolved device/pseudo-source label, or a calm "none" fallback
 // when `asrc` is absent (federation tolerance).
 const activeAudioSourceLabel = $derived.by(() => {
-	if (audioEmbeddedActive || resolvedAudio.embedded) return m["live.source.audioEmbedded"]();
+	// An explicit "No audio" sends nothing, so it outranks the source's own sound.
+	if (
+		activeAudioSource !== AUDIO_SOURCE_NO_AUDIO &&
+		(audioEmbeddedActive || resolvedAudio.embedded)
+	)
+		return m["live.source.audioEmbedded"]();
 	if (resolvedAudio.current) return resolvedAudio.current;
 	if (activeAudioSource === AUDIO_SOURCE_AUTO) return '\u2014';
 	if (!activeAudioSource) return m["settings.noAudioSourceSelected"]();

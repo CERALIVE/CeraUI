@@ -5,7 +5,7 @@ import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import { persistPlugin } from "svelte-persistent-runes/plugins";
-import { defineConfig } from "vite";
+import { defineConfig, normalizePath } from "vite";
 
 import { BUILD_BRAND } from "./brand.config.ts";
 import {
@@ -46,6 +46,17 @@ const DIALOG_ENTRIES = {
 	audio: path.resolve(__dirname, "src/lib/federation/audio-entry.ts"),
 	server: path.resolve(__dirname, "src/lib/federation/server-entry.ts"),
 };
+const STYLE_ENTRY = normalizePath(path.resolve(__dirname, "src/lib/federation/federation.css"));
+// The same directories must be excluded by Tailwind and absent from the module graph.
+const DEVICE_STYLE_SOURCES = [
+	"../../main/layout",
+	"../../main/live",
+	"../../main/settings",
+	"../../main/system-logs",
+];
+const deviceStyleRoots = DEVICE_STYLE_SOURCES.map(
+	(source) => `${normalizePath(path.resolve(path.dirname(STYLE_ENTRY), source))}/`,
+);
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -63,6 +74,22 @@ export default defineConfig({
 			strategy: [...PARAGLIDE_STRATEGY],
 		}),
 		persistPlugin(),
+		{
+			name: "federation-style-source-boundary",
+			enforce: "pre",
+			load(id) {
+				if (id !== STYLE_ENTRY) return;
+				const exclusions = DEVICE_STYLE_SOURCES.map((source) => `@source not "${source}";`);
+				return [readFileSync(STYLE_ENTRY, "utf8"), ...exclusions].join("\n");
+			},
+			generateBundle() {
+				for (const id of this.getModuleIds()) {
+					if (deviceStyleRoots.some((root) => id.startsWith(root))) {
+						this.error(`Federation imports an excluded CSS source: ${id}`);
+					}
+				}
+			},
+		},
 		tailwindcss(),
 		svelte({
 			compilerOptions: {

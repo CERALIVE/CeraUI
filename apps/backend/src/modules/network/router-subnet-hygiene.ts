@@ -57,14 +57,21 @@
  * the collision it cleans up is not a bonding fault in the first place.
  */
 
+import { z } from "zod";
 import { logger } from "../../helpers/logger.ts";
 import { run } from "../../helpers/run.ts";
+import { readSystemBootId } from "../streaming/armed-stream-marker.ts";
 import { hilinkDhcpSettingsBody } from "./hilink-documents.ts";
 import {
 	HILINK_DHCP_SETTINGS_PATH,
+	type HilinkTransport,
 	hilinkHeaders,
 	openHilinkSession,
+	RouterNetdevLost,
+	requireRouterNetdev,
+	routerWriteTransport,
 } from "./hilink-session.ts";
+import { netdevLifetimeFence } from "./netdev-lifetime.ts";
 import {
 	defaultRouterAdminProbeDeps,
 	dialectForVidPid,
@@ -73,7 +80,9 @@ import {
 } from "./router-cellular-admin.ts";
 import {
 	dhcpRecordsMatch,
+	fullDhcpRecordsMatch,
 	type HilinkDhcpRecord,
+	parseCompleteHilinkDhcpSettings,
 	parseHilinkDhcpSettings,
 	planSubnetRewrite,
 	type SubnetPlanRefusal,
@@ -92,7 +101,7 @@ export const SUBNET_CONFIRM_DELAY_MS = 2_000;
 
 export type SubnetRewriteDeps = RouterAdminProbeDeps & {
 	/** Re-lease this interface so the host follows the device onto its new subnet. */
-	renewDhcpLease: (ifname: string) => Promise<void>;
+	renewDhcpLease: (ifname: string, isCurrent?: () => boolean) => Promise<void>;
 	/** `ip -4 -o addr show` → stdout. MAY reject. */
 	runIpAddrShow: () => Promise<string>;
 	wait: (ms: number) => Promise<void>;
@@ -102,8 +111,10 @@ export const defaultSubnetRewriteDeps: SubnetRewriteDeps = {
 	...defaultRouterAdminProbeDeps,
 	// Disconnect + connect rather than `device reapply`: reapply re-asserts the
 	// EXISTING addresses, which is precisely the stale lease that has to go.
-	renewDhcpLease: async (ifname) => {
+	renewDhcpLease: async (ifname, isCurrent) => {
+		if (isCurrent) requireRouterNetdev(isCurrent);
 		await run("nmcli", ["device", "disconnect", ifname]).catch(() => "");
+		if (isCurrent) requireRouterNetdev(isCurrent);
 		await run("nmcli", ["device", "connect", ifname]);
 	},
 	runIpAddrShow: () => run("ip", ["-4", "-o", "addr", "show"]),
@@ -137,6 +148,12 @@ export type SubnetRewritePlan = {
 	readonly adminUrl: string;
 	readonly current: HilinkDhcpRecord;
 	readonly target: HilinkDhcpRecord;
+	readonly originalDhcpComplete?: boolean;
+};
+
+export type LiveSubnetRewritePlan = SubnetRewritePlan & {
+	readonly isCurrent: ReturnType<typeof netdevLifetimeFence>;
+	readonly bootId: string;
 };
 
 export type SubnetRewriteResult =
@@ -149,10 +166,32 @@ export type SubnetRewriteResult =
 	| { readonly status: "reverted"; readonly detail: string }
 	| { readonly status: "blocked"; readonly detail: string };
 
-async function readRecord(
+export function subnetContinuityLost(): Extract<
+	SubnetRewriteResult,
+	{ status: "blocked" }
+> {
+	return {
+		status: "blocked",
+		detail:
+			"The original dongle could no longer be verified. The LAN change is unconfirmed.",
+	};
+}
+
+function ignoreUnreachable(error: unknown): undefined {
+	if (error instanceof RouterNetdevLost) throw error;
+	return undefined;
+}
+
+async function readRouterSubnetRecord(
 	ifname: string,
 	adminUrl: string,
-	deps: RouterAdminProbeDeps,
+	deps: Pick<HilinkTransport, "fetchViaInterface">,
+	parse: (
+		body: string,
+	) =>
+		| HilinkDhcpRecord
+		| undefined
+		| Promise<HilinkDhcpRecord | undefined> = parseHilinkDhcpSettings,
 ): Promise<HilinkDhcpRecord | undefined> {
 	const session = await openHilinkSession(ifname, adminUrl, deps);
 	if (session === undefined) return undefined;
@@ -161,7 +200,52 @@ async function readRecord(
 		[`${adminUrl}${HILINK_DHCP_SETTINGS_PATH}`],
 		hilinkHeaders(session),
 	);
-	return body === undefined ? undefined : parseHilinkDhcpSettings(body);
+	return body === undefined ? undefined : parse(body);
+}
+
+/** Read the complete record only while the caller's proof holds. Never writes. */
+export function readProvenRouterSubnetRecord(
+	ifname: string,
+	adminUrl: string,
+	isCurrent: () => boolean,
+): Promise<HilinkDhcpRecord | undefined> {
+	return readRouterSubnetRecord(
+		ifname,
+		adminUrl,
+		{
+			fetchViaInterface: (name, urls, headers) =>
+				isCurrent()
+					? defaultSubnetRewriteDeps.fetchViaInterface(name, urls, headers)
+					: Promise.resolve([]),
+		},
+		parseCompleteHilinkDhcpSettings,
+	);
+}
+
+/** Keep the rewrite's tolerant defaults; track whether this read is also recovery evidence. */
+async function readSubnetPreflight(
+	ifname: string,
+	adminUrl: string,
+	deps: Pick<HilinkTransport, "fetchViaInterface">,
+) {
+	let originalDhcpComplete = false;
+	const current = await readRouterSubnetRecord(
+		ifname,
+		adminUrl,
+		deps,
+		async (body) => {
+			const record = parseHilinkDhcpSettings(body);
+			if (record !== undefined) {
+				const complete = await parseCompleteHilinkDhcpSettings(body).catch(
+					() => undefined,
+				);
+				originalDhcpComplete =
+					complete !== undefined && fullDhcpRecordsMatch(complete, record);
+			}
+			return record;
+		},
+	).catch(() => undefined);
+	return { current, originalDhcpComplete };
 }
 
 async function writeRecord(
@@ -193,12 +277,15 @@ async function locateDevice(
 	ifname: string,
 	candidates: readonly { url: string; expected: HilinkDhcpRecord }[],
 	deps: SubnetRewriteDeps,
+	isCurrent?: () => boolean,
 ): Promise<string | undefined> {
 	for (let attempt = 0; attempt < SUBNET_CONFIRM_ATTEMPTS; attempt += 1) {
 		for (const candidate of candidates) {
-			const record = await readRecord(ifname, candidate.url, deps).catch(
-				() => undefined,
-			);
+			const record = await readRouterSubnetRecord(
+				ifname,
+				candidate.url,
+				deps,
+			).catch(ignoreUnreachable);
 			if (
 				record !== undefined &&
 				dhcpRecordsMatch(record, candidate.expected)
@@ -207,9 +294,14 @@ async function locateDevice(
 			}
 		}
 		await deps.wait(SUBNET_CONFIRM_DELAY_MS);
-		await deps.renewDhcpLease(ifname).catch(() => undefined);
+		await deps.renewDhcpLease(ifname, isCurrent).catch(ignoreUnreachable);
 	}
 	return undefined;
+}
+
+/** Whether this build speaks the dialect whose LAN record it reads and rewrites. */
+export function supportsSubnetRewrite(vidPid: string): boolean {
+	return dialectForVidPid(vidPid) === "hilink";
 }
 
 /**
@@ -225,16 +317,19 @@ export async function prepareSubnetRewrite(
 	targetAddress: string,
 	deps: SubnetRewriteDeps = defaultSubnetRewriteDeps,
 ): Promise<
-	| { readonly ok: true; readonly plan: SubnetRewritePlan }
+	| { readonly ok: true; readonly plan: LiveSubnetRewritePlan }
 	| {
 			readonly ok: false;
 			readonly reason: SubnetRewriteRefusal;
 			readonly conflict?: string;
 	  }
 > {
-	if (dialectForVidPid(vidPid) !== "hilink" || !(await deps.isRealDevice())) {
+	const isCurrent = netdevLifetimeFence(ifname);
+	if (!supportsSubnetRewrite(vidPid) || !(await deps.isRealDevice())) {
 		return { ok: false, reason: "unsupported" };
 	}
+	const bootId = z.uuid().safeParse(readSystemBootId());
+	if (!bootId.success) return { ok: false, reason: "unreachable" };
 	let adminUrl: string | undefined;
 	try {
 		const gateway = parseDefaultGateways(
@@ -246,8 +341,10 @@ export async function prepareSubnetRewrite(
 	}
 	if (adminUrl === undefined) return { ok: false, reason: "unreachable" };
 
-	const current = await readRecord(ifname, adminUrl, deps).catch(
-		() => undefined,
+	const { current, originalDhcpComplete } = await readSubnetPreflight(
+		ifname,
+		adminUrl,
+		routerWriteTransport(deps, isCurrent),
 	);
 	if (current === undefined) return { ok: false, reason: "unreadable" };
 
@@ -257,6 +354,7 @@ export async function prepareSubnetRewrite(
 			.then((stdout) => parseHostSubnets(stdout))
 			.catch(() => new Map<string, string>()),
 	);
+	if (!isCurrent()) return { ok: false, reason: "unreachable" };
 	hostSubnets.delete(ifname);
 
 	const plan = planSubnetRewrite(current, targetAddress, hostSubnets);
@@ -265,7 +363,18 @@ export async function prepareSubnetRewrite(
 			? { ok: false, reason: plan.reason }
 			: { ok: false, reason: plan.reason, conflict: plan.conflict };
 	}
-	return { ok: true, plan: { ifname, adminUrl, current, target: plan.target } };
+	return {
+		ok: true,
+		plan: {
+			ifname,
+			adminUrl,
+			current,
+			target: plan.target,
+			...(originalDhcpComplete ? {} : { originalDhcpComplete: false }),
+			isCurrent,
+			bootId: bootId.data,
+		},
+	};
 }
 
 /**
@@ -276,50 +385,64 @@ export async function prepareSubnetRewrite(
  * exactly what replay's rollback table branches on.
  */
 export async function executeSubnetRewrite(
-	plan: SubnetRewritePlan,
+	plan: LiveSubnetRewritePlan,
 	markExecuting: () => Promise<void>,
-	deps: SubnetRewriteDeps = defaultSubnetRewriteDeps,
+	baseDeps: SubnetRewriteDeps = defaultSubnetRewriteDeps,
 ): Promise<SubnetRewriteResult> {
-	const { ifname, adminUrl, current, target } = plan;
-
-	// Re-read under the lease. The preflight read happened before the lease was
-	// held, so a record that moved in between is a state we did not plan against
-	// and must not overwrite.
-	const held = await readRecord(ifname, adminUrl, deps).catch(() => undefined);
-	if (held === undefined) return { status: "refused", reason: "unreachable" };
-	if (!dhcpRecordsMatch(held, current)) {
-		return { status: "refused", reason: "state_drifted" };
-	}
-
-	await markExecuting();
-	if (!(await writeRecord(ifname, adminUrl, target, deps))) {
-		return { status: "refused", reason: "unreachable" };
-	}
-	await deps.renewDhcpLease(ifname).catch(() => undefined);
-
-	const targetUrl = `http://${target.address}`;
-	const confirmed = await locateDevice(
-		ifname,
-		[{ url: targetUrl, expected: target }],
-		deps,
-	);
-	if (confirmed !== undefined) return { status: "applied", record: target };
-
-	logger.warn("router subnet rewrite did not confirm; auto-restoring", {
-		module: "network",
-		ifname,
-		target: target.address,
+	const { ifname, adminUrl, current, target, isCurrent } = plan;
+	let dispatched = false;
+	const deps = routerWriteTransport(baseDeps, isCurrent, () => {
+		dispatched = true;
 	});
-	const restored = await restoreSubnet(plan, deps);
-	return restored
-		? {
-				status: "reverted",
-				detail: `the device never answered at ${target.address}; its previous LAN settings were restored and reconfirmed`,
-			}
-		: {
-				status: "blocked",
-				detail: `the device answered at neither ${target.address} nor ${current.address} after the LAN rewrite`,
-			};
+
+	try {
+		// Re-read under the lease so a plan cannot overwrite a changed record.
+		const held = await readRouterSubnetRecord(ifname, adminUrl, deps).catch(
+			ignoreUnreachable,
+		);
+		if (held === undefined) return { status: "refused", reason: "unreachable" };
+		if (!dhcpRecordsMatch(held, current)) {
+			return { status: "refused", reason: "state_drifted" };
+		}
+
+		await markExecuting();
+		if (!(await writeRecord(ifname, adminUrl, target, deps))) {
+			return { status: "refused", reason: "unreachable" };
+		}
+		await deps.renewDhcpLease(ifname, isCurrent).catch(ignoreUnreachable);
+
+		const targetUrl = `http://${target.address}`;
+		const confirmed = await locateDevice(
+			ifname,
+			[{ url: targetUrl, expected: target }],
+			deps,
+			isCurrent,
+		);
+		if (confirmed !== undefined) return { status: "applied", record: target };
+
+		logger.warn("router subnet rewrite did not confirm; auto-restoring", {
+			module: "network",
+			ifname,
+			target: target.address,
+		});
+		const restored = await restoreSubnet(plan, baseDeps, isCurrent);
+		return restored
+			? {
+					status: "reverted",
+					detail: `the device never answered at ${target.address}; its previous LAN settings were restored and reconfirmed`,
+				}
+			: {
+					status: "blocked",
+					detail: `The LAN change could not be confirmed at ${target.address} or ${current.address}.`,
+				};
+	} catch (error) {
+		if (!(error instanceof RouterNetdevLost) && (!dispatched || isCurrent())) {
+			throw error;
+		}
+		return dispatched
+			? subnetContinuityLost()
+			: { status: "refused", reason: "unreachable" };
+	}
 }
 
 /**
@@ -330,8 +453,10 @@ export async function executeSubnetRewrite(
  */
 export async function restoreSubnet(
 	plan: SubnetRewritePlan,
-	deps: SubnetRewriteDeps = defaultSubnetRewriteDeps,
+	baseDeps: SubnetRewriteDeps = defaultSubnetRewriteDeps,
+	isCurrent?: () => boolean,
 ): Promise<boolean> {
+	const deps = isCurrent ? routerWriteTransport(baseDeps, isCurrent) : baseDeps;
 	const { ifname, current, target } = plan;
 	const oldUrl = `http://${current.address}`;
 	const newUrl = `http://${target.address}`;
@@ -343,18 +468,25 @@ export async function restoreSubnet(
 			{ url: newUrl, expected: target },
 		],
 		deps,
+		isCurrent,
 	);
 	// Found on the OLD address holding the OLD record: the write never landed,
 	// so there is nothing to undo and reachability is already reconfirmed.
 	if (found === oldUrl) return true;
 	if (found === undefined) return false;
 
-	if (!(await writeRecord(ifname, newUrl, current, deps).catch(() => false))) {
+	if (
+		!(await writeRecord(ifname, newUrl, current, deps).catch(ignoreUnreachable))
+	) {
 		return false;
 	}
-	await deps.renewDhcpLease(ifname).catch(() => undefined);
+	await deps.renewDhcpLease(ifname, isCurrent).catch(ignoreUnreachable);
 	return (
-		(await locateDevice(ifname, [{ url: oldUrl, expected: current }], deps)) !==
-		undefined
+		(await locateDevice(
+			ifname,
+			[{ url: oldUrl, expected: current }],
+			deps,
+			isCurrent,
+		)) !== undefined
 	);
 }

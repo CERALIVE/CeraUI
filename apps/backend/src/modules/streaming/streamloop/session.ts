@@ -34,6 +34,7 @@ import { announceBindMapReport } from "../bind-map-notification.ts";
 import { stopLinkTelemetry } from "../link-telemetry.ts";
 import type { Pipeline } from "../pipelines.ts";
 import { restartSrtla } from "../srtla.ts";
+import { acceptStartAudio } from "../start-audio.ts";
 import {
 	classifyStartFailure,
 	StreamStartFailure,
@@ -73,6 +74,7 @@ export async function start(
 	params: ConfigParameters,
 	generation = 0,
 	attemptId = "legacy-start",
+	startAudio = acceptStartAudio(params),
 ): Promise<StartStreamResult> {
 	assertStreamLaunchOwnership();
 	const ownsLaunch = currentStreamLaunchOwner();
@@ -105,7 +107,7 @@ export async function start(
 		streamid: string;
 	};
 	try {
-		c = await updateConfig(params);
+		c = await updateConfig(params, startAudio);
 		assertStreamLaunchOwnership();
 	} catch (err) {
 		if (typeof err === "string") {
@@ -180,6 +182,8 @@ export async function start(
 			c.streamid,
 			{},
 			attemptId,
+			undefined,
+			startAudio,
 		);
 	} catch (err) {
 		if (sessionResources?.generation === generation) {

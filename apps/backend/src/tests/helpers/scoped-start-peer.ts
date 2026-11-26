@@ -11,6 +11,7 @@ import {
 	type RpcErrorCode,
 	rpcRequestSchema,
 	SCHEMA_VERSION,
+	type StartParams,
 	startParamsSchema,
 } from "@ceralive/cerastream";
 
@@ -44,6 +45,7 @@ export type Scenario =
 	| "capacity"
 	| "legacy"
 	| "legacy-deadline"
+	| "legacy-success"
 	| "old"
 	| "success"
 	| "unknown";
@@ -53,6 +55,7 @@ export async function scopedStartPeer(scenario: Scenario) {
 	const dir = await mkdtemp(join(tmpdir(), "scoped-"));
 	const path = join(dir, "engine.sock");
 	const requests: { method: string; peer: number; attemptId?: string }[] = [];
+	const startAudio: StartParams["audio"][] = [];
 	const entered = Promise.withResolvers<void>();
 	const negotiating = Promise.withResolvers<void>();
 	const sendLaunchStatus =
@@ -130,7 +133,9 @@ export async function scopedStartPeer(scenario: Scenario) {
 								reply({
 									...capabilities,
 									features:
-										scenario === "legacy" || scenario === "legacy-deadline"
+										scenario === "legacy" ||
+										scenario === "legacy-deadline" ||
+										scenario === "legacy-success"
 											? []
 											: [ATTEMPT_SCOPED_START_FEATURE],
 								});
@@ -161,6 +166,7 @@ export async function scopedStartPeer(scenario: Scenario) {
 							break;
 						case "start": {
 							const params = startParamsSchema.parse(request.params);
+							startAudio.push(params.audio);
 							if (params.attempt_id !== undefined)
 								record.attemptId = params.attempt_id;
 							entered.resolve();
@@ -189,6 +195,8 @@ export async function scopedStartPeer(scenario: Scenario) {
 											attempt_id: attempt,
 										}),
 									);
+								} else if (scenario === "legacy-success") {
+									reply({ session_id: "cs-1", state: "streaming" });
 								} else if (
 									scenario === "deadline" ||
 									scenario === "legacy-deadline"
@@ -238,6 +246,7 @@ export async function scopedStartPeer(scenario: Scenario) {
 		capabilityReads: () =>
 			requests.filter(({ method }) => method === "get-capabilities"),
 		starts: () => requests.filter(({ method }) => method === "start"),
+		startAudio,
 		prepares: () => requests.filter(({ method }) => method === "prepare-start"),
 		cancels: () => requests.filter(({ method }) => method === "cancel-start"),
 		stops: () => requests.filter(({ method }) => method === "stop"),

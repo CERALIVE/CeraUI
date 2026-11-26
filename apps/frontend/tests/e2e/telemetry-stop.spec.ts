@@ -62,8 +62,12 @@ let seqCounter = SEQ_BASE;
 // (genuinely stuck) or finally-stopped (recovery) to the stopping watchdog's
 // authoritative PULL, which the push-frame rewrite (desiredStreaming) cannot reach.
 let forcePullStreaming: boolean | null = null;
+let replyToStopWatchdogRead: (() => StatusResponse) | undefined;
 let adjustBitrate: ((value: number) => boolean) | undefined;
 const bitrateRequests: number[] = [];
+let stopRequests = 0;
+let holdStopRequest = false;
+let releaseStopRequest: (() => void) | undefined;
 // Tracks in-flight RPC request id → dotted path so a response can be matched.
 const pendingRpc = new Map<string, string>();
 
@@ -127,8 +131,12 @@ test.describe("Telemetry lifecycle (clears on stop)", () => {
 		desiredStreaming = false;
 		seqCounter = SEQ_BASE;
 		forcePullStreaming = null;
+		replyToStopWatchdogRead = undefined;
 		adjustBitrate = undefined;
 		bitrateRequests.length = 0;
+		stopRequests = 0;
+		holdStopRequest = false;
+		releaseStopRequest = undefined;
 		pendingRpc.clear();
 
 		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
@@ -143,6 +151,10 @@ test.describe("Telemetry lifecycle (clears on stop)", () => {
 					if (req?.id && Array.isArray(req.path)) {
 						const path = req.path.join(".");
 						const max = req.input?.max_br;
+						if (path === "status.getStatus" && replyToStopWatchdogRead) {
+							ws.send(JSON.stringify({ id: req.id, result: replyToStopWatchdogRead() }));
+							return;
+						}
 						if (path === "streaming.setBitrate" && typeof max === "number" && adjustBitrate) {
 							bitrateRequests.push(max);
 							const success = adjustBitrate(max);
@@ -152,6 +164,13 @@ test.describe("Telemetry lifecycle (clears on stop)", () => {
 							return;
 						}
 						pendingRpc.set(req.id, path);
+						if (path === "streaming.stop") {
+							stopRequests += 1;
+							if (holdStopRequest) {
+								releaseStopRequest = () => server.send(m);
+								return;
+							}
+						}
 					}
 				} catch {
 					/* non-JSON / binary frame */
@@ -217,6 +236,46 @@ test.describe("Telemetry lifecycle (clears on stop)", () => {
 			.filter({ visible: true })
 			.first()
 			.getByRole("img", { name: /bitrate/i });
+	}
+
+	for (const stream_lifecycle of ["stop_failed", "reconciling"] as const) {
+		test(`Stop asks, then sends one Stop, while the device reports live and ${stream_lifecycle}`, async ({ page }) => {
+			sendConfig();
+			desiredStreaming = true;
+			// Observe the pending control before the mock device can settle Stop.
+			holdStopRequest = true;
+			pushStatus({
+				is_streaming: true,
+				stream_lifecycle,
+				linkTelemetry: { links: TWO_LINKS, measured_bps: 4_200_000 },
+			});
+			const stop = page.getByTestId("live-bar").getByTestId("live-bar-stop");
+			await expect(stop).toBeEnabled();
+			await expect(stop).toBeInViewport({ ratio: 1 });
+			await expect(page.getByTestId("unconfirmed-stream-band")).toHaveCount(0);
+			await expect(page.getByTestId("ingest-stats").getByTestId("ingest-row")).toHaveCount(2);
+
+			await stop.click();
+			const question = page.getByTestId("live-stop-confirm");
+			await question.getByTestId("live-stop-keep").click();
+			await expect(question).toHaveCount(0);
+			await expect(stop).toBeEnabled();
+			expect(stopRequests).toBe(0);
+
+			await endStream(page);
+			await expect.poll(() => stopRequests).toBe(1);
+			await expect(stop).toBeDisabled();
+			await expect(stop).toHaveJSProperty("disabled", true);
+			await expect(stop).toHaveText("Stopping...");
+			expect(releaseStopRequest).toBeDefined();
+			desiredStreaming = false;
+			pushStatus({ is_streaming: false, stream_lifecycle: "idle", linkTelemetry: null });
+			holdStopRequest = false;
+			releaseStopRequest?.();
+			await expect(stop).toHaveCount(0);
+			await expect(page.getByTestId("ingest-summary")).toBeVisible();
+			expect(stopRequests).toBe(1);
+		});
 	}
 
 	test("Live entry retains the title on idle and unconfirmed phones @mobile-only", async ({ page }) => {
@@ -571,13 +630,20 @@ test.describe("Telemetry lifecycle (clears on stop)", () => {
 
 		sendConfig();
 		desiredStreaming = true;
-		pushStatus({ is_streaming: true, linkTelemetry: { links: TWO_LINKS } });
+		pushStatus({ is_streaming: true, stream_lifecycle: "streaming", linkTelemetry: { links: TWO_LINKS } });
 
 		await expect(page.getByTestId("live-cockpit")).toBeVisible({ timeout: 15_000 });
 
-		// The backend genuinely cannot stop: force the watchdog's authoritative PULL to
-		// keep reporting is_streaming:true (and keep the push rewritten to true too).
-		forcePullStreaming = true;
+		const readReplies: boolean[] = [];
+		let answerRetryWithIdle = false;
+		replyToStopWatchdogRead = () => {
+			const isStreaming = !answerRetryWithIdle;
+			readReplies.push(isStreaming);
+			return {
+				is_streaming: isStreaming,
+				stream_lifecycle: isStreaming ? "streaming" : "idle",
+			};
+		};
 		await endStream(page);
 
 		// The watchdog pulls (still streaming) → re-dispatches → pulls (still streaming)
@@ -585,14 +651,17 @@ test.describe("Telemetry lifecycle (clears on stop)", () => {
 		// (LiveCockpit still shown) — never fake-idle.
 		const banner = page.getByTestId("stop-stuck-banner");
 		await expect(banner).toBeVisible({ timeout: 15_000 });
-		await expect(banner.getByTestId("stop-stuck-retry")).toBeVisible();
+		const retry = banner.getByTestId("stop-stuck-retry");
+		await expect(retry).toBeVisible();
 		await expect(page.getByTestId("live-cockpit")).toBeVisible();
 		await expect(page.getByTestId("idle-cockpit")).toHaveCount(0);
 
-		// Recovery: the backend finally stops. Retry re-runs pull→stop→pull; the pull
-		// now returns is_streaming:false → reconcile → summary → IdleCockpit, banner gone.
-		forcePullStreaming = false;
-		await banner.getByTestId("stop-stuck-retry").click();
+		// Both automatic reads report live. Only the read triggered by Retry sees idle.
+		await expect.poll(() => readReplies).toEqual([true, true]);
+		await expect(retry).toBeEnabled();
+		answerRetryWithIdle = true;
+		await retry.click();
+		await expect.poll(() => readReplies).toEqual([true, true, false]);
 
 		await expect(page.getByTestId("stop-stuck-banner")).toHaveCount(0, {
 			timeout: 15_000,

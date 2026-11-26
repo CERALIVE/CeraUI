@@ -21,6 +21,7 @@ import {
 	getAudioMixInputs,
 } from "../../modules/streaming/audio-mix-status.ts";
 import { cerastreamBackend } from "../../modules/streaming/cerastream-backend.ts";
+import { noteAudioSaved } from "../../modules/streaming/start-audio.ts";
 import { broadcastConfig } from "../config-broadcast.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import { uiBuildMiddleware } from "../middleware/ui-build.middleware.ts";
@@ -39,6 +40,7 @@ export const setAudioMixProcedure = os
 			const changed = changedAudioInputs(config, id, { include, track });
 			if ("error" in changed) return { success: false, error: changed.error };
 			config.audio_inputs = storedAudioInputs(changed.inputs, config);
+			noteAudioSaved("audio_inputs");
 			saveConfig();
 			broadcastConfig(config);
 			const entry = changed.inputs.find((input) => input.id === id);
@@ -125,6 +127,7 @@ export const setAudioMixProcedure = os
 		// A pending membership/track edit stays pending; a live write changes values only.
 		if (!live || config.audio_inputs !== undefined) {
 			config.audio_inputs = storedAudioInputs(next, config);
+			noteAudioSaved("audio_inputs");
 			saveConfig();
 			broadcastConfig(config);
 		}

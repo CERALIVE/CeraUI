@@ -9,6 +9,7 @@
 */
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { wifiInterfaceSchema } from "@ceraui/rpc/schemas";
 
 import { getModeForInterface } from "../modules/wifi/state/wifi-state.ts";
 import { wifiBuildMsg } from "../modules/wifi/wifi.ts";
@@ -181,6 +182,49 @@ describe("cached mode matches the broadcast mode", () => {
 });
 
 describe("wifiBuildMsg — an AP radio is never offered client controls", () => {
+	test("publishes different mode observations for a confirmed Station and an unreadable profile", () => {
+		const known = makeIface({
+			activeConn: CLIENT_UUID,
+			activeMode: "infrastructure",
+		});
+		const unknown = makeIface({
+			activeConn: CLIENT_UUID,
+			activeMode: "unknown",
+		});
+		expect(wifiInterfaceSchema.parse(buildEntry(known))).toMatchObject({
+			mode: "station",
+			observed_mode: "station",
+		});
+		expect(wifiInterfaceSchema.parse(buildEntry(unknown))).toMatchObject({
+			mode: "station",
+			observed_mode: null,
+		});
+	});
+
+	test("cannot confirm Station when an active virtual leg is unreadable", () => {
+		const iface = makeIface({
+			activeConn: CLIENT_UUID,
+			activeMode: "infrastructure",
+			virtualModeUnresolved: true,
+		});
+		expect(buildEntry(iface)).toMatchObject({
+			mode: "station",
+			observed_mode: null,
+		});
+	});
+
+	test("publishes Hybrid without changing the physical station role", () => {
+		const iface = makeIface({
+			activeConn: CLIENT_UUID,
+			activeMode: "infrastructure",
+			concurrentHotspot: { ifname: "clap-wlan0", activeConn: HOTSPOT_UUID },
+		});
+		expect(buildEntry(iface)).toMatchObject({
+			mode: "station",
+			observed_mode: "hybrid",
+		});
+	});
+
 	test("omits the scan list and saved networks so no Connect target exists", () => {
 		const scan = new Map([
 			[

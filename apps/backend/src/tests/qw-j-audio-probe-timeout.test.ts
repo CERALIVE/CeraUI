@@ -1,11 +1,13 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
 
 import {
 	AudioProbeTimeoutError,
 	asrcProbe,
 	clearAsrcProbeReject,
+	isAsrcProbeRejectResolved,
 } from "../modules/streaming/audio.ts";
 import { AUDIO_PROBE_TIMEOUT_MS } from "../modules/streaming/constants.ts";
+import * as notifications from "../modules/ui/notifications.ts";
 
 describe("QW-J: Audio Device Probe Timeout", () => {
 	afterEach(() => {
@@ -122,6 +124,53 @@ describe("QW-J: Audio Device Probe Timeout", () => {
 					expect(err.message).toContain(missingDevice);
 				}
 			} finally {
+				global.setTimeout = originalSetTimeout;
+				global.clearTimeout = originalClearTimeout;
+			}
+		});
+
+		it("should leave the next probe alone once it was cancelled, and name the probed device", async () => {
+			const originalSetTimeout = global.setTimeout;
+			const originalClearTimeout = global.clearTimeout;
+			const timers = new Map<number, () => void>();
+			let nextId = 1;
+			global.setTimeout = ((callback: () => void) => {
+				timers.set(nextId, callback);
+				return nextId++ as unknown as ReturnType<typeof setTimeout>;
+			}) as typeof setTimeout;
+			global.clearTimeout = ((id: number) => {
+				timers.delete(id);
+			}) as unknown as typeof clearTimeout;
+			const broadcast = spyOn(
+				notifications,
+				"notificationBroadcast",
+			).mockImplementation((() => {}) as never);
+
+			try {
+				const refusal = (probe: Promise<string>) =>
+					probe.then(
+						() => "resolved",
+						(error: Error) => error.message,
+					);
+				const cancelled = refusal(asrcProbe("first-microphone"));
+				const ofCancelled = [...timers.keys()];
+				const next = refusal(asrcProbe("second-microphone"));
+				expect(await cancelled).toContain("first-microphone");
+				const named = broadcast.mock.calls.map(([, , message]) => message);
+				expect(named[0]).toContain("'first-microphone'");
+				expect(named.at(-1)).toContain("'second-microphone'");
+
+				for (const id of ofCancelled) timers.get(id)?.();
+				await Promise.resolve();
+				expect(isAsrcProbeRejectResolved()).toBe(true);
+				expect(broadcast.mock.calls.length).toBe(named.length);
+
+				clearAsrcProbeReject();
+				expect(await next).toContain("second-microphone");
+				expect(isAsrcProbeRejectResolved()).toBe(false);
+				expect(timers.size).toBe(0);
+			} finally {
+				broadcast.mockRestore();
 				global.setTimeout = originalSetTimeout;
 				global.clearTimeout = originalClearTimeout;
 			}

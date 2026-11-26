@@ -425,7 +425,7 @@ async function applyNetMode(mode: string) {
  * `subnetRewriteRequest` is the only shape this call site can build.
  *
  * Every terminal answer is rendered, `blocked` included. That outcome means the
- * dongle answered at NEITHER address, so it maps onto the outcome band's
+ * device could not confirm the write, so it maps onto the outcome band's
  * `unknown` kind — claiming a refusal there would assert the old settings are
  * intact, and claiming success would assert the new ones are.
  */

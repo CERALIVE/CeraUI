@@ -63,6 +63,7 @@ import {
 	PreviewEncodeRejectedError,
 	setPreviewEncodeReplayTransport,
 } from "../modules/streaming/preview-encode-replay.ts";
+import { acceptStartAudio } from "../modules/streaming/start-audio.ts";
 import type { StreamingProcess } from "../modules/streaming/streamloop/process-runner.ts";
 import {
 	PREVIEW_ENCODE_REPLAY_FAILED,
@@ -151,6 +152,7 @@ function runStart(configOverride?: Partial<RuntimeConfig>) {
 		{},
 		"att_preview",
 		configOverride,
+		acceptStartAudio(),
 	);
 }
 

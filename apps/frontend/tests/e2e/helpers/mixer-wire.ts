@@ -8,8 +8,8 @@ import { type EngineAudioToken, engineAudioMixRefusal } from "../../../../backen
  * and its mock engine. The proxy records the RPC frames, injects the bridged
  * `audio-level` frames the mock does not publish on the main socket, forces a
  * backend or engine refusal where a scenario needs it, and holds the device's
- * answer to a live change until the test releases it. A page script reports,
- * by RPC id, which answers the page's own socket has received.
+ * answer to a live change or an audio pick until the test releases it. A page
+ * script reports, by RPC id, which answers the page's own socket has received.
  */
 
 export interface RpcCall {
@@ -35,6 +35,10 @@ export interface MixerWire {
 	delayServer(ms: number): void;
 	/** Hold the device's answer to the next `streaming.setAudioMix`; the call itself reaches the device. */
 	holdAudioMix(): HeldReply;
+	/** Hold the device's answer to the next save of this audio pick; the save itself reaches the device. */
+	holdAudioPick(asrc: string): HeldReply;
+	/** The device's answer to the next call to this path, which the page receives as usual. */
+	nextAnswer(path: string): Promise<RpcCall>;
 	/** Answer `streaming.setAudioMix` as the backend does when the engine refuses with this token; null stops. */
 	refuseAudioMixWithEngineToken(token: EngineAudioToken | null): void;
 	/** Whether the page's own socket has received the answer to the call with this RPC id. */
@@ -51,6 +55,7 @@ interface PageReplies {
 type WithPageReplies = typeof globalThis & { __mixerWireReplies: PageReplies };
 
 interface Hold {
+	matches(call: RpcCall): boolean;
 	released: boolean;
 	deliver?: () => void;
 	settle(call: RpcCall): void;
@@ -112,7 +117,8 @@ export async function installMixerWire(
 						ws.send(JSON.stringify({ id: frame.id, result: call.result }));
 						return;
 					}
-					const hold = call.path === "streaming.setAudioMix" ? nextHolds.shift() : undefined;
+					const next = nextHolds.findIndex((hold) => hold.matches(call));
+					const [hold] = next === -1 ? [] : nextHolds.splice(next, 1);
 					if (hold) holdsById.set(frame.id, hold);
 				}
 			} catch {
@@ -192,6 +198,23 @@ export async function installMixerWire(
 		};
 	});
 
+	const holdNext = (matches: Hold["matches"]): HeldReply => {
+		let settle!: (call: RpcCall) => void;
+		const answer = new Promise<RpcCall>((resolve) => {
+			settle = resolve;
+		});
+		const hold: Hold = { matches, released: false, settle };
+		nextHolds.push(hold);
+		return {
+			held: answer,
+			release: () => {
+				if (hold.released) return;
+				hold.released = true;
+				hold.deliver?.();
+			},
+		};
+	};
+
 	return {
 		calls: (path) => all.filter((call) => call.path === path),
 		inject: (frame) => route?.send(JSON.stringify(frame)),
@@ -201,21 +224,16 @@ export async function installMixerWire(
 		delayServer: (ms) => {
 			delayMs = ms;
 		},
-		holdAudioMix: () => {
-			let settle!: (call: RpcCall) => void;
-			const answer = new Promise<RpcCall>((resolve) => {
-				settle = resolve;
-			});
-			const hold: Hold = { released: false, settle };
-			nextHolds.push(hold);
-			return {
-				held: answer,
-				release: () => {
-					if (hold.released) return;
-					hold.released = true;
-					hold.deliver?.();
-				},
-			};
+		holdAudioMix: () => holdNext((call) => call.path === "streaming.setAudioMix"),
+		holdAudioPick: (asrc) =>
+			holdNext(
+				(call) =>
+					call.path === "streaming.setConfig" && call.input.audio_pick === true && call.input.asrc === asrc,
+			),
+		nextAnswer: (path) => {
+			const reply = holdNext((call) => call.path === path);
+			reply.release();
+			return reply.held;
 		},
 		refuseAudioMixWithEngineToken: (token) => {
 			engineRefusal = token;

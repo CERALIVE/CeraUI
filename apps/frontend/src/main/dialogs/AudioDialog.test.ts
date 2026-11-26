@@ -219,6 +219,37 @@ describe("AudioDialog — resolved Auto preview in the read-only line (T6)", () 
 		expect(activeText()).toContain("Embedded audio");
 	});
 
+	it("says No audio, not Embedded audio, when No audio is chosen on an RTMP ingest", () => {
+		seed({
+			config: { asrc: "No audio", pipeline: "rtmp", source: "rtmp" },
+			audioSources: ["Built-in Mic", "No audio"],
+		});
+		state.sources = {
+			hardware: "rk3588",
+			sources: [
+				{
+					...AUDIO_SOURCE,
+					origin: "network",
+					id: "rtmp",
+					pipelineId: "rtmp",
+					labelKey: "settings.sources.rtmp",
+					requiresGateway: "rtmp",
+					url: "rtmp://192.168.1.100:1935/publish/live",
+					audioKind: "embedded",
+				},
+			],
+		};
+		state.status = {
+			asrcs: ["Built-in Mic", "No audio"],
+			resolved_asrc: null,
+			resolved_asrc_reason: "embedded",
+		};
+		render(AudioDialog, {
+			props: { open: true, audioSource: "No audio", audioCodec: "aac" },
+		});
+		expect(activeText()).toBe("No audio");
+	});
+
 	it("STALE-VALUE GATE: an explicit pick renders its own label, never a stale resolved_asrc", () => {
 		seed({ config: { asrc: "Built-in Mic" }, audioSources: ["Built-in Mic"] });
 		state.status = {

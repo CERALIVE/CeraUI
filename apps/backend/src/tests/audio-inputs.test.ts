@@ -31,7 +31,10 @@ import {
 	setConfigFilePath,
 } from "../modules/config.ts";
 import { setMockAudioDevicesProvider } from "../modules/streaming/audio.ts";
-import { primaryAudioInputId } from "../modules/streaming/audio-inputs.ts";
+import {
+	launchAudioPlan,
+	primaryAudioInputId,
+} from "../modules/streaming/audio-inputs.ts";
 import {
 	initAudioMeterBridge,
 	settleAudioMeterBridge,
@@ -1089,6 +1092,112 @@ test("streaming mix levels survive a deferred No audio selection", async () => {
 	} finally {
 		clearTimeout(deadline);
 	}
+});
+
+const twoInputs = [entry("Primary"), entry("Second", [2])];
+const twoInputsOnTheWire = [
+	{
+		input_id: "hw:CARD=primary",
+		tracks: [1],
+		gain_db: 0,
+		mute: false,
+		delay_ms: 0,
+	},
+	{
+		input_id: "hw:CARD=second",
+		tracks: [2],
+		gain_db: 0,
+		mute: false,
+		delay_ms: 0,
+	},
+];
+
+test.each(["test", "rtmp"])(
+	"No audio with a saved two-input mix starts with no audio at all on the %s pipeline and keeps the mix on disk",
+	async (pipeline) => {
+		getConfig().pipeline = pipeline;
+		await save(twoInputs);
+		await pick("No audio");
+		Object.assign(getConfig(), {
+			acodec: "aac",
+			delay: -120,
+			audio_backend: "pipewire",
+		});
+		const saved = await Bun.file(getConfigFilePath()).text();
+		expect((await start()).audio).toEqual({
+			backend: "pipewire",
+			mode: "none",
+			codec: "aac",
+			delay_ms: -120,
+		});
+		expect(getConfig().audio_inputs).toEqual(twoInputs);
+		expect(await Bun.file(getConfigFilePath()).text()).toBe(saved);
+	},
+);
+
+test("a saved config from before the fix with No audio and a two-input mix starts with no audio and keeps the file as it was", async () => {
+	await Bun.write(
+		getConfigFilePath(),
+		JSON.stringify({
+			pipeline: "test",
+			asrc: "No audio",
+			max_br: 8000,
+			srt_latency: 2000,
+			audio_inputs: twoInputs,
+		}),
+	);
+	await loadConfig();
+	expect(getConfig().audio_inputs).toEqual(twoInputs);
+	const loaded = await Bun.file(getConfigFilePath()).text();
+	expect((await start()).audio).toEqual({ mode: "none", delay_ms: 0 });
+	expect(await Bun.file(getConfigFilePath()).text()).toBe(loaded);
+});
+
+test("picking a microphone while a No audio Start is held keeps this stream silent, edits keep the mix, and the next Start sends it", async () => {
+	await save(twoInputs);
+	await pick("No audio");
+	holdStart = true;
+	const started = start();
+	await startObserved.promise;
+	await pick("Primary");
+	releaseStart?.();
+	expect((await started).audio).toEqual({ mode: "none" });
+	routeLiveProcedure();
+	expect(buildInitialStatus().status.audio_mix_active).toBe(false);
+	expect(await change({ id: "Second", gain_db: -6 })).toMatchObject({
+		success: true,
+		applies_next_start: true,
+	});
+	await backend.confirmStop();
+	holdStart = false;
+	requests = [];
+	expect((await start()).audio).toEqual({
+		mode: "default",
+		inputs: [twoInputsOnTheWire[0], { ...twoInputsOnTheWire[1], gain_db: -6 }],
+	});
+});
+
+test("Start sends launchAudioPlan, and audio off sends none over any pick and mix without saving", async () => {
+	await save(twoInputs);
+	const saved = await Bun.file(getConfigFilePath()).text();
+	expect(launchAudioPlan(getConfig(), { audioOff: true })).toEqual({
+		mode: "none",
+	});
+	expect((await start()).audio).toEqual(launchAudioPlan(getConfig()));
+	expect(launchAudioPlan(getConfig())).toEqual({
+		mode: "default",
+		inputs: twoInputsOnTheWire,
+	});
+	expect(await Bun.file(getConfigFilePath()).text()).toBe(saved);
+});
+
+test("Pipeline default with a saved mix still starts that mix", async () => {
+	await save(twoInputs);
+	await pick("Pipeline default");
+	expect((await start()).audio).toEqual({
+		mode: "default",
+		inputs: twoInputsOnTheWire,
+	});
 });
 
 test("Start sends a main input outside the saved mix first on Track 1 and leaves the saved mix as it was", async () => {

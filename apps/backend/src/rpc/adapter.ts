@@ -17,16 +17,20 @@ import { logger, logRedact } from "../helpers/logger.ts";
 import { isRuntimeConfigAvailable } from "../modules/config.ts";
 import { stopFollow } from "../modules/device-logs/follow.ts";
 import { SHARING_DIAG_EVENT } from "../modules/network/sharing-diag/status.ts";
+import { getAudioOffActive } from "../modules/streaming/audio-mix-status.ts";
 import {
 	getStreamHealth,
 	HEALTH_EVENT_TYPE,
 } from "../modules/streaming/health.ts";
+import { getStreamLifecycleState } from "../modules/streaming/stream-lifecycle-status.ts";
+import { getIsStreaming } from "../modules/streaming/streaming.ts";
 import { CPU_EVENT } from "../modules/system/cpu.ts";
 import { getDeviceStatsSnapshot } from "../modules/system/device-stats-snapshot.ts";
 import {
 	createPreviewWebSocketHandler,
 	isPreviewSocket,
 } from "../modules/ui/preview-proxy.ts";
+import type { StatusResponseMessage } from "../modules/ui/status.ts";
 import { rememberConfigSent } from "./config-broadcast.ts";
 import {
 	closeSocketSession,
@@ -225,6 +229,13 @@ export async function handleORPCMessage(
  * Send initial status to a newly authenticated client
  */
 function sendInitialStatusToClient(ws: AppWebSocket): void {
+	// Apart from the snapshot, which one unreadable inventory row can make throw.
+	const streaming = getIsStreaming();
+	sendToClient(ws, "status", {
+		is_streaming: streaming,
+		stream_lifecycle: getStreamLifecycleState(),
+		audio_off_active: streaming ? getAudioOffActive() : undefined,
+	} satisfies StatusResponseMessage);
 	const initialStatus = buildInitialStatus();
 
 	sendToClient(ws, "config", initialStatus.config);

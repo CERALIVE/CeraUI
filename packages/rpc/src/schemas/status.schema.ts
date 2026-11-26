@@ -70,6 +70,8 @@ export const statusMessageSchema = z.object({
 	set_password: z.boolean().optional(),
 	is_streaming: z.boolean(),
 	audio_mix_active: z.boolean().optional(),
+	// The running stream was started with "No audio", whatever pick is saved now.
+	audio_off_active: z.boolean().optional(),
 	stream_lifecycle: lifecycleStateSchema.optional(),
 	available_updates: availableUpdatesFieldSchema,
 	updating: updatingStatusSchema,
@@ -451,6 +453,8 @@ export type UnclaimedAdapter = z.infer<typeof unclaimedAdapterSchema>;
 export const statusResponseSchema = z.object({
 	is_streaming: z.boolean().optional(),
 	audio_mix_active: z.boolean().optional(),
+	// The running stream was started with "No audio", whatever pick is saved now.
+	audio_off_active: z.boolean().optional(),
 	stream_lifecycle: lifecycleStateSchema.optional(),
 	available_updates: availableUpdatesFieldSchema.optional(),
 	updating: updatingStatusSchema.optional(),

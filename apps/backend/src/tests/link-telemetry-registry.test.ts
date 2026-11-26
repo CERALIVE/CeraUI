@@ -1,11 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-
+import { portLabelFromIdPath } from "@ceraui/rpc/schemas";
 import type {
 	Telemetry,
 	TelemetryUpdate,
 	watchTelemetry as WatchTelemetryFn,
 } from "@ceraui/srtla-send/telemetry";
-import { portLabelFromIdPath } from "../modules/modems/physical-identity.ts";
 import type { BondEntry } from "../modules/streaming/bind-map.ts";
 import {
 	clearBindMapReport,

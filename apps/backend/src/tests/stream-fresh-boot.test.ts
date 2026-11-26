@@ -7,6 +7,7 @@ import { getConfig } from "../modules/config.ts";
 import { setup } from "../modules/setup.ts";
 import type { Pipeline } from "../modules/streaming/pipelines.ts";
 import { setPreviewEncodeReplayTransport } from "../modules/streaming/preview-encode-replay.ts";
+import { acceptStartAudio } from "../modules/streaming/start-audio.ts";
 import { StreamStartFailure } from "../modules/streaming/start-failure-taxonomy.ts";
 import { createStreamSessionOrchestrator } from "../modules/streaming/stream-session-orchestrator.ts";
 import { streamSessionProductionDeps } from "../modules/streaming/stream-session-production.ts";
@@ -125,6 +126,7 @@ function bootHarness(realProbe = false) {
 							balancer: "adaptive",
 							srt_latency: 2000,
 						},
+						acceptStartAudio(),
 					);
 					if (!result.success) throw new Error(result.error);
 				},

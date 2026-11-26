@@ -42,7 +42,7 @@ import {
 
 import {
 	reconciledMutationJournalRevision,
-	refreshMutationBlocks,
+	reconcileMutationBlocks,
 } from "./mutation-blocks.ts";
 import {
 	commitMutationEntry,
@@ -184,18 +184,21 @@ async function replayEntry(
 export async function runMutationReplay(): Promise<ReplaySummary> {
 	const tally = { rolledBack: 0, pruned: 0, blocked: 0, quarantined: 0 };
 	let unreadable = 0;
+	const damaged = new Set<string>();
 	try {
 		await settlePendingMutationRemovals();
 		for (const name of await listUnreadableSlots()) {
-			unreadable += 1;
+			damaged.add(name);
 			logger.error("modem mutation journal slot is unreadable; left in place", {
 				module: "modems",
 				slot: name,
 			});
 		}
-		// Readable entries still replay beside a damaged slot; the strict block
-		// publication below vetoes completion when the inventory changed meanwhile.
-		for (const hint of await listMutationEntries()) {
+		// Readable entries still replay beside a damaged slot. A row this second
+		// inventory could not read was not replayed, so the pass is incomplete.
+		for (const hint of await listMutationEntries(undefined, false, (slot) =>
+			damaged.add(slot),
+		)) {
 			try {
 				const revision = mutationJournalRevision();
 				const entry = await readMutationEntry(hint.stableKey);
@@ -213,7 +216,8 @@ export async function runMutationReplay(): Promise<ReplaySummary> {
 				});
 			}
 		}
-		await refreshMutationBlocks();
+		if ((await reconcileMutationBlocks()).unreadable.length > 0)
+			unreadable += 1;
 	} catch (err) {
 		unreadable += 1;
 		logger.error("modem mutation replay did not complete", {
@@ -221,7 +225,10 @@ export async function runMutationReplay(): Promise<ReplaySummary> {
 			err,
 		});
 	}
-	const summary: ReplaySummary = { ...tally, unreadable };
+	const summary: ReplaySummary = {
+		...tally,
+		unreadable: unreadable + damaged.size,
+	};
 	logger.info("modem mutation replay finished", {
 		module: "modems",
 		...summary,
@@ -232,9 +239,9 @@ export async function runMutationReplay(): Promise<ReplaySummary> {
 /** Settle submitted bookkeeping and read current blocks, without hardware rollback. */
 async function journalReadsCompletely(): Promise<boolean> {
 	await settlePendingMutationRemovals();
-	if ((await listUnreadableSlots()).length > 0) return false;
-	await refreshMutationBlocks();
-	return true;
+	const unreadable = await listUnreadableSlots();
+	const published = await reconcileMutationBlocks();
+	return unreadable.length === 0 && published.unreadable.length === 0;
 }
 
 export interface MutationRecoveryOptions {

@@ -43,7 +43,7 @@ import {
 	setMutationBlocks,
 } from "../streaming/lifecycle-admission.ts";
 
-import { listMutationEntries } from "./mutation-journal.ts";
+import { listMutationEntries, mutationSlotName } from "./mutation-journal.ts";
 import {
 	assertMutationJournalRevision,
 	isMutationJournalRevisionCurrent,
@@ -63,7 +63,9 @@ const REFUSAL_BY_STATE: Readonly<
 };
 
 export interface MutationBlockDeps {
-	listEntries(): Promise<readonly ModemMutationEntry[]>;
+	listEntries(
+		onUnreadable: (slot: string) => void,
+	): Promise<readonly ModemMutationEntry[]>;
 	presentStableKeys(): Promise<ReadonlySet<string>>;
 }
 
@@ -93,7 +95,8 @@ async function enumeratePresentKeys(): Promise<ReadonlySet<string>> {
 }
 
 export const defaultMutationBlockDeps: MutationBlockDeps = {
-	listEntries: () => listMutationEntries(undefined, true),
+	listEntries: (onUnreadable) =>
+		listMutationEntries(undefined, false, onUnreadable),
 	presentStableKeys: enumeratePresentKeys,
 };
 
@@ -107,39 +110,75 @@ export function resetMutationBlockDeps(): void {
 	activeDeps = defaultMutationBlockDeps;
 }
 
-let lastBlocks: readonly ModemMutationBlock[] = [];
-let lastRevision = mutationJournalRevision();
+interface MutationBlockPublication {
+	readonly blocks: readonly ModemMutationBlock[];
+	readonly readableKeys: ReadonlySet<string>;
+	readonly revision: bigint;
+}
+
+let publication: MutationBlockPublication = {
+	blocks: [],
+	readableKeys: new Set(),
+	revision: mutationJournalRevision(),
+};
+
+export function currentMutationBlockPublication(): MutationBlockPublication {
+	return publication;
+}
 
 export function reconciledMutationJournalRevision(): bigint {
-	return lastRevision;
+	return publication.revision;
 }
 
 export function currentMutationBlocks(): readonly ModemMutationBlock[] {
-	return lastBlocks;
+	return publication.blocks;
+}
+
+interface BlockCensus {
+	readonly entries: readonly ModemMutationEntry[];
+	readonly unreadable: readonly string[];
+	readonly revision: bigint;
+}
+
+/**
+ * Each damaged slot moves the revision once, by this very read. A census that
+ * counted those faults itself is stale only when the revision moved further.
+ */
+async function readBlockCensus(deps: MutationBlockDeps): Promise<BlockCensus> {
+	const before = mutationJournalRevision();
+	const unreadable: string[] = [];
+	const entries = await deps.listEntries((slot) => unreadable.push(slot));
+	return {
+		entries,
+		unreadable,
+		revision: before + BigInt(unreadable.length),
+	};
 }
 
 /** Re-derive the block set from disk and publish it to the interlock. */
 export async function refreshMutationBlocks(
 	deps: MutationBlockDeps = activeDeps,
 ): Promise<readonly ModemMutationBlock[]> {
-	let revision = mutationJournalRevision();
-	let entries = await deps.listEntries();
-	if (!isMutationJournalRevisionCurrent(revision)) {
-		revision = mutationJournalRevision();
-		entries = await deps.listEntries();
-	}
-	const blocking = entries.filter((entry) => blocksMutations(entry.state));
-	if (blocking.length === 0) {
-		assertMutationJournalRevision(revision);
-		setMutationBlocks([]);
-		lastBlocks = [];
-		lastRevision = revision;
-		return lastBlocks;
-	}
+	return (await reconcileMutationBlocks(deps)).blocks;
+}
 
-	const present = await deps.presentStableKeys();
+/** The same publication, naming the damaged slots its view could not include. */
+export async function reconcileMutationBlocks(
+	deps: MutationBlockDeps = activeDeps,
+): Promise<{
+	readonly blocks: readonly ModemMutationBlock[];
+	readonly unreadable: readonly string[];
+}> {
+	let census = await readBlockCensus(deps);
+	if (!isMutationJournalRevisionCurrent(census.revision)) {
+		census = await readBlockCensus(deps);
+	}
+	const { entries, unreadable, revision } = census;
+	const blocking = entries.filter((entry) => blocksMutations(entry.state));
+	const present =
+		blocking.length === 0 ? PRESENCE_UNKNOWN : await deps.presentStableKeys();
 	const presenceKnown = present !== PRESENCE_UNKNOWN;
-	const blocks: ModemMutationBlock[] = blocking.map((entry) => ({
+	const readable: ModemMutationBlock[] = blocking.map((entry) => ({
 		stableKey: entry.stableKey,
 		kind: entry.kind,
 		state: entry.state,
@@ -153,6 +192,13 @@ export async function refreshMutationBlocks(
 	}));
 
 	assertMutationJournalRevision(revision);
+	// Damage is not absence: a slot that cannot be read keeps its published row.
+	const blocks = [
+		...readable,
+		...publication.blocks.filter((block) =>
+			unreadable.includes(`${mutationSlotName(block.stableKey)}.json`),
+		),
+	];
 	setMutationBlocks(
 		blocks.map(
 			(block): MutationBlock => ({
@@ -162,7 +208,10 @@ export async function refreshMutationBlocks(
 			}),
 		),
 	);
-	lastBlocks = blocks;
-	lastRevision = revision;
-	return lastBlocks;
+	publication = {
+		blocks,
+		readableKeys: new Set(blocking.map((entry) => entry.stableKey)),
+		revision,
+	};
+	return { blocks, unreadable };
 }

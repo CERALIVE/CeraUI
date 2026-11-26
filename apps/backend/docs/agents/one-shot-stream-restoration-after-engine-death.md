@@ -31,6 +31,28 @@ config snapshot plus the current `boot_id`, and nothing else that matters.
   operator explicitly deferred to their next start. `startStream` therefore takes
   an optional `configOverride` (absent for every other caller — byte-identical
   behaviour) and restoration passes the snapshot.
+- **Its audio is the running audio.** The marker is written once, so a live audio
+  change the engine acknowledged is written into it and into the launch pin that a
+  later arming reads (`followLiveAudio`): gain, mute and delay of the mix
+  (`setAudioMix`), the live delay (`reloadAudioDelay`) and a switch to or from the
+  silence leg (`switchAudio`, restored without audio). A refused change, or an answer
+  that arrives for the session before, changes nothing. A save for the next Start
+  never reaches it, and a live `reload-config` restates the running delay. After a
+  backend restart the adopted stream has no pin, so the marker alone follows its live
+  delay and silence; its mix cannot be edited live.
+- **A restoration is a Start like the others.** `restoredStartAudio` builds its
+  snapshot from the marker, `validateConfig` and `startStream` take it, and the launch
+  runs inside `whileInFlight`: an absent microphone is waited for, a re-enumerated one
+  is addressed by its new id, and the Bluetooth microphones are listed for the
+  recorded backend. The real probe looks for a known stable-identity successor on
+  each wake; the engine adapter reads the selected IDs again after subscription
+  and any scoped Start preparation, immediately before sending Start. The snapshot
+  still owns backend, codec, delay and applied mix values; discovery never
+  substitutes an unrelated saved pick. A marker from before the mix was recorded
+  leaves the mix and the backend to the saved ones.
+- **Video and network fields are not followed.** A live bitrate, source or encoder
+  change leaves the marker's value from arming, as before. The audio part is covered
+  by `tests/no-audio-start.test.ts` through the real marker, runner and launch.
 - **It is schema-parsed on WRITE, not only on read.** The snapshot is built by
   copying from the runtime config, which also holds `password_hash`, `ssh_pass`
   and `remote_key`; Zod strips everything outside the declared shape so a future

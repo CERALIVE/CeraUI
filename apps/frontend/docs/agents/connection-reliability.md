@@ -5,18 +5,58 @@
 ### Stream-read ordering and watchdog ownership [EXISTS; host-tested]
 
 Reconnect consumes config/status independently, while restoration still waits
-for both paths. A status pull carries request-dispatch and browser-receipt marks
-on the evidence clock; a newer intent/STREAM-FACT observation supersedes stream
-evidence. Only `is_streaming`, `stream_lifecycle` and unclassified field names
+for both paths. After a successful sign-in reply, the first hydration frame
+carries `is_streaming`, `stream_lifecycle`, and `audio_off_active` when the
+running session's audio choice is known. The device sends this partial
+status to the socket that signed in, before building the full snapshot. A
+snapshot failure therefore does not hide the stream or its known audio choice.
+An omitted audio fact on a same-stream partial push does not clear it. A link
+drop, an observed stream boundary, or an admissible full pull without the fact
+does clear it. An adopted stream does not assert a known choice.
+An in-place `reconfiguring` frame keeps the stream's Stop confirmation epoch;
+an actual stop, replacement, or uncertain liveness still invalidates it.
+A status pull carries
+request-dispatch and browser-receipt marks on the evidence clock; a newer
+intent/STREAM-FACT observation supersedes stream
+evidence. `is_streaming`, `stream_lifecycle`, `audio_off_active` and other
+unclassified field names
 advance that atomic horizon (unknown fails closed). Explicitly unrelated pushes
 never advance it. Superseded stream fields are withheld, but unrelated supplied
 fields merge unless a push carrying that field arrived after dispatch or a newer
 receipt/read already applied it. Implicit stop-edge clears obey those same field
-fences and cannot run from superseded stream evidence. Permit at most one fresh
-read, never a loop or an automatic Stop on
+fences and cannot run from superseded stream evidence. Ordinary pulls permit at
+most one fresh read, never a loop or an automatic Stop on
 unknown. Receipt is arrival, not device computation; ingestion keeps provenance.
 Both watchdogs fence post-await effects to their originating action lifetime.
 Settlement or replacement invalidates running promises as well as timers.
+The shared optimism signal exists before the first Live selector reads it,
+so a cold Live mount observes the pending transition immediately. Test reset
+clears actions and timers without replacing the subscribers' signal.
+For a confirmed Live-bar End, the subscription store revokes the queued Stop
+and its retries on link loss, an idle/false receipt, a new Start, or entry into
+`reconciling`. Repeating a current phase is not entry into reconciliation:
+a fresh End confirmed within it keeps its authority. Ordinary stopping and
+reconfiguration are not replacement events. Each send rechecks the original
+action at dispatch. Neither watchdog path resends in `stopping` or
+`reconfiguring`; in `reconciling` or `stop_failed`, only operator Retry may
+resend. At dequeue the latest applicable watchdog read must still report
+explicit live truth, with or without a lifecycle. A newer unknown read
+withdraws earlier authorization even if the snapshot clears a pending phase.
+Retry can join an active check and use its confirming read. If that Retry
+sends after the confirming read, one status RPC follows actual dispatch to
+recover a missed idle push. A superseded reply can hydrate disjoint fields
+but cannot settle the Stop, trigger another read, or resend. The button is
+disabled while a Retry is accepted or a resend or its check is pending,
+including while a resend waits behind composition. Revocation cancels
+unsent retries without blocking a newer Stop. The banner reports delay, not
+a proven failure.
+
+Stop still has a 30 s client reply timeout. The device can continue a Stop
+parked behind an apply-now change, and the client ignores the reply once the
+request expires. If settlement comes after the bounded checks and the final
+push is missed, another current status read or Retry is needed. The client
+cannot fence an unobserved replacement without a server-side session check,
+and it cannot recall an already-sent Stop.
 Real-socket Vitest transcripts cover this contract; browser/board proof is owed.
 
 Bounded Start exhaustion creates a generation-owned recovery-unknown entry in

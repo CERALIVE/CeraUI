@@ -183,7 +183,7 @@ $effect(() => {
 					{/snippet}
 					<!-- The mode is a property of the RADIO, so its badge rides the radio's
 					     name and the mode fact renders exactly once per row. -->
-					{#snippet identity()}<WifiModeBadge device={id} mode={modeView.displayMode} />{/snippet}
+					{#snippet identity()}<WifiModeBadge device={id} mode={modeView.modeKnown ? modeView.displayMode : undefined} />{/snippet}
 					<!-- A degraded radio's reason is stated once, whole, in its warning band
 					     below; the status line does not repeat it. -->
 					{#snippet status()}

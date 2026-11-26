@@ -124,9 +124,17 @@ export const setBitrate = async (bitrate: number) => {
 	}
 };
 
-export const stopStreaming = async () => {
+/** Call prepareDispatch only at the wire boundary; it may arm the Stop watchdog. */
+export const stopStreaming = async (
+	prepareDispatch?: () => boolean,
+	onSent?: () => void,
+) => {
 	try {
-		await sendSessionTransition("idle", () => rpc.streaming.stop());
+		await sendSessionTransition("idle", () =>
+			prepareDispatch?.() === false
+				? undefined
+				: rpc.streaming.stop(undefined, onSent),
+		);
 	} catch (error) {
 		console.error("Failed to stop streaming:", error);
 		throw error;

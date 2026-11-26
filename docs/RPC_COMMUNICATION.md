@@ -500,7 +500,7 @@ On success the server responds:
 
 ### Post-login push
 
-Immediately after a successful `auth.login` response, `adapter.ts` calls `sendInitialStatusToClient(ws)`, which sends seven unicast messages to the newly authenticated socket (no `seq` — these bypass the drop-stale guard):
+Immediately after a successful `auth.login` response, `adapter.ts` calls `sendInitialStatusToClient(ws)`, which sends unicast messages to the newly authenticated socket (no `seq`: these bypass the drop-stale guard). The first is a partial `status` with only `is_streaming` and `stream_lifecycle`, read as it is sent. It does not need the snapshot, so a client still learns the stream state when an inventory row makes `buildInitialStatus()` throw. The snapshot follows:
 
 ```
 config      — current streaming config

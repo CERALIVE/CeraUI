@@ -261,11 +261,13 @@ rollup visible after Stop even if Details was never opened.
   live boolean counts whether it came from a push, reconnect hydrate or
   watchdog read, once the connection is up. A newer live flag can precede the
   lifecycle update at the start edge, and live reconfiguration can still be
-  stopped. A reported lifecycle other than streaming, including stopping
-  before the live flag clears, or a connection drop invalidates an open
-  question. Keep streaming and
-  Escape close it without stopping and return focus to Stop, or to the
-  main content landmark if Stop is gone or unavailable. A backdrop tap
+  stopped. An explicit `true` on this connection keeps Stop usable while the
+  device reports `stop_failed` or `reconciling`; a reported `stopping` withholds it.
+  Applying a live setting or repeating the current uncertain phase keeps an
+  open question. Entry into an uncertain phase, `idle`, `starting`, `stopping`,
+  loss of the live flag, or a connection drop invalidates it.
+  Keep streaming and Escape close it without stopping and return focus to Stop,
+  or to the main content landmark if Stop is gone or unavailable. A backdrop tap
   does nothing. The recovery/unconfirmed band's Stop and the stop watchdog's
   Retry remain one tap, without confirmation.
 - While it is mounted, the document's `scroll-padding-bottom` is the bar's
@@ -348,11 +350,17 @@ existing Power sheet only; reboot still needs its own confirmation.
 
 **Today** `DESKTOP_CHROME_QUERY` is
 `(min-width: 1024px), (min-width: 768px) and (max-height: 600px)`
-(`apps/frontend/src/lib/layout.ts:29-30`). **Today** `app.css` sets
-`--mobile-dock-height` to 7rem and documents it as the height of the fixed
-mobile dock (`apps/frontend/src/app.css:230-235`). The Live bar must sit above
-the mobile dock, offset by `--mobile-dock-height`, and the toast stack must sit
-above the Live bar.
+(`apps/frontend/src/lib/layout.ts:29-30`). **Today** `--mobile-dock-height`
+is 7rem (`apps/frontend/src/app.css:269-271`), and it is what the Live bar
+offsets itself by. The Live bar must sit above the mobile dock, offset by
+`--mobile-dock-height`, and the toast stack must sit above the Live bar,
+clearing `--mobile-dock-height`, `--live-bar-height`,
+`--live-checklist-height`, the safe area and `--toast-clearance`. On Live,
+`<main>` always pads by that 7rem token. On a non-Live destination with a
+dock, `MainView.svelte` uses the measured border-box height (including the
+safe area) plus two spacing units for page bottom padding and document
+scroll padding, which is the token only until the dock is measured. The
+visible PWA install banner's own scroll padding outranks that while it shows.
 
 #### The preview's open state
 
@@ -437,6 +445,14 @@ must keep that ABI.
   no other strip can be turned on. At `max_inputs` inputs in the mix (a saved
   input with no strip, gone or unavailable, still counts), the others cannot be
   turned on and say the mix is full.
+- "No audio" sends no audio: Start sends `audio.mode: "none"` and no inputs
+  whatever mix is saved, and the saved mix comes back with the next pick. On an
+  RTMP or SRT ingest the Source card keeps `audio-source-select` (live,
+  `audio-source-readonly`) reading "No audio" instead of
+  `audio-source-embedded`, and the Audio dialog and the live summary say "No
+  audio" too. While a stream runs, the summary says it from the session's own
+  `audio_off_active`, not from the pick saved for the next Start; a session that
+  does not report it is read by the saved pick.
 - The main input is always in the mix Start sends, decided where it is used,
   never by a follow-up save: the backend's `effectiveAudioInputs` adds a main
   input outside the saved mix first at its defaults on Track 1 (the old main

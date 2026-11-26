@@ -60,7 +60,7 @@ export function resolveDisplayedAudioSource(
 // The two pseudo-source wire ids (byte-equal to the backend `config.asrc`
 // sentinels). Used to derive the typed model from a legacy `asrcs` string list
 // when the backend does not carry `audio_sources`.
-const AUDIO_SOURCE_NO_AUDIO = "No audio";
+export const AUDIO_SOURCE_NO_AUDIO = "No audio";
 const AUDIO_SOURCE_PIPELINE_DEFAULT = "Pipeline default";
 
 /**

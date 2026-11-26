@@ -40,6 +40,7 @@ import {
 import { getStreamActivity } from '$lib/rpc/session-epoch.svelte';
 import { statusFieldIsCurrent } from '$lib/rpc/status-field-order';
 import {
+	getStopRetryBusy,
 	getStopStuckBannerVisible,
 	getStreamingAttemptGeneration,
 	getStreamingOptimismState,
@@ -71,6 +72,7 @@ import { getEncoderLoad } from '$lib/stores/device-health-history.svelte';
 import { deriveBitrateReading, deriveMeasuredBitrateKbps } from '$lib/stores/hud/derive';
 import { getLinks } from '$lib/stores/hud.svelte';
 import { getLinkNames } from '$lib/stores/link-names.svelte';
+import { requestMutationBlockReveal } from '$lib/stores/mutation-block-reveal';
 import { getStreamHealthRollup, isVideoSignalLost } from '$lib/stores/stream-health.svelte';
 import { assessStart } from '$lib/streaming/assess-start';
 import { isSelectedAudioLost } from '$lib/streaming/audioLost';
@@ -97,6 +99,7 @@ import {
 	resolveReceiverKind,
 } from '$lib/streaming/receiver-experience';
 import {
+	AUDIO_SOURCE_NO_AUDIO,
 	audioSelectionWireId,
 	audioSourceLabel,
 	deriveActiveSummary,
@@ -168,8 +171,7 @@ const updateRefusal = $derived(
 		streamingStartFailure,
 	),
 );
-// Truthful stop-stuck banner (T0): shown only while the authoritative flag still
-// says streaming after the bounded stopping watchdog pulled + re-dispatched.
+// A delay notice, not a diagnosis: the first watchdog read did not confirm idle.
 const stopStuckBanner = $derived(getStopStuckBannerVisible());
 
 // Idle vs Live cockpit gate (Task 11): the optimistic view of streaming so the
@@ -359,7 +361,15 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 		: decision.state === 'blocked'
 			? resolveMessageKey(decision.blockers[0]?.reasonKey ?? '')
 			: undefined;
-	const { step, message, logKey } = startFailureMessage(failure, repeated, admitted, blockedReason);
+	const { step, message, logKey } = startFailureMessage(
+		// Network cannot list the change before the cellular service is up.
+		failure.class === 'mutation_blocked' && getStatus()?.cellular_initializing === true
+			? { ...failure, class: 'recovery_pending' }
+			: failure,
+		repeated,
+		admitted,
+		blockedReason,
+	);
 	if (step === undefined) {
 		toast.error(message, viewLogsToast(logKey));
 		return;
@@ -412,6 +422,7 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 					} else if (!isCurrent()) {
 						return false;
 					} else if (step === 'openNetwork') {
+						requestMutationBlockReveal();
 						void handleManageLinks();
 					} else if (!handleOpenSetup()) {
 						return false;
@@ -1091,6 +1102,12 @@ const summaryAudio = $derived.by(() => {
 		entries,
 		t,
 	);
+	// A running stream says itself whether it is silent; the saved pick is the next
+	// Start's. One that does not say (older device, adopted stream) is read by the pick.
+	const runningOff = isStreaming ? getStatus()?.audio_off_active : undefined;
+	const pickedOff = effectiveAudioSource === AUDIO_SOURCE_NO_AUDIO;
+	if (runningOff ?? pickedOff)
+		return { current: t('audio.sources.noAudio'), pending: resolved.pending, embedded: false };
 	const activeSrc = config?.source
 		? getSources()?.sources.find((s) => s.id === config.source)
 		: undefined;
@@ -1099,7 +1116,7 @@ const summaryAudio = $derived.by(() => {
 	let current: string | undefined;
 	if (resolved.current) {
 		current = resolved.current;
-	} else if (effectiveAudioSource) {
+	} else if (effectiveAudioSource && !pickedOff) {
 		const entry = entries.find((e) => e.id === effectiveAudioSource);
 		current = entry ? audioSourceLabel(entry, t) : effectiveAudioSource;
 	}
@@ -1152,18 +1169,17 @@ function handleStop() {
 		/* dismiss is best-effort */
 	}
 
-	// Optimistic transient: show `stopping` immediately.
-	stopStreamingOptimism();
+	// Claim this Stop now; the composition lane may send it later.
+	const prepareDispatch = stopStreamingOptimism();
 
 	if (typeof window !== 'undefined' && window.stopStreamingWithNotificationClear) {
-		window.stopStreamingWithNotificationClear();
+		window.stopStreamingWithNotificationClear(prepareDispatch);
 	} else {
-		void stopStreaming();
+		void stopStreaming(prepareDispatch);
 	}
 }
 
-// Stop-stuck banner Retry: re-run the bounded watchdog (pull→stop→pull) via the
-// direct rpc path — never the window global (backend stop is idempotent).
+// Retry checks the original Stop's status before any re-dispatch.
 function handleRetryStop() {
 	retryStopStreaming();
 }
@@ -1214,9 +1230,6 @@ const configRows = $derived<ConfigRow[]>([
 	{/if}
 
 	{#if stopStuckBanner}
-		<!-- Truthful bounded stop-stuck banner (T0): the stopping watchdog pulled +
-		     re-dispatched but the authoritative flag still says streaming. The view
-		     stays truthfully live (never fake-idle); Retry re-runs pull→stop→pull. -->
 		<div
 			role="alert"
 			data-testid="stop-stuck-banner"
@@ -1226,7 +1239,8 @@ const configRows = $derived<ConfigRow[]>([
 			<button
 				type="button"
 				data-testid="stop-stuck-retry"
-				class="shrink-0 rounded-md border border-status-warning/50 px-3 py-1 font-medium transition-colors hover:bg-status-warning/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-warning/60"
+				class="shrink-0 rounded-md border border-status-warning/50 px-3 py-1 font-medium transition-colors enabled:hover:bg-status-warning/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-warning/60 disabled:opacity-50"
+				disabled={getStopRetryBusy()}
 				onclick={handleRetryStop}
 			>
 				{m["live.stopStuck.retry"]()}

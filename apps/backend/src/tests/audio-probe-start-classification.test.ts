@@ -25,6 +25,7 @@ import { getConfig } from "../modules/config.ts";
 import { AudioProbeTimeoutError } from "../modules/streaming/audio.ts";
 import { AUDIO_PROBE_TIMEOUT_MS } from "../modules/streaming/constants.ts";
 import type { Pipeline } from "../modules/streaming/pipelines.ts";
+import { acceptStartAudio } from "../modules/streaming/start-audio.ts";
 import {
 	DEFAULT_START_RETRY_POLICY,
 	StreamStartFailure,
@@ -227,6 +228,9 @@ describe("startStream self-classifies the probe failure", () => {
 				{
 					probe: () => Promise.reject(new AudioProbeTimeoutError("HDMI")),
 				},
+				undefined,
+				undefined,
+				acceptStartAudio(),
 			);
 
 			expect(result).toEqual({

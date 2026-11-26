@@ -37,6 +37,7 @@ import { broadcastConfig } from "../../rpc/config-broadcast.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { getLastCapabilities } from "../streaming/capabilities.ts";
 import { captureOperatorStopIntent } from "../streaming/operator-stop-intent.ts";
+import { acceptStartAudio } from "../streaming/start-audio.ts";
 import {
 	classifyStartFailure,
 	StreamStartFailure,
@@ -65,6 +66,7 @@ function projectCaps(): SetProfileCaps {
 async function reconnect(): Promise<void> {
 	const currentIntent = captureOperatorStopIntent();
 	if (!getIsStreaming()) return;
+	const startAudio = acceptStartAudio();
 	// `reconfigure`, not `operator`: this stop is the first half of a restart the
 	// platform asked for, so the armed-stream marker must survive it. Clearing it
 	// here would silently disarm restoration for the rest of the session.
@@ -84,10 +86,16 @@ async function reconnect(): Promise<void> {
 		},
 		data: { isAuthenticated: true, lastActive: Date.now() },
 	} as unknown as import("ws").default;
-	const started = await startStreamSession({
+	const starting = startStreamSession({
 		origin: "set-profile",
 		launch: async ({ attemptId, generation }) => {
-			const result = await startStream(stubConn, {}, generation, attemptId);
+			const result = await startStream(
+				stubConn,
+				{},
+				generation,
+				attemptId,
+				startAudio,
+			);
 			if (!result.success) {
 				throw new StreamStartFailure(
 					result.failureClass !== undefined
@@ -102,6 +110,7 @@ async function reconnect(): Promise<void> {
 			}
 		},
 	});
+	const started = await startAudio.whileInFlight(starting);
 	if (started.result !== "started") {
 		logger.warn("set-profile: stream restart did not complete", { started });
 	}

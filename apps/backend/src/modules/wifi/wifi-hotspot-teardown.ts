@@ -141,7 +141,7 @@ export async function teardownHotspotLocked(
 				connection: null,
 				mode: "unknown",
 			});
-			delete wifiInterface.activeConn;
+			wifiInterface.activeConn = null;
 			delete wifiInterface.activeMode;
 		}
 		if (wifiInterface.conn === conn && sameObservation) {

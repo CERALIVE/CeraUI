@@ -56,6 +56,7 @@ import {
 	stopLinkTelemetry,
 } from "../modules/streaming/link-telemetry.ts";
 import type { Pipeline } from "../modules/streaming/pipelines.ts";
+import { acceptStartAudio } from "../modules/streaming/start-audio.ts";
 import { updateStatus } from "../modules/streaming/streaming.ts";
 import {
 	AUDIO_SOURCE_PROBE_FAILED,
@@ -495,6 +496,9 @@ describe("a genuine session boundary still clears the caches", () => {
 				{
 					probe: () => Promise.reject(new AudioProbeTimeoutError("HDMI")),
 				},
+				undefined,
+				undefined,
+				acceptStartAudio(),
 			);
 			expect(result).toMatchObject({
 				success: false,

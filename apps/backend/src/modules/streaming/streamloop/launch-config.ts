@@ -9,7 +9,7 @@ import {
 // "Auto" resolves at launch in a shallow copy; persisted config keeps its sentinel.
 export function resolveLaunchConfig(config: RuntimeConfig): RuntimeConfig {
 	if (config.asrc !== AUDIO_SOURCE_AUTO) return config;
-	const resolution = resolveAutoAsrcFromLiveState();
+	const resolution = resolveAutoAsrcFromLiveState(config.source);
 	setResolvedAsrcFromStart(
 		resolution.asrcKey,
 		resolution.reason,

@@ -76,12 +76,20 @@ mode switch needs fresh acknowledgement. A setup gate loads the replacement's
 details without the old draft and without inheriting its retry. A token-less
 frame or an expired wait selects `hotspotConfirm.bindingUnsupported` and
 sends no request. A second refusal uses the existing reloaded-details
-handling. Closing the owner or changing device/link retires the wait. There
+handling. A mode change that was sent without the credential gate is not retried
+once the label or the row says the access point would start from a station; its
+refusal opens the first credential prompt without a changed-binding notice.
+The prompt takes over from the refused attempt, so cancelling it leaves no
+mode-switch error on the row.
+An acknowledged change keeps its one retry.
+Closing the owner or changing device/link retires the wait. There
 is no automatic retry loop. The retry stays on its original key, and is not
 sent if another transition has taken over that key.
 An open Start or mode confirmation, including the inline warning before dropping
 an uplink, keeps the dialog's consent slot; the other action cannot open a
 second confirmation while it is occupied.
+If the access point ends after the inline warning opened, confirming the warning
+opens the credential gate and sends nothing.
 
 Configure keeps this same recovery owner alive after the RPC dispatch
 acknowledgement until its captured config terminal arrives. A deferred

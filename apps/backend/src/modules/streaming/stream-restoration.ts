@@ -60,6 +60,7 @@ import {
 	clearArmedStreamMarker,
 	decideStreamRestoration,
 	defaultArmedStreamMarkerDeps,
+	pinnedLaunchedAudio,
 	RESTORATION_BOUND_MS,
 	RESTORATION_POLL_MS,
 	RESTORATION_UNKNOWN_DEADLINE_MS,
@@ -91,11 +92,19 @@ export function captureArmedStreamConfig(): ArmedStreamConfig {
 		const value = (config as unknown as Record<string, unknown>)[key];
 		if (value !== undefined) snapshot[key] = value;
 	};
-	copy("delay");
+	const launched = pinnedLaunchedAudio();
+	const audio = launched ?? config;
+	for (const key of ["delay", "acodec", "asrc", "audio_backend"] as const) {
+		if (audio[key] !== undefined) snapshot[key] = audio[key];
+	}
+	snapshot.audio_inputs = audio.audio_inputs ?? null;
+	if (launched?.audio_physical_ids !== undefined)
+		snapshot.audio_physical_ids = launched.audio_physical_ids;
+	if (launched?.audio_unverified_ids !== undefined)
+		snapshot.audio_unverified_ids = launched.audio_unverified_ids;
+	if (launched?.audio_silenced) snapshot.audio_silenced = true;
 	copy("srt_latency");
 	copy("pipeline");
-	copy("acodec");
-	copy("asrc");
 	copy("relay_server");
 	copy("relay_account");
 	copy("relay_streamid_override");
@@ -218,6 +227,7 @@ async function defaultLaunch(
 		{ resolveSrtla },
 		{ prepareSrtlaIpAddresses },
 		{ startStream },
+		{ restoredStartAudio },
 		{ startStreamSession },
 		{ StreamStartFailure, classifyStartFailure, typedStartFailure },
 	] = await Promise.all([
@@ -225,14 +235,17 @@ async function defaultLaunch(
 		import("./srtla.ts"),
 		import("./streamloop/session.ts"),
 		import("./streamloop/start-stream.ts"),
+		import("./start-audio.ts"),
 		import("./stream-session-orchestrator.ts"),
 		import("./start-failure-taxonomy.ts"),
 	]);
 
 	if (!current()) return { ok: false, reason: "start_cancelled" };
+	const startAudio = restoredStartAudio(config);
+	const launchConfig = { ...config, ...startAudio.config };
 	let resolved: Awaited<ReturnType<typeof validateConfig>>;
 	try {
-		resolved = await validateConfig({ ...config });
+		resolved = await validateConfig(launchConfig, startAudio);
 		if (!current()) return { ok: false, reason: "start_cancelled" };
 		await prepareSrtlaIpAddresses(resolved.srtlaAddr);
 	} catch (error) {
@@ -243,7 +256,7 @@ async function defaultLaunch(
 	}
 
 	if (!current()) return { ok: false, reason: "start_cancelled" };
-	const result = await startStreamSession({
+	const starting = startStreamSession({
 		origin: "restoration",
 		launch: async ({ attemptId }) => {
 			const srtlaAddr = await resolveSrtla(resolved.srtlaAddr);
@@ -254,7 +267,8 @@ async function defaultLaunch(
 				resolved.streamid,
 				{},
 				attemptId,
-				config,
+				launchConfig,
+				startAudio,
 			);
 			if (!launched.success) {
 				throw new StreamStartFailure(
@@ -271,6 +285,7 @@ async function defaultLaunch(
 		},
 	});
 
+	const result = await startAudio.whileInFlight(starting);
 	if (result.result === "started") return { ok: true };
 	if (result.result === "busy") return { ok: false, reason: "start_busy" };
 	if (result.result === "cancelled")

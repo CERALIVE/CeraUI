@@ -65,6 +65,8 @@ export const DBUS_FALLBACK_REASON = "cellular_dbus_init_failed";
 
 export const DEFAULT_INIT_TIMEOUT_MS = 15_000;
 
+const FALLBACK_STOP_TIMEOUT_MS = 2_000;
+
 export interface CellularStartResult {
 	readonly ok: boolean;
 }
@@ -153,7 +155,7 @@ export async function initCellularStack(
 		);
 		activeBackend = undefined;
 		if (backend !== undefined) {
-			await stopQuietly(backend);
+			await stopQuietly(backend, FALLBACK_STOP_TIMEOUT_MS);
 		}
 		markBootDegraded(CELLULAR_SUBSYSTEM);
 		stack = DEGRADED_MMCLI;
@@ -195,11 +197,15 @@ async function loadDbusBackendFactory(): Promise<CellularBackendFactory> {
 	return createDbusCellularBackend;
 }
 
-async function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
+async function withDeadline<T>(
+	work: Promise<T>,
+	ms: number,
+	what = "init",
+): Promise<T> {
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	const deadline = new Promise<never>((_resolve, reject) => {
 		timer = setTimeout(
-			() => reject(new Error(`cellular init exceeded ${ms}ms`)),
+			() => reject(new Error(`cellular ${what} exceeded ${ms}ms`)),
 			ms,
 		);
 	});
@@ -212,9 +218,13 @@ async function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
 	}
 }
 
-async function stopQuietly(backend: CellularBackend): Promise<void> {
+async function stopQuietly(
+	backend: CellularBackend,
+	ms?: number,
+): Promise<void> {
 	try {
-		await backend.stop();
+		const stopped = backend.stop();
+		await (ms === undefined ? stopped : withDeadline(stopped, ms, "stop"));
 	} catch (err) {
 		logger.debug(`cellular stack: backend stop failed: ${describe(err)}`);
 	}

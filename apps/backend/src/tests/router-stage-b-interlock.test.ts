@@ -32,7 +32,7 @@ import {
 	rollbackMutation,
 	setMutationCaptureDeps,
 } from "../modules/modems/mutation-rollback.ts";
-import { restoreRouterSubnet } from "../modules/network/router-subnet-rollback.ts";
+import { routerSubnetRollback } from "../modules/network/router-subnet-rollback.ts";
 import { resetLifecycleInterlock } from "../modules/streaming/lifecycle-admission.ts";
 
 const KEY = "platform-xhci-hcd.0.auto-usb-0:1.3.1";
@@ -114,9 +114,7 @@ describe("the subnet rewrite registers a replay rollback; the net-mode write doe
 		// (and whether a sibling suite has since cleared the registry) is test-order
 		// state. The side effect itself is pinned statically below, by the
 		// procedure's own import.
-		registerMutationRollback("router-subnet", {
-			rollback: restoreRouterSubnet,
-		});
+		registerMutationRollback("router-subnet", routerSubnetRollback);
 		setMutationCaptureDeps({
 			enumerate: () =>
 				Promise.resolve([

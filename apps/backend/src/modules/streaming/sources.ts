@@ -1164,6 +1164,10 @@ let engineDeviceCache: CaptureDevice[] = [];
 // `@ceraui/rpc` `CaptureDevice`, `fromEngineDevice()`, or the video whitelist
 // copy — because those all drop the join key. `buildSources` never reads it.
 let engineAudioDeviceCache: EngineAudioDevice[] = [];
+let audioCardScan: { complete: boolean } | undefined;
+let observedAudioCardScan: typeof audioCardScan;
+let audioProbeSequence = 0;
+let appliedAudioProbeSequence = 0;
 
 // The last ENGINE-AUTHORED row for every video device this process has probed,
 // keyed by `input_id`. Monotonic like `sessionSeenDeviceSnapshots` — a device
@@ -1370,10 +1374,31 @@ export function getEngineAudioDevices(): EngineAudioDevice[] {
 	return engineAudioDeviceCache;
 }
 
+/** A new kernel scan invalidates launch evidence, not the last-known display. */
+export function beginAudioCardScan(): () => boolean {
+	const scan = { complete: false };
+	audioCardScan = scan;
+	return () => {
+		if (audioCardScan !== scan) return false;
+		scan.complete = true;
+		return true;
+	};
+}
+
+export function getObservedEngineAudioDevices():
+	| readonly EngineAudioDevice[]
+	| undefined {
+	if (audioCardScan !== undefined && observedAudioCardScan === audioCardScan)
+		return engineAudioDeviceCache;
+	return undefined;
+}
+
 /** One answered `list-devices` probe, mapped but NOT yet applied to the caches. */
 interface EngineDeviceProbe {
 	devices: CaptureDevice[];
 	audio: EngineAudioDevice[];
+	audioScan: typeof audioCardScan;
+	audioSequence: number;
 	// The operator-write token as it stood when this probe was DISPATCHED, so a
 	// round-trip that was already in flight when a selection was saved commits a
 	// view that is correctly marked older than that selection.
@@ -1392,6 +1417,8 @@ async function probeEngineDevices(
 	current: () => boolean = () => true,
 ): Promise<EngineDeviceProbe | undefined> {
 	const selectionToken = sourceSelectionToken;
+	const audioScan = audioCardScan?.complete ? audioCardScan : undefined;
+	const audioSequence = ++audioProbeSequence;
 	try {
 		const result = await deps.fetchEngineDevices();
 		// A caller torn down while the probe was in flight keeps nothing, not
@@ -1414,6 +1441,8 @@ async function probeEngineDevices(
 		return {
 			devices,
 			selectionToken,
+			audioScan,
+			audioSequence,
 			// Parallel AUDIO cache (T4): an EXPLICIT field copy of the audio entries
 			// that preserves the producer-owned join keys verbatim. It is NOT routed
 			// through the video whitelist copy above or `fromEngineDevice()`, both of
@@ -1548,25 +1577,49 @@ export function setEngineAudioChangeHandler(
  */
 function commitEngineDevices(
 	devices: readonly CaptureDevice[],
-	audio?: readonly EngineAudioDevice[],
+	audio?: Pick<EngineDeviceProbe, "audio" | "audioScan" | "audioSequence">,
 	viewSelectionToken: number = sourceSelectionToken,
 	// The committing caller's guard, carried into the queued audio re-resolve.
 	current: () => boolean = () => true,
 ): void {
 	engineDeviceCache = [...devices];
 	engineViewSelectionToken = viewSelectionToken;
-	let audioChanged = false;
-	if (audio !== undefined) {
-		const next = JSON.stringify(audio);
-		audioChanged = next !== JSON.stringify(engineAudioDeviceCache);
-		engineAudioDeviceCache = [...audio];
-	}
 	recordObservedDevices(engineDeviceCache);
 	// Deliberately on EVERY commit, not only a changed one: a transient
 	// `timing is invalid` dmesg line raises the notification while the engine's
 	// own view never varies, so a change-gated hook would never retract it.
 	clearHdmiSignalErrorOnRecovery(engineDeviceCache);
-	if (audioChanged) engineAudioChangeHandler(current);
+	if (audio !== undefined) commitEngineAudioDevices(audio, current);
+}
+
+function commitEngineAudioDevices(
+	probe: Pick<EngineDeviceProbe, "audio" | "audioScan" | "audioSequence">,
+	current: () => boolean,
+): void {
+	const hadEvidence = getObservedEngineAudioDevices() !== undefined;
+	const isCurrentScan = probe.audioScan === audioCardScan;
+	// A probe begun before the scan cannot replace evidence for the new scan.
+	if (
+		probe.audioSequence < appliedAudioProbeSequence ||
+		(hadEvidence && !isCurrentScan)
+	)
+		return;
+	appliedAudioProbeSequence = probe.audioSequence;
+	const changed =
+		JSON.stringify(probe.audio) !== JSON.stringify(engineAudioDeviceCache);
+	engineAudioDeviceCache = probe.audio;
+	observedAudioCardScan = probe.audioScan;
+	if (
+		changed ||
+		(!hadEvidence && getObservedEngineAudioDevices() !== undefined)
+	)
+		engineAudioChangeHandler(current);
+}
+
+/** The audio scanner needs a new producer answer without replacing the video view. */
+export async function refreshEngineAudioDevices(): Promise<void> {
+	const probe = await probeEngineDevices(defaultEngineDeviceCacheDeps);
+	if (probe !== undefined) commitEngineAudioDevices(probe, () => true);
 }
 
 /**
@@ -1584,12 +1637,7 @@ export async function tryRefreshEngineDeviceCache(
 	const probe = await probeEngineDevices(deps, current);
 	// A caller torn down while the probe was in flight commits nothing.
 	if (probe === undefined || !current()) return false;
-	commitEngineDevices(
-		probe.devices,
-		probe.audio,
-		probe.selectionToken,
-		current,
-	);
+	commitEngineDevices(probe.devices, probe, probe.selectionToken, current);
 	return true;
 }
 
@@ -1612,6 +1660,7 @@ export async function refreshEngineDeviceCache(
 export function resetEngineDeviceCache(): void {
 	engineDeviceCache = [];
 	engineAudioDeviceCache = [];
+	observedAudioCardScan = undefined;
 	sessionSeenDeviceSnapshots.clear();
 	lastEngineVideoDevices.clear();
 	lastBroadcastSources = undefined;
@@ -1963,7 +2012,7 @@ export async function refreshSourcesForHotplug(
 	}
 	commitEngineDevices(
 		mergeObservedWithProbe(observed, probe.devices),
-		probe.audio,
+		probe,
 		probe.selectionToken,
 	);
 	broadcastSources();
@@ -2028,7 +2077,7 @@ async function runSignalRecheck(
 	if (probe === undefined) return;
 	commitEngineDevices(
 		mergeObservedWithProbe(observed, probe.devices),
-		probe.audio,
+		probe,
 		probe.selectionToken,
 	);
 	broadcastSourcesIfChanged();

@@ -52,7 +52,6 @@
 
 import { logger } from "../../helpers/logger.ts";
 import { spawnWithTimeout } from "../../helpers/spawn-policy.ts";
-import { shouldUseMocks } from "../../mocks/mock-service.ts";
 
 /**
  * `udevadm info --export-db` is a local database dump, but it runs on the boot
@@ -74,16 +73,25 @@ const NET_SUBSYSTEM = "net";
  * output with no udev on the host. Records are blank-line separated; only `E:`
  * lines are read, so the `P:`/`N:`/`S:`/`L:` lines a future udev adds are inert.
  */
-export function parseNetIdPaths(exportDb: string): ReadonlyMap<string, string> {
-	const resolved = new Map<string, string>();
+export function* udevPropertyRecords(exportDb: string) {
 	for (const block of exportDb.split("\n\n")) {
 		const env = new Map<string, string>();
+		let path: string | undefined;
 		for (const line of block.split("\n")) {
+			if (line.startsWith("P: ")) path = line.slice(3);
 			if (!line.startsWith("E: ")) continue;
 			const rest = line.slice(3);
 			const eq = rest.indexOf("=");
 			if (eq > 0) env.set(rest.slice(0, eq), rest.slice(eq + 1));
 		}
+		if (path !== undefined || env.size !== 0)
+			yield { path: path ?? env.get("DEVPATH"), env };
+	}
+}
+
+export function parseNetIdPaths(exportDb: string): ReadonlyMap<string, string> {
+	const resolved = new Map<string, string>();
+	for (const { env } of udevPropertyRecords(exportDb)) {
 		if (env.get(SUBSYSTEM_KEY) !== NET_SUBSYSTEM) continue;
 		const ifname = env.get(INTERFACE_KEY)?.trim();
 		const idPath = env.get(ID_PATH_KEY)?.trim();
@@ -115,6 +123,7 @@ export async function readUdevExportDb(): Promise<string> {
  * the retired enumerator bug took — silently, for the life of the process.
  */
 export async function readModemIdPaths(): Promise<ReadonlyMap<string, string>> {
+	const { shouldUseMocks } = await import("../../mocks/mock-service.ts");
 	if (shouldUseMocks()) {
 		const { getMockModemIdPaths } = await import(
 			"../../mocks/providers/cellular.ts"

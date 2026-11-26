@@ -1,6 +1,7 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { modemMutationEntrySchema } from "@ceraui/rpc/schemas";
+import * as udev from "../modules/modems/modem-id-path-source.ts";
 import {
 	acknowledgeMutation,
 	decommissionMutation,
@@ -18,6 +19,7 @@ import {
 } from "../modules/modems/mutation-journal.ts";
 import { withJournaledModemMutation } from "../modules/modems/mutation-lease.ts";
 import { initMutationRecovery } from "../modules/modems/mutation-replay.ts";
+import { routerUsbSysfs } from "../modules/modems/router-subnet-recovery-device.ts";
 import {
 	streamingBlockingMutation,
 	tryAcquireLifecycle,
@@ -104,20 +106,34 @@ for (const action of [
 
 test("decommission retains its entry and does not invoke the removal primitive", async () => {
 	// Given quarantined authority: decommission is not archival retirement.
-	await seedFailedMutation("usb:b");
-	const entry = await readMutationEntry("usb:b");
+	const key = "platform-xhci-hcd.0.auto-usb-0:1";
+	await seedFailedMutation(key);
+	const entry = await readMutationEntry(key);
 	if (!entry) throw new Error("missing seeded entry");
 	await commitMutationEntry({ ...entry, state: "device-absent-quarantine" });
 	await refreshMutationBlocks();
 	const fault = retirementFault(harness.root(), Number.POSITIVE_INFINITY);
+	const database = spyOn(udev, "readUdevExportDb").mockResolvedValue(
+		"P: /devices/platform/xhci-hcd.0.auto/usb1\nE: SUBSYSTEM=usb\n",
+	);
+	const devices = spyOn(routerUsbSysfs, "names").mockReturnValue(["usb1"]);
+	const root = spyOn(routerUsbSysfs, "rootPath").mockReturnValue(
+		"/sys/devices/platform/xhci-hcd.0.auto/usb1",
+	);
 	// When the operator confirms absence, even a faulting unlink port is irrelevant.
-	expect(await decommissionMutation("usb:b")).toEqual({
-		success: true,
-		state: "decommissioned",
-	});
+	try {
+		expect(await decommissionMutation(key)).toEqual({
+			success: true,
+			state: "decommissioned",
+		});
+	} finally {
+		database.mockRestore();
+		devices.mockRestore();
+		root.mockRestore();
+	}
 	// Then the durable retained decision blocks only the identity, never streaming.
 	expect(fault.unlinks()).toBe(0);
-	expect((await readMutationEntry("usb:b"))?.state).toBe("decommissioned");
+	expect((await readMutationEntry(key))?.state).toBe("decommissioned");
 	expect(
 		currentMutationBlocks().map((block) => [
 			block.state,
