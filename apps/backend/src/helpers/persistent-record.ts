@@ -145,7 +145,11 @@ class DamagedCopyConflictError extends Error {
 	}
 }
 
-function publishedCopyMatches(target: string, bytes: Uint8Array): boolean {
+function publishedCopyMatches(
+	target: string,
+	bytes: Uint8Array,
+	sourceFd?: number,
+): boolean {
 	let fd: number;
 	try {
 		fd = openSync(
@@ -158,12 +162,32 @@ function publishedCopyMatches(target: string, bytes: Uint8Array): boolean {
 		throw error;
 	}
 	try {
+		if (sourceFd !== undefined) {
+			const source = fstatSync(sourceFd, { bigint: true });
+			const copy = fstatSync(fd, { bigint: true });
+			if (source.dev === copy.dev && source.ino === copy.ino)
+				throw new DamagedCopyConflictError();
+		}
 		if (!readStoredStateDescriptor(fd, bytes.length).equals(Buffer.from(bytes)))
 			throw new DamagedCopyConflictError();
 		return true;
 	} finally {
 		closeSync(fd);
 	}
+}
+
+export function hasPreservedDamagedRecord(
+	path: string,
+	bytes: Uint8Array,
+	parent: number,
+	sourceFd: number,
+): boolean {
+	const digest = createHash("sha256").update(bytes).digest("hex");
+	return publishedCopyMatches(
+		`/proc/self/fd/${parent}/${basename(path)}.damaged-${digest}`,
+		bytes,
+		sourceFd,
+	);
 }
 
 /** Immutable digest evidence is checked and reacknowledged before any allocation. */

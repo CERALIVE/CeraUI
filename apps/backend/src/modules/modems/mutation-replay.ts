@@ -44,11 +44,13 @@ import {
 	reconciledMutationJournalRevision,
 	reconcileMutationBlocks,
 } from "./mutation-blocks.ts";
+import { retainedMutationEvidenceIsIntact } from "./mutation-damaged-storage.ts";
 import {
 	commitMutationEntry,
 	journalNow,
 	listMutationEntries,
 	listUnreadableSlots,
+	mutationJournalDeps,
 	nextEntry,
 	readMutationEntry,
 	removeMutationEntry,
@@ -294,6 +296,8 @@ export async function initMutationRecovery(
 	};
 	startMutationRecovery();
 	setRecoveryRetryOwner({
+		verifyAdmission: () =>
+			retainedMutationEvidenceIsIntact(mutationJournalDeps().dir),
 		schedule: () => scheduleMutationRecovery(deps, "verify"),
 		cancel: stopMutationRecovery,
 	});

@@ -298,6 +298,20 @@ Readable rows in the same publication still get their own evidence checks.
 A new read fault or revision change during the list suppresses all Check again
 hints. This does not complete replay or replace strict reads in direct actions.
 
+Retained evidence from a prior set-aside is the one exception to "every
+unreadable name blocks": a `.set-aside-<slot>-<receipt>.retained.json`
+directory is not live authority and is reported as unreadable unless it holds a
+private stage whose single `record` still matches its receipt in the name and
+has a byte-identical archive beside the journal under a different inode. Verified
+evidence is skipped by inventory, replay and the complete-inventory gate, so an
+app running this reader can still Start and mutate modems after a clean set-aside
+performed by a newer slot. Anything else — a stage name without
+`.retained.json`, a drifted record, a missing archive, a hard link back to the
+journal entry — stays unreadable and keeps the barrier. Because the very same
+inode can be changed later through an open descriptor, admission revalidates the
+retained evidence on every Start and modem-mutation decision: drift raises the
+barrier again instead of being trusted from the last replay.
+
 Keep, Gone, Check again and the card's scoping use the same presence rule:
 identified, absent or unknown. Keep accepts the current USB descriptor or an
 exact whole-device udev `ID_PATH` (including native PCIe and SoC). This path

@@ -424,6 +424,8 @@ export function createStreamSessionOrchestrator(
 		// lease-busy answer) and before the attempt goes in-flight below, because
 		// a modem re-enumeration admitted alongside it would tear a bond link out
 		// from under a launch that has already spawned the sender.
+		if (deps.recoveryPending?.() === true)
+			return refuseStart(attemptId, "recovery_pending", "recovery_pending");
 		const admitLifecycle = deps.admitLifecycle;
 		if (admitLifecycle === undefined)
 			return await admittedStart(attemptId, request, currentIntent);
