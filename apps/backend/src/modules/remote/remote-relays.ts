@@ -37,7 +37,7 @@ import { validatePortNo } from "../../helpers/number.ts";
 import { writeTextFileAtomic } from "../../helpers/text-files.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { getMockRelayRtt } from "../../mocks/providers/relays.ts";
-
+import { broadcastConfig } from "../../rpc/config-broadcast.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 
@@ -351,7 +351,7 @@ export async function handleRemoteRelays(
 		if (autoPreloadSubscriptionRelays()) configModified = true;
 		if (configModified) {
 			saveConfig();
-			broadcastMsg("config", getConfig());
+			broadcastConfig(getConfig());
 		}
 	}
 }

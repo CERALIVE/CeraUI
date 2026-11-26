@@ -302,7 +302,11 @@ describe("the first frame after a sign-in", () => {
 			...(snapshot.capabilities ? ["capabilities"] : []),
 			"health",
 			"notification",
+			"notification",
 		]);
+		expect(hydration.at(-1)).toMatchObject({
+			notification: { remove: [{ id: "ui-out-of-date" }] },
+		});
 		expect(hydration.find((frame) => "status" in frame)).toEqual({
 			status: snapshot.status,
 		});

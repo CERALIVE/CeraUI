@@ -50,8 +50,13 @@ for mask in 077 022; do
     COMMIT=fixture
     CERAUI_VERSION=2026.9.5
     ARCHITECTURE=arm64
+    CERAUI_BUILD_ID=ceraui-build-fixture
     log_step() { :; }
     log_error() { fail "$1"; }
+    # The bundle-identity check is build-identity.test.sh's contract, not this one's.
+    assert_bundle_build_id() {
+      [[ "$1" == "$TEMP_DIR/var/www/ceralive" ]] || fail 'unexpected bundle path'
+    }
     bun() {
       [[ "$*" == 'build apps/backend/src/modules/system/update-orchestrator/recovery-cli.ts --compile --target=bun-linux-arm64 --outfile='* ]] \
         || fail 'unexpected compilation command'

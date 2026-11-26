@@ -349,10 +349,8 @@ function defaultClearSelectedVideoInput(): void {
 	const config = getConfig();
 	if (config.selected_video_input === undefined) return;
 	config.selected_video_input = undefined;
+	// The save itself publishes the clear (rpc/config-broadcast.ts).
 	saveConfig();
-	void import("../ui/websocket-server.ts").then(({ broadcastMsg }) =>
-		broadcastMsg("config", getConfig()),
-	);
 }
 
 function defaultRememberedDeviceKind(inputId: string): DeviceKind | undefined {

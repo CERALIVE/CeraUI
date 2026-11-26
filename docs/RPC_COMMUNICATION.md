@@ -137,6 +137,16 @@ Streaming configuration snapshot. Emitted after any config change (start, setCon
 
 Ingestion is **lock-aware**: fields guarded by an optimistic dirty-field lock are skipped until the lock resolves. See `apps/frontend/src/lib/rpc/dirty-registry.svelte.ts`.
 
+`config` is partial: an omitted key means unchanged. A cleared setting is stored as absent, and JSON drops an absent key, so the frame alone cannot say a key is gone; `config_clear` says it.
+
+### `config_clear`
+
+The keys the device's last `config` write cleared, sent right after that `config` frame on the same sockets (never alone, never relayed to the cloud). Every `config` broadcast goes through `broadcastConfig` (`apps/backend/src/rpc/config-broadcast.ts`), which names each key clients were sent that the frame no longer carries; every config save checks for one, so a writer that broadcasts nothing still publishes its clear. The frontend deletes exactly those keys from its config store and releases their field locks, unless a newer write for a value still holds one. A client that predates the type ignores it.
+
+```json
+{ "config_clear": { "keys": ["audio_inputs"] }, "seq": 3 }
+```
+
 ### `status`
 
 Aggregated device status. Emitted on state changes and as part of the post-login push.
@@ -567,7 +577,9 @@ Setter procedures (`streaming.start`, `streaming.setConfig`, `streaming.setBitra
 `streaming.start` is a partial-update exception to “send the whole form”: the server
 first projects the persisted stream configuration through the public input schema,
 then overlays the fields in the request. Sending `{}` therefore starts the saved
-configuration, while a partial object changes only its defined fields. A manual
+configuration, while a partial object changes only its defined fields. A request
+that names a `source` also decides `selected_video_input`: a source without a
+capture input clears the saved one. A manual
 address/port clears the saved managed relay server and account; a managed server
 clears the saved manual address/port. Persisted non-stream fields never enter the
 start payload.

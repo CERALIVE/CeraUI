@@ -35,6 +35,7 @@ import {
 import { MOCK_CONFIG_PAIRING_DEFAULTS } from "../mocks/mock-config.ts";
 import { shouldUseMocks } from "../mocks/mock-service.ts";
 import { getPasswordHash, setPasswordHash } from "../rpc/state/password.ts";
+import { announceConfigSave } from "./config-save-listeners.ts";
 import { getSshPasswordHash, setSshPasswordHash } from "./system/ssh.ts";
 
 /**
@@ -107,6 +108,8 @@ export async function loadConfig() {
 
 export function saveConfig() {
 	if (authorityFailure) throw authorityFailure;
+	// Before the write: a save that fails leaves the device on the new values too.
+	announceConfigSave(config);
 	const dataToSave: RuntimeConfig = {
 		...config,
 		password_hash: getPasswordHash(),

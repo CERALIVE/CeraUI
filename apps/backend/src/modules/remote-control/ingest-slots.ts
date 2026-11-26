@@ -33,6 +33,7 @@
  */
 
 import { logger } from "../../helpers/logger.ts";
+import { broadcastConfig } from "../../rpc/config-broadcast.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { type IngestSlot, IngestSlotsPayloadSchema } from "./protocol.ts";
 
@@ -78,6 +79,7 @@ function defaultDeps(): IngestSlotsDeps {
 				config.selected_ingest_endpoint = endpointId;
 			}
 			saveConfig();
+			broadcastConfig(config);
 		},
 	};
 }

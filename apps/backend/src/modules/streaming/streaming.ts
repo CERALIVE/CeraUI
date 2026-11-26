@@ -33,6 +33,7 @@ import {
 	runtimeConfigSchema,
 } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
+import { broadcastConfig } from "../../rpc/config-broadcast.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import {
 	convertManualToRemoteRelay,
@@ -349,7 +350,7 @@ export async function updateConfig(
 	}
 
 	saveConfig();
-	broadcastMsg("config", config);
+	broadcastConfig(config);
 
 	return { pipeline, srtlaAddr, srtlaPort, streamid };
 }

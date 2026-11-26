@@ -1,119 +1,26 @@
 // @vitest-environment jsdom
 // allow: SIZE_OK - socket lifecycle cases share one scripted transport and auth fixture.
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
+
+import {
+	COMPILE_MS,
+	compileTab,
+	flushReplies,
+	RESTORE,
+	resetTab,
+	start,
+	TOKEN,
+} from "../../tests/harness/scripted-socket";
 
 vi.mock("../env", () => ({ getRpcSocketUrl: () => "ws://test.local/ws" }));
 
-type Request = {
-	readonly id: string;
-	readonly path: string[];
-	readonly input?: unknown;
-};
+beforeAll(async () => {
+	await compileTab();
+	await import("@testing-library/svelte");
+	await import("../../main/Auth.svelte");
+}, COMPILE_MS);
 
-class ScriptedSocket {
-	static readonly OPEN = 1;
-	static readonly CONNECTING = 0;
-	static readonly CLOSED = 3;
-	static instances: ScriptedSocket[] = [];
-	readyState = ScriptedSocket.CONNECTING;
-	onopen?: () => void;
-	onclose?: () => void;
-	onmessage?: (event: { data: string }) => void;
-	readonly sent: Request[] = [];
-
-	constructor() {
-		ScriptedSocket.instances.push(this);
-	}
-
-	open() {
-		this.readyState = ScriptedSocket.OPEN;
-		this.onopen?.();
-	}
-
-	close() {
-		this.readyState = ScriptedSocket.CLOSED;
-		this.onclose?.();
-	}
-
-	send(data: string) {
-		const request: Request = JSON.parse(data);
-		if (request.path) this.sent.push(request);
-	}
-
-	request(path: string): Request {
-		const request = this.sent.findLast((item) => item.path.join(".") === path);
-		if (!request) throw new Error(`No ${path} request on this socket`);
-		return request;
-	}
-
-	reply(path: string, result: unknown) {
-		this.onmessage?.({
-			data: JSON.stringify({ id: this.request(path).id, result }),
-		});
-	}
-
-	push(message: object) {
-		this.onmessage?.({ data: JSON.stringify(message) });
-	}
-}
-
-const TOKEN = "issued-session-token";
-const RESTORE = { token: TOKEN, persistent_token: true };
-
-function openLatest() {
-	const socket = ScriptedSocket.instances.at(-1);
-	if (!socket) throw new Error("No pending WebSocket");
-	socket.open();
-	return socket;
-}
-
-async function start() {
-	const subscriptions = await import("./subscriptions.svelte");
-	const session = await import("./session-epoch.svelte");
-	const auth = await import("$lib/stores/auth-status.svelte");
-	const { rpcClient } = await import("./client");
-	subscriptions.initSubscriptions();
-	const first = openLatest();
-	const replace = (old: ScriptedSocket) => {
-		old.close();
-		rpcClient.connect();
-		return openLatest();
-	};
-	const setupPassword = async (success: boolean) => {
-		first.push({ status: { set_password: true } });
-		const pending = auth.createPassword("disposable-password");
-		await flushReplies();
-		first.reply("auth.setPassword", { success });
-		expect(await pending).toBe(success);
-	};
-	const signIn = async (remember = true) => {
-		const pending = auth.authenticate("disposable-password", remember);
-		await flushReplies();
-		first.reply("auth.login", { success: true, auth_token: TOKEN });
-		expect(await pending).toEqual({ kind: "ok" });
-	};
-	return {
-		auth,
-		first,
-		replace,
-		session,
-		setupPassword,
-		signIn,
-		subscriptions,
-	};
-}
-
-async function flushReplies() {
-	await vi.advanceTimersByTimeAsync(0);
-}
-
-beforeEach(() => {
-	vi.resetModules();
-	vi.useFakeTimers();
-	vi.stubGlobal("WebSocket", ScriptedSocket);
-	ScriptedSocket.instances = [];
-	localStorage.clear();
-});
+beforeEach(resetTab);
 
 it("retains the token and offers sign-in on a live replay timeout after first-run setup", async () => {
 	const { first, replace, setupPassword, signIn, auth, subscriptions } =
@@ -159,6 +66,34 @@ it("replays the token issued to a fresh remembered password login", async () => 
 	await flushReplies();
 	expect(session.getRestoredSessions()).toBe(1);
 });
+
+it.each(["after", "before", "without"] as const)(
+	"a clear missed while offline is applied by the reconnect pull, %s the login snapshot, and autostart survives",
+	async (order) => {
+		const { first, replace, signIn, subscriptions } = await start();
+		await signIn();
+		first.push({
+			config: { source: "cam-1", video_codec: "h264", autostart: true },
+			seq: 1,
+		});
+
+		// Offline, another tab cleared video_codec: no frame reached this tab.
+		const second = replace(first);
+		second.reply("auth.login", { success: true });
+		const snapshot = () =>
+			second.push({ config: { source: "cam-1", autostart: true } });
+		if (order === "after") snapshot();
+		await flushReplies();
+		second.reply("streaming.getConfig", { source: "cam-1" });
+		await flushReplies();
+		if (order === "before") snapshot();
+
+		expect(subscriptions.getConfig()).toEqual({
+			source: "cam-1",
+			autostart: true,
+		});
+	},
+);
 
 it("signs out on rejection, without sending protected reads or replaying again", async () => {
 	const { first, replace, signIn, auth } = await start();

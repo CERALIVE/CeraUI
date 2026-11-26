@@ -2025,6 +2025,7 @@
 	"notifications.streamStartUpdateInProgressFailed": "无法启动：软件更新正在安装，无法中断。请在更新完成后重试。",
 	"notifications.updateAvailable": "有可用更新",
 	"notifications.updateAvailableDescription": "有新版本可用。刷新页面即可更新。",
+	"notifications.uiOutOfDate": "此页面版本已过旧。请刷新页面后继续。",
 	"notifications.updateInProgress": "更新进行中",
 	"notifications.uplinkFlowsReset": "已重置 {iface} 上的客户端连接，使其能切换到可用的上行链路。",
 	"notifications.validationFailed": "请检查这些字段：{fields}",

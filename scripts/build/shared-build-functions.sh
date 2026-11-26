@@ -62,10 +62,10 @@ get_git_hash() {
     git -C "$BUILD_REPO_ROOT" rev-parse HEAD 2>/dev/null || echo "unknown"
 }
 
-hash_build_inputs() {
-    local component="$1"
-    local path
-    local -a inputs=(
+# The production build inputs of component $1, into the array named by $2.
+build_input_paths() {
+    local -n paths="$2"
+    paths=(
         package.json
         bun.lock
         .bun-version
@@ -77,11 +77,18 @@ hash_build_inputs() {
         deployment
     )
 
-    case "$component" in
-        frontend) inputs+=(apps/frontend) ;;
-        backend) inputs+=(apps/backend) ;;
+    case "$1" in
+        frontend) paths+=(apps/frontend) ;;
+        backend) paths+=(apps/backend) ;;
         *) return 1 ;;
     esac
+}
+
+hash_build_inputs() {
+    local component="$1"
+    local path
+    local -a inputs
+    build_input_paths "$component" inputs || return 1
 
     (
         cd "$BUILD_REPO_ROOT"
@@ -104,6 +111,46 @@ get_frontend_hash() {
     hash_build_inputs frontend
 }
 
+# The build identity (CERAUI_BUILD_ID): a hash of the git-tracked content of the
+# frontend's build inputs. Generated files and caches are untracked, so they
+# never change it, and every artifact built from one checkout gets the same one.
+compute_build_id() {
+    local -a inputs
+    build_input_paths frontend inputs
+    (
+        set -o pipefail
+        cd "$BUILD_REPO_ROOT"
+        git ls-files -z -- "${inputs[@]}" | LC_ALL=C sort -z | while IFS= read -r -d '' path; do
+            [ -f "$path" ] || continue
+            printf '%s\0' "$path"
+            sha256sum "$path"
+        done | sha256sum | cut -d' ' -f1
+    )
+}
+
+# Derive CERAUI_BUILD_ID once, before any generation step, and export it to every
+# later step (the frontend build embeds it; the packaging stamps it). A caller
+# that already set it keeps its value.
+ensure_build_id() {
+    if [ -z "${CERAUI_BUILD_ID:-}" ]; then
+        CERAUI_BUILD_ID="ceraui-build-$(compute_build_id)" || return 1
+    fi
+    export CERAUI_BUILD_ID
+}
+
+# The frontend bundle under $1 must carry CERAUI_BUILD_ID: a package whose stamp
+# names another build than its bundle fails here, never warns.
+assert_bundle_build_id() {
+    if [ -z "${CERAUI_BUILD_ID:-}" ]; then
+        log_error "CERAUI_BUILD_ID is not set"
+        return 1
+    fi
+    if ! grep -rqF -- "$CERAUI_BUILD_ID" "$1"; then
+        log_error "The frontend bundle in $1 does not carry CERAUI_BUILD_ID ($CERAUI_BUILD_ID)"
+        return 1
+    fi
+}
+
 get_backend_hash() {
     hash_build_inputs backend
 }
@@ -119,6 +166,8 @@ is_frontend_cache_valid() {
     cached_hash=$(cat "$FRONTEND_CACHE/hash.txt")
     current_hash=$(get_frontend_hash)
 
+    # A frontend built under another identity would name the wrong build.
+    [ "$(cat "$FRONTEND_CACHE/build-id.txt" 2>/dev/null)" = "${CERAUI_BUILD_ID:-}" ] || return 1
     [ "$cached_hash" = "$current_hash" ]
 }
 
@@ -161,6 +210,7 @@ build_frontend_only() {
     rm -rf "$FRONTEND_CACHE/public"
     cp -r dist/public "$FRONTEND_CACHE/"
     get_frontend_hash > "$FRONTEND_CACHE/hash.txt"
+    printf '%s\n' "${CERAUI_BUILD_ID:-}" > "$FRONTEND_CACHE/build-id.txt"
 
     echo "✅ Frontend built and cached"
 }
@@ -197,6 +247,8 @@ build_backend_only() {
 smart_build() {
     local arch=${BUILD_ARCH:-arm64}
     echo "🚀 Smart build for $arch architecture using artifact caching"
+    ensure_build_id
+    log_info "Build identity: $CERAUI_BUILD_ID"
 
     # Clean dist directory
     rm -rf dist
@@ -474,7 +526,8 @@ smart_build_monitored() {
 
 # Export all functions for use in other scripts
 export -f get_version get_commit get_build_date get_architecture get_ceraui_version
-export -f get_git_hash hash_build_inputs get_frontend_hash get_backend_hash
+export -f get_git_hash build_input_paths hash_build_inputs get_frontend_hash get_backend_hash
+export -f compute_build_id ensure_build_id assert_bundle_build_id
 export -f is_frontend_cache_valid is_backend_cache_valid
 export -f build_frontend_only build_backend_only smart_build smart_build_monitored
 export -f clean_cache cache_status

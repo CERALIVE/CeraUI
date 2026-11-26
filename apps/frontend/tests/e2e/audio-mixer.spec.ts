@@ -230,6 +230,38 @@ test.describe("audio mixer — caps-full", () => {
 		expect(wire.calls("streaming.setAudioMix")).toHaveLength(beforeMix);
 	});
 
+	test("idle mute then unmute of the main input ends unmuted once the device answers, and after a reload", async ({
+		page,
+		backendRpc,
+	}) => {
+		await backendRpc.call(["streaming", "setConfig"], { audio_inputs: null });
+		const mute = page.getByTestId(`audio-strip-mute-${MAIN}`);
+		await expect(mute).toHaveAttribute("aria-pressed", "false");
+		// What the strip shows once the device's answer has settled the click, not
+		// the preview it shows while that answer is on its way.
+		const settled = async () => {
+			const reply = wire.holdAudioMix();
+			await mute.click();
+			const held = await reply.held;
+			reply.release();
+			await wire.pageReply(held.id);
+			await page.evaluate(() => new Promise((done) => requestAnimationFrame(done)));
+			return mute.getAttribute("aria-pressed");
+		};
+
+		expect(await settled()).toBe("true");
+		// Unmuted, the main input is back at its defaults, which the device saves as no mix at all.
+		expect(await settled()).toBe("false");
+		expect(
+			await backendRpc.call<{ audio_inputs?: unknown }>(["streaming", "getConfig"]),
+		).not.toHaveProperty("audio_inputs");
+
+		await page.reload();
+		await ensureAuthenticated(page);
+		await navigateTo(page, "live");
+		await expect(page.getByTestId(`audio-strip-mute-${MAIN}`)).toHaveAttribute("aria-pressed", "false");
+	});
+
 	test("picking a main input outside the saved mix saves it first on Track 1, and live its level change is applied", async ({
 		page,
 		backendRpc,

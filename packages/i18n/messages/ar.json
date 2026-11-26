@@ -2286,6 +2286,7 @@
 	"notifications.streamStartUpdateInProgressFailed": "تعذّر البدء: يجري تثبيت تحديث للبرنامج ولا يمكن مقاطعته. أعد المحاولة بعد انتهائه.",
 	"notifications.updateAvailable": "تحديث متاح",
 	"notifications.updateAvailableDescription": "يتوفر إصدار جديد. حدّث الصفحة للتحديث.",
+	"notifications.uiOutOfDate": "هذه الصفحة قديمة. أعد تحميل الصفحة للمتابعة.",
 	"notifications.updateInProgress": "التحديث قيد التقدم",
 	"notifications.uplinkFlowsReset": "أُعيد ضبط اتصالات الأجهزة على {iface} كي تنتقل إلى وصلة صاعدة سليمة.",
 	"notifications.validationFailed": "يرجى التحقق من هذه الحقول: {fields}",

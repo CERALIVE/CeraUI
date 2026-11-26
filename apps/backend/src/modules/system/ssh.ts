@@ -22,6 +22,7 @@ import { execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
 import { runWithStdin } from "../../helpers/run.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
+import { broadcastConfig } from "../../rpc/config-broadcast.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { setup } from "../setup.ts";
 import type { MessageSocket } from "../ui/message-socket.ts";
@@ -537,7 +538,7 @@ async function mintAndApplySshPassword(
 	config.ssh_pass = password;
 	sshPasswordHash = await probeSshUserHash(deps.readShadow, ssh_user);
 	deps.persist();
-	broadcastMsg("config", config);
+	broadcastConfig(config);
 	await deps.refreshStatus();
 	return password;
 }

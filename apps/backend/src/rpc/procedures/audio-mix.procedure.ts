@@ -22,13 +22,15 @@ import {
 } from "../../modules/streaming/audio-mix-status.ts";
 import { cerastreamBackend } from "../../modules/streaming/cerastream-backend.ts";
 import { noteAudioSaved } from "../../modules/streaming/start-audio.ts";
-import { broadcastMsg } from "../../modules/ui/websocket-server.ts";
+import { broadcastConfig } from "../config-broadcast.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
+import { uiBuildMiddleware } from "../middleware/ui-build.middleware.ts";
 import type { RPCContext } from "../types.ts";
 
 export const setAudioMixProcedure = os
 	.$context<RPCContext>()
 	.use(authMiddleware)
+	.use(uiBuildMiddleware)
 	.input(setAudioMixInputSchema)
 	.output(setAudioMixOutputSchema)
 	.handler(async ({ input: { id, include, track, ...update } }) => {
@@ -40,7 +42,7 @@ export const setAudioMixProcedure = os
 			config.audio_inputs = storedAudioInputs(changed.inputs, config);
 			noteAudioSaved("audio_inputs");
 			saveConfig();
-			broadcastMsg("config", config);
+			broadcastConfig(config);
 			const entry = changed.inputs.find((input) => input.id === id);
 			return {
 				success: true,
@@ -127,7 +129,7 @@ export const setAudioMixProcedure = os
 			config.audio_inputs = storedAudioInputs(next, config);
 			noteAudioSaved("audio_inputs");
 			saveConfig();
-			broadcastMsg("config", config);
+			broadcastConfig(config);
 		}
 		return { success: true, applied, applies_next_start: !live };
 	});

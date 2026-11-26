@@ -27,6 +27,7 @@ import type {
 	UnclaimedAdapter,
 } from "@ceraui/rpc/schemas";
 import type WebSocket from "ws";
+import { rememberConfigSent } from "../../rpc/config-broadcast.ts";
 import {
 	BLUETOOTH_EVENT,
 	getBluetoothStatusMessage,
@@ -150,6 +151,7 @@ export function sendStatus(conn: WebSocket) {
 export function sendInitialStatus(conn: WebSocket) {
 	const config = getConfig();
 	conn.send(buildMsg("config", config));
+	rememberConfigSent(config);
 	conn.send(buildMsg("pipelines", getPipelinesMessage()));
 	conn.send(buildMsg("sources", getSourcesMessage()));
 	if (getRelays()) conn.send(buildMsg("relays", buildRelaysMsg()));

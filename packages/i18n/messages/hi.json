@@ -2230,6 +2230,7 @@
 	"notifications.streamStartUpdateInProgressFailed": "शुरू नहीं हो सका: एक सॉफ़्टवेयर अपडेट इंस्टॉल हो रहा है और इसे बाधित नहीं किया जा सकता। इसके पूरा होने पर फिर से कोशिश करें।",
 	"notifications.updateAvailable": "अपडेट उपलब्ध",
 	"notifications.updateAvailableDescription": "एक नया संस्करण उपलब्ध है। अपडेट करने के लिए रिफ्रेश करें।",
+	"notifications.uiOutOfDate": "यह पेज पुराना हो गया है। जारी रखने के लिए पेज रीलोड करें।",
 	"notifications.updateInProgress": "अपडेट प्रगति पर है",
 	"notifications.uplinkFlowsReset": "{iface} पर क्लाइंट कनेक्शन रीसेट किए गए ताकि वे किसी स्वस्थ अपलिंक पर जा सकें।",
 	"notifications.validationFailed": "कृपया इन फ़ील्ड की जाँच करें: {fields}",

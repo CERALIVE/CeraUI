@@ -115,6 +115,10 @@ printf '%s\n' "$COMMIT" > "$TEMP_DIR/opt/ceralive/revision"
 # `revision` keeps its exact meaning (the commit, demoted to build metadata) and
 # this sibling carries the version that is promoted in front of it.
 printf '%s\n' "$CERAUI_VERSION" > "$TEMP_DIR/opt/ceralive/version"
+# The build identity the packaged bundle names on its socket; the backend refuses
+# Live writes from a page that names another (an open tab from before an update).
+assert_bundle_build_id "$TEMP_DIR/var/www/ceralive"
+printf '%s\n' "$CERAUI_BUILD_ID" > "$TEMP_DIR/opt/ceralive/build-id"
 ln -s /var/www/ceralive "$TEMP_DIR/opt/ceralive/public"
 cp dist/override-ceralive.sh "$TEMP_DIR/usr/local/bin/"
 cp dist/reset-to-default.sh "$TEMP_DIR/usr/local/bin/"

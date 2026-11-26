@@ -46,6 +46,10 @@ The `streaming` router exposes these procedures:
 
 `setConfig` writes the provided fields onto the running config (same relay/manual mutual-exclusion logic as `updateConfig`, minus DNS/pipeline validation), then calls `saveConfig` and broadcasts a `config` message. Use this for all config-only dialogs that must not start the stream.
 
+### Cleared settings and out-of-date pages [EXISTS]
+
+Every `config` broadcast goes through `broadcastConfig` (`rpc/config-broadcast.ts`), never `broadcastMsg("config", ...)` (`tests/config-broadcast-guard.test.ts` fails on one): after a write that cleared keys clients were sent, it follows the unchanged `config` frame with `config_clear { keys }` (the login snapshot counts as sent). Every `saveConfig` is followed by a check (`modules/config-save-listeners.ts`): a key clients hold that the device no longer has is published in the same tick, also when the disk write fails and when the writer broadcasts nothing. A writer that SETS a value tabs show still calls `broadcastConfig` itself, synchronously after its save. Every clearable setting and writer is a row in `tests/config-clear-sites.test.ts`; a new one adds a row. `GET_CONFIG_KEYS` (`@ceraui/rpc`) equals the keys `getConfig` returns; the frontend's reconnect hydrate depends on it (`tests/config-clear.test.ts`). `start`, `setConfig`, `setSourceVisibility`, `setAudioMix`, `switchInput`, `switchAudio` and `reloadAudioDelay` are gated by the page's build: a UI socket whose page named another build than `/opt/ceralive/build-id` (or none) is refused before its input is read, so before any change or engine call, and sent the notice "This page is out of date. Reload to continue." (key `notifications.uiOutOfDate`; `msg` is the English an older bundle without the key shows). A refused `start` resolves with its own `{ success: false, is_streaming, error: "UI_OUT_OF_DATE" }` (`uiBuildStartMiddleware`), because a page reads a thrown Start as a lost reply and shows nothing; every other call throws (`uiBuildMiddleware`), because the audio pick answers a resolved `success: false` with a second, silent try. Both shapes are pinned on the page from before the check and on today's, each against the real device, in the frontend's `src/tests/harness/refused-live-writes.test.ts`. A page that signs in to a backend of its own build, or to one with no identity, has an earlier backend's notice withdrawn (`syncOutOfDateNotice`). `stop` and `setBitrate` stay open, so a stale page can always end or lower a running stream. The device-control channel and reads are never gated, nor is anything on a backend with no identity (`tests/ui-build-admission.test.ts`; `tests/ui-build-wiring.test.ts` boots the shipped entrypoint).
+
 ### Composition placement [EXISTS]
 
 `setConfig({ composition_rect })` places the second input: the backend writes
@@ -132,6 +136,9 @@ no default for it, so no caller launches without one.
 Validation, the codec gate, the probe, the engine request, every retry and the armed
 marker read that snapshot (`asrc`, `audio_inputs`, `acodec`, `delay` and
 `audio_backend`), never the saved config.
+An omitted `audio_inputs` on Start uses the saved mix. An explicit `null`
+clears the mix for that Start and for the saved setup, unless a newer save
+owns the field. Clearing the mix does not select "No audio".
 So a "No audio" Start stays without audio, and a Start pressed with a microphone
 is judged on that microphone: if it does not answer, the Start is refused with
 `audio_source_probe_failed` even when "No audio" was saved meanwhile. Two reads stay

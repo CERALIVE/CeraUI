@@ -2244,6 +2244,7 @@
 	"notifications.streamStartUpdateInProgressFailed": "Não foi possível iniciar: uma atualização de software está sendo instalada e não pode ser interrompida. Tente novamente quando ela terminar.",
 	"notifications.updateAvailable": "Atualização disponível",
 	"notifications.updateAvailableDescription": "Uma nova versão está disponível. Recarregue a página para atualizar.",
+	"notifications.uiOutOfDate": "Esta página está desatualizada. Recarregue a página para continuar.",
 	"notifications.updateInProgress": "Atualização em andamento",
 	"notifications.uplinkFlowsReset": "As conexões de clientes em {iface} foram reiniciadas para que possam migrar para um enlace saudável.",
 	"notifications.validationFailed": "Verifique estes campos: {fields}",

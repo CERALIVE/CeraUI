@@ -86,8 +86,8 @@ const PASSWORD = process.env.E2E_PASSWORD ?? '12345678';
 const MAIN_CONTENT = '#main-content';
 const PASSWORD_FIELD = '#password';
 
-/** The RPC socket is `<origin>/ws` with no query — see `getRpcSocketUrl()`. */
-const RPC_SOCKET_URL = /\/ws$/;
+/** The RPC socket is `<origin>/ws?ui_build=<build>`, matched by its path (see `getRpcSocketUrl()`). */
+const RPC_SOCKET_URL = (url: URL) => url.pathname === '/ws';
 
 /** Mirrors the routing cookie the `page` fixture installs under CI preview. */
 const CI_PREVIEW_ROUTING_COOKIE = 'ceraui_e2e_backend_port';
@@ -183,7 +183,7 @@ function installSocketProbe(): void {
 		// biome-ignore lint/suspicious/noExplicitAny: native ctor signature.
 		constructor(url: string, protocols?: any) {
 			super(url, protocols);
-			if (String(url).endsWith('/ws')) {
+			if (new URL(String(url)).pathname === '/ws') {
 				w.__ceraRememberProbe.socket = this;
 			}
 		}

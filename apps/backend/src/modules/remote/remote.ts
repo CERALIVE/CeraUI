@@ -49,6 +49,7 @@ import { ACTIVE_TO } from "../../helpers/shared.ts";
 import { getms } from "../../helpers/time.ts";
 import { extractMessage } from "../../helpers/types.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
+import { broadcastConfig } from "../../rpc/config-broadcast.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { dnsCacheResolve, dnsCacheValidate } from "../network/dns.ts";
 import { queueUpdateGw } from "../network/gateways.ts";
@@ -369,7 +370,7 @@ export function forceRepairMigration(reason: RemoteRepairReason): void {
 		{ remote: { error: REMOTE_REPAIR_STATUS } } satisfies StatusResponseMessage,
 		getms() - ACTIVE_TO,
 	);
-	broadcastMsg("config", config);
+	broadcastConfig(config);
 }
 
 async function remoteConnect() {
@@ -553,6 +554,7 @@ export async function setRemoteConfig(params: SetRemoteConfigParams) {
 	}
 
 	saveConfig();
+	broadcastConfig(config);
 
 	if (remoteWs) {
 		remoteStatusHandled = true;
@@ -564,8 +566,6 @@ export async function setRemoteConfig(params: SetRemoteConfigParams) {
 	if (await updateCachedRelays(undefined)) {
 		broadcastMsg("relays", buildRelaysMsg());
 	}
-
-	broadcastMsg("config", config);
 }
 
 /**

@@ -26,6 +26,7 @@ import {
 	getIsStreaming,
 	updateStatus,
 } from "../modules/streaming/streaming.ts";
+import { broadcastConfig } from "../rpc/config-broadcast.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
 import {
 	getConfigProcedure,
@@ -209,6 +210,8 @@ test("forced video passthrough remains stored and forwarded", async () => {
 test("config broadcast and getConfig carry the saved balancer", async () => {
 	const broadcasts: string[] = [];
 	const context = makeRpcContext(broadcasts);
+	// Baseline: what clients were sent before this test names no cleared key.
+	broadcastConfig(getConfig());
 	addClient(context.ws);
 	try {
 		await call(

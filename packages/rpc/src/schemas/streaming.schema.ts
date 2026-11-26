@@ -1120,6 +1120,59 @@ export const configMessageSchema = z.object({
 });
 export type ConfigMessage = z.infer<typeof configMessageSchema>;
 
+// The keys `streaming.getConfig` returns (a backend test pins it to the
+// handler). The reconnect safety hydrate applies that reply as a snapshot of
+// exactly these keys: a listed key the reply omits is cleared, while a key it
+// never returns (`autostart`) is left as it is.
+export const GET_CONFIG_KEYS = [
+	'asrc',
+	'audio_inputs',
+	'max_br',
+	'balancer',
+	'acodec',
+	'audio_backend',
+	'delay',
+	'pipeline',
+	'srt_latency',
+	'fec_enabled',
+	'recovery_mode',
+	'stream_profile',
+	'profile_decided_by',
+	'bitrate_overlay',
+	'resolution',
+	'framerate',
+	'video_codec',
+	'video_passthrough',
+	'failover_rate_policy',
+	'selected_video_input',
+	'source',
+	'input_mode',
+	'previewEncode',
+	'composition',
+	'source_preference',
+	'sources_visibility',
+	'srtla_addr',
+	'srtla_port',
+	'srt_streamid',
+	'remote_key',
+	'relay_account',
+	'relay_server',
+	'relay_streamid_override',
+	'relay_protocol',
+	'selected_ingest_endpoint',
+	'detectionMethod',
+	'modem_provisioning',
+] as const satisfies readonly (keyof ConfigMessage)[];
+
+// Sent right after a `config` broadcast whose write cleared settings, on the
+// same sockets: the keys the device now holds as absent. JSON drops an absent
+// key, so the `config` frame cannot say it; `config` itself stays partial (an
+// omitted key there still means unchanged). A client that predates this type
+// ignores it.
+export const CONFIG_CLEAR_EVENT = 'config_clear';
+export const configClearMessageSchema = z.object({ keys: z.array(z.string()) });
+export type ConfigClearMessage = z.infer<typeof configClearMessageSchema>;
+
 // Streaming start output
 export const streamingStartOutputSchema = z.object({
 	success: z.boolean(),

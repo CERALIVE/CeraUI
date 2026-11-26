@@ -175,6 +175,29 @@ describe("BackendRpc connection ownership", () => {
 		expect(socket.closed).toBe(true);
 	});
 
+	it("answers a valid server heartbeat without sending an RPC request", async () => {
+		const socket = new FakeBackendRpcSocket();
+		socket.respondToLogin = true;
+		const client = await BackendRpc.connect(3100, {
+			createSocket: () => {
+				queueMicrotask(() => socket.open());
+				return socket;
+			},
+		});
+		const send = vi.spyOn(socket, "send").mockImplementation(() => {});
+		try {
+			socket.dispatchEvent(
+				new MessageEvent("message", { data: '{"ping":{"t":0}}' }),
+			);
+			socket.dispatchEvent(
+				new MessageEvent("message", { data: '{"ping":{"t":1},"seq":2}' }),
+			);
+			expect(send.mock.calls).toEqual([['{"pong":true}']]);
+		} finally {
+			client.close();
+		}
+	});
+
 	for (const terminalEvent of ["close", "error"] as const) {
 		it(`rejects a pending call immediately on socket ${terminalEvent}`, async () => {
 			const socket = new FakeBackendRpcSocket();

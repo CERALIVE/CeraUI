@@ -14,7 +14,13 @@
  * hostname + the backend dev port.
  */
 
-import { PREVIEW_TOKEN_PARAM, PREVIEW_WS_PATH } from "@ceraui/rpc/schemas";
+import {
+	PREVIEW_TOKEN_PARAM,
+	PREVIEW_WS_PATH,
+	UI_BUILD_PARAM,
+} from "@ceraui/rpc/schemas";
+
+import { CLIENT_VERSION } from "../stores/version-manager";
 
 interface BuildInfo {
 	MODE: string;
@@ -150,9 +156,15 @@ export function getSocketUrl(): string {
 	});
 }
 
+/**
+ * The RPC socket URL, naming the build this page was served from so the device
+ * can refuse Live writes from a page older than its backend.
+ */
 export function getRpcSocketUrl(): string {
 	const origin = getSocketUrl();
-	return origin ? `${origin}${RPC_WS_PATH}` : NON_BROWSER_SOCKET_URL;
+	return origin
+		? `${origin}${RPC_WS_PATH}?${UI_BUILD_PARAM}=${encodeURIComponent(CLIENT_VERSION)}`
+		: NON_BROWSER_SOCKET_URL;
 }
 
 /**

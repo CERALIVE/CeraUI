@@ -215,19 +215,23 @@ function configSnapshotOp(): RevertibleOp {
 		},
 		apply: async (payload) => {
 			const { getConfig, saveConfig } = await import("../config.ts");
+			const { broadcastConfig } = await import("../../rpc/config-broadcast.ts");
 			const config = getConfig() as Record<string, unknown>;
 			Object.assign(config, payload ?? {});
 			saveConfig();
+			broadcastConfig(config);
 			return structuredClone(config);
 		},
 		revert: async (snapshot) => {
 			const { getConfig, saveConfig } = await import("../config.ts");
+			const { broadcastConfig } = await import("../../rpc/config-broadcast.ts");
 			const config = getConfig() as Record<string, unknown>;
 			for (const key of Object.keys(config)) {
 				delete config[key];
 			}
 			Object.assign(config, snapshot as Record<string, unknown>);
 			saveConfig();
+			broadcastConfig(config);
 		},
 	};
 }

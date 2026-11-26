@@ -2025,6 +2025,7 @@
 	"notifications.streamStartUpdateInProgressFailed": "開始できません: ソフトウェアアップデートをインストール中のため中断できません。完了後にもう一度お試しください。",
 	"notifications.updateAvailable": "アップデートがあります",
 	"notifications.updateAvailableDescription": "新しいバージョンを利用できます。ページを再読み込みすると更新されます。",
+	"notifications.uiOutOfDate": "このページは古いバージョンです。続行するにはページを再読み込みしてください。",
 	"notifications.updateInProgress": "更新が進行中です",
 	"notifications.uplinkFlowsReset": "{iface} のクライアント接続をリセットし、正常なアップリンクへ移れるようにしました。",
 	"notifications.validationFailed": "次の項目を確認してください: {fields}",

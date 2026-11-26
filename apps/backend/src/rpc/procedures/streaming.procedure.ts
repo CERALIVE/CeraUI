@@ -155,7 +155,12 @@ import {
 } from "../../modules/streaming/streaming-engine.ts";
 import { start as startStream } from "../../modules/streaming/streamloop.ts";
 import { broadcastMsg } from "../../modules/ui/websocket-server.ts";
+import { broadcastConfig } from "../config-broadcast.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
+import {
+	uiBuildMiddleware,
+	uiBuildStartMiddleware,
+} from "../middleware/ui-build.middleware.ts";
 import type { RPCContext } from "../types.ts";
 
 export { setAudioMixProcedure } from "./audio-mix.procedure.ts";
@@ -188,6 +193,9 @@ const baseProcedure = os.$context<RPCContext>();
 
 // Authenticated procedure
 const authedProcedure = baseProcedure.use(authMiddleware);
+
+// Start and the Live source, format and audio writes refuse an out-of-date page.
+const liveWriteProcedure = authedProcedure.use(uiBuildMiddleware);
 
 // A second streaming.start arriving while the first is still launching is
 // rejected with this stable code (not treated as a hard failure). The launch
@@ -253,6 +261,7 @@ function startResponse(
  * Start streaming procedure
  */
 export const streamingStartProcedure = authedProcedure
+	.use(uiBuildStartMiddleware)
 	.input(streamingConfigInputSchema)
 	.output(streamingStartOutputSchemaExtended)
 	.handler(async ({ input, context }) => {
@@ -492,7 +501,7 @@ export const setBitrateProcedure = authedProcedure
 				// control re-seeds from that cache on every mount (a destination
 				// switch unmounts LiveView), so a hot-adjust visibly reverted on
 				// tab-return while the device streamed on at the new rate.
-				broadcastMsg("config", getConfig());
+				broadcastConfig(getConfig());
 				return { success: true, applied: newBitrate };
 			}
 			// Streaming, but the engine refused the change — report a failure so the
@@ -693,7 +702,7 @@ function staysOnTheSameDevice(
 	return anchor !== undefined && anchor === config.source_stable_id;
 }
 
-export const setConfigProcedure = authedProcedure
+export const setConfigProcedure = liveWriteProcedure
 	.input(streamingSetConfigInputSchema)
 	.output(streamingSetConfigOutputSchema)
 	.handler(async ({ input }) => {
@@ -1140,7 +1149,7 @@ export const setConfigProcedure = authedProcedure
 		}
 
 		saveConfig();
-		broadcastMsg("config", config);
+		broadcastConfig(config);
 		reportActiveProfile();
 		if (input.audio_backend !== undefined) {
 			await refreshBluetoothAudioDevices();
@@ -1214,7 +1223,7 @@ export const setConfigProcedure = authedProcedure
 		const persisted = getConfig();
 		if (staged.composition !== undefined)
 			applied.composition = persisted.composition ?? null;
-		broadcastMsg("config", persisted);
+		broadcastConfig(persisted);
 		// Post-clamp echo for the staged half, same rule as the merge above.
 		if (staged.resolution !== undefined)
 			applied.resolution = persisted.resolution;
@@ -1240,14 +1249,14 @@ export const setConfigProcedure = authedProcedure
  * the Live source list re-renders the marked-but-never-dropped row) and the
  * `config` echo (so the Sources dialog reflects the saved toggle).
  */
-export const setSourceVisibilityProcedure = authedProcedure
+export const setSourceVisibilityProcedure = liveWriteProcedure
 	.input(setSourceVisibilityInputSchema)
 	.output(setSourceVisibilityOutputSchema)
 	.handler(({ input }) => {
 		const config = getConfig();
 		config.sources_visibility = { hide_test_pattern: input.hide_test_pattern };
 		saveConfig();
-		broadcastMsg("config", config);
+		broadcastConfig(config);
 		broadcastSources();
 		return {
 			success: true,
@@ -1390,7 +1399,7 @@ export function applySwitchInputFollow(
 	config.selected_video_input = routed.selected_video_input;
 	noteSourceSelectionWrite(inputId);
 	saveConfig();
-	broadcastMsg("config", config);
+	broadcastConfig(config);
 
 	if (getConfig().asrc !== AUDIO_SOURCE_AUTO) return result;
 	const next = resolveAutoAsrcFromLiveState();
@@ -1404,7 +1413,7 @@ export function applySwitchInputFollow(
  * error (SOURCE_LOST when the target was unplugged before the switch landed). A
  * successful switch is persisted + re-resolves the deferred Auto audio follow.
  */
-export const switchInputProcedure = authedProcedure
+export const switchInputProcedure = liveWriteProcedure
 	.input(switchInputInputSchema)
 	.output(switchInputOutputSchema)
 	.handler(async ({ input }) => {
@@ -1433,7 +1442,7 @@ export const switchInputProcedure = authedProcedure
  * `cerastream.audio.device_not_found` to AUDIO_DEVICE_NOT_FOUND — never the
  * video SOURCE_LOST code.
  */
-export const switchAudioProcedure = authedProcedure
+export const switchAudioProcedure = liveWriteProcedure
 	.input(switchAudioInputSchema)
 	.output(switchAudioOutputSchema)
 	.handler(async ({ input }) => {
@@ -1491,7 +1500,7 @@ export const switchAudioProcedure = authedProcedure
  * Hot-apply the audio delay (Phase 1.5) via reload-config — no stream restart.
  * The engine clamps and echoes the applied value.
  */
-export const reloadAudioDelayProcedure = authedProcedure
+export const reloadAudioDelayProcedure = liveWriteProcedure
 	.input(reloadAudioDelayInputSchema)
 	.output(reloadAudioDelayOutputSchema)
 	.handler(async ({ input }) => {

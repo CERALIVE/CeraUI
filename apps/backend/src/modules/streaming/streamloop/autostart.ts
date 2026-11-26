@@ -23,11 +23,11 @@
 import fs from "node:fs";
 import { logger } from "../../../helpers/logger.ts";
 import { AUTOSTART_RETRY_DELAY } from "../../../helpers/timing-constants.ts";
+import { broadcastConfig } from "../../../rpc/config-broadcast.ts";
 import { getConfig, saveConfig } from "../../config.ts";
 import { emitEvent } from "../../events/emit.ts";
 import { isUpdating } from "../../system/software-updates.ts";
 import { notificationBroadcast } from "../../ui/notifications.ts";
-import { broadcastMsg } from "../../ui/websocket-server.ts";
 import type { Pipeline } from "../pipelines.ts";
 import { awaitRecoveryBarrier } from "../recovery-barrier.ts";
 import { genSrtlaIpList, resolveSrtla } from "../srtla.ts";
@@ -49,7 +49,7 @@ export function setAutostart(value: boolean): boolean {
 	config.autostart = value;
 	saveConfig();
 
-	broadcastMsg("config", config);
+	broadcastConfig(config);
 	return config.autostart;
 }
 

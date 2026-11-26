@@ -73,7 +73,10 @@ export function acceptStartAudio(
 	const saves = { ...audioSaves };
 	const pressed: StartAudioConfig = structuredClone({
 		asrc: request.asrc ?? savedAsrc,
-		audio_inputs: request.audio_inputs ?? saved.audio_inputs,
+		audio_inputs:
+			request.audio_inputs === undefined
+				? saved.audio_inputs
+				: (request.audio_inputs ?? undefined),
 		// `validateConfig` refuses a codec outside the enum.
 		acodec: (request.acodec ?? saved.acodec) as RuntimeConfig["acodec"],
 		delay: request.delay ?? saved.delay,
@@ -110,7 +113,7 @@ export function acceptStartAudio(
 		unsaved: () => {
 			const { asrc, audio_inputs, acodec, delay } = startAudio.config;
 			const stillNewest = (field: SavedAudioField) =>
-				request[field] != null && audioSaves[field] === saves[field];
+				request[field] !== undefined && audioSaves[field] === saves[field];
 			return {
 				...(stillNewest("asrc") && pressed.asrc !== savedAsrc ? { asrc } : {}),
 				...(stillNewest("audio_inputs") ? { audio_inputs } : {}),

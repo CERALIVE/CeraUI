@@ -166,7 +166,10 @@ import { initDeviceStats } from "./modules/system/device-stats.ts";
 import { initEncoderLoad } from "./modules/system/encoder-load.ts";
 import { initFan } from "./modules/system/fan.ts";
 import { getHardwareKind } from "./modules/system/hardware-kind.ts";
-import { initRevisions } from "./modules/system/revisions.ts";
+import {
+	initRevisions,
+	readBuildIdentity,
+} from "./modules/system/revisions.ts";
 import {
 	initHardwareMonitoring,
 	stopDmesgWatchers,
@@ -201,6 +204,7 @@ import { wifiRadioObservation } from "./modules/wifi/wifi-radio-observation.ts";
 import { broadcastMsgLocal } from "./rpc/compat.ts";
 import { onHeartbeatTick, startHeartbeat } from "./rpc/heartbeat.ts";
 import { getServer, initServer } from "./rpc/index.ts";
+import { initUiBuildIdentity } from "./rpc/middleware/ui-build.middleware.ts";
 import { stopLegacyTokenMigration } from "./rpc/procedures/auth.procedure.ts";
 
 /* Disable localization for any CLI commands we run */
@@ -296,6 +300,10 @@ beginRecoveryBarrier();
 cleanupOrphanedTempFiles(process.cwd());
 
 if (configAvailableAtBind) void initRemote();
+
+// Started before the bind and never awaited here: every UI-build check awaits
+// the read, so no out-of-date page slips past it and the bind still comes first.
+void initUiBuildIdentity(readBuildIdentity);
 
 // CRITICAL: bind the WS control server FIRST — before any non-critical init that
 // could fail OR hang. It is the operator's only lifeline to the device, so it

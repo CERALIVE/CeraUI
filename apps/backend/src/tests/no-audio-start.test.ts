@@ -100,6 +100,8 @@ import {
 import * as notifications from "../modules/ui/notifications.ts";
 import { sendStatus } from "../modules/ui/status.ts";
 import * as websocketServer from "../modules/ui/websocket-server.ts";
+import { broadcastConfig } from "../rpc/config-broadcast.ts";
+import { addClient, removeClient } from "../rpc/events.ts";
 import { setAudioMixProcedure } from "../rpc/procedures/audio-mix.procedure.ts";
 import {
 	buildInitialStatus,
@@ -519,6 +521,72 @@ test("a saved microphone that is missing at the press is still waited for after 
 
 const newerMix = [entry("Primary", [1]), entry("Second", [1])];
 const context = () => ({ context: makeRpcContext() });
+
+test("a Start requesting a cleared mix does not fall back to the saved mix", async () => {
+	getConfig().asrc = "Primary";
+	saveConfig();
+
+	expect(await uiStart("Primary", { audio_inputs: null })).toMatchObject({
+		success: true,
+	});
+	expect(launchedAudio()).toEqual([device("Primary")]);
+	expect(await disk()).not.toHaveProperty("audio_inputs");
+});
+
+test.each(["settings", "membership", "level"] as const)(
+	"a %s clear reaches the other tab without changing the already admitted mix",
+	async (writer) => {
+		getConfig().asrc = "Primary";
+		getConfig().audio_inputs =
+			writer === "level"
+				? [{ ...entry("Primary", [1]), mute: true }]
+				: structuredClone(newerMix);
+		const sent: string[] = [];
+		const { ws: tab } = makeRpcContext(sent);
+		addClient(tab);
+		try {
+			broadcastConfig(getConfig());
+			expect(JSON.parse(sent.splice(0)[0] ?? "{}").config.audio_inputs).toEqual(
+				getConfig().audio_inputs,
+			);
+			GATES["update admission"]?.();
+			const started = uiStart("Primary", { audio_inputs: savedMix });
+			await reached.promise;
+			try {
+				const result =
+					writer === "settings"
+						? await call(setConfigProcedure, { audio_inputs: null }, context())
+						: await call(
+								setAudioMixProcedure,
+								writer === "membership"
+									? { id: "Second", include: false }
+									: { id: "Primary", mute: false },
+								context(),
+							);
+				expect(result.success).toBe(true);
+				const [config, clear, ...rest] = sent
+					.map((frame) => JSON.parse(frame))
+					.filter((frame) => "config" in frame || "config_clear" in frame);
+				expect(config?.config).not.toHaveProperty("audio_inputs");
+				expect(clear?.config_clear).toEqual({ keys: ["audio_inputs"] });
+				expect(rest).toEqual([]);
+			} finally {
+				gate.resolve();
+				expect(await started).toMatchObject({ success: true });
+			}
+			expect(launchedAudio()).toEqual([
+				{ mode: "default", inputs: mixOnTheWire, delay_ms: 0 },
+			]);
+			expect(await disk()).not.toHaveProperty("audio_inputs");
+			await stop();
+			expect(await start()).toMatchObject({ success: true });
+			expect(launchedAudio()[1]).toEqual(device("Primary"));
+		} finally {
+			removeClient(tab);
+		}
+	},
+);
+
 test.each([
 	[
 		"a saved mix",

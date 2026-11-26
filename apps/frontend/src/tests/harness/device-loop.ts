@@ -28,6 +28,14 @@ export function ingest(type: string, payload: unknown): unknown {
 	return frame[type];
 }
 
+/** Deliver one broadcast's exact bytes, `seq` included, as the socket does. */
+export function ingestFrame(bytes: string): void {
+	const { seq, ...frame } = JSON.parse(bytes) as Record<string, unknown>;
+	for (const [type, payload] of Object.entries(frame))
+		handleMessageForTest(type, payload, seq as number | undefined);
+	flushSync();
+}
+
 export interface HeldCall {
 	readonly method: string;
 	readonly input: unknown;

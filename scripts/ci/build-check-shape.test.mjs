@@ -30,17 +30,25 @@ test('federation publication enforces gzip budgets after building and before sig
 	expect(steps[gate]['continue-on-error']).toBeUndefined();
 });
 
-for (const filename of ['build-check.yml', 'publish-release.yml']) {
-	test(`${filename} supplies full history to every backend unit-test job`, async () => {
+// The backend suite compares against historical commits; the frontend suite runs
+// the last handler before `config_clear` from one (old-tab-config-clear.test.ts).
+for (const [filename, suite, command] of [
+	['build-check.yml', 'backend', 'bun run --filter backend test'],
+	['publish-release.yml', 'backend', 'bun run --filter backend test'],
+	['build-check.yml', 'frontend', 'bun run --filter frontend test:ci-shard'],
+	['publish-release.yml', 'frontend', 'bun run --filter frontend test'],
+	['publish-deb.yml', 'workspace', 'bun run test'],
+]) {
+	test(`${filename} supplies full history to every ${suite} unit-test job`, async () => {
 		const source = await file(
 			new URL(`../../.github/workflows/${filename}`, import.meta.url),
 		).text();
 		const workflow = YAML.parse(source);
-		const backendJobs = Object.values(workflow.jobs).filter((job) =>
-			job.steps?.some((step) => String(step.run ?? '').includes('bun run --filter backend test')),
+		const jobs = Object.values(workflow.jobs).filter((job) =>
+			job.steps?.some((step) => String(step.run ?? '').includes(command)),
 		);
-		expect(backendJobs.length).toBeGreaterThan(0);
-		for (const job of backendJobs) {
+		expect(jobs.length).toBeGreaterThan(0);
+		for (const job of jobs) {
 			const checkouts = job.steps.filter((step) => step.uses?.startsWith('actions/checkout@'));
 			expect(checkouts).toHaveLength(1);
 			expect(checkouts[0].with?.['fetch-depth']).toBe(0);

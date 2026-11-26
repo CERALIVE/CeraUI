@@ -38,8 +38,6 @@ export {
 // Get __dirname equivalent for ES modules
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const VERSION = generateUniqueVersion();
-
 // The packaged SPA tree, and the NON-packaged sibling its sourcemaps are moved to.
 const SPA_OUT_DIR = path.resolve(__dirname, "../../dist/public");
 const SPA_MAP_DIR = path.resolve(
@@ -73,6 +71,12 @@ export default defineConfig(({ mode }) => {
 		deviceEnv,
 		process.env.CI === "true",
 	);
+	// One build identity for the page and its backend: the package build derives
+	// CERAUI_BUILD_ID from its source and stamps it beside this bundle, and dev
+	// and the e2e stack pass one to both processes. Without it a build stays unique.
+	const VERSION =
+		loadEnv(mode, path.resolve(__dirname, "../.."), "CERAUI_BUILD_ID")
+			.CERAUI_BUILD_ID || generateUniqueVersion();
 
 	return {
 		// Load .env from monorepo root for unified configuration

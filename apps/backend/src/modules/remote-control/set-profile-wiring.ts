@@ -33,6 +33,7 @@
 import { resolverDecidedBySchema } from "@ceraui/rpc/schemas";
 import { RUNTIME_CONFIG_DEFAULTS } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
+import { broadcastConfig } from "../../rpc/config-broadcast.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { getLastCapabilities } from "../streaming/capabilities.ts";
 import { captureOperatorStopIntent } from "../streaming/operator-stop-intent.ts";
@@ -48,7 +49,6 @@ import {
 } from "../streaming/stream-session-orchestrator.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
 import { start as startStream } from "../streaming/streamloop.ts";
-import { broadcastMsg } from "../ui/websocket-server.ts";
 import { reportActiveProfile } from "./active-profile-reporter.ts";
 import { configureSetProfile, type SetProfileCaps } from "./set-profile.ts";
 
@@ -133,7 +133,7 @@ export function wireSetProfile(): void {
 			const decidedBy = resolverDecidedBySchema.safeParse(resolved.decidedBy);
 			if (decidedBy.success) config.profile_decided_by = decidedBy.data;
 			saveConfig();
-			broadcastMsg("config", config);
+			broadcastConfig(config);
 			reportActiveProfile();
 		},
 		isStreaming: getIsStreaming,

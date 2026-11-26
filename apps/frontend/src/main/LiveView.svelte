@@ -448,7 +448,10 @@ $effect(() => {
 	}
 	if (streamingStopReason) {
 		clearStartRetry();
-		toast.error(startFailedMessage(streamingStopReason));
+		// Once per attempt and reason, like a typed failure: a later visit to Live does not repeat it.
+		const attempt = untrack(getStreamingAttemptGeneration);
+		if (claimStartFailurePresentation(`start:${attempt}:${streamingStopReason}`))
+			toast.error(startFailedMessage(streamingStopReason));
 	}
 });
 

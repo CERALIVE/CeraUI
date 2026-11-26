@@ -2230,6 +2230,7 @@
 	"notifications.streamStartUpdateInProgressFailed": "Start nicht möglich: Ein Software-Update wird installiert und kann nicht unterbrochen werden. Versuche es erneut, sobald es abgeschlossen ist.",
 	"notifications.updateAvailable": "Update verfügbar",
 	"notifications.updateAvailableDescription": "Eine neue Version ist verfügbar. Laden Sie die Seite neu, um zu aktualisieren.",
+	"notifications.uiOutOfDate": "Diese Seite ist veraltet. Laden Sie die Seite neu, um fortzufahren.",
 	"notifications.updateInProgress": "Update läuft",
 	"notifications.uplinkFlowsReset": "Die Client-Verbindungen auf {iface} wurden zurückgesetzt, damit sie auf einen funktionierenden Uplink wechseln können.",
 	"notifications.validationFailed": "Bitte überprüfe diese Felder: {fields}",

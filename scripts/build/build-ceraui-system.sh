@@ -61,6 +61,10 @@ echo "📂 Preparing distribution files..."
 # Copy all distribution files
 cp -r dist/* "$TEMP_DIR/" 2>/dev/null || true
 
+# The build identity the bundle names on its socket, installed beside the backend.
+assert_bundle_build_id "$TEMP_DIR/public"
+printf '%s\n' "$CERAUI_BUILD_ID" > "$TEMP_DIR/build-id"
+
 # Remove temporary directories from the package
 rm -rf "$TEMP_DIR"/compressed "$TEMP_DIR"/belabox-* 2>/dev/null || true
 
@@ -72,46 +76,59 @@ set -e
 echo "🚀 Installing CeraUI System..."
 echo "This will install CeraUI to replace ceralive or deploy on custom development devices."
 
+# DESTDIR installs into a staging root (an image build, a test) instead of this
+# system: no root check and no service reloads there.
+DESTDIR="${DESTDIR:-}"
+
 # Check if running as root
-if [[ $EUID -ne 0 ]]; then
+if [[ -z "$DESTDIR" && $EUID -ne 0 ]]; then
    echo "❌ This script must be run as root (use sudo)"
    exit 1
 fi
 
+mkdir -p "$DESTDIR/usr/local/bin" "$DESTDIR/etc/systemd/system" \
+    "$DESTDIR/etc/udev/rules.d" "$DESTDIR/opt/ceralive"
+
 # Install binary
 echo "📦 Installing CERALIVE binary..."
-cp ceralive /usr/local/bin/ceralive
-chmod +x /usr/local/bin/ceralive
+cp ceralive "$DESTDIR/usr/local/bin/ceralive"
+chmod +x "$DESTDIR/usr/local/bin/ceralive"
 
 # Install systemd service
 echo "⚙️  Installing systemd service..."
-cp ceralive.service /etc/systemd/system/
-cp ceralive.socket /etc/systemd/system/
+cp ceralive.service "$DESTDIR/etc/systemd/system/"
+cp ceralive.socket "$DESTDIR/etc/systemd/system/"
 
 # Install udev rules
 echo "🔌 Installing udev rules..."
-cp 98-ceralive-audio.rules /etc/udev/rules.d/
-cp 99-ceralive-check-usb-devices.rules /etc/udev/rules.d/
+cp 98-ceralive-audio.rules "$DESTDIR/etc/udev/rules.d/"
+cp 99-ceralive-check-usb-devices.rules "$DESTDIR/etc/udev/rules.d/"
 
 # Install web files
 echo "🌐 Installing web interface..."
-mkdir -p /var/www/ceralive
-cp -r public/* /var/www/ceralive/
+mkdir -p "$DESTDIR/var/www/ceralive"
+cp -r public/* "$DESTDIR/var/www/ceralive/"
+
+# The build identity the backend (WorkingDirectory /opt/ceralive) compares a
+# UI page's build with.
+cp build-id "$DESTDIR/opt/ceralive/build-id"
 
 # Install configuration
 echo "⚙️  Installing configuration..."
-mkdir -p /etc/ceralive
-cp config.json /etc/ceralive/
+mkdir -p "$DESTDIR/etc/ceralive"
+cp config.json "$DESTDIR/etc/ceralive/"
 
 # Install scripts
 echo "🛠️  Installing utility scripts..."
-cp override-ceralive.sh /usr/local/bin/
-cp reset-to-default.sh /usr/local/bin/
-chmod +x /usr/local/bin/override-ceralive.sh /usr/local/bin/reset-to-default.sh
+cp override-ceralive.sh "$DESTDIR/usr/local/bin/"
+cp reset-to-default.sh "$DESTDIR/usr/local/bin/"
+chmod +x "$DESTDIR/usr/local/bin/override-ceralive.sh" "$DESTDIR/usr/local/bin/reset-to-default.sh"
 
 # Reload systemd and udev
-systemctl daemon-reload
-udevadm control --reload
+if [[ -z "$DESTDIR" ]]; then
+    systemctl daemon-reload
+    udevadm control --reload
+fi
 
 echo "✅ CeraUI system installed successfully!"
 echo ""

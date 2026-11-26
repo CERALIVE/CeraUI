@@ -2025,6 +2025,7 @@
 	"notifications.streamStartUpdateInProgressFailed": "시작할 수 없습니다: 소프트웨어 업데이트가 설치 중이며 중단할 수 없습니다. 완료된 후 다시 시도하세요.",
 	"notifications.updateAvailable": "업데이트 가능",
 	"notifications.updateAvailableDescription": "새 버전이 있습니다. 새로 고치면 업데이트됩니다.",
+	"notifications.uiOutOfDate": "이 페이지는 이전 버전입니다. 계속하려면 페이지를 새로 고치세요.",
 	"notifications.updateInProgress": "업데이트가 진행 중입니다",
 	"notifications.uplinkFlowsReset": "{iface} 의 클라이언트 연결을 초기화해 정상인 업링크로 옮길 수 있게 했습니다.",
 	"notifications.validationFailed": "다음 항목을 확인하세요: {fields}",
