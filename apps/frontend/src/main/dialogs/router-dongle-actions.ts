@@ -214,12 +214,12 @@ const SUBNET_INTERLOCK_KEY = "network.routerCellular.subnet.refused.interlock";
 /**
  * Turn the device's own four-status answer into an operator sentence.
  *
- * `blocked` is deliberately `unknown` rather than `refused`: the device answered
- * at NEITHER its old nor its new address, so nothing about the write can be
- * asserted in either direction — which is exactly what the outcome band's
- * `unknown` kind exists to say. Reporting it as a refusal would claim the
- * previous settings are intact, and reporting it as applied would claim the new
- * ones are.
+ * `blocked` is deliberately `unknown` rather than `refused`: the device could not
+ * confirm the write (no answer at either address, or no proof it was the same
+ * dongle), so nothing about it can be asserted in either direction, which is
+ * exactly what the outcome band's `unknown` kind exists to say. Reporting it as a
+ * refusal would claim the previous settings are intact, and reporting it as
+ * applied would claim the new ones are.
  */
 export function subnetOutcome(
 	result: SetRouterSubnetOutput,

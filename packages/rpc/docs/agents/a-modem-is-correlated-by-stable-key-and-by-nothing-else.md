@@ -26,7 +26,10 @@ not invented: no usb parent (a PCIe FM350) ⇒ the device's own `ID_PATH` verbat
 no `ID_PATH` at all ⇒ `undefined`, and the optional field is OMITTED rather than
 faked. It lives beside the field it produces so the two cannot drift, and it is
 emitted verbatim (no prefix, no hash) so no adapter can disagree about a
-formatting step — the key is opaque BY CONTRACT (equality only), not by encoding.
+formatting step. For modem correlation the key is opaque: compare the full value
+for exact equality. The modem wire projection and recovery card may derive a USB
+port label from its topology using `portLabelFromIdPath`. Neither that label nor
+any of its parts can be used to match modems.
 
 **…and "one rule" now covers the INPUT, not only the reduction.** The adapters do
 not all observe an `ID_PATH`: ModemManager publishes `Modem.Physdev` as a raw

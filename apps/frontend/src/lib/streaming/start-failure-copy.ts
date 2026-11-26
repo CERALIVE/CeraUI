@@ -77,11 +77,9 @@ function classReason(failure: StartFailureCopyInput): string {
 	if (failure.class === "audio_source_unavailable")
 		return m["notifications.streamStartAudioSourceUnavailableFailed"]();
 	const key =
-		failure.class === "mutation_blocked"
-			? "live.startFailure.mutationBlockedNetwork"
-			: failure.captureCause !== undefined
-				? `live.startFailure.class.${failure.class}.${failure.captureCause}`
-				: `live.startFailure.class.${failure.class}`;
+		failure.captureCause !== undefined
+			? `live.startFailure.class.${failure.class}.${failure.captureCause}`
+			: `live.startFailure.class.${failure.class}`;
 	const cls = m[key];
 	return typeof cls === "function" ? cls() : m["live.startFailed.generic"]();
 }
@@ -116,5 +114,11 @@ export function startFailureMessage(
 				: "notRetriable"
 	}` as const;
 	const suffix = (next === "blockedEngine" && blockedReason) || m[logKey]();
-	return { step: undefined, message: `${reason} ${suffix}`, logKey };
+	return {
+		step: undefined,
+		// Its own copy says what to try; "retrying cannot help" would contradict it.
+		message:
+			failure.class === "recovery_pending" ? reason : `${reason} ${suffix}`,
+		logKey,
+	};
 }

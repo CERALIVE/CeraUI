@@ -417,23 +417,23 @@ export const BACKEND_RPC_PARITY: ParityRecord = {
 			"Releases an open USSD dialogue network-side; no operator surface dispatches it, so a session opened out of band can only be closed by its own timeout.",
 	},
 	"modems.listMutationBlocks": {
-		disposition: "unwired",
+		disposition: "wired",
 		reason:
-			"Reports which physical modems a failed rollback still blocks; no operator surface renders the list.",
+			"NetworkView re-reads it on the device's own events, and MutationBlockNotice renders each block on its Cellular row, or at the top of that card when the modem is not listed.",
 	},
 	"modems.acknowledgeMutation": {
-		disposition: "unwired",
+		disposition: "wired",
 		reason:
-			"Clears a blocked modem through a verified rollback or a force-rebaseline; no operator surface offers either path.",
+			"MutationBlockNotice's Check again, offered only where the list entry says a check can work, sends the verified rollback; its confirmed Keep current settings sends the force-rebaseline.",
 	},
 	"modems.decommissionMutation": {
-		disposition: "unwired",
+		disposition: "wired",
 		reason:
-			"Records that a blocked modem is physically gone so it stops holding streaming; no operator surface offers it.",
+			"MutationBlockNotice's confirmed This dongle is gone sends it directly; the device judges the port itself and its answer is shown.",
 	},
 	"modems.rebaselineMutation": {
-		disposition: "unwired",
+		disposition: "wired",
 		reason:
-			"Accepts a replacement modem in a decommissioned device's port as the new baseline; no operator surface offers it.",
+			"MutationBlockNotice's confirmed Keep current settings sends it for a modem in a port that was marked as gone.",
 	},
 };

@@ -71,6 +71,11 @@ import type {
 	ModemCredentialsOutput,
 	ModemGpsInput,
 	ModemGpsOutput,
+	ModemMutationAckInput,
+	ModemMutationAckOutput,
+	ModemMutationDecommissionInput,
+	ModemMutationListOutput,
+	ModemMutationRebaselineInput,
 	ModemScanInput,
 	ModemScanOutput,
 	ModemSmsInput,
@@ -900,6 +905,17 @@ export interface TypedRPC {
 		ussdInitiate: (input: UssdInitiateInput) => Promise<ModemUssdOutput>;
 		ussdRespond: (input: UssdRespondInput) => Promise<ModemUssdOutput>;
 		ussdCancel: (input: UssdCancelInput) => Promise<ModemUssdOutput>;
+		/** The modems an unconfirmed change holds, and the operator's three ways out. */
+		listMutationBlocks: () => Promise<ModemMutationListOutput>;
+		acknowledgeMutation: (
+			input: ModemMutationAckInput,
+		) => Promise<ModemMutationAckOutput>;
+		decommissionMutation: (
+			input: ModemMutationDecommissionInput,
+		) => Promise<ModemMutationAckOutput>;
+		rebaselineMutation: (
+			input: ModemMutationRebaselineInput,
+		) => Promise<ModemMutationAckOutput>;
 	};
 	wifi: {
 		getStatus: () => Promise<unknown>;

@@ -110,6 +110,7 @@ async function startWithReply(
 	onPowerCall?: (path: string) => void,
 	installBannerYields?: boolean,
 	projectInbound?: (frame: Frame) => void,
+	answer?: (path: string) => unknown,
 ): Promise<WsHandle> {
 	const ws = await attachWs(page, {
 		mutateInbound: (frame) => {
@@ -129,6 +130,11 @@ async function startWithReply(
 			const path = rpcPath(frame);
 			if (path === 'streaming.start') {
 				reply({ id: frame.id, result: typeof result === 'function' ? result() : result });
+				return true;
+			}
+			const answered = answer?.(path);
+			if (answered !== undefined) {
+				reply({ id: frame.id, result: answered });
 				return true;
 			}
 			if (onPowerCall && (path === 'system.reboot' || path === 'system.poweroff')) {
@@ -462,7 +468,7 @@ test('German Network refusal keeps its explanation reachable at 390×390', async
 	await expect(toast).toBeInViewport({ ratio: 1 });
 	await expectAboveChrome(page, [network, toast.getByRole('button', { name: 'Protokolle anzeigen', exact: true })]);
 	const reason = toast.getByRole('region', { name: 'Benachrichtigungen' });
-	await expect(reason).toContainText('Eine Modem-Änderung konnte nicht rückgängig gemacht werden');
+	await expect(reason).toContainText('Eine Modem-Änderung konnte nicht bestätigt werden');
 	if (await reason.evaluate((element) => element.scrollHeight > element.clientHeight)) {
 		await reason.focus();
 		await expect(reason).toBeFocused();
@@ -471,6 +477,26 @@ test('German Network refusal keeps its explanation reachable at 390×390', async
 	await expect.poll(() => reason.evaluate((element) =>
 		element.scrollHeight - element.clientHeight - element.scrollTop,
 	)).toBeCloseTo(0, 0);
+});
+
+test('Open Network lands on the modem change that refused the start', async ({ page }) => {
+	const attemptId = 'open-the-block';
+	await startWithReply(page, {
+		result: 'failed', success: false, attemptId,
+		failure: { attemptId, phase: 'params', class: 'mutation_blocked', retriable: false },
+	}, undefined, undefined, undefined, (path) => path === 'modems.listMutationBlocks'
+		? {
+				replayComplete: true,
+				blocks: [{
+					stableKey: 'e2e-port-unlisted', kind: 'router-subnet', state: 'failed',
+					updatedAt: 0, devicePresent: true, blocksStreaming: true,
+				}],
+			}
+		: undefined);
+	await page.getByRole('button', { name: 'Open Network', exact: true }).press('Enter');
+	const block = page.getByTestId('mutation-block');
+	await expect(block).toBeFocused();
+	await expect(block).toBeInViewport({ ratio: 1 });
 });
 
 test('delayed keyboard entry still reaches recovery and can dismiss it', async ({ page }) => {

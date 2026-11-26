@@ -69,7 +69,7 @@
 -->
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
-import type { Modem, NetifMessage } from '@ceraui/rpc/schemas';
+import type { Modem, ModemMutationBlock, NetifMessage } from '@ceraui/rpc/schemas';
 import {
 	Antenna,
 	Check,
@@ -90,12 +90,15 @@ import {
 	SignalMedium,
 	SignalZero,
 } from '@lucide/svelte';
+import { tick } from 'svelte';
 import Badge from '$lib/components/custom/Badge.svelte';
 import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import NoSimBadge from '$lib/components/custom/NoSimBadge.svelte';
+import * as AlertDialog from '$lib/components/ui/alert-dialog';
 import { Button } from '$lib/components/ui/button';
 import { isolatedDongleLabel } from '$lib/helpers/link-names';
 import { DiagnosticsBlock } from '$lib/modem/sections';
+import { takeMutationBlockReveal } from '$lib/stores/mutation-block-reveal';
 import { cn } from '$lib/utils';
 import {
 	detailFields,
@@ -129,6 +132,16 @@ import {
 	stateLabelKey,
 	stateTone,
 } from './cellular-row';
+import MutationBlockNotice from './MutationBlockNotice.svelte';
+import {
+	changeLabelKey,
+	goneLabelKey,
+	type MutationRecovery,
+	offeredActions,
+	portLabel,
+	type RecoveryAction,
+	type RecoveryNotice,
+} from './mutation-recovery.svelte';
 import NetworkRow from './NetworkRow.svelte';
 import { openRouterAdminUi, routerAdminOpenReasonKey } from './router-admin-open';
 import type { RouterSignalReadout } from './router-signal';
@@ -156,6 +169,10 @@ interface Props {
 	 * (and every existing test) byte-identical.
 	 */
 	cellularInitializing?: boolean;
+	/** The modem changes the device could not confirm. Absent: this mount shows none. */
+	recovery?: MutationRecovery;
+	/** The device can be asked to settle one. */
+	isConnected?: boolean;
 	/**
 	 * Opens the row's destination. The row does NOT decide which dialog that is —
 	 * `NetworkView` routes on the same lock the button was labelled from, so the
@@ -171,6 +188,8 @@ const {
 	isFullyStale,
 	staleInterfaces,
 	cellularInitializing = false,
+	recovery,
+	isConnected = true,
 	onConfigure,
 }: Props = $props();
 
@@ -413,6 +432,82 @@ function toggleDetails(rowId: string): void {
  */
 const NO_DERIVED_ROWS = { rows: [] } as const;
 
+const placed = $derived(recovery?.place(orderedEntries));
+
+let sectionEl = $state<HTMLElement | null>(null);
+let headingEl = $state<HTMLElement | null>(null);
+// The words are those of the press: the modem may leave its row, and its block may
+// leave the list, while this is open.
+let confirming = $state.raw<{
+	stableKey: string;
+	action: Exclude<RecoveryAction, 'check'>;
+	label: string;
+	subject: string;
+	changeKey: string | undefined;
+}>();
+let confirmOpen = $state(false);
+// Read from the list every time: the block may be settled elsewhere, or change state,
+// while the confirmation is open.
+const confirmBlock = $derived(confirming && recovery?.blockFor(confirming.stableKey));
+
+function noticeEl(stableKey: string): HTMLElement | undefined {
+	return [...(sectionEl?.querySelectorAll<HTMLElement>('[data-testid="mutation-block"]') ?? [])].find(
+		(el) => el.dataset.stableKey === stableKey,
+	);
+}
+
+/** The pressed control if it is still there, else its notice, else the card. */
+function focusNotice(stableKey: string, action: RecoveryAction): void {
+	const notice = noticeEl(stableKey);
+	const target =
+		notice?.querySelector<HTMLElement>(`[data-testid="mutation-block-${action}"]`) ??
+		notice ??
+		headingEl;
+	target?.focus({ preventScroll: target === headingEl });
+}
+
+async function act(stableKey: string, action: RecoveryAction): Promise<void> {
+	const block = recovery?.blockFor(stableKey);
+	if (!recovery || !block) return;
+	await recovery.act(block, action);
+	await tick();
+	// The answer can remove the pressed control, or the row it was on.
+	const focused = document.activeElement;
+	if (focused === null || focused === document.body) focusNotice(stableKey, action);
+}
+
+function onRecoveryAction(
+	block: ModemMutationBlock,
+	name: string | undefined,
+	action: RecoveryAction,
+): void {
+	const { stableKey } = block;
+	if (action === 'check') {
+		void act(stableKey, action);
+		return;
+	}
+	confirming = {
+		stableKey,
+		action,
+		label: action === 'gone' ? t(goneLabelKey(block)) : m["network.block.keep"](),
+		subject: name ?? portLabel(stableKey),
+		changeKey: changeLabelKey(block),
+	};
+	confirmOpen = true;
+}
+
+// A request this visit could not answer is not for a later one.
+$effect(() => () => void takeMutationBlockReveal());
+
+$effect(() => {
+	if (!recovery?.read || !takeMutationBlockReveal()) return;
+	void tick().then(() => {
+		const first = sectionEl?.querySelector<HTMLElement>('[data-testid="mutation-block"]');
+		first?.scrollIntoView({ block: 'center', behavior: 'instant' });
+		first?.focus({ preventScroll: true });
+	});
+});
+
 let adminOpenFailure = $state<Record<string, string>>({});
 
 async function openAdminUi(rowId: string): Promise<void> {
@@ -428,11 +523,22 @@ async function openAdminUi(rowId: string): Promise<void> {
 }
 </script>
 
+{#snippet blockNotice(notice: RecoveryNotice, name: string | undefined)}
+	<MutationBlockNotice
+		{notice}
+		{name}
+		{isConnected}
+		busy={recovery?.pending !== undefined}
+		working={recovery?.pending === notice.stableKey}
+		onAction={(action) => notice.block && onRecoveryAction(notice.block, name, action)}
+	/>
+{/snippet}
+
 <!-- ───────────── Cellular ───────────── -->
-<section class="bg-card rounded-xl border">
+<section bind:this={sectionEl} class="bg-card rounded-xl border">
 	<div class="flex items-center gap-2 border-b px-4 py-2">
 		<Radio aria-hidden="true" class="text-muted-foreground size-4 shrink-0" />
-		<h2 class="text-sm font-semibold tracking-tight">{m["network.view.cellular"]()}</h2>
+		<h2 bind:this={headingEl} class="text-sm font-semibold tracking-tight" tabindex="-1">{m["network.view.cellular"]()}</h2>
 	</div>
 	{#if cellularInitializing}
 		<!-- Calm, not alarming: nothing is broken, the stack simply has not
@@ -453,6 +559,9 @@ async function openAdminUi(rowId: string): Promise<void> {
 			</div>
 		</div>
 	{/if}
+	{#each placed?.unlisted as notice (notice.stableKey)}
+		<div class="border-b px-4 py-2">{@render blockNotice(notice, undefined)}</div>
+	{/each}
 	<div class="divide-y">
 		{#if modemEntries.length === 0}
 			{#if !cellularInitializing}
@@ -699,6 +808,10 @@ async function openAdminUi(rowId: string): Promise<void> {
 					<!-- Why this device's controls are what they are, ON SCREEN — every one is
 					     a disabled control's reason, and the kiosk cannot hover. -->
 					{#snippet reasons()}
+						{const rowNotice = $derived(placed?.byRow.get(id))}
+						{#if rowNotice}
+							{@render blockNotice(rowNotice, title)}
+						{/if}
 						{#each notes as noteKey (noteKey)}
 							<p class="text-muted-foreground text-xs" data-testid="modem-note" data-note-key={noteKey}>
 								{t(noteKey)}
@@ -992,3 +1105,57 @@ async function openAdminUi(rowId: string): Promise<void> {
 		{/if}
 	</div>
 </section>
+
+{#if confirming}
+	{const stableKey = $derived(confirming.stableKey)}
+	{const action = $derived(confirming.action)}
+	{const gone = $derived(action === 'gone')}
+	<!-- Closes on the press (the wait shows in the notice), and by itself when its block is
+	     resolved elsewhere. It names the block by key, so the modem may leave its row. -->
+	<AlertDialog.Root
+		open={confirmOpen && confirmBlock !== undefined && offeredActions(confirmBlock).includes(action)}
+		onOpenChange={(open) => (confirmOpen = open)}
+	>
+		<AlertDialog.Content
+			class="max-h-[85svh] overflow-y-auto"
+			data-testid="mutation-block-confirm"
+			onCloseAutoFocus={(event) => {
+				event.preventDefault();
+				focusNotice(stableKey, action);
+			}}
+		>
+			<AlertDialog.Header>
+				<AlertDialog.Title>{confirming.label}</AlertDialog.Title>
+				<AlertDialog.Description>
+					<span class="text-foreground block font-medium">
+						<bdi>{confirming.subject}</bdi>
+						{#if confirming.changeKey}· {t(confirming.changeKey)}{/if}
+					</span>
+					{gone ? m["network.block.goneConfirm"]() : m["network.block.keepConfirm"]()}
+					{#if !isConnected}
+						<span class="text-foreground mt-2 block" id="mutation-block-confirm-offline">
+							{m["connection.lost"]()}
+						</span>
+					{/if}
+				</AlertDialog.Description>
+			</AlertDialog.Header>
+			<AlertDialog.Footer>
+				<AlertDialog.Cancel class="min-h-11">{m["dialog.cancel"]()}</AlertDialog.Cancel>
+				<AlertDialog.Action
+					class="min-h-11 whitespace-normal aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+					aria-describedby={isConnected ? undefined : 'mutation-block-confirm-offline'}
+					aria-disabled={isConnected ? undefined : 'true'}
+					data-testid="mutation-block-confirm-action"
+					variant={gone ? 'destructive' : 'default'}
+					onclick={() => {
+						if (!isConnected) return;
+						confirmOpen = false;
+						void act(stableKey, action);
+					}}
+				>
+					{confirming.label}
+				</AlertDialog.Action>
+			</AlertDialog.Footer>
+		</AlertDialog.Content>
+	</AlertDialog.Root>
+{/if}

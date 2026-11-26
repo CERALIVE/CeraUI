@@ -64,7 +64,7 @@ import type {
 	RouterAdmin,
 	UsbCompositionMode,
 } from "@ceraui/rpc/schemas";
-
+import { portLabelFromIdPath } from "@ceraui/rpc/schemas";
 import type { ResolvedModemLock } from "./modem-lock-state.ts";
 // NOT the schema's same-named type. This union is wider (it also spells mmcli's
 // `current`/`forbidden`/`unknown`); `modem-network-scan.ts` normalizes those away
@@ -72,7 +72,6 @@ import type { ResolvedModemLock } from "./modem-lock-state.ts";
 // to use this one is that `getAvailableNetworksForModem` and the live builder are
 // typed with it — swapping in the schema type just relocates the cast.
 import type { AvailableNetwork, Modem } from "./modems-state.ts";
-import { portLabelFromIdPath } from "./physical-identity.ts";
 import { claimsNoSim, type SimPresence } from "./sim-presence.ts";
 
 /** Wire status block — identical shape to `modem-status.ts`'s internal type. */

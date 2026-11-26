@@ -72,6 +72,7 @@ import { getEncoderLoad } from '$lib/stores/device-health-history.svelte';
 import { deriveBitrateReading, deriveMeasuredBitrateKbps } from '$lib/stores/hud/derive';
 import { getLinks } from '$lib/stores/hud.svelte';
 import { getLinkNames } from '$lib/stores/link-names.svelte';
+import { requestMutationBlockReveal } from '$lib/stores/mutation-block-reveal';
 import { getStreamHealthRollup, isVideoSignalLost } from '$lib/stores/stream-health.svelte';
 import { assessStart } from '$lib/streaming/assess-start';
 import { isSelectedAudioLost } from '$lib/streaming/audioLost';
@@ -359,7 +360,15 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 		: decision.state === 'blocked'
 			? resolveMessageKey(decision.blockers[0]?.reasonKey ?? '')
 			: undefined;
-	const { step, message, logKey } = startFailureMessage(failure, repeated, admitted, blockedReason);
+	const { step, message, logKey } = startFailureMessage(
+		// Network cannot list the change before the cellular service is up.
+		failure.class === 'mutation_blocked' && getStatus()?.cellular_initializing === true
+			? { ...failure, class: 'recovery_pending' }
+			: failure,
+		repeated,
+		admitted,
+		blockedReason,
+	);
 	if (step === undefined) {
 		toast.error(message, viewLogsToast(logKey));
 		return;
@@ -412,6 +421,7 @@ function startFailureToast(failure: NonNullable<typeof streamingStartFailure>) {
 					} else if (!isCurrent()) {
 						return false;
 					} else if (step === 'openNetwork') {
+						requestMutationBlockReveal();
 						void handleManageLinks();
 					} else if (!handleOpenSetup()) {
 						return false;
