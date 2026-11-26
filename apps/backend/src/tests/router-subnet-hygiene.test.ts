@@ -406,6 +406,8 @@ describe("the rewrite, and the AUTO-RESTORE when it does not answer", () => {
 		// the only honest description of where the dongle now is.
 		expect(outcome.detail).toContain("192.168.9.1");
 		expect(outcome.detail).toContain("192.168.8.1");
+		// A failed read proves no answer was seen, not that none was given.
+		expect(outcome.detail).not.toMatch(/answer/i);
 	});
 
 	test("a record that moved between preflight and the lease is refused, unwritten", async () => {

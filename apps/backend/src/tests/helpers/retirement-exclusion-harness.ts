@@ -46,17 +46,24 @@ export const retirementActions: readonly {
 	},
 ];
 
-export async function seedRetirement(state: ModemMutationState): Promise<void> {
-	await seedFailedMutation("usb:b");
-	const entry = await readMutationEntry("usb:b");
+export async function seedRetirement(
+	state: ModemMutationState,
+	key = "usb:b",
+): Promise<void> {
+	await seedFailedMutation(key);
+	const entry = await readMutationEntry(key);
 	if (!entry) throw new Error("missing seeded slot");
 	await commitMutationEntry({ ...entry, state });
 }
 
-export function holdRetirement(root: string, decommission: boolean) {
+export function holdRetirement(
+	root: string,
+	decommission: boolean,
+	key = "usb:b",
+) {
 	const entered = deferred(),
 		hold = deferred();
-	const slot = join(root, `${mutationSlotName("usb:b")}.json`);
+	const slot = join(root, `${mutationSlotName(key)}.json`);
 	let calls = 0;
 	setMutationJournalDeps({
 		dir: root,
