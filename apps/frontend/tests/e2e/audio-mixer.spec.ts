@@ -541,6 +541,45 @@ test.describe("audio mixer — caps-full", () => {
 			});
 			await expect(page.getByTestId("audio-source-select")).toContainText(MAIN);
 		});
+
+		test(`Start launches the new pick after an already shown ${refusal}`, async ({ page, backendRpc }) => {
+			const main = mixEntry(MAIN, [1], -3);
+			await backendRpc.call(["streaming", "setConfig"], { audio_inputs: [main] });
+
+			const first = wire.holdAudioPick(SECOND);
+			await pickDevice(page, /Elgato Wave:3/);
+			const firstReply = await first.held;
+			expect(firstReply.result).toMatchObject({ success: true });
+
+			wire.refuseAudioInputs(refusal);
+			await pickThird(page);
+			await expect(page.getByText(message, { exact: true })).toBeVisible();
+			wire.refuseAudioInputs(null);
+
+			const last = wire.holdAudioPick(MAIN);
+			await pickDevice(page, /RØDE AI-Micro/);
+			const lastReply = await last.held;
+			expect(lastReply.result).toMatchObject({ success: true, applied: { asrc: MAIN } });
+			await expect(page.getByTestId("audio-source-select")).toContainText(MAIN);
+			const start = wire.nextAnswer("streaming.start");
+			await startButton(page).click();
+			await expect(page.getByTestId("live-bar")).toHaveAttribute("data-state", "pending");
+			expect(await wire.pageHasReply(firstReply.id)).toBe(false);
+			expect(wire.calls("streaming.start")).toEqual([]);
+
+			last.release();
+			await receiveReply(lastReply.id);
+			first.release();
+			await receiveReply(firstReply.id);
+
+			expect(await savedConfig(backendRpc)).toMatchObject({ asrc: MAIN, audio_inputs: [mixEntry(SECOND), main] });
+			await expect.soft(page.getByTestId("live-cockpit")).toBeVisible({ timeout: 10_000 });
+			expect(wire.calls("streaming.start").map(({ input }) => input.asrc)).toEqual([MAIN]);
+			expect(await start).toMatchObject({ input: { asrc: MAIN }, result: { success: true } });
+
+			await endAndWait(page);
+			await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
+		});
 	}
 
 	async function pickDevice(page: Page, name: RegExp): Promise<void> {

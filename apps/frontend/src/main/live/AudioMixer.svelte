@@ -86,10 +86,10 @@ type Delta = Omit<SetAudioMixInput, 'id'>;
 
 const mix = $derived(capabilities?.audio_mix);
 const status = $derived(getStatus());
-const excluded = $derived((status?.audio_mix_excluded ?? []).filter(
+const excluded = $derived(status?.audio_mix_excluded?.filter(
 	(row) => config?.audio_inputs?.some(({ id }) => id === row.id),
-));
-const excludedIds = $derived(new Set(excluded.map(({ id }) => id)));
+) ?? []);
+const isExcluded = (id: string) => excluded.some((row) => row.id === id);
 const mixLive = $derived(isStreaming && status?.audio_mix_active === true);
 const liveEpoch = $derived(mixLive ? getStreamSessionEpoch() : undefined);
 // Live without a mix, level, mute and delay wait for the next start too.
@@ -121,9 +121,9 @@ const primaryId = $derived.by(() => {
 
 const strips = $derived.by(() => {
 	const devices = resolveAudioSourceList(status?.audio_sources, status?.asrcs ?? [])
-		.filter((source) => source.kind === 'device' && source.unavailable_reason === undefined && !excludedIds.has(source.id))
+		.filter((source) => source.kind === 'device' && source.unavailable_reason === undefined && !isExcluded(source.id))
 		.map((source) => ({ id: source.id, label: audioSourceLabel(source, t) }));
-	return embeddedId === undefined || excludedIds.has(embeddedId)
+	return embeddedId === undefined || isExcluded(embeddedId)
 		? devices
 		: [{ id: embeddedId, label: m['live.source.audioEmbedded']() }, ...devices];
 });
@@ -154,7 +154,7 @@ function withTrack(entry: AudioInputSetting, number: number, on: boolean): Audio
 const inputs = $derived.by(() => {
 	let entries =
 		audioMixWithPrimary(
-			config?.audio_inputs?.filter(({ id }) => !excludedIds.has(id)),
+			config?.audio_inputs?.filter(({ id }) => !isExcluded(id)),
 			hasPrimary ? primaryId : undefined,
 			mix?.max_inputs ?? 0,
 		) ??
@@ -511,7 +511,7 @@ const headingId = `${uid}-heading`;
 				{const reasonId = `${uid}-reason-${index}`}
 				{const reason = $derived.by(() => {
 					if (unavailable === 'unplugged') return m['live.audioMixer.unplugged']();
-					if (unavailable === 'other_source') return m['live.audioMixer.otherSource']({ source: strip.label });
+					if (unavailable) return m['live.audioMixer.otherSource']({ source: strip.label });
 					if (isPrimary) return m['live.audioMixer.primary']();
 					if (enabled || isStreaming) return undefined;
 					if (!hasPrimary) return m['live.audioMixer.needsPrimary']();
@@ -532,7 +532,6 @@ const headingId = `${uid}-heading`;
 						<div class="min-w-0 flex-1 space-y-0.5">
 							<p
 								class="truncate text-sm font-medium {enabled ? '' : 'text-muted-foreground'}"
-								id={`${reasonId}-name`}
 								title={strip.label}
 							>
 								{strip.label}
@@ -548,17 +547,17 @@ const headingId = `${uid}-heading`;
 							{/if}
 						</div>
 						{#if unavailable}
+							{const removeLabel = $derived(m['live.audioMixer.remove']())}
 							<Button
 								aria-describedby={fieldDescription(strip.id, 'include', describedBy)}
-								aria-labelledby={`${reasonId}-remove ${reasonId}-name`}
+								aria-label={`${removeLabel} ${strip.label}`}
 								class="min-h-(--touch-target-min) min-w-(--touch-target-min)"
 								disabled={pendingDelta(strip.id, 'include') !== undefined}
-								id={`${reasonId}-remove`}
 								onclick={() => void edit(strip.id, 'include', { include: false })}
 								size="sm"
 								variant="outline"
 							>
-								{m['live.audioMixer.remove']()}
+								{removeLabel}
 							</Button>
 						{:else}
 							<Switch

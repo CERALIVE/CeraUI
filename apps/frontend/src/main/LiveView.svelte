@@ -881,14 +881,13 @@ function handleSelectAudioSource(selection: string) {
 		delay: effectiveAudioDelay,
 	};
 	const picked = audioOverride;
-	// Send picks immediately, but settle rollback in pick order: an earlier
-	// refused draft must not become the next pick's rollback value.
-	const result = Promise.all([earlier?.result ?? previous, saveAudioPick(asrc)]).then(([prior, accepted]) => {
+	const result = saveAudioPick(asrc).then(async (accepted) => {
+		// A refusal counts when reported, not when its rollback reaches the front.
+		if (!accepted) audioPickRefusalCount += 1;
+		// An earlier refused draft must not become this pick's rollback value.
+		const prior = await (earlier?.result ?? previous);
 		const rollback = earlier?.draft === previous ? prior : previous;
-		if (!accepted) {
-			audioPickRefusalCount += 1;
-			if (audioOverride === picked) audioOverride = rollback;
-		}
+		if (!accepted && audioOverride === picked) audioOverride = rollback;
 		if (pendingAudioPick?.draft === picked) pendingAudioPick = undefined;
 		return accepted ? picked : rollback;
 	});
@@ -1190,11 +1189,11 @@ async function handleStart() {
 		// Wait locally: there is no device Start attempt to reconcile yet.
 		startWaitingForAudioPick = true;
 		do {
-			await pick.result;
+			if ((await pick.result) !== pick.draft) break;
 			pick = pendingAudioPick;
 		} while (pick && audioPickRefusalCount === refusalsAtStart);
 		startWaitingForAudioPick = false;
-		if (audioPickRefusalCount !== refusalsAtStart || !viewMounted || getLinkEpoch() !== link ||
+		if (pick || audioPickRefusalCount !== refusalsAtStart || !viewMounted || getLinkEpoch() !== link ||
 			getStreamingAttemptGeneration() !== attempt || showLiveCockpit ||
 			startAssessment.decision.state !== 'ready') return;
 	}

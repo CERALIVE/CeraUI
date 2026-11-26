@@ -484,7 +484,9 @@ must keep that ABI.
   without retrying. Other mix refusals still retry with `asrc` alone. A pick
   already in the mix changes only `asrc`. Start stays pending until the picker
   saves settle, including newer picks made while waiting, and uses the settled
-  selection. If a save that Start waited for is refused, that Start is cancelled.
+  selection. A refusal of the pick Start waits for, or a refusal received
+  during the wait, cancels that Start. A superseded refusal already shown
+  before the press does not.
 - The rule itself is `audioMixWithPrimary` in `@ceraui/rpc/schemas`, shared by
   the backend and the strips.
 - Meters: before going live, the main strip carries today's meter (the
