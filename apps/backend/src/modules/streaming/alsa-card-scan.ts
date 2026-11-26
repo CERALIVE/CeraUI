@@ -16,6 +16,8 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { realpath } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { readdirP } from "../../helpers/files.ts";
 import { logger } from "../../helpers/logger.ts";
 import { readTextFile } from "../../helpers/text-files.ts";
@@ -43,17 +45,25 @@ export interface ScannedAlsaCard {
 	readonly index: number;
 	/** That card directory's entries — the PCM nodes the direction rules read. */
 	readonly entries: readonly string[];
+	readonly usb?: ScannedAudioUsbReport;
+}
+
+export interface ScannedAudioUsbReport {
+	readonly groupId: string;
+	readonly model: string | undefined;
 }
 
 /** Effectful surface, injected so a test drives the resolver without sysfs. */
 export interface AlsaCardScanDeps {
 	readDir: (path: string) => Promise<string[]>;
 	readText: (path: string) => Promise<string | undefined>;
+	resolveDevicePath?: (path: string) => Promise<string | undefined>;
 }
 
 const defaultScanDeps: AlsaCardScanDeps = {
 	readDir: (path) => readdirP(path),
 	readText: (path) => readTextFile(path),
+	resolveDevicePath: (path) => realpath(path).catch(() => undefined),
 };
 
 /**
@@ -93,6 +103,26 @@ async function readCardEntries(
 	}
 }
 
+async function readAudioUsbReport(
+	card: string,
+	deps: AlsaCardScanDeps,
+): Promise<ScannedAudioUsbReport | undefined> {
+	// Resolve the class link before walking from the interface to the nearest USB device.
+	const device = await deps.resolveDevicePath?.(join(card, "device"));
+	for (let dir = device; dir !== undefined && dir !== "/"; dir = dirname(dir)) {
+		const info = await deps.readText(join(dir, "uevent"));
+		if (!info?.split("\n").includes("DEVTYPE=usb_device")) continue;
+		const product = /^PRODUCT=([\da-f]{1,4})\/([\da-f]{1,4})\//im.exec(info);
+		const vid = product?.[1]?.toLowerCase().padStart(4, "0");
+		const pid = product?.[2]?.toLowerCase().padStart(4, "0");
+		return {
+			groupId: `usb:${basename(dir).toLowerCase()}`,
+			model: vid && pid ? `${vid}:${pid}` : undefined,
+		};
+	}
+	return undefined;
+}
+
 /**
  * The ALSA cards a directory describes, read VERBATIM — no reconciliation.
  *
@@ -119,12 +149,15 @@ export async function scanAlsaCards(
 
 	const cards: ScannedAlsaCard[] = [];
 	for (const entry of cardEntriesInIndexOrder(entries)) {
-		const id = ((await deps.readText(`${dir}/${entry}/id`)) ?? "").trim();
+		const path = join(dir, entry);
+		const id = ((await deps.readText(join(path, "id"))) ?? "").trim();
 		if (id === "") continue;
+		const usb = await readAudioUsbReport(path, deps);
 		cards.push({
 			id,
 			index: cardIndex(entry),
-			entries: await readCardEntries(`${dir}/${entry}`, deps),
+			entries: await readCardEntries(path, deps),
+			...(usb === undefined ? {} : { usb }),
 		});
 	}
 	return cards;

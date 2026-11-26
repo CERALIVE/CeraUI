@@ -7,8 +7,16 @@
  * production orchestrator, session, updateConfig, startStream and the real engine
  * adapter over a fake client) and save another audio choice meanwhile.
  */
-import { afterEach, beforeEach, expect, jest, spyOn, test } from "bun:test";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import {
+	afterEach,
+	beforeEach,
+	expect,
+	jest,
+	onTestFinished,
+	spyOn,
+	test,
+} from "bun:test";
+import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -21,6 +29,7 @@ import {
 	type CerastreamClient,
 	CerastreamConnectionError,
 	CerastreamRpcError,
+	connect,
 	SCHEMA_VERSION,
 } from "@ceralive/cerastream";
 import type { CaptureStreamSource } from "@ceraui/rpc/schemas";
@@ -105,6 +114,7 @@ import {
 	switchAudioProcedure,
 } from "../rpc/procedures/streaming.procedure.ts";
 import { makeRpcContext } from "./helpers/bond-toggle-fixture.ts";
+import { scopedStartPeer } from "./helpers/scoped-start-peer.ts";
 import { evidenceHarness } from "./helpers/stream-engine-evidence.ts";
 
 const CAPS: GetCapabilitiesResult = {
@@ -2131,7 +2141,14 @@ test("a microphone muted live that re-enumerated is still muted after an engine 
 const ORIGINAL_MIC = "usb:1a2b:3c4d:rekey-mic";
 const UNRELATED_MIC = "usb:1a2b:3c4d:unrelated-mic";
 
-async function physicalMicScan(ids: readonly string[]) {
+async function physicalMicScan(
+	ids: readonly string[],
+	usb?: {
+		readonly instance: string;
+		readonly port: string;
+		readonly product: string;
+	},
+) {
 	const sound = join(directory, "identity-cards");
 	await rm(sound, { recursive: true, force: true });
 	await mkdir(sound);
@@ -2139,6 +2156,16 @@ async function physicalMicScan(ids: readonly string[]) {
 		const card = join(sound, `card${index}`);
 		await mkdir(join(card, `pcmC${index}D0c`), { recursive: true });
 		await Bun.write(join(card, "id"), `${id}\n`);
+		if (usb !== undefined) {
+			const parent = join(directory, usb.instance, usb.port);
+			const iface = join(parent, `${usb.port}:1.0`);
+			await mkdir(iface, { recursive: true });
+			await Bun.write(
+				join(parent, "uevent"),
+				`DEVTYPE=usb_device\nPRODUCT=${usb.product}/100\n`,
+			);
+			await symlink(iface, join(card, "device"));
+		}
 	}
 	return sound;
 }
@@ -2153,21 +2180,115 @@ async function listPhysicalMics(
 }
 
 async function answerPhysicalMics(
-	...cards: ReadonlyArray<readonly [id: string, stableId: string]>
+	...cards: ReadonlyArray<
+		readonly [id: string, stableId: string, physicalGroupId?: string]
+	>
 ) {
 	await refreshEngineDeviceCache({
 		fetchEngineDevices: async () => ({
-			devices: cards.map(([id, stable_id]) => ({
+			devices: cards.map(([id, stable_id, physical_group_id]) => ({
 				alsa_card_id: id,
 				input_id: `hw:CARD=${id}`,
 				device_path: `hw:CARD=${id}`,
 				media_class: "audio",
 				display_name: "Recovery microphone",
 				stable_id,
+				...(physical_group_id === undefined ? {} : { physical_group_id }),
 			})),
 		}),
 	});
 }
+
+test.each([
+	{ name: "the coherent original", instance: "original" },
+	{ name: "an indistinguishable same-report replacement", instance: "other" },
+	{ name: "a different USB model at the same port", product: "1a2b/3c4e" },
+	{ name: "a different USB attachment", port: "5-2" },
+	{ name: "a scanned input omitted by the roster", missing: true },
+])(
+	"Start and restoration with $name at the saved selector",
+	async ({ instance, product, port, missing }) => {
+		const peer = await scopedStartPeer("legacy-success");
+		const clients: CerastreamClient[] = [];
+		onTestFinished(async () => {
+			for (const client of clients) await client.close();
+		});
+		engine.dispose();
+		engine = evidenceHarness(false, {
+			connectPeer: async (opts) => {
+				const client = await connect({ ...opts, socketPath: peer.path });
+				clients.push(client);
+				return client;
+			},
+		});
+		setEngineAudioChangeHandler(() => {});
+		const sameRow = ["micOld", ORIGINAL_MIC, "usb:5-1"] as const;
+		const original = {
+			instance: "original",
+			port: "5-1",
+			product: "1a2b/3c4d",
+		};
+		const expectedAudio = mixed({
+			...wire("", [1]),
+			input_id: "hw:CARD=micOld",
+		});
+		try {
+			await audio.updateAudioDevices(
+				await physicalMicScan(["micOld"], original),
+			);
+			await answerPhysicalMics(sameRow);
+			keepMarker();
+			getConfig().asrc = "Pipeline default";
+			getConfig().audio_inputs = [entry("micOld", [1])];
+			saveConfig();
+			expect(await start()).toMatchObject({ success: true });
+			expect(peer.startAudio).toEqual([expectedAudio]);
+			expect(readArmedStreamMarker()?.config.audio_physical_ids).toEqual({
+				micOld: ORIGINAL_MIC,
+			});
+			const saved = await Bun.file(getConfigFilePath()).text();
+
+			await loseEngine();
+			await audio.updateAudioDevices(
+				await physicalMicScan(["micOld"], {
+					instance: instance ?? "other",
+					port: port ?? original.port,
+					product: product ?? original.product,
+				}),
+			);
+			await answerPhysicalMics(...(missing ? [] : [sameRow]));
+			const failures = spyOn(
+				streamSessionProductionDeps,
+				"reportTerminalFailure",
+			);
+			if (instance !== undefined) {
+				expect((await restore()).result).toBe("recovered");
+				expect(peer.startAudio).toEqual([expectedAudio, expectedAudio]);
+			} else {
+				expect(await restore()).toMatchObject({
+					result: "failed",
+					reason: "start_failed",
+				});
+				expect(failures.mock.calls.map(([failure]) => failure.class)).toEqual([
+					"audio_source_unavailable",
+				]);
+				expect(peer.startAudio).toEqual([expectedAudio]);
+				expect(await Bun.file(getConfigFilePath()).text()).toEqual(saved);
+
+				expect(await start()).toMatchObject({
+					success: false,
+					failure: { class: "audio_source_unavailable" },
+				});
+				expect(peer.startAudio).toEqual([expectedAudio]);
+			}
+			expect(await Bun.file(getConfigFilePath()).text()).toEqual(saved);
+		} finally {
+			await listPhysicalMics();
+			audio.resetRememberedAudioIdentities();
+			setEngineAudioChangeHandler(undefined);
+		}
+	},
+);
 
 async function awaitLaunchBoundary(finishing: Promise<unknown>) {
 	expect(

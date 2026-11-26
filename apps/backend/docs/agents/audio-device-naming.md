@@ -11,6 +11,20 @@ still contain a stale producer snapshot. If an answered roster omits a scanned
 input, a fresh Start records it as unavailable, not as a legacy address-only
 selection. Auto resolving to that same key later cannot clear a mix input's
 unavailable state recorded at admission.
+
+The scan also reads the nearest USB device's kernel-reported attachment and
+vendor/product for each USB-backed ALSA card. A conflicting roster attachment
+or USB model makes the selected input unavailable, including when a saved mix
+or a restoration would otherwise use the reused selector. This is a refusal
+only: it does not update the saved pick or mix, treat diagnostic serials as
+identity, or affect a launch that does not use the local input.
+
+Agreement is not verification. The original receiver and a replacement can
+present the same scan and stale roster evidence and both take the ordinary
+restore path. Rejecting a stale-but-plausible route at the actual audio open
+requires the cerastream verified route check (CERALIVE/cerastream#267) and a
+receiver qualified for that route. This change enables neither.
+
 A model or port token can open an unchanged address on a fresh Start, but the
 armed marker records that it cannot identify that input after engine loss.
 Older markers remain readable without inferring a physical identity from

@@ -10,7 +10,10 @@ import {
 import type { LifecycleState } from "@ceraui/rpc/schemas";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import { ENGINE_STATE_RECONCILE_TIMEOUT } from "../../helpers/timing-constants.ts";
-import { CerastreamBackend } from "../../modules/streaming/cerastream-backend.ts";
+import {
+	CerastreamBackend,
+	type CerastreamBackendDeps,
+} from "../../modules/streaming/cerastream-backend.ts";
 import { createLaunchTransaction } from "../../modules/streaming/launch-transaction.ts";
 import { createStreamSessionOrchestrator } from "../../modules/streaming/stream-session-orchestrator.ts";
 
@@ -33,7 +36,13 @@ const unused = async (): Promise<never> => {
 /** Engine truth changes at effect submission/ack, never from a production guard. */
 export function evidenceHarness(
 	protectedAtBoot = false,
-	{ schemaVersion = "0.1.0" }: { readonly schemaVersion?: string } = {},
+	{
+		schemaVersion = "0.1.0",
+		connectPeer,
+	}: {
+		readonly schemaVersion?: string;
+		readonly connectPeer?: CerastreamBackendDeps["connect"];
+	} = {},
 ) {
 	let engine: "idle" | "streaming" = "idle";
 	let live = false;
@@ -195,7 +204,7 @@ export function evidenceHarness(
 		return client;
 	};
 	const deps = {
-		connect,
+		connect: connectPeer ?? connect,
 		connectOptions: {},
 		getConfig: () => config,
 		saveConfig: () => undefined,
