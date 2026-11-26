@@ -101,18 +101,18 @@ export class NetworkPage {
 	 * Open the WiFi selector and WAIT for scan results via a web-first assertion.
 	 * Never uses waitForTimeout — asserts on a network row appearing instead.
 	 *
-	 * Each scanned network renders a row whose SSID is a `<p title={ssid}>`
-	 * (WifiSelectorDialog.svelte). That `title` attribute is unique to network
-	 * rows in this dialog, so it is the most reliable structural signal that the
-	 * scan has produced results. The auto-retry window covers scan latency.
+	 * Each scanned network renders a row button with the `wifi-network-row` test
+	 * id (WifiNetworkList.svelte), so a visible row is the most reliable
+	 * structural signal that the scan has produced results. The auto-retry
+	 * window covers scan latency.
 	 */
 	async openWifiSelector(): Promise<void> {
 		const trigger = this.page.getByTestId('open-wifi-selector-dialog').first();
 		await trigger.click();
 		const dialog = this.page.getByRole('dialog', { name: 'Available Networks' });
 		await expect(dialog).toBeVisible();
-		// Web-first wait for scan results: a network row (SSID paragraph) appears.
-		await expect(dialog.locator('p[title]').first()).toBeVisible({ timeout: 15_000 });
+		// Web-first wait for scan results: a network row appears.
+		await expect(dialog.getByTestId('wifi-network-row').first()).toBeVisible({ timeout: 15_000 });
 	}
 
 	async closeWifiSelector(): Promise<void> {

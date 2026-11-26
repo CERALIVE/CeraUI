@@ -2773,6 +2773,7 @@
 	"wifiSelector.button.changePassword": "تغيير كلمة المرور",
 	"wifiSelector.button.disconnect": "قطع الاتصال",
 	"wifiSelector.button.forget": "نسيان",
+	"wifiSelector.button.manage": "إدارة",
 	"wifiSelector.button.scan": "مسح",
 	"wifiSelector.button.scanning": "جاري المسح",
 	"wifiSelector.dialog.availableNetworks": "الشبكات المتاحة لـ {network}",

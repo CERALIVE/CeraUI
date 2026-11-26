@@ -2728,6 +2728,7 @@
 	"wifiSelector.button.changePassword": "Cambiar contraseña",
 	"wifiSelector.button.disconnect": "Desconectar",
 	"wifiSelector.button.forget": "Olvidar",
+	"wifiSelector.button.manage": "Gestionar",
 	"wifiSelector.button.scan": "Buscar redes",
 	"wifiSelector.button.scanning": "Buscando redes...",
 	"wifiSelector.dialog.availableNetworks": "Redes Disponibles",

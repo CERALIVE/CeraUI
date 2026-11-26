@@ -58,7 +58,8 @@ const RED_STATUS = {
 	selector: ".text-status-error",
 	utility: "var(--status-error)",
 };
-// Red only while hovered: the Wi-Fi list's Forget icon (WifiNetworkList.svelte).
+// Kept red while hovered: the Wi-Fi details' Forget button (WifiNetworkList.svelte),
+// whose ghost variant would otherwise switch its ink on hover.
 const RED_TEXT_HOVER = {
 	selector: ".hover\\:text-destructive:hover",
 	utility: "var(--destructive)",
