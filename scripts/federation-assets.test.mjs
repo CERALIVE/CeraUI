@@ -61,6 +61,12 @@ describe('federation asset contract', () => {
 		}
 	});
 
+	it('ships hosted dialog utilities without the device Live bar layout', () => {
+		const css = readFileSync(join(OUTPUT, 'frontend.css'), 'utf8');
+		expect(css).toContain(String.raw`.min-h-\[44px\]`);
+		expect(css).not.toContain(String.raw`.pb-\(--live-bar-height\)`);
+	});
+
 	it('rejects executable chunks outside the entry graph', () => {
 		expect(() =>
 			assertFederationAssetSet([

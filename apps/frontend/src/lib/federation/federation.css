@@ -1,4 +1,7 @@
 @import "../../app.css";
 
-/* Hosted dialogs do not render the on-device System Logs view. */
+/* The hosted dialogs share app.css, not the device screens and layout. */
+@source not "../../main/layout";
+@source not "../../main/live";
+@source not "../../main/settings";
 @source not "../../main/system-logs";

@@ -5,7 +5,7 @@ import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import { persistPlugin } from "svelte-persistent-runes/plugins";
-import { defineConfig } from "vite";
+import { defineConfig, normalizePath } from "vite";
 
 import { BUILD_BRAND } from "./brand.config.ts";
 import {
@@ -46,6 +46,11 @@ const DIALOG_ENTRIES = {
 	audio: path.resolve(__dirname, "src/lib/federation/audio-entry.ts"),
 	server: path.resolve(__dirname, "src/lib/federation/server-entry.ts"),
 };
+const STYLE_ENTRY = path.resolve(__dirname, "src/lib/federation/federation.css");
+const skippedStyleRoots = Array.from(
+	readFileSync(STYLE_ENTRY, "utf8").matchAll(/^@source not "([^"]+)";$/gm),
+	(match) => `${normalizePath(path.resolve(path.dirname(STYLE_ENTRY), match[1]))}/`,
+);
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -63,6 +68,16 @@ export default defineConfig({
 			strategy: [...PARAGLIDE_STRATEGY],
 		}),
 		persistPlugin(),
+		{
+			name: "federation-style-source-boundary",
+			generateBundle() {
+				for (const id of this.getModuleIds()) {
+					if (skippedStyleRoots.some((root) => id.startsWith(root))) {
+						this.error(`Federation imports an excluded CSS source: ${id}`);
+					}
+				}
+			},
+		},
 		tailwindcss(),
 		svelte({
 			compilerOptions: {
