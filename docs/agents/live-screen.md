@@ -474,14 +474,15 @@ must keep that ABI.
   full. It does not insert an unavailable main input that is outside the saved
   mix. This projection does not write to disk; opening Live and starting a
   stream do not save the projection.
-- A pick in the audio picker sends only `setConfig({ asrc, audio_pick: true })`.
+- An audio picker change first sends `setConfig({ asrc, audio_pick: true })`.
   The backend decides the membership in the same synchronous write, against its
   own current saved mix and current main input (Auto's resolution included):
   a device outside the mix joins it, and in a full mix it replaces the main
-  input it actually replaces and takes its tracks. Quick successive picks and a
-  stale second tab therefore compose. A refused mix retries with `asrc` alone,
-  but an unavailable source is refused and never retried. A pick already in
-  the mix changes only `asrc`.
+  input it actually replaces and takes its tracks. Surviving inputs keep their
+  saved relative order. An unavailable source or a pick that exceeds the
+  saved slot limit restores the previous selection and shows the refusal,
+  without retrying. Other mix refusals still retry with `asrc` alone. A pick
+  already in the mix changes only `asrc`.
 - The rule itself is `audioMixWithPrimary` in `@ceraui/rpc/schemas`, shared by
   the backend and the strips.
 - Meters: before going live, the main strip carries today's meter (the

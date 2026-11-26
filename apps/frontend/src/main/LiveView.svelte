@@ -885,9 +885,11 @@ async function handleSelectAudioSource(selection: string) {
 		// The backend adds the pick to the saved mix against its own current state.
 		const result = await rpc.streaming.setConfig({ asrc, audio_pick: true });
 		if (!result.success) {
-			if (result.error === 'audio_source_unavailable') {
+			if (result.error === 'audio_source_unavailable' || result.error === 'audio_inputs_too_many') {
 				if (audioOverride === picked) audioOverride = previous;
-				toast.error(m['live.startFailure.class.audio_source_unavailable']());
+				toast.error(result.error === 'audio_inputs_too_many'
+					? m['live.audioMixer.error.audio_inputs_too_many']()
+					: m['live.startFailure.class.audio_source_unavailable']());
 			} else {
 				// A mix refusal is separate from admission of the selected input.
 				await rpc.streaming.setConfig({ asrc });

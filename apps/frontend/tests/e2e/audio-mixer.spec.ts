@@ -414,6 +414,43 @@ test.describe("audio mixer — caps-full", () => {
 	const savedConfig = (backendRpc: BackendRpc) =>
 		backendRpc.call<{ asrc?: string; audio_inputs?: unknown[] }>(["streaming", "getConfig"]);
 
+	test("a picker capacity refusal keeps the previous mix editable after the unplugged input returns", async ({
+		page,
+		backendRpc,
+	}) => {
+		expect(await backendRpc.call(["streaming", "setConfig"], { audio_inputs: savedTwo })).toMatchObject({
+			success: true,
+		});
+		const attach = (attached: boolean) =>
+			backendRpc.call(["streaming", "setMockDeviceAttached"], {
+				input_id: "audio_elgato_wave3",
+				attached,
+			});
+		await attach(false);
+		const second = stripOf(page, SECOND);
+		await expect(second.getByRole("button", { name: `Remove ${SECOND}` })).toBeVisible();
+
+		// The backend RPC suite exercises a real full roster; this browser fixture has three mics.
+		wire.refuseAudioInputs("audio_inputs_too_many");
+		await pickThird(page);
+		await expect(page.getByText("The mix is full. Turn another input off first.", { exact: true })).toBeVisible();
+		await expect(page.getByTestId("audio-source-select")).toContainText(MAIN);
+		expect(wire.calls("streaming.setConfig").map(({ input }) => input)).toEqual([
+			{ asrc: THIRD, audio_pick: true },
+		]);
+		wire.refuseAudioInputs(null);
+
+		await attach(true);
+		await expect(second.getByRole("switch")).toBeChecked();
+		const mute = wire.nextAnswer("streaming.setAudioMix");
+		await page.getByTestId(`audio-strip-mute-${MAIN}`).click();
+		expect((await mute).result).toMatchObject({ success: true, applied: { id: MAIN, mute: true } });
+		expect(await savedConfig(backendRpc)).toMatchObject({
+			asrc: MAIN,
+			audio_inputs: [{ ...savedTwo[0], mute: true }, savedTwo[1]],
+		});
+	});
+
 	async function pickDevice(page: Page, name: RegExp): Promise<void> {
 		await page.getByTestId("audio-source-select").click();
 		await page.getByRole("option", { name }).click();

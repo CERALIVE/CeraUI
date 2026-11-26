@@ -636,11 +636,17 @@ test("an unplugged input keeps its saved slot so reconnect cannot strand the mix
 	expect(buildInitialStatus().status?.audio_mix_excluded).toMatchObject([
 		{ id: "Second", reason: "unplugged" },
 	]);
+	expect(await pick("Fifth")).toEqual({
+		success: false,
+		error: "audio_inputs_too_many",
+		applied: { relay_protocol: "srtla" },
+	});
 	expect(await change({ id: "Fifth", include: true })).toEqual({
 		success: false,
 		error: "audio_inputs_too_many",
 	});
 	expect((await disk()).audio_inputs).toEqual(saved);
+	expect((await disk()).asrc).toBe("Primary");
 
 	setMockAudioDevicesProvider(() => devices);
 	expect(buildInitialStatus().status?.audio_mix_excluded).toEqual([]);
@@ -1632,8 +1638,8 @@ test("full mix with Auto resolved to a same-device input: a new pick replaces th
 	}
 });
 
-test("picking another primary keeps a saved unplugged input and its original tracks", async () => {
-	const saved = [entry("Primary"), entry("Fourth", [2])];
+test("picking another primary keeps a saved unplugged input in order with its original tracks", async () => {
+	const saved = [entry("Primary"), entry("Fourth", [2]), entry("Second")];
 	expect(await save(saved)).toMatchObject({ success: true });
 	const { Fourth: _unplugged, ...rest } = devices;
 	setMockAudioDevicesProvider(() => rest);

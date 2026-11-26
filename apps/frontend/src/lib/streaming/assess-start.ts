@@ -73,9 +73,11 @@ function audioGate(
 			selected.unavailable_reason !== undefined) ||
 		(!selected && isSelectedAudioLost(config.asrc, input.audioIds))
 	) {
-		// Let the existing Start refusal explain a missing sole saved mic.
+		// A current typed roster can distinguish unplugged from listed but unusable.
 		const savedMix = config.audio_inputs;
 		if (
+			selected === undefined &&
+			input.audioSources !== undefined &&
 			config.asrc === input.config?.asrc &&
 			(savedMix === undefined ||
 				(savedMix.length === 1 && savedMix[0]?.id === config.asrc))

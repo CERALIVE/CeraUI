@@ -257,10 +257,13 @@ function mixWithAvailablePrimary(
 ): AudioInputSetting[] | undefined {
 	if (!saved?.length) return undefined;
 	const present = saved.filter(({ id }) => available.has(id));
-	const next = audioMixWithPrimary(present, primary, maxInputs, previous);
+	const [main = defaultAudioInput(primary), ...remaining] =
+		audioMixWithPrimary(present, primary, maxInputs, previous) ?? [];
 	return [
-		...(next ?? [defaultAudioInput(primary)]),
-		...saved.filter(({ id }) => !available.has(id)),
+		main,
+		...saved.filter(
+			(input) => !available.has(input.id) || remaining.includes(input),
+		),
 	];
 }
 

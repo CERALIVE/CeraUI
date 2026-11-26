@@ -104,16 +104,23 @@ maximum, and their union must be 1 through k. Gain includes both advertised
 endpoints. Delay is an integer from zero through the advertised maximum.
 Non-numeric/non-finite values fail RPC input parsing.
 
-The engine adapter resolves every picker id through the existing audio resolver,
-puts the primary first, omits `audio.device` and sends producer-owned
-`audio.inputs`. It sends `effectiveAudioInputs`: a primary the device can open
-but the saved mix lacks joins first on Track 1, or in a full mix takes the
-first entry's place and tracks. Live and idle `setAudioMix` admit the same
-mix, and nothing is written until an operator edit. `setConfig({ asrc,
-audio_pick: true })` is the picker's explicit pick: `pickedAudioInputs` adds
-the picked device to the current saved mix (replacing the current main input,
-Auto resolved, in a full mix) and saves both in one synchronous write, so
-picks serialize; without `audio_pick` an `asrc` save changes no membership.
+Start builds `effectiveAudioInputs` from the saved mix, with an available
+primary added if needed. `projectLaunchAudioInputs` omits unavailable legs
+only if it omits no primary leg from that mix and the surviving legs cover
+every assigned track. Otherwise Start keeps the routing for normal admission
+or refuses an input that cannot be safely resolved. The engine adapter puts the primary
+first, maps the projected IDs to engine selectors, and sends producer-owned
+`audio.inputs` instead of `audio.device`. Projection does not rewrite the
+saved mix. Live value edits target inputs admitted to the running session;
+idle edits target the effective saved mix for the next start.
+
+`setConfig({ asrc, audio_pick: true })` is the picker's explicit pick.
+`pickedAudioInputs` adds the picked device to the current saved mix. When the
+available mix is full, the pick replaces the previous main or, if that input
+is not in the available mix, the first available entry. Accepted picks
+preserve the relative order of all surviving inputs and save the selection
+and mix in one synchronous write. A pick that would exceed the saved slot
+limit is refused; without `audio_pick` an `asrc` save changes no membership.
 Idle edits from the Live strips arrive as per-input deltas on
 `setAudioMix`: values, or `include` / `track` for membership and tracks, which
 `changedAudioInputs` composes on the current saved mix (refusing to turn the
