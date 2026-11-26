@@ -721,8 +721,9 @@ three more.
 `router-cellular-control.ts` (net-mode + the two proven toggles),
 `router-subnet-hygiene.ts` + `router-subnet-plan.ts` (the LAN-subnet rewrite),
 `router-subnet-rollback.ts` (its replay handler) and
-`rpc/procedures/modems-router.procedure.ts` are everything this build writes to a
-router dongle. `router-cellular-admin.ts` reads and nothing in it mutates
+`rpc/procedures/modems-router.procedure.ts` own CeraUI's direct settings writes.
+The separate vendor web proxy is not covered by this contract.
+`router-cellular-admin.ts` reads and nothing in it mutates
 (808 → 683 pure LOC; the extraction todos 20, 23 and 22-Stage-A each recorded as
 owed).
 
@@ -748,6 +749,37 @@ owed).
   its own registered rollback. Ordering is the safety argument: preflight (all
   reads) → journal armed → re-read under the lease and refuse `state_drifted` if
   it moved → `markExecuting` → write → DHCP renewal → confirm.
+- **THE LEASE DOES NOT PROVE THE NETDEV.** All direct writes issue the same
+  `netdevLifetimeFence` as saved login before lease admission can yield. The
+  subnet proof starts before preflight. It covers fresh sessions and their
+  reads, setting POSTs, retry reads, each `nmcli` command and live restoration.
+  Read-back counts only while the original proof holds; a refused write that
+  never dispatched may clear its journal, but loss after a possible dispatch
+  returns existing `blocked` and leaves a durable `failed` entry. This is a
+  pre-dispatch check, not an atomic binding to a kernel object (#731).
+  Cellular data, roaming and radio-mode writes that were read back under the
+  proof are never answered as refused if the dongle leaves or is replaced
+  during the refresh: the reply is success without a reading. The dialog does
+  not use that reading, so it behaves as for any successful reply. A row that
+  keeps its old reading ends as unknown. A row that loses its admin reading
+  shows no outcome. A replacement that already reports the value shows "The
+  dongle confirmed the change." A row that leaves the list closes the dialog.
+  Loss before the POST answers `unreachable` and sends nothing.
+- **SAME-BOOT SUBNET REPLAY USES THE JOURNALED WITNESS.** New entries add the
+  kernel boot ID, ifindex and sysfs node from the issuing proof to the existing
+  version-1 pre-state. On the same boot, both kernel fields must be readable and
+  match at issue and throughout rollback. A rename can be followed only to a
+  unique name with that witness. Absent, changed or unreadable evidence blocks
+  replay without dispatch, or stops it at the next check if it changed in
+  flight. A dongle that unregisters itself remains blocked rather than
+  continuing its own rollback. Only a confirmed different boot takes the prior
+  replay path, which does not prove continuity. Interrupted entries without
+  boot provenance block without dispatch. A build that writes these rows must
+  include the modem recovery card. It exposes Keep current settings for a resolved
+  occupant, Gone after confirmed absence, and Check again only on an eligible
+  block. Check again requires the original same-boot netdev and a complete
+  match of the original DHCP settings. Rows without a witness cannot use it.
+  Replugging or rebooting alone does not clear the global block.
 - **THE OLD ADDRESS IS RETAINED AND PROBED.** After a failed confirmation the
   device is at exactly one of two addresses — the new one (the write landed, the
   host could not follow) or the old one (it never landed) — and only asking BOTH
@@ -758,8 +790,9 @@ owed).
   (reached at the new address) and `reverted` (restored AND reconfirmed at the old
   one) both leave nothing outstanding, so the journal entry is cancelled — keeping
   a device blocked that was just proven healthy would be fail-closed theatre.
-  `blocked` (answered at neither) is the ONLY outcome that leaves the entry
-  `failed`, which is exactly the case the journal exists for.
+  `blocked` leaves the entry `failed` when the result cannot be confirmed.
+  The detail distinguishes ordinary verification failure from loss of the
+  original netdev's proof, including when a response arrived before that loss.
 - **Only /24 is accepted, and only RFC1918.** Re-hosting a DHCP pool across an
   arbitrary prefix means guessing which bits are the host part, and a wrong guess
   writes a pool that does not contain the addresses it serves. Everything except
@@ -1030,7 +1063,10 @@ Physical opt-outs still apply when coverage supplies the final identity.
 `identitySettled` latches admission on an addressed publication that is no longer
 pending, or synchronously at a covering scan commit. Losing coverage in a later
 scan never withdraws that entry. Classification and settlement die when removal
-is observed by the monitor, a poll without the name, or a non-RUNNING row.
+is observed by the monitor or a poll cannot prove continuity for a withdrawn
+name. A non-RUNNING row leaves the published netif map, but keeps its lifetime
+like a monitor flap if the live kernel witness matches without contradictions.
+Later polls check withdrawn names too, including while they remain non-RUNNING.
 Per-name presence counters fence bus results issued before an observed create,
 delete or replacement. When names remain uncovered after the existing scan wait,
 the producer awaits one I/O turn to deliver ready classification callbacks.
@@ -1048,15 +1084,20 @@ the network/scan/registry dependency cycle.
 An interface name locates a kernel netdev; it does not identify its lifetime.
 The lifetime witness is the netdev's ifindex (the `ip -4 addr` header or
 `/sys/class/net/<if>/ifindex`) and its sysfs node (device and inode of
-`/sys/class/net/<if>`), plus the MAC from ifconfig. When both the node and the
-index are known and equal, the netdev is the same one and a different MAC is
-configuration: a down/up flap keeps its admission and link ID. Otherwise any
+`/sys/class/net/<if>` after following the class symlink), plus the MAC from
+ifconfig. This node is the sysfs netdev directory, not the parent USB device,
+port, or pathname. Ifindex can be reused. On 64-bit Linux kernfs includes a
+generation in the inode number; neither field is a permanent ID or an open
+handle, and identical observations cannot disprove an unseen ABA. When both the
+node and index match without an observed retirement, a different MAC is treated
+as configuration, not evidence of replacement:
+a down/up flap keeps its admission and link ID. Otherwise any
 known index, node or MAC that differs is a replacement, so the same index and
 MAC on a new node is still a new netdev. Sysfs answers in three ways: listed,
 confirmed absent (`ENOENT`), or unreadable (any other OS error). An unreadable
 or ifconfig-only sample keeps the last known witness, including the last
-confirmed presence, and neither confirms nor retires anything; an exception
-that is not an OS error propagates.
+confirmed presence. Unknown evidence does not erase it, but cannot excuse
+withdrawal or an ambiguous reappearance. A non-OS exception propagates.
 
 The USB scan reads the witness on both sides of its descriptor read and checks
 the retirement epoch and the poll's witness before committing. The poll reads
@@ -1091,7 +1132,8 @@ fields for the successor.
 A credential attempt proceeds only on positive continuity. At issue, the live
 witness must share a matching ifindex or node with the recorded witness and no
 known field may contradict it; every request and the receipt re-check the live
-witness against the issuing one the same way. Missing, unreadable or
+witness against the issuing one the same way and refuses contradictions with
+earlier recorded evidence missing from the issuing read. Missing, unreadable or
 non-overlapping evidence, a confirmed absence, or a changed retirement epoch
 refuses. These checks run in the backend. The transport is
 `curl --interface <name>`, which binds its socket with `SO_BINDTODEVICE` by name

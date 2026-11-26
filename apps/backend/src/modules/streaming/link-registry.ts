@@ -44,9 +44,8 @@
 */
 
 import type { BondLinkIdentityState } from "@ceraui/rpc/schemas";
-
+import { portLabelFromIdPath } from "@ceraui/rpc/schemas";
 import { logger } from "../../helpers/logger.ts";
-import { portLabelFromIdPath } from "../modems/physical-identity.ts";
 import { resolveModemPhysicalIdentity } from "../modems/physical-identity-source.ts";
 import { type BondEntry, isUnmappableEntry } from "./bind-map.ts";
 

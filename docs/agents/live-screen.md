@@ -261,11 +261,13 @@ rollup visible after Stop even if Details was never opened.
   live boolean counts whether it came from a push, reconnect hydrate or
   watchdog read, once the connection is up. A newer live flag can precede the
   lifecycle update at the start edge, and live reconfiguration can still be
-  stopped. A reported lifecycle other than streaming, including stopping
-  before the live flag clears, or a connection drop invalidates an open
-  question. Keep streaming and
-  Escape close it without stopping and return focus to Stop, or to the
-  main content landmark if Stop is gone or unavailable. A backdrop tap
+  stopped. An explicit `true` on this connection keeps Stop usable while the
+  device reports `stop_failed` or `reconciling`; a reported `stopping` withholds it.
+  Applying a live setting or repeating the current uncertain phase keeps an
+  open question. Entry into an uncertain phase, `idle`, `starting`, `stopping`,
+  loss of the live flag, or a connection drop invalidates it.
+  Keep streaming and Escape close it without stopping and return focus to Stop,
+  or to the main content landmark if Stop is gone or unavailable. A backdrop tap
   does nothing. The recovery/unconfirmed band's Stop and the stop watchdog's
   Retry remain one tap, without confirmation.
 - While it is mounted, the document's `scroll-padding-bottom` is the bar's

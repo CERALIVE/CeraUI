@@ -218,6 +218,7 @@ export type WifiInterfaceResponseMessage = Pick<
 	supports_hotspot?: true;
 	supports_ap_sta_concurrency?: true;
 	mode?: "station" | "hotspot";
+	observed_mode?: WifiInterfaceWire["observed_mode"];
 	transition?: "activating" | "deactivating";
 	degraded_reason?: BaseWifiInterface["degradedReason"];
 	// Absent means NOT COMPUTED (no `iw`, an unresolvable wiphy, or a dump that
@@ -449,6 +450,18 @@ export function wifiBuildMsg() {
 		}
 
 		entry.mode = isApMode(wifiInterface) ? "hotspot" : "station";
+		if (isConcurrentHotspot(wifiInterface)) {
+			entry.observed_mode = "hybrid";
+		} else if (entry.mode === "hotspot") {
+			entry.observed_mode = "hotspot";
+		} else {
+			entry.observed_mode =
+				!wifiInterface.virtualModeUnresolved &&
+				(wifiInterface.activeConn === null ||
+					wifiInterface.activeMode === "infrastructure")
+					? "station"
+					: null;
+		}
 		if (canHotspot(wifiInterface) && wifiInterface.hotspot.transition) {
 			entry.transition = wifiInterface.hotspot.transition;
 		}

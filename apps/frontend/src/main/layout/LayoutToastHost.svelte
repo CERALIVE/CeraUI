@@ -100,11 +100,11 @@ $effect(() => {
 });
 
 // Preserve the notification reset on the existing Stop path.
-const stopStreaming = () => {
+const stopStreaming = (prepareDispatch?: () => boolean) => {
 	toast.dismiss();
 	clearNotifications();
 	renderedAt.clear();
-	void stopStreamingFn();
+	void stopStreamingFn(prepareDispatch);
 };
 
 window.stopStreamingWithNotificationClear = stopStreaming;

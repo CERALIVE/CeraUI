@@ -12,8 +12,7 @@
  * Architecture
  * -----------
  * Pure core functions (rune-free, unit-testable) handle state transitions and
- * reconciliation. The reactive layer uses Svelte 5 runes and is created lazily
- * on first selector access.
+ * reconciliation. The reactive layer uses a shared Svelte 5 rune store.
  */
 
 import type { StartFailure } from "@ceraui/rpc/schemas";
@@ -28,7 +27,7 @@ import {
 } from "$lib/streaming/unresolved-stream-actions.svelte";
 
 import { pullStatusEvidence } from "./pulled-status";
-import { markStreamIntent } from "./session-epoch.svelte";
+import { markStreamIntent, statusFrameIsCurrent } from "./session-epoch.svelte";
 import {
 	runStartWatchdog,
 	START_WATCHDOG_TIMEOUT_MS,
@@ -38,9 +37,8 @@ import {
 	runStopWatchdog,
 	STOP_WATCHDOG_REPULL_DELAY_MS,
 	STOP_WATCHDOG_TIMEOUT_MS,
-	type StopWatchdogDeps,
 } from "./streaming-stop-watchdog";
-import { ingestPulledStatus } from "./subscriptions.svelte";
+import { getStatus, ingestPulledStatus } from "./subscriptions.svelte";
 
 // ============================================
 // Types
@@ -227,12 +225,13 @@ interface ReactiveOptimismStore {
 	getFailure: () => StartFailure | undefined;
 	getGeneration: () => number;
 	transitionToStarting: () => void;
-	transitionToStopping: () => void;
+	transitionToStopping: () => () => boolean;
 	reconcileToAuthority: (isStreaming: boolean) => void;
 	revertWithReason: (reason: string, generation?: number) => void;
 	revertWithFailure: (failure: StartFailure, generation?: number) => void;
 	supersedeStarting: (generation: number) => void;
 	clearStopReason: () => void;
+	isRetryBusy: () => boolean;
 	retryStop: () => void;
 	destroy: () => void;
 	getStore: () => StreamingOptimismStore;
@@ -268,17 +267,18 @@ function resolveStartWatchdogMs(): number {
 let stopStuckBannerState = $state(false);
 
 /**
- * Create the reactive optimism store (runes — never run by unit tests). Also owns
- * the bounded stopping WATCHDOG: a timer armed on `transitionToStopping`, cleared
- * once the stop confirms (`stopping`→`idle`); if it persists it pull-reconciles
- * authoritative status — the guarantee against the stuck-after-stop bug (see
- * streaming-stop-watchdog.ts).
+ * Create the reactive optimism store. Also owns
+ * the bounded watchdog, armed at Stop dispatch and cleared when the Stop
+ * settles or loses ownership. Its status pull can recover a missed idle push.
  */
 function createReactiveOptimismStore(): ReactiveOptimismStore {
 	let store = $state<StreamingOptimismStore>(createOptimismStore());
 	let watchdogTimer: ReturnType<typeof setTimeout> | undefined;
 	let lifetime = 0;
-	let watchdogRunning: number | undefined;
+	let watchdogRunning:
+		| { readonly action: number; operatorRetry: boolean }
+		| undefined;
+	let busyRetryAction = $state<number>();
 	let startWatchdogTimer: ReturnType<typeof setTimeout> | undefined;
 	let startWatchdogRunning: number | undefined;
 
@@ -312,14 +312,81 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 		}, resolveStartWatchdogMs());
 	}
 
-	async function runWatchdogOnce(): Promise<void> {
+	async function runWatchdogOnce(operatorRetry = false): Promise<void> {
 		const action = lifetime;
-		if (store.state !== "stopping" || watchdogRunning === action) return;
-		watchdogRunning = action;
+		if (store.state !== "stopping" || watchdogRunning?.action === action)
+			return;
+		const cycle = { action, operatorRetry };
+		watchdogRunning = cycle;
+		const isCurrent = () => lifetime === action;
+		let liveReadAuthorizesResend = false;
+		let resend: Promise<unknown> | undefined;
+		let joinedRecovery: Promise<unknown> | undefined;
+		const delay = () =>
+			new Promise<void>((resolve) =>
+				setTimeout(resolve, STOP_WATCHDOG_REPULL_DELAY_MS),
+			);
+
+		function checkJoinedResend(): void {
+			joinedRecovery = Promise.allSettled([
+				delay().then(async () => {
+					if (isCurrent())
+						await pullWatchdogStatus(isCurrent, { retryOnSupersession: false });
+				}),
+			]);
+		}
+
+		function redispatchStop(afterConfirm = false): void {
+			if (resend !== undefined) return;
+			// Keep operator intent, but recheck live evidence at dequeue.
+			const requested = cycle.operatorRetry;
+			const canRedispatch = () => {
+				if (!isCurrent() || !liveReadAuthorizesResend) return false;
+				const lifecycle = getStatus(true)?.stream_lifecycle;
+				return (
+					lifecycle !== "reconfiguring" &&
+					lifecycle !== "stopping" &&
+					(requested ||
+						(lifecycle !== "reconciling" && lifecycle !== "stop_failed"))
+				);
+			};
+			if (!canRedispatch()) return;
+			busyRetryAction = action;
+			// SystemHelper reports failures; we only need to know when the send settles.
+			resend = Promise.allSettled([
+				directStopStreaming(
+					canRedispatch,
+					afterConfirm ? checkJoinedResend : undefined,
+				),
+			]);
+		}
+
 		try {
-			await runStopWatchdog(buildWatchdogDeps(() => lifetime === action));
+			const stillLive = await runStopWatchdog({
+				isCurrent,
+				pullStatus: () =>
+					pullWatchdogStatus(isCurrent, {
+						noteLive: (isLive) => {
+							liveReadAuthorizesResend = isLive;
+						},
+					}),
+				reconcile: (isStreaming) => {
+					if (isCurrent()) applyReconcile(isStreaming);
+				},
+				redispatchStop,
+				delay,
+				setBannerVisible: (visible) => {
+					if (isCurrent()) stopStuckBannerState = visible;
+				},
+			});
+			// A click during the delay/read can use its fresh live result.
+			if (stillLive && cycle.operatorRetry) redispatchStop(true);
 		} finally {
-			if (watchdogRunning === action) watchdogRunning = undefined;
+			// The read cycle can finish while the resend is still waiting to dispatch.
+			if (resend !== undefined) await resend;
+			if (joinedRecovery !== undefined) await joinedRecovery;
+			if (watchdogRunning === cycle) watchdogRunning = undefined;
+			if (busyRetryAction === action) busyRetryAction = undefined;
 		}
 	}
 
@@ -353,22 +420,37 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 
 	async function pullWatchdogStatus(
 		isCurrent: () => boolean,
+		{
+			noteLive,
+			retryOnSupersession = true,
+		}: {
+			readonly noteLive?: (isLive: boolean) => void;
+			readonly retryOnSupersession?: boolean;
+		} = {},
 	): Promise<boolean | undefined> {
 		try {
-			const answer = await pullStatusEvidence(isCurrent);
-			if (!isCurrent() || answer === undefined) return undefined;
-			ingestPulledStatus(answer.status, answer.receipt);
-			const status = answer.status;
-			if (
-				typeof status !== "object" ||
-				status === null ||
-				!("is_streaming" in status)
-			)
+			const answer = await pullStatusEvidence(isCurrent, {
+				retryOnSupersession,
+			});
+			if (!isCurrent() || answer === undefined) {
+				noteLive?.(false);
 				return undefined;
-			return typeof status.is_streaming === "boolean"
-				? status.is_streaming
-				: undefined;
+			}
+			const { status, receipt } = answer;
+			const isStreaming =
+				statusFrameIsCurrent(receipt) &&
+				typeof status === "object" &&
+				status !== null &&
+				"is_streaming" in status &&
+				typeof status.is_streaming === "boolean"
+					? status.is_streaming
+					: undefined;
+			// Withdraw older authority before this snapshot can clear a phase veto.
+			noteLive?.(isStreaming === true);
+			ingestPulledStatus(status, receipt);
+			return isStreaming;
 		} catch (error) {
+			noteLive?.(false);
 			if (!(error instanceof Error)) throw error;
 			console.error("Stream watchdog status read failed:", error);
 			return undefined;
@@ -400,27 +482,6 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 		};
 	}
 
-	function buildWatchdogDeps(isCurrent: () => boolean): StopWatchdogDeps {
-		return {
-			isCurrent,
-			pullStatus: () => pullWatchdogStatus(isCurrent),
-			reconcile: (isStreaming: boolean) => {
-				if (isCurrent()) applyReconcile(isStreaming);
-			},
-			redispatchStop: () => {
-				if (!isCurrent()) return;
-				void directStopStreaming();
-			},
-			delay: () =>
-				new Promise((resolve) =>
-					setTimeout(resolve, STOP_WATCHDOG_REPULL_DELAY_MS),
-				),
-			setBannerVisible: (visible: boolean) => {
-				if (isCurrent()) stopStuckBannerState = visible;
-			},
-		};
-	}
-
 	return {
 		getState: () => store.state,
 		getStopReason: () => store.stopReason,
@@ -437,12 +498,17 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 			armStartWatchdog();
 		},
 		transitionToStopping: () => {
-			lifetime += 1;
+			const action = ++lifetime;
 			markStreamIntent();
 			clearStartWatchdogTimer();
+			clearWatchdogTimer();
 			stopStuckBannerState = false;
 			store = transitionToStopping(store);
-			armWatchdog();
+			return () => {
+				if (lifetime !== action) return false;
+				armWatchdog();
+				return true;
+			};
 		},
 		reconcileToAuthority: (isStreaming: boolean) => {
 			applyReconcile(isStreaming);
@@ -476,25 +542,30 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 		clearStopReason: () => {
 			store = clearStopReason(store);
 		},
+		isRetryBusy: () => busyRetryAction === lifetime,
 		retryStop: () => {
-			void runWatchdogOnce();
+			if (!stopStuckBannerState || busyRetryAction === lifetime) return;
+			busyRetryAction = lifetime;
+			if (watchdogRunning?.action === lifetime)
+				watchdogRunning.operatorRetry = true;
+			else void runWatchdogOnce(true);
 		},
 		destroy: () => {
 			lifetime += 1;
 			clearWatchdogTimer();
 			clearStartWatchdogTimer();
+			watchdogRunning = undefined;
+			startWatchdogRunning = undefined;
+			busyRetryAction = undefined;
 			stopStuckBannerState = false;
+			store = createOptimismStore();
 		},
 		getStore: () => store,
 	};
 }
 
-let singleton: ReactiveOptimismStore | null = null;
-
-function store(): ReactiveOptimismStore {
-	singleton ??= createReactiveOptimismStore();
-	return singleton;
-}
+// Allocate the signals outside the first selector's derived so it subscribes.
+const singleton = createReactiveOptimismStore();
 
 // ============================================
 // Public selectors
@@ -504,14 +575,14 @@ function store(): ReactiveOptimismStore {
  * Get the current optimistic streaming state.
  */
 export function getStreamingOptimismState(): StreamingOptimismState {
-	return store().getState();
+	return singleton.getState();
 }
 
 /**
  * Get the stop reason (if start failed) — a legacy code string.
  */
 export function getStreamingStopReason(): string | undefined {
-	return store().getStopReason();
+	return singleton.getStopReason();
 }
 
 /**
@@ -519,7 +590,7 @@ export function getStreamingStopReason(): string | undefined {
  * carried one. `undefined` for a legacy string-only revert.
  */
 export function getStreamingStartFailure(): StartFailure | undefined {
-	return store().getFailure();
+	return singleton.getFailure();
 }
 
 /**
@@ -528,28 +599,35 @@ export function getStreamingStartFailure(): StartFailure | undefined {
  * late response from a superseded attempt is fenced.
  */
 export function getStreamingAttemptGeneration(): number {
-	return store().getGeneration();
+	return singleton.getGeneration();
 }
 
 /**
  * Transition to `starting` state (user clicked Start).
  */
 export function startStreamingOptimism(): void {
-	store().transitionToStarting();
+	singleton.transitionToStarting();
 }
 
 /**
- * Transition to `stopping` state (user clicked Stop).
+ * Claim `stopping` now. The returned callback rechecks ownership and arms the
+ * watchdog just before the initial Stop dispatch.
  */
-export function stopStreamingOptimism(): void {
-	store().transitionToStopping();
+export function stopStreamingOptimism(): () => boolean {
+	return singleton.transitionToStopping();
+}
+
+/** Withdraw the confirmed Stop, including any queued send, at an observed boundary. */
+export function invalidateConfirmedStop(): void {
+	if (singleton.getState() === "stopping")
+		singleton.reconcileToAuthority(false);
 }
 
 /**
  * Reconcile to the authoritative `is_streaming` broadcast.
  */
 export function reconcileStreamingOptimism(isStreaming: boolean): void {
-	store().reconcileToAuthority(isStreaming);
+	singleton.reconcileToAuthority(isStreaming);
 }
 
 /**
@@ -560,7 +638,7 @@ export function revertStreamingOptimism(
 	reason: string,
 	generation?: number,
 ): void {
-	store().revertWithReason(reason, generation);
+	singleton.revertWithReason(reason, generation);
 }
 
 /**
@@ -571,7 +649,7 @@ export function revertStreamingOptimismFailure(
 	failure: StartFailure,
 	generation?: number,
 ): void {
-	store().revertWithFailure(failure, generation);
+	singleton.revertWithFailure(failure, generation);
 }
 
 /**
@@ -580,39 +658,41 @@ export function revertStreamingOptimismFailure(
  * Pass the attempt `generation`; a stale one is ignored.
  */
 export function supersedeStartingOptimism(generation: number): void {
-	store().supersedeStarting(generation);
+	singleton.supersedeStarting(generation);
 }
 
 /**
  * Clear the stop reason (e.g., when the user dismisses the error toast).
  */
 export function clearStreamingStopReason(): void {
-	store().clearStopReason();
+	singleton.clearStopReason();
 }
 
 /**
- * Whether the truthful "stop is taking longer than expected" banner is showing —
- * exposed only while the authoritative flag still says streaming after the
- * watchdog has pulled and re-dispatched.
+ * Whether the Stop delay banner is showing. The first watchdog read did not
+ * confirm idle; the Stop may still be pending or its outcome unknown.
  */
 export function getStopStuckBannerVisible(): boolean {
 	return stopStuckBannerState;
 }
 
-/**
- * Retry the bounded stopping watchdog (pull→stop→pull). Wired to the stop-stuck
- * banner's Retry button.
- */
-export function retryStopStreaming(): void {
-	store().retryStop();
+/** A Retry is already accepted or a resend is pending for the current Stop. */
+export function getStopRetryBusy(): boolean {
+	return singleton.isRetryBusy();
 }
 
 /**
- * Tear down the reactive store (clearing the watchdog timer) and the
- * unresolved stream actions that qualify it. For tests/HMR.
+ * Authorize one Retry for the current Stop, joining its watchdog if still active.
+ */
+export function retryStopStreaming(): void {
+	singleton.retryStop();
+}
+
+/**
+ * Reset the reactive store and its unresolved actions without losing existing
+ * subscribers. For tests/HMR.
  */
 export function destroyStreamingOptimism(): void {
-	singleton?.destroy();
-	singleton = null;
+	singleton.destroy();
 	resetUnresolvedStreamActions();
 }

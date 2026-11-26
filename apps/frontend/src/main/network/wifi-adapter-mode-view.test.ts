@@ -266,6 +266,53 @@ describe("an AP the radio's own snapshot shows up outranks a stale `station` ans
 	});
 });
 
+describe("the snapshot distinguishes settled station from unreadable mode", () => {
+	it.each(["hotspot", "hybrid"] as const)(
+		"replaces a cached %s mode after the device confirms Station",
+		(mode) => {
+			const settled = {
+				...iface({ mode: "station" }),
+				observed_mode: "station" as const,
+			};
+			const v = view({ iface: settled, entry: entry({ mode }) });
+			expect(v.displayMode).toBe("station");
+			expect(optionFor(v, "station").selected).toBe(true);
+			expect(optionFor(v, mode).selected).toBe(false);
+		},
+	);
+
+	it("does not select a mode when a new device explicitly cannot verify it", () => {
+		const unreadable = { ...iface({ mode: "station" }), observed_mode: null };
+		const v = view({ iface: unreadable, entry: entry({ mode: "hotspot" }) });
+		expect(v.options.filter((option) => option.selected)).toEqual([]);
+		expect(v.stationRow).toBe(true);
+	});
+
+	it("keeps the legacy cached mode if an older device has no observation field", () => {
+		const v = view({
+			iface: iface({ mode: "station" }),
+			entry: entry({ mode: "hotspot" }),
+		});
+		expect(v.displayMode).toBe("hotspot");
+		expect(optionFor(v, "hotspot").selected).toBe(true);
+	});
+
+	it("keeps the recorded prior mode until a pending transition settles", () => {
+		const settled = {
+			...iface({ mode: "station" }),
+			observed_mode: "station" as const,
+		};
+		const v = view({
+			iface: settled,
+			phase: "pending",
+			target: "station",
+			from: "hotspot",
+		});
+		expect(v.displayMode).toBe("hotspot");
+		expect(optionFor(v, "station").pending).toBe(true);
+	});
+});
+
 describe("a pending transition holds the PRIOR mode", () => {
 	it("does not flip the control before the device confirms", () => {
 		const v = view({

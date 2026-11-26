@@ -32,15 +32,19 @@ export type EquivalenceFixture = {
 	readonly publication?: () => Promise<void>;
 };
 
-// P's only allowed byte delta is the optional field on each Wi-Fi row.
+// The recorded legacy transcript predates these two additive observations.
 function legacyWifiStatus(rows: unknown): unknown {
 	if (typeof rows !== "object" || rows === null) return rows;
 	return Object.fromEntries(
 		Object.entries(rows).map(([id, row]) => {
-			if (typeof row !== "object" || row === null || !("incarnation" in row)) {
+			if (typeof row !== "object" || row === null) {
 				return [id, row];
 			}
-			const { incarnation: _incarnation, ...legacy } = row;
+			const {
+				incarnation: _incarnation,
+				observed_mode: _observedMode,
+				...legacy
+			} = row as Record<string, unknown>;
 			return [id, legacy];
 		}),
 	);

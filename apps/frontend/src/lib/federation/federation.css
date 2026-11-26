@@ -1,4 +1,1 @@
 @import "../../app.css";
-
-/* Hosted dialogs do not render the on-device System Logs view. */
-@source not "../../main/system-logs";

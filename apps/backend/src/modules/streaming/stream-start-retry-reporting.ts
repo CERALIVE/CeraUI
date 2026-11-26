@@ -129,7 +129,7 @@ const TERMINAL_FALLBACK_MESSAGES: Partial<Record<StartFailureClass, string>> = {
 	recovery_pending:
 		"Stream failed to start: the device is still finishing modem recovery after a restart. Try again in a moment.",
 	mutation_blocked:
-		"Stream failed to start: a modem change could not be undone, so its state is unknown. Review the blocked modem in Settings before streaming.",
+		"Stream failed to start: a modem change couldn't be confirmed. Open Network and resolve it under Cellular.",
 	capture_source_unavailable:
 		"Stream failed to start: the video input could not be used. Check the camera and cable, then start again.",
 	update_in_progress:

@@ -55,6 +55,7 @@ import {
 	withJournaledModemMutation,
 	withModemMutation,
 } from "../../modules/modems/mutation-lease.ts";
+import { netdevLifetimeFence } from "../../modules/network/netdev-lifetime.ts";
 import { refreshRouterAdminState } from "../../modules/network/network-interfaces.ts";
 import type { RouterAdminCapabilities } from "../../modules/network/router-capabilities.ts";
 import {
@@ -65,6 +66,7 @@ import { getRouterCellularMarker } from "../../modules/network/router-cellular-s
 import {
 	executeSubnetRewrite,
 	prepareSubnetRewrite,
+	subnetContinuityLost,
 } from "../../modules/network/router-subnet-hygiene.ts";
 // Imported for its SIDE EFFECT as well as its helper: loading it is what
 // registers the `router-subnet` rollback on todo 25's registry, so a rewrite that
@@ -128,6 +130,7 @@ export const setRouterControlProcedure = modemProcedure
 		// was observed on real hardware, neither of which can cost the link, and
 		// arming a rollback for a kind that has none would block the device on a
 		// refusal that changed nothing.
+		const isCurrent = netdevLifetimeFence(ifname);
 		const guarded = await withModemMutation(
 			modemStableKeyForIfname(ifname),
 			() =>
@@ -136,6 +139,8 @@ export const setRouterControlProcedure = modemProcedure
 					marker.vid_pid,
 					input.control,
 					input.value,
+					undefined,
+					isCurrent,
 				),
 		);
 		if (!guarded.ok) {
@@ -147,6 +152,9 @@ export const setRouterControlProcedure = modemProcedure
 		}
 
 		await refreshRouterAdminState();
+		// The read-back held, so the change landed. A dongle lost since then leaves
+		// no reading to adopt, but must never be answered as refused.
+		if (!isCurrent()) return { success: true };
 		return { success: true, controls: result.controls };
 	});
 
@@ -191,9 +199,17 @@ export const setRouterNetModeProcedure = modemProcedure
 			return { success: false, error: "unknown_device" as const };
 		}
 
+		const isCurrent = netdevLifetimeFence(target.ifname);
 		const guarded = await withModemMutation(
 			modemStableKeyForIfname(target.ifname),
-			() => applyRouterNetMode(target.ifname, target.vidPid, input.mode),
+			() =>
+				applyRouterNetMode(
+					target.ifname,
+					target.vidPid,
+					input.mode,
+					undefined,
+					isCurrent,
+				),
 		);
 		if (!guarded.ok) {
 			return { success: false, mutationRefusal: guarded.refusal };
@@ -206,6 +222,7 @@ export const setRouterNetModeProcedure = modemProcedure
 		}
 
 		await refreshRouterAdminState();
+		if (!isCurrent()) return { success: true };
 		return {
 			success: true,
 			capabilities: toWireCapabilities(result.capabilities),
@@ -259,10 +276,11 @@ export const setRouterSubnetProcedure = modemProcedure
 			"router-subnet",
 			preStateFor(plan),
 			async (mutation) => {
-				const outcome = await executeSubnetRewrite(
-					plan,
-					mutation.markExecuting,
-				);
+				const result = await executeSubnetRewrite(plan, mutation.markExecuting);
+				const outcome =
+					result.status !== "refused" && !plan.isCurrent()
+						? subnetContinuityLost()
+						: result;
 				return {
 					// `blocked` is the ONLY outcome that leaves the entry armed: a
 					// refusal changed nothing and a reverted rewrite was reconfirmed

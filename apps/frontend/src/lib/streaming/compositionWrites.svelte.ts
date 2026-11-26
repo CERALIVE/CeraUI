@@ -94,7 +94,7 @@ export function sendSessionTransition<T>(
 ): Promise<T>;
 /** Returning undefined from dispatch cancels the intent without a device transition. */
 export function sendSessionTransition<T>(
-	to: "live",
+	to: Session,
 	run: () => Promise<T> | undefined,
 ): Promise<T | undefined>;
 export function sendSessionTransition<T>(

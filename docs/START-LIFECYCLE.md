@@ -659,7 +659,7 @@ follows an engine-loss stop. It renders an amber band and a Stop exactly when
 | `stopping` | `false` | pending | yes, as one continuous "Stopping..." |
 | any, including `stopping` retained after a lost reply, or absent | `false` | unresolved (pressed, not settled by the device) | yes: failure or "not confirmed yet" copy and an enabled Stop (FIX-16-FRONT3) |
 | any, including held `idle`, `starting`, or absent | `false` | none pending; current Start's recovery evidence exhausted | yes: existing unconfirmed copy and enabled operator Stop (FIX-16-F8) |
-| `reconciling` or `stop_failed` | `true` | any | no: the live cockpit's Stop is on screen |
+| `reconciling` or `stop_failed` | `true` | any | no: the live cockpit's Stop asks first, once the current connection reports `true` |
 | `idle`, `starting`, `streaming`, `reconfiguring`, absent; `stopping` with no pending Stop | any | none unresolved and no exhausted Start | no: unchanged |
 
 Local optimism never hides it (FIX-16-C3). The optimistic live cockpit that a

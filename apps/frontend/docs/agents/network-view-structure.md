@@ -17,17 +17,30 @@ uses it for the row badge, status line, hotspot setup, and mode popover; the
 station/hotspot/hybrid identity is therefore stated once beside the radio name,
 while mode selection and capability details remain available on request. A
 station or hybrid radio retains its connection and bond actions; an exclusive
-hotspot radio does not. The device's `getAdapterModes` answer is a pull, re-read
-only when the radio set changes or the mode control confirms, so an AP that the
-pushed interface snapshot shows up outranks a stale `station` answer
-(`wifi-adapter-mode-view.ts`): a hotspot started from its own dialog reads
-Hotspot (or Hybrid beside a station link) at once. That correction is for an idle
-radio only: while a mode change is pending, the selector keeps the prior mode
+hotspot radio does not. The pushed Wi-Fi row's `observed_mode` takes precedence
+over cached `getAdapterModes` mode in either direction. It does not change the
+pull's offered choices or the physical `mode` used for bonding. An explicit
+`null` withholds the mode badge and selector choice until the device can verify
+the mode; an omitted field preserves older-device behavior, where a visible AP
+outranks a cached Station. While a mode change is pending, the selector keeps
+the prior mode
 until the matching terminal arrives. The control records that mode in its
 request (`WifiModeRequest.from`) as it begins, and the device's own pending echo
 keeps it, so it holds even when the device never answered `getAdapterModes`. A
 change begun on another client carries no record and falls back to the device's
 preference, then its cached answer.
+
+**THE CREDENTIAL QUESTION HAS TWO WITNESSES [EXISTS].** The label can outlive the
+access point it names, so it does not decide alone whether the name and password
+are shown before one starts. Choosing Hotspot or Hybrid asks whenever the label
+OR the radio's own row says it would start from a station (`startsApFromStation`).
+The row says so when it states `mode: "station"` and carries no `hotspot`; a row
+that states no `mode` (an older device) is not a witness. The check runs wherever a
+start leaves the control: the rung, the inline uplink confirmation, and the one
+automatic retry of a change that was sent without the question. The cost is one
+extra question on a working hotspot whose legacy row reads
+Station, for example after a backend restart until the connection is read, or after
+a failed first mode read.
 
 Wi-Fi rows, the Wi-Fi selector, Ethernet rows and Bonded Links use the same
 inventory label projection as Live/HUD. For example, a MAC-named radio with
@@ -70,6 +83,56 @@ The row hooks `data-net-row`, `data-net-row-title`, `data-net-row-dot`,
 `data-net-row-status`, `data-net-row-bond`, `data-net-row-body`,
 `data-net-row-actions` and `data-net-row-wide` are what
 `tests/e2e/network-row-anatomy.spec.ts` measures.
+
+**AN UNCONFIRMED MODEM CHANGE HAS A WAY OUT, SAVE THE SEVEN CASES THE BACKEND
+CONTRACT NAMES [EXISTS].** A `failed` mutation
+journal entry refuses every stream start and every change to that modem and
+survives a reboot, so its recovery is on this destination and nowhere else.
+`MutationBlockNotice.svelte` renders one block in the modem's own `NetworkRow`
+(`reasons`), matched by `stable_key` equality alone; a block whose modem is not
+listed leads the Cellular card. For display only, the unlisted notice and
+confirmation show the USB port with its full controller prefix, or the raw key
+if there is no USB port label. `main/network/mutation-recovery.svelte.ts` is
+the one owner of the list, the pending action and every answer. Seven rules
+are load-bearing.
+
+0. **Keep and Gone are the guaranteed ways out; Check again is optional per
+   block.** It is offered only on an entry whose list row says `checkable: true`,
+   and hidden, never disabled, otherwise; no other copy names it. The generic
+   acknowledgement compares four USB descriptor fields that only a `usb-mode` entry
+   stores, so a check offered on any other kind could only ever refuse.
+1. **The device's list decides.** Nothing is dropped from the screen on a local
+   guess; only a `success: true` reply, or a re-read, removes a block. A failed read
+   keeps the last answer, and an older read never overwrites a newer one.
+2. **No timer.** The list is a pull with no push behind it. `NetworkView` re-reads it
+   on the socket and session edges, the cellular stack finishing, the set of modem
+   ports, a stream starting or stopping, a modem/dongle/SIM dialog opening or
+   closing, the tab becoming visible, and after every action. While
+   `replayComplete` is false the next `netif` push re-reads too, and that stops
+   with the replay. A clear made by another browser is therefore learned at the
+   next of these, or from the refused action itself.
+3. **One press is one call.** `decommissionMutation` accepts `failed` and
+   `device-absent-quarantine` for every kind and judges the port itself, so "Gone"
+   sends only that and shows its answer. No acknowledgement goes first: its answer
+   is to a different question, and a passing one would read as resolved.
+4. **An answer ends with its state.** A success is about a settled port, a refusal
+   about the block pressed or the state that refusal put it in, and either is dropped
+   when the list shows anything else. Only an unanswered action says so then, and a
+   reply that comes after its bound is followed by a re-read. `journal_write_failed` is never read as done.
+   An absent modem can be kept once it is back or let go; only the check is gone. A
+   modem the device can neither read nor prove absent is an ANSWER, not a state
+   (`read_failed`): the notice says to unplug it and say it's gone, and every
+   action stays live.
+5. **Keep covers the returned port.** `recommission-pending` is cleared only by
+   `rebaselineMutation`; without it, "gone" would be a new lockout.
+6. **The confirmation and the focus outlive the row.** `CellularSection` owns both,
+   because the modem can leave its row while either is open. A settled answer
+   stays where the block was until the operator leaves Network, and the Start
+   refusal's Open Network focuses the first notice (`mutation-block-reveal.ts`).
+
+Coverage: `src/main/NetworkView.mutationBlocks.test.ts`,
+`tests/e2e/mutation-block-recovery.spec.ts`, and `stream-start-failure.spec.ts` →
+"Open Network lands on the modem change that refused the start".
 
 `EthernetSection.svelte` treats a `shared-lan` port as a client-zone row rather
 than an uplink: one combined role/zone pill names what the port is and whether

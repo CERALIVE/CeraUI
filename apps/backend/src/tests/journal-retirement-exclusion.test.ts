@@ -1,8 +1,10 @@
 import { expect, spyOn, test } from "bun:test";
+import * as udev from "../modules/modems/modem-id-path-source.ts";
 import { currentMutationBlocks } from "../modules/modems/mutation-blocks.ts";
 import { readMutationEntry } from "../modules/modems/mutation-journal.ts";
 import { withJournaledModemMutation } from "../modules/modems/mutation-lease.ts";
 import { initMutationRecovery } from "../modules/modems/mutation-replay.ts";
+import { routerUsbSysfs } from "../modules/modems/router-subnet-recovery-device.ts";
 import { isModemMutationHeld } from "../modules/streaming/lifecycle-admission.ts";
 import { isRecoveryPending } from "../modules/streaming/recovery-barrier.ts";
 import {
@@ -25,18 +27,20 @@ type AbortListener = Parameters<AbortSignal["addEventListener"]>[1];
 const harness = useReplayHarness();
 for (const action of retirementActions) {
 	test(`${action.name} keeps same-key exclusion through its awaited effect while another key proceeds`, async () => {
+		const gone = action.name === "decommission";
+		const key = gone ? "platform-xhci-hcd.0.auto-usb-0:1" : "usb:b";
 		// Given eligible authority, and the oracle's retained acknowledged decision for removing actions.
-		await seedRetirement(action.state);
+		await seedRetirement(action.state, key);
 		await initMutationRecovery({ sleep: new JournalRetryClock().sleep });
-		if (action.name === "decommission") await seedRetirement(action.state);
-		if (action.name !== "decommission") {
+		if (gone) await seedRetirement(action.state, key);
+		if (!gone) {
 			retirementFault(harness.root(), 1);
-			expect(await action.invoke("usb:b")).toEqual({
+			expect(await action.invoke(key)).toEqual({
 				success: false,
 				error: "journal_write_failed",
 			});
-			expect((await readMutationEntry("usb:b"))?.state).toBe("acknowledged");
-			expect(isModemMutationHeld("usb:b")).toBe(false);
+			expect((await readMutationEntry(key))?.state).toBe("acknowledged");
+			expect(isModemMutationHeld(key)).toBe(false);
 			expect(
 				await withJournaledModemMutation("usb:a", "usb-mode", {}, async () => ({
 					confirmed: true,
@@ -45,16 +49,29 @@ for (const action of retirementActions) {
 			).toEqual({ ok: true, value: "a" });
 			expect(currentMutationBlocks()).toEqual([]);
 		}
-		const held = holdRetirement(harness.root(), action.name === "decommission");
-		const retirement = action.invoke("usb:b");
+		const inventory = gone
+			? spyOn(udev, "readUdevExportDb").mockResolvedValue(
+					"P: /devices/platform/xhci-hcd.0.auto/usb1\nE: SUBSYSTEM=usb\n",
+				)
+			: undefined;
+		const buses = gone
+			? spyOn(routerUsbSysfs, "names").mockReturnValue(["usb1"])
+			: undefined;
+		const root = gone
+			? spyOn(routerUsbSysfs, "rootPath").mockReturnValue(
+					"/sys/devices/platform/xhci-hcd.0.auto/usb1",
+				)
+			: undefined;
+		const held = holdRetirement(harness.root(), gone, key);
+		const retirement = action.invoke(key);
 		try {
 			await Promise.race([held.entered, retirement]);
-			const before = journalBytes(harness.root());
+			const before = journalBytes(harness.root(), key);
 			// When a new ordinary mutation tries to arm while old retirement's effect is pending
 			// (a quarantined slot keeps its published block ahead of the lease in the frozen order).
 			expect(
 				await withJournaledModemMutation(
-					"usb:b",
+					key,
 					"usb-mode",
 					{},
 					async (mutation) => {
@@ -64,13 +81,10 @@ for (const action of retirementActions) {
 				),
 			).toEqual({
 				ok: false,
-				refusal:
-					action.name === "decommission"
-						? "mutation_blocked"
-						: "mutation_in_progress",
+				refusal: gone ? "mutation_blocked" : "mutation_in_progress",
 			});
-			expect(journalBytes(harness.root())).toEqual(before);
-			expect(isModemMutationHeld("usb:b")).toBe(true);
+			expect(journalBytes(harness.root(), key)).toEqual(before);
+			expect(isModemMutationHeld(key)).toBe(true);
 			// Then a different physical key is still independent, including its final refresh.
 			const other = withJournaledModemMutation(
 				"usb:a",
@@ -82,13 +96,15 @@ for (const action of retirementActions) {
 			held.release();
 			expect(await retirement).toEqual({
 				success: true,
-				state:
-					action.name === "decommission" ? "decommissioned" : "acknowledged",
+				state: gone ? "decommissioned" : "acknowledged",
 			});
-			expect(isModemMutationHeld("usb:b")).toBe(false);
+			expect(isModemMutationHeld(key)).toBe(false);
 		} finally {
 			held.release();
 			await retirement;
+			inventory?.mockRestore();
+			buses?.mockRestore();
+			root?.mockRestore();
 		}
 	});
 

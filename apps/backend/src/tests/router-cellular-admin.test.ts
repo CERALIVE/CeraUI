@@ -524,6 +524,10 @@ describe("applyRouterCellularControl", () => {
 		return { deps, posts, state };
 	}
 
+	// These protocol fixtures do not change the kernel device. The real fence
+	// is exercised separately in router-write-lifetime.test.ts.
+	const unchanged = () => true;
+
 	it("reports applied only after the device reports the new value", async () => {
 		const { deps, state } = fakeHilink();
 
@@ -533,6 +537,7 @@ describe("applyRouterCellularControl", () => {
 			"mobile_data",
 			false,
 			deps,
+			unchanged,
 		);
 
 		expect(result).toEqual({
@@ -553,6 +558,7 @@ describe("applyRouterCellularControl", () => {
 			"mobile_data",
 			false,
 			deps,
+			unchanged,
 		);
 
 		expect(result).toEqual({ status: "refused", reason: "not_applied" });
@@ -567,6 +573,7 @@ describe("applyRouterCellularControl", () => {
 			"roaming_autoconnect",
 			true,
 			deps,
+			unchanged,
 		);
 
 		expect(result.status).toBe("applied");

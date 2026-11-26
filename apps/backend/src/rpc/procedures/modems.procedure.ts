@@ -92,7 +92,7 @@ import {
 	decommissionMutation,
 	rebaselineMutation,
 } from "../../modules/modems/mutation-acknowledge.ts";
-import { currentMutationBlocks } from "../../modules/modems/mutation-blocks.ts";
+import { operatorMutationBlocks } from "../../modules/modems/mutation-block-list.ts";
 import {
 	modemStableKeyForId,
 	modemStableKeyForMmTarget,
@@ -606,10 +606,10 @@ export const setFiveGPreferenceProcedure = modemProcedure
  */
 export const listMutationBlocksProcedure = modemProcedure
 	.output(modemMutationListOutputSchema)
-	.handler(() => ({
-		replayComplete: !isRecoveryPending(),
-		blocks: [...currentMutationBlocks()],
-	}));
+	.handler(async () => {
+		const blocks = await operatorMutationBlocks();
+		return { replayComplete: !isRecoveryPending(), blocks: [...blocks] };
+	});
 
 /**
  * Acknowledge a failed mutation. NEITHER mode is a dismissal — see

@@ -138,6 +138,44 @@ async function download() {
 	return handleLogBundleRequest(new Request(`http://device${created.url}`));
 }
 
+test("bundle masks covered boot IDs in journal messages but preserves boot metadata", async () => {
+	const dashedPrevious = "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB";
+	const unrelated = "cccccccccccccccccccccccccccccccc";
+	const overlappingBoot = `a${"e".repeat(31)}`;
+	source.bootRecords.push({
+		bootId: overlappingBoot,
+		startedAt: 0,
+		versions: { ...context, bootId: overlappingBoot },
+	});
+	const cursor = `s=${"d".repeat(32)};i=1;b=${bootId};m=2;t=3;x=4`;
+	const scan = spyOn(pages, "scanPage").mockImplementation(
+		async (_query, scope) =>
+			page(
+				scope.bootId === bootId
+					? [
+							{
+								...record(1),
+								cursor,
+								message: `current=${bootId} previous=${dashedPrevious} embedded=f${bootId}e dashed=f${dashedPrevious}e overlap=${bootId}${overlappingBoot.slice(1)} unrelated=${unrelated}`,
+							},
+						]
+					: [],
+			),
+	);
+	try {
+		const { lines } = await unpack(await download());
+		expect(lines.find((line) => line.section === "journal")).toMatchObject({
+			entry: {
+				bootId,
+				cursor,
+				message: `current=[BOOT_ID] previous=[BOOT_ID] embedded=f[BOOT_ID]e dashed=f[BOOT_ID]e overlap=[BOOT_ID] unrelated=${unrelated}`,
+			},
+		});
+	} finally {
+		scan.mockRestore();
+	}
+});
+
 test("preview and download use the same redacted pipeline, stored boot versions and counts", async () => {
 	const scan = spyOn(pages, "scanPage").mockImplementation(
 		async (_query, scope) =>
@@ -961,16 +999,18 @@ test("uncompressed output is bounded at 32 MiB and compressed output at 8 MiB", 
 					)
 				: "x".repeat(16_384),
 		);
-		const scan = spyOn(pages, "scanPage").mockImplementation(async () => ({
-			...page(
-				Array.from({ length: 200 }, (_, index) => ({
-					...record(++n),
-					message: messages[index] ?? "",
-				})),
-				true,
-			),
-			continuation: String(n),
-		}));
+		const scan = spyOn(pages, "scanPage").mockImplementation(
+			async (_, scope) => ({
+				...page(
+					Array.from({ length: 200 }, (_, index) => ({
+						...record(++n, { _BOOT_ID: scope.bootId }),
+						message: messages[index] ?? "",
+					})),
+					true,
+				),
+				continuation: String(n),
+			}),
+		);
 		try {
 			const response = await download();
 			const compressed = await response.arrayBuffer();

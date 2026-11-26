@@ -71,6 +71,11 @@ import type {
 	ModemCredentialsOutput,
 	ModemGpsInput,
 	ModemGpsOutput,
+	ModemMutationAckInput,
+	ModemMutationAckOutput,
+	ModemMutationDecommissionInput,
+	ModemMutationListOutput,
+	ModemMutationRebaselineInput,
 	ModemScanInput,
 	ModemScanOutput,
 	ModemSmsInput,
@@ -735,7 +740,10 @@ export interface TypedRPC {
 			input: StreamingConfigInput,
 			onSent?: () => void,
 		) => Promise<StreamingStartOutputExtended>;
-		stop: () => Promise<StreamingStopOutput>;
+		stop: (
+			input?: undefined,
+			onSent?: () => void,
+		) => Promise<StreamingStopOutput>;
 		setBitrate: (input: BitrateInput) => Promise<BitrateOutput>;
 		getPipelines: () => Promise<unknown>;
 		getAudioCodecs: () => Promise<unknown>;
@@ -897,6 +905,17 @@ export interface TypedRPC {
 		ussdInitiate: (input: UssdInitiateInput) => Promise<ModemUssdOutput>;
 		ussdRespond: (input: UssdRespondInput) => Promise<ModemUssdOutput>;
 		ussdCancel: (input: UssdCancelInput) => Promise<ModemUssdOutput>;
+		/** The modems an unconfirmed change holds, and the operator's three ways out. */
+		listMutationBlocks: () => Promise<ModemMutationListOutput>;
+		acknowledgeMutation: (
+			input: ModemMutationAckInput,
+		) => Promise<ModemMutationAckOutput>;
+		decommissionMutation: (
+			input: ModemMutationDecommissionInput,
+		) => Promise<ModemMutationAckOutput>;
+		rebaselineMutation: (
+			input: ModemMutationRebaselineInput,
+		) => Promise<ModemMutationAckOutput>;
 	};
 	wifi: {
 		getStatus: () => Promise<unknown>;

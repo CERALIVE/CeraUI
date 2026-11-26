@@ -120,6 +120,7 @@ import {
 } from "./session-epoch.svelte";
 import { selectStatusFields } from "./status-field-order";
 import {
+	invalidateConfirmedStop,
 	reconcileStreamingOptimism,
 	supersedeStartingOptimism,
 } from "./streaming-optimism.svelte";
@@ -391,7 +392,7 @@ export function getConfirmedLiveStopEpoch(): number | undefined {
 	const link = getLinkEpoch();
 	if (
 		!isConnectedState ||
-		!isStreamingState ||
+		isStreamingState !== true ||
 		streamingStatusReceipt?.link !== link
 	)
 		return undefined;
@@ -399,6 +400,9 @@ export function getConfirmedLiveStopEpoch(): number | undefined {
 	const lifecycle =
 		delivery.link === link ? statusState?.stream_lifecycle : undefined;
 	switch (lifecycle) {
+		// Even with uncertain liveness, the current link's true flag allows asking.
+		case "stop_failed":
+		case "reconciling":
 		case undefined:
 		case "streaming":
 		case "reconfiguring":
@@ -408,10 +412,8 @@ export function getConfirmedLiveStopEpoch(): number | undefined {
 		case "starting":
 			if (delivery.seq >= streamingStatusReceipt.at) return undefined;
 			break;
-		// These phases can retain a true flag even though liveness is unknown.
+		// A Stop is under way; the true flag is only retained.
 		case "stopping":
-		case "stop_failed":
-		case "reconciling":
 			return undefined;
 		default:
 			// A new lifecycle must decide here whether it authorizes Stop.
@@ -694,10 +696,14 @@ function handleMessage(
 			const streamingChanged =
 				statusData.is_streaming !== undefined &&
 				statusData.is_streaming !== isStreamingState;
+			const lifecycle = statusData.stream_lifecycle;
+			const repeatedUncertainPhase =
+				(lifecycle === "reconciling" || lifecycle === "stop_failed") &&
+				lifecycle === getStatus(true)?.stream_lifecycle;
 			if (
 				streamingChanged ||
 				("stream_lifecycle" in statusData &&
-					statusData.stream_lifecycle !== statusState?.stream_lifecycle)
+					lifecycle !== statusState?.stream_lifecycle)
 			)
 				noteStreamActivity();
 
@@ -770,15 +776,26 @@ function handleMessage(
 				// or the device has not published is_streaming=false yet. A live
 				// apply-now edit, by contrast, keeps the same stream and Stop intent.
 				if (
-					statusData.stream_lifecycle !== undefined &&
-					statusData.stream_lifecycle !== "streaming" &&
-					statusData.stream_lifecycle !== "reconfiguring"
+					lifecycle !== undefined &&
+					lifecycle !== "streaming" &&
+					lifecycle !== "reconfiguring" &&
+					!repeatedUncertainPhase
 				)
 					noteStreamSessionBoundary();
 			}
 			const recoveredStart = settleStartRecoveryEvidence(statusData, received);
 			if (recoveredStart !== undefined)
 				supersedeStartingOptimism(recoveredStart);
+			// Unlike the open confirmation, a confirmed Stop survives the
+			// same stream's transition into stopping. Revoke on the admitted
+			// boundary itself, even if Live is unmounted or has not rendered.
+			if (
+				statusData.is_streaming === false ||
+				lifecycle === "idle" ||
+				lifecycle === "starting" ||
+				(lifecycle === "reconciling" && !repeatedUncertainPhase)
+			)
+				invalidateConfirmedStop();
 			if (statusData.is_streaming === true) reconcileStreamingOptimism(true);
 			break;
 		}
@@ -1407,9 +1424,12 @@ function handleConnectionChange(state: ConnectionState): void {
 	// authoritative. Steady connected→connected ticks reconcile nothing.
 	const link = getLinkEpoch();
 	noteLinkState(state);
-	// An unseen replacement must not inherit the previous link's audio fact.
-	if (getLinkEpoch() !== link && statusState?.audio_off_active !== undefined)
-		statusState = { ...statusState, audio_off_active: undefined };
+	if (getLinkEpoch() !== link) {
+		invalidateConfirmedStop();
+		// An unseen replacement must not inherit the previous link's audio fact.
+		if (statusState?.audio_off_active !== undefined)
+			statusState = { ...statusState, audio_off_active: undefined };
+	}
 	reconcileOperationsOnReconnect(previous, state);
 
 	if (state === "connected") {
@@ -1465,6 +1485,7 @@ export function initSubscriptions(): void {
  * Reset all state (for testing or logout)
  */
 export function resetState(): void {
+	invalidateConfirmedStop();
 	eventFeedListener = undefined;
 	logFollowListener = undefined;
 	authState = undefined;

@@ -28,6 +28,8 @@ function isLocalIPv4(a: number, b: number): boolean {
 /** Held values shorter than this are not matched: too many false hits. */
 export const MIN_REDACTED_LENGTH = 4;
 
+type TextSpan = readonly [start: number, end: number];
+
 interface Redactor {
 	/**
 	 * Kinds (sorted, unique) of held values that are NOT matched because they
@@ -40,12 +42,13 @@ interface Redactor {
 	known(value: string): { readonly text: string; readonly redactions: number };
 	text(
 		value: string,
-		bootSpan?: readonly [start: number, end: number],
+		exempt?: { readonly boot: TextSpan; readonly numeric?: TextSpan },
 	): { readonly text: string; readonly redactions: number };
 }
 
 export function buildRedactor(
 	secrets: readonly { readonly kind: string; readonly value: string }[],
+	bootIds?: ReadonlySet<string>,
 ): Redactor {
 	const literals = new Map<string, string>();
 	const unredacted = new Set<string>();
@@ -93,6 +96,16 @@ export function buildRedactor(
 	const exact = alternatives.length
 		? new RegExp(alternatives.join("|"), "g")
 		: null;
+	const bootForms = [...(bootIds ?? [])]
+		.filter((id) => /^[0-9a-f]{32}$/i.test(id))
+		.flatMap((id) => [
+			id,
+			id.replace(/^(.{8})(.{4})(.{4})(.{4})/, "$1-$2-$3-$4-"),
+		]);
+	// A lookahead visits each start so overlapping IDs reach the span merger.
+	const exactBoot = bootForms.length
+		? new RegExp(`(?=(${bootForms.join("|")}))`, "gi")
+		: null;
 	return {
 		unredacted: [...unredacted].sort(),
 		structured(value: string | number | boolean | null) {
@@ -109,7 +122,7 @@ export function buildRedactor(
 			});
 			return { text, redactions };
 		},
-		text(value: string, bootSpan) {
+		text(value: string, exempt) {
 			const spans: Array<{
 				start: number;
 				end: number;
@@ -174,11 +187,14 @@ export function buildRedactor(
 					address?: (typeof addresses)[number],
 				) => string,
 				addressContext = false,
-				ignore?: typeof bootSpan,
+				ignore?: TextSpan,
+				spanGroup = 0,
 			) => {
 				let addressIndex = 0;
 				for (const match of value.matchAll(pattern)) {
-					const end = match.index + match[0].length;
+					const text = match[spanGroup];
+					if (!text) continue;
+					const end = match.index + text.length;
 					if (ignore && ignore[0] <= match.index && end <= ignore[1]) continue;
 					let containing: (typeof addresses)[number] | undefined;
 					if (addressContext) {
@@ -188,8 +204,8 @@ export function buildRedactor(
 						if (address && address.start <= match.index && end <= address.end)
 							containing = address;
 					}
-					const next = replacement(match[0], containing);
-					if (next !== match[0])
+					const next = replacement(text, containing);
+					if (next !== text)
 						spans.push({
 							start: match.index,
 							end,
@@ -198,8 +214,10 @@ export function buildRedactor(
 						});
 				}
 			};
-			mask(/(?<!\d)89\d{17,18}(?!\d)/g, () => "[ICCID]", false, bootSpan);
-			mask(/(?<!\d)\d{15}(?!\d)/g, () => "[ID]", false, bootSpan);
+			if (exactBoot) mask(exactBoot, () => "[BOOT_ID]", false, exempt?.boot, 1);
+			const numericSpan = exempt?.numeric ?? exempt?.boot;
+			mask(/(?<!\d)89\d{17,18}(?!\d)/g, () => "[ICCID]", false, numericSpan);
+			mask(/(?<!\d)\d{15}(?!\d)/g, () => "[ID]", false, numericSpan);
 			mask(
 				/\b[0-9a-f]{2}([:-])[0-9a-f]{2}\1[0-9a-f]{2}\1[0-9a-f]{2}\1[0-9a-f]{2}\1[0-9a-f]{2}\b/gi,
 				(match, address) => {

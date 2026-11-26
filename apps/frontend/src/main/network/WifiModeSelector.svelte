@@ -33,11 +33,14 @@
   5. NO ACCESS POINT STARTS UNSEEN (#413). Leaving `station` for `hotspot` or
      `hybrid` opens `HotspotActivationConfirm` instead of the consequence band:
      it states the same disconnect risk AND the exact credentials the AP will
-     broadcast, and dispatches only after the operator acknowledges them.
+     broadcast, and dispatches only after the operator acknowledges them. "From
+     station" is what the shown mode OR the radio's own row says
+     (`startsApFromStation`), asked again wherever a start leaves this control:
+     the rung, the inline confirm, and the automatic retry of an unanswered one.
 -->
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
-import type { WifiAdapterMode } from '@ceraui/rpc/schemas';
+import type { SetWifiAdapterModeOutput, WifiAdapterMode } from '@ceraui/rpc/schemas';
 import { Ban, Loader2, RadioTower, Waypoints, Wifi } from '@lucide/svelte';
 import { onDestroy, untrack } from 'svelte';
 
@@ -53,6 +56,7 @@ import WifiModeErrorBand from './WifiModeErrorBand.svelte';
 import {
 	actionableWifiModeConsequence,
 	deriveWifiModeConsequence,
+	startsApFromStation,
 	type WifiAdapterModeContext,
 	type WifiAdapterModeView,
 	type WifiModeConfirmation,
@@ -172,26 +176,29 @@ onDestroy(() => { session += 1; admission?.abort(); });
 
 const unavailable = $derived(view.options.filter((option) => !option.available));
 
-function reopenGate(mode: WifiAdapterMode, unsupported = false) {
+function openRetryGate(mode: WifiAdapterMode, disposition: 'first-consent' | 'reload' | 'unsupported') {
 	if (confirmation || consentBlocked) return;
 	focusRecoveredGate = shouldFocusRecoveredGate?.() === true;
-	if (unsupported) bindingUnsupported = true;
-	else reloaded = true;
+	if (disposition === 'unsupported') bindingUnsupported = true;
+	else reloaded = disposition === 'reload';
 	session += 1;
 	confirmation = { kind: 'credentials', mode };
 }
 
-async function apply(mode: WifiAdapterMode, incarnation = view.incarnation) {
+async function apply(mode: WifiAdapterMode, incarnation = view.incarnation, answered = false) {
 	const original = capture();
 	if (incarnation !== original.incarnation ||
 		(mode !== 'station' && (!incarnation || view.degradedReason || consentBlocked))) return;
 	confirmation = undefined;
 	let replaced = false;
+	let firstConsentHandoff: (() => boolean) | undefined;
 	await osCommand({
 		key: wifiModeOpKey(original.device, incarnation),
-		classify: classifyWifiMutation,
+		classify: (result: SetWifiAdapterModeOutput) => firstConsentHandoff
+			? { ok: true, clear: true }
+			: classifyWifiMutation(result),
 		target: { mode, from: view.displayMode } satisfies WifiModeRequest,
-		rpc: async (handoff) => {
+		rpc: async (handoff): Promise<SetWifiAdapterModeOutput> => {
 			const invoke = (token?: string) => rpc.wifi.setAdapterMode({
 				device: original.device, mode, ...(token !== undefined ? { incarnation: token } : {}),
 			});
@@ -207,16 +214,26 @@ async function apply(mode: WifiAdapterMode, incarnation = view.incarnation) {
 				signal: controller.signal,
 				current: owned,
 				currentToken: () => view.incarnation,
-				canRetry: () => current(original) && handoff(key),
+				canRetry: () => {
+					// The handoff first: it alone sees that this change already settled.
+					if (!current(original) || !handoff(key)) return false;
+					if (answered || !startsApFromStation(view, mode)) return true;
+					// Recheck ownership at settlement before releasing this attempt.
+					firstConsentHandoff = () => handoff(key);
+					return false;
+				},
 				onReplacement: () => { replaced = handoff(key); },
 			});
-			if (!result && !controller.signal.aborted && owned()) reopenGate(mode, true);
+			if (!result && !controller.signal.aborted && owned()) openRetryGate(mode, 'unsupported');
 			return result ?? { success: false, error: 'binding-required' };
 		},
-		isCurrent: () => current(original) || (replaced && admissionOwner === original &&
+		isCurrent: () => current(original) ? (firstConsentHandoff?.() ?? true)
+			: (replaced && admissionOwner === original &&
 			!admission?.signal.aborted && view.device === original.device && getLinkEpoch() === original.link),
 		onResult: (result) => {
-			if (mode !== 'station' && wifiRadioChanged(result)) reopenGate(mode);
+			if (mode !== 'station' && wifiRadioChanged(result)) {
+				openRetryGate(mode, firstConsentHandoff ? 'first-consent' : 'reload');
+			}
 		},
 		// The reason renders inline beneath the control; a toast would say the
 		// same thing twice and then take it away.
@@ -229,9 +246,10 @@ function request(mode: WifiAdapterMode) {
 	admission?.abort();
 	bindingUnsupported = false;
 	reloaded = false;
-	focusRecoveredGate = false;
+	// The gate replaces the inline panel, so focus inside that panel moves to it.
+	focusRecoveredGate = inlinePanel?.contains(document.activeElement) === true;
 	session += 1;
-	if ((view.displayMode === 'station' || !view.incarnation || view.degradedReason) && mode !== 'station') {
+	if (startsApFromStation(view, mode) || ((!view.incarnation || view.degradedReason) && mode !== 'station')) {
 		confirmation = { kind: 'credentials', mode };
 		return;
 	}
@@ -246,7 +264,7 @@ function request(mode: WifiAdapterMode) {
 <div
 	class="space-y-1.5"
 	data-device={view.device}
-	data-mode={view.displayMode}
+	data-mode={view.modeKnown ? view.displayMode : undefined}
 	data-device-answered={view.deviceAnswered}
 	data-testid="wifi-mode-selector"
 >
@@ -295,7 +313,7 @@ function request(mode: WifiAdapterMode) {
 		{/each}
 	</div>
 
-	{#if !compact}
+	{#if !compact && view.modeKnown}
 		<p class="text-muted-foreground text-xs" data-testid="wifi-mode-hint-{view.device}">
 			{resolveMessageKey(wifiModeDescriptionKey(view.displayMode))}
 		</p>
@@ -356,7 +374,7 @@ function request(mode: WifiAdapterMode) {
 			focusOnOpen={focusRecoveredGate}
 			keepsStation={gated === 'hybrid'}
 			onCancel={() => { admission?.abort(); session += 1; confirmation = undefined; }}
-			onConfirm={(incarnation) => gated && apply(gated, incarnation)}
+			onConfirm={(incarnation) => gated && apply(gated, incarnation, true)}
 		/>
 	{/if}
 
@@ -378,7 +396,8 @@ function request(mode: WifiAdapterMode) {
 				<Button
 					class="h-8 min-h-[var(--touch-target-min)] px-2.5"
 					data-testid="wifi-mode-confirm-apply-{view.device}"
-					onclick={() => armed && armedConsequence && apply(armed)}
+					onclick={() => armed && armedConsequence &&
+						(startsApFromStation(view, armed) ? request(armed) : apply(armed))}
 					size="sm"
 					variant="destructive"
 				>

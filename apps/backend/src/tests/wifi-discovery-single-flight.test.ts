@@ -471,7 +471,10 @@ test("unavailable and recovery change only observational status tokens", async (
 		JSON.stringify(
 			Object.fromEntries(
 				Object.entries(rows).map(
-					([id, { incarnation: _incarnation, ...row }]) => [id, row],
+					([
+						id,
+						{ incarnation: _incarnation, observed_mode: _observedMode, ...row },
+					]) => [id, row],
 				),
 			),
 		);
@@ -482,6 +485,7 @@ test("unavailable and recovery change only observational status tokens", async (
 	expect(beforeMessage[0]?.incarnation).toEqual(expect.any(String));
 	expect(beforeMessage[0]?.incarnation).toBe(initial[0]?.incarnation);
 	expect(beforeMessage[0]?.saved).toEqual({ "Saved network": "saved-uuid" });
+	expect(beforeMessage[0]?.observed_mode).toBeNull();
 	const before = legacyBytes(beforeMessage);
 	const healthy = wifiRadioIdentity.state.rows.get("wlan0")?.incarnation;
 	handleWifiMonitorEvent({
@@ -508,6 +512,7 @@ test("unavailable and recovery change only observational status tokens", async (
 	).toBeUndefined();
 	const recovered = wifi.wifiBuildMsg();
 	expect(legacyBytes(recovered)).toBe(before);
+	expect(recovered[0]?.observed_mode).toBe("station");
 	expect(recovered[0]?.incarnation).toEqual(expect.any(String));
 	expect(recovered[0]?.incarnation).not.toBe(
 		degraded.rows.get("wlan0")?.incarnation,

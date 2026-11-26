@@ -50,6 +50,21 @@ test.use({ backendScenario: "caps-full" });
 test.describe("audio mixer — caps-full", () => {
 	let wire: MixerWire;
 
+	async function liveMixCard(page: Page, inputId: string): Promise<Locator> {
+		const card = page.getByTestId("live-cockpit").getByTestId("audio-card");
+		await expect(card).toBeVisible({ timeout: 15_000 });
+		// Start mounts the cockpit optimistically; live mix readiness is a separate device fact.
+		await expect
+			.poll(async () => {
+				const start = wire.calls("streaming.start").at(-1);
+				return start?.result?.success === true && (await wire.pageHasReply(start.id));
+			}, { timeout: 15_000 })
+			.toBe(true);
+		await expect(card.getByTestId("audio-mixer-next-start")).toBeVisible();
+		await expect(stripOf(card, inputId).getByTestId("audio-level-meter")).toBeVisible();
+		return card;
+	}
+
 	test.beforeEach(async ({ page, pageRpc, backendRpc }) => {
 		// A known main input, a capture source and a destination, so Start is ready
 		// whatever config the worker backend was seeded with.
@@ -106,9 +121,8 @@ test.describe("audio mixer — caps-full", () => {
 		await page.getByTestId("live-bar").getByRole("button", { name: "Start stream" }).click();
 		const cockpit = page.getByTestId("live-cockpit");
 		await expect(cockpit).toBeVisible({ timeout: 15_000 });
-		const card = cockpit.getByTestId("audio-card");
+		const card = await liveMixCard(page, SECOND);
 		await expect(strips(card)).toHaveCount((await selectableDevices(backendRpc)).length);
-		await expect(card.getByTestId("audio-mixer-next-start")).toBeVisible();
 		await expect(page.getByTestId(`audio-strip-track-${SECOND}-2`)).toBeDisabled();
 		await expect(page.getByTestId(`audio-strip-enable-${SECOND}`)).toBeDisabled();
 
@@ -242,8 +256,7 @@ test.describe("audio mixer — caps-full", () => {
 		await expect(page.getByTestId(`audio-strip-enable-${MAIN}`)).toHaveAttribute("aria-checked", "true");
 
 		await page.getByTestId("live-bar").getByRole("button", { name: "Start stream" }).click();
-		const card = page.getByTestId("live-cockpit").getByTestId("audio-card");
-		await expect(card).toBeVisible({ timeout: 15_000 });
+		const card = await liveMixCard(page, THIRD);
 		const thumb = card.getByTestId(`audio-strip-gain-${THIRD}`).getByRole("slider");
 		await expect(thumb).toBeEnabled();
 		await thumb.focus();
@@ -275,8 +288,7 @@ test.describe("audio mixer — caps-full", () => {
 
 	// Live, the new main input's level change is admitted by the session Start launched.
 	async function thirdGainIsAdmittedLive(page: Page): Promise<void> {
-		const card = page.getByTestId("live-cockpit").getByTestId("audio-card");
-		await expect(card).toBeVisible({ timeout: 15_000 });
+		const card = await liveMixCard(page, THIRD);
 		const thumb = card.getByTestId(`audio-strip-gain-${THIRD}`).getByRole("slider");
 		await expect(thumb).toBeEnabled();
 		await thumb.focus();
@@ -443,8 +455,7 @@ test.describe("audio mixer — caps-full", () => {
 			.poll(() => savedConfig(backendRpc))
 			.toMatchObject({ asrc: THIRD, audio_inputs: [mixEntry(THIRD), mixEntry(SECOND), mixEntry(MAIN, [1], -3)] });
 		await startButton(page).click();
-		const card = page.getByTestId("live-cockpit").getByTestId("audio-card");
-		await expect(card).toBeVisible({ timeout: 15_000 });
+		const card = await liveMixCard(page, MAIN);
 		await expect(card.getByTestId(`audio-strip-gain-${MAIN}`).getByRole("slider")).toHaveAttribute(
 			"aria-valuenow",
 			"-3",
@@ -502,8 +513,7 @@ test.describe("audio mixer — caps-full", () => {
 		await backendRpc.call(["streaming", "setConfig"], { audio_inputs: savedTwo });
 		await expect(page.getByTestId(`audio-strip-enable-${SECOND}`)).toHaveAttribute("aria-checked", "true");
 		await startButton(page).click();
-		const card = page.getByTestId("live-cockpit").getByTestId("audio-card");
-		await expect(card).toBeVisible({ timeout: 15_000 });
+		const card = await liveMixCard(page, SECOND);
 		const mute = card.getByTestId(`audio-strip-mute-${SECOND}`);
 		await expect(mute).toHaveAttribute("aria-pressed", "false");
 		const savedMute = async () =>
@@ -557,8 +567,7 @@ test.describe("audio mixer — caps-full", () => {
 		await backendRpc.call(["streaming", "setConfig"], { audio_inputs: savedTwo });
 		await expect(page.getByTestId(`audio-strip-enable-${SECOND}`)).toHaveAttribute("aria-checked", "true");
 		await startButton(page).click();
-		const card = page.getByTestId("live-cockpit").getByTestId("audio-card");
-		await expect(card).toBeVisible({ timeout: 15_000 });
+		const card = await liveMixCard(page, SECOND);
 		const mute = card.getByTestId(`audio-strip-mute-${SECOND}`);
 		await expect(mute).toHaveAttribute("aria-pressed", "false");
 

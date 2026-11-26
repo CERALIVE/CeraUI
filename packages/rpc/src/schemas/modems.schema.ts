@@ -524,6 +524,8 @@ export const modemMutationBlockSchema = z.object({
 	state: modemMutationStateSchema,
 	updatedAt: z.number().int().nonnegative(),
 	detail: z.string().optional(),
+	// Whether this particular row supports verified rollback. Not a result.
+	checkable: z.boolean().optional(),
 	devicePresent: z.boolean(),
 	// Whether this entry ALSO holds global stream autostart. A decommissioned
 	// identity blocks only itself, which is what stops a destroyed modem from
@@ -1364,10 +1366,11 @@ export type ModemSimPresenceEvidence = z.infer<typeof modemSimPresenceEvidenceSc
 //   3. no ID_PATH at all                             → `undefined`; the optional
 //      `stable_key` field is then OMITTED rather than faked
 //
-// The key is OPAQUE BY CONTRACT, not by encoding: equality is the only sanctioned
-// operation. It is emitted verbatim (no prefix, no hash) precisely so that three
-// independent adapters cannot disagree about a formatting step; a bus-topology
-// path carries no secret (it is not a serial, IMEI, ICCID or EID).
+// For modem matching, treat the key as opaque and compare the complete value
+// for exact equality. `portLabelFromIdPath` may read its topology for display;
+// neither the label nor its components are matching keys. The key is emitted
+// verbatim (no prefix, no hash) so adapters cannot disagree about formatting.
+// A bus-topology path is not a serial, IMEI, ICCID or EID.
 //
 // ── ONE PORT, TWO ENCODINGS — the normalization below, and why it is here ────
 // "Every adapter runs one rule" was true of the REDUCTION and false of the INPUT.
@@ -1380,10 +1383,10 @@ export type ModemSimPresenceEvidence = z.infer<typeof modemSimPresenceEvidenceSc
 //   udev-sourced rows  platform-xhci-hcd.0.auto-usb-0:1.4.1
 //   ModemManager row   /sys/devices/platform/fc400000.usb/xhci-hcd.0.auto/usb1/1-1/1-1.4/1-1.4.1
 //
-// `stable_key` equality is the ONLY sanctioned operation, so two encodings of one
-// port means no consumer can correlate them: the authoritative row could never
-// retire the optimistic udev row, and the wire carried two rows for one stick on
-// 10 of 10 power cycles. `sysfsDevpathToIdPath` closes that at the DERIVATION —
+// Exact `stable_key` equality means consumers could not correlate two encodings
+// of one port. The authoritative row could never retire the optimistic udev
+// row, and the wire carried two rows for one stick on 10 of 10 power cycles.
+// `sysfsDevpathToIdPath` closes that at the DERIVATION —
 // it is not a fuzzy compare-time match, it is udev's own `path_id` USB rule
 // (systemd `src/udev/udev-builtin-path_id.c`) applied to the sysfs path so both
 // encodings MINT the same canonical key. A path it cannot confidently convert is
@@ -1417,6 +1420,22 @@ const SYSFS_PCI_FUNCTION_RE = /^[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-9a-f]+$/
  * rather than fabricating a key.
  */
 export function sysfsDevpathToIdPath(devpath: string): string | undefined {
+	const port = sysfsUsbPort(devpath);
+	if (port === undefined) return undefined;
+	const { controller, portChain } = port;
+	const prefix = SYSFS_PCI_FUNCTION_RE.test(controller)
+		? `pci-${controller}`
+		: `platform-${controller}`;
+	return `${prefix}${USB_MARKER}0:${portChain}`;
+}
+
+function sysfsUsbPort(devpath: string):
+	| {
+			readonly controller: string;
+			readonly portChain: string;
+			readonly devicePath: string;
+	  }
+	| undefined {
 	const trimmed = devpath.trim();
 	// Accept both the kernel's own `DEVPATH` (`/devices/…`) and the mounted form
 	// (`/sys/devices/…`); ModemManager publishes the latter.
@@ -1455,10 +1474,11 @@ export function sysfsDevpathToIdPath(devpath: string): string | undefined {
 	const controller = rootHubAt > 0 ? parts[rootHubAt - 1] : undefined;
 	if (controller === undefined) return undefined;
 
-	const prefix = SYSFS_PCI_FUNCTION_RE.test(controller)
-		? `pci-${controller}`
-		: `platform-${controller}`;
-	return `${prefix}${USB_MARKER}0:${portChain}`;
+	return {
+		controller,
+		portChain,
+		devicePath: `/devices/${parts.slice(0, deviceAt + 1).join('/')}`,
+	};
 }
 
 /**
@@ -1494,6 +1514,50 @@ export function deriveModemStableKey(idPath: string | undefined | null): string 
 	if (fields.length < 2 || !busnum || !portChain) return path;
 
 	return `${prefix}${busnum}:${portChain}`;
+}
+
+/** Display-only USB topology hint, shared by inventory, telemetry and recovery. */
+export function portLabelFromIdPath(
+	idPath: string | undefined,
+	format: 'port' | 'port-and-controller' = 'port',
+): string | undefined {
+	const path = idPath?.trim();
+	if (!path) return undefined;
+	const markerAt = path.lastIndexOf(USB_MARKER);
+	if (markerAt < 0) return undefined;
+
+	const port = /^(\d+):(\d+(?:\.\d+)*)(?::|$)/.exec(path.slice(markerAt + USB_MARKER.length));
+	if (!port) return undefined;
+	const label = `USB ${port[1]}-${port[2]}`;
+	return format === 'port-and-controller' ? `${label} (${path.slice(0, markerAt)})` : label;
+}
+
+/** Recovery-only view of a udev USB port. Never mint a persisted key here. */
+export function modemRecoveryPort(idPath: string | undefined) {
+	const match = /^([^\s/]+)-usb-0:([1-9]\d*(?:\.[1-9]\d*)*)(?::\d+\.\d+(?:-[^\s/]+)?)?$/.exec(
+		idPath?.trim() ?? '',
+	);
+	const ancestry = match?.[1];
+	const portChain = match?.[2];
+	if (ancestry === undefined || portChain === undefined) return undefined;
+	const stableKey = `${ancestry}${USB_MARKER}0:${portChain}`;
+	// The transport is appended to the complete controller name. Do not
+	// interpret the prefix: controller names and parent groups can have dashes.
+	const hasController = (controller: string) => ancestry.endsWith(`-${controller}`);
+	return {
+		stableKey,
+		portChain,
+		hasController,
+		// Raw paths may veto absence, never authorize I/O to a device.
+		containsDevpath(path: string) {
+			const port = sysfsUsbPort(path);
+			return port !== undefined && port.portChain === portChain && hasController(port.controller);
+		},
+		devicePathAtChain(path: string) {
+			const port = sysfsUsbPort(path);
+			return port?.portChain === portChain ? port.devicePath : undefined;
+		},
+	};
 }
 
 // ── The `five-g-pref` capability module ──────────────────────────────────────
