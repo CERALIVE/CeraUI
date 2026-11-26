@@ -30,6 +30,8 @@ interface Props {
 	disabledReason?: string;
 	/** Accessible label for the switch (`aria-label`). */
 	label?: string;
+	/** Id of on-screen text that describes the switch (`aria-describedby`). */
+	describedBy?: string;
 	/** Switch size token, forwarded to the primitive. */
 	size?: 'sm' | 'default';
 	class?: string;
@@ -41,6 +43,7 @@ let {
 	disabled = false,
 	disabledReason,
 	label,
+	describedBy,
 	size = 'default',
 	class: className,
 }: Props = $props();
@@ -58,6 +61,7 @@ const stateLabel = $derived(checked ? m["network.view.on"]() : m["network.view.o
 					title={disabledReason}
 				>
 					<Switch
+						aria-describedby={describedBy}
 						aria-label={label}
 						bind:checked
 						{disabled}

@@ -72,6 +72,12 @@ import {
 } from "./modems-state.ts";
 import { modemStableKeyForId } from "./mutation-identity.ts";
 import { withJournaledModemMutation } from "./mutation-lease.ts";
+import {
+	type ApnHint,
+	describeHomeApn,
+	loadProviderDatabase,
+	shouldWriteHomeApn,
+} from "./provider-apn.ts";
 import { deriveSimPresence } from "./sim-presence.ts";
 
 export type { ModemId } from "./mmcli.ts";
@@ -122,6 +128,18 @@ async function getModemConfig(
 	const gsmConnections = await getGsmConnections();
 	if (gsmConnections === undefined) return undefined;
 
+	// What the provider database says about the SIM's own network. Attached to
+	// every profile so the dialog's note survives a restart; it only shows while
+	// the profile's values match it (see `deriveApnSource`).
+	const providerDb = await loadProviderDatabase();
+	const apnHint = describeHomeApn(providerDb, operatorId);
+	const writeHomeApn = shouldWriteHomeApn(
+		providerDb,
+		apnHint,
+		modemInfo["modem.3gpp.operator-code"],
+	);
+	const withHint = apnHint !== undefined ? { apn_hint: apnHint } : {};
+
 	if (gsmConnections.byDevice[modemId]?.[simId]) {
 		const ci = gsmConnections.byDevice[modemId][simId];
 		logger.debug(`Found NM connection ${ci.uuid} for modem ${modemId}`);
@@ -133,12 +151,30 @@ async function getModemConfig(
 			password: ci.password,
 			roaming: ci.roaming,
 			network: ci.network,
+			...withHint,
 		};
 	}
 
 	if (operatorId && gsmConnections.byOperator[operatorId]) {
 		// Copy the settings from an existing config for the same operator
 		const ci = gsmConnections.byOperator[operatorId];
+		// The template's own pinned network is what NetworkManager will look up.
+		const writeForTemplate = shouldWriteHomeApn(
+			providerDb,
+			apnHint,
+			modemInfo["modem.3gpp.operator-code"],
+			ci.roaming ? ci.network : undefined,
+		);
+		// An automatic template would hand this SIM the same wrong automatic
+		// choice. A manual template carries an APN someone may have chosen on
+		// purpose, so it is copied as it always was.
+		if (ci.autoconfig === true && writeForTemplate) {
+			return {
+				...newProfileConfig(apnHint, writeForTemplate),
+				roaming: ci.roaming,
+				network: ci.network,
+			};
+		}
 		return {
 			autoconfig: ci.autoconfig === true,
 			apn: ci.apn,
@@ -146,17 +182,41 @@ async function getModemConfig(
 			password: ci.password,
 			roaming: ci.roaming,
 			network: ci.network,
+			...withHint,
 		};
 	}
 
 	// New connection profile
+	return newProfileConfig(apnHint, writeHomeApn);
+}
+
+/**
+ * A new profile keeps Automatic APN unless NetworkManager's automatic choice is
+ * known to differ from the APN listed for the SIM's own network (see
+ * `provider-apn.ts`). Then that APN is written, with the hint the UI shows.
+ */
+export function newProfileConfig(
+	hint: ApnHint | undefined,
+	writeHomeApn: boolean,
+): ModemConfig {
+	const base = { roaming: true, network: "" };
+	if (writeHomeApn && hint?.source === "provider-database") {
+		return {
+			...base,
+			autoconfig: false,
+			apn: hint.apn,
+			username: hint.username,
+			password: hint.password,
+			apn_hint: hint,
+		};
+	}
 	return {
+		...base,
 		autoconfig: true,
 		apn: "internet",
 		username: "",
 		password: "",
-		roaming: true,
-		network: "",
+		...(hint !== undefined ? { apn_hint: hint } : {}),
 	};
 }
 

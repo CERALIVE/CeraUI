@@ -23,6 +23,7 @@ import type {
 	SimLockRequired,
 } from "./mmcli.ts";
 import type { ModemStatus } from "./modem-registration.ts";
+import type { ApnHint } from "./provider-apn.ts";
 import type { SimPresence } from "./sim-presence.ts";
 
 export type SimLock = {
@@ -38,6 +39,12 @@ export type ModemConfig = {
 	password: string;
 	roaming: boolean;
 	network: string;
+	/**
+	 * Where a new profile's APN came from, when CeraUI chose it instead of
+	 * Automatic APN (see `provider-apn.ts`). Not written to NetworkManager; the
+	 * wire derives `apn_source` from it and the current values.
+	 */
+	apn_hint?: ApnHint;
 };
 
 export type AvailableNetwork = {

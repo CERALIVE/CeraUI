@@ -1245,6 +1245,8 @@
 	"network.modem.autoApnDescription": "Configurer l'APN automatiquement",
 	"network.modem.autoApnRecommended": "Recommandé",
 	"network.modem.autoApnUnsupported": "Cet appareil ne peut pas configurer l'APN automatiquement. Saisissez-le manuellement ci-dessous.",
+	"network.modem.apnFromProviderDatabase": "Cet APN est celui que la base de données des opérateurs mobiles indique pour le réseau de cette SIM. Si les données mobiles ne se connectent pas, saisissez l'APN de votre opérateur.",
+	"network.modem.apnNotListed": "La base de données des opérateurs mobiles n'indique aucun APN internet pour le réseau de cette SIM. Si les données mobiles ne se connectent pas, désactivez APN Automatique et saisissez l'APN de votre opérateur.",
 	"network.modem.autoapn": "APN Automatique",
 	"network.modem.automaticRoamingNetwork": "Sélection automatique",
 	"network.modem.availableNetworks": "Réseaux disponibles",

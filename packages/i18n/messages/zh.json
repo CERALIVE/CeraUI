@@ -1122,6 +1122,8 @@
 	"network.modem.autoApnDescription": "自动配置 APN",
 	"network.modem.autoApnRecommended": "推荐",
 	"network.modem.autoApnUnsupported": "此设备无法自动配置 APN。请在下方手动输入。",
+	"network.modem.apnFromProviderDatabase": "这是移动运营商数据库为此 SIM 卡网络列出的 APN。如果移动数据无法连接，请输入运营商提供的 APN。",
+	"network.modem.apnNotListed": "移动运营商数据库中没有此 SIM 卡网络的互联网 APN。如果移动数据无法连接，请关闭自动 APN 并输入运营商提供的 APN。",
 	"network.modem.autoapn": "自动 APN",
 	"network.modem.automaticRoamingNetwork": "自动选择",
 	"network.modem.availableNetworks": "可用网络",
