@@ -735,7 +735,10 @@ export interface TypedRPC {
 			input: StreamingConfigInput,
 			onSent?: () => void,
 		) => Promise<StreamingStartOutputExtended>;
-		stop: () => Promise<StreamingStopOutput>;
+		stop: (
+			input?: undefined,
+			onSent?: () => void,
+		) => Promise<StreamingStopOutput>;
 		setBitrate: (input: BitrateInput) => Promise<BitrateOutput>;
 		getPipelines: () => Promise<unknown>;
 		getAudioCodecs: () => Promise<unknown>;

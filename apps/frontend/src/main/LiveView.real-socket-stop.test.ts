@@ -487,6 +487,114 @@ describe("Live bar Stop confirmation over the real socket", () => {
 		expect(dialog.dataset.state).toBe("closed");
 	});
 
+	it.each([
+		["settles before End", ["reconfiguring", "streaming"]],
+		["is still running at End", ["reconfiguring"]],
+	])(
+		"a live setting change that %s keeps the open question, and End sends one Stop",
+		async (_, lifecycles) => {
+			const { container } = render(LiveView);
+			deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+			const dialog = await openLiveStopConfirmation(container);
+			const keep = getByTestId(dialog, "live-stop-keep");
+
+			for (const stream_lifecycle of lifecycles) {
+				deliverStatus({ stream_lifecycle });
+				await settle();
+			}
+
+			expect(dialog.dataset.state).toBe("open");
+			expect(document.activeElement).toBe(keep);
+			expect(sentCount("streaming.stop")).toBe(0);
+			await fireEvent.click(getByTestId(dialog, "live-stop-end"));
+			await settle();
+			expect(sentCount("streaming.stop")).toBe(1);
+			answer("streaming.stop", { success: true, result: "stopped" });
+			await settle();
+		},
+	);
+
+	it.each([
+		{ host: false, replaced: true },
+		{ host: true, replaced: true },
+		{ host: true, replaced: false },
+	])(
+		"dispatches a confirmed End behind a composition write only for its own stream (toast host=$host, replaced=$replaced)",
+		async ({ host, replaced }) => {
+			vi.stubGlobal("stopStreamingWithNotificationClear", undefined);
+			try {
+				if (host) render(LayoutToastHost);
+				const { container, unmount } = render(LiveView);
+				deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+				const dialog = await openLiveStopConfirmation(container);
+				const write = sendCompositionWrite(
+					{ composition_patch: { alpha: 0.5 } },
+					() => true,
+				);
+				expect(
+					outstanding("streaming.setConfig").map(({ input }) => input),
+				).toEqual([{ apply_now: true, composition_patch: { alpha: 0.5 } }]);
+				deliverStatus({ stream_lifecycle: "reconfiguring" });
+				await fireEvent.click(getByTestId(dialog, "live-stop-end"));
+				await settle();
+				expect(sentCount("streaming.stop")).toBe(0);
+				expect(getStreamingOptimismState()).toBe("stopping");
+				unmount();
+
+				deliverStatus({ stream_lifecycle: "stopping" });
+				if (replaced) {
+					deliverStatus({ is_streaming: false, stream_lifecycle: "idle" });
+					deliverStatus({ stream_lifecycle: "starting" });
+					deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+				}
+				answer("streaming.setConfig", { success: true });
+				await write;
+				await settle();
+				if (outstanding("streaming.stop").length)
+					answer("streaming.stop", { success: true, result: "stopped" });
+				expect(sentCount("streaming.stop")).toBe(replaced ? 0 : 1);
+				if (replaced) {
+					expect(getStreamingOptimismState()).toBe("idle");
+					await elapse(15_000);
+					expect(sentCount("status.getStatus")).toBe(0);
+				}
+			} finally {
+				vi.unstubAllGlobals();
+			}
+		},
+	);
+
+	const CHANGING = { stream_lifecycle: "reconfiguring" };
+	it.each([
+		...["idle", "starting", "stopping", "stop_failed", "reconciling"].map(
+			(stream_lifecycle) =>
+				[
+					`reports ${stream_lifecycle}`,
+					[CHANGING, { stream_lifecycle }, CHANGING],
+				] as const,
+		),
+		[
+			"is replaced while live again",
+			[CHANGING, { is_streaming: false }, { is_streaming: true, ...CHANGING }],
+		] as const,
+	])(
+		"a live setting change whose stream %s closes the question unsent",
+		async (_, frames) => {
+			const { container } = render(LiveView);
+			deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+			const dialog = await openLiveStopConfirmation(container);
+			const end = getByTestId(dialog, "live-stop-end");
+
+			// Every frame reaches the store before the queued press and any render.
+			for (const status of frames) socket().deliver({ status });
+			end.click();
+			await settle();
+
+			expect(sentCount("streaming.stop")).toBe(0);
+			expect(dialog.dataset.state).toBe("closed");
+		},
+	);
+
 	it("two delivered End clicks send one Stop RPC without waiting for a reply", async () => {
 		const { container } = render(LiveView);
 		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
@@ -555,6 +663,834 @@ describe("Live bar Stop confirmation over the real socket", () => {
 		answer("streaming.stop", { success: true, result: "stopped" });
 		await settle();
 	});
+});
+
+describe.each(["stop_failed", "reconciling"] as const)(
+	"Live bar Stop while the device reports streaming and %s",
+	(stream_lifecycle) => {
+		const unconfirmed = { is_streaming: true, stream_lifecycle };
+		const live = { is_streaming: true, stream_lifecycle: "streaming" };
+
+		async function expectInertStop(container: HTMLElement): Promise<void> {
+			const stop = getByTestId(container, "live-bar-stop");
+			expect(stop.getAttribute("aria-disabled")).toBe("true");
+			await fireEvent.click(stop);
+			expect(queryByTestId(document.body, "live-stop-confirm")).toBeNull();
+			expect(sentCount("streaming.stop")).toBe(0);
+		}
+
+		async function expectUsableStop(container: HTMLElement): Promise<void> {
+			const stop = getByTestId(container, "live-bar-stop");
+			expect(stop.getAttribute("aria-disabled")).toBeNull();
+			expect(controls(container)).toEqual([
+				{ label: "Stop Stream", disabled: false },
+			]);
+			expect(band(container)).toBeNull();
+			const dialog = await openLiveStopConfirmation(container);
+			await fireEvent.click(getByTestId(dialog, "live-stop-keep"));
+			await settle();
+			expect(dialog.dataset.state).toBe("closed");
+			expect(sentCount("streaming.stop")).toBe(0);
+			await endLiveStream(container);
+			await settle();
+			expect(sentCount("streaming.stop")).toBe(1);
+			answer("streaming.stop", { success: true, result: "stopped" });
+			await settle();
+		}
+
+		it.each([
+			["in one frame", () => deliverStatus(unconfirmed)],
+			[
+				"after the live flag",
+				() => {
+					deliverStatus(live);
+					deliverStatus({ stream_lifecycle });
+				},
+			],
+			[
+				"before the live flag",
+				() => {
+					deliverStatus({ stream_lifecycle });
+					deliverStatus({ is_streaming: true });
+				},
+			],
+			[
+				"in the read after a reconnect",
+				async () => {
+					deliverStatus(live);
+					await reconnectAwaitingHydrate();
+					answer("streaming.getConfig", {});
+					answer("status.getStatus", unconfirmed);
+					await settle();
+				},
+			],
+			[
+				"in the push after a reconnect",
+				async () => {
+					deliverStatus(live);
+					await reconnectAwaitingHydrate();
+					deliverStatus(unconfirmed);
+				},
+			],
+		] as const)(
+			"asks and sends one Stop when it arrives %s",
+			async (_, arrive) => {
+				const { container } = render(LiveView);
+				await arrive();
+				await expectUsableStop(container);
+			},
+		);
+
+		it.each([
+			[
+				"during the outage",
+				async () => {
+					dropLink();
+					await settle();
+				},
+			],
+			[
+				"when only the state reached the new connection",
+				async () => {
+					await reconnectAwaitingHydrate();
+					deliverStatus({ stream_lifecycle });
+				},
+			],
+		] as const)("withholds Stop %s", async (_, act) => {
+			const { container } = render(LiveView);
+			deliverStatus(unconfirmed);
+			await act();
+			await expectInertStop(container);
+		});
+
+		it("withholds Stop when the current link sends a non-boolean live flag", async () => {
+			const { container } = render(LiveView);
+			deliverStatus({ is_streaming: "true", stream_lifecycle });
+			await expectInertStop(container);
+		});
+
+		it("closes a question opened while streaming, then asks again", async () => {
+			const { container } = render(LiveView);
+			deliverStatus(live);
+			const dialog = await openLiveStopConfirmation(container);
+			const end = getByTestId(dialog, "live-stop-end");
+
+			socket().deliver({ status: { stream_lifecycle } });
+			end.click();
+			await settle();
+
+			expect(sentCount("streaming.stop")).toBe(0);
+			vi.advanceTimersToNextFrame();
+			await settle();
+			expect(queryByTestId(document.body, "live-stop-confirm")).toBeNull();
+			expect(document.activeElement).toBe(
+				getByTestId(container, "live-bar-stop"),
+			);
+			await expectUsableStop(container);
+		});
+
+		it.each([
+			["the link drops", () => dropLink()],
+			[
+				"another client's Stop begins",
+				() => socket().deliver({ status: { stream_lifecycle: "stopping" } }),
+			],
+			[
+				"another client's Stop is refused too",
+				() => {
+					socket().deliver({ status: { stream_lifecycle: "stopping" } });
+					socket().deliver({ status: { stream_lifecycle } });
+				},
+			],
+			[
+				"another client stops the stream",
+				() =>
+					socket().deliver({
+						status: { is_streaming: false, stream_lifecycle: "idle" },
+					}),
+			],
+			[
+				"another client replaces the stream",
+				() => {
+					socket().deliver({ status: { stream_lifecycle: "idle" } });
+					socket().deliver({ status: { is_streaming: false } });
+					socket().deliver({ status: { stream_lifecycle: "starting" } });
+					socket().deliver({ status: live });
+				},
+			],
+			[
+				"the live flag clears and returns",
+				() => {
+					socket().deliver({ status: { is_streaming: false } });
+					socket().deliver({ status: { is_streaming: true } });
+				},
+			],
+		] as const)("an open question sends nothing once %s", async (_, change) => {
+			const { container } = render(LiveView);
+			deliverStatus(unconfirmed);
+			const dialog = await openLiveStopConfirmation(container);
+			const end = getByTestId(dialog, "live-stop-end");
+
+			// The device's word reaches the store before the queued activation.
+			change();
+			end.click();
+			await settle();
+
+			expect(sentCount("streaming.stop")).toBe(0);
+			vi.advanceTimersToNextFrame();
+			await settle();
+			expect(queryByTestId(document.body, "live-stop-confirm")).toBeNull();
+		});
+
+		it.each([
+			["live flag", { is_streaming: true, active_encode: null }],
+			["lifecycle", { stream_lifecycle }],
+			["full status", unconfirmed],
+		])(
+			"the device's repeated live report keeps the question open (%s)",
+			async (_, report) => {
+				const { container } = render(LiveView);
+				deliverStatus(unconfirmed);
+				const dialog = await openLiveStopConfirmation(container);
+				deliverStatus(report);
+				expect(dialog.dataset.state).toBe("open");
+				await fireEvent.click(getByTestId(dialog, "live-stop-end"));
+				await settle();
+				expect(sentCount("streaming.stop")).toBe(1);
+				answer("streaming.stop", { success: true, result: "stopped" });
+				await settle();
+			},
+		);
+
+		it("signing out drops an open question and signing in does not restore it", async () => {
+			const first = render(LiveView);
+			deliverStatus(unconfirmed);
+			const dialog = await openLiveStopConfirmation(first.container);
+			const end = getByTestId(dialog, "live-stop-end");
+
+			// Layout replaces the page with sign-in.
+			session.authenticated = false;
+			first.unmount();
+			end.click();
+			await settle();
+			expect(sentCount("streaming.stop")).toBe(0);
+
+			session.authenticated = true;
+			const { container } = render(LiveView);
+			await settle();
+			expect(queryByTestId(document.body, "live-stop-confirm")).toBeNull();
+			await expectUsableStop(container);
+		});
+
+		it("two presses on Stop ask once and two on End send one Stop", async () => {
+			const { container } = render(LiveView);
+			deliverStatus(unconfirmed);
+			const stop = getByTestId(container, "live-bar-stop");
+			await fireEvent.click(stop);
+			await fireEvent.click(stop);
+			const dialog = getByTestId(document.body, "live-stop-confirm");
+			expect(sentCount("streaming.stop")).toBe(0);
+
+			const end = getByTestId(dialog, "live-stop-end");
+			end.click();
+			end.click();
+			await settle();
+			expect(sentCount("streaming.stop")).toBe(1);
+			answer("streaming.stop", { success: true, result: "stopped" });
+			await settle();
+		});
+
+		it("a late answer sends nothing more", async () => {
+			const { container } = render(LiveView);
+			deliverStatus(unconfirmed);
+			await endLiveStream(container);
+			await settle();
+			expect(controls(container)).toEqual([
+				{ label: "Stopping...", disabled: true },
+			]);
+			await elapse(14_000);
+			await fireEvent.click(getByTestId(container, "live-bar-stop"));
+			expect(sentCount("streaming.stop")).toBe(1);
+
+			deliverStatus({ is_streaming: false, stream_lifecycle: "idle" });
+			await settle();
+			answer("streaming.stop", { success: true, result: "stopped" });
+			await settle();
+			expect(queryByTestId(container, "live-bar-stop")).toBeNull();
+			expect(queryByTestId(container, "stop-stuck-banner")).toBeNull();
+			expect(sentCount("streaming.stop")).toBe(1);
+		});
+
+		it("a Stop refused again is sent once, keeps the stream shown and offers Retry", async () => {
+			const { container } = render(LiveView);
+			deliverStatus(unconfirmed);
+			await endLiveStream(container);
+			await settle();
+			deliverStatus({ stream_lifecycle });
+			answer("streaming.stop", STOP_FAILED_REPLY);
+			await settle();
+			expect(controls(container)).toEqual([
+				{ label: "Stopping...", disabled: true },
+			]);
+			expect(sentCount("streaming.stop")).toBe(1);
+
+			await elapse(15_000);
+			answer("status.getStatus", unconfirmed);
+			await settle();
+			expect(getByTestId(container, "live-cockpit")).toBeDefined();
+			expect(button(container, "Retry").disabled).toBe(false);
+			expect(sentCount("streaming.stop")).toBe(1);
+		});
+
+		it.each([false, true])(
+			"the first watchdog read after refusal retains Retry without a resend (recovered before Retry=%s)",
+			async (recovered) => {
+				const { container } = render(LiveView);
+				deliverStatus(unconfirmed);
+				await endLiveStream(container);
+				await settle();
+				answer("streaming.stop", STOP_FAILED_REPLY);
+				await settle();
+				expect(sentCount("streaming.stop")).toBe(1);
+
+				await elapse(15_000);
+				answer("status.getStatus", unconfirmed);
+				await settle();
+				expect(queryByTestId(container, "stop-stuck-banner")).not.toBeNull();
+				expect(button(container, "Retry").disabled).toBe(false);
+				expect(sentCount("streaming.stop")).toBe(1);
+
+				await elapse(2_000);
+				answer("status.getStatus", unconfirmed);
+				await settle();
+				expect(sentCount("streaming.stop")).toBe(1);
+				const retry = button(container, "Retry");
+				if (recovered) deliverStatus(live);
+				retry.click();
+				retry.click();
+				await settle();
+				expect(sentCount("status.getStatus")).toBe(3);
+				answer("status.getStatus", recovered ? live : unconfirmed);
+				await settle();
+				expect(sentCount("streaming.stop")).toBe(2);
+
+				answer("streaming.stop", { success: true, result: "stopped" });
+				await elapse(2_000);
+				answer("status.getStatus", {
+					is_streaming: false,
+					stream_lifecycle: "idle",
+				});
+				await settle();
+				expect(queryByTestId(container, "stop-stuck-banner")).toBeNull();
+				expect(sentCount("streaming.stop")).toBe(2);
+			},
+		);
+	},
+);
+
+describe("Stop Retry ownership across read and dispatch", () => {
+	const live = { is_streaming: true, stream_lifecycle: "reconciling" };
+	const idle = { is_streaming: false, stream_lifecycle: "idle" };
+
+	async function showDelay(
+		container: HTMLElement,
+		{
+			status = live,
+			leaveStopPending = false,
+		}: {
+			readonly status?: typeof live;
+			readonly leaveStopPending?: boolean;
+		} = {},
+	): Promise<HTMLButtonElement> {
+		deliverStatus(status);
+		await endLiveStream(container);
+		await settle();
+		if (!leaveStopPending) answer("streaming.stop", STOP_FAILED_REPLY);
+		await elapse(15_000);
+		answer("status.getStatus", status);
+		await settle();
+		expect(sentCount("streaming.stop")).toBe(1);
+		return button(container, "Retry");
+	}
+
+	it.each(
+		["reconciling", "stop_failed"].flatMap((stream_lifecycle) =>
+			["delay", "read", "idle reply", "unknown reply"].map((during) => ({
+				status: { is_streaming: true, stream_lifecycle },
+				during,
+			})),
+		),
+	)(
+		"honors one enabled Retry in $status.stream_lifecycle during automatic confirmation ($during)",
+		async ({ status, during }) => {
+			const { container } = render(LiveView);
+			const retry = await showDelay(container, { status });
+			if (during === "read") await elapse(2_000);
+			expect(retry.disabled).toBe(false);
+			retry.click();
+			await settle();
+			expect(sentCount("streaming.stop")).toBe(1);
+
+			if (during !== "read") await elapse(2_000);
+			expect(sentCount("status.getStatus")).toBe(2);
+			answer(
+				"status.getStatus",
+				during === "idle reply"
+					? idle
+					: during === "unknown reply"
+						? {}
+						: status,
+			);
+			await settle();
+			expect(sentCount("streaming.stop")).toBe(
+				during === "idle reply" || during === "unknown reply" ? 1 : 2,
+			);
+			if (during === "idle reply") {
+				expect(queryByTestId(container, "stop-stuck-banner")).toBeNull();
+			} else if (during === "unknown reply") {
+				expect(retry.disabled).toBe(false);
+			} else {
+				expect(retry.disabled).toBe(true);
+				answer("streaming.stop", STOP_FAILED_REPLY);
+				await settle();
+				expect(retry.disabled).toBe(true);
+				await elapse(2_000);
+				expect(sentCount("status.getStatus")).toBe(3);
+				answer("status.getStatus", {});
+				await settle();
+				expect(sentCount("streaming.stop")).toBe(2);
+				expect(retry.disabled).toBe(false);
+			}
+		},
+	);
+
+	it.each([
+		"same owner",
+		"idle",
+		"stream replacement",
+		"link replacement",
+	] as const)(
+		"deduplicates a Retry waiting behind a composition write (%s)",
+		async (outcome) => {
+			const { container } = render(LiveView);
+			const retry = await showDelay(container);
+			await elapse(2_000);
+			answer("status.getStatus", live);
+			await settle();
+			const write = sendCompositionWrite(
+				{ composition_patch: { alpha: 0.5 } },
+				() => true,
+			);
+			expect(
+				outstanding("streaming.setConfig").map(({ input }) => input),
+			).toEqual([{ apply_now: true, composition_patch: { alpha: 0.5 } }]);
+
+			retry.click();
+			await settle();
+			answer("status.getStatus", live);
+			await elapse(2_000);
+			answer("status.getStatus", live);
+			await settle();
+			expect(sentCount("streaming.stop")).toBe(1);
+			expect(sentCount("status.getStatus")).toBe(4);
+			retry.click();
+			await settle();
+			// Serve any extra cycle so the final assertion catches its queued Stop.
+			if (outstanding("status.getStatus").length !== 0) {
+				answer("status.getStatus", live);
+				await elapse(2_000);
+				answer("status.getStatus", live);
+				await settle();
+			}
+
+			if (outcome === "link replacement") {
+				const dropped = expect(write).rejects.toBeInstanceOf(Error);
+				await reconnectAwaitingHydrate();
+				await dropped;
+				answer("streaming.getConfig", {});
+				answer("status.getStatus", live);
+			} else {
+				if (outcome !== "same owner") deliverStatus(idle);
+				if (outcome === "stream replacement") deliverStatus(live);
+				answer("streaming.setConfig", { success: true });
+				await write;
+			}
+			await settle();
+			expect(sentCount("streaming.stop")).toBe(
+				outcome === "same owner" ? 2 : 1,
+			);
+			expect(sentCount("status.getStatus")).toBe(
+				outcome === "link replacement" ? 5 : 4,
+			);
+			if (outcome === "same owner") {
+				expect(retry.disabled).toBe(true);
+				answer("streaming.stop", STOP_FAILED_REPLY);
+				await settle();
+				expect(retry.disabled).toBe(false);
+			} else {
+				expect(queryByTestId(container, "stop-stuck-banner")).toBeNull();
+			}
+		},
+	);
+
+	it.each([
+		{ automatic: true, pending: "stopping", confirmation: {}, stops: 1 },
+		{ automatic: true, pending: "reconfiguring", confirmation: {}, stops: 1 },
+		{
+			automatic: true,
+			pending: "stopping",
+			confirmation: { is_streaming: true },
+			stops: 2,
+		},
+		{
+			automatic: true,
+			pending: "reconfiguring",
+			confirmation: { is_streaming: true, stream_lifecycle: "reconfiguring" },
+			stops: 1,
+		},
+		{ automatic: false, pending: undefined, confirmation: {}, stops: 1 },
+		{ automatic: false, pending: "stopping", confirmation: {}, stops: 1 },
+		{ automatic: false, pending: undefined, confirmation: "error", stops: 1 },
+		{
+			automatic: false,
+			pending: undefined,
+			confirmation: { stream_lifecycle: "streaming" },
+			stops: 1,
+		},
+	])(
+		"uses the newest live evidence before dispatch (automatic=$automatic, phase=$pending, reply=$confirmation)",
+		async ({ automatic, pending, confirmation, stops }) => {
+			const { container } = render(LiveView);
+			const status = automatic
+				? { is_streaming: true, stream_lifecycle: "streaming" }
+				: live;
+			if (automatic) {
+				deliverStatus(status);
+				await endLiveStream(container);
+				await settle();
+				answer("streaming.stop", STOP_FAILED_REPLY);
+				await settle();
+			} else {
+				await showDelay(container);
+				await elapse(2_000);
+				answer("status.getStatus", live);
+				await settle();
+			}
+
+			const write = sendCompositionWrite(
+				{ composition_patch: { alpha: 0.5 } },
+				() => true,
+			);
+			expect(
+				outstanding("streaming.setConfig").map(({ input }) => input),
+			).toEqual([{ apply_now: true, composition_patch: { alpha: 0.5 } }]);
+			if (automatic) await elapse(15_000);
+			else button(container, "Retry").click();
+			answer("status.getStatus", status);
+			await settle();
+			const retry = button(container, "Retry");
+			expect(retry.disabled).toBe(true);
+			expect(sentCount("streaming.stop")).toBe(1);
+
+			if (pending !== undefined) deliverStatus({ stream_lifecycle: pending });
+			await elapse(2_000);
+			if (confirmation === "error")
+				reject("status.getStatus", "INTERNAL_ERROR");
+			else answer("status.getStatus", confirmation);
+			await settle();
+			expect(sentCount("status.getStatus")).toBe(automatic ? 2 : 4);
+			expect(sentCount("streaming.stop")).toBe(1);
+			answer("streaming.setConfig", { success: true });
+			await write;
+			await settle();
+			expect(sentCount("streaming.stop")).toBe(stops);
+
+			if (stops === 1) {
+				expect(retry.disabled).toBe(false);
+				retry.click();
+				await settle();
+				answer("status.getStatus", { is_streaming: true });
+				await settle();
+				expect(sentCount("streaming.stop")).toBe(2);
+				expect(sentCount("status.getStatus")).toBe(automatic ? 3 : 5);
+			}
+			answer("streaming.stop", { success: true, result: "stopped" });
+			deliverStatus(idle);
+			await settle();
+		},
+	);
+
+	it.each([
+		"direct and idle reply",
+		"held dispatch and idle reply",
+		"canceled before dispatch",
+		"replaced after dispatch",
+	] as const)(
+		"checks joined Retry settlement only after an actual current send (%s)",
+		async (outcome) => {
+			const { container } = render(LiveView);
+			const retry = await showDelay(container);
+			const held = outcome === "held dispatch and idle reply";
+			const canceled = outcome === "canceled before dispatch";
+			const replaced = outcome === "replaced after dispatch";
+			const write =
+				held || canceled
+					? sendCompositionWrite(
+							{ composition_patch: { alpha: 0.5 } },
+							() => true,
+						)
+					: undefined;
+			retry.click();
+			await elapse(2_000);
+			answer("status.getStatus", live);
+			await settle();
+			expect(sentCount("status.getStatus")).toBe(2);
+			expect(sentCount("streaming.stop")).toBe(write === undefined ? 2 : 1);
+			if (write !== undefined) {
+				await elapse(2_000);
+				expect(sentCount("status.getStatus")).toBe(2);
+				if (canceled) deliverStatus(idle);
+				answer("streaming.setConfig", { success: true });
+				await write;
+				await settle();
+			}
+
+			expect(sentCount("streaming.stop")).toBe(canceled ? 1 : 2);
+			expect(sentCount("status.getStatus")).toBe(2);
+			if (!canceled && !held)
+				answer("streaming.stop", { success: true, result: "stopped" });
+			if (replaced) {
+				deliverStatus(idle);
+				deliverStatus(live);
+			}
+			await elapse(2_000);
+			const checked = !canceled && !replaced;
+			expect(sentCount("status.getStatus")).toBe(checked ? 3 : 2);
+			if (held) {
+				expect(outstanding("streaming.stop").map(({ input }) => input)).toEqual(
+					[undefined],
+				);
+				answer("streaming.stop", { success: true, result: "stopped" });
+			}
+			if (checked) answer("status.getStatus", idle);
+			await settle();
+			expect(queryByTestId(container, "stop-stuck-banner")).toBeNull();
+			expect(getStreamingOptimismState()).toBe("idle");
+			await elapse(2_000);
+			expect(sentCount("streaming.stop")).toBe(canceled ? 1 : 2);
+			expect(sentCount("status.getStatus")).toBe(checked ? 3 : 2);
+		},
+	);
+
+	it.each(["reconciling", "stop_failed"] as const)(
+		"does not repull a superseded joined Retry settlement in %s",
+		async (stream_lifecycle) => {
+			const { container } = render(LiveView);
+			const status = { is_streaming: true, stream_lifecycle };
+			deliverStatus({ ssh: false });
+			const retry = await showDelay(container, { status });
+			retry.click();
+			await elapse(2_000);
+			answer("status.getStatus", status);
+			await settle();
+			expect(sentCount("streaming.stop")).toBe(2);
+			expect(sentCount("status.getStatus")).toBe(2);
+			answer("streaming.stop", { success: true, result: "stopped" });
+
+			await elapse(2_000);
+			expect(sentCount("status.getStatus")).toBe(3);
+			deliverStatus(status);
+			await settle();
+			answer("status.getStatus", { ...idle, ssh: true });
+			await settle();
+			await elapse(2_000);
+
+			expect(sentCount("streaming.stop")).toBe(2);
+			expect(sentCount("status.getStatus")).toBe(3);
+			expect(getStatus()?.ssh).toBe(true);
+			expect(getStatus()?.stream_lifecycle).toBe(stream_lifecycle);
+			expect(getStreamingOptimismState()).toBe("stopping");
+			expect(getByTestId(container, "live-cockpit")).toBeDefined();
+			expect(retry.disabled).toBe(false);
+		},
+	);
+
+	it("an accepted Retry and late refusal cannot affect the replacement Stop", async () => {
+		const { container } = render(LiveView);
+		const oldRetry = await showDelay(container, { leaveStopPending: true });
+		await elapse(2_000);
+		expect(oldRetry.disabled).toBe(false);
+		oldRetry.click();
+		deliverStatus(idle);
+		deliverStatus(live);
+		await endLiveStream(container);
+		await settle();
+		expect(sentCount("streaming.stop")).toBe(2);
+
+		answer("streaming.stop", STOP_FAILED_REPLY, "oldest");
+		await elapse(15_000);
+		expect(outstanding("status.getStatus")).toHaveLength(2);
+		expect(getStreamingOptimismState()).toBe("stopping");
+		expect(queryByTestId(container, "stop-stuck-banner")).toBeNull();
+
+		answer("streaming.stop", STOP_FAILED_REPLY);
+		answer("status.getStatus", live, "newest");
+		await settle();
+		const retry = button(container, "Retry");
+		expect(retry.disabled).toBe(false);
+		retry.click();
+		answer("status.getStatus", live, "oldest");
+		await settle();
+		expect(sentCount("streaming.stop")).toBe(2);
+
+		await elapse(2_000);
+		answer("status.getStatus", live);
+		await settle();
+		expect(sentCount("streaming.stop")).toBe(3);
+		expect(sentCount("status.getStatus")).toBe(4);
+		answer("streaming.stop", { success: true, result: "stopped" });
+		deliverStatus(idle);
+		await settle();
+		expect(queryByTestId(container, "stop-stuck-banner")).toBeNull();
+	});
+});
+
+it.each([
+	{
+		name: "a reconciling echo through direct dispatch",
+		host: false,
+		before: "reconciling",
+		receipt: { stream_lifecycle: "reconciling" },
+		stops: 1,
+	},
+	{
+		name: "a reconciling snapshot through the toast host",
+		host: true,
+		before: "reconciling",
+		receipt: { is_streaming: true, stream_lifecycle: "reconciling" },
+		stops: 1,
+	},
+	{
+		name: "entry into reconciliation from stop_failed",
+		host: true,
+		before: "stop_failed",
+		receipt: { stream_lifecycle: "reconciling" },
+		stops: 0,
+	},
+	{
+		name: "idle before the live flag clears",
+		host: false,
+		before: "reconciling",
+		receipt: { stream_lifecycle: "idle" },
+		stops: 0,
+	},
+	{
+		name: "a newer Start",
+		host: true,
+		before: "reconciling",
+		receipt: { stream_lifecycle: "starting" },
+		stops: 0,
+	},
+])(
+	"an End confirmed in an uncertain phase and queued behind composition: $name sends $stops",
+	async ({ host, before, receipt, stops }) => {
+		vi.stubGlobal("stopStreamingWithNotificationClear", undefined);
+		try {
+			if (host) render(LayoutToastHost);
+			const { container } = render(LiveView);
+			deliverStatus({ is_streaming: true, stream_lifecycle: before });
+			const dialog = await openLiveStopConfirmation(container);
+			const write = sendCompositionWrite(
+				{ composition_patch: { alpha: 0.5 } },
+				() => true,
+			);
+			expect(
+				outstanding("streaming.setConfig").map(({ input }) => input),
+			).toEqual([{ apply_now: true, composition_patch: { alpha: 0.5 } }]);
+			await fireEvent.click(getByTestId(dialog, "live-stop-end"));
+			await settle();
+			expect(sentCount("streaming.stop")).toBe(0);
+
+			deliverStatus(receipt);
+			answer("streaming.setConfig", { success: true });
+			await write;
+			await settle();
+			expect(sentCount("streaming.stop")).toBe(stops);
+			if (stops === 1) {
+				answer("streaming.stop", { success: true, result: "stopped" });
+				await settle();
+			} else {
+				await elapse(15_000);
+				expect(sentCount("status.getStatus")).toBe(0);
+			}
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	},
+);
+
+it("a queued End in reconciliation does not survive reconnect, but a fresh End sends once", async () => {
+	const { container } = render(LiveView);
+	const live = { is_streaming: true, stream_lifecycle: "reconciling" };
+	deliverStatus(live);
+	const write = sendCompositionWrite(
+		{ composition_patch: { alpha: 0.5 } },
+		() => true,
+	);
+	const rejectedWrite = expect(write).rejects.toBeInstanceOf(Error);
+	await endLiveStream(container);
+	await settle();
+	expect(sentCount("streaming.stop")).toBe(0);
+
+	await reconnectAwaitingHydrate();
+	await rejectedWrite;
+	answer("streaming.getConfig", {});
+	answer("status.getStatus", live);
+	await settle();
+	await elapse(15_000);
+	expect(sentCount("status.getStatus")).toBe(1);
+	expect(sentCount("streaming.stop")).toBe(0);
+
+	await endLiveStream(container);
+	await settle();
+	expect(sentCount("streaming.stop")).toBe(1);
+	answer("streaming.stop", { success: true, result: "stopped" });
+	await settle();
+});
+
+it("a question open while reconciling survives the same stream's recovery", async () => {
+	const { container } = render(LiveView);
+	deliverStatus({ is_streaming: true, stream_lifecycle: "reconciling" });
+	const dialog = await openLiveStopConfirmation(container);
+	deliverStatus({ stream_lifecycle: "streaming" });
+	expect(dialog.dataset.state).toBe("open");
+	await fireEvent.click(getByTestId(dialog, "live-stop-end"));
+	await settle();
+	expect(sentCount("streaming.stop")).toBe(1);
+	answer("streaming.stop", { success: true, result: "stopped" });
+	await settle();
+});
+
+it("a previous connection's stopping does not withhold Stop from a stream reported live now", async () => {
+	const { container } = render(LiveView);
+	deliverStatus({ is_streaming: true, stream_lifecycle: "stopping" });
+	await reconnectAwaitingHydrate();
+	deliverStatus({ is_streaming: true });
+	expect(
+		getByTestId(container, "live-bar-stop").getAttribute("aria-disabled"),
+	).toBeNull();
+	await openLiveStopConfirmation(container);
+	expect(sentCount("streaming.stop")).toBe(0);
+});
+
+it("a device already stopping keeps the Live bar Stop inert", async () => {
+	const { container } = render(LiveView);
+	deliverStatus({ is_streaming: true, stream_lifecycle: "stopping" });
+	const stop = getByTestId(container, "live-bar-stop");
+	expect(stop.getAttribute("aria-disabled")).toBe("true");
+	await fireEvent.click(stop);
+	expect(queryByTestId(document.body, "live-stop-confirm")).toBeNull();
+	expect(sentCount("streaming.stop")).toBe(0);
 });
 
 it("updates the live link after a standalone modems frame and records the next sample", () => {
@@ -4304,6 +5240,95 @@ describe("F6 request causality and action lifetime over the real socket", () => 
 		expect(band(container)).toBeNull();
 	});
 
+	it.each(["reconnect", "same link after unmount", "lifecycle only"] as const)(
+		"a confirmed End's watchdog cannot Stop a replacement stream observed via %s",
+		async (replacement) => {
+			const { container, unmount } = render(LiveView);
+			deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+			const dialog = await openLiveStopConfirmation(container);
+			deliverStatus({ stream_lifecycle: "reconfiguring" });
+			await fireEvent.click(getByTestId(dialog, "live-stop-end"));
+			await settle();
+			expect(sentCount("streaming.stop")).toBe(1);
+			answer("streaming.stop", { success: true, result: "stopped" });
+			await settle();
+			unmount();
+
+			if (replacement === "reconnect") {
+				await reconnectAwaitingHydrate();
+				answer("streaming.getConfig", {});
+				answer("status.getStatus", {
+					is_streaming: true,
+					stream_lifecycle: "streaming",
+				});
+			} else {
+				deliverStatus({ stream_lifecycle: "stopping" });
+				deliverStatus(
+					replacement === "lifecycle only"
+						? { stream_lifecycle: "idle" }
+						: { is_streaming: false, stream_lifecycle: "idle" },
+				);
+				deliverStatus({ stream_lifecycle: "starting" });
+				deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+			}
+			await settle();
+			const reads = sentCount("status.getStatus");
+			await elapse(15_000);
+			if (outstanding("status.getStatus").length) {
+				answer("status.getStatus", {
+					is_streaming: true,
+					stream_lifecycle: "streaming",
+				});
+				await settle();
+			}
+			if (outstanding("streaming.stop").length)
+				answer("streaming.stop", { success: true, result: "stopped" });
+
+			expect(sentCount("streaming.stop")).toBe(1);
+			expect(sentCount("status.getStatus")).toBe(reads);
+			expect(getStreamingOptimismState()).toBe("idle");
+		},
+	);
+
+	it.each([false, true])(
+		"a Retry click sends only for the original live stream (replaced=%s)",
+		async (replaced) => {
+			const { container } = render(LiveView);
+			deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+			await endLiveStream(container);
+			await settle();
+			answer("streaming.stop", { success: true, result: "stopped" });
+			await elapse(15_000);
+			answer("status.getStatus", {});
+			await settle();
+			const retry = getByTestId(container, "stop-stuck-retry");
+
+			socket().deliver({ status: { stream_lifecycle: "stopping" } });
+			if (replaced)
+				socket().deliver({
+					status: { is_streaming: false, stream_lifecycle: "idle" },
+				});
+			socket().deliver({
+				status: { is_streaming: true, stream_lifecycle: "streaming" },
+			});
+			retry.click();
+			await settle();
+			if (outstanding("status.getStatus").length) {
+				answer("status.getStatus", {
+					is_streaming: true,
+					stream_lifecycle: "streaming",
+				});
+				await settle();
+			}
+			if (outstanding("streaming.stop").length)
+				answer("streaming.stop", { success: true, result: "stopped" });
+			expect(sentCount("streaming.stop")).toBe(replaced ? 1 : 2);
+			expect(sentCount("status.getStatus")).toBe(replaced ? 1 : 2);
+			if (replaced)
+				expect(queryByTestId(container, "stop-stuck-banner")).toBeNull();
+		},
+	);
+
 	it("a completed Start watchdog never reverts the next starting attempt", async () => {
 		const { container } = render(LiveView);
 		await fireEvent.click(button(container, "Start Stream"));
@@ -4349,6 +5374,9 @@ describe("F6 request causality and action lifetime over the real socket", () => 
 		});
 		await settle();
 		expect(sentCount("streaming.stop")).toBe(2);
+		const retry = button(container, "Retry");
+		expect(retry.disabled).toBe(true);
+		retry.click();
 		answer("streaming.stop", { result: "stopped", success: true }, "newest");
 		await elapse(2_000);
 		answer("status.getStatus", {
@@ -4357,7 +5385,66 @@ describe("F6 request causality and action lifetime over the real socket", () => 
 		});
 		await settle();
 		expect(sentCount("streaming.stop")).toBe(2);
+		expect(sentCount("status.getStatus")).toBe(2);
 		expect(getStreamingOptimismState()).toBe("idle");
 		expect(header(container)).toContain("Not streaming");
 	});
+
+	it("a watchdog retry waiting behind a composition write cannot Stop the next stream", async () => {
+		const { container, unmount } = render(LiveView);
+		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+		await endLiveStream(container);
+		await settle();
+		answer("streaming.stop", { success: true, result: "stopped" });
+		await settle();
+		const write = sendCompositionWrite(
+			{ composition_patch: { alpha: 0.5 } },
+			() => true,
+		);
+		await elapse(15_000);
+		answer("status.getStatus", {
+			is_streaming: true,
+			stream_lifecycle: "streaming",
+		});
+		await settle();
+		expect(queryByTestId(container, "stop-stuck-banner")).not.toBeNull();
+		expect(sentCount("streaming.stop")).toBe(1);
+		unmount();
+
+		deliverStatus({ is_streaming: false, stream_lifecycle: "idle" });
+		deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+		answer("streaming.setConfig", { success: true });
+		await write;
+		await settle();
+		expect(sentCount("streaming.stop")).toBe(1);
+	});
+
+	it.each(["reconfiguring", "stopping"] as const)(
+		"the Stop watchdog can recover a missed idle push without duplicating a pending Stop during %s",
+		async (stream_lifecycle) => {
+			const { container } = render(LiveView);
+			deliverStatus({ is_streaming: true, stream_lifecycle: "streaming" });
+			await endLiveStream(container);
+			await settle();
+			deliverStatus({ stream_lifecycle });
+			await elapse(15_000);
+			answer("status.getStatus", { is_streaming: true, stream_lifecycle });
+			await settle();
+			const stopsWhilePending = sentCount("streaming.stop");
+			expect(queryByTestId(container, "stop-stuck-banner")).not.toBeNull();
+			await elapse(2_000);
+			answer("status.getStatus", {
+				is_streaming: false,
+				stream_lifecycle: "idle",
+			});
+			while (outstanding("streaming.stop").length)
+				answer("streaming.stop", { success: true, result: "stopped" });
+			await settle();
+
+			expect(stopsWhilePending).toBe(1);
+			expect(sentCount("streaming.stop")).toBe(1);
+			expect(queryByTestId(container, "stop-stuck-banner")).toBeNull();
+			expect(header(container)).toContain("Not streaming");
+		},
+	);
 });

@@ -10,11 +10,15 @@ import {
 	receivePulledStatus,
 } from "./subscriptions.svelte";
 
-/** One supersession permits one fresh read, never a recursive recovery loop. */
+/** By default, one supersession permits one fresh read. */
 export async function pullStatusEvidence(
 	isCurrent: () => boolean = () => true,
+	{
+		retryOnSupersession = true,
+	}: { readonly retryOnSupersession?: boolean } = {},
 ): Promise<ReceivedStatus | undefined> {
-	for (let reads = 0; reads < 2; reads += 1) {
+	const readLimit = retryOnSupersession ? 2 : 1;
+	for (let reads = 0; reads < readLimit; reads += 1) {
 		if (!isCurrent()) return undefined;
 		const dispatch = dispatchEvidence();
 		const answer = receivePulledStatus(await rpc.status.getStatus(), dispatch);

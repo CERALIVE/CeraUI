@@ -2,7 +2,9 @@ export {};
 
 declare global {
 	interface Window {
-		stopStreamingWithNotificationClear?: () => void;
+		stopStreamingWithNotificationClear?: (
+			prepareDispatch?: () => boolean,
+		) => void;
 		__ceraAppMounted?: boolean;
 		__ceraDisplayRefreshCount?: number;
 	}

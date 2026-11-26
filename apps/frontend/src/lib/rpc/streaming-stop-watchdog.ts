@@ -18,12 +18,11 @@
  * (status.procedure.ts, seq-less, bypassing the drop-stale path) — recovers. That
  * is the "stuck after stop until reload" field bug.
  *
- * This module is the recovery guarantee. When `stopping` persists past the
- * timeout with no flag change, it PULLS authoritative status (never trusting a
- * flag echo, never depending on a new broadcast) and reconciles the store from the
- * pulled value. If the pull still says streaming it re-dispatches stop ONCE
- * (idempotent) and pulls again; if it is STILL streaming, a truthful bounded
- * banner is exposed with a Retry that re-runs the same pull→stop→pull. The view
+ * When `stopping` persists past the timeout, the watchdog pulls authoritative
+ * status instead of relying on another broadcast. If the pull still says
+ * streaming, it attempts one re-dispatch and pulls again. The delay banner
+ * appears if the first read cannot confirm idle; Retry re-runs the bounded
+ * check, not a proven-failed Stop. The view
  * leaves live mode ONLY on an authoritative `is_streaming:false` (push OR pull) —
  * never by pretending idle while the authoritative flag still says streaming.
  *
@@ -35,7 +34,7 @@
 /** How long `stopping` may persist (no `is_streaming` change) before the watchdog fires. */
 export const STOP_WATCHDOG_TIMEOUT_MS = 15_000;
 
-/** Bounded delay between the re-dispatched stop and the confirming second pull. */
+/** Bounded delay before the confirming second pull. */
 export const STOP_WATCHDOG_REPULL_DELAY_MS = 2_000;
 
 export interface StopWatchdogDeps {
@@ -50,7 +49,7 @@ export interface StopWatchdogDeps {
 	isCurrent?: () => boolean;
 	/** Reconcile the optimism overlay from a pulled `is_streaming` value. */
 	reconcile: (isStreaming: boolean) => void;
-	/** Re-dispatch stop ONCE via the DIRECT rpc path (NEVER the window global). */
+	/** Re-dispatch once if still authorized and not pending on the device. */
 	redispatchStop: () => void;
 	/** Bounded delay before the confirming second pull. */
 	delay: () => Promise<void>;
@@ -59,49 +58,52 @@ export interface StopWatchdogDeps {
 }
 
 /**
- * Run ONE watchdog cycle: pull → (still streaming ? redispatch → pull) → banner.
+ * Run one watchdog cycle. Unknown shows the delay banner without a retry send.
  *
  * - pull #1 says NOT streaming → reconcile to idle, NO re-dispatch, banner hidden
  *   (the "no-rebroadcast trap": the push was lost but the server is already
  *   stopped, so the PULL alone recovers the view).
- * - pull #1 says streaming → expose the banner, re-dispatch stop ONCE, then pull
- *   again after a bounded delay:
+ * - pull #1 says streaming → expose the banner, attempt one re-dispatch, then
+ *   pull again after a bounded delay:
  *     - pull #2 NOT streaming → reconcile, banner hidden (recovered).
- *     - pull #2 streaming → banner stays (genuinely stuck; Retry re-runs this).
+ *     - pull #2 streaming or unknown → delay banner stays; Retry re-runs this.
+ *
+ * Return true only if the confirming read still proves live for this owner.
  */
-export async function runStopWatchdog(deps: StopWatchdogDeps): Promise<void> {
+export async function runStopWatchdog(
+	deps: StopWatchdogDeps,
+): Promise<boolean> {
 	const current = deps.isCurrent ?? (() => true);
-	if (!current()) return;
+	if (!current()) return false;
 	const first = await deps.pullStatus();
-	if (!current()) return;
+	if (!current()) return false;
 	if (first === undefined) {
 		deps.setBannerVisible(true);
-		return;
+		return false;
 	}
 	deps.reconcile(first);
-	if (!current()) return;
+	if (!current()) return false;
 	if (!first) {
 		// The authoritative flag is already false: the view will leave live mode on
 		// this reconcile. No re-dispatch (nothing to stop), no banner.
 		deps.setBannerVisible(false);
-		return;
+		return false;
 	}
 
-	// Still streaming per authority: surface the truthful banner while we retry.
+	// Still streaming per authority, not necessarily a failed Stop.
 	deps.setBannerVisible(true);
-	if (!current()) return;
-	// Backend stop is idempotent; a second stop is safe even if the first landed.
+	if (!current()) return false;
 	deps.redispatchStop();
 	await deps.delay();
-	if (!current()) return;
+	if (!current()) return false;
 
 	const second = await deps.pullStatus();
-	if (!current() || second === undefined) return;
+	if (!current() || second === undefined) return false;
 	deps.reconcile(second);
-	if (!current()) return;
+	if (!current()) return false;
 	if (!second) {
-		// Recovered after the re-dispatch.
+		// The second read recovered the missed stop confirmation.
 		deps.setBannerVisible(false);
 	}
-	// else: genuinely stuck — the banner stays and the user can Retry.
+	return second;
 }
