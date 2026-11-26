@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
+import { writeSync } from "node:fs";
 import {
 	link,
 	mkdir,
@@ -85,8 +86,10 @@ async function seedRetained(kind: FutureEvidence) {
 	return { name, writer };
 }
 
-const initialize = () =>
-	initMutationRecovery({ sleep: new JournalRetryClock().sleep });
+const initialize = () => initializeWith(new JournalRetryClock());
+
+const initializeWith = (clock: JournalRetryClock) =>
+	initMutationRecovery({ sleep: clock.sleep });
 
 test("the rollback reader ignores only verified and independently archived retained evidence", async () => {
 	const { writer } = await seedRetained("complete");
@@ -130,30 +133,67 @@ test("a clean verified set-aside admits an operator Start on the previous slot",
 		recoveryPending: streamSessionProductionDeps.recoveryPending,
 	});
 	let launches = 0;
-	await session.start({
-		origin: "ui",
-		launch: async () => {
-			launches++;
-		},
-	});
+	expect(
+		await session.start({
+			origin: "ui",
+			launch: async () => {
+				launches++;
+			},
+		}),
+	).toMatchObject({ result: "started" });
 	expect(launches).toBe(1);
 	expect(isRecoveryPending()).toBe(false);
 });
 
-test("an internal boot origin rechecks drift after the barrier it awaited", async () => {
+test("a clean internal boot origin launches on the previous slot", async () => {
 	const { writer } = await seedRetained("complete");
+	await writer.close();
+	expect((await initialize()).unreadable).toBe(0);
+	const session = createStreamSessionOrchestrator({
+		initialLiveness: () => "idle",
+		createAttemptId: () => "retained-autostart-clean",
+		setStreamingStatus: () => {},
+		stopRuntime: async () => {},
+		queryRuntime: async () => "idle",
+		recoveryPending: streamSessionProductionDeps.recoveryPending,
+		awaitRecovery: streamSessionProductionDeps.awaitRecovery,
+	});
+	let launches = 0;
+	expect(
+		await session.start({
+			origin: "autostart",
+			launch: async () => {
+				launches++;
+			},
+		}),
+	).toMatchObject({ result: "started" });
+	expect(launches).toBe(1);
+});
+
+test("an internal boot origin holds instead of failing terminally when drift appears between its admission gates", async () => {
+	const { writer } = await seedRetained("complete");
+	const clock = new JournalRetryClock();
+	const productionPending = streamSessionProductionDeps.recoveryPending;
+	let drifted = false;
 	try {
-		expect((await initialize()).unreadable).toBe(0);
-		await writer.writeFile("out-of-band repair");
-		await writer.sync();
+		expect((await initializeWith(clock)).unreadable).toBe(0);
 		const session = createStreamSessionOrchestrator({
 			initialLiveness: () => "idle",
 			createAttemptId: () => "retained-autostart",
 			setStreamingStatus: () => {},
 			stopRuntime: async () => {},
 			queryRuntime: async () => "idle",
-			recoveryPending: streamSessionProductionDeps.recoveryPending,
+			recoveryPending: productionPending,
 			awaitRecovery: streamSessionProductionDeps.awaitRecovery,
+			// Clean at the first gate; an already-open writer drifts the evidence
+			// while the attempt is between that gate and the one before admission.
+			blockingMutation: () => {
+				if (!drifted) {
+					drifted = true;
+					writeSync(writer.fd, "out-of-band repair");
+				}
+				return undefined;
+			},
 		});
 		let launches = 0;
 		const started = session.start({
@@ -162,17 +202,22 @@ test("an internal boot origin rechecks drift after the barrier it awaited", asyn
 				launches++;
 			},
 		});
-		// Awaiting raised the new unsettled promise; the owner cannot lower it
-		// while the evidence is still drifted, so the launch never proceeds.
-		expect(isRecoveryPending()).toBe(true);
-		const outcome = await Promise.race([
+		const early = await Promise.race([
 			started,
-			new Promise((resolve) => setTimeout(() => resolve("still-waiting"), 50)),
+			new Promise((resolve) => setTimeout(() => resolve("held"), 50)),
 		]);
-		expect(outcome).toBe("still-waiting");
+		expect(early).toBe("held");
 		expect(launches).toBe(0);
-		resetRecoveryBarrier();
-		await started;
+		expect(isRecoveryPending()).toBe(true);
+
+		// The receipt binds the file's mtime, so drifted evidence never becomes
+		// verified again: the attempt must stay held, not become a terminal failure.
+		const stillWaiting = await Promise.race([
+			started,
+			new Promise((resolve) => setTimeout(() => resolve("held"), 50)),
+		]);
+		expect(stillWaiting).toBe("held");
+		expect(launches).toBe(0);
 	} finally {
 		await writer.close();
 	}

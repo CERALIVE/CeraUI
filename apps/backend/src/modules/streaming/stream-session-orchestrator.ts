@@ -424,8 +424,16 @@ export function createStreamSessionOrchestrator(
 		// lease-busy answer) and before the attempt goes in-flight below, because
 		// a modem re-enumeration admitted alongside it would tear a bond link out
 		// from under a launch that has already spawned the sender.
-		if (deps.recoveryPending?.() === true)
-			return refuseStart(attemptId, "recovery_pending", "recovery_pending");
+		// A barrier that rose while this attempt reconciled is a retry for an
+		// external arrival, but an internal origin has no retry (restoration turns
+		// a refusal into terminal `start_failed`), so it waits for the answer.
+		if (deps.recoveryPending?.() === true) {
+			if (!INTERNAL_LAUNCH_ORIGINS.has(request.origin))
+				return refuseStart(attemptId, "recovery_pending", "recovery_pending");
+			do {
+				await deps.awaitRecovery?.();
+			} while (deps.recoveryPending?.() === true);
+		}
 		const admitLifecycle = deps.admitLifecycle;
 		if (admitLifecycle === undefined)
 			return await admittedStart(attemptId, request, currentIntent);
