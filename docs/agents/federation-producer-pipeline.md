@@ -94,12 +94,14 @@ re-verifies the version match before building; for v2026.7.0 it publishes
 `ui-bundle/2026.7.0/`. Steps:
 
 1. `bun run build:federation` — produces `dist/federation/<version>/`
-2. `bun scripts/ci/bundle-report.mjs --federation-only` — requires the complete
+2. `bun test ./scripts/federation-assets.test.mjs` — verifies the built asset
+   graph and stylesheet.
+3. `bun scripts/ci/bundle-report.mjs --federation-only` — requires the complete
    built graph and enforces gzip budgets before any signing or upload.
-3. `bun run sign:federation` — produces `.sri` + `.sig` + `manifest.json`
-4. Uploads every signed JS/CSS asset and sidecar plus the signed manifest to R2
+4. `bun run sign:federation` — produces `.sri` + `.sig` + `manifest.json`
+5. Uploads every signed JS/CSS asset and sidecar plus the signed manifest to R2
    at `ui-bundle/<ceraui-version>/` with pinned content types.
-5. `publish-federation-immutable.sh` uses conditional `PutObject` writes and a
+6. `publish-federation-immutable.sh` uses conditional `PutObject` writes and a
    digest of the signed payload set. An identical retry preserves existing
    objects (including earlier valid signature bytes), a changed payload fails
    before any write, and a failed fresh publish removes only objects created by
