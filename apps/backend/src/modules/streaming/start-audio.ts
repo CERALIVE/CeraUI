@@ -48,6 +48,8 @@ export interface StartAudio {
 	readonly config: StartAudioConfig;
 	readonly audioEvidence: ReadonlyMap<string, AudioIdentityEvidence>;
 	readonly micChoices: ReturnType<typeof freezeMicChoices>;
+	/** Proofs accepted by the engine for this launch, not just observed at press. */
+	readonly verifiedMicChoices: Map<string, string>;
 	readonly originalMicChoice: (id: string) => string;
 	readonly restoration?: {
 		readonly proofs: ArmedStreamConfig["mic_route_proofs"];
@@ -110,6 +112,7 @@ export function acceptStartAudio(
 		audioEvidence.has(id) ? undefined : audioIdentitySuccessor(id);
 	const startAudio: StartAudio = {
 		audioEvidence,
+		verifiedMicChoices: new Map(),
 		originalMicChoice: (id) =>
 			startAudio.micChoices.has(id)
 				? id

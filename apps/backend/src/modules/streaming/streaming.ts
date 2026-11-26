@@ -50,11 +50,13 @@ import {
 	setSocketSenderId,
 } from "../ui/websocket-server.ts";
 import { notifyWifiAdapterModeEdge } from "../wifi/wifi-adapter-mode-events.ts";
-import { getAudioDevices } from "./audio.ts";
+import { getAudioDevices, isPseudoAudioSource } from "./audio.ts";
+import { audioInputEngineId } from "./audio-inputs.ts";
 import { getAudioMixActive, getAudioOffActive } from "./audio-mix-status.ts";
 import { getLastCapabilities, getSupportedTransports } from "./capabilities.ts";
 import { isCompositionSupported } from "./composition.ts";
 import { validateBitrate } from "./encoder.ts";
+import { noteStartedMicChoice } from "./mic-route-admission.ts";
 import { AUDIO_CODECS } from "./pipeline-sources.ts";
 import { searchPipelines } from "./pipelines.ts";
 import { noteSourceSelectionWrite } from "./sources.ts";
@@ -356,9 +358,26 @@ export function saveAppliedStartAudio(
 ) {
 	const config = getConfig();
 	const { asrc, acodec, ...fields } = startAudio.unsaved();
+	const verified = (id: string) =>
+		noteStartedMicChoice(config, id, startAudio.verifiedMicChoices.get(id));
+	const saveAsrc =
+		asrc &&
+		(asrc === AUDIO_SOURCE_AUTO || isPseudoAudioSource(asrc) || verified(asrc));
+	// A mix is one setting. Keep the existing mix if any new microphone in
+	// the proposed one was not actually used and verified by this launch.
+	let saveMix = true;
+	for (const { id } of fields.audio_inputs ?? []) {
+		if (
+			!config.audio_inputs?.some((input) => input.id === id) &&
+			audioInputEngineId(id, config) !== "embedded" &&
+			!verified(id)
+		)
+			saveMix = false;
+	}
+	if (!saveMix) delete fields.audio_inputs;
 	const applied = {
 		...fields,
-		...(supportsAudio && asrc ? { asrc } : {}),
+		...(supportsAudio && saveAsrc ? { asrc } : {}),
 		...(supportsAudio && acodec ? { acodec } : {}),
 	};
 	if (Object.keys(applied).length === 0) return;

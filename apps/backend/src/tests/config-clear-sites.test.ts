@@ -504,8 +504,8 @@ describe("through the streaming writers", () => {
 	test("set, resolution, framerate, audio_inputs: a start that carries them", async () => {
 		Object.assign(getConfig(), START);
 		const input = {
-			resolution: "1080p",
-			framerate: 30,
+			resolution: "1080p" as const,
+			framerate: 30 as const,
 			audio_inputs: [{ ...MIX, mute: true }],
 		};
 		const audio = acceptStartAudio(input);
@@ -517,6 +517,7 @@ describe("through the streaming writers", () => {
 		expect(told()).toMatchObject({ resolution: "1080p", framerate: 30 });
 		expect(told()).not.toHaveProperty("audio_inputs");
 
+		audio.verifiedMicChoices.set(MIX.id, `mic-report-v1:${"a".repeat(64)}`);
 		expect(await heardFrom(() => saveAppliedStartAudio(audio, true))).toEqual([
 			"config",
 		]);

@@ -162,7 +162,11 @@ live on purpose: a card that re-enumerated, as the main input or in the mix, is
 addressed by its new id, and Auto is resolved against the launched source at launch. The Start's own write
 (`StartAudio.unsaved`) leaves out every field saved since the press, even when that
 save repeats the saved value: `setConfig` and `setAudioMix` call
-`noteAudioSaved`, the Start's own write does not. Until a Start is done the
+`noteAudioSaved`, the Start's own write does not. A successful Start writes a
+new concrete microphone only when that launch used it and the engine accepted its
+proof. An embedded-audio Start does not change the saved pick or let a subsequent
+Start enroll a replacement for the ignored selector. Re-pick the microphone to
+establish a new proof. Until a Start is done the
 Bluetooth microphones stay listed for its backend, and `startStream` lists them again
 when another backend was saved before the launch. The compatibility
 start-schema export aliases the published producer schema, preserving its

@@ -193,6 +193,7 @@ export async function startStream(
 	startAudio: StartAudio,
 ): Promise<StartStreamResult> {
 	assertStreamLaunchOwnership();
+	startAudio.verifiedMicChoices.clear();
 	// The preview-encoder fence, and the reason it lives HERE. The engine fixes
 	// the preview encoder when it builds the main graph, so the operator's mode
 	// has to be in the engine's config BEFORE the `start` below — not racing it.
@@ -353,6 +354,7 @@ export async function startStream(
 		let launchedAudio: LaunchedAudio | undefined;
 		let launchedAsrc: RuntimeConfig["asrc"];
 		let originalKeys: ReadonlyMap<string, string>;
+		let checkedIds: readonly (string | undefined)[] = [];
 		await startStreamDeps.getStreamingBackend().start(
 			// The bitrate is live: a change made while starting still applies.
 			configOverride === undefined
@@ -427,6 +429,7 @@ export async function startStream(
 												({ id }) => audioInputEngineId(id, projected) === key,
 											)?.id,
 									);
+						checkedIds = ids;
 						const proofs = await Promise.all(
 							ids.map((id) =>
 								id === undefined
@@ -441,6 +444,15 @@ export async function startStream(
 							: undefined;
 					},
 					applied: (proofs, backend) => {
+						for (const [index, proof] of (proofs ?? []).entries()) {
+							const id = checkedIds[index];
+							if (id === undefined) continue;
+							startAudio.verifiedMicChoices.set(id, proof);
+							startAudio.verifiedMicChoices.set(
+								originalKeys.get(id) ?? startAudio.originalMicChoice(id),
+								proof,
+							);
+						}
 						if (launchedAudio !== undefined)
 							pinLaunchedAudio({
 								...launchedAudio,

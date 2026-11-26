@@ -57,6 +57,28 @@ const savedChoices = new WeakMap<
 	{ readonly path: string; readonly proofs: Map<string, Admission> }
 >();
 
+function micChoiceProofs(config: RuntimeConfig) {
+	const path = getConfigFilePath();
+	const current = savedChoices.get(config);
+	if (current?.path === path) return current.proofs;
+	const proofs = new Map<string, Admission>();
+	savedChoices.set(config, { path, proofs });
+	return proofs;
+}
+
+export function noteStartedMicChoice(
+	config: RuntimeConfig,
+	id: string,
+	proof: string | undefined,
+): boolean {
+	const choices = micChoiceProofs(config);
+	// A repeated Start payload is not a new picker choice. Do not let an
+	// ignored selector enroll a different occupant on the next Start.
+	if (proof !== undefined || !choices.has(id))
+		choices.set(id, Promise.resolve(proof));
+	return proof !== undefined;
+}
+
 export function captureMicChoices(ids: readonly string[]) {
 	return [...new Set(ids)]
 		.filter((id) => id !== AUDIO_SOURCE_AUTO && !isPseudoAudioSource(id))
@@ -81,12 +103,7 @@ export function noteMicChoices(
 	});
 	const [first, second] = choicesToObserve;
 	if (first === undefined) return undefined;
-	const path = getConfigFilePath();
-	let choices = savedChoices.get(config);
-	if (choices?.path !== path) {
-		choices = { path, proofs: new Map() };
-		savedChoices.set(config, choices);
-	}
+	const choices = micChoiceProofs(config);
 	const observed = (async () => {
 		if (!choicesToObserve.every(({ current }) => current())) return undefined;
 		const proofs = await observe(
@@ -108,7 +125,7 @@ export function noteMicChoices(
 			: undefined;
 	})();
 	for (const [index, { id }] of choicesToObserve.entries())
-		choices.proofs.set(
+		choices.set(
 			id,
 			observed.then((proofs) => proofs?.[index]),
 		);

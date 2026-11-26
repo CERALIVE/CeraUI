@@ -67,6 +67,7 @@ import {
 } from "../modules/streaming/cerastream-backend.ts";
 import { commitStagedConfigChange } from "../modules/streaming/config-change-persistence.ts";
 import { stageConfigChange } from "../modules/streaming/config-change-staging.ts";
+import * as gateway from "../modules/streaming/gateway-availability.ts";
 import {
 	initPipelines,
 	type Pipeline,
@@ -2528,6 +2529,56 @@ function useRoutePeer(
 		engine.backend.admitMicRoutes(request),
 	);
 }
+
+test.each(["rtmp", "srt"] as const)(
+	"%s embedded Start neither saves an unused microphone nor authorizes its replacement",
+	async (pipeline) => {
+		clearCapabilitiesCache();
+		await initPipelines({
+			fetchEngineCapabilities: async () => ({
+				caps: {
+					...CAPS,
+					network_embedded_audio: true,
+					sources: [
+						...(CAPS.sources ?? []),
+						{ id: pipeline, supports_audio: true },
+					],
+				},
+				schemaVersion: SCHEMA_VERSION,
+			}),
+			fetchEngineDevices: async () => ({ devices: [] }),
+		});
+		spyOn(gateway, "isGatewayActive").mockReturnValue(true);
+		const peer = await scopedStartPeer("legacy-success", testMicRoutes);
+		useRoutePeer(peer);
+		getConfig().audio_inputs = undefined;
+		saveConfig();
+		try {
+			await listPhysicalMics(["micOld", ORIGINAL_MIC]);
+			expect(await start({ pipeline, asrc: "micOld" })).toMatchObject({
+				success: true,
+			});
+			expect(peer.starts().map(({ method }) => method)).toEqual(["start"]);
+			expect(peer.startAudio).toEqual([{ mode: "default", delay_ms: 0 }]);
+			expect(peer.checks).toEqual([]);
+			expect(getConfig().asrc).toBe("No audio");
+			expect((await disk()).asrc).toBe("No audio");
+			await stop();
+
+			await listPhysicalMics(["micOld", UNRELATED_MIC]);
+			expect(await start({ pipeline: "test", asrc: "micOld" })).toMatchObject({
+				success: false,
+				failure: { code: "audio_source_probe_failed" },
+			});
+			expect(peer.checks).toEqual([]);
+			expect(peer.starts().map(({ method }) => method)).toEqual(["start"]);
+			expect((await disk()).asrc).toBe("No audio");
+		} finally {
+			await listPhysicalMics();
+			audio.resetRememberedAudioIdentities();
+		}
+	},
+);
 
 test.each([
 	{ name: "the coherent original", instance: "original" },
