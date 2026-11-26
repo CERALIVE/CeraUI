@@ -7,8 +7,8 @@ CeraUI consumes THREE npm producers whose wire data is Zod-validated:
 A pin is a version boundary as well as a path boundary, and the failure mode on
 the wrong side of it is SILENT.
 
-Both cerastream consumers pin published `2026.11.4` (schema `0.26.0`,
-protocol `cerastream-ipc/1`, producer `2ad2349e`). Attempt-scoped Start requires
+Both cerastream consumers pin published `2026.11.5` (schema `0.27.0`,
+protocol `cerastream-ipc/1`, producer `7c97890f`). Attempt-scoped Start requires
 `ATTEMPT_SCOPED_START_FEATURE` from the launch socket itself. No package,
 schema version, or cached capability can grant that authority.
 The runtime observer opts into status hydration only when the live engine
