@@ -73,6 +73,14 @@ function audioGate(
 			selected.unavailable_reason !== undefined) ||
 		(!selected && isSelectedAudioLost(config.asrc, input.audioIds))
 	) {
+		// Let the existing Start refusal explain a missing sole saved mic.
+		const savedMix = config.audio_inputs;
+		if (
+			config.asrc === input.config?.asrc &&
+			(savedMix === undefined ||
+				(savedMix.length === 1 && savedMix[0]?.id === config.asrc))
+		)
+			return { state: "ok" };
 		return {
 			state: "blocked",
 			reasonKey: "live.inputPicker.audioSourceLost",

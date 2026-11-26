@@ -117,7 +117,11 @@ picks serialize; without `audio_pick` an `asrc` save changes no membership.
 Idle edits from the Live strips arrive as per-input deltas on
 `setAudioMix`: values, or `include` / `track` for membership and tracks, which
 `changedAudioInputs` composes on the current saved mix (refusing to turn the
-main input out with `audio_input_primary`) and saves for the next start. For a network source, its source id (`rtmp` or `srt`) denotes
+available main input out with `audio_input_primary`) and saves for the next
+start. An unavailable leg can be removed explicitly, but otherwise keeps its
+saved slot when the server admits new members. A value-only delta can keep an
+existing track gap after Remove; it cannot introduce a new gap. For a network
+source, its source id (`rtmp` or `srt`) denotes
 the embedded input and becomes engine `embedded`. Without saved inputs or the
 capability, start serialization stays on the existing path. The engine start,
 the persisted engine config and the mock start read one decision,

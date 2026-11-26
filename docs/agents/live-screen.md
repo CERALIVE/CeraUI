@@ -423,15 +423,16 @@ must keep that ABI.
 #### The Audio card's mixer [EXISTS]
 
 - A saved input that is unplugged or belongs to another network source stays in
-  the mixer with a reason and a Remove button. It does not take an available
-  input's slot or block edits to other inputs. Remove changes the saved mix for
-  the next start, not the running stream. Start omits a redundant unavailable
-  input only if the primary and all assigned tracks still have a route. The
-  picker still shows a missing input, and the existing Start readiness and
-  attempted-Start checks are unchanged. Reworking the readiness block and
-  adding session-only recovery actions belong to row 9 of the Live audio
-  plan. Neither changing a source nor starting a stream removes or renumbers
-  saved tracks.
+  the mixer with a reason and a Remove button. It is excluded when the server
+  validates edits to other inputs, but keeps its saved slot so it can return
+  with the same ID, place, tracks and values. Remove changes the saved mix for
+  the next start, not the running stream. If Remove leaves a track gap, value
+  edits still work without renumbering tracks. Start omits a redundant
+  unavailable input only if the primary and all assigned tracks still have a
+  route. With only the saved microphone selected and unplugged, Start stays
+  enabled if all other checks pass; pressing it shows the existing typed
+  audio recovery. Proactive routing-loss checks and new recovery actions
+  belong to row 9 of the Live audio plan.
 
 - `AudioMixer` (`audio-mixer`) renders only when the capabilities carry
   `audio_mix`; without it the idle `audio-card` is today's picker and meter and
@@ -441,7 +442,7 @@ must keep that ABI.
 - One strip per selectable audio device in `status.audio_sources` (no
   pseudo-source, no row with an `unavailable_reason`), plus the embedded audio
   of a network source when the engine routes it, saved under the source id.
-  Each strip, `audio-strip-<id>`, holds the switch `audio-strip-enable-<id>`;
+  Each available strip, `audio-strip-<id>`, holds the switch `audio-strip-enable-<id>`;
   while it is on, the level slider `audio-strip-gain-<id>` (the capability's
   `gain_db_min` to `gain_db_max`, steps of 1) with `audio-strip-gain-reset-<id>`,
   the mute button `audio-strip-mute-<id>` (`aria-pressed`), the delay field
@@ -449,14 +450,16 @@ must keep that ABI.
   per track, `audio-strip-track-<id>-<n>` for 1 to `max_tracks`
   (`aria-pressed`). `audio-strip-reason-<id>` says why a switch is disabled and
   `audio-strip-error-<id>` (`role="alert"`, always mounted) shows a refusal.
-  Under the strips, `audio-mixer-track-hint` says most receivers play Track 1.
+  An unavailable saved row, including the main input, shows Remove instead of
+  a switch. Under the strips, `audio-mixer-track-hint` says most receivers play
+  Track 1.
 - The main input is the backend's: the picker's input, Auto's resolution, or
-  the embedded audio when the picker defers to the source. Its strip is always
-  on and its switch disabled with the reason beside it. Without a main input,
-  no other strip can be turned on. At `max_inputs` inputs in the mix, the others
-  cannot be turned on and say the mix is full. Only entries the backend lists
-  in `status.audio_mix_excluded` are ignored for this count; a missing strip
-  alone is not evidence of unavailability.
+  the embedded audio when the picker defers to the source. When available, its
+  strip is on with its switch disabled and the reason beside it. Without a
+  main input, no other strip can be turned on. The UI disables more switches
+  when its active count reaches `max_inputs`; it excludes only entries listed
+  in `status.audio_mix_excluded`. The server also counts reserved saved slots
+  when admitting a new entry, and can refuse it even if a switch was enabled.
 - "No audio" sends no audio: Start sends `audio.mode: "none"` and no inputs
   whatever mix is saved, and the saved mix comes back with the next pick. On an
   RTMP or SRT ingest the Source card keeps `audio-source-select` (live,
@@ -465,12 +468,12 @@ must keep that ABI.
   audio" too. While a stream runs, the summary says it from the session's own
   `audio_off_active`, not from the pick saved for the next Start; a session that
   does not report it is read by the saved pick.
-- The main input is always in the mix Start sends, decided where it is used,
-  never by a follow-up save: the backend's `effectiveAudioInputs` adds a main
-  input outside the saved mix first at its defaults on Track 1 (the old main
-  input stays an ordinary input), or in a full mix gives it the first entry's
-  place and tracks. The strips show the same mix. Opening Live never saves;
-  only an edit of an audio control saves, and it saves the mix shown.
+- When Start uses a saved mix, the backend's `effectiveAudioInputs` adds an
+  available main input outside that mix first at its defaults on Track 1, or
+  gives it the first available entry's place and tracks if the active mix is
+  full. It does not insert an unavailable main input that is outside the saved
+  mix. This projection does not write to disk; opening Live and starting a
+  stream do not save the projection.
 - A pick in the audio picker sends only `setConfig({ asrc, audio_pick: true })`.
   The backend decides the membership in the same synchronous write, against its
   own current saved mix and current main input (Auto's resolution included):
@@ -515,9 +518,10 @@ must keep that ABI.
   `audio_inputs_too_many`, `audio_tracks_invalid`, `audio_tracks_gap`,
   `audio_gain_range`, `audio_delay_range` and `audio_mix_active`); any other
   token, such as an engine refusal, reads as a generic refusal and never as the
-  raw token. The UI refuses a track change or a delay the backend would refuse,
-  in the backend's order and with the same copy, and sends nothing. The track
-  check reads the whole mix, saved inputs with no strip included.
+  raw token. The server owns validation. The UI checks delay locally and
+  prechecks track edits when there are no excluded legs. When an excluded leg
+  is present, it sends the track delta for the server to validate against the
+  effective mix rather than treating unavailable routing as active.
 - The mock backend does not bridge `audio-level` to the main socket (its meter
   bridge is skipped under mocks), so `audio-mixer.spec.ts` injects that frame
   when it checks the per-input meters.

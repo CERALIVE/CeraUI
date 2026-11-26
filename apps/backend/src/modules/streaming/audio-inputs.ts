@@ -120,22 +120,27 @@ export function excludedAudioInputs(
 export function validateAudioInputs(
 	inputs: readonly AudioInputSetting[],
 	config: RuntimeConfig,
-	editedId?: string,
+	edit?: { readonly id: string; readonly valuesOnly?: true },
 ): string | undefined {
 	const capability = getLastCapabilities()?.audio_mix;
 	if (!capability) return "audio_mix_unsupported";
 	const available = availableAudioInputIds(config);
+	const saved = config.audio_inputs ?? [];
+	// An unavailable leg still needs its saved slot when it returns.
+	const exceedsSavedLimit =
+		inputs.length > capability.max_inputs &&
+		inputs.some(({ id }) => !saved.some((input) => input.id === id));
 	const excluded = new Set(
-		config.audio_inputs
-			?.filter(
-				({ id }) =>
-					editedId !== undefined && id !== editedId && !available.has(id),
+		saved
+			.filter(
+				({ id }) => edit !== undefined && id !== edit.id && !available.has(id),
 			)
 			.map(({ id }) => id),
 	);
 	inputs = inputs.filter(({ id }) => !excluded.has(id));
 	if (inputs.length === 0) return "audio_inputs_empty";
-	if (inputs.length > capability.max_inputs) return "audio_inputs_too_many";
+	if (exceedsSavedLimit || inputs.length > capability.max_inputs)
+		return "audio_inputs_too_many";
 	const ids = new Set<string>();
 	const tracks = new Set<number>();
 	for (const input of inputs) {
@@ -157,14 +162,14 @@ export function validateAudioInputs(
 		const error = validateAudioInputValues(input);
 		if (error !== undefined) return error;
 	}
-	// Losing a device can already have left a gap. An edit to another input
-	// may leave that gap alone, but cannot create a new one.
+	// Losing or explicitly removing a device can leave a gap. Keep existing
+	// gaps for value edits; no edit may create a new gap.
 	const previousTracks =
-		excluded.size === 0
-			? []
-			: (config.audio_inputs ?? [])
+		excluded.size > 0 || edit?.valuesOnly
+			? saved
 					.filter(({ id }) => available.has(id))
-					.flatMap(({ tracks }) => tracks);
+					.flatMap(({ tracks }) => tracks)
+			: [];
 	for (let track = 1; track < Math.max(...tracks); track++) {
 		if (
 			!tracks.has(track) &&
@@ -217,9 +222,8 @@ export function storedAudioInputs(
 }
 
 /**
- * The mix Start sends and live changes address: the saved entries with the main
- * input in them (`audioMixWithPrimary`). Nothing is written here, so loading and
- * Start never rewrite the saved mix.
+ * The saved mix with the available main input included (`audioMixWithPrimary`).
+ * Nothing is written here, so loading and Start never rewrite the saved mix.
  */
 export function effectiveAudioInputs(
 	config: RuntimeConfig,
@@ -334,7 +338,7 @@ export function changedAudioInputs(
 					},
 		);
 	}
-	const error = validateAudioInputs(next, config, id);
+	const error = validateAudioInputs(next, config, { id });
 	return error === undefined ? { inputs: next } : { error };
 }
 

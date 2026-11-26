@@ -756,6 +756,42 @@ test.describe("audio mixer — caps-full", () => {
 		}
 	});
 
+	test("unplugging the sole saved microphone leaves Start enabled and shows typed recovery", async ({
+		page,
+		backendRpc,
+		workerBackend,
+	}) => {
+		const saved = [{ id: MAIN, tracks: [1], gain_db: -3, mute: false, delay_ms: 0 }];
+		expect(await backendRpc.call(["streaming", "setConfig"], { audio_inputs: saved })).toMatchObject({
+			success: true,
+		});
+		await expect(page.getByTestId(`audio-strip-gain-${MAIN}`).getByRole("slider")).toHaveAttribute("aria-valuenow", "-3");
+		await backendRpc.call(["streaming", "setMockDeviceAttached"], {
+			input_id: "audio_rode_ai_micro",
+			attached: false,
+		});
+		await expect(stripOf(page, MAIN).getByRole("button", { name: `Remove ${MAIN}` })).toBeVisible();
+
+		const button = startButton(page);
+		await expect(button).toBeEnabled();
+		const answer = wire.nextAnswer("streaming.start");
+		await button.click();
+		expect((await answer).result).toMatchObject({
+			success: false,
+			failure: { class: "audio_source_unavailable" },
+		});
+		const recovery = page.locator("[data-sonner-toast]").filter({ hasText: /selected audio input is not available/i });
+		await expect(recovery.getByRole("button", { name: "View logs", exact: true })).toBeVisible();
+		expect(await workerBackend.mockEngine()).toMatchObject({
+			streaming: false,
+			audioInputs: [],
+		});
+		expect(await backendRpc.call(["streaming", "getConfig"])).toMatchObject({
+			asrc: MAIN,
+			audio_inputs: saved,
+		});
+	});
+
 	test("No audio picked over a saved two-input mix: Start sends no audio, the summary says so, and the next microphone pick brings the mix back", async ({
 		page,
 		backendRpc,

@@ -623,6 +623,35 @@ test("muting Primary succeeds while the saved Second input is unplugged", async 
 	});
 });
 
+test("an unplugged input keeps its saved slot so reconnect cannot strand the mix", async () => {
+	const saved = [
+		entry("Primary"),
+		{ ...entry("Second", [1, 2]), gain_db: -3, mute: true, delay_ms: 40 },
+		entry("Third", [2]),
+		entry("Fourth"),
+	];
+	expect((await save(saved)).success).toBe(true);
+	const { Second: _unplugged, ...remaining } = devices;
+	setMockAudioDevicesProvider(() => remaining);
+	expect(buildInitialStatus().status?.audio_mix_excluded).toMatchObject([
+		{ id: "Second", reason: "unplugged" },
+	]);
+	expect(await change({ id: "Fifth", include: true })).toEqual({
+		success: false,
+		error: "audio_inputs_too_many",
+	});
+	expect((await disk()).audio_inputs).toEqual(saved);
+
+	setMockAudioDevicesProvider(() => devices);
+	expect(buildInitialStatus().status?.audio_mix_excluded).toEqual([]);
+	expect((await change({ id: "Primary", mute: true })).success).toBe(true);
+	const muted = [{ ...entry("Primary"), mute: true }, ...saved.slice(1)];
+	expect((await disk()).audio_inputs).toEqual(muted);
+	expect((await start()).audio?.inputs).toEqual(
+		muted.map(({ id, ...values }) => ({ input_id: devices[id], ...values })),
+	);
+});
+
 test("refreshing status after unplug keeps the still-attached mock input available", async () => {
 	await unplugSecond();
 	const sent = spyOn(websocket, "broadcastMsg");
@@ -664,6 +693,26 @@ test("an unplugged saved input can be removed without reassigning tracks", async
 	expect((await disk()).audio_inputs).toEqual([
 		{ ...entry("Primary"), mute: true },
 	]);
+});
+
+test("removing the unplugged Track 1 input leaves Track 2 editable without changing routing", async () => {
+	const primary = entry("Primary", [2]);
+	expect((await save([primary, entry("Second")])).success).toBe(true);
+	setMockAudioDevicesProvider(() => ({ Primary: devices.Primary }));
+	expect((await change({ id: "Second", include: false })).success).toBe(true);
+	expect((await disk()).audio_inputs).toEqual([primary]);
+
+	expect(await change({ id: "Primary", mute: true })).toMatchObject({
+		success: true,
+		applied: { id: "Primary", mute: true },
+	});
+	expect(
+		await change({ id: "Primary", track: { number: 4, on: true } }),
+	).toEqual({
+		success: false,
+		error: "audio_tracks_gap",
+	});
+	expect((await disk()).audio_inputs).toEqual([{ ...primary, mute: true }]);
 });
 
 test("a saved RTMP embedded input stays visible but is not sent to a USB Start", async () => {
