@@ -422,6 +422,13 @@ must keep that ABI.
 
 #### The Audio card's mixer [EXISTS]
 
+- A saved input that is unplugged or belongs to another network source stays in
+  the mixer with a reason and a Remove button. It does not take an available
+  input's slot or block edits to other inputs. Remove changes the saved mix for
+  the next start, not the running stream. A launch can leave the input out only
+  if the primary input and all assigned tracks still have a route. Neither
+  changing a source nor starting a stream removes or renumbers saved tracks.
+
 - `AudioMixer` (`audio-mixer`) renders only when the capabilities carry
   `audio_mix`; without it the idle `audio-card` is today's picker and meter and
   the live screen has no `audio-card`. Idle, it sits in `audio-card` under
@@ -442,9 +449,10 @@ must keep that ABI.
 - The main input is the backend's: the picker's input, Auto's resolution, or
   the embedded audio when the picker defers to the source. Its strip is always
   on and its switch disabled with the reason beside it. Without a main input,
-  no other strip can be turned on. At `max_inputs` inputs in the mix (a saved
-  input with no strip, gone or unavailable, still counts), the others cannot be
-  turned on and say the mix is full.
+  no other strip can be turned on. At `max_inputs` inputs in the mix, the others
+  cannot be turned on and say the mix is full. Only entries the backend lists
+  in `status.audio_mix_excluded` are ignored for this count; a missing strip
+  alone is not evidence of unavailability.
 - "No audio" sends no audio: Start sends `audio.mode: "none"` and no inputs
   whatever mix is saved, and the saved mix comes back with the next pick. On an
   RTMP or SRT ingest the Source card keeps `audio-source-select` (live,

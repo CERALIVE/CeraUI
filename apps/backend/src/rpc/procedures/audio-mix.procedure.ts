@@ -126,7 +126,7 @@ export const setAudioMixProcedure = os
 			(input) => (input.id === id ? { ...input, ...applied } : input),
 		);
 		if (!live) {
-			const error = validateAudioInputs(next, config);
+			const error = validateAudioInputs(next, config, id);
 			if (error !== undefined) return { success: false, error };
 		}
 		// A pending membership/track edit stays pending; a live write changes values only.

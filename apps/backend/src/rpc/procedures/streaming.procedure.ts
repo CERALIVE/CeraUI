@@ -399,7 +399,7 @@ export const streamingStartProcedure = authedProcedure
 						composition: applied.composition ?? getConfig().composition,
 						video_codec: applied.video_codec ?? getConfig().video_codec,
 					};
-					const audio = launchAudioPlan(config);
+					const audio = launchAudioPlan(config, { attemptId });
 					// What the engine adapter hands over at a real start, after
 					// `validateConfig` drops a composition the engine does not advertise.
 					const composition =
@@ -916,7 +916,11 @@ export const setConfigProcedure = liveWriteProcedure
 			video_codec: config.video_codec,
 		};
 		if (audioInputs != null) {
-			const error = validateAudioInputs(audioInputs, audioConfig);
+			const error = validateAudioInputs(
+				audioInputs,
+				audioConfig,
+				input.audio_inputs === undefined ? input.asrc : undefined,
+			);
 			if (error !== undefined) return { success: false, error, applied: {} };
 		}
 

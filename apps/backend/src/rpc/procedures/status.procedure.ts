@@ -28,6 +28,7 @@ import {
 	deriveAudioSources,
 	getAudioDevices,
 } from "../../modules/streaming/audio.ts";
+import { excludedAudioInputs } from "../../modules/streaming/audio-inputs.ts";
 import {
 	getAudioMixActive,
 	getAudioOffActive,
@@ -88,6 +89,7 @@ export const getStatusProcedure = authedProcedure
 		return {
 			is_streaming: getIsStreaming(),
 			audio_mix_active: getAudioMixActive(),
+			audio_mix_excluded: excludedAudioInputs(getConfig()),
 			audio_off_active: getAudioOffActive(),
 			stream_lifecycle: getStreamLifecycleState(),
 			available_updates: getAvailableUpdates(),
@@ -140,6 +142,7 @@ export function buildInitialStatus() {
 		status: {
 			is_streaming: getIsStreaming(),
 			audio_mix_active: getAudioMixActive(),
+			audio_mix_excluded: excludedAudioInputs(config),
 			audio_off_active: getAudioOffActive(),
 			stream_lifecycle: getStreamLifecycleState(),
 			available_updates: getAvailableUpdates(),

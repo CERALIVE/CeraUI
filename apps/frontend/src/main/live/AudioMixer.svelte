@@ -86,6 +86,10 @@ type Delta = Omit<SetAudioMixInput, 'id'>;
 
 const mix = $derived(capabilities?.audio_mix);
 const status = $derived(getStatus());
+const excluded = $derived((status?.audio_mix_excluded ?? []).filter(
+	(row) => config?.audio_inputs?.some(({ id }) => id === row.id),
+));
+const excludedIds = $derived(new Set(excluded.map(({ id }) => id)));
 const mixLive = $derived(isStreaming && status?.audio_mix_active === true);
 const liveEpoch = $derived(mixLive ? getStreamSessionEpoch() : undefined);
 // Live without a mix, level, mute and delay wait for the next start too.
@@ -117,9 +121,9 @@ const primaryId = $derived.by(() => {
 
 const strips = $derived.by(() => {
 	const devices = resolveAudioSourceList(status?.audio_sources, status?.asrcs ?? [])
-		.filter((source) => source.kind === 'device' && source.unavailable_reason === undefined)
+		.filter((source) => source.kind === 'device' && source.unavailable_reason === undefined && !excludedIds.has(source.id))
 		.map((source) => ({ id: source.id, label: audioSourceLabel(source, t) }));
-	return embeddedId === undefined
+	return embeddedId === undefined || excludedIds.has(embeddedId)
 		? devices
 		: [{ id: embeddedId, label: m['live.source.audioEmbedded']() }, ...devices];
 });
@@ -149,7 +153,11 @@ function withTrack(entry: AudioInputSetting, number: number, on: boolean): Audio
 
 const inputs = $derived.by(() => {
 	let entries =
-		audioMixWithPrimary(config?.audio_inputs, hasPrimary ? primaryId : undefined, mix?.max_inputs ?? 0) ??
+		audioMixWithPrimary(
+			config?.audio_inputs?.filter(({ id }) => !excludedIds.has(id)),
+			hasPrimary ? primaryId : undefined,
+			mix?.max_inputs ?? 0,
+		) ??
 		(hasPrimary && primaryId !== undefined ? [defaults(primaryId)] : [])
 	if (isStreaming) return entries;
 	// Rebase only outstanding membership and track changes on the newest saved mix.
@@ -233,7 +241,7 @@ function shown(id: string): AudioInputSetting {
 	return entry;
 }
 
-function pendingDelta(id: string, field: ValueField): Delta | undefined {
+function pendingDelta(id: string, field: Field): Delta | undefined {
 	const intent = intents.get(fieldKey(id, field));
 	return intent !== undefined && intent.epoch === liveEpoch ? intent.delta : undefined;
 }
@@ -345,7 +353,8 @@ function toggleTrack(id: string, track: number): void {
 	if (isStreaming) return;
 	const on = !entryFor(id).tracks.includes(track);
 	const next = inputs.map((entry) => entry.id === id ? withTrack(entry, track, on) : entry);
-	const refusal = tracksError(next);
+	// With an excluded leg the backend knows which gaps predate this edit.
+	const refusal = excluded.length ? undefined : tracksError(next);
 	if (refusal !== undefined) {
 		setError(id, track, refusal);
 		return;
@@ -691,6 +700,38 @@ const headingId = `${uid}-heading`;
 								</p>
 							</div>
 						{/each}
+					</div>
+				</li>
+			{/each}
+			{#each excluded as row (row.id)}
+				{const reasonId = $derived(`${uid}-excluded-${encodeURIComponent(row.id)}`)}
+				{const error = $derived(errors.get(fieldKey(row.id, 'include')))}
+				<li class="space-y-2 py-3" data-audio-strip={row.id} data-testid={`audio-strip-${row.id}`}>
+					<div class="flex items-center gap-3">
+						<div class="min-w-0 flex-1 space-y-0.5">
+							<p class="truncate text-sm font-medium" title={row.label}>{row.label}</p>
+							<p class="text-muted-foreground text-xs" id={reasonId}>
+								{row.reason === 'unplugged'
+									? m['live.audioMixer.unplugged']()
+									: m['live.audioMixer.otherSource']({ source: row.label })}
+							</p>
+						</div>
+						<Button
+							aria-describedby={fieldDescription(row.id, 'include', reasonId)}
+							aria-label={m['live.audioMixer.removeFor']({ name: row.label })}
+							class="min-h-(--touch-target-min) min-w-(--touch-target-min)"
+							disabled={pendingDelta(row.id, 'include') !== undefined}
+							onclick={() => void edit(row.id, 'include', { include: false })}
+							size="sm"
+							variant="outline"
+						>
+							{m['live.audioMixer.remove']()}
+						</Button>
+					</div>
+					<div aria-live="assertive" role="alert">
+						{#if error && error.epoch === liveEpoch}
+							<p class="text-status-warning text-xs" id={fieldErrorId(row.id, 'include')}>{errorCopy(error.token)}</p>
+						{/if}
 					</div>
 				</li>
 			{/each}

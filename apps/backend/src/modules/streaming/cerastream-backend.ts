@@ -1938,6 +1938,7 @@ export class CerastreamBackend implements StreamingBackend {
 		config: RuntimeConfig,
 		pipelineId: string | undefined,
 		audioOff?: boolean,
+		deferAudio = false,
 	): {
 		input_id?: string;
 		codec?: "h264" | "h265";
@@ -1947,7 +1948,9 @@ export class CerastreamBackend implements StreamingBackend {
 		audio?: StartParams["audio"];
 	} {
 		const inputId = config.selected_video_input ?? this.deps.getActiveInput();
-		const audio = this.encodeStartAudio(config, pipelineId, audioOff);
+		const audio = deferAudio
+			? undefined
+			: this.encodeStartAudio(config, pipelineId, audioOff);
 		return {
 			...(inputId !== undefined ? { input_id: inputId } : {}),
 			...(config.video_codec !== undefined
@@ -2043,6 +2046,7 @@ export class CerastreamBackend implements StreamingBackend {
 				config,
 				config.pipeline ?? opts.pipeline,
 				opts.audioOff,
+				opts.audioAtDispatch !== undefined,
 			),
 		});
 	}

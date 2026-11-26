@@ -40,6 +40,7 @@ import {
 	engineAudioDevicesForCard,
 	parseProcAsoundPcm,
 } from "./audio-card-vocabulary.ts";
+import { excludedAudioInputs } from "./audio-inputs.ts";
 import { syncAudioMeterPreference } from "./audio-meter-bridge.ts";
 import type {
 	AudioDeviceDisplay,
@@ -806,23 +807,26 @@ async function resolveAudioDisplaysForTick(
 export async function broadcastAudioSources(
 	current: () => boolean = () => true,
 ): Promise<void> {
-	const displays = await resolveAudioDisplaysForTick(audioDevices);
+	const displays = await resolveAudioDisplaysForTick(getAudioDevices());
 	// A caller torn down while the displays resolved commits and sends nothing.
 	if (!current()) return;
+	const devices = getAudioDevices();
 	lastAudioDisplays = displays;
 	lastAudioIdentities = resolveAudioIdentities(
-		audioDevices,
+		devices,
 		getEngineAudioDevices(),
 		cardAliases,
 	);
 	if (getObservedEngineAudioDevices() !== undefined) rememberAudioIdentities();
+	const audio_sources = deriveAudioSources(
+		devices,
+		lastAudioDisplays,
+		lastAudioIdentities,
+	);
 	broadcastMsg("status", {
-		asrcs: Object.keys(audioDevices),
-		audio_sources: deriveAudioSources(
-			audioDevices,
-			lastAudioDisplays,
-			lastAudioIdentities,
-		),
+		asrcs: Object.keys(devices),
+		audio_sources,
+		audio_mix_excluded: excludedAudioInputs(getConfig(), audio_sources),
 	});
 }
 

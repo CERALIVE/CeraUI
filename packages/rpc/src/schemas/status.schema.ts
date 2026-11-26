@@ -65,11 +65,19 @@ export const resolvedAsrcReasonSchema = z.enum([
 ]);
 export type ResolvedAsrcReason = z.infer<typeof resolvedAsrcReasonSchema>;
 
+const audioMixExcludedInputSchema = z.object({
+	id: z.string(),
+	label: z.string(),
+	reason: z.enum(['unplugged', 'other_source']),
+});
+export type AudioMixExcludedInput = z.infer<typeof audioMixExcludedInputSchema>;
+
 // Full status message schema
 export const statusMessageSchema = z.object({
 	set_password: z.boolean().optional(),
 	is_streaming: z.boolean(),
 	audio_mix_active: z.boolean().optional(),
+	audio_mix_excluded: z.array(audioMixExcludedInputSchema).optional(),
 	// The running stream was started with "No audio", whatever pick is saved now.
 	audio_off_active: z.boolean().optional(),
 	stream_lifecycle: lifecycleStateSchema.optional(),
@@ -453,6 +461,7 @@ export type UnclaimedAdapter = z.infer<typeof unclaimedAdapterSchema>;
 export const statusResponseSchema = z.object({
 	is_streaming: z.boolean().optional(),
 	audio_mix_active: z.boolean().optional(),
+	audio_mix_excluded: z.array(audioMixExcludedInputSchema).optional(),
 	// The running stream was started with "No audio", whatever pick is saved now.
 	audio_off_active: z.boolean().optional(),
 	stream_lifecycle: lifecycleStateSchema.optional(),

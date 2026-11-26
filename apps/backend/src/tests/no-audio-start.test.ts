@@ -3033,7 +3033,7 @@ test("restoration follows the physical microphone Auto actually launched without
 	}
 });
 
-test("a re-enumerated mix input whose new id is already in the mix is not sent twice", async () => {
+test("a re-enumerated mix input whose new id is already in the mix cannot silently lose its sole track", async () => {
 	await running("Primary", "mix");
 	getConfig().audio_inputs = [entry("Second", [1]), entry("Third", [2])];
 	getConfig().asrc = "Third";
@@ -3052,13 +3052,11 @@ test("a re-enumerated mix input whose new id is already in the mix is not sent t
 	} finally {
 		gate.resolve();
 	}
-	expect(await starting).toMatchObject({ success: true });
-	expect(launchedAudio().slice(launches)).toEqual([
-		mixed(wire("Third", [2]), {
-			...wire("Second", [1]),
-			input_id: "hw:CARD=Second",
-		}),
-	]);
+	expect(await starting).toMatchObject({
+		success: false,
+		failure: { class: "audio_source_unavailable" },
+	});
+	expect(launchedAudio().slice(launches)).toEqual([]);
 	expect(acceptStartAudio().config.audio_inputs?.map(({ id }) => id)).toEqual([
 		"Second",
 		"Third",

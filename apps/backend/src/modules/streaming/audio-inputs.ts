@@ -2,6 +2,8 @@ import type { AudioInputConfig } from "@ceralive/cerastream";
 import {
 	AUDIO_SOURCE_AUTO,
 	type AudioInputSetting,
+	type AudioMixExcludedInput,
+	type AudioSource,
 	audioMixWithPrimary,
 	defaultAudioInput,
 } from "@ceraui/rpc/schemas";
@@ -17,7 +19,12 @@ import {
 import { resolveAutoAsrc } from "./auto-audio.ts";
 import { getLastCapabilities } from "./capabilities.ts";
 import { isEmbeddedAudioPipeline } from "./embedded-audio.ts";
+import { isNetworkIngestPipeline } from "./pipelines.ts";
 import { getEngineAudioDevices, getSourcesMessage } from "./sources.ts";
+import {
+	StreamStartFailure,
+	typedStartFailure,
+} from "./start-failure-taxonomy.ts";
 
 export function primaryAudioInputId(config: RuntimeConfig): string | undefined {
 	if (
@@ -41,21 +48,30 @@ export function primaryAudioInputId(config: RuntimeConfig): string | undefined {
 	);
 }
 
-export function audioInputEngineId(id: string, config: RuntimeConfig): string {
+export function audioInputEngineId(
+	id: string,
+	config: RuntimeConfig,
+): string | undefined {
 	if (
 		isEmbeddedAudioPipeline(config.pipeline) &&
 		id === (config.source ?? config.pipeline)
 	)
 		return "embedded";
+	if (isNetworkIngestPipeline(id)) return undefined;
 	return resolveAudioMode(id, false, getAudioDevices()).device ?? id;
 }
 
-function availableAudioInputIds(config: RuntimeConfig): Set<string> {
+function availableAudioInputIds(
+	config: RuntimeConfig,
+	sources = deriveAudioSources(),
+): Set<string> {
 	const available = new Set(
-		deriveAudioSources()
+		sources
 			.filter(
 				(source) =>
-					source.kind === "device" && source.unavailable_reason === undefined,
+					source.kind === "device" &&
+					source.unavailable_reason === undefined &&
+					!isNetworkIngestPipeline(source.id),
 			)
 			.map((source) => source.id),
 	);
@@ -66,15 +82,46 @@ function availableAudioInputIds(config: RuntimeConfig): Set<string> {
 	return available;
 }
 
+export function excludedAudioInputs(
+	config: RuntimeConfig,
+	sources: AudioSource[] = deriveAudioSources(),
+): AudioMixExcludedInput[] {
+	const available = availableAudioInputIds(config, sources);
+	return (config.audio_inputs ?? []).flatMap<AudioMixExcludedInput>(
+		({ id }) => {
+			if (available.has(id)) return [];
+			return isNetworkIngestPipeline(id)
+				? [{ id, reason: "other_source", label: id.toUpperCase() }]
+				: [
+						{
+							id,
+							reason: "unplugged",
+							label: sources.find((source) => source.id === id)?.label ?? id,
+						},
+					];
+		},
+	);
+}
+
 export function validateAudioInputs(
 	inputs: readonly AudioInputSetting[],
 	config: RuntimeConfig,
+	editedId?: string,
 ): string | undefined {
 	const capability = getLastCapabilities()?.audio_mix;
 	if (!capability) return "audio_mix_unsupported";
+	const available = availableAudioInputIds(config);
+	const excluded = new Set(
+		config.audio_inputs
+			?.filter(
+				({ id }) =>
+					editedId !== undefined && id !== editedId && !available.has(id),
+			)
+			.map(({ id }) => id),
+	);
+	inputs = inputs.filter(({ id }) => !excluded.has(id));
 	if (inputs.length === 0) return "audio_inputs_empty";
 	if (inputs.length > capability.max_inputs) return "audio_inputs_too_many";
-	const available = availableAudioInputIds(config);
 	const ids = new Set<string>();
 	const tracks = new Set<number>();
 	for (const input of inputs) {
@@ -96,8 +143,20 @@ export function validateAudioInputs(
 		const error = validateAudioInputValues(input);
 		if (error !== undefined) return error;
 	}
-	for (let track = 1; track <= tracks.size; track++) {
-		if (!tracks.has(track)) return "audio_tracks_gap";
+	// Losing a device can already have left a gap. An edit to another input
+	// may leave that gap alone, but cannot create a new one.
+	const previousTracks =
+		excluded.size === 0
+			? []
+			: (config.audio_inputs ?? [])
+					.filter(({ id }) => available.has(id))
+					.flatMap(({ tracks }) => tracks);
+	for (let track = 1; track < Math.max(...tracks); track++) {
+		if (
+			!tracks.has(track) &&
+			(previousTracks.includes(track) || track > Math.max(0, ...previousTracks))
+		)
+			return "audio_tracks_gap";
 	}
 	return undefined;
 }
@@ -129,6 +188,7 @@ export function storedAudioInputs(
 	const only = inputs?.[0];
 	if (
 		inputs === null ||
+		inputs.length === 0 ||
 		(inputs.length === 1 &&
 			only !== undefined &&
 			only.id === primaryAudioInputId(config) &&
@@ -149,20 +209,41 @@ export function storedAudioInputs(
  */
 export function effectiveAudioInputs(
 	config: RuntimeConfig,
+	pinnedPrimary?: string,
 ): AudioInputSetting[] | undefined {
 	const capability = getLastCapabilities()?.audio_mix;
-	const primary = primaryAudioInputId(config);
+	const primary = pinnedPrimary ?? primaryAudioInputId(config);
 	if (
 		!capability ||
 		primary === undefined ||
-		!availableAudioInputIds(config).has(primary)
+		config.audio_inputs?.some(({ id }) => id === primary)
 	)
 		return config.audio_inputs;
-	return audioMixWithPrimary(
+	const available = availableAudioInputIds(config);
+	if (pinnedPrimary !== undefined) available.add(pinnedPrimary);
+	if (!available.has(primary)) return config.audio_inputs;
+	return mixWithAvailablePrimary(
 		config.audio_inputs,
 		primary,
 		capability.max_inputs,
+		available,
 	);
+}
+
+function mixWithAvailablePrimary(
+	saved: AudioInputSetting[] | undefined,
+	primary: string,
+	maxInputs: number,
+	available: Set<string>,
+	previous?: string,
+): AudioInputSetting[] | undefined {
+	if (!saved?.length) return undefined;
+	const present = saved.filter(({ id }) => available.has(id));
+	const next = audioMixWithPrimary(present, primary, maxInputs, previous);
+	return [
+		...(next ?? [defaultAudioInput(primary)]),
+		...saved.filter(({ id }) => !available.has(id)),
+	];
 }
 
 /**
@@ -177,17 +258,19 @@ export function pickedAudioInputs(
 ): AudioInputSetting[] | undefined {
 	const capability = getLastCapabilities()?.audio_mix;
 	const saved = config.audio_inputs;
+	const available = availableAudioInputIds(config);
 	if (
 		!capability ||
 		!saved?.length ||
 		saved.some((input) => input.id === asrc) ||
-		!availableAudioInputIds(config).has(asrc)
+		!available.has(asrc)
 	)
 		return undefined;
-	return audioMixWithPrimary(
+	return mixWithAvailablePrimary(
 		saved,
 		asrc,
 		capability.max_inputs,
+		available,
 		primaryAudioInputId(config),
 	);
 }
@@ -204,6 +287,13 @@ export function changedAudioInputs(
 		track?: { number: number; on: boolean } | undefined;
 	},
 ): { inputs: AudioInputSetting[] } | { error: string } {
+	const saved = config.audio_inputs;
+	if (
+		change.include === false &&
+		saved?.some((input) => input.id === id) &&
+		!availableAudioInputIds(config).has(id)
+	)
+		return { inputs: saved.filter((input) => input.id !== id) };
 	const primary = primaryAudioInputId(config);
 	if (change.include === false && id === primary)
 		return { error: "audio_input_primary" };
@@ -230,27 +320,58 @@ export function changedAudioInputs(
 					},
 		);
 	}
-	const error = validateAudioInputs(next, config);
+	const error = validateAudioInputs(next, config, id);
 	return error === undefined ? { inputs: next } : { error };
 }
 
-export function engineAudioInputs(
+/** Project available legs only when the primary and every populated track survive. */
+export function projectLaunchAudioInputs(
 	config: RuntimeConfig,
-	audioOff = config.asrc === NO_AUDIO_ID,
+	inputs: readonly AudioInputSetting[],
+	resolveId: (id: string) => string | undefined = (id) => id,
+): AudioInputSetting[] | undefined {
+	const available = availableAudioInputIds(config);
+	const primary = primaryAudioInputId(config);
+	const projected: AudioInputSetting[] = [];
+	for (const input of inputs) {
+		const id = resolveId(input.id);
+		if (id !== undefined && available.has(id)) projected.push({ ...input, id });
+		else if (input.id === primary) return undefined;
+	}
+	const tracks = new Set(projected.flatMap(({ tracks }) => tracks));
+	if (inputs.some((input) => input.tracks.some((track) => !tracks.has(track))))
+		return undefined;
+	return projected;
+}
+
+function engineAudioInputs(
+	config: RuntimeConfig,
+	audioOff: boolean,
+	attemptId: string,
 ): AudioInputConfig[] | undefined {
 	// "No audio" sends nothing whatever mix is saved; the mix stays for the next pick.
 	if (audioOff) return undefined;
-	const inputs = effectiveAudioInputs(config);
-	if (!getLastCapabilities()?.audio_mix || !inputs?.length) return undefined;
+	const effective = effectiveAudioInputs(config);
+	if (!getLastCapabilities()?.audio_mix || !effective?.length) return undefined;
+	const inputs = projectLaunchAudioInputs(config, effective);
+	if (inputs === undefined)
+		throw new StreamStartFailure(
+			typedStartFailure(
+				attemptId,
+				"params",
+				"audio_source_unavailable",
+				"audio_source_probe_failed",
+			),
+		);
 	const primary = primaryAudioInputId(config);
 	const ordered = [
 		...inputs.filter((input) => input.id === primary),
 		...inputs.filter((input) => input.id !== primary),
 	];
-	return ordered.map(({ id, ...input }) => ({
-		input_id: audioInputEngineId(id, config),
-		...input,
-	}));
+	return ordered.flatMap(({ id, ...input }) => {
+		const input_id = audioInputEngineId(id, config);
+		return input_id === undefined ? [] : [{ input_id, ...input }];
+	});
 }
 
 export interface LaunchAudioPlan extends AudioModeSelection {
@@ -271,10 +392,15 @@ export function launchAudioPlan(
 	{
 		audioOff = config.asrc === NO_AUDIO_ID,
 		embeddedAudioActive = isEmbeddedAudioPipeline(config.pipeline),
-	}: { audioOff?: boolean | undefined; embeddedAudioActive?: boolean } = {},
+		attemptId = "backend-start",
+	}: {
+		audioOff?: boolean | undefined;
+		embeddedAudioActive?: boolean;
+		attemptId?: string;
+	} = {},
 ): LaunchAudioPlan | undefined {
 	if (audioOff) return { mode: "none" };
-	const inputs = engineAudioInputs(config, audioOff);
+	const inputs = engineAudioInputs(config, audioOff, attemptId);
 	if (inputs !== undefined) return { mode: "default", inputs };
 	return config.asrc === undefined
 		? undefined

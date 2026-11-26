@@ -706,6 +706,44 @@ test.describe("audio mixer — caps-full", () => {
 		});
 	}
 
+	test("an unplugged saved input stays visible while another input is muted and Start succeeds", async ({
+		page,
+		backendRpc,
+		workerBackend,
+	}) => {
+		const secondary = stripOf(page, SECOND);
+		const include = wire.nextAnswer("streaming.setAudioMix");
+		await secondary.getByRole("switch").click();
+		expect((await include).result?.success).toBe(true);
+		await expect(secondary.getByRole("switch")).toBeChecked();
+		const attach = (attached: boolean) =>
+			backendRpc.call(["streaming", "setMockDeviceAttached"], {
+				input_id: "audio_elgato_wave3",
+				attached,
+			});
+		try {
+			await attach(false);
+			await expect(secondary.getByText("Unplugged", { exact: true })).toBeVisible();
+			const remove = secondary.getByRole("button", { name: `Remove ${SECOND}` });
+			await remove.evaluate((button) => button.scrollIntoView({ block: "center" }));
+			await expect(remove).toBeInViewport();
+			await expect(remove).toBeEnabled();
+			const mute = wire.nextAnswer("streaming.setAudioMix");
+			await page.getByTestId(`audio-strip-mute-${MAIN}`).click();
+			expect((await mute).result).toMatchObject({ success: true, applied: { id: MAIN, mute: true } });
+			await pressStart(page);
+			await expect(page.getByTestId("live-cockpit").getByText("Unplugged", { exact: true })).toBeVisible();
+			expect((await workerBackend.mockEngine()).lastStartParams?.audio).toMatchObject({
+				mode: "default",
+				inputs: [{ input_id: "audio_rode_ai_micro", tracks: [1], mute: true }],
+			});
+			await endAndWait(page);
+		} finally {
+			await attach(true);
+			await backendRpc.call(["streaming", "setConfig"], { audio_inputs: null });
+		}
+	});
+
 	test("No audio picked over a saved two-input mix: Start sends no audio, the summary says so, and the next microphone pick brings the mix back", async ({
 		page,
 		backendRpc,

@@ -394,6 +394,60 @@ describe("AudioMixer — idle", () => {
 		]);
 	});
 
+	it.each([
+		{
+			id: "usb-b",
+			reason: "unplugged",
+			label: "Elgato Wave:3",
+			description: "Unplugged",
+		},
+		{
+			id: "rtmp",
+			reason: "other_source",
+			label: "RTMP",
+			description: "Used only with RTMP",
+		},
+	])(
+		"shows a saved $reason input and removes only that input",
+		async ({ id, reason, label, description }) => {
+			const subscriptions = await vi.importActual<
+				typeof import("$lib/rpc/subscriptions.svelte")
+			>("$lib/rpc/subscriptions.svelte");
+			const rpc = heldRpc();
+			setAudioMix.mockImplementation(
+				(update) =>
+					rpc.streaming.setAudioMix(update) as Promise<SetAudioMixOutput>,
+			);
+			try {
+				ingest("config", {
+					asrc: "usb-a",
+					audio_inputs: [input("usb-a"), input(id)],
+				});
+				ingest("status", {
+					audio_sources: AUDIO_SOURCES.filter((source) => source.id !== id),
+					audio_mix_excluded: [{ id, reason, label }],
+				});
+				const view = mixer({
+					config: getConfig(),
+					status: { ...subscriptions.getStatus() },
+				});
+				const row = within(strip(id));
+				expect(row.getByText(description).textContent).toBe(description);
+				const remove = row.getByRole("button", { name: `Remove ${label}` });
+				await fireEvent.click(remove);
+				expect(rpc.calls.map((call) => call.input)).toEqual([
+					{ id, include: false },
+				]);
+				rpc.calls[0]?.resolve(EDIT_OK);
+				ingest("config", { asrc: "usb-a", audio_inputs: [input("usb-a")] });
+				await view.rerender({ config: getConfig() });
+				expect(screen.queryByTestId(`audio-strip-${id}`)).toBeNull();
+			} finally {
+				resetState();
+			}
+		},
+	);
+
 	it("turning off an input's last chip is refused: every input needs a track", async () => {
 		mixer({
 			config: {
