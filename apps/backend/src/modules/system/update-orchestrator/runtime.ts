@@ -187,7 +187,10 @@ import {
 	retireStagedReceipt,
 } from "./os-staged-receipt-retirement.ts";
 import { settleOsUnlaunchedWitness } from "./os-unlaunched-adapter.ts";
-import { retireFulfilledPackageNotices } from "./package-notice-retirement.ts";
+import {
+	retireFulfilledPackageNotices,
+	scheduledPackageNoticeIdentity,
+} from "./package-notice-retirement.ts";
 import { progressFromWire } from "./package-progress.ts";
 import {
 	type PackageRecoveryEvidence,
@@ -1228,23 +1231,31 @@ async function runPackageCheckCycle(): Promise<void> {
 	const outcomeNow = deps.now();
 	if (error === null) {
 		const wire = deps.getPackageInstallWireState();
+		const capableDiscovery = isAptAllDiscovery();
 		const actionableCount =
 			wire.kind === "available" ? (wire.actionable_count ?? 0) : 0;
+		const packageRows =
+			wire.kind === "available"
+				? wire.packages?.map(
+						(item) => `${item.name}=${item.version ?? "unknown"}`,
+					)
+				: undefined;
 		if (wire.kind === "available") {
 			await deps.quarantine.reconcileCandidates(
 				wire.packages?.flatMap((item) =>
 					item.version ? [{ name: item.name, version: item.version }] : [],
 				) ?? [],
 			);
-			if (actionableCount > 0)
+			if (actionableCount > 0) {
+				const id = packageRows?.sort().join(",") ?? wire.identity.version;
 				notifyUpdate({
 					kind: "updates-available",
 					id:
-						wire.packages
-							?.map((item) => `${item.name}=${item.version ?? "unknown"}`)
-							.sort()
-							.join(",") ?? wire.identity.version,
+						capableDiscovery && packageRows
+							? scheduledPackageNoticeIdentity(id)
+							: id,
 				});
+			}
 		}
 		const nextAttemptAt =
 			outcomeNow +
@@ -1270,13 +1281,9 @@ async function runPackageCheckCycle(): Promise<void> {
 					},
 		);
 		await kernelRuntime.check();
-		if (isAptAllDiscovery())
+		if (capableDiscovery)
 			await retireFulfilledPackageNotices(
-				wire.kind === "available"
-					? (wire.packages ?? []).map(
-							(item) => `${item.name}=${item.version ?? "unknown"}`,
-						)
-					: [],
+				packageRows ?? [],
 				// Even a newer check whose announcement was deduped supersedes this proof.
 				() => generation === packageCheckGeneration,
 			);

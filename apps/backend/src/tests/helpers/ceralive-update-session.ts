@@ -13,6 +13,7 @@
 // main-backend-preload.ts: main's backend from before this notice owner, whose
 // own check raises the notice the way main did, and which never initializes or
 // writes the offer record.
+import { join } from "node:path";
 import { defaultAptSpaceDeps } from "../../modules/system/apt-space-admission.ts";
 import * as updates from "../../modules/system/software-updates.ts";
 import { setStreamLivenessSourceForTest } from "../../modules/system/stream-liveness-source.ts";
@@ -21,6 +22,7 @@ import { setCeraliveSourcesFileForTest } from "../../modules/system/update-apt-c
 import { setUpdateCapabilityPathForTest } from "../../modules/system/update-capabilities.ts";
 import { DownloadPausedLedger } from "../../modules/system/update-orchestrator/download-paused-ledger.ts";
 import { DownloadPausedNotices } from "../../modules/system/update-orchestrator/download-paused-notices.ts";
+import { setOrchestratorStateFilePathForTest } from "../../modules/system/update-orchestrator/persistence.ts";
 import { UpdateQuarantine } from "../../modules/system/update-orchestrator/quarantine.ts";
 import {
 	checkUpdatesNow,
@@ -59,6 +61,9 @@ export type SessionStep = {
 };
 
 const step = JSON.parse(process.argv[2] ?? "") as SessionStep;
+setOrchestratorStateFilePathForTest(
+	join(step.scratch, "update-state", "agent.json"),
+);
 setStreamReconciliationCompletedForTest(true);
 setStreamLivenessSourceForTest(() => "idle");
 // A capable image declares apt-all-packages; otherwise the legacy discovery runs.
@@ -86,10 +91,6 @@ updates.setAptReachabilityProbeForTest(async () => ({
 	detail: [],
 }));
 let apt = scriptedApt(step.apt ?? {});
-let nextPolicyState:
-	| { readonly pkg: string; readonly apt: AptScript }
-	| undefined;
-let compareGate: ReturnType<typeof Promise.withResolvers<void>> | undefined;
 let holdGate: ReturnType<typeof Promise.withResolvers<void>> | undefined;
 // The next dpkg-query this runner serves pauses before it reads, or after it answered.
 let readGate:
@@ -111,22 +112,9 @@ const gated = async (argv: readonly string[]) => {
 		await paused.gate.promise;
 	}
 	const answer = await apt(argv);
-	if (
-		nextPolicyState &&
-		argv[0] === "/usr/bin/apt-cache" &&
-		argv[1] === "policy" &&
-		argv[2] === nextPolicyState.pkg
-	) {
-		apt = scriptedApt(nextPolicyState.apt);
-		nextPolicyState = undefined;
-	}
 	if (paused?.when === "after") {
 		process.stdout.write("backend:dpkg-read-captured\n");
 		await paused.gate.promise;
-	}
-	if (argv[0] === "dpkg" && argv[1] === "--compare-versions" && compareGate) {
-		process.stdout.write("backend:compare-captured\n");
-		await compareGate.promise;
 	}
 	if (argv[0] === "/usr/bin/apt-mark" && argv[1] === "showhold" && holdGate) {
 		process.stdout.write("backend:holds-captured\n");
@@ -165,12 +153,6 @@ for await (const command of console) {
 	} else if (command.startsWith("apt ")) {
 		apt = scriptedApt(JSON.parse(command.slice(4)));
 		process.stdout.write(`${APPLIED_MARKER}\n`);
-	} else if (command.startsWith("swap-after-policy ")) {
-		nextPolicyState = JSON.parse(command.slice("swap-after-policy ".length));
-		process.stdout.write(`${APPLIED_MARKER}\n`);
-	} else if (command === "pause-package-compare") {
-		compareGate = Promise.withResolvers<void>();
-		process.stdout.write("backend:compare-armed\n");
 	} else if (command === "pause-package-holds") {
 		holdGate = Promise.withResolvers<void>();
 		process.stdout.write("backend:holds-armed\n");
@@ -188,9 +170,6 @@ for await (const command of console) {
 	} else if (command === "resume-dpkg-read") {
 		releaseRead?.();
 		releaseRead = undefined;
-	} else if (command === "resume-package-compare") {
-		compareGate?.resolve();
-		compareGate = undefined;
 	} else if (command === "commands") {
 		process.stdout.write(
 			`${COMMANDS_PREFIX}${JSON.stringify(ran.splice(0))}\n`,

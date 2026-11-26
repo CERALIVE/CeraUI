@@ -20,8 +20,11 @@ the listener at logout.
 The open view displays at most 300 rows, newest first. Loading older events
 past that limit drops the newest edge and continues with the server cursor.
 Live pushes leave that history window in place. The view counts each new
-event the filter admits, once. A skipped `seq` or a reconnect reads the live
-edge again for the events it missed; a full page, a continuation cursor or
+event the filter admits, once. An older page can advertise a newer ring head
+without including those events. The view remembers that head for clear
+detection, but keeps the tally incomplete until pushes or a live-edge read
+cover the advance. A skipped `seq` or a reconnect reads the live edge again
+for the events it missed; a full page, a continuation cursor or
 `retainedFromSeq` above the last seen sequence plus one makes the tally
 incomplete, even if the read adds no matches. Start from newest shows
 `startFromNewestAtLeast` for a positive lower bound or `startFromNewestCount`

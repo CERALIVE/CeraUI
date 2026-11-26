@@ -1,7 +1,13 @@
-import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { updateSettingsSchema } from "@ceraui/rpc/schemas";
+import { setCredentialStoreState } from "../helpers/credential-store-state.ts";
 import { MOCK_DEVICE_STATS } from "../mocks/providers/device-stats.ts";
 import * as config from "../modules/config.ts";
+import {
+	abortLogBundles,
+	createBundle,
+	previewBundle,
+} from "../modules/device-logs/bundle.ts";
 import { collectBundleData } from "../modules/device-logs/bundle-data.ts";
 import { buildRedactor } from "../modules/device-logs/redaction.ts";
 import * as stored from "../modules/events/store.ts";
@@ -18,7 +24,12 @@ import * as hardware from "../modules/system/hardware-kind.ts";
 import * as updates from "../modules/system/update-settings.ts";
 import * as versions from "../modules/system/version-context.ts";
 import * as hotspots from "../modules/wifi/hotspot-credentials.ts";
-import { bootId, queryFixture } from "./helpers/device-query.ts";
+import {
+	bootId,
+	journal,
+	queryFixture,
+	record,
+} from "./helpers/device-query.ts";
 
 let fixture: ReturnType<typeof queryFixture>;
 const current = {
@@ -148,6 +159,60 @@ afterEach(() => {
 	fixture.restore();
 	credentials.resetModemCredentialsForTest();
 	resetPhysicalIdentityRegistry();
+});
+
+describe("support bundle credential readiness", () => {
+	const unavailable = [
+		["hotspot", "pending"],
+		["modem", "pending"],
+		["hotspot", "failed"],
+		["modem", "failed"],
+	] as const;
+
+	beforeEach(() => {
+		fixture.scan.mockImplementation(
+			journal([record(1, { MESSAGE: "synthetic hotspot-pass event" })]),
+		);
+	});
+	afterEach(async () => {
+		setCredentialStoreState("hotspot", "ready");
+		setCredentialStoreState("modem", "ready");
+		await abortLogBundles();
+	});
+
+	test.each(unavailable)(
+		"preview refuses while the %s credential inventory is %s",
+		async (store, state) => {
+			setCredentialStoreState(store, state);
+			await expect(previewBundle()).rejects.toMatchObject({
+				code: "READ_FAILED",
+				message: "READ_FAILED",
+			});
+		},
+	);
+
+	test.each(unavailable)(
+		"creation issues no ticket while the %s credential inventory is %s",
+		async (store, state) => {
+			setCredentialStoreState(store, state);
+			const result = await createBundle({});
+			expect(result).toStrictEqual({ ok: false, error: "READ_FAILED" });
+
+			setCredentialStoreState(store, "ready");
+			expect((await createBundle({})).ok).toBe(true);
+		},
+	);
+
+	test("preview counts redactions from the ready credential inventory", async () => {
+		const manifest = await previewBundle();
+		expect(manifest.sections.at(-1)).toEqual({
+			id: "journal",
+			entries: 1,
+			redactions: 1,
+			bootsCovered: 1,
+			complete: true,
+		});
+	});
 });
 
 test.each([false, true])(

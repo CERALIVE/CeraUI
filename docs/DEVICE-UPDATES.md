@@ -1552,42 +1552,57 @@ The orchestrator's package `updates-available` notice has its own rule, below.
 ### Scheduled package notice [EXISTS; host-tested, board qualification owed]
 
 The scheduled package check raises `update:updates-available:<id>` ("Updates are
-available") exactly as main does: `runPackageCheckCycle` (`runtime.ts`) builds
-`<id>` from every row the check displayed, `name=version` sorted, and
-`notifyUpdate` dedupes by that name, records a dismissal under it and logs the id
-as an `update_updates_available` device event. Ids, dedupe, dismissal, text and
-timing are unchanged on both images.
+available"). `runPackageCheckCycle` (`runtime.ts`) sorts the `name=version` rows
+the check displayed. On capable images, lists longer than the Events id limit
+of 1,024 characters use the SHA-256 of the complete comma-separated list.
+The id uses `sha256:` and eight groups of eight hex digits separated by
+hyphens, so the digest cannot be mistaken for a long decimal identifier.
+`update_updates_available` still carries only `id`. The private,
+owner-only `/data/ceralive/update-state/scheduled-package-notices.json` file
+stores the matching canonical list for up to 512 targets and 64 KiB per offer.
+It holds at most 33 entries so recording the incoming offer cannot evict
+one of the 32 currently announced ids. It is atomically replaced and checked
+for syntax, bounds, and identity binding on read and write. This record is not
+part of Events, log export, the journal, or support bundles.
+The same id keys the notice and its dismissal. Short offers, legacy-image
+offers, and OS notices keep their previous ids. Notice text, timing, and
+notification frame shapes are unchanged. No installation result is saved.
 
 On capable images only, the same successful check then withdraws a notice once
-dpkg shows every package its name lists installed at the exact named version
+dpkg shows every package in its offer installed at the exact offered version
 (`update-orchestrator/package-notice-retirement.ts`). Every shipped frontend
-removes this notice by name alone, and every backend that ever issued a name
-(main, this build, an older or newer one, before or after a rollback) used it for
-the same claim: these packages can move to these versions. So the proof is about
-the name's own content, not about who sent the copy a tab holds: no receipt,
-record or lineage exists. A bare name (`curl=2`) means the package, its native or
-`Architecture: all` instance (dpkg holds at most one of those); `curl:armhf=2`
-means that instance only.
+removes this notice by name alone. A compact id is usable only with a complete
+offer that hashes to it. Neither the offer nor the hash proves installation:
+the next check still needs a fresh dpkg read. A bare name (`curl=2`) means the
+package's native or `Architecture: all` instance (dpkg holds at most one of
+those); `curl:armhf=2` means that instance only.
 
 A notice is withdrawn only when all of these hold:
 
 - The package check succeeded and its discovery was the capable one
   (`apt-all-packages`). Startup, login, reconnect, a restart or a recovered
   install alone withdraw nothing; a failed check runs nothing.
-- The name is a live slot of this process, or one of the 32 most recent distinct
-  ids in the device events (so a notice main or an earlier process raised is
-  covered). Every element is `package[:arch]=version`, each instance once, with a
-  version that starts with a digit. Anything else (`os:<version>`, a legacy
-  `=unknown` id, the identity fallback, other kinds) is skipped before any command.
-- No element of the name is a row of this check: those rows are what main has
+- The name is a live slot with a known offer, or one of the 32 most recent
+  distinct ids in device events (including historical plain-id rows). This
+  process also keeps the last 32 compact offers for live slots if the private
+  file could not be saved or the event was lost. Every element is
+  `package[:arch]=version`, each instance once, with a version that starts
+  with a digit. Anything else (`os:<version>`, a legacy `=unknown` id, the
+  identity fallback, other kinds) is skipped before any command.
+- No element of the offer is a row of this check: those rows are what it has
   just announced as pending.
-- One `dpkg-query -W` of the name's packages shows each target's instance exactly
-  once, `ii ` (installed and configured, not held), at exactly the named version.
+- One `dpkg-query -W` of the offer's packages shows each target's own distinct
+  instance exactly once, `ii ` (installed and configured, not held), at exactly
+  the named version. A bare target and an explicit native or `all` target may
+  not share a row.
   A newer installed version is not evidence for withdrawal, regardless of the APT
   candidate. The proof does not combine package facts from separate APT reads.
 - No newer package check superseded this one, and the notice was neither shown
   again nor dismissed while dpkg was read. A newer check can report a reinstall
   even when deduplication sends no new announcement.
+- If the candidate relied on event history, that history was not cleared
+  between the candidate snapshot and withdrawal. A live slot with its own
+  offer does not depend on that history.
 
 The withdrawal goes live, as a typed and a separate bare-name frame (both
 decoders), to the tabs connected then, and again on every later capable check
@@ -1600,7 +1615,7 @@ What the proof reads, and why no failed or partial read can remove a notice:
 | Read | Counts only as | Otherwise |
 |---|---|---|
 | `dpkg --print-architecture` | exit 0, empty stderr, one line | nothing else is read; every notice stays |
-| `dpkg-query -W -f=<#664's format> -- <the name's packages>` | exit 0, empty stderr, newline-terminated, every line a complete row, each instance once | kept |
+| `dpkg-query -W -f=<#664's format> -- <the offer's packages>` | exit 0, empty stderr, newline-terminated, every line a complete row, each instance once | kept |
 
 Each command has 5 s and a pass 20 s (#664's bounds). Every deciding fact is the
 presence of a complete line with a specific value. A cut answer is a prefix of the
@@ -1620,9 +1635,17 @@ Limits, each a stale banner as on main, which a dismissal clears:
 - every legacy-image copy;
 - a held, pinned-away, kept-back or never-installed target, or a package
   installed at a different version, including when the named version was skipped;
-- a tab not connected at any withdrawal while the name is still a candidate (the
-  32 most recent ids; Clear logs empties them): an old open tab may need one reload
-  or dismissal;
+- a tab not connected at any withdrawal while the name is still a candidate.
+  **Clear event history** empties the historical candidates, not live slots
+  or private updater state. After a backend restart, that private file alone
+  cannot make a cleared notice eligible. The separate **Clear all** action
+  for raw logs does not clear Events or updater state;
+- a compact offer over either proof size limit, or without matching retained
+  offer data. Missing, unreadable or invalid private state cannot justify
+  removal; checks and publication still run. Old releases cannot retire compact
+  notices. An oversized plain-id notice from before this change had no saved
+  event and cannot be recovered after restart. Its old dismissal key does not
+  apply to the new compact id;
 - the time until the next successful capable check after the install.
 
 One `dpkg-query` is one read, not an atomic snapshot. A `dpkg` or `apt` run
@@ -1640,11 +1663,16 @@ authenticate late, disconnect and dismiss, against an oracle of attained targets
 CERALIVE_NOTICE_SHRINK=1 bun test ./apps/backend/src/tests/ceralive-update-notice-restart.test.ts -t 'scheduled notice model'`
 sweeps more and shrinks a failure); the frame-for-frame differential against
 main's scheduler; the recovered install; same-id rollbacks and stale-index
-re-shows that must keep; every byte prefix and fault of the dpkg read; a hold seen
-only by dpkg; a skipped version retained across restart and late login; crossed
-APT candidates; a reinstall found by an overlapping manual check; an `all`
-instance; dismissal during the read. `tests/scheduled-notice-retirement.test.ts`
-covers the id grammar and every byte prefix and fault of each proof read.
+re-shows; every byte prefix and fault of the dpkg read; a hold seen only by
+dpkg; a skipped version retained across restart and late login; different
+members proven on separate dpkg reads; a reinstall found by an overlapping
+manual check; an `all` instance; and dismissal during the read. It also covers
+large offers across restart, damaged private proof, and Clear event history.
+`tests/scheduled-notice-retirement.test.ts` covers the id grammar, duplicate
+resolved instances and the proof reads. `tests/scheduled-notice-proof-store.test.ts`
+covers bounded retention and refused writes. `tests/device-logs-bundle.test.ts`
+proves bundle preview and download remain available for a compact offer with
+dotted versions.
 
 ### Download hold notice [EXISTS; host-tested, board qualification owed]
 
