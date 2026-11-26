@@ -32,7 +32,6 @@ import { setPendingAudioFollowAsrc } from "../auto-audio.ts";
 import { clearBindMapReport } from "../bind-map-disposition.ts";
 import { announceBindMapReport } from "../bind-map-notification.ts";
 import { stopLinkTelemetry } from "../link-telemetry.ts";
-import type { Pipeline } from "../pipelines.ts";
 import { restartSrtla } from "../srtla.ts";
 import { acceptStartAudio } from "../start-audio.ts";
 import {
@@ -101,12 +100,7 @@ export async function start(
 
 	const senderId = getSocketSenderId(conn);
 
-	let c: {
-		pipeline: Pipeline;
-		srtlaAddr: string;
-		srtlaPort: number;
-		streamid: string;
-	};
+	let c: Awaited<ReturnType<typeof updateConfig>>;
 	try {
 		c = await updateConfig(params, startAudio);
 		assertStreamLaunchOwnership();
@@ -183,12 +177,11 @@ export async function start(
 			c.streamid,
 			{},
 			attemptId,
-			undefined,
+			c.config,
 			startAudio,
 		);
 		assertStreamLaunchOwnership();
-		if (result.success)
-			saveAppliedStartAudio(startAudio, c.pipeline.supportsAudio);
+		if (result.success) saveAppliedStartAudio(startAudio, c);
 	} catch (err) {
 		if (sessionResources?.generation === generation) {
 			sessionResources.removeNetworkInterfacesChangeListener();

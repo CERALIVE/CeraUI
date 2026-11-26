@@ -76,6 +76,7 @@ import { z } from "zod";
 import { writeFileAtomicSync } from "../../helpers/config-loader.ts";
 import {
 	framerateSchema,
+	type RuntimeConfig,
 	relayProtocolSchema,
 	resolutionSchema,
 	videoCodecSchema,
@@ -138,6 +139,7 @@ const armedStreamConfigSchema = z.object({
 export type ArmedStreamConfig = z.infer<typeof armedStreamConfigSchema>;
 
 export type LaunchedAudio = StartAudio["config"] & {
+	readonly streamConfig?: RuntimeConfig;
 	readonly audio_physical_ids?: ArmedStreamConfig["audio_physical_ids"];
 	readonly audio_unverified_ids?: ArmedStreamConfig["audio_unverified_ids"];
 	readonly mic_route_proofs?: ArmedStreamConfig["mic_route_proofs"];

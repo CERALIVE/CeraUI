@@ -151,7 +151,9 @@ function runStart(configOverride?: Partial<RuntimeConfig>) {
 		"sid",
 		{},
 		"att_preview",
-		configOverride,
+		configOverride === undefined
+			? { ...getConfig() }
+			: { previewEncode: getConfig().previewEncode, ...configOverride },
 		acceptStartAudio(),
 	);
 }
@@ -397,7 +399,7 @@ describe("the fence covers every start origin, not just the tested ones", () => 
 
 	test("the fence is awaited BEFORE that dispatch, in the same function", async () => {
 		const text = await read("modules/streaming/streamloop/start-stream.ts");
-		const fence = text.indexOf("await replayPreviewEncodeMode()");
+		const fence = text.indexOf("await replayPreviewEncodeMode(");
 		const dispatch = text.indexOf(
 			"await startStreamDeps.getStreamingBackend().start(",
 		);

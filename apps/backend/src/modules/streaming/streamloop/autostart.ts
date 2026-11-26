@@ -28,10 +28,10 @@ import { getConfig, saveConfig } from "../../config.ts";
 import { emitEvent } from "../../events/emit.ts";
 import { isUpdating } from "../../system/software-updates.ts";
 import { notificationBroadcast } from "../../ui/notifications.ts";
-import type { Pipeline } from "../pipelines.ts";
 import { awaitRecoveryBarrier } from "../recovery-barrier.ts";
 import { genSrtlaIpList, resolveSrtla } from "../srtla.ts";
 import { acceptStartAudio } from "../start-audio.ts";
+import { mergePersistedStartConfig } from "../start-config-merge.ts";
 import {
 	classifyStartFailure,
 	StreamStartFailure,
@@ -117,14 +117,13 @@ export async function autoStartStream(linkAttempt = 1): Promise<void> {
 	// If the config is invalid, then we won't ever be able to start, so don't retry
 	const config = getConfig();
 	const startAudio = acceptStartAudio();
-	let c: {
-		pipeline: Pipeline;
-		srtlaAddr: string;
-		srtlaPort: number;
-		streamid: string;
-	};
+	let c: Awaited<ReturnType<typeof validateConfig>>;
 	try {
-		c = await validateConfig(config);
+		c = await validateConfig(
+			{ ...mergePersistedStartConfig(config, {}), ...startAudio.config },
+			startAudio,
+		);
+		c.config.source_stable_id = config.source_stable_id;
 	} catch (err) {
 		logger.error("autostart failed", { err });
 		try {
@@ -161,7 +160,7 @@ export async function autoStartStream(linkAttempt = 1): Promise<void> {
 				c.streamid,
 				{},
 				attemptId,
-				undefined,
+				c.config,
 				startAudio,
 			);
 			if (!launched.success) {

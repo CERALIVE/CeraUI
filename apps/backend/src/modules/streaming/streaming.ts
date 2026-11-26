@@ -85,6 +85,7 @@ export type ConfigParameters = {
 	max_br?: number | undefined;
 	resolution?: Resolution | undefined;
 	framerate?: Framerate | undefined;
+	video_codec?: RuntimeConfig["video_codec"] | null;
 	autostart?: boolean | undefined;
 	source?: string | undefined;
 	selected_video_input?: string | undefined;
@@ -151,10 +152,9 @@ export async function validateConfig(
 ) {
 	if (typeof params !== "object") throw new Error("Invalid config");
 
-	// `null` is setConfig's explicit CLEAR, never a start value, and the runtime
-	// schema carries no null arm — so it is normalized BEFORE the parse rather
-	// than dropped after it, or a start would reject an operator's "off".
+	// A wire `null` clears the field; the launch runtime represents that as absent.
 	if (params.composition === null) delete params.composition;
+	if (params.video_codec === null) delete params.video_codec;
 	if (params.audio_inputs === null) delete params.audio_inputs;
 
 	// Pre-validate with Zod schema for type safety and basic constraints
@@ -275,7 +275,7 @@ export async function validateConfig(
 		{ ristAvailable: getSupportedTransports().includes(RIST_TRANSPORT) },
 	);
 
-	return { pipeline, srtlaAddr, srtlaPort, streamid };
+	return { pipeline, config: validated, srtlaAddr, srtlaPort, streamid };
 }
 
 export async function updateConfig(
@@ -294,6 +294,7 @@ export async function updateConfig(
 
 	const {
 		pipeline,
+		config: accepted,
 		srtlaAddr: initialAddr,
 		srtlaPort,
 		streamid,
@@ -317,6 +318,7 @@ export async function updateConfig(
 		config.source = params.source;
 		config.selected_video_input = params.selected_video_input;
 		noteSourceSelectionWrite(params.source);
+		accepted.source_stable_id = config.source_stable_id;
 	}
 
 	if (params.relay_server) {
@@ -348,13 +350,16 @@ export async function updateConfig(
 	saveConfig();
 	broadcastConfig(config);
 
-	return { pipeline, srtlaAddr, srtlaPort, streamid };
+	return { pipeline, config: accepted, srtlaAddr, srtlaPort, streamid };
 }
 
 /** A rejected Start must not save its proposed audio over the next-start choice. */
 export function saveAppliedStartAudio(
 	startAudio: StartAudio,
-	supportsAudio: boolean,
+	accepted: {
+		readonly pipeline: { readonly supportsAudio: boolean };
+		readonly config: RuntimeConfig;
+	},
 ) {
 	const config = getConfig();
 	const { asrc, acodec, ...fields } = startAudio.unsaved();
@@ -369,7 +374,7 @@ export function saveAppliedStartAudio(
 	for (const { id } of fields.audio_inputs ?? []) {
 		if (
 			!config.audio_inputs?.some((input) => input.id === id) &&
-			audioInputEngineId(id, config) !== "embedded" &&
+			audioInputEngineId(id, accepted.config) !== "embedded" &&
 			!verified(id)
 		)
 			saveMix = false;
@@ -377,8 +382,8 @@ export function saveAppliedStartAudio(
 	if (!saveMix) delete fields.audio_inputs;
 	const applied = {
 		...fields,
-		...(supportsAudio && saveAsrc ? { asrc } : {}),
-		...(supportsAudio && acodec ? { acodec } : {}),
+		...(accepted.pipeline.supportsAudio && saveAsrc ? { asrc } : {}),
+		...(accepted.pipeline.supportsAudio && acodec ? { acodec } : {}),
 	};
 	if (Object.keys(applied).length === 0) return;
 	Object.assign(config, applied);

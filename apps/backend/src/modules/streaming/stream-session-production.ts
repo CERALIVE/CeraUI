@@ -2,7 +2,10 @@ import { logger } from "../../helpers/logger.ts";
 import { emitEvent } from "../events/emit.ts";
 import { admitAndPrepareStreamStart } from "../system/update-orchestrator/runtime.ts";
 import { notificationBroadcast } from "../ui/notifications.ts";
-import { noteStreamStopped } from "./armed-stream-marker.ts";
+import {
+	noteStreamStopped,
+	pinnedLaunchedAudio,
+} from "./armed-stream-marker.ts";
 import { asrcProbeRemainingMs } from "./audio.ts";
 import {
 	broadcastConfigChangePhase,
@@ -97,7 +100,8 @@ export const streamSessionProductionDeps: StreamSessionOrchestratorDeps = {
 	onStreamCommitted: (current) => {
 		void import("./sources.ts")
 			.then(({ noteStreamedSourceCommitted }) => {
-				if (current()) noteStreamedSourceCommitted();
+				if (current())
+					noteStreamedSourceCommitted(pinnedLaunchedAudio()?.streamConfig);
 			})
 			.catch((error) =>
 				logger.warn("stream commit bookkeeping failed", { error }),

@@ -497,7 +497,7 @@ describe("a genuine session boundary still clears the caches", () => {
 					probe: () => Promise.reject(new AudioProbeTimeoutError("HDMI")),
 				},
 				undefined,
-				undefined,
+				{ ...getConfig() },
 				acceptStartAudio(),
 			);
 			expect(result).toMatchObject({

@@ -151,6 +151,11 @@ no default for it, so no caller launches without one.
 The Start RPC resolves the requested or saved source before freezing audio. The
 same routed pipeline reaches the launch; an embedded-only RTMP or SRT request
 does not check a microphone, even if the saved pipeline was local.
+The shared Start validator passes its normalized launch configuration through
+relay and bond preparation to the engine. A subsequent settings save does not
+replace the source, codec, latency, format, or preview mode already accepted for
+that launch. The armed marker records the launched source and settings rather
+than the next-start selection. Live bitrate remains adjustable during Start.
 Validation, the codec gate, the probe, the engine request, every retry and the armed
 marker read that snapshot (`asrc`, `audio_inputs`, `acodec`, `delay` and
 `audio_backend`), never the saved config.

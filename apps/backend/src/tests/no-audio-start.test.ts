@@ -932,7 +932,7 @@ async function launchAutoOnDeadHdmi() {
 			"auto",
 			{},
 			"auto",
-			undefined,
+			{ ...getConfig() },
 			acceptStartAudio(),
 		),
 	).toEqual({ success: true });
@@ -1488,7 +1488,7 @@ test("Auto follows the camera this Start launches, not one chosen for later", as
 			"restored",
 			{},
 			"restored",
-			{ source: "camera-a" },
+			{ ...getConfig(), source: "camera-a" },
 			acceptStartAudio(),
 		),
 	).toEqual({ success: true });
@@ -2531,8 +2531,45 @@ function useRoutePeer(
 	);
 }
 
+const networkSources = ["rtmp", "srt"] as const;
+
+async function embeddedStartPeer() {
+	clearCapabilitiesCache();
+	await initPipelines({
+		fetchEngineCapabilities: async () => ({
+			caps: {
+				...CAPS,
+				network_embedded_audio: true,
+				sources: [
+					...(CAPS.sources ?? []),
+					...networkSources.map((id) => ({
+						id,
+						supports_audio: true,
+						supports_resolution_override: false,
+						supports_framerate_override: false,
+						default_resolution: "1080p",
+						default_framerate: 30,
+					})),
+				],
+			},
+			schemaVersion: SCHEMA_VERSION,
+		}),
+		fetchEngineDevices: async () => ({ devices: [] }),
+	});
+	spyOn(gateway, "isGatewayActive").mockReturnValue(true);
+	spyOn(networkIngest, "getNetworkIngestInfo").mockReturnValue({
+		rtmp: { service_active: true, url: null },
+		srt: { service_active: true, url: null },
+	});
+	const peer = await scopedStartPeer("legacy-success", testMicRoutes);
+	useRoutePeer(peer);
+	getConfig().audio_inputs = undefined;
+	saveConfig();
+	return peer;
+}
+
 test.each(
-	(["rtmp", "srt"] as const).flatMap((pipeline) =>
+	networkSources.flatMap((pipeline) =>
 		(["pipeline", "source"] as const).map(
 			(selector) => [pipeline, selector] as const,
 		),
@@ -2540,37 +2577,7 @@ test.each(
 )(
 	"%s embedded Start by %s does not check or save an unused mic or authorize its replacement",
 	async (pipeline, selector) => {
-		clearCapabilitiesCache();
-		await initPipelines({
-			fetchEngineCapabilities: async () => ({
-				caps: {
-					...CAPS,
-					network_embedded_audio: true,
-					sources: [
-						...(CAPS.sources ?? []),
-						{
-							id: pipeline,
-							supports_audio: true,
-							supports_resolution_override: false,
-							supports_framerate_override: false,
-							default_resolution: "1080p",
-							default_framerate: 30,
-						},
-					],
-				},
-				schemaVersion: SCHEMA_VERSION,
-			}),
-			fetchEngineDevices: async () => ({ devices: [] }),
-		});
-		spyOn(gateway, "isGatewayActive").mockReturnValue(true);
-		spyOn(networkIngest, "getNetworkIngestInfo").mockReturnValue({
-			rtmp: { service_active: true, url: null },
-			srt: { service_active: true, url: null },
-		});
-		const peer = await scopedStartPeer("legacy-success", testMicRoutes);
-		useRoutePeer(peer);
-		getConfig().audio_inputs = undefined;
-		saveConfig();
+		const peer = await embeddedStartPeer();
 		try {
 			await listPhysicalMics(["micOld", ORIGINAL_MIC]);
 			expect((await disk()).pipeline).toBe("test");
@@ -2599,6 +2606,82 @@ test.each(
 			await listPhysicalMics();
 			audio.resetRememberedAudioIdentities();
 		}
+	},
+);
+
+test.each([
+	["rtmp", "srt"],
+	["srt", "rtmp"],
+] as const)(
+	"an accepted %s Start keeps its wire configuration while %s is saved",
+	async (source, nextSource) => {
+		const peer = await embeddedStartPeer();
+		keepMarker();
+		Object.assign(getConfig(), {
+			srt_latency: 2300,
+			video_codec: "h264",
+			balancer: "fixed",
+			previewEncode: "software",
+		});
+		saveConfig();
+		const replayedModes: string[] = [];
+		setPreviewEncodeReplayTransport(async (mode) => {
+			replayedModes.push(mode);
+		});
+		GATES["bond preparation"]?.();
+		const starting = start({ source, asrc: "Primary" });
+
+		await reached.promise;
+		try {
+			expect(peer.starts()).toEqual([]);
+			expect(
+				await call(
+					setConfigProcedure,
+					{
+						source: nextSource,
+						max_br: 4700,
+						srt_latency: 3100,
+						video_codec: "h265",
+						balancer: "aimd",
+						previewEncode: "hardware",
+					},
+					context(),
+				),
+			).toMatchObject({ success: true });
+		} finally {
+			gate.resolve();
+		}
+
+		expect(await starting).toMatchObject({ success: true });
+		expect(peer.starts().map(({ method }) => method)).toEqual(["start"]);
+		expect(peer.launchParams.map((launch) => launch.pipeline)).toEqual([
+			source,
+		]);
+		expect(peer.launchParams[0]).toMatchObject({
+			srt: { latency_ms: 2300 },
+			codec: "h264",
+			bitrate: { balancer: "fixed", max_bitrate: 4700 },
+		});
+		expect(peer.startAudio).toEqual([{ mode: "default", delay_ms: 0 }]);
+		expect(peer.checks).toEqual([]);
+		expect(replayedModes).toEqual(["software"]);
+		expect(readArmedStreamMarker()?.config).toMatchObject({
+			pipeline: source,
+			source,
+			srt_latency: 2300,
+			video_codec: "h264",
+			max_br: 4700,
+		});
+		expect(await disk()).toMatchObject({
+			pipeline: nextSource,
+			source: nextSource,
+			srt_latency: 3100,
+			video_codec: "h265",
+			max_br: 4700,
+			balancer: "aimd",
+			previewEncode: "hardware",
+			asrc: "No audio",
+		});
 	},
 );
 

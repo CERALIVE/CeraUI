@@ -86,13 +86,13 @@ import type { EngineRuntimeState } from "./streaming-backend.ts";
  * snapshot is what makes restoration restore the stream that was interrupted.
  */
 export function captureArmedStreamConfig(): ArmedStreamConfig {
-	const config = getConfig();
+	const launched = pinnedLaunchedAudio();
+	const config = launched?.streamConfig ?? getConfig();
 	const snapshot: Record<string, unknown> = {};
 	const copy = (key: keyof ArmedStreamConfig): void => {
 		const value = (config as unknown as Record<string, unknown>)[key];
 		if (value !== undefined) snapshot[key] = value;
 	};
-	const launched = pinnedLaunchedAudio();
 	const audio = launched ?? config;
 	for (const key of ["delay", "acodec", "asrc", "audio_backend"] as const) {
 		if (audio[key] !== undefined) snapshot[key] = audio[key];
@@ -245,7 +245,16 @@ async function defaultLaunch(
 
 	if (!current()) return { ok: false, reason: "start_cancelled" };
 	const startAudio = restoredStartAudio(config);
-	const launchConfig = { ...config, ...startAudio.config };
+	// Legacy markers never recorded these settings. Keep their existing
+	// fallback, but take it once before validating or waiting for the engine.
+	const { balancer, failover_rate_policy, previewEncode } = getConfig();
+	const launchConfig = {
+		balancer,
+		failover_rate_policy,
+		previewEncode,
+		...config,
+		...startAudio.config,
+	};
 	let resolved: Awaited<ReturnType<typeof validateConfig>>;
 	try {
 		resolved = await validateConfig(launchConfig, startAudio);
@@ -270,7 +279,7 @@ async function defaultLaunch(
 				resolved.streamid,
 				{},
 				attemptId,
-				launchConfig,
+				resolved.config,
 				startAudio,
 			);
 			if (!launched.success) {

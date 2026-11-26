@@ -518,9 +518,14 @@ describe("through the streaming writers", () => {
 		expect(told()).not.toHaveProperty("audio_inputs");
 
 		audio.verifiedMicChoices.set(MIX.id, `mic-report-v1:${"a".repeat(64)}`);
-		expect(await heardFrom(() => saveAppliedStartAudio(audio, true))).toEqual([
-			"config",
-		]);
+		expect(
+			await heardFrom(() =>
+				saveAppliedStartAudio(audio, {
+					pipeline: { supportsAudio: true },
+					config: getConfig(),
+				}),
+			),
+		).toEqual(["config"]);
 		expect(told()).toEqual(stored());
 		expect(told()).toMatchObject(input);
 	});

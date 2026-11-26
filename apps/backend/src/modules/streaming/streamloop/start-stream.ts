@@ -171,16 +171,9 @@ export async function maybeProbeAudioSource(
 }
 
 /**
- * `configOverride` exists for ONE caller: the engine-death restoration, which
- * must relaunch the configuration the engine was actually RUNNING. `config.json`
- * is not that — a save with no `apply_now` persists a restart-requiring field
- * while the live session keeps encoding the previous one, so restoring from disk
- * would apply an edit the operator deferred to their next start. Absent (every
- * other caller), the live config is read exactly as before.
- *
- * `startAudio` is the audio configuration the Start was pressed with. Nothing here
- * reads the saved one: a save made meanwhile counts for the next Start. It has no
- * default, so no caller can launch without taking one.
+ * `acceptedConfig` came from validation or the restored stream, not from a
+ * later read of saved settings. Only live bitrate and the audio roster can
+ * change while starting.
  */
 export async function startStream(
 	pipeline: Pipeline,
@@ -189,11 +182,13 @@ export async function startStream(
 	streamid: string,
 	audioDeps: AudioProbeDeps = {},
 	attemptId = "legacy-start",
-	configOverride: Partial<RuntimeConfig> | undefined,
+	acceptedConfig: RuntimeConfig,
 	startAudio: StartAudio,
 ): Promise<StartStreamResult> {
 	assertStreamLaunchOwnership();
 	startAudio.verifiedMicChoices.clear();
+	const saved = getConfig();
+	const restoring = startAudio.restoration !== undefined;
 	// The preview-encoder fence, and the reason it lives HERE. The engine fixes
 	// the preview encoder when it builds the main graph, so the operator's mode
 	// has to be in the engine's config BEFORE the `start` below — not racing it.
@@ -206,7 +201,9 @@ export async function startStream(
 	//
 	// It runs before every other side effect on purpose: a refused mode must cost
 	// nothing — no sender spawned, no audio probed, no bitrate written.
-	const previewEncode = await replayPreviewEncodeMode();
+	const previewEncode = await replayPreviewEncodeMode(
+		acceptedConfig.previewEncode,
+	);
 	assertStreamLaunchOwnership();
 	if (!previewEncode.ok) {
 		return {
@@ -221,25 +218,21 @@ export async function startStream(
 		};
 	}
 
-	const saved = getConfig();
 	if (saved.audio_backend !== startAudio.config.audio_backend) {
 		// The Bluetooth microphones may be listed for the backend saved since.
 		await refreshBluetoothAudioDevices();
 		assertStreamLaunchOwnership();
 	}
 	const config: RuntimeConfig = {
-		...saved,
-		...(configOverride && {
-			...configOverride,
-			composition: configOverride.composition,
-		}),
+		...acceptedConfig,
+		pipeline: pipeline.source,
 		...startAudio.config,
 	};
 	const launchConfig = resolveLaunchConfig(config);
 	const chosen = launchConfig.asrc;
 	const wasAuto = config.asrc === AUDIO_SOURCE_AUTO;
 	const autoEvidence =
-		wasAuto && chosen !== undefined && configOverride === undefined
+		wasAuto && chosen !== undefined && !restoring
 			? liveAudioIdentityEvidence().get(chosen)
 			: undefined;
 	const audioEvidence =
@@ -254,7 +247,7 @@ export async function startStream(
 		wasAuto && startAudio.restoration === undefined
 			? freezeMicChoices(launchConfig, saved, startAudio.micChoices, audioOff)
 			: startAudio.micChoices;
-	startStreamDeps.getStreamingBackend().setBitrate(launchConfig);
+	startStreamDeps.getStreamingBackend().setBitrate({ max_br: saved.max_br });
 
 	// A fresh stream start clears any prior unexpected-exit health flag so the
 	// health rollup tracks this new session (ADR-0005 observe-and-notify). The
@@ -355,11 +348,12 @@ export async function startStream(
 		let launchedAsrc: RuntimeConfig["asrc"];
 		let originalKeys: ReadonlyMap<string, string>;
 		let checkedIds: readonly (string | undefined)[] = [];
+		const engineConfig = restoring
+			? launchConfig
+			: { ...launchConfig, max_br: saved.max_br };
 		await startStreamDeps.getStreamingBackend().start(
 			// The bitrate is live: a change made while starting still applies.
-			configOverride === undefined
-				? { ...launchConfig, max_br: saved.max_br }
-				: launchConfig,
+			engineConfig,
 			{
 				pipeline: pipeline.source,
 				host: "127.0.0.1",
@@ -380,9 +374,7 @@ export async function startStream(
 						audioEvidence,
 						{
 							audioOff,
-							embedded: isEmbeddedAudioPipeline(
-								launchConfig.pipeline ?? pipeline.source,
-							),
+							embedded: isEmbeddedAudioPipeline(pipeline.source),
 						},
 					);
 					if (!resolved.ok)
@@ -456,6 +448,7 @@ export async function startStream(
 						if (launchedAudio !== undefined)
 							pinLaunchedAudio({
 								...launchedAudio,
+								streamConfig: engineConfig,
 								...(proofs === undefined ? {} : { asrc: launchedAsrc }),
 								...(backend === undefined ? {} : { audio_backend: backend }),
 								// An empty applied batch is not a historical address-only marker.

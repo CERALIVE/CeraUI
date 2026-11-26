@@ -229,7 +229,7 @@ describe("startStream self-classifies the probe failure", () => {
 					probe: () => Promise.reject(new AudioProbeTimeoutError("HDMI")),
 				},
 				undefined,
-				undefined,
+				{ ...getConfig() },
 				acceptStartAudio(),
 			);
 
