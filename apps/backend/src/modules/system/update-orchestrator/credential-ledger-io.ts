@@ -12,7 +12,7 @@ import {
 import { basename, dirname } from "node:path";
 import { openStoredStateDirectory } from "./stored-state-file.ts";
 
-export function saveCredentialLedger(
+export function writePrivateUpdateRecord(
 	path: string,
 	contents: string,
 	syncDirectory: (fd: number) => void = fsyncSync,
@@ -20,7 +20,7 @@ export function saveCredentialLedger(
 	mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
 	const parent = openStoredStateDirectory(dirname(path), true);
 	const root = `/proc/self/fd/${parent}`;
-	const temp = `${root}/.credential-notices-${randomUUID()}.tmp`;
+	const temp = `${root}/.${basename(path, ".json")}-${randomUUID()}.tmp`;
 	let renamed = false;
 	try {
 		const fd = openSync(
@@ -48,3 +48,5 @@ export function saveCredentialLedger(
 		}
 	}
 }
+
+export { writePrivateUpdateRecord as saveCredentialLedger };

@@ -5,23 +5,27 @@
  * APT policy cannot authorize withdrawal of a skipped version.
  */
 import { afterEach, expect, test } from "bun:test";
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import type { SpawnWithTimeoutResult } from "../helpers/spawn-policy.ts";
+import { resolveEventsDir } from "../modules/events/store.ts";
 import { setAptCommandRunnerForTest } from "../modules/system/software-updates.ts";
+import { noticeTargets } from "../modules/system/update-orchestrator/package-notice-proofs.ts";
 import {
-	noticeTargets,
 	retireFulfilledPackageNotices,
+	scheduledPackageNoticeIdentity,
 } from "../modules/system/update-orchestrator/package-notice-retirement.ts";
+import { setOrchestratorStateFilePathForTest } from "../modules/system/update-orchestrator/persistence.ts";
 import {
 	notificationExists,
 	notificationSend,
 	notificationWithdraw,
 } from "../modules/ui/notifications.ts";
 
-type Read = "native" | "dpkg" | "compare" | "policy";
+type Read = "native" | "dpkg";
 type Answer = Partial<SpawnWithTimeoutResult> | "throw";
 type Device = {
 	readonly rows?: string;
-	readonly policy?: string;
 	readonly answers?: Partial<Record<Read, Answer>>;
 	readonly duringRead?: () => void;
 };
@@ -29,43 +33,31 @@ type Device = {
 const NAME = "update:updates-available:curl=2";
 const ROWS = "curl\tarm64\tii \t2\n";
 const NEWER_ROWS = "curl\tarm64\tii \t3\n";
-const POLICY = "curl:\n  Installed: 3\n  Candidate: 3\n  Version table:\n";
 const ok = (stdout: string): SpawnWithTimeoutResult => ({
 	exitCode: 0,
 	stdout,
 	stderr: "",
 });
 
-const readOf = (argv: readonly string[]): Read =>
-	argv[0] === "dpkg-query"
+const readOf = (argv: readonly string[]): Read | "unexpected" =>
+	argv[0] === "dpkg-query" && argv[1] === "-W"
 		? "dpkg"
-		: argv[1] === "--print-architecture"
+		: argv[0] === "dpkg" && argv[1] === "--print-architecture"
 			? "native"
-			: argv[0] === "dpkg"
-				? "compare"
-				: "policy";
+			: "unexpected";
 
-let ran: Read[] = [];
+let ran: ReturnType<typeof readOf>[] = [];
 
-function device({ rows = ROWS, policy = POLICY, answers, duringRead }: Device) {
+function device({ rows = ROWS, answers, duringRead }: Device) {
 	return async (argv: readonly string[]): Promise<SpawnWithTimeoutResult> => {
 		const read = readOf(argv);
 		ran.push(read);
+		if (read === "unexpected")
+			throw new Error(`unexpected retirement command: ${argv[0]}`);
 		if (read === "dpkg") duringRead?.();
 		const answer = answers?.[read];
 		if (answer === "throw") throw new Error(`${read} did not answer`);
-		const clean =
-			read === "native"
-				? ok("arm64\n")
-				: read === "dpkg"
-					? ok(rows)
-					: read === "policy"
-						? ok(policy)
-						: {
-								exitCode: Bun.spawnSync(["dpkg", ...argv.slice(1)]).exitCode,
-								stdout: "",
-								stderr: "",
-							};
+		const clean = ok(read === "native" ? "arm64\n" : rows);
 		return { ...clean, ...answer };
 	};
 }
@@ -110,7 +102,7 @@ test("the id grammar accepts only versioned package lists, each instance once", 
 		expect([id, noticeTargets(id)]).toEqual([id, null]);
 });
 
-test("a newer installed version keeps the notice even when APT matches it", async () => {
+test("a newer installed version keeps the notice without a fallback read", async () => {
 	expect(await withdrawn({ rows: NEWER_ROWS })).toBe(false);
 	expect(ran).toEqual(["native", "dpkg"]);
 });
@@ -120,24 +112,30 @@ test("an exact installed version needs no comparison or policy read", async () =
 	expect(ran).toEqual(["native", "dpkg"]);
 });
 
-test("every proper prefix of a proof read keeps the notice; APT prefixes cannot prove a newer version", async () => {
-	const answers: Record<Exclude<Read, "compare">, string> = {
-		native: "arm64\n",
-		dpkg: ROWS,
-		policy: POLICY,
-	};
-	for (const [read, full] of Object.entries(answers))
+test("every proper prefix of a native or installed-version read keeps the notice", async () => {
+	for (const [read, full, commands] of [
+		["native", "arm64\n", ["native"]],
+		["dpkg", ROWS, ["native", "dpkg"]],
+	] as const)
 		for (let end = 0; end < full.length; end++) {
 			const stdout = full.slice(0, end);
 			expect([
 				read,
 				end,
-				await withdrawn({
-					rows: read === "policy" ? NEWER_ROWS : ROWS,
-					answers: { [read]: { stdout } },
-				}),
+				await withdrawn({ answers: { [read]: { stdout } } }),
 			]).toEqual([read, end, false]);
+			expect(ran).toEqual([...commands]);
 		}
+});
+
+test("a multilined architecture answer cannot prove a bare all-architecture target", async () => {
+	expect(
+		await withdrawn({
+			rows: "curl\tall\tii \t2\n",
+			answers: { native: { stdout: "arm64\n\n" } },
+		}),
+	).toBe(false);
+	expect(ran).toEqual(["native"]);
 });
 
 test("a failed, noisy or unanswered read keeps the notice", async () => {
@@ -147,22 +145,20 @@ test("a failed, noisy or unanswered read keeps the notice", async () => {
 		{ stderr: "W: something\n" },
 		"throw",
 	];
-	for (const read of ["native", "dpkg", "compare", "policy"] as const)
-		for (const fault of faults)
+	for (const [read, commands] of [
+		["native", ["native"]],
+		["dpkg", ["native", "dpkg"]],
+	] as const)
+		for (const fault of faults) {
 			expect([
 				read,
 				fault,
-				await withdrawn({
-					rows: read === "compare" || read === "policy" ? NEWER_ROWS : ROWS,
-					answers: { [read]: fault },
-				}),
+				await withdrawn({ answers: { [read]: fault } }),
 			]).toEqual([read, fault, false]);
-	expect(
-		await withdrawn({
-			rows: NEWER_ROWS,
-			answers: { compare: { stdout: "x\n" } },
-		}),
-	).toBe(false);
+			expect(ran).toEqual([...commands]);
+		}
+	expect(await withdrawn({ answers: { dpkg: { stdout: "x\n" } } })).toBe(false);
+	expect(ran).toEqual(["native", "dpkg"]);
 });
 
 test("only one installed, configured, unheld instance at the exact version counts", async () => {
@@ -188,21 +184,54 @@ test("only one installed, configured, unheld instance at the exact version count
 		]);
 });
 
-test("a newer installed version keeps the notice regardless of APT policy", async () => {
-	const policies: readonly string[] = [
-		"curl:\n  Installed: 3\n  Candidate: 2\n",
-		"curl:\n  Installed: 2\n  Candidate: 3\n",
-		"curl:\n  Installed: 3\n  Candidate: 3\n  Candidate: 2\n",
-		"curl:\n  Installed: 3\n  Installed: 3\n  Candidate: 3\n",
-		"curl:armhf:\n  Installed: 3\n  Candidate: 3\n",
-		"  Installed: 3\n  Candidate: 3\n",
+test("other installed instances and malformed evidence never substitute for an exact match", async () => {
+	const answers = [
+		"curl\tarm64\tii \t3\ncurl\tarmhf\tii \t2\n",
+		"curl\tall\tii \t3\ncurl\tarmhf\tii \t2\n",
+		"curl\tarm64\tii \t2\ncurl\tarm64\tii \t3\n",
+		"curl\tarm64\tii \t3\ncurl\tarm64\tii \t3\n",
+		"curl\tarmhf\tii \t3\n",
+		"\tarm64\tii \t3\n",
 	];
-	for (const policy of policies)
-		expect([
-			policy,
-			await withdrawn({ rows: NEWER_ROWS, policy }),
-			ran,
-		]).toEqual([policy, false, ["native", "dpkg"]]);
+	for (const rows of answers)
+		expect([rows, await withdrawn({ rows }), ran]).toEqual([
+			rows,
+			false,
+			["native", "dpkg"],
+		]);
+});
+
+test("a compact live slot can use its exact offer without history, within the target budget", async () => {
+	const state = join(resolveEventsDir(), "../update-state");
+	mkdirSync(join(state, "scheduled-package-notices.json"), { recursive: true });
+	setOrchestratorStateFilePathForTest(join(state, "agent.json"));
+	try {
+		for (const [count, expected] of [
+			[42, true],
+			[513, false],
+		] as const) {
+			const names = Array.from(
+				{ length: count },
+				(_, index) => `compact-live-fixture-package-${index}`,
+			);
+			const id = scheduledPackageNoticeIdentity(
+				names
+					.map((name) => `${name}=2`)
+					.sort()
+					.join(","),
+			);
+			const name = `update:updates-available:${id}`;
+			try {
+				const rows = names.map((pkg) => `${pkg}\tarm64\tii \t2\n`).join("");
+				expect(await withdrawn({ rows }, [], name)).toBe(expected);
+				expect(ran).toEqual(expected ? ["native", "dpkg"] : []);
+			} finally {
+				notificationWithdraw(name);
+			}
+		}
+	} finally {
+		setOrchestratorStateFilePathForTest(null);
+	}
 });
 
 test("a name sharing a row with the current check is not read", async () => {
@@ -232,3 +261,31 @@ test("a foreign instance needs that architecture's own row", async () => {
 		notificationWithdraw(name);
 	}
 });
+
+test("a qualified package named sha256 retains its plain notice identity", async () => {
+	const name = "update:updates-available:sha256:arm64=2";
+	try {
+		expect(await withdrawn({ rows: "sha256\tarm64\tii \t2\n" }, [], name)).toBe(
+			true,
+		);
+		expect(ran).toEqual(["native", "dpkg"]);
+	} finally {
+		notificationWithdraw(name);
+	}
+});
+
+test.each([
+	["arm64", "curl\tarm64\tii \t2\n", false],
+	["all", "curl\tall\tii \t2\n", false],
+	["armhf", "curl\tarm64\tii \t2\ncurl\tarmhf\tii \t2\n", true],
+] as const)(
+	"each offered target must use a distinct installed row (%s)",
+	async (arch, rows, expected) => {
+		const name = `update:updates-available:curl=2,curl:${arch}=2`;
+		try {
+			expect(await withdrawn({ rows }, [], name)).toBe(expected);
+		} finally {
+			notificationWithdraw(name);
+		}
+	},
+);

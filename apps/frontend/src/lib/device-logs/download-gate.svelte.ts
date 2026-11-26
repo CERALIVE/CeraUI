@@ -11,7 +11,11 @@ import { socketEpoch } from "$lib/rpc/socket-epoch.svelte";
 /** Whether the open a request was issued under is still the live one. */
 export type Issued = () => boolean;
 
-function save(href: string, name: string): void {
+function save(
+	href: string,
+	name: string,
+	remove = (anchor: HTMLAnchorElement) => anchor.remove(),
+): void {
 	const anchor = document.createElement("a");
 	anchor.href = href;
 	anchor.download = name;
@@ -19,7 +23,7 @@ function save(href: string, name: string): void {
 	try {
 		anchor.click();
 	} finally {
-		anchor.remove();
+		remove(anchor);
 	}
 }
 
@@ -44,11 +48,12 @@ const SYSTEM_LOG_FILE = "ceralive_system_log.txt";
 export const FILE_AFTER_REPLY_MS = 10_000;
 
 /**
- * One legacy request, owned until its file outcome is known. Its file push, saved
- * or dropped, ends it at once, and its reply is then ignored. An error reply
- * before the file fails it. An OK reply only acknowledges the call: the request
- * keeps its slot and waits for its file until `FILE_AFTER_REPLY_MS` has passed,
- * then fails (a device that could not read its journal answers with no file).
+ * One legacy request, owned until its file outcome is known. The file push ends
+ * it at once, whether handed off, failed or dropped, and its reply is then
+ * ignored. An error reply before the file fails it. An OK reply only acknowledges
+ * the call: the request keeps its slot and waits for its file until
+ * `FILE_AFTER_REPLY_MS` has passed, then fails (a device that could not read its
+ * journal answers with no file).
  * Only a request whose call has not failed, with a live open, is given its file.
  */
 interface LegacyRequest {
@@ -150,23 +155,25 @@ export async function requestLegacyLog(
 			request.deadline = setTimeout(() => {
 				if (request.file !== "awaited") return;
 				request.reply = "failed";
-				end(request, new Error("The device answered but sent no log file"));
+				end(request, {
+					error: new Error("The device answered but sent no log file"),
+				});
 			}, FILE_AFTER_REPLY_MS);
 		},
 		(error: unknown) => {
 			request.reply =
 				error instanceof CallTimeoutError ? "timed-out" : "failed";
-			if (request.file === "awaited") end(request, error);
+			if (request.file === "awaited") end(request, { error });
 		},
 	);
 	return request.outcome.promise;
 }
 
 /** Ends a request once: its caller learns the outcome, its slot frees unless it is the lock. */
-function end(request: LegacyRequest, error?: unknown): void {
+function end(request: LegacyRequest, failure?: { error: unknown }): void {
 	clearTimeout(request.deadline);
-	if (error === undefined) request.outcome.resolve();
-	else request.outcome.reject(error);
+	if (failure) request.outcome.reject(failure.error);
+	else request.outcome.resolve();
 	request.ended.resolve();
 	release(request);
 }
@@ -188,6 +195,17 @@ function owner(file: {
 	return request?.epoch === socketEpoch() ? request : undefined;
 }
 
+function cleanupLegacyDownload(
+	resource: "anchor" | "object URL",
+	cleanup: () => void,
+): void {
+	try {
+		cleanup();
+	} catch (error) {
+		console.warn("Failed to clean up legacy log download:", resource, error);
+	}
+}
+
 /** The socket's `log` push: saved only for the current request it answers, while that request's open is live. */
 export function deliverLegacyLog(file: {
 	name: string;
@@ -198,20 +216,35 @@ export function deliverLegacyLog(file: {
 	if (request === undefined || request.file === "consumed") return false;
 	request.file = "consumed";
 	const owned = request.reply === "awaited" || request.reply === "answered";
-	const current = owned && request.issued();
-	if (owned) end(request);
-	else release(request);
-	if (!current) return false;
-	const contents = file.contents
-		.split("\n")
-		.map((line) => line.trim())
-		.filter((line) => line.length > 0)
-		.join("\n");
-	const url = URL.createObjectURL(new Blob([contents], { type: "text/plain" }));
-	try {
-		save(url, file.name);
-	} finally {
-		URL.revokeObjectURL(url);
+	if (!owned) {
+		release(request);
+		return false;
 	}
+	if (!request.issued()) {
+		end(request);
+		return false;
+	}
+	try {
+		const contents = file.contents
+			.split("\n")
+			.map((line) => line.trim())
+			.filter((line) => line.length > 0)
+			.join("\n");
+		const url = URL.createObjectURL(
+			new Blob([contents], { type: "text/plain" }),
+		);
+		// Cleanup must neither undo a successful handoff nor replace a click error.
+		try {
+			save(url, file.name, (anchor) =>
+				cleanupLegacyDownload("anchor", () => anchor.remove()),
+			);
+		} finally {
+			cleanupLegacyDownload("object URL", () => URL.revokeObjectURL(url));
+		}
+	} catch (error) {
+		end(request, { error });
+		return false;
+	}
+	end(request);
 	return true;
 }

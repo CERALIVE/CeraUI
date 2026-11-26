@@ -17,8 +17,11 @@ recording the failed attempt does not make that policy terminal. Ignored events,
 ordinary progress and phase changes emit no failure. The legacy software-update
 notification raises do not produce these events.
 
-No admission, state transition, notification identity, text or polling changes
-are introduced. `src/tests/events-update-emits.test.ts` drives the production
+Capable scheduled package offers over the event id limit record only a
+compact `id`. The roster needed for retirement stays in bounded private
+updater state, not in Events, log exports, the journal, or support bundles.
+Other update-event identities and notice text stay unchanged.
+`src/tests/events-update-emits.test.ts` drives the production
 notice and runtime funnels through the real emitter and JSONL store, including
 shown/dismissed notices and a failure rejected after state replacement.
 `src/tests/events-update-recording.test.ts` separately records each producer call

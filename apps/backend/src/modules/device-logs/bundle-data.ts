@@ -1,3 +1,4 @@
+import { credentialStoresState } from "../../helpers/credential-store-state.ts";
 import { getConfig } from "../config.ts";
 import { readBoots, readEvents } from "../events/store.ts";
 import { getStoredModemCredentials } from "../modems/modem-credentials.ts";
@@ -11,7 +12,7 @@ import { readUpdateChannel } from "../system/update-settings.ts";
 import { collectVersionContext } from "../system/version-context.ts";
 import { getAllHotspotCredentials } from "../wifi/hotspot-credentials.ts";
 import { listBoots } from "./boots.ts";
-import { MIN_REDACTED_LENGTH } from "./redaction.ts";
+import { BundleReadError, MIN_REDACTED_LENGTH } from "./redaction.ts";
 import { getLogSettings, getLogState } from "./settings.ts";
 
 interface BundleData {
@@ -102,6 +103,7 @@ export function collectHeldSecrets(): Array<{ kind: string; value: string }> {
 }
 
 export async function collectBundleData(): Promise<BundleData> {
+	if (credentialStoresState() !== "ready") throw new BundleReadError();
 	const config = getConfig();
 	const secrets = collectHeldSecrets();
 	const [exportedBy, available, updateChannel] = await Promise.all([

@@ -24,6 +24,10 @@ record parsing and logger-ring mock scan/follow adapters. These are internal
 building blocks for the planned viewer. See the
 [reader contract](apps/backend/docs/agents/device-journal-reader.md).
 
+**Full log files [EXISTS].** If the browser cannot start a full log download,
+System Logs offers Retry for that log. Retry fetches it again.
+See the [System Logs contract](apps/frontend/docs/agents/system-logs-view.md).
+
 **Support bundle backend [EXISTS].** Authenticated local clients can preview a
 manifest and download a bounded, redacted support bundle. Privacy validation
 finishes before a download ticket is issued; a secret colliding with structured

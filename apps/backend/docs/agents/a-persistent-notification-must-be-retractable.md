@@ -316,8 +316,10 @@ refused records and stores, failed writes); and the frontend half
 
 ## THE SCHEDULED PACKAGE NOTICE IS WITHDRAWN BY ITS OWN NAME [EXISTS]
 
-`update:updates-available:<p1=v1,...>` keeps main's announcement byte for byte
-(`runPackageCheckCycle`, `notifyUpdate`). PR #684 tried for eight review rounds
+`update:updates-available:<p1=v1,...>` keeps the existing identity for short
+offers. A capable check's list over 1,024 characters uses a SHA-256 id bound
+to the exact list in private updater state; its event carries only the id.
+PR #684 tried for eight review rounds
 to bind a server-side receipt to the copy a tab holds and to read "no longer
 pending" from what refresh, inventory, holds or the plan left out. Neither can
 work: several processes issue the same name with other subsets or architectures,
@@ -327,6 +329,7 @@ partial read made absence look like proof. Owner:
 
 **The rule.** After a successful capable check, a name is withdrawn only if one
 clean `dpkg-query` shows each named instance `ii ` at the exact named version.
+Each target uses a distinct installed row, even if an alias would match it.
 That is one read, not an atomic snapshot. An outside `dpkg` or `apt` run during
 or after the read can invalidate a qualifying row even at the same version,
 for example by putting the package on hold. A later successful package check
@@ -336,7 +339,11 @@ policy reads cannot prove a coherent set of candidates. Candidates are this
 process's live slots and main's `update_updates_available` event ids.
 Keep the name if it shares a row with the check, if a new package check starts,
 or if the name is shown or dismissed during the read (`fenceNotification`).
-Do not add receipts, ledgers or lineage, do not
-conclude anything from absence, do not run it on legacy images (`=unknown` ids are
+A compact id without a matching private offer or live cache entry is
+unprovable. The store remembers proof inputs, never a dpkg result or update
+authority. Clearing Events invalidates historical candidates, including proof
+in flight, even if the private offer remains. Live slots with their own offer
+do not depend on Events. Do not conclude anything from absence or run retirement
+on legacy images (`=unknown` ids are
 unprovable) and never at startup or login. Full contract and limits:
 [DEVICE-UPDATES.md](../../../../docs/DEVICE-UPDATES.md#scheduled-package-notice-exists-host-tested-board-qualification-owed).

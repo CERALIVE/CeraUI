@@ -393,6 +393,45 @@ it("moves the row stop off a replaced record whose seq and ID were reused", asyn
 
 it.each([
 	{
+		scenario: "the next push skips the missed event",
+		pushed: [503],
+		label: lowerBound(2),
+	},
+	{
+		scenario: "the next push includes the delayed event",
+		pushed: [502, 503],
+		label: newCount(2),
+	},
+])(
+	"keeps the unseen Events tally truthful when $scenario",
+	async ({ pushed, label }) => {
+		const retained = await openHistory(501, true, EVENT_RING_EPOCH);
+		for (const _page of [1, 2, 3]) await loadOlder();
+		const newest = screen.getByRole("button", { name: error.startFromNewest });
+
+		// Seq 502 is stored, but the feed has not delivered it before the older read.
+		retained.unshift(stopped(502));
+		await loadOlder();
+		const olderRows = retained
+			.slice(201, 501)
+			.map((record) => new Date(record.at).toISOString());
+		expect(renderedTimes()).toEqual(olderRows);
+		const pendingLabel = newest.textContent?.trim();
+
+		retained.unshift(stopped(503));
+		feed.listener?.(pushed.map(stopped));
+		await waitFor(() => expect(newest.textContent?.trim()).toBe(label));
+		expect(pendingLabel).toBe(copy.startFromNewestUnknown);
+		expect(renderedTimes()).toEqual(olderRows);
+
+		await loadOlder();
+		expect(screen.getByText(copy.noOlder)).toBeTruthy();
+		expect(renderedTimes().at(-1)).toBe(new Date(stopped(1).at).toISOString());
+	},
+);
+
+it.each([
+	{
 		scenario: "a full page with more matches",
 		size: 100,
 		floor: 1,

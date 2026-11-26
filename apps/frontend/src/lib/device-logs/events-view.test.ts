@@ -773,6 +773,33 @@ describe("EventsView: connection", () => {
 		expect(open).not.toHaveBeenCalled();
 	});
 
+	it("recognizes a cleared ring below a head reported only by paging", async () => {
+		const { view, list, push } = await browsing();
+		list.mockResolvedValueOnce(
+			eventPage([e(100)], { headSeq: 503, retainedFromSeq: 1 }),
+		);
+		await view.loadOlder();
+
+		// The first page in the replacement ring is ahead of the last delivered
+		// push cursor (500), but behind the head advertised by Load older (503).
+		const replacement = eventPage([refill(502)], {
+			epoch: undefined,
+			retainedFromSeq: 1,
+			nextBeforeSeq: 502,
+		});
+		list.mockResolvedValueOnce(replacement);
+		reconnect(view);
+		await vi.waitFor(() => expect(view.loading).toBeNull());
+
+		expect(view.events).toEqual(replacement.events);
+		expect(view.nextBeforeSeq).toBe(502);
+		expect(view.newWhileBrowsing).toBe(0);
+		expect(view.newCountIncomplete).toBe(false);
+		push(refill(503));
+		expect(view.newWhileBrowsing).toBe(1);
+		expect(list).toHaveBeenCalledTimes(6);
+	});
+
 	it.each([
 		{ form: "below the old head", head: 210 },
 		{ form: "at the old head", head: 500 },
@@ -1156,6 +1183,22 @@ describe("EventsView: connection", () => {
 });
 
 describe("EventsView: new events while browsing", () => {
+	it("keeps a lower bound when paging reveals unseen events were evicted", async () => {
+		const { view, list, push } = await browsing();
+		list.mockResolvedValueOnce(
+			eventPage([], { headSeq: 502, retainedFromSeq: 502 }),
+		);
+		await view.loadOlder();
+
+		// The feed arrives late, including an event that is no longer retained.
+		push(e(501), e(502), e(503));
+
+		expect(view.newWhileBrowsing).toBe(2);
+		expect(view.newCountIncomplete).toBe(true);
+		expect(view.events).toEqual([]);
+		expect(view.nextBeforeSeq).toBeNull();
+	});
+
 	it("counts each new event the filter admits without moving the window, and starts again from newest", async () => {
 		const { view, list, push } = await browsing(BOOT_IDS.current);
 		const shown = view.events;

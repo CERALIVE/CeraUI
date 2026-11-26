@@ -17,13 +17,17 @@ import {
 	mkdir,
 	mkdtemp,
 	readFile,
+	rename,
 	rm,
+	rmdir,
+	stat,
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { notificationsMessageSchema } from "@ceraui/rpc/schemas";
 
+import { clearEvents, readEvents } from "../modules/events/store.ts";
 import {
 	ARCH_LIMIT,
 	OFFER_VERSION_LIMIT,
@@ -72,6 +76,8 @@ let root: string;
 let record: string;
 let dismissals: string;
 let live: { close(): Promise<void> }[] = [];
+const scheduledProofPath = () =>
+	join(root, "update-state", "scheduled-package-notices.json");
 
 beforeEach(async () => {
 	root = await mkdtemp(join(tmpdir(), "ceralive-update-restart-"));
@@ -273,43 +279,11 @@ class Backend {
 		);
 	}
 
-	swapAfterPolicy(pkg: string, apt: AptScript): Promise<void> {
-		return this.command(
-			`swap-after-policy ${JSON.stringify({ pkg, apt })}`,
-			APPLIED_MARKER,
-			"policy state swap armed",
-		);
-	}
-
 	manualPackageCheck(): Promise<void> {
 		return this.command(
 			"manual-package-check",
 			"backend:manual-check:true",
 			"manual check completion",
-		);
-	}
-
-	pausePackageCompare(): Promise<void> {
-		return this.command(
-			"pause-package-compare",
-			"backend:compare-armed",
-			"comparison barrier armed",
-		);
-	}
-
-	startCheckAndWaitForCapturedCompare(): Promise<void> {
-		return this.command(
-			"scheduled-package-check",
-			"backend:compare-captured",
-			"captured dpkg comparison",
-		);
-	}
-
-	resumePackageCompare(): Promise<void> {
-		return this.command(
-			"resume-package-compare",
-			CHECKED_MARKER,
-			"scheduled package check completion",
 		);
 	}
 
@@ -487,6 +461,12 @@ class Tab {
 		await this.request(["notifications", "dismiss"], {
 			name,
 			...this.shown.get(name),
+		});
+	}
+
+	async clearEventHistory(): Promise<void> {
+		expect(await this.request(["events", "clear"])).toMatchObject({
+			result: { success: true },
 		});
 	}
 
@@ -702,12 +682,9 @@ async function playScheduled(
 ): Promise<Observed[]> {
 	// Each run starts as a fresh device: no dismissal, offer record or receipt from the other.
 	await Promise.all(
-		[
-			dismissals,
-			record,
-			join(root, "scheduled_package_notices.json"),
-			join(root, "events"),
-		].map((path) => rm(path, { recursive: true, force: true })),
+		[dismissals, record, scheduledProofPath(), join(root, "events")].map(
+			(path) => rm(path, { recursive: true, force: true }),
+		),
 	);
 	let main = run === "main" || run === "upgrade";
 	let backend = await Backend.start({ capable, canonicalScheduler: main });
@@ -1126,8 +1103,8 @@ class ModelMismatch extends Error {
 const packageNotice = `${noticePrefix}cerastream=2`;
 const cleanTrace = async () => {
 	await Promise.all(
-		[dismissals, record, join(root, "events")].map((path) =>
-			rm(path, { recursive: true, force: true }),
+		[dismissals, record, scheduledProofPath(), join(root, "events")].map(
+			(path) => rm(path, { recursive: true, force: true }),
 		),
 	);
 };
@@ -1363,9 +1340,210 @@ const narrowOffer: AptScript = {
 	inventory: INVENTORY.replace("o=Debian,", "o=Unknown,"),
 };
 const wideOffer: AptScript = { upgradable: [offer, debianCurl] };
+const largeOffer = (): AptPackage[] => [
+	offer,
+	...Array.from({ length: 42 }, (_, index) => ({
+		...debianCurl,
+		name: `scheduled-restart-fixture-package-${index}`,
+		candidate:
+			index === 41 ? "1.2.3.4" : index === 40 ? "1+v2.public.fixture" : "2",
+	})),
+];
 
 test(
-	"scheduled notice keeps both copies when APT candidates cross between reads",
+	"a large scheduled offer survives restart and retires only at its exact installed versions",
+	async () => {
+		const packages = largeOffer();
+		const rows = packages.map(({ name, candidate }) => `${name}=${candidate}`);
+		expect(rows.join(",").length).toBeGreaterThan(1024);
+		const offerText = rows.sort().join(",");
+		const initial = await Backend.start({ capable: true });
+		const retained = scheduledTabs();
+		await reconnect(initial, retained);
+		await scheduledStep(initial, { upgradable: packages }, retained);
+		const shown = scheduledNames(retained);
+		const hash = new Bun.CryptoHasher("sha256").update(offerText);
+		const digest = hash.digest("hex");
+		const id = `sha256:${digest.match(/.{8}/g)?.join("-")}`;
+		const name = `${noticePrefix}${id}`;
+		expect(shown).toEqual([[name], [name]]);
+		const proof = scheduledProofPath();
+		const saved = await readFile(proof, "utf8");
+		expect(JSON.parse(saved)).toEqual({
+			schema: 1,
+			offers: [{ id, offer: offerText }],
+		});
+		expect((await stat(proof)).mode & 0o777).toBe(0o600);
+		expect(
+			readEvents({ baseDir: join(root, "events") })
+				.filter((event) => event.code === "update_updates_available")
+				.map((event) => event.params),
+		).toEqual([{ id }]);
+		await initial.close();
+		await Promise.all(retained.map((tab) => tab.dropped()));
+
+		const restarted = await Backend.start({ capable: true });
+		await reconnect(restarted, retained);
+		expect(scheduledNames(retained)).toEqual(shown);
+		expect(retained.map((tab) => tab.removedNames)).toEqual([[], []]);
+		const exact = packages.map((pkg) => ({ ...pkg, installed: pkg.candidate }));
+		const skipped = exact.map((pkg, index) =>
+			index === exact.length - 1
+				? { ...pkg, installed: "3", candidate: "3" }
+				: pkg,
+		);
+		const query = `dpkg-query -W -f=\${Package}\\t\${Architecture}\\t\${db:Status-Abbrev}\\t\${Version}\\n -- ${rows
+			.map((row) => row.split("=")[0])
+			.join(" ")}`;
+		const unknown = exact
+			.map(({ name, installed }, index) =>
+				index === exact.length - 1
+					? `${name}\tarm64\tun \t\n`
+					: `${name}\tarm64\tii \t${installed}\n`,
+			)
+			.join("");
+		for (const apt of [
+			{ installed: skipped },
+			{ installed: exact, proof: { "dpkg-query": { stdout: unknown } } },
+		]) {
+			await scheduledStep(restarted, apt, retained);
+			expect((await restarted.commands()).filter(proofRead)).toEqual([
+				"dpkg --print-architecture",
+				query,
+			]);
+			expect(scheduledNames(retained)).toEqual(shown);
+			expect(retained.map((tab) => tab.removedNames)).toEqual([[], []]);
+		}
+
+		const keepsWithoutProof = async (installed: readonly AptPackage[]) => {
+			await scheduledStep(restarted, { installed }, retained);
+			expect((await restarted.commands()).filter(proofRead)).toEqual([]);
+			expect(retained.map((tab) => tab.removedNames)).toEqual([[], []]);
+			expect(scheduledNames(retained)).toEqual(shown);
+		};
+
+		const altered = skipped
+			.map(({ name, candidate }) => `${name}=${candidate}`)
+			.sort()
+			.join(",");
+		const mismatched = JSON.stringify({
+			schema: 1,
+			offers: [{ id, offer: altered }],
+		});
+		// Matching dpkg rows for an altered roster cannot remove the original name.
+		await writeFile(proof, mismatched);
+		await keepsWithoutProof(skipped);
+		expect(await readFile(proof, "utf8")).toBe(mismatched);
+
+		await writeFile(proof, "{");
+		await keepsWithoutProof(exact);
+		expect(await readFile(proof, "utf8")).toBe("{");
+
+		// A non-regular path cannot be read as proof, even by privileged test runners.
+		const parked = `${proof}.fixture`;
+		await rename(proof, parked);
+		await keepsWithoutProof(exact);
+		await mkdir(proof);
+		await keepsWithoutProof(exact);
+		expect((await stat(proof)).isDirectory()).toBe(true);
+		await rmdir(proof);
+		await rename(parked, proof);
+		await writeFile(proof, saved);
+
+		await scheduledStep(restarted, { installed: exact }, retained);
+		expect(retained.map((tab) => tab.removedNames)).toEqual(shown);
+		expect(scheduledNames(retained)).toEqual([[], []]);
+	},
+	budget(2),
+);
+
+test(
+	"clearing event history removes restart candidates without exposing or changing private offer state",
+	async () => {
+		const packages = largeOffer();
+		const initial = await Backend.start({ capable: true });
+		const retained = scheduledTabs();
+		await reconnect(initial, retained);
+		await scheduledStep(initial, { upgradable: packages }, retained);
+		await scheduledStep(initial, pending("1", "2"), retained);
+		const shown = scheduledNames(retained);
+		expect(shown[0]).toHaveLength(2);
+		expect(shown[1]).toEqual(shown[0]);
+		const proof = scheduledProofPath();
+		const saved = await readFile(proof, "utf8");
+		await initial.close();
+		await Promise.all(retained.map((tab) => tab.dropped()));
+
+		const baseDir = join(root, "events");
+		expect(clearEvents({ baseDir })).toBe(true);
+		expect(readEvents({ baseDir })).toEqual([]);
+		expect(await readFile(proof, "utf8")).toBe(saved);
+
+		const restarted = await Backend.start({ capable: true });
+		await reconnect(restarted, retained);
+		const installed = packages.map((pkg) => ({
+			...pkg,
+			installed: pkg.candidate,
+		}));
+		await scheduledStep(restarted, { installed }, retained);
+		expect((await restarted.commands()).filter(proofRead)).toEqual([]);
+		expect(retained.map((tab) => tab.removedNames)).toEqual([[], []]);
+		expect(scheduledNames(retained)).toEqual(shown);
+	},
+	budget(2),
+);
+
+for (const [kind, restart, compact] of [
+	["historical inline", true, false],
+	["historical compact", true, true],
+	["live compact", false, true],
+] as const) {
+	test(
+		`clearing event history during captured dpkg proof (${kind} scheduled notice)`,
+		async () => {
+			const packages = compact ? largeOffer() : [offer];
+			let backend = await Backend.start({ capable: true });
+			const opened = scheduledTabs();
+			const [clearingTab] = opened;
+			if (!clearingTab) throw new Error("missing clearing tab");
+			await reconnect(backend, opened);
+			await scheduledStep(backend, { upgradable: packages }, opened);
+			const shown = scheduledNames(opened);
+			expect(shown[0]).toHaveLength(1);
+			expect(shown[1]).toEqual(shown[0]);
+
+			if (restart) {
+				await backend.close();
+				await Promise.all(opened.map((tab) => tab.dropped()));
+				backend = await Backend.start({ capable: true });
+				await reconnect(backend, opened);
+				expect(scheduledNames(opened)).toEqual(shown);
+			}
+
+			await backend.setApt({
+				installed: packages.map((pkg) => ({
+					...pkg,
+					installed: pkg.candidate,
+				})),
+			});
+			await backend.startCheckPausedAtDpkgRead("after");
+			// Use the real RPC in the process whose in-memory clear generation matters.
+			await clearingTab.clearEventHistory();
+			expect(readEvents({ baseDir: join(root, "events") })).toEqual([]);
+			await backend.resumeDpkgRead();
+			await sync(opened);
+
+			expect(opened.map((tab) => tab.removedNames)).toEqual(
+				restart ? [[], []] : shown,
+			);
+			expect(scheduledNames(opened)).toEqual(restart ? shown : [[], []]);
+		},
+		budget(restart ? 2 : 1),
+	);
+}
+
+test(
+	"scheduled notice keeps both copies when different dpkg reads prove different members",
 	async () => {
 		const main = await Backend.start({
 			capable: true,
@@ -1380,16 +1558,29 @@ test(
 
 		const current = await Backend.start({ capable: true });
 		await reconnect(current, opened);
-		const cache = (first: string, second: string): AptScript => ({
+		const state = (first: string, second: string): AptScript => ({
 			installed: [
-				cerastream("3", first),
-				{ ...debianCurl, installed: "3", candidate: second },
+				cerastream(first, first),
+				{ ...debianCurl, installed: second, candidate: second },
 			],
 		});
-		await current.swapAfterPolicy("cerastream", cache("2", "3"));
-		await scheduledStep(current, cache("3", "2"), opened);
-		expect(opened.map((tab) => tab.removedNames)).toEqual([[], []]);
-		expect(scheduledNames(opened)).toEqual(opened.map(() => [combinedNotice]));
+		const partial = [state("2", "3"), state("3", "2")];
+		for (const answer of partial) {
+			await current.setApt(state("2", "2"));
+			await current.startCheckPausedAtDpkgRead("before");
+			await current.setApt(answer);
+			await current.resumeDpkgRead();
+			await sync(opened);
+			expect(opened.map((tab) => tab.removedNames)).toEqual([[], []]);
+			expect(scheduledNames(opened)).toEqual(
+				opened.map(() => [combinedNotice]),
+			);
+		}
+		await scheduledStep(current, state("2", "2"), opened);
+		expect(opened.map((tab) => tab.removedNames)).toEqual(
+			opened.map(() => [combinedNotice]),
+		);
+		expect(scheduledNames(opened)).toEqual([[], []]);
 	},
 	budget(2),
 );
@@ -1513,17 +1704,7 @@ test(
 			{ ...done, dpkgStatus: { curl: "iU " } },
 			{ ...done, dpkgStatus: { curl: "iF " } },
 			{ installed: [installed, { ...debianCurl, installed: "3" }] },
-			{
-				installed: [
-					installed,
-					{ ...debianCurl, installed: "3", candidate: "3" },
-				],
-				proof: {
-					"package-policy": {
-						stdout: "curl:\n  Installed: 2\n  Candidate: 3\n",
-					},
-				},
-			},
+			{ ...done, fail: { "dpkg-native": "silent-exit-1" } },
 			{
 				...done,
 				upgradable: [{ ...debianCurl, installed: "2" }],
@@ -2364,7 +2545,10 @@ test(
 			expect([kind, removals(control)]).toEqual([kind, [0, 0]]);
 			await backend.check();
 			await sync(control);
-			expect([kind, names(control)]).toEqual([kind, expected]);
+			expect([kind, names(control)]).toEqual([
+				kind,
+				expected.map((pair) => [...pair]),
+			]);
 			await backend.close();
 		}
 		await rm(record);

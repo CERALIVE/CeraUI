@@ -10,66 +10,75 @@
 
 /**
  * Withdraws a scheduled "updates are available" notice once dpkg shows every
- * package its name lists installed at the exact named version. The name is `update:updates-available:`
- * plus `p1=v1,...` (main's announcement, unchanged), every frontend removes a
- * copy by that name alone, and every backend that issued the name used it for
- * the same claim: these packages can still move to these versions. So the
- * proof is about the name, not about who sent it, and it rests only on
+ * package in its offer installed at the exact offered version. The name is
+ * `update:updates-available:` plus `p1=v1,...` or the SHA-256 of a large list.
+ * Every frontend removes a copy by that name alone. The proof is about the
+ * offer bound to the name, not about who sent it, and it rests only on
  * complete lines dpkg prints: a cut, failed or noisy read can lose a
  * deciding line, never invent one, and so only keeps the notice. Legacy ids
  * carry `unknown` versions and are never provable. Contract:
  * docs/DEVICE-UPDATES.md, "The scheduled package notice".
  */
 
+import { resolve } from "node:path";
+import { EVENT_TEXT_LIMIT } from "@ceraui/rpc/events";
 import { logger } from "../../../helpers/logger.ts";
-import { readEvents } from "../../events/store.ts";
+import {
+	eventsClearGeneration,
+	readEvents,
+	resolveEventsDir,
+} from "../../events/store.ts";
 import {
 	fenceNotification,
 	notificationExists,
 	notificationWithdraw,
 	persistentNotificationNames,
 } from "../../ui/notifications.ts";
-import { APT_PACKAGE_NAME_RE } from "../apt-package-name.ts";
-import { APT_SIMULATION_VERSION_RE } from "../apt-simulation-row.ts";
 import {
 	DPKG_QUERY_FORMAT,
 	parseDpkgRows,
 } from "../software-update-outcome.ts";
 import { runAptCommand } from "../software-updates.ts";
+import {
+	ANNOUNCED_WINDOW,
+	COMPACT_ID,
+	canRetainCompactOffer,
+	compactId,
+	type NoticeTarget,
+	noticeTargets,
+	PACKAGE_ARCH,
+	readCompactOffers,
+	rememberCompactOffer,
+} from "./package-notice-proofs.ts";
 
 const PREFIX = "update:updates-available:";
-const ANNOUNCED_WINDOW = 32;
+// A live slot can still be proven if its record could not be saved.
+const recentCompactOffers = new Map<string, string>();
 // #664's bounds: per command, and for the whole pass; past them nothing is proven.
 const PROBE_TIMEOUT_MS = 5_000;
 const PASS_DEADLINE_MS = 20_000;
-const ARCH = /^[a-z0-9][a-z0-9-]*$/;
 
-type Target = {
-	readonly pkg: string;
-	// null: a bare name, which apt prints for the native or `all` instance.
-	readonly arch: string | null;
-	readonly version: string;
-};
 // The stdout of a clean finish (exit 0, nothing on stderr), else null.
 type Ask = (argv: string[]) => Promise<string | null>;
 
-/** The packages and versions a scheduled notice id names; null unless every element is one, once. */
-export function noticeTargets(id: string): readonly Target[] | null {
-	const targets: Target[] = [];
-	for (const item of id.split(",")) {
-		const [, name = "", version = ""] = /^([^=]+)=([^=]+)$/.exec(item) ?? [];
-		const [pkg = "", arch = null, extra] = name.split(":");
-		if (
-			!APT_PACKAGE_NAME_RE.test(name) ||
-			!APT_SIMULATION_VERSION_RE.test(version) ||
-			extra !== undefined ||
-			(arch !== null && !ARCH.test(arch)) ||
-			targets.some((target) => target.pkg === pkg && target.arch === arch)
-		)
-			return null;
-		targets.push({ pkg, arch, version });
+export function scheduledPackageNoticeIdentity(offer: string): string {
+	if (offer.length <= EVENT_TEXT_LIMIT) return offer;
+	const id = compactId(offer);
+	if (!canRetainCompactOffer(offer)) return id;
+	recentCompactOffers.delete(id);
+	recentCompactOffers.set(id, offer);
+	for (const oldest of recentCompactOffers.keys()) {
+		if (recentCompactOffers.size <= ANNOUNCED_WINDOW) break;
+		recentCompactOffers.delete(oldest);
 	}
-	return targets.length > 0 ? targets : null;
+	try {
+		rememberCompactOffer(id, offer, announcedIds);
+	} catch {
+		logger.warn(
+			"update-orchestrator: scheduled package notice proof not saved",
+		);
+	}
+	return id;
 }
 
 function bounded(): Ask {
@@ -88,21 +97,62 @@ function bounded(): Ask {
 	};
 }
 
-function candidateIds(): Set<string> {
-	const ids = new Set(
-		persistentNotificationNames(PREFIX).map((name) =>
-			name.slice(PREFIX.length),
-		),
-	);
+function announcedIds(baseDir = resolveEventsDir()): Set<string> {
 	const announced = new Set<string>();
-	const events = readEvents()
+	const events = readEvents({ baseDir })
 		.filter((event) => event.code === "update_updates_available")
 		.sort((left, right) => right.seq - left.seq);
 	for (const { params } of events) {
 		if (announced.size >= ANNOUNCED_WINDOW) break;
 		if (typeof params.id === "string") announced.add(params.id);
 	}
-	return new Set([...ids, ...announced]);
+	return announced;
+}
+
+function savedOffers(): ReadonlyMap<string, string> {
+	try {
+		return readCompactOffers();
+	} catch {
+		logger.warn(
+			"update-orchestrator: scheduled package notice proof unavailable",
+		);
+		return new Map();
+	}
+}
+
+function candidateOffers(baseDir: string) {
+	const live = new Set(
+		persistentNotificationNames(PREFIX).map((name) =>
+			name.slice(PREFIX.length),
+		),
+	);
+	const announced = announcedIds(baseDir);
+	const candidates: {
+		readonly id: string;
+		readonly offer: string;
+		readonly reliesOnHistory: boolean;
+	}[] = [];
+	let saved: ReadonlyMap<string, string> | undefined;
+	for (const id of new Set([...live, ...announced])) {
+		let offer = id;
+		let reliesOnHistory = !live.has(id);
+		if (COMPACT_ID.test(id)) {
+			const active = reliesOnHistory ? undefined : recentCompactOffers.get(id);
+			if (active !== undefined) {
+				offer = active;
+			} else {
+				// The private store resolves historical IDs; it cannot extend the window.
+				if (!announced.has(id)) continue;
+				saved ??= savedOffers();
+				const exact = saved.get(id);
+				if (exact === undefined) continue;
+				offer = exact;
+				reliesOnHistory = true;
+			}
+		}
+		candidates.push({ id, offer, reliesOnHistory });
+	}
+	return candidates;
 }
 
 // All targets must match in one dpkg-query read, not an atomic snapshot.
@@ -110,7 +160,7 @@ function candidateIds(): Set<string> {
 // without changing the version (for example, by putting a package on hold).
 // Only a later successful check finding actionable updates announces them.
 async function installed(
-	targets: readonly Target[],
+	targets: readonly NoticeTarget[],
 	native: string,
 	ask: Ask,
 ): Promise<boolean> {
@@ -124,6 +174,7 @@ async function installed(
 	]);
 	const rows = listed?.endsWith("\n") ? parseDpkgRows(listed, packages) : null;
 	if (!rows) return false;
+	const used = new Set<string>();
 	for (const { pkg, arch, version } of targets) {
 		const instances = rows.filter(
 			(row) =>
@@ -134,6 +185,9 @@ async function installed(
 		);
 		const row = instances.length === 1 ? instances[0] : undefined;
 		if (row?.status !== "ii " || row.version !== version) return false;
+		const instance = `${row.name}:${row.arch}`;
+		if (used.has(instance)) return false;
+		used.add(instance);
 	}
 	return true;
 }
@@ -150,18 +204,22 @@ export async function retireFulfilledPackageNotices(
 ): Promise<void> {
 	if (!isCurrent()) return;
 	const pending = new Set(current);
-	const provable = [...candidateIds()].flatMap((id) => {
-		const targets = noticeTargets(id);
-		return targets && !id.split(",").some((item) => pending.has(item))
-			? [{ id, targets }]
-			: [];
-	});
+	const baseDir = resolve(resolveEventsDir());
+	const clearGeneration = eventsClearGeneration(baseDir);
+	const provable = candidateOffers(baseDir).flatMap(
+		({ id, offer, reliesOnHistory }) => {
+			const targets = noticeTargets(offer);
+			return targets && !offer.split(",").some((item) => pending.has(item))
+				? [{ id, targets, reliesOnHistory }]
+				: [];
+		},
+	);
 	if (provable.length === 0) return;
 	const ask = bounded();
 	const native = await ask(["dpkg", "--print-architecture"]);
 	const arch = native?.endsWith("\n") ? native.slice(0, -1) : undefined;
-	if (arch === undefined || !ARCH.test(arch)) return;
-	for (const { id, targets } of provable) {
+	if (arch === undefined || !PACKAGE_ARCH.test(arch)) return;
+	for (const { id, targets, reliesOnHistory } of provable) {
 		if (!isCurrent()) return;
 		const name = PREFIX + id;
 		const unchanged = fenceNotification(name);
@@ -170,6 +228,8 @@ export async function retireFulfilledPackageNotices(
 		if (!unchanged() || !proven) continue;
 		if (!isCurrent()) return;
 		const live = notificationExists(name) !== undefined;
+		if (reliesOnHistory && eventsClearGeneration(baseDir) !== clearGeneration)
+			continue;
 		notificationWithdraw(name);
 		if (live)
 			logger.info(

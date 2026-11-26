@@ -71,7 +71,6 @@ export class EventsView {
 	stale = $state(false);
 	liveEdgeFailed = $state(false);
 	newWhileBrowsing = $state(0);
-	newCountIncomplete = $state(false);
 	get rawLink() {
 		return this.#raw.link;
 	}
@@ -83,7 +82,13 @@ export class EventsView {
 	readonly #deps: EventsViewDeps;
 	readonly #raw = new EventsRawLink();
 	#generation = 0;
-	#head = 0;
+	#accountedHead = $state(0);
+	#pagedHead = $state(0);
+	#countIncomplete = $state(false);
+	readonly newCountIncomplete = $derived(
+		this.#countIncomplete ||
+			(this.browsingHistory && this.#pagedHead > this.#accountedHead),
+	);
 	#retainedFrom = 0;
 	#epoch: string | undefined;
 	#historyEpoch: string | undefined;
@@ -106,7 +111,7 @@ export class EventsView {
 		if (this.#connected) this.stale = false;
 		this.liveEdgeFailed = false;
 		this.newWhileBrowsing = 0;
-		this.newCountIncomplete = false;
+		this.#countIncomplete = false;
 		this.#raw.reset();
 		// An automatic refill can keep the old DOM until it can compare records.
 		if (!replacement) {
@@ -199,7 +204,7 @@ export class EventsView {
 		const beforeSeq = end === "older" ? this.nextBeforeSeq : null;
 		const window = {
 			rows: this.events,
-			head: this.#head,
+			head: Math.max(this.#accountedHead, this.#pagedHead),
 			epoch: this.#epoch,
 			current,
 		};
@@ -217,19 +222,20 @@ export class EventsView {
 				this.failed = "older";
 				return;
 			}
-			const seen = this.#head;
+			const seen = this.#accountedHead;
+			const headRegressed = page.headSeq < Math.max(seen, this.#pagedHead);
 			const epochChanged =
 				page.epoch !== undefined &&
 				this.#historyEpoch !== undefined &&
 				page.epoch !== this.#historyEpoch;
 			if (shouldReloadEvents(page, window, mode === "replace" ? end : mode)) {
 				void this.#reload({
-					identityChanged: epochChanged || page.headSeq < seen,
+					identityChanged: epochChanged || headRegressed,
 				});
 				return;
 			}
 			this.#epoch = page.epoch;
-			if (end === "first" && (mode !== "live-edge" || page.headSeq < seen)) {
+			if (end === "first" && (mode !== "live-edge" || headRegressed)) {
 				const shownBySeq = new Map(window.rows.map((row) => [row.seq, row]));
 				let sharesRecord = false;
 				const reusedSeq = page.events.some((event) => {
@@ -241,7 +247,7 @@ export class EventsView {
 				});
 				const identityChanged =
 					epochChanged ||
-					page.headSeq < seen ||
+					headRegressed ||
 					reusedSeq ||
 					replacement?.identityChanged === true;
 				if (identityChanged) {
@@ -255,24 +261,26 @@ export class EventsView {
 			// An omitted epoch affects reload rules but does not identify a new ring.
 			this.#historyEpoch = page.epoch ?? this.#historyEpoch;
 			// A first page reports the head at its read; pushes since then are held.
-			this.#head =
-				end === "first" ? page.headSeq : Math.max(seen, page.headSeq);
+			if (end === "first") {
+				this.#accountedHead = page.headSeq;
+				this.#pagedHead = 0;
+			}
 			this.#retainedFrom = page.retainedFromSeq;
 			if (mode === "live-edge") {
 				// Seq only grows while the ring is kept, so a lower head proves a clear,
 				// after which seq, and so a shown row's id, can repeat.
-				if (page.headSeq < seen) {
+				if (headRegressed) {
 					this.events = page.events;
 					this.nextBeforeSeq = page.nextBeforeSeq;
 					this.newWhileBrowsing = 0;
-					this.newCountIncomplete = false;
+					this.#countIncomplete = false;
 					settleRows = true;
 				} else {
 					const kept = retainedEvents(this.events, page);
 					const fresh = page.events.filter((event) => event.seq > seen).length;
 					this.newWhileBrowsing += fresh;
 					// A bounded read can reduce certainty without adding to the tally.
-					this.newCountIncomplete ||=
+					this.#countIncomplete ||=
 						page.retainedFromSeq > seen + 1 ||
 						page.events.length >= input.limit ||
 						page.nextBeforeSeq !== null;
@@ -298,6 +306,14 @@ export class EventsView {
 				);
 				if (liveEdgeMoved || merged.length > EVENT_ROW_CAP)
 					this.browsingHistory = true;
+				if (end === "older") {
+					// Paging knows the ring's head, but its rows do not cover that edge.
+					this.#pagedHead = Math.max(this.#pagedHead, page.headSeq);
+					this.#countIncomplete ||=
+						this.browsingHistory &&
+						page.headSeq > seen &&
+						page.retainedFromSeq > seen + 1;
+				}
 				this.events = merged.slice(-EVENT_ROW_CAP);
 				this.nextBeforeSeq = page.nextBeforeSeq;
 			}
@@ -342,7 +358,7 @@ export class EventsView {
 		const admitted: DeviceEvent[] = [];
 		let fresh = 0;
 		for (const event of batch) {
-			if (event.seq > this.#head + 1) {
+			if (event.seq > this.#accountedHead + 1) {
 				// While browsing, only the count needs what was missed, not the rows.
 				if (this.browsingHistory) this.newWhileBrowsing += fresh;
 				void this.#read("first", this.browsingHistory ? "live-edge" : "gap");
@@ -350,9 +366,9 @@ export class EventsView {
 			}
 			if (event.seq >= this.#retainedFrom && admits(this.filter, event)) {
 				admitted.push(event);
-				if (event.seq > this.#head) fresh += 1;
+				if (event.seq > this.#accountedHead) fresh += 1;
 			}
-			this.#head = Math.max(this.#head, event.seq);
+			this.#accountedHead = Math.max(this.#accountedHead, event.seq);
 		}
 		// A browsed window stays in place; Start from newest names what arrived.
 		if (this.browsingHistory) {

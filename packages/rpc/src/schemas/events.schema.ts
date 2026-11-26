@@ -39,7 +39,8 @@ export const UPLINK_HEALTH_REASONS = [
 export const uplinkHealthReasonSchema = z.enum(UPLINK_HEALTH_REASONS);
 export type UplinkHealthReason = z.infer<typeof uplinkHealthReasonSchema>;
 
-const text = z.string().max(1024);
+export const EVENT_TEXT_LIMIT = 1024;
+const text = z.string().max(EVENT_TEXT_LIMIT);
 const strings = z.array(text);
 const duration = z.number().nonnegative();
 const count = z.number().int().nonnegative();

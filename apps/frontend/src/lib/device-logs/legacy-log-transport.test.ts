@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
+import { tick } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { rpcClient } from "$lib/rpc/client";
 import { RPC_CALL_TIMEOUT_MS } from "$lib/rpc/rpc-timeouts";
 import { initSubscriptions, resetState } from "$lib/rpc/subscriptions.svelte";
 
+import LegacyLogDownloads from "../../main/system-logs/LegacyLogDownloads.svelte";
 import { LogDownloads } from "../../main/system-logs/log-downloads.svelte";
 import { type LegacyKind, legacyLocked } from "./download-gate.svelte";
 
@@ -70,6 +73,7 @@ const KINDS = [
 const FILE_WINDOW_MS = 10_000;
 
 const realWebSocket = globalThis.WebSocket;
+const realRemoveAnchor = HTMLAnchorElement.prototype.remove;
 // biome-ignore lint/complexity/useLiteralKeys: test-only private transport seam
 const realGetUrl = rpcClient["getUrl"];
 // Every browser download handed off, in order: the file name and the bytes behind its URL.
@@ -152,6 +156,29 @@ async function drain(): Promise<void> {
 	await vi.advanceTimersByTimeAsync(0);
 }
 
+function failCleanup(remove: boolean, revoke: boolean) {
+	const removal = vi.spyOn(HTMLAnchorElement.prototype, "remove");
+	if (remove) {
+		removal.mockImplementationOnce(function (this: HTMLAnchorElement) {
+			// Keep the jsdom fixture clean even when the adapter reports failure.
+			realRemoveAnchor.call(this);
+			throw new Error("anchor removal failed");
+		});
+	}
+	if (revoke) {
+		vi.mocked(URL.revokeObjectURL).mockImplementationOnce(() => {
+			throw new Error("URL revocation failed");
+		});
+	}
+	return removal;
+}
+
+function expectNoParseError(): void {
+	expect(
+		vi.mocked(console.error).mock.calls.map(([message]) => message),
+	).not.toContain("Failed to parse message:");
+}
+
 beforeEach(() => {
 	vi.useFakeTimers({
 		toFake: [
@@ -194,6 +221,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+	cleanup();
 	resetState();
 	rpcClient.disconnect();
 	// biome-ignore lint/complexity/useLiteralKeys: test-only private transport seam
@@ -204,6 +232,119 @@ afterEach(() => {
 });
 
 describe("legacy log downloads over the socket", () => {
+	it.each([
+		{ kind: "device", fault: "object URL", cleanupFails: false, revoked: [] },
+		{
+			kind: "system",
+			fault: "anchor click",
+			cleanupFails: false,
+			revoked: [["blob:log-1"]],
+		},
+		{
+			kind: "system",
+			fault: "anchor click",
+			cleanupFails: true,
+			revoked: [["blob:log-1"]],
+		},
+	] as const)(
+		"shows Retry for the $kind log when $fault throws (cleanup also throws: $cleanupFails) and hands off only the fresh file",
+		async ({ kind, fault, cleanupFails, revoked }) => {
+			const removal = failCleanup(cleanupFails, cleanupFails);
+			const failure = new Error(`${fault} failed`);
+			const browserStep =
+				fault === "object URL"
+					? vi.mocked(URL.createObjectURL)
+					: vi.mocked(HTMLAnchorElement.prototype.click);
+			browserStep.mockImplementationOnce(() => {
+				throw failure;
+			});
+			const view = new LogDownloads(() => true);
+			render(LegacyLogDownloads, { props: { downloads: view } });
+
+			await fireEvent.click(screen.getByTestId(`log-download-${kind}`));
+			const first = nth(kind, 0);
+			push(kind, "failed file", first.request);
+			await drain();
+			await tick();
+
+			expect(screen.queryByRole("alert")?.dataset.testid).toBe(
+				"log-download-error",
+			);
+			expect(await handed()).toEqual([]);
+			expect(removal).toHaveBeenCalledTimes(fault === "anchor click" ? 1 : 0);
+			expect(vi.mocked(URL.revokeObjectURL).mock.calls).toEqual(revoked);
+			expect(document.querySelector("a[download]")).toBeNull();
+
+			await fireEvent.click(screen.getByTestId("log-download-retry"));
+			const fresh = nth(kind, 1);
+			expect(fresh.request).not.toBe(first.request);
+			answer(first.id);
+			push(kind, "stale file", first.request);
+			push(kind, "  fresh file\n", fresh.request);
+			answer(fresh.id);
+			await drain();
+			await tick();
+
+			expectNoParseError();
+			const requestError = `Failed to request ${kind} log:`;
+			expect(
+				vi
+					.mocked(console.error)
+					.mock.calls.filter(([msg]) => msg === requestError),
+			).toEqual([[requestError, failure]]);
+			expect(screen.queryByRole("alert")).toBeNull();
+			expect(view.downloading).toBeNull();
+			expect(await handed()).toEqual([file(kind, "fresh file")]);
+			expect(vi.mocked(URL.revokeObjectURL).mock.calls).toEqual([
+				...revoked,
+				[fault === "object URL" ? "blob:log-1" : "blob:log-2"],
+			]);
+			expect(document.querySelector("a[download]")).toBeNull();
+		},
+	);
+
+	it.each([
+		{ fault: "anchor removal", remove: true, revoke: false },
+		{ fault: "URL revocation", remove: false, revoke: true },
+		{ fault: "cleanup of both resources", remove: true, revoke: true },
+	])(
+		"does not offer Retry for a successful handoff when $fault throws",
+		async ({ remove, revoke }) => {
+			const removal = failCleanup(remove, revoke);
+			let open = true;
+			const view = new LogDownloads(() => open);
+			render(LegacyLogDownloads, { props: { downloads: view } });
+
+			const download = screen.getByTestId("log-download-device");
+			await fireEvent.click(download);
+			const first = nth("device", 0);
+			push("device", "first file", first.request);
+			push("device", "duplicate file", first.request);
+			answer(first.id);
+			await drain();
+			await tick();
+
+			expect(await handed()).toEqual([file("device", "first file")]);
+			expect(removal).toHaveBeenCalledTimes(1);
+			expect(vi.mocked(URL.revokeObjectURL).mock.calls).toEqual([
+				["blob:log-1"],
+			]);
+			expect(screen.queryByRole("alert")).toBeNull();
+			expectNoParseError();
+
+			await fireEvent.click(download);
+			const next = nth("device", 1);
+			expect(next.request).not.toBe(first.request);
+			open = false;
+			push("device", "closed view", next.request);
+			answer(next.id);
+			await drain();
+
+			expect(view.downloading).toBeNull();
+			expect(await handed()).toEqual([file("device", "first file")]);
+		},
+	);
+
 	it.each(KINDS)(
 		"an older device's $kind file late after a timeout is dropped, and only then the retry is sent and saves its own",
 		async ({ kind }) => {

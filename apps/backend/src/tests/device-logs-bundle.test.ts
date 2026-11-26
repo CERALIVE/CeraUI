@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import * as fs from "node:fs";
+import { join } from "node:path";
 import {
 	type LogEntry,
 	type LogQueryPage,
@@ -20,6 +21,11 @@ import {
 } from "../modules/device-logs/export.ts";
 import { queryLogs } from "../modules/device-logs/query.ts";
 import * as pages from "../modules/device-logs/scan-page.ts";
+import { readEvents, resolveEventsDir } from "../modules/events/store.ts";
+import { notifyUpdate } from "../modules/system/update-orchestrator/notifications.ts";
+import { scheduledPackageNoticeIdentity } from "../modules/system/update-orchestrator/package-notice-retirement.ts";
+import { setOrchestratorStateFilePathForTest } from "../modules/system/update-orchestrator/persistence.ts";
+import { notificationWithdraw } from "../modules/ui/notifications.ts";
 import {
 	bootId,
 	journal,
@@ -137,6 +143,47 @@ async function download() {
 	const created = await ticket();
 	return handleLogBundleRequest(new Request(`http://device${created.url}`));
 }
+
+test("dotted versions and a numeric digest run do not block compact-offer support bundles", async () => {
+	const offer = Array.from(
+		{ length: 40 },
+		(_, index) =>
+			`bundle-proof-fixture-package-${index}=1.2.3.4${index === 39 ? "+180" : ""}`,
+	)
+		.sort()
+		.join(",");
+	const rawDigest = new Bun.CryptoHasher("sha256").update(offer).digest("hex");
+	expect(rawDigest).toMatch(/(?<!\d)\d{15}(?!\d)/);
+	setOrchestratorStateFilePathForTest(
+		join(resolveEventsDir(), "../update-state/agent.json"),
+	);
+	const id = scheduledPackageNoticeIdentity(offer);
+	try {
+		notifyUpdate({ kind: "updates-available", id });
+		collect.mockImplementation(async () => ({
+			...source,
+			events: readEvents(),
+		}));
+
+		const manifest = await previewBundle();
+		expect(
+			manifest.sections.find((section) => section.id === "events"),
+		).toEqual({
+			id: "events",
+			entries: 2,
+			redactions: 0,
+		});
+		const { text, lines } = await unpack(await download());
+		expect(lines.find((line) => line.section === "events")).toMatchObject({
+			event: { code: "update_updates_available", params: { id } },
+		});
+		expect(readEvents().map((event) => event.params)).toEqual([{ id }]);
+		expect(text).not.toContain("1.2.3.4");
+	} finally {
+		notificationWithdraw(`update:updates-available:${id}`);
+		setOrchestratorStateFilePathForTest(null);
+	}
+});
 
 test("bundle masks covered boot IDs in journal messages but preserves boot metadata", async () => {
 	const dashedPrevious = "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB";

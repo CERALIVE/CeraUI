@@ -140,11 +140,18 @@ density. It is not a redesign.
   sharing ticket's URL, or a legacy file the device pushes as a `log` event before
   it answers, one slot per kind (device log, system log); the lock below is
   per kind, while the two buttons still share the view's one running state. A
-  request owns its kind's slot until its file outcome is known: its file,
-  consumed (saved or dropped) exactly once, ends it at once and its later reply is
-  ignored (no failure shown, no slot held); an error reply before the file fails
-  it; an OK reply only acknowledges the call, and the request keeps its slot
-  waiting for its file until `FILE_AFTER_REPLY_MS` passes, then fails with the
+  request owns its kind's slot until its file outcome is known. A file is
+  consumed once, and a later reply cannot change that outcome. For a live open,
+  success means creating the object URL and clicking the temporary download
+  anchor without throwing, not that the browser finished writing the file.
+  Anchor removal and URL revocation are attempted independently. Cleanup
+  errors are logged without changing the handoff outcome.
+  A failure to start the download frees the slot and shows the existing
+  inline Retry, which sends a fresh request for the same log. A file for a closed
+  open is dropped without starting a download or showing a failure. An error
+  reply before the file fails the request; an OK reply only acknowledges the
+  call, and the request keeps its slot waiting for its file until
+  `FILE_AFTER_REPLY_MS` passes, then fails with the
   usual failure band (the stock device answers a failed journal read with an
   empty log and no file); a reconnect does not end it early, the deadline
   still does. The client pairs each reply with its own call. A file

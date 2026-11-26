@@ -29,10 +29,17 @@ NetworkManager profile is included. `readUpdateChannel()` reuses the update
 owner's validated readers without migrating or writing settings.
 
 Held config, relay, hotspot, APN and router credentials are inputs to redaction
-only. `getStoredModemCredentials()` returns copies of the username/password
-pairs, including disconnected devices, without identity or verification
-metadata. They never become bundle records. The backend has no SRT passphrase
-field to read; an absent credential is not invented or probed from the engine.
+only. Before collecting data, both preview and creation require the hotspot
+and modem stores to be ready, as reported by `credentialStoresState()`, the
+same authority used by filtered export. A missing file counts as ready once
+initialization has checked it. A store that is still loading or could not be
+read refuses with bare `READ_FAILED`, without a manifest or a new ticket.
+Retry after initialization completes; a failed store requires successful
+reinitialization. `getStoredModemCredentials()` returns copies of the
+username/password pairs, including disconnected devices, without identity or
+verification metadata. They never become bundle records. The backend has no SRT
+passphrase field to read; an absent credential is not invented or probed from the
+engine.
 
 `redaction.ts` replaces non-overlapping exact occurrences, choosing the longest
 match at each position, for secrets of at least four JavaScript string units.
@@ -182,7 +189,7 @@ generic one, whose Retry and Export this view controls are already their remedy.
 | `journal_read` | `READ_FAILED` | `journalctl --list-boots` failed during collection; journal page failures are cuts, not refusals |
 | `abort` | `READ_FAILED` | a clear, service stop or caller abort, or a history epoch change, interrupted preparation |
 | `deadline` | `READ_FAILED` | the sixty-second budget expired while admission waited for a clear |
-| `internal` | `READ_FAILED` (bare message) | anything else, including an unencodable held secret |
+| `internal` | `READ_FAILED` (bare message) | credential stores are not ready, an unencodable held secret, or any other unclassified failure |
 | `busy` | `BUSY` | another export, bundle or unexpired ticket holds the sharing lease |
 
 Once admitted, the time limit, byte caps and journal page read failures never

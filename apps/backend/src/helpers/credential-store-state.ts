@@ -1,7 +1,8 @@
 /**
  * Load state of the persistent credential stores, for consumers that redact the
- * credentials the backend holds (the log export). Kept free of imports so the
- * test preload can model a booted backend without loading the stores.
+ * credentials the backend holds (log exports and support bundles). Kept free
+ * of imports so the test preload can model a booted backend without loading
+ * the stores.
  *
  * `pending` until a store's init has classified its file, `ready` once it loaded
  * or there was no file, `failed` when the file existed but could not be read,
