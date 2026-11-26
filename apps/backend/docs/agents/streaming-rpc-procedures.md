@@ -123,7 +123,8 @@ and mix in one synchronous write. A pick that would exceed the saved slot
 limit is refused. The same request observes the selected route. A missing
 proof returns `audio_source_probe_failed`, not
 permission to retry with a bare `asrc` or to enroll the current occupant on
-Start. Without `audio_pick` an `asrc` save changes no membership.
+Start. Without `audio_pick` an `asrc` save changes no membership, but a concrete
+microphone still requires the same observation before the save can succeed.
 Idle edits from the Live strips arrive as per-input deltas on
 `setAudioMix`: values, or `include` / `track` for membership and tracks, which
 `changedAudioInputs` composes on the current saved mix (refusing to turn the
@@ -173,8 +174,9 @@ Stop, engine idle or connection loss withdraw it. Only an active mix refuses
 `switchAudio` with `audio_mix_active`. A legacy session retains live source
 switching even after a mix is saved.
 A live mixer acknowledgement for a session replaced by Stop and Start replies
-with `audio_mix_not_saved`; it does not edit the successor's mix or broadcast
-saved settings.
+with `stream_ended_before_audio_saved`; it does not edit the successor's mix or
+broadcast saved settings. Stop advances the ownership epoch even before the
+engine acknowledges it, so a live mixer reply during Stop cannot save either.
 
 Status snapshots, the start and stop updates and the first post-sign-in status also carry
 `audio_off_active`: whether the running session was launched without audio by the

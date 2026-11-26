@@ -1738,7 +1738,7 @@ test("late live mix success after Stop and verified Start is not saved", async (
 			gate.resolve();
 			expect(await pending).toEqual({
 				success: false,
-				error: "audio_mix_not_saved",
+				error: "stream_ended_before_audio_saved",
 			});
 			expect(await Bun.file(getConfigFilePath()).text()).toBe(saved);
 			expect(readArmedStreamMarker()).toEqual(successor);
@@ -2878,8 +2878,12 @@ test("a verified Start rejection cannot fall back or apply its proof to the mark
 	expect(await Bun.file(getConfigFilePath()).text()).toBe(saved);
 });
 
-test.each(["no saved mix", "an invalid saved mix"] as const)(
-	"a picker save with %s cannot acknowledge a replacement observed at the same address",
+test.each([
+	"no saved mix",
+	"an invalid saved mix",
+	"an untagged asrc",
+] as const)(
+	"a microphone save with %s cannot acknowledge a replacement observed at the same address",
 	async (caseName) => {
 		const observing = Promise.withResolvers<void>();
 		const readRoute = Promise.withResolvers<void>();
@@ -2892,13 +2896,19 @@ test.each(["no saved mix", "an invalid saved mix"] as const)(
 		});
 		useRoutePeer(peer);
 		const savedMix =
-			caseName === "an invalid saved mix"
-				? [entry("Primary", [1]), entry("Gone", [2])]
-				: undefined;
+			caseName === "no saved mix"
+				? undefined
+				: [
+						entry("Primary", [1]),
+						entry(caseName === "an invalid saved mix" ? "Gone" : "Second", [2]),
+					];
 		getConfig().audio_inputs = savedMix;
 		await listPhysicalMics(["micOld", ORIGINAL_MIC]);
 		try {
-			const saved = pick("micOld");
+			const saved =
+				caseName === "an untagged asrc"
+					? call(setConfigProcedure, { asrc: "micOld" }, context())
+					: pick("micOld");
 			expect(
 				await Promise.race([
 					observing.promise.then(() => "observing the picker"),
@@ -2920,7 +2930,7 @@ test.each(["no saved mix", "an invalid saved mix"] as const)(
 			expect((await disk()).asrc).toBe("micOld");
 			expect((await disk()).audio_inputs).toEqual(savedMix);
 			if (savedMix !== undefined) {
-				// Clearing the invalid mix must not let Start enroll the replacement.
+				// Clearing the saved mix must not let Start enroll the replacement.
 				expect(
 					await call(setConfigProcedure, { audio_inputs: null }, context()),
 				).toMatchObject({ success: true });

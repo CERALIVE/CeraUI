@@ -103,19 +103,12 @@ export const setAudioMixProcedure = os
 			const ownsWrite = captureLiveWriteFence();
 			const params = { inputs: [{ input_id: running.input_id, ...update }] };
 			try {
-				const mocked = shouldUseMocks();
-				const result = mocked
+				const result = shouldUseMocks()
 					? setMockAudioMix(params)
 					: await cerastreamBackend.setAudioMix(params);
 				// The engine answered for the old stream, not the current settings.
 				if (!ownsWrite())
 					return { success: false, error: "stream_ended_before_audio_saved" };
-				// A successor can have the same input ID, but not the same session row.
-				if (
-					!mocked &&
-					(!getAudioMixActive() || !getAudioMixInputs()?.includes(running))
-				)
-					return { success: false, error: "audio_mix_not_saved" };
 				const state = result.inputs.find(
 					(input) => input.input_id === running.input_id,
 				);

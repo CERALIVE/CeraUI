@@ -327,6 +327,35 @@ export function createStreamSessionOrchestrator(
 	const stopWithinDeadline = cleanup.run;
 	const transition = ownership.transition;
 
+	const confirmPreDispatchStop = async (
+		owner: ReturnType<typeof ownership.capture>,
+		rollback: (() => Promise<void>) | undefined,
+	): Promise<void> => {
+		const deadline = Promise.withResolvers<never>();
+		let observing = true;
+		const current = () => observing && ownership.owns(owner);
+		const timer = scheduleTimeout(() => {
+			observing = false;
+			deadline.reject(new Error("stop_timeout"));
+		}, stopDeadlineMs);
+		try {
+			await Promise.race([
+				deadline.promise,
+				Promise.resolve(rollback?.()).then(async () => {
+					if (!current()) return;
+					const state = await withRuntimeObservationOwner(
+						current,
+						deps.queryRuntime,
+					);
+					if (state !== "idle") throw new Error("stop_not_confirmed");
+				}),
+			]);
+		} finally {
+			observing = false;
+			cancelTimeout(timer);
+		}
+	};
+
 	const finishCancelled = async (
 		attempt: ActiveAttempt,
 		liveness: "idle" | "unknown",
@@ -908,10 +937,7 @@ export function createStreamSessionOrchestrator(
 			const cleanupBeforeDispatch =
 				rollback?.kind === "pre-dispatch" ? rollback.run : undefined;
 			const stopping = preDispatch
-				? Promise.resolve(cleanupBeforeDispatch?.()).then(async () => {
-						if ((await deps.queryRuntime?.()) !== "idle")
-							throw new Error("stop_not_confirmed");
-					})
+				? confirmPreDispatchStop(owner, cleanupBeforeDispatch)
 				: stopWithinDeadline(stoppedGeneration, cause === "operator");
 			if (cancellingStart && active !== undefined) {
 				active.cancelStop = stopping.then(

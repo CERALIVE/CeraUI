@@ -111,9 +111,13 @@ test("S4 operator Stop during held Start leaves idle without a blind second Stop
 	h.engine.holdConnect(connect.promise);
 	const start = h.start();
 	await h.engine.connected;
-	expect(await h.session.stop("operator")).toEqual({ result: "stopped" });
-	connect.resolve();
-	await h.expireProbe();
+	try {
+		expect(await h.session.stop("operator")).toEqual({ result: "stopped" });
+	} finally {
+		connect.resolve();
+		await h.expireProbe();
+		await start;
+	}
 	expect(await start).toMatchObject({ result: "cancelled" });
 	expect(h.engine.clients[0]?.calls).not.toContain("start");
 	expect(h.calls().filter((call) => call === "stop")).toHaveLength(1);
@@ -321,10 +325,13 @@ for (const row of evidenceMatrix)
 				h.engine.holdConnect(connect.promise);
 				const start = h.start();
 				await h.engine.connected;
-				await h.session.stop("operator");
-				connect.resolve();
-				await h.expireProbe();
-				await start;
+				try {
+					await h.session.stop("operator");
+				} finally {
+					connect.resolve();
+					await h.expireProbe();
+					await start;
+				}
 				expect(h.calls().filter((call) => call === "stop")).toHaveLength(1);
 				break;
 			}

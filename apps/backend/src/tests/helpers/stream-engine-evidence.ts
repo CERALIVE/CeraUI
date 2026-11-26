@@ -20,6 +20,7 @@ import {
 } from "../../modules/streaming/cerastream-backend.ts";
 import { createLaunchTransaction } from "../../modules/streaming/launch-transaction.ts";
 import { createStreamSessionOrchestrator } from "../../modules/streaming/stream-session-orchestrator.ts";
+import type { StreamRunOptions } from "../../modules/streaming/streaming-backend.ts";
 
 const config = {
 	max_br: 8000,
@@ -36,6 +37,14 @@ const options = {
 const unused = async (): Promise<never> => {
 	throw new Error("unexpected fake engine operation");
 };
+
+// Old wire fixtures exercise the sole address-only launch policy: legacy restore.
+export const legacyAddressOnlyAudio = {
+	attemptId: "legacy-address-only-restore",
+	legacyAddressOnly: true,
+	expected: unused,
+	applied: () => undefined,
+} satisfies NonNullable<StreamRunOptions["micRoute"]>;
 
 /** Engine truth changes at effect submission/ack, never from a production guard. */
 export function evidenceHarness(
@@ -322,20 +331,38 @@ export function evidenceHarness(
 				if (delay === ms) return timers.get(timer);
 			return undefined;
 		},
-		start: (override: Partial<RuntimeConfig> = {}) => {
+		start: (
+			override: Partial<RuntimeConfig> = {},
+			micRoute?: StreamRunOptions["micRoute"],
+		) => {
 			const transaction = createLaunchTransaction("evidence", {
 				timers: { schedule, cancel },
 			});
+			let subscribed = false;
 			return session.start({
 				origin: "ui",
 				launch: () =>
-					backend.start({ ...config, ...override }, options, {
-						...transaction,
-						runPhase: (phase, operation, errorPhase) => {
-							if (phase === "start-rpc") beforeDispatch?.();
-							return transaction.runPhase(phase, operation, errorPhase);
+					backend.start(
+						{ ...config, ...override },
+						micRoute === undefined ? options : { ...options, micRoute },
+						{
+							...transaction,
+							acquirePhase: async (phase, operation, cleanup, errorPhase) => {
+								const acquired = await transaction.acquirePhase(
+									phase,
+									operation,
+									cleanup,
+									errorPhase,
+								);
+								if (phase === "subscribe") subscribed = true;
+								return acquired;
+							},
+							runPhase: (phase, operation, errorPhase) => {
+								if (subscribed && phase === "start-rpc") beforeDispatch?.();
+								return transaction.runPhase(phase, operation, errorPhase);
+							},
 						},
-					}),
+					),
 			});
 		},
 		beforeStartDispatch: (action: () => void) => {

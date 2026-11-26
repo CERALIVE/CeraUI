@@ -17,6 +17,7 @@ import {
 	supportsVideoPassthrough,
 } from "../modules/streaming/cerastream-backend.ts";
 import type { StreamRunOptions } from "../modules/streaming/streaming-backend.ts";
+import { legacyAddressOnlyAudio } from "./helpers/stream-engine-evidence.ts";
 
 // Todo 18 — start/reload assembly. Drives a real CerastreamBackend against an
 // in-memory fake control client and inspects the exact params handed to the
@@ -28,6 +29,8 @@ const RUN_OPTS: StreamRunOptions = {
 	pipeline: "hdmi",
 	host: "127.0.0.1",
 	port: 9000,
+	streamid: "",
+	micRoute: legacyAddressOnlyAudio,
 };
 
 const silentLogger: CerastreamBackendDeps["logger"] = {

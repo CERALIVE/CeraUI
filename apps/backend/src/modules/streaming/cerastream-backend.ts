@@ -903,6 +903,15 @@ export class CerastreamBackend implements StreamingBackend {
 			);
 		try {
 			let params = this.buildStartParams(config, opts);
+			// Preserve explicit Stop for an ordinary launch with no concrete mic.
+			// A scoped reservation or microphone preflight uses read-only cancellation.
+			registerLaunchRollback({
+				kind:
+					micRouteKeys(params.audio).length === 0
+						? "transaction"
+						: "pre-dispatch",
+				run: launchTransaction.rollback,
+			});
 			let audioMixInputs: CerastreamBackend["audioMixInputs"];
 			let appliedProofs: string[] | undefined;
 			await this.enqueue(async () => {
@@ -953,6 +962,11 @@ export class CerastreamBackend implements StreamingBackend {
 					},
 				);
 				scoped = launchCaps.scoped;
+				if (scoped)
+					registerLaunchRollback({
+						kind: "pre-dispatch",
+						run: launchTransaction.rollback,
+					});
 				negotiatingCapabilities = false;
 				assertLaunchSocket();
 				const subscription = await launchTransaction.acquirePhase(

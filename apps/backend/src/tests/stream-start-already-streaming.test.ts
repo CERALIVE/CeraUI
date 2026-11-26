@@ -20,7 +20,10 @@ import {
 	ENGINE_TRANSITION_STOP_DEADLINE_MS,
 	START_PHASE_DEADLINES_MS,
 } from "../modules/streaming/start-lifecycle-timing.ts";
-import { evidenceHarness } from "./helpers/stream-engine-evidence.ts";
+import {
+	evidenceHarness,
+	legacyAddressOnlyAudio,
+} from "./helpers/stream-engine-evidence.ts";
 
 const codes = rpcErrorCodeSchema.enum;
 const busy = codes["cerastream.state.already_streaming"];
@@ -187,7 +190,12 @@ test.each([
 		const h = harness(SCHEMA_VERSION);
 		refuseAgainstForeignStream(h, numeric[dataCode], dataCode);
 
-		expect(await h.start(config)).toMatchObject({
+		expect(
+			await h.start(
+				config,
+				dataCode === audioMissing ? legacyAddressOnlyAudio : undefined,
+			),
+		).toMatchObject({
 			result: "failed",
 			failure: {
 				phase: "start-rpc",

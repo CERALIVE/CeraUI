@@ -959,7 +959,7 @@ export const setConfigProcedure = liveWriteProcedure
 				? undefined
 				: storedAudioInputs(audioInputs, audioConfig);
 		const micChoices = captureMicChoices([
-			...(pickerAsrc === undefined ? [] : [pickerAsrc]),
+			...(input.asrc === undefined ? [] : [input.asrc]),
 			...(storedMix ?? [])
 				.filter(
 					({ id }) => !config.audio_inputs?.some((input) => input.id === id),
