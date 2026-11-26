@@ -261,6 +261,7 @@ export type StreamSessionOrchestrator = {
 	readonly reconcileLostSession: (current: () => boolean) => Promise<void>;
 	readonly reconcile: (current?: () => boolean) => Promise<LifecycleState>;
 	readonly snapshot: () => StreamSessionSnapshot;
+	readonly captureLiveWriteFence: () => () => boolean;
 	readonly changeConfig: (
 		delta: StreamConfigChangeDelta,
 	) => Promise<ConfigChangeResult>;
@@ -1142,6 +1143,10 @@ export function createStreamSessionOrchestrator(
 			state: ownership.state,
 			generation: ownership.generation,
 		}),
+		captureLiveWriteFence: () => {
+			const owner = ownership.capture();
+			return () => ownership.owns(owner);
+		},
 		changeConfig,
 		noteConfigChangePhase,
 		noteEngineStatus,
@@ -1181,6 +1186,10 @@ export function reconcileStreamSession(
 
 export function getStreamSessionSnapshot(): StreamSessionSnapshot {
 	return productionOrchestrator.snapshot();
+}
+
+export function captureLiveWriteFence(): () => boolean {
+	return productionOrchestrator.captureLiveWriteFence();
 }
 
 export function streamLiveness(): "streaming" | "idle" | "unknown" {

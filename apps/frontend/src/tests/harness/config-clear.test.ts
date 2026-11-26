@@ -12,7 +12,7 @@
  */
 import { m } from "@ceraui/i18n/svelte";
 import { fireEvent, render, screen } from "@testing-library/svelte";
-import { flushSync } from "svelte";
+import { flushSync, tick } from "svelte";
 import {
 	afterAll,
 	afterEach,
@@ -154,6 +154,40 @@ describe("the mixer shows a cleared mix as cleared", () => {
 				.getAttribute("aria-pressed"),
 		).toBe("false");
 		expect(Object.hasOwn(getConfig() ?? {}, "audio_inputs")).toBe(false);
+	});
+
+	it("a delayed idle mute success cannot undo a newer unmute and clear", async () => {
+		await idleDevice({});
+		render(MixerOnStore);
+		const mute = screen.getByTestId(`audio-strip-mute-${MAIN}`);
+		await fireEvent.click(mute);
+		const pending = await held.next("setAudioMix");
+		expect(pending.input).toEqual({ id: MAIN, mute: true });
+		const muted = await device.call(pending.method, pending.input);
+		expect(muted.result).toMatchObject({
+			success: true,
+			applied: { mute: true },
+		});
+		for (const frame of muted.frames) ingestFrame(frame);
+		expect(getConfig()?.audio_inputs?.[0]?.mute).toBe(true);
+
+		// A second tab unmutes while this tab still waits for its own reply.
+		const unmuted = await device.call("setAudioMix", { id: MAIN, mute: false });
+		expect(unmuted.result).toMatchObject({
+			success: true,
+			applied: { mute: false },
+		});
+		expectMixCleared(unmuted.frames);
+		for (const frame of unmuted.frames) ingestFrame(frame);
+		expect(Object.hasOwn(getConfig() ?? {}, "audio_inputs")).toBe(false);
+
+		pending.resolve(muted.result);
+		await tick();
+		flushSync();
+		expect(mute.getAttribute("aria-pressed")).toBe("false");
+		expect(
+			screen.getByTestId(`audio-strip-error-${MAIN}`).textContent?.trim(),
+		).toBe("");
 	});
 
 	it("(2) primary on Tracks 1+2, remove Track 2: shows Track 1 only", async () => {

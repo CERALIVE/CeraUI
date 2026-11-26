@@ -168,7 +168,8 @@ It is omitted for a stream this process adopted instead of launching.
 `streaming.setAudioMix({ id, gain_db?, mute?, delay_ms? })` uses that session's
 admitted input identity. A live mix sends one producer `setAudioMix` request,
 returns the applied state and saves its values while the stream ownership
-generation still matches. If Stop or a new Start invalidated that generation,
+epoch still matches. Stop invalidates it without waiting for a new Start. If
+the operation lost ownership,
 the successful engine reply saves nothing and the RPC reports
 `stream_ended_before_audio_saved`.
 The reply is authoritative even when its gain differs from the request; partial

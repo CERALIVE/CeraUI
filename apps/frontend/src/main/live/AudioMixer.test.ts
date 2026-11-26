@@ -642,6 +642,36 @@ describe("AudioMixer — latest intent", () => {
 		expect(mute("usb-b").getAttribute("aria-pressed")).toBe("true");
 	});
 
+	it.each([[[0, 1, 2]], [[2, 1, 0]]] as const)(
+		"live gain -6, Reset, -6 settles at -6 with reply order %j",
+		async (order) => {
+			const { rpc } = heldMixer(true);
+			const track = gainRoot("usb-b");
+			track.getBoundingClientRect = () => new DOMRect(0, 0, 72, 10);
+			const chooseMinusSix = async () => {
+				await fireEvent.pointerDown(track, { button: 0, clientX: 54 });
+				await fireEvent.pointerUp(document, { button: 0, clientX: 54 });
+			};
+
+			await chooseMinusSix();
+			await fireEvent.click(screen.getByTestId("audio-strip-gain-reset-usb-b"));
+			await chooseMinusSix();
+			const choices = [-6, 0, -6];
+			expect(rpc.calls.map(({ input }) => input)).toEqual(
+				choices.map((gain_db) => ({ id: "usb-b", gain_db })),
+			);
+			for (const index of order) {
+				rpc.calls[index]?.resolve({
+					success: true,
+					applied: { ...DEFAULTS, id: "usb-b", gain_db: choices[index] },
+				});
+				await setAudioMix.mock.results[index]?.value;
+				await tick();
+			}
+			expect(gainThumb("usb-b").getAttribute("aria-valuenow")).toBe("-6");
+		},
+	);
+
 	it("an old refusal after a newer success does not show an error", async () => {
 		const { rpc } = heldMixer(true);
 		await pressMute();

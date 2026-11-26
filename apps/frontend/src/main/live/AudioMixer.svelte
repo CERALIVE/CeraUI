@@ -304,6 +304,7 @@ async function edit(id: string, field: Field, delta: Delta): Promise<void> {
 	const sentAt = broadcasts.get(key);
 	const current = () => intents.get(key)?.generation === seq && epoch === liveEpoch;
 	intents.set(key, { id, delta, generation: seq, epoch });
+	if (epoch !== undefined && delta.gain_db !== undefined) gainSent[id] = delta.gain_db;
 	errors.delete(key);
 	try {
 		const result = await rpc.streaming.setAudioMix({ id, ...delta });
@@ -315,9 +316,9 @@ async function edit(id: string, field: Field, delta: Delta): Promise<void> {
 			field !== 'include' &&
 			typeof field !== 'number' &&
 			result.applied !== undefined &&
-			(epoch === undefined || sentAt === broadcasts.get(key))
+			sentAt === broadcasts.get(key)
 		) {
-			// A live echo that changed this same field has overtaken this reply.
+			// A broadcast that changed this field, including a clear, wins over its late reply.
 			appliedValues.set(key, { values: { [field]: result.applied[field] }, epoch });
 			if (field === 'gain_db' && epoch !== undefined) gainSent[id] = result.applied.gain_db;
 		}
@@ -386,12 +387,15 @@ $effect(() => {
 	});
 });
 
+function latestSentGain(id: string): number | undefined {
+	return pendingDelta(id, 'gain_db')?.gain_db ?? gainSent[id];
+}
+
 function sendGain(id: string): void {
 	const value = gainDraft[id];
 	// A queued level is sent only while its session is still live.
-	if (!mixLive || value === undefined || value === gainSent[id]) return;
+	if (!mixLive || value === undefined || value === latestSentGain(id)) return;
 	gainSentAt[id] = Date.now();
-	gainSent[id] = value;
 	void edit(id, 'gain_db', { gain_db: value });
 }
 
@@ -419,7 +423,7 @@ function commitGain(id: string, value: number): void {
 	gainTimer[id] = undefined;
 	if (mixLive) {
 		gainDraft = { ...gainDraft, [id]: value };
-		if (value !== gainSent[id]) sendGain(id);
+		if (value !== latestSentGain(id)) sendGain(id);
 		else if (pendingDelta(id, 'gain_db') === undefined) dropDraft(id);
 		return;
 	}

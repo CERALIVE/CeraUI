@@ -483,8 +483,9 @@ must keep that ABI.
   left at its defaults), so edits and picks from several tabs never drop one
   another. An unanswered edit shows as the choice for that input and control.
   A subsequent click starts from that choice, even before a reply. Only the
-  latest reply for the control settles it: a success shows the applied value,
-  and a refusal restores the confirmed value and describes the affected control.
+  latest reply for the control settles it: a success shows the applied value
+  unless a newer broadcast changed or cleared that field, and a refusal
+  restores the confirmed value and describes the affected control.
 - Live on a session whose status says `audio_mix_active`, level, mute and
   delay call `streaming.setAudioMix` with only the changed field (the level
   at most every 100 ms while dragging and once on release), and the values the
