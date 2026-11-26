@@ -85,6 +85,7 @@ import {
 } from "../modules/streaming/stream-restoration.ts";
 import {
 	noteStreamSessionEngineStatus,
+	reconcileStreamSession,
 	retireLostStreamSession,
 } from "../modules/streaming/stream-session-orchestrator.ts";
 import { streamSessionProductionDeps } from "../modules/streaming/stream-session-production.ts";
@@ -2202,12 +2203,31 @@ async function answerPhysicalMics(
 test.each([
 	{ name: "the coherent original", instance: "original" },
 	{ name: "an indistinguishable same-report replacement", instance: "other" },
+	{
+		name: "the same identity moved with a stale roster port",
+		instance: "original",
+		port: "5-2",
+	},
 	{ name: "a different USB model at the same port", product: "1a2b/3c4e" },
-	{ name: "a different USB attachment", port: "5-2" },
+	{ name: "a different reported identity", differentId: true },
+	{ name: "a duplicated identity", duplicate: true },
 	{ name: "a scanned input omitted by the roster", missing: true },
+	{
+		name: "a legacy address-only marker despite the model mismatch",
+		product: "1a2b/3c4e",
+		legacy: true,
+	},
 ])(
 	"Start and restoration with $name at the saved selector",
-	async ({ instance, product, port, missing }) => {
+	async ({
+		instance,
+		product,
+		port,
+		differentId,
+		duplicate,
+		missing,
+		legacy,
+	}) => {
 		const peer = await scopedStartPeer("legacy-success");
 		const clients: CerastreamClient[] = [];
 		onTestFinished(async () => {
@@ -2232,6 +2252,7 @@ test.each([
 			...wire("", [1]),
 			input_id: "hw:CARD=micOld",
 		});
+		const changedRow = ["micOld", UNRELATED_MIC, "usb:5-1"] as const;
 		try {
 			await audio.updateAudioDevices(
 				await physicalMicScan(["micOld"], original),
@@ -2247,23 +2268,52 @@ test.each([
 				micOld: ORIGINAL_MIC,
 			});
 			const saved = await Bun.file(getConfigFilePath()).text();
+			if (legacy) {
+				const marker = readArmedStreamMarker();
+				if (marker === undefined) throw new Error("expected an armed stream");
+				const {
+					audio_physical_ids: _physical,
+					audio_unverified_ids: _unverified,
+					...config
+				} = marker.config;
+				armed = JSON.stringify({ ...marker, config });
+			}
 
 			await loseEngine();
 			await audio.updateAudioDevices(
-				await physicalMicScan(["micOld"], {
+				await physicalMicScan(duplicate ? ["micOld", "micTwin"] : ["micOld"], {
 					instance: instance ?? "other",
 					port: port ?? original.port,
 					product: product ?? original.product,
 				}),
 			);
-			await answerPhysicalMics(...(missing ? [] : [sameRow]));
+			if (missing) await answerPhysicalMics();
+			else if (differentId) await answerPhysicalMics(changedRow);
+			else if (duplicate)
+				await answerPhysicalMics(sameRow, ["micTwin", ORIGINAL_MIC, "usb:5-2"]);
+			else await answerPhysicalMics(sameRow);
 			const failures = spyOn(
 				streamSessionProductionDeps,
 				"reportTerminalFailure",
 			);
-			if (instance !== undefined) {
+			if (instance !== undefined || legacy) {
 				expect((await restore()).result).toBe("recovered");
 				expect(peer.startAudio).toEqual([expectedAudio, expectedAudio]);
+				if (legacy) {
+					expect(readArmedStreamMarker()?.config).not.toHaveProperty(
+						"audio_physical_ids",
+					);
+				}
+				if (port !== undefined) {
+					await loseEngine();
+					expect(await reconcileStreamSession()).toBe("idle");
+					expect(await start()).toMatchObject({ success: true });
+					expect(peer.startAudio).toEqual([
+						expectedAudio,
+						expectedAudio,
+						expectedAudio,
+					]);
+				}
 			} else {
 				expect(await restore()).toMatchObject({
 					result: "failed",
@@ -2275,7 +2325,22 @@ test.each([
 				expect(peer.startAudio).toEqual([expectedAudio]);
 				expect(await Bun.file(getConfigFilePath()).text()).toEqual(saved);
 
-				expect(await start()).toMatchObject({
+				if (differentId) {
+					// A fresh press captures the current report. Change it only after
+					// admission so this attempt has an expected identity to enforce.
+					await answerPhysicalMics(sameRow);
+					GATES["update admission"]?.();
+				}
+				const starting = start();
+				if (differentId) {
+					try {
+						await awaitLaunchBoundary(starting);
+						await answerPhysicalMics(changedRow);
+					} finally {
+						gate.resolve();
+					}
+				}
+				expect(await starting).toMatchObject({
 					success: false,
 					failure: { class: "audio_source_unavailable" },
 				});

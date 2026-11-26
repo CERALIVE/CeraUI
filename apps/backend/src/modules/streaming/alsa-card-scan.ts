@@ -17,7 +17,7 @@
 */
 
 import { realpath } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import { readdirP } from "../../helpers/files.ts";
 import { logger } from "../../helpers/logger.ts";
 import { readTextFile } from "../../helpers/text-files.ts";
@@ -45,12 +45,8 @@ export interface ScannedAlsaCard {
 	readonly index: number;
 	/** That card directory's entries — the PCM nodes the direction rules read. */
 	readonly entries: readonly string[];
-	readonly usb?: ScannedAudioUsbReport;
-}
-
-export interface ScannedAudioUsbReport {
-	readonly groupId: string;
-	readonly model: string | undefined;
+	/** USB vendor/product reported by the kernel, when readable. */
+	readonly usbModel?: string;
 }
 
 /** Effectful surface, injected so a test drives the resolver without sysfs. */
@@ -103,10 +99,10 @@ async function readCardEntries(
 	}
 }
 
-async function readAudioUsbReport(
+async function readAudioUsbModel(
 	card: string,
 	deps: AlsaCardScanDeps,
-): Promise<ScannedAudioUsbReport | undefined> {
+): Promise<string | undefined> {
 	// Resolve the class link before walking from the interface to the nearest USB device.
 	const device = await deps.resolveDevicePath?.(join(card, "device"));
 	for (let dir = device; dir !== undefined && dir !== "/"; dir = dirname(dir)) {
@@ -115,10 +111,7 @@ async function readAudioUsbReport(
 		const product = /^PRODUCT=([\da-f]{1,4})\/([\da-f]{1,4})\//im.exec(info);
 		const vid = product?.[1]?.toLowerCase().padStart(4, "0");
 		const pid = product?.[2]?.toLowerCase().padStart(4, "0");
-		return {
-			groupId: `usb:${basename(dir).toLowerCase()}`,
-			model: vid && pid ? `${vid}:${pid}` : undefined,
-		};
+		return vid && pid ? `${vid}:${pid}` : undefined;
 	}
 	return undefined;
 }
@@ -152,12 +145,12 @@ export async function scanAlsaCards(
 		const path = join(dir, entry);
 		const id = ((await deps.readText(join(path, "id"))) ?? "").trim();
 		if (id === "") continue;
-		const usb = await readAudioUsbReport(path, deps);
+		const usbModel = await readAudioUsbModel(path, deps);
 		cards.push({
 			id,
 			index: cardIndex(entry),
 			entries: await readCardEntries(path, deps),
-			...(usb === undefined ? {} : { usb }),
+			...(usbModel === undefined ? {} : { usbModel }),
 		});
 	}
 	return cards;

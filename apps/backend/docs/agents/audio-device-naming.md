@@ -12,23 +12,25 @@ input, a fresh Start records it as unavailable, not as a legacy address-only
 selection. Auto resolving to that same key later cannot clear a mix input's
 unavailable state recorded at admission.
 
-The scan also reads the nearest USB device's kernel-reported attachment and
-vendor/product for each USB-backed ALSA card. A conflicting roster attachment
-or USB model makes the selected input unavailable, including when a saved mix
-or a restoration would otherwise use the reused selector. This is a refusal
-only: it does not update the saved pick or mix, treat diagnostic serials as
-identity, or affect a launch that does not use the local input.
+The scan reads kernel-reported vendor/product for each USB-backed ALSA card.
+A conflicting USB model makes the roster row unavailable. This protects a
+fresh Start that uses the local input, including a saved mix leg, and a restore
+that must resolve a recorded physical identity. A matching identity remains
+eligible when it moves USB ports, even if the roster still names the old port.
+A refusal does not update the saved pick or mix, and diagnostic serials are not
+used to identify the current occupant.
 
 Agreement is not verification. The original receiver and a replacement can
 present the same scan and stale roster evidence and both take the ordinary
-restore path. Rejecting a stale-but-plausible route at the actual audio open
-requires the cerastream verified route check (CERALIVE/cerastream#267) and a
-receiver qualified for that route. This change enables neither.
+restore path. Checking the actual open after a port move or when a stale report
+still looks plausible requires cerastream's verified route check and a receiver
+qualified for that route. This change enables neither.
 
 A model or port token can open an unchanged address on a fresh Start, but the
 armed marker records that it cannot identify that input after engine loss.
-Older markers remain readable without inferring a physical identity from
-whoever now occupies an old address.
+Legacy address-only markers stay on their existing address-based restore path:
+they do not apply the identity veto or acquire a physical identity from whoever
+now occupies the address.
 
 **Production v7.2 also reports `HDMIIN` / `RK3588 HDMI-IN`.** Rock's
 2026-09-18 raw ALSA inventory uses that third spelling, not `hdmirx`.

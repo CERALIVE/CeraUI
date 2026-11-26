@@ -31,7 +31,6 @@ import { broadcastMsg } from "../ui/websocket-server.ts";
 import {
 	CANONICAL_SOUND_CLASS_DIR,
 	resolveConfiguredAlsaCards,
-	type ScannedAudioUsbReport,
 	scanAlsaCards,
 } from "./alsa-card-scan.ts";
 import {
@@ -408,7 +407,7 @@ function getAudioSrcReverseAliases(): Record<string, string> {
 // follows for the engine join).
 let scannedAudioCards: Record<string, string> = {};
 let scannedCaptureCardIds: ReadonlySet<string> = new Set();
-let scannedUsbReports: ReadonlyMap<string, ScannedAudioUsbReport> = new Map();
+let scannedUsbModels: ReadonlyMap<string, string> = new Map();
 
 let audioDevices: Record<string, string> = {};
 addAudioCardById(audioDevices, NO_AUDIO_ID);
@@ -573,22 +572,19 @@ export function liveAudioIdentityEvidence(): ReadonlyMap<
 		const matches = engineAudioDevicesForCard(card, rows, cardAliases);
 		const match = matches[0];
 		const stableId = match?.stable_id;
-		const usb = scannedUsbReports.get(card);
-		const reportedGroup = match?.physical_group_id;
+		const scannedModel = scannedUsbModels.get(card);
 		const reportedModel = /^usb:([\da-f]{4}:[\da-f]{4})(?:[:@]|$)/.exec(
 			stableId ?? "",
 		)?.[1];
-		// A conflicting scan can veto a roster row; agreement cannot verify its route.
-		const usbMismatch =
-			usb !== undefined &&
-			((reportedGroup?.startsWith("usb:") && reportedGroup !== usb.groupId) ||
-				(reportedModel !== undefined &&
-					usb.model !== undefined &&
-					reportedModel !== usb.model));
+		// Model disagreement can veto a row; a port move is not an identity change.
+		const modelMismatch =
+			scannedModel !== undefined &&
+			reportedModel !== undefined &&
+			scannedModel !== reportedModel;
 		if (
 			match === undefined ||
 			matches.length > 1 ||
-			usbMismatch ||
+			modelMismatch ||
 			rows.some(
 				(row) =>
 					row !== match &&
@@ -905,7 +901,7 @@ export async function updateAudioDevices(dir?: string) {
 
 	const list: Record<string, true> = {};
 	const captureCards = new Set<string>();
-	const usbReports = new Map<string, ScannedAudioUsbReport>();
+	const usbModels = new Map<string, string>();
 
 	for (const card of cards) {
 		// Skip over the IDs known not to be valid audio inputs, and over any card
@@ -915,7 +911,7 @@ export async function updateAudioDevices(dir?: string) {
 
 		list[card.id] = true;
 		if (hasCapturePcmNode(card.entries)) captureCards.add(card.id);
-		if (card.usb !== undefined) usbReports.set(card.id, card.usb);
+		if (card.usbModel !== undefined) usbModels.set(card.id, card.usbModel);
 	}
 	// First add any priority cards found
 	const sortedList = {};
@@ -941,7 +937,7 @@ export async function updateAudioDevices(dir?: string) {
 
 	scannedAudioCards = sortedList;
 	scannedCaptureCardIds = captureCards;
-	scannedUsbReports = usbReports;
+	scannedUsbModels = usbModels;
 	composeAudioDevices();
 	if (dir === undefined) await refreshEngineAudioDevices();
 	if (!completeScan()) return;
