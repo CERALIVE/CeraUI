@@ -9,7 +9,15 @@
  * and the crash injection between the acknowledgement write and the archive is
  * asserted to RESUME rather than to lose the operator's decision.
  */
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	jest,
+	spyOn,
+	test,
+} from "bun:test";
 
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -21,6 +29,7 @@ import {
 	modemMutationAckInputSchema,
 } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
+import * as udev from "../modules/modems/modem-id-path-source.ts";
 
 import {
 	acknowledgeMutation,
@@ -47,6 +56,7 @@ import {
 	resetMutationCaptureDeps,
 	setMutationCaptureDeps,
 } from "../modules/modems/mutation-rollback.ts";
+import { routerUsbSysfs } from "../modules/modems/router-subnet-recovery-device.ts";
 import {
 	resetLifecycleInterlock,
 	streamingBlockingMutation,
@@ -102,6 +112,22 @@ function makeContext(): RPCContext {
 }
 
 function useDevice(mode: "qmi" | "mbim" | "absent", model = "RM520N-GL"): void {
+	const controller = "/devices/platform/xhci-hcd.0.auto/usb1";
+	const record =
+		mode === "absent"
+			? `P: ${controller}\nE: SUBSYSTEM=usb\nE: DEVTYPE=usb_device\n`
+			: `P: ${controller}/1-1/1-1.4/1-1.4.1
+E: SUBSYSTEM=usb
+E: DEVTYPE=usb_device
+E: ID_VENDOR_ID=2c7c
+E: ID_MODEL_ID=0801
+E: ID_PATH=${KEY}
+`;
+	spyOn(udev, "readUdevExportDb").mockResolvedValue(record);
+	spyOn(routerUsbSysfs, "names").mockReturnValue(
+		mode === "absent" ? ["usb1"] : ["usb1", "1-1.4.1"],
+	);
+	spyOn(routerUsbSysfs, "rootPath").mockReturnValue(`/sys${controller}`);
 	setMutationCaptureDeps({
 		enumerate: () =>
 			Promise.resolve(
@@ -158,6 +184,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+	jest.restoreAllMocks();
 	resetMutationJournalDeps();
 	resetMutationCaptureDeps();
 	resetMutationBlockDeps();
@@ -350,12 +377,12 @@ describe("decommission and rebaseline", () => {
 		expect(streamingBlockingMutation()).toBeUndefined();
 	});
 
-	test("a decommission is refused for anything but a quarantined device", async () => {
+	test("a decommission is refused while the failed device is still connected", async () => {
 		await seed("failed");
 		useDevice("qmi");
 		expect(await decommissionMutation(KEY)).toEqual({
 			success: false,
-			error: "not_blocked",
+			error: "state_mismatch",
 		});
 	});
 

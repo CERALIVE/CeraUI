@@ -234,6 +234,78 @@ attempts; the default sleep resolves before creating a timer/listener when its
 signal is already aborted, and removes its abort listener when the timer completes
 as well as on abort. Already-submitted capture/hardware is not revoked.
 
+### ROUTER SUBNET OPERATOR RECOVERY
+
+For `router-subnet`, `verified-rollback` uses the USB and net records in one
+udev export. Both must identify the journaled port through `ID_PATH`. The
+interface comes from the net record, never the USB descriptor. A port identifies
+a socket, not the dongle in it. Check again requires the recorded same-boot
+ifindex and sysfs node and fences the session and settings GETs separately
+and again before retirement. It never sends a POST or triggers DHCP renewal.
+This is a pre-dispatch check, not a kernel binding guarantee (#731).
+
+Only a complete original DHCP record matches: address, netmask, DHCP enabled,
+both pool bounds, lease duration, DNS mode and both DNS addresses. DHCP off or
+DNS at the target does not qualify. DHCP leases expire and learned upstream
+resolvers may change, but their runtime values are not any of these configured
+fields. There is no supported normalization exception. A partial, malformed or
+unfenced reply, or no proof of which device sent it, is `read_failed`; a complete
+different record read on the proven dongle is `state_mismatch`. A target match
+is not proof of rollback.
+
+The writer keeps its tolerant preflight and write defaults. Missing fields
+do not prevent the live rewrite, but are not recovery evidence; a journal row
+marks that original unread for Check again. The writer only associates the
+original read with a lifetime that still matches at the end of preflight. Rows
+without that witness cannot use Check again: even an exact original record at
+the recorded port could come from a replacement. `listMutationBlocks` only
+sets `checkable` when the failed row has a verifier and the needed evidence.
+This is a hint, not an acknowledgement; the action checks again.
+USB-mode can compare its saved descriptors and mode. Modem configuration,
+band lock, five-G preference and FCC unlock save kind-specific settings and
+do not have a verified-rollback comparison for them.
+
+When a publication carries a row from an unreadable slot, the list keeps that
+row blocked without Check again and does not reread the known-damaged slot.
+Readable rows in the same publication still get their own evidence checks.
+A new read fault or revision change during the list suppresses all Check again
+hints. This does not complete replay or replace strict reads in direct actions.
+
+Keep, Gone, Check again and the card's scoping use the same presence rule:
+identified, absent or unknown. Keep accepts the current USB descriptor or an
+exact whole-device udev `ID_PATH` (including native PCIe and SoC). This path
+does not verify DHCP or USB mode for a device without those observations.
+Gone is called directly on either `failed` or quarantine, for every kind.
+An identified occupant returns `state_mismatch`; if quarantined, either
+operator action can first return it to `failed`. An absent failed row commits
+quarantine and rechecks before Gone commits decommission. No edge is added.
+
+USB uses the full controller name and exact port chain. If the controller is
+gone or renumbered, a readable census with no non-hub occupant anywhere on
+that chain counts as absent. The fallback ignores a raw path only if its
+last USB device is a positively identified hub. With a matching controller,
+another identified bus at that chain is not the recorded port. A raw path or kernel census entry
+at the possible port, an occupied PCI function without `ID_PATH`, or a live
+same-boot witness without identity vetoes absence; unknown returns
+`read_failed`. An absent PCI sysfs directory (`ENOENT`) is empty, not
+unreadable; a raw udev record can still veto absence. An ambiguous but
+removable occupant can be unplugged before retrying.
+
+Neither Keep nor Gone can clear Start if the journal is unreadable, storage
+refuses journal writes (Keep on a connected device and Gone on an absent one
+both answer `journal_write_failed`), the cellular stack never becomes ready,
+the presence census stays unreadable, a soldered PCIe modem is present without `ID_PATH`, a fixed non-hub (such as
+soldered Bluetooth) occupies the same chain when the USB controller is missing
+or renamed, or a fixed USB device at its own recorded port lacks `ID_PATH`.
+Two inventory cases can release Start through Gone while a device is still
+connected: a SoC or opaque key without `ID_PATH`, and two controllers that swap
+names (indistinguishable from moving the device to another port). The presence
+observation does not lock out later hotplug.
+Gone releases global Start but not mutations to the absent
+identity. A returning device requires explicit rebaseline. Successful Check
+again or Keep archives the row and releases both admissions. A crash after the
+durable `acknowledged` transition resumes archival without querying the router.
+
 ### SAME-KEY JOURNAL EXCLUSION
 
 Every cooperating operation that writes or removes a stable key's journal slot holds

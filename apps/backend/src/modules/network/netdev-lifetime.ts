@@ -139,14 +139,26 @@ function netdevContinues(
  * non-overlapping evidence refuses. This runs in this process before the
  * transport binds the name, so it narrows, not closes, the check-to-bind window.
  */
-export function netdevLifetimeFence(name: string): () => boolean {
+export function netdevLifetimeFence(
+	name: string,
+	durable?: NetdevWitness,
+): () => boolean {
 	const epoch = epochs.get(name);
 	const issued = readNetdevWitness(name);
-	const valid = netdevContinues(witnesses.get(name), issued);
+	// A previous process's retirement epoch is not recoverable.
+	const comparable = (before: NetdevWitness | undefined, live: NetdevWitness) =>
+		(durable === undefined ||
+			(before?.node !== undefined &&
+				before.ifindex !== undefined &&
+				live.present === true &&
+				live.node !== undefined &&
+				live.ifindex !== undefined)) &&
+		netdevContinues(before, live);
+	const valid = comparable(durable ?? witnesses.get(name), issued);
 	return () =>
 		valid &&
 		epochs.get(name) === epoch &&
-		netdevContinues(issued, readNetdevWitness(name));
+		comparable(issued, readNetdevWitness(name));
 }
 
 export function noteNetdevWitness(name: string, next: NetdevWitness): void {

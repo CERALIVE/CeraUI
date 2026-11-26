@@ -94,7 +94,7 @@ export function parseHilinkSession(body: string): HilinkSession | undefined {
 export async function openHilinkSession(
 	ifname: string,
 	adminUrl: string,
-	transport: HilinkTransport,
+	transport: Pick<HilinkTransport, "fetchViaInterface">,
 ): Promise<HilinkSession | undefined> {
 	const [body] = await transport.fetchViaInterface(ifname, [
 		`${adminUrl}${HILINK_SESSION_PATH}`,

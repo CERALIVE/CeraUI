@@ -49,6 +49,8 @@
  * reach. Every shipped router dongle on this bench is /24.
  */
 
+import { parseStringPromise } from "xml2js";
+import { z } from "zod";
 import { xmlValue } from "./vendor-xml.ts";
 
 /** The `/api/dhcp/settings` record, verbatim. Every member is echoed on write. */
@@ -237,5 +239,88 @@ export function dhcpRecordsMatch(
 		a.netmask === b.netmask &&
 		a.startAddress === b.startAddress &&
 		a.endAddress === b.endAddress
+	);
+}
+
+const ipv4Field = z
+	.string()
+	.trim()
+	.refine((value) => octets(value) !== undefined);
+const flagField = z
+	.string()
+	.trim()
+	.pipe(z.enum(["0", "1"]));
+const leaseField = z.string().trim().regex(/^\d+$/);
+
+export function isCompleteHilinkDhcpRecord(record: HilinkDhcpRecord): boolean {
+	return (
+		[
+			record.address,
+			record.netmask,
+			record.startAddress,
+			record.endAddress,
+			record.primaryDns,
+			record.secondaryDns,
+		].every(
+			(value) => value === value.trim() && ipv4Field.safeParse(value).success,
+		) &&
+		flagField.safeParse(record.dhcpStatus).data === record.dhcpStatus &&
+		flagField.safeParse(record.dnsStatus).data === record.dnsStatus &&
+		leaseField.safeParse(record.leaseTime).data === record.leaseTime
+	);
+}
+
+const completeDhcpResponse = z.object({
+	response: z.object({
+		DhcpIPAddress: z.tuple([ipv4Field]),
+		DhcpLanNetmask: z.tuple([ipv4Field]),
+		DhcpStatus: z.tuple([flagField]),
+		DhcpStartIPAddress: z.tuple([ipv4Field]),
+		DhcpEndIPAddress: z.tuple([ipv4Field]),
+		DhcpLeaseTime: z.tuple([leaseField]),
+		DnsStatus: z.tuple([flagField]),
+		PrimaryDns: z.tuple([ipv4Field]),
+		SecondaryDns: z.tuple([ipv4Field]),
+	}),
+});
+
+/** Recovery evidence requires a full single response, not write-side defaults. */
+export async function parseCompleteHilinkDhcpSettings(
+	body: string,
+): Promise<HilinkDhcpRecord | undefined> {
+	if (
+		!/^\s*(?:<\?xml\s[^?]*\?>\s*)?<response>(?:(?!<\/?response\b)[\s\S])*<\/response>\s*$/.test(
+			body,
+		)
+	)
+		return undefined;
+	const raw: unknown = await parseStringPromise(body).catch(() => undefined);
+	const parsed = completeDhcpResponse.safeParse(raw);
+	if (!parsed.success) return undefined;
+	const { response } = parsed.data;
+	return {
+		address: response.DhcpIPAddress[0],
+		netmask: response.DhcpLanNetmask[0],
+		dhcpStatus: response.DhcpStatus[0],
+		startAddress: response.DhcpStartIPAddress[0],
+		endAddress: response.DhcpEndIPAddress[0],
+		leaseTime: response.DhcpLeaseTime[0],
+		dnsStatus: response.DnsStatus[0],
+		primaryDns: response.PrimaryDns[0],
+		secondaryDns: response.SecondaryDns[0],
+	};
+}
+
+export function fullDhcpRecordsMatch(
+	a: HilinkDhcpRecord,
+	b: HilinkDhcpRecord,
+): boolean {
+	return (
+		dhcpRecordsMatch(a, b) &&
+		a.dhcpStatus === b.dhcpStatus &&
+		a.leaseTime === b.leaseTime &&
+		a.dnsStatus === b.dnsStatus &&
+		a.primaryDns === b.primaryDns &&
+		a.secondaryDns === b.secondaryDns
 	);
 }

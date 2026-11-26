@@ -524,6 +524,8 @@ export const modemMutationBlockSchema = z.object({
 	state: modemMutationStateSchema,
 	updatedAt: z.number().int().nonnegative(),
 	detail: z.string().optional(),
+	// Whether this particular row supports verified rollback. Not a result.
+	checkable: z.boolean().optional(),
 	devicePresent: z.boolean(),
 	// Whether this entry ALSO holds global stream autostart. A decommissioned
 	// identity blocks only itself, which is what stops a destroyed modem from
@@ -1417,6 +1419,22 @@ const SYSFS_PCI_FUNCTION_RE = /^[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-9a-f]+$/
  * rather than fabricating a key.
  */
 export function sysfsDevpathToIdPath(devpath: string): string | undefined {
+	const port = sysfsUsbPort(devpath);
+	if (port === undefined) return undefined;
+	const { controller, portChain } = port;
+	const prefix = SYSFS_PCI_FUNCTION_RE.test(controller)
+		? `pci-${controller}`
+		: `platform-${controller}`;
+	return `${prefix}${USB_MARKER}0:${portChain}`;
+}
+
+function sysfsUsbPort(devpath: string):
+	| {
+			readonly controller: string;
+			readonly portChain: string;
+			readonly devicePath: string;
+	  }
+	| undefined {
 	const trimmed = devpath.trim();
 	// Accept both the kernel's own `DEVPATH` (`/devices/…`) and the mounted form
 	// (`/sys/devices/…`); ModemManager publishes the latter.
@@ -1455,10 +1473,11 @@ export function sysfsDevpathToIdPath(devpath: string): string | undefined {
 	const controller = rootHubAt > 0 ? parts[rootHubAt - 1] : undefined;
 	if (controller === undefined) return undefined;
 
-	const prefix = SYSFS_PCI_FUNCTION_RE.test(controller)
-		? `pci-${controller}`
-		: `platform-${controller}`;
-	return `${prefix}${USB_MARKER}0:${portChain}`;
+	return {
+		controller,
+		portChain,
+		devicePath: `/devices/${parts.slice(0, deviceAt + 1).join('/')}`,
+	};
 }
 
 /**
@@ -1494,6 +1513,34 @@ export function deriveModemStableKey(idPath: string | undefined | null): string 
 	if (fields.length < 2 || !busnum || !portChain) return path;
 
 	return `${prefix}${busnum}:${portChain}`;
+}
+
+/** Recovery-only view of a udev USB port. Never mint a persisted key here. */
+export function modemRecoveryPort(idPath: string | undefined) {
+	const match = /^([^\s/]+)-usb-0:([1-9]\d*(?:\.[1-9]\d*)*)(?::\d+\.\d+(?:-[^\s/]+)?)?$/.exec(
+		idPath?.trim() ?? '',
+	);
+	const ancestry = match?.[1];
+	const portChain = match?.[2];
+	if (ancestry === undefined || portChain === undefined) return undefined;
+	const stableKey = `${ancestry}${USB_MARKER}0:${portChain}`;
+	// The transport is appended to the complete controller name. Do not
+	// interpret the prefix: controller names and parent groups can have dashes.
+	const hasController = (controller: string) => ancestry.endsWith(`-${controller}`);
+	return {
+		stableKey,
+		portChain,
+		hasController,
+		// Raw paths may veto absence, never authorize I/O to a device.
+		containsDevpath(path: string) {
+			const port = sysfsUsbPort(path);
+			return port !== undefined && port.portChain === portChain && hasController(port.controller);
+		},
+		devicePathAtChain(path: string) {
+			const port = sysfsUsbPort(path);
+			return port?.portChain === portChain ? port.devicePath : undefined;
+		},
+	};
 }
 
 // ── The `five-g-pref` capability module ──────────────────────────────────────

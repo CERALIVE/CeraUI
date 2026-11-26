@@ -86,6 +86,10 @@ export function preStateFor(
 		adminUrl: plan.adminUrl,
 		current: { ...plan.current },
 		target: { ...plan.target },
+		...(plan.netdev === undefined ? {} : { netdev: plan.netdev }),
+		...(plan.originalDhcpComplete === false
+			? { originalDhcpComplete: false }
+			: {}),
 	};
 }
 

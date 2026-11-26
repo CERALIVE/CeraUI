@@ -110,15 +110,28 @@ export function resetMutationBlockDeps(): void {
 	activeDeps = defaultMutationBlockDeps;
 }
 
-let lastBlocks: readonly ModemMutationBlock[] = [];
-let lastRevision = mutationJournalRevision();
+interface MutationBlockPublication {
+	readonly blocks: readonly ModemMutationBlock[];
+	readonly readableKeys: ReadonlySet<string>;
+	readonly revision: bigint;
+}
+
+let publication: MutationBlockPublication = {
+	blocks: [],
+	readableKeys: new Set(),
+	revision: mutationJournalRevision(),
+};
+
+export function currentMutationBlockPublication(): MutationBlockPublication {
+	return publication;
+}
 
 export function reconciledMutationJournalRevision(): bigint {
-	return lastRevision;
+	return publication.revision;
 }
 
 export function currentMutationBlocks(): readonly ModemMutationBlock[] {
-	return lastBlocks;
+	return publication.blocks;
 }
 
 interface BlockCensus {
@@ -182,7 +195,7 @@ export async function reconcileMutationBlocks(
 	// Damage is not absence: a slot that cannot be read keeps its published row.
 	const blocks = [
 		...readable,
-		...lastBlocks.filter((block) =>
+		...publication.blocks.filter((block) =>
 			unreadable.includes(`${mutationSlotName(block.stableKey)}.json`),
 		),
 	];
@@ -195,7 +208,10 @@ export async function reconcileMutationBlocks(
 			}),
 		),
 	);
-	lastBlocks = blocks;
-	lastRevision = revision;
+	publication = {
+		blocks,
+		readableKeys: new Set(blocking.map((entry) => entry.stableKey)),
+		revision,
+	};
 	return { blocks, unreadable };
 }

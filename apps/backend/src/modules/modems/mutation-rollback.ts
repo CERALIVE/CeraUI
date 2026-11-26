@@ -75,11 +75,16 @@ export function clearMutationRollbacks(): void {
 }
 
 export interface MutationCaptureDeps {
-	enumerate(): Promise<readonly UsbDeviceSnapshot[]>;
+	enumerate(
+		readUdevDatabase?: () => Promise<string>,
+	): Promise<readonly UsbDeviceSnapshot[]>;
 }
 
 export const defaultMutationCaptureDeps: MutationCaptureDeps = {
-	enumerate: () => createUsbEnumerator().enumerate(),
+	enumerate: (readUdevDatabase) =>
+		createUsbEnumerator(
+			readUdevDatabase ? { readUdevDatabase } : {},
+		).enumerate(),
 };
 
 let activeDeps: MutationCaptureDeps = defaultMutationCaptureDeps;
@@ -94,13 +99,16 @@ export function resetMutationCaptureDeps(): void {
 	activeDeps = defaultMutationCaptureDeps;
 }
 
-function snapshotOf(device: UsbDeviceSnapshot): CapturedState {
+export function enumerateMutationUsb(readUdevDatabase: () => Promise<string>) {
+	return activeDeps.enumerate(readUdevDatabase);
+}
+
+export function captureUsbDescriptor(device: UsbDeviceSnapshot) {
 	return {
 		vidPid: `${device.vendorId.toLowerCase()}:${device.productId.toLowerCase()}`,
 		model: device.model ?? "",
 		firmwareRevision: device.firmwareRevision ?? "",
 		mode: detectUsbMode(device) ?? "unknown",
-		ifname: device.ifname ?? "",
 	};
 }
 
@@ -113,7 +121,9 @@ export async function captureModemState(
 	const device = devices.find(
 		(candidate) => deriveModemStableKey(candidate.physicalUid) === stableKey,
 	);
-	return device === undefined ? undefined : snapshotOf(device);
+	return device === undefined
+		? undefined
+		: { ...captureUsbDescriptor(device), ifname: device.ifname ?? "" };
 }
 
 /**

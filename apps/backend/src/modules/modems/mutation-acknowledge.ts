@@ -50,6 +50,7 @@ import type {
 } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
+import { verifyRouterSubnet } from "../network/router-subnet-verify.ts";
 
 import { refreshMutationBlocks } from "./mutation-blocks.ts";
 import {
@@ -65,11 +66,8 @@ import {
 } from "./mutation-journal-revision.ts";
 import { isLegalMutationTransition } from "./mutation-journal-state.ts";
 import { withRetirementKey } from "./mutation-retirement-key.ts";
-import {
-	captureModemState,
-	isCoherentState,
-	statesMatch,
-} from "./mutation-rollback.ts";
+import { statesMatch } from "./mutation-rollback.ts";
+import { resolveMutationDevice } from "./router-subnet-recovery-device.ts";
 
 function fail(error: ModemMutationAckOutput["error"]): ModemMutationAckOutput {
 	return { success: false, ...(error === undefined ? {} : { error }) };
@@ -137,7 +135,11 @@ export function acknowledgeMutation(
 ): Promise<ModemMutationAckOutput> {
 	return withRetirementKey(
 		stableKey,
-		(entry) => entry.state === "acknowledged" || entry.state === "failed",
+		(entry) =>
+			entry.state === "acknowledged" ||
+			entry.state === "failed" ||
+			(mode === "force-rebaseline" &&
+				entry.state === "device-absent-quarantine"),
 		signal,
 		() => acknowledgeHeld(stableKey, mode),
 	);
@@ -155,29 +157,52 @@ async function acknowledgeHeld(
 		if (!isMutationJournalRevisionCurrent(revision)) return fail("not_blocked");
 		return archiveAcknowledged(entry, mode, "resume acknowledged retirement");
 	}
-	if (entry.state !== "failed") return fail("not_blocked");
+	if (
+		entry.state !== "failed" &&
+		!(mode === "force-rebaseline" && entry.state === "device-absent-quarantine")
+	)
+		return fail("not_blocked");
 
-	let current: Readonly<Record<string, unknown>> | undefined;
-	try {
-		current = await captureModemState(stableKey);
-	} catch {
-		return fail("read_failed");
-	}
+	const device = await resolveMutationDevice(entry);
 	if (!isMutationJournalRevisionCurrent(revision)) return fail("not_blocked");
-	if (current === undefined) return quarantine(entry);
+	if (device.status === "absent") return quarantine(entry);
+	if (device.status !== "present") return fail("read_failed");
 
 	if (mode === "verified-rollback") {
-		return statesMatch(entry.preState, current)
+		if (entry.kind === "router-subnet") {
+			const result = await verifyRouterSubnet(entry.preState, device.ifname);
+			if (!isMutationJournalRevisionCurrent(revision))
+				return fail("not_blocked");
+			if ("error" in result) return fail(result.error);
+			if (!result.isCurrent()) return fail("read_failed");
+			return archiveAcknowledged(
+				entry,
+				mode,
+				"original router DHCP record verified",
+			);
+		}
+		return device.identity === "usb-descriptor" &&
+			statesMatch(entry.preState, device.state)
 			? archiveAcknowledged(entry, mode, "rollback verified against the device")
 			: fail("state_mismatch");
 	}
 
-	if (!isCoherentState(current)) return fail("read_failed");
+	if (entry.state === "device-absent-quarantine") {
+		try {
+			await advance(entry, "failed", "device returned before acknowledgement");
+		} catch {
+			return fail("journal_write_failed");
+		}
+		// Resample after the durable transition, under the same lease.
+		const result = await acknowledgeHeld(stableKey, mode);
+		if (!result.success) await refreshMutationBlocks();
+		return result;
+	}
 	return archiveAcknowledged(
 		entry,
 		mode,
 		"operator accepted the current hardware state as the new baseline",
-		current,
+		device.state,
 	);
 }
 
@@ -185,12 +210,13 @@ export function decommissionMutation(
 	stableKey: string,
 	signal?: AbortSignal,
 ): Promise<ModemMutationAckOutput> {
-	return withRetirementKey(
-		stableKey,
-		(entry) => entry.state === "device-absent-quarantine",
-		signal,
-		() => decommissionHeld(stableKey),
+	return withRetirementKey(stableKey, canDecommission, signal, () =>
+		decommissionHeld(stableKey),
 	);
+}
+
+function canDecommission(entry: ModemMutationEntry): boolean {
+	return entry.state === "device-absent-quarantine" || entry.state === "failed";
 }
 
 async function decommissionHeld(
@@ -200,9 +226,34 @@ async function decommissionHeld(
 	const entry = await readMutationEntry(stableKey);
 	if (entry === undefined) return fail("no_entry");
 	if (entry.stableKey !== stableKey) return fail("state_mismatch");
-	if (entry.state !== "device-absent-quarantine") return fail("not_blocked");
+	if (!canDecommission(entry)) return fail("not_blocked");
 	if (!isMutationJournalRevisionCurrent(revision)) return fail("not_blocked");
+	const presence = await resolveMutationDevice(entry);
+	if (!isMutationJournalRevisionCurrent(revision)) return fail("not_blocked");
+	if (presence.status === "unknown") return fail("read_failed");
+	if (presence.status === "present") {
+		if (entry.state === "failed") return fail("state_mismatch");
+		try {
+			await advance(entry, "failed", "device returned before decommission");
+		} catch {
+			return fail("journal_write_failed");
+		}
+		await refreshMutationBlocks();
+		return fail("state_mismatch");
+	}
 	try {
+		if (entry.state === "failed") {
+			await advance(
+				entry,
+				"device-absent-quarantine",
+				"device absent at decommission",
+			);
+			// Re-observe after the awaited durable transition, still under
+			// the same lease. A replacement may have arrived meanwhile.
+			const result = await decommissionHeld(stableKey);
+			if (!result.success) await refreshMutationBlocks();
+			return result;
+		}
 		await advance(
 			entry,
 			"decommissioned",
@@ -214,6 +265,7 @@ async function decommissionHeld(
 			stableKey,
 			err,
 		});
+		await refreshMutationBlocks().catch(() => undefined);
 		return fail("journal_write_failed");
 	}
 	await refreshMutationBlocks();
@@ -250,20 +302,15 @@ async function rebaselineHeld(
 	}
 	if (entry.state !== "recommission-pending") return fail("not_blocked");
 
-	let current: Readonly<Record<string, unknown>> | undefined;
-	try {
-		current = await captureModemState(stableKey);
-	} catch {
-		return fail("read_failed");
-	}
+	const device = await resolveMutationDevice(entry);
 	if (!isMutationJournalRevisionCurrent(revision)) return fail("not_blocked");
-	if (current === undefined) return fail("device_absent");
-	if (!isCoherentState(current)) return fail("read_failed");
+	if (device.status === "absent") return fail("device_absent");
+	if (device.status !== "present") return fail("read_failed");
 
 	return archiveAcknowledged(
 		entry,
 		"force-rebaseline",
 		"operator rebaselined the device now occupying this identity",
-		current,
+		device.state,
 	);
 }
